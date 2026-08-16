@@ -67,10 +67,14 @@ export async function loadTemplate({ db, slug }) {
  */
 export function standardVars({ user, dashboardUrl = resolveDashboardUrl() } = {}) {
   const name = String(user?.name ?? '').trim()
+  const firstName = name.split(/\s+/)[0] || ''
   return {
     marca: BRAND_NAME,
     nome: name,
-    primeiro_nome: name.split(/\s+/)[0] || '',
+    primeiro_nome: firstName,
+    // Saudação pronta: sem nome cadastrado, "Olá, {{primeiro_nome}}!" viraria
+    // "Olá, !" na tela da cliente. Por isso os textos usam {{saudacao}}.
+    saudacao: firstName ? `Olá, ${firstName}!` : 'Olá!',
     link_painel: `${dashboardUrl}/painel`,
     link_login: `${dashboardUrl}/login`,
     link_planos: `${dashboardUrl}/painel/planos`,
@@ -99,8 +103,16 @@ export function renderTemplate({ template, vars = {}, unsubscribeUrl = '' }) {
   return { subject: subjectResult.output.trim(), text, html, missing }
 }
 
+// As tabelas do motor de e-mails podem não existir ainda (API subindo antes da
+// migration rodar). Nesse caso o e-mail transacional continua saindo — só sem
+// histórico e sem a trava de repetição, que é melhor que não avisar a cliente.
+function hasModel(db, model) {
+  return Boolean(db?.[model]?.findMany || db?.[model]?.count || db?.[model]?.create)
+}
+
 async function alreadySentWithin({ db, slug, userId, email, days, now }) {
   if (!days || days <= 0) return false
+  if (!hasModel(db, 'emailSendLog')) return false
   const since = new Date(new Date(now).getTime() - days * MS_PER_DAY)
   const where = { slug, status: 'sent', createdAt: { gte: since } }
   const count = await db.emailSendLog.count({
@@ -110,6 +122,7 @@ async function alreadySentWithin({ db, slug, userId, email, days, now }) {
 }
 
 async function sentInLast24h({ db, now }) {
+  if (!hasModel(db, 'emailSendLog')) return 0
   const since = new Date(new Date(now).getTime() - MS_PER_DAY)
   return db.emailSendLog.count({ where: { status: 'sent', createdAt: { gte: since } } }).catch(() => 0)
 }
@@ -143,7 +156,7 @@ export async function sendTemplateEmail({
   // Quando o envio veio da fila (disparo manual em massa), a linha do histórico
   // JÁ existe — atualiza aquela em vez de criar uma segunda.
   const markSkipped = async (reason) => {
-    if (logRowId) {
+    if (logRowId && hasModel(db, 'emailSendLog')) {
       await db.emailSendLog.update({
         where: { id: logRowId },
         data: { status: 'skipped', skipReason: reason },
@@ -199,13 +212,15 @@ export async function sendTemplateEmail({
       return { sent: false, skipped: true, reason: 'smtp_disabled', retryLater: true }
     }
 
-    if (logRowId) {
+    if (logRowId && hasModel(db, 'emailSendLog')) {
       await db.emailSendLog.update({
         where: { id: logRowId },
         data: { status: 'sent', sentAt: new Date() },
       }).catch((err) => logger?.warn?.({ slug, err: err?.message }, 'e-mail: falha ao atualizar histórico'))
       return { sent: true, logId: logRowId }
     }
+
+    if (!hasModel(db, 'emailSendLog')) return { sent: true, logId: null }
 
     const log = await db.emailSendLog.create({
       data: {
@@ -228,6 +243,7 @@ export async function sendTemplateEmail({
   } catch (err) {
     logger?.error?.({ slug, err: err?.message }, 'e-mail: falha ao enviar')
     const errorText = String(err?.message ?? err).slice(0, 500)
+    if (!hasModel(db, 'emailSendLog')) return { sent: false, reason: 'error', error: errorText }
     if (logRowId) {
       await db.emailSendLog.update({ where: { id: logRowId }, data: { status: 'error', error: errorText } }).catch(() => {})
     } else {
@@ -245,6 +261,6 @@ export async function sendTemplateEmail({
         },
       }).catch(() => {})
     }
-    return { sent: false, reason: 'error' }
+    return { sent: false, reason: 'error', error: errorText }
   }
 }

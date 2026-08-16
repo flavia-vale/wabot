@@ -4,7 +4,7 @@ import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
-import { sendWelcomeEmail } from '../../email/welcomeEmail.js'
+import { notifyWelcome, notifyReferralSignup } from '../../emailTriggers/events.js'
 import { attachAffiliateAttributionTouchesToUser, attachOrphanTouchesByDevice, recordAffiliateAttributionTouch } from '../../domain/affiliate/service.js'
 import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
 import { isRealEmail } from '../../leadNurture/policy.js'
@@ -386,12 +386,14 @@ export async function authRoutes(app) {
     const affiliateVisitorId = typeof rawAffiliateVisitorId === 'string' ? rawAffiliateVisitorId.trim().slice(0, 120) : ''
     let affiliateProfileId = undefined
     let affiliateCodeForTouch = null
+    let affiliateOwnerUserId = null
     if (aff_code) {
       try {
         const affProfile = await db.affiliateProfile.findUnique({ where: { code: aff_code } })
         if (affProfile?.status === 'approved') {
           affiliateProfileId = affProfile.id
           affiliateCodeForTouch = affProfile.code
+          affiliateOwnerUserId = affProfile.userId
         }
       } catch {}
     }
@@ -500,7 +502,15 @@ export async function authRoutes(app) {
     // informados pelo usuário (não para o fallback user_*@sistema.com).
     // No-op quando SMTP não está configurado; nunca derruba o signup.
     if (providedEmail) {
-      sendWelcomeEmail({ to: providedEmail, name }).catch(() => {})
+      // Passa pelo motor de e-mails (catálogo + travas + histórico) em vez do
+      // builder antigo: assim a admin edita este texto pela aba E-mails.
+      notifyWelcome({ db, user, trialEndsAt: user.accessExpiresAt, logger: req.log }).catch(() => {})
+    }
+
+    // Quem indicou merece saber na hora — tanto pelo link antigo de indicação
+    // quanto pelo programa de afiliadas. Best-effort, nunca derruba o cadastro.
+    for (const indicadoraId of new Set([referrer?.id, affiliateOwnerUserId].filter(Boolean))) {
+      notifyReferralSignup({ db, referrerUserId: indicadoraId, logger: req.log }).catch(() => {})
     }
 
     // Trilha de nutrição de leads (011-lead-nurture-emails, D4): o welcome

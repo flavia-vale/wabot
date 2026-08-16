@@ -43,6 +43,7 @@ import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { runEmailQueueTick } from '../email/queue.js'
+import { runLifecycleEmailSweep } from '../emailTriggers/lifecycleSweep.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -231,6 +232,29 @@ async function runCredentialExpirySweepTick() {
 function startCredentialExpirySweep() {
   runCredentialExpirySweepTick()
   const timer = setInterval(runCredentialExpirySweepTick, CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
+// E-mails de ciclo de vida (vencimento de teste/plano, saúde do robô, saque
+// disponível): uma passada por dia, in-process. Sem SMTP a passada nem começa.
+//   LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS — intervalo entre passadas (default 24h).
+//   LIFECYCLE_EMAIL_ENABLED           — 'false' desliga.
+const LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS = Math.max(Number(process.env.LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS) || 24 * 60 * 60 * 1000, 60 * 1000)
+async function runLifecycleEmailTick() {
+  if (String(process.env.LIFECYCLE_EMAIL_ENABLED ?? '').trim().toLowerCase() === 'false') return
+  if (!isEmailConfigured()) return
+  try {
+    const summary = await runLifecycleEmailSweep({ db, sendMail, logger: app.log })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'e-mails de ciclo de vida: passada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'e-mails de ciclo de vida: passada falhou')
+  }
+}
+function startLifecycleEmailSweep() {
+  runLifecycleEmailTick()
+  const timer = setInterval(runLifecycleEmailTick, LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
@@ -517,6 +541,7 @@ startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
 startEmailQueueJob()
+startLifecycleEmailSweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()

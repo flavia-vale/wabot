@@ -25,12 +25,15 @@ export function buildUnsubscribeUrl({ userId, secret, baseUrl }) {
  */
 export async function isOptedOut({ db, userId, category = OPT_OUT_CATEGORY }) {
   if (!userId) return false
-  const found = await db.emailOptOut.findUnique({
+  // Tabela ainda não migrada: cai no descadastro antigo (evento) em vez de
+  // quebrar o envio.
+  const found = db?.emailOptOut?.findUnique ? await db.emailOptOut.findUnique({
     where: { userId_category: { userId, category } },
-  }).catch(() => null)
+  }).catch(() => null) : null
   if (found) return true
   // Quem já pediu para sair da trilha de nutrição não pode voltar a receber
   // divulgação por outra porta — o pedido dela vale para marketing inteiro.
+  if (!db?.analyticsEvent?.count) return false
   const legacy = await db.analyticsEvent.count({
     where: { userId, event: 'nurture_unsubscribed' },
   }).catch(() => 0)

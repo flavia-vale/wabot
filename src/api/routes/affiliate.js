@@ -2,7 +2,7 @@ import { createHash } from 'crypto'
 import { COMMISSION_PAYABLE_STATUSES, applyAffiliate, approveAffiliateCommission, getAffiliateMeData, getAffiliateReferrals, getAffiliateSettings, recordAffiliateAttributionTouch, reverseAffiliateCommission, tryCreateAffiliateCommission, writeCommissionLedger, createPayoutRequest, listAffiliatePayoutRequests, confirmPayoutRequest, rejectPayoutRequest } from '../../domain/affiliate/service.js'
 import { computeDebtCents, computeAvailableCents } from '../../domain/affiliate/affiliateBalance.js'
 import { validatePixKey } from '../../domain/affiliate/pixKeyValidation.js'
-import { sendAffiliateApprovedEmail, sendAffiliateRejectedEmail, sendCommissionPaidEmail } from '../../email/affiliateEmails.js'
+import { notifyAffiliateApproved, notifyAffiliateRejected, notifyPayoutPaid } from '../../emailTriggers/events.js'
 import { encryptCredential, decryptCredential } from '../../credentialCrypto.js'
 import { createTrackGuard } from './affiliateTrackGuard.js'
 import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
@@ -246,8 +246,8 @@ export async function affiliateRoutes(app) {
 
     // US5 (009-affiliate-improvements-r1, T038): notificação fire-and-forget
     // de comissão paga também no confirm de saque self-service (T016/US2).
-    db.affiliateProfile.findUnique({ where: { id: before.affiliateId }, include: { user: { select: { email: true } } } })
-      .then(profile => sendCommissionPaidEmail({ to: profile?.user?.email, amountCents: result.payoutRequest?.amountCents }))
+    db.affiliateProfile.findUnique({ where: { id: before.affiliateId }, include: { user: { select: { id: true, name: true, email: true, status: true } } } })
+      .then(profile => notifyPayoutPaid({ db, user: profile?.user, amountCents: result.payoutRequest?.amountCents, logger: req.log }))
       .catch(() => {})
 
     await writeAdminAuditLog(req, {
@@ -387,7 +387,7 @@ export async function affiliateRoutes(app) {
     if (!access) return
 
     const { id } = req.params
-    const profile = await db.affiliateProfile.findUnique({ where: { id }, include: { user: { select: { email: true } } } })
+    const profile = await db.affiliateProfile.findUnique({ where: { id }, include: { user: { select: { id: true, name: true, email: true, status: true } } } })
     if (!profile) return reply.code(404).send({ error: 'Perfil não encontrado' })
     if (profile.status === 'approved') return reply.code(409).send({ error: 'Afiliado já aprovado' })
 
@@ -397,7 +397,7 @@ export async function affiliateRoutes(app) {
     })
     // US5 (009-affiliate-improvements-r1): notificação fire-and-forget,
     // best-effort e no-op sem SMTP (nunca derruba a aprovação).
-    sendAffiliateApprovedEmail({ to: profile.user?.email }).catch(() => {})
+    notifyAffiliateApproved({ db, user: profile.user, logger: req.log }).catch(() => {})
     return { profile: { ...updated, pixKey: decryptCredential(updated.pixKey) } }
   })
 
@@ -407,7 +407,7 @@ export async function affiliateRoutes(app) {
 
     const { id } = req.params
     const { adminNotes } = req.body ?? {}
-    const profile = await db.affiliateProfile.findUnique({ where: { id }, include: { user: { select: { email: true } } } })
+    const profile = await db.affiliateProfile.findUnique({ where: { id }, include: { user: { select: { id: true, name: true, email: true, status: true } } } })
     if (!profile) return reply.code(404).send({ error: 'Perfil não encontrado' })
 
     const updated = await db.affiliateProfile.update({
@@ -415,7 +415,7 @@ export async function affiliateRoutes(app) {
       data: { status: 'rejected', rejectedAt: new Date(), approvedAt: null, adminNotes: adminNotes || null },
     })
     // US5: notificação fire-and-forget, best-effort e no-op sem SMTP.
-    sendAffiliateRejectedEmail({ to: profile.user?.email, adminNotes: adminNotes || null }).catch(() => {})
+    notifyAffiliateRejected({ db, user: profile.user, adminNotes: adminNotes || null, logger: req.log }).catch(() => {})
     return { profile: { ...updated, pixKey: decryptCredential(updated.pixKey) } }
   })
 
@@ -504,7 +504,7 @@ export async function affiliateRoutes(app) {
     if (!access) return
 
     const { id } = req.params
-    const commission = await db.affiliateCommission.findUnique({ where: { id }, include: { affiliate: { select: { status: true, user: { select: { email: true } } } } } })
+    const commission = await db.affiliateCommission.findUnique({ where: { id }, include: { affiliate: { select: { status: true, user: { select: { id: true, name: true, email: true, status: true } } } } } })
     if (!commission) return reply.code(404).send({ error: 'Comissão não encontrada' })
     if (commission.status === 'paid') return reply.code(409).send({ error: 'Comissão já marcada como paga' })
     if (!COMMISSION_PAYABLE_STATUSES.includes(commission.status)) return reply.code(409).send({ error: 'Somente comissões elegíveis/aprovadas podem ser pagas' })
@@ -519,7 +519,7 @@ export async function affiliateRoutes(app) {
     if (result.count !== 1) return reply.code(409).send({ error: 'Comissão mudou de status; recarregue a página antes de pagar' })
     await writeCommissionLedger({ commissionId: id, affiliateId: commission.affiliateId, fromStatus: commission.status, toStatus: 'paid', amountCents: commission.commissionAmountCents, reason: 'mark_paid', actor: req.user.sub, at: now, db })
     // US5: notificação fire-and-forget, best-effort e no-op sem SMTP.
-    sendCommissionPaidEmail({ to: commission.affiliate?.user?.email, amountCents: commission.commissionAmountCents }).catch(() => {})
+    notifyPayoutPaid({ db, user: commission.affiliate?.user, amountCents: commission.commissionAmountCents, logger: req.log }).catch(() => {})
     const updated = await db.affiliateCommission.findUnique({ where: { id } })
     await writeAdminAuditLog(req, {
       action: 'admin.affiliate.commission.mark_paid',
@@ -544,7 +544,7 @@ export async function affiliateRoutes(app) {
     // filtro de relação) e pagamos por id.
     const eligible = await db.affiliateCommission.findMany({
       where: { cycleMonth: month, status: { in: COMMISSION_PAYABLE_STATUSES }, affiliate: { status: 'approved' } },
-      select: { id: true, affiliateId: true, status: true, commissionAmountCents: true, affiliate: { select: { user: { select: { email: true } } } } },
+      select: { id: true, affiliateId: true, status: true, commissionAmountCents: true, affiliate: { select: { user: { select: { id: true, name: true, email: true, status: true } } } } },
     })
     const ids = eligible.map(c => c.id)
     const now = new Date()
@@ -560,14 +560,16 @@ export async function affiliateRoutes(app) {
     // US5: um e-mail por afiliado com o total pago no ciclo (fire-and-forget,
     // best-effort), em vez de um por comissão — evita spam quando o afiliado
     // tem várias comissões elegíveis no mesmo mês.
-    const totalByAffiliateEmail = new Map()
+    const totalByAffiliateUser = new Map()
     for (const c of eligible) {
-      const email = c.affiliate?.user?.email
-      if (!email) continue
-      totalByAffiliateEmail.set(email, (totalByAffiliateEmail.get(email) ?? 0) + (c.commissionAmountCents ?? 0))
+      const affiliateUser = c.affiliate?.user
+      if (!affiliateUser?.email) continue
+      const current = totalByAffiliateUser.get(affiliateUser.id) ?? { user: affiliateUser, amountCents: 0 }
+      current.amountCents += (c.commissionAmountCents ?? 0)
+      totalByAffiliateUser.set(affiliateUser.id, current)
     }
-    for (const [email, amountCents] of totalByAffiliateEmail) {
-      sendCommissionPaidEmail({ to: email, amountCents }).catch(() => {})
+    for (const { user: affiliateUser, amountCents } of totalByAffiliateUser.values()) {
+      notifyPayoutPaid({ db, user: affiliateUser, amountCents, logger: req.log }).catch(() => {})
     }
     await writeAdminAuditLog(req, {
       action: 'admin.affiliate.cycle.mark_all_paid',

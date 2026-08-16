@@ -5,6 +5,7 @@ import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/serv
 import { classifyPayerEmail } from '../../domain/payments/payerEmail.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
+import { notifyPaymentApproved } from '../../emailTriggers/events.js'
 import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment, checkStuckPromotions } from '../../domain/affiliate/service.js'
 export { resolvePlanForPayment }
 
@@ -530,6 +531,8 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
               activation = { triggered: true, ...result }
               if (!result.alreadyActivated) {
                 trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'webhook' } })
+                // Recibo por e-mail. Best-effort: nunca segura nem derruba o webhook.
+                notifyPaymentApproved({ db, userId, plan, amount: plans[plan].price, accessExpiresAt: result?.expiresAt, logger: log }).catch(() => {})
                 const payment = await db.payment.findUnique({ where: { mpPaymentId: String(summary.dataResourceId) }, select: { id: true, amount: true } }).catch(() => null)
                 if (payment) {
                   tryCreateAffiliateCommission({
@@ -936,6 +939,7 @@ export async function paymentsRoutes(app) {
       )
       trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'callback' } })
       if (!result.alreadyActivated) {
+        notifyPaymentApproved({ db, userId, plan, amount: plans[plan].price, accessExpiresAt: result?.expiresAt, logger: req.log }).catch(() => {})
         const payment = await db.payment.findUnique({ where: { mpPaymentId: String(mpPaymentId) }, select: { id: true, amount: true } }).catch(() => null)
         if (payment) {
           tryCreateAffiliateCommission({

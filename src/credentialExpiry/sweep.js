@@ -20,7 +20,9 @@
 import { randomUUID } from 'crypto'
 import { parseCredentialData, validateCredentialData } from '../credentialHealth.js'
 import { encryptCredential } from '../credentialCrypto.js'
-import { buildCredentialExpiryEmail } from '../email/credentialExpiryEmail.js'
+import { sendTemplateEmail } from '../email/dispatcher.js'
+import { resolveDashboardUrl } from '../email/layout.js'
+import { describeExpiredStores, EXPIRY_TEMPLATE_SLUG } from './message.js'
 import {
   ALERT_EVENT,
   EXPIRY_ALERT_PLATFORMS,
@@ -145,13 +147,21 @@ export async function runCredentialExpirySweep({
       if (!expiredPlatforms.length) continue
       summary.expired += expiredPlatforms.length
 
-      const { subject, text, html } = buildCredentialExpiryEmail({
-        name: entry.user.name,
-        platforms: expiredPlatforms,
+      // Passa pelo motor de e-mails (catálogo + travas + histórico): assim a
+      // admin edita este texto pela aba E-mails, como todos os outros.
+      const { lojas, consequencia } = describeExpiredStores(expiredPlatforms)
+      const res = await sendTemplateEmail({
+        db,
+        sendMail,
+        slug: EXPIRY_TEMPLATE_SLUG,
+        user: entry.user,
+        vars: { lojas, consequencia, link_credenciais: `${resolveDashboardUrl()}/painel/ids-afiliada` },
+        mode: 'auto',
+        now,
+        logger,
       })
-      const res = await sendMail({ to: entry.user.email, subject, text, html })
-      if (res?.skipped) {
-        // Sem SMTP configurado o envio é no-op — NÃO gravar o aviso, senão a
+      if (!res?.sent) {
+        // Sem SMTP (ou trava do despachante): NÃO gravar o aviso, senão a
         // janela de silêncio queima sem a cliente ter recebido nada.
         summary.skipped += 1
         continue
