@@ -494,6 +494,36 @@ para e-mails **reais** informados pelo usuário (não para o fallback
 | `SMTP_PASS`     | para ativar  | Senha / app password.                                           |
 | `SMTP_FROM`     | não          | Remetente exibido (default = `SMTP_USER`).                      |
 
+### Aviso "o código de acesso da loja venceu" (não regredir)
+
+Caso real (ago/2026): cliente ficou **uma semana** com o código de acesso do ML e
+o da Amazon mortos (0 link curto em 7 dias, 100% plano B) sem ninguém perceber —
+o aviso só existia dentro do painel, e as ofertas continuavam saindo, então nada
+gritava. `src/credentialExpiry/` fecha esse buraco por e-mail.
+
+- **Onde roda:** `setInterval` + `unref()` no boot da API
+  (`startCredentialExpirySweep`, `src/api/server.js`), mesmo padrão de
+  `startLeadNurtureSweep`. **Sem processo PM2 novo, sem worker, sem dependência
+  nova** — cron dedicado foi descartado por custar um processo Node inteiro para
+  rodar 1×/dia (política de memória).
+- **Só `alive === false` dispara.** `alive === null` (rede, 403, 429, sondagem
+  ocupada) é indeterminado e NUNCA vira aviso — mandaria a cliente recadastrar um
+  código vivo. Não afrouxar isso.
+- **Anti-spam:** no máximo 1 aviso por cliente/loja a cada
+  `CREDENTIAL_EXPIRY_ALERT_COOLDOWN_DAYS` (default 7), persistido no
+  `AnalyticsEvent('credential_expiry_alert_sent')` (sem tabela/migration nova). A
+  janela é checada **antes de sondar** — quem já foi avisado não gera chamada
+  extra à loja. Sem SMTP o evento não é gravado (a janela não queima à toa).
+- **Nunca dizer que o envio parou.** O plano B continua enviando e a comissão
+  continua sendo dela; a diferença é link mais comprido (e, no ML, cupom sem
+  produto deixa de ser convertido). Vocabulário leigo obrigatório, com teste que
+  falha se jargão voltar (`test/credential-expiry-alert.test.js`).
+- Envs (todas opcionais): `CREDENTIAL_EXPIRY_ALERT_ENABLED`,
+  `CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS`, `CREDENTIAL_EXPIRY_ALERT_COOLDOWN_DAYS`.
+  Sem SMTP a passada nem começa. Runbook de ligar o SMTP:
+  `docs/ops/aviso-codigo-acesso-vencido.md` (lembrar da pegadinha #1 —
+  `pm2 delete` + `start`, não `restart --update-env`).
+
 **Contato de suporte (dashboard):** o e-mail e WhatsApp de suporte exibidos no
 site vêm de constantes em `dashboard/lib/marketing-content.js`
 (`SUPPORT_EMAIL`, `SUPPORT_WHATSAPP_*`, `SUPPORT_HOURS`, `SUPPORT_RESPONSE_SLA`).
