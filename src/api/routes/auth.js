@@ -4,7 +4,8 @@ import db from '../../db.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { normalizeEmail } from '../auth-utils.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
-import { notifyWelcome, notifyReferralSignup } from '../../emailTriggers/events.js'
+import { notifyWelcome, notifyReferralSignup, notifyPasswordReset } from '../../emailTriggers/events.js'
+import { signPasswordResetToken, verifyPasswordResetToken, peekPasswordResetUserId, DEFAULT_TTL_MS as PASSWORD_RESET_TTL_MS } from '../../auth/passwordResetToken.js'
 import { attachAffiliateAttributionTouchesToUser, attachOrphanTouchesByDevice, recordAffiliateAttributionTouch } from '../../domain/affiliate/service.js'
 import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
 import { isRealEmail } from '../../leadNurture/policy.js'
@@ -165,6 +166,10 @@ export function clearLoginAttempts({ email, ip }) {
 function isPrismaShapeMismatch(err) {
   const message = String(err?.message ?? '')
   return message.includes('Unknown argument') || message.includes('Unknown field') || message.includes('no such column') || message.includes('does not exist in the current database')
+}
+
+function resolveJwtSecretForReset() {
+  return process.env.JWT_SECRET || process.env.AUTH_JWT_SECRET || process.env.JWT_TOKEN || null
 }
 
 async function findUserByNormalizedEmail(email) {
@@ -612,6 +617,82 @@ export async function authRoutes(app) {
       user = await ensureReferralCode(req.user.sub)
     }
     return user
+  })
+
+  // ---------------------------------------------------------------------
+  // Esqueci minha senha. Sem isso, quem perdia a senha só voltava pelo
+  // suporte — e a conta some do produto até alguém responder.
+  //
+  // O link é um token assinado que morre em 1h e vale UMA vez (a assinatura
+  // inclui a impressão da senha atual: trocou a senha, todo link antigo cai).
+  // Nenhuma tabela nova.
+  // ---------------------------------------------------------------------
+  app.post('/forgot-password', async (req, reply) => {
+    const email = normalizeEmail(req.body?.email)
+    // Resposta SEMPRE igual, exista ou não a conta: senão esta rota vira um
+    // detector de "quem tem conta aqui".
+    const respostaNeutra = {
+      ok: true,
+      message: 'Se existir uma conta com esse e-mail, enviamos o link para criar uma nova senha. Confira também a caixa de spam.',
+    }
+    if (!email) return reply.code(200).send(respostaNeutra)
+
+    // Mesmo balde de tentativas do login: impede varrer e-mails por aqui.
+    const rate = consumeLoginAttempt({ email, ip: req.ip })
+    if (rate.blocked) {
+      reply.header('Retry-After', Math.max(1, Math.ceil((rate.resetAt - Date.now()) / 1000)))
+      return reply.code(429).send({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' })
+    }
+
+    const user = await findUserByNormalizedEmail(email).catch(() => null)
+    if (user && user.status !== 'banned' && user.status !== 'suspended' && !String(user.email).endsWith('@sistema.com')) {
+      const secret = resolveJwtSecretForReset()
+      if (secret) {
+        const token = signPasswordResetToken({ userId: user.id, passwordHash: user.passwordHash, secret })
+        const dashboardUrl = String(process.env.DASHBOARD_URL || process.env.API_URL || 'https://espelhagrupos.com.br').replace(/\/+$/, '')
+        notifyPasswordReset({
+          db,
+          user,
+          resetUrl: `${dashboardUrl}/nova-senha?c=${encodeURIComponent(token)}`,
+          validity: `${Math.round(PASSWORD_RESET_TTL_MS / 60000)} minutos`,
+          logger: req.log,
+        }).catch(() => {})
+        trackAnalyticsEventSafe({ userId: user.id, event: 'password_reset_requested' })
+      }
+    }
+    return reply.code(200).send(respostaNeutra)
+  })
+
+  app.post('/reset-password', async (req, reply) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token : ''
+    const password = typeof req.body?.password === 'string' ? req.body.password : ''
+    const confirmPassword = typeof req.body?.confirmPassword === 'string' ? req.body.confirmPassword : ''
+
+    if (!password) return reply.code(400).send({ error: 'Escolha uma senha nova.' })
+    if (password.length < 8) return reply.code(400).send({ error: 'A senha precisa ter pelo menos 8 caracteres.' })
+    if (password.length > 200) return reply.code(400).send({ error: 'Essa senha é longa demais.' })
+    if (confirmPassword && confirmPassword !== password) return reply.code(400).send({ error: 'As duas senhas não são iguais.' })
+
+    const secret = resolveJwtSecretForReset()
+    const userId = peekPasswordResetUserId(token)
+    const linkInvalido = { error: 'Este link não vale mais. Peça um novo na tela de entrada — eles duram pouco tempo de propósito.' }
+    if (!secret || !userId) return reply.code(400).send(linkInvalido)
+
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, email: true, passwordHash: true, status: true } })
+    if (!user) return reply.code(400).send(linkInvalido)
+    if (user.status === 'banned' || user.status === 'suspended') return reply.code(403).send({ error: 'Esta conta está bloqueada. Fale com o suporte.' })
+
+    const check = verifyPasswordResetToken({ token, passwordHash: user.passwordHash, secret })
+    if (!check.valid) return reply.code(400).send(linkInvalido)
+
+    const passwordHash = await bcrypt.hash(password, 10)
+    await db.user.update({ where: { id: user.id }, data: { passwordHash } })
+    clearLoginAttempts({ email: normalizeEmail(user.email), ip: req.ip })
+    trackAnalyticsEventSafe({ userId: user.id, event: 'password_reset_completed' })
+
+    const authToken = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
+    setAuthCookie(reply, authToken, req)
+    return { ok: true, token: authToken, message: 'Senha trocada! Já entramos com a sua conta.' }
   })
 
   // Troca de senha autenticada: exige a senha atual, valida a confirmação,

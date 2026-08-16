@@ -149,6 +149,13 @@ export const api = {
     return data
   },
 
+  forgotPassword: (email) => apiFetch('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: async (token, password, confirmPassword) => {
+    const data = await apiFetch('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password, confirmPassword }) })
+    if (data?.token) setAuthToken(data.token)
+    return data
+  },
+
   me: () => apiFetch('/api/auth/me'),
   updateAccountEmail: (email) =>
     apiFetch('/api/auth/me/email', { method: 'PATCH', body: JSON.stringify({ email }) }),
