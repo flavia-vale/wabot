@@ -45,6 +45,7 @@ import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { runEmailQueueTick } from '../email/queue.js'
 import { runLifecycleEmailSweep } from '../emailTriggers/lifecycleSweep.js'
+import { runWeeklySummarySweep } from '../emailTriggers/weeklySummary.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -256,6 +257,26 @@ async function runLifecycleEmailTick() {
 function startLifecycleEmailSweep() {
   runLifecycleEmailTick()
   const timer = setInterval(runLifecycleEmailTick, LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
+// Resumo semanal: a passada roda junto (mesmo intervalo), mas só AGE no dia da
+// semana escolhido (WEEKLY_SUMMARY_WEEKDAY, default segunda).
+//   WEEKLY_SUMMARY_ENABLED — 'false' desliga.
+async function runWeeklySummaryTick() {
+  if (String(process.env.WEEKLY_SUMMARY_ENABLED ?? '').trim().toLowerCase() === 'false') return
+  if (!isEmailConfigured()) return
+  try {
+    const summary = await runWeeklySummarySweep({ db, sendMail, logger: app.log })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'resumo semanal: passada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'resumo semanal: passada falhou')
+  }
+}
+function startWeeklySummarySweep() {
+  const timer = setInterval(runWeeklySummaryTick, LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
@@ -544,6 +565,7 @@ startLeadNurtureSweep()
 startCredentialExpirySweep()
 startEmailQueueJob()
 startLifecycleEmailSweep()
+startWeeklySummarySweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()

@@ -352,12 +352,12 @@ function LoginContent() {
             <div className="mb-1 flex items-center justify-between gap-3">
               <label htmlFor="password" className={`block text-sm font-medium ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Senha</label>
               {!isRegister && (
-                <a
-                  href="mailto:suporte@botinho.app?subject=Recuperar%20senha%20do%20BOTinho"
+                <Link
+                  href="/esqueci-senha"
                   className="text-xs font-medium text-green-600 hover:underline"
                 >
                   Esqueci minha senha
-                </a>
+                </Link>
               )}
             </div>
             <div className="relative">

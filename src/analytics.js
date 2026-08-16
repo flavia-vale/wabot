@@ -115,6 +115,10 @@ export const ANALYTICS_EVENTS = new Set([
   // trocar a persistência antes — sem ele, o cliente que ignora o aviso passa a
   // receber e-mail todo dia.
   'credential_expiry_alert_sent',
+  // Recuperação de senha por e-mail (pedido e conclusão) — sem PII, só o
+  // userId, para dar para ver se o fluxo está sendo usado e se trava no meio.
+  'password_reset_requested',
+  'password_reset_completed',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i
