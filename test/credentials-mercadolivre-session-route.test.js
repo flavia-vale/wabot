@@ -229,7 +229,7 @@ test('GET /mercadolivre/session: resultado transitório (alive:null) não é cac
   assert.equal(JSON.parse(res2.body).alive, null)
 })
 
-test('PUT /mercadolivre: invalida o cache de sondagem — GET seguinte sonda de novo (sem servir valor stale)', async () => {
+test('PUT /mercadolivre: o próprio save testa o código e deixa o resultado FRESCO em cache', async () => {
   await withEncryptionKey(async () => {
     const userId = nextUserId()
     const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(20) }) })
@@ -256,10 +256,18 @@ test('PUT /mercadolivre: invalida o cache de sondagem — GET seguinte sonda de 
       payload: { tag: '475630078', ssid: 'b'.repeat(20) },
     })
     assert.equal(putRes.statusCode, 200)
-    assert.equal(probeCache.has(userId), false, 'PUT deve invalidar a entrada em cache do usuário')
+    // Mudança de contrato (RCA 2026-08-15): antes o PUT só INVALIDAVA o cache e
+    // deixava o GET seguinte sondar. Agora o próprio save sonda — é assim que
+    // ele consegue dizer na hora se o código funciona — e guarda o resultado
+    // FRESCO. A garantia que importa continua valendo: nunca servir valor
+    // stale. E gasta-se uma sondagem a menos por recadastro (na Amazon, uma
+    // rotação de código a menos).
+    assert.equal(calls, 2, 'o próprio PUT deve testar o código recém-colado')
+    assert.equal(JSON.parse(putRes.body).sessionCheck.alive, true)
+    assert.equal(probeCache.has(userId), true, 'o resultado fresco do save fica em cache')
 
     const res2 = await app.inject({ method: 'GET', url: '/mercadolivre/session' })
-    assert.equal(calls, 2, 'GET após PUT deve sondar de novo (cache miss), não servir o valor stale')
-    assert.equal(JSON.parse(res2.body).alive, true)
+    assert.equal(calls, 2, 'GET após PUT não sonda de novo — serve o resultado fresco do save')
+    assert.equal(JSON.parse(res2.body).alive, true, 'e o valor servido é o novo, nunca o stale')
   })
 })

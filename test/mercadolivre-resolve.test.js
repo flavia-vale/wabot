@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import axios from 'axios'
-import { clearMercadoLivreAffiliateCooldownsForTest, resolveToCleanProductUrl, convert, extractFeaturedSocialProduct } from '../src/converters/mercadolivre.js'
+import { clearMercadoLivreAffiliateCooldownsForTest, resolveToCleanProductUrl, convert, extractFeaturedSocialProduct, isSyntheticListingUrl } from '../src/converters/mercadolivre.js'
 
 test('link de recomendação com MLB no path resolve para o produto (tracking removido)', async () => {
   const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-roupas-portatil-_JM?searchVariation=188766696371#polycard_client=recommendations&reco_backend=x&c_id=/home/element'
@@ -799,4 +799,65 @@ test('extractFeaturedSocialProduct: endereço do card sai limpo (sem parâmetros
 test('extractFeaturedSocialProduct: card sem url utilizável mantém o fallback antigo (não quebra quem já funcionava)', () => {
   const html = `<html><body><div class="card-featured"></div><script>{"polycards":[{"metadata":{"id":"MLB4224584697","category_id":"MLB1276"}}]}</script></body></html>`
   assert.equal(extractFeaturedSocialProduct(html), 'https://produto.mercadolivre.com.br/MLB4224584697-x-_JM')
+})
+
+// ===== Nunca publicar endereço montado por nós (RCA 2026-08-15) =====
+// Cliente Matheus Chaves relatou "os links do mercado livre estão dando erro" e
+// mandou o print da página "Tivemos um problema". O diagnóstico em produção
+// mostrou 10 de 79 envios de ML publicados como
+// `produto.mercadolivre.com.br/MLB<id>-x-_JM?partner_id=<tag>` — endereço que NÓS
+// montamos quando o card destacado não traz nem código de catálogo nem endereço
+// pronto. Ele não existe no ML (confirmado abrindo no celular e no computador) e
+// as linhas ainda eram gravadas como `success` no painel.
+//
+// O endereço montado continua servindo de ENTRADA para a API de afiliados (a API
+// aceita e devolve um meli.la que funciona — validado ao vivo com a credencial do
+// cliente). O que não pode é ele ser PUBLICADO cru quando a API falha.
+
+test('isSyntheticListingUrl: reconhece só o endereço montado por nós', () => {
+  assert.equal(isSyntheticListingUrl('https://produto.mercadolivre.com.br/MLB2627263823-x-_JM'), true)
+  assert.equal(isSyntheticListingUrl('https://produto.mercadolivre.com.br/MLB2627263823-x-_JM/'), true)
+  // endereço REAL do anúncio (com hífen e nome) não pode ser confundido
+  assert.equal(isSyntheticListingUrl('https://produto.mercadolivre.com.br/MLB-4091845807-jogo-de-toalhas-_JM'), false)
+  // catálogo continua válido
+  assert.equal(isSyntheticListingUrl('https://www.mercadolivre.com.br/p/MLB62551600'), false)
+  assert.equal(isSyntheticListingUrl('https://site-de-terceiro.example.com/MLB2627263823-x-_JM'), false)
+  assert.equal(isSyntheticListingUrl(null), false)
+  assert.equal(isSyntheticListingUrl('nao-e-url'), false)
+})
+
+test('convert NÃO publica o endereço montado por nós quando o código de acesso venceu (401)', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(axios, 'post', async () => ({ status: 401, data: { message: 'unauthorized: sessão expirada' }, headers: {} }))
+  const url = 'https://produto.mercadolivre.com.br/MLB2627263823-x-_JM'
+  const result = await convert(url, { tag: 'shinebaloes', ssid: 'ssid-expirado-1234567890' })
+  assert.equal(result, null, 'melhor não enviar a oferta do que enviar link quebrado para o grupo')
+})
+
+test('convert continua publicando o fallback partner_id em endereço REAL de anúncio (não regride)', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(axios, 'post', async () => ({ status: 401, data: { message: 'unauthorized: sessão expirada' }, headers: {} }))
+  const url = 'https://produto.mercadolivre.com.br/MLB-4091845807-jogo-de-toalhas-karsten-_JM'
+  const result = await convert(url, { tag: 'shinebaloes', ssid: 'ssid-expirado-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.match(result.url, /partner_id=shinebaloes/)
+  assert.equal(result.warning, 'ml_ssid_expired')
+})
+
+test('convert continua publicando o fallback partner_id em endereço de catálogo (não regride)', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(axios, 'post', async () => ({ status: 401, data: { message: 'unauthorized: sessão expirada' }, headers: {} }))
+  const result = await convert('https://www.mercadolivre.com.br/p/MLB62551600', { tag: 'shinebaloes', ssid: 'ssid-expirado-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.match(result.url, /partner_id=shinebaloes/)
+})
+
+test('endereço montado segue valendo como ENTRADA da API de afiliados (link curto continua saindo)', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  t.mock.method(axios, 'post', async () => ({ status: 200, data: { urls: [{ short_url: 'https://meli.la/2hDEepb' }] }, headers: {} }))
+  const url = 'https://produto.mercadolivre.com.br/MLB4032550787-x-_JM'
+  const result = await convert(url, { tag: 'shinebaloes', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.url, 'https://meli.la/2hDEepb')
+  assert.equal(result.linkKind, 'product')
 })

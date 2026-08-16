@@ -494,6 +494,36 @@ para e-mails **reais** informados pelo usuário (não para o fallback
 | `SMTP_PASS`     | para ativar  | Senha / app password.                                           |
 | `SMTP_FROM`     | não          | Remetente exibido (default = `SMTP_USER`).                      |
 
+### Aviso "o código de acesso da loja venceu" (não regredir)
+
+Caso real (ago/2026): cliente ficou **uma semana** com o código de acesso do ML e
+o da Amazon mortos (0 link curto em 7 dias, 100% plano B) sem ninguém perceber —
+o aviso só existia dentro do painel, e as ofertas continuavam saindo, então nada
+gritava. `src/credentialExpiry/` fecha esse buraco por e-mail.
+
+- **Onde roda:** `setInterval` + `unref()` no boot da API
+  (`startCredentialExpirySweep`, `src/api/server.js`), mesmo padrão de
+  `startLeadNurtureSweep`. **Sem processo PM2 novo, sem worker, sem dependência
+  nova** — cron dedicado foi descartado por custar um processo Node inteiro para
+  rodar 1×/dia (política de memória).
+- **Só `alive === false` dispara.** `alive === null` (rede, 403, 429, sondagem
+  ocupada) é indeterminado e NUNCA vira aviso — mandaria a cliente recadastrar um
+  código vivo. Não afrouxar isso.
+- **Anti-spam:** no máximo 1 aviso por cliente/loja a cada
+  `CREDENTIAL_EXPIRY_ALERT_COOLDOWN_DAYS` (default 7), persistido no
+  `AnalyticsEvent('credential_expiry_alert_sent')` (sem tabela/migration nova). A
+  janela é checada **antes de sondar** — quem já foi avisado não gera chamada
+  extra à loja. Sem SMTP o evento não é gravado (a janela não queima à toa).
+- **Nunca dizer que o envio parou.** O plano B continua enviando e a comissão
+  continua sendo dela; a diferença é link mais comprido (e, no ML, cupom sem
+  produto deixa de ser convertido). Vocabulário leigo obrigatório, com teste que
+  falha se jargão voltar (`test/credential-expiry-alert.test.js`).
+- Envs (todas opcionais): `CREDENTIAL_EXPIRY_ALERT_ENABLED`,
+  `CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS`, `CREDENTIAL_EXPIRY_ALERT_COOLDOWN_DAYS`.
+  Sem SMTP a passada nem começa. Runbook de ligar o SMTP:
+  `docs/ops/aviso-codigo-acesso-vencido.md` (lembrar da pegadinha #1 —
+  `pm2 delete` + `start`, não `restart --update-env`).
+
 **Contato de suporte (dashboard):** o e-mail e WhatsApp de suporte exibidos no
 site vêm de constantes em `dashboard/lib/marketing-content.js`
 (`SUPPORT_EMAIL`, `SUPPORT_WHATSAPP_*`, `SUPPORT_HOURS`, `SUPPORT_RESPONSE_SLA`).
@@ -2069,6 +2099,48 @@ card destacado").
 (`suspicious-traffic-frontend` / `/gz/account-verification`) com **status 200**
 para quem ele não reconhece. Um `200` num teste de fora do VPS **não prova** que
 a página existe — confira o corpo antes de concluir.
+
+### O endereço montado por nós NUNCA pode ser publicado (RCA 2026-08-15)
+
+O RCA acima passou a **preferir** o endereço do card, mas manteve a fabricação de
+`produto.mercadolivre.com.br/MLB<id>-x-_JM` como último recurso — e ela continuou
+chegando ao grupo. Cliente novo (`matheuschaves308@gmail.com`) reportou "os links
+do mercado livre estão dando erro" com print da página **"Tivemos um problema"**;
+o mesmo endereço aberto no celular E no computador dá **"Parece que esta página
+não existe"**. Em 7 dias, **10 de 79** envios de ML dele saíram como
+`produto.mercadolivre.com.br/MLB<id>-x-_JM?partner_id=<tag>` — e gravados como
+`success` no painel.
+
+**Por que ficava escondido:** o endereço montado é só a **entrada** da chamada à
+API de afiliados, e a API **aceita** (validado ao vivo com a credencial dele:
+devolveu `meli.la` funcionando). Quem chega ao grupo é o `meli.la`. Só quando a
+chamada falha (código de acesso vencido, 403, 429) o plano B publica o endereço
+montado **cru** — e aí o link quebrado vai para o grupo. Isso explica o relato do
+cliente ("atualizei o código, voltou a funcionar, caiu de novo"): com a credencial
+viva sai `meli.la`, com ela morta sai o endereço quebrado.
+
+**Armadilha de diagnóstico (não repetir):** os 401 do `bot.log` estavam TODOS em
+endereços montados, sugerindo que o formato causava o 401. É falso — um teste
+controlado com a credencial dele converteu o MESMO endereço montado com sucesso.
+O 401 era a credencial; a página de erro era o endereço. **Dois problemas
+independentes** que se sobrepunham no log.
+
+**Fix:** `isSyntheticListingUrl` (`src/converters/mercadolivre.js`, pura/exportada)
+reconhece exatamente o formato que nós montamos, e `convert()` **retorna `null`**
+em vez de aplicar o fallback `partner_id` sobre ele. A guarda é no **publicar**,
+não no montar — montar continua valendo como entrada da API (é o que preserva os
+links curtos). Melhor não enviar a oferta do que enviar link quebrado, e a linha
+vira falha de conversão honesta em vez de `success` mentiroso.
+
+**Não regredir:** não voltar a pendurar `partner_id` em endereço que casa com
+`isSyntheticListingUrl`; não confundir com o endereço REAL
+(`MLB-<id>-<nome>-_JM`) nem com catálogo (`/p/MLB<id>`), que continuam saindo
+normalmente no fallback. Testes: `test/mercadolivre-resolve.test.js` (bloco
+"Nunca publicar endereço montado por nós").
+
+**Diagnóstico reutilizável:** `scripts/diag-ml-sends.mjs <email|telefone|nome>`
+— read-only, classifica o formato de cada link de ML publicado e marca com ⚠ os
+suspeitos (`listing_fabricado`, `vitrine_social`, `cupom_generico`).
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 

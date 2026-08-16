@@ -109,6 +109,12 @@ export const ANALYTICS_EVENTS = new Set([
   'nurture_email_sent',
   // Opt-out durável da trilha de nutrição (LGPD) — prevalece sobre novos downloads.
   'nurture_unsubscribed',
+  // Aviso por e-mail de "código de acesso da loja venceu" (src/credentialExpiry).
+  // É TAMBÉM a persistência do anti-spam: a data do último evento por loja é o
+  // que segura o próximo aviso dentro da janela de silêncio. Não remover sem
+  // trocar a persistência antes — sem ele, o cliente que ignora o aviso passa a
+  // receber e-mail todo dia.
+  'credential_expiry_alert_sent',
 ])
 
 const SENSITIVE_KEY_PATTERN = /(token|secret|password|cookie|credential|csrf|ssid|key|message|text|url|phone|email)/i

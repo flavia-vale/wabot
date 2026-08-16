@@ -411,6 +411,34 @@ function extractFeaturedCardUrl(metadata, expectedMlbId) {
   return u.toString()
 }
 
+// Reconhece o endereço que NÓS montamos quando não há código de catálogo nem
+// endereço pronto no card: `produto.mercadolivre.com.br/MLB<id>-x-_JM`.
+//
+// RCA 2026-08-15 (cliente Matheus Chaves): esse formato NÃO EXISTE no Mercado
+// Livre — o endereço real é `produto.mercadolivre.com.br/MLB-<id>-<nome>-_JM`
+// (com hífen depois de MLB e com o nome do produto no meio). Confirmado abrindo
+// no celular E no computador: dá "Tivemos um problema" / "Parece que esta página
+// não existe". Em 7 dias, 10 dos 79 envios de Mercado Livre dele saíram assim,
+// gravados como `success` no painel — o cliente recebia link quebrado e o painel
+// dizia que estava tudo certo.
+//
+// Por que isso ficava escondido: enquanto a API de afiliados gera o link curto,
+// o endereço montado é só a ENTRADA da chamada (e o ML aceita — validado ao vivo
+// com a credencial dele: devolveu `meli.la` funcionando). Quem chega ao grupo é o
+// `meli.la`, não o endereço montado. Só quando a chamada falha — código de acesso
+// vencido, 403, 429 — o plano B publica o endereço montado cru, e aí o link
+// quebrado vai para o grupo.
+//
+// Por isso a guarda é no PUBLICAR, não no montar: montar continua valendo (é
+// entrada útil para a API), publicar não.
+export function isSyntheticListingUrl(raw) {
+  if (!raw) return false
+  let u
+  try { u = new URL(String(raw)) } catch { return false }
+  if (!ML_HOST.test(u.hostname)) return false
+  return /^\/MLB[0-9]{6,}-x-_JM\/?$/i.test(u.pathname)
+}
+
 export function extractFeaturedSocialProduct(html) {
   if (typeof html !== 'string' || !html) return null
   // Sem card destacado => não é divulgação de um produto específico.
@@ -1186,6 +1214,21 @@ export async function convert(url, creds) {
     // uma URL inexistente (404 "Parece que esta página não existe" — bug real no
     // card). A própria página /p/MLB é válida; só penduramos partner_id nela. O
     // formato -x-_JM só é correto para o wid= (listing id), já tratado no resolve.
+    // Plano B publica o `target` cru com `partner_id`. Se o `target` é um
+    // endereço que NÓS montamos (ver isSyntheticListingUrl), ele não existe no
+    // Mercado Livre e o grupo receberia "Tivemos um problema" / "Parece que esta
+    // página não existe". Nesse caso é melhor não enviar a oferta do que enviar
+    // link quebrado: a linha vira falha de conversão (honesta no painel) em vez
+    // de `success` mentiroso. Não regredir — era exatamente isso que fazia o
+    // cliente reclamar de "links do mercado livre dando erro".
+    if (isSyntheticListingUrl(target)) {
+      logger.warn(
+        { url, target, affiliateWarning },
+        'ML fallback: endereço montado por nós não existe no ML — descartando a oferta em vez de publicar link quebrado',
+      )
+      return null
+    }
+
     const fallbackId = extractMlbId(target)
     const u = new URL(canonicalizeMlProductUrl(target))
 
