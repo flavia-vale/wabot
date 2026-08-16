@@ -177,17 +177,23 @@ const targets = await db.groupTarget.findMany({
 const monitors = groups.filter(g => g.role === 'monitor')
 const posts = groups.filter(g => g.role === 'post')
 const postById = new Map(posts.map(g => [g.id, g]))
+// Mesma normalização do bot-worker (`normalizeJidForMatch`): tira o sufixo de
+// device (`:12@`) antes de comparar. Sem isso, um jid com device parece "não
+// monitorado" aqui e o diagnóstico apontaria a causa errada.
+const normJid = (j) => (typeof j === 'string' ? j.trim().replace(/:\d+(?=@)/, '') : '')
+const monitorJids = new Set(monitors.map(g => normJid(g.waJid)))
+const nameByJid = new Map(groups.map(g => [normJid(g.waJid), g.name]))
 console.log(`  monitorados: ${monitors.length} | destinos: ${posts.length} | pares monitor→destino: ${targets.length}`)
 for (const m of monitors) {
   const dests = targets.filter(t => t.monitorId === m.id).map(t => postById.get(t.postId)?.name || t.postId)
   const canalBloqueado = m.kind === 'channel' && !entitlements.canUseChannels
-  console.log(`    [monitor] ${m.name} (${m.kind}) → ${dests.length ? dests.join(', ') : '(NENHUM DESTINO)'}${canalBloqueado ? '  ⚠ canal bloqueado pelo plano' : ''}`)
+  console.log(`    [monitor] ${m.name} (${m.kind}) ${m.waJid} → ${dests.length ? dests.join(', ') : '(NENHUM DESTINO)'}${canalBloqueado ? '  ⚠ canal bloqueado pelo plano' : ''}`)
   if (!dests.length) flag(`grupo monitorado "${m.name}" não tem nenhum destino ligado — nada sai dele`)
   if (canalBloqueado) flag(`"${m.name}" é canal e o plano atual não libera canais — ele é removido da config do robô em silêncio`)
 }
 for (const p of posts) {
   const bloqueado = p.kind === 'channel' && !entitlements.canUseChannels
-  console.log(`    [destino] ${p.name} (${p.kind})${bloqueado ? '  ⚠ canal bloqueado pelo plano' : ''}`)
+  console.log(`    [destino] ${p.name} (${p.kind}) ${p.waJid}${bloqueado ? '  ⚠ canal bloqueado pelo plano' : ''}`)
 }
 if (!monitors.length) flag('nenhum grupo monitorado cadastrado nesta conta/ambiente')
 if (!posts.length) flag('nenhum grupo de destino cadastrado nesta conta/ambiente')
@@ -213,6 +219,7 @@ line('BOT.LOG (mensagens que chegaram do WhatsApp)')
 const logFile = logPathArg || join(getLogsBaseDir(), 'bot.log')
 const counters = { upsert: 0, aceita: 0, descartada: 0, foraDoEscopo: 0, erroTimeout: 0 }
 const amostra = []
+const aceitasPorJid = new Map()
 let logDisponivel = true
 if (!existsSync(logFile)) {
   logDisponivel = false
@@ -232,7 +239,15 @@ if (!existsSync(logFile)) {
     if (m) t = Number(m[1])
     if (t && t < sinceMs) continue
     if (l.includes('messages.upsert recebido')) counters.upsert++
-    else if (l.includes('Mensagem aceita para processamento')) { counters.aceita++; if (amostra.length < 8) amostra.push(l.slice(0, 220)) }
+    else if (l.includes('Mensagem aceita para processamento')) {
+      counters.aceita++
+      const j = l.match(/"jid":"([^"]+)"/)
+      if (j) {
+        const key = normJid(j[1])
+        aceitasPorJid.set(key, (aceitasPorJid.get(key) || 0) + 1)
+      }
+      if (amostra.length < 4) amostra.push(l.slice(0, 200))
+    }
     else if (l.includes('Mensagem descartada: reentrega')) counters.descartada++
     else if (l.includes('fora do escopo monitorado')) counters.foraDoEscopo++
     else if (l.includes('Mensagem descartada após erro/timeout')) counters.erroTimeout++
@@ -240,6 +255,30 @@ if (!existsSync(logFile)) {
   console.log(`  nas últimas ${hours}h:`, counters)
   console.log('  (o bot.log é compartilhado por TODAS as contas do ambiente — em staging normalmente é só a sua)')
   for (const a of amostra) console.log(`    ${a}`)
+}
+
+// Cruzamento decisivo: "Mensagem aceita para processamento" é logada para
+// QUALQUER chat que o socket recebe — inclusive conversa que o robô não
+// monitora. Se o jid não for de um grupo monitorado, processIncomingMessage
+// retorna em silêncio (sem linha em MessageLog), e a tela de Envios fica vazia
+// com o robô 100% saudável. Só a comparação abaixo separa esse caso de um bug.
+line('DE ONDE VIERAM AS MENSAGENS ACEITAS')
+let aceitasMonitoradas = 0
+let aceitasForaDoMonitor = 0
+if (!aceitasPorJid.size) {
+  console.log('  nenhuma mensagem aceita na janela')
+} else {
+  const ordenado = [...aceitasPorJid.entries()].sort((a, b) => b[1] - a[1])
+  for (const [jid, n] of ordenado) {
+    const monitorado = monitorJids.has(jid)
+    if (monitorado) aceitasMonitoradas += n; else aceitasForaDoMonitor += n
+    const nome = nameByJid.get(jid)
+    console.log(`    ${String(n).padStart(4)}x  ${jid}  ${monitorado ? '✔ MONITORADO' : '✗ não monitorado por esta conta'}${nome ? ` (${nome})` : ''}`)
+  }
+  console.log(`  total: ${aceitasMonitoradas} de grupo monitorado | ${aceitasForaDoMonitor} de outros chats`)
+  if (aceitasMonitoradas === 0) {
+    flag('TODAS as mensagens aceitas vieram de chats que esta conta NÃO monitora — o robô ignora em silêncio e nada aparece em Envios')
+  }
 }
 
 // ------------------------------------------------------------------ veredito
@@ -255,10 +294,15 @@ if (!logDisponivel) {
 } else if (counters.aceita === 0) {
   console.log('  Mensagens chegaram no socket mas NENHUMA foi aceita para processamento.')
   console.log('  Suspeitos: reentrega/mensagem velha (descartada) ou chat fora dos grupos monitorados.')
+} else if (logs.length === 0 && aceitasMonitoradas === 0) {
+  console.log('  O robô recebeu mensagem, mas NENHUMA veio de um grupo que esta conta monitora.')
+  console.log('  Não é bug: mensagem de chat não monitorado é ignorada em silêncio, sem linha em Envios.')
+  console.log('  Para testar, publique no grupo listado como [monitor] acima — o JID tem que bater.')
 } else if (logs.length === 0) {
-  console.log('  Mensagens FORAM aceitas mas NENHUMA linha foi gravada em Envios.')
-  console.log('  Suspeitos: mensagem sem link de loja, grupo monitorado sem destino ligado,')
-  console.log('  canal bloqueado pelo plano, ou erro antes da gravação (ver "fora do escopo" acima).')
+  console.log(`  ${aceitasMonitoradas} mensagem(ns) de grupo MONITORADO foram aceitas e mesmo assim`)
+  console.log('  nenhuma linha foi gravada em Envios. Aí sim é problema no pipeline.')
+  console.log('  Suspeitos: mensagem sem link de loja, monitorado sem destino ligado,')
+  console.log('  canal bloqueado pelo plano, ou erro antes da gravação.')
 } else {
   console.log(`  Existem ${logs.length} linhas no banco na janela. Se a tela está vazia, o problema é da`)
   console.log('  API/tela (login em outro ambiente, filtro de período, erro no /api/logs), não do robô.')
