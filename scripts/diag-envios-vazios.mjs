@@ -220,6 +220,7 @@ const logFile = logPathArg || join(getLogsBaseDir(), 'bot.log')
 const counters = { upsert: 0, aceita: 0, descartada: 0, foraDoEscopo: 0, erroTimeout: 0 }
 const amostra = []
 const aceitasPorJid = new Map()
+const aceitasTs = []
 let logDisponivel = true
 if (!existsSync(logFile)) {
   logDisponivel = false
@@ -245,6 +246,7 @@ if (!existsSync(logFile)) {
       if (j) {
         const key = normJid(j[1])
         aceitasPorJid.set(key, (aceitasPorJid.get(key) || 0) + 1)
+        if (t) aceitasTs.push({ ts: t, jid: key })
       }
       if (amostra.length < 4) amostra.push(l.slice(0, 200))
     }
@@ -281,6 +283,27 @@ if (!aceitasPorJid.size) {
   }
 }
 
+// Toda reconexão/pareamento dispara uma rajada de mensagens de SISTEMA
+// (senderKeyDistribution, protocolMessage, sync) que chegam como 'notify'
+// fresquinhas e contam como "aceitas" — mas não têm texto nem link, então
+// processIncomingMessage as ignora em silêncio DE PROPÓSITO (comentário em
+// bot-worker.js: sem isso um reconnect polui o painel com dezenas de 'nolink').
+// Confundir essa rajada com "mensagem real que sumiu" foi o que travou o
+// diagnóstico nesta investigação — por isso a checagem virou parte do script.
+const RAJADA_MS = 5 * 60_000
+const marcosReconexao = events
+  .filter(e => ['reconnect_success', 'reconnect_attempt', 'manual_pairing_requested'].includes(e.type))
+  .map(e => new Date(e.occurredAt).getTime())
+if (aceitasTs.length && marcosReconexao.length) {
+  const naRajada = aceitasTs.filter(({ ts }) => marcosReconexao.some(m => ts >= m && ts - m <= RAJADA_MS))
+  const pct = Math.round((naRajada.length / aceitasTs.length) * 100)
+  const monitoradasNaRajada = naRajada.filter(({ jid }) => monitorJids.has(jid)).length
+  console.log(`  ${naRajada.length}/${aceitasTs.length} (${pct}%) chegaram até 5min depois de uma reconexão/pareamento`)
+  if (monitoradasNaRajada > 0 && monitoradasNaRajada === aceitasMonitoradas) {
+    flag(`as ${aceitasMonitoradas} mensagens do grupo monitorado chegaram TODAS logo após uma reconexão — quase certamente tráfego de sistema do re-pareamento, não mensagem de verdade. Publique uma oferta AGORA no grupo e rode com --hours=1`)
+  }
+}
+
 // ------------------------------------------------------------------ veredito
 line('VEREDITO')
 if (!logDisponivel) {
@@ -300,9 +323,11 @@ if (!logDisponivel) {
   console.log('  Para testar, publique no grupo listado como [monitor] acima — o JID tem que bater.')
 } else if (logs.length === 0) {
   console.log(`  ${aceitasMonitoradas} mensagem(ns) de grupo MONITORADO foram aceitas e mesmo assim`)
-  console.log('  nenhuma linha foi gravada em Envios. Aí sim é problema no pipeline.')
-  console.log('  Suspeitos: mensagem sem link de loja, monitorado sem destino ligado,')
-  console.log('  canal bloqueado pelo plano, ou erro antes da gravação.')
+  console.log('  nenhuma linha foi gravada em Envios.')
+  console.log('  Se o aviso de rajada pós-reconexão apareceu acima, provavelmente eram mensagens')
+  console.log('  de sistema (não de verdade) — publique uma oferta e rode com --hours=1 pra confirmar.')
+  console.log('  Se NÃO apareceu, é problema no pipeline: mensagem sem link de loja reconhecível,')
+  console.log('  convite de grupo removido do texto, ou erro antes da gravação.')
 } else {
   console.log(`  Existem ${logs.length} linhas no banco na janela. Se a tela está vazia, o problema é da`)
   console.log('  API/tela (login em outro ambiente, filtro de período, erro no /api/logs), não do robô.')
