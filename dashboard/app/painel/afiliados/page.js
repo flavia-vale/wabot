@@ -112,6 +112,30 @@ function MyReferrals() {
   )
 }
 
+const AFFILIATE_MATERIALS_URL = 'https://drive.google.com/drive/folders/1yJtLOfIqDaGpUIAdT6oAVNwdBVTPbngB?usp=sharing'
+
+// Balão de materiais de divulgação — só aparece para afiliado aprovado,
+// logo abaixo do link de indicação.
+function AffiliateMaterialsBalloon() {
+  return (
+    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+      <p className="text-sm font-black text-indigo-900">🎁 Materiais prontos para divulgar o BOTinho</p>
+      <p className="mt-1 text-sm leading-6 text-indigo-900">
+        Neste link você encontra materiais de divulgação do BOTinho: imagens para feed, story e carrossel.
+        É só baixar, publicar e colocar o seu link de indicação junto.
+      </p>
+      <a
+        href={AFFILIATE_MATERIALS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+      >
+        Abrir pasta de materiais
+      </a>
+    </div>
+  )
+}
+
 function StatCard({ label, value, helper = null }) {
   return (
     <div className="rounded-xl bg-white border border-gray-100 p-4 shadow-sm">
@@ -498,6 +522,8 @@ export default function AffiliatePage() {
         </div>
         <p className="mt-2 break-words text-xs text-emerald-600">Código: <strong className="break-all">{profile.code}</strong> · PIX: <span className="break-all">{profile.pixKey}</span> ({PIX_KEY_TYPE_LABELS[profile.pixKeyType] ?? profile.pixKeyType})</p>
       </div>
+
+      {profile.status === 'approved' && <AffiliateMaterialsBalloon />}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total de indicados" value={stats.totalReferrals ?? 0} />
