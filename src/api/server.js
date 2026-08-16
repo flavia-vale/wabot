@@ -41,6 +41,8 @@ import { runNurtureSweep } from '../leadNurture/sweep.js'
 import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
+import { emailPrefsRoutes } from './routes/emailPrefs.js'
+import { runEmailQueueTick } from '../email/queue.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -232,6 +234,29 @@ function startCredentialExpirySweep() {
   timer.unref?.()
 }
 
+// Fila lenta dos disparos manuais de e-mail (aba E-mails do admin). Mesmo
+// padrão dos demais jobs in-process: setInterval + unref, sem processo PM2 novo.
+// O estado mora no banco, então reinício da API não perde a campanha.
+//   EMAIL_QUEUE_TICK_MS      — intervalo entre rodadas (default 60s).
+//   EMAIL_QUEUE_BATCH_SIZE   — e-mails por rodada (default 10 → ~600/h).
+//   EMAIL_DAILY_CAP          — teto de envios em 24h (default 250).
+const EMAIL_QUEUE_TICK_MS = Math.max(Number(process.env.EMAIL_QUEUE_TICK_MS) || 60_000, 10_000)
+async function runEmailQueueTickSafe() {
+  if (!isEmailConfigured()) return
+  try {
+    const summary = await runEmailQueueTick({ db, sendMail, logger: app.log })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'fila de e-mail: rodada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'fila de e-mail: rodada falhou')
+  }
+}
+function startEmailQueueJob() {
+  const timer = setInterval(runEmailQueueTickSafe, EMAIL_QUEUE_TICK_MS)
+  timer.unref?.()
+}
+
 // PR-5.C.3: watchdog do probe roda a cada 5min e marca yellow canais que
 // publicaram mas não receberam ping da conta-probe. Conservador — nunca
 // degrada para red/critical e nunca sobreescreve red/critical existente.
@@ -367,6 +392,7 @@ app.register(offerQueueRoutes, { prefix: '/api/offer-queues' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 app.register(affiliateRoutes, { prefix: '/api' })
 app.register(leadNurtureRoutes, { prefix: '/api/lead-nurture' })
+app.register(emailPrefsRoutes, { prefix: '/api/emails' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
@@ -490,6 +516,7 @@ startLogRetentionJob()
 startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
+startEmailQueueJob()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()
