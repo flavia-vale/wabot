@@ -38,7 +38,8 @@ import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/stale
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
 import { trackAnalyticsEventSafe } from '../analytics.js'
 import { runNurtureSweep } from '../leadNurture/sweep.js'
-import { sendMail } from '../email/mailer.js'
+import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
+import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
@@ -186,6 +187,48 @@ async function runLeadNurtureSweepTick() {
 function startLeadNurtureSweep() {
   runLeadNurtureSweepTick()
   const timer = setInterval(runLeadNurtureSweepTick, LEAD_NURTURE_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
+// Aviso de código de acesso vencido (Mercado Livre / Amazon): passada diária
+// in-process, MESMO padrão de startLeadNurtureSweep (setInterval + unref, sem
+// processo/worker/Redis novo — AGENTS.md "Política de memória"). Envs opcionais
+// aditivas, sem mudança obrigatória de .env:
+//   CREDENTIAL_EXPIRY_ALERT_ENABLED        — 'false' desliga (default ligado).
+//   CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS    — intervalo entre passadas (default 24h).
+//   CREDENTIAL_EXPIRY_ALERT_COOLDOWN_DAYS  — silêncio por loja/cliente (default 7).
+// Sem SMTP configurado a passada nem começa: o envio seria no-op e a sondagem
+// gastaria chamada (e rotação de código de acesso) à toa.
+const CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS = Math.max(Number(process.env.CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS) || 24 * 60 * 60 * 1000, 60 * 1000)
+function credentialExpiryAlertEnabled() {
+  return String(process.env.CREDENTIAL_EXPIRY_ALERT_ENABLED ?? '').trim().toLowerCase() !== 'false'
+}
+async function runCredentialExpirySweepTick() {
+  if (!credentialExpiryAlertEnabled() || !isEmailConfigured()) return
+  try {
+    const [{ checkMercadoLivreSession }, { checkAmazonSession }, mlCache, amazonCache] = await Promise.all([
+      import('../converters/mercadolivre.js'),
+      import('../converters/amazon.js'),
+      import('../converters/mercadolivreSessionProbeCache.js'),
+      import('../converters/amazonSessionProbeCache.js'),
+    ])
+    const summary = await runCredentialExpirySweep({
+      db,
+      sendMail,
+      checkers: { mercadolivre: checkMercadoLivreSession, amazon: checkAmazonSession },
+      probeCaches: { mercadolivre: mlCache, amazon: amazonCache },
+      logger: app.log,
+    })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'credential-expiry: passada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'credential-expiry: passada falhou')
+  }
+}
+function startCredentialExpirySweep() {
+  runCredentialExpirySweepTick()
+  const timer = setInterval(runCredentialExpirySweepTick, CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
@@ -446,6 +489,7 @@ setTimeout(() => { warnIfWorkersRunStaleCode() }, STALE_CODE_CHECK_DELAY_MS).unr
 startLogRetentionJob()
 startActivityCacheCleanup()
 startLeadNurtureSweep()
+startCredentialExpirySweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()
