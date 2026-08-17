@@ -295,7 +295,13 @@ const BOGUS_SCRAPE_TITLE_PATTERNS = [
   // título é específico o bastante para não pegar título de produto real
   // (produto real nunca menciona a própria loja no título).
   /n[ãa]o perca esta oferta .{0,20}na shein/i,
-  /economize muito agora/i,
+  // "Economize muito agora" sozinho é frase promocional genérica demais —
+  // sem âncora de marca, um título legítimo de produto de outra loja (ex.:
+  // Amazon/Shopee/ML/Magalu) que contenha essa frase seria descartado à toa
+  // (fere FR-023, zero regressão nas quatro lojas existentes). Ancorado à
+  // marca SHEIN igual ao padrão irmão acima — só descarta quando as duas
+  // partes aparecem juntas no mesmo título.
+  /shein.{0,60}economize muito agora|economize muito agora.{0,60}shein/i,
 ]
 
 function isBogusScrapeTitle(title) {

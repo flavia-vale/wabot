@@ -134,6 +134,89 @@ test('erro de rede degrada para a última URL conhecida (nunca lança)', async (
   assert.equal(await resolveSheinShortLink(start, { fetchImpl }), start)
 })
 
+// T065 (review): sem teto, `await res.text()` carrega o corpo INTEIRO do hop
+// para memória, dentro do pipeline de incoming do bot-worker (teto de heap
+// 384MB). Este teste prova que a leitura para de consumir chunks assim que
+// cruza o teto (512KB, mesmo valor de shopee.js), mesmo com um corpo bem
+// maior disponível — e que a extração ainda funciona com o que foi lido.
+test('corpo HTML maior que o teto de bytes é lido truncado, sem consumir o stream inteiro', async () => {
+  const start = 'https://onelink.shein.com/14/abc'
+  const dest = 'https://m.shein.com/br/ark/default?goods_id=485735309'
+  const encoder = new TextEncoder()
+  // O destino fica bem no início do corpo — igual ao interstício real.
+  const prefix = `<html><body><input id="url" value="${dest}"></body></html>`
+  const fillerChunk = encoder.encode('x'.repeat(100 * 1024)) // 100KB por chunk
+  const chunks = [encoder.encode(prefix), ...Array.from({ length: 20 }, () => fillerChunk)] // corpo total ~2MB
+  let readCalls = 0
+  const res = {
+    ok: true,
+    status: 200,
+    url: start,
+    headers: {
+      get: (name) => (name.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null),
+      getSetCookie: () => [],
+    },
+    body: {
+      getReader: () => {
+        let i = 0
+        return {
+          read: async () => {
+            readCalls++
+            if (i >= chunks.length) return { done: true, value: undefined }
+            return { done: false, value: chunks[i++] }
+          },
+          cancel: async () => {},
+        }
+      },
+    },
+    // Se o código caísse de volta em res.text(), este teste acusaria: não é
+    // esse o caminho esperado quando body.getReader() está disponível.
+    text: async () => { throw new Error('não deveria usar text() quando body.getReader existe') },
+  }
+  const fetchImpl = async () => res
+  const resolved = await resolveSheinShortLink(start, { fetchImpl })
+  assert.equal(resolved, dest, 'a extração deve funcionar com o corpo truncado, já que o destino vem no início')
+  assert.ok(
+    readCalls < chunks.length,
+    `esperava parar de ler chunks antes do fim do stream (leu ${readCalls} de ${chunks.length})`,
+  )
+})
+
+// T066 (review): antes, `timeoutMs` era aplicado a CADA hop (8s × maxHops=6 =
+// até 48s de pior caso), acima do MSG_QUEUE_TIMEOUT_MS (25s) do incoming —
+// uma cadeia lenta perdia a MENSAGEM INTEIRA como timeout:incoming. Agora
+// `totalTimeoutMs` é um orçamento compartilhado entre todos os hops.
+test('orçamento TOTAL da resolução é respeitado mesmo com hops individualmente rápidos', async () => {
+  const start = 'https://onelink.shein.com/14/abc'
+  let fetches = 0
+  const fetchImpl = async (url) => {
+    fetches++
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    return redirectResponse(`${url}/next`, url)
+  }
+  const startedAt = Date.now()
+  const resolved = await resolveSheinShortLink(start, { fetchImpl, totalTimeoutMs: 45, maxHops: 6 })
+  const elapsedMs = Date.now() - startedAt
+  assert.ok(
+    fetches < 6,
+    `deveria parar antes de completar os 6 hops de 20ms cada (parou em ${fetches} chamadas)`,
+  )
+  assert.ok(
+    elapsedMs < 6 * 20 + 40,
+    `tempo total (${elapsedMs}ms) não pode se aproximar do pior caso por-hop (6 × 20ms+)`,
+  )
+  assert.equal(typeof resolved, 'string')
+})
+
+test('estouro do prazo total via AbortSignal nunca lança — degrada para a última URL conhecida', async () => {
+  const start = 'https://onelink.shein.com/14/abc'
+  const fetchImpl = async (url, init) => new Promise((resolve, reject) => {
+    init.signal.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })))
+  })
+  const resolved = await resolveSheinShortLink(start, { fetchImpl, totalTimeoutMs: 20, maxHops: 3 })
+  assert.equal(resolved, start)
+})
+
 test('extractSheinGoodsId cobre caminho -p-<id>.html e query goods_id', () => {
   assert.equal(extractSheinGoodsId('https://br.shein.com/algo-p-485735309.html'), '485735309')
   assert.equal(extractSheinGoodsId('https://br.shein.com/algo-p-485735309-cat-123.html'), '485735309')

@@ -48,6 +48,17 @@ export const AFFILIATE_URL_FROM_PREFIX = 'affiliate_koc_'
 const BROWSER_UA =
   'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36'
 
+// Teto de bytes lido do corpo de cada hop, mesmo padrão dos dois conversores
+// irmãos que resolvem short link (`src/converters/shopee.js` 512KB,
+// `src/converters/amazon.js` 256KB) — sem teto, um hop de terceiro que sirva
+// um corpo grande é lido inteiro para a memória dentro do pipeline de
+// incoming do bot-worker, que roda sob teto de heap de 384MB
+// (`BOT_WORKER_MAX_OLD_SPACE_MB`). Usa o mesmo valor da Shopee: a página do
+// oneLink é um interstício pequeno, mas o teto generoso não pesa e evita
+// truncar o `<input id="url">` real caso o hop sirva algo maior do que o
+// esperado.
+const SHORT_LINK_BODY_MAX_BYTES = 512 * 1024
+
 // oneLink não devolve 302: serve uma página-interstício que redireciona por
 // JS. O destino real fica num `<input id="url">` escondido — por isso esse
 // padrão vem PRIMEIRO na lista (é o padrão real medido em produção).
@@ -114,6 +125,37 @@ export function stripSheinAffiliateTracking(url) {
   }
 }
 
+// Lê o corpo até SHORT_LINK_BODY_MAX_BYTES e devolve o que foi coletado até
+// lá (nunca `null` por causa do teto — só por erro real de leitura). Mesmo
+// contrato de `readBodyLimited` em shopee.js/amazon.js.
+async function readBodyLimited(res) {
+  try {
+    if (!res?.body?.getReader) {
+      const text = await res?.text?.()
+      return typeof text === 'string' ? text.slice(0, SHORT_LINK_BODY_MAX_BYTES) : null
+    }
+    const reader = res.body.getReader()
+    const chunks = []
+    let received = 0
+    while (received < SHORT_LINK_BODY_MAX_BYTES) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.byteLength
+    }
+    await reader.cancel().catch(() => {})
+    const body = new Uint8Array(received)
+    let offset = 0
+    for (const chunk of chunks) {
+      body.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return new TextDecoder().decode(body)
+  } catch {
+    return null
+  }
+}
+
 function extractRedirectFromHtml(html, baseUrl) {
   for (const re of HTML_REDIRECT_PATTERNS) {
     const m = html.match(re)
@@ -128,24 +170,38 @@ function extractRedirectFromHtml(html, baseUrl) {
 
 // Segue redirects MANUALMENTE, com cookie jar, e devolve a URL do hop mais
 // informativo. Nunca usa `redirect: 'follow'` — perderia o hop com os dados.
-// Nunca lança: falha de rede degrada para "não resolveu" (convert() decide).
+// Nunca lança: falha de rede/prazo esgotado degrada para "não resolveu"
+// (convert() decide) — nunca escapa como exceção.
+//
+// `totalTimeoutMs` é um ORÇAMENTO TOTAL para a cadeia inteira (não por hop):
+// antes, `timeoutMs` era aplicado a CADA hop (até 8s × maxHops=6 = 48s de
+// pior caso), acima do `MSG_QUEUE_TIMEOUT_MS` (25s) do pipeline de incoming
+// — uma cadeia lenta estourava o timeout da MENSAGEM INTEIRA em vez de só
+// essa conversão falhar. Default 8000ms alinhado ao alvo declarado em
+// plan.md ("≤ 8s com no máximo 6 hops"). Cada hop recebe como timeout o que
+// resta do orçamento (nunca o valor cheio de novo).
 export async function resolveSheinShortLink(
   url,
-  { timeoutMs = 8000, maxHops = 6, fetchImpl = globalThis.fetch } = {},
+  { totalTimeoutMs = 8000, maxHops = 6, fetchImpl = globalThis.fetch } = {},
 ) {
   let current = String(url)
   const cookieJar = new Map()
+  const deadlineAt = Date.now() + totalTimeoutMs
 
   for (let i = 0; i < maxHops; i++) {
     // 1. A URL atual já revela o produto — para aqui.
     if (hasProductId(current)) break
+
+    // 2. Orçamento total esgotado — última URL conhecida, sem novo hop.
+    const remainingMs = deadlineAt - Date.now()
+    if (remainingMs <= 0) break
 
     const cookieHeader = [...cookieJar].map(([k, v]) => `${k}=${v}`).join('; ')
     let res
     try {
       res = await fetchImpl(current, {
         redirect: 'manual',
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(remainingMs),
         headers: {
           'User-Agent': BROWSER_UA,
           Accept: 'text/html,application/xhtml+xml',
@@ -180,12 +236,8 @@ export async function resolveSheinShortLink(
 
     if (!String(res.headers.get('content-type') || '').includes('text/html')) break
 
-    let html = ''
-    try {
-      html = await res.text()
-    } catch {
-      break
-    }
+    const html = await readBodyLimited(res)
+    if (!html) break
 
     const next = extractRedirectFromHtml(html, current)
     if (!next || next === current) break
