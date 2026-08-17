@@ -105,6 +105,66 @@ test('resolve oneLink de terceiro (via input#url) e converte preservando goods_i
   assert.equal(out.searchParams.get('goods_id'), '999888')
 })
 
+test('T061: cadeia de redirect que sai do domínio SHEIN é recusada, mesmo com goods_id no destino', async () => {
+  // Simula um oneLink cujo redirect (Location) escapa para um domínio de
+  // terceiro que embute os mesmos query params — se a guarda de host não
+  // existisse, isso seria publicado com o rastro do terceiro intacto.
+  const redirectResponse = (location) => ({
+    ok: true,
+    status: 302,
+    url: 'https://onelink.shein.com/14/abc',
+    headers: {
+      get: (name) => (name.toLowerCase() === 'location' ? location : null),
+      getSetCookie: () => [],
+    },
+    text: async () => '',
+  })
+  const fetchImpl = async () =>
+    redirectResponse('https://tracker-terceiro.example.com/x?goods_id=485735309&koc_id=OUTRO&url_from=affiliate_koc_OUTRO')
+  const result = await convert('https://onelink.shein.com/14/abc', { tag: '12345' }, { fetchImpl })
+  assert.equal(result, null)
+})
+
+test('T061: link direto de host que não é SHEIN nunca converte (guarda de host)', async () => {
+  const result = await convert('https://not-shein.com/vestido-p-123.html', { tag: '12345' })
+  assert.equal(result, null)
+})
+
+test('T062: landing genérica do oneLink (/ark/default) sem goods_id e sem nenhum parâmetro de destino → null', async () => {
+  const url = 'https://m.shein.com/br/ark/default'
+  assert.equal(await convert(url, { tag: '12345' }), null)
+})
+
+test('T062: landing genérica do oneLink só com rastro (onelink/requestId), sem goods_id → null', async () => {
+  const url = 'https://m.shein.com/br/ark/default?onelink=x&requestId=y'
+  assert.equal(await convert(url, { tag: '12345' }), null)
+})
+
+test('T062: não regride cupom/campanha legítimo (INV-6) mesmo com o novo filtro de /ark/default', async () => {
+  const url = 'https://m.shein.com/br/ark/default?scene=1&campaign=summer-sale'
+  const result = await convert(url, { tag: '12345' })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'coupon')
+})
+
+test('T063: campaign/campaign_id/ad_type/scene/test do link de origem chegam intactos (não mascarados pelo re-preenchimento dos padrões)', async () => {
+  const url =
+    'https://m.shein.com/br/ark/default?goods_id=485735309&campaign=summer-sale&campaign_id=999&ad_type=CUSTOM&scene=9&test=123'
+  const result = await convert(url, { tag: '12345' })
+  assert.ok(result)
+  const out = new URL(result.url)
+  assert.equal(out.searchParams.get('campaign'), 'summer-sale')
+  assert.equal(out.searchParams.get('campaign_id'), '999')
+  assert.equal(out.searchParams.get('ad_type'), 'CUSTOM')
+  assert.equal(out.searchParams.get('scene'), '9')
+  assert.equal(out.searchParams.get('test'), '123')
+})
+
+test('T064: shc/link vazios (?shc=&link=) também são recusados (presença, não valor)', async () => {
+  const url = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=&link=&url_from=GM7999'
+  assert.equal(await convert(url, { tag: '12345' }), null)
+})
+
 test('garante PROGRAM_PARAMS ausentes no destino', async () => {
   const url = 'https://br.shein.com/vestido-floral-p-485735309.html'
   const result = await convert(url, { tag: '12345' })

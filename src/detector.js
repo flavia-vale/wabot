@@ -1,7 +1,10 @@
 // Aceita qualquer subdomínio antes do domínio registrável (produto., lista.,
 // m., www. etc.). `(?:[a-z0-9-]+\.)*` exige um ponto separador, então não
 // casa hosts coladas como `notmercadolivre.com.br`.
-const PATTERNS = {
+// Exportado (além de usado internamente) para que conversores possam validar
+// se um host resolvido pertence de fato à loja — fonte única, sem duplicar a
+// lista de domínios (ex.: src/converters/shein.js, guarda de host pós-redirect).
+export const PATTERNS = {
   mercadolivre: /https?:\/\/(?:[a-z0-9-]+\.)*(?:mercadolivre\.com\.br|mercadolivre\.com|mercadolibre\.com|meli\.la|mluvem\.com)[^\s]*/gi,
   amazon:       /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.com\.br|link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzn\.divulguei\.app|amzlink\.to)[^\s]*/gi,
   shopee:       /https?:\/\/(?:[a-z0-9-]+\.)*(?:shope\.ee|shopee\.com\.br)[^\s]*/gi,

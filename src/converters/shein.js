@@ -8,6 +8,8 @@
 // Estrutura espelha src/converters/shopee.js (resolvedor + conversor no
 // mesmo módulo, sem API paga).
 
+import { PATTERNS } from '../detector.js'
+
 // Página de produto direta: `<slug>-p-<goodsId>.html` (opcionalmente com
 // `-cat-<catId>`).
 export const SHEIN_PRODUCT_RE = /-p-(\d+)(?:-cat-(\d+))?\.html/i
@@ -17,6 +19,11 @@ export const SHEIN_GOODS_ID_RE = /[?&]goods_id=(\d+)/i
 // Página de captcha do sistema de risco da SHEIN. Responde HTTP 200 e
 // descarta o hop anterior — que é onde estão os dados. Nunca seguir para cá.
 export const SHEIN_RISK_RE = /\/risk\/(?:challenge|action)/i
+// Vitrine genérica do oneLink — landing padrão quando o destino real
+// (produto ou cupom específico) não pôde ser determinado. Ver uso em
+// `convert()`: sem goods_id e sem nenhum parâmetro de destino restante, é
+// tratada como resolução incompleta, não como cupom.
+export const SHEIN_ARK_DEFAULT_RE = /\/ark\/default\/?$/i
 
 // Parâmetros de rastro do terceiro que gerou o link. Removidos antes de
 // aplicar a identidade da cliente — nunca copiados para a saída.
@@ -51,6 +58,21 @@ const HTML_REDIRECT_PATTERNS = [
   /<link[^>]+rel=["']?canonical["']?[^>]+href=["']([^"']+)["']/i,
 ]
 
+// Guarda de host: o destino final (pós-resolução de redirect) precisa ser um
+// domínio real da SHEIN. Reusa `PATTERNS.shein` de src/detector.js — mesma
+// lista canônica do detector, sem duplicar. Sem isso, uma cadeia de
+// redirecionamento que sai do domínio da SHEIN seria publicada com os
+// parâmetros de rastro do terceiro intactos (vazamento de comissão).
+export function isSheinHost(url) {
+  try {
+    const hostname = new URL(String(url)).hostname
+    PATTERNS.shein.lastIndex = 0
+    return PATTERNS.shein.test(`https://${hostname}`)
+  } catch {
+    return false
+  }
+}
+
 export function isSheinShortLink(url) {
   return /^https?:\/\/(?:[a-z0-9-]+\.)*(?:onelink\.shein\.com|shein\.top)\//i.test(String(url || ''))
 }
@@ -67,7 +89,10 @@ function hasProductId(url) {
 export function hasOpaqueShareToken(url) {
   try {
     const u = new URL(String(url))
-    return OPAQUE_SHARE_PARAMS.some((key) => u.searchParams.get(key))
+    // Presença, não valor: `?shc=`/`?link=` vazios ainda são o token do botão
+    // "compartilhar" do app — `searchParams.get` (truthy) deixava passar string
+    // vazia, que é falsy em JS.
+    return OPAQUE_SHARE_PARAMS.some((key) => u.searchParams.has(key))
   } catch {
     return false
   }
@@ -191,6 +216,12 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {})
       if (isSheinShortLink(resolved)) return null
     }
 
+    // Guarda de host: depois de resolver e ANTES de aplicar a identidade da
+    // cliente, recusar qualquer destino que não seja domínio real da SHEIN —
+    // um redirect que escapou do domínio nunca pode receber koc_id/url_from
+    // dela nem ser publicado com o rastro do terceiro intacto.
+    if (!isSheinHost(resolved)) return null
+
     if (hasOpaqueShareToken(resolved)) return null
 
     const stripped = stripSheinAffiliateTracking(resolved)
@@ -199,6 +230,18 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {})
     try {
       u = new URL(stripped)
     } catch {
+      return null
+    }
+
+    // Vitrine genérica do oneLink (`/ark/default`) sem goods_id E sem NENHUM
+    // parâmetro de destino restante (depois do strip de tracking): não é um
+    // cupom/campanha legítimo, é a resolução não tendo concluído — o `<input
+    // id="url">` não revelou nada além da própria página-padrão. Cupom real
+    // carrega ao menos um parâmetro de destino (ex.: `campaign=<algo>`) além
+    // do boilerplate; publicar essa vitrine vazia como "cupom" seria mentir
+    // sobre o que o link realmente é. Não afeta INV-6 (cupom/campanha
+    // legítimos sempre chegam com pelo menos um parâmetro de destino).
+    if (SHEIN_ARK_DEFAULT_RE.test(u.pathname) && !extractSheinGoodsId(stripped) && [...u.searchParams.keys()].length === 0) {
       return null
     }
 
