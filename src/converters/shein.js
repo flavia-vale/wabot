@@ -8,7 +8,7 @@
 // Estrutura espelha src/converters/shopee.js (resolvedor + conversor no
 // mesmo módulo, sem API paga).
 
-import { PATTERNS } from '../detector.js'
+import { isSheinHostname } from '../detector.js'
 
 // Página de produto direta: `<slug>-p-<goodsId>.html` (opcionalmente com
 // `-cat-<catId>`).
@@ -70,15 +70,19 @@ const HTML_REDIRECT_PATTERNS = [
 ]
 
 // Guarda de host: o destino final (pós-resolução de redirect) precisa ser um
-// domínio real da SHEIN. Reusa `PATTERNS.shein` de src/detector.js — mesma
-// lista canônica do detector, sem duplicar. Sem isso, uma cadeia de
+// domínio real da SHEIN. Reusa `isSheinHostname` de src/detector.js — mesma
+// lista canônica do detector, sem duplicar. Validação ANCORADA (host igual ao
+// domínio, ou subdomínio dele com separador de ponto) — nunca o regex de
+// extração de texto (`PATTERNS.shein`, que termina em `[^\s]*` de propósito
+// para capturar o link inteiro em texto corrido). Usar o extrator aqui era
+// exatamente o furo do T070: `shein.com.evil.net` "começa com" `shein.com`
+// como substring e passava. Sem esta guarda ancorada, uma cadeia de
 // redirecionamento que sai do domínio da SHEIN seria publicada com os
 // parâmetros de rastro do terceiro intactos (vazamento de comissão).
 export function isSheinHost(url) {
   try {
     const hostname = new URL(String(url)).hostname
-    PATTERNS.shein.lastIndex = 0
-    return PATTERNS.shein.test(`https://${hostname}`)
+    return isSheinHostname(hostname)
   } catch {
     return false
   }

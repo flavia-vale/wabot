@@ -130,6 +130,28 @@ test('T061: link direto de host que não é SHEIN nunca converte (guarda de host
   assert.equal(result, null)
 })
 
+test('T070: link direto de domínio sósia (shein.com.<atacante>) nunca converte', async () => {
+  const result = await convert('https://shein.com.evil.net/x-p-123.html?goods_id=123', { tag: '999' })
+  assert.equal(result, null)
+})
+
+test('T070: cadeia de redirect que termina em domínio sósia (shein.company.io) nunca converte', async () => {
+  const redirectResponse = (location) => ({
+    ok: true,
+    status: 302,
+    url: 'https://onelink.shein.com/14/abc',
+    headers: {
+      get: (name) => (name.toLowerCase() === 'location' ? location : null),
+      getSetCookie: () => [],
+    },
+    text: async () => '',
+  })
+  const fetchImpl = async () =>
+    redirectResponse('https://shein.company.io/x-p-123.html?goods_id=123&koc_id=OUTRO&url_from=affiliate_koc_OUTRO')
+  const result = await convert('https://onelink.shein.com/14/abc', { tag: '12345' }, { fetchImpl })
+  assert.equal(result, null)
+})
+
 test('T062: landing genérica do oneLink (/ark/default) sem goods_id e sem nenhum parâmetro de destino → null', async () => {
   const url = 'https://m.shein.com/br/ark/default'
   assert.equal(await convert(url, { tag: '12345' }), null)

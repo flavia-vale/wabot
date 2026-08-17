@@ -12,7 +12,14 @@ import { usePainelHeader } from '../PainelShell'
 
 const MAX_LINKS = 1
 const MAX_TEXT_LENGTH = 12_000
-const SUPPORTED_LINK_RE = /https?:\/\/(?:www\.)?(?:mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|shope\.ee|shopee\.com\.br|s\.shopee\.com\.br|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me|shein\.com|onelink\.shein\.com|shein\.top)\S*/gi
+// SHEIN fica num ramo à parte, com prefixo de subdomínio `(?:[a-z0-9-]+\.)*`
+// e um delimitador ancorado logo após o domínio (`/?#:` ou fim) — sem isso
+// `br.shein.com`/`m.shein.com` (hosts que o próprio conversor emite, ver
+// data-model.md §3) não batiam contra o prefixo fixo `(?:www\.)?` usado pelas
+// outras lojas, e o painel mostrava "0 links detectados"/"link não suportado"
+// para um link que o espelhamento converte normalmente (T071). As outras
+// entradas não mudam.
+const SUPPORTED_LINK_RE = /https?:\/\/(?:(?:www\.)?(?:mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|shope\.ee|shopee\.com\.br|s\.shopee\.com\.br|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)|(?:[a-z0-9-]+\.)*(?:shein\.com|onelink\.shein\.com|shein\.top)(?=[\/?#:]|\s|$))\S*/gi
 
 function countSupportedLinks(text) {
   const matches = text.match(SUPPORTED_LINK_RE)
