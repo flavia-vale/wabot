@@ -461,3 +461,36 @@ irmãos (`shopee.js`, `amazon.js`).
   `shein` na mesma string). Ajustar `test/product-info-scraper.test.js` para cobrir tanto a
   frase real da SHEIN quanto um título legítimo de outra loja contendo "economize" que **não**
   pode ser descartado. (review)
+
+---
+
+## Phase 10: Code Review Fixes (2ª rodada)
+
+- [ ] T068 Transformar o strip de miniatura da SHEIN em **lista de candidatos com fallback** em
+  `src/converters/imageScrapers.js`, em vez de uma reescrita destrutiva de via única.
+  Hoje `resolveSheinImage` devolve `stripSheinImageThumbnailSuffix(image)` e
+  `buildImageUrlCandidates` **não** tem ramo para `img.ltwebstatic.com`, então
+  `fetchImageBuffer` faz **uma única tentativa**: se a URL sem `_thumbnail_<w>x<h>` responder
+  404, redirecionar para placeholder, ou servir bytes que `validateDownloadedImage` reprova, a
+  URL original de miniatura (que funcionava) já foi descartada e a oferta sai **sem foto** —
+  degradando SC-004 (≥90% das ofertas convertidas com foto). Todas as outras transformações de
+  CDN deste mesmo arquivo são candidate lists justamente por isso
+  (`buildAmazonImageUrlCandidates`, `buildShopeeImageUrlCandidates`, o upgrade `D_NQ_NP_2X_` do
+  ML), e o comentário da Amazon logo acima documenta exatamente esse modo de falha ("a URL sem
+  sufixo fica por último porque alguns ASINs/CDNs devolvem placeholder branco nesse caminho").
+  Implementar `isSheinImageUrl` + `buildSheinImageUrlCandidates` (URL sem o sufixo primeiro,
+  URL original de miniatura como fallback) e plugar em `buildImageUrlCandidates`, mantendo
+  `stripSheinImageThumbnailSuffix` como função pura. Cobrir em `test/image-scrapers.test.js`:
+  a URL sem sufixo vem primeiro na lista e a original permanece como último candidato. (review)
+
+- [ ] T069 Eliminar o **fetch duplicado** do mesmo endereço no caminho de imagem da SHEIN em
+  `src/converters/imageScrapers.js`. `resolveSheinImage(url)` é exatamente
+  `resolveByHtmlLayers(url, { ua: BROWSER_UA })` + strip, e `fetchProductImage` executa
+  `if (!image) image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })` logo em
+  seguida — como `resolveByHtmlLayers` não é memoizada e o cache de `fetchProductImage` só é
+  consultado no início da função, toda falha de imagem de SHEIN baixa o HTML do mesmo oneLink
+  **duas vezes** dentro do pipeline de incoming (que tem orçamento de 25s,
+  `MSG_QUEUE_TIMEOUT_MS`). Depois de T068 o ramo `else if (platform === 'shein')` deixa de
+  precisar existir: basta a lista de candidatos, e o caminho genérico
+  `resolveByHtmlLayers` já cobre a extração do `og:image`. Remover o ramo (ou fazê-lo não
+  repetir a chamada genérica) e garantir por teste que só há uma busca de HTML por link. (review)
