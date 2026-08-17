@@ -329,6 +329,71 @@ test('fetchProductImage resolve short link meli.la do Mercado Livre antes de bus
   assert.deepEqual(calls, [shortUrl, productUrl])
 })
 
+test('fetchProductImage da SHEIN busca o HTML do oneLink uma única vez (sem fetch duplicado)', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const productUrl = 'https://shein.com/oneLink/123'
+  const thumbUrl = 'https://img.ltwebstatic.com/images3/2026/produto_thumbnail_405x552.jpg'
+  const html = `<html><head>
+    <meta property="og:image" content="${thumbUrl}" />
+  </head></html>`
+
+  globalThis.fetch = async (url) => {
+    calls.push(String(url))
+    return htmlResponse(html, productUrl)
+  }
+
+  const image = await fetchProductImage('shein', productUrl, {})
+
+  assert.equal(image, thumbUrl)
+  assert.deepEqual(calls, [productUrl], `esperava 1 fetch de HTML, veio ${calls.length}: ${calls.join(', ')}`)
+})
+
+test('fetchImageBuffer da SHEIN tenta a URL sem sufixo de miniatura primeiro e cai para a miniatura original se falhar', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const hires = await imageBytes({ width: 1340, height: 1785, color: '#333' })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const thumbUrl = 'https://img.ltwebstatic.com/images3/2026/produto_thumbnail_405x552.jpg'
+  const strippedUrl = 'https://img.ltwebstatic.com/images3/2026/produto.jpg'
+
+  globalThis.fetch = async (url) => {
+    const urlStr = String(url)
+    calls.push(urlStr)
+    return imageResponse(hires, urlStr)
+  }
+
+  const image = await fetchImageBuffer(thumbUrl, 'https://shein.com/oneLink/123')
+
+  assert.equal(image?.mimetype, 'image/png')
+  assert.deepEqual(calls, [strippedUrl], 'deveria ter baixado a variante sem sufixo primeiro')
+})
+
+test('fetchImageBuffer da SHEIN cai para a miniatura original quando a URL sem sufixo falha (SC-004: nunca sai sem foto)', async (t) => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  const hires = await imageBytes({ width: 1340, height: 1785, color: '#333' })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const thumbUrl = 'https://img.ltwebstatic.com/images3/2026/produto_thumbnail_405x552.jpg'
+  const strippedUrl = 'https://img.ltwebstatic.com/images3/2026/produto.jpg'
+
+  globalThis.fetch = async (url) => {
+    const urlStr = String(url)
+    calls.push(urlStr)
+    if (urlStr === strippedUrl) return new Response('', { status: 404 })
+    return imageResponse(hires, urlStr)
+  }
+
+  const image = await fetchImageBuffer(thumbUrl, 'https://shein.com/oneLink/123')
+
+  assert.equal(image?.mimetype, 'image/png')
+  assert.deepEqual(calls, [strippedUrl, thumbUrl], `esperava fallback para a miniatura original, tentativas: ${calls.join(', ')}`)
+})
+
 // RCA "imagens muito pequenas" (filas/broadcast): a Baileys só calcula
 // width/height de um imageMessage quando NÃO recebe jpegThumbnail pronto
 // (Utils/messages.js:132-162 do @whiskeysockets/baileys) — como o app SEMPRE
