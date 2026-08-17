@@ -48,6 +48,28 @@ function daysSince(value, now) {
   return hours === null ? null : hours / 24
 }
 
+// Gatilho ancorado no CADASTRO ("faz 2 dias que você criou a conta e ainda não
+// conectou") precisa de teto, senão vira retroativo: quem se cadastrou há oito
+// meses também satisfaz "faz 2 dias ou mais" e recebe hoje um e-mail de
+// boas-vindas atrasado. Aconteceu em produção (2026-08) quando o motor entrou
+// no ar com a base já formada.
+//
+// Gatilho ancorado em FATO ATUAL (o plano vence em 3 dias, o robô caiu ontem,
+// há saldo para sacar) não tem esse problema e continua valendo para todo
+// mundo — não é retroativo, é o que está acontecendo agora.
+const SIGNUP_WINDOW_DAYS = { onboarding: 30, configuracao: 30, afiliado: 90 }
+
+/**
+ * Data a partir da qual os gatilhos ancorados no cadastro passam a valer.
+ * Sem a env, só as janelas acima protegem a base antiga.
+ */
+export function resolveTriggersStartAt(env = process.env) {
+  const raw = String(env.EMAIL_TRIGGERS_START_AT ?? '').trim()
+  if (!raw) return null
+  const date = new Date(raw)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 const COUNTDOWN_SLUGS = {
   trial: { 3: 'teste_acaba_em_3_dias', 2: 'teste_acaba_em_2_dias', 1: 'teste_acaba_em_1_dia' },
   paid: { 3: 'plano_vence_em_3_dias', 2: 'plano_vence_em_2_dias', 1: 'plano_vence_em_1_dia' },
@@ -58,9 +80,16 @@ const COUNTDOWN_SLUGS = {
  * @param {Date|number} now
  * @returns {{ slug: string, vars: Record<string, any> } | null}
  */
-export function decideLifecycleEmail(snapshot, now = new Date()) {
+export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStartAt = null } = {}) {
   if (!snapshot) return null
   if (snapshot.status === 'banned' || snapshot.status === 'suspended') return null
+
+  // Conta anterior à virada nunca dispara gatilho de "dias após o cadastro".
+  const cadastroValeParaGatilho = !triggersStartAt || !snapshot.createdAt
+    || new Date(snapshot.createdAt).getTime() >= new Date(triggersStartAt).getTime()
+  const dentroDaJanelaDeCadastro = (dias, min, max) => (
+    cadastroValeParaGatilho && dias !== null && dias >= min && dias <= max
+  )
 
   const plan = String(snapshot.plan ?? 'trial').toLowerCase()
   const isPaidPlan = PAID_PLANS.has(plan)
@@ -105,11 +134,12 @@ export function decideLifecycleEmail(snapshot, now = new Date()) {
     }
 
     const diasDeConta = daysSince(snapshot.createdAt, now)
-    if (!snapshot.waEverConnected && diasDeConta !== null && diasDeConta >= 2) {
+    if (!snapshot.waEverConnected && dentroDaJanelaDeCadastro(diasDeConta, 2, SIGNUP_WINDOW_DAYS.onboarding)) {
       return { slug: 'onboarding_conecte_whatsapp', vars: {} }
     }
 
-    if (snapshot.waEverConnected && diasDeConta !== null && diasDeConta >= 1 && (!snapshot.hasMonitorGroup || !snapshot.hasPostGroup)) {
+    if (snapshot.waEverConnected && dentroDaJanelaDeCadastro(diasDeConta, 1, SIGNUP_WINDOW_DAYS.configuracao)
+      && (!snapshot.hasMonitorGroup || !snapshot.hasPostGroup)) {
       const faltando = []
       if (!snapshot.hasMonitorGroup) faltando.push('os grupos de onde as ofertas vêm')
       if (!snapshot.hasPostGroup) faltando.push('os grupos para onde as ofertas vão')
@@ -136,8 +166,11 @@ export function decideLifecycleEmail(snapshot, now = new Date()) {
   }
 
   // 5) Convite de afiliada por último: é o único de divulgação da lista.
+  // Convite de afiliada também é ancorado no cadastro: sem teto, a base antiga
+  // inteira receberia de uma vez. Cliente de casa antiga é convidada pela aba
+  // E-mails, no momento que a admin escolher.
   const diasDeConta = daysSince(snapshot.createdAt, now)
-  if (!snapshot.isAffiliate && acessoAtivo && diasDeConta !== null && diasDeConta >= 14) {
+  if (!snapshot.isAffiliate && acessoAtivo && dentroDaJanelaDeCadastro(diasDeConta, 14, SIGNUP_WINDOW_DAYS.afiliado)) {
     return { slug: 'seja_afiliado', vars: { percentual: `${snapshot.commissionPercent ?? 30}%` } }
   }
 

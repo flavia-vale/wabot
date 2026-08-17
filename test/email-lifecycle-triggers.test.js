@@ -3,7 +3,7 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decideLifecycleEmail, daysUntil, formatDateBR, formatMoneyBR } from '../src/emailTriggers/lifecyclePolicy.js'
+import { decideLifecycleEmail, daysUntil, formatDateBR, formatMoneyBR, resolveTriggersStartAt } from '../src/emailTriggers/lifecyclePolicy.js'
 import { runLifecycleEmailSweep } from '../src/emailTriggers/lifecycleSweep.js'
 import { listTemplateDefinitions, getTemplateDefinition } from '../src/email/registry.js'
 
@@ -140,6 +140,61 @@ test('saldo abaixo do mínimo não avisa', () => {
 test('convite de afiliada só depois de 14 dias de conta', () => {
   assert.equal(decideLifecycleEmail(base({ createdAt: new Date(NOW.getTime() - 20 * DAY) }), NOW)?.slug, 'seja_afiliado')
   assert.equal(decideLifecycleEmail(base({ createdAt: new Date(NOW.getTime() - 5 * DAY) }), NOW), null)
+})
+
+// ------------------------------------------- gatilho de cadastro não é retroativo
+
+test('base antiga não recebe e-mail de "dias após o cadastro"', () => {
+  const antiga = { createdAt: new Date(NOW.getTime() - 240 * DAY) }
+
+  const nuncaConectou = base({ ...antiga, waEverConnected: false, waConnected: false })
+  assert.equal(decideLifecycleEmail(nuncaConectou, NOW), null, 'onboarding voltou a ser retroativo')
+
+  const semDestino = base({ ...antiga, hasPostGroup: false })
+  assert.equal(decideLifecycleEmail(semDestino, NOW), null, 'configuração incompleta voltou a ser retroativa')
+
+  assert.equal(decideLifecycleEmail(base(antiga), NOW), null, 'convite de afiliada voltou a ser retroativo')
+})
+
+test('o corte de virada vale por conta: quem se cadastrou antes dele não dispara', () => {
+  const virada = new Date(NOW.getTime() - 2 * DAY)
+  const snapshot = base({ waEverConnected: false, waConnected: false, createdAt: new Date(NOW.getTime() - 3 * DAY) })
+
+  assert.equal(decideLifecycleEmail(snapshot, NOW)?.slug, 'onboarding_conecte_whatsapp')
+  assert.equal(decideLifecycleEmail(snapshot, NOW, { triggersStartAt: virada }), null)
+
+  const depoisDaVirada = base({ waEverConnected: false, waConnected: false, createdAt: new Date(NOW.getTime() - DAY) })
+  const passados3Dias = new Date(NOW.getTime() + 2 * DAY)
+  assert.equal(
+    decideLifecycleEmail(depoisDaVirada, passados3Dias, { triggersStartAt: virada })?.slug,
+    'onboarding_conecte_whatsapp',
+    'quem se cadastrou depois da virada continua recebendo',
+  )
+})
+
+test('o corte NÃO silencia aviso de fato atual (vencimento, robô caído, saque)', () => {
+  const virada = new Date(NOW.getTime() - DAY)
+  const antiga = new Date(NOW.getTime() - 300 * DAY)
+  const opcoes = { triggersStartAt: virada }
+
+  const vencendo = base({ plan: 'pro', createdAt: antiga, accessExpiresAt: new Date(NOW.getTime() + 3 * DAY) })
+  assert.equal(decideLifecycleEmail(vencendo, NOW, opcoes)?.slug, 'plano_vence_em_3_dias')
+
+  const caido = base({ createdAt: antiga, waConnected: false, waDisconnectedSince: new Date(NOW.getTime() - 30 * HOUR) })
+  assert.equal(decideLifecycleEmail(caido, NOW, opcoes)?.slug, 'whatsapp_desconectado')
+
+  const comSaldo = base({ createdAt: antiga, isAffiliate: true, affiliateAvailableCents: 9000, minPayoutCents: 5000 })
+  assert.equal(decideLifecycleEmail(comSaldo, NOW, opcoes)?.slug, 'saque_disponivel')
+})
+
+test('resolveTriggersStartAt: sem env é null, data inválida também', () => {
+  assert.equal(resolveTriggersStartAt({}), null)
+  assert.equal(resolveTriggersStartAt({ EMAIL_TRIGGERS_START_AT: '   ' }), null)
+  assert.equal(resolveTriggersStartAt({ EMAIL_TRIGGERS_START_AT: 'ontem' }), null)
+  assert.equal(
+    resolveTriggersStartAt({ EMAIL_TRIGGERS_START_AT: '2026-08-17' })?.toISOString(),
+    new Date('2026-08-17').toISOString(),
+  )
 })
 
 // ------------------------------------------------------------------ prioridade

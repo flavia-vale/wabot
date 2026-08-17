@@ -8,6 +8,7 @@
 import { randomUUID } from 'crypto'
 import { isRealEmail, isWithinActiveWindow, elapsedDays, computeDueSteps } from './policy.js'
 import { sendTemplateEmail } from '../email/dispatcher.js'
+import { resolveTriggersStartAt } from '../emailTriggers/lifecyclePolicy.js'
 
 const NURTURE_EMAIL_SENT_EVENT = 'nurture_email_sent'
 
@@ -58,12 +59,26 @@ export async function isUnsubscribed({ db, userId }) {
  * @param {{db: object, sendMail: function, now?: Date, logger?: object, secret: string, baseUrl?: string}} params
  * @returns {Promise<{scanned: number, sent: number, skipped: number, failed: number, failures: Array}>}
  */
-export async function runNurtureSweep({ db, sendMail, now = new Date(), logger = console, secret, baseUrl } = {}) {
+export async function runNurtureSweep({
+  db,
+  sendMail,
+  now = new Date(),
+  logger = console,
+  secret,
+  baseUrl,
+  triggersStartAt = resolveTriggersStartAt(),
+} = {}) {
   const summary = { scanned: 0, sent: 0, skipped: 0, failed: 0, failures: [] }
 
   let leads = []
   try {
-    const windowStart = new Date(new Date(now).getTime() - 8 * 24 * 60 * 60 * 1000)
+    // A janela de 8 dias já protege a base antiga; o corte de virada existe
+    // para o dia em que o motor entra no ar com cadastros recentes que nunca
+    // deveriam receber a trilha retroativamente.
+    const janela = new Date(new Date(now).getTime() - 8 * 24 * 60 * 60 * 1000)
+    const windowStart = triggersStartAt && new Date(triggersStartAt).getTime() > janela.getTime()
+      ? new Date(triggersStartAt)
+      : janela
     leads = await db.user.findMany({
       where: { createdAt: { gte: windowStart, lte: now } },
     })
