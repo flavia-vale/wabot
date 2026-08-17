@@ -251,11 +251,11 @@ Phase 5 (US3) — o banner de marca (`BRAND_STYLES.shein`, T035) é reaproveitad
 
 ### Implementation for User Story 4
 
-- [ ] T044 [US4] Conferir/ajustar em `src/bot-worker.js` (caminho de banner de cupom) que
+- [X] T044 [US4] Conferir/ajustar em `src/bot-worker.js` (caminho de banner de cupom) que
       `linkKind:'coupon'` de SHEIN aciona o mesmo tratamento visual de cupom já aplicado a Shopee/
       Amazon/ML/Magalu, reusando `BRAND_STYLES.shein` de T035 — sem gate de `COUPON_LINK_CONVERT`
       (research.md D-008, depende de T029, T035)
-- [ ] T045 [US4] Estender `test/converters-shein.test.js` (ou teste de banner de cupom existente,
+- [X] T045 [US4] Estender `test/converters-shein.test.js` (ou teste de banner de cupom existente,
       se o tratamento visual tiver arquivo próprio) confirmando que o banner "CUPOM SHEIN" é
       acionado para `linkKind:'coupon'` sem `COUPON_LINK_CONVERT` setado (depende de T044)
 
