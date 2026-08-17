@@ -8,7 +8,8 @@ import dbDefault from '../../db.js'
 import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
 import { sendMail as defaultSendMail, isEmailConfigured } from '../../email/mailer.js'
 import { listTemplateDefinitions, getTemplateDefinition, variablesForTemplate, EMAIL_GROUPS } from '../../email/registry.js'
-import { loadTemplate, renderTemplate, standardVars, sendTemplateEmail } from '../../email/dispatcher.js'
+import { loadTemplate, renderTemplate, standardVars, sendTemplateEmail, resolveDailyCap } from '../../email/dispatcher.js'
+import { resolveDailyWindowStart, nextDailyWindowStart, describeWindowStart } from '../../email/dailyWindow.js'
 import { extractVariables } from '../../email/markup.js'
 import { buildAudienceWhere, describeAudience, loadAudience, AUDIENCE_FILTERS } from '../../email/audience.js'
 import { enqueueEmailBatch, cancelEmailBatch, resolveBatchSize } from '../../email/queue.js'
@@ -286,7 +287,9 @@ export async function adminEmailsRoutes(app, opts = {}) {
     return {
       ...batch,
       description: describeAudience(filters),
-      ritmo: `${resolveBatchSize()} e-mails por minuto`,
+      ritmo: `${resolveBatchSize()} e-mails por minuto, até ${resolveDailyCap()} por dia`,
+      tetoDiario: resolveDailyCap(),
+      proximaViradaLabel: describeWindowStart(nextDailyWindowStart(new Date())),
     }
   })
 
@@ -359,21 +362,32 @@ export async function adminEmailsRoutes(app, opts = {}) {
   // Resumo do topo da tela: quanto saiu hoje, quanto está na fila.
   app.get('/summary', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await requireAdminAccess(req, reply, 'admin:read'))) return
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    const [enviados24h, naFila, erros24h, descadastros] = await Promise.all([
-      db.emailSendLog.count({ where: { status: 'sent', createdAt: { gte: since } } }),
+    // O "dia" do teto começa na virada das 8h (America/Sao_Paulo), então o
+    // resumo conta a mesma janela que o despachante — senão a tela diria que
+    // sobrou cota quando o teto já bateu.
+    const agora = new Date()
+    const inicioDoDia = resolveDailyWindowStart(agora)
+    const proximaVirada = nextDailyWindowStart(agora)
+    const [enviadosNoDia, naFila, errosNoDia, descadastros] = await Promise.all([
+      db.emailSendLog.count({ where: { status: 'sent', createdAt: { gte: inicioDoDia } } }),
       db.emailSendLog.count({ where: { status: 'queued' } }),
-      db.emailSendLog.count({ where: { status: 'error', createdAt: { gte: since } } }),
+      db.emailSendLog.count({ where: { status: 'error', createdAt: { gte: inicioDoDia } } }),
       db.emailOptOut.count().catch(() => 0),
     ])
     return {
       smtpConfigured: isEmailConfigured(),
-      enviados24h,
+      enviadosNoDia,
+      // Nome antigo mantido para não quebrar tela em cache durante o deploy.
+      enviados24h: enviadosNoDia,
       naFila,
-      erros24h,
+      errosNoDia,
+      erros24h: errosNoDia,
       descadastros,
-      tetoDiario: Number(process.env.EMAIL_DAILY_CAP) || 250,
+      tetoDiario: resolveDailyCap(),
       porRodada: resolveBatchSize(),
+      inicioDoDia: inicioDoDia.toISOString(),
+      proximaVirada: proximaVirada.toISOString(),
+      proximaViradaLabel: describeWindowStart(proximaVirada),
     }
   })
 }

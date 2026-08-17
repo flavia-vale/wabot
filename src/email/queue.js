@@ -129,7 +129,10 @@ export async function runEmailQueueTick({
       else if (result.retryLater) {
         // Teto diário ou SMTP desligado: a linha fica em 'queued' e a rodada
         // para aqui — insistir nas próximas linhas daria o mesmo resultado.
-        logger?.info?.({ reason: result.reason }, 'fila de e-mail: rodada interrompida, continua depois')
+        logger?.info?.(
+          { reason: result.reason, voltaEm: result.retryAtLabel ?? null },
+          'fila de e-mail: rodada interrompida, continua depois',
+        )
         break
       } else summary.skipped += 1
     } catch (err) {

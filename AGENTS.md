@@ -556,13 +556,22 @@ caminho só, e a cliente edita os textos pelo painel.
 - **Disparo em massa só ENFILEIRA.** Quem envia é a fila lenta
   (`EMAIL_QUEUE_BATCH_SIZE`/rodada, `EMAIL_DAILY_CAP`/dia) — domínio novo que
   dispara tudo de uma vez cai em spam, e o provedor tem teto.
+- **O "dia" do teto tem hora certa: 8h da manhã (America/Sao_Paulo)**, não é
+  janela deslizante de 24h. Com janela deslizante, bater o teto às 15h de terça
+  fazia a fila só voltar às 15h de quarta, e cada dia ela andava mais tarde que
+  o anterior. `src/email/dailyWindow.js` (puro) resolve a virada vigente; o
+  despachante conta o gasto do dia a partir dela e devolve `retryAt` quando
+  barra. Envs: `EMAIL_DAILY_RESET_HOUR` (8), `EMAIL_TIMEZONE`
+  (`America/Sao_Paulo`). Fuso ou hora inválidos caem no padrão de Brasília —
+  teto na hora errada é menos grave que fila parada.
 - Sem SMTP, nada é gravado como enviado: a janela anti-repetição não pode
   queimar sem a cliente ter recebido.
 - Passadas rodam in-process na API (`setInterval` + `unref`) — **nenhum processo
   PM2 novo** (política de memória).
 
 Envs (todas opcionais): `EMAIL_QUEUE_TICK_MS`, `EMAIL_QUEUE_BATCH_SIZE` (10),
-`EMAIL_DAILY_CAP` (250), `LIFECYCLE_EMAIL_ENABLED`,
+`EMAIL_DAILY_CAP` (300), `EMAIL_DAILY_RESET_HOUR` (8), `EMAIL_TIMEZONE`
+(`America/Sao_Paulo`), `LIFECYCLE_EMAIL_ENABLED`,
 `LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS`, `WEEKLY_SUMMARY_ENABLED`,
 `WEEKLY_SUMMARY_WEEKDAY` (1 = segunda).
 

@@ -35,7 +35,7 @@ const MOTIVO_LABEL = {
   opted_out: 'pessoa descadastrada',
   already_sent: 'já recebeu este e-mail há pouco',
   template_disabled: 'e-mail desligado',
-  daily_cap: 'teto do dia atingido',
+  daily_cap: 'teto do dia atingido (continua às 8h)',
   smtp_disabled: 'envio de e-mail desligado',
   batch_canceled: 'campanha cancelada',
   user_removed: 'cliente não existe mais',
@@ -69,20 +69,32 @@ function Chip({ children, tone = 'gray' }) {
 
 function Resumo({ summary }) {
   if (!summary) return null
+  const enviados = summary.enviadosNoDia ?? summary.enviados24h ?? 0
+  const teto = summary.tetoDiario ?? 0
+  const erros = summary.errosNoDia ?? summary.erros24h ?? 0
   const cards = [
-    ['Enviados nas últimas 24h', summary.enviados24h],
-    ['Esperando na fila', summary.naFila],
-    ['Erros nas últimas 24h', summary.erros24h],
-    ['Descadastros', summary.descadastros],
+    ['Enviados hoje', teto > 0 ? `${enviados} de ${teto}` : enviados],
+    ['Esperando na fila', summary.naFila ?? 0],
+    ['Erros hoje', erros],
+    ['Descadastros', summary.descadastros ?? 0],
   ]
+  const tetoBatido = teto > 0 && enviados >= teto
   return (
-    <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-      {cards.map(([label, valor]) => (
-        <div key={label} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
-          <div className="text-xs font-bold text-gray-500">{label}</div>
-          <div className="mt-1 text-2xl font-black text-gray-900">{valor ?? 0}</div>
-        </div>
-      ))}
+    <div className="mb-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {cards.map(([label, valor]) => (
+          <div key={label} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
+            <div className="text-xs font-bold text-gray-500">{label}</div>
+            <div className="mt-1 text-2xl font-black text-gray-900">{valor}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-gray-500">
+        O dia de envio começa às 8h da manhã.{' '}
+        {tetoBatido
+          ? `O teto de hoje já foi atingido — o resto da fila sai a partir das ${summary.proximaViradaLabel ?? '8h'}.`
+          : `O que sobrar na fila continua amanhã, a partir das ${summary.proximaViradaLabel ?? '8h'}.`}
+      </p>
     </div>
   )
 }
