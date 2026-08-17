@@ -210,28 +210,28 @@ o texto do grupo de origem como descrição.
 
 ### Implementation for User Story 3
 
-- [ ] T034 [P] [US3] `src/bot-worker.js:1501` — `STORE_PREVIEW_TITLES.shein = 'SHEIN'` (o campo
+- [X] T034 [P] [US3] `src/bot-worker.js:1501` — `STORE_PREVIEW_TITLES.shein = 'SHEIN'` (o campo
       `title` do card nunca pode ser omitido — regressão PR #1186) (contracts/registries.md C1)
-- [ ] T035 [P] [US3] `src/converters/storeBrandCard.js:28` — `BRAND_STYLES.shein = { store: 'SHEIN',
+- [X] T035 [P] [US3] `src/converters/storeBrandCard.js:28` — `BRAND_STYLES.shein = { store: 'SHEIN',
       bg: '#000000', fg: '#FFFFFF', accent: '#FFFFFF' }` (contracts/registries.md C2)
-- [ ] T036 [P] [US3] `src/core/mirrorTemplate.js:17` — `PLATFORM_LABELS.shein = 'SHEIN'`
+- [X] T036 [P] [US3] `src/core/mirrorTemplate.js:17` — `PLATFORM_LABELS.shein = 'SHEIN'`
       (contracts/registries.md C3)
-- [ ] T037 [P] [US3] `src/core/copyLinter.js:11` — `BRAND_RE` ganha `shein`
+- [X] T037 [P] [US3] `src/core/copyLinter.js:11` — `BRAND_RE` ganha `shein`
       (contracts/registries.md C4)
-- [ ] T038 [US3] `src/converters/imageScrapers.js:419` — ramo `shein` em `fetchProductImage`: lê
+- [X] T038 [US3] `src/converters/imageScrapers.js:419` — ramo `shein` em `fetchProductImage`: lê
       `og:image` da página do oneLink (não da página de produto) e remove o sufixo de miniatura
       (`_thumbnail_405x552`) do endereço em `img.ltwebstatic.com`, resultando na imagem original
       (research.md D-005); sem foto disponível, degrada sem erro (contracts/registries.md C5)
-- [ ] T039 [US3] `src/converters/productInfoScraper.js:254,278` — acrescentar a frase promocional
+- [X] T039 [US3] `src/converters/productInfoScraper.js:254,278` — acrescentar a frase promocional
       genérica da SHEIN a `BOGUS_SCRAPE_TITLES` / `BOGUS_SCRAPE_TITLE_PATTERNS` como padrão (regex,
       não casamento exato) (research.md D-006, contracts/registries.md C6)
-- [ ] T040 [P] [US3] Atualizar `test/store-brand-card.test.js` — banner SHEIN renderiza; guarda
+- [X] T040 [P] [US3] Atualizar `test/store-brand-card.test.js` — banner SHEIN renderiza; guarda
       estrutural de que `title` nunca é omitido continua valendo para SHEIN (depende de T034, T035)
-- [ ] T041 [P] [US3] Atualizar `test/product-info-scraper.test.js` — frase genérica da SHEIN
+- [X] T041 [P] [US3] Atualizar `test/product-info-scraper.test.js` — frase genérica da SHEIN
       reprovada como título (depende de T039)
-- [ ] T042 [P] [US3] Atualizar `test/mirror-template.test.js` — rótulo `SHEIN` da loja (depende de
+- [X] T042 [P] [US3] Atualizar `test/mirror-template.test.js` — rótulo `SHEIN` da loja (depende de
       T036)
-- [ ] T043 [US3] Rodar `node --test test/store-brand-card.test.js test/product-info-scraper.test.js
+- [X] T043 [US3] Rodar `node --test test/store-brand-card.test.js test/product-info-scraper.test.js
       test/mirror-template.test.js` e confirmar tudo verde (depende de T040, T041, T042)
 
 **Checkpoint**: US3 completa — card com foto e identidade visual, sem risco de título-lixo.

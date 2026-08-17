@@ -267,6 +267,7 @@ const BOGUS_SCRAPE_TITLES = [
   'access denied',
   'robot check',
   '404',
+  'shein',
 ]
 
 // Páginas anti-bot/interstício servem um og:title que é uma FRASE (não um
@@ -288,6 +289,13 @@ const BOGUS_SCRAPE_TITLE_PATTERNS = [
   /suspicious (traffic|activity)/i,
   /(verify you are|are you a) human/i,
   /acesso negado/i,
+  // og:title genérico do oneLink da SHEIN — a MESMA frase promocional para
+  // qualquer produto (research.md D-006). Regex (não casamento exato) porque
+  // a frase pode variar de pontuação/locale; "oferta" + "shein" no mesmo
+  // título é específico o bastante para não pegar título de produto real
+  // (produto real nunca menciona a própria loja no título).
+  /n[ãa]o perca esta oferta .{0,20}na shein/i,
+  /economize muito agora/i,
 ]
 
 function isBogusScrapeTitle(title) {

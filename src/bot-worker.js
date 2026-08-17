@@ -1503,6 +1503,7 @@ const STORE_PREVIEW_TITLES = {
   shopee: 'Shopee',
   mercadolivre: 'Mercado Livre',
   magazineluiza: 'Magalu',
+  shein: 'SHEIN',
 }
 
 // Flag experimental (default OFF) para testar em staging se dá pra esconder

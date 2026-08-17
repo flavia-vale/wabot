@@ -311,6 +311,35 @@ async function resolveMercadoLivreImage(url) {
   return resolveByHtmlLayers(target, { ua: BROWSER_UA })
 }
 
+// A página do oneLink da SHEIN (não a página de produto — bloqueada por
+// captcha, research.md D-004) serve og:image com a foto do produto, mas em
+// tamanho de miniatura: img.ltwebstatic.com/.../<id>_thumbnail_<w>x<h>.<ext>.
+// Removendo o sufixo `_thumbnail_<w>x<h>`, o mesmo CDN devolve a imagem
+// original — medido ao vivo em 1340x1785 (acima de
+// IMAGE_HIRES_MIN_DIMENSION_PX). Mesmo padrão de strip de CDN já usado para
+// Amazon (`_AC_SL1500_`) e Shopee (`_tn`, `@resize_w`).
+const SHEIN_IMAGE_THUMBNAIL_SUFFIX_RE = /_thumbnail_\d+x\d+(?=\.[a-z0-9]+(?:[?#]|$))/i
+
+function stripSheinImageThumbnailSuffix(rawUrl) {
+  if (!rawUrl) return rawUrl
+  try {
+    const u = new URL(rawUrl)
+    if (!/(^|\.)ltwebstatic\.com$/i.test(u.hostname)) return rawUrl
+    u.pathname = u.pathname.replace(SHEIN_IMAGE_THUMBNAIL_SUFFIX_RE, '')
+    return u.toString()
+  } catch {
+    return rawUrl
+  }
+}
+
+// `productUrl` aqui é o link ORIGINAL da mensagem (buildManualLinkPreview
+// passa `sourceUrl = primary.url`) — para SHEIN isso é justamente o oneLink,
+// que já serve og:image sem precisar de hop extra de resolução.
+async function resolveSheinImage(url) {
+  const image = await resolveByHtmlLayers(url, { ua: BROWSER_UA })
+  return stripSheinImageThumbnailSuffix(image)
+}
+
 function isAmazonImageUrl(rawUrl) {
   try {
     const u = new URL(rawUrl)
@@ -428,6 +457,8 @@ export async function fetchProductImage(platform, productUrl, creds) {
       image = await resolveAmazonImage(productUrl)
     } else if (platform === 'mercadolivre') {
       image = await resolveMercadoLivreImage(productUrl)
+    } else if (platform === 'shein') {
+      image = await resolveSheinImage(productUrl)
     }
     if (!image) image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })
 
