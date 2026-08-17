@@ -498,27 +498,37 @@ export default function AdminEmailsPage() {
   const [batches, setBatches] = useState([])
   const [sends, setSends] = useState([])
 
-  const recarregar = useCallback(async () => {
-    try {
-      const [resumo, lista, historicoBatches, historicoSends] = await Promise.all([
-        api.adminEmailSummary(),
-        api.adminEmailTemplates(),
-        api.adminEmailBatches().catch(() => ({ batches: [] })),
-        api.adminEmailSends({ limit: 100 }).catch(() => ({ sends: [] })),
-      ])
-      setSummary(resumo)
-      setTemplates(lista.templates ?? [])
-      setBatches(historicoBatches.batches ?? [])
-      setSends(historicoSends.sends ?? [])
-      setErro('')
-    } catch (err) {
-      setErro(err.message)
-    } finally {
-      setCarregando(false)
-    }
+  // Busca (sem tocar em estado) e aplicação do resultado ficam separadas: assim
+  // o carregamento inicial atualiza a tela DENTRO do callback da promessa, que
+  // é o formato que o lint do React exige dentro de um efeito.
+  const buscarTudo = useCallback(() => Promise.all([
+    api.adminEmailSummary(),
+    api.adminEmailTemplates(),
+    api.adminEmailBatches().catch(() => ({ batches: [] })),
+    api.adminEmailSends({ limit: 100 }).catch(() => ({ sends: [] })),
+  ]), [])
+
+  const aplicar = useCallback(([resumo, lista, historicoBatches, historicoSends]) => {
+    setSummary(resumo)
+    setTemplates(lista.templates ?? [])
+    setBatches(historicoBatches.batches ?? [])
+    setSends(historicoSends.sends ?? [])
+    setErro('')
   }, [])
 
-  useEffect(() => { recarregar() }, [recarregar])
+  const recarregar = useCallback(() => buscarTudo()
+    .then(aplicar)
+    .catch((err) => setErro(err.message))
+    .finally(() => setCarregando(false)), [buscarTudo, aplicar])
+
+  useEffect(() => {
+    let ativo = true
+    buscarTudo()
+      .then((dados) => { if (ativo) aplicar(dados) })
+      .catch((err) => { if (ativo) setErro(err.message) })
+      .finally(() => { if (ativo) setCarregando(false) })
+    return () => { ativo = false }
+  }, [buscarTudo, aplicar])
 
   const porGrupo = useMemo(() => {
     const grupos = new Map()
