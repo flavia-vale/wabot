@@ -211,7 +211,13 @@ test('orçamento TOTAL da resolução é respeitado mesmo com hops individualmen
 test('estouro do prazo total via AbortSignal nunca lança — degrada para a última URL conhecida', async () => {
   const start = 'https://onelink.shein.com/14/abc'
   const fetchImpl = async (url, init) => new Promise((resolve, reject) => {
-    init.signal.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })))
+    // Timer só para manter o event loop vivo até o abort disparar — o timer
+    // interno de AbortSignal.timeout() não é `ref`'d por si só.
+    const keepAlive = setTimeout(() => {}, 1000)
+    init.signal.addEventListener('abort', () => {
+      clearTimeout(keepAlive)
+      reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' }))
+    })
   })
   const resolved = await resolveSheinShortLink(start, { fetchImpl, totalTimeoutMs: 20, maxHops: 3 })
   assert.equal(resolved, start)

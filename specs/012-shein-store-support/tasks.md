@@ -423,7 +423,7 @@ Achados da revisão de código (fase `review`) sobre o diff completo da branch c
 de correção/consistência com o `plan.md` e com o padrão já estabelecido pelos conversores
 irmãos (`shopee.js`, `amazon.js`).
 
-- [ ] T065 Limitar a leitura do corpo HTML em `resolveSheinShortLink`
+- [X] T065 Limitar a leitura do corpo HTML em `resolveSheinShortLink`
   (`src/converters/shein.js`): hoje faz `await res.text()` **sem teto de bytes**, enquanto os
   dois conversores irmãos que resolvem short link já capam a leitura
   (`readBodyLimited` + `SHORT_LINK_BODY_MAX_BYTES = 512KB` em `src/converters/shopee.js:285,179`
@@ -434,7 +434,7 @@ irmãos (`shopee.js`, `amazon.js`).
   módulo compartilhado OU replicar o mesmo teto no `shein.js`), com teste que garanta que o
   corpo é truncado. Não mudar a semântica de resolução. (review)
 
-- [ ] T066 Dar um **prazo total** à resolução do oneLink em `src/converters/shein.js`: hoje
+- [X] T066 Dar um **prazo total** à resolução do oneLink em `src/converters/shein.js`: hoje
   `timeoutMs = 8000` é aplicado **por hop** (`AbortSignal.timeout(timeoutMs)` dentro do laço) e
   `maxHops = 6`, então o pior caso é **~48s** — acima do orçamento declarado no `plan.md`
   ("alvo ≤ 8s com no máximo 6 hops") e acima do `MSG_QUEUE_TIMEOUT_MS` (25s) do pipeline de
@@ -449,7 +449,7 @@ irmãos (`shopee.js`, `amazon.js`).
   `test/shein-shortlink-resolve.test.js` com `fetchImpl` que atrasa, garantindo que o total
   respeita o prazo e que nada é lançado. (review)
 
-- [ ] T067 Ancorar (ou remover) o padrão `/economize muito agora/i` em
+- [X] T067 Ancorar (ou remover) o padrão `/economize muito agora/i` em
   `BOGUS_SCRAPE_TITLE_PATTERNS` (`src/converters/productInfoScraper.js`): a lista é **global,
   aplicada às cinco lojas**, e esse padrão é uma frase promocional genérica em português **sem
   nenhuma âncora de marca** — um título legítimo de produto de Amazon/Shopee/ML/Magalu que
