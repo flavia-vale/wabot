@@ -494,3 +494,59 @@ irmãos (`shopee.js`, `amazon.js`).
   precisar existir: basta a lista de candidatos, e o caminho genérico
   `resolveByHtmlLayers` já cobre a extração do `og:image`. Remover o ramo (ou fazê-lo não
   repetir a chamada genérica) e garantir por teste que só há uma busca de HTML por link. (review)
+
+---
+
+## Phase 11: Code Review Fixes (3ª rodada)
+
+- [ ] T070 Fechar o **furo da guarda de host** da SHEIN: hoje `isSheinHost` (e, na origem,
+  `PATTERNS.shein` em `src/detector.js`) aceita domínios de terceiro que apenas *começam* com
+  `shein.com`, porque o padrão do detector termina em `[^\s]*` (é um extrator de link em texto
+  corrido, não um validador de host) e é reusado como validador em
+  `src/converters/shein.js`. Verificado executando o código desta branch:
+
+  ```
+  isSheinHost('https://shein.com.evil.net/a')  // true  (deveria ser false)
+  isSheinHost('https://shein.company.io/a')    // true  (deveria ser false)
+  detectLinks('https://shein.com.attacker.net/x-p-1.html')
+    // → [{ platform: 'shein', url: 'https://shein.com.attacker.net/x-p-1.html' }]
+  convert('https://shein.com.evil.net/x-p-123.html?goods_id=123', { tag: '999' })
+    // → { url: 'https://shein.com.evil.net/x-p-123.html?goods_id=123&koc_id=999
+    //         &url_from=affiliate_koc_999&scene=1&...', linkKind: 'product' }
+  ```
+
+  Ou seja: um link de host de terceiro postado no grupo monitorado é reconhecido como SHEIN,
+  passa pela guarda que existe exatamente para impedir isso (comentário em `isSheinHost`: "um
+  redirect que escapou do domínio nunca pode receber koc_id/url_from dela nem ser publicado"),
+  recebe a identidade da cliente e é **publicado no grupo de destino**. Fere FR-002 ("MUST NOT
+  reconhecer domínios semelhantes que não pertençam à SHEIN") e esvazia FR-013/FR-015. Não
+  depende de redirect: o link direto já basta.
+
+  Correção: `isSheinHost` deve validar o host de forma **ancorada** (o hostname termina em
+  `shein.com` / `shein.top`, com ponto separador — não "contém como prefixo"), e a entrada
+  `shein` de `PATTERNS` em `src/detector.js` deve exigir um delimitador (`/`, `?`, `#` ou fim)
+  logo após o domínio registrável, para não extrair `shein.com.attacker.net` como link de SHEIN.
+  Manter a fonte única: a lista de domínios continua só em `PATTERNS.shein`; o que muda é a
+  forma de casar. **Não alterar as entradas de Mercado Livre, Amazon, Shopee e Magalu**
+  (FR-023 — Mercado Livre é referência de qualidade e não pode mudar).
+
+  Cobrir com testes: em `test/converters-shein.test.js`, `convert` retorna `null` para
+  `https://shein.com.evil.net/x-p-123.html?goods_id=123` e para uma cadeia de redirect que
+  termina nesse host; em `test/detector.test.js`, `detectLinks`/`isOfferUrl` **não** reconhecem
+  `https://shein.com.attacker.net/...` nem `https://shein.company.io/...`, e continuam
+  reconhecendo `https://br.shein.com/...`, `https://m.shein.com/...`,
+  `https://onelink.shein.com/...` e `https://shein.top/...`. (review)
+
+- [ ] T071 Completar a allowlist de domínios do painel "Converte links":
+  `SUPPORTED_LINK_RE` em `dashboard/app/painel/converte-links/page.js` ganhou
+  `shein.com|onelink.shein.com|shein.top`, mas o prefixo do padrão é `(?:www\.)?`, então
+  **`br.shein.com` e `m.shein.com` não casam** — e esses são justamente os hosts de destino que
+  o próprio conversor produz (`data-model.md` §3, `convert()` devolve `m.shein.com/br/ark/...`
+  e `br.shein.com/...-p-<id>.html`). Efeito: a cliente cola um link de SHEIN válido, o contador
+  "Detectados" mostra `0` e, em texto longo, aparece o aviso de "nenhum link suportado
+  encontrado", enquanto o espelhamento converte o mesmo link normalmente — exatamente o risco
+  já previsto em `plan.md` ("Painel dizer 'link não suportado' enquanto o espelhamento
+  funciona"). Ajustar o padrão para aceitar subdomínio de `shein.com` (mesma forma ancorada
+  adotada em T070, sem alterar as entradas das outras quatro lojas) e cobrir com teste que
+  `br.shein.com`/`m.shein.com`/`onelink.shein.com` contam como 1 link detectado. Lembrar que a
+  allowlist vai para o bundle do Next: `cd dashboard && npm run build` depois da mudança. (review)
