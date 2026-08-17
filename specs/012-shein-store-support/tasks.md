@@ -499,7 +499,7 @@ irmãos (`shopee.js`, `amazon.js`).
 
 ## Phase 11: Code Review Fixes (3ª rodada)
 
-- [ ] T070 Fechar o **furo da guarda de host** da SHEIN: hoje `isSheinHost` (e, na origem,
+- [X] T070 Fechar o **furo da guarda de host** da SHEIN: hoje `isSheinHost` (e, na origem,
   `PATTERNS.shein` em `src/detector.js`) aceita domínios de terceiro que apenas *começam* com
   `shein.com`, porque o padrão do detector termina em `[^\s]*` (é um extrator de link em texto
   corrido, não um validador de host) e é reusado como validador em
@@ -537,7 +537,7 @@ irmãos (`shopee.js`, `amazon.js`).
   reconhecendo `https://br.shein.com/...`, `https://m.shein.com/...`,
   `https://onelink.shein.com/...` e `https://shein.top/...`. (review)
 
-- [ ] T071 Completar a allowlist de domínios do painel "Converte links":
+- [X] T071 Completar a allowlist de domínios do painel "Converte links":
   `SUPPORTED_LINK_RE` em `dashboard/app/painel/converte-links/page.js` ganhou
   `shein.com|onelink.shein.com|shein.top`, mas o prefixo do padrão é `(?:www\.)?`, então
   **`br.shein.com` e `m.shein.com` não casam** — e esses são justamente os hosts de destino que
