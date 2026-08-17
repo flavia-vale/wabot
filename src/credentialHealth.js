@@ -5,6 +5,7 @@ const PLATFORM_LABELS = {
   amazon: 'Amazon',
   mercadolivre: 'Mercado Livre',
   magazineluiza: 'Magazine Luiza',
+  shein: 'SHEIN',
 }
 
 export const PLATFORMS = Object.keys(PLATFORM_LABELS)
@@ -53,6 +54,7 @@ export const REQUIRED_FIELDS = {
   amazon: ['tag', 'ubid-acbbr', 'at-acbbr', 'x-acbbr'],
   mercadolivre: ['tag'],
   magazineluiza: ['tag'],
+  shein: ['tag'],
 }
 
 function hasValue(value) {
@@ -96,7 +98,34 @@ function getFormatWarnings(platform, data = {}) {
     if (tag && tag.length < 3) warnings.push('A tag do Magazine Luiza parece curta. Confira se copiou a tag completa.')
   }
 
+  if (platform === 'shein') {
+    const tag = getString(data, 'tag')
+    if (tag && tag.length < 3) warnings.push('O número de afiliada da SHEIN parece curto. Confira se copiou o número completo.')
+  }
+
   return warnings
+}
+
+// Recusa dura da SHEIN: `sanitizeCredentialBody` só normaliza o que sabe
+// interpretar (link de afiliada com identificador visível, ou o número puro).
+// O que sobra sem virar número — oneLink ainda não expandido, link do botão
+// "compartilhar" do app (GM7/shc/link), ou texto qualquer — precisa ser
+// recusado aqui com uma explicação que ensina onde pegar o link certo (a
+// entrada continua "mantida como veio" pela normalização, então cai neste
+// ramo). Mensagens em linguagem leiga (FR-007) — nenhum jargão técnico.
+function sheinFormatWarnings(tag) {
+  if (!tag) return []
+  if (/^\d+$/.test(tag)) return []
+  if (/GM7|[?&](?:shc|link)=/i.test(tag)) {
+    return [
+      'Esse link é do botão de compartilhar do aplicativo da SHEIN, e ele não serve para cadastro. ' +
+      'Copie o seu link de afiliada ou o seu número de afiliada no painel de afiliada da SHEIN e cole aqui.',
+    ]
+  }
+  return [
+    'Não reconhecemos esse texto. Era esperado o seu link de afiliada da SHEIN (o link que você gera no ' +
+    'painel de afiliada) ou apenas o seu número de afiliada.',
+  ]
 }
 
 export function validateCredentialData(platform, data = {}) {
@@ -135,7 +164,24 @@ export function validateCredentialData(platform, data = {}) {
       missing.push('ssid/cookie')
     }
   }
-  const warnings = missing.length ? [] : getFormatWarnings(platform, data)
+
+  // SHEIN: presença de valor sozinha não basta — um texto qualquer, o link do
+  // botão de compartilhar do app, ou um oneLink que sanitizeCredentialBody
+  // não conseguiu resolver offline, todos "têm valor" mas não servem. Recusa
+  // dura (não fica "configured" com aviso) — a cliente precisa colar o link/
+  // número certo antes de a loja aparecer pronta.
+  let sheinRecusaWarnings = []
+  if (platform === 'shein') {
+    const tag = getString(data, 'tag')
+    if (tag && !/^\d+$/.test(tag)) {
+      if (!missing.includes('tag')) missing.push('tag')
+      sheinRecusaWarnings = sheinFormatWarnings(tag)
+    }
+  }
+
+  const warnings = sheinRecusaWarnings.length
+    ? sheinRecusaWarnings
+    : missing.length ? [] : getFormatWarnings(platform, data)
   const configured = missing.length === 0
 
   return {
@@ -181,6 +227,11 @@ export function summarizeCredentialHealth(credentials = []) {
 
 export function getCredentialSaveMessage(validation) {
   if (!validation?.configured) {
+    // Recusa com mensagem específica (ex.: SHEIN recusando link de
+    // compartilhamento) tem precedência sobre a genérica "faltou preencher" —
+    // aqui o campo TEM valor, só não é o formato certo (SC-008: a mensagem
+    // precisa levar ao link certo sozinha).
+    if (validation?.warnings?.length) return validation.warnings[0]
     return `Faltou preencher ${joinFriendly(validation?.missing ?? [])} da ${validation?.label ?? 'loja'}.`
   }
   if (validation.warnings?.length) {
@@ -227,6 +278,28 @@ export function sanitizeCredentialBody(platform, body = {}) {
     if (!cookie) return body
     const { 'ubid-acbbr': _ubid, 'at-acbbr': _at, 'x-acbbr': _x, ...rest } = body
     return { ...rest, cookie }
+  }
+
+  // SHEIN: a cliente pode colar o número puro OU um link de afiliada com o
+  // identificador visível na URL (`koc_id=<n>` ou `url_from=affiliate_koc_<n>`).
+  // Normalização é OFFLINE (só parsing de URL, sem rede) — um oneLink que
+  // ainda não expõe o identificador na URL, o link do botão de compartilhar
+  // (GM7/shc/link), ou texto qualquer, ficam como vieram e são reprovados na
+  // validação (`validateCredentialData`), que ensina onde pegar o link certo.
+  if (platform === 'shein') {
+    const raw = typeof body.tag === 'string' ? body.tag.trim() : ''
+    if (!raw || /^\d+$/.test(raw)) return { ...body, tag: raw }
+    try {
+      const u = new URL(raw)
+      const kocId = u.searchParams.get('koc_id')
+      if (kocId && /^\d+$/.test(kocId)) return { ...body, tag: kocId }
+      const urlFrom = u.searchParams.get('url_from') || ''
+      const fromKoc = urlFrom.match(/^affiliate_koc_(\d+)$/)
+      if (fromKoc) return { ...body, tag: fromKoc[1] }
+    } catch {
+      // não é URL — mantém como veio, cai na recusa da validação
+    }
+    return body
   }
 
   return body

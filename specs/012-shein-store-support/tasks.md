@@ -102,57 +102,57 @@ aparecer como pronta; repetir com o link de compartilhamento e ver o aviso expli
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] `src/credentialHealth.js:3` — `PLATFORM_LABELS.shein = 'SHEIN'`
+- [X] T011 [US1] `src/credentialHealth.js:3` — `PLATFORM_LABELS.shein = 'SHEIN'`
       (contracts/registries.md B1)
-- [ ] T012 [US1] `src/credentialHealth.js:51` — `REQUIRED_FIELDS.shein = ['tag']`
+- [X] T012 [US1] `src/credentialHealth.js:51` — `REQUIRED_FIELDS.shein = ['tag']`
       (contracts/registries.md B2, depende de T011)
-- [ ] T013 [US1] `src/credentialHealth.js:200` — ramo `shein` em `sanitizeCredentialBody`: só
+- [X] T013 [US1] `src/credentialHealth.js:200` — ramo `shein` em `sanitizeCredentialBody`: só
       dígitos → dígitos; link com `koc_id=<n>` → `<n>`; link com `url_from=affiliate_koc_<n>` →
       `<n>`; oneLink/`GM7`/`shc`/`link`/outra coisa → mantido como veio (reprovado na validação)
       (contracts/credential-shein.md, contracts/registries.md B4, depende de T011)
-- [ ] T014 [US1] `src/credentialHealth.js:66` — ramo `shein` em `getFormatWarnings`: valor final não
+- [X] T014 [US1] `src/credentialHealth.js:66` — ramo `shein` em `getFormatWarnings`: valor final não
       numérico → recusa "era esperado o link de afiliada ou o número"; entrada com `GM7`/`shc`/`link`
       → recusa específica explicando o Gerador de Link do painel de afiliada; número muito curto →
       aviso leve não bloqueante (contracts/credential-shein.md, contracts/registries.md B3, depende
       de T011)
-- [ ] T015 [P] [US1] `prisma/schema.prisma:294` — default de `BotConfig.platforms` passa a incluir
+- [X] T015 [P] [US1] `prisma/schema.prisma:294` — default de `BotConfig.platforms` passa a incluir
       `shein` (contracts/registries.md B5)
-- [ ] T016 [US1] Criar migration DML `prisma/migrations/<ts>_botconfig_platforms_add_shein/migration.sql`
+- [X] T016 [US1] Criar migration DML `prisma/migrations/<ts>_botconfig_platforms_add_shein/migration.sql`
       idempotente, sem `ALTER TABLE`, conforme data-model.md seção 7 (`UPDATE "BotConfig" SET
       "platforms" = "platforms" || ',shein' WHERE ',' || COALESCE("platforms",'') || ',' NOT LIKE
       '%,shein,%'`) (contracts/registries.md B6, depende de T015)
-- [ ] T017 [P] [US1] `src/api/routes/config.js:12` — CSV default ganha `shein`
+- [X] T017 [P] [US1] `src/api/routes/config.js:12` — CSV default ganha `shein`
       (contracts/registries.md B7)
-- [ ] T018 [P] [US1] `src/bot-worker.js:633` — CSV default ganha `shein`
+- [X] T018 [P] [US1] `src/bot-worker.js:633` — CSV default ganha `shein`
       (contracts/registries.md B8)
-- [ ] T019 [P] [US1] `scripts/reset-legacy-botconfig-fields.mjs:29` — CSV default ganha `shein`
+- [X] T019 [P] [US1] `scripts/reset-legacy-botconfig-fields.mjs:29` — CSV default ganha `shein`
       (contracts/registries.md B9)
-- [ ] T020 [P] [US1] `src/api/routes/groups.js:175` — whitelist `allowedPlatforms` ganha `'shein'`
+- [X] T020 [P] [US1] `src/api/routes/groups.js:175` — whitelist `allowedPlatforms` ganha `'shein'`
       (contracts/registries.md B10)
-- [ ] T021 [P] [US1] `dashboard/lib/painel/affiliatePlatforms.js:75-86` — entrada `shein` (id,
+- [X] T021 [P] [US1] `dashboard/lib/painel/affiliatePlatforms.js:75-86` — entrada `shein` (id,
       label, `instructions` e `fields` em linguagem leiga, `actionLinks` para a página do programa de
       afiliadas), no formato declarativo do Magalu (contracts/credential-shein.md, vocabulário
       obrigatório: "seu link de afiliada da SHEIN", "seu número de afiliada", "o link do botão de
       compartilhar do aplicativo não serve"; proibido: `koc_id`, `url_from`, `goods_id`, `aff_id`,
       `oneLink`, `affiliate_koc`, `GM7`, `token`, `parâmetro`, `query string`, `captcha`)
       (contracts/registries.md D14)
-- [ ] T022 [US1] Criar/estender teste de validação e normalização de credencial da SHEIN (junto de
+- [X] T022 [US1] Criar/estender teste de validação e normalização de credencial da SHEIN (junto de
       `test/credential-*` existente — usar o mesmo arquivo/padrão das outras lojas) cobrindo: número
       puro aceito; link de afiliada extrai o número; link com `url_from=affiliate_koc_<n>` extrai o
       número; link de compartilhamento (`GM7`/`shc`/`link`) recusado com mensagem que ensina; texto
       aleatório recusado (depende de T013, T014)
-- [ ] T023 [P] [US1] Atualizar `test/painel-linguagem-leiga.test.js` para cobrir a entrada `shein`
+- [X] T023 [P] [US1] Atualizar `test/painel-linguagem-leiga.test.js` para cobrir a entrada `shein`
       de `affiliatePlatforms.js` — reprovar jargão (`koc_id`, `url_from`, `goods_id`, `GM7`, etc.)
       (contracts/registries.md, depende de T021)
-- [ ] T024 [P] [US1] Atualizar `test/painel-ids-afiliada-privacy.test.js` confirmando que a entrada
+- [X] T024 [P] [US1] Atualizar `test/painel-ids-afiliada-privacy.test.js` confirmando que a entrada
       `shein` não reintroduz "modo sem cookie" nem campo de sessão (depende de T021)
-- [ ] T025 [P] [US1] Atualizar `test/groups-route-image-mode.test.js` confirmando `shein` aceito na
+- [X] T025 [P] [US1] Atualizar `test/groups-route-image-mode.test.js` confirmando `shein` aceito na
       whitelist de `allowedPlatforms` (depende de T020)
-- [ ] T026 [P] [US1] Criar `test/migrations-botconfig-platforms-shein.test.js` confirmando que a
+- [X] T026 [P] [US1] Criar `test/migrations-botconfig-platforms-shein.test.js` confirmando que a
       migration de T016 é DML puro (sem `ALTER TABLE`) e idempotente (aplicar 2x sem efeito
       colateral), seguindo o padrão de `test/migrations-group-image-mode-preview.test.js` (depende
       de T016)
-- [ ] T027 [US1] Rodar `node --test test/painel-linguagem-leiga.test.js
+- [X] T027 [US1] Rodar `node --test test/painel-linguagem-leiga.test.js
       test/painel-ids-afiliada-privacy.test.js test/groups-route-image-mode.test.js
       test/migrations-botconfig-platforms-shein.test.js` e os testes de credencial de T022,
       confirmar tudo verde (depende de T022, T023, T024, T025, T026)

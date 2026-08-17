@@ -55,3 +55,36 @@ test('POST / cria grupo role=post sem imageMode explícito → também persiste 
   assert.equal(JSON.parse(res.body).imageMode, 'preview')
   await app.close()
 })
+
+// specs/012-shein-store-support (T020/T025): 'shein' entrou na whitelist de
+// allowedPlatforms — PUT /:id não pode mais recusá-la como "plataforma
+// inválida".
+test('PUT /:id aceita shein na whitelist de allowedPlatforms', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'monitor-shein@g.us', name: 'Grupo Monitor Shein', role: 'monitor', kind: 'group' } })
+  assert.equal(createRes.statusCode, 200)
+  const { id } = JSON.parse(createRes.body)
+
+  const putRes = await app.inject({
+    method: 'PUT',
+    url: `/api/groups/${id}`,
+    payload: { allowedPlatforms: 'shopee,amazon,mercadolivre,magazineluiza,shein' },
+  })
+  assert.equal(putRes.statusCode, 200)
+  assert.equal(JSON.parse(putRes.body).allowedPlatforms, 'shopee,amazon,mercadolivre,magazineluiza,shein')
+  await app.close()
+})
+
+test('PUT /:id ainda recusa plataforma realmente inválida', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'monitor-invalid@g.us', name: 'Grupo Monitor Inválido', role: 'monitor', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  const putRes = await app.inject({
+    method: 'PUT',
+    url: `/api/groups/${id}`,
+    payload: { allowedPlatforms: 'shein,naoexiste' },
+  })
+  assert.equal(putRes.statusCode, 400)
+  await app.close()
+})

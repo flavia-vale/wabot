@@ -26,7 +26,7 @@ import 'dotenv/config'
 import db from '../src/db.js'
 
 const DEFAULTS = {
-  platforms: 'shopee,amazon,mercadolivre,magazineluiza',
+  platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein',
   blockedKeywords: '',
   welcomeMsg: '',
   postToStatus: false,

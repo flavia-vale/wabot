@@ -172,7 +172,7 @@ export async function groupsRoutes(app, opts = {}) {
     const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
-      const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza'].includes(p))
+      const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza', 'shein'].includes(p))
       if (invalid) return reply.code(400).send({ error: 'allowedPlatforms contém plataforma inválida' })
     }
 

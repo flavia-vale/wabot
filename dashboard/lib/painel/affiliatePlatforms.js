@@ -83,6 +83,20 @@ export const AFFILIATE_PLATFORMS = [
     ],
     fields: [{ key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'Ex.: parceiro123' }],
   },
+  {
+    id: 'shein',
+    label: 'SHEIN',
+    instructions: 'Onde pegar: no painel de afiliada da SHEIN, use o Gerador de Link para gerar o seu link de afiliada. Cole aqui o link inteiro ou apenas o seu número de afiliada. O link do botão de compartilhar do aplicativo não serve — ele é para uso pessoal, não para cadastro.',
+    actionLinks: [
+      {
+        label: 'Abrir a página da loja',
+        href: 'https://www.shein.com/affiliate',
+      },
+    ],
+    fields: [
+      { key: 'tag', label: 'Seu link de afiliada da SHEIN (ou seu número de afiliada)', hint: 'Cole o link que você gera no painel de afiliada, ou só o número.' },
+    ],
+  },
 ]
 
 export const CRED_STATUS = {
