@@ -149,6 +149,13 @@ export const api = {
     return data
   },
 
+  forgotPassword: (email) => apiFetch('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: async (token, password, confirmPassword) => {
+    const data = await apiFetch('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password, confirmPassword }) })
+    if (data?.token) setAuthToken(data.token)
+    return data
+  },
+
   me: () => apiFetch('/api/auth/me'),
   updateAccountEmail: (email) =>
     apiFetch('/api/auth/me/email', { method: 'PATCH', body: JSON.stringify({ email }) }),
@@ -320,6 +327,20 @@ export const api = {
   adminUpdateAccess: (id, data) =>
     apiFetch(`/api/admin/users/${id}/access`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // Aba E-mails do admin (motor de e-mails).
+  adminEmailSummary: () => apiFetch('/api/admin/emails/summary'),
+  adminEmailTemplates: () => apiFetch('/api/admin/emails/templates'),
+  adminEmailTemplate: (slug) => apiFetch(`/api/admin/emails/templates/${encodeURIComponent(slug)}`),
+  adminEmailTemplateSave: (slug, payload) => apiFetch(`/api/admin/emails/templates/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  adminEmailTemplateReset: (slug) => apiFetch(`/api/admin/emails/templates/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+  adminEmailTemplatePreview: (slug, payload) => apiFetch(`/api/admin/emails/templates/${encodeURIComponent(slug)}/preview`, { method: 'POST', body: JSON.stringify(payload ?? {}) }),
+  adminEmailTemplateTest: (slug, payload) => apiFetch(`/api/admin/emails/templates/${encodeURIComponent(slug)}/test`, { method: 'POST', body: JSON.stringify(payload ?? {}) }),
+  adminEmailAudiencePreview: (payload) => apiFetch('/api/admin/emails/audience/preview', { method: 'POST', body: JSON.stringify(payload ?? {}) }),
+  adminEmailAudienceSearch: (q) => apiFetch(`/api/admin/emails/audience/search?q=${encodeURIComponent(q ?? '')}`),
+  adminEmailSend: (payload) => apiFetch('/api/admin/emails/send', { method: 'POST', body: JSON.stringify(payload) }),
+  adminEmailBatches: () => apiFetch('/api/admin/emails/batches'),
+  adminEmailBatchCancel: (id) => apiFetch(`/api/admin/emails/batches/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  adminEmailSends: (params = {}) => apiFetch(`/api/admin/emails/sends?${new URLSearchParams(params).toString()}`),
   adminStagingStatus: () => apiFetch('/api/admin/staging-power'),
   adminStagingPower: (action, { mfaToken } = {}) =>
     apiFetch('/api/admin/staging-power', {

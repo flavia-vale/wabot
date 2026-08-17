@@ -5,7 +5,7 @@ import { computeDebtCents, computeAvailableCents } from './affiliateBalance.js'
 import { canRequestPayout } from './payoutPolicy.js'
 import { validatePixKey } from './pixKeyValidation.js'
 import { resolveOrphanTouchDecision } from './orphanTouchPolicy.js'
-import { sendCommissionEligibleEmail } from '../../email/affiliateEmails.js'
+import { notifyCommissionEligible, notifyReferralPayment } from '../../emailTriggers/events.js'
 import { evaluateStuckPromotion } from './stuckPromotionAlarm.js'
 
 const AFFILIATE_STUCK_PROMOTION_THRESHOLD_MS = Number(process.env.AFFILIATE_STUCK_PROMOTION_THRESHOLD_MS) || 24 * 60 * 60 * 1000
@@ -656,6 +656,18 @@ export async function tryCreateAffiliateCommission({ userId, paymentId, saleAmou
     }
 
     await writeCommissionLedger({ commissionId: finalCommission.id, affiliateId: profile.id, fromStatus: null, toStatus: finalCommission.status, amountCents: finalCommission.commissionAmountCents, reason: isHeld ? effectiveRisk.reason : 'created', actor: 'system', log, db: dbi })
+    // Avisa a afiliada que uma indicação dela assinou. Comissão em análise
+    // (held) não vira e-mail: o valor ainda pode não se confirmar, e prometer
+    // dinheiro que some depois é pior que não avisar. Fire-and-forget.
+    if (!isHeld) {
+      notifyReferralPayment({
+        db: dbi,
+        affiliateUserId: profile.userId,
+        commissionCents: finalCommission.commissionAmountCents,
+        holdDays: settings.commissionHoldDays ?? DEFAULT_SETTINGS.commissionHoldDays,
+        logger: log,
+      }).catch(() => {})
+    }
     return { created: true, commissionId: finalCommission.id, commissionType: finalCommission.commissionType, status: finalCommission.status }
   } catch (err) {
     if (err.code === 'P2002') return { skipped: 'duplicate_payment' }
@@ -714,7 +726,7 @@ export async function reconcileAffiliateCommissions({ db: dbi = db, log, batchSi
 export async function promoteEligibleAffiliateCommissions({ db: dbi = db, now = new Date(), batchSize = 200, log } = {}) {
   const rows = await dbi.affiliateCommission.findMany({
     where: { status: 'pending', eligibleAt: { lte: now } },
-    select: { id: true, affiliateId: true, commissionAmountCents: true, affiliate: { select: { user: { select: { email: true } } } } },
+    select: { id: true, affiliateId: true, commissionAmountCents: true, affiliate: { select: { user: { select: { id: true, name: true, email: true, status: true } } } } },
     orderBy: { eligibleAt: 'asc' },
     take: batchSize,
   })
@@ -730,7 +742,7 @@ export async function promoteEligibleAffiliateCommissions({ db: dbi = db, now = 
       result.promoted++
       // US5 (009-affiliate-improvements-r1, T037): notificação fire-and-forget,
       // best-effort e no-op sem SMTP — nunca atrasa/derruba a promoção em si.
-      sendCommissionEligibleEmail({ to: row.affiliate?.user?.email, amountCents: row.commissionAmountCents }).catch(() => {})
+      notifyCommissionEligible({ db: dbi, user: row.affiliate?.user, amountCents: row.commissionAmountCents, logger: log }).catch(() => {})
     } catch (err) {
       result.failed++
       log?.error?.({ err: err?.message, commissionId: row.id }, 'affiliate_commission_eligibility_failed')

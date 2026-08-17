@@ -7,10 +7,12 @@
 
 import { randomUUID } from 'crypto'
 import { isRealEmail, isWithinActiveWindow, elapsedDays, computeDueSteps } from './policy.js'
-import { buildNurtureEmail } from '../email/nurtureEmails.js'
-import { signUnsubscribeToken } from './unsubscribeToken.js'
+import { sendTemplateEmail } from '../email/dispatcher.js'
 
 const NURTURE_EMAIL_SENT_EVENT = 'nurture_email_sent'
+
+// Cada passo da trilha virou um e-mail do catálogo, editável pelo painel.
+const NURTURE_SLUG_BY_STEP = { 2: 'nutricao_dia_2', 5: 'nutricao_dia_5', 7: 'nutricao_dia_7' }
 const NURTURE_UNSUBSCRIBED_EVENT = 'nurture_unsubscribed'
 
 /**
@@ -44,16 +46,6 @@ export async function isUnsubscribed({ db, userId }) {
     where: { userId, event: NURTURE_UNSUBSCRIBED_EVENT },
   })
   return count > 0
-}
-
-function resolveBaseUrl(baseUrl) {
-  const raw = (baseUrl || process.env.DASHBOARD_URL || process.env.API_URL || 'https://espelhagrupos.com.br').trim()
-  return raw.replace(/\/+$/, '')
-}
-
-function buildUnsubscribeUrl({ userId, secret, baseUrl }) {
-  const token = signUnsubscribeToken(userId, secret)
-  return `${resolveBaseUrl(baseUrl)}/api/lead-nurture/unsubscribe?token=${encodeURIComponent(token)}`
 }
 
 /**
@@ -93,10 +85,26 @@ export async function runNurtureSweep({ db, sendMail, now = new Date(), logger =
 
       const due = computeDueSteps({ createdAt: lead.createdAt, now, sentSteps: sent, isUnsubscribed: unsub })
       for (const step of due) {
-        const unsubscribeUrl = buildUnsubscribeUrl({ userId: lead.id, secret, baseUrl })
-        const { subject, text, html } = buildNurtureEmail(step, { name: lead.name, unsubscribeUrl })
-        const res = await sendMail({ to: lead.email, subject, text, html })
-        if (res?.skipped) {
+        // Passa pelo motor de e-mails (catálogo + travas + histórico + link de
+        // descadastro): assim a admin edita estes textos pela aba E-mails.
+        const res = await sendTemplateEmail({
+          db,
+          sendMail,
+          slug: NURTURE_SLUG_BY_STEP[step],
+          user: lead,
+          mode: 'auto',
+          now,
+          secret,
+          logger,
+        })
+        if (!res?.sent) {
+          // Falha real de envio continua aparecendo como falha (visibilidade);
+          // trava do despachante (descadastro, repetição, sem SMTP) é skip.
+          if (res?.reason === 'error') {
+            summary.failed += 1
+            summary.failures.push({ userId: lead.id, step, error: res.error ?? 'falha no envio' })
+            break
+          }
           summary.skipped += 1
           continue
         }

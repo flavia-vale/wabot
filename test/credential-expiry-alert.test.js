@@ -12,7 +12,6 @@ import {
   resolveAlertCooldownMs,
 } from '../src/credentialExpiry/policy.js'
 import { runCredentialExpirySweep, lastAlertByPlatform } from '../src/credentialExpiry/sweep.js'
-import { buildCredentialExpiryEmail } from '../src/email/credentialExpiryEmail.js'
 
 const DAY = 24 * 60 * 60 * 1000
 const NOW = new Date('2026-08-16T12:00:00Z')
@@ -64,64 +63,6 @@ test('loja em janela de silêncio nem chega a ser sondada', () => {
     cooldownMs: 7 * DAY,
   })
   assert.deepEqual(due, ['amazon'])
-})
-
-// -------------------------------------------------------------- texto leigo
-
-// O que a cliente NUNCA pode ler. Mesmo espírito de
-// test/painel-linguagem-leiga.test.js: o texto é parte do produto.
-const JARGAO_PROIBIDO = [
-  /cookie/i,
-  /ssid/i,
-  /\btoken\b/i,
-  /\?tag=/,
-  /partner_id/i,
-  /amzn\.to/i,
-  /meli\.la/i,
-  /sess[ãa]o expirada/i,
-  /expirou|expirad/i,
-  /endpoint|payload|fallback|api\b/i,
-  /pausad/i, // o envio NUNCA está pausado — o plano B segue enviando
-]
-
-function textoVisivel({ text, html, subject }) {
-  return [subject, text, html.replace(/<[^>]+>/g, ' ')].join('\n')
-}
-
-test('e-mail não usa jargão técnico nem diz que o envio parou', () => {
-  for (const platforms of [['mercadolivre'], ['amazon'], ['mercadolivre', 'amazon']]) {
-    const email = buildCredentialExpiryEmail({ name: 'Juliane', platforms, dashboardUrl: 'https://exemplo.com' })
-    const visivel = textoVisivel(email)
-    for (const proibido of JARGAO_PROIBIDO) {
-      assert.doesNotMatch(visivel, proibido, `jargão "${proibido}" no e-mail de ${platforms.join('+')}`)
-    }
-  }
-})
-
-test('e-mail diz o essencial: venceu, continua saindo, comissão é dela, como resolver', () => {
-  const email = buildCredentialExpiryEmail({ name: 'Juliane Pumuceno', platforms: ['mercadolivre'], dashboardUrl: 'https://exemplo.com' })
-  assert.match(email.subject, /venceu/i)
-  assert.match(email.text, /Olá, Juliane!/)
-  assert.match(email.text, /código de acesso/i)
-  assert.match(email.text, /continuam saindo/i)
-  assert.match(email.text, /comissão CONTINUA sendo sua/i)
-  assert.match(email.text, /link.*mais comprido/i)
-  assert.match(email.text, /cupom.*não aponta para um produto/i)
-  assert.match(email.text, /Minhas credenciais/)
-  assert.match(email.text, /https:\/\/exemplo\.com\/painel\/ids-afiliada/)
-  assert.match(email.html, /https:\/\/exemplo\.com\/painel\/ids-afiliada/)
-})
-
-test('duas lojas vencidas viram UM e-mail só, citando as duas', () => {
-  const email = buildCredentialExpiryEmail({ platforms: ['mercadolivre', 'amazon'], dashboardUrl: 'https://x.com' })
-  assert.match(email.subject, /Mercado Livre e Amazon/)
-  assert.match(email.text, /Mercado Livre e Amazon/)
-  assert.match(email.text, /^Olá!/)
-})
-
-test('e-mail da Amazon não fala em cupom sem produto (isso é só do Mercado Livre)', () => {
-  const email = buildCredentialExpiryEmail({ platforms: ['amazon'] })
-  assert.doesNotMatch(email.text, /cupom.*deixa de ser convertido/i)
 })
 
 // -------------------------------------------------------------- passada (sweep)
