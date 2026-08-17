@@ -38,6 +38,19 @@ function PlatformInfoCard({ platform }) {
 
 function SessionWarning({ platformId, sessionStatus }) {
   if (!sessionStatus || sessionStatus.alive !== false) return null
+  // Shopee é o caso GRAVE: sem chave aceita não há plano B — a oferta não é
+  // publicada e as ofertas automáticas param. O texto tranquilizador das outras
+  // duas lojas ("continuam saindo") seria mentira aqui e faria a cliente
+  // ignorar prejuízo real.
+  if (platformId === 'shopee') {
+    return (
+      <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
+        <strong>A Shopee parou de aceitar sua chave.</strong> Enquanto ela não for aceita, as ofertas da Shopee param de
+        sair — as outras lojas seguem normalmente. Gere um App ID e uma chave secreta novos no painel de afiliada da
+        Shopee e cole aqui embaixo.
+      </div>
+    )
+  }
   if (platformId === 'amazon') {
     return (
       <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
@@ -240,6 +253,7 @@ export default function IdsAfiliadaPage() {
   const [loadError, setLoadError] = useState('')
   const [mlSession, setMlSession] = useState(null)
   const [amazonSession, setAmazonSession] = useState(null)
+  const [shopeeSession, setShopeeSession] = useState(null)
 
   // Checa a validade do SSID do ML (sessão de afiliado). Só roda quando há
   // cookie cadastrado — o endpoint faz um request autenticado ao ML.
@@ -260,6 +274,15 @@ export default function IdsAfiliadaPage() {
       .catch(() => setAmazonSession(null))
   }
 
+  // Idem para a Shopee: só checa quando os dois campos estão preenchidos —
+  // campo faltando é outro problema, e o cartão já mostra "falta preencher".
+  function refreshShopeeSession(data) {
+    if (!(data?.appId && data?.secretKey)) { setShopeeSession(null); return }
+    api.shopeeSession()
+      .then((status) => setShopeeSession(status))
+      .catch(() => setShopeeSession(null))
+  }
+
   useEffect(() => {
     let active = true
     api.credentials()
@@ -270,6 +293,7 @@ export default function IdsAfiliadaPage() {
         setCredMap(map)
         refreshMlSession(map.mercadolivre)
         refreshAmazonSession(map.amazon)
+        refreshShopeeSession(map.shopee)
       })
       .catch((err) => { if (active) setLoadError(err?.message || 'Falha ao carregar credenciais.') })
     return () => { active = false }
@@ -283,10 +307,15 @@ export default function IdsAfiliadaPage() {
     // ele evita uma SEGUNDA sondagem à loja logo em seguida (na Amazon cada
     // sondagem gasta uma rotação de código de acesso). Sem o campo (API antiga),
     // cai no comportamento histórico de re-checar.
-    const setter = platform === 'mercadolivre' ? setMlSession : platform === 'amazon' ? setAmazonSession : null
+    const setter = platform === 'mercadolivre'
+      ? setMlSession
+      : platform === 'amazon'
+        ? setAmazonSession
+        : platform === 'shopee' ? setShopeeSession : null
     if (setter && result?.sessionCheck) setter(result.sessionCheck)
     else if (platform === 'mercadolivre') refreshMlSession(savedData)
     else if (platform === 'amazon') refreshAmazonSession(savedData)
+    else if (platform === 'shopee') refreshShopeeSession(savedData)
     return result
   }
 
@@ -299,6 +328,7 @@ export default function IdsAfiliadaPage() {
     })
     if (platform === 'mercadolivre') setMlSession(null)
     if (platform === 'amazon') setAmazonSession(null)
+    if (platform === 'shopee') setShopeeSession(null)
     return result
   }
 
@@ -331,7 +361,11 @@ export default function IdsAfiliadaPage() {
                 onSave={handleSave}
                 onDelete={handleDelete}
                 disabled={!!loadError}
-                sessionStatus={p.id === 'mercadolivre' ? mlSession : p.id === 'amazon' ? amazonSession : null}
+                sessionStatus={
+                  p.id === 'mercadolivre' ? mlSession
+                    : p.id === 'amazon' ? amazonSession
+                      : p.id === 'shopee' ? shopeeSession : null
+                }
               />
             )
           )}

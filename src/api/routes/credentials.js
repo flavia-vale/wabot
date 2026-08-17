@@ -4,6 +4,7 @@ import { getCredentialSaveMessage, parseCredentialData, PLATFORMS, sanitizeCrede
 import { encryptCredential } from '../../credentialCrypto.js'
 import { checkMercadoLivreSession as defaultCheckMercadoLivreSession } from '../../converters/mercadolivre.js'
 import { checkAmazonSession as defaultCheckAmazonSession } from '../../converters/amazon.js'
+import { checkShopeeSession as defaultCheckShopeeSession } from '../../converters/shopee.js'
 import { getCachedProbe as defaultGetCachedProbe, invalidateCachedProbe as defaultInvalidateCachedProbe, setCachedProbe as defaultSetCachedProbe } from '../../converters/amazonSessionProbeCache.js'
 import { getCachedProbe as defaultGetCachedMlProbe, invalidateCachedProbe as defaultInvalidateCachedMlProbe, setCachedProbe as defaultSetCachedMlProbe } from '../../converters/mercadolivreSessionProbeCache.js'
 import { getBotMetrics as defaultGetBotMetrics, isRunning as defaultIsRunning, reloadConfig as defaultReloadConfig, startBot as defaultStartBot, stopBot as defaultStopBot } from '../../manager.js'
@@ -15,6 +16,7 @@ export async function credentialsRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
   const checkMercadoLivreSession = opts.checkMercadoLivreSession ?? defaultCheckMercadoLivreSession
   const checkAmazonSession = opts.checkAmazonSession ?? defaultCheckAmazonSession
+  const checkShopeeSession = opts.checkShopeeSession ?? defaultCheckShopeeSession
   const getCachedAmazonProbe = opts.getCachedProbe ?? defaultGetCachedProbe
   const setCachedAmazonProbe = opts.setCachedProbe ?? defaultSetCachedProbe
   const invalidateCachedAmazonProbe = opts.invalidateCachedProbe ?? defaultInvalidateCachedProbe
@@ -127,6 +129,24 @@ export async function credentialsRoutes(app, opts = {}) {
       setCachedAmazonProbe(req.user.sub, responseBody)
     }
     return responseBody
+  })
+
+  // Checagem ativa da chave da Shopee (App ID + chave secreta). Quando a Shopee
+  // passa a recusar, TODA oferta da loja é descartada e as ofertas automáticas
+  // param — e, até este endpoint existir, o painel seguia mostrando a loja em
+  // verde porque só conferia o formato dos campos (RCA ago/2026).
+  //
+  // Sem cache, de propósito: diferente do ML/Amazon, a sondagem é só leitura e
+  // NÃO rotaciona credencial, então repetir não custa sessão. O que sobra é uma
+  // chamada barata por abertura da tela.
+  app.get('/shopee/session', { onRequest: [app.authenticate] }, async (req) => {
+    const cred = await db.credential.findUnique({
+      where: { userId_platform: { userId: req.user.sub, platform: 'shopee' } },
+    })
+    if (!cred) return { configured: false, alive: null, reason: 'not_configured' }
+    const result = await checkShopeeSession(parseCredentialData(cred.data))
+    app.log.debug({ userId: req.user.sub }, 'Shopee session: sondagem efetiva (chamada real à Shopee)')
+    return { ...result, checkedAt: new Date().toISOString() }
   })
 
   app.put('/:platform', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -244,8 +264,14 @@ export async function credentialsRoutes(app, opts = {}) {
   // (na Amazon isso custa mais uma rotação de cookie).
   async function probeSavedCredential({ platform, userId, data, log }) {
     if (!platformSupportsSessionCheck(platform)) return null
+    const checkByPlatform = {
+      mercadolivre: checkMercadoLivreSession,
+      amazon: checkAmazonSession,
+      shopee: checkShopeeSession,
+    }
     try {
-      const check = platform === 'mercadolivre' ? checkMercadoLivreSession : checkAmazonSession
+      const check = checkByPlatform[platform]
+      if (typeof check !== 'function') return null
       const result = await check(data)
       const { credentialPatch, ...publicResult } = result || {}
       if (credentialPatch) {
@@ -255,9 +281,11 @@ export async function credentialsRoutes(app, opts = {}) {
         })
       }
       const body = { ...publicResult, checkedAt: new Date().toISOString() }
+      // Shopee não tem cache de sondagem (a chamada é só leitura, não gasta
+      // sessão) — por isso fica de fora deste bloco.
       if (body.alive === true || body.alive === false) {
         if (platform === 'mercadolivre') setCachedMlProbe(userId, body)
-        else setCachedAmazonProbe(userId, body)
+        else if (platform === 'amazon') setCachedAmazonProbe(userId, body)
       }
       return body
     } catch (err) {
