@@ -298,7 +298,7 @@ a nenhuma user story isolada), e a passada final de regressão.
 - [X] T059 `cd dashboard && npm run build` — obrigatório: a allowlist de domínios/catálogos do
       painel vai para o bundle do Next; sem isso o painel segue dizendo "link não suportado" mesmo
       com o backend correto (contracts/registries.md, nota final; depende de T046-T057)
-- [ ] T060 Rodar a suíte inteira `npm test` na raiz e confirmar zero regressão nas quatro lojas
+- [X] T060 Rodar a suíte inteira `npm test` na raiz e confirmar zero regressão nas quatro lojas
       existentes (FR-023, SC-007) — não corrigir nada fora do escopo desta feature se algo já
       estivesse quebrado antes; qualquer falha nova precisa ser resolvida antes de considerar a
       feature pronta (depende de todas as tasks anteriores)
