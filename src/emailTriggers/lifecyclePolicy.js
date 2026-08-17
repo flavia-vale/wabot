@@ -9,6 +9,8 @@
 // A trava de repetição (o mesmo e-mail não sair duas vezes) NÃO mora aqui: é o
 // `dedupDays` de cada e-mail no catálogo, aplicado pelo despachante.
 
+import { wasStoppedByUser } from '../email/accountActivity.js'
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const MS_PER_HOUR = 60 * 60 * 1000
 
@@ -128,8 +130,11 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
 
   // 3) Saúde do robô — só para quem está pagando/testando de verdade.
   if (acessoAtivo) {
+    // Desconectar pelo painel é escolha (viagem, troca de chip, pausa), não
+    // problema: avisar que "o robô está fora do ar" nesse caso é ruído.
     const horasDesconectado = hoursSince(snapshot.waDisconnectedSince, now)
-    if (snapshot.waEverConnected && !snapshot.waConnected && horasDesconectado !== null && horasDesconectado >= 24) {
+    if (snapshot.waEverConnected && !snapshot.waConnected && !wasStoppedByUser(snapshot)
+      && horasDesconectado !== null && horasDesconectado >= 24) {
       return { slug: 'whatsapp_desconectado', vars: {} }
     }
 

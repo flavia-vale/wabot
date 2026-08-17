@@ -39,6 +39,8 @@ const MOTIVO_LABEL = {
   smtp_disabled: 'envio de e-mail desligado',
   batch_canceled: 'campanha cancelada',
   user_removed: 'cliente não existe mais',
+  account_idle: 'conta parada — não está usando o robô',
+  weekly_cap: 'já recebeu e-mails demais esta semana',
 }
 
 const ACESSO_OPCOES = [

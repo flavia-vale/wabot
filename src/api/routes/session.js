@@ -6,6 +6,7 @@ import { mapInfraError } from '../../errors.js'
 import { appContainer } from '../../app/container.js'
 import { normalizePairingPhone } from '../../domain/session/service.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
+import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 
 const WA_GROUPS_RECOVERY_TIMEOUT_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_TIMEOUT_MS || 15000), 0)
 const WA_GROUPS_RECOVERY_RETRY_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_RETRY_MS || 1000), 100)
@@ -116,6 +117,14 @@ export async function sessionRoutes(app) {
       where: { userId },
       data: { status: 'disconnected' },
     }).catch(() => {})
+    // Marca que a desconexão foi PEDIDA. Sem isso, o aviso "seu robô está fora
+    // do ar" sai para quem desligou de propósito (viagem, troca de chip).
+    recordWaConnectionEventSafe({
+      userId,
+      type: MANUAL_STOP_EVENT,
+      lifecycle: 'stopped_by_user',
+      metadata: { source: 'painel' },
+    })
     return { ok: true }
   })
 
@@ -219,6 +228,12 @@ export async function sessionRoutes(app) {
       where: { userId },
       data: { status: 'disconnected', phone: null },
     }).catch(() => {})
+    recordWaConnectionEventSafe({
+      userId,
+      type: MANUAL_STOP_EVENT,
+      lifecycle: 'stopped_by_user',
+      metadata: { source: 'painel_esquecer' },
+    })
     const authDir = getAuthInfoDir(userId)
     await rm(authDir, { recursive: true, force: true })
     return { ok: true }

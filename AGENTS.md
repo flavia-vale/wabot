@@ -620,6 +620,46 @@ Envs (todas opcionais): `EMAIL_QUEUE_TICK_MS`, `EMAIL_QUEUE_BATCH_SIZE` (10),
 `LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS`, `WEEKLY_SUMMARY_ENABLED`,
 `WEEKLY_SUMMARY_WEEKDAY` (1 = segunda), `EMAIL_TRIGGERS_START_AT`.
 
+### Aviso operacional só para conta em uso (RCA 2026-08 — não regredir)
+
+Cliente com plano vencido, WhatsApp fora do ar e nenhuma oferta há semanas
+recebeu "a Shopee parou de aceitar sua chave" — e, antes disso, o robô ainda
+gastou uma sondagem na loja para descobrir. A varredura de credencial olhava só
+"conta não banida + e-mail real".
+
+`src/email/accountActivity.js` (puro + carregador com db injetado) responde
+"essa conta está usando o robô agora?": **acesso ativo E (WhatsApp conectado OU
+oferta enviada nos últimos `EMAIL_OPERATIONAL_IDLE_DAYS` dias OU conta com menos
+de 14 dias que já chegou a conectar)**. A carência da conta nova é de propósito:
+quem acabou de montar é quem mais precisa saber que o robô caiu.
+
+Onde a regra age:
+- **No despachante**, para todo e-mail do grupo `saude` disparado em modo
+  `auto` (código de acesso venceu, chave da Shopee recusada, WhatsApp caído,
+  robô parado). Chokepoint único: gatilho de saúde novo herda a trava sem
+  precisar lembrar dela. Envio **manual** da admin nunca é barrado.
+- **Antes de sondar** a loja, em `credentialExpiry/sweep.js` — economiza
+  chamada à Shopee/ML/Amazon e poupa rotação de código de conta parada.
+
+**Cobrança, senha e dinheiro de afiliada NÃO passam por essa trava**: conta
+parada continua precisando saber que o plano vence e que tem saque a fazer.
+
+**Foto incompleta não silencia.** Consulta que falhou (ou banco sem os modelos)
+marca `incompleta: true` e o aviso VAI — engolir alerta legítimo por um blip é
+pior que mandá-lo.
+
+Duas travas irmãs, no mesmo arquivo:
+- **Teto semanal**: no máximo `EMAIL_AUTO_WEEKLY_CAP` (2) e-mails automáticos
+  por cliente por semana, contando só os grupos `saude` e `marketing`. Cada
+  aviso sozinho se justifica; três assuntos diferentes em três dias viram spam.
+- **Desconexão pedida** (`wasStoppedByUser`): `POST /session/stop` e
+  `/session/forget` gravam `WaConnectionEvent('manual_stop_requested')`, e o
+  aviso de WhatsApp caído não sai enquanto não houver conexão nova depois do
+  pedido. Desligar o robô é escolha, não problema.
+
+Envs (opcionais): `EMAIL_OPERATIONAL_IDLE_DAYS` (7), `EMAIL_AUTO_WEEKLY_CAP` (2,
+`0` desliga). Teste: `test/email-conta-parada.test.js`.
+
 ### Gatilho ancorado no cadastro não pode ser retroativo (RCA 2026-08 — não regredir)
 
 O motor entrou no ar com a base já formada, e três decisões de
