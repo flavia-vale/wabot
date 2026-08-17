@@ -564,7 +564,30 @@ caminho só, e a cliente edita os textos pelo painel.
 Envs (todas opcionais): `EMAIL_QUEUE_TICK_MS`, `EMAIL_QUEUE_BATCH_SIZE` (10),
 `EMAIL_DAILY_CAP` (250), `LIFECYCLE_EMAIL_ENABLED`,
 `LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS`, `WEEKLY_SUMMARY_ENABLED`,
-`WEEKLY_SUMMARY_WEEKDAY` (1 = segunda).
+`WEEKLY_SUMMARY_WEEKDAY` (1 = segunda), `EMAIL_TRIGGERS_START_AT`.
+
+### Gatilho ancorado no cadastro não pode ser retroativo (RCA 2026-08 — não regredir)
+
+O motor entrou no ar com a base já formada, e três decisões de
+`lifecyclePolicy.js` olhavam "dias desde o cadastro" **sem teto**:
+`onboarding_conecte_whatsapp` (`>= 2 dias`), `configuracao_incompleta`
+(`>= 1 dia`) e `seja_afiliado` (`>= 14 dias`). Cliente de oito meses atrás
+satisfaz "faz 2 dias ou mais" — a base inteira recebeu e-mail de boas-vindas
+atrasado na primeira passada. Duas travas, uma não substitui a outra:
+
+- **Janela máxima** (`SIGNUP_WINDOW_DAYS`: 30/30/90 dias) direto na política
+  pura — vale mesmo sem env nenhuma configurada.
+- **Corte de virada** `EMAIL_TRIGGERS_START_AT` (data ISO, ausente = desligado):
+  conta criada ANTES dessa data nunca dispara gatilho ancorado no cadastro.
+  Vale também para a trilha de nutrição (`runNurtureSweep` recua o início da
+  janela de 8 dias para a data da virada).
+
+**O corte NÃO silencia aviso de fato atual** — plano vencendo, robô caído
+ontem, saldo disponível para saque continuam valendo para toda a base: não são
+retroativos, são o que está acontecendo agora. Cliente antiga que você quiser
+convidar para afiliada é disparo manual pela aba E-mails. Testes:
+`test/email-lifecycle-triggers.test.js` (bloco "gatilho de cadastro não é
+retroativo").
 
 Testes: `test/email-engine.test.js`, `test/email-lifecycle-triggers.test.js`,
 `test/admin-emails.test.js`, `test/email-templates-migrados.test.js`,
