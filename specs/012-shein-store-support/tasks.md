@@ -404,4 +404,12 @@ Task: "src/api/routes/groups.js:175 — allowedPlatforms ganha shein"
   (passos 4-7), nunca como checkbox aqui
 - Commitar após cada task ou grupo lógico
 - Parar em qualquer checkpoint para validar a story isoladamente
-</content>
+
+---
+
+## Phase 8: Convergence
+
+- [ ] T061 Adicionar em `src/converters/shein.js` uma guarda de host no `convert()`: depois da resolução e antes de aplicar a identidade da cliente, recusar (`null`) quando a URL final não for de um domínio real da SHEIN (mesma lista canônica de `PATTERNS.shein` em `src/detector.js`), e cobrir com teste em `test/converters-shein.test.js` — hoje uma cadeia de redirecionamento que sai do domínio da SHEIN é publicada com os parâmetros de rastro do terceiro intactos, per FR-015 / FR-013 / FR-002 (partial)
+- [ ] T062 Recusar (`null`) em `src/converters/shein.js` o destino de landing do oneLink (`/ark/default`, conforme `data-model.md` §3.2) quando ele chegar sem `goods_id` — resolução que não concluiu deve falhar honestamente em vez de publicar a vitrine genérica como cupom; cobrir com teste em `test/converters-shein.test.js`, sem regredir cupom/campanha legítimos (INV-6), per US2/AC4 (partial)
+- [ ] T063 Acrescentar em `test/converters-shein.test.js` assertivas de que `campaign`, `campaign_id`, `ad_type`, `scene` e `test` vindos do link de origem chegam à saída **com o valor original** (usar valores diferentes dos `PROGRAM_PARAMS`, ex. `campaign=summer-sale`), fechando o ponto cego em que uma regressão de strip seria mascarada pelo re-preenchimento dos padrões, per FR-012 e contrato `stripSheinAffiliateTracking` (partial)
+- [ ] T064 Trocar `hasOpaqueShareToken` em `src/converters/shein.js` de checagem de valor truthy (`searchParams.get`) para checagem de presença (`searchParams.has`), de modo que `?shc=`/`?link=` vazios também sejam recusados, com teste correspondente, per contrato `converter-shein.md` (INV-2) (partial)
