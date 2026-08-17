@@ -295,7 +295,7 @@ a nenhuma user story isolada), e a passada final de regressão.
 - [X] T058 Atualizar os testes `test/mobile-*.test.js` relevantes para cobrir SHEIN nos catálogos
       móveis (`mobileOfferComposer`, `mobileGroupPicker`, `mobileLogs`, `mobileCouponStore`)
       (depende de T050, T051, T055, T056, T057)
-- [ ] T059 `cd dashboard && npm run build` — obrigatório: a allowlist de domínios/catálogos do
+- [X] T059 `cd dashboard && npm run build` — obrigatório: a allowlist de domínios/catálogos do
       painel vai para o bundle do Next; sem isso o painel segue dizendo "link não suportado" mesmo
       com o backend correto (contracts/registries.md, nota final; depende de T046-T057)
 - [ ] T060 Rodar a suíte inteira `npm test` na raiz e confirmar zero regressão nas quatro lojas
