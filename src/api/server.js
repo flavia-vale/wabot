@@ -211,16 +211,19 @@ function credentialExpiryAlertEnabled() {
 async function runCredentialExpirySweepTick() {
   if (!credentialExpiryAlertEnabled() || !isEmailConfigured()) return
   try {
-    const [{ checkMercadoLivreSession }, { checkAmazonSession }, mlCache, amazonCache] = await Promise.all([
+    const [{ checkMercadoLivreSession }, { checkAmazonSession }, { checkShopeeSession }, mlCache, amazonCache] = await Promise.all([
       import('../converters/mercadolivre.js'),
       import('../converters/amazon.js'),
+      import('../converters/shopee.js'),
       import('../converters/mercadolivreSessionProbeCache.js'),
       import('../converters/amazonSessionProbeCache.js'),
     ])
     const summary = await runCredentialExpirySweep({
       db,
       sendMail,
-      checkers: { mercadolivre: checkMercadoLivreSession, amazon: checkAmazonSession },
+      // Shopee não tem cache de sondagem: diferente do ML/Amazon, a consulta é
+      // só leitura e não rotaciona credencial, então não há o que preservar.
+      checkers: { mercadolivre: checkMercadoLivreSession, amazon: checkAmazonSession, shopee: checkShopeeSession },
       probeCaches: { mercadolivre: mlCache, amazon: amazonCache },
       logger: app.log,
     })

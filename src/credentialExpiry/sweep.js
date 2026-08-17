@@ -1,5 +1,5 @@
-// Passada periódica que descobre código de acesso vencido e avisa a cliente
-// por e-mail (Mercado Livre / Amazon).
+// Passada periódica que descobre credencial de loja recusada e avisa a cliente
+// por e-mail (Mercado Livre / Amazon / Shopee).
 //
 // Por que existe: o caso real que motivou (ago/2026) ficou UMA SEMANA com o
 // código do ML e o da Amazon mortos, 0 link curto em 7 dias, e ninguém
@@ -22,7 +22,7 @@ import { parseCredentialData, validateCredentialData } from '../credentialHealth
 import { encryptCredential } from '../credentialCrypto.js'
 import { sendTemplateEmail } from '../email/dispatcher.js'
 import { resolveDashboardUrl } from '../email/layout.js'
-import { describeExpiredStores, EXPIRY_TEMPLATE_SLUG } from './message.js'
+import { buildExpiryAlerts } from './message.js'
 import {
   ALERT_EVENT,
   EXPIRY_ALERT_PLATFORMS,
@@ -148,38 +148,47 @@ export async function runCredentialExpirySweep({
       summary.expired += expiredPlatforms.length
 
       // Passa pelo motor de e-mails (catálogo + travas + histórico): assim a
-      // admin edita este texto pela aba E-mails, como todos os outros.
-      const { lojas, consequencia } = describeExpiredStores(expiredPlatforms)
-      const res = await sendTemplateEmail({
-        db,
-        sendMail,
-        slug: EXPIRY_TEMPLATE_SLUG,
-        user: entry.user,
-        vars: { lojas, consequencia, link_credenciais: `${resolveDashboardUrl()}/painel/ids-afiliada` },
-        mode: 'auto',
-        now,
-        logger,
-      })
-      if (!res?.sent) {
-        // Sem SMTP (ou trava do despachante): NÃO gravar o aviso, senão a
-        // janela de silêncio queima sem a cliente ter recebido nada.
+      // admin edita estes textos pela aba E-mails, como todos os outros.
+      //
+      // Pode sair mais de um e-mail: ML/Amazon compartilham um texto ("continua
+      // saindo, só o link fica mais comprido") e a Shopee tem o dela ("as
+      // ofertas pararam"). Ver buildExpiryAlerts.
+      const alerts = buildExpiryAlerts(expiredPlatforms)
+      const notified = []
+      for (const alert of alerts) {
+        const res = await sendTemplateEmail({
+          db,
+          sendMail,
+          slug: alert.slug,
+          user: entry.user,
+          vars: { ...alert.vars, link_credenciais: `${resolveDashboardUrl()}/painel/ids-afiliada` },
+          mode: 'auto',
+          now,
+          logger,
+        })
+        // Sem SMTP (ou trava do despachante): NÃO gravar o aviso desta loja,
+        // senão a janela de silêncio queima sem a cliente ter recebido nada.
+        if (res?.sent) notified.push(...alert.platforms)
+      }
+
+      if (!notified.length) {
         summary.skipped += 1
         continue
       }
 
-      for (const platform of expiredPlatforms) {
+      for (const platform of notified) {
         await db.analyticsEvent.create({
           data: {
             id: randomUUID(),
             userId,
             event: ALERT_EVENT,
-            metadata: JSON.stringify({ platform, together: expiredPlatforms.length }),
+            metadata: JSON.stringify({ platform, together: notified.length }),
             createdAt: new Date(now),
           },
         })
       }
       summary.sent += 1
-      logger?.info?.({ userId, platforms: expiredPlatforms }, 'credential-expiry: aviso enviado')
+      logger?.info?.({ userId, platforms: notified }, 'credential-expiry: aviso enviado')
     } catch (err) {
       summary.failed += 1
       summary.failures.push({ userId, error: String(err?.message ?? err) })

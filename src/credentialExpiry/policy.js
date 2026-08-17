@@ -6,10 +6,17 @@
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
-// Só estas duas lojas têm código de acesso que vence e sondagem ativa
-// (checkMercadoLivreSession / checkAmazonSession). Shopee usa App ID + chave
-// secreta, que não vencem sozinhos; Magalu só tem etiqueta de afiliada.
-export const EXPIRY_ALERT_PLATFORMS = Object.freeze(['mercadolivre', 'amazon'])
+// Lojas com sondagem ativa de saúde da credencial (checkMercadoLivreSession /
+// checkAmazonSession / checkShopeeSession). Magalu fica de fora: só tem
+// etiqueta de afiliada, que não é recusada pela loja.
+//
+// A Shopee entrou depois (RCA ago/2026). O comentário anterior aqui dizia que
+// App ID + chave secreta "não vencem sozinhos" — está ERRADO e foi o que deixou
+// a loja sem cobertura: uma conta real passou dias com a chave recusada
+// (`Invalid Signature`), com TODA oferta da Shopee sendo descartada e as
+// ofertas automáticas paradas, sem nenhum aviso. Não voltar a tirar a Shopee
+// desta lista.
+export const EXPIRY_ALERT_PLATFORMS = Object.freeze(['mercadolivre', 'amazon', 'shopee'])
 
 export const ALERT_EVENT = 'credential_expiry_alert_sent'
 
