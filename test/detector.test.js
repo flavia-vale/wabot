@@ -71,6 +71,28 @@ test('não casa host colado (notmercadolivre.com.br)', () => {
   assert.equal(detectLinks('https://notmercadolivre.com.br/p/MLB123').length, 0)
 })
 
+// specs/012-shein-store-support (D-012): domínios reais confirmados em campo.
+test('detecta domínios reais da SHEIN', () => {
+  for (const url of [
+    'https://onelink.shein.com/14/4v4p6bpzshsx',
+    'https://br.shein.com/vestido-floral-p-485735309.html',
+    'https://m.shein.com/br/ark/default?goods_id=485735309',
+    'https://us.shein.com/algo-p-123.html',
+    'https://pt.shein.com/algo-p-123.html',
+    'https://api-shein.shein.com/h5/sharejump/appjump?shc=x',
+    'https://shein.top/14/abc',
+    'https://shein.com/algo',
+  ]) {
+    const links = detectLinks(url)
+    assert.equal(links.length, 1, `esperava detectar ${url}`)
+    assert.equal(links[0].platform, 'shein')
+  }
+})
+
+test('não casa host colado da SHEIN (notshein.com)', () => {
+  assert.equal(detectLinks('https://notshein.com/algo-p-123.html').length, 0)
+})
+
 // Regressão (incidente 2026-06-23): "último link" deve significar "último link
 // DE LOJA". Numa mensagem espelhada com link de produto + link de cupom (ambos
 // de loja) + link de vitrine de afiliado (iadivu.link, NÃO-loja) + grupo de

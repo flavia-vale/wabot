@@ -175,21 +175,21 @@ grupo de destino que o link publicado leva ao mesmo produto e carrega a identifi
 
 ### Implementation for User Story 2
 
-- [ ] T028 [US2] `src/detector.js:4-9` — `PATTERNS.shein` com os domínios reais (`shein.com`,
+- [X] T028 [US2] `src/detector.js:4-9` — `PATTERNS.shein` com os domínios reais (`shein.com`,
       `br.shein.com`, `m.shein.com`, `us.shein.com`, `pt.shein.com`, `onelink.shein.com`,
       `api-shein.shein.com`, `shein.top`), mantendo o prefixo `(?:[a-z0-9-]+\.)*`, **sem**
       `s.shein.com` (não existe) — alimenta `detectLinks` e `isOfferUrl` (research.md D-012,
       contracts/registries.md A1)
-- [ ] T029 [US2] `src/converters/index.js:1-11` — `import { convert as convertShein } from
+- [X] T029 [US2] `src/converters/index.js:1-11` — `import { convert as convertShein } from
       './shein.js'` + entrada `shein` em `CONVERTERS` (contracts/registries.md A2, depende de T007,
       T028)
-- [ ] T030 [P] [US2] `src/converters/linkKind.js:24-27` — `PRODUCT_ID_DETECTORS.shein = (url) =>
+- [X] T030 [P] [US2] `src/converters/linkKind.js:24-27` — `PRODUCT_ID_DETECTORS.shein = (url) =>
       /-p-\d+|[?&]goods_id=\d+/i.test(url)` (contracts/registries.md A3)
-- [ ] T031 [P] [US2] Atualizar `test/detector.test.js` — domínios reais de SHEIN casam;
+- [X] T031 [P] [US2] Atualizar `test/detector.test.js` — domínios reais de SHEIN casam;
       `s.shein.com` e host colado (`notshein.com`) não casam (depende de T028)
-- [ ] T032 [P] [US2] Atualizar `test/link-kind.test.js` — produto (`goods_id`/`-p-<id>`) vs cupom
+- [X] T032 [P] [US2] Atualizar `test/link-kind.test.js` — produto (`goods_id`/`-p-<id>`) vs cupom
       para SHEIN (depende de T030)
-- [ ] T033 [US2] Rodar `node --test test/detector.test.js test/link-kind.test.js` e confirmar tudo
+- [X] T033 [US2] Rodar `node --test test/detector.test.js test/link-kind.test.js` e confirmar tudo
       verde (depende de T029, T031, T032)
 
 **Checkpoint**: US2 completa — detecção + conversão + registro do dispatcher funcionam. O caminho

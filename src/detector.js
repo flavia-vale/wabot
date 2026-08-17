@@ -6,6 +6,8 @@ const PATTERNS = {
   amazon:       /https?:\/\/(?:[a-z0-9-]+\.)*(?:amazon\.com\.br|link\.amazon|amzn\.to|amzn\.la|a\.co|amzn\.divulgador\.link|amzn\.divulguei\.app|amzlink\.to)[^\s]*/gi,
   shopee:       /https?:\/\/(?:[a-z0-9-]+\.)*(?:shope\.ee|shopee\.com\.br)[^\s]*/gi,
   magazineluiza:/https?:\/\/(?:[a-z0-9-]+\.)*(?:magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)[^\s]*/gi,
+  // s.shein.com NÃO existe — não incluir (research.md D-012).
+  shein:        /https?:\/\/(?:[a-z0-9-]+\.)*(?:shein\.com|onelink\.shein\.com|shein\.top)[^\s]*/gi,
 }
 
 export function detectLinks(text) {
