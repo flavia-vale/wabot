@@ -551,6 +551,18 @@ de `EXPIRY_ALERT_PLATFORMS`.**
 - Armadilha de diagnóstico: chave recusada e credencial incompleta produzem
   sintomas parecidos no painel, mas são coisas diferentes — campo faltando não
   chega a ser sondado (o painel já diz "falta preencher").
+- **O painel também avisa** (`GET /credentials/shopee/session` + sondagem no
+  `PUT /credentials/shopee`, via `PLATFORMS_WITH_SESSION_CHECK`). Antes disso o
+  painel mostrava a Shopee em VERDE com a chave morta — só conferia o formato
+  dos campos —, e era por isso que ninguém percebia. E-mail avisando com painel
+  verde ao mesmo tempo é pior do que não avisar: as duas pontas andam juntas.
+- **Texto da Shopee é o oposto do das outras duas, nas TRÊS superfícies**
+  (e-mail, banner do painel, mensagem do save): "as ofertas da Shopee param de
+  sair", nunca "continuam saindo, só o link fica mais comprido". Guardas em
+  `test/credential-save-session-check.test.js` e
+  `test/credentials-shopee-session-route.test.js`.
+- Vocabulário: na Shopee é **"chave"** (App ID + chave secreta), não "código de
+  acesso" — esse termo é dos cookies de sessão do ML/Amazon.
 - Envs (todas opcionais): `CREDENTIAL_EXPIRY_ALERT_ENABLED`,
   `CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS`, `CREDENTIAL_EXPIRY_ALERT_COOLDOWN_DAYS`.
   Sem SMTP a passada nem começa. Runbook de ligar o SMTP:
