@@ -187,7 +187,28 @@ function stripAffiliateTracking(url) {
   }
 }
 
+// Token opaco de compartilhamento do app da SHEIN. Ele carrega o produto E,
+// possivelmente, a atribuição de quem compartilhou — e não dá para inspecionar
+// nem reescrever. Trocar só o `url_from` deixando o `shc` de outra pessoa seria
+// publicar um link que PARECE convertido e pode creditar a comissão a ela.
+// Enquanto isso não estiver provado, o caminho seguro é recusar.
+const OPAQUE_SHARE_PARAMS = ['shc', 'link']
+
+function hasOpaqueShareToken(url) {
+  try {
+    const u = new URL(url)
+    return OPAQUE_SHARE_PARAMS.some((key) => u.searchParams.get(key))
+  } catch {
+    return false
+  }
+}
+
 function buildConvertedLink(productUrl, affiliateParams) {
+  // Sem o código do produto não há como remontar o link no formato de
+  // afiliada — e um link montado às cegas ou não abre, ou abre o produto
+  // errado. Melhor não converter do que converter errado.
+  if (!readGoodsId(productUrl)) return null
+  if (hasOpaqueShareToken(productUrl)) return null
   try {
     const u = new URL(stripAffiliateTracking(productUrl))
     // Só o que identifica VOCÊ. De fora ficam:
@@ -276,6 +297,23 @@ async function main() {
     console.log("     'https://br.shein.com/algum-produto-p-485735309.html'")
   } else {
     const converted = buildConvertedLink(productUrl, affiliateParams)
+    if (!converted) {
+      console.log('   ✘ NÃO DÁ PARA CONVERTER ESSE LINK COM SEGURANÇA.\n')
+      if (!readGoodsId(productUrl)) {
+        console.log('     Falta o código do produto (goods_id) na URL — ele está')
+        console.log('     escondido dentro de um token do app da SHEIN.')
+      }
+      if (hasOpaqueShareToken(productUrl)) {
+        console.log('     O link carrega um token de compartilhamento (shc/link) que')
+        console.log('     não dá para inspecionar. Trocar só a identificação deixaria')
+        console.log('     esse token intacto, e a comissão poderia ir para quem')
+        console.log('     compartilhou.')
+      }
+      console.log('\n     Esse formato é o do botão "compartilhar" do app, não o do')
+      console.log('     Gerador de Link do painel de afiliada. Gere o link do produto')
+      console.log('     pelo painel de afiliada e rode de novo.\n')
+      return
+    }
     console.log(`   Produto (goods_id ${readGoodsId(productUrl) ?? '?'}):`)
     console.log(`   ${line()}`)
     console.log('   A) LINK OFICIAL (gerado pela SHEIN) — o controle:')
