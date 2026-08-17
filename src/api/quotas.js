@@ -7,7 +7,11 @@ import { trackAnalyticsEventSafe } from '../analytics.js'
 
 export const QUOTAS = {
   groupsPerUser: Math.max(1, Number(process.env.MAX_GROUPS_PER_USER || 50)),
-  automationsPerUser: Math.max(1, Number(process.env.MAX_AUTOMATIONS_PER_USER || 10)),
+  // 10 -> 30 (2026-08): teto antigo apertava contas que rodam várias lojas/
+  // horários. Automação não cria processo nem worker — roda no cron in-process
+  // da API — então o custo de RAM é desprezível; o freio real de volume
+  // continua sendo a preservação por destino (burst/daily cap + fila serial).
+  automationsPerUser: Math.max(1, Number(process.env.MAX_AUTOMATIONS_PER_USER || 30)),
   offerQueuesPerUser: Math.max(1, Number(process.env.MAX_OFFER_QUEUES_PER_USER || 5)),
   pendingItemsPerQueue: Math.max(1, Number(process.env.MAX_PENDING_ITEMS_PER_QUEUE || 500)),
   pendingScheduledPerUser: Math.max(1, Number(process.env.MAX_PENDING_SCHEDULED_PER_USER || 500)),
