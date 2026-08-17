@@ -16,6 +16,7 @@ import { getTemplateDefinition, templateExists } from './registry.js'
 import { applyVariables } from './markup.js'
 import { wrapEmail, resolveDashboardUrl, resolveSupportEmail, BRAND_NAME, DEFAULT_SUPPORT_WHATSAPP } from './layout.js'
 import { buildUnsubscribeUrl, isOptedOut } from './optOut.js'
+import { resolveDailyWindowStart, nextDailyWindowStart, describeWindowStart } from './dailyWindow.js'
 
 const FALLBACK_EMAIL_RE = /^user_.*@sistema\.com$/i
 const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -37,7 +38,7 @@ export function isDeliverableUser(user) {
 
 export function resolveDailyCap(env = process.env) {
   const raw = Number(env.EMAIL_DAILY_CAP)
-  return Number.isFinite(raw) && raw >= 0 ? raw : 250
+  return Number.isFinite(raw) && raw >= 0 ? raw : 300
 }
 
 /**
@@ -121,10 +122,15 @@ async function alreadySentWithin({ db, slug, userId, email, days, now }) {
   return count > 0
 }
 
-async function sentInLast24h({ db, now }) {
+/**
+ * Quantos e-mails já saíram no dia de envio vigente (o que começou na última
+ * virada das 8h de Brasília). Janela com hora certa, não deslizante: assim o
+ * teto zera de manhã e a fila do dia sai cedo, em vez de andar cada dia mais
+ * tarde conforme a hora em que o teto foi batido.
+ */
+export async function sentInCurrentWindow({ db, now, windowStart = resolveDailyWindowStart(now) }) {
   if (!hasModel(db, 'emailSendLog')) return 0
-  const since = new Date(new Date(now).getTime() - MS_PER_DAY)
-  return db.emailSendLog.count({ where: { status: 'sent', createdAt: { gte: since } } }).catch(() => 0)
+  return db.emailSendLog.count({ where: { status: 'sent', createdAt: { gte: new Date(windowStart) } } }).catch(() => 0)
 }
 
 /**
@@ -185,10 +191,18 @@ export async function sendTemplateEmail({
 
     if (!ignoreDailyCap) {
       const cap = resolveDailyCap()
-      if (cap > 0 && await sentInLast24h({ db, now }) >= cap) {
+      if (cap > 0 && await sentInCurrentWindow({ db, now }) >= cap) {
         // NÃO marca a linha da fila como descartada: o teto diário é uma espera,
-        // não uma recusa — ela continua na fila e sai amanhã.
-        return { sent: false, skipped: true, reason: 'daily_cap', retryLater: true }
+        // não uma recusa — ela continua na fila e sai na próxima virada das 8h.
+        const retryAt = nextDailyWindowStart(now)
+        return {
+          sent: false,
+          skipped: true,
+          reason: 'daily_cap',
+          retryLater: true,
+          retryAt,
+          retryAtLabel: describeWindowStart(retryAt),
+        }
       }
     }
 
