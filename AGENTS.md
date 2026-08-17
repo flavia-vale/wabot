@@ -524,6 +524,85 @@ gritava. `src/credentialExpiry/` fecha esse buraco por e-mail.
   `docs/ops/aviso-codigo-acesso-vencido.md` (lembrar da pegadinha #1 —
   `pm2 delete` + `start`, não `restart --update-env`).
 
+### Motor de e-mails (canônico — todo e-mail passa por aqui)
+
+Antes cada e-mail tinha seu próprio builder e suas próprias regras. Hoje há um
+caminho só, e a cliente edita os textos pelo painel.
+
+| Peça | Onde |
+|---|---|
+| Catálogo (texto padrão de 34 e-mails) | `src/email/registry.js` |
+| Formato do texto (parágrafo, lista, botão, `{{variavel}}`) | `src/email/markup.js` |
+| Moldura visual + rodapé de descadastro | `src/email/layout.js` |
+| Despachante (ÚNICO caminho de envio, com todas as travas) | `src/email/dispatcher.js` |
+| Fila lenta dos disparos em massa | `src/email/queue.js` |
+| Filtros de público (puro) | `src/email/audience.js` |
+| Descadastro por categoria (LGPD) | `src/email/optOut.js` + `/api/emails/unsubscribe` |
+| Gatilhos por ciclo de vida (passada diária) | `src/emailTriggers/lifecyclePolicy.js` + `lifecycleSweep.js` |
+| Gatilhos por acontecimento | `src/emailTriggers/events.js` |
+| Resumo semanal | `src/emailTriggers/weeklySummary.js` |
+| Aba E-mails do admin | `src/api/routes/adminEmails.js` + `dashboard/app/admin/emails/page.js` |
+
+**Não regredir:**
+- **Não enviar e-mail fora do despachante.** Ele é quem barra endereço
+  fabricado (`user_*@sistema.com`), conta banida/suspensa, descadastro
+  (marketing), repetição dentro da janela do próprio e-mail (`dedupDays`) e o
+  teto diário. Gatilho novo = `sendTemplateEmail`, nunca `sendMail` direto.
+- **Texto padrão mora no código; o painel grava só override** (`EmailTemplate`).
+  Sem linha lá, vale o código — apagar o override conserta uma edição ruim.
+- **`transactional` vs `marketing`** decide consentimento: divulgação respeita
+  descadastro e leva o link no rodapé; aviso de conta (cobrança, vencimento,
+  segurança) vai sempre e não leva.
+- **Disparo em massa só ENFILEIRA.** Quem envia é a fila lenta
+  (`EMAIL_QUEUE_BATCH_SIZE`/rodada, `EMAIL_DAILY_CAP`/dia) — domínio novo que
+  dispara tudo de uma vez cai em spam, e o provedor tem teto.
+- Sem SMTP, nada é gravado como enviado: a janela anti-repetição não pode
+  queimar sem a cliente ter recebido.
+- Passadas rodam in-process na API (`setInterval` + `unref`) — **nenhum processo
+  PM2 novo** (política de memória).
+
+Envs (todas opcionais): `EMAIL_QUEUE_TICK_MS`, `EMAIL_QUEUE_BATCH_SIZE` (10),
+`EMAIL_DAILY_CAP` (250), `LIFECYCLE_EMAIL_ENABLED`,
+`LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS`, `WEEKLY_SUMMARY_ENABLED`,
+`WEEKLY_SUMMARY_WEEKDAY` (1 = segunda).
+
+Testes: `test/email-engine.test.js`, `test/email-lifecycle-triggers.test.js`,
+`test/admin-emails.test.js`, `test/email-templates-migrados.test.js`,
+`test/weekly-summary-email.test.js`, `test/password-reset.test.js`.
+
+### Grupo "Contato e escuta" (não regredir)
+
+Oito e-mails prontos (`group: 'contato'` em `src/email/registry.js`) para
+perguntar à cliente o que travou, o que ficou confuso e o que faltou — check-in
+geral, travou na configuração, dúvida nas lojas, primeira semana, parou de usar,
+o que faltou (quem não continuou), convite para conversa e pesquisa de uma
+pergunta só.
+
+Contrato garantido por `test/email-contato-escuta.test.js`:
+- **Sempre `trigger: 'manual'`.** Pergunta automática, disparada na hora errada,
+  queima o canal — quem escolhe o momento e o público é a pessoa, pela aba
+  E-mails.
+- **Sempre `marketing`**: não é obrigação de serviço, então respeita descadastro
+  e leva o link no rodapé.
+- **Todo e-mail pergunta alguma coisa e convida a responder**, e traz os DOIS
+  canais (WhatsApp e e-mail de suporte) no corpo. Pergunta sem canal de resposta
+  é armadilha.
+- **`dedupDays >= 21`**: ninguém pode ser sondada toda semana.
+- Sem cobrança, sem culpa, sem promessa de resultado (o teste falha em
+  "culpa sua", "garantimos", "última chance" e afins).
+
+### Recuperação de senha (não existia até 2026-08)
+
+Quem perdia a senha só voltava pelo suporte — e o link "Esqueci minha senha"
+apontava para um `mailto:` de um domínio que não é nosso. Agora:
+`POST /api/auth/forgot-password` → e-mail com link → `POST /api/auth/reset-password`.
+
+- **Sem tabela nova:** o link é um token assinado (`src/auth/passwordResetToken.js`)
+  que inclui a impressão do hash da senha ATUAL. Isso dá **uso único de graça**
+  (trocou a senha, todo link antigo morre) e validade de 1h.
+- **Resposta sempre igual**, exista ou não a conta — a rota não pode virar
+  detector de quem tem conta aqui. Usa o mesmo balde de tentativas do login.
+
 **Contato de suporte (dashboard):** o e-mail e WhatsApp de suporte exibidos no
 site vêm de constantes em `dashboard/lib/marketing-content.js`
 (`SUPPORT_EMAIL`, `SUPPORT_WHATSAPP_*`, `SUPPORT_HOURS`, `SUPPORT_RESPONSE_SLA`).

@@ -845,3 +845,70 @@ model AffiliateCommissionLedger {
   @@index([commissionId, createdAt])
   @@index([affiliateId, createdAt])
 }
+
+// ---------------------------------------------------------------------------
+// Motor de e-mails (fase 2 do plano de e-mails). O TEXTO PADRÃO de cada e-mail
+// mora no código (src/email/registry.js); estas tabelas guardam só o que a
+// admin muda pelo painel e o histórico do que saiu. Sem linha em EmailTemplate,
+// vale o padrão do código — a aba de e-mails nunca deixa o sistema sem texto.
+// ---------------------------------------------------------------------------
+
+model EmailTemplate {
+  slug            String   @id
+  subject         String
+  body            String
+  enabled         Boolean  @default(true)
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Histórico + idempotência de TODO e-mail que sai (automático, manual ou teste).
+// É também a trava anti-repetição: "já recebeu este e-mail nos últimos N dias"
+// é uma consulta aqui. `userId` fica sem relação de propósito (mesmo padrão de
+// AnalyticsEvent) para o log sobreviver à exclusão da conta.
+model EmailSendLog {
+  id          String    @id @default(cuid())
+  slug        String
+  userId      String?
+  email       String
+  category    String    @default("transactional")
+  mode        String    @default("auto")
+  batchId     String?
+  status      String    @default("queued")
+  skipReason  String?
+  error       String?
+  scheduledAt DateTime  @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([slug, userId, createdAt])
+  @@index([status, scheduledAt])
+  @@index([batchId, status])
+}
+
+// Um disparo manual em massa feito pelo painel admin.
+model EmailBatch {
+  id              String    @id @default(cuid())
+  slug            String
+  createdByUserId String?
+  filters         String    @default("{}")
+  total           Int       @default(0)
+  status          String    @default("running")
+  createdAt       DateTime  @default(now())
+  finishedAt      DateTime?
+
+  @@index([status, createdAt])
+}
+
+// Descadastro por categoria (hoje só 'marketing'). E-mail transacional
+// (cobrança, vencimento, segurança) NÃO passa por aqui — é obrigação de serviço.
+model EmailOptOut {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String   @default("marketing")
+  source    String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, category])
+}

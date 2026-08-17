@@ -18,6 +18,7 @@ import { dashboardRoutes } from './routes/dashboard.js'
 import { logsRoutes } from './routes/logs.js'
 import { linkConversionRoutes } from './routes/linkConversion.js'
 import { adminRoutes } from './routes/admin.js'
+import { adminEmailsRoutes } from './routes/adminEmails.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { preservationRoutes } from './routes/preservation.js'
@@ -41,6 +42,10 @@ import { runNurtureSweep } from '../leadNurture/sweep.js'
 import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
+import { emailPrefsRoutes } from './routes/emailPrefs.js'
+import { runEmailQueueTick } from '../email/queue.js'
+import { runLifecycleEmailSweep } from '../emailTriggers/lifecycleSweep.js'
+import { runWeeklySummarySweep } from '../emailTriggers/weeklySummary.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -232,6 +237,72 @@ function startCredentialExpirySweep() {
   timer.unref?.()
 }
 
+// E-mails de ciclo de vida (vencimento de teste/plano, saúde do robô, saque
+// disponível): uma passada por dia, in-process. Sem SMTP a passada nem começa.
+//   LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS — intervalo entre passadas (default 24h).
+//   LIFECYCLE_EMAIL_ENABLED           — 'false' desliga.
+const LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS = Math.max(Number(process.env.LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS) || 24 * 60 * 60 * 1000, 60 * 1000)
+async function runLifecycleEmailTick() {
+  if (String(process.env.LIFECYCLE_EMAIL_ENABLED ?? '').trim().toLowerCase() === 'false') return
+  if (!isEmailConfigured()) return
+  try {
+    const summary = await runLifecycleEmailSweep({ db, sendMail, logger: app.log })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'e-mails de ciclo de vida: passada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'e-mails de ciclo de vida: passada falhou')
+  }
+}
+function startLifecycleEmailSweep() {
+  runLifecycleEmailTick()
+  const timer = setInterval(runLifecycleEmailTick, LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
+// Resumo semanal: a passada roda junto (mesmo intervalo), mas só AGE no dia da
+// semana escolhido (WEEKLY_SUMMARY_WEEKDAY, default segunda).
+//   WEEKLY_SUMMARY_ENABLED — 'false' desliga.
+async function runWeeklySummaryTick() {
+  if (String(process.env.WEEKLY_SUMMARY_ENABLED ?? '').trim().toLowerCase() === 'false') return
+  if (!isEmailConfigured()) return
+  try {
+    const summary = await runWeeklySummarySweep({ db, sendMail, logger: app.log })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'resumo semanal: passada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'resumo semanal: passada falhou')
+  }
+}
+function startWeeklySummarySweep() {
+  const timer = setInterval(runWeeklySummaryTick, LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
+// Fila lenta dos disparos manuais de e-mail (aba E-mails do admin). Mesmo
+// padrão dos demais jobs in-process: setInterval + unref, sem processo PM2 novo.
+// O estado mora no banco, então reinício da API não perde a campanha.
+//   EMAIL_QUEUE_TICK_MS      — intervalo entre rodadas (default 60s).
+//   EMAIL_QUEUE_BATCH_SIZE   — e-mails por rodada (default 10 → ~600/h).
+//   EMAIL_DAILY_CAP          — teto de envios em 24h (default 250).
+const EMAIL_QUEUE_TICK_MS = Math.max(Number(process.env.EMAIL_QUEUE_TICK_MS) || 60_000, 10_000)
+async function runEmailQueueTickSafe() {
+  if (!isEmailConfigured()) return
+  try {
+    const summary = await runEmailQueueTick({ db, sendMail, logger: app.log })
+    if (summary.sent > 0 || summary.failed > 0) {
+      app.log.info({ ...summary }, 'fila de e-mail: rodada concluída')
+    }
+  } catch (err) {
+    app.log.error({ err: err.message }, 'fila de e-mail: rodada falhou')
+  }
+}
+function startEmailQueueJob() {
+  const timer = setInterval(runEmailQueueTickSafe, EMAIL_QUEUE_TICK_MS)
+  timer.unref?.()
+}
+
 // PR-5.C.3: watchdog do probe roda a cada 5min e marca yellow canais que
 // publicaram mas não receberam ping da conta-probe. Conservador — nunca
 // degrada para red/critical e nunca sobreescreve red/critical existente.
@@ -360,6 +431,7 @@ app.register(dashboardRoutes, { prefix: '/api/dashboard' })
 app.register(logsRoutes, { prefix: '/api/logs' })
 app.register(linkConversionRoutes, { prefix: '/api/link-conversion' })
 app.register(adminRoutes, { prefix: '/api/admin' })
+app.register(adminEmailsRoutes, { prefix: '/api/admin/emails' })
 app.register(publicRoutes, { prefix: '/api/public' })
 app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
@@ -367,6 +439,7 @@ app.register(offerQueueRoutes, { prefix: '/api/offer-queues' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 app.register(affiliateRoutes, { prefix: '/api' })
 app.register(leadNurtureRoutes, { prefix: '/api/lead-nurture' })
+app.register(emailPrefsRoutes, { prefix: '/api/emails' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))
@@ -490,6 +563,9 @@ startLogRetentionJob()
 startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
+startEmailQueueJob()
+startLifecycleEmailSweep()
+startWeeklySummarySweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()
