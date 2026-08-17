@@ -466,7 +466,7 @@ irmãos (`shopee.js`, `amazon.js`).
 
 ## Phase 10: Code Review Fixes (2ª rodada)
 
-- [ ] T068 Transformar o strip de miniatura da SHEIN em **lista de candidatos com fallback** em
+- [X] T068 Transformar o strip de miniatura da SHEIN em **lista de candidatos com fallback** em
   `src/converters/imageScrapers.js`, em vez de uma reescrita destrutiva de via única.
   Hoje `resolveSheinImage` devolve `stripSheinImageThumbnailSuffix(image)` e
   `buildImageUrlCandidates` **não** tem ramo para `img.ltwebstatic.com`, então
@@ -483,7 +483,7 @@ irmãos (`shopee.js`, `amazon.js`).
   `stripSheinImageThumbnailSuffix` como função pura. Cobrir em `test/image-scrapers.test.js`:
   a URL sem sufixo vem primeiro na lista e a original permanece como último candidato. (review)
 
-- [ ] T069 Eliminar o **fetch duplicado** do mesmo endereço no caminho de imagem da SHEIN em
+- [X] T069 Eliminar o **fetch duplicado** do mesmo endereço no caminho de imagem da SHEIN em
   `src/converters/imageScrapers.js`. `resolveSheinImage(url)` é exatamente
   `resolveByHtmlLayers(url, { ua: BROWSER_UA })` + strip, e `fetchProductImage` executa
   `if (!image) image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })` logo em
