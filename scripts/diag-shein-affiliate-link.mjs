@@ -20,10 +20,32 @@
 // Ele só resolve o seu oneLink, mostra qual é o seu identificador de afiliada
 // e monta os links do teste. QUEM decide é você, clicando no celular.
 
-const AFFILIATE_PARAMS = ['url_from', 'aff_id', 'src_identifier', 'onelink', 'requestId', 'campaign_id']
+const AFFILIATE_PARAMS = [
+  'url_from', 'aff_id', 'src_identifier', 'koc_id',
+  'onelink', 'requestId', 'campaign_id', 'goods_id', 'ad_type', 'campaign',
+]
 // Os que identificam a AFILIADA (candidatos a carregar o crédito da comissão).
-const IDENTITY_PARAMS = ['url_from', 'aff_id', 'src_identifier']
+const IDENTITY_PARAMS = ['url_from', 'koc_id', 'aff_id', 'src_identifier']
 const SHEIN_PRODUCT_RE = /-p-(\d+)(?:-cat-(\d+))?\.html/i
+// O oneLink de produto não usa o caminho `-p-<id>.html`: ele leva o produto no
+// query param `goods_id`. As duas formas contam como "achei o produto".
+const SHEIN_GOODS_ID_RE = /[?&]goods_id=(\d+)/i
+// Página de captcha do sistema de risco da SHEIN. Ela responde 200 e guarda o
+// destino real em `redirection` — seguir para ela PERDE os parâmetros do hop
+// anterior, que é justamente onde está o dado que interessa.
+const SHEIN_RISK_RE = /\/risk\/(?:challenge|action)/i
+
+function isSheinShortLink(url) {
+  return /^https?:\/\/(?:[a-z0-9-]+\.)*(?:onelink\.shein\.com|shein\.top)\//i.test(String(url || ''))
+}
+
+function hasProductId(url) {
+  return SHEIN_PRODUCT_RE.test(url) || SHEIN_GOODS_ID_RE.test(url)
+}
+
+function readGoodsId(url) {
+  return url.match(SHEIN_PRODUCT_RE)?.[1] || url.match(SHEIN_GOODS_ID_RE)?.[1] || null
+}
 const BROWSER_UA =
   'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36'
 
@@ -88,16 +110,23 @@ async function resolveOneLink(startUrl) {
     hops.push({ url: current, status: res.status })
 
     // Parou onde interessa: a URL já revela o produto.
-    if (SHEIN_PRODUCT_RE.test(current)) break
+    if (hasProductId(current)) break
 
     const location = res.headers.get('location')
     if (location) {
+      let next
       try {
-        current = new URL(location, current).toString()
-        continue
+        next = new URL(location, current).toString()
       } catch {
         break
       }
+      // Não entrar no captcha: o hop atual é o mais informativo que teremos.
+      if (SHEIN_RISK_RE.test(next)) {
+        hops[hops.length - 1].note = 'próximo hop é o captcha da SHEIN — parando aqui'
+        break
+      }
+      current = next
+      continue
     }
 
     if (!String(res.headers.get('content-type') || '').includes('text/html')) break
@@ -112,6 +141,10 @@ async function resolveOneLink(startUrl) {
     const next = extractRedirectFromHtml(html, current)
     if (!next || next === current) {
       hops[hops.length - 1].note = 'fim da cadeia (sem redirect no corpo)'
+      break
+    }
+    if (SHEIN_RISK_RE.test(next)) {
+      hops[hops.length - 1].note = 'próximo hop é o captcha da SHEIN — parando aqui'
       break
     }
     current = next
@@ -132,12 +165,21 @@ function readAffiliateParams(url) {
   return found
 }
 
+// O que sai: identidade e sessão de QUEM GEROU o link. O que FICA: tudo que
+// descreve o destino (`goods_id`, `campaign_id`, `ad_type`, `campaign`,
+// `scene`, `test`) — sem isso a página não sabe qual produto abrir, e o link
+// convertido nasceria quebrado.
+const THIRD_PARTY_PARAMS = [
+  'url_from', 'koc_id', 'aff_id', 'src_identifier',
+  'onelink', 'requestId', 'behaviorId',
+]
+
 function stripAffiliateTracking(url) {
   try {
     const u = new URL(url)
-    for (const key of AFFILIATE_PARAMS) u.searchParams.delete(key)
+    for (const key of THIRD_PARTY_PARAMS) u.searchParams.delete(key)
     for (const key of [...u.searchParams.keys()]) {
-      if (/^utm_/i.test(key) || /^behaviorId$/i.test(key)) u.searchParams.delete(key)
+      if (/^utm_/i.test(key)) u.searchParams.delete(key)
     }
     return u.toString()
   } catch {
@@ -204,7 +246,27 @@ async function main() {
     console.log('\n   (✔ = provável parâmetro de comissão; · = rastro da sessão de quem gerou)')
   }
 
-  const productUrl = productArg || (SHEIN_PRODUCT_RE.test(finalUrl) ? finalUrl : null)
+  // O 2º argumento pode ser um link de produto direto OU o oneLink de OUTRO
+  // afiliado (o caso real: é isso que chega no grupo monitorado). Sendo oneLink,
+  // resolvemos ele também — é exatamente o que o robô fará em produção.
+  let productUrl = productArg || (hasProductId(finalUrl) ? finalUrl : null)
+  let originInfo = null
+
+  if (productArg && isSheinShortLink(productArg)) {
+    console.log('\n1b) RESOLVENDO O LINK DE ORIGEM (do outro afiliado)\n')
+    const origin = await resolveOneLink(productArg)
+    for (const [i, hop] of origin.hops.entries()) {
+      console.log(`   ${i + 1}. [${hop.status}] ${hop.url}`)
+      if (hop.note) console.log(`      ↳ ${hop.note}`)
+    }
+    const originParams = readAffiliateParams(origin.finalUrl)
+    originInfo = { url: origin.finalUrl, params: originParams }
+    productUrl = origin.finalUrl
+    console.log('\n   Quem ganha a comissão HOJE nesse link:')
+    for (const key of IDENTITY_PARAMS) {
+      if (originParams[key]) console.log(`      ${key} = ${originParams[key]}`)
+    }
+  }
 
   console.log('\n3) OS DOIS LINKS DO TESTE\n')
   if (!productUrl) {
@@ -214,14 +276,29 @@ async function main() {
     console.log("     'https://br.shein.com/algum-produto-p-485735309.html'")
   } else {
     const converted = buildConvertedLink(productUrl, affiliateParams)
-    const match = productUrl.match(SHEIN_PRODUCT_RE)
-    console.log(`   Produto (goods_id ${match?.[1] ?? '?'}):`)
+    console.log(`   Produto (goods_id ${readGoodsId(productUrl) ?? '?'}):`)
     console.log(`   ${line()}`)
     console.log('   A) LINK OFICIAL (gerado pela SHEIN) — o controle:')
     console.log(`      ${oneLink}`)
     console.log('\n   B) LINK MONTADO POR NÓS — é este que precisa ser provado:')
     console.log(`      ${converted}`)
     console.log(`   ${line()}`)
+
+    if (originInfo) {
+      // Invariante do produto: o link de terceiro NUNCA pode ser encaminhado,
+      // nem em pedaço. Se sobrar qualquer identificador do outro afiliado no
+      // link convertido, a comissão vai para ele — falha grave e silenciosa.
+      const leaked = IDENTITY_PARAMS
+        .filter((key) => originInfo.params[key])
+        .filter((key) => String(converted).includes(originInfo.params[key]))
+      console.log('\n   Conferência de segurança:')
+      if (leaked.length === 0) {
+        console.log('   ✔ nenhum identificador do outro afiliado sobrou no link B')
+      } else {
+        console.log(`   ✘ VAZOU identificador do outro afiliado: ${leaked.join(', ')}`)
+        console.log('     Não use esse link — a comissão iria para ele.')
+      }
+    }
   }
 
   console.log('\n4) COMO CONCLUIR O TESTE (só você pode fazer)\n')
