@@ -210,9 +210,17 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {})
 
     const finalUrl = u.toString()
     const goodsId = extractSheinGoodsId(finalUrl)
-    const linkKind = goodsId ? 'product' : 'coupon'
+    // Marca de "isto deveria ser um produto" mais frouxa que SHEIN_PRODUCT_RE
+    // (que exige o id em dígitos): o marcador `-p-` no caminho aparece em toda
+    // página de produto da SHEIN, com ou sem id capturável. Se o marcador
+    // existe mas a extração não achou o id (URL corrompida/truncada), é
+    // melhor recusar do que publicar link de produto sem produto.
+    const looksLikeProductPath = (() => {
+      try { return /-p-/i.test(new URL(finalUrl).pathname) } catch { return false }
+    })()
+    if (!goodsId && looksLikeProductPath) return null
 
-    if (linkKind === 'product' && !goodsId) return null
+    const linkKind = goodsId ? 'product' : 'coupon'
 
     return { url: finalUrl, linkKind }
   } catch {

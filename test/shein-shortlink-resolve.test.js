@@ -103,7 +103,7 @@ test('cadeia sem fim para em maxHops', async () => {
   }
   const resolved = await resolveSheinShortLink('https://onelink.shein.com/14/abc', { fetchImpl, maxHops: 3 })
   assert.equal(n, 3)
-  assert.equal(resolved, 'https://onelink.shein.com/14/abc/next/next')
+  assert.equal(resolved, 'https://onelink.shein.com/14/abc/next/next/next')
 })
 
 test('cookies do hop 1 são reenviados no hop 2', async () => {

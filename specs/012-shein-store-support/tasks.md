@@ -34,7 +34,7 @@ migrations em `prisma/migrations/`. Nenhum diretório novo.
 **Purpose**: criar o módulo conversor puro que todo o resto depende (núcleo isolado, testável sem
 nenhum registry preenchido ainda).
 
-- [ ] T001 Criar `src/converters/shein.js` com as constantes exportadas do contrato
+- [X] T001 Criar `src/converters/shein.js` com as constantes exportadas do contrato
       (`SHEIN_PRODUCT_RE`, `SHEIN_GOODS_ID_RE`, `SHEIN_RISK_RE`, `THIRD_PARTY_PARAMS`,
       `OPAQUE_SHARE_PARAMS`, `PROGRAM_PARAMS`, `AFFILIATE_URL_FROM_PREFIX`) — portar exatamente de
       `scripts/diag-shein-affiliate-link.mjs` (ver `contracts/converter-shein.md`, seção
@@ -51,40 +51,40 @@ qualquer registry ser preenchido — é o que os registries vão importar/consum
 
 **⚠️ CRITICAL**: nenhuma task de US1/US2/US3/US4 pode começar antes do checkpoint desta fase.
 
-- [ ] T002 [P] Implementar `isSheinShortLink(url)` em `src/converters/shein.js` — `true` para host
+- [X] T002 [P] Implementar `isSheinShortLink(url)` em `src/converters/shein.js` — `true` para host
       `onelink.shein.com` ou `shein.top` com prefixo `(?:[a-z0-9-]+\.)*` (contracts/converter-shein.md)
-- [ ] T003 [P] Implementar `extractSheinGoodsId(url)` em `src/converters/shein.js` — caminho
+- [X] T003 [P] Implementar `extractSheinGoodsId(url)` em `src/converters/shein.js` — caminho
       `-p-<id>.html` ou query `goods_id=<id>`; `null` quando nenhum
-- [ ] T004 [P] Implementar `hasOpaqueShareToken(url)` em `src/converters/shein.js` — `true` se houver
+- [X] T004 [P] Implementar `hasOpaqueShareToken(url)` em `src/converters/shein.js` — `true` se houver
       `shc` ou `link` na query
-- [ ] T005 [P] Implementar `stripSheinAffiliateTracking(url)` em `src/converters/shein.js` — remove
+- [X] T005 [P] Implementar `stripSheinAffiliateTracking(url)` em `src/converters/shein.js` — remove
       `THIRD_PARTY_PARAMS` + toda chave `/^utm_/i`, preserva caminho/`goods_id`/demais params; URL
       inválida devolve a entrada inalterada
-- [ ] T006 Implementar `resolveSheinShortLink(url, { timeoutMs = 8000, maxHops = 6, fetchImpl =
+- [X] T006 Implementar `resolveSheinShortLink(url, { timeoutMs = 8000, maxHops = 6, fetchImpl =
       globalThis.fetch })` em `src/converters/shein.js` — portar `resolveOneLink` de
       `scripts/diag-shein-affiliate-link.mjs`: redirects manuais, cookie jar, ordem de decisão por
       hop do contrato (produto já revelado → retorna; `Location` casando `SHEIN_RISK_RE` → para no
       hop anterior; sem `Location` extrai de `<input id="url">` → meta-refresh → `location =` JS →
       `<link rel=canonical>`, sempre checando `/risk/` antes de seguir; sem destino/maxHops
       esgotado/erro de rede → última URL conhecida; nunca lança) (depende de T002)
-- [ ] T007 Implementar `convert(url, creds)` em `src/converters/shein.js` — os 9 passos do contrato
+- [X] T007 Implementar `convert(url, creds)` em `src/converters/shein.js` — os 9 passos do contrato
       (sem `creds.tag` → `null`; resolve shortlink se aplicável; token opaco → `null`; strip de
       tracking; aplica `koc_id`/`url_from` da cliente; garante `PROGRAM_PARAMS`; `linkKind`
       product/coupon; produto sem `goods_id` → `null`; exceção → `null`) (depende de T003, T004,
       T005, T006)
-- [ ] T008 [P] Criar `test/shein-shortlink-resolve.test.js` (db-free, `fetchImpl` mockado): 1º hop
+- [X] T008 [P] Criar `test/shein-shortlink-resolve.test.js` (db-free, `fetchImpl` mockado): 1º hop
       200 com `<input id="url">` segue para o destino; hop intermediário já com `goods_id` para ali;
       `Location` para `/risk/challenge` para no hop anterior; corpo HTML cujo único destino é
       `/risk/challenge` idem; cadeia sem fim para em `maxHops`; cookies do hop 1 reenviados no hop 2
       (depende de T006)
-- [ ] T009 [P] Criar `test/converters-shein.test.js` (db-free, `fetchImpl` mockado) cobrindo INV-1 a
+- [X] T009 [P] Criar `test/converters-shein.test.js` (db-free, `fetchImpl` mockado) cobrindo INV-1 a
       INV-6 do contrato: produto direto converte com identidade da cliente e `linkKind:'product'`;
       destino de outro afiliado perde a identidade dele e ganha a da cliente preservando `goods_id`
       (INV-1); `shc`/`link` → `null` (INV-2); produto sem `goods_id` → `null` (INV-3);
       `onelink`/`requestId`/`behaviorId`/`utm_*` ausentes da saída (INV-4); `fetchImpl` que rejeita →
       `null` (INV-5); cupom/campanha → `linkKind:'coupon'` sem depender de `COUPON_LINK_CONVERT`
       (INV-6); sem `creds.tag` → `null` (depende de T007)
-- [ ] T010 Rodar `node --test test/converters-shein.test.js test/shein-shortlink-resolve.test.js` e
+- [X] T010 Rodar `node --test test/converters-shein.test.js test/shein-shortlink-resolve.test.js` e
       confirmar tudo verde antes de prosseguir (depende de T008, T009)
 
 **Checkpoint**: `src/converters/shein.js` completo e testado isoladamente — nenhum registry ainda
