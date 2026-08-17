@@ -514,10 +514,55 @@ gritava. `src/credentialExpiry/` fecha esse buraco por e-mail.
   `AnalyticsEvent('credential_expiry_alert_sent')` (sem tabela/migration nova). A
   janela é checada **antes de sondar** — quem já foi avisado não gera chamada
   extra à loja. Sem SMTP o evento não é gravado (a janela não queima à toa).
-- **Nunca dizer que o envio parou.** O plano B continua enviando e a comissão
-  continua sendo dela; a diferença é link mais comprido (e, no ML, cupom sem
-  produto deixa de ser convertido). Vocabulário leigo obrigatório, com teste que
-  falha se jargão voltar (`test/credential-expiry-alert.test.js`).
+- **Nunca dizer que o envio parou — no ML e na Amazon.** O plano B continua
+  enviando e a comissão continua sendo dela; a diferença é link mais comprido (e,
+  no ML, cupom sem produto deixa de ser convertido). Vocabulário leigo
+  obrigatório, com teste que falha se jargão voltar
+  (`test/credential-expiry-alert.test.js`).
+- **Shopee é o caso OPOSTO e tem e-mail próprio (`chave_shopee_recusada`).**
+  Sem chave aceita, a conversão da Shopee falha inteira: a oferta vira
+  `skip:no_valid_conversions`, **nada é publicado**, e as ofertas automáticas
+  param junto (o dispatcher morre no `fetchOffers`). Mandar ali o texto
+  tranquilizador de "continua saindo" seria mentira e faria a cliente ignorar
+  prejuízo real — por isso `buildExpiryAlerts` (`credentialExpiry/message.js`)
+  separa os dois e-mails, e há teste que falha se o texto da Shopee voltar a
+  prometer que as ofertas continuam. **Não fundir os dois textos.**
+
+### Aviso "a Shopee parou de aceitar a chave" (RCA 2026-08 — não regredir)
+
+O comentário original de `EXPIRY_ALERT_PLATFORMS` afirmava que App ID + chave
+secreta "não vencem sozinhos", e por isso a Shopee ficou **fora** da cobertura.
+É falso: uma conta real (`victoriaiq9@gmail.com`) passou dias com a chave
+recusada (`error [10020]: Invalid Signature`), com 100% das ofertas de Shopee
+descartadas e as duas automações dela sem enviar **uma única vez** — em
+silêncio total. Foi descoberto só numa investigação manual. **Não tirar a Shopee
+de `EXPIRY_ALERT_PLATFORMS`.**
+
+- Sondagem: `checkShopeeSession` (`src/converters/shopee.js`), mesmo contrato
+  `{ configured, alive, reason }` do ML/Amazon. Usa uma consulta **só de
+  leitura** (`productOfferV2` com `limit: 1`) — não gera link nem grava nada do
+  lado da Shopee, então **não precisa de cache de sondagem** (diferente do
+  ML/Amazon, onde o probe rotaciona credencial).
+- **Só o código `10020` vira `alive:false`** (`SHOPEE_AUTH_REJECTED_CODES`, com
+  a classificação pura em `classifyShopeeProbeResponse`). Qualquer outro código,
+  HTTP != 200, timeout ou rede fora fica **indeterminado**. Lembre que a API de
+  afiliado responde **200 mesmo em erro**, sinalizando via `errors` — por isso a
+  classificação lê o corpo, não só o status.
+- Armadilha de diagnóstico: chave recusada e credencial incompleta produzem
+  sintomas parecidos no painel, mas são coisas diferentes — campo faltando não
+  chega a ser sondado (o painel já diz "falta preencher").
+- **O painel também avisa** (`GET /credentials/shopee/session` + sondagem no
+  `PUT /credentials/shopee`, via `PLATFORMS_WITH_SESSION_CHECK`). Antes disso o
+  painel mostrava a Shopee em VERDE com a chave morta — só conferia o formato
+  dos campos —, e era por isso que ninguém percebia. E-mail avisando com painel
+  verde ao mesmo tempo é pior do que não avisar: as duas pontas andam juntas.
+- **Texto da Shopee é o oposto do das outras duas, nas TRÊS superfícies**
+  (e-mail, banner do painel, mensagem do save): "as ofertas da Shopee param de
+  sair", nunca "continuam saindo, só o link fica mais comprido". Guardas em
+  `test/credential-save-session-check.test.js` e
+  `test/credentials-shopee-session-route.test.js`.
+- Vocabulário: na Shopee é **"chave"** (App ID + chave secreta), não "código de
+  acesso" — esse termo é dos cookies de sessão do ML/Amazon.
 - Envs (todas opcionais): `CREDENTIAL_EXPIRY_ALERT_ENABLED`,
   `CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS`, `CREDENTIAL_EXPIRY_ALERT_COOLDOWN_DAYS`.
   Sem SMTP a passada nem começa. Runbook de ligar o SMTP:
@@ -556,15 +601,47 @@ caminho só, e a cliente edita os textos pelo painel.
 - **Disparo em massa só ENFILEIRA.** Quem envia é a fila lenta
   (`EMAIL_QUEUE_BATCH_SIZE`/rodada, `EMAIL_DAILY_CAP`/dia) — domínio novo que
   dispara tudo de uma vez cai em spam, e o provedor tem teto.
+- **O "dia" do teto tem hora certa: 8h da manhã (America/Sao_Paulo)**, não é
+  janela deslizante de 24h. Com janela deslizante, bater o teto às 15h de terça
+  fazia a fila só voltar às 15h de quarta, e cada dia ela andava mais tarde que
+  o anterior. `src/email/dailyWindow.js` (puro) resolve a virada vigente; o
+  despachante conta o gasto do dia a partir dela e devolve `retryAt` quando
+  barra. Envs: `EMAIL_DAILY_RESET_HOUR` (8), `EMAIL_TIMEZONE`
+  (`America/Sao_Paulo`). Fuso ou hora inválidos caem no padrão de Brasília —
+  teto na hora errada é menos grave que fila parada.
 - Sem SMTP, nada é gravado como enviado: a janela anti-repetição não pode
   queimar sem a cliente ter recebido.
 - Passadas rodam in-process na API (`setInterval` + `unref`) — **nenhum processo
   PM2 novo** (política de memória).
 
 Envs (todas opcionais): `EMAIL_QUEUE_TICK_MS`, `EMAIL_QUEUE_BATCH_SIZE` (10),
-`EMAIL_DAILY_CAP` (250), `LIFECYCLE_EMAIL_ENABLED`,
+`EMAIL_DAILY_CAP` (300), `EMAIL_DAILY_RESET_HOUR` (8), `EMAIL_TIMEZONE`
+(`America/Sao_Paulo`), `LIFECYCLE_EMAIL_ENABLED`,
 `LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS`, `WEEKLY_SUMMARY_ENABLED`,
-`WEEKLY_SUMMARY_WEEKDAY` (1 = segunda).
+`WEEKLY_SUMMARY_WEEKDAY` (1 = segunda), `EMAIL_TRIGGERS_START_AT`.
+
+### Gatilho ancorado no cadastro não pode ser retroativo (RCA 2026-08 — não regredir)
+
+O motor entrou no ar com a base já formada, e três decisões de
+`lifecyclePolicy.js` olhavam "dias desde o cadastro" **sem teto**:
+`onboarding_conecte_whatsapp` (`>= 2 dias`), `configuracao_incompleta`
+(`>= 1 dia`) e `seja_afiliado` (`>= 14 dias`). Cliente de oito meses atrás
+satisfaz "faz 2 dias ou mais" — a base inteira recebeu e-mail de boas-vindas
+atrasado na primeira passada. Duas travas, uma não substitui a outra:
+
+- **Janela máxima** (`SIGNUP_WINDOW_DAYS`: 30/30/90 dias) direto na política
+  pura — vale mesmo sem env nenhuma configurada.
+- **Corte de virada** `EMAIL_TRIGGERS_START_AT` (data ISO, ausente = desligado):
+  conta criada ANTES dessa data nunca dispara gatilho ancorado no cadastro.
+  Vale também para a trilha de nutrição (`runNurtureSweep` recua o início da
+  janela de 8 dias para a data da virada).
+
+**O corte NÃO silencia aviso de fato atual** — plano vencendo, robô caído
+ontem, saldo disponível para saque continuam valendo para toda a base: não são
+retroativos, são o que está acontecendo agora. Cliente antiga que você quiser
+convidar para afiliada é disparo manual pela aba E-mails. Testes:
+`test/email-lifecycle-triggers.test.js` (bloco "gatilho de cadastro não é
+retroativo").
 
 Testes: `test/email-engine.test.js`, `test/email-lifecycle-triggers.test.js`,
 `test/admin-emails.test.js`, `test/email-templates-migrados.test.js`,
@@ -2357,10 +2434,20 @@ origem de toda visita externa no evento `referral_visit` (`AnalyticsEvent`),
 classificada por `dashboard/lib/ai-referral.js` em `ai`/`search`/`social`/
 `other`. **Só o host do referenciador é gravado, nunca a URL completa** — URL de
 buscador carrega o termo pesquisado, que é dado da pessoa; não regredir isso
-(guard em `test/ai-referral.test.js`). O evento precisa estar nas **duas**
-allowlists de `src/analytics.js` (`PUBLIC_ANALYTICS_EVENTS` autoriza a rota,
-`ANALYTICS_EVENTS` autoriza a gravação) — faltar em uma faz o dado sumir sem
-erro. Cuidado ao renomear os campos: `sanitizeAnalyticsMetadata` descarta
+(guard em `test/ai-referral.test.js`). **Todo evento público passa por TRÊS
+allowlists, e faltar em qualquer uma descarta o dado sem erro nenhum:**
+`PUBLIC_PERSISTED_EVENTS` (`dashboard/lib/analytics.js`) autoriza o navegador a
+enviar, `PUBLIC_ANALYTICS_EVENTS` (`src/analytics.js`) autoriza a rota a aceitar
+e `ANALYTICS_EVENTS` (idem) autoriza a gravação. Foi assim que
+`organic_page_view` e `organic_cta_click` — as **duas primeiras etapas do funil
+canônico** de `docs/marketing/event-taxonomy-v1.md` — ficaram desde 2026-05 sendo
+descartadas: estavam só na terceira. O funil de SEO só passava a existir no
+`signup_created`, e não havia como separar "ninguém acha a página" de "acham e
+não clicam", que pedem consertos opostos. Corrigido em 2026-08-17 (guard em
+`test/pagina-achadinhos-clique.test.js`, leitura em
+`scripts/diag-paginas-seo.mjs`). Lembre que a allowlist do navegador vai para o
+**bundle**: mudança nela só vale depois de `npm run build` no dashboard.
+Cuidado ao renomear os campos: `sanitizeAnalyticsMetadata` descarta
 qualquer chave que case com `/(token|secret|…|key|url|…)/i`, então algo como
 `referrer_url` seria descartado em silêncio.
 

@@ -52,17 +52,63 @@ test('não deu para testar: nunca afirma que funciona nem que não funciona', ()
   }
 })
 
-test('loja sem código de acesso (Shopee/Magalu) mantém a mensagem histórica', () => {
-  assert.equal(platformSupportsSessionCheck('shopee'), false)
+test('loja sem sondagem (Magalu) mantém a mensagem histórica', () => {
+  // Magalu só tem etiqueta de afiliada — não há credencial que a loja recuse.
   assert.equal(platformSupportsSessionCheck('magalu'), false)
+  const out = describeSaveSessionCheck({
+    platform: 'magalu',
+    validation: { configured: true, label: 'Magazine Luiza', warnings: [] },
+    probe: null,
+    fallbackMessage: 'Tudo certo! O Magazine Luiza está pronto.',
+  })
+  assert.equal(out.tone, 'success')
+  assert.equal(out.message, 'Tudo certo! O Magazine Luiza está pronto.')
+})
+
+// A Shopee entrou na sondagem depois (RCA ago/2026): a suposição de que a chave
+// dela "não vence" deixou uma conta real dias com as ofertas descartadas em
+// silêncio, com o painel verde. Não voltar a tirá-la daqui.
+test('Shopee tem sondagem no save', () => {
+  assert.equal(platformSupportsSessionCheck('shopee'), true)
+})
+
+test('Shopee recusada: diz que as ofertas PARAM (não repete o "continua saindo")', () => {
   const out = describeSaveSessionCheck({
     platform: 'shopee',
     validation: { configured: true, label: 'Shopee', warnings: [] },
-    probe: null,
+    probe: { configured: true, alive: false, reason: 'rejected' },
+    fallbackMessage: 'Tudo certo! A Shopee está pronta.',
+  })
+  assert.equal(out.tone, 'error')
+  // Sem chave aceita não há plano B na Shopee: nada é publicado.
+  assert.match(out.message, /param de sair/i)
+  assert.doesNotMatch(out.message, /continuam saindo|link (fica )?mais comprido/i)
+  // Vocabulário da tela: na Shopee a cliente cola App ID + chave secreta.
+  assert.match(out.message, /chave/i)
+  assert.doesNotMatch(out.message, /invalid signature|10020|assinatura/i)
+})
+
+test('Shopee aceita: confirma que testamos agora', () => {
+  const out = describeSaveSessionCheck({
+    platform: 'shopee',
+    validation: { configured: true, label: 'Shopee', warnings: [] },
+    probe: { configured: true, alive: true, reason: 'ok' },
     fallbackMessage: 'Tudo certo! A Shopee está pronta.',
   })
   assert.equal(out.tone, 'success')
-  assert.equal(out.message, 'Tudo certo! A Shopee está pronta.')
+  assert.match(out.message, /Testamos agora/i)
+})
+
+test('Shopee indeterminada: não afirma que funciona nem que não funciona', () => {
+  const out = describeSaveSessionCheck({
+    platform: 'shopee',
+    validation: { configured: true, label: 'Shopee', warnings: [] },
+    probe: { configured: true, alive: null, reason: 'network_error' },
+    fallbackMessage: 'Tudo certo! A Shopee está pronta.',
+  })
+  assert.equal(out.tone, 'warn')
+  assert.match(out.message, /não deu para testar/i)
+  assert.doesNotMatch(out.message, /param de sair/i)
 })
 
 test('campo faltando continua com a mensagem de campo faltando', () => {

@@ -50,8 +50,14 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
   },
   'bot-achadinhos-whatsapp': {
     path: '/bot-achadinhos-whatsapp',
-    title: 'Bot para Achadinhos no WhatsApp: automatize seus grupos de ofertas',
-    description: 'Automatize seu grupo de achadinhos no WhatsApp: o bot captura as ofertas, troca o link pelo seu código de afiliado e publica sozinho nos seus grupos e canais. Teste grátis por 7 dias.',
+    // Título e descrição reescritos em 2026-08-17. O anterior tinha 65 chars e,
+    // somado ao sufixo ' | Espelha Grupos' do template do layout, chegava a 83 —
+    // o Google corta perto de 55 no celular, que é de onde vêm 62% das nossas
+    // impressões. O que sobrava na tela era só "Bot para Achadinhos no WhatsApp:
+    // automatize seus g…": nenhum motivo para clicar. Agora o diferencial (4
+    // lojas) e o teste cabem dentro da janela visível. Manter curto.
+    title: 'Bot para achadinhos no WhatsApp: 4 lojas e 7 dias grátis',
+    description: 'O bot pega a oferta do grupo que você acompanha, troca o link pelo seu código de afiliado e publica nos seus grupos. Shopee, Amazon, Mercado Livre e Magalu.',
     eyebrow: 'Bot para achadinhos',
     h1: 'Bot para achadinhos no WhatsApp: as ofertas saem sozinhas',
     lead: 'Um bot de achadinhos acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp. Você deixa de copiar e colar oferta por oferta e passa a revisar o que já foi enviado.',
@@ -70,6 +76,19 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     },
     primaryCta: 'Testar grátis por 7 dias',
     secondaryCta: 'Ver como funciona',
+    // Esta página recebe a maior parte das suas impressões de gente digitando o
+    // NOME de um concorrente (achadinhoosbot / achadinhosbot / achadinhos bot =
+    // 443 impressões em 3 meses, 15% do site). Isso é busca de NAVEGAÇÃO: a
+    // pessoa quer aquele produto específico. Ela cai aqui, não encontra o nome
+    // que digitou em lugar nenhum e sai — não por falta de botão, mas por falta
+    // de orientação. Para esse público o elemento que converte é COMPARAÇÃO, não
+    // CTA: o trabalho dela ali é decidir, e botão serve para quem já decidiu.
+    // Fica ANTES dos botões de propósito.
+    competitorNudge: {
+      text: 'Procurando o AchadinhosBot?',
+      label: 'Veja a comparação lado a lado',
+      href: '/alternativas/achadinhos-bot?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=commercial_competitor_nudge',
+    },
     problemTitle: 'O achadinho bom dura minutos — e você não está sempre no celular.',
     problem: 'Promoção de achadinho é por tempo limitado e estoque curto. Quem depende de ver a oferta, copiar o link, trocar pelo seu código de afiliado e colar em cada grupo sempre chega atrasado — ou desiste de postar em metade dos grupos.',
     bullets: ['A oferta sai nos seus grupos no mesmo minuto em que aparece na fonte, não meia hora depois.', 'O link já vai com o seu código de afiliado, sem você trocar nada na mão.', 'A mesma promoção não é repostada duas vezes no mesmo grupo no mesmo dia.'],
@@ -267,6 +286,8 @@ const s = {
   softCard: { background: 'color-mix(in oklab, var(--accent) 12%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 24 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 },
   ctas: { display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 26 },
+  nudge: { fontSize: 15.5, lineHeight: 1.6, color: 'var(--ink-soft)', marginTop: 18 },
+  nudgeLink: { color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 },
 }
 
 function SectionHeader({ eyebrow, title, body }) {
@@ -314,6 +335,21 @@ export function PreservationCommercialPage({ pageKey }) {
               <span className="pill"><span className="dot" />{page.eyebrow}</span>
               <h1 id="page-title" style={s.h1}>{page.h1}</h1>
               <p style={s.lead}>{page.lead}</p>
+              {page.competitorNudge ? (
+                <p style={s.nudge}>
+                  {page.competitorNudge.text}{' '}
+                  <Link
+                    href={page.competitorNudge.href}
+                    style={s.nudgeLink}
+                    data-seo-cta="commercial_competitor_nudge"
+                    data-cta-position="hero_nudge"
+                    data-cta-stage="comparison"
+                    data-cta-destination="comparison"
+                  >
+                    {page.competitorNudge.label}
+                  </Link>
+                </p>
+              ) : null}
               <div style={s.ctas}>
                 <Link className="btn btn-accent" href={registerHref} data-seo-cta="commercial_signup" data-cta-position="hero_primary" data-cta-stage="conversion" data-cta-destination="signup">{page.primaryCta}</Link>
                 <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="commercial_diagnostic" data-cta-position="hero_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Fazer diagnóstico</Link>

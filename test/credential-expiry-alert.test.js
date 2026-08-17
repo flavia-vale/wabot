@@ -4,6 +4,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  EXPIRY_ALERT_PLATFORMS,
   isAlertableUser,
   isConfirmedExpired,
   isRealEmail,
@@ -11,7 +12,14 @@ import {
   platformsDueForProbe,
   resolveAlertCooldownMs,
 } from '../src/credentialExpiry/policy.js'
+import {
+  buildExpiryAlerts,
+  EXPIRY_TEMPLATE_SLUG,
+  SHOPEE_REJECTED_TEMPLATE_SLUG,
+} from '../src/credentialExpiry/message.js'
 import { runCredentialExpirySweep, lastAlertByPlatform } from '../src/credentialExpiry/sweep.js'
+import { classifyShopeeProbeResponse } from '../src/converters/shopee.js'
+import { getTemplateDefinition } from '../src/email/registry.js'
 
 const DAY = 24 * 60 * 60 * 1000
 const NOW = new Date('2026-08-16T12:00:00Z')
@@ -57,12 +65,17 @@ test('isWithinCooldown respeita a janela e tolera data ausente/inválida', () =>
 
 test('loja em janela de silêncio nem chega a ser sondada', () => {
   const due = platformsDueForProbe({
-    platforms: ['mercadolivre', 'amazon', 'shopee'],
+    platforms: ['mercadolivre', 'amazon', 'shopee', 'magazineluiza'],
     lastAlertByPlatform: { mercadolivre: new Date(NOW.getTime() - 2 * DAY) },
     now: NOW,
     cooldownMs: 7 * DAY,
   })
-  assert.deepEqual(due, ['amazon'])
+  // magazineluiza fica de fora por não ter sondagem (só etiqueta de afiliada).
+  assert.deepEqual(due, ['amazon', 'shopee'])
+})
+
+test('Shopee está coberta pelo aviso (RCA ago/2026 — não remover da lista)', () => {
+  assert.ok(EXPIRY_ALERT_PLATFORMS.includes('shopee'))
 })
 
 // -------------------------------------------------------------- passada (sweep)
@@ -313,4 +326,115 @@ test('lastAlertByPlatform devolve a data mais recente por loja e ignora metadata
   const result = await lastAlertByPlatform({ db, userId: 'u1' })
   assert.equal(result.amazon.getTime(), NOW.getTime() - DAY)
   assert.equal(Object.keys(result).length, 1)
+})
+
+// ------------------------------------------------------- Shopee (RCA ago/2026)
+
+test('sondagem Shopee: só "Invalid Signature" (10020) conta como chave recusada', () => {
+  const rejeitada = { configured: true, alive: false, reason: 'rejected' }
+  assert.deepEqual(
+    classifyShopeeProbeResponse({ status: 200, errors: [{ message: 'error [10020]: Invalid Signature', extensions: { code: 10020 } }] }),
+    rejeitada,
+  )
+  // A API às vezes devolve o código fora de `extensions`.
+  assert.deepEqual(classifyShopeeProbeResponse({ status: 200, errors: [{ code: 10020 }] }), rejeitada)
+})
+
+test('sondagem Shopee: qualquer outro erro fica INDETERMINADO (nunca alarma)', () => {
+  for (const resposta of [
+    { status: 200, errors: [{ extensions: { code: 90309999 } }] },
+    { status: 429, errors: [] },
+    { status: 500 },
+    { status: 200 },
+  ]) {
+    const { alive } = classifyShopeeProbeResponse(resposta)
+    assert.equal(alive, null, `resposta não deveria virar aviso: ${JSON.stringify(resposta)}`)
+  }
+})
+
+test('sondagem Shopee: resposta boa é chave viva', () => {
+  const res = classifyShopeeProbeResponse({ status: 200, hasNodes: true })
+  assert.deepEqual(res, { configured: true, alive: true, reason: 'ok' })
+  // Busca sem resultado ainda é chave viva: `nodes` existe, só está vazio.
+  assert.equal(classifyShopeeProbeResponse({ status: 200, hasNodes: true, errors: [] }).alive, true)
+})
+
+test('Shopee sai em e-mail PRÓPRIO, separado do de ML/Amazon', () => {
+  assert.deepEqual(buildExpiryAlerts(['shopee']).map((a) => a.slug), [SHOPEE_REJECTED_TEMPLATE_SLUG])
+  assert.deepEqual(buildExpiryAlerts(['mercadolivre', 'amazon']).map((a) => a.slug), [EXPIRY_TEMPLATE_SLUG])
+
+  // Três lojas caídas no mesmo dia = dois e-mails, porque as consequências são
+  // opostas (ML/Amazon continuam enviando; Shopee para).
+  const tudo = buildExpiryAlerts(['mercadolivre', 'amazon', 'shopee'])
+  assert.deepEqual(tudo.map((a) => a.slug), [EXPIRY_TEMPLATE_SLUG, SHOPEE_REJECTED_TEMPLATE_SLUG])
+  assert.match(tudo[0].vars.lojas, /Mercado Livre e Amazon/)
+})
+
+test('chave da Shopee recusada dispara e-mail e grava o aviso', async () => {
+  const db = makeDb({ credentials: [credentialRow({ platform: 'shopee', data: { appId: '18360000001', secretKey: 'k'.repeat(32) } })] })
+  const { sent, sendMail } = collectMails()
+  const summary = await runCredentialExpirySweep({
+    db,
+    sendMail,
+    checkers: { shopee: async () => ({ configured: true, alive: false, reason: 'rejected' }) },
+    now: NOW,
+    logger: silentLogger,
+  })
+  assert.equal(summary.sent, 1)
+  assert.equal(sent.length, 1)
+  assert.match(sent[0].subject, /Shopee/)
+  assert.equal(JSON.parse(db.created[0].metadata).platform, 'shopee')
+})
+
+test('Shopee + Mercado Livre caídos: dois e-mails, um por consequência', async () => {
+  const db = makeDb({
+    credentials: [
+      credentialRow({ platform: 'mercadolivre' }),
+      credentialRow({ platform: 'shopee', data: { appId: '18360000001', secretKey: 'k'.repeat(32) } }),
+    ],
+  })
+  const { sent, sendMail } = collectMails()
+  const summary = await runCredentialExpirySweep({
+    db,
+    sendMail,
+    checkers: {
+      mercadolivre: async () => ({ configured: true, alive: false }),
+      shopee: async () => ({ configured: true, alive: false }),
+    },
+    now: NOW,
+    logger: silentLogger,
+  })
+  assert.equal(sent.length, 2)
+  assert.equal(summary.expired, 2)
+  assert.equal(db.created.length, 2, 'um registro de aviso por loja')
+})
+
+test('e-mail da Shopee é HONESTO: diz que as ofertas pararam, sem jargão', () => {
+  const { subject, body, title } = getTemplateDefinition(SHOPEE_REJECTED_TEMPLATE_SLUG)
+  const texto = `${title} ${subject} ${body}`
+
+  // O e-mail de ML/Amazon promete "suas ofertas CONTINUAM saindo" — na Shopee
+  // isso seria mentira e faria a cliente ignorar prejuízo real.
+  assert.doesNotMatch(texto, /continuam saindo|continua saindo/i)
+  assert.match(texto, /pararam de sair|estão paradas/i)
+
+  // Linguagem leiga obrigatória (regra canônica do AGENTS.md).
+  for (const jargao of [/assinatura inválida/i, /invalid signature/i, /10020/, /API/, /GraphQL/i, /token/i]) {
+    assert.doesNotMatch(texto, jargao, `jargão não pode chegar na tela: ${jargao}`)
+  }
+})
+
+test('credencial Shopee incompleta não vira aviso de chave recusada', async () => {
+  let probes = 0
+  const db = makeDb({ credentials: [credentialRow({ platform: 'shopee', data: { appId: '18360000001', secretKey: '' } })] })
+  const { sent, sendMail } = collectMails()
+  await runCredentialExpirySweep({
+    db,
+    sendMail,
+    checkers: { shopee: async () => { probes += 1; return { configured: true, alive: false } } },
+    now: NOW,
+    logger: silentLogger,
+  })
+  assert.equal(probes, 0)
+  assert.equal(sent.length, 0)
 })

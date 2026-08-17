@@ -8,7 +8,7 @@
 // Isolamento por cliente: erro num não impede os outros (mesma lição do RCA
 // "fila travava inteira quando UM item falhava"). Nunca lança para o chamador.
 
-import { decideLifecycleEmail } from './lifecyclePolicy.js'
+import { decideLifecycleEmail, resolveTriggersStartAt } from './lifecyclePolicy.js'
 import { sendTemplateEmail, isDeliverableUser } from '../email/dispatcher.js'
 import { resolveDashboardUrl } from '../email/layout.js'
 
@@ -82,7 +82,14 @@ export async function buildUserSnapshot({ db, user, now = new Date(), settings =
  * Uma passada completa. Devolve o resumo para o log da API.
  * @returns {Promise<{scanned:number, sent:number, skipped:number, failed:number, bySlug:Record<string,number>}>}
  */
-export async function runLifecycleEmailSweep({ db, sendMail, now = new Date(), logger = console, secret = process.env.JWT_SECRET } = {}) {
+export async function runLifecycleEmailSweep({
+  db,
+  sendMail,
+  now = new Date(),
+  logger = console,
+  secret = process.env.JWT_SECRET,
+  triggersStartAt = resolveTriggersStartAt(),
+} = {}) {
   const summary = { scanned: 0, sent: 0, skipped: 0, failed: 0, bySlug: {} }
 
   let users = []
@@ -109,7 +116,7 @@ export async function runLifecycleEmailSweep({ db, sendMail, now = new Date(), l
       }
 
       const snapshot = await buildUserSnapshot({ db, user, now, settings })
-      const decision = decideLifecycleEmail(snapshot, now)
+      const decision = decideLifecycleEmail(snapshot, now, { triggersStartAt })
       if (!decision) {
         summary.skipped += 1
         continue

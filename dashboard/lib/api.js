@@ -199,6 +199,7 @@ export const api = {
     apiFetch(`/api/credentials/${platform}`, { method: 'DELETE' }),
   mercadolivreSession: () => apiFetch('/api/credentials/mercadolivre/session'),
   amazonSession: () => apiFetch('/api/credentials/amazon/session'),
+  shopeeSession: () => apiFetch('/api/credentials/shopee/session'),
 
   convertLinks: (text) =>
     apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),

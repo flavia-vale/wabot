@@ -338,6 +338,31 @@ Como resolver, em menos de um minuto:
 [[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
   },
   {
+    slug: 'chave_shopee_recusada',
+    name: 'Shopee parou de aceitar a chave',
+    description: 'Sai quando a Shopee passa a recusar o App ID / chave secreta cadastrados. Diferente do ML e da Amazon, aqui as ofertas da Shopee PARAM de sair — o texto diz isso.',
+    group: 'saude',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 7,
+    variables: [
+      { name: 'link_credenciais', description: 'Endereço da tela de credenciais', example: 'https://espelhagrupos.com.br/painel/ids-afiliada' },
+    ],
+    title: 'A Shopee parou de aceitar sua chave',
+    subject: 'Sua chave da Shopee parou de valer — as ofertas da Shopee estão paradas',
+    body: `{{saudacao}} A Shopee parou de aceitar a chave que você cadastrou. Isso acontece de tempos em tempos e não é erro seu.
+
+Aqui é diferente das outras lojas, e por isso este aviso: **as ofertas da Shopee pararam de sair**. Sem a chave aceita, o robô não consegue montar o seu link, e prefere não publicar a publicar um link que não é seu. Suas ofertas automáticas da Shopee também estão paradas. As outras lojas seguem normalmente.
+
+Como resolver, em menos de dois minutos:
+
+1. Entre no painel de afiliada da Shopee e gere um App ID e uma chave secreta novos.
+2. Aqui no nosso painel, abra "Minhas credenciais" e escolha a Shopee.
+3. Cole os dois e salve. A gente testa na hora e te diz se ficou certo.
+
+[[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
+  },
+  {
     slug: 'whatsapp_desconectado',
     name: 'WhatsApp caiu e não voltou',
     description: 'Sai quando o WhatsApp fica desconectado por mais de 24h com plano ativo.',

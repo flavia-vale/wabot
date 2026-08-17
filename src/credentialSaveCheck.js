@@ -15,9 +15,14 @@
 // comprido" (nunca ?tag=/partner_id), "venceu" (nunca "sessão expirada"). E
 // nunca dizer que o envio está pausado — o plano B segue enviando.
 
-// Lojas que têm sondagem de código de acesso. Shopee e Magalu usam chave de API
-// (não há sessão para vencer), então continuam com a mensagem de sempre.
-export const PLATFORMS_WITH_SESSION_CHECK = ['mercadolivre', 'amazon']
+// Lojas com sondagem ativa da credencial. Magalu fica de fora: só tem etiqueta
+// de afiliada, que a loja não recusa.
+//
+// A Shopee entrou depois (RCA ago/2026): a suposição de que a chave dela "não
+// vence" custou dias de ofertas descartadas em silêncio, com o painel mostrando
+// a loja em verde. Aqui a chave não vence por tempo — é recusada de uma vez —
+// mas o efeito para a cliente é o mesmo e o aviso precisa existir.
+export const PLATFORMS_WITH_SESSION_CHECK = ['mercadolivre', 'amazon', 'shopee']
 
 export function platformSupportsSessionCheck(platform) {
   return PLATFORMS_WITH_SESSION_CHECK.includes(platform)
@@ -26,6 +31,15 @@ export function platformSupportsSessionCheck(platform) {
 const STORE_LABEL = {
   mercadolivre: 'Mercado Livre',
   amazon: 'Amazon',
+  shopee: 'Shopee',
+}
+
+// Como a credencial se chama na tela de cada loja. Na Shopee não é "código de
+// acesso" (não é cookie de sessão): a cliente cola App ID + chave secreta.
+const CREDENTIAL_NOUN = {
+  mercadolivre: 'código de acesso',
+  amazon: 'código de acesso',
+  shopee: 'chave',
 }
 
 // O que se perde além do link curto, por loja. Precisa ser verdade: no ML o
@@ -57,13 +71,26 @@ export function describeSaveSessionCheck({ platform, validation, probe, fallback
     return { tone: validation.warnings?.length ? 'warn' : 'success', message: fallbackMessage }
   }
 
-  // A loja RECUSOU o código. É o caso que motivou este módulo: dizer na cara,
-  // no mesmo lugar onde a pessoa acabou de colar, que aquele código não serve.
+  const noun = CREDENTIAL_NOUN[platform] || 'código de acesso'
+
+  // A loja RECUSOU a credencial. É o caso que motivou este módulo: dizer na
+  // cara, no mesmo lugar onde a pessoa acabou de colar, que aquilo não serve.
   if (probe?.alive === false) {
+    // Shopee é o caso GRAVE e o texto precisa dizer isso: sem chave aceita não
+    // há plano B — a oferta não é publicada e as ofertas automáticas param.
+    // Reaproveitar aqui o "continuam saindo" das outras duas lojas seria mentira.
+    if (platform === 'shopee') {
+      return {
+        tone: 'error',
+        message:
+          'Salvamos, mas a Shopee não aceitou essa chave. Enquanto ela não for aceita, as ofertas da Shopee param de sair '
+          + '(as outras lojas seguem normalmente). Gere um App ID e uma chave secreta novos no painel de afiliada da Shopee e cole aqui.',
+      }
+    }
     return {
       tone: 'error',
       message:
-        `Salvamos, mas a ${label} não aceitou esse código de acesso — ele já venceu. ` +
+        `Salvamos, mas a ${label} não aceitou esse ${noun} — ele já venceu. ` +
         `Pegue um código novo e cole aqui. Enquanto isso suas ofertas continuam saindo e a comissão continua sendo sua, ` +
         `só que o link fica mais comprido${EXTRA_LOSS[platform] || ''}.`,
     }
@@ -73,19 +100,33 @@ export function describeSaveSessionCheck({ platform, validation, probe, fallback
   // o verde significa alguma coisa.
   if (probe?.alive === true) {
     if (validation.warnings?.length) return { tone: 'warn', message: fallbackMessage }
+    if (platform === 'shopee') {
+      return {
+        tone: 'success',
+        message: 'Testamos agora e a Shopee aceitou sua chave. Suas ofertas já saem com a sua comissão.',
+      }
+    }
     return {
       tone: 'success',
-      message: `Testamos agora e o código de acesso da ${label} está funcionando. Suas ofertas já saem com a sua comissão e com link curto.`,
+      message: `Testamos agora e o ${noun} da ${label} está funcionando. Suas ofertas já saem com a sua comissão e com link curto.`,
     }
   }
 
   // Não deu para saber (loja fora do ar, bloqueio momentâneo, limite de
   // tentativas). Não podemos dizer nem que funciona nem que não funciona —
   // afirmar qualquer um dos dois é pior do que admitir a dúvida.
+  if (platform === 'shopee') {
+    return {
+      tone: 'warn',
+      message:
+        'Salvamos, mas não deu para testar a chave agora — a Shopee não respondeu. '
+        + 'Se as ofertas da Shopee não saírem, volte aqui e confira se a chave está certa.',
+    }
+  }
   return {
     tone: 'warn',
     message:
-      `Salvamos, mas não deu para testar o código agora — a ${label} não respondeu. ` +
+      `Salvamos, mas não deu para testar o ${noun} agora — a ${label} não respondeu. ` +
       `Se as ofertas começarem a sair com link mais comprido, volte aqui e cole um código novo.`,
   }
 }

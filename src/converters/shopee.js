@@ -470,3 +470,95 @@ export async function fetchShopeeProductInfo(url, creds) {
     return null
   }
 }
+
+// ---------------------------------------------------------------------------
+// Sondagem de saúde da chave da Shopee (App ID + chave secreta).
+//
+// Por que existe: quando a Shopee passa a recusar a chave, TODA conversão da
+// loja falha e as ofertas automáticas param — e isso acontecia em SILÊNCIO. O
+// caso real (ago/2026) ficou dias assim: `Invalid Signature` no log, ofertas
+// virando `skip:no_valid_conversions`, e nenhum aviso em lugar nenhum. Foi
+// descoberto só porque alguém foi investigar à mão.
+//
+// Diferente do ML/Amazon, aqui não é "código que vence": a chave é recusada de
+// uma vez. O contrato de retorno é o MESMO de checkMercadoLivreSession /
+// checkAmazonSession — { configured, alive, reason } — para o aviso por e-mail
+// tratar as três lojas pelo mesmo caminho.
+
+// Códigos que a Shopee devolve quando a autenticação em si é recusada. Só estes
+// viram `alive:false`. Qualquer outro código fica INDETERMINADO: mandar a
+// cliente recadastrar uma chave viva é pior do que não avisar (mesma regra de
+// `alive === null` em credentialExpiry/policy.js).
+export const SHOPEE_AUTH_REJECTED_CODES = Object.freeze([10020])
+
+// Consulta só de leitura, sem efeito colateral: não gera link nem grava nada do
+// lado da Shopee. O que importa é se a assinatura é aceita.
+const SESSION_PROBE_QUERY = '{ productOfferV2(keyword: "teste", listType: 1, sortType: 2, page: 1, limit: 1) { nodes { itemId } } }'
+
+/**
+ * Decisão pura sobre a resposta da sondagem — separada do I/O para ser testável
+ * sem rede.
+ *
+ * A API de afiliado responde **200 mesmo em erro**, sinalizando via `errors`
+ * (mesma pegadinha já documentada em offerAutomation/shopeeOffers.js). Por isso
+ * a classificação olha o corpo, não só o status.
+ *
+ * @param {{ status?: number, errors?: Array<{extensions?:{code?:number}, code?:number, message?:string}>, hasNodes?: boolean }} response
+ * @returns {{ configured: boolean, alive: boolean|null, reason: string }}
+ */
+export function classifyShopeeProbeResponse({ status, errors, hasNodes } = {}) {
+  if (Number.isFinite(status) && status !== 200) {
+    return { configured: true, alive: null, reason: 'http_error' }
+  }
+
+  const list = Array.isArray(errors) ? errors : []
+  if (list.length) {
+    const codes = list.map((e) => Number(e?.extensions?.code ?? e?.code)).filter(Number.isFinite)
+    if (codes.some((code) => SHOPEE_AUTH_REJECTED_CODES.includes(code))) {
+      return { configured: true, alive: false, reason: 'rejected' }
+    }
+    // Rate limit, indisponibilidade, consulta sem permissão: não prova que a
+    // chave morreu.
+    return { configured: true, alive: null, reason: 'api_error' }
+  }
+
+  if (hasNodes) return { configured: true, alive: true, reason: 'ok' }
+
+  // 200, sem erro e sem o campo esperado: contrato mudou ou resposta truncada.
+  return { configured: true, alive: null, reason: 'unexpected_response' }
+}
+
+/**
+ * @param {{ appId?: string, secretKey?: string }} creds
+ * @param {{ axiosImpl?: object, timeoutMs?: number }} [deps]
+ * @returns {Promise<{ configured: boolean, alive: boolean|null, reason: string }>}
+ */
+export async function checkShopeeSession(creds = {}, { axiosImpl = axios, timeoutMs = 8000 } = {}) {
+  const appId = String(creds?.appId ?? '').trim()
+  const secretKey = String(creds?.secretKey ?? '').trim()
+  // Falta de campo é outro problema (o painel já diz "falta preencher").
+  if (!appId || !secretKey) return { configured: false, alive: null, reason: 'no_credentials' }
+
+  const body = { query: SESSION_PROBE_QUERY }
+  const payload = JSON.stringify(body)
+  const { header } = buildAuth(appId, secretKey, payload)
+
+  try {
+    const { status, data } = await axiosImpl.post(ENDPOINT, body, {
+      headers: { Authorization: header, 'Content-Type': 'application/json' },
+      timeout: timeoutMs,
+    })
+    return classifyShopeeProbeResponse({
+      status,
+      errors: data?.errors,
+      hasNodes: Array.isArray(data?.data?.productOfferV2?.nodes),
+    })
+  } catch (err) {
+    // Rede/timeout/5xx nunca viram "sua chave morreu".
+    const status = Number(err?.response?.status)
+    if (Number.isFinite(status)) {
+      return classifyShopeeProbeResponse({ status, errors: err?.response?.data?.errors })
+    }
+    return { configured: true, alive: null, reason: 'network_error' }
+  }
+}
