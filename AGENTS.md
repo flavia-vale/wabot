@@ -2357,10 +2357,20 @@ origem de toda visita externa no evento `referral_visit` (`AnalyticsEvent`),
 classificada por `dashboard/lib/ai-referral.js` em `ai`/`search`/`social`/
 `other`. **Só o host do referenciador é gravado, nunca a URL completa** — URL de
 buscador carrega o termo pesquisado, que é dado da pessoa; não regredir isso
-(guard em `test/ai-referral.test.js`). O evento precisa estar nas **duas**
-allowlists de `src/analytics.js` (`PUBLIC_ANALYTICS_EVENTS` autoriza a rota,
-`ANALYTICS_EVENTS` autoriza a gravação) — faltar em uma faz o dado sumir sem
-erro. Cuidado ao renomear os campos: `sanitizeAnalyticsMetadata` descarta
+(guard em `test/ai-referral.test.js`). **Todo evento público passa por TRÊS
+allowlists, e faltar em qualquer uma descarta o dado sem erro nenhum:**
+`PUBLIC_PERSISTED_EVENTS` (`dashboard/lib/analytics.js`) autoriza o navegador a
+enviar, `PUBLIC_ANALYTICS_EVENTS` (`src/analytics.js`) autoriza a rota a aceitar
+e `ANALYTICS_EVENTS` (idem) autoriza a gravação. Foi assim que
+`organic_page_view` e `organic_cta_click` — as **duas primeiras etapas do funil
+canônico** de `docs/marketing/event-taxonomy-v1.md` — ficaram desde 2026-05 sendo
+descartadas: estavam só na terceira. O funil de SEO só passava a existir no
+`signup_created`, e não havia como separar "ninguém acha a página" de "acham e
+não clicam", que pedem consertos opostos. Corrigido em 2026-08-17 (guard em
+`test/pagina-achadinhos-clique.test.js`, leitura em
+`scripts/diag-paginas-seo.mjs`). Lembre que a allowlist do navegador vai para o
+**bundle**: mudança nela só vale depois de `npm run build` no dashboard.
+Cuidado ao renomear os campos: `sanitizeAnalyticsMetadata` descarta
 qualquer chave que case com `/(token|secret|…|key|url|…)/i`, então algo como
 `referrer_url` seria descartado em silêncio.
 

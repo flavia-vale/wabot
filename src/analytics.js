@@ -21,6 +21,18 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
   // rastreou, isto mostra a pessoa que chegou. Só o host do referenciador é
   // gravado, nunca a URL completa (ver dashboard/lib/ai-referral.js).
   'referral_visit',
+  // As DUAS PRIMEIRAS etapas do funil canônico de SEO
+  // (docs/marketing/event-taxonomy-v1.md). Estavam em ANALYTICS_EVENTS abaixo
+  // (gravação autorizada) mas faltavam AQUI e na allowlist do cliente
+  // (`PUBLIC_PERSISTED_EVENTS` em dashboard/lib/analytics.js) — e faltar em uma
+  // das três faz o dado sumir sem erro. Resultado: visita e clique de CTA de
+  // visitante anônimo nunca foram gravados, então o funil só passava a existir
+  // no `signup_created` e era impossível separar "ninguém acha a página" de
+  // "acham e não clicam". Descoberto em 2026-08-17, quando 529 impressões em
+  // /bot-achadinhos-whatsapp renderam 11 cliques e não havia como saber o que
+  // aqueles 11 fizeram. Leitura: scripts/diag-paginas-seo.mjs.
+  'organic_page_view',
+  'organic_cta_click',
 ])
 
 export const ANALYTICS_EVENTS = new Set([

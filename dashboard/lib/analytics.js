@@ -39,6 +39,13 @@ export const PROMPT_EXCLUDED_PATH_PREFIXES = [
 ]
 
 export const PUBLIC_PERSISTED_EVENTS = new Set([
+  // Duas primeiras etapas do funil canônico de SEO. Sem elas dava para ver quem
+  // se cadastrou, mas não quantos chegaram na página nem quantos clicaram no
+  // CTA — ou seja, era impossível distinguir "ninguém acha a página" de "acham
+  // e não clicam", que pedem ações opostas. O evento precisa estar TAMBÉM nas
+  // duas allowlists de src/analytics.js; faltar em uma descarta em silêncio.
+  TRACKING_EVENTS.ORGANIC_PAGE_VIEW,
+  TRACKING_EVENTS.ORGANIC_CTA_CLICK,
   TRACKING_EVENTS.CONVERSION_PROMPT_VIEWED,
   TRACKING_EVENTS.CONVERSION_PROMPT_DISMISSED,
   TRACKING_EVENTS.CONVERSION_PROMPT_CTA_CLICKED,

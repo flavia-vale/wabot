@@ -53,10 +53,13 @@ export const COMPARISON_PAGES = {
       { q: 'Essas alternativas garantem comissão?', a: 'Não. Comissão depende de oferta, público, regras da plataforma, rastreio correto e comportamento dos compradores.' },
     ],
   },
-  /* Página de marca do concorrente. Existe porque duas das 13 consultas que o
-   * site registra no Search Console são `achadinhos bot` e `achadinhoosbot`
-   * (posições 7 e 9,5): a demanda por essa marca já chega aqui sem nenhuma
-   * página feita para ela.
+  /* Página de marca do concorrente. Criada porque duas das 13 consultas que o
+   * site registrava no Search Console eram `achadinhos bot` e `achadinhoosbot`.
+   * Em 2026-08-16 essa aposta se confirmou como a maior do site: as três
+   * variações da marca (`achadinhoosbot`, `achadinhosbot`, `achadinhos bot`)
+   * somam 443 impressões em 3 meses — 15% de tudo — e a busca por marca de
+   * concorrente virou a principal fonte de impressão. `fluxopromo` e `shozap`
+   * já aparecem também.
    *
    * Todos os dados de preço e recurso vêm de `competitors-data.js`, verificados
    * por print em 31/07/2026. Regra que não se quebra: dizer honestamente onde o
@@ -66,9 +69,23 @@ export const COMPARISON_PAGES = {
   '/alternativas/achadinhos-bot': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · AchadinhosBot',
-    title: 'Alternativa ao AchadinhosBot: comparativo honesto para grupos de achadinhos',
-    description: 'Compare AchadinhosBot, Achadinho Pro e BOTinho para automatizar grupos de achadinhos no WhatsApp: preço por plano, marketplaces suportados e teste grátis. Dados verificados em 31/07/2026.',
+    // Título encurtado em 2026-08-17 (era 74 chars, cortado no celular). Esta é
+    // a página que deve responder a busca pelo NOME do concorrente — por isso
+    // ela mantém "Alternativa ao AchadinhosBot" na frente, e a página comercial
+    // /bot-achadinhos-whatsapp deixou de disputar o mesmo termo. As duas
+    // ranqueavam para as MESMAS consultas (529 e 226 impressões), dividindo o
+    // sinal entre si sem nenhuma delas subir.
+    title: 'Alternativa ao AchadinhosBot: comparativo honesto',
+    description: 'Compare AchadinhosBot, Achadinho Pro e BOTinho para automatizar grupos de achadinhos no WhatsApp: preço, marketplaces e teste grátis. Dados de 31/07/2026.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
+    // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
+    // páginas ranqueavam para as mesmas consultas e não se linkavam, então o
+    // Google não tinha como saber qual responde o quê. Aqui fica a busca por
+    // NOME do concorrente; lá, a busca genérica por "bot para achadinhos".
+    productPage: {
+      href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
+      label: 'Como funciona o bot para achadinhos no WhatsApp',
+    },
     tldr: 'Se você opera só Shopee e quer escalar por número de grupos, o AchadinhosBot resolve. Se precisa de Mercado Livre, Amazon e Magalu na mesma conta, compare o custo total antes de decidir.',
     directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco em Shopee, cobrando por faixa de grupos (R$ 59,90 por 1 grupo até R$ 199,90 por 15 grupos) e oferecendo teste grátis de 3 dias. As alternativas mais próximas são o Achadinho Pro, que adiciona Mercado Livre e Amazon a partir de R$ 59,97/mês, e o BOTinho, que cobre quatro marketplaces e converte também links de cupom.',
     rows: [
@@ -414,34 +431,13 @@ export function ComparisonPage({ slug }) {
             <span className="pill"><span className="dot" />Veja também</span>
             <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Outros comparativos relacionados</h2>
             <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
-              <li><Link href="/comparativos" data-comparison-cta="related-hub" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>Hub de comparativos do BOTinho</Link></li>
-              {relatedPages.map((related) => (
-                <li key={related.href}>
-                  <Link href={related.href} data-comparison-cta="related-page" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>
-                    {related.title}
+              {page.productPage ? (
+                <li>
+                  <Link href={page.productPage.href} data-comparison-cta="product-page" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>
+                    {page.productPage.label}
                   </Link>
                 </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'color-mix(in oklab, var(--accent) 14%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />TL;DR</span>
-            <p style={{ margin: '12px 0 0', color: 'var(--ink)', lineHeight: 1.7 }}>{page.tldr || page.directAnswer}</p>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />Veja também</span>
-            <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Outros comparativos relacionados</h2>
-            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+              ) : null}
               <li><Link href="/comparativos" data-comparison-cta="related-hub" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>Hub de comparativos do BOTinho</Link></li>
               {relatedPages.map((related) => (
                 <li key={related.href}>
