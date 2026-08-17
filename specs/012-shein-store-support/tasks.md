@@ -413,3 +413,51 @@ Task: "src/api/routes/groups.js:175 — allowedPlatforms ganha shein"
 - [X] T062 Recusar (`null`) em `src/converters/shein.js` o destino de landing do oneLink (`/ark/default`, conforme `data-model.md` §3.2) quando ele chegar sem `goods_id` — resolução que não concluiu deve falhar honestamente em vez de publicar a vitrine genérica como cupom; cobrir com teste em `test/converters-shein.test.js`, sem regredir cupom/campanha legítimos (INV-6), per US2/AC4 (partial)
 - [X] T063 Acrescentar em `test/converters-shein.test.js` assertivas de que `campaign`, `campaign_id`, `ad_type`, `scene` e `test` vindos do link de origem chegam à saída **com o valor original** (usar valores diferentes dos `PROGRAM_PARAMS`, ex. `campaign=summer-sale`), fechando o ponto cego em que uma regressão de strip seria mascarada pelo re-preenchimento dos padrões, per FR-012 e contrato `stripSheinAffiliateTracking` (partial)
 - [X] T064 Trocar `hasOpaqueShareToken` em `src/converters/shein.js` de checagem de valor truthy (`searchParams.get`) para checagem de presença (`searchParams.has`), de modo que `?shc=`/`?link=` vazios também sejam recusados, com teste correspondente, per contrato `converter-shein.md` (INV-2) (partial)
+
+---
+
+## Phase 9: Code Review Fixes
+
+Achados da revisão de código (fase `review`) sobre o diff completo da branch contra
+`origin/develop`. Ordem por severidade. Nenhum é de segurança; os três são defeitos reais
+de correção/consistência com o `plan.md` e com o padrão já estabelecido pelos conversores
+irmãos (`shopee.js`, `amazon.js`).
+
+- [ ] T065 Limitar a leitura do corpo HTML em `resolveSheinShortLink`
+  (`src/converters/shein.js`): hoje faz `await res.text()` **sem teto de bytes**, enquanto os
+  dois conversores irmãos que resolvem short link já capam a leitura
+  (`readBodyLimited` + `SHORT_LINK_BODY_MAX_BYTES = 512KB` em `src/converters/shopee.js:285,179`
+  e `256KB` em `src/converters/amazon.js:104,48`). Um hop de terceiro que sirva um corpo grande
+  é lido inteiro para a memória dentro do pipeline de incoming do `bot-worker`, que roda sob
+  teto de heap de 384MB (`BOT_WORKER_MAX_OLD_SPACE_MB`) — exatamente o que a "Política de
+  memória" do AGENTS.md manda evitar. Reaproveitar o padrão existente (extrair o helper para um
+  módulo compartilhado OU replicar o mesmo teto no `shein.js`), com teste que garanta que o
+  corpo é truncado. Não mudar a semântica de resolução. (review)
+
+- [ ] T066 Dar um **prazo total** à resolução do oneLink em `src/converters/shein.js`: hoje
+  `timeoutMs = 8000` é aplicado **por hop** (`AbortSignal.timeout(timeoutMs)` dentro do laço) e
+  `maxHops = 6`, então o pior caso é **~48s** — acima do orçamento declarado no `plan.md`
+  ("alvo ≤ 8s com no máximo 6 hops") e acima do `MSG_QUEUE_TIMEOUT_MS` (25s) do pipeline de
+  incoming. Para comparação, `resolveShopeeShortLink` é chamado no `convert()` com
+  `timeoutMs: 5000` (`src/converters/shopee.js:374`), pior caso 30s. Consequência concreta: uma
+  cadeia de SHEIN lenta estoura o timeout do incoming e a **mensagem inteira** é perdida como
+  `timeout:incoming` (categoria TIMEOUT, `status='error'`), em vez de a conversão daquele link
+  falhar honestamente e o resto da mensagem seguir. Implementar um deadline global (ex.:
+  `deadlineAt = Date.now() + totalTimeoutMs` com `totalTimeoutMs` default 8000, e o `signal` de
+  cada hop derivado do que resta), sair do laço quando o prazo acabar e devolver a última URL
+  conhecida (o `convert()` já recusa short link não resolvido). Cobrir em
+  `test/shein-shortlink-resolve.test.js` com `fetchImpl` que atrasa, garantindo que o total
+  respeita o prazo e que nada é lançado. (review)
+
+- [ ] T067 Ancorar (ou remover) o padrão `/economize muito agora/i` em
+  `BOGUS_SCRAPE_TITLE_PATTERNS` (`src/converters/productInfoScraper.js`): a lista é **global,
+  aplicada às cinco lojas**, e esse padrão é uma frase promocional genérica em português **sem
+  nenhuma âncora de marca** — um título legítimo de produto de Amazon/Shopee/ML/Magalu que
+  contenha essa frase passaria a ser descartado como título-lixo, o que fere FR-023 (zero
+  regressão nas quatro lojas existentes). O próprio arquivo já documenta essa regra logo acima
+  da lista ("NÃO usar 'navegador' sozinho — existe 'GPS navegador automotivo'"). O padrão irmão
+  `/n[ãa]o perca esta oferta .{0,20}na shein/i` já cobre a frase real do oneLink e **está**
+  ancorado na marca. Ou remover o padrão genérico, ou reescrevê-lo ancorado (ex.: exigir
+  `shein` na mesma string). Ajustar `test/product-info-scraper.test.js` para cobrir tanto a
+  frase real da SHEIN quanto um título legítimo de outra loja contendo "economize" que **não**
+  pode ser descartado. (review)
