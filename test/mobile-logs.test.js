@@ -1,6 +1,20 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { friendlyMobileLogError, isSafeMobileLogUrl, mobileLogLinkActions, toMobileLogItem } from '../dashboard/lib/mobileLogs.js'
+import { friendlyMobileLogError, isSafeMobileLogUrl, mobileLogLinkActions, toMobileLogItem, MOBILE_LOG_PLATFORM_LABEL } from '../dashboard/lib/mobileLogs.js'
+
+// specs/012-shein-store-support (D12/T058): rótulo da loja nos registros
+test('MOBILE_LOG_PLATFORM_LABEL rotula shein como SHEIN', () => {
+  assert.equal(MOBILE_LOG_PLATFORM_LABEL.shein, 'SHEIN')
+  const item = toMobileLogItem({
+    id: '1',
+    status: 'success',
+    sentAt: '2026-08-17T10:00:00.000Z',
+    platform: 'shein',
+    sourceGroup: 'monitor',
+    destGroup: 'dest',
+  }, new Date('2026-08-17T12:00:00.000Z'))
+  assert.equal(item.loja, 'SHEIN')
+})
 
 test('log mobile traduz erro por item de conversão sem ação falsa', () => {
   const item = toMobileLogItem({

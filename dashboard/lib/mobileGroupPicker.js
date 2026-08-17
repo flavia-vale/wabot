@@ -46,6 +46,7 @@ export const MOBILE_GROUP_PLATFORMS = [
   { id: 'amazon', label: 'Amazon' },
   { id: 'mercadolivre', label: 'Mercado Livre' },
   { id: 'magazineluiza', label: 'Magazine Luiza' },
+  { id: 'shein', label: 'SHEIN' },
 ]
 
 function parsePlatformCsv(allowedPlatforms) {

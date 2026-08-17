@@ -331,6 +331,13 @@ function extractTitleFromUrl(url) {
       const m = u.pathname.match(/^\/([^/]+)\/(?:up|p)\//i)
       if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
     }
+    // SHEIN: mesma nota de offerEngine.js D8 — só cobre `-p-<slug>` direto; o
+    // destino do oneLink não tem slug, então na maioria dos casos reais não
+    // há título a inferir aqui (degrada normalmente).
+    if (/(^|\.)shein\.com$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)-p-\d+(?:-cat-\d+)?\.html/i)
+      if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
+    }
   } catch {}
   return ''
 }

@@ -61,6 +61,15 @@ export function inferTitleFromUrl(url) {
       const m = u.pathname.match(/^\/([^/]+)-i\.\d+\.\d+/i)
       if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
     }
+    // SHEIN: só para `-p-<slug>` direto (página de produto). O destino do
+    // oneLink (`/br/ark/default`) não tem slug no caminho, então na maioria
+    // dos casos reais (link ainda não resolvido) não há título a inferir
+    // aqui — degrada normalmente para o fallback do motor (research.md,
+    // contracts/registries.md D8).
+    if (/(^|\.)shein\.com$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)-p-\d+(?:-cat-\d+)?\.html/i)
+      if (m?.[1]) return decodeURIComponent(m[1]).replace(/-/g, ' ').trim()
+    }
   } catch {}
   return ''
 }

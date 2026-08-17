@@ -268,31 +268,31 @@ Phase 5 (US3) — o banner de marca (`BRAND_STYLES.shein`, T035) é reaproveitad
 **Purpose**: fechar as duplicações restantes do painel (catálogos móveis e telas que não pertencem
 a nenhuma user story isolada), e a passada final de regressão.
 
-- [ ] T046 [P] `dashboard/app/painel/converte-links/page.js:15` — `SUPPORTED_LINK_RE` ganha os
+- [X] T046 [P] `dashboard/app/painel/converte-links/page.js:15` — `SUPPORTED_LINK_RE` ganha os
       domínios da SHEIN (contracts/registries.md D2)
-- [ ] T047 [P] `dashboard/app/painel/converte-links/page.js:42` — texto "Use um link de Amazon,
+- [X] T047 [P] `dashboard/app/painel/converte-links/page.js:42` — texto "Use um link de Amazon,
       Mercado Livre, Shopee ou Magazine Luiza" ganha SHEIN (contracts/registries.md D3)
-- [ ] T048 [P] `dashboard/app/painel/criar-oferta/page.js:25` — `STORES` ganha `{ test: /shein/i,
+- [X] T048 [P] `dashboard/app/painel/criar-oferta/page.js:25` — `STORES` ganha `{ test: /shein/i,
       name: 'SHEIN', bg: '#000000', fg: '#fff', mark: 'S' }` (contracts/registries.md D4)
-- [ ] T049 [P] `dashboard/app/painel/criar-oferta/page.js:286` — texto "Cole um link de …" ganha
+- [X] T049 [P] `dashboard/app/painel/criar-oferta/page.js:286` — texto "Cole um link de …" ganha
       SHEIN (contracts/registries.md D5)
-- [ ] T050 [P] `dashboard/lib/mobileOfferComposer.js:60` — `COUPON_STORES` ganha `{ key: 'shein',
+- [X] T050 [P] `dashboard/lib/mobileOfferComposer.js:60` — `COUPON_STORES` ganha `{ key: 'shein',
       nome: 'SHEIN', cor: '#000000' }` (contracts/registries.md D6)
-- [ ] T051 [P] `dashboard/lib/mobileOfferComposer.js:129` — detecção por host: `if
+- [X] T051 [P] `dashboard/lib/mobileOfferComposer.js:129` — detecção por host: `if
       (host.includes('shein')) return 'shein'` (contracts/registries.md D7)
-- [ ] T052 [P] `src/converters/offerEngine.js:52` — ramo SHEIN opcional em `inferTitleFromUrl`, só
+- [X] T052 [P] `src/converters/offerEngine.js:52` — ramo SHEIN opcional em `inferTitleFromUrl`, só
       para `-p-<slug>` direto (contracts/registries.md D8)
-- [ ] T053 [P] `src/converters/productInfoScraper.js:310` — ramo SHEIN opcional em
+- [X] T053 [P] `src/converters/productInfoScraper.js:310` — ramo SHEIN opcional em
       `extractTitleFromUrl`, mesma nota de D8 (contracts/registries.md D9)
-- [ ] T054 [P] `dashboard/app/painel/grupos/page.js:20` — `ALL_PLATFORMS` ganha `shein`
+- [X] T054 [P] `dashboard/app/painel/grupos/page.js:20` — `ALL_PLATFORMS` ganha `shein`
       (contracts/registries.md D10)
-- [ ] T055 [P] `dashboard/lib/mobileGroupPicker.js:44` — `MOBILE_GROUP_PLATFORMS` ganha `shein`
+- [X] T055 [P] `dashboard/lib/mobileGroupPicker.js:44` — `MOBILE_GROUP_PLATFORMS` ganha `shein`
       (contracts/registries.md D11)
-- [ ] T056 [P] `dashboard/lib/mobileLogs.js:12` — `MOBILE_LOG_PLATFORM_LABEL.shein = 'SHEIN'`
+- [X] T056 [P] `dashboard/lib/mobileLogs.js:12` — `MOBILE_LOG_PLATFORM_LABEL.shein = 'SHEIN'`
       (contracts/registries.md D12)
-- [ ] T057 [P] `dashboard/lib/mobileCouponStore.js:9` — `DEFAULT_COUPON_LINKS` ganha `shein: ''`
+- [X] T057 [P] `dashboard/lib/mobileCouponStore.js:9` — `DEFAULT_COUPON_LINKS` ganha `shein: ''`
       (contracts/registries.md D13)
-- [ ] T058 Atualizar os testes `test/mobile-*.test.js` relevantes para cobrir SHEIN nos catálogos
+- [X] T058 Atualizar os testes `test/mobile-*.test.js` relevantes para cobrir SHEIN nos catálogos
       móveis (`mobileOfferComposer`, `mobileGroupPicker`, `mobileLogs`, `mobileCouponStore`)
       (depende de T050, T051, T055, T056, T057)
 - [ ] T059 `cd dashboard && npm run build` — obrigatório: a allowlist de domínios/catálogos do

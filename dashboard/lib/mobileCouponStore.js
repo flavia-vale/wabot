@@ -6,7 +6,7 @@ import { api } from './api.js'
 const STORAGE_KEY = 'wabot.mobile.offer.couponPrefs.v1'
 const LEGACY_LINKS_KEY = 'wabot.mobile.offer.couponLinks.v1'
 
-export const DEFAULT_COUPON_LINKS = { shopee: '', mercadolivre: '', amazon: '', magazineluiza: '' }
+export const DEFAULT_COUPON_LINKS = { shopee: '', mercadolivre: '', amazon: '', magazineluiza: '', shein: '' }
 export const DEFAULT_COUPON_CTA = '🎟 Mais cupons da {loja}:'
 
 function normalizePrefs(raw) {
