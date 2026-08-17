@@ -80,12 +80,20 @@ test('Shopee está coberta pelo aviso (RCA ago/2026 — não remover da lista)',
 
 // -------------------------------------------------------------- passada (sweep)
 
-function makeDb({ credentials = [], events = [] } = {}) {
+// Por padrão a conta fingida está EM USO (acesso ativo + WhatsApp conectado):
+// desde ago/2026 a passada só avisa quem está usando o robô, então um fixture
+// de conta parada faria todos os testes pararem de exercitar o aviso.
+function makeDb({ credentials = [], events = [], sessao = { status: 'connected', phone: '5532999' }, ultimoEnvio = new Date(), acessoAte = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } = {}) {
   const created = []
   const updates = []
   return {
     created,
     updates,
+    user: {
+      findUnique: async () => ({ accessExpiresAt: acessoAte, createdAt: new Date('2026-01-01T00:00:00Z') }),
+    },
+    waSession: { findUnique: async () => sessao },
+    messageLog: { findFirst: async () => (ultimoEnvio ? { sentAt: ultimoEnvio } : null) },
     credential: {
       findMany: async () => credentials,
       update: async (args) => { updates.push(args); return {} },
@@ -133,6 +141,45 @@ test('código vencido confirmado dispara um e-mail e grava o aviso', async () =>
   assert.equal(db.created.length, 1)
   assert.equal(db.created[0].event, 'credential_expiry_alert_sent')
   assert.equal(JSON.parse(db.created[0].metadata).platform, 'mercadolivre')
+})
+
+test('conta parada não é avisada NEM sondada (nada a fazer com o aviso)', async () => {
+  let probes = 0
+  const db = makeDb({
+    credentials: [credentialRow({})],
+    sessao: { status: 'disconnected' },
+    ultimoEnvio: new Date(NOW.getTime() - 40 * DAY),
+    acessoAte: new Date(NOW.getTime() - 10 * DAY),
+  })
+  const { sent, sendMail } = collectMails()
+  const summary = await runCredentialExpirySweep({
+    db,
+    sendMail,
+    checkers: { mercadolivre: async () => { probes += 1; return { configured: true, alive: false } } },
+    now: NOW,
+    logger: silentLogger,
+  })
+  assert.equal(probes, 0, 'sondagem em conta parada é chamada à loja desperdiçada')
+  assert.equal(sent.length, 0)
+  assert.equal(summary.sent, 0)
+  assert.equal(summary.skipped, 1)
+})
+
+test('conta desconectada mas que enviou nos últimos dias continua sendo avisada', async () => {
+  const db = makeDb({
+    credentials: [credentialRow({})],
+    sessao: { status: 'disconnected', phone: '5532999' },
+    ultimoEnvio: new Date(NOW.getTime() - 2 * DAY),
+  })
+  const { sent, sendMail } = collectMails()
+  await runCredentialExpirySweep({
+    db,
+    sendMail,
+    checkers: { mercadolivre: async () => ({ configured: true, alive: false }) },
+    now: NOW,
+    logger: silentLogger,
+  })
+  assert.equal(sent.length, 1)
 })
 
 test('anti-spam: cliente avisado há 2 dias não recebe de novo (nem é sondado)', async () => {
