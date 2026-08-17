@@ -22,6 +22,7 @@ import { parseCredentialData, validateCredentialData } from '../credentialHealth
 import { encryptCredential } from '../credentialCrypto.js'
 import { sendTemplateEmail } from '../email/dispatcher.js'
 import { resolveDashboardUrl } from '../email/layout.js'
+import { isAccountInUse, loadAccountActivity } from '../email/accountActivity.js'
 import { buildExpiryAlerts } from './message.js'
 import {
   ALERT_EVENT,
@@ -127,6 +128,16 @@ export async function runCredentialExpirySweep({
         // aqui só tratamos código cadastrado que a loja passou a recusar.
         return validateCredentialData(platform, data).configured
       })
+
+      // Antes de gastar sondagem na loja: essa conta está usando o robô? Conta
+      // com plano vencido / WhatsApp fora / parada há dias não tem o que fazer
+      // com o aviso, e a sondagem ainda queimaria uma rotação de código à toa.
+      // Foto incompleta (consulta que caiu) não silencia — segue e sonda.
+      const activity = await loadAccountActivity({ db, userId, user: entry.user })
+      if (!activity.incompleta && !isAccountInUse(activity, now)) {
+        summary.skipped += 1
+        continue
+      }
 
       const alertedAt = await lastAlertByPlatform({ db, userId, since: cooldownStart })
       const due = platformsDueForProbe({ platforms: configured, lastAlertByPlatform: alertedAt, now, cooldownMs })

@@ -17,6 +17,15 @@ import { applyVariables } from './markup.js'
 import { wrapEmail, resolveDashboardUrl, resolveSupportEmail, BRAND_NAME, DEFAULT_SUPPORT_WHATSAPP } from './layout.js'
 import { buildUnsubscribeUrl, isOptedOut } from './optOut.js'
 import { resolveDailyWindowStart, nextDailyWindowStart, describeWindowStart } from './dailyWindow.js'
+import {
+  isAccountInUse,
+  isOperationalEmail,
+  countsTowardWeeklyCap,
+  loadAccountActivity,
+  resolveAutoEmailWeeklyCap,
+  CAPPED_GROUPS,
+} from './accountActivity.js'
+import { listTemplateDefinitions } from './registry.js'
 
 const FALLBACK_EMAIL_RE = /^user_.*@sistema\.com$/i
 const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -133,6 +142,30 @@ export async function sentInCurrentWindow({ db, now, windowStart = resolveDailyW
   return db.emailSendLog.count({ where: { status: 'sent', createdAt: { gte: new Date(windowStart) } } }).catch(() => 0)
 }
 
+/** Slugs que entram no teto semanal — resolvidos uma vez, o catálogo é estático. */
+let cappedSlugsCache = null
+function cappedSlugs() {
+  if (!cappedSlugsCache) {
+    cappedSlugsCache = listTemplateDefinitions()
+      .filter((definition) => CAPPED_GROUPS.includes(definition.group))
+      .map((definition) => definition.slug)
+  }
+  return cappedSlugsCache
+}
+
+/**
+ * Quantos e-mails automáticos de saúde/divulgação esse cliente já recebeu na
+ * semana. Sem teto, uma conta bagunçada recebe um assunto diferente por dia —
+ * cada e-mail sozinho é justificável e o conjunto vira spam.
+ */
+export async function autoEmailsSentThisWeek({ db, userId, now = new Date() }) {
+  if (!hasModel(db, 'emailSendLog') || !userId) return 0
+  const since = new Date(new Date(now).getTime() - 7 * MS_PER_DAY)
+  return db.emailSendLog.count({
+    where: { userId, status: 'sent', mode: 'auto', slug: { in: cappedSlugs() }, createdAt: { gte: since } },
+  }).catch(() => 0)
+}
+
 /**
  * Envia um e-mail do catálogo para um cliente, aplicando todas as travas.
  *
@@ -187,6 +220,27 @@ export async function sendTemplateEmail({
       db, slug, userId: user.id, email: user.email, days: template.dedupDays, now,
     })) {
       return markSkipped('already_sent')
+    }
+
+    // Aviso operacional (grupo `saude`) para conta que não está usando o robô é
+    // ruído: o plano venceu, o WhatsApp está fora, nada é enviado há dias — e
+    // ainda assim chegava "a Shopee parou de aceitar sua chave". Cobrança,
+    // senha e dinheiro de afiliada não passam por aqui de propósito.
+    // Só vale para disparo automático: envio manual da admin é decisão dela.
+    if (mode === 'auto' && isOperationalEmail(template)) {
+      const activity = await loadAccountActivity({ db, userId: user.id, user })
+      // Foto incompleta (consulta que caiu) NÃO silencia: silenciar aviso
+      // legítimo por causa de um blip do banco é pior que mandá-lo.
+      if (!activity.incompleta && !isAccountInUse(activity, now)) {
+        return markSkipped('account_idle')
+      }
+    }
+
+    if (mode === 'auto' && countsTowardWeeklyCap(template)) {
+      const cap = resolveAutoEmailWeeklyCap()
+      if (cap > 0 && await autoEmailsSentThisWeek({ db, userId: user.id, now }) >= cap) {
+        return markSkipped('weekly_cap')
+      }
     }
 
     if (!ignoreDailyCap) {

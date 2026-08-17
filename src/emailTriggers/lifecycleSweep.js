@@ -11,6 +11,7 @@
 import { decideLifecycleEmail, resolveTriggersStartAt } from './lifecyclePolicy.js'
 import { sendTemplateEmail, isDeliverableUser } from '../email/dispatcher.js'
 import { resolveDashboardUrl } from '../email/layout.js'
+import { loadDisconnectIntent } from '../email/accountActivity.js'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -53,7 +54,11 @@ export async function buildUserSnapshot({ db, user, now = new Date(), settings =
   }
 
   const connected = waSession?.status === 'connected'
+  // Só consulta quem pediu para desconectar quando de fato está desconectado —
+  // é a única situação em que a resposta muda alguma decisão.
+  const intent = connected ? { stoppedByUserAt: null, lastConnectedAt: null } : await loadDisconnectIntent({ db, userId: user.id })
   return {
+    ...intent,
     id: user.id,
     name: user.name,
     email: user.email,
