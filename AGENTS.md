@@ -570,6 +570,27 @@ Testes: `test/email-engine.test.js`, `test/email-lifecycle-triggers.test.js`,
 `test/admin-emails.test.js`, `test/email-templates-migrados.test.js`,
 `test/weekly-summary-email.test.js`, `test/password-reset.test.js`.
 
+### Grupo "Contato e escuta" (não regredir)
+
+Oito e-mails prontos (`group: 'contato'` em `src/email/registry.js`) para
+perguntar à cliente o que travou, o que ficou confuso e o que faltou — check-in
+geral, travou na configuração, dúvida nas lojas, primeira semana, parou de usar,
+o que faltou (quem não continuou), convite para conversa e pesquisa de uma
+pergunta só.
+
+Contrato garantido por `test/email-contato-escuta.test.js`:
+- **Sempre `trigger: 'manual'`.** Pergunta automática, disparada na hora errada,
+  queima o canal — quem escolhe o momento e o público é a pessoa, pela aba
+  E-mails.
+- **Sempre `marketing`**: não é obrigação de serviço, então respeita descadastro
+  e leva o link no rodapé.
+- **Todo e-mail pergunta alguma coisa e convida a responder**, e traz os DOIS
+  canais (WhatsApp e e-mail de suporte) no corpo. Pergunta sem canal de resposta
+  é armadilha.
+- **`dedupDays >= 21`**: ninguém pode ser sondada toda semana.
+- Sem cobrança, sem culpa, sem promessa de resultado (o teste falha em
+  "culpa sua", "garantimos", "última chance" e afins).
+
 ### Recuperação de senha (não existia até 2026-08)
 
 Quem perdia a senha só voltava pelo suporte — e o link "Esqueci minha senha"

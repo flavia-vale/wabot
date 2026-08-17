@@ -26,6 +26,7 @@ export const EMAIL_GROUPS = Object.freeze({
   saude: 'Saúde do robô',
   afiliados: 'Programa de afiliados',
   marketing: 'Marketing e avisos',
+  contato: 'Contato e escuta',
 })
 
 // Variáveis que TODO e-mail recebe, sem precisar declarar.
@@ -56,6 +57,23 @@ Depois dessa data o robô para de enviar suas ofertas. Escolhendo um plano antes
 [[botao:Escolher meu plano|{{link_planos}}]]
 
 Ficou na dúvida sobre qual plano serve para você? É só responder este e-mail que a gente te ajuda a escolher.`
+}
+
+// Todo e-mail de escuta termina do MESMO jeito: as duas formas de falar com a
+// gente, lado a lado, e o convite explícito para só responder o e-mail. Quem
+// está travada não vai procurar canal de suporte — o canal tem que estar na
+// frente dela.
+const CONTATO_FECHAMENTO = `Para responder é só apertar "responder" neste e-mail. Se preferir, fala com a gente por onde for mais fácil:
+
+- WhatsApp: {{whatsapp_suporte}}
+- E-mail: {{email_suporte}}
+
+A gente lê tudo e responde pessoalmente — não é robô respondendo aqui.`
+
+function escutaBody(miolo) {
+  return `${miolo}
+
+${CONTATO_FECHAMENTO}`
 }
 
 function planCountdownBody(chamada) {
@@ -722,6 +740,168 @@ Travou em algum passo? A gente te ajuda pessoalmente pelo {{whatsapp_suporte}}.`
 Ative o robô agora para não perder nenhuma oferta enquanto o teste grátis ainda está valendo.
 
 [[botao:Ligar meu robô|{{link_login}}]]`,
+  },
+
+  // ------------------------------------------------------------ contato e escuta
+  //
+  // Grupo de e-mails PRONTOS para perguntar o que travou. Todos são disparados
+  // por você, pela aba E-mails, escolhendo o público na hora — não têm gatilho
+  // automático de propósito: pergunta feita por robô, na hora errada, queima o
+  // canal. Todos são 'marketing' porque não são obrigação de serviço: quem
+  // pediu para não receber divulgação também não quer ser sondada.
+  {
+    slug: 'contato_como_esta_indo',
+    name: 'Como está indo? (check-in geral)',
+    description: 'Pergunta aberta para qualquer cliente: está indo bem, travou em alguma coisa?',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 30,
+    variables: [],
+    title: 'Como está indo por aí?',
+    subject: 'Posso te ajudar em alguma coisa no {{marca}}?',
+    body: escutaBody(`{{saudacao}} Passando só para saber como está indo com o robô.
+
+Está conseguindo usar do jeito que queria? Tem alguma coisa que você tentou fazer e não achou, ou que deu trabalho demais?
+
+Não precisa escrever bonito nem detalhar: uma frase já ajuda muito. Se estiver tudo certo, pode responder só "tá tudo certo" que eu já fico feliz.`),
+  },
+  {
+    slug: 'contato_travou_na_configuracao',
+    name: 'Travou na configuração?',
+    description: 'Para quem criou a conta e não terminou de configurar. Pergunta onde parou.',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 21,
+    variables: [],
+    title: 'Travou em algum passo?',
+    subject: 'Ficou faltando algum passo para o seu robô começar?',
+    body: escutaBody(`{{saudacao}} Vi que a sua conta está criada, mas o robô ainda não começou a trabalhar de verdade.
+
+Isso quase sempre é um passo que ficou pelo meio, e acontece com todo mundo. Me conta em que ponto você parou:
+
+- Não conseguiu conectar o WhatsApp?
+- Ficou em dúvida sobre quais grupos marcar?
+- Empacou nas etiquetas de afiliada das lojas?
+- Foi outra coisa?
+
+Se preferir, a gente faz junto por chamada, na hora que der para você. Leva uns 15 minutos e resolve.`),
+  },
+  {
+    slug: 'contato_duvida_credenciais',
+    name: 'Dúvida nas etiquetas e códigos das lojas',
+    description: 'Para quem está com credencial faltando ou vencida e não recadastrou.',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 21,
+    variables: [],
+    title: 'Dúvida com as lojas?',
+    subject: 'Precisa de ajuda com as etiquetas de afiliada?',
+    body: escutaBody(`{{saudacao}} Reparei que os dados de alguma loja sua estão faltando ou pararam de valer.
+
+Essa é a parte que mais gera dúvida, e é onde a gente mais consegue ajudar. Se você me disser qual loja está te dando trabalho — Mercado Livre, Amazon, Shopee ou Magalu — eu te mando o passo a passo com print, ou a gente faz junto por chamada.
+
+Enquanto isso suas ofertas continuam saindo e a comissão continua sendo sua: o link só sai mais comprido.`),
+  },
+  {
+    slug: 'contato_primeira_semana',
+    name: 'Como foi a primeira semana?',
+    description: 'Para quem acabou de completar os primeiros dias usando o robô.',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 60,
+    variables: [],
+    title: 'Como foi sua primeira semana?',
+    subject: 'Como foi sua primeira semana com o {{marca}}?',
+    body: escutaBody(`{{saudacao}} Você já tem alguns dias de robô rodando. Queria muito saber como está sendo.
+
+Três perguntas rápidas (responde só as que quiser):
+
+1. O que funcionou melhor do que você esperava?
+2. O que te deu trabalho ou te deixou insegura?
+3. Se você pudesse mudar UMA coisa no robô, qual seria?
+
+Sua resposta muda o que a gente constrói em seguida — a maior parte do que existe hoje nasceu de e-mail de cliente igual a este.`),
+  },
+  {
+    slug: 'contato_parou_de_usar',
+    name: 'Parou de usar — o que aconteceu?',
+    description: 'Para quem está com plano ativo mas parou de enviar. Pergunta sem cobrar.',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 30,
+    variables: [],
+    title: 'Aconteceu alguma coisa?',
+    subject: 'Seu robô está parado — posso ajudar?',
+    body: escutaBody(`{{saudacao}} Notei que faz um tempo que o robô não envia nada por aí.
+
+Não é cobrança — pode ser que você tenha decidido dar uma pausa, e tudo bem. Mas se foi alguma coisa que quebrou, ficou confusa ou parou de funcionar, eu quero saber para resolver.
+
+Me conta o que houve? Se for algo do robô, a gente conserta. Se for uma dúvida, a gente responde. Se for só uma pausa, é só ignorar este e-mail.`),
+  },
+  {
+    slug: 'contato_o_que_faltou',
+    name: 'O que faltou? (quem não continuou)',
+    description: 'Para quem não renovou ou deixou o teste acabar. Pergunta o motivo, sem vender.',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 90,
+    variables: [],
+    title: 'O que faltou para você?',
+    subject: 'Me conta o que faltou no {{marca}}?',
+    body: escutaBody(`{{saudacao}} Você conheceu o robô e decidiu não continuar — e está tudo bem.
+
+Só queria te pedir um favor rápido: me conta o que faltou? Pode ser sincera, inclusive se for algo duro de ouvir.
+
+- Não entendeu como usar?
+- Não deu o resultado que você esperava?
+- O preço não fechou?
+- Achou outra ferramenta melhor?
+
+Este e-mail não é para te vender nada. É para a gente melhorar o que ficou faltando.`),
+  },
+  {
+    slug: 'contato_convite_conversa',
+    name: 'Convite para uma conversa rápida',
+    description: 'Convite para uma chamada de 15 minutos para resolver o que estiver travado.',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 45,
+    variables: [
+      { name: 'convite', description: 'Motivo do convite, em uma frase', example: 'te ajudar a deixar o robô rodando redondo' },
+    ],
+    title: 'Vamos conversar 15 minutos?',
+    subject: 'Uma conversa rápida para {{convite}}?',
+    body: escutaBody(`{{saudacao}} Queria te chamar para uma conversa rápida, de uns 15 minutos, para {{convite}}.
+
+É por chamada de WhatsApp, na hora que for melhor para você — inclusive fora do horário comercial. Não tem apresentação, não tem venda: é você mostrando onde está travando e a gente resolvendo junto.
+
+Topa? Me responde com dois horários que funcionam para você.`),
+  },
+  {
+    slug: 'contato_pesquisa_rapida',
+    name: 'Pesquisa de uma pergunta só',
+    description: 'Uma pergunta única para descobrir a maior dificuldade da base.',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 90,
+    variables: [
+      { name: 'pergunta', description: 'A pergunta única desta rodada', example: 'qual é hoje a parte mais chata do seu dia divulgando ofertas?' },
+    ],
+    title: 'Uma pergunta só',
+    subject: 'Uma pergunta rápida (responde em 30 segundos)',
+    body: escutaBody(`{{saudacao}} Uma pergunta só, e prometo que é rápida:
+
+**{{pergunta}}**
+
+Pode responder em uma linha, do jeito que vier à cabeça. Não tem resposta errada, e eu leio todas.`),
   },
 ]
 
