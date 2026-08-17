@@ -37,9 +37,15 @@ AFFILIATE_URL_FROM_PREFIX = 'affiliate_koc_'
 
 ---
 
-## `resolveSheinShortLink(url, { timeoutMs = 8000, maxHops = 6, fetchImpl = globalThis.fetch }) → Promise<string>`
+## `resolveSheinShortLink(url, { totalTimeoutMs = 8000, maxHops = 6, fetchImpl = globalThis.fetch }) → Promise<string>`
 
 Segue redirects **manualmente**, com cookie jar, e devolve a URL do hop mais informativo.
+
+`totalTimeoutMs` é orçamento **da cadeia inteira**, não por hop (T066). Prazo por
+hop somava até 48s de pior caso, acima dos 25s de `MSG_QUEUE_TIMEOUT_MS` — a
+mensagem inteira morreria como `timeout:incoming` em vez de o link falhar
+honestamente e a oferta seguir. O corpo é lido por `readBodyLimited`, com teto de
+512KB (mesmo valor da Shopee), devolvendo o que coletou.
 
 Ordem de decisão por hop (não reordenar):
 
