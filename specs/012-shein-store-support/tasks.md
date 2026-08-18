@@ -623,7 +623,7 @@ só trava quando o `fetchImpl` injetado não propaga o `AbortSignal` para a
 leitura do corpo. O `fetch` do Node propaga, e com ele o abort ocorre no prazo.
 Não é alcançável em produção.
 
-- [ ] T075 **O painel pede um link que o cadastro recusa.** A instrução diz
+- [X] T075 **O painel pede um link que o cadastro recusa.** A instrução diz
   "use o Gerador de Link para gerar o seu link de afiliada. Cole aqui o link
   inteiro" e o rótulo do campo é "Seu link de afiliada da SHEIN (ou seu número
   de afiliada)" (`dashboard/lib/painel/affiliatePlatforms.js:89,97`). Mas
@@ -650,7 +650,7 @@ Não é alcançável em produção.
   não deu para conferir agora e que ela pode colar o número.
   Cobrir com teste de rota (fetch injetado) e manter o vocabulário leigo.
 
-- [ ] T076 `validateCredentialData('shein', ...)` aceita número com **zero à
+- [X] T076 `validateCredentialData('shein', ...)` aceita número com **zero à
   esquerda** (`0001150365562` → configurado) e **de comprimento arbitrário**
   (60 dígitos → configurado). O primeiro gera `url_from=affiliate_koc_000...`,
   que não corresponde à conta real — comissão perdida em silêncio, sem nada na

@@ -120,3 +120,52 @@ test('SHEIN: campo vazio é "faltou preencher", não recusa de formato', () => {
   assert.deepEqual(v.missing, ['tag'])
   assert.match(getCredentialSaveMessage(v), /faltou preencher/i)
 })
+
+// ---------------------------------------------------------------------------
+// T076 — zero à esquerda não pode virar identificador diferente da conta
+// real, e comprimento fora de faixa plausível precisa ser recusado (hoje os
+// dois "passam como configurados" e geram um url_from que não corresponde à
+// conta da cliente, sem nada avisar na tela).
+// ---------------------------------------------------------------------------
+
+test('SHEIN: zero à esquerda é normalizado antes de salvar (não é a mesma conta com padding)', () => {
+  const out = sanitizeCredentialBody('shein', { tag: '0001150365562' })
+  assert.equal(out.tag, '1150365562')
+  const v = validateCredentialData('shein', out)
+  assert.equal(v.configured, true)
+})
+
+test('SHEIN: zero à esquerda extraído de um link de afiliada também é normalizado', () => {
+  const url = 'https://m.shein.com/br/ark/default?koc_id=0001150365562&url_from=affiliate_koc_0001150365562'
+  const out = sanitizeCredentialBody('shein', { tag: url })
+  assert.equal(out.tag, '1150365562')
+})
+
+test('SHEIN: número de comprimento arbitrário (60 dígitos) é recusado', () => {
+  const sessentaDigitos = '1'.repeat(60)
+  const out = sanitizeCredentialBody('shein', { tag: sessentaDigitos })
+  const v = validateCredentialData('shein', out)
+  assert.equal(v.configured, false)
+  assert.deepEqual(v.missing, ['tag'])
+  assert.match(getCredentialSaveMessage(v), /n[uú]mero.*n[ãa]o parece/i)
+})
+
+test('SHEIN: número curto demais (abaixo da faixa plausível) é recusado', () => {
+  const v = validateCredentialData('shein', { tag: '42' })
+  assert.equal(v.configured, false)
+  assert.match(getCredentialSaveMessage(v), /n[uú]mero.*n[ãa]o parece/i)
+})
+
+test('SHEIN: número de 10 dígitos (comprimento real observado) continua aceito', () => {
+  const v = validateCredentialData('shein', { tag: '1150365562' })
+  assert.equal(v.configured, true)
+  assert.deepEqual(v.missing, [])
+})
+
+test('SHEIN: zero à esquerda que resulta em número fora de faixa continua recusado (não escapa pela normalização)', () => {
+  // "007" normaliza para "7" — abaixo da faixa plausível, deve recusar do mesmo jeito.
+  const out = sanitizeCredentialBody('shein', { tag: '007' })
+  assert.equal(out.tag, '7')
+  const v = validateCredentialData('shein', out)
+  assert.equal(v.configured, false)
+})
