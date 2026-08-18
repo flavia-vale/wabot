@@ -312,6 +312,96 @@ test('T077: continua recusando identificador de terceiro no caminho', async () =
   assert.equal(await convert(url, { tag: '1150365562' }), null)
 })
 
+// ---------------------------------------------------------------------------
+// T078: formato solto (`koc<separador?><dígitos longos>`) num parâmetro que
+// não bate nem a regra (a) `affiliate_koc_<dígitos>` nem a regra (b) (nome do
+// parâmetro contendo "koc") vazava o identificador do terceiro — ex.:
+// `ad_type=KOC<id>` (ad_type é isento da regra por nome, T063, mas isso não
+// isenta o VALOR). A exceção de `ad_type` em si não é a causa (inalcançável
+// pela regra por nome) — a lacuna é o formato solto em qualquer parâmetro.
+// ---------------------------------------------------------------------------
+
+test('T078: recusa identificador de terceiro em formato solto dentro de ad_type', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&ad_type=KOC5849195695'
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T078: recusa identificador de terceiro em formato solto num parâmetro de nome desconhecido', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&promo=KOC5849195695'
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T078: não regride — Kocotree no slug continua convertendo normalmente', async () => {
+  const url = 'https://br.shein.com/Kocotree-Mochila-Infantil-p-1.html?goods_id=111'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+})
+
+test('T078: não regride — koch no slug continua convertendo normalmente', async () => {
+  const url = 'https://br.shein.com/koch-blusa-p-2.html?goods_id=222'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+})
+
+test('T078: não regride — campaign=kocobeauty continua convertendo normalmente', async () => {
+  const url = 'https://m.shein.com/br/ark/default?scene=1&campaign=kocobeauty&goods_id=333'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(new URL(result.url).searchParams.get('campaign'), 'kocobeauty')
+})
+
+test('T078: não regride — ad_type=KOC legítimo (sem dígitos) continua convertendo normalmente', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&ad_type=KOC&ad_type=KOC'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+})
+
+test('T078: não regride — ad_type=CUSTOM preservado (T063) continua convertendo normalmente', async () => {
+  const url = 'https://m.shein.com/br/ark/default?goods_id=485735309&campaign=summer-sale&ad_type=CUSTOM'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(new URL(result.url).searchParams.get('ad_type'), 'CUSTOM')
+})
+
+// ---------------------------------------------------------------------------
+// T079: a decodificação da rede de segurança era uma passada única
+// (`decodeOnce`), então um identificador de terceiro com encoding DUPLO
+// (`%255F` → `%5F` → `_`) escapava da checagem. Agora decodifica
+// repetidamente até estabilizar, com teto de iterações e tolerância a
+// sequência inválida (nunca lança).
+// ---------------------------------------------------------------------------
+
+test('T079: recusa identificador de terceiro com encoding duplo (%255F)', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&next=affiliate%255Fkoc%255F5849195695'
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T079: não regride — encoding simples (%5F) continua recusando', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&next=affiliate%5Fkoc%5F5849195695'
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T079: não regride — encoding simples (%3D) continua recusando', async () => {
+  const nested = 'https://x.com/?url_from=affiliate_koc_5849195695'
+  const url = `https://br.shein.com/a-p-1.html?goods_id=1&next=${encodeURIComponent(nested)}`
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T079: entrada com sequência de encoding inválida (%zz) não lança e segue o caminho normal', async () => {
+  const url = 'https://br.shein.com/vestido-floral-p-485735309.html?goods_id=1&weird=%zz'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+})
+
+test('T079: não regride — link legítimo do T077 continua convertendo após a decodificação repetida', async () => {
+  const url = 'https://br.shein.com/Kocotree-Mochila-Infantil-p-1.html?goods_id=111'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+})
+
 test('garante PROGRAM_PARAMS ausentes no destino', async () => {
   const url = 'https://br.shein.com/vestido-floral-p-485735309.html'
   const result = await convert(url, { tag: '12345' })

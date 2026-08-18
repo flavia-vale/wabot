@@ -364,20 +364,52 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {})
     //
     // Qualquer identificador achado que não seja o da própria cliente →
     // recusa (preferimos recusar a tentar limpar, mesma filosofia do T074).
-    const decodeOnce = (str) => {
-      try {
-        return decodeURIComponent(String(str))
-      } catch {
-        return String(str)
+    //
+    // T079: decodificação ITERATIVA (não mais uma passada única). Um
+    // identificador de terceiro pode chegar com encoding duplicado
+    // (`%255F` → `%5F` → `_`), e uma única `decodeURIComponent` não
+    // desmancha as duas camadas. Decodifica até o valor estabilizar (ou até
+    // o teto de iterações, para não abrir trabalho ilimitado em entrada
+    // hostil); uma sequência inválida (`%zz`) para o laço e usa o último
+    // valor válido, sem nunca lançar.
+    const MAX_KOC_DECODE_ITERATIONS = 5
+    const decodeRepeated = (str) => {
+      let current = String(str)
+      for (let i = 0; i < MAX_KOC_DECODE_ITERATIONS; i++) {
+        let next
+        try {
+          next = decodeURIComponent(current)
+        } catch {
+          break
+        }
+        if (next === current) break
+        current = next
       }
+      return current
     }
-    for (const match of decodeOnce(finalUrl).matchAll(/affiliate_koc_(\d+)/gi)) {
+    // T078: além do padrão exato `affiliate_koc_<dígitos>` (regra a) e do
+    // valor de parâmetro por NOME contendo "koc" (regra b), um identificador
+    // de terceiro em FORMATO SOLTO (`koc`, separador opcional, dígitos
+    // longos — o id real da SHEIN tem ~10) pode aparecer dentro do valor de
+    // QUALQUER parâmetro preservado, com um nome que não bate nem (a) nem
+    // (b) — ex.: `ad_type=KOC5849195695` (ad_type é isento da regra por
+    // nome, T063, mas isso não isenta o VALOR de carregar um id de
+    // terceiro). Regra (c) varre a URL final decodificada por esse formato,
+    // sem depender do nome do parâmetro. Ela NÃO confunde texto livre
+    // legítimo porque exige dígitos longos GRUDADOS em "koc" (com no máximo
+    // um separador): "Kocotree"/"koch"/"kocobeauty" têm letra logo após o
+    // "koc", não dígito, e por isso nunca casam.
+    const decodedFinalUrl = decodeRepeated(finalUrl)
+    for (const match of decodedFinalUrl.matchAll(/affiliate_koc_(\d+)/gi)) {
+      if (match[1] !== tag) return null
+    }
+    for (const match of decodedFinalUrl.matchAll(/koc[-_]?(\d{6,})/gi)) {
       if (match[1] !== tag) return null
     }
     const EXEMPT_KOC_PARAMS = new Set(['koc_id', 'url_from', 'ad_type'])
     for (const [key, value] of u.searchParams) {
       if (EXEMPT_KOC_PARAMS.has(key.toLowerCase())) continue
-      if (/koc/i.test(key) && decodeOnce(value) !== tag) return null
+      if (/koc/i.test(key) && decodeRepeated(value) !== tag) return null
     }
 
     const goodsId = extractSheinGoodsId(finalUrl)
