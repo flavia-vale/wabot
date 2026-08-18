@@ -1,4 +1,5 @@
 import { decryptCredential } from './credentialCrypto.js'
+import { extractSheinAffiliateId } from './converters/shein.js'
 
 const PLATFORM_LABELS = {
   shopee: 'Shopee',
@@ -98,13 +99,33 @@ function getFormatWarnings(platform, data = {}) {
     if (tag && tag.length < 3) warnings.push('A tag do Magazine Luiza parece curta. Confira se copiou a tag completa.')
   }
 
-  if (platform === 'shein') {
-    const tag = getString(data, 'tag')
-    if (tag && tag.length < 3) warnings.push('O número de afiliada da SHEIN parece curto. Confira se copiou o número completo.')
-  }
+  // Nota: a checagem de comprimento do número da SHEIN é recusa DURA (não
+  // aviso leve) — ver SHEIN_TAG_MIN_DIGITS/SHEIN_TAG_MAX_DIGITS e o bloco
+  // `platform === 'shein'` em validateCredentialData, T076.
 
   return warnings
 }
+
+// T076: remove zero à esquerda (a SHEIN não usa padding no número de
+// afiliada — `0001150365562` e `1150365562` não são a mesma coisa para o
+// parâmetro `url_from` que o conversor monta). Preserva um único "0" caso o
+// texto seja só zeros (caso patológico, cai na recusa de comprimento a
+// seguir de qualquer forma).
+function normalizeSheinDigits(digits) {
+  const stripped = digits.replace(/^0+/, '')
+  return stripped || '0'
+}
+
+// Faixa plausível de comprimento do número de afiliada da SHEIN, depois de
+// normalizado (T076). Os números reais observados na integração têm 10
+// dígitos (ver contracts/credential-shein.md). Não travamos em exatamente 10
+// — variações de conta legítimas podem existir — mas damos uma folga
+// generosa (6 a 15) que ainda recusa o que claramente não é um identificador
+// real: nem 1-2 dígitos, nem uma sequência de dezenas de dígitos (60 dígitos,
+// por exemplo, não corresponde a nenhuma conta e geraria comissão perdida em
+// silêncio, do mesmo jeito que o zero à esquerda).
+export const SHEIN_TAG_MIN_DIGITS = 6
+export const SHEIN_TAG_MAX_DIGITS = 15
 
 // Recusa dura da SHEIN: `sanitizeCredentialBody` só normaliza o que sabe
 // interpretar (link de afiliada com identificador visível, ou o número puro).
@@ -115,7 +136,19 @@ function getFormatWarnings(platform, data = {}) {
 // ramo). Mensagens em linguagem leiga (FR-007) — nenhum jargão técnico.
 function sheinFormatWarnings(tag) {
   if (!tag) return []
-  if (/^\d+$/.test(tag)) return []
+  if (/^\d+$/.test(tag)) {
+    // T076: comprimento fora da faixa plausível — zero à esquerda já foi
+    // removido por sanitizeCredentialBody antes de chegar aqui, então um
+    // número curto demais ou longo demais não é erro de digitação de zeros,
+    // é um número que não parece ser o de afiliada de verdade.
+    if (tag.length < SHEIN_TAG_MIN_DIGITS || tag.length > SHEIN_TAG_MAX_DIGITS) {
+      return [
+        'Esse número não parece ser o número de afiliada da SHEIN. Confira se colou o número completo, ' +
+        'sem espaços ou caracteres a mais — ou copie de novo no painel de afiliada da SHEIN.',
+      ]
+    }
+    return []
+  }
   if (/GM7|[?&](?:shc|link)=/i.test(tag)) {
     return [
       'Esse link é do botão de compartilhar do aplicativo da SHEIN, e ele não serve para cadastro. ' +
@@ -173,7 +206,8 @@ export function validateCredentialData(platform, data = {}) {
   let sheinRecusaWarnings = []
   if (platform === 'shein') {
     const tag = getString(data, 'tag')
-    if (tag && !/^\d+$/.test(tag)) {
+    const isPlausibleNumber = /^\d+$/.test(tag) && tag.length >= SHEIN_TAG_MIN_DIGITS && tag.length <= SHEIN_TAG_MAX_DIGITS
+    if (tag && !isPlausibleNumber) {
       if (!missing.includes('tag')) missing.push('tag')
       sheinRecusaWarnings = sheinFormatWarnings(tag)
     }
@@ -285,17 +319,21 @@ export function sanitizeCredentialBody(platform, body = {}) {
   // Normalização é OFFLINE (só parsing de URL, sem rede) — um oneLink que
   // ainda não expõe o identificador na URL, o link do botão de compartilhar
   // (GM7/shc/link), ou texto qualquer, ficam como vieram e são reprovados na
-  // validação (`validateCredentialData`), que ensina onde pegar o link certo.
+  // validação (`validateCredentialData`), que ensina onde pegar o link certo
+  // (ou, na rota de save, resolvidos pela rede — ver T075 em
+  // src/api/routes/credentials.js).
   if (platform === 'shein') {
     const raw = typeof body.tag === 'string' ? body.tag.trim() : ''
-    if (!raw || /^\d+$/.test(raw)) return { ...body, tag: raw }
+    if (!raw) return { ...body, tag: raw }
+    // T076: zero à esquerda não corresponde à conta real (a SHEIN não usa
+    // padding) — normaliza antes de validar comprimento/salvar, para
+    // `0001150365562` virar `1150365562` em vez de gerar um identificador que
+    // nunca vai bater com a conta da cliente.
+    if (/^\d+$/.test(raw)) return { ...body, tag: normalizeSheinDigits(raw) }
     try {
       const u = new URL(raw)
-      const kocId = u.searchParams.get('koc_id')
-      if (kocId && /^\d+$/.test(kocId)) return { ...body, tag: kocId }
-      const urlFrom = u.searchParams.get('url_from') || ''
-      const fromKoc = urlFrom.match(/^affiliate_koc_(\d+)$/)
-      if (fromKoc) return { ...body, tag: fromKoc[1] }
+      const extracted = extractSheinAffiliateId(u.toString())
+      if (extracted) return { ...body, tag: normalizeSheinDigits(extracted) }
     } catch {
       // não é URL — mantém como veio, cai na recusa da validação
     }

@@ -92,6 +92,27 @@ export function isSheinShortLink(url) {
   return /^https?:\/\/(?:[a-z0-9-]+\.)*(?:onelink\.shein\.com|shein\.top)\//i.test(String(url || ''))
 }
 
+// Extrai o número de afiliada de uma URL da SHEIN que já expõe o identificador
+// (via `koc_id=<n>` ou `url_from=affiliate_koc_<n>`). Mesma regra usada
+// offline por `sanitizeCredentialBody` (src/credentialHealth.js) para um link
+// de afiliada já expandido, e reusada por T075 (rota de save) depois de
+// resolver um oneLink pela rede — um único lugar para as duas chamadas não
+// divergirem. Devolve `null` quando a URL é inválida ou não expõe nenhum dos
+// dois formatos.
+export function extractSheinAffiliateId(url) {
+  try {
+    const u = new URL(String(url))
+    const kocId = u.searchParams.get('koc_id')
+    if (kocId && /^\d+$/.test(kocId)) return kocId
+    const urlFrom = u.searchParams.get('url_from') || ''
+    const fromKoc = urlFrom.match(/^affiliate_koc_(\d+)$/)
+    if (fromKoc) return fromKoc[1]
+    return null
+  } catch {
+    return null
+  }
+}
+
 export function extractSheinGoodsId(url) {
   const str = String(url || '')
   return str.match(SHEIN_PRODUCT_RE)?.[1] || str.match(SHEIN_GOODS_ID_RE)?.[1] || null
