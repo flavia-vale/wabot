@@ -657,3 +657,27 @@ Não é alcançável em produção.
   tela. Normalizar removendo zeros à esquerda e recusar comprimento fora de uma
   faixa plausível (os números reais observados têm 10 dígitos), com mensagem
   leiga. Cobrir com teste.
+
+### Eixo 6 (interação com o resto do sistema) — sondado, sem achado
+
+- As quatro lojas antigas continuam sendo detectadas (Mercado Livre, Amazon,
+  Shopee, Magalu), com o link no formato real de cada uma.
+- O sanitizador de mensagem **preserva** o link de SHEIN — que era o problema
+  original desta feature (link apagado da mensagem espelhada).
+- `resolveLinkKind` classifica certo: `goods_id` → `product`, `/ark/default`
+  sem produto → `coupon`. Banner de marca registrado para a loja.
+- **Conversão é canonizante, e isso faz a dedup existente funcionar de graça:**
+  o mesmo produto chegando por dois afiliados de origem diferentes (oneLinks
+  distintos, `koc_id` distintos, `requestId`/`behaviorId` distintos) produz
+  saída **byte a byte idêntica**, então a dedup por link do worker reconhece a
+  repetição sem precisar de código novo.
+- Verificado o risco inverso (canonização engolir oferta legítima): duas
+  campanhas diferentes e dois produtos diferentes continuam gerando endereços
+  distintos. Nenhuma oferta legítima vira duplicata.
+
+Observação sem task: landing `/ark/default` que chega **com** os parâmetros do
+programa mas **sem** `goods_id` converte como cupom em vez de ser recusada pela
+regra do T062. Não é vazamento nem link quebrado — é uma página de campanha real
+da SHEIN, e só é alcançável quando a cadeia de fato chegou nela (resolução que
+falha devolve o short link, que é recusado). Fica registrado como comportamento
+conhecido, não como defeito.
