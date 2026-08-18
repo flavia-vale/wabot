@@ -686,7 +686,7 @@ conhecido, não como defeito.
 
 ## Phase 14: Convergence
 
-- [ ] T077 Estreitar a **rede de segurança do T074** em `convert()`
+- [X] T077 Estreitar a **rede de segurança do T074** em `convert()`
   (`src/converters/shein.js`) para não recusar link legítimo da SHEIN per FR-012 /
   US2-AC1 (contradicts). Hoje a checagem conta ocorrências da substring `koc`
   (case-insensitive) na **URL final inteira** — caminho, nomes e valores de todos os
