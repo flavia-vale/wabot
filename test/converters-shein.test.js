@@ -187,6 +187,73 @@ test('T064: shc/link vazios (?shc=&link=) também são recusados (presença, nã
   assert.equal(await convert(url, { tag: '12345' }), null)
 })
 
+// ---------------------------------------------------------------------------
+// Phase 12: Caça adversarial (sondagem manual). Identificador de OUTRO
+// afiliado chega à saída em seis formas diferentes (T072-T074).
+// ---------------------------------------------------------------------------
+
+test('T072: remoção de url_from é insensível a maiúsculas (URL_FROM sobrevivia)', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&URL_FROM=affiliate_koc_5849195695'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  const out = new URL(result.url)
+  assert.equal(out.searchParams.has('URL_FROM'), false)
+  assert.equal(out.searchParams.get('url_from'), 'affiliate_koc_1150365562')
+  assert.equal(result.url.includes('5849195695'), false)
+})
+
+test('T072: remoção de koc_id é insensível a maiúsculas (KOC_ID sobrevivia)', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&KOC_ID=5849195695'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  const out = new URL(result.url)
+  assert.equal(out.searchParams.has('KOC_ID'), false)
+  assert.equal(out.searchParams.get('koc_id'), '1150365562')
+  assert.equal(result.url.includes('5849195695'), false)
+})
+
+test('T073: fragmento é descartado na saída de convert()', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1#url_from=affiliate_koc_5849195695'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(result.url.includes('#'), false)
+  assert.equal(result.url.includes('5849195695'), false)
+})
+
+test('T074: parâmetro de nome desconhecido (partner_koc) com identificador de terceiro → null', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&partner_koc=5849195695'
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T074: identificador de terceiro aninhado/URL-encoded (next=...url_from=affiliate_koc_<id>) → null', async () => {
+  const nested = 'https://x.com/?url_from=affiliate_koc_5849195695'
+  const url = `https://br.shein.com/a-p-1.html?goods_id=1&next=${encodeURIComponent(nested)}`
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T074: identificador de terceiro no caminho (/affiliate_koc_<id>/) → null', async () => {
+  const url = 'https://br.shein.com/affiliate_koc_5849195695/a-p-1.html?goods_id=1'
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T074: não regride link legítimo — koc_id e url_from da própria cliente aparecem 2x sem disparar a rede de segurança', async () => {
+  const url = 'https://br.shein.com/vestido-floral-p-485735309.html'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+  const out = new URL(result.url)
+  assert.equal(out.searchParams.get('koc_id'), '1150365562')
+  assert.equal(out.searchParams.get('url_from'), 'affiliate_koc_1150365562')
+})
+
+test('T074: não regride ad_type customizado do link de origem (T063) mesmo contendo letras', async () => {
+  const url =
+    'https://m.shein.com/br/ark/default?goods_id=485735309&campaign=summer-sale&ad_type=CUSTOM'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(new URL(result.url).searchParams.get('ad_type'), 'CUSTOM')
+})
+
 test('garante PROGRAM_PARAMS ausentes no destino', async () => {
   const url = 'https://br.shein.com/vestido-floral-p-485735309.html'
   const result = await convert(url, { tag: '12345' })

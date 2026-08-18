@@ -119,10 +119,17 @@ export function hasOpaqueShareToken(url) {
 export function stripSheinAffiliateTracking(url) {
   try {
     const u = new URL(String(url))
-    for (const key of THIRD_PARTY_PARAMS) u.searchParams.delete(key)
+    const thirdPartyLower = new Set(THIRD_PARTY_PARAMS.map((key) => key.toLowerCase()))
     for (const key of [...u.searchParams.keys()]) {
-      if (/^utm_/i.test(key)) u.searchParams.delete(key)
+      if (thirdPartyLower.has(key.toLowerCase()) || /^utm_/i.test(key)) {
+        u.searchParams.delete(key)
+      }
     }
+    // T073: fragmento nunca carrega informação de destino que a gente
+    // precise, e a SHEIN roda no navegador (pode ler `location.hash`) — não
+    // vale o risco de deixar um identificador de terceiro passar escondido
+    // no fragmento até o servidor de análise (mesmo sem ir ao servidor HTTP).
+    u.hash = ''
     return u.toString()
   } catch {
     return String(url)
@@ -308,6 +315,23 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {})
     }
 
     const finalUrl = u.toString()
+
+    // T074: rede de segurança final. Mesmo que um parâmetro de nome
+    // desconhecido, aninhado/URL-encoded ou colado no caminho escape de
+    // THIRD_PARTY_PARAMS, o formato do programa de afiliados da SHEIN sempre
+    // carrega o marcador "koc" (Key Opinion Consumer — ver
+    // AFFILIATE_URL_FROM_PREFIX). As únicas ocorrências LEGÍTIMAS são as que
+    // nós mesmos escrevemos (`koc_id=<tag>`, `url_from=affiliate_koc_<tag>`)
+    // mais o que já veio do próprio link de origem em `ad_type` (T063:
+    // preservado como veio, pode ou não conter "KOC"). Contamos as
+    // ocorrências reais contra o esperado; qualquer ocorrência a mais é
+    // identificador de outro afiliado, seja qual for o nome do parâmetro —
+    // preferimos recusar a tentar limpar.
+    const countKoc = (str) => (String(str).match(/koc/gi) || []).length
+    const expectedKocOccurrences =
+      countKoc(`koc_id=${tag}`) + countKoc(`${AFFILIATE_URL_FROM_PREFIX}${tag}`) + countKoc(u.searchParams.get('ad_type'))
+    if (countKoc(finalUrl) > expectedKocOccurrences) return null
+
     const goodsId = extractSheinGoodsId(finalUrl)
     // Marca de "isto deveria ser um produto" mais frouxa que SHEIN_PRODUCT_RE
     // (que exige o id em dígitos): o marcador `-p-` no caminho aparece em toda
