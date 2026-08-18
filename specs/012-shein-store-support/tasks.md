@@ -725,3 +725,66 @@ conhecido, não como defeito.
   no slug converte (`linkKind: 'product'`), cupom com `koc` no valor de `campaign`
   converte (`linkKind: 'coupon'`), `ad_type` repetido na origem converte — e os três
   casos de vazamento continuam `null`. Todos sem rede (`fetchImpl` injetado).
+
+---
+
+## Phase 15: Convergence
+
+- [ ] T078 Fechar o vazamento de identificador de terceiro em **formato solto** (`KOC<dígitos>`)
+  na rede de segurança de `convert()` (`src/converters/shein.js`) per FR-013 / FR-015 (partial).
+  Hoje a regra (b) só inspeciona o valor de parâmetros cujo **nome** contém `koc`, e a regra (a)
+  só casa `affiliate_koc_<dígitos>`. Um identificador de terceiro escrito em qualquer outro
+  parâmetro preservado passa e é publicado. Reproduzido executando o código desta branch, sem
+  rede (`fetchImpl` que rejeita) e `tag: '1150365562'`:
+
+  ```
+  convert('https://br.shein.com/a-p-1.html?goods_id=1&ad_type=KOC5849195695')
+    → publica  ...&ad_type=KOC5849195695&koc_id=1150365562&url_from=affiliate_koc_1150365562...
+  ```
+
+  Nota de diagnóstico já apurada (não repetir a investigação): a exceção de `ad_type` no conjunto
+  `EXEMPT_KOC_PARAMS` **não** é a causa — a chave `ad_type` não casa `/koc/i`, então a exceção é
+  inalcançável e remover ou manter ela não muda nada. A lacuna é da regra por nome de parâmetro,
+  e vale para qualquer parâmetro preservado, não só `ad_type`.
+
+  Correção: acrescentar uma checagem por **formato de identificador** — `koc`, separador opcional
+  (`_`/`-`/nada), seguido de uma sequência longa de dígitos (o id real da SHEIN tem ~10) — aplicada
+  ao caminho e aos valores dos parâmetros da URL final, recusando quando os dígitos não forem os da
+  própria cliente. Manter a filosofia do T077: casar formato de identificador, nunca a substring
+  solta `koc`, e preferir recusar a tentar limpar.
+
+  Não regredir (os falsos positivos que o T077 fechou precisam continuar convertendo): `Kocotree`
+  e `koch` no slug, `campaign=kocobeauty`, `ad_type=KOC` legítimo (sem dígitos) e `ad_type=CUSTOM`
+  preservado do T063; e os três vazamentos do T074 (`partner_koc=<terceiro>`, aninhado
+  URL-encoded, no caminho) continuam `null`.
+
+  Cobrir em `test/converters-shein.test.js`, no mesmo bloco do T074/T077: `ad_type=KOC<id-de-terceiro>`
+  → `null`; identificador em formato solto num parâmetro de nome desconhecido → `null`; e os casos
+  legítimos acima convertendo normalmente. Todos sem rede (`fetchImpl` injetado).
+
+- [ ] T079 Tornar a decodificação da rede de segurança de `convert()` (`src/converters/shein.js`)
+  **iterativa e limitada**, em vez de uma passada única, per FR-013 / FR-015 (partial). O helper
+  `decodeOnce` decodifica exatamente uma vez, então um identificador de terceiro com duplo encoding
+  atravessa a checagem. Reproduzido nas mesmas condições do T078:
+
+  ```
+  convert('https://br.shein.com/a-p-1.html?goods_id=1&next=affiliate%255Fkoc%255F5849195695')
+    → publica o parâmetro com o identificador do terceiro intacto
+  ```
+
+  Encoding simples continua sendo pego corretamente (`next=affiliate%5Fkoc%5F...` e
+  `next=...url_from%3Daffiliate_koc_...` já retornam `null`) — o buraco é só a segunda camada.
+
+  Correção: decodificar repetidamente até o valor estabilizar, com **teto pequeno de iterações**
+  (evitar trabalho ilimitado em entrada hostil) e tolerância a sequência inválida (uma decodificação
+  que lança deve parar o laço e usar o último valor válido, nunca derrubar a conversão). Aplicar a
+  mesma normalização aos dois lugares que hoje chamam `decodeOnce` (a varredura da URL final e o
+  valor de cada parâmetro), e ao formato novo introduzido pelo T078.
+
+  Não regredir: nenhum dos links legítimos do T077 pode passar a ser recusado pela decodificação
+  extra — a decodificação repetida não pode transformar slug/campanha de texto livre em falso
+  positivo.
+
+  Cobrir em `test/converters-shein.test.js`: `%255F` (duplo encoding) → `null`; `%5F` e `%3D`
+  (encoding simples) continuam `null`; entrada com `%` inválido (`%zz`) não lança e segue o
+  caminho normal de decisão; e os casos legítimos do T077 continuam convertendo. Todos sem rede.
