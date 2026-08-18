@@ -254,6 +254,64 @@ test('T074: não regride ad_type customizado do link de origem (T063) mesmo cont
   assert.equal(new URL(result.url).searchParams.get('ad_type'), 'CUSTOM')
 })
 
+// ---------------------------------------------------------------------------
+// T077: a rede de segurança do T074 (substring solta "koc" na URL inteira)
+// recusava oferta legítima em silêncio — marca real da SHEIN no slug, nome
+// de campanha vindo da origem. Corrigido para casar o FORMATO do
+// identificador (`affiliate_koc_<dígitos>` e nome de parâmetro contendo
+// "koc"), não a substring solta. Estes casos precisam CONVERTER.
+// ---------------------------------------------------------------------------
+
+test('T077: produto com marca "Kocotree" (koc) no slug converte normalmente', async () => {
+  const url = 'https://br.shein.com/Kocotree-Mochila-Infantil-p-1.html?goods_id=111'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+  const out = new URL(result.url)
+  assert.equal(out.searchParams.get('koc_id'), '1150365562')
+  assert.equal(out.searchParams.get('url_from'), 'affiliate_koc_1150365562')
+})
+
+test('T077: produto com "koch" no slug converte normalmente', async () => {
+  const url = 'https://br.shein.com/koch-blusa-p-2.html?goods_id=222'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+})
+
+test('T077: cupom com "koc" no valor de campaign (kocobeauty) converte normalmente', async () => {
+  const url = 'https://m.shein.com/br/ark/default?scene=1&campaign=kocobeauty&goods_id=333'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+  assert.equal(new URL(result.url).searchParams.get('campaign'), 'kocobeauty')
+})
+
+test('T077: ad_type=KOC repetido na origem converte normalmente', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&ad_type=KOC&ad_type=KOC'
+  const result = await convert(url, { tag: '1150365562' })
+  assert.ok(result)
+})
+
+// Não regredir: os três vazamentos que o T074 fechou continuam recusados
+// pela checagem por formato/parâmetro.
+
+test('T077: continua recusando parâmetro de nome desconhecido (partner_koc) com id de terceiro', async () => {
+  const url = 'https://br.shein.com/a-p-1.html?goods_id=1&partner_koc=5849195695'
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T077: continua recusando identificador de terceiro aninhado/URL-encoded', async () => {
+  const nested = 'https://x.com/?url_from=affiliate_koc_5849195695'
+  const url = `https://br.shein.com/a-p-1.html?goods_id=1&next=${encodeURIComponent(nested)}`
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
+test('T077: continua recusando identificador de terceiro no caminho', async () => {
+  const url = 'https://br.shein.com/affiliate_koc_5849195695/a-p-1.html?goods_id=1'
+  assert.equal(await convert(url, { tag: '1150365562' }), null)
+})
+
 test('garante PROGRAM_PARAMS ausentes no destino', async () => {
   const url = 'https://br.shein.com/vestido-floral-p-485735309.html'
   const result = await convert(url, { tag: '12345' })

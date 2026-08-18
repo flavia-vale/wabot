@@ -337,21 +337,48 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {})
 
     const finalUrl = u.toString()
 
-    // T074: rede de segurança final. Mesmo que um parâmetro de nome
-    // desconhecido, aninhado/URL-encoded ou colado no caminho escape de
-    // THIRD_PARTY_PARAMS, o formato do programa de afiliados da SHEIN sempre
-    // carrega o marcador "koc" (Key Opinion Consumer — ver
-    // AFFILIATE_URL_FROM_PREFIX). As únicas ocorrências LEGÍTIMAS são as que
-    // nós mesmos escrevemos (`koc_id=<tag>`, `url_from=affiliate_koc_<tag>`)
-    // mais o que já veio do próprio link de origem em `ad_type` (T063:
-    // preservado como veio, pode ou não conter "KOC"). Contamos as
-    // ocorrências reais contra o esperado; qualquer ocorrência a mais é
-    // identificador de outro afiliado, seja qual for o nome do parâmetro —
-    // preferimos recusar a tentar limpar.
-    const countKoc = (str) => (String(str).match(/koc/gi) || []).length
-    const expectedKocOccurrences =
-      countKoc(`koc_id=${tag}`) + countKoc(`${AFFILIATE_URL_FROM_PREFIX}${tag}`) + countKoc(u.searchParams.get('ad_type'))
-    if (countKoc(finalUrl) > expectedKocOccurrences) return null
+    // T077: rede de segurança final. O T074 contava toda ocorrência da
+    // substring solta "koc" (case-insensitive) na URL final INTEIRA —
+    // caminho incluso — contra um esperado de três. Isso estourava com
+    // texto livre absolutamente legítimo que a gente não controla: o slug
+    // da SHEIN é o nome do produto (`Kocotree-Mochila-Infantil`, marca real
+    // da loja; `koch-blusa`) e o valor de `campaign` vem da origem
+    // (`kocobeauty`) — nenhum dos dois é identificador de afiliado, mas
+    // ambos contêm "koc" e faziam a oferta ser descartada em silêncio
+    // (nada publicado, comissão perdida, sem nada no log). Hoje casamos o
+    // FORMATO do identificador de verdade, não a substring solta:
+    //
+    //   (a) o padrão que nós mesmos escrevemos, `affiliate_koc_<dígitos>`,
+    //       em qualquer lugar da URL final — caminho incluso (onde um
+    //       terceiro pode colar o identificador dele, ex.:
+    //       `/affiliate_koc_<id>/a-p-1.html`) — decodificado uma vez para
+    //       pegar o caso aninhado/URL-encoded
+    //       (`next=...url_from%3Daffiliate_koc_<id>`). A(s) própria(s)
+    //       ocorrência(s) que nós escrevemos (`url_from=affiliate_koc_<tag>`)
+    //       tem o id da cliente e não dispara nada.
+    //   (b) o valor de qualquer parâmetro cujo NOME contenha "koc" — fora de
+    //       `koc_id`/`url_from` (os dois que nós mesmos escrevemos) e
+    //       `ad_type` (preservado como veio da origem, T063) — pega o caso
+    //       de nome de parâmetro desconhecido carregando o id de terceiro
+    //       cru (`partner_koc=<id>`, sem o formato `affiliate_koc_`).
+    //
+    // Qualquer identificador achado que não seja o da própria cliente →
+    // recusa (preferimos recusar a tentar limpar, mesma filosofia do T074).
+    const decodeOnce = (str) => {
+      try {
+        return decodeURIComponent(String(str))
+      } catch {
+        return String(str)
+      }
+    }
+    for (const match of decodeOnce(finalUrl).matchAll(/affiliate_koc_(\d+)/gi)) {
+      if (match[1] !== tag) return null
+    }
+    const EXEMPT_KOC_PARAMS = new Set(['koc_id', 'url_from', 'ad_type'])
+    for (const [key, value] of u.searchParams) {
+      if (EXEMPT_KOC_PARAMS.has(key.toLowerCase())) continue
+      if (/koc/i.test(key) && decodeOnce(value) !== tag) return null
+    }
 
     const goodsId = extractSheinGoodsId(finalUrl)
     // Marca de "isto deveria ser um produto" mais frouxa que SHEIN_PRODUCT_RE
