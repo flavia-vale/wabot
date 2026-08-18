@@ -19,6 +19,7 @@ const PLATFORM_LABELS = {
   mercadolivre: 'Mercado Livre',
   shopee: 'Shopee',
   magazineluiza: 'Magazine Luiza',
+  shein: 'SHEIN',
 }
 
 function parseTemplateStore(json) {

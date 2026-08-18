@@ -53,6 +53,18 @@ test('amazon/ML: linkKind explícito do converter é respeitado mesmo quando url
   )
 })
 
+// specs/012-shein-store-support (A3): defesa em profundidade — o conversor já
+// devolve linkKind explícito, que tem precedência (testado acima). Este
+// fallback regex só entra quando o converter não cooperou.
+test('shein: goods_id ou -p-<id> classifica como product', () => {
+  assert.equal(resolveLinkKind('shein', { url: 'https://br.shein.com/vestido-p-485735309.html' }), 'product')
+  assert.equal(resolveLinkKind('shein', { url: 'https://m.shein.com/br/ark/default?goods_id=485735309' }), 'product')
+})
+
+test('shein: sem goods_id/-p- classifica como coupon', () => {
+  assert.equal(resolveLinkKind('shein', { url: 'https://m.shein.com/br/ark/default?scene=1&campaign=summer' }), 'coupon')
+})
+
 test('plataforma sem detector (magazineluiza) devolve undefined sem lançar', () => {
   assert.equal(resolveLinkKind('magazineluiza', { url: 'https://www.magazineluiza.com.br/produto/p/123' }), undefined)
 })

@@ -27,6 +27,7 @@ const STORES = [
   { test: /amazon|amzn/i, name: 'Amazon', bg: '#FF9900', fg: '#fff', mark: 'a' },
   { test: /mercadoliv|mercadolib|mlstatic/i, name: 'Mercado Livre', bg: '#FFE600', fg: '#1F2D2A', mark: 'ML' },
   { test: /magazineluiza|magazinevoce|magalu/i, name: 'Magalu', bg: '#0086FF', fg: '#fff', mark: 'M' },
+  { test: /shein/i, name: 'SHEIN', bg: '#000000', fg: '#fff', mark: 'S' },
 ]
 function detectStore(url) {
   const u = String(url || '')
@@ -283,7 +284,7 @@ export default function CriarOfertaPage() {
               {store.name} detectada
             </span>
           ) : (
-            <span>Cole um link de Shopee, Amazon, Mercado Livre ou Magalu.</span>
+            <span>Cole um link de Shopee, Amazon, Mercado Livre, Magalu ou SHEIN.</span>
           )}
           {generated && (
             <>

@@ -99,9 +99,14 @@ test('com csv explícito, só as plataformas listadas contam como selecionadas',
 })
 
 test('desmarcar a primeira plataforma parte do conjunto completo', () => {
-  // grupo sem seleção (todas ativas) → desmarcar shopee mantém as outras 3
+  // grupo sem seleção (todas ativas) → desmarcar shopee mantém as outras 4
   const next = toggleMobilePlatform('', 'shopee')
-  assert.deepEqual(next.split(',').sort(), ['amazon', 'magazineluiza', 'mercadolivre'])
+  assert.deepEqual(next.split(',').sort(), ['amazon', 'magazineluiza', 'mercadolivre', 'shein'])
+})
+
+// specs/012-shein-store-support (D10/D11/T058)
+test('MOBILE_GROUP_PLATFORMS inclui a SHEIN', () => {
+  assert.ok(MOBILE_GROUP_PLATFORMS.some((p) => p.id === 'shein' && p.label === 'SHEIN'))
 })
 
 test('marcar e desmarcar plataforma sobre csv existente é idempotente em par', () => {

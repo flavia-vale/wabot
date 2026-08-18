@@ -8,7 +8,7 @@ export const LINT_CODES = Object.freeze({
   MISLEADING_CLAIM: 'misleading_claim',
 })
 
-const BRAND_RE = /amazon|shopee|mercado[\s.]?livre|magalu|aliexpress/i
+const BRAND_RE = /amazon|shopee|mercado[\s.]?livre|magalu|aliexpress|shein/i
 const ALLOWED_PREFIX_RE = /^\s*(ofertas?\s+de|achados?\s+de)\s+/i
 const GENERIC_TITLE_RE = /^(promo|ofertas?|achados?)$/i
 

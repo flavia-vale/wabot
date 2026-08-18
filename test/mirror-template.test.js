@@ -30,6 +30,18 @@ test('resolveMirrorOfferFromLink lê o link ORIGINAL do produto e emite o link c
   })
 })
 
+// specs/012-shein-store-support (C3/T042): rótulo da loja no template do
+// espelhamento.
+test('resolveMirrorOfferFromLink rotula shein como SHEIN', async () => {
+  const fields = await resolveMirrorOfferFromLink({
+    originalUrl: 'https://br.shein.com/vestido-p-485735309.html',
+    convertedUrl: 'https://m.shein.com/br/ark/default?goods_id=485735309&koc_id=123',
+    platform: 'shein',
+    fetchInfo: async () => ({ title: 'Título do produto', oldPrice: '', newPrice: 'R$ 49,90' }),
+  })
+  assert.equal(fields.storeName, 'SHEIN')
+})
+
 test('resolveMirrorOfferFromLink usa o convertido como último recurso quando o original não traz nada', async () => {
   const scraped = []
   const fields = await resolveMirrorOfferFromLink({

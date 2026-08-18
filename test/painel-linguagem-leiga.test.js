@@ -23,6 +23,18 @@ const JARGAO_PROIBIDO = [
   /cookie de sess[ãa]o/i,
   /devtools/i,
   /endpoint|payload|fallback|token de sess[ãa]o/i,
+  // SHEIN (specs/012-shein-store-support, FR-007/SC-006).
+  /koc_id/i,
+  /url_from/i,
+  /goods_id/i,
+  /aff_id/i,
+  /oneLink/i,
+  /affiliate_koc/i,
+  /GM7/,
+  /\btoken\b/i,
+  /par[âa]metro/i,
+  /query string/i,
+  /captcha/i,
 ]
 
 function textosVisiveis() {

@@ -2,12 +2,14 @@ import { convert as convertML }     from './mercadolivre.js'
 import { convert as convertAmazon } from './amazon.js'
 import { convert as convertShopee } from './shopee.js'
 import { convert as convertMagalu } from './magazineluiza.js'
+import { convert as convertShein }  from './shein.js'
 
 const CONVERTERS = {
   mercadolivre:  convertML,
   amazon:        convertAmazon,
   shopee:        convertShopee,
   magazineluiza: convertMagalu,
+  shein:         convertShein,
 }
 
 // Normaliza retorno dos converters para `{ url, warning } | null`.

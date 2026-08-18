@@ -9,7 +9,7 @@ export { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
 const DEFAULTS = {
   delayMin: 5,
   delayMax: 15,
-  platforms: 'shopee,amazon,mercadolivre,magazineluiza',
+  platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein',
   blockedKeywords: '',
   welcomeMsg: '',
   postToStatus: false,

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectLinks } from '../src/detector.js'
+import { detectLinks, isOfferUrl } from '../src/detector.js'
 
 test('detecta produto.mercadolivre.com.br (subdomínio, link de recomendação com #fragment)', () => {
   const text = 'olha essa oferta https://produto.mercadolivre.com.br/MLB-4049246221-secadora-roupas-portatil-110v-mini-eletrica-cortina-pendurar-_JM?searchVariation=188766696371#polycard_client=recommendations_home_navigation-recommendations&reco_backend=x&c_id=/home/element fim'
@@ -69,6 +69,57 @@ test('não casa outro subdomínio de divulguei.app como amazon', () => {
 
 test('não casa host colado (notmercadolivre.com.br)', () => {
   assert.equal(detectLinks('https://notmercadolivre.com.br/p/MLB123').length, 0)
+})
+
+// specs/012-shein-store-support (D-012): domínios reais confirmados em campo.
+test('detecta domínios reais da SHEIN', () => {
+  for (const url of [
+    'https://onelink.shein.com/14/4v4p6bpzshsx',
+    'https://br.shein.com/vestido-floral-p-485735309.html',
+    'https://m.shein.com/br/ark/default?goods_id=485735309',
+    'https://us.shein.com/algo-p-123.html',
+    'https://pt.shein.com/algo-p-123.html',
+    'https://api-shein.shein.com/h5/sharejump/appjump?shc=x',
+    'https://shein.top/14/abc',
+    'https://shein.com/algo',
+  ]) {
+    const links = detectLinks(url)
+    assert.equal(links.length, 1, `esperava detectar ${url}`)
+    assert.equal(links[0].platform, 'shein')
+  }
+})
+
+test('não casa host colado da SHEIN (notshein.com)', () => {
+  assert.equal(detectLinks('https://notshein.com/algo-p-123.html').length, 0)
+})
+
+// T070 (review, 3ª rodada): PATTERNS.shein terminava em `[^\s]*` sem
+// delimitador ancorado após o domínio — um domínio sósia que apenas COMEÇA
+// com "shein.com" (seguido de mais rótulos, sem separador válido) era
+// reconhecido como SHEIN. Cobre exatamente os hosts citados no achado.
+test('T070: não reconhece domínios sósia da SHEIN (shein.com.<atacante>)', () => {
+  for (const url of [
+    'https://shein.com.attacker.net/x-p-1.html',
+    'https://shein.com.evil.net/x-p-123.html?goods_id=123',
+    'https://shein.company.io/a',
+  ]) {
+    assert.equal(detectLinks(url).length, 0, `não deveria detectar ${url}`)
+    assert.equal(isOfferUrl(url), false, `isOfferUrl não deveria aceitar ${url}`)
+  }
+})
+
+test('T070: continua reconhecendo os hosts legítimos da SHEIN', () => {
+  for (const url of [
+    'https://br.shein.com/vestido-floral-p-485735309.html',
+    'https://m.shein.com/br/ark/default?goods_id=485735309',
+    'https://onelink.shein.com/14/4v4p6bpzshsx',
+    'https://shein.top/14/abc',
+  ]) {
+    const links = detectLinks(url)
+    assert.equal(links.length, 1, `esperava detectar ${url}`)
+    assert.equal(links[0].platform, 'shein')
+    assert.equal(isOfferUrl(url), true)
+  }
 })
 
 // Regressão (incidente 2026-06-23): "último link" deve significar "último link
