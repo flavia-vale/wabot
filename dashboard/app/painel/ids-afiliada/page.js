@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
-import { AFFILIATE_PLATFORMS, CRED_STATUS, getPlatformStatus } from '@/lib/painel/affiliatePlatforms'
+import { AFFILIATE_PLATFORMS, CRED_STATUS, describeInvalidAffiliateValue, getPlatformStatus } from '@/lib/painel/affiliatePlatforms'
 
 
 function PlatformActionLinks({ links }) {
@@ -55,8 +55,8 @@ function SessionWarning({ platformId, sessionStatus }) {
     return (
       <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
         <strong>O código de acesso da Amazon venceu.</strong> Suas ofertas continuam saindo normalmente e a comissão
-        continua sendo sua — só que o link fica mais comprido. Para voltar a encurtar, cole um código novo aqui embaixo.
-        Se preferir, deixe assim mesmo: nada se perde.
+        continua sendo sua — só que o link fica mais comprido. Para voltar a encurtar, cole um código novo aqui embaixo
+        e não clique em &quot;Sair&quot; na Amazon depois de colar. Se preferir, deixe assim mesmo: nada se perde.
       </div>
     )
   }
@@ -64,7 +64,7 @@ function SessionWarning({ platformId, sessionStatus }) {
     <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
       <strong>O código de acesso do Mercado Livre venceu.</strong> Suas ofertas continuam saindo e a comissão continua
       sendo sua — só que o link fica mais comprido e cupons sem produto deixam de ser convertidos. Para voltar ao link
-      curto, cole um código novo aqui embaixo.
+      curto, cole um código novo aqui embaixo — e, depois de colar, não clique em &quot;Sair&quot; no Mercado Livre.
     </div>
   )
 }
@@ -138,6 +138,17 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
       setFeedback({ type: 'error', message: `Preencha os campos obrigatórios de ${platform.label}.` })
       return
     }
+    // Peneira de formato antes de mandar para o servidor (que também recusa —
+    // ele é a autoridade). Evita o caso real de colar um LINK no campo do
+    // código e o painel responder "Tudo certo!".
+    const invalidos = platform.fields
+      .map((f) => [f.key, describeInvalidAffiliateValue(platform.id, f.key, values[f.key])])
+      .filter(([, mensagem]) => mensagem)
+    if (invalidos.length) {
+      setFieldErrors(Object.fromEntries(invalidos))
+      setFeedback({ type: 'error', message: invalidos[0][1] })
+      return
+    }
     setSaving(true)
     setFeedback(null)
     try {
@@ -171,6 +182,15 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
       <SessionWarning platformId={platform.id} sessionStatus={sessionStatus} />
       <PlatformActionLinks links={platform.actionLinks} />
       {platform.platformWarning && <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }}>{platform.platformWarning}</div>}
+      {/* O motivo nº 1 de "cadastrei e venceu de novo" (investigação 18/08/2026):
+          sair da conta da loja encerra a sessão e derruba o código na hora —
+          confirmado em teste controlado (código passou de válido a vencido em
+          menos de 4 min após o clique em "Sair"). Fica em destaque, fora do
+          bloco recolhível, porque quem lê depois de já ter saído não tem mais
+          conserto senão recadastrar. */}
+      {platform.sessionCareNote && (
+        <div className="pnl-note-box" style={{ marginBottom: 12 }}>{platform.sessionCareNote}</div>
+      )}
 
       <CookiePrivacyDetails platform={platform} />
 

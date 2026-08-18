@@ -161,6 +161,64 @@ function sheinFormatWarnings(tag) {
   ]
 }
 
+// Regras de formato por campo de código de acesso.
+//
+// `singleToken`: o valor é UM valor só (não pode ter espaço). O código completo
+// da Amazon e o pacote do ML são listas de vários pares (`a=1; b=2`) e por isso
+// PODEM ter espaço — aplicar a regra neles recusaria credencial legítima.
+// `minLength` só é usado onde há evidência de produção do tamanho real: os
+// códigos do ML que funcionam têm 83-85 caracteres. Os códigos separados da
+// Amazon variam de tamanho e ficam de fora (continuam com o aviso brando de
+// `getFormatWarnings`).
+const ACCESS_CODE_RULES = {
+  mercadolivre: [
+    { field: 'ssid', singleToken: true, minLength: 30 },
+    { field: 'cookie' },
+  ],
+  amazon: [
+    { field: 'cookie' },
+    { field: 'ubid-acbbr', singleToken: true },
+    { field: 'at-acbbr', singleToken: true },
+    { field: 'x-acbbr', singleToken: true },
+  ],
+}
+
+// Formato claramente errado no código de acesso. NÃO diz se a loja aceita o
+// código (só ela sabe) — barra o que nunca poderia funcionar: link colado no
+// lugar do código, valor com espaço onde não cabe espaço, pedaço faltando.
+//
+// Por que existe (investigação 18/08/2026): a validação só conferia se o campo
+// estava preenchido. Uma conta salvou um LINK no lugar do código, o painel
+// respondeu "Tudo certo!" e o robô acumulou 537 recusas seguidas do Mercado
+// Livre sem que nada no painel denunciasse. Outras quatro contas estavam com
+// 10, 16 e 52 caracteres — todas marcadas como prontas para usar.
+//
+// Espelhado na tela em `describeInvalidAffiliateValue`
+// (dashboard/lib/painel/affiliatePlatforms.js). Aqui é a autoridade.
+export function describeInvalidCredentialFields(platform, data = {}) {
+  const problemas = []
+  for (const regra of ACCESS_CODE_RULES[platform] ?? []) {
+    const value = getString(data, regra.field)
+    if (!value) continue
+    if (/^https?:\/\//i.test(value)) {
+      problemas.push({ field: regra.field, message: LINK_NO_LUGAR_DO_CODIGO })
+      continue
+    }
+    if (regra.singleToken && /\s/.test(value)) {
+      problemas.push({ field: regra.field, message: CODIGO_COM_ESPACO })
+      continue
+    }
+    if (regra.minLength && value.length < regra.minLength) {
+      problemas.push({ field: regra.field, message: CODIGO_CURTO_DEMAIS })
+    }
+  }
+  return problemas
+}
+
+export const LINK_NO_LUGAR_DO_CODIGO = 'Isso é um link, não o código de acesso. O código não começa com "http" — é uma sequência de letras e números que você copia com a extensão Cookie-Editor.'
+export const CODIGO_COM_ESPACO = 'O código não pode ter espaços no meio. Copie o valor inteiro, de uma vez só.'
+export const CODIGO_CURTO_DEMAIS = 'Esse código está curto demais — parece que faltou um pedaço. Copie o valor inteiro do campo na extensão Cookie-Editor.'
+
 export function validateCredentialData(platform, data = {}) {
   if (!PLATFORMS.includes(platform)) {
     return {
@@ -217,13 +275,19 @@ export function validateCredentialData(platform, data = {}) {
     ? sheinRecusaWarnings
     : missing.length ? [] : getFormatWarnings(platform, data)
   const configured = missing.length === 0
+  // `invalid` é separado de `missing` de propósito: o campo ESTÁ preenchido (só
+  // que com conteúdo que nunca vai funcionar). Manter `configured` amarrado a
+  // `missing` preserva o comportamento de todo mundo que já lê esse campo; quem
+  // precisa barrar o save olha `invalid`.
+  const invalid = configured ? describeInvalidCredentialFields(platform, data) : []
 
   return {
     platform,
     label: PLATFORM_LABELS[platform],
-    status: configured ? (warnings.length ? 'warning' : 'configured') : 'incomplete',
+    status: invalid.length ? 'invalid' : (configured ? (warnings.length ? 'warning' : 'configured') : 'incomplete'),
     configured,
     missing,
+    invalid,
     warnings,
   }
 }

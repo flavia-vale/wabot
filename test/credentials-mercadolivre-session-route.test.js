@@ -105,7 +105,7 @@ test('GET /mercadolivre/session: persiste credentialPatch cifrado (D-3) sem expo
 test('GET /mercadolivre/session: sem credentialPatch não chama db.credential.update', async () => {
   await withEncryptionKey(async () => {
     const userId = nextUserId()
-    const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(20) }) })
+    const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(84) }) })
     const checkMercadoLivreSession = async () => ({ configured: true, alive: true, reason: 'ok' })
 
     const app = await buildApp({ userId, db, checkMercadoLivreSession })
@@ -119,7 +119,7 @@ test('GET /mercadolivre/session: sem credentialPatch não chama db.credential.up
 test('GET /mercadolivre/session: network_error/busy (transitório) não persiste e não mascara o estado', async () => {
   await withEncryptionKey(async () => {
     const userId = nextUserId()
-    const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(20) }) })
+    const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(84) }) })
     const checkMercadoLivreSession = async () => ({ configured: true, alive: null, reason: 'network_error' })
 
     const app = await buildApp({ userId, db, checkMercadoLivreSession })
@@ -136,7 +136,7 @@ test('GET /mercadolivre/session: network_error/busy (transitório) não persiste
 test('GET /mercadolivre/session: reason busy (lock) também é transitório — não persiste, resposta mantém alive:null', async () => {
   await withEncryptionKey(async () => {
     const userId = nextUserId()
-    const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(20) }) })
+    const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(84) }) })
     const checkMercadoLivreSession = async () => ({ configured: true, alive: null, reason: 'busy' })
 
     const app = await buildApp({ userId, db, checkMercadoLivreSession })
@@ -168,7 +168,7 @@ test('GET /mercadolivre/session: credencial não cadastrada devolve not_configur
 
 test('GET /mercadolivre/session: 2 chamadas consecutivas dentro da janela TTL só sondam o ML 1 vez', async () => {
   const userId = nextUserId()
-  const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(20) }) })
+  const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(84) }) })
   let calls = 0
   const checkMercadoLivreSession = async () => {
     calls++
@@ -196,12 +196,12 @@ test('GET /mercadolivre/session: cache não é compartilhado entre usuários dif
   }
 
   const userA = nextUserId()
-  const dbA = fakeDb({ userId: userA, platform: 'mercadolivre', data: JSON.stringify({ tag: 'a-20', ssid: 'a'.repeat(20) }) })
+  const dbA = fakeDb({ userId: userA, platform: 'mercadolivre', data: JSON.stringify({ tag: 'a-20', ssid: 'a'.repeat(84) }) })
   const appA = await buildApp({ userId: userA, db: dbA, checkMercadoLivreSession, probeCache })
   await appA.inject({ method: 'GET', url: '/mercadolivre/session' })
 
   const userB = nextUserId()
-  const dbB = fakeDb({ userId: userB, platform: 'mercadolivre', data: JSON.stringify({ tag: 'b-20', ssid: 'b'.repeat(20) }) })
+  const dbB = fakeDb({ userId: userB, platform: 'mercadolivre', data: JSON.stringify({ tag: 'b-20', ssid: 'b'.repeat(84) }) })
   const appB = await buildApp({ userId: userB, db: dbB, checkMercadoLivreSession, probeCache })
   await appB.inject({ method: 'GET', url: '/mercadolivre/session' })
 
@@ -210,7 +210,7 @@ test('GET /mercadolivre/session: cache não é compartilhado entre usuários dif
 
 test('GET /mercadolivre/session: resultado transitório (alive:null) não é cacheado — próxima chamada sonda de novo', async () => {
   const userId = nextUserId()
-  const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(20) }) })
+  const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(84) }) })
   let calls = 0
   const checkMercadoLivreSession = async () => {
     calls++
@@ -232,7 +232,7 @@ test('GET /mercadolivre/session: resultado transitório (alive:null) não é cac
 test('PUT /mercadolivre: o próprio save testa o código e deixa o resultado FRESCO em cache', async () => {
   await withEncryptionKey(async () => {
     const userId = nextUserId()
-    const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(20) }) })
+    const db = fakeDb({ userId, platform: 'mercadolivre', data: JSON.stringify({ tag: '475630078', ssid: 'a'.repeat(84) }) })
     let calls = 0
     let currentAlive = false
     const checkMercadoLivreSession = async () => {
@@ -253,7 +253,7 @@ test('PUT /mercadolivre: o próprio save testa o código e deixa o resultado FRE
     const putRes = await app.inject({
       method: 'PUT',
       url: '/mercadolivre',
-      payload: { tag: '475630078', ssid: 'b'.repeat(20) },
+      payload: { tag: '475630078', ssid: 'b'.repeat(84) },
     })
     assert.equal(putRes.statusCode, 200)
     // Mudança de contrato (RCA 2026-08-15): antes o PUT só INVALIDAVA o cache e
