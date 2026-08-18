@@ -730,7 +730,7 @@ conhecido, não como defeito.
 
 ## Phase 15: Convergence
 
-- [ ] T078 Fechar o vazamento de identificador de terceiro em **formato solto** (`KOC<dígitos>`)
+- [X] T078 Fechar o vazamento de identificador de terceiro em **formato solto** (`KOC<dígitos>`)
   na rede de segurança de `convert()` (`src/converters/shein.js`) per FR-013 / FR-015 (partial).
   Hoje a regra (b) só inspeciona o valor de parâmetros cujo **nome** contém `koc`, e a regra (a)
   só casa `affiliate_koc_<dígitos>`. Um identificador de terceiro escrito em qualquer outro
@@ -762,7 +762,7 @@ conhecido, não como defeito.
   → `null`; identificador em formato solto num parâmetro de nome desconhecido → `null`; e os casos
   legítimos acima convertendo normalmente. Todos sem rede (`fetchImpl` injetado).
 
-- [ ] T079 Tornar a decodificação da rede de segurança de `convert()` (`src/converters/shein.js`)
+- [X] T079 Tornar a decodificação da rede de segurança de `convert()` (`src/converters/shein.js`)
   **iterativa e limitada**, em vez de uma passada única, per FR-013 / FR-015 (partial). O helper
   `decodeOnce` decodifica exatamente uma vez, então um identificador de terceiro com duplo encoding
   atravessa a checagem. Reproduzido nas mesmas condições do T078:
