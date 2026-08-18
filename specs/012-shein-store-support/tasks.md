@@ -681,3 +681,47 @@ regra do T062. Não é vazamento nem link quebrado — é uma página de campanh
 da SHEIN, e só é alcançável quando a cadeia de fato chegou nela (resolução que
 falha devolve o short link, que é recusado). Fica registrado como comportamento
 conhecido, não como defeito.
+
+---
+
+## Phase 14: Convergence
+
+- [ ] T077 Estreitar a **rede de segurança do T074** em `convert()`
+  (`src/converters/shein.js`) para não recusar link legítimo da SHEIN per FR-012 /
+  US2-AC1 (contradicts). Hoje a checagem conta ocorrências da substring `koc`
+  (case-insensitive) na **URL final inteira** — caminho, nomes e valores de todos os
+  parâmetros — contra um esperado de três (o `koc_id=<tag>` e o `affiliate_koc_<tag>`
+  que nós escrevemos, mais o `ad_type`). Qualquer `koc` legítimo em outro lugar
+  estoura a conta e a oferta é **descartada em silêncio** (nada publicado, comissão
+  perdida). Reproduzido executando o código desta branch, com
+  `fetchImpl` que rejeita (sem rede) e `tag: '1150365562'`:
+
+  ```
+  convert('https://br.shein.com/Kocotree-Kids-Backpack-p-12345.html')      → null   (marca real vendida na SHEIN)
+  convert('https://br.shein.com/womens-koch-jacket-p-999.html')            → null
+  convert('https://m.shein.com/br/ark/default?campaign=kocobeauty')        → null   (cupom/campanha legítimo)
+  convert('https://br.shein.com/a-p-1.html?ad_type=KOC&ad_type=KOC')       → null   (ad_type repetido na origem)
+  ```
+
+  O slug da SHEIN é o nome do produto, e o valor de `campaign` vem da origem — os
+  dois são texto livre que a gente não controla, então a classe de falso positivo é
+  aberta, não uma curiosidade pontual. Recusar oferta boa é o oposto do que a rede de
+  segurança existe para fazer, e é invisível: não há aviso no painel, só ausência.
+
+  Correção: fazer a checagem **por parâmetro**, e não por varredura da string inteira —
+  ignorar caminho/slug e os dois parâmetros que nós mesmos escrevemos (`koc_id`,
+  `url_from`) mais `ad_type`, e reprovar quando **qualquer outro** nome ou valor de
+  parâmetro (inclusive depois de decodificar uma vez, para pegar o caso aninhado)
+  carregar um identificador de afiliado que não seja o da cliente. Manter a filosofia
+  do T074 (preferir recusar a tentar limpar) e a mensagem/comentário explicando por quê.
+
+  Não regredir: os três vazamentos reproduzidos no T074 precisam continuar retornando
+  `null` — `&partner_koc=<terceiro>` (nome de parâmetro desconhecido),
+  `&next=<URL-encoded contendo url_from=affiliate_koc_<terceiro>>` (aninhado) e
+  `/affiliate_koc_<terceiro>/a-p-1.html` (no caminho) — assim como
+  `URL_FROM`/`KOC_ID` maiúsculos (T072) e o descarte do fragmento (T073).
+
+  Cobrir em `test/converters-shein.test.js`, no mesmo bloco do T074: produto com `koc`
+  no slug converte (`linkKind: 'product'`), cupom com `koc` no valor de `campaign`
+  converte (`linkKind: 'coupon'`), `ad_type` repetido na origem converte — e os três
+  casos de vazamento continuam `null`. Todos sem rede (`fetchImpl` injetado).
