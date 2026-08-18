@@ -568,7 +568,7 @@ ler `location.hash`). Mesmo assim, o contrato desta feature diz que o link de
 terceiro nunca é encaminhado **nem em pedaço** (INV-1), e o custo de fechar é
 baixo. Cada task abaixo tem o caso reproduzido junto.
 
-- [ ] T072 Tornar a remoção de parâmetro **insensível a maiúsculas** em
+- [X] T072 Tornar a remoção de parâmetro **insensível a maiúsculas** em
   `stripSheinAffiliateTracking` (`src/converters/shein.js`). Hoje
   `searchParams.delete('url_from')` não remove `URL_FROM`, e o identificador do
   terceiro sobrevive. Reproduzido:
@@ -576,13 +576,13 @@ baixo. Cada task abaixo tem o caso reproduzido junto.
   saída mantém `URL_FROM=affiliate_koc_<DELE>` ao lado do `url_from` da cliente.
   Idem `KOC_ID`. Cobrir os dois em `test/converters-shein.test.js`.
 
-- [ ] T073 **Descartar o fragmento** (`#...`) na saída de `convert()`. Hoje ele
+- [X] T073 **Descartar o fragmento** (`#...`) na saída de `convert()`. Hoje ele
   passa intacto: `.../a-p-1.html?goods_id=1#url_from=affiliate_koc_<DELE>` sai com
   o fragmento preservado. Fragmento não vai ao servidor, mas a SHEIN é um site que
   roda no navegador e pode ler `location.hash` — e o fragmento nunca carrega
   informação de destino que a gente precise. Cobrir com teste.
 
-- [ ] T074 Rede de segurança final em `convert()`: **recusar (`null`) quando a URL
+- [X] T074 Rede de segurança final em `convert()`: **recusar (`null`) quando a URL
   montada ainda contiver um identificador de afiliado que não seja o da cliente**.
   Fecha de uma vez a classe inteira de vazamento por parâmetro que ainda não
   conhecemos, sem precisar adivinhar nomes. Casos reproduzidos que passam hoje:
