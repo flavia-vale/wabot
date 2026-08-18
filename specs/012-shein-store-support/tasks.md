@@ -550,3 +550,57 @@ irmãos (`shopee.js`, `amazon.js`).
   adotada em T070, sem alterar as entradas das outras quatro lojas) e cobrir com teste que
   `br.shein.com`/`m.shein.com`/`onelink.shein.com` contam como 1 link detectado. Lembrar que a
   allowlist vai para o bundle do Next: `cd dashboard && npm run build` depois da mudança. (review)
+
+---
+
+## Phase 12: Caça adversarial (sondagem manual)
+
+Achados de uma sondagem adversarial rodada à mão contra o código desta branch,
+fora das rodadas automáticas. `stripSheinAffiliateTracking` é uma **lista de
+proibidos** (`THIRD_PARTY_PARAMS` + `utm_*`), e tudo que não está nela sobrevive.
+Reproduzido: o identificador de OUTRO afiliado chega à saída em seis formas
+diferentes.
+
+Ressalva honesta: **não está provado** que a SHEIN credita o terceiro em nenhum
+desses casos — chave de query costuma ser sensível a maiúsculas, e fragmento não
+é enviado ao servidor (embora a SHEIN seja um site que roda no navegador e possa
+ler `location.hash`). Mesmo assim, o contrato desta feature diz que o link de
+terceiro nunca é encaminhado **nem em pedaço** (INV-1), e o custo de fechar é
+baixo. Cada task abaixo tem o caso reproduzido junto.
+
+- [ ] T072 Tornar a remoção de parâmetro **insensível a maiúsculas** em
+  `stripSheinAffiliateTracking` (`src/converters/shein.js`). Hoje
+  `searchParams.delete('url_from')` não remove `URL_FROM`, e o identificador do
+  terceiro sobrevive. Reproduzido:
+  `.../a-p-1.html?goods_id=1&URL_FROM=affiliate_koc_<DELE>` →
+  saída mantém `URL_FROM=affiliate_koc_<DELE>` ao lado do `url_from` da cliente.
+  Idem `KOC_ID`. Cobrir os dois em `test/converters-shein.test.js`.
+
+- [ ] T073 **Descartar o fragmento** (`#...`) na saída de `convert()`. Hoje ele
+  passa intacto: `.../a-p-1.html?goods_id=1#url_from=affiliate_koc_<DELE>` sai com
+  o fragmento preservado. Fragmento não vai ao servidor, mas a SHEIN é um site que
+  roda no navegador e pode ler `location.hash` — e o fragmento nunca carrega
+  informação de destino que a gente precise. Cobrir com teste.
+
+- [ ] T074 Rede de segurança final em `convert()`: **recusar (`null`) quando a URL
+  montada ainda contiver um identificador de afiliado que não seja o da cliente**.
+  Fecha de uma vez a classe inteira de vazamento por parâmetro que ainda não
+  conhecemos, sem precisar adivinhar nomes. Casos reproduzidos que passam hoje:
+  - nome de parâmetro desconhecido: `&partner_koc=<DELE>`
+  - parâmetro aninhado URL-encoded: `&next=https%3A%2F%2F...%3Furl_from%3Daffiliate_koc_<DELE>`
+    (a parte `affiliate_koc_<DELE>` fica legível na string final)
+  - no caminho: `/affiliate_koc_<DELE>/a-p-1.html`
+  Cuidado ao implementar: o identificador da PRÓPRIA cliente aparece
+  legitimamente duas vezes (`koc_id` e dentro de `url_from`) — a checagem precisa
+  ignorar essas ocorrências e reprovar só as demais. Preferir recusar a tentar
+  limpar: melhor não enviar a oferta do que enviar link com comissão de outra
+  pessoa.
+
+Já verificado e **sem achado** nesta sondagem (não gerar task):
+`shein.com.evil.net`, `notshein.com`, `https://shein.com@evil.net` (userinfo),
+punycode, homógrafo cirílico, `br-shein.com`, hostname com ponto final e
+`evil.net/br.shein.com` são todos recusados pela guarda. Barra invertida e barra
+dupla são aceitas **corretamente** — o endereço é de fato da SHEIN, e o conversor
+publica a forma normalizada, então não há divergência entre o que validamos e o
+que a cliente abre. Parâmetro repetido (`url_from=a&url_from=b`) é removido nas
+duas ocorrências.
