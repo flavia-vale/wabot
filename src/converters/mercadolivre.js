@@ -684,13 +684,20 @@ export async function checkMercadoLivreSession(creds = {}) {
   if (!cookieHeader) return { configured: false, alive: null, reason: 'no_cookie' }
   try {
     const res = await withMercadoLivreCredentialLock(creds, () => callCreateLinkApi(SESSION_PROBE_URL, tag || '', { cookieHeader, csrf }))
-    const credentialPatch = buildCredentialPatchFromSetCookie(creds, cookieHeader, res.headers)
     // 401 é sinal de auth: cookie expirado/inválido -> redireciona ao login.
     // 403/429 não provam expiração do SSID; são bloqueio/rate-limit e ficam
     // indeterminados para não alarmar a usuária com falso "SSID expirou".
-    if (res.status === 401) return { configured: true, alive: false, reason: 'expired', ...(credentialPatch ? { credentialPatch } : {}) }
-    if (res.status === 403) return { configured: true, alive: null, reason: 'forbidden', ...(credentialPatch ? { credentialPatch } : {}) }
-    if (res.status === 429) return { configured: true, alive: null, reason: 'rate_limited', ...(credentialPatch ? { credentialPatch } : {}) }
+    //
+    // Recusa NÃO devolve credentialPatch (investigação 18/08/2026): a resposta
+    // 401 é o redirect para a tela de login e vem COM Set-Cookie (2 cookies,
+    // medido em produção). Persistir isso mistura cookie de sessão anônima no
+    // jar guardado — e como `buildCookieHeader` dá precedência ao jar sobre o
+    // `ssid`, seria uma forma de brickar uma credencial que ainda podia estar
+    // viva. Só rotação vinda de resposta ACEITA é guardada.
+    if (res.status === 401) return { configured: true, alive: false, reason: 'expired' }
+    if (res.status === 403) return { configured: true, alive: null, reason: 'forbidden' }
+    if (res.status === 429) return { configured: true, alive: null, reason: 'rate_limited' }
+    const credentialPatch = buildCredentialPatchFromSetCookie(creds, cookieHeader, res.headers)
     return { configured: true, alive: true, reason: 'ok', ...(credentialPatch ? { credentialPatch } : {}) }
   } catch (err) {
     if (err?.code === 'ML_AFFILIATE_LOCK_TIMEOUT') return { configured: true, alive: null, reason: 'busy' }
@@ -715,7 +722,6 @@ async function createAffiliateLink(mlUrl, tag, creds) {
 
   let lastError = null
   let terminalFailure = null
-  let terminalCredentialPatch = null
   const RETRYABLE_STATUS = new Set([408, 409, 425, 500, 502, 503, 504])
   const retryBackoffMs = [400, 1200, 2800]
   for (const attempt of attempts) {
@@ -735,7 +741,6 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
         if (affiliateFailure) {
           terminalFailure = affiliateFailure
-          terminalCredentialPatch = credentialPatch
         }
 
         lastError = {
@@ -768,7 +773,6 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
         if (affiliateFailure) {
           terminalFailure = affiliateFailure
-          terminalCredentialPatch = buildCredentialPatchFromSetCookie(creds, attempt.cookieHeader, err.response?.headers)
         }
         lastError = { attempt: attempt.label, retry: i, err: err.message, status, apiError }
 
@@ -793,7 +797,6 @@ async function createAffiliateLink(mlUrl, tag, creds) {
 
   if (terminalFailure) {
     const err = buildMlAffiliateError(terminalFailure)
-    err.credentialPatch = terminalCredentialPatch
     throw err
   }
 
@@ -1057,7 +1060,9 @@ async function convertMlCouponWithoutProduct(url, creds) {
       return { url: affiliateUrl, linkKind: 'coupon' }
     }
   } catch (err) {
-    await notifyCredentialPatch(creds, err.credentialPatch)
+    // Falha NÃO persiste cookie (18/08/2026): a resposta de recusa traz o
+    // Set-Cookie da tela de login, e guardá-lo sujaria o jar — que tem
+    // precedência sobre o ssid — podendo matar credencial ainda viva.
     logger.warn({ url, resolved, err: err.message }, 'ML cupom: createLink falhou — descartando (não encaminha link de terceiro)')
 
     // Decisão centralizada (feature 007-ml-vitrine-fallback-expired):
@@ -1195,7 +1200,7 @@ export async function convert(url, creds) {
             break
           }
           if (err.mlWarning || /credencial|inv[aá]lida|expirad|recusou|limitou/i.test(err.message)) {
-            await notifyCredentialPatch(creds, err.credentialPatch)
+            // Sem persistir cookie de recusa — ver comentário no ramo de cupom.
             affiliateWarning = err.mlWarning || 'ml_ssid_expired'
             if (err.mlFailureType === 'forbidden' || err.mlFailureType === 'rate_limited') {
               setAffiliateCooldown(creds, err.mlFailureType)
