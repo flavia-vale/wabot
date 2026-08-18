@@ -109,10 +109,23 @@ async function main() {
     const n = conjunto.size
     const perda = perdas[i]
     const marca = i === idxMaior && maiorPerda > 0 ? '  <== MAIOR QUEDA' : ''
+    // Delta NEGATIVO significa que a etapa tem MAIS gente que a anterior — ou
+    // seja, as etapas não são uma sequência obrigatória (dá para configurar
+    // grupo sem ter salvado credencial). Mostrar "—" nesse caso escondia o
+    // fato e fazia o funil parecer mais linear do que é.
+    const delta = perda > 0 ? `-${perda}` : perda < 0 ? `+${-perda}` : '—'
     console.log(
-      `  ${nome.padEnd(38)}  ${String(n).padStart(5)}    ${pct(n, total).padStart(7)}   ${perda > 0 ? `-${perda}` : '—'}${marca}`
+      `  ${nome.padEnd(38)}  ${String(n).padStart(5)}    ${pct(n, total).padStart(7)}   ${delta.padStart(4)}${marca}`
     )
   })
+
+  if (perdas.some((p) => p < 0)) {
+    console.log(`
+  Nota: onde aparece "+", a etapa tem MAIS gente que a anterior. As etapas não
+  são uma sequência obrigatória — dá para configurar grupo sem ter salvado
+  credencial, por exemplo. Leia cada linha como "quantos chegaram até aqui",
+  não como "quantos passaram pela linha de cima".`)
+  }
 
   console.log(`\n  Conectados AGORA (sessão viva): ${conectadoAgora.size}`)
 
