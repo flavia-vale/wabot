@@ -604,3 +604,56 @@ dupla são aceitas **corretamente** — o endereço é de fato da SHEIN, e o con
 publica a forma normalizada, então não há divergência entre o que validamos e o
 que a cliente abre. Parâmetro repetido (`url_from=a&url_from=b`) é removido nas
 duas ocorrências.
+
+---
+
+## Phase 13: Caça adversarial — eixos 3 a 6
+
+Eixo 3 (cadeia de redirect) e eixo 4 (recursos) sondados, **sem achado**:
+laço infinito, ping-pong entre hosts, `Location` vazio/malformado,
+`javascript:`/`data:`, redirect para fora do domínio, `<input id="url">` vazio,
+com entidade HTML ou múltiplos, Content-Type mentindo, 500 cookies gigantes e
+`fetch` que lança — o resolvedor nunca trava nem lança, e `convert()` recusa
+todos os desfechos perigosos. O teto de 512KB corta na hora certa (input antes
+do teto resolve, depois do teto degrada para recusa) e o orçamento total é
+respeitado (servidor lento aborta em 3000ms de 3000ms).
+
+Um caso pareceu travar (corpo pendurado) e foi **descartado após verificação**:
+só trava quando o `fetchImpl` injetado não propaga o `AbortSignal` para a
+leitura do corpo. O `fetch` do Node propaga, e com ele o abort ocorre no prazo.
+Não é alcançável em produção.
+
+- [ ] T075 **O painel pede um link que o cadastro recusa.** A instrução diz
+  "use o Gerador de Link para gerar o seu link de afiliada. Cole aqui o link
+  inteiro" e o rótulo do campo é "Seu link de afiliada da SHEIN (ou seu número
+  de afiliada)" (`dashboard/lib/painel/affiliatePlatforms.js:89,97`). Mas
+  `validateCredentialData('shein', ...)` **recusa** exatamente esse link:
+
+      https://onelink.shein.com/48/5z6ad6oma2ac   → RECUSA
+      "Não reconhecemos esse texto. Era esperado o seu link de afiliada da SHEIN"
+
+  Só passam o número puro e a forma **já resolvida**
+  (`...?url_from=affiliate_koc_<n>`), que a cliente nunca vê — é um estado
+  intermediário interno. Causa: extrair o número de um oneLink exige resolver o
+  link pela rede, e a validação é pura/offline por contrato.
+
+  Isso reproduz o RCA já documentado no AGENTS.md (cliente do Mercado Livre que
+  salvou 17 vezes em 4h30 vendo verde e sem funcionar), só que pior: aqui ela
+  cola o que foi mandado colar e é recusada, com uma mensagem que pede de volta
+  a mesma coisa que ela colou. Toda cliente nova esbarra nisso no primeiro passo.
+
+  Correção: **resolver o oneLink na rota de save** (`PUT /credentials/:platform`
+  em `src/api/routes/credentials.js`), reusando `resolveSheinShortLink`, e
+  persistir o número extraído. A rota já faz sondagem de rede para outras lojas,
+  então o lugar é esse; a validação pura continua pura. Falha de rede não pode
+  virar recusa seca — se não der para resolver, explicar em linguagem leiga que
+  não deu para conferir agora e que ela pode colar o número.
+  Cobrir com teste de rota (fetch injetado) e manter o vocabulário leigo.
+
+- [ ] T076 `validateCredentialData('shein', ...)` aceita número com **zero à
+  esquerda** (`0001150365562` → configurado) e **de comprimento arbitrário**
+  (60 dígitos → configurado). O primeiro gera `url_from=affiliate_koc_000...`,
+  que não corresponde à conta real — comissão perdida em silêncio, sem nada na
+  tela. Normalizar removendo zeros à esquerda e recusar comprimento fora de uma
+  faixa plausível (os números reais observados têm 10 dígitos), com mensagem
+  leiga. Cobrir com teste.
