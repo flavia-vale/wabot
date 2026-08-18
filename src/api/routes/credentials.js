@@ -162,6 +162,16 @@ export async function credentialsRoutes(app, opts = {}) {
         validation,
       })
     }
+    // Formato claramente errado (link colado no lugar do código, valor com
+    // espaço, pedaço faltando) NÃO é salvo. Antes o save aceitava qualquer
+    // texto e respondia "Tudo certo!" — uma conta ficou com um link guardado e
+    // 537 recusas seguidas da loja, sem nada no painel que denunciasse.
+    if (validation.invalid?.length) {
+      return reply.code(400).send({
+        error: validation.invalid[0].message,
+        validation,
+      })
+    }
 
     const encryptedData = encryptCredential(JSON.stringify(sanitizedBody))
     const cred = await db.credential.upsert({
