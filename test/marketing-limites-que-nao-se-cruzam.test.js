@@ -49,13 +49,40 @@ const PADROES_PROMESSA_NAO_BANIMENTO = [
 const NEGACAO_ANTES_RE = /\b(ningu[ée]m|nenhuma|nenhum|n[ãa]o\s+(h[áa]|existe|podemos|d[áa]\s+para|pode))\b[^.!?]{0,80}$/i
 const JANELA_CONTEXTO_ANTES = 80
 
+// (T051) Segundo contexto legítimo, diferente da negação-antes: a PERGUNTA de
+// um par de FAQ. "A calculadora garante que meu WhatsApp não será banido?"
+// contém literalmente o padrão proibido, mas é a pergunta que a página existe
+// para responder — e a negação vive na RESPOSTA ao lado, não antes do trecho
+// na mesma sentença, então NEGACAO_ANTES_RE não a alcança. Estender a
+// varredura sem isto quebraria o CI com dois falsos positivos.
+//
+// Uma pergunta não é promessa; mas exigimos as duas condições juntas para não
+// abrir brecha: a sentença que carrega o trecho termina em "?" E a resposta
+// logo em seguida nega a garantia. Pergunta retórica seguida de promessa
+// continua reprovando.
+const JANELA_RESPOSTA = 400
+const NEGACAO_NA_RESPOSTA_RE = /\b(n[ãa]o(\.|,|\s)|ningu[ée]m|nenhum[a]?|desconfie|imposs[íi]vel)\b/i
+
+function ehPerguntaRespondidaComNegacao(texto, _indice, fim) {
+  // O terminador da PRÓPRIA sentença precisa ser "?". Procurar o próximo "?"
+  // em qualquer lugar do texto abriria brecha larga: página de FAQ tem
+  // pergunta o tempo todo mais adiante, então quase toda promessa seria
+  // desculpada como "é pergunta". Verificado injetando promessas sintéticas —
+  // três passavam com a versão que buscava "?" solto.
+  const terminador = texto.slice(fim).match(/[.!?]/)
+  if (!terminador || terminador[0] !== '?') return false
+  const depoisDaPergunta = fim + terminador.index + 1
+  const resposta = texto.slice(depoisDaPergunta, depoisDaPergunta + JANELA_RESPOSTA)
+  return NEGACAO_NA_RESPOSTA_RE.test(resposta)
+}
+
 function encontrarPromessaProibida(texto) {
   for (const padrao of PADROES_PROMESSA_NAO_BANIMENTO) {
     const re = new RegExp(padrao.source, padrao.flags.includes('g') ? padrao.flags : `${padrao.flags}g`)
     let m
     while ((m = re.exec(texto))) {
       const antes = texto.slice(Math.max(0, m.index - JANELA_CONTEXTO_ANTES), m.index)
-      if (!NEGACAO_ANTES_RE.test(antes)) {
+      if (!NEGACAO_ANTES_RE.test(antes) && !ehPerguntaRespondidaComNegacao(texto, m.index, re.lastIndex)) {
         return { trecho: m[0], padrao }
       }
       if (m.index === re.lastIndex) re.lastIndex++ // evita loop infinito em match vazio
@@ -87,9 +114,21 @@ function extrairBlocoPreservationCommercial(pageKey) {
 // só a página nomeada em FR-024/US4. Uma página nova em qualquer um dos dois
 // módulos entra na varredura automaticamente pelo `listarChaves()`, sem
 // editar este arquivo.
+// (T051) Faltavam as DUAS páginas mais expostas à promessa — `/faq-antiban-whatsapp`
+// e `/protecao-antiban-botinho`, ambas em `_preservationDecisionPages.js`, cujo
+// assunto INTEIRO é banimento — e as três páginas de risco que esta rodada
+// reescreveu (diagnóstico, checklist, calculadora), que têm `page.js` próprio e
+// por isso não aparecem em módulo de conteúdo nenhum.
+const PAGINAS_DE_RISCO_COM_PAGE_JS = [
+  'dashboard/app/diagnostico-antiban-whatsapp/page.js',
+  'dashboard/app/materiais/checklist-antiban-whatsapp/page.js',
+  'dashboard/app/ferramentas/calculadora-risco-whatsapp/page.js',
+]
+
 function paginasParaChecarFR029() {
   const preservationFonte = lerFonte('dashboard/app/_preservationCommercialPages.js')
   const blogFonte = lerFonte('dashboard/app/blog/_preservationBlogPosts.js')
+  const decisionFonte = lerFonte('dashboard/app/_preservationDecisionPages.js')
   return [
     ...listarChaves(preservationFonte).map((chave) => ({
       origem: '_preservationCommercialPages.js',
@@ -101,12 +140,22 @@ function paginasParaChecarFR029() {
       chave,
       bloco: extrairBlocoPorChave(blogFonte, chave),
     })),
+    ...listarChaves(decisionFonte).map((chave) => ({
+      origem: '_preservationDecisionPages.js',
+      chave,
+      bloco: extrairBlocoPorChave(decisionFonte, chave),
+    })),
+    ...PAGINAS_DE_RISCO_COM_PAGE_JS.map((arquivo) => ({
+      origem: arquivo,
+      chave: arquivo.split('/').slice(-2)[0],
+      bloco: lerFonte(arquivo),
+    })),
   ]
 }
 
 test('FR-029: nenhuma página comercial/blog promete que a conta não será banida (varredura completa)', () => {
   const paginas = paginasParaChecarFR029()
-  assert.ok(paginas.length >= 20, `varredura de FR-029 achou só ${paginas.length} páginas — o parser de listarChaves() pode ter quebrado`)
+  assert.ok(paginas.length >= 27, `varredura de FR-029 achou só ${paginas.length} páginas — o parser de listarChaves() pode ter quebrado`)
 
   for (const { origem, chave, bloco } of paginas) {
     const achado = encontrarPromessaProibida(bloco)

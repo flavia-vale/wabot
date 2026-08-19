@@ -9,7 +9,7 @@ const slug = '/diagnostico-antiban-whatsapp'
 const siteUrl = getSiteUrl()
 const pageUrl = `${siteUrl}${slug}`
 const title = 'Teste: qual o risco do seu WhatsApp ser banido'
-const description = 'Responda 6 perguntas e veja o que na sua divulgação aumenta o risco de banimento: volume, ritmo, mensagens repetidas, chip e monitoramento. Ninguém garante imunidade — dá para reduzir risco.'
+const description = 'Responda 6 perguntas e veja o que aumenta o risco de banimento na sua divulgação: volume, ritmo, mensagens repetidas e chip. Ninguém garante imunidade.'
 
 const faqItems = [
   {

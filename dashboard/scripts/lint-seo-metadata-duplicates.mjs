@@ -77,6 +77,23 @@ function parseComparisonContentMeta() {
   return map
 }
 
+// T050 (specs/013-inbound-leads-strategy, FR-001): sétimo módulo de conteúdo,
+// e o último que faltava. As 4 rotas daqui tinham title E description também
+// no registry — mesma classe de dado morto que já derivou em outras rotas.
+// Blocos chaveados pelo path completo, como `_comparisonContent.js`.
+function parsePreservationDecisionMeta() {
+  const sourcePath = path.resolve(process.cwd(), 'app/_preservationDecisionPages.js')
+  if (!fs.existsSync(sourcePath)) return new Map()
+  const source = fs.readFileSync(sourcePath, 'utf8')
+  const map = new Map()
+  const blockRegex = /'(\/[^']+)':\s*\{[^}]*?title:\s*'([^']+)'[^}]*?description:\s*'([^']+)'/gs
+  for (const match of source.matchAll(blockRegex)) {
+    const [, routePath, title, description] = match
+    map.set(routePath, { title, description })
+  }
+  return map
+}
+
 function parseSeoHubMeta() {
   const sourcePath = path.resolve(process.cwd(), 'app/_seoHubShared.js')
   if (!fs.existsSync(sourcePath)) return new Map()
@@ -113,12 +130,13 @@ const preservationMeta = parsePreservationCommercialMeta()
 const comparisonMeta = parseComparisonContentMeta()
 const hubMeta = parseSeoHubMeta()
 const preservationBlogMeta = parsePreservationBlogMeta()
+const preservationDecisionMeta = parsePreservationDecisionMeta()
 
 // União de todos os módulos de conteúdo, indexada por path. É a "outra
 // ponta" da checagem de fonte única (FR-001): se um path tiver algo aqui E
 // title/description literal no registry, é divergência silenciosa em
 // potencial (ou pelo menos dado morto duplicado).
-const contentMetaByPath = new Map([...programmaticMeta, ...preservationMeta, ...comparisonMeta, ...hubMeta, ...preservationBlogMeta])
+const contentMetaByPath = new Map([...programmaticMeta, ...preservationMeta, ...comparisonMeta, ...hubMeta, ...preservationBlogMeta, ...preservationDecisionMeta])
 
 const records = []
 

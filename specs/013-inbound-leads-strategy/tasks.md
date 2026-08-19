@@ -675,7 +675,7 @@ e 45 caracteres. FR-008..FR-011, FR-012, FR-013, FR-015..FR-022, FR-025..FR-027 
 quatro arquivos de teste da feature passam (40 asserções). Sobraram três lacunas, todas de
 **cobertura de guarda** — nenhuma delas é violação de conteúdo hoje, e nenhuma bloqueia o entregue.
 
-- [ ] T050 Fechar a fonte única nos **dois últimos módulos de conteúdo** per FR-001 (partial).
+- [X] T050 Fechar a fonte única nos **dois últimos módulos de conteúdo** per FR-001 (partial).
   O parser de `dashboard/scripts/lint-seo-metadata-duplicates.mjs` conhece cinco dos **sete**
   módulos de conteúdo de `dashboard/app/`. Faltam `_preservationDecisionPages.js` e
   `_organicNicheLanding.js` — e o primeiro tem duplicação real agora: `/bot-comum-vs-botinho`,
@@ -697,7 +697,7 @@ quatro arquivos de teste da feature passam (40 asserções). Sobraram três lacu
   `test/seo-noindex-guard.test.js` para cobrir essa classe. Conferir que as duas rotas de nicho
   saem do `AVISO` e entram na contagem de rotas avaliadas (hoje 77/80). Nada de página nova nem de
   reabrir a linha congelada de nicho (FR-033/FR-034): as duas rotas continuam existindo como estão.
-- [ ] T051 Estender a varredura de **FR-029** às páginas que ficaram fora dela per FR-041 (partial).
+- [X] T051 Estender a varredura de **FR-029** às páginas que ficaram fora dela per FR-041 (partial).
   T047 trocou os alvos fixos por varredura, mas só sobre `_preservationCommercialPages.js` (5) e
   `_preservationBlogPosts.js` (15) — 20 páginas. Ficaram de fora justamente as mais expostas à
   promessa: `dashboard/app/_preservationDecisionPages.js`, que contém `/faq-antiban-whatsapp`
@@ -717,7 +717,7 @@ quatro arquivos de teste da feature passam (40 asserções). Sobraram três lacu
   adjacente) — nunca afrouxar os padrões de `PADROES_PROMESSA_NAO_BANIMENTO`, que são a guarda de
   verdade. Manter a asserção de piso de contagem de páginas varridas (hoje `>= 20`), subindo-a, para
   que uma quebra futura do parser não passe como "varredura vazia".
-- [ ] T052 Medir os **55 caracteres** também nos títulos com `page.js` próprio per FR-002/FR-041
+- [X] T052 Medir os **55 caracteres** também nos títulos com `page.js` próprio per FR-002/FR-041
   (partial). `test/inbound-titulos-clique.test.js` mede o orçamento de 55 sobre a lista fixa
   `ALVOS` (as 10/11 rotas de FR-004). T049 reescreveu mais três títulos fora dessa lista
   (`/diagnostico-antiban-whatsapp` 47, `/ferramentas/calculadora-risco-whatsapp` 47,

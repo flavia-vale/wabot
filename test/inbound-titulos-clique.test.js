@@ -102,6 +102,40 @@ const ALVOS = [
   { path: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', fonte: () => blocoChave('dashboard/app/blog/_preservationBlogPosts.js', 'como-divulgar-ofertas-mercado-livre-whatsapp') },
 ]
 
+// (T052) As três páginas de risco reescritas em T049. Não estão em FR-004 —
+// entraram porque o título que entra pela palavra buscada ("banido", "ban",
+// "banimento") estava parado no seo-registry.mjs e nunca tinha ido ao ar,
+// enquanto o page.js publicava o termo próprio da casa ("Preservação
+// Avançada"), que o AGENTS.md proíbe como porta de entrada. Ficam sob o mesmo
+// teto de 55 para não repetir o problema que P1 veio consertar.
+const ALVOS_RISCO_REESCRITOS = [
+  { path: '/diagnostico-antiban-whatsapp', fonte: () => blocoConst('dashboard/app/diagnostico-antiban-whatsapp/page.js') },
+  { path: '/materiais/checklist-antiban-whatsapp', fonte: () => blocoConst('dashboard/app/materiais/checklist-antiban-whatsapp/page.js') },
+  { path: '/ferramentas/calculadora-risco-whatsapp', fonte: () => blocoConst('dashboard/app/ferramentas/calculadora-risco-whatsapp/page.js') },
+]
+
+test('os 3 títulos de risco reescritos cabem em 55 chars e entram pela palavra buscada, não pelo termo da casa', () => {
+  for (const alvo of ALVOS_RISCO_REESCRITOS) {
+    const { title, description } = alvo.fonte()
+    assert.ok(title, `${alvo.path}: não achei o title na fonte`)
+    assert.ok(
+      title.length <= ORCAMENTO_TITULO,
+      `${alvo.path}: título com ${title.length} chars (entregue: "${tituloEntregue(title)}" = ${tituloEntregue(title).length} chars) passa de ${ORCAMENTO_TITULO}`
+    )
+    assert.match(
+      title,
+      /ban(id[oa]|imento)?\b/i,
+      `${alvo.path}: o título precisa entrar pela palavra que a pessoa busca ("banido"/"ban"/"banimento") — o termo próprio da casa é explicado DENTRO da página, nunca usado como porta de entrada (AGENTS.md)`
+    )
+    assert.doesNotMatch(
+      title,
+      /preserva[çc][ãa]o avan[çc]ada/i,
+      `${alvo.path}: "Preservação Avançada" é o termo da casa e não pode ser a porta de entrada`
+    )
+    assert.ok(description && description.length <= ORCAMENTO_DESCRICAO, `${alvo.path}: description ausente ou acima de ${ORCAMENTO_DESCRICAO} chars`)
+  }
+})
+
 test('os 10 títulos de FR-004 cabem em 55 chars de texto próprio (sufixo medido à parte)', () => {
   for (const alvo of ALVOS) {
     const { title } = alvo.fonte()
