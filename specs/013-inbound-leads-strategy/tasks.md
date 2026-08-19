@@ -658,3 +658,72 @@ lacuna, da mesma família que T046 acabou de fechar para o blog.
   checagem (c) de `test/seo-noindex-guard.test.js` para cobrir essa classe de rota. Conferir
   antes de remover que a cópia mantida é a que está no ar (o `page.js`), nunca a do registry, para
   não reintroduzir os títulos com `BOTinho`.
+
+---
+
+## Phase 12: Convergence
+
+**Origem**: terceira avaliação do código atual contra `spec.md`/`plan.md`/`tasks.md` em 2026-08-19,
+depois de T049 implementada. T049 foi **confirmada satisfeita de fato**: `parseMetadataFromPage()`
+entra no laço de `sourceConflicts` com o sinal `ownsMetadata`, as 11 rotas perderam a cópia do
+registry e `npm run lint:seo-metadata` fecha com zero conflito em 77/80. **Os três títulos de risco
+reescritos respeitam FR-029 — texto lido, não presumido**: `/diagnostico-antiban-whatsapp` ("Ninguém
+garante imunidade — dá para reduzir risco"), `/ferramentas/calculadora-risco-whatsapp` ("Estimativa,
+não garantia") e `/materiais/checklist-antiban-whatsapp` ("Nenhuma ferramenta garante imunidade");
+os FAQ das três respondem "Nenhuma ferramenta séria garante banimento zero"; os títulos medem 47, 47
+e 45 caracteres. FR-008..FR-011, FR-012, FR-013, FR-015..FR-022, FR-025..FR-027 seguem íntegros e os
+quatro arquivos de teste da feature passam (40 asserções). Sobraram três lacunas, todas de
+**cobertura de guarda** — nenhuma delas é violação de conteúdo hoje, e nenhuma bloqueia o entregue.
+
+- [ ] T050 Fechar a fonte única nos **dois últimos módulos de conteúdo** per FR-001 (partial).
+  O parser de `dashboard/scripts/lint-seo-metadata-duplicates.mjs` conhece cinco dos **sete**
+  módulos de conteúdo de `dashboard/app/`. Faltam `_preservationDecisionPages.js` e
+  `_organicNicheLanding.js` — e o primeiro tem duplicação real agora: `/bot-comum-vs-botinho`,
+  `/faq-antiban-whatsapp`, `/como-funciona-botinho-canais` e `/protecao-antiban-botinho` declaram
+  `title` **e** `description` no `dashboard/lib/seo-registry.mjs` **e** no módulo. Os valores ainda
+  são idênticos — que é exatamente o estado em que `/bot-achadinhos-whatsapp` estava antes de
+  divergir (R2 do `research.md`) e em que `/parcerias`, `/conteudos` e `/bot-canais-whatsapp`
+  estavam antes de T049 medi-las já divergidas. O laço de `sourceConflicts` (linhas 182-200) não
+  acusa porque `contentMetaByPath` não tem esses paths e o `page.js` dessas rotas não traz literal
+  de `title` (chama `getDecisionPageMetadata(...)`), então cai no `continue` do `ownsMetadata`.
+  `_organicNicheLanding.js` não tem duplicação hoje (o registry não guarda cópia das suas duas
+  rotas), mas suas rotas `/bot-ofertas-restaurantes-whatsapp` e `/bot-ofertas-marketplace-whatsapp`
+  são duas das três da linha `AVISO: 3 rotas indexáveis sem metadata completa` — ficam **fora da
+  validação de duplicidade de FR-007 inteira**, além de fora do guard de fonte única. Ensinar o
+  parser os dois módulos (os blocos de `_preservationDecisionPages.js` são chaveados por `slug:`
+  com o path já barrado, como `_preservationBlogPosts.js`; os de `_organicNicheLanding.js` também
+  usam `slug:`), remover do registry o `title`/`description` das quatro rotas de decisão — o módulo
+  vira a fonte única, como já foi feito em T046 e T049 — e ampliar a checagem (c) de
+  `test/seo-noindex-guard.test.js` para cobrir essa classe. Conferir que as duas rotas de nicho
+  saem do `AVISO` e entram na contagem de rotas avaliadas (hoje 77/80). Nada de página nova nem de
+  reabrir a linha congelada de nicho (FR-033/FR-034): as duas rotas continuam existindo como estão.
+- [ ] T051 Estender a varredura de **FR-029** às páginas que ficaram fora dela per FR-041 (partial).
+  T047 trocou os alvos fixos por varredura, mas só sobre `_preservationCommercialPages.js` (5) e
+  `_preservationBlogPosts.js` (15) — 20 páginas. Ficaram de fora justamente as mais expostas à
+  promessa: `dashboard/app/_preservationDecisionPages.js`, que contém `/faq-antiban-whatsapp`
+  ("WhatsApp banido divulgando ofertas: perguntas e respostas") e `/protecao-antiban-botinho`
+  ("Como evitar que o WhatsApp seja banido divulgando ofertas"); e as três páginas de risco com
+  `page.js` próprio — `/diagnostico-antiban-whatsapp`, `/ferramentas/calculadora-risco-whatsapp`,
+  `/materiais/checklist-antiban-whatsapp` — cujo título e descrição **esta mesma entrega
+  reescreveu** em T049. Como FR-029 diz "nenhum texto" e está na seção que reprova a entrega em
+  revisão, o texto que a feature escreveu não pode ficar sem guarda. **Nenhuma das cinco viola
+  FR-029 hoje** — verificado aplicando o próprio `encontrarPromessaProibida` do teste a todas elas.
+  ⚠️ Armadilha medida, resolver junto: estender a varredura como está produz **dois falsos
+  positivos** em pergunta honesta de FAQ — "A calculadora garante que meu WhatsApp não será
+  banido?" e "Este diagnóstico garante que meu WhatsApp não será banido?", ambas respondidas com
+  "Não. Nenhuma ferramenta séria garante banimento zero." O `NEGACAO_ANTES_RE` só olha para trás
+  dentro da mesma sentença, e aqui a negação está no campo `answer` vizinho, não antes do trecho.
+  Tratar o par pergunta+resposta como uma unidade de contexto (ou aceitar a negação na `answer`
+  adjacente) — nunca afrouxar os padrões de `PADROES_PROMESSA_NAO_BANIMENTO`, que são a guarda de
+  verdade. Manter a asserção de piso de contagem de páginas varridas (hoje `>= 20`), subindo-a, para
+  que uma quebra futura do parser não passe como "varredura vazia".
+- [ ] T052 Medir os **55 caracteres** também nos títulos com `page.js` próprio per FR-002/FR-041
+  (partial). `test/inbound-titulos-clique.test.js` mede o orçamento de 55 sobre a lista fixa
+  `ALVOS` (as 10/11 rotas de FR-004). T049 reescreveu mais três títulos fora dessa lista
+  (`/diagnostico-antiban-whatsapp` 47, `/ferramentas/calculadora-risco-whatsapp` 47,
+  `/materiais/checklist-antiban-whatsapp` 45) — **todos dentro do orçamento hoje**, mas nenhum teste
+  reprova se um deles crescer. FR-041 nomeia "o limite de caracteres do título" como a primeira
+  regra que não pode regredir em silêncio, e agora existem títulos escritos por esta entrega que
+  nenhuma medição cobre. Incluir essas três rotas na medição (mesma mensagem de falha, com o sufixo
+  reportado à parte pela decisão D1 do `plan.md`), sem mexer no teto de 60 preservado para
+  `/bot-achadinhos-whatsapp` e sem afrouxar nada existente.
