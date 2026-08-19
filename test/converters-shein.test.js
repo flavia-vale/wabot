@@ -412,3 +412,90 @@ test('garante PROGRAM_PARAMS ausentes no destino', async () => {
   assert.equal(out.searchParams.get('campaign'), 'goods')
   assert.equal(out.searchParams.get('campaign_id'), '20')
 })
+
+// ---------------------------------------------------------------------------
+// T084 (Phase 16, specs/012-shein-store-support): guarda de não-regressão.
+// As guardas T072-T079 não podem mudar de comportamento com o encurtamento
+// LIGADO (cookie presente). Para isolar "o encurtamento tentou e falhou" de
+// "a guarda continua recusando", usamos um fetchImpl que sempre falha na
+// primeira chamada da SHEIN (getSiteInfo) — assim shortenSheinLink() sempre
+// degrada para `null` e o resultado de convert() é sempre o link longo
+// (idêntico ao caminho sem cookie), permitindo reaplicar exatamente as
+// mesmas asserções das guardas.
+// ---------------------------------------------------------------------------
+
+function fetchImplComEncurtadorFalhando() {
+  // getSiteInfo falha de rede → shortenSheinLink() degrada para null em
+  // qualquer chamada, sem nunca chegar ao gerador de link.
+  return async (url) => {
+    if (String(url).includes('shein.com/br/api/others/getSiteInfo')) throw new Error('rede fora (teste)')
+    throw new Error(`URL inesperada no teste: ${url}`)
+  }
+}
+
+test('T084: com cookie presente (encurtamento ligado), guardas de identidade de terceiro continuam recusando', async () => {
+  const creds = { tag: '1150365562', cookie: 'algum-cookie=valor' }
+  const fetchImpl = fetchImplComEncurtadorFalhando()
+
+  const url1 = 'https://br.shein.com/a-p-1.html?goods_id=1&partner_koc=5849195695'
+  assert.equal(await convert(url1, creds, { fetchImpl }), null)
+
+  const url2 = 'https://br.shein.com/affiliate_koc_5849195695/a-p-1.html?goods_id=1'
+  assert.equal(await convert(url2, creds, { fetchImpl }), null)
+
+  const url3 = 'https://br.shein.com/a-p-1.html?goods_id=1&ad_type=KOC5849195695'
+  assert.equal(await convert(url3, creds, { fetchImpl }), null)
+})
+
+test('T084: com cookie presente (encurtamento ligado), guarda de host ancorado continua recusando', async () => {
+  const creds = { tag: '999', cookie: 'algum-cookie=valor' }
+  const fetchImpl = fetchImplComEncurtadorFalhando()
+  const result = await convert('https://shein.com.evil.net/x-p-123.html?goods_id=123', creds, { fetchImpl })
+  assert.equal(result, null)
+})
+
+test('T084: com cookie presente (encurtamento ligado), token opaco (shc/link) continua recusando', async () => {
+  const creds = { tag: '12345', cookie: 'algum-cookie=valor' }
+  const fetchImpl = fetchImplComEncurtadorFalhando()
+  const url = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=abc123&link=xyz&url_from=GM7999'
+  assert.equal(await convert(url, creds, { fetchImpl }), null)
+})
+
+test('T084: com cookie presente (encurtamento ligado), link legítimo continua convertendo com koc_id/url_from da cliente (encurtador falhou → link longo)', async () => {
+  const creds = { tag: '1150365562', cookie: 'algum-cookie=valor' }
+  const fetchImpl = fetchImplComEncurtadorFalhando()
+  const url = 'https://br.shein.com/Kocotree-Mochila-Infantil-p-1.html?goods_id=111'
+  const result = await convert(url, creds, { fetchImpl })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+  const out = new URL(result.url)
+  assert.equal(out.searchParams.get('koc_id'), '1150365562')
+  assert.equal(out.searchParams.get('url_from'), 'affiliate_koc_1150365562')
+  // encurtador falhou → publica o link longo, não um oneLink
+  assert.equal(result.url.includes('onelink.shein.com'), false)
+})
+
+test('T084: com cookie presente (encurtamento ligado), landing genérica /ark/default sem destino continua null', async () => {
+  const creds = { tag: '12345', cookie: 'algum-cookie=valor' }
+  const fetchImpl = fetchImplComEncurtadorFalhando()
+  const url = 'https://m.shein.com/br/ark/default'
+  assert.equal(await convert(url, creds, { fetchImpl }), null)
+})
+
+test('T084: as outras quatro lojas seguem intocadas pela mudança do Phase 16 (SHEIN)', async () => {
+  const { convert: convertML } = await import('../src/converters/mercadolivre.js')
+  const { convert: convertAmazon } = await import('../src/converters/amazon.js')
+  const { convert: convertShopee } = await import('../src/converters/shopee.js')
+  const { convert: convertMagalu } = await import('../src/converters/magazineluiza.js')
+
+  assert.equal(typeof convertML, 'function')
+  assert.equal(typeof convertAmazon, 'function')
+  assert.equal(typeof convertShopee, 'function')
+  assert.equal(typeof convertMagalu, 'function')
+
+  // Magazine Luiza não depende de rede/credencial de sessão — smoke test
+  // simples de que o converter segue funcionando sem qualquer interferência
+  // do módulo shein.js (módulos são independentes; nenhum import cruzado).
+  const magaluResult = await convertMagalu('https://www.magazinevoce.com.br/magazinealguem/produto/p/123/', { tag: 'minhatag' })
+  assert.ok(magaluResult)
+})

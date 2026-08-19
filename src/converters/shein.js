@@ -9,6 +9,7 @@
 // mesmo módulo, sem API paga).
 
 import { isSheinHostname } from '../detector.js'
+import logger from '../logger.js'
 
 // Página de produto direta: `<slug>-p-<goodsId>.html` (opcionalmente com
 // `-cat-<catId>`).
@@ -280,6 +281,162 @@ export async function resolveSheinShortLink(
   return current
 }
 
+// Caminho CONFIRMADO ao vivo pela cliente (specs/012-shein-store-support,
+// Phase 16 — não é hipótese, replicado de scripts/diag-shein-shortlink.mjs):
+//
+//   GET  {origin}/api/others/getSiteInfo   header bff-source: shein;pwa
+//     -> { SiteUID, token, memberId, appLanguage }
+//   POST {origin}/affiliate/api/share/link/from/url
+//     headers token, siteuid, language, localcountry:'BR', mi:<memberId>
+//     body    { url, language, uid:<memberId> }
+//     -> { code:"0", info:{ oneLink } }
+const SHEIN_SITE_INFO_URL = 'https://m.shein.com/br/api/others/getSiteInfo'
+const SHEIN_SHORTEN_URL = 'https://m.shein.com/br/affiliate/api/share/link/from/url'
+
+// Orçamento TOTAL para as duas chamadas somadas — mesmo espírito do
+// `totalTimeoutMs` de `resolveSheinShortLink`: roda dentro do pipeline de
+// mensagens, que tem teto de 25s (`MSG_QUEUE_TIMEOUT_MS`). ~6s deixa folga
+// generosa para o resto do pipeline mesmo no pior caso.
+const SHORTEN_TOTAL_TIMEOUT_MS = 6000
+
+// Cache do token em escopo de MÓDULO, por `tag` — o token traz timestamp de
+// emissão embutido (mesma sessão serve por minutos), e cunhar um novo por
+// oferta é desperdício de rede/latência. TTL curto de propósito: nada de
+// cache "grande" ou de longa duração (política de memória do AGENTS.md) —
+// só evita a chamada dupla quando várias ofertas saem em sequência rápida.
+// Chave por `tag` + o próprio cookie (para invalidar sozinho se a cliente
+// trocar o código de acesso no meio do TTL).
+const SHORTEN_TOKEN_CACHE_TTL_MS = 10 * 60 * 1000
+const shortenTokenCache = new Map()
+
+function getCachedShortenSession(tag, cookie) {
+  const cached = shortenTokenCache.get(tag)
+  if (!cached) return null
+  if (cached.cookie !== cookie || cached.expiresAt <= Date.now()) {
+    shortenTokenCache.delete(tag)
+    return null
+  }
+  return cached
+}
+
+// Gera o oneLink curto da SHEIN para `longUrl`, usando o código de acesso
+// (cookie) cadastrado pela cliente. Retorna a string do oneLink ou `null`.
+// NUNCA lança — qualquer falha (rede, prazo, resposta inesperada) degrada
+// para `null`, e quem chama publica o link longo (comportamento de hoje).
+//
+// Guarda de identidade — a parte mais importante: o `memberId` devolvido
+// pela sessão da SHEIN PRECISA ser o mesmo número já cadastrado em
+// `creds.tag` (confirmado pela cliente: é o mesmo número). `memberId` vazio
+// quer dizer código de acesso vencido (sessão de visitante); `memberId`
+// diferente do `tag` quer dizer que o cookie colado é de OUTRA conta —
+// publicar o oneLink dela pagaria a comissão para ela. Mesmo princípio das
+// guardas T074/T077 em `convert()`.
+export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.fetch, totalTimeoutMs = SHORTEN_TOTAL_TIMEOUT_MS } = {}) {
+  try {
+    if (String(process.env.SHEIN_SHORTLINK_ENABLED ?? 'true') === 'false') return null
+
+    const cookie = String(creds?.cookie || '').trim()
+    if (!cookie) return null
+    const tag = String(creds?.tag || '').trim()
+    if (!tag) return null
+
+    const deadlineAt = Date.now() + totalTimeoutMs
+
+    let session = getCachedShortenSession(tag, cookie)
+    if (!session) {
+      const remainingMs = deadlineAt - Date.now()
+      if (remainingMs <= 0) return null
+
+      let siteInfoRes
+      try {
+        siteInfoRes = await fetchImpl(SHEIN_SITE_INFO_URL, {
+          signal: AbortSignal.timeout(remainingMs),
+          headers: {
+            'User-Agent': BROWSER_UA,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'bff-source': 'shein;pwa',
+            Cookie: cookie,
+          },
+        })
+      } catch {
+        return null
+      }
+
+      let info
+      try {
+        info = await siteInfoRes.json()
+      } catch {
+        return null
+      }
+
+      const memberId = String(info?.memberId || '').trim()
+      // memberId vazio: código de acesso venceu (sessão de visitante). Não é
+      // erro de rede — é a SHEIN dizendo "essa sessão não é de ninguém logado".
+      if (!memberId) return null
+      // Guarda de identidade (a mais importante): nunca publicar oneLink
+      // emitido por uma conta diferente da cadastrada.
+      if (memberId !== tag) {
+        logger.warn({ tag, memberId }, 'SHEIN: memberId da sessão diverge do ID de afiliada cadastrado — encurtamento recusado')
+        return null
+      }
+
+      session = {
+        token: info?.token || '',
+        memberId,
+        siteUid: info?.SiteUID || 'mbr',
+        language: info?.appLanguage || 'pt-br',
+        cookie,
+        expiresAt: Date.now() + SHORTEN_TOKEN_CACHE_TTL_MS,
+      }
+      shortenTokenCache.set(tag, session)
+    }
+
+    const remainingMs = deadlineAt - Date.now()
+    if (remainingMs <= 0) return null
+
+    let shortenRes
+    try {
+      shortenRes = await fetchImpl(SHEIN_SHORTEN_URL, {
+        method: 'POST',
+        signal: AbortSignal.timeout(remainingMs),
+        headers: {
+          'User-Agent': BROWSER_UA,
+          Accept: 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
+          'X-Requested-With': 'XMLHttpRequest',
+          token: session.token,
+          siteuid: session.siteUid,
+          localcountry: 'BR',
+          language: session.language,
+          mi: session.memberId,
+        },
+        body: JSON.stringify({ url: String(longUrl), language: session.language, uid: session.memberId }),
+      })
+    } catch {
+      return null
+    }
+
+    let data
+    try {
+      data = await shortenRes.json()
+    } catch {
+      return null
+    }
+
+    if (data?.code !== '0') return null
+    const oneLink = data?.info?.oneLink
+    if (!oneLink) return null
+
+    // Devolve como veio — não reescrever nem remover parâmetro (mesma lição
+    // do `generateShortLink` da Shopee: o short link só funciona devolvido
+    // como-está).
+    return String(oneLink)
+  } catch {
+    return null
+  }
+}
+
 // Converte um link da SHEIN aplicando a identidade da cliente. Retorna
 // `{ url, linkKind }` ou `null`. Nunca lança.
 // Terceiro parâmetro (`{ fetchImpl }`) é injeção de teste — em produção usa o
@@ -424,6 +581,19 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {})
     if (!goodsId && looksLikeProductPath) return null
 
     const linkKind = goodsId ? 'product' : 'coupon'
+
+    // T082: o encurtamento acontece DEPOIS de todas as guardas acima (host
+    // ancorado, token opaco, `/ark/default` sem goods_id, rede de segurança
+    // de identificador de terceiro) — não reordenar. `finalUrl` já é o link
+    // longo pronto, com a identidade da cliente aplicada; o encurtamento só
+    // troca a forma final, nunca o destino/identidade. Sem `creds.cookie`,
+    // `shortenSheinLink` nem tenta (devolve `null` de cara) — o opt-in de
+    // verdade é a própria existência do código de acesso cadastrado.
+    // Kill-switch `SHEIN_SHORTLINK_ENABLED` (default ligado) corta em
+    // produção sem redeploy. Qualquer falha do encurtador (`null`) publica o
+    // link longo — o fallback é o comportamento de hoje, já validado.
+    const shortLink = await shortenSheinLink(finalUrl, creds, { fetchImpl })
+    if (shortLink) return { url: shortLink, linkKind }
 
     return { url: finalUrl, linkKind }
   } catch {
