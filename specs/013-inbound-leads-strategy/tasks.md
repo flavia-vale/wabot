@@ -561,3 +561,61 @@ Task: "T021 [US3] Criar test/painel-aviso-credencial.test.js"
   ou banco — confirmado no portão final (T044).
 - Verificar que os testes falham antes da implementação (T002, T014, T021, T030).
 - Parar em qualquer checkpoint para validar a história isoladamente antes de seguir.
+
+---
+
+## Phase 10: Convergence
+
+**Origem**: avaliação do código atual contra `spec.md`/`plan.md`/`tasks.md` em 2026-08-19, depois
+da decisão revista de triagem de indexação (25 rotas de grade fora do índice). US2 foi confirmada
+satisfeita de fato (mecanismo ligado nos 4 chokepoints **e** aplicado; nenhuma página apagada;
+sitemap/IndexNow/HTML sincronizados). As lacunas abaixo são as que sobraram — nenhuma delas
+bloqueia o que já foi entregue.
+
+- [ ] T045 Cobrir a **SHEIN** no aviso de credencial do painel per FR-015/FR-016 (partial).
+  `src/credentialBlockAlert/message.js` mapeia só `shopee`/`mercadolivre`/`amazon`/`magazineluiza`
+  e descarta em silêncio qualquer outra loja (fail-safe de "loja desconhecida"). Mas a SHEIN é
+  conversor vivo (`src/converters/shein.js`) e plataforma canônica em `src/credentialHealth.js`
+  (`PLATFORMS`), e o `convert()` dela faz `if (!tag) return null` — sem credencial, **nada da
+  SHEIN é publicado** e o envio vira `skip:no_valid_conversions` com `platform: 'shein'`
+  (`src/bot-worker.js`, ~linha 3037). Hoje esse caso não gera nenhum aviso no painel: é
+  exatamente o silêncio que US3 existe para acabar. Adicionar a SHEIN à **família da Shopee**
+  ("as ofertas da SHEIN param de sair" — sem a etiqueta de afiliada nada sai; NUNCA o texto de
+  ML/Amazon de "continuam saindo, só com link mais comprido"), mantendo as constantes
+  estruturalmente separadas exigidas por T021(d). Estender
+  `test/painel-aviso-credencial.test.js` com (a) a asserção de inversão para `platform: 'shein'`
+  e (b) uma guarda de cobertura que reprove quando uma plataforma de
+  `src/credentialHealth.js#PLATFORMS` não tiver texto em `STORE_LABELS`/`ALERT_BUILDERS` — para
+  que a próxima loja nova não repita este buraco em silêncio.
+- [ ] T046 Estender a guarda de **fonte única** ao módulo de blog per FR-001 (partial).
+  11 rotas de `/blog/*` ainda têm `title`/`description` em dois lugares ao mesmo tempo
+  (`dashboard/lib/seo-registry.mjs` **e** `dashboard/app/blog/_preservationBlogPosts.js`),
+  inclusive `/blog/como-ser-afiliado-shopee-whatsapp`, que US6 editou nesta mesma rodada — é o
+  mesmo padrão que já divergiu em silêncio em `/bot-achadinhos-whatsapp` (R2 do research.md).
+  Hoje nem `dashboard/scripts/lint-seo-metadata-duplicates.mjs` nem
+  `test/seo-noindex-guard.test.js` olham esse módulo (deferimento registrado no comentário do
+  teste, linhas 137-146). Ensinar o parser do lint a ler `_preservationBlogPosts.js`, remover a
+  cópia de `title`/`description` dessas rotas do registry (módulo vira a única fonte, como já
+  foi feito para as 4 rotas de FR-004) e ampliar a checagem (c) de
+  `test/seo-noindex-guard.test.js` para incluir os paths de blog.
+- [ ] T047 Generalizar os guards dos **limites que não se cruzam** per FR-041 (partial).
+  `test/marketing-limites-que-nao-se-cruzam.test.js` prende cada regra a uma página específica,
+  enquanto a spec escreve "nenhum texto" (FR-029) e "todo comparativo" (FR-030/031/032):
+  (a) FR-029 só varre `bot-afiliados-whatsapp` e o post da Shopee — `/anti-ban-whatsapp`, a
+  página mais exposta à promessa, fica de fora; (b) FR-030/FR-031/FR-032 só varrem
+  `/alternativas/achadinho-pro`. Como `checklist-comparativos.md` prevê **cinco** comparativos
+  novos, uma página futura sem `bestFit`, com preço sem `verifiedAt`+`source` em
+  `dashboard/lib/competitors-data.js`, ou com título se passando pelo concorrente **passa o CI
+  hoje**. Trocar as asserções por iteração sobre todas as entradas de
+  `dashboard/app/_comparisonContent.js` (FR-030/031/032) e sobre todas as entradas de
+  `dashboard/app/_preservationCommercialPages.js` + `_preservationBlogPosts.js` (FR-029). As 9
+  entradas de comparativo já têm `bestFit` hoje — a mudança é de cobertura de guarda, não de
+  conteúdo.
+- [ ] T048 Documentar o **caminho de uso** dos oito e-mails de "Contato e escuta" per FR-022
+  (partial). T026 confirmou o que o requisito proíbe (todos seguem `trigger: 'manual'` em
+  `src/email/registry.js` — verificado), mas a outra metade do FR ("apenas o caminho de uso MUST
+  ser documentado") não gerou artefato nesta entrega. Escrever em
+  `specs/013-inbound-leads-strategy/` (seção nova em `quickstart.md` ou arquivo próprio) como a
+  usuária dispara esses e-mails na prática: aba E-mails do admin, escolha de público, escolha do
+  momento, e a razão de nunca virarem automáticos (pergunta disparada na hora errada queima o
+  canal — `AGENTS.md`, grupo "Contato e escuta"). Nenhuma mudança de código.
