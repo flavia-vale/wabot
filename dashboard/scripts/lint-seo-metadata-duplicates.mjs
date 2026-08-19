@@ -23,6 +23,12 @@ function parseMetadataFromPage(routePath) {
   return {
     title: titleMatch?.[1] || null,
     description: descriptionMatch?.[1] || null,
+    // A página é DONA da própria metadata? Só nesse caso um title no registry
+    // é conflito de fonte — sem isso, um `title:` solto no meio do JSX (um
+    // card, um gráfico) viraria falso positivo. O regex acima é
+    // deliberadamente frouxo porque serve também para preencher lacuna no
+    // laço de registros; a checagem de conflito exige este sinal explícito.
+    ownsMetadata: /export\s+(const\s+metadata|(async\s+)?function\s+generateMetadata)/.test(src),
   }
 }
 
@@ -175,15 +181,28 @@ if (dupDescriptions.length > 0) {
 const sourceConflicts = []
 for (const route of SEO_ROUTES) {
   const moduleMeta = contentMetaByPath.get(route.path)
-  if (!moduleMeta) continue
-  if (route.title && moduleMeta.title) sourceConflicts.push({ path: route.path, field: 'title' })
-  if (route.description && moduleMeta.description) sourceConflicts.push({ path: route.path, field: 'description' })
+  if (moduleMeta) {
+    if (route.title && moduleMeta.title) sourceConflicts.push({ path: route.path, field: 'title', onde: 'o módulo de conteúdo que renderiza a página' })
+    if (route.description && moduleMeta.description) sourceConflicts.push({ path: route.path, field: 'description', onde: 'o módulo de conteúdo que renderiza a página' })
+    continue
+  }
+
+  // Rota servida pelo próprio `page.js` (sem módulo de conteúdo compartilhado).
+  // Esta classe escapava do guard: `parseMetadataFromPage` existia, mas só era
+  // usada para PREENCHER lacuna no laço de registros, nunca para acusar
+  // conflito. Resultado medido em 2026-08-19: 5 rotas com title/description nos
+  // dois lugares, 3 já divergidas, e as cópias paradas no registry ainda
+  // traziam o sufixo de marca que já tinha sido removido do que vai ao ar.
+  const pageMeta = parseMetadataFromPage(route.path)
+  if (!pageMeta?.ownsMetadata) continue
+  if (route.title && pageMeta.title) sourceConflicts.push({ path: route.path, field: 'title', onde: 'o próprio page.js da rota' })
+  if (route.description && pageMeta.description) sourceConflicts.push({ path: route.path, field: 'description', onde: 'o próprio page.js da rota' })
 }
 
 if (sourceConflicts.length > 0) {
   console.error('ERRO: title/description em DOIS lugares para a(s) rota(s) abaixo (fonte única quebrada, FR-001):')
-  sourceConflicts.forEach(({ path: p, field }) =>
-    console.error(` - ${p} (${field}) — está em dashboard/lib/seo-registry.mjs E no módulo de conteúdo que renderiza a página`)
+  sourceConflicts.forEach(({ path: p, field, onde }) =>
+    console.error(` - ${p} (${field}) — está em dashboard/lib/seo-registry.mjs E em ${onde}`)
   )
   process.exitCode = 1
 }

@@ -619,3 +619,42 @@ bloqueia o que já foi entregue.
   usuária dispara esses e-mails na prática: aba E-mails do admin, escolha de público, escolha do
   momento, e a razão de nunca virarem automáticos (pergunta disparada na hora errada queima o
   canal — `AGENTS.md`, grupo "Contato e escuta"). Nenhuma mudança de código.
+
+---
+
+## Phase 11: Convergence
+
+**Origem**: segunda avaliação do código atual contra `spec.md`/`plan.md`/`tasks.md` em 2026-08-19,
+depois de T045–T048 implementadas. T045 (SHEIN na família da Shopee), T046 (fonte única do módulo
+de blog), T047 (guards de FR-029..FR-032 varrendo todas as páginas) e T048 (caminho de uso dos
+e-mails de escuta) foram **confirmadas satisfeitas de fato**, não só marcadas. FR-008..FR-011
+seguem íntegros: `buildSeoRobots()` devolve `{ index: false, follow: true }`, `sitemap.js` e
+`scripts/notify-indexnow.mjs` leem `getIndexableSeoRoutes()` enquanto
+`guard-seo-registry-coverage.mjs` lê `getAllSeoRoutes()` — as três pontas sincronizadas e nenhuma
+página apagada. Os quatro arquivos de teste da feature passam (40 asserções). Sobrou **uma**
+lacuna, da mesma família que T046 acabou de fechar para o blog.
+
+- [X] T049 Estender a guarda de **fonte única** às páginas com `page.js` próprio per FR-001
+  (partial). A checagem de FR-001 em `dashboard/scripts/lint-seo-metadata-duplicates.mjs`
+  (linhas 176-181) compara o registry apenas contra `contentMetaByPath` — a união dos cinco
+  módulos de conteúdo (`_lpShared`, `_preservationCommercialPages`, `_comparisonContent`,
+  `_seoHubShared`, `_preservationBlogPosts`). O parser `parseMetadataFromPage()` (linha 12) já
+  sabe ler `app/<rota>/page.js`, mas seu resultado só é usado como **preenchimento** quando falta
+  metadata (linhas 131-135); ele **nunca** entra em `sourceConflicts`. Resultado: a rota que
+  declara `title`/`description` no `seo-registry.mjs` **e** no seu próprio `page.js` passa o
+  `npm run lint:seo-metadata` (hoje verde, 77/80) sem ninguém comparar os dois valores — é
+  exatamente o buraco que deixou `/bot-achadinhos-whatsapp` divergir em silêncio (R2 do
+  `research.md`), reaberto por outra porta. Cinco rotas estão nessa situação
+  (`/precos`, `/parcerias`, `/bot-canais-whatsapp`, `/parceiro-influenciador`, `/conteudos`) e
+  **três já divergiram de fato**: `/parcerias` (registry `'Parcerias BOTinho | Co-marketing para
+  admins e afiliados'` vs. no ar `'Parcerias | Co-marketing para admins e afiliados de ofertas'`),
+  `/conteudos` (diverge em `title` **e** `description`) e `/bot-canais-whatsapp` (diverge em
+  `description`). Note que as cópias paradas no registry ainda carregam o texto de marca
+  `BOTinho` que esta mesma rodada removeu de 38 títulos — a limpeza alcançou a cópia servida e
+  não a do registry, que é a prova de que a duplicação continua produzindo deriva. Alimentar
+  `parseMetadataFromPage()` no laço de `sourceConflicts` (mesma mensagem de erro, citando os dois
+  arquivos), remover do registry o `title`/`description` dessas rotas — o `page.js` vira a fonte
+  única, como já foi feito para as rotas de FR-004 e para as 11 de blog em T046 — e ampliar a
+  checagem (c) de `test/seo-noindex-guard.test.js` para cobrir essa classe de rota. Conferir
+  antes de remover que a cópia mantida é a que está no ar (o `page.js`), nunca a do registry, para
+  não reintroduzir os títulos com `BOTinho`.

@@ -6,8 +6,8 @@ import { getSiteUrl } from '@/lib/site-url'
 
 const slug = '/ferramentas/calculadora-risco-whatsapp'
 const siteUrl = getSiteUrl()
-const title = 'Calculadora de risco para WhatsApp de afiliados'
-const description = 'Calcule a exposição operacional da sua divulgação no WhatsApp com base em volume, cadência, mensagens idênticas, chip dedicado, monitoramento e recuperação.'
+const title = 'Calculadora: risco de banimento do seu WhatsApp'
+const description = 'Estime o risco de banimento da sua divulgação no WhatsApp a partir de volume, ritmo, mensagens idênticas, chip dedicado e monitoramento. Estimativa, não garantia.'
 
 const faqItems = [
   {
