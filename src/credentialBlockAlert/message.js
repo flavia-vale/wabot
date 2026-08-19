@@ -15,6 +15,7 @@ const STORE_LABELS = {
   mercadolivre: 'Mercado Livre',
   amazon: 'Amazon',
   magazineluiza: 'Magalu',
+  shein: 'SHEIN',
 }
 
 // --- Shopee: SEM chave aceita, a conversão falha por completo — nenhuma
@@ -27,6 +28,21 @@ function buildShopeeAlert(storeLabel) {
     headline: `As ofertas da ${storeLabel} não estão saindo`,
     body: `Sem a chave da ${storeLabel} aceita, as ofertas da ${storeLabel} param de sair — a conversão falha por completo e nada é publicado.`,
     nextStep: `Cadastre a chave da ${storeLabel} (App ID + chave secreta) em "Minhas credenciais" para as ofertas voltarem a sair.`,
+  }
+}
+
+// --- SHEIN: entra na FAMÍLIA DA SHOPEE, não na de ML/Amazon/Magalu.
+// `src/converters/shein.js#convert()` faz `if (!tag) return null` — sem a
+// etiqueta de afiliada, NADA é resolvido e a oferta vira
+// `skip:no_valid_conversions` (não existe plano B com link mais comprido,
+// diferente de ML/Amazon/Magalu). Constante própria, nunca fundida com
+// `buildShopeeAlert`/`buildSessionAlert` (T045 espelha a exigência de T021(d)
+// para a Shopee).
+function buildSheinAlert(storeLabel) {
+  return {
+    headline: `As ofertas da ${storeLabel} não estão saindo`,
+    body: `Sem a etiqueta de afiliada da ${storeLabel}, as ofertas da ${storeLabel} param de sair — a conversão falha por completo e nada é publicado.`,
+    nextStep: `Cadastre a etiqueta de afiliada da ${storeLabel} em "Minhas credenciais" para as ofertas voltarem a sair.`,
   }
 }
 
@@ -49,6 +65,7 @@ const ALERT_BUILDERS = {
   mercadolivre: buildSessionAlert,
   amazon: buildSessionAlert,
   magazineluiza: buildSessionAlert,
+  shein: buildSheinAlert,
 }
 
 /**

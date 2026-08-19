@@ -11,6 +11,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildCredentialBlockAlerts } from '../src/credentialBlockAlert/message.js'
+import { PLATFORMS } from '../src/credentialHealth.js'
 
 // (a) Jargão que nunca pode chegar à tela da cliente (FR-017).
 const JARGAO_PROIBIDO = [/\bcookie\b/i, /\bSSID\b/i, /\btag\b/i, /partner_id/i, /\?tag=/, /amzn\.to/i]
@@ -115,4 +116,42 @@ test('plataforma desconhecida não quebra o motor (fail-safe: não monta aviso g
     configuredPlatforms: [],
   })
   assert.deepEqual(stores, [])
+})
+
+// --- T045 (FR-015/FR-016): SHEIN é conversor vivo (src/converters/shein.js)
+// cujo convert() faz `if (!tag) return null` — sem a etiqueta de afiliada,
+// NADA da SHEIN é resolvido/publicado. Mesma família de vocabulário da
+// Shopee ("param de sair"), nunca a de ML/Amazon/Magalu ("continuam
+// saindo... link mais comprido"), que seria falsa para a SHEIN.
+
+test('(g) SHEIN: o body diz que as ofertas PARAM de sair, família Shopee (FR-015)', () => {
+  const [store] = buildCredentialBlockAlerts({
+    blockedByPlatform: [{ platform: 'shein', blockedCount: 6, lastBlockedAt: new Date().toISOString() }],
+    configuredPlatforms: [],
+  })
+  assert.ok(store, 'SHEIN deveria gerar aviso quando bloqueada por falta de credencial')
+  assert.equal(store.storeLabel, 'SHEIN')
+  assert.match(store.body, /param de sair|para de sair|não est(ã|a)o saindo/i)
+  assert.doesNotMatch(store.body, /continuam saindo/i, 'SHEIN não pode herdar a frase de ML/Amazon — não existe plano B para ela')
+})
+
+test('(h) guarda de cobertura: toda plataforma de credentialHealth#PLATFORMS gera aviso (não pode faltar texto em silêncio)', () => {
+  const blockedByPlatform = PLATFORMS.map((platform) => ({
+    platform,
+    blockedCount: 1,
+    lastBlockedAt: new Date().toISOString(),
+  }))
+  const stores = buildCredentialBlockAlerts({ blockedByPlatform, configuredPlatforms: [] })
+
+  const covered = new Set(stores.map((s) => s.platform))
+  const faltando = PLATFORMS.filter((platform) => !covered.has(platform))
+
+  assert.deepEqual(
+    faltando,
+    [],
+    `Plataforma(s) de credentialHealth#PLATFORMS sem texto em STORE_LABELS/ALERT_BUILDERS: ${faltando.join(', ')} — próxima loja nova não pode repetir o buraco de T045`,
+  )
+  for (const store of stores) {
+    assert.ok(store.headline && store.body && store.nextStep, `${store.platform}: aviso incompleto`)
+  }
 })

@@ -135,15 +135,12 @@ test('(b) nenhuma rota some de generateStaticParams()/da lista de builds ao vira
 })
 
 // (c) Fonte única (FR-001), espelhando a checagem que lint-seo-metadata-duplicates.mjs
-// ganhou em T003 — mesmos DOIS módulos que o parser ali entende
-// (_preservationCommercialPages.js e _comparisonContent.js, mais
-// _seoHubShared.js para o hub que migrou em T009). Escopo idêntico ao do
-// lint script de propósito: `_preservationBlogPosts.js` tem outras rotas com
-// title duplicado no registry além das 4 de FR-004 (achado durante a escrita
-// deste teste) — mas isso é preexistente e mais amplo do que esta feature
-// contratou consertar (nem T003 nem contracts/seo-robots.md pedem o parser
-// para blog posts fora dos 4 nomeados em FR-004). Reportado à parte para
-// virar backlog, não resolvido silenciosamente aqui.
+// ganhou em T003 — mesmos módulos que o parser ali entende
+// (_preservationCommercialPages.js e _comparisonContent.js, _seoHubShared.js
+// para o hub que migrou em T009, e _preservationBlogPosts.js, cujo parser T046
+// ensinou o lint script a ler — as 11 rotas de /blog/* que ainda tinham
+// title/description duplicados no registry ganharam parser aqui também, para
+// as duas checagens (lint script + este teste) enxergarem o mesmo escopo).
 function contentModulePaths() {
   const paths = new Set()
 
@@ -161,6 +158,13 @@ function contentModulePaths() {
   const hubSource = lerFonte('dashboard/app/_seoHubShared.js')
   const hubBlockRegex = /'([^']+)':\s*\{[^}]*?title:\s*'[^']+'[^}]*?\n {2}\},/gs
   for (const match of hubSource.matchAll(hubBlockRegex)) paths.add(`/${match[1]}`)
+
+  // _preservationBlogPosts.js (T046): chaveado por postKey, path vem do
+  // campo slug: dentro do próprio bloco (não path:, diferente do módulo
+  // comercial acima).
+  const blogSource = lerFonte('dashboard/app/blog/_preservationBlogPosts.js')
+  const blogBlockRegex = /'[^']+':\s*\{\s*slug:\s*'([^']+)'[^}]*?title:\s*'[^']+'/gs
+  for (const match of blogSource.matchAll(blogBlockRegex)) paths.add(match[1])
 
   return paths
 }

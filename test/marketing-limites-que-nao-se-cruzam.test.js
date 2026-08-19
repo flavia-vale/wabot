@@ -3,13 +3,18 @@
 // "anti-ban" continua permitido (é como as pessoas buscam), só a PROMESSA de
 // não-banimento reprova. Este arquivo nasce em US4 (T030, só FR-029 contra
 // /bot-afiliados-whatsapp) e é ESTENDIDO — nunca recriado — em US5 (T036:
-// preço/fonte/data + bestFit) e US6 (T041: promessa + posição do CTA de
-// produto), mais o guard de frentes congeladas no Polish final (T043).
+// preço/fonte/data + bestFit), US6 (T041: promessa + posição do CTA de
+// produto), no guard de frentes congeladas no Polish final (T043), e em T047
+// (FR-041), que troca os alvos fixos por VARREDURA de todas as entradas dos
+// módulos de conteúdo — um comparativo/página nova sem `bestFit`, sem preço
+// sourceado ou com promessa de não-banimento reprova o CI automaticamente,
+// sem precisar editar este arquivo.
 
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
 import { SEO_ROUTES, HUB_SEO_ROUTES, PROGRAMMATIC_SEO_ROUTES } from '../dashboard/lib/seo-registry.mjs'
+import { getCompetitorBySlug } from '../dashboard/lib/competitors-data.js'
 
 const raiz = new URL('..', import.meta.url)
 const lerFonte = (caminho) => fs.readFileSync(new URL(caminho, raiz), 'utf8')
@@ -30,91 +35,256 @@ const PADROES_PROMESSA_NAO_BANIMENTO = [
   /garante.{0,15}(imunidade|prote[çc][ãa]o total)/i,
 ]
 
-function extrairBlocoPreservationCommercial(pageKey) {
-  const fonte = lerFonte('dashboard/app/_preservationCommercialPages.js')
-  const marcador = `'${pageKey}': {`
+// (T047) A varredura por TODAS as páginas encontrou casos legítimos de
+// NEGAÇÃO da garantia bem perto de um padrão acima — ex.: "/anti-ban-whatsapp"
+// diz "Ninguém pode garantir que você não será banido." (contém literalmente
+// "não será banido") e "Nenhuma ferramenta garante imunidade" (contém
+// literalmente "garante imunidade"). As duas são o USO HONESTO que este
+// arquivo sempre permitiu (ver comentário acima) — só que agora precisam de
+// checagem de contexto, não só de substring, porque uma página inteira nova
+// entrou na varredura. Se a MESMA sentença que carrega o padrão proibido tem,
+// pouco antes, uma palavra de negação da garantia ("ninguém", "nenhum(a)",
+// "não há/existe/podemos/dá para/pode"), o trecho é permitido — é negação,
+// não promessa.
+const NEGACAO_ANTES_RE = /\b(ningu[ée]m|nenhuma|nenhum|n[ãa]o\s+(h[áa]|existe|podemos|d[áa]\s+para|pode))\b[^.!?]{0,80}$/i
+const JANELA_CONTEXTO_ANTES = 80
+
+function encontrarPromessaProibida(texto) {
+  for (const padrao of PADROES_PROMESSA_NAO_BANIMENTO) {
+    const re = new RegExp(padrao.source, padrao.flags.includes('g') ? padrao.flags : `${padrao.flags}g`)
+    let m
+    while ((m = re.exec(texto))) {
+      const antes = texto.slice(Math.max(0, m.index - JANELA_CONTEXTO_ANTES), m.index)
+      if (!NEGACAO_ANTES_RE.test(antes)) {
+        return { trecho: m[0], padrao }
+      }
+      if (m.index === re.lastIndex) re.lastIndex++ // evita loop infinito em match vazio
+    }
+  }
+  return null
+}
+
+function extrairBlocoPorChave(fonte, chave) {
+  const marcador = `'${chave}': {`
   const idx = fonte.indexOf(marcador)
-  if (idx === -1) throw new Error(`chave "${pageKey}" não encontrada em _preservationCommercialPages.js`)
+  if (idx === -1) throw new Error(`chave "${chave}" não encontrada`)
   const resto = fonte.slice(idx + marcador.length)
   const fimRelativo = resto.search(/\n {2}'/)
   return fimRelativo === -1 ? resto : resto.slice(0, fimRelativo)
 }
 
-test('FR-029: /bot-afiliados-whatsapp nunca promete que a conta não será banida', () => {
-  const bloco = extrairBlocoPreservationCommercial('bot-afiliados-whatsapp')
-  for (const padrao of PADROES_PROMESSA_NAO_BANIMENTO) {
-    assert.doesNotMatch(bloco, padrao, `/bot-afiliados-whatsapp contém promessa de não-banimento (padrão: ${padrao})`)
-  }
-  // Entrar pela palavra continua permitido — a página PODE (e deve) discutir
-  // o tema, só não pode prometer ausência de risco.
-  assert.match(bloco, /banid[oa]|anti-?ban|banimento/i, 'a página deveria abordar o tema de risco honestamente, não evitá-lo')
-})
-
-// --- US5 (T036): extensão para /alternativas/achadinho-pro — nunca recriar
-// um segundo arquivo, só estender este.
-
-function extrairBlocoComparativo(path) {
-  const fonte = lerFonte('dashboard/app/_comparisonContent.js')
-  const marcador = `'${path}': {`
-  const idx = fonte.indexOf(marcador)
-  if (idx === -1) throw new Error(`chave "${path}" não encontrada em _comparisonContent.js`)
-  const resto = fonte.slice(idx + marcador.length)
-  const fimRelativo = resto.search(/\n {2}'\//)
-  return fimRelativo === -1 ? resto : resto.slice(0, fimRelativo)
+function listarChaves(fonte) {
+  return [...fonte.matchAll(/\n {2}'([^']+)':\s*\{/g)].map((m) => m[1])
 }
 
-function extrairCompetitorData(slug) {
-  const fonte = lerFonte('dashboard/lib/competitors-data.js')
-  const idx = fonte.indexOf(`slug: '${slug}'`)
-  if (idx === -1) throw new Error(`slug "${slug}" não encontrado em competitors-data.js`)
-  const fimObjeto = fonte.indexOf('\n  },', idx)
-  const bloco = fonte.slice(Math.max(0, fonte.lastIndexOf('{', idx)), fimObjeto)
-  return {
-    bloco,
-    verifiedAt: bloco.match(/verifiedAt:\s*'([^']+)'/)?.[1] ?? null,
-    source: bloco.match(/source:\s*'([^']+)'/)?.[1] ?? null,
-    precos: [...bloco.matchAll(/R\$\s?[\d.,]+/g)].map((m) => m[0].replace(/\s/g, ' ').trim()),
-  }
+function extrairBlocoPreservationCommercial(pageKey) {
+  return extrairBlocoPorChave(lerFonte('dashboard/app/_preservationCommercialPages.js'), pageKey)
 }
 
-test('FR-030: /alternativas/achadinho-pro diz "alternativa a/ao", nunca se apresenta como o concorrente', () => {
-  const bloco = extrairBlocoComparativo('/alternativas/achadinho-pro')
-  const title = bloco.match(/title:\s*'([^']+)'/)?.[1]
-  assert.ok(title, 'não achei o title de /alternativas/achadinho-pro')
-  assert.match(title, /^alternativa (a|ao)/i)
-  assert.doesNotMatch(title, /^achadinho pro/i, 'o título não pode se apresentar como o próprio Achadinho Pro')
-})
+// (T047, FR-029) Varre TODAS as entradas de _preservationCommercialPages.js
+// (5 páginas, inclusive /anti-ban-whatsapp — a mais exposta à promessa, que
+// não estava coberta antes) e de _preservationBlogPosts.js (15 posts) — não
+// só a página nomeada em FR-024/US4. Uma página nova em qualquer um dos dois
+// módulos entra na varredura automaticamente pelo `listarChaves()`, sem
+// editar este arquivo.
+function paginasParaChecarFR029() {
+  const preservationFonte = lerFonte('dashboard/app/_preservationCommercialPages.js')
+  const blogFonte = lerFonte('dashboard/app/blog/_preservationBlogPosts.js')
+  return [
+    ...listarChaves(preservationFonte).map((chave) => ({
+      origem: '_preservationCommercialPages.js',
+      chave,
+      bloco: extrairBlocoPorChave(preservationFonte, chave),
+    })),
+    ...listarChaves(blogFonte).map((chave) => ({
+      origem: '_preservationBlogPosts.js',
+      chave,
+      bloco: extrairBlocoPorChave(blogFonte, chave),
+    })),
+  ]
+}
 
-test('FR-031: todo preço citado em /alternativas/achadinho-pro tem correspondência em competitors-data.js com verifiedAt+source', () => {
-  const bloco = extrairBlocoComparativo('/alternativas/achadinho-pro')
-  const competitor = extrairCompetitorData('achadinho-pro')
+test('FR-029: nenhuma página comercial/blog promete que a conta não será banida (varredura completa)', () => {
+  const paginas = paginasParaChecarFR029()
+  assert.ok(paginas.length >= 20, `varredura de FR-029 achou só ${paginas.length} páginas — o parser de listarChaves() pode ter quebrado`)
 
-  assert.ok(competitor.verifiedAt, 'competitors-data.js: achadinho-pro sem verifiedAt')
-  assert.ok(competitor.source, 'competitors-data.js: achadinho-pro sem source')
-
-  // Todo "R$ N" que aparece na página tem que casar com um preço já
-  // verificado do concorrente — preço solto no texto reprova (FR-031).
-  const precosNaPagina = [...bloco.matchAll(/R\$\s?[\d.,]+/g)].map((m) => m[0].replace(/\s/g, ' ').trim())
-  assert.ok(precosNaPagina.length > 0, 'página de comparação sem nenhum preço citado — revisar se isso é esperado')
-  // Deltas calculados a partir de valores já verificados (ex.: R$59,97 -
-  // R$49,97 = R$10; R$69 - R$39 = R$30) não são número novo — são aritmética
-  // sobre dado que já passou pela fonte única. O preço do próprio BOTinho
-  // (R$39/R$69) também não exige competitors-data.js, que é só para
-  // concorrente.
-  const precosDerivadosPermitidos = ['R$10', 'R$30', 'R$39', 'R$69']
-  for (const preco of precosNaPagina) {
-    assert.ok(
-      competitor.precos.includes(preco) || precosDerivadosPermitidos.includes(preco),
-      `preço "${preco}" citado em /alternativas/achadinho-pro não bate com nenhum valor verificado em competitors-data.js nem é delta/preço próprio conhecido`
+  for (const { origem, chave, bloco } of paginas) {
+    const achado = encontrarPromessaProibida(bloco)
+    assert.equal(
+      achado,
+      null,
+      achado
+        ? `${origem}#${chave}: promessa de não-banimento ("${achado.trecho}", padrão: ${achado.padrao}) — reescrever como negação honesta, nunca garantia`
+        : undefined
     )
   }
 })
 
-test('FR-032: /alternativas/achadinho-pro tem o bloco bestFit (onde o concorrente é a melhor escolha)', () => {
-  const bloco = extrairBlocoComparativo('/alternativas/achadinho-pro')
-  assert.match(bloco, /bestFit:\s*\[/, 'faltou o campo bestFit')
-  const bestFitBloco = bloco.slice(bloco.indexOf('bestFit:'), bloco.indexOf('bestFit:') + 800)
-  assert.match(bestFitBloco, /achadinho pro/i, 'bestFit precisa dizer explicitamente quando escolher o Achadinho Pro')
+test('FR-029: as páginas dedicadas ao tema (bot-afiliados-whatsapp, anti-ban-whatsapp) continuam abordando o risco honestamente, não evitando o assunto', () => {
+  for (const pageKey of ['bot-afiliados-whatsapp', 'anti-ban-whatsapp']) {
+    const bloco = extrairBlocoPreservationCommercial(pageKey)
+    assert.match(bloco, /banid[oa]|anti-?ban|banimento/i, `${pageKey}: a página deveria abordar o tema de risco honestamente, não evitá-lo`)
+  }
+})
+
+// --- US5 (T036): extensão para /alternativas/achadinho-pro. T047 (FR-041)
+// troca essa página fixa por varredura de TODAS as entradas de
+// _comparisonContent.js que declaram `competitorSlugs` (comparativo de
+// verdade, contra um ou mais concorrentes nomeados) — páginas sem
+// `competitorSlugs` (ex.: /melhores-bots-para-afiliados-whatsapp, um guia de
+// critérios sem concorrente único) ficam fora do escopo de FR-030/031/032 por
+// não serem "alternativa a X" nenhum X específico, mas continuam cobertas por
+// FR-029 acima (nenhuma delas está nos dois módulos de FR-029, então nem
+// precisam — o critério de escopo aqui é estrutural: ter `competitorSlugs`).
+
+function extrairBlocoComparativo(path) {
+  return extrairBlocoPorChave(lerFonte('dashboard/app/_comparisonContent.js'), path)
+}
+
+function extrairCompetitorSlugsDoBloco(bloco) {
+  const m = bloco.match(/competitorSlugs:\s*\[([^\]]*)\]/)
+  if (!m) return []
+  return [...m[1].matchAll(/'([^']+)'/g)].map((mm) => mm[1])
+}
+
+// Regex de preço em formato brasileiro (R$ N ou R$ N.NNN,NN) — mais estrito
+// que "R$ seguido de qualquer dígito/ponto/vírgula" para não engolir
+// pontuação de frase logo depois do preço (ex.: "R$ 37, mais barato" não pode
+// virar o preço "R$ 37,"). Usado nos dois lados (página e competitors-data.js)
+// para os dois conjuntos ficarem na mesma unidade de comparação.
+const PRECO_RE = /R\$\s?\d{1,3}(?:\.\d{3})*(?:,\d{2})?/g
+
+function normalizarPreco(bruto) {
+  // Remove espaço interno ("R$ 39" vira "R$39" — as duas formas convivem no
+  // mesmo módulo hoje) e o ",00" de reais fechados ("R$300,00" vira "R$300",
+  // igual à forma como o texto da página cita o mesmo valor sem centavos).
+  return bruto.replace(/\s+/g, '').replace(/,00$/, '')
+}
+
+function precosDoTexto(texto) {
+  return [...texto.matchAll(PRECO_RE)].map((m) => normalizarPreco(m[0]))
+}
+
+function paraNumero(precoNormalizado) {
+  const semSimbolo = precoNormalizado.replace('R$', '').replace(/\./g, '').replace(',', '.')
+  const n = Number(semSimbolo)
+  return Number.isFinite(n) ? n : null
+}
+
+function formatarPreco(n) {
+  return Number.isInteger(n) ? `R$${n}` : `R$${n.toFixed(2).replace('.', ',')}`
+}
+
+// Preços do próprio BOTinho (planos Basic/Pro) citados lado a lado com o
+// concorrente em todo comparativo — não são "preço de concorrente" (FR-031
+// exige fonte para preço DO CONCORRENTE), então entram como allowlist fixa,
+// não vinda de competitors-data.js (que é só para concorrente).
+const PRECOS_PROPRIOS_BOTINHO = ['R$39', 'R$69']
+
+function precosPermitidosParaPagina(competitorSlugs) {
+  const permitidos = new Set(PRECOS_PROPRIOS_BOTINHO)
+  for (const slug of competitorSlugs) {
+    const competitor = getCompetitorBySlug(slug)
+    assert.ok(competitor, `competitorSlug "${slug}" referenciado em _comparisonContent.js não existe em competitors-data.js`)
+    assert.ok(competitor.verifiedAt, `competitors-data.js: "${slug}" sem verifiedAt`)
+    assert.ok(competitor.source, `competitors-data.js: "${slug}" sem source`)
+    for (const tier of competitor.pricingTiers ?? []) {
+      for (const preco of precosDoTexto(tier.price)) permitidos.add(preco)
+    }
+  }
+  // Deltas entre dois valores já sourceados (ex.: R$59,97 - R$49,97 = R$10)
+  // não são número novo — são aritmética sobre dado que já passou pela fonte
+  // única, o mesmo raciocínio que já valia hardcoded para achadinho-pro,
+  // generalizado aqui para qualquer par de preços já permitidos.
+  const numeros = [...permitidos].map(paraNumero).filter((n) => n != null)
+  for (const a of numeros) {
+    for (const b of numeros) {
+      const delta = a - b
+      if (delta > 0) permitidos.add(normalizarPreco(formatarPreco(delta)))
+    }
+  }
+  return permitidos
+}
+
+function comparisonPagesComConcorrente() {
+  const fonte = lerFonte('dashboard/app/_comparisonContent.js')
+  return listarChaves(fonte)
+    .filter((chave) => chave.startsWith('/'))
+    .map((path) => ({ path, bloco: extrairBlocoPorChave(fonte, path) }))
+    .filter(({ bloco }) => extrairCompetitorSlugsDoBloco(bloco).length > 0)
+}
+
+test('FR-030/031/032 (T047): varredura roda sobre pelo menos os 8 comparativos com concorrente nomeado conhecidos nesta rodada', () => {
+  const paginas = comparisonPagesComConcorrente()
+  assert.ok(paginas.length >= 8, `esperava >= 8 páginas com competitorSlugs em _comparisonContent.js, achei ${paginas.length} — checklist-comparativos.md prevê mais 5`)
+})
+
+test('FR-030: todo comparativo com concorrente nomeado se apresenta como alternativa/comparação, nunca se passa pelo concorrente', () => {
+  // Formato aceito: "Alternativa(s) a/ao/de X" (formato /alternativas/*) OU
+  // "X ou Y: quando/qual ..." (formato "vs" contra prática genérica). Os dois
+  // são leitura honesta de comparação; título que não bate com nenhum dos
+  // dois é sinal de posicionamento arriscado (a página se apresentando como
+  // se FOSSE a alternativa, sem deixar claro que é comparação).
+  const FRAMES_COMPARATIVOS = [/^alternativas?\s+(a|ao|de)\b/i, /\bou\b.*\b(quando|qual)\b/i]
+
+  for (const { path, bloco } of comparisonPagesComConcorrente()) {
+    const title = bloco.match(/title:\s*'([^']+)'/)?.[1]
+    assert.ok(title, `${path}: não achei o title`)
+
+    assert.ok(
+      FRAMES_COMPARATIVOS.some((re) => re.test(title)),
+      `${path}: título "${title}" não se apresenta como comparação (nem "alternativa(s) a/ao/de X" nem "X ou Y: quando/qual...")`
+    )
+
+    for (const slug of extrairCompetitorSlugsDoBloco(bloco)) {
+      const competitor = getCompetitorBySlug(slug)
+      if (!competitor?.name) continue
+      assert.doesNotMatch(
+        title.trim(),
+        new RegExp(`^${competitor.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
+        `${path}: o título não pode se apresentar como o próprio "${competitor.name}"`
+      )
+    }
+  }
+})
+
+test('FR-031: todo preço citado em comparativo com concorrente tem correspondência em competitors-data.js (verifiedAt+source) ou é preço próprio/delta', () => {
+  for (const { path, bloco } of comparisonPagesComConcorrente()) {
+    const slugs = extrairCompetitorSlugsDoBloco(bloco)
+    const permitidos = precosPermitidosParaPagina(slugs)
+    const precosNaPagina = precosDoTexto(bloco)
+
+    for (const preco of precosNaPagina) {
+      assert.ok(
+        permitidos.has(preco),
+        `${path}: preço "${preco}" não bate com nenhum valor verificado em competitors-data.js (slugs: ${slugs.join(', ')}) nem é delta/preço próprio do BOTinho`
+      )
+    }
+  }
+})
+
+test('FR-032: todo comparativo com concorrente nomeado tem bestFit dizendo quando o concorrente é a melhor escolha', () => {
+  // "sobre o concorrente" = item do bestFit cujo sujeito NÃO é o próprio
+  // BOTinho ("Escolha BOTinho..."/"BOTinho é/são..."). Todo comparativo
+  // precisa de pelo menos um item assim — um bestFit onde toda entrada só
+  // fala do BOTinho não responde "quando o concorrente é a melhor escolha"
+  // (FR-032), mesmo tendo o campo preenchido.
+  const SUJEITO_BOTINHO_RE = /^(escolha\s+(o\s+|a\s+)?botinho\b|botinho\s+(é|s[ãa]o)\b)/i
+
+  for (const { path, bloco } of comparisonPagesComConcorrente()) {
+    assert.match(bloco, /bestFit:\s*\[/, `${path}: faltou o campo bestFit`)
+
+    const idxInicio = bloco.indexOf('bestFit:')
+    const idxFim = bloco.indexOf('],', idxInicio)
+    const bestFitBloco = idxFim === -1 ? bloco.slice(idxInicio) : bloco.slice(idxInicio, idxFim)
+    const itens = [...bestFitBloco.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((m) => m[1])
+
+    assert.ok(itens.length >= 2, `${path}: bestFit precisa de pelo menos 2 itens (BOTinho + concorrente) para poder dizer quando cada um vence`)
+    assert.ok(
+      itens.some((item) => !SUJEITO_BOTINHO_RE.test(item.trim())),
+      `${path}: nenhum item do bestFit fala do concorrente — todos abrem com o BOTinho como sujeito`
+    )
+  }
 })
 
 // --- US6 (T041): extensão para o guia Tier 1 da Shopee.

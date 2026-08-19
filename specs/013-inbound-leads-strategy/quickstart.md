@@ -130,6 +130,82 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3004/api/logs/credent
 
 ---
 
+## E-mails de escuta — caminho de uso (FR-022)
+
+**Isto não é um portão de teste** — não há comando a rodar aqui, e nenhuma linha de código muda
+com esta seção. É o "como usar na prática" que faltava documentar depois de T026/T041 terem
+confirmado o que o requisito PROÍBE (os oito e-mails do grupo `contato` em `src/email/registry.js`
+— o grupo "Contato e escuta" de AGENTS.md — são **sempre `trigger: 'manual'`**, nunca disparo
+automático). O uso mais direto é falar com quem parou **na etapa da credencial**: conectou o
+WhatsApp, mas nunca cadastrou etiqueta de afiliada de nenhuma loja — e por isso o robô se recusa a
+publicar (protege a comissão dela, não repassa para o afiliado do grupo de origem).
+
+**Por que sempre manual, e por que isso não é negociável:** pergunta disparada por e-mail na hora
+errada queima o canal — diferente de um aviso de conta vencendo (código de acesso, chave da
+Shopee), que É automático porque descreve um fato atual, não um convite a conversar. O motor de
+e-mails (`src/email/dispatcher.js`) tecnicamente permitiria automatizar qualquer template; a trava
+é de produto/relacionamento, não técnica — por isso fica registrada aqui, para não ser removida
+"para economizar tempo" sem entender o motivo.
+
+### Passo 1 — identificar o público (read-only)
+
+```bash
+cd ~/wabot && node scripts/diag-funil-ativacao.mjs --listar
+# janela maior, se a de 90 dias (default) trouxer pouca gente:
+cd ~/wabot && node scripts/diag-funil-ativacao.mjs --dias 180 --listar
+```
+
+O script não escreve nada. A saída relevante são duas seções:
+
+- **"ONDE PARARAM OS QUE NÃO PAGARAM"** — quantas pessoas pararam em cada etapa (conta, quanto
+  vale conversar com aquele grupo).
+- **"EXEMPLOS POR ETAPA (até 5 de cada)"** — até 5 e-mails/nomes de exemplo por etapa, só quando
+  chamado com `--listar`. É essa lista que você leva para a aba E-mails do admin.
+
+Para "quem parou na etapa da credencial" especificamente, a etapa a procurar na saída é
+**`pareou, mas não cadastrou credencial`** (conectou o WhatsApp, `Credential` continua vazia).
+
+### Passo 2 — escolher o e-mail certo para a etapa
+
+| Etapa (rótulo exato do script) | E-mail (`slug`) | Por quê |
+|---|---|---|
+| `pareou, mas não cadastrou credencial` | `contato_duvida_credenciais` | Fala direto do que travou (etiqueta de afiliada da loja) e já tranquiliza: a oferta continua saindo com link mais comprido enquanto não cadastra — o mesmo vocabulário leigo da tela do painel. |
+| `tentou enviar e NENHUM envio saiu` | `contato_duvida_credenciais` | O próprio script aponta essa como a causa mais comum: sem credencial o robô recusa publicar, e por fora "parece não funcionar". Confirmar antes com `errorMsg` no `MessageLog` (o script já sugere o SELECT). |
+| `nunca tentou parear o WhatsApp` | `contato_travou_na_configuracao` | Pergunta sem presumir a causa: pareamento, grupos ou credenciais — cobre as três sem forçar hipótese. |
+| `tem credencial, sem grupo de ORIGEM` / `tem origem, sem grupo de DESTINO` | `contato_travou_na_configuracao` | Mesmo e-mail — "travou em algum passo" cobre a etapa de configurar grupos de origem/destino. |
+| `configurou tudo, nunca enviou` | `contato_travou_na_configuracao` (recente) ou `contato_como_esta_indo` (já faz tempo) | Recente = ainda faz sentido perguntar onde travou; antigo = check-in mais aberto, sem presumir. |
+| `ENVIOU DE VERDADE e não foi para o checkout` | `contato_primeira_semana` (recente) ou `contato_convite_conversa` (grupo mais valioso, por avaliação do próprio script) | Viu o robô funcionar e mesmo assim não comprou — o motivo dela vale mais que pesquisa de mercado; conversa por chamada entende melhor que e-mail sozinho. |
+| `foi ao checkout e não pagou` | `contato_convite_conversa` | Chegou mais perto de todo mundo sem fechar — conversa direta capta o motivo melhor que qualquer template. |
+| Conta que já usou e o robô ficou quieto (não é bem uma etapa do funil de ativação — é sinal de churn) | `contato_parou_de_usar` | Pergunta se foi pausa deliberada ("tudo bem, é só ignorar") ou algo quebrou. |
+| Cancelou/decidiu não continuar depois de conhecer o robô | `contato_o_que_faltou` | Pede o motivo de não continuar, mesmo que "duro de ouvir". |
+| Qualquer etapa, quando o objetivo é um dado rápido e amplo | `contato_pesquisa_rapida` | Uma pergunta só, baixa fricção — serve para lote maior sem pedir muita atenção de cada pessoa. |
+| Nenhuma das etapas específicas se aplica claramente | `contato_como_esta_indo` | Abertura genérica, sem hipótese de onde travou. |
+
+### Passo 3 — disparar pela aba E-mails do admin
+
+`dashboard/app/admin/emails/page.js` é o único lugar de onde estes e-mails saem, e sempre por
+clique humano — não existe rota nem cron que os dispare sozinhos.
+
+1. Com a lista de e-mails da etapa escolhida em mãos (passo 1), abrir a aba **E-mails** do painel
+   admin e escolher, na lista de templates, o `slug` correspondente (tabela acima) — os oito do
+   grupo "Contato e escuta" aparecem marcados com o chip **Manual**.
+2. Usar a busca de clientes da própria tela (por nome ou e-mail) para localizar e marcar, um a um,
+   os clientes que o script listou — o envio manual sempre vai só para quem foi selecionado ali
+   (`filters.userIds`), nunca para "todos que batem um filtro amplo" por engano.
+3. Revisar o texto antes de enviar (as variáveis `{{saudacao}}`/`{{marca}}` são preenchidas pelo
+   próprio motor — não editar à mão) e confirmar o envio.
+4. `dedupDays` de cada e-mail (varia entre 21 e 90 dias por template, ver `registry.js`) impede
+   reenviar o MESMO e-mail para a MESMA pessoa dentro da janela — mas isso não impede mandar um
+   e-mail *diferente* do grupo `contato` na mesma semana, então use bom senso: uma pergunta por
+   vez, não uma sequência de oito.
+
+**Não regredir:** os oito continuam `trigger: 'manual'` em `src/email/registry.js` (T026/T041 já
+guardam isso por teste); esta seção é só o "como usar", não abre um caminho de automação novo. Não
+criar cron, `setInterval` nem gatilho de evento para nenhum destes oito sem decisão explícita
+nova — seria romper de propósito a regra que motivou o grupo existir.
+
+---
+
 ## P4, P5, P6 — conteúdo
 
 ```bash

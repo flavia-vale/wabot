@@ -572,7 +572,7 @@ satisfeita de fato (mecanismo ligado nos 4 chokepoints **e** aplicado; nenhuma p
 sitemap/IndexNow/HTML sincronizados). As lacunas abaixo são as que sobraram — nenhuma delas
 bloqueia o que já foi entregue.
 
-- [ ] T045 Cobrir a **SHEIN** no aviso de credencial do painel per FR-015/FR-016 (partial).
+- [X] T045 Cobrir a **SHEIN** no aviso de credencial do painel per FR-015/FR-016 (partial).
   `src/credentialBlockAlert/message.js` mapeia só `shopee`/`mercadolivre`/`amazon`/`magazineluiza`
   e descarta em silêncio qualquer outra loja (fail-safe de "loja desconhecida"). Mas a SHEIN é
   conversor vivo (`src/converters/shein.js`) e plataforma canônica em `src/credentialHealth.js`
@@ -587,7 +587,7 @@ bloqueia o que já foi entregue.
   e (b) uma guarda de cobertura que reprove quando uma plataforma de
   `src/credentialHealth.js#PLATFORMS` não tiver texto em `STORE_LABELS`/`ALERT_BUILDERS` — para
   que a próxima loja nova não repita este buraco em silêncio.
-- [ ] T046 Estender a guarda de **fonte única** ao módulo de blog per FR-001 (partial).
+- [X] T046 Estender a guarda de **fonte única** ao módulo de blog per FR-001 (partial).
   11 rotas de `/blog/*` ainda têm `title`/`description` em dois lugares ao mesmo tempo
   (`dashboard/lib/seo-registry.mjs` **e** `dashboard/app/blog/_preservationBlogPosts.js`),
   inclusive `/blog/como-ser-afiliado-shopee-whatsapp`, que US6 editou nesta mesma rodada — é o
@@ -598,7 +598,7 @@ bloqueia o que já foi entregue.
   cópia de `title`/`description` dessas rotas do registry (módulo vira a única fonte, como já
   foi feito para as 4 rotas de FR-004) e ampliar a checagem (c) de
   `test/seo-noindex-guard.test.js` para incluir os paths de blog.
-- [ ] T047 Generalizar os guards dos **limites que não se cruzam** per FR-041 (partial).
+- [X] T047 Generalizar os guards dos **limites que não se cruzam** per FR-041 (partial).
   `test/marketing-limites-que-nao-se-cruzam.test.js` prende cada regra a uma página específica,
   enquanto a spec escreve "nenhum texto" (FR-029) e "todo comparativo" (FR-030/031/032):
   (a) FR-029 só varre `bot-afiliados-whatsapp` e o post da Shopee — `/anti-ban-whatsapp`, a
@@ -611,7 +611,7 @@ bloqueia o que já foi entregue.
   `dashboard/app/_preservationCommercialPages.js` + `_preservationBlogPosts.js` (FR-029). As 9
   entradas de comparativo já têm `bestFit` hoje — a mudança é de cobertura de guarda, não de
   conteúdo.
-- [ ] T048 Documentar o **caminho de uso** dos oito e-mails de "Contato e escuta" per FR-022
+- [X] T048 Documentar o **caminho de uso** dos oito e-mails de "Contato e escuta" per FR-022
   (partial). T026 confirmou o que o requisito proíbe (todos seguem `trigger: 'manual'` em
   `src/email/registry.js` — verificado), mas a outra metade do FR ("apenas o caminho de uso MUST
   ser documentado") não gerou artefato nesta entrega. Escrever em

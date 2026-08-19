@@ -84,16 +84,35 @@ function parseSeoHubMeta() {
   return map
 }
 
+// T046 (specs/013-inbound-leads-strategy, FR-001): módulo de conteúdo dos
+// posts de blog — mesmo buraco do PR #1420 (bot-achadinhos-whatsapp), só que
+// em 11 rotas de /blog/*. Blocos são chaveados por postKey, não por path; o
+// path real vem do campo `slug:` dentro do próprio bloco (diferente de
+// `_preservationCommercialPages.js`, que usa `path:`).
+function parsePreservationBlogMeta() {
+  const sourcePath = path.resolve(process.cwd(), 'app/blog/_preservationBlogPosts.js')
+  if (!fs.existsSync(sourcePath)) return new Map()
+  const source = fs.readFileSync(sourcePath, 'utf8')
+  const map = new Map()
+  const blockRegex = /'[^']+':\s*\{\s*slug:\s*'([^']+)'[^}]*?title:\s*'([^']+)'[^}]*?description:\s*'([^']+)'/gs
+  for (const match of source.matchAll(blockRegex)) {
+    const [, routePath, title, description] = match
+    map.set(routePath, { title, description })
+  }
+  return map
+}
+
 const programmaticMeta = parseProgrammaticMetadataFromLpShared()
 const preservationMeta = parsePreservationCommercialMeta()
 const comparisonMeta = parseComparisonContentMeta()
 const hubMeta = parseSeoHubMeta()
+const preservationBlogMeta = parsePreservationBlogMeta()
 
 // União de todos os módulos de conteúdo, indexada por path. É a "outra
 // ponta" da checagem de fonte única (FR-001): se um path tiver algo aqui E
 // title/description literal no registry, é divergência silenciosa em
 // potencial (ou pelo menos dado morto duplicado).
-const contentMetaByPath = new Map([...programmaticMeta, ...preservationMeta, ...comparisonMeta, ...hubMeta])
+const contentMetaByPath = new Map([...programmaticMeta, ...preservationMeta, ...comparisonMeta, ...hubMeta, ...preservationBlogMeta])
 
 const records = []
 
