@@ -143,7 +143,7 @@ function sheinFormatWarnings(tag) {
     // é um número que não parece ser o de afiliada de verdade.
     if (tag.length < SHEIN_TAG_MIN_DIGITS || tag.length > SHEIN_TAG_MAX_DIGITS) {
       return [
-        'Esse número não parece ser o número de afiliada da SHEIN. Confira se colou o número completo, ' +
+        'Esse número não parece ser o ID de afiliado da SHEIN. Confira se copiou o ID completo, ' +
         'sem espaços ou caracteres a mais — ou copie de novo no painel de afiliada da SHEIN.',
       ]
     }
@@ -152,12 +152,12 @@ function sheinFormatWarnings(tag) {
   if (/GM7|[?&](?:shc|link)=/i.test(tag)) {
     return [
       'Esse link é do botão de compartilhar do aplicativo da SHEIN, e ele não serve para cadastro. ' +
-      'Copie o seu link de afiliada ou o seu número de afiliada no painel de afiliada da SHEIN e cole aqui.',
+      'Copie o seu ID de afiliado (em Minha conta) ou gere um link no Gerador de Link, no painel de afiliada da SHEIN.',
     ]
   }
   return [
     'Não reconhecemos esse texto. Era esperado o seu link de afiliada da SHEIN (o link que você gera no ' +
-    'painel de afiliada) ou apenas o seu número de afiliada.',
+    'painel de afiliada) ou o seu ID de afiliado, que fica no painel em Minha conta.',
   ]
 }
 

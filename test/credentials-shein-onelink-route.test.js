@@ -87,7 +87,10 @@ test('PUT /credentials/shein: falha de rede na resolução não vira recusa seca
     assert.equal(res.statusCode, 400)
     const body = res.json()
     assert.match(body.error, /n[ãa]o deu para conferir/i)
-    assert.match(body.error, /n[úu]mero de afiliada/i)
+    // Vocabulário do painel: a SHEIN chama de "ID de afiliado" (Minha conta),
+    // e a tela usa esse mesmo nome — a mensagem de falha tem que combinar com
+    // o que a cliente vê no campo, senão ela procura uma coisa que não existe.
+    assert.match(body.error, /ID de afiliado/i)
     assert.doesNotMatch(body.error, /n[ãa]o reconhecemos esse texto/i)
     await app.close()
   })
