@@ -29,8 +29,8 @@ const hubRoutes = [
     slug: 'bot-ofertas-whatsapp',
     path: '/bot-ofertas-whatsapp',
     label: 'Bot de ofertas WhatsApp',
-    title: 'Bot de ofertas para WhatsApp por nicho',
-    description: 'Hub para nichos que divulgam ofertas no WhatsApp e precisam padronizar campanhas, links e grupos.',
+    // title/description ficam só em _seoHubShared.js (HUB_CONTENT), fonte
+    // única FR-001 — specs/013-inbound-leads-strategy.
     type: 'hub',
     cluster: 'nichos',
     intent: 'bot de ofertas whatsapp',
@@ -235,14 +235,19 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/cadastro', title: 'Cadastro BOTinho — teste grátis para automatizar ofertas no WhatsApp', description: 'Crie sua conta no BOTinho e comece a automatizar a divulgação de ofertas em grupos e canais do WhatsApp.', template: 'signup', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/cadastro'), indexable: true },
   { path: '/parcerias', title: 'Parcerias BOTinho | Co-marketing para admins e afiliados', description: 'Programa de parcerias do BOTinho para admins, creators e comunidades que operam ofertas no WhatsApp com piloto guiado, UTMs e operação responsável.', template: 'partnerships', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/parcerias'), indexable: true },
   { path: '/bot-canais-whatsapp', title: 'Bot para Canais do WhatsApp com Módulo de Preservação Avançada', description: 'Migre achadinhos para Canais do WhatsApp com espelhamento entre grupos e canais, ritmo humano, variações, monitoramento e preservação avançada.', template: 'campaign-landing', priority: 0.9, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
-  { path: '/bot-afiliados-whatsapp', title: 'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre', description: 'Converta links de afiliado da Shopee, Amazon, Mercado Livre e Magalu e publique as ofertas nos seus grupos e Canais do WhatsApp automaticamente. Teste grátis por 7 dias.', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-afiliados-whatsapp', '2026-07-30'), indexable: true },
-  { path: '/bot-achadinhos-whatsapp', title: 'Bot para Achadinhos no WhatsApp: automatize seus grupos de ofertas', description: 'Automatize seu grupo de achadinhos no WhatsApp: o bot captura as ofertas, troca o link pelo seu código de afiliado e publica sozinho nos seus grupos e canais. Teste grátis por 7 dias.', template: 'commercial-seo', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-achadinhos-whatsapp', '2026-07-30'), indexable: true },
-  { path: '/anti-ban-whatsapp', title: 'WhatsApp banido por divulgar ofertas: como reduzir o risco', description: 'Por que o WhatsApp bane quem divulga ofertas em grupos, o que aumenta o risco e o que dá para controlar de verdade. Sem promessa de “anti-ban 100%” — isso ninguém pode garantir.', template: 'commercial-seo', priority: 0.85, changeFrequency: 'weekly', lastModified: resolveLastModified('/anti-ban-whatsapp', '2026-07-30'), indexable: true },
-  { path: '/grupo-para-canal-whatsapp', title: 'Como migrar grupo de achadinhos para Canal do WhatsApp', description: 'Planeje a migração de grupos de achadinhos para Canais do WhatsApp com o BOTinho, mantendo grupos como fonte e canais como vitrine preservada.', template: 'commercial-seo', priority: 0.82, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
-  { path: '/bot-canal-whatsapp', title: 'Bot para Canal do WhatsApp com cadência e preservação', description: 'Publique ofertas em Canal do WhatsApp com o BOTinho usando cadência humana, variações, monitoramento e Módulo de Preservação Avançada.', template: 'commercial-seo', priority: 0.82, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
+  // title/description destas 5 rotas moram só em _preservationCommercialPages.js
+  // (fonte única, FR-001 — specs/013-inbound-leads-strategy). Removidos daqui em
+  // 2026-08-19: viviam duplicados (e no caso de /bot-achadinhos-whatsapp,
+  // divergentes — R2 de research.md) sem nenhum validador comparar os dois.
+  { path: '/bot-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-afiliados-whatsapp', '2026-07-30'), indexable: true },
+  { path: '/bot-achadinhos-whatsapp', template: 'commercial-seo', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-achadinhos-whatsapp', '2026-07-30'), indexable: true },
+  { path: '/anti-ban-whatsapp', template: 'commercial-seo', priority: 0.85, changeFrequency: 'weekly', lastModified: resolveLastModified('/anti-ban-whatsapp', '2026-07-30'), indexable: true },
+  { path: '/grupo-para-canal-whatsapp', template: 'commercial-seo', priority: 0.82, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
+  { path: '/bot-canal-whatsapp', template: 'commercial-seo', priority: 0.82, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/diagnostico-antiban-whatsapp', title: 'Teste: qual o risco do seu WhatsApp ser banido divulgando ofertas', description: 'Faça um diagnóstico rápido de exposição operacional no WhatsApp: chip dedicado, cadência, variações, canais, monitoramento e recuperação.', template: 'diagnostic-tool', priority: 0.86, changeFrequency: 'weekly', lastModified: resolveLastModified('/diagnostico-antiban-whatsapp'), indexable: true },
   { path: '/comparativos', template: 'comparison-hub', priority: 0.75, changeFrequency: 'monthly', lastModified: resolveLastModified('/comparativos'), indexable: true },
-  { path: '/programa-de-afiliados', title: 'Programa de afiliados: Shopee, Amazon ou Mercado Livre (comparativo 2026)', description: 'Compare os programas de afiliados de Shopee, Amazon e Mercado Livre: quanto cada um paga de comissão, prazo de atribuição e como divulgar no WhatsApp. Dados com fonte e data.', template: 'comparison-hub', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/programa-de-afiliados'), indexable: true },
+  // title/description ficam só em app/programa-de-afiliados/page.js (fonte única, FR-001).
+  { path: '/programa-de-afiliados', template: 'comparison-hub', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/programa-de-afiliados'), indexable: true },
   { path: '/parceiro-influenciador', title: 'Parceria para criadores: robô grátis + 30% de comissão recorrente', description: 'Se você ensina afiliação ou tem audiência de afiliados: use o BOTinho de graça e ganhe 30% de comissão recorrente de cada pessoa que assinar pelo seu link. Todo mês, enquanto ela for cliente.', template: 'partner-landing', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/parceiro-influenciador', '2026-08-04'), indexable: true },
   { path: '/termos-parceria-influenciador', title: 'Regras da parceria com criadores: cortesia e comissão recorrente', description: 'As regras da parceria do BOTinho com criadores: como funciona a cortesia do robô, por quanto tempo ela vale, o que renova, como é calculada a comissão de 30% recorrente e quando ela é paga.', template: 'legal', priority: 0.5, changeFrequency: 'monthly', lastModified: resolveLastModified('/termos-parceria-influenciador', '2026-08-04'), indexable: true },
   { path: '/conteudos', title: 'Conteúdos: blog e materiais para afiliados no WhatsApp — hub de conteúdo BOTinho', description: 'Hub com todos os artigos e materiais gratuitos do BOTinho para afiliados que divulgam ofertas em grupos e canais do WhatsApp.', template: 'content-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/conteudos'), indexable: true },
@@ -260,13 +265,15 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/blog/bot-whatsapp-antiban-existe', title: 'Bot “anti-ban” para WhatsApp existe? A resposta honesta', description: 'Entenda por que “anti-ban” absoluto não existe e como o Módulo de Preservação Avançada do BOTinho reduz risco com camadas operacionais.', template: 'article', priority: 0.76, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/bot-whatsapp-antiban-existe'), indexable: true },
   { path: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', title: 'Como começar como afiliado no WhatsApp sem ter grupo grande', description: 'Guia para afiliado iniciante começar a divulgar ofertas no WhatsApp mesmo sem audiência grande: chip dedicado, primeiros grupos, conversão de link e cadência responsável.', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/comecar-afiliado-whatsapp-sem-grupo-grande'), indexable: true },
   { path: '/blog/como-ser-afiliado-shopee-whatsapp', title: 'Shopee Afiliados: como se cadastrar e divulgar no WhatsApp (guia 2026)', description: 'Guia completo de Shopee Afiliados: como se cadastrar, quanto paga de comissão por tipo de venda, prazo de atribuição e como divulgar no WhatsApp sem perder comissão.', template: 'article', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-ser-afiliado-shopee-whatsapp', '2026-07-31'), indexable: true },
-  { path: '/blog/como-divulgar-ofertas-amazon-whatsapp', title: 'Afiliado Amazon: como divulgar ofertas no WhatsApp (comissão por categoria)', description: 'Guia de afiliado Amazon (Amazon Associados): quanto paga de comissão por categoria de produto, como divulgar no WhatsApp com a tag correta e cadência que protege o número.', template: 'article', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-divulgar-ofertas-amazon-whatsapp', '2026-07-31'), indexable: true },
-  { path: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', title: 'Afiliado Mercado Livre: comissão por categoria e como divulgar no WhatsApp', description: 'Quanto o Mercado Livre paga de comissão de afiliado por categoria (venda direta e indireta), o prazo de pagamento e como divulgar as ofertas no WhatsApp sem perder a atribuição do link.', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-divulgar-ofertas-mercado-livre-whatsapp'), indexable: true },
+  // title/description destas 3 rotas moram só em blog/_preservationBlogPosts.js (fonte única, FR-001).
+  { path: '/blog/como-divulgar-ofertas-amazon-whatsapp', template: 'article', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-divulgar-ofertas-amazon-whatsapp', '2026-07-31'), indexable: true },
+  { path: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-divulgar-ofertas-mercado-livre-whatsapp'), indexable: true },
   { path: '/blog/quanto-custa-bot-para-whatsapp-afiliados', title: 'Quanto custa um bot para WhatsApp de afiliados? Preços e o que avaliar', description: 'Entenda quanto custa um bot para WhatsApp de afiliados, o que muda entre plano básico e avançado e como avaliar custo real além do preço da mensalidade.', template: 'article', priority: 0.82, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/quanto-custa-bot-para-whatsapp-afiliados'), indexable: true },
-  { path: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', title: 'Melhores horários para postar ofertas no WhatsApp (guia prático)', description: 'Descubra os melhores horários para postar ofertas no WhatsApp, por que a cadência importa mais que o horário exato e como distribuir envios sem parecer disparo.', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/melhores-horarios-para-postar-ofertas-no-whatsapp'), indexable: true },
+  { path: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/melhores-horarios-para-postar-ofertas-no-whatsapp'), indexable: true },
   { path: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', title: 'Como converter link de afiliado automaticamente no WhatsApp', description: 'Entenda como converter link de afiliado automaticamente no WhatsApp para Shopee, Amazon, Mercado Livre e Magalu, sem perder comissão nem encaminhar link de terceiro.', template: 'article', priority: 0.82, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-converter-link-de-afiliado-automaticamente-whatsapp'), indexable: true },
   { path: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', title: 'Como combinar Amazon, Shopee e Mercado Livre no mesmo grupo de ofertas', description: 'Estratégia para operar os três programas de afiliados ao mesmo tempo no WhatsApp: qual loja usar para cada tipo de oferta, como não misturar os códigos e como medir qual rende mais no seu público.', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp'), indexable: true },
-  { path: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', title: 'Como montar um grupo de ofertas no WhatsApp do zero', description: 'Guia para montar um grupo de ofertas no WhatsApp do zero: chip dedicado, primeiras fontes de oferta, conversão de link, cadência e quando migrar para canal.', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero'), indexable: true },
+  // title/description ficam só em blog/_preservationBlogPosts.js (fonte única, FR-001).
+  { path: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero'), indexable: true },
   { path: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp', template: 'lead-magnet', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/materiais/checklist-divulgacao-ofertas-grupos-whatsapp'), indexable: true },
   { path: '/bot-comum-vs-botinho', title: 'Bot comum vs BOTinho: qual preserva melhor sua operação no WhatsApp?', description: 'Compare bot comum e BOTinho para afiliados no WhatsApp: repostagem simples, cadência, variações, monitoramento, canais e preservação avançada.', template: 'comparison', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-comum-vs-botinho'), indexable: true },
   { path: '/faq-antiban-whatsapp', title: 'WhatsApp banido divulgando ofertas: perguntas e respostas', description: 'Por que o WhatsApp bane número que divulga ofertas em grupo, se existe bot “anti-ban”, se chip dedicado resolve e o que fazer quando o número já foi bloqueado.', template: 'faq', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/faq-antiban-whatsapp'), indexable: true },
@@ -279,11 +286,16 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/melhores-bots-para-afiliados-whatsapp', template: 'listicle', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/melhores-bots-para-afiliados-whatsapp'), indexable: true },
   { path: '/glossario', template: 'glossary', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/glossario'), indexable: true },
   { path: '/estudos-de-caso', template: 'case-studies', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/estudos-de-caso'), indexable: true },
-  { path: '/alternativas/achadinhos-bot', title: 'Alternativa ao AchadinhosBot: comparativo honesto para grupos de achadinhos', description: 'Compare AchadinhosBot, Achadinho Pro e BOTinho para automatizar grupos de achadinhos no WhatsApp: preço por plano, marketplaces suportados e teste grátis. Dados verificados em 31/07/2026.', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/achadinhos-bot'), indexable: true },
+  // title/description das 4 rotas /alternativas/* abaixo moram só em
+  // _comparisonContent.js (fonte única, FR-001 — specs/013-inbound-leads-strategy).
+  { path: '/alternativas/achadinhos-bot', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/achadinhos-bot'), indexable: true },
   { path: '/alternativas/bot-para-whatsapp-afiliados', template: 'alternatives', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/bot-para-whatsapp-afiliados'), indexable: true },
-  { path: '/alternativas/proafiliados', title: 'Alternativa ao ProAfiliados: comparativo honesto para bot de afiliados no WhatsApp', description: 'Compare ProAfiliados e BOTinho para automatizar ofertas de afiliado no WhatsApp: plano grátis, preço por plano, tag nas mensagens e o que cada um cobre. Dados verificados em 04/08/2026.', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/proafiliados'), indexable: true },
-  { path: '/alternativas/shozap', title: 'Alternativa ao Shozap: comparativo honesto de preço e limites por plano', description: 'Compare Shozap e BOTinho para divulgar ofertas no WhatsApp: preço por plano, quantas conexões e grupos cabem, e quais marketplaces entram em cada faixa. Dados verificados em 04/08/2026.', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/shozap'), indexable: true },
-  { path: '/alternativas/fluxopromo', title: 'Alternativa ao FluxoPromo: comparativo honesto para quem divulga ofertas', description: 'Compare FluxoPromo e BOTinho para divulgar ofertas de afiliado: plano grátis, preço por plano, limite de ofertas por dia e a diferença entre feed de ofertas e espelhamento de grupos. Verificado em 04/08/2026.', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/fluxopromo'), indexable: true },
+  { path: '/alternativas/proafiliados', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/proafiliados'), indexable: true },
+  { path: '/alternativas/shozap', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/shozap'), indexable: true },
+  { path: '/alternativas/fluxopromo', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/fluxopromo'), indexable: true },
+  // US5 (specs/013-inbound-leads-strategy) — única página nova desta rodada.
+  // title/description ficam só em _comparisonContent.js (fonte única, FR-001).
+  { path: '/alternativas/achadinho-pro', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/achadinho-pro'), indexable: true },
   { path: '/ferramentas', template: 'tools-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/ferramentas/calculadora-tempo-grupos-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/ferramentas/calculadora-risco-whatsapp', title: 'Calculadora: risco de banimento do WhatsApp para quem divulga ofertas', description: 'Calcule a exposição operacional da sua divulgação no WhatsApp com base em volume, cadência, mensagens idênticas, chip dedicado, monitoramento e recuperação.', template: 'tool-calculator', priority: 0.84, changeFrequency: 'weekly', lastModified: resolveLastModified('/ferramentas/calculadora-risco-whatsapp'), indexable: true },
@@ -324,4 +336,31 @@ export function getRelatedProgrammaticSeoRoutes(route, limit = 3) {
 
 export function getIndexableSeoRoutes() {
   return SEO_ROUTES.filter((route) => route.indexable !== false)
+}
+
+// P2 (specs/013-inbound-leads-strategy) — sinal real de não-indexar, sem
+// custo de memória (funções puras, build-time). Ver contracts/seo-robots.md.
+
+/** Todas as rotas do registro, sem filtro de indexação — base de cobertura. */
+export function getAllSeoRoutes() {
+  return SEO_ROUTES
+}
+
+/** Entrada do registro por caminho — indexável ou não. */
+export function getSeoRoute(routePath) {
+  return SEO_ROUTES.find((route) => route.path === routePath) ?? null
+}
+
+/**
+ * Metadata `robots` do Next derivada do registro. `follow: true` é sempre
+ * obrigatório (FR-009) — a página sai do índice mas continua fazendo
+ * circular o link interno. Devolve `undefined` quando a rota é indexável
+ * (ausência = herda o default do site, que é indexar) — nunca emitir
+ * `index: true` explícito, para não criar ruído nem divergir do
+ * comportamento atual das rotas indexáveis.
+ */
+export function buildSeoRobots(routePath) {
+  const route = getSeoRoute(routePath)
+  if (!route || route.indexable !== false) return undefined
+  return { index: false, follow: true }
 }

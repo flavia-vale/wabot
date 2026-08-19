@@ -3,8 +3,11 @@ import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates } from '@/lib/editorial-content'
 
-const title = 'Como conferir e converter link de afiliado para WhatsApp'
-const description = 'Guia prático para afiliados validarem link monetizado, tag ou código de afiliado antes de divulgar ofertas em grupos de WhatsApp sem perder comissão por URL errada.'
+// Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1): era
+// 56 chars de texto próprio (passava do orçamento por 1 char). "Link errado?"
+// é o motivo pra clicar, na frente.
+const title = 'Link de afiliado errado? Confira antes de enviar'
+const description = 'Guia prático para afiliados validarem link, tag ou código antes de divulgar ofertas em grupos de WhatsApp sem perder comissão por URL errada.'
 const slug = '/blog/conferir-converter-link-afiliado-whatsapp'
 const dates = getEditorialDates(slug)
 

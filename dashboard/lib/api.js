@@ -436,6 +436,10 @@ export const api = {
   },
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
   logsSeries: (days = 7) => apiFetch(`/api/logs/series?days=${encodeURIComponent(days)}`),
+  // P3 (specs/013-inbound-leads-strategy): sem parâmetro, janela fixa de 7
+  // dias no servidor. Chamada só no mount e no `focus` da janela — ver
+  // ActivationChecklist.js.
+  logsCredentialBlock: () => apiFetch('/api/logs/credential-block'),
   logsClear: () => apiFetch('/api/logs/clear', { method: 'DELETE' }),
   logsClearQueue: () => apiFetch('/api/logs/queue', { method: 'DELETE' }),
 
