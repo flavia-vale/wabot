@@ -71,10 +71,45 @@ test('(a) os quatro chokepoints de metadata referenciam buildSeoRobots — nenhu
   }
 })
 
+// Composição exata da retirada de 2026-08-19, aprovada pela usuária. Fica
+// travada aqui porque os dois erros possíveis são caros e silenciosos: tirar
+// de menos não destrava o rastreamento, e tirar de mais apaga do Google uma
+// página que produz.
+const CIDADES_FORA = 15
+const NICHOS_FORA = 10
+const DORES_FORA = 0
+
+// Está na família de nicho, mas é uma das dez páginas cujo título US1
+// reescreveu para ganhar clique (49 impressões). Tirá-la do índice desfaria
+// essa entrega na mesma rodada.
+const EXCECAO_INDEXAVEL = '/bot-ofertas-afiliados-whatsapp'
+
+test('a retirada do índice pegou exatamente as rotas de grade mortas (15 cidade + 10 nicho, 0 dor)', () => {
+  const fora = getAllSeoRoutes().filter((r) => r.indexable === false)
+  const porTipo = (tipo) => fora.filter((r) => r.type === tipo).length
+
+  assert.equal(porTipo('city'), CIDADES_FORA, 'mudou o número de rotas de cidade fora do índice')
+  assert.equal(porTipo('niche'), NICHOS_FORA, 'mudou o número de rotas de nicho fora do índice')
+  assert.equal(
+    porTipo('pain'),
+    DORES_FORA,
+    'rota de dor operacional saiu do índice — essa família CONVERTE (/automatizar-divulgacao-em-grupos-whatsapp tem 173 impressões e 8% de clique) e não pode ser retirada'
+  )
+  assert.equal(fora.length, CIDADES_FORA + NICHOS_FORA + DORES_FORA)
+})
+
+test('a página de nicho que US1 reescreveu continua indexável (não desfazer entrega na mesma rodada)', () => {
+  const rota = getSeoRoute(EXCECAO_INDEXAVEL)
+  assert.ok(rota, `${EXCECAO_INDEXAVEL}: sumiu do registro`)
+  assert.notEqual(
+    rota.indexable,
+    false,
+    `${EXCECAO_INDEXAVEL} saiu do índice — mas é uma das dez páginas de US1, com título reescrito para ganhar clique. Tirá-la joga fora essa entrega.`
+  )
+  assert.equal(buildSeoRobots(EXCECAO_INDEXAVEL), undefined)
+})
+
 test('(a) toda rota indexable:false tem robots emitido pelo chokepoint que gera a metadata dela (regressão futura)', () => {
-  // Vacuamente verdadeiro enquanto T018 não marcar nenhuma rota — existe para
-  // travar a regressão quando a primeira rota virar indexable:false sem que
-  // T016 já tenha ligado o chokepoint correspondente.
   const rotasNaoIndexaveis = getAllSeoRoutes().filter((r) => r.indexable === false)
   for (const rota of rotasNaoIndexaveis) {
     const robots = buildSeoRobots(rota.path)

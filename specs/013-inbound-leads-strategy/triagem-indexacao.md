@@ -71,19 +71,47 @@ transparência, não por necessidade de decisão:
   **confirmar** a permanência (edge case "qualquer impressão → engorda"),
   nunca mudar a decisão desta rodada para retirada.
 
-## Decisão
+## Decisão — primeira versão, REVERTIDA (mantida para registro)
 
-**Nenhuma das 36 rotas `programmatic-lp` é marcada `indexable: false` nesta
-rodada.** Todas têm conteúdo exclusivo declarado por construção (LP_CONFIG),
-o que já falha a Parte 1 do critério — condição necessária para sequer cogitar
-a retirada. `dashboard/lib/seo-registry.mjs` permanece com as 36 rotas em
-`indexable: true` (nenhuma mudança de código nesta task).
+A primeira passada concluiu que **nenhuma** das 36 rotas sairia do índice,
+porque todas têm conteúdo exclusivo declarado por construção (LP_CONFIG) e
+isso já falharia a Parte 1 do critério.
 
-| Rota (36) | Conteúdo exclusivo declarado? | Decisão |
-|---|---|---|
-| 15 rotas `espelhar-grupos-whatsapp-<cidade>` | Sim (uniqueHeadline/faq/howTo por cidade) | Permanece indexável |
-| 11 rotas `bot-ofertas-<nicho>-whatsapp` | Sim (idem, por nicho) | Permanece indexável |
-| 10 rotas de dor operacional (`automatizar-divulgacao-em-grupos-whatsapp` etc.) | Sim (idem, por dor) | Permanece indexável |
+**Essa conclusão estava errada, e o erro é instrutivo:** ter
+`uniqueHeadline`/`faq`/`howTo` preenchidos é conteúdo **declarado**; a Parte 1
+pede intenção de busca **comprovada**. São coisas diferentes, e tratar uma
+como a outra faz qualquer página gerada por modelo passar no filtro por
+construção — o critério nunca selecionaria nada.
+
+## Decisão vigente (2026-08-19, aprovada pela usuária)
+
+**25 rotas saem do índice**, com `follow: true` preservado — as páginas
+continuam no ar, continuam recebendo e passando link interno, e voltam com a
+remoção de uma linha em `GRADE_FORA_DO_INDICE`.
+
+| Família | Rotas | Evidência (AGENTS.md, baseline 2026-08-16) | Decisão |
+|---|---:|---|---|
+| `espelhar-grupos-whatsapp-<cidade>` | 15 | ~25 impressões somadas em 2,5 meses; 5 em zero | **Fora do índice** |
+| `bot-ofertas-<nicho>-whatsapp` | 10 | zero impressão em 2,5 meses | **Fora do índice** |
+| `bot-ofertas-afiliados-whatsapp` | 1 | 49 impressões; título reescrito em US1 | Permanece indexável |
+| Dor operacional (`automatizar-divulgacao-em-grupos-whatsapp` etc.) | 10 | uma delas com 173 impressões e 8,09% de clique | Permanece indexável |
+
+### A exceção, e por que ela existe
+
+`bot-ofertas-afiliados-whatsapp` pertence à família de nicho, mas é **uma das
+dez páginas cujo título US1 reescreveu para ganhar clique**. Retirá-la do
+índice desfaria essa entrega na mesma rodada — o robô teria otimizado o título
+de uma página que ninguém mais veria. Travada em
+`test/seo-noindex-guard.test.js`.
+
+### Efeito colateral encontrado ao aplicar
+
+Marcar as 25 quebrou três testes existentes, e eles apontaram um problema real:
+`getSeoRoutesByCluster` filtrava por `indexable`, o que **esvaziaria o hub
+`/espelhar-grupos-whatsapp`** (zero cidades a listar) e orfanaria as páginas
+retiradas. Navegação e indexação são eixos diferentes: o filtro foi removido
+desse helper e vive só em `getIndexableSeoRoutes` (sitemap + IndexNow). É
+exatamente o que o `follow: true` de FR-009 existe para preservar.
 
 ## Reavaliação futura
 

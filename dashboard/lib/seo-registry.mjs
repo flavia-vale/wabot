@@ -182,6 +182,29 @@ const organicNicheRoutes = [
   },
 ]
 
+// Rotas de grade retiradas do índice em 2026-08-19 (P2, US2 —
+// specs/013-inbound-leads-strategy). NÃO são apagadas: continuam no ar,
+// continuam recebendo link interno (`follow: true` em `buildSeoRobots`) e
+// voltam com a remoção de uma linha. O que muda é só parar de disputar
+// rastreamento com as páginas que produzem.
+//
+// Evidência (AGENTS.md, "SEO orgânico — linhas CONGELADAS", baseline
+// 2026-08-16): as 15 rotas de cidade somaram ~25 impressões em 2,5 meses (5
+// delas em zero) e as de nicho tiveram zero impressão no mesmo período. Ter
+// `uniqueHeadline`/`faq`/`howTo` preenchidos é conteúdo DECLARADO, não
+// intenção de busca COMPROVADA — foi essa confusão que, na primeira triagem
+// automática, não selecionou nenhuma rota.
+//
+// EXCEÇÃO deliberada: `bot-ofertas-afiliados-whatsapp` continua indexável
+// apesar de ser da família de nicho. Ela tem 49 impressões e é uma das nove
+// páginas cujo título foi reescrito em US1 para ganhar clique — tirá-la do
+// índice desfaria essa entrega na mesma rodada. Guarda em
+// `test/seo-noindex-guard.test.js`.
+const GRADE_FORA_DO_INDICE = new Set([
+  ...citySlugs,
+  ...nicheSlugs.filter((slug) => slug !== 'bot-ofertas-afiliados-whatsapp'),
+])
+
 function buildProgrammaticRoute(slug, type) {
   const clusterByType = {
     city: 'localizacoes',
@@ -207,7 +230,7 @@ function buildProgrammaticRoute(slug, type) {
     priority: 0.9,
     changeFrequency: 'weekly',
     lastModified: DEFAULT_LAST_MODIFIED,
-    indexable: true,
+    indexable: !GRADE_FORA_DO_INDICE.has(slug),
     schemaTypes: ['FAQPage', 'HowTo', 'SoftwareApplication', 'BreadcrumbList'],
   }
 }
@@ -323,8 +346,15 @@ export function getHubSeoRoute(pathOrCluster) {
   return HUB_SEO_ROUTES.find((route) => route.path === pathOrCluster || route.cluster === pathOrCluster) ?? null
 }
 
+// NÃO filtra por `indexable` de propósito: este helper alimenta NAVEGAÇÃO (a
+// lista de páginas irmãs no hub e o bloco de relacionadas), não o sitemap.
+// Filtrar aqui esvaziaria o hub `/espelhar-grupos-whatsapp` assim que as 15
+// rotas de cidade saíssem do índice, e orfanaria as páginas retiradas — o
+// contrário do `follow: true` que `buildSeoRobots` emite justamente para o
+// link interno continuar circulando (FR-009). Quem filtra por indexação é
+// `getIndexableSeoRoutes` (sitemap + IndexNow), e só ele.
 export function getSeoRoutesByCluster(cluster) {
-  return SEO_ROUTES.filter((route) => route.cluster === cluster && route.type !== 'hub' && route.indexable !== false)
+  return SEO_ROUTES.filter((route) => route.cluster === cluster && route.type !== 'hub')
 }
 
 export function getRelatedProgrammaticSeoRoutes(route, limit = 3) {
