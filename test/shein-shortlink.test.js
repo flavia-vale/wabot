@@ -209,3 +209,30 @@ test('resposta sem oneLink no info (code 0 mas sem link) → null', async () => 
   const result = await shortenSheinLink(LONG_URL, { tag: '12345', cookie: 'cookie-sem-onelink' }, { fetchImpl })
   assert.equal(result, null)
 })
+
+test('aceita os dois formatos de exportação do Cookie-Editor (Header string e JSON)', async () => {
+  // O painel ensina a exportação JSON na Amazon, logo acima da SHEIN na mesma
+  // tela. Um cliente que copiar por hábito manda JSON aqui. Sem normalizar, o
+  // JSON cru iria como cabeçalho Cookie, a SHEIN responderia como visitante e a
+  // oferta sairia com link comprido sem explicar por quê.
+  const enviados = []
+  const fetchFor = (tag) => async (url, opts) => {
+    if (String(url).includes('getSiteInfo')) {
+      enviados.push(opts?.headers?.Cookie)
+      return { status: 200, json: async () => ({ token: 't', memberId: tag, SiteUID: 'mbr', appLanguage: 'pt-br' }) }
+    }
+    return { status: 200, json: async () => ({ code: '0', info: { oneLink: 'https://onelink.shein.com/48/X' } }) }
+  }
+
+  const headerString = 'sessionID=abc; x=1'
+  const jsonExport = JSON.stringify([{ name: 'sessionID', value: 'abc' }, { name: 'x', value: '1' }])
+
+  // Tags distintas para não cair no cache de sessão de uma chamada na outra.
+  const a = await shortenSheinLink(LONG_URL, { tag: '1111111111', cookie: headerString }, { fetchImpl: fetchFor('1111111111') })
+  const b = await shortenSheinLink(LONG_URL, { tag: '2222222222', cookie: jsonExport }, { fetchImpl: fetchFor('2222222222') })
+
+  assert.ok(a, 'Header string deveria encurtar')
+  assert.ok(b, 'exportação JSON deveria encurtar')
+  assert.equal(enviados[0], headerString)
+  assert.equal(enviados[1], headerString, 'JSON precisa virar o mesmo cabeçalho da Header string')
+})

@@ -111,7 +111,7 @@ export const AFFILIATE_PLATFORMS = [
         sensitive: true,
         cookieField: true,
         hint: 'Necessário para o link da oferta sair curtinho. Sem ele, a oferta sai do mesmo jeito — o link só fica mais comprido.',
-        help: 'No computador, entre em shein.com.br já logada, clique na extensão Cookie-Editor → botão Export (canto inferior direito) → Header string. O código é copiado sozinho; é só colar aqui.',
+        help: 'No computador, entre em shein.com.br já logada, clique na extensão Cookie-Editor e use o botão Export (canto inferior direito). Não precisa escolher campo nenhum: pode ser Header string ou JSON, os dois funcionam. O código é copiado sozinho; é só colar aqui.',
       },
     ],
   },
