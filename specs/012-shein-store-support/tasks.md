@@ -820,7 +820,7 @@ Dois fatos que sustentam a implementação:
 Não existe alternativa pública: o código do oneLink é registro opaco criado no
 servidor (código inventado cai na home, `shein.top` não aceita nada arbitrário).
 
-- [ ] T080 Campo `cookie` **opcional** para SHEIN. `REQUIRED_FIELDS.shein`
+- [X] T080 Campo `cookie` **opcional** para SHEIN. `REQUIRED_FIELDS.shein`
   continua `['tag']` — o cookie NÃO entra em required, porque sem ele tudo
   continua funcionando (link longo, comissão certa). No painel
   (`dashboard/lib/painel/affiliatePlatforms.js`, entrada `shein`): `required:
@@ -831,7 +831,7 @@ servidor (código inventado cai na home, `shein.top` não aceita nada arbitrári
   saindo, e dizer o contrário seria a mentira que o AGENTS.md proíbe. Conferir
   que o valor passa pelo `encryptCredential` como os demais (esquema D-3).
 
-- [ ] T081 `shortenSheinLink(longUrl, creds, { fetchImpl })` em
+- [X] T081 `shortenSheinLink(longUrl, creds, { fetchImpl })` em
   `src/converters/shein.js`. Passo 1 cunha o token pelo `getSiteInfo` com o
   cookie. **Guarda de identidade — a parte mais importante:** `memberId` vazio
   → `null` (código de acesso venceu); `memberId` diferente de `creds.tag` →
@@ -847,7 +847,7 @@ servidor (código inventado cai na home, `shein.top` não aceita nada arbitrári
   `tag`, TTL curto (~10min) — o token traz timestamp de emissão embutido, e
   cunhar um por oferta é desperdício.
 
-- [ ] T082 Ligar no `convert()`. O encurtamento acontece **depois** de o link
+- [X] T082 Ligar no `convert()`. O encurtamento acontece **depois** de o link
   longo estar pronto e ter passado por TODAS as guardas existentes (host
   ancorado, token opaco `shc`/`link`, `/ark/default` sem `goods_id`, rede de
   segurança de identificador de terceiro) — não reordenar nada disso. Sem
@@ -857,7 +857,7 @@ servidor (código inventado cai na home, `shein.top` não aceita nada arbitrári
   desliga) para cortar em produção sem redeploy; o opt-in de verdade é a
   própria existência do cookie.
 
-- [ ] T083 `test/shein-shortlink.test.js` (novo, db-free, sem rede, fetch
+- [X] T083 `test/shein-shortlink.test.js` (novo, db-free, sem rede, fetch
   injetado): encurta quando há cookie e o identificador bate; **identificador
   divergente → `null` e link longo publicado** (o teste mais importante);
   identificador vazio → link longo; `code != '0'` → link longo; falha de rede
@@ -866,7 +866,7 @@ servidor (código inventado cai na home, `shein.top` não aceita nada arbitrári
   não chama; oneLink publicado exatamente como a SHEIN devolveu, com os
   parâmetros dela.
 
-- [ ] T084 Guarda de não-regressão: somar casos a
+- [X] T084 Guarda de não-regressão: somar casos a
   `test/converters-shein.test.js` provando que nenhuma das guardas T072-T079
   mudou de comportamento com o encurtamento ligado, e que as outras quatro
   lojas seguem intocadas.
