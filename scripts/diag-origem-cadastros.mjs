@@ -28,6 +28,7 @@
 //     evidência FORTE de SEO: ninguém digita esse endereço de cabeça.
 //   * Cadastro com landing_page = '/' ou '/login' é ambíguo.
 
+import { pathToFileURL } from 'node:url'
 import db from '../src/db.js'
 
 const args = process.argv.slice(2)
@@ -63,16 +64,41 @@ function tabela(mapa, total, rotulo) {
 
 // Classifica a página de entrada em "isso é conteúdo de SEO?" — a distinção
 // que responde a pergunta original.
-function classificaLanding(landing) {
-  const p = String(landing || '').split('?')[0]
+// O sanitizador de atribuição troca '?' e '=' por '-', então a query vira parte
+// do caminho: `/x?utm_source=chatgpt.com` chega como `/x-utm_source-chatgpt.com`.
+// Cortar em '?' não resolve — é preciso cortar no '-utm'.
+function limpaLanding(landing) {
+  return String(landing || '')
+    .split('?')[0]
+    .replace(/-utm[-_].*$/, '')
+    .replace(/-source-.*$/, '')
+}
+
+// Marca de IA: quando a pessoa clica num link dentro do ChatGPT/Perplexity, a
+// própria ferramenta carimba `utm_source` na URL. É o rastro mais confiável de
+// origem em IA que existe hoje, e vale mais que a classificação da página.
+// O separador varia: `=` na URL crua, `-` depois do sanitizador de atribuição.
+const MARCAS_DE_IA = /utm[-_]source[-_=](chatgpt|openai|perplexity|copilot|claude|gemini)/i
+
+export function origemDeIA(landing) {
+  const m = String(landing || '').match(MARCAS_DE_IA)
+  return m ? m[1].toLowerCase() : null
+}
+
+export function classificaLanding(landing) {
+  const p = limpaLanding(landing)
   if (!p) return 'sem registro'
   if (p.startsWith('/blog/')) return 'CONTEÚDO (blog)'
   if (p.startsWith('/alternativas/')) return 'CONTEÚDO (comparativo)'
   if (p.startsWith('/materiais/') || p.startsWith('/ferramentas/')) return 'CONTEÚDO (ferramenta/material)'
-  if (/^\/(bot-|anti-ban|faq-antiban|protecao-|programa-de-afiliados|espelhar-|automacao-|grupo-para-canal|como-funciona|comparativos|melhores-bots|botinho-vs|glossario|conteudos|diagnostico-)/.test(p)) {
+  // `automatizar-`, `padronizar-`, `postar-` e `reduzir-` faltavam nesta lista e
+  // caíam em "outro" — subnotificando justamente as páginas comerciais de SEO
+  // que mais trazem gente. Ao adicionar prefixo aqui, conferir contra a lista
+  // real de rotas (dashboard/lib/seo-registry.mjs), não de memória.
+  if (/^\/(bot-|anti-ban|faq-antiban|protecao-|programa-de-afiliados|espelhar-|automacao-|automatizar-|padronizar-|postar-|reduzir-|rastrear-|grupo-para-canal|como-funciona|comparativos|melhores-bots|botinho-vs|glossario|conteudos|diagnostico-|benchmarks|estudos-de-caso)/.test(p)) {
     return 'CONTEÚDO (página de busca)'
   }
-  if (p === '/' ) return 'home (ambíguo)'
+  if (p === '/') return 'home (ambíguo)'
   if (p.startsWith('/login') || p.startsWith('/cadastro')) return 'direto no cadastro (ambíguo)'
   if (p.startsWith('/r/')) return 'link de indicação'
   return `outro: ${p}`
@@ -95,6 +121,7 @@ async function main() {
   const porOrigem = new Map()
   const porLandingClasse = new Map()
   const porLandingExata = new Map()
+  const porIA = new Map()
   const userIds = []
 
   for (const ev of signups) {
@@ -110,6 +137,9 @@ async function main() {
 
     const exata = String(m.landing_page || '(sem registro)').split('?')[0]
     porLandingExata.set(exata, (porLandingExata.get(exata) || 0) + 1)
+
+    const ia = origemDeIA(m.landing_page)
+    if (ia) porIA.set(ia, (porIA.get(ia) || 0) + 1)
   }
 
   titulo(`CADASTROS NO PERÍODO: ${total}`)
@@ -126,6 +156,17 @@ async function main() {
     .reduce((s, [, v]) => s + v, 0)
   console.log(`\n  >> Entraram por página de conteúdo: ${conteudo} de ${total} (${pct(conteudo, total)})`)
   console.log('     Ninguém digita /blog/... de cabeça. Isso é SEO com alta confiança.')
+
+  const totalIA = [...porIA.values()].reduce((s, v) => s + v, 0)
+  console.log('\n-- Cadastros que vieram de uma resposta de IA --\n')
+  if (!totalIA) {
+    console.log('  (nenhum no período)')
+  } else {
+    tabela(porIA, total, 'ferramenta')
+    console.log(`\n  >> ${totalIA} de ${total} (${pct(totalIA, total)}) chegaram por link dentro de uma IA.`)
+    console.log('     A própria ferramenta carimba utm_source no link — é o rastro')
+    console.log('     mais confiável de origem que existe hoje, melhor que o referenciador.')
+  }
 
   console.log('\n-- Página de entrada exata (top 15) --\n')
   const top = new Map([...porLandingExata.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15))
@@ -205,9 +246,17 @@ async function main() {
 `)
 }
 
-main()
-  .catch((err) => {
-    console.error('\nFalhou:', err?.message || err)
-    process.exitCode = 1
-  })
-  .finally(() => db.$disconnect())
+// Só roda quando chamado direto na linha de comando. Sem esta guarda, importar
+// o módulo para testar `classificaLanding` dispara a consulta ao banco e o
+// teste falha por falta de DATABASE_URL — que é exatamente o que a suíte
+// db-free não pode exigir.
+const chamadoDireto = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (chamadoDireto) {
+  main()
+    .catch((err) => {
+      console.error('\nFalhou:', err?.message || err)
+      process.exitCode = 1
+    })
+    .finally(() => db.$disconnect())
+}
