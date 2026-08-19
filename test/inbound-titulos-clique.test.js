@@ -26,6 +26,40 @@ const ORCAMENTO_TITULO = 55
 const ORCAMENTO_DESCRICAO = 160
 const tituloEntregue = (bruto) => bruto + SUFIXO_TEMPLATE
 
+// Arquivos onde o título de página é escrito à mão. O sufixo de marca NUNCA
+// entra aqui: quem o coloca é o `title.template` do layout.
+const MODULOS_COM_TITULO = [
+  'dashboard/app/_lpShared.js',
+  'dashboard/app/_organicNicheLanding.js',
+  'dashboard/app/_comparisonContent.js',
+  'dashboard/app/_seoHubShared.js',
+  'dashboard/app/_preservationCommercialPages.js',
+  'dashboard/app/blog/_preservationBlogPosts.js',
+]
+
+test('nenhum título carrega sufixo de marca próprio — o layout já anexa o dele', () => {
+  // Achado de 2026-08-19: 38 títulos terminavam em ' | BOTinho' e o template
+  // anexava ' | Espelha Grupos' por cima, entregando DUAS marcas em sequência
+  // — uma delas aposentada na unificação de 2026-08-04 (marketing-content.js:
+  // 'Espelha Grupos' é a MARCA e vai no title template; 'BOTinho' é o NOME DO
+  // PRODUTO e vive no corpo do texto). Uma das páginas afetadas é a terceira
+  // que mais converte no site (173 impressões, 8,09% de clique).
+  const sufixosProibidos = [/ \| BOTinho'/, / \| Espelha Grupos'/]
+
+  for (const arquivo of MODULOS_COM_TITULO) {
+    const fonte = lerFonte(arquivo)
+    for (const [i, titulo] of [...fonte.matchAll(/title: '([^']+)'/g)].entries()) {
+      for (const proibido of sufixosProibidos) {
+        assert.doesNotMatch(
+          `title: '${titulo[1]}'`,
+          proibido,
+          `${arquivo} (title #${i + 1}): "${titulo[1]}" já traz sufixo de marca. O layout anexa "${SUFIXO_TEMPLATE}" por cima, entregando duas marcas em sequência.`
+        )
+      }
+    }
+  }
+})
+
 // Extrai o bloco de um objeto literal `'chave': { ... }` sem cruzar para o
 // próximo item de nível superior (que sempre começa em nova linha com 2
 // espaços de indentação + aspas simples nestes arquivos).

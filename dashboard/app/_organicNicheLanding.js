@@ -10,7 +10,7 @@ import { buildOgImageUrl } from '@/lib/seo-og'
 const pages = {
   'bot-ofertas-restaurantes-whatsapp': {
     slug: '/bot-ofertas-restaurantes-whatsapp',
-    title: 'Bot de ofertas para restaurantes no WhatsApp | BOTinho',
+    title: 'Bot de ofertas para restaurantes no WhatsApp',
     description: 'Organize divulgação de ofertas de restaurantes no WhatsApp com curadoria, calendário, grupos e/ou canais certos e automação responsável.',
     eyebrow: 'Nicho restaurantes',
     h1: 'Bot de ofertas para restaurantes no WhatsApp',
@@ -49,7 +49,7 @@ const pages = {
   },
   'bot-ofertas-marketplace-whatsapp': {
     slug: '/bot-ofertas-marketplace-whatsapp',
-    title: 'Bot de ofertas para marketplace no WhatsApp | BOTinho',
+    title: 'Bot de ofertas para marketplace no WhatsApp',
     description: 'Padronize ofertas de marketplace no WhatsApp com conferência de link monetizado, tag de afiliado, copy e distribuição em grupos e canais.',
     eyebrow: 'Marketplace e afiliados',
     h1: 'Bot de ofertas para marketplace no WhatsApp',
