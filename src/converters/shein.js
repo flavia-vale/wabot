@@ -9,6 +9,13 @@
 // mesmo módulo, sem API paga).
 
 import { isSheinHostname } from '../detector.js'
+// A extensão Cookie-Editor exporta em dois formatos, e o painel ensina o JSON
+// na Amazon (logo acima da SHEIN na mesma tela). Um cliente que copiar por
+// hábito manda JSON aqui — e, sem normalizar, o JSON cru vai como cabeçalho
+// Cookie, a SHEIN responde como visitante e a oferta sai com link comprido sem
+// explicar por quê. `normalizeAmazonCookie` já resolve os dois formatos e não
+// tem nada de específico da Amazon; é reusado em vez de duplicado.
+import { normalizeAmazonCookie as normalizeCookieExport } from './amazon.js'
 import logger from '../logger.js'
 
 // Página de produto direta: `<slug>-p-<goodsId>.html` (opcionalmente com
@@ -335,7 +342,9 @@ export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.
   try {
     if (String(process.env.SHEIN_SHORTLINK_ENABLED ?? 'true') === 'false') return null
 
-    const cookie = String(creds?.cookie || '').trim()
+    // Aceita os DOIS formatos de exportação do Cookie-Editor: "Header string"
+    // (`a=1; b=2`) e "JSON" (lista de {name,value}). Ver o comentário do import.
+    const cookie = normalizeCookieExport(creds?.cookie).trim()
     if (!cookie) return null
     const tag = String(creds?.tag || '').trim()
     if (!tag) return null
