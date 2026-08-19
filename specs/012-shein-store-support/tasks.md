@@ -788,3 +788,85 @@ conhecido, não como defeito.
   Cobrir em `test/converters-shein.test.js`: `%255F` (duplo encoding) → `null`; `%5F` e `%3D`
   (encoding simples) continuam `null`; entrada com `%` inválido (`%zz`) não lança e segue o
   caminho normal de decisão; e os casos legítimos do T077 continuam convertendo. Todos sem rede.
+
+---
+
+## Phase 16: Link curto (oneLink da SHEIN)
+
+Escopo novo, pedido pela cliente: hoje a oferta sai com o link longo
+(`m.shein.com/br/ark/default?...`) e o concorrente publica o curto
+(`onelink.shein.com/48/<código>`).
+
+**Caminho CONFIRMADO ao vivo** (teste feito pela cliente no navegador dela,
+logada no painel de afiliada — não é hipótese):
+
+    GET  {origin}/api/others/getSiteInfo     header: bff-source: shein;pwa
+      -> { SiteUID, token, memberId, appLanguage }
+    POST {origin}/affiliate/api/share/link/from/url
+      headers: token, siteuid, language, localcountry:'BR', mi:<memberId>,
+               Content-Type: application/json; charset=utf-8,
+               X-Requested-With: XMLHttpRequest, Accept: application/json
+      body:    { url, language, uid:<memberId> }
+      -> { code:"0", info:{ oneLink } }
+
+Resultado real: `https://onelink.shein.com/48/5zdjzeumrua5?ismg_ol=GGkS8InolgI_01_KOC-C`
+
+Dois fatos que sustentam a implementação:
+- a chamada NÃO exigiu assinatura anti-robô (x-gw-auth/armor/x-anti) — só o
+  `token` derivado da sessão. É o que torna a chamada de servidor viável;
+- `memberId` é **o mesmo número** já guardado em `creds.tag` (confirmado pela
+  cliente), então não é preciso pedir identificador novo.
+
+Não existe alternativa pública: o código do oneLink é registro opaco criado no
+servidor (código inventado cai na home, `shein.top` não aceita nada arbitrário).
+
+- [ ] T080 Campo `cookie` **opcional** para SHEIN. `REQUIRED_FIELDS.shein`
+  continua `['tag']` — o cookie NÃO entra em required, porque sem ele tudo
+  continua funcionando (link longo, comissão certa). No painel
+  (`dashboard/lib/painel/affiliatePlatforms.js`, entrada `shein`): `required:
+  false`, `sensitive: true`, `cookieField: true`. Vocabulário obrigatório:
+  "código de acesso da SHEIN", nunca "cookie"/"token"/"memberId". O texto tem
+  que ser da família ML/Amazon ("sem ele o link só fica mais comprido"), NUNCA
+  da família Shopee ("as ofertas param de sair") — aqui as ofertas continuam
+  saindo, e dizer o contrário seria a mentira que o AGENTS.md proíbe. Conferir
+  que o valor passa pelo `encryptCredential` como os demais (esquema D-3).
+
+- [ ] T081 `shortenSheinLink(longUrl, creds, { fetchImpl })` em
+  `src/converters/shein.js`. Passo 1 cunha o token pelo `getSiteInfo` com o
+  cookie. **Guarda de identidade — a parte mais importante:** `memberId` vazio
+  → `null` (código de acesso venceu); `memberId` diferente de `creds.tag` →
+  `null` + log de aviso. Nunca publicar oneLink emitido por outra conta; é o
+  mesmo princípio das guardas T074/T077. Passo 2 chama o gerador e, com
+  `code === '0'`, devolve `info.oneLink` **como veio** — não reescrever nem
+  remover parâmetro (mesma lição do `generateShortLink` da Shopee, que só
+  funciona devolvendo o short link como-está). Qualquer outro desfecho →
+  `null`. Nunca lança. Orçamento de tempo TOTAL curto (~6s para as duas
+  chamadas somadas), no espírito do `totalTimeoutMs` do
+  `resolveSheinShortLink`: roda dentro do pipeline de mensagens, que tem teto
+  de 25s (`MSG_QUEUE_TIMEOUT_MS`). Cache do token em escopo de MÓDULO por
+  `tag`, TTL curto (~10min) — o token traz timestamp de emissão embutido, e
+  cunhar um por oferta é desperdício.
+
+- [ ] T082 Ligar no `convert()`. O encurtamento acontece **depois** de o link
+  longo estar pronto e ter passado por TODAS as guardas existentes (host
+  ancorado, token opaco `shc`/`link`, `/ark/default` sem `goods_id`, rede de
+  segurança de identificador de terceiro) — não reordenar nada disso. Sem
+  `creds.cookie`, nem tenta. `null` do encurtador → publica o link longo. O
+  fallback é o comportamento de hoje, já validado em todas as rodadas
+  anteriores. Kill-switch `SHEIN_SHORTLINK_ENABLED` (default ligado, `'false'`
+  desliga) para cortar em produção sem redeploy; o opt-in de verdade é a
+  própria existência do cookie.
+
+- [ ] T083 `test/shein-shortlink.test.js` (novo, db-free, sem rede, fetch
+  injetado): encurta quando há cookie e o identificador bate; **identificador
+  divergente → `null` e link longo publicado** (o teste mais importante);
+  identificador vazio → link longo; `code != '0'` → link longo; falha de rede
+  ou estouro de prazo → link longo, sem lançar; sem cookie → o gerador nem é
+  chamado (asserção de que o fetch não foi invocado); kill-switch desligado →
+  não chama; oneLink publicado exatamente como a SHEIN devolveu, com os
+  parâmetros dela.
+
+- [ ] T084 Guarda de não-regressão: somar casos a
+  `test/converters-shein.test.js` provando que nenhuma das guardas T072-T079
+  mudou de comportamento com o encurtamento ligado, e que as outras quatro
+  lojas seguem intocadas.
