@@ -107,7 +107,7 @@ function getFormatWarnings(platform, data = {}) {
 }
 
 // T076: remove zero à esquerda (a SHEIN não usa padding no número de
-// afiliada — `0001150365562` e `1150365562` não são a mesma coisa para o
+// afiliada — `0009876543` e `9876543` não são a mesma coisa para o
 // parâmetro `url_from` que o conversor monta). Preserva um único "0" caso o
 // texto seja só zeros (caso patológico, cai na recusa de comprimento a
 // seguir de qualquer forma).
@@ -391,7 +391,7 @@ export function sanitizeCredentialBody(platform, body = {}) {
     if (!raw) return { ...body, tag: raw }
     // T076: zero à esquerda não corresponde à conta real (a SHEIN não usa
     // padding) — normaliza antes de validar comprimento/salvar, para
-    // `0001150365562` virar `1150365562` em vez de gerar um identificador que
+    // `0009876543` virar `9876543` em vez de gerar um identificador que
     // nunca vai bater com a conta da cliente.
     if (/^\d+$/.test(raw)) return { ...body, tag: normalizeSheinDigits(raw) }
     try {
