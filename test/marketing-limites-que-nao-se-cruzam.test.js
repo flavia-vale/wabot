@@ -60,8 +60,17 @@ const JANELA_CONTEXTO_ANTES = 80
 // abrir brecha: a sentença que carrega o trecho termina em "?" E a resposta
 // logo em seguida nega a garantia. Pergunta retórica seguida de promessa
 // continua reprovando.
-const JANELA_RESPOSTA = 400
-const NEGACAO_NA_RESPOSTA_RE = /\b(n[ãa]o(\.|,|\s)|ningu[ée]m|nenhum[a]?|desconfie|imposs[íi]vel)\b/i
+// A negação precisa ser A RESPOSTA, não uma palavra solta perto dela. Segunda
+// brecha encontrada na revisão, depois da primeira já corrigida: procurar
+// negação em 400 chars deixava passar "Nosso robô garante imunidade? Sim! E
+// não cobramos taxa." — o "não" de "não cobramos" desculpava a promessa. Por
+// isso a janela é o INÍCIO da resposta, e uma afirmação logo aí reprova na
+// hora, mesmo que venha negação depois.
+const INICIO_RESPOSTA = 80
+// Folga para a casca estrutural do código entre a pergunta e a resposta.
+const CASCA_ESTRUTURAL = 40
+const AFIRMACAO_RE = /^\W*(sim|com certeza|claro|garantimos|garantido|sempre)\b/i
+const NEGACAO_NA_RESPOSTA_RE = /^\W*(n[ãa]o\b|ningu[ée]m\b|nenhum[a]?\b|depende\b|imposs[íi]vel\b|desconfie\b)/i
 
 function ehPerguntaRespondidaComNegacao(texto, _indice, fim) {
   // O terminador da PRÓPRIA sentença precisa ser "?". Procurar o próximo "?"
@@ -72,8 +81,18 @@ function ehPerguntaRespondidaComNegacao(texto, _indice, fim) {
   const terminador = texto.slice(fim).match(/[.!?]/)
   if (!terminador || terminador[0] !== '?') return false
   const depoisDaPergunta = fim + terminador.index + 1
-  const resposta = texto.slice(depoisDaPergunta, depoisDaPergunta + JANELA_RESPOSTA)
-  return NEGACAO_NA_RESPOSTA_RE.test(resposta)
+  // Entre a pergunta e a resposta pode haver a estrutura do próprio código —
+  // `', \n answer: '` quando o par vive em dois campos (caso das FAQs reais)
+  // — ou nada, quando pergunta e resposta estão no mesmo texto corrido. Os
+  // dois precisam funcionar: recortar sem tirar essa casca fazia a resposta
+  // honesta "Não. Nenhuma ferramenta séria garante banimento zero" ser lida
+  // como promessa.
+  const inicioDaResposta = texto
+    .slice(depoisDaPergunta, depoisDaPergunta + INICIO_RESPOSTA + CASCA_ESTRUTURAL)
+    .replace(/^['",\s]*(answer|resposta|a)\s*:\s*['"]?/i, '')
+    .slice(0, INICIO_RESPOSTA)
+  if (AFIRMACAO_RE.test(inicioDaResposta)) return false
+  return NEGACAO_NA_RESPOSTA_RE.test(inicioDaResposta)
 }
 
 function encontrarPromessaProibida(texto) {
