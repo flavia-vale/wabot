@@ -49,6 +49,8 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Oferta espelhada saiu sem foto porque o card de preview não conseguiu
   // imagem. Durável para comparar por loja e por etapa ao longo dos dias.
   preview_card_no_image: 'ops_preview_card_no_image',
+  // Muro anti-robô do ML batendo no IP do servidor (RCA 2026-08-19/20).
+  ml_anti_bot_wall: 'ops_ml_anti_bot_wall',
 }
 
 let cachedTrackFn = null
