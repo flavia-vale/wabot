@@ -119,6 +119,11 @@ export const ANALYTICS_EVENTS = new Set([
   // Antes desse sinal o caminho era 100% silencioso — ver comentário em
   // reportPreviewCardNoImage (src/bot-worker.js).
   'ops_preview_card_no_image',
+  // O Mercado Livre passou a servir o muro anti-robô para o IP do servidor: a
+  // página do produto responde 200, sem foto. Sinal separado do
+  // `ops_preview_card_no_image` porque a ação é outra — não é defeito nosso,
+  // é bloqueio da loja, e a foto tem que vir por outra fonte (a vitrine).
+  'ops_ml_anti_bot_wall',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

@@ -79,3 +79,26 @@ test('o endereço montado não é o formato fabricado que o ML recusa', async ()
   const { extractFeaturedSocialProduct, isSyntheticListingUrl } = await import('../src/converters/mercadolivre.js')
   assert.equal(isSyntheticListingUrl(extractFeaturedSocialProduct(html)), false)
 })
+
+// Guard do incidente: o muro anti-robô do ML responde **status 200** com corpo
+// de página normal. Sem reconhecê-lo pelo nome, um bloqueio da loja vira "sem
+// foto" genérico — foi exatamente o que custou um dia de investigação em
+// 2026-08-19/20. Não regredir: o muro tem que ser detectável e virar sinal
+// próprio (`ops_ml_anti_bot_wall`), separado do `ops_preview_card_no_image`.
+
+test('reconhece o muro anti-robô do ML (que responde 200)', async () => {
+  const { isAntiBotWallHtml } = await import('../src/converters/imageScrapers.js')
+  const muro = '<html data-assets-prefix="https://http2.mlstatic.com/frontend-assets/suspicious-traffic-frontend/"></html>'
+  assert.equal(isAntiBotWallHtml(muro), true)
+  assert.equal(isAntiBotWallHtml('<html><a href="/gz/account-verification">verificar</a></html>'), true)
+  // Página legítima (a fixture real da vitrine) não pode ser confundida com muro.
+  assert.equal(isAntiBotWallHtml(html), false)
+  assert.equal(isAntiBotWallHtml(''), false)
+  assert.equal(isAntiBotWallHtml(null), false)
+})
+
+test('o muro tem sinal durável próprio, separado de "sem foto"', async () => {
+  const { ANALYTICS_EVENTS } = await import('../src/analytics.js')
+  assert.equal(ANALYTICS_EVENTS.has('ops_ml_anti_bot_wall'), true)
+  assert.equal(ANALYTICS_EVENTS.has('ops_preview_card_no_image'), true)
+})

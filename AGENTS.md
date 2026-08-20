@@ -2139,6 +2139,13 @@ PRIMEIRO polycard (os seguintes são recomendações). Fixture real em
 `test/fixtures/ml-social-card-featured.html`; teste:
 `test/ml-social-card-image.test.js`.
 
+**O muro tem nome próprio no log (guard do incidente).** `isAntiBotWallHtml`
+(`imageScrapers.js`) reconhece os marcadores (`suspicious-traffic`,
+`/gz/account-verification`) e `resolveMercadoLivreImage` emite
+`ops_ml_anti_bot_wall` em vez de deixar o bloqueio virar "sem foto" genérico —
+sinal SEPARADO de `ops_preview_card_no_image` porque a ação é outra: não é
+defeito nosso, é a loja barrando, e a foto tem que vir por outra fonte.
+
 **Armadilha de diagnóstico:** o muro vem com **200**, então "a página respondeu"
 não significa nada. Checar `og:image` e o marcador `suspicious-traffic` no corpo:
 ```bash
