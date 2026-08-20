@@ -102,3 +102,48 @@ export function platformsDueForProbe({ platforms = [], lastAlertByPlatform = {},
     && !isWithinCooldown({ lastAlertAt: lastAlertByPlatform[platform], now, cooldownMs })
   ))
 }
+
+// ---------------------------------------------------------------------------
+// Segunda via de confirmação: a RECUSA JÁ REGISTRADA nos envios.
+//
+// RCA 2026-08-20: duas clientes ficaram 4 e 7 dias com o código do Mercado
+// Livre recusado (1.697 e 1.042 recusas gravadas) sem receber aviso nenhum. O
+// gatilho do e-mail dependia SÓ da sondagem — e a sondagem do ML passa pela
+// trava de credencial (`withMercadoLivreCredentialLock`): com o bot chamando a
+// loja o tempo todo, ela volta `busy`/`null`, que por regra NUNCA vira aviso.
+// Resultado: o robô sabia da recusa e o aviso não saía.
+//
+// A evidência dos envios é mais forte que a sondagem: são recusas reais, na
+// conta real, feitas com a credencial real. Duas condições ao mesmo tempo, para
+// não avisar por blip:
+//   - recusas suficientes na janela (não uma ou duas); E
+//   - NENHUM link curto de afiliado saiu na mesma janela (se saiu, a credencial
+//     está viva e o que houve foi instabilidade pontual).
+export const REFUSAL_EVIDENCE_WARNING = Object.freeze({
+  mercadolivre: 'ml_ssid_expired',
+})
+
+const DEFAULT_REFUSAL_WINDOW_HOURS = 24
+const DEFAULT_REFUSAL_MIN_COUNT = 20
+
+export function resolveRefusalEvidenceWindowMs(env = process.env) {
+  const raw = Number(env.CREDENTIAL_REFUSAL_EVIDENCE_WINDOW_HOURS)
+  const hours = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_REFUSAL_WINDOW_HOURS
+  return hours * 60 * 60 * 1000
+}
+
+export function resolveRefusalEvidenceMinCount(env = process.env) {
+  const raw = Number(env.CREDENTIAL_REFUSAL_EVIDENCE_MIN_COUNT)
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_REFUSAL_MIN_COUNT
+}
+
+/**
+ * A recusa registrada nos envios é conclusiva? Exige volume E ausência total de
+ * link curto na janela — as duas coisas, nunca uma só.
+ * @param {{ refusals?: number, shortLinks?: number, minRefusals?: number }} params
+ * @returns {boolean}
+ */
+export function isRefusalEvidenceConclusive({ refusals = 0, shortLinks = 0, minRefusals = DEFAULT_REFUSAL_MIN_COUNT } = {}) {
+  if (!Number.isFinite(refusals) || refusals < minRefusals) return false
+  return shortLinks === 0
+}

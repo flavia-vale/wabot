@@ -27,10 +27,14 @@ import { buildExpiryAlerts } from './message.js'
 import {
   ALERT_EVENT,
   EXPIRY_ALERT_PLATFORMS,
+  REFUSAL_EVIDENCE_WARNING,
   isAlertableUser,
   isConfirmedExpired,
+  isRefusalEvidenceConclusive,
   platformsDueForProbe,
   resolveAlertCooldownMs,
+  resolveRefusalEvidenceMinCount,
+  resolveRefusalEvidenceWindowMs,
 } from './policy.js'
 
 /**
@@ -58,6 +62,42 @@ export async function lastAlertByPlatform({ db, userId, since }) {
   }
   return result
 }
+
+
+/**
+ * Recusa já registrada nos envios, na janela recente. Fonte: `MessageLog` — as
+ * mesmas linhas que o painel mostra. `refusals` conta os avisos de recusa da
+ * loja; `shortLinks` conta as ofertas que saíram com link curto de afiliado
+ * (prova de que a credencial está viva).
+ *
+ * Só existe para as lojas com marcador conhecido (REFUSAL_EVIDENCE_WARNING);
+ * para as demais devolve inconclusivo e o fluxo segue para a sondagem.
+ */
+export async function loadRefusalEvidence({ db, userId, platform, now = new Date(), env = process.env }) {
+  const warning = REFUSAL_EVIDENCE_WARNING[platform]
+  if (!warning) return { refusals: 0, shortLinks: 0, conclusive: false }
+  const since = new Date(new Date(now).getTime() - resolveRefusalEvidenceWindowMs(env))
+  try {
+    const [refusals, shortLinks] = await Promise.all([
+      db.messageLog.count({ where: { userId, sentAt: { gte: since }, errorMsg: { contains: warning } } }),
+      db.messageLog.count({
+        where: { userId, sentAt: { gte: since }, status: 'success', convertedUrl: { contains: SHORT_LINK_MARKER[platform] } },
+      }),
+    ])
+    return {
+      refusals,
+      shortLinks,
+      conclusive: isRefusalEvidenceConclusive({ refusals, shortLinks, minRefusals: resolveRefusalEvidenceMinCount(env) }),
+    }
+  } catch {
+    // Consulta indisponível não pode virar aviso — segue para a sondagem.
+    return { refusals: 0, shortLinks: 0, conclusive: false }
+  }
+}
+
+// Marca do link curto de afiliado por loja: se ele apareceu na janela, a
+// credencial estava viva e a recusa foi instabilidade pontual.
+const SHORT_LINK_MARKER = { mercadolivre: 'meli.la' }
 
 function groupCredentialsByUser(credentials = []) {
   const byUser = new Map()
@@ -148,6 +188,17 @@ export async function runCredentialExpirySweep({
 
       const expiredPlatforms = []
       for (const platform of due) {
+        // Primeiro a recusa JÁ REGISTRADA nos envios: é prova mais forte que a
+        // sondagem (recusa real, na conta real, com a credencial real) e não
+        // gasta chamada à loja. Foi o que faltou no RCA 2026-08-20 — a sondagem
+        // do ML disputa a trava de credencial com o bot e volta `busy`/`null`,
+        // que por regra nunca vira aviso; as clientes ficaram 4 e 7 dias
+        // recusadas em silêncio.
+        const evidencia = await loadRefusalEvidence({ db, userId, platform, now })
+        if (evidencia.conclusive) {
+          expiredPlatforms.push(platform)
+          continue
+        }
         const probe = await probePlatform({
           db, platform, userId, cred: entry.credentials.get(platform), checkers, probeCaches, logger,
         })
