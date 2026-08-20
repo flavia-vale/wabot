@@ -28,7 +28,8 @@
  */
 
 import 'dotenv/config'
-import { readFileSync, existsSync } from 'fs'
+import { existsSync, statSync, createReadStream } from 'fs'
+import { createInterface } from 'readline'
 import { join } from 'path'
 import db from '../src/db.js'
 import { getLogsBaseDir } from '../src/paths.js'
@@ -79,11 +80,21 @@ console.log(`\n[1] Avisos no log (${logFile})`)
 if (!existsSync(logFile)) {
   console.log('    bot.log não encontrado neste ambiente.')
 } else {
-  const lines = readFileSync(logFile, 'utf8').split('\n')
+  // O bot.log de produção passa de 1GB — `readFileSync` estoura o limite de
+  // string do Node (ERR_STRING_TOO_LONG). Lemos só a CAUDA do arquivo, em
+  // fluxo, linha a linha: o que interessa é o período recente.
+  const size = statSync(logFile).size
+  const tailBytes = Math.min(size, Number(arg('log-tail-mb', 400)) * 1024 * 1024)
+  const start = size - tailBytes
   const porEtapa = new Map()
   const porLoja = new Map()
   let total = 0
-  for (const line of lines) {
+  let primeiraLinha = true
+  const stream = createReadStream(logFile, { start, encoding: 'utf8' })
+  for await (const line of createInterface({ input: stream, crlfDelay: Infinity })) {
+    // A 1ª linha pode estar cortada ao meio (começamos no meio do arquivo).
+    if (primeiraLinha && start > 0) { primeiraLinha = false; continue }
+    primeiraLinha = false
     if (!line.includes('Card de preview sem imagem')) continue
     let row
     try { row = JSON.parse(line) } catch { continue }
@@ -92,6 +103,7 @@ if (!existsSync(logFile)) {
     porEtapa.set(row.stage || '?', (porEtapa.get(row.stage || '?') || 0) + 1)
     porLoja.set(row.platform || '?', (porLoja.get(row.platform || '?') || 0) + 1)
   }
+  console.log(`    (lidos os últimos ${Math.round(tailBytes / 1024 / 1024)} MB de ${Math.round(size / 1024 / 1024)} MB — ajuste com --log-tail-mb=N)`)
   if (!total) {
     console.log('    Nenhum aviso na janela. Duas leituras possíveis:')
     console.log('    - o card está saindo COM foto (o "sem imagem" é outra coisa); ou')
