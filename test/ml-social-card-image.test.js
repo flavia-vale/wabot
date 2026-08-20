@@ -58,3 +58,24 @@ test('só vitrine COM ref vira fonte de foto', async () => {
   assert.equal(await resolveSocialShareUrl('https://exemplo.com/social/x?ref=BLOB'), null)
   assert.equal(await resolveSocialShareUrl(''), null)
 })
+
+// RCA 2026-08-20 (parte 2): as ofertas de ML de vitrine PARARAM DE SAIR sempre
+// que a conversão precisava do plano B. O card de recomendação traz o `url`
+// apontando para `/up/MLBU...` (outro namespace de id), o leitor recusava esse
+// endereço e caíamos no endereço FABRICADO `MLB<id>-x-_JM` — que não existe no
+// ML e, desde 15/08, é descartado no publicar. Com id + nome do produto que já
+// vêm no card dá para montar o endereço REAL (`MLB-<id>-<nome>-_JM`, com hífen
+// depois de MLB). Não regredir: voltar a fabricar faz a oferta sumir de novo.
+
+test('monta o endereço REAL do anúncio a partir do card de recomendação', async () => {
+  const { extractFeaturedSocialProduct } = await import('../src/converters/mercadolivre.js')
+  assert.equal(
+    extractFeaturedSocialProduct(html),
+    'https://produto.mercadolivre.com.br/MLB-4715816813-kit-1-boleira-slim--2-mini-cake-2-band-20x13-2-sextavada-_JM',
+  )
+})
+
+test('o endereço montado não é o formato fabricado que o ML recusa', async () => {
+  const { extractFeaturedSocialProduct, isSyntheticListingUrl } = await import('../src/converters/mercadolivre.js')
+  assert.equal(isSyntheticListingUrl(extractFeaturedSocialProduct(html)), false)
+})
