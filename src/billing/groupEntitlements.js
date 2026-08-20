@@ -1,5 +1,6 @@
 import { JID_KIND } from '../core/jid.js'
 import { canUseChannels } from './plans.js'
+import { resolveGroupImageMode } from '../core/imageModePolicy.js'
 
 function isChannelGroup(group) {
   return group?.kind === JID_KIND.CHANNEL
@@ -22,7 +23,12 @@ function toMonitorGroup(group, targetPostJids = []) {
     // tratavam 'fetch'/'original'/'none' (src/bot-worker.js,
     // src/monitoredRelayPolicy.js, src/converters/imageScrapers.js)
     // permanecem no repositório intactos/dormentes (FR-006) — não excluir.
-    imageMode: 'preview',
+    // O modo é global e vem de `resolveGroupImageMode` (env GROUP_IMAGE_MODE,
+    // padrão 'preview'). O valor persistido em `group.imageMode` segue IGNORADO
+    // aqui — a invariante do chokepoint não mudou; o que mudou é que o modo
+    // único passou a ser configurável, para dar rollback de minutos quando uma
+    // loja bloqueia o caminho da foto do preview (RCA 2026-08-19/20).
+    imageMode: resolveGroupImageMode(),
     imageLinkTarget: group.imageLinkTarget ?? 'first',
     fallbackToOriginal: true,
     blockedKeywords: group.blockedKeywords,

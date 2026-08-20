@@ -2001,6 +2001,30 @@ Blindagem em código (não regredir): `src/supervisor/envGuard.js`
 supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
 Teste: `test/supervisor-env-guard.test.js`.
 
+## Modo de imagem é GLOBAL e trocável por env (`GROUP_IMAGE_MODE`, 2026-08-20)
+
+Desde 2026-07 o modo é único para todo mundo e o valor persistido em
+`Group.imageMode` nunca é lido no envio (seção abaixo). O que mudou em
+2026-08-20: esse modo único deixou de ser a string fixa `'preview'` e passa por
+`resolveGroupImageMode` (`src/core/imageModePolicy.js`), que lê
+`GROUP_IMAGE_MODE` do `.env` — padrão `preview`, valor inválido cai no padrão.
+
+**Por que:** o Mercado Livre passou a barrar o IP do servidor e parte das
+ofertas voltou a sair sem foto no preview. `original` ("imagem que veio na
+mensagem") não abre a página da loja, então não é afetado por bloqueio de loja
+nenhuma — é o plano B enquanto a causa não fecha. A troca é por env de
+propósito: vale para todas as contas de uma vez, **não reescreve escolha
+nenhuma no banco** e volta apagando a linha do `.env` (pegadinha #1: `pm2
+delete` + `start`, e reiniciar o `bot-supervisor` para os bots pegarem).
+
+**A memória de quem estava em preview** fica em
+`scripts/snapshot-image-mode.mjs` (read-only): grava cliente por cliente, grupo
+por grupo, num JSON com data e motivo. Rodar ANTES de trocar.
+
+**Não regredir:** a invariante do chokepoint continua valendo — `toMonitorGroup`
+não pode voltar a ler `group.imageMode`; o que ele lê é o modo global. Teste:
+`test/image-mode-policy.test.js`.
+
 ## `imageMode` fixado em `'preview'` para todos os grupos (2026-07, specs/001-image-mode-preview-default)
 
 A escolha de imagem por grupo monitorado ("Preview clicável" / "Imagem oficial
