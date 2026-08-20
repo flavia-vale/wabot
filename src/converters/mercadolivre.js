@@ -520,6 +520,26 @@ export async function fetchFeaturedSocialImage(url) {
   }
 }
 
+// Monta o endereço REAL do anúncio a partir do card: id do anúncio + nome do
+// produto que já vem no `url` do card (`.../<nome>/up/MLBU...`).
+//
+// Diferença para o endereço fabricado (`MLB<id>-x-_JM`, que não existe no ML):
+// hífen depois de `MLB` e o nome real do produto no lugar do `-x-`.
+function buildListingUrlFromCard(metadata, listingId) {
+  if (!listingId) return null
+  const raw = metadata.match(/"url"\s*:\s*"([^"]+)"/i)?.[1]
+  if (!raw) return null
+  const decoded = String(raw).replace(/\\u002F/gi, '/').replace(/\\\//g, '/')
+  // Primeiro trecho do caminho = nome do produto (slug). Ex.:
+  // `www.mercadolivre.com.br/kit-1-boleira-slim.../up/MLBU4009333855`
+  const slug = decoded.split('?')[0].split('#')[0].split('/').find((part) => (
+    /^[a-z0-9][a-z0-9-]{2,}$/i.test(part) && !/^www$/i.test(part) && !/mercadolivre|mercadolibre/i.test(part) && !/^MLB/i.test(part) && !/^up$/i.test(part)
+  ))
+  if (!slug) return null
+  const digits = String(listingId).replace(/^MLB[-_]?/i, '')
+  return `https://produto.mercadolivre.com.br/MLB-${digits}-${slug.toLowerCase()}-_JM`
+}
+
 export function extractFeaturedSocialProduct(html) {
   if (typeof html !== 'string' || !html) return null
   // Sem card destacado => não é divulgação de um produto específico.
@@ -537,6 +557,18 @@ export function extractFeaturedSocialProduct(html) {
     // Endereço real do ML antes de qualquer fabricação (ver extractFeaturedCardUrl).
     const cardUrl = extractFeaturedCardUrl(firstPolycard, listingId)
     if (cardUrl) return cardUrl
+    // Card de recomendação: o `url` aponta para a página `/up/MLBU...` (id de
+    // "user product", outro namespace), então extractFeaturedCardUrl recusa —
+    // e caíamos no endereço fabricado, que hoje é DESCARTADO no publicar
+    // (isSyntheticListingUrl). Resultado em produção: a oferta simplesmente
+    // não saía sempre que a conversão precisava do plano B.
+    //
+    // O card, porém, tem tudo para montar o endereço REAL do anúncio: o id do
+    // anúncio (`id`) e o nome do produto (o primeiro trecho do `url`). O
+    // formato de verdade do ML é `MLB-<id>-<nome>-_JM` — com hífen depois de
+    // MLB, que é justamente o que faltava no fabricado.
+    const realListing = buildListingUrlFromCard(firstPolycard, listingId)
+    if (realListing) return realListing
     // Último recurso: sem `url` utilizável no card, montamos o endereço pelo id.
     // Essa forma já respondeu 404 em produção — por isso ela é o ÚLTIMO caminho,
     // não o primeiro.

@@ -2,6 +2,7 @@ import sharp from 'sharp'
 import { extractShopeeIds, resolveShopeeShortLink as resolveShopeeShortLinkShared } from './shopee.js'
 import { resolveToCleanProductUrl, fetchFeaturedSocialImage, resolveSocialShareUrl } from './mercadolivre.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
+import { recordOperationalSignal } from '../observability/operationalSignals.js'
 
 const OG_IMAGE_RE = [
   /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
@@ -167,6 +168,21 @@ async function fetchHtml(url, { ua = 'Mozilla/5.0 (compatible; BotConversorAfili
   return { html, finalUrl: res.url || url }
 }
 
+// Muro anti-robô do Mercado Livre. É a lição mais cara do incidente de
+// 2026-08-19/20: a parede vem com **status 200** e corpo de página normal, então
+// "a página respondeu" não significa nada — sem reconhecê-la pelo nome, um
+// bloqueio da loja vira "sem foto" genérico e custa um dia de investigação.
+//
+// Marcadores confirmados em produção: o app `suspicious-traffic-frontend` e a
+// rota de verificação de conta. Nenhum dos dois aparece em página de produto
+// legítima.
+const ANTI_BOT_WALL_RE = /suspicious-traffic|\/gz\/account-verification/i
+
+export function isAntiBotWallHtml(html) {
+  if (typeof html !== 'string' || !html) return false
+  return ANTI_BOT_WALL_RE.test(html)
+}
+
 function extractImageFromHtmlLayers(html) {
   if (!html) return null
 
@@ -320,7 +336,15 @@ async function resolveMercadoLivreImage(url) {
     if (fromCard) return fromCard
   }
   const target = (await resolveToCleanProductUrl(url).catch(() => null)) || url
-  return resolveByHtmlLayers(target, { ua: BROWSER_UA })
+  const { html } = await fetchHtml(target, { ua: BROWSER_UA }).catch(() => ({ html: null }))
+  // Bloqueio da loja tem nome próprio no log e sinal durável. Sem isso, o
+  // muro (que responde 200) se disfarça de "página sem imagem" — foi assim
+  // que o incidente de 2026-08-19/20 passou um dia sem diagnóstico.
+  if (isAntiBotWallHtml(html)) {
+    recordOperationalSignal('ml_anti_bot_wall', { url: target })
+    return null
+  }
+  return extractImageFromHtmlLayers(html)
 }
 
 
