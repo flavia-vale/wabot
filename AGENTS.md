@@ -2109,6 +2109,42 @@ de já ter a foto". Lembre da armadilha do ML: o muro anti-robô vem com **statu
 `bot-supervisor` não for reiniciado, os avisos novos não aparecem no log (ver
 seção "código novo não carregado pelos bots").
 
+## ML sem foto: o muro anti-robô do ML bate no IP do servidor (RCA 2026-08-19/20)
+
+**Sintoma:** de um dia para o outro, as ofertas de Mercado Livre passaram a sair
+**sem foto** (card de preview vazio). Amazon e Shopee normais. A conversão do ML
+continuou funcionando — foto e conversão são caminhos independentes.
+
+**Causa medida no próprio VPS** (não suposição): a página do produto do ML
+responde **status 200**, ~39KB e **sem `og:image`** — é o muro anti-robô
+(`suspicious-traffic-frontend`). `fetchProductImage('mercadolivre', ...)` devolve
+`null` e o card sai sem imagem. O muro é **por IP, não por User-Agent**: Chrome,
+iPhone, WhatsApp, Facebook e Googlebot receberam todos a mesma parede; só `curl`
+mudou (403). Trocar UA não resolve.
+
+**Fonte de foto usada hoje:** a página da **vitrine** (`/social/<handle>?ref=`)
+continua acessível e já é buscada para achar o produto destacado. Ela traz a foto
+em `pictures.pictures[0].id`, e a CDN (`http2.mlstatic.com`) nunca esteve
+bloqueada: `D_NQ_NP_2X_<id>-F.jpg` devolve **1080x1080** (acima do mínimo de
+800px do preview). `extractFeaturedSocialImage` +
+`fetchFeaturedSocialImage` + `resolveSocialShareUrl`
+(`src/converters/mercadolivre.js`) alimentam `resolveMercadoLivreImage`
+(`imageScrapers.js`), **antes** da leitura da página do produto — que fica como
+2ª opção e volta a valer sozinha se o bloqueio cair.
+
+**Não regredir:** não voltar a depender só da página do produto; não aceitar
+vitrine **sem `?ref=`** como fonte (sem o ref o ML serve um destaque qualquer do
+perfil — é a origem do bug histórico da "foto errada"); manter a âncora no
+PRIMEIRO polycard (os seguintes são recomendações). Fixture real em
+`test/fixtures/ml-social-card-featured.html`; teste:
+`test/ml-social-card-image.test.js`.
+
+**Armadilha de diagnóstico:** o muro vem com **200**, então "a página respondeu"
+não significa nada. Checar `og:image` e o marcador `suspicious-traffic` no corpo:
+```bash
+node -e "fetch('<url do produto>',{headers:{'User-Agent':'Mozilla/5.0'}}).then(async r=>{const t=await r.text();console.log(r.status,/suspicious-traffic/.test(t),/og:image/.test(t))})"
+```
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview

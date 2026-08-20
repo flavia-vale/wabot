@@ -439,6 +439,87 @@ export function isSyntheticListingUrl(raw) {
   return /^\/MLB[0-9]{6,}-x-_JM\/?$/i.test(u.pathname)
 }
 
+// Foto do card destacado da vitrine `/social/?ref=`.
+//
+// RCA 2026-08-19/20: as ofertas de ML passaram a sair SEM FOTO, de um dia para
+// o outro, só o ML (Amazon e Shopee normais). Causa medida no próprio VPS: o
+// Mercado Livre passou a servir o muro anti-robô para o IP do servidor — a
+// página do produto responde **status 200**, 39KB, sem `og:image`, então o
+// leitor de imagem não tinha o que ler e devolvia `null` (e o card de preview
+// sai sem foto). Confirmado que o muro é por IP, não por User-Agent: Chrome,
+// iPhone, WhatsApp, Facebook e Googlebot recebem todos a mesma parede.
+//
+// O que continua acessível é a página da VITRINE (`/social/<handle>?ref=`) —
+// a mesma que já buscamos para achar o produto destacado. Ela traz a foto do
+// card em `pictures.pictures[0].id`, e a CDN de imagem (http2.mlstatic.com)
+// nunca esteve bloqueada: a variante `D_NQ_NP_2X_<id>-F.jpg` devolve 1080x1080
+// (bem acima do mínimo de 800px do preview do WhatsApp).
+//
+// Ou seja: a foto vem de graça no HTML que já lemos, sem uma requisição a mais.
+const ML_PICTURE_ID_RE = /"pictures"\s*:\s*\{[^}]*?"pictures"\s*:\s*\[\s*\{\s*"id"\s*:\s*"([A-Za-z0-9_-]+)"/i
+
+export function buildMlPictureUrl(pictureId) {
+  if (!pictureId || !/^[A-Za-z0-9_-]+$/.test(String(pictureId))) return null
+  // `2X` + `-F` é a variante grande (medido: 1080x1080). Sem `2X` a CDN entrega
+  // 500px, que o preview do WhatsApp mostra pixelizado.
+  return `https://http2.mlstatic.com/D_NQ_NP_2X_${pictureId}-F.jpg`
+}
+
+export function extractFeaturedSocialImage(html) {
+  if (typeof html !== 'string' || !html) return null
+  if (!/card-featured/i.test(html)) return null
+  // Mesma âncora do produto destacado: o PRIMEIRO polycard. Os seguintes são
+  // recomendações — pegar a foto deles reintroduziria a "foto errada".
+  const firstPolycard = html.match(/"polycards"\s*:\s*\[\s*\{([\s\S]*?)"components"/i)?.[1]
+  if (!firstPolycard) return null
+  return buildMlPictureUrl(firstPolycard.match(ML_PICTURE_ID_RE)?.[1])
+}
+
+/**
+ * URL da vitrine COM `?ref=` a partir do link que chegou (aceita o encurtador).
+ * O `ref` é o que diz QUAL produto a divulgação representa — sem ele o ML serve
+ * um destaque qualquer do perfil, que foi a origem do bug histórico da "foto
+ * errada". Devolve null para qualquer coisa que não seja vitrine com ref.
+ */
+export async function resolveSocialShareUrl(url) {
+  try {
+    let candidate = String(url || '')
+    if (/meli\.la|mluvem\.com/i.test(candidate) || isMlAffiliateShortLink(candidate)) {
+      candidate = (await resolve(candidate)) || ''
+    }
+    if (!candidate) return null
+    const u = new URL(candidate)
+    if (!ML_HOST.test(u.hostname)) return null
+    if (!/^\/social\//i.test(u.pathname)) return null
+    if (/\/lists(?:\/|$)/i.test(u.pathname)) return null
+    if (!u.searchParams.get('ref')) return null
+    return u.toString()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Busca o HTML da vitrine e devolve a foto do card destacado. Usado pelo
+ * leitor de imagem (imageScrapers) quando a página do produto está barrada.
+ */
+export async function fetchFeaturedSocialImage(url) {
+  try {
+    const res = await axios.get(url, {
+      timeout: 8000,
+      headers: {
+        'User-Agent': ML_BROWSER_UA,
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    })
+    const html = typeof res?.data === 'string' ? res.data : ''
+    return extractFeaturedSocialImage(html)
+  } catch (err) {
+    logger.warn({ landingUrl: url, err: err.message }, 'ML social share: erro ao buscar foto do card destacado')
+    return null
+  }
+}
+
 export function extractFeaturedSocialProduct(html) {
   if (typeof html !== 'string' || !html) return null
   // Sem card destacado => não é divulgação de um produto específico.
