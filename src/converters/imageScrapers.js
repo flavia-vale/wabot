@@ -393,6 +393,7 @@ function buildSheinImageUrlCandidates(rawUrl) {
   return uniqueImageUrls([stripped, rawUrl])
 }
 
+
 function isAmazonImageUrl(rawUrl) {
   try {
     const u = new URL(rawUrl)
