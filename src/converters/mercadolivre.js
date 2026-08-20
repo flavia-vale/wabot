@@ -439,6 +439,107 @@ export function isSyntheticListingUrl(raw) {
   return /^\/MLB[0-9]{6,}-x-_JM\/?$/i.test(u.pathname)
 }
 
+// Foto do card destacado da vitrine `/social/?ref=`.
+//
+// RCA 2026-08-19/20: as ofertas de ML passaram a sair SEM FOTO, de um dia para
+// o outro, só o ML (Amazon e Shopee normais). Causa medida no próprio VPS: o
+// Mercado Livre passou a servir o muro anti-robô para o IP do servidor — a
+// página do produto responde **status 200**, 39KB, sem `og:image`, então o
+// leitor de imagem não tinha o que ler e devolvia `null` (e o card de preview
+// sai sem foto). Confirmado que o muro é por IP, não por User-Agent: Chrome,
+// iPhone, WhatsApp, Facebook e Googlebot recebem todos a mesma parede.
+//
+// O que continua acessível é a página da VITRINE (`/social/<handle>?ref=`) —
+// a mesma que já buscamos para achar o produto destacado. Ela traz a foto do
+// card em `pictures.pictures[0].id`, e a CDN de imagem (http2.mlstatic.com)
+// nunca esteve bloqueada: a variante `D_NQ_NP_2X_<id>-F.jpg` devolve 1080x1080
+// (bem acima do mínimo de 800px do preview do WhatsApp).
+//
+// Ou seja: a foto vem de graça no HTML que já lemos, sem uma requisição a mais.
+const ML_PICTURE_ID_RE = /"pictures"\s*:\s*\{[^}]*?"pictures"\s*:\s*\[\s*\{\s*"id"\s*:\s*"([A-Za-z0-9_-]+)"/i
+
+export function buildMlPictureUrl(pictureId) {
+  if (!pictureId || !/^[A-Za-z0-9_-]+$/.test(String(pictureId))) return null
+  // `2X` + `-F` é a variante grande (medido: 1080x1080). Sem `2X` a CDN entrega
+  // 500px, que o preview do WhatsApp mostra pixelizado.
+  return `https://http2.mlstatic.com/D_NQ_NP_2X_${pictureId}-F.jpg`
+}
+
+export function extractFeaturedSocialImage(html) {
+  if (typeof html !== 'string' || !html) return null
+  if (!/card-featured/i.test(html)) return null
+  // Mesma âncora do produto destacado: o PRIMEIRO polycard. Os seguintes são
+  // recomendações — pegar a foto deles reintroduziria a "foto errada".
+  const firstPolycard = html.match(/"polycards"\s*:\s*\[\s*\{([\s\S]*?)"components"/i)?.[1]
+  if (!firstPolycard) return null
+  return buildMlPictureUrl(firstPolycard.match(ML_PICTURE_ID_RE)?.[1])
+}
+
+/**
+ * URL da vitrine COM `?ref=` a partir do link que chegou (aceita o encurtador).
+ * O `ref` é o que diz QUAL produto a divulgação representa — sem ele o ML serve
+ * um destaque qualquer do perfil, que foi a origem do bug histórico da "foto
+ * errada". Devolve null para qualquer coisa que não seja vitrine com ref.
+ */
+export async function resolveSocialShareUrl(url) {
+  try {
+    let candidate = String(url || '')
+    if (/meli\.la|mluvem\.com/i.test(candidate) || isMlAffiliateShortLink(candidate)) {
+      candidate = (await resolve(candidate)) || ''
+    }
+    if (!candidate) return null
+    const u = new URL(candidate)
+    if (!ML_HOST.test(u.hostname)) return null
+    if (!/^\/social\//i.test(u.pathname)) return null
+    if (/\/lists(?:\/|$)/i.test(u.pathname)) return null
+    if (!u.searchParams.get('ref')) return null
+    return u.toString()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Busca o HTML da vitrine e devolve a foto do card destacado. Usado pelo
+ * leitor de imagem (imageScrapers) quando a página do produto está barrada.
+ */
+export async function fetchFeaturedSocialImage(url) {
+  try {
+    const res = await axios.get(url, {
+      timeout: 8000,
+      headers: {
+        'User-Agent': ML_BROWSER_UA,
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    })
+    const html = typeof res?.data === 'string' ? res.data : ''
+    return extractFeaturedSocialImage(html)
+  } catch (err) {
+    logger.warn({ landingUrl: url, err: err.message }, 'ML social share: erro ao buscar foto do card destacado')
+    return null
+  }
+}
+
+// Monta o endereço REAL do anúncio a partir do card: id do anúncio + nome do
+// produto que já vem no `url` do card (`.../<nome>/up/MLBU...`).
+//
+// Diferença para o endereço fabricado (`MLB<id>-x-_JM`, que não existe no ML):
+// hífen depois de `MLB` e o nome real do produto no lugar do `-x-`.
+function buildListingUrlFromCard(metadata, listingId) {
+  if (!listingId) return null
+  const raw = metadata.match(/"url"\s*:\s*"([^"]+)"/i)?.[1]
+  if (!raw) return null
+  const decoded = String(raw).replace(/\\u002F/gi, '/').replace(/\\\//g, '/')
+  // Primeiro trecho do caminho = nome do produto (slug). Ex.:
+  // `www.mercadolivre.com.br/kit-1-boleira-slim.../up/MLBU4009333855`
+  const slug = decoded.split('?')[0].split('#')[0].split('/').find((part) => (
+    /^[a-z0-9][a-z0-9-]{2,}$/i.test(part) && !/^www$/i.test(part) && !/mercadolivre|mercadolibre/i.test(part) && !/^MLB/i.test(part) && !/^up$/i.test(part)
+  ))
+  if (!slug) return null
+  const digits = String(listingId).replace(/^MLB[-_]?/i, '')
+  return `https://produto.mercadolivre.com.br/MLB-${digits}-${slug.toLowerCase()}-_JM`
+}
+
 export function extractFeaturedSocialProduct(html) {
   if (typeof html !== 'string' || !html) return null
   // Sem card destacado => não é divulgação de um produto específico.
@@ -456,6 +557,18 @@ export function extractFeaturedSocialProduct(html) {
     // Endereço real do ML antes de qualquer fabricação (ver extractFeaturedCardUrl).
     const cardUrl = extractFeaturedCardUrl(firstPolycard, listingId)
     if (cardUrl) return cardUrl
+    // Card de recomendação: o `url` aponta para a página `/up/MLBU...` (id de
+    // "user product", outro namespace), então extractFeaturedCardUrl recusa —
+    // e caíamos no endereço fabricado, que hoje é DESCARTADO no publicar
+    // (isSyntheticListingUrl). Resultado em produção: a oferta simplesmente
+    // não saía sempre que a conversão precisava do plano B.
+    //
+    // O card, porém, tem tudo para montar o endereço REAL do anúncio: o id do
+    // anúncio (`id`) e o nome do produto (o primeiro trecho do `url`). O
+    // formato de verdade do ML é `MLB-<id>-<nome>-_JM` — com hífen depois de
+    // MLB, que é justamente o que faltava no fabricado.
+    const realListing = buildListingUrlFromCard(firstPolycard, listingId)
+    if (realListing) return realListing
     // Último recurso: sem `url` utilizável no card, montamos o endereço pelo id.
     // Essa forma já respondeu 404 em produção — por isso ela é o ÚLTIMO caminho,
     // não o primeiro.

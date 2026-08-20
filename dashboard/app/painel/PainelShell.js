@@ -78,6 +78,19 @@ function ExpiredPlanBanner({ user }) {
   )
 }
 
+function MaintenanceBanner() {
+  return (
+    <div className="pnl-note-box is-warn pnl-maintenance-banner" role="status">
+      <div>
+        <strong style={{ fontWeight: 600 }}>API do Mercado Livre em manutenção</strong>
+        <p style={{ marginTop: 6 }}>
+          Tempo de retorno esperado: até às 14h.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function ExpiredMlSsidBanner({ expired }) {
   if (!expired) return null
 
@@ -401,6 +414,7 @@ export default function PainelShell({ children }) {
                 ciclo. Como a ação correta não é reconectar, o banner não aparece
                 mais. sessionHealth segue exposto no contexto/metrics para
                 observabilidade, sem alarmar o usuário com uma ação enganosa. */}
+            <MaintenanceBanner />
             <ExpiredPlanBanner user={user} />
             <ExpiredMlSsidBanner expired={mlSsidExpired} />
             {children}

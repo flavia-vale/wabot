@@ -1978,6 +1978,30 @@ Blindagem em código (não regredir): `src/supervisor/envGuard.js`
 supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
 Teste: `test/supervisor-env-guard.test.js`.
 
+## Modo de imagem é GLOBAL e trocável por env (`GROUP_IMAGE_MODE`, 2026-08-20)
+
+Desde 2026-07 o modo é único para todo mundo e o valor persistido em
+`Group.imageMode` nunca é lido no envio (seção abaixo). O que mudou em
+2026-08-20: esse modo único deixou de ser a string fixa `'preview'` e passa por
+`resolveGroupImageMode` (`src/core/imageModePolicy.js`), que lê
+`GROUP_IMAGE_MODE` do `.env` — padrão `preview`, valor inválido cai no padrão.
+
+**Por que:** o Mercado Livre passou a barrar o IP do servidor e parte das
+ofertas voltou a sair sem foto no preview. `original` ("imagem que veio na
+mensagem") não abre a página da loja, então não é afetado por bloqueio de loja
+nenhuma — é o plano B enquanto a causa não fecha. A troca é por env de
+propósito: vale para todas as contas de uma vez, **não reescreve escolha
+nenhuma no banco** e volta apagando a linha do `.env` (pegadinha #1: `pm2
+delete` + `start`, e reiniciar o `bot-supervisor` para os bots pegarem).
+
+**A memória de quem estava em preview** fica em
+`scripts/snapshot-image-mode.mjs` (read-only): grava cliente por cliente, grupo
+por grupo, num JSON com data e motivo. Rodar ANTES de trocar.
+
+**Não regredir:** a invariante do chokepoint continua valendo — `toMonitorGroup`
+não pode voltar a ler `group.imageMode`; o que ele lê é o modo global. Teste:
+`test/image-mode-policy.test.js`.
+
 ## `imageMode` fixado em `'preview'` para todos os grupos (2026-07, specs/001-image-mode-preview-default)
 
 A escolha de imagem por grupo monitorado ("Preview clicável" / "Imagem oficial
@@ -2068,6 +2092,89 @@ de `''`. Antes de promover para main: ligar a flag em staging, mandar uma
 oferta real (Amazon/Shopee/ML/Magalu) e conferir no celular se o card ainda
 aparece com foto. Se sumir, desligar a flag (sem redeploy) e reverter para o
 nome da loja.
+
+## Oferta saindo SEM FOTO: o caminho do card de preview era MUDO (2026-08)
+
+Toda oferta espelhada sai como card de preview (`imageMode` fixo em `'preview'`).
+O card só existe com foto: sem `jpegThumbnail`, `buildManualLinkPreview`
+(`src/bot-worker.js`) devolve `null` e a mensagem sai como **texto puro** — é
+esse o "sem imagem" que a cliente relata.
+
+**O que impedia o diagnóstico:** esse caminho não deixava rastro nenhum em
+produção. `fetchProductImage` (`src/converters/imageScrapers.js`) trata o
+próprio erro e devolve `null` **sem lançar**, então o `.catch(logger.debug)`
+nunca rodava; e `logger.debug` não chega ao `bot.log` de qualquer forma — o
+transport de arquivo é `level: 'info'` (`src/logger.js`). Ou seja: zero linha de
+log, zero sinal, nenhuma forma de saber se a foto se perdeu na loja, no
+download, no `normalize` ou no upload da thumbnail.
+
+Hoje cada etapa que perde a foto chama `reportPreviewCardNoImage(stage)`:
+`logger.warn` + `AnalyticsEvent('ops_preview_card_no_image')` (allowlist em
+`src/analytics.js`, mapa em `src/observability/operationalSignals.js`). Etapas:
+`anchor_missing` (o link não aparece literal no texto), `scrape_sem_imagem` (a
+loja não devolveu foto — caso mais comum), `download_falhou`/`download_sem_bytes`,
+`normalize_falhou`, `sem_plataforma`.
+
+**Não regredir:** não rebaixar esses avisos para `debug` e não voltar a tratar
+`fetchProductImage` como se lançasse erro em falha (ele devolve `null`).
+Teste: `test/preview-card-no-image-observability.test.js`.
+
+**Diagnóstico (read-only, roda no diretório do ambiente):**
+```bash
+cd ~/wabot && node scripts/diag-preview-sem-imagem.mjs [<email>] [--days=3] [--no-live]
+```
+Ele cruza os avisos do `bot.log`, o histórico do sinal no banco e **repete ao
+vivo** a busca de foto dos últimos envios reais, loja por loja — é o que separa
+"a loja parou de entregar a foto para este servidor" de "problema nosso depois
+de já ter a foto". Lembre da armadilha do ML: o muro anti-robô vem com **status
+200** e sem `og:image`.
+
+⚠️ Em modo `remote`, deploy da API **não** recarrega os bot-workers: enquanto o
+`bot-supervisor` não for reiniciado, os avisos novos não aparecem no log (ver
+seção "código novo não carregado pelos bots").
+
+## ML sem foto: o muro anti-robô do ML bate no IP do servidor (RCA 2026-08-19/20)
+
+**Sintoma:** de um dia para o outro, as ofertas de Mercado Livre passaram a sair
+**sem foto** (card de preview vazio). Amazon e Shopee normais. A conversão do ML
+continuou funcionando — foto e conversão são caminhos independentes.
+
+**Causa medida no próprio VPS** (não suposição): a página do produto do ML
+responde **status 200**, ~39KB e **sem `og:image`** — é o muro anti-robô
+(`suspicious-traffic-frontend`). `fetchProductImage('mercadolivre', ...)` devolve
+`null` e o card sai sem imagem. O muro é **por IP, não por User-Agent**: Chrome,
+iPhone, WhatsApp, Facebook e Googlebot receberam todos a mesma parede; só `curl`
+mudou (403). Trocar UA não resolve.
+
+**Fonte de foto usada hoje:** a página da **vitrine** (`/social/<handle>?ref=`)
+continua acessível e já é buscada para achar o produto destacado. Ela traz a foto
+em `pictures.pictures[0].id`, e a CDN (`http2.mlstatic.com`) nunca esteve
+bloqueada: `D_NQ_NP_2X_<id>-F.jpg` devolve **1080x1080** (acima do mínimo de
+800px do preview). `extractFeaturedSocialImage` +
+`fetchFeaturedSocialImage` + `resolveSocialShareUrl`
+(`src/converters/mercadolivre.js`) alimentam `resolveMercadoLivreImage`
+(`imageScrapers.js`), **antes** da leitura da página do produto — que fica como
+2ª opção e volta a valer sozinha se o bloqueio cair.
+
+**Não regredir:** não voltar a depender só da página do produto; não aceitar
+vitrine **sem `?ref=`** como fonte (sem o ref o ML serve um destaque qualquer do
+perfil — é a origem do bug histórico da "foto errada"); manter a âncora no
+PRIMEIRO polycard (os seguintes são recomendações). Fixture real em
+`test/fixtures/ml-social-card-featured.html`; teste:
+`test/ml-social-card-image.test.js`.
+
+**O muro tem nome próprio no log (guard do incidente).** `isAntiBotWallHtml`
+(`imageScrapers.js`) reconhece os marcadores (`suspicious-traffic`,
+`/gz/account-verification`) e `resolveMercadoLivreImage` emite
+`ops_ml_anti_bot_wall` em vez de deixar o bloqueio virar "sem foto" genérico —
+sinal SEPARADO de `ops_preview_card_no_image` porque a ação é outra: não é
+defeito nosso, é a loja barrando, e a foto tem que vir por outra fonte.
+
+**Armadilha de diagnóstico:** o muro vem com **200**, então "a página respondeu"
+não significa nada. Checar `og:image` e o marcador `suspicious-traffic` no corpo:
+```bash
+node -e "fetch('<url do produto>',{headers:{'User-Agent':'Mozilla/5.0'}}).then(async r=>{const t=await r.text();console.log(r.status,/suspicious-traffic/.test(t),/og:image/.test(t))})"
+```
 
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
