@@ -73,9 +73,96 @@ async function postJson(url, { token, memberId, siteUid, language, body }) {
   })
 }
 
+
+// ── Modo descoberta ────────────────────────────────────────────────────────
+// Descobre o CONJUNTO MÍNIMO de cookies que a SHEIN precisa para reconhecer a
+// sessão. Existe por uma razão de privacidade: o botão Export do Cookie-Editor
+// copia tudo (carrinho, navegação, identificador de aparelho), e guardar isso
+// inteiro é pedir muito mais do que o necessário para gerar um link.
+//
+// Estratégia: elimina um cookie por vez e vê se a SHEIN ainda devolve o
+// memberId. O que puder sair, sai. Só chama `getSiteInfo`, que é leitura — não
+// gera link nem altera nada.
+//
+// Imprime apenas os NOMES dos cookies necessários. Nenhum valor é exibido.
+function parseCookiePairs(raw) {
+  const texto = String(raw || '').trim()
+  const lista = texto.startsWith('[') || texto.startsWith('{')
+    ? (() => { try { const j = JSON.parse(texto); return (Array.isArray(j) ? j : [j]).map(c => [String(c?.name || ''), String(c?.value ?? '')]) } catch { return [] } })()
+    : texto.split(';').map(p => { const i = p.indexOf('='); return i < 0 ? null : [p.slice(0, i).trim(), p.slice(i + 1).trim()] }).filter(Boolean)
+  return lista.filter(([nome]) => nome)
+}
+
+function montarHeader(pares) {
+  return pares.map(([n, v]) => `${n}=${v}`).join('; ')
+}
+
+async function sessaoReconhecida(pares) {
+  try {
+    const res = await fetch(SITE_INFO_URL, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: {
+        'User-Agent': BROWSER_UA, Accept: 'application/json',
+        'Content-Type': 'application/json', 'bff-source': 'shein;pwa',
+        Cookie: montarHeader(pares),
+      },
+    })
+    const info = await res.json()
+    return Boolean(String(info?.memberId || '').trim())
+  } catch {
+    return false
+  }
+}
+
+async function descobrirMinimo(cookieBruto) {
+  console.log(line('═'))
+  console.log('DESCOBRINDO O MÍNIMO NECESSÁRIO')
+  console.log(line('═'))
+
+  let pares = parseCookiePairs(cookieBruto)
+  console.log(`\nO seu Export tem ${pares.length} cookies.`)
+  if (!pares.length) { console.log('Não consegui ler nenhum cookie. Confira o que foi colado.'); return }
+
+  console.log('Conferindo se a SHEIN reconhece a sessão com todos...')
+  if (!(await sessaoReconhecida(pares))) {
+    console.log('\n✘ A SHEIN não reconheceu nem com o pacote completo.')
+    console.log('  O código venceu ou foi copiado pela metade. Faça login de novo e copie outra vez.')
+    return
+  }
+  console.log('✔ reconheceu. Agora vou tirando um por um.\n')
+
+  const necessarios = []
+  for (let i = 0; i < pares.length; i++) {
+    const candidato = pares[i]
+    const semEle = pares.filter((_, idx) => idx !== i && !necessarios.includes(pares[idx]))
+      .concat(necessarios)
+    const aindaFunciona = await sessaoReconhecida(semEle)
+    if (!aindaFunciona) {
+      necessarios.push(candidato)
+      console.log(`   PRECISA   ${candidato[0]}`)
+    } else {
+      pares = pares.filter((_, idx) => idx !== i)
+      i--
+    }
+    await new Promise(r => setTimeout(r, 250))
+  }
+
+  console.log(`\n${line()}`)
+  if (!necessarios.length) {
+    console.log('   Nenhum cookie individual se mostrou obrigatório — a SHEIN aceita')
+    console.log('   combinações. Me mande a lista abaixo assim mesmo.')
+  }
+  console.log('   COOKIES NECESSÁRIOS (só os nomes — nenhum valor foi impresso):\n')
+  for (const [nome] of (necessarios.length ? necessarios : pares)) console.log(`      ${nome}`)
+  console.log(`\n   Descartáveis: ${cookieBruto ? parseCookiePairs(cookieBruto).length - (necessarios.length || pares.length) : 0} cookies`)
+  console.log(`${line()}`)
+  console.log('\n   Me mande essa lista de nomes. Vou guardar só esses e descartar o resto.\n')
+}
+
 async function main() {
   const cookie = process.env.SHEIN_COOKIE
-  const productUrl = process.argv[2]
+  const modoDescoberta = process.argv.includes('--descobrir')
+  const productUrl = process.argv.find(a => a.startsWith('http'))
 
   console.log(line('═'))
   console.log('TESTE DO GERADOR DE LINK DA SHEIN')
@@ -89,6 +176,8 @@ async function main() {
     process.exitCode = 1
     return
   }
+  if (modoDescoberta) { await descobrirMinimo(cookie); return }
+
   if (!productUrl) {
     console.error('\nFalta o link do produto que você quer encurtar.\n')
     process.exitCode = 1
