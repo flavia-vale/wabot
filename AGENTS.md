@@ -528,6 +528,29 @@ gritava. `src/credentialExpiry/` fecha esse buraco por e-mail.
   separa os dois e-mails, e há teste que falha se o texto da Shopee voltar a
   prometer que as ofertas continuam. **Não fundir os dois textos.**
 
+### A recusa registrada nos envios também confirma (RCA 2026-08-20 — não regredir)
+
+Duas clientes ficaram **4 e 7 dias** com o código de acesso do Mercado Livre
+recusado — 1.697 e 1.042 recusas gravadas, **zero link curto** — sem receber um
+aviso sequer. O gatilho do e-mail dependia SÓ da sondagem, e a sondagem do ML
+passa por `withMercadoLivreCredentialLock`: com o bot usando a credencial o
+tempo todo, ela volta `busy` → `alive:null` → nunca vira aviso (regra correta,
+gatilho insuficiente). O robô sabia da recusa e o aviso não saía.
+
+Agora `runCredentialExpirySweep` consulta **primeiro** `loadRefusalEvidence`
+(`src/credentialExpiry/sweep.js`): recusas no `MessageLog` na janela
+(`ml_ssid_expired`) versus ofertas que saíram com link curto (`meli.la`). Só é
+conclusivo com **volume de recusa E nenhum link curto na janela** — um único
+link curto derruba a conclusão (credencial viva com instabilidade pontual não
+pode virar "seu código venceu"). Evidência conclusiva **pula a sondagem**, o que
+também poupa rotação de credencial.
+
+Envs: `CREDENTIAL_REFUSAL_EVIDENCE_WINDOW_HOURS` (24),
+`CREDENTIAL_REFUSAL_EVIDENCE_MIN_COUNT` (20). Banco indisponível ou loja sem
+marcador conhecido (`REFUSAL_EVIDENCE_WARNING`, hoje só ML) devolve
+inconclusivo e cai na sondagem — nunca avisa por dúvida. Teste:
+`test/credential-refusal-evidence.test.js`.
+
 ### Aviso "a Shopee parou de aceitar a chave" (RCA 2026-08 — não regredir)
 
 O comentário original de `EXPIRY_ALERT_PLATFORMS` afirmava que App ID + chave
