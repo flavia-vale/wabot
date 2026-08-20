@@ -2069,6 +2069,46 @@ oferta real (Amazon/Shopee/ML/Magalu) e conferir no celular se o card ainda
 aparece com foto. Se sumir, desligar a flag (sem redeploy) e reverter para o
 nome da loja.
 
+## Oferta saindo SEM FOTO: o caminho do card de preview era MUDO (2026-08)
+
+Toda oferta espelhada sai como card de preview (`imageMode` fixo em `'preview'`).
+O card só existe com foto: sem `jpegThumbnail`, `buildManualLinkPreview`
+(`src/bot-worker.js`) devolve `null` e a mensagem sai como **texto puro** — é
+esse o "sem imagem" que a cliente relata.
+
+**O que impedia o diagnóstico:** esse caminho não deixava rastro nenhum em
+produção. `fetchProductImage` (`src/converters/imageScrapers.js`) trata o
+próprio erro e devolve `null` **sem lançar**, então o `.catch(logger.debug)`
+nunca rodava; e `logger.debug` não chega ao `bot.log` de qualquer forma — o
+transport de arquivo é `level: 'info'` (`src/logger.js`). Ou seja: zero linha de
+log, zero sinal, nenhuma forma de saber se a foto se perdeu na loja, no
+download, no `normalize` ou no upload da thumbnail.
+
+Hoje cada etapa que perde a foto chama `reportPreviewCardNoImage(stage)`:
+`logger.warn` + `AnalyticsEvent('ops_preview_card_no_image')` (allowlist em
+`src/analytics.js`, mapa em `src/observability/operationalSignals.js`). Etapas:
+`anchor_missing` (o link não aparece literal no texto), `scrape_sem_imagem` (a
+loja não devolveu foto — caso mais comum), `download_falhou`/`download_sem_bytes`,
+`normalize_falhou`, `sem_plataforma`.
+
+**Não regredir:** não rebaixar esses avisos para `debug` e não voltar a tratar
+`fetchProductImage` como se lançasse erro em falha (ele devolve `null`).
+Teste: `test/preview-card-no-image-observability.test.js`.
+
+**Diagnóstico (read-only, roda no diretório do ambiente):**
+```bash
+cd ~/wabot && node scripts/diag-preview-sem-imagem.mjs [<email>] [--days=3] [--no-live]
+```
+Ele cruza os avisos do `bot.log`, o histórico do sinal no banco e **repete ao
+vivo** a busca de foto dos últimos envios reais, loja por loja — é o que separa
+"a loja parou de entregar a foto para este servidor" de "problema nosso depois
+de já ter a foto". Lembre da armadilha do ML: o muro anti-robô vem com **status
+200** e sem `og:image`.
+
+⚠️ Em modo `remote`, deploy da API **não** recarrega os bot-workers: enquanto o
+`bot-supervisor` não for reiniciado, os avisos novos não aparecem no log (ver
+seção "código novo não carregado pelos bots").
+
 ## Image scrapers — configuração canônica (PR #422, não regredir)
 
 `src/converters/imageScrapers.js` entrega imagem hi-res para link preview
