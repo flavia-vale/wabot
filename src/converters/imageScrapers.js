@@ -1,6 +1,6 @@
 import sharp from 'sharp'
 import { extractShopeeIds, resolveShopeeShortLink as resolveShopeeShortLinkShared } from './shopee.js'
-import { resolveToCleanProductUrl } from './mercadolivre.js'
+import { resolveToCleanProductUrl, fetchFeaturedSocialImage, resolveSocialShareUrl } from './mercadolivre.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
 
 const OG_IMAGE_RE = [
@@ -306,10 +306,23 @@ async function resolveAmazonImage(url) {
 // confirmada do texto/link batendo com um produto e a imagem vindo de outro.
 // resolveToCleanProductUrl já faz essa resolução completa (usada para montar
 // o link de afiliado do texto); reaproveitamos aqui para a imagem também.
+// A foto da vitrine vem ANTES da página do produto de propósito (RCA
+// 2026-08-19/20): o ML passou a servir o muro anti-robô para o IP do servidor,
+// e a página do produto responde 200 SEM `og:image` — o leitor de HTML não tem
+// o que ler e a oferta sai sem foto. A página da vitrine (`/social/?ref=`)
+// continua acessível e já traz a foto do card destacado, então ela é a fonte
+// confiável hoje. A leitura da página do produto segue como segunda opção: se
+// o bloqueio cair, ela volta a funcionar sozinha.
 async function resolveMercadoLivreImage(url) {
+  const socialUrl = await resolveSocialShareUrl(url)
+  if (socialUrl) {
+    const fromCard = await fetchFeaturedSocialImage(socialUrl).catch(() => null)
+    if (fromCard) return fromCard
+  }
   const target = (await resolveToCleanProductUrl(url).catch(() => null)) || url
   return resolveByHtmlLayers(target, { ua: BROWSER_UA })
 }
+
 
 function isAmazonImageUrl(rawUrl) {
   try {
