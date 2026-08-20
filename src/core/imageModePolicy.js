@@ -30,3 +30,25 @@ export function resolveGroupImageMode(env = process.env) {
   const raw = String(env?.GROUP_IMAGE_MODE ?? '').trim().toLowerCase()
   return MODOS_VALIDOS.has(raw) ? raw : DEFAULT_GROUP_IMAGE_MODE
 }
+
+// Como a foto "que veio na mensagem" chega ao destino: SUBINDO de novo
+// (`reupload`) ou REPASSANDO o proto já hospedado da origem (`relay`).
+//
+// RCA 2026-08-20/21: existiam DOIS caminhos para a mesma promessa de produto
+// ("usar a imagem da mensagem"), e eles não eram equivalentes:
+//   - destino COM botão "Ver canal" → `getImage` baixa a mídia da origem e a
+//     SOBE de novo como imagem nova (o botão só é aceito em corpo de mídia).
+//     É o caminho que a cliente descreve como "funciona perfeito".
+//   - destino SEM botão, modo `original` → `relayMessage` REAPROVEITA o proto
+//     da origem, sem subir nada.
+// Ao mudar todas as contas para `original`, o grupo sem botão passou a usar o
+// repasse e a cliente reportou oferta que chegava no grupo gêmeo (com botão) e
+// não chegava nele — com o envio gravado como sucesso, porque o repasse é
+// aceito pelo Baileys e a perda acontece depois, na entrega.
+//
+// Padrão passa a ser `reupload`: um caminho só, o mesmo que já funciona.
+// Escape hatch `IMAGE_ORIGINAL_STRATEGY=relay` volta ao comportamento
+// histórico (mais barato e preserva vídeo) sem redeploy.
+export function shouldReuploadOriginalMedia(env = process.env) {
+  return String(env?.IMAGE_ORIGINAL_STRATEGY ?? '').trim().toLowerCase() !== 'relay'
+}

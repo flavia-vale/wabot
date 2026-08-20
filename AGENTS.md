@@ -2001,6 +2001,32 @@ Blindagem em código (não regredir): `src/supervisor/envGuard.js`
 supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
 Teste: `test/supervisor-env-guard.test.js`.
 
+## "Imagem que veio na mensagem" tem UM caminho só: subir de novo (RCA 2026-08-21)
+
+Existiam **dois** caminhos para a mesma promessa de produto, e eles não eram
+equivalentes:
+
+- destino **com** botão "Ver canal" → `getImage({ forceOriginalForChannelButton })`
+  baixa a mídia da origem e a **SOBE de novo** como imagem nova (o botão só é
+  aceito em corpo de mídia). É o caminho que a cliente descreve como "funciona
+  perfeito";
+- destino **sem** botão, modo `original` → `shouldUseRelayPath` + `relayMessage`
+  **REAPROVEITAM** o proto já hospedado da origem, sem subir nada.
+
+Quando todas as contas foram trocadas para `original` (bloqueio do ML), o grupo
+sem botão passou a usar o repasse e a cliente reportou oferta que **chegava no
+grupo gêmeo e não chegava nele** — com o envio gravado como `success`, porque o
+repasse é aceito pelo Baileys e a perda acontece depois, na entrega. O painel não
+tem como ver isso: `success` significa "entreguei ao WhatsApp", não "apareceu no
+grupo".
+
+Hoje `shouldReuploadOriginalMedia` (`src/core/imageModePolicy.js`) faz o modo
+`original` usar o MESMO caminho do botão. Escape hatch
+`IMAGE_ORIGINAL_STRATEGY=relay` volta ao repasse (mais barato, preserva vídeo)
+sem redeploy. **Não regredir:** não voltar o repasse a padrão sem antes provar,
+em teste controlado com dois destinos gêmeos, que ele entrega tudo. Teste:
+`test/image-mode-policy.test.js`.
+
 ## Modo de imagem é GLOBAL e trocável por env (`GROUP_IMAGE_MODE`, 2026-08-20)
 
 Desde 2026-07 o modo é único para todo mundo e o valor persistido em

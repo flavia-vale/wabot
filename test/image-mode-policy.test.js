@@ -38,3 +38,35 @@ test('o chokepoint não volta a ler o imageMode persistido do grupo', () => {
   assert.match(fn, /imageMode: resolveGroupImageMode\(\)/)
   assert.equal(/imageMode: group\.imageMode/.test(fn), false)
 })
+
+// RCA 2026-08-20/21 — "no modo original faltou oferta; com o botão Ver canal
+// funciona perfeito". Havia DOIS caminhos para a mesma promessa ("usar a imagem
+// que veio na mensagem") e eles não eram equivalentes:
+//   - com botão: baixa a mídia da origem e SOBE de novo (o botão só é aceito em
+//     corpo de mídia) — o caminho que funciona;
+//   - sem botão, modo original: REPASSA o proto já hospedado da origem.
+// A cliente viu oferta chegar no grupo com botão e não chegar no gêmeo sem
+// botão, com o envio gravado como sucesso (o repasse é aceito pelo Baileys e a
+// perda acontece na entrega). Padrão passa a ser um caminho só: reupload.
+
+test('por padrão a foto da mensagem é subida de novo, como no caminho do botão', async () => {
+  const { shouldReuploadOriginalMedia } = await import('../src/core/imageModePolicy.js')
+  assert.equal(shouldReuploadOriginalMedia({}), true)
+  assert.equal(shouldReuploadOriginalMedia(undefined), true)
+  assert.equal(shouldReuploadOriginalMedia({ IMAGE_ORIGINAL_STRATEGY: '' }), true)
+  assert.equal(shouldReuploadOriginalMedia({ IMAGE_ORIGINAL_STRATEGY: 'reupload' }), true)
+})
+
+test('o repasse antigo continua acessível como escape hatch', async () => {
+  const { shouldReuploadOriginalMedia } = await import('../src/core/imageModePolicy.js')
+  assert.equal(shouldReuploadOriginalMedia({ IMAGE_ORIGINAL_STRATEGY: 'relay' }), false)
+  assert.equal(shouldReuploadOriginalMedia({ IMAGE_ORIGINAL_STRATEGY: ' RELAY ' }), false)
+})
+
+test('o envio só usa relay quando o escape hatch pede (guarda estrutural)', async () => {
+  const { readFileSync } = await import('fs')
+  const src = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  const linha = src.split('\n').find(l => l.includes('shouldRelayOriginalMediaForImageMode(imageMode)') && l.includes('const original'))
+  assert.ok(linha, 'decisão de mídia original não encontrada')
+  assert.match(linha, /!shouldReuploadOriginalMedia\(\)/, 'o caminho de repasse precisa continuar condicionado ao escape hatch')
+})
