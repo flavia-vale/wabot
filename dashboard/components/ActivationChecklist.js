@@ -157,6 +157,35 @@ function StepCta({ href, label, isActive }) {
   )
 }
 
+// P3 (specs/013-inbound-leads-strategy): aviso de envio bloqueado por falta
+// de credencial de loja, sem exigir abertura do histórico (FR-015/FR-016).
+// Cada item traz o que aconteceu, o porquê (com o vocabulário certo por
+// loja — Shopee é o OPOSTO de ML/Amazon/Magalu) e o próximo passo, com link
+// direto para o cadastro.
+function CredentialBlockAlerts({ stores }) {
+  if (!stores || stores.length === 0) return null
+  return (
+    <div style={{ display: 'grid', gap: 10, marginBottom: 22 }}>
+      {stores.map((store) => (
+        <div key={store.platform} style={{
+          background: 'color-mix(in oklab, var(--danger) 8%, var(--surface))',
+          border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--line))',
+          borderRadius: 16, padding: '16px 20px',
+        }}>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>{store.headline}</div>
+          <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-soft)', margin: '0 0 10px' }}>{store.body}</p>
+          <a href={store.href} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            fontSize: 13, fontWeight: 600, color: 'var(--accent-strong)', textDecoration: 'none',
+          }}>
+            {store.nextStep} <Icon name="arrow" size={13} />
+          </a>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function CelebrationBanner() {
   return (
     <div style={{
@@ -222,6 +251,21 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
     return () => { cancelled = true; clearInterval(id) }
   }, [])
 
+  // P3 (specs/013-inbound-leads-strategy): aviso de credencial — chamada só
+  // no mount e no `focus` da janela, SEM intervalo (nunca pendurado no poll
+  // de 10s acima — ver bloco 🚩 em tasks.md e research.md R3).
+  const [credentialAlerts, setCredentialAlerts] = useState([])
+  useEffect(() => {
+    let cancelled = false
+    const load = () =>
+      api.logsCredentialBlock()
+        .then(data => { if (!cancelled) setCredentialAlerts(data?.stores || []) })
+        .catch(() => {})
+    load()
+    window.addEventListener('focus', load)
+    return () => { cancelled = true; window.removeEventListener('focus', load) }
+  }, [])
+
   const completedSet = new Set(STEPS.filter(s => status?.[s.key]).map(s => s.key))
   const count = completedSet.size
   const botActive = isBotActive(status)
@@ -255,7 +299,10 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
     if (view === 'hidden') onActivated?.()
   }, [view, onActivated])
 
-  if (view === 'hidden') return null
+  // Mesmo com a checklist de onboarding concluída (view 'hidden'), o aviso de
+  // credencial continua aparecendo — quem já ativou o bot pode perder uma
+  // credencial depois (FR-015).
+  if (view === 'hidden') return <CredentialBlockAlerts stores={credentialAlerts} />
   if (view === 'celebrate') return <CelebrationBanner />
 
   const timeLabel = count === 0
@@ -318,6 +365,12 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
           </div>
         </div>
       </div>
+
+      {credentialAlerts.length > 0 && (
+        <div style={{ padding: '18px 28px 0' }}>
+          <CredentialBlockAlerts stores={credentialAlerts} />
+        </div>
+      )}
 
       {/* Steps 1–4 */}
       {STEPS.map((s, i) => {

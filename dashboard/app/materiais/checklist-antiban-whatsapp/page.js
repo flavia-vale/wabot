@@ -5,8 +5,8 @@ import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
 const slug = '/materiais/checklist-antiban-whatsapp'
-const title = 'Checklist de Preservação Avançada para WhatsApp'
-const description = 'Checklist prático para reduzir exposição operacional no WhatsApp com chip dedicado, cadência, variações, monitoramento e plano de recuperação.'
+const title = 'Checklist: reduzir o risco de ban no WhatsApp'
+const description = 'Checklist de quem divulga ofertas: chip separado, ritmo entre envios, variação de texto, limite por grupo e o que fazer se o número cair.'
 const dates = getEditorialDates(slug)
 
 const checklistBlocks = [

@@ -26,6 +26,14 @@ export const EDITORIAL_DATES = {
   // criação dos arquivos (PR #1186).
   '/cadastro': { publishedAt: '2026-07-03', updatedAt: '2026-07-31' },
   '/parcerias': { publishedAt: '2026-07-03', updatedAt: '2026-07-31' },
+  // Mesma lacuna da nota acima, encontrada em 2026-08-19 ao rodar
+  // validate:seo-consistency para specs/013-inbound-leads-strategy (P2) — as
+  // 3 rotas abaixo já tinham data em resolveLastModified() no seo-registry,
+  // só faltava aqui. Reaproveita a MESMA data já em uso no registry para não
+  // inventar dado novo.
+  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-08-05' },
+  '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
+  '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-07-31' },
   '/conteudos': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/benchmarks/operacao-grupos-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
@@ -59,6 +67,9 @@ export const EDITORIAL_DATES = {
   '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp': { publishedAt: '2026-05-14', updatedAt: '2026-05-15' },
   '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-08-03' },
+  // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
+  // desta rodada, publicada em 2026-08-19.
+  '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-08-19' },
   '/alternativas/proafiliados': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/alternativas/shozap': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/alternativas/fluxopromo': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },

@@ -28,7 +28,11 @@ test('programmatic LP registry requires the rendered schema types validated in s
 
   for (const route of PROGRAMMATIC_SEO_ROUTES) {
     assert.equal(route.template, 'programmatic-lp')
-    assert.equal(route.indexable, true)
+    // `indexable` deixou de ser sempre `true` em 2026-08-19: 25 rotas de
+    // grade (cidade e nicho) saíram do índice sem sair do site. A composição
+    // exata é travada em `test/seo-noindex-guard.test.js`; aqui só importa
+    // que a rota siga existindo e sendo construída.
+    assert.equal(typeof route.indexable, 'boolean')
     assert.match(route.path, /^\/[a-z0-9-]+$/)
     assert.ok(route.parentPath, `${route.slug} must link back to a hub`)
     assert.deepEqual(route.schemaTypes, ['FAQPage', 'HowTo', 'SoftwareApplication', 'BreadcrumbList'])

@@ -1,9 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getIndexableSeoRoutes } from '../lib/seo-registry.mjs'
+import { getAllSeoRoutes } from '../lib/seo-registry.mjs'
 
 const appDir = path.resolve(process.cwd(), 'app')
-const privatePrefixes = ['/painel', '/admin', '/login', '/api', '/promo-vip-7dias']
+// /esqueci-senha e /nova-senha: fluxo de recuperação de senha, mesma
+// natureza de /login (utilitário de autenticação, sem valor de SEO) — gap
+// pré-existente encontrado ao ajustar este guard em specs/013-inbound-leads-strategy
+// (T013), não coberto por nenhuma task desta feature além do próprio ajuste do guard.
+const privatePrefixes = ['/painel', '/admin', '/login', '/esqueci-senha', '/nova-senha', '/api', '/promo-vip-7dias']
 const nonPageFiles = new Set(['layout.js', 'loading.js', 'error.js', 'not-found.js', 'template.js', 'route.js', 'default.js'])
 const allowedUnregistered = new Set(['/sitemap.xml', '/robots.txt'])
 
@@ -41,9 +45,15 @@ const publicRoutesFromFs = pageFiles
   .map(toRoute)
   .filter((route) => isPublicRoute(route) && !allowedUnregistered.has(route))
 
-const indexable = new Set(getIndexableSeoRoutes().map((route) => route.path))
+// P2 (specs/013-inbound-leads-strategy): a base de comparação é a COBERTURA
+// do registro (getAllSeoRoutes), não mais a lista de indexáveis. Cobertura =
+// estar no registro; indexação (campo `indexable`) é decisão separada, lida
+// só por buildSeoRobots/sitemap/IndexNow. Antes deste ajuste, a 1ª rota
+// marcada `indexable: false` reprovava este guard como se tivesse sumido do
+// registro — ver contracts/seo-robots.md.
+const registered = new Set(getAllSeoRoutes().map((route) => route.path))
 
-const missingInRegistry = [...new Set(publicRoutesFromFs)].filter((route) => !indexable.has(route)).sort()
+const missingInRegistry = [...new Set(publicRoutesFromFs)].filter((route) => !registered.has(route)).sort()
 
 if (missingInRegistry.length > 0) {
   console.error('ERRO: rotas públicas sem entrada no seo-registry:')

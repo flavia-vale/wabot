@@ -47,7 +47,7 @@ function ErrorDetails({ log, expanded, onToggle }) {
       <button type="button" className={`pnl-detail-btn${benign ? '' : ' is-error'}`} onClick={onToggle} aria-expanded={expanded}>
         {expanded ? 'Ocultar motivo' : (benign ? 'Ver motivo' : 'Ver detalhes')}
       </button>
-      {expanded && <p className={`pnl-detail-box${benign ? '' : ' is-error'}`}>{explainErrorMsg(log.errorMsg)}</p>}
+      {expanded && <p className={`pnl-detail-box${benign ? '' : ' is-error'}`}>{explainErrorMsg(log.errorMsg, log.platform)}</p>}
     </div>
   )
 }

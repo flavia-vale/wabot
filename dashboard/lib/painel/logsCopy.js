@@ -3,6 +3,21 @@
  * com a taxonomia canônica de erros exibida no painel de envios.
  * É copy de UI — não muda nenhuma regra de negócio. */
 
+import { buildCredentialBlockAlerts } from '../../../src/credentialBlockAlert/message.js'
+
+// P3 (specs/013-inbound-leads-strategy): terceiro ponto de exibição da
+// Assumption (histórico de envios) — mesma fonte de vocabulário do aviso
+// novo do painel (T022), para a cliente ler a MESMA frase em qualquer lugar.
+// Nunca duplicar o texto por loja aqui: reusa buildCredentialBlockAlerts.
+function credentialBlockCopyForPlatform(platform) {
+  if (!platform) return null
+  const [store] = buildCredentialBlockAlerts({
+    blockedByPlatform: [{ platform, blockedCount: 0, lastBlockedAt: null }],
+    configuredPlatforms: [],
+  })
+  return store ?? null
+}
+
 function formatDuration(totalSeconds) {
   if (totalSeconds < 60) return `${totalSeconds}s`
   const minutes = Math.floor(totalSeconds / 60)
@@ -20,7 +35,7 @@ function parseDedupAgeSuffix(errorMsg) {
   return { ageSeconds: Number(m[1]), windowSeconds: Number(m[2]) }
 }
 
-export function explainErrorMsg(errorMsg) {
+export function explainErrorMsg(errorMsg, platform) {
   if (!errorMsg) return null
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) {
     return 'Seus cookies da Amazon (sitestripe) expiraram. As ofertas continuam saindo com link longo de afiliado e creditando comissão, mas para voltar a gerar links curtos amzn.to, renove os cookies em IDs de afiliada → Amazon.'
@@ -56,7 +71,14 @@ export function explainErrorMsg(errorMsg) {
   if (errorMsg.startsWith('skip:blocked_keyword')) return 'Contém uma palavra que você marcou para bloquear.'
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
   if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'
-  if (errorMsg.startsWith('skip:no_valid_conversions')) return 'Nenhum link da mensagem pôde ser convertido em link de afiliado.'
+  if (errorMsg.startsWith('skip:no_valid_conversions')) {
+    // Antes: texto genérico, igual para toda loja, sem próximo passo. Agora
+    // nomeia a loja e diz o que fazer — mesma inversão Shopee/ML-Amazon-Magalu
+    // do aviso novo do painel (P3, specs/013-inbound-leads-strategy).
+    const copy = credentialBlockCopyForPlatform(platform)
+    if (copy) return `${copy.body} ${copy.nextStep}`
+    return 'Nenhum link da mensagem pôde ser convertido em link de afiliado. Confira se a credencial dessa loja está cadastrada em "Minhas credenciais".'
+  }
   if (errorMsg.startsWith('skip:policy')) {
     if (errorMsg.endsWith(':unsupported_store')) return 'Essa promoção foi ignorada porque ainda não fazemos conversão automática de afiliado para essa loja.'
     return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'

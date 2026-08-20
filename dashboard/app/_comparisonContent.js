@@ -7,6 +7,7 @@ import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS } from '@/lib/marke
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 import { getSiteUrl } from '@/lib/site-url'
 import { getCompetitorBySlug } from '@/lib/competitors-data'
+import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { ComparisonPageTracker } from '@/components/marketing/ComparisonPageTracker'
 
 export const COMPARISON_SOURCE_LINKS = [
@@ -205,8 +206,11 @@ export const COMPARISON_PAGES = {
   '/alternativas/fluxopromo': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · FluxoPromo',
-    title: 'Alternativa ao FluxoPromo: comparativo honesto para quem divulga ofertas',
-    description: 'Compare FluxoPromo e BOTinho para divulgar ofertas de afiliado: plano grátis, preço por plano, limite de ofertas por dia e a diferença entre feed de ofertas e espelhamento de grupos. Verificado em 04/08/2026.',
+    // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
+    // era 72 chars de texto próprio, cortado no celular. Mantém "Alternativa
+    // ao" na frente (FR-030 — nunca se apresenta como o concorrente).
+    title: 'Alternativa ao FluxoPromo: preço e o que muda',
+    description: 'Compare FluxoPromo e BOTinho: plano grátis, preço por plano, limite de ofertas por dia e feed pronto vs. espelhamento de grupos. Verificado em 04/08/2026.',
     competitorSlugs: ['fluxopromo'],
     tldr: 'Antes de comparar preço, entenda que são propostas diferentes: o FluxoPromo entrega ofertas prontas por nicho, o BOTinho espelha os grupos que você escolhe acompanhar. Uma não substitui a outra.',
     directAnswer: 'O FluxoPromo distribui ofertas de afiliado por nicho para canais de Telegram e destinos de WhatsApp, com plano gratuito permanente (20 ofertas/dia, 3 lojas, 1 canal de Telegram) e planos pagos de R$ 37 a R$ 197/mês cobrados por teto de ofertas por dia. O BOTinho funciona de outra forma: monitora os grupos de origem que você escolhe, converte os links para o seu código e republica nos seus destinos, a partir de R$ 39/30 dias.',
@@ -241,6 +245,57 @@ export const COMPARISON_PAGES = {
       { q: 'Em que o FluxoPromo é melhor que o BOTinho?', a: 'Em quatro pontos. Tem plano gratuito permanente, enquanto aqui o teste dura 7 dias. O plano pago de entrada custa R$ 37, mais barato que o nosso Basic. Cobre Telegram, que o BOTinho não atende. E o plano Expert cobre 12 lojas, mais do que as quatro que cobrimos.' },
       { q: 'Qual a diferença real entre os dois?', a: 'De onde vem a oferta. O FluxoPromo entrega ofertas selecionadas pela própria ferramenta, organizadas por nicho e loja. O BOTinho monitora os grupos de origem que você escolhe e republica o que sai neles com o seu código de afiliado. Se você já tem grupos bons para acompanhar, são coisas diferentes; se não tem, o feed pronto resolve um problema que o espelhamento não resolve.' },
       { q: 'O limite de ofertas por dia atrapalha?', a: 'Depende do seu volume. São 20/dia no grátis, 50 no Essencial, 150 no Pro e ilimitado só no Expert (R$ 197/mês). Para quem publica poucas ofertas selecionadas por dia, o teto nunca é alcançado. Para quem espelha grupos ativos, 20 ou 50 acabam rápido.' },
+    ],
+  },
+  /* Página nova de US5 (specs/013-inbound-leads-strategy, FR-014/FR-025):
+   * ÚNICA página de comparação nova desta rodada — escolhida por já ter dado
+   * verificado com fonte e data em dashboard/lib/competitors-data.js
+   * (slug 'achadinho-pro', verifiedAt 2026-07-31), sem exigir coleta nova
+   * (D3 do plan.md). As próximas cinco da fila ficam em
+   * specs/013-inbound-leads-strategy/checklist-comparativos.md, uma por
+   * semana, só depois desta entrar no índice (SC-011, ≤14 dias).
+   */
+  '/alternativas/achadinho-pro': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Achadinho Pro',
+    title: 'Alternativa ao Achadinho Pro: preço e marketplaces',
+    description: 'Compare Achadinho Pro e BOTinho: preço por plano, marketplaces cobertos e o que cada um resolve primeiro. Dados verificados em 31/07/2026.',
+    competitorSlugs: ['achadinho-pro'],
+    productPage: {
+      href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
+      label: 'Como funciona o bot para achadinhos no WhatsApp',
+    },
+    tldr: 'Se você vai começar só com Shopee e não se importa em pagar mais depois para somar Mercado Livre e Amazon, o Achadinho Pro resolve. Se já divulga as três lojas (ou Magalu) desde o início, compare o custo total antes de decidir.',
+    directAnswer: 'O Achadinho Pro é um bot de afiliados para WhatsApp com IA para selecionar produtos: o plano Basic (R$ 49,97/mês) cobre só Shopee, com grupos ilimitados por automação e até 5 números de WhatsApp; o Pro (R$ 59,97/mês) soma Mercado Livre e Amazon pelo mesmo custo de apenas R$10 a mais. A página de preços consultada não indica teste grátis. A alternativa mais próxima é o BOTinho, que cobre Shopee, Amazon, Mercado Livre e Magalu já no plano de entrada (R$39/30 dias) e converte também links de cupom, com teste grátis de 7 dias.',
+    rows: [
+      ['Marketplaces no plano de entrada', 'Achadinho Pro: só Shopee no Basic (R$ 49,97/mês); Mercado Livre e Amazon entram no Pro (R$ 59,97/mês). BOTinho: Shopee, Amazon, Mercado Livre e Magalu já no Basic (R$39/30 dias).', 'Se você já divulga mais de uma loja, compare pelo plano que cobre todas — não pelo preço de entrada.'],
+      ['Diferença de preço entre os planos', 'Achadinho Pro: R$10/mês a mais para triplicar o número de marketplaces (Basic → Pro). BOTinho: R$30 a mais (Basic → Pro) para Canais do WhatsApp e ofertas automáticas — os marketplaces já vêm todos no Basic.', 'São upgrades diferentes: no Achadinho Pro o upgrade é sobre LOJA; no BOTinho é sobre CANAL e AUTOMAÇÃO.'],
+      ['Grupos e números de WhatsApp', 'Achadinho Pro: grupos ilimitados por automação, até 5 números de WhatsApp por conta. BOTinho: sem limite de grupos, uma sessão por conta.', 'Se você opera vários números de WhatsApp na mesma operação, o Achadinho Pro cobre isso e o BOTinho não.'],
+      ['Teste antes de pagar', 'Achadinho Pro: a página de preços consultada não indica teste grátis nem número de dias de trial. BOTinho: 7 dias grátis com o plano Pro completo, sem cartão.', 'Sem teste indicado, é mais difícil validar antes de assinar — confirme na página oficial se isso mudou.'],
+      ['Conversão de cupom', 'Não indicada nas páginas públicas do Achadinho Pro. BOTinho converte link de cupom, não só de produto.', 'Só faz diferença para quem divulga campanha de cupom além de produto avulso.'],
+    ],
+    criteria: ['Quantos marketplaces você divulga hoje', 'Quantos números de WhatsApp a operação usa', 'Se precisa validar antes de pagar (teste grátis)', 'Se converte cupom além de produto', 'Se quer Canais do WhatsApp além de grupos'],
+    botinhoDifferentials: ['Quatro marketplaces já no plano de entrada', 'Teste grátis de 7 dias com o Pro completo, sem cartão', 'Conversão de link de cupom, não só de produto', 'Canais e Comunidades do WhatsApp', 'Sem limite de grupos', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
+    bestFit: [
+      'Escolha o Achadinho Pro se vai começar só com Shopee, quer pagar pouco a mais (R$10/mês) para depois somar Mercado Livre e Amazon, ou precisa operar vários números de WhatsApp na mesma conta.',
+      'Escolha o BOTinho se já divulga Shopee, Amazon, Mercado Livre e Magalu desde o início, quer validar a operação completa com teste grátis antes de pagar, ou divulga campanha de cupom além de produto avulso.',
+    ],
+    notIdealFit: [
+      'O Achadinho Pro não é ideal para quem já divulga Mercado Livre ou Amazon desde o primeiro dia — o plano de entrada cobre só Shopee.',
+      'O Achadinho Pro também não é ideal para quem quer testar antes de assinar: a página de preços não indica teste grátis.',
+      'O BOTinho não é ideal para quem opera vários números de WhatsApp na mesma conta — o Achadinho Pro cobre até 5, o BOTinho é uma sessão por conta.',
+    ],
+    migrationPath: [
+      'Conte quantos marketplaces você realmente divulga hoje e quantos números de WhatsApp a operação usa — são os dois fatores que mais mudam a conta entre as duas ferramentas.',
+      'Se decidir pelo Achadinho Pro, comece pelo Basic (só Shopee) e migre para o Pro só quando for divulgar Mercado Livre ou Amazon de fato.',
+      'Se decidir pelo BOTinho, use os 7 dias de teste grátis para validar a conversão de link e o preview antes de assinar.',
+    ],
+    faq: [
+      { q: 'Quanto custa o Achadinho Pro?', a: 'Conforme a página pública consultada em 31/07/2026: Basic R$ 49,97/mês (só Shopee, grupos ilimitados por automação, até 5 números de WhatsApp) e Pro R$ 59,97/mês (soma Mercado Livre e Amazon, mais Listas Personalizadas com 48h de auto-expiração). Confirme na página oficial antes de decidir — preços mudam.' },
+      { q: 'O Achadinho Pro tem teste grátis?', a: 'A página de preços consultada em 31/07/2026 não indica teste grátis nem número de dias de trial. Se isso for importante para você, confirme diretamente no site oficial antes de assinar.' },
+      { q: 'Em que o Achadinho Pro é melhor que o BOTinho?', a: 'Em dois pontos concretos: a diferença de preço entre os planos é pequena (R$10/mês) para triplicar o número de marketplaces cobertos, e ele permite até 5 números de WhatsApp na mesma conta — o BOTinho é uma sessão por conta.' },
+      { q: 'Vale a pena pagar o plano Pro do Achadinho Pro?', a: 'Depende de quantas lojas você divulga. Se for só Shopee, o Basic já resolve. Se pretende somar Mercado Livre e Amazon, o Pro custa R$10/mês a mais — proporcionalmente barato para triplicar a cobertura de marketplace.' },
+      { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles, então dá para rodar as duas em paralelo por uma semana antes de cancelar a atual.' },
     ],
   },
   '/botinho-vs-planilha-manual': {
@@ -342,10 +397,12 @@ export const COMPARISON_PAGES = {
 
 export function getComparisonMetadata(slug) {
   const page = COMPARISON_PAGES[slug]
+  const robots = buildSeoRobots(slug)
   return {
     title: page.title,
     description: page.description,
     alternates: { canonical: slug },
+    ...(robots ? { robots } : {}),
     openGraph: { title: page.title, description: page.description, url: `${getSiteUrl()}${slug}`, type: 'article', locale: 'pt_BR' },
   }
 }
