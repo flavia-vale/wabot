@@ -1389,13 +1389,30 @@ function buildBroadcastImageRecipe(text, options = {}) {
 // NUNCA usar contextInfo.externalAdReply para "forçar" card grande: é campo
 // de anúncio e causa drop silencioso em mensagem monitorada — a guarda em
 // monitoredMessagePayload.js rejeita payload com esse campo em qualquer rota.
+// Card de preview sem imagem = oferta que sai como TEXTO PURO no grupo.
+// Até 2026-08 esse caminho era MUDO em produção: `fetchProductImage` engole
+// o próprio erro e devolve `null` (não lança), então o `.catch(logger.debug)`
+// abaixo nunca rodava — e `logger.debug` não chega ao `bot.log` de qualquer
+// forma (o transport de arquivo é `level: 'info'`, src/logger.js). Resultado:
+// a cliente via oferta sem foto e não havia UMA linha de log dizendo em que
+// etapa a foto se perdeu. Aqui cada etapa que falha vira `warn` + sinal
+// durável (`ops_preview_card_no_image`), para dar pra separar por loja e por
+// etapa sem depender de reproduzir o caso.
+function reportPreviewCardNoImage(stage, ctx = {}) {
+  logger.warn({ ...ctx, stage }, 'Card de preview sem imagem: oferta vai sair como texto puro')
+  try { recordOperationalSignal('preview_card_no_image', { userId, stage, platform: ctx.platform || null }) } catch {}
+}
+
 async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal }) {
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
   // âncora o cliente WhatsApp não associa o card ao link e não renderiza nada.
   // Sem âncora, devolve null e o Baileys tenta o preview automático.
-  if (!String(text || '').includes(matchedText)) return null
+  if (!String(text || '').includes(matchedText)) {
+    reportPreviewCardNoImage('anchor_missing', { platform: primary?.platform, matchedText })
+    return null
+  }
 
   const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
 
@@ -1445,19 +1462,36 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     hqSourceBuffer = banner
   } else if (primary?.platform) {
     const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
-      logger.debug({ err: err?.message, sourceUrl }, 'linkPreview manual: fetchProductImage falhou — preview sem imagem')
+      reportPreviewCardNoImage('scrape_threw', { platform: primary.platform, sourceUrl, err: err?.message })
       return null
     })
-    if (isHttpUrl(imageUrl)) {
+    if (!isHttpUrl(imageUrl)) {
+      // Caminho MAIS COMUM de falha e, até aqui, o único totalmente silencioso:
+      // `fetchProductImage` trata o próprio erro e devolve `null` (loja
+      // bloqueando o scrape, HTML sem og:image, short link não resolvido,
+      // credencial da Shopee recusada). Sem essa linha não dá para saber se a
+      // oferta saiu sem foto por causa da loja ou por causa do upload.
+      reportPreviewCardNoImage('scrape_sem_imagem', { platform: primary.platform, sourceUrl })
+    } else {
       try {
         const fetched = await fetchImageBuffer(imageUrl, sourceUrl)
+        if (!fetched?.buffer) {
+          reportPreviewCardNoImage('download_sem_bytes', { platform: primary.platform, imageUrl, sourceUrl })
+        }
         const normalized = fetched?.buffer ? await normalizeImageForWhatsApp(fetched.buffer) : null
+        if (fetched?.buffer && !normalized?.jpegThumbnail) {
+          reportPreviewCardNoImage('normalize_falhou', { platform: primary.platform, imageUrl, sourceUrl, bytes: fetched.buffer.length })
+        }
         jpegThumbnail = normalized?.jpegThumbnail || undefined
         hqSourceBuffer = normalized?.buffer || jpegThumbnail
       } catch (err) {
-        logger.warn({ err: err?.message, imageUrl, sourceUrl }, 'linkPreview manual: falha ao baixar thumbnail — preview sem imagem')
+        reportPreviewCardNoImage('download_falhou', { platform: primary.platform, imageUrl, sourceUrl, err: err?.message })
       }
     }
+  } else {
+    // Sem plataforma reconhecida não existe caminho de imagem: o card nunca é
+    // montado. Vale logar para separar "loja bloqueou" de "link não é de loja".
+    reportPreviewCardNoImage('sem_plataforma', { sourceUrl })
   }
 
   let highQualityThumbnail

@@ -46,6 +46,11 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // específico. Sinal durável para separar "essa conta está com problema" de
   // "o WhatsApp cortou a nossa versão e todo mundo caiu junto".
   wa_version_rejected: 'ops_wa_version_rejected',
+  // Oferta espelhada saiu sem foto porque o card de preview não conseguiu
+  // imagem. Durável para comparar por loja e por etapa ao longo dos dias.
+  preview_card_no_image: 'ops_preview_card_no_image',
+  // Muro anti-robô do ML batendo no IP do servidor (RCA 2026-08-19/20).
+  ml_anti_bot_wall: 'ops_ml_anti_bot_wall',
 }
 
 let cachedTrackFn = null
