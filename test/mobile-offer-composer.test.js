@@ -9,6 +9,7 @@ import {
   detectMobileOfferStoreKey,
   getMobileOfferSingleLinkWarning,
   normalizeMobileOfferProduct,
+  COUPON_STORES,
 } from '../dashboard/lib/mobileOfferComposer.js'
 import {
   PRESET_TEMPLATE_BODIES,
@@ -181,6 +182,19 @@ test('detecta loja da oferta por dados do scrape, conversão ou hostname', () =>
   assert.equal(detectMobileOfferStoreKey({ product: { conversion: { platform: 'mercadolivre' } }, link: '' }), 'mercadolivre')
   assert.equal(detectMobileOfferStoreKey({ product: { platform: 'amazon' }, link: '' }), 'amazon')
   assert.equal(detectMobileOfferStoreKey({ product: {}, link: 'https://www.magazineluiza.com.br/produto' }), 'magazineluiza')
+})
+
+// specs/012-shein-store-support (D6/D7/T058)
+test('detecta SHEIN por platform explícito e por hostname', () => {
+  assert.equal(detectMobileOfferStoreKey({ product: { platform: 'shein' }, link: '' }), 'shein')
+  assert.equal(detectMobileOfferStoreKey({ product: {}, link: 'https://br.shein.com/vestido-p-123.html' }), 'shein')
+  assert.equal(detectMobileOfferStoreKey({ product: {}, link: 'https://onelink.shein.com/14/abc' }), 'shein')
+})
+
+test('COUPON_STORES inclui a SHEIN', () => {
+  const shein = COUPON_STORES.find((s) => s.key === 'shein')
+  assert.ok(shein)
+  assert.equal(shein.nome, 'SHEIN')
 })
 
 

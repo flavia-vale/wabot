@@ -4,7 +4,7 @@ import { Hero } from '@/components/landing/Hero'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { IntroCard } from '@/components/landing/IntroCard'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
-import { getHubSeoRoute, getSeoRoutesByCluster } from '@/lib/seo-registry.mjs'
+import { getHubSeoRoute, getSeoRoutesByCluster, buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
 
@@ -17,6 +17,11 @@ const HUB_CONTENT = {
   },
   'bot-ofertas-whatsapp': {
     eyebrow: 'Hub de nichos',
+    // Título/descrição movidos para cá em 2026-08-19 (specs/013-inbound-leads-strategy,
+    // P1/P2): fonte única (FR-001) — antes viviam só no seo-registry.mjs, sem
+    // nenhuma página realmente ler dali. Motivo pra clicar ("escolha por nicho") na frente.
+    title: 'Bot de ofertas no WhatsApp: escolha por nicho',
+    description: 'Hub para nichos que divulgam ofertas no WhatsApp e precisam padronizar campanhas, links e grupos.',
     intro: 'Use este hub para adaptar a divulgação de ofertas ao calendário comercial de cada nicho, com copy, link, plataforma e revisão adequados antes da automação.',
     promise: 'Ideal para afiliados, curadores e admins que publicam ofertas por categoria.',
     checklist: ['Criar checklist de validação por nicho.', 'Padronizar benefício, preço, validade e CTA da oferta.', 'Medir quais categorias justificam mais frequência.'],
@@ -37,24 +42,32 @@ export function getSeoHubMetadata(hubSlug) {
   const route = getHubSeoRoute(`/${hubSlug}`)
   if (!route) return {}
 
+  // Fonte única (FR-001): HUB_CONTENT é a fonte quando o hub declara título
+  // próprio aqui; os hubs que ainda não migraram continuam lendo do registry.
+  const content = HUB_CONTENT[hubSlug]
+  const title = content?.title ?? route.title
+  const description = content?.description ?? route.description
+
   const ogImage = buildOgImageUrl({ slug: hubSlug, cluster: route.cluster, template: 'seo-hub' })
+  const robots = buildSeoRobots(route.path)
 
   return {
-    title: route.title,
-    description: route.description,
+    title,
+    description,
     alternates: { canonical: route.path },
+    ...(robots ? { robots } : {}),
     openGraph: {
-      images: [{ url: ogImage, width: 1200, height: 630, alt: route.title }],
-      title: route.title,
-      description: route.description,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+      title,
+      description,
       url: `${getSiteUrl()}${route.path}`,
       type: 'website',
       locale: 'pt_BR',
     },
     twitter: {
       card: 'summary',
-      title: route.title,
-      description: route.description,
+      title,
+      description,
       images: [ogImage],
     },
   }
@@ -68,11 +81,16 @@ export function SeoHubPage({ hubSlug }) {
 
   if (!route || !content) return null
 
+  // Fonte única (FR-001): usa o título do módulo quando ele existir, senão
+  // cai para o do registry (hubs que ainda não migraram título/descrição pra cá).
+  const title = content.title ?? route.title
+  const description = content.description ?? route.description
+
   const collectionJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: route.title,
-    description: route.description,
+    name: title,
+    description,
     url: `${siteUrl}${route.path}`,
     mainEntity: {
       '@type': 'ItemList',
@@ -107,8 +125,8 @@ export function SeoHubPage({ hubSlug }) {
 
   const headline = (
     <>
-      <span>{route.title.split(' ').slice(0, -2).join(' ')}</span><br />
-      <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{route.title.split(' ').slice(-2).join(' ')}</span>
+      <span>{title.split(' ').slice(0, -2).join(' ')}</span><br />
+      <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{title.split(' ').slice(-2).join(' ')}</span>
     </>
   )
 
@@ -130,7 +148,7 @@ export function SeoHubPage({ hubSlug }) {
         <div className="wrap" style={{ marginTop: 28 }}>
           <IntroCard
             eyebrow={content.eyebrow}
-            title={route.title}
+            title={title}
             body={content.intro}
             pills={content.checklist}
           />

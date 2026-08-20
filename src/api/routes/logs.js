@@ -2,6 +2,13 @@ import db from '../../db.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
 import { buildOfferQueueSource, parseOfferQueueSourceId } from '../../offerQueue/sourceTag.js'
 import { clearUserQueuedSendLogs } from '../../jobs/stuckSendLogs.js'
+import { buildCredentialBlockAlerts } from '../../credentialBlockAlert/message.js'
+
+// P3 (specs/013-inbound-leads-strategy): janela fixa de 7 dias, constante no
+// módulo — não vira query param para a rota não virar superfície de
+// varredura arbitrária do histórico (contracts/credential-block-alert.md).
+const CREDENTIAL_BLOCK_ERROR_PREFIX = 'skip:no_valid_conversions'
+const CREDENTIAL_BLOCK_WINDOW_MS = 7 * 24 * 60 * 60_000
 
 // Cache leve do /summary — métricas não precisam ser real-time-real-time.
 // Chave: `${userId}:${period}`. TTL curto para não pesar no banco em refresh
@@ -372,5 +379,51 @@ export async function logsRoutes(app) {
     }
 
     return { days, buckets }
+  })
+
+  // GET /logs/credential-block — P3 (specs/013-inbound-leads-strategy):
+  // avisa no painel quem parou na etapa da credencial, sem exigir abertura
+  // do histórico. Rota NOVA e enxuta (não reaproveita /summary nem
+  // /dashboard/status — ver contracts/credential-block-alert.md para o
+  // porquê). Sem cache: chamada no mount e no `focus` da janela do painel,
+  // sem intervalo — não replica o `summaryCache` (Map sem despejo) deste
+  // mesmo arquivo.
+  app.get('/credential-block', { onRequest: [app.authenticate] }, async (req) => {
+    const userId = req.user.sub
+    const since = new Date(Date.now() - CREDENTIAL_BLOCK_WINDOW_MS)
+
+    const [blockedLogs, credentials] = await Promise.all([
+      db.messageLog.findMany({
+        where: {
+          userId,
+          status: 'skipped',
+          sentAt: { gte: since },
+          errorMsg: { startsWith: CREDENTIAL_BLOCK_ERROR_PREFIX },
+        },
+        select: { platform: true, sentAt: true },
+      }),
+      db.credential.findMany({ where: { userId }, select: { platform: true } }),
+    ])
+
+    const aggByPlatform = new Map()
+    for (const log of blockedLogs) {
+      const cur = aggByPlatform.get(log.platform) || { blockedCount: 0, lastBlockedAt: null }
+      cur.blockedCount += 1
+      if (!cur.lastBlockedAt || new Date(log.sentAt) > new Date(cur.lastBlockedAt)) {
+        cur.lastBlockedAt = log.sentAt
+      }
+      aggByPlatform.set(log.platform, cur)
+    }
+
+    const blockedByPlatform = [...aggByPlatform.entries()].map(([platform, agg]) => ({
+      platform,
+      blockedCount: agg.blockedCount,
+      lastBlockedAt: agg.lastBlockedAt,
+    }))
+    const configuredPlatforms = credentials.map((c) => c.platform)
+
+    const stores = buildCredentialBlockAlerts({ blockedByPlatform, configuredPlatforms })
+
+    return { stores }
   })
 }

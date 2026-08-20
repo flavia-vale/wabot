@@ -58,6 +58,7 @@ export const COUPON_STORES = [
   { key: 'mercadolivre', nome: 'Mercado Livre', cor: '#FFE600' },
   { key: 'amazon', nome: 'Amazon', cor: '#FF9900' },
   { key: 'magazineluiza', nome: 'Magalu', cor: '#0086FF' },
+  { key: 'shein', nome: 'SHEIN', cor: '#000000' },
 ]
 
 const HTTP_URL_RE = /https?:\/\/[^\s]+/gi
@@ -127,6 +128,7 @@ export function detectMobileOfferStoreKey({ product = {}, link = '' } = {}) {
   if (host.includes('mercadolivre') || host.includes('mercadolibre') || host.includes('meli.')) return 'mercadolivre'
   if (host.includes('amazon') || host.includes('amzn.')) return 'amazon'
   if (host.includes('magazineluiza') || host.includes('magalu')) return 'magazineluiza'
+  if (host.includes('shein')) return 'shein'
   return ''
 }
 

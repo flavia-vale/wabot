@@ -267,6 +267,7 @@ const BOGUS_SCRAPE_TITLES = [
   'access denied',
   'robot check',
   '404',
+  'shein',
 ]
 
 // Páginas anti-bot/interstício servem um og:title que é uma FRASE (não um
@@ -288,6 +289,19 @@ const BOGUS_SCRAPE_TITLE_PATTERNS = [
   /suspicious (traffic|activity)/i,
   /(verify you are|are you a) human/i,
   /acesso negado/i,
+  // og:title genérico do oneLink da SHEIN — a MESMA frase promocional para
+  // qualquer produto (research.md D-006). Regex (não casamento exato) porque
+  // a frase pode variar de pontuação/locale; "oferta" + "shein" no mesmo
+  // título é específico o bastante para não pegar título de produto real
+  // (produto real nunca menciona a própria loja no título).
+  /n[ãa]o perca esta oferta .{0,20}na shein/i,
+  // "Economize muito agora" sozinho é frase promocional genérica demais —
+  // sem âncora de marca, um título legítimo de produto de outra loja (ex.:
+  // Amazon/Shopee/ML/Magalu) que contenha essa frase seria descartado à toa
+  // (fere FR-023, zero regressão nas quatro lojas existentes). Ancorado à
+  // marca SHEIN igual ao padrão irmão acima — só descarta quando as duas
+  // partes aparecem juntas no mesmo título.
+  /shein.{0,60}economize muito agora|economize muito agora.{0,60}shein/i,
 ]
 
 function isBogusScrapeTitle(title) {
@@ -321,6 +335,13 @@ function extractTitleFromUrl(url) {
     }
     if (/mercadolivre\.com\.br$/.test(host)) {
       const m = u.pathname.match(/^\/([^/]+)\/(?:up|p)\//i)
+      if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
+    }
+    // SHEIN: mesma nota de offerEngine.js D8 — só cobre `-p-<slug>` direto; o
+    // destino do oneLink não tem slug, então na maioria dos casos reais não
+    // há título a inferir aqui (degrada normalmente).
+    if (/(^|\.)shein\.com$/.test(host)) {
+      const m = u.pathname.match(/^\/([^/]+)-p-\d+(?:-cat-\d+)?\.html/i)
       if (m?.[1]) return normalizeText(decodeURIComponent(m[1]).replace(/-/g, ' '))
     }
   } catch {}

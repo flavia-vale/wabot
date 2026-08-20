@@ -528,6 +528,29 @@ gritava. `src/credentialExpiry/` fecha esse buraco por e-mail.
   separa os dois e-mails, e há teste que falha se o texto da Shopee voltar a
   prometer que as ofertas continuam. **Não fundir os dois textos.**
 
+### A recusa registrada nos envios também confirma (RCA 2026-08-20 — não regredir)
+
+Duas clientes ficaram **4 e 7 dias** com o código de acesso do Mercado Livre
+recusado — 1.697 e 1.042 recusas gravadas, **zero link curto** — sem receber um
+aviso sequer. O gatilho do e-mail dependia SÓ da sondagem, e a sondagem do ML
+passa por `withMercadoLivreCredentialLock`: com o bot usando a credencial o
+tempo todo, ela volta `busy` → `alive:null` → nunca vira aviso (regra correta,
+gatilho insuficiente). O robô sabia da recusa e o aviso não saía.
+
+Agora `runCredentialExpirySweep` consulta **primeiro** `loadRefusalEvidence`
+(`src/credentialExpiry/sweep.js`): recusas no `MessageLog` na janela
+(`ml_ssid_expired`) versus ofertas que saíram com link curto (`meli.la`). Só é
+conclusivo com **volume de recusa E nenhum link curto na janela** — um único
+link curto derruba a conclusão (credencial viva com instabilidade pontual não
+pode virar "seu código venceu"). Evidência conclusiva **pula a sondagem**, o que
+também poupa rotação de credencial.
+
+Envs: `CREDENTIAL_REFUSAL_EVIDENCE_WINDOW_HOURS` (24),
+`CREDENTIAL_REFUSAL_EVIDENCE_MIN_COUNT` (20). Banco indisponível ou loja sem
+marcador conhecido (`REFUSAL_EVIDENCE_WARNING`, hoje só ML) devolve
+inconclusivo e cai na sondagem — nunca avisa por dúvida. Teste:
+`test/credential-refusal-evidence.test.js`.
+
 ### Aviso "a Shopee parou de aceitar a chave" (RCA 2026-08 — não regredir)
 
 O comentário original de `EXPIRY_ALERT_PLATFORMS` afirmava que App ID + chave
@@ -2543,21 +2566,42 @@ re-estimar por sinal de SERP quando este dado real já existe.**
 Ordem de prioridade dos marketplaces (Trends, estável salvo Magalu):
 **Shopee ≫ Mercado Livre > Amazon ≫ Magalu (em queda)**.
 
-### Baseline do site (Search Console, snapshot 2026-07-30)
+### Baseline do site (Search Console — atualizado 2026-08-16)
 
-| Métrica | Valor |
-|---|---:|
-| Cliques (site inteiro, ~2,5 meses de dado) | 41 |
-| Impressões | 1.154 |
-| Posição média | 7,85 |
-| Consultas distintas registradas | **13** ← métrica mais honesta de progresso |
-| Rotas indexáveis no sitemap | 96 |
-| Rotas com zero impressão | 36 |
-| Páginas indexadas / não indexadas | 76 / 16 |
+| Métrica | 30/07 | **16/08** |
+|---|---:|---:|
+| Cliques (soma da aba "Países") | 40 | **93** |
+| Impressões | 1.102 | **2.902** |
+| CTR | 3,63% | 3,20% |
+| Posição média (Brasil) | 7,85 | 7,60 |
+| Consultas distintas | 13 | **29** ← métrica mais honesta de progresso |
+| Páginas com impressão | 60 | 77 |
 
-As duas páginas que concentram tração hoje (42% das impressões, ambas em
-posição ~8,4): `/blog/como-divulgar-ofertas-amazon-whatsapp` e
-`/blog/como-ser-afiliado-shopee-whatsapp`.
+Compare sempre pela soma da aba "Países" (o painel-resumo dá 41/1.154 em 30/07
+porque inclui linhas sem país atribuído — as duas metodologias não se misturam).
+
+**As impressões multiplicaram por 5,3 nas duas semanas seguintes a 04/08**
+(183 → 741 → 965 por semana), data em que entraram juntos: desbloqueio do
+robots.txt da Cloudflare, IndexNow no deploy, unificação da marca e pedidos
+manuais de indexação.
+
+**A página com mais impressões do site hoje é `/bot-achadinhos-whatsapp`** (529),
+que em 30/07 tinha 5. Ela e `/alternativas/achadinhos-bot` (226) atendem buscas
+pelo **nome de um concorrente** (`achadinhoosbot`/`achadinhosbot`/`achadinhos
+bot` = 443 impressões, 15% do total, CTR ~1%). `fluxopromo` e `shozap` já
+aparecem também. **As páginas de comparação com concorrente são o motor de
+crescimento** — é nelas que vale produzir, não em cidade nem em nicho.
+
+O gargalo mudou de lugar: já há impressão, falta **clique**. Sete páginas somam
+464 impressões e ZERO clique (a maior: `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp`,
+176 impressões em posição 7,1) — é problema de título/descrição, não de
+conteúdo. Celular traz 62% das impressões com CTR de 2,07% contra 5,10% no
+computador. Análise completa e lista de ação priorizada em
+`docs/marketing/ANALISE_SEO_2026-08-16.md`.
+
+Tier 1 (`shopee afiliados` etc., 50.000/mês, concorrência baixa) segue com
+**zero consulta** — não existe página nossa disputando. Maior oportunidade
+aberta.
 
 ### Concorrentes mapeados
 
@@ -2569,12 +2613,18 @@ concorrente antes de citar preço em qualquer página pública.
 
 ### 🔁 Atualizar mensalmente
 
-No começo de cada mês, sugerir à usuária repetir a coleta (Search Console +
-Planejador + Trends + **referrals de IA**, mesmo passo a passo de
-`docs/marketing/COLETA_DADOS_KEYWORDS_PASSO_A_PASSO.md`) e comparar contra
-este baseline — principalmente **consultas distintas** e **posição média das
-2 páginas fortes**. Atualizar esta seção e a data do cabeçalho quando novos
-números chegarem.
+No começo de cada mês, sugerir à usuária repetir **só o Relatório 1 (Search
+Console)** do passo a passo de
+`docs/marketing/COLETA_DADOS_KEYWORDS_PASSO_A_PASSO.md` e comparar contra o
+baseline acima — principalmente **consultas distintas** e as páginas com muita
+impressão e pouco clique. Atualizar esta seção e a data do cabeçalho.
+
+**Não refazer Planejador e Trends todo mês.** Os dois medem volume de mercado,
+que não muda em semanas, e as decisões que dependem deles já estão congeladas
+(seção "SEO orgânico — linhas CONGELADAS"). Rodada completa dos quatro
+relatórios: **a cada ~3 meses** (próxima em outubro/2026). O Relatório 4
+(referrals de IA) não precisa mais de coleta manual —
+`scripts/diag-origem-cadastros.mjs` já produz.
 
 **Referrals de IA (Relatório 4, baseline zera em 2026-08-04).** O site grava a
 origem de toda visita externa no evento `referral_visit` (`AnalyticsEvent`),

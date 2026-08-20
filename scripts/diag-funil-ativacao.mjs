@@ -58,10 +58,19 @@ async function main() {
 
   // Estado real, uma consulta por etapa. `distinct` no userId para contar
   // PESSOAS, não linhas — um usuário com 40 envios conta uma vez.
-  const [sessoes, credenciais, grupos, envios, checkouts, pagamentos] = await Promise.all([
+  const [sessoes, credenciais, grupos, envios, tentativas, checkouts, pagamentos] = await Promise.all([
     db.waSession.findMany({ where: { userId: { in: ids } }, select: { userId: true, status: true } }),
     db.credential.findMany({ where: { userId: { in: ids } }, select: { userId: true, platform: true }, distinct: ['userId'] }),
     db.group.findMany({ where: { userId: { in: ids } }, select: { userId: true, role: true } }),
+    // ATENÇÃO: só `status: 'success'`. A versão anterior contava QUALQUER linha
+    // de MessageLog como "enviou", inclusive `skipped` e `error` — e a linha
+    // mais comum entre quem não tem credencial é justamente
+    // `skip:no_valid_conversions` (o pipeline se recusa a publicar link não
+    // convertido, para não dar a comissão ao afiliado do grupo de origem).
+    // Resultado: gente cujo envio NUNCA saiu aparecia no grupo "viu o produto
+    // funcionar" — que é o oposto da conversa que ela precisa. Ver `tentativas`
+    // abaixo, que separa os dois casos.
+    db.messageLog.findMany({ where: { userId: { in: ids }, status: 'success' }, select: { userId: true }, distinct: ['userId'] }),
     db.messageLog.findMany({ where: { userId: { in: ids } }, select: { userId: true }, distinct: ['userId'] }),
     db.analyticsEvent.findMany({ where: { event: 'checkout_started', userId: { in: ids } }, select: { userId: true }, distinct: ['userId'] }),
     db.payment.findMany({ where: { userId: { in: ids }, status: 'approved' }, select: { userId: true } }),
@@ -73,8 +82,14 @@ async function main() {
   const comMonitor = new Set(grupos.filter((g) => g.role === 'monitor').map((g) => g.userId))
   const comDestino = new Set(grupos.filter((g) => g.role === 'post').map((g) => g.userId))
   const comEnvio = new Set(envios.map((m) => m.userId))
+  const comTentativa = new Set(tentativas.map((m) => m.userId))
   const comCheckout = new Set(checkouts.map((c) => c.userId))
   const pagantes = new Set(pagamentos.map((p) => p.userId))
+
+  // Quem gerou linha de envio mas nunca teve UMA que saísse. É o grupo que mais
+  // engana na leitura: parece ativado e não é. Quase sempre é falta de
+  // credencial de loja (`skip:no_valid_conversions`).
+  const soTentou = new Set([...comTentativa].filter((id) => !comEnvio.has(id)))
 
   const etapas = [
     ['1. Criou a conta', new Set(ids)],
@@ -82,7 +97,7 @@ async function main() {
     ['3. Cadastrou credencial de loja', comCredencial],
     ['4. Configurou grupo de ORIGEM', comMonitor],
     ['5. Configurou grupo de DESTINO', comDestino],
-    ['6. Teve algum envio registrado', comEnvio],
+    ['6. Teve envio que SAIU de verdade', comEnvio],
     ['7. Iniciou o checkout', comCheckout],
     ['8. PAGOU', pagantes],
   ]
@@ -109,10 +124,23 @@ async function main() {
     const n = conjunto.size
     const perda = perdas[i]
     const marca = i === idxMaior && maiorPerda > 0 ? '  <== MAIOR QUEDA' : ''
+    // Delta NEGATIVO significa que a etapa tem MAIS gente que a anterior — ou
+    // seja, as etapas não são uma sequência obrigatória (dá para configurar
+    // grupo sem ter salvado credencial). Mostrar "—" nesse caso escondia o
+    // fato e fazia o funil parecer mais linear do que é.
+    const delta = perda > 0 ? `-${perda}` : perda < 0 ? `+${-perda}` : '—'
     console.log(
-      `  ${nome.padEnd(38)}  ${String(n).padStart(5)}    ${pct(n, total).padStart(7)}   ${perda > 0 ? `-${perda}` : '—'}${marca}`
+      `  ${nome.padEnd(38)}  ${String(n).padStart(5)}    ${pct(n, total).padStart(7)}   ${delta.padStart(4)}${marca}`
     )
   })
+
+  if (perdas.some((p) => p < 0)) {
+    console.log(`
+  Nota: onde aparece "+", a etapa tem MAIS gente que a anterior. As etapas não
+  são uma sequência obrigatória — dá para configurar grupo sem ter salvado
+  credencial, por exemplo. Leia cada linha como "quantos chegaram até aqui",
+  não como "quantos passaram pela linha de cima".`)
+  }
 
   console.log(`\n  Conectados AGORA (sessão viva): ${conectadoAgora.size}`)
 
@@ -130,8 +158,11 @@ async function main() {
     else if (!comCredencial.has(u.id)) rotulo = 'pareou, mas não cadastrou credencial'
     else if (!comMonitor.has(u.id)) rotulo = 'tem credencial, sem grupo de ORIGEM'
     else if (!comDestino.has(u.id)) rotulo = 'tem origem, sem grupo de DESTINO'
+    // Separado de "nunca enviou": aqui o robô TENTOU e não conseguiu publicar
+    // nenhuma vez. A pessoa acha que está usando o produto e não está.
+    else if (soTentou.has(u.id)) rotulo = 'tentou enviar e NENHUM envio saiu'
     else if (!comEnvio.has(u.id)) rotulo = 'configurou tudo, nunca enviou'
-    else if (!comCheckout.has(u.id)) rotulo = 'ENVIOU e não foi para o checkout'
+    else if (!comCheckout.has(u.id)) rotulo = 'ENVIOU DE VERDADE e não foi para o checkout'
     else rotulo = 'foi ao checkout e não pagou'
 
     parou.set(rotulo, (parou.get(rotulo) || 0) + 1)
@@ -160,7 +191,8 @@ async function main() {
 
   // ------------------------------------------------------------ leitura ---
   const semPareamento = parou.get('nunca tentou parear o WhatsApp') || 0
-  const enviouNaoPagou = parou.get('ENVIOU e não foi para o checkout') || 0
+  const enviouNaoPagou = parou.get('ENVIOU DE VERDADE e não foi para o checkout') || 0
+  const soTentouNaoPagou = parou.get('tentou enviar e NENHUM envio saiu') || 0
 
   console.log(`\n${'='.repeat(74)}`)
   console.log('COMO LER')
@@ -175,9 +207,16 @@ async function main() {
     entendeu o que fazer, ou não estava pronta para conectar um número.
     Se conserta com produto e comunicação, não com mais tráfego.
 
-  * Gente que ENVIOU e mesmo assim não pagou (${enviouNaoPagou} aqui) é o grupo
-    mais valioso para conversar: ela viu o produto funcionar e mesmo assim
-    não comprou. O motivo dela vale mais que qualquer pesquisa de mercado.
+  * Gente que ENVIOU DE VERDADE e mesmo assim não pagou (${enviouNaoPagou} aqui)
+    é o grupo mais valioso para conversar: ela viu o produto funcionar e mesmo
+    assim não comprou. O motivo dela vale mais que qualquer pesquisa de mercado.
+
+  * Gente que tentou enviar e NENHUM envio saiu (${soTentouNaoPagou} aqui) é
+    outra conversa, e mais urgente: ela acha que testou o produto e nunca viu
+    ele funcionar. A causa mais comum é falta de credencial da loja — sem ela
+    o robô se RECUSA a publicar, para não dar a sua comissão para o afiliado
+    do grupo de origem. Do lado de fora, isso parece "não funciona".
+    Rode em cima delas: SELECT errorMsg no MessageLog confirma o motivo.
 
   Rode com --listar para pegar os e-mails e falar com eles.
   `)

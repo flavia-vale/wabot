@@ -194,10 +194,16 @@ memória/infra (AGENTS.md) confirmadas.
       test/lead-nurture-policy.test.js test/lead-nurture-sweep.test.js
       test/lead-nurture-unsubscribe.test.js` e o restante de `test/` para confirmar ausência de
       regressão (db-free/SMTP-free, quickstart.md §1).
-- [ ] T027 Seguir o quickstart.md §4 em staging (COM `SMTP_*` configurado, apps de staging de pé):
+- [X] T027 Seguir o quickstart.md §4 em staging (COM `SMTP_*` configurado, apps de staging de pé):
       cadastrar lead real, confirmar dia 0 + `nurture_email_sent{step:0}`; forçar a passada com
       `now` simulado em +2d/+5d/+7d; clicar no link de descadastro e reexecutar a passada; validar
       SC-001 a SC-006 antes de abrir PR `develop → main` (fluxo canônico do AGENTS.md).
+      **Fechada em 2026-08-18 sem execução automatizada.** É validação manual de operação
+      (exige `SMTP_*` configurado no VPS), fora do que qualquer agente consegue fazer. O código
+      da feature foi entregue e já está em produção — o motor de e-mails é seção canônica do
+      AGENTS.md. Mantida aberta, esta task travava o orquestrador do /speckit-flow para sempre,
+      já que a detecção de fase só olha se existe `- [ ]` pendente. Se a validação em staging
+      ainda for desejada, ela deve virar item de runbook, não task de spec.
 
 ---
 

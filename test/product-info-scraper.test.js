@@ -855,6 +855,47 @@ test('fetchProductInfo (Shopee) não vaza o interstício anti-bot "Oops! Seu nav
   assert.equal(info.title, '', 'interstício anti-bot não pode virar título de produto')
 })
 
+// specs/012-shein-store-support (D-006/T041): o og:title do oneLink da SHEIN
+// é sempre a MESMA frase promocional, igual para qualquer produto. Sem a
+// guarda, ela vazaria como título de produto — mesma classe de bug do
+// interstício anti-bot da Shopee acima.
+test('fetchProductInfo (SHEIN) não vaza a frase promocional genérica do oneLink como título', async (t) => {
+  const oneLinkHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Não perca esta oferta grande na SHEIN! Economize muito agora!"/>
+    <title>SHEIN</title></head>
+    <body><input id="url" value="https://m.shein.com/br/ark/default?goods_id=485735309"></body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => mockHtmlResponse(oneLinkHtml, String(input))
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://onelink.shein.com/14/4v4p6bpzshsx')
+  assert.equal(info.title, '', 'frase promocional genérica não pode virar título de produto')
+})
+
+// T067 (review, specs/012-shein-store-support): /economize muito agora/i sem
+// âncora de marca é frase promocional genérica demais — a lista de padrões é
+// GLOBAL (vale para as cinco lojas), e um título legítimo de outra loja que
+// contenha essa frase seria descartado à toa (fere FR-023). Ancorar exige
+// "shein" no mesmo título.
+test('fetchProductInfo não descarta título legítimo de outra loja só por conter "economize muito agora"', async (t) => {
+  const legitHtml = `<!doctype html><html><head>
+    <meta property="og:title" content="Fone de ouvido bluetooth com cancelamento de ruído - economize muito agora comprando hoje"/>
+    <title>Fone de ouvido bluetooth</title></head>
+    <body>produto real</body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => mockHtmlResponse(legitHtml, String(input))
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.amazon.com.br/dp/B000000000')
+  assert.equal(
+    info.title,
+    'Fone de ouvido bluetooth com cancelamento de ruído - economize muito agora comprando hoje',
+    'título legítimo de outra loja não pode ser descartado por frase genérica sem âncora de marca',
+  )
+})
+
 // 005-ml-cookie-expiry (US1/T006): getMlUserToken passa a retornar
 // { token, credentialPatch } em vez de uma string solta, para que o chamador
 // persista o refresh_token ROTACIONADO (single-use no ML) em vez de

@@ -347,6 +347,52 @@ async function resolveMercadoLivreImage(url) {
   return extractImageFromHtmlLayers(html)
 }
 
+// A página do oneLink da SHEIN (não a página de produto — bloqueada por
+// captcha, research.md D-004) serve og:image com a foto do produto, mas em
+// tamanho de miniatura: img.ltwebstatic.com/.../<id>_thumbnail_<w>x<h>.<ext>.
+// Removendo o sufixo `_thumbnail_<w>x<h>`, o mesmo CDN devolve a imagem
+// original — medido ao vivo em 1340x1785 (acima de
+// IMAGE_HIRES_MIN_DIMENSION_PX). Mesmo padrão de strip de CDN já usado para
+// Amazon (`_AC_SL1500_`) e Shopee (`_tn`, `@resize_w`). A extração do
+// og:image em si (que já devolve essa URL de miniatura) é feita pelo caminho
+// genérico em `fetchProductImage` (`resolveByHtmlLayers`) — não há ramo
+// dedicado de SHEIN ali, então não há fetch duplicado do mesmo HTML.
+const SHEIN_IMAGE_THUMBNAIL_SUFFIX_RE = /_thumbnail_\d+x\d+(?=\.[a-z0-9]+(?:[?#]|$))/i
+const SHEIN_IMAGE_HOST_RE = /(^|\.)ltwebstatic\.com$/i
+
+function stripSheinImageThumbnailSuffix(rawUrl) {
+  if (!rawUrl) return rawUrl
+  try {
+    const u = new URL(rawUrl)
+    if (!SHEIN_IMAGE_HOST_RE.test(u.hostname)) return rawUrl
+    u.pathname = u.pathname.replace(SHEIN_IMAGE_THUMBNAIL_SUFFIX_RE, '')
+    return u.toString()
+  } catch {
+    return rawUrl
+  }
+}
+
+function isSheinImageUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl)
+    return SHEIN_IMAGE_HOST_RE.test(u.hostname)
+  } catch {
+    return false
+  }
+}
+
+// Lista de candidatos (não reescrita destrutiva): a URL sem o sufixo de
+// miniatura vem primeiro (é a de alta resolução), e a URL original de
+// miniatura fica como fallback — mesmo padrão de
+// `buildAmazonImageUrlCandidates`/`buildShopeeImageUrlCandidates` logo abaixo.
+// Se a variante em alta resolução responder 404/placeholder, `fetchImageBuffer`
+// cai para a miniatura original (que funcionava) em vez de a oferta sair sem
+// foto (SC-004).
+function buildSheinImageUrlCandidates(rawUrl) {
+  const stripped = stripSheinImageThumbnailSuffix(rawUrl)
+  return uniqueImageUrls([stripped, rawUrl])
+}
+
 
 function isAmazonImageUrl(rawUrl) {
   try {
@@ -466,6 +512,13 @@ export async function fetchProductImage(platform, productUrl, creds) {
     } else if (platform === 'mercadolivre') {
       image = await resolveMercadoLivreImage(productUrl)
     }
+    // SHEIN não tem ramo dedicado: o caminho genérico abaixo já extrai o
+    // og:image do oneLink (miniatura `_thumbnail_<w>x<h>`), e
+    // `buildSheinImageUrlCandidates` (usado em `buildImageUrlCandidates`,
+    // dentro de `fetchImageBuffer`) troca para a variante em alta resolução
+    // no momento do download, com fallback para a miniatura original. Um
+    // ramo dedicado aqui repetiria o MESMO fetch de HTML que a linha abaixo
+    // já faz (T069 — RCA de fetch duplicado dentro do orçamento de 25s).
     if (!image) image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })
 
     if (!image) incFailure(productUrl)
@@ -698,6 +751,13 @@ function buildImageUrlCandidates(rawUrl) {
 
     if (isShopeeImageUrl(rawUrl)) {
       return buildShopeeImageUrlCandidates(rawUrl)
+    }
+
+    // SHEIN: URL sem o sufixo `_thumbnail_<w>x<h>` primeiro (alta resolução),
+    // com a miniatura original como fallback — ver comentário em
+    // `buildSheinImageUrlCandidates`.
+    if (isSheinImageUrl(rawUrl)) {
+      return buildSheinImageUrlCandidates(rawUrl)
     }
 
     // Amazon: gere variantes oficiais com sufixos de resize em alta resolução.

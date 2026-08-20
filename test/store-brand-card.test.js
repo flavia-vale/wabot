@@ -32,6 +32,24 @@ test('SVG de todas as lojas desenha "CUPOM" + o nome da loja (pedido explícito:
   }
 })
 
+// specs/012-shein-store-support (C1/C2/T040): banner SHEIN renderiza igual
+// às outras lojas, e o campo title do card (STORE_PREVIEW_TITLES) nunca
+// pode ser omitido para SHEIN — mesma regressão do PR #1186.
+test('banner SHEIN renderiza (preto/branco) e isBrandCardPlatform reconhece a loja', async () => {
+  assert.equal(isBrandCardPlatform('shein'), true)
+  const buffer = await buildStoreBrandCardImage('shein')
+  assert.ok(buffer?.length)
+  assert.equal(buffer[0], 0xff)
+  assert.equal(buffer[1], 0xd8)
+  assert.equal(__storeBrandCardInternals.BRAND_STYLES.shein.store, 'SHEIN')
+  assert.equal(__storeBrandCardInternals.BRAND_STYLES.shein.bg, '#000000')
+})
+
+test('bot-worker: STORE_PREVIEW_TITLES.shein existe (title do card nunca omitido)', () => {
+  const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(botWorkerSource, /shein:\s*'SHEIN'/)
+})
+
 test('plataforma desconhecida devolve null sem lançar', async () => {
   assert.equal(await buildStoreBrandCardImage('lojainexistente'), null)
   assert.equal(await buildStoreBrandCardImage(null), null)

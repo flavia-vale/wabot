@@ -16,6 +16,7 @@ export const MOBILE_LOG_PLATFORM_LABEL = {
   magazineluiza: 'Magalu',
   magalu: 'Magalu',
   aliexpress: 'AliExpress',
+  shein: 'SHEIN',
 }
 
 function formatMobileDuration(totalSeconds) {

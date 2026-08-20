@@ -5,7 +5,7 @@ import { shouldUseCouponBrandCard } from '../src/converters/couponBrandCardPolic
 import { buildStoreBrandCardImage } from '../src/converters/storeBrandCard.js'
 import { decideSkipActiveFetchForCoupon } from '../src/monitoredImageResolver.js'
 
-const SUPPORTED_PLATFORMS = ['amazon', 'shopee', 'mercadolivre', 'magazineluiza']
+const SUPPORTED_PLATFORMS = ['amazon', 'shopee', 'mercadolivre', 'magazineluiza', 'shein']
 
 // US1 (T005) — cupom de loja suportada, com sinal de texto e URL sem ID de
 // produto: banner precisa aparecer para as 4 lojas (FR-001/FR-002/FR-007).
@@ -163,6 +163,35 @@ test('shouldUseCouponBrandCard: cupom genérico store-wide (skip=true) mantém o
     }),
     true,
   )
+})
+
+// specs/012-shein-store-support (US4/T045): cupom/campanha da SHEIN aciona o
+// mesmo tratamento visual das outras lojas, sem depender de COUPON_LINK_CONVERT
+// (que governa só a conversão do link — já coberto por INV-6 em
+// converters-shein.test.js — não o banner, que tem seu próprio gate
+// COUPON_BRAND_CARD_ENABLED, independente).
+test('shouldUseCouponBrandCard: banner "CUPOM SHEIN" acionado sem COUPON_LINK_CONVERT setado', () => {
+  const previous = process.env.COUPON_LINK_CONVERT
+  delete process.env.COUPON_LINK_CONVERT
+  try {
+    assert.equal(
+      shouldUseCouponBrandCard({
+        enabled: true,
+        platform: 'shein',
+        linkKind: 'coupon',
+        couponTextSignal: true,
+        resolvedUrl: 'https://m.shein.com/br/ark/default?scene=1&campaign=summer',
+      }),
+      true,
+    )
+  } finally {
+    if (previous !== undefined) process.env.COUPON_LINK_CONVERT = previous
+  }
+})
+
+test('shouldUseCouponBrandCard: reusa BRAND_STYLES.shein (preto/branco) para o banner de cupom', async () => {
+  const banner = await buildStoreBrandCardImage('shein')
+  assert.ok(banner?.length)
 })
 
 test('shouldUseCouponBrandCard: linkKind diferente de coupon retorna false', () => {

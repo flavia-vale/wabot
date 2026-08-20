@@ -11,6 +11,7 @@ import { getBotMetrics as defaultGetBotMetrics, isRunning as defaultIsRunning, r
 import { describeSaveSessionCheck, platformSupportsSessionCheck } from '../../credentialSaveCheck.js'
 import { classifyWorkerHealth } from '../../workerHealth.js'
 import { restartStaleWorkerIfNeeded } from '../../workerRemediation.js'
+import { extractSheinAffiliateId, isSheinShortLink, resolveSheinShortLink as defaultResolveSheinShortLink } from '../../converters/shein.js'
 
 export async function credentialsRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
@@ -25,6 +26,7 @@ export async function credentialsRoutes(app, opts = {}) {
   const invalidateCachedMlProbe = opts.invalidateMlProbeCache ?? defaultInvalidateCachedMlProbe
   const reloadConfig = opts.reloadConfig ?? defaultReloadConfig
   const getBotMetrics = opts.getBotMetrics ?? defaultGetBotMetrics
+  const resolveSheinShortLink = opts.resolveSheinShortLink ?? defaultResolveSheinShortLink
   const restartStaleWorker = opts.restartStaleWorker ?? ((args) => restartStaleWorkerIfNeeded({
     ...args,
     stopBot: defaultStopBot,
@@ -153,12 +155,50 @@ export async function credentialsRoutes(app, opts = {}) {
     const { platform } = req.params
     if (!PLATFORMS.includes(platform)) return reply.code(400).send({ error: 'Plataforma inválida' })
 
-    const sanitizedBody = sanitizeCredentialBody(platform, req.body)
+    let sanitizedBody = sanitizeCredentialBody(platform, req.body)
+
+    // T075: o painel manda a cliente colar o link do Gerador de Link da
+    // SHEIN — um oneLink (`onelink.shein.com/...`) — mas `sanitizeCredentialBody`
+    // é offline e não consegue extrair o número dele (o identificador só
+    // aparece depois de resolver o link pela rede). Sem este passo, o cadastro
+    // recusava exatamente o que a instrução mandava colar. A rota já faz
+    // sondagem de rede para outras lojas (probeSavedCredential, abaixo) — é o
+    // lugar certo para isto também; `validateCredentialData` continua pura.
+    let sheinLinkResolutionFailed = false
+    if (platform === 'shein') {
+      const rawTag = String(sanitizedBody?.tag ?? '').trim()
+      if (rawTag && !/^\d+$/.test(rawTag) && isSheinShortLink(rawTag)) {
+        try {
+          const resolved = await resolveSheinShortLink(rawTag)
+          const extracted = extractSheinAffiliateId(resolved)
+          if (extracted) {
+            sanitizedBody = { ...sanitizedBody, tag: extracted }
+          } else {
+            // Resolveu (ou não) mas não achou o identificador — o formato
+            // colado É um oneLink de verdade (isSheinShortLink já confirmou),
+            // então isto nunca é "a cliente colou a coisa errada": é rede
+            // lenta/fora do ar, captcha no meio do caminho, ou instabilidade
+            // da SHEIN. Recusa seca aqui repetiria o próprio bug do T075 —
+            // por isso vira aviso específico em vez do "Não reconhecemos esse
+            // texto" genérico (ver mensagem abaixo).
+            sheinLinkResolutionFailed = true
+          }
+        } catch (err) {
+          app.log.warn({ err: err?.message }, 'Falha ao resolver link de afiliada da SHEIN no save')
+          sheinLinkResolutionFailed = true
+        }
+      }
+    }
 
     const validation = validateCredentialData(platform, sanitizedBody)
     if (validation.missing.length) {
+      const error = sheinLinkResolutionFailed
+        ? 'Não deu para conferir esse link agora (pode ser instabilidade da internet ou da SHEIN). ' +
+          'Tente colar o link de novo em instantes, ou cole aqui apenas o seu número de afiliada — ele fica ' +
+          'visível na mesma tela onde você gera o link.'
+        : getCredentialSaveMessage(validation)
       return reply.code(400).send({
-        error: getCredentialSaveMessage(validation),
+        error,
         validation,
       })
     }

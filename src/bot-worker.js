@@ -630,7 +630,7 @@ async function loadConfig() {
   const botConfig = {
     delayMin: 5,
     delayMax: 15,
-    platforms: 'shopee,amazon,mercadolivre,magazineluiza',
+    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein',
     blockedKeywords: '',
     welcomeMsg: '',
     postToStatus: false,
@@ -1537,6 +1537,7 @@ const STORE_PREVIEW_TITLES = {
   shopee: 'Shopee',
   mercadolivre: 'Mercado Livre',
   magazineluiza: 'Magalu',
+  shein: 'SHEIN',
 }
 
 // Flag experimental (default OFF) para testar em staging se dá pra esconder

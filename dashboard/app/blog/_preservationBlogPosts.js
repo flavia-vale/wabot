@@ -196,12 +196,19 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
     leadMagnetVariant: 'afiliados',
+    // FR-027 (US6, specs/013-inbound-leads-strategy): a chamada de produto
+    // fica no FIM do artigo, depois de cadastro/comissão/regras/divulgação —
+    // nunca no meio, disputando atenção com o conteúdo técnico. `position:
+    // 'end'` é o que muda o comportamento padrão do render (ver
+    // PreservationBlogPost abaixo); outros posts com midBridge continuam na
+    // posição padrão (meio do artigo) até decisão em contrário.
     midBridge: {
-      question: 'Você já tem um grupo ou canal para divulgar?',
-      body: 'Se já tem, o gargalo deixa de ser o cadastro na Shopee e passa a ser o trabalho de postar oferta por oferta. Dá para o robô pegar os links, trocar pelo seu código de afiliada e postar sozinho — com intervalo controlado entre os envios. Teste 7 dias, sem cartão.',
+      question: 'Já tem um grupo ou canal pra divulgar?',
+      body: 'Se já tem, o gargalo deixa de ser o cadastro na Shopee e passa a ser o trabalho de postar oferta por oferta. O BOTinho pega os links, troca pelo seu código de afiliada e posta sozinho — com intervalo controlado entre os envios. Teste 7 dias, sem cartão.',
       cta: 'Ver preços e testar grátis',
       href: '/precos',
       secondary: { label: 'Ainda não tenho grupo', href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero' },
+      position: 'end',
     },
     usePersonAuthor: true,
     intro: 'Shopee Afiliados é o programa que paga comissão sobre vendas geradas pelo seu link. O cadastro é gratuito, a comissão parte de 3% e a atribuição vale por até 7 dias após o clique. Divulgar no WhatsApp funciona bem quando o link sai sempre com o seu código e a frequência de envio é controlada.',
@@ -210,6 +217,13 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Quanto paga a comissão da Shopee', paragraphs: ['A comissão-base é de 3% sobre o valor líquido da venda (sem impostos, cupons ou frete), tanto para vendas via redes sociais/WhatsApp quanto para vendas geradas em lives e Shopee Vídeo.', 'Existe também o programa de Comissão Extra: ao divulgar produtos de parceiros selecionados, a comissão pode chegar a até 30% — a comissão padrão da Shopee soma com uma comissão extra paga pelo próprio vendedor.'], table: { headers: ['Tipo de venda', 'Comissão'], rows: [['Venda padrão (redes sociais e WhatsApp)', '3%'], ['Vendas em lives', '3%'], ['Vendas via Shopee Vídeo', '3%'], ['Produtos do programa de Comissão Extra', 'até 30% (padrão + extra do vendedor)']], note: 'Fonte: Shopee Affiliate Program, "Entenda o Comissionamento da Shopee" (consultado em 30/07/2026). Comissão calculada sobre o valor líquido da venda; sujeita às condições especiais e a alterações sem aviso prévio da Shopee.' } },
       { h2: 'Prazo para a comissão ser atribuída a você', paragraphs: ['Quando alguém clica no seu link e adiciona o produto ao carrinho, a Shopee guarda essa atribuição por até 7 dias — mesmo que a pessoa não compre na hora, você ainda ganha a comissão se ela finalizar a compra dentro desse prazo.', 'Sites e apps especializados em cupom, cashback ou tecnologia têm taxa de comissão sob consulta — as regras padrão valem para o afiliado comum divulgando em grupos e canais.'] },
       { h2: 'Como se tornar afiliado Shopee: passo a passo', paragraphs: ['Tornar-se afiliado Shopee leva poucos minutos e não tem custo. O cadastro é feito no site do Programa de Afiliados Shopee, e depois da aprovação você já consegue gerar links com o seu código.'], bullets: ['Acesse o site do Programa de Afiliados Shopee e crie sua conta.', 'Confirme seus dados cadastrais e aguarde a aprovação.', 'Ao entrar na sua conta de afiliado, localize suas credenciais (appId / secret).', 'Gere links com o seu código para os produtos que vai divulgar.', 'Organize seus grupos e canais de destino no WhatsApp antes de começar a publicar.'] },
+      // Adicionado em 2026-08-19 (US6, specs/013-inbound-leads-strategy,
+      // FR-027): das quatro coberturas exigidas (cadastro, comissão, regras,
+      // como divulgar), "regras" era a que faltava — o guia falava de
+      // comissão e prazo, mas não do que o programa proíbe. Regras gerais de
+      // programa de afiliado, sem citar número que exigiria fonte/data (ao
+      // contrário da tabela de comissão acima).
+      { h2: 'Regras do programa que você precisa respeitar', paragraphs: ['Nenhum programa de afiliado paga comissão sobre compra feita com o seu próprio link — comprar para você mesmo não gera comissão e pode levar à suspensão da conta de afiliado.', 'A divulgação precisa ser honesta: preço, condição e disponibilidade anunciados têm que bater com o que está realmente na página do produto. Prometer desconto ou brinde que não existe é o tipo de coisa que gera denúncia e desgasta o grupo.', 'O programa não é feito para disparo em massa sem critério — cadência e relevância protegem tanto a sua conta de afiliado quanto o número de WhatsApp usado para divulgar.'], bullets: ['Nunca compre pelo próprio link de afiliado esperando comissão.', 'Não anuncie preço, cupom ou condição que não existe de verdade no produto.', 'Publique só para quem topou receber oferta — divulgação sem consentimento gera denúncia.', 'Guarde suas credenciais (appId/secret) só para você — são o que identifica suas vendas.'] },
       { h2: 'Como divulgar sem queimar o número', paragraphs: ['Use um chip dedicado, publique poucas ofertas boas por vez, varie o texto e evite mandar a mesma mensagem idêntica para todos os destinos ao mesmo tempo.', 'Quem dispara dezenas de links iguais em sequência arrisca o número e ainda cansa a audiência. Cadência responsável vende mais no médio prazo.'] },
       { h2: 'Como o BOTinho automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o BOTinho converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
     ],
@@ -231,8 +245,10 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-divulgar-ofertas-amazon-whatsapp': {
     slug: '/blog/como-divulgar-ofertas-amazon-whatsapp',
-    title: 'Afiliado Amazon: como divulgar ofertas no WhatsApp (comissão por categoria)',
-    description: 'Guia de afiliado Amazon (Amazon Associados): quanto paga de comissão por categoria de produto, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
+    // Título encurtado em 2026-08-19 (P1): era 75 chars de texto próprio. O
+    // número da comissão vai na frente — é o motivo concreto pra clicar.
+    title: 'Afiliado Amazon: comissão por categoria (0% a 13%)',
+    description: 'Guia de afiliado Amazon: quanto paga de comissão por categoria, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
     leadMagnetVariant: 'afiliados',
@@ -266,8 +282,9 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-divulgar-ofertas-mercado-livre-whatsapp': {
     slug: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
-    title: 'Afiliado Mercado Livre: comissão por categoria e como divulgar no WhatsApp',
-    description: 'Quanto o Mercado Livre paga de comissão de afiliado por categoria (venda direta e indireta), o prazo de pagamento e como divulgar as ofertas no WhatsApp sem perder a atribuição do link.',
+    // Título encurtado em 2026-08-19 (P1): era 74 chars de texto próprio.
+    title: 'Afiliado Mercado Livre: comissão por categoria',
+    description: 'Quanto o Mercado Livre paga de comissão por categoria (direta e indireta), prazo de pagamento e como divulgar no WhatsApp sem perder a atribuição.',
     eyebrow: 'Afiliado Mercado Livre · Guia completo',
     usePersonAuthor: true,
     origin: 'blog_como_divulgar_ofertas_mercado_livre_whatsapp',
@@ -326,7 +343,10 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'melhores-horarios-para-postar-ofertas-no-whatsapp': {
     slug: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp',
-    title: 'Melhores horários para postar ofertas no WhatsApp (guia prático)',
+    // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
+    // era 64 chars de texto próprio, o que empurrava o corte do Google no
+    // celular. Motivo pra clicar ("horário certo") na frente.
+    title: 'Horário certo pra postar oferta no WhatsApp: veja',
     description: 'Descubra os melhores horários para postar ofertas no WhatsApp, por que a cadência importa mais que o horário exato e como distribuir envios sem parecer disparo.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
@@ -404,7 +424,9 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-montar-grupo-de-ofertas-no-whatsapp-do-zero': {
     slug: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero',
-    title: 'Como montar um grupo de ofertas no WhatsApp do zero',
+    // Título ajustado em 2026-08-19 (P1): já cabia em 55, mas o passo a passo
+    // ("do zero") reforça o motivo pra quem está começando clicar.
+    title: 'Monte um grupo de ofertas no WhatsApp do zero',
     description: 'Guia para montar um grupo de ofertas no WhatsApp do zero: chip dedicado, primeiras fontes de oferta, conversão de link, cadência e quando migrar para canal.',
     eyebrow: 'Começando · Grupo de ofertas',
     origin: 'blog_como_montar_grupo_de_ofertas_no_whatsapp_do_zero',
@@ -503,7 +525,9 @@ export function PreservationBlogPost({ postKey }) {
 
         {post.sections.map((section, sectionIndex) => (
           <Fragment key={section.h2}>
-          {post.midBridge && sectionIndex === Math.ceil(post.sections.length / 2) ? (
+          {/* FR-027 (US6): midBridge com position:'end' NUNCA renderiza aqui
+              no meio — só depois de todas as seções técnicas, logo abaixo. */}
+          {post.midBridge && post.midBridge.position !== 'end' && sectionIndex === Math.ceil(post.sections.length / 2) ? (
             <MidArticleBridge bridge={post.midBridge} slug={post.slug} />
           ) : null}
           <section key={section.h2}>
@@ -540,6 +564,13 @@ export function PreservationBlogPost({ postKey }) {
           </section>
           </Fragment>
         ))}
+
+        {/* FR-027 (US6): a menção ao produto entra AQUI — depois de TODAS as
+            seções técnicas (cadastro, comissão, regras, divulgação),
+            apresentada como a ferramenta que resolve a parte repetitiva. */}
+        {post.midBridge && post.midBridge.position === 'end' ? (
+          <MidArticleBridge bridge={post.midBridge} slug={post.slug} />
+        ) : null}
 
         {post.relatedLinks?.length ? (
           <section>

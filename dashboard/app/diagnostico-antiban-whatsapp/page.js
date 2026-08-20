@@ -8,8 +8,8 @@ import { buildOgImageUrl } from '@/lib/seo-og'
 const slug = '/diagnostico-antiban-whatsapp'
 const siteUrl = getSiteUrl()
 const pageUrl = `${siteUrl}${slug}`
-const title = 'Diagnóstico de Preservação Avançada para WhatsApp'
-const description = 'Faça um diagnóstico rápido de exposição operacional no WhatsApp: chip dedicado, cadência, variações, canais, monitoramento e plano de recuperação.'
+const title = 'Teste: qual o risco do seu WhatsApp ser banido'
+const description = 'Responda 6 perguntas e veja o que aumenta o risco de banimento na sua divulgação: volume, ritmo, mensagens repetidas e chip. Ninguém garante imunidade.'
 
 const faqItems = [
   {

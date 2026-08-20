@@ -23,6 +23,10 @@ const MLB_ID_RE = /\bMLB[-_]?([0-9]{6,})\b/i
 const PRODUCT_ID_DETECTORS = {
   amazon: (url) => AMAZON_ASIN_RE.test(url),
   mercadolivre: (url) => MLB_ID_RE.test(url),
+  // Defesa em profundidade: o conversor da SHEIN já devolve `linkKind`
+  // explícito (que tem precedência via resolveLinkKind), então este detector
+  // só entra em ação se a chamada vier fora do fluxo normal de conversão.
+  shein: (url) => /-p-\d+|[?&]goods_id=\d+/i.test(url),
 }
 
 // `existingLinkKind` vence sempre que presente (respeita o que o converter

@@ -18,9 +18,21 @@ test('as lojas que pedem código de acesso marcam esses campos como cookieField'
   const amazonCookieFields = platform('amazon').fields.filter((f) => f.cookieField).map((f) => f.key)
   assert.deepEqual(amazonCookieFields, ['cookie', 'ubid-acbbr', 'at-acbbr', 'x-acbbr'])
 
-  // Shopee/Magalu não usam código de acesso da conta.
+  // Shopee/Magalu/SHEIN não usam código de acesso da conta.
   assert.equal(platform('shopee').fields.some((f) => f.cookieField), false)
   assert.equal(platform('magazineluiza').fields.some((f) => f.cookieField), false)
+  assert.equal(platform('shein').fields.some((f) => f.cookieField), false)
+})
+
+test('a entrada shein não reintroduz modo sem cookie nem campo de sessão', () => {
+  const shein = platform('shein')
+  assert.equal(shein.supportsCookielessMode, undefined)
+  assert.equal(shein.cookielessNote, undefined)
+  // Único campo, sem sensitive/cookieField — é um identificador permanente,
+  // não um código de acesso que expira (specs/012-shein-store-support D-009).
+  assert.deepEqual(shein.fields.map((f) => f.key), ['tag'])
+  assert.equal(shein.fields[0].cookieField, undefined)
+  assert.equal(shein.fields[0].sensitive, undefined)
 })
 
 test('o código de acesso do ML continua obrigatório — não existe opção de ficar sem', () => {

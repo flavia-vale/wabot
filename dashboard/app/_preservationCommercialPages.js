@@ -4,6 +4,7 @@ import Footer from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 
 const siteUrl = getSiteUrl()
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
@@ -27,6 +28,31 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'De 0% a 13% conforme o produto, e por que a tag precisa estar na URL da loja.' },
     ],
     about: ['Marketing de afiliados', 'Link de afiliado', 'Grupos de WhatsApp'],
+    // P4 (specs/013-inbound-leads-strategy, FR-023/FR-024): bloco de resposta
+    // direta e extraível por IA para as quatro perguntas de decisão — o que
+    // é, como funciona, quanto custa, como escolher. Curto e localizável de
+    // propósito (parágrafo por pergunta, não espalhado no texto longo da
+    // página). Não cria página nova — reforça esta, que já existe (FR-024).
+    // Preço: mesmos valores de /precos e dashboard/lib/marketing-content.js
+    // (Basic R$39, Pro R$69, 7 dias grátis) — nenhum número novo.
+    decisionQA: [
+      {
+        q: 'O que é um bot para afiliados no WhatsApp?',
+        a: 'É um robô que acompanha os grupos que você já segue, troca o link de cada oferta pelo seu código de afiliado (Shopee, Amazon, Mercado Livre e Magalu) e publica a oferta convertida nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.',
+      },
+      {
+        q: 'Como funciona na prática?',
+        a: 'Você cadastra as credenciais de afiliada de cada loja, escolhe os grupos de origem (onde as ofertas aparecem primeiro) e os grupos/canais de destino (onde você publica), define o intervalo entre envios, e o robô converte e publica sozinho — com o que saiu, para onde e o que foi bloqueado registrado no histórico.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Teste grátis por 7 dias, sem cartão, com o plano Pro completo. Depois, Basic a partir de R$39 por 30 dias (espelhamento e conversão de link) ou Pro a R$69 (acrescenta Canais do WhatsApp e ofertas automáticas da Shopee). Sem fidelidade — cancela quando quiser.',
+      },
+      {
+        q: 'Como escolher entre Basic e Pro?',
+        a: 'Comece pelo Basic se você opera só em grupos e quer a conversão de link automática. Migre para o Pro quando quiser publicar em Canais do WhatsApp, ativar ofertas automáticas da Shopee por palavra-chave ou precisar de fila com limite maior por hora e por dia. Dá para trocar de plano a qualquer momento pelo painel.',
+      },
+    ],
     aside: {
       pill: 'O erro que mais custa caro',
       title: 'Link enviado sem o seu código não gera comissão nenhuma.',
@@ -220,10 +246,12 @@ export function getPreservationCommercialMetadata(pageKey) {
   const page = PRESERVATION_COMMERCIAL_PAGES[pageKey]
   if (!page) return {}
   const ogImage = buildOgImageUrl({ slug: pageKey, cluster: 'canais-preservacao', template: 'commercial-seo' })
+  const robots = buildSeoRobots(page.path)
   return {
     title: page.title,
     description: page.description,
     alternates: { canonical: page.path },
+    ...(robots ? { robots } : {}),
     openGraph: {
       title: page.title,
       description: page.description,
@@ -257,11 +285,20 @@ function buildSchemas(page) {
     {
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
-      mainEntity: page.faqs.map(([question, answer]) => ({
-        '@type': 'Question',
-        name: question,
-        acceptedAnswer: { '@type': 'Answer', text: answer },
-      })),
+      // decisionQA entra ANTES das FAQs "tradicionais" — são as quatro
+      // perguntas de decisão (FR-023), o bloco mais citável por motor de IA.
+      mainEntity: [
+        ...(page.decisionQA ?? []).map(({ q, a }) => ({
+          '@type': 'Question',
+          name: q,
+          acceptedAnswer: { '@type': 'Answer', text: a },
+        })),
+        ...page.faqs.map(([question, answer]) => ({
+          '@type': 'Question',
+          name: question,
+          acceptedAnswer: { '@type': 'Answer', text: answer },
+        })),
+      ],
     },
     {
       '@context': 'https://schema.org',
@@ -362,6 +399,22 @@ export function PreservationCommercialPage({ pageKey }) {
             </aside>
           </div>
         </section>
+
+        {Array.isArray(page.decisionQA) && page.decisionQA.length > 0 && (
+          <section style={s.section} aria-labelledby="decision-qa-title">
+            <div className="wrap">
+              <SectionHeader eyebrow="Resposta rápida" title="O que você precisa saber antes de decidir" />
+              <div style={{ display: 'grid', gap: 14 }}>
+                {page.decisionQA.map(({ q, a }) => (
+                  <div key={q} style={s.card}>
+                    <strong style={{ display: 'block', fontSize: 16.5, marginBottom: 8 }}>{q}</strong>
+                    <p style={s.small}>{a}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         <section style={s.section}>
           <div className="wrap">

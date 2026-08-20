@@ -29,6 +29,7 @@ const BRAND_STYLES = {
   shopee: { store: 'Shopee', bg: '#EE4D2D', fg: '#FFFFFF', accent: '#FFFFFF' },
   mercadolivre: { store: 'Mercado Livre', bg: '#FFE600', fg: '#2D3277', accent: '#2D3277' },
   magazineluiza: { store: 'Magalu', bg: '#0086FF', fg: '#FFFFFF', accent: '#FFFFFF' },
+  shein: { store: 'SHEIN', bg: '#000000', fg: '#FFFFFF', accent: '#FFFFFF' },
 }
 
 const WIDTH = 720
