@@ -191,8 +191,8 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-ser-afiliado-shopee-whatsapp': {
     slug: '/blog/como-ser-afiliado-shopee-whatsapp',
-    title: 'Shopee Afiliados: como se cadastrar e divulgar no WhatsApp (guia 2026)',
-    description: 'Guia completo de Shopee Afiliados: como se cadastrar, quanto paga de comissão por tipo de venda, prazo de atribuição e como divulgar no WhatsApp sem perder comissão.',
+    title: 'Shopee Afiliados: como entrar e quanto paga',
+    description: 'Como entrar no Shopee Afiliados, quanto a Shopee paga por tipo de venda, o prazo para a comissão contar e como divulgar no WhatsApp sem perder venda.',
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
     leadMagnetVariant: 'afiliados',
