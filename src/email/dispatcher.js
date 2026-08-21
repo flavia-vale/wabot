@@ -14,7 +14,7 @@
 
 import { getTemplateDefinition, templateExists } from './registry.js'
 import { applyVariables } from './markup.js'
-import { wrapEmail, resolveDashboardUrl, resolveSupportEmail, BRAND_NAME, DEFAULT_SUPPORT_WHATSAPP } from './layout.js'
+import { wrapEmail, resolveDashboardUrl, resolveSupportEmail, BRAND_NAME, DEFAULT_SUPPORT_WHATSAPP, VIDEO_CADASTRO_ETIQUETAS_URL } from './layout.js'
 import { buildUnsubscribeUrl, isOptedOut } from './optOut.js'
 import { resolveDailyWindowStart, nextDailyWindowStart, describeWindowStart } from './dailyWindow.js'
 import {
@@ -88,6 +88,12 @@ export function standardVars({ user, dashboardUrl = resolveDashboardUrl() } = {}
     link_painel: `${dashboardUrl}/painel`,
     link_login: `${dashboardUrl}/login`,
     link_planos: `${dashboardUrl}/painel/planos`,
+    // Tela onde a cliente cadastra a etiqueta de afiliada de cada loja. É o
+    // destino do e-mail de "sem etiqueta o robô não publica" — sem esta
+    // variável o texto teria que colar a URL na mão e sair errado quando a
+    // rota mudar.
+    link_lojas: `${dashboardUrl}/painel/ids-afiliada`,
+    video_etiquetas: VIDEO_CADASTRO_ETIQUETAS_URL,
     email_suporte: resolveSupportEmail(),
     whatsapp_suporte: DEFAULT_SUPPORT_WHATSAPP,
   }
