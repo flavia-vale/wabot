@@ -18,6 +18,8 @@
 // afiliada" (nunca tag), "link mais comprido". E nunca dizer que o envio parou
 // quando ele não parou.
 
+import { VIDEO_ETIQUETAS_CAPITULOS, videoEtiquetasEm } from './layout.js'
+
 export const EMAIL_CATEGORIES = Object.freeze(['transactional', 'marketing'])
 
 export const EMAIL_GROUPS = Object.freeze({
@@ -42,6 +44,13 @@ export const STANDARD_VARIABLES = Object.freeze([
   { name: 'email_suporte', description: 'E-mail de suporte', example: 'contato@espelhagrupos.com.br' },
   { name: 'whatsapp_suporte', description: 'WhatsApp de suporte', example: 'https://wa.me/5532999844020' },
   { name: 'marca', description: 'Nome da marca', example: 'BOTinho' },
+  // Um por capítulo do vídeo, gerados da MESMA tabela que monta os links —
+  // declarar à mão abriria espaço para a lista e os links divergirem.
+  ...VIDEO_ETIQUETAS_CAPITULOS.map((c) => ({
+    name: `video_${c.chave}`,
+    description: `Vídeo-aula no trecho: ${c.rotulo}`,
+    example: videoEtiquetasEm(c.segundos, 'https://youtu.be/6F2AUM88FKk'),
+  })),
 ])
 
 const VAR_FIM_TESTE = { name: 'fim_do_teste', description: 'Data em que o teste grátis acaba', example: '23/08/2026' }
@@ -873,7 +882,15 @@ Uma loja só já resolve, e leva uns 5 minutos:
 
 [[botao:Cadastrar minha etiqueta|{{link_lojas}}]]
 
-Se preferir ver antes de mexer, tem uma vídeo-aula mostrando loja por loja — Shopee, Mercado Livre, Amazon e Magalu: {{video_etiquetas}}
+Se preferir ver antes de mexer, tem uma vídeo-aula mostrando o passo a passo. Cada link abaixo já abre o vídeo no minuto exato da sua loja — não precisa procurar:
+
+- [Shopee: pedir seu acesso de afiliada (0:15)]({{video_shopee_pedir}})
+- [Shopee: copiar a chave (1:43)]({{video_shopee}})
+- [Instalar o programinha que o vídeo indica (3:15)]({{video_extensao}}) — só para os dois passos seguintes
+- [Amazon: pegar o código de acesso (4:10)]({{video_amazon}})
+- [Mercado Livre: pegar o código de acesso (6:11)]({{video_mercadolivre}})
+- [Mercado Livre: cadastrar o link da sua vitrine (8:20)]({{video_vitrine_ml}})
+- [Magalu: pegar a etiqueta de afiliada (9:22)]({{video_magalu}})
 
 Se você chegou a tentar e travou em alguma parte, me conta qual — eu te mando o passo a passo com print da tela, ou a gente faz junto por chamada, na hora que der para você.`),
   },

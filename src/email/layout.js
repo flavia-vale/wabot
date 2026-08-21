@@ -19,6 +19,51 @@ export const DEFAULT_SUPPORT_WHATSAPP = 'https://wa.me/5532999844020'
 export const VIDEO_CADASTRO_ETIQUETAS_URL =
   process.env.VIDEO_CREDENCIAIS_URL || 'https://youtu.be/6F2AUM88FKk'
 
+// Capítulos do vídeo, em SEGUNDOS. Mandar a pessoa para "o vídeo" e deixá-la
+// procurar o trecho da loja dela é onde ela desiste — cada loja tem endereço
+// próprio aqui.
+//
+// Tabela única de propósito: o minuto e a URL saem do mesmo lugar, então não
+// existe o caso de alguém corrigir um e esquecer o outro. Se o vídeo for
+// regravado, mexe-se AQUI e em `VIDEO_CADASTRO_ETIQUETAS_URL`, e todos os
+// links se ajustam sozinhos.
+//
+// Os rótulos ficam em linguagem de gente por obrigação (`JARGAO_PROIBIDO` em
+// `test/email-engine.test.js`): o capítulo 3:15 é a instalação de uma extensão
+// cujo nome contém uma palavra que não pode chegar à tela da cliente — quem
+// nomeia a ferramenta é o vídeo, não o e-mail.
+export const VIDEO_ETIQUETAS_CAPITULOS = Object.freeze([
+  { chave: 'shopee_pedir', segundos: 15, rotulo: 'Pedir seu acesso de afiliada na Shopee' },
+  { chave: 'shopee', segundos: 103, rotulo: 'Copiar a chave da Shopee' },
+  { chave: 'extensao', segundos: 195, rotulo: 'Instalar o programinha que o vídeo indica' },
+  { chave: 'amazon', segundos: 250, rotulo: 'Pegar o código de acesso da Amazon' },
+  { chave: 'mercadolivre', segundos: 371, rotulo: 'Pegar o código de acesso do Mercado Livre' },
+  { chave: 'vitrine_ml', segundos: 500, rotulo: 'Cadastrar o link da sua vitrine do Mercado Livre' },
+  { chave: 'magalu', segundos: 562, rotulo: 'Pegar a etiqueta de afiliada da Magalu' },
+])
+
+/**
+ * Link do vídeo já posicionado no segundo indicado. Usa `URL` de propósito:
+ * assim funciona tanto no formato curto (`youtu.be/ID?t=15`) quanto no longo
+ * (`watch?v=ID&t=15`), e o override por env não quebra o separador.
+ */
+export function videoEtiquetasEm(segundos, base = VIDEO_CADASTRO_ETIQUETAS_URL) {
+  try {
+    const url = new URL(base)
+    url.searchParams.set('t', String(Math.max(0, Math.floor(Number(segundos) || 0))))
+    return url.toString()
+  } catch {
+    return base
+  }
+}
+
+/** `{ video_shopee: 'https://...?t=103', ... }` — pronto para as variáveis. */
+export function videoEtiquetasVars() {
+  return Object.fromEntries(
+    VIDEO_ETIQUETAS_CAPITULOS.map((c) => [`video_${c.chave}`, videoEtiquetasEm(c.segundos)])
+  )
+}
+
 export function resolveDashboardUrl() {
   const raw = (process.env.DASHBOARD_URL || process.env.API_URL || DEFAULT_DASHBOARD_URL).trim()
   return raw.replace(/\/+$/, '')

@@ -124,6 +124,12 @@ export const ANALYTICS_EVENTS = new Set([
   // `ops_preview_card_no_image` porque a ação é outra — não é defeito nosso,
   // é bloqueio da loja, e a foto tem que vir por outra fonte (a vitrine).
   'ops_ml_anti_bot_wall',
+  // A foto da loja falhou, mas o card de preview SAIU MESMO ASSIM — com a foto
+  // da mensagem de origem (plano B em cascata, core/previewImageFallbackPolicy.js).
+  // Sinal separado de propósito: aqui a oferta saiu completa (foto + clique que
+  // abre a loja). Somado com `ops_preview_card_no_image` por loja, diz quanto o
+  // bloqueio da loja ainda custa depois do plano B.
+  'ops_preview_card_origin_fallback',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está
