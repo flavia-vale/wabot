@@ -11,6 +11,14 @@ export const DEFAULT_DASHBOARD_URL = 'https://espelhagrupos.com.br'
 export const DEFAULT_SUPPORT_EMAIL = 'contato@espelhagrupos.com.br'
 export const DEFAULT_SUPPORT_WHATSAPP = 'https://wa.me/5532999844020'
 
+// Vídeo-aula de cadastro das etiquetas de afiliada (Shopee, Mercado Livre,
+// Amazon e Magalu). É o MESMO vídeo linkado no painel, em
+// `dashboard/app/painel/checklist/page.js` — a constante existe para os dois
+// lados não derivarem: se o vídeo for refeito, muda aqui e no painel, e o
+// teste de e-mail reprova link colado na mão.
+export const VIDEO_CADASTRO_ETIQUETAS_URL =
+  process.env.VIDEO_CREDENCIAIS_URL || 'https://youtu.be/6F2AUM88FKk'
+
 export function resolveDashboardUrl() {
   const raw = (process.env.DASHBOARD_URL || process.env.API_URL || DEFAULT_DASHBOARD_URL).trim()
   return raw.replace(/\/+$/, '')
