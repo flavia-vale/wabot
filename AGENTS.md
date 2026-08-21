@@ -2001,6 +2001,51 @@ Blindagem em código (não regredir): `src/supervisor/envGuard.js`
 supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
 Teste: `test/supervisor-env-guard.test.js`.
 
+## "Imagem que veio na mensagem" tem UM caminho só: subir de novo (RCA 2026-08-21)
+
+Existiam **dois** caminhos para a mesma promessa de produto, e eles não eram
+equivalentes:
+
+- destino **com** botão "Ver canal" → `getImage({ forceOriginalForChannelButton })`
+  baixa a mídia da origem e a **SOBE de novo** como imagem nova (o botão só é
+  aceito em corpo de mídia). É o caminho que a cliente descreve como "funciona
+  perfeito";
+- destino **sem** botão, modo `original` → `shouldUseRelayPath` + `relayMessage`
+  **REAPROVEITAM** o proto já hospedado da origem, sem subir nada.
+
+Quando todas as contas foram trocadas para `original` (bloqueio do ML), o grupo
+sem botão passou a usar o repasse e a cliente reportou oferta que **chegava no
+grupo gêmeo e não chegava nele** — com o envio gravado como `success`, porque o
+repasse é aceito pelo Baileys e a perda acontece depois, na entrega. O painel não
+tem como ver isso: `success` significa "entreguei ao WhatsApp", não "apareceu no
+grupo".
+
+Hoje `shouldReuploadOriginalMedia` (`src/core/imageModePolicy.js`) faz o modo
+`original` usar o MESMO caminho do botão. Escape hatch
+`IMAGE_ORIGINAL_STRATEGY=relay` volta ao repasse (mais barato, preserva vídeo)
+sem redeploy. **Não regredir:** não voltar o repasse a padrão sem antes provar,
+em teste controlado com dois destinos gêmeos, que ele entrega tudo. Teste:
+`test/image-mode-policy.test.js`.
+
+## Padrão do produto: "a foto que veio na oferta" (2026-08-21)
+
+`DEFAULT_GROUP_IMAGE_MODE` passou de `preview` para **`original`**. Motivo
+medido: o card de preview depende de ABRIR A PÁGINA DA LOJA para achar a foto, e
+com o Mercado Livre barrando o IP do servidor **todo link de produto direto do
+ML saía sem foto** — um grupo que só recebe esse tipo de link ficou 100% sem
+imagem, enquanto o gêmeo com botão "Ver canal" (que sobe a foto da mensagem)
+saía perfeito.
+
+- O modo `preview` **não foi removido**: continua no código e alcançável por
+  `GROUP_IMAGE_MODE=preview`. A investigação de foto por loja fica para depois.
+- A cliente **não escolhe** formato de imagem na tela. A única escolha de
+  formato no painel é o botão "Ver canal" (`dashboard/app/painel/grupos/page.js`).
+  Guarda em `test/image-mode-policy.test.js` falha se um controle de `imageMode`
+  ou o texto "card de preview" voltar à tela.
+- Testes que travavam a string `'preview'` foram reescritos para comparar com
+  `resolveGroupImageMode()`: a invariante do chokepoint é o valor persistido ser
+  IGNORADO, não o modo ser um valor específico.
+
 ## Modo de imagem é GLOBAL e trocável por env (`GROUP_IMAGE_MODE`, 2026-08-20)
 
 Desde 2026-07 o modo é único para todo mundo e o valor persistido em

@@ -24,6 +24,7 @@ import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
+import { shouldReuploadOriginalMedia } from './core/imageModePolicy.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -3506,7 +3507,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // "Imagem que veio na mensagem". No modo "Imagem oficial da loja"
         // precisamos forçar o caminho de upload (getImage → fetch ativo) para não
         // vazar a imagem do anúncio/origem por cima da escolha do usuário.
-        const original = shouldRelayOriginalMediaForImageMode(imageMode) ? originalMedia : null
+        // `reupload` (padrão): a foto da mensagem de origem é baixada e SUBIDA de
+        // novo, exatamente como no destino com botão "Ver canal" — caminho único
+        // para a mesma promessa de produto. Ver shouldReuploadOriginalMedia
+        // (core/imageModePolicy.js) para o RCA de por que os dois caminhos
+        // deixaram de coexistir.
+        const original = (shouldRelayOriginalMediaForImageMode(imageMode) && !shouldReuploadOriginalMedia())
+          ? originalMedia
+          : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
 
         const previousSuccessCount = await db.messageLog.count({ where: { userId, status: 'success' } }).catch(() => 1)
