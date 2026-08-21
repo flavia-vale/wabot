@@ -38,6 +38,7 @@ export const STANDARD_VARIABLES = Object.freeze([
   { name: 'link_login', description: 'Endereço da tela de entrada', example: 'https://espelhagrupos.com.br/login' },
   { name: 'link_planos', description: 'Endereço da tela de planos', example: 'https://espelhagrupos.com.br/painel/planos' },
   { name: 'link_lojas', description: 'Endereço da tela onde a cliente cadastra a etiqueta de afiliada de cada loja', example: 'https://espelhagrupos.com.br/painel/ids-afiliada' },
+  { name: 'video_etiquetas', description: 'Vídeo-aula de como cadastrar a etiqueta de afiliada de cada loja (o mesmo do painel)', example: 'https://youtu.be/6F2AUM88FKk' },
   { name: 'email_suporte', description: 'E-mail de suporte', example: 'contato@espelhagrupos.com.br' },
   { name: 'whatsapp_suporte', description: 'WhatsApp de suporte', example: 'https://wa.me/5532999844020' },
   { name: 'marca', description: 'Nome da marca', example: 'BOTinho' },
@@ -871,6 +872,8 @@ E isso é de propósito, não é defeito. Publicar sem a sua etiqueta faria a co
 Uma loja só já resolve, e leva uns 5 minutos:
 
 [[botao:Cadastrar minha etiqueta|{{link_lojas}}]]
+
+Se preferir ver antes de mexer, tem uma vídeo-aula mostrando loja por loja — Shopee, Mercado Livre, Amazon e Magalu: {{video_etiquetas}}
 
 Se você chegou a tentar e travou em alguma parte, me conta qual — eu te mando o passo a passo com print da tela, ou a gente faz junto por chamada, na hora que der para você.`),
   },
