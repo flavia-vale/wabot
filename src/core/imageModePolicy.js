@@ -17,7 +17,18 @@
 // `scripts/snapshot-image-mode.mjs`).
 const MODOS_VALIDOS = new Set(['preview', 'original', 'fetch', 'none'])
 
-export const DEFAULT_GROUP_IMAGE_MODE = 'preview'
+// 2026-08-21: o padrão do produto passou de `preview` para `original` ("a foto
+// que veio na oferta"). O card de preview depende de ABRIR A PÁGINA DA LOJA para
+// achar a foto, e com o Mercado Livre bloqueando o IP do servidor a oferta saía
+// sem imagem — medido em produção: todo link de produto direto do ML ficava sem
+// foto, e um grupo que só recebia esse tipo de link ficou 100% sem imagem.
+// `original` não abre a loja: reaproveita a foto da própria mensagem, subindo-a
+// de novo (mesmo caminho do botão "Ver canal", que sempre funcionou).
+//
+// O modo `preview` CONTINUA no código e alcançável por `GROUP_IMAGE_MODE=preview`
+// — a investigação da foto por loja fica para depois. Só deixou de ser padrão e
+// não é oferecido na tela da cliente.
+export const DEFAULT_GROUP_IMAGE_MODE = 'original'
 
 /**
  * Modo efetivo de imagem para TODOS os grupos monitorados.
