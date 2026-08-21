@@ -88,6 +88,11 @@ export function standardVars({ user, dashboardUrl = resolveDashboardUrl() } = {}
     link_painel: `${dashboardUrl}/painel`,
     link_login: `${dashboardUrl}/login`,
     link_planos: `${dashboardUrl}/painel/planos`,
+    // Tela onde a cliente cadastra a etiqueta de afiliada de cada loja. É o
+    // destino do e-mail de "sem etiqueta o robô não publica" — sem esta
+    // variável o texto teria que colar a URL na mão e sair errado quando a
+    // rota mudar.
+    link_lojas: `${dashboardUrl}/painel/ids-afiliada`,
     email_suporte: resolveSupportEmail(),
     whatsapp_suporte: DEFAULT_SUPPORT_WHATSAPP,
   }

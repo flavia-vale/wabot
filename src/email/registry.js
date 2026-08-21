@@ -37,6 +37,7 @@ export const STANDARD_VARIABLES = Object.freeze([
   { name: 'link_painel', description: 'Endereço do painel', example: 'https://espelhagrupos.com.br/painel' },
   { name: 'link_login', description: 'Endereço da tela de entrada', example: 'https://espelhagrupos.com.br/login' },
   { name: 'link_planos', description: 'Endereço da tela de planos', example: 'https://espelhagrupos.com.br/painel/planos' },
+  { name: 'link_lojas', description: 'Endereço da tela onde a cliente cadastra a etiqueta de afiliada de cada loja', example: 'https://espelhagrupos.com.br/painel/ids-afiliada' },
   { name: 'email_suporte', description: 'E-mail de suporte', example: 'contato@espelhagrupos.com.br' },
   { name: 'whatsapp_suporte', description: 'WhatsApp de suporte', example: 'https://wa.me/5532999844020' },
   { name: 'marca', description: 'Nome da marca', example: 'BOTinho' },
@@ -814,9 +815,20 @@ Isso quase sempre é um passo que ficou pelo meio, e acontece com todo mundo. Me
 Se preferir, a gente faz junto por chamada, na hora que der para você. Leva uns 15 minutos e resolve.`),
   },
   {
+    // ATENÇÃO — este e-mail e o `contato_sem_etiqueta_nada_sai` logo abaixo
+    // tratam de situações OPOSTAS e não podem ser fundidos nem trocados:
+    //
+    //   aqui  = a cliente TEM etiqueta cadastrada e ela venceu/está incompleta.
+    //           No ML e na Amazon o plano B continua publicando, só com link
+    //           mais comprido. Por isso o texto tranquiliza.
+    //   abaixo = a cliente NUNCA cadastrou etiqueta nenhuma. Aí o robô se
+    //           RECUSA a publicar (`skip:no_valid_conversions`) e NADA sai.
+    //           Dizer "continua saindo" ali seria mentira.
+    //
+    // Guarda em `test/email-contato-escuta.test.js`.
     slug: 'contato_duvida_credenciais',
     name: 'Dúvida nas etiquetas e códigos das lojas',
-    description: 'Para quem está com credencial faltando ou vencida e não recadastrou.',
+    description: 'Para quem JÁ cadastrou etiqueta de alguma loja e ela venceu ou ficou incompleta. NÃO usar para quem nunca cadastrou — nesse caso nada é publicado e o texto certo é o contato_sem_etiqueta_nada_sai.',
     group: 'contato',
     category: 'marketing',
     trigger: 'manual',
@@ -829,6 +841,38 @@ Se preferir, a gente faz junto por chamada, na hora que der para você. Leva uns
 Essa é a parte que mais gera dúvida, e é onde a gente mais consegue ajudar. Se você me disser qual loja está te dando trabalho — Mercado Livre, Amazon, Shopee ou Magalu — eu te mando o passo a passo com print, ou a gente faz junto por chamada.
 
 Enquanto isso suas ofertas continuam saindo e a comissão continua sendo sua: o link só sai mais comprido.`),
+  },
+  {
+    // Existe porque as 22 pessoas que travaram nesta etapa (32% de quem não
+    // pagou, medido em 2026-08) não cabiam em nenhum e-mail existente: o
+    // `contato_duvida_credenciais` diz "suas ofertas continuam saindo", e para
+    // quem nunca cadastrou etiqueta nenhuma isso é FALSO — nada saiu.
+    //
+    // O ponto que muda a conversa: elas acham que o robô não funciona. Ele
+    // está funcionando exatamente como deveria — recusando publicar link que
+    // daria a comissão para outra pessoa. Dizer isso transforma "quebrado" em
+    // "protegendo você", e o próximo passo fica óbvio.
+    slug: 'contato_sem_etiqueta_nada_sai',
+    name: 'Conectou o WhatsApp mas não cadastrou etiqueta',
+    description: 'Para quem conectou o WhatsApp e NUNCA cadastrou etiqueta de loja nenhuma. Sem etiqueta o robô não publica nada — e a pessoa costuma achar que o robô está quebrado. NÃO usar para quem já cadastrou e a etiqueta venceu (aí é o contato_duvida_credenciais).',
+    group: 'contato',
+    category: 'marketing',
+    trigger: 'manual',
+    dedupDays: 21,
+    variables: [],
+    title: 'Falta um passo para o robô começar',
+    subject: 'Seu robô está pronto, falta só a etiqueta da loja',
+    body: escutaBody(`{{saudacao}} Você já conectou o WhatsApp — essa é a parte mais chata de todas, e ela já está feita.
+
+Falta só uma coisa para o robô começar a trabalhar: cadastrar a sua etiqueta de afiliada de pelo menos uma loja. Enquanto ela não estiver lá, o robô **não publica nenhuma oferta**.
+
+E isso é de propósito, não é defeito. Publicar sem a sua etiqueta faria a comissão daquela venda ir para outra pessoa — o robô prefere não enviar a te fazer trabalhar de graça.
+
+Uma loja só já resolve, e leva uns 5 minutos:
+
+[[botao:Cadastrar minha etiqueta|{{link_lojas}}]]
+
+Se você chegou a tentar e travou em alguma parte, me conta qual — eu te mando o passo a passo com print da tela, ou a gente faz junto por chamada, na hora que der para você.`),
   },
   {
     slug: 'contato_primeira_semana',
