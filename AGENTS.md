@@ -2201,6 +2201,95 @@ de já ter a foto". Lembre da armadilha do ML: o muro anti-robô vem com **statu
 `bot-supervisor` não for reiniciado, os avisos novos não aparecem no log (ver
 seção "código novo não carregado pelos bots").
 
+## Voltar ao CARD DE PREVIEW CLICÁVEL: as duas travas e como caíram (2026-08-21)
+
+Os dois formatos de oferta **não são a mesma coisa para a cliente**:
+
+- **card de preview clicável** (`GROUP_IMAGE_MODE=preview`): texto + card grande;
+  **tocar no card ABRE A LOJA**. A foto vem de raspar a página da loja;
+- **imagem de verdade** (`original`, e o caminho do botão "Ver canal"): foto com
+  legenda; **tocar na foto só amplia a foto** — para ir à loja a pessoa precisa
+  achar o link dentro do texto.
+
+Em 20-21/08 o padrão virou `original` porque o preview saía SEM FOTO (sem
+thumbnail o WhatsApp não desenha card e a oferta vira texto puro). Foi
+paliativo: resolveu a foto e **custou a clicabilidade**. As duas travas que
+impediam a volta:
+
+**Trava 1 — o ML fechou TODAS as rotas gratuitas de foto.** Medido de um IP
+bloqueado: página de produto (`/p/MLB…` e `produto…-_JM`) responde 200 com ~39KB
+e sem `og:image` (muro); `api.mercadolibre.com` responde **403 PolicyAgent** sem
+token; `/oembed` não existe (404). Não sobra rota anônima. O que passa: a
+**vitrine** `/social/<handle>?ref=` (já implementada, mas só existe para
+`meli.la`) e a **CDN** `http2.mlstatic.com`, que nunca esteve bloqueada.
+
+A saída não exigiu rota nova: `fetchMercadoLivreProductInfo`/
+`fetchMercadoLivreItemInfo` **já chamavam a API do ML** para título e preço, e a
+mesma resposta traz `pictures[]` — a foto estava sendo descartada.
+`fetchMercadoLivreApiImageId` (`src/converters/productInfoScraper.js`) devolve o
+id da PRIMEIRA foto e `buildMlPictureUrl` monta a mesma variante grande da
+vitrine (`D_NQ_NP_2X_<id>-F.jpg`, 1080x1080).
+
+Ordem canônica em `resolveMercadoLivreImage` (**não inverter** — guarda em
+`test/ml-api-image-source.test.js`): **vitrine → API → página do produto**. A
+vitrine primeiro porque está provada em produção e não gasta token; a API antes
+da página porque a página é justamente a que o muro barra (tentá-la primeiro só
+queimaria o orçamento de 25s da mensagem).
+
+Cada endpoint exige um token diferente, e é isso que define a cobertura:
+`/products/<id>` (link de catálogo `/p/`) usa token de **aplicação**
+(`ML_CLIENT_ID`/`ML_CLIENT_SECRET`) e vale para **todas** as contas;
+`/items/<id>` (link de anúncio) usa o token **OAuth da cliente** e só vale para
+quem tem `oauthRefreshToken`. Sem token, devolve `null` e cai na fonte seguinte.
+
+⚠️ **Não provado:** que o token passa pelo PolicyAgent a partir de um IP
+bloqueado. Um token falso devolve o mesmo 403 (a política de auth reprova
+antes), então só um teste com as credenciais reais, do VPS, decide. Se o 403
+persistir com token válido, a Trava 2 continua sendo a rede de segurança.
+
+**Trava 2 — o card tinha UMA fonte de foto só.** Falhou a loja, o card inteiro
+era descartado (`if (!jpegThumbnail) return null`) e a oferta ia como texto puro.
+Agora há **plano B em cascata**: a foto da própria mensagem de origem vira a
+thumbnail do card, preservando foto **e** clique que abre a loja
+(`src/core/previewImageFallbackPolicy.js`).
+
+**Isso não é hipótese sobre o WhatsApp.** O card não sabe de onde vieram os
+bytes da thumbnail — é um JPEG subido por `prepareWAMessageMedia` com
+`mediaTypeOverride: 'thumbnail-link'`. O banner de cupom
+(`buildStoreBrandCardImage`, specs/008) **já** alimenta os MESMOS dois campos
+com um JPEG gerado localmente a partir de um SVG, sem tocar na loja, e renderiza
+card clicável. "Bytes que não vêm da loja" é caminho já exercitado.
+
+**Não regredir:** a foto da LOJA continua sendo a primeira escolha — a cascata
+só roda quando não há thumbnail (a foto da origem vem do concorrente e pode ter
+marca d'água/preço antigo; usá-la sempre rebaixaria toda oferta). Não roda em
+cupom com banner. Sinal PRÓPRIO `ops_preview_card_origin_fallback` (a oferta
+SAIU completa — contá-la como `ops_preview_card_no_image` esconderia justamente
+quantas ofertas o plano B salvou). A mídia da origem é baixada **uma vez por
+mensagem** (`getOriginalPhotoOnce`), não uma vez por destino — `buildPayload`
+roda por destino.
+
+Envs: `PREVIEW_CARD_ORIGIN_FALLBACK=off` desliga a cascata (default LIGADA: ela
+só age quando o card já ia sair sem foto, então não há caminho em que piore o
+resultado; e como o padrão hoje é `original`, ligada por default ela não muda
+nada no que está no ar). `GROUP_IMAGE_MODE=preview` religa o card clicável.
+
+**Ainda não medido (não repetir como fato):** se o muro do ML é permanente, por
+frequência ou por reputação de IP — staging (mesmo IP, pouco tráfego) entregava
+foto enquanto produção não, e num teste em produção 4 de 8 links devolveram
+foto. Sugere intermitência; ninguém mediu. Rodar
+`scripts/diag-ml-muro-taxa.mjs --sample=6 --repetir=24 --intervalo=30` (12h de
+cobertura) antes de qualquer conclusão. Quantas contas estão com a chave da
+Shopee recusada também nunca foi medido:
+`scripts/diag-shopee-chave-por-conta.mjs`.
+
+**Critério para religar o preview:** `GROUP_IMAGE_MODE=preview` em produção com
+as ofertas saindo com card clicável E com foto, inclusive as de link direto do
+ML — conferido no celular, em dois grupos, com `ops_preview_card_no_image` perto
+de zero por algumas horas. Lembre que em modo `remote` o deploy da API **não**
+recarrega os bot-workers: sem `pm2 restart bot-supervisor --update-env` nada
+disso vale nos bots (e isso reconecta TODAS as sessões — avisar antes).
+
 ## ML sem foto: o muro anti-robô do ML bate no IP do servidor (RCA 2026-08-19/20)
 
 **Sintoma:** de um dia para o outro, as ofertas de Mercado Livre passaram a sair

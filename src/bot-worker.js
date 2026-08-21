@@ -19,6 +19,7 @@ import { convertLink } from './converters/index.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
+import { shouldUseOriginPhotoFallback } from './core/previewImageFallbackPolicy.js'
 import { resolveLinkKind } from './converters/linkKind.js'
 import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
@@ -1404,7 +1405,7 @@ function reportPreviewCardNoImage(stage, ctx = {}) {
   try { recordOperationalSignal('preview_card_no_image', { userId, stage, platform: ctx.platform || null }) } catch {}
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal }) {
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto }) {
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
@@ -1493,6 +1494,36 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // Sem plataforma reconhecida não existe caminho de imagem: o card nunca é
     // montado. Vale logar para separar "loja bloqueou" de "link não é de loja".
     reportPreviewCardNoImage('sem_plataforma', { sourceUrl })
+  }
+
+  // PLANO B EM CASCATA: a loja não entregou foto, mas a mensagem de origem
+  // quase sempre traz uma. Sem isso o card inteiro é descartado abaixo (`if
+  // (!jpegThumbnail) return null`) e a oferta sai como TEXTO PURO — perdendo a
+  // foto E o clique que abre a loja. Com isso, o card sobrevive ao bloqueio da
+  // loja mantendo as duas coisas. Ver src/core/previewImageFallbackPolicy.js
+  // para o porquê de o WhatsApp aceitar bytes que não vêm da loja (o banner de
+  // cupom, logo acima, já faz exatamente isso com um JPEG gerado localmente).
+  //
+  // Não roda no caminho do banner de cupom: ali a ausência de foto de produto é
+  // intencional (link de campanha não tem produto), e o banner já preencheu.
+  if (!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && shouldUseOriginPhotoFallback()) {
+    try {
+      const origin = await fetchOriginPhoto()
+      const normalized = origin?.buffer ? await normalizeImageForWhatsApp(origin.buffer) : null
+      if (normalized?.jpegThumbnail) {
+        jpegThumbnail = normalized.jpegThumbnail
+        hqSourceBuffer = normalized.buffer || normalized.jpegThumbnail
+        // Sinal PRÓPRIO (não é `ops_preview_card_no_image`): aqui a oferta SAIU
+        // com card e com foto. Misturar os dois esconderia justamente o número
+        // que interessa — quantas ofertas o plano B salvou, e de qual loja.
+        logger.info({ platform: primary?.platform, sourceUrl }, 'Card de preview: foto da loja falhou, usando a foto da mensagem de origem')
+        try { recordOperationalSignal('preview_card_origin_fallback', { userId, platform: primary?.platform || null }) } catch {}
+      }
+    } catch (err) {
+      // Best-effort: o plano B falhando devolve o caso ao estado que já era o
+      // atual (card descartado, texto puro). Nunca derruba o envio.
+      logger.warn({ err: err?.message, sourceUrl }, 'Card de preview: plano B da foto de origem falhou')
+    }
   }
 
   let highQualityThumbnail
@@ -2913,6 +2944,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // imagem mesmo assim — reaproveita o MESMO caminho (resolveMonitoredImage,
       // mode 'original') que já é usado pelas ofertas comuns, só que escopado ao
       // destino que pediu o botão, sem tocar no default global de imageMode.
+      // Memo da foto da mensagem de origem, no mesmo espírito de
+      // `imageFetched`/`cachedImage` em getImage(): `buildPayload` roda UMA VEZ
+      // POR DESTINO, então sem isso uma mensagem espelhada para N grupos
+      // baixaria e decifraria a MESMA mídia N vezes. `downloadOriginalImage` é
+      // a parte cara do caminho (download + decrypt via Baileys).
+      let originPhotoFetched = false
+      let cachedOriginPhoto = null
+      async function getOriginalPhotoOnce() {
+        if (originPhotoFetched) return cachedOriginPhoto
+        originPhotoFetched = true
+        cachedOriginPhoto = await downloadOriginalImage()
+        return cachedOriginPhoto
+      }
+
       async function getImage({ forceOriginalForChannelButton = false } = {}) {
         if (imageFetched) return cachedImage
         imageFetched = true
@@ -3599,6 +3644,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               uploadToServer: activeSock?.waUploadToServer,
               destJid,
               couponTextSignal,
+              // Plano B da foto (previewImageFallbackPolicy.js): só é chamado
+              // quando a loja não entregou imagem. `downloadOriginalImage` é
+              // lazy e já tem log próprio; no modo preview ele não é usado por
+              // mais ninguém (getImage devolve null cedo), então não há
+              // download duplicado da mesma mídia.
+              fetchOriginPhoto: getOriginalPhotoOnce,
             })
             return buildMonitoredMessagePayload({
               finalText: variantText,

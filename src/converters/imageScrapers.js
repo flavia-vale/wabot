@@ -1,6 +1,7 @@
 import sharp from 'sharp'
 import { extractShopeeIds, resolveShopeeShortLink as resolveShopeeShortLinkShared } from './shopee.js'
-import { resolveToCleanProductUrl, fetchFeaturedSocialImage, resolveSocialShareUrl } from './mercadolivre.js'
+import { resolveToCleanProductUrl, fetchFeaturedSocialImage, resolveSocialShareUrl, buildMlPictureUrl } from './mercadolivre.js'
+import { fetchMercadoLivreApiImageId } from './productInfoScraper.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
 
@@ -329,13 +330,24 @@ async function resolveAmazonImage(url) {
 // continua acessível e já traz a foto do card destacado, então ela é a fonte
 // confiável hoje. A leitura da página do produto segue como segunda opção: se
 // o bloqueio cair, ela volta a funcionar sozinha.
-async function resolveMercadoLivreImage(url) {
+async function resolveMercadoLivreImage(url, creds) {
   const socialUrl = await resolveSocialShareUrl(url)
   if (socialUrl) {
     const fromCard = await fetchFeaturedSocialImage(socialUrl).catch(() => null)
     if (fromCard) return fromCard
   }
   const target = (await resolveToCleanProductUrl(url).catch(() => null)) || url
+
+  // 2ª fonte: a API do ML, que já entrega título e preço para esta mesma oferta
+  // e traz `pictures[]` na MESMA resposta (fetchMercadoLivreApiImageId). Entra
+  // ANTES da página do produto porque a página é justamente a que o muro
+  // anti-robô barra — de um IP bloqueado ela responde 200 e sem foto, então
+  // tentá-la primeiro só gastaria o orçamento de tempo da mensagem. Fica DEPOIS
+  // da vitrine porque a vitrine já está provada em produção e não gasta token.
+  const apiPictureId = await fetchMercadoLivreApiImageId(target, { mlCredentials: creds?.mercadolivre || null }).catch(() => null)
+  const fromApi = buildMlPictureUrl(apiPictureId)
+  if (fromApi) return fromApi
+
   const { html } = await fetchHtml(target, { ua: BROWSER_UA }).catch(() => ({ html: null }))
   // Bloqueio da loja tem nome próprio no log e sinal durável. Sem isso, o
   // muro (que responde 200) se disfarça de "página sem imagem" — foi assim
@@ -510,7 +522,7 @@ export async function fetchProductImage(platform, productUrl, creds) {
     } else if (platform === 'amazon') {
       image = await resolveAmazonImage(productUrl)
     } else if (platform === 'mercadolivre') {
-      image = await resolveMercadoLivreImage(productUrl)
+      image = await resolveMercadoLivreImage(productUrl, creds)
     }
     // SHEIN não tem ramo dedicado: o caminho genérico abaixo já extrai o
     // og:image do oneLink (miniatura `_thumbnail_<w>x<h>`), e

@@ -49,6 +49,68 @@ const META_PRICE_RE = [
   /<meta[^>]+(?:property|itemprop)=["']price["'][^>]+content=["']([^"']+)["']/i,
 ]
 
+// FOTO DO ML PELA MESMA API QUE JÁ DÁ TÍTULO E PREÇO (RCA 2026-08-19/21).
+//
+// O muro anti-robô do ML barra o IP do servidor na PÁGINA do produto (medido:
+// 200 + ~39KB + sem `og:image`), e era daí que a foto do card de preview vinha.
+// Com isso, todo link de produto DIRETO (`/p/MLB…` e `…MLB<id>…-_JM`) saía sem
+// foto — só os `meli.la` de vitrine escapavam, porque a vitrine não é barrada.
+//
+// A saída não exige rota nova: `fetchMercadoLivreProductInfo` e
+// `fetchMercadoLivreItemInfo` (logo acima) JÁ chamam a API do ML para título e
+// preço, e a MESMA resposta traz `pictures[]`. A foto estava ali o tempo todo,
+// sendo descartada. A CDN de imagem (http2.mlstatic.com) nunca esteve
+// bloqueada — comprovado no mesmo IP que recebe o muro na página.
+//
+// Os dois endpoints se dividem pelo formato do link e por qual token exigem:
+//   - catálogo `/p/MLB…` → `/products/<id>`, token de APLICAÇÃO
+//     (`ML_CLIENT_ID`/`ML_CLIENT_SECRET`) — não depende da credencial de
+//     nenhuma cliente;
+//   - anúncio `MLB<id>` → `/items/<id>`, token OAuth DA CLIENTE — só funciona
+//     para quem tem `oauthRefreshToken` cadastrado.
+// Sem token, cada caminho devolve `null` e o chamador segue para a próxima
+// fonte. Nunca lança: é mais uma camada, não um gargalo novo.
+export async function fetchMercadoLivreApiImageId(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, mlCredentials = null } = {}) {
+  const productId = parseMercadoLivreProductIdFromUrl(url)
+  const itemId = productId ? null : parseMercadoLivreItemIdFromUrl(url)
+  if (!productId && !itemId) return null
+
+  try {
+    let token = null
+    if (productId) {
+      token = await getMlAppToken()
+    } else {
+      const { token: userToken, credentialPatch } = await getMlUserToken(mlCredentials)
+      if (credentialPatch && typeof mlCredentials?.__onCredentialPatch === 'function') {
+        // Mesmo cuidado de fetchMercadoLivreItemInfo: o refresh_token do ML é
+        // single-use, então o token rotacionado precisa ser persistido — mas
+        // falhar em persistir não pode derrubar a busca de foto em curso.
+        try { await mlCredentials.__onCredentialPatch('mercadolivre', credentialPatch) } catch {}
+      }
+      token = userToken
+    }
+    if (!token) return null
+
+    const endpoint = productId
+      ? `https://api.mercadolibre.com/products/${productId}`
+      : `https://api.mercadolibre.com/items/${itemId}`
+    const res = await fetch(endpoint, {
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json,text/plain,*/*', Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'follow',
+    })
+    if (!res.ok) return null
+    const payload = await res.json().catch(() => null)
+    // PRIMEIRA foto = a principal do anúncio. As seguintes são outros ângulos
+    // e variações de cor — mesma razão pela qual a vitrine ancora no primeiro
+    // polycard (pegar outra reintroduziria a "foto errada").
+    const pictureId = payload?.pictures?.[0]?.id
+    return typeof pictureId === 'string' && pictureId ? pictureId : null
+  } catch {
+    return null
+  }
+}
+
 function decodeEntities(value = '') {
   return String(value)
     .replace(/&quot;/g, '"')
