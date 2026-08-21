@@ -149,3 +149,45 @@ test('o e-mail de "nada sai" leva para a tela de cadastrar etiqueta, sem URL col
   const { text } = await render('contato_sem_etiqueta_nada_sai')
   assert.match(text, /painel\/ids-afiliada/, 'o link renderizado precisa apontar para a tela de etiquetas')
 })
+
+test('o e-mail de "nada sai" leva a pessoa direto ao minuto da loja dela', async () => {
+  // Mandar "assiste o vídeo" e deixar a pessoa procurar o trecho da loja é
+  // onde ela desiste. Cada loja precisa de endereço próprio.
+  const { text } = await render('contato_sem_etiqueta_nada_sai')
+
+  for (const [loja, segundos] of [
+    ['Shopee', 103],
+    ['Amazon', 250],
+    ['Mercado Livre', 371],
+    ['Magalu', 562],
+  ]) {
+    assert.match(
+      text,
+      new RegExp(`\\?t=${segundos}\\b`),
+      `${loja}: falta o link posicionado no segundo ${segundos} — sem ele a pessoa cai no começo do vídeo e procura sozinha`
+    )
+  }
+
+  // O capítulo 3:15 é a instalação de uma extensão cujo nome carrega uma
+  // palavra da lista de jargão proibido. Quem nomeia a ferramenta é o vídeo;
+  // o e-mail só aponta o minuto.
+  assert.match(text, /\?t=195\b/, 'falta o link do passo que precede Amazon e Mercado Livre')
+  assert.doesNotMatch(text, /cookie/i, 'jargão proibido chegou à tela da cliente')
+})
+
+test('os carimbos de tempo do vídeo saem de uma tabela só (minuto e link não podem divergir)', async () => {
+  const { VIDEO_ETIQUETAS_CAPITULOS, videoEtiquetasEm } = await import('../src/email/layout.js')
+  const { text } = await render('contato_sem_etiqueta_nada_sai')
+
+  for (const capitulo of VIDEO_ETIQUETAS_CAPITULOS) {
+    const minuto = `${Math.floor(capitulo.segundos / 60)}:${String(capitulo.segundos % 60).padStart(2, '0')}`
+    assert.ok(
+      text.includes(minuto),
+      `capítulo ${minuto} (${capitulo.rotulo}) está na tabela mas não aparece no e-mail — a lista e a tabela divergiram`
+    )
+    assert.ok(
+      text.includes(videoEtiquetasEm(capitulo.segundos)),
+      `o link de ${minuto} não confere com o que a tabela gera`
+    )
+  }
+})

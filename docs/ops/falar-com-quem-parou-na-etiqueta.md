@@ -67,10 +67,32 @@ texto num balão só não é lida.
 > iria para outra pessoa. O robô prefere não enviar a te fazer trabalhar de
 > graça.
 >
-> Uma loja só já resolve e leva uns 5 minutos. Tem uma vídeo-aula mostrando
-> loja por loja: https://youtu.be/6F2AUM88FKk
+> Uma loja só já resolve e leva uns 5 minutos. Tem uma vídeo-aula e eu já te
+> mando o link no minuto certo — qual loja você usa?
+
+**Mensagem 3 — só o link da loja que ela responder**
+
+Mandar os sete links de uma vez vira lista e ninguém abre. Pergunte a loja e
+mande **um** link, já posicionado no segundo:
+
+| Trecho | Link direto |
+|---|---|
+| Shopee — pedir o acesso de afiliada (0:15) | https://youtu.be/6F2AUM88FKk?t=15 |
+| Shopee — copiar a chave (1:43) | https://youtu.be/6F2AUM88FKk?t=103 |
+| Instalar o programinha (3:15) — antes de Amazon e ML | https://youtu.be/6F2AUM88FKk?t=195 |
+| Amazon — código de acesso (4:10) | https://youtu.be/6F2AUM88FKk?t=250 |
+| Mercado Livre — código de acesso (6:11) | https://youtu.be/6F2AUM88FKk?t=371 |
+| Mercado Livre — link da vitrine (8:20) | https://youtu.be/6F2AUM88FKk?t=500 |
+| Magalu — etiqueta de afiliada (9:22) | https://youtu.be/6F2AUM88FKk?t=562 |
+
+> Perfeito! Esse aqui já abre no minuto da {LOJA}: {LINK}
 >
-> Quer que eu te acompanhe por aqui enquanto você faz?
+> Me chama se travar em qualquer tela que eu vejo com você.
+
+Os mesmos carimbos saem de `VIDEO_ETIQUETAS_CAPITULOS` em
+`src/email/layout.js` — se o vídeo for regravado, muda lá e o e-mail se
+ajusta sozinho. Esta tabela é cópia para consulta rápida; o teste
+`test/email-contato-escuta.test.js` garante que o e-mail não divirja da fonte.
 
 ### Se a pessoa sumiu faz tempo (mais de 60 dias)
 
