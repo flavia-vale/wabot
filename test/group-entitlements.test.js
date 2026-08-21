@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { buildEntitledGroupConfig } from '../src/billing/groupEntitlements.js'
+import { resolveGroupImageMode } from '../src/core/imageModePolicy.js'
 
 const groups = [
   { id: 'm-group', role: 'monitor', waJid: 'monitor@g.us', kind: 'group', imageLinkTarget: 'first', blockedKeywords: null, allowedPlatforms: null, forwardMode: 'LINK_ONLY', noLinkScope: null },
@@ -27,7 +28,7 @@ test('buildEntitledGroupConfig removes all channel monitors, posts and targets f
   assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null }])
 })
 
-test('buildEntitledGroupConfig força imageMode=preview no cfg efetivo para qualquer valor persistido (specs/001-image-mode-preview-default, INV-1)', () => {
+test('buildEntitledGroupConfig IGNORA o imageMode persistido e usa o modo global (specs/001-image-mode-preview-default, INV-1)', () => {
   const custom = [
     { id: 'm-default', role: 'monitor', waJid: 'a@g.us', kind: 'group', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
     { id: 'm-fetch', role: 'monitor', waJid: 'b@g.us', kind: 'group', imageMode: 'fetch', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
@@ -44,7 +45,11 @@ test('buildEntitledGroupConfig força imageMode=preview no cfg efetivo para qual
   // persistido em group.imageMode, o cfg efetivo consumido pelo pipeline de
   // envio é sempre 'preview' (defesa em profundidade, FR-001/FR-009).
   for (const jid of ['a@g.us', 'b@g.us', 'c@g.us', 'd@g.us', 'e@g.us', 'f@g.us', 'g@g.us']) {
-    assert.equal(byJid[jid].imageMode, 'preview', `imageMode efetivo deveria ser 'preview' para ${jid}`)
+    // A invariante é o valor persistido ser IGNORADO — o modo em si é global
+    // (resolveGroupImageMode, env GROUP_IMAGE_MODE) e mudou de 'preview' para
+    // 'original' em 2026-08-21; prender o teste à string faria a troca de padrão
+    // parecer regressão.
+    assert.equal(byJid[jid].imageMode, resolveGroupImageMode(), `imageMode efetivo deveria ser o modo global para ${jid}`)
   }
   // fallbackToOriginal segue sempre ligado (rede de segurança preservada, mesmo dormente).
   assert.equal(byJid['b@g.us'].fallbackToOriginal, true)

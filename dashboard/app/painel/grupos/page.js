@@ -315,12 +315,18 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
           </select>
         </CfgRow>
 
-        {/* 2026-07 (specs/001-image-mode-preview-default): o seletor "Imagem da
-            oferta" foi removido da UI — toda oferta sai fixa como "Preview
-            clicável do WhatsApp" (chokepoint em src/billing/groupEntitlements.js
-            força imageMode='preview' em runtime, independente do que estiver
-            persistido em group.imageMode). Ver AGENTS.md para o histórico da
-            decisão. */}
+        {/* O seletor "Imagem da oferta" não aparece para a cliente (2026-07,
+            specs/001-image-mode-preview-default) e o modo é único para todo
+            mundo, resolvido em runtime pelo chokepoint em
+            src/billing/groupEntitlements.js.
+
+            2026-08-21: o padrão do produto passou a ser "a foto que veio na
+            oferta" — o card de preview depende de abrir a página da loja, e
+            loja bloqueando o servidor (Mercado Livre hoje) deixava a oferta sem
+            foto. O modo preview CONTINUA no código, alcançável por
+            GROUP_IMAGE_MODE=preview, para ser investigado e corrigido depois;
+            só não é oferecido na tela. A única escolha de formato que a cliente
+            faz é o botão "Ver canal", logo abaixo. */}
       </CfgSection>
 
       {/* ── Seção 3: Para onde vai ── */}
@@ -577,7 +583,7 @@ export default function GruposPage() {
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <p className="pnl-label" style={{ marginBottom: 6 }}>Botão &quot;Ver canal&quot; ao final das mensagens</p>
             <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              É um ou outro, nunca os dois na mesma mensagem: <strong>sem canal escolhido</strong>, as mensagens saem como o card de link clicável de sempre (preview). <strong>Com canal escolhido</strong>, elas passam a sair como foto do produto + legenda + botão &quot;Ver canal&quot; — o WhatsApp só aceita esse botão em mensagem com imagem, não no card de preview. Se a foto do produto não for encontrada, a mensagem sai do mesmo jeito, só que sem o botão.
+              As ofertas deste grupo saem com a <strong>foto que veio na oferta</strong> + o texto. O botão é a única diferença: <strong>com canal escolhido</strong>, a mensagem leva o botão &quot;Ver canal&quot; no fim; <strong>sem canal</strong>, ela sai igual, só sem o botão. Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão (o WhatsApp só aceita esse botão em mensagem com imagem).
             </p>
             {g.channelButtonJid ? (
               <div style={{ display: 'grid', gap: 8 }}>
@@ -586,11 +592,11 @@ export default function GruposPage() {
                   <div className="pnl-hint" style={{ fontFamily: 'monospace', marginTop: 2 }}>{g.channelButtonJid}</div>
                 </div>
                 <p className="pnl-hint" style={{ marginTop: 0 }}>
-                  Botão ativo: as mensagens deste grupo agora saem como imagem (não mais como card de preview) para poder carregar o botão.
+                  Botão ativo: as mensagens deste grupo saem com a foto da oferta e o botão &quot;Ver canal&quot; no fim.
                 </p>
                 <div className="pnl-toolbar">
                   <button type="button" className="pnl-btn" onClick={() => setChannelButtonGroupId(g.id)}>Trocar canal</button>
-                  <button type="button" className="pnl-btn" onClick={() => handleUpdateGroup(g.id, { channelButtonJid: '', channelButtonName: '' })}>Remover botão (volta pro card de preview)</button>
+                  <button type="button" className="pnl-btn" onClick={() => handleUpdateGroup(g.id, { channelButtonJid: '', channelButtonName: '' })}>Remover botão</button>
                 </div>
               </div>
             ) : (

@@ -9,9 +9,17 @@ import { resolveGroupImageMode, DEFAULT_GROUP_IMAGE_MODE } from '../src/core/ima
 // mensagem" (`original`) é global e por env — não reescreve escolha no banco e
 // volta apagando a linha do `.env`.
 
-test('sem env, o modo continua sendo o histórico (preview)', () => {
-  assert.equal(resolveGroupImageMode({}), 'preview')
-  assert.equal(DEFAULT_GROUP_IMAGE_MODE, 'preview')
+// 2026-08-21: o padrão do produto passou a ser "a foto que veio na oferta"
+// (`original`) — o card de preview depende de abrir a página da loja, e loja
+// bloqueando o servidor deixava a oferta sem foto. `preview` continua no código
+// e alcançável por env, só não é mais o padrão nem aparece na tela da cliente.
+test('sem env, o padrão é a foto que veio na oferta', () => {
+  assert.equal(resolveGroupImageMode({}), 'original')
+  assert.equal(DEFAULT_GROUP_IMAGE_MODE, 'original')
+})
+
+test('o modo preview continua alcançável (não foi removido do código)', () => {
+  assert.equal(resolveGroupImageMode({ GROUP_IMAGE_MODE: 'preview' }), 'preview')
 })
 
 test('a env troca o modo de todos os grupos de uma vez', () => {
@@ -22,9 +30,9 @@ test('a env troca o modo de todos os grupos de uma vez', () => {
 
 test('valor inválido não deixa o pipeline sem modo', () => {
   // `.env` mal preenchido não pode virar oferta sem imagem nem erro de envio.
-  assert.equal(resolveGroupImageMode({ GROUP_IMAGE_MODE: 'qualquer' }), 'preview')
-  assert.equal(resolveGroupImageMode({ GROUP_IMAGE_MODE: '' }), 'preview')
-  assert.equal(resolveGroupImageMode(), 'preview')
+  assert.equal(resolveGroupImageMode({ GROUP_IMAGE_MODE: 'qualquer' }), DEFAULT_GROUP_IMAGE_MODE)
+  assert.equal(resolveGroupImageMode({ GROUP_IMAGE_MODE: '' }), DEFAULT_GROUP_IMAGE_MODE)
+  assert.equal(resolveGroupImageMode(), DEFAULT_GROUP_IMAGE_MODE)
 })
 
 // A invariante do chokepoint não mudou: o valor persistido em `Group.imageMode`
@@ -69,4 +77,15 @@ test('o envio só usa relay quando o escape hatch pede (guarda estrutural)', asy
   const linha = src.split('\n').find(l => l.includes('shouldRelayOriginalMediaForImageMode(imageMode)') && l.includes('const original'))
   assert.ok(linha, 'decisão de mídia original não encontrada')
   assert.match(linha, /!shouldReuploadOriginalMedia\(\)/, 'o caminho de repasse precisa continuar condicionado ao escape hatch')
+})
+
+// A cliente não escolhe formato de imagem: a única escolha de formato na tela é
+// o botão "Ver canal". Guarda para o seletor de preview não voltar à UI por
+// engano (o modo continua no código, só não é oferecido).
+test('a tela de grupos não oferece escolha de imagem/preview para a cliente', () => {
+  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const semComentarios = page.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '')
+  assert.equal(/imageMode/.test(semComentarios), false, 'nenhum controle de imageMode pode aparecer na tela')
+  assert.equal(/card de preview/i.test(semComentarios), false, 'a tela não deve mais falar em card de preview')
+  assert.match(semComentarios, /Ver canal/, 'a escolha do botão "Ver canal" continua na tela')
 })

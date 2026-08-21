@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 import { buildEntitledGroupConfig } from '../src/billing/groupEntitlements.js'
+import { resolveGroupImageMode } from '../src/core/imageModePolicy.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const botWorkerSource = readFileSync(join(__dirname, '../src/bot-worker.js'), 'utf8')
@@ -75,22 +76,22 @@ test('imageMode preview repassa destJid pro buildManualLinkPreview no call site'
 // (forceOriginalForChannelButton) — só assim o botão nativo "Ver canal"
 // (mídia-only, src/core/channelSend.js) tem um corpo de mídia pra anexar.
 // Ver testes dedicados abaixo.
-test('US1: grupo antes em "fetch" sai como preview (chokepoint força imageMode efetivo)', () => {
+test('US1: grupo antes em "fetch" sai no modo global (chokepoint força imageMode efetivo)', () => {
   const groups = [{ id: 'g1', role: 'monitor', waJid: 'fetch@g.us', kind: 'group', imageMode: 'fetch', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
   const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
-  assert.equal(result.groups.monitor[0].imageMode, 'preview')
+  assert.equal(result.groups.monitor[0].imageMode, resolveGroupImageMode())
 })
 
-test('US1: grupo antes em "none" sai como preview (chokepoint força imageMode efetivo)', () => {
+test('US1: grupo antes em "none" sai no modo global (chokepoint força imageMode efetivo)', () => {
   const groups = [{ id: 'g2', role: 'monitor', waJid: 'none@g.us', kind: 'group', imageMode: 'none', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
   const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
-  assert.equal(result.groups.monitor[0].imageMode, 'preview')
+  assert.equal(result.groups.monitor[0].imageMode, resolveGroupImageMode())
 })
 
-test('US1: grupo já em "preview" mantém comportamento idêntico (sem regressão)', () => {
+test('US1: grupo já em "preview" também cai no modo global (sem regressão)', () => {
   const groups = [{ id: 'g3', role: 'monitor', waJid: 'preview@g.us', kind: 'group', imageMode: 'preview', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
   const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
-  assert.equal(result.groups.monitor[0].imageMode, 'preview')
+  assert.equal(result.groups.monitor[0].imageMode, resolveGroupImageMode())
 })
 
 test('US1: getImage() no bot-worker pula o fetch ativo (curto-circuito) para o imageMode efetivo preview, exceto com channelForward', () => {
