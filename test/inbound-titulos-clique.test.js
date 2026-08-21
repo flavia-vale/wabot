@@ -208,3 +208,41 @@ test('fonte única (FR-001): os 10 caminhos de FR-004 não têm title/descriptio
     }
   }
 })
+
+// --- Frente Tier 1 ---------------------------------------------------------
+//
+// `shopee afiliados`, `mercado livre afiliados` e `afiliado amazon` têm 50.000
+// buscas/mês cada e concorrência BAIXA (AGENTS.md, "Dados de mercado para
+// marketing") — é a maior oportunidade aberta do levantamento. A página da
+// Shopee já existe e já entra pelo termo; o que faltava era caber na tela do
+// celular, que traz 62% das impressões com metade do CTR do computador.
+//
+// Estas páginas ficam sob o MESMO teto de 55 das de FR-004: não adianta abrir
+// a frente de maior volume do site e entregar um título cortado.
+const ALVOS_TIER_1 = [
+  {
+    path: '/blog/como-ser-afiliado-shopee-whatsapp',
+    termo: /shopee afiliados/i,
+    fonte: () => blocoChave('dashboard/app/blog/_preservationBlogPosts.js', 'como-ser-afiliado-shopee-whatsapp'),
+  },
+]
+
+test('as páginas da frente Tier 1 cabem em 55 chars e entram pelo termo de maior volume', () => {
+  for (const alvo of ALVOS_TIER_1) {
+    const { title, description } = alvo.fonte()
+    assert.ok(title, `${alvo.path}: não achei o title na fonte`)
+    assert.ok(
+      title.length <= ORCAMENTO_TITULO,
+      `${alvo.path}: título com ${title.length} chars (entregue: "${tituloEntregue(title)}" = ${tituloEntregue(title).length} chars) passa de ${ORCAMENTO_TITULO} — é a frente de maior volume do site, não pode chegar cortada no celular`
+    )
+    assert.match(
+      title,
+      alvo.termo,
+      `${alvo.path}: o título precisa carregar o termo de 50.000 buscas/mês — é ele que abre a frente`
+    )
+    assert.ok(
+      description && description.length <= ORCAMENTO_DESCRICAO,
+      `${alvo.path}: description ausente ou acima de ${ORCAMENTO_DESCRICAO} chars`
+    )
+  }
+})

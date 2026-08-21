@@ -92,3 +92,102 @@ test('os dois e-mails com pergunta configurável rendem o texto que a admin escr
   const pesquisa = await render('contato_pesquisa_rapida', { pergunta: 'o que mais te dá trabalho hoje?' })
   assert.match(pesquisa.text, /o que mais te dá trabalho hoje\?/)
 })
+
+// --- Os dois e-mails de etiqueta tratam situações OPOSTAS -------------------
+//
+// Medido em produção (2026-08): 22 pessoas — 32% de quem não pagou — conectaram
+// o WhatsApp e nunca cadastraram etiqueta de loja nenhuma. Nesse estado o robô
+// se RECUSA a publicar (`skip:no_valid_conversions`, `src/bot-worker.js`), para
+// não dar a comissão da venda ao afiliado do grupo de origem. NADA sai.
+//
+// O e-mail que já existia (`contato_duvida_credenciais`) diz o contrário —
+// "suas ofertas continuam saindo, o link só sai mais comprido" — e está certo
+// para o caso dele: etiqueta cadastrada que venceu, no ML/Amazon, onde o plano
+// B segue publicando. Mandar esse texto para as 22 seria afirmar que as ofertas
+// delas estão saindo quando nenhuma saiu.
+//
+// Mesma lição do texto da Shopee em `credentialExpiry/message.js`: tranquilizar
+// quem está tendo prejuízo é pior do que não escrever.
+
+test('quem nunca cadastrou etiqueta NÃO recebe "suas ofertas continuam saindo"', async () => {
+  const { text } = await render('contato_sem_etiqueta_nada_sai')
+
+  assert.doesNotMatch(
+    text,
+    /continuam? saindo|continua sendo sua|link (só sai )?mais comprido/i,
+    'o texto de "nada sai" não pode tranquilizar como o de etiqueta vencida — para quem nunca cadastrou, nenhuma oferta foi publicada'
+  )
+  assert.match(
+    text,
+    /n[ãa]o publica (nenhuma oferta|nada)/i,
+    'precisa dizer com todas as letras que nada é publicado — é essa informação que falta para a pessoa'
+  )
+  assert.match(
+    text,
+    /de prop[óo]sito|n[ãa]o [ée] defeito/i,
+    'precisa explicar que é decisão do robô, não defeito — sem isso a pessoa continua achando que o produto está quebrado'
+  )
+})
+
+test('o e-mail de etiqueta VENCIDA continua tranquilizando (não inverter os dois)', async () => {
+  const { text } = await render('contato_duvida_credenciais')
+  assert.match(text, /continuam saindo/i, 'para etiqueta vencida no ML/Amazon o plano B segue publicando — este texto tem que continuar dizendo isso')
+  assert.doesNotMatch(text, /n[ãa]o publica (nenhuma oferta|nada)/i, 'este e-mail não é o de "nada sai"')
+})
+
+test('os dois textos de etiqueta não são o mesmo texto', async () => {
+  const vencida = await render('contato_duvida_credenciais')
+  const nunca = await render('contato_sem_etiqueta_nada_sai')
+  assert.notEqual(vencida.text, nunca.text, 'os dois e-mails foram fundidos — são situações opostas')
+  assert.notEqual(vencida.subject, nunca.subject)
+})
+
+test('o e-mail de "nada sai" leva para a tela de cadastrar etiqueta, sem URL colada na mão', async () => {
+  const definicao = getTemplateDefinition('contato_sem_etiqueta_nada_sai')
+  assert.match(definicao.body, /\{\{link_lojas\}\}/, 'usar a variável, não colar a URL — a rota muda e o texto fica quebrado em silêncio')
+
+  const { text } = await render('contato_sem_etiqueta_nada_sai')
+  assert.match(text, /painel\/ids-afiliada/, 'o link renderizado precisa apontar para a tela de etiquetas')
+})
+
+test('o e-mail de "nada sai" leva a pessoa direto ao minuto da loja dela', async () => {
+  // Mandar "assiste o vídeo" e deixar a pessoa procurar o trecho da loja é
+  // onde ela desiste. Cada loja precisa de endereço próprio.
+  const { text } = await render('contato_sem_etiqueta_nada_sai')
+
+  for (const [loja, segundos] of [
+    ['Shopee', 103],
+    ['Amazon', 250],
+    ['Mercado Livre', 371],
+    ['Magalu', 562],
+  ]) {
+    assert.match(
+      text,
+      new RegExp(`\\?t=${segundos}\\b`),
+      `${loja}: falta o link posicionado no segundo ${segundos} — sem ele a pessoa cai no começo do vídeo e procura sozinha`
+    )
+  }
+
+  // O capítulo 3:15 é a instalação de uma extensão cujo nome carrega uma
+  // palavra da lista de jargão proibido. Quem nomeia a ferramenta é o vídeo;
+  // o e-mail só aponta o minuto.
+  assert.match(text, /\?t=195\b/, 'falta o link do passo que precede Amazon e Mercado Livre')
+  assert.doesNotMatch(text, /cookie/i, 'jargão proibido chegou à tela da cliente')
+})
+
+test('os carimbos de tempo do vídeo saem de uma tabela só (minuto e link não podem divergir)', async () => {
+  const { VIDEO_ETIQUETAS_CAPITULOS, videoEtiquetasEm } = await import('../src/email/layout.js')
+  const { text } = await render('contato_sem_etiqueta_nada_sai')
+
+  for (const capitulo of VIDEO_ETIQUETAS_CAPITULOS) {
+    const minuto = `${Math.floor(capitulo.segundos / 60)}:${String(capitulo.segundos % 60).padStart(2, '0')}`
+    assert.ok(
+      text.includes(minuto),
+      `capítulo ${minuto} (${capitulo.rotulo}) está na tabela mas não aparece no e-mail — a lista e a tabela divergiram`
+    )
+    assert.ok(
+      text.includes(videoEtiquetasEm(capitulo.segundos)),
+      `o link de ${minuto} não confere com o que a tabela gera`
+    )
+  }
+})
