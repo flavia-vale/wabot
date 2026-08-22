@@ -1,6 +1,6 @@
 import { JID_KIND } from '../core/jid.js'
 import { canUseChannels } from './plans.js'
-import { resolveGroupImageModeFor } from '../core/imageModePolicy.js'
+import { resolveGroupImageMode } from '../core/imageModePolicy.js'
 
 function isChannelGroup(group) {
   return group?.kind === JID_KIND.CHANNEL
@@ -11,28 +11,16 @@ function toMonitorGroup(group, targetPostJids = []) {
     id: group.id,
     waJid: group.waJid,
     kind: group.kind,
-    // ESCOLHA DE IMAGEM POR GRUPO — de volta na tela em 2026-08-22.
+    // CHOKEPOINT: o valor persistido em `Group.imageMode` é IGNORADO. O modo é
+    // único para todo mundo e vem da env global (`GROUP_IMAGE_MODE`, padrão
+    // `original` = "a foto que veio na oferta").
     //
-    // Histórico curto: em 2026-07 (specs/001-image-mode-preview-default) o
-    // seletor saiu da tela e este chokepoint passou a IGNORAR
-    // `group.imageMode`, forçando um modo único. Em 2026-08-20/21 esse modo
-    // único virou configurável por env (`GROUP_IMAGE_MODE`) porque o Mercado
-    // Livre bloqueou o IP do servidor e o card de preview passou a sair sem
-    // foto — era preciso trocar o formato de todo mundo em minutos.
-    //
-    // O que mudou agora: com a foto do ML vindo pela API e com o plano B em
-    // cascata (core/previewImageFallbackPolicy.js), o card de preview deixou de
-    // depender de UMA fonte de foto só — que era exatamente o motivo de a
-    // escolha ter sido tirada da cliente. Então ela volta, restrita aos DOIS
-    // formatos que mudam o que a pessoa vê no celular (preview/original).
-    //
-    // A invariante de rollback foi PRESERVADA, e essa parte não pode regredir:
-    // `GROUP_IMAGE_MODE_FORCE` continua podendo ignorar a escolha de todo mundo
-    // de uma vez, sem migration e sem redeploy. Toda a precedência vive em
-    // `resolveGroupImageModeFor` (puro/testado); este continua sendo o único
-    // ponto do pipeline de envio que decide o modo — não voltar a ler
-    // `group.imageMode` cru em nenhum outro lugar.
-    imageMode: resolveGroupImageModeFor(group),
+    // A escolha por grupo chegou a voltar à tela em 2026-08-22 e foi retirada
+    // no mesmo dia: com ela ligada em produção apareceu divergência entre o que
+    // o painel mostrava e o que saía no grupo, e a prioridade passou a ser
+    // manter as clientes funcionando. Não reintroduzir a leitura de
+    // `group.imageMode` aqui sem antes fechar aquela investigação.
+    imageMode: resolveGroupImageMode(),
     imageLinkTarget: group.imageLinkTarget ?? 'first',
     fallbackToOriginal: true,
     blockedKeywords: group.blockedKeywords,

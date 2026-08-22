@@ -1,5 +1,5 @@
 import { decryptCredential } from './credentialCrypto.js'
-import { extractSheinAffiliateId } from './converters/shein.js'
+import { extractSheinAffiliateId, normalizeSheinDigits } from './converters/shein.js'
 
 const PLATFORM_LABELS = {
   shopee: 'Shopee',
@@ -106,16 +106,6 @@ function getFormatWarnings(platform, data = {}) {
   return warnings
 }
 
-// T076: remove zero à esquerda (a SHEIN não usa padding no número de
-// afiliada — `0001150365562` e `1150365562` não são a mesma coisa para o
-// parâmetro `url_from` que o conversor monta). Preserva um único "0" caso o
-// texto seja só zeros (caso patológico, cai na recusa de comprimento a
-// seguir de qualquer forma).
-function normalizeSheinDigits(digits) {
-  const stripped = digits.replace(/^0+/, '')
-  return stripped || '0'
-}
-
 // Faixa plausível de comprimento do número de afiliada da SHEIN, depois de
 // normalizado (T076). Os números reais observados na integração têm 10
 // dígitos (ver contracts/credential-shein.md). Não travamos em exatamente 10
@@ -143,7 +133,7 @@ function sheinFormatWarnings(tag) {
     // é um número que não parece ser o de afiliada de verdade.
     if (tag.length < SHEIN_TAG_MIN_DIGITS || tag.length > SHEIN_TAG_MAX_DIGITS) {
       return [
-        'Esse número não parece ser o número de afiliada da SHEIN. Confira se colou o número completo, ' +
+        'Esse número não parece ser o ID de afiliado da SHEIN. Confira se copiou o ID completo, ' +
         'sem espaços ou caracteres a mais — ou copie de novo no painel de afiliada da SHEIN.',
       ]
     }
@@ -152,12 +142,12 @@ function sheinFormatWarnings(tag) {
   if (/GM7|[?&](?:shc|link)=/i.test(tag)) {
     return [
       'Esse link é do botão de compartilhar do aplicativo da SHEIN, e ele não serve para cadastro. ' +
-      'Copie o seu link de afiliada ou o seu número de afiliada no painel de afiliada da SHEIN e cole aqui.',
+      'Copie o seu ID de afiliado (em Minha conta) ou gere um link no Gerador de Link, no painel de afiliada da SHEIN.',
     ]
   }
   return [
     'Não reconhecemos esse texto. Era esperado o seu link de afiliada da SHEIN (o link que você gera no ' +
-    'painel de afiliada) ou apenas o seu número de afiliada.',
+    'painel de afiliada) ou o seu ID de afiliado, que fica no painel em Minha conta.',
   ]
 }
 
@@ -391,7 +381,7 @@ export function sanitizeCredentialBody(platform, body = {}) {
     if (!raw) return { ...body, tag: raw }
     // T076: zero à esquerda não corresponde à conta real (a SHEIN não usa
     // padding) — normaliza antes de validar comprimento/salvar, para
-    // `0001150365562` virar `1150365562` em vez de gerar um identificador que
+    // `0009876543` virar `9876543` em vez de gerar um identificador que
     // nunca vai bater com a conta da cliente.
     if (/^\d+$/.test(raw)) return { ...body, tag: normalizeSheinDigits(raw) }
     try {

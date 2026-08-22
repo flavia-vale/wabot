@@ -248,6 +248,12 @@ COUPON_LINK_CONVERT=true
 # texto de cupom/vitrine E URL sem ASIN/MLB. Produto por short link continua
 # saindo com foto (não regride #1205/#1208).
 COUPON_BRAND_CARD_ENABLED=true
+# Encurta o link da SHEIN (oneLink) via API de afiliado. Default LIGADO (ausente
+# = liga); só o valor exatamente 'false' desliga ('0'/'off'/'no' não têm efeito).
+# Desligar não para nenhuma oferta — só volta a publicar o link longo da SHEIN.
+# Aplicar exige pm2 delete + start (pegadinha #1). Ver seção "SHEIN: encurtamento
+# de link".
+# SHEIN_SHORTLINK_ENABLED=false
 ```
 
 ### `~/wabot-staging/dashboard/.env.local`
@@ -282,6 +288,12 @@ COUPON_LINK_CONVERT=true
 # Banner de marca "CUPOM + loja" no card de preview (specs/008-coupon-brand-banner).
 # Permanece AUSENTE/OFF em produção até validação explícita em staging (US1/US2/US3
 # completas, blindagem tripla contra #1205/#1208 confirmada). Não setar aqui sem OK.
+# Encurta o link da SHEIN (oneLink) via API de afiliado. Default LIGADO (ausente
+# = liga); só o valor exatamente 'false' desliga ('0'/'off'/'no' não têm efeito).
+# Desligar não para nenhuma oferta — só volta a publicar o link longo da SHEIN.
+# Aplicar exige pm2 delete + start (pegadinha #1). Ver seção "SHEIN: encurtamento
+# de link".
+# SHEIN_SHORTLINK_ENABLED=false
 ```
 
 ### `~/wabot/dashboard/.env.local`
@@ -2070,6 +2082,34 @@ por grupo, num JSON com data e motivo. Rodar ANTES de trocar.
 não pode voltar a ler `group.imageMode`; o que ele lê é o modo global. Teste:
 `test/image-mode-policy.test.js`.
 
+## A escolha do formato foi RETIRADA da tela de novo (2026-08-22, fim do dia)
+
+Voltou e saiu no mesmo dia. Com a escolha por grupo ligada em produção, apareceu
+**divergência entre o que o painel mostrava e o que saía no grupo** (grupo com
+"Card que abre a loja" selecionado recebendo foto original), e não havia
+orçamento para investigar a fundo com clientes no ar.
+
+**Estado atual, e é o que vale:**
+
+- o modo é **único para todo mundo** e vem só da env global
+  (`resolveGroupImageMode`, `GROUP_IMAGE_MODE`, padrão `original` = "a foto que
+  veio na oferta");
+- o chokepoint `toMonitorGroup` (`src/billing/groupEntitlements.js`) **ignora**
+  `Group.imageMode` de novo;
+- a tela **não** oferece escolha de formato. A única escolha de formato que a
+  cliente faz é o botão "Ver canal";
+- `Group.imageMode` continua na coluna e aceito pela rota, **dormente**.
+
+**Não reintroduzir a escolha por grupo sem antes fechar a investigação de
+22/08.** Guardas em `test/image-mode-policy.test.js` falham se o seletor voltar
+à tela ou se o chokepoint voltar a ler o campo persistido.
+
+**Investigação em aberto (retomar com orçamento):** por que, com a escolha
+ligada, o formato que saía não batia com o selecionado no painel. Suspeita não
+verificada: o memo de `getImage` é por MENSAGEM e `buildPayload` roda por
+DESTINO, então o primeiro destino a sair pode fixar o resultado para os demais.
+Nada disso foi comprovado.
+
 ## A escolha do formato VOLTOU para a tela da cliente (2026-08-22)
 
 Por grupo monitorado, em "Como a oferta aparece":
@@ -2532,6 +2572,35 @@ comissão).
 (1) o ML credita cupom de algum jeito? **Validar clicando no link num celular
 ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
 `test/converters-amazon.test.js`.
+
+## SHEIN: encurtamento de link (`SHEIN_SHORTLINK_ENABLED`, default LIGADO)
+
+`shortenSheinLink()` (`src/converters/shein.js`) troca o link longo da SHEIN
+pelo `oneLink` curto da própria loja, seguindo o mesmo padrão de kill-switch
+dos outros interruptores de rollout desta seção (`COUPON_LINK_CONVERT`,
+`COUPON_BRAND_CARD_ENABLED`, `WA_IGNORE_UNMONITORED_GROUPS`,
+`BADSESSION_KEEP_ESTABLISHED_AUTH`, `PREVIEW_CARD_HIDE_STORE_TITLE`): env
+única, sem redeploy para desligar.
+
+- **Default é LIGADO.** Só o valor **exatamente** `'false'` desliga —
+  `'0'`, `'off'`, `'no'` etc. **não têm efeito nenhum** (a leitura é
+  `String(process.env.SHEIN_SHORTLINK_ENABLED ?? 'true') === 'false'`).
+- **Desligar não para nenhuma oferta de sair.** `shortenSheinLink()` some
+  logo no topo (antes de tocar cookie/rede) e devolve `null`; `convert()`
+  cai no comportamento de sempre — publica o link **longo** da SHEIN com a
+  identidade da cliente aplicada. É a única alavanca de rollback deste
+  encurtamento sem precisar reverter código/deploy.
+- **Aplicar a env exige `pm2 delete` + `start`**, não `restart --update-env`
+  (pegadinha #1 — PM2 cacheia env no `pm2 start`).
+- **Guarda de publicação (T090, não regredir):** o `oneLink` devolvido pela
+  SHEIN é validado ANTES de publicar — precisa ser string, URL absoluta
+  `http(s)` e host aprovado por `isSheinHost` (mesmo princípio do RCA "o
+  endereço montado por nós NUNCA pode ser publicado", seção do Mercado
+  Livre). Reprovação devolve `null` e cai no link longo; nunca publica
+  domínio de fora, caminho relativo ou `[object Object]`. Um `oneLink`
+  legítimo (inclusive com parâmetros próprios da SHEIN, ex.: `?ismg_ol=...`)
+  continua saindo **exatamente como veio**, sem reescrever nem remover
+  parâmetro. Teste: `test/shein-shortlink.test.js`.
 
 ## Amazon: a tag PRECISA estar dentro da `longUrl` mandada ao SiteStripe (RCA 2026-07 — não regredir)
 

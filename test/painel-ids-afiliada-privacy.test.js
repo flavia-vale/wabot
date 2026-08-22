@@ -18,21 +18,34 @@ test('as lojas que pedem código de acesso marcam esses campos como cookieField'
   const amazonCookieFields = platform('amazon').fields.filter((f) => f.cookieField).map((f) => f.key)
   assert.deepEqual(amazonCookieFields, ['cookie', 'ubid-acbbr', 'at-acbbr', 'x-acbbr'])
 
-  // Shopee/Magalu/SHEIN não usam código de acesso da conta.
+  // Shopee/Magalu não usam código de acesso da conta. SHEIN passou a
+  // aceitar um código de acesso OPCIONAL a partir do Phase 16
+  // (specs/012-shein-store-support) — só para encurtar o link; o cadastro
+  // funciona igual sem ele.
   assert.equal(platform('shopee').fields.some((f) => f.cookieField), false)
   assert.equal(platform('magazineluiza').fields.some((f) => f.cookieField), false)
-  assert.equal(platform('shein').fields.some((f) => f.cookieField), false)
+  const sheinCookieFields = platform('shein').fields.filter((f) => f.cookieField).map((f) => f.key)
+  assert.deepEqual(sheinCookieFields, ['cookie'])
 })
 
-test('a entrada shein não reintroduz modo sem cookie nem campo de sessão', () => {
+test('a entrada shein não reintroduz o modo sem cookie do ML — o código de acesso dela é opcional por natureza, não uma flag de opt-out', () => {
   const shein = platform('shein')
   assert.equal(shein.supportsCookielessMode, undefined)
   assert.equal(shein.cookielessNote, undefined)
-  // Único campo, sem sensitive/cookieField — é um identificador permanente,
-  // não um código de acesso que expira (specs/012-shein-store-support D-009).
-  assert.deepEqual(shein.fields.map((f) => f.key), ['tag'])
-  assert.equal(shein.fields[0].cookieField, undefined)
-  assert.equal(shein.fields[0].sensitive, undefined)
+
+  // T080 (Phase 16): `tag` continua o único campo OBRIGATÓRIO — é o
+  // identificador permanente de afiliada (specs/012-shein-store-support
+  // D-009). O `cookie` é um campo novo, explicitamente opcional
+  // (`required: false`), que só existe para encurtar o link — sem ele o
+  // cadastro segue completo e a oferta sai igual (link mais comprido).
+  assert.deepEqual(shein.fields.map((f) => f.key), ['tag', 'cookie'])
+  assert.equal(shein.fields[0].key, 'tag')
+  assert.equal(shein.fields[0].required, undefined) // obrigatório por omissão, igual sempre foi
+
+  const cookieField = shein.fields.find((f) => f.key === 'cookie')
+  assert.equal(cookieField.required, false)
+  assert.equal(cookieField.sensitive, true)
+  assert.equal(cookieField.cookieField, true)
 })
 
 test('o código de acesso do ML continua obrigatório — não existe opção de ficar sem', () => {

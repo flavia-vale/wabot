@@ -273,3 +273,75 @@ test('T029: buildScrapedOffer com fetchProductInfo REAL persiste o refresh_token
   assert.notEqual(patched.patch.oauthRefreshToken, 'old-refresh-token')
   assert.equal(patched.patch.oauthAccessToken, 'new-access-token')
 })
+
+// ---------------------------------------------------------------------------
+// T087 — buildScrapedOffer liga `shorten: false` no convertLink quando
+// keepOriginalLink=true (o link convertido é descartado; encurtar ali seria
+// 2 idas à rede à toa dentro do request síncrono do painel "Criar oferta").
+// ---------------------------------------------------------------------------
+
+test('buildScrapedOffer: passa shorten:false para convertLink quando keepOriginalLink=true', async () => {
+  const original = 'https://br.shein.com/vestido-floral-p-485735309.html'
+  let receivedOptions
+  await buildScrapedOffer({
+    url: original,
+    platform: 'shein',
+    credentialsMap: { shein: { tag: '1234567890', cookie: 'algum-cookie=valor' } },
+    keepOriginalLink: true,
+    convertLink: async (_platform, _url, _creds, options) => {
+      receivedOptions = options
+      return { url: original }
+    },
+    fetchProductInfo: async (url) => ({ title: 'Vestido', oldPrice: '', newPrice: '99', finalUrl: url }),
+  })
+
+  assert.deepEqual(receivedOptions, { shorten: false })
+})
+
+test('buildScrapedOffer: passa shorten:true (default) para convertLink quando keepOriginalLink=false — bot-worker não muda', async () => {
+  const original = 'https://br.shein.com/vestido-floral-p-485735309.html'
+  let receivedOptions
+  await buildScrapedOffer({
+    url: original,
+    platform: 'shein',
+    credentialsMap: { shein: { tag: '1234567890', cookie: 'algum-cookie=valor' } },
+    keepOriginalLink: false,
+    convertLink: async (_platform, _url, _creds, options) => {
+      receivedOptions = options
+      return { url: original }
+    },
+    fetchProductInfo: async (url) => ({ title: 'Vestido', oldPrice: '', newPrice: '99', finalUrl: url }),
+  })
+
+  assert.deepEqual(receivedOptions, { shorten: true })
+})
+
+test('buildScrapedOffer: keepOriginalLink=true com SHEIN e cookie cadastrado não chama o gerador de link curto (convertLink real)', async () => {
+  const { convertLink: realConvertLink } = await import('../src/converters/index.js')
+  const original = 'https://br.shein.com/vestido-floral-p-485735309.html'
+  let shortenerCalled = false
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('getSiteInfo') || String(url).includes('share/link/from/url')) {
+      shortenerCalled = true
+    }
+    throw new Error('T087: nenhuma chamada de rede deveria ocorrer no caminho descartado')
+  }
+  try {
+    const offer = await buildScrapedOffer({
+      url: original,
+      platform: 'shein',
+      credentialsMap: { shein: { tag: '1234567890', cookie: 'algum-cookie=valor' } },
+      keepOriginalLink: true,
+      convertLink: realConvertLink,
+      fetchProductInfo: async (url) => ({ title: 'Vestido', oldPrice: '', newPrice: '99', finalUrl: url }),
+    })
+    assert.equal(shortenerCalled, false, 'com keepOriginalLink=true o encurtador da SHEIN não deveria ser chamado')
+    // Sem slug perdido: displayUrl continua sendo o link original colado,
+    // que preserva o `-p-<id>.html` usado pelo fallback de título.
+    assert.equal(offer.displayUrl, original)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

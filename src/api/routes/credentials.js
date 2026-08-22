@@ -194,8 +194,8 @@ export async function credentialsRoutes(app, opts = {}) {
     if (validation.missing.length) {
       const error = sheinLinkResolutionFailed
         ? 'Não deu para conferir esse link agora (pode ser instabilidade da internet ou da SHEIN). ' +
-          'Tente colar o link de novo em instantes, ou cole aqui apenas o seu número de afiliada — ele fica ' +
-          'visível na mesma tela onde você gera o link.'
+          'Tente colar o link de novo em instantes, ou cole aqui apenas o seu ID de afiliado — ele fica ' +
+          'no painel de afiliada da SHEIN, em Minha conta.'
         : getCredentialSaveMessage(validation)
       return reply.code(400).send({
         error,

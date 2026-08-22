@@ -302,6 +302,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
             ? 'O template usa esse link para buscar título, preço e imagem do produto principal.'
             : 'Útil em ofertas espelhadas com vários links: todos continuam no texto, mas a imagem/dados principais seguem esta escolha.'}
           extra="cfg-fadeup"
+          last
         >
           <select
             className="pnl-input"
@@ -314,30 +315,14 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
           </select>
         </CfgRow>
 
-        <CfgRow
-          label="Como a oferta aparece"
-          info={<>
-            <strong>Card que abre a loja:</strong> a mensagem sai como texto + um card grande com a foto. Quem tocar no card vai direto para a página do produto.<br />
-            <strong>Foto da oferta:</strong> a mensagem sai como foto + texto. Quem tocar na foto só amplia a foto — para ir à loja precisa tocar no link dentro do texto.<br />
-            Nos dois casos, se a loja não devolver a foto do produto, o robô usa a foto que veio na oferta de origem.
-          </>}
-          hint={g.channelButtonJid
-            ? 'Este grupo tem o botão "Ver canal" ligado, e o botão só funciona em mensagem com foto — enquanto ele estiver ligado, as ofertas saem como foto da oferta.'
-            : 'Vale só para este grupo. Você pode mudar quando quiser.'}
-          extra="cfg-fadeup"
-          last
-        >
-          <select
-            className="pnl-input"
-            value={g.imageMode === 'original' ? 'original' : 'preview'}
-            disabled={Boolean(g.channelButtonJid)}
-            onChange={(e) => onUpdate(g.id, { imageMode: e.target.value })}
-          >
-            <option value="preview">Card que abre a loja</option>
-            <option value="original">Foto da oferta</option>
-          </select>
-        </CfgRow>
-
+        {/* 2026-08-22: o seletor "Como a oferta aparece" foi REMOVIDO da tela no
+            mesmo dia em que voltou. Com a escolha ligada em produção apareceu
+            divergência entre o que o painel mostrava e o que saía no grupo, e a
+            prioridade passou a ser manter as clientes funcionando. Toda oferta
+            sai com a FOTO QUE VEIO NA OFERTA; o modo é único e vem da env
+            global (chokepoint em src/billing/groupEntitlements.js). A única
+            escolha de formato que a cliente faz é o botão "Ver canal", abaixo.
+            Não reintroduzir sem antes fechar aquela investigação. */}
       </CfgSection>
 
       {/* ── Seção 3: Para onde vai ── */}
@@ -594,7 +579,7 @@ export default function GruposPage() {
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <p className="pnl-label" style={{ marginBottom: 6 }}>Botão &quot;Ver canal&quot; ao final das mensagens</p>
             <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              O WhatsApp só aceita esse botão em mensagem com foto. Por isso, <strong>com um canal escolhido</strong> as ofertas deste grupo passam a sair como <strong>foto + texto</strong>, e a escolha de &quot;Como a oferta aparece&quot; (lá em cima) fica travada enquanto o botão estiver ligado. <strong>Sem canal</strong>, vale o que você escolheu lá. Se não houver foto nenhuma disponível, a mensagem sai mesmo assim — só sem imagem e sem o botão.
+              As ofertas deste grupo saem com a <strong>foto que veio na oferta</strong> + o texto. O botão é a única diferença: <strong>com canal escolhido</strong>, a mensagem leva o botão &quot;Ver canal&quot; no fim; <strong>sem canal</strong>, ela sai igual, só sem o botão. Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão (o WhatsApp só aceita esse botão em mensagem com imagem).
             </p>
             {g.channelButtonJid ? (
               <div style={{ display: 'grid', gap: 8 }}>
@@ -603,7 +588,7 @@ export default function GruposPage() {
                   <div className="pnl-hint" style={{ fontFamily: 'monospace', marginTop: 2 }}>{g.channelButtonJid}</div>
                 </div>
                 <p className="pnl-hint" style={{ marginTop: 0 }}>
-                  Botão ativo: as mensagens deste grupo saem com a foto da oferta e o botão &quot;Ver canal&quot; no fim. Para voltar a escolher o formato, remova o botão.
+                  Botão ativo: as mensagens deste grupo saem com a foto da oferta e o botão &quot;Ver canal&quot; no fim.
                 </p>
                 <div className="pnl-toolbar">
                   <button type="button" className="pnl-btn" onClick={() => setChannelButtonGroupId(g.id)}>Trocar canal</button>
