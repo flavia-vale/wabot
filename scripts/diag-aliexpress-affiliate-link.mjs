@@ -11,14 +11,25 @@
 // comissão perdida em silêncio.
 //
 // Uso:
-//   node scripts/diag-aliexpress-affiliate-link.mjs '<link que chegou no grupo>' \
+//   node scripts/diag-aliexpress-affiliate-link.mjs '<SEU link de afiliada>' \
+//     ['<link de OUTRO afiliado, do tipo que chega no grupo>'] \
 //     [--app-key=... --app-secret=... --tracking-id=...]
 //
-//   As credenciais também podem vir do ambiente:
+//   As credenciais da API (quando existirem) também podem vir do ambiente:
 //     ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_TRACKING_ID
 //
 // Ex.:
-//   node scripts/diag-aliexpress-affiliate-link.mjs 'https://s.click.aliexpress.com/e/_oABC123'
+//   node scripts/diag-aliexpress-affiliate-link.mjs 'https://s.click.aliexpress.com/e/_oSEULINK' \
+//     'https://s.click.aliexpress.com/e/_oLINKDOUTRO'
+//
+// Há DOIS caminhos possíveis de conversão, e o script mede os dois:
+//   A) API oficial (`aliexpress.affiliate.link.generate`) — o caminho forte, do
+//      mesmo formato da Shopee. Exige acesso à API liberado no painel de
+//      afiliada; sem isso, esta parte é pulada.
+//   B) Transplante de identidade — pegar o que identifica a cliente no link
+//      dela e aplicar no endereço do produto do outro afiliado, como é feito
+//      hoje na SHEIN e no Magalu. NÃO É PROVADO: é justamente a hipótese que o
+//      clique no celular (seção 5) decide.
 //
 // O script é READ-ONLY: não toca no banco, não envia mensagem, não grava nada.
 // Ele resolve o link, mostra quem ganha a comissão hoje, tenta montar o link
@@ -55,8 +66,11 @@ const AE_FALLBACK_LANDING_RE = /^https?:\/\/(?:[a-z0-9-]+\.)*best\.aliexpress\.[
 // Parâmetros que aparecem num link de afiliado do AliExpress. Os de IDENTIDADE
 // são os candidatos a carregar o crédito da comissão; os demais são rastro da
 // sessão de quem gerou o link.
-const IDENTITY_PARAMS = ['aff_fcid', 'aff_short_key', 'aff_trace_key', 'sk', 'af', 'cv', 'cn', 'dp']
-const SESSION_PARAMS = ['aff_platform', 'aff_fsk', 'terminal_id', 'tt', 'shareId', 'businessType', 'templateId', 'spreadType']
+// `aff_trace_key` e `terminal_id` NÃO entram aqui de propósito: eles marcam o
+// clique/dispositivo que gerou o link, não a afiliada. Transplantá-los seria
+// copiar rastro de sessão sem ganho nenhum de comissão.
+const IDENTITY_PARAMS = ['aff_fcid', 'aff_short_key', 'sk', 'af', 'cv', 'cn', 'dp']
+const SESSION_PARAMS = ['aff_platform', 'aff_fsk', 'aff_trace_key', 'terminal_id', 'tt', 'shareId', 'businessType', 'templateId', 'spreadType']
 
 const BROWSER_UA =
   'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36'
@@ -293,6 +307,49 @@ async function generateOfficialLink(sourceUrl, { appKey, appSecret, trackingId }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Caminho B — transplante de identidade (hipótese, NÃO provada)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Rastro da SESSÃO de quem gerou o link: nunca é copiado para o link novo.
+// (`aff_trace_key` e `terminal_id` identificam o clique/dispositivo de origem,
+// não a afiliada; `afSmartRedirect` é comportamento de página.)
+const SESSION_ONLY_PARAMS = ['aff_trace_key', 'terminal_id', 'afSmartRedirect', 'tt', 'shareId', 'spreadType', 'templateId', 'businessType']
+
+// Remove de uma URL do AliExpress tudo que identifica um afiliado ou a sessão
+// dele, preservando o caminho e os parâmetros que descrevem o DESTINO (sem eles
+// a página não sabe qual produto abrir). Pura e idempotente.
+export function stripAliexpressAffiliateTracking(url) {
+  try {
+    const u = new URL(String(url))
+    const remove = new Set([...IDENTITY_PARAMS, ...SESSION_PARAMS, ...SESSION_ONLY_PARAMS].map((k) => k.toLowerCase()))
+    for (const key of [...u.searchParams.keys()]) {
+      if (remove.has(key.toLowerCase()) || /^utm_/i.test(key)) u.searchParams.delete(key)
+    }
+    // Fragmento também pode carregar identificador escondido — some.
+    u.hash = ''
+    return u.toString()
+  } catch {
+    return String(url)
+  }
+}
+
+// Monta o link da cliente pelo caminho B: endereço do produto do OUTRO
+// afiliado, limpo, recebendo só o que identifica ELA no link dela.
+// Devolve `null` quando não dá para montar com segurança.
+function buildTransplantedLink(productUrl, myIdentityParams) {
+  if (!extractItemId(productUrl)) return null
+  const mine = Object.entries(myIdentityParams).filter(([key]) => IDENTITY_PARAMS.includes(key))
+  if (mine.length === 0) return null
+  try {
+    const u = new URL(stripAliexpressAffiliateTracking(productUrl))
+    for (const [key, value] of mine) u.searchParams.set(key, value)
+    return u.toString()
+  } catch {
+    return null
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Saída
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -310,18 +367,51 @@ function parseArgs(argv) {
   return out
 }
 
+function printHops(hops) {
+  for (const [i, hop] of hops.entries()) {
+    console.log(`   ${i + 1}. [${hop.status}] ${hop.url}`)
+    if (hop.note) console.log(`      ↳ ${hop.note}`)
+  }
+}
+
+function describeDestination(finalUrl) {
+  if (isFallbackLanding(finalUrl)) {
+    console.log('\n   ✘ A cadeia terminou na vitrine genérica do AliExpress.')
+    console.log('     Isso quer dizer que o link curto está morto/expirado — NÃO é cupom.')
+    console.log('     Em produção, esse caso precisa virar falha honesta (nada publicado).')
+    return null
+  }
+  const itemId = extractItemId(finalUrl)
+  if (itemId) console.log(`   Produto identificado: ${itemId}`)
+  else console.log('   ⚠ Nenhum código de produto na URL final (pode ser cupom/campanha/vitrine).')
+  return itemId
+}
+
+function printAffiliateParams(params, { emptyHint }) {
+  if (Object.keys(params).length === 0) {
+    console.log(`   ⚠ Nenhum parâmetro de afiliado encontrado. ${emptyHint}`)
+    return
+  }
+  for (const [key, value] of Object.entries(params)) {
+    const isIdentity = IDENTITY_PARAMS.includes(key)
+    console.log(`   ${isIdentity ? '✔' : '·'} ${key} = ${value}`)
+  }
+  console.log('\n   (✔ = provável identificador do afiliado; · = rastro da sessão de quem gerou)')
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const inputUrl = args.positional[0]
+  const myLink = args.positional[0]
+  const otherLink = args.positional[1]
 
   const appKey = args['app-key'] || process.env.ALIEXPRESS_APP_KEY || ''
   const appSecret = args['app-secret'] || process.env.ALIEXPRESS_APP_SECRET || ''
   const trackingId = args['tracking-id'] || process.env.ALIEXPRESS_TRACKING_ID || ''
 
-  if (!inputUrl) {
-    console.error('Falta o link do AliExpress para diagnosticar.\n')
-    console.error("Uso: node scripts/diag-aliexpress-affiliate-link.mjs '<link>' \\")
-    console.error('       [--app-key=... --app-secret=... --tracking-id=...]')
+  if (!myLink) {
+    console.error('Falta o SEU link de afiliada do AliExpress.\n')
+    console.error("Uso: node scripts/diag-aliexpress-affiliate-link.mjs '<seu link>' \\")
+    console.error("       ['<link de outro afiliado>'] [--app-key=... --app-secret=... --tracking-id=...]")
     process.exitCode = 1
     return
   }
@@ -330,59 +420,50 @@ async function main() {
   console.log('TESTE DE COMISSÃO DO ALIEXPRESS — read-only, nada é enviado nem gravado')
   console.log(line('═'))
 
-  console.log('\n1) RESOLVENDO O LINK QUE CHEGOU\n')
-  if (!isShortLink(inputUrl) && !extractItemId(inputUrl)) {
-    console.log('   (não é link curto conhecido nem tem produto na URL — resolvendo assim mesmo)')
-  }
-  const { finalUrl, hops } = await resolveChain(inputUrl)
-  for (const [i, hop] of hops.entries()) {
-    console.log(`   ${i + 1}. [${hop.status}] ${hop.url}`)
-    if (hop.note) console.log(`      ↳ ${hop.note}`)
-  }
-  console.log(`\n   Chegou em: ${finalUrl}`)
+  console.log('\n1) RESOLVENDO O SEU LINK DE AFILIADA\n')
+  const mine = await resolveChain(myLink)
+  printHops(mine.hops)
+  console.log(`\n   Chegou em: ${mine.finalUrl}`)
+  const myItemId = describeDestination(mine.finalUrl)
 
-  const itemId = extractItemId(finalUrl)
-  if (isFallbackLanding(finalUrl)) {
-    console.log('\n   ✘ A cadeia terminou na vitrine genérica do AliExpress.')
-    console.log('     Isso quer dizer que o link curto está morto/expirado — NÃO é cupom.')
-    console.log('     Em produção, esse caso precisa virar falha honesta (nada publicado).')
-  } else if (itemId) {
-    console.log(`   Produto identificado: ${itemId}`)
-  } else {
-    console.log('   ⚠ Nenhum código de produto na URL final (pode ser cupom/campanha/vitrine).')
-  }
+  console.log('\n2) O QUE IDENTIFICA VOCÊ NESSE LINK\n')
+  const myParams = readAffiliateParams(mine.finalUrl)
+  printAffiliateParams(myParams, {
+    emptyHint: 'A atribuição pode estar só no cookie do redirecionamento — nesse caso a URL sozinha não carrega o crédito, e o único caminho é a API oficial.',
+  })
 
-  console.log('\n2) QUEM GANHA A COMISSÃO HOJE NESSE LINK\n')
-  const originParams = readAffiliateParams(finalUrl)
-  if (Object.keys(originParams).length === 0) {
-    console.log('   ⚠ Nenhum parâmetro de afiliado encontrado na URL final.')
-    console.log('     Ou o link não é de afiliado, ou a atribuição ficou só no cookie')
-    console.log('     do redirecionamento — nesse caso a URL sozinha não carrega o crédito.')
-  } else {
-    for (const [key, value] of Object.entries(originParams)) {
-      const isIdentity = IDENTITY_PARAMS.includes(key)
-      console.log(`   ${isIdentity ? '✔' : '·'} ${key} = ${value}`)
-    }
-    console.log('\n   (✔ = provável identificador do afiliado; · = rastro da sessão de quem gerou)')
+  let productUrl = null
+  let otherParams = {}
+  if (otherLink) {
+    console.log('\n3) RESOLVENDO O LINK DO OUTRO AFILIADO (o caso real do grupo)\n')
+    const other = await resolveChain(otherLink)
+    printHops(other.hops)
+    console.log(`\n   Chegou em: ${other.finalUrl}`)
+    describeDestination(other.finalUrl)
+    otherParams = readAffiliateParams(other.finalUrl)
+    console.log('\n   Quem ganha a comissão HOJE nesse link:')
+    printAffiliateParams(otherParams, { emptyHint: 'Nada na URL — a atribuição dele pode estar no cookie.' })
+    productUrl = other.finalUrl
+  } else if (myItemId) {
+    productUrl = mine.finalUrl
   }
 
-  console.log('\n3) MONTANDO O LINK DA CLIENTE PELA API OFICIAL\n')
+  console.log('\n4) MONTANDO O LINK DA CLIENTE\n')
+
+  console.log('   CAMINHO A — API oficial de afiliados (o caminho forte)\n')
+  let apiLink = null
   if (!appKey || !appSecret || !trackingId) {
-    console.log('   ⚠ Sem credenciais — pulando.')
-    console.log('     Passe --app-key, --app-secret e --tracking-id (ou as variáveis')
-    console.log('     ALIEXPRESS_APP_KEY / ALIEXPRESS_APP_SECRET / ALIEXPRESS_TRACKING_ID)')
-    console.log('     para o script chamar a API de verdade e mostrar o link gerado.')
-    console.log('\n     Onde pegar: portals.aliexpress.com → Ferramentas → API (chave e')
-    console.log('     segredo do aplicativo) e Conta → Tracking ID.')
+    console.log('   ⚠ Sem credenciais de API — pulando.')
+    console.log('     Onde pegar: portals.aliexpress.com → Ferramentas → API (chave e segredo)')
+    console.log('     e Conta → Tracking ID. Se o acesso à API ainda não foi liberado, é preciso')
+    console.log('     solicitar por lá (Apply Now) e esperar a aprovação.')
+  } else if (!productUrl) {
+    console.log('   ⚠ Sem um endereço de produto para enviar à API — passe o link do outro')
+    console.log('     afiliado como 2º argumento.')
   } else {
-    // A URL mandada para a API é a do produto SEM o rastro do terceiro: o
-    // objetivo é a API assinar um link novo, não reetiquetar o link dele.
-    let sourceUrl = finalUrl
-    if (itemId) sourceUrl = `https://www.aliexpress.com/item/${itemId}.html`
-
+    const itemId = extractItemId(productUrl)
+    const sourceUrl = itemId ? `https://www.aliexpress.com/item/${itemId}.html` : stripAliexpressAffiliateTracking(productUrl)
     console.log(`   Origem enviada à API: ${sourceUrl}`)
-
-    let success = null
     for (const withPath of [false, true]) {
       const label = withPath ? 'com /sync na base' : 'sem /sync na base'
       let out
@@ -393,50 +474,56 @@ async function main() {
       }
       if (out.ok) {
         console.log(`   ✔ assinatura ${label} — ACEITA`)
-        success = out
+        apiLink = out.link
         break
       }
       console.log(`   ✘ assinatura ${label} — ${out.error}`)
     }
+    if (apiLink) console.log(`\n   LINK GERADO PELA API: ${apiLink}`)
+    else console.log('\n   Nenhuma das duas convenções de assinatura foi aceita (ver mensagem acima).')
+  }
 
-    if (success) {
-      console.log('\n   LINK MONTADO PELA API (é este que precisa ser provado no celular):')
-      console.log(`   ${success.link}`)
-
-      const leaked = IDENTITY_PARAMS
-        .filter((key) => originParams[key])
-        .filter((key) => String(success.link).includes(originParams[key]))
-      console.log('\n   Conferência de segurança:')
-      if (leaked.length === 0) {
-        console.log('   ✔ nenhum identificador do outro afiliado sobrou no link novo')
-      } else {
-        console.log(`   ✘ VAZOU identificador do outro afiliado: ${leaked.join(', ')}`)
-        console.log('     Não use esse link — a comissão iria para ele.')
+  console.log('\n   CAMINHO B — transplante de identidade (HIPÓTESE, não provada)\n')
+  let transplanted = null
+  if (!productUrl) {
+    console.log('   ⚠ Sem endereço de produto — passe o link do outro afiliado como 2º argumento.')
+  } else {
+    transplanted = buildTransplantedLink(productUrl, myParams)
+    if (!transplanted) {
+      console.log('   ✘ NÃO DÁ PARA MONTAR ESSE LINK COM SEGURANÇA.')
+      if (!extractItemId(productUrl)) console.log('     Falta o código do produto na URL final.')
+      if (Object.keys(myParams).filter((k) => IDENTITY_PARAMS.includes(k)).length === 0) {
+        console.log('     Não há nada na URL do seu link que identifique você — sem isso, só a API.')
       }
     } else {
-      console.log('\n   Nenhuma das duas convenções de assinatura foi aceita.')
-      console.log('   Se o erro foi de credencial (chave/segredo/tracking), confira os dados.')
-      console.log('   Se foi de assinatura, é a convenção da base que precisa ser ajustada —')
-      console.log('   e é exatamente por isso que este teste roda ANTES de escrever o conversor.')
+      console.log(`   ${transplanted}`)
     }
   }
 
-  console.log('\n4) O QUE ISSO JÁ DECIDE\n')
-  console.log('   • API respondeu com link → a conversão pode ser feita como na Shopee')
-  console.log('     (chave + segredo + tracking cadastrados pela cliente, link assinado).')
-  console.log('   • API recusou por credencial → a cliente precisa liberar o acesso à API')
-  console.log('     no painel de afiliada dela antes de qualquer implementação.')
-  console.log('   • Vitrine genérica no fim da cadeia → link morto; nunca publicar.')
+  const candidates = [['A (API)', apiLink], ['B (transplante)', transplanted]].filter(([, v]) => v)
+  if (candidates.length && Object.keys(otherParams).length) {
+    console.log('\n   Conferência de segurança (invariante do produto: link de terceiro nunca sai):')
+    for (const [label, link] of candidates) {
+      // Confere TODOS os parâmetros do terceiro (identidade E sessão): a
+      // invariante é que nada dele sobrevive, nem em pedaço.
+      const leaked = Object.keys(otherParams)
+        .filter((key) => String(link).includes(otherParams[key]))
+      if (leaked.length === 0) console.log(`   ✔ ${label}: nenhum identificador do outro afiliado sobrou`)
+      else console.log(`   ✘ ${label}: VAZOU ${leaked.join(', ')} — não use esse link, a comissão iria para ele`)
+    }
+  }
 
-  console.log('\n5) COMO CONCLUIR O TESTE (só a cliente pode fazer)\n')
+  console.log('\n5) COMO CONCLUIR O TESTE (só você pode fazer)\n')
   console.log('   1. Anote quantos cliques o painel do AliExpress mostra HOJE.')
-  console.log('   2. No CELULAR, abra o link montado por nós. Navegue um pouco.')
+  console.log('   2. No CELULAR, abra o(s) link(s) montado(s) acima. Navegue um pouco.')
   console.log('   3. Espere o painel atualizar (pode levar horas).')
-  console.log('   4. Se o clique aparecer → a conversão automática funciona e a loja')
-  console.log('      pode ser implementada como as outras.')
-  console.log('      Se NÃO aparecer → converter link sozinho seria trabalhar de graça.')
-  console.log('\n   Faça o teste com o celular fora do WiFi de casa se puder — assim')
-  console.log('   você não confunde com um clique seu anterior.\n')
+  console.log('   4. Se o clique aparecer → aquele caminho credita, e a loja pode ser')
+  console.log('      implementada por ele. Se NÃO aparecer → converter link por esse')
+  console.log('      caminho seria trabalhar de graça.')
+  console.log('\n   Se os dois caminhos forem testados no mesmo dia, teste UM POR VEZ —')
+  console.log('   senão não dá para saber qual deles gerou o clique.')
+  console.log('   Faça com o celular fora do WiFi de casa se puder, para não confundir')
+  console.log('   com um clique seu anterior.\n')
 }
 
 main().catch((err) => {

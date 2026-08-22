@@ -72,6 +72,21 @@ legítima (o erro inverso da SHEIN, em que a checagem por "koc" recusava a marca
    caso a caso no painel dela. Sem isso, não há caminho oficial de conversão — e o caminho de
    parâmetro pendurado é justamente o que o RCA do `partner_id` do ML mostrou não creditar.
 
+## D-001 — A cliente tem conta de afiliada, mas **não** tem acesso à API (2026-08-22)
+
+Confirmado com ela. Consequências:
+
+- **Caminho A (API oficial)** — o forte, do mesmo formato da Shopee — fica **bloqueado** até o
+  AliExpress aprovar o pedido de acesso à API (portals.aliexpress.com → Ferramentas → API → Apply
+  Now). Sem aprovação não há link assinado.
+- **Caminho B (transplante de identidade)** — pegar o que identifica a cliente no link dela e aplicar
+  no endereço do produto que veio do grupo, como já é feito na SHEIN e no Magalu — **pode ser
+  provado hoje**, sem API, com um clique real no celular.
+
+O script mede os dois. O caminho B é explicitamente marcado como **hipótese não provada**: é
+exatamente o formato de erro do `partner_id` do Mercado Livre (pendurar parâmetro em página que não
+credita) e do RCA da Amazon. Nada de conversor enquanto o clique não aparecer no painel dela.
+
 ## Ferramenta
 
 `scripts/diag-aliexpress-affiliate-link.mjs` — read-only (não toca banco, não envia nada). Resolve a
@@ -81,14 +96,24 @@ com as duas convenções de assinatura; e confere que nenhum identificador de te
 gerado.
 
 ```bash
-node scripts/diag-aliexpress-affiliate-link.mjs '<link que chegou no grupo>' \
+# sem API (o que dá para fazer agora):
+node scripts/diag-aliexpress-affiliate-link.mjs '<SEU link de afiliada>' '<link de outro afiliado>'
+
+# com API, quando o acesso for liberado:
+node scripts/diag-aliexpress-affiliate-link.mjs '<SEU link>' '<link do outro>' \
   --app-key=… --app-secret=… --tracking-id=…
 ```
+
+As chaves nunca precisam sair do VPS: a cliente roda o script lá e manda só a saída.
 
 ## O que falta para liberar a Fase 1
 
 - [ ] Um link de afiliada real da cliente (AliExpress).
 - [ ] Um link de **outro** afiliado, do tipo que chega nos grupos monitorados.
-- [ ] Chave, segredo e identificador de rastreio da API de afiliados dela.
-- [ ] **Gate humano**: ela abre no celular o link montado por nós e confirma o clique no painel de
-      afiliada. Só depois disso o conversor é escrito.
+- [ ] **Gate humano (caminho B)**: ela abre no celular o link montado por transplante e confirma o
+      clique no painel de afiliada. Um caminho por vez, senão não dá para saber qual creditou.
+- [ ] (Em paralelo, sem bloquear) pedido de acesso à API no painel de afiliada; quando aprovado,
+      chave, segredo e Tracking ID liberam o caminho A, que é o preferido.
+
+**Se o caminho B não creditar e a API não for aprovada, a feature não tem como existir** — e essa é
+uma resposta legítima da Fase 0, muito mais barata que descobrir depois de implementada.
