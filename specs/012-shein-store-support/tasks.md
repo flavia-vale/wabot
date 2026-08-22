@@ -994,3 +994,60 @@ corretos — o que segue são lacunas de cobertura e de custo, não vazamento de
 
   Cobrir em `test/shein-shortlink.test.js`: passar do teto não faz o cache
   crescer sem limite e não quebra o encurtamento de um `tag` recém-inserido.
+
+## Phase 18: Code Review Fixes
+
+- [ ] T090 Validar o `oneLink` devolvido pela SHEIN antes de publicá-lo, em
+  `shortenSheinLink` (`src/converters/shein.js`), per INV-5 / a guarda de host
+  já aplicada em `convert()` (partial). Hoje o caminho de sucesso é:
+
+  ```js
+  if (data?.code !== '0') return null
+  const oneLink = data?.info?.oneLink
+  if (!oneLink) return null
+  return String(oneLink)
+  ```
+
+  `convert()` gasta guardas caras para garantir que só um destino real da SHEIN
+  seja publicado (resolução do short link, `isSheinHost(resolved)`,
+  `hasOpaqueShareToken`, varredura de identificador de terceiro), e então o
+  valor final é **substituído** por uma string vinda crua de uma resposta JSON
+  remota, sem nenhuma verificação. Basta a SHEIN mudar o formato (ou um hop
+  intermediário devolver outra coisa) para o robô espelhar no grupo um endereço
+  que não é da SHEIN, um caminho relativo (`/48/abc`), ou — se `oneLink` vier
+  como objeto/número, casos que o `if (!oneLink)` não pega — o texto
+  `[object Object]`. A linha ainda é gravada como `success`, exatamente o
+  padrão que o RCA "O endereço montado por nós NUNCA pode ser publicado"
+  (AGENTS.md, Mercado Livre) manda evitar: melhor não encurtar do que publicar
+  link quebrado.
+
+  Aplicar, antes do `return`: exigir que o valor seja string, que seja URL
+  absoluta `http(s)` e que passe por `isSheinHost` — a função já existe e é
+  exportada no mesmo arquivo (usada em `convert()` logo depois de resolver o
+  short link). Qualquer reprovação devolve `null`, e o fallback de sempre
+  publica o link longo (comportamento já validado). Não reescrever nem remover
+  parâmetro do `oneLink` aprovado — ele continua sendo devolvido como-está.
+
+  Cobrir em `test/shein-shortlink.test.js`: (a) `oneLink` de host fora da SHEIN
+  (ex.: `https://onelink.shein.com.evil.net/48/x`) → publica o link longo;
+  (b) `oneLink` relativo (`/48/abc`) → publica o link longo; (c) `oneLink`
+  não-string truthy (ex.: `{}`) → publica o link longo, nunca
+  `[object Object]`; (d) `oneLink` legítimo com query continua saindo
+  exatamente como veio (não regride o teste que já existe).
+
+- [ ] T091 Documentar o kill-switch `SHEIN_SHORTLINK_ENABLED` em `AGENTS.md`,
+  per a convenção do próprio arquivo (partial). Todo interruptor de rollout com
+  semântica de produção está documentado lá (`COUPON_LINK_CONVERT`,
+  `COUPON_BRAND_CARD_ENABLED`, `WA_IGNORE_UNMONITORED_GROUPS`,
+  `BADSESSION_KEEP_ESTABLISHED_AUTH`, `PREVIEW_CARD_HIDE_STORE_TITLE`); este é
+  a única alavanca de rollback sem redeploy do encurtamento da SHEIN e hoje só
+  existe como comentário dentro de `src/converters/shein.js`.
+
+  Registrar: o nome da env, que o **default é LIGADO** e que **só o valor
+  exatamente `'false'` desliga** (`'0'`, `'off'`, `'no'` não têm efeito — a
+  leitura é `String(process.env.SHEIN_SHORTLINK_ENABLED ?? 'true') === 'false'`),
+  que desligar faz a oferta voltar a sair com o link longo (não para de sair),
+  e que aplicar a env exige `pm2 delete` + `start` (pegadinha #1), não
+  `restart --update-env`. Acrescentar a env comentada nos blocos `.env` de
+  staging e de produção da seção "`.env` mínimo em cada ambiente", no mesmo
+  formato das outras envs opcionais.
