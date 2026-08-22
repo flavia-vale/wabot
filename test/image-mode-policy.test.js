@@ -35,56 +35,17 @@ test('valor inválido não deixa o pipeline sem modo', () => {
   assert.equal(resolveGroupImageMode(), DEFAULT_GROUP_IMAGE_MODE)
 })
 
-// 2026-08-22: a escolha por grupo voltou à tela, então o chokepoint VOLTA a
-// considerar `Group.imageMode`. O que não pode regredir é ele continuar sendo o
-// ÚNICO ponto que decide o modo, e fazer isso pela função de precedência (que
-// preserva a chave-mestra de rollback) — nunca lendo o campo cru.
-test('o chokepoint decide o modo por resolveGroupImageModeFor, não lendo o campo cru', () => {
+// 2026-08-22 (fim do dia): a escolha por grupo saiu da tela de novo e o
+// chokepoint voltou a IGNORAR `Group.imageMode`. Guarda para ninguém reativar o
+// campo por engano — o modo é único e vem da env global.
+test('o chokepoint ignora o imageMode persistido e usa o modo global', () => {
   const source = readFileSync(new URL('../src/billing/groupEntitlements.js', import.meta.url), 'utf8')
   const fnStart = source.indexOf('function toMonitorGroup(')
   const fnEnd = source.indexOf('function toPostDetail(')
   const fn = source.slice(fnStart, fnEnd)
-  assert.match(fn, /imageMode: resolveGroupImageModeFor\(group\)/)
-  assert.equal(/imageMode: group\.imageMode/.test(fn), false, 'o campo cru nunca pode ser lido direto — a precedência é da política')
-})
-
-// A escolha da cliente vale...
-test('o grupo que escolheu ganha o formato que escolheu', async () => {
-  const { resolveGroupImageModeFor } = await import('../src/core/imageModePolicy.js')
-  assert.equal(resolveGroupImageModeFor({ imageMode: 'preview' }, {}), 'preview')
-  assert.equal(resolveGroupImageModeFor({ imageMode: 'original' }, {}), 'original')
-  assert.equal(resolveGroupImageModeFor({ imageMode: ' PREVIEW ' }, {}), 'preview')
-})
-
-// ...mas quem nunca escolheu segue o padrão global.
-test('grupo sem escolha cai no padrão global (env ou padrão do produto)', async () => {
-  const { resolveGroupImageModeFor } = await import('../src/core/imageModePolicy.js')
-  assert.equal(resolveGroupImageModeFor({}, {}), DEFAULT_GROUP_IMAGE_MODE)
-  assert.equal(resolveGroupImageModeFor({ imageMode: null }, {}), DEFAULT_GROUP_IMAGE_MODE)
-  assert.equal(resolveGroupImageModeFor({}, { GROUP_IMAGE_MODE: 'preview' }), 'preview')
-})
-
-// Valor legado de um modo que a tela NÃO oferece não pode reativar sozinho um
-// caminho dormente que ninguém escolheu conscientemente.
-test('modo legado fora da tela (fetch/none) cai no padrão global', async () => {
-  const { resolveGroupImageModeFor } = await import('../src/core/imageModePolicy.js')
-  assert.equal(resolveGroupImageModeFor({ imageMode: 'fetch' }, {}), DEFAULT_GROUP_IMAGE_MODE)
-  assert.equal(resolveGroupImageModeFor({ imageMode: 'none' }, {}), DEFAULT_GROUP_IMAGE_MODE)
-})
-
-// A lição de 2026-08-19/21: quando uma loja bloqueia o caminho da foto, é
-// preciso trocar o formato de TODAS as contas em minutos. Com a escolha por
-// grupo de volta, essa chave-mestra é o que garante o rollback.
-test('a chave-mestra global ignora a escolha de todo mundo', async () => {
-  const { resolveGroupImageModeFor } = await import('../src/core/imageModePolicy.js')
-  const env = { GROUP_IMAGE_MODE_FORCE: 'original', GROUP_IMAGE_MODE: 'preview' }
-  assert.equal(resolveGroupImageModeFor({ imageMode: 'preview' }, env), 'original')
-  assert.equal(resolveGroupImageModeFor({}, env), 'original')
-  // chave-mestra mal preenchida não pode travar o pipeline
-  assert.equal(
-    resolveGroupImageModeFor({ imageMode: 'preview' }, { GROUP_IMAGE_MODE_FORCE: 'qualquer' }),
-    'preview',
-  )
+  assert.match(fn, /imageMode: resolveGroupImageMode\(\)/)
+  assert.equal(/imageMode: group\.imageMode/.test(fn), false)
+  assert.equal(/resolveGroupImageModeFor/.test(fn), false, 'a escolha por grupo não pode voltar sem fechar a investigação de 22/08')
 })
 
 // RCA 2026-08-20/21 — "no modo original faltou oferta; com o botão Ver canal
@@ -119,35 +80,13 @@ test('o envio só usa relay quando o escape hatch pede (guarda estrutural)', asy
   assert.match(linha, /!shouldReuploadOriginalMedia\(\)/, 'o caminho de repasse precisa continuar condicionado ao escape hatch')
 })
 
-// 2026-08-22: a escolha voltou à tela. O que a guarda protege agora é COMO ela
-// aparece — a decisão de produto é oferecer só os dois formatos que mudam o que
-// a pessoa vê, em linguagem leiga, e nunca expor os modos dormentes.
-test('a tela de grupos oferece a escolha do formato, só com os dois modos da tela', () => {
+// A cliente não escolhe formato de imagem: a única escolha de formato na tela é
+// o botão "Ver canal". Guarda para o seletor não voltar à UI sem antes fechar a
+// investigação de 22/08 (painel mostrava um formato, o grupo recebia outro).
+test('a tela de grupos não oferece escolha de imagem/preview para a cliente', () => {
   const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
   const semComentarios = page.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '')
-  assert.match(semComentarios, /onUpdate\(g\.id, \{ imageMode:/, 'a tela precisa salvar a escolha de formato')
-  assert.match(semComentarios, /value="preview"/, 'o card clicável precisa ser oferecido')
-  assert.match(semComentarios, /value="original"/, 'a foto da oferta precisa ser oferecida')
-  for (const dormente of ['value="fetch"', 'value="none"']) {
-    assert.equal(semComentarios.includes(dormente), false, `modo dormente ${dormente} não pode aparecer na tela`)
-  }
+  assert.equal(/imageMode/.test(semComentarios), false, 'nenhum controle de imageMode pode aparecer na tela')
+  assert.equal(/card de preview/i.test(semComentarios), false, 'a tela não deve falar em card de preview')
   assert.match(semComentarios, /Ver canal/, 'a escolha do botão "Ver canal" continua na tela')
-})
-
-// Vocabulário: nome técnico não chega à tela (regra canônica do AGENTS.md). A
-// cliente lê o que ACONTECE — "abre a loja" vs. "amplia a foto".
-test('a tela explica o formato sem jargão', () => {
-  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
-  const semComentarios = page.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '')
-  for (const jargao of ['imageMode=', 'card de preview', 'linkPreview', 'thumbnail', 'jpegThumbnail']) {
-    assert.equal(new RegExp(jargao, 'i').test(semComentarios.replace(/imageMode: e\.target\.value/g, '')), false, `jargão "${jargao}" não pode chegar à tela`)
-  }
-  assert.match(semComentarios, /abre a loja/i, 'a tela precisa dizer que o card abre a loja')
-})
-
-// O botão "Ver canal" só é aceito em mensagem de mídia. Oferecer o card
-// clicável junto com o botão prometeria algo que o WhatsApp derruba.
-test('com o botão "Ver canal" ligado, a escolha de formato fica travada', () => {
-  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
-  assert.match(page, /disabled=\{Boolean\(g\.channelButtonJid\)\}/, 'o seletor precisa ficar desabilitado quando há botão de canal')
 })

@@ -2082,6 +2082,34 @@ por grupo, num JSON com data e motivo. Rodar ANTES de trocar.
 não pode voltar a ler `group.imageMode`; o que ele lê é o modo global. Teste:
 `test/image-mode-policy.test.js`.
 
+## A escolha do formato foi RETIRADA da tela de novo (2026-08-22, fim do dia)
+
+Voltou e saiu no mesmo dia. Com a escolha por grupo ligada em produção, apareceu
+**divergência entre o que o painel mostrava e o que saía no grupo** (grupo com
+"Card que abre a loja" selecionado recebendo foto original), e não havia
+orçamento para investigar a fundo com clientes no ar.
+
+**Estado atual, e é o que vale:**
+
+- o modo é **único para todo mundo** e vem só da env global
+  (`resolveGroupImageMode`, `GROUP_IMAGE_MODE`, padrão `original` = "a foto que
+  veio na oferta");
+- o chokepoint `toMonitorGroup` (`src/billing/groupEntitlements.js`) **ignora**
+  `Group.imageMode` de novo;
+- a tela **não** oferece escolha de formato. A única escolha de formato que a
+  cliente faz é o botão "Ver canal";
+- `Group.imageMode` continua na coluna e aceito pela rota, **dormente**.
+
+**Não reintroduzir a escolha por grupo sem antes fechar a investigação de
+22/08.** Guardas em `test/image-mode-policy.test.js` falham se o seletor voltar
+à tela ou se o chokepoint voltar a ler o campo persistido.
+
+**Investigação em aberto (retomar com orçamento):** por que, com a escolha
+ligada, o formato que saía não batia com o selecionado no painel. Suspeita não
+verificada: o memo de `getImage` é por MENSAGEM e `buildPayload` roda por
+DESTINO, então o primeiro destino a sair pode fixar o resultado para os demais.
+Nada disso foi comprovado.
+
 ## A escolha do formato VOLTOU para a tela da cliente (2026-08-22)
 
 Por grupo monitorado, em "Como a oferta aparece":
