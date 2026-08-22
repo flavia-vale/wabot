@@ -1,5 +1,5 @@
 import { decryptCredential } from './credentialCrypto.js'
-import { extractSheinAffiliateId } from './converters/shein.js'
+import { extractSheinAffiliateId, normalizeSheinDigits } from './converters/shein.js'
 
 const PLATFORM_LABELS = {
   shopee: 'Shopee',
@@ -104,16 +104,6 @@ function getFormatWarnings(platform, data = {}) {
   // `platform === 'shein'` em validateCredentialData, T076.
 
   return warnings
-}
-
-// T076: remove zero à esquerda (a SHEIN não usa padding no número de
-// afiliada — `0009876543` e `9876543` não são a mesma coisa para o
-// parâmetro `url_from` que o conversor monta). Preserva um único "0" caso o
-// texto seja só zeros (caso patológico, cai na recusa de comprimento a
-// seguir de qualquer forma).
-function normalizeSheinDigits(digits) {
-  const stripped = digits.replace(/^0+/, '')
-  return stripped || '0'
 }
 
 // Faixa plausível de comprimento do número de afiliada da SHEIN, depois de

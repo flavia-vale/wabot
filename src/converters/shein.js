@@ -121,6 +121,19 @@ export function extractSheinAffiliateId(url) {
   }
 }
 
+// T076: remove zero à esquerda (a SHEIN não usa padding no número de
+// afiliada — `0009876543` e `9876543` não são a mesma coisa para o
+// parâmetro `url_from` que o conversor monta). Preserva um único "0" caso o
+// texto seja só zeros (caso patológico, cai na recusa de comprimento na
+// validação de qualquer forma). Mora aqui (em vez de credentialHealth.js,
+// que já importa `extractSheinAffiliateId` deste módulo) para T088 poder
+// reusar a MESMA função na guarda de identidade sem criar um import
+// circular entre os dois arquivos.
+export function normalizeSheinDigits(digits) {
+  const stripped = String(digits).replace(/^0+/, '')
+  return stripped || '0'
+}
+
 export function extractSheinGoodsId(url) {
   const str = String(url || '')
   return str.match(SHEIN_PRODUCT_RE)?.[1] || str.match(SHEIN_GOODS_ID_RE)?.[1] || null
@@ -314,7 +327,38 @@ const SHORTEN_TOTAL_TIMEOUT_MS = 6000
 // Chave por `tag` + o próprio cookie (para invalidar sozinho se a cliente
 // trocar o código de acesso no meio do TTL).
 const SHORTEN_TOKEN_CACHE_TTL_MS = 10 * 60 * 1000
+
+// T086: cache da RECUSA (código de acesso vencido/de outra conta, ou falha de
+// rede ao consultar a sessão) — sem isso, cada oferta refaz a mesma consulta
+// que já falhou, gastando parte do orçamento de 6s e emitindo um
+// `logger.warn` por oferta. TTL bem mais curto que o do sucesso: a cliente
+// pode recadastrar o código a qualquer momento e não deve ficar presa à
+// recusa por muito tempo (mesma chave tag+cookie do cache de sucesso —
+// trocar o cookie invalida a entrada negativa do mesmo jeito).
+const SHORTEN_NEGATIVE_CACHE_TTL_MS = 2 * 60 * 1000
+
+// T089: os dois Maps são de escopo de MÓDULO e, sem teto, só perdem entrada
+// quando o MESMO tag é consultado de novo — no processo da API (que atende
+// todas as clientes do painel, não um processo por cliente como o
+// bot-worker) as entradas acumulam uma por tag distinto e nunca são
+// varridas. Teto pequeno e explícito: ao inserir, se passar do teto, descarta
+// a mais antiga (ordem de inserção do Map, mesmo espírito de um LRU simples).
+// Entradas são pequenas (um punhado de strings curtas); o ponto é o limite
+// existir, não o tamanho exato.
+const SHORTEN_CACHE_MAX_ENTRIES = 200
 const shortenTokenCache = new Map()
+const shortenNegativeCache = new Map()
+
+function setCachedWithCap(map, key, value) {
+  // Remove e reinsere para a chave contar como "mais nova" na ordem de
+  // inserção do Map (evita descartar uma entrada acabada de atualizar).
+  map.delete(key)
+  map.set(key, value)
+  if (map.size > SHORTEN_CACHE_MAX_ENTRIES) {
+    const oldestKey = map.keys().next().value
+    if (oldestKey !== undefined) map.delete(oldestKey)
+  }
+}
 
 function getCachedShortenSession(tag, cookie) {
   const cached = shortenTokenCache.get(tag)
@@ -324,6 +368,23 @@ function getCachedShortenSession(tag, cookie) {
     return null
   }
   return cached
+}
+
+// Entrada negativa presente e válida (mesmo cookie, dentro do TTL curto) →
+// recusa de cara, sem tocar a rede nem logar de novo (o warn já saiu quando a
+// entrada foi criada).
+function getCachedShortenRefusal(tag, cookie) {
+  const cached = shortenNegativeCache.get(tag)
+  if (!cached) return false
+  if (cached.cookie !== cookie || cached.expiresAt <= Date.now()) {
+    shortenNegativeCache.delete(tag)
+    return false
+  }
+  return true
+}
+
+function cacheShortenRefusal(tag, cookie) {
+  setCachedWithCap(shortenNegativeCache, tag, { cookie, expiresAt: Date.now() + SHORTEN_NEGATIVE_CACHE_TTL_MS })
 }
 
 // Gera o oneLink curto da SHEIN para `longUrl`, usando o código de acesso
@@ -351,6 +412,9 @@ export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.
 
     const deadlineAt = Date.now() + totalTimeoutMs
 
+    // T086: recusa já memorizada para este tag+cookie → nem toca a rede.
+    if (getCachedShortenRefusal(tag, cookie)) return null
+
     let session = getCachedShortenSession(tag, cookie)
     if (!session) {
       const remainingMs = deadlineAt - Date.now()
@@ -369,6 +433,9 @@ export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.
           },
         })
       } catch {
+        // Falha de rede/prazo: a SHEIN fora do ar não pode custar 6s por
+        // oferta — memoriza a recusa com o mesmo TTL curto.
+        cacheShortenRefusal(tag, cookie)
         return null
       }
 
@@ -376,17 +443,27 @@ export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.
       try {
         info = await siteInfoRes.json()
       } catch {
+        cacheShortenRefusal(tag, cookie)
         return null
       }
 
       const memberId = String(info?.memberId || '').trim()
       // memberId vazio: código de acesso venceu (sessão de visitante). Não é
       // erro de rede — é a SHEIN dizendo "essa sessão não é de ninguém logado".
-      if (!memberId) return null
+      if (!memberId) {
+        cacheShortenRefusal(tag, cookie)
+        return null
+      }
       // Guarda de identidade (a mais importante): nunca publicar oneLink
-      // emitido por uma conta diferente da cadastrada.
-      if (memberId !== tag) {
+      // emitido por uma conta diferente da cadastrada. T088: normaliza os
+      // dois lados (mesma regra de zero à esquerda que todo caminho de save
+      // já aplica ao `tag`) para um `memberId` com padding não virar falso
+      // negativo — a guarda continua recusando divergência real.
+      if (normalizeSheinDigits(memberId) !== normalizeSheinDigits(tag)) {
+        // T086: o warn sai UMA VEZ por entrada negativa (aqui, ao criá-la),
+        // não a cada oferta — cache hits acima retornam antes de chegar aqui.
         logger.warn({ tag, memberId }, 'SHEIN: memberId da sessão diverge do ID de afiliada cadastrado — encurtamento recusado')
+        cacheShortenRefusal(tag, cookie)
         return null
       }
 
@@ -398,7 +475,7 @@ export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.
         cookie,
         expiresAt: Date.now() + SHORTEN_TOKEN_CACHE_TTL_MS,
       }
-      shortenTokenCache.set(tag, session)
+      setCachedWithCap(shortenTokenCache, tag, session)
     }
 
     const remainingMs = deadlineAt - Date.now()
@@ -450,7 +527,15 @@ export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.
 // `{ url, linkKind }` ou `null`. Nunca lança.
 // Terceiro parâmetro (`{ fetchImpl }`) é injeção de teste — em produção usa o
 // `fetch` global, como as outras lojas (padrão de `resolveSheinShortLink`).
-export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {}) {
+// `shorten` (default `true`): T087 — o painel "Criar oferta" roda a
+// conversão só para tentar extrair título/preço e DESCARTA o link
+// convertido (`keepOriginalLink: true`), então encurtar ali é 2 idas à rede
+// à toa dentro de um request síncrono que a cliente espera na tela, e o
+// oneLink sem slug `-p-<id>` piora o fallback de título por URL
+// (`extractTitleFromUrl`). `offerEngine.buildScrapedOffer` liga
+// `shorten: false` só nesse caminho; o espelhamento (bot-worker), que
+// PRECISA do link curto, não passa a opção e mantém o default.
+export async function convert(url, creds, { fetchImpl = globalThis.fetch, shorten = true } = {}) {
   try {
     const tag = String(creds?.tag || '').trim()
     if (!tag) return null
@@ -601,8 +686,10 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch } = {})
     // Kill-switch `SHEIN_SHORTLINK_ENABLED` (default ligado) corta em
     // produção sem redeploy. Qualquer falha do encurtador (`null`) publica o
     // link longo — o fallback é o comportamento de hoje, já validado.
-    const shortLink = await shortenSheinLink(finalUrl, creds, { fetchImpl })
-    if (shortLink) return { url: shortLink, linkKind }
+    if (shorten) {
+      const shortLink = await shortenSheinLink(finalUrl, creds, { fetchImpl })
+      if (shortLink) return { url: shortLink, linkKind }
+    }
 
     return { url: finalUrl, linkKind }
   } catch {

@@ -18,7 +18,11 @@ const CONVERTERS = {
 // Amazon avisa que cookies sitestripe expiraram mas a oferta saiu via
 // fallback `?tag=` longo). Consumidores leem `.url` e, se houver,
 // `.warning` decide se grava aviso no painel.
-export async function convertLink(platform, url, credentials) {
+// `options` (opcional): repassado como 3º argumento ao converter da
+// plataforma. Hoje só a SHEIN lê algo dali (`{ shorten: false }`, T087 —
+// desliga o encurtamento quando o chamador vai descartar o link convertido).
+// Converters que não usam options simplesmente ignoram o argumento extra.
+export async function convertLink(platform, url, credentials, options) {
   const fn = CONVERTERS[platform]
   if (!fn) return null
   const creds = credentials[platform]
@@ -26,7 +30,7 @@ export async function convertLink(platform, url, credentials) {
   const platformCreds = typeof credentials.__onCredentialPatch === 'function'
     ? { ...creds, __onCredentialPatch: credentials.__onCredentialPatch }
     : creds
-  const result = await fn(url, platformCreds)
+  const result = await fn(url, platformCreds, options)
   if (!result) return null
   if (typeof result === 'string') return { url: result, warning: null }
   if (result.url) return { ...result, url: result.url, warning: result.warning ?? null }
