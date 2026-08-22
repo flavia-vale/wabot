@@ -87,6 +87,23 @@ O script mede os dois. O caminho B é explicitamente marcado como **hipótese n�
 exatamente o formato de erro do `partner_id` do Mercado Livre (pendurar parâmetro em página que não
 credita) e do RCA da Amazon. Nada de conversor enquanto o clique não aparecer no painel dela.
 
+## D-002 — Decisão: seguir pelo Caminho A (API oficial) — 2026-08-22
+
+A cliente escolheu o caminho da API oficial. Consequências para o desenho da loja (a serem
+confirmadas na Fase 1, quando a spec for escrita):
+
+- **A credencial tem o formato da Shopee**, não da SHEIN/Magalu: três dados (chave do aplicativo,
+  segredo e identificador de rastreio), e não um número extraído de um link.
+- **A família de mensagem é a da Shopee**: se a chave for recusada, a conversão falha inteira e
+  **as ofertas do AliExpress param de sair**. Nunca usar o texto tranquilizador do ML/Amazon
+  ("continua saindo, o link só fica mais comprido") — ali seria mentira.
+- **O segredo é dado sensível**: entra cifrado em repouso pelo mesmo esquema das outras lojas
+  (`src/credentialCrypto.js`), e a tela nunca mostra o valor de volta.
+- O caminho B (transplante) fica no script apenas como medição comparativa. Não vira código.
+
+**Bloqueio atual**: o acesso à API precisa ser aprovado pelo AliExpress (leva alguns dias). Enquanto
+não houver chave, segredo e identificador de rastreio válidos, nenhum código de loja é escrito.
+
 ## Ferramenta
 
 `scripts/diag-aliexpress-affiliate-link.mjs` — read-only (não toca banco, não envia nada). Resolve a
