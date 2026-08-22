@@ -88,10 +88,14 @@ test('US1: grupo antes em "none" sai no modo global (chokepoint força imageMode
   assert.equal(result.groups.monitor[0].imageMode, resolveGroupImageMode())
 })
 
-test('US1: grupo já em "preview" também cai no modo global (sem regressão)', () => {
+// 2026-08-22: a escolha por grupo voltou à tela, então um grupo que escolheu
+// 'preview' agora RECEBE 'preview' — não mais o modo global. Os dois testes
+// acima continuam valendo porque 'fetch'/'none' não são oferecidos na tela e
+// seguem caindo no global.
+test('US1: grupo que escolheu "preview" recebe preview (escolha da cliente vale)', () => {
   const groups = [{ id: 'g3', role: 'monitor', waJid: 'preview@g.us', kind: 'group', imageMode: 'preview', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
   const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
-  assert.equal(result.groups.monitor[0].imageMode, resolveGroupImageMode())
+  assert.equal(result.groups.monitor[0].imageMode, 'preview')
 })
 
 test('US1: getImage() no bot-worker pula o fetch ativo (curto-circuito) para o imageMode efetivo preview, exceto com channelForward', () => {

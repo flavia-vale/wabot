@@ -1,6 +1,6 @@
 import { JID_KIND } from '../core/jid.js'
 import { canUseChannels } from './plans.js'
-import { resolveGroupImageMode } from '../core/imageModePolicy.js'
+import { resolveGroupImageModeFor } from '../core/imageModePolicy.js'
 
 function isChannelGroup(group) {
   return group?.kind === JID_KIND.CHANNEL
@@ -11,24 +11,28 @@ function toMonitorGroup(group, targetPostJids = []) {
     id: group.id,
     waJid: group.waJid,
     kind: group.kind,
-    // 2026-07 (specs/001-image-mode-preview-default): a escolha de imagem por
-    // grupo (seletor no painel) foi DESATIVADA — todo grupo monitorado sai
-    // sempre como card de "Preview clicável do WhatsApp", independente do
-    // valor persistido em `group.imageMode` ('fetch'/'original'/'none'/nulo/
-    // legado). Este é o chokepoint de defesa em profundidade (FR-001/FR-009):
-    // mesmo que a coluna `Group.imageMode` ainda exista (dormente, para
-    // reativação futura) e a migration de dados não tenha rodado num grupo
-    // específico, o pipeline de envio nunca lê o valor persistido — ele
-    // ignora `group.imageMode` e força 'preview' aqui. Os ramos de código que
-    // tratavam 'fetch'/'original'/'none' (src/bot-worker.js,
-    // src/monitoredRelayPolicy.js, src/converters/imageScrapers.js)
-    // permanecem no repositório intactos/dormentes (FR-006) — não excluir.
-    // O modo é global e vem de `resolveGroupImageMode` (env GROUP_IMAGE_MODE,
-    // padrão 'preview'). O valor persistido em `group.imageMode` segue IGNORADO
-    // aqui — a invariante do chokepoint não mudou; o que mudou é que o modo
-    // único passou a ser configurável, para dar rollback de minutos quando uma
-    // loja bloqueia o caminho da foto do preview (RCA 2026-08-19/20).
-    imageMode: resolveGroupImageMode(),
+    // ESCOLHA DE IMAGEM POR GRUPO — de volta na tela em 2026-08-22.
+    //
+    // Histórico curto: em 2026-07 (specs/001-image-mode-preview-default) o
+    // seletor saiu da tela e este chokepoint passou a IGNORAR
+    // `group.imageMode`, forçando um modo único. Em 2026-08-20/21 esse modo
+    // único virou configurável por env (`GROUP_IMAGE_MODE`) porque o Mercado
+    // Livre bloqueou o IP do servidor e o card de preview passou a sair sem
+    // foto — era preciso trocar o formato de todo mundo em minutos.
+    //
+    // O que mudou agora: com a foto do ML vindo pela API e com o plano B em
+    // cascata (core/previewImageFallbackPolicy.js), o card de preview deixou de
+    // depender de UMA fonte de foto só — que era exatamente o motivo de a
+    // escolha ter sido tirada da cliente. Então ela volta, restrita aos DOIS
+    // formatos que mudam o que a pessoa vê no celular (preview/original).
+    //
+    // A invariante de rollback foi PRESERVADA, e essa parte não pode regredir:
+    // `GROUP_IMAGE_MODE_FORCE` continua podendo ignorar a escolha de todo mundo
+    // de uma vez, sem migration e sem redeploy. Toda a precedência vive em
+    // `resolveGroupImageModeFor` (puro/testado); este continua sendo o único
+    // ponto do pipeline de envio que decide o modo — não voltar a ler
+    // `group.imageMode` cru em nenhum outro lugar.
+    imageMode: resolveGroupImageModeFor(group),
     imageLinkTarget: group.imageLinkTarget ?? 'first',
     fallbackToOriginal: true,
     blockedKeywords: group.blockedKeywords,
