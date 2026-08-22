@@ -880,7 +880,7 @@ Rodada de convergência sobre o delta do Phase 16 (link curto/oneLink), que foi 
 guarda de identidade do encurtador e o fallback para link longo foram verificados e estão
 corretos — o que segue são lacunas de cobertura e de custo, não vazamento de comissão.
 
-- [ ] T085 Cobrir o ramo de **acerto de cache** de `shortenSheinLink` em
+- [X] T085 Cobrir o ramo de **acerto de cache** de `shortenSheinLink` em
   `test/shein-shortlink.test.js`, per FR-025 (partial). Hoje esse ramo é 100%
   descoberto: cada caso do arquivo usa um cookie único **de propósito** para
   desviar do cache (comentários nas linhas 60-61 e 230), então
@@ -909,7 +909,7 @@ corretos — o que segue são lacunas de cobertura e de custo, não vazamento de
   comentário, porque foi exatamente essa contaminação que os cookies únicos
   atuais estavam evitando.
 
-- [ ] T086 Memorizar a **recusa** do encurtador em `src/converters/shein.js`, per
+- [X] T086 Memorizar a **recusa** do encurtador em `src/converters/shein.js`, per
   plan (orçamento de tempo do Phase 16) (partial). `shortenTokenCache.set` só
   roda no caminho de sucesso, então cookie vencido (`memberId` vazio) ou de
   outra conta (`memberId !== tag`) refaz o `getSiteInfo` a **cada oferta**,
@@ -931,7 +931,7 @@ corretos — o que segue são lacunas de cobertura e de custo, não vazamento de
   recusado não chama o `fetchImpl`; trocar o cookie volta a chamar; falha de
   rede também não repete dentro do TTL.
 
-- [ ] T087 Não encurtar quando o chamador **descarta** o link convertido, per
+- [X] T087 Não encurtar quando o chamador **descarta** o link convertido, per
   plan (orçamento de tempo) / FR-023 (contradicts). `offerEngine.buildScrapedOffer`
   chama `convertLink` (`src/converters/offerEngine.js`, ~linha 177) dentro da
   rota **síncrona** do painel "Criar oferta"
@@ -959,7 +959,7 @@ corretos — o que segue são lacunas de cobertura e de custo, não vazamento de
   gerador de link não é chamado; e em `test/shein-shortlink.test.js`, que a
   opção não afeta o caminho padrão.
 
-- [ ] T088 Normalizar os dois lados da guarda de identidade em
+- [X] T088 Normalizar os dois lados da guarda de identidade em
   `shortenSheinLink` (`src/converters/shein.js`), per T081 / T076 (partial). A
   comparação hoje é entre `String(creds?.tag).trim()` e
   `String(info?.memberId).trim()` **crus**, enquanto todo caminho de save passa
@@ -979,7 +979,7 @@ corretos — o que segue são lacunas de cobertura e de custo, não vazamento de
   `memberId: '0009876543'` (e o inverso) encurta normalmente; `tag: '9876543'`
   com `memberId: '1234567'` continua `null`.
 
-- [ ] T089 Limitar `shortenTokenCache` em `src/converters/shein.js`, per plan
+- [X] T089 Limitar `shortenTokenCache` em `src/converters/shein.js`, per plan
   (política de memória do AGENTS.md) (partial). É um `Map` de escopo de módulo
   sem teto, com remoção apenas preguiçosa: uma entrada só é descartada quando o
   **mesmo** `tag` é consultado de novo. No bot-worker isso é irrelevante (um
