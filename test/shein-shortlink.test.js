@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { shortenSheinLink, convert } from '../src/converters/shein.js'
+import { convertLink } from '../src/converters/index.js'
 
 // ---------------------------------------------------------------------------
 // Phase 16 (specs/012-shein-store-support): link curto (oneLink) da SHEIN.
@@ -235,4 +236,258 @@ test('aceita os dois formatos de exportação do Cookie-Editor (Header string e 
   assert.ok(b, 'exportação JSON deveria encurtar')
   assert.equal(enviados[0], headerString)
   assert.equal(enviados[1], headerString, 'JSON precisa virar o mesmo cabeçalho da Header string')
+})
+
+// ---------------------------------------------------------------------------
+// T085 — ramo de ACERTO DE CACHE (a sessão memorizada é reaproveitada).
+// Cada caso usa um `tag`/cookie próprio (o cache é de escopo de módulo e
+// persiste entre casos do mesmo arquivo) para não contaminar os demais —
+// exatamente o motivo pelo qual os testes acima usam cookie único por caso.
+// ---------------------------------------------------------------------------
+
+test('T085.1 — acerto de cache: duas chamadas com o mesmo tag+cookie fazem getSiteInfo uma vez só', async () => {
+  let siteInfoCalls = 0
+  const fetchImpl = async (url) => {
+    if (String(url).includes('getSiteInfo')) {
+      siteInfoCalls++
+      return jsonResponse({ SiteUID: 'mbr', token: 'tok-t085-1', memberId: 't085-reuso', appLanguage: 'pt-br' })
+    }
+    return jsonResponse({ code: '0', info: { oneLink: 'https://onelink.shein.com/48/t085-reuso' } })
+  }
+  const creds = { tag: 't085-reuso', cookie: 'cookie-t085-reuso' }
+
+  const first = await shortenSheinLink(LONG_URL, creds, { fetchImpl })
+  const second = await shortenSheinLink(LONG_URL, creds, { fetchImpl })
+
+  assert.equal(first, 'https://onelink.shein.com/48/t085-reuso')
+  assert.equal(second, 'https://onelink.shein.com/48/t085-reuso')
+  assert.equal(siteInfoCalls, 1, 'a segunda chamada deveria reaproveitar a sessão em cache, sem consultar getSiteInfo de novo')
+})
+
+test('T085.2 — troca de cookie invalida a sessão em cache (o mais importante)', async () => {
+  const tag = 't085-troca'
+  let siteInfoCalls = 0
+  const fetchFor = (memberId) => async (url) => {
+    if (String(url).includes('getSiteInfo')) {
+      siteInfoCalls++
+      return jsonResponse({ SiteUID: 'mbr', token: 'tok', memberId, appLanguage: 'pt-br' })
+    }
+    return jsonResponse({ code: '0', info: { oneLink: 'https://onelink.shein.com/48/naodeveriapublicar' } })
+  }
+
+  // 1ª sessão: cookie A, memberId bate com o tag cadastrado → cunha e cacheia.
+  const first = await shortenSheinLink(LONG_URL, { tag, cookie: 'cookie-A' }, { fetchImpl: fetchFor(tag) })
+  assert.ok(first, 'a primeira sessão deveria encurtar (identidade bate)')
+  assert.equal(siteInfoCalls, 1)
+
+  // 2ª chamada: MESMO tag, cookie B (de outra conta) — a sessão cacheada em
+  // cookie A NÃO pode ser reaproveitada para o cookie novo. Prova que a chave
+  // de cache inclui o cookie, não só o tag: se a chave fosse só o tag, esta
+  // chamada devolveria o oneLink cunhado para cookie A sem tocar a rede, e
+  // publicaria a sessão de uma conta para o cookie de outra.
+  const second = await shortenSheinLink(LONG_URL, { tag, cookie: 'cookie-B' }, { fetchImpl: fetchFor('99999-outra-conta') })
+  assert.equal(second, null, 'sessão de outra conta nunca pode ser servida — nem por reaproveitamento indevido do cache')
+  assert.equal(siteInfoCalls, 2, 'a troca de cookie precisa disparar uma nova consulta a getSiteInfo, não reaproveitar a sessão anterior')
+})
+
+test('T085.3 — TTL: sessão cunhada expira e a próxima chamada re-cunha', async () => {
+  const tag = 't085-ttl'
+  const cookie = 'cookie-t085-ttl'
+  let siteInfoCalls = 0
+  const fetchImpl = async (url) => {
+    if (String(url).includes('getSiteInfo')) {
+      siteInfoCalls++
+      return jsonResponse({ SiteUID: 'mbr', token: 'tok', memberId: tag, appLanguage: 'pt-br' })
+    }
+    return jsonResponse({ code: '0', info: { oneLink: 'https://onelink.shein.com/48/t085-ttl' } })
+  }
+
+  const realNow = Date.now
+  try {
+    const first = await shortenSheinLink(LONG_URL, { tag, cookie }, { fetchImpl })
+    assert.ok(first)
+    assert.equal(siteInfoCalls, 1)
+
+    // Ainda dentro do TTL (10min) — cache hit, sem nova consulta.
+    Date.now = () => realNow() + 5 * 60 * 1000
+    const withinTtl = await shortenSheinLink(LONG_URL, { tag, cookie }, { fetchImpl })
+    assert.ok(withinTtl)
+    assert.equal(siteInfoCalls, 1)
+
+    // Além do TTL (10min) — a sessão expirou, precisa re-cunhar.
+    Date.now = () => realNow() + 11 * 60 * 1000
+    const afterTtl = await shortenSheinLink(LONG_URL, { tag, cookie }, { fetchImpl })
+    assert.ok(afterTtl)
+    assert.equal(siteInfoCalls, 2, 'depois do TTL a sessão precisa ser re-cunhada, não servida do cache')
+  } finally {
+    Date.now = realNow
+  }
+})
+
+// ---------------------------------------------------------------------------
+// T086 — cache da RECUSA (código de acesso vencido/de outra conta, ou falha
+// de rede) para não refazer a mesma consulta fadada a falhar a cada oferta.
+// ---------------------------------------------------------------------------
+
+test('T086.1 — recusa por identidade divergente é memorizada: segunda oferta não chama fetchImpl', async () => {
+  const tag = 't086-recusa'
+  let siteInfoCalls = 0
+  const fetchImpl = async (url) => {
+    siteInfoCalls++
+    if (String(url).includes('getSiteInfo')) {
+      return jsonResponse({ SiteUID: 'mbr', token: 'tok', memberId: '99999-outra-conta', appLanguage: 'pt-br' })
+    }
+    throw new Error('não deveria chegar ao gerador de link com identidade divergente')
+  }
+  const creds = { tag, cookie: 'cookie-t086-recusa' }
+
+  const first = await shortenSheinLink(LONG_URL, creds, { fetchImpl })
+  assert.equal(first, null)
+  assert.equal(siteInfoCalls, 1)
+
+  const second = await shortenSheinLink(LONG_URL, creds, { fetchImpl })
+  assert.equal(second, null)
+  assert.equal(siteInfoCalls, 1, 'a segunda oferta com o mesmo tag+cookie recusado não deveria tocar a rede de novo')
+})
+
+test('T086.2 — trocar o cookie depois de uma recusa memorizada volta a chamar a rede', async () => {
+  const tag = 't086-troca-apos-recusa'
+  let siteInfoCalls = 0
+  const fetchFor = (memberId) => async (url) => {
+    if (String(url).includes('getSiteInfo')) {
+      siteInfoCalls++
+      return jsonResponse({ SiteUID: 'mbr', token: 'tok', memberId, appLanguage: 'pt-br' })
+    }
+    return jsonResponse({ code: '0', info: { oneLink: 'https://onelink.shein.com/48/t086-troca' } })
+  }
+
+  const refused = await shortenSheinLink(LONG_URL, { tag, cookie: 'cookie-velho' }, { fetchImpl: fetchFor('') })
+  assert.equal(refused, null)
+  assert.equal(siteInfoCalls, 1)
+
+  // Cliente corrigiu o código de acesso (cookie novo) — não deve ficar presa
+  // à recusa memorizada até o TTL vencer.
+  const fixed = await shortenSheinLink(LONG_URL, { tag, cookie: 'cookie-corrigido' }, { fetchImpl: fetchFor(tag) })
+  assert.ok(fixed, 'trocar o cookie deveria permitir nova tentativa imediatamente')
+  assert.equal(siteInfoCalls, 2)
+})
+
+test('T086.3 — falha de rede no getSiteInfo também é memorizada dentro do TTL', async () => {
+  const tag = 't086-falha-rede'
+  let siteInfoCalls = 0
+  const fetchImpl = async (url) => {
+    if (String(url).includes('getSiteInfo')) {
+      siteInfoCalls++
+      throw new Error('rede fora')
+    }
+    throw new Error('não deveria chegar ao gerador de link')
+  }
+  const creds = { tag, cookie: 'cookie-t086-falha-rede' }
+
+  const first = await shortenSheinLink(LONG_URL, creds, { fetchImpl })
+  assert.equal(first, null)
+  assert.equal(siteInfoCalls, 1)
+
+  const second = await shortenSheinLink(LONG_URL, creds, { fetchImpl })
+  assert.equal(second, null)
+  assert.equal(siteInfoCalls, 1, 'falha de rede recente não deveria ser retentada a cada oferta')
+})
+
+// ---------------------------------------------------------------------------
+// T088 — normalização de dígitos nos dois lados da guarda de identidade
+// (reusa `normalizeSheinDigits`, a mesma função do caminho de save).
+// ---------------------------------------------------------------------------
+
+test('T088.1 — memberId com zero à esquerda ainda bate com o tag sem padding', async () => {
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok', memberId: '0009876543', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: 'https://onelink.shein.com/48/t088-a' } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '9876543', cookie: 'cookie-t088-a' }, { fetchImpl })
+  assert.equal(result, 'https://onelink.shein.com/48/t088-a')
+})
+
+test('T088.2 — tag com zero à esquerda ainda bate com o memberId sem padding', async () => {
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok', memberId: '9876543', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: 'https://onelink.shein.com/48/t088-b' } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '0009876543', cookie: 'cookie-t088-b' }, { fetchImpl })
+  assert.equal(result, 'https://onelink.shein.com/48/t088-b')
+})
+
+test('T088.3 — divergência real (não é só zero à esquerda) continua recusando', async () => {
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok', memberId: '1234567', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: 'https://onelink.shein.com/48/naodeveriapublicar' } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '9876543', cookie: 'cookie-t088-c' }, { fetchImpl })
+  assert.equal(result, null)
+})
+
+// ---------------------------------------------------------------------------
+// T089 — teto de entradas do cache (Map de escopo de módulo sem limite antes).
+// ---------------------------------------------------------------------------
+
+test('T089 — passar do teto de entradas descarta a mais antiga, sem quebrar o encurtamento de um tag recente', async () => {
+  const siteInfoCallsByTag = new Map()
+  const fetchFor = (tag) => async (url) => {
+    if (String(url).includes('getSiteInfo')) {
+      siteInfoCallsByTag.set(tag, (siteInfoCallsByTag.get(tag) || 0) + 1)
+      return jsonResponse({ SiteUID: 'mbr', token: 'tok', memberId: tag, appLanguage: 'pt-br' })
+    }
+    return jsonResponse({ code: '0', info: { oneLink: `https://onelink.shein.com/48/${tag}` } })
+  }
+  const callFor = (tag) => shortenSheinLink(LONG_URL, { tag, cookie: `cookie-${tag}` }, { fetchImpl: fetchFor(tag) })
+
+  const firstTag = 't089-cap-primeiro'
+  await callFor(firstTag)
+  assert.equal(siteInfoCallsByTag.get(firstTag), 1)
+
+  // Insere entradas suficientes para estourar o teto (200) e empurrar a
+  // primeira para fora do cache.
+  for (let i = 0; i < 200; i++) {
+    await callFor(`t089-cap-enchendo-${i}`)
+  }
+
+  // A primeira entrada foi descartada: precisa re-cunhar (nova consulta).
+  await callFor(firstTag)
+  assert.equal(siteInfoCallsByTag.get(firstTag), 2, 'a entrada mais antiga deveria ter sido descartada ao estourar o teto')
+
+  // Uma entrada recém-inserida continua servindo do cache normalmente.
+  const recentTag = 't089-cap-enchendo-199'
+  await callFor(recentTag) // 2ª chamada para o mesmo tag: deveria ser cache hit
+  assert.equal(siteInfoCallsByTag.get(recentTag), 1, 'uma entrada recente não deveria ter sido descartada nem exigir nova consulta')
+})
+
+// ---------------------------------------------------------------------------
+// T087 — não encurtar quando o chamador descarta o link convertido
+// (`shorten: false`, ligado por offerEngine quando keepOriginalLink=true).
+// ---------------------------------------------------------------------------
+
+test('T087.1 — convert() com shorten:false não chama o encurtador, publica o link longo', async () => {
+  const url = 'https://br.shein.com/vestido-floral-p-485735309.html'
+  let shortenerCalled = false
+  const fetchImpl = async (u) => {
+    if (String(u).includes('getSiteInfo') || String(u).includes('share/link/from/url')) shortenerCalled = true
+    throw new Error('não deveria buscar')
+  }
+  const result = await convert(url, { tag: '12345', cookie: 'cookie-t087-shorten-false' }, { fetchImpl, shorten: false })
+  assert.ok(result)
+  assert.equal(result.linkKind, 'product')
+  assert.match(result.url, /^https:\/\/br\.shein\.com\/vestido-floral-p-485735309\.html\?/)
+  assert.equal(result.url.includes('onelink.shein.com'), false)
+  assert.equal(shortenerCalled, false)
+})
+
+test('T087.2 — a opção shorten:false não afeta o caminho padrão (default continua encurtando)', async () => {
+  const url = 'https://br.shein.com/vestido-floral-p-485735309.html'
+  const oneLink = 'https://onelink.shein.com/48/t087-default'
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok', memberId: '12345', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink } },
+  })
+  const result = await convert(url, { tag: '12345', cookie: 'cookie-t087-default' }, { fetchImpl })
+  assert.ok(result)
+  assert.equal(result.url, oneLink, 'sem passar shorten explicitamente, o default continua encurtando (bot-worker não muda)')
 })
