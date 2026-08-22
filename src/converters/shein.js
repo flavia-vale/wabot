@@ -527,8 +527,19 @@ export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.
     // por nós nunca pode ser publicado" (AGENTS.md, Mercado Livre): melhor
     // não encurtar do que publicar link quebrado ou de outro domínio como se
     // fosse sucesso. O fallback de sempre publica o link longo.
+    // (4) protocolo `https:`. `isSheinHost` olha só o hostname, então
+    // `javascript://onelink.shein.com/%0aalert(1)` e `ftp://onelink.shein.com/x`
+    // passavam por ela — o host é mesmo da loja, o esquema é que não. Publicar
+    // `javascript:` numa mensagem é indefensível mesmo sendo inerte no
+    // WhatsApp, e `http:` seria rebaixar a conexão da cliente. O link real vem
+    // da API da própria SHEIN por HTTPS: exigir isso não recusa nada legítimo.
     if (typeof oneLink !== 'string') return null
     if (!isSheinHost(oneLink)) return null
+    try {
+      if (new URL(oneLink).protocol !== 'https:') return null
+    } catch {
+      return null
+    }
 
     // Devolve como veio — não reescrever nem remover parâmetro (mesma lição
     // do `generateShortLink` da Shopee: o short link só funciona devolvido

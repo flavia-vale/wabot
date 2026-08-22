@@ -553,3 +553,28 @@ test('T087.2 — a opção shorten:false não afeta o caminho padrão (default c
   assert.ok(result)
   assert.equal(result.url, oneLink, 'sem passar shorten explicitamente, o default continua encurtando (bot-worker não muda)')
 })
+
+test('recusa link devolvido com protocolo que não é https', async () => {
+  // `isSheinHost` olha só o hostname, então um esquema perigoso com host da
+  // loja passava por ela: `javascript://onelink.shein.com/...` é inerte no
+  // WhatsApp, mas publicar isso numa mensagem é indefensível; e `http:` seria
+  // rebaixar a conexão da cliente. O link real vem da API da SHEIN por HTTPS.
+  const fetchFor = (oneLink) => async (url) => (
+    String(url).includes('getSiteInfo')
+      ? { status: 200, json: async () => ({ token: 't', memberId: '1150365562', SiteUID: 'mbr', appLanguage: 'pt-br' }) }
+      : { status: 200, json: async () => ({ code: '0', info: { oneLink } }) }
+  )
+
+  const recusados = [
+    'javascript://onelink.shein.com/%0aalert(1)',
+    'ftp://onelink.shein.com/x',
+    'http://onelink.shein.com/48/x',
+  ]
+  for (const [i, valor] of recusados.entries()) {
+    const r = await shortenSheinLink(LONG_URL, { tag: '1150365562', cookie: `proto-${i}` }, { fetchImpl: fetchFor(valor) })
+    assert.equal(r, null, `deveria recusar: ${valor}`)
+  }
+
+  const ok = await shortenSheinLink(LONG_URL, { tag: '1150365562', cookie: 'proto-ok' }, { fetchImpl: fetchFor('https://onelink.shein.com/48/x') })
+  assert.equal(ok, 'https://onelink.shein.com/48/x', 'https legítimo continua passando')
+})
