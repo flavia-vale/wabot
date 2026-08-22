@@ -63,3 +63,42 @@ export function resolveGroupImageMode(env = process.env) {
 export function shouldReuploadOriginalMedia(env = process.env) {
   return String(env?.IMAGE_ORIGINAL_STRATEGY ?? '').trim().toLowerCase() !== 'relay'
 }
+
+// FORMATOS QUE A CLIENTE ESCOLHE NA TELA (2026-08-22).
+//
+// A escolha por grupo voltou ao painel. Só estes DOIS entram na tela, e é de
+// propósito — são os que mudam o que a pessoa vê no celular:
+//   - `preview`  → texto + card grande; TOCAR NO CARD ABRE A LOJA;
+//   - `original` → foto com legenda; tocar na foto só AMPLIA a foto.
+// `fetch` e `none` continuam dormentes (FR-006): existem no código e na coluna,
+// mas nunca são oferecidos. Valor legado desses dois cai no padrão global em
+// vez de reativar um caminho que ninguém escolheu conscientemente.
+export const MODOS_ESCOLHIVEIS_NA_TELA = Object.freeze(['preview', 'original'])
+
+/**
+ * Modo de imagem EFETIVO de um grupo monitorado. Ordem de precedência:
+ *
+ *   1. `GROUP_IMAGE_MODE_FORCE` — chave-mestra global. Ignora a escolha de
+ *      TODO mundo. Existe porque a lição de 2026-08-19/21 foi justamente essa:
+ *      quando uma loja bloqueia o caminho da foto, é preciso trocar o formato
+ *      de todas as contas em minutos, sem migration e sem redeploy. Com a
+ *      escolha por grupo de volta, `GROUP_IMAGE_MODE` sozinho não conseguiria
+ *      mais fazer isso (quem escolheu ganharia da env) — daí a chave separada.
+ *   2. A escolha da cliente (`Group.imageMode`), se for um dos formatos que a
+ *      tela oferece.
+ *   3. `GROUP_IMAGE_MODE` / padrão do produto — vale para grupo que nunca
+ *      escolheu nada.
+ *
+ * @param {{ imageMode?: string|null }} group
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {'preview'|'original'|'fetch'|'none'}
+ */
+export function resolveGroupImageModeFor(group, env = process.env) {
+  const forcado = String(env?.GROUP_IMAGE_MODE_FORCE ?? '').trim().toLowerCase()
+  if (MODOS_VALIDOS.has(forcado)) return forcado
+
+  const escolha = String(group?.imageMode ?? '').trim().toLowerCase()
+  if (MODOS_ESCOLHIVEIS_NA_TELA.includes(escolha)) return escolha
+
+  return resolveGroupImageMode(env)
+}
