@@ -137,6 +137,61 @@ for (const l of linhas) {
   ofertas.get(chave).porDestino.set(l.destGroup, l)
 }
 
+// ── 3b) PERDAS POR DESTINO.
+//
+// Correção de um falso negativo do próprio script (achado em produção
+// 2026-08-22): quando a dedup bloqueia um envio, o robô NÃO cria linha nova —
+// ele soma no contador `dedupHits` da linha antiga (`registerDedupBlock`,
+// bot-worker.js). Ou seja, uma oferta bloqueada por repetição fica invisível na
+// comparação linha-a-linha acima, que pode então dizer "nenhuma diferença"
+// enquanto centenas de ofertas estão sendo descartadas.
+//
+// Aqui a conta é por DESTINO e olha as perdas de frente. Um destino que
+// "recebe as mesmas ofertas" que o gêmeo pode, ainda assim, estar perdendo
+// muita coisa — só que os dois perdem igual.
+console.log('── Perdas por destino (o que NÃO chegou, e por quê) ──\n')
+const perdas = new Map()
+for (const l of linhas) {
+  const acc = perdas.get(l.destGroup) || { enviadas: 0, repeticoesBloqueadas: 0, presas: 0, porMotivo: new Map() }
+  if (l.status === 'success') acc.enviadas += 1
+  // dedupHits conta as repetições bloqueadas AGREGADAS nesta linha — inclusive
+  // em linhas de sucesso (a oferta saiu uma vez e foi barrada N vezes depois).
+  acc.repeticoesBloqueadas += Number(l.dedupHits || 0)
+  if (['queued', 'sending'].includes(l.status)) acc.presas += 1
+  if (l.status === 'skipped' || l.status === 'error') {
+    const motivo = String(l.errorMsg || 'sem motivo').split(':').slice(0, 2).join(':')
+    acc.porMotivo.set(motivo, (acc.porMotivo.get(motivo) || 0) + 1)
+  }
+  perdas.set(l.destGroup, acc)
+}
+for (const [jid, acc] of perdas) {
+  const nome = porJid.get(jid)?.name || jid
+  console.log(`  ${nome}`)
+  console.log(`    entregues ao WhatsApp: ${acc.enviadas} | repetições bloqueadas: ${acc.repeticoesBloqueadas} | presas na fila agora: ${acc.presas}`)
+  for (const [motivo, n] of [...acc.porMotivo.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)) {
+    console.log(`      ${String(n).padStart(5)}x  ${motivo}`)
+  }
+}
+console.log('')
+
+// ── 3c) Rastrear UMA oferta específica (--url=<trecho>), quando a cliente
+//       aponta um caso concreto. Casa por trecho do link, em qualquer destino.
+const urlFiltro = arg('url', null)
+if (urlFiltro) {
+  console.log(`── Rastreando ofertas cujo link contém "${urlFiltro}" ──\n`)
+  const achadas = linhas.filter(l => `${l.originalUrl || ''} ${l.convertedUrl || ''}`.includes(urlFiltro))
+  if (!achadas.length) {
+    console.log('  Nenhuma linha de envio com esse link na janela.')
+    console.log('  Isso é informação: a oferta não chegou a virar envio para NENHUM destino')
+    console.log('  (conversão falhou, palavra bloqueada, ou a mensagem nem foi processada).')
+  }
+  for (const l of achadas) {
+    const nome = porJid.get(l.destGroup)?.name || l.destGroup
+    console.log(`  ${l.sentAt.toISOString().slice(5, 16).replace('T', ' ')}  ${nome.padEnd(32)} ${l.status}${l.errorMsg ? ` | ${l.errorMsg}` : ''}${l.dedupHits ? ` | +${l.dedupHits} bloqueadas` : ''}`)
+  }
+  console.log('')
+}
+
 const paresPedidos = (nomeA && nomeB)
   ? [[destinos.find(d => d.name === nomeA), destinos.find(d => d.name === nomeB)]]
   : []
@@ -201,6 +256,9 @@ for (const [a, b] of pares) {
 }
 
 console.log('\n── Como ler ──')
+console.log('  ATENÇÃO: "nenhuma diferença" na comparação acima NÃO significa que está tudo bem.')
+console.log('  Repetição bloqueada não cria linha nova (soma em dedupHits), então dois destinos')
+console.log('  podem estar perdendo MUITA oferta e ainda assim parecerem iguais. Leia "Perdas por destino".')
 console.log('  NENHUMA LINHA        -> configuração: destino fora da lista do monitorado, plano, ou grupo inativo.')
 console.log('  PRESO_NA_FILA        -> preservação daquele destino (horário/cadência/teto). Não é perda, é espera.')
 console.log('  skip:...             -> decisão do robô; o texto depois de "skip:" diz qual.')
