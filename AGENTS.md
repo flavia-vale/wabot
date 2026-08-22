@@ -248,6 +248,12 @@ COUPON_LINK_CONVERT=true
 # texto de cupom/vitrine E URL sem ASIN/MLB. Produto por short link continua
 # saindo com foto (não regride #1205/#1208).
 COUPON_BRAND_CARD_ENABLED=true
+# Encurta o link da SHEIN (oneLink) via API de afiliado. Default LIGADO (ausente
+# = liga); só o valor exatamente 'false' desliga ('0'/'off'/'no' não têm efeito).
+# Desligar não para nenhuma oferta — só volta a publicar o link longo da SHEIN.
+# Aplicar exige pm2 delete + start (pegadinha #1). Ver seção "SHEIN: encurtamento
+# de link".
+# SHEIN_SHORTLINK_ENABLED=false
 ```
 
 ### `~/wabot-staging/dashboard/.env.local`
@@ -282,6 +288,12 @@ COUPON_LINK_CONVERT=true
 # Banner de marca "CUPOM + loja" no card de preview (specs/008-coupon-brand-banner).
 # Permanece AUSENTE/OFF em produção até validação explícita em staging (US1/US2/US3
 # completas, blindagem tripla contra #1205/#1208 confirmada). Não setar aqui sem OK.
+# Encurta o link da SHEIN (oneLink) via API de afiliado. Default LIGADO (ausente
+# = liga); só o valor exatamente 'false' desliga ('0'/'off'/'no' não têm efeito).
+# Desligar não para nenhuma oferta — só volta a publicar o link longo da SHEIN.
+# Aplicar exige pm2 delete + start (pegadinha #1). Ver seção "SHEIN: encurtamento
+# de link".
+# SHEIN_SHORTLINK_ENABLED=false
 ```
 
 ### `~/wabot/dashboard/.env.local`
@@ -2532,6 +2544,35 @@ comissão).
 (1) o ML credita cupom de algum jeito? **Validar clicando no link num celular
 ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
 `test/converters-amazon.test.js`.
+
+## SHEIN: encurtamento de link (`SHEIN_SHORTLINK_ENABLED`, default LIGADO)
+
+`shortenSheinLink()` (`src/converters/shein.js`) troca o link longo da SHEIN
+pelo `oneLink` curto da própria loja, seguindo o mesmo padrão de kill-switch
+dos outros interruptores de rollout desta seção (`COUPON_LINK_CONVERT`,
+`COUPON_BRAND_CARD_ENABLED`, `WA_IGNORE_UNMONITORED_GROUPS`,
+`BADSESSION_KEEP_ESTABLISHED_AUTH`, `PREVIEW_CARD_HIDE_STORE_TITLE`): env
+única, sem redeploy para desligar.
+
+- **Default é LIGADO.** Só o valor **exatamente** `'false'` desliga —
+  `'0'`, `'off'`, `'no'` etc. **não têm efeito nenhum** (a leitura é
+  `String(process.env.SHEIN_SHORTLINK_ENABLED ?? 'true') === 'false'`).
+- **Desligar não para nenhuma oferta de sair.** `shortenSheinLink()` some
+  logo no topo (antes de tocar cookie/rede) e devolve `null`; `convert()`
+  cai no comportamento de sempre — publica o link **longo** da SHEIN com a
+  identidade da cliente aplicada. É a única alavanca de rollback deste
+  encurtamento sem precisar reverter código/deploy.
+- **Aplicar a env exige `pm2 delete` + `start`**, não `restart --update-env`
+  (pegadinha #1 — PM2 cacheia env no `pm2 start`).
+- **Guarda de publicação (T090, não regredir):** o `oneLink` devolvido pela
+  SHEIN é validado ANTES de publicar — precisa ser string, URL absoluta
+  `http(s)` e host aprovado por `isSheinHost` (mesmo princípio do RCA "o
+  endereço montado por nós NUNCA pode ser publicado", seção do Mercado
+  Livre). Reprovação devolve `null` e cai no link longo; nunca publica
+  domínio de fora, caminho relativo ou `[object Object]`. Um `oneLink`
+  legítimo (inclusive com parâmetros próprios da SHEIN, ex.: `?ismg_ol=...`)
+  continua saindo **exatamente como veio**, sem reescrever nem remover
+  parâmetro. Teste: `test/shein-shortlink.test.js`.
 
 ## Amazon: a tag PRECISA estar dentro da `longUrl` mandada ao SiteStripe (RCA 2026-07 — não regredir)
 

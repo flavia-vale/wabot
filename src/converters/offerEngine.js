@@ -173,8 +173,15 @@ export async function buildScrapedOffer({
       reasonMessage = missingCredentialMessage(validation)
     } else {
       try {
+        // T087: `keepOriginalLink: true` (painel "Criar oferta") descarta o
+        // link convertido (`displayUrl` fica com o original) — encurtar a
+        // SHEIN nesse caminho é 2 idas à rede à toa dentro de um request
+        // síncrono, além de trocar o `-p-<id>.html` pelo oneLink sem slug e
+        // degradar o fallback de título. `shorten: false` só afeta a SHEIN;
+        // os demais converters ignoram a chave. O espelhamento (bot-worker)
+        // não passa `keepOriginalLink`, então mantém `shorten: true` (default).
         const conversionResult = await withTimeout(
-          convertLink(platform, url, credentialsMap),
+          convertLink(platform, url, credentialsMap, { shorten: !keepOriginalLink }),
           conversionTimeoutMs,
           `Tempo limite de conversão excedido para ${validation.label}. Tente novamente.`,
         )

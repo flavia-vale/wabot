@@ -88,15 +88,31 @@ export const AFFILIATE_PLATFORMS = [
   {
     id: 'shein',
     label: 'SHEIN',
-    instructions: 'Onde pegar: no painel de afiliada da SHEIN, use o Gerador de Link para gerar o seu link de afiliada. Cole aqui o link inteiro ou apenas o seu número de afiliada. O link do botão de compartilhar do aplicativo não serve — ele é para uso pessoal, não para cadastro.',
+    instructions: 'Você pode preencher de dois jeitos, o que for mais fácil. (1) Pelo ID: no painel de afiliada da SHEIN, vá em Minha conta e copie o ID de afiliado. (2) Pelo link: ainda no painel, use o Gerador de Link em qualquer produto e cole aqui o link inteiro. O link do botão de compartilhar do aplicativo não serve — ele é para uso pessoal, não para cadastro.',
     actionLinks: [
       {
         label: 'Abrir a página da loja',
         href: 'https://www.shein.com/affiliate',
       },
     ],
+    platformWarning: 'Com o ID e o código de acesso, o link da oferta sai curtinho. Só com o ID, a oferta sai do mesmo jeito — o link só fica mais comprido.',
+    sessionCareNote: 'Depois de colar o código aqui, NÃO clique em "Sair" na SHEIN e não use janela anônima. Sair da conta derruba o código na hora, e você vai precisar cadastrar tudo de novo. Pode fechar a aba normalmente — só não sair da conta.',
     fields: [
-      { key: 'tag', label: 'Seu link de afiliada da SHEIN (ou seu número de afiliada)', hint: 'Cole o link que você gera no painel de afiliada, ou só o número.' },
+      {
+        key: 'tag',
+        label: 'ID de afiliado ou um link de qualquer produto de afiliada da SHEIN',
+        hint: 'O ID fica no painel de afiliada, em Minha conta. O link você gera no Gerador de Link.',
+        help: 'Duas formas de preencher: copie o ID de afiliado em Painel de afiliada → Minha conta → ID de afiliado; ou abra o Gerador de Link, gere o link de um produto qualquer e cole aqui. Qualquer uma serve — o robô descobre o resto sozinho.',
+      },
+      {
+        key: 'cookie',
+        label: 'Código de acesso da SHEIN (opcional)',
+        required: false,
+        sensitive: true,
+        cookieField: true,
+        hint: 'Necessário para o link da oferta sair curtinho. Sem ele, a oferta sai do mesmo jeito — o link só fica mais comprido.',
+        help: 'No computador, entre em shein.com.br já logada, clique na extensão Cookie-Editor e use o botão Export (canto inferior direito). Não precisa escolher campo nenhum: pode ser Header string ou JSON, os dois funcionam. O código é copiado sozinho; é só colar aqui.',
+      },
     ],
   },
 ]
