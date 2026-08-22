@@ -514,10 +514,26 @@ export async function shortenSheinLink(longUrl, creds, { fetchImpl = globalThis.
     const oneLink = data?.info?.oneLink
     if (!oneLink) return null
 
+    // T090: validar o valor antes de publicar. `convert()` gasta guardas
+    // caras (resolução de short link, `isSheinHost`, `hasOpaqueShareToken`,
+    // varredura de terceiro) para só publicar destino real da SHEIN — não
+    // faz sentido substituir esse resultado por uma string crua da resposta
+    // remota sem checagem nenhuma. Precisa ser: (1) string de fato (não
+    // objeto/número — `oneLink` truthy não-string nunca deveria virar
+    // `[object Object]` na mensagem); (2) URL absoluta válida (rejeita
+    // caminho relativo tipo `/48/abc`); (3) host aprovado por `isSheinHost`
+    // (rejeita `onelink.shein.com.evil.net` e qualquer domínio de fora).
+    // Reprovação devolve `null` — mesmo princípio do RCA "o endereço montado
+    // por nós nunca pode ser publicado" (AGENTS.md, Mercado Livre): melhor
+    // não encurtar do que publicar link quebrado ou de outro domínio como se
+    // fosse sucesso. O fallback de sempre publica o link longo.
+    if (typeof oneLink !== 'string') return null
+    if (!isSheinHost(oneLink)) return null
+
     // Devolve como veio — não reescrever nem remover parâmetro (mesma lição
     // do `generateShortLink` da Shopee: o short link só funciona devolvido
     // como-está).
-    return String(oneLink)
+    return oneLink
   } catch {
     return null
   }

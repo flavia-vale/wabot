@@ -189,6 +189,68 @@ test('oneLink publicado exatamente como a SHEIN devolveu, com os parâmetros del
   assert.equal(result, oneLinkComParametros)
 })
 
+// ---------------------------------------------------------------------------
+// T090 (Phase 18): o oneLink devolvido pela SHEIN precisa ser validado antes
+// de publicar — string, URL absoluta, host aprovado por isSheinHost. Reprovar
+// devolve `null` (fallback publica o link longo), nunca o valor cru.
+// ---------------------------------------------------------------------------
+
+test('T090: oneLink de host fora da SHEIN → null (não publica domínio de terceiro)', async () => {
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok123', memberId: '12345', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: 'https://onelink.shein.com.evil.net/48/x' } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '12345', cookie: 'cookie-t090-host-fora' }, { fetchImpl })
+  assert.equal(result, null)
+})
+
+test('T090: oneLink relativo → null (não publica caminho sem host)', async () => {
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok123', memberId: '12345', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: '/48/abc' } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '12345', cookie: 'cookie-t090-relativo' }, { fetchImpl })
+  assert.equal(result, null)
+})
+
+test('T090: oneLink não-string (objeto) → null, nunca "[object Object]"', async () => {
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok123', memberId: '12345', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: { a: 1 } } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '12345', cookie: 'cookie-t090-objeto' }, { fetchImpl })
+  assert.equal(result, null)
+  assert.notEqual(result, '[object Object]')
+})
+
+test('T090: oneLink "javascript:" → null (não é URL http(s) da SHEIN)', async () => {
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok123', memberId: '12345', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: 'javascript:alert(1)' } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '12345', cookie: 'cookie-t090-javascript' }, { fetchImpl })
+  assert.equal(result, null)
+})
+
+test('T090: oneLink legítimo em onelink.shein.com continua publicando (não regride)', async () => {
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok123', memberId: '12345', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: 'https://onelink.shein.com/48/OK' } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '12345', cookie: 'cookie-t090-legitimo' }, { fetchImpl })
+  assert.equal(result, 'https://onelink.shein.com/48/OK')
+})
+
+test('T090: oneLink legítimo com parâmetro ismg_ol continua publicado tal qual, sem reescrever', async () => {
+  const oneLinkComIsmgOl = 'https://onelink.shein.com/48/5zdjzeumrua5?ismg_ol=GGkS8InolgI_01_KOC-C'
+  const fetchImpl = makeFetchImpl({
+    siteInfo: { SiteUID: 'mbr', token: 'tok123', memberId: '12345', appLanguage: 'pt-br' },
+    shorten: { code: '0', info: { oneLink: oneLinkComIsmgOl } },
+  })
+  const result = await shortenSheinLink(LONG_URL, { tag: '12345', cookie: 'cookie-t090-ismg-ol' }, { fetchImpl })
+  assert.equal(result, oneLinkComIsmgOl)
+})
+
 test('convert() com cookie e identificador batendo publica o oneLink curto', async () => {
   const url = 'https://br.shein.com/vestido-floral-p-485735309.html'
   const oneLinkComParametros = 'https://onelink.shein.com/48/5zdjzeumrua5?ismg_ol=GGkS8InolgI_01_KOC-C'

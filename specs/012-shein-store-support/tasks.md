@@ -997,7 +997,7 @@ corretos — o que segue são lacunas de cobertura e de custo, não vazamento de
 
 ## Phase 18: Code Review Fixes
 
-- [ ] T090 Validar o `oneLink` devolvido pela SHEIN antes de publicá-lo, em
+- [X] T090 Validar o `oneLink` devolvido pela SHEIN antes de publicá-lo, em
   `shortenSheinLink` (`src/converters/shein.js`), per INV-5 / a guarda de host
   já aplicada em `convert()` (partial). Hoje o caminho de sucesso é:
 
@@ -1035,7 +1035,7 @@ corretos — o que segue são lacunas de cobertura e de custo, não vazamento de
   `[object Object]`; (d) `oneLink` legítimo com query continua saindo
   exatamente como veio (não regride o teste que já existe).
 
-- [ ] T091 Documentar o kill-switch `SHEIN_SHORTLINK_ENABLED` em `AGENTS.md`,
+- [X] T091 Documentar o kill-switch `SHEIN_SHORTLINK_ENABLED` em `AGENTS.md`,
   per a convenção do próprio arquivo (partial). Todo interruptor de rollout com
   semântica de produção está documentado lá (`COUPON_LINK_CONVERT`,
   `COUPON_BRAND_CARD_ENABLED`, `WA_IGNORE_UNMONITORED_GROUPS`,
