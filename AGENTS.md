@@ -2070,6 +2070,58 @@ por grupo, num JSON com data e motivo. Rodar ANTES de trocar.
 não pode voltar a ler `group.imageMode`; o que ele lê é o modo global. Teste:
 `test/image-mode-policy.test.js`.
 
+## A escolha do formato VOLTOU para a tela da cliente (2026-08-22)
+
+Por grupo monitorado, em "Como a oferta aparece":
+
+- **Card que abre a loja** (`preview`) — texto + card grande; tocar no card abre
+  a página do produto;
+- **Foto da oferta** (`original`) — foto + texto; tocar na foto só amplia a foto.
+
+**Por que voltou.** A escolha tinha sido tirada em 2026-07 porque o card
+dependia de UMA fonte de foto só (raspar a loja): loja bloqueando = oferta sem
+foto = suporte. Isso deixou de valer — a foto do ML agora vem também pela API, e
+o plano B em cascata (`core/previewImageFallbackPolicy.js`) usa a foto da
+mensagem de origem quando a loja não entrega. O motivo de a cliente não poder
+escolher caiu junto.
+
+**Precedência — toda ela em `resolveGroupImageModeFor`** (`core/imageModePolicy.js`,
+puro/testado), consumida SÓ pelo chokepoint `toMonitorGroup`
+(`src/billing/groupEntitlements.js`):
+
+1. **`GROUP_IMAGE_MODE_FORCE`** — chave-mestra global, ignora a escolha de todo
+   mundo;
+2. `Group.imageMode`, se for um dos dois formatos que a tela oferece;
+3. `GROUP_IMAGE_MODE` / `DEFAULT_GROUP_IMAGE_MODE` — para grupo que nunca
+   escolheu.
+
+**A chave-mestra não é enfeite.** A lição de 2026-08-19/21 foi precisar trocar o
+formato de todas as contas em minutos, sem migration e sem redeploy, quando uma
+loja fecha o caminho da foto. Com a escolha por grupo de volta, `GROUP_IMAGE_MODE`
+sozinho não faria mais isso (quem escolheu ganharia da env) — daí a env separada.
+**Não remover.**
+
+**Não regredir:**
+- `fetch` e `none` continuam **dormentes** (FR-006): existem no código e na
+  coluna, mas **não** são oferecidos na tela. Valor legado desses dois cai no
+  padrão global em vez de reativar um caminho que ninguém escolheu — a migration
+  de 2026-07 deixou todo grupo existente com `'preview'` persistido, então essa
+  regra é o que impede dado antigo de virar comportamento novo em silêncio.
+- ⚠️ **Consequência do deploy, não de ação da cliente:** como todo grupo já
+  existente tem `'preview'` no banco, subir esta versão faz esses grupos
+  passarem a sair como card clicável **sem ninguém mexer em nada**. É o efeito
+  desejado, mas é uma mudança de comportamento no deploy — não confundir com bug.
+- O chokepoint continua sendo o **único** ponto que decide o modo. Não voltar a
+  ler `group.imageMode` cru em nenhum outro lugar.
+- Com o botão **"Ver canal"** ligado no grupo, o seletor fica **travado** em foto:
+  o botão só é aceito em corpo de mídia, então oferecer o card ali prometeria
+  algo que o WhatsApp derruba.
+- Linguagem: a tela diz o que ACONTECE ("abre a loja" / "amplia a foto"), nunca
+  `imageMode`, "card de preview", "thumbnail" ou afins. Teste falha se jargão
+  voltar.
+
+Testes: `test/image-mode-policy.test.js`, `test/group-entitlements.test.js`.
+
 ## `imageMode` fixado em `'preview'` para todos os grupos (2026-07, specs/001-image-mode-preview-default)
 
 A escolha de imagem por grupo monitorado ("Preview clicável" / "Imagem oficial

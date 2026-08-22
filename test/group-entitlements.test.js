@@ -28,7 +28,7 @@ test('buildEntitledGroupConfig removes all channel monitors, posts and targets f
   assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null }])
 })
 
-test('buildEntitledGroupConfig IGNORA o imageMode persistido e usa o modo global (specs/001-image-mode-preview-default, INV-1)', () => {
+test('buildEntitledGroupConfig respeita a escolha da cliente e cai no modo global quando não há escolha', () => {
   const custom = [
     { id: 'm-default', role: 'monitor', waJid: 'a@g.us', kind: 'group', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
     { id: 'm-fetch', role: 'monitor', waJid: 'b@g.us', kind: 'group', imageMode: 'fetch', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
@@ -41,16 +41,19 @@ test('buildEntitledGroupConfig IGNORA o imageMode persistido e usa o modo global
   const result = buildEntitledGroupConfig({ groups: custom, groupTargets: [], planSubject: { plan: 'pro' } })
   const byJid = Object.fromEntries(result.groups.monitor.map(g => [g.waJid, g]))
 
-  // Chokepoint (src/billing/groupEntitlements.js): independente do valor
-  // persistido em group.imageMode, o cfg efetivo consumido pelo pipeline de
-  // envio é sempre 'preview' (defesa em profundidade, FR-001/FR-009).
-  for (const jid of ['a@g.us', 'b@g.us', 'c@g.us', 'd@g.us', 'e@g.us', 'f@g.us', 'g@g.us']) {
-    // A invariante é o valor persistido ser IGNORADO — o modo em si é global
-    // (resolveGroupImageMode, env GROUP_IMAGE_MODE) e mudou de 'preview' para
-    // 'original' em 2026-08-21; prender o teste à string faria a troca de padrão
-    // parecer regressão.
-    assert.equal(byJid[jid].imageMode, resolveGroupImageMode(), `imageMode efetivo deveria ser o modo global para ${jid}`)
+  // 2026-08-22 (chokepoint em src/billing/groupEntitlements.js): a escolha por
+  // grupo voltou à tela. Quem escolheu um dos DOIS formatos oferecidos recebe o
+  // que escolheu.
+  assert.equal(byJid['d@g.us'].imageMode, 'preview', 'grupo que escolheu o card clicável recebe preview')
+  assert.equal(byJid['e@g.us'].imageMode, 'original', 'grupo que escolheu a foto da oferta recebe original')
+
+  // Quem nunca escolheu — e quem tem valor legado de um modo que a tela NÃO
+  // oferece (fetch/none/lixo) — segue o modo global. Isso impede que um dado
+  // antigo reative sozinho um caminho dormente (FR-006).
+  for (const jid of ['a@g.us', 'b@g.us', 'c@g.us', 'f@g.us', 'g@g.us']) {
+    assert.equal(byJid[jid].imageMode, resolveGroupImageMode(), `sem escolha válida, ${jid} deveria seguir o modo global`)
   }
+
   // fallbackToOriginal segue sempre ligado (rede de segurança preservada, mesmo dormente).
   assert.equal(byJid['b@g.us'].fallbackToOriginal, true)
 })
