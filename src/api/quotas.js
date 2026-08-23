@@ -1,3 +1,4 @@
+import dbDefault from '../db.js'
 import { trackAnalyticsEventSafe } from '../analytics.js'
 
 // Quotas por tenant — sem elas, um único cliente (ou integração com bug em
@@ -24,11 +25,27 @@ function quotaError(reply, { userId, quota, limit, current, message }) {
   return reply.code(400).send({ error: message, quota, limit })
 }
 
+// Busca o limite customizado por usuário para automações; fallback para env.
+export async function getUserAutomationQuota(db, userId) {
+  try {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { maxAutomations: true } })
+    return user?.maxAutomations ?? QUOTAS.automationsPerUser
+  } catch {
+    return QUOTAS.automationsPerUser
+  }
+}
+
 // Caps de contagem de recursos (grupos, automações, filas, pendências).
 // Devolve true quando dentro do limite; caso contrário responde 400 e
 // devolve false (padrão das demais validações de rota deste repo).
-export async function ensureCountQuota(reply, { userId, quota, count, label }) {
-  const limit = QUOTAS[quota]
+export async function ensureCountQuota(reply, { userId, quota, count, label, db }) {
+  let limit = QUOTAS[quota]
+
+  // Para automações, buscar o limite customizado do usuário
+  if (quota === 'automationsPerUser' && db) {
+    limit = await getUserAutomationQuota(db, userId)
+  }
+
   const current = await count()
   if (current < limit) return true
   quotaError(reply, {
