@@ -87,6 +87,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
       quota: 'automationsPerUser',
       count: () => db.offerAutomation.count({ where: { userId: req.user.sub } }),
       label: 'automações de oferta',
+      db,
     }))) return
 
     return db.offerAutomation.create({

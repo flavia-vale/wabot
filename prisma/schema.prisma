@@ -63,11 +63,13 @@ model User {
   resolvedPayoutRequests      AffiliatePayoutRequest[]    @relation("ResolvedPayoutRequests")
   subscriptions               Subscription[]
   affiliateAttributionTouches AffiliateAttributionTouch[]
+  maxAutomations             Int       @default(30)
 
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
   @@index([supportStatus])
   @@index([affiliateProfileId])
+  @@index([maxAutomations])
 }
 
 model WaSession {
