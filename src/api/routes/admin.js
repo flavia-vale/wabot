@@ -2688,4 +2688,71 @@ app.get('/sessions', async (req, reply) => {
       return reply.code(503).send({ error: `Falha ao ${action === 'on' ? 'ligar' : 'desligar'} staging: ${err.message}` })
     }
   })
+
+  // Configuração de limite de automações por usuário
+  app.get('/automation-quota', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const { page = 1, limit = 20, search = '' } = req.query
+    const p = Math.max(1, Number(page))
+    const l = Math.min(100, Math.max(1, Number(limit)))
+    const offset = (p - 1) * l
+
+    const searchLower = String(search).toLowerCase().trim()
+    const where = searchLower ? {
+      OR: [
+        { email: { contains: searchLower, mode: 'insensitive' } },
+        { name: { contains: searchLower, mode: 'insensitive' } },
+      ]
+    } : {}
+
+    const [users, total] = await Promise.all([
+      db.user.findMany({
+        where,
+        select: { id: true, email: true, name: true, maxAutomations: true },
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: l,
+      }),
+      db.user.count({ where }),
+    ])
+
+    const usersWithCount = await Promise.all(users.map(async (u) => ({
+      ...u,
+      activeAutomations: await db.offerAutomation.count({ where: { userId: u.id, enabled: true } }),
+      totalAutomations: await db.offerAutomation.count({ where: { userId: u.id } }),
+    })))
+
+    await writeAdminAuditLog(req, { action: 'admin.automation_quota.list', resource: 'user', after: { total, page: p, limit: l } })
+    return { users: usersWithCount, total, page: p, limit: l }
+  })
+
+  app.patch('/automation-quota/:userId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:write'))) return
+    const { maxAutomations } = req.body ?? {}
+    const userId = String(req.params.userId).trim()
+
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, email: true, maxAutomations: true } })
+    if (!user) return reply.code(404).send({ error: 'Usuário não encontrado' })
+
+    const newLimit = Math.max(1, Math.min(200, Number(maxAutomations)))
+    const oldLimit = user.maxAutomations
+
+    const updated = await db.user.update({
+      where: { id: userId },
+      data: { maxAutomations: newLimit },
+      select: { id: true, email: true, maxAutomations: true },
+    })
+
+    const activeCount = await db.offerAutomation.count({ where: { userId, enabled: true } })
+    await writeAdminAuditLog(req, {
+      action: 'admin.automation_quota.update',
+      resource: 'user',
+      resourceId: userId,
+      targetUserId: userId,
+      before: { maxAutomations: oldLimit },
+      after: { maxAutomations: newLimit, activeAutomations: activeCount },
+    })
+
+    return { ...updated, activeAutomations: activeCount }
+  })
 }
