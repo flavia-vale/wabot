@@ -32,7 +32,10 @@ export default function AdminAutomationsPage() {
   }, [page, limit, search])
 
   useEffect(() => {
-    loadUsers()
+    // Defer the initial request so its loading-state updates do not run
+    // synchronously in the effect body (react-hooks/set-state-in-effect).
+    const timeoutId = window.setTimeout(loadUsers, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [loadUsers])
 
   const handleUpdateQuota = async (userId, newLimit) => {
