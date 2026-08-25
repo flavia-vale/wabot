@@ -17,7 +17,7 @@ const botWorkerSource = readFileSync(join(__dirname, '../src/bot-worker.js'), 'u
 // porque bot-worker.js roda como processo próprio e não expõe essa lógica
 // para import direto — mesmo padrão de bot-worker-relay-branding.test.js.
 test('msgRetryCounterCache é declarada em escopo de módulo (fora de startBotInner)', () => {
-  const declIndex = botWorkerSource.indexOf('const msgRetryCounterCache = new NodeCache(')
+  const declIndex = botWorkerSource.indexOf('const msgRetryCounterCache = createDurableStuckMessageRetryCache(')
   const startBotInnerIndex = botWorkerSource.indexOf('async function startBotInner()')
   assert.notEqual(declIndex, -1, 'declaração de msgRetryCounterCache não encontrada')
   assert.notEqual(startBotInnerIndex, -1, 'startBotInner não encontrada')
@@ -25,6 +25,14 @@ test('msgRetryCounterCache é declarada em escopo de módulo (fora de startBotIn
     declIndex < startBotInnerIndex,
     'msgRetryCounterCache precisa ser declarada ANTES/FORA de startBotInner (escopo de módulo), senão é recriada a cada reconexão',
   )
+})
+
+test('stream:error repetido coloca o msgId na quarentena antes de reconectar', () => {
+  const quarantineIndex = botWorkerSource.indexOf('msgRetryCounterCache.quarantine(stuckMsgId)')
+  const reconnectIndex = botWorkerSource.indexOf("scheduleReconnect(delayMs, { code, reason:", quarantineIndex)
+  assert.notEqual(quarantineIndex, -1, 'quarentena do msgId travado não encontrada')
+  assert.notEqual(reconnectIndex, -1, 'reconexão após stream:error não encontrada')
+  assert.ok(quarantineIndex < reconnectIndex, 'msgId precisa ser quarentenado antes da próxima conexão')
 })
 
 test('placeholderResendCache é declarada em escopo de módulo (fora de startBotInner)', () => {

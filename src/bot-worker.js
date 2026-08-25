@@ -79,6 +79,7 @@ import { buildRedisOptions } from './core/redisFactory.js'
 import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
+import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
 
 const userId = process.env.BOT_USER_ID
 const WORKER_STARTED_AT = Date.now()
@@ -288,10 +289,15 @@ let shuttingDown = false
 // (`stream:error`), e a queda reseta o contador de novo. Loop que se
 // autoalimenta: a queda impede a mensagem de ser esquecida, e a mensagem não-
 // esquecida causa a próxima queda (caso real: sessão caindo a cada ~50min por
-// dias seguidos presa numa única mensagem). Fix: manter as caches vivas no
-// escopo do módulo (sobrevivem a reconexões dentro do mesmo processo worker,
-// mas começam limpas a cada restart do worker — aceitável).
-const msgRetryCounterCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
+// dias seguidos presa numa única mensagem). A cache comum vive no escopo do
+// módulo; a quarentena dos ids comprovadamente travados também é persistida no
+// AUTH_DIR para sobreviver a restart do worker e ao `del` interno do Baileys.
+const WA_MAX_MSG_RETRY_COUNT = 5
+const msgRetryCounterCache = createDurableStuckMessageRetryCache({
+  file: `${getAuthInfoDir(userId)}/stuck-message-quarantine.json`,
+  maxRetryCount: WA_MAX_MSG_RETRY_COUNT,
+  logger,
+})
 const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
 // Timestamp (Date.now()) até quando uma reconexão automática já está agendada
 // (setTimeout(startBot, ...) pendente). Existe um intervalo real entre o close
@@ -2218,6 +2224,7 @@ async function startBotInner() {
     // declaração acima (RCA 2026-07: loop infinito de retry-receipt).
     msgRetryCounterCache,
     placeholderResendCache,
+    maxMsgRetryCount: WA_MAX_MSG_RETRY_COUNT,
     // Fix de causa raiz: grupo @g.us não-monitorado e dessincronizado que
     // derrubava a sessão via retry-receipt agora é ACKado e descartado antes do
     // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
@@ -2396,9 +2403,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         })
         stuckMessageTimestamps = stuckResult.state
         if (stuckResult.stuck) {
+          const newlyQuarantined = msgRetryCounterCache.quarantine(stuckMsgId)
           logger.error(
-            { msgId: stuckMsgId, count: stuckResult.count, windowMs: STUCK_MSG_WINDOW_MS },
-            'Mensagem travada em loop de retry-receipt derrubando a sessão repetidamente — ver AGENTS.md "Loop de retry-receipt travado"'
+            { msgId: stuckMsgId, count: stuckResult.count, windowMs: STUCK_MSG_WINDOW_MS, quarantined: true, newlyQuarantined },
+            'Mensagem travada em loop de retry-receipt colocada em quarentena durável; a próxima conexão não pedirá novo retry'
           )
           try { recordOperationalSignal('wa_stuck_message_retry', { userId, msgId: stuckMsgId, count: stuckResult.count }) } catch {}
         }
