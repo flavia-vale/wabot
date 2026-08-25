@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
@@ -15,11 +15,7 @@ export default function AdminAutomationsPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(null)
 
-  useEffect(() => {
-    loadUsers()
-  }, [page, limit, search])
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
@@ -33,7 +29,14 @@ export default function AdminAutomationsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, limit, search])
+
+  useEffect(() => {
+    // Defer the initial request so its loading-state updates do not run
+    // synchronously in the effect body (react-hooks/set-state-in-effect).
+    const timeoutId = window.setTimeout(loadUsers, 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [loadUsers])
 
   const handleUpdateQuota = async (userId, newLimit) => {
     setSaving(userId)
