@@ -1476,10 +1476,21 @@ presa nisso por pelo menos 3+ dias antes de ser detectada).
 pediu) agora são criados **uma vez em escopo de módulo** (`NodeCache` de
 `@cacheable/node-cache`, mesma lib que o Baileys usa internamente — já vinha
 como dependência transitiva, promovida a dependência direta) e passados
-explicitamente pro `makeWASocket()`. Sobrevivem a reconexões dentro do MESMO
-processo worker; começam limpos a cada restart do worker (aceitável — não é
-esse o vetor do bug). `stdTTL` de 1h e `useClones: false` espelham os defaults
-internos do Baileys.
+explicitamente pro `makeWASocket()`. A cache comum sobrevive às reconexões do
+MESMO processo worker.
+
+**Correção complementar (RCA 2026-08, Cynthia):** isso ainda era insuficiente.
+O próprio Baileys apaga o contador ao atingir `maxMsgRetryCount`, e um restart
+manual recriava a cache vazia. Uma mídia envenenada de `@newsletter` voltou por
+horas e deixou a sessão com heartbeat verde, mas sem novos envios. Ao segundo
+`stream:error` do mesmo `msgId`, `createDurableStuckMessageRetryCache` grava
+`stuck-message-quarantine.json` dentro do `AUTH_DIR` da conta. Para esse id, a
+cache devolve o limite ao Baileys e recusa o `del`: ele ACKa/descarta sem mandar
+outro retry-receipt. A quarentena dura 7 dias, sobrevive a restart do worker e
+some junto com o auth em logout/reset. Para recuperar um id já confirmado no
+node `stream:error`, antes de reiniciar apenas o worker da conta, use
+`node scripts/quarantine-wa-message.mjs <userId> <msgId>`. Nunca usar por
+palpite: o id precisa vir do log.
 
 **Não é sobre decrypt/crypto em si.** As falhas de "failed to decrypt
 message" (`Bad MAC`/`SessionError`/`MessageCounterError`) que aparecem em
@@ -1506,10 +1517,9 @@ messageId) via `extractAckMessageIdFromStreamErrorNode` +
 `registerStuckMessageAndDecide` (`src/core/reconnectPolicy.js`, puras/
 testadas): se o MESMO `messageId` aparecer no ack de um `stream:error` 2+
 vezes (`WA_STUCK_MSG_THRESHOLD`, default 2) dentro de 2h
-(`WA_STUCK_MSG_WINDOW_MS`), emite `logger.error` + `AnalyticsEvent
-ops_wa_stuck_message_retry` — visibilidade operacional ANTES do cliente
-reclamar, independente de qual bug específico estiver causando o travamento
-dessa vez.
+(`WA_STUCK_MSG_WINDOW_MS`), coloca o id na quarentena durável e emite
+`logger.error` + `AnalyticsEvent ops_wa_stuck_message_retry`. Assim a próxima
+conexão deixa de pedir retry da mensagem culpada em vez de apenas avisar.
 
 ## `failure 405` derrubando TODAS as sessões: versão do WA Web cortada (RCA 2026-07-28)
 
