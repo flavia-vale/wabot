@@ -277,6 +277,29 @@ function toneClasses(tone) {
   return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
 }
 
+const SCENARIO_LABELS = {
+  blind: 'Sem receber',
+  quedas: 'Caindo demais',
+  manual: 'Cliente teve que agir',
+  desync: 'Fonte dessincronizada',
+}
+
+function ScenarioCard({ label, value, tone = 'ok', helper, onClick }) {
+  const content = (
+    <>
+      <p className="text-[11px] font-black uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-1 text-2xl font-black">{value}</p>
+      {helper && <p className="mt-1 text-xs opacity-80">{helper}</p>}
+    </>
+  )
+  if (!onClick) return <article className={`rounded-2xl p-4 ring-1 shadow-sm ${toneClasses(tone)}`}>{content}</article>
+  return (
+    <button type="button" onClick={onClick} className={`rounded-2xl p-4 text-left ring-1 shadow-sm transition hover:brightness-95 ${toneClasses(tone)}`}>
+      {content}
+    </button>
+  )
+}
+
 function CommandCard({ label, value, tone = 'ok', helper }) {
   return <article className={`rounded-2xl p-4 ring-1 shadow-sm ${toneClasses(tone)}`}><p className="text-[11px] font-black uppercase tracking-wide opacity-80">{label}</p><p className="mt-1 text-2xl font-black">{value}</p>{helper && <p className="mt-1 text-xs opacity-80">{helper}</p>}</article>
 }
@@ -1200,7 +1223,7 @@ export default function AdminPage() {
   const [commissions, setCommissions] = useState(null)
   const [onlineDetail, setOnlineDetail] = useState(null)
   const [onlineDetailLoading, setOnlineDetailLoading] = useState(false)
-  const [onlineFilters, setOnlineFilters] = useState({ search: '', waStatus: 'all', plan: 'all', activity: 'all', minErrors: '' })
+  const [onlineFilters, setOnlineFilters] = useState({ search: '', waStatus: 'all', plan: 'all', activity: 'all', minErrors: '', cenario: 'all' })
   const [onlineFiltering, setOnlineFiltering] = useState(false)
 
   async function reloadOnline(next = onlineFilters) {
@@ -1213,6 +1236,14 @@ export default function AdminPage() {
     } finally {
       setOnlineFiltering(false)
     }
+  }
+
+  // Abre a aba online já filtrada pelo cenário clicado nos cards do topo.
+  function openScenario(cenario) {
+    const next = { ...onlineFilters, cenario }
+    setOnlineFilters(next)
+    setTab('online')
+    reloadOnline(next)
   }
 
   function onOnlineSelect(key, value) {
@@ -1639,6 +1670,45 @@ export default function AdminPage() {
               </div>
               <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">Atualização em tempo real</span>
             </div>
+            {/* Cenários da frota (Fase 1B do plano de recepção, RCA 2026-08-26).
+                Primeira fileira de propósito: é o retrato de quantas clientes
+                estão em cada quadro, e cada card leva para a lista filtrada. */}
+            <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <ScenarioCard
+                label="Sem receber"
+                value={formatNumber(online?.summary?.scenarios?.semReceber ?? 0)}
+                tone={severityTone(online?.summary?.scenarios?.semReceber ?? 0, 1, 3)}
+                helper="conectadas e sem mensagem chegando"
+                onClick={() => openScenario('blind')}
+              />
+              <ScenarioCard
+                label="Caindo demais"
+                value={formatNumber(online?.summary?.scenarios?.caindoDemais ?? 0)}
+                tone={severityTone(online?.summary?.scenarios?.caindoDemais ?? 0, 1, 3)}
+                helper={`acima de ${formatNumber(online?.summary?.scenarios?.dropsAlertThreshold ?? 20)} quedas em 24h`}
+                onClick={() => openScenario('quedas')}
+              />
+              <ScenarioCard
+                label="Cliente teve que agir"
+                value={formatNumber(online?.summary?.scenarios?.clienteAgiu ?? 0)}
+                tone={severityTone(online?.summary?.scenarios?.clienteAgiu ?? 0, 1, 2)}
+                helper={`${formatDurationMs(online?.summary?.scenarios?.manualOfflineMs24h)} parados até agir`}
+                onClick={() => openScenario('manual')}
+              />
+              <ScenarioCard
+                label="Fonte dessincronizada"
+                value={formatNumber(online?.summary?.scenarios?.fonteQuebrada ?? 0)}
+                tone={severityTone(online?.summary?.scenarios?.fonteQuebrada ?? 0, 1, 5)}
+                helper="conserto automático não resolveu (7d)"
+                onClick={() => openScenario('desync')}
+              />
+              <ScenarioCard
+                label="Offline acumulado 24h"
+                value={formatDurationMs(online?.summary?.scenarios?.offlineMs24h)}
+                tone={(online?.summary?.scenarios?.offlineMs24h ?? 0) > 0 ? 'warn' : 'ok'}
+                helper="tempo total da frota fora do ar"
+              />
+            </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <CommandCard label="Online agora" value={online?.summary?.onlineUsers ?? '—'} tone={severityTone(0)} helper={`${online?.summary?.stabilityPct ?? '—'}% estabilidade`} />
               <CommandCard label="Erros 24h" value={overview?.errors24h ?? 0} tone={severityTone(overview?.errors24h, 1, 10)} helper="Acima de 10 = crítico" />
@@ -1917,6 +1987,11 @@ export default function AdminPage() {
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); reloadOnline() }} className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_160px_130px_190px_110px_auto]">
+              {onlineFilters.cenario && onlineFilters.cenario !== 'all' && (
+                <button type="button" onClick={() => onOnlineSelect('cenario', 'all')} className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800 hover:bg-emerald-200">
+                  {SCENARIO_LABELS[onlineFilters.cenario] || onlineFilters.cenario} · limpar filtro
+                </button>
+              )}
               <input value={onlineFilters.search} onChange={(e) => setOnlineFilters({ ...onlineFilters, search: e.target.value })} placeholder="Buscar nome ou e-mail" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
               <select value={onlineFilters.waStatus} onChange={(e) => onOnlineSelect('waStatus', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
                 <option value="all">Todos status</option>

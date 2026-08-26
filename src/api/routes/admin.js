@@ -797,6 +797,80 @@ function isSessionOnline(session, now = new Date()) {
   return session.status === 'connecting' && heartbeatFresh && ['connecting', 'reconnecting'].includes(session.lifecycle)
 }
 
+// Cenários da frota para os PRIMEIROS cards do admin (Fase 1B do plano de
+// recepção, RCA 2026-08-26). Cada número responde uma pergunta operacional
+// diferente e leva para a aba online já filtrada:
+//   semReceber     — conectado e sem receber (o "verde mentiroso")
+//   caindoDemais   — quedas acima do normal em 24h
+//   clienteAgiu    — precisou re-parear: é o número que mede a promessa
+//   fonteQuebrada  — auto-refresh não resolveu a dessincronização
+//   offlineMs24h   — tempo total da frota fora do ar
+// Custo bounded: três groupBy e uma varredura de 48h dos eventos de conexão
+// (a mesma janela que a listagem já usa).
+const FLEET_DROPS_ALERT_24H = Math.max(1, Number(process.env.ADMIN_DROPS_ALERT_24H || 20))
+const FLEET_RECEPTION_BLIND_WINDOW_MS = Math.max(10 * 60_000, Number(process.env.ADMIN_RECEPTION_BLIND_WINDOW_MS || 60 * 60_000))
+
+async function buildFleetScenarios(now = new Date()) {
+  const since24h = addDays(now, -1)
+  const since7d = addDays(now, -7)
+  const blindSince = new Date(now.getTime() - FLEET_RECEPTION_BLIND_WINDOW_MS)
+
+  const [dropRows, manualRows, blindRows, desyncRows, offlineEvents] = await Promise.all([
+    db.waConnectionEvent.groupBy({
+      by: ['userId'],
+      where: { type: { in: ['disconnect', 'disconnect_terminal'] }, occurredAt: { gte: since24h, lte: now } },
+      _count: { _all: true },
+    }).catch(() => []),
+    db.waConnectionEvent.findMany({
+      where: { type: { in: ['manual_reconnect_requested', 'manual_pairing_requested'] }, occurredAt: { gte: since24h, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.analyticsEvent.findMany({
+      where: { event: 'ops_wa_reception_blind', createdAt: { gte: blindSince, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.analyticsEvent.findMany({
+      where: { event: 'ops_wa_group_desync_unresolved', createdAt: { gte: since7d, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.waConnectionEvent.findMany({
+      where: { type: { in: OFFLINE_EPISODE_EVENT_TYPES }, occurredAt: { gte: addDays(now, -2), lte: now } },
+      orderBy: { occurredAt: 'asc' },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
+    }).catch(() => []),
+  ])
+
+  const metricsByUser = summarizeOfflineEpisodesByUser(offlineEvents, { since: since24h, now })
+  let offlineMs24h = 0
+  let manualOfflineMs24h = 0
+  for (const metrics of metricsByUser.values()) {
+    offlineMs24h += Number(metrics.automaticOfflineMs || 0) + Number(metrics.manualOfflineMs || 0) + Number(metrics.ongoingOfflineMs || 0)
+    manualOfflineMs24h += Number(metrics.manualOfflineMs || 0)
+  }
+
+  const byScenario = {
+    blind: new Set(blindRows.map(row => row.userId).filter(Boolean)),
+    quedas: new Set(dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).map(row => row.userId).filter(Boolean)),
+    manual: new Set(manualRows.map(row => row.userId).filter(Boolean)),
+    desync: new Set(desyncRows.map(row => row.userId).filter(Boolean)),
+  }
+
+  return {
+    byScenario,
+    semReceber: blindRows.filter(row => row.userId).length,
+    caindoDemais: dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).length,
+    clienteAgiu: manualRows.filter(row => row.userId).length,
+    fonteQuebrada: desyncRows.filter(row => row.userId).length,
+    offlineMs24h,
+    manualOfflineMs24h,
+    dropsAlertThreshold: FLEET_DROPS_ALERT_24H,
+    blindWindowMs: FLEET_RECEPTION_BLIND_WINDOW_MS,
+  }
+}
+
 async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = {}) {
   const now = new Date()
   const since24h = addDays(now, -1)
@@ -866,6 +940,9 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     getLogActivityMap({ userIds }),
   ])
 
+  const scenarios = await buildFleetScenarios(now).catch(() => null)
+  const scenarioFilter = String(query.cenario || '').trim()
+  const scenarioUserIds = scenarios?.byScenario?.[scenarioFilter] ?? null
   const eventCounts24h = countRowsByUserAndType(eventCounts24hRows)
   const offlineMetrics24h = summarizeOfflineEpisodesByUser(offlineEvents24h, { since: since24h, now })
   const rows = users.map(user => {
@@ -908,6 +985,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       waSession: session,
     }, adminRole)
   }).filter(row => {
+    if (scenarioUserIds && !scenarioUserIds.has(row.id)) return false
     const sessionStatus = row.waSession?.status || 'none'
     const isAlert = row.waSession && sessionStatus !== 'connected'
     if (waStatus === 'alerts' && !isAlert) return false
@@ -927,17 +1005,19 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const connectingUsers = allActiveSessions.filter(session => session.status === 'connecting').length
   const disconnectedAlerts = allActiveSessions.filter(session => session.status !== 'connected' && session.status !== 'connecting').length
   const stabilityPct = totalSessions ? Math.round((onlineUsers / totalSessions) * 1000) / 10 : 100
+  const { byScenario: _byScenario, ...scenarioCounts } = scenarios ?? {}
 
   return {
     checkedAt: now.toISOString(),
     summary: {
+      scenarios: scenarios ? scenarioCounts : null,
       onlineUsers,
       totalSessions,
       stabilityPct,
       disconnectedAlerts,
       connectingUsers,
       activeUsersLoaded: rows.length,
-      filters: { search, plan, waStatus, activity, minErrors },
+      filters: { search, plan, waStatus, activity, minErrors, cenario: scenarioFilter || 'all' },
     },
     users: rows.sort((a, b) => {
       const priorityA = (a.waSession?.status === 'disconnected' ? 3 : a.waSession?.status === 'connecting' ? 2 : a.recentErrors ? 1 : 0)
