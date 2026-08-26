@@ -70,6 +70,7 @@ export const EDITORIAL_DATES = {
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
   // desta rodada, publicada em 2026-08-19.
   '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-08-19' },
+  '/alternativas/gigi-bot': { publishedAt: '2026-08-26', updatedAt: '2026-08-26' },
   '/alternativas/proafiliados': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/alternativas/shozap': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/alternativas/fluxopromo': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },

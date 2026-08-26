@@ -331,6 +331,10 @@ export const CONTENT_SEO_ROUTES = [
   // US5 (specs/013-inbound-leads-strategy) — única página nova desta rodada.
   // title/description ficam só em _comparisonContent.js (fonte única, FR-001).
   { path: '/alternativas/achadinho-pro', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/achadinho-pro'), indexable: true },
+  // Busca pelo NOME do concorrente — a linha que virou o motor de impressão
+  // do site (15% do total em 2026-08-16). title/description ficam só em
+  // _comparisonContent.js (fonte única, FR-001).
+  { path: '/alternativas/gigi-bot', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/gigi-bot'), indexable: true },
   { path: '/ferramentas', template: 'tools-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/ferramentas/calculadora-tempo-grupos-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   // title/description ficam só em app/ferramentas/calculadora-risco-whatsapp/page.js (fonte única, FR-001).
