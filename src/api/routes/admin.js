@@ -12,6 +12,7 @@ import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normali
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
 import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
+import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
 
 const ROLE_PERMISSIONS = {
@@ -788,78 +789,86 @@ function safeIsoDate(value) {
 }
 
 
-function parseEventMetadata(metadata) {
-  try { return JSON.parse(metadata || '{}') || {} } catch { return {} }
-}
-
-function summarizeOfflineEpisodes(events = [], { since, now = new Date() } = {}) {
-  const startedByUser = new Map()
-  const result = new Map()
-  const sinceMs = since ? new Date(since).getTime() : 0
-  const nowMs = now.getTime()
-  const automaticRestoreTypes = new Set(['reconnect_success', 'connected'])
-  const manualTypes = new Set(['manual_reconnect_requested', 'manual_pairing_requested'])
-
-  function ensure(userId) {
-    if (!result.has(userId)) {
-      result.set(userId, {
-        manualReconnects: 0,
-        automaticRecoveries: 0,
-        automaticOfflineMs: 0,
-        longestAutomaticOfflineMs: 0,
-        ongoingOfflineMs: 0,
-      })
-    }
-    return result.get(userId)
-  }
-
-  for (const event of events) {
-    const userId = event.userId
-    const type = String(event.type || '')
-    const atMs = new Date(event.occurredAt).getTime()
-    if (!userId || !Number.isFinite(atMs)) continue
-    const bucket = ensure(userId)
-    if (manualTypes.has(type)) {
-      bucket.manualReconnects += 1
-      startedByUser.delete(userId)
-      continue
-    }
-    if (type === 'disconnect') {
-      const metadata = parseEventMetadata(event.metadata)
-      if (metadata.pairing || metadata.manual || metadata.terminal) continue
-      if (!startedByUser.has(userId)) startedByUser.set(userId, atMs)
-      continue
-    }
-    if (type === 'disconnect_terminal' || type === 'auth_reset') {
-      startedByUser.delete(userId)
-      continue
-    }
-    if (automaticRestoreTypes.has(type) && startedByUser.has(userId)) {
-      const startMs = startedByUser.get(userId)
-      const durationMs = Math.max(0, atMs - startMs)
-      const windowedMs = Math.max(0, atMs - Math.max(startMs, sinceMs))
-      bucket.automaticRecoveries += 1
-      bucket.automaticOfflineMs += windowedMs
-      bucket.longestAutomaticOfflineMs = Math.max(bucket.longestAutomaticOfflineMs, durationMs)
-      startedByUser.delete(userId)
-    }
-  }
-
-  for (const [userId, startMs] of startedByUser.entries()) {
-    const bucket = ensure(userId)
-    bucket.ongoingOfflineMs = Math.max(0, nowMs - Math.max(startMs, sinceMs))
-    bucket.longestAutomaticOfflineMs = Math.max(bucket.longestAutomaticOfflineMs, Math.max(0, nowMs - startMs))
-  }
-
-  return result
-}
-
 function isSessionOnline(session, now = new Date()) {
   if (!session) return false
   if (session.status === 'connected') return true
   const heartbeatAt = session.lastHeartbeatAt ? new Date(session.lastHeartbeatAt).getTime() : 0
   const heartbeatFresh = heartbeatAt && now.getTime() - heartbeatAt <= 2 * 60_000
   return session.status === 'connecting' && heartbeatFresh && ['connecting', 'reconnecting'].includes(session.lifecycle)
+}
+
+// Cenários da frota para os PRIMEIROS cards do admin (Fase 1B do plano de
+// recepção, RCA 2026-08-26). Cada número responde uma pergunta operacional
+// diferente e leva para a aba online já filtrada:
+//   semReceber     — conectado e sem receber (o "verde mentiroso")
+//   caindoDemais   — quedas acima do normal em 24h
+//   clienteAgiu    — precisou re-parear: é o número que mede a promessa
+//   fonteQuebrada  — auto-refresh não resolveu a dessincronização
+//   offlineMs24h   — tempo total da frota fora do ar
+// Custo bounded: três groupBy e uma varredura de 48h dos eventos de conexão
+// (a mesma janela que a listagem já usa).
+const FLEET_DROPS_ALERT_24H = Math.max(1, Number(process.env.ADMIN_DROPS_ALERT_24H || 20))
+const FLEET_RECEPTION_BLIND_WINDOW_MS = Math.max(10 * 60_000, Number(process.env.ADMIN_RECEPTION_BLIND_WINDOW_MS || 60 * 60_000))
+
+async function buildFleetScenarios(now = new Date()) {
+  const since24h = addDays(now, -1)
+  const since7d = addDays(now, -7)
+  const blindSince = new Date(now.getTime() - FLEET_RECEPTION_BLIND_WINDOW_MS)
+
+  const [dropRows, manualRows, blindRows, desyncRows, offlineEvents] = await Promise.all([
+    db.waConnectionEvent.groupBy({
+      by: ['userId'],
+      where: { type: { in: ['disconnect', 'disconnect_terminal'] }, occurredAt: { gte: since24h, lte: now } },
+      _count: { _all: true },
+    }).catch(() => []),
+    db.waConnectionEvent.findMany({
+      where: { type: { in: ['manual_reconnect_requested', 'manual_pairing_requested'] }, occurredAt: { gte: since24h, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.analyticsEvent.findMany({
+      where: { event: 'ops_wa_reception_blind', createdAt: { gte: blindSince, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.analyticsEvent.findMany({
+      where: { event: 'ops_wa_group_desync_unresolved', createdAt: { gte: since7d, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.waConnectionEvent.findMany({
+      where: { type: { in: OFFLINE_EPISODE_EVENT_TYPES }, occurredAt: { gte: addDays(now, -2), lte: now } },
+      orderBy: { occurredAt: 'asc' },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
+    }).catch(() => []),
+  ])
+
+  const metricsByUser = summarizeOfflineEpisodesByUser(offlineEvents, { since: since24h, now })
+  let offlineMs24h = 0
+  let manualOfflineMs24h = 0
+  for (const metrics of metricsByUser.values()) {
+    offlineMs24h += Number(metrics.automaticOfflineMs || 0) + Number(metrics.manualOfflineMs || 0) + Number(metrics.ongoingOfflineMs || 0)
+    manualOfflineMs24h += Number(metrics.manualOfflineMs || 0)
+  }
+
+  const byScenario = {
+    blind: new Set(blindRows.map(row => row.userId).filter(Boolean)),
+    quedas: new Set(dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).map(row => row.userId).filter(Boolean)),
+    manual: new Set(manualRows.map(row => row.userId).filter(Boolean)),
+    desync: new Set(desyncRows.map(row => row.userId).filter(Boolean)),
+  }
+
+  return {
+    byScenario,
+    semReceber: blindRows.filter(row => row.userId).length,
+    caindoDemais: dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).length,
+    clienteAgiu: manualRows.filter(row => row.userId).length,
+    fonteQuebrada: desyncRows.filter(row => row.userId).length,
+    offlineMs24h,
+    manualOfflineMs24h,
+    dropsAlertThreshold: FLEET_DROPS_ALERT_24H,
+    blindWindowMs: FLEET_RECEPTION_BLIND_WINDOW_MS,
+  }
 }
 
 async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = {}) {
@@ -918,18 +927,24 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       where: { userId: { in: userIds }, occurredAt: { gte: since24h } },
       _count: { _all: true },
     }).catch(() => []) : [],
+    // Busca com FOLGA (48h) e recorta em 24h no cálculo: um episódio que
+    // começou antes da janela precisa achar o par para não sumir da conta
+    // (defeito 2 do RCA 2026-08-26).
     userIds.length ? db.waConnectionEvent.findMany({
-      where: { userId: { in: userIds }, occurredAt: { gte: since24h, lte: now }, type: { in: ['disconnect', 'disconnect_terminal', 'auth_reset', 'reconnect_success', 'connected', 'manual_reconnect_requested', 'manual_pairing_requested'] } },
+      where: { userId: { in: userIds }, occurredAt: { gte: addDays(now, -2), lte: now }, type: { in: OFFLINE_EPISODE_EVENT_TYPES } },
       orderBy: { occurredAt: 'asc' },
-      select: { userId: true, type: true, metadata: true, occurredAt: true },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
     }).catch(() => []) : [],
     getLogCountMap({ status: 'success', since: since24h, userIds }),
     getLogCountMap({ status: 'error', since: since24h, userIds }),
     getLogActivityMap({ userIds }),
   ])
 
+  const scenarios = await buildFleetScenarios(now).catch(() => null)
+  const scenarioFilter = String(query.cenario || '').trim()
+  const scenarioUserIds = scenarios?.byScenario?.[scenarioFilter] ?? null
   const eventCounts24h = countRowsByUserAndType(eventCounts24hRows)
-  const offlineMetrics24h = summarizeOfflineEpisodes(offlineEvents24h, { since: since24h, now })
+  const offlineMetrics24h = summarizeOfflineEpisodesByUser(offlineEvents24h, { since: since24h, now })
   const rows = users.map(user => {
     const session = user.waSession
     const counts = eventCounts24h.get(user.id) || {}
@@ -962,12 +977,15 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       reconnectAttempts24h,
       reconnectSuccess24h,
       manualReconnects24h: Number(offline24h.manualReconnects || 0),
+      manualRecoveries24h: Number(offline24h.manualRecoveries || 0),
+      manualOfflineMs24h: Number(offline24h.manualOfflineMs || 0),
       automaticRecoveries24h: Number(offline24h.automaticRecoveries || 0),
       automaticOfflineMs24h: Number(offline24h.automaticOfflineMs || 0),
       ongoingOfflineMs24h: Number(offline24h.ongoingOfflineMs || 0),
       waSession: session,
     }, adminRole)
   }).filter(row => {
+    if (scenarioUserIds && !scenarioUserIds.has(row.id)) return false
     const sessionStatus = row.waSession?.status || 'none'
     const isAlert = row.waSession && sessionStatus !== 'connected'
     if (waStatus === 'alerts' && !isAlert) return false
@@ -987,17 +1005,19 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const connectingUsers = allActiveSessions.filter(session => session.status === 'connecting').length
   const disconnectedAlerts = allActiveSessions.filter(session => session.status !== 'connected' && session.status !== 'connecting').length
   const stabilityPct = totalSessions ? Math.round((onlineUsers / totalSessions) * 1000) / 10 : 100
+  const { byScenario: _byScenario, ...scenarioCounts } = scenarios ?? {}
 
   return {
     checkedAt: now.toISOString(),
     summary: {
+      scenarios: scenarios ? scenarioCounts : null,
       onlineUsers,
       totalSessions,
       stabilityPct,
       disconnectedAlerts,
       connectingUsers,
       activeUsersLoaded: rows.length,
-      filters: { search, plan, waStatus, activity, minErrors },
+      filters: { search, plan, waStatus, activity, minErrors, cenario: scenarioFilter || 'all' },
     },
     users: rows.sort((a, b) => {
       const priorityA = (a.waSession?.status === 'disconnected' ? 3 : a.waSession?.status === 'connecting' ? 2 : a.recentErrors ? 1 : 0)
@@ -1049,9 +1069,9 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       _count: { _all: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
-      where: { userId, occurredAt: { gte: since7d, lte: now }, type: { in: ['disconnect', 'disconnect_terminal', 'auth_reset', 'reconnect_success', 'connected', 'manual_reconnect_requested', 'manual_pairing_requested'] } },
+      where: { userId, occurredAt: { gte: since7d, lte: now }, type: { in: OFFLINE_EPISODE_EVENT_TYPES } },
       orderBy: { occurredAt: 'asc' },
-      select: { userId: true, type: true, metadata: true, occurredAt: true },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
       where: { userId, occurredAt: { gte: since7d, lte: now } },
@@ -1078,8 +1098,11 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   const counts7d = countByType(events7d)
   const disconnects24h = Number(counts24h.disconnect || 0) + Number(counts24h.disconnect_terminal || 0)
   const disconnects7d = Number(counts7d.disconnect || 0) + Number(counts7d.disconnect_terminal || 0)
-  const offlineMetrics24h = summarizeOfflineEpisodes(offlineEvents7d.filter(event => new Date(event.occurredAt).getTime() >= since24h.getTime()), { since: since24h, now }).get(userId) || {}
-  const offlineMetrics7d = summarizeOfflineEpisodes(offlineEvents7d, { since: since7d, now }).get(userId) || {}
+  // Os episódios são montados UMA vez sobre a série inteira; as janelas só
+  // recortam o tempo. Filtrar os eventos antes de parear era o defeito 2.
+  const offlineEpisodes = buildOfflineEpisodesByUser(offlineEvents7d, { now }).get(userId) || []
+  const offlineMetrics24h = summarizeEpisodes(offlineEpisodes, { since: since24h, now })
+  const offlineMetrics7d = summarizeEpisodes(offlineEpisodes, { since: since7d, now })
 
   return {
     checkedAt: now.toISOString(),
@@ -1103,7 +1126,14 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       longestAutomaticOfflineMs7d: Number(offlineMetrics7d.longestAutomaticOfflineMs || 0),
       ongoingOfflineMs24h: Number(offlineMetrics24h.ongoingOfflineMs || 0),
       ongoingOfflineMs7d: Number(offlineMetrics7d.ongoingOfflineMs || 0),
+      manualRecoveries24h: Number(offlineMetrics24h.manualRecoveries || 0),
+      manualRecoveries7d: Number(offlineMetrics7d.manualRecoveries || 0),
+      manualOfflineMs24h: Number(offlineMetrics24h.manualOfflineMs || 0),
+      manualOfflineMs7d: Number(offlineMetrics7d.manualOfflineMs || 0),
+      longestManualOfflineMs7d: Number(offlineMetrics7d.longestManualOfflineMs || 0),
+      terminalEpisodes7d: Number(offlineMetrics7d.terminalEpisodes || 0),
     },
+    offlineEpisodes: presentOfflineEpisodes(offlineEpisodes, { limit: 50 }),
     errorsByType: buildErrorsByMessage(logs, { limit: 20 }),
     desyncGroups: summarizeDesyncGroups(desyncEvents, { limit: 10 }),
     recentEvents: recentEvents.map(event => {
