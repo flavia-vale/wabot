@@ -277,6 +277,24 @@ function toneClasses(tone) {
   return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
 }
 
+// Botão "Ver mais": conta vencida há muito tempo fica fora da visão por
+// padrão. Some da TELA, não do sistema — e o botão diz quantas são, para
+// ninguém achar que o número sumiu.
+function VerVencidasToggle({ oculto = 0, ligado = false, janelaDias = 30, onToggle }) {
+  if (!ligado && !oculto) return null
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="mt-1 text-xs font-black text-emerald-700 underline underline-offset-2 hover:text-emerald-900"
+    >
+      {ligado
+        ? `Ocultar quem venceu há mais de ${janelaDias} dias`
+        : `Ver mais (${oculto} vencida${oculto === 1 ? '' : 's'} há mais de ${janelaDias} dias)`}
+    </button>
+  )
+}
+
 const SCENARIO_LABELS = {
   parado: 'Paradas sem ninguém tentando',
   vencido: 'Acesso vencido',
@@ -1227,6 +1245,9 @@ export default function AdminPage() {
   const [onlineDetail, setOnlineDetail] = useState(null)
   const [onlineDetailLoading, setOnlineDetailLoading] = useState(false)
   const [onlineFilters, setOnlineFilters] = useState({ search: '', waStatus: 'all', plan: 'all', activity: 'all', minErrors: '', cenario: 'all' })
+  // Conta vencida há muito tempo fica fora da visão por padrão — polui e
+  // esconde o que precisa de decisão hoje. "Ver mais" traz de volta.
+  const [verVencidasAntigas, setVerVencidasAntigas] = useState(false)
   const [onlineFiltering, setOnlineFiltering] = useState(false)
 
   async function reloadOnline(next = onlineFilters) {
@@ -1312,13 +1333,13 @@ export default function AdminPage() {
     return () => { active = false }
   }, [])
 
-  async function loadAdminData(nextRisk = risk, nextSearch = search) {
+  async function loadAdminData(nextRisk = risk, nextSearch = search, nextVerVencidas = verVencidasAntigas) {
     if (accessDenied) return
     setError('')
     const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
-      api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20 }),
+      api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20, incluirVencidos: nextVerVencidas ? 1 : '' }),
       api.adminWaDisconnectedUsers({ search: nextSearch, limit: 12, minSuccess: 1 }).catch(() => null),
       api.adminSessions({ limit: 10 }),
       api.adminSessionTelemetry({ limit: 60 }).catch(() => null),
@@ -1332,7 +1353,7 @@ export default function AdminPage() {
       api.adminSystemHealth().catch(() => null),
       api.adminSystemMetrics().catch(() => null),
       api.adminSystemObservability().catch(() => null),
-      api.adminOnline({ limit: 120 }).catch(() => null),
+      api.adminOnline({ limit: 120, incluirVencidos: nextVerVencidas ? 1 : '' }).catch(() => null),
       api.adminLpContent().catch(() => null),
       api.adminLegalTerms().catch(() => null),
     ])
@@ -1438,6 +1459,12 @@ export default function AdminPage() {
         <div>
           <h2 className="text-lg font-black text-gray-900">Gestão de clientes</h2>
           <p className="text-sm text-gray-500">{users?.total ?? 0} clientes encontrados · {atRiskUsers.length} com alertas nesta página</p>
+          <VerVencidasToggle
+            oculto={users?.ocultasPorVencimento}
+            ligado={verVencidasAntigas}
+            janelaDias={users?.janelaVencimentoDias}
+            onToggle={() => { const proximo = !verVencidasAntigas; setVerVencidasAntigas(proximo); loadAdminData(risk, search, proximo) }}
+          />
         </div>
         <form onSubmit={applyFilters} className="flex flex-col gap-2 sm:flex-row">
           <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por email" className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" />

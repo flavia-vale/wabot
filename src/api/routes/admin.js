@@ -14,6 +14,7 @@ import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedacti
 import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
+import { buildLongExpiredWhere, wantsLongExpired, isLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
 
@@ -867,6 +868,8 @@ async function buildFleetScenarios(now = new Date()) {
   const precisamDaCliente = new Set()
   const acessoVencido = new Set()
   for (const session of sessions) {
+    // Mesma janela da listagem: card e lista têm que contar a mesma coisa.
+    if (isLongExpired(session.user?.accessExpiresAt ?? null, { now: now.getTime() })) continue
     const ownership = resolveSessionOwner({
       status: session.status,
       lifecycle: session.lifecycle,
@@ -927,10 +930,16 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const minErrors = Math.max(0, Number(query.minErrors ?? 0) || 0)
   const running = new Set(await listRunningBots())
 
+  // Vencidas há muito tempo saem da visão por padrão (pedido de 2026-08-26:
+  // 57 de 66 contas caídas estavam vencidas, e a operação procurava 9 casos
+  // reais no meio disso). É filtro de apresentação — "Ver mais" traz de volta.
+  const includeLongExpired = wantsLongExpired(query.incluirVencidos)
+  const longExpiredWhere = buildLongExpiredWhere({ now, includeLongExpired })
   const where = {
     status: 'active',
     ...(plan !== 'all' && ['trial', 'basic', 'pro'].includes(plan) ? { plan } : {}),
     ...(search ? { OR: [{ email: { contains: search } }, { name: { contains: search } }] } : {}),
+    ...(longExpiredWhere ? { AND: [longExpiredWhere] } : {}),
   }
 
   const [users, allActiveSessions] = await Promise.all([
@@ -1074,6 +1083,16 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const connectingUsers = allActiveSessions.filter(session => session.status === 'connecting').length
   const disconnectedAlerts = allActiveSessions.filter(session => session.status !== 'connected' && session.status !== 'connecting').length
   const stabilityPct = totalSessions ? Math.round((onlineUsers / totalSessions) * 1000) / 10 : 100
+  // Quantas ficaram de fora — o botão "Ver mais" precisa dizer o tamanho.
+  const hiddenLongExpired = includeLongExpired
+    ? 0
+    : await db.user.count({
+        where: {
+          status: 'active',
+          accessExpiresAt: { lte: new Date(now.getTime() - resolveLongExpiredDays() * 24 * 60 * 60 * 1000) },
+        },
+      }).catch(() => 0)
+
   const { byScenario: _byScenario, ...scenarioCounts } = scenarios ?? {}
 
   return {
@@ -1086,6 +1105,9 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       disconnectedAlerts,
       connectingUsers,
       activeUsersLoaded: rows.length,
+      ocultasPorVencimento: hiddenLongExpired,
+      incluindoVencidasAntigas: includeLongExpired,
+      janelaVencimentoDias: resolveLongExpiredDays(),
       filters: { search, plan, waStatus, activity, minErrors, cenario: scenarioFilter || 'all' },
     },
     users: rows.sort((a, b) => {
