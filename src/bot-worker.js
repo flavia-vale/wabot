@@ -32,6 +32,7 @@ import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
+import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { describeMissingCredentials, validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
@@ -81,6 +82,7 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
 
 const userId = process.env.BOT_USER_ID
 const WORKER_STARTED_AT = Date.now()
@@ -261,6 +263,81 @@ let allowedChatJidsReady = false
 // visibilidade admin), evitando que a operadora precise cruzar o jid na mão.
 const groupSubjectByJid = new Map()
 
+// Fase 2 do plano de recepção (RCA 2026-08-26): "olhar só o que foi escolhido".
+// Inverte a lista de exceções acima — ver src/core/chatScopePolicy.js. Modo em
+// degraus, default `off`, rollback sem redeploy pela env.
+const CHAT_SCOPE_MODE = normalizeChatScopeMode(process.env.WA_CHAT_SCOPE_MODE)
+const CHAT_SCOPE_PANIC_MS = Math.max(0, Number(process.env.WA_CHAT_SCOPE_PANIC_MS ?? DEFAULT_CHAT_SCOPE_PANIC_MS))
+const CHAT_SCOPE_SIGNAL_INTERVAL_MS = Math.max(5 * 60_000, Number(process.env.WA_CHAT_SCOPE_SIGNAL_INTERVAL_MS || 60 * 60_000))
+const CHAT_SCOPE_LOG_SAMPLE_PER_TYPE = Math.max(0, Number(process.env.WA_CHAT_SCOPE_LOG_SAMPLE || 5))
+
+// Identidades da própria conta (número e `@lid`). Preenchido no `open` — é por
+// elas que chegam histórico e notificações da própria conta.
+let selfChatJids = new Set()
+// Freio de emergência: quando aciona, vale até o restart do worker.
+let chatScopeDisabled = false
+// Contagem do que foi ignorado, por tipo. Sem isto trocaríamos um problema
+// visível (mensagem some do log) por um invisível.
+let chatScopeIgnoredByType = new Map()
+let chatScopeIgnoredSinceLastAccepted = 0
+let chatScopeSampledJids = new Map()
+let lastChatScopeSignalAt = 0
+
+function recordChatScopeIgnored(type, jid) {
+  chatScopeIgnoredByType.set(type, (chatScopeIgnoredByType.get(type) || 0) + 1)
+  chatScopeIgnoredSinceLastAccepted += 1
+  // Amostra limitada: os primeiros N endereços distintos por tipo, para dar
+  // rastro sem inflar o log (mensagem ignorada é evento de alto volume).
+  if (CHAT_SCOPE_LOG_SAMPLE_PER_TYPE <= 0) return
+  const seen = chatScopeSampledJids.get(type) || new Set()
+  if (seen.size >= CHAT_SCOPE_LOG_SAMPLE_PER_TYPE || seen.has(jid)) return
+  seen.add(jid)
+  chatScopeSampledJids.set(type, seen)
+  logger.info({ jid, type, mode: CHAT_SCOPE_MODE }, 'Conversa fora da lista de escolhidos: confirmada e descartada sem tentar abrir')
+}
+
+function getChatScopeSnapshot() {
+  return {
+    mode: CHAT_SCOPE_MODE,
+    disabled: chatScopeDisabled,
+    ignoredByType: Object.fromEntries(chatScopeIgnoredByType),
+    ignoredSinceLastAccepted: chatScopeIgnoredSinceLastAccepted,
+  }
+}
+
+// Roda junto do heartbeat. Duas coisas: o freio de emergência e o sinal
+// durável agregado (nunca por mensagem).
+function reviewChatScope() {
+  if (CHAT_SCOPE_MODE === CHAT_SCOPE_MODES.OFF) return
+  const now = Date.now()
+  if (shouldAutoDisableChatScope({
+    now,
+    enabled: true,
+    alreadyDisabled: chatScopeDisabled,
+    everAccepted: lastAcceptedAtMs != null,
+    lastAcceptedAtMs,
+    ignoredSinceLastAccepted: chatScopeIgnoredSinceLastAccepted,
+    panicMs: CHAT_SCOPE_PANIC_MS,
+  })) {
+    chatScopeDisabled = true
+    logger.error({
+      mode: CHAT_SCOPE_MODE,
+      ignoredSinceLastAccepted: chatScopeIgnoredSinceLastAccepted,
+      lastAcceptedAgeMs: now - lastAcceptedAtMs,
+    }, 'FREIO DE EMERGÊNCIA: a conta parou de receber mensagem com a regra de escopo ligada — regra desligada sozinha, tudo volta a passar até o próximo restart')
+    try { recordOperationalSignal('wa_chat_scope_auto_disabled', { userId, mode: CHAT_SCOPE_MODE, ignored: chatScopeIgnoredSinceLastAccepted }) } catch {}
+    return
+  }
+  if (now - lastChatScopeSignalAt < CHAT_SCOPE_SIGNAL_INTERVAL_MS) return
+  lastChatScopeSignalAt = now
+  if (chatScopeIgnoredByType.size === 0) return
+  const ignoredByType = Object.fromEntries(chatScopeIgnoredByType)
+  logger.info({ mode: CHAT_SCOPE_MODE, ignoredByType }, 'Resumo do escopo de conversas na janela')
+  try { recordOperationalSignal('wa_chat_scope_filtered', { userId, mode: CHAT_SCOPE_MODE, ...ignoredByType }) } catch {}
+  chatScopeIgnoredByType = new Map()
+  chatScopeSampledJids = new Map()
+}
+
 function updateAllowedChatJids(groups) {
   try {
     const jids = [
@@ -270,6 +347,7 @@ function updateAllowedChatJids(groups) {
     ]
     allowedChatJids = buildAllowedJidSet(jids)
     allowedChatJidsReady = true
+    monitoredSourceCount = (groups?.monitorJids ?? []).length
   } catch {
     // Nunca deixa a atualização do allowlist quebrar o getConfig.
   }
@@ -419,6 +497,8 @@ function startHeartbeatIpc() {
       maxReconnectingMs: MAX_RECONNECTING_MS,
     })
     if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
+    try { reportReceptionHealth(getReceptionHealth()) } catch {}
+    try { reviewChatScope() } catch {}
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
@@ -1137,6 +1217,62 @@ const SESSION_HEALTH_SIGNAL_RE = /sent retry receipt|failed to decrypt|Bad MAC|M
 // nem a lógica de reconexão, que dependem do fechamento da conexão, não da
 // linha de log em si.
 const INIT_QUERIES_LOG_RE = /unexpected error in 'init queries'/i
+
+// Fase 0 do plano de recepção (RCA 2026-08): marcadores de RECEPÇÃO, para
+// separar "o processo está vivo" de "está chegando mensagem". Escopo de
+// módulo de propósito: precisam sobreviver às reconexões do MESMO worker
+// (mesma lição do msgRetryCounterCache) — zerar a cada `open` esconderia
+// justamente a sessão que reconecta o tempo todo e não recebe nada.
+const RECEPTION_WINDOW_MS = Math.max(60_000, Number(process.env.WA_RECEPTION_WINDOW_MS || DEFAULT_RECEPTION_WINDOW_MS))
+const RECEPTION_MIN_FAILURES = Math.max(1, Number(process.env.WA_RECEPTION_MIN_FAILURES || DEFAULT_RECEPTION_MIN_FAILURES))
+const RECEPTION_SIGNAL_THROTTLE_MS = Math.max(5 * 60_000, Number(process.env.WA_RECEPTION_SIGNAL_THROTTLE_MS || 60 * 60_000))
+let lastUpsertAtMs = null
+let lastAcceptedAtMs = null
+let monitoredSourceCount = 0
+let lastReceptionSignalAt = 0
+
+function markUpsertReceived() { lastUpsertAtMs = Date.now() }
+function markMessageAccepted() {
+  lastAcceptedAtMs = Date.now()
+  chatScopeIgnoredSinceLastAccepted = 0
+}
+
+// `WA_RECEPTION_WINDOW_MS=0` desliga a classificação (rollback sem redeploy).
+function getReceptionHealth() {
+  if (String(process.env.WA_RECEPTION_WINDOW_MS ?? '') === '0') return null
+  return computeReceptionState({
+    now: Date.now(),
+    connected: Boolean(activeSock) && lifecycleState === WA_LIFECYCLE.READY,
+    connectedSinceMs: connectionOpenedAt,
+    lastUpsertAtMs,
+    lastAcceptedAtMs,
+    failuresInWindow: getSessionHealth().cryptoErrors,
+    hasMonitoredSources: monitoredSourceCount > 0,
+    windowMs: RECEPTION_WINDOW_MS,
+    minFailures: RECEPTION_MIN_FAILURES,
+  })
+}
+
+// Só emite sinal durável para o estado comprovadamente problemático (`blind`),
+// e no máximo 1× por hora — alarme repetido treina a pessoa a ignorar.
+function reportReceptionHealth(reception) {
+  if (!reception || !isReceptionProblem(reception.state)) return
+  const now = Date.now()
+  if (now - lastReceptionSignalAt < RECEPTION_SIGNAL_THROTTLE_MS) return
+  lastReceptionSignalAt = now
+  logger.error({
+    silentForMs: reception.silentForMs,
+    failuresInWindow: reception.failuresInWindow,
+    windowMs: reception.windowMs,
+  }, 'Sessão conectada e SEM receber mensagens: está chegando e falhando, nada foi aceito na janela')
+  try {
+    recordOperationalSignal('wa_reception_blind', {
+      userId,
+      silentForMs: reception.silentForMs,
+      failuresInWindow: reception.failuresInWindow,
+    })
+  } catch {}
+}
 
 function recordCryptoError() {
   const now = Date.now()
@@ -2275,11 +2411,27 @@ async function startBotInner() {
     // derrubava a sessão via retry-receipt agora é ACKado e descartado antes do
     // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
     // ignorar mensagem legítima enquanto a config ainda não carregou.
-    shouldIgnoreJid: (jid) => shouldIgnoreChatJid(jid, {
-      allowedJids: allowedChatJids,
-      enabled: IGNORE_UNMONITORED_GROUPS,
-      ready: allowedChatJidsReady,
-    }),
+    shouldIgnoreJid: (jid) => {
+      // Regra nova (Fase 2): olhar só o que foi escolhido. Com o modo `off`
+      // ela não decide nada e a regra antiga (lista de exceções) segue valendo
+      // para quem já ligou WA_IGNORE_UNMONITORED_GROUPS.
+      const scope = shouldIgnoreByChatScope(jid, {
+        mode: CHAT_SCOPE_MODE,
+        allowedJids: allowedChatJids,
+        ready: allowedChatJidsReady,
+        selfJids: selfChatJids,
+        disabled: chatScopeDisabled,
+      })
+      if (scope.ignore) {
+        recordChatScopeIgnored(scope.type, normalizeChatScopeJid(jid))
+        return true
+      }
+      return shouldIgnoreChatJid(jid, {
+        allowedJids: allowedChatJids,
+        enabled: IGNORE_UNMONITORED_GROUPS,
+        ready: allowedChatJidsReady,
+      })
+    },
   })
 
   pendingSock = sock
@@ -2287,7 +2439,7 @@ async function startBotInner() {
   // Aquece o allowlist antes de qualquer mensagem chegar (o shouldIgnoreJid é
   // síncrono; sem isso o 1º lote de mensagens passaria com ready=false). Best
   // effort — se falhar, o ready-guard mantém o comportamento seguro (não ignora).
-  if (IGNORE_UNMONITORED_GROUPS) void getConfig().catch(() => {})
+  if (IGNORE_UNMONITORED_GROUPS || CHAT_SCOPE_MODE !== CHAT_SCOPE_MODES.OFF) void getConfig().catch(() => {})
 
   sock.ev.on('creds.update', saveCreds)
 
@@ -2402,6 +2554,10 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       disconnectedSinceMs = null
       pairingState.clear()
       const phone = sock.user?.id?.split(':')[0] ?? null
+      // Identidades da própria conta (número e `@lid`), para a regra de escopo
+      // nunca ignorar o que chega pela própria conta — é por aí que vêm o
+      // histórico e as notificações que alimentam "Canais que sigo".
+      selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
       recordWaConnectionEventSafe({
@@ -3833,6 +3989,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
+    markUpsertReceived()
     if (type !== 'notify' && type !== 'append') return
     const cutoff = Date.now() - INCOMING_MAX_AGE_MS
 
@@ -3954,6 +4111,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         hasValidTimestamp,
         ageMs: msgTs ? now - msgTs : null,
       }, 'Mensagem aceita para processamento')
+      markMessageAccepted()
 
       const msgId = msg.key.id || dedupKey || `${msg.key.remoteJid || 'unknown'}:${msgTsRaw || now}`
       const accepted = incomingQueue.enqueue(() => processIncomingMessage(msg, sock), {
@@ -4190,7 +4348,7 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), worker: workerMetadata } })
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata } })
   }
 
   if (msg?.type === 'broadcast') {

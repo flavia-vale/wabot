@@ -108,6 +108,9 @@ export const ANALYTICS_EVENTS = new Set([
   // auto-refresh — precisa de ação manual (ex.: cliente sair/reentrar no
   // grupo). Nunca automático: só visibilidade para decisão humana.
   'ops_wa_group_desync_unresolved',
+  'ops_wa_reception_blind',
+  'ops_wa_chat_scope_filtered',
+  'ops_wa_chat_scope_auto_disabled',
   // `failure reason=405` do WhatsApp: recusa de login/registro por versão do WA
   // Web cortada pelo servidor. Atinge todas as sessões ao mesmo tempo (RCA
   // 2026-07-28) — é o sinal que separa incidente global de problema de chip.

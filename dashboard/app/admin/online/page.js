@@ -148,11 +148,38 @@ function UserDrawer({ detail, loading, onClose }) {
               <OnlineCard label="Quedas 7d" value={formatNumber(detail.connectionMetrics?.disconnects7d)} tone={detail.connectionMetrics?.disconnects7d ? 'red' : 'green'} />
               <OnlineCard label="Ações manuais 7d" value={formatNumber(detail.connectionMetrics?.manualReconnects7d)} helper="trabalho real do cliente" tone={detail.connectionMetrics?.manualReconnects7d ? 'red' : 'green'} />
               <OnlineCard label="Offline auto 7d" value={formatDurationMs((detail.connectionMetrics?.automaticOfflineMs7d || 0) + (detail.connectionMetrics?.ongoingOfflineMs7d || 0))} helper={`${formatNumber(detail.connectionMetrics?.automaticRecoveries7d)} recuperação(ões) automáticas`} tone={(detail.connectionMetrics?.automaticOfflineMs7d || detail.connectionMetrics?.ongoingOfflineMs7d) ? 'amber' : 'green'} />
+              <OnlineCard label="Parado até o cliente agir 7d" value={formatDurationMs(detail.connectionMetrics?.manualOfflineMs7d)} helper={`${formatNumber(detail.connectionMetrics?.manualRecoveries7d)} episódio(s) que só voltaram com ação dele`} tone={detail.connectionMetrics?.manualOfflineMs7d ? 'red' : 'green'} />
             </section>
 
             <section className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <p className="font-black">Como ler estas métricas</p>
-              <p className="mt-1">&quot;Ações manuais&quot; conta quando o cliente precisou iniciar/reparear pelo painel. &quot;Offline auto&quot; mede o tempo em que o robô ficou fora até o sistema recuperar sozinho; tentativas internas de backoff não entram como trabalho do cliente.</p>
+              <p className="mt-1">&quot;Ações manuais&quot; conta quando o cliente precisou iniciar/reparear pelo painel. &quot;Offline auto&quot; mede o tempo em que o robô ficou fora até o sistema recuperar sozinho; tentativas internas de backoff não entram como trabalho do cliente. &quot;Parado até o cliente agir&quot; é o tempo que ele ficou sem robô esperando, antes de ir lá resolver — é a métrica que mede a promessa do produto.</p>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-4">
+              <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo das quedas (7 dias)</h3>
+              <p className="mt-1 text-xs text-slate-500">Cada linha é um episódio fora do ar: quando começou, quanto durou e se o robô voltou sozinho ou só voltou depois que o cliente agiu.</p>
+              <div className="mt-3 divide-y divide-slate-100">
+                {asArray(detail.offlineEpisodes).map((episode) => {
+                  const tone = episode.open ? 'bg-amber-50 text-amber-800' : episode.endedBy === 'sozinho' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                  const label = episode.open ? 'em aberto' : episode.endedBy === 'sozinho' ? 'voltou sozinho' : episode.endedBy === 'cliente' ? 'o cliente teve que agir' : 'interrompido'
+                  return (
+                    <div key={`${episode.startedAt}-${episode.endedAt || 'aberto'}`} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3 text-sm">
+                      <div>
+                        <p className="font-bold text-slate-900">{formatDate(episode.startedAt)} → {episode.endedAt ? formatDate(episode.endedAt) : 'agora'}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatDurationMs(episode.durationMs)} fora
+                          {episode.code ? ` · código ${episode.code}` : ''}
+                          {episode.stuckMsg ? ' · mensagem travada' : ''}
+                          {episode.terminal ? ' · sessão deslogada' : ''}
+                        </p>
+                      </div>
+                      <span className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-black ${tone}`}>{label}</span>
+                    </div>
+                  )
+                })}
+                {!asArray(detail.offlineEpisodes).length && <p className="py-4 text-sm text-slate-500">Nenhuma queda registrada nos últimos 7 dias.</p>}
+              </div>
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-4">
@@ -386,6 +413,7 @@ export default function AdminOnlinePage() {
                       <td className="px-3 py-4 text-right text-xs text-slate-600">
                         <p><strong>{formatDurationMs((user.automaticOfflineMs24h || 0) + (user.ongoingOfflineMs24h || 0))}</strong> offline auto</p>
                         <p>{formatNumber(user.manualReconnects24h)} ação(ões) manuais</p>
+                        {!!user.manualOfflineMs24h && <p className="font-bold text-red-700">{formatDurationMs(user.manualOfflineMs24h)} parado até agir</p>}
                       </td>
                       <td className="px-3 py-4">
                         <div className="flex flex-col gap-2">
