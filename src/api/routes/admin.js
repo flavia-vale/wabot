@@ -1,6 +1,6 @@
 import db from '../../db.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE } from '../../manager.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
@@ -13,6 +13,8 @@ import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
 import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
+import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
+import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
 
 const ROLE_PERMISSIONS = {
@@ -815,7 +817,7 @@ async function buildFleetScenarios(now = new Date()) {
   const since7d = addDays(now, -7)
   const blindSince = new Date(now.getTime() - FLEET_RECEPTION_BLIND_WINDOW_MS)
 
-  const [dropRows, manualRows, blindRows, desyncRows, offlineEvents] = await Promise.all([
+  const [dropRows, manualRows, blindRows, desyncRows, offlineEvents, sessions, runningIds] = await Promise.all([
     db.waConnectionEvent.groupBy({
       by: ['userId'],
       where: { type: { in: ['disconnect', 'disconnect_terminal'] }, occurredAt: { gte: since24h, lte: now } },
@@ -841,7 +843,38 @@ async function buildFleetScenarios(now = new Date()) {
       orderBy: { occurredAt: 'asc' },
       select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
     }).catch(() => []),
+    db.waSession.findMany({
+      where: { user: { status: 'active' } },
+      select: { userId: true, status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true },
+    }).catch(() => []),
+    listRunningBots().then(ids => new Set(ids)).catch(() => null),
   ])
+
+  // Quem resolve cada desconexão. O balde que interessa aqui é `ninguem`:
+  // sessão caída, sem robô no ar e sem heartbeat — ninguém está tentando, e
+  // era o caso que passava despercebido (13 robôs no ar para 67 caídas).
+  const lastEventByUser = new Map()
+  for (const event of offlineEvents) {
+    const previous = lastEventByUser.get(event.userId)
+    if (!previous || new Date(event.occurredAt).getTime() >= new Date(previous.occurredAt).getTime()) {
+      lastEventByUser.set(event.userId, event)
+    }
+  }
+  const paradas = new Set()
+  const precisamDaCliente = new Set()
+  for (const session of sessions) {
+    const ownership = resolveSessionOwner({
+      status: session.status,
+      lifecycle: session.lifecycle,
+      lastDisconnectCode: session.lastDisconnectCode,
+      lastEventType: lastEventByUser.get(session.userId)?.type ?? null,
+      workerRunning: runningIds ? runningIds.has(session.userId) : null,
+      lastHeartbeatAt: session.lastHeartbeatAt,
+      now: now.getTime(),
+    })
+    if (ownership.owner === SESSION_OWNER.NOBODY) paradas.add(session.userId)
+    else if (ownership.owner === SESSION_OWNER.CLIENT) precisamDaCliente.add(session.userId)
+  }
 
   const metricsByUser = summarizeOfflineEpisodesByUser(offlineEvents, { since: since24h, now })
   let offlineMs24h = 0
@@ -852,6 +885,8 @@ async function buildFleetScenarios(now = new Date()) {
   }
 
   const byScenario = {
+    parado: paradas,
+    qr: precisamDaCliente,
     blind: new Set(blindRows.map(row => row.userId).filter(Boolean)),
     quedas: new Set(dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).map(row => row.userId).filter(Boolean)),
     manual: new Set(manualRows.map(row => row.userId).filter(Boolean)),
@@ -860,6 +895,8 @@ async function buildFleetScenarios(now = new Date()) {
 
   return {
     byScenario,
+    paradasSemNinguem: paradas.size,
+    precisamDeQr: precisamDaCliente.size,
     semReceber: blindRows.filter(row => row.userId).length,
     caindoDemais: dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).length,
     clienteAgiu: manualRows.filter(row => row.userId).length,
@@ -940,6 +977,16 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     getLogActivityMap({ userIds }),
   ])
 
+  // Último evento de conexão por usuário — é o que separa "o robô está
+  // tentando" de "precisa da cliente" e de "ninguém está tentando".
+  const lastEventByUser = new Map()
+  for (const event of offlineEvents24h) {
+    const previous = lastEventByUser.get(event.userId)
+    if (!previous || new Date(event.occurredAt).getTime() >= new Date(previous.occurredAt).getTime()) {
+      lastEventByUser.set(event.userId, event)
+    }
+  }
+
   const scenarios = await buildFleetScenarios(now).catch(() => null)
   const scenarioFilter = String(query.cenario || '').trim()
   const scenarioUserIds = scenarios?.byScenario?.[scenarioFilter] ?? null
@@ -954,6 +1001,15 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     const lastMessageAt = lastMessageMap.get(user.id) ?? null
     const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
     const online = isSessionOnline(session, now)
+    const ownership = resolveSessionOwner({
+      status: session?.status ?? 'disconnected',
+      lifecycle: session?.lifecycle ?? null,
+      lastDisconnectCode: session?.lastDisconnectCode ?? null,
+      lastEventType: lastEventByUser.get(user.id)?.type ?? null,
+      workerRunning: running.has(user.id),
+      lastHeartbeatAt: session?.lastHeartbeatAt ?? null,
+      now: now.getTime(),
+    })
     const successCount24h = successMap24h.get(user.id) ?? 0
     const errorCount24h = errorMap24h.get(user.id) ?? 0
     const offline24h = offlineMetrics24h.get(user.id) || {}
@@ -976,6 +1032,9 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       disconnects24h,
       reconnectAttempts24h,
       reconnectSuccess24h,
+      sessionOwner: ownership.owner,
+      sessionOwnerReason: ownership.reason,
+      canAdminRetry: ownership.canAdminRetry,
       manualReconnects24h: Number(offline24h.manualReconnects || 0),
       manualRecoveries24h: Number(offline24h.manualRecoveries || 0),
       manualOfflineMs24h: Number(offline24h.manualOfflineMs || 0),
@@ -1144,6 +1203,18 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   }
 }
 
+// listRunningBots pode falhar (supervisor fora do ar); nesse caso devolvemos
+// `null` = "não sei", e a política trata como indeterminado em vez de assumir
+// que não há robô e oferecer um clique que atropelaria uma reconexão em curso.
+async function isRunningSafe(userId) {
+  try {
+    const ids = await listRunningBots()
+    return new Set(ids).has(userId)
+  } catch {
+    return null
+  }
+}
+
 export async function adminRoutes(app) {
   const adminService = createAdminService({
     db,
@@ -1226,6 +1297,68 @@ export async function adminRoutes(app) {
       after: { totalSessions: result.summary.totalSessions, disconnectedAlerts: result.summary.disconnectedAlerts },
     })
     return result
+  })
+
+  // Botão "Tentar reconectar" da aba online. Sobe o robô da cliente sem que
+  // ela precise fazer nada — só serve quando a credencial ainda existe.
+  //
+  // Duas travas de propósito:
+  //   1. Só age quando `canAdminRetry` é true. Em 401/auth_reset o robô até
+  //      sobe, mas o que ele gera é um QR que SÓ a cliente pode ler no celular
+  //      dela — deixar o botão "funcionar" ali prometeria o que não entrega.
+  //   2. Grava evento PRÓPRIO (`admin_reconnect_requested`), nunca
+  //      `manual_reconnect_requested`. Se o nosso clique contasse como ação da
+  //      cliente, o card "Cliente teve que agir" — que mede a promessa do
+  //      produto — viraria mentira.
+  app.post('/online/:userId/reconnect', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const userId = String(req.params.userId || '')
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, status: true, plan: true, accessExpiresAt: true },
+    }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    if (user.status !== 'active') return reply.code(409).send({ error: 'A conta não está ativa' })
+
+    const [session, running, lastEvent] = await Promise.all([
+      db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true } }).catch(() => null),
+      isRunningSafe(userId),
+      db.waConnectionEvent.findFirst({ where: { userId }, orderBy: { occurredAt: 'desc' }, select: { type: true } }).catch(() => null),
+    ])
+
+    const ownership = resolveSessionOwner({
+      status: session?.status ?? 'disconnected',
+      lifecycle: session?.lifecycle ?? null,
+      lastDisconnectCode: session?.lastDisconnectCode ?? null,
+      lastEventType: lastEvent?.type ?? null,
+      workerRunning: running,
+      lastHeartbeatAt: session?.lastHeartbeatAt ?? null,
+    })
+    if (!ownership.canAdminRetry) {
+      return reply.code(409).send({ error: 'Reconectar daqui não resolve este caso', motivo: ownership.reason, owner: ownership.owner })
+    }
+
+    recordWaConnectionEventSafe({
+      userId,
+      type: 'admin_reconnect_requested',
+      lifecycle: session?.lifecycle ?? null,
+      metadata: { source: 'admin', owner: ownership.owner, adminId: req.admin?.id ?? null },
+    })
+
+    try {
+      await startBot(userId)
+    } catch (err) {
+      await writeAdminAuditLog(req, { action: 'admin.online.reconnect_failed', resource: 'waSession', targetUserId: userId, after: { error: String(err?.message ?? err) } })
+      return reply.code(502).send({ error: 'Não consegui subir o robô agora', detalhe: String(err?.message ?? err) })
+    }
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.online.reconnect',
+      resource: 'waSession',
+      targetUserId: userId,
+      after: { owner: ownership.owner, previousStatus: session?.status ?? null },
+    })
+    return { ok: true, owner: ownership.owner, message: 'Robô iniciado — acompanhe o status nos próximos minutos' }
   })
 
   app.get('/online/:userId', async (req, reply) => {

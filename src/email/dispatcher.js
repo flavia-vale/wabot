@@ -31,6 +31,16 @@ const FALLBACK_EMAIL_RE = /^user_.*@sistema\.com$/i
 const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
+// A trava de "conta parada" existe para não incomodar quem abandonou o robô.
+// Só que ela usa "WhatsApp conectado ou envio nos últimos dias" como prova de
+// uso — e quem está com o WhatsApp CAÍDO não tem nem uma coisa nem outra. Ou
+// seja: a trava calava justamente o aviso que traria a pessoa de volta.
+// Medido em produção (2026-08-26): 24 contas ativas paradas há semanas por
+// falta de re-pareamento, e ZERO avisos de `whatsapp_desconectado` no
+// histórico. O limite de quanto tempo ainda vale avisar mora na política
+// (`lifecyclePolicy.js`), não aqui.
+const IDLE_GATE_EXEMPT_SLUGS = new Set(['whatsapp_desconectado'])
+
 export function isRealEmail(email) {
   const trimmed = String(email ?? '').trim()
   if (!trimmed) return false
@@ -202,11 +212,33 @@ export async function sendTemplateEmail({
 } = {}) {
   // Quando o envio veio da fila (disparo manual em massa), a linha do histórico
   // JÁ existe — atualiza aquela em vez de criar uma segunda.
+  //
+  // RCA 2026-08-26: antes, o descarte de um envio AUTOMÁTICO não deixava
+  // rastro nenhum (a linha só era escrita quando o envio vinha da fila, que já
+  // tinha `logRowId`). Resultado: o aviso "seu WhatsApp caiu" nunca apareceu no
+  // histórico — nem como enviado, nem como barrado —, e ficou impossível saber
+  // se ele não disparava ou se estava sendo silenciado por alguma trava. Agora
+  // todo descarte vira linha, com o motivo.
   const markSkipped = async (reason) => {
-    if (logRowId && hasModel(db, 'emailSendLog')) {
+    if (!hasModel(db, 'emailSendLog')) return { sent: false, skipped: true, reason }
+    if (logRowId) {
       await db.emailSendLog.update({
         where: { id: logRowId },
         data: { status: 'skipped', skipReason: reason },
+      }).catch(() => {})
+    } else {
+      await db.emailSendLog.create({
+        data: {
+          slug,
+          userId: user?.id ?? null,
+          email: user?.email ?? '',
+          category: getTemplateDefinition(slug)?.category ?? 'transactional',
+          mode,
+          batchId,
+          status: 'skipped',
+          skipReason: reason,
+          scheduledAt: new Date(now),
+        },
       }).catch(() => {})
     }
     return { sent: false, skipped: true, reason }
@@ -235,7 +267,7 @@ export async function sendTemplateEmail({
     // ainda assim chegava "a Shopee parou de aceitar sua chave". Cobrança,
     // senha e dinheiro de afiliada não passam por aqui de propósito.
     // Só vale para disparo automático: envio manual da admin é decisão dela.
-    if (mode === 'auto' && isOperationalEmail(template)) {
+    if (mode === 'auto' && isOperationalEmail(template) && !IDLE_GATE_EXEMPT_SLUGS.has(slug)) {
       const activity = await loadAccountActivity({ db, userId: user.id, user })
       // Foto incompleta (consulta que caiu) NÃO silencia: silenciar aviso
       // legítimo por causa de um blip do banco é pior que mandá-lo.

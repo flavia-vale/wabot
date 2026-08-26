@@ -118,9 +118,14 @@ export async function sessionRoutes(app) {
     const userId = req.user.sub
     const stopped = await stopBot(userId)
     if (!stopped) return reply.code(404).send({ error: 'Bot não estava rodando' })
+    // Grava o desligamento TAMBÉM na sessão, não só no evento. Sem isto o
+    // `lifecycle` ficava congelado em 'ready' (confirmado em produção em
+    // 2026-08-26: contas com último evento `manual_stop_requested` e
+    // `lifecycle=ready`), então nem o painel da cliente nem a visão admin
+    // conseguiam distinguir "ela desligou" de "caiu sozinho".
     await db.waSession.updateMany({
       where: { userId },
-      data: { status: 'disconnected' },
+      data: { status: 'disconnected', lifecycle: 'stopped_by_user' },
     }).catch(() => {})
     // Marca que a desconexão foi PEDIDA. Sem isso, o aviso "seu robô está fora
     // do ar" sai para quem desligou de propósito (viagem, troca de chip).
@@ -248,7 +253,7 @@ export async function sessionRoutes(app) {
     try { await stopBot(userId) } catch (err) { req.log.warn({ err: err.message, userId }, 'Falha ao parar worker em /forget') }
     await db.waSession.updateMany({
       where: { userId },
-      data: { status: 'disconnected', phone: null },
+      data: { status: 'disconnected', lifecycle: 'stopped_by_user', phone: null },
     }).catch(() => {})
     recordWaConnectionEventSafe({
       userId,
