@@ -1063,6 +1063,91 @@ Ele cruza `MessageLog` (incluindo pendentes), `SendDedupKey`,
 Testes: `test/incoming-freshness.test.js`, `test/mirror-duplicate-replay.test.js`,
 `test/bot-worker-relay-branding.test.js`.
 
+## Espelhamento para grupo NÃO escolhido + foto borrada (RCA 2026-08-26 — não regredir)
+
+Cliente `julianepumuceno16@gmail.com` reportou três coisas no mesmo dia: oferta
+chegando com a foto **irreconhecível**, oferta chegando com a foto do
+concorrente (marca d'água), e o robô **espelhando para grupo que ela nunca
+escolheu** para aquela origem. São duas causas raiz independentes.
+
+### 1) Foto borrada: publicávamos miniatura de 457 bytes
+
+No log da oferta do Cooktop, em sequência: `Usando thumbnail do link preview
+{ size: 457 }` → `resolveMonitoredImage: fetchProductImage { shopee }` → e
+**nenhum** `imagem alta-res obtida via marketplace`. Ou seja: a mensagem de
+origem não trazia imagem de verdade, só a miniatura embutida no card de link
+(457 bytes ≈ 100px), a busca da foto oficial na loja não devolveu nada, e o
+último recurso ("imagem ruim > nenhuma imagem") publicou essa miniatura
+ampliada.
+
+`core/thumbnailQualityPolicy.js` (puro) põe um **piso em bytes**: abaixo de
+`MONITORED_MIN_IMAGE_BYTES` (default 3000) a miniatura **não é publicada** e o
+envio degrada para o card de link do WhatsApp, que fica legível. `0` desliga o
+piso (comportamento histórico). Bytes é o único sinal disponível de graça nesse
+ponto (o buffer ainda não foi decodificado); miniatura de card de link costuma
+ter 3-20KB. Sinal durável `ops_monitored_thumbnail_dropped`.
+
+**A marca d'água não é nossa e não tem conserto por aqui**: quando a foto oficial
+da loja não vem, o que sobra são os bytes da mensagem de origem — que é o
+concorrente, marca d'água inclusa. Publicar isso segue melhor do que não publicar
+nada; o que mudou é só o piso de legibilidade.
+
+### 2) Espelhamento para destino não escolhido: `GroupTarget` some por cascata
+
+A regra era `targetPostJids.length ? targetPostJids : todos os destinos` — "sem
+vínculo" significava "manda para TODO MUNDO". Só que `GroupTarget` tem
+`onDelete: Cascade` no destino: **apagar um grupo de destino apaga os vínculos
+que apontavam para ele**. Uma origem amarrada explicitamente a N destinos, ao
+ficar com zero vínculos por causa dessas exclusões, deixava de ser explícita e
+passava a espelhar para todos os destinos da conta. O painel piorava: `GET
+/:id/targets` devolvia `mode:'all'` com TODOS os destinos marcados, então a tela
+dizia que estava tudo certo.
+
+`Group.targetsMode` ('explicit' | 'all', migration
+`20260826180000_group_targets_mode`) guarda a **intenção** da cliente. Decisão
+inteira em `core/destinationRouting.js` (`resolveMonitorDestinations`):
+
+- `explicit` → usa a lista escolhida; **lista vazia = nenhum destino**, nunca
+  "todos" (melhor não enviar do que enviar errado — envio errado é irreversível);
+- `all` (quem nunca escolheu) → comportamento histórico preservado, agora com
+  aviso no log e sinal `ops_mirror_fallback_all_destinations`.
+
+Salvar destinos no painel grava `explicit`; desmarcar tudo volta a `all` (é como
+a tela sempre se comportou). A migration marca como `explicit` toda origem que
+já tem vínculo hoje.
+
+### 3) Job já enfileirado não era cancelado
+
+Os destinos são calculados quando a mensagem CHEGA; o job só sai no dequeue, que
+pode ser muito depois (preservação do destino, freio de fila). Uma entrega saiu
+**1,5s depois** de a cliente apagar o destino no painel. Agora o job `converted`
+carrega `sourceJid` e `processSendJob` **revalida o destino no dequeue**
+(`shouldDropUnlinkedDestination`), antes do descarte por idade: destino que não
+está mais na lista atual vira `skip:dest_unlinked` (`skip:source_unlinked` se a
+origem sumiu), categoria `CONFIG_BLOCK`, com tradução leiga no painel. Fail-safe:
+sem foto confiável da config, **envia** (descartar por dúvida perderia oferta
+legítima). `status@broadcast` nunca é descartado por essa checagem.
+
+### 4) `configReloaded: {}` no log da API não confirmava nada
+
+`reloadConfig` é assíncrono no modo `remote` e as rotas de grupo **não davam
+`await`** — a Promise ia crua para o logger e virava `configReloaded: {}`.
+Parecia confirmação e não era: não dizia se o supervisor recebeu o comando nem
+se o worker invalidou o cache, e foi o que impediu de separar "job antigo ainda
+saindo" de "worker nem recarregou". Hoje as quatro rotas usam
+`reloadWorkerConfig` (await + `configReloadError` no log).
+
+**Não regredir:** não voltar a decidir destino fora de `resolveMonitorDestinations`;
+não tratar lista explícita vazia como "todos"; não remover a revalidação no
+dequeue nem movê-la para depois do envio; não voltar a publicar miniatura sem
+piso; não chamar `reloadConfig` sem `await` nas rotas. Testes:
+`test/destination-routing.test.js`, `test/thumbnail-quality-policy.test.js`,
+`test/groups-route-targets-mode.test.js`.
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada disso
+vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
+as sessões: avisar antes). Ver "código novo não carregado pelos bots".
+
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando a mesma
