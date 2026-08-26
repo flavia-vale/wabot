@@ -314,8 +314,15 @@ export const COMPARISON_PAGES = {
    *
    * O ângulo honesto e forte é outro, e esse SIM está verificado: o plano
    * gratuito nunca espelhou grupos. Quem usava de graça e queria espelhar
-   * precisava do Gigi Prime Bot (R$67,99, R$49,90 no 1º mês) — e é contra esse
-   * número que o BOTinho (R$39/30 dias) compara.
+   * precisava do Gigi Prime Bot, o plano mais caro — e é contra o preço dele
+   * que o plano de entrada compara.
+   *
+   * Sem cifra neste comentário de propósito: `extrairBlocoPorChave` (FR-031,
+   * test/marketing-limites-que-nao-se-cruzam.test.js) fatia o arquivo até a
+   * PRÓXIMA chave de página, então comentário que precede uma chave é lido
+   * como parte do bloco da página ANTERIOR. Preço citado aqui vira preço sem
+   * fonte atribuído a /alternativas/achadinho-pro e reprova o CI. Preço mora
+   * no corpo da entrada, onde é conferido contra competitors-data.js.
    */
   '/alternativas/gigi-bot': {
     format: 'alternative-plural',
