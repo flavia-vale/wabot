@@ -281,6 +281,7 @@ export const api = {
     return apiFetch(`/api/admin/online${query ? `?${query}` : ''}`)
   },
   adminOnlineUser: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}`),
+  adminOnlineReconnect: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}/reconnect`, { method: 'POST' }),
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
   adminLogs: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()

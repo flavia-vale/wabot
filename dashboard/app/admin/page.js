@@ -278,6 +278,8 @@ function toneClasses(tone) {
 }
 
 const SCENARIO_LABELS = {
+  parado: 'Paradas sem ninguém tentando',
+  qr: 'Precisam de QR novo',
   blind: 'Sem receber',
   quedas: 'Caindo demais',
   manual: 'Cliente teve que agir',
@@ -1673,7 +1675,21 @@ export default function AdminPage() {
             {/* Cenários da frota (Fase 1B do plano de recepção, RCA 2026-08-26).
                 Primeira fileira de propósito: é o retrato de quantas clientes
                 estão em cada quadro, e cada card leva para a lista filtrada. */}
-            <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <ScenarioCard
+                label="Paradas sem ninguém tentando"
+                value={formatNumber(online?.summary?.scenarios?.paradasSemNinguem ?? 0)}
+                tone={severityTone(online?.summary?.scenarios?.paradasSemNinguem ?? 0, 1, 3)}
+                helper="caídas, sem nenhum robô no ar — um clique resolve"
+                onClick={() => openScenario('parado')}
+              />
+              <ScenarioCard
+                label="Precisam de QR novo"
+                value={formatNumber(online?.summary?.scenarios?.precisamDeQr ?? 0)}
+                tone={severityTone(online?.summary?.scenarios?.precisamDeQr ?? 0, 1, 5)}
+                helper="só a cliente resolve, lendo o código"
+                onClick={() => openScenario('qr')}
+              />
               <ScenarioCard
                 label="Sem receber"
                 value={formatNumber(online?.summary?.scenarios?.semReceber ?? 0)}
