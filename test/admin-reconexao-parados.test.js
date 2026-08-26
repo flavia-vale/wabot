@@ -76,3 +76,22 @@ test('os cards novos estão na primeira tela do admin', () => {
   assert.match(adminPage, /Precisam de QR novo/)
   assert.match(adminPage, /openScenario\('parado'\)/)
 })
+
+// Causa raiz das "paradas" (RCA 2026-08-26): acesso vencido faz o próprio
+// worker gravar `disconnected` e sair. Reconectar ali repete o ciclo.
+test('o botão recusa conta com acesso vencido', () => {
+  const trecho = adminRoute.slice(adminRoute.indexOf("app.post('/online/:userId/reconnect'"), adminRoute.indexOf("app.get('/online/:userId'"))
+  assert.match(trecho, /user\.accessExpiresAt && new Date\(user\.accessExpiresAt\) <= new Date\(\)/)
+  assert.match(trecho, /é caso de renovação, não de reconexão/)
+})
+
+test('acesso vencido tem contador e cenário próprios, separados de "parada"', () => {
+  assert.match(adminRoute, /acessoVencido: acessoVencido\.size/)
+  assert.match(adminRoute, /vencido: acessoVencido/)
+  assert.match(adminPage, /Acesso vencido/)
+})
+
+test('a classificação recebe a data de acesso nas duas visões', () => {
+  assert.match(adminRoute, /accessExpiresAt: user\.accessExpiresAt \?\? null/)
+  assert.match(adminRoute, /accessExpiresAt: session\.user\?\.accessExpiresAt \?\? null/)
+})

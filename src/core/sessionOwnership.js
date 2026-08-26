@@ -26,6 +26,8 @@ export const SESSION_OWNER = {
   // NINGUÉM está tentando: sem robô no ar e sem reconexão agendada. É o caso
   // que passava despercebido, e o único em que um clique nosso resolve.
   NOBODY: 'ninguem',
+  // Acesso vencido: o robô sai sozinho por decisão do produto. Não é queda.
+  EXPIRED: 'acesso_vencido',
 }
 
 // Códigos que exigem ação da cliente. 401 = desvinculou o aparelho no celular
@@ -44,9 +46,20 @@ export function resolveSessionOwner({
   lastEventType = null,
   workerRunning = null,
   lastHeartbeatAt = null,
+  accessExpiresAt = null,
   now = Date.now(),
   staleAfterMs = DEFAULT_HEARTBEAT_STALE_MS,
 } = {}) {
+  // Acesso vencido vem ANTES de tudo: quando o plano expira, o próprio worker
+  // grava `disconnected` e sai (`bot-worker.js`, "Acesso expirado — bot
+  // bloqueado"). Isso NÃO é queda e NÃO é abandono técnico — e reconectar
+  // daqui só repetiria o ciclo (sobe, detecta vencido, sai). Confirmado como
+  // causa das sessões "paradas sem evento de desconexão" (RCA 2026-08-26).
+  const expiresMs = accessExpiresAt == null ? null : new Date(accessExpiresAt).getTime()
+  if (Number.isFinite(expiresMs) && expiresMs <= now && status !== 'connected') {
+    return { owner: SESSION_OWNER.EXPIRED, canAdminRetry: false, reason: 'o acesso venceu — é caso de renovação, não de reconexão' }
+  }
+
   if (status === 'connected') return { owner: SESSION_OWNER.CONNECTED, canAdminRetry: false, reason: 'conectado' }
 
   const code = lastDisconnectCode == null ? null : String(lastDisconnectCode)
@@ -87,4 +100,5 @@ export const SESSION_OWNER_LABEL = {
   [SESSION_OWNER.CLIENT_STOPPED]: 'ela desligou',
   [SESSION_OWNER.BLOCKED]: 'número recusado pelo WhatsApp',
   [SESSION_OWNER.NOBODY]: 'parada, ninguém tentando',
+  [SESSION_OWNER.EXPIRED]: 'acesso vencido',
 }

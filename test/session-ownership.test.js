@@ -71,3 +71,33 @@ test('a ação da cliente tem precedência sobre o robô estar vivo', () => {
   const r = owner({ lastDisconnectCode: 401, workerRunning: true, lastHeartbeatAt: NOW - min(1) })
   assert.equal(r.owner, SESSION_OWNER.CLIENT, 'worker vivo não conserta credencial apagada')
 })
+
+// Causa raiz das sessões "paradas sem evento de desconexão" (RCA 2026-08-26):
+// quando o acesso vence, o próprio worker grava `disconnected` e SAI
+// (bot-worker.js, "Acesso expirado — bot bloqueado"). Não há evento de queda,
+// não há robô no ar, e o monitor do supervisor não ressuscita — de propósito.
+test('acesso vencido é estado próprio, não "parada sem ninguém tentando"', () => {
+  const r = owner({ accessExpiresAt: NOW - 86_400_000, lastEventType: 'reconnect_success' })
+  assert.equal(r.owner, SESSION_OWNER.EXPIRED)
+  assert.equal(r.canAdminRetry, false, 'subir o robô só repetiria o ciclo: sobe, vê que venceu, sai')
+})
+
+test('acesso vencido vence até o caso de QR', () => {
+  const r = owner({ accessExpiresAt: NOW - 86_400_000, lastDisconnectCode: 401 })
+  assert.equal(r.owner, SESSION_OWNER.EXPIRED, 'pedir QR para quem não pode usar seria pior')
+})
+
+test('acesso válido não muda nada', () => {
+  const r = owner({ accessExpiresAt: NOW + 5 * 86_400_000, lastHeartbeatAt: null })
+  assert.equal(r.owner, SESSION_OWNER.NOBODY)
+  assert.equal(r.canAdminRetry, true)
+})
+
+test('sem data de acesso conhecida, não assume vencido', () => {
+  assert.equal(owner({ accessExpiresAt: null }).owner, SESSION_OWNER.NOBODY)
+})
+
+test('sessão conectada com acesso vencido continua aparecendo como conectada', () => {
+  const r = owner({ status: 'connected', accessExpiresAt: NOW - 86_400_000 })
+  assert.equal(r.owner, SESSION_OWNER.CONNECTED)
+})

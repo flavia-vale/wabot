@@ -84,6 +84,7 @@ const OWNER_META = {
   cliente_desligou: { label: 'ela desligou', className: 'bg-slate-100 text-slate-600' },
   bloqueio: { label: 'número recusado pelo WhatsApp', className: 'bg-red-50 text-red-700' },
   ninguem: { label: 'parada, ninguém tentando', className: 'bg-red-100 text-red-800' },
+  acesso_vencido: { label: 'acesso vencido', className: 'bg-purple-50 text-purple-700' },
 }
 
 function formatDurationMs(value) {

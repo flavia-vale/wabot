@@ -845,7 +845,10 @@ async function buildFleetScenarios(now = new Date()) {
     }).catch(() => []),
     db.waSession.findMany({
       where: { user: { status: 'active' } },
-      select: { userId: true, status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true },
+      select: {
+        userId: true, status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true,
+        user: { select: { accessExpiresAt: true } },
+      },
     }).catch(() => []),
     listRunningBots().then(ids => new Set(ids)).catch(() => null),
   ])
@@ -862,6 +865,7 @@ async function buildFleetScenarios(now = new Date()) {
   }
   const paradas = new Set()
   const precisamDaCliente = new Set()
+  const acessoVencido = new Set()
   for (const session of sessions) {
     const ownership = resolveSessionOwner({
       status: session.status,
@@ -870,10 +874,12 @@ async function buildFleetScenarios(now = new Date()) {
       lastEventType: lastEventByUser.get(session.userId)?.type ?? null,
       workerRunning: runningIds ? runningIds.has(session.userId) : null,
       lastHeartbeatAt: session.lastHeartbeatAt,
+      accessExpiresAt: session.user?.accessExpiresAt ?? null,
       now: now.getTime(),
     })
     if (ownership.owner === SESSION_OWNER.NOBODY) paradas.add(session.userId)
     else if (ownership.owner === SESSION_OWNER.CLIENT) precisamDaCliente.add(session.userId)
+    else if (ownership.owner === SESSION_OWNER.EXPIRED) acessoVencido.add(session.userId)
   }
 
   const metricsByUser = summarizeOfflineEpisodesByUser(offlineEvents, { since: since24h, now })
@@ -887,6 +893,7 @@ async function buildFleetScenarios(now = new Date()) {
   const byScenario = {
     parado: paradas,
     qr: precisamDaCliente,
+    vencido: acessoVencido,
     blind: new Set(blindRows.map(row => row.userId).filter(Boolean)),
     quedas: new Set(dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).map(row => row.userId).filter(Boolean)),
     manual: new Set(manualRows.map(row => row.userId).filter(Boolean)),
@@ -897,6 +904,7 @@ async function buildFleetScenarios(now = new Date()) {
     byScenario,
     paradasSemNinguem: paradas.size,
     precisamDeQr: precisamDaCliente.size,
+    acessoVencido: acessoVencido.size,
     semReceber: blindRows.filter(row => row.userId).length,
     caindoDemais: dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).length,
     clienteAgiu: manualRows.filter(row => row.userId).length,
@@ -937,6 +945,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
         contactPhone: true,
         status: true,
         plan: true,
+        accessExpiresAt: true,
         lastActivityAt: true,
         createdAt: true,
         waSession: {
@@ -1008,6 +1017,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       lastEventType: lastEventByUser.get(user.id)?.type ?? null,
       workerRunning: running.has(user.id),
       lastHeartbeatAt: session?.lastHeartbeatAt ?? null,
+      accessExpiresAt: user.accessExpiresAt ?? null,
       now: now.getTime(),
     })
     const successCount24h = successMap24h.get(user.id) ?? 0
@@ -1319,6 +1329,12 @@ export async function adminRoutes(app) {
     }).catch(() => null)
     if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
     if (user.status !== 'active') return reply.code(409).send({ error: 'A conta não está ativa' })
+    // Com o acesso vencido o worker sobe, detecta o vencimento e sai
+    // (bot-worker.js, "Acesso expirado — bot bloqueado"): reconectar aqui só
+    // repetiria o ciclo. É caso de renovação, não de reconexão.
+    if (user.accessExpiresAt && new Date(user.accessExpiresAt) <= new Date()) {
+      return reply.code(409).send({ error: 'O acesso desta conta venceu — é caso de renovação, não de reconexão' })
+    }
 
     const [session, running, lastEvent] = await Promise.all([
       db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true } }).catch(() => null),
@@ -1333,6 +1349,7 @@ export async function adminRoutes(app) {
       lastEventType: lastEvent?.type ?? null,
       workerRunning: running,
       lastHeartbeatAt: session?.lastHeartbeatAt ?? null,
+      accessExpiresAt: user.accessExpiresAt ?? null,
     })
     if (!ownership.canAdminRetry) {
       return reply.code(409).send({ error: 'Reconectar daqui não resolve este caso', motivo: ownership.reason, owner: ownership.owner })

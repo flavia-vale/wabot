@@ -279,6 +279,7 @@ function toneClasses(tone) {
 
 const SCENARIO_LABELS = {
   parado: 'Paradas sem ninguém tentando',
+  vencido: 'Acesso vencido',
   qr: 'Precisam de QR novo',
   blind: 'Sem receber',
   quedas: 'Caindo demais',
@@ -1682,6 +1683,13 @@ export default function AdminPage() {
                 tone={severityTone(online?.summary?.scenarios?.paradasSemNinguem ?? 0, 1, 3)}
                 helper="caídas, sem nenhum robô no ar — um clique resolve"
                 onClick={() => openScenario('parado')}
+              />
+              <ScenarioCard
+                label="Acesso vencido"
+                value={formatNumber(online?.summary?.scenarios?.acessoVencido ?? 0)}
+                tone={severityTone(online?.summary?.scenarios?.acessoVencido ?? 0, 1, 10)}
+                helper="o robô para sozinho — é caso de renovação"
+                onClick={() => openScenario('vencido')}
               />
               <ScenarioCard
                 label="Precisam de QR novo"
