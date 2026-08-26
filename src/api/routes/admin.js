@@ -12,6 +12,7 @@ import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normali
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
 import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
+import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
 
 const ROLE_PERMISSIONS = {
@@ -788,72 +789,6 @@ function safeIsoDate(value) {
 }
 
 
-function parseEventMetadata(metadata) {
-  try { return JSON.parse(metadata || '{}') || {} } catch { return {} }
-}
-
-function summarizeOfflineEpisodes(events = [], { since, now = new Date() } = {}) {
-  const startedByUser = new Map()
-  const result = new Map()
-  const sinceMs = since ? new Date(since).getTime() : 0
-  const nowMs = now.getTime()
-  const automaticRestoreTypes = new Set(['reconnect_success', 'connected'])
-  const manualTypes = new Set(['manual_reconnect_requested', 'manual_pairing_requested'])
-
-  function ensure(userId) {
-    if (!result.has(userId)) {
-      result.set(userId, {
-        manualReconnects: 0,
-        automaticRecoveries: 0,
-        automaticOfflineMs: 0,
-        longestAutomaticOfflineMs: 0,
-        ongoingOfflineMs: 0,
-      })
-    }
-    return result.get(userId)
-  }
-
-  for (const event of events) {
-    const userId = event.userId
-    const type = String(event.type || '')
-    const atMs = new Date(event.occurredAt).getTime()
-    if (!userId || !Number.isFinite(atMs)) continue
-    const bucket = ensure(userId)
-    if (manualTypes.has(type)) {
-      bucket.manualReconnects += 1
-      startedByUser.delete(userId)
-      continue
-    }
-    if (type === 'disconnect') {
-      const metadata = parseEventMetadata(event.metadata)
-      if (metadata.pairing || metadata.manual || metadata.terminal) continue
-      if (!startedByUser.has(userId)) startedByUser.set(userId, atMs)
-      continue
-    }
-    if (type === 'disconnect_terminal' || type === 'auth_reset') {
-      startedByUser.delete(userId)
-      continue
-    }
-    if (automaticRestoreTypes.has(type) && startedByUser.has(userId)) {
-      const startMs = startedByUser.get(userId)
-      const durationMs = Math.max(0, atMs - startMs)
-      const windowedMs = Math.max(0, atMs - Math.max(startMs, sinceMs))
-      bucket.automaticRecoveries += 1
-      bucket.automaticOfflineMs += windowedMs
-      bucket.longestAutomaticOfflineMs = Math.max(bucket.longestAutomaticOfflineMs, durationMs)
-      startedByUser.delete(userId)
-    }
-  }
-
-  for (const [userId, startMs] of startedByUser.entries()) {
-    const bucket = ensure(userId)
-    bucket.ongoingOfflineMs = Math.max(0, nowMs - Math.max(startMs, sinceMs))
-    bucket.longestAutomaticOfflineMs = Math.max(bucket.longestAutomaticOfflineMs, Math.max(0, nowMs - startMs))
-  }
-
-  return result
-}
-
 function isSessionOnline(session, now = new Date()) {
   if (!session) return false
   if (session.status === 'connected') return true
@@ -918,10 +853,13 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       where: { userId: { in: userIds }, occurredAt: { gte: since24h } },
       _count: { _all: true },
     }).catch(() => []) : [],
+    // Busca com FOLGA (48h) e recorta em 24h no cálculo: um episódio que
+    // começou antes da janela precisa achar o par para não sumir da conta
+    // (defeito 2 do RCA 2026-08-26).
     userIds.length ? db.waConnectionEvent.findMany({
-      where: { userId: { in: userIds }, occurredAt: { gte: since24h, lte: now }, type: { in: ['disconnect', 'disconnect_terminal', 'auth_reset', 'reconnect_success', 'connected', 'manual_reconnect_requested', 'manual_pairing_requested'] } },
+      where: { userId: { in: userIds }, occurredAt: { gte: addDays(now, -2), lte: now }, type: { in: OFFLINE_EPISODE_EVENT_TYPES } },
       orderBy: { occurredAt: 'asc' },
-      select: { userId: true, type: true, metadata: true, occurredAt: true },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
     }).catch(() => []) : [],
     getLogCountMap({ status: 'success', since: since24h, userIds }),
     getLogCountMap({ status: 'error', since: since24h, userIds }),
@@ -929,7 +867,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   ])
 
   const eventCounts24h = countRowsByUserAndType(eventCounts24hRows)
-  const offlineMetrics24h = summarizeOfflineEpisodes(offlineEvents24h, { since: since24h, now })
+  const offlineMetrics24h = summarizeOfflineEpisodesByUser(offlineEvents24h, { since: since24h, now })
   const rows = users.map(user => {
     const session = user.waSession
     const counts = eventCounts24h.get(user.id) || {}
@@ -962,6 +900,8 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       reconnectAttempts24h,
       reconnectSuccess24h,
       manualReconnects24h: Number(offline24h.manualReconnects || 0),
+      manualRecoveries24h: Number(offline24h.manualRecoveries || 0),
+      manualOfflineMs24h: Number(offline24h.manualOfflineMs || 0),
       automaticRecoveries24h: Number(offline24h.automaticRecoveries || 0),
       automaticOfflineMs24h: Number(offline24h.automaticOfflineMs || 0),
       ongoingOfflineMs24h: Number(offline24h.ongoingOfflineMs || 0),
@@ -1049,9 +989,9 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       _count: { _all: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
-      where: { userId, occurredAt: { gte: since7d, lte: now }, type: { in: ['disconnect', 'disconnect_terminal', 'auth_reset', 'reconnect_success', 'connected', 'manual_reconnect_requested', 'manual_pairing_requested'] } },
+      where: { userId, occurredAt: { gte: since7d, lte: now }, type: { in: OFFLINE_EPISODE_EVENT_TYPES } },
       orderBy: { occurredAt: 'asc' },
-      select: { userId: true, type: true, metadata: true, occurredAt: true },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
       where: { userId, occurredAt: { gte: since7d, lte: now } },
@@ -1078,8 +1018,11 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   const counts7d = countByType(events7d)
   const disconnects24h = Number(counts24h.disconnect || 0) + Number(counts24h.disconnect_terminal || 0)
   const disconnects7d = Number(counts7d.disconnect || 0) + Number(counts7d.disconnect_terminal || 0)
-  const offlineMetrics24h = summarizeOfflineEpisodes(offlineEvents7d.filter(event => new Date(event.occurredAt).getTime() >= since24h.getTime()), { since: since24h, now }).get(userId) || {}
-  const offlineMetrics7d = summarizeOfflineEpisodes(offlineEvents7d, { since: since7d, now }).get(userId) || {}
+  // Os episódios são montados UMA vez sobre a série inteira; as janelas só
+  // recortam o tempo. Filtrar os eventos antes de parear era o defeito 2.
+  const offlineEpisodes = buildOfflineEpisodesByUser(offlineEvents7d, { now }).get(userId) || []
+  const offlineMetrics24h = summarizeEpisodes(offlineEpisodes, { since: since24h, now })
+  const offlineMetrics7d = summarizeEpisodes(offlineEpisodes, { since: since7d, now })
 
   return {
     checkedAt: now.toISOString(),
@@ -1103,7 +1046,14 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       longestAutomaticOfflineMs7d: Number(offlineMetrics7d.longestAutomaticOfflineMs || 0),
       ongoingOfflineMs24h: Number(offlineMetrics24h.ongoingOfflineMs || 0),
       ongoingOfflineMs7d: Number(offlineMetrics7d.ongoingOfflineMs || 0),
+      manualRecoveries24h: Number(offlineMetrics24h.manualRecoveries || 0),
+      manualRecoveries7d: Number(offlineMetrics7d.manualRecoveries || 0),
+      manualOfflineMs24h: Number(offlineMetrics24h.manualOfflineMs || 0),
+      manualOfflineMs7d: Number(offlineMetrics7d.manualOfflineMs || 0),
+      longestManualOfflineMs7d: Number(offlineMetrics7d.longestManualOfflineMs || 0),
+      terminalEpisodes7d: Number(offlineMetrics7d.terminalEpisodes || 0),
     },
+    offlineEpisodes: presentOfflineEpisodes(offlineEpisodes, { limit: 50 }),
     errorsByType: buildErrorsByMessage(logs, { limit: 20 }),
     desyncGroups: summarizeDesyncGroups(desyncEvents, { limit: 10 }),
     recentEvents: recentEvents.map(event => {
