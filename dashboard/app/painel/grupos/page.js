@@ -148,7 +148,7 @@ function KeywordTagInput({ keywords, draft, onDraftChange, onAdd, onRemove }) {
 }
 
 /* ── Monitor group config panel (redesigned) ────────────────────────── */
-function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, onOpenTargetEditor, onSetActionError, templates }) {
+function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, targetsModeCache, onOpenTargetEditor, onSetActionError, templates }) {
   const [draft, setDraft] = useState('')
 
   const keywords = (g.blockedKeywords || '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -179,6 +179,12 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
   const templateApplied = g.templateKey !== null && g.templateKey !== ''
 
   const cachedIds = targetsCache[g.id]
+  // 'explicit' com lista vazia = a pessoa escolheu destinos e todos eles foram
+  // apagados. Não é "todos os destinos" — é NENHUM. Mostrar "todos" aqui foi o
+  // que fez a oferta cair em grupo não escolhido sem ninguém entender (RCA
+  // 2026-08-26).
+  const cachedMode = targetsModeCache?.[g.id]
+  const noDestinationsChosen = cachedMode === 'explicit' && Array.isArray(cachedIds) && cachedIds.length === 0
   const destNames = cachedIds
     ? (cachedIds.length === 0 ? null : cachedIds.map((id) => post.find((p) => p.id === id)?.name).filter(Boolean))
     : null
@@ -333,9 +339,11 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
               ? destNames.map((name) => (
                   <span key={name} className="cfg-dest-pill">⚡ {name}</span>
                 ))
-              : cachedIds !== undefined
-                ? <span className="pnl-hint" style={{ paddingTop: 4 }}>Todos os destinos (sem filtro)</span>
-                : null}
+              : noDestinationsChosen
+                ? <span className="pnl-hint" style={{ paddingTop: 4, color: 'var(--warn, #b45309)' }}>Nenhum destino escolhido — esse grupo não está enviando para ninguém.</span>
+                : cachedIds !== undefined
+                  ? <span className="pnl-hint" style={{ paddingTop: 4 }}>Todos os destinos (sem filtro)</span>
+                  : null}
             <button type="button" className="pnl-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => onOpenTargetEditor(g.id)}>
               <CfgIcon name="plus" size={13} />
               {cachedIds !== undefined ? 'Editar destinos' : 'Escolher destinos'}
@@ -378,6 +386,7 @@ export default function GruposPage() {
   const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
   const [templates, setTemplates] = useState([])
   const [groupTargetsCache, setGroupTargetsCache] = useState({})
+  const [groupTargetsModeCache, setGroupTargetsModeCache] = useState({})
 
   async function load() {
     setLoadingGroups(true)
@@ -488,9 +497,11 @@ export default function GruposPage() {
     try {
       const data = await api.groupTargets(groupId)
       const ids = data.postIds ?? []
-      setTargetMode(data.mode ?? 'explicit')
+      const mode = data.mode ?? 'explicit'
+      setTargetMode(mode)
       setTargetPostIds(ids)
       setGroupTargetsCache((prev) => ({ ...prev, [groupId]: ids }))
+      setGroupTargetsModeCache((prev) => ({ ...prev, [groupId]: mode }))
     } catch (err) {
       setActionError(err.message)
       setTargetEditorId(null)
@@ -511,8 +522,10 @@ export default function GruposPage() {
     setActionError('')
     try {
       await api.updateGroupTargets(targetEditorId, targetPostIds)
-      setTargetMode('explicit')
+      const savedMode = targetPostIds.length ? 'explicit' : 'all'
+      setTargetMode(savedMode)
       setGroupTargetsCache((prev) => ({ ...prev, [targetEditorId]: targetPostIds }))
+      setGroupTargetsModeCache((prev) => ({ ...prev, [targetEditorId]: savedMode }))
       setTargetEditorId(null)
     } catch (err) {
       setActionError(err.message)
@@ -708,6 +721,7 @@ export default function GruposPage() {
                       canUseChannels={canUseChannels}
                       post={post}
                       targetsCache={groupTargetsCache}
+                      targetsModeCache={groupTargetsModeCache}
                       onOpenTargetEditor={openTargetEditor}
                       onSetActionError={setActionError}
                       templates={templates}

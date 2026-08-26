@@ -24,6 +24,7 @@ import { resolveLinkKind } from './converters/linkKind.js'
 import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia } from './core/imageModePolicy.js'
 import db from './db.js'
@@ -1798,6 +1799,51 @@ async function processSendJob(job) {
       logger.warn({ err: err?.message, destJid: job.destJid }, 'Preservação do destino não pôde ser lida; seguindo sem pausa')
     }
 
+    // B) Revalidação do destino (RCA 2026-08-26). Os destinos são calculados
+    // quando a mensagem CHEGA; o job só sai no dequeue, que pode ser muito
+    // depois (preservação do destino, freio de fila). Se a cliente desvinculou
+    // ou apagou o destino nesse meio-tempo, a alteração valia só para mensagens
+    // futuras e o job já materializado seguia entregando — foi assim que uma
+    // oferta saiu 1,5s DEPOIS de o destino ser apagado no painel. Só vale para
+    // envio espelhado (`converted`, que carrega `sourceJid`); broadcast, oferta
+    // automática e agendamento têm destino escolhido na hora e não passam aqui.
+    if (job.type === 'converted' && job.sourceJid) {
+      const unlinked = await (async () => {
+        try {
+          const cfg = await getConfig()
+          const monitorGroup = cfg.groups.monitor.find(g => g.waJid === job.sourceJid)
+          if (!monitorGroup) {
+            // A origem sumiu da config: não há mais espelhamento dela.
+            return { drop: true, reason: 'source_unlinked' }
+          }
+          const current = resolveMonitorDestinations({
+            targetsMode: monitorGroup.targetsMode,
+            targetPostJids: monitorGroup.targetPostJids,
+            allPostJids: cfg.groups.post,
+          })
+          // 'status@broadcast' é destino sintético (postToStatus), não vive em
+          // Group — nunca deve ser descartado por esta checagem.
+          if (job.destJid === 'status@broadcast') return { drop: false, reason: 'status' }
+          return shouldDropUnlinkedDestination({ destJid: job.destJid, currentDestinations: current.destinations })
+        } catch (err) {
+          // Fail-safe: sem foto confiável da config, envia (descartar por
+          // dúvida perderia oferta legítima).
+          logger.warn({ err: err?.message, destJid: job.destJid }, 'Revalidação do destino falhou; seguindo com o envio')
+          return { drop: false, reason: 'unknown_config' }
+        }
+      })()
+      if (unlinked.drop) {
+        await db.messageLog.update({
+          where: { id: job.logId },
+          data: { status: 'skipped', errorMsg: `skip:${unlinked.reason}`, sentAt: new Date() },
+        }).catch(() => {})
+        logger.warn({ destJid: job.destJid, sourceJid: job.sourceJid, logId: job.logId, reason: unlinked.reason }, 'Envio descartado: destino não está mais vinculado à origem')
+        try { recordOperationalSignal('send_dest_unlinked', { userId, destJid: job.destJid, sourceJid: job.sourceJid, reason: unlinked.reason }) } catch {}
+        await finishSendJob(job, { ok: false, error: unlinked.reason })
+        return
+      }
+    }
+
     // C) Descarte por idade na fila (configurável por destino na Preservação).
     // Oferta que ficou esperando mais que o teto não serve mais — e fila
     // infinita é o que liga o freio progressivo e derruba a vazão de todos os
@@ -2995,6 +3041,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
           skipActiveFetch: couponSkipActiveFetch,
           logger,
+          // Miniatura pequena demais para publicar: a oferta sai SEM imagem
+          // (card de link do WhatsApp) em vez de com borrão. Sinal durável para
+          // medir quanto isso acontece por loja — ver thumbnailQualityPolicy.js.
+          onThumbnailDropped: info => {
+            try { recordOperationalSignal('monitored_thumbnail_dropped', { userId, msgId: msg.key.id, ...info }) } catch {}
+          },
         })
         return cachedImage
       }
@@ -3278,7 +3330,24 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         logger.info({ msgId: msg.key.id, hasProductLink, titleOverlap, looksGeneric: couponLooksGeneric, couponSkipActiveFetch }, 'estratégia de imagem para mensagem de cupom')
       }
 
-      const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
+      // Para onde essa mensagem vai. A decisão inteira mora em
+      // core/destinationRouting.js: origem com destinos escolhidos no painel
+      // ('explicit') NUNCA cai no espelhamento para todos os destinos da conta,
+      // mesmo que a lista tenha ficado vazia porque a cliente apagou os grupos
+      // que havia escolhido (RCA 2026-08-26).
+      const routing = resolveMonitorDestinations({
+        targetsMode: monitorGroup?.targetsMode,
+        targetPostJids: monitorGroup?.targetPostJids,
+        allPostJids: cfg.groups.post,
+      })
+      const baseDestinations = routing.destinations
+      if (routing.reason === DESTINATION_REASON.FALLBACK_ALL && baseDestinations.length) {
+        logger.warn({ sourceJid: jid, destCount: baseDestinations.length }, 'Origem sem destino escolhido: espelhando para TODOS os destinos da conta')
+        recordOperationalSignal('mirror_fallback_all_destinations', { userId, sourceJid: jid, destCount: baseDestinations.length })
+      }
+      if (routing.reason === DESTINATION_REASON.EXPLICIT_EMPTY) {
+        logger.warn({ sourceJid: jid }, 'Origem com destinos escolhidos, porém nenhum destino válido restou — nada será enviado')
+      }
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.
@@ -3730,6 +3799,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           type: 'converted',
           logId: log.id,
           destJid,
+          // Revalidação no dequeue (core/destinationRouting.js): o job pode
+          // esperar minutos/horas na fila e a cliente pode desvincular/apagar o
+          // destino nesse meio-tempo.
+          sourceJid: jid,
           platforms,
           plan: cfg.plan,
           // Só o stagger entre destinos fica congelado no job; o freio de fila

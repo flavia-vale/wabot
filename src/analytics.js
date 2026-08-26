@@ -130,6 +130,18 @@ export const ANALYTICS_EVENTS = new Set([
   // abre a loja). Somado com `ops_preview_card_no_image` por loja, diz quanto o
   // bloqueio da loja ainda custa depois do plano B.
   'ops_preview_card_origin_fallback',
+  // A única imagem disponível era uma miniatura pequena demais para publicar
+  // (borrão). A oferta saiu sem imagem, com o card de link do WhatsApp — ver
+  // core/thumbnailQualityPolicy.js e o RCA 2026-08-26.
+  'ops_monitored_thumbnail_dropped',
+  // Origem monitorada SEM destino explícito espelhando para TODOS os destinos
+  // da conta (comportamento histórico de quem nunca escolheu destinos). Sinal
+  // para achar quem está nesse estado sem querer — ver core/destinationRouting.js.
+  'ops_mirror_fallback_all_destinations',
+  // Envio descartado no dequeue porque o destino deixou de estar vinculado à
+  // origem enquanto o job esperava na fila (RCA 2026-08-26: entrega 1,5s DEPOIS
+  // de a cliente apagar o destino no painel).
+  'ops_send_dest_unlinked',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está
