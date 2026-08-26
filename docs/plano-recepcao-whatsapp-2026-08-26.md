@@ -285,15 +285,33 @@ vazia, próprio número, freio de emergência).
 
 ### Fase 3 — Canal (`@newsletter`) fora do escopo
 
-O caso da Cynthia. Só entra depois de **provar na fonte da biblioteca
-instalada** que ignorar canal não quebra:
-1. a descoberta da tela "Canais que sigo" (hoje vem de `messaging-history.set`
-   e `chats.upsert`, **não** de `messages.upsert` — precisa ser confirmado);
-2. a confirmação de entrega das nossas próprias mensagens;
-3. o aviso de entrada em grupo (mensagem de boas-vindas).
+**GATE CONFERIDO NA FONTE INSTALADA (2026-08-26, `@whiskeysockets/baileys`
+6.7.23).** O gancho `shouldIgnoreJid` é consultado em **quatro** lugares — não
+só nas mensagens:
 
-Validação em staging: seguir um canal novo e ver se ele aparece no picker;
-entrar num grupo de destino e ver se a boas-vindas dispara.
+| Onde | Arquivo | O que acontece se o jid for ignorado |
+|---|---|---|
+| `handleMessage` | `Socket/messages-recv.js:611` | ACK + descarta **antes** do decrypt e do pedido de reenvio — é exatamente o que queremos |
+| `handleReceipt` | `Socket/messages-recv.js:512` | perde a **confirmação de entrega das nossas próprias mensagens** para aquele destino |
+| `handleNotification` | `Socket/messages-recv.js:580` | perde notificação de grupo — inclusive **entrada de participante**, que dispara a mensagem de boas-vindas |
+| `handlePresenceUpdate` | `Socket/chats.js:543` | perde presença (irrelevante para o produto) |
+
+Consequências que viram **regra obrigatória da Fase 2**:
+- **Destinos de postagem e canal do botão têm que continuar na lista de
+  escolhidos** — senão a boas-vindas para de disparar e perdemos a
+  confirmação de entrega. (Hoje `updateAllowedChatJids` já os inclui.)
+- **`status@broadcast` nunca pode ser ignorado**: quando `postToStatus` está
+  ligado, é para lá que publicamos, e o receipt passa pelo mesmo gancho.
+
+E a boa notícia que libera o canal: a descoberta de "Canais que sigo" **não**
+passa por esse gancho. Ela vem de `messaging-history.set`, emitido em
+`Utils/process-message.js:168` ao processar a notificação de history sync (que
+chega pelo próprio número), e de `chats.upsert`. Ignorar canal
+**não-monitorado** não apaga o picker de canais.
+
+Falta apenas a validação em staging antes de ligar: seguir um canal novo e
+confirmar que ele aparece no picker; entrar num grupo de destino e confirmar
+que a boas-vindas dispara; enviar uma oferta e confirmar a entrega.
 
 ### Fase 4 — Fonte monitorada dessincronizada (176 eventos, 9 contas)
 
