@@ -84,6 +84,8 @@ export function explainErrorMsg(errorMsg, platform) {
     return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
   }
   if (errorMsg.startsWith('skip:queue_cleared')) return 'Você limpou a fila de envios manualmente — esta oferta foi removida da fila antes de ser enviada.'
+  if (errorMsg.startsWith('skip:dest_unlinked')) return 'Esse grupo de destino deixou de estar ligado a esse grupo de origem enquanto a oferta esperava na fila, então ela não foi enviada para lá.'
+  if (errorMsg.startsWith('skip:source_unlinked')) return 'O grupo de origem dessa oferta foi removido enquanto ela esperava na fila, então ela não foi enviada.'
   if (errorMsg.startsWith('skip:queue_expired')) {
     const m = /age=(\d+)min:max=(\d+)min/.exec(errorMsg)
     if (m) {
