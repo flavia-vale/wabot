@@ -4175,7 +4175,7 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), worker: workerMetadata } })
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata } })
   }
 
   if (msg?.type === 'broadcast') {
