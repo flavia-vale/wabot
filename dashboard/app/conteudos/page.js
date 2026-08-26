@@ -15,6 +15,11 @@ const formattedLastUpdated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long
 
 const blogPosts = [
   {
+    href: '/clonar-mensagens-de-grupo-de-afiliados',
+    title: 'Como clonar mensagens de grupo de afiliados no WhatsApp',
+    description: 'O que significa clonar um grupo de ofertas, como o link vira o seu e quais ferramentas fazem isso.',
+  },
+  {
     href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande',
     title: 'Como começar como afiliado no WhatsApp sem ter grupo grande',
     description: 'Primeiros passos para quem está começando: chip dedicado, conversão de link e cadência sem precisar de audiência grande.',

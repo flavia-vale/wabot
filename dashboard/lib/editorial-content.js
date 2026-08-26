@@ -35,6 +35,7 @@ export const EDITORIAL_DATES = {
   '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-07-31' },
+  '/clonar-mensagens-de-grupo-de-afiliados': { publishedAt: '2026-08-26', updatedAt: '2026-08-26' },
   '/conteudos': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/benchmarks/operacao-grupos-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/blog/como-escalar-grupos-sem-operacao-manual': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },

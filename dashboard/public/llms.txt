@@ -41,11 +41,12 @@ Beyond link conversion, the product also: converts coupon and voucher links (not
 - Credential security: https://espelhagrupos.com.br/seguranca-credenciais-afiliado
 - Glossary: https://espelhagrupos.com.br/glossario
 - Comparison hub examples: https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados
+- How to clone/mirror affiliate group messages: https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados
 
 ## Main topics covered by the site
 
 - Bot para afiliados no WhatsApp.
-- Espelhar grupos de WhatsApp com revisão humana.
+- Espelhar grupos de WhatsApp com revisão humana (o mercado também chama isso de "clonar" ou "replicar" um grupo de afiliados).
 - Divulgar ofertas em vários grupos com cadência responsável.
 - Conferir e converter link de afiliado antes de divulgar.
 - Padronizar copy, oferta, grupo de destino and UTM.
@@ -56,6 +57,7 @@ Beyond link conversion, the product also: converts coupon and voucher links (not
 
 ## Pages suitable for citation
 
+- https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados
 - https://espelhagrupos.com.br/blog/conferir-converter-link-afiliado-whatsapp
 - https://espelhagrupos.com.br/blog/bot-para-afiliados-whatsapp-grupos-cupons
 - https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp
