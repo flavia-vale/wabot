@@ -49,6 +49,9 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Oferta espelhada saiu sem foto porque o card de preview não conseguiu
   // imagem. Durável para comparar por loja e por etapa ao longo dos dias.
   preview_card_no_image: 'ops_preview_card_no_image',
+  // Sessão conectada e SEM receber mensagem útil, com evidência de tráfego
+  // chegando e falhando (RCA 2026-08-26: painel verde e espelhamento parado).
+  wa_reception_blind: 'ops_wa_reception_blind',
   // Muro anti-robô do ML batendo no IP do servidor (RCA 2026-08-19/20).
   ml_anti_bot_wall: 'ops_ml_anti_bot_wall',
   // Card de preview salvo pelo plano B: loja sem foto, foto da mensagem de

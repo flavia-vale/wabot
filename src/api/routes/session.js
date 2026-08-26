@@ -148,6 +148,10 @@ export async function sessionRoutes(app) {
       // Atalho de topo para o painel decidir o banner "reconecte" sem ter que
       // cavar dentro de metrics. Só presente quando métricas foram coletadas.
       sessionHealth: metrics?.sessionHealth ?? null,
+      // Recepção funcional: 'ok'/'quiet' (nada a mostrar), 'blind' (conectado
+      // e sem receber — o quadro do RCA 2026-08), 'starved' (suspeita fraca).
+      // Só presente quando métricas foram coletadas.
+      reception: metrics?.reception ?? null,
     }
   })
 
