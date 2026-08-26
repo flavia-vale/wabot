@@ -1437,6 +1437,72 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
+## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
+
+A regra acima (`WA_IGNORE_UNMONITORED_GROUPS`) é uma **lista de exceções**, e
+listas de exceções envelhecem mal: começou cobrindo grupo, veio o incidente de
+**canal** (`@newsletter`, conta `cynthiatceles@gmail.com`, 2026-08-25) e a
+medição de 26/08 mostrou que o MAIOR balde nem era grupo — eram as **conversas
+diretas pessoais da própria cliente** (538 de 1.082 eventos de dessincronização,
+15 contas), que o robô tenta decifrar e **descarta na linha seguinte**
+(`monitorGroups: []`). Cada incidente descobria um balde novo depois que a
+cliente reclamava.
+
+`src/core/chatScopePolicy.js` inverte: a lista passa a ser do que **olhar**.
+Modo em degraus via `WA_CHAT_SCOPE_MODE`:
+
+| Modo | Ignora, fora da lista de escolhidos |
+|---|---|
+| `off` (default) | nada — comportamento histórico |
+| `dm` | conversa direta (`@lid`, `@s.whatsapp.net`) |
+| `dm+group` | soma grupo `@g.us` |
+| `strict` | soma canal `@newsletter` (**só após a validação da Fase 3**) |
+
+**Tudo falha para o lado de DEIXAR PASSAR** (não afrouxar): modo desligado,
+config ainda não carregada (`ready=false`), **lista de escolhidos vazia**, freio
+acionado, tipo de endereço desconhecido, jid vazio — nada disso filtra. Lista
+vazia é sinal de config incompleta, não autorização para ignorar tudo.
+
+**Nunca ignorados, em nenhum modo:** o que está na lista (fontes monitoradas,
+destinos de postagem, canal do botão), a **identidade da própria conta**
+(número e `@lid`, preenchidos no `open`) e `status@broadcast`.
+
+⚠️ **Por que destinos e `status@broadcast` precisam estar na lista** (conferido
+na fonte do Baileys 6.7.23 — não é escolha estética): o MESMO gancho
+`shouldIgnoreJid` é consultado em quatro caminhos —
+`handleMessage` (`messages-recv.js:611`, o que queremos),
+`handleReceipt` (`:512`, **confirmação de entrega das nossas mensagens**),
+`handleNotification` (`:580`, **entrada em grupo → mensagem de boas-vindas**) e
+`handlePresenceUpdate` (`chats.js:543`). Ignorar um destino quebraria a
+boas-vindas e o recibo. A descoberta de "Canais que sigo" **não** passa por aí
+(vem de `messaging-history.set` / `chats.upsert`), então ignorar canal
+não-monitorado não apaga o picker.
+
+**Freio de emergência (`shouldAutoDisableChatScope`) — não remover.** Se a conta
+ESTAVA recebendo, parou por completo por `WA_CHAT_SCOPE_PANIC_MS` (default
+30min) e o contador de ignoradas continua subindo, a regra **se desliga sozinha**
+naquele worker e tudo volta a passar até o próximo restart, com
+`ops_wa_chat_scope_auto_disabled`. É a rede contra o cenário que não conseguimos
+prever — em especial a migração do endereçamento de grupo para `@lid`, que faria
+um grupo monitorado deixar de casar com a lista e sair do ar **em silêncio**.
+Conta que nunca recebeu (nova) e silêncio sem nada sendo ignorado **não**
+acionam o freio.
+
+**Observabilidade obrigatória:** contagem por tipo, amostra de log limitada
+(`WA_CHAT_SCOPE_LOG_SAMPLE`, primeiros N endereços distintos por tipo) e sinal
+durável **agregado por janela** `ops_wa_chat_scope_filtered`
+(`WA_CHAT_SCOPE_SIGNAL_INTERVAL_MS`, default 1h) — **nunca por mensagem**. Sem
+isso trocaríamos um problema visível por um invisível: com o filtro ativo a
+mensagem some antes do nosso log, e foi justamente uma linha de log
+(`"mensagem recebida" jid: ...@lid, monitorGroups: []`) que permitiu diagnosticar
+o incidente.
+
+Aplicar a env exige `pm2 delete` + `start` (pegadinha #1) **e**, em modo
+`remote`, restart do `bot-supervisor` para os workers pegarem o código — o que
+reconecta TODAS as sessões (anunciar antes). Rollback: `WA_CHAT_SCOPE_MODE=off`.
+Testes: `test/chat-scope-policy.test.js`, `test/bot-worker-chat-scope-wiring.test.js`.
+Plano completo: `docs/plano-recepcao-whatsapp-2026-08-26.md`.
+
 ## Loop de retry-receipt travado derrubando sessão a cada ~50min (RCA 2026-07)
 
 **Sintoma:** cliente reportou queda "de novo hoje". Investigação encontrou uma
