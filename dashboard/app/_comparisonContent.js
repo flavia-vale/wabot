@@ -298,6 +298,73 @@ export const COMPARISON_PAGES = {
       { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles, então dá para rodar as duas em paralelo por uma semana antes de cancelar a atual.' },
     ],
   },
+  /* Página de marca do concorrente Gigi Bot. Criada em 2026-08-26 depois de uma
+   * cliente relatar que migrou porque "o Gigi Bot era grátis e virou pago".
+   * Segue o padrão que já é o motor de impressão do site (busca pelo NOME do
+   * concorrente — 15% de tudo em 2026-08-16), não as linhas congeladas de
+   * cidade/nicho.
+   *
+   * Regra que NÃO se quebra aqui: o fim do plano gratuito é RELATO de cliente,
+   * não fato verificado por nós. A tabela pública que temos (print de
+   * 31/07/2026) ainda listava o plano gratuito, e gigibot.com.br responde 403
+   * para leitura automatizada. Por isso a página nunca AFIRMA que acabou o
+   * grátis — ela responde a pergunta com o que é verificável e manda confirmar
+   * na fonte oficial. Afirmar mudança de preço de concorrente sem prova é risco
+   * jurídico e destrói a citabilidade por IA, que é justamente o objetivo.
+   *
+   * O ângulo honesto e forte é outro, e esse SIM está verificado: o plano
+   * gratuito nunca espelhou grupos. Quem usava de graça e queria espelhar
+   * precisava do Gigi Prime Bot (R$67,99, R$49,90 no 1º mês) — e é contra esse
+   * número que o BOTinho (R$39/30 dias) compara.
+   */
+  '/alternativas/gigi-bot': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Gigi Bot',
+    title: 'Alternativa ao Gigi Bot: comparativo honesto',
+    description: 'Comparativo entre Gigi Bot e BOTinho para quem usava o plano gratuito e precisa espelhar grupos: preço, lojas cobertas e o que muda. Dados de 31/07/2026.',
+    competitorSlugs: ['gigi-bot'],
+    productPage: {
+      href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
+      label: 'Como funciona o bot para achadinhos no WhatsApp',
+    },
+    tldr: 'Se você só converte link avulso e cabe no plano gratuito, o Gigi Bot resolve e cobre mais lojas que qualquer concorrente mapeado. Se o que você precisa é espelhar grupos, o plano necessário lá é o mais caro (R$67,99) — compare com o BOTinho a R$39/30 dias antes de decidir.',
+    directAnswer: 'O Gigi Bot é um bot de afiliados para WhatsApp com quatro planos: um gratuito que converte links de 9 lojas com limite de 120 promoções/dia, o Guru Plus a R$ 19,99/mês, o Gigi Promo a R$ 39,99/mês (adiciona Amazon) e o Gigi Prime a R$ 67,99/mês (R$ 49,90 no primeiro mês), que é o único com espelhamento de grupos, filas de envio e agendamento. A alternativa mais próxima para quem quer espelhar grupos é o BOTinho, a R$39/30 dias, com quatro marketplaces, grupos ilimitados e 7 dias de teste grátis com o plano Pro completo. Dados da tabela pública verificada em 31/07/2026 — preços mudam, confirme na fonte oficial.',
+    rows: [
+      ['Espelhar grupos', 'Gigi Bot: só no plano mais caro, o Gigi Prime (R$ 67,99/mês, R$ 49,90 no 1º mês), com 4 filas de até 20 grupos cada. BOTinho: incluído desde o plano de entrada (R$39/30 dias), sem limite de grupos.', 'Este é o ponto que mais muda a conta. O plano gratuito do Gigi Bot converte link, mas não espelha grupo.'],
+      ['Lojas cobertas', 'Gigi Bot: 9 lojas (Shopee, Mercado Livre, Magalu, AliExpress, Kabum, Terabyte, Natura, Shein e Temu) — Amazon só a partir do 3º plano. BOTinho: Shopee, Amazon, Mercado Livre e Magalu, todas no plano de entrada.', 'Aqui o Gigi Bot é claramente mais amplo. Se você divulga AliExpress, Temu ou Shein, isso pesa a favor dele.'],
+      ['Amazon', 'Gigi Bot: entra no Gigi Promo (R$ 39,99/mês) ou acima. BOTinho: incluída no plano de entrada.', 'Se Amazon é parte da sua rotina, compare o plano do Gigi Bot que a inclui, não o gratuito.'],
+      ['Começar sem pagar', 'Gigi Bot: plano gratuito permanente na tabela verificada, com limite de 120 promoções/dia e sem espelhamento. BOTinho: 7 dias grátis com o plano Pro completo, sem cartão, depois é pago.', 'São coisas diferentes: um é plano grátis limitado para sempre; o outro é teste completo por tempo determinado.'],
+      ['Relatório de comissões', 'Gigi Bot: relatório de comissões da Shopee, recurso que não vimos nos outros concorrentes mapeados. BOTinho: histórico completo de envios, incluindo o que foi bloqueado por repetição.', 'São relatórios de coisas diferentes: um olha a comissão na loja, o outro olha o que o robô fez com cada oferta.'],
+    ],
+    criteria: ['Se você precisa espelhar grupos ou só converter link avulso', 'Quantas lojas você divulga de verdade hoje', 'Se Amazon faz parte da rotina', 'Quantos grupos recebem oferta por semana', 'O que você consegue validar antes de pagar'],
+    botinhoDifferentials: ['Espelhamento de grupos já no plano de entrada', 'Sem limite de grupos e sem limite diário de promoções', 'Quatro marketplaces incluídos, Amazon entre eles', 'Teste grátis de 7 dias com o plano Pro completo, sem cartão', 'Conversão de link de cupom, não só de produto', 'Canais e Comunidades do WhatsApp', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
+    bestFit: [
+      'Escolha o Gigi Bot se você divulga AliExpress, Temu, Shein, Kabum, Terabyte ou Natura — nenhum concorrente que mapeamos cobre tantas lojas.',
+      'Escolha o Gigi Bot se o seu uso é converter link avulso dentro do limite de 120 promoções por dia e o plano gratuito resolve.',
+      'Escolha o BOTinho se o que você precisa é espelhar grupos: lá isso está no plano mais caro (R$ 67,99/mês), aqui está no de entrada (R$39/30 dias).',
+      'Escolha o BOTinho se quer testar a operação completa antes de pagar, com os 7 dias do plano Pro.',
+    ],
+    notIdealFit: [
+      'O Gigi Bot não é ideal para quem quer espelhar grupos gastando pouco — espelhamento, filas e agendamento só aparecem no plano mais caro.',
+      'O Gigi Bot não é ideal para quem depende da Amazon desde o começo: ela entra a partir do 3º plano pago.',
+      'O BOTinho não é ideal para quem divulga AliExpress, Temu ou Shein — essas lojas não estão entre as quatro que ele converte.',
+      'O BOTinho não é ideal para quem quer um plano gratuito permanente: o que existe aqui é teste de 7 dias.',
+    ],
+    migrationPath: [
+      'Separe o que você faz hoje em duas colunas: converter link avulso e espelhar grupo. É essa divisão que decide qual plano você precisa em cada ferramenta.',
+      'Liste as lojas que você realmente divulga. Se AliExpress, Temu ou Shein estiverem na lista, a cobertura do Gigi Bot é uma vantagem real e vale considerá-la.',
+      'Compare o preço do plano que cobre o que você precisa, não o preço de entrada de cada um — no Gigi Bot o espelhamento está no plano de R$ 67,99.',
+      'Rode uma semana em paralelo antes de cancelar a ferramenta atual, comparando qualidade do link convertido e do preview no celular.',
+    ],
+    faq: [
+      { q: 'O Gigi Bot deixou de ser grátis?', a: 'Não podemos afirmar. A tabela pública que verificamos em 31/07/2026 ainda listava o plano gratuito Guru das Promoções Bot, com conversão de 9 lojas e limite de 120 promoções por dia. Recebemos relato de usuária dizendo que isso mudou, mas não conseguimos confirmar na fonte oficial. Confirme direto no site do Gigi Bot antes de decidir — preços e planos mudam.' },
+      { q: 'O plano gratuito do Gigi Bot espelha grupos?', a: 'Não, e isso é o mais importante para quem está comparando. Na tabela verificada, o plano gratuito converte link automaticamente, mas espelhamento de grupos, filas de envio e agendamento por horário só aparecem no Gigi Prime Bot, o plano mais caro (R$ 67,99/mês, com R$ 49,90 no primeiro mês).' },
+      { q: 'Quanto custa o Gigi Bot?', a: 'Conforme a tabela pública verificada em 31/07/2026: Guru das Promoções Bot grátis, Guru Plus Bot R$ 19,99/mês, Gigi Promo Bot R$ 39,99/mês e Gigi Prime Bot R$ 67,99/mês (anunciado a R$ 49,90 no primeiro mês, sem indicar se o desconto se mantém). Confirme na página oficial antes de assinar.' },
+      { q: 'Qual a melhor alternativa ao Gigi Bot?', a: 'Depende do que travou. Se o problema foi o preço do plano que espelha grupos, o BOTinho faz isso no plano de entrada (R$39/30 dias) com grupos ilimitados. Se o que você valoriza é a variedade de lojas, o próprio Gigi Bot continua sendo o mais amplo entre os concorrentes que mapeamos.' },
+      { q: 'Em que o Gigi Bot é melhor que o BOTinho?', a: 'Em dois pontos concretos. Primeiro, cobertura de lojas: são 9, incluindo AliExpress, Temu, Shein, Kabum, Terabyte e Natura, contra as quatro do BOTinho. Segundo, ele tem um plano gratuito permanente para converter link avulso, enquanto aqui o gratuito é um teste de 7 dias.' },
+      { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles, então dá para rodar as duas em paralelo por uma semana antes de cancelar a atual.' },
+    ],
+  },
   '/botinho-vs-planilha-manual': {
     format: 'vs',
     eyebrow: 'Comparativo · Operação manual',
