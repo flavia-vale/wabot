@@ -35,6 +35,7 @@ export const EDITORIAL_DATES = {
   '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-07-31' },
+  '/clonar-mensagens-de-grupo-de-afiliados': { publishedAt: '2026-08-26', updatedAt: '2026-08-26' },
   '/conteudos': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/benchmarks/operacao-grupos-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/blog/como-escalar-grupos-sem-operacao-manual': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
@@ -70,6 +71,7 @@ export const EDITORIAL_DATES = {
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
   // desta rodada, publicada em 2026-08-19.
   '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-08-19' },
+  '/alternativas/gigi-bot': { publishedAt: '2026-08-26', updatedAt: '2026-08-26' },
   '/alternativas/proafiliados': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/alternativas/shozap': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/alternativas/fluxopromo': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },

@@ -4,6 +4,13 @@ import { shouldConvertCouponLinks } from './couponPolicy.js'
 
 const ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql'
 
+// SubID fixo enviado em TODO link de afiliado que geramos. Não é configuração
+// de ambiente nem campo por cliente de propósito: é requisito de produto (todo
+// clique tem que cair no relatório da Shopee sob esta origem), e uma env
+// criaria o risco de staging/prod divergirem ou de o tracking sumir por
+// configuração ausente. Vale para cliente existente e futura sem migration.
+export const SHOPEE_SUB_ID = 'espelhagrupos'
+
 function buildAuth(appId, secretKey, payload) {
   const timestamp = Math.floor(Date.now() / 1000)
   const sig = crypto
@@ -85,7 +92,7 @@ async function generateAffiliateShortLink(originUrl, { appId, secretKey }, { att
   const safeUrl = String(originUrl).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   const body = {
     query: `mutation {
-      generateShortLink(input: { originUrl: "${safeUrl}", subIds: [""] }) {
+      generateShortLink(input: { originUrl: "${safeUrl}", subIds: ["${SHOPEE_SUB_ID}"] }) {
         shortLink
       }
     }`,

@@ -76,6 +76,17 @@ function WhatsAppButton({ phone }) {
 }
 
 
+// Quem resolve a desconexão — espelha src/core/sessionOwnership.js.
+const OWNER_META = {
+  connected: { label: 'conectado', className: 'bg-emerald-50 text-emerald-700' },
+  robo: { label: 'o robô está tentando', className: 'bg-sky-50 text-sky-700' },
+  cliente: { label: 'precisa da cliente (QR)', className: 'bg-amber-50 text-amber-800' },
+  cliente_desligou: { label: 'ela desligou', className: 'bg-slate-100 text-slate-600' },
+  bloqueio: { label: 'número recusado pelo WhatsApp', className: 'bg-red-50 text-red-700' },
+  ninguem: { label: 'parada, ninguém tentando', className: 'bg-red-100 text-red-800' },
+  acesso_vencido: { label: 'acesso vencido', className: 'bg-purple-50 text-purple-700' },
+}
+
 function formatDurationMs(value) {
   const ms = Math.max(0, Number(value ?? 0))
   if (!Number.isFinite(ms) || ms <= 0) return '0min'
@@ -255,6 +266,11 @@ export default function AdminOnlinePage() {
   const [activity, setActivity] = useState('all')
   const [minErrors, setMinErrors] = useState('')
   const [error, setError] = useState('')
+  const [reconnecting, setReconnecting] = useState(null)
+  // Conta vencida há muito tempo sai da visão por padrão (ver
+  // src/core/adminVisibility.js). "Ver mais" traz de volta.
+  const [verVencidasAntigas, setVerVencidasAntigas] = useState(false)
+  const [feedback, setFeedback] = useState('')
 
   function currentFilters(extra = {}) {
     return {
@@ -264,6 +280,7 @@ export default function AdminOnlinePage() {
       plan,
       activity,
       minErrors,
+      incluirVencidos: verVencidasAntigas ? 1 : '',
       ...extra,
     }
   }
@@ -284,7 +301,25 @@ export default function AdminOnlinePage() {
       api.adminOnline(currentFilters()).then((result) => { if (active) setData(result) }).catch(() => {})
     }, 15000)
     return () => { active = false; clearInterval(timer) }
-  }, [search, waStatus, plan, activity, minErrors])
+  }, [search, waStatus, plan, activity, minErrors, verVencidasAntigas])
+
+  // Sobe o robô da cliente sem que ela precise fazer nada. O botão só aparece
+  // quando a credencial ainda existe (`canAdminRetry`) — em conta que precisa
+  // de QR novo ele não resolveria, e a API recusa por garantia.
+  async function reconnect(userId) {
+    setReconnecting(userId)
+    setError('')
+    setFeedback('')
+    try {
+      const result = await api.adminOnlineReconnect(userId)
+      setFeedback(result?.message || 'Robô iniciado.')
+      await load().catch(() => {})
+    } catch (err) {
+      setError(err.message || 'Não consegui subir o robô.')
+    } finally {
+      setReconnecting(null)
+    }
+  }
 
   async function openDetail(userId) {
     setDetailLoading(true)
@@ -323,6 +358,18 @@ export default function AdminOnlinePage() {
         </header>
 
         {error && <Alert type="error" title="ONLINE" message={error} />}
+        {feedback && <Alert type="success" title="Reconexão" message={feedback} />}
+        {(verVencidasAntigas || !!data?.summary?.ocultasPorVencimento) && (
+          <button
+            type="button"
+            onClick={() => setVerVencidasAntigas(!verVencidasAntigas)}
+            className="text-xs font-black text-emerald-700 underline underline-offset-2 hover:text-emerald-900"
+          >
+            {verVencidasAntigas
+              ? `Ocultar quem venceu há mais de ${data?.summary?.janelaVencimentoDias ?? 30} dias`
+              : `Ver mais (${data?.summary?.ocultasPorVencimento} vencida(s) há mais de ${data?.summary?.janelaVencimentoDias ?? 30} dias)`}
+          </button>
+        )}
 
         <section className="grid gap-4 md:grid-cols-3">
           <OnlineCard label="Usuários online agora" value={formatNumber(data?.summary?.onlineUsers)} helper={`${formatNumber(data?.summary?.totalSessions)} sessões monitoradas`} tone="green" />
@@ -417,7 +464,24 @@ export default function AdminOnlinePage() {
                       </td>
                       <td className="px-3 py-4">
                         <div className="flex flex-col gap-2">
+                          {user.sessionOwner && user.sessionOwner !== 'connected' && (
+                            <span
+                              title={user.sessionOwnerReason || ''}
+                              className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-center text-[11px] font-black ${(OWNER_META[user.sessionOwner] || {}).className || 'bg-slate-100 text-slate-600'}`}
+                            >
+                              {(OWNER_META[user.sessionOwner] || {}).label || user.sessionOwner}
+                            </span>
+                          )}
                           <button onClick={() => openDetail(user.id)} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Abrir detalhes</button>
+                          {user.canAdminRetry && (
+                            <button
+                              onClick={() => reconnect(user.id)}
+                              disabled={reconnecting === user.id}
+                              className="rounded-xl bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700 disabled:opacity-60"
+                            >
+                              {reconnecting === user.id ? 'Subindo…' : 'Tentar reconectar'}
+                            </button>
+                          )}
                           <WhatsAppButton phone={user.contactPhone} />
                         </div>
                       </td>
