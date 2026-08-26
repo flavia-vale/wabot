@@ -62,9 +62,11 @@ não podem se perder):
 2. **O que for filtrado tem que ser contado.** Hoje a forense veio de uma
    linha de log (`mensagem recebida`). Filtrar dentro da biblioteca apaga essa
    linha; sem contador, trocamos problema visível por invisível.
-3. **Status honesto para a cliente, sem empurrar QR.** Precedente de 2026-06:
-   o banner de "conexão instável" foi removido porque a ação que sugeria
-   (re-parear) PIORA — logo após reconectar há rajada esperada de Bad MAC.
+3. **Cada público recebe a dose certa de verdade.** Nós enxergamos toda
+   piscada; a cliente só vê o que exige ação dela. Reconexão rápida que o robô
+   resolve sozinho não vira aviso. E nunca empurramos QR: precedente de 2026-06
+   — o banner de "conexão instável" foi removido porque a ação que sugeria
+   (re-parear) PIORA, já que logo após reconectar há rajada esperada de Bad MAC.
    Mostramos o fato, não mandamos re-parear.
 4. **Zero migration de schema.** Tudo por métrica em memória + IPC + sinais
    `AnalyticsEvent`. Migration DDL exige lock e derruba supervisor
@@ -117,33 +119,122 @@ Envs: `WA_RECEPTION_WINDOW_MS` (default 20min),
 
 Testes: `test/reception-health.test.js` (puro, sem DB/Redis).
 
-### Fase 1 — Status honesto na tela + visibilidade para nós
+### Fase 1 — Status honesto, na dose certa para cada público
 
-Entrega:
-- **Painel da cliente** (`dashboard/app/painel/whatsapp/page.js`): sub-linha
-  ABAIXO do status, sem trocar a linha principal (mesmo padrão do
-  `lifecycle='reconnecting'` já existente):
-  - `blind` → "Conectado, mas sem receber mensagens há X minutos. O robô está
-    tentando resolver sozinho." **Sem botão de re-parear, sem sugerir QR.**
-  - `ok` → nada (não poluir).
-- **Painel admin** (`dashboard/app/admin/online/page.js` +
-  `buildAdminOnlineUserDetail`): estado de recepção por conta, para a gente
-  ver a frota inteira numa tela em vez de grepar 1,4 GB de log.
-- **E-mail para a cliente: NÃO nesta fase.** Já existe
-  `Seu plano está ativo, mas o robô não envia há 2 dias` (grupo `saude`,
-  dedup 7 dias) e há teto de 2 e-mails automáticos por semana. E-mail de
-  20 minutos queimaria o canal. Se depois quisermos encurtar, ajusta-se o
-  gatilho existente, não se cria e-mail novo.
+Princípio novo desta fase (pedido da dona do produto, 26/08):
 
-O que pode dar errado:
-- **Assustar a cliente à toa** → só `blind` aparece, e com texto que diz que o
-  robô está resolvendo sozinho.
-- **Contradizer a linha de status** → a sub-linha nunca troca "Conectado" por
-  outra coisa; ela acrescenta.
+> **A cliente só vê o que exige ação dela.** O robô cai e volta sozinho dezenas
+> de vezes por dia; expor cada piscada gera aflição, chamado no suporte e — pior
+> — re-pareamento desnecessário, que é justamente a ação que PIORA o estado.
+> **Nós vemos tudo. Ela vê o que precisa decidir.**
 
-Testes: `test/reception-health.test.js` (estados) + guarda de linguagem no
-padrão de `test/painel-linguagem-leiga.test.js` (nenhum jargão: `jid`, `lid`,
-`decrypt`, `retry` não podem chegar à tela).
+#### 1A. Painel da cliente — janela de carência antes de assustar
+
+Hoje qualquer close não-terminal grava `status='connecting'` e o painel pisca
+"Conectando…" por alguns segundos, várias vezes ao dia, sem que nada tenha
+acontecido de fato para ela.
+
+Regra nova, decidida por `resolveClientVisibleState`
+(`src/core/clientVisibleSessionState.js`, **puro/testado**):
+
+| Situação real | O que a cliente vê |
+|---|---|
+| Conectado e recebendo | **Tudo certo** |
+| Caiu e o robô está reconectando há menos de `WA_CLIENT_GRACE_MS` (default **3 min**) | **Tudo certo** (nada muda na tela) |
+| Reconectando há mais que a carência | "Reconectando — o robô está resolvendo sozinho, você não precisa fazer nada" |
+| `blind` (conectado e sem receber, Fase 0) | "Conectado, mas sem receber mensagens há X" |
+| Precisa de ação dela: deslogado (401), credencial apagada, bloqueio do WhatsApp (403), parada pedida por ela | **Desconectado** + o que fazer |
+
+Limites que essa carência **não** pode cruzar (senão vira mentira):
+1. Ação necessária **nunca** espera carência — 401/403/auth apagado aparecem na
+   hora, sem carência nenhuma.
+2. A carência tem teto absoluto: `WA_HEARTBEAT_MAX_RECONNECTING_MS` (2 min de
+   reconexão presa) continua valendo e **vence** a carência. Nunca escondemos
+   indefinidamente.
+3. O banco continua guardando a verdade crua (`status`, `lifecycle`,
+   `WaConnectionEvent`). A carência é **camada de apresentação**, não de dado —
+   admin e diagnóstico enxergam cada queda.
+
+Isso revisa (com motivo declarado) a decisão de 2026-07 registrada no
+`AGENTS.md` item 3 ("`status==='disconnected'` sempre renderiza Desconectado").
+O que a decisão antiga protegia — não esconder loop de reconexão da cliente —
+continua protegido pelos limites 1 e 2. O que muda é só a piscada de segundos.
+
+Testes: `test/client-visible-session-state.test.js` (puro) + guarda de que
+nenhum estado de ação necessária passa pela carência.
+
+#### 1B. Painel admin — primeira tela, primeiros cards
+
+A visão de frota tem que estar **na home do admin, nos primeiros cards** — não
+escondida numa aba. Cards novos (`dashboard/app/admin/page.js`, junto dos
+`CommandCard` que já existem):
+
+| Card | O que conta | Tom |
+|---|---|---|
+| **Sem receber** | contas `blind` agora (conectadas e sem mensagem chegando) | vermelho se ≥ 1 |
+| **Caindo demais** | contas com quedas 24h acima de `ADMIN_DROPS_ALERT_24H` (default 20) | vermelho |
+| **Cliente teve que agir** | contas com re-pareamento/reconexão manual nas últimas 24h | vermelho — é o número que mede a promessa do produto |
+| **Fonte dessincronizada** | contas com `ops_wa_group_desync_unresolved` em 7d | âmbar |
+| **Offline acumulado 24h** | soma do tempo fora do ar da frota | âmbar |
+
+Cada card é clicável e leva para a aba online **já filtrada** por aquele
+cenário (`/admin/online?cenario=blind|quedas|manual|desync`).
+
+Fonte de dados: `getOperationalOverview` + `buildAdminOnlineOverview`, que já
+varrem `WaConnectionEvent` e `AnalyticsEvent`. **Sem consulta nova pesada** —
+os agregados saem da mesma varredura, com cache curto (o admin já recarrega
+periodicamente).
+
+#### 1C. Aba online — consertar o que já existe (não é feature nova, é bug)
+
+Os números de tempo offline e de recuperação **já são calculados**
+(`summarizeOfflineEpisodes`, `src/api/routes/admin.js`) e já aparecem em cards.
+A auditoria de hoje achou **dois defeitos** que fazem eles mentirem justamente
+no caso que interessa:
+
+**Defeito 1 — o pior episódio é apagado da conta.** Quando chega
+`manual_reconnect_requested` / `manual_pairing_requested`, o código faz
+`startedByUser.delete(userId)` e **descarta o episódio aberto**. Ou seja: o
+tempo que a cliente ficou parada ANTES de ir lá re-parear **nunca é somado**.
+O caso que mais dói é o único que soma zero. Correção: fechar o episódio com
+`endedBy: 'cliente'` e acumular em `manualOfflineMs` (métrica separada de
+`automaticOfflineMs` — não misturar "voltou sozinho" com "só voltou porque ela
+agiu").
+
+**Defeito 2 — episódio que começa fora da janela some.** A métrica de 24h
+filtra os eventos por data antes de casar queda com volta; uma queda de
+23h50 que só voltou dentro da janela perde o par e não conta recuperação nem
+tempo. Correção: casar os episódios sobre a série de 7 dias e só depois
+recortar a janela (o recorte por `sinceMs` já existe para o tempo; falta para o
+pareamento).
+
+**Falta o drill-down que a dona pediu.** Hoje o detalhe mostra contadores e uma
+lista crua de eventos. Passa a mostrar uma **linha do tempo de episódios**,
+que é como se lê a história da conta:
+
+```
+14:02 → 14:06   4 min fora    voltou sozinho
+16:31 → 16:33   2 min fora    voltou sozinho
+20:14 → 23:40   3h26 fora     você re-pareou   ← ação da cliente
+26/08 09:10 →   em aberto     tentando sozinho há 12 min
+```
+
+Campos por episódio: início, fim, duração, como terminou (`sozinho`,
+`cliente`, `terminal`, `em aberto`), código da queda e se tinha mensagem
+travada. Vem de `buildAdminOnlineUserDetail` como `offlineEpisodes` (limite de
+50, mais recentes primeiro).
+
+Testes: `test/admin-offline-episodes.test.js` (puro, sem DB — alimenta a função
+com uma série de eventos e confere os dois defeitos acima e a montagem da linha
+do tempo).
+
+#### 1D. E-mail para a cliente — não nesta fase
+
+Já existe `Seu plano está ativo, mas o robô não envia há 2 dias` (grupo
+`saude`, dedup 7 dias) e há teto de 2 e-mails automáticos por semana. E-mail
+de 20 minutos queimaria o canal e contraria o princípio desta fase (só falar
+quando ela precisa agir). Se depois quisermos encurtar o prazo, ajusta-se o
+gatilho existente — não se cria e-mail novo.
 
 ### Fase 2 — "Olhar só o que foi escolhido" (o coração do plano)
 
@@ -215,12 +306,15 @@ mensagem legítima que só demorou a decifrar.
 
 ## 4. Ordem de execução
 
-1. Fase 0 + Fase 1 juntas (a rede de segurança vem antes de tudo).
-2. Validar em staging: forçar o quadro `blind` e conferir painel + sinal.
-3. Fase 2 em modo `dm`, **uma conta primeiro** (a da própria dona), 24h.
-4. Medir: quedas/hora da conta antes × depois.
-5. Fase 2 em modo `dm` na frota; depois `dm+group`.
-6. Fase 3 só após o gate da biblioteca.
+1. **Fase 1C primeiro** (conserto dos dois defeitos do tempo offline + linha
+   do tempo de episódios). É barato, não muda comportamento nenhum e é o que
+   nos dá o retrato verdadeiro para medir todo o resto.
+2. Fase 0 + Fase 1A/1B juntas (a rede de segurança vem antes de tudo).
+3. Validar em staging: forçar o quadro `blind` e conferir painel + sinal.
+4. Fase 2 em modo `dm`, **uma conta primeiro** (a da própria dona), 24h.
+5. Medir: quedas/hora da conta antes × depois.
+6. Fase 2 em modo `dm` na frota; depois `dm+group`.
+7. Fase 3 só após o gate da biblioteca.
 
 Cada passo em branch a partir de `develop`, PR contra `develop`, staging,
 depois `develop → main`.
@@ -240,6 +334,8 @@ Baseline de 26/08:
 | Contas com `ops_wa_stuck_message_retry` / 7d | 14 | < 5 |
 | Conta "conectada e sem receber" sem sinal emitido | não medido | 0 |
 | Cliente precisando re-parear | 3 relatos/semana | 0 |
+| Card "Cliente teve que agir" (24h) | não medido | 0 |
+| Piscada de "Conectando" na tela da cliente por reconexão automática | várias/dia | 0 |
 
 Consulta de acompanhamento (read-only, roda no diretório do ambiente):
 
@@ -258,7 +354,8 @@ GROUP BY hora ORDER BY hora;"
 | Fase | Rollback | Precisa redeploy? |
 |---|---|---|
 | 0 | `WA_RECEPTION_WINDOW_MS=0` desliga a classificação | não |
-| 1 | idem (sem estado, a sub-linha some) | não |
+| 1A | `WA_CLIENT_GRACE_MS=0` volta a expor toda queda na hora | não |
+| 1B/1C | sem chave: são leitura e conserto de conta errada; rollback é reverter o código | sim |
 | 2 | `WA_CHAT_SCOPE_MODE=off` | não |
 | 3 | não sobe sem o gate | — |
 
