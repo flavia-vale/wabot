@@ -14,6 +14,7 @@ import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedacti
 import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
+import { buildLongExpiredWhere, wantsLongExpired, isLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
 
@@ -845,7 +846,10 @@ async function buildFleetScenarios(now = new Date()) {
     }).catch(() => []),
     db.waSession.findMany({
       where: { user: { status: 'active' } },
-      select: { userId: true, status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true },
+      select: {
+        userId: true, status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true,
+        user: { select: { accessExpiresAt: true } },
+      },
     }).catch(() => []),
     listRunningBots().then(ids => new Set(ids)).catch(() => null),
   ])
@@ -862,7 +866,10 @@ async function buildFleetScenarios(now = new Date()) {
   }
   const paradas = new Set()
   const precisamDaCliente = new Set()
+  const acessoVencido = new Set()
   for (const session of sessions) {
+    // Mesma janela da listagem: card e lista têm que contar a mesma coisa.
+    if (isLongExpired(session.user?.accessExpiresAt ?? null, { now: now.getTime() })) continue
     const ownership = resolveSessionOwner({
       status: session.status,
       lifecycle: session.lifecycle,
@@ -870,10 +877,12 @@ async function buildFleetScenarios(now = new Date()) {
       lastEventType: lastEventByUser.get(session.userId)?.type ?? null,
       workerRunning: runningIds ? runningIds.has(session.userId) : null,
       lastHeartbeatAt: session.lastHeartbeatAt,
+      accessExpiresAt: session.user?.accessExpiresAt ?? null,
       now: now.getTime(),
     })
     if (ownership.owner === SESSION_OWNER.NOBODY) paradas.add(session.userId)
     else if (ownership.owner === SESSION_OWNER.CLIENT) precisamDaCliente.add(session.userId)
+    else if (ownership.owner === SESSION_OWNER.EXPIRED) acessoVencido.add(session.userId)
   }
 
   const metricsByUser = summarizeOfflineEpisodesByUser(offlineEvents, { since: since24h, now })
@@ -887,6 +896,7 @@ async function buildFleetScenarios(now = new Date()) {
   const byScenario = {
     parado: paradas,
     qr: precisamDaCliente,
+    vencido: acessoVencido,
     blind: new Set(blindRows.map(row => row.userId).filter(Boolean)),
     quedas: new Set(dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).map(row => row.userId).filter(Boolean)),
     manual: new Set(manualRows.map(row => row.userId).filter(Boolean)),
@@ -897,6 +907,7 @@ async function buildFleetScenarios(now = new Date()) {
     byScenario,
     paradasSemNinguem: paradas.size,
     precisamDeQr: precisamDaCliente.size,
+    acessoVencido: acessoVencido.size,
     semReceber: blindRows.filter(row => row.userId).length,
     caindoDemais: dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).length,
     clienteAgiu: manualRows.filter(row => row.userId).length,
@@ -919,10 +930,16 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const minErrors = Math.max(0, Number(query.minErrors ?? 0) || 0)
   const running = new Set(await listRunningBots())
 
+  // Vencidas há muito tempo saem da visão por padrão (pedido de 2026-08-26:
+  // 57 de 66 contas caídas estavam vencidas, e a operação procurava 9 casos
+  // reais no meio disso). É filtro de apresentação — "Ver mais" traz de volta.
+  const includeLongExpired = wantsLongExpired(query.incluirVencidos)
+  const longExpiredWhere = buildLongExpiredWhere({ now, includeLongExpired })
   const where = {
     status: 'active',
     ...(plan !== 'all' && ['trial', 'basic', 'pro'].includes(plan) ? { plan } : {}),
     ...(search ? { OR: [{ email: { contains: search } }, { name: { contains: search } }] } : {}),
+    ...(longExpiredWhere ? { AND: [longExpiredWhere] } : {}),
   }
 
   const [users, allActiveSessions] = await Promise.all([
@@ -937,6 +954,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
         contactPhone: true,
         status: true,
         plan: true,
+        accessExpiresAt: true,
         lastActivityAt: true,
         createdAt: true,
         waSession: {
@@ -1008,6 +1026,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       lastEventType: lastEventByUser.get(user.id)?.type ?? null,
       workerRunning: running.has(user.id),
       lastHeartbeatAt: session?.lastHeartbeatAt ?? null,
+      accessExpiresAt: user.accessExpiresAt ?? null,
       now: now.getTime(),
     })
     const successCount24h = successMap24h.get(user.id) ?? 0
@@ -1064,6 +1083,16 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const connectingUsers = allActiveSessions.filter(session => session.status === 'connecting').length
   const disconnectedAlerts = allActiveSessions.filter(session => session.status !== 'connected' && session.status !== 'connecting').length
   const stabilityPct = totalSessions ? Math.round((onlineUsers / totalSessions) * 1000) / 10 : 100
+  // Quantas ficaram de fora — o botão "Ver mais" precisa dizer o tamanho.
+  const hiddenLongExpired = includeLongExpired
+    ? 0
+    : await db.user.count({
+        where: {
+          status: 'active',
+          accessExpiresAt: { lte: new Date(now.getTime() - resolveLongExpiredDays() * 24 * 60 * 60 * 1000) },
+        },
+      }).catch(() => 0)
+
   const { byScenario: _byScenario, ...scenarioCounts } = scenarios ?? {}
 
   return {
@@ -1076,6 +1105,9 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       disconnectedAlerts,
       connectingUsers,
       activeUsersLoaded: rows.length,
+      ocultasPorVencimento: hiddenLongExpired,
+      incluindoVencidasAntigas: includeLongExpired,
+      janelaVencimentoDias: resolveLongExpiredDays(),
       filters: { search, plan, waStatus, activity, minErrors, cenario: scenarioFilter || 'all' },
     },
     users: rows.sort((a, b) => {
@@ -1319,6 +1351,12 @@ export async function adminRoutes(app) {
     }).catch(() => null)
     if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
     if (user.status !== 'active') return reply.code(409).send({ error: 'A conta não está ativa' })
+    // Com o acesso vencido o worker sobe, detecta o vencimento e sai
+    // (bot-worker.js, "Acesso expirado — bot bloqueado"): reconectar aqui só
+    // repetiria o ciclo. É caso de renovação, não de reconexão.
+    if (user.accessExpiresAt && new Date(user.accessExpiresAt) <= new Date()) {
+      return reply.code(409).send({ error: 'O acesso desta conta venceu — é caso de renovação, não de reconexão' })
+    }
 
     const [session, running, lastEvent] = await Promise.all([
       db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true } }).catch(() => null),
@@ -1333,6 +1371,7 @@ export async function adminRoutes(app) {
       lastEventType: lastEvent?.type ?? null,
       workerRunning: running,
       lastHeartbeatAt: session?.lastHeartbeatAt ?? null,
+      accessExpiresAt: user.accessExpiresAt ?? null,
     })
     if (!ownership.canAdminRetry) {
       return reply.code(409).send({ error: 'Reconectar daqui não resolve este caso', motivo: ownership.reason, owner: ownership.owner })

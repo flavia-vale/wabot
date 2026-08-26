@@ -84,6 +84,7 @@ const OWNER_META = {
   cliente_desligou: { label: 'ela desligou', className: 'bg-slate-100 text-slate-600' },
   bloqueio: { label: 'número recusado pelo WhatsApp', className: 'bg-red-50 text-red-700' },
   ninguem: { label: 'parada, ninguém tentando', className: 'bg-red-100 text-red-800' },
+  acesso_vencido: { label: 'acesso vencido', className: 'bg-purple-50 text-purple-700' },
 }
 
 function formatDurationMs(value) {
@@ -266,6 +267,9 @@ export default function AdminOnlinePage() {
   const [minErrors, setMinErrors] = useState('')
   const [error, setError] = useState('')
   const [reconnecting, setReconnecting] = useState(null)
+  // Conta vencida há muito tempo sai da visão por padrão (ver
+  // src/core/adminVisibility.js). "Ver mais" traz de volta.
+  const [verVencidasAntigas, setVerVencidasAntigas] = useState(false)
   const [feedback, setFeedback] = useState('')
 
   function currentFilters(extra = {}) {
@@ -276,6 +280,7 @@ export default function AdminOnlinePage() {
       plan,
       activity,
       minErrors,
+      incluirVencidos: verVencidasAntigas ? 1 : '',
       ...extra,
     }
   }
@@ -296,7 +301,7 @@ export default function AdminOnlinePage() {
       api.adminOnline(currentFilters()).then((result) => { if (active) setData(result) }).catch(() => {})
     }, 15000)
     return () => { active = false; clearInterval(timer) }
-  }, [search, waStatus, plan, activity, minErrors])
+  }, [search, waStatus, plan, activity, minErrors, verVencidasAntigas])
 
   // Sobe o robô da cliente sem que ela precise fazer nada. O botão só aparece
   // quando a credencial ainda existe (`canAdminRetry`) — em conta que precisa
@@ -354,6 +359,17 @@ export default function AdminOnlinePage() {
 
         {error && <Alert type="error" title="ONLINE" message={error} />}
         {feedback && <Alert type="success" title="Reconexão" message={feedback} />}
+        {(verVencidasAntigas || !!data?.summary?.ocultasPorVencimento) && (
+          <button
+            type="button"
+            onClick={() => setVerVencidasAntigas(!verVencidasAntigas)}
+            className="text-xs font-black text-emerald-700 underline underline-offset-2 hover:text-emerald-900"
+          >
+            {verVencidasAntigas
+              ? `Ocultar quem venceu há mais de ${data?.summary?.janelaVencimentoDias ?? 30} dias`
+              : `Ver mais (${data?.summary?.ocultasPorVencimento} vencida(s) há mais de ${data?.summary?.janelaVencimentoDias ?? 30} dias)`}
+          </button>
+        )}
 
         <section className="grid gap-4 md:grid-cols-3">
           <OnlineCard label="Usuários online agora" value={formatNumber(data?.summary?.onlineUsers)} helper={`${formatNumber(data?.summary?.totalSessions)} sessões monitoradas`} tone="green" />
