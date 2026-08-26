@@ -2700,8 +2700,11 @@ app.get('/sessions', async (req, reply) => {
     const searchLower = String(search).toLowerCase().trim()
     const where = searchLower ? {
       OR: [
-        { email: { contains: searchLower, mode: 'insensitive' } },
-        { name: { contains: searchLower, mode: 'insensitive' } },
+        // SQLite faz comparação ASCII case-insensitive por padrão. O atributo
+        // `mode` não existe no connector SQLite do Prisma e fazia a busca do
+        // painel falhar em runtime assim que o admin digitava qualquer texto.
+        { email: { contains: searchLower } },
+        { name: { contains: searchLower } },
       ]
     } : {}
 
@@ -2716,11 +2719,28 @@ app.get('/sessions', async (req, reply) => {
       db.user.count({ where }),
     ])
 
-    const usersWithCount = await Promise.all(users.map(async (u) => ({
+    // Duas agregações para a página inteira evitam 2 queries por cliente.
+    // Com 100 linhas, a implementação anterior fazia 202 consultas por load.
+    const userIds = users.map((user) => user.id)
+    const [activeCounts, totalCounts] = userIds.length ? await Promise.all([
+      db.offerAutomation.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds }, enabled: true },
+        _count: { _all: true },
+      }),
+      db.offerAutomation.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds } },
+        _count: { _all: true },
+      }),
+    ]) : [[], []]
+    const activeByUser = new Map(activeCounts.map((row) => [row.userId, row._count._all]))
+    const totalByUser = new Map(totalCounts.map((row) => [row.userId, row._count._all]))
+    const usersWithCount = users.map((u) => ({
       ...u,
-      activeAutomations: await db.offerAutomation.count({ where: { userId: u.id, enabled: true } }),
-      totalAutomations: await db.offerAutomation.count({ where: { userId: u.id } }),
-    })))
+      activeAutomations: activeByUser.get(u.id) ?? 0,
+      totalAutomations: totalByUser.get(u.id) ?? 0,
+    }))
 
     await writeAdminAuditLog(req, { action: 'admin.automation_quota.list', resource: 'user', after: { total, page: p, limit: l } })
     return { users: usersWithCount, total, page: p, limit: l }
@@ -2734,7 +2754,10 @@ app.get('/sessions', async (req, reply) => {
     const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, email: true, maxAutomations: true } })
     if (!user) return reply.code(404).send({ error: 'Usuário não encontrado' })
 
-    const newLimit = Math.max(1, Math.min(200, Number(maxAutomations)))
+    const newLimit = Number(maxAutomations)
+    if (!Number.isInteger(newLimit) || newLimit < 1 || newLimit > 200) {
+      return reply.code(400).send({ error: 'Limite de automações deve ser um número inteiro entre 1 e 200' })
+    }
     const oldLimit = user.maxAutomations
 
     const updated = await db.user.update({
