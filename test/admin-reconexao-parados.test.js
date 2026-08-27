@@ -95,3 +95,23 @@ test('a classificação recebe a data de acesso nas duas visões', () => {
   assert.match(adminRoute, /accessExpiresAt: user\.accessExpiresAt \?\? null/)
   assert.match(adminRoute, /accessExpiresAt: session\.user\?\.accessExpiresAt \?\? null/)
 })
+
+// O admin tem DUAS telas de "online": a aba dentro do painel principal
+// (dashboard/app/admin/page.js) e a página própria (/admin/online). A primeira
+// rodada só cobriu a página própria, e por isso "quem resolve" e o botão não
+// apareciam para quem usa a aba. As duas precisam andar juntas.
+test('a ABA online do painel principal também mostra quem resolve', () => {
+  assert.match(adminPage, /OWNER_META/)
+  assert.match(adminPage, /<th className="px-3 py-2">Quem resolve<\/th>/)
+})
+
+test('a ABA online do painel principal também tem o botão de reconectar', () => {
+  assert.match(adminPage, /user\?\.canAdminRetry && \(/)
+  assert.match(adminPage, /function reconectarCliente\(userId\)/)
+  assert.match(adminPage, /adminOnlineReconnect/)
+})
+
+test('a ABA online do painel principal também mostra a linha do tempo', () => {
+  assert.match(adminPage, /Linha do tempo das quedas/)
+  assert.match(adminPage, /detail\.offlineEpisodes/)
+})
