@@ -386,6 +386,12 @@ export function createAdminService({
   // HISTÓRICO: cadastro, situação, plano, vencimento, uso. Ordenável por
   // coluna e varrível de ponta a ponta.
   //
+  // De propósito NÃO aplica `buildLongExpiredWhere`: esconder vencida antiga
+  // existe para limpar a FILA DE TRABALHO (`listUsers`), e esta tela é o
+  // arquivo de clientes — quem procura o histórico de alguém que cancelou há
+  // seis meses precisa achá-la aqui. Para isolar os vencidos, o filtro
+  // `situacao=vencido`.
+  //
   // Todo agregado por cliente sai em LOTE (groupBy/findMany com `in`) — nunca
   // uma consulta por linha. Ver a mesma disciplina em `listUsers` acima.
   async function listCustomers({ query = {}, adminRole } = {}) {

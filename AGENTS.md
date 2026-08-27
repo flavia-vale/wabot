@@ -395,6 +395,47 @@ em `src/ops/stagingPower.js`; rotas `GET/POST /api/admin/staging-power`
 - Envs opcionais: `STAGING_PM2_APPS` (default `api-staging visual-staging`),
   `STAGING_DIR`, `PM2_BIN`. Teste: `test/ops-staging-power.test.js`.
 
+## ADMIN > Capacidade (observabilidade da VPS)
+
+A rota `/admin/capacidade` (permissão `tech:read`) apresenta o host contratado,
+RAM/CPU/disco/swap, processos PM2, workers reais, staging, histórico, forecast e
+alertas. A coleta roda dentro da API a cada 5 minutos, com `unref()` e
+single-flight; **não existe processo PM2 novo** e a tela nunca cria, apaga ou
+redimensiona recursos Hetzner. Atualização manual exige `tech:write` e é
+auditada como `admin.capacity.refresh`.
+
+Política conservadora (`src/ops/capacity/policy.js`): reserva o maior valor
+entre 20% da RAM e 1.536 MB; cada sessão custa pelo menos 350 MB ou o p95
+observado (o maior); swap não aumenta a capacidade. Dados ausentes ficam
+`null`/`insufficient_data`. Swap ocupado sem atividade é informativo; pressão
+contínua, pouca `MemAvailable`, disco e headroom determinam atenção/criticidade.
+O forecast só fornece horizonte quando há cobertura suficiente e crescimento
+positivo, sempre com faixa e confiança.
+
+Snapshots de 5 minutos são retidos por 90 dias; rollups horários por 12 meses
+e diários permanecem. Alertas exigem confirmação em duas amostras, possuem
+cooldown de 24 h, registram piora e recuperação e nunca executam ações. Eventos
+de restart, staging, reboot/OOM e mudança de host/política explicam o histórico
+com payload sanitizado e dedupe.
+
+Integração Hetzner é opcional e somente leitura:
+
+```text
+HCLOUD_READ_TOKEN=<token read-only, nunca enviar ao browser/log>
+HCLOUD_PROJECT_ID=14422101
+HCLOUD_SERVER_ID=128727108
+CAPACITY_SWEEP_INTERVAL_MS=300000
+```
+
+Sem token, usa o baseline `wabot-prod / CX33 / 4 vCPU / 8 GB / 40 GB` e marca
+a fonte como `baseline`; falha externa preserva o último inventário como stale.
+O cache Hetzner dura no mínimo 6 h.
+
+Antes de produção: PR contra `develop`, autodeploy, validar em
+`http://178.105.54.0:3006` e observar por 24 h (<1% CPU média e <50 MB adicionais)
+conforme `specs/014-admin-capacity-observability/quickstart.md`. A validação de
+24 h é manual e não pode ser inferida dos testes locais.
+
 ## D-3 — Criptografia de credenciais em repouso (canônico)
 
 As credenciais de afiliado (cookie de sessão ML/Amazon, tokens OAuth, secret da
@@ -1694,6 +1735,43 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 `msgRetryCounterCache`); não ampliar o `shouldIgnoreChatJid` para ignorar
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
+
+## Sessão presa em reconexão sumia da ressurreição (RCA 2026-08-27 — não regredir)
+
+Duas regras que, isoladas, fazem sentido, criavam juntas uma sessão morta que
+**só voltava com a cliente clicando em "Conectar"**:
+
+1. Passando de `WA_HEARTBEAT_MAX_RECONNECTING_MS` (2min) presa, o worker grava
+   `status='disconnected'` com `lifecycle='reconnecting'`
+   (`buildHeartbeatSessionPatch`) — a válvula que impede o painel de esconder um
+   loop de reconexão da cliente.
+2. O health monitor (supervisor em `remote`, `sessionCore` em `inline`) só
+   ressuscitava sessões com `status IN ('connected','connecting')`.
+
+Resultado: passou de 2 minutos → vira `disconnected` → **sai da lista de
+ressurreição**. Quando o worker morria depois disso — OOM, exceção, ou o
+**próprio matador de zumbis do supervisor**, que derruba worker sem heartbeat
+*contando com a ressurreição do tick seguinte* — ninguém mais o levantava.
+
+Medido em produção: sessões presas nesse estado por **4h e por 45 dias**; e
+clientes com quedas 428/515 que só voltaram após **8h, 18h e 29h**, sempre por
+ação manual delas. Diagnóstico: `SELECT ... WHERE status='disconnected' AND
+lifecycle='reconnecting'` lista as presas.
+
+`src/core/sessionResurrectionPolicy.js` (puro) passa a reconhecer o que o
+próprio worker declarou: `reconnecting` = "eu ainda estava tentando".
+**Não afrouxa nada** — `stopped_by_user`, `auth_reset_required`,
+`disconnected` e `authenticating` continuam nunca sendo ressuscitados, e a
+parada deliberada vence até o status antigo. O orçamento de restarts
+(`restartBudget`) continua valendo por cima, então sessão que morre em loop
+ainda entra em quarentena em vez de churn.
+
+**Não regredir:** não voltar a filtrar `status IN ('connected','connecting')`
+na mão em nenhum dos dois modos — há teste que falha se o filtro antigo
+reaparecer. A correção precisa valer nos DOIS (staging roda `inline`; sem ela
+lá, não dá nem para validar). Sinal `ops_wa_session_resurrected` mede quantas
+vezes o conserto salvou uma cliente. Rollback: `WA_RESURRECT_RECONNECTING=0`.
+Teste: `test/session-resurrection-policy.test.js`.
 
 ## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
 

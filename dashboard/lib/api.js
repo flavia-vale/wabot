@@ -309,6 +309,12 @@ export const api = {
   adminSystemHealth: () => apiFetch('/api/admin/system/health'),
   adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
   adminSystemObservability: () => apiFetch('/api/admin/system/observability'),
+  adminCapacityCurrent: () => apiFetch('/api/admin/capacity/current'),
+  adminCapacityHistory: (period = '30d') => apiFetch(`/api/admin/capacity/history?period=${encodeURIComponent(period)}`),
+  adminCapacityForecast: () => apiFetch('/api/admin/capacity/forecast'),
+  adminCapacityScenario: (input) => apiFetch('/api/admin/capacity/scenario', { method: 'POST', body: JSON.stringify(input) }),
+  adminCapacityAlerts: (status = '', limit = 100) => apiFetch(`/api/admin/capacity/alerts?${new URLSearchParams({ ...(status ? { status } : {}), limit: String(limit) })}`),
+  adminCapacityRefresh: () => apiFetch('/api/admin/capacity/refresh', { method: 'POST', body: '{}' }),
   adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
   adminSuccessQueue: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
