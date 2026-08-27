@@ -284,6 +284,7 @@ build_dashboard_with_recovery() {
 cd "$ROOT_DIR"
 configure_public_git_dependencies
 echo "[1/9] Sync branch $BRANCH"
+REVISION_BEFORE_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
 git fetch origin
 git checkout "$BRANCH"
 
@@ -299,6 +300,50 @@ if [[ "$FORCE_RESET_ON_SYNC" == "1" ]]; then
 else
   git pull --ff-only origin "$BRANCH"
 fi
+
+REVISION_AFTER_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
+
+# Em modo `remote` o deploy reinicia a API mas NÃO os bot-workers — de propósito,
+# para não derrubar as sessões. O preço era que toda correção em bot-worker.js ou
+# no pipeline de mensagem chegava ao disco e continuava SEM VALER, porque os
+# workers em execução seguem com o módulo antigo em memória. Isso já custou três
+# fixes seguidos entregues "verdes" e sem efeito (RCA 2026-08, seção "código novo
+# não carregado pelos bots" do AGENTS.md), e a descoberta veio da cliente
+# reclamando pela terceira vez.
+#
+# Agora o próprio deploy decide: se os commits que acabaram de entrar tocaram
+# código que os WORKERS executam, o supervisor é reiniciado ao final. Se tocaram
+# só API/dashboard/docs/testes, ele é preservado (nenhuma sessão cai).
+#
+# ⚠️ Reiniciar o supervisor RECONECTA TODAS AS SESSÕES WHATSAPP de uma vez.
+# Por isso a detecção é conservadora: só os caminhos abaixo, que são exatamente
+# os que o processo do worker carrega.
+WORKER_CODE_PATHS_RE='^(src/bot-worker\.js|src/supervisor/|src/core/|src/converters/|src/monitored[A-Za-z]*\.js|src/messageProcessor\.js|src/manager\.js|src/db\.js|src/logger\.js|src/analytics\.js|src/errorTaxonomy\.js|src/observability/|src/billing/|prisma/schema\.prisma|package-lock\.json)'
+
+worker_code_changed_in_sync() {
+  [[ -n "$REVISION_BEFORE_SYNC" && -n "$REVISION_AFTER_SYNC" ]] || return 1
+  [[ "$REVISION_BEFORE_SYNC" != "$REVISION_AFTER_SYNC" ]] || return 1
+  git diff --name-only "$REVISION_BEFORE_SYNC" "$REVISION_AFTER_SYNC" 2>/dev/null \
+    | grep -qE "$WORKER_CODE_PATHS_RE"
+}
+
+# 'auto' (default) = reinicia só quando o código dos workers mudou.
+# '1' = sempre reinicia. '0' = nunca (preserva sessões mesmo com código novo,
+# assumindo que o fix vai ficar dormente até alguém reiniciar à mão).
+RESTART_SUPERVISOR="${RESTART_SUPERVISOR:-auto}"
+if [[ "$RESTART_SUPERVISOR" == "auto" ]]; then
+  if worker_code_changed_in_sync; then
+    RESTART_SUPERVISOR=1
+    echo "  Código dos bots mudou neste deploy — bot-supervisor será reiniciado ao final."
+    echo "  (isso reconecta TODAS as sessões WhatsApp; RESTART_SUPERVISOR=0 desativa)"
+    git diff --name-only "$REVISION_BEFORE_SYNC" "$REVISION_AFTER_SYNC" 2>/dev/null \
+      | grep -E "$WORKER_CODE_PATHS_RE" | sed 's/^/    /' | head -20
+  else
+    RESTART_SUPERVISOR=0
+    echo "  Nenhuma mudança em código dos bots — bot-supervisor preservado, sessões intactas."
+  fi
+fi
+export RESTART_SUPERVISOR
 
 echo "[2/9] Install root dependencies sem alterar lockfile"
 run_npm_ci_with_recovery "root"
@@ -544,12 +589,14 @@ echo "[7b/9] Restart PM2 apps"
 recreate_frontend_pm2_app "dashboard" "$DASHBOARD_PORT"
 ensure_pm2_app_running "api"
 
-# bot-supervisor (prod) é INTENCIONALMENTE preservado: ver comentário
-# detalhado em scripts/deploy_safe_staging.sh. Reinicie manualmente quando
-# mudar src/supervisor/*, src/core/sessionCore.js ou src/bot-worker.js.
-# Para forçar restart nesse pipeline, exporte RESTART_SUPERVISOR=1.
+# bot-supervisor (prod) é preservado por padrão para não derrubar as sessões,
+# MAS o passo [1/9] já decidiu por você: se os commits deste deploy tocaram
+# código que os workers executam (WORKER_CODE_PATHS_RE), RESTART_SUPERVISOR
+# chega aqui como 1 e o supervisor reinicia — senão o fix ficaria no disco sem
+# valer (RCA 2026-08). Escape hatch: RESTART_SUPERVISOR=0 preserva sempre;
+# RESTART_SUPERVISOR=1 reinicia sempre.
 if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
-  echo "  RESTART_SUPERVISOR=1 — reiniciando bot-supervisor"
+  echo "  Reiniciando bot-supervisor para os bots carregarem o código novo (sessões reconectam)"
   pm2 restart bot-supervisor --update-env
 else
   echo "  bot-supervisor preservado. Sessões WhatsApp continuam ativas."
