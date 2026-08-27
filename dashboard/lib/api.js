@@ -266,6 +266,7 @@ export const api = {
   adminDeleteFaq: (id) => apiFetch(`/api/admin/faq/${id}`, { method: 'DELETE' }),
   adminOverview: () => apiFetch('/api/admin/overview'),
   adminPipeline: () => apiFetch('/api/admin/pipeline'),
+  adminQualidadeEntrega: (horas = 24) => apiFetch(`/api/admin/qualidade-entrega?horas=${encodeURIComponent(horas)}`),
   adminUpdatePipelineIssueStatus: (id, status) =>
     apiFetch(`/api/admin/pipeline/issues/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   adminUsers: (params = {}) => {
