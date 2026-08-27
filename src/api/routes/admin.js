@@ -1,4 +1,5 @@
 import db from '../../db.js'
+import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
 import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
@@ -1271,6 +1272,16 @@ export async function adminRoutes(app) {
     return req.admin
   })
 
+
+  // Visão macro de qualidade de entrega das ofertas. Existe para a admin ver
+  // ANTES da cliente reclamar: quantas ofertas saíram, de que jeito saíram, e
+  // quais saíram sem imagem TENDO imagem na mensagem de origem.
+  app.get('/qualidade-entrega', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const horasBrutas = Number(req.query?.horas)
+    const horas = Number.isFinite(horasBrutas) ? Math.min(24 * 30, Math.max(1, horasBrutas)) : 24
+    return carregarVisaoEntrega({ db, horas })
+  })
 
   app.get('/pipeline', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
