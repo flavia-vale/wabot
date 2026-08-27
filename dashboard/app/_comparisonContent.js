@@ -21,6 +21,7 @@ import {
   TRIAL_LABEL,
   TrialCta,
 } from '@/components/marketing/ComparisonSections'
+import { DifferentialGrid, InteractiveComparisonTable, TrustStrip } from '@/components/marketing/ComparisonInteractive'
 
 export const COMPARISON_SOURCE_LINKS = [
   { label: 'Política de Mensagens do WhatsApp Business', href: 'https://whatsappbusiness.com/pt-br/policy/' },
@@ -101,15 +102,25 @@ export const COMPARISON_PAGES = {
     },
     tldr: 'Se você opera só Shopee e quer escalar por número de grupos, o AchadinhosBot resolve. Se precisa de Mercado Livre, Amazon e Magalu na mesma conta, compare o custo total antes de decidir.',
     directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco em Shopee, cobrando por faixa de grupos (R$ 59,90 por 1 grupo até R$ 199,90 por 15 grupos) e oferecendo teste grátis de 3 dias. As alternativas mais próximas são o Achadinho Pro, que adiciona Mercado Livre e Amazon a partir de R$ 59,97/mês, e o BOTinho, que cobre quatro marketplaces e converte também links de cupom.',
+    // Formato de objeto (em vez de tupla) liga o comparador interativo por
+    // critério (InteractiveComparisonTable) nesta página — ver
+    // `isInteractiveComparison` em ComparisonPage. Mesmos fatos e preços da
+    // versão anterior, só separados em coluna própria por opção em vez de
+    // uma célula só com os três textos concatenados (FR-031: preços iguais,
+    // nada novo).
     rows: [
-      ['Preço de entrada', 'AchadinhosBot: R$ 59,90/mês (1 grupo). Achadinho Pro: R$ 49,97/mês (só Shopee). BOTinho: R$ 39/30 dias.', 'Compare pelo número de grupos que você realmente usa, não só pelo preço da primeira faixa.'],
-      ['Marketplaces', 'AchadinhosBot: Shopee. Achadinho Pro: Shopee no Basic, +ML e Amazon no Pro. BOTinho: Shopee, Amazon, Mercado Livre e Magalu.', 'Se você só divulga Shopee, cobertura extra não vale nada. Pese pelo que você usa hoje.'],
-      ['Como escala o preço', 'AchadinhosBot: por faixa de grupos (1 → 5 → 10 → 15). Achadinho Pro: grupos ilimitados por automação. BOTinho: sem limite de grupos.', 'Escalar por faixa é previsível, mas fica caro se a operação cresce em grupos.'],
-      ['Teste grátis', 'AchadinhosBot: 3 dias, com marca d’água e conexão que o próprio site descreve como "menos estável". BOTinho: 7 dias com o plano Pro completo.', 'Teste limitado mostra menos do produto real. Veja o que está incluído antes de concluir.'],
-      ['Conversão de cupom', 'Não indicada nas páginas públicas dos dois concorrentes. BOTinho converte link de cupom, não só de produto.', 'Só faz diferença para quem divulga campanha de cupom além de produto avulso.'],
+      { key: 'preco', label: 'Preço de entrada', produto: 'R$ 39/30 dias.', concorrente: 'AchadinhosBot: R$ 59,90/mês (1 grupo). Achadinho Pro: R$ 49,97/mês (só Shopee).', reading: 'Compare pelo número de grupos que você realmente usa, não só pelo preço da primeira faixa.' },
+      { key: 'marketplaces', label: 'Marketplaces', produto: 'Shopee, Amazon, Mercado Livre e Magalu.', concorrente: 'AchadinhosBot: Shopee. Achadinho Pro: Shopee no Basic, +ML e Amazon no Pro.', reading: 'Se você só divulga Shopee, cobertura extra não vale nada. Pese pelo que você usa hoje.' },
+      { key: 'escala', label: 'Como escala o preço', produto: 'Sem limite de grupos.', concorrente: 'AchadinhosBot: por faixa de grupos (1 → 5 → 10 → 15). Achadinho Pro: grupos ilimitados por automação.', reading: 'Escalar por faixa é previsível, mas fica caro se a operação cresce em grupos.' },
+      { key: 'teste', label: 'Teste grátis', produto: '7 dias com o plano Pro completo.', concorrente: 'AchadinhosBot: 3 dias, com marca d’água e conexão que o próprio site descreve como "menos estável".', reading: 'Teste limitado mostra menos do produto real. Veja o que está incluído antes de concluir.' },
+      { key: 'cupom', label: 'Conversão de cupom', produto: 'Converte link de cupom, não só de produto.', concorrente: 'Não indicada nas páginas públicas dos dois concorrentes.', reading: 'Só faz diferença para quem divulga campanha de cupom além de produto avulso.' },
     ],
     criteria: ['Número de grupos que você opera hoje', 'Marketplaces que realmente usa', 'Se precisa converter cupom além de produto', 'O que o teste grátis deixa você validar', 'Transparência de preço e de limites'],
     botinhoDifferentials: ['Quatro marketplaces incluídos', 'Conversão de link de cupom, não só de produto', 'Sem limite de grupos', 'Teste grátis de 7 dias com o Pro completo', 'Canais e Comunidades do WhatsApp', 'Histórico completo de envios'],
+    // Mockup do Claude Design ("Landing Comparativo") pede peso visual maior
+    // para esta seção — cartão por item em vez de chip. Ligado só nesta
+    // página para servir de piloto antes de estender às outras 6.
+    richDifferentials: true,
     bestFit: [
       'Escolha o AchadinhosBot se opera só Shopee, quer preço previsível por faixa de grupos e valoriza suporte 24/7 já no plano de entrada.',
       'Escolha o Achadinho Pro se quer os três marketplaces principais pagando pouco mais que o plano básico, e se grupos ilimitados por automação resolve sua estrutura.',
@@ -564,6 +575,10 @@ export function ComparisonPage({ slug }) {
   const hasDifferentials = Array.isArray(page.botinhoDifferentials) && page.botinhoDifferentials.length > 0
   const hasMigration = Array.isArray(page.migrationPath) && page.migrationPath.length > 0
   const competitorSlugs = page.competitorSlugs || []
+  // page.rows normalmente é tupla [critério, alternativa, leitura] (ComparisonTable).
+  // Uma página pode optar por objetos { key, label, produto, concorrente, reading }
+  // para ganhar o comparador interativo por critério (InteractiveComparisonTable).
+  const isInteractiveComparison = Array.isArray(page.rows) && page.rows.length > 0 && !Array.isArray(page.rows[0])
 
   const navItems = [
     { href: `#${SECTION_IDS.comparativo}`, label: 'Comparativo' },
@@ -594,6 +609,8 @@ export function ComparisonPage({ slug }) {
         heroStyle={{ background: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-2) 18%, white), transparent)', borderRadius: 24, paddingInline: 20 }}
       />
 
+      <TrustStrip />
+
       {/* Uma seção só, com um ritmo de espaçamento só. Antes eram 12 <section>
         * de 72px de respiro cada, o que fazia a página parecer não ter fim. */}
       <section className="comparison-section">
@@ -622,7 +639,15 @@ export function ComparisonPage({ slug }) {
             title="Comparativo lado a lado"
             lead="Cada linha é um critério de decisão, o que cada opção entrega nele e como ler esse dado sem se enganar."
           >
-            <ComparisonTable rows={page.rows} headers={COMPARISON_TABLE_HEADERS} />
+            {isInteractiveComparison ? (
+              <InteractiveComparisonTable
+                rows={page.rows}
+                produtoNome={BRAND_NAME}
+                concorrenteNome={competitorSlugs.map((competitorSlug) => getCompetitorBySlug(competitorSlug).name).join(' / ')}
+              />
+            ) : (
+              <ComparisonTable rows={page.rows} headers={COMPARISON_TABLE_HEADERS} />
+            )}
             <TrialCta slug={slug} content="tabela-register" variant="inline" label="Testar o BOTinho 7 dias grátis" />
           </SectionCard>
 
@@ -655,7 +680,11 @@ export function ComparisonPage({ slug }) {
               title={`O que o ${BRAND_NAME} traz nessa comparação`}
               lead={`Pontos que o ${BRAND_NAME} cobre. Os pontos em que a alternativa é melhor estão logo acima, na tabela — comparativo torto não ajuda ninguém a decidir.`}
             >
-              <DifferentialChips items={page.botinhoDifferentials} />
+              {page.richDifferentials ? (
+                <DifferentialGrid items={page.botinhoDifferentials} />
+              ) : (
+                <DifferentialChips items={page.botinhoDifferentials} />
+              )}
               <TrialCta slug={slug} content="diferenciais-register" variant="inline" />
             </SectionCard>
           )}
