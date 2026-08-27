@@ -330,6 +330,54 @@ o processo no boot — vide seção "D-3" abaixo. Gere uma por ambiente com:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+## Histórico por cliente no admin (`/admin/clientes`, 2026-08-27)
+
+Antes só existia visão macro: a gestão em `/admin` lista por RISCO (20 por
+página, sem ordenação) e o drill-down `GET /users/:id` é operacional — não
+respondia "quando essa cliente assinou, qual plano, quando vence". A
+`Subscription` sequer era lida ali.
+
+| Peça | Onde |
+|---|---|
+| Montagem dos 4 blocos + linha do tempo (PURO, sem banco) | `src/domain/admin/customerHistory.js` |
+| Lista larga, buscável e ordenável | `listCustomers` em `src/domain/admin/service.js` |
+| Rotas | `GET /api/admin/customers` e `GET /api/admin/customers/:id/history` |
+| Tela da lista | `dashboard/app/admin/clientes/page.js` |
+| Tela do histórico | `dashboard/app/admin/clientes/[id]/page.js` |
+
+Os quatro blocos: **cadastral** (criação, origem, termos, último acesso),
+**financeiro** (trial, assinaturas, pagamentos, LTV, acessos liberados na mão),
+**técnico** (quedas por janela/código, erros por categoria, lojas) e **uso**
+(grupos, envios 30d/7d/24h, automações, série diária).
+
+**Não regredir — as regras que impedem a tela de virar parede:**
+- **Cabeçalho tem exatamente 6 números.** Teste falha se virar 7.
+- **A linha do tempo só recebe MARCOS.** Envio individual nunca vira linha —
+  vira agregado diário, e queda de WhatsApp idem ("caiu 3 vezes"). Sem isso um
+  cliente com 160 envios/dia produz 4.800 linhas e a página deixa de servir
+  para qualquer coisa.
+- **Cada aba mostra 8 linhas**; o resto fica atrás de "ver tudo".
+- **Linguagem leiga**, como no resto do produto: a categoria de erro vira
+  "Demorou demais e desistiu", não `timeout:`. Teste falha se prefixo de
+  `errorMsg` chegar à tela.
+
+**Trial não tem tabela própria** — é `plan='trial'` + `accessExpiresAt`.
+`summarizeTrial` reconstrói início/fim/conversão a partir do cadastro e do
+PRIMEIRO pagamento aprovado. Depois de assinar, `accessExpiresAt` passa a ser a
+validade do plano pago, então `endsAt` do trial vira `null` de propósito —
+reaproveitá-lo mentiria na linha do tempo.
+
+**Custos:** só leitura, nenhum processo novo, **zero impacto de RAM**. Todo
+agregado por cliente sai em lote (`groupBy`/`in`), nunca uma consulta por linha.
+`MessageLog` é lido em janela de 30 dias com teto de 20.000 linhas — o histórico
+de uso é agregado, não listagem. Ordenação só por coluna real do banco
+(`SORTABLE_CUSTOMER_FIELDS`); último envio e LTV ficam de fora porque ordenar
+por eles exigiria carregar a base inteira em memória.
+
+Telefone segue mascarado por papel (`sanitizeUser`/`canSeePhone`) e as duas
+rotas exigem `support:read` e gravam `AdminAuditLog`. Testes:
+`test/admin-customer-history.test.js`.
+
 ## Liga/desliga staging pelo painel admin (economia de RAM)
 
 Como staging e prod dividem o mesmo VPS, o painel admin de prod tem um botão
@@ -346,6 +394,47 @@ em `src/ops/stagingPower.js`; rotas `GET/POST /api/admin/staging-power`
 - Só roda no host de **produção** (`APP_ENV != staging`).
 - Envs opcionais: `STAGING_PM2_APPS` (default `api-staging visual-staging`),
   `STAGING_DIR`, `PM2_BIN`. Teste: `test/ops-staging-power.test.js`.
+
+## ADMIN > Capacidade (observabilidade da VPS)
+
+A rota `/admin/capacidade` (permissão `tech:read`) apresenta o host contratado,
+RAM/CPU/disco/swap, processos PM2, workers reais, staging, histórico, forecast e
+alertas. A coleta roda dentro da API a cada 5 minutos, com `unref()` e
+single-flight; **não existe processo PM2 novo** e a tela nunca cria, apaga ou
+redimensiona recursos Hetzner. Atualização manual exige `tech:write` e é
+auditada como `admin.capacity.refresh`.
+
+Política conservadora (`src/ops/capacity/policy.js`): reserva o maior valor
+entre 20% da RAM e 1.536 MB; cada sessão custa pelo menos 350 MB ou o p95
+observado (o maior); swap não aumenta a capacidade. Dados ausentes ficam
+`null`/`insufficient_data`. Swap ocupado sem atividade é informativo; pressão
+contínua, pouca `MemAvailable`, disco e headroom determinam atenção/criticidade.
+O forecast só fornece horizonte quando há cobertura suficiente e crescimento
+positivo, sempre com faixa e confiança.
+
+Snapshots de 5 minutos são retidos por 90 dias; rollups horários por 12 meses
+e diários permanecem. Alertas exigem confirmação em duas amostras, possuem
+cooldown de 24 h, registram piora e recuperação e nunca executam ações. Eventos
+de restart, staging, reboot/OOM e mudança de host/política explicam o histórico
+com payload sanitizado e dedupe.
+
+Integração Hetzner é opcional e somente leitura:
+
+```text
+HCLOUD_READ_TOKEN=<token read-only, nunca enviar ao browser/log>
+HCLOUD_PROJECT_ID=14422101
+HCLOUD_SERVER_ID=128727108
+CAPACITY_SWEEP_INTERVAL_MS=300000
+```
+
+Sem token, usa o baseline `wabot-prod / CX33 / 4 vCPU / 8 GB / 40 GB` e marca
+a fonte como `baseline`; falha externa preserva o último inventário como stale.
+O cache Hetzner dura no mínimo 6 h.
+
+Antes de produção: PR contra `develop`, autodeploy, validar em
+`http://178.105.54.0:3006` e observar por 24 h (<1% CPU média e <50 MB adicionais)
+conforme `specs/014-admin-capacity-observability/quickstart.md`. A validação de
+24 h é manual e não pode ser inferida dos testes locais.
 
 ## D-3 — Criptografia de credenciais em repouso (canônico)
 
@@ -1230,6 +1319,48 @@ piso; não chamar `reloadConfig` sem `await` nas rotas. Testes:
 ⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada disso
 vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
 as sessões: avisar antes). Ver "código novo não carregado pelos bots".
+
+## Visão admin "como as ofertas estão chegando" (2026-08-27 — não regredir)
+
+Três incidentes seguidos de imagem (foto borrada, foto sumida, texto pelado)
+foram descobertos **pela cliente**, não por nós. O motivo é estrutural: o
+`MessageLog` registrava que o envio deu certo, mas `success` só quer dizer "o
+WhatsApp aceitou" — não diz se a oferta chegou com foto, com card ou como texto
+pelado. Existia até um campo `sentVia` no worker que nascia `'text'` e **nunca
+era atualizado**.
+
+Hoje cada envio espelhado grava duas colunas novas em `MessageLog`
+(migration `20260827120000_message_log_delivery_kind`):
+
+- **`deliveryKind`** — como saiu: `foto`, `relay`, `card_loja`, `card_origem`,
+  `card_banner`, `texto`. Vocabulário único em `src/core/deliveryKind.js`,
+  preenchido por `buildPayload` nos QUATRO caminhos de montagem e persistido no
+  update de sucesso de `processSendJob`.
+- **`originImageBytes`** — quanto de imagem a mensagem de ORIGEM trouxe
+  (`0` = origem sem imagem). É o que separa "saiu sem foto porque não havia
+  foto" de "saiu sem foto tendo foto na origem" — o segundo é defeito nosso.
+
+`ofertaPerdeuImagem()` combina os dois: só conta como perda quando
+`deliveryKind === 'texto'` **e** `originImageBytes > 0`. Linha antiga (colunas
+nulas) **não** vira alarme: "não sabemos" é resposta honesta, e alarme por
+dúvida treina a pessoa a ignorar o painel.
+
+Leitura em `src/ops/deliveryQuality.js` (parte pura + carregador com `db`
+injetado), rota `GET /api/admin/qualidade-entrega?horas=N` (`tech:read`), tela
+em `dashboard/app/admin/ofertas/page.js` (link no admin). A tela mostra total,
+percentual que chegou com imagem, quantas perderam a foto, distribuição por
+jeito de entrega, por loja, e **quais clientes/grupos de origem** estão
+perdendo foto — que foi exatamente o corte que resolveu o caso de 2026-08-26.
+
+**Não regredir:**
+- o percentual olha só as linhas COM registro (`comRegistro`), nunca o total —
+  senão envio antigo dilui o indicador e dá falsa sensação de melhora;
+- a fonte da foto do card viaja por **callback** (`onFonteDaFoto`), nunca como
+  campo do objeto `urlInfo`: esse objeto entra no proto do WhatsApp, e campo
+  estranho ali é risco (ver o RCA do `title` no PR #1186);
+- `deliveryInfo` é preenchido em TODOS os caminhos de `buildPayload`; se um
+  caminho novo aparecer sem marcar, ele vira "não registrado" em silêncio.
+  Guarda estrutural em `test/ops-delivery-quality.test.js` conta os quatro.
 
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
