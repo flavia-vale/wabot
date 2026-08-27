@@ -1,11 +1,30 @@
 import vm from 'node:vm'
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+
+// Este helper renderiza componentes do painel de verdade, e para isso usa o
+// compilador do Next — que vive em `dashboard/node_modules`, instalado à parte
+// da raiz. Quem roda `npm test` sem ter instalado o dashboard via bem um
+// "Cannot find module .../next/dist/build/swc" que não diz nada sobre a causa.
+// Mesma filosofia do `hasSqlite3()` dos testes de migration: o teste se pula
+// com motivo em vez de falhar por falta de ambiente. Na CI as dependências são
+// instaladas (ver .github/workflows/quality-gate.yml), então o pulo não
+// acontece lá e a cobertura continua sendo exercida de verdade.
+const SWC_PATH = fileURLToPath(new URL('../../dashboard/node_modules/next/dist/build/swc/index.js', import.meta.url))
+
+export function hasDashboardDeps() {
+  return existsSync(SWC_PATH)
+}
+
+export const DASHBOARD_DEPS_SKIP = 'requer as dependências do painel: rode `npm ci --prefix dashboard`'
 
 const dashboardRequire = createRequire(new URL('../../dashboard/package.json', import.meta.url))
 
 export async function renderJsxComponent(file, { modules = {}, globals = {} } = {}) {
-  const { loadBindings, transform } = await import('../dashboard/node_modules/next/dist/build/swc/index.js'.replace('../dashboard', '../../dashboard'))
+  if (!hasDashboardDeps()) throw new Error(`renderJsxComponent: ${DASHBOARD_DEPS_SKIP}`)
+  const { loadBindings, transform } = await import(SWC_PATH)
   await loadBindings()
   const source = await readFile(file, 'utf8')
   const transformed = await transform(source, {
