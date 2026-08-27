@@ -7,6 +7,15 @@ import {
 } from '../src/core/thumbnailQualityPolicy.js'
 import { resolveMonitoredImage } from '../src/monitoredImageResolver.js'
 
+// Hotfix 2026-08-26: o piso entrou em 3000 e derrubou a imagem de oferta
+// legítima — a cliente passou a receber texto pelado, pior que foto ruim.
+// O piso é rede contra o borrão extremo, não critério de qualidade.
+test('piso padrão só barra o borrão extremo, não miniatura mediana', () => {
+  assert.equal(DEFAULT_MIN_PUBLISHABLE_IMAGE_BYTES, 800)
+  assert.equal(isPublishableFallbackImage({ buffer: Buffer.alloc(1_200) }).publish, true)
+  assert.equal(isPublishableFallbackImage({ buffer: Buffer.alloc(2_500) }).publish, true)
+})
+
 test('miniatura de 457 bytes (caso real do Cooktop) não é publicável', () => {
   const v = isPublishableFallbackImage({ buffer: Buffer.alloc(457), mimetype: 'image/jpeg' })
   assert.equal(v.publish, false)
