@@ -166,7 +166,25 @@ de anunciar/agendar antes. Fail-safe em todos os caminhos: sem dado confiável
 (supervisor fora do ar, modo `inline`, chave ausente) **não** avisa — alarme
 falso recorrente treina a pessoa a ignorar justamente este alerta.
 
-Aplicar o código novo nos bots (o passo manual que o aviso está cobrando):
+**Desde 2026-08-26 o deploy faz isso sozinho — quando é o caso.** Os dois
+scripts (`deploy_safe_dashboard.sh` e `deploy_safe_staging.sh`) guardam o commit
+ANTES do pull, comparam com o de depois e, se os arquivos que entraram batem em
+`WORKER_CODE_PATHS_RE` (`src/bot-worker.js`, `src/supervisor/`, `src/core/`,
+`src/converters/`, `src/monitored*.js`, `src/messageProcessor.js`,
+`src/manager.js`, `src/db.js`, `src/logger.js`, `src/analytics.js`,
+`src/errorTaxonomy.js`, `src/observability/`, `src/billing/`,
+`prisma/schema.prisma`, `package-lock.json`), reiniciam o supervisor ao final do
+deploy. Deploy que mexe só em dashboard/rotas/docs/testes **não** reinicia nada e
+as sessões seguem intactas.
+
+`RESTART_SUPERVISOR` aceita `auto` (default), `1` (sempre reinicia) e `0` (nunca
+— o fix fica dormente até alguém reiniciar à mão). A lista de caminhos é
+deliberadamente conservadora: reiniciar o supervisor reconecta TODAS as sessões,
+então caminho novo só entra ali se o processo do worker de fato o carregar.
+Guardas: `test/deploy-safe-dashboard.test.js`, `test/deploy-safe-staging.test.js`.
+
+Aplicar o código novo nos bots à mão (quando o deploy não rodou, ou com
+`RESTART_SUPERVISOR=0`):
 
 ```bash
 cd ~/wabot && pm2 restart bot-supervisor --update-env && pm2 save
@@ -1111,6 +1129,198 @@ Ele cruza `MessageLog` (incluindo pendentes), `SendDedupKey`,
 Testes: `test/incoming-freshness.test.js`, `test/mirror-duplicate-replay.test.js`,
 `test/bot-worker-relay-branding.test.js`.
 
+## Espelhamento para grupo NÃO escolhido + foto borrada (RCA 2026-08-26 — não regredir)
+
+Cliente `julianepumuceno16@gmail.com` reportou três coisas no mesmo dia: oferta
+chegando com a foto **irreconhecível**, oferta chegando com a foto do
+concorrente (marca d'água), e o robô **espelhando para grupo que ela nunca
+escolheu** para aquela origem. São duas causas raiz independentes.
+
+### 1) Foto borrada: publicávamos miniatura de 457 bytes
+
+No log da oferta do Cooktop, em sequência: `Usando thumbnail do link preview
+{ size: 457 }` → `resolveMonitoredImage: fetchProductImage { shopee }` → e
+**nenhum** `imagem alta-res obtida via marketplace`. Ou seja: a mensagem de
+origem não trazia imagem de verdade, só a miniatura embutida no card de link
+(457 bytes ≈ 100px), a busca da foto oficial na loja não devolveu nada, e o
+último recurso ("imagem ruim > nenhuma imagem") publicou essa miniatura
+ampliada.
+
+`core/thumbnailQualityPolicy.js` (puro) põe um **piso em bytes**: abaixo de
+`MONITORED_MIN_IMAGE_BYTES` (default **800**) a miniatura não vira imagem de
+corpo inteiro. `0` desliga o piso (comportamento histórico). Bytes é o único
+sinal disponível de graça nesse ponto (o buffer ainda não foi decodificado).
+Sinal durável `ops_monitored_thumbnail_dropped`.
+
+⚠️ **O piso nasceu em 3000 e teve que cair para 800 no MESMO DIA.** 3000 veio de
+analogia ("miniatura de card costuma ter 3-20KB"), não de medição, e derrubou a
+imagem de muita oferta legítima. E o caminho de degradação estava errado: sem
+imagem, o código só ligava `useLinkPreview`, que aciona o preview **automático**
+do Baileys — e ele **não resolve link de afiliado encurtado**
+(`s.shopee.com.br`, `amzn.to`, `meli.la`), limitação que abre o comentário de
+`monitoredImageResolver.js`. Resultado em produção: a oferta chegou como **texto
+pelado**, sem foto e sem card. Trocar foto ruim por nenhuma imagem é regressão.
+
+Hoje o caminho sem imagem monta o **mesmo card manual do modo preview**
+(`buildManualLinkPreview` com `fetchOriginPhoto`), e o plano B da foto de origem
+roda ali **mesmo com `PREVIEW_CARD_ORIGIN_FALLBACK` desligado**
+(`allowSmallOriginPhoto`): nesse ponto a alternativa não é uma foto melhor, é
+nenhuma imagem. Miniatura pequena dentro de um card é legível — o problema
+original era ela ampliada como imagem de corpo inteiro. **Não regredir:** não
+voltar a confiar no preview automático como degradação, e não subir o piso sem
+medir a distribuição real de bytes no `bot.log`. Guarda:
+`test/oferta-sem-imagem-card.test.js`.
+
+**A marca d'água não é nossa e não tem conserto por aqui**: quando a foto oficial
+da loja não vem, o que sobra são os bytes da mensagem de origem — que é o
+concorrente, marca d'água inclusa. Publicar isso segue melhor do que não publicar
+nada; o que mudou é só o piso de legibilidade.
+
+### 1b) Shopee sem foto: a resolução do short link estourava sob carga
+
+Medição em produção (2026-08-26): das últimas 2000 buscas de foto de Shopee,
+**780 voltaram sem URL nenhuma** — e os nulos estavam concentrados no worker
+mais movimentado, enquanto os MESMOS links resolviam 8/8 num teste isolado.
+
+Causa: a Shopee tem uma fonte de foto só (a API de afiliado), e ela precisa de
+`(shopId, itemId)` — que só existem depois de resolver o short link. Essa
+resolução é uma cadeia de vários redirects, cada hop com seu próprio timeout, e
+ela roda **três vezes por mensagem** (conversão, título/preço, foto). Quando um
+hop estoura, `resolveShopeeShortLink` devolve a URL curta como veio; sem ids, a
+busca de foto vira `null` **silencioso** e a oferta sai com a miniatura da
+mensagem de origem — 500 bytes nas origens que geram card próprio.
+
+Conserto: cache da resolução **bem-sucedida** (`SHOPEE_SHORTLINK_CACHE_TTL_MS`,
+6h; `0` desliga). Short link da Shopee é imutável, e a conversão já resolve o
+link antes da foto — então a foto passa a reaproveitar. **Fracasso não é
+cacheado**: guardar um timeout de rede transformaria falha pontual em "esse link
+não tem produto" pelas horas seguintes. O cache é pulado quando `fetchImpl` é
+injetado (stub de teste). Testes: `test/shopee-shortlink-resolve.test.js`.
+
+⚠️ **Armadilha de diagnóstico que custou horas:** o passo "teste ao vivo" de
+`scripts/diag-preview-sem-imagem.mjs` chamava `fetchProductImage(plat, url, {})`
+— **sem credencial**. Para a Shopee isso pula o único caminho que funciona, e o
+script reportava `shopee 0/N com foto` para QUALQUER conta, sugerindo bloqueio da
+loja que não existia. Amazon e ML não denunciavam o defeito porque têm fontes que
+funcionam sem credencial. Corrigido: o script carrega as credenciais reais da
+conta. Ao ler "a loja não devolveu foto", confirme sempre com
+`scripts/diag-shopee-foto.mjs`, que usa a credencial e separa chave recusada de
+item fora do catálogo.
+
+### 1c) Miniatura da origem varia MUITO por grupo de origem
+
+Também medido em 2026-08-26, por grupo de origem, no mesmo log:
+
+| Origem | miniatura (menor / mediana / maior) |
+|---|---|
+| Ofertas da Gio | 332 / 500 / 654 bytes |
+| OFERTAS BABY #2 | 355 / 525 / 722 bytes |
+| Achadinhos da Cabeleireira | 1.148 / 35.761 / 65.532 bytes |
+| DUDA INDICA | 2.240 / 9.405 / 21.256 bytes |
+
+Origens que geram o próprio card (com marca d'água) mandam miniatura de ~500
+bytes; outras mandam 10-60KB. É isso — e não configuração de grupo, conta ou
+credencial — que faz "esse grupo manda foto e aquele não" quando a foto da loja
+falha. Ferramenta: `scripts/diag-thumb-por-origem.mjs`.
+
+### 2) Espelhamento para destino não escolhido: `GroupTarget` some por cascata
+
+A regra era `targetPostJids.length ? targetPostJids : todos os destinos` — "sem
+vínculo" significava "manda para TODO MUNDO". Só que `GroupTarget` tem
+`onDelete: Cascade` no destino: **apagar um grupo de destino apaga os vínculos
+que apontavam para ele**. Uma origem amarrada explicitamente a N destinos, ao
+ficar com zero vínculos por causa dessas exclusões, deixava de ser explícita e
+passava a espelhar para todos os destinos da conta. O painel piorava: `GET
+/:id/targets` devolvia `mode:'all'` com TODOS os destinos marcados, então a tela
+dizia que estava tudo certo.
+
+`Group.targetsMode` ('explicit' | 'all', migration
+`20260826180000_group_targets_mode`) guarda a **intenção** da cliente. Decisão
+inteira em `core/destinationRouting.js` (`resolveMonitorDestinations`):
+
+- `explicit` → usa a lista escolhida; **lista vazia = nenhum destino**, nunca
+  "todos" (melhor não enviar do que enviar errado — envio errado é irreversível);
+- `all` (quem nunca escolheu) → comportamento histórico preservado, agora com
+  aviso no log e sinal `ops_mirror_fallback_all_destinations`.
+
+Salvar destinos no painel grava `explicit`; desmarcar tudo volta a `all` (é como
+a tela sempre se comportou). A migration marca como `explicit` toda origem que
+já tem vínculo hoje.
+
+### 3) Job já enfileirado não era cancelado
+
+Os destinos são calculados quando a mensagem CHEGA; o job só sai no dequeue, que
+pode ser muito depois (preservação do destino, freio de fila). Uma entrega saiu
+**1,5s depois** de a cliente apagar o destino no painel. Agora o job `converted`
+carrega `sourceJid` e `processSendJob` **revalida o destino no dequeue**
+(`shouldDropUnlinkedDestination`), antes do descarte por idade: destino que não
+está mais na lista atual vira `skip:dest_unlinked` (`skip:source_unlinked` se a
+origem sumiu), categoria `CONFIG_BLOCK`, com tradução leiga no painel. Fail-safe:
+sem foto confiável da config, **envia** (descartar por dúvida perderia oferta
+legítima). `status@broadcast` nunca é descartado por essa checagem.
+
+### 4) `configReloaded: {}` no log da API não confirmava nada
+
+`reloadConfig` é assíncrono no modo `remote` e as rotas de grupo **não davam
+`await`** — a Promise ia crua para o logger e virava `configReloaded: {}`.
+Parecia confirmação e não era: não dizia se o supervisor recebeu o comando nem
+se o worker invalidou o cache, e foi o que impediu de separar "job antigo ainda
+saindo" de "worker nem recarregou". Hoje as quatro rotas usam
+`reloadWorkerConfig` (await + `configReloadError` no log).
+
+**Não regredir:** não voltar a decidir destino fora de `resolveMonitorDestinations`;
+não tratar lista explícita vazia como "todos"; não remover a revalidação no
+dequeue nem movê-la para depois do envio; não voltar a publicar miniatura sem
+piso; não chamar `reloadConfig` sem `await` nas rotas. Testes:
+`test/destination-routing.test.js`, `test/thumbnail-quality-policy.test.js`,
+`test/groups-route-targets-mode.test.js`.
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada disso
+vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
+as sessões: avisar antes). Ver "código novo não carregado pelos bots".
+
+## Visão admin "como as ofertas estão chegando" (2026-08-27 — não regredir)
+
+Três incidentes seguidos de imagem (foto borrada, foto sumida, texto pelado)
+foram descobertos **pela cliente**, não por nós. O motivo é estrutural: o
+`MessageLog` registrava que o envio deu certo, mas `success` só quer dizer "o
+WhatsApp aceitou" — não diz se a oferta chegou com foto, com card ou como texto
+pelado. Existia até um campo `sentVia` no worker que nascia `'text'` e **nunca
+era atualizado**.
+
+Hoje cada envio espelhado grava duas colunas novas em `MessageLog`
+(migration `20260827120000_message_log_delivery_kind`):
+
+- **`deliveryKind`** — como saiu: `foto`, `relay`, `card_loja`, `card_origem`,
+  `card_banner`, `texto`. Vocabulário único em `src/core/deliveryKind.js`,
+  preenchido por `buildPayload` nos QUATRO caminhos de montagem e persistido no
+  update de sucesso de `processSendJob`.
+- **`originImageBytes`** — quanto de imagem a mensagem de ORIGEM trouxe
+  (`0` = origem sem imagem). É o que separa "saiu sem foto porque não havia
+  foto" de "saiu sem foto tendo foto na origem" — o segundo é defeito nosso.
+
+`ofertaPerdeuImagem()` combina os dois: só conta como perda quando
+`deliveryKind === 'texto'` **e** `originImageBytes > 0`. Linha antiga (colunas
+nulas) **não** vira alarme: "não sabemos" é resposta honesta, e alarme por
+dúvida treina a pessoa a ignorar o painel.
+
+Leitura em `src/ops/deliveryQuality.js` (parte pura + carregador com `db`
+injetado), rota `GET /api/admin/qualidade-entrega?horas=N` (`tech:read`), tela
+em `dashboard/app/admin/ofertas/page.js` (link no admin). A tela mostra total,
+percentual que chegou com imagem, quantas perderam a foto, distribuição por
+jeito de entrega, por loja, e **quais clientes/grupos de origem** estão
+perdendo foto — que foi exatamente o corte que resolveu o caso de 2026-08-26.
+
+**Não regredir:**
+- o percentual olha só as linhas COM registro (`comRegistro`), nunca o total —
+  senão envio antigo dilui o indicador e dá falsa sensação de melhora;
+- a fonte da foto do card viaja por **callback** (`onFonteDaFoto`), nunca como
+  campo do objeto `urlInfo`: esse objeto entra no proto do WhatsApp, e campo
+  estranho ali é risco (ver o RCA do `title` no PR #1186);
+- `deliveryInfo` é preenchido em TODOS os caminhos de `buildPayload`; se um
+  caminho novo aparecer sem marcar, ele vira "não registrado" em silêncio.
+  Guarda estrutural em `test/ops-delivery-quality.test.js` conta os quatro.
+
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando a mesma
@@ -1485,6 +1695,72 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
+## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
+
+A regra acima (`WA_IGNORE_UNMONITORED_GROUPS`) é uma **lista de exceções**, e
+listas de exceções envelhecem mal: começou cobrindo grupo, veio o incidente de
+**canal** (`@newsletter`, conta `cynthiatceles@gmail.com`, 2026-08-25) e a
+medição de 26/08 mostrou que o MAIOR balde nem era grupo — eram as **conversas
+diretas pessoais da própria cliente** (538 de 1.082 eventos de dessincronização,
+15 contas), que o robô tenta decifrar e **descarta na linha seguinte**
+(`monitorGroups: []`). Cada incidente descobria um balde novo depois que a
+cliente reclamava.
+
+`src/core/chatScopePolicy.js` inverte: a lista passa a ser do que **olhar**.
+Modo em degraus via `WA_CHAT_SCOPE_MODE`:
+
+| Modo | Ignora, fora da lista de escolhidos |
+|---|---|
+| `off` (default) | nada — comportamento histórico |
+| `dm` | conversa direta (`@lid`, `@s.whatsapp.net`) |
+| `dm+group` | soma grupo `@g.us` |
+| `strict` | soma canal `@newsletter` (**só após a validação da Fase 3**) |
+
+**Tudo falha para o lado de DEIXAR PASSAR** (não afrouxar): modo desligado,
+config ainda não carregada (`ready=false`), **lista de escolhidos vazia**, freio
+acionado, tipo de endereço desconhecido, jid vazio — nada disso filtra. Lista
+vazia é sinal de config incompleta, não autorização para ignorar tudo.
+
+**Nunca ignorados, em nenhum modo:** o que está na lista (fontes monitoradas,
+destinos de postagem, canal do botão), a **identidade da própria conta**
+(número e `@lid`, preenchidos no `open`) e `status@broadcast`.
+
+⚠️ **Por que destinos e `status@broadcast` precisam estar na lista** (conferido
+na fonte do Baileys 6.7.23 — não é escolha estética): o MESMO gancho
+`shouldIgnoreJid` é consultado em quatro caminhos —
+`handleMessage` (`messages-recv.js:611`, o que queremos),
+`handleReceipt` (`:512`, **confirmação de entrega das nossas mensagens**),
+`handleNotification` (`:580`, **entrada em grupo → mensagem de boas-vindas**) e
+`handlePresenceUpdate` (`chats.js:543`). Ignorar um destino quebraria a
+boas-vindas e o recibo. A descoberta de "Canais que sigo" **não** passa por aí
+(vem de `messaging-history.set` / `chats.upsert`), então ignorar canal
+não-monitorado não apaga o picker.
+
+**Freio de emergência (`shouldAutoDisableChatScope`) — não remover.** Se a conta
+ESTAVA recebendo, parou por completo por `WA_CHAT_SCOPE_PANIC_MS` (default
+30min) e o contador de ignoradas continua subindo, a regra **se desliga sozinha**
+naquele worker e tudo volta a passar até o próximo restart, com
+`ops_wa_chat_scope_auto_disabled`. É a rede contra o cenário que não conseguimos
+prever — em especial a migração do endereçamento de grupo para `@lid`, que faria
+um grupo monitorado deixar de casar com a lista e sair do ar **em silêncio**.
+Conta que nunca recebeu (nova) e silêncio sem nada sendo ignorado **não**
+acionam o freio.
+
+**Observabilidade obrigatória:** contagem por tipo, amostra de log limitada
+(`WA_CHAT_SCOPE_LOG_SAMPLE`, primeiros N endereços distintos por tipo) e sinal
+durável **agregado por janela** `ops_wa_chat_scope_filtered`
+(`WA_CHAT_SCOPE_SIGNAL_INTERVAL_MS`, default 1h) — **nunca por mensagem**. Sem
+isso trocaríamos um problema visível por um invisível: com o filtro ativo a
+mensagem some antes do nosso log, e foi justamente uma linha de log
+(`"mensagem recebida" jid: ...@lid, monitorGroups: []`) que permitiu diagnosticar
+o incidente.
+
+Aplicar a env exige `pm2 delete` + `start` (pegadinha #1) **e**, em modo
+`remote`, restart do `bot-supervisor` para os workers pegarem o código — o que
+reconecta TODAS as sessões (anunciar antes). Rollback: `WA_CHAT_SCOPE_MODE=off`.
+Testes: `test/chat-scope-policy.test.js`, `test/bot-worker-chat-scope-wiring.test.js`.
+Plano completo: `docs/plano-recepcao-whatsapp-2026-08-26.md`.
+
 ## Loop de retry-receipt travado derrubando sessão a cada ~50min (RCA 2026-07)
 
 **Sintoma:** cliente reportou queda "de novo hoje". Investigação encontrou uma
@@ -1524,10 +1800,21 @@ presa nisso por pelo menos 3+ dias antes de ser detectada).
 pediu) agora são criados **uma vez em escopo de módulo** (`NodeCache` de
 `@cacheable/node-cache`, mesma lib que o Baileys usa internamente — já vinha
 como dependência transitiva, promovida a dependência direta) e passados
-explicitamente pro `makeWASocket()`. Sobrevivem a reconexões dentro do MESMO
-processo worker; começam limpos a cada restart do worker (aceitável — não é
-esse o vetor do bug). `stdTTL` de 1h e `useClones: false` espelham os defaults
-internos do Baileys.
+explicitamente pro `makeWASocket()`. A cache comum sobrevive às reconexões do
+MESMO processo worker.
+
+**Correção complementar (RCA 2026-08, Cynthia):** isso ainda era insuficiente.
+O próprio Baileys apaga o contador ao atingir `maxMsgRetryCount`, e um restart
+manual recriava a cache vazia. Uma mídia envenenada de `@newsletter` voltou por
+horas e deixou a sessão com heartbeat verde, mas sem novos envios. Ao segundo
+`stream:error` do mesmo `msgId`, `createDurableStuckMessageRetryCache` grava
+`stuck-message-quarantine.json` dentro do `AUTH_DIR` da conta. Para esse id, a
+cache devolve o limite ao Baileys e recusa o `del`: ele ACKa/descarta sem mandar
+outro retry-receipt. A quarentena dura 7 dias, sobrevive a restart do worker e
+some junto com o auth em logout/reset. Para recuperar um id já confirmado no
+node `stream:error`, antes de reiniciar apenas o worker da conta, use
+`node scripts/quarantine-wa-message.mjs <userId> <msgId>`. Nunca usar por
+palpite: o id precisa vir do log.
 
 **Não é sobre decrypt/crypto em si.** As falhas de "failed to decrypt
 message" (`Bad MAC`/`SessionError`/`MessageCounterError`) que aparecem em
@@ -1554,10 +1841,9 @@ messageId) via `extractAckMessageIdFromStreamErrorNode` +
 `registerStuckMessageAndDecide` (`src/core/reconnectPolicy.js`, puras/
 testadas): se o MESMO `messageId` aparecer no ack de um `stream:error` 2+
 vezes (`WA_STUCK_MSG_THRESHOLD`, default 2) dentro de 2h
-(`WA_STUCK_MSG_WINDOW_MS`), emite `logger.error` + `AnalyticsEvent
-ops_wa_stuck_message_retry` — visibilidade operacional ANTES do cliente
-reclamar, independente de qual bug específico estiver causando o travamento
-dessa vez.
+(`WA_STUCK_MSG_WINDOW_MS`), coloca o id na quarentena durável e emite
+`logger.error` + `AnalyticsEvent ops_wa_stuck_message_retry`. Assim a próxima
+conexão deixa de pedir retry da mensagem culpada em vez de apenas avisar.
 
 ## `failure 405` derrubando TODAS as sessões: versão do WA Web cortada (RCA 2026-07-28)
 

@@ -16,6 +16,8 @@
 // O limiar de 50KB separa "thumbnail do link preview" de "imageMessage real
 // comprimido pelo WhatsApp" — abaixo disso é quase certo que seja preview.
 
+import { isPublishableFallbackImage, resolveMinPublishableImageBytes } from './core/thumbnailQualityPolicy.js'
+
 export const MONITORED_THUMBNAIL_BYTES_THRESHOLD = 50_000
 
 export function isLikelyJpegThumbnail(image) {
@@ -72,6 +74,8 @@ export async function resolveMonitoredImage({
   fallbackToOriginal = true,
   skipActiveFetch = false,
   logger,
+  minPublishableBytes = resolveMinPublishableImageBytes(),
+  onThumbnailDropped = null,
 }) {
   const log = logger || { info: () => {}, warn: () => {} }
 
@@ -79,7 +83,11 @@ export async function resolveMonitoredImage({
     if (skipActiveFetch) return null
     if (!target?.url) return null
     try {
-      const productImageUrl = await fetchProductImage(target.platform, target.url, credentials || {})
+      const productImageUrl = await fetchProductImage(target.platform, target.url, credentials || {}, {
+        // Sem isto, "a loja não devolveu foto" chega aqui sem motivo nenhum —
+        // era o caso da Shopee, cuja única fonte de foto é a API de afiliado.
+        onDiagnostic: ({ stage, detail }) => log.warn({ platform: target.platform, stage, detail }, 'resolveMonitoredImage: loja não devolveu foto'),
+      })
       log.info({ platform: target.platform, productImageUrl }, 'resolveMonitoredImage: fetchProductImage')
       if (!productImageUrl) return null
       const fetched = await fetchImageBuffer(productImageUrl, target.url)
@@ -106,8 +114,18 @@ export async function resolveMonitoredImage({
     const upgraded = await tryActiveFetch()
     if (upgraded) return upgraded
 
-    // Última cartada: a thumbnail mesmo. Imagem ruim > nenhuma imagem.
-    return downloaded || null
+    // Última cartada: a thumbnail mesmo. Imagem ruim > nenhuma imagem — mas só
+    // até o piso de qualidade (thumbnailQualityPolicy.js). Abaixo dele a foto
+    // sai como borrão e o certo é NÃO publicar imagem: o envio degrada para o
+    // card de link do WhatsApp, que fica legível. Ver RCA 2026-08-26.
+    if (!downloaded) return null
+    const verdict = isPublishableFallbackImage(downloaded, minPublishableBytes)
+    if (!verdict.publish) {
+      log.warn({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes }, 'resolveMonitoredImage: miniatura pequena demais para publicar — enviando sem imagem')
+      onThumbnailDropped?.({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes })
+      return null
+    }
+    return downloaded
   }
 
   if (mode === 'fetch') {
@@ -115,7 +133,12 @@ export async function resolveMonitoredImage({
     if (upgraded) return upgraded
     if (fallbackToOriginal) {
       const downloaded = await downloadOriginalImage()
-      if (downloaded) return downloaded
+      if (downloaded) {
+        const verdict = isPublishableFallbackImage(downloaded, minPublishableBytes)
+        if (verdict.publish) return downloaded
+        log.warn({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes }, 'resolveMonitoredImage: miniatura pequena demais para publicar — enviando sem imagem')
+        onThumbnailDropped?.({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes })
+      }
     }
     return null
   }

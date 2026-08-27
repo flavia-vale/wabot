@@ -458,16 +458,25 @@ const SHOPEE_CRAWLER_UAS = [
   'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
 ]
 
-async function resolveShopeeImage(url, creds) {
-  // 1) Caminho preferencial: API de afiliado (GraphQL) — usa creds que já temos.
+async function resolveShopeeImage(url, creds, { onDiagnostic } = {}) {
+  const report = (stage, detail) => {
+    try { onDiagnostic?.({ stage, detail }) } catch {}
+  }
+  // 1) Caminho preferencial e, na prática, ÚNICO que funciona: API de afiliado
+  // (GraphQL). O shell SPA da página não traz og:image e a API v4 pública é
+  // bloqueada — os fallbacks abaixo quase sempre devolvem null. Por isso este
+  // caminho não pode ser silencioso: quando ele falha, a oferta de Shopee sai
+  // sem foto de loja, e era impossível saber o motivo (RCA 2026-08-26).
   if (creds?.shopee?.appId && creds?.shopee?.secretKey) {
     try {
       const { fetchShopeeImage } = await import('./shopee.js')
-      const img = await fetchShopeeImage(url, creds.shopee)
+      const img = await fetchShopeeImage(url, creds.shopee, { onDiagnostic })
       if (img) return img
-    } catch {
-      // segue para fallbacks
+    } catch (err) {
+      report('shopee_api_excecao', err?.message)
     }
+  } else {
+    report('shopee_sem_credencial')
   }
 
   const canonical = await resolveShopeeShortLink(url)
@@ -504,6 +513,7 @@ async function resolveShopeeImage(url, creds) {
       // segue para retorno nulo
     }
   }
+  report('shopee_sem_foto_em_todas_as_fontes')
   return null
 }
 
@@ -511,14 +521,18 @@ export function getImageResolverMetrics() {
   return Object.fromEntries(domainFailureMetrics)
 }
 
-export async function fetchProductImage(platform, productUrl, creds) {
+// `onDiagnostic({ stage, detail })` (opcional, best-effort): recebe o motivo de
+// a foto não ter vindo, para quem chama logar/emitir sinal. Existe porque o
+// caminho da Shopee era mudo — chave recusada, item fora do catálogo de
+// afiliado e short link não resolvido produziam todos o mesmo `null`.
+export async function fetchProductImage(platform, productUrl, creds, { onDiagnostic } = {}) {
   const cached = getCached(productUrl)
   if (cached !== null) return cached
 
   try {
     let image = null
     if (platform === 'shopee') {
-      image = await resolveShopeeImage(productUrl, creds)
+      image = await resolveShopeeImage(productUrl, creds, { onDiagnostic })
     } else if (platform === 'amazon') {
       image = await resolveAmazonImage(productUrl)
     } else if (platform === 'mercadolivre') {

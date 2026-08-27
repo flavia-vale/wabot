@@ -24,7 +24,10 @@ function buildAuth(appId, secretKey, payload) {
 
 async function genShortLink(originUrl, { appId, secretKey }) {
   const safeUrl = String(originUrl).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-  const body = { query: `mutation { generateShortLink(input: { originUrl: "${safeUrl}", subIds: [""] }) { shortLink } }` }
+  // Mesmo SubID que a produção manda (SHOPEE_SUB_ID em src/converters/shopee.js).
+  // Duplicado de propósito: importar o conversor arrastaria axios e a
+  // implementação inteira para dentro de um script de diagnóstico.
+  const body = { query: `mutation { generateShortLink(input: { originUrl: "${safeUrl}", subIds: ["espelhagrupos"] }) { shortLink } }` }
   const payload = JSON.stringify(body)
   try {
     const { data } = await axios.post(ENDPOINT, body, {

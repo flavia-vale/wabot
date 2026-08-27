@@ -1,6 +1,7 @@
 import db from '../../db.js'
+import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE } from '../../manager.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
@@ -13,6 +14,10 @@ import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normali
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
 import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
+import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
+import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
+import { buildLongExpiredWhere, wantsLongExpired, isLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
+import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
 
 const ROLE_PERMISSIONS = {
@@ -789,78 +794,131 @@ function safeIsoDate(value) {
 }
 
 
-function parseEventMetadata(metadata) {
-  try { return JSON.parse(metadata || '{}') || {} } catch { return {} }
-}
-
-function summarizeOfflineEpisodes(events = [], { since, now = new Date() } = {}) {
-  const startedByUser = new Map()
-  const result = new Map()
-  const sinceMs = since ? new Date(since).getTime() : 0
-  const nowMs = now.getTime()
-  const automaticRestoreTypes = new Set(['reconnect_success', 'connected'])
-  const manualTypes = new Set(['manual_reconnect_requested', 'manual_pairing_requested'])
-
-  function ensure(userId) {
-    if (!result.has(userId)) {
-      result.set(userId, {
-        manualReconnects: 0,
-        automaticRecoveries: 0,
-        automaticOfflineMs: 0,
-        longestAutomaticOfflineMs: 0,
-        ongoingOfflineMs: 0,
-      })
-    }
-    return result.get(userId)
-  }
-
-  for (const event of events) {
-    const userId = event.userId
-    const type = String(event.type || '')
-    const atMs = new Date(event.occurredAt).getTime()
-    if (!userId || !Number.isFinite(atMs)) continue
-    const bucket = ensure(userId)
-    if (manualTypes.has(type)) {
-      bucket.manualReconnects += 1
-      startedByUser.delete(userId)
-      continue
-    }
-    if (type === 'disconnect') {
-      const metadata = parseEventMetadata(event.metadata)
-      if (metadata.pairing || metadata.manual || metadata.terminal) continue
-      if (!startedByUser.has(userId)) startedByUser.set(userId, atMs)
-      continue
-    }
-    if (type === 'disconnect_terminal' || type === 'auth_reset') {
-      startedByUser.delete(userId)
-      continue
-    }
-    if (automaticRestoreTypes.has(type) && startedByUser.has(userId)) {
-      const startMs = startedByUser.get(userId)
-      const durationMs = Math.max(0, atMs - startMs)
-      const windowedMs = Math.max(0, atMs - Math.max(startMs, sinceMs))
-      bucket.automaticRecoveries += 1
-      bucket.automaticOfflineMs += windowedMs
-      bucket.longestAutomaticOfflineMs = Math.max(bucket.longestAutomaticOfflineMs, durationMs)
-      startedByUser.delete(userId)
-    }
-  }
-
-  for (const [userId, startMs] of startedByUser.entries()) {
-    const bucket = ensure(userId)
-    bucket.ongoingOfflineMs = Math.max(0, nowMs - Math.max(startMs, sinceMs))
-    bucket.longestAutomaticOfflineMs = Math.max(bucket.longestAutomaticOfflineMs, Math.max(0, nowMs - startMs))
-  }
-
-  return result
-}
-
 function isSessionOnline(session, now = new Date()) {
   if (!session) return false
   if (session.status === 'connected') return true
   const heartbeatAt = session.lastHeartbeatAt ? new Date(session.lastHeartbeatAt).getTime() : 0
   const heartbeatFresh = heartbeatAt && now.getTime() - heartbeatAt <= 2 * 60_000
   return session.status === 'connecting' && heartbeatFresh && ['connecting', 'reconnecting'].includes(session.lifecycle)
+}
+
+// Cenários da frota para os PRIMEIROS cards do admin (Fase 1B do plano de
+// recepção, RCA 2026-08-26). Cada número responde uma pergunta operacional
+// diferente e leva para a aba online já filtrada:
+//   semReceber     — conectado e sem receber (o "verde mentiroso")
+//   caindoDemais   — quedas acima do normal em 24h
+//   clienteAgiu    — precisou re-parear: é o número que mede a promessa
+//   fonteQuebrada  — auto-refresh não resolveu a dessincronização
+//   offlineMs24h   — tempo total da frota fora do ar
+// Custo bounded: três groupBy e uma varredura de 48h dos eventos de conexão
+// (a mesma janela que a listagem já usa).
+const FLEET_DROPS_ALERT_24H = Math.max(1, Number(process.env.ADMIN_DROPS_ALERT_24H || 20))
+const FLEET_RECEPTION_BLIND_WINDOW_MS = Math.max(10 * 60_000, Number(process.env.ADMIN_RECEPTION_BLIND_WINDOW_MS || 60 * 60_000))
+
+async function buildFleetScenarios(now = new Date()) {
+  const since24h = addDays(now, -1)
+  const since7d = addDays(now, -7)
+  const blindSince = new Date(now.getTime() - FLEET_RECEPTION_BLIND_WINDOW_MS)
+
+  const [dropRows, manualRows, blindRows, desyncRows, offlineEvents, sessions, runningIds] = await Promise.all([
+    db.waConnectionEvent.groupBy({
+      by: ['userId'],
+      where: { type: { in: ['disconnect', 'disconnect_terminal'] }, occurredAt: { gte: since24h, lte: now } },
+      _count: { _all: true },
+    }).catch(() => []),
+    db.waConnectionEvent.findMany({
+      where: { type: { in: ['manual_reconnect_requested', 'manual_pairing_requested'] }, occurredAt: { gte: since24h, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.analyticsEvent.findMany({
+      where: { event: 'ops_wa_reception_blind', createdAt: { gte: blindSince, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.analyticsEvent.findMany({
+      where: { event: 'ops_wa_group_desync_unresolved', createdAt: { gte: since7d, lte: now } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }).catch(() => []),
+    db.waConnectionEvent.findMany({
+      where: { type: { in: OFFLINE_EPISODE_EVENT_TYPES }, occurredAt: { gte: addDays(now, -2), lte: now } },
+      orderBy: { occurredAt: 'asc' },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
+    }).catch(() => []),
+    db.waSession.findMany({
+      where: { user: { status: 'active' } },
+      select: {
+        userId: true, status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true,
+        user: { select: { accessExpiresAt: true } },
+      },
+    }).catch(() => []),
+    listRunningBots().then(ids => new Set(ids)).catch(() => null),
+  ])
+
+  // Quem resolve cada desconexão. O balde que interessa aqui é `ninguem`:
+  // sessão caída, sem robô no ar e sem heartbeat — ninguém está tentando, e
+  // era o caso que passava despercebido (13 robôs no ar para 67 caídas).
+  const lastEventByUser = new Map()
+  for (const event of offlineEvents) {
+    const previous = lastEventByUser.get(event.userId)
+    if (!previous || new Date(event.occurredAt).getTime() >= new Date(previous.occurredAt).getTime()) {
+      lastEventByUser.set(event.userId, event)
+    }
+  }
+  const paradas = new Set()
+  const precisamDaCliente = new Set()
+  const acessoVencido = new Set()
+  for (const session of sessions) {
+    // Mesma janela da listagem: card e lista têm que contar a mesma coisa.
+    if (isLongExpired(session.user?.accessExpiresAt ?? null, { now: now.getTime() })) continue
+    const ownership = resolveSessionOwner({
+      status: session.status,
+      lifecycle: session.lifecycle,
+      lastDisconnectCode: session.lastDisconnectCode,
+      lastEventType: lastEventByUser.get(session.userId)?.type ?? null,
+      workerRunning: runningIds ? runningIds.has(session.userId) : null,
+      lastHeartbeatAt: session.lastHeartbeatAt,
+      accessExpiresAt: session.user?.accessExpiresAt ?? null,
+      now: now.getTime(),
+    })
+    if (ownership.owner === SESSION_OWNER.NOBODY) paradas.add(session.userId)
+    else if (ownership.owner === SESSION_OWNER.CLIENT) precisamDaCliente.add(session.userId)
+    else if (ownership.owner === SESSION_OWNER.EXPIRED) acessoVencido.add(session.userId)
+  }
+
+  const metricsByUser = summarizeOfflineEpisodesByUser(offlineEvents, { since: since24h, now })
+  let offlineMs24h = 0
+  let manualOfflineMs24h = 0
+  for (const metrics of metricsByUser.values()) {
+    offlineMs24h += Number(metrics.automaticOfflineMs || 0) + Number(metrics.manualOfflineMs || 0) + Number(metrics.ongoingOfflineMs || 0)
+    manualOfflineMs24h += Number(metrics.manualOfflineMs || 0)
+  }
+
+  const byScenario = {
+    parado: paradas,
+    qr: precisamDaCliente,
+    vencido: acessoVencido,
+    blind: new Set(blindRows.map(row => row.userId).filter(Boolean)),
+    quedas: new Set(dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).map(row => row.userId).filter(Boolean)),
+    manual: new Set(manualRows.map(row => row.userId).filter(Boolean)),
+    desync: new Set(desyncRows.map(row => row.userId).filter(Boolean)),
+  }
+
+  return {
+    byScenario,
+    paradasSemNinguem: paradas.size,
+    precisamDeQr: precisamDaCliente.size,
+    acessoVencido: acessoVencido.size,
+    semReceber: blindRows.filter(row => row.userId).length,
+    caindoDemais: dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).length,
+    clienteAgiu: manualRows.filter(row => row.userId).length,
+    fonteQuebrada: desyncRows.filter(row => row.userId).length,
+    offlineMs24h,
+    manualOfflineMs24h,
+    dropsAlertThreshold: FLEET_DROPS_ALERT_24H,
+    blindWindowMs: FLEET_RECEPTION_BLIND_WINDOW_MS,
+  }
 }
 
 async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = {}) {
@@ -874,10 +932,16 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const minErrors = Math.max(0, Number(query.minErrors ?? 0) || 0)
   const running = new Set(await listRunningBots())
 
+  // Vencidas há muito tempo saem da visão por padrão (pedido de 2026-08-26:
+  // 57 de 66 contas caídas estavam vencidas, e a operação procurava 9 casos
+  // reais no meio disso). É filtro de apresentação — "Ver mais" traz de volta.
+  const includeLongExpired = wantsLongExpired(query.incluirVencidos)
+  const longExpiredWhere = buildLongExpiredWhere({ now, includeLongExpired })
   const where = {
     status: 'active',
     ...(plan !== 'all' && ['trial', 'basic', 'pro'].includes(plan) ? { plan } : {}),
     ...(search ? { OR: [{ email: { contains: search } }, { name: { contains: search } }] } : {}),
+    ...(longExpiredWhere ? { AND: [longExpiredWhere] } : {}),
   }
 
   const [users, allActiveSessions] = await Promise.all([
@@ -892,6 +956,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
         contactPhone: true,
         status: true,
         plan: true,
+        accessExpiresAt: true,
         lastActivityAt: true,
         createdAt: true,
         waSession: {
@@ -919,18 +984,34 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       where: { userId: { in: userIds }, occurredAt: { gte: since24h } },
       _count: { _all: true },
     }).catch(() => []) : [],
+    // Busca com FOLGA (48h) e recorta em 24h no cálculo: um episódio que
+    // começou antes da janela precisa achar o par para não sumir da conta
+    // (defeito 2 do RCA 2026-08-26).
     userIds.length ? db.waConnectionEvent.findMany({
-      where: { userId: { in: userIds }, occurredAt: { gte: since24h, lte: now }, type: { in: ['disconnect', 'disconnect_terminal', 'auth_reset', 'reconnect_success', 'connected', 'manual_reconnect_requested', 'manual_pairing_requested'] } },
+      where: { userId: { in: userIds }, occurredAt: { gte: addDays(now, -2), lte: now }, type: { in: OFFLINE_EPISODE_EVENT_TYPES } },
       orderBy: { occurredAt: 'asc' },
-      select: { userId: true, type: true, metadata: true, occurredAt: true },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
     }).catch(() => []) : [],
     getLogCountMap({ status: 'success', since: since24h, userIds }),
     getLogCountMap({ status: 'error', since: since24h, userIds }),
     getLogActivityMap({ userIds }),
   ])
 
+  // Último evento de conexão por usuário — é o que separa "o robô está
+  // tentando" de "precisa da cliente" e de "ninguém está tentando".
+  const lastEventByUser = new Map()
+  for (const event of offlineEvents24h) {
+    const previous = lastEventByUser.get(event.userId)
+    if (!previous || new Date(event.occurredAt).getTime() >= new Date(previous.occurredAt).getTime()) {
+      lastEventByUser.set(event.userId, event)
+    }
+  }
+
+  const scenarios = await buildFleetScenarios(now).catch(() => null)
+  const scenarioFilter = String(query.cenario || '').trim()
+  const scenarioUserIds = scenarios?.byScenario?.[scenarioFilter] ?? null
   const eventCounts24h = countRowsByUserAndType(eventCounts24hRows)
-  const offlineMetrics24h = summarizeOfflineEpisodes(offlineEvents24h, { since: since24h, now })
+  const offlineMetrics24h = summarizeOfflineEpisodesByUser(offlineEvents24h, { since: since24h, now })
   const rows = users.map(user => {
     const session = user.waSession
     const counts = eventCounts24h.get(user.id) || {}
@@ -940,6 +1021,16 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     const lastMessageAt = lastMessageMap.get(user.id) ?? null
     const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
     const online = isSessionOnline(session, now)
+    const ownership = resolveSessionOwner({
+      status: session?.status ?? 'disconnected',
+      lifecycle: session?.lifecycle ?? null,
+      lastDisconnectCode: session?.lastDisconnectCode ?? null,
+      lastEventType: lastEventByUser.get(user.id)?.type ?? null,
+      workerRunning: running.has(user.id),
+      lastHeartbeatAt: session?.lastHeartbeatAt ?? null,
+      accessExpiresAt: user.accessExpiresAt ?? null,
+      now: now.getTime(),
+    })
     const successCount24h = successMap24h.get(user.id) ?? 0
     const errorCount24h = errorMap24h.get(user.id) ?? 0
     const offline24h = offlineMetrics24h.get(user.id) || {}
@@ -962,13 +1053,19 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       disconnects24h,
       reconnectAttempts24h,
       reconnectSuccess24h,
+      sessionOwner: ownership.owner,
+      sessionOwnerReason: ownership.reason,
+      canAdminRetry: ownership.canAdminRetry,
       manualReconnects24h: Number(offline24h.manualReconnects || 0),
+      manualRecoveries24h: Number(offline24h.manualRecoveries || 0),
+      manualOfflineMs24h: Number(offline24h.manualOfflineMs || 0),
       automaticRecoveries24h: Number(offline24h.automaticRecoveries || 0),
       automaticOfflineMs24h: Number(offline24h.automaticOfflineMs || 0),
       ongoingOfflineMs24h: Number(offline24h.ongoingOfflineMs || 0),
       waSession: session,
     }, adminRole)
   }).filter(row => {
+    if (scenarioUserIds && !scenarioUserIds.has(row.id)) return false
     const sessionStatus = row.waSession?.status || 'none'
     const isAlert = row.waSession && sessionStatus !== 'connected'
     if (waStatus === 'alerts' && !isAlert) return false
@@ -988,17 +1085,32 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const connectingUsers = allActiveSessions.filter(session => session.status === 'connecting').length
   const disconnectedAlerts = allActiveSessions.filter(session => session.status !== 'connected' && session.status !== 'connecting').length
   const stabilityPct = totalSessions ? Math.round((onlineUsers / totalSessions) * 1000) / 10 : 100
+  // Quantas ficaram de fora — o botão "Ver mais" precisa dizer o tamanho.
+  const hiddenLongExpired = includeLongExpired
+    ? 0
+    : await db.user.count({
+        where: {
+          status: 'active',
+          accessExpiresAt: { lte: new Date(now.getTime() - resolveLongExpiredDays() * 24 * 60 * 60 * 1000) },
+        },
+      }).catch(() => 0)
+
+  const { byScenario: _byScenario, ...scenarioCounts } = scenarios ?? {}
 
   return {
     checkedAt: now.toISOString(),
     summary: {
+      scenarios: scenarios ? scenarioCounts : null,
       onlineUsers,
       totalSessions,
       stabilityPct,
       disconnectedAlerts,
       connectingUsers,
       activeUsersLoaded: rows.length,
-      filters: { search, plan, waStatus, activity, minErrors },
+      ocultasPorVencimento: hiddenLongExpired,
+      incluindoVencidasAntigas: includeLongExpired,
+      janelaVencimentoDias: resolveLongExpiredDays(),
+      filters: { search, plan, waStatus, activity, minErrors, cenario: scenarioFilter || 'all' },
     },
     users: rows.sort((a, b) => {
       const priorityA = (a.waSession?.status === 'disconnected' ? 3 : a.waSession?.status === 'connecting' ? 2 : a.recentErrors ? 1 : 0)
@@ -1050,9 +1162,9 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       _count: { _all: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
-      where: { userId, occurredAt: { gte: since7d, lte: now }, type: { in: ['disconnect', 'disconnect_terminal', 'auth_reset', 'reconnect_success', 'connected', 'manual_reconnect_requested', 'manual_pairing_requested'] } },
+      where: { userId, occurredAt: { gte: since7d, lte: now }, type: { in: OFFLINE_EPISODE_EVENT_TYPES } },
       orderBy: { occurredAt: 'asc' },
-      select: { userId: true, type: true, metadata: true, occurredAt: true },
+      select: { userId: true, type: true, code: true, metadata: true, occurredAt: true },
     }).catch(() => []),
     db.waConnectionEvent.findMany({
       where: { userId, occurredAt: { gte: since7d, lte: now } },
@@ -1079,8 +1191,11 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
   const counts7d = countByType(events7d)
   const disconnects24h = Number(counts24h.disconnect || 0) + Number(counts24h.disconnect_terminal || 0)
   const disconnects7d = Number(counts7d.disconnect || 0) + Number(counts7d.disconnect_terminal || 0)
-  const offlineMetrics24h = summarizeOfflineEpisodes(offlineEvents7d.filter(event => new Date(event.occurredAt).getTime() >= since24h.getTime()), { since: since24h, now }).get(userId) || {}
-  const offlineMetrics7d = summarizeOfflineEpisodes(offlineEvents7d, { since: since7d, now }).get(userId) || {}
+  // Os episódios são montados UMA vez sobre a série inteira; as janelas só
+  // recortam o tempo. Filtrar os eventos antes de parear era o defeito 2.
+  const offlineEpisodes = buildOfflineEpisodesByUser(offlineEvents7d, { now }).get(userId) || []
+  const offlineMetrics24h = summarizeEpisodes(offlineEpisodes, { since: since24h, now })
+  const offlineMetrics7d = summarizeEpisodes(offlineEpisodes, { since: since7d, now })
 
   return {
     checkedAt: now.toISOString(),
@@ -1104,7 +1219,14 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       longestAutomaticOfflineMs7d: Number(offlineMetrics7d.longestAutomaticOfflineMs || 0),
       ongoingOfflineMs24h: Number(offlineMetrics24h.ongoingOfflineMs || 0),
       ongoingOfflineMs7d: Number(offlineMetrics7d.ongoingOfflineMs || 0),
+      manualRecoveries24h: Number(offlineMetrics24h.manualRecoveries || 0),
+      manualRecoveries7d: Number(offlineMetrics7d.manualRecoveries || 0),
+      manualOfflineMs24h: Number(offlineMetrics24h.manualOfflineMs || 0),
+      manualOfflineMs7d: Number(offlineMetrics7d.manualOfflineMs || 0),
+      longestManualOfflineMs7d: Number(offlineMetrics7d.longestManualOfflineMs || 0),
+      terminalEpisodes7d: Number(offlineMetrics7d.terminalEpisodes || 0),
     },
+    offlineEpisodes: presentOfflineEpisodes(offlineEpisodes, { limit: 50 }),
     errorsByType: buildErrorsByMessage(logs, { limit: 20 }),
     desyncGroups: summarizeDesyncGroups(desyncEvents, { limit: 10 }),
     recentEvents: recentEvents.map(event => {
@@ -1112,6 +1234,18 @@ async function buildAdminOnlineUserDetail({ userId, adminRole = 'support' }) {
       try { metadata = JSON.parse(event.metadata || '{}') } catch {}
       return { ...event, metadata, occurredAt: safeIsoDate(event.occurredAt) }
     }),
+  }
+}
+
+// listRunningBots pode falhar (supervisor fora do ar); nesse caso devolvemos
+// `null` = "não sei", e a política trata como indeterminado em vez de assumir
+// que não há robô e oferecer um clique que atropelaria uma reconexão em curso.
+async function isRunningSafe(userId) {
+  try {
+    const ids = await listRunningBots()
+    return new Set(ids).has(userId)
+  } catch {
+    return null
   }
 }
 
@@ -1139,6 +1273,16 @@ export async function adminRoutes(app) {
     return req.admin
   })
 
+
+  // Visão macro de qualidade de entrega das ofertas. Existe para a admin ver
+  // ANTES da cliente reclamar: quantas ofertas saíram, de que jeito saíram, e
+  // quais saíram sem imagem TENDO imagem na mensagem de origem.
+  app.get('/qualidade-entrega', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const horasBrutas = Number(req.query?.horas)
+    const horas = Number.isFinite(horasBrutas) ? Math.min(24 * 30, Math.max(1, horasBrutas)) : 24
+    return carregarVisaoEntrega({ db, horas })
+  })
 
   app.get('/pipeline', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
@@ -1197,6 +1341,75 @@ export async function adminRoutes(app) {
       after: { totalSessions: result.summary.totalSessions, disconnectedAlerts: result.summary.disconnectedAlerts },
     })
     return result
+  })
+
+  // Botão "Tentar reconectar" da aba online. Sobe o robô da cliente sem que
+  // ela precise fazer nada — só serve quando a credencial ainda existe.
+  //
+  // Duas travas de propósito:
+  //   1. Só age quando `canAdminRetry` é true. Em 401/auth_reset o robô até
+  //      sobe, mas o que ele gera é um QR que SÓ a cliente pode ler no celular
+  //      dela — deixar o botão "funcionar" ali prometeria o que não entrega.
+  //   2. Grava evento PRÓPRIO (`admin_reconnect_requested`), nunca
+  //      `manual_reconnect_requested`. Se o nosso clique contasse como ação da
+  //      cliente, o card "Cliente teve que agir" — que mede a promessa do
+  //      produto — viraria mentira.
+  app.post('/online/:userId/reconnect', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const userId = String(req.params.userId || '')
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, status: true, plan: true, accessExpiresAt: true },
+    }).catch(() => null)
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+    if (user.status !== 'active') return reply.code(409).send({ error: 'A conta não está ativa' })
+    // Com o acesso vencido o worker sobe, detecta o vencimento e sai
+    // (bot-worker.js, "Acesso expirado — bot bloqueado"): reconectar aqui só
+    // repetiria o ciclo. É caso de renovação, não de reconexão.
+    if (user.accessExpiresAt && new Date(user.accessExpiresAt) <= new Date()) {
+      return reply.code(409).send({ error: 'O acesso desta conta venceu — é caso de renovação, não de reconexão' })
+    }
+
+    const [session, running, lastEvent] = await Promise.all([
+      db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true, lastDisconnectCode: true, lastHeartbeatAt: true } }).catch(() => null),
+      isRunningSafe(userId),
+      db.waConnectionEvent.findFirst({ where: { userId }, orderBy: { occurredAt: 'desc' }, select: { type: true } }).catch(() => null),
+    ])
+
+    const ownership = resolveSessionOwner({
+      status: session?.status ?? 'disconnected',
+      lifecycle: session?.lifecycle ?? null,
+      lastDisconnectCode: session?.lastDisconnectCode ?? null,
+      lastEventType: lastEvent?.type ?? null,
+      workerRunning: running,
+      lastHeartbeatAt: session?.lastHeartbeatAt ?? null,
+      accessExpiresAt: user.accessExpiresAt ?? null,
+    })
+    if (!ownership.canAdminRetry) {
+      return reply.code(409).send({ error: 'Reconectar daqui não resolve este caso', motivo: ownership.reason, owner: ownership.owner })
+    }
+
+    recordWaConnectionEventSafe({
+      userId,
+      type: 'admin_reconnect_requested',
+      lifecycle: session?.lifecycle ?? null,
+      metadata: { source: 'admin', owner: ownership.owner, adminId: req.admin?.id ?? null },
+    })
+
+    try {
+      await startBot(userId)
+    } catch (err) {
+      await writeAdminAuditLog(req, { action: 'admin.online.reconnect_failed', resource: 'waSession', targetUserId: userId, after: { error: String(err?.message ?? err) } })
+      return reply.code(502).send({ error: 'Não consegui subir o robô agora', detalhe: String(err?.message ?? err) })
+    }
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.online.reconnect',
+      resource: 'waSession',
+      targetUserId: userId,
+      after: { owner: ownership.owner, previousStatus: session?.status ?? null },
+    })
+    return { ok: true, owner: ownership.owner, message: 'Robô iniciado — acompanhe o status nos próximos minutos' }
   })
 
   app.get('/online/:userId', async (req, reply) => {
@@ -2790,8 +3003,11 @@ app.get('/sessions', async (req, reply) => {
     const searchLower = String(search).toLowerCase().trim()
     const where = searchLower ? {
       OR: [
-        { email: { contains: searchLower, mode: 'insensitive' } },
-        { name: { contains: searchLower, mode: 'insensitive' } },
+        // SQLite faz comparação ASCII case-insensitive por padrão. O atributo
+        // `mode` não existe no connector SQLite do Prisma e fazia a busca do
+        // painel falhar em runtime assim que o admin digitava qualquer texto.
+        { email: { contains: searchLower } },
+        { name: { contains: searchLower } },
       ]
     } : {}
 
@@ -2806,11 +3022,28 @@ app.get('/sessions', async (req, reply) => {
       db.user.count({ where }),
     ])
 
-    const usersWithCount = await Promise.all(users.map(async (u) => ({
+    // Duas agregações para a página inteira evitam 2 queries por cliente.
+    // Com 100 linhas, a implementação anterior fazia 202 consultas por load.
+    const userIds = users.map((user) => user.id)
+    const [activeCounts, totalCounts] = userIds.length ? await Promise.all([
+      db.offerAutomation.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds }, enabled: true },
+        _count: { _all: true },
+      }),
+      db.offerAutomation.groupBy({
+        by: ['userId'],
+        where: { userId: { in: userIds } },
+        _count: { _all: true },
+      }),
+    ]) : [[], []]
+    const activeByUser = new Map(activeCounts.map((row) => [row.userId, row._count._all]))
+    const totalByUser = new Map(totalCounts.map((row) => [row.userId, row._count._all]))
+    const usersWithCount = users.map((u) => ({
       ...u,
-      activeAutomations: await db.offerAutomation.count({ where: { userId: u.id, enabled: true } }),
-      totalAutomations: await db.offerAutomation.count({ where: { userId: u.id } }),
-    })))
+      activeAutomations: activeByUser.get(u.id) ?? 0,
+      totalAutomations: totalByUser.get(u.id) ?? 0,
+    }))
 
     await writeAdminAuditLog(req, { action: 'admin.automation_quota.list', resource: 'user', after: { total, page: p, limit: l } })
     return { users: usersWithCount, total, page: p, limit: l }
@@ -2824,7 +3057,10 @@ app.get('/sessions', async (req, reply) => {
     const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, email: true, maxAutomations: true } })
     if (!user) return reply.code(404).send({ error: 'Usuário não encontrado' })
 
-    const newLimit = Math.max(1, Math.min(200, Number(maxAutomations)))
+    const newLimit = Number(maxAutomations)
+    if (!Number.isInteger(newLimit) || newLimit < 1 || newLimit > 200) {
+      return reply.code(400).send({ error: 'Limite de automações deve ser um número inteiro entre 1 e 200' })
+    }
     const oldLimit = user.maxAutomations
 
     const updated = await db.user.update({

@@ -9,6 +9,18 @@ import { getSiteUrl } from '@/lib/site-url'
 import { getCompetitorBySlug } from '@/lib/competitors-data'
 import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { ComparisonPageTracker } from '@/components/marketing/ComparisonPageTracker'
+import {
+  CompetitorCard,
+  ComparisonTable,
+  DifferentialChips,
+  IconList,
+  SectionCard,
+  SectionNav,
+  StepList,
+  StickyTrialCta,
+  TRIAL_LABEL,
+  TrialCta,
+} from '@/components/marketing/ComparisonSections'
 
 export const COMPARISON_SOURCE_LINKS = [
   { label: 'Política de Mensagens do WhatsApp Business', href: 'https://whatsappbusiness.com/pt-br/policy/' },
@@ -298,6 +310,108 @@ export const COMPARISON_PAGES = {
       { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles, então dá para rodar as duas em paralelo por uma semana antes de cancelar a atual.' },
     ],
   },
+  /* Página de marca do concorrente Gigi Bot. Criada em 2026-08-26 depois de uma
+   * cliente relatar que migrou porque "o Gigi Bot era grátis e virou pago".
+   * Segue o padrão que já é o motor de impressão do site (busca pelo NOME do
+   * concorrente — 15% de tudo em 2026-08-16), não as linhas congeladas de
+   * cidade/nicho.
+   *
+   * Regra que NÃO se quebra aqui: o fim do plano gratuito é RELATO de cliente,
+   * não fato verificado por nós. A tabela pública que temos (print de
+   * 31/07/2026) ainda listava o plano gratuito, e gigibot.com.br responde 403
+   * para leitura automatizada. Por isso a página nunca AFIRMA que acabou o
+   * grátis — ela responde a pergunta com o que é verificável e manda confirmar
+   * na fonte oficial. Afirmar mudança de preço de concorrente sem prova é risco
+   * jurídico e destrói a citabilidade por IA, que é justamente o objetivo.
+   *
+   * O ângulo honesto e forte é outro, e esse SIM está verificado: o plano
+   * gratuito nunca espelhou grupos. Quem usava de graça e queria espelhar
+   * precisava do Gigi Prime Bot, o plano mais caro — e é contra o preço dele
+   * que o plano de entrada compara.
+   *
+   * Sem cifra neste comentário de propósito: `extrairBlocoPorChave` (FR-031,
+   * test/marketing-limites-que-nao-se-cruzam.test.js) fatia o arquivo até a
+   * PRÓXIMA chave de página, então comentário que precede uma chave é lido
+   * como parte do bloco da página ANTERIOR. Preço citado aqui vira preço sem
+   * fonte atribuído a /alternativas/achadinho-pro e reprova o CI. Preço mora
+   * no corpo da entrada, onde é conferido contra competitors-data.js.
+   */
+  /* Página de marca do concorrente Gigi Bot. Criada em 2026-08-26 depois de uma
+   * cliente relatar que migrou porque "o Gigi Bot era grátis e virou pago".
+   * Segue o padrão que já é o motor de impressão do site (busca pelo NOME do
+   * concorrente — 15% de tudo em 2026-08-16), não as linhas congeladas de
+   * cidade/nicho.
+   *
+   * O relato da cliente foi checado contra a tabela pública (print de
+   * 26/08/2026, em competitors-data.js). O plano gratuito NÃO acabou — e a
+   * página diz isso, porque afirmar mudança de preço de concorrente sem prova
+   * é risco jurídico e destrói a citabilidade por IA, que é o objetivo aqui.
+   *
+   * O que a checagem achou é mais forte do que o relato: autoenvio
+   * WhatsApp/Telegram aparece riscado nos TRÊS primeiros planos. O plano
+   * gratuito converte o link, mas quem posta no grupo é a pessoa. Quem começou
+   * de graça e depois quis o robô publicando sozinho não caiu no primeiro plano
+   * pago — caiu no último. É esse corte que a página usa como eixo, e não
+   * "espelhamento contra conversão de link", que era o eixo da 1ª versão.
+   *
+   * Sem cifra neste comentário de propósito: `extrairBlocoPorChave` (FR-031,
+   * test/marketing-limites-que-nao-se-cruzam.test.js) fatia o arquivo até a
+   * PRÓXIMA chave de página, então comentário que precede uma chave é lido
+   * como parte do bloco da página ANTERIOR. Preço citado aqui vira preço sem
+   * fonte atribuído a /alternativas/achadinho-pro e reprova o CI. Preço mora
+   * no corpo da entrada, onde é conferido contra competitors-data.js.
+   */
+  '/alternativas/gigi-bot': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Gigi Bot',
+    title: 'Alternativa ao Gigi Bot: comparativo honesto',
+    description: 'Comparativo entre Gigi Bot e BOTinho: qual plano envia sozinho para o WhatsApp, quanto custa e o que o plano gratuito faz. Tabela verificada em 26/08/2026.',
+    competitorSlugs: ['gigi-bot'],
+    productPage: {
+      href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
+      label: 'Como funciona o bot para achadinhos no WhatsApp',
+    },
+    tldr: 'O plano gratuito do Gigi Bot continua existindo, mas ele não publica no WhatsApp — nem ele, nem os dois planos seguintes. Envio automático e espelhamento de grupos só no plano mais caro. Se o que você precisa é o robô postando sozinho nos grupos, compare esse plano, não o de entrada.',
+    directAnswer: 'O Gigi Bot tem quatro planos: um gratuito que converte links de 9 lojas com limite de 120 promoções por dia, o Guru Plus a R$ 19,99/mês, o Gigi Promo a R$ 39,99/mês (adiciona Amazon e site próprio) e o Gigi Prime, anunciado a R$ 49,90 no primeiro mês e R$ 67,99 depois. Na tabela pública, "autoenvio WhatsApp/Telegram" aparece riscado nos três primeiros planos: só o Gigi Prime publica sozinho no WhatsApp, com espelhamento de grupos e limite de 20 grupos por fila. A alternativa mais próxima para quem precisa do envio automático é o BOTinho, a R$39/30 dias, com espelhamento e grupos ilimitados já no plano de entrada e 7 dias de teste grátis com o plano Pro. Dados da tabela verificada em 26/08/2026 — preços mudam, confirme na fonte oficial.',
+    rows: [
+      ['O robô publica sozinho no WhatsApp?', 'Gigi Bot: só no Gigi Prime, o plano mais caro. Nos outros três (grátis, R$ 19,99 e R$ 39,99) o autoenvio WhatsApp/Telegram aparece riscado na tabela. BOTinho: sim, desde o plano de entrada (R$39/30 dias).', 'Este é o corte que mais muda a conta, e é o que costuma passar despercebido: o plano gratuito converte link, mas quem posta no grupo é você.'],
+      ['Espelhar grupos', 'Gigi Bot: só no Gigi Prime, com 4 filas de até 20 grupos cada. BOTinho: incluído no plano de entrada, sem limite de grupos.', 'Se você já opera mais de 20 grupos por fila, o limite do plano mais caro pesa na comparação.'],
+      ['Lojas cobertas', 'Gigi Bot: 9 lojas (Shopee, Mercado Livre, Magalu, AliExpress, Kabum, Terabyte, Natura, Shein e Temu) — Amazon só a partir do 3º plano. BOTinho: Shopee, Amazon, Mercado Livre e Magalu, todas no plano de entrada.', 'Aqui o Gigi Bot é claramente mais amplo. Se você divulga AliExpress, Temu ou Shein, isso pesa a favor dele.'],
+      ['Começar sem pagar', 'Gigi Bot: plano gratuito permanente, com limite de 120 promoções por dia, sem Amazon e sem envio automático. BOTinho: 7 dias grátis com o plano Pro completo, sem cartão, depois é pago.', 'São coisas diferentes: um é plano grátis limitado para sempre; o outro é teste completo por tempo determinado.'],
+      ['Onde o robô roda', 'Gigi Bot: todos os planos são marcados como "disponível no Telegram" — é lá que você opera o bot. BOTinho: painel no navegador, conectado ao seu WhatsApp por QR Code.', 'Não é melhor nem pior, é rotina diferente. Vale saber antes de assinar.'],
+      ['Relatório', 'Gigi Bot: relatório de comissões da Shopee, recurso que não vimos nos outros concorrentes mapeados. BOTinho: histórico completo de envios, incluindo o que foi bloqueado por repetição.', 'São relatórios de coisas diferentes: um olha a comissão na loja, o outro olha o que o robô fez com cada oferta.'],
+    ],
+    criteria: ['Se você precisa que o robô publique sozinho ou só quer converter link', 'Quantos grupos recebem oferta hoje (e se cabem em 20 por fila)', 'Quantas lojas você divulga de verdade', 'Se Amazon faz parte da rotina', 'Se você prefere operar por Telegram ou por painel no navegador'],
+    botinhoDifferentials: ['Envio automático para os grupos já no plano de entrada', 'Espelhamento de grupos sem limite de grupos', 'Quatro marketplaces incluídos, Amazon entre eles', 'Teste grátis de 7 dias com o plano Pro completo, sem cartão', 'Conversão de link de cupom, não só de produto', 'Canais e Comunidades do WhatsApp', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
+    bestFit: [
+      'Escolha o Gigi Bot se você divulga AliExpress, Temu, Shein, Kabum, Terabyte ou Natura — nenhum concorrente que mapeamos cobre tantas lojas.',
+      'Escolha o Gigi Bot se o seu uso é converter link e postar você mesma, dentro do limite de 120 promoções por dia: aí o plano gratuito resolve e não custa nada.',
+      'Escolha o Gigi Bot se você já opera pelo Telegram e prefere manter a rotina lá.',
+      'Escolha o BOTinho se o que você precisa é o robô publicando sozinho nos grupos: lá isso está no plano mais caro, aqui está no de entrada.',
+      'Escolha o BOTinho se opera mais grupos do que o limite de 20 por fila, ou se quer testar a operação completa antes de pagar.',
+    ],
+    notIdealFit: [
+      'O Gigi Bot não é ideal para quem quer o robô postando sozinho gastando pouco — autoenvio e espelhamento só aparecem no plano mais caro.',
+      'O Gigi Bot não é ideal para quem depende da Amazon desde o começo: ela entra a partir do 3º plano pago.',
+      'O BOTinho não é ideal para quem divulga AliExpress, Temu ou Shein — essas lojas não estão entre as quatro que ele converte.',
+      'O BOTinho não é ideal para quem quer um plano gratuito permanente: o que existe aqui é teste de 7 dias.',
+    ],
+    migrationPath: [
+      'Responda primeiro uma pergunta só: você quer converter o link e postar você mesma, ou quer o robô postando sozinho? É isso que decide o plano em cada ferramenta, mais do que qualquer outro item.',
+      'Conte quantos grupos recebem oferta por semana. Passando de 20 por fila, o limite do Gigi Prime entra na conta.',
+      'Liste as lojas que você realmente divulga. Se AliExpress, Temu ou Shein estiverem na lista, a cobertura do Gigi Bot é uma vantagem real e vale considerá-la.',
+      'Rode uma semana em paralelo antes de cancelar a ferramenta atual, comparando qualidade do link convertido e do preview no celular.',
+    ],
+    faq: [
+      { q: 'O Gigi Bot deixou de ser grátis?', a: 'Não. Na tabela pública verificada em 26/08/2026 o plano gratuito Guru das Promoções Bot continua lá, com conversão de 9 lojas e limite de 120 promoções por dia. O que confunde é outra coisa: o plano gratuito não publica nada sozinho no WhatsApp. Ele converte o link e você posta. Quem começou de graça e depois quis o robô postando sozinho descobriu que isso é pago — e não no primeiro plano pago, no último.' },
+      { q: 'O plano gratuito do Gigi Bot envia para os grupos?', a: 'Não. Na tabela verificada, "autoenvio WhatsApp/Telegram" aparece riscado no plano gratuito, no Guru Plus (R$ 19,99/mês) e no Gigi Promo (R$ 39,99/mês). Só o Gigi Prime Bot envia sozinho, e é o plano mais caro.' },
+      { q: 'Qual plano do Gigi Bot espelha grupos?', a: 'Só o Gigi Prime Bot, anunciado a R$ 49,90 no primeiro mês e R$ 67,99 depois. Ele traz 4 filas de envios de até 20 grupos cada, espelhamento de grupos, agendamento por horário e relatório de comissões da Shopee.' },
+      { q: 'Quanto custa o Gigi Bot?', a: 'Conforme a tabela pública verificada em 26/08/2026: Guru das Promoções Bot grátis, Guru Plus Bot R$ 19,99/mês, Gigi Promo Bot R$ 39,99/mês e Gigi Prime Bot a R$ 49,90 no primeiro mês, indicado como promocional, sobre um valor cheio de R$ 67,99/mês. Confirme na página oficial antes de assinar.' },
+      { q: 'Qual a melhor alternativa ao Gigi Bot?', a: 'Depende do que travou. Se o problema foi precisar do plano mais caro só para o robô publicar nos grupos, o BOTinho faz isso no plano de entrada (R$39/30 dias), com espelhamento e sem limite de grupos. Se o que você valoriza é a variedade de lojas, o próprio Gigi Bot continua sendo o mais amplo entre os concorrentes que mapeamos.' },
+      { q: 'Em que o Gigi Bot é melhor que o BOTinho?', a: 'Em dois pontos concretos. Primeiro, cobertura de lojas: são 9, incluindo AliExpress, Temu, Shein, Kabum, Terabyte e Natura, contra as quatro do BOTinho. Segundo, ele tem um plano gratuito permanente para converter link, enquanto aqui o gratuito é um teste de 7 dias.' },
+      { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles, então dá para rodar as duas em paralelo por uma semana antes de cancelar a atual.' },
+    ],
+  },
   '/botinho-vs-planilha-manual': {
     format: 'vs',
     eyebrow: 'Comparativo · Operação manual',
@@ -428,12 +542,36 @@ function getRelatedComparisonPages(slug, limit = 3) {
     .slice(0, limit)
 }
 
+/* Colunas da tabela. Rótulo que diz o que a coluna RESPONDE, não o jargão
+ * ("Alternativa" / "Leitura responsável" não diziam nada a quem chega do
+ * Google). */
+const COMPARISON_TABLE_HEADERS = ['Critério', 'O que cada opção oferece', 'Como ler isso na prática']
+
+const SECTION_IDS = {
+  comparativo: 'comparativo',
+  decisao: 'decisao',
+  alternativas: 'alternativas',
+  migracao: 'migracao',
+  perguntas: 'perguntas',
+}
+
 export function ComparisonPage({ slug }) {
   const page = COMPARISON_PAGES[slug]
   const relatedPages = getRelatedComparisonPages(slug, 3)
   const siteUrl = getSiteUrl()
   const dates = getEditorialDates(slug)
   const schemas = buildArticleJsonLd({ title: page.title, description: page.description, slug, siteUrl, faq: page.faq, type: 'Article' })
+  const hasDifferentials = Array.isArray(page.botinhoDifferentials) && page.botinhoDifferentials.length > 0
+  const hasMigration = Array.isArray(page.migrationPath) && page.migrationPath.length > 0
+  const competitorSlugs = page.competitorSlugs || []
+
+  const navItems = [
+    { href: `#${SECTION_IDS.comparativo}`, label: 'Comparativo' },
+    { href: `#${SECTION_IDS.decisao}`, label: 'Como decidir' },
+    ...(competitorSlugs.length > 0 ? [{ href: `#${SECTION_IDS.alternativas}`, label: 'Alternativas avaliadas' }] : []),
+    ...(hasMigration ? [{ href: `#${SECTION_IDS.migracao}`, label: 'Como migrar' }] : []),
+    { href: `#${SECTION_IDS.perguntas}`, label: 'Perguntas' },
+  ]
 
   const headline = (
     <>
@@ -443,250 +581,166 @@ export function ComparisonPage({ slug }) {
   )
 
   return (
-    <div className="landing-root">
+    <div className="landing-root comparison-has-sticky">
       <ComparisonPageTracker slug={slug} format={page.format} />
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
       <Hero
         eyebrowLabel={page.eyebrow}
-        primaryCtaLabel="Entrar na Lista VIP"
+        primaryCtaLabel={TRIAL_LABEL}
         headlineOverride={headline}
         subOverride={page.description}
         heroStyle={{ background: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-2) 18%, white), transparent)', borderRadius: 24, paddingInline: 20 }}
       />
 
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
+      {/* Uma seção só, com um ritmo de espaçamento só. Antes eram 12 <section>
+        * de 72px de respiro cada, o que fazia a página parecer não ter fim. */}
+      <section className="comparison-section">
+        <div className="wrap comparison-stack">
+          {/* 1. Resposta curta + porta de entrada para o teste. Quem decide na
+            * primeira dobra não pode precisar rolar até o rodapé para clicar. */}
+          <SectionCard tone="accent" eyebrow="Resumo rápido" title="A resposta curta">
+            <p style={{ color: 'var(--ink)', lineHeight: 1.7, fontSize: 17, maxWidth: '70ch' }}>{page.tldr || page.directAnswer}</p>
+            <TrialCta slug={slug} content="tldr-register" />
+            <SectionNav items={navItems} />
+          </SectionCard>
+
+          {/* 2. Resposta completa, com autoria e datas. */}
           <IntroCard
             eyebrow={page.eyebrow}
-            title={page.title}
+            title="Resposta direta"
             body={page.directAnswer}
             pills={[`Por ${EDITORIAL_AUTHOR}`, `Publicado em ${formatDatePtBr(dates.publishedAt)}`, `Atualizado em ${formatDatePtBr(dates.updatedAt)}`]}
             accent
           />
-        </div>
-      </section>
 
-      {Array.isArray(page.botinhoDifferentials) && page.botinhoDifferentials.length > 0 && (
-        <section>
-          <div className="wrap" style={{ marginTop: 28 }}>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-              <span className="pill"><span className="dot" />Diferenciais BOTinho</span>
-              <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Veja como nos comparamos com Divulgador Inteligente, Divulga Ninja, Gigi Prime Bot, Busqy e DivulgaLinks</h2>
-              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.8 }}>
-                {page.botinhoDifferentials.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </div>
-          </div>
-        </section>
-      )}
+          {/* 3. O comparativo em si — antes ficava depois de "Veja também". */}
+          <SectionCard
+            id={SECTION_IDS.comparativo}
+            eyebrow="Comparativo"
+            title="Comparativo lado a lado"
+            lead="Cada linha é um critério de decisão, o que cada opção entrega nele e como ler esse dado sem se enganar."
+          >
+            <ComparisonTable rows={page.rows} headers={COMPARISON_TABLE_HEADERS} />
+            <TrialCta slug={slug} content="tabela-register" variant="inline" label="Testar o BOTinho 7 dias grátis" />
+          </SectionCard>
 
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />Veja também</span>
-            <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Outros comparativos relacionados</h2>
-            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
-              {page.productPage ? (
-                <li>
-                  <Link href={page.productPage.href} data-comparison-cta="product-page" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>
-                    {page.productPage.label}
-                  </Link>
-                </li>
-              ) : null}
-              <li><Link href="/comparativos" data-comparison-cta="related-hub" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>Hub de comparativos do BOTinho</Link></li>
-              {relatedPages.map((related) => (
-                <li key={related.href}>
-                  <Link href={related.href} data-comparison-cta="related-page" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }}>
-                    {related.title}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'color-mix(in oklab, var(--accent) 14%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />TL;DR</span>
-            <p style={{ margin: '12px 0 0', color: 'var(--ink)', lineHeight: 1.7 }}>{page.tldr || page.directAnswer}</p>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />Comparativo</span>
-            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 18px' }}>Comparativo equilibrado</h2>
-            <div style={{ overflowX: 'auto', borderRadius: 16, border: '1px solid var(--line)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, textAlign: 'left', color: 'var(--ink)' }}>
-                <thead style={{ background: 'var(--bg-soft)' }}>
-                  <tr>
-                    <th style={{ padding: 16, fontWeight: 700, borderBottom: '1px solid var(--line)' }}>Critério</th>
-                    <th style={{ padding: 16, fontWeight: 700, borderBottom: '1px solid var(--line)' }}>Alternativa</th>
-                    <th style={{ padding: 16, fontWeight: 700, borderBottom: '1px solid var(--line)' }}>Leitura responsável</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {page.rows.map(([criterion, alternative, reading], i, arr) => (
-                    <tr key={criterion} style={{ borderBottom: i === arr.length - 1 ? 'none' : '1px solid var(--line)' }}>
-                      <td style={{ padding: 16, fontWeight: 600 }}>{criterion}</td>
-                      <td style={{ padding: 16, lineHeight: 1.6, color: 'var(--ink-soft)' }}>{alternative}</td>
-                      <td style={{ padding: 16, lineHeight: 1.6, color: 'var(--ink-soft)' }}>{reading}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-              <span className="pill"><span className="dot" />Decisão</span>
-              <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>Critérios de decisão</h2>
-              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
-                {page.criteria.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </div>
-            <div style={{ background: 'color-mix(in oklab, var(--accent-2) 24%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-              <span className="pill"><span className="dot" />Limites</span>
-              <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>Limites importantes</h2>
-              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
-                {PRODUCT_LIMITATIONS.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </div>
+          {/* 4. Decisão: quatro recortes lado a lado, com ícone em vez de bullet. */}
+          <div id={SECTION_IDS.decisao} className="comparison-decision-grid">
+            <SectionCard eyebrow="Decisão" title="Critérios de decisão">
+              <IconList items={page.criteria} />
+            </SectionCard>
+            <SectionCard tone="soft" eyebrow="Limites" title="Limites importantes">
+              <IconList items={PRODUCT_LIMITATIONS} tone="no" />
+            </SectionCard>
             {Array.isArray(page.bestFit) && page.bestFit.length > 0 && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-                <span className="pill"><span className="dot" />Melhor encaixe</span>
-                <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>Quem deve usar o quê</h2>
-                <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
-                  {page.bestFit.map((item) => <li key={item}>{item}</li>)}
-                </ul>
-              </div>
+              <SectionCard eyebrow="Melhor encaixe" title="Quem deve usar o quê">
+                <IconList items={page.bestFit} />
+              </SectionCard>
             )}
             {Array.isArray(page.notIdealFit) && page.notIdealFit.length > 0 && (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-                <span className="pill"><span className="dot" />Quando não usar</span>
-                <h2 style={{ fontSize: 22, fontWeight: 600, margin: '14px 0 12px', letterSpacing: '-0.01em' }}>Cenários não ideais</h2>
-                <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7 }}>
-                  {page.notIdealFit.map((item) => <li key={item}>{item}</li>)}
-                </ul>
-              </div>
+              <SectionCard eyebrow="Quando não usar" title="Cenários não ideais">
+                <IconList items={page.notIdealFit} tone="no" />
+              </SectionCard>
             )}
           </div>
-        </div>
-      </section>
 
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />Perfis de alternativa</span>
-            <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Resumo centralizado dos caminhos avaliados</h2>
-            <div style={{ display: 'grid', gap: 12 }}>
-              {(page.competitorSlugs || []).map((slug) => {
-                const competitor = getCompetitorBySlug(slug)
-                return (
-                  <article key={slug} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: 16, background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
-                    <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>{competitor.name}</h3>
-                    <p style={{ margin: 0, color: 'var(--ink-soft)', lineHeight: 1.6 }}>{competitor.positioning}</p>
-                    <p style={{ margin: '8px 0 0', color: 'var(--ink)', lineHeight: 1.6 }}><strong>Melhor para:</strong> {competitor.bestFor}</p>
-                    <p style={{ margin: '8px 0 0', color: 'var(--ink)', lineHeight: 1.6 }}><strong>Não ideal para:</strong> {competitor.notIdealFor}</p>
-                    <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Nota de migração:</strong> {competitor.migrationNotes}</p>
-                    <p style={{ margin: '8px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Fonte:</strong> {competitor.source}</p>
-                    <p style={{ margin: '4px 0 0', color: 'var(--ink-soft)', lineHeight: 1.6 }}><strong>Verificado em:</strong> {competitor.verifiedAt}</p>
-                  </article>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
+          {/* 5. Diferenciais como chips. O título antigo era fixo e nomeava
+            * concorrentes que não têm nada a ver com a página aberta. */}
+          {hasDifferentials && (
+            <SectionCard
+              tone="accent"
+              eyebrow={`Diferenciais ${BRAND_NAME}`}
+              title={`O que o ${BRAND_NAME} traz nessa comparação`}
+              lead={`Pontos que o ${BRAND_NAME} cobre. Os pontos em que a alternativa é melhor estão logo acima, na tabela — comparativo torto não ajuda ninguém a decidir.`}
+            >
+              <DifferentialChips items={page.botinhoDifferentials} />
+              <TrialCta slug={slug} content="diferenciais-register" variant="inline" />
+            </SectionCard>
+          )}
 
-      {Array.isArray(page.migrationPath) && page.migrationPath.length > 0 && (
-        <section>
-          <div className="wrap" style={{ marginTop: 28 }}>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-              <span className="pill"><span className="dot" />Migração</span>
-              <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Caminho de migração recomendado</h2>
-              <ol style={{ margin: 0, paddingLeft: 20, color: 'var(--ink)', lineHeight: 1.8 }}>
-                {page.migrationPath.map((step) => <li key={step}>{step}</li>)}
-              </ol>
-            </div>
-          </div>
-        </section>
-      )}
+          {/* 6. Perfil de cada alternativa avaliada. */}
+          {competitorSlugs.length > 0 && (
+            <SectionCard
+              id={SECTION_IDS.alternativas}
+              eyebrow="Alternativas avaliadas"
+              title="Perfil de cada alternativa"
+              lead="Preços e limites conforme as páginas públicas de cada ferramenta na data da verificação. Confirme no site oficial antes de decidir — eles mudam."
+            >
+              <div className="comparison-competitor-grid">
+                {competitorSlugs.map((competitorSlug) => (
+                  <CompetitorCard key={competitorSlug} competitor={getCompetitorBySlug(competitorSlug)} />
+                ))}
+              </div>
+            </SectionCard>
+          )}
 
-      {Array.isArray(page.migrationPath) && page.migrationPath.length > 0 && (
-        <section>
-          <div className="wrap" style={{ marginTop: 28 }}>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-              <span className="pill"><span className="dot" />Migração</span>
-              <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Caminho de migração recomendado</h2>
-              <ol style={{ margin: 0, paddingLeft: 20, color: 'var(--ink)', lineHeight: 1.8 }}>
-                {page.migrationPath.map((step) => <li key={step}>{step}</li>)}
-              </ol>
-            </div>
-          </div>
-        </section>
-      )}
+          {/* 7. Migração em passos numerados (antes renderizada duas vezes). */}
+          {hasMigration && (
+            <SectionCard
+              id={SECTION_IDS.migracao}
+              eyebrow="Migração"
+              title="Como trocar sem parar a operação"
+              lead="Seus grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles — por isso dá para rodar em paralelo antes de cancelar a atual."
+            >
+              <StepList steps={page.migrationPath} />
+              <TrialCta slug={slug} content="migracao-register" variant="inline" label="Começar o teste de 7 dias" />
+            </SectionCard>
+          )}
 
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />Fontes</span>
-            <h2 style={{ fontSize: 'clamp(22px, 2.4vw, 30px)', lineHeight: 1.15, margin: '14px 0 12px' }}>Fontes e políticas para revisar antes de operar</h2>
-            <p style={{ color: 'var(--ink-soft)', lineHeight: 1.65 }}>Use as políticas oficiais como referência operacional. Elas podem mudar e devem ser revisadas pela pessoa responsável antes de ampliar volume.</p>
-            <ul style={{ margin: '14px 0 0', paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.8 }}>
-              {COMPARISON_SOURCE_LINKS.map((source) => (
-                <li key={source.href}>
-                  <a href={source.href} data-comparison-cta="source-link" style={{ color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 }} rel="noreferrer">{source.label}</a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />FAQ</span>
-            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 36px)', lineHeight: 1.12, margin: '14px 0 16px' }}>Perguntas frequentes</h2>
-            <div style={{ display: 'grid', gap: 12 }}>
+          {/* 8. Perguntas. */}
+          <SectionCard id={SECTION_IDS.perguntas} eyebrow="Perguntas" title="Perguntas frequentes">
+            <div className="comparison-faq">
               {page.faq.map((item) => (
-                <details key={item.q} style={{ border: '1px solid var(--line)', borderRadius: 16, padding: '14px 16px', background: 'color-mix(in oklab, var(--surface) 92%, white)' }}>
-                  <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--ink)' }}>{item.q}</summary>
-                  <p style={{ marginTop: 10, color: 'var(--ink-soft)', lineHeight: 1.65 }}>{item.a}</p>
+                <details key={item.q}>
+                  <summary>{item.q}</summary>
+                  <p>{item.a}</p>
                 </details>
               ))}
             </div>
-          </div>
-        </div>
-      </section>
+          </SectionCard>
 
-      <section>
-        <div className="wrap" style={{ marginTop: 28 }}>
-          <div style={{ background: 'color-mix(in oklab, var(--accent) 22%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
-            <span className="pill"><span className="dot" />{BRAND_NAME}</span>
-            <h2 style={{ fontSize: 'clamp(24px, 2.6vw, 34px)', lineHeight: 1.12, margin: '14px 0 12px' }}>Onde o {BRAND_NAME} se encaixa?</h2>
-            <p style={{ color: 'var(--ink)', lineHeight: 1.7 }}>{PRODUCT_DEFINITION}</p>
-            <Link href="/login?mode=register&utm_source=comparativo&utm_medium=organic&utm_campaign=ai-seo-p2" data-comparison-cta="bottom-register" className="btn btn-accent" style={{ marginTop: 20 }}>
-              Entrar na Lista VIP
-            </Link>
+          {/* 9. Fechamento com a chamada principal. */}
+          <SectionCard tone="accent" eyebrow={BRAND_NAME} title={`Onde o ${BRAND_NAME} se encaixa?`}>
+            <p style={{ color: 'var(--ink)', lineHeight: 1.7, maxWidth: '70ch' }}>{PRODUCT_DEFINITION}</p>
+            <TrialCta slug={slug} content="bottom-register" label={`Testar o ${BRAND_NAME} 7 dias grátis`} />
+          </SectionCard>
+
+          {/* 10. Links de apoio, no fim — onde link de saída atrapalha menos. */}
+          <div className="comparison-decision-grid">
+            <SectionCard eyebrow="Veja também" title="Outros comparativos">
+              <ul className="comparison-links">
+                {page.productPage ? (
+                  <li>
+                    <Link href={page.productPage.href} data-comparison-cta="product-page">{page.productPage.label}</Link>
+                  </li>
+                ) : null}
+                <li><Link href="/comparativos" data-comparison-cta="related-hub">Hub de comparativos do {BRAND_NAME}</Link></li>
+                {relatedPages.map((related) => (
+                  <li key={related.href}>
+                    <Link href={related.href} data-comparison-cta="related-page">{related.title}</Link>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+
+            <SectionCard eyebrow="Fontes" title="Políticas para revisar antes de operar" lead="As políticas oficiais mudam e devem ser revisadas pela pessoa responsável antes de ampliar volume.">
+              <ul className="comparison-links">
+                {COMPARISON_SOURCE_LINKS.map((source) => (
+                  <li key={source.href}>
+                    <a href={source.href} data-comparison-cta="source-link" rel="noreferrer">{source.label}</a>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
           </div>
         </div>
       </section>
 
       <FinalCTA />
       <Footer />
+      <StickyTrialCta slug={slug} />
     </div>
   )
 }

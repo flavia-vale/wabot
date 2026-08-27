@@ -1,4 +1,5 @@
 import { planLabel } from './customerHistory.js'
+import { buildLongExpiredWhere, wantsLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 
 const ORIGIN_SOURCE_LABELS = {
   direct: 'Direto',
@@ -85,6 +86,11 @@ export function createAdminService({
     const { status, plan, risk, search } = query
     const now = new Date()
     const twoDaysAgo = addDays(now, -2)
+    // Vencidas há muito tempo saem da visão por padrão (ver
+    // src/core/adminVisibility.js). É apresentação, não dado: "Ver mais"
+    // (`incluirVencidos=1`) traz todas de volta.
+    const includeLongExpired = wantsLongExpired(query.incluirVencidos)
+    const longExpiredWhere = buildLongExpiredWhere({ now, includeLongExpired })
     const where = {
       ...(status ? { status } : {}),
       ...(plan ? { plan } : {}),
@@ -96,10 +102,21 @@ export function createAdminService({
       ...(risk === 'missing_monitor' ? { groups: { none: { role: 'monitor' } } } : {}),
       ...(risk === 'missing_post' ? { groups: { none: { role: 'post' } } } : {}),
       ...(risk === 'wa_disconnected' ? { OR: [{ waSession: { is: null } }, { waSession: { is: { status: { not: 'connected' } } } }] } : {}),
+      ...(longExpiredWhere ? { AND: [longExpiredWhere] } : {}),
     }
 
     const since24h = addDays(now, -1)
-    const [total, users] = await Promise.all([
+    // Tamanho do que ficou escondido — o botão "Ver mais" precisa dizer quantas
+    // são, senão parece que os números do painel encolheram sozinhos.
+    const contarOcultas = () => (includeLongExpired ? Promise.resolve(0) : db.user.count({
+      where: {
+        ...(status ? { status } : {}),
+        ...(plan ? { plan } : {}),
+        accessExpiresAt: { lte: new Date(now.getTime() - resolveLongExpiredDays() * 24 * 60 * 60 * 1000) },
+      },
+    }).catch(() => 0))
+    const [ocultasPorVencimento, total, users] = await Promise.all([
+      contarOcultas(),
       db.user.count({ where }),
       db.user.findMany({
         where,
@@ -167,6 +184,9 @@ export function createAdminService({
       total,
       page,
       limit,
+      ocultasPorVencimento,
+      incluindoVencidasAntigas: includeLongExpired,
+      janelaVencimentoDias: resolveLongExpiredDays(),
       users: users.map(user => {
         const groupCounts = getGroupCounts(user.groups)
         const successCount = successMap.get(user.id) ?? 0
@@ -365,6 +385,12 @@ export function createAdminService({
   // `listUsers` (que é a gestão operacional por RISCO), aqui a chave é o
   // HISTÓRICO: cadastro, situação, plano, vencimento, uso. Ordenável por
   // coluna e varrível de ponta a ponta.
+  //
+  // De propósito NÃO aplica `buildLongExpiredWhere`: esconder vencida antiga
+  // existe para limpar a FILA DE TRABALHO (`listUsers`), e esta tela é o
+  // arquivo de clientes — quem procura o histórico de alguém que cancelou há
+  // seis meses precisa achá-la aqui. Para isolar os vencidos, o filtro
+  // `situacao=vencido`.
   //
   // Todo agregado por cliente sai em LOTE (groupBy/findMany com `in`) — nunca
   // uma consulta por linha. Ver a mesma disciplina em `listUsers` acima.

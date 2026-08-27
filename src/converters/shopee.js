@@ -4,6 +4,13 @@ import { shouldConvertCouponLinks } from './couponPolicy.js'
 
 const ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql'
 
+// SubID fixo enviado em TODO link de afiliado que geramos. Não é configuração
+// de ambiente nem campo por cliente de propósito: é requisito de produto (todo
+// clique tem que cair no relatório da Shopee sob esta origem), e uma env
+// criaria o risco de staging/prod divergirem ou de o tracking sumir por
+// configuração ausente. Vale para cliente existente e futura sem migration.
+export const SHOPEE_SUB_ID = 'espelhagrupos'
+
 function buildAuth(appId, secretKey, payload) {
   const timestamp = Math.floor(Date.now() / 1000)
   const sig = crypto
@@ -85,7 +92,7 @@ async function generateAffiliateShortLink(originUrl, { appId, secretKey }, { att
   const safeUrl = String(originUrl).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   const body = {
     query: `mutation {
-      generateShortLink(input: { originUrl: "${safeUrl}", subIds: [""] }) {
+      generateShortLink(input: { originUrl: "${safeUrl}", subIds: ["${SHOPEE_SUB_ID}"] }) {
         shortLink
       }
     }`,
@@ -318,13 +325,68 @@ async function readBodyLimited(res) {
 // Estratégia: seguir os redirects manualmente carregando cookies da cadeia e
 // parar no PRIMEIRO hop cuja URL já contenha (shopId, itemId) — inclusive
 // URL-encoded em query param. Sem redirect HTTP, extrai o alvo do corpo.
+// Cache da resolução (RCA 2026-08-26). Motivo medido em produção: a MESMA URL
+// curta é resolvida três vezes por mensagem — na conversão, na busca de
+// título/preço e na busca da foto —, e cada resolução é uma cadeia de vários
+// redirects, cada hop com seu próprio timeout. Quando um hop estoura, a função
+// devolve a URL curta como veio (sem ids) e QUEM CHAMOU não tem como saber:
+// para a foto isso vira `null` silencioso, e a oferta sai com a miniatura de
+// 500 bytes da mensagem de origem em vez da foto da loja.
+//
+// Medição: 780 de 2000 buscas de foto de Shopee no log voltaram sem URL, e os
+// nulos estavam concentrados no worker mais movimentado — o mesmo link que
+// resolve de primeira num teste isolado falha sob carga. Short link da Shopee é
+// imutável, então cachear a resolução BEM-SUCEDIDA é seguro e elimina duas das
+// três idas à rede.
+const SHORT_LINK_CACHE_TTL_MS = Math.max(0, Number(process.env.SHOPEE_SHORTLINK_CACHE_TTL_MS || 6 * 60 * 60 * 1000))
+const SHORT_LINK_CACHE_MAX = 2_000
+const shortLinkCache = new Map()
+
+function getCachedShortLink(url) {
+  if (!SHORT_LINK_CACHE_TTL_MS) return null
+  const hit = shortLinkCache.get(url)
+  if (!hit) return null
+  if (hit.expiresAt < Date.now()) {
+    shortLinkCache.delete(url)
+    return null
+  }
+  return hit.value
+}
+
+function setCachedShortLink(url, value) {
+  if (!url || !SHORT_LINK_CACHE_TTL_MS) return
+  // Só cacheia resolução ÚTIL: guardar um fracasso transformaria uma falha
+  // pontual de rede em "esse link não tem produto" pelas próximas horas.
+  if (!extractShopeeIds(value)) return
+  if (shortLinkCache.size >= SHORT_LINK_CACHE_MAX) {
+    const primeira = shortLinkCache.keys().next().value
+    if (primeira !== undefined) shortLinkCache.delete(primeira)
+  }
+  shortLinkCache.set(url, { value, expiresAt: Date.now() + SHORT_LINK_CACHE_TTL_MS })
+}
+
+export function _resetShopeeShortLinkCache() {
+  shortLinkCache.clear()
+}
+
 export async function resolveShopeeShortLink(url, { timeoutMs = 8000, fetchImpl = globalThis.fetch } = {}) {
   let current = String(url || '')
   if (!isShopeeShortLink(current)) return current
 
+  // `fetchImpl` injetado = cenário controlado (teste/stub): o cache guardaria o
+  // resultado de um stub e vazaria para a chamada seguinte. Só cacheia o
+  // caminho real.
+  const podeCachear = fetchImpl === globalThis.fetch
+  const cached = podeCachear ? getCachedShortLink(current) : null
+  if (cached) return cached
+  const original = podeCachear ? current : null
+
   const jar = new Map()
   for (let hop = 0; hop < SHORT_LINK_MAX_HOPS; hop++) {
-    if (extractShopeeIds(current)) return current
+    if (extractShopeeIds(current)) {
+      setCachedShortLink(original, current)
+      return current
+    }
 
     let res
     try {
@@ -364,8 +426,10 @@ export async function resolveShopeeShortLink(url, { timeoutMs = 8000, fetchImpl 
       current = target
       continue
     }
+    setCachedShortLink(original, current)
     return current
   }
+  setCachedShortLink(original, current)
   return current
 }
 
@@ -382,11 +446,30 @@ function parseIds(url) {
 
 // Consulta a API de afiliado (GraphQL) para obter a imagem oficial do produto.
 // Mais confiável que scraping HTML, que a Shopee bloqueia para UAs comuns.
-export async function fetchShopeeImage(url, creds) {
-  if (!creds?.appId || !creds?.secretKey) return null
+// A Shopee tem UMA fonte de foto que funciona: esta API de afiliado. O shell
+// SPA da página não traz og:image e a API v4 pública responde com erro
+// (documentado no AGENTS.md, seção "Image scrapers"). Ou seja: quando isto aqui
+// devolve `null`, a oferta de Shopee fica sem foto de loja — e até 2026-08-26
+// esse caminho era MUDO (dois `catch` vazios), então não dava para saber se foi
+// chave recusada, item fora do catálogo de afiliado ou short link não resolvido.
+// O Mercado Livre não sofre disso porque tem vitrine + API + página como fontes.
+//
+// `onDiagnostic({ stage, detail })` é opcional e best-effort: quem chama decide
+// se loga/emite sinal. Nunca altera o retorno.
+export async function fetchShopeeImage(url, creds, { onDiagnostic } = {}) {
+  const report = (stage, detail) => {
+    try { onDiagnostic?.({ stage, detail }) } catch {}
+  }
+  if (!creds?.appId || !creds?.secretKey) {
+    report('shopee_sem_credencial')
+    return null
+  }
   const canonical = await resolveCanonical(url)
   const ids = parseIds(canonical)
-  if (!ids) return null
+  if (!ids) {
+    report('shopee_sem_ids', canonical)
+    return null
+  }
 
   const body = {
     query: `{
@@ -403,9 +486,23 @@ export async function fetchShopeeImage(url, creds) {
       headers: { Authorization: header, 'Content-Type': 'application/json' },
       timeout: 6000,
     })
+    // A API de afiliado responde 200 MESMO EM ERRO, sinalizando via `errors`
+    // (mesma armadilha da sondagem de credencial — ver checkShopeeSession).
+    // Sem ler o corpo, chave recusada (10020) parecia "produto sem foto".
+    const apiError = Array.isArray(data?.errors) ? data.errors[0] : null
+    if (apiError) {
+      report('shopee_api_erro', apiError?.message || apiError?.code || 'erro sem detalhe')
+      return null
+    }
     const node = data?.data?.productOfferV2?.nodes?.[0]
-    return node?.imageUrl || null
-  } catch {
+    if (!node?.imageUrl) {
+      // Catálogo de afiliado não tem esse item: acontece e não é defeito nosso.
+      report('shopee_item_fora_do_catalogo', `${ids.shopId}/${ids.itemId}`)
+      return null
+    }
+    return node.imageUrl
+  } catch (err) {
+    report('shopee_api_falhou', err?.message)
     return null
   }
 }

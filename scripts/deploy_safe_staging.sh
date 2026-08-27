@@ -394,6 +394,7 @@ if [[ "$SYNC_GIT" == "1" ]]; then
       exit 1
     fi
   fi
+  REVISION_BEFORE_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
   if [[ "$FORCE_RESET_ON_SYNC" == "1" ]]; then
     # Staging é um espelho descartável: sincroniza de forma idempotente com
     # origin/$BRANCH. Imune a working tree suja e a arquivos untracked que
@@ -412,6 +413,27 @@ if [[ "$SYNC_GIT" == "1" ]]; then
 else
   echo "[2/9] Sync git pulado (SYNC_GIT=0). Usando checkout atual."
 fi
+
+REVISION_AFTER_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
+
+# Mesma decisão do deploy de produção (ver scripts/deploy_safe_dashboard.sh):
+# o supervisor é reiniciado quando — e só quando — os commits deste deploy
+# tocaram código que os WORKERS executam. Sem isso, o fix chega ao disco e fica
+# dormente na memória dos workers em execução (RCA 2026-08).
+WORKER_CODE_PATHS_RE='^(src/bot-worker\.js|src/supervisor/|src/core/|src/converters/|src/monitored[A-Za-z]*\.js|src/messageProcessor\.js|src/manager\.js|src/db\.js|src/logger\.js|src/analytics\.js|src/errorTaxonomy\.js|src/observability/|src/billing/|prisma/schema\.prisma|package-lock\.json)'
+
+RESTART_SUPERVISOR="${RESTART_SUPERVISOR:-auto}"
+if [[ "$RESTART_SUPERVISOR" == "auto" ]]; then
+  if [[ -n "${REVISION_BEFORE_SYNC:-}" && -n "${REVISION_AFTER_SYNC:-}" && "$REVISION_BEFORE_SYNC" != "$REVISION_AFTER_SYNC" ]] \
+     && git diff --name-only "$REVISION_BEFORE_SYNC" "$REVISION_AFTER_SYNC" 2>/dev/null | grep -qE "$WORKER_CODE_PATHS_RE"; then
+    RESTART_SUPERVISOR=1
+    echo "  Código dos bots mudou neste deploy — supervisor será reiniciado ao final."
+  else
+    RESTART_SUPERVISOR=0
+    echo "  Nenhuma mudança em código dos bots — supervisor preservado."
+  fi
+fi
+export RESTART_SUPERVISOR
 
 echo "[3/9] Install root dependencies sem alterar lockfile"
 run_npm_ci_with_recovery "root"
@@ -602,18 +624,14 @@ fi
 ensure_pm2_app_running "$API_APP"
 recreate_frontend_pm2_app "$VISUAL_APP" "$VISUAL_PORT"
 
-# bot-supervisor é INTENCIONALMENTE deixado de fora do restart automático
-# em todo deploy. O ponto do desacoplamento é justamente que deploy da API
-# não derrube as sessões WhatsApp. Reinicie o supervisor manualmente quando
-# houver mudança em:
-#   - src/supervisor/*
-#   - src/core/sessionCore.js
-#   - src/bot-worker.js
-# Comando: pm2 restart bot-supervisor-staging --update-env
-# Para forçar restart no pipeline (raro), exporte RESTART_SUPERVISOR=1.
+# O supervisor NÃO é reiniciado em todo deploy — o ponto do desacoplamento é
+# que deploy da API não derrube as sessões WhatsApp. Mas quando o deploy traz
+# código que os workers executam, preservá-lo faria o fix ficar dormente: o
+# passo de sync já decidiu isso e RESTART_SUPERVISOR chega aqui como 1 ou 0.
+# Escape hatch: RESTART_SUPERVISOR=0 preserva sempre; =1 reinicia sempre.
 SUPERVISOR_APP="${SUPERVISOR_APP:-bot-supervisor-staging}"
 if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
-  echo "  RESTART_SUPERVISOR=1 — reiniciando $SUPERVISOR_APP"
+  echo "  Reiniciando $SUPERVISOR_APP para os bots carregarem o código novo"
   ensure_pm2_app_running "$SUPERVISOR_APP"
 else
   echo "  bot-supervisor preservado (RESTART_SUPERVISOR=0). Sessões continuam ativas."

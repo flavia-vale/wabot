@@ -109,10 +109,14 @@ test('as duas páginas não disputam o mesmo título', () => {
 
 test('o comparativo não renderiza o mesmo bloco duas vezes', () => {
   const comparativo = lerFonte('dashboard/app/_comparisonContent.js')
-  // Os blocos "Outros comparativos relacionados" e TL;DR estavam duplicados
-  // verbatim (27 linhas), então todo visitante lia as duas seções em dobro.
-  const ocorrenciasRelacionados = comparativo.split('Outros comparativos relacionados').length - 1
-  const ocorrenciasTldr = comparativo.split('<span className="pill"><span className="dot" />TL;DR</span>').length - 1
-  assert.equal(ocorrenciasRelacionados, 1, 'bloco de comparativos relacionados duplicado')
-  assert.equal(ocorrenciasTldr, 1, 'bloco de TL;DR duplicado')
+  // Os blocos "Outros comparativos relacionados", TL;DR e "Caminho de migração"
+  // já estiveram duplicados verbatim, e todo visitante lia as seções em dobro.
+  // Depois da rodada visual de 2026-08-26 as seções viraram <SectionCard>, então
+  // a contagem é por seção, não pelo texto do cabeçalho antigo.
+  const vezes = (marcador) => comparativo.split(marcador).length - 1
+
+  assert.equal(vezes('title="Outros comparativos"'), 1, 'bloco de comparativos relacionados duplicado')
+  assert.equal(vezes('eyebrow="Resumo rápido"'), 1, 'bloco de resumo rápido (TL;DR) duplicado')
+  assert.equal(vezes('id={SECTION_IDS.migracao}'), 1, 'bloco de migração duplicado')
+  assert.equal(vezes('id={SECTION_IDS.comparativo}'), 1, 'bloco do comparativo duplicado')
 })

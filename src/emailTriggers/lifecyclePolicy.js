@@ -82,6 +82,15 @@ const COUNTDOWN_SLUGS = {
  * @param {Date|number} now
  * @returns {{ slug: string, vars: Record<string, any> } | null}
  */
+// Teto de quanto tempo ainda faz sentido avisar que o WhatsApp caiu. Sem ele,
+// uma conta parada há meses receberia o mesmo aviso a cada 3 dias (a janela de
+// repetição do template) para sempre — o oposto de ajudar. 30 dias cobre com
+// folga quem esqueceu de re-parear e para de insistir com quem desistiu.
+export const WHATSAPP_DESCONECTADO_MAX_HORAS = Math.max(
+  48,
+  Number(process.env.EMAIL_WHATSAPP_DESCONECTADO_MAX_HORAS || 30 * 24)
+)
+
 export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStartAt = null } = {}) {
   if (!snapshot) return null
   if (snapshot.status === 'banned' || snapshot.status === 'suspended') return null
@@ -134,7 +143,8 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
     // problema: avisar que "o robô está fora do ar" nesse caso é ruído.
     const horasDesconectado = hoursSince(snapshot.waDisconnectedSince, now)
     if (snapshot.waEverConnected && !snapshot.waConnected && !wasStoppedByUser(snapshot)
-      && horasDesconectado !== null && horasDesconectado >= 24) {
+      && horasDesconectado !== null && horasDesconectado >= 24
+      && horasDesconectado <= WHATSAPP_DESCONECTADO_MAX_HORAS) {
       return { slug: 'whatsapp_desconectado', vars: {} }
     }
 

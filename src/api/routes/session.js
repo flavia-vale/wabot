@@ -7,10 +7,15 @@ import { appContainer } from '../../app/container.js'
 import { normalizePairingPhone } from '../../domain/session/service.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
+import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
 
 const WA_GROUPS_RECOVERY_TIMEOUT_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_TIMEOUT_MS || 15000), 0)
 const WA_GROUPS_RECOVERY_RETRY_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_RETRY_MS || 1000), 100)
 const RESUMABLE_SESSION_STATUSES = new Set(['connected', 'connecting'])
+// Carência antes de expor à cliente uma queda que o robô resolve sozinho.
+// `0` volta a expor toda queda na hora (rollback sem redeploy).
+const CLIENT_GRACE_MS = Math.max(0, Number(process.env.WA_CLIENT_GRACE_MS ?? DEFAULT_CLIENT_GRACE_MS))
+const CLIENT_GRACE_CAP_MS = Math.max(30_000, Number(process.env.WA_HEARTBEAT_MAX_RECONNECTING_MS || 120_000))
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -113,9 +118,14 @@ export async function sessionRoutes(app) {
     const userId = req.user.sub
     const stopped = await stopBot(userId)
     if (!stopped) return reply.code(404).send({ error: 'Bot não estava rodando' })
+    // Grava o desligamento TAMBÉM na sessão, não só no evento. Sem isto o
+    // `lifecycle` ficava congelado em 'ready' (confirmado em produção em
+    // 2026-08-26: contas com último evento `manual_stop_requested` e
+    // `lifecycle=ready`), então nem o painel da cliente nem a visão admin
+    // conseguiam distinguir "ela desligou" de "caiu sozinho".
     await db.waSession.updateMany({
       where: { userId },
-      data: { status: 'disconnected' },
+      data: { status: 'disconnected', lifecycle: 'stopped_by_user' },
     }).catch(() => {})
     // Marca que a desconexão foi PEDIDA. Sem isso, o aviso "seu robô está fora
     // do ar" sai para quem desligou de propósito (viagem, troca de chip).
@@ -148,6 +158,23 @@ export async function sessionRoutes(app) {
       // Atalho de topo para o painel decidir o banner "reconecte" sem ter que
       // cavar dentro de metrics. Só presente quando métricas foram coletadas.
       sessionHealth: metrics?.sessionHealth ?? null,
+      // Recepção funcional: 'ok'/'quiet' (nada a mostrar), 'blind' (conectado
+      // e sem receber — o quadro do RCA 2026-08), 'starved' (suspeita fraca).
+      // Só presente quando métricas foram coletadas.
+      reception: metrics?.reception ?? null,
+      // O que a CLIENTE deve ver. Queda que o robô resolve sozinho em poucos
+      // minutos não vira aviso; o que exige ação dela nunca espera carência.
+      // Ver src/core/clientVisibleSessionState.js.
+      clientState: resolveClientVisibleState({
+        running,
+        status: session?.status ?? 'disconnected',
+        lifecycle: session?.lifecycle ?? null,
+        lastDisconnectCode: session?.lastDisconnectCode ?? null,
+        disconnectedForMs: metrics?.disconnectedForMs ?? null,
+        receptionState: metrics?.reception?.state ?? null,
+        graceMs: CLIENT_GRACE_MS,
+        maxReconnectingMs: CLIENT_GRACE_CAP_MS,
+      }),
     }
   })
 
@@ -226,7 +253,7 @@ export async function sessionRoutes(app) {
     try { await stopBot(userId) } catch (err) { req.log.warn({ err: err.message, userId }, 'Falha ao parar worker em /forget') }
     await db.waSession.updateMany({
       where: { userId },
-      data: { status: 'disconnected', phone: null },
+      data: { status: 'disconnected', lifecycle: 'stopped_by_user', phone: null },
     }).catch(() => {})
     recordWaConnectionEventSafe({
       userId,
