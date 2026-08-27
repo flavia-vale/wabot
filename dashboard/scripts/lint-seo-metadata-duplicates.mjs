@@ -94,6 +94,22 @@ function parsePreservationDecisionMeta() {
   return map
 }
 
+// T053 (specs/013-inbound-leads-strategy, FR-001): as páginas orgânicas de
+// nicho também são donas da própria metadata. Os blocos são chaveados por uma
+// chave sem barra, mas o path canônico vem do campo `slug:`.
+function parseOrganicNicheMeta() {
+  const sourcePath = path.resolve(process.cwd(), 'app/_organicNicheLanding.js')
+  if (!fs.existsSync(sourcePath)) return new Map()
+  const source = fs.readFileSync(sourcePath, 'utf8')
+  const map = new Map()
+  const blockRegex = /'[^']+':\s*\{\s*slug:\s*'([^']+)'[^}]*?title:\s*'([^']+)'[^}]*?description:\s*'([^']+)'/gs
+  for (const match of source.matchAll(blockRegex)) {
+    const [, routePath, title, description] = match
+    map.set(routePath, { title, description })
+  }
+  return map
+}
+
 function parseSeoHubMeta() {
   const sourcePath = path.resolve(process.cwd(), 'app/_seoHubShared.js')
   if (!fs.existsSync(sourcePath)) return new Map()
@@ -131,12 +147,13 @@ const comparisonMeta = parseComparisonContentMeta()
 const hubMeta = parseSeoHubMeta()
 const preservationBlogMeta = parsePreservationBlogMeta()
 const preservationDecisionMeta = parsePreservationDecisionMeta()
+const organicNicheMeta = parseOrganicNicheMeta()
 
 // União de todos os módulos de conteúdo, indexada por path. É a "outra
 // ponta" da checagem de fonte única (FR-001): se um path tiver algo aqui E
 // title/description literal no registry, é divergência silenciosa em
 // potencial (ou pelo menos dado morto duplicado).
-const contentMetaByPath = new Map([...programmaticMeta, ...preservationMeta, ...comparisonMeta, ...hubMeta, ...preservationBlogMeta, ...preservationDecisionMeta])
+const contentMetaByPath = new Map([...programmaticMeta, ...preservationMeta, ...comparisonMeta, ...hubMeta, ...preservationBlogMeta, ...preservationDecisionMeta, ...organicNicheMeta])
 
 const records = []
 
@@ -226,10 +243,22 @@ if (sourceConflicts.length > 0) {
 }
 
 const incompleteRecords = records.filter((r) => !r.title || !r.description)
-if (incompleteRecords.length > 0) {
+const reportJson = process.argv.includes('--report-json')
+
+if (reportJson) {
+  // Saída estruturada para as guardas automatizadas observarem o resultado
+  // deste lint, em vez de reimplementarem seus parsers ou inferirem cobertura
+  // apenas pela cardinalidade agregada (T055). A execução CLI sem a flag
+  // mantém exatamente as mensagens humanas históricas abaixo.
+  console.log(JSON.stringify({
+    completePaths: completeRecords.map((record) => record.path),
+    incompletePaths: incompleteRecords.map((record) => record.path),
+    total: records.length,
+  }))
+} else if (incompleteRecords.length > 0) {
   console.warn(`AVISO: ${incompleteRecords.length} rotas indexáveis sem metadata completa; não entram na validação de duplicidade.`)
 }
 
-if (!process.exitCode) {
+if (!reportJson && !process.exitCode) {
   console.log(`OK: ${completeRecords.length}/${records.length} rotas indexáveis avaliadas com metadata única (title/description).`)
 }

@@ -95,6 +95,7 @@ export const ANALYTICS_EVENTS = new Set([
   // com BOT_SUPERVISOR_MODE != remote e sessão conectada — deploy da API vai
   // derrubar a sessão na próxima janela.
   'ops_mode_regression',
+  'ops_capacity_alert',
   'ops_stale_worker_code',
   // Mesma mensagem repetindo no ack de um stream:error N+ vezes — sinal de
   // loop de retry-receipt travado derrubando a sessão em cadência (RCA
