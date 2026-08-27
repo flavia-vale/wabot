@@ -7,7 +7,8 @@ import { getSupervisorOperationalCounters } from '../../supervisor/operationalCo
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
 import { getPublicAnalyticsQualitySnapshot } from './public.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
-import { createAdminService } from '../../domain/admin/service.js'
+import { createAdminService, buildUserOrigin } from '../../domain/admin/service.js'
+import { buildCustomerHistory } from '../../domain/admin/customerHistory.js'
 import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipeline.js'
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
@@ -2376,6 +2377,95 @@ export async function adminRoutes(app) {
       errorCount24h,
       riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running }),
     }, req.admin.role)
+  })
+
+  // Lista larga de clientes (página /admin/clientes). É a porta de entrada do
+  // histórico por cliente — varrível, buscável e ordenável, ao contrário da
+  // gestão por risco em /users.
+  app.get('/customers', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const result = await adminService.listCustomers({ query: req.query ?? {}, adminRole: req.admin.role })
+    await writeAdminAuditLog(req, { action: 'admin.customers.list', resource: 'user' })
+    return result
+  })
+
+  // Histórico macro de UM cliente: cadastral, financeiro/assinatura, técnico e
+  // de uso, mais a linha do tempo unificada. Toda a montagem fica no módulo
+  // puro `customerHistory.js` — aqui só carregamos as linhas.
+  app.get('/customers/:id/history', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+
+    const now = new Date()
+    const since30d = addDays(now, -30)
+    const userId = String(req.params.id)
+
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, name: true, email: true, contactPhone: true, contactPhoneVerifiedAt: true,
+        status: true, plan: true, accessExpiresAt: true, sendCount: true, supportStatus: true,
+        referralCode: true, referredBy: true, affiliateProfileId: true,
+        termsAcceptedAt: true, termsVersion: true,
+        lastLoginAt: true, lastActivityAt: true, createdAt: true,
+        affiliateRef: { select: { code: true, status: true, user: { select: { id: true, name: true, email: true } } } },
+        waSession: { select: { status: true, lifecycle: true, phone: true, lastHeartbeatAt: true, lastDisconnectCode: true, updatedAt: true } },
+        groups: { select: { role: true } },
+        credentials: { select: { id: true, platform: true, data: true } },
+      },
+    })
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const [
+      payments, subscriptions, manualGrants, connectionEvents, contactLogs, logs,
+      automationsTotal, automationsEnabled, lastMessage, signupEvents, referrerRows,
+    ] = await Promise.all([
+      db.payment.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 60, select: { id: true, plan: true, status: true, amount: true, createdAt: true, expiresAt: true } }),
+      db.subscription.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, plan: true, status: true, createdAt: true, nextChargeAt: true, cancelledAt: true } }),
+      db.adminAuditLog.findMany({ where: { targetUserId: userId, action: 'admin.users.access' }, orderBy: { createdAt: 'desc' }, take: 20, select: { createdAt: true, reason: true, after: true } }),
+      db.waConnectionEvent.findMany({ where: { userId, occurredAt: { gte: since30d } }, orderBy: { occurredAt: 'desc' }, take: 2000, select: { type: true, code: true, occurredAt: true } }),
+      db.customerContactLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20, select: { createdAt: true, channel: true, reason: true, outcome: true } }),
+      // Janela de 30 dias com teto: o histórico de uso é agregado, não uma
+      // listagem — carregar a vida inteira de MessageLog derrubaria a página.
+      db.messageLog.findMany({ where: { userId, sentAt: { gte: since30d } }, orderBy: { sentAt: 'desc' }, take: 20000, select: { status: true, errorMsg: true, dedupHits: true, sentAt: true } }),
+      db.offerAutomation.count({ where: { userId } }),
+      db.offerAutomation.count({ where: { userId, enabled: true } }),
+      db.messageLog.findFirst({ where: { userId }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
+      user.affiliateProfileId ? [] : db.analyticsEvent.findMany({ where: { userId, event: 'signup_created' }, orderBy: { createdAt: 'desc' }, take: 1, select: { userId: true, metadata: true } }),
+      user.referredBy ? db.user.findMany({ where: { id: user.referredBy }, select: { id: true, name: true, email: true } }) : [],
+    ])
+
+    const signupMetaMap = new Map()
+    for (const row of signupEvents) {
+      if (!row.userId || signupMetaMap.has(row.userId)) continue
+      let meta = {}
+      try { meta = JSON.parse(row.metadata || '{}') } catch { meta = {} }
+      signupMetaMap.set(row.userId, meta)
+    }
+
+    const running = (await listRunningBots()).includes(userId)
+    const safeUser = sanitizeUser(user, req.admin.role)
+
+    const history = buildCustomerHistory({
+      user: safeUser,
+      origin: buildUserOrigin(user, { referrerMap: new Map(referrerRows.map(r => [r.id, r])), signupMetaMap }),
+      payments,
+      subscriptions,
+      manualGrants,
+      connectionEvents,
+      contactLogs,
+      logs,
+      groupCounts: getGroupCounts(user.groups),
+      automations: { total: automationsTotal, enabled: automationsEnabled },
+      credentialHealth: summarizeCredentialHealth(user.credentials),
+      waSession: safeUser.waSession,
+      botRunning: running,
+      lastMessageAt: lastMessage?.sentAt ?? null,
+      now,
+      timelineLimit: Math.max(10, Math.min(200, parseInt(req.query?.timelineLimit ?? '60') || 60)),
+    })
+
+    await writeAdminAuditLog(req, { action: 'admin.customers.history', resource: 'user', resourceId: userId, targetUserId: userId })
+    return history
   })
 
   app.get('/logs', async (req, reply) => {

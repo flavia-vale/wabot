@@ -1734,6 +1734,7 @@ export default function AdminPage() {
               ))}
             </nav>
             <div className="flex items-center gap-2">
+              <Link href="/admin/clientes" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Clientes</Link>
               <Link href="/admin/automacoes" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Automações</Link>
               <Link href="/admin/emails" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">E-mails</Link>
               <Link href="/admin/ofertas" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Ofertas (entrega)</Link>
