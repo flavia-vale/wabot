@@ -1606,7 +1606,9 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     jpegThumbnail = banner
     hqSourceBuffer = banner
   } else if (primary?.platform) {
-    const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
+    const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}, {
+      onDiagnostic: ({ stage, detail }) => reportPreviewCardNoImage(stage, { platform: primary.platform, sourceUrl, detail }),
+    }).catch((err) => {
       reportPreviewCardNoImage('scrape_threw', { platform: primary.platform, sourceUrl, err: err?.message })
       return null
     })
