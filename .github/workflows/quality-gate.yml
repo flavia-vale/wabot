@@ -25,6 +25,14 @@ jobs:
 
       - run: npm ci
 
+      # Alguns testes renderizam componentes do painel de verdade
+      # (test/helpers/render-jsx-component.js usa o compilador do Next que vive
+      # em dashboard/node_modules). Sem esta instalação eles falham em TODA PR,
+      # não por instabilidade: o módulo simplesmente não existe no runner.
+      # Descoberto em 27/08, depois que o painel de capacidade entrou no
+      # develop e passou a deixar o gate vermelho para todo mundo.
+      - run: npm ci --prefix dashboard
+
       - run: npm test
 
       - run: npm run arch:check
