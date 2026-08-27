@@ -146,3 +146,62 @@ test('resolveShopeeShortLink devolve a URL corrente quando o corpo não tem alvo
   const fetchImpl = async (url) => htmlResponse('<html><body>página opaca sem redirect</body></html>', url)
   assert.equal(await resolveShopeeShortLink(short, { fetchImpl }), short)
 })
+
+// RCA 2026-08-26: a MESMA URL curta era resolvida três vezes por mensagem
+// (conversão, título/preço, foto), cada resolução sendo uma cadeia de redirects
+// com timeout por hop. Sob carga um hop estourava, a função devolvia a URL curta
+// como veio (sem ids) e a busca de foto virava `null` silencioso — a oferta saía
+// com a miniatura de 500 bytes da origem em vez da foto da loja. Medição: 780 de
+// 2000 buscas de foto de Shopee voltaram sem URL, concentradas no worker mais
+// movimentado, enquanto o mesmo link resolvia de primeira num teste isolado.
+test('resolução bem-sucedida é reaproveitada (não vai à rede de novo)', async () => {
+  const { _resetShopeeShortLinkCache } = await import('../src/converters/shopee.js')
+  _resetShopeeShortLinkCache()
+  const short = 'https://s.shopee.com.br/CACHE123'
+  const alvo = 'https://shopee.com.br/product/111/222'
+  let chamadas = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    chamadas++
+    return {
+      status: 302,
+      headers: { get: name => (name === 'location' ? alvo : null), getSetCookie: () => [] },
+      url: short,
+      text: async () => '',
+    }
+  }
+  try {
+    assert.equal(await resolveShopeeShortLink(short), alvo)
+    assert.equal(await resolveShopeeShortLink(short), alvo)
+    assert.equal(chamadas, 1, 'a segunda resolução tem que vir do cache')
+  } finally {
+    globalThis.fetch = originalFetch
+    _resetShopeeShortLinkCache()
+  }
+})
+
+test('fracasso NÃO é cacheado (falha de rede pontual não pode virar verdade por horas)', async () => {
+  const { _resetShopeeShortLinkCache } = await import('../src/converters/shopee.js')
+  _resetShopeeShortLinkCache()
+  const short = 'https://s.shopee.com.br/CACHE456'
+  const alvo = 'https://shopee.com.br/product/333/444'
+  let chamadas = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    chamadas++
+    if (chamadas === 1) throw new Error('timeout')
+    return {
+      status: 302,
+      headers: { get: name => (name === 'location' ? alvo : null), getSetCookie: () => [] },
+      url: short,
+      text: async () => '',
+    }
+  }
+  try {
+    assert.equal(await resolveShopeeShortLink(short), short, 'primeira tentativa degrada para a URL original')
+    assert.equal(await resolveShopeeShortLink(short), alvo, 'a segunda tenta de novo e resolve')
+  } finally {
+    globalThis.fetch = originalFetch
+    _resetShopeeShortLinkCache()
+  }
+})

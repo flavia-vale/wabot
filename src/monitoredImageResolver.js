@@ -83,7 +83,11 @@ export async function resolveMonitoredImage({
     if (skipActiveFetch) return null
     if (!target?.url) return null
     try {
-      const productImageUrl = await fetchProductImage(target.platform, target.url, credentials || {})
+      const productImageUrl = await fetchProductImage(target.platform, target.url, credentials || {}, {
+        // Sem isto, "a loja não devolveu foto" chega aqui sem motivo nenhum —
+        // era o caso da Shopee, cuja única fonte de foto é a API de afiliado.
+        onDiagnostic: ({ stage, detail }) => log.warn({ platform: target.platform, stage, detail }, 'resolveMonitoredImage: loja não devolveu foto'),
+      })
       log.info({ platform: target.platform, productImageUrl }, 'resolveMonitoredImage: fetchProductImage')
       if (!productImageUrl) return null
       const fetched = await fetchImageBuffer(productImageUrl, target.url)
