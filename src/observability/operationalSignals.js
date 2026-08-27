@@ -59,6 +59,10 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // desligou sozinha. Precisa de olho humano — é sinal de lista defasada ou de
   // endereçamento novo do WhatsApp.
   wa_chat_scope_auto_disabled: 'ops_wa_chat_scope_auto_disabled',
+  // Sessão presa em reconexão sem worker que o supervisor levantou de volta
+  // (RCA 2026-08-27). Antes ela morria de vez e só voltava com a cliente
+  // clicando em Conectar.
+  wa_session_resurrected: 'ops_wa_session_resurrected',
   // Muro anti-robô do ML batendo no IP do servidor (RCA 2026-08-19/20).
   ml_anti_bot_wall: 'ops_ml_anti_bot_wall',
   // Card de preview salvo pelo plano B: loja sem foto, foto da mensagem de

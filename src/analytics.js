@@ -110,6 +110,7 @@ export const ANALYTICS_EVENTS = new Set([
   // grupo). Nunca automático: só visibilidade para decisão humana.
   'ops_wa_group_desync_unresolved',
   'ops_wa_reception_blind',
+  'ops_wa_session_resurrected',
   'ops_wa_chat_scope_filtered',
   'ops_wa_chat_scope_auto_disabled',
   // `failure reason=405` do WhatsApp: recusa de login/registro por versão do WA

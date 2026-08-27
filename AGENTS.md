@@ -1736,6 +1736,43 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
+## Sessão presa em reconexão sumia da ressurreição (RCA 2026-08-27 — não regredir)
+
+Duas regras que, isoladas, fazem sentido, criavam juntas uma sessão morta que
+**só voltava com a cliente clicando em "Conectar"**:
+
+1. Passando de `WA_HEARTBEAT_MAX_RECONNECTING_MS` (2min) presa, o worker grava
+   `status='disconnected'` com `lifecycle='reconnecting'`
+   (`buildHeartbeatSessionPatch`) — a válvula que impede o painel de esconder um
+   loop de reconexão da cliente.
+2. O health monitor (supervisor em `remote`, `sessionCore` em `inline`) só
+   ressuscitava sessões com `status IN ('connected','connecting')`.
+
+Resultado: passou de 2 minutos → vira `disconnected` → **sai da lista de
+ressurreição**. Quando o worker morria depois disso — OOM, exceção, ou o
+**próprio matador de zumbis do supervisor**, que derruba worker sem heartbeat
+*contando com a ressurreição do tick seguinte* — ninguém mais o levantava.
+
+Medido em produção: sessões presas nesse estado por **4h e por 45 dias**; e
+clientes com quedas 428/515 que só voltaram após **8h, 18h e 29h**, sempre por
+ação manual delas. Diagnóstico: `SELECT ... WHERE status='disconnected' AND
+lifecycle='reconnecting'` lista as presas.
+
+`src/core/sessionResurrectionPolicy.js` (puro) passa a reconhecer o que o
+próprio worker declarou: `reconnecting` = "eu ainda estava tentando".
+**Não afrouxa nada** — `stopped_by_user`, `auth_reset_required`,
+`disconnected` e `authenticating` continuam nunca sendo ressuscitados, e a
+parada deliberada vence até o status antigo. O orçamento de restarts
+(`restartBudget`) continua valendo por cima, então sessão que morre em loop
+ainda entra em quarentena em vez de churn.
+
+**Não regredir:** não voltar a filtrar `status IN ('connected','connecting')`
+na mão em nenhum dos dois modos — há teste que falha se o filtro antigo
+reaparecer. A correção precisa valer nos DOIS (staging roda `inline`; sem ela
+lá, não dá nem para validar). Sinal `ops_wa_session_resurrected` mede quantas
+vezes o conserto salvou uma cliente. Rollback: `WA_RESURRECT_RECONNECTING=0`.
+Teste: `test/session-resurrection-policy.test.js`.
+
 ## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
 
 A regra acima (`WA_IGNORE_UNMONITORED_GROUPS`) é uma **lista de exceções**, e
