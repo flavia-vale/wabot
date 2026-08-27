@@ -89,3 +89,11 @@ test('deploy_safe_staging.sh auto-escalates supervisor stop when a preserved mig
     'escalation must stop the supervisor and retry the migrate deploy',
   )
 })
+
+test('deploy_safe_staging.sh usa a mesma decisão automática de restart do supervisor', () => {
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'deploy_safe_staging.sh')
+  const script = fs.readFileSync(scriptPath, 'utf8')
+  assert.match(script, /RESTART_SUPERVISOR="\$\{RESTART_SUPERVISOR:-auto\}"/)
+  assert.match(script, /git diff --name-only "\$REVISION_BEFORE_SYNC" "\$REVISION_AFTER_SYNC"/)
+  assert.ok(script.includes('src/bot-worker'), 'a lista de caminhos precisa cobrir o worker')
+})

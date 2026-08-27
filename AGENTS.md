@@ -166,7 +166,25 @@ de anunciar/agendar antes. Fail-safe em todos os caminhos: sem dado confiável
 (supervisor fora do ar, modo `inline`, chave ausente) **não** avisa — alarme
 falso recorrente treina a pessoa a ignorar justamente este alerta.
 
-Aplicar o código novo nos bots (o passo manual que o aviso está cobrando):
+**Desde 2026-08-26 o deploy faz isso sozinho — quando é o caso.** Os dois
+scripts (`deploy_safe_dashboard.sh` e `deploy_safe_staging.sh`) guardam o commit
+ANTES do pull, comparam com o de depois e, se os arquivos que entraram batem em
+`WORKER_CODE_PATHS_RE` (`src/bot-worker.js`, `src/supervisor/`, `src/core/`,
+`src/converters/`, `src/monitored*.js`, `src/messageProcessor.js`,
+`src/manager.js`, `src/db.js`, `src/logger.js`, `src/analytics.js`,
+`src/errorTaxonomy.js`, `src/observability/`, `src/billing/`,
+`prisma/schema.prisma`, `package-lock.json`), reiniciam o supervisor ao final do
+deploy. Deploy que mexe só em dashboard/rotas/docs/testes **não** reinicia nada e
+as sessões seguem intactas.
+
+`RESTART_SUPERVISOR` aceita `auto` (default), `1` (sempre reinicia) e `0` (nunca
+— o fix fica dormente até alguém reiniciar à mão). A lista de caminhos é
+deliberadamente conservadora: reiniciar o supervisor reconecta TODAS as sessões,
+então caminho novo só entra ali se o processo do worker de fato o carregar.
+Guardas: `test/deploy-safe-dashboard.test.js`, `test/deploy-safe-staging.test.js`.
+
+Aplicar o código novo nos bots à mão (quando o deploy não rodou, ou com
+`RESTART_SUPERVISOR=0`):
 
 ```bash
 cd ~/wabot && pm2 restart bot-supervisor --update-env && pm2 save
