@@ -347,6 +347,47 @@ em `src/ops/stagingPower.js`; rotas `GET/POST /api/admin/staging-power`
 - Envs opcionais: `STAGING_PM2_APPS` (default `api-staging visual-staging`),
   `STAGING_DIR`, `PM2_BIN`. Teste: `test/ops-staging-power.test.js`.
 
+## ADMIN > Capacidade (observabilidade da VPS)
+
+A rota `/admin/capacidade` (permissão `tech:read`) apresenta o host contratado,
+RAM/CPU/disco/swap, processos PM2, workers reais, staging, histórico, forecast e
+alertas. A coleta roda dentro da API a cada 5 minutos, com `unref()` e
+single-flight; **não existe processo PM2 novo** e a tela nunca cria, apaga ou
+redimensiona recursos Hetzner. Atualização manual exige `tech:write` e é
+auditada como `admin.capacity.refresh`.
+
+Política conservadora (`src/ops/capacity/policy.js`): reserva o maior valor
+entre 20% da RAM e 1.536 MB; cada sessão custa pelo menos 350 MB ou o p95
+observado (o maior); swap não aumenta a capacidade. Dados ausentes ficam
+`null`/`insufficient_data`. Swap ocupado sem atividade é informativo; pressão
+contínua, pouca `MemAvailable`, disco e headroom determinam atenção/criticidade.
+O forecast só fornece horizonte quando há cobertura suficiente e crescimento
+positivo, sempre com faixa e confiança.
+
+Snapshots de 5 minutos são retidos por 90 dias; rollups horários por 12 meses
+e diários permanecem. Alertas exigem confirmação em duas amostras, possuem
+cooldown de 24 h, registram piora e recuperação e nunca executam ações. Eventos
+de restart, staging, reboot/OOM e mudança de host/política explicam o histórico
+com payload sanitizado e dedupe.
+
+Integração Hetzner é opcional e somente leitura:
+
+```text
+HCLOUD_READ_TOKEN=<token read-only, nunca enviar ao browser/log>
+HCLOUD_PROJECT_ID=14422101
+HCLOUD_SERVER_ID=128727108
+CAPACITY_SWEEP_INTERVAL_MS=300000
+```
+
+Sem token, usa o baseline `wabot-prod / CX33 / 4 vCPU / 8 GB / 40 GB` e marca
+a fonte como `baseline`; falha externa preserva o último inventário como stale.
+O cache Hetzner dura no mínimo 6 h.
+
+Antes de produção: PR contra `develop`, autodeploy, validar em
+`http://178.105.54.0:3006` e observar por 24 h (<1% CPU média e <50 MB adicionais)
+conforme `specs/014-admin-capacity-observability/quickstart.md`. A validação de
+24 h é manual e não pode ser inferida dos testes locais.
+
 ## D-3 — Criptografia de credenciais em repouso (canônico)
 
 As credenciais de afiliado (cookie de sessão ML/Amazon, tokens OAuth, secret da

@@ -727,3 +727,74 @@ quatro arquivos de teste da feature passam (40 asserções). Sobraram três lacu
   nenhuma medição cobre. Incluir essas três rotas na medição (mesma mensagem de falha, com o sufixo
   reportado à parte pela decisão D1 do `plan.md`), sem mexer no teto de 60 preservado para
   `/bot-achadinhos-whatsapp` e sem afrouxar nada existente.
+
+---
+
+## Phase 13: Convergence
+
+**Origem**: quarta avaliação do código atual contra `spec.md`/`plan.md`/`tasks.md` em 2026-08-27,
+depois de T050–T052 marcadas como concluídas. T051 e T052 foram confirmadas satisfeitas: a guarda
+de FR-029 agora cobre 27 páginas (incluindo os módulos de decisão e os três `page.js` de risco), e
+os três títulos de risco reescritos estão sob o teto automatizado de 55 caracteres. T050 ficou
+parcial: a duplicação das quatro rotas de decisão foi removida e o lint aprendeu esse módulo, mas
+a segunda metade expressamente pedida — `_organicNicheLanding.js` — não foi implementada.
+
+- [X] T053 Completar T050 ensinando as duas guardas de **fonte única** a ler
+  `_organicNicheLanding.js` per FR-001/FR-007/FR-041 (partial). O arquivo
+  `dashboard/scripts/lint-seo-metadata-duplicates.mjs` adicionou
+  `parsePreservationDecisionMeta()`, porém não tem parser para `_organicNicheLanding.js` e seu
+  `contentMetaByPath` continua unindo somente seis módulos. Por isso
+  `/bot-ofertas-restaurantes-whatsapp` e `/bot-ofertas-marketplace-whatsapp` seguem fora da
+  validação de duplicidade: `npm run lint:seo-metadata` ainda avisa que 3 das 82 rotas indexáveis
+  não têm metadata completa, em vez de avaliar essas duas rotas. Além disso,
+  `test/seo-noindex-guard.test.js#contentModulePaths()` ainda não inclui nem
+  `_preservationDecisionPages.js` nem `_organicNicheLanding.js`, apesar de T050 pedir que a
+  checagem (c) cobrisse essa classe. Criar o parser do módulo orgânico usando os blocos com
+  `slug:`/`title:`/`description:`, incluí-lo em `contentMetaByPath`, e espelhar no teste a
+  cobertura dos módulos de decisão e nicho. Confirmar que as duas rotas orgânicas passam a
+  integrar `completeRecords` (restando no máximo a única rota incompleta não relacionada), sem
+  publicar, apagar ou alterar conteúdo das linhas congeladas (FR-033/FR-034).
+
+---
+
+## Phase 14: Review
+
+**Origem**: revisão de código após T053 em 2026-08-27. O parser novo funciona com o formato
+atual e o lint informa `81/82`, porém nenhuma asserção torna essa cobertura obrigatória. Tanto o
+lint quanto a checagem (c) continuam retornando sucesso se o regex de
+`_organicNicheLanding.js` deixar de casar silenciosamente; como as duas rotas não têm cópia no
+registry, o `Set` vazio também não produz conflito e o teste segue verde. Isso reabre exatamente
+o buraco que T053 deveria fechar.
+
+- [X] T054 Tornar a inclusão das duas rotas orgânicas uma **guarda que falha**, não apenas uma
+  observação manual, per FR-001/FR-007/FR-041. Em `test/seo-noindex-guard.test.js`, afirmar
+  explicitamente que `contentModulePaths()` contém
+  `/bot-ofertas-restaurantes-whatsapp` e `/bot-ofertas-marketplace-whatsapp` (e, para evitar a
+  mesma falha silenciosa no outro módulo acrescentado por T050, os quatro paths de
+  `_preservationDecisionPages.js`). Adicionar também uma asserção automatizada sobre o lint para
+  provar que as duas rotas entram em `completeRecords` — por exemplo, executar
+  `dashboard/scripts/lint-seo-metadata-duplicates.mjs` no teste e exigir a cobertura mínima
+  conhecida de `81/82`, ou extrair/exportar o parser para testá-lo diretamente. A solução deve
+  falhar se qualquer regex retornar vazio/parcial e continuar permitindo somente a única rota
+  incompleta não relacionada; não afrouxar o lint nem alterar conteúdo congelado.
+
+---
+
+## Phase 15: Review
+
+**Origem**: revisão de código após T054 em 2026-08-27. A nova asserção de paths prova que o
+parser duplicado dentro do teste reconhece as seis rotas esperadas, e a asserção `81/82` prova
+somente a cardinalidade global produzida pelo lint. Ela não prova que **o parser do lint** incluiu
+as duas rotas orgânicas em `completeRecords`: se esse parser regredir enquanto outra rota passar a
+ter metadata completa, a cardinalidade continua `81/82` e ambas as asserções ficam verdes. Os dois
+parsers são implementações regex independentes, portanto o sucesso de um não valida o outro.
+
+- [X] T055 Fazer o teste observar diretamente quais paths o lint colocou em `completeRecords`,
+  per FR-001/FR-007/FR-041 e o requisito expresso de T054. Expor do
+  `dashboard/scripts/lint-seo-metadata-duplicates.mjs` uma saída estruturada/testável (por exemplo,
+  função exportada sem efeitos colaterais, módulo auxiliar compartilhado, ou flag de relatório
+  JSON) e afirmar que ela contém `/bot-ofertas-restaurantes-whatsapp` e
+  `/bot-ofertas-marketplace-whatsapp`, além de manter a guarda de que resta exatamente uma rota
+  incompleta. Evitar validar apenas a string agregada `81/82` e evitar dois parsers independentes
+  como evidência da mesma propriedade. A execução CLI existente e sua mensagem devem continuar
+  compatíveis; não alterar conteúdo congelado.

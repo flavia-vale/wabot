@@ -17,6 +17,8 @@ import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.
 import { buildLongExpiredWhere, wantsLongExpired, isLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
+import { createCapacityService } from '../../ops/capacity/service.js'
+import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1269,6 +1271,50 @@ export async function adminRoutes(app) {
   app.get('/me', async (req, reply) => {
     if (!(await requireAdmin(req, reply))) return
     return req.admin
+  })
+
+  app.get('/capacity/current', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const result = await createCapacityService({ db }).current()
+    return result
+  })
+
+  const CAPACITY_HISTORY_PERIODS = new Set(['24h', '7d', '30d', '90d'])
+  app.get('/capacity/history', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const period = String(req.query?.period || '30d')
+    if (!CAPACITY_HISTORY_PERIODS.has(period)) return reply.code(400).send({ code: 'INVALID_CAPACITY_PERIOD', error: 'Período inválido. Use 24h, 7d, 30d ou 90d.' })
+    return createCapacityService({ db }).history(period)
+  })
+
+  app.get('/capacity/forecast', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    return createCapacityService({ db }).forecast()
+  })
+
+  app.post('/capacity/scenario', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    try { return await createCapacityService({ db }).scenario(req.body) }
+    catch (error) { if (!['INVALID_CAPACITY_SCENARIO', 'CAPACITY_SCENARIO_BASELINE_UNAVAILABLE'].includes(error?.code)) throw error; return reply.code(400).send({ code: error.code, error: error.message }) }
+  })
+
+  app.get('/capacity/alerts', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const status = req.query?.status ? String(req.query.status) : undefined
+    if (status && !['pending', 'active', 'recovered'].includes(status)) return reply.code(400).send({ code: 'INVALID_CAPACITY_ALERT_STATUS', error: 'Status de alerta inválido.' })
+    const limit = Number(req.query?.limit ?? 100)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) return reply.code(400).send({ code: 'INVALID_CAPACITY_ALERT_LIMIT', error: 'Limite deve estar entre 1 e 500.' })
+    return createCapacityService({ db }).alerts({ status, limit })
+  })
+
+  app.post('/capacity/refresh', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    if (req.body && Object.keys(req.body).length) return reply.code(400).send({ code: 'CAPACITY_REFRESH_BODY_NOT_ALLOWED', error: 'A atualização não aceita parâmetros.' })
+    const result = requestCapacityRefresh()
+    if (!result.accepted && result.reason === 'NOT_INITIALIZED') return reply.code(503).send({ code: 'CAPACITY_REFRESH_NOT_INITIALIZED', error: 'A coleta de capacidade ainda não foi inicializada.' })
+    if (!result.accepted) return reply.code(409).send({ code: 'CAPACITY_REFRESH_IN_PROGRESS', error: 'Já existe uma atualização em andamento.' })
+    await writeAdminAuditLog(req, { action: 'admin.capacity.refresh', resource: 'capacity', after: { accepted: true } })
+    return reply.code(202).send(result)
   })
 
 
