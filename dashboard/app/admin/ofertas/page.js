@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
@@ -70,19 +70,25 @@ export default function AdminOfertasPage() {
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
 
-  const carregar = useCallback(async (janela) => {
-    setCarregando(true)
-    setErro('')
-    try {
-      setDados(await api.adminQualidadeEntrega(janela))
-    } catch (err) {
-      setErro(err?.message || 'Falha ao carregar a visão de entrega')
-    } finally {
-      setCarregando(false)
-    }
-  }, [])
-
-  useEffect(() => { carregar(horas) }, [carregar, horas])
+  // A busca não pode chamar setState de forma síncrona dentro do efeito
+  // (`react-hooks/set-state-in-effect` reprova, e é regra do lint do dashboard).
+  // Mesmo padrão das outras telas do admin: a cadeia começa num microtask e
+  // `ativo` descarta a resposta de uma janela que já foi trocada.
+  useEffect(() => {
+    let ativo = true
+    Promise.resolve()
+      .then(() => {
+        if (ativo) {
+          setCarregando(true)
+          setErro('')
+        }
+        return api.adminQualidadeEntrega(horas)
+      })
+      .then((data) => { if (ativo) setDados(data) })
+      .catch((err) => { if (ativo) setErro(err?.message || 'Falha ao carregar a visão de entrega') })
+      .finally(() => { if (ativo) setCarregando(false) })
+    return () => { ativo = false }
+  }, [horas])
 
   const resumo = dados?.resumo
   const perdas = dados?.origensComPerda ?? []
