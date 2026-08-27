@@ -1231,6 +1231,48 @@ piso; não chamar `reloadConfig` sem `await` nas rotas. Testes:
 vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
 as sessões: avisar antes). Ver "código novo não carregado pelos bots".
 
+## Visão admin "como as ofertas estão chegando" (2026-08-27 — não regredir)
+
+Três incidentes seguidos de imagem (foto borrada, foto sumida, texto pelado)
+foram descobertos **pela cliente**, não por nós. O motivo é estrutural: o
+`MessageLog` registrava que o envio deu certo, mas `success` só quer dizer "o
+WhatsApp aceitou" — não diz se a oferta chegou com foto, com card ou como texto
+pelado. Existia até um campo `sentVia` no worker que nascia `'text'` e **nunca
+era atualizado**.
+
+Hoje cada envio espelhado grava duas colunas novas em `MessageLog`
+(migration `20260827120000_message_log_delivery_kind`):
+
+- **`deliveryKind`** — como saiu: `foto`, `relay`, `card_loja`, `card_origem`,
+  `card_banner`, `texto`. Vocabulário único em `src/core/deliveryKind.js`,
+  preenchido por `buildPayload` nos QUATRO caminhos de montagem e persistido no
+  update de sucesso de `processSendJob`.
+- **`originImageBytes`** — quanto de imagem a mensagem de ORIGEM trouxe
+  (`0` = origem sem imagem). É o que separa "saiu sem foto porque não havia
+  foto" de "saiu sem foto tendo foto na origem" — o segundo é defeito nosso.
+
+`ofertaPerdeuImagem()` combina os dois: só conta como perda quando
+`deliveryKind === 'texto'` **e** `originImageBytes > 0`. Linha antiga (colunas
+nulas) **não** vira alarme: "não sabemos" é resposta honesta, e alarme por
+dúvida treina a pessoa a ignorar o painel.
+
+Leitura em `src/ops/deliveryQuality.js` (parte pura + carregador com `db`
+injetado), rota `GET /api/admin/qualidade-entrega?horas=N` (`tech:read`), tela
+em `dashboard/app/admin/ofertas/page.js` (link no admin). A tela mostra total,
+percentual que chegou com imagem, quantas perderam a foto, distribuição por
+jeito de entrega, por loja, e **quais clientes/grupos de origem** estão
+perdendo foto — que foi exatamente o corte que resolveu o caso de 2026-08-26.
+
+**Não regredir:**
+- o percentual olha só as linhas COM registro (`comRegistro`), nunca o total —
+  senão envio antigo dilui o indicador e dá falsa sensação de melhora;
+- a fonte da foto do card viaja por **callback** (`onFonteDaFoto`), nunca como
+  campo do objeto `urlInfo`: esse objeto entra no proto do WhatsApp, e campo
+  estranho ali é risco (ver o RCA do `title` no PR #1186);
+- `deliveryInfo` é preenchido em TODOS os caminhos de `buildPayload`; se um
+  caminho novo aparecer sem marcar, ele vira "não registrado" em silêncio.
+  Guarda estrutural em `test/ops-delivery-quality.test.js` conta os quatro.
+
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando a mesma
