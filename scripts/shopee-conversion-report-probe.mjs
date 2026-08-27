@@ -6,7 +6,8 @@
 //
 // Uso em staging:
 //   node scripts/shopee-conversion-report-probe.mjs --list-users
-//   node scripts/shopee-conversion-report-probe.mjs --user-id <ID> --days 1
+//   node scripts/shopee-conversion-report-probe.mjs --days 1
+// Se houver mais de uma credencial, aí sim informe --user-id com um ID listado.
 //
 // Por segurança, o resultado padrão é agregado e não imprime orderId,
 // conversionId ou nomes de produtos. Use --show-sample apenas se for necessário
@@ -125,6 +126,12 @@ export function summarizeReport(nodes = []) {
   return { rows: nodes.length, taggedEspelhaGrupos: tagged, byStatus, commissionTotals }
 }
 
+export function credentialNotFoundHint(total) {
+  return total === 1
+    ? 'Há apenas uma credencial Shopee neste ambiente; rode novamente sem --user-id para selecioná-la automaticamente.'
+    : 'Rode --list-users e copie exatamente um dos IDs listados.'
+}
+
 function buildAuth(appId, secretKey, payload) {
   const timestamp = Math.floor(Date.now() / 1000)
   const signature = crypto.createHash('sha256').update(`${appId}${timestamp}${payload}${secretKey}`).digest('hex')
@@ -156,7 +163,11 @@ async function loadShopeeCredentials(userId) {
     if (rows.length > 1) throw new Error('Há mais de uma conta Shopee. Informe --user-id para evitar consultar a conta errada.')
   }
   const row = rows[0]
-  if (!row) throw new Error(`Credencial Shopee não encontrada para userId=${userId}`)
+  if (!row) {
+    const total = await prisma.credential.count({ where: { platform: 'shopee' } })
+    const hint = credentialNotFoundHint(total)
+    throw new Error(`Credencial Shopee não encontrada para o userId informado. ${hint}`)
+  }
   const credentials = JSON.parse(decryptCredential(row.data))
   if (!credentials.appId || !credentials.secretKey) throw new Error('Credencial Shopee sem appId/secretKey.')
   return { userId: row.userId, appId: credentials.appId, secretKey: credentials.secretKey }

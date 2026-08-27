@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   buildConversionReportQuery,
   buildTypeQuery,
+  credentialNotFoundHint,
   discoverSelection,
   parseArgs,
   summarizeReport,
@@ -17,6 +18,11 @@ test('probe limita a janela e exige argumentos conhecidos', () => {
   })
   assert.throws(() => parseArgs(['--days', '8']), /entre 1 e 7/)
   assert.throws(() => parseArgs(['--write']), /desconhecido/)
+})
+
+test('orienta omitir user-id quando há somente uma credencial', () => {
+  assert.match(credentialNotFoundHint(1), /sem --user-id/)
+  assert.match(credentialNotFoundHint(2), /--list-users/)
 })
 
 test('query da prova técnica usa a seleção descoberta e é somente leitura', () => {
