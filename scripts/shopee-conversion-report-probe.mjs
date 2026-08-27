@@ -48,14 +48,52 @@ export function parseArgs(argv) {
   return args
 }
 
-export function buildConversionReportQuery({ start, end }) {
+const TYPE_REF = 'kind name ofType { kind name ofType { kind name ofType { kind name } } }'
+
+export function buildTypeQuery(typeName) {
+  return `query { __type(name: "${typeName}") { name fields { name args { name type { ${TYPE_REF} } } type { ${TYPE_REF} } } } }`
+}
+
+function namedType(type) {
+  let current = type
+  while (current?.ofType) current = current.ofType
+  return current
+}
+
+function hasRequiredArguments(field) {
+  return (field?.args ?? []).some(arg => arg?.type?.kind === 'NON_NULL')
+}
+
+export async function discoverSelection(rootTypeName, inspectType, maxDepth = 3) {
+  const cache = new Map()
+  async function fieldsFor(typeName, depth, ancestors) {
+    if (depth > maxDepth || ancestors.has(typeName)) return []
+    let type = cache.get(typeName)
+    if (!type) {
+      type = await inspectType(typeName)
+      if (!type?.fields) throw new Error(`A introspecção não retornou os campos do tipo ${typeName}.`)
+      cache.set(typeName, type)
+    }
+    const selections = []
+    for (const field of type.fields) {
+      if (hasRequiredArguments(field)) continue
+      const leaf = namedType(field.type)
+      if (['SCALAR', 'ENUM'].includes(leaf?.kind)) selections.push(field.name)
+      else if (['OBJECT', 'INTERFACE'].includes(leaf?.kind)) {
+        const children = await fieldsFor(leaf.name, depth + 1, new Set([...ancestors, typeName]))
+        if (children.length) selections.push(`${field.name} { ${children.join(' ')} }`)
+      }
+    }
+    return selections
+  }
+  return fieldsFor(rootTypeName, 0, new Set())
+}
+
+export function buildConversionReportQuery({ start, end, selection }) {
+  if (!Array.isArray(selection) || selection.length === 0) throw new Error('Seleção dinâmica do relatório vazia.')
   return `query {
     conversionReport(purchaseTimeStart: ${start}, purchaseTimeEnd: ${end}) {
-      nodes {
-        purchaseTime clickTime conversionId orderId checkoutId
-        itemId itemName itemPrice commissionRate estimatedCommission
-        buyerType referrer status subId1 subId2 subId3 subId4 subId5
-      }
+      nodes { ${selection.join(' ')} }
       pageInfo { scrollId hasNextPage }
     }
   }`
@@ -64,20 +102,47 @@ export function buildConversionReportQuery({ start, end }) {
 export function summarizeReport(nodes = []) {
   const byStatus = {}
   let tagged = 0
-  let estimatedCommission = 0
-  for (const row of nodes) {
-    const status = String(row?.status || 'unknown')
-    byStatus[status] = (byStatus[status] || 0) + 1
-    if ([row?.subId1, row?.subId2, row?.subId3, row?.subId4, row?.subId5].includes(EXPECTED_SUB_ID)) tagged++
-    estimatedCommission += Number(row?.estimatedCommission) || 0
+  const commissionTotals = {}
+  function visit(value, path = '') {
+    if (Array.isArray(value)) return value.forEach((item, index) => visit(item, `${path}[${index}]`))
+    if (!value || typeof value !== 'object') return
+    for (const [key, child] of Object.entries(value)) {
+      const childPath = path ? `${path}.${key}` : key
+      if (/status$/i.test(key) && child != null && typeof child !== 'object') {
+        const status = `${childPath}=${String(child)}`
+        byStatus[status] = (byStatus[status] || 0) + 1
+      }
+      if (/sub.?id|referrer/i.test(key) && String(child).toLowerCase() === EXPECTED_SUB_ID) tagged++
+      if (/commission/i.test(key) && Number.isFinite(Number(child))) {
+        commissionTotals[childPath] = (commissionTotals[childPath] || 0) + Number(child)
+      }
+      visit(child, childPath)
+    }
   }
-  return { rows: nodes.length, taggedEspelhaGrupos: tagged, byStatus, estimatedCommission }
+  for (const row of nodes) {
+    visit(row)
+  }
+  return { rows: nodes.length, taggedEspelhaGrupos: tagged, byStatus, commissionTotals }
 }
 
 function buildAuth(appId, secretKey, payload) {
   const timestamp = Math.floor(Date.now() / 1000)
   const signature = crypto.createHash('sha256').update(`${appId}${timestamp}${payload}${secretKey}`).digest('hex')
   return `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`
+}
+
+async function requestGraphql({ appId, secretKey }, query) {
+  const body = { query }
+  const payload = JSON.stringify(body)
+  const { data } = await axios.post(ENDPOINT, body, {
+    headers: { Authorization: buildAuth(appId, secretKey, payload), 'Content-Type': 'application/json' },
+    timeout: 15000,
+  })
+  if (data?.errors?.length) {
+    const errors = data.errors.map(({ code, message, path }) => ({ code, message, path }))
+    throw new Error(`A Shopee recusou a consulta: ${JSON.stringify(errors)}`)
+  }
+  return data?.data
 }
 
 async function loadShopeeCredentials(userId) {
@@ -110,18 +175,14 @@ async function listUsers() {
 async function requestReport({ appId, secretKey, days }) {
   const end = Math.floor(Date.now() / 1000)
   const start = end - days * 24 * 60 * 60
-  const body = { query: buildConversionReportQuery({ start, end }) }
-  const payload = JSON.stringify(body)
-  const { data } = await axios.post(ENDPOINT, body, {
-    headers: { Authorization: buildAuth(appId, secretKey, payload), 'Content-Type': 'application/json' },
-    timeout: 15000,
+  const credentials = { appId, secretKey }
+  const selection = await discoverSelection('ConversionReport', async typeName => {
+    const data = await requestGraphql(credentials, buildTypeQuery(typeName))
+    return data?.__type
   })
-  if (data?.errors?.length) {
-    const errors = data.errors.map(({ code, message, path }) => ({ code, message, path }))
-    throw new Error(`A Shopee recusou a consulta: ${JSON.stringify(errors)}`)
-  }
-  if (!data?.data?.conversionReport) throw new Error('Resposta sem data.conversionReport.')
-  return data.data.conversionReport
+  const data = await requestGraphql(credentials, buildConversionReportQuery({ start, end, selection }))
+  if (!data?.conversionReport) throw new Error('Resposta sem data.conversionReport.')
+  return { ...data.conversionReport, discoveredSelection: selection }
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -136,6 +197,7 @@ export async function main(argv = process.argv.slice(2)) {
     periodDays: args.days,
     summary: summarizeReport(report.nodes),
     pageInfo: report.pageInfo ?? null,
+    discoveredSelection: report.discoveredSelection,
   }
   if (args.showSample) output.sample = report.nodes?.slice(0, 3) ?? []
   console.log(JSON.stringify(output, null, 2))
