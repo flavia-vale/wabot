@@ -514,6 +514,88 @@
   color: var(--ink);
 }
 
+/* --- Selos de confiança (logo abaixo do hero) --- */
+.landing-root .comparison-trust-strip {
+  list-style: none;
+  margin: 0;
+  padding: 14px 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(16px, 4vw, 40px);
+  border-bottom: 1px solid var(--line);
+}
+.landing-root .comparison-trust-strip li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.landing-root .comparison-trust-strip li svg { color: var(--accent-strong); flex-shrink: 0; }
+
+/* --- Grade de diferenciais (variante com cartão, em vez de chip) --- */
+.landing-root .comparison-differential-grid {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.landing-root .comparison-differential-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* --- Comparador interativo por critério --- */
+.landing-root .comparison-criteria-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.landing-root .comparison-criteria-pill {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 13px;
+  font-family: inherit;
+  padding: 9px 15px;
+  border-radius: 999px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.landing-root .comparison-criteria-pill.is-active {
+  border-color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 24%, var(--surface));
+  color: var(--ink);
+}
+.landing-root .comparison-table tbody tr.is-focused {
+  background: color-mix(in oklab, var(--accent) 14%, var(--surface));
+}
+.landing-root .comparison-insight {
+  margin: 16px 0 0;
+  padding: 16px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--accent-3) 55%, var(--surface));
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
 /* --- Passos de migração --- */
 .landing-root .comparison-steps {
   list-style: none;
