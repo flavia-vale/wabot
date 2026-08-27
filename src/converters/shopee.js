@@ -389,11 +389,30 @@ function parseIds(url) {
 
 // Consulta a API de afiliado (GraphQL) para obter a imagem oficial do produto.
 // Mais confiável que scraping HTML, que a Shopee bloqueia para UAs comuns.
-export async function fetchShopeeImage(url, creds) {
-  if (!creds?.appId || !creds?.secretKey) return null
+// A Shopee tem UMA fonte de foto que funciona: esta API de afiliado. O shell
+// SPA da página não traz og:image e a API v4 pública responde com erro
+// (documentado no AGENTS.md, seção "Image scrapers"). Ou seja: quando isto aqui
+// devolve `null`, a oferta de Shopee fica sem foto de loja — e até 2026-08-26
+// esse caminho era MUDO (dois `catch` vazios), então não dava para saber se foi
+// chave recusada, item fora do catálogo de afiliado ou short link não resolvido.
+// O Mercado Livre não sofre disso porque tem vitrine + API + página como fontes.
+//
+// `onDiagnostic({ stage, detail })` é opcional e best-effort: quem chama decide
+// se loga/emite sinal. Nunca altera o retorno.
+export async function fetchShopeeImage(url, creds, { onDiagnostic } = {}) {
+  const report = (stage, detail) => {
+    try { onDiagnostic?.({ stage, detail }) } catch {}
+  }
+  if (!creds?.appId || !creds?.secretKey) {
+    report('shopee_sem_credencial')
+    return null
+  }
   const canonical = await resolveCanonical(url)
   const ids = parseIds(canonical)
-  if (!ids) return null
+  if (!ids) {
+    report('shopee_sem_ids', canonical)
+    return null
+  }
 
   const body = {
     query: `{
@@ -410,9 +429,23 @@ export async function fetchShopeeImage(url, creds) {
       headers: { Authorization: header, 'Content-Type': 'application/json' },
       timeout: 6000,
     })
+    // A API de afiliado responde 200 MESMO EM ERRO, sinalizando via `errors`
+    // (mesma armadilha da sondagem de credencial — ver checkShopeeSession).
+    // Sem ler o corpo, chave recusada (10020) parecia "produto sem foto".
+    const apiError = Array.isArray(data?.errors) ? data.errors[0] : null
+    if (apiError) {
+      report('shopee_api_erro', apiError?.message || apiError?.code || 'erro sem detalhe')
+      return null
+    }
     const node = data?.data?.productOfferV2?.nodes?.[0]
-    return node?.imageUrl || null
-  } catch {
+    if (!node?.imageUrl) {
+      // Catálogo de afiliado não tem esse item: acontece e não é defeito nosso.
+      report('shopee_item_fora_do_catalogo', `${ids.shopId}/${ids.itemId}`)
+      return null
+    }
+    return node.imageUrl
+  } catch (err) {
+    report('shopee_api_falhou', err?.message)
     return null
   }
 }
