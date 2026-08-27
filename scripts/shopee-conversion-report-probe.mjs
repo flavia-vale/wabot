@@ -104,26 +104,48 @@ export function summarizeReport(nodes = []) {
   const byStatus = {}
   let tagged = 0
   const commissionTotals = {}
+  const attributionBreakdown = {}
+  function safeAttributionValue(value) {
+    const text = String(value ?? '').trim()
+    if (!text) return '(vazio)'
+    try {
+      const url = new URL(text)
+      return `url:${url.hostname}`
+    } catch {
+      return text.slice(0, 120)
+    }
+  }
   function visit(value, path = '') {
-    if (Array.isArray(value)) return value.forEach((item, index) => visit(item, `${path}[${index}]`))
-    if (!value || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      let found = false
+      value.forEach((item, index) => { if (visit(item, `${path}[${index}]`)) found = true })
+      return found
+    }
+    if (!value || typeof value !== 'object') return false
+    let foundExpectedTag = false
     for (const [key, child] of Object.entries(value)) {
       const childPath = path ? `${path}.${key}` : key
       if (/status$/i.test(key) && child != null && typeof child !== 'object') {
         const status = `${childPath}=${String(child)}`
         byStatus[status] = (byStatus[status] || 0) + 1
       }
-      if (/sub.?id|referrer/i.test(key) && String(child).toLowerCase() === EXPECTED_SUB_ID) tagged++
+      if (/sub.?id|utmContent|referrer/i.test(key) && child != null && typeof child !== 'object') {
+        const attributionValue = safeAttributionValue(child)
+        const attribution = `${childPath}=${attributionValue}`
+        attributionBreakdown[attribution] = (attributionBreakdown[attribution] || 0) + 1
+        if (String(child).trim().toLowerCase().includes(EXPECTED_SUB_ID)) foundExpectedTag = true
+      }
       if (/commission/i.test(key) && Number.isFinite(Number(child))) {
         commissionTotals[childPath] = (commissionTotals[childPath] || 0) + Number(child)
       }
-      visit(child, childPath)
+      if (visit(child, childPath)) foundExpectedTag = true
     }
+    return foundExpectedTag
   }
   for (const row of nodes) {
-    visit(row)
+    if (visit(row)) tagged++
   }
-  return { rows: nodes.length, taggedEspelhaGrupos: tagged, byStatus, commissionTotals }
+  return { rows: nodes.length, taggedEspelhaGrupos: tagged, attributionBreakdown, byStatus, commissionTotals }
 }
 
 export function credentialNotFoundHint(total) {

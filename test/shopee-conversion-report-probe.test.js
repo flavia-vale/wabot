@@ -54,13 +54,19 @@ test('introspecção descobre escalares e objetos aninhados sem adivinhar o sche
 
 test('resumo conta conversões da tag sem expor identificadores', () => {
   const summary = summarizeReport([
-    { orders: [{ orderStatus: 'PENDING', referrer: 'espelhagrupos', estimatedCommission: '1.25', orderId: 'sensitive' }] },
+    { utmContent: '[espelhagrupos]', orders: [{ orderStatus: 'PENDING', referrer: 'https://chat.whatsapp.com/private-path', estimatedCommission: '1.25', orderId: 'sensitive' }] },
     { orders: [{ orderStatus: 'PENDING', referrer: 'other', sellerCommission: 2 }] },
     { orders: [{ orderStatus: 'COMPLETED', referrer: 'espelhagrupos', estimatedCommission: null }] },
   ])
   assert.deepEqual(summary, {
     rows: 3,
     taggedEspelhaGrupos: 2,
+    attributionBreakdown: {
+      'utmContent=[espelhagrupos]': 1,
+      'orders[0].referrer=url:chat.whatsapp.com': 1,
+      'orders[0].referrer=other': 1,
+      'orders[0].referrer=espelhagrupos': 1,
+    },
     byStatus: {
       'orders[0].orderStatus=PENDING': 2,
       'orders[0].orderStatus=COMPLETED': 1,
