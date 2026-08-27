@@ -284,6 +284,12 @@ export const api = {
   adminOnlineUser: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}`),
   adminOnlineReconnect: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}/reconnect`, { method: 'POST' }),
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
+  adminCustomers: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/customers${query ? `?${query}` : ''}`)
+  },
+  adminCustomerHistory: (id) => apiFetch(`/api/admin/customers/${encodeURIComponent(id)}/history`),
+
   adminLogs: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/logs${query ? `?${query}` : ''}`)

@@ -330,6 +330,54 @@ o processo no boot — vide seção "D-3" abaixo. Gere uma por ambiente com:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+## Histórico por cliente no admin (`/admin/clientes`, 2026-08-27)
+
+Antes só existia visão macro: a gestão em `/admin` lista por RISCO (20 por
+página, sem ordenação) e o drill-down `GET /users/:id` é operacional — não
+respondia "quando essa cliente assinou, qual plano, quando vence". A
+`Subscription` sequer era lida ali.
+
+| Peça | Onde |
+|---|---|
+| Montagem dos 4 blocos + linha do tempo (PURO, sem banco) | `src/domain/admin/customerHistory.js` |
+| Lista larga, buscável e ordenável | `listCustomers` em `src/domain/admin/service.js` |
+| Rotas | `GET /api/admin/customers` e `GET /api/admin/customers/:id/history` |
+| Tela da lista | `dashboard/app/admin/clientes/page.js` |
+| Tela do histórico | `dashboard/app/admin/clientes/[id]/page.js` |
+
+Os quatro blocos: **cadastral** (criação, origem, termos, último acesso),
+**financeiro** (trial, assinaturas, pagamentos, LTV, acessos liberados na mão),
+**técnico** (quedas por janela/código, erros por categoria, lojas) e **uso**
+(grupos, envios 30d/7d/24h, automações, série diária).
+
+**Não regredir — as regras que impedem a tela de virar parede:**
+- **Cabeçalho tem exatamente 6 números.** Teste falha se virar 7.
+- **A linha do tempo só recebe MARCOS.** Envio individual nunca vira linha —
+  vira agregado diário, e queda de WhatsApp idem ("caiu 3 vezes"). Sem isso um
+  cliente com 160 envios/dia produz 4.800 linhas e a página deixa de servir
+  para qualquer coisa.
+- **Cada aba mostra 8 linhas**; o resto fica atrás de "ver tudo".
+- **Linguagem leiga**, como no resto do produto: a categoria de erro vira
+  "Demorou demais e desistiu", não `timeout:`. Teste falha se prefixo de
+  `errorMsg` chegar à tela.
+
+**Trial não tem tabela própria** — é `plan='trial'` + `accessExpiresAt`.
+`summarizeTrial` reconstrói início/fim/conversão a partir do cadastro e do
+PRIMEIRO pagamento aprovado. Depois de assinar, `accessExpiresAt` passa a ser a
+validade do plano pago, então `endsAt` do trial vira `null` de propósito —
+reaproveitá-lo mentiria na linha do tempo.
+
+**Custos:** só leitura, nenhum processo novo, **zero impacto de RAM**. Todo
+agregado por cliente sai em lote (`groupBy`/`in`), nunca uma consulta por linha.
+`MessageLog` é lido em janela de 30 dias com teto de 20.000 linhas — o histórico
+de uso é agregado, não listagem. Ordenação só por coluna real do banco
+(`SORTABLE_CUSTOMER_FIELDS`); último envio e LTV ficam de fora porque ordenar
+por eles exigiria carregar a base inteira em memória.
+
+Telefone segue mascarado por papel (`sanitizeUser`/`canSeePhone`) e as duas
+rotas exigem `support:read` e gravam `AdminAuditLog`. Testes:
+`test/admin-customer-history.test.js`.
+
 ## Liga/desliga staging pelo painel admin (economia de RAM)
 
 Como staging e prod dividem o mesmo VPS, o painel admin de prod tem um botão
