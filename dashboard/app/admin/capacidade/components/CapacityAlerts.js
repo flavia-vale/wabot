@@ -1,0 +1,5 @@
+const STATUS_LABEL = { pending: 'Em confirmação', active: 'Ativo', recovered: 'Recuperado' }
+
+export default function CapacityAlerts({ alerts = [], error = '' }) {
+  return <section aria-labelledby="capacity-alerts" className="rounded-2xl border border-slate-200 bg-white p-5"><h2 id="capacity-alerts" className="font-black text-slate-950">Alertas e recuperações</h2>{error && <p role="alert" className="mt-3 text-sm font-semibold text-amber-800">{error}</p>}{!alerts.length ? <p className="mt-3 text-sm text-slate-600">Nenhum alerta registrado.</p> : <ul className="mt-3 space-y-3">{alerts.map((alert) => <li key={alert.id || `${alert.type}-${alert.lastObservedAt}`} className="rounded-xl border border-slate-200 p-4"><strong className="text-sm text-slate-900">{alert.type}</strong><span className="float-right text-xs font-bold uppercase text-slate-600">{STATUS_LABEL[alert.status] || alert.status} · {alert.severity}</span><p className="mt-2 text-sm text-slate-700">{alert.recommendation}</p></li>)}</ul>}</section>
+}

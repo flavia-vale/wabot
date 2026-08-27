@@ -30,6 +30,10 @@ function toMonitorGroup(group, targetPostJids = []) {
     templateKey: group.templateKey ?? null,
     primaryLinkTarget: group.primaryLinkTarget ?? null,
     targetPostJids,
+    // Intenção da cliente sobre os destinos (core/destinationRouting.js).
+    // 'explicit' = ela escolheu; lista vazia então significa NENHUM destino.
+    // Ausente/desconhecido cai em 'all' = comportamento histórico.
+    targetsMode: group.targetsMode === 'explicit' ? 'explicit' : 'all',
   }
 }
 

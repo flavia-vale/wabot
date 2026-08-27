@@ -327,3 +327,530 @@
     font-size: 11.5px;
   }
 }
+
+/* ============================================================
+ * Páginas de comparativo (/alternativas/*)
+ *
+ * A pilha de cartões idênticos com o mesmo peso visual era o que deixava
+ * essas páginas "confusas e poluídas". Aqui: um ritmo de espaçamento só,
+ * tabela que vira cartão no celular, chips no lugar de listas e uma barra
+ * fixa de teste grátis no celular (62% das impressões vêm de lá).
+ * ============================================================ */
+
+.landing-root .comparison-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.landing-root .comparison-section {
+  padding: 0 0 var(--gap) 0;
+}
+
+.landing-root .comparison-card {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 28px;
+  scroll-margin-top: 24px;
+}
+
+.landing-root .comparison-card-title {
+  font-size: clamp(21px, 2.3vw, 28px);
+  line-height: 1.18;
+  margin: 14px 0 10px;
+}
+
+.landing-root .comparison-card-lead {
+  color: var(--ink-soft);
+  line-height: 1.65;
+  max-width: 70ch;
+}
+
+/* --- Índice de seções --- */
+.landing-root .comparison-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.landing-root .comparison-nav-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.landing-root .comparison-nav-chip:hover {
+  background: color-mix(in oklab, var(--accent) 18%, var(--surface));
+  transform: translateY(-1px);
+}
+
+/* --- Chamada para o teste grátis --- */
+.landing-root .comparison-cta { margin-top: 22px; }
+.landing-root .comparison-cta-inline {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.landing-root .comparison-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.landing-root .comparison-cta-note {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* --- Barra fixa (celular) --- */
+.landing-root .comparison-sticky-cta { display: none; }
+
+/* --- Tabela --- */
+.landing-root .comparison-table-wrap {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.landing-root .comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+  text-align: left;
+  color: var(--ink);
+}
+.landing-root .comparison-table thead th {
+  background: color-mix(in oklab, var(--accent) 16%, var(--surface));
+  padding: 14px 16px;
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.landing-root .comparison-table tbody tr:nth-child(even) {
+  background: color-mix(in oklab, var(--bg-soft) 45%, var(--surface));
+}
+.landing-root .comparison-table tbody th {
+  padding: 16px;
+  font-weight: 700;
+  vertical-align: top;
+  width: 22%;
+  border-bottom: 1px solid var(--line);
+}
+.landing-root .comparison-table tbody td {
+  padding: 16px;
+  line-height: 1.6;
+  vertical-align: top;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line);
+}
+.landing-root .comparison-table tbody tr:last-child th,
+.landing-root .comparison-table tbody tr:last-child td { border-bottom: none; }
+
+/* --- Listas com ícone --- */
+.landing-root .comparison-icon-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.landing-root .comparison-icon-list li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.landing-root .comparison-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.landing-root .comparison-icon-check {
+  background: color-mix(in oklab, var(--accent) 26%, var(--surface));
+  color: var(--accent-strong);
+}
+.landing-root .comparison-icon-no {
+  background: color-mix(in oklab, #D97757 18%, var(--surface));
+  color: #C77758;
+  transform: rotate(45deg);
+}
+
+/* --- Chips de diferencial --- */
+.landing-root .comparison-chips {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.landing-root .comparison-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px 9px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* --- Selos de confiança (logo abaixo do hero) --- */
+.landing-root .comparison-trust-strip {
+  list-style: none;
+  margin: 0;
+  padding: 14px 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(16px, 4vw, 40px);
+  border-bottom: 1px solid var(--line);
+}
+.landing-root .comparison-trust-strip li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.landing-root .comparison-trust-strip li svg { color: var(--accent-strong); flex-shrink: 0; }
+
+/* --- Grade de diferenciais (variante com cartão, em vez de chip) --- */
+.landing-root .comparison-differential-grid {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.landing-root .comparison-differential-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* --- Comparador interativo por critério --- */
+.landing-root .comparison-criteria-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.landing-root .comparison-criteria-pill {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 13px;
+  font-family: inherit;
+  padding: 9px 15px;
+  border-radius: 999px;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.landing-root .comparison-criteria-pill.is-active {
+  border-color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 24%, var(--surface));
+  color: var(--ink);
+}
+.landing-root .comparison-table tbody tr.is-focused {
+  background: color-mix(in oklab, var(--accent) 14%, var(--surface));
+}
+.landing-root .comparison-insight {
+  margin: 16px 0 0;
+  padding: 16px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--accent-3) 55%, var(--surface));
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+/* --- Passos de migração --- */
+.landing-root .comparison-steps {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  counter-reset: comparison-step;
+}
+.landing-root .comparison-steps li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--surface) 92%, white);
+  line-height: 1.6;
+}
+.landing-root .comparison-step-number {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--accent-strong);
+  color: white;
+}
+
+/* --- Perfil de concorrente --- */
+.landing-root .comparison-competitor-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+.landing-root .comparison-competitor {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 20px;
+  background: color-mix(in oklab, var(--surface) 92%, white);
+}
+.landing-root .comparison-competitor-head h3 {
+  font-size: 19px;
+  margin: 0 0 6px;
+}
+.landing-root .comparison-competitor-head p {
+  color: var(--ink-soft);
+  line-height: 1.6;
+  font-size: 14.5px;
+}
+.landing-root .comparison-price-row {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.landing-root .comparison-price-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent-3) 55%, var(--surface));
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.landing-root .comparison-price-name { color: var(--ink-soft); }
+.landing-root .comparison-competitor-fit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+.landing-root .comparison-fit-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.landing-root .comparison-fit-label-yes { color: var(--accent-strong); }
+.landing-root .comparison-fit-label-no { color: #C77758; }
+.landing-root .comparison-competitor-fit p {
+  color: var(--ink);
+  line-height: 1.6;
+  font-size: 14.5px;
+}
+.landing-root .comparison-competitor-source {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.landing-root .comparison-competitor-source summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.landing-root .comparison-competitor-source p {
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* --- Decisão em duas colunas --- */
+/* Duas colunas fixas: com auto-fit os quatro cartões viravam 3 + 1, e o
+ * cartão sozinho na segunda fileira esticava na largura inteira. */
+.landing-root .comparison-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+/* --- FAQ --- */
+.landing-root .comparison-faq {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+.landing-root .comparison-faq details {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 18px;
+  background: color-mix(in oklab, var(--surface) 92%, white);
+}
+.landing-root .comparison-faq summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.5;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.landing-root .comparison-faq p {
+  margin-top: 10px;
+  color: var(--ink-soft);
+  line-height: 1.65;
+}
+
+/* --- Links (veja também / fontes) --- */
+.landing-root .comparison-links {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.landing-root .comparison-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  line-height: 1.5;
+  min-height: 32px;
+}
+
+@media (max-width: 900px) {
+  .landing-root .comparison-competitor-fit { grid-template-columns: 1fr; gap: 12px; }
+  .landing-root .comparison-decision-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .landing-root .comparison-card { padding: 20px; border-radius: 20px; }
+  .landing-root .comparison-stack { gap: 16px; }
+
+  /* Tabela vira cartão: 3 colunas em 375px é ilegível. */
+  .landing-root .comparison-table-wrap { border: none; border-radius: 0; }
+  .landing-root .comparison-table,
+  .landing-root .comparison-table tbody,
+  .landing-root .comparison-table tr,
+  .landing-root .comparison-table th,
+  .landing-root .comparison-table td { display: block; width: auto; }
+  .landing-root .comparison-table thead { display: none; }
+  .landing-root .comparison-table tbody tr {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    margin-bottom: 12px;
+    background: var(--surface) !important;
+    overflow: hidden;
+  }
+  .landing-root .comparison-table tbody th {
+    display: block;
+    width: auto;
+    background: color-mix(in oklab, var(--accent) 16%, var(--surface));
+    font-size: 15px;
+    padding: 12px 16px;
+  }
+  .landing-root .comparison-table tbody td { padding: 12px 16px; border-bottom: none; }
+  .landing-root .comparison-table tbody td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+
+  /* Barra fixa de teste grátis. */
+  .landing-root .comparison-sticky-cta {
+    display: flex;
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 50;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px 10px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: color-mix(in oklab, var(--surface) 94%, white);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(6px);
+  }
+  .landing-root .comparison-sticky-cta-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+    font-size: 13.5px;
+    flex: 1;
+    min-width: 0;
+  }
+  .landing-root .comparison-sticky-cta-text strong,
+  .landing-root .comparison-sticky-cta-text span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* O bloco de ≤414px deixa todo .btn com width:100% (bom no corpo da
+   * página, péssimo dentro de uma barra de uma linha só). */
+  .landing-root .comparison-sticky-cta .btn { flex-shrink: 0; width: auto; }
+  .landing-root .comparison-sticky-cta-text span { font-size: 11.5px; color: var(--ink-soft); }
+  .landing-root .comparison-sticky-cta .btn { padding: 11px 18px; font-size: 14px; }
+  /* Espaço para a barra não cobrir o rodapé. */
+  .landing-root .comparison-has-sticky { padding-bottom: 84px; }
+
+  .landing-root .comparison-cta-actions .btn { width: 100%; justify-content: center; }
+}

@@ -24,6 +24,8 @@ import { resolveLinkKind } from './converters/linkKind.js'
 import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
+import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia } from './core/imageModePolicy.js'
 import db from './db.js'
@@ -1547,7 +1549,18 @@ function reportPreviewCardNoImage(stage, ctx = {}) {
   try { recordOperationalSignal('preview_card_no_image', { userId, stage, platform: ctx.platform || null }) } catch {}
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto }) {
+function kindDoCard(fonte) {
+  if (fonte === 'origem') return DELIVERY_KIND.CARD_ORIGEM
+  if (fonte === 'banner') return DELIVERY_KIND.CARD_BANNER
+  return DELIVERY_KIND.CARD_LOJA
+}
+
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto }) {
+  // `onFonteDaFoto` (opcional): diz de ONDE veio a foto do card ('loja',
+  // 'origem' ou 'banner'). Vai por callback, e não como campo do objeto
+  // devolvido, porque esse objeto é o urlInfo que entra no proto do WhatsApp —
+  // campo estranho ali é risco desnecessário (ver o RCA do `title` do PR #1186).
+  const marcarFonte = fonte => { try { onFonteDaFoto?.(fonte) } catch { /* best-effort */ } }
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
@@ -1604,8 +1617,11 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
     jpegThumbnail = banner
     hqSourceBuffer = banner
+    if (banner) marcarFonte('banner')
   } else if (primary?.platform) {
-    const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
+    const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}, {
+      onDiagnostic: ({ stage, detail }) => reportPreviewCardNoImage(stage, { platform: primary.platform, sourceUrl, detail }),
+    }).catch((err) => {
       reportPreviewCardNoImage('scrape_threw', { platform: primary.platform, sourceUrl, err: err?.message })
       return null
     })
@@ -1628,6 +1644,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         }
         jpegThumbnail = normalized?.jpegThumbnail || undefined
         hqSourceBuffer = normalized?.buffer || jpegThumbnail
+        if (jpegThumbnail) marcarFonte('loja')
       } catch (err) {
         reportPreviewCardNoImage('download_falhou', { platform: primary.platform, imageUrl, sourceUrl, err: err?.message })
       }
@@ -1648,13 +1665,17 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   //
   // Não roda no caminho do banner de cupom: ali a ausência de foto de produto é
   // intencional (link de campanha não tem produto), e o banner já preencheu.
-  if (!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && shouldUseOriginPhotoFallback()) {
+  // `allowSmallOriginPhoto`: chamada vinda do caminho SEM imagem (modo foto
+  // cujo envio ia sair como texto pelado). Ali o plano B não é opcional — sem
+  // ele a oferta vai sem nada —, então ele roda mesmo com a env desligada.
+  if (!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && (allowSmallOriginPhoto || shouldUseOriginPhotoFallback())) {
     try {
       const origin = await fetchOriginPhoto()
       const normalized = origin?.buffer ? await normalizeImageForWhatsApp(origin.buffer) : null
       if (normalized?.jpegThumbnail) {
         jpegThumbnail = normalized.jpegThumbnail
         hqSourceBuffer = normalized.buffer || normalized.jpegThumbnail
+        marcarFonte('origem')
         // Sinal PRÓPRIO (não é `ops_preview_card_no_image`): aqui a oferta SAIU
         // com card e com foto. Misturar os dois esconderia justamente o número
         // que interessa — quantas ofertas o plano B salvou, e de qual loja.
@@ -1934,6 +1955,51 @@ async function processSendJob(job) {
       logger.warn({ err: err?.message, destJid: job.destJid }, 'Preservação do destino não pôde ser lida; seguindo sem pausa')
     }
 
+    // B) Revalidação do destino (RCA 2026-08-26). Os destinos são calculados
+    // quando a mensagem CHEGA; o job só sai no dequeue, que pode ser muito
+    // depois (preservação do destino, freio de fila). Se a cliente desvinculou
+    // ou apagou o destino nesse meio-tempo, a alteração valia só para mensagens
+    // futuras e o job já materializado seguia entregando — foi assim que uma
+    // oferta saiu 1,5s DEPOIS de o destino ser apagado no painel. Só vale para
+    // envio espelhado (`converted`, que carrega `sourceJid`); broadcast, oferta
+    // automática e agendamento têm destino escolhido na hora e não passam aqui.
+    if (job.type === 'converted' && job.sourceJid) {
+      const unlinked = await (async () => {
+        try {
+          const cfg = await getConfig()
+          const monitorGroup = cfg.groups.monitor.find(g => g.waJid === job.sourceJid)
+          if (!monitorGroup) {
+            // A origem sumiu da config: não há mais espelhamento dela.
+            return { drop: true, reason: 'source_unlinked' }
+          }
+          const current = resolveMonitorDestinations({
+            targetsMode: monitorGroup.targetsMode,
+            targetPostJids: monitorGroup.targetPostJids,
+            allPostJids: cfg.groups.post,
+          })
+          // 'status@broadcast' é destino sintético (postToStatus), não vive em
+          // Group — nunca deve ser descartado por esta checagem.
+          if (job.destJid === 'status@broadcast') return { drop: false, reason: 'status' }
+          return shouldDropUnlinkedDestination({ destJid: job.destJid, currentDestinations: current.destinations })
+        } catch (err) {
+          // Fail-safe: sem foto confiável da config, envia (descartar por
+          // dúvida perderia oferta legítima).
+          logger.warn({ err: err?.message, destJid: job.destJid }, 'Revalidação do destino falhou; seguindo com o envio')
+          return { drop: false, reason: 'unknown_config' }
+        }
+      })()
+      if (unlinked.drop) {
+        await db.messageLog.update({
+          where: { id: job.logId },
+          data: { status: 'skipped', errorMsg: `skip:${unlinked.reason}`, sentAt: new Date() },
+        }).catch(() => {})
+        logger.warn({ destJid: job.destJid, sourceJid: job.sourceJid, logId: job.logId, reason: unlinked.reason }, 'Envio descartado: destino não está mais vinculado à origem')
+        try { recordOperationalSignal('send_dest_unlinked', { userId, destJid: job.destJid, sourceJid: job.sourceJid, reason: unlinked.reason }) } catch {}
+        await finishSendJob(job, { ok: false, error: unlinked.reason })
+        return
+      }
+    }
+
     // C) Descarte por idade na fila (configurável por destino na Preservação).
     // Oferta que ficou esperando mais que o teto não serve mais — e fila
     // infinita é o que liga o freio progressivo e derruba a vazão de todos os
@@ -2048,9 +2114,20 @@ async function processSendJob(job) {
             .catch(err => logger.warn({ err: err?.message }, 'recordChannelSendResult(ok) falhou'))
         }
 
+        // Registra COMO a oferta saiu (visão admin de qualidade de entrega).
+        // `deliveryInfo` é preenchido por buildPayload, que já rodou acima neste
+        // mesmo dequeue. Campos ausentes ficam NULL: "não sabemos" é uma
+        // resposta honesta e não polui a contagem do painel.
+        const entrega = job.deliveryInfo || {}
         await db.messageLog.update({
           where: { id: job.logId },
-          data: { status: 'success', errorMsg: null, sentAt: new Date() },
+          data: {
+            status: 'success',
+            errorMsg: null,
+            sentAt: new Date(),
+            ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
+            ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
+          },
         })
 
         sendMetrics.successTotal++
@@ -3151,6 +3228,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
           skipActiveFetch: couponSkipActiveFetch,
           logger,
+          // Miniatura pequena demais para publicar: a oferta sai SEM imagem
+          // (card de link do WhatsApp) em vez de com borrão. Sinal durável para
+          // medir quanto isso acontece por loja — ver thumbnailQualityPolicy.js.
+          onThumbnailDropped: info => {
+            try { recordOperationalSignal('monitored_thumbnail_dropped', { userId, msgId: msg.key.id, ...info }) } catch {}
+          },
         })
         return cachedImage
       }
@@ -3434,7 +3517,24 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         logger.info({ msgId: msg.key.id, hasProductLink, titleOverlap, looksGeneric: couponLooksGeneric, couponSkipActiveFetch }, 'estratégia de imagem para mensagem de cupom')
       }
 
-      const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
+      // Para onde essa mensagem vai. A decisão inteira mora em
+      // core/destinationRouting.js: origem com destinos escolhidos no painel
+      // ('explicit') NUNCA cai no espelhamento para todos os destinos da conta,
+      // mesmo que a lista tenha ficado vazia porque a cliente apagou os grupos
+      // que havia escolhido (RCA 2026-08-26).
+      const routing = resolveMonitorDestinations({
+        targetsMode: monitorGroup?.targetsMode,
+        targetPostJids: monitorGroup?.targetPostJids,
+        allPostJids: cfg.groups.post,
+      })
+      const baseDestinations = routing.destinations
+      if (routing.reason === DESTINATION_REASON.FALLBACK_ALL && baseDestinations.length) {
+        logger.warn({ sourceJid: jid, destCount: baseDestinations.length }, 'Origem sem destino escolhido: espelhando para TODOS os destinos da conta')
+        recordOperationalSignal('mirror_fallback_all_destinations', { userId, sourceJid: jid, destCount: baseDestinations.length })
+      }
+      if (routing.reason === DESTINATION_REASON.EXPLICIT_EMPTY) {
+        logger.warn({ sourceJid: jid }, 'Origem com destinos escolhidos, porém nenhum destino válido restou — nada será enviado')
+      }
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.
@@ -3738,7 +3838,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             logger.warn({ err: err?.message, logId: log.id }, 'Falha ao vincular SendDedupKey ao MessageLog')
           })
         }
-        let sentVia = 'text'
+        // COMO esta oferta saiu, preenchido por buildPayload no dequeue e
+        // persistido no MessageLog quando o envio dá certo. Antes daqui existia
+        // um `sentVia` que nascia 'text' e nunca era atualizado — ou seja, o
+        // painel sabia que o envio deu certo, mas não sabia se a cliente recebeu
+        // foto, card ou texto pelado. Era esse buraco que fazia todo problema de
+        // imagem ser descoberto pela cliente, e não por nós.
+        const deliveryInfo = { kind: null, originImageBytes: null }
 
         // PR-5.B.2: variação de copy por canal-destino. Aplica só em canal —
         // em grupo não há fingerprint de "mesma mensagem em N", então mantém
@@ -3765,6 +3871,16 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
+          // Quanto a MENSAGEM DE ORIGEM trouxe de imagem. `getOriginalPhotoOnce`
+          // é memoizado por mensagem, então isto não gera download extra — e é o
+          // dado que separa "não havia foto" de "havia foto e se perdeu".
+          try {
+            const origem = await getOriginalPhotoOnce()
+            deliveryInfo.originImageBytes = origem?.buffer?.length ?? 0
+          } catch {
+            deliveryInfo.originImageBytes = null
+          }
+
           // Modo "preview": envia uma única mensagem de texto com link preview
           // clicável do WhatsApp (card grande via thumbnail HQ upada — ver
           // buildManualLinkPreview). Não envia imageMessage: o clique no card
@@ -3801,7 +3917,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // imagem (preview e não-preview) concordam sobre produto-vs-cupom. O
             // sinal de vitrine ML (warning) segue como gatilho independente.
             const couponTextSignal = couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used'
+            let fonteDaFoto = null
             const linkPreview = await buildManualLinkPreview({
+              onFonteDaFoto: fonte => { fonteDaFoto = fonte },
               text: variantText,
               primary,
               credentialsMap: cfg.credentials,
@@ -3815,6 +3933,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // download duplicado da mesma mídia.
               fetchOriginPhoto: getOriginalPhotoOnce,
             })
+            deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
               finalText: variantText,
               image: null,
@@ -3838,6 +3957,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               caption: hasCaption ? variantText : undefined,
               forwardNewsletter: null,
             })
+            deliveryInfo.kind = DELIVERY_KIND.RELAY
             return {
               _route: 'relay',
               relay: {
@@ -3875,6 +3995,47 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             }
           }
 
+          // Sem imagem, `useLinkPreview` sozinho só liga o preview AUTOMÁTICO do
+          // Baileys (generateHighQualityLinkPreview). Ele não resolve link de
+          // afiliado encurtado (s.shopee.com.br, amzn.to, meli.la) — é a
+          // limitação que abre o comentário de monitoredImageResolver.js —, e aí
+          // a oferta chega no grupo como TEXTO PELADO, sem foto e sem card.
+          // Foi o que aconteceu ao ligar o piso de qualidade da miniatura em
+          // 2026-08-26: trocamos foto ruim por nenhuma imagem, que é pior.
+          //
+          // Montamos então o MESMO card manual do modo preview (foto da loja →
+          // plano B com a foto da mensagem de origem). A oferta sai com card
+          // clicável e com a foto que houver; a miniatura pequena, renderizada
+          // dentro de um card, é legível — o problema original era ela ampliada
+          // como imagem de corpo inteiro.
+          if (useLinkPreview && !image) {
+            let fonteDaFotoFallback = null
+            const fallbackPreview = await buildManualLinkPreview({
+              onFonteDaFoto: fonte => { fonteDaFotoFallback = fonte },
+              text: variantText,
+              primary,
+              credentialsMap: cfg.credentials,
+              uploadToServer: activeSock?.waUploadToServer,
+              destJid,
+              couponTextSignal: couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used',
+              fetchOriginPhoto: getOriginalPhotoOnce,
+              // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
+              // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
+              allowSmallOriginPhoto: true,
+            }).catch(err => {
+              logger.warn({ err: err?.message, destJid }, 'Card de fallback sem imagem falhou; oferta sai como texto')
+              return null
+            })
+            deliveryInfo.kind = fallbackPreview ? kindDoCard(fonteDaFotoFallback) : DELIVERY_KIND.TEXTO
+            return buildMonitoredMessagePayload({
+              finalText: variantText,
+              image: null,
+              useLinkPreview: true,
+              linkPreview: fallbackPreview,
+            })
+          }
+
+          deliveryInfo.kind = image ? DELIVERY_KIND.FOTO : DELIVERY_KIND.TEXTO
           return buildMonitoredMessagePayload({
             finalText: variantText,
             image,
@@ -3886,6 +4047,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           type: 'converted',
           logId: log.id,
           destJid,
+          // Revalidação no dequeue (core/destinationRouting.js): o job pode
+          // esperar minutos/horas na fila e a cliente pode desvincular/apagar o
+          // destino nesse meio-tempo.
+          sourceJid: jid,
           platforms,
           plan: cfg.plan,
           // Só o stagger entre destinos fica congelado no job; o freio de fila
@@ -3894,9 +4059,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
           buildPayload,
+          // Referência viva: buildPayload roda no dequeue e preenche este mesmo
+          // objeto, que processSendJob lê depois para gravar no MessageLog.
+          deliveryInfo,
           onDone: async (result) => {
             if (result.ok) {
-              logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
+              logger.info({ destJid, platforms, deliveryKind: deliveryInfo.kind, originImageBytes: deliveryInfo.originImageBytes }, 'Mensagem enviada')
               if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })

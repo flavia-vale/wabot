@@ -88,6 +88,10 @@ export function categorizeErrorMsg(errorMsg) {
   // decisão de configuração, não falha de envio — cai em CONFIG_BLOCK como os
   // demais `skip:`. Branch explícito só para documentar o motivo canônico.
   if (errorMsg.startsWith('skip:queue_expired')) return ERROR_CATEGORIES.CONFIG_BLOCK
+  // Destino (ou a própria origem) deixou de estar vinculado enquanto o envio
+  // esperava na fila — decisão de configuração da cliente, não falha de envio.
+  if (errorMsg.startsWith('skip:dest_unlinked')) return ERROR_CATEGORIES.CONFIG_BLOCK
+  if (errorMsg.startsWith('skip:source_unlinked')) return ERROR_CATEGORIES.CONFIG_BLOCK
   if (errorMsg.startsWith('skip:decrypt_failed')) return ERROR_CATEGORIES.DECRYPT
   if (errorMsg.startsWith('skip:incoming_error')) return ERROR_CATEGORIES.INCOMING_ERROR
   if (errorMsg.startsWith('warning:amazon_cookies_expired')) return ERROR_CATEGORIES.CREDENTIAL_EXPIRED

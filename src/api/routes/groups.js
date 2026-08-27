@@ -114,8 +114,8 @@ export async function groupsRoutes(app, opts = {}) {
         event: role === 'monitor' ? 'monitor_group_created' : 'post_group_created',
         metadata: { role, kind },
       })
-      const configReloaded = reloadConfig(req.user.sub)
-      app.log.info({ groupId: group.id, role, kind, configReloaded }, 'Grupo/canal criado; configuração do worker recarregada quando disponível')
+      const configReload = await reloadWorkerConfig(req.user.sub)
+      app.log.info({ groupId: group.id, role, kind, configReloaded: configReload.ok, configReloadError: configReload.error }, 'Grupo/canal criado; configuração do worker recarregada quando disponível')
       return group
     } catch (err) {
       if (err.code === 'P2002') return reply.code(409).send({ error: 'Grupo já cadastrado com esse role' })
@@ -123,12 +123,33 @@ export async function groupsRoutes(app, opts = {}) {
     }
   })
 
+  // `reloadConfig` é assíncrono no modo remote (comando via Redis até o
+  // supervisor) e devolve uma Promise. Sem `await`, a Promise ia crua para o
+  // logger e virava `configReloaded: {}` — parecia confirmação e não era: não
+  // dizia se o supervisor recebeu o comando nem se o worker invalidou o cache.
+  // Foi o que impediu de distinguir "job antigo ainda saindo" de "worker nem
+  // recarregou" no RCA 2026-08-26.
+  async function reloadWorkerConfig(userId) {
+    try {
+      return { ok: Boolean(await reloadConfig(userId)), error: null }
+    } catch (err) {
+      return { ok: false, error: err?.message || String(err) }
+    }
+  }
+
   app.get('/:id/targets', { onRequest: [app.authenticate] }, async (req, reply) => {
     const monitor = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub, role: 'monitor' } })
     if (!monitor) return reply.code(404).send({ error: 'Grupo monitor não encontrado' })
 
     const targets = await db.groupTarget.findMany({ where: { userId: req.user.sub, monitorId: monitor.id }, select: { postId: true } })
     if (targets.length > 0) return { postIds: targets.map(t => t.postId), mode: 'explicit' }
+
+    // Escolha explícita que ficou sem nenhum destino (a cliente apagou os grupos
+    // que havia selecionado): a resposta honesta é "nenhum destino", e o
+    // espelhamento dessa origem fica parado até ela escolher de novo. Mostrar
+    // todos aqui era o que fazia o painel dizer que estava tudo selecionado
+    // enquanto a oferta caía em grupo que ela nunca escolheu (RCA 2026-08-26).
+    if (monitor.targetsMode === 'explicit') return { postIds: [], mode: 'explicit' }
 
     // Sem linhas em GroupTarget significa fallback canônico: o monitor envia
     // para TODOS os destinos de postagem do usuário. Retornamos esses ids para
@@ -155,14 +176,21 @@ export async function groupsRoutes(app, opts = {}) {
     const usesChannel = monitor.kind === JID_KIND.CHANNEL || validPosts.some(post => post.kind === JID_KIND.CHANNEL)
     if (usesChannel && !(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
 
+    // `targetsMode` grava a INTENÇÃO da cliente. Escolheu destinos → 'explicit':
+    // daí em diante, se esses vínculos sumirem (ex.: ela apagar os grupos de
+    // destino, o que apaga GroupTarget por cascata), a origem NÃO volta a
+    // espelhar para todos os destinos da conta. Lista vazia mantém 'all' porque
+    // é assim que a tela sempre se comportou (desmarcar tudo = padrão histórico).
+    const targetsMode = postIds.length ? 'explicit' : 'all'
     await db.$transaction([
       db.groupTarget.deleteMany({ where: { userId: req.user.sub, monitorId: monitor.id } }),
       ...postIds.map(postId => db.groupTarget.create({ data: { userId: req.user.sub, monitorId: monitor.id, postId } })),
+      db.group.update({ where: { id: monitor.id }, data: { targetsMode } }),
     ])
 
-    const configReloaded = reloadConfig(req.user.sub)
-    app.log.info({ monitorId: monitor.id, postCount: postIds.length, configReloaded }, 'Destinos do grupo monitor atualizados; configuração do worker recarregada quando disponível')
-    return { postIds }
+    const configReload = await reloadWorkerConfig(req.user.sub)
+    app.log.info({ monitorId: monitor.id, postCount: postIds.length, targetsMode, configReloaded: configReload.ok, configReloadError: configReload.error }, 'Destinos do grupo monitor atualizados; configuração do worker recarregada quando disponível')
+    return { postIds, mode: targetsMode }
   })
 
   app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -245,8 +273,8 @@ export async function groupsRoutes(app, opts = {}) {
         ...(normalizedChannelButtonName !== undefined ? { channelButtonName: normalizedChannelButtonName || null } : {}),
       },
     })
-    const configReloaded = reloadConfig(req.user.sub)
-    app.log.info({ groupId: updated.id, imageMode: updated.imageMode, imageLinkTarget: updated.imageLinkTarget, fallbackToOriginal: updated.fallbackToOriginal, configReloaded }, 'Grupo atualizado; configuração do worker recarregada quando disponível')
+    const configReload = await reloadWorkerConfig(req.user.sub)
+    app.log.info({ groupId: updated.id, imageMode: updated.imageMode, imageLinkTarget: updated.imageLinkTarget, fallbackToOriginal: updated.fallbackToOriginal, configReloaded: configReload.ok, configReloadError: configReload.error }, 'Grupo atualizado; configuração do worker recarregada quando disponível')
     return updated
   })
 
@@ -254,8 +282,8 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
     await db.group.delete({ where: { id: req.params.id } })
-    const configReloaded = reloadConfig(req.user.sub)
-    app.log.info({ groupId: group.id, role: group.role, configReloaded }, 'Grupo removido; configuração do worker recarregada quando disponível')
+    const configReload = await reloadWorkerConfig(req.user.sub)
+    app.log.info({ groupId: group.id, role: group.role, configReloaded: configReload.ok, configReloadError: configReload.error }, 'Grupo removido; configuração do worker recarregada quando disponível')
     return { ok: true }
   })
 

@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fetchProductInfo, getMlUserToken } from '../src/converters/productInfoScraper.js'
+import { _resetShopeeShortLinkCache } from '../src/converters/shopee.js'
 
 function mockHtmlResponse(html, url = 'https://www.amazon.com.br/dp/B0CXGBT3Z9') {
   return {
@@ -49,7 +50,10 @@ test('fetchProductInfo (ML social share) usa o preço do produto destacado, não
     }
     return mockHtmlResponse(socialHtml, expanded)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://meli.la/2jBSikD', { mlCredentials: { ssid: 'x'.repeat(20) } })
   assert.match(info.title, /Lava E Seca Samsung/)
@@ -83,7 +87,10 @@ test('fetchProductInfo (ML social share) funciona SEM mlCredentials — não exi
     assert.ok(!init?.headers?.Cookie, 'não deve enviar cookie sem mlCredentials')
     return mockHtmlResponse(socialHtml, expanded)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://meli.la/2YH3Vob', {})
   assert.match(info.title, /Jaqueta Puffer/)
@@ -112,7 +119,10 @@ test('fetchProductInfo (Amazon) re-tenta quando cai na página de CAPTCHA', asyn
     // 1ª e 2ª chamadas: captcha; 3ª em diante: página real.
     return mockHtmlResponse(calls < 3 ? captchaHtml : realHtml, 'https://www.amazon.com.br/dp/B0G1TNVJPH')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.amazon.com.br/dp/B0G1TNVJPH')
   assert.ok(calls >= 3, `deveria ter re-tentado (chamadas=${calls})`)
@@ -128,7 +138,10 @@ test('fetchProductInfo extrai título e preço de página Amazon mesmo sem json-
 
   const originalFetch = globalThis.fetch
   globalThis.fetch = async () => mockHtmlResponse(html)
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://amazon.com.br/qualquer')
   assert.match(info.title, /Amai, Absorvente Externo Fluxo Regular/i)
@@ -143,7 +156,10 @@ test('fetchProductInfo extrai preço Amazon via a-price-whole/fraction quando a-
 
   const originalFetch = globalThis.fetch
   globalThis.fetch = async () => mockHtmlResponse(html)
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.amazon.com.br/Milagre-Creme-Pentear-Lola-Cosmetics/dp/B07GTMGKY1')
   assert.match(info.title, /Milagre Creme de Pentear/i)
@@ -178,7 +194,10 @@ test('fetchProductInfo usa fallback da API da Shopee para título e preços', as
     }
     throw new Error(`unexpected fetch: ${url}`)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290?extraParams=1')
   assert.equal(info.title, 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso')
@@ -211,7 +230,10 @@ test('fetchProductInfo usa campos alternativos de preço da Shopee quando price_
     }
     return mockHtmlResponse(shellHtml, 'https://shopee.com.br/KIT-TERERE-BLACK-ERVA-SABOR-CEREJA-ICE-i.1750300958.23499408546')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://shopee.com.br/KIT-TERERE-BLACK-ERVA-SABOR-CEREJA-ICE-i.1750300958.23499408546')
   assert.match(info.title, /KIT TERERÉ BLACK ERVA SABOR CEREJA ICE/i)
@@ -243,7 +265,10 @@ test('fetchProductInfo extrai faixa de preço da Shopee pelo HTML quando API nã
     }
     return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Moletom-Canguru-Capuz-Bolso-Blusa-de-Frio-Feminino-Masculino-Unissex-Algod%C3%A3o-Drag%C3%A3o-Japon%C3%AAs-i.392751109.58255937719')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://shopee.com.br/Moletom-Canguru-Capuz-Bolso-Blusa-de-Frio-Feminino-Masculino-Unissex-Algod%C3%A3o-Drag%C3%A3o-Japon%C3%AAs-i.392751109.58255937719')
   assert.equal(info.newPrice, '58,99')
@@ -265,7 +290,10 @@ test('fetchProductInfo extrai preço da Shopee por JSON inline quando API falha'
     }
     return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Moletom-Canguru-Capuz-Bolso-Blusa-de-Frio-Feminino-Masculino-Unissex-Algod%C3%A3o-Drag%C3%A3o-Japon%C3%AAs-i.392751109.58255937719')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://shopee.com.br/Moletom-Canguru-Capuz-Bolso-Blusa-de-Frio-Feminino-Masculino-Unissex-Algod%C3%A3o-Drag%C3%A3o-Japon%C3%AAs-i.392751109.58255937719')
   assert.equal(info.newPrice, '58,99')
@@ -302,7 +330,10 @@ test('fetchProductInfo resolve short link da Shopee antes de consultar a API', a
     }
     throw new Error(`unexpected fetch: ${url}`)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://s.shopee.com.br/6L1arzoKKY')
   assert.equal(info.title, 'Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso')
@@ -320,7 +351,10 @@ test('fetchProductInfo usa título do slug da URL quando Shopee API falhar', asy
     }
     return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Completo-Com-Pinc%C3%A9is-Empreendedora-Sucesso-i.358101010.21697493290?extraParams=1')
   assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Empreendedora Sucesso/i)
@@ -355,7 +389,10 @@ test('fetchProductInfo (regressão) lê título/preço de short link Shopee mesm
     }
     return mockHtmlResponse(shellHtml, url)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo(shortUrl)
   assert.match(String(v4Query), /itemid=21697493290&shopid=358101010/)
@@ -381,7 +418,10 @@ test('fetchProductInfo (regressão) resolve short link Shopee servido como inter
     }
     return mockHtmlResponse(shellHtml, url)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo(shortUrl)
   assert.match(info.title, /Caneca Ceramica Premium/i)
@@ -418,7 +458,10 @@ test('fetchProductInfo extrai título e preços do HTML da PDP do Mercado Livre 
     }
     return mockHtmlResponse(html, 'https://www.mercadolivre.com.br/forma-silicone/p/MLB69573479')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.mercadolivre.com.br/forma-silicone/p/MLB69573479')
   assert.match(info.title, /02 Forma Silicone Retangular Reutilizável Air Fryer/i)
@@ -442,7 +485,10 @@ test('fetchProductInfo extrai preços do JSON embarcado da PDP do Mercado Livre'
     }
     return mockHtmlResponse(html, 'https://www.mercadolivre.com.br/secador/p/MLB70009242')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador/p/MLB70009242')
   assert.match(info.title, /Secador De Roupas Elétrico Portátil/i)
@@ -474,7 +520,10 @@ test('fetchProductInfo envia cookie de sessão do ML e extrai dados da PDP auten
     const body = cookie ? realPdp : antiBot
     return mockHtmlResponse(body, 'https://www.mercadolivre.com.br/forma-universal/p/MLB26402871')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.mercadolivre.com.br/forma-universal/p/MLB26402871', {
     mlCredentials: { ssid: 'sessionid1234567890', csrf: 'tok', id: '42' },
@@ -506,7 +555,10 @@ test('fetchProductInfo usa fallback da API de products do Mercado Livre para tí
     }
     throw new Error(`unexpected fetch: ${url}`)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
   assert.match(info.title, /Secador de roupas 600w elétrico portátil/i)
@@ -549,7 +601,10 @@ test('fetchProductInfo retenta URL ML com cookie quando meli.la redireciona cros
     }
     throw new Error(`unexpected fetch: ${url}`)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://meli.la/2jUq4U9', {
     mlCredentials: { ssid: 'sessionid1234567890', tag: '123456', id: '42' },
@@ -596,7 +651,10 @@ test('fetchProductInfo retenta URL ML com cookie quando meli.la redireciona para
     }
     throw new Error(`unexpected fetch: ${url}`)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://meli.la/ABCDE123', {
     mlCredentials: { ssid: 'sessionid1234567890', tag: '123456', id: '42' },
@@ -629,7 +687,10 @@ test('fetchProductInfo mantém fallback de API do Mercado Livre mesmo quando fet
     }
     throw new Error(`unexpected fetch: ${url}`)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador-de-roupas-600w-eletrico-portatil-suspenso-cortina-compacto-econmico-seca-rapido-110v/p/MLB70009242')
   assert.match(info.title, /Secador de roupas 600w elétrico portátil/i)
@@ -658,7 +719,10 @@ test('fetchProductInfo (Shopee sem creds) extrai título e preço do SSR retorna
     }
     return mockHtmlResponse(shellHtml, 'https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
   assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Profissionais/i)
@@ -676,7 +740,10 @@ test('fetchProductInfo (Shopee sem creds) usa título do slug quando crawler UA 
     // todos os UAs retornam o shell
     return mockHtmlResponse(shellHtml, url)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-Com-Pinceis-i.358101010.21697493290')
   assert.match(info.title, /Kit Maquiagem Com Pinceis/i)
@@ -703,7 +770,10 @@ test('fetchProductInfo (Shopee sem creds) detecta o shell SPA REAL de produção
     }
     return mockHtmlResponse(realShellHtml, 'https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://shopee.com.br/Kit-Maquiagem-i.358101010.21697493290')
   assert.match(info.title, /Kit Maquiagem Completo Com Pincéis Profissionais/i)
@@ -734,7 +804,10 @@ test('fetchProductInfo (ML sem creds) tenta facebookexternalhit quando HTML é a
     }
     return mockHtmlResponse(antibotHtml, url)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.mercadolivre.com.br/liquidificador-arno/MLB123456')
   assert.match(info.title, /Liquidificador Arno Faciclic Plus/i)
@@ -765,7 +838,10 @@ test('fetchProductInfo (Amazon) usa facebookexternalhit quando todos os retries 
     normalCallCount++
     return mockHtmlResponse(captchaHtml, String(input))
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.amazon.com.br/dp/B09VQ39F41')
   assert.match(info.title, /Fritadeira Air Fryer Mondial/i)
@@ -788,7 +864,10 @@ test('fetchProductInfo (Shopee COM creds) não chama crawler UA — usa API de a
     }
     return mockHtmlResponse('<!doctype html><html><head><title>Shopee Brasil</title></head><body></body></html>', String(input))
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   await fetchProductInfo('https://shopee.com.br/Produto-i.111.222', { shopeeCredentials: { appId: '123', secretKey: 'abc' } })
   assert.equal(crawlerUaCalled, false, 'crawler UA não deve ser chamado quando shopeeCreds está presente')
@@ -807,7 +886,10 @@ test('fetchProductInfo (ML COM creds) não chama facebookexternalhit — usa coo
         <span class="andes-money-amount__cents">90</span>
         </body></html>`, String(input))
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   await fetchProductInfo('https://produto.mercadolivre.com.br/MLB123', {
     mlCredentials: { ssid: 'x'.repeat(20) },
@@ -828,7 +910,10 @@ test('fetchProductInfo (ML) não vaza "Mercado Libre" da página anti-bot como t
 
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input) => mockHtmlResponse(antiBotHtml, String(input))
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://produto.mercadolivre.com.br/MLB123', {
     mlCredentials: { ssid: 'x'.repeat(20) },
@@ -849,7 +934,10 @@ test('fetchProductInfo (Shopee) não vaza o interstício anti-bot "Oops! Seu nav
 
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input) => mockHtmlResponse(antiBotHtml, String(input))
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://s.shopee.com.br/5VTC0c5D8e')
   assert.equal(info.title, '', 'interstício anti-bot não pode virar título de produto')
@@ -867,7 +955,10 @@ test('fetchProductInfo (SHEIN) não vaza a frase promocional genérica do oneLin
 
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input) => mockHtmlResponse(oneLinkHtml, String(input))
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://onelink.shein.com/14/4v4p6bpzshsx')
   assert.equal(info.title, '', 'frase promocional genérica não pode virar título de produto')
@@ -886,7 +977,10 @@ test('fetchProductInfo não descarta título legítimo de outra loja só por con
 
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input) => mockHtmlResponse(legitHtml, String(input))
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const info = await fetchProductInfo('https://www.amazon.com.br/dp/B000000000')
   assert.equal(
@@ -1023,7 +1117,10 @@ test('getMlUserToken: duas chamadas concorrentes para a MESMA credencial seriali
       json: async () => ({ access_token: 'new-access-token', refresh_token: 'new-refresh-token', expires_in: 21600 }),
     }
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  // A resolução de short link tem cache real (RCA 2026-08-26): dois testes que
+  // usam o MESMO link curto com stubs diferentes precisam limpá-lo.
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
 
   const creds = {
     ssid: 'x'.repeat(20),

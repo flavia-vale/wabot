@@ -34,6 +34,7 @@ import { join } from 'path'
 import db from '../src/db.js'
 import { getLogsBaseDir } from '../src/paths.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from '../src/converters/imageScrapers.js'
+import { decryptCredential } from '../src/credentialCrypto.js'
 
 function arg(name, fallback) {
   const hit = process.argv.find(a => a.startsWith(`--${name}=`))
@@ -168,13 +169,32 @@ if (!live) {
   if (!porPlataforma.size) {
     console.log('    Nenhum envio de loja conhecida na janela para testar.')
   }
+  // CREDENCIAIS REAIS DA CONTA — não passar `{}` aqui.
+  // A Shopee tem UMA fonte de foto que funciona (a API de afiliado, que exige
+  // appId+secretKey); sem credencial esse caminho é pulado e o teste devolvia
+  // "0/N com foto" para TODA conta, sugerindo bloqueio da loja que não existia.
+  // Foi assim que este script mandou a investigação de 2026-08-26 para o lado
+  // errado. Amazon e Mercado Livre não denunciavam o defeito porque têm fontes
+  // que funcionam sem credencial.
+  const credenciais = {}
+  if (user) {
+    const rowsCred = await db.credential.findMany({ where: { userId: user.id } })
+    for (const c of rowsCred) {
+      try { credenciais[c.platform] = JSON.parse(decryptCredential(c.data)) } catch { /* credencial ilegível: ignora */ }
+    }
+    const semCred = ['shopee'].filter(p => !credenciais[p]?.appId)
+    if (semCred.length) console.log(`    (aviso: conta sem credencial utilizável de ${semCred.join(', ')} — a foto dessa loja não tem como vir)`)
+  } else {
+    console.log('    (aviso: sem conta informada, o teste roda SEM credencial — a Shopee vai falhar por definição)')
+  }
+
   for (const [plat, urls] of porPlataforma) {
     let comFoto = 0
     const falhas = new Map()
     for (const url of urls) {
       let etapa = 'ok'
       try {
-        const imageUrl = await fetchProductImage(plat, url, {})
+        const imageUrl = await fetchProductImage(plat, url, credenciais)
         if (!imageUrl) etapa = 'loja_nao_devolveu_foto'
         else {
           const fetched = await fetchImageBuffer(imageUrl, url)

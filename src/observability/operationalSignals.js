@@ -68,6 +68,13 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Card de preview salvo pelo plano B: loja sem foto, foto da mensagem de
   // origem no lugar. A oferta SAIU com card clicável e com imagem.
   preview_card_origin_fallback: 'ops_preview_card_origin_fallback',
+  // Miniatura abaixo do piso de qualidade: a oferta saiu sem imagem em vez de
+  // com borrão (RCA 2026-08-26).
+  monitored_thumbnail_dropped: 'ops_monitored_thumbnail_dropped',
+  // Origem sem destino explícito espelhando para todos os destinos da conta.
+  mirror_fallback_all_destinations: 'ops_mirror_fallback_all_destinations',
+  // Job descartado no dequeue: destino não está mais vinculado à origem.
+  send_dest_unlinked: 'ops_send_dest_unlinked',
 }
 
 let cachedTrackFn = null
