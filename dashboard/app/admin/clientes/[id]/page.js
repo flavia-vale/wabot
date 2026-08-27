@@ -308,21 +308,26 @@ const TABS = [
 export default function AdminClienteHistoricoPage() {
   const params = useParams()
   const id = params?.id
-  const [history, setHistory] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [tab, setTab] = useState('cadastro')
+  // Estado único carimbado com o cliente que o produziu. "Carregando" e "erro"
+  // são DERIVADOS — flag de loading setada dentro do efeito dispara
+  // renderização em cascata (react-hooks/set-state-in-effect) e ainda podia
+  // mostrar o histórico de um cliente enquanto a URL já apontava para outro.
+  const [result, setResult] = useState(null)
 
   useEffect(() => {
-    if (!id) return
+    if (!id) return undefined
     let cancelled = false
-    setLoading(true)
     api.adminCustomerHistory(id)
-      .then(data => { if (!cancelled) { setHistory(data); setError('') } })
-      .catch(err => { if (!cancelled) setError(err?.message || 'Não foi possível carregar o histórico.') })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .then(history => { if (!cancelled) setResult({ id, history, error: '' }) })
+      .catch(err => { if (!cancelled) setResult({ id, history: null, error: err?.message || 'Não foi possível carregar o histórico.' }) })
     return () => { cancelled = true }
   }, [id])
+
+  const isCurrent = result?.id === id
+  const loading = !isCurrent
+  const error = isCurrent ? result.error : ''
+  const history = isCurrent ? result.history : null
 
   if (loading) return <main className="min-h-screen bg-slate-50 px-5 py-8"><LoadingState /></main>
   if (error) return <main className="min-h-screen bg-slate-50 px-5 py-8"><div className="mx-auto max-w-3xl"><Alert type="error" title="Histórico do cliente" message={error} /></div></main>

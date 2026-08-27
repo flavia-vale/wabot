@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
@@ -66,35 +66,40 @@ const COLUMNS = [
 ]
 
 export default function AdminClientesPage() {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [situacao, setSituacao] = useState('')
-  const [sort, setSort] = useState('createdAt')
-  const [dir, setDir] = useState('desc')
-  const [page, setPage] = useState(1)
+  const [query, setQuery] = useState({ search: '', situacao: '', sort: 'createdAt', dir: 'desc', page: 1 })
+  // Um estado só, carimbado com a busca que o produziu. "Carregando" e "erro"
+  // são DERIVADOS dele em vez de flags próprias — flag setada dentro do efeito
+  // dispara renderização em cascata (regra react-hooks/set-state-in-effect) e
+  // ainda pode dessincronizar da resposta que chegou.
+  const [result, setResult] = useState(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      setData(await api.adminCustomers({ search, situacao, sort, dir, page, limit: 50 }))
-    } catch (err) {
-      setError(err?.message || 'Não foi possível carregar a lista de clientes.')
-    } finally {
-      setLoading(false)
-    }
-  }, [search, situacao, sort, dir, page])
+  const { search, situacao, sort, dir, page } = query
+  const queryKey = `${search}|${situacao}|${sort}|${dir}|${page}`
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    let cancelled = false
+    api.adminCustomers({ search, situacao, sort, dir, page, limit: 50 })
+      .then(data => { if (!cancelled) setResult({ key: queryKey, data, error: '' }) })
+      .catch(err => { if (!cancelled) setResult({ key: queryKey, data: null, error: err?.message || 'Não foi possível carregar a lista de clientes.' }) })
+    return () => { cancelled = true }
+  }, [queryKey, search, situacao, sort, dir, page])
+
+  const isCurrent = result?.key === queryKey
+  const loading = !isCurrent
+  const error = isCurrent ? result.error : ''
+  // Mantém a tabela anterior na tela enquanto a próxima página chega, em vez
+  // de piscar vazio a cada clique de ordenação.
+  const data = result?.data ?? null
 
   function toggleSort(key) {
     if (!COLUMNS.find(col => col.key === key)?.sortable) return
-    setPage(1)
-    if (sort === key) setDir(dir === 'desc' ? 'asc' : 'desc')
-    else { setSort(key); setDir('desc') }
+    setQuery(current => ({
+      ...current,
+      page: 1,
+      sort: key,
+      dir: current.sort === key && current.dir === 'desc' ? 'asc' : 'desc',
+    }))
   }
 
   const customers = asArray(data?.customers)
@@ -114,7 +119,7 @@ export default function AdminClientesPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <form
-            onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(searchInput.trim()) }}
+            onSubmit={(event) => { event.preventDefault(); setQuery(current => ({ ...current, page: 1, search: searchInput.trim() })) }}
             className="flex flex-wrap items-center gap-2"
           >
             <input
@@ -129,7 +134,7 @@ export default function AdminClientesPage() {
                 <button
                   key={key || 'todos'}
                   type="button"
-                  onClick={() => { setPage(1); setSituacao(key) }}
+                  onClick={() => setQuery(current => ({ ...current, page: 1, situacao: key }))}
                   className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${situacao === key ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200'}`}
                 >
                   {label}
@@ -188,9 +193,9 @@ export default function AdminClientesPage() {
 
         {data && totalPages > 1 && (
           <div className="flex items-center justify-center gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Anterior</button>
+            <button onClick={() => setQuery(current => ({ ...current, page: Math.max(1, current.page - 1) }))} disabled={page <= 1} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Anterior</button>
             <span className="text-sm text-slate-500">Página {page} de {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Próxima</button>
+            <button onClick={() => setQuery(current => ({ ...current, page: Math.min(totalPages, current.page + 1) }))} disabled={page >= totalPages} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Próxima</button>
           </div>
         )}
       </div>
