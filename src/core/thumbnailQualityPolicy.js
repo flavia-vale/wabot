@@ -20,7 +20,13 @@
 // pipeline (o buffer ainda não foi decodificado); miniatura de card de link
 // costuma ter 3-20KB, e o caso patológico deste RCA tinha 457 bytes.
 
-export const DEFAULT_MIN_PUBLISHABLE_IMAGE_BYTES = 3_000
+// 800 e não 3000 (hotfix 2026-08-26, mesmo dia): o piso entrou em 3000 por
+// analogia ("miniatura de card costuma ter 3-20KB") e derrubou a imagem de
+// MUITA oferta legítima — a cliente passou a receber oferta como texto pelado,
+// que é pior que foto ruim. O caso patológico do RCA tinha 457 bytes; 800
+// separa "não dá para ver nada" de "dá para ver, mal". Piso é rede contra o
+// borrão extremo, não critério de qualidade.
+export const DEFAULT_MIN_PUBLISHABLE_IMAGE_BYTES = 800
 
 export function resolveMinPublishableImageBytes(env = process.env) {
   const raw = env?.MONITORED_MIN_IMAGE_BYTES

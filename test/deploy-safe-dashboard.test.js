@@ -84,3 +84,25 @@ test('deploy_safe_dashboard.sh auto-escalates supervisor stop when a preserved m
     'escalation must stop bot-supervisor (restart_after=1, so it gets revived) and retry the migrate deploy',
   )
 })
+
+// RCA 2026-08 ("código novo não carregado pelos bots") + pedido da usuária
+// 2026-08-26: em modo remote, o deploy reinicia a API mas não os bot-workers,
+// então toda correção em código que o WORKER executa chegava ao disco e ficava
+// dormente até alguém reiniciar o supervisor à mão. Três fixes seguidos foram
+// entregues "verdes" e sem efeito por causa disso. O deploy passa a decidir
+// sozinho — e só quando o código dos bots realmente mudou, porque reiniciar o
+// supervisor reconecta TODAS as sessões WhatsApp.
+test('deploy_safe_dashboard.sh reinicia o supervisor quando o deploy traz código dos bots', () => {
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'deploy_safe_dashboard.sh')
+  const script = fs.readFileSync(scriptPath, 'utf8')
+
+  assert.match(script, /REVISION_BEFORE_SYNC="\$\(git rev-parse HEAD/, 'precisa guardar o commit ANTES do pull para comparar')
+  assert.match(script, /RESTART_SUPERVISOR="\$\{RESTART_SUPERVISOR:-auto\}"/, 'o default precisa ser a decisão automática')
+  assert.match(script, /worker_code_changed_in_sync/, 'a decisão precisa vir do diff do próprio deploy')
+  assert.match(script, /git diff --name-only "\$REVISION_BEFORE_SYNC" "\$REVISION_AFTER_SYNC"/, 'compara os arquivos que entraram neste deploy')
+
+  for (const caminho of ['src/bot-worker', 'src/supervisor/', 'src/core/', 'src/converters/']) {
+    assert.ok(script.includes(caminho), `WORKER_CODE_PATHS_RE precisa cobrir ${caminho}`)
+  }
+  assert.match(script, /RESTART_SUPERVISOR=0\n    echo "  Nenhuma mudança em código dos bots/, 'deploy que não toca no worker preserva as sessões')
+})

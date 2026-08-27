@@ -1548,7 +1548,7 @@ function reportPreviewCardNoImage(stage, ctx = {}) {
   try { recordOperationalSignal('preview_card_no_image', { userId, stage, platform: ctx.platform || null }) } catch {}
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto }) {
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false }) {
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
@@ -1649,7 +1649,10 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   //
   // Não roda no caminho do banner de cupom: ali a ausência de foto de produto é
   // intencional (link de campanha não tem produto), e o banner já preencheu.
-  if (!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && shouldUseOriginPhotoFallback()) {
+  // `allowSmallOriginPhoto`: chamada vinda do caminho SEM imagem (modo foto
+  // cujo envio ia sair como texto pelado). Ali o plano B não é opcional — sem
+  // ele a oferta vai sem nada —, então ele roda mesmo com a env desligada.
+  if (!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && (allowSmallOriginPhoto || shouldUseOriginPhotoFallback())) {
     try {
       const origin = await fetchOriginPhoto()
       const normalized = origin?.buffer ? await normalizeImageForWhatsApp(origin.buffer) : null
@@ -3942,6 +3945,43 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             if ((imageMode === 'original' || channelForward) && !image) {
               useLinkPreview = true
             }
+          }
+
+          // Sem imagem, `useLinkPreview` sozinho só liga o preview AUTOMÁTICO do
+          // Baileys (generateHighQualityLinkPreview). Ele não resolve link de
+          // afiliado encurtado (s.shopee.com.br, amzn.to, meli.la) — é a
+          // limitação que abre o comentário de monitoredImageResolver.js —, e aí
+          // a oferta chega no grupo como TEXTO PELADO, sem foto e sem card.
+          // Foi o que aconteceu ao ligar o piso de qualidade da miniatura em
+          // 2026-08-26: trocamos foto ruim por nenhuma imagem, que é pior.
+          //
+          // Montamos então o MESMO card manual do modo preview (foto da loja →
+          // plano B com a foto da mensagem de origem). A oferta sai com card
+          // clicável e com a foto que houver; a miniatura pequena, renderizada
+          // dentro de um card, é legível — o problema original era ela ampliada
+          // como imagem de corpo inteiro.
+          if (useLinkPreview && !image) {
+            const fallbackPreview = await buildManualLinkPreview({
+              text: variantText,
+              primary,
+              credentialsMap: cfg.credentials,
+              uploadToServer: activeSock?.waUploadToServer,
+              destJid,
+              couponTextSignal: couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used',
+              fetchOriginPhoto: getOriginalPhotoOnce,
+              // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
+              // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
+              allowSmallOriginPhoto: true,
+            }).catch(err => {
+              logger.warn({ err: err?.message, destJid }, 'Card de fallback sem imagem falhou; oferta sai como texto')
+              return null
+            })
+            return buildMonitoredMessagePayload({
+              finalText: variantText,
+              image: null,
+              useLinkPreview: true,
+              linkPreview: fallbackPreview,
+            })
           }
 
           return buildMonitoredMessagePayload({
