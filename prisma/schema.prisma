@@ -929,3 +929,160 @@ model EmailOptOut {
 
   @@unique([userId, category])
 }
+
+model CapacityHostProfile {
+  id                String   @id @default(cuid())
+  hostKey           String   @unique
+  hostname          String
+  provider          String   @default("hetzner")
+  providerProjectId String?
+  providerServerId  String?
+  serverType        String?
+  architecture      String?
+  vcpu              Int?
+  memoryTotalMb     Int?
+  diskTotalMb       Int?
+  region            String?
+  ipv4              String?
+  inventoryJson     String   @default("{}")
+  source            String   @default("baseline")
+  checkedAt         DateTime?
+  lastSuccessAt     DateTime?
+  errorCode         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  snapshots CapacitySnapshot[]
+  rollups   CapacityRollup[]
+  events    CapacityEvent[]
+  alerts    CapacityAlert[]
+}
+
+model CapacitySnapshot {
+  id                    String   @id @default(cuid())
+  hostProfileId         String
+  collectedAt           DateTime @default(now())
+  hostKey                String?
+  serverType             String?
+  contractedVcpu         Int?
+  contractedMemoryMb     Int?
+  contractedDiskMb       Int?
+  deploymentRevision     String?
+  durationMs            Int?
+  completeness          String
+  cpuPercent            Float?
+  load1                 Float?
+  load5                 Float?
+  load15                Float?
+  uptimeSeconds         Int?
+  oomKillCount          Int?
+  memoryTotalMb         Int?
+  memoryFreeMb          Int?
+  memoryAvailableMb     Int?
+  memoryCacheMb         Int?
+  processRssTotalMb     Int?
+  classifiedRssTotalMb  Int?
+  fixedBaseMb           Int?
+  swapTotalMb           Int?
+  swapUsedMb            Int?
+  swapInKbPerSec        Float?
+  swapOutKbPerSec       Float?
+  diskTotalMb           Int?
+  diskUsedMb            Int?
+  diskAvailableMb       Int?
+  diskUsedPercent       Float?
+  inodeUsedPercent      Float?
+  connectedSessions     Int?
+  activeCustomers       Int?
+  productionWorkers     Int?
+  stagingWorkers        Int?
+  workerRssTotalMb      Int?
+  workerRssP50Mb        Int?
+  workerRssP95Mb        Int?
+  workerRssMaxMb        Int?
+  productionRssMb       Int?
+  stagingRssMb          Int?
+  stagingOnline         Boolean?
+  policyVersion         String?
+  safeSessionLimit      Int?
+  estimatedMaximum      Int?
+  reserveMb             Int?
+  sessionCostMb         Int?
+  fixedBaseBudgetMb     Int?
+  headroomSessions      Int?
+  headroomMemoryMb      Int?
+  bottleneck            String?
+  operationalState      String
+  decisionReasonsJson   String   @default("[]")
+  sourcesJson           String   @default("[]")
+  componentsJson        String   @default("[]")
+
+  hostProfile CapacityHostProfile @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
+
+  @@index([hostProfileId, collectedAt])
+  @@index([operationalState, collectedAt])
+}
+
+model CapacityRollup {
+  id                     String   @id @default(cuid())
+  hostProfileId          String
+  bucketStart            DateTime
+  granularity            String
+  sampleCount            Int
+  expectedSampleCount    Int
+  metricsJson            String
+  sessionPeak            Int?
+  workerPeak             Int?
+  safeLimitMin           Int?
+  worstState             String
+  policyVersionsJson     String   @default("[]")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  hostProfile CapacityHostProfile @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([hostProfileId, granularity, bucketStart])
+}
+
+model CapacityEvent {
+  id            String   @id @default(cuid())
+  hostProfileId String
+  type          String
+  occurredAt    DateTime
+  source        String
+  severity      String
+  title         String
+  detailsJson   String   @default("{}")
+  dedupeKey     String?  @unique
+  createdAt     DateTime @default(now())
+
+  hostProfile CapacityHostProfile @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
+
+  @@index([hostProfileId, occurredAt])
+  @@index([type, occurredAt])
+}
+
+model CapacityAlert {
+  id                    String    @id @default(cuid())
+  hostProfileId         String
+  type                  String
+  status                String
+  severity              String
+  conditionKey          String    @unique
+  firstObservedAt       DateTime
+  lastObservedAt        DateTime
+  consecutiveBreaches   Int       @default(0)
+  consecutiveRecoveries Int       @default(0)
+  lastNotifiedAt        DateTime?
+  recoveredAt           DateTime?
+  observedValuesJson    String    @default("{}")
+  recommendation        String
+  policyVersion         String
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  hostProfile CapacityHostProfile @relation(fields: [hostProfileId], references: [id], onDelete: Cascade)
+
+  @@index([hostProfileId, status, lastObservedAt])
+  @@index([type, status])
+}

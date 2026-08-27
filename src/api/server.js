@@ -46,6 +46,12 @@ import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { runEmailQueueTick } from '../email/queue.js'
 import { runLifecycleEmailSweep } from '../emailTriggers/lifecycleSweep.js'
 import { runWeeklySummarySweep } from '../emailTriggers/weeklySummary.js'
+import { startCapacitySweep } from '../ops/capacity/sweep.js'
+import { createCapacityRepository } from '../ops/capacity/repository.js'
+import { createHetznerClient, manualCapacityContractFromEnv } from '../ops/capacity/hetznerClient.js'
+import { evaluateCapacityAlerts } from '../ops/capacity/alerts.js'
+import { resolveDeploymentRevision } from '../ops/capacity/deploymentMarker.js'
+import { resolveProcessRoots } from '../ops/capacity/processMetrics.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 registerApiMetricsHooks(app)
@@ -502,6 +508,37 @@ if (!databaseReadyAtBoot) {
 // registrar aqui em vez de descobrir pelo spam de "A sincronização foi
 // concluída" no celular da cliente.
 if (databaseReadyAtBoot) {
+  const capacityRepository = createCapacityRepository(db)
+  const deploymentRevision = await resolveDeploymentRevision()
+  const capacityProcessRoots = resolveProcessRoots(process.env)
+  startCapacitySweep({ db, repository: capacityRepository, logger: app.log,
+    deploymentRevision,
+    collectOptions: {
+      processOptions: { roots: capacityProcessRoots },
+      collectDatabase: async () => {
+        const [connectedSessions, activeCustomers] = await Promise.all([
+          db.waSession.count({ where: { status: 'connected' } }),
+          db.user.count({ where: { status: 'active' } }),
+        ])
+        return { connectedSessions, activeCustomers }
+      },
+    },
+    refreshInventory: async (host) => {
+      const parseInventory = (profile) => { try { return JSON.parse(profile?.inventoryJson || '{}') } catch { return {} } }
+      const loadCache = async () => {
+        const current = await capacityRepository.getHostProfile(host.id) || host
+        return { inventory: parseInventory(current), checkedAt: current.checkedAt, lastSuccessAt: current.lastSuccessAt, source: current.source, profile: current }
+      }
+      const client = createHetznerClient({ serverId: process.env.HCLOUD_SERVER_ID || host.providerServerId, baseline: parseInventory(host), manual: manualCapacityContractFromEnv(), loadCache, saveCache: (cache) => capacityRepository.updateHostInventory(host.id, cache) })
+      const result = await client.inventory(); if (result.errorCode) await capacityRepository.updateHostInventory(host.id, result)
+      return result
+    },
+    evaluateAlerts: (snapshot, host, previous) => evaluateCapacityAlerts({ repository: capacityRepository, host, snapshot, previous, notify: (alert) => {
+      const metadata = { type: alert.type, severity: alert.severity, recovered: Boolean(alert.recovered) }
+      app.log[alert.recovered ? 'info' : 'error'](metadata, alert.recovered ? 'capacity: alerta administrativo recuperado' : 'capacity: alerta administrativo ativo')
+      trackAnalyticsEventSafe({ event: 'ops_capacity_alert', metadata })
+    } }),
+  })
   try {
     const appEnv = process.env.APP_ENV || process.env.NODE_ENV
     const hasConnectedSession = (await db.waSession.count({ where: { status: 'connected' } })) > 0
