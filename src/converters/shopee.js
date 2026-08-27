@@ -325,13 +325,68 @@ async function readBodyLimited(res) {
 // Estratégia: seguir os redirects manualmente carregando cookies da cadeia e
 // parar no PRIMEIRO hop cuja URL já contenha (shopId, itemId) — inclusive
 // URL-encoded em query param. Sem redirect HTTP, extrai o alvo do corpo.
+// Cache da resolução (RCA 2026-08-26). Motivo medido em produção: a MESMA URL
+// curta é resolvida três vezes por mensagem — na conversão, na busca de
+// título/preço e na busca da foto —, e cada resolução é uma cadeia de vários
+// redirects, cada hop com seu próprio timeout. Quando um hop estoura, a função
+// devolve a URL curta como veio (sem ids) e QUEM CHAMOU não tem como saber:
+// para a foto isso vira `null` silencioso, e a oferta sai com a miniatura de
+// 500 bytes da mensagem de origem em vez da foto da loja.
+//
+// Medição: 780 de 2000 buscas de foto de Shopee no log voltaram sem URL, e os
+// nulos estavam concentrados no worker mais movimentado — o mesmo link que
+// resolve de primeira num teste isolado falha sob carga. Short link da Shopee é
+// imutável, então cachear a resolução BEM-SUCEDIDA é seguro e elimina duas das
+// três idas à rede.
+const SHORT_LINK_CACHE_TTL_MS = Math.max(0, Number(process.env.SHOPEE_SHORTLINK_CACHE_TTL_MS || 6 * 60 * 60 * 1000))
+const SHORT_LINK_CACHE_MAX = 2_000
+const shortLinkCache = new Map()
+
+function getCachedShortLink(url) {
+  if (!SHORT_LINK_CACHE_TTL_MS) return null
+  const hit = shortLinkCache.get(url)
+  if (!hit) return null
+  if (hit.expiresAt < Date.now()) {
+    shortLinkCache.delete(url)
+    return null
+  }
+  return hit.value
+}
+
+function setCachedShortLink(url, value) {
+  if (!url || !SHORT_LINK_CACHE_TTL_MS) return
+  // Só cacheia resolução ÚTIL: guardar um fracasso transformaria uma falha
+  // pontual de rede em "esse link não tem produto" pelas próximas horas.
+  if (!extractShopeeIds(value)) return
+  if (shortLinkCache.size >= SHORT_LINK_CACHE_MAX) {
+    const primeira = shortLinkCache.keys().next().value
+    if (primeira !== undefined) shortLinkCache.delete(primeira)
+  }
+  shortLinkCache.set(url, { value, expiresAt: Date.now() + SHORT_LINK_CACHE_TTL_MS })
+}
+
+export function _resetShopeeShortLinkCache() {
+  shortLinkCache.clear()
+}
+
 export async function resolveShopeeShortLink(url, { timeoutMs = 8000, fetchImpl = globalThis.fetch } = {}) {
   let current = String(url || '')
   if (!isShopeeShortLink(current)) return current
 
+  // `fetchImpl` injetado = cenário controlado (teste/stub): o cache guardaria o
+  // resultado de um stub e vazaria para a chamada seguinte. Só cacheia o
+  // caminho real.
+  const podeCachear = fetchImpl === globalThis.fetch
+  const cached = podeCachear ? getCachedShortLink(current) : null
+  if (cached) return cached
+  const original = podeCachear ? current : null
+
   const jar = new Map()
   for (let hop = 0; hop < SHORT_LINK_MAX_HOPS; hop++) {
-    if (extractShopeeIds(current)) return current
+    if (extractShopeeIds(current)) {
+      setCachedShortLink(original, current)
+      return current
+    }
 
     let res
     try {
@@ -371,8 +426,10 @@ export async function resolveShopeeShortLink(url, { timeoutMs = 8000, fetchImpl 
       current = target
       continue
     }
+    setCachedShortLink(original, current)
     return current
   }
+  setCachedShortLink(original, current)
   return current
 }
 

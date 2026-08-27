@@ -1110,6 +1110,53 @@ da loja não vem, o que sobra são os bytes da mensagem de origem — que é o
 concorrente, marca d'água inclusa. Publicar isso segue melhor do que não publicar
 nada; o que mudou é só o piso de legibilidade.
 
+### 1b) Shopee sem foto: a resolução do short link estourava sob carga
+
+Medição em produção (2026-08-26): das últimas 2000 buscas de foto de Shopee,
+**780 voltaram sem URL nenhuma** — e os nulos estavam concentrados no worker
+mais movimentado, enquanto os MESMOS links resolviam 8/8 num teste isolado.
+
+Causa: a Shopee tem uma fonte de foto só (a API de afiliado), e ela precisa de
+`(shopId, itemId)` — que só existem depois de resolver o short link. Essa
+resolução é uma cadeia de vários redirects, cada hop com seu próprio timeout, e
+ela roda **três vezes por mensagem** (conversão, título/preço, foto). Quando um
+hop estoura, `resolveShopeeShortLink` devolve a URL curta como veio; sem ids, a
+busca de foto vira `null` **silencioso** e a oferta sai com a miniatura da
+mensagem de origem — 500 bytes nas origens que geram card próprio.
+
+Conserto: cache da resolução **bem-sucedida** (`SHOPEE_SHORTLINK_CACHE_TTL_MS`,
+6h; `0` desliga). Short link da Shopee é imutável, e a conversão já resolve o
+link antes da foto — então a foto passa a reaproveitar. **Fracasso não é
+cacheado**: guardar um timeout de rede transformaria falha pontual em "esse link
+não tem produto" pelas horas seguintes. O cache é pulado quando `fetchImpl` é
+injetado (stub de teste). Testes: `test/shopee-shortlink-resolve.test.js`.
+
+⚠️ **Armadilha de diagnóstico que custou horas:** o passo "teste ao vivo" de
+`scripts/diag-preview-sem-imagem.mjs` chamava `fetchProductImage(plat, url, {})`
+— **sem credencial**. Para a Shopee isso pula o único caminho que funciona, e o
+script reportava `shopee 0/N com foto` para QUALQUER conta, sugerindo bloqueio da
+loja que não existia. Amazon e ML não denunciavam o defeito porque têm fontes que
+funcionam sem credencial. Corrigido: o script carrega as credenciais reais da
+conta. Ao ler "a loja não devolveu foto", confirme sempre com
+`scripts/diag-shopee-foto.mjs`, que usa a credencial e separa chave recusada de
+item fora do catálogo.
+
+### 1c) Miniatura da origem varia MUITO por grupo de origem
+
+Também medido em 2026-08-26, por grupo de origem, no mesmo log:
+
+| Origem | miniatura (menor / mediana / maior) |
+|---|---|
+| Ofertas da Gio | 332 / 500 / 654 bytes |
+| OFERTAS BABY #2 | 355 / 525 / 722 bytes |
+| Achadinhos da Cabeleireira | 1.148 / 35.761 / 65.532 bytes |
+| DUDA INDICA | 2.240 / 9.405 / 21.256 bytes |
+
+Origens que geram o próprio card (com marca d'água) mandam miniatura de ~500
+bytes; outras mandam 10-60KB. É isso — e não configuração de grupo, conta ou
+credencial — que faz "esse grupo manda foto e aquele não" quando a foto da loja
+falha. Ferramenta: `scripts/diag-thumb-por-origem.mjs`.
+
 ### 2) Espelhamento para destino não escolhido: `GroupTarget` some por cascata
 
 A regra era `targetPostJids.length ? targetPostJids : todos os destinos` — "sem
