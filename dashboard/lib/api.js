@@ -125,6 +125,10 @@ async function apiFetch(path, options = {}) {
 }
 
 export const api = {
+  shopeeSales: ({ from, to, orderPage = 1, productPage = 1, limit = 20, timeZone = 'America/Sao_Paulo' }, { signal } = {}) => {
+    const params = new URLSearchParams({ from, to, orderPage: String(orderPage), productPage: String(productPage), limit: String(limit), timeZone })
+    return apiFetch(`/api/shopee-sales?${params}`, { signal })
+  },
   login: async (email, password) => {
     const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
     setAuthToken(data?.token || '')
@@ -341,6 +345,13 @@ export const api = {
   },
   adminUpdateAccess: (id, data) =>
     apiFetch(`/api/admin/users/${id}/access`, { method: 'POST', body: JSON.stringify(data) }),
+
+  adminAutomationQuota: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/automation-quota${query ? `?${query}` : ''}`)
+  },
+  adminAutomationQuotaUpdate: (userId, maxAutomations) =>
+    apiFetch(`/api/admin/automation-quota/${encodeURIComponent(userId)}`, { method: 'PATCH', body: JSON.stringify({ maxAutomations }) }),
 
   // Aba E-mails do admin (motor de e-mails).
   adminEmailSummary: () => apiFetch('/api/admin/emails/summary'),

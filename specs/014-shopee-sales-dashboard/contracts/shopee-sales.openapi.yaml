@@ -1,0 +1,157 @@
+openapi: 3.1.0
+info:
+  title: Wabot Shopee Sales API
+  version: 1.0.0
+paths:
+  /api/shopee-sales:
+    get:
+      summary: Consulta snapshot somente leitura das vendas Shopee atribuídas ao robô
+      security: [{ bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: orderPage, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: productPage, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: timeZone, in: query, schema: { type: string, enum: [America/Sao_Paulo], default: America/Sao_Paulo } }
+      responses:
+        '200':
+          description: Snapshot completo e paginado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SalesSnapshot' }
+        '400':
+          description: Período ou paginação inválidos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { description: Sessão ausente ou expirada }
+        '404':
+          description: Credencial Shopee ausente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Credencial Shopee inválida/recusada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: Fonte indisponível ou leitura completa impossível
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    cookieAuth: { type: apiKey, in: cookie, name: token }
+  schemas:
+    Money:
+      type: [number, 'null']
+      description: Valor decimal BRL; null significa indisponível, não zero.
+    Status:
+      type: string
+      enum: [pending, unpaid, confirmed, cancelled, refunded, unclassified]
+    OrderPage:
+      type: object
+      additionalProperties: false
+      required: [page, limit, total, hasNextPage, rows]
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        hasNextPage: { type: boolean }
+        rows: { type: array, items: { $ref: '#/components/schemas/OrderRow' } }
+    ProductPage:
+      type: object
+      additionalProperties: false
+      required: [page, limit, total, hasNextPage, rows]
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        hasNextPage: { type: boolean }
+        rows: { type: array, items: { $ref: '#/components/schemas/ProductRow' } }
+    OrderRow:
+      description: Comissão da conversão só é exposta quando ela contém um único pedido, evitando duplicidade.
+      type: object
+      additionalProperties: false
+      required: [id, purchasedAt, convertedClickAt, status, rawStatusLabel, amount, estimatedCommission, confirmedCommission, commissionScope, itemCount]
+      properties:
+        id: { type: string, description: Identificador opaco gerado pelo Wabot. }
+        purchasedAt: { type: [string, 'null'], format: date-time }
+        convertedClickAt: { type: [string, 'null'], format: date-time }
+        status: { $ref: '#/components/schemas/Status' }
+        rawStatusLabel: { type: string }
+        amount: { $ref: '#/components/schemas/Money' }
+        estimatedCommission: { $ref: '#/components/schemas/Money' }
+        confirmedCommission: { $ref: '#/components/schemas/Money' }
+        commissionScope: { type: string, enum: [conversion, multiple_orders] }
+        itemCount: { type: integer }
+    ProductRow:
+      type: object
+      additionalProperties: false
+      required: [id, name, shopName, quantity, amount, estimatedCommission, status, imageUrl, purchasedAt]
+      properties:
+        id: { type: string, description: Identificador opaco gerado pelo Wabot. }
+        name: { type: string }
+        shopName: { type: [string, 'null'] }
+        quantity: { type: integer }
+        amount: { $ref: '#/components/schemas/Money' }
+        estimatedCommission: { $ref: '#/components/schemas/Money' }
+        status: { $ref: '#/components/schemas/Status' }
+        imageUrl: { type: [string, 'null'], format: uri }
+        purchasedAt: { type: [string, 'null'], format: date-time }
+    StatusCounts:
+      type: object
+      required: [pending, unpaid, confirmed, cancelled, refunded, unclassified]
+      additionalProperties: false
+      properties:
+        pending: { type: integer }
+        unpaid: { type: integer }
+        confirmed: { type: integer }
+        cancelled: { type: integer }
+        refunded: { type: integer }
+        unclassified: { type: integer }
+    SalesSnapshot:
+      type: object
+      additionalProperties: false
+      required: [period, summary, orders, products, sourceUpdatedAt, stale, clickCoverage]
+      properties:
+        period:
+          type: object
+          additionalProperties: false
+          required: [from, to, timeZone]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+            timeZone: { type: string }
+        summary:
+          type: object
+          additionalProperties: false
+          required: [attributedPurchases, orderCount, itemQuantity, statusCounts]
+          properties:
+            attributedPurchases: { type: integer }
+            orderCount: { type: integer }
+            itemQuantity: { type: integer }
+            salesAmount: { $ref: '#/components/schemas/Money' }
+            estimatedCommission: { $ref: '#/components/schemas/Money' }
+            confirmedCommission: { $ref: '#/components/schemas/Money' }
+            statusCounts: { $ref: '#/components/schemas/StatusCounts' }
+        orders: { $ref: '#/components/schemas/OrderPage' }
+        products: { $ref: '#/components/schemas/ProductPage' }
+        sourceUpdatedAt: { type: string, format: date-time }
+        stale: { type: boolean, const: false }
+        clickCoverage:
+          type: string
+          const: converted_clicks_only
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, code, retryable]
+      properties:
+        error: { type: string }
+        code:
+          type: string
+          enum: [INVALID_PERIOD, SHOPEE_NOT_CONFIGURED, SHOPEE_CREDENTIAL_REJECTED, SHOPEE_UNAVAILABLE, SHOPEE_REPORT_INCOMPLETE]
+        retryable: { type: boolean }
