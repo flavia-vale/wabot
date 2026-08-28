@@ -11,6 +11,10 @@ function toMonitorGroup(group, targetPostJids = []) {
     id: group.id,
     waJid: group.waJid,
     kind: group.kind,
+    // A estratégia de imagem (e a marca d'água) pertence ao DESTINO — ver
+    // toPostDetail() abaixo e src/core/imageModePolicy.js. A origem NUNCA leu
+    // `imageMode`; `Group.imageMode` continua na coluna de grupos role='monitor'
+    // só por compatibilidade de schema, e não é propagado para cá de propósito.
     imageLinkTarget: group.imageLinkTarget ?? 'first',
     fallbackToOriginal: true,
     blockedKeywords: group.blockedKeywords,
@@ -34,6 +38,11 @@ function toPostDetail(group) {
     welcomeMsg: group.welcomeMsg,
     channelButtonJid: group.channelButtonJid ?? null,
     channelButtonName: group.channelButtonName ?? null,
+    // Modo de imagem e texto da marca são escolhidos POR DESTINO — cada grupo/
+    // canal de postagem pode mostrar a mesma oferta de um jeito diferente. Ver
+    // src/core/imageModePolicy.js (resolveDestinationImageMode cai em
+    // 'original' para valor ausente/desconhecido, nunca deixa o worker sem
+    // modo) e src/bot-worker.js (resolução por destino no loop de envio).
     imageMode: resolveDestinationImageMode(group.imageMode),
     watermarkText: group.watermarkText ?? null,
   }

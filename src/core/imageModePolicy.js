@@ -88,13 +88,65 @@ export function shouldReuploadOriginalMedia(env = process.env) {
   return String(env?.IMAGE_ORIGINAL_STRATEGY ?? '').trim().toLowerCase() !== 'relay'
 }
 
-// 2026-08-22 (fim do dia): a escolha por grupo foi RETIRADA da tela de novo e o
-// chokepoint voltou a ignorar `Group.imageMode`. Motivo: com a escolha ligada em
-// produção apareceu divergência entre o que o painel mostrava e o que saía no
-// grupo, e não havia orçamento para investigar a fundo com clientes no ar.
-// Decisão da dona do produto: voltar todo mundo para "a foto que veio na
-// oferta" (`original`), um modo só, e retomar a investigação depois.
+// 2026-08-22 (fim do dia): a escolha por grupo foi RETIRADA da tela porque, com
+// ela ligada em produção, apareceu divergência entre o que o painel mostrava e
+// o que saía no grupo. A suspeita — nunca comprovada até então — era
+// `getImage()` no bot-worker memoizar a imagem UMA vez por MENSAGEM (uma única
+// variável `cachedImage`), não por destino: como `buildPayload` roda uma vez
+// por destino, o PRIMEIRO destino a resolver a imagem fixava o resultado para
+// todos os destinos seguintes da mesma oferta, mesmo que pedissem modos
+// diferentes.
 //
-// O modo volta a ser governado SÓ pela env global (`resolveGroupImageMode`).
-// `Group.imageMode` continua na coluna e aceito pela rota, mas DORMENTE —
-// nada no caminho de envio o lê.
+// 2026-08-28 (specs deste módulo): a escolha volta À TELA, agora por DESTINO
+// (não mais por grupo monitorado — a origem nunca leu `imageMode`, quem lê é
+// o destino de postagem). A causa suspeita acima É a que este módulo fecha:
+// `getImage()` em bot-worker.js passou a memoizar num `Map` chaveado pelo modo
+// EFETIVO (`destinationImageBaseMode`) em vez de uma variável única, então
+// destinos com modos diferentes na MESMA mensagem resolvem e cacheiam
+// independentemente — dois destinos gêmeos, um 'original' e outro 'preview',
+// não competem mais pelo mesmo slot de cache. Ver
+// `test/destination-watermark-worker.test.js` ("dois destinos com modos
+// diferentes na mesma mensagem não compartilham cache de imagem") para a
+// guarda de regressão. Antes de expandir esse comportamento (ex.: ativar
+// `preview_watermark`), validar em staging com dois destinos reais e modos
+// diferentes na mesma oferta — é exatamente o cenário que gerou a divergência
+// de 22/08.
+export const DESTINATION_IMAGE_MODE = Object.freeze({
+  ORIGINAL: 'original',
+  ORIGINAL_WATERMARK: 'original_watermark',
+  PREVIEW: 'preview',
+  // Ainda NÃO implementado no worker nem aceito pela API — ver groups.js e
+  // bot-worker.js. Existe aqui só para a política já falar a linguagem final
+  // e o próximo passo não precisar reescrever este enum.
+  PREVIEW_WATERMARK: 'preview_watermark',
+})
+
+const DESTINATION_MODES = new Set(Object.values(DESTINATION_IMAGE_MODE))
+
+/**
+ * Modo de imagem do DESTINO (grupo/canal de postagem), nunca da origem.
+ * Valor desconhecido/ausente cai em 'original' — nunca deixa o pipeline sem
+ * modo por causa de um valor legado (`none`/`fetch`/`preview` gravado antes
+ * desta feature) ou de um dado corrompido.
+ * @param {string|null|undefined} value
+ * @returns {'original'|'original_watermark'|'preview'|'preview_watermark'}
+ */
+export function resolveDestinationImageMode(value) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return DESTINATION_MODES.has(normalized) ? normalized : DESTINATION_IMAGE_MODE.ORIGINAL
+}
+
+/**
+ * Modo-base da imagem (de onde os bytes vêm): 'original' reaproveita a foto da
+ * mensagem monitorada; 'preview' raspa a loja e monta o card clicável. As
+ * variantes com marca d'água usam o mesmo modo-base do par sem marca.
+ */
+export function destinationImageBaseMode(value) {
+  const mode = resolveDestinationImageMode(value)
+  return mode.startsWith('preview') ? DESTINATION_IMAGE_MODE.PREVIEW : DESTINATION_IMAGE_MODE.ORIGINAL
+}
+
+export function destinationImageUsesWatermark(value) {
+  const mode = resolveDestinationImageMode(value)
+  return mode === DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK || mode === DESTINATION_IMAGE_MODE.PREVIEW_WATERMARK
+}

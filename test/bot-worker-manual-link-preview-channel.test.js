@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
+import { buildEntitledGroupConfig } from '../src/billing/groupEntitlements.js'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const botWorkerSource = readFileSync(join(__dirname, '../src/bot-worker.js'), 'utf8')
 
@@ -56,16 +58,27 @@ test('imageMode preview repassa destJid pro buildManualLinkPreview no call site'
   )
 })
 
-// 2026-08-28: o modo deixou de pertencer à origem e passou ao destino.
-//
-// Exceção (fix "Ver canal" não aparece em oferta automática): quando o
-// destino tem `channelForward` (Group.channelButtonJid) configurado, o ramo
-// de preview é pulado e getImage() busca imagem mesmo assim
-// (forceOriginalForChannelButton) — só assim o botão nativo "Ver canal"
-// (mídia-only, src/core/channelSend.js) tem um corpo de mídia pra anexar.
-// Ver testes dedicados abaixo.
-test('getImage pula o fetch ativo quando o destino escolhe preview', () => {
-  assert.match(botWorkerSource, /const skipFetch = !forceOriginalForChannelButton && baseMode === 'preview'/)
+// 2026-08-28: o modo de imagem deixou de ser único/global e passou a ser
+// escolhido POR DESTINO (ver test/group-entitlements.test.js e
+// test/image-mode-policy.test.js para a cobertura completa do novo desenho).
+// Estes dois testes cobrem só o essencial deste arquivo: a origem
+// (monitorGroup) nunca expõe imageMode, seja qual for o valor legado gravado
+// no banco — o modo mora inteiramente em cfg.groups.postDetails, por destino.
+test('a origem (monitorGroup) nunca expõe imageMode, mesmo com valor legado gravado no banco', () => {
+  for (const legacyValue of ['fetch', 'none', 'preview']) {
+    const groups = [{ id: `g-${legacyValue}`, role: 'monitor', waJid: `${legacyValue}@g.us`, kind: 'group', imageMode: legacyValue, imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
+    const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
+    assert.equal('imageMode' in result.groups.monitor[0], false, `monitorGroup não pode expor imageMode para valor legado ${legacyValue}`)
+  }
+})
+
+test('US1: getImage() no bot-worker pula o fetch ativo (curto-circuito) para o modo-base preview, exceto com channelForward', () => {
+  // Prova estrutural de que, para o modo-base 'preview' (resolvido por
+  // destinationImageBaseMode a partir do postDetail), o fetch ativo de
+  // imagem só roda quando forceOriginalForChannelButton (destino com botão
+  // "Ver canal") pede explicitamente.
+  const shortCircuitStart = botWorkerSource.indexOf("const skipFetch = !forceOriginalForChannelButton && baseMode === 'preview'")
+  assert.notEqual(shortCircuitStart, -1, 'curto-circuito de getImage() não encontrado')
 })
 
 test('US1: buildPayload só executa o ramo de link preview quando imageMode === preview e não há channelForward', () => {
@@ -85,15 +98,15 @@ test('buildPayload pula o ramo de preview e getImage força fetch quando channel
   assert.notEqual(wantImageStart, -1, 'busca de imagem precisa rodar também quando channelForward está setado, mesmo com wantImage=false')
 
   const getImageCallStart = botWorkerSource.indexOf('await getImage({ forceOriginalForChannelButton: !!channelForward, imageMode })')
-  assert.notEqual(getImageCallStart, -1, 'getImage precisa ser chamado com forceOriginalForChannelButton para o destino com botão')
+  assert.notEqual(getImageCallStart, -1, 'getImage precisa ser chamado com forceOriginalForChannelButton e o imageMode do destino')
 
   const fallbackStart = botWorkerSource.indexOf("if ((imageMode === 'original' || channelForward) && !image)")
   assert.notEqual(fallbackStart, -1, 'sem imagem disponível, destino com channelForward precisa cair no fallback de link preview automático (useLinkPreview) em vez de texto pelado')
 })
 
-test('getImage trata forceOriginalForChannelButton como original quando o destino usa preview', () => {
+test('getImage trata forceOriginalForChannelButton como mode "original" quando o modo-base do destino é preview', () => {
   const fnStart = botWorkerSource.indexOf("async function getImage({ forceOriginalForChannelButton = false, imageMode = 'original' } = {}) {")
-  assert.notEqual(fnStart, -1, 'assinatura de getImage precisa aceitar forceOriginalForChannelButton')
+  assert.notEqual(fnStart, -1, 'assinatura de getImage precisa aceitar forceOriginalForChannelButton e imageMode (por destino)')
 
   const fnEnd = botWorkerSource.indexOf('\n      }\n', fnStart)
   const fnBody = botWorkerSource.slice(fnStart, fnEnd)

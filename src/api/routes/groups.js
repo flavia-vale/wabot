@@ -100,8 +100,13 @@ export async function groupsRoutes(app, opts = {}) {
 
     try {
       const group = await db.group.create({
-        // A estratégia de imagem pertence ao DESTINO. Origem mantém o campo
-        // dormente apenas por compatibilidade com o schema histórico.
+        // 2026-08-28: a estratégia de imagem passa a ser escolhida por DESTINO
+        // (role='post'), na tela de "Filtros" desse grupo/canal — ver
+        // src/core/imageModePolicy.js e src/billing/groupEntitlements.js. Todo
+        // grupo novo nasce em 'original' ("a foto que veio na oferta", padrão
+        // do produto desde 2026-08-21); role='monitor' nunca leu este campo,
+        // mas mantemos um único valor por simplicidade e defesa em
+        // profundidade.
         data: { userId: req.user.sub, waJid, name, role, kind, forwardMode: FORWARD_MODE.LINK_ONLY, imageMode: 'original' },
       })
       trackAnalyticsEventSafe({
@@ -199,13 +204,25 @@ export async function groupsRoutes(app, opts = {}) {
       if (invalid) return reply.code(400).send({ error: 'allowedPlatforms contém plataforma inválida' })
     }
 
+    // `preview_watermark` já existe na política (core/imageModePolicy.js) mas
+    // ainda não é composto pelo worker nem tem tela própria — recusar aqui
+    // evita salvar uma escolha que a cliente veria como "não fez nada".
     if (imageMode !== undefined && !['original', 'original_watermark', 'preview'].includes(imageMode)) {
       return reply.code(400).send({ error: 'imageMode inválido' })
     }
+    // Modo de imagem e marca d'água pertencem ao DESTINO, nunca à origem — a
+    // origem nunca leu este campo (toMonitorGroup em groupEntitlements.js nem
+    // repassa `imageMode`), mas bloqueamos a escrita aqui para não deixar uma
+    // configuração "fantasma" salva sem nenhum efeito.
     if ((imageMode !== undefined || watermarkText !== undefined) && group.role !== 'post') {
       return reply.code(400).send({ error: 'Modo de imagem e marca d\'água só podem ser definidos no destino.' })
     }
-    const normalizedWatermarkText = watermarkText !== undefined ? String(watermarkText ?? '').replace(/\s+/g, ' ').trim() : undefined
+    // Unicode-aware ([...string].length conta codepoints, não UTF-16 code
+    // units) — mesmo critério usado pelo renderizador (destinationWatermark.js)
+    // e pelo contador de caracteres da tela, para os três nunca divergirem.
+    const normalizedWatermarkText = watermarkText !== undefined
+      ? String(watermarkText ?? '').replace(/\s+/g, ' ').trim()
+      : undefined
     if (normalizedWatermarkText !== undefined && [...normalizedWatermarkText].length > 50) {
       return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 50 caracteres.' })
     }

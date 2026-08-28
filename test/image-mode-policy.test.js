@@ -2,7 +2,14 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'fs'
 
-import { destinationImageBaseMode, destinationImageUsesWatermark, resolveDestinationImageMode, resolveGroupImageMode, DEFAULT_GROUP_IMAGE_MODE } from '../src/core/imageModePolicy.js'
+import {
+  resolveGroupImageMode,
+  DEFAULT_GROUP_IMAGE_MODE,
+  DESTINATION_IMAGE_MODE,
+  resolveDestinationImageMode,
+  destinationImageBaseMode,
+  destinationImageUsesWatermark,
+} from '../src/core/imageModePolicy.js'
 
 // 2026-08-20: com o Mercado Livre barrando o IP do servidor, parte das ofertas
 // voltou a sair sem foto no modo preview. A troca para "imagem que veio na
@@ -35,27 +42,26 @@ test('valor inválido não deixa o pipeline sem modo', () => {
   assert.equal(resolveGroupImageMode(), DEFAULT_GROUP_IMAGE_MODE)
 })
 
-// 2026-08-22 (fim do dia): a escolha por grupo saiu da tela de novo e o
-// chokepoint voltou a IGNORAR `Group.imageMode`. Guarda para ninguém reativar o
-// campo por engano — o modo é único e vem da env global.
-test('a estratégia de imagem sai da origem e passa ao detalhe do destino', () => {
+// 2026-08-28: a escolha de imagem volta à tela, mas por DESTINO — a origem
+// nunca leu `imageMode` e continua sem ler. `toMonitorGroup` não pode voltar a
+// expor `imageMode` (nem fixo nem vindo do banco); quem carrega modo/marca é
+// `toPostDetail`, só para grupos role='post'.
+test('a origem (toMonitorGroup) não expõe imageMode nem watermarkText', () => {
   const source = readFileSync(new URL('../src/billing/groupEntitlements.js', import.meta.url), 'utf8')
   const fnStart = source.indexOf('function toMonitorGroup(')
   const fnEnd = source.indexOf('function toPostDetail(')
-  const monitorFn = source.slice(fnStart, fnEnd)
-  const postFn = source.slice(fnEnd, source.indexOf('export function buildEntitledGroupConfig'))
-  assert.equal(/imageMode/.test(monitorFn), false)
-  assert.match(postFn, /imageMode: resolveDestinationImageMode\(group\.imageMode\)/)
+  const fn = source.slice(fnStart, fnEnd).replace(/\/\/[^\n]*/g, '')
+  assert.equal(/imageMode\s*:/.test(fn), false, 'toMonitorGroup não pode ler nem expor imageMode — isso é do destino')
+  assert.equal(/watermarkText\s*:/.test(fn), false)
 })
 
-test('modos compostos resolvem base e uso de marca com fallback seguro', () => {
-  assert.equal(resolveDestinationImageMode('original_watermark'), 'original_watermark')
-  assert.equal(resolveDestinationImageMode('preview'), 'preview')
-  assert.equal(resolveDestinationImageMode('desconhecido'), 'original')
-  assert.equal(destinationImageBaseMode('original_watermark'), 'original')
-  assert.equal(destinationImageBaseMode('preview_watermark'), 'preview')
-  assert.equal(destinationImageUsesWatermark('original_watermark'), true)
-  assert.equal(destinationImageUsesWatermark('preview'), false)
+test('o destino (toPostDetail) resolve o modo com resolveDestinationImageMode e expõe watermarkText', () => {
+  const source = readFileSync(new URL('../src/billing/groupEntitlements.js', import.meta.url), 'utf8')
+  const fnStart = source.indexOf('function toPostDetail(')
+  const fnEnd = source.indexOf('export function buildEntitledGroupConfig(')
+  const fn = source.slice(fnStart, fnEnd)
+  assert.match(fn, /imageMode: resolveDestinationImageMode\(group\.imageMode\)/)
+  assert.match(fn, /watermarkText: group\.watermarkText/)
 })
 
 // RCA 2026-08-20/21 — "no modo original faltou oferta; com o botão Ver canal
@@ -90,17 +96,48 @@ test('o envio só usa relay quando o escape hatch pede (guarda estrutural)', asy
   assert.match(linha, /!shouldReuploadOriginalMedia\(\)/, 'o caminho de repasse precisa continuar condicionado ao escape hatch')
 })
 
-// A cliente não escolhe formato de imagem: a única escolha de formato na tela é
-// o botão "Ver canal". Guarda para o seletor não voltar à UI sem antes fechar a
-// investigação de 22/08 (painel mostrava um formato, o grupo recebia outro).
-test('a tela oferece o modo de imagem somente nos filtros do destino', () => {
+// 2026-08-28: a escolha de imagem volta à tela do DESTINO (nunca do grupo
+// monitorado/origem) — ver renderPostConfig em dashboard/app/painel/grupos/page.js.
+test('a escolha de imagem só aparece na configuração do destino (post), nunca na origem (monitor)', () => {
   const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
-  const semComentarios = page.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '')
-  const monitorStart = semComentarios.indexOf('function MonitorGroupConfig')
-  const postStart = semComentarios.indexOf('function renderPostConfig')
-  assert.equal(/imageMode/.test(semComentarios.slice(monitorStart, postStart)), false)
-  assert.match(semComentarios.slice(postStart), /original_watermark/)
-  assert.match(semComentarios.slice(postStart), /Preview clicável/)
-  assert.match(semComentarios.slice(postStart), /preview_watermark.*disabled/)
-  assert.match(semComentarios, /Ver canal/, 'a escolha do botão "Ver canal" continua na tela')
+  const monitorFnStart = page.indexOf('function MonitorGroupConfig(')
+  const monitorFnEnd = page.indexOf('export default function GruposPage(', monitorFnStart + 1)
+  assert.notEqual(monitorFnEnd, -1, 'limite de MonitorGroupConfig não encontrado')
+  const monitorFn = page.slice(monitorFnStart, monitorFnEnd)
+  assert.equal(/imageMode/.test(monitorFn), false, 'a config do grupo monitorado (origem) não pode oferecer escolha de imagem')
+
+  const postFnStart = page.indexOf('function renderPostConfig(')
+  assert.notEqual(postFnStart, -1, 'renderPostConfig não encontrada')
+  const postFn = page.slice(postFnStart, postFnStart + 4000)
+  assert.match(postFn, /imageMode/, 'a config do destino precisa oferecer o modo de imagem')
+  assert.match(postFn, /watermarkText/, 'a config do destino precisa oferecer o texto da marca')
+  assert.match(postFn, /preview_watermark['"]?\s+disabled/, 'preview com marca ainda não implementado precisa aparecer desabilitado')
+})
+
+// resolveDestinationImageMode / destinationImageBaseMode / destinationImageUsesWatermark
+
+test('resolveDestinationImageMode aceita os 4 modos e cai em original para qualquer outro valor', () => {
+  assert.equal(resolveDestinationImageMode('original'), DESTINATION_IMAGE_MODE.ORIGINAL)
+  assert.equal(resolveDestinationImageMode('original_watermark'), DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK)
+  assert.equal(resolveDestinationImageMode('preview'), DESTINATION_IMAGE_MODE.PREVIEW)
+  assert.equal(resolveDestinationImageMode('preview_watermark'), DESTINATION_IMAGE_MODE.PREVIEW_WATERMARK)
+  assert.equal(resolveDestinationImageMode(' ORIGINAL_WATERMARK '), DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK)
+  for (const legacy of ['none', 'fetch', null, undefined, '', 'legado-desconhecido']) {
+    assert.equal(resolveDestinationImageMode(legacy), DESTINATION_IMAGE_MODE.ORIGINAL, `esperava fallback para original em ${legacy}`)
+  }
+})
+
+test('destinationImageBaseMode separa o modo-base (de onde vêm os bytes) da marca d\'água', () => {
+  assert.equal(destinationImageBaseMode('original'), 'original')
+  assert.equal(destinationImageBaseMode('original_watermark'), 'original')
+  assert.equal(destinationImageBaseMode('preview'), 'preview')
+  assert.equal(destinationImageBaseMode('preview_watermark'), 'preview')
+  assert.equal(destinationImageBaseMode('legado-desconhecido'), 'original')
+})
+
+test('destinationImageUsesWatermark só é true nas duas variantes com marca', () => {
+  assert.equal(destinationImageUsesWatermark('original'), false)
+  assert.equal(destinationImageUsesWatermark('preview'), false)
+  assert.equal(destinationImageUsesWatermark('original_watermark'), true)
+  assert.equal(destinationImageUsesWatermark('preview_watermark'), true)
 })

@@ -24,16 +24,48 @@ test('buildEntitledGroupConfig removes all channel monitors, posts and targets f
   assert.deepEqual(result.groups.monitor[0].targetPostJids, ['post@g.us'])
   assert.deepEqual(result.groups.monitorJids, ['monitor@g.us'])
   assert.deepEqual(result.groups.post, ['post@g.us'])
-  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null, imageMode: 'original_watermark', watermarkText: 'Minha marca' }])
+  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null, imageMode: 'original', watermarkText: null }])
 })
 
-test('buildEntitledGroupConfig carrega modo por destino e nao pela origem', () => {
-  const result = buildEntitledGroupConfig({ groups, groupTargets, planSubject: { plan: 'pro' } })
-  const source = result.groups.monitor.find(group => group.waJid === 'monitor@g.us')
-  const destination = result.groups.postDetails.find(group => group.waJid === 'post@g.us')
-  assert.equal('imageMode' in source, false)
-  assert.equal(destination.imageMode, 'original_watermark')
-  assert.equal(destination.watermarkText, 'Minha marca')
+// 2026-08-28: o modo de imagem deixou de ser único/global e passou a ser
+// escolhido POR DESTINO. A origem (toMonitorGroup) nunca leu `imageMode` e
+// continua sem lê-lo — nem fixo nem vindo do banco. `fallbackToOriginal`
+// continua sempre ligado (rede de segurança preservada).
+test('toMonitorGroup não expõe imageMode, mesmo quando a origem tem valores legados gravados', () => {
+  const custom = [
+    { id: 'm-default', role: 'monitor', waJid: 'a@g.us', kind: 'group', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
+    { id: 'm-fetch', role: 'monitor', waJid: 'b@g.us', kind: 'group', imageMode: 'fetch', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
+    { id: 'm-preview', role: 'monitor', waJid: 'd@g.us', kind: 'group', imageMode: 'preview', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' },
+  ]
+  const result = buildEntitledGroupConfig({ groups: custom, groupTargets: [], planSubject: { plan: 'pro' } })
+  const byJid = Object.fromEntries(result.groups.monitor.map(g => [g.waJid, g]))
+
+  for (const jid of ['a@g.us', 'b@g.us', 'd@g.us']) {
+    assert.equal('imageMode' in byJid[jid], false, `toMonitorGroup não pode expor imageMode para ${jid}`)
+    assert.equal(byJid[jid].fallbackToOriginal, true)
+  }
+})
+
+// Cada destino escolhe seu próprio modo/marca — a mesma oferta pode sair
+// 'original' num grupo, 'original_watermark' noutro e 'preview' num terceiro.
+test('toPostDetail resolve imageMode/watermarkText por destino, com fallback seguro para valor ausente/desconhecido', () => {
+  const custom = [
+    { id: 'p-original', role: 'post', waJid: 'a@g.us', kind: 'group', imageMode: 'original' },
+    { id: 'p-watermark', role: 'post', waJid: 'b@g.us', kind: 'group', imageMode: 'original_watermark', watermarkText: 'Achadinhos da Maria' },
+    { id: 'p-preview', role: 'post', waJid: 'c@g.us', kind: 'group', imageMode: 'preview' },
+    { id: 'p-legacy', role: 'post', waJid: 'd@g.us', kind: 'group', imageMode: 'legado-desconhecido' },
+    { id: 'p-null', role: 'post', waJid: 'e@g.us', kind: 'group', imageMode: null },
+  ]
+  const result = buildEntitledGroupConfig({ groups: custom, groupTargets: [], planSubject: { plan: 'pro' } })
+  const byJid = Object.fromEntries(result.groups.postDetails.map(g => [g.waJid, g]))
+
+  assert.equal(byJid['a@g.us'].imageMode, 'original')
+  assert.equal(byJid['a@g.us'].watermarkText, null)
+  assert.equal(byJid['b@g.us'].imageMode, 'original_watermark')
+  assert.equal(byJid['b@g.us'].watermarkText, 'Achadinhos da Maria')
+  assert.equal(byJid['c@g.us'].imageMode, 'preview')
+  assert.equal(byJid['d@g.us'].imageMode, 'original', 'valor desconhecido cai em original, nunca deixa o worker sem modo')
+  assert.equal(byJid['e@g.us'].imageMode, 'original')
 })
 
 test('buildEntitledGroupConfig keeps channels for active trial and Pro', () => {

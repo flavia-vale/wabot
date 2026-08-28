@@ -63,7 +63,7 @@ model User {
   resolvedPayoutRequests      AffiliatePayoutRequest[]    @relation("ResolvedPayoutRequests")
   subscriptions               Subscription[]
   affiliateAttributionTouches AffiliateAttributionTouch[]
-  maxAutomations             Int       @default(30)
+  maxAutomations              Int                         @default(30)
 
   @@index([status, plan, accessExpiresAt])
   @@index([lastActivityAt])
@@ -111,6 +111,10 @@ model Group {
   name                  String
   role                  String
   kind                  String              @default("group")
+  // Modo de imagem e marca d'água pertencem ao DESTINO (role='post'), nunca à
+  // origem — ver src/core/imageModePolicy.js e src/billing/groupEntitlements.js.
+  // O campo continua existindo em qualquer role por simplicidade de schema,
+  // mas só é lido para grupos role='post'.
   imageMode             String              @default("original")
   watermarkText         String?
   imageLinkTarget       String              @default("first")
@@ -185,7 +189,7 @@ model PreservationPreset {
   // mais tempo que isto (em minutos). Oferta velha demais já não serve — e
   // fila infinita derruba a vazão de TODOS os destinos (RCA 2026-07).
   // 0 = nunca descarta. Default 300 (5h).
-  queueMaxAgeMin  Int     @default(300)
+  queueMaxAgeMin Int @default(300)
 
   groups    Group[]
   createdAt DateTime @default(now())
