@@ -42,6 +42,20 @@ export function normalizeWatermarkConfig(raw = {}) {
   return { text, position, opacity, maxWidthPercent }
 }
 
+export async function createSampleInput() {
+  const card = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800">' +
+    '<rect width="1200" height="800" fill="#eef2ff"/>' +
+    '<rect x="90" y="90" width="1020" height="620" rx="42" fill="#ffffff"/>' +
+    '<circle cx="390" cy="400" r="210" fill="#fbbf24"/>' +
+    '<text x="690" y="310" text-anchor="middle" font-family="DejaVu Sans,Arial" font-size="38" font-weight="700" fill="#111827">OFERTA DE TESTE</text>' +
+    '<text x="690" y="405" text-anchor="middle" font-family="DejaVu Sans,Arial" font-size="72" font-weight="700" fill="#dc2626">R$ 99,90</text>' +
+    '<text x="690" y="480" text-anchor="middle" font-family="DejaVu Sans,Arial" font-size="28" fill="#475569">Imagem gerada pela POC</text>' +
+    '</svg>',
+  )
+  return sharp(card).jpeg({ quality: 95 }).toBuffer()
+}
+
 function wrapText(text, maxCharacters) {
   const words = text.split(' ').flatMap(word => {
     const characters = [...word]
@@ -164,14 +178,14 @@ function parseArgs(argv) {
 
 export async function runRenderCli(argv = process.argv.slice(2)) {
   const args = parseArgs(argv)
-  if (!args.input || !args.config || !args.output) {
-    throw new Error('Uso: node render.mjs --input imagem.jpg --config config.json --output diretorio')
+  if (!args.config || !args.output) {
+    throw new Error('Uso: node render.mjs [--input imagem.jpg] --config config.json --output diretorio')
   }
 
   sharp.cache(false)
   sharp.concurrency(1)
   const [input, configFile] = await Promise.all([
-    fs.readFile(args.input),
+    args.input ? fs.readFile(args.input) : createSampleInput(),
     fs.readFile(args.config, 'utf8').then(JSON.parse),
   ])
   const destinations = Array.isArray(configFile.destinations) ? configFile.destinations : []
@@ -203,7 +217,11 @@ export async function runRenderCli(argv = process.argv.slice(2)) {
       skipReason: rendered.skipReason,
     })
   }
-  await fs.writeFile(path.join(args.output, 'report.json'), `${JSON.stringify({ generatedAt: new Date().toISOString(), report }, null, 2)}\n`)
+  await fs.writeFile(path.join(args.output, 'report.json'), `${JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    inputSource: args.input ? 'file' : 'generated_sample',
+    report,
+  }, null, 2)}\n`)
   return report
 }
 

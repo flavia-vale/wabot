@@ -4,15 +4,17 @@ Esta prova e **offline**: nao importa codigo de `src/`, nao acessa banco/Redis,
 nao inicia PM2 e nao envia nada ao WhatsApp. Ela recebe uma imagem e um JSON
 local, produz um JPEG principal e uma miniatura para cada JID e grava metricas.
 
-## Renderizar duas marcas
+## Renderizar duas marcas sem preparar imagem
 
 ```bash
 mkdir -p scripts/experiments/watermark-poc/output
 node --max-old-space-size=256 scripts/experiments/watermark-poc/render.mjs \
-  --input /caminho/oferta.jpg \
   --config scripts/experiments/watermark-poc/config.example.json \
   --output scripts/experiments/watermark-poc/output/render
 ```
+
+Sem `--input`, o proprio utilitario gera uma imagem de oferta demonstrativa.
+Para validar depois com uma foto real, acrescente `--input /caminho/oferta.jpg`.
 
 Os arquivos usam identificadores ordinais (`destination-001`, `destination-002`).
 `report.json` nao grava JID, hash do JID nem texto da marca. O diretorio

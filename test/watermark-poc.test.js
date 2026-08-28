@@ -8,6 +8,7 @@ import path from 'node:path'
 import sharp from 'sharp'
 
 import {
+  createSampleInput,
   escapeXml,
   normalizeWatermarkConfig,
   renderDestinationWatermark,
@@ -22,6 +23,14 @@ async function fixture() {
 
 test('POC escapa texto controlado pelo cliente antes de montar SVG', () => {
   assert.equal(escapeXml('A&B <teste> "ok"'), 'A&amp;B &lt;teste&gt; &quot;ok&quot;')
+})
+
+test('POC gera internamente uma imagem demonstrativa valida', async () => {
+  const sample = await createSampleInput()
+  const metadata = await sharp(sample).metadata()
+  assert.equal(metadata.format, 'jpeg')
+  assert.equal(metadata.width, 1200)
+  assert.equal(metadata.height, 800)
 })
 
 test('POC valida limites e posicao da configuracao', () => {
@@ -82,6 +91,20 @@ test('CLI usa IDs ordinais e nao grava JID ou texto da marca no relatorio', asyn
   assert.deepEqual(files, ['destination-001-main.jpg', 'destination-001-thumb.jpg', 'report.json'])
   assert.doesNotMatch(reportText, /5511999999999/)
   assert.doesNotMatch(reportText, /MARCA PRIVADA/)
+})
+
+test('CLI funciona sem arquivo de entrada usando amostra gerada', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'watermark-poc-'))
+  t.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const configPath = path.join(directory, 'config.json')
+  const outputPath = path.join(directory, 'output')
+  await fs.writeFile(configPath, JSON.stringify({ destinations: [{ jid: 'teste@g.us', text: 'MARCA TESTE' }] }))
+
+  await runRenderCli(['--config', configPath, '--output', outputPath])
+  const report = JSON.parse(await fs.readFile(path.join(outputPath, 'report.json'), 'utf8'))
+
+  assert.equal(report.inputSource, 'generated_sample')
+  assert.equal(report.report[0].watermarkApplied, true)
 })
 
 test('CLI rejeita JID duplicado antes de sobrescrever uma variante', async (t) => {
