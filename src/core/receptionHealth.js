@@ -48,6 +48,12 @@ export function computeReceptionState({
   lastAcceptedAtMs = null,
   failuresInWindow = 0,
   hasMonitoredSources = false,
+  // Fila de entrada: quantos jobs esperando e quando um saiu pela última vez.
+  // RCA 2026-08-28: a mensagem era ACEITA (e o marcador de recepção ficava
+  // fresco) mas a fila da origem estava travada e nada era processado — o
+  // alerta via tudo verde enquanto a cliente ficava sem oferta nenhuma.
+  incomingPending = 0,
+  lastProcessedAtMs = null,
   windowMs = DEFAULT_RECEPTION_WINDOW_MS,
   minFailures = DEFAULT_RECEPTION_MIN_FAILURES,
   starvedFactor = DEFAULT_RECEPTION_STARVED_FACTOR,
@@ -71,6 +77,20 @@ export function computeReceptionState({
   // Julgar aqui produziria alarme falso a cada reconexão — e elas são muitas.
   if (connectedForMs != null && connectedForMs < safeWindowMs) {
     return { ...base, state: RECEPTION_STATE.OK, reason: 'conexão recente' }
+  }
+
+  // Fila de entrada parada: tem mensagem esperando e nada sai dela há mais que
+  // a janela. Vem ANTES do 'ok' por aceitação, porque é justamente o caso em
+  // que a mensagem é aceita e nunca processada.
+  const processedAgeMs = age(now, lastProcessedAtMs)
+  const pendentes = Math.max(0, Number(incomingPending) || 0)
+  if (pendentes > 0 && processedAgeMs != null && processedAgeMs > safeWindowMs) {
+    return {
+      ...base,
+      state: RECEPTION_STATE.BLIND,
+      reason: 'fila de entrada parada: mensagem esperando e nada sendo processado',
+      silentForMs: processedAgeMs,
+    }
   }
 
   if (acceptedAgeMs != null && acceptedAgeMs <= safeWindowMs) {

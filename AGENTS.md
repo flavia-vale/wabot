@@ -1738,6 +1738,68 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
+## Conectado e sem receber: o robô refaz a conexão sozinho (RCA 2026-08-28)
+
+Terceira parada da mesma cliente (`cynthiatceles@gmail.com`) em quatro dias.
+Os eventos de conexão contam a história inteira:
+
+```
+17:23 → 18:27   sem enviar nada, ZERO eventos de conexão no meio
+18:27:14        ela clica em Conectar
+18:27:15        volta a enviar
+18:27 → 19:33   para de novo, de novo sem nenhum evento de conexão
+19:31:41        ela clica em Conectar
+19:33           volta a enviar
+```
+
+O socket não caiu, o heartbeat não falhou, o painel ficou verde — e nada
+entrava. **Só a ação manual dela resolvia**, duas vezes, em paradas de 64 e 66
+minutos. A conta recebe de **4 a 14 mensagens por minuto** quando saudável.
+
+**Não precisamos saber a causa para agir.** A ação certa é a mesma que ela faz
+na mão: refazer a conexão. `src/core/receptionSelfHeal.js`
+(`shouldSelfHealReception`, puro) decide pela linha de base **da própria
+conta** — não por número fixo, senão conta que naturalmente recebe pouco
+dispararia à toa.
+
+Dispara quando: sessão **conectada**, silêncio de `WA_SELF_HEAL_SILENCE_MS`
+(30min) **e** a conta recebeu ao menos `WA_SELF_HEAL_MIN_BASELINE` (30)
+mensagens na janela `WA_SELF_HEAL_BASELINE_WINDOW_MS` (6h). Tetos:
+`WA_SELF_HEAL_COOLDOWN_MS` (1h) e `WA_SELF_HEAL_MAX_PER_DAY` (2).
+
+**A ação é só fechar o socket** — o caminho normal de reconexão sobe de novo,
+com todo o backoff e as guardas existentes. **NÃO apaga credencial, NÃO gera
+QR.** Há teste estrutural que falha se `rm(AUTH_DIR)`, `auth_reset` ou
+`requestPairingCode` aparecerem nesse caminho: auto-cura que vira
+re-pareamento seria muito pior que o problema.
+
+Os tetos são a parte mais importante: reconexão repetida é o padrão que o
+WhatsApp associa a robô (ver o RCA do teto de tentativas). Rollback:
+`WA_SELF_HEAL_MAX_PER_DAY=0`. Sinal `ops_wa_reception_self_heal` — cada evento
+é uma vez que a cliente **não** precisou clicar.
+
+### A fila de entrada travava a origem inteira por causa de uma mensagem
+
+Achado na mesma investigação, defeito real e independente. A fila serializa por
+origem (`orderKey` = jid) para não espelhar fora de ordem. O elo da corrente era
+a promessa da tarefa anterior, que só resolvia quando a **função** do job
+terminava — e o timeout da fila **não cancela a função**: ele solta o slot e
+segue. Uma mensagem que trave para sempre deixava a corrente pendurada e **toda
+mensagem seguinte daquela origem nunca rodava**. O watchdog soltava o slot, não
+a corrente.
+
+Agora a corrente avança quando a **fila** termina de esperar pelo job
+(concluído, com erro ou por timeout). **Não regredir:** o elo é o fim do job na
+FILA, nunca o fim da função. Teste:
+`test/message-queue-order-stall.test.js`.
+
+### O alerta de recepção não pegava nada disso
+
+`markMessageAccepted` roda **antes** da fila: com a fila travada, o marcador
+continuava fresco e estava tudo verde. A fila passa a registrar quando um job
+saiu pela última vez (`lastCompletedAt`), e `computeReceptionState` trata "tem
+mensagem esperando e nada sai há mais que a janela" como cegueira.
+
 ## Teto de tentativas de reconexão sem sucesso (RCA 2026-08-28 — não regredir)
 
 Três contas somaram **281 das ~380 quedas de 12h** — 94, 94 e 93 tentativas com

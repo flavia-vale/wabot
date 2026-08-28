@@ -110,6 +110,7 @@ export const ANALYTICS_EVENTS = new Set([
   // grupo). Nunca automático: só visibilidade para decisão humana.
   'ops_wa_group_desync_unresolved',
   'ops_wa_reception_blind',
+  'ops_wa_reception_self_heal',
   'ops_wa_retry_giveup',
   'ops_wa_retry_slowed',
   'ops_wa_chat_scope_filtered',
