@@ -2491,6 +2491,72 @@ Blindagem em código (não regredir): `src/supervisor/envGuard.js`
 supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
 Teste: `test/supervisor-env-guard.test.js`.
 
+### 10. Dois PRs desenvolvidos em paralelo sobre o mesmo recurso podem mergear SEM conflito e ainda assim quebrar `develop` (RCA 2026-08-28)
+
+**Sintoma:** dois PRs implementando a mesma feature de forma independente
+(imagem/marca d'água por destino) foram mergeados em `develop` em sequência,
+um em cima do outro. Como os dois adicionavam blocos de código quase idênticos
+em regiões PRÓXIMAS mas não idênticas dos mesmos arquivos, o merge automático
+do GitHub **não viu conflito textual nenhum** — simplesmente concatenou as
+duas versões. Isso aconteceu **duas vezes seguidas** no mesmo dia: uma 3ª
+sessão, trabalhando em paralelo num incidente não relacionado, tentou
+consertar o mesmo problema de novo por conta própria e a correção dela também
+colidiu (dessa vez numa fixture de teste, não no código de produção).
+
+Dois efeitos, achados só depois do merge:
+
+1. `src/core/imageModePolicy.js` ficou com **duas declarações** do mesmo
+   `const`/`function` — `SyntaxError: Identifier already declared`. O lint
+   (`backend-lint.yml`, job `no-undef`) pegou isso e reprovou a PR — **mas a
+   PR foi mergeada mesmo assim**, com o check vermelho.
+2. **Duas migrations diferentes** (pastas com timestamps diferentes, sem
+   colisão de nome) faziam o **mesmo** `ALTER TABLE ... ADD COLUMN`. A
+   primeira já tinha sido aplicada com sucesso no banco de staging durante o
+   deploy do 1º PR; quando o deploy do 2º PR rodou logo depois, a segunda
+   falhou com `duplicate column name` e deixou o banco de staging em
+   **estado de migration falha (P3009)** — todo deploy seguinte continuou
+   falhando até alguém rodar `prisma migrate resolve --rolled-back
+   <migration>` manualmente no VPS. O deploy também tinha parado
+   `api-staging`/`bot-supervisor-staging` pra rodar a migration e nunca
+   religou os dois, por causa do erro — staging ficou fora do ar até a
+   correção manual.
+
+**Por que ninguém viu antes de mergear:** cada PR, sozinho, passava em todos
+os testes — o problema só existe na COMBINAÇÃO dos dois. `npm test` local (ou
+até o CI) rodando na branch de um PR isolado nunca vê o código do outro PR
+que será mergeado antes ou depois dele.
+
+**Duas camadas de proteção, não uma só:**
+
+- **Guarda de código** (não evita a causa, mas pega o sintoma cedo):
+  `test/migrations-no-duplicate-column.test.js` varre TODAS as migrations e
+  falha se a mesma tabela+coluna for adicionada em mais de uma — é
+  exatamente o sinal que só aparece quando duas migrations independentes
+  colidem. Mesmo espírito de `test/api-routes-no-duplicate-registration.test.js`
+  (RCA do mesmo dia, rota duplicada derrubando o boot da API). SyntaxError de
+  identificador duplicado já era pego pelo ESLint (`no-undef` do
+  `backend-lint.yml`) — o problema nunca foi falta de detecção.
+- **Processo** (a causa raiz de verdade — nenhuma das duas PRs deveria ter
+  sido mergeada com o check vermelho): **branch protection em `develop` e
+  `main` exigindo os checks `quality` (quality-gate.yml) e `no-undef`
+  (backend-lint.yml) verdes antes de permitir merge.** Sem isso, um PR com
+  lint quebrado pode ser mergeado manualmente e ninguém percebe até o deploy
+  falhar em produção/staging. Configurar em GitHub → Settings → Branches →
+  Branch protection rules → (develop e main) → "Require status checks to pass
+  before merging" → marcar `quality` e `no-undef`. Isso **não está
+  configurado no repositório hoje** — nenhum agente de IA tem acesso para
+  configurar isso sozinho (é uma permissão de admin do repo), então é ação
+  manual da dona do produto.
+- **Antes de abrir uma branch nova para uma feature que outra sessão/PR pode
+  estar tocando ao mesmo tempo**, checar PRs abertos/recém-mergeados que
+  tocam os mesmos arquivos (`gh pr list` / GitHub UI) antes de duplicar
+  trabalho. E depois de QUALQUER merge em `develop` (seu ou de outra sessão),
+  rodar `npm test` + lint + `npm run arch:check` no `develop` atualizado
+  ANTES de começar a construir em cima dele — um merge "limpo" pelo GitHub
+  não significa `develop` saudável.
+
+Teste: `test/migrations-no-duplicate-column.test.js`.
+
 ## "Imagem que veio na mensagem" tem UM caminho só: subir de novo (RCA 2026-08-21)
 
 Existiam **dois** caminhos para a mesma promessa de produto, e eles não eram
