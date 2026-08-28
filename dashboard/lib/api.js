@@ -125,6 +125,10 @@ async function apiFetch(path, options = {}) {
 }
 
 export const api = {
+  shopeeSales: ({ from, to, orderPage = 1, productPage = 1, limit = 20, timeZone = 'America/Sao_Paulo' }, { signal } = {}) => {
+    const params = new URLSearchParams({ from, to, orderPage: String(orderPage), productPage: String(productPage), limit: String(limit), timeZone })
+    return apiFetch(`/api/shopee-sales?${params}`, { signal })
+  },
   login: async (email, password) => {
     const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
     setAuthToken(data?.token || '')
@@ -266,6 +270,7 @@ export const api = {
   adminDeleteFaq: (id) => apiFetch(`/api/admin/faq/${id}`, { method: 'DELETE' }),
   adminOverview: () => apiFetch('/api/admin/overview'),
   adminPipeline: () => apiFetch('/api/admin/pipeline'),
+  adminQualidadeEntrega: (horas = 24) => apiFetch(`/api/admin/qualidade-entrega?horas=${encodeURIComponent(horas)}`),
   adminUpdatePipelineIssueStatus: (id, status) =>
     apiFetch(`/api/admin/pipeline/issues/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   adminUsers: (params = {}) => {
@@ -283,6 +288,12 @@ export const api = {
   adminOnlineUser: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}`),
   adminOnlineReconnect: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}/reconnect`, { method: 'POST' }),
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
+  adminCustomers: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/customers${query ? `?${query}` : ''}`)
+  },
+  adminCustomerHistory: (id) => apiFetch(`/api/admin/customers/${encodeURIComponent(id)}/history`),
+
   adminLogs: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/logs${query ? `?${query}` : ''}`)
@@ -302,6 +313,12 @@ export const api = {
   adminSystemHealth: () => apiFetch('/api/admin/system/health'),
   adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
   adminSystemObservability: () => apiFetch('/api/admin/system/observability'),
+  adminCapacityCurrent: () => apiFetch('/api/admin/capacity/current'),
+  adminCapacityHistory: (period = '30d') => apiFetch(`/api/admin/capacity/history?period=${encodeURIComponent(period)}`),
+  adminCapacityForecast: () => apiFetch('/api/admin/capacity/forecast'),
+  adminCapacityScenario: (input) => apiFetch('/api/admin/capacity/scenario', { method: 'POST', body: JSON.stringify(input) }),
+  adminCapacityAlerts: (status = '', limit = 100) => apiFetch(`/api/admin/capacity/alerts?${new URLSearchParams({ ...(status ? { status } : {}), limit: String(limit) })}`),
+  adminCapacityRefresh: () => apiFetch('/api/admin/capacity/refresh', { method: 'POST', body: '{}' }),
   adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
   adminSuccessQueue: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
@@ -328,6 +345,13 @@ export const api = {
   },
   adminUpdateAccess: (id, data) =>
     apiFetch(`/api/admin/users/${id}/access`, { method: 'POST', body: JSON.stringify(data) }),
+
+  adminAutomationQuota: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/automation-quota${query ? `?${query}` : ''}`)
+  },
+  adminAutomationQuotaUpdate: (userId, maxAutomations) =>
+    apiFetch(`/api/admin/automation-quota/${encodeURIComponent(userId)}`, { method: 'PATCH', body: JSON.stringify({ maxAutomations }) }),
 
   // Aba E-mails do admin (motor de e-mails).
   adminEmailSummary: () => apiFetch('/api/admin/emails/summary'),

@@ -330,6 +330,54 @@ o processo no boot — vide seção "D-3" abaixo. Gere uma por ambiente com:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+## Histórico por cliente no admin (`/admin/clientes`, 2026-08-27)
+
+Antes só existia visão macro: a gestão em `/admin` lista por RISCO (20 por
+página, sem ordenação) e o drill-down `GET /users/:id` é operacional — não
+respondia "quando essa cliente assinou, qual plano, quando vence". A
+`Subscription` sequer era lida ali.
+
+| Peça | Onde |
+|---|---|
+| Montagem dos 4 blocos + linha do tempo (PURO, sem banco) | `src/domain/admin/customerHistory.js` |
+| Lista larga, buscável e ordenável | `listCustomers` em `src/domain/admin/service.js` |
+| Rotas | `GET /api/admin/customers` e `GET /api/admin/customers/:id/history` |
+| Tela da lista | `dashboard/app/admin/clientes/page.js` |
+| Tela do histórico | `dashboard/app/admin/clientes/[id]/page.js` |
+
+Os quatro blocos: **cadastral** (criação, origem, termos, último acesso),
+**financeiro** (trial, assinaturas, pagamentos, LTV, acessos liberados na mão),
+**técnico** (quedas por janela/código, erros por categoria, lojas) e **uso**
+(grupos, envios 30d/7d/24h, automações, série diária).
+
+**Não regredir — as regras que impedem a tela de virar parede:**
+- **Cabeçalho tem exatamente 6 números.** Teste falha se virar 7.
+- **A linha do tempo só recebe MARCOS.** Envio individual nunca vira linha —
+  vira agregado diário, e queda de WhatsApp idem ("caiu 3 vezes"). Sem isso um
+  cliente com 160 envios/dia produz 4.800 linhas e a página deixa de servir
+  para qualquer coisa.
+- **Cada aba mostra 8 linhas**; o resto fica atrás de "ver tudo".
+- **Linguagem leiga**, como no resto do produto: a categoria de erro vira
+  "Demorou demais e desistiu", não `timeout:`. Teste falha se prefixo de
+  `errorMsg` chegar à tela.
+
+**Trial não tem tabela própria** — é `plan='trial'` + `accessExpiresAt`.
+`summarizeTrial` reconstrói início/fim/conversão a partir do cadastro e do
+PRIMEIRO pagamento aprovado. Depois de assinar, `accessExpiresAt` passa a ser a
+validade do plano pago, então `endsAt` do trial vira `null` de propósito —
+reaproveitá-lo mentiria na linha do tempo.
+
+**Custos:** só leitura, nenhum processo novo, **zero impacto de RAM**. Todo
+agregado por cliente sai em lote (`groupBy`/`in`), nunca uma consulta por linha.
+`MessageLog` é lido em janela de 30 dias com teto de 20.000 linhas — o histórico
+de uso é agregado, não listagem. Ordenação só por coluna real do banco
+(`SORTABLE_CUSTOMER_FIELDS`); último envio e LTV ficam de fora porque ordenar
+por eles exigiria carregar a base inteira em memória.
+
+Telefone segue mascarado por papel (`sanitizeUser`/`canSeePhone`) e as duas
+rotas exigem `support:read` e gravam `AdminAuditLog`. Testes:
+`test/admin-customer-history.test.js`.
+
 ## Liga/desliga staging pelo painel admin (economia de RAM)
 
 Como staging e prod dividem o mesmo VPS, o painel admin de prod tem um botão
@@ -346,6 +394,47 @@ em `src/ops/stagingPower.js`; rotas `GET/POST /api/admin/staging-power`
 - Só roda no host de **produção** (`APP_ENV != staging`).
 - Envs opcionais: `STAGING_PM2_APPS` (default `api-staging visual-staging`),
   `STAGING_DIR`, `PM2_BIN`. Teste: `test/ops-staging-power.test.js`.
+
+## ADMIN > Capacidade (observabilidade da VPS)
+
+A rota `/admin/capacidade` (permissão `tech:read`) apresenta o host contratado,
+RAM/CPU/disco/swap, processos PM2, workers reais, staging, histórico, forecast e
+alertas. A coleta roda dentro da API a cada 5 minutos, com `unref()` e
+single-flight; **não existe processo PM2 novo** e a tela nunca cria, apaga ou
+redimensiona recursos Hetzner. Atualização manual exige `tech:write` e é
+auditada como `admin.capacity.refresh`.
+
+Política conservadora (`src/ops/capacity/policy.js`): reserva o maior valor
+entre 20% da RAM e 1.536 MB; cada sessão custa pelo menos 350 MB ou o p95
+observado (o maior); swap não aumenta a capacidade. Dados ausentes ficam
+`null`/`insufficient_data`. Swap ocupado sem atividade é informativo; pressão
+contínua, pouca `MemAvailable`, disco e headroom determinam atenção/criticidade.
+O forecast só fornece horizonte quando há cobertura suficiente e crescimento
+positivo, sempre com faixa e confiança.
+
+Snapshots de 5 minutos são retidos por 90 dias; rollups horários por 12 meses
+e diários permanecem. Alertas exigem confirmação em duas amostras, possuem
+cooldown de 24 h, registram piora e recuperação e nunca executam ações. Eventos
+de restart, staging, reboot/OOM e mudança de host/política explicam o histórico
+com payload sanitizado e dedupe.
+
+Integração Hetzner é opcional e somente leitura:
+
+```text
+HCLOUD_READ_TOKEN=<token read-only, nunca enviar ao browser/log>
+HCLOUD_PROJECT_ID=14422101
+HCLOUD_SERVER_ID=128727108
+CAPACITY_SWEEP_INTERVAL_MS=300000
+```
+
+Sem token, usa o baseline `wabot-prod / CX33 / 4 vCPU / 8 GB / 40 GB` e marca
+a fonte como `baseline`; falha externa preserva o último inventário como stale.
+O cache Hetzner dura no mínimo 6 h.
+
+Antes de produção: PR contra `develop`, autodeploy, validar em
+`http://178.105.54.0:3006` e observar por 24 h (<1% CPU média e <50 MB adicionais)
+conforme `specs/014-admin-capacity-observability/quickstart.md`. A validação de
+24 h é manual e não pode ser inferida dos testes locais.
 
 ## D-3 — Criptografia de credenciais em repouso (canônico)
 
@@ -1648,6 +1737,45 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 `msgRetryCounterCache`); não ampliar o `shouldIgnoreChatJid` para ignorar
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
+
+## Teto de tentativas de reconexão sem sucesso (RCA 2026-08-28 — não regredir)
+
+Três contas somaram **281 das ~380 quedas de 12h** — 94, 94 e 93 tentativas com
+**zero** conexões bem-sucedidas, nenhuma delas com mensagem travada. Eram
+sessões que tentavam a cada ~8min e o WhatsApp nunca aceitava.
+
+O gatilho foi a correção da ressurreição (RCA 2026-08-27): antes essas sessões
+morriam e ficavam quietas; depois passaram a ser levantadas de volta e a
+martelar. Medido nas três: de **0,6-1,9 quedas/h para 7-8/h**. Trocar "morta em
+silêncio" por "loop de reconexão" é pior — reconexão repetida é o padrão que o
+WhatsApp associa a robô, e o preço é chip restringido.
+
+`src/core/reconnectGiveupPolicy.js` (puro) resolve **desacelerando**, não
+parando:
+
+| Situação | Regra | Efeito |
+|---|---|---|
+| Sessão que **já abriu** alguma vez e caiu | `WA_RETRY_GIVEUP_ATTEMPTS` (12) falhas seguidas → passa a tentar a cada `WA_RETRY_SLOW_INTERVAL_MS` (15min) | queda de rede/WhatsApp continua se recuperando sozinha; exposição cai ~75% |
+| Sessão que **nunca abriu** nesta credencial | `WA_RETRY_NEVER_CONNECTED_MAX` (10) → **para** e marca `lifecycle='disconnected'` | sem credencial válida o WhatsApp nunca aceita; quem resolve é a cliente lendo o QR |
+
+**Quem já conectou NUNCA é parada** — só desacelerada. Parar sessão de cliente
+pagante quebraria a promessa de robô 24h; a política de alta disponibilidade do
+projeto prefere indisponibilidade curta, e por isso o ritmo lento é 15min e não
+30. Qualquer `open` zera o contador, então a frota saudável nunca chega ao teto
+(hoje ninguém passa de 16 quedas/12h, todas com 100% de recuperação).
+
+**Não regredir:** o contador (`consecutiveFailedReconnects`) e `everOpened`
+vivem em escopo de módulo — dentro de `startBotInner` zerariam a cada
+reconexão e o teto nunca seria atingido (mesma lição do `msgRetryCounterCache`).
+`everOpened` é de propósito mais frouxo que `everHadStableOpen`: para a PARADA
+definitiva só vale "nunca chegou a abrir", não "abriu e não ficou estável". O
+teto age só no close genérico — pareamento e `replaced` têm caminhos próprios.
+Sinais `ops_wa_retry_slowed` e `ops_wa_retry_giveup`. Rollback:
+`WA_RETRY_GIVEUP_ATTEMPTS=0` e `WA_RETRY_NEVER_CONNECTED_MAX=0`.
+Teste: `test/reconnect-giveup-policy.test.js`.
+
+Parar uma sessão à mão (marca como parada de propósito, não gera aviso de robô
+caído): `node scripts/parar-sessao.mjs <email>`.
 
 ## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
 

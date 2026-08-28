@@ -83,6 +83,7 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
 
 const userId = process.env.BOT_USER_ID
@@ -1549,7 +1550,18 @@ function reportPreviewCardNoImage(stage, ctx = {}) {
   try { recordOperationalSignal('preview_card_no_image', { userId, stage, platform: ctx.platform || null }) } catch {}
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false }) {
+function kindDoCard(fonte) {
+  if (fonte === 'origem') return DELIVERY_KIND.CARD_ORIGEM
+  if (fonte === 'banner') return DELIVERY_KIND.CARD_BANNER
+  return DELIVERY_KIND.CARD_LOJA
+}
+
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto }) {
+  // `onFonteDaFoto` (opcional): diz de ONDE veio a foto do card ('loja',
+  // 'origem' ou 'banner'). Vai por callback, e não como campo do objeto
+  // devolvido, porque esse objeto é o urlInfo que entra no proto do WhatsApp —
+  // campo estranho ali é risco desnecessário (ver o RCA do `title` do PR #1186).
+  const marcarFonte = fonte => { try { onFonteDaFoto?.(fonte) } catch { /* best-effort */ } }
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
@@ -1606,6 +1618,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
     jpegThumbnail = banner
     hqSourceBuffer = banner
+    if (banner) marcarFonte('banner')
   } else if (primary?.platform) {
     const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}, {
       onDiagnostic: ({ stage, detail }) => reportPreviewCardNoImage(stage, { platform: primary.platform, sourceUrl, detail }),
@@ -1632,6 +1645,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         }
         jpegThumbnail = normalized?.jpegThumbnail || undefined
         hqSourceBuffer = normalized?.buffer || jpegThumbnail
+        if (jpegThumbnail) marcarFonte('loja')
       } catch (err) {
         reportPreviewCardNoImage('download_falhou', { platform: primary.platform, imageUrl, sourceUrl, err: err?.message })
       }
@@ -1662,6 +1676,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
       if (normalized?.jpegThumbnail) {
         jpegThumbnail = normalized.jpegThumbnail
         hqSourceBuffer = normalized.buffer || normalized.jpegThumbnail
+        marcarFonte('origem')
         // Sinal PRÓPRIO (não é `ops_preview_card_no_image`): aqui a oferta SAIU
         // com card e com foto. Misturar os dois esconderia justamente o número
         // que interessa — quantas ofertas o plano B salvou, e de qual loja.
@@ -2100,9 +2115,20 @@ async function processSendJob(job) {
             .catch(err => logger.warn({ err: err?.message }, 'recordChannelSendResult(ok) falhou'))
         }
 
+        // Registra COMO a oferta saiu (visão admin de qualidade de entrega).
+        // `deliveryInfo` é preenchido por buildPayload, que já rodou acima neste
+        // mesmo dequeue. Campos ausentes ficam NULL: "não sabemos" é uma
+        // resposta honesta e não polui a contagem do painel.
+        const entrega = job.deliveryInfo || {}
         await db.messageLog.update({
           where: { id: job.logId },
-          data: { status: 'success', errorMsg: null, sentAt: new Date() },
+          data: {
+            status: 'success',
+            errorMsg: null,
+            sentAt: new Date(),
+            ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
+            ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
+          },
         })
 
         sendMetrics.successTotal++
@@ -2270,6 +2296,15 @@ let connectionOpenedAt = null
 // transitórias, não corrupção que justifique apagar auth. Ver
 // shouldResetAuthForBadSession(keepEstablishedAuth).
 let everHadStableOpen = false
+// RCA 2026-08-28: teto de tentativas sem sucesso. `everOpened` é mais frouxo
+// que `everHadStableOpen` de propósito — para a PARADA definitiva só vale
+// "nunca chegou a abrir nenhuma vez", não "abriu mas não ficou estável".
+// Escopo de módulo: precisa sobreviver às reconexões do mesmo worker.
+let everOpened = false
+let consecutiveFailedReconnects = 0
+const RETRY_GIVEUP_ATTEMPTS = Math.max(0, Number(process.env.WA_RETRY_GIVEUP_ATTEMPTS ?? DEFAULT_GIVEUP_ATTEMPTS))
+const RETRY_SLOW_INTERVAL_MS = Math.max(0, Number(process.env.WA_RETRY_SLOW_INTERVAL_MS ?? DEFAULT_SLOW_INTERVAL_MS))
+const RETRY_NEVER_CONNECTED_MAX = Math.max(0, Number(process.env.WA_RETRY_NEVER_CONNECTED_MAX ?? DEFAULT_NEVER_CONNECTED_MAX))
 
 function calcReconnectDelayMs() {
   return calcBackoffDelayMs(reconnectAttempts, { baseMs: RECONNECT_BASE_MS, maxMs: RECONNECT_MAX_MS })
@@ -2554,6 +2589,9 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // concluída". O reset agora é decidido no close, só se a sessão foi estável
       // (shouldResetBackoff). Aqui só marcamos quando ela abriu.
       connectionOpenedAt = Date.now()
+      // Conectou: o orçamento de tentativas volta ao zero.
+      everOpened = true
+      consecutiveFailedReconnects = 0
       const wasReconnecting = disconnectedSinceMs != null
       activeSock = sock
       pendingSock = null
@@ -2856,6 +2894,39 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           delayMs = calcReconnectDelayMs()
           reconnectAttempts++
           logger.warn({ code, attempt: reconnectAttempts, delayMs, stuckMsgId: stuckMsgId || undefined }, 'WA conexão fechada, agendando restart automático')
+        }
+        // Teto de tentativas sem sucesso (RCA 2026-08-28). Só vale para o close
+        // genérico: pareamento e `replaced` têm caminhos próprios. Conexão que
+        // abre zera o contador, então a frota saudável nunca chega aqui.
+        consecutiveFailedReconnects++
+        const ritmo = decideRetryPace({
+          consecutiveFailures: consecutiveFailedReconnects,
+          everConnected: everOpened,
+          baseDelayMs: delayMs,
+          giveupAttempts: RETRY_GIVEUP_ATTEMPTS,
+          slowIntervalMs: RETRY_SLOW_INTERVAL_MS,
+          neverConnectedMax: RETRY_NEVER_CONNECTED_MAX,
+        })
+        if (ritmo.action === RETRY_ACTION.STOP) {
+          // Nunca abriu nenhuma vez: sem credencial válida o WhatsApp não vai
+          // aceitar, e insistir é só exposição (reconexão repetida é o padrão
+          // associado a chip restringido). Quem resolve é a cliente lendo o QR.
+          logger.error(
+            { code, tentativas: consecutiveFailedReconnects, motivo: ritmo.reason },
+            'Sessão nunca conectou e esgotou as tentativas — parando de tentar. Só volta com um novo pareamento (QR) pela cliente.'
+          )
+          try { recordOperationalSignal('wa_retry_giveup', { userId, code, tentativas: consecutiveFailedReconnects }) } catch {}
+          recordWaConnectionEventSafe({ userId, type: 'retry_giveup', code, lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE, metadata: { tentativas: consecutiveFailedReconnects } })
+          await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected' }).catch(() => {})
+          return
+        }
+        if (ritmo.action === RETRY_ACTION.SLOW && ritmo.delayMs > delayMs) {
+          logger.warn(
+            { code, tentativas: consecutiveFailedReconnects, delayMs: ritmo.delayMs },
+            'Muitas tentativas seguidas sem conectar — desacelerando a reconexão (continua tentando sozinho, só mais espaçado)'
+          )
+          try { recordOperationalSignal('wa_retry_slowed', { userId, code, tentativas: consecutiveFailedReconnects }) } catch {}
+          delayMs = ritmo.delayMs
         }
         scheduleReconnect(delayMs, { code, reason: f.flapping ? 'flap_cooldown' : wasStable ? 'stable_close' : 'close' })
       }
@@ -3831,7 +3902,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             logger.warn({ err: err?.message, logId: log.id }, 'Falha ao vincular SendDedupKey ao MessageLog')
           })
         }
-        let sentVia = 'text'
+        // COMO esta oferta saiu, preenchido por buildPayload no dequeue e
+        // persistido no MessageLog quando o envio dá certo. Antes daqui existia
+        // um `sentVia` que nascia 'text' e nunca era atualizado — ou seja, o
+        // painel sabia que o envio deu certo, mas não sabia se a cliente recebeu
+        // foto, card ou texto pelado. Era esse buraco que fazia todo problema de
+        // imagem ser descoberto pela cliente, e não por nós.
+        const deliveryInfo = { kind: null, originImageBytes: null }
 
         // PR-5.B.2: variação de copy por canal-destino. Aplica só em canal —
         // em grupo não há fingerprint de "mesma mensagem em N", então mantém
@@ -3858,6 +3935,16 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
+          // Quanto a MENSAGEM DE ORIGEM trouxe de imagem. `getOriginalPhotoOnce`
+          // é memoizado por mensagem, então isto não gera download extra — e é o
+          // dado que separa "não havia foto" de "havia foto e se perdeu".
+          try {
+            const origem = await getOriginalPhotoOnce()
+            deliveryInfo.originImageBytes = origem?.buffer?.length ?? 0
+          } catch {
+            deliveryInfo.originImageBytes = null
+          }
+
           // Modo "preview": envia uma única mensagem de texto com link preview
           // clicável do WhatsApp (card grande via thumbnail HQ upada — ver
           // buildManualLinkPreview). Não envia imageMessage: o clique no card
@@ -3894,7 +3981,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // imagem (preview e não-preview) concordam sobre produto-vs-cupom. O
             // sinal de vitrine ML (warning) segue como gatilho independente.
             const couponTextSignal = couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used'
+            let fonteDaFoto = null
             const linkPreview = await buildManualLinkPreview({
+              onFonteDaFoto: fonte => { fonteDaFoto = fonte },
               text: variantText,
               primary,
               credentialsMap: cfg.credentials,
@@ -3908,6 +3997,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // download duplicado da mesma mídia.
               fetchOriginPhoto: getOriginalPhotoOnce,
             })
+            deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
               finalText: variantText,
               image: null,
@@ -3931,6 +4021,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               caption: hasCaption ? variantText : undefined,
               forwardNewsletter: null,
             })
+            deliveryInfo.kind = DELIVERY_KIND.RELAY
             return {
               _route: 'relay',
               relay: {
@@ -3982,7 +4073,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // dentro de um card, é legível — o problema original era ela ampliada
           // como imagem de corpo inteiro.
           if (useLinkPreview && !image) {
+            let fonteDaFotoFallback = null
             const fallbackPreview = await buildManualLinkPreview({
+              onFonteDaFoto: fonte => { fonteDaFotoFallback = fonte },
               text: variantText,
               primary,
               credentialsMap: cfg.credentials,
@@ -3997,6 +4090,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               logger.warn({ err: err?.message, destJid }, 'Card de fallback sem imagem falhou; oferta sai como texto')
               return null
             })
+            deliveryInfo.kind = fallbackPreview ? kindDoCard(fonteDaFotoFallback) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
               finalText: variantText,
               image: null,
@@ -4005,6 +4099,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             })
           }
 
+          deliveryInfo.kind = image ? DELIVERY_KIND.FOTO : DELIVERY_KIND.TEXTO
           return buildMonitoredMessagePayload({
             finalText: variantText,
             image,
@@ -4028,9 +4123,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
           buildPayload,
+          // Referência viva: buildPayload roda no dequeue e preenche este mesmo
+          // objeto, que processSendJob lê depois para gravar no MessageLog.
+          deliveryInfo,
           onDone: async (result) => {
             if (result.ok) {
-              logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
+              logger.info({ destJid, platforms, deliveryKind: deliveryInfo.kind, originImageBytes: deliveryInfo.originImageBytes }, 'Mensagem enviada')
               if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })

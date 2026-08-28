@@ -19,9 +19,7 @@ export default function AdminAutomationsPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await api.get('/admin/automation-quota', {
-        params: { page, limit, search },
-      })
+      const res = await api.adminAutomationQuota({ page, limit, search })
       setUsers(res.users || [])
       setTotal(res.total || 0)
     } catch (err) {
@@ -41,9 +39,7 @@ export default function AdminAutomationsPage() {
   const handleUpdateQuota = async (userId, newLimit) => {
     setSaving(userId)
     try {
-      await api.patch(`/admin/automation-quota/${userId}`, {
-        maxAutomations: newLimit,
-      })
+      await api.adminAutomationQuotaUpdate(userId, newLimit)
       await loadUsers()
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Erro ao atualizar limite')
