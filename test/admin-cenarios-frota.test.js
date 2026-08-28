@@ -38,7 +38,7 @@ test('os cards de cenário estão na primeira tela e são clicáveis', () => {
   assert.match(adminPage, /Caindo demais/)
   assert.match(adminPage, /Cliente teve que agir/)
   assert.match(adminPage, /Fonte dessincronizada/)
-  assert.match(adminPage, /Offline acumulado 24h/)
+  assert.doesNotMatch(adminPage, /Offline acumulado 24h/)
   assert.match(adminPage, /function openScenario/)
 })
 
