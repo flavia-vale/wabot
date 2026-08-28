@@ -148,6 +148,10 @@ export const ANALYTICS_EVENTS = new Set([
   // origem enquanto o job esperava na fila (RCA 2026-08-26: entrega 1,5s DEPOIS
   // de a cliente apagar o destino no painel).
   'ops_send_dest_unlinked',
+  // A foto oficial da loja substituiu a foto que veio na mensagem de origem
+  // (que costuma ser a do concorrente, com marca d'água). Mede quanto o
+  // conserto de 2026-08-27 está de fato agindo — ver core/storePhotoPreference.js.
+  'ops_store_photo_over_origin',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

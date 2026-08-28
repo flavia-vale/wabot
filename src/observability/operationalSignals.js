@@ -77,6 +77,8 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   mirror_fallback_all_destinations: 'ops_mirror_fallback_all_destinations',
   // Job descartado no dequeue: destino não está mais vinculado à origem.
   send_dest_unlinked: 'ops_send_dest_unlinked',
+  // Foto da loja usada no lugar da foto da origem (evita marca d'água de terceiro).
+  store_photo_over_origin: 'ops_store_photo_over_origin',
 }
 
 let cachedTrackFn = null
