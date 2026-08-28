@@ -1736,6 +1736,45 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
+## Teto de tentativas de reconexão sem sucesso (RCA 2026-08-28 — não regredir)
+
+Três contas somaram **281 das ~380 quedas de 12h** — 94, 94 e 93 tentativas com
+**zero** conexões bem-sucedidas, nenhuma delas com mensagem travada. Eram
+sessões que tentavam a cada ~8min e o WhatsApp nunca aceitava.
+
+O gatilho foi a correção da ressurreição (RCA 2026-08-27): antes essas sessões
+morriam e ficavam quietas; depois passaram a ser levantadas de volta e a
+martelar. Medido nas três: de **0,6-1,9 quedas/h para 7-8/h**. Trocar "morta em
+silêncio" por "loop de reconexão" é pior — reconexão repetida é o padrão que o
+WhatsApp associa a robô, e o preço é chip restringido.
+
+`src/core/reconnectGiveupPolicy.js` (puro) resolve **desacelerando**, não
+parando:
+
+| Situação | Regra | Efeito |
+|---|---|---|
+| Sessão que **já abriu** alguma vez e caiu | `WA_RETRY_GIVEUP_ATTEMPTS` (12) falhas seguidas → passa a tentar a cada `WA_RETRY_SLOW_INTERVAL_MS` (15min) | queda de rede/WhatsApp continua se recuperando sozinha; exposição cai ~75% |
+| Sessão que **nunca abriu** nesta credencial | `WA_RETRY_NEVER_CONNECTED_MAX` (10) → **para** e marca `lifecycle='disconnected'` | sem credencial válida o WhatsApp nunca aceita; quem resolve é a cliente lendo o QR |
+
+**Quem já conectou NUNCA é parada** — só desacelerada. Parar sessão de cliente
+pagante quebraria a promessa de robô 24h; a política de alta disponibilidade do
+projeto prefere indisponibilidade curta, e por isso o ritmo lento é 15min e não
+30. Qualquer `open` zera o contador, então a frota saudável nunca chega ao teto
+(hoje ninguém passa de 16 quedas/12h, todas com 100% de recuperação).
+
+**Não regredir:** o contador (`consecutiveFailedReconnects`) e `everOpened`
+vivem em escopo de módulo — dentro de `startBotInner` zerariam a cada
+reconexão e o teto nunca seria atingido (mesma lição do `msgRetryCounterCache`).
+`everOpened` é de propósito mais frouxo que `everHadStableOpen`: para a PARADA
+definitiva só vale "nunca chegou a abrir", não "abriu e não ficou estável". O
+teto age só no close genérico — pareamento e `replaced` têm caminhos próprios.
+Sinais `ops_wa_retry_slowed` e `ops_wa_retry_giveup`. Rollback:
+`WA_RETRY_GIVEUP_ATTEMPTS=0` e `WA_RETRY_NEVER_CONNECTED_MAX=0`.
+Teste: `test/reconnect-giveup-policy.test.js`.
+
+Parar uma sessão à mão (marca como parada de propósito, não gera aviso de robô
+caído): `node scripts/parar-sessao.mjs <email>`.
+
 ## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
 
 A regra acima (`WA_IGNORE_UNMONITORED_GROUPS`) é uma **lista de exceções**, e
