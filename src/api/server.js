@@ -43,6 +43,7 @@ import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
+import { shopeeSalesRoutes } from './routes/shopeeSales.js'
 import { runEmailQueueTick } from '../email/queue.js'
 import { runLifecycleEmailSweep } from '../emailTriggers/lifecycleSweep.js'
 import { runWeeklySummarySweep } from '../emailTriggers/weeklySummary.js'
@@ -443,6 +444,7 @@ app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na rai
 app.register(affiliateRoutes, { prefix: '/api' })
 app.register(leadNurtureRoutes, { prefix: '/api/lead-nurture' })
 app.register(emailPrefsRoutes, { prefix: '/api/emails' })
+app.register(shopeeSalesRoutes, { prefix: '/api/shopee-sales' })
 
 // Liveness: processo está de pé
 app.get('/health', () => ({ ok: true }))

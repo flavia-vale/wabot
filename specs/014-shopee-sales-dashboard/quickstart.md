@@ -64,3 +64,26 @@ Não há migration, alteração de `.env`, reinício manual de supervisor ou cut
 
 Como a mudança é perceptível, capturar screenshots desktop e móvel da tela em staging com dados
 de teste anonimizados, incluindo estado de sucesso e ao menos um estado vazio/erro seguro.
+
+## Resultado da implementação (2026-08-27)
+
+- Pipeline aditivo implementado em `src/shopeeSales/`, com query explícita, janelas de sete dias, paginação e limites defensivos.
+- Endpoint autenticado `GET /api/shopee-sales` não expõe credenciais, usuário, comprador nem payload bruto.
+- `/painel/vendas` inclui filtros, KPIs, estados conservadores, tabelas, paginação, retry e aviso sobre cliques convertidos.
+- Status conhecidos: `PENDING`, `UNPAID`, `COMPLETED`/`CONFIRMED`/`APPROVED`, `CANCELLED`/`CANCELED` e `REFUNDED`; valores novos ficam não classificados.
+- Testes focados, ESLint e build de produção passaram.
+- Validação visual autenticada em staging e evidências permanecem pendentes até a branch ser implantada em `http://178.105.54.0:3006`.
+- O handoff operacional, nomes esperados das evidências e checklist de
+  anonimização estão em `evidence/README.md`. A execução real permanece como
+  gate de aceite pós-merge em `develop`, não como tarefa de implementação
+  pré-merge.
+
+## Review remediation verification
+
+The focused test, lint, and production-build commands above are the canonical
+current verification. They must be rerun after report-contract or UI changes;
+a historical successful run is never a substitute for current output.
+
+### Test harness note
+
+The repository environment cannot download a DOM/component renderer (the npm registry returns HTTP 403). The dashboard lifecycle is therefore extracted into `salesLifecycle.js`, consumed directly by `SalesDashboard`, and exercised through dependency-free executable `node:test` action sequences. Only navigation order remains a static source guard.

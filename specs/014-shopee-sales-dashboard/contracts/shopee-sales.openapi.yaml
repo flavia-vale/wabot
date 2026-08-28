@@ -52,21 +52,75 @@ components:
     Status:
       type: string
       enum: [pending, unpaid, confirmed, cancelled, refunded, unclassified]
-    Page:
+    OrderPage:
       type: object
+      additionalProperties: false
       required: [page, limit, total, hasNextPage, rows]
       properties:
         page: { type: integer }
         limit: { type: integer }
         total: { type: integer }
         hasNextPage: { type: boolean }
-        rows: { type: array, items: { type: object } }
+        rows: { type: array, items: { $ref: '#/components/schemas/OrderRow' } }
+    ProductPage:
+      type: object
+      additionalProperties: false
+      required: [page, limit, total, hasNextPage, rows]
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        hasNextPage: { type: boolean }
+        rows: { type: array, items: { $ref: '#/components/schemas/ProductRow' } }
+    OrderRow:
+      description: Comissão da conversão só é exposta quando ela contém um único pedido, evitando duplicidade.
+      type: object
+      additionalProperties: false
+      required: [id, purchasedAt, convertedClickAt, status, rawStatusLabel, amount, estimatedCommission, confirmedCommission, commissionScope, itemCount]
+      properties:
+        id: { type: string, description: Identificador opaco gerado pelo Wabot. }
+        purchasedAt: { type: [string, 'null'], format: date-time }
+        convertedClickAt: { type: [string, 'null'], format: date-time }
+        status: { $ref: '#/components/schemas/Status' }
+        rawStatusLabel: { type: string }
+        amount: { $ref: '#/components/schemas/Money' }
+        estimatedCommission: { $ref: '#/components/schemas/Money' }
+        confirmedCommission: { $ref: '#/components/schemas/Money' }
+        commissionScope: { type: string, enum: [conversion, multiple_orders] }
+        itemCount: { type: integer }
+    ProductRow:
+      type: object
+      additionalProperties: false
+      required: [id, name, shopName, quantity, amount, estimatedCommission, status, imageUrl, purchasedAt]
+      properties:
+        id: { type: string, description: Identificador opaco gerado pelo Wabot. }
+        name: { type: string }
+        shopName: { type: [string, 'null'] }
+        quantity: { type: integer }
+        amount: { $ref: '#/components/schemas/Money' }
+        estimatedCommission: { $ref: '#/components/schemas/Money' }
+        status: { $ref: '#/components/schemas/Status' }
+        imageUrl: { type: [string, 'null'], format: uri }
+        purchasedAt: { type: [string, 'null'], format: date-time }
+    StatusCounts:
+      type: object
+      required: [pending, unpaid, confirmed, cancelled, refunded, unclassified]
+      additionalProperties: false
+      properties:
+        pending: { type: integer }
+        unpaid: { type: integer }
+        confirmed: { type: integer }
+        cancelled: { type: integer }
+        refunded: { type: integer }
+        unclassified: { type: integer }
     SalesSnapshot:
       type: object
+      additionalProperties: false
       required: [period, summary, orders, products, sourceUpdatedAt, stale, clickCoverage]
       properties:
         period:
           type: object
+          additionalProperties: false
           required: [from, to, timeZone]
           properties:
             from: { type: string, format: date }
@@ -74,6 +128,7 @@ components:
             timeZone: { type: string }
         summary:
           type: object
+          additionalProperties: false
           required: [attributedPurchases, orderCount, itemQuantity, statusCounts]
           properties:
             attributedPurchases: { type: integer }
@@ -82,11 +137,9 @@ components:
             salesAmount: { $ref: '#/components/schemas/Money' }
             estimatedCommission: { $ref: '#/components/schemas/Money' }
             confirmedCommission: { $ref: '#/components/schemas/Money' }
-            statusCounts:
-              type: object
-              additionalProperties: { type: integer }
-        orders: { $ref: '#/components/schemas/Page' }
-        products: { $ref: '#/components/schemas/Page' }
+            statusCounts: { $ref: '#/components/schemas/StatusCounts' }
+        orders: { $ref: '#/components/schemas/OrderPage' }
+        products: { $ref: '#/components/schemas/ProductPage' }
         sourceUpdatedAt: { type: string, format: date-time }
         stale: { type: boolean, const: false }
         clickCoverage:
@@ -94,6 +147,7 @@ components:
           const: converted_clicks_only
     Error:
       type: object
+      additionalProperties: false
       required: [error, code, retryable]
       properties:
         error: { type: string }
