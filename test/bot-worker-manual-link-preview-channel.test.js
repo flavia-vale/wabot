@@ -4,9 +4,6 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
-import { buildEntitledGroupConfig } from '../src/billing/groupEntitlements.js'
-import { resolveGroupImageMode } from '../src/core/imageModePolicy.js'
-
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const botWorkerSource = readFileSync(join(__dirname, '../src/bot-worker.js'), 'utf8')
 
@@ -59,16 +56,7 @@ test('imageMode preview repassa destJid pro buildManualLinkPreview no call site'
   )
 })
 
-// specs/001-image-mode-preview-default (US1, AC1-AC3): qualquer que fosse o
-// imageMode histórico do grupo ('fetch'/'none'/'preview'), a oferta espelhada
-// sempre sai como card de preview clicável. bot-worker.js roda como processo
-// próprio (mesma limitação estrutural documentada acima), então validamos o
-// contrato em duas camadas: (1) o chokepoint em groupEntitlements.js entrega
-// SEMPRE 'preview' no monitorGroup, para os três cenários; (2) o call site do
-// bot-worker só toma o ramo de preview (`imageMode === 'preview'`) e o
-// `getImage()` (fonte de fetch ativo) só retorna null para 'preview' porque
-// 'preview' está no array de curto-circuito — provando que os três cenários
-// caem no mesmo ramo de runtime, sem divergência de comportamento.
+// 2026-08-28: o modo deixou de pertencer à origem e passou ao destino.
 //
 // Exceção (fix "Ver canal" não aparece em oferta automática): quando o
 // destino tem `channelForward` (Group.channelButtonJid) configurado, o ramo
@@ -76,32 +64,8 @@ test('imageMode preview repassa destJid pro buildManualLinkPreview no call site'
 // (forceOriginalForChannelButton) — só assim o botão nativo "Ver canal"
 // (mídia-only, src/core/channelSend.js) tem um corpo de mídia pra anexar.
 // Ver testes dedicados abaixo.
-test('US1: grupo antes em "fetch" sai no modo global (chokepoint força imageMode efetivo)', () => {
-  const groups = [{ id: 'g1', role: 'monitor', waJid: 'fetch@g.us', kind: 'group', imageMode: 'fetch', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
-  const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
-  assert.equal(result.groups.monitor[0].imageMode, resolveGroupImageMode())
-})
-
-test('US1: grupo antes em "none" sai no modo global (chokepoint força imageMode efetivo)', () => {
-  const groups = [{ id: 'g2', role: 'monitor', waJid: 'none@g.us', kind: 'group', imageMode: 'none', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
-  const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
-  assert.equal(result.groups.monitor[0].imageMode, resolveGroupImageMode())
-})
-
-test('US1: grupo já em "preview" também cai no modo global (escolha por grupo dormente)', () => {
-  const groups = [{ id: 'g3', role: 'monitor', waJid: 'preview@g.us', kind: 'group', imageMode: 'preview', imageLinkTarget: 'first', forwardMode: 'LINK_ONLY' }]
-  const result = buildEntitledGroupConfig({ groups, groupTargets: [], planSubject: { plan: 'pro' } })
-  assert.equal(result.groups.monitor[0].imageMode, resolveGroupImageMode())
-})
-
-test('US1: getImage() no bot-worker pula o fetch ativo (curto-circuito) para o imageMode efetivo preview, exceto com channelForward', () => {
-  // Prova estrutural de que, com o chokepoint sempre entregando 'preview',
-  // o fetch ativo de imagem só roda quando forceOriginalForChannelButton
-  // (destino com botão "Ver canal") pede explicitamente — o restante da
-  // função (resolveMonitoredImage) fica dormente pra qualquer outro destino
-  // (FR-006).
-  const shortCircuitStart = botWorkerSource.indexOf("const skipFetch = !forceOriginalForChannelButton && ['none', 'preview'].includes(monitorGroup.imageMode)")
-  assert.notEqual(shortCircuitStart, -1, 'curto-circuito de getImage() não encontrado — não remover FR-006')
+test('getImage pula o fetch ativo quando o destino escolhe preview', () => {
+  assert.match(botWorkerSource, /const skipFetch = !forceOriginalForChannelButton && baseMode === 'preview'/)
 })
 
 test('US1: buildPayload só executa o ramo de link preview quando imageMode === preview e não há channelForward', () => {
@@ -120,22 +84,22 @@ test('buildPayload pula o ramo de preview e getImage força fetch quando channel
   const wantImageStart = botWorkerSource.indexOf('if (wantImage || channelForward)')
   assert.notEqual(wantImageStart, -1, 'busca de imagem precisa rodar também quando channelForward está setado, mesmo com wantImage=false')
 
-  const getImageCallStart = botWorkerSource.indexOf('await getImage({ forceOriginalForChannelButton: !!channelForward })')
+  const getImageCallStart = botWorkerSource.indexOf('await getImage({ forceOriginalForChannelButton: !!channelForward, imageMode })')
   assert.notEqual(getImageCallStart, -1, 'getImage precisa ser chamado com forceOriginalForChannelButton para o destino com botão')
 
   const fallbackStart = botWorkerSource.indexOf("if ((imageMode === 'original' || channelForward) && !image)")
   assert.notEqual(fallbackStart, -1, 'sem imagem disponível, destino com channelForward precisa cair no fallback de link preview automático (useLinkPreview) em vez de texto pelado')
 })
 
-test('getImage trata forceOriginalForChannelButton como mode "original" quando o imageMode efetivo é none/preview', () => {
-  const fnStart = botWorkerSource.indexOf('async function getImage({ forceOriginalForChannelButton = false } = {}) {')
+test('getImage trata forceOriginalForChannelButton como original quando o destino usa preview', () => {
+  const fnStart = botWorkerSource.indexOf("async function getImage({ forceOriginalForChannelButton = false, imageMode = 'original' } = {}) {")
   assert.notEqual(fnStart, -1, 'assinatura de getImage precisa aceitar forceOriginalForChannelButton')
 
   const fnEnd = botWorkerSource.indexOf('\n      }\n', fnStart)
   const fnBody = botWorkerSource.slice(fnStart, fnEnd)
   assert.match(
     fnBody,
-    /const effectiveMode = forceOriginalForChannelButton[\s\S]*?\?\s*'original'\s*\n\s*:\s*monitorGroup\.imageMode/,
+    /const effectiveMode = forceOriginalForChannelButton && baseMode === 'preview' \? 'original' : baseMode/,
     "forceOriginalForChannelButton precisa mapear pra mode:'original' no resolveMonitoredImage",
   )
 })

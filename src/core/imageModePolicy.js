@@ -17,6 +17,30 @@
 // `scripts/snapshot-image-mode.mjs`).
 const MODOS_VALIDOS = new Set(['preview', 'original', 'fetch', 'none'])
 
+export const DESTINATION_IMAGE_MODE = Object.freeze({
+  ORIGINAL: 'original',
+  ORIGINAL_WATERMARK: 'original_watermark',
+  PREVIEW: 'preview',
+  PREVIEW_WATERMARK: 'preview_watermark',
+})
+
+const DESTINATION_MODES = new Set(Object.values(DESTINATION_IMAGE_MODE))
+
+export function resolveDestinationImageMode(value) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return DESTINATION_MODES.has(normalized) ? normalized : DESTINATION_IMAGE_MODE.ORIGINAL
+}
+
+export function destinationImageBaseMode(value) {
+  const mode = resolveDestinationImageMode(value)
+  return mode.startsWith('preview') ? DESTINATION_IMAGE_MODE.PREVIEW : DESTINATION_IMAGE_MODE.ORIGINAL
+}
+
+export function destinationImageUsesWatermark(value) {
+  const mode = resolveDestinationImageMode(value)
+  return mode === DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK || mode === DESTINATION_IMAGE_MODE.PREVIEW_WATERMARK
+}
+
 // 2026-08-21: o padrão do produto passou de `preview` para `original` ("a foto
 // que veio na oferta"). O card de preview depende de ABRIR A PÁGINA DA LOJA para
 // achar a foto, e com o Mercado Livre bloqueando o IP do servidor a oferta saía

@@ -28,7 +28,8 @@ import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_
 import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
-import { shouldReuploadOriginalMedia } from './core/imageModePolicy.js'
+import { destinationImageBaseMode, destinationImageUsesWatermark, resolveDestinationImageMode, shouldReuploadOriginalMedia } from './core/imageModePolicy.js'
+import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -3199,7 +3200,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
       // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
       // { buffer, mimetype } pronto para enviar à Baileys, respeitando a
-      // configuração de imagem do grupo monitorado.
+      // configuração de imagem recebida do destino.
       // Estratégia de imagem para mensagens de cupom. Atribuído UMA vez logo após
       // o guard de title_mismatch (que já raspa o og:title do produto), e lido
       // por getImage() no dequeue. Default false = ofertas normais sempre buscam
@@ -3225,20 +3226,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         || cfg.botConfig?.primaryLinkTargetDefault
         || 'first'
 
-      let cachedImage
-      let imageFetched = false
+      const cachedImages = new Map()
       // `forceOriginalForChannelButton`: o botão nativo "Ver canal"
       // (contextInfo.forwardedNewsletterMessageInfo, injetado por
       // injectChannelForwardIntoPayload em src/core/channelSend.js) só é aceito
       // pelo WhatsApp em corpos de MÍDIA (image/video) — texto puro com o botão
-      // é derrubado silenciosamente. resolveGroupEntitlements() força
-      // `monitorGroup.imageMode` para 'preview' sempre (specs/001-image-mode-preview-default),
-      // e o modo preview manda texto+linkPreview (sem `image`), então nenhum
-      // grupo tinha uma mensagem de mídia pra carregar o botão. Quando o destino
-      // tem `channelForward` configurado (Group.channelButtonJid), buscamos a
-      // imagem mesmo assim — reaproveita o MESMO caminho (resolveMonitoredImage,
-      // mode 'original') que já é usado pelas ofertas comuns, só que escopado ao
-      // destino que pediu o botão, sem tocar no default global de imageMode.
+      // é derrubado silenciosamente. Quando o destino usa preview e também tem
+      // `channelForward`, buscamos a imagem original apenas para esse envio.
       // Memo da foto da mensagem de origem, no mesmo espírito de
       // `imageFetched`/`cachedImage` em getImage(): `buildPayload` roda UMA VEZ
       // POR DESTINO, então sem isso uma mensagem espelhada para N grupos
@@ -3253,14 +3247,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         return cachedOriginPhoto
       }
 
-      async function getImage({ forceOriginalForChannelButton = false } = {}) {
-        if (imageFetched) return cachedImage
-        imageFetched = true
-        const skipFetch = !forceOriginalForChannelButton && ['none', 'preview'].includes(monitorGroup.imageMode)
+      async function getImage({ forceOriginalForChannelButton = false, imageMode = 'original' } = {}) {
+        const baseMode = destinationImageBaseMode(imageMode)
+        const effectiveMode = forceOriginalForChannelButton && baseMode === 'preview' ? 'original' : baseMode
+        const cacheKey = effectiveMode
+        if (cachedImages.has(cacheKey)) return cachedImages.get(cacheKey)
+        const skipFetch = !forceOriginalForChannelButton && baseMode === 'preview'
         if (skipFetch) return null
-        const effectiveMode = forceOriginalForChannelButton && ['none', 'preview'].includes(monitorGroup.imageMode)
-          ? 'original'
-          : monitorGroup.imageMode
 
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
         const target = effectiveLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
@@ -3272,7 +3265,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // pula o fetch ativo quando a mensagem é um cupom GENÉRICO cujo link
         // resolve para produto não relacionado (caso A em
         // decideSkipActiveFetchForCoupon). Produto+cupom busca hi-res normalmente.
-        cachedImage = await resolveMonitoredImage({
+        const resolved = await resolveMonitoredImage({
           mode: effectiveMode,
           target,
           credentials: cfg.credentials,
@@ -3293,7 +3286,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             try { recordOperationalSignal('monitored_thumbnail_dropped', { userId, msgId: msg.key.id, ...info }) } catch {}
           },
         })
-        return cachedImage
+        cachedImages.set(cacheKey, resolved)
+        return resolved
       }
 
 
@@ -3619,8 +3613,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
-        // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
-        const channelForward = resolveChannelForward(cfg.groups.postDetails.find(g => g.waJid === destJid))
+        const postDetail = cfg.groups.postDetails.find(g => g.waJid === destJid)
+        // Aparência e botão pertencem ao DESTINO, nunca mais à origem.
+        const destinationImageMode = resolveDestinationImageMode(postDetail?.imageMode)
+        const imageMode = destinationImageBaseMode(destinationImageMode)
+        const watermarkText = String(postDetail?.watermarkText ?? '').trim()
+        const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
+        const channelForward = resolveChannelForward(postDetail)
         // Segurança anti-duplicação por destino. Precisamos guardar DUAS chaves:
         // - primary.url: link upstream estável. Bloqueia a mesma mensagem da fonte
         //   repostada logo depois, mesmo que o conversor gere outro shortlink.
@@ -3866,15 +3865,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // Quando imageMode=original mas só houver jpegThumbnail minúsculo, usa
         // preview automático do WhatsApp em vez de imagem pixelada.
         //
-        // 2026-07 (specs/001-image-mode-preview-default): `monitorGroup.imageMode`
-        // chega AQUI sempre como 'preview' — resolveGroupEntitlements() (chokepoint
-        // em src/billing/groupEntitlements.js) força esse valor independente do que
-        // está persistido no banco. Na prática, deste ponto em diante só o ramo
-        // `imageMode === 'preview'` (linha do `buildManualLinkPreview` abaixo) roda
-        // em runtime. Os ramos `wantImage`/`shouldRelayOriginalMediaForImageMode`/
-        // `imageMode === 'original'` ficam dormentes/preservados (FR-006) — não
-        // remover nem simplificar essa lógica condicional, apenas documentar.
-        const imageMode = monitorGroup?.imageMode ?? 'original'
+        // O modo é resolvido por destino: uma mesma oferta pode sair original
+        // em um grupo, marcada em outro e como preview em um terceiro.
         const wantImage = !['none', 'preview'].includes(imageMode)
         // O caminho de relay reaproveita a mídia hospedada da mensagem de origem.
         // Portanto ele só é correto quando a preferência é explicitamente
@@ -3886,7 +3878,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // para a mesma promessa de produto. Ver shouldReuploadOriginalMedia
         // (core/imageModePolicy.js) para o RCA de por que os dois caminhos
         // deixaram de coexistir.
-        const original = (shouldRelayOriginalMediaForImageMode(imageMode) && !shouldReuploadOriginalMedia())
+        // Marca exige acesso aos bytes: mesmo com o escape hatch global em
+        // relay, este destino precisa baixar/compor/subir a imagem.
+        const original = (shouldRelayOriginalMediaForImageMode(imageMode) && !useDestinationWatermark && !shouldReuploadOriginalMedia())
           ? originalMedia
           : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
@@ -4034,7 +4028,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
           let image = null
           if (wantImage || channelForward) {
-            const fetched = await getImage({ forceOriginalForChannelButton: !!channelForward })
+            const fetched = await getImage({ forceOriginalForChannelButton: !!channelForward, imageMode })
             // Mutação anti-fingerprint SOMENTE para canal-destino (newsletter
             // JID) e quando o opt-in global está ligado. NÃO aplicar a grupos.
             // Quando ligada, o crop + qualidade variada vão DENTRO do mesmo
@@ -4042,9 +4036,25 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // Regressão de dupla compressão documentada em 2026-06
             // (commit image-upload-bug-fix). Ver normalizeImageForWhatsApp.
             const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
-            image = fetched
-              ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
-              : null
+            if (fetched && useDestinationWatermark && imageMode === 'original') {
+              try {
+                const rendered = await renderDestinationWatermark(fetched.buffer, { text: watermarkText })
+                image = {
+                  buffer: rendered.main,
+                  mimetype: 'image/jpeg',
+                  jpegThumbnail: rendered.thumbnail,
+                  width: rendered.width,
+                  height: rendered.height,
+                }
+              } catch (err) {
+                logger.warn({ err: err?.message, destJid }, 'Marca d\'água falhou; enviando imagem normal')
+                image = await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
+              }
+            } else {
+              image = fetched
+                ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
+                : null
+            }
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }
