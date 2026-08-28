@@ -87,6 +87,7 @@ import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
+import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
 
 const userId = process.env.BOT_USER_ID
 const WORKER_STARTED_AT = Date.now()
@@ -502,6 +503,7 @@ function startHeartbeatIpc() {
     })
     if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
+    try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
@@ -1236,8 +1238,71 @@ let monitoredSourceCount = 0
 let lastReceptionSignalAt = 0
 
 function markUpsertReceived() { lastUpsertAtMs = Date.now() }
+
+// Auto-cura de recepção (RCA 2026-08-28). Linha de base da PRÓPRIA conta: só
+// os horários das mensagens aceitas na janela, podados. Escopo de módulo —
+// precisa sobreviver às reconexões do worker, senão a linha de base zera
+// justamente quando ela seria usada.
+const SELF_HEAL_SILENCE_MS = Math.max(60_000, Number(process.env.WA_SELF_HEAL_SILENCE_MS ?? DEFAULT_SILENCE_MS))
+const SELF_HEAL_BASELINE_WINDOW_MS = Math.max(60_000, Number(process.env.WA_SELF_HEAL_BASELINE_WINDOW_MS ?? DEFAULT_BASELINE_WINDOW_MS))
+const SELF_HEAL_MIN_BASELINE = Math.max(0, Number(process.env.WA_SELF_HEAL_MIN_BASELINE ?? DEFAULT_MIN_BASELINE))
+const SELF_HEAL_COOLDOWN_MS = Math.max(0, Number(process.env.WA_SELF_HEAL_COOLDOWN_MS ?? DEFAULT_COOLDOWN_MS))
+const SELF_HEAL_MAX_PER_DAY = Math.max(0, Number(process.env.WA_SELF_HEAL_MAX_PER_DAY ?? DEFAULT_MAX_PER_DAY))
+let acceptedTimestamps = []
+let lastSelfHealAtMs = null
+let selfHealTimestamps = []
+
+function acceptedInBaselineWindow(now = Date.now()) {
+  const cutoff = now - SELF_HEAL_BASELINE_WINDOW_MS
+  if (acceptedTimestamps.length > 5_000 || (acceptedTimestamps.length && acceptedTimestamps[0] < cutoff)) {
+    acceptedTimestamps = acceptedTimestamps.filter(ts => ts >= cutoff)
+  }
+  return acceptedTimestamps.length
+}
+
+// Refaz a conexão sozinho — exatamente o que a cliente faz quando clica em
+// "Conectar", e nada além disso: fecha o socket e deixa o caminho normal de
+// reconexão subir de novo. NÃO apaga credencial, NÃO gera QR.
+function trySelfHealReception() {
+  const now = Date.now()
+  const decisao = shouldSelfHealReception({
+    now,
+    connected: Boolean(activeSock) && lifecycleState === WA_LIFECYCLE.READY,
+    connectedSinceMs: connectionOpenedAt,
+    lastAcceptedAtMs,
+    acceptedInBaselineWindow: acceptedInBaselineWindow(now),
+    lastHealAtMs: lastSelfHealAtMs,
+    healsToday: selfHealTimestamps.filter(ts => now - ts <= 24 * 60 * 60_000).length,
+    silenceMs: SELF_HEAL_SILENCE_MS,
+    minBaseline: SELF_HEAL_MIN_BASELINE,
+    cooldownMs: SELF_HEAL_COOLDOWN_MS,
+    maxPerDay: SELF_HEAL_MAX_PER_DAY,
+  })
+  if (!decisao.heal) return
+  lastSelfHealAtMs = now
+  selfHealTimestamps = selfHealTimestamps.filter(ts => now - ts <= 24 * 60 * 60_000).concat(now)
+  logger.error({
+    silentForMs: decisao.silentForMs,
+    baseline: decisao.baseline,
+    motivo: decisao.reason,
+  }, 'Conectado e sem receber nada há muito tempo numa conta que costuma receber muito — refazendo a conexão sozinho (mesma ação do botão Conectar, sem apagar credencial)')
+  try { recordOperationalSignal('wa_reception_self_heal', { userId, silentForMs: decisao.silentForMs, baseline: decisao.baseline }) } catch {}
+  recordWaConnectionEventSafe({
+    userId,
+    type: 'reception_self_heal',
+    lifecycle: lifecycleState,
+    ownerInstance: OWNER_INSTANCE,
+    metadata: { silentForMs: decisao.silentForMs, baseline: decisao.baseline },
+  })
+  // Fechar o socket cai no handler de close normal, que reagenda a conexão
+  // com todo o backoff e as guardas já existentes.
+  try { activeSock?.end?.(new Error('reception_self_heal')) } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao fechar socket na auto-cura de recepção')
+  }
+}
 function markMessageAccepted() {
   lastAcceptedAtMs = Date.now()
+  acceptedTimestamps.push(lastAcceptedAtMs)
   chatScopeIgnoredSinceLastAccepted = 0
 }
 
