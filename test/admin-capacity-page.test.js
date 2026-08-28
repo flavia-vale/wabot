@@ -1,9 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { findAll, renderJsxComponent, textContent } from './helpers/render-jsx-component.js'
+import { DASHBOARD_DEPS_SKIP, findAll, hasDashboardDeps, renderJsxComponent, textContent } from './helpers/render-jsx-component.js'
 
-test('rota Capacidade faz fetch lazy, preserva ultimo valor e tem estados textuais', async () => {
+// Renderiza componentes do painel de verdade — sem as dependências do
+// dashboard instaladas o teste não tem como rodar. Pula com motivo em vez de
+// falhar por falta de ambiente (a CI instala, então lá ele roda).
+const skip = hasDashboardDeps() ? false : DASHBOARD_DEPS_SKIP
+
+test('rota Capacidade faz fetch lazy, preserva ultimo valor e tem estados textuais', { skip }, async () => {
   const page = await readFile(new URL('../dashboard/app/admin/capacidade/page.js', import.meta.url), 'utf8')
   assert.match(page, /adminCapacityCurrent/)
   assert.match(page, /visibilityState/)
@@ -14,12 +19,12 @@ test('rota Capacidade faz fetch lazy, preserva ultimo valor e tem estados textua
   assert.match(page, /aria-live/)
 })
 
-test('admin oferece navegacao Capacidade apenas sob tech:read', async () => {
+test('admin oferece navegacao Capacidade apenas sob tech:read', { skip }, async () => {
   const admin = await readFile(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
   assert.match(admin, /permissions\?\.includes\('tech:read'\)[\s\S]*href="\/admin\/capacidade"/)
 })
 
-test('capacidade apresenta recursos, processos e staging sem acao automatica', async () => {
+test('capacidade apresenta recursos, processos e staging sem acao automatica', { skip }, async () => {
   const page = await readFile(new URL('../dashboard/app/admin/capacidade/page.js', import.meta.url), 'utf8')
   const resources = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityResourceCards.js', import.meta.url), 'utf8')
   const processes = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityProcessBreakdown.js', import.meta.url), 'utf8')
@@ -34,7 +39,7 @@ test('capacidade apresenta recursos, processos e staging sem acao automatica', a
   assert.doesNotMatch(environments, /useEffect/)
 })
 
-test('capacidade oferece periodos, grafico SVG acessivel e tabela equivalente', async () => {
+test('capacidade oferece periodos, grafico SVG acessivel e tabela equivalente', { skip }, async () => {
   const page = await readFile(new URL('../dashboard/app/admin/capacidade/page.js', import.meta.url), 'utf8')
   const chart = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityHistoryChart.js', import.meta.url), 'utf8')
   assert.match(page, /\['24h', '7d', '30d', '90d'\]/)
@@ -52,7 +57,7 @@ test('capacidade oferece periodos, grafico SVG acessivel e tabela equivalente', 
   for (const series of ['Workers', 'CPU', 'Load 1\/5\/15', 'Swap in\/out', 'Disco', 'Inodes']) assert.match(chart, new RegExp(series))
 })
 
-test('decisão e recursos explicam margem, horizonte e totais sem depender somente de cor', async () => {
+test('decisão e recursos explicam margem, horizonte e totais sem depender somente de cor', { skip }, async () => {
   const decision = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityDecisionCard.js', import.meta.url), 'utf8')
   const resources = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityResourceCards.js', import.meta.url), 'utf8')
   const processes = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityProcessBreakdown.js', import.meta.url), 'utf8')
@@ -65,7 +70,7 @@ test('decisão e recursos explicam margem, horizonte e totais sem depender somen
   assert.match(processes, /Tempo ativo/)
 })
 
-test('simulador é acessível, consultivo e não oferece controles de infraestrutura', async () => {
+test('simulador é acessível, consultivo e não oferece controles de infraestrutura', { skip }, async () => {
   const page = await readFile(new URL('../dashboard/app/admin/capacidade/page.js', import.meta.url), 'utf8')
   const simulator = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityScenarioSimulator.js', import.meta.url), 'utf8')
   assert.match(page, /CapacityScenarioSimulator/)
@@ -76,7 +81,7 @@ test('simulador é acessível, consultivo e não oferece controles de infraestru
   assert.doesNotMatch(simulator, /rescale|delete server|pm2|desligar staging/i)
 })
 
-test('inventário, alertas e refresh manual ficam integrados sem ações destrutivas Hetzner', async () => {
+test('inventário, alertas e refresh manual ficam integrados sem ações destrutivas Hetzner', { skip }, async () => {
   const page = await readFile(new URL('../dashboard/app/admin/capacidade/page.js', import.meta.url), 'utf8')
   const inventory = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityInventory.js', import.meta.url), 'utf8')
   const alerts = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityAlerts.js', import.meta.url), 'utf8')
@@ -93,7 +98,7 @@ test('inventário, alertas e refresh manual ficam integrados sem ações destrut
   assert.doesNotMatch(`${page}\n${inventory}\n${alerts}`, /createServer|deleteServer|rescale|powerOff|powerOn|HCLOUD_READ_TOKEN/)
 })
 
-test('renderiza conciliação parcial e não transforma métricas desconhecidas em zero', async () => {
+test('renderiza conciliação parcial e não transforma métricas desconhecidas em zero', { skip }, async () => {
   const harness = await renderJsxComponent(new URL('../dashboard/app/admin/capacidade/components/CapacityProcessBreakdown.js', import.meta.url))
   const tree = harness.render({
     components: [{ key: 'api', environment: 'production', status: 'online', rssMb: null, cpuPercent: null, uptimeSeconds: null, restartCount: null }],
@@ -110,7 +115,7 @@ test('renderiza conciliação parcial e não transforma métricas desconhecidas 
   assert.doesNotMatch(text, /contabilizado:\s+0 MB/)
 })
 
-test('renderiza estado parcial de staging e confirma controle limitado antes de interagir', async () => {
+test('renderiza estado parcial de staging e confirma controle limitado antes de interagir', { skip }, async () => {
   const calls = []
   let confirmation = false
   const harness = await renderJsxComponent(new URL('../dashboard/app/admin/capacidade/components/CapacityEnvironments.js', import.meta.url), {
@@ -140,7 +145,7 @@ test('renderiza estado parcial de staging e confirma controle limitado antes de 
   assert.deepEqual(calls, ['off'])
 })
 
-test('rota renderizada respeita permissão, mount lazy, visibilidade, período e refresh confirmado', async () => {
+test('rota renderizada respeita permissão, mount lazy, visibilidade, período e refresh confirmado', { skip }, async () => {
   const calls = []
   const timers = []
   const intervals = []
@@ -207,7 +212,7 @@ test('rota renderizada respeita permissão, mount lazy, visibilidade, período e
   assert.ok(visibleCount >= 2)
 })
 
-test('componentes renderizados distinguem null/stale e simulador envia somente cenário consultivo', async () => {
+test('componentes renderizados distinguem null/stale e simulador envia somente cenário consultivo', { skip }, async () => {
   const decisionHarness = await renderJsxComponent(new URL('../dashboard/app/admin/capacidade/components/CapacityDecisionCard.js', import.meta.url))
   assert.match(textContent(decisionHarness.render({ decision: null })), /Dados insuficientes.*nenhum zero/s)
   assert.match(textContent(decisionHarness.render({ decision: { state: 'stale', sessions: 17, safeLimit: 22, reasons: [] } })), /Dados desatualizados/)

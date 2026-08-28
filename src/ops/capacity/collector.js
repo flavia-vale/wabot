@@ -3,7 +3,21 @@ import { collectProcessMetrics } from './processMetrics.js'
 import { sanitizeCapacityComponent, sanitizeCapacitySource } from './contract.js'
 
 let collecting = false
-const withTimeout = (promise, ms) => Promise.race([promise, new Promise((_, reject) => { const timer = setTimeout(() => reject(Object.assign(new Error('timeout'), { code: 'TIMEOUT' })), ms); timer.unref?.() })])
+// O timer NÃO pode ser `unref()`: se a fonte travar de vez (é justamente o
+// caso que o timeout existe para cobrir) e não houver mais nada segurando o
+// event loop, um timer sem referência simplesmente não dispara — o await fica
+// pendurado para sempre em vez de expirar. Foi o que deixou o gate vermelho em
+// 27/08: o teste de fonte que nunca resolve travava o arquivo inteiro
+// ("Promise resolution is still pending but the event loop has already
+// resolved"). Em troca, limpamos o timer assim que a corrida termina, para não
+// segurar o processo à toa.
+const withTimeout = (promise, ms) => {
+  let timer
+  const expira = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error('timeout'), { code: 'TIMEOUT' })), ms)
+  })
+  return Promise.race([promise, expira]).finally(() => clearTimeout(timer))
+}
 const failedSource = (name, error) => ({ name, status: 'unavailable', observedAt: new Date().toISOString(), ageSeconds: 0, errorCode: error?.code === 'TIMEOUT' ? 'SOURCE_TIMEOUT' : 'SOURCE_UNAVAILABLE' })
 const sum = (values) => values.reduce((a, b) => a + b, 0)
 const percentile = (values, fraction) => { if (!values.length) return null; const sorted = [...values].sort((a, b) => a - b); return sorted[Math.ceil(sorted.length * fraction) - 1] }
