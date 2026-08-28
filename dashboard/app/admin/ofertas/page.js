@@ -22,10 +22,10 @@ const JANELAS = [
 ]
 
 const TOM = {
-  ok: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100',
-  warn: 'border-amber-400/40 bg-amber-400/10 text-amber-100',
-  critical: 'border-red-500/50 bg-red-500/10 text-red-100',
-  info: 'border-cyan-300/40 bg-cyan-400/10 text-cyan-100',
+  ok: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+  warn: 'border-amber-200 bg-amber-50 text-amber-900',
+  critical: 'border-red-200 bg-red-50 text-red-900',
+  info: 'border-cyan-200 bg-cyan-50 text-cyan-900',
 }
 
 function num(value) {
@@ -40,7 +40,7 @@ function bytesCurto(value) {
 
 function Tile({ rotulo, valor, ajuda, tom = 'info' }) {
   return (
-    <article className={`rounded-3xl border p-4 shadow-2xl shadow-black/10 backdrop-blur ${TOM[tom] || TOM.info}`}>
+    <article className={`rounded-2xl border p-4 shadow-sm ${TOM[tom] || TOM.info}`}>
       <p className="text-[11px] font-black uppercase tracking-[0.22em] opacity-70">{rotulo}</p>
       <p className="mt-2 text-3xl font-black tracking-tight">{valor}</p>
       {ajuda && <p className="mt-2 text-xs leading-relaxed opacity-75">{ajuda}</p>}
@@ -54,11 +54,11 @@ function BarraTipo({ item, total }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-3 text-xs">
-        <span className={`font-bold ${ruim ? 'text-red-200' : 'text-slate-200'}`}>{item.rotulo}</span>
-        <span className="text-slate-400">{num(item.quantidade)} · {largura}%</span>
+        <span className={`font-bold ${ruim ? 'text-red-700' : 'text-slate-700'}`}>{item.rotulo}</span>
+        <span className="text-slate-500">{num(item.quantidade)} · {largura}%</span>
       </div>
-      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-800">
-        <div className={`h-full rounded-full ${ruim ? 'bg-red-400' : 'bg-cyan-400'}`} style={{ width: `${largura}%` }} />
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${ruim ? 'bg-red-500' : 'bg-cyan-500'}`} style={{ width: `${largura}%` }} />
       </div>
     </div>
   )
@@ -99,13 +99,13 @@ export default function AdminOfertasPage() {
     : resumo?.percentualComImagem >= 95 ? 'ok' : resumo?.percentualComImagem >= 80 ? 'warn' : 'critical'
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-8">
+    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 sm:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Link href="/admin" className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">← Admin</Link>
+            <Link href="/admin" className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700 hover:text-emerald-900">← Admin</Link>
             <h1 className="mt-2 text-3xl font-black tracking-tight">Como as ofertas estão chegando</h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">
               Envio marcado como &quot;sucesso&quot; só quer dizer que o WhatsApp aceitou. Aqui dá para ver
               de que jeito a oferta chegou no grupo — e quantas saíram sem imagem tendo imagem na origem.
             </p>
@@ -116,7 +116,7 @@ export default function AdminOfertasPage() {
                 key={j.horas}
                 type="button"
                 onClick={() => setHoras(j.horas)}
-                className={`rounded-full border px-3 py-1 text-xs font-bold ${horas === j.horas ? 'border-cyan-300 bg-cyan-400/20 text-cyan-100' : 'border-white/10 bg-white/[0.04] text-slate-300'}`}
+                className={`rounded-full border px-3 py-1 text-xs font-bold transition ${horas === j.horas ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'}`}
               >
                 {j.rotulo}
               </button>
@@ -151,24 +151,24 @@ export default function AdminOfertasPage() {
             </section>
 
             <section className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 backdrop-blur-xl">
-                <h2 className="text-lg font-black text-white">De que jeito saíram</h2>
-                <p className="mt-1 text-xs text-slate-400">&quot;Só texto&quot; é o que a cliente enxerga como oferta sem imagem.</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-black text-slate-900">De que jeito saíram</h2>
+                <p className="mt-1 text-xs text-slate-500">&quot;Só texto&quot; é o que a cliente enxerga como oferta sem imagem.</p>
                 <div className="mt-5 space-y-3">
                   {(resumo.porTipo ?? []).map((t) => <BarraTipo key={t.kind} item={t} total={totalTipos} />)}
                 </div>
               </div>
 
-              <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 backdrop-blur-xl">
-                <h2 className="text-lg font-black text-white">Por loja</h2>
-                <p className="mt-1 text-xs text-slate-400">Loja que não entrega a foto do produto aparece aqui antes de virar reclamação.</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-black text-slate-900">Por loja</h2>
+                <p className="mt-1 text-xs text-slate-500">Loja que não entrega a foto do produto aparece aqui antes de virar reclamação.</p>
                 <div className="mt-5 space-y-2">
                   {(resumo.porLoja ?? []).map((l) => (
-                    <div key={l.loja} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-xs">
-                      <span className="font-bold text-white">{l.loja}</span>
-                      <span className="text-slate-400">
+                    <div key={l.loja} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                      <span className="font-bold text-slate-900">{l.loja}</span>
+                      <span className="text-slate-500">
                         {num(l.total)} envios · {num(l.comImagem)} com imagem
-                        {l.perderamImagem > 0 && <span className="ml-2 rounded-full bg-red-500/20 px-2 py-0.5 font-bold text-red-200">{num(l.perderamImagem)} perderam a foto</span>}
+                        {l.perderamImagem > 0 && <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 font-bold text-red-700">{num(l.perderamImagem)} perderam a foto</span>}
                       </span>
                     </div>
                   ))}
@@ -176,28 +176,28 @@ export default function AdminOfertasPage() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 backdrop-blur-xl">
-              <h2 className="text-lg font-black text-white">Onde a foto está se perdendo</h2>
-              <p className="mt-1 text-xs text-slate-400">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-black text-slate-900">Onde a foto está se perdendo</h2>
+              <p className="mt-1 text-xs text-slate-500">
                 Cliente e grupo de origem das ofertas que saíram só com texto tendo foto na origem.
                 Miniatura muito pequena na origem (poucos KB) é a causa mais comum.
               </p>
               <div className="mt-5 space-y-2">
                 {perdas.length === 0 && (
-                  <p className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+                  <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                     Nenhuma oferta perdeu a foto nesta janela.
                   </p>
                 )}
                 {perdas.map((p) => (
-                  <div key={`${p.userId}-${p.sourceGroup}`} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  <div key={`${p.userId}-${p.sourceGroup}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-bold text-white">{p.cliente}</span>
-                      <span className="rounded-full bg-red-500/20 px-3 py-1 text-[11px] font-black text-red-200">{num(p.quantidade)} sem foto</span>
+                      <span className="text-sm font-bold text-slate-900">{p.cliente}</span>
+                      <span className="rounded-full bg-red-100 px-3 py-1 text-[11px] font-black text-red-700">{num(p.quantidade)} sem foto</span>
                     </div>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-slate-500">
                       Origem: {p.origemNome || '(grupo não cadastrado)'} · {p.sourceGroup}
                     </p>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-slate-500">
                       Lojas: {p.lojas.join(', ') || '—'} · imagem na origem entre {bytesCurto(p.menorBytes)} e {bytesCurto(p.maiorBytes)}
                     </p>
                   </div>

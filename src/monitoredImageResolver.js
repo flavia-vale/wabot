@@ -76,6 +76,11 @@ export async function resolveMonitoredImage({
   logger,
   minPublishableBytes = resolveMinPublishableImageBytes(),
   onThumbnailDropped = null,
+  // Decidido por core/storePhotoPreference.js: quando true, a foto oficial da
+  // loja tem prioridade sobre a foto que veio na mensagem de origem — que
+  // frequentemente é a do concorrente, com marca d'água.
+  preferStorePhoto = false,
+  onStorePhotoPreferred = null,
 }) {
   const log = logger || { info: () => {}, warn: () => {} }
 
@@ -105,8 +110,21 @@ export async function resolveMonitoredImage({
   if (mode === 'original') {
     const downloaded = await downloadOriginalImage()
 
-    // Imagem cheia da origem — usa direto, sem custo de rede extra.
+    // Imagem cheia da origem. O atalho histórico devolvia ela direto, sem custo
+    // de rede — e com isso republicava a marca d'água do concorrente sempre que
+    // a origem anexava foto própria (RCA 2026-08-27). Quando o link aponta para
+    // um produto identificado (shouldPreferStorePhoto), a foto da LOJA tem
+    // prioridade; se a loja não devolver nada, a foto da origem continua sendo
+    // usada — a troca é best-effort e nunca perde imagem.
     if (downloaded && !isLikelyJpegThumbnail(downloaded)) {
+      if (preferStorePhoto) {
+        const daLoja = await tryActiveFetch()
+        if (daLoja) {
+          log.info({ platform: target?.platform, size: daLoja.buffer?.length }, 'resolveMonitoredImage: foto da loja no lugar da foto da origem (evita marca d\'água de terceiro)')
+          onStorePhotoPreferred?.({ platform: target?.platform, bytes: daLoja.buffer?.length ?? null })
+          return daLoja
+        }
+      }
       return downloaded
     }
 

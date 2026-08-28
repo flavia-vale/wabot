@@ -1738,7 +1738,7 @@ export default function AdminPage() {
               <Link href="/admin/clientes" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Clientes</Link>
               <Link href="/admin/automacoes" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Automações</Link>
               <Link href="/admin/emails" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">E-mails</Link>
-              <Link href="/admin/ofertas" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Ofertas (entrega)</Link>
+              <Link href="/admin/ofertas" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Ofertas (imagem)</Link>
               <button onClick={() => applyFilters()} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Atualizar</button>
               <Link href="/painel" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Voltar</Link>
             </div>
@@ -1773,20 +1773,6 @@ export default function AdminPage() {
                 onClick={() => openScenario('parado')}
               />
               <ScenarioCard
-                label="Acesso vencido"
-                value={formatNumber(online?.summary?.scenarios?.acessoVencido ?? 0)}
-                tone={severityTone(online?.summary?.scenarios?.acessoVencido ?? 0, 1, 10)}
-                helper="o robô para sozinho — é caso de renovação"
-                onClick={() => openScenario('vencido')}
-              />
-              <ScenarioCard
-                label="Precisam de QR novo"
-                value={formatNumber(online?.summary?.scenarios?.precisamDeQr ?? 0)}
-                tone={severityTone(online?.summary?.scenarios?.precisamDeQr ?? 0, 1, 5)}
-                helper="só a cliente resolve, lendo o código"
-                onClick={() => openScenario('qr')}
-              />
-              <ScenarioCard
                 label="Sem receber"
                 value={formatNumber(online?.summary?.scenarios?.semReceber ?? 0)}
                 tone={severityTone(online?.summary?.scenarios?.semReceber ?? 0, 1, 3)}
@@ -1814,17 +1800,10 @@ export default function AdminPage() {
                 helper="conserto automático não resolveu (7d)"
                 onClick={() => openScenario('desync')}
               />
-              <ScenarioCard
-                label="Offline acumulado 24h"
-                value={formatDurationMs(online?.summary?.scenarios?.offlineMs24h)}
-                tone={(online?.summary?.scenarios?.offlineMs24h ?? 0) > 0 ? 'warn' : 'ok'}
-                helper="tempo total da frota fora do ar"
-              />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <CommandCard label="Online agora" value={online?.summary?.onlineUsers ?? '—'} tone={severityTone(0)} helper={`${online?.summary?.stabilityPct ?? '—'}% estabilidade`} />
               <CommandCard label="Erros 24h" value={overview?.errors24h ?? 0} tone={severityTone(overview?.errors24h, 1, 10)} helper="Acima de 10 = crítico" />
-              <CommandCard label="WA desconectado" value={online?.summary?.disconnectedAlerts ?? Math.max((overview?.paidActiveUsers ?? 0) - (overview?.connectedSessions ?? 0), 0)} tone={severityTone(online?.summary?.disconnectedAlerts ?? 0, 1, 5)} helper="Instâncias em alerta" />
               <CommandCard label="DB / API" value={systemObservability?.goNoGo?.dbOk ? 'OK' : 'Revisar'} tone={systemObservability?.goNoGo?.dbOk ? 'ok' : 'critical'} helper={`${systemObservability?.api?.total5xx ?? 0} erros 5xx`} />
               <CommandCard label="Filas/DLQ" value={(systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0)} tone={severityTone((systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0), 1, 3)} helper="Pendências técnicas" />
             </div>

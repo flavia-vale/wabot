@@ -26,6 +26,7 @@ import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
+import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { destinationImageBaseMode, destinationImageUsesWatermark, resolveDestinationImageMode, shouldReuploadOriginalMedia } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
@@ -84,6 +85,7 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
 
 const userId = process.env.BOT_USER_ID
@@ -2296,6 +2298,15 @@ let connectionOpenedAt = null
 // transitórias, não corrupção que justifique apagar auth. Ver
 // shouldResetAuthForBadSession(keepEstablishedAuth).
 let everHadStableOpen = false
+// RCA 2026-08-28: teto de tentativas sem sucesso. `everOpened` é mais frouxo
+// que `everHadStableOpen` de propósito — para a PARADA definitiva só vale
+// "nunca chegou a abrir nenhuma vez", não "abriu mas não ficou estável".
+// Escopo de módulo: precisa sobreviver às reconexões do mesmo worker.
+let everOpened = false
+let consecutiveFailedReconnects = 0
+const RETRY_GIVEUP_ATTEMPTS = Math.max(0, Number(process.env.WA_RETRY_GIVEUP_ATTEMPTS ?? DEFAULT_GIVEUP_ATTEMPTS))
+const RETRY_SLOW_INTERVAL_MS = Math.max(0, Number(process.env.WA_RETRY_SLOW_INTERVAL_MS ?? DEFAULT_SLOW_INTERVAL_MS))
+const RETRY_NEVER_CONNECTED_MAX = Math.max(0, Number(process.env.WA_RETRY_NEVER_CONNECTED_MAX ?? DEFAULT_NEVER_CONNECTED_MAX))
 
 function calcReconnectDelayMs() {
   return calcBackoffDelayMs(reconnectAttempts, { baseMs: RECONNECT_BASE_MS, maxMs: RECONNECT_MAX_MS })
@@ -2580,6 +2591,9 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // concluída". O reset agora é decidido no close, só se a sessão foi estável
       // (shouldResetBackoff). Aqui só marcamos quando ela abriu.
       connectionOpenedAt = Date.now()
+      // Conectou: o orçamento de tentativas volta ao zero.
+      everOpened = true
+      consecutiveFailedReconnects = 0
       const wasReconnecting = disconnectedSinceMs != null
       activeSock = sock
       pendingSock = null
@@ -2883,6 +2897,39 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           reconnectAttempts++
           logger.warn({ code, attempt: reconnectAttempts, delayMs, stuckMsgId: stuckMsgId || undefined }, 'WA conexão fechada, agendando restart automático')
         }
+        // Teto de tentativas sem sucesso (RCA 2026-08-28). Só vale para o close
+        // genérico: pareamento e `replaced` têm caminhos próprios. Conexão que
+        // abre zera o contador, então a frota saudável nunca chega aqui.
+        consecutiveFailedReconnects++
+        const ritmo = decideRetryPace({
+          consecutiveFailures: consecutiveFailedReconnects,
+          everConnected: everOpened,
+          baseDelayMs: delayMs,
+          giveupAttempts: RETRY_GIVEUP_ATTEMPTS,
+          slowIntervalMs: RETRY_SLOW_INTERVAL_MS,
+          neverConnectedMax: RETRY_NEVER_CONNECTED_MAX,
+        })
+        if (ritmo.action === RETRY_ACTION.STOP) {
+          // Nunca abriu nenhuma vez: sem credencial válida o WhatsApp não vai
+          // aceitar, e insistir é só exposição (reconexão repetida é o padrão
+          // associado a chip restringido). Quem resolve é a cliente lendo o QR.
+          logger.error(
+            { code, tentativas: consecutiveFailedReconnects, motivo: ritmo.reason },
+            'Sessão nunca conectou e esgotou as tentativas — parando de tentar. Só volta com um novo pareamento (QR) pela cliente.'
+          )
+          try { recordOperationalSignal('wa_retry_giveup', { userId, code, tentativas: consecutiveFailedReconnects }) } catch {}
+          recordWaConnectionEventSafe({ userId, type: 'retry_giveup', code, lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE, metadata: { tentativas: consecutiveFailedReconnects } })
+          await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected' }).catch(() => {})
+          return
+        }
+        if (ritmo.action === RETRY_ACTION.SLOW && ritmo.delayMs > delayMs) {
+          logger.warn(
+            { code, tentativas: consecutiveFailedReconnects, delayMs: ritmo.delayMs },
+            'Muitas tentativas seguidas sem conectar — desacelerando a reconexão (continua tentando sozinho, só mais espaçado)'
+          )
+          try { recordOperationalSignal('wa_retry_slowed', { userId, code, tentativas: consecutiveFailedReconnects }) } catch {}
+          delayMs = ritmo.delayMs
+        }
         scheduleReconnect(delayMs, { code, reason: f.flapping ? 'flap_cooldown' : wasStable ? 'stable_close' : 'close' })
       }
     }
@@ -3159,6 +3206,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // por getImage() no dequeue. Default false = ofertas normais sempre buscam
       // hi-res. Ver decideSkipActiveFetchForCoupon() para a lógica completa.
       let couponSkipActiveFetch = false
+      // Trocar a foto da MENSAGEM DE ORIGEM pela foto oficial da loja quando o
+      // link aponta para um produto identificado. Atribuído junto com
+      // couponSkipActiveFetch (depois do guard de title_mismatch, que é quem
+      // calcula o titleOverlap) e lido por getImage() no dequeue. Sem isso, a
+      // origem que anexa foto própria republica a marca d'água do concorrente
+      // — RCA 2026-08-27, ver core/storePhotoPreference.js.
+      let preferStorePhoto = false
 
       // Eleição canônica do link principal entre múltiplas URLs da mesma
       // mensagem. A mesma escolha precisa governar:
@@ -3220,6 +3274,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           fetchImageBuffer,
           fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
           skipActiveFetch: couponSkipActiveFetch,
+          preferStorePhoto,
+          onStorePhotoPreferred: info => {
+            try { recordOperationalSignal('store_photo_over_origin', { userId, msgId: msg.key.id, ...info }) } catch {}
+          },
           logger,
           // Miniatura pequena demais para publicar: a oferta sai SEM imagem
           // (card de link do WhatsApp) em vez de com borrão. Sinal durável para
@@ -3510,6 +3568,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       if (isCouponMsg) {
         logger.info({ msgId: msg.key.id, hasProductLink, titleOverlap, looksGeneric: couponLooksGeneric, couponSkipActiveFetch }, 'estratégia de imagem para mensagem de cupom')
       }
+
+      preferStorePhoto = shouldPreferStorePhoto({
+        linkKind: primary.linkKind,
+        titleOverlap,
+        isCouponMsg,
+        enabled: isStorePhotoPreferenceEnabled(),
+      })
 
       // Para onde essa mensagem vai. A decisão inteira mora em
       // core/destinationRouting.js: origem com destinos escolhidos no painel
