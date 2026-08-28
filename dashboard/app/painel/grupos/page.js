@@ -68,7 +68,6 @@ function CfgIcon({ name, size = 17 }) {
   if (name === 'check')  return <svg {...p} strokeWidth={2.8}><path d="M5 12.5 10 17 19 7"/></svg>
   if (name === 'x')      return <svg {...p} strokeWidth={2}><path d="M6 6l12 12M18 6 6 18"/></svg>
   if (name === 'plus')   return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>
-  if (name === 'image')  return <svg {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>
   return null
 }
 
