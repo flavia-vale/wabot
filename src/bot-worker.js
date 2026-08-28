@@ -1252,6 +1252,8 @@ function getReceptionHealth() {
     lastAcceptedAtMs,
     failuresInWindow: getSessionHealth().cryptoErrors,
     hasMonitoredSources: monitoredSourceCount > 0,
+    incomingPending: incomingQueue.getStats().pending,
+    lastProcessedAtMs: incomingQueue.getStats().lastCompletedAt,
     windowMs: RECEPTION_WINDOW_MS,
     minFailures: RECEPTION_MIN_FAILURES,
   })
