@@ -21,6 +21,17 @@ function formatCurrency(value) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value ?? 0))
 }
 
+function formatDaysUntil(value) {
+  if (!value) return '—'
+  const expiresAt = new Date(value)
+  if (Number.isNaN(expiresAt.getTime())) return '—'
+
+  const days = Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000)
+  if (days < 0) return `Venceu há ${Math.abs(days)} ${Math.abs(days) === 1 ? 'dia' : 'dias'}`
+  if (days === 0) return 'Vence hoje'
+  return `${days} ${days === 1 ? 'dia' : 'dias'}`
+}
+
 const SITUACAO_FILTERS = [
   ['', 'Todos'],
   ['trial', 'Em teste'],
@@ -176,7 +187,7 @@ export default function AdminClientesPage() {
                     <td className="px-4 py-3 text-slate-600">{formatDate(customer.createdAt)}</td>
                     <td className="px-4 py-3"><SituacaoBadge customer={customer} /></td>
                     <td className="px-4 py-3 text-slate-600">{customer.planLabel}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(customer.accessExpiresAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">{formatDaysUntil(customer.accessExpiresAt)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-700">{formatCurrency(customer.ltv)}</td>
                     <td className="px-4 py-3 text-slate-600">{customer.groupCounts?.monitor ?? 0}/{customer.groupCounts?.post ?? 0}</td>
                     <td className="px-4 py-3 text-slate-600">{formatNumber(customer.sends30d)}</td>

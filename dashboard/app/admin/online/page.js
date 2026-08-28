@@ -371,10 +371,9 @@ export default function AdminOnlinePage() {
           </button>
         )}
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2">
           <OnlineCard label="Usuários online agora" value={formatNumber(data?.summary?.onlineUsers)} helper={`${formatNumber(data?.summary?.totalSessions)} sessões monitoradas`} tone="green" />
           <OnlineCard label="Estabilidade" value={`${data?.summary?.stabilityPct ?? 100}%`} helper="Conectados ou reconectando com heartbeat recente" tone={(data?.summary?.stabilityPct ?? 100) >= 90 ? 'green' : (data?.summary?.stabilityPct ?? 100) >= 75 ? 'amber' : 'red'} />
-          <OnlineCard label="Alertas desconectados" value={formatNumber(data?.summary?.disconnectedAlerts)} helper={`${formatNumber(data?.summary?.connectingUsers)} tentando conectar`} tone={data?.summary?.disconnectedAlerts ? 'red' : 'green'} />
         </section>
 
         {!!criticalUsers.length && (
