@@ -95,6 +95,7 @@ export const ANALYTICS_EVENTS = new Set([
   // com BOT_SUPERVISOR_MODE != remote e sessão conectada — deploy da API vai
   // derrubar a sessão na próxima janela.
   'ops_mode_regression',
+  'ops_capacity_alert',
   'ops_stale_worker_code',
   // Mesma mensagem repetindo no ack de um stream:error N+ vezes — sinal de
   // loop de retry-receipt travado derrubando a sessão em cadência (RCA
@@ -109,6 +110,7 @@ export const ANALYTICS_EVENTS = new Set([
   // grupo). Nunca automático: só visibilidade para decisão humana.
   'ops_wa_group_desync_unresolved',
   'ops_wa_reception_blind',
+  'ops_wa_session_resurrected',
   'ops_wa_chat_scope_filtered',
   'ops_wa_chat_scope_auto_disabled',
   // `failure reason=405` do WhatsApp: recusa de login/registro por versão do WA

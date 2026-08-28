@@ -1,4 +1,5 @@
 import db from '../../db.js'
+import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
 import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
@@ -6,7 +7,8 @@ import { getSupervisorOperationalCounters } from '../../supervisor/operationalCo
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
 import { getPublicAnalyticsQualitySnapshot } from './public.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
-import { createAdminService } from '../../domain/admin/service.js'
+import { createAdminService, buildUserOrigin } from '../../domain/admin/service.js'
+import { buildCustomerHistory } from '../../domain/admin/customerHistory.js'
 import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipeline.js'
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
@@ -17,6 +19,8 @@ import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.
 import { buildLongExpiredWhere, wantsLongExpired, isLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
+import { createCapacityService } from '../../ops/capacity/service.js'
+import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1271,6 +1275,70 @@ export async function adminRoutes(app) {
     return req.admin
   })
 
+  app.get('/capacity/current', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const result = await createCapacityService({ db }).current()
+    return result
+  })
+
+  const CAPACITY_HISTORY_PERIODS = new Set(['24h', '7d', '30d', '90d'])
+  app.get('/capacity/history', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const period = String(req.query?.period || '30d')
+    if (!CAPACITY_HISTORY_PERIODS.has(period)) return reply.code(400).send({ code: 'INVALID_CAPACITY_PERIOD', error: 'Período inválido. Use 24h, 7d, 30d ou 90d.' })
+    return createCapacityService({ db }).history(period)
+  })
+
+  app.get('/capacity/forecast', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    return createCapacityService({ db }).forecast()
+  })
+
+  app.post('/capacity/scenario', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    try { return await createCapacityService({ db }).scenario(req.body) }
+    catch (error) { if (!['INVALID_CAPACITY_SCENARIO', 'CAPACITY_SCENARIO_BASELINE_UNAVAILABLE'].includes(error?.code)) throw error; return reply.code(400).send({ code: error.code, error: error.message }) }
+  })
+
+  app.get('/capacity/alerts', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const status = req.query?.status ? String(req.query.status) : undefined
+    if (status && !['pending', 'active', 'recovered'].includes(status)) return reply.code(400).send({ code: 'INVALID_CAPACITY_ALERT_STATUS', error: 'Status de alerta inválido.' })
+    const limit = Number(req.query?.limit ?? 100)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) return reply.code(400).send({ code: 'INVALID_CAPACITY_ALERT_LIMIT', error: 'Limite deve estar entre 1 e 500.' })
+    return createCapacityService({ db }).alerts({ status, limit })
+  })
+
+  app.post('/capacity/refresh', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    if (req.body && Object.keys(req.body).length) return reply.code(400).send({ code: 'CAPACITY_REFRESH_BODY_NOT_ALLOWED', error: 'A atualização não aceita parâmetros.' })
+    const result = requestCapacityRefresh()
+    if (!result.accepted && result.reason === 'NOT_INITIALIZED') return reply.code(503).send({ code: 'CAPACITY_REFRESH_NOT_INITIALIZED', error: 'A coleta de capacidade ainda não foi inicializada.' })
+    if (!result.accepted) return reply.code(409).send({ code: 'CAPACITY_REFRESH_IN_PROGRESS', error: 'Já existe uma atualização em andamento.' })
+    await writeAdminAuditLog(req, { action: 'admin.capacity.refresh', resource: 'capacity', after: { accepted: true } })
+    return reply.code(202).send(result)
+  })
+
+
+  // Visão macro de qualidade de entrega das ofertas. Existe para a admin ver
+  // ANTES da cliente reclamar: quantas ofertas saíram, de que jeito saíram, e
+  // quais saíram sem imagem TENDO imagem na mensagem de origem.
+  app.get('/qualidade-entrega', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const horasBrutas = Number(req.query?.horas)
+    const horas = Number.isFinite(horasBrutas) ? Math.min(24 * 30, Math.max(1, horasBrutas)) : 24
+    return carregarVisaoEntrega({ db, horas })
+  })
+
+  // Visão macro de qualidade de entrega das ofertas. Existe para a admin ver
+  // ANTES da cliente reclamar: quantas ofertas saíram, de que jeito saíram, e
+  // quais saíram sem imagem TENDO imagem na mensagem de origem.
+  app.get('/qualidade-entrega', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const horasBrutas = Number(req.query?.horas)
+    const horas = Number.isFinite(horasBrutas) ? Math.min(24 * 30, Math.max(1, horasBrutas)) : 24
+    return carregarVisaoEntrega({ db, horas })
+  })
 
   app.get('/pipeline', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
@@ -2365,6 +2433,95 @@ export async function adminRoutes(app) {
       errorCount24h,
       riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running }),
     }, req.admin.role)
+  })
+
+  // Lista larga de clientes (página /admin/clientes). É a porta de entrada do
+  // histórico por cliente — varrível, buscável e ordenável, ao contrário da
+  // gestão por risco em /users.
+  app.get('/customers', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const result = await adminService.listCustomers({ query: req.query ?? {}, adminRole: req.admin.role })
+    await writeAdminAuditLog(req, { action: 'admin.customers.list', resource: 'user' })
+    return result
+  })
+
+  // Histórico macro de UM cliente: cadastral, financeiro/assinatura, técnico e
+  // de uso, mais a linha do tempo unificada. Toda a montagem fica no módulo
+  // puro `customerHistory.js` — aqui só carregamos as linhas.
+  app.get('/customers/:id/history', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+
+    const now = new Date()
+    const since30d = addDays(now, -30)
+    const userId = String(req.params.id)
+
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, name: true, email: true, contactPhone: true, contactPhoneVerifiedAt: true,
+        status: true, plan: true, accessExpiresAt: true, sendCount: true, supportStatus: true,
+        referralCode: true, referredBy: true, affiliateProfileId: true,
+        termsAcceptedAt: true, termsVersion: true,
+        lastLoginAt: true, lastActivityAt: true, createdAt: true,
+        affiliateRef: { select: { code: true, status: true, user: { select: { id: true, name: true, email: true } } } },
+        waSession: { select: { status: true, lifecycle: true, phone: true, lastHeartbeatAt: true, lastDisconnectCode: true, updatedAt: true } },
+        groups: { select: { role: true } },
+        credentials: { select: { id: true, platform: true, data: true } },
+      },
+    })
+    if (!user) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const [
+      payments, subscriptions, manualGrants, connectionEvents, contactLogs, logs,
+      automationsTotal, automationsEnabled, lastMessage, signupEvents, referrerRows,
+    ] = await Promise.all([
+      db.payment.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 60, select: { id: true, plan: true, status: true, amount: true, createdAt: true, expiresAt: true } }),
+      db.subscription.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, plan: true, status: true, createdAt: true, nextChargeAt: true, cancelledAt: true } }),
+      db.adminAuditLog.findMany({ where: { targetUserId: userId, action: 'admin.users.access' }, orderBy: { createdAt: 'desc' }, take: 20, select: { createdAt: true, reason: true, after: true } }),
+      db.waConnectionEvent.findMany({ where: { userId, occurredAt: { gte: since30d } }, orderBy: { occurredAt: 'desc' }, take: 2000, select: { type: true, code: true, occurredAt: true } }),
+      db.customerContactLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20, select: { createdAt: true, channel: true, reason: true, outcome: true } }),
+      // Janela de 30 dias com teto: o histórico de uso é agregado, não uma
+      // listagem — carregar a vida inteira de MessageLog derrubaria a página.
+      db.messageLog.findMany({ where: { userId, sentAt: { gte: since30d } }, orderBy: { sentAt: 'desc' }, take: 20000, select: { status: true, errorMsg: true, dedupHits: true, sentAt: true } }),
+      db.offerAutomation.count({ where: { userId } }),
+      db.offerAutomation.count({ where: { userId, enabled: true } }),
+      db.messageLog.findFirst({ where: { userId }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
+      user.affiliateProfileId ? [] : db.analyticsEvent.findMany({ where: { userId, event: 'signup_created' }, orderBy: { createdAt: 'desc' }, take: 1, select: { userId: true, metadata: true } }),
+      user.referredBy ? db.user.findMany({ where: { id: user.referredBy }, select: { id: true, name: true, email: true } }) : [],
+    ])
+
+    const signupMetaMap = new Map()
+    for (const row of signupEvents) {
+      if (!row.userId || signupMetaMap.has(row.userId)) continue
+      let meta = {}
+      try { meta = JSON.parse(row.metadata || '{}') } catch { meta = {} }
+      signupMetaMap.set(row.userId, meta)
+    }
+
+    const running = (await listRunningBots()).includes(userId)
+    const safeUser = sanitizeUser(user, req.admin.role)
+
+    const history = buildCustomerHistory({
+      user: safeUser,
+      origin: buildUserOrigin(user, { referrerMap: new Map(referrerRows.map(r => [r.id, r])), signupMetaMap }),
+      payments,
+      subscriptions,
+      manualGrants,
+      connectionEvents,
+      contactLogs,
+      logs,
+      groupCounts: getGroupCounts(user.groups),
+      automations: { total: automationsTotal, enabled: automationsEnabled },
+      credentialHealth: summarizeCredentialHealth(user.credentials),
+      waSession: safeUser.waSession,
+      botRunning: running,
+      lastMessageAt: lastMessage?.sentAt ?? null,
+      now,
+      timelineLimit: Math.max(10, Math.min(200, parseInt(req.query?.timelineLimit ?? '60') || 60)),
+    })
+
+    await writeAdminAuditLog(req, { action: 'admin.customers.history', resource: 'user', resourceId: userId, targetUserId: userId })
+    return history
   })
 
   app.get('/logs', async (req, reply) => {

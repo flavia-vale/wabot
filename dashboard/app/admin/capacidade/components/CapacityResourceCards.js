@@ -1,0 +1,12 @@
+const LABELS = { healthy: 'Saudável', attention: 'Atenção', critical: 'Crítico', unknown: 'Sem dados' }
+const pct = (value) => value == null ? '—' : `${Math.round(value)}%`
+const mb = (value) => value == null ? '—' : value >= 1024 ? `${(value / 1024).toFixed(1)} GB` : `${Math.round(value)} MB`
+export default function CapacityResourceCards({ resources = {}, health = {} }) {
+  const cards = [
+    { key: 'memory', title: 'Memória RAM', value: mb(resources.memory?.availableMb), details: [`Livre: ${mb(resources.memory?.freeMb)}`, `Cache recuperável: ${mb(resources.memory?.cacheMb)}`, `Processos (RSS): ${mb(resources.memory?.processRssMb)}`, `Disponível / total: ${mb(resources.memory?.availableMb)} / ${mb(resources.memory?.totalMb)}`] },
+    { key: 'cpu', title: 'CPU e carga', value: pct(resources.cpu?.percent), details: [`Load 1 min: ${resources.cpu?.load1 ?? '—'}`, `Load 5 min: ${resources.cpu?.load5 ?? '—'}`, `Load 15 min: ${resources.cpu?.load15 ?? '—'}`] },
+    { key: 'disk', title: 'Disco e inodes', value: pct(resources.disk?.usedPercent), details: [`Usado: ${mb(resources.disk?.usedMb)}`, `Disponível: ${mb(resources.disk?.availableMb)}`, `Total: ${mb(resources.disk?.totalMb)}`, `Inodes usados: ${pct(resources.disk?.inodeUsedPercent)}`] },
+    { key: 'swap', title: 'Swap', value: `${mb(resources.swap?.usedMb)} / ${mb(resources.swap?.totalMb)}`, details: [`Entrada: ${resources.swap?.inKbPerSec == null ? '—' : resources.swap.inKbPerSec} KB/s`, `Saída: ${resources.swap?.outKbPerSec == null ? '—' : resources.swap.outKbPerSec} KB/s`, health.swap?.active ? 'Há atividade de swap na amostra.' : 'ocupado sem pressão atual.'] },
+  ]
+  return <section aria-labelledby="capacity-resources-title"><h2 id="capacity-resources-title" className="mb-3 text-lg font-black text-slate-950">Recursos do host</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map((card) => <article key={card.key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-600">{card.title}</p><strong className="mt-2 block text-2xl tabular-nums text-slate-950">{card.value}</strong><ul className="mt-2 space-y-1 text-sm text-slate-600">{card.details.map((detail) => <li key={detail}>{detail}</li>)}</ul><p className="mt-3 text-xs font-black uppercase tracking-wide text-slate-700"><span aria-hidden="true">● </span>{LABELS[health[card.key]?.state] || 'Sem dados'}</p></article>)}</div></section>
+}

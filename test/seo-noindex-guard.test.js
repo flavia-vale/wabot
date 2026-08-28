@@ -12,6 +12,7 @@
 // ainda.
 
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import test from 'node:test'
 import {
@@ -136,11 +137,10 @@ test('(b) nenhuma rota some de generateStaticParams()/da lista de builds ao vira
 
 // (c) Fonte única (FR-001), espelhando a checagem que lint-seo-metadata-duplicates.mjs
 // ganhou em T003 — mesmos módulos que o parser ali entende
-// (_preservationCommercialPages.js e _comparisonContent.js, _seoHubShared.js
-// para o hub que migrou em T009, e _preservationBlogPosts.js, cujo parser T046
-// ensinou o lint script a ler — as 11 rotas de /blog/* que ainda tinham
-// title/description duplicados no registry ganharam parser aqui também, para
-// as duas checagens (lint script + este teste) enxergarem o mesmo escopo).
+// (_preservationCommercialPages.js, _comparisonContent.js, _seoHubShared.js,
+// _preservationBlogPosts.js, _preservationDecisionPages.js e
+// _organicNicheLanding.js), para as duas checagens (lint script + este teste)
+// enxergarem o mesmo escopo.
 function contentModulePaths() {
   const paths = new Set()
 
@@ -166,8 +166,59 @@ function contentModulePaths() {
   const blogBlockRegex = /'[^']+':\s*\{\s*slug:\s*'([^']+)'[^}]*?title:\s*'[^']+'/gs
   for (const match of blogSource.matchAll(blogBlockRegex)) paths.add(match[1])
 
+  // _preservationDecisionPages.js: chaveado pelo próprio path.
+  const decisionSource = lerFonte('dashboard/app/_preservationDecisionPages.js')
+  for (const match of decisionSource.matchAll(/^\s*'(\/[^']+)':\s*\{/gm)) paths.add(match[1])
+
+  // _organicNicheLanding.js: chaveado por nome sem barra; o path vem de slug:.
+  const organicNicheSource = lerFonte('dashboard/app/_organicNicheLanding.js')
+  const organicNicheBlockRegex = /'[^']+':\s*\{\s*slug:\s*'([^']+)'[^}]*?title:\s*'[^']+'/gs
+  for (const match of organicNicheSource.matchAll(organicNicheBlockRegex)) paths.add(match[1])
+
   return paths
 }
+
+const REQUIRED_DECISION_MODULE_PATHS = [
+  '/bot-comum-vs-botinho',
+  '/faq-antiban-whatsapp',
+  '/como-funciona-botinho-canais',
+  '/protecao-antiban-botinho',
+]
+
+const REQUIRED_ORGANIC_NICHE_PATHS = [
+  '/bot-ofertas-restaurantes-whatsapp',
+  '/bot-ofertas-marketplace-whatsapp',
+]
+
+test('(c) parsers de módulos cobrem todas as rotas orgânicas e de decisão esperadas (FR-001/FR-007/FR-041)', () => {
+  const pathsComModulo = contentModulePaths()
+
+  for (const routePath of [...REQUIRED_DECISION_MODULE_PATHS, ...REQUIRED_ORGANIC_NICHE_PATHS]) {
+    assert.ok(
+      pathsComModulo.has(routePath),
+      `${routePath}: parser de fonte única deixou de reconhecer a rota no módulo de conteúdo`
+    )
+  }
+})
+
+test('(c) lint inclui as rotas orgânicas em completeRecords e mantém somente a lacuna conhecida', () => {
+  const dashboardDir = new URL('../dashboard/', import.meta.url)
+  const output = execFileSync(
+    process.execPath,
+    ['scripts/lint-seo-metadata-duplicates.mjs', '--report-json'],
+    { cwd: dashboardDir, encoding: 'utf8' }
+  )
+  const report = JSON.parse(output)
+
+  for (const routePath of REQUIRED_ORGANIC_NICHE_PATHS) {
+    assert.ok(
+      report.completePaths.includes(routePath),
+      `${routePath}: o próprio lint deixou de colocar a rota orgânica em completeRecords`
+    )
+  }
+  assert.equal(report.incompletePaths.length, 1, `o lint deve manter exatamente uma lacuna conhecida: ${JSON.stringify(report.incompletePaths)}`)
+  assert.equal(report.completePaths.length, report.total - 1)
+})
 
 test('(c) fonte única (FR-001) vale para o registro inteiro nos módulos cobertos por lint-seo-metadata-duplicates.mjs (T003)', () => {
   const pathsComModulo = contentModulePaths()

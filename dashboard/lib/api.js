@@ -270,6 +270,7 @@ export const api = {
   adminDeleteFaq: (id) => apiFetch(`/api/admin/faq/${id}`, { method: 'DELETE' }),
   adminOverview: () => apiFetch('/api/admin/overview'),
   adminPipeline: () => apiFetch('/api/admin/pipeline'),
+  adminQualidadeEntrega: (horas = 24) => apiFetch(`/api/admin/qualidade-entrega?horas=${encodeURIComponent(horas)}`),
   adminUpdatePipelineIssueStatus: (id, status) =>
     apiFetch(`/api/admin/pipeline/issues/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   adminUsers: (params = {}) => {
@@ -287,6 +288,12 @@ export const api = {
   adminOnlineUser: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}`),
   adminOnlineReconnect: (id) => apiFetch(`/api/admin/online/${encodeURIComponent(id)}/reconnect`, { method: 'POST' }),
   adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`),
+  adminCustomers: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/customers${query ? `?${query}` : ''}`)
+  },
+  adminCustomerHistory: (id) => apiFetch(`/api/admin/customers/${encodeURIComponent(id)}/history`),
+
   adminLogs: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/logs${query ? `?${query}` : ''}`)
@@ -306,6 +313,12 @@ export const api = {
   adminSystemHealth: () => apiFetch('/api/admin/system/health'),
   adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
   adminSystemObservability: () => apiFetch('/api/admin/system/observability'),
+  adminCapacityCurrent: () => apiFetch('/api/admin/capacity/current'),
+  adminCapacityHistory: (period = '30d') => apiFetch(`/api/admin/capacity/history?period=${encodeURIComponent(period)}`),
+  adminCapacityForecast: () => apiFetch('/api/admin/capacity/forecast'),
+  adminCapacityScenario: (input) => apiFetch('/api/admin/capacity/scenario', { method: 'POST', body: JSON.stringify(input) }),
+  adminCapacityAlerts: (status = '', limit = 100) => apiFetch(`/api/admin/capacity/alerts?${new URLSearchParams({ ...(status ? { status } : {}), limit: String(limit) })}`),
+  adminCapacityRefresh: () => apiFetch('/api/admin/capacity/refresh', { method: 'POST', body: '{}' }),
   adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
   adminSuccessQueue: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
