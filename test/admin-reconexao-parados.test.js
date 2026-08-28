@@ -71,9 +71,9 @@ test('a tela mostra quem resolve e oferece o clique só onde ajuda', () => {
   assert.match(onlinePage, /Tentar reconectar/)
 })
 
-test('os cards novos estão na primeira tela do admin', () => {
+test('a primeira tela destaca apenas o cenário acionável de parada', () => {
   assert.match(adminPage, /Paradas sem ninguém tentando/)
-  assert.match(adminPage, /Precisam de QR novo/)
+  assert.doesNotMatch(adminPage, /label="Precisam de QR novo"/)
   assert.match(adminPage, /openScenario\('parado'\)/)
 })
 
@@ -85,10 +85,10 @@ test('o botão recusa conta com acesso vencido', () => {
   assert.match(trecho, /é caso de renovação, não de reconexão/)
 })
 
-test('acesso vencido tem contador e cenário próprios, separados de "parada"', () => {
+test('acesso vencido segue classificado na rota, mas sem card no painel', () => {
   assert.match(adminRoute, /acessoVencido: acessoVencido\.size/)
   assert.match(adminRoute, /vencido: acessoVencido/)
-  assert.match(adminPage, /Acesso vencido/)
+  assert.doesNotMatch(adminPage, /label="Acesso vencido"/)
 })
 
 test('a classificação recebe a data de acesso nas duas visões', () => {
