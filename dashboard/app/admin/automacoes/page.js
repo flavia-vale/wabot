@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
@@ -15,17 +15,11 @@ export default function AdminAutomationsPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(null)
 
-  useEffect(() => {
-    loadUsers()
-  }, [page, limit, search])
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const res = await api.get('/admin/automation-quota', {
-        params: { page, limit, search },
-      })
+      const res = await api.adminAutomationQuota({ page, limit, search })
       setUsers(res.users || [])
       setTotal(res.total || 0)
     } catch (err) {
@@ -33,14 +27,19 @@ export default function AdminAutomationsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, limit, search])
+
+  useEffect(() => {
+    // Defer the initial request so its loading-state updates do not run
+    // synchronously in the effect body (react-hooks/set-state-in-effect).
+    const timeoutId = window.setTimeout(loadUsers, 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [loadUsers])
 
   const handleUpdateQuota = async (userId, newLimit) => {
     setSaving(userId)
     try {
-      await api.patch(`/admin/automation-quota/${userId}`, {
-        maxAutomations: newLimit,
-      })
+      await api.adminAutomationQuotaUpdate(userId, newLimit)
       await loadUsers()
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Erro ao atualizar limite')

@@ -64,6 +64,7 @@ function CfgIcon({ name, size = 17 }) {
   if (name === 'search') return <svg {...p}><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M10.5 6.5 8.5 10.2h3L9.5 13.8"/></svg>
   if (name === 'bolt')   return <svg {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
   if (name === 'send')   return <svg {...p}><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+  if (name === 'image')  return <svg {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>
   if (name === 'check')  return <svg {...p} strokeWidth={2.8}><path d="M5 12.5 10 17 19 7"/></svg>
   if (name === 'x')      return <svg {...p} strokeWidth={2}><path d="M6 6l12 12M18 6 6 18"/></svg>
   if (name === 'plus')   return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>
@@ -149,7 +150,7 @@ function KeywordTagInput({ keywords, draft, onDraftChange, onAdd, onRemove }) {
 }
 
 /* ── Monitor group config panel (redesigned) ────────────────────────── */
-function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, onOpenTargetEditor, onSetActionError, templates }) {
+function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, targetsModeCache, onOpenTargetEditor, onSetActionError, templates }) {
   const [draft, setDraft] = useState('')
 
   const keywords = (g.blockedKeywords || '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -180,6 +181,12 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
   const templateApplied = g.templateKey !== null && g.templateKey !== ''
 
   const cachedIds = targetsCache[g.id]
+  // 'explicit' com lista vazia = a pessoa escolheu destinos e todos eles foram
+  // apagados. Não é "todos os destinos" — é NENHUM. Mostrar "todos" aqui foi o
+  // que fez a oferta cair em grupo não escolhido sem ninguém entender (RCA
+  // 2026-08-26).
+  const cachedMode = targetsModeCache?.[g.id]
+  const noDestinationsChosen = cachedMode === 'explicit' && Array.isArray(cachedIds) && cachedIds.length === 0
   const destNames = cachedIds
     ? (cachedIds.length === 0 ? null : cachedIds.map((id) => post.find((p) => p.id === id)?.name).filter(Boolean))
     : null
@@ -334,9 +341,11 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, o
               ? destNames.map((name) => (
                   <span key={name} className="cfg-dest-pill">⚡ {name}</span>
                 ))
-              : cachedIds !== undefined
-                ? <span className="pnl-hint" style={{ paddingTop: 4 }}>Todos os destinos (sem filtro)</span>
-                : null}
+              : noDestinationsChosen
+                ? <span className="pnl-hint" style={{ paddingTop: 4, color: 'var(--warn, #b45309)' }}>Nenhum destino escolhido — esse grupo não está enviando para ninguém.</span>
+                : cachedIds !== undefined
+                  ? <span className="pnl-hint" style={{ paddingTop: 4 }}>Todos os destinos (sem filtro)</span>
+                  : null}
             <button type="button" className="pnl-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => onOpenTargetEditor(g.id)}>
               <CfgIcon name="plus" size={13} />
               {cachedIds !== undefined ? 'Editar destinos' : 'Escolher destinos'}
@@ -379,6 +388,7 @@ export default function GruposPage() {
   const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
   const [templates, setTemplates] = useState([])
   const [groupTargetsCache, setGroupTargetsCache] = useState({})
+  const [groupTargetsModeCache, setGroupTargetsModeCache] = useState({})
 
   async function load() {
     setLoadingGroups(true)
@@ -506,9 +516,11 @@ export default function GruposPage() {
     try {
       const data = await api.groupTargets(groupId)
       const ids = data.postIds ?? []
-      setTargetMode(data.mode ?? 'explicit')
+      const mode = data.mode ?? 'explicit'
+      setTargetMode(mode)
       setTargetPostIds(ids)
       setGroupTargetsCache((prev) => ({ ...prev, [groupId]: ids }))
+      setGroupTargetsModeCache((prev) => ({ ...prev, [groupId]: mode }))
     } catch (err) {
       setActionError(err.message)
       setTargetEditorId(null)
@@ -529,8 +541,10 @@ export default function GruposPage() {
     setActionError('')
     try {
       await api.updateGroupTargets(targetEditorId, targetPostIds)
-      setTargetMode('explicit')
+      const savedMode = targetPostIds.length ? 'explicit' : 'all'
+      setTargetMode(savedMode)
       setGroupTargetsCache((prev) => ({ ...prev, [targetEditorId]: targetPostIds }))
+      setGroupTargetsModeCache((prev) => ({ ...prev, [targetEditorId]: savedMode }))
       setTargetEditorId(null)
     } catch (err) {
       setActionError(err.message)
@@ -768,7 +782,7 @@ export default function GruposPage() {
                       {savingGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>salvando…</span>}
                       {savedGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--success)' }}>salvo</span>}
                       <button type="button" className="pnl-link-btn" aria-expanded={configOpen} onClick={() => setExpandedConfigId(configOpen ? null : g.id)}>
-                        {configOpen ? 'Fechar' : (tab === 'monitor' ? 'Filtros' : 'Config')}
+                        {configOpen ? 'Fechar' : 'Filtros'}
                       </button>
                       <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(g)}>Remover</button>
                     </div>
@@ -781,6 +795,7 @@ export default function GruposPage() {
                       canUseChannels={canUseChannels}
                       post={post}
                       targetsCache={groupTargetsCache}
+                      targetsModeCache={groupTargetsModeCache}
                       onOpenTargetEditor={openTargetEditor}
                       onSetActionError={setActionError}
                       templates={templates}

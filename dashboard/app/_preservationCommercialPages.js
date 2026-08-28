@@ -93,6 +93,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'De onde vem a comissão dos achadinhos que você publica.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'O programa com maior volume de busca no Brasil.' },
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
+      { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'Clonar mensagens de um grupo de afiliados', note: 'O que a busca chama de "clonar" e como o link vira o seu.' },
     ],
     about: ['Achadinhos', 'Afiliados', 'Grupos de WhatsApp'],
     aside: {

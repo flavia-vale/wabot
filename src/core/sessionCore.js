@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { safeCoreEvent } from './errors.js'
 import { resolveWorkerExecArgv } from './workerSpawnOptions.js'
+import { shouldResurrectSession, buildResurrectionWhere, resolveIncludeReconnecting } from './sessionResurrectionPolicy.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const workerPath = join(__dirname, '..', 'bot-worker.js')
@@ -22,7 +23,10 @@ function shouldAutoStartPersistedBots() {
 
 export async function resumePersistedBots(db, log = console) {
   if (!shouldAutoStartPersistedBots()) return { attempted: 0, started: 0, skipped: 0 }
-  const sessions = await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+  const sessions = (await db.waSession.findMany({
+    where: buildResurrectionWhere({ includeReconnecting: resolveIncludeReconnecting() }),
+    select: { userId: true, status: true, lifecycle: true },
+  })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: resolveIncludeReconnecting() }))
   let started = 0; let skipped = 0
   for (const session of sessions) {
     if (bots.has(session.userId)) { skipped++; continue }
@@ -54,7 +58,10 @@ export function startSessionHealthMonitor(db, log = console) {
       // incidente 2026-06: api inline forkou 3 workers para a mesma sessão).
       stopBot(userId)
     }
-    const persisted = await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+    const persisted = (await db.waSession.findMany({
+    where: buildResurrectionWhere({ includeReconnecting: resolveIncludeReconnecting() }),
+    select: { userId: true, status: true, lifecycle: true },
+  })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: resolveIncludeReconnecting() }))
     for (const s of persisted) if (!bots.has(s.userId)) startBot(s.userId)
   }
 

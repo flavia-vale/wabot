@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import axios from 'axios'
-import { convert, fetchShopeeProductInfo, shopeeDecimalPriceToString, cleanAffiliateUrl, stripAffiliateTracking } from '../src/converters/shopee.js'
+import { convert, fetchShopeeProductInfo, shopeeDecimalPriceToString, cleanAffiliateUrl, stripAffiliateTracking, SHOPEE_SUB_ID } from '../src/converters/shopee.js'
 
 // Credenciais fictícias — o axios.post é stubbado, então o valor não importa.
 const CREDS = { appId: '1234567890', secretKey: 'TEST_SECRET_KEY_PLACEHOLDER_0000' }
@@ -77,10 +77,12 @@ test('fetchShopeeProductInfo retorna null sem credenciais', async () => {
 test('convert() entrega o shortLink afiliado oficial da Shopee sem resolver para URL longa', async (t) => {
   const shortLink = 'https://s.shopee.com.br/AfXXXfake'
   let fetchCalled = false
+  let sentQuery = ''
 
-  t.after(stubAxiosPost(async () => ({
-    data: { data: { generateShortLink: { shortLink } } },
-  })))
+  t.after(stubAxiosPost(async (_url, body) => {
+    sentQuery = body.query
+    return { data: { data: { generateShortLink: { shortLink } } } }
+  }))
 
   const originalFetch = globalThis.fetch
   globalThis.fetch = async () => {
@@ -93,6 +95,10 @@ test('convert() entrega o shortLink afiliado oficial da Shopee sem resolver para
   assert.equal(result.url, shortLink)
   assert.equal(result.linkKind, 'product')
   assert.equal(fetchCalled, false, 'não deve chamar fetch para resolver o shortLink')
+  // Todo link de produto nasce com o SubID fixo — é o que faz o clique aparecer
+  // separado no relatório da Shopee.
+  assert.ok(sentQuery.includes('subIds: ["espelhagrupos"]'), 'produto envia o SubID fixo')
+  assert.ok(!sentQuery.includes('subIds: [""]'), 'não pode voltar a mandar posição vazia')
 })
 
 test('convert() rejeita resposta sem shortLink afiliado válido', async (t) => {
@@ -221,6 +227,9 @@ test('convert() converte cupom Shopee preservando o caminho e devolve o short li
   assert.ok(sentQuery.includes('https://shopee.com.br/m/envio-rapido'), 'origin preserva o caminho original do cupom')
   assert.ok(!/cupom-de-desconto/.test(sentQuery), 'NÃO reescreve para a landing web')
   assert.ok(!/utm_source|utm_medium|gads_t_sig/.test(sentQuery), 'remove tracking de terceiro antes da API')
+  // Cupom passa pela MESMA função de geração de link, então carrega o mesmo SubID.
+  assert.ok(sentQuery.includes('subIds: ["espelhagrupos"]'), 'cupom envia o SubID fixo')
+  assert.ok(!sentQuery.includes('subIds: [""]'), 'não pode voltar a mandar posição vazia')
 })
 
 test('convert() converte URL direta de cupom Shopee preservando o caminho', async (t) => {
@@ -238,6 +247,14 @@ test('convert() converte URL direta de cupom Shopee preservando o caminho', asyn
   assert.ok(sentQuery.includes('/m/cupom?'), 'origin preserva o caminho /m/cupom')
   assert.ok(sentQuery.includes('promotionId=999'), 'origin mantém a identidade do cupom')
   assert.ok(!/cupom-de-desconto/.test(sentQuery), 'NÃO reescreve para a landing web')
+  assert.ok(sentQuery.includes('subIds: ["espelhagrupos"]'), 'cupom direto envia o SubID fixo')
+})
+
+// O valor é requisito de produto e vale para toda cliente, existente ou futura:
+// não é lido de env nem do banco. Se alguém transformar em configuração, este
+// teste falha e obriga a decisão a ser explícita.
+test('SHOPEE_SUB_ID é a constante fixa espelhagrupos', () => {
+  assert.equal(SHOPEE_SUB_ID, 'espelhagrupos')
 })
 
 // Invariante de segurança: mesmo com o flag ligado, se a API recusar o cupom,

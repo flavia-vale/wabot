@@ -573,6 +573,15 @@ export default function WhatsAppPage() {
   const showInactivityReset = isRunning && isConnecting && !isConnected && qrWaitElapsed >= INACTIVITY_RESET_SECONDS
   const canSubmitPairing = pairingPhone.trim().length >= 10
   const isValidatingSession = isRunning && isConnecting && !qr && !pairingCode && qrStartElapsed > 0
+
+  // O que a cliente deve ver (decidido no servidor por
+  // src/core/clientVisibleSessionState.js): queda que o robô resolve sozinho
+  // em poucos minutos não vira aviso; o que exige ação dela nunca espera.
+  // Fallback para o comportamento antigo quando a API não mandar o campo.
+  const clientState = status?.clientState?.state ?? null
+  const isSelfHealing = clientState === 'recovering' || Boolean(status?.clientState?.hiddenByGrace)
+  const isNotReceiving = clientState === 'not_receiving'
+  const silentMinutes = Math.max(1, Math.round(Number(status?.reception?.silentForMs || 0) / 60000))
   const isQrScanned = isValidatingSession
 
   const connectionSteps = [
@@ -589,7 +598,9 @@ export default function WhatsAppPage() {
     trackTelemetry({ stage: 'authenticating', event: 'session_validation_started' })
   }, [isValidatingSession, trackTelemetry])
 
-  const statusDotColor = isConnected ? 'var(--success)' : isConnecting ? 'var(--warn)' : 'var(--line)'
+  // Durante a carência a bolinha continua verde: piscar amarelo a cada
+  // reconexão automática é exatamente o susto que queremos evitar.
+  const statusDotColor = (isConnected || status?.clientState?.hiddenByGrace) ? 'var(--success)' : (isConnecting || clientState === 'recovering') ? 'var(--warn)' : 'var(--line)'
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 560, margin: '0 auto' }}>
@@ -644,9 +655,23 @@ export default function WhatsAppPage() {
           {statusLoading ? (
             <p className="pnl-card-note">{statusLoadingTimedOut ? 'Status demorando mais do que o esperado…' : 'Carregando status do WhatsApp…'}</p>
           ) : (
-            <p style={{ fontWeight: 600, color: 'var(--ink)' }}>{isConnected ? 'Conectado' : (isConnecting || isAwaitingConnectStart) ? 'Conectando…' : statusError ? 'Status indisponível' : 'Desconectado'}</p>
+            <p style={{ fontWeight: 600, color: 'var(--ink)' }}>{
+              statusError ? 'Status indisponível'
+                : clientState === 'stopped' ? 'Desligado por você'
+                : (isConnected || status?.clientState?.hiddenByGrace) ? 'Conectado'
+                : clientState === 'recovering' ? 'Reconectando…'
+                : (isConnecting || isAwaitingConnectStart) ? 'Conectando…'
+                : clientState === 'action_required' ? 'Desconectado'
+                : isConnected ? 'Conectado' : 'Desconectado'
+            }</p>
           )}
-          {!statusLoading && !isConnected && !isConnecting && !isAwaitingConnectStart && !statusError && status?.lifecycle === 'reconnecting' && (
+          {!statusLoading && !statusError && isNotReceiving && (
+            <p className="pnl-hint">Conectado, mas sem receber mensagens há {silentMinutes} minutos. O robô está tentando resolver sozinho.</p>
+          )}
+          {!statusLoading && !statusError && !isNotReceiving && isSelfHealing && (
+            <p className="pnl-hint">O robô está resolvendo sozinho — você não precisa fazer nada.</p>
+          )}
+          {!statusLoading && !isConnected && !isConnecting && !isAwaitingConnectStart && !statusError && !clientState && status?.lifecycle === 'reconnecting' && (
             <p className="pnl-hint">O robô está tentando reconectar sozinho — você não precisa fazer nada.</p>
           )}
           {status?.phone && <p className="pnl-hint">+{status.phone}</p>}
@@ -654,7 +679,7 @@ export default function WhatsAppPage() {
       </section>
 
       {/* Gerando QR (spinner) */}
-      {((isRunning && !isConnected && !qr && !pairingCode) || isAwaitingConnectStart) ? (
+      {((isRunning && !isConnected && !isSelfHealing && !qr && !pairingCode) || isAwaitingConnectStart) ? (
         <section className="pnl-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 32 }}>
           <svg className="pnl-rotate" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--accent-strong)' }}>
             <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />

@@ -32,7 +32,10 @@ test('valor desconhecido não desliga por engano (fail-safe: manter a foto)', ()
 test('a foto da LOJA continua sendo a primeira escolha — a cascata só roda sem jpegThumbnail', () => {
   assert.match(
     botWorkerSource,
-    /if \(!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && shouldUseOriginPhotoFallback\(\)\)/,
+    // `allowSmallOriginPhoto` (hotfix 2026-08-26) força a cascata no caminho em
+    // que a oferta ia sair como texto pelado; a condição que importa aqui —
+    // rodar SÓ quando a loja não entregou foto — continua intacta.
+    /if \(!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && \(allowSmallOriginPhoto \|\| shouldUseOriginPhotoFallback\(\)\)\)/,
     'a cascata precisa ser condicionada a NÃO haver thumbnail da loja (senão rebaixaria toda oferta para a foto do concorrente)',
   )
 })

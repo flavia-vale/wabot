@@ -16,6 +16,8 @@
 // O limiar de 50KB separa "thumbnail do link preview" de "imageMessage real
 // comprimido pelo WhatsApp" — abaixo disso é quase certo que seja preview.
 
+import { isPublishableFallbackImage, resolveMinPublishableImageBytes } from './core/thumbnailQualityPolicy.js'
+
 export const MONITORED_THUMBNAIL_BYTES_THRESHOLD = 50_000
 
 export function isLikelyJpegThumbnail(image) {
@@ -72,6 +74,13 @@ export async function resolveMonitoredImage({
   fallbackToOriginal = true,
   skipActiveFetch = false,
   logger,
+  minPublishableBytes = resolveMinPublishableImageBytes(),
+  onThumbnailDropped = null,
+  // Decidido por core/storePhotoPreference.js: quando true, a foto oficial da
+  // loja tem prioridade sobre a foto que veio na mensagem de origem — que
+  // frequentemente é a do concorrente, com marca d'água.
+  preferStorePhoto = false,
+  onStorePhotoPreferred = null,
 }) {
   const log = logger || { info: () => {}, warn: () => {} }
 
@@ -79,7 +88,11 @@ export async function resolveMonitoredImage({
     if (skipActiveFetch) return null
     if (!target?.url) return null
     try {
-      const productImageUrl = await fetchProductImage(target.platform, target.url, credentials || {})
+      const productImageUrl = await fetchProductImage(target.platform, target.url, credentials || {}, {
+        // Sem isto, "a loja não devolveu foto" chega aqui sem motivo nenhum —
+        // era o caso da Shopee, cuja única fonte de foto é a API de afiliado.
+        onDiagnostic: ({ stage, detail }) => log.warn({ platform: target.platform, stage, detail }, 'resolveMonitoredImage: loja não devolveu foto'),
+      })
       log.info({ platform: target.platform, productImageUrl }, 'resolveMonitoredImage: fetchProductImage')
       if (!productImageUrl) return null
       const fetched = await fetchImageBuffer(productImageUrl, target.url)
@@ -97,8 +110,21 @@ export async function resolveMonitoredImage({
   if (mode === 'original') {
     const downloaded = await downloadOriginalImage()
 
-    // Imagem cheia da origem — usa direto, sem custo de rede extra.
+    // Imagem cheia da origem. O atalho histórico devolvia ela direto, sem custo
+    // de rede — e com isso republicava a marca d'água do concorrente sempre que
+    // a origem anexava foto própria (RCA 2026-08-27). Quando o link aponta para
+    // um produto identificado (shouldPreferStorePhoto), a foto da LOJA tem
+    // prioridade; se a loja não devolver nada, a foto da origem continua sendo
+    // usada — a troca é best-effort e nunca perde imagem.
     if (downloaded && !isLikelyJpegThumbnail(downloaded)) {
+      if (preferStorePhoto) {
+        const daLoja = await tryActiveFetch()
+        if (daLoja) {
+          log.info({ platform: target?.platform, size: daLoja.buffer?.length }, 'resolveMonitoredImage: foto da loja no lugar da foto da origem (evita marca d\'água de terceiro)')
+          onStorePhotoPreferred?.({ platform: target?.platform, bytes: daLoja.buffer?.length ?? null })
+          return daLoja
+        }
+      }
       return downloaded
     }
 
@@ -106,8 +132,18 @@ export async function resolveMonitoredImage({
     const upgraded = await tryActiveFetch()
     if (upgraded) return upgraded
 
-    // Última cartada: a thumbnail mesmo. Imagem ruim > nenhuma imagem.
-    return downloaded || null
+    // Última cartada: a thumbnail mesmo. Imagem ruim > nenhuma imagem — mas só
+    // até o piso de qualidade (thumbnailQualityPolicy.js). Abaixo dele a foto
+    // sai como borrão e o certo é NÃO publicar imagem: o envio degrada para o
+    // card de link do WhatsApp, que fica legível. Ver RCA 2026-08-26.
+    if (!downloaded) return null
+    const verdict = isPublishableFallbackImage(downloaded, minPublishableBytes)
+    if (!verdict.publish) {
+      log.warn({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes }, 'resolveMonitoredImage: miniatura pequena demais para publicar — enviando sem imagem')
+      onThumbnailDropped?.({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes })
+      return null
+    }
+    return downloaded
   }
 
   if (mode === 'fetch') {
@@ -115,7 +151,12 @@ export async function resolveMonitoredImage({
     if (upgraded) return upgraded
     if (fallbackToOriginal) {
       const downloaded = await downloadOriginalImage()
-      if (downloaded) return downloaded
+      if (downloaded) {
+        const verdict = isPublishableFallbackImage(downloaded, minPublishableBytes)
+        if (verdict.publish) return downloaded
+        log.warn({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes }, 'resolveMonitoredImage: miniatura pequena demais para publicar — enviando sem imagem')
+        onThumbnailDropped?.({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes })
+      }
     }
     return null
   }

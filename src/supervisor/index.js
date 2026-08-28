@@ -23,6 +23,7 @@ import { buildRedisOptions } from '../core/redisFactory.js'
 import { buildShardTag, normalizeShardCount, shouldHandleUserOnShard } from './sharding.js'
 import { checkSupervisorEnvConsistency, supervisorManagesSessions, supervisorShouldAutoResume } from './envGuard.js'
 import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, RESTART_QUARANTINE_MS } from './restartBudget.js'
+import { shouldResurrectSession, buildResurrectionWhere, resolveIncludeReconnecting } from '../core/sessionResurrectionPolicy.js'
 import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import {
@@ -135,6 +136,11 @@ const SESSION_QUARANTINE_KEY = `supervisor:session_quarantine_total:${SHARD_TAG}
 // Orçamento de restarts automáticos por sessão (health monitor). Start manual
 // via comando START_BOT limpa a quarentena.
 const restartBudget = createRestartBudget()
+// RCA 2026-08-27: sessão presa há mais de 2min grava status='disconnected'
+// com lifecycle='reconnecting' e, antes deste fix, sumia da ressurreição —
+// morrendo de vez quando o worker caía. `WA_RESURRECT_RECONNECTING=0` volta ao
+// comportamento antigo sem redeploy.
+const RESURRECT_RECONNECTING = resolveIncludeReconnecting()
 
 // Espelha o sessionCore: AUTO_START_WHATSAPP_SESSIONS=false desliga o
 // auto-resume/ressurreição. Comandos manuais (START_BOT) e kill de zumbis
@@ -420,10 +426,10 @@ async function healthMonitorTick() {
   // está desligado (AUTO_START_WHATSAPP_SESSIONS=false).
   if (!AUTO_RESUME) return
   try {
-    const persisted = await db.waSession.findMany({
-      where: { status: { in: ['connected', 'connecting'] } },
-      select: { userId: true },
-    })
+    const persisted = (await db.waSession.findMany({
+      where: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }),
+      select: { userId: true, status: true, lifecycle: true },
+    })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
     for (const s of persisted) {
       if (!belongsToThisShard(s.userId)) continue
       if (sessionCore.isRunning(s.userId)) continue
@@ -445,8 +451,20 @@ async function healthMonitorTick() {
         }
         continue
       }
+      // Sinal próprio para o caso do RCA 2026-08-27: sessão que estava
+      // marcada como desconectada mas com o robô declarando "ainda tentando".
+      // Antes deste fix ela morria de vez e só voltava com a cliente clicando —
+      // medir quantas vezes salvamos é o que prova o valor do conserto.
+      const eraOrfaReconectando = s.status === 'disconnected' && s.lifecycle === 'reconnecting'
       try {
         await startBotWithBridge(s.userId)
+        if (eraOrfaReconectando) {
+          logger.warn({ userId: s.userId, shard: SHARD_TAG }, 'Sessão presa em reconexão sem worker foi ressuscitada (antes só voltava com ação da cliente)')
+          try {
+            const { recordOperationalSignal } = await import('../observability/operationalSignals.js')
+            recordOperationalSignal('wa_session_resurrected', { userId: s.userId })
+          } catch {}
+        }
       } catch (err) {
         logger.error({ err: err?.message, userId: s.userId, shard: SHARD_TAG }, 'Falha ao ressuscitar sessão no health monitor')
       }
@@ -479,7 +497,10 @@ async function boot() {
   let attempted = 0
   try {
     const persisted = AUTO_RESUME
-      ? await db.waSession.findMany({ where: { status: { in: ['connected', 'connecting'] } }, select: { userId: true } })
+      ? (await db.waSession.findMany({
+          where: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }),
+          select: { userId: true, status: true, lifecycle: true },
+        })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
       : []
     if (!AUTO_RESUME) logger.info({ shard: SHARD_TAG }, 'AUTO_START_WHATSAPP_SESSIONS=false — supervisor não faz auto-resume (só comandos manuais)')
     attempted = persisted.length

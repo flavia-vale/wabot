@@ -1,3 +1,6 @@
+import { buildLongExpiredWhere, wantsLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
+import { planLabel } from './customerHistory.js'
+
 const ORIGIN_SOURCE_LABELS = {
   direct: 'Direto',
   organic: 'Orgânico',
@@ -51,6 +54,11 @@ export function buildUserOrigin(user, { referrerMap = new Map(), signupMetaMap =
   }
 }
 
+// Colunas realmente ordenáveis no banco. Campos derivados (último envio, LTV)
+// ficam de fora de propósito: ordenar por eles exigiria carregar a base
+// inteira em memória a cada página.
+const SORTABLE_CUSTOMER_FIELDS = new Set(['createdAt', 'accessExpiresAt', 'name', 'email', 'plan', 'status', 'sendCount', 'lastLoginAt'])
+
 export function createAdminService({
   db,
   listRunningBots,
@@ -78,6 +86,11 @@ export function createAdminService({
     const { status, plan, risk, search } = query
     const now = new Date()
     const twoDaysAgo = addDays(now, -2)
+    // Vencidas há muito tempo saem da visão por padrão (ver
+    // src/core/adminVisibility.js). É apresentação, não dado: "Ver mais"
+    // (`incluirVencidos=1`) traz todas de volta.
+    const includeLongExpired = wantsLongExpired(query.incluirVencidos)
+    const longExpiredWhere = buildLongExpiredWhere({ now, includeLongExpired })
     const where = {
       ...(status ? { status } : {}),
       ...(plan ? { plan } : {}),
@@ -89,10 +102,21 @@ export function createAdminService({
       ...(risk === 'missing_monitor' ? { groups: { none: { role: 'monitor' } } } : {}),
       ...(risk === 'missing_post' ? { groups: { none: { role: 'post' } } } : {}),
       ...(risk === 'wa_disconnected' ? { OR: [{ waSession: { is: null } }, { waSession: { is: { status: { not: 'connected' } } } }] } : {}),
+      ...(longExpiredWhere ? { AND: [longExpiredWhere] } : {}),
     }
 
     const since24h = addDays(now, -1)
-    const [total, users] = await Promise.all([
+    // Tamanho do que ficou escondido — o botão "Ver mais" precisa dizer quantas
+    // são, senão parece que os números do painel encolheram sozinhos.
+    const contarOcultas = () => (includeLongExpired ? Promise.resolve(0) : db.user.count({
+      where: {
+        ...(status ? { status } : {}),
+        ...(plan ? { plan } : {}),
+        accessExpiresAt: { lte: new Date(now.getTime() - resolveLongExpiredDays() * 24 * 60 * 60 * 1000) },
+      },
+    }).catch(() => 0))
+    const [ocultasPorVencimento, total, users] = await Promise.all([
+      contarOcultas(),
       db.user.count({ where }),
       db.user.findMany({
         where,
@@ -160,6 +184,9 @@ export function createAdminService({
       total,
       page,
       limit,
+      ocultasPorVencimento,
+      incluindoVencidasAntigas: includeLongExpired,
+      janelaVencimentoDias: resolveLongExpiredDays(),
       users: users.map(user => {
         const groupCounts = getGroupCounts(user.groups)
         const successCount = successMap.get(user.id) ?? 0
@@ -353,5 +380,138 @@ export function createAdminService({
     }
   }
 
-  return { getOverview, listUsers, listWaDisconnectedUsers, listLogs }
+
+  // Lista larga de clientes para a página "Clientes" do admin. Diferente de
+  // `listUsers` (que é a gestão operacional por RISCO), aqui a chave é o
+  // HISTÓRICO: cadastro, situação, plano, vencimento, uso. Ordenável por
+  // coluna e varrível de ponta a ponta.
+  //
+  // De propósito NÃO aplica `buildLongExpiredWhere`: esconder vencida antiga
+  // existe para limpar a FILA DE TRABALHO (`listUsers`), e esta tela é o
+  // arquivo de clientes — quem procura o histórico de alguém que cancelou há
+  // seis meses precisa achá-la aqui. Para isolar os vencidos, o filtro
+  // `situacao=vencido`.
+  //
+  // Todo agregado por cliente sai em LOTE (groupBy/findMany com `in`) — nunca
+  // uma consulta por linha. Ver a mesma disciplina em `listUsers` acima.
+  async function listCustomers({ query = {}, adminRole } = {}) {
+    const { page, limit, skip } = getPagination(query, 50)
+    const now = new Date()
+    const search = String(query.search ?? '').trim()
+    const situacao = String(query.situacao ?? '').trim()
+
+    const where = {
+      ...(search
+        ? {
+          OR: [
+            { email: { contains: search } },
+            { name: { contains: search } },
+            { contactPhone: { contains: search.replace(/\D/g, '') || search } },
+          ],
+        }
+        : {}),
+      ...(situacao === 'trial' ? { plan: 'trial', status: 'active', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gte: now } }] } : {}),
+      ...(situacao === 'ativo' ? { plan: { not: 'trial' }, status: 'active', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gte: now } }] } : {}),
+      ...(situacao === 'vencido' ? { status: 'active', accessExpiresAt: { lt: now } } : {}),
+      ...(situacao === 'bloqueado' ? { status: { in: ['banned', 'suspended'] } } : {}),
+    }
+
+    const sortField = SORTABLE_CUSTOMER_FIELDS.has(String(query.sort ?? '')) ? String(query.sort) : 'createdAt'
+    const sortDir = String(query.dir ?? 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc'
+
+    const [total, users] = await Promise.all([
+      db.user.count({ where }),
+      db.user.findMany({
+        where,
+        orderBy: { [sortField]: sortDir },
+        take: limit,
+        skip,
+        select: {
+          id: true, name: true, email: true, contactPhone: true, status: true, plan: true,
+          accessExpiresAt: true, createdAt: true, sendCount: true, lastLoginAt: true,
+          waSession: { select: { status: true, phone: true, updatedAt: true } },
+          groups: { select: { role: true } },
+        },
+      }),
+    ])
+
+    const userIds = users.map(user => user.id)
+    const [paymentRows, subscriptionRows, sendMap30d, lastMessageMap] = await Promise.all([
+      userIds.length
+        ? db.payment.groupBy({
+          by: ['userId'],
+          where: { userId: { in: userIds }, status: 'approved' },
+          _sum: { amount: true },
+          _count: { _all: true },
+          _min: { createdAt: true },
+        })
+        : [],
+      userIds.length
+        ? db.subscription.findMany({
+          where: { userId: { in: userIds } },
+          orderBy: { createdAt: 'desc' },
+          select: { userId: true, plan: true, status: true, createdAt: true, nextChargeAt: true, cancelledAt: true },
+        })
+        : [],
+      getLogCountMap({ status: 'success', since: addDays(now, -30), userIds }),
+      getLogActivityMap({ userIds }),
+    ])
+
+    const paymentMap = new Map(paymentRows.map(row => [row.userId, row]))
+    const subscriptionMap = new Map()
+    for (const row of subscriptionRows) {
+      // findMany já vem em ordem decrescente: fica a assinatura mais recente,
+      // salvo se houver uma ativa (essa ganha, é o que a coluna precisa dizer).
+      const current = subscriptionMap.get(row.userId)
+      const isActive = ['authorized', 'active'].includes(String(row.status ?? '').toLowerCase())
+      if (!current || (isActive && !['authorized', 'active'].includes(String(current.status ?? '').toLowerCase()))) {
+        subscriptionMap.set(row.userId, row)
+      }
+    }
+
+    return {
+      total,
+      page,
+      limit,
+      sort: sortField,
+      dir: sortDir,
+      customers: users.map(user => {
+        const payment = paymentMap.get(user.id) ?? null
+        const subscription = subscriptionMap.get(user.id) ?? null
+        return sanitizeUser({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          contactPhone: user.contactPhone,
+          status: user.status,
+          plan: user.plan,
+          planLabel: planLabel(user.plan),
+          accessStatus: getAccessStatus(user, now),
+          accessExpiresAt: user.accessExpiresAt,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+          waSession: user.waSession ?? null,
+          groupCounts: getGroupCounts(user.groups),
+          sendCount: user.sendCount ?? 0,
+          sends30d: sendMap30d.get(user.id) ?? 0,
+          lastMessageAt: lastMessageMap.get(user.id) ?? null,
+          ltv: payment?._sum?.amount ?? 0,
+          paidCount: payment?._count?._all ?? 0,
+          firstPaymentAt: payment?._min?.createdAt ?? null,
+          subscription: subscription
+            ? {
+              plan: subscription.plan,
+              planLabel: planLabel(subscription.plan),
+              status: subscription.status,
+              startedAt: subscription.createdAt,
+              nextChargeAt: subscription.nextChargeAt,
+              cancelledAt: subscription.cancelledAt,
+            }
+            : null,
+        }, adminRole)
+      }),
+    }
+  }
+
+  return { getOverview, listUsers, listCustomers, listWaDisconnectedUsers, listLogs }
 }

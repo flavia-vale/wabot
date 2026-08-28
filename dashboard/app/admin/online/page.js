@@ -76,6 +76,17 @@ function WhatsAppButton({ phone }) {
 }
 
 
+// Quem resolve a desconexão — espelha src/core/sessionOwnership.js.
+const OWNER_META = {
+  connected: { label: 'conectado', className: 'bg-emerald-50 text-emerald-700' },
+  robo: { label: 'o robô está tentando', className: 'bg-sky-50 text-sky-700' },
+  cliente: { label: 'precisa da cliente (QR)', className: 'bg-amber-50 text-amber-800' },
+  cliente_desligou: { label: 'ela desligou', className: 'bg-slate-100 text-slate-600' },
+  bloqueio: { label: 'número recusado pelo WhatsApp', className: 'bg-red-50 text-red-700' },
+  ninguem: { label: 'parada, ninguém tentando', className: 'bg-red-100 text-red-800' },
+  acesso_vencido: { label: 'acesso vencido', className: 'bg-purple-50 text-purple-700' },
+}
+
 function formatDurationMs(value) {
   const ms = Math.max(0, Number(value ?? 0))
   if (!Number.isFinite(ms) || ms <= 0) return '0min'
@@ -148,11 +159,38 @@ function UserDrawer({ detail, loading, onClose }) {
               <OnlineCard label="Quedas 7d" value={formatNumber(detail.connectionMetrics?.disconnects7d)} tone={detail.connectionMetrics?.disconnects7d ? 'red' : 'green'} />
               <OnlineCard label="Ações manuais 7d" value={formatNumber(detail.connectionMetrics?.manualReconnects7d)} helper="trabalho real do cliente" tone={detail.connectionMetrics?.manualReconnects7d ? 'red' : 'green'} />
               <OnlineCard label="Offline auto 7d" value={formatDurationMs((detail.connectionMetrics?.automaticOfflineMs7d || 0) + (detail.connectionMetrics?.ongoingOfflineMs7d || 0))} helper={`${formatNumber(detail.connectionMetrics?.automaticRecoveries7d)} recuperação(ões) automáticas`} tone={(detail.connectionMetrics?.automaticOfflineMs7d || detail.connectionMetrics?.ongoingOfflineMs7d) ? 'amber' : 'green'} />
+              <OnlineCard label="Parado até o cliente agir 7d" value={formatDurationMs(detail.connectionMetrics?.manualOfflineMs7d)} helper={`${formatNumber(detail.connectionMetrics?.manualRecoveries7d)} episódio(s) que só voltaram com ação dele`} tone={detail.connectionMetrics?.manualOfflineMs7d ? 'red' : 'green'} />
             </section>
 
             <section className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <p className="font-black">Como ler estas métricas</p>
-              <p className="mt-1">&quot;Ações manuais&quot; conta quando o cliente precisou iniciar/reparear pelo painel. &quot;Offline auto&quot; mede o tempo em que o robô ficou fora até o sistema recuperar sozinho; tentativas internas de backoff não entram como trabalho do cliente.</p>
+              <p className="mt-1">&quot;Ações manuais&quot; conta quando o cliente precisou iniciar/reparear pelo painel. &quot;Offline auto&quot; mede o tempo em que o robô ficou fora até o sistema recuperar sozinho; tentativas internas de backoff não entram como trabalho do cliente. &quot;Parado até o cliente agir&quot; é o tempo que ele ficou sem robô esperando, antes de ir lá resolver — é a métrica que mede a promessa do produto.</p>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-4">
+              <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Linha do tempo das quedas (7 dias)</h3>
+              <p className="mt-1 text-xs text-slate-500">Cada linha é um episódio fora do ar: quando começou, quanto durou e se o robô voltou sozinho ou só voltou depois que o cliente agiu.</p>
+              <div className="mt-3 divide-y divide-slate-100">
+                {asArray(detail.offlineEpisodes).map((episode) => {
+                  const tone = episode.open ? 'bg-amber-50 text-amber-800' : episode.endedBy === 'sozinho' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                  const label = episode.open ? 'em aberto' : episode.endedBy === 'sozinho' ? 'voltou sozinho' : episode.endedBy === 'cliente' ? 'o cliente teve que agir' : 'interrompido'
+                  return (
+                    <div key={`${episode.startedAt}-${episode.endedAt || 'aberto'}`} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3 text-sm">
+                      <div>
+                        <p className="font-bold text-slate-900">{formatDate(episode.startedAt)} → {episode.endedAt ? formatDate(episode.endedAt) : 'agora'}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatDurationMs(episode.durationMs)} fora
+                          {episode.code ? ` · código ${episode.code}` : ''}
+                          {episode.stuckMsg ? ' · mensagem travada' : ''}
+                          {episode.terminal ? ' · sessão deslogada' : ''}
+                        </p>
+                      </div>
+                      <span className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-black ${tone}`}>{label}</span>
+                    </div>
+                  )
+                })}
+                {!asArray(detail.offlineEpisodes).length && <p className="py-4 text-sm text-slate-500">Nenhuma queda registrada nos últimos 7 dias.</p>}
+              </div>
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-4">
@@ -228,6 +266,11 @@ export default function AdminOnlinePage() {
   const [activity, setActivity] = useState('all')
   const [minErrors, setMinErrors] = useState('')
   const [error, setError] = useState('')
+  const [reconnecting, setReconnecting] = useState(null)
+  // Conta vencida há muito tempo sai da visão por padrão (ver
+  // src/core/adminVisibility.js). "Ver mais" traz de volta.
+  const [verVencidasAntigas, setVerVencidasAntigas] = useState(false)
+  const [feedback, setFeedback] = useState('')
 
   function currentFilters(extra = {}) {
     return {
@@ -237,6 +280,7 @@ export default function AdminOnlinePage() {
       plan,
       activity,
       minErrors,
+      incluirVencidos: verVencidasAntigas ? 1 : '',
       ...extra,
     }
   }
@@ -257,7 +301,25 @@ export default function AdminOnlinePage() {
       api.adminOnline(currentFilters()).then((result) => { if (active) setData(result) }).catch(() => {})
     }, 15000)
     return () => { active = false; clearInterval(timer) }
-  }, [search, waStatus, plan, activity, minErrors])
+  }, [search, waStatus, plan, activity, minErrors, verVencidasAntigas])
+
+  // Sobe o robô da cliente sem que ela precise fazer nada. O botão só aparece
+  // quando a credencial ainda existe (`canAdminRetry`) — em conta que precisa
+  // de QR novo ele não resolveria, e a API recusa por garantia.
+  async function reconnect(userId) {
+    setReconnecting(userId)
+    setError('')
+    setFeedback('')
+    try {
+      const result = await api.adminOnlineReconnect(userId)
+      setFeedback(result?.message || 'Robô iniciado.')
+      await load().catch(() => {})
+    } catch (err) {
+      setError(err.message || 'Não consegui subir o robô.')
+    } finally {
+      setReconnecting(null)
+    }
+  }
 
   async function openDetail(userId) {
     setDetailLoading(true)
@@ -296,11 +358,22 @@ export default function AdminOnlinePage() {
         </header>
 
         {error && <Alert type="error" title="ONLINE" message={error} />}
+        {feedback && <Alert type="success" title="Reconexão" message={feedback} />}
+        {(verVencidasAntigas || !!data?.summary?.ocultasPorVencimento) && (
+          <button
+            type="button"
+            onClick={() => setVerVencidasAntigas(!verVencidasAntigas)}
+            className="text-xs font-black text-emerald-700 underline underline-offset-2 hover:text-emerald-900"
+          >
+            {verVencidasAntigas
+              ? `Ocultar quem venceu há mais de ${data?.summary?.janelaVencimentoDias ?? 30} dias`
+              : `Ver mais (${data?.summary?.ocultasPorVencimento} vencida(s) há mais de ${data?.summary?.janelaVencimentoDias ?? 30} dias)`}
+          </button>
+        )}
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2">
           <OnlineCard label="Usuários online agora" value={formatNumber(data?.summary?.onlineUsers)} helper={`${formatNumber(data?.summary?.totalSessions)} sessões monitoradas`} tone="green" />
           <OnlineCard label="Estabilidade" value={`${data?.summary?.stabilityPct ?? 100}%`} helper="Conectados ou reconectando com heartbeat recente" tone={(data?.summary?.stabilityPct ?? 100) >= 90 ? 'green' : (data?.summary?.stabilityPct ?? 100) >= 75 ? 'amber' : 'red'} />
-          <OnlineCard label="Alertas desconectados" value={formatNumber(data?.summary?.disconnectedAlerts)} helper={`${formatNumber(data?.summary?.connectingUsers)} tentando conectar`} tone={data?.summary?.disconnectedAlerts ? 'red' : 'green'} />
         </section>
 
         {!!criticalUsers.length && (
@@ -386,10 +459,28 @@ export default function AdminOnlinePage() {
                       <td className="px-3 py-4 text-right text-xs text-slate-600">
                         <p><strong>{formatDurationMs((user.automaticOfflineMs24h || 0) + (user.ongoingOfflineMs24h || 0))}</strong> offline auto</p>
                         <p>{formatNumber(user.manualReconnects24h)} ação(ões) manuais</p>
+                        {!!user.manualOfflineMs24h && <p className="font-bold text-red-700">{formatDurationMs(user.manualOfflineMs24h)} parado até agir</p>}
                       </td>
                       <td className="px-3 py-4">
                         <div className="flex flex-col gap-2">
+                          {user.sessionOwner && user.sessionOwner !== 'connected' && (
+                            <span
+                              title={user.sessionOwnerReason || ''}
+                              className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-center text-[11px] font-black ${(OWNER_META[user.sessionOwner] || {}).className || 'bg-slate-100 text-slate-600'}`}
+                            >
+                              {(OWNER_META[user.sessionOwner] || {}).label || user.sessionOwner}
+                            </span>
+                          )}
                           <button onClick={() => openDetail(user.id)} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100">Abrir detalhes</button>
+                          {user.canAdminRetry && (
+                            <button
+                              onClick={() => reconnect(user.id)}
+                              disabled={reconnecting === user.id}
+                              className="rounded-xl bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700 disabled:opacity-60"
+                            >
+                              {reconnecting === user.id ? 'Subindo…' : 'Tentar reconectar'}
+                            </button>
+                          )}
                           <WhatsAppButton phone={user.contactPhone} />
                         </div>
                       </td>

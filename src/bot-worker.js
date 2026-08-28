@@ -24,6 +24,9 @@ import { resolveLinkKind } from './converters/linkKind.js'
 import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
+import { DELIVERY_KIND } from './core/deliveryKind.js'
+import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, resolveDestinationImageMode } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
@@ -32,6 +35,7 @@ import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
+import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { describeMissingCredentials, validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
@@ -80,6 +84,9 @@ import { buildRedisOptions } from './core/redisFactory.js'
 import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
+import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
+import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
 
 const userId = process.env.BOT_USER_ID
 const WORKER_STARTED_AT = Date.now()
@@ -260,6 +267,81 @@ let allowedChatJidsReady = false
 // visibilidade admin), evitando que a operadora precise cruzar o jid na mão.
 const groupSubjectByJid = new Map()
 
+// Fase 2 do plano de recepção (RCA 2026-08-26): "olhar só o que foi escolhido".
+// Inverte a lista de exceções acima — ver src/core/chatScopePolicy.js. Modo em
+// degraus, default `off`, rollback sem redeploy pela env.
+const CHAT_SCOPE_MODE = normalizeChatScopeMode(process.env.WA_CHAT_SCOPE_MODE)
+const CHAT_SCOPE_PANIC_MS = Math.max(0, Number(process.env.WA_CHAT_SCOPE_PANIC_MS ?? DEFAULT_CHAT_SCOPE_PANIC_MS))
+const CHAT_SCOPE_SIGNAL_INTERVAL_MS = Math.max(5 * 60_000, Number(process.env.WA_CHAT_SCOPE_SIGNAL_INTERVAL_MS || 60 * 60_000))
+const CHAT_SCOPE_LOG_SAMPLE_PER_TYPE = Math.max(0, Number(process.env.WA_CHAT_SCOPE_LOG_SAMPLE || 5))
+
+// Identidades da própria conta (número e `@lid`). Preenchido no `open` — é por
+// elas que chegam histórico e notificações da própria conta.
+let selfChatJids = new Set()
+// Freio de emergência: quando aciona, vale até o restart do worker.
+let chatScopeDisabled = false
+// Contagem do que foi ignorado, por tipo. Sem isto trocaríamos um problema
+// visível (mensagem some do log) por um invisível.
+let chatScopeIgnoredByType = new Map()
+let chatScopeIgnoredSinceLastAccepted = 0
+let chatScopeSampledJids = new Map()
+let lastChatScopeSignalAt = 0
+
+function recordChatScopeIgnored(type, jid) {
+  chatScopeIgnoredByType.set(type, (chatScopeIgnoredByType.get(type) || 0) + 1)
+  chatScopeIgnoredSinceLastAccepted += 1
+  // Amostra limitada: os primeiros N endereços distintos por tipo, para dar
+  // rastro sem inflar o log (mensagem ignorada é evento de alto volume).
+  if (CHAT_SCOPE_LOG_SAMPLE_PER_TYPE <= 0) return
+  const seen = chatScopeSampledJids.get(type) || new Set()
+  if (seen.size >= CHAT_SCOPE_LOG_SAMPLE_PER_TYPE || seen.has(jid)) return
+  seen.add(jid)
+  chatScopeSampledJids.set(type, seen)
+  logger.info({ jid, type, mode: CHAT_SCOPE_MODE }, 'Conversa fora da lista de escolhidos: confirmada e descartada sem tentar abrir')
+}
+
+function getChatScopeSnapshot() {
+  return {
+    mode: CHAT_SCOPE_MODE,
+    disabled: chatScopeDisabled,
+    ignoredByType: Object.fromEntries(chatScopeIgnoredByType),
+    ignoredSinceLastAccepted: chatScopeIgnoredSinceLastAccepted,
+  }
+}
+
+// Roda junto do heartbeat. Duas coisas: o freio de emergência e o sinal
+// durável agregado (nunca por mensagem).
+function reviewChatScope() {
+  if (CHAT_SCOPE_MODE === CHAT_SCOPE_MODES.OFF) return
+  const now = Date.now()
+  if (shouldAutoDisableChatScope({
+    now,
+    enabled: true,
+    alreadyDisabled: chatScopeDisabled,
+    everAccepted: lastAcceptedAtMs != null,
+    lastAcceptedAtMs,
+    ignoredSinceLastAccepted: chatScopeIgnoredSinceLastAccepted,
+    panicMs: CHAT_SCOPE_PANIC_MS,
+  })) {
+    chatScopeDisabled = true
+    logger.error({
+      mode: CHAT_SCOPE_MODE,
+      ignoredSinceLastAccepted: chatScopeIgnoredSinceLastAccepted,
+      lastAcceptedAgeMs: now - lastAcceptedAtMs,
+    }, 'FREIO DE EMERGÊNCIA: a conta parou de receber mensagem com a regra de escopo ligada — regra desligada sozinha, tudo volta a passar até o próximo restart')
+    try { recordOperationalSignal('wa_chat_scope_auto_disabled', { userId, mode: CHAT_SCOPE_MODE, ignored: chatScopeIgnoredSinceLastAccepted }) } catch {}
+    return
+  }
+  if (now - lastChatScopeSignalAt < CHAT_SCOPE_SIGNAL_INTERVAL_MS) return
+  lastChatScopeSignalAt = now
+  if (chatScopeIgnoredByType.size === 0) return
+  const ignoredByType = Object.fromEntries(chatScopeIgnoredByType)
+  logger.info({ mode: CHAT_SCOPE_MODE, ignoredByType }, 'Resumo do escopo de conversas na janela')
+  try { recordOperationalSignal('wa_chat_scope_filtered', { userId, mode: CHAT_SCOPE_MODE, ...ignoredByType }) } catch {}
+  chatScopeIgnoredByType = new Map()
+  chatScopeSampledJids = new Map()
+}
+
 function updateAllowedChatJids(groups) {
   try {
     const jids = [
@@ -269,6 +351,7 @@ function updateAllowedChatJids(groups) {
     ]
     allowedChatJids = buildAllowedJidSet(jids)
     allowedChatJidsReady = true
+    monitoredSourceCount = (groups?.monitorJids ?? []).length
   } catch {
     // Nunca deixa a atualização do allowlist quebrar o getConfig.
   }
@@ -289,10 +372,15 @@ let shuttingDown = false
 // (`stream:error`), e a queda reseta o contador de novo. Loop que se
 // autoalimenta: a queda impede a mensagem de ser esquecida, e a mensagem não-
 // esquecida causa a próxima queda (caso real: sessão caindo a cada ~50min por
-// dias seguidos presa numa única mensagem). Fix: manter as caches vivas no
-// escopo do módulo (sobrevivem a reconexões dentro do mesmo processo worker,
-// mas começam limpas a cada restart do worker — aceitável).
-const msgRetryCounterCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
+// dias seguidos presa numa única mensagem). A cache comum vive no escopo do
+// módulo; a quarentena dos ids comprovadamente travados também é persistida no
+// AUTH_DIR para sobreviver a restart do worker e ao `del` interno do Baileys.
+const WA_MAX_MSG_RETRY_COUNT = 5
+const msgRetryCounterCache = createDurableStuckMessageRetryCache({
+  file: `${getAuthInfoDir(userId)}/stuck-message-quarantine.json`,
+  maxRetryCount: WA_MAX_MSG_RETRY_COUNT,
+  logger,
+})
 const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
 // Timestamp (Date.now()) até quando uma reconexão automática já está agendada
 // (setTimeout(startBot, ...) pendente). Existe um intervalo real entre o close
@@ -413,6 +501,8 @@ function startHeartbeatIpc() {
       maxReconnectingMs: MAX_RECONNECTING_MS,
     })
     if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
+    try { reportReceptionHealth(getReceptionHealth()) } catch {}
+    try { reviewChatScope() } catch {}
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
@@ -1132,6 +1222,62 @@ const SESSION_HEALTH_SIGNAL_RE = /sent retry receipt|failed to decrypt|Bad MAC|M
 // linha de log em si.
 const INIT_QUERIES_LOG_RE = /unexpected error in 'init queries'/i
 
+// Fase 0 do plano de recepção (RCA 2026-08): marcadores de RECEPÇÃO, para
+// separar "o processo está vivo" de "está chegando mensagem". Escopo de
+// módulo de propósito: precisam sobreviver às reconexões do MESMO worker
+// (mesma lição do msgRetryCounterCache) — zerar a cada `open` esconderia
+// justamente a sessão que reconecta o tempo todo e não recebe nada.
+const RECEPTION_WINDOW_MS = Math.max(60_000, Number(process.env.WA_RECEPTION_WINDOW_MS || DEFAULT_RECEPTION_WINDOW_MS))
+const RECEPTION_MIN_FAILURES = Math.max(1, Number(process.env.WA_RECEPTION_MIN_FAILURES || DEFAULT_RECEPTION_MIN_FAILURES))
+const RECEPTION_SIGNAL_THROTTLE_MS = Math.max(5 * 60_000, Number(process.env.WA_RECEPTION_SIGNAL_THROTTLE_MS || 60 * 60_000))
+let lastUpsertAtMs = null
+let lastAcceptedAtMs = null
+let monitoredSourceCount = 0
+let lastReceptionSignalAt = 0
+
+function markUpsertReceived() { lastUpsertAtMs = Date.now() }
+function markMessageAccepted() {
+  lastAcceptedAtMs = Date.now()
+  chatScopeIgnoredSinceLastAccepted = 0
+}
+
+// `WA_RECEPTION_WINDOW_MS=0` desliga a classificação (rollback sem redeploy).
+function getReceptionHealth() {
+  if (String(process.env.WA_RECEPTION_WINDOW_MS ?? '') === '0') return null
+  return computeReceptionState({
+    now: Date.now(),
+    connected: Boolean(activeSock) && lifecycleState === WA_LIFECYCLE.READY,
+    connectedSinceMs: connectionOpenedAt,
+    lastUpsertAtMs,
+    lastAcceptedAtMs,
+    failuresInWindow: getSessionHealth().cryptoErrors,
+    hasMonitoredSources: monitoredSourceCount > 0,
+    windowMs: RECEPTION_WINDOW_MS,
+    minFailures: RECEPTION_MIN_FAILURES,
+  })
+}
+
+// Só emite sinal durável para o estado comprovadamente problemático (`blind`),
+// e no máximo 1× por hora — alarme repetido treina a pessoa a ignorar.
+function reportReceptionHealth(reception) {
+  if (!reception || !isReceptionProblem(reception.state)) return
+  const now = Date.now()
+  if (now - lastReceptionSignalAt < RECEPTION_SIGNAL_THROTTLE_MS) return
+  lastReceptionSignalAt = now
+  logger.error({
+    silentForMs: reception.silentForMs,
+    failuresInWindow: reception.failuresInWindow,
+    windowMs: reception.windowMs,
+  }, 'Sessão conectada e SEM receber mensagens: está chegando e falhando, nada foi aceito na janela')
+  try {
+    recordOperationalSignal('wa_reception_blind', {
+      userId,
+      silentForMs: reception.silentForMs,
+      failuresInWindow: reception.failuresInWindow,
+    })
+  } catch {}
+}
+
 function recordCryptoError() {
   const now = Date.now()
   lastCryptoErrorAt = now
@@ -1406,7 +1552,18 @@ function reportPreviewCardNoImage(stage, ctx = {}) {
   try { recordOperationalSignal('preview_card_no_image', { userId, stage, platform: ctx.platform || null }) } catch {}
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto }) {
+function kindDoCard(fonte) {
+  if (fonte === 'origem') return DELIVERY_KIND.CARD_ORIGEM
+  if (fonte === 'banner') return DELIVERY_KIND.CARD_BANNER
+  return DELIVERY_KIND.CARD_LOJA
+}
+
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto }) {
+  // `onFonteDaFoto` (opcional): diz de ONDE veio a foto do card ('loja',
+  // 'origem' ou 'banner'). Vai por callback, e não como campo do objeto
+  // devolvido, porque esse objeto é o urlInfo que entra no proto do WhatsApp —
+  // campo estranho ali é risco desnecessário (ver o RCA do `title` do PR #1186).
+  const marcarFonte = fonte => { try { onFonteDaFoto?.(fonte) } catch { /* best-effort */ } }
   const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
   if (!matchedText) return null
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
@@ -1463,8 +1620,11 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
     jpegThumbnail = banner
     hqSourceBuffer = banner
+    if (banner) marcarFonte('banner')
   } else if (primary?.platform) {
-    const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}).catch((err) => {
+    const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}, {
+      onDiagnostic: ({ stage, detail }) => reportPreviewCardNoImage(stage, { platform: primary.platform, sourceUrl, detail }),
+    }).catch((err) => {
       reportPreviewCardNoImage('scrape_threw', { platform: primary.platform, sourceUrl, err: err?.message })
       return null
     })
@@ -1487,6 +1647,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         }
         jpegThumbnail = normalized?.jpegThumbnail || undefined
         hqSourceBuffer = normalized?.buffer || jpegThumbnail
+        if (jpegThumbnail) marcarFonte('loja')
       } catch (err) {
         reportPreviewCardNoImage('download_falhou', { platform: primary.platform, imageUrl, sourceUrl, err: err?.message })
       }
@@ -1507,13 +1668,17 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   //
   // Não roda no caminho do banner de cupom: ali a ausência de foto de produto é
   // intencional (link de campanha não tem produto), e o banner já preencheu.
-  if (!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && shouldUseOriginPhotoFallback()) {
+  // `allowSmallOriginPhoto`: chamada vinda do caminho SEM imagem (modo foto
+  // cujo envio ia sair como texto pelado). Ali o plano B não é opcional — sem
+  // ele a oferta vai sem nada —, então ele roda mesmo com a env desligada.
+  if (!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && (allowSmallOriginPhoto || shouldUseOriginPhotoFallback())) {
     try {
       const origin = await fetchOriginPhoto()
       const normalized = origin?.buffer ? await normalizeImageForWhatsApp(origin.buffer) : null
       if (normalized?.jpegThumbnail) {
         jpegThumbnail = normalized.jpegThumbnail
         hqSourceBuffer = normalized.buffer || normalized.jpegThumbnail
+        marcarFonte('origem')
         // Sinal PRÓPRIO (não é `ops_preview_card_no_image`): aqui a oferta SAIU
         // com card e com foto. Misturar os dois esconderia justamente o número
         // que interessa — quantas ofertas o plano B salvou, e de qual loja.
@@ -1793,6 +1958,51 @@ async function processSendJob(job) {
       logger.warn({ err: err?.message, destJid: job.destJid }, 'Preservação do destino não pôde ser lida; seguindo sem pausa')
     }
 
+    // B) Revalidação do destino (RCA 2026-08-26). Os destinos são calculados
+    // quando a mensagem CHEGA; o job só sai no dequeue, que pode ser muito
+    // depois (preservação do destino, freio de fila). Se a cliente desvinculou
+    // ou apagou o destino nesse meio-tempo, a alteração valia só para mensagens
+    // futuras e o job já materializado seguia entregando — foi assim que uma
+    // oferta saiu 1,5s DEPOIS de o destino ser apagado no painel. Só vale para
+    // envio espelhado (`converted`, que carrega `sourceJid`); broadcast, oferta
+    // automática e agendamento têm destino escolhido na hora e não passam aqui.
+    if (job.type === 'converted' && job.sourceJid) {
+      const unlinked = await (async () => {
+        try {
+          const cfg = await getConfig()
+          const monitorGroup = cfg.groups.monitor.find(g => g.waJid === job.sourceJid)
+          if (!monitorGroup) {
+            // A origem sumiu da config: não há mais espelhamento dela.
+            return { drop: true, reason: 'source_unlinked' }
+          }
+          const current = resolveMonitorDestinations({
+            targetsMode: monitorGroup.targetsMode,
+            targetPostJids: monitorGroup.targetPostJids,
+            allPostJids: cfg.groups.post,
+          })
+          // 'status@broadcast' é destino sintético (postToStatus), não vive em
+          // Group — nunca deve ser descartado por esta checagem.
+          if (job.destJid === 'status@broadcast') return { drop: false, reason: 'status' }
+          return shouldDropUnlinkedDestination({ destJid: job.destJid, currentDestinations: current.destinations })
+        } catch (err) {
+          // Fail-safe: sem foto confiável da config, envia (descartar por
+          // dúvida perderia oferta legítima).
+          logger.warn({ err: err?.message, destJid: job.destJid }, 'Revalidação do destino falhou; seguindo com o envio')
+          return { drop: false, reason: 'unknown_config' }
+        }
+      })()
+      if (unlinked.drop) {
+        await db.messageLog.update({
+          where: { id: job.logId },
+          data: { status: 'skipped', errorMsg: `skip:${unlinked.reason}`, sentAt: new Date() },
+        }).catch(() => {})
+        logger.warn({ destJid: job.destJid, sourceJid: job.sourceJid, logId: job.logId, reason: unlinked.reason }, 'Envio descartado: destino não está mais vinculado à origem')
+        try { recordOperationalSignal('send_dest_unlinked', { userId, destJid: job.destJid, sourceJid: job.sourceJid, reason: unlinked.reason }) } catch {}
+        await finishSendJob(job, { ok: false, error: unlinked.reason })
+        return
+      }
+    }
+
     // C) Descarte por idade na fila (configurável por destino na Preservação).
     // Oferta que ficou esperando mais que o teto não serve mais — e fila
     // infinita é o que liga o freio progressivo e derruba a vazão de todos os
@@ -1907,9 +2117,20 @@ async function processSendJob(job) {
             .catch(err => logger.warn({ err: err?.message }, 'recordChannelSendResult(ok) falhou'))
         }
 
+        // Registra COMO a oferta saiu (visão admin de qualidade de entrega).
+        // `deliveryInfo` é preenchido por buildPayload, que já rodou acima neste
+        // mesmo dequeue. Campos ausentes ficam NULL: "não sabemos" é uma
+        // resposta honesta e não polui a contagem do painel.
+        const entrega = job.deliveryInfo || {}
         await db.messageLog.update({
           where: { id: job.logId },
-          data: { status: 'success', errorMsg: null, sentAt: new Date() },
+          data: {
+            status: 'success',
+            errorMsg: null,
+            sentAt: new Date(),
+            ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
+            ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
+          },
         })
 
         sendMetrics.successTotal++
@@ -2077,6 +2298,15 @@ let connectionOpenedAt = null
 // transitórias, não corrupção que justifique apagar auth. Ver
 // shouldResetAuthForBadSession(keepEstablishedAuth).
 let everHadStableOpen = false
+// RCA 2026-08-28: teto de tentativas sem sucesso. `everOpened` é mais frouxo
+// que `everHadStableOpen` de propósito — para a PARADA definitiva só vale
+// "nunca chegou a abrir nenhuma vez", não "abriu mas não ficou estável".
+// Escopo de módulo: precisa sobreviver às reconexões do mesmo worker.
+let everOpened = false
+let consecutiveFailedReconnects = 0
+const RETRY_GIVEUP_ATTEMPTS = Math.max(0, Number(process.env.WA_RETRY_GIVEUP_ATTEMPTS ?? DEFAULT_GIVEUP_ATTEMPTS))
+const RETRY_SLOW_INTERVAL_MS = Math.max(0, Number(process.env.WA_RETRY_SLOW_INTERVAL_MS ?? DEFAULT_SLOW_INTERVAL_MS))
+const RETRY_NEVER_CONNECTED_MAX = Math.max(0, Number(process.env.WA_RETRY_NEVER_CONNECTED_MAX ?? DEFAULT_NEVER_CONNECTED_MAX))
 
 function calcReconnectDelayMs() {
   return calcBackoffDelayMs(reconnectAttempts, { baseMs: RECONNECT_BASE_MS, maxMs: RECONNECT_MAX_MS })
@@ -2219,15 +2449,32 @@ async function startBotInner() {
     // declaração acima (RCA 2026-07: loop infinito de retry-receipt).
     msgRetryCounterCache,
     placeholderResendCache,
+    maxMsgRetryCount: WA_MAX_MSG_RETRY_COUNT,
     // Fix de causa raiz: grupo @g.us não-monitorado e dessincronizado que
     // derrubava a sessão via retry-receipt agora é ACKado e descartado antes do
     // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
     // ignorar mensagem legítima enquanto a config ainda não carregou.
-    shouldIgnoreJid: (jid) => shouldIgnoreChatJid(jid, {
-      allowedJids: allowedChatJids,
-      enabled: IGNORE_UNMONITORED_GROUPS,
-      ready: allowedChatJidsReady,
-    }),
+    shouldIgnoreJid: (jid) => {
+      // Regra nova (Fase 2): olhar só o que foi escolhido. Com o modo `off`
+      // ela não decide nada e a regra antiga (lista de exceções) segue valendo
+      // para quem já ligou WA_IGNORE_UNMONITORED_GROUPS.
+      const scope = shouldIgnoreByChatScope(jid, {
+        mode: CHAT_SCOPE_MODE,
+        allowedJids: allowedChatJids,
+        ready: allowedChatJidsReady,
+        selfJids: selfChatJids,
+        disabled: chatScopeDisabled,
+      })
+      if (scope.ignore) {
+        recordChatScopeIgnored(scope.type, normalizeChatScopeJid(jid))
+        return true
+      }
+      return shouldIgnoreChatJid(jid, {
+        allowedJids: allowedChatJids,
+        enabled: IGNORE_UNMONITORED_GROUPS,
+        ready: allowedChatJidsReady,
+      })
+    },
   })
 
   pendingSock = sock
@@ -2235,7 +2482,7 @@ async function startBotInner() {
   // Aquece o allowlist antes de qualquer mensagem chegar (o shouldIgnoreJid é
   // síncrono; sem isso o 1º lote de mensagens passaria com ready=false). Best
   // effort — se falhar, o ready-guard mantém o comportamento seguro (não ignora).
-  if (IGNORE_UNMONITORED_GROUPS) void getConfig().catch(() => {})
+  if (IGNORE_UNMONITORED_GROUPS || CHAT_SCOPE_MODE !== CHAT_SCOPE_MODES.OFF) void getConfig().catch(() => {})
 
   sock.ev.on('creds.update', saveCreds)
 
@@ -2344,12 +2591,19 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // concluída". O reset agora é decidido no close, só se a sessão foi estável
       // (shouldResetBackoff). Aqui só marcamos quando ela abriu.
       connectionOpenedAt = Date.now()
+      // Conectou: o orçamento de tentativas volta ao zero.
+      everOpened = true
+      consecutiveFailedReconnects = 0
       const wasReconnecting = disconnectedSinceMs != null
       activeSock = sock
       pendingSock = null
       disconnectedSinceMs = null
       pairingState.clear()
       const phone = sock.user?.id?.split(':')[0] ?? null
+      // Identidades da própria conta (número e `@lid`), para a regra de escopo
+      // nunca ignorar o que chega pela própria conta — é por aí que vêm o
+      // histórico e as notificações que alimentam "Canais que sigo".
+      selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
       recordWaConnectionEventSafe({
@@ -2397,9 +2651,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         })
         stuckMessageTimestamps = stuckResult.state
         if (stuckResult.stuck) {
+          const newlyQuarantined = msgRetryCounterCache.quarantine(stuckMsgId)
           logger.error(
-            { msgId: stuckMsgId, count: stuckResult.count, windowMs: STUCK_MSG_WINDOW_MS },
-            'Mensagem travada em loop de retry-receipt derrubando a sessão repetidamente — ver AGENTS.md "Loop de retry-receipt travado"'
+            { msgId: stuckMsgId, count: stuckResult.count, windowMs: STUCK_MSG_WINDOW_MS, quarantined: true, newlyQuarantined },
+            'Mensagem travada em loop de retry-receipt colocada em quarentena durável; a próxima conexão não pedirá novo retry'
           )
           try { recordOperationalSignal('wa_stuck_message_retry', { userId, msgId: stuckMsgId, count: stuckResult.count }) } catch {}
         }
@@ -2641,6 +2896,39 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           delayMs = calcReconnectDelayMs()
           reconnectAttempts++
           logger.warn({ code, attempt: reconnectAttempts, delayMs, stuckMsgId: stuckMsgId || undefined }, 'WA conexão fechada, agendando restart automático')
+        }
+        // Teto de tentativas sem sucesso (RCA 2026-08-28). Só vale para o close
+        // genérico: pareamento e `replaced` têm caminhos próprios. Conexão que
+        // abre zera o contador, então a frota saudável nunca chega aqui.
+        consecutiveFailedReconnects++
+        const ritmo = decideRetryPace({
+          consecutiveFailures: consecutiveFailedReconnects,
+          everConnected: everOpened,
+          baseDelayMs: delayMs,
+          giveupAttempts: RETRY_GIVEUP_ATTEMPTS,
+          slowIntervalMs: RETRY_SLOW_INTERVAL_MS,
+          neverConnectedMax: RETRY_NEVER_CONNECTED_MAX,
+        })
+        if (ritmo.action === RETRY_ACTION.STOP) {
+          // Nunca abriu nenhuma vez: sem credencial válida o WhatsApp não vai
+          // aceitar, e insistir é só exposição (reconexão repetida é o padrão
+          // associado a chip restringido). Quem resolve é a cliente lendo o QR.
+          logger.error(
+            { code, tentativas: consecutiveFailedReconnects, motivo: ritmo.reason },
+            'Sessão nunca conectou e esgotou as tentativas — parando de tentar. Só volta com um novo pareamento (QR) pela cliente.'
+          )
+          try { recordOperationalSignal('wa_retry_giveup', { userId, code, tentativas: consecutiveFailedReconnects }) } catch {}
+          recordWaConnectionEventSafe({ userId, type: 'retry_giveup', code, lifecycle: 'disconnected', ownerInstance: OWNER_INSTANCE, metadata: { tentativas: consecutiveFailedReconnects } })
+          await persistSessionPatch({ status: 'disconnected', lifecycle: 'disconnected' }).catch(() => {})
+          return
+        }
+        if (ritmo.action === RETRY_ACTION.SLOW && ritmo.delayMs > delayMs) {
+          logger.warn(
+            { code, tentativas: consecutiveFailedReconnects, delayMs: ritmo.delayMs },
+            'Muitas tentativas seguidas sem conectar — desacelerando a reconexão (continua tentando sozinho, só mais espaçado)'
+          )
+          try { recordOperationalSignal('wa_retry_slowed', { userId, code, tentativas: consecutiveFailedReconnects }) } catch {}
+          delayMs = ritmo.delayMs
         }
         scheduleReconnect(delayMs, { code, reason: f.flapping ? 'flap_cooldown' : wasStable ? 'stable_close' : 'close' })
       }
@@ -2912,12 +3200,19 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
       // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
       // { buffer, mimetype } pronto para enviar à Baileys, respeitando a
-      // configuração de imagem do grupo monitorado.
+      // configuração de imagem recebida do destino.
       // Estratégia de imagem para mensagens de cupom. Atribuído UMA vez logo após
       // o guard de title_mismatch (que já raspa o og:title do produto), e lido
       // por getImage() no dequeue. Default false = ofertas normais sempre buscam
       // hi-res. Ver decideSkipActiveFetchForCoupon() para a lógica completa.
       let couponSkipActiveFetch = false
+      // Trocar a foto da MENSAGEM DE ORIGEM pela foto oficial da loja quando o
+      // link aponta para um produto identificado. Atribuído junto com
+      // couponSkipActiveFetch (depois do guard de title_mismatch, que é quem
+      // calcula o titleOverlap) e lido por getImage() no dequeue. Sem isso, a
+      // origem que anexa foto própria republica a marca d'água do concorrente
+      // — RCA 2026-08-27, ver core/storePhotoPreference.js.
+      let preferStorePhoto = false
 
       // Eleição canônica do link principal entre múltiplas URLs da mesma
       // mensagem. A mesma escolha precisa governar:
@@ -2993,7 +3288,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           fetchImageBuffer,
           fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
           skipActiveFetch: couponSkipActiveFetch,
+          preferStorePhoto,
+          onStorePhotoPreferred: info => {
+            try { recordOperationalSignal('store_photo_over_origin', { userId, msgId: msg.key.id, ...info }) } catch {}
+          },
           logger,
+          // Miniatura pequena demais para publicar: a oferta sai SEM imagem
+          // (card de link do WhatsApp) em vez de com borrão. Sinal durável para
+          // medir quanto isso acontece por loja — ver thumbnailQualityPolicy.js.
+          onThumbnailDropped: info => {
+            try { recordOperationalSignal('monitored_thumbnail_dropped', { userId, msgId: msg.key.id, ...info }) } catch {}
+          },
         })
         cachedImages.set(effectiveMode, resolved)
         return resolved
@@ -3278,7 +3583,31 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         logger.info({ msgId: msg.key.id, hasProductLink, titleOverlap, looksGeneric: couponLooksGeneric, couponSkipActiveFetch }, 'estratégia de imagem para mensagem de cupom')
       }
 
-      const baseDestinations = monitorGroup?.targetPostJids?.length ? monitorGroup.targetPostJids : cfg.groups.post
+      preferStorePhoto = shouldPreferStorePhoto({
+        linkKind: primary.linkKind,
+        titleOverlap,
+        isCouponMsg,
+        enabled: isStorePhotoPreferenceEnabled(),
+      })
+
+      // Para onde essa mensagem vai. A decisão inteira mora em
+      // core/destinationRouting.js: origem com destinos escolhidos no painel
+      // ('explicit') NUNCA cai no espelhamento para todos os destinos da conta,
+      // mesmo que a lista tenha ficado vazia porque a cliente apagou os grupos
+      // que havia escolhido (RCA 2026-08-26).
+      const routing = resolveMonitorDestinations({
+        targetsMode: monitorGroup?.targetsMode,
+        targetPostJids: monitorGroup?.targetPostJids,
+        allPostJids: cfg.groups.post,
+      })
+      const baseDestinations = routing.destinations
+      if (routing.reason === DESTINATION_REASON.FALLBACK_ALL && baseDestinations.length) {
+        logger.warn({ sourceJid: jid, destCount: baseDestinations.length }, 'Origem sem destino escolhido: espelhando para TODOS os destinos da conta')
+        recordOperationalSignal('mirror_fallback_all_destinations', { userId, sourceJid: jid, destCount: baseDestinations.length })
+      }
+      if (routing.reason === DESTINATION_REASON.EXPLICIT_EMPTY) {
+        logger.warn({ sourceJid: jid }, 'Origem com destinos escolhidos, porém nenhum destino válido restou — nada será enviado')
+      }
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.
@@ -3589,7 +3918,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             logger.warn({ err: err?.message, logId: log.id }, 'Falha ao vincular SendDedupKey ao MessageLog')
           })
         }
-        let sentVia = 'text'
+        // COMO esta oferta saiu, preenchido por buildPayload no dequeue e
+        // persistido no MessageLog quando o envio dá certo. Antes daqui existia
+        // um `sentVia` que nascia 'text' e nunca era atualizado — ou seja, o
+        // painel sabia que o envio deu certo, mas não sabia se a cliente recebeu
+        // foto, card ou texto pelado. Era esse buraco que fazia todo problema de
+        // imagem ser descoberto pela cliente, e não por nós.
+        const deliveryInfo = { kind: null, originImageBytes: null }
 
         // PR-5.B.2: variação de copy por canal-destino. Aplica só em canal —
         // em grupo não há fingerprint de "mesma mensagem em N", então mantém
@@ -3616,6 +3951,16 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
+          // Quanto a MENSAGEM DE ORIGEM trouxe de imagem. `getOriginalPhotoOnce`
+          // é memoizado por mensagem, então isto não gera download extra — e é o
+          // dado que separa "não havia foto" de "havia foto e se perdeu".
+          try {
+            const origem = await getOriginalPhotoOnce()
+            deliveryInfo.originImageBytes = origem?.buffer?.length ?? 0
+          } catch {
+            deliveryInfo.originImageBytes = null
+          }
+
           // Modo "preview": envia uma única mensagem de texto com link preview
           // clicável do WhatsApp (card grande via thumbnail HQ upada — ver
           // buildManualLinkPreview). Não envia imageMessage: o clique no card
@@ -3652,7 +3997,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // imagem (preview e não-preview) concordam sobre produto-vs-cupom. O
             // sinal de vitrine ML (warning) segue como gatilho independente.
             const couponTextSignal = couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used'
+            let fonteDaFoto = null
             const linkPreview = await buildManualLinkPreview({
+              onFonteDaFoto: fonte => { fonteDaFoto = fonte },
               text: variantText,
               primary,
               credentialsMap: cfg.credentials,
@@ -3666,6 +4013,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // download duplicado da mesma mídia.
               fetchOriginPhoto: getOriginalPhotoOnce,
             })
+            deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
               finalText: variantText,
               image: null,
@@ -3689,6 +4037,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               caption: hasCaption ? variantText : undefined,
               forwardNewsletter: null,
             })
+            deliveryInfo.kind = DELIVERY_KIND.RELAY
             return {
               _route: 'relay',
               relay: {
@@ -3750,6 +4099,47 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             }
           }
 
+          // Sem imagem, `useLinkPreview` sozinho só liga o preview AUTOMÁTICO do
+          // Baileys (generateHighQualityLinkPreview). Ele não resolve link de
+          // afiliado encurtado (s.shopee.com.br, amzn.to, meli.la) — é a
+          // limitação que abre o comentário de monitoredImageResolver.js —, e aí
+          // a oferta chega no grupo como TEXTO PELADO, sem foto e sem card.
+          // Foi o que aconteceu ao ligar o piso de qualidade da miniatura em
+          // 2026-08-26: trocamos foto ruim por nenhuma imagem, que é pior.
+          //
+          // Montamos então o MESMO card manual do modo preview (foto da loja →
+          // plano B com a foto da mensagem de origem). A oferta sai com card
+          // clicável e com a foto que houver; a miniatura pequena, renderizada
+          // dentro de um card, é legível — o problema original era ela ampliada
+          // como imagem de corpo inteiro.
+          if (useLinkPreview && !image) {
+            let fonteDaFotoFallback = null
+            const fallbackPreview = await buildManualLinkPreview({
+              onFonteDaFoto: fonte => { fonteDaFotoFallback = fonte },
+              text: variantText,
+              primary,
+              credentialsMap: cfg.credentials,
+              uploadToServer: activeSock?.waUploadToServer,
+              destJid,
+              couponTextSignal: couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used',
+              fetchOriginPhoto: getOriginalPhotoOnce,
+              // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
+              // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
+              allowSmallOriginPhoto: true,
+            }).catch(err => {
+              logger.warn({ err: err?.message, destJid }, 'Card de fallback sem imagem falhou; oferta sai como texto')
+              return null
+            })
+            deliveryInfo.kind = fallbackPreview ? kindDoCard(fonteDaFotoFallback) : DELIVERY_KIND.TEXTO
+            return buildMonitoredMessagePayload({
+              finalText: variantText,
+              image: null,
+              useLinkPreview: true,
+              linkPreview: fallbackPreview,
+            })
+          }
+
+          deliveryInfo.kind = image ? DELIVERY_KIND.FOTO : DELIVERY_KIND.TEXTO
           return buildMonitoredMessagePayload({
             finalText: variantText,
             image,
@@ -3761,6 +4151,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           type: 'converted',
           logId: log.id,
           destJid,
+          // Revalidação no dequeue (core/destinationRouting.js): o job pode
+          // esperar minutos/horas na fila e a cliente pode desvincular/apagar o
+          // destino nesse meio-tempo.
+          sourceJid: jid,
           platforms,
           plan: cfg.plan,
           // Só o stagger entre destinos fica congelado no job; o freio de fila
@@ -3769,9 +4163,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
           buildPayload,
+          // Referência viva: buildPayload roda no dequeue e preenche este mesmo
+          // objeto, que processSendJob lê depois para gravar no MessageLog.
+          deliveryInfo,
           onDone: async (result) => {
             if (result.ok) {
-              logger.info({ destJid, platforms, sentVia }, 'Mensagem enviada')
+              logger.info({ destJid, platforms, deliveryKind: deliveryInfo.kind, originImageBytes: deliveryInfo.originImageBytes }, 'Mensagem enviada')
               if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
@@ -3791,6 +4188,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info({ type, count: messages.length }, 'messages.upsert recebido')
+    markUpsertReceived()
     if (type !== 'notify' && type !== 'append') return
     const cutoff = Date.now() - INCOMING_MAX_AGE_MS
 
@@ -3912,6 +4310,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         hasValidTimestamp,
         ageMs: msgTs ? now - msgTs : null,
       }, 'Mensagem aceita para processamento')
+      markMessageAccepted()
 
       const msgId = msg.key.id || dedupKey || `${msg.key.remoteJid || 'unknown'}:${msgTsRaw || now}`
       const accepted = incomingQueue.enqueue(() => processIncomingMessage(msg, sock), {
@@ -4148,7 +4547,7 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), worker: workerMetadata } })
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata } })
   }
 
   if (msg?.type === 'broadcast') {

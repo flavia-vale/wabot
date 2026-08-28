@@ -49,11 +49,36 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Oferta espelhada saiu sem foto porque o card de preview não conseguiu
   // imagem. Durável para comparar por loja e por etapa ao longo dos dias.
   preview_card_no_image: 'ops_preview_card_no_image',
+  // Sessão conectada e SEM receber mensagem útil, com evidência de tráfego
+  // chegando e falhando (RCA 2026-08-26: painel verde e espelhamento parado).
+  wa_reception_blind: 'ops_wa_reception_blind',
+  // Escopo de conversas (Fase 2): resumo agregado do que foi ignorado por
+  // estar fora da lista de escolhidos. Nunca por mensagem.
+  wa_chat_scope_filtered: 'ops_wa_chat_scope_filtered',
+  // Freio de emergência: a conta parou de receber com a regra ligada e ela se
+  // desligou sozinha. Precisa de olho humano — é sinal de lista defasada ou de
+  // endereçamento novo do WhatsApp.
+  wa_chat_scope_auto_disabled: 'ops_wa_chat_scope_auto_disabled',
+  // Sessão que nunca conectou esgotou as tentativas e parou de tentar
+  // (RCA 2026-08-28). Precisa de novo pareamento pela cliente.
+  wa_retry_giveup: 'ops_wa_retry_giveup',
+  // Muitas tentativas seguidas sem conectar: reconexão desacelerada para não
+  // queimar o chip. Continua tentando sozinha, só mais espaçado.
+  wa_retry_slowed: 'ops_wa_retry_slowed',
   // Muro anti-robô do ML batendo no IP do servidor (RCA 2026-08-19/20).
   ml_anti_bot_wall: 'ops_ml_anti_bot_wall',
   // Card de preview salvo pelo plano B: loja sem foto, foto da mensagem de
   // origem no lugar. A oferta SAIU com card clicável e com imagem.
   preview_card_origin_fallback: 'ops_preview_card_origin_fallback',
+  // Miniatura abaixo do piso de qualidade: a oferta saiu sem imagem em vez de
+  // com borrão (RCA 2026-08-26).
+  monitored_thumbnail_dropped: 'ops_monitored_thumbnail_dropped',
+  // Origem sem destino explícito espelhando para todos os destinos da conta.
+  mirror_fallback_all_destinations: 'ops_mirror_fallback_all_destinations',
+  // Job descartado no dequeue: destino não está mais vinculado à origem.
+  send_dest_unlinked: 'ops_send_dest_unlinked',
+  // Foto da loja usada no lugar da foto da origem (evita marca d'água de terceiro).
+  store_photo_over_origin: 'ops_store_photo_over_origin',
 }
 
 let cachedTrackFn = null
