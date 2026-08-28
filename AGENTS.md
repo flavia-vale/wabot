@@ -1736,42 +1736,44 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
-## Sessão presa em reconexão sumia da ressurreição (RCA 2026-08-27 — não regredir)
+## Teto de tentativas de reconexão sem sucesso (RCA 2026-08-28 — não regredir)
 
-Duas regras que, isoladas, fazem sentido, criavam juntas uma sessão morta que
-**só voltava com a cliente clicando em "Conectar"**:
+Três contas somaram **281 das ~380 quedas de 12h** — 94, 94 e 93 tentativas com
+**zero** conexões bem-sucedidas, nenhuma delas com mensagem travada. Eram
+sessões que tentavam a cada ~8min e o WhatsApp nunca aceitava.
 
-1. Passando de `WA_HEARTBEAT_MAX_RECONNECTING_MS` (2min) presa, o worker grava
-   `status='disconnected'` com `lifecycle='reconnecting'`
-   (`buildHeartbeatSessionPatch`) — a válvula que impede o painel de esconder um
-   loop de reconexão da cliente.
-2. O health monitor (supervisor em `remote`, `sessionCore` em `inline`) só
-   ressuscitava sessões com `status IN ('connected','connecting')`.
+O gatilho foi a correção da ressurreição (RCA 2026-08-27): antes essas sessões
+morriam e ficavam quietas; depois passaram a ser levantadas de volta e a
+martelar. Medido nas três: de **0,6-1,9 quedas/h para 7-8/h**. Trocar "morta em
+silêncio" por "loop de reconexão" é pior — reconexão repetida é o padrão que o
+WhatsApp associa a robô, e o preço é chip restringido.
 
-Resultado: passou de 2 minutos → vira `disconnected` → **sai da lista de
-ressurreição**. Quando o worker morria depois disso — OOM, exceção, ou o
-**próprio matador de zumbis do supervisor**, que derruba worker sem heartbeat
-*contando com a ressurreição do tick seguinte* — ninguém mais o levantava.
+`src/core/reconnectGiveupPolicy.js` (puro) resolve **desacelerando**, não
+parando:
 
-Medido em produção: sessões presas nesse estado por **4h e por 45 dias**; e
-clientes com quedas 428/515 que só voltaram após **8h, 18h e 29h**, sempre por
-ação manual delas. Diagnóstico: `SELECT ... WHERE status='disconnected' AND
-lifecycle='reconnecting'` lista as presas.
+| Situação | Regra | Efeito |
+|---|---|---|
+| Sessão que **já abriu** alguma vez e caiu | `WA_RETRY_GIVEUP_ATTEMPTS` (12) falhas seguidas → passa a tentar a cada `WA_RETRY_SLOW_INTERVAL_MS` (15min) | queda de rede/WhatsApp continua se recuperando sozinha; exposição cai ~75% |
+| Sessão que **nunca abriu** nesta credencial | `WA_RETRY_NEVER_CONNECTED_MAX` (10) → **para** e marca `lifecycle='disconnected'` | sem credencial válida o WhatsApp nunca aceita; quem resolve é a cliente lendo o QR |
 
-`src/core/sessionResurrectionPolicy.js` (puro) passa a reconhecer o que o
-próprio worker declarou: `reconnecting` = "eu ainda estava tentando".
-**Não afrouxa nada** — `stopped_by_user`, `auth_reset_required`,
-`disconnected` e `authenticating` continuam nunca sendo ressuscitados, e a
-parada deliberada vence até o status antigo. O orçamento de restarts
-(`restartBudget`) continua valendo por cima, então sessão que morre em loop
-ainda entra em quarentena em vez de churn.
+**Quem já conectou NUNCA é parada** — só desacelerada. Parar sessão de cliente
+pagante quebraria a promessa de robô 24h; a política de alta disponibilidade do
+projeto prefere indisponibilidade curta, e por isso o ritmo lento é 15min e não
+30. Qualquer `open` zera o contador, então a frota saudável nunca chega ao teto
+(hoje ninguém passa de 16 quedas/12h, todas com 100% de recuperação).
 
-**Não regredir:** não voltar a filtrar `status IN ('connected','connecting')`
-na mão em nenhum dos dois modos — há teste que falha se o filtro antigo
-reaparecer. A correção precisa valer nos DOIS (staging roda `inline`; sem ela
-lá, não dá nem para validar). Sinal `ops_wa_session_resurrected` mede quantas
-vezes o conserto salvou uma cliente. Rollback: `WA_RESURRECT_RECONNECTING=0`.
-Teste: `test/session-resurrection-policy.test.js`.
+**Não regredir:** o contador (`consecutiveFailedReconnects`) e `everOpened`
+vivem em escopo de módulo — dentro de `startBotInner` zerariam a cada
+reconexão e o teto nunca seria atingido (mesma lição do `msgRetryCounterCache`).
+`everOpened` é de propósito mais frouxo que `everHadStableOpen`: para a PARADA
+definitiva só vale "nunca chegou a abrir", não "abriu e não ficou estável". O
+teto age só no close genérico — pareamento e `replaced` têm caminhos próprios.
+Sinais `ops_wa_retry_slowed` e `ops_wa_retry_giveup`. Rollback:
+`WA_RETRY_GIVEUP_ATTEMPTS=0` e `WA_RETRY_NEVER_CONNECTED_MAX=0`.
+Teste: `test/reconnect-giveup-policy.test.js`.
+
+Parar uma sessão à mão (marca como parada de propósito, não gera aviso de robô
+caído): `node scripts/parar-sessao.mjs <email>`.
 
 ## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
 
