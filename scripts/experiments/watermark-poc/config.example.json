@@ -1,0 +1,18 @@
+{
+  "defaults": {
+    "opacity": 0.68,
+    "maxWidthPercent": 42
+  },
+  "destinations": [
+    {
+      "jid": "grupo-teste-a@g.us",
+      "text": "ACHADINHOS DA MARIA",
+      "position": "bottom-right"
+    },
+    {
+      "jid": "canal-teste-b@newsletter",
+      "text": "CANAL DA MARIA",
+      "position": "bottom-left"
+    }
+  ]
+}

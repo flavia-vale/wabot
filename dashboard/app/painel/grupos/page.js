@@ -64,6 +64,7 @@ function CfgIcon({ name, size = 17 }) {
   if (name === 'search') return <svg {...p}><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M10.5 6.5 8.5 10.2h3L9.5 13.8"/></svg>
   if (name === 'bolt')   return <svg {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
   if (name === 'send')   return <svg {...p}><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+  if (name === 'image')  return <svg {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>
   if (name === 'check')  return <svg {...p} strokeWidth={2.8}><path d="M5 12.5 10 17 19 7"/></svg>
   if (name === 'x')      return <svg {...p} strokeWidth={2}><path d="M6 6l12 12M18 6 6 18"/></svg>
   if (name === 'plus')   return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>
@@ -575,8 +576,55 @@ export default function GruposPage() {
   })()
 
   function renderPostConfig(g) {
+    const destinationImageMode = ['original', 'original_watermark', 'preview'].includes(g.imageMode) ? g.imageMode : 'original'
+    const watermarkMode = destinationImageMode === 'original_watermark'
     return (
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 14 }}>
+        <CfgSection icon="image" title="Imagem das ofertas" desc="Escolha como as ofertas aparecem neste destino.">
+          <CfgRow
+            label="Modo da imagem"
+            hint={destinationImageMode === 'preview'
+              ? 'Card clicável: tocar na imagem abre o link da oferta.'
+              : watermarkMode
+                ? 'Foto original com a identificação deste destino.'
+                : 'Usa a foto que veio na mensagem monitorada.'}
+          >
+            <select
+              className="pnl-input"
+              value={destinationImageMode}
+              onChange={(e) => {
+                const nextMode = e.target.value
+                handleUpdateGroup(g.id, {
+                  imageMode: nextMode,
+                  ...(nextMode === 'original_watermark' && !(g.watermarkText ?? '').trim()
+                    ? { watermarkText: String(g.name ?? '').trim().slice(0, 50) }
+                    : {}),
+                })
+              }}
+            >
+              <option value="original">Original</option>
+              <option value="original_watermark">Original com marca d&apos;água</option>
+              <option value="preview">Preview clicável</option>
+              <option value="preview_watermark" disabled>Preview com marca d&apos;água — em breve</option>
+            </select>
+          </CfgRow>
+          {watermarkMode && (
+            <CfgRow
+              label="Texto da marca d&apos;água"
+              hint={`${[...(g.watermarkText ?? '')].length}/50 caracteres · aparece apenas neste destino.`}
+              last
+              extra="cfg-fadeup"
+            >
+              <input
+                className="pnl-input"
+                value={g.watermarkText ?? ''}
+                maxLength={50}
+                placeholder="Ex.: Achadinhos da Maria"
+                onChange={(e) => handleUpdateGroup(g.id, { watermarkText: e.target.value })}
+              />
+            </CfgRow>
+          )}
+        </CfgSection>
         <div>
           <p className="pnl-label" style={{ marginBottom: 6 }}>Mensagem de boas-vindas</p>
           <textarea
@@ -708,7 +756,7 @@ export default function GruposPage() {
                       {savingGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>salvando…</span>}
                       {savedGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--success)' }}>salvo</span>}
                       <button type="button" className="pnl-link-btn" aria-expanded={configOpen} onClick={() => setExpandedConfigId(configOpen ? null : g.id)}>
-                        {configOpen ? 'Fechar' : (tab === 'monitor' ? 'Filtros' : 'Config')}
+                        {configOpen ? 'Fechar' : 'Filtros'}
                       </button>
                       <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(g)}>Remover</button>
                     </div>

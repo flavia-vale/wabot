@@ -111,7 +111,8 @@ model Group {
   name                  String
   role                  String
   kind                  String              @default("group")
-  imageMode             String              @default("preview")
+  imageMode             String              @default("original")
+  watermarkText         String?
   imageLinkTarget       String              @default("first")
   fallbackToOriginal    Boolean             @default(false)
   forwardMode           String              @default("LINK_ONLY")

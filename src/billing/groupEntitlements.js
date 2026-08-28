@@ -1,6 +1,6 @@
 import { JID_KIND } from '../core/jid.js'
 import { canUseChannels } from './plans.js'
-import { resolveGroupImageMode } from '../core/imageModePolicy.js'
+import { resolveDestinationImageMode } from '../core/imageModePolicy.js'
 
 function isChannelGroup(group) {
   return group?.kind === JID_KIND.CHANNEL
@@ -11,16 +11,6 @@ function toMonitorGroup(group, targetPostJids = []) {
     id: group.id,
     waJid: group.waJid,
     kind: group.kind,
-    // CHOKEPOINT: o valor persistido em `Group.imageMode` é IGNORADO. O modo é
-    // único para todo mundo e vem da env global (`GROUP_IMAGE_MODE`, padrão
-    // `original` = "a foto que veio na oferta").
-    //
-    // A escolha por grupo chegou a voltar à tela em 2026-08-22 e foi retirada
-    // no mesmo dia: com ela ligada em produção apareceu divergência entre o que
-    // o painel mostrava e o que saía no grupo, e a prioridade passou a ser
-    // manter as clientes funcionando. Não reintroduzir a leitura de
-    // `group.imageMode` aqui sem antes fechar aquela investigação.
-    imageMode: resolveGroupImageMode(),
     imageLinkTarget: group.imageLinkTarget ?? 'first',
     fallbackToOriginal: true,
     blockedKeywords: group.blockedKeywords,
@@ -44,6 +34,8 @@ function toPostDetail(group) {
     welcomeMsg: group.welcomeMsg,
     channelButtonJid: group.channelButtonJid ?? null,
     channelButtonName: group.channelButtonName ?? null,
+    imageMode: resolveDestinationImageMode(group.imageMode),
+    watermarkText: group.watermarkText ?? null,
   }
 }
 
