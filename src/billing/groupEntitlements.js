@@ -1,6 +1,6 @@
 import { JID_KIND } from '../core/jid.js'
 import { canUseChannels } from './plans.js'
-import { resolveGroupImageMode } from '../core/imageModePolicy.js'
+import { resolveDestinationImageMode } from '../core/imageModePolicy.js'
 
 function isChannelGroup(group) {
   return group?.kind === JID_KIND.CHANNEL
@@ -11,16 +11,10 @@ function toMonitorGroup(group, targetPostJids = []) {
     id: group.id,
     waJid: group.waJid,
     kind: group.kind,
-    // CHOKEPOINT: o valor persistido em `Group.imageMode` é IGNORADO. O modo é
-    // único para todo mundo e vem da env global (`GROUP_IMAGE_MODE`, padrão
-    // `original` = "a foto que veio na oferta").
-    //
-    // A escolha por grupo chegou a voltar à tela em 2026-08-22 e foi retirada
-    // no mesmo dia: com ela ligada em produção apareceu divergência entre o que
-    // o painel mostrava e o que saía no grupo, e a prioridade passou a ser
-    // manter as clientes funcionando. Não reintroduzir a leitura de
-    // `group.imageMode` aqui sem antes fechar aquela investigação.
-    imageMode: resolveGroupImageMode(),
+    // A estratégia de imagem (e a marca d'água) pertence ao DESTINO — ver
+    // toPostDetail() abaixo e src/core/imageModePolicy.js. A origem NUNCA leu
+    // `imageMode`; `Group.imageMode` continua na coluna de grupos role='monitor'
+    // só por compatibilidade de schema, e não é propagado para cá de propósito.
     imageLinkTarget: group.imageLinkTarget ?? 'first',
     fallbackToOriginal: true,
     blockedKeywords: group.blockedKeywords,
@@ -40,6 +34,13 @@ function toPostDetail(group) {
     welcomeMsg: group.welcomeMsg,
     channelButtonJid: group.channelButtonJid ?? null,
     channelButtonName: group.channelButtonName ?? null,
+    // Modo de imagem e texto da marca são escolhidos POR DESTINO — cada grupo/
+    // canal de postagem pode mostrar a mesma oferta de um jeito diferente. Ver
+    // src/core/imageModePolicy.js (resolveDestinationImageMode cai em
+    // 'original' para valor ausente/desconhecido, nunca deixa o worker sem
+    // modo) e src/bot-worker.js (resolução por destino no loop de envio).
+    imageMode: resolveDestinationImageMode(group.imageMode),
+    watermarkText: group.watermarkText ?? null,
   }
 }
 

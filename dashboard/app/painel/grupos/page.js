@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -67,6 +67,7 @@ function CfgIcon({ name, size = 17 }) {
   if (name === 'check')  return <svg {...p} strokeWidth={2.8}><path d="M5 12.5 10 17 19 7"/></svg>
   if (name === 'x')      return <svg {...p} strokeWidth={2}><path d="M6 6l12 12M18 6 6 18"/></svg>
   if (name === 'plus')   return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>
+  if (name === 'image')  return <svg {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>
   return null
 }
 
@@ -481,6 +482,23 @@ export default function GruposPage() {
     }
   }
 
+  // Digitar o texto da marca d'água dispara `handleUpdateGroup` a cada tecla
+  // (mesmo padrão da mensagem de boas-vindas). Sem atraso, cada tecla vira um
+  // PUT /groups/:id imediato, que por sua vez recarrega a config do worker —
+  // em conta com muitos grupos isso soma requisições desnecessárias enquanto a
+  // pessoa ainda está digitando. Debounce curto só para este campo: a tela
+  // continua mostrando o valor digitado na hora (setGroups já é síncrono
+  // dentro de handleUpdateGroup), só o PUT em si é atrasado.
+  const watermarkSaveTimers = useRef({})
+  function handleUpdateGroupDebounced(id, data, delayMs = 500) {
+    setGroups((prev) => prev.map((g) => g.id === id ? { ...g, ...data } : g))
+    if (watermarkSaveTimers.current[id]) window.clearTimeout(watermarkSaveTimers.current[id])
+    watermarkSaveTimers.current[id] = window.setTimeout(() => {
+      delete watermarkSaveTimers.current[id]
+      handleUpdateGroup(id, data)
+    }, delayMs)
+  }
+
   async function openTargetEditor(groupId) {
     setActionError('')
     setTargetLoading(true)
@@ -562,8 +580,63 @@ export default function GruposPage() {
   })()
 
   function renderPostConfig(g) {
+    const destinationImageMode = ['original', 'original_watermark', 'preview'].includes(g.imageMode) ? g.imageMode : 'original'
+    const watermarkMode = destinationImageMode === 'original_watermark'
     return (
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 14 }}>
+        <CfgSection icon="image" title="Imagem das ofertas" desc="Escolha como as ofertas aparecem neste destino — a mesma oferta pode sair diferente em cada grupo/canal.">
+          <CfgRow
+            label="Modo da imagem"
+            hint={destinationImageMode === 'preview'
+              ? 'Card clicável: tocar na imagem abre o link da oferta.'
+              : watermarkMode
+                ? 'Foto original da oferta, com a identificação deste destino.'
+                : 'Usa a foto que veio na mensagem monitorada.'}
+          >
+            <select
+              className="pnl-input"
+              value={destinationImageMode}
+              onChange={(e) => {
+                const nextMode = e.target.value
+                handleUpdateGroup(g.id, {
+                  imageMode: nextMode,
+                  // Ao ligar a marca pela 1ª vez sem texto salvo, sugere o
+                  // nome do próprio destino — a pessoa pode trocar depois.
+                  ...(nextMode === 'original_watermark' && ![...(g.watermarkText ?? '')].join('').trim()
+                    ? { watermarkText: [...String(g.name ?? '').trim()].slice(0, 50).join('') }
+                    : {}),
+                })
+              }}
+            >
+              <option value="original">Original</option>
+              <option value="original_watermark">Original com marca d&apos;água</option>
+              <option value="preview">Preview clicável</option>
+              <option value="preview_watermark" disabled>Preview com marca d&apos;água — em breve</option>
+            </select>
+          </CfgRow>
+          {watermarkMode && (
+            <CfgRow
+              label="Texto da marca d&apos;água"
+              hint={`${[...(g.watermarkText ?? '')].length}/50 caracteres · aparece apenas neste destino.`}
+              last
+              extra="cfg-fadeup"
+            >
+              <input
+                className="pnl-input"
+                value={g.watermarkText ?? ''}
+                maxLength={50}
+                placeholder="Ex.: Achadinhos da Maria"
+                onChange={(e) => {
+                  // [...string] conta codepoints (não UTF-16 code units), igual
+                  // ao limite aplicado no servidor e no renderizador da marca —
+                  // os três nunca podem discordar sobre "50 caracteres".
+                  const clamped = [...e.target.value].slice(0, 50).join('')
+                  handleUpdateGroupDebounced(g.id, { watermarkText: clamped })
+                }}
+              />
+            </CfgRow>
+          )}
+        </CfgSection>
         <div>
           <p className="pnl-label" style={{ marginBottom: 6 }}>Mensagem de boas-vindas</p>
           <textarea
@@ -579,7 +652,7 @@ export default function GruposPage() {
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <p className="pnl-label" style={{ marginBottom: 6 }}>Botão &quot;Ver canal&quot; ao final das mensagens</p>
             <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              As ofertas deste grupo saem com a <strong>foto que veio na oferta</strong> + o texto. O botão é a única diferença: <strong>com canal escolhido</strong>, a mensagem leva o botão &quot;Ver canal&quot; no fim; <strong>sem canal</strong>, ela sai igual, só sem o botão. Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão (o WhatsApp só aceita esse botão em mensagem com imagem).
+              O botão é a única diferença: <strong>com canal escolhido</strong>, a mensagem leva o botão &quot;Ver canal&quot; no fim; <strong>sem canal</strong>, ela sai igual, só sem o botão. Com canal escolhido, a foto sempre vem da mensagem original (o card clicável não aceita esse botão). Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão (o WhatsApp só aceita esse botão em mensagem com imagem).
             </p>
             {g.channelButtonJid ? (
               <div style={{ display: 'grid', gap: 8 }}>
