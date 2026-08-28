@@ -99,6 +99,19 @@ test('o worker registra COMO a oferta saiu em todos os caminhos de montagem', ()
   assert.match(workerSource, /\.\.\.\(entrega\.kind \? \{ deliveryKind: entrega\.kind \} : \{\}\)/, 'precisa persistir no MessageLog')
 })
 
+// O import sumiu num merge (2026-08-28): duas mudanças adicionaram uma linha na
+// MESMA posição do bloco de imports, o merge ficou com uma só, e o `main` foi
+// para produção com `DELIVERY_KIND is not defined` — ReferenceError em TODO
+// caminho de montagem de mensagem, ou seja, espelhamento inteiro quebrado. O
+// `no-undef` do CI pegou, mas o merge aconteceu com o CI vermelho.
+test('DELIVERY_KIND é importado onde é usado', () => {
+  assert.match(
+    workerSource,
+    /import \{[^}]*DELIVERY_KIND[^}]*\} from '\.\/core\/deliveryKind\.js'/,
+    'sem esse import o worker lança ReferenceError em todo envio espelhado',
+  )
+})
+
 test('a fonte da foto do card não entra no urlInfo (proto do WhatsApp)', () => {
   assert.match(workerSource, /onFonteDaFoto/, 'a fonte vai por callback')
   assert.ok(!/_fotoDaOrigem/.test(workerSource), 'campo estranho no urlInfo é risco — ver RCA do title no PR #1186')
