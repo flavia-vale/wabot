@@ -25,6 +25,7 @@ import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
+import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia } from './core/imageModePolicy.js'
 import db from './db.js'
@@ -3132,6 +3133,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // por getImage() no dequeue. Default false = ofertas normais sempre buscam
       // hi-res. Ver decideSkipActiveFetchForCoupon() para a lógica completa.
       let couponSkipActiveFetch = false
+      // Trocar a foto da MENSAGEM DE ORIGEM pela foto oficial da loja quando o
+      // link aponta para um produto identificado. Atribuído junto com
+      // couponSkipActiveFetch (depois do guard de title_mismatch, que é quem
+      // calcula o titleOverlap) e lido por getImage() no dequeue. Sem isso, a
+      // origem que anexa foto própria republica a marca d'água do concorrente
+      // — RCA 2026-08-27, ver core/storePhotoPreference.js.
+      let preferStorePhoto = false
 
       // Eleição canônica do link principal entre múltiplas URLs da mesma
       // mensagem. A mesma escolha precisa governar:
@@ -3201,6 +3209,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           fetchImageBuffer,
           fallbackToOriginal: monitorGroup.fallbackToOriginal !== false,
           skipActiveFetch: couponSkipActiveFetch,
+          preferStorePhoto,
+          onStorePhotoPreferred: info => {
+            try { recordOperationalSignal('store_photo_over_origin', { userId, msgId: msg.key.id, ...info }) } catch {}
+          },
           logger,
           // Miniatura pequena demais para publicar: a oferta sai SEM imagem
           // (card de link do WhatsApp) em vez de com borrão. Sinal durável para
@@ -3490,6 +3502,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       if (isCouponMsg) {
         logger.info({ msgId: msg.key.id, hasProductLink, titleOverlap, looksGeneric: couponLooksGeneric, couponSkipActiveFetch }, 'estratégia de imagem para mensagem de cupom')
       }
+
+      preferStorePhoto = shouldPreferStorePhoto({
+        linkKind: primary.linkKind,
+        titleOverlap,
+        isCouponMsg,
+        enabled: isStorePhotoPreferenceEnabled(),
+      })
 
       // Para onde essa mensagem vai. A decisão inteira mora em
       // core/destinationRouting.js: origem com destinos escolhidos no painel

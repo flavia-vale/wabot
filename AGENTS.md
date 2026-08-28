@@ -1231,6 +1231,50 @@ piso; não chamar `reloadConfig` sem `await` nas rotas. Testes:
 vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
 as sessões: avisar antes). Ver "código novo não carregado pelos bots".
 
+## Marca d'água do concorrente: origem que ANEXA foto própria (RCA 2026-08-27)
+
+Depois do conserto de 26/08, duas origens da mesma cliente voltaram a receber a
+foto limpa da loja e outras duas continuaram com a marca d'água do concorrente.
+A diferença **não** era conta, destino nem configuração: era o que cada origem
+manda.
+
+`resolveMonitoredImage` (modo `original`) tinha um atalho: foto cheia da origem
+(acima do limiar de miniatura) era republicada **direto**, sem nem tentar a
+loja. Origem que manda só a miniatura do card passava pelo upgrade e ganhava a
+foto oficial; origem que **anexa foto de verdade** nunca chegava lá — e essa
+foto é a do concorrente, marca d'água queimada em cima.
+
+Medido em produção (mesmas contas, mesmo minuto):
+
+| Origem | fotos de verdade | só miniatura |
+|---|---|---|
+| Ofertas da Gio | 0 | 1.746 |
+| OFERTAS BABY #2 | 0 | 679 |
+| Ofertas Mamãe Bebê #3 | 372 | 0 |
+| PROMO DO BEBÊ #12 | 100 | 0 |
+
+`core/storePhotoPreference.js` (`shouldPreferStorePhoto`) decide a troca, e ela
+é **conservadora de propósito** — buscar foto da loja para qualquer link já
+publicou produto ALEATÓRIO antes (camiseta branca 2026-06; banner em produto
+#1205/#1208). Só troca quando:
+
+- `linkKind === 'product'` — o conversor resolveu ASIN/MLB/(shopId,itemId)
+  antes de gerar o link curto. É a afirmação mais forte de que o link aponta
+  para UM produto, e cobre a Shopee, que não tem detector por regex mas marca
+  `linkKind` no próprio converter;
+- a mensagem não é de cupom (ali a ausência de produto é o normal);
+- `titleOverlap !== 'mismatch'`. `'unknown'` **não** bloqueia — a garantia vem
+  do `linkKind`, não do título, e Shopee cai sempre em `'unknown'`.
+
+**A troca é best-effort e nunca perde imagem**: loja sem foto mantém a foto da
+origem (foto com marca d'água > oferta sem foto). Sem preferência, o atalho
+histórico continua valendo e **não** custa rede a mais. Sinal durável
+`ops_store_photo_over_origin`; escape hatch `STORE_PHOTO_OVER_ORIGIN=false`.
+
+**Não regredir:** não afrouxar a trava para trocar sem `linkKind === 'product'`;
+não fazer a troca em mensagem de cupom; não deixar a oferta sair sem foto quando
+a loja falhar. Teste: `test/store-photo-over-origin.test.js`.
+
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando a mesma
