@@ -20,7 +20,7 @@ const DEFAULTS = Object.freeze({
   position: 'center',
   color: 'white',
   opacity: 0.5,
-  maxWidthPercent: 70,
+  maxWidthPercent: 55,
 })
 const MIN_WATERMARK_DIMENSION = 160
 
@@ -118,8 +118,11 @@ function buildCenteredOverlay({ imageWidth, imageHeight, config }) {
   const AVERAGE_GLYPH_RATIO = 0.62
   const fitFontSize = Math.floor(maxTextWidth / Math.max(1, longest * AVERAGE_GLYPH_RATIO))
   // Dois tetos: a largura pedida e uma fração do lado menor — sem o segundo,
-  // marca de 3 letras viraria um letreiro cobrindo a foto inteira.
-  const fontSize = Math.max(14, Math.min(fitFontSize, Math.round(shortSide * 0.2)))
+  // marca de 3 letras viraria um letreiro cobrindo a foto inteira. Os dois
+  // valores (55% da largura, 13% do lado menor) foram reduzidos em 2026-08-29
+  // a pedido da dona do produto: a marca precisa identificar a oferta sem
+  // competir com o produto na foto.
+  const fontSize = Math.max(14, Math.min(fitFontSize, Math.round(shortSide * 0.13)))
   const lineHeight = Math.round(fontSize * 1.15)
   const blockHeight = lineHeight * lines.length
   const firstBaseline = Math.round(imageHeight / 2 - blockHeight / 2 + fontSize * 0.82)
