@@ -16,6 +16,8 @@ import { usePainelHeader, PainelContentActions } from '../PainelShell'
 // importa aquele módulo: ele carrega `sharp`). test/watermark-limite-caracteres.test.js
 // falha se os números divergirem.
 const WATERMARK_TEXT_MAX_CHARS = 25
+// Quanto tempo a confirmação de "marca salva" fica na tela.
+const WATERMARK_SAVED_FEEDBACK_MS = 4000
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -311,14 +313,8 @@ function WatermarkTextField({ group, maxChars, draft, saving, savedAt, error, on
         }}
       />
       <div className="cfg-dest-actions">
-        <span className={`cfg-dest-status${dirty ? ' is-dirty' : ''}${justSaved ? ' is-saved' : ''}`} aria-live="polite">
-          {error
-            ? error
-            : dirty
-              ? `Não salvo · ${used}/${maxChars}`
-              : justSaved
-                ? 'Marca salva'
-                : `${used}/${maxChars} caracteres`}
+        <span className={`cfg-dest-status${dirty ? ' is-dirty' : ''}`}>
+          {dirty ? `Não salvo · ${used}/${maxChars}` : `${used}/${maxChars} caracteres`}
         </span>
         {dirty && (
           <button type="button" className="pnl-btn" onClick={() => onReset(group.id)} disabled={saving}>Desfazer</button>
@@ -327,6 +323,31 @@ function WatermarkTextField({ group, maxChars, draft, saving, savedAt, error, on
           {saving ? 'Salvando…' : 'Salvar marca'}
         </button>
       </div>
+
+      {/* Resposta ao clique em Salvar. Antes o resultado era uma troca de texto
+          de 12px na mesma linha do contador de caracteres — a cliente clicava e
+          não percebia se tinha salvado. Agora é um aviso com ícone, cor de
+          fundo e uma frase inteira, que aparece com animação: dá para ver com o
+          canto do olho, no celular, sem procurar.
+
+          `role="alert"` no erro (o leitor de tela interrompe e anuncia) e
+          `role="status"` no sucesso (anuncia sem interromper). */}
+      {(saving || justSaved || error) && (
+        <p
+          className={`cfg-save-feedback${error ? ' is-error' : justSaved ? ' is-ok' : ' is-busy'} cfg-fadeup`}
+          role={error ? 'alert' : 'status'}
+          aria-live={error ? 'assertive' : 'polite'}
+        >
+          {!saving && <CfgIcon name={error ? 'x' : 'check'} size={14} />}
+          <span>
+            {saving
+              ? 'Salvando a marca…'
+              : error
+                ? `Não deu para salvar: ${error}`
+                : 'Marca salva neste destino'}
+          </span>
+        </p>
+      )}
     </div>
   )
 }
@@ -674,6 +695,12 @@ export default function GruposPage() {
   const [watermarkSavedAt, setWatermarkSavedAt] = useState({})
   const [watermarkErrors, setWatermarkErrors] = useState({})
 
+  const watermarkSavedTimers = useRef({})
+  useEffect(() => {
+    const timers = watermarkSavedTimers.current
+    return () => { for (const timer of Object.values(timers)) clearTimeout(timer) }
+  }, [])
+
   const setWatermarkDraft = useCallback((id, value) => {
     setWatermarkDrafts((prev) => ({ ...prev, [id]: value }))
     setWatermarkErrors((prev) => (prev[id] ? { ...prev, [id]: '' } : prev))
@@ -699,6 +726,17 @@ export default function GruposPage() {
       setGroups((prev) => prev.map((g) => g.id === id ? { ...g, watermarkText: updated?.watermarkText ?? value } : g))
       resetWatermarkDraft(id)
       setWatermarkSavedAt((prev) => ({ ...prev, [id]: Date.now() }))
+      // A confirmação some sozinha depois de alguns segundos. Aviso de sucesso
+      // que fica para sempre na tela deixa de ser aviso: na próxima visita a
+      // pessoa lê "Marca salva" sem ter salvado nada agora.
+      clearTimeout(watermarkSavedTimers.current[id])
+      watermarkSavedTimers.current[id] = setTimeout(() => {
+        setWatermarkSavedAt((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+      }, WATERMARK_SAVED_FEEDBACK_MS)
     } catch (err) {
       // O erro nasce AO LADO do campo. Nada de `load()` aqui: recarregar todos
       // os grupos era o que apagava o texto que a pessoa acabou de escrever.

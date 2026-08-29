@@ -85,3 +85,41 @@ test('o limite de caracteres continua vindo de uma constante única', () => {
   assert.match(field, /maxLength=\{maxChars\}/)
   assert.match(field, /\[\.\.\.e\.target\.value\]\.slice\(0, maxChars\)/)
 })
+
+// Segundo relato da mesma cliente (2026-08-29): "quando clico em salvar marca,
+// precisa aparecer algo para o usuário confirmando visualmente que foi salvo ou
+// não". A confirmação existia, mas era uma troca de texto de 12px na linha do
+// contador de caracteres — passava despercebida.
+
+test('o clique em Salvar tem resposta visível: salvando, salvou e falhou', () => {
+  const field = watermarkField()
+  assert.match(field, /className=\{`cfg-save-feedback/, 'a confirmação precisa ter faixa própria, não só troca de texto')
+  assert.match(field, /Salvando a marca…/)
+  assert.match(field, /Marca salva neste destino/)
+  assert.match(field, /Não deu para salvar: \$\{error\}/, 'a falha precisa dizer o motivo, junto do campo')
+  assert.match(field, /CfgIcon name=\{error \? 'x' : 'check'\}/)
+})
+
+test('quem não enxerga a tela também é avisado', () => {
+  const field = watermarkField()
+  assert.match(field, /role=\{error \? 'alert' : 'status'\}/, 'erro interrompe o leitor de tela; sucesso não')
+  assert.match(field, /aria-live=\{error \? 'assertive' : 'polite'\}/)
+})
+
+test('a confirmação de sucesso some sozinha', () => {
+  // Aviso de sucesso permanente deixa de ser aviso: na visita seguinte a pessoa
+  // leria "Marca salva" sem ter salvado nada.
+  assert.match(page, /const WATERMARK_SAVED_FEEDBACK_MS = \d+/)
+  assert.match(page, /watermarkSavedTimers/)
+  const start = page.indexOf('const saveWatermarkText =')
+  const fn = page.slice(start, page.indexOf('}, [resetWatermarkDraft])', start))
+  assert.match(fn, /setTimeout\(/)
+  assert.match(fn, /clearTimeout\(watermarkSavedTimers\.current\[id\]\)/, 'salvar duas vezes não pode deixar timer órfão')
+})
+
+test('as faixas de confirmação têm estilo próprio na folha de estilo', () => {
+  const css = readFileSync(new URL('../dashboard/app/painel/painel.css', import.meta.url), 'utf8')
+  for (const classe of ['.cfg-save-feedback', '.cfg-save-feedback.is-ok', '.cfg-save-feedback.is-error', '.cfg-save-feedback.is-busy']) {
+    assert.ok(css.includes(classe), `${classe} sem estilo — a faixa sairia sem cor nenhuma`)
+  }
+})
