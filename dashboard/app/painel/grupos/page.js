@@ -456,6 +456,12 @@ export default function GruposPage() {
   usePainelHeader({ title: 'Grupos e canais', subtitle: 'Defina quais grupos o bot escuta e onde ele publica' })
 
   const [groups, setGroups] = useState([])
+  // Precisam ser declarados ANTES dos callbacks de destino: `post` entra na
+  // lista de dependências de alguns `useCallback`, e lista de dependências é
+  // avaliada na hora — um `const` declarado mais abaixo estoura
+  // "Cannot access 'post' before initialization" e a página inteira não abre.
+  const monitor = groups.filter((g) => g.role === 'monitor')
+  const post = groups.filter((g) => g.role === 'post')
   const [actionError, setActionError] = useState('')
   const [loadingGroups, setLoadingGroups] = useState(true)
   const [waGroups, setWaGroups] = useState(null)
@@ -738,8 +744,6 @@ export default function GruposPage() {
     }
   }
 
-  const monitor = groups.filter((g) => g.role === 'monitor')
-  const post = groups.filter((g) => g.role === 'post')
   const current = tab === 'monitor' ? monitor : post
   const existingJidRoles = new Set(groups.map((g) => `${g.waJid}::${g.role}`))
 

@@ -80,3 +80,14 @@ test('fechar o painel com destino mexido e não salvo não é silencioso', () =>
   assert.match(page, /const targetsDirty = Boolean\(targetState && Array\.isArray\(targetState\.savedIds\)/)
   assert.match(page, /destinos não salvos/)
 })
+
+test('post/monitor são declarados antes dos callbacks que os usam como dependência', () => {
+  // O build passa e a página quebra em runtime: `post` entra na lista de
+  // dependências de useCallback, e lista de dependência é avaliada na hora.
+  // Declarado mais abaixo, vira "Cannot access 'post' before initialization" e
+  // a tela inteira mostra "This page couldn't load".
+  const decl = page.indexOf("const post = groups.filter")
+  const useInDeps = page.indexOf("}, [post])")
+  assert.ok(decl > 0 && useInDeps > 0)
+  assert.ok(decl < useInDeps, 'declare post/monitor antes dos useCallback que dependem deles')
+})
