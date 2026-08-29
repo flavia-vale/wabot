@@ -39,7 +39,7 @@ test('POC valida limites e posicao da configuracao', () => {
     position: 'top-left',
     color: 'white',
     opacity: 0.5,
-    maxWidthPercent: 70,
+    maxWidthPercent: 55,
   })
   assert.throws(() => normalizeWatermarkConfig({ text: '' }), /sem texto/)
   assert.throws(() => normalizeWatermarkConfig({ text: 'x'.repeat(26) }), /25 caracteres/)
