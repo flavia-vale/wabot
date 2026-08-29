@@ -1068,6 +1068,70 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   color: var(--accent-strong); font-size: 13px; font-weight: 500;
 }
 
+/* Escolha de destinos direto na tela (antes era um modal) */
+.cfg-dest-block { padding: 16px 20px; }
+
+.cfg-dest-picker { display: grid; gap: 10px; }
+
+.cfg-dest-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.cfg-dest-count { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+
+.cfg-dest-search {
+  width: 100%; padding: 9px 12px; font-size: 13.5px; font-family: inherit;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: 10px; outline: none;
+}
+.cfg-dest-search:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+
+.cfg-dest-list {
+  display: grid; gap: 8px;
+  max-height: 320px; overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* Linha inteira clicável: no celular o alvo do dedo é a linha, não a caixinha. */
+.cfg-dest-option {
+  display: flex; align-items: center; gap: 11px;
+  min-height: 46px; padding: 9px 12px;
+  border: 1px solid var(--line-strong); border-radius: 12px;
+  background: var(--surface); cursor: pointer;
+  font-size: 13.5px; color: var(--ink);
+  transition: background 0.15s, border-color 0.15s;
+}
+.cfg-dest-option:hover { background: var(--bg-soft); }
+.cfg-dest-option.is-on {
+  border-color: var(--accent-strong);
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface));
+}
+.cfg-dest-option input { width: 19px; height: 19px; flex-shrink: 0; accent-color: var(--accent-strong); }
+.cfg-dest-name { flex: 1; min-width: 0; word-break: break-word; line-height: 1.35; }
+.cfg-dest-kind {
+  flex-shrink: 0; font-size: 11px; font-weight: 600; text-transform: lowercase;
+  color: var(--ink-faint); background: var(--bg-soft);
+  padding: 3px 8px; border-radius: 999px;
+}
+
+/* O salvar fica ao lado da lista, sempre visível junto do estado atual. */
+.cfg-dest-actions {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  flex-wrap: wrap; padding-top: 2px;
+}
+.cfg-dest-status { flex: 1; min-width: 120px; font-size: 12px; color: var(--ink-faint); }
+/* --warn é claro demais para texto pequeno sobre fundo branco: âmbar escuro. */
+.cfg-dest-status.is-dirty { color: #b45309; font-weight: 600; }
+.cfg-dest-status.is-saved { color: var(--success); font-weight: 600; }
+
+@media (max-width: 680px) {
+  .cfg-dest-block { padding: 14px 16px; }
+  .cfg-dest-actions > .pnl-btn { flex: 1 1 auto; justify-content: center; }
+  .cfg-dest-status { flex: 1 0 100%; }
+}
+
 .cfg-inline-warn {
   display: flex; gap: 8px; margin-top: 10px; padding: 10px 12px; border-radius: 10px;
   background: color-mix(in oklab, var(--warn, #f5a623) 18%, var(--surface));

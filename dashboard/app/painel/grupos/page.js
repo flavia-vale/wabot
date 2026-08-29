@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -148,8 +148,119 @@ function KeywordTagInput({ keywords, draft, onDraftChange, onAdd, onRemove }) {
   )
 }
 
+function sameIdSet(a = [], b = []) {
+  if (a.length !== b.length) return false
+  const set = new Set(b)
+  return a.every((id) => set.has(id))
+}
+
+/* ── Escolha de destinos, direto na tela (sem modal) ─────────────────── */
+//
+// Antes isso era um modal. Duas coisas ruins: no celular a janelinha cobria a
+// tela e escondia o contexto do grupo que estava sendo configurado, e a lista
+// abria clicável antes de os destinos chegarem do servidor — quem desmarcasse
+// nessa janela tinha a escolha atropelada pela resposta e saía achando que
+// tinha salvado (bug relatado pela cliente em 2026-08-29).
+//
+// Agora a escolha vive dentro do próprio painel do grupo, com o botão de salvar
+// ao lado da lista. Invariantes de usabilidade que precisam ficar:
+//  - nada é clicável enquanto a lista não chega (não existe clique perdido);
+//  - o que está na tela e ainda não foi salvo aparece como "não salvo", com
+//    "Desfazer" ao lado — a pessoa nunca fica em dúvida se gravou;
+//  - o aviso de erro nasce ao lado do botão, não num banner longe no topo.
+function DestinationPicker({ groupId, post, state, onLoad, onToggle, onSetAll, onSave, onReset }) {
+  const [filter, setFilter] = useState('')
+
+  useEffect(() => { onLoad(groupId) }, [groupId, onLoad])
+
+  const ready = Array.isArray(state?.savedIds)
+  const draft = state?.draftIds ?? []
+  const saving = Boolean(state?.saving)
+  const dirty = ready && !sameIdSet(draft, state.savedIds)
+  const justSaved = Boolean(state?.savedAt) && !dirty
+
+  if (post.length === 0) {
+    return <p className="pnl-hint" style={{ color: 'var(--warn, #b45309)' }}>Cadastre ao menos um grupo de destino para escolher para onde esse grupo envia.</p>
+  }
+  if (!ready) {
+    return (
+      <p className="pnl-hint" aria-live="polite">
+        {state?.error ? state.error : 'Carregando os destinos deste grupo…'}
+      </p>
+    )
+  }
+
+  const term = filter.trim().toLowerCase()
+  const visible = term ? post.filter((gr) => gr.name.toLowerCase().includes(term)) : post
+  const allChecked = draft.length === post.length
+
+  return (
+    <div className="cfg-dest-picker">
+      <div className="cfg-dest-bar">
+        <span className="cfg-dest-count">
+          {draft.length === 0
+            ? 'Nenhum marcado'
+            : `${draft.length} de ${post.length} ${post.length === 1 ? 'destino' : 'destinos'}`}
+        </span>
+        <button type="button" className="pnl-link-btn" onClick={() => onSetAll(groupId, !allChecked)}>
+          {allChecked ? 'Desmarcar todos' : 'Marcar todos'}
+        </button>
+      </div>
+
+      {post.length > 6 && (
+        <input
+          className="cfg-dest-search"
+          type="search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Procurar destino pelo nome"
+          aria-label="Procurar destino pelo nome"
+        />
+      )}
+
+      <div className="cfg-dest-list" role="group" aria-label="Grupos de destino">
+        {visible.length === 0 && <p className="pnl-hint" style={{ padding: '4px 2px' }}>Nenhum destino com esse nome.</p>}
+        {visible.map((gr) => {
+          const checked = draft.includes(gr.id)
+          return (
+            <label key={gr.id} className={`cfg-dest-option${checked ? ' is-on' : ''}`}>
+              <input type="checkbox" checked={checked} onChange={() => onToggle(groupId, gr.id)} />
+              <span className="cfg-dest-name">{gr.name}</span>
+              <span className="cfg-dest-kind">{gr.kind === 'channel' ? 'canal' : 'grupo'}</span>
+            </label>
+          )
+        })}
+      </div>
+
+      {draft.length === 0 && (
+        <p className="cfg-inline-warn" style={{ marginTop: 0 }}>
+          Sem nenhum marcado, esse grupo envia para <strong>todos</strong> os seus destinos. Para ele parar de enviar, remova o grupo monitorado.
+        </p>
+      )}
+
+      <div className="cfg-dest-actions">
+        <span className={`cfg-dest-status${dirty ? ' is-dirty' : ''}${justSaved ? ' is-saved' : ''}`} aria-live="polite">
+          {state?.error
+            ? state.error
+            : dirty
+              ? 'Alterações ainda não salvas'
+              : justSaved
+                ? 'Destinos salvos'
+                : 'Tudo salvo'}
+        </span>
+        {dirty && (
+          <button type="button" className="pnl-btn" onClick={() => onReset(groupId)} disabled={saving}>Desfazer</button>
+        )}
+        <button type="button" className="pnl-btn is-primary" onClick={() => onSave(groupId)} disabled={saving || !dirty}>
+          {saving ? 'Salvando…' : 'Salvar destinos'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Monitor group config panel (redesigned) ────────────────────────── */
-function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, targetsModeCache, onOpenTargetEditor, onSetActionError, templates }) {
+function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, targetsHandlers, onSetActionError, templates }) {
   const [draft, setDraft] = useState('')
 
   const keywords = (g.blockedKeywords || '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -178,17 +289,6 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, t
 
   const templateValue = (g.templateKey == null || g.templateKey === '') ? '__relay__' : g.templateKey
   const templateApplied = g.templateKey !== null && g.templateKey !== ''
-
-  const cachedIds = targetsCache[g.id]
-  // 'explicit' com lista vazia = a pessoa escolheu destinos e todos eles foram
-  // apagados. Não é "todos os destinos" — é NENHUM. Mostrar "todos" aqui foi o
-  // que fez a oferta cair em grupo não escolhido sem ninguém entender (RCA
-  // 2026-08-26).
-  const cachedMode = targetsModeCache?.[g.id]
-  const noDestinationsChosen = cachedMode === 'explicit' && Array.isArray(cachedIds) && cachedIds.length === 0
-  const destNames = cachedIds
-    ? (cachedIds.length === 0 ? null : cachedIds.map((id) => post.find((p) => p.id === id)?.name).filter(Boolean))
-    : null
 
   return (
     <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 16, display: 'grid', gap: 14 }}>
@@ -333,24 +433,19 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsCache, t
       </CfgSection>
 
       {/* ── Seção 3: Para onde vai ── */}
-      <CfgSection icon="send" title="Para onde esse grupo envia" desc="Os destinos que recebem as ofertas desse grupo.">
-        <CfgRow label="Destinos" hint="Sem nenhum escolhido, envia para todos os grupos de destino." last>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            {destNames && destNames.length > 0
-              ? destNames.map((name) => (
-                  <span key={name} className="cfg-dest-pill">⚡ {name}</span>
-                ))
-              : noDestinationsChosen
-                ? <span className="pnl-hint" style={{ paddingTop: 4, color: 'var(--warn, #b45309)' }}>Nenhum destino escolhido — esse grupo não está enviando para ninguém.</span>
-                : cachedIds !== undefined
-                  ? <span className="pnl-hint" style={{ paddingTop: 4 }}>Todos os destinos (sem filtro)</span>
-                  : null}
-            <button type="button" className="pnl-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => onOpenTargetEditor(g.id)}>
-              <CfgIcon name="plus" size={13} />
-              {cachedIds !== undefined ? 'Editar destinos' : 'Escolher destinos'}
-            </button>
-          </div>
-        </CfgRow>
+      <CfgSection icon="send" title="Para onde esse grupo envia" desc="Marque os destinos que recebem as ofertas desse grupo e salve.">
+        <div className="cfg-dest-block">
+          <DestinationPicker
+            groupId={g.id}
+            post={post}
+            state={targetsState[g.id]}
+            onLoad={targetsHandlers.load}
+            onToggle={targetsHandlers.toggle}
+            onSetAll={targetsHandlers.setAll}
+            onSave={targetsHandlers.save}
+            onReset={targetsHandlers.reset}
+          />
+        </div>
       </CfgSection>
 
     </div>
@@ -371,10 +466,15 @@ export default function GruposPage() {
   const [savingGroupId, setSavingGroupId] = useState(null)
   const [savedGroupId, setSavedGroupId] = useState(null)
   const [groupErrors, setGroupErrors] = useState({})
-  const [targetEditorId, setTargetEditorId] = useState(null)
-  const [targetPostIds, setTargetPostIds] = useState([])
-  const [targetMode, setTargetMode] = useState('explicit')
-  const [targetLoading, setTargetLoading] = useState(false)
+  // Um registro por grupo monitorado:
+  //   { loading, error, savedIds, mode, draftIds, saving, savedAt }
+  // `savedIds` é o que está no servidor; `draftIds` é o que está na tela. A
+  // diferença entre os dois é o que faz a tela dizer "alterações não salvas".
+  const [targetsState, setTargetsState] = useState({})
+  // Cada carregamento ganha um número por grupo: resposta atrasada de um
+  // carregamento antigo é descartada em vez de sobrescrever o que a pessoa já
+  // marcou (foi assim que a escolha da cliente sumia).
+  const targetRequestRef = useRef({})
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [channelButtonGroupId, setChannelButtonGroupId] = useState(null)
   const [tab, setTab] = useState('monitor')
@@ -386,8 +486,6 @@ export default function GruposPage() {
   const [expandedHealthId, setExpandedHealthId] = useState(null)
   const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
   const [templates, setTemplates] = useState([])
-  const [groupTargetsCache, setGroupTargetsCache] = useState({})
-  const [groupTargetsModeCache, setGroupTargetsModeCache] = useState({})
 
   async function load() {
     setLoadingGroups(true)
@@ -508,49 +606,109 @@ export default function GruposPage() {
     }, delayMs)
   }
 
-  async function openTargetEditor(groupId) {
-    setActionError('')
-    setTargetLoading(true)
-    setTargetEditorId(groupId)
+  // Bug relatado por cliente (2026-08-29): ela desmarcava um destino, salvava, e
+  // ao reabrir ele estava marcado de novo — e continuava recebendo oferta.
+  //
+  // Causa: a lista de destinos ficava clicável enquanto o GET ainda estava em
+  // vôo (celular em 4G leva segundos). Quem desmarcasse nesse intervalo tinha a
+  // escolha ATROPELADA pela resposta, que remarcava tudo; o botão de salvar
+  // gravava a lista da resposta, não a escolha dela.
+  //
+  // As travas que impedem a volta do bug: a lista só vira clicável depois que a
+  // resposta chega (não há janela para clique perdido) e resposta de um
+  // carregamento antigo é descartada pelo número da requisição.
+  const patchTargets = useCallback((groupId, patch) => {
+    setTargetsState((prev) => ({ ...prev, [groupId]: { ...(prev[groupId] ?? {}), ...patch } }))
+  }, [])
+
+  const loadTargets = useCallback(async (groupId, { force = false } = {}) => {
+    let skip = false
+    setTargetsState((prev) => {
+      const current = prev[groupId]
+      // Já carregado (ou carregando): não refaz o GET a cada vez que a pessoa
+      // abre e fecha o painel — e, principalmente, não joga fora uma escolha
+      // que ela fez e ainda não salvou.
+      if (!force && current && (current.loading || Array.isArray(current.savedIds))) skip = true
+      return prev
+    })
+    if (skip) return
+    const requestId = (targetRequestRef.current[groupId] ?? 0) + 1
+    targetRequestRef.current[groupId] = requestId
+    patchTargets(groupId, { loading: true, error: '' })
     try {
       const data = await api.groupTargets(groupId)
+      if (targetRequestRef.current[groupId] !== requestId) return
       const ids = data.postIds ?? []
-      const mode = data.mode ?? 'explicit'
-      setTargetMode(mode)
-      setTargetPostIds(ids)
-      setGroupTargetsCache((prev) => ({ ...prev, [groupId]: ids }))
-      setGroupTargetsModeCache((prev) => ({ ...prev, [groupId]: mode }))
+      patchTargets(groupId, { loading: false, error: '', savedIds: ids, draftIds: ids, mode: data.mode ?? 'explicit' })
     } catch (err) {
-      setActionError(err.message)
-      setTargetEditorId(null)
-    } finally {
-      setTargetLoading(false)
+      if (targetRequestRef.current[groupId] !== requestId) return
+      patchTargets(groupId, { loading: false, error: err.message })
     }
-  }
+  }, [patchTargets])
 
-  function toggleTargetPost(postId) {
-    setTargetPostIds((current) => current.includes(postId)
-      ? current.filter((id) => id !== postId)
-      : [...current, postId])
-  }
+  const toggleTargetDraft = useCallback((groupId, postId) => {
+    setTargetsState((prev) => {
+      const current = prev[groupId]
+      // Sem lista carregada não há o que marcar: ignorar aqui é a mesma trava
+      // que evita o clique perdido.
+      if (!current || !Array.isArray(current.savedIds)) return prev
+      const draft = current.draftIds ?? []
+      const next = draft.includes(postId) ? draft.filter((id) => id !== postId) : [...draft, postId]
+      return { ...prev, [groupId]: { ...current, draftIds: next, savedAt: null } }
+    })
+  }, [])
 
-  async function saveTargetPosts() {
-    if (!targetEditorId) return
-    setTargetLoading(true)
+  const setAllTargetDrafts = useCallback((groupId, checked) => {
+    setTargetsState((prev) => {
+      const current = prev[groupId]
+      if (!current || !Array.isArray(current.savedIds)) return prev
+      return { ...prev, [groupId]: { ...current, draftIds: checked ? post.map((p) => p.id) : [], savedAt: null } }
+    })
+  }, [post])
+
+  const resetTargetDraft = useCallback((groupId) => {
+    setTargetsState((prev) => {
+      const current = prev[groupId]
+      if (!current || !Array.isArray(current.savedIds)) return prev
+      return { ...prev, [groupId]: { ...current, draftIds: current.savedIds, savedAt: null, error: '' } }
+    })
+  }, [])
+
+  const saveTargets = useCallback(async (groupId) => {
+    const current = targetsState[groupId]
+    if (!current || current.loading || current.saving || !Array.isArray(current.savedIds)) return
+    // Só mandamos ids que ainda existem na lista de destinos da tela. Id de um
+    // grupo já apagado faz a rota devolver 400 ("Lista de grupos destino
+    // inválida") e a escolha inteira se perde — com cara de "não salvou".
+    const idsToSave = (current.draftIds ?? []).filter((id) => post.some((p) => p.id === id))
+    patchTargets(groupId, { saving: true, error: '' })
     setActionError('')
     try {
-      await api.updateGroupTargets(targetEditorId, targetPostIds)
-      const savedMode = targetPostIds.length ? 'explicit' : 'all'
-      setTargetMode(savedMode)
-      setGroupTargetsCache((prev) => ({ ...prev, [targetEditorId]: targetPostIds }))
-      setGroupTargetsModeCache((prev) => ({ ...prev, [targetEditorId]: savedMode }))
-      setTargetEditorId(null)
+      await api.updateGroupTargets(groupId, idsToSave)
+      patchTargets(groupId, {
+        saving: false,
+        error: '',
+        savedIds: idsToSave,
+        draftIds: idsToSave,
+        mode: idsToSave.length ? 'explicit' : 'all',
+        savedAt: Date.now(),
+      })
     } catch (err) {
+      // O aviso nasce ao lado do botão: o banner do topo da página fica fora da
+      // tela no celular, então a falha passava despercebida e a cliente saía
+      // achando que tinha salvado.
+      patchTargets(groupId, { saving: false, error: err.message })
       setActionError(err.message)
-    } finally {
-      setTargetLoading(false)
     }
-  }
+  }, [targetsState, post, patchTargets])
+
+  const targetsHandlers = useMemo(() => ({
+    load: loadTargets,
+    toggle: toggleTargetDraft,
+    setAll: setAllTargetDrafts,
+    reset: resetTargetDraft,
+    save: saveTargets,
+  }), [loadTargets, toggleTargetDraft, setAllTargetDrafts, resetTargetDraft, saveTargets])
 
   async function handleLoadWA() {
     setLoadingWA(true)
@@ -763,6 +921,11 @@ export default function GruposPage() {
           <ul>
             {current.map((g, i) => {
               const configOpen = expandedConfigId === g.id
+              // Destinos mexidos e ainda não salvos precisam aparecer na LINHA
+              // do grupo: fechar o painel sem salvar não pode ser silencioso.
+              const targetState = targetsState[g.id]
+              const targetsDirty = Boolean(targetState && Array.isArray(targetState.savedIds)
+                && !sameIdSet(targetState.draftIds ?? [], targetState.savedIds))
               return (
                 <li key={g.id} style={{ borderBottom: i === current.length - 1 ? 'none' : '1px solid var(--line)', padding: '14px 18px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -778,6 +941,7 @@ export default function GruposPage() {
                       <div className="pnl-hint" style={{ marginTop: 2 }}>{g.kind === 'channel' ? 'canal' : 'grupo'} · {g.waJid}</div>
                     </div>
                     <div className="pnl-toolbar" style={{ flexShrink: 0 }}>
+                      {targetsDirty && <span className="pnl-tag is-flight" title="Você mexeu nos destinos e ainda não salvou">destinos não salvos</span>}
                       {savingGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>salvando…</span>}
                       {savedGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--success)' }}>salvo</span>}
                       <button type="button" className="pnl-link-btn" aria-expanded={configOpen} onClick={() => setExpandedConfigId(configOpen ? null : g.id)}>
@@ -793,9 +957,8 @@ export default function GruposPage() {
                       onUpdate={handleUpdateGroup}
                       canUseChannels={canUseChannels}
                       post={post}
-                      targetsCache={groupTargetsCache}
-                      targetsModeCache={groupTargetsModeCache}
-                      onOpenTargetEditor={openTargetEditor}
+                      targetsState={targetsState}
+                      targetsHandlers={targetsHandlers}
                       onSetActionError={setActionError}
                       templates={templates}
                     />
@@ -871,37 +1034,6 @@ export default function GruposPage() {
           </button>
         </div>
       </section>
-
-      {/* Editor de alvos (modal) */}
-      {targetEditorId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', padding: 16 }}>
-          <div className="pnl-card" style={{ width: '100%', maxWidth: 420 }}>
-            <div className="pnl-card-title">Configurar destinos</div>
-            <p className="pnl-card-note" style={{ marginTop: 4, marginBottom: 12 }}>Escolha quais grupos de destino recebem mensagens deste grupo monitorado. Se nenhum for selecionado, o bot envia para todos.</p>
-            {targetMode === 'all' && (
-              <p className="pnl-hint" style={{ color: '#166534', marginBottom: 12 }}>
-                Este monitor está usando o padrão “todos os destinos”. Eles aparecem marcados para deixar claro que estão ativos.
-              </p>
-            )}
-            {post.length === 0 ? (
-              <p className="pnl-hint" style={{ color: '#b5742a', marginBottom: 12 }}>Cadastre ao menos um grupo de postagem para configurar destinos.</p>
-            ) : (
-              <div className="pnl-grid" style={{ maxHeight: 256, overflowY: 'auto', marginBottom: 12 }}>
-                {post.map((group) => (
-                  <label key={group.id} className="pnl-check" style={{ fontWeight: 400, fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--pnl-radius-sm)', padding: 8 }}>
-                    <input type="checkbox" checked={targetPostIds.includes(group.id)} onChange={() => toggleTargetPost(group.id)} />
-                    <span>{group.name}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-            <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
-              <button type="button" className="pnl-btn" onClick={() => setTargetEditorId(null)}>Cancelar</button>
-              <button type="button" className="pnl-btn is-primary" onClick={saveTargetPosts} disabled={targetLoading}>{targetLoading ? 'Salvando…' : 'Salvar destinos'}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <ConfirmDialog
         open={!!deleteTarget}
