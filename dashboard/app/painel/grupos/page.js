@@ -12,6 +12,11 @@ import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
 import Link from 'next/link'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
 
+// Espelha WATERMARK_MAX_CHARS de src/core/destinationWatermark.js (a tela não
+// importa aquele módulo: ele carrega `sharp`). test/watermark-limite-caracteres.test.js
+// falha se os números divergirem.
+const WATERMARK_TEXT_MAX_CHARS = 25
+
 const roleLabels = {
   monitor: 'Monitorar (origem)',
   post: 'Postar (destino)',
@@ -253,6 +258,73 @@ function DestinationPicker({ groupId, post, state, onLoad, onToggle, onSetAll, o
         )}
         <button type="button" className="pnl-btn is-primary" onClick={() => onSave(groupId)} disabled={saving || !dirty}>
           {saving ? 'Salvando…' : 'Salvar destinos'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── Texto da marca d'água: rascunho local + salvar explícito ───────── */
+//
+// Bug relatado pela cliente (2026-08-29): "a página parece estar atualizando
+// quando eu começo a escrever o texto da marca d'água".
+//
+// O campo salvava sozinho enquanto ela digitava (debounce de 500ms). Três
+// efeitos, todos no meio da digitação: (1) cada pausa disparava um PUT, que
+// mexia em `savingGroupId`/`savedGroupId` e repintava a linha do grupo; (2) o
+// PUT recarrega a config do worker a cada vez; (3) — o pior — se o PUT falhasse,
+// `handleUpdateGroup` chamava `load()`, que recarrega TODOS os grupos e
+// substitui o estado: o texto pela metade era apagado e voltava o valor antigo.
+// Digitar virava uma briga com a tela.
+//
+// Agora o que se digita é rascunho LOCAL. Nada vai ao servidor até o clique em
+// Salvar. Mesmo padrão já usado no DestinationPicker: estado explícito de "não
+// salvo", Desfazer ao lado, e o erro nascendo junto do botão em vez de um banner
+// no topo (que no celular fica fora da tela).
+function WatermarkTextField({ group, maxChars, draft, saving, savedAt, error, onDraftChange, onSave, onReset }) {
+  const saved = group.watermarkText ?? ''
+  const value = draft ?? saved
+  const dirty = value !== saved
+  const justSaved = Boolean(savedAt) && !dirty
+  const used = [...value].length
+
+  function handleSave() {
+    if (!dirty || saving) return
+    onSave(group.id, value)
+  }
+
+  return (
+    <div className="cfg-dest-picker">
+      <input
+        className="pnl-input"
+        value={value}
+        maxLength={maxChars}
+        placeholder="Ex.: Achadinhos da Maria"
+        aria-label="Texto da marca d'água"
+        onChange={(e) => {
+          // [...string] conta codepoints (não UTF-16 code units), igual ao
+          // limite do servidor e do renderizador — os três não podem divergir.
+          onDraftChange(group.id, [...e.target.value].slice(0, maxChars).join(''))
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); handleSave() }
+        }}
+      />
+      <div className="cfg-dest-actions">
+        <span className={`cfg-dest-status${dirty ? ' is-dirty' : ''}${justSaved ? ' is-saved' : ''}`} aria-live="polite">
+          {error
+            ? error
+            : dirty
+              ? `Não salvo · ${used}/${maxChars}`
+              : justSaved
+                ? 'Marca salva'
+                : `${used}/${maxChars} caracteres`}
+        </span>
+        {dirty && (
+          <button type="button" className="pnl-btn" onClick={() => onReset(group.id)} disabled={saving}>Desfazer</button>
+        )}
+        <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving || !dirty}>
+          {saving ? 'Salvando…' : 'Salvar marca'}
         </button>
       </div>
     </div>
@@ -595,22 +667,46 @@ export default function GruposPage() {
     }
   }
 
-  // Digitar o texto da marca d'água dispara `handleUpdateGroup` a cada tecla
-  // (mesmo padrão da mensagem de boas-vindas). Sem atraso, cada tecla vira um
-  // PUT /groups/:id imediato, que por sua vez recarrega a config do worker —
-  // em conta com muitos grupos isso soma requisições desnecessárias enquanto a
-  // pessoa ainda está digitando. Debounce curto só para este campo: a tela
-  // continua mostrando o valor digitado na hora (setGroups já é síncrono
-  // dentro de handleUpdateGroup), só o PUT em si é atrasado.
-  const watermarkSaveTimers = useRef({})
-  function handleUpdateGroupDebounced(id, data, delayMs = 500) {
-    setGroups((prev) => prev.map((g) => g.id === id ? { ...g, ...data } : g))
-    if (watermarkSaveTimers.current[id]) window.clearTimeout(watermarkSaveTimers.current[id])
-    watermarkSaveTimers.current[id] = window.setTimeout(() => {
-      delete watermarkSaveTimers.current[id]
-      handleUpdateGroup(id, data)
-    }, delayMs)
-  }
+  // Rascunho local do texto da marca d'água, por grupo. Ver WatermarkTextField:
+  // digitar NÃO salva; só o botão Salvar grava.
+  const [watermarkDrafts, setWatermarkDrafts] = useState({})
+  const [watermarkSaving, setWatermarkSaving] = useState({})
+  const [watermarkSavedAt, setWatermarkSavedAt] = useState({})
+  const [watermarkErrors, setWatermarkErrors] = useState({})
+
+  const setWatermarkDraft = useCallback((id, value) => {
+    setWatermarkDrafts((prev) => ({ ...prev, [id]: value }))
+    setWatermarkErrors((prev) => (prev[id] ? { ...prev, [id]: '' } : prev))
+  }, [])
+
+  const resetWatermarkDraft = useCallback((id) => {
+    setWatermarkDrafts((prev) => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    setWatermarkErrors((prev) => (prev[id] ? { ...prev, [id]: '' } : prev))
+  }, [])
+
+  const saveWatermarkText = useCallback(async (id, value) => {
+    setWatermarkSaving((prev) => ({ ...prev, [id]: true }))
+    setWatermarkErrors((prev) => ({ ...prev, [id]: '' }))
+    try {
+      const updated = await api.updateGroup(id, { watermarkText: value })
+      // O servidor normaliza (colapsa espaços, apara pontas). Adotamos o valor
+      // DELE como verdade e limpamos o rascunho — assim o campo passa a mostrar
+      // exatamente o que ficou gravado, sem divergir do banco em silêncio.
+      setGroups((prev) => prev.map((g) => g.id === id ? { ...g, watermarkText: updated?.watermarkText ?? value } : g))
+      resetWatermarkDraft(id)
+      setWatermarkSavedAt((prev) => ({ ...prev, [id]: Date.now() }))
+    } catch (err) {
+      // O erro nasce AO LADO do campo. Nada de `load()` aqui: recarregar todos
+      // os grupos era o que apagava o texto que a pessoa acabou de escrever.
+      setWatermarkErrors((prev) => ({ ...prev, [id]: err.message }))
+    } finally {
+      setWatermarkSaving((prev) => ({ ...prev, [id]: false }))
+    }
+  }, [resetWatermarkDraft])
 
   // Bug relatado por cliente (2026-08-29): ela desmarcava um destino, salvava, e
   // ao reabrir ele estava marcado de novo — e continuava recebendo oferta.
@@ -778,7 +874,7 @@ export default function GruposPage() {
                   // Ao ligar a marca pela 1ª vez sem texto salvo, sugere o
                   // nome do próprio destino — a pessoa pode trocar depois.
                   ...(nextMode === 'original_watermark' && ![...(g.watermarkText ?? '')].join('').trim()
-                    ? { watermarkText: [...String(g.name ?? '').trim()].slice(0, 25).join('') }
+                    ? { watermarkText: [...String(g.name ?? '').trim()].slice(0, WATERMARK_TEXT_MAX_CHARS).join('') }
                     : {}),
                 })
               }}
@@ -792,21 +888,19 @@ export default function GruposPage() {
           {watermarkMode && (
             <CfgRow
               label="Texto da marca d&apos;água"
-              hint={`${[...(g.watermarkText ?? '')].length}/25 caracteres · aparece no meio da foto, apenas neste destino.`}
+              hint="Escreva o texto todo e clique em Salvar. Aparece no meio da foto, apenas neste destino."
               extra="cfg-fadeup"
             >
-              <input
-                className="pnl-input"
-                value={g.watermarkText ?? ''}
-                maxLength={25}
-                placeholder="Ex.: Achadinhos da Maria"
-                onChange={(e) => {
-                  // [...string] conta codepoints (não UTF-16 code units), igual
-                  // ao limite aplicado no servidor e no renderizador da marca —
-                  // os três nunca podem discordar sobre "25 caracteres".
-                  const clamped = [...e.target.value].slice(0, 25).join('')
-                  handleUpdateGroupDebounced(g.id, { watermarkText: clamped })
-                }}
+              <WatermarkTextField
+                group={g}
+                maxChars={WATERMARK_TEXT_MAX_CHARS}
+                draft={watermarkDrafts[g.id]}
+                saving={Boolean(watermarkSaving[g.id])}
+                savedAt={watermarkSavedAt[g.id]}
+                error={watermarkErrors[g.id]}
+                onDraftChange={setWatermarkDraft}
+                onSave={saveWatermarkText}
+                onReset={resetWatermarkDraft}
               />
             </CfgRow>
           )}

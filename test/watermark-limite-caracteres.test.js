@@ -31,9 +31,16 @@ test('a API valida com o MESMO limite do renderizador', () => {
 
 test('a tela usa o MESMO limite do renderizador', () => {
   const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
-  assert.match(page, new RegExp(`maxLength=\\{${WATERMARK_MAX_CHARS}\\}`))
-  assert.match(page, new RegExp(`slice\\(0, ${WATERMARK_MAX_CHARS}\\)`))
-  assert.match(page, new RegExp(`/${WATERMARK_MAX_CHARS} caracteres`))
+  // A tela declara o limite UMA vez, numa constante, e o campo o consome por
+  // prop. Conferir a constante (em vez de caçar o número literal espalhado)
+  // continua pegando a divergência e não quebra quando o campo é refatorado.
+  assert.match(
+    page,
+    new RegExp(`const WATERMARK_TEXT_MAX_CHARS = ${WATERMARK_MAX_CHARS}\\b`),
+    `a tela precisa declarar o limite como ${WATERMARK_MAX_CHARS}, igual ao renderizador`,
+  )
+  assert.match(page, /maxLength=\{maxChars\}/, 'o campo precisa consumir o limite por prop, sem número solto')
+  assert.match(page, /\[\.\.\.e\.target\.value\]\.slice\(0, maxChars\)/)
 })
 
 // Formato pedido pela dona do produto (2026-08-29): centralizada, 50% de
