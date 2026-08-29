@@ -263,6 +263,38 @@ const IGNORE_UNMONITORED_GROUPS = String(process.env.WA_IGNORE_UNMONITORED_GROUP
 let allowedChatJids = new Set()
 let allowedChatJidsReady = false
 
+// RCA 2026-08-29: mensagem de uma origem MONITORADA podia ser descartada em
+// silêncio total — sem linha no bot.log e sem linha em Envios. Aconteceram dois
+// `return` mudos logo depois de a origem ser reconhecida (texto que virou vazio
+// ao remover convites; mensagem sem link e sem texto aproveitável). Do lado da
+// cliente isso é indistinguível de "o robô parou": ela manda a oferta no grupo
+// monitorado e não aparece absolutamente nada em lugar nenhum. Foi exatamente o
+// que travou o diagnóstico de staging por horas.
+//
+// Por que era mudo de propósito: um reconnect dispara rajada de
+// senderKeyDistribution/protocolMessage nos grupos, e logar por MENSAGEM
+// inundaria o bot.log (que já passa de 400MB). A saída é a mesma do escopo de
+// conversas (`reviewChatScope`): AGREGAR — no máximo uma linha por origem por
+// minuto, carregando quantas foram suprimidas desde a última. Escopo de módulo
+// para sobreviver às reconexões do MESMO worker.
+const MONITORED_DROP_LOG_INTERVAL_MS = Math.max(0, Number(process.env.MONITORED_DROP_LOG_INTERVAL_MS ?? 60_000))
+const monitoredDropLogState = new Map()
+
+function logMonitoredSourceDrop(jid, reason, details = {}) {
+  const now = Date.now()
+  const entry = monitoredDropLogState.get(jid) || { lastLoggedAt: 0, suppressed: 0 }
+  if (now - entry.lastLoggedAt < MONITORED_DROP_LOG_INTERVAL_MS) {
+    entry.suppressed += 1
+    monitoredDropLogState.set(jid, entry)
+    return
+  }
+  monitoredDropLogState.set(jid, { lastLoggedAt: now, suppressed: 0 })
+  logger.info(
+    { jid, reason, suppressedSinceLast: entry.suppressed, ...details },
+    'Origem monitorada: mensagem descartada antes de virar oferta',
+  )
+}
+
 // Cache jid→nome (subject) preenchido no groupFetchAllParticipating. Best-effort,
 // só para anexar o NOME do grupo culpado nos eventos de desync (Part B —
 // visibilidade admin), evitando que a operadora precise cruzar o jid na mão.
@@ -3143,7 +3175,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       }
 
       const sanitizedText = text ? sanitizeInviteLinks(text) : ''
-      if (text && !sanitizedText) return
+      if (text && !sanitizedText) {
+        logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
+        return
+      }
 
       const isCouponMsg = isCouponAnnouncement(sanitizedText)
 
@@ -3164,7 +3199,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // Sem isso, um reconnect (que dispara rajada de senderKeyDistribution)
         // polui o log com dezenas de 'nolink' mesmo o grupo não tendo recebido
         // nenhuma mensagem real (incidente 2026-06).
-        if (messageKind === 'other' && links.length === 0 && !hasGenericUrl) return
+        if (messageKind === 'other' && links.length === 0 && !hasGenericUrl) {
+          // `contentKeys` é o campo que separa as três causas possíveis, todas
+          // indistinguíveis para a cliente ("não apareceu nada"):
+          //   - vazio            → a mensagem não pôde ser DECIFRADA (sessão
+          //                        Signal dessincronizada). O robô recebeu o
+          //                        envelope e não o conteúdo.
+          //   - protocolMessage/senderKeyDistributionMessage/reactionMessage
+          //                      → ruído de protocolo, descarte correto.
+          //   - conversation/extendedTextMessage/imageMessage
+          //                      → havia conteúdo de verdade e a extração de
+          //                        texto falhou: aí é bug nosso.
+          logMonitoredSourceDrop(jid, 'sem_link_e_sem_texto', {
+            msgId: msg.key.id,
+            messageKind,
+            textLength: sanitizedText.length,
+            hasMessageContent: Boolean(msg.message),
+            contentKeys: Object.keys(innerMessage || msg.message || {}),
+          })
+          return
+        }
         const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
@@ -3701,6 +3755,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // core/imageModePolicy.js — valor ausente/desconhecido cai em 'original'.
         const destinationImageMode = resolveDestinationImageMode(postDetail?.imageMode)
         const watermarkText = String(postDetail?.watermarkText ?? '').trim()
+        const watermarkColor = postDetail?.watermarkColor ?? undefined
         const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
         // Segurança anti-duplicação por destino. Precisamos guardar DUAS chaves:
         // - primary.url: link upstream estável. Bloqueia a mesma mensagem da fonte
@@ -4126,7 +4181,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
             if (fetched && useDestinationWatermark && imageMode === 'original') {
               try {
-                const rendered = await renderDestinationWatermark(fetched.buffer, { text: watermarkText })
+                const rendered = await renderDestinationWatermark(fetched.buffer, { text: watermarkText, color: watermarkColor })
                 // A mutação roda POR CIMA da imagem já marcada (2º encode JPEG,
                 // aceito só nesta combinação rara de marca+mutação ligadas ao
                 // mesmo tempo). Sem isso, o canal perderia a proteção

@@ -11,7 +11,7 @@ test('worker resolve modo e texto a partir do detalhe do destino', () => {
 })
 
 test('original com marca renderiza principal e thumbnail e cai para imagem normal em falha', () => {
-  assert.match(worker, /await renderDestinationWatermark\(fetched\.buffer, \{ text: watermarkText \}\)/)
+  assert.match(worker, /await renderDestinationWatermark\(fetched\.buffer, \{ text: watermarkText, color: watermarkColor \}\)/)
   assert.match(worker, /jpegThumbnail: rendered\.thumbnail/)
   assert.match(worker, /Marca d\\'água falhou; enviando imagem normal/)
   assert.match(worker, /image = await normalizeImageForWhatsApp\(fetched\.buffer, wantMutation \? \{ mutation: \{ groupId: destJid \} \} : \{\}\)/)

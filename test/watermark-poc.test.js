@@ -37,12 +37,16 @@ test('POC valida limites e posicao da configuracao', () => {
   assert.deepEqual(normalizeWatermarkConfig({ text: ' Minha marca ', position: 'top-left' }), {
     text: 'Minha marca',
     position: 'top-left',
-    opacity: 0.68,
-    maxWidthPercent: 42,
+    color: 'white',
+    opacity: 0.5,
+    maxWidthPercent: 70,
   })
   assert.throws(() => normalizeWatermarkConfig({ text: '' }), /sem texto/)
-  assert.throws(() => normalizeWatermarkConfig({ text: 'x'.repeat(51) }), /50 caracteres/)
-  assert.throws(() => normalizeWatermarkConfig({ text: 'ok', position: 'center' }), /Posicao/)
+  assert.throws(() => normalizeWatermarkConfig({ text: 'x'.repeat(26) }), /25 caracteres/)
+  // 'center' passou a ser posição VÁLIDA (e o padrão do produto desde
+  // 2026-08-29); posição inexistente continua sendo recusada.
+  assert.equal(normalizeWatermarkConfig({ text: 'ok', position: 'center' }).position, 'center')
+  assert.throws(() => normalizeWatermarkConfig({ text: 'ok', position: 'diagonal' }), /Posicao/)
 })
 
 test('POC gera JPEG principal e thumbnail marcados por destino', async () => {

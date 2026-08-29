@@ -45,6 +45,8 @@ function toPostDetail(group) {
     // modo) e src/bot-worker.js (resolução por destino no loop de envio).
     imageMode: resolveDestinationImageMode(group.imageMode),
     watermarkText: group.watermarkText ?? null,
+    // 'white' | 'black'; nulo = padrão, resolvido no renderizador.
+    watermarkColor: group.watermarkColor ?? null,
   }
 }
 

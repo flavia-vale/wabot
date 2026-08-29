@@ -197,7 +197,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza', 'shein'].includes(p))
@@ -214,7 +214,7 @@ export async function groupsRoutes(app, opts = {}) {
     // origem nunca leu este campo (toMonitorGroup em groupEntitlements.js nem
     // repassa `imageMode`), mas bloqueamos a escrita aqui para não deixar uma
     // configuração "fantasma" salva sem nenhum efeito.
-    if ((imageMode !== undefined || watermarkText !== undefined) && group.role !== 'post') {
+    if ((imageMode !== undefined || watermarkText !== undefined || watermarkColor !== undefined) && group.role !== 'post') {
       return reply.code(400).send({ error: 'Modo de imagem e marca d\'água só podem ser definidos no destino.' })
     }
     // Unicode-aware ([...string].length conta codepoints, não UTF-16 code
@@ -223,8 +223,17 @@ export async function groupsRoutes(app, opts = {}) {
     const normalizedWatermarkText = watermarkText !== undefined
       ? String(watermarkText ?? '').replace(/\s+/g, ' ').trim()
       : undefined
-    if (normalizedWatermarkText !== undefined && [...normalizedWatermarkText].length > 50) {
-      return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 50 caracteres.' })
+    // Espelha WATERMARK_MAX_CHARS de core/destinationWatermark.js. NÃO importar
+    // aquele módulo aqui: ele carrega `sharp` (binário nativo) e a API o mantém
+    // fora do processo de propósito (mesmo motivo do lazy load em
+    // linkConversion.js). test/watermark-limite-caracteres.test.js falha se os
+    // dois números divergirem.
+    if (normalizedWatermarkText !== undefined && [...normalizedWatermarkText].length > 25) {
+      return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 25 caracteres.' })
+    }
+    // Só duas cores por decisão de produto (ver core/destinationWatermark.js).
+    if (watermarkColor !== undefined && !['white', 'black'].includes(watermarkColor)) {
+      return reply.code(400).send({ error: 'Cor da marca d\'água inválida.' })
     }
     const requestedImageMode = imageMode ?? group.imageMode ?? 'original'
     const requestedWatermarkText = normalizedWatermarkText ?? group.watermarkText ?? ''
@@ -286,6 +295,7 @@ export async function groupsRoutes(app, opts = {}) {
         ...(welcomeMsg !== undefined ? { welcomeMsg: String(welcomeMsg).trim() || null } : {}),
         ...(imageMode !== undefined ? { imageMode } : {}),
         ...(normalizedWatermarkText !== undefined ? { watermarkText: normalizedWatermarkText || null } : {}),
+        ...(watermarkColor !== undefined ? { watermarkColor } : {}),
         ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
         ...(forwardMode !== undefined ? { forwardMode: requestedForwardMode } : {}),

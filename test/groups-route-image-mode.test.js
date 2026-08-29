@@ -81,11 +81,11 @@ test('PUT /:id aceita original/original_watermark/preview em grupo role=post (de
     assert.equal(JSON.parse(putRes.body).imageMode, imageMode)
   }
 
-  const withWatermark = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'original_watermark', watermarkText: 'Achadinhos da Maria' } })
+  const withWatermark = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'original_watermark', watermarkText: 'Achadinhos Maria' } })
   assert.equal(withWatermark.statusCode, 200)
   const body = JSON.parse(withWatermark.body)
   assert.equal(body.imageMode, 'original_watermark')
-  assert.equal(body.watermarkText, 'Achadinhos da Maria')
+  assert.equal(body.watermarkText, 'Achadinhos Maria')
   await app.close()
 })
 
@@ -109,7 +109,7 @@ test('PUT /:id recusa original_watermark sem texto de marca', async () => {
   await app.close()
 })
 
-test('PUT /:id recusa texto de marca acima de 50 caracteres (contagem por codepoint)', async () => {
+test('PUT /:id recusa texto de marca acima de 25 caracteres (contagem por codepoint)', async () => {
   const { app } = await buildApp()
   const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-too-long@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
   const { id } = JSON.parse(createRes.body)
@@ -117,14 +117,14 @@ test('PUT /:id recusa texto de marca acima de 50 caracteres (contagem por codepo
   const putRes = await app.inject({
     method: 'PUT',
     url: `/api/groups/${id}`,
-    payload: { imageMode: 'original_watermark', watermarkText: 'x'.repeat(51) },
+    payload: { imageMode: 'original_watermark', watermarkText: 'x'.repeat(26) },
   })
   assert.equal(putRes.statusCode, 400)
 
   const putOk = await app.inject({
     method: 'PUT',
     url: `/api/groups/${id}`,
-    payload: { imageMode: 'original_watermark', watermarkText: 'x'.repeat(50) },
+    payload: { imageMode: 'original_watermark', watermarkText: 'x'.repeat(25) },
   })
   assert.equal(putOk.statusCode, 200)
   await app.close()

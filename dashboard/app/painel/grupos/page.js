@@ -778,7 +778,7 @@ export default function GruposPage() {
                   // Ao ligar a marca pela 1ª vez sem texto salvo, sugere o
                   // nome do próprio destino — a pessoa pode trocar depois.
                   ...(nextMode === 'original_watermark' && ![...(g.watermarkText ?? '')].join('').trim()
-                    ? { watermarkText: [...String(g.name ?? '').trim()].slice(0, 50).join('') }
+                    ? { watermarkText: [...String(g.name ?? '').trim()].slice(0, 25).join('') }
                     : {}),
                 })
               }}
@@ -792,23 +792,39 @@ export default function GruposPage() {
           {watermarkMode && (
             <CfgRow
               label="Texto da marca d&apos;água"
-              hint={`${[...(g.watermarkText ?? '')].length}/50 caracteres · aparece apenas neste destino.`}
-              last
+              hint={`${[...(g.watermarkText ?? '')].length}/25 caracteres · aparece no meio da foto, apenas neste destino.`}
               extra="cfg-fadeup"
             >
               <input
                 className="pnl-input"
                 value={g.watermarkText ?? ''}
-                maxLength={50}
+                maxLength={25}
                 placeholder="Ex.: Achadinhos da Maria"
                 onChange={(e) => {
                   // [...string] conta codepoints (não UTF-16 code units), igual
                   // ao limite aplicado no servidor e no renderizador da marca —
-                  // os três nunca podem discordar sobre "50 caracteres".
-                  const clamped = [...e.target.value].slice(0, 50).join('')
+                  // os três nunca podem discordar sobre "25 caracteres".
+                  const clamped = [...e.target.value].slice(0, 25).join('')
                   handleUpdateGroupDebounced(g.id, { watermarkText: clamped })
                 }}
               />
+            </CfgRow>
+          )}
+          {watermarkMode && (
+            <CfgRow
+              label="Cor da marca d&apos;água"
+              hint="Escolha conforme as suas fotos: a marca branca some em foto clara, a preta some em foto escura."
+              last
+              extra="cfg-fadeup"
+            >
+              <select
+                className="pnl-input"
+                value={g.watermarkColor === 'black' ? 'black' : 'white'}
+                onChange={(e) => handleUpdateGroup(g.id, { watermarkColor: e.target.value })}
+              >
+                <option value="white">Branca</option>
+                <option value="black">Preta</option>
+              </select>
             </CfgRow>
           )}
         </CfgSection>

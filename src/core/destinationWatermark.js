@@ -1,10 +1,26 @@
 import sharp from 'sharp'
 
-const POSITIONS = new Set(['top-left', 'top-right', 'bottom-left', 'bottom-right'])
+// 'center' é o padrão do produto (2026-08-29): a marca fica no meio da foto,
+// com 50% de transparência, para identificar a oferta sem esconder o produto e
+// sem poder ser cortada fora como acontece com marca de canto. Os cantos
+// continuam suportados pela POC/benchmark, mas a tela da cliente não os oferece.
+const POSITIONS = new Set(['center', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
+
+// Só duas cores, por decisão de produto: a cliente escolhe conforme as fotos
+// dela (marca branca some em foto clara, preta some em foto escura). Qualquer
+// outro valor cai no padrão em vez de quebrar o envio.
+export const WATERMARK_COLORS = Object.freeze({ white: '#ffffff', black: '#000000' })
+
+// 25 caracteres: a marca é centralizada e grande o bastante para ser lida na
+// miniatura do WhatsApp; texto mais longo teria de encolher tanto que deixaria
+// de cumprir a função.
+export const WATERMARK_MAX_CHARS = 25
+
 const DEFAULTS = Object.freeze({
-  position: 'bottom-right',
-  opacity: 0.68,
-  maxWidthPercent: 42,
+  position: 'center',
+  color: 'white',
+  opacity: 0.5,
+  maxWidthPercent: 70,
 })
 const MIN_WATERMARK_DIMENSION = 160
 
@@ -20,10 +36,16 @@ export function escapeXml(value) {
 export function normalizeWatermarkConfig(raw = {}) {
   const text = String(raw.text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!text) throw new Error('Marca d\'agua sem texto')
-  if ([...text].length > 50) throw new Error('Marca d\'agua deve ter no maximo 50 caracteres')
+  if ([...text].length > WATERMARK_MAX_CHARS) {
+    throw new Error(`Marca d'agua deve ter no maximo ${WATERMARK_MAX_CHARS} caracteres`)
+  }
 
   const position = raw.position ?? DEFAULTS.position
   if (!POSITIONS.has(position)) throw new Error(`Posicao de marca d'agua invalida: ${position}`)
+
+  // Cor desconhecida NAO derruba o envio: cai no padrao. A marca e enfeite;
+  // perder a oferta inteira por causa de um valor legado no banco seria pior.
+  const color = Object.hasOwn(WATERMARK_COLORS, raw.color) ? raw.color : DEFAULTS.color
 
   const opacity = Number(raw.opacity ?? DEFAULTS.opacity)
   if (!Number.isFinite(opacity) || opacity < 0.25 || opacity > 0.9) {
@@ -35,7 +57,7 @@ export function normalizeWatermarkConfig(raw = {}) {
     throw new Error('Largura maxima deve estar entre 20 e 70 por cento')
   }
 
-  return { text, position, opacity, maxWidthPercent }
+  return { text, position, color, opacity, maxWidthPercent }
 }
 
 export async function createSampleInput() {
@@ -78,6 +100,48 @@ function wrapText(text, maxCharacters) {
   return [lines[0], `${lines.slice(1).join(' ').slice(0, Math.max(1, maxCharacters - 1))}…`]
 }
 
+// Marca CENTRALIZADA (o formato do produto). Sem caixa atrás do texto: a caixa
+// existe no estilo de canto para garantir contraste, mas no meio da foto ela
+// taparia justamente o produto. Aqui o que dá o efeito de marca d'água é o
+// próprio texto a 50% — por isso a cliente escolhe entre branco e preto
+// conforme as fotos dela.
+//
+// O SVG tem o tamanho da imagem inteira e é composto em (0,0): deixar o
+// alinhamento para o `text-anchor` do SVG evita a conta de centralização
+// manual, que erraria em toda imagem não-quadrada.
+function buildCenteredOverlay({ imageWidth, imageHeight, config }) {
+  const shortSide = Math.min(imageWidth, imageHeight)
+  // Com o teto de 25 caracteres, quebrar em ~14 dá no máximo duas linhas.
+  const lines = wrapText(config.text, 14)
+  const longest = Math.max(...lines.map(line => [...line].length))
+  const maxTextWidth = imageWidth * config.maxWidthPercent / 100
+  const AVERAGE_GLYPH_RATIO = 0.62
+  const fitFontSize = Math.floor(maxTextWidth / Math.max(1, longest * AVERAGE_GLYPH_RATIO))
+  // Dois tetos: a largura pedida e uma fração do lado menor — sem o segundo,
+  // marca de 3 letras viraria um letreiro cobrindo a foto inteira.
+  const fontSize = Math.max(14, Math.min(fitFontSize, Math.round(shortSide * 0.2)))
+  const lineHeight = Math.round(fontSize * 1.15)
+  const blockHeight = lineHeight * lines.length
+  const firstBaseline = Math.round(imageHeight / 2 - blockHeight / 2 + fontSize * 0.82)
+  const fill = WATERMARK_COLORS[config.color]
+  const textNodes = lines.map((line, index) => (
+    `<text x="${Math.round(imageWidth / 2)}" y="${firstBaseline + index * lineHeight}" ` +
+    'text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" ' +
+    `font-size="${fontSize}" font-weight="700" fill="${fill}" fill-opacity="${config.opacity}">` +
+    `${escapeXml(line)}</text>`
+  )).join('')
+
+  return {
+    width: imageWidth,
+    height: imageHeight,
+    buffer: Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}">${textNodes}</svg>`,
+    ),
+  }
+}
+
+// Estilo de CANTO (legado): caixa escura com texto branco. Continua alcançável
+// pela POC/benchmark; a tela da cliente não oferece essas posições.
 function buildOverlay({ imageWidth, imageHeight, config }) {
   const shortSide = Math.min(imageWidth, imageHeight)
   const fontSize = Math.max(14, Math.min(54, Math.round(shortSide * 0.045)))
@@ -129,10 +193,19 @@ export async function renderDestinationWatermark(input, rawConfig, options = {})
       .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })
       .toBuffer({ resolveWithObject: true })
   } else {
-    const margin = Math.max(8, Math.round(Math.min(info.width, info.height) * 0.025))
-    const overlay = buildOverlay({ imageWidth: info.width - margin * 2, imageHeight: info.height - margin * 2, config })
-    const top = config.position.startsWith('top') ? margin : info.height - overlay.height - margin
-    const left = config.position.endsWith('left') ? margin : info.width - overlay.width - margin
+    let overlay
+    let top
+    let left
+    if (config.position === 'center') {
+      overlay = buildCenteredOverlay({ imageWidth: info.width, imageHeight: info.height, config })
+      top = 0
+      left = 0
+    } else {
+      const margin = Math.max(8, Math.round(Math.min(info.width, info.height) * 0.025))
+      overlay = buildOverlay({ imageWidth: info.width - margin * 2, imageHeight: info.height - margin * 2, config })
+      top = config.position.startsWith('top') ? margin : info.height - overlay.height - margin
+      left = config.position.endsWith('left') ? margin : info.width - overlay.width - margin
+    }
     mainResult = await sharp(data, { raw: info })
       .composite([{ input: overlay.buffer, top, left, blend: 'over' }])
       .jpeg({ quality: 95, mozjpeg: true, chromaSubsampling: '4:4:4' })

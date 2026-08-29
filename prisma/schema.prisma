@@ -117,6 +117,9 @@ model Group {
   // mas só é lido para grupos role='post'.
   imageMode             String              @default("original")
   watermarkText         String?
+  // 'white' | 'black'. Nulo = padrão ('white'). Valor desconhecido cai no
+  // padrão no renderizador — marca é enfeite, não pode derrubar o envio.
+  watermarkColor        String?
   imageLinkTarget       String              @default("first")
   fallbackToOriginal    Boolean             @default(false)
   forwardMode           String              @default("LINK_ONLY")

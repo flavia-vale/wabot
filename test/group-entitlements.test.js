@@ -28,7 +28,7 @@ test('buildEntitledGroupConfig removes all channel monitors, posts and targets f
   // escolha de imagem/marca que a cliente fez. Não existe gate de plano para
   // marca d'água em lugar nenhum do código — se um dia existir, é aqui que ele
   // aparece (e este assert é quem trava a regressão).
-  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null, imageMode: 'original_watermark', watermarkText: 'Minha marca' }])
+  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null, imageMode: 'original_watermark', watermarkText: 'Minha marca', watermarkColor: null }])
 })
 
 // 2026-08-28: o modo de imagem deixou de ser único/global e passou a ser
