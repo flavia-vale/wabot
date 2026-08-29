@@ -375,6 +375,11 @@ export default function GruposPage() {
   const [targetPostIds, setTargetPostIds] = useState([])
   const [targetMode, setTargetMode] = useState('explicit')
   const [targetLoading, setTargetLoading] = useState(false)
+  const [targetSaving, setTargetSaving] = useState(false)
+  const [targetError, setTargetError] = useState('')
+  // Cada abertura do editor ganha um número. A resposta do GET só é aplicada se
+  // ainda for a da abertura corrente — ver o comentário em openTargetEditor.
+  const targetRequestRef = useRef(0)
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [channelButtonGroupId, setChannelButtonGroupId] = useState(null)
   const [tab, setTab] = useState('monitor')
@@ -508,12 +513,30 @@ export default function GruposPage() {
     }, delayMs)
   }
 
+  // Bug relatado por cliente (2026-08-29): ela desmarcava um destino, salvava, e
+  // ao reabrir ele estava marcado de novo — e continuava recebendo oferta.
+  //
+  // Causa: o modal abria JÁ com a lista de destinos clicável enquanto o GET
+  // ainda estava em vôo (celular em 4G leva segundos). Quem desmarcasse nesse
+  // intervalo tinha a escolha ATROPELADA pela resposta, que chamava
+  // `setTargetPostIds(ids)` e remarcava tudo. O clique em "Salvar destinos"
+  // gravava a lista da resposta, não a escolha dela. Pior: até a resposta
+  // chegar, o modal ainda mostrava a seleção do OUTRO monitor aberto antes.
+  //
+  // Duas travas, e as duas precisam ficar: a lista só vira clicável depois que
+  // a resposta chega (não há janela para clique perdido) e a resposta de uma
+  // abertura antiga é descartada (não sobrescreve a seleção da abertura atual).
   async function openTargetEditor(groupId) {
+    const requestId = ++targetRequestRef.current
     setActionError('')
+    setTargetError('')
     setTargetLoading(true)
     setTargetEditorId(groupId)
+    setTargetPostIds([])
+    setTargetMode('explicit')
     try {
       const data = await api.groupTargets(groupId)
+      if (targetRequestRef.current !== requestId) return
       const ids = data.postIds ?? []
       const mode = data.mode ?? 'explicit'
       setTargetMode(mode)
@@ -521,10 +544,12 @@ export default function GruposPage() {
       setGroupTargetsCache((prev) => ({ ...prev, [groupId]: ids }))
       setGroupTargetsModeCache((prev) => ({ ...prev, [groupId]: mode }))
     } catch (err) {
+      if (targetRequestRef.current !== requestId) return
+      setTargetError(err.message)
       setActionError(err.message)
       setTargetEditorId(null)
     } finally {
-      setTargetLoading(false)
+      if (targetRequestRef.current === requestId) setTargetLoading(false)
     }
   }
 
@@ -535,20 +560,30 @@ export default function GruposPage() {
   }
 
   async function saveTargetPosts() {
-    if (!targetEditorId) return
-    setTargetLoading(true)
+    if (!targetEditorId || targetLoading || targetSaving) return
+    setTargetSaving(true)
     setActionError('')
+    setTargetError('')
+    // Só mandamos ids que ainda existem na lista de destinos da tela. Id de um
+    // grupo já apagado faz a rota devolver 400 ("Lista de grupos destino
+    // inválida") e a escolha inteira se perde — de novo com cara de "não
+    // salvou".
+    const idsToSave = targetPostIds.filter((id) => post.some((p) => p.id === id))
     try {
-      await api.updateGroupTargets(targetEditorId, targetPostIds)
-      const savedMode = targetPostIds.length ? 'explicit' : 'all'
+      await api.updateGroupTargets(targetEditorId, idsToSave)
+      const savedMode = idsToSave.length ? 'explicit' : 'all'
       setTargetMode(savedMode)
-      setGroupTargetsCache((prev) => ({ ...prev, [targetEditorId]: targetPostIds }))
+      setGroupTargetsCache((prev) => ({ ...prev, [targetEditorId]: idsToSave }))
       setGroupTargetsModeCache((prev) => ({ ...prev, [targetEditorId]: savedMode }))
       setTargetEditorId(null)
     } catch (err) {
+      // O aviso precisa aparecer DENTRO do modal: o banner do topo da página
+      // fica fora da tela no celular, então a falha passava despercebida e a
+      // cliente saía achando que tinha salvado.
+      setTargetError(err.message)
       setActionError(err.message)
     } finally {
-      setTargetLoading(false)
+      setTargetSaving(false)
     }
   }
 
@@ -878,12 +913,20 @@ export default function GruposPage() {
           <div className="pnl-card" style={{ width: '100%', maxWidth: 420 }}>
             <div className="pnl-card-title">Configurar destinos</div>
             <p className="pnl-card-note" style={{ marginTop: 4, marginBottom: 12 }}>Escolha quais grupos de destino recebem mensagens deste grupo monitorado. Se nenhum for selecionado, o bot envia para todos.</p>
-            {targetMode === 'all' && (
+            {!targetLoading && targetMode === 'all' && (
               <p className="pnl-hint" style={{ color: '#166534', marginBottom: 12 }}>
                 Este monitor está usando o padrão “todos os destinos”. Eles aparecem marcados para deixar claro que estão ativos.
               </p>
             )}
-            {post.length === 0 ? (
+            {targetError && (
+              <p className="pnl-hint" style={{ color: '#b42318', marginBottom: 12 }}>{targetError}</p>
+            )}
+            {/* Enquanto a lista de destinos não chega, nada é clicável: um
+                clique aqui seria apagado pela resposta e a escolha da cliente
+                se perderia sem aviso nenhum. */}
+            {targetLoading ? (
+              <p className="pnl-hint" style={{ marginBottom: 12 }}>Carregando os destinos deste grupo…</p>
+            ) : post.length === 0 ? (
               <p className="pnl-hint" style={{ color: '#b5742a', marginBottom: 12 }}>Cadastre ao menos um grupo de postagem para configurar destinos.</p>
             ) : (
               <div className="pnl-grid" style={{ maxHeight: 256, overflowY: 'auto', marginBottom: 12 }}>
@@ -897,7 +940,7 @@ export default function GruposPage() {
             )}
             <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
               <button type="button" className="pnl-btn" onClick={() => setTargetEditorId(null)}>Cancelar</button>
-              <button type="button" className="pnl-btn is-primary" onClick={saveTargetPosts} disabled={targetLoading}>{targetLoading ? 'Salvando…' : 'Salvar destinos'}</button>
+              <button type="button" className="pnl-btn is-primary" onClick={saveTargetPosts} disabled={targetLoading || targetSaving}>{targetSaving ? 'Salvando…' : 'Salvar destinos'}</button>
             </div>
           </div>
         </div>
