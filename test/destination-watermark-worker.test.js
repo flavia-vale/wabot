@@ -6,7 +6,7 @@ const worker = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'u
 
 test('worker resolve modo e texto a partir do detalhe do destino', () => {
   assert.match(worker, /const postDetail = cfg\.groups\.postDetails\.find\(g => g\.waJid === destJid\)/)
-  assert.match(worker, /resolveDestinationImageMode\(postDetail\?\.imageMode\)/)
+  assert.match(worker, /effectiveDestinationImageMode\(postDetail\?\.imageMode, \{ hasChannelButton: !!channelForward \}\)/)
   assert.match(worker, /postDetail\?\.watermarkText/)
 })
 

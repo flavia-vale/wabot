@@ -28,7 +28,7 @@ import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_
 import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
-import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, resolveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
+import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, effectiveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
@@ -845,9 +845,12 @@ async function checkScheduledMessages() {
           continue
         }
 
-        const scheduledImageRecipe = buildBroadcastImageRecipe(msg.text, { imageUrl: msg.imageUrl, imageRefererUrl: msg.imageRefererUrl })
-        // Botão "Ver canal" herdado do grupo de destino (mensagem agendada).
-        const scheduledChannelForward = resolveChannelForward((await getConfig()).groups.postDetails.find(g => g.waJid === jid))
+        // Mesma regra do broadcast: o grupo de destino define o botão e o
+        // formato. Deixar a agendada de fora faria o MESMO grupo se comportar
+        // diferente conforme a esteira que enviou.
+        const scheduledPostDetail = (await getConfig()).groups.postDetails.find(g => g.waJid === jid)
+        const scheduledChannelForward = resolveChannelForward(scheduledPostDetail)
+        const scheduledImageRecipe = buildBroadcastImageRecipe(msg.text, { imageUrl: msg.imageUrl, imageRefererUrl: msg.imageRefererUrl, appearance: resolveOfferAppearance(scheduledPostDetail, { hasChannelButton: !!scheduledChannelForward }) })
         const accepted = await enqueueSendJob({
           type: 'scheduled',
           logId: log.id,
@@ -1611,12 +1614,15 @@ function buildBroadcastImageRecipe(text, options = {}) {
     imageUrl: options.imageUrl,
     refererUrl: isHttpUrl(options.imageRefererUrl) ? options.imageRefererUrl : undefined,
     // Como esta oferta deve aparecer (foto / foto com marca / card clicável /
-    // card com marca). Vem da FILA (escolha por fila) ou da conta (escolha
-    // única das ofertas automáticas) — ver resolveOfferAppearance em
-    // core/imageModePolicy.js. Precisa viajar DENTRO da receita porque a
-    // receita é o que sobrevive ao BullMQ: o payload só é montado no dequeue,
-    // possivelmente noutro processo, onde a linha do banco não está à mão.
-    // Ausente = 'original', o comportamento histórico.
+    // card com marca). Vem SEMPRE do GRUPO DE DESTINO — a mesma escolha que o
+    // espelhamento já lia. O formato é sobre ONDE a oferta chega, não sobre
+    // qual esteira a produziu: assim um grupo se comporta igual venha a oferta
+    // de espelhamento, de fila, de oferta automática ou de agendamento, e não
+    // existem duas configurações concorrentes para a mesma decisão.
+    //
+    // Precisa viajar DENTRO da receita porque a receita é o que sobrevive ao
+    // BullMQ: o payload só é montado no dequeue, possivelmente noutro
+    // processo, onde a config não está à mão. Ausente = 'original'.
     appearance: options.appearance ?? undefined,
   }
 }
@@ -3892,7 +3898,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         const channelForward = resolveChannelForward(postDetail)
         // Aparência da imagem: escolhida pelo DESTINO, não pela origem. Ver
         // core/imageModePolicy.js — valor ausente/desconhecido cai em 'original'.
-        const destinationImageMode = resolveDestinationImageMode(postDetail?.imageMode)
+        // Destino com botão "Ver canal" não aceita card: o WhatsApp só aceita o
+        // botão em corpo de mídia. A degradação preserva a marca d'água — antes
+        // dela, card com marca + botão saía como foto SEM marca, em silêncio.
+        const destinationImageMode = effectiveDestinationImageMode(postDetail?.imageMode, { hasChannelButton: !!channelForward })
         const watermarkText = String(postDetail?.watermarkText ?? '').trim()
         const watermarkColor = postDetail?.watermarkColor ?? undefined
         const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
@@ -4847,10 +4856,11 @@ process.on('message', async msg => {
         errors.push({ jid, error: classifyError(err) })
         continue
       }
-      const imageRecipe = buildBroadcastImageRecipe(msg.text, msg.options)
-      // Botão "Ver canal" herdado do grupo de destino (oferta automática,
-      // broadcast manual). null = sem botão. A injeção acontece em processSendJob.
-      const broadcastChannelForward = resolveChannelForward((await getConfig()).groups.postDetails.find(g => g.waJid === jid))
+      // Grupo de destino: define o botão "Ver canal" E como a oferta aparece.
+      const broadcastPostDetail = (await getConfig()).groups.postDetails.find(g => g.waJid === jid)
+      // null = sem botão. A injeção acontece em processSendJob.
+      const broadcastChannelForward = resolveChannelForward(broadcastPostDetail)
+      const imageRecipe = buildBroadcastImageRecipe(msg.text, { ...msg.options, appearance: resolveOfferAppearance(broadcastPostDetail, { hasChannelButton: !!broadcastChannelForward }) })
       const accepted = await enqueueSendJob({
         type: 'broadcast',
         logId: log.id,

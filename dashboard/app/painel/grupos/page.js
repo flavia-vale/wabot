@@ -891,18 +891,26 @@ export default function GruposPage() {
   function renderPostConfig(g) {
     const destinationImageMode = ['original', 'original_watermark', 'preview', 'preview_watermark'].includes(g.imageMode) ? g.imageMode : 'original'
     const watermarkMode = destinationImageMode === 'original_watermark' || destinationImageMode === 'preview_watermark'
+    // Com o botão "Ver canal" ligado, o WhatsApp só aceita o botão em cima de
+    // uma foto — o card clicável seria derrubado. Em vez de oferecer uma
+    // escolha que não vale, a tela mostra só o que de fato pode sair e diz o
+    // porquê. Ao ligar o botão, a API já grava o formato degradado
+    // (effectiveDestinationImageMode), então o que aparece aqui é a verdade.
+    const temBotaoCanal = Boolean(g.channelButtonJid)
     return (
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 14 }}>
         <CfgSection icon="image" title="Imagem das ofertas" desc="Escolha como as ofertas aparecem neste destino — a mesma oferta pode sair diferente em cada grupo/canal.">
           <CfgRow
             label="Modo da imagem"
-            hint={destinationImageMode === 'preview'
-              ? 'Card clicável: tocar na imagem abre o link da oferta.'
-              : destinationImageMode === 'preview_watermark'
-                ? 'Card clicável com a sua identificação na imagem: tocar abre o link da oferta.'
-                : watermarkMode
-                  ? 'Foto original da oferta, com a identificação deste destino.'
-                  : 'Usa a foto que veio na mensagem monitorada.'}
+            hint={temBotaoCanal
+              ? 'Com o botão "Ver canal" ligado, a oferta sai como foto: o WhatsApp só aceita o botão em cima de uma foto. Para usar o card que abre a loja, remova o botão abaixo.'
+              : destinationImageMode === 'preview'
+                ? 'Card clicável: tocar na imagem abre o link da oferta.'
+                : destinationImageMode === 'preview_watermark'
+                  ? 'Card clicável com a sua identificação na imagem: tocar abre o link da oferta.'
+                  : watermarkMode
+                    ? 'Foto original da oferta, com a identificação deste destino.'
+                    : 'Usa a foto que veio na mensagem monitorada.'}
           >
             <select
               className="pnl-input"
@@ -921,8 +929,8 @@ export default function GruposPage() {
             >
               <option value="original">Original</option>
               <option value="original_watermark">Original com marca d&apos;água</option>
-              <option value="preview">Preview clicável</option>
-              <option value="preview_watermark">Preview com marca d&apos;água</option>
+              {!temBotaoCanal && <option value="preview">Preview clicável</option>}
+              {!temBotaoCanal && <option value="preview_watermark">Preview com marca d&apos;água</option>}
             </select>
           </CfgRow>
           {watermarkMode && (

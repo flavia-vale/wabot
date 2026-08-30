@@ -416,10 +416,6 @@ test('runAutomation: envia imagem do anúncio junto com a oferta automática', a
     imageUrl: 'https://down-br.img.susercontent.com/file/anuncio42',
     imageRefererUrl: 'https://shope.ee/oferta42',
     source: 'offerAutomation',
-    // Como a oferta aparece: escolha única da conta (BotConfig). Esta conta
-    // não escolheu nada, então segue a foto da oferta — o comportamento
-    // histórico. Ver test/oferta-aparencia-fila-automacao.test.js.
-    appearance: { mode: 'original', baseMode: 'original', watermark: null },
   })
   assert.deepEqual(updates[0].sentItemIds, JSON.stringify(['42']))
 })

@@ -19,10 +19,10 @@ test('o limite do produto é 25 caracteres', () => {
   assert.throws(() => normalizeWatermarkConfig({ text: 'a'.repeat(26) }), /25 caracteres/)
 })
 
-// A marca d'água passou a existir em TRÊS telas (destino de espelhamento, fila
-// de ofertas e ofertas automáticas). Em vez de cada rota copiar o número por
-// conta própria, a API tem um lugar único — core/watermarkInput.js — e é ele
-// que precisa bater com o renderizador.
+// A validação da marca na API vive num lugar único — core/watermarkInput.js —
+// e é ele que precisa bater com o renderizador. Quem escolhe a marca é o GRUPO
+// DE DESTINO, então hoje só a rota de grupos valida; o módulo existe para que
+// qualquer rota futura valide igual em vez de copiar o número.
 test('a API valida com o MESMO limite e as MESMAS cores do renderizador', () => {
   assert.equal(WATERMARK_INPUT_MAX_CHARS, WATERMARK_MAX_CHARS)
   assert.deepEqual([...WATERMARK_INPUT_COLORS].sort(), Object.keys(WATERMARK_COLORS).sort())
@@ -30,8 +30,8 @@ test('a API valida com o MESMO limite e as MESMAS cores do renderizador', () => 
   assert.equal(isWatermarkTextTooLong('a'.repeat(WATERMARK_MAX_CHARS + 1)), true)
 })
 
-test('as três rotas com marca validam pelo lugar único, e nenhuma carrega o renderizador', () => {
-  const rotas = ['groups.js', 'offerQueue.js', 'offerAutomation.js']
+test('a rota com marca valida pelo lugar único e não carrega o renderizador', () => {
+  const rotas = ['groups.js']
   for (const arquivo of rotas) {
     const rota = readFileSync(new URL(`../src/api/routes/${arquivo}`, import.meta.url), 'utf8')
     assert.match(rota, /from '\.\.\/\.\.\/core\/watermarkInput\.js'/, `${arquivo} precisa validar pelo lugar único`)

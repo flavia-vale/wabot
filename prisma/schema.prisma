@@ -337,13 +337,6 @@ model BotConfig {
   preservationEnabled      Boolean  @default(false)
   channelForwardJid        String?
   channelForwardName       String?
-  // Como as OFERTAS AUTOMÁTICAS aparecem — escolha ÚNICA da conta, não por
-  // automação (decisão de produto: a pessoa configura uma vez e vale para
-  // todas). As filas têm a escolha própria, em OfferQueue. Valores possíveis
-  // em src/core/imageModePolicy.js (DESTINATION_IMAGE_MODE).
-  automationImageMode      String   @default("original")
-  automationWatermarkText  String?
-  automationWatermarkColor String?
   updatedAt                DateTime @updatedAt
 }
 
@@ -465,11 +458,6 @@ model OfferQueue {
   // JSON array de JIDs de destino da fila. "[]" = fallback para todos os
   // grupos com role 'post' (comportamento legado, pré-seleção por fila).
   targetJids            String           @default("[]")
-  // Como as ofertas DESTA fila aparecem. Escolha por fila (cada fila costuma
-  // atender um público diferente). Valores em src/core/imageModePolicy.js.
-  imageMode             String           @default("original")
-  watermarkText         String?
-  watermarkColor        String?
   lastSentAt            DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
