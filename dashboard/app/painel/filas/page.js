@@ -221,6 +221,13 @@ export default function FilasPage() {
           <div className="pnl-field"><label className="pnl-label" htmlFor="operatingHoursEnd">Fim</label><input id="operatingHoursEnd" className="pnl-input" type="time" value={form.operatingHoursEnd} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnd: e.target.value }))} required /></div>
         </div>}
       </div>
+      {/* O formato da oferta é escolhido no GRUPO DE DESTINO, nunca aqui: ele é
+          sobre ONDE a oferta chega, não sobre qual esteira a produziu. Duas
+          configurações para a mesma decisão só criariam contradição silenciosa. */}
+      <p className="pnl-hint" style={{ marginTop: 16 }}>
+        Como a oferta aparece (foto, foto com a sua marca ou card que abre a loja) é escolhido em{' '}
+        <Link href="/painel/grupos">Grupos</Link>, dentro de cada grupo de destino — vale para tudo que chega nele.
+      </p>
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}><button className="pnl-btn is-primary" type="submit">Salvar fila</button><button className="pnl-btn" type="button" onClick={() => setShowForm(false)}>Cancelar</button></div>
     </form>}
     {loading ? <div className="pnl-card">Carregando filas…</div> : !queues.length ? <div className="pnl-card"><div className="pnl-card-title">Nenhuma fila criada</div><p className="pnl-hint" style={{ marginTop: 6 }}>Crie uma fila para distribuir ofertas automaticamente ao longo do dia.</p><button className="pnl-btn is-primary" style={{ marginTop: 14 }} onClick={openCreate}>Criar primeira fila</button></div> : queues.map((queue) => <section className="pnl-card" key={queue.id} style={{ opacity: queue.enabled ? 1 : 0.76 }}>

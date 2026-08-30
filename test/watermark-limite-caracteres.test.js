@@ -3,13 +3,15 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 import { WATERMARK_MAX_CHARS, WATERMARK_COLORS, normalizeWatermarkConfig } from '../src/core/destinationWatermark.js'
+import { WATERMARK_INPUT_MAX_CHARS, WATERMARK_INPUT_COLORS, isWatermarkTextTooLong } from '../src/core/watermarkInput.js'
 
 // O limite de caracteres da marca vive em TRÊS lugares que não podem divergir:
-// o renderizador (fonte da verdade), a validação da API e o campo da tela. A
-// API não pode importar o renderizador — ele carrega `sharp` (binário nativo) e
-// a API o mantém fora do processo de propósito (mesmo motivo do lazy load em
-// src/api/routes/linkConversion.js, política de memória do AGENTS.md). Como o
-// número é copiado, este teste é quem impede a divergência.
+// o renderizador (fonte da verdade), a validação da API (core/watermarkInput.js)
+// e o campo da tela. A API não pode importar o renderizador — ele carrega
+// `sharp` (binário nativo) e a API o mantém fora do processo de propósito
+// (mesmo motivo do lazy load em src/api/routes/linkConversion.js, política de
+// memória do AGENTS.md). Como o número é copiado, este teste é quem impede a
+// divergência.
 
 test('o limite do produto é 25 caracteres', () => {
   assert.equal(WATERMARK_MAX_CHARS, 25)
@@ -17,16 +19,34 @@ test('o limite do produto é 25 caracteres', () => {
   assert.throws(() => normalizeWatermarkConfig({ text: 'a'.repeat(26) }), /25 caracteres/)
 })
 
-test('a API valida com o MESMO limite do renderizador', () => {
-  const rota = readFileSync(new URL('../src/api/routes/groups.js', import.meta.url), 'utf8')
-  assert.match(
-    rota,
-    new RegExp(`\\[\\.\\.\\.normalizedWatermarkText\\]\\.length > ${WATERMARK_MAX_CHARS}\\b`),
-    `a rota precisa recusar acima de ${WATERMARK_MAX_CHARS} caracteres`,
-  )
-  assert.match(rota, new RegExp(`no máximo ${WATERMARK_MAX_CHARS} caracteres`))
-  // Guarda da política de memória: a rota NÃO pode importar o renderizador.
-  assert.doesNotMatch(rota, /from '\.\.\/\.\.\/core\/destinationWatermark\.js'/)
+// A validação da marca na API vive num lugar único — core/watermarkInput.js —
+// e é ele que precisa bater com o renderizador. Quem escolhe a marca é o GRUPO
+// DE DESTINO, então hoje só a rota de grupos valida; o módulo existe para que
+// qualquer rota futura valide igual em vez de copiar o número.
+test('a API valida com o MESMO limite e as MESMAS cores do renderizador', () => {
+  assert.equal(WATERMARK_INPUT_MAX_CHARS, WATERMARK_MAX_CHARS)
+  assert.deepEqual([...WATERMARK_INPUT_COLORS].sort(), Object.keys(WATERMARK_COLORS).sort())
+  assert.equal(isWatermarkTextTooLong('a'.repeat(WATERMARK_MAX_CHARS)), false)
+  assert.equal(isWatermarkTextTooLong('a'.repeat(WATERMARK_MAX_CHARS + 1)), true)
+})
+
+test('a rota com marca valida pelo lugar único e não carrega o renderizador', () => {
+  const rotas = ['groups.js']
+  for (const arquivo of rotas) {
+    const rota = readFileSync(new URL(`../src/api/routes/${arquivo}`, import.meta.url), 'utf8')
+    assert.match(rota, /from '\.\.\/\.\.\/core\/watermarkInput\.js'/, `${arquivo} precisa validar pelo lugar único`)
+    assert.match(rota, new RegExp(`no máximo ${WATERMARK_MAX_CHARS} caracteres`), `${arquivo} precisa dizer o limite à cliente`)
+    // Guarda da política de memória: rota NÃO pode importar o renderizador
+    // (ele carrega `sharp`, binário nativo, que a API mantém fora do processo).
+    assert.doesNotMatch(rota, /from '\.\.\/\.\.\/core\/destinationWatermark\.js'/, `${arquivo} não pode carregar o renderizador`)
+  }
+})
+
+// O módulo de validação da API é puro de propósito — se ele passar a importar
+// o renderizador, `sharp` entra no processo da API pela porta dos fundos.
+test('o lugar único de validação da API não carrega o renderizador', () => {
+  const modulo = readFileSync(new URL('../src/core/watermarkInput.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(modulo, /^\s*import .*(destinationWatermark|sharp)/m)
 })
 
 test('a tela usa o MESMO limite do renderizador', () => {

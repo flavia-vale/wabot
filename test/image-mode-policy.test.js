@@ -9,6 +9,8 @@ import {
   resolveDestinationImageMode,
   destinationImageBaseMode,
   destinationImageUsesWatermark,
+  resolveOfferAppearance,
+  effectiveDestinationImageMode,
 } from '../src/core/imageModePolicy.js'
 
 // 2026-08-20: com o Mercado Livre barrando o IP do servidor, parte das ofertas
@@ -111,7 +113,11 @@ test('a escolha de imagem só aparece na configuração do destino (post), nunca
   const postFn = page.slice(postFnStart, postFnStart + 4000)
   assert.match(postFn, /imageMode/, 'a config do destino precisa oferecer o modo de imagem')
   assert.match(postFn, /watermarkText/, 'a config do destino precisa oferecer o texto da marca')
-  assert.match(postFn, /preview_watermark['"]?\s+disabled/, 'preview com marca ainda não implementado precisa aparecer desabilitado')
+  // 2026-08-30: o card com marca d'água saiu do "em breve" — a composição
+  // entrou em buildManualLinkPreview (bot-worker.js) e a API passou a aceitar
+  // o modo. A opção não pode voltar a aparecer desabilitada na tela.
+  assert.match(postFn, /value="preview_watermark"/, 'a tela precisa oferecer o card com marca d\'água')
+  assert.doesNotMatch(postFn, /preview_watermark['"]?\s+disabled/, 'o modo já está implementado; não pode voltar a aparecer desabilitado')
 })
 
 // resolveDestinationImageMode / destinationImageBaseMode / destinationImageUsesWatermark
@@ -140,4 +146,119 @@ test('destinationImageUsesWatermark só é true nas duas variantes com marca', (
   assert.equal(destinationImageUsesWatermark('preview'), false)
   assert.equal(destinationImageUsesWatermark('original_watermark'), true)
   assert.equal(destinationImageUsesWatermark('preview_watermark'), true)
+})
+
+// resolveOfferAppearance — chokepoint dos caminhos que não passam pelo
+// espelhamento (fila, ofertas automáticas, agendadas, broadcast manual). A
+// entrada é sempre o GRUPO DE DESTINO: eles não passam por `toMonitorGroup`
+// (não há grupo monitorado), mas leem a MESMA escolha que o espelhamento lê.
+
+test('resolveOfferAppearance normaliza os quatro modos e devolve o modo-base', () => {
+  assert.deepEqual(resolveOfferAppearance({ imageMode: 'preview' }), {
+    mode: 'preview', baseMode: 'preview', watermark: null,
+  })
+  assert.deepEqual(resolveOfferAppearance({ imageMode: 'original' }), {
+    mode: 'original', baseMode: 'original', watermark: null,
+  })
+  const comMarca = resolveOfferAppearance({ imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' })
+  assert.equal(comMarca.mode, 'preview_watermark')
+  assert.equal(comMarca.baseMode, 'preview')
+  assert.deepEqual(comMarca.watermark, { text: 'Ofertas da Ana', color: 'black' })
+})
+
+test('resolveOfferAppearance cai em original para destino ausente, vazio ou com valor legado', () => {
+  for (const row of [undefined, {}, { imageMode: null }, { imageMode: '' }, { imageMode: 'fetch' }, { imageMode: 'none' }]) {
+    const resolved = resolveOfferAppearance(row)
+    assert.equal(resolved.mode, 'original', `linha ${JSON.stringify(row)} deveria cair em original`)
+    assert.equal(resolved.watermark, null)
+  }
+})
+
+// Modo com marca e texto vazio não pode derrubar o envio nem produzir marca em
+// branco — mesma regra do espelhamento (useDestinationWatermark exige texto).
+test('resolveOfferAppearance ignora a marca quando não há texto', () => {
+  for (const imageMode of ['original_watermark', 'preview_watermark']) {
+    assert.equal(resolveOfferAppearance({ imageMode, watermarkText: '   ' }).watermark, null)
+    assert.equal(resolveOfferAppearance({ imageMode }).watermark, null)
+    // ...mas o modo em si é preservado: quem escolheu o card continua com card.
+    assert.equal(resolveOfferAppearance({ imageMode }).baseMode, imageMode.startsWith('preview') ? 'preview' : 'original')
+  }
+})
+
+// REGRESSÃO (achado na revisão, antes de ir para produção): a escolha é
+// resolvida no dispatcher, viaja dentro da receita de envio e é resolvida DE
+// NOVO no worker. Como a saída tem outro formato da entrada, a segunda passada
+// não achava `imageMode`, caía em 'original' e a escolha da cliente sumia
+// INTEIRA no meio do caminho — a fila dizia "card com a sua marca" e a oferta
+// saía como foto sem marca, sem erro nenhum em lugar nenhum.
+test('resolveOfferAppearance é idempotente: resolver duas vezes dá o mesmo resultado', () => {
+  const linhas = [
+    { imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' },
+    { imageMode: 'original_watermark', watermarkText: 'Achadinhos', watermarkColor: 'white' },
+    { imageMode: 'preview' },
+    { imageMode: 'original' },
+    {},
+  ]
+  for (const linha of linhas) {
+    const primeira = resolveOfferAppearance(linha)
+    const segunda = resolveOfferAppearance(primeira)
+    assert.deepEqual(segunda, primeira, `resolver duas vezes mudou o resultado de ${JSON.stringify(linha)}`)
+    // Terceira passada, porque nada garante que a receita seja resolvida só
+    // duas vezes no futuro.
+    assert.deepEqual(resolveOfferAppearance(segunda), primeira)
+  }
+})
+
+// effectiveDestinationImageMode — botão "Ver canal" vs. card clicável.
+//
+// Não é escolha nossa: o WhatsApp só aceita o botão em corpo de MÍDIA
+// (injectChannelForwardIntoPayload, src/core/channelSend.js), então no destino
+// com botão o card vira foto. O que estava errado era isso acontecer em
+// silêncio — e, pior, levando a marca d'água junto.
+
+test('sem botão, o formato escolhido vale como está', () => {
+  for (const mode of ['original', 'original_watermark', 'preview', 'preview_watermark']) {
+    assert.equal(effectiveDestinationImageMode(mode), mode)
+    assert.equal(effectiveDestinationImageMode(mode, { hasChannelButton: false }), mode)
+  }
+})
+
+test('com botão "Ver canal", o card vira foto', () => {
+  assert.equal(effectiveDestinationImageMode('preview', { hasChannelButton: true }), 'original')
+  assert.equal(effectiveDestinationImageMode('original', { hasChannelButton: true }), 'original')
+})
+
+// REGRESSÃO: antes desta função, destino com botão + "card com marca" saía como
+// foto SEM marca. O worker só compunha a marca quando o modo-base já era
+// 'original', e o card com marca tem modo-base 'preview' — a marca era
+// descartada sem nenhum aviso.
+test('a marca d\'água sobrevive à troca de card para foto', () => {
+  assert.equal(effectiveDestinationImageMode('preview_watermark', { hasChannelButton: true }), 'original_watermark')
+  assert.equal(effectiveDestinationImageMode('original_watermark', { hasChannelButton: true }), 'original_watermark')
+
+  const aparencia = resolveOfferAppearance(
+    { imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' },
+    { hasChannelButton: true },
+  )
+  assert.equal(aparencia.baseMode, 'original', 'com botão a oferta sai como foto')
+  assert.deepEqual(aparencia.watermark, { text: 'Ofertas da Ana', color: 'black' }, 'a marca não pode se perder na troca')
+})
+
+test('o worker resolve o formato já considerando o botão do destino', () => {
+  const worker = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(worker, /effectiveDestinationImageMode\(postDetail\?\.imageMode, \{ hasChannelButton: !!channelForward \}\)/)
+  assert.doesNotMatch(worker, /resolveDestinationImageMode\(postDetail/, 'o modo do destino não pode voltar a ignorar o botão')
+  for (const nome of ['broadcastChannelForward', 'scheduledChannelForward']) {
+    assert.match(worker, new RegExp(`hasChannelButton: !!${nome}`), `o caminho de ${nome} também precisa considerar o botão`)
+  }
+})
+
+// A tela não pode oferecer um formato que o WhatsApp derruba.
+test('a tela esconde o card quando o botão "Ver canal" está ligado', () => {
+  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  assert.match(page, /const temBotaoCanal = Boolean\(g\.channelButtonJid\)/)
+  assert.match(page, /\{!temBotaoCanal && <option value="preview">/)
+  assert.match(page, /\{!temBotaoCanal && <option value="preview_watermark">/)
+  // E explica o motivo, em linguagem leiga, sem mandar a pessoa adivinhar.
+  assert.match(page, /o WhatsApp só aceita o botão em cima de uma foto/)
 })

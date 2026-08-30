@@ -91,9 +91,10 @@ export const DESTINATION_IMAGE_MODE = Object.freeze({
   ORIGINAL: 'original',
   ORIGINAL_WATERMARK: 'original_watermark',
   PREVIEW: 'preview',
-  // Ainda NÃO implementado no worker nem aceito pela API — ver groups.js e
-  // bot-worker.js. Existe aqui só para a política já falar a linguagem final
-  // e o próximo passo não precisar reescrever este enum.
+  // Card clicável COM a marca d'água composta na foto. A marca entra em
+  // `buildManualLinkPreview` (bot-worker.js) antes do upload da miniatura de
+  // alta qualidade, para que o card pequeno e a foto ampliada sejam a MESMA
+  // imagem marcada.
   PREVIEW_WATERMARK: 'preview_watermark',
 })
 
@@ -125,4 +126,71 @@ export function destinationImageBaseMode(value) {
 export function destinationImageUsesWatermark(value) {
   const mode = resolveDestinationImageMode(value)
   return mode === DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK || mode === DESTINATION_IMAGE_MODE.PREVIEW_WATERMARK
+}
+
+/**
+ * O botão "Ver canal" e o card clicável são incompatíveis, e não por escolha
+ * nossa: o WhatsApp só aceita o botão em corpo de MÍDIA
+ * (`injectChannelForwardIntoPayload`, src/core/channelSend.js) — texto puro com
+ * card nunca carrega o botão. Então, no destino com botão, o card vira foto.
+ *
+ * A degradação preserva a marca d'água: 'preview_watermark' vira
+ * 'original_watermark', não 'original'. Antes disso, o destino com botão e card
+ * com marca saía como foto SEM marca — a marca era descartada em silêncio,
+ * porque o worker só a compunha quando o modo-base já era 'original'.
+ *
+ * @param {string|null|undefined} mode
+ * @param {{hasChannelButton?: boolean}} [opts]
+ */
+export function effectiveDestinationImageMode(mode, { hasChannelButton = false } = {}) {
+  const resolved = resolveDestinationImageMode(mode)
+  if (!hasChannelButton) return resolved
+  return destinationImageUsesWatermark(resolved)
+    ? DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK
+    : DESTINATION_IMAGE_MODE.ORIGINAL
+}
+
+/**
+ * Como a oferta aparece, para os caminhos que não passam pelo espelhamento —
+ * fila de ofertas, ofertas automáticas, agendadas e broadcast manual.
+ *
+ * A entrada é o GRUPO DE DESTINO (`postDetail`), a MESMA escolha que o
+ * espelhamento já lia. O formato é sobre ONDE a oferta chega, não sobre qual
+ * esteira a produziu: um grupo se comporta igual venha a oferta de onde vier, e
+ * não existem duas configurações concorrentes para a mesma decisão. Foi por
+ * isso que a escolha por fila (e a escolha única das ofertas automáticas)
+ * chegou a existir nesta branch e foi retirada antes de ir ao ar: a fila
+ * sobrepunha o grupo em silêncio.
+ *
+ * Existe para que esses caminhos nunca leiam `imageMode` cru: eles passam a
+ * linha por aqui e recebem a decisão já normalizada, do mesmo jeito que o
+ * espelhamento passa pelo chokepoint `toMonitorGroup`. Valor legado, vazio ou
+ * corrompido cai em 'original' num lugar só.
+ *
+ * IDEMPOTENTE DE PROPÓSITO — aceita a linha do destino (`imageMode`/
+ * `watermarkText`/`watermarkColor`) **ou** o resultado desta própria função
+ * (`mode`/`watermark`). A escolha é resolvida ao montar a receita de envio, que
+ * atravessa a fila persistida (possivelmente até outro processo), e é resolvida
+ * DE NOVO no dequeue, que não pode confiar no que veio. Sem aceitar as duas
+ * formas, a segunda passada não achava `imageMode`, caía em 'original' e a
+ * escolha da cliente sumia inteira no meio do caminho.
+ *
+ * A marca d'água some quando não há texto: modo com marca e texto vazio não
+ * pode virar erro de envio nem imagem com marca em branco — a oferta sai sem
+ * marca, que é o mesmo que o espelhamento faz (`useDestinationWatermark`).
+ *
+ * @param {object} [row] linha do grupo de destino ou resultado desta função
+ * @param {{hasChannelButton?: boolean}} [opts] destino com botão "Ver canal"
+ *   não aceita card (ver effectiveDestinationImageMode).
+ */
+export function resolveOfferAppearance(row = {}, opts = {}) {
+  const mode = effectiveDestinationImageMode(row?.imageMode ?? row?.mode, opts)
+  const text = String(row?.watermarkText ?? row?.watermark?.text ?? '').replace(/\s+/g, ' ').trim()
+  const color = row?.watermarkColor ?? row?.watermark?.color ?? undefined
+  const usaMarca = destinationImageUsesWatermark(mode) && Boolean(text)
+  return {
+    mode,
+    baseMode: destinationImageBaseMode(mode),
+    watermark: usaMarca ? { text, color } : null,
+  }
 }

@@ -356,6 +356,13 @@ export default function OfertasAutomaticasPage() {
         <span className="pnl-link-btn">Editar em Mensagens →</span>
       </Link>
 
+      {/* Mesma regra da fila e do espelhamento: quem decide o formato é o grupo
+          de destino. Ver src/core/imageModePolicy.js. */}
+      <Link className="pnl-note-box" href="/painel/grupos" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
+        <span>🖼️ Como a oferta aparece (foto, foto com a sua marca ou card que abre a loja) é escolhido em cada grupo de destino.</span>
+        <span className="pnl-link-btn">Editar em Grupos →</span>
+      </Link>
+
       <div className="pnl-note-box is-flight">
         <strong style={{ fontWeight: 600 }}>Checklist antes de automatizar</strong>
         <p style={{ marginTop: 4 }}>Conecte o WhatsApp, confira suas credenciais da Shopee, escolha um grupo de destino e use “Enviar agora” para validar o modelo antes de deixar a recorrência ligada.</p>
