@@ -127,3 +127,29 @@ export function destinationImageUsesWatermark(value) {
   const mode = resolveDestinationImageMode(value)
   return mode === DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK || mode === DESTINATION_IMAGE_MODE.PREVIEW_WATERMARK
 }
+
+/**
+ * Como a oferta aparece, para os caminhos que NÃO são espelhamento — a fila de
+ * ofertas (escolha por fila) e as ofertas automáticas (escolha única da conta).
+ *
+ * Existe para que esses dois caminhos nunca leiam `imageMode` cru: eles passam
+ * a linha do banco por aqui e recebem a decisão já normalizada, do mesmo jeito
+ * que o espelhamento passa pelo chokepoint `toMonitorGroup`. Assim um valor
+ * legado, vazio ou corrompido cai em 'original' num lugar só.
+ *
+ * A marca d'água some quando não há texto: modo com marca e texto vazio não
+ * pode virar erro de envio nem imagem com marca em branco — a oferta sai sem
+ * marca, que é o mesmo que o espelhamento faz (`useDestinationWatermark`).
+ *
+ * @param {{imageMode?: string|null, watermarkText?: string|null, watermarkColor?: string|null}} [row]
+ */
+export function resolveOfferAppearance(row = {}) {
+  const mode = resolveDestinationImageMode(row?.imageMode)
+  const text = String(row?.watermarkText ?? '').replace(/\s+/g, ' ').trim()
+  const usaMarca = destinationImageUsesWatermark(mode) && Boolean(text)
+  return {
+    mode,
+    baseMode: destinationImageBaseMode(mode),
+    watermark: usaMarca ? { text, color: row?.watermarkColor ?? undefined } : null,
+  }
+}

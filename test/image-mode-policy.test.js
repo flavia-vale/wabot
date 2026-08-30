@@ -9,6 +9,7 @@ import {
   resolveDestinationImageMode,
   destinationImageBaseMode,
   destinationImageUsesWatermark,
+  resolveOfferAppearance,
 } from '../src/core/imageModePolicy.js'
 
 // 2026-08-20: com o Mercado Livre barrando o IP do servidor, parte das ofertas
@@ -144,4 +145,40 @@ test('destinationImageUsesWatermark só é true nas duas variantes com marca', (
   assert.equal(destinationImageUsesWatermark('preview'), false)
   assert.equal(destinationImageUsesWatermark('original_watermark'), true)
   assert.equal(destinationImageUsesWatermark('preview_watermark'), true)
+})
+
+// resolveOfferAppearance — chokepoint das FILAS e das OFERTAS AUTOMÁTICAS.
+// Os dois caminhos não passam por `toMonitorGroup` (não há grupo monitorado),
+// então precisam de um ponto único próprio para nunca lerem `imageMode` cru.
+
+test('resolveOfferAppearance normaliza os quatro modos e devolve o modo-base', () => {
+  assert.deepEqual(resolveOfferAppearance({ imageMode: 'preview' }), {
+    mode: 'preview', baseMode: 'preview', watermark: null,
+  })
+  assert.deepEqual(resolveOfferAppearance({ imageMode: 'original' }), {
+    mode: 'original', baseMode: 'original', watermark: null,
+  })
+  const comMarca = resolveOfferAppearance({ imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' })
+  assert.equal(comMarca.mode, 'preview_watermark')
+  assert.equal(comMarca.baseMode, 'preview')
+  assert.deepEqual(comMarca.watermark, { text: 'Ofertas da Ana', color: 'black' })
+})
+
+test('resolveOfferAppearance cai em original para linha ausente, vazia ou com valor legado', () => {
+  for (const row of [undefined, {}, { imageMode: null }, { imageMode: '' }, { imageMode: 'fetch' }, { imageMode: 'none' }]) {
+    const resolved = resolveOfferAppearance(row)
+    assert.equal(resolved.mode, 'original', `linha ${JSON.stringify(row)} deveria cair em original`)
+    assert.equal(resolved.watermark, null)
+  }
+})
+
+// Modo com marca e texto vazio não pode derrubar o envio nem produzir marca em
+// branco — mesma regra do espelhamento (useDestinationWatermark exige texto).
+test('resolveOfferAppearance ignora a marca quando não há texto', () => {
+  for (const imageMode of ['original_watermark', 'preview_watermark']) {
+    assert.equal(resolveOfferAppearance({ imageMode, watermarkText: '   ' }).watermark, null)
+    assert.equal(resolveOfferAppearance({ imageMode }).watermark, null)
+    // ...mas o modo em si é preservado: quem escolheu o card continua com card.
+    assert.equal(resolveOfferAppearance({ imageMode }).baseMode, imageMode.startsWith('preview') ? 'preview' : 'original')
+  }
 })
