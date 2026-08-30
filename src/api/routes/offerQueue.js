@@ -3,24 +3,15 @@ import { enforceChannelPlanGate, loadUserPlanSubject, normalizeTargetJids, resol
 import { ensureCountQuota } from '../quotas.js'
 import { buildFeatureGateError, canUseOfferQueues, FEATURE_CODES } from '../../billing/plans.js'
 import { startOfSaoPauloDayUtc } from '../../offerQueue/time.js'
-import { resolveDestinationImageMode } from '../../core/imageModePolicy.js'
-import { isValidWatermarkColor, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
 
 const DEFAULTS = { intervalMinutes: 30, hourlyCap: 10, dailyCap: 50 }
 
 const HHMM_RE = /^\d{2}:\d{2}$/
 
-// Como as ofertas da fila aparecem. Só os quatro formatos que a tela oferece —
-// os valores legados do espelhamento ('fetch'/'none') seguem dormentes e não
-// entram aqui. A decisão em si continua em core/imageModePolicy.js.
-const IMAGE_MODES = ['original', 'original_watermark', 'preview', 'preview_watermark']
-
 function queueData(body = {}, partial = false) {
   const data = {}
-  const fields = ['name', 'enabled', 'intervalEnabled', 'intervalMinutes', 'hourlyCapEnabled', 'hourlyCap', 'dailyCapEnabled', 'dailyCap', 'operatingHoursEnabled', 'operatingHoursStart', 'operatingHoursEnd', 'imageMode', 'watermarkColor']
+  const fields = ['name', 'enabled', 'intervalEnabled', 'intervalMinutes', 'hourlyCapEnabled', 'hourlyCap', 'dailyCapEnabled', 'dailyCap', 'operatingHoursEnabled', 'operatingHoursStart', 'operatingHoursEnd']
   for (const field of fields) if (body[field] !== undefined) data[field] = body[field]
-  const normalizedWatermarkText = normalizeWatermarkInputText(body.watermarkText)
-  if (normalizedWatermarkText !== undefined) data.watermarkText = normalizedWatermarkText
   if (body.targetJids !== undefined) data.targetJids = JSON.stringify(normalizeTargetJids(body.targetJids))
   if (!partial) Object.assign(data, { enabled: body.enabled ?? true, intervalEnabled: body.intervalEnabled ?? false, intervalMinutes: body.intervalMinutes ?? DEFAULTS.intervalMinutes, hourlyCapEnabled: body.hourlyCapEnabled ?? false, hourlyCap: body.hourlyCap ?? DEFAULTS.hourlyCap, dailyCapEnabled: body.dailyCapEnabled ?? false, dailyCap: body.dailyCap ?? DEFAULTS.dailyCap, operatingHoursEnabled: body.operatingHoursEnabled ?? false, targetJids: data.targetJids ?? '[]' })
   if ('name' in data) data.name = typeof data.name === 'string' ? data.name.trim() : ''
@@ -40,15 +31,6 @@ function validateQueue(data, current = {}) {
   if (merged.operatingHoursEnabled) {
     if (!HHMM_RE.test(merged.operatingHoursStart ?? '') || !HHMM_RE.test(merged.operatingHoursEnd ?? '')) return 'Horário de funcionamento exige início e fim no formato HH:mm'
   }
-  if (data.imageMode !== undefined && !IMAGE_MODES.includes(data.imageMode)) return 'Formato de imagem inválido'
-  if (data.watermarkColor !== undefined && !isValidWatermarkColor(data.watermarkColor)) return 'Cor da marca d\'água inválida.'
-  if (data.watermarkText !== undefined && isWatermarkTextTooLong(data.watermarkText)) return 'A marca d\'água deve ter no máximo 25 caracteres.'
-  // Mesma exigência do destino de espelhamento: modo com marca sem texto não
-  // adianta ligar — a oferta sairia igual à de sempre e a pessoa acharia que a
-  // escolha não fez nada.
-  if (String(merged.imageMode ?? '').endsWith('_watermark') && !String(merged.watermarkText ?? '').trim()) {
-    return 'Escreva o texto da marca d\'água antes de escolher esse formato.'
-  }
   return null
 }
 
@@ -57,9 +39,7 @@ function parseQueueTargetJids(queue) {
 }
 
 function presentQueue(queue) {
-  // O formato sai normalizado pelo ponto único: linha antiga (sem a coluna) ou
-  // valor legado chega à tela como 'original', que é como ela de fato sai.
-  return { ...queue, targetJids: parseQueueTargetJids(queue), imageMode: resolveDestinationImageMode(queue?.imageMode) }
+  return { ...queue, targetJids: parseQueueTargetJids(queue) }
 }
 
 function optionalUrl(value) {

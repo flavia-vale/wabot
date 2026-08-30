@@ -1,5 +1,6 @@
 import db from '../../db.js'
 import { isValidWatermarkColor, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
+import { effectiveDestinationImageMode } from '../../core/imageModePolicy.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { ensureCountQuota } from '../quotas.js'
 import {
@@ -282,13 +283,25 @@ export async function groupsRoutes(app, opts = {}) {
     const enablingAdvancedPreservation = requestedForwardMode === FORWARD_MODE.ALLOW_NO_LINK
     if (enablingAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(req.user.sub, reply))) return
 
+    // Botão "Ver canal" e card clicável não convivem: o WhatsApp só aceita o
+    // botão em corpo de mídia. Em vez de guardar uma escolha que nunca vai
+    // valer, gravamos já o formato que de fato vai sair — assim o painel mostra
+    // a verdade em vez de prometer um card que o WhatsApp derruba. A marca
+    // d'água é preservada na troca ('card com marca' vira 'foto com marca').
+    const channelButtonFinal = normalizedChannelButtonJid !== undefined
+      ? normalizedChannelButtonJid || null
+      : (group.channelButtonJid ?? null)
+    const imageModeSolicitado = imageMode ?? group.imageMode
+    const imageModeFinal = effectiveDestinationImageMode(imageModeSolicitado, { hasChannelButton: Boolean(channelButtonFinal) })
+    const precisaDegradar = imageModeFinal !== imageModeSolicitado
+
     const updated = await db.group.update({
       where: { id: req.params.id },
       data: {
         ...(blockedKeywords !== undefined ? { blockedKeywords: String(blockedKeywords).trim() || null } : {}),
         ...(allowedPlatforms !== undefined ? { allowedPlatforms: String(allowedPlatforms).trim() || null } : {}),
         ...(welcomeMsg !== undefined ? { welcomeMsg: String(welcomeMsg).trim() || null } : {}),
-        ...(imageMode !== undefined ? { imageMode } : {}),
+        ...((imageMode !== undefined || precisaDegradar) ? { imageMode: imageModeFinal } : {}),
         ...(normalizedWatermarkText !== undefined ? { watermarkText: normalizedWatermarkText || null } : {}),
         ...(watermarkColor !== undefined ? { watermarkColor } : {}),
         ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),

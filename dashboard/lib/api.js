@@ -469,11 +469,6 @@ export const api = {
   logsClearQueue: () => apiFetch('/api/logs/queue', { method: 'DELETE' }),
 
   offerAutomations: () => apiFetch('/api/offer-automations'),
-  // Como as ofertas automáticas aparecem: escolha ÚNICA da conta, não por
-  // automação (ver src/api/routes/offerAutomation.js).
-  offerAutomationsAppearance: () => apiFetch('/api/offer-automations/appearance'),
-  offerAutomationsAppearanceUpdate: (data) =>
-    apiFetch('/api/offer-automations/appearance', { method: 'PUT', body: JSON.stringify(data) }),
   offerAutomationCreate: (data) =>
     apiFetch('/api/offer-automations', { method: 'POST', body: JSON.stringify(data) }),
   offerAutomationUpdate: (id, data) =>

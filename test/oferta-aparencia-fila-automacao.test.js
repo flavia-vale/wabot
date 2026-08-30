@@ -1,196 +1,81 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { drainQueueOnce } from '../src/offerQueue/dispatcher.js'
-import { runAutomation } from '../src/offerAutomation/dispatcher.js'
 import { resolveOfferAppearance } from '../src/core/imageModePolicy.js'
 
 const worker = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
 
-// "Como a oferta aparece" deixou de valer só para o espelhamento. A fila
-// escolhe por FILA; as ofertas automáticas têm UMA escolha para a conta toda.
-// Os dois caminhos saem pelo mesmo lugar (sendBroadcast → receita de imagem no
-// worker), então a escolha viaja dentro da receita.
+// "Como a oferta aparece" é decidido pelo GRUPO DE DESTINO, e só por ele —
+// venha a oferta de espelhamento, de fila, de oferta automática, de
+// agendamento ou de broadcast manual.
+//
+// A escolha por fila (e a escolha única das ofertas automáticas) chegou a
+// existir nesta branch e foi retirada antes de ir ao ar: como o caminho de
+// broadcast não lia o formato do destino, a fila sobrepunha o grupo EM
+// SILÊNCIO — a pessoa marcava "card" no grupo, a oferta saía como foto e não
+// havia erro em lugar nenhum.
 
-// ---------------------------------------------------------------- fila
-
-function setupFila(queueOverrides = {}) {
-  const now = new Date('2026-06-10T15:00:00.000Z')
-  const queue = { id: 'q1', userId: 'u1', enabled: true, intervalEnabled: false, hourlyCapEnabled: false, dailyCapEnabled: false, lastSentAt: null, ...queueOverrides }
-  const item = { id: 'i1', queueId: 'q1', userId: 'u1', status: 'pending', position: 1, text: 'Oferta', targetJids: '["grupo@g.us"]', imageUrl: 'https://img.test/item.jpg' }
-  const calls = { sent: [] }
-  const db = {
-    offerQueueItem: {
-      count: async () => 0,
-      findFirst: async () => item,
-      updateMany: async () => ({ count: 1 }),
-    },
-    offerQueue: {
-      findFirst: async ({ where, select }) => {
-        if (where.enabled === true && queue.enabled !== true) return null
-        return select ? Object.fromEntries(Object.keys(select).map((k) => [k, queue[k]])) : { ...queue }
-      },
-      updateMany: () => ({}),
-    },
-    $transaction: async () => {},
-  }
-  return { queue, calls, deps: { db, now: () => now, isRunning: () => true, sendBroadcast: async (...args) => { calls.sent.push(args) } } }
-}
-
-test('fila sem escolha salva continua saindo como a foto da oferta', async () => {
-  const { queue, calls, deps } = setupFila()
-  await drainQueueOnce(queue, deps)
-  assert.deepEqual(calls.sent[0][3].appearance, { mode: 'original', baseMode: 'original', watermark: null })
+test('a receita de envio leva o formato do GRUPO DE DESTINO', () => {
+  assert.match(worker, /const broadcastPostDetail = \(await getConfig\(\)\)\.groups\.postDetails\.find\(g => g\.waJid === jid\)/)
+  assert.match(worker, /appearance: resolveOfferAppearance\(broadcastPostDetail, \{ hasChannelButton: !!broadcastChannelForward \}\)/)
 })
 
-test('fila leva a própria escolha de aparência para o envio', async () => {
-  const { queue, calls, deps } = setupFila({ imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' })
-  await drainQueueOnce(queue, deps)
-  const { appearance } = calls.sent[0][3]
-  assert.equal(appearance.mode, 'preview_watermark')
-  assert.equal(appearance.baseMode, 'preview')
-  assert.deepEqual(appearance.watermark, { text: 'Ofertas da Ana', color: 'black' })
+// Deixar a agendada de fora faria o MESMO grupo se comportar diferente
+// conforme a esteira que enviou — exatamente a incoerência que este ajuste
+// existe para acabar.
+test('a mensagem agendada segue a mesma regra do broadcast', () => {
+  assert.match(worker, /appearance: resolveOfferAppearance\(scheduledPostDetail, \{ hasChannelButton: !!scheduledChannelForward \}\)/)
 })
 
-test('duas filas da mesma conta podem aparecer de formas diferentes', async () => {
-  const cartao = setupFila({ id: 'q-card', imageMode: 'preview' })
-  await drainQueueOnce(cartao.queue, cartao.deps)
-  const foto = setupFila({ id: 'q-foto', imageMode: 'original' })
-  await drainQueueOnce(foto.queue, foto.deps)
-  assert.equal(cartao.calls.sent[0][3].appearance.baseMode, 'preview')
-  assert.equal(foto.calls.sent[0][3].appearance.baseMode, 'original')
+test('todo caminho de receita resolve o formato pelo destino, nenhum inventa o seu', () => {
+  const chamadas = worker.split('buildBroadcastImageRecipe(').length - 1
+  // 1 declaração + os call sites; cada call site precisa levar a aparência.
+  const comAparencia = worker.split('appearance: resolveOfferAppearance(').length - 1
+  assert.equal(comAparencia, chamadas - 1, 'todo call site precisa levar o formato do destino')
 })
 
-// ------------------------------------------------- ofertas automáticas
-
-function setupAutomacao(botConfig) {
-  const automation = { id: 'a1', userId: 'u1', destGroupJid: 'grupo@g.us', keyword: 'fone', sentItemIds: '[]', page: 1, maxOffersPerRun: 1 }
-  const calls = { sent: [] }
-  const dbOverride = {
-    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'x', secretKey: 'y' }) }) },
-    botConfig: { findUnique: async () => botConfig },
-    offerAutomationSentLog: { findMany: async () => [], createMany: async () => ({}), deleteMany: async () => ({}) },
-    offerAutomation: { update: async () => ({}), updateMany: async () => ({}) },
-    messageLog: { createMany: async () => ({}), create: async () => ({}) },
-  }
-  const offers = [{ itemId: '1', shopId: '1', title: 'Fone', price: '99', priceCents: 9900, imageUrl: 'https://img.test/a.jpg', offerLink: 'https://s.shopee.com.br/abc' }]
-  return {
-    automation,
-    calls,
-    deps: {
-      dbOverride,
-      isRunningFn: async () => true,
-      fetchOffersFn: async () => ({ offers, rawCount: offers.length }),
-      sendBroadcastFn: async (...args) => { calls.sent.push(args) },
-    },
-  }
-}
-
-test('ofertas automáticas usam a escolha ÚNICA da conta, vinda de BotConfig', async () => {
-  const { automation, calls, deps } = setupAutomacao({
-    automationImageMode: 'original_watermark',
-    automationWatermarkText: 'Achadinhos Maria',
-    automationWatermarkColor: 'white',
-  })
-  await runAutomation(automation, deps)
-  assert.equal(calls.sent.length, 1)
-  const { appearance } = calls.sent[0][3]
-  assert.equal(appearance.mode, 'original_watermark')
-  assert.deepEqual(appearance.watermark, { text: 'Achadinhos Maria', color: 'white' })
-})
-
-test('conta sem escolha salva mantém as ofertas automáticas como a foto da oferta', async () => {
-  const { automation, calls, deps } = setupAutomacao({})
-  await runAutomation(automation, deps)
-  assert.equal(calls.sent[0][3].appearance.mode, 'original')
-  assert.equal(calls.sent[0][3].appearance.watermark, null)
-})
-
-// A escolha é da CONTA, não da automação: nenhuma coluna de aparência pode
-// aparecer em OfferAutomation, senão duas automações da mesma conta
-// divergiriam — o oposto do que foi pedido.
-test('a aparência das ofertas automáticas não é lida da automação', () => {
-  const dispatcher = readFileSync(new URL('../src/offerAutomation/dispatcher.js', import.meta.url), 'utf8')
-  assert.doesNotMatch(dispatcher, /automation\.(imageMode|watermarkText|watermarkColor|automationImageMode)/)
-  assert.match(dispatcher, /botConfig\?\.automationImageMode/)
-})
-
-// ------------------------------------------------------------- worker
-
-test('nenhum dos dois caminhos lê imageMode cru: os dois passam por resolveOfferAppearance', () => {
-  for (const arquivo of ['../src/offerQueue/dispatcher.js', '../src/offerAutomation/dispatcher.js']) {
+// A fila e as ofertas automáticas NÃO podem ter formato próprio: seria a
+// segunda configuração para a mesma decisão, e uma sobreporia a outra.
+test('fila e ofertas automáticas não guardam formato próprio', () => {
+  for (const arquivo of ['../src/offerQueue/dispatcher.js', '../src/offerAutomation/dispatcher.js', '../src/api/routes/offerQueue.js', '../src/api/routes/offerAutomation.js']) {
     const src = readFileSync(new URL(arquivo, import.meta.url), 'utf8')
-    assert.match(src, /resolveOfferAppearance/, `${arquivo} precisa passar pelo ponto único`)
+    assert.doesNotMatch(src, /imageMode|watermark/i, `${arquivo} não pode ter formato próprio — quem decide é o grupo de destino`)
   }
-  assert.match(worker, /const appearance = resolveOfferAppearance\(recipe\.appearance \?\? \{\}\)/)
+  const schema = readFileSync(new URL('../prisma/schema.prisma', import.meta.url), 'utf8')
+  const blocoFila = schema.slice(schema.indexOf('model OfferQueue {'), schema.indexOf('model OfferQueueItem {'))
+  assert.doesNotMatch(blocoFila, /imageMode|watermark/i, 'OfferQueue não pode guardar formato próprio')
+  const blocoConfig = schema.slice(schema.indexOf('model BotConfig {'), schema.indexOf('model FollowLog {'))
+  assert.doesNotMatch(blocoConfig, /automationImageMode|automationWatermark/i, 'BotConfig não pode guardar formato das automáticas')
 })
 
-test('a escolha viaja DENTRO da receita, que é o que sobrevive à fila persistida', () => {
-  const inicio = worker.indexOf('function buildBroadcastImageRecipe(')
-  const fim = worker.indexOf('\n}', inicio)
-  assert.match(worker.slice(inicio, fim), /appearance: options\.appearance \?\? undefined/)
+// As telas de fila e de automáticas dizem ONDE o formato é escolhido — sem
+// isso a pessoa procura a configuração e não acha.
+test('as telas de fila e de automáticas apontam para os grupos', () => {
+  for (const arquivo of ['../dashboard/app/painel/filas/page.js', '../dashboard/app/painel/ofertas-automaticas/page.js']) {
+    const page = readFileSync(new URL(arquivo, import.meta.url), 'utf8')
+    assert.match(page, /Como a oferta aparece/, `${arquivo} precisa dizer onde o formato é escolhido`)
+    assert.match(page, /painel\/grupos/, `${arquivo} precisa levar a pessoa até os grupos`)
+  }
 })
 
-// Receita enfileirada ANTES desta versão não tem `appearance`. Ela precisa
-// continuar saindo exatamente como saía (foto), nunca virar card por acidente.
-test('receita antiga, sem escolha, cai em foto da oferta', () => {
-  assert.match(worker, /recipe\.appearance \?\? \{\}/)
+// REGRESSÃO: a escolha é resolvida ao montar a receita e resolvida DE NOVO no
+// dequeue. Como a saída tem outro formato da entrada, a segunda passada não
+// achava `imageMode`, caía em 'original' e a escolha sumia INTEIRA — sem erro
+// em lugar nenhum, que é o pior jeito de falhar.
+test('resolver o formato duas vezes dá o mesmo resultado', () => {
+  const destinos = [
+    { imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' },
+    { imageMode: 'original_watermark', watermarkText: 'Achadinhos', watermarkColor: null },
+    { imageMode: 'preview' },
+    undefined,
+  ]
+  for (const destino of destinos) {
+    const primeira = resolveOfferAppearance(destino)
+    assert.deepEqual(resolveOfferAppearance(primeira), primeira, `mudou ao resolver de novo: ${JSON.stringify(destino)}`)
+  }
 })
 
-test('o card da oferta exige âncora do link e devolve null sem foto', () => {
-  const inicio = worker.indexOf('async function buildBroadcastLinkPreview(')
-  assert.notEqual(inicio, -1, 'buildBroadcastLinkPreview não encontrada')
-  const fim = worker.indexOf('\nasync function buildPayloadFromRecipe(', inicio)
-  const fn = worker.slice(inicio, fim)
-  assert.match(fn, /detectLinks\(corpo\)\.find\(l => corpo\.includes\(l\.url\)\)/)
-  assert.match(fn, /if \(!link\) return null/)
-  assert.match(fn, /if \(!thumb\) return null/)
-  // Sem `title` o WhatsApp não renderiza o card (regressão do PR #1186).
-  assert.match(fn, /title: storePreviewTitle\(/)
-})
-
-// Card impossível (sem link no texto, sem foto) não pode virar texto pelado:
-// a oferta continua saindo com foto, só sem o clique que abre a loja.
-test('card impossível degrada para a foto, nunca para texto pelado', () => {
-  const inicio = worker.indexOf('async function buildPayloadFromRecipe(')
-  const fim = worker.indexOf('\n// Resolve qual canal injetar', inicio)
-  const fn = worker.slice(inicio, fim === -1 ? inicio + 6000 : fim)
-  const preview = fn.indexOf("if (appearance.baseMode === 'preview')")
-  const foto = fn.indexOf('let image = null')
-  assert.ok(preview !== -1 && foto !== -1 && preview < foto, 'o caminho da foto precisa vir DEPOIS da tentativa de card')
-  assert.match(fn, /Cair na FOTO/)
-})
-
-test('a marca é composta uma vez só e serve ao card e à foto', () => {
-  const inicio = worker.indexOf('async function buildPayloadFromRecipe(')
-  const fn = worker.slice(inicio, inicio + 6000)
-  assert.equal(fn.split('renderDestinationWatermark(').length - 1, 1, 'a marca não pode ser composta duas vezes por envio')
-  assert.match(fn, /jpegThumbnail: marcada\?\.thumbnail/)
-  assert.match(fn, /hqBuffer: marcada\?\.main \?\? baixada/)
-  // Best-effort: marca que falha deixa a oferta sair sem marca, nunca sem imagem.
-  assert.match(fn, /enviando imagem sem marca/)
-})
-
-// Ponta a ponta do que o worker de fato recebe: ele resolve DE NOVO o que veio
-// na receita (não pode confiar no conteúdo de uma fila persistida). Se a
-// segunda resolução não devolvesse a mesma coisa, a escolha da cliente sumiria
-// em silêncio entre a tela e o grupo — foi o defeito achado na revisão.
-test('a escolha sobrevive à segunda resolução que o worker faz', async () => {
-  const { queue, calls, deps } = setupFila({ imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' })
-  await drainQueueOnce(queue, deps)
-  const enviada = calls.sent[0][3].appearance
-  assert.deepEqual(resolveOfferAppearance(enviada), enviada)
-  assert.equal(enviada.baseMode, 'preview')
-  assert.equal(enviada.watermark.text, 'Ofertas da Ana')
-})
-
-test('a escolha das automáticas também sobrevive à segunda resolução', async () => {
-  const { automation, calls, deps } = setupAutomacao({
-    automationImageMode: 'original_watermark',
-    automationWatermarkText: 'Achadinhos Maria',
-    automationWatermarkColor: 'white',
-  })
-  await runAutomation(automation, deps)
-  const enviada = calls.sent[0][3].appearance
-  assert.deepEqual(resolveOfferAppearance(enviada), enviada)
+test('destino sem formato salvo mantém a foto da oferta', () => {
+  assert.deepEqual(resolveOfferAppearance(undefined), { mode: 'original', baseMode: 'original', watermark: null })
+  assert.deepEqual(resolveOfferAppearance({ imageMode: 'fetch' }), { mode: 'original', baseMode: 'original', watermark: null })
 })

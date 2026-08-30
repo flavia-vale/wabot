@@ -1,6 +1,5 @@
 import dbDefault from '../db.js'
 import { isRunning as isRunningDefault, sendBroadcast as sendBroadcastDefault } from '../manager.js'
-import { resolveOfferAppearance } from '../core/imageModePolicy.js'
 import { startOfSaoPauloDayUtc } from './time.js'
 import { isOutsideOperatingHours } from './operatingHours.js'
 
@@ -130,12 +129,7 @@ async function drainQueueUnlocked(queue, deps = {}) {
     return { skipped: 'queue_disabled' }
   }
   try {
-    // Como as ofertas DESTA fila aparecem (foto / foto com marca / card
-    // clicável / card com marca). A escolha é por fila; `resolveOfferAppearance`
-    // é o ponto único que normaliza a linha do banco — nunca ler `imageMode`
-    // cru daqui.
-    const appearance = resolveOfferAppearance(queue)
-    await sendBroadcast(queue.userId, item.text, JSON.parse(item.targetJids), { imageUrl: item.imageUrl ?? undefined, imageRefererUrl: item.imageRefererUrl ?? undefined, source: 'offerQueue', queueId: queue.id, ignoreGlobalQuietHours: queue.operatingHoursEnabled === true, appearance })
+    await sendBroadcast(queue.userId, item.text, JSON.parse(item.targetJids), { imageUrl: item.imageUrl ?? undefined, imageRefererUrl: item.imageRefererUrl ?? undefined, source: 'offerQueue', queueId: queue.id, ignoreGlobalQuietHours: queue.operatingHoursEnabled === true })
     await db.$transaction([
       db.offerQueueItem.updateMany({ where: { id: item.id, queueId: queue.id, userId: queue.userId, status: 'queued' }, data: { status: 'sent', sentAt: now, lastError: null } }),
       db.offerQueue.updateMany({ where: { id: queue.id, userId: queue.userId }, data: { lastSentAt: now } }),

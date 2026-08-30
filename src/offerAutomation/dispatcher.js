@@ -1,6 +1,5 @@
 import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
-import { resolveOfferAppearance } from '../core/imageModePolicy.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
 import { applyVariation, resolveCopyVariationPoolJson } from '../core/copyVariation.js'
@@ -246,14 +245,6 @@ export async function runAutomation(automation, {
   const groupInviteLink = botConfig?.brandingGroupLink ?? ''
   const couponLink = botConfig?.couponLink ?? ''
   const templateBody = resolveAutomationTemplateBody(botConfig, automation.templateKey)
-  // Como as ofertas automáticas aparecem: escolha ÚNICA da conta, não por
-  // automação — quem configura decide uma vez e vale para todas. Por isso os
-  // campos moram em BotConfig, e não em OfferAutomation.
-  const appearance = resolveOfferAppearance({
-    imageMode: botConfig?.automationImageMode,
-    watermarkText: botConfig?.automationWatermarkText,
-    watermarkColor: botConfig?.automationWatermarkColor,
-  })
 
   const sentIds = []
   // Envios seguem sequenciais (stagger anti-ban); só os logs de dedup cruzada
@@ -276,7 +267,6 @@ export async function runAutomation(automation, {
         imageUrl: offer.imageUrl,
         imageRefererUrl: offer.offerLink,
         source: 'offerAutomation',
-        appearance,
       })
     } catch (err) {
       // Uma falha pontual num item do lote (timeout de IPC pro worker, bot sem

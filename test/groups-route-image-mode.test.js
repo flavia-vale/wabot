@@ -189,3 +189,61 @@ test('PUT /:id ainda recusa plataforma realmente inválida', async () => {
   assert.equal(putRes.statusCode, 400)
   await app.close()
 })
+
+// Botão "Ver canal" e card clicável não convivem: o WhatsApp só aceita o botão
+// em corpo de mídia. Em vez de guardar uma escolha que nunca vai valer, a rota
+// grava já o formato que de fato vai sair — assim o painel mostra a verdade em
+// vez de prometer um card que o WhatsApp derruba.
+test('PUT /:id troca o card por foto ao ligar o botão "Ver canal"', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-botao-card@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'preview' } })
+  const comBotao = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { channelButtonJid: '120363000000000000@newsletter', channelButtonName: 'Meu canal' } })
+  assert.equal(comBotao.statusCode, 200)
+  assert.equal(JSON.parse(comBotao.body).imageMode, 'original')
+  await app.close()
+})
+
+// A marca d'água não pode se perder na troca — antes disso, card com marca +
+// botão saía como foto SEM marca, em silêncio.
+test('PUT /:id preserva a marca ao trocar o card por foto', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-botao-marca@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana' } })
+  const comBotao = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { channelButtonJid: '120363000000000000@newsletter', channelButtonName: 'Meu canal' } })
+  const salvo = JSON.parse(comBotao.body)
+  assert.equal(salvo.imageMode, 'original_watermark')
+  assert.equal(salvo.watermarkText, 'Ofertas da Ana')
+  await app.close()
+})
+
+// Escolher o card num destino que JÁ tem botão também degrada — senão a tela
+// mostraria "card" e a oferta sairia como foto.
+test('PUT /:id degrada o card escolhido num destino que já tem botão', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-ja-com-botao@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { channelButtonJid: '120363000000000000@newsletter', channelButtonName: 'Meu canal' } })
+  const res = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'preview' } })
+  assert.equal(JSON.parse(res.body).imageMode, 'original')
+  await app.close()
+})
+
+// Removido o botão, o card volta a ser escolhível — a degradação é do momento
+// em que o botão existe, não uma porta de mão única.
+test('PUT /:id volta a aceitar o card depois de remover o botão', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-botao-removido@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { channelButtonJid: '120363000000000000@newsletter', channelButtonName: 'Meu canal' } })
+  await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { channelButtonJid: '', channelButtonName: '' } })
+  const res = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'preview' } })
+  assert.equal(JSON.parse(res.body).imageMode, 'preview')
+  await app.close()
+})
