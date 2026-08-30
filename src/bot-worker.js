@@ -28,7 +28,8 @@ import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_
 import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
-import { shouldReuploadOriginalMedia } from './core/imageModePolicy.js'
+import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, resolveDestinationImageMode } from './core/imageModePolicy.js'
+import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
@@ -86,6 +87,7 @@ import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
+import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
 
 const userId = process.env.BOT_USER_ID
 const WORKER_STARTED_AT = Date.now()
@@ -260,6 +262,38 @@ const IGNORE_UNMONITORED_GROUPS = String(process.env.WA_IGNORE_UNMONITORED_GROUP
 // reconexões do MESMO worker.
 let allowedChatJids = new Set()
 let allowedChatJidsReady = false
+
+// RCA 2026-08-29: mensagem de uma origem MONITORADA podia ser descartada em
+// silêncio total — sem linha no bot.log e sem linha em Envios. Aconteceram dois
+// `return` mudos logo depois de a origem ser reconhecida (texto que virou vazio
+// ao remover convites; mensagem sem link e sem texto aproveitável). Do lado da
+// cliente isso é indistinguível de "o robô parou": ela manda a oferta no grupo
+// monitorado e não aparece absolutamente nada em lugar nenhum. Foi exatamente o
+// que travou o diagnóstico de staging por horas.
+//
+// Por que era mudo de propósito: um reconnect dispara rajada de
+// senderKeyDistribution/protocolMessage nos grupos, e logar por MENSAGEM
+// inundaria o bot.log (que já passa de 400MB). A saída é a mesma do escopo de
+// conversas (`reviewChatScope`): AGREGAR — no máximo uma linha por origem por
+// minuto, carregando quantas foram suprimidas desde a última. Escopo de módulo
+// para sobreviver às reconexões do MESMO worker.
+const MONITORED_DROP_LOG_INTERVAL_MS = Math.max(0, Number(process.env.MONITORED_DROP_LOG_INTERVAL_MS ?? 60_000))
+const monitoredDropLogState = new Map()
+
+function logMonitoredSourceDrop(jid, reason, details = {}) {
+  const now = Date.now()
+  const entry = monitoredDropLogState.get(jid) || { lastLoggedAt: 0, suppressed: 0 }
+  if (now - entry.lastLoggedAt < MONITORED_DROP_LOG_INTERVAL_MS) {
+    entry.suppressed += 1
+    monitoredDropLogState.set(jid, entry)
+    return
+  }
+  monitoredDropLogState.set(jid, { lastLoggedAt: now, suppressed: 0 })
+  logger.info(
+    { jid, reason, suppressedSinceLast: entry.suppressed, ...details },
+    'Origem monitorada: mensagem descartada antes de virar oferta',
+  )
+}
 
 // Cache jid→nome (subject) preenchido no groupFetchAllParticipating. Best-effort,
 // só para anexar o NOME do grupo culpado nos eventos de desync (Part B —
@@ -501,6 +535,7 @@ function startHeartbeatIpc() {
     })
     if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
+    try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
@@ -1235,8 +1270,71 @@ let monitoredSourceCount = 0
 let lastReceptionSignalAt = 0
 
 function markUpsertReceived() { lastUpsertAtMs = Date.now() }
+
+// Auto-cura de recepção (RCA 2026-08-28). Linha de base da PRÓPRIA conta: só
+// os horários das mensagens aceitas na janela, podados. Escopo de módulo —
+// precisa sobreviver às reconexões do worker, senão a linha de base zera
+// justamente quando ela seria usada.
+const SELF_HEAL_SILENCE_MS = Math.max(60_000, Number(process.env.WA_SELF_HEAL_SILENCE_MS ?? DEFAULT_SILENCE_MS))
+const SELF_HEAL_BASELINE_WINDOW_MS = Math.max(60_000, Number(process.env.WA_SELF_HEAL_BASELINE_WINDOW_MS ?? DEFAULT_BASELINE_WINDOW_MS))
+const SELF_HEAL_MIN_BASELINE = Math.max(0, Number(process.env.WA_SELF_HEAL_MIN_BASELINE ?? DEFAULT_MIN_BASELINE))
+const SELF_HEAL_COOLDOWN_MS = Math.max(0, Number(process.env.WA_SELF_HEAL_COOLDOWN_MS ?? DEFAULT_COOLDOWN_MS))
+const SELF_HEAL_MAX_PER_DAY = Math.max(0, Number(process.env.WA_SELF_HEAL_MAX_PER_DAY ?? DEFAULT_MAX_PER_DAY))
+let acceptedTimestamps = []
+let lastSelfHealAtMs = null
+let selfHealTimestamps = []
+
+function acceptedInBaselineWindow(now = Date.now()) {
+  const cutoff = now - SELF_HEAL_BASELINE_WINDOW_MS
+  if (acceptedTimestamps.length > 5_000 || (acceptedTimestamps.length && acceptedTimestamps[0] < cutoff)) {
+    acceptedTimestamps = acceptedTimestamps.filter(ts => ts >= cutoff)
+  }
+  return acceptedTimestamps.length
+}
+
+// Refaz a conexão sozinho — exatamente o que a cliente faz quando clica em
+// "Conectar", e nada além disso: fecha o socket e deixa o caminho normal de
+// reconexão subir de novo. NÃO apaga credencial, NÃO gera QR.
+function trySelfHealReception() {
+  const now = Date.now()
+  const decisao = shouldSelfHealReception({
+    now,
+    connected: Boolean(activeSock) && lifecycleState === WA_LIFECYCLE.READY,
+    connectedSinceMs: connectionOpenedAt,
+    lastAcceptedAtMs,
+    acceptedInBaselineWindow: acceptedInBaselineWindow(now),
+    lastHealAtMs: lastSelfHealAtMs,
+    healsToday: selfHealTimestamps.filter(ts => now - ts <= 24 * 60 * 60_000).length,
+    silenceMs: SELF_HEAL_SILENCE_MS,
+    minBaseline: SELF_HEAL_MIN_BASELINE,
+    cooldownMs: SELF_HEAL_COOLDOWN_MS,
+    maxPerDay: SELF_HEAL_MAX_PER_DAY,
+  })
+  if (!decisao.heal) return
+  lastSelfHealAtMs = now
+  selfHealTimestamps = selfHealTimestamps.filter(ts => now - ts <= 24 * 60 * 60_000).concat(now)
+  logger.error({
+    silentForMs: decisao.silentForMs,
+    baseline: decisao.baseline,
+    motivo: decisao.reason,
+  }, 'Conectado e sem receber nada há muito tempo numa conta que costuma receber muito — refazendo a conexão sozinho (mesma ação do botão Conectar, sem apagar credencial)')
+  try { recordOperationalSignal('wa_reception_self_heal', { userId, silentForMs: decisao.silentForMs, baseline: decisao.baseline }) } catch {}
+  recordWaConnectionEventSafe({
+    userId,
+    type: 'reception_self_heal',
+    lifecycle: lifecycleState,
+    ownerInstance: OWNER_INSTANCE,
+    metadata: { silentForMs: decisao.silentForMs, baseline: decisao.baseline },
+  })
+  // Fechar o socket cai no handler de close normal, que reagenda a conexão
+  // com todo o backoff e as guardas já existentes.
+  try { activeSock?.end?.(new Error('reception_self_heal')) } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao fechar socket na auto-cura de recepção')
+  }
+}
 function markMessageAccepted() {
   lastAcceptedAtMs = Date.now()
+  acceptedTimestamps.push(lastAcceptedAtMs)
   chatScopeIgnoredSinceLastAccepted = 0
 }
 
@@ -1251,6 +1349,8 @@ function getReceptionHealth() {
     lastAcceptedAtMs,
     failuresInWindow: getSessionHealth().cryptoErrors,
     hasMonitoredSources: monitoredSourceCount > 0,
+    incomingPending: incomingQueue.getStats().pending,
+    lastProcessedAtMs: incomingQueue.getStats().lastCompletedAt,
     windowMs: RECEPTION_WINDOW_MS,
     minFailures: RECEPTION_MIN_FAILURES,
   })
@@ -3075,7 +3175,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       }
 
       const sanitizedText = text ? sanitizeInviteLinks(text) : ''
-      if (text && !sanitizedText) return
+      if (text && !sanitizedText) {
+        logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
+        return
+      }
 
       const isCouponMsg = isCouponAnnouncement(sanitizedText)
 
@@ -3096,7 +3199,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // Sem isso, um reconnect (que dispara rajada de senderKeyDistribution)
         // polui o log com dezenas de 'nolink' mesmo o grupo não tendo recebido
         // nenhuma mensagem real (incidente 2026-06).
-        if (messageKind === 'other' && links.length === 0 && !hasGenericUrl) return
+        if (messageKind === 'other' && links.length === 0 && !hasGenericUrl) {
+          // `contentKeys` é o campo que separa as três causas possíveis, todas
+          // indistinguíveis para a cliente ("não apareceu nada"):
+          //   - vazio            → a mensagem não pôde ser DECIFRADA (sessão
+          //                        Signal dessincronizada). O robô recebeu o
+          //                        envelope e não o conteúdo.
+          //   - protocolMessage/senderKeyDistributionMessage/reactionMessage
+          //                      → ruído de protocolo, descarte correto.
+          //   - conversation/extendedTextMessage/imageMessage
+          //                      → havia conteúdo de verdade e a extração de
+          //                        texto falhou: aí é bug nosso.
+          logMonitoredSourceDrop(jid, 'sem_link_e_sem_texto', {
+            msgId: msg.key.id,
+            messageKind,
+            textLength: sanitizedText.length,
+            hasMessageContent: Boolean(msg.message),
+            contentKeys: Object.keys(innerMessage || msg.message || {}),
+          })
+          return
+        }
         const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
@@ -3199,7 +3321,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
       // Pre-fetch da imagem (lazy, uma vez por mensagem). Retorna
       // { buffer, mimetype } pronto para enviar à Baileys, respeitando a
-      // configuração de imagem do grupo monitorado.
+      // configuração de imagem recebida do destino.
       // Estratégia de imagem para mensagens de cupom. Atribuído UMA vez logo após
       // o guard de title_mismatch (que já raspa o og:title do produto), e lido
       // por getImage() no dequeue. Default false = ofertas normais sempre buscam
@@ -3225,25 +3347,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         || cfg.botConfig?.primaryLinkTargetDefault
         || 'first'
 
-      let cachedImage
-      let imageFetched = false
       // `forceOriginalForChannelButton`: o botão nativo "Ver canal"
       // (contextInfo.forwardedNewsletterMessageInfo, injetado por
       // injectChannelForwardIntoPayload em src/core/channelSend.js) só é aceito
       // pelo WhatsApp em corpos de MÍDIA (image/video) — texto puro com o botão
-      // é derrubado silenciosamente. resolveGroupEntitlements() força
-      // `monitorGroup.imageMode` para 'preview' sempre (specs/001-image-mode-preview-default),
-      // e o modo preview manda texto+linkPreview (sem `image`), então nenhum
-      // grupo tinha uma mensagem de mídia pra carregar o botão. Quando o destino
+      // é derrubado silenciosamente. Quando o destino usa 'preview' e também
       // tem `channelForward` configurado (Group.channelButtonJid), buscamos a
       // imagem mesmo assim — reaproveita o MESMO caminho (resolveMonitoredImage,
       // mode 'original') que já é usado pelas ofertas comuns, só que escopado ao
-      // destino que pediu o botão, sem tocar no default global de imageMode.
-      // Memo da foto da mensagem de origem, no mesmo espírito de
-      // `imageFetched`/`cachedImage` em getImage(): `buildPayload` roda UMA VEZ
-      // POR DESTINO, então sem isso uma mensagem espelhada para N grupos
-      // baixaria e decifraria a MESMA mídia N vezes. `downloadOriginalImage` é
-      // a parte cara do caminho (download + decrypt via Baileys).
+      // destino que pediu o botão.
+      // Memo da foto da mensagem de origem, no mesmo espírito do cache de
+      // getImage() logo abaixo: `buildPayload` roda UMA VEZ POR DESTINO, então
+      // sem isso uma mensagem espelhada para N grupos baixaria e decifraria a
+      // MESMA mídia N vezes. `downloadOriginalImage` é a parte cara do caminho
+      // (download + decrypt via Baileys).
       let originPhotoFetched = false
       let cachedOriginPhoto = null
       async function getOriginalPhotoOnce() {
@@ -3253,14 +3370,25 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         return cachedOriginPhoto
       }
 
-      async function getImage({ forceOriginalForChannelButton = false } = {}) {
-        if (imageFetched) return cachedImage
-        imageFetched = true
-        const skipFetch = !forceOriginalForChannelButton && ['none', 'preview'].includes(monitorGroup.imageMode)
+      // 2026-08-28: o modo de imagem passou a ser escolhido POR DESTINO (antes
+      // era único por mensagem, herdado do grupo monitorado). A mesma oferta
+      // pode pedir 'original' num destino e 'preview' noutro — por isso o cache
+      // não pode mais ser uma única variável (`imageFetched`/`cachedImage`):
+      // isso foi a causa suspeita da divergência de 22/08 ("painel mostrava um
+      // formato, o grupo recebia outro"), quando a escolha por grupo existiu
+      // por um dia. `cachedImages` é um Map chaveado pelo MODO-BASE efetivo
+      // ('original'/'preview'), então dois destinos que pedem o mesmo modo-base
+      // reaproveitam o fetch (mantém a economia de rede/CPU original), e dois
+      // destinos com modos-base diferentes resolvem e cacheiam
+      // independentemente — nunca um pisa no resultado do outro. Ver
+      // test/destination-watermark-worker.test.js.
+      const cachedImages = new Map()
+      async function getImage({ forceOriginalForChannelButton = false, imageMode = 'original' } = {}) {
+        const baseMode = destinationImageBaseMode(imageMode)
+        const effectiveMode = forceOriginalForChannelButton && baseMode === 'preview' ? 'original' : baseMode
+        if (cachedImages.has(effectiveMode)) return cachedImages.get(effectiveMode)
+        const skipFetch = !forceOriginalForChannelButton && baseMode === 'preview'
         if (skipFetch) return null
-        const effectiveMode = forceOriginalForChannelButton && ['none', 'preview'].includes(monitorGroup.imageMode)
-          ? 'original'
-          : monitorGroup.imageMode
 
         const enabled = links.filter(l => enabledPlatforms.has(l.platform))
         const target = effectiveLinkTarget === 'last' ? enabled[enabled.length - 1] : enabled[0]
@@ -3272,7 +3400,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // pula o fetch ativo quando a mensagem é um cupom GENÉRICO cujo link
         // resolve para produto não relacionado (caso A em
         // decideSkipActiveFetchForCoupon). Produto+cupom busca hi-res normalmente.
-        cachedImage = await resolveMonitoredImage({
+        const resolved = await resolveMonitoredImage({
           mode: effectiveMode,
           target,
           credentials: cfg.credentials,
@@ -3293,7 +3421,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             try { recordOperationalSignal('monitored_thumbnail_dropped', { userId, msgId: msg.key.id, ...info }) } catch {}
           },
         })
-        return cachedImage
+        cachedImages.set(effectiveMode, resolved)
+        return resolved
       }
 
 
@@ -3619,8 +3748,15 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       let destIndex = -1
       for (const destJid of destinations) {
         destIndex++
+        const postDetail = cfg.groups.postDetails.find(g => g.waJid === destJid)
         // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
-        const channelForward = resolveChannelForward(cfg.groups.postDetails.find(g => g.waJid === destJid))
+        const channelForward = resolveChannelForward(postDetail)
+        // Aparência da imagem: escolhida pelo DESTINO, não pela origem. Ver
+        // core/imageModePolicy.js — valor ausente/desconhecido cai em 'original'.
+        const destinationImageMode = resolveDestinationImageMode(postDetail?.imageMode)
+        const watermarkText = String(postDetail?.watermarkText ?? '').trim()
+        const watermarkColor = postDetail?.watermarkColor ?? undefined
+        const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
         // Segurança anti-duplicação por destino. Precisamos guardar DUAS chaves:
         // - primary.url: link upstream estável. Bloqueia a mesma mensagem da fonte
         //   repostada logo depois, mesmo que o conversor gere outro shortlink.
@@ -3866,15 +4002,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // Quando imageMode=original mas só houver jpegThumbnail minúsculo, usa
         // preview automático do WhatsApp em vez de imagem pixelada.
         //
-        // 2026-07 (specs/001-image-mode-preview-default): `monitorGroup.imageMode`
-        // chega AQUI sempre como 'preview' — resolveGroupEntitlements() (chokepoint
-        // em src/billing/groupEntitlements.js) força esse valor independente do que
-        // está persistido no banco. Na prática, deste ponto em diante só o ramo
-        // `imageMode === 'preview'` (linha do `buildManualLinkPreview` abaixo) roda
-        // em runtime. Os ramos `wantImage`/`shouldRelayOriginalMediaForImageMode`/
-        // `imageMode === 'original'` ficam dormentes/preservados (FR-006) — não
-        // remover nem simplificar essa lógica condicional, apenas documentar.
-        const imageMode = monitorGroup?.imageMode ?? 'original'
+        // O modo é resolvido POR DESTINO (destinationImageMode, calculado acima
+        // no início do loop) — uma mesma oferta pode sair 'original' num grupo,
+        // 'original_watermark' noutro e 'preview' num terceiro. `imageMode` aqui
+        // é sempre o MODO-BASE ('original'/'preview'); a marca d'água é uma
+        // camada aplicada em cima do modo-base 'original' (useDestinationWatermark).
+        const imageMode = destinationImageBaseMode(destinationImageMode)
         const wantImage = !['none', 'preview'].includes(imageMode)
         // O caminho de relay reaproveita a mídia hospedada da mensagem de origem.
         // Portanto ele só é correto quando a preferência é explicitamente
@@ -3886,7 +4019,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // para a mesma promessa de produto. Ver shouldReuploadOriginalMedia
         // (core/imageModePolicy.js) para o RCA de por que os dois caminhos
         // deixaram de coexistir.
-        const original = (shouldRelayOriginalMediaForImageMode(imageMode) && !shouldReuploadOriginalMedia())
+        // Marca d'água exige acesso aos bytes: mesmo com o escape hatch global
+        // em relay, um destino com marca precisa baixar/compor/subir a imagem —
+        // o relay reaproveita o proto da origem, sem qualquer chance de compor
+        // a marca por cima.
+        const original = (shouldRelayOriginalMediaForImageMode(imageMode) && !useDestinationWatermark && !shouldReuploadOriginalMedia())
           ? originalMedia
           : null
         let useLinkPreview = false  // será setado a true se jpegThumbnail for descartado
@@ -4034,7 +4171,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
           let image = null
           if (wantImage || channelForward) {
-            const fetched = await getImage({ forceOriginalForChannelButton: !!channelForward })
+            const fetched = await getImage({ forceOriginalForChannelButton: !!channelForward, imageMode })
             // Mutação anti-fingerprint SOMENTE para canal-destino (newsletter
             // JID) e quando o opt-in global está ligado. NÃO aplicar a grupos.
             // Quando ligada, o crop + qualidade variada vão DENTRO do mesmo
@@ -4042,9 +4179,33 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // Regressão de dupla compressão documentada em 2026-06
             // (commit image-upload-bug-fix). Ver normalizeImageForWhatsApp.
             const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
-            image = fetched
-              ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
-              : null
+            if (fetched && useDestinationWatermark && imageMode === 'original') {
+              try {
+                const rendered = await renderDestinationWatermark(fetched.buffer, { text: watermarkText, color: watermarkColor })
+                // A mutação roda POR CIMA da imagem já marcada (2º encode JPEG,
+                // aceito só nesta combinação rara de marca+mutação ligadas ao
+                // mesmo tempo). Sem isso, o canal perderia a proteção
+                // anti-fingerprint sempre que a marca desse certo — achado de
+                // revisão (a marca não pode desligar essa proteção em silêncio).
+                const mutated = wantMutation
+                  ? await normalizeImageForWhatsApp(rendered.main, { mutation: { groupId: destJid } })
+                  : null
+                image = mutated || {
+                  buffer: rendered.main,
+                  mimetype: 'image/jpeg',
+                  jpegThumbnail: rendered.thumbnail,
+                  width: rendered.width,
+                  height: rendered.height,
+                }
+              } catch (err) {
+                logger.warn({ err: err?.message, destJid }, 'Marca d\'água falhou; enviando imagem normal')
+                image = await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
+              }
+            } else {
+              image = fetched
+                ? await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
+                : null
+            }
             if (fetched && !image) {
               logger.warn({ msgId: msg.key.id, srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'normalizeImageForWhatsApp falhou — enviando sem imagem')
             }

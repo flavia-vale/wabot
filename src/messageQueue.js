@@ -28,6 +28,10 @@ export function createMessageQueue({
     timedOut: 0,
     watchdogResets: 0,
     rejected: 0,
+    // Quando um job saiu da fila pela última vez (concluído, com erro ou por
+    // timeout). É o que separa "não está chegando nada" de "está chegando e a
+    // fila parou de andar" — o quadro do RCA 2026-08-28.
+    lastCompletedAt: null,
   }
 
   function tick() {
@@ -39,7 +43,7 @@ export function createMessageQueue({
   }
 
   async function run(job) {
-    const tracker = { startedAt: Date.now(), label: job.label, abandoned: false }
+    const tracker = { startedAt: Date.now(), label: job.label, abandoned: false, done: job.done }
     active.add(tracker)
     let timeoutHandle
     try {
@@ -69,6 +73,13 @@ export function createMessageQueue({
         active.delete(tracker)
         running--
       }
+      // RCA 2026-08-28: a corrente de ordem da origem avança quando a FILA
+      // termina de esperar por este job — inclusive quando ele estourou o
+      // timeout. Antes ela só avançava quando a função do job resolvia, e o
+      // timeout não cancela a função: uma mensagem travada para sempre deixava
+      // a origem inteira surda, com a sessão conectada e nada saindo.
+      stats.lastCompletedAt = Date.now()
+      job.done?.()
       tick()
     }
   }
@@ -82,6 +93,9 @@ export function createMessageQueue({
         active.delete(tracker)
         running = Math.max(0, running - 1)
         stats.watchdogResets++
+        // Mesma razão do `job.done?.()` acima: soltar o slot sem soltar a
+        // corrente deixaria a origem travada para sempre.
+        tracker.done?.()
         logger.warn(
           { queue: name, label: tracker.label, durationMs: now - tracker.startedAt },
           'Watchdog: slot liberado por job travado',
@@ -110,18 +124,19 @@ export function createMessageQueue({
       return true
     }
 
-    // Mantém ordem dentro da chave: encadeia o novo fn após o anterior do mesmo grupo.
+    // Mantém ordem dentro da chave: encadeia o novo fn após o anterior do mesmo
+    // grupo. `completion` resolve quando a fila TERMINA DE ESPERAR pelo job
+    // (função concluída, erro ou timeout) — nunca depende de a função resolver
+    // sozinha, senão uma tarefa travada bloqueia a origem para sempre.
     const prev = orderTails.get(orderKey) || Promise.resolve()
-    const wrapped = () => prev.catch(() => {}).then(() => fn())
-    const completion = new Promise(resolve => {
-      stats.enqueued++
-      pending.push({
-        label,
-        fn: async () => {
-          try { await wrapped() } finally { resolve() }
-        },
-        onError,
-      })
+    let liberar
+    const completion = new Promise(resolve => { liberar = resolve })
+    stats.enqueued++
+    pending.push({
+      label,
+      fn: () => prev.catch(() => {}).then(() => fn()),
+      onError,
+      done: liberar,
     })
     orderTails.set(orderKey, completion)
     completion.finally(() => {

@@ -1126,6 +1126,33 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .cfg-dest-status.is-dirty { color: #b45309; font-weight: 600; }
 .cfg-dest-status.is-saved { color: var(--success); font-weight: 600; }
 
+/* Confirmação do clique em "Salvar marca". A troca de texto de 12px na linha do
+   contador passava despercebida (relato da cliente, 2026-08-29): ela clicava e
+   não sabia se tinha salvado. Aqui é faixa com fundo, ícone e frase inteira —
+   percebe-se com o canto do olho, inclusive no celular. */
+.cfg-save-feedback {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 0 0; padding: 9px 12px; border-radius: 10px;
+  font-size: 13px; font-weight: 600; line-height: 1.4;
+  border: 1px solid transparent;
+}
+.cfg-save-feedback svg { flex-shrink: 0; }
+.cfg-save-feedback.is-ok {
+  color: color-mix(in oklab, var(--success) 78%, #000);
+  background: color-mix(in oklab, var(--success) 14%, var(--surface));
+  border-color: color-mix(in oklab, var(--success) 34%, transparent);
+}
+.cfg-save-feedback.is-error {
+  color: color-mix(in oklab, var(--danger) 74%, #000);
+  background: color-mix(in oklab, var(--danger) 14%, var(--surface));
+  border-color: color-mix(in oklab, var(--danger) 36%, transparent);
+}
+.cfg-save-feedback.is-busy {
+  color: var(--ink-soft);
+  background: var(--bg-soft);
+  border-color: var(--line, rgba(0,0,0,0.08));
+}
+
 @media (max-width: 680px) {
   .cfg-dest-block { padding: 14px 16px; }
   .cfg-dest-actions > .pnl-btn { flex: 1 1 auto; justify-content: center; }

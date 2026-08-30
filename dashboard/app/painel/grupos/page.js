@@ -12,6 +12,13 @@ import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
 import Link from 'next/link'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
 
+// Espelha WATERMARK_MAX_CHARS de src/core/destinationWatermark.js (a tela não
+// importa aquele módulo: ele carrega `sharp`). test/watermark-limite-caracteres.test.js
+// falha se os números divergirem.
+const WATERMARK_TEXT_MAX_CHARS = 25
+// Quanto tempo a confirmação de "marca salva" fica na tela.
+const WATERMARK_SAVED_FEEDBACK_MS = 4000
+
 const roleLabels = {
   monitor: 'Monitorar (origem)',
   post: 'Postar (destino)',
@@ -64,6 +71,7 @@ function CfgIcon({ name, size = 17 }) {
   if (name === 'search') return <svg {...p}><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M10.5 6.5 8.5 10.2h3L9.5 13.8"/></svg>
   if (name === 'bolt')   return <svg {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
   if (name === 'send')   return <svg {...p}><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+  if (name === 'image')  return <svg {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>
   if (name === 'check')  return <svg {...p} strokeWidth={2.8}><path d="M5 12.5 10 17 19 7"/></svg>
   if (name === 'x')      return <svg {...p} strokeWidth={2}><path d="M6 6l12 12M18 6 6 18"/></svg>
   if (name === 'plus')   return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>
@@ -254,6 +262,92 @@ function DestinationPicker({ groupId, post, state, onLoad, onToggle, onSetAll, o
           {saving ? 'Salvando…' : 'Salvar destinos'}
         </button>
       </div>
+    </div>
+  )
+}
+
+/* ── Texto da marca d'água: rascunho local + salvar explícito ───────── */
+//
+// Bug relatado pela cliente (2026-08-29): "a página parece estar atualizando
+// quando eu começo a escrever o texto da marca d'água".
+//
+// O campo salvava sozinho enquanto ela digitava (debounce de 500ms). Três
+// efeitos, todos no meio da digitação: (1) cada pausa disparava um PUT, que
+// mexia em `savingGroupId`/`savedGroupId` e repintava a linha do grupo; (2) o
+// PUT recarrega a config do worker a cada vez; (3) — o pior — se o PUT falhasse,
+// `handleUpdateGroup` chamava `load()`, que recarrega TODOS os grupos e
+// substitui o estado: o texto pela metade era apagado e voltava o valor antigo.
+// Digitar virava uma briga com a tela.
+//
+// Agora o que se digita é rascunho LOCAL. Nada vai ao servidor até o clique em
+// Salvar. Mesmo padrão já usado no DestinationPicker: estado explícito de "não
+// salvo", Desfazer ao lado, e o erro nascendo junto do botão em vez de um banner
+// no topo (que no celular fica fora da tela).
+function WatermarkTextField({ group, maxChars, draft, saving, savedAt, error, onDraftChange, onSave, onReset }) {
+  const saved = group.watermarkText ?? ''
+  const value = draft ?? saved
+  const dirty = value !== saved
+  const justSaved = Boolean(savedAt) && !dirty
+  const used = [...value].length
+
+  function handleSave() {
+    if (!dirty || saving) return
+    onSave(group.id, value)
+  }
+
+  return (
+    <div className="cfg-dest-picker">
+      <input
+        className="pnl-input"
+        value={value}
+        maxLength={maxChars}
+        placeholder="Ex.: Achadinhos da Maria"
+        aria-label="Texto da marca d'água"
+        onChange={(e) => {
+          // [...string] conta codepoints (não UTF-16 code units), igual ao
+          // limite do servidor e do renderizador — os três não podem divergir.
+          onDraftChange(group.id, [...e.target.value].slice(0, maxChars).join(''))
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); handleSave() }
+        }}
+      />
+      <div className="cfg-dest-actions">
+        <span className={`cfg-dest-status${dirty ? ' is-dirty' : ''}`}>
+          {dirty ? `Não salvo · ${used}/${maxChars}` : `${used}/${maxChars} caracteres`}
+        </span>
+        {dirty && (
+          <button type="button" className="pnl-btn" onClick={() => onReset(group.id)} disabled={saving}>Desfazer</button>
+        )}
+        <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving || !dirty}>
+          {saving ? 'Salvando…' : 'Salvar marca'}
+        </button>
+      </div>
+
+      {/* Resposta ao clique em Salvar. Antes o resultado era uma troca de texto
+          de 12px na mesma linha do contador de caracteres — a cliente clicava e
+          não percebia se tinha salvado. Agora é um aviso com ícone, cor de
+          fundo e uma frase inteira, que aparece com animação: dá para ver com o
+          canto do olho, no celular, sem procurar.
+
+          `role="alert"` no erro (o leitor de tela interrompe e anuncia) e
+          `role="status"` no sucesso (anuncia sem interromper). */}
+      {(saving || justSaved || error) && (
+        <p
+          className={`cfg-save-feedback${error ? ' is-error' : justSaved ? ' is-ok' : ' is-busy'} cfg-fadeup`}
+          role={error ? 'alert' : 'status'}
+          aria-live={error ? 'assertive' : 'polite'}
+        >
+          {!saving && <CfgIcon name={error ? 'x' : 'check'} size={14} />}
+          <span>
+            {saving
+              ? 'Salvando a marca…'
+              : error
+                ? `Não deu para salvar: ${error}`
+                : 'Marca salva neste destino'}
+          </span>
+        </p>
+      )}
     </div>
   )
 }
@@ -594,6 +688,64 @@ export default function GruposPage() {
     }
   }
 
+  // Rascunho local do texto da marca d'água, por grupo. Ver WatermarkTextField:
+  // digitar NÃO salva; só o botão Salvar grava.
+  const [watermarkDrafts, setWatermarkDrafts] = useState({})
+  const [watermarkSaving, setWatermarkSaving] = useState({})
+  const [watermarkSavedAt, setWatermarkSavedAt] = useState({})
+  const [watermarkErrors, setWatermarkErrors] = useState({})
+
+  const watermarkSavedTimers = useRef({})
+  useEffect(() => {
+    const timers = watermarkSavedTimers.current
+    return () => { for (const timer of Object.values(timers)) clearTimeout(timer) }
+  }, [])
+
+  const setWatermarkDraft = useCallback((id, value) => {
+    setWatermarkDrafts((prev) => ({ ...prev, [id]: value }))
+    setWatermarkErrors((prev) => (prev[id] ? { ...prev, [id]: '' } : prev))
+  }, [])
+
+  const resetWatermarkDraft = useCallback((id) => {
+    setWatermarkDrafts((prev) => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    setWatermarkErrors((prev) => (prev[id] ? { ...prev, [id]: '' } : prev))
+  }, [])
+
+  const saveWatermarkText = useCallback(async (id, value) => {
+    setWatermarkSaving((prev) => ({ ...prev, [id]: true }))
+    setWatermarkErrors((prev) => ({ ...prev, [id]: '' }))
+    try {
+      const updated = await api.updateGroup(id, { watermarkText: value })
+      // O servidor normaliza (colapsa espaços, apara pontas). Adotamos o valor
+      // DELE como verdade e limpamos o rascunho — assim o campo passa a mostrar
+      // exatamente o que ficou gravado, sem divergir do banco em silêncio.
+      setGroups((prev) => prev.map((g) => g.id === id ? { ...g, watermarkText: updated?.watermarkText ?? value } : g))
+      resetWatermarkDraft(id)
+      setWatermarkSavedAt((prev) => ({ ...prev, [id]: Date.now() }))
+      // A confirmação some sozinha depois de alguns segundos. Aviso de sucesso
+      // que fica para sempre na tela deixa de ser aviso: na próxima visita a
+      // pessoa lê "Marca salva" sem ter salvado nada agora.
+      clearTimeout(watermarkSavedTimers.current[id])
+      watermarkSavedTimers.current[id] = setTimeout(() => {
+        setWatermarkSavedAt((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+      }, WATERMARK_SAVED_FEEDBACK_MS)
+    } catch (err) {
+      // O erro nasce AO LADO do campo. Nada de `load()` aqui: recarregar todos
+      // os grupos era o que apagava o texto que a pessoa acabou de escrever.
+      setWatermarkErrors((prev) => ({ ...prev, [id]: err.message }))
+    } finally {
+      setWatermarkSaving((prev) => ({ ...prev, [id]: false }))
+    }
+  }, [resetWatermarkDraft])
+
   // Bug relatado por cliente (2026-08-29): ela desmarcava um destino, salvava, e
   // ao reabrir ele estava marcado de novo — e continuava recebendo oferta.
   //
@@ -737,8 +889,77 @@ export default function GruposPage() {
   })()
 
   function renderPostConfig(g) {
+    const destinationImageMode = ['original', 'original_watermark', 'preview'].includes(g.imageMode) ? g.imageMode : 'original'
+    const watermarkMode = destinationImageMode === 'original_watermark'
     return (
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 14 }}>
+        <CfgSection icon="image" title="Imagem das ofertas" desc="Escolha como as ofertas aparecem neste destino — a mesma oferta pode sair diferente em cada grupo/canal.">
+          <CfgRow
+            label="Modo da imagem"
+            hint={destinationImageMode === 'preview'
+              ? 'Card clicável: tocar na imagem abre o link da oferta.'
+              : watermarkMode
+                ? 'Foto original da oferta, com a identificação deste destino.'
+                : 'Usa a foto que veio na mensagem monitorada.'}
+          >
+            <select
+              className="pnl-input"
+              value={destinationImageMode}
+              onChange={(e) => {
+                const nextMode = e.target.value
+                handleUpdateGroup(g.id, {
+                  imageMode: nextMode,
+                  // Ao ligar a marca pela 1ª vez sem texto salvo, sugere o
+                  // nome do próprio destino — a pessoa pode trocar depois.
+                  ...(nextMode === 'original_watermark' && ![...(g.watermarkText ?? '')].join('').trim()
+                    ? { watermarkText: [...String(g.name ?? '').trim()].slice(0, WATERMARK_TEXT_MAX_CHARS).join('') }
+                    : {}),
+                })
+              }}
+            >
+              <option value="original">Original</option>
+              <option value="original_watermark">Original com marca d&apos;água</option>
+              <option value="preview">Preview clicável</option>
+              <option value="preview_watermark" disabled>Preview com marca d&apos;água — em breve</option>
+            </select>
+          </CfgRow>
+          {watermarkMode && (
+            <CfgRow
+              label="Texto da marca d&apos;água"
+              hint="Escreva o texto todo e clique em Salvar. Aparece no meio da foto, apenas neste destino."
+              extra="cfg-fadeup"
+            >
+              <WatermarkTextField
+                group={g}
+                maxChars={WATERMARK_TEXT_MAX_CHARS}
+                draft={watermarkDrafts[g.id]}
+                saving={Boolean(watermarkSaving[g.id])}
+                savedAt={watermarkSavedAt[g.id]}
+                error={watermarkErrors[g.id]}
+                onDraftChange={setWatermarkDraft}
+                onSave={saveWatermarkText}
+                onReset={resetWatermarkDraft}
+              />
+            </CfgRow>
+          )}
+          {watermarkMode && (
+            <CfgRow
+              label="Cor da marca d&apos;água"
+              hint="Escolha conforme as suas fotos: a marca branca some em foto clara, a preta some em foto escura."
+              last
+              extra="cfg-fadeup"
+            >
+              <select
+                className="pnl-input"
+                value={g.watermarkColor === 'black' ? 'black' : 'white'}
+                onChange={(e) => handleUpdateGroup(g.id, { watermarkColor: e.target.value })}
+              >
+                <option value="white">Branca</option>
+                <option value="black">Preta</option>
+              </select>
+            </CfgRow>
+          )}
+        </CfgSection>
         <div>
           <p className="pnl-label" style={{ marginBottom: 6 }}>Mensagem de boas-vindas</p>
           <textarea
@@ -754,7 +975,7 @@ export default function GruposPage() {
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
             <p className="pnl-label" style={{ marginBottom: 6 }}>Botão &quot;Ver canal&quot; ao final das mensagens</p>
             <p className="pnl-hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              As ofertas deste grupo saem com a <strong>foto que veio na oferta</strong> + o texto. O botão é a única diferença: <strong>com canal escolhido</strong>, a mensagem leva o botão &quot;Ver canal&quot; no fim; <strong>sem canal</strong>, ela sai igual, só sem o botão. Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão (o WhatsApp só aceita esse botão em mensagem com imagem).
+              O botão é a única diferença: <strong>com canal escolhido</strong>, a mensagem leva o botão &quot;Ver canal&quot; no fim; <strong>sem canal</strong>, ela sai igual, só sem o botão. Com canal escolhido, a foto sempre vem da mensagem original (o card clicável não aceita esse botão). Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão (o WhatsApp só aceita esse botão em mensagem com imagem).
             </p>
             {g.channelButtonJid ? (
               <div style={{ display: 'grid', gap: 8 }}>
@@ -876,7 +1097,7 @@ export default function GruposPage() {
                       {savingGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>salvando…</span>}
                       {savedGroupId === g.id && <span className="pnl-hint" style={{ color: 'var(--success)' }}>salvo</span>}
                       <button type="button" className="pnl-link-btn" aria-expanded={configOpen} onClick={() => setExpandedConfigId(configOpen ? null : g.id)}>
-                        {configOpen ? 'Fechar' : (tab === 'monitor' ? 'Filtros' : 'Config')}
+                        {configOpen ? 'Fechar' : 'Filtros'}
                       </button>
                       <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(g)}>Remover</button>
                     </div>

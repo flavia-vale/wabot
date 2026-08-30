@@ -1738,6 +1738,68 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
+## Conectado e sem receber: o robô refaz a conexão sozinho (RCA 2026-08-28)
+
+Terceira parada da mesma cliente (`cynthiatceles@gmail.com`) em quatro dias.
+Os eventos de conexão contam a história inteira:
+
+```
+17:23 → 18:27   sem enviar nada, ZERO eventos de conexão no meio
+18:27:14        ela clica em Conectar
+18:27:15        volta a enviar
+18:27 → 19:33   para de novo, de novo sem nenhum evento de conexão
+19:31:41        ela clica em Conectar
+19:33           volta a enviar
+```
+
+O socket não caiu, o heartbeat não falhou, o painel ficou verde — e nada
+entrava. **Só a ação manual dela resolvia**, duas vezes, em paradas de 64 e 66
+minutos. A conta recebe de **4 a 14 mensagens por minuto** quando saudável.
+
+**Não precisamos saber a causa para agir.** A ação certa é a mesma que ela faz
+na mão: refazer a conexão. `src/core/receptionSelfHeal.js`
+(`shouldSelfHealReception`, puro) decide pela linha de base **da própria
+conta** — não por número fixo, senão conta que naturalmente recebe pouco
+dispararia à toa.
+
+Dispara quando: sessão **conectada**, silêncio de `WA_SELF_HEAL_SILENCE_MS`
+(30min) **e** a conta recebeu ao menos `WA_SELF_HEAL_MIN_BASELINE` (30)
+mensagens na janela `WA_SELF_HEAL_BASELINE_WINDOW_MS` (6h). Tetos:
+`WA_SELF_HEAL_COOLDOWN_MS` (1h) e `WA_SELF_HEAL_MAX_PER_DAY` (2).
+
+**A ação é só fechar o socket** — o caminho normal de reconexão sobe de novo,
+com todo o backoff e as guardas existentes. **NÃO apaga credencial, NÃO gera
+QR.** Há teste estrutural que falha se `rm(AUTH_DIR)`, `auth_reset` ou
+`requestPairingCode` aparecerem nesse caminho: auto-cura que vira
+re-pareamento seria muito pior que o problema.
+
+Os tetos são a parte mais importante: reconexão repetida é o padrão que o
+WhatsApp associa a robô (ver o RCA do teto de tentativas). Rollback:
+`WA_SELF_HEAL_MAX_PER_DAY=0`. Sinal `ops_wa_reception_self_heal` — cada evento
+é uma vez que a cliente **não** precisou clicar.
+
+### A fila de entrada travava a origem inteira por causa de uma mensagem
+
+Achado na mesma investigação, defeito real e independente. A fila serializa por
+origem (`orderKey` = jid) para não espelhar fora de ordem. O elo da corrente era
+a promessa da tarefa anterior, que só resolvia quando a **função** do job
+terminava — e o timeout da fila **não cancela a função**: ele solta o slot e
+segue. Uma mensagem que trave para sempre deixava a corrente pendurada e **toda
+mensagem seguinte daquela origem nunca rodava**. O watchdog soltava o slot, não
+a corrente.
+
+Agora a corrente avança quando a **fila** termina de esperar pelo job
+(concluído, com erro ou por timeout). **Não regredir:** o elo é o fim do job na
+FILA, nunca o fim da função. Teste:
+`test/message-queue-order-stall.test.js`.
+
+### O alerta de recepção não pegava nada disso
+
+`markMessageAccepted` roda **antes** da fila: com a fila travada, o marcador
+continuava fresco e estava tudo verde. A fila passa a registrar quando um job
+saiu pela última vez (`lastCompletedAt`), e `computeReceptionState` trata "tem
+mensagem esperando e nada sai há mais que a janela" como cegueira.
+
 ## Teto de tentativas de reconexão sem sucesso (RCA 2026-08-28 — não regredir)
 
 Três contas somaram **281 das ~380 quedas de 12h** — 94, 94 e 93 tentativas com
@@ -2428,6 +2490,72 @@ Blindagem em código (não regredir): `src/supervisor/envGuard.js`
 `-staging`) ou com a Redis DB canônica (staging→`/1`, prod→`/0`). Assim o
 supervisor no diretório errado falha no boot em vez de subir surdo pra fila.
 Teste: `test/supervisor-env-guard.test.js`.
+
+### 10. Dois PRs desenvolvidos em paralelo sobre o mesmo recurso podem mergear SEM conflito e ainda assim quebrar `develop` (RCA 2026-08-28)
+
+**Sintoma:** dois PRs implementando a mesma feature de forma independente
+(imagem/marca d'água por destino) foram mergeados em `develop` em sequência,
+um em cima do outro. Como os dois adicionavam blocos de código quase idênticos
+em regiões PRÓXIMAS mas não idênticas dos mesmos arquivos, o merge automático
+do GitHub **não viu conflito textual nenhum** — simplesmente concatenou as
+duas versões. Isso aconteceu **duas vezes seguidas** no mesmo dia: uma 3ª
+sessão, trabalhando em paralelo num incidente não relacionado, tentou
+consertar o mesmo problema de novo por conta própria e a correção dela também
+colidiu (dessa vez numa fixture de teste, não no código de produção).
+
+Dois efeitos, achados só depois do merge:
+
+1. `src/core/imageModePolicy.js` ficou com **duas declarações** do mesmo
+   `const`/`function` — `SyntaxError: Identifier already declared`. O lint
+   (`backend-lint.yml`, job `no-undef`) pegou isso e reprovou a PR — **mas a
+   PR foi mergeada mesmo assim**, com o check vermelho.
+2. **Duas migrations diferentes** (pastas com timestamps diferentes, sem
+   colisão de nome) faziam o **mesmo** `ALTER TABLE ... ADD COLUMN`. A
+   primeira já tinha sido aplicada com sucesso no banco de staging durante o
+   deploy do 1º PR; quando o deploy do 2º PR rodou logo depois, a segunda
+   falhou com `duplicate column name` e deixou o banco de staging em
+   **estado de migration falha (P3009)** — todo deploy seguinte continuou
+   falhando até alguém rodar `prisma migrate resolve --rolled-back
+   <migration>` manualmente no VPS. O deploy também tinha parado
+   `api-staging`/`bot-supervisor-staging` pra rodar a migration e nunca
+   religou os dois, por causa do erro — staging ficou fora do ar até a
+   correção manual.
+
+**Por que ninguém viu antes de mergear:** cada PR, sozinho, passava em todos
+os testes — o problema só existe na COMBINAÇÃO dos dois. `npm test` local (ou
+até o CI) rodando na branch de um PR isolado nunca vê o código do outro PR
+que será mergeado antes ou depois dele.
+
+**Duas camadas de proteção, não uma só:**
+
+- **Guarda de código** (não evita a causa, mas pega o sintoma cedo):
+  `test/migrations-no-duplicate-column.test.js` varre TODAS as migrations e
+  falha se a mesma tabela+coluna for adicionada em mais de uma — é
+  exatamente o sinal que só aparece quando duas migrations independentes
+  colidem. Mesmo espírito de `test/api-routes-no-duplicate-registration.test.js`
+  (RCA do mesmo dia, rota duplicada derrubando o boot da API). SyntaxError de
+  identificador duplicado já era pego pelo ESLint (`no-undef` do
+  `backend-lint.yml`) — o problema nunca foi falta de detecção.
+- **Processo** (a causa raiz de verdade — nenhuma das duas PRs deveria ter
+  sido mergeada com o check vermelho): **branch protection em `develop` e
+  `main` exigindo os checks `quality` (quality-gate.yml) e `no-undef`
+  (backend-lint.yml) verdes antes de permitir merge.** Sem isso, um PR com
+  lint quebrado pode ser mergeado manualmente e ninguém percebe até o deploy
+  falhar em produção/staging. Configurar em GitHub → Settings → Branches →
+  Branch protection rules → (develop e main) → "Require status checks to pass
+  before merging" → marcar `quality` e `no-undef`. Isso **não está
+  configurado no repositório hoje** — nenhum agente de IA tem acesso para
+  configurar isso sozinho (é uma permissão de admin do repo), então é ação
+  manual da dona do produto.
+- **Antes de abrir uma branch nova para uma feature que outra sessão/PR pode
+  estar tocando ao mesmo tempo**, checar PRs abertos/recém-mergeados que
+  tocam os mesmos arquivos (`gh pr list` / GitHub UI) antes de duplicar
+  trabalho. E depois de QUALQUER merge em `develop` (seu ou de outra sessão),
+  rodar `npm test` + lint + `npm run arch:check` no `develop` atualizado
+  ANTES de começar a construir em cima dele — um merge "limpo" pelo GitHub
+  não significa `develop` saudável.
+
+Teste: `test/migrations-no-duplicate-column.test.js`.
 
 ## "Imagem que veio na mensagem" tem UM caminho só: subir de novo (RCA 2026-08-21)
 

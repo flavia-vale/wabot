@@ -100,14 +100,14 @@ export async function groupsRoutes(app, opts = {}) {
 
     try {
       const group = await db.group.create({
-        // 2026-07 (specs/001-image-mode-preview-default): todo grupo novo
-        // nasce em 'preview' — a escolha por grupo foi desativada (UI removida
-        // em dashboard/app/painel/grupos/page.js) e o chokepoint em
-        // src/billing/groupEntitlements.js força 'preview' em runtime de
-        // qualquer forma. Fixo para monitor e post (role diferente de
-        // 'monitor' nunca leu este campo, mas mantemos único valor por
-        // simplicidade e defesa em profundidade — INV-3).
-        data: { userId: req.user.sub, waJid, name, role, kind, forwardMode: FORWARD_MODE.LINK_ONLY, imageMode: 'preview' },
+        // 2026-08-28: a estratégia de imagem passa a ser escolhida por DESTINO
+        // (role='post'), na tela de "Filtros" desse grupo/canal — ver
+        // src/core/imageModePolicy.js e src/billing/groupEntitlements.js. Todo
+        // grupo novo nasce em 'original' ("a foto que veio na oferta", padrão
+        // do produto desde 2026-08-21); role='monitor' nunca leu este campo,
+        // mas mantemos um único valor por simplicidade e defesa em
+        // profundidade.
+        data: { userId: req.user.sub, waJid, name, role, kind, forwardMode: FORWARD_MODE.LINK_ONLY, imageMode: 'original' },
       })
       trackAnalyticsEventSafe({
         userId: req.user.sub,
@@ -197,15 +197,48 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza', 'shein'].includes(p))
       if (invalid) return reply.code(400).send({ error: 'allowedPlatforms contém plataforma inválida' })
     }
 
-    if (imageMode !== undefined && !['none', 'fetch', 'original', 'preview'].includes(imageMode)) {
+    // `preview_watermark` já existe na política (core/imageModePolicy.js) mas
+    // ainda não é composto pelo worker nem tem tela própria — recusar aqui
+    // evita salvar uma escolha que a cliente veria como "não fez nada".
+    if (imageMode !== undefined && !['original', 'original_watermark', 'preview'].includes(imageMode)) {
       return reply.code(400).send({ error: 'imageMode inválido' })
+    }
+    // Modo de imagem e marca d'água pertencem ao DESTINO, nunca à origem — a
+    // origem nunca leu este campo (toMonitorGroup em groupEntitlements.js nem
+    // repassa `imageMode`), mas bloqueamos a escrita aqui para não deixar uma
+    // configuração "fantasma" salva sem nenhum efeito.
+    if ((imageMode !== undefined || watermarkText !== undefined || watermarkColor !== undefined) && group.role !== 'post') {
+      return reply.code(400).send({ error: 'Modo de imagem e marca d\'água só podem ser definidos no destino.' })
+    }
+    // Unicode-aware ([...string].length conta codepoints, não UTF-16 code
+    // units) — mesmo critério usado pelo renderizador (destinationWatermark.js)
+    // e pelo contador de caracteres da tela, para os três nunca divergirem.
+    const normalizedWatermarkText = watermarkText !== undefined
+      ? String(watermarkText ?? '').replace(/\s+/g, ' ').trim()
+      : undefined
+    // Espelha WATERMARK_MAX_CHARS de core/destinationWatermark.js. NÃO importar
+    // aquele módulo aqui: ele carrega `sharp` (binário nativo) e a API o mantém
+    // fora do processo de propósito (mesmo motivo do lazy load em
+    // linkConversion.js). test/watermark-limite-caracteres.test.js falha se os
+    // dois números divergirem.
+    if (normalizedWatermarkText !== undefined && [...normalizedWatermarkText].length > 25) {
+      return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 25 caracteres.' })
+    }
+    // Só duas cores por decisão de produto (ver core/destinationWatermark.js).
+    if (watermarkColor !== undefined && !['white', 'black'].includes(watermarkColor)) {
+      return reply.code(400).send({ error: 'Cor da marca d\'água inválida.' })
+    }
+    const requestedImageMode = imageMode ?? group.imageMode ?? 'original'
+    const requestedWatermarkText = normalizedWatermarkText ?? group.watermarkText ?? ''
+    if (requestedImageMode === 'original_watermark' && !requestedWatermarkText) {
+      return reply.code(400).send({ error: 'Escreva o texto da marca d\'água antes de ativar esse modo.' })
     }
     if (imageLinkTarget !== undefined && !['first', 'last'].includes(imageLinkTarget)) {
       return reply.code(400).send({ error: 'imageLinkTarget inválido' })
@@ -261,6 +294,8 @@ export async function groupsRoutes(app, opts = {}) {
         ...(allowedPlatforms !== undefined ? { allowedPlatforms: String(allowedPlatforms).trim() || null } : {}),
         ...(welcomeMsg !== undefined ? { welcomeMsg: String(welcomeMsg).trim() || null } : {}),
         ...(imageMode !== undefined ? { imageMode } : {}),
+        ...(normalizedWatermarkText !== undefined ? { watermarkText: normalizedWatermarkText || null } : {}),
+        ...(watermarkColor !== undefined ? { watermarkColor } : {}),
         ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
         ...(forwardMode !== undefined ? { forwardMode: requestedForwardMode } : {}),
