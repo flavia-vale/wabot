@@ -1,4 +1,5 @@
 import db from '../../db.js'
+import { isValidWatermarkColor, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { ensureCountQuota } from '../quotas.js'
 import {
@@ -219,22 +220,14 @@ export async function groupsRoutes(app, opts = {}) {
     if ((imageMode !== undefined || watermarkText !== undefined || watermarkColor !== undefined) && group.role !== 'post') {
       return reply.code(400).send({ error: 'Modo de imagem e marca d\'água só podem ser definidos no destino.' })
     }
-    // Unicode-aware ([...string].length conta codepoints, não UTF-16 code
-    // units) — mesmo critério usado pelo renderizador (destinationWatermark.js)
-    // e pelo contador de caracteres da tela, para os três nunca divergirem.
-    const normalizedWatermarkText = watermarkText !== undefined
-      ? String(watermarkText ?? '').replace(/\s+/g, ' ').trim()
-      : undefined
-    // Espelha WATERMARK_MAX_CHARS de core/destinationWatermark.js. NÃO importar
-    // aquele módulo aqui: ele carrega `sharp` (binário nativo) e a API o mantém
-    // fora do processo de propósito (mesmo motivo do lazy load em
-    // linkConversion.js). test/watermark-limite-caracteres.test.js falha se os
-    // dois números divergirem.
-    if (normalizedWatermarkText !== undefined && [...normalizedWatermarkText].length > 25) {
+    // Limite e cores vêm de core/watermarkInput.js — o lugar único onde a API
+    // repete o formato do renderizador sem carregar `sharp` (política de
+    // memória; ver o cabeçalho daquele módulo).
+    const normalizedWatermarkText = normalizeWatermarkInputText(watermarkText)
+    if (normalizedWatermarkText !== undefined && isWatermarkTextTooLong(normalizedWatermarkText)) {
       return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 25 caracteres.' })
     }
-    // Só duas cores por decisão de produto (ver core/destinationWatermark.js).
-    if (watermarkColor !== undefined && !['white', 'black'].includes(watermarkColor)) {
+    if (watermarkColor !== undefined && !isValidWatermarkColor(watermarkColor)) {
       return reply.code(400).send({ error: 'Cor da marca d\'água inválida.' })
     }
     const requestedImageMode = imageMode ?? group.imageMode ?? 'original'

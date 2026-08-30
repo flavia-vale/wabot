@@ -1,4 +1,6 @@
 import dbDefault from '../../db.js'
+import { resolveDestinationImageMode } from '../../core/imageModePolicy.js'
+import { isValidWatermarkColor, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
 import { ensureCountQuota } from '../quotas.js'
 import { loadUserPlanSubject, validateOwnedTargetJids } from './broadcastTargets.js'
 import { buildFeatureGateError, canUseOfferAutomations, FEATURE_CODES } from '../../billing/plans.js'
@@ -27,6 +29,10 @@ function normalizeTemplateKey(value) {
 // sem isso a automação dispara para qualquer JID arbitrário pela sessão do
 // usuário. Devolve o JID normalizado ou null (validateOwnedTargetJids lança
 // 400 com mensagem amigável quando o grupo não pertence ao tenant).
+// Só os quatro formatos que a tela oferece — 'fetch'/'none' seguem dormentes
+// (ver core/imageModePolicy.js).
+const AUTOMATION_IMAGE_MODES = ['original', 'original_watermark', 'preview', 'preview_watermark']
+
 async function resolveOwnedDestGroupJid(db, userId, destGroupJid) {
   const [normalized] = await validateOwnedTargetJids({ db, userId, jids: [destGroupJid] })
   return normalized ?? null
@@ -44,6 +50,67 @@ export async function offerAutomationRoutes(app, opts = {}) {
     reply.code(403).send(buildFeatureGateError(FEATURE_CODES.OFFER_AUTOMATIONS))
     return false
   }
+
+  // COMO AS OFERTAS AUTOMÁTICAS APARECEM — escolha ÚNICA da conta.
+  //
+  // De propósito NÃO é por automação: quem usa costuma ter várias automações
+  // apontando para o mesmo público, e ter que repetir a escolha (e o texto da
+  // marca) em cada uma seria só trabalho repetido com chance de divergir. Por
+  // isso mora em BotConfig, não em OfferAutomation.
+  //
+  // Rota própria em vez de campo no PUT /config genérico porque é a tela de
+  // ofertas automáticas que a oferece — e assim salvar a aparência não arrasta
+  // junto nenhum outro campo de configuração da conta.
+  app.get('/appearance', { onRequest: [app.authenticate] }, async (req) => {
+    const cfg = await db.botConfig.findUnique({ where: { userId: req.user.sub } })
+    return {
+      imageMode: resolveDestinationImageMode(cfg?.automationImageMode),
+      watermarkText: cfg?.automationWatermarkText ?? '',
+      watermarkColor: cfg?.automationWatermarkColor === 'black' ? 'black' : 'white',
+    }
+  })
+
+  app.put('/appearance', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+    const { imageMode, watermarkText, watermarkColor } = req.body ?? {}
+
+    if (imageMode !== undefined && !AUTOMATION_IMAGE_MODES.includes(imageMode)) {
+      return reply.code(400).send({ error: 'Formato de imagem inválido' })
+    }
+    const normalizedText = normalizeWatermarkInputText(watermarkText)
+    if (normalizedText !== undefined && isWatermarkTextTooLong(normalizedText)) {
+      return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 25 caracteres.' })
+    }
+    if (watermarkColor !== undefined && !isValidWatermarkColor(watermarkColor)) {
+      return reply.code(400).send({ error: 'Cor da marca d\'água inválida.' })
+    }
+
+    const existing = await db.botConfig.findUnique({ where: { userId } })
+    const modoFinal = imageMode ?? existing?.automationImageMode ?? 'original'
+    const textoFinal = normalizedText ?? existing?.automationWatermarkText ?? ''
+    // Mesma exigência das outras telas: formato com marca sem texto não adianta
+    // ligar — a oferta sairia igual à de sempre e a pessoa acharia que a
+    // escolha não fez nada.
+    if (String(modoFinal).endsWith('_watermark') && !String(textoFinal).trim()) {
+      return reply.code(400).send({ error: 'Escreva o texto da marca d\'água antes de escolher esse formato.' })
+    }
+
+    const campos = {
+      ...(imageMode !== undefined && { automationImageMode: imageMode }),
+      ...(normalizedText !== undefined && { automationWatermarkText: normalizedText || null }),
+      ...(watermarkColor !== undefined && { automationWatermarkColor: watermarkColor }),
+    }
+    const cfg = await db.botConfig.upsert({
+      where: { userId },
+      create: { userId, ...campos },
+      update: campos,
+    })
+    return {
+      imageMode: resolveDestinationImageMode(cfg.automationImageMode),
+      watermarkText: cfg.automationWatermarkText ?? '',
+      watermarkColor: cfg.automationWatermarkColor === 'black' ? 'black' : 'white',
+    }
+  })
 
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     return db.offerAutomation.findMany({
