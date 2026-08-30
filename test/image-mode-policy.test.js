@@ -182,3 +182,27 @@ test('resolveOfferAppearance ignora a marca quando não há texto', () => {
     assert.equal(resolveOfferAppearance({ imageMode }).baseMode, imageMode.startsWith('preview') ? 'preview' : 'original')
   }
 })
+
+// REGRESSÃO (achado na revisão, antes de ir para produção): a escolha é
+// resolvida no dispatcher, viaja dentro da receita de envio e é resolvida DE
+// NOVO no worker. Como a saída tem outro formato da entrada, a segunda passada
+// não achava `imageMode`, caía em 'original' e a escolha da cliente sumia
+// INTEIRA no meio do caminho — a fila dizia "card com a sua marca" e a oferta
+// saía como foto sem marca, sem erro nenhum em lugar nenhum.
+test('resolveOfferAppearance é idempotente: resolver duas vezes dá o mesmo resultado', () => {
+  const linhas = [
+    { imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' },
+    { imageMode: 'original_watermark', watermarkText: 'Achadinhos', watermarkColor: 'white' },
+    { imageMode: 'preview' },
+    { imageMode: 'original' },
+    {},
+  ]
+  for (const linha of linhas) {
+    const primeira = resolveOfferAppearance(linha)
+    const segunda = resolveOfferAppearance(primeira)
+    assert.deepEqual(segunda, primeira, `resolver duas vezes mudou o resultado de ${JSON.stringify(linha)}`)
+    // Terceira passada, porque nada garante que a receita seja resolvida só
+    // duas vezes no futuro.
+    assert.deepEqual(resolveOfferAppearance(segunda), primeira)
+  }
+})

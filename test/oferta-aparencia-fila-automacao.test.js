@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { drainQueueOnce } from '../src/offerQueue/dispatcher.js'
 import { runAutomation } from '../src/offerAutomation/dispatcher.js'
+import { resolveOfferAppearance } from '../src/core/imageModePolicy.js'
 
 const worker = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
 
@@ -168,4 +169,28 @@ test('a marca é composta uma vez só e serve ao card e à foto', () => {
   assert.match(fn, /hqBuffer: marcada\?\.main \?\? baixada/)
   // Best-effort: marca que falha deixa a oferta sair sem marca, nunca sem imagem.
   assert.match(fn, /enviando imagem sem marca/)
+})
+
+// Ponta a ponta do que o worker de fato recebe: ele resolve DE NOVO o que veio
+// na receita (não pode confiar no conteúdo de uma fila persistida). Se a
+// segunda resolução não devolvesse a mesma coisa, a escolha da cliente sumiria
+// em silêncio entre a tela e o grupo — foi o defeito achado na revisão.
+test('a escolha sobrevive à segunda resolução que o worker faz', async () => {
+  const { queue, calls, deps } = setupFila({ imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' })
+  await drainQueueOnce(queue, deps)
+  const enviada = calls.sent[0][3].appearance
+  assert.deepEqual(resolveOfferAppearance(enviada), enviada)
+  assert.equal(enviada.baseMode, 'preview')
+  assert.equal(enviada.watermark.text, 'Ofertas da Ana')
+})
+
+test('a escolha das automáticas também sobrevive à segunda resolução', async () => {
+  const { automation, calls, deps } = setupAutomacao({
+    automationImageMode: 'original_watermark',
+    automationWatermarkText: 'Achadinhos Maria',
+    automationWatermarkColor: 'white',
+  })
+  await runAutomation(automation, deps)
+  const enviada = calls.sent[0][3].appearance
+  assert.deepEqual(resolveOfferAppearance(enviada), enviada)
 })

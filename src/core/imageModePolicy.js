@@ -137,19 +137,28 @@ export function destinationImageUsesWatermark(value) {
  * que o espelhamento passa pelo chokepoint `toMonitorGroup`. Assim um valor
  * legado, vazio ou corrompido cai em 'original' num lugar só.
  *
+ * IDEMPOTENTE DE PROPÓSITO — aceita a LINHA do banco (`imageMode`/
+ * `watermarkText`/`watermarkColor`) **ou** o resultado desta própria função
+ * (`mode`/`watermark`). A escolha é resolvida no dispatcher, viaja dentro da
+ * receita de envio (que atravessa a fila persistida, possivelmente até outro
+ * processo) e é resolvida DE NOVO no worker, que não pode confiar no que veio.
+ * Sem aceitar as duas formas, a segunda passada não achava `imageMode`, caía em
+ * 'original' e a escolha da cliente sumia inteira no meio do caminho.
+ *
  * A marca d'água some quando não há texto: modo com marca e texto vazio não
  * pode virar erro de envio nem imagem com marca em branco — a oferta sai sem
  * marca, que é o mesmo que o espelhamento faz (`useDestinationWatermark`).
  *
- * @param {{imageMode?: string|null, watermarkText?: string|null, watermarkColor?: string|null}} [row]
+ * @param {object} [row] linha do banco ou resultado desta função
  */
 export function resolveOfferAppearance(row = {}) {
-  const mode = resolveDestinationImageMode(row?.imageMode)
-  const text = String(row?.watermarkText ?? '').replace(/\s+/g, ' ').trim()
+  const mode = resolveDestinationImageMode(row?.imageMode ?? row?.mode)
+  const text = String(row?.watermarkText ?? row?.watermark?.text ?? '').replace(/\s+/g, ' ').trim()
+  const color = row?.watermarkColor ?? row?.watermark?.color ?? undefined
   const usaMarca = destinationImageUsesWatermark(mode) && Boolean(text)
   return {
     mode,
     baseMode: destinationImageBaseMode(mode),
-    watermark: usaMarca ? { text, color: row?.watermarkColor ?? undefined } : null,
+    watermark: usaMarca ? { text, color } : null,
   }
 }
