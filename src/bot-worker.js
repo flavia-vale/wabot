@@ -28,7 +28,7 @@ import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_
 import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
-import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, resolveDestinationImageMode } from './core/imageModePolicy.js'
+import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, resolveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
@@ -1610,6 +1610,14 @@ function buildBroadcastImageRecipe(text, options = {}) {
     text: String(text || ''),
     imageUrl: options.imageUrl,
     refererUrl: isHttpUrl(options.imageRefererUrl) ? options.imageRefererUrl : undefined,
+    // Como esta oferta deve aparecer (foto / foto com marca / card clicável /
+    // card com marca). Vem da FILA (escolha por fila) ou da conta (escolha
+    // única das ofertas automáticas) — ver resolveOfferAppearance em
+    // core/imageModePolicy.js. Precisa viajar DENTRO da receita porque a
+    // receita é o que sobrevive ao BullMQ: o payload só é montado no dequeue,
+    // possivelmente noutro processo, onde a linha do banco não está à mão.
+    // Ausente = 'original', o comportamento histórico.
+    appearance: options.appearance ?? undefined,
   }
 }
 
@@ -1657,7 +1665,7 @@ function kindDoCard(fonte) {
   return DELIVERY_KIND.CARD_LOJA
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto }) {
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto, watermark = null }) {
   // `onFonteDaFoto` (opcional): diz de ONDE veio a foto do card ('loja',
   // 'origem' ou 'banner'). Vai por callback, e não como campo do objeto
   // devolvido, porque esse objeto é o urlInfo que entra no proto do WhatsApp —
@@ -1791,6 +1799,32 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     }
   }
 
+  // MARCA D'ÁGUA NO CARD DE PREVIEW (modo `preview_watermark`).
+  //
+  // O card não é um caminho separado de imagem: ele carrega os MESMOS bytes que
+  // o envio de foto — `jpegThumbnail` (placeholder inline) e o buffer que
+  // alimenta o `highQualityThumbnail`. Compor a marca aqui, ANTES do upload HQ,
+  // é o que garante que o que a pessoa vê no card pequeno e o que ela vê ao
+  // tocar sejam a MESMA imagem marcada (`renderDestinationWatermark` já deriva
+  // a miniatura da principal justamente para isso — ver
+  // src/core/destinationWatermark.js).
+  //
+  // Vale para qualquer fonte de foto do card (loja, plano B da origem, banner
+  // de cupom): a promessa da cliente é "a oferta sai com a minha marca", e ela
+  // não muda porque a foto veio de outro lugar.
+  //
+  // Best-effort, como no caminho de foto: marca que falha NUNCA derruba o card
+  // — a oferta sai com a foto sem marca, que é muito melhor do que texto pelado.
+  if (jpegThumbnail && watermark?.text) {
+    try {
+      const rendered = await renderDestinationWatermark(hqSourceBuffer || jpegThumbnail, { text: watermark.text, color: watermark.color })
+      hqSourceBuffer = rendered.main
+      jpegThumbnail = rendered.thumbnail
+    } catch (err) {
+      logger.warn({ err: err?.message, destJid }, 'Marca d\'água no card falhou; card sai com a foto sem marca')
+    }
+  }
+
   let highQualityThumbnail
   if (hqSourceBuffer && typeof uploadToServer === 'function') {
     try {
@@ -1855,18 +1889,123 @@ function storePreviewTitle(platform, url, isCoupon) {
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return 'Oferta' }
 }
 
-async function buildPayloadFromRecipe(recipe) {
+// Card clicável para os caminhos SEM mensagem monitorada (fila de ofertas e
+// ofertas automáticas). É o primo simples de buildManualLinkPreview: lá a foto
+// precisa ser caçada na loja porque a origem é uma mensagem de terceiro; aqui a
+// foto do produto JÁ veio junto com a oferta (`imageUrl` da receita), então só
+// falta achar a âncora do link e montar o card.
+//
+// A âncora é obrigatória pelo mesmo motivo de sempre: sem o link literal no
+// corpo da mensagem o WhatsApp não associa o card e não renderiza nada.
+async function buildBroadcastLinkPreview({ text, destJid, jpegThumbnail, hqBuffer }) {
+  const corpo = String(text || '')
+  const link = detectLinks(corpo).find(l => corpo.includes(l.url))
+  if (!link) return null
+
+  let thumb = jpegThumbnail
+  let hq = hqBuffer
+  if (!thumb && hqBuffer) {
+    const normalized = await normalizeImageForWhatsApp(hqBuffer)
+    thumb = normalized?.jpegThumbnail
+    hq = normalized?.buffer || normalized?.jpegThumbnail
+  }
+  // Sem foto não há card: um urlInfo só com matched-text renderiza uma barra
+  // vazia. Devolver null faz quem chamou cair na foto/texto, como antes.
+  if (!thumb) return null
+
+  let highQualityThumbnail
+  if (hq && typeof activeSock?.waUploadToServer === 'function') {
+    try {
+      const { imageMessage } = await prepareWAMessageMedia(
+        { image: hq },
+        { upload: activeSock.waUploadToServer, mediaTypeOverride: 'thumbnail-link', jid: destJid },
+      )
+      highQualityThumbnail = imageMessage || undefined
+    } catch (err) {
+      logger.warn({ err: err?.message, destJid }, 'Card da oferta: upload da miniatura grande falhou — card sai compacto')
+    }
+  }
+
+  return {
+    'canonical-url': link.url,
+    'matched-text': link.url,
+    // `title` NUNCA pode ser omitido: sem ele o WhatsApp não renderiza o card
+    // (regressão do PR #1186). Mesma regra do card do espelhamento.
+    title: storePreviewTitle(link.platform, link.url, false),
+    jpegThumbnail: thumb,
+    ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
+  }
+}
+
+async function buildPayloadFromRecipe(recipe, { destJid } = {}) {
   if (recipe?.type !== 'imageUrl') return undefined
 
-  let image = null
+  // Ponto único: a receita nunca é lida crua. Receita antiga (enfileirada
+  // antes desta versão) não tem `appearance` e cai em 'original' — o
+  // comportamento que ela já esperava.
+  const appearance = resolveOfferAppearance(recipe.appearance ?? {})
+
+  let baixada = null
   try {
     const fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
-    image = fetched ? await normalizeImageForWhatsApp(fetched.buffer) : null
-    if (fetched && !image) {
-      logger.warn({ srcMime: fetched.mimetype, size: fetched.buffer?.length }, 'broadcast image: normalizeImageForWhatsApp falhou — enviando texto com preview')
+    baixada = fetched?.buffer ?? null
+    if (fetched && !baixada) {
+      logger.warn({ srcMime: fetched.mimetype }, 'broadcast image: download sem bytes — enviando texto com preview')
     }
   } catch (err) {
     logger.warn({ err: err?.message, imageUrl: recipe.imageUrl }, 'broadcast image: falha ao baixar imagem — enviando texto com preview')
+  }
+
+  // A marca é composta UMA vez e serve aos dois formatos: no card ela vira a
+  // miniatura, na foto ela vira o corpo. Assim a pessoa vê a mesma imagem
+  // marcada nos dois casos. Best-effort: marca que falha deixa a oferta sair
+  // sem marca, nunca sem imagem.
+  let marcada = null
+  if (baixada && appearance.watermark) {
+    try {
+      marcada = await renderDestinationWatermark(baixada, appearance.watermark)
+    } catch (err) {
+      logger.warn({ err: err?.message, destJid }, 'Marca d\'água da oferta falhou; enviando imagem sem marca')
+    }
+  }
+
+  if (appearance.baseMode === 'preview') {
+    const linkPreview = await buildBroadcastLinkPreview({
+      text: recipe.text,
+      destJid,
+      jpegThumbnail: marcada?.thumbnail,
+      hqBuffer: marcada?.main ?? baixada,
+    }).catch(err => {
+      logger.warn({ err: err?.message, destJid }, 'Card da oferta falhou; oferta sai com a foto')
+      return null
+    })
+    if (linkPreview) {
+      return buildMonitoredMessagePayload({
+        finalText: recipe.text,
+        image: null,
+        useLinkPreview: true,
+        linkPreview,
+      })
+    }
+    // Sem âncora de link ou sem foto o card é impossível. Cair na FOTO (abaixo)
+    // é melhor do que insistir e mandar texto pelado — a oferta continua
+    // saindo com imagem, só sem o clique que abre a loja.
+  }
+
+  let image = null
+  if (marcada) {
+    image = {
+      buffer: marcada.main,
+      mimetype: 'image/jpeg',
+      jpegThumbnail: marcada.thumbnail,
+      width: marcada.width,
+      height: marcada.height,
+    }
+  } else if (baixada) {
+    image = await normalizeImageForWhatsApp(baixada)
+    if (!image) {
+      logger.warn({ size: baixada.length }, 'broadcast image: normalizeImageForWhatsApp falhou — enviando texto com preview')
+    }
   }
 
   return buildMonitoredMessagePayload({
@@ -2184,7 +2323,7 @@ async function processSendJob(job) {
         if (!sockForAttempt) throw new Error('Bot não conectado')
         if (payload === null) {
           if (typeof job.buildPayload === 'function') payload = await job.buildPayload()
-          else if (job.payloadRecipe) payload = await buildPayloadFromRecipe(job.payloadRecipe)
+          else if (job.payloadRecipe) payload = await buildPayloadFromRecipe(job.payloadRecipe, { destJid: job.destJid })
           else payload = job.payload
         }
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
@@ -4134,6 +4273,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // mais ninguém (getImage devolve null cedo), então não há
               // download duplicado da mesma mídia.
               fetchOriginPhoto: getOriginalPhotoOnce,
+              // Modo "card com marca d'água": a marca é uma camada em cima do
+              // modo-base, igual ao par 'original'/'original_watermark'.
+              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null,
             })
             deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
@@ -4248,6 +4390,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
               // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
               allowSmallOriginPhoto: true,
+              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null,
             }).catch(err => {
               logger.warn({ err: err?.message, destJid }, 'Card de fallback sem imagem falhou; oferta sai como texto')
               return null

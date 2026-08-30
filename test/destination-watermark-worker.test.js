@@ -54,3 +54,36 @@ test('a mutação anti-fingerprint continua sendo aplicada quando a marca també
   assert.match(block, /wantMutation/, 'o caminho de sucesso da marca precisa considerar wantMutation')
   assert.match(block, /normalizeImageForWhatsApp\(rendered\.main, \{ mutation: \{ groupId: destJid \} \}\)/)
 })
+
+// 2026-08-30: o card de preview passou a aceitar marca d'água
+// (`preview_watermark`). O card carrega os MESMOS bytes do envio de foto —
+// `jpegThumbnail` inline + o buffer que alimenta o `highQualityThumbnail` —,
+// então compor a marca ANTES do upload HQ é o que garante que o card pequeno e
+// a foto ampliada sejam a mesma imagem marcada.
+test('o card de preview compõe a marca antes do upload da miniatura de alta qualidade', () => {
+  const composeAt = worker.indexOf("if (jpegThumbnail && watermark?.text)")
+  assert.notEqual(composeAt, -1, 'composição da marca no card não encontrada')
+  const uploadAt = worker.indexOf('let highQualityThumbnail')
+  assert.notEqual(uploadAt, -1)
+  assert.ok(composeAt < uploadAt, 'a marca precisa ser composta ANTES do upload da miniatura HQ')
+
+  const block = worker.slice(composeAt, uploadAt)
+  assert.match(block, /hqSourceBuffer = rendered\.main/)
+  assert.match(block, /jpegThumbnail = rendered\.thumbnail/)
+  // Best-effort: marca que falha nunca pode derrubar o card (a alternativa
+  // seria a oferta sair como texto pelado).
+  assert.match(block, /catch \(err\)/)
+  assert.match(block, /card sai com a foto sem marca/)
+})
+
+test('os dois caminhos que montam o card recebem a marca do destino', () => {
+  const callSites = worker.split('await buildManualLinkPreview({').length - 1
+  assert.equal(callSites, 2, 'esperados exatamente dois call sites de buildManualLinkPreview')
+  const passandoMarca = worker.split('watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null').length - 1
+  assert.equal(passandoMarca, callSites, 'todo caminho que monta o card precisa repassar a marca do destino')
+})
+
+test('buildManualLinkPreview aceita a marca por parâmetro (nunca lê o destino direto)', () => {
+  const sig = worker.slice(worker.indexOf('async function buildManualLinkPreview('), worker.indexOf('async function buildManualLinkPreview(') + 400)
+  assert.match(sig, /watermark = null/)
+})

@@ -889,8 +889,8 @@ export default function GruposPage() {
   })()
 
   function renderPostConfig(g) {
-    const destinationImageMode = ['original', 'original_watermark', 'preview'].includes(g.imageMode) ? g.imageMode : 'original'
-    const watermarkMode = destinationImageMode === 'original_watermark'
+    const destinationImageMode = ['original', 'original_watermark', 'preview', 'preview_watermark'].includes(g.imageMode) ? g.imageMode : 'original'
+    const watermarkMode = destinationImageMode === 'original_watermark' || destinationImageMode === 'preview_watermark'
     return (
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 14, display: 'grid', gap: 14 }}>
         <CfgSection icon="image" title="Imagem das ofertas" desc="Escolha como as ofertas aparecem neste destino — a mesma oferta pode sair diferente em cada grupo/canal.">
@@ -898,9 +898,11 @@ export default function GruposPage() {
             label="Modo da imagem"
             hint={destinationImageMode === 'preview'
               ? 'Card clicável: tocar na imagem abre o link da oferta.'
-              : watermarkMode
-                ? 'Foto original da oferta, com a identificação deste destino.'
-                : 'Usa a foto que veio na mensagem monitorada.'}
+              : destinationImageMode === 'preview_watermark'
+                ? 'Card clicável com a sua identificação na imagem: tocar abre o link da oferta.'
+                : watermarkMode
+                  ? 'Foto original da oferta, com a identificação deste destino.'
+                  : 'Usa a foto que veio na mensagem monitorada.'}
           >
             <select
               className="pnl-input"
@@ -911,7 +913,7 @@ export default function GruposPage() {
                   imageMode: nextMode,
                   // Ao ligar a marca pela 1ª vez sem texto salvo, sugere o
                   // nome do próprio destino — a pessoa pode trocar depois.
-                  ...(nextMode === 'original_watermark' && ![...(g.watermarkText ?? '')].join('').trim()
+                  ...(['original_watermark', 'preview_watermark'].includes(nextMode) && ![...(g.watermarkText ?? '')].join('').trim()
                     ? { watermarkText: [...String(g.name ?? '').trim()].slice(0, WATERMARK_TEXT_MAX_CHARS).join('') }
                     : {}),
                 })
@@ -920,7 +922,7 @@ export default function GruposPage() {
               <option value="original">Original</option>
               <option value="original_watermark">Original com marca d&apos;água</option>
               <option value="preview">Preview clicável</option>
-              <option value="preview_watermark" disabled>Preview com marca d&apos;água — em breve</option>
+              <option value="preview_watermark">Preview com marca d&apos;água</option>
             </select>
           </CfgRow>
           {watermarkMode && (

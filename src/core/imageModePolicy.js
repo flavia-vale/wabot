@@ -91,9 +91,10 @@ export const DESTINATION_IMAGE_MODE = Object.freeze({
   ORIGINAL: 'original',
   ORIGINAL_WATERMARK: 'original_watermark',
   PREVIEW: 'preview',
-  // Ainda NÃO implementado no worker nem aceito pela API — ver groups.js e
-  // bot-worker.js. Existe aqui só para a política já falar a linguagem final
-  // e o próximo passo não precisar reescrever este enum.
+  // Card clicável COM a marca d'água composta na foto. A marca entra em
+  // `buildManualLinkPreview` (bot-worker.js) antes do upload da miniatura de
+  // alta qualidade, para que o card pequeno e a foto ampliada sejam a MESMA
+  // imagem marcada.
   PREVIEW_WATERMARK: 'preview_watermark',
 })
 
@@ -125,4 +126,39 @@ export function destinationImageBaseMode(value) {
 export function destinationImageUsesWatermark(value) {
   const mode = resolveDestinationImageMode(value)
   return mode === DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK || mode === DESTINATION_IMAGE_MODE.PREVIEW_WATERMARK
+}
+
+/**
+ * Como a oferta aparece, para os caminhos que NÃO são espelhamento — a fila de
+ * ofertas (escolha por fila) e as ofertas automáticas (escolha única da conta).
+ *
+ * Existe para que esses dois caminhos nunca leiam `imageMode` cru: eles passam
+ * a linha do banco por aqui e recebem a decisão já normalizada, do mesmo jeito
+ * que o espelhamento passa pelo chokepoint `toMonitorGroup`. Assim um valor
+ * legado, vazio ou corrompido cai em 'original' num lugar só.
+ *
+ * IDEMPOTENTE DE PROPÓSITO — aceita a LINHA do banco (`imageMode`/
+ * `watermarkText`/`watermarkColor`) **ou** o resultado desta própria função
+ * (`mode`/`watermark`). A escolha é resolvida no dispatcher, viaja dentro da
+ * receita de envio (que atravessa a fila persistida, possivelmente até outro
+ * processo) e é resolvida DE NOVO no worker, que não pode confiar no que veio.
+ * Sem aceitar as duas formas, a segunda passada não achava `imageMode`, caía em
+ * 'original' e a escolha da cliente sumia inteira no meio do caminho.
+ *
+ * A marca d'água some quando não há texto: modo com marca e texto vazio não
+ * pode virar erro de envio nem imagem com marca em branco — a oferta sai sem
+ * marca, que é o mesmo que o espelhamento faz (`useDestinationWatermark`).
+ *
+ * @param {object} [row] linha do banco ou resultado desta função
+ */
+export function resolveOfferAppearance(row = {}) {
+  const mode = resolveDestinationImageMode(row?.imageMode ?? row?.mode)
+  const text = String(row?.watermarkText ?? row?.watermark?.text ?? '').replace(/\s+/g, ' ').trim()
+  const color = row?.watermarkColor ?? row?.watermark?.color ?? undefined
+  const usaMarca = destinationImageUsesWatermark(mode) && Boolean(text)
+  return {
+    mode,
+    baseMode: destinationImageBaseMode(mode),
+    watermark: usaMarca ? { text, color } : null,
+  }
 }

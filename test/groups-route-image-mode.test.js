@@ -89,12 +89,39 @@ test('PUT /:id aceita original/original_watermark/preview em grupo role=post (de
   await app.close()
 })
 
-test('PUT /:id recusa preview_watermark (ainda não implementado)', async () => {
+// 2026-08-30: `preview_watermark` (card clicável com a marca na foto) saiu do
+// "em breve" — o worker passou a compor a marca no card. A rota agora aceita o
+// modo, com a MESMA exigência do par sem card: sem texto de marca não adianta
+// ligar, então continua 400.
+test('PUT /:id aceita preview_watermark com texto de marca', async () => {
   const { app } = await buildApp()
   const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-preview-watermark@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
   const { id } = JSON.parse(createRes.body)
 
+  const putRes = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana' } })
+  assert.equal(putRes.statusCode, 200)
+  const saved = await db.group.findUnique({ where: { id } })
+  assert.equal(saved.imageMode, 'preview_watermark')
+  assert.equal(saved.watermarkText, 'Ofertas da Ana')
+  await app.close()
+})
+
+test('PUT /:id recusa preview_watermark sem texto de marca', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-preview-wm-sem-texto@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
   const putRes = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'preview_watermark' } })
+  assert.equal(putRes.statusCode, 400)
+  await app.close()
+})
+
+test('PUT /:id recusa modo de imagem desconhecido', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-modo-invalido@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  const putRes = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'fetch' } })
   assert.equal(putRes.statusCode, 400)
   await app.close()
 })

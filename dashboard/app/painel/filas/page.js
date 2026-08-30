@@ -6,8 +6,9 @@ import { api } from '@/lib/api'
 import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
 import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { PainelContentActions, usePainelHeader } from '../PainelShell'
+import { OfferAppearanceFields, OFFER_APPEARANCE_OPTIONS } from '@/components/OfferAppearanceFields'
 
-const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [] }
+const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [], imageMode: 'original', watermarkText: '', watermarkColor: 'white' }
 const LIMITS = [
   ['intervalEnabled', 'intervalMinutes', 'Intervalo mínimo entre ofertas', 'minutos'],
   ['hourlyCapEnabled', 'hourlyCap', 'Máximo de ofertas por hora', 'ofertas'],
@@ -73,7 +74,7 @@ export default function FilasPage() {
   useEffect(() => { load(); loadGroups() }, [])
 
   function openCreate() { setEditing(null); setForm(EMPTY); setShowForm(true); setMessage(''); setNotice('') }
-  function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue, operatingHoursStart: queue.operatingHoursStart || EMPTY.operatingHoursStart, operatingHoursEnd: queue.operatingHoursEnd || EMPTY.operatingHoursEnd }); setShowForm(true); setMessage(''); setNotice('') }
+  function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue, operatingHoursStart: queue.operatingHoursStart || EMPTY.operatingHoursStart, operatingHoursEnd: queue.operatingHoursEnd || EMPTY.operatingHoursEnd, watermarkText: queue.watermarkText || '', watermarkColor: queue.watermarkColor || 'white' }); setShowForm(true); setMessage(''); setNotice('') }
   async function save(event) {
     event.preventDefault(); setMessage('')
     if (!form.targetJids.length) { setMessage('Selecione pelo menos um grupo de destino para a fila.'); return }
@@ -138,6 +139,10 @@ export default function FilasPage() {
     if (queue.hourlyCapEnabled) active.push(`${queue.hourlyCap}/hora`)
     if (queue.dailyCapEnabled) active.push(`${queue.dailyCap}/dia`)
     if (queue.operatingHoursEnabled && queue.operatingHoursStart && queue.operatingHoursEnd) active.push(`funciona ${queue.operatingHoursStart}–${queue.operatingHoursEnd}`)
+    // O formato aparece no resumo para a pessoa conferir sem abrir a fila —
+    // é a diferença mais visível entre duas filas parecidas.
+    const formato = OFFER_APPEARANCE_OPTIONS.find((option) => option.value === queue.imageMode)
+    if (formato && formato.value !== 'original') active.push(formato.label.toLowerCase())
     return active.length ? active.join(' · ') : 'Sem limites adicionais'
   }
   const destinationsLabel = (queue) => {
@@ -221,6 +226,15 @@ export default function FilasPage() {
           <div className="pnl-field"><label className="pnl-label" htmlFor="operatingHoursEnd">Fim</label><input id="operatingHoursEnd" className="pnl-input" type="time" value={form.operatingHoursEnd} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnd: e.target.value }))} required /></div>
         </div>}
       </div>
+      {/* Cada fila escolhe o próprio formato: filas diferentes costumam atender
+          públicos diferentes. As ofertas automáticas têm UMA escolha para a
+          conta toda, na tela delas. */}
+      <OfferAppearanceFields
+        idPrefix="queue"
+        value={form}
+        nameSuggestion={form.name}
+        onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+      />
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}><button className="pnl-btn is-primary" type="submit">Salvar fila</button><button className="pnl-btn" type="button" onClick={() => setShowForm(false)}>Cancelar</button></div>
     </form>}
     {loading ? <div className="pnl-card">Carregando filas…</div> : !queues.length ? <div className="pnl-card"><div className="pnl-card-title">Nenhuma fila criada</div><p className="pnl-hint" style={{ marginTop: 6 }}>Crie uma fila para distribuir ofertas automaticamente ao longo do dia.</p><button className="pnl-btn is-primary" style={{ marginTop: 14 }} onClick={openCreate}>Criar primeira fila</button></div> : queues.map((queue) => <section className="pnl-card" key={queue.id} style={{ opacity: queue.enabled ? 1 : 0.76 }}>

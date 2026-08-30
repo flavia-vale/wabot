@@ -1,4 +1,5 @@
 import db from '../../db.js'
+import { isValidWatermarkColor, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { ensureCountQuota } from '../quotas.js'
 import {
@@ -204,10 +205,12 @@ export async function groupsRoutes(app, opts = {}) {
       if (invalid) return reply.code(400).send({ error: 'allowedPlatforms contém plataforma inválida' })
     }
 
-    // `preview_watermark` já existe na política (core/imageModePolicy.js) mas
-    // ainda não é composto pelo worker nem tem tela própria — recusar aqui
-    // evita salvar uma escolha que a cliente veria como "não fez nada".
-    if (imageMode !== undefined && !['original', 'original_watermark', 'preview'].includes(imageMode)) {
+    // Os quatro modos da política (core/imageModePolicy.js) são aceitos desde
+    // que o worker saiba compor cada um. `preview_watermark` entrou aqui junto
+    // com a composição da marca no card (buildManualLinkPreview, bot-worker.js)
+    // — nunca liberar um modo antes do worker, senão a cliente salva uma
+    // escolha que ela veria como "não fez nada".
+    if (imageMode !== undefined && !['original', 'original_watermark', 'preview', 'preview_watermark'].includes(imageMode)) {
       return reply.code(400).send({ error: 'imageMode inválido' })
     }
     // Modo de imagem e marca d'água pertencem ao DESTINO, nunca à origem — a
@@ -217,27 +220,19 @@ export async function groupsRoutes(app, opts = {}) {
     if ((imageMode !== undefined || watermarkText !== undefined || watermarkColor !== undefined) && group.role !== 'post') {
       return reply.code(400).send({ error: 'Modo de imagem e marca d\'água só podem ser definidos no destino.' })
     }
-    // Unicode-aware ([...string].length conta codepoints, não UTF-16 code
-    // units) — mesmo critério usado pelo renderizador (destinationWatermark.js)
-    // e pelo contador de caracteres da tela, para os três nunca divergirem.
-    const normalizedWatermarkText = watermarkText !== undefined
-      ? String(watermarkText ?? '').replace(/\s+/g, ' ').trim()
-      : undefined
-    // Espelha WATERMARK_MAX_CHARS de core/destinationWatermark.js. NÃO importar
-    // aquele módulo aqui: ele carrega `sharp` (binário nativo) e a API o mantém
-    // fora do processo de propósito (mesmo motivo do lazy load em
-    // linkConversion.js). test/watermark-limite-caracteres.test.js falha se os
-    // dois números divergirem.
-    if (normalizedWatermarkText !== undefined && [...normalizedWatermarkText].length > 25) {
+    // Limite e cores vêm de core/watermarkInput.js — o lugar único onde a API
+    // repete o formato do renderizador sem carregar `sharp` (política de
+    // memória; ver o cabeçalho daquele módulo).
+    const normalizedWatermarkText = normalizeWatermarkInputText(watermarkText)
+    if (normalizedWatermarkText !== undefined && isWatermarkTextTooLong(normalizedWatermarkText)) {
       return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 25 caracteres.' })
     }
-    // Só duas cores por decisão de produto (ver core/destinationWatermark.js).
-    if (watermarkColor !== undefined && !['white', 'black'].includes(watermarkColor)) {
+    if (watermarkColor !== undefined && !isValidWatermarkColor(watermarkColor)) {
       return reply.code(400).send({ error: 'Cor da marca d\'água inválida.' })
     }
     const requestedImageMode = imageMode ?? group.imageMode ?? 'original'
     const requestedWatermarkText = normalizedWatermarkText ?? group.watermarkText ?? ''
-    if (requestedImageMode === 'original_watermark' && !requestedWatermarkText) {
+    if (['original_watermark', 'preview_watermark'].includes(requestedImageMode) && !requestedWatermarkText) {
       return reply.code(400).send({ error: 'Escreva o texto da marca d\'água antes de ativar esse modo.' })
     }
     if (imageLinkTarget !== undefined && !['first', 'last'].includes(imageLinkTarget)) {

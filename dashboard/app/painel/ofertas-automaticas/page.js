@@ -13,6 +13,7 @@ import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
 import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
+import { OfferAppearanceFields } from '@/components/OfferAppearanceFields'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -110,17 +111,42 @@ export default function OfertasAutomaticasPage() {
   const [bulkToggling, setBulkToggling] = useState(null)
   const [triggerResult, setTriggerResult] = useState({})
   const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
+  // Aparência das ofertas automáticas: UMA escolha para a conta toda, não por
+  // automação — quem usa costuma ter várias automações para o mesmo público, e
+  // repetir a escolha (e o texto da marca) em cada uma só daria trabalho.
+  const [appearance, setAppearance] = useState({ imageMode: 'original', watermarkText: '', watermarkColor: 'white' })
+  const [appearanceSaving, setAppearanceSaving] = useState(false)
+  const [appearanceSaved, setAppearanceSaved] = useState(false)
+  const [appearanceError, setAppearanceError] = useState('')
+
+  async function saveAppearance() {
+    setAppearanceSaving(true)
+    setAppearanceError('')
+    setAppearanceSaved(false)
+    try {
+      const saved = await api.offerAutomationsAppearanceUpdate(appearance)
+      setAppearance(saved)
+      setAppearanceSaved(true)
+    } catch (err) {
+      setAppearanceError(err.message)
+    } finally {
+      setAppearanceSaving(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
     setError('')
     try {
-      const [list, groups, templateStore, me] = await Promise.all([
+      const [list, groups, templateStore, me, savedAppearance] = await Promise.all([
         api.offerAutomations(),
         api.groups().then((gs) => gs.filter((g) => g.role === 'post')),
         loadTemplateStore(),
         api.me().catch(() => null),
+        // Best-effort: a aparência não pode impedir a tela de carregar.
+        api.offerAutomationsAppearance().catch(() => null),
       ])
+      if (savedAppearance) setAppearance(savedAppearance)
       setAutomations(list)
       setWaGroups(groups)
       setTemplates(composeTemplates(templateStore))
@@ -360,6 +386,27 @@ export default function OfertasAutomaticasPage() {
         <strong style={{ fontWeight: 600 }}>Checklist antes de automatizar</strong>
         <p style={{ marginTop: 4 }}>Conecte o WhatsApp, confira suas credenciais da Shopee, escolha um grupo de destino e use “Enviar agora” para validar o modelo antes de deixar a recorrência ligada.</p>
       </div>
+
+      <section className="pnl-card">
+        <div className="pnl-card-title">Como as ofertas automáticas aparecem</div>
+        <p className="pnl-hint" style={{ marginTop: 6 }}>
+          Vale para todas as suas automações de uma vez. Para escolher um formato diferente por grupo,
+          use as filas ou a configuração de cada destino.
+        </p>
+        <OfferAppearanceFields
+          idPrefix="automations"
+          value={appearance}
+          disabled={appearanceSaving}
+          onChange={(patch) => { setAppearance((current) => ({ ...current, ...patch })); setAppearanceSaved(false) }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+          <button type="button" className="pnl-btn is-primary" onClick={saveAppearance} disabled={appearanceSaving}>
+            {appearanceSaving ? 'Salvando…' : 'Salvar'}
+          </button>
+          {appearanceSaved && <span className="pnl-hint" role="status">Salvo.</span>}
+        </div>
+        {appearanceError && <div className="pnl-note-box is-error" role="alert" style={{ marginTop: 10 }}>{appearanceError}</div>}
+      </section>
 
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
 
