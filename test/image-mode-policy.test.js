@@ -111,7 +111,11 @@ test('a escolha de imagem só aparece na configuração do destino (post), nunca
   const postFn = page.slice(postFnStart, postFnStart + 4000)
   assert.match(postFn, /imageMode/, 'a config do destino precisa oferecer o modo de imagem')
   assert.match(postFn, /watermarkText/, 'a config do destino precisa oferecer o texto da marca')
-  assert.match(postFn, /preview_watermark['"]?\s+disabled/, 'preview com marca ainda não implementado precisa aparecer desabilitado')
+  // 2026-08-30: o card com marca d'água saiu do "em breve" — a composição
+  // entrou em buildManualLinkPreview (bot-worker.js) e a API passou a aceitar
+  // o modo. A opção não pode voltar a aparecer desabilitada na tela.
+  assert.match(postFn, /value="preview_watermark"/, 'a tela precisa oferecer o card com marca d\'água')
+  assert.doesNotMatch(postFn, /preview_watermark['"]?\s+disabled/, 'o modo já está implementado; não pode voltar a aparecer desabilitado')
 })
 
 // resolveDestinationImageMode / destinationImageBaseMode / destinationImageUsesWatermark

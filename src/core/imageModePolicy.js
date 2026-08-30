@@ -91,9 +91,10 @@ export const DESTINATION_IMAGE_MODE = Object.freeze({
   ORIGINAL: 'original',
   ORIGINAL_WATERMARK: 'original_watermark',
   PREVIEW: 'preview',
-  // Ainda NÃO implementado no worker nem aceito pela API — ver groups.js e
-  // bot-worker.js. Existe aqui só para a política já falar a linguagem final
-  // e o próximo passo não precisar reescrever este enum.
+  // Card clicável COM a marca d'água composta na foto. A marca entra em
+  // `buildManualLinkPreview` (bot-worker.js) antes do upload da miniatura de
+  // alta qualidade, para que o card pequeno e a foto ampliada sejam a MESMA
+  // imagem marcada.
   PREVIEW_WATERMARK: 'preview_watermark',
 })
 

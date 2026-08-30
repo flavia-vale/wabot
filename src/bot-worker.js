@@ -1657,7 +1657,7 @@ function kindDoCard(fonte) {
   return DELIVERY_KIND.CARD_LOJA
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto }) {
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto, watermark = null }) {
   // `onFonteDaFoto` (opcional): diz de ONDE veio a foto do card ('loja',
   // 'origem' ou 'banner'). Vai por callback, e não como campo do objeto
   // devolvido, porque esse objeto é o urlInfo que entra no proto do WhatsApp —
@@ -1788,6 +1788,32 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
       // Best-effort: o plano B falhando devolve o caso ao estado que já era o
       // atual (card descartado, texto puro). Nunca derruba o envio.
       logger.warn({ err: err?.message, sourceUrl }, 'Card de preview: plano B da foto de origem falhou')
+    }
+  }
+
+  // MARCA D'ÁGUA NO CARD DE PREVIEW (modo `preview_watermark`).
+  //
+  // O card não é um caminho separado de imagem: ele carrega os MESMOS bytes que
+  // o envio de foto — `jpegThumbnail` (placeholder inline) e o buffer que
+  // alimenta o `highQualityThumbnail`. Compor a marca aqui, ANTES do upload HQ,
+  // é o que garante que o que a pessoa vê no card pequeno e o que ela vê ao
+  // tocar sejam a MESMA imagem marcada (`renderDestinationWatermark` já deriva
+  // a miniatura da principal justamente para isso — ver
+  // src/core/destinationWatermark.js).
+  //
+  // Vale para qualquer fonte de foto do card (loja, plano B da origem, banner
+  // de cupom): a promessa da cliente é "a oferta sai com a minha marca", e ela
+  // não muda porque a foto veio de outro lugar.
+  //
+  // Best-effort, como no caminho de foto: marca que falha NUNCA derruba o card
+  // — a oferta sai com a foto sem marca, que é muito melhor do que texto pelado.
+  if (jpegThumbnail && watermark?.text) {
+    try {
+      const rendered = await renderDestinationWatermark(hqSourceBuffer || jpegThumbnail, { text: watermark.text, color: watermark.color })
+      hqSourceBuffer = rendered.main
+      jpegThumbnail = rendered.thumbnail
+    } catch (err) {
+      logger.warn({ err: err?.message, destJid }, 'Marca d\'água no card falhou; card sai com a foto sem marca')
     }
   }
 
@@ -4134,6 +4160,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // mais ninguém (getImage devolve null cedo), então não há
               // download duplicado da mesma mídia.
               fetchOriginPhoto: getOriginalPhotoOnce,
+              // Modo "card com marca d'água": a marca é uma camada em cima do
+              // modo-base, igual ao par 'original'/'original_watermark'.
+              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null,
             })
             deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
@@ -4248,6 +4277,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
               // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
               allowSmallOriginPhoto: true,
+              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null,
             }).catch(err => {
               logger.warn({ err: err?.message, destJid }, 'Card de fallback sem imagem falhou; oferta sai como texto')
               return null

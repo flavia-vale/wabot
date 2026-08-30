@@ -204,10 +204,12 @@ export async function groupsRoutes(app, opts = {}) {
       if (invalid) return reply.code(400).send({ error: 'allowedPlatforms contém plataforma inválida' })
     }
 
-    // `preview_watermark` já existe na política (core/imageModePolicy.js) mas
-    // ainda não é composto pelo worker nem tem tela própria — recusar aqui
-    // evita salvar uma escolha que a cliente veria como "não fez nada".
-    if (imageMode !== undefined && !['original', 'original_watermark', 'preview'].includes(imageMode)) {
+    // Os quatro modos da política (core/imageModePolicy.js) são aceitos desde
+    // que o worker saiba compor cada um. `preview_watermark` entrou aqui junto
+    // com a composição da marca no card (buildManualLinkPreview, bot-worker.js)
+    // — nunca liberar um modo antes do worker, senão a cliente salva uma
+    // escolha que ela veria como "não fez nada".
+    if (imageMode !== undefined && !['original', 'original_watermark', 'preview', 'preview_watermark'].includes(imageMode)) {
       return reply.code(400).send({ error: 'imageMode inválido' })
     }
     // Modo de imagem e marca d'água pertencem ao DESTINO, nunca à origem — a
@@ -237,7 +239,7 @@ export async function groupsRoutes(app, opts = {}) {
     }
     const requestedImageMode = imageMode ?? group.imageMode ?? 'original'
     const requestedWatermarkText = normalizedWatermarkText ?? group.watermarkText ?? ''
-    if (requestedImageMode === 'original_watermark' && !requestedWatermarkText) {
+    if (['original_watermark', 'preview_watermark'].includes(requestedImageMode) && !requestedWatermarkText) {
       return reply.code(400).send({ error: 'Escreva o texto da marca d\'água antes de ativar esse modo.' })
     }
     if (imageLinkTarget !== undefined && !['first', 'last'].includes(imageLinkTarget)) {
