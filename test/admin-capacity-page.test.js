@@ -50,6 +50,17 @@ test('capacidade traduz criticidade em impacto e plano de ação sem inventar sa
   assert.match(text, /atraso ponta a ponta/)
 })
 
+test('capacidade explica a cadência viva e sinaliza coleta atrasada', { skip }, async () => {
+  const harness = await renderJsxComponent(new URL('../dashboard/app/admin/capacidade/components/CapacityLiveStatus.js', import.meta.url))
+  const current = textContent(harness.render({ collectedAt: new Date(Date.now() - 50_000).toISOString(), completeness: 'complete', sources: [{ name: 'linux', status: 'ok' }] }))
+  assert.match(current, /Painel recebendo dados/)
+  assert.match(current, /a cada 5 minutos/)
+  assert.match(current, /a cada 30 segundos/)
+  const stale = textContent(harness.render({ ageSeconds: 700, completeness: 'partial', sources: [] }))
+  assert.match(stale, /Medição atrasada/)
+  assert.match(stale, /Coleta parcial/)
+})
+
 test('capacidade oferece periodos, grafico SVG acessivel e tabela equivalente', { skip }, async () => {
   const page = await readFile(new URL('../dashboard/app/admin/capacidade/page.js', import.meta.url), 'utf8')
   const chart = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityHistoryChart.js', import.meta.url), 'utf8')
@@ -183,7 +194,8 @@ test('rota renderizada respeita permissão, mount lazy, visibilidade, período e
       './components/CapacityScenarioSimulator': { default: placeholder('scenario') },
       './components/CapacityInventory': { default: placeholder('inventory') },
       './components/CapacityAlerts': { default: placeholder('alerts') },
-      './components/CapacityActionPlan': { default: placeholder('action-plan') }
+      './components/CapacityActionPlan': { default: placeholder('action-plan') },
+      './components/CapacityLiveStatus': { default: placeholder('live-status') }
     },
     globals: {
       document: { visibilityState: 'visible' },

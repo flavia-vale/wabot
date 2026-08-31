@@ -58,6 +58,21 @@ limita concorrência de escrita e não oferece alta disponibilidade.
 
 ## Roteiro de coleta na VPS
 
+### Resumo curto para colar no atendimento
+
+Quando não for necessário o diagnóstico completo, use o coletor breve. Ele
+retorna apenas agregados, normalmente menos de 60 linhas, sem IPs remotos,
+variáveis do PM2, conteúdo dos logs ou nomes de chaves Redis:
+
+```bash
+cd ~/wabot
+chmod +x scripts/collect-capacity-brief.sh
+./scripts/collect-capacity-brief.sh
+```
+
+Use `collect-capacity-audit.sh` somente quando o resumo apontar um problema que
+precisa de investigação detalhada.
+
 ### Opção recomendada: um comando
 
 Copie e cole **este bloco inteiro** na VPS de produção. Ele entra no diretório,
