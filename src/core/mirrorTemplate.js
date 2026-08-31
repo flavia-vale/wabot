@@ -13,7 +13,7 @@ const MIRROR_TEMPLATE_SCRAPE_BUDGET_MS = Math.max(
   Number(process.env.MIRROR_TEMPLATE_SCRAPE_BUDGET_MS) || 6000,
 )
 
-const UNRESOLVED_OFFER_PLACEHOLDER_RE = /\{(?:produto|preço|preço_de|desconto|rating|vendas|link|loja)\}/g
+const UNRESOLVED_OFFER_PLACEHOLDER_RE = /\{(?:produto|preço|preço_de|desconto|rating|vendas|link|loja|linhaDeCupom)\}/g
 const PLATFORM_LABELS = {
   amazon: 'Amazon',
   mercadolivre: 'Mercado Livre',
@@ -46,6 +46,30 @@ function applyMirrorGlobalLinkVariables(body, botConfig = {}) {
   return String(body || '')
     .replace(/\{\{grupoLink\}\}/g, botConfig?.brandingGroupLink || '')
     .replace(/\{\{cupomLink\}\}/g, botConfig?.couponLink || '')
+}
+
+// Preserva a copy do cupom exatamente como chegou do grupo de origem. O
+// marketplace não expõe essa frase no scrape do produto: ela pertence ao texto
+// editorial da oferta (código, valor OFF e instrução de resgate). Escolhemos a
+// linha mais característica quando "cupom" aparece mais de uma vez; por exemplo,
+// "Por R$ 180 c/cupom" perde para "Use o cupom CLUBE...".
+export function extractCouponLine(text = '') {
+  const candidates = String(text || '')
+    .split(/\r?\n/)
+    .map((line, index) => ({ line: line.trim(), index }))
+    .filter(({ line }) => /\b(?:cupom|cupons)\b/i.test(line) && !/^https?:\/\//i.test(line))
+    .map(({ line, index }) => {
+      let score = 1
+      if (/🎟(?:️)?/.test(line)) score += 4
+      if (/\b(?:use|usar|resgate|resgatar|aplique|aplicar|insira|digite)\b/i.test(line)) score += 5
+      if (/\b(?:cupom|cupons)\s*:/i.test(line)) score += 3
+      if (/\b(?:cupom|cupons)\b[^\n]{0,30}\b[A-Z0-9]{5,}\b/.test(line)) score += 2
+      if (/\bc\s*\/\s*cupom\b/i.test(line)) score -= 3
+      return { line, index, score }
+    })
+
+  candidates.sort((a, b) => b.score - a.score || a.index - b.index)
+  return candidates[0]?.score >= 3 ? candidates[0].line : ''
 }
 
 export function resolveMirrorTemplateBody(botConfig, templateKey) {
@@ -160,7 +184,7 @@ export async function applyMirrorTemplate(text, {
     return text
   }
   const rendered = buildMobileOfferText({
-    product: fields,
+    product: { ...fields, couponLine: extractCouponLine(text) },
     link: fields.link,
     template: templateKey,
     templateBody: applyMirrorGlobalLinkVariables(body, botConfig),
