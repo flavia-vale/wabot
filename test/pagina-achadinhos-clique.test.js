@@ -120,3 +120,27 @@ test('o comparativo não renderiza o mesmo bloco duas vezes', () => {
   assert.equal(vezes('id={SECTION_IDS.migracao}'), 1, 'bloco de migração duplicado')
   assert.equal(vezes('id={SECTION_IDS.comparativo}'), 1, 'bloco do comparativo duplicado')
 })
+
+test('o comparativo apresenta preço, grupos e as cinco lojas do BOTinho em toda a decisão', () => {
+  const comparativo = lerFonte('dashboard/app/_comparisonContent.js')
+  const inicio = comparativo.indexOf("'/alternativas/achadinhos-bot': {")
+  const fim = comparativo.indexOf("'/alternativas/proafiliados': {", inicio)
+  const bloco = comparativo.slice(inicio, fim)
+
+  assert.match(bloco, /R\$ 39 por 30 dias \(grupos ilimitados\)/)
+  assert.match(bloco, /Shopee, Amazon, Mercado Livre, Magalu e SHEIN/)
+  assert.match(bloco, /productProfile:\s*{[\s\S]*name: 'BOTinho'/)
+  assert.match(bloco, /productDefinition: 'O BOTinho é para quem administra grupos/)
+  assert.match(bloco, /Qual é mais barato: BOTinho, AchadinhosBot ou Achadinho Pro\?/)
+  assert.match(bloco, /Qual bot aceita mais lojas pelo menor preço\?/)
+})
+
+test('o texto aprovado usa o layout existente e não cria uma seção visual nova', () => {
+  const comparativo = lerFonte('dashboard/app/_comparisonContent.js')
+
+  // Os novos conteúdos entram nos componentes que a página já usava: lista de
+  // limites, CompetitorCard e fechamento. Assim a copy muda sem trocar o layout.
+  assert.match(comparativo, /page\.limitations \|\| PRODUCT_LIMITATIONS/)
+  assert.match(comparativo, /page\.productProfile && <CompetitorCard/)
+  assert.match(comparativo, /page\.productDefinition \|\| PRODUCT_DEFINITION/)
+})
