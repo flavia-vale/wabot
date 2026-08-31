@@ -1665,6 +1665,21 @@ function reportPreviewCardNoImage(stage, ctx = {}) {
   try { recordOperationalSignal('preview_card_no_image', { userId, stage, platform: ctx.platform || null }) } catch {}
 }
 
+// A marca d'água foi pedida pelo destino e NÃO chegou na imagem enviada.
+//
+// Todos os caminhos de marca são best-effort de propósito (marca que falha
+// nunca derruba a oferta), e até 2026-08-31 isso era MUDO: a imagem pequena
+// demais nem log tinha (`renderDestinationWatermark` devolve
+// `watermarkApplied:false` em silêncio) e o card que não conseguiu foto sai
+// pelo preview automático do WhatsApp — com a foto da loja SEM a nossa marca.
+// Ou seja: a única forma de descobrir que a marca sumiu era a cliente reclamar,
+// que foi exatamente o que aconteceu. Aqui cada perda vira `warn` + sinal
+// durável, para dar pra separar por etapa sem reproduzir o caso.
+function reportWatermarkMissing(stage, ctx = {}) {
+  logger.warn({ ...ctx, stage }, 'Marca d\'água pedida pelo destino não entrou na imagem')
+  try { recordOperationalSignal('watermark_missing', { userId, stage, destJid: ctx.destJid || null }) } catch {}
+}
+
 function kindDoCard(fonte) {
   if (fonte === 'origem') return DELIVERY_KIND.CARD_ORIGEM
   if (fonte === 'banner') return DELIVERY_KIND.CARD_BANNER
@@ -1826,9 +1841,16 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
       const rendered = await renderDestinationWatermark(hqSourceBuffer || jpegThumbnail, { text: watermark.text, color: watermark.color })
       hqSourceBuffer = rendered.main
       jpegThumbnail = rendered.thumbnail
+      if (!rendered.watermarkApplied) reportWatermarkMissing(`card:${rendered.skipReason || 'nao_aplicada'}`, { destJid, platform: primary?.platform })
     } catch (err) {
       logger.warn({ err: err?.message, destJid }, 'Marca d\'água no card falhou; card sai com a foto sem marca')
+      reportWatermarkMissing('card:render_falhou', { destJid, platform: primary?.platform, err: err?.message })
     }
+  } else if (watermark?.text && !jpegThumbnail) {
+    // Sem foto não há card, e o envio cai no preview AUTOMÁTICO do WhatsApp —
+    // que, quando consegue montar algo, mostra a foto da loja SEM a nossa marca.
+    // A oferta sai; a marca não. Precisa aparecer no log com nome próprio.
+    reportWatermarkMissing('card:sem_foto', { destJid, platform: primary?.platform })
   }
 
   let highQualityThumbnail
@@ -1970,9 +1992,13 @@ async function buildPayloadFromRecipe(recipe, { destJid } = {}) {
   if (baixada && appearance.watermark) {
     try {
       marcada = await renderDestinationWatermark(baixada, appearance.watermark)
+      if (!marcada.watermarkApplied) reportWatermarkMissing(`oferta:${marcada.skipReason || 'nao_aplicada'}`, { destJid })
     } catch (err) {
       logger.warn({ err: err?.message, destJid }, 'Marca d\'água da oferta falhou; enviando imagem sem marca')
+      reportWatermarkMissing('oferta:render_falhou', { destJid, err: err?.message })
     }
+  } else if (appearance.watermark && !baixada) {
+    reportWatermarkMissing('oferta:sem_foto', { destJid })
   }
 
   if (appearance.baseMode === 'preview') {
@@ -4348,8 +4374,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                   width: rendered.width,
                   height: rendered.height,
                 }
+                if (!rendered.watermarkApplied) reportWatermarkMissing(`foto:${rendered.skipReason || 'nao_aplicada'}`, { destJid })
               } catch (err) {
                 logger.warn({ err: err?.message, destJid }, 'Marca d\'água falhou; enviando imagem normal')
+                reportWatermarkMissing('foto:render_falhou', { destJid, err: err?.message })
                 image = await normalizeImageForWhatsApp(fetched.buffer, wantMutation ? { mutation: { groupId: destJid } } : {})
               }
             } else {

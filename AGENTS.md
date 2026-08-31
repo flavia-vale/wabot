@@ -1320,6 +1320,100 @@ piso; não chamar `reloadConfig` sem `await` nas rotas. Testes:
 vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
 as sessões: avisar antes). Ver "código novo não carregado pelos bots".
 
+## A marca d'água não saía porque os BOTS ESTAVAM COM CÓDIGO VELHO (RCA 2026-08-31 — não regredir)
+
+Cliente configurou o destino em **"Preview com marca d'água"** e as ofertas
+continuaram saindo sem marca. O código da composição estava certo, testado e em
+`main` desde 30/08. **O que não estava era rodando.**
+
+**Causa raiz — a detecção de "código dos bots mudou" nunca funcionou em
+produção.** O auto-restart do supervisor (2026-08-26) decide comparando o commit
+ANTES e DEPOIS do sync, dentro de `deploy_safe_dashboard.sh`. Só que o passo
+"Deploy via SSH" do `.github/workflows/deploy.yml` faz
+`git fetch/checkout/reset --hard origin/main` **antes** de chamar o script:
+quando o script media `git rev-parse HEAD`, o clone **já estava no commit novo**,
+os dois lados davam o mesmo valor, o diff saía vazio e a decisão virava sempre
+"nenhuma mudança em código dos bots".
+
+Evidência nos logs do próprio deploy (run 2199, 30/08 21:22, produção):
+
+```
+HEAD is now at 5534fe86 Merge pull request #1524      ← workflow, ANTES do script
+[1/9] Sync branch main
+HEAD is now at 5534fe86 ...                            ← mesmo commit
+  Nenhuma mudança em código dos bots — bot-supervisor preservado, sessões intactas.
+│ 285 │ bot-supervisor │ ... │ uptime 6h │             ← não reiniciou
+```
+
+E, no MESMO commit, meia hora antes, em staging (run 2197) — cujo workflow
+**não** tem o reset inline:
+
+```
+  Código dos bots mudou neste deploy — supervisor será reiniciado ao final.
+  Reiniciando bot-supervisor-staging para os bots carregarem o código novo
+```
+
+É por isso que a marca no card funcionou em staging e não em produção: em
+produção o `bot-worker.js` que os workers tinham em memória sequer conhecia o
+parâmetro `watermark` de `buildManualLinkPreview`.
+
+**Consequência maior que a marca d'água:** desde 26/08, **nenhum** fix em
+`bot-worker.js`, `src/core/`, `src/converters/` etc. passou a valer em produção
+por conta do deploy. Ao investigar qualquer relato de "corrigimos e a cliente
+continua vendo o problema", **confira primeiro o uptime do `bot-supervisor`
+contra a data do fix** — antes de procurar defeito no código.
+
+**Conserto, em duas camadas:**
+
+1. O workflow captura `REVISION_BEFORE_DEPLOY` **antes** do reset inline e passa
+   ao script, que passa a usá-lo em vez de medir HEAD tarde demais. **Não mover
+   essa captura para depois do reset** — é literalmente o bug.
+2. Rede de segurança independente do git (`workers_running_stale_code`, nos dois
+   scripts): compara o mtime dos arquivos que o worker carrega
+   (`WORKER_CODE_PATHS_RE`, nunca `src/` inteiro — senão todo deploy de rota da
+   API reconectaria as sessões) com o horário de início do processo do
+   supervisor. Código no disco mais novo que o processo → reinicia. Isso cobre
+   sync feito fora do script e deploy anterior que ficou dormente. Fail-safe:
+   sem conseguir medir os dois lados, **não** reinicia (preservar sessão é o
+   default seguro). Com `RESTART_SUPERVISOR=0` a preservação continua valendo,
+   mas o deploy passa a **dizer em alto e bom som** que as correções não estão
+   valendo e qual comando aplica.
+
+⚠️ O primeiro deploy de produção com este conserto **vai reiniciar o
+bot-supervisor** — é o comportamento prometido desde 26/08 e nunca cumprido — e
+isso **reconecta todas as sessões WhatsApp de uma vez**. Anunciar antes.
+
+O aviso `ops_stale_worker_code` (guard na API, RCA 2026-08) provavelmente vinha
+disparando esse tempo todo: ele mora só no log da API e num `AnalyticsEvent`, e
+ninguém lê. Aviso que não chega a uma pessoa não conta como aviso.
+
+Testes: `test/deploy-supervisor-restart-detection.test.js` — roda a função de
+verdade extraída do script num repositório git temporário e **reproduz o bug**
+(sem o commit anterior a decisão é "preserva"), além de travar a ordem
+captura-antes-do-reset no YAML do workflow.
+
+### Achado secundário da mesma investigação: a marca podia sair invisível
+
+Medido, não deduzido: texto **branco a 50% sobre foto branca não altera um único
+pixel** — o desvio-padrão da imagem marcada é idêntico ao da original. Foto
+oficial de loja (Amazon/Mercado Livre/Shopee) é fundo branco liso por padrão de
+catálogo, então o card era justamente onde isso apareceria.
+
+**Isto NÃO era a causa do relato acima** (a marca nem chegava a ser composta),
+mas é um defeito real e foi corrigido junto: o texto ganhou **contorno na cor
+oposta** (`WATERMARK_STROKE_COLORS`, `src/core/destinationWatermark.js`), fino e
+mais transparente que o preenchimento. Não empurrar isso para a cliente como
+"escolha a outra cor": a cor é gosto; marca que some conforme a foto é defeito
+nosso. Guarda **funcional** (renderiza imagem e mede a variação de pixels):
+`test/watermark-contraste.test.js`.
+
+Junto, toda perda de marca ganhou nome próprio no log: os três caminhos (card,
+foto do espelhamento, receita de fila/automáticas) são best-effort de propósito
+e eram mudos — `renderDestinationWatermark` devolve `watermarkApplied:false` em
+silêncio com foto pequena demais, e card sem foto cai no preview automático do
+WhatsApp, que mostra a foto da loja sem marca. Agora `reportWatermarkMissing`
+(bot-worker.js) loga `warn` + emite `ops_watermark_missing` com a etapa.
+
 ## Marca d'água do concorrente: origem que ANEXA foto própria (RCA 2026-08-27)
 
 Depois do conserto de 26/08, duas origens da mesma cliente voltaram a receber a

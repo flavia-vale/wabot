@@ -164,6 +164,20 @@ jobs:
               else
                 git remote set-url origin "git@github.com:${{ github.repository }}.git"
               fi
+              # Referência do "ANTES" do deploy, capturada OBRIGATORIAMENTE antes
+              # do reset abaixo. É com ela que o script decide se este deploy
+              # trouxe código que os bot-workers executam (e portanto se o
+              # bot-supervisor precisa reiniciar para o fix valer).
+              #
+              # RCA 2026-08-31 — NÃO REMOVER, NÃO MOVER PARA DEPOIS DO RESET:
+              # o reset inline abaixo já deixa o clone no commit novo, então o
+              # script, ao medir HEAD por conta própria, obtinha o MESMO commit
+              # dos dois lados. O diff saía vazio, a decisão virava "nenhuma
+              # mudança em código dos bots" e o supervisor NUNCA era reiniciado
+              # em produção — todo fix de bot-worker.js chegava ao disco e
+              # ficava dormente na memória dos workers. Staging não tinha o
+              # reset inline, e por isso a mesma lógica funcionava lá.
+              REVISION_BEFORE_DEPLOY="$(git rev-parse HEAD 2>/dev/null || true)"
               # Hard reset inline para resolver divergência antes de chamar o script
               # (necessário quando o VPS tem commits locais que bloqueiam ff-only).
               git fetch origin main
@@ -176,6 +190,7 @@ jobs:
               # com o input stop_supervisor_for_migration marcado — usado para
               # destravar uma migration presa em SQLITE_BUSY (modo=remote). Ligar
               # reconecta TODAS as sessões WhatsApp; anunciar antes.
+              REVISION_BEFORE_DEPLOY="$REVISION_BEFORE_DEPLOY" \
               PM2_UPDATE_DURING_DEPLOY="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pm2_update_during_deploy == 'true' && '1' || '0' }}" \
               PRESERVE_SUPERVISOR_DURING_MIGRATION="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.stop_supervisor_for_migration == 'true' && '0' || '1' }}" \
                 ROOT_DIR=~/wabot BRANCH=main FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_dashboard.sh
@@ -189,7 +204,11 @@ jobs:
                 git remote set-url origin "git@github.com:${{ github.repository }}.git"
               fi
               chmod +x ./scripts/deploy_safe_staging.sh
-              ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_staging.sh
+              # Mesma referência do "ANTES" de produção. Aqui o sync é feito pelo
+              # próprio script, mas passar o commit mantém as duas pontas com a
+              # mesma regra em vez de duas regras parecidas.
+              REVISION_BEFORE_DEPLOY="$(git rev-parse HEAD 2>/dev/null || true)" \
+                ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_staging.sh
             fi
 
       # Purga o cache da Cloudflare APÓS um deploy de PRODUÇÃO bem-sucedido.
