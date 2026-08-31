@@ -7,9 +7,29 @@ import sharp from 'sharp'
 const POSITIONS = new Set(['center', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
 
 // Só duas cores, por decisão de produto: a cliente escolhe conforme as fotos
-// dela (marca branca some em foto clara, preta some em foto escura). Qualquer
-// outro valor cai no padrão em vez de quebrar o envio.
+// dela. Desde o contorno de contraste (WATERMARK_STROKE_COLORS, abaixo) as duas
+// aparecem em qualquer foto — a escolha passou a ser de gosto, não de
+// legibilidade. Qualquer outro valor cai no padrão em vez de quebrar o envio.
 export const WATERMARK_COLORS = Object.freeze({ white: '#ffffff', black: '#000000' })
+
+// Contorno de contraste, na cor OPOSTA à do texto.
+//
+// RCA 2026-08-31 (cliente relatou "coloquei preview com marca d'água e não sai
+// com marca"): sem contorno, a marca branca a 50% sobre foto BRANCA não muda um
+// único pixel — medido, o desvio-padrão da imagem final é literalmente o mesmo
+// da original. A cliente não estava vendo "a marca fraca": não havia marca
+// nenhuma na imagem.
+//
+// Isso explica por que o problema apareceu justo ao trocar para o card de
+// preview: no modo "foto que veio na oferta" a imagem é o print colorido da
+// mensagem de origem, e o branco aparece; no card, a foto é a OFICIAL DA LOJA —
+// que em Amazon/Mercado Livre/Shopee é, por catálogo, fundo branco liso.
+//
+// O contorno resolve a causa (falta de contraste) em vez de empurrar a escolha
+// da cor para a cliente, e vale para os dois lados: branco sobre foto clara e
+// preto sobre foto escura. Em foto colorida a aparência muda pouco — o contorno
+// é fino e mais transparente que o texto.
+export const WATERMARK_STROKE_COLORS = Object.freeze({ white: '#000000', black: '#ffffff' })
 
 // 25 caracteres: a marca é centralizada e grande o bastante para ser lida na
 // miniatura do WhatsApp; texto mais longo teria de encolher tanto que deixaria
@@ -127,10 +147,21 @@ function buildCenteredOverlay({ imageWidth, imageHeight, config }) {
   const blockHeight = lineHeight * lines.length
   const firstBaseline = Math.round(imageHeight / 2 - blockHeight / 2 + fontSize * 0.82)
   const fill = WATERMARK_COLORS[config.color]
+  // Contorno na cor oposta: é o que impede a marca de sumir por completo quando
+  // ela cai numa área da foto da MESMA cor dela (ver WATERMARK_STROKE_COLORS).
+  // Mais fino e mais transparente que o texto de propósito — a marca continua
+  // discreta; só deixa de ser invisível. `paint-order="stroke"` pinta o contorno
+  // ATRÁS do preenchimento; onde o renderizador de SVG ignorar a propriedade, o
+  // contorno vai por cima e a marca segue legível (nunca some).
+  const stroke = WATERMARK_STROKE_COLORS[config.color]
+  const strokeWidth = Math.max(2, Math.round(fontSize * 0.055))
+  const strokeOpacity = Math.round(config.opacity * 90) / 100
   const textNodes = lines.map((line, index) => (
     `<text x="${Math.round(imageWidth / 2)}" y="${firstBaseline + index * lineHeight}" ` +
     'text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" ' +
-    `font-size="${fontSize}" font-weight="700" fill="${fill}" fill-opacity="${config.opacity}">` +
+    `font-size="${fontSize}" font-weight="700" fill="${fill}" fill-opacity="${config.opacity}" ` +
+    `stroke="${stroke}" stroke-width="${strokeWidth}" stroke-opacity="${strokeOpacity}" ` +
+    'stroke-linejoin="round" paint-order="stroke">' +
     `${escapeXml(line)}</text>`
   )).join('')
 

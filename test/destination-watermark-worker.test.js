@@ -87,3 +87,24 @@ test('buildManualLinkPreview aceita a marca por parâmetro (nunca lê o destino 
   const sig = worker.slice(worker.indexOf('async function buildManualLinkPreview('), worker.indexOf('async function buildManualLinkPreview(') + 400)
   assert.match(sig, /watermark = null/)
 })
+
+// RCA 2026-08-31: todos os caminhos de marca são best-effort (marca que falha
+// nunca derruba a oferta) e todos eram MUDOS. A imagem pequena demais nem log
+// tinha — `renderDestinationWatermark` devolve `watermarkApplied:false` em
+// silêncio —, e o card sem foto cai no preview automático do WhatsApp, que
+// mostra a foto da loja sem a nossa marca. A única forma de descobrir que a
+// marca sumiu era a cliente reclamar, que foi o que aconteceu.
+test('toda perda de marca vira aviso com nome próprio', () => {
+  assert.match(worker, /function reportWatermarkMissing\(/)
+  assert.match(worker, /recordOperationalSignal\('watermark_missing'/)
+
+  // Os três renderizadores da marca (card, foto do espelhamento e receita de
+  // fila/automáticas) precisam avisar quando ela não foi aplicada.
+  const naoAplicada = worker.split('if (!rendered.watermarkApplied)').length - 1
+    + worker.split('if (!marcada.watermarkApplied)').length - 1
+  assert.equal(naoAplicada, 3, 'todo caminho de marca precisa avisar quando ela não é aplicada')
+
+  // E quando não há foto nenhuma para marcar: a oferta sai, a marca não.
+  assert.match(worker, /reportWatermarkMissing\('card:sem_foto'/)
+  assert.match(worker, /reportWatermarkMissing\('oferta:sem_foto'/)
+})

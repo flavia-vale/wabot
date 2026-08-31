@@ -153,6 +153,9 @@ export const ANALYTICS_EVENTS = new Set([
   // (que costuma ser a do concorrente, com marca d'água). Mede quanto o
   // conserto de 2026-08-27 está de fato agindo — ver core/storePhotoPreference.js.
   'ops_store_photo_over_origin',
+  // O destino pediu marca d'água e ela não entrou na imagem que saiu (RCA
+  // 2026-08-31). Ver reportWatermarkMissing em src/bot-worker.js.
+  'ops_watermark_missing',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

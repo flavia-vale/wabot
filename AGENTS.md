@@ -1320,6 +1320,46 @@ piso; não chamar `reloadConfig` sem `await` nas rotas. Testes:
 vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
 as sessões: avisar antes). Ver "código novo não carregado pelos bots".
 
+## A marca d'água da cliente saía INVISÍVEL no card (RCA 2026-08-31 — não regredir)
+
+Cliente trocou o destino para **"Preview com marca d'água"** e relatou que a
+oferta chegava **sem marca nenhuma**. A marca estava sendo composta — o caminho
+do card (`buildManualLinkPreview`, bot-worker.js) chama
+`renderDestinationWatermark` antes do upload da miniatura, e o teste estrutural
+confirmava. O que faltava era **contraste**: texto branco a 50% sobre fundo
+branco não muda um único pixel (medido: o desvio-padrão da imagem marcada é
+idêntico ao da original). Não era "marca fraca"; não havia marca na imagem.
+
+**Por que só apareceu no card.** No modo "a foto que veio na oferta" a imagem é
+o print colorido da mensagem monitorada, e o branco aparece. No card, a foto é a
+**oficial da loja** — que em Amazon/Mercado Livre/Shopee é, por padrão de
+catálogo, **fundo branco liso**. Mesma configuração, resultado oposto.
+
+Conserto na causa (`WATERMARK_STROKE_COLORS`, `src/core/destinationWatermark.js`):
+o texto ganha **contorno na cor oposta**, mais fino e mais transparente que o
+preenchimento (`paint-order="stroke"`, com o contorno atrás do texto). Vale para
+os dois lados — branca em foto clara, preta em foto escura — e muda pouco a
+aparência em foto colorida. **Não empurrar isso para a cliente como "escolha a
+outra cor"**: a escolha de cor é de gosto, e uma marca que some conforme a foto
+é defeito nosso. Guarda funcional (com imagem de verdade, não estrutural):
+`test/watermark-contraste.test.js` — ela falha se o contorno sair.
+
+**Toda perda de marca agora tem nome próprio no log.** Os três caminhos de marca
+(card, foto do espelhamento e receita de fila/automáticas) são best-effort de
+propósito — marca que falha nunca derruba a oferta — e eram **mudos**:
+`renderDestinationWatermark` devolve `watermarkApplied:false` em silêncio quando
+a foto é pequena demais (`MIN_WATERMARK_DIMENSION`), e o card sem foto cai no
+preview **automático** do WhatsApp, que mostra a foto da loja **sem a nossa
+marca**. A única forma de descobrir era a cliente reclamar. Hoje
+`reportWatermarkMissing` (bot-worker.js) loga `warn` + emite
+`ops_watermark_missing` (allowlist em `src/analytics.js`, mapa em
+`src/observability/operationalSignals.js`), com a etapa no `stage`
+(`card:sem_foto`, `foto:image_too_small`, `oferta:render_falhou`, ...).
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada disso
+vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
+as sessões: avisar antes). Ver "código novo não carregado pelos bots".
+
 ## Marca d'água do concorrente: origem que ANEXA foto própria (RCA 2026-08-27)
 
 Depois do conserto de 26/08, duas origens da mesma cliente voltaram a receber a
