@@ -14,16 +14,16 @@ export const WATERMARK_COLORS = Object.freeze({ white: '#ffffff', black: '#00000
 
 // Contorno de contraste, na cor OPOSTA à do texto.
 //
-// RCA 2026-08-31 (cliente relatou "coloquei preview com marca d'água e não sai
-// com marca"): sem contorno, a marca branca a 50% sobre foto BRANCA não muda um
-// único pixel — medido, o desvio-padrão da imagem final é literalmente o mesmo
-// da original. A cliente não estava vendo "a marca fraca": não havia marca
-// nenhuma na imagem.
+// Achado da investigação de 2026-08-31 (o relato "coloquei preview com marca
+// d'água e não sai com marca" tinha OUTRA causa — os bots rodavam código velho;
+// ver AGENTS.md). Este é um defeito independente, medido: sem contorno, a marca
+// branca a 50% sobre foto BRANCA não muda um único pixel — o desvio-padrão da
+// imagem final é literalmente o mesmo da original.
 //
-// Isso explica por que o problema apareceu justo ao trocar para o card de
-// preview: no modo "foto que veio na oferta" a imagem é o print colorido da
-// mensagem de origem, e o branco aparece; no card, a foto é a OFICIAL DA LOJA —
-// que em Amazon/Mercado Livre/Shopee é, por catálogo, fundo branco liso.
+// Onde isso apareceria primeiro é o card: ali a foto é a OFICIAL DA LOJA, que
+// em Amazon/Mercado Livre/Shopee é fundo branco liso por padrão de catálogo. No
+// modo "foto que veio na oferta" a imagem é o print colorido da mensagem de
+// origem, e o branco aparece.
 //
 // O contorno resolve a causa (falta de contraste) em vez de empurrar a escolha
 // da cor para a cliente, e vale para os dois lados: branco sobre foto clara e

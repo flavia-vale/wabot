@@ -394,7 +394,11 @@ if [[ "$SYNC_GIT" == "1" ]]; then
       exit 1
     fi
   fi
-  REVISION_BEFORE_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
+  # Referência do "ANTES". Aqui o sync é feito pelo próprio script, então medir
+  # nesta linha funciona — mas o workflow também passa REVISION_BEFORE_DEPLOY,
+  # e respeitá-lo mantém as duas pontas com a MESMA regra (em produção medir
+  # aqui dentro é tarde demais; ver o comentário em deploy_safe_dashboard.sh).
+  REVISION_BEFORE_SYNC="${REVISION_BEFORE_DEPLOY:-$(git rev-parse HEAD 2>/dev/null || true)}"
   if [[ "$FORCE_RESET_ON_SYNC" == "1" ]]; then
     # Staging é um espelho descartável: sincroniza de forma idempotente com
     # origin/$BRANCH. Imune a working tree suja e a arquivos untracked que
@@ -422,16 +426,50 @@ REVISION_AFTER_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
 # dormente na memória dos workers em execução (RCA 2026-08).
 WORKER_CODE_PATHS_RE='^(src/bot-worker\.js|src/supervisor/|src/core/|src/converters/|src/monitored[A-Za-z]*\.js|src/messageProcessor\.js|src/manager\.js|src/db\.js|src/logger\.js|src/analytics\.js|src/errorTaxonomy\.js|src/observability/|src/billing/|prisma/schema\.prisma|package-lock\.json)'
 
+SUPERVISOR_APP_NAME="${SUPERVISOR_APP:-bot-supervisor-staging}"
+STALE_WORKER_TOLERANCE_SEC="${STALE_WORKER_TOLERANCE_SEC:-60}"
+
+# Segunda opinião, independente do git: os bots em execução estão mais VELHOS
+# que o código dos workers no disco? Ver o comentário longo em
+# deploy_safe_dashboard.sh. Fail-safe: sem medir os dois lados, devolve "não".
+supervisor_started_at_epoch() {
+  local pid etimes
+  pid="$(pm2 pid "$SUPERVISOR_APP_NAME" 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
+  [[ -n "$pid" && "$pid" != "0" ]] || return 1
+  etimes="$(ps -o etimes= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+  [[ -n "$etimes" ]] || return 1
+  echo $(( $(date +%s) - etimes ))
+}
+
+newest_worker_code_epoch() {
+  git ls-files 2>/dev/null | grep -E "$WORKER_CODE_PATHS_RE" \
+    | xargs -r stat -c %Y 2>/dev/null | sort -n | tail -n 1
+}
+
+workers_running_stale_code() {
+  local started code
+  started="$(supervisor_started_at_epoch)" || return 1
+  code="$(newest_worker_code_epoch)"
+  [[ -n "$code" ]] || return 1
+  (( code - started > STALE_WORKER_TOLERANCE_SEC ))
+}
+
 RESTART_SUPERVISOR="${RESTART_SUPERVISOR:-auto}"
 if [[ "$RESTART_SUPERVISOR" == "auto" ]]; then
   if [[ -n "${REVISION_BEFORE_SYNC:-}" && -n "${REVISION_AFTER_SYNC:-}" && "$REVISION_BEFORE_SYNC" != "$REVISION_AFTER_SYNC" ]] \
      && git diff --name-only "$REVISION_BEFORE_SYNC" "$REVISION_AFTER_SYNC" 2>/dev/null | grep -qE "$WORKER_CODE_PATHS_RE"; then
     RESTART_SUPERVISOR=1
     echo "  Código dos bots mudou neste deploy — supervisor será reiniciado ao final."
+  elif workers_running_stale_code; then
+    RESTART_SUPERVISOR=1
+    echo "  Os bots estão rodando código MAIS ANTIGO que o do servidor — supervisor será reiniciado ao final."
   else
     RESTART_SUPERVISOR=0
     echo "  Nenhuma mudança em código dos bots — supervisor preservado."
   fi
+elif [[ "$RESTART_SUPERVISOR" == "0" ]] && workers_running_stale_code; then
+  echo "  ATENÇÃO: os bots continuam com código mais antigo que o do servidor (RESTART_SUPERVISOR=0)."
+  echo "  As correções deste deploy NÃO valem até rodar: pm2 restart $SUPERVISOR_APP_NAME --update-env"
 fi
 export RESTART_SUPERVISOR
 
@@ -629,7 +667,7 @@ recreate_frontend_pm2_app "$VISUAL_APP" "$VISUAL_PORT"
 # código que os workers executam, preservá-lo faria o fix ficar dormente: o
 # passo de sync já decidiu isso e RESTART_SUPERVISOR chega aqui como 1 ou 0.
 # Escape hatch: RESTART_SUPERVISOR=0 preserva sempre; =1 reinicia sempre.
-SUPERVISOR_APP="${SUPERVISOR_APP:-bot-supervisor-staging}"
+SUPERVISOR_APP="${SUPERVISOR_APP:-$SUPERVISOR_APP_NAME}"
 if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
   echo "  Reiniciando $SUPERVISOR_APP para os bots carregarem o código novo"
   ensure_pm2_app_running "$SUPERVISOR_APP"
