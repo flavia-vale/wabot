@@ -44,7 +44,7 @@
 - [X] T011 [P] Escrever testes de CRUD, último snapshot, séries limitadas, rollup idempotente e retenção raw/horária/diária em `test/ops-capacity-repository.test.js`
 - [X] T012 Implementar bootstrap do perfil baseline `wabot-prod/CX33/x86/4 vCPU/8192 MB/40960 MB/eu-central` e repositório de snapshots, rollups, eventos, alertas e retenção em `src/ops/capacity/repository.js`
 - [X] T013 Implementar `collectCapacitySnapshot()` com dependências injetáveis, timeout global ≤10 s, isolamento por fonte, trava in-process e resultado parcial em `src/ops/capacity/collector.js`
-- [X] T014 Implementar `startCapacitySweep()` com coleta best-effort no boot, intervalo padrão de 5 minutos, `unref()`, persistência raw, rollup, alert evaluation hook e retenção best-effort em `src/ops/capacity/sweep.js`
+- [X] T014 Implementar `startCapacitySweep()` com coleta best-effort no boot, intervalo padrão originalmente de 5 minutos e revisado para 1 hora em 2026-08-31, `unref()`, persistência raw, rollup, alert evaluation hook e retenção best-effort em `src/ops/capacity/sweep.js`
 - [X] T015 Integrar `startCapacitySweep()` ao boot da API somente após banco disponível, sem bloquear startup nem criar processo PM2, em `src/api/server.js`
 
 **Checkpoint**: A API coleta e persiste amostras locais sanitizadas de forma leve e resiliente, sem interface pública.
