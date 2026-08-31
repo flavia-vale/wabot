@@ -2,7 +2,7 @@
 
 ## 1. Coleta dentro da API existente
 
-**Decision**: iniciar uma passada best-effort no boot e depois a cada 5 minutos com `setInterval(...).unref()`, trava in-process contra sobreposição e timeout global. Cada fonte tem timeout e resultado independente.
+**Decision (revisada em 2026-08-31)**: iniciar uma passada best-effort no boot e depois a cada 1 hora com `setInterval(...).unref()`, trava in-process contra sobreposição e timeout global. Cada fonte tem timeout e resultado independente. A redução de cadência evita observação excessiva; o botão manual cobre investigações pontuais.
 
 **Rationale**: é o padrão já usado por sweeps do projeto, evita um novo processo PM2 e atende à frequência/overhead do spec. A trava impede acúmulo se PM2, SQLite ou metadata demorarem.
 
@@ -58,7 +58,7 @@
 
 **Decision**: uma linha por snapshot com métricas escalares e um JSON sanitizado de componentes/fontes; rollups horários/diários em tabela separada; eventos e alertas em tabelas próprias. Gerar rollup antes de apagar raw >90 d. Manter horário UTC e guardar `policyVersion` e capacidade contratada aplicada.
 
-**Rationale**: 25.920 snapshots em 90 dias são pequenos. JSON evita uma explosão de linhas por processo, mas os valores consultados/grafados permanecem em colunas indexáveis. Alertas precisam de lifecycle próprio; `AnalyticsEvent` não modela recuperação/última observação com clareza.
+**Rationale**: 2.160 snapshots horários em 90 dias são pequenos. JSON evita uma explosão de linhas por processo, mas os valores consultados/grafados permanecem em colunas indexáveis. Alertas precisam de lifecycle próprio; `AnalyticsEvent` não modela recuperação/última observação com clareza.
 
 **Alternatives considered**:
 - Somente `AnalyticsEvent`: inadequado para séries densas e lifecycle mutável.

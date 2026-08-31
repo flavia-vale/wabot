@@ -207,7 +207,7 @@ retorne as demais seções.
 
 | Métrica | Definição | Visualização / alerta |
 |---|---|---|
-| Latência captura→envio | `sent_at - captured_at`, p50/p95/p99 por 5 min | Série e SLO; separar conversão, espera e envio |
+| Latência captura→envio | `sent_at - captured_at`, p50/p95/p99 por janela | Série e SLO; separar conversão, espera e envio |
 | Taxa de entrega | enviados com sucesso / tentativas | 5 min e 24 h, por sessão e destino |
 | Ocupação das filas | waiting, active, delayed, failed, DLQ | total, variação e capacidade de drenagem |
 | Idade do item mais antigo | agora − `createdAt` do primeiro waiting | principal sinal de backlog; alerta por SLO |
