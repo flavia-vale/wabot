@@ -36,6 +36,7 @@ export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
       { token: '{link}', label: 'Link da oferta', example: 'https://shope.ee/abc' },
       { token: '{loja}', label: 'Loja/plataforma', example: 'Shopee' },
       { token: '{linhaDeCupom}', label: 'Linha de cupom', example: '🎟️ Use o cupom: OFERTA10' },
+      { token: '{preçoDoTexto}', label: 'Preço escrito na oferta', example: 'De R$ 129,90 por R$ 89,90' },
     ],
   },
   {
@@ -141,10 +142,11 @@ export function stripAutomationTemplatePlaceholders(text = '') {
     .trim()
 }
 
-export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '', couponLine = '' } = {}) {
-  let result = (couponLine
-    ? body
-    : body.replace(/^[ \t]*\{linhaDeCupom\}[ \t]*(?:\r?\n|$)/gm, ''))
+export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '', couponLine = '', textPrice = '' } = {}) {
+  let preparedBody = body
+  if (!couponLine) preparedBody = preparedBody.replace(/^[ \t]*\{linhaDeCupom\}[ \t]*(?:\r?\n|$)/gm, '')
+  if (!textPrice) preparedBody = preparedBody.replace(/^[ \t]*\{preçoDoTexto\}[ \t]*(?:\r?\n|$)/gm, '')
+  let result = preparedBody
     .replace(/\{produto\}/g, title || '{produto}')
     .replace(/\{preço\}/g, price || '{preço}')
     .replace(/\{link\}/g, link || '{link}')
@@ -153,6 +155,7 @@ export function applyTemplateVariables(body, { title = '', price = '', oldPrice 
     .replace(/\{vendas\}/g, sales || '')
     .replace(/\{loja\}/g, storeName || '')
     .replace(/\{linhaDeCupom\}/g, couponLine || '')
+    .replace(/\{preçoDoTexto\}/g, textPrice || '')
   if (oldPrice) {
     result = result.replace(/\{preço_de\}/g, oldPrice)
   } else {
@@ -200,6 +203,7 @@ export function buildMobileOfferText({
       sales: normalized.sales,
       storeName: normalized.storeName,
       couponLine: product?.couponLine,
+      textPrice: product?.textPrice,
     })
     lines = (preserveAutomationPlaceholders ? bodyText : stripAutomationTemplatePlaceholders(bodyText)).split('\n')
   } else {
