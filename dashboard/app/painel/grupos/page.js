@@ -955,7 +955,7 @@ export default function GruposPage() {
           {watermarkMode && (
             <CfgRow
               label="Cor da marca d&apos;água"
-              hint="Escolha conforme as suas fotos: a marca branca some em foto clara, a preta some em foto escura."
+              hint="As duas aparecem em qualquer foto (a marca tem contorno). Escolha a que combina melhor com as suas fotos."
               last
               extra="cfg-fadeup"
             >

@@ -96,7 +96,14 @@ test('deploy_safe_dashboard.sh reinicia o supervisor quando o deploy traz códig
   const scriptPath = path.join(__dirname, '..', 'scripts', 'deploy_safe_dashboard.sh')
   const script = fs.readFileSync(scriptPath, 'utf8')
 
-  assert.match(script, /REVISION_BEFORE_SYNC="\$\(git rev-parse HEAD/, 'precisa guardar o commit ANTES do pull para comparar')
+  // RCA 2026-08-31: em produção o workflow já resetou o clone para o commit novo
+  // ANTES de chamar o script, então medir HEAD aqui devolve o DEPOIS nos dois
+  // lados e a detecção nunca dispara. O commit de referência tem de vir de fora.
+  assert.match(
+    script,
+    /REVISION_BEFORE_SYNC="\$\{REVISION_BEFORE_DEPLOY:-\$\(git rev-parse HEAD/,
+    'o commit de referência precisa vir de REVISION_BEFORE_DEPLOY (o workflow o captura antes do reset)',
+  )
   assert.match(script, /RESTART_SUPERVISOR="\$\{RESTART_SUPERVISOR:-auto\}"/, 'o default precisa ser a decisão automática')
   assert.match(script, /worker_code_changed_in_sync/, 'a decisão precisa vir do diff do próprio deploy')
   assert.match(script, /git diff --name-only "\$REVISION_BEFORE_SYNC" "\$REVISION_AFTER_SYNC"/, 'compara os arquivos que entraram neste deploy')

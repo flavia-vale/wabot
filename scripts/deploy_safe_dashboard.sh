@@ -284,7 +284,23 @@ build_dashboard_with_recovery() {
 cd "$ROOT_DIR"
 configure_public_git_dependencies
 echo "[1/9] Sync branch $BRANCH"
-REVISION_BEFORE_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
+# Ponto de referência do "ANTES" do deploy.
+#
+# ⚠️ Não pode ser medido aqui dentro em produção. O passo "Deploy via SSH" do
+# .github/workflows/deploy.yml faz `git fetch/checkout/reset --hard origin/main`
+# ANTES de chamar este script, então quando chegamos nesta linha o clone JÁ está
+# no commit novo — `git rev-parse HEAD` devolveria o DEPOIS nos dois lados, o
+# diff sairia vazio e a detecção de "código dos bots mudou" nunca dispararia.
+#
+# Foi exatamente isso que aconteceu (RCA 2026-08-31): desde que o auto-restart
+# foi criado, TODO deploy de produção imprimiu "Nenhuma mudança em código dos
+# bots" e o bot-supervisor nunca foi reiniciado — enquanto em staging, cujo
+# workflow não faz o reset inline, a mesma lógica funcionava. Resultado: todo
+# fix em bot-worker.js chegava ao disco de produção e ficava dormente na
+# memória dos workers.
+#
+# Por isso o workflow passa REVISION_BEFORE_DEPLOY, capturado antes do reset.
+REVISION_BEFORE_SYNC="${REVISION_BEFORE_DEPLOY:-$(git rev-parse HEAD 2>/dev/null || true)}"
 git fetch origin
 git checkout "$BRANCH"
 
@@ -327,6 +343,47 @@ worker_code_changed_in_sync() {
     | grep -qE "$WORKER_CODE_PATHS_RE"
 }
 
+SUPERVISOR_APP_NAME="${SUPERVISOR_APP:-bot-supervisor}"
+# Mesma folga do guard da API (src/ops/staleWorkerCodeGuard.js): num deploy
+# normal o sync e o restart acontecem quase juntos.
+STALE_WORKER_TOLERANCE_SEC="${STALE_WORKER_TOLERANCE_SEC:-60}"
+
+# SEGUNDA OPINIÃO, independente do git: o processo que está rodando é mais VELHO
+# que o código dos workers no disco?
+#
+# A comparação por commit responde "este deploy trouxe código de bot?"; esta
+# responde "os bots estão rodando o código que está no disco?" — que é a
+# pergunta que de fato importa e que continua valendo quando o commit anterior
+# se perde (sync feito fora do script, deploy anterior que não reiniciou,
+# RESTART_SUPERVISOR=0 de uma janela antiga). É o mesmo sinal que a API já
+# calcula em src/ops/codeVersion.js, aqui aplicado só aos caminhos que o worker
+# de fato carrega — usar `src/` inteiro reiniciaria as sessões a cada deploy de
+# rota da API, que é o oposto do que queremos.
+supervisor_started_at_epoch() {
+  local pid etimes
+  pid="$(pm2 pid "$SUPERVISOR_APP_NAME" 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
+  [[ -n "$pid" && "$pid" != "0" ]] || return 1
+  etimes="$(ps -o etimes= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+  [[ -n "$etimes" ]] || return 1
+  echo $(( $(date +%s) - etimes ))
+}
+
+newest_worker_code_epoch() {
+  git ls-files 2>/dev/null | grep -E "$WORKER_CODE_PATHS_RE" \
+    | xargs -r stat -c %Y 2>/dev/null | sort -n | tail -n 1
+}
+
+# Fail-safe: sem conseguir medir os dois lados devolve "não" (preserva as
+# sessões). Perder um restart é recuperável; reconectar todas as sessões por
+# causa de uma medição furada, não.
+workers_running_stale_code() {
+  local started code
+  started="$(supervisor_started_at_epoch)" || return 1
+  code="$(newest_worker_code_epoch)"
+  [[ -n "$code" ]] || return 1
+  (( code - started > STALE_WORKER_TOLERANCE_SEC ))
+}
+
 # 'auto' (default) = reinicia só quando o código dos workers mudou.
 # '1' = sempre reinicia. '0' = nunca (preserva sessões mesmo com código novo,
 # assumindo que o fix vai ficar dormente até alguém reiniciar à mão).
@@ -338,10 +395,22 @@ if [[ "$RESTART_SUPERVISOR" == "auto" ]]; then
     echo "  (isso reconecta TODAS as sessões WhatsApp; RESTART_SUPERVISOR=0 desativa)"
     git diff --name-only "$REVISION_BEFORE_SYNC" "$REVISION_AFTER_SYNC" 2>/dev/null \
       | grep -E "$WORKER_CODE_PATHS_RE" | sed 's/^/    /' | head -20
+  elif workers_running_stale_code; then
+    RESTART_SUPERVISOR=1
+    echo "  Os bots estão rodando código MAIS ANTIGO que o do servidor — bot-supervisor será reiniciado ao final."
+    echo "  (rede de segurança: pega deploy que ficou dormente e sync feito fora deste script)"
+    echo "  (isso reconecta TODAS as sessões WhatsApp; RESTART_SUPERVISOR=0 desativa)"
   else
     RESTART_SUPERVISOR=0
     echo "  Nenhuma mudança em código dos bots — bot-supervisor preservado, sessões intactas."
   fi
+elif [[ "$RESTART_SUPERVISOR" == "0" ]] && workers_running_stale_code; then
+  # Escolha explícita de preservar as sessões. Legítima — mas não pode ser
+  # silenciosa: enquanto o supervisor não reiniciar, as correções deste deploy
+  # não valem para nenhum cliente.
+  echo "  ATENÇÃO: os bots continuam com código mais antigo que o do servidor (RESTART_SUPERVISOR=0)."
+  echo "  As correções deste deploy NÃO valem para os clientes até rodar:"
+  echo "    pm2 restart $SUPERVISOR_APP_NAME --update-env && pm2 save"
 fi
 export RESTART_SUPERVISOR
 

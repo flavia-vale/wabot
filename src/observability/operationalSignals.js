@@ -82,6 +82,11 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   send_dest_unlinked: 'ops_send_dest_unlinked',
   // Foto da loja usada no lugar da foto da origem (evita marca d'água de terceiro).
   store_photo_over_origin: 'ops_store_photo_over_origin',
+  // O destino pediu marca d'água e ela NÃO entrou na imagem enviada (foto
+  // pequena demais, render que falhou, ou card sem foto caindo no preview
+  // automático). Todos esses caminhos são best-effort e eram silenciosos — a
+  // marca sumia e só a reclamação da cliente denunciava (RCA 2026-08-31).
+  watermark_missing: 'ops_watermark_missing',
 }
 
 let cachedTrackFn = null
