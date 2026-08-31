@@ -60,6 +60,26 @@ test('remove linha de perfil mesmo cercada de emoji (caso ocasaljovemoficial)', 
   assert.equal(result.includes('R$ 49,90'), true)
 })
 
+test('remove rótulo de marca seguido de perfil (caso Promos das irmas_andrade)', () => {
+  const original = [
+    'Oferta especial',
+    'Compre aqui: https://s.shopee.com.br/4LIJqrEqow',
+    'Promos das @irmas_andrade01',
+  ].join('\n')
+
+  const result = stripTrailingSourceSignature(original)
+
+  assert.equal(result.includes('Promos das'), false)
+  assert.equal(result.includes('irmas_andrade01'), false)
+  assert.equal(result.includes('https://s.shopee.com.br/4LIJqrEqow'), true)
+})
+
+test('não generaliza texto com perfil para assinatura', () => {
+  assert.equal(isSocialOnlyLine('Siga @fulano para mais ofertas'), false)
+  assert.equal(isSocialOnlyLine('Promos das lojas @fulano'), false)
+  assert.equal(isSocialOnlyLine('Cupom das @irmas_andrade01'), false)
+})
+
 // 2ª rodada (staging, 2026-08): o `sharabarros` saiu mas o
 // `@ocasaljovemoficial_` sobreviveu. O `MessageLog` troca quebra de linha por
 // espaço (`sanitizeMessageForLog`), então o log NÃO distingue "handle em linha
