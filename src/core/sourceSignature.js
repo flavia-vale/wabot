@@ -40,6 +40,11 @@ const DOMAIN_SRC = '(?<![\\w.])(?:www\\.)?(?:instagram\\.com|tiktok\\.com|facebo
 const SOCIAL_HANDLE_RE = new RegExp(HANDLE_SRC, 'gu')
 const SOCIAL_DOMAIN_RE = new RegExp(DOMAIN_SRC, 'gui')
 
+// Rótulo curto de marca que algumas origens colocam antes do perfil. Mantido
+// deliberadamente exato: ampliar para qualquer texto + @handle faria chamadas
+// legítimas como "Siga @fulano para mais ofertas" virarem assinatura.
+const SOCIAL_BRAND_LABEL_RE = /^promos\s+das$/i
+
 // Cauda social no FIM de uma linha: um ou mais tokens sociais separados apenas
 // por espaço, pontuação, emoji e marcadores de formatação. Existe para o caso
 // em que a origem gruda a assinatura na MESMA linha do link — aí remover a
@@ -119,7 +124,8 @@ function signatureCore(line) {
 
 // Linha que existe SÓ para carregar um perfil: `@handle`, menção de contato ou
 // domínio social. Depois de tirar esses tokens não sobra nenhuma letra/dígito,
-// só emoji e pontuação (ex.: `⚠ *😱😱😱.* *@ocasaljovemoficial_*`).
+// só emoji e pontuação (ex.: `⚠ *😱😱😱.* *@ocasaljovemoficial_*`),
+// ou sobra exatamente o rótulo de marca observado `Promos das`.
 export function isSocialOnlyLine(line) {
   const raw = String(line ?? '')
   if (!raw.trim() || hasHttpUrl(raw)) return false
@@ -138,7 +144,7 @@ export function isSocialOnlyLine(line) {
   SOCIAL_HANDLE_RE.lastIndex = 0
   SOCIAL_DOMAIN_RE.lastIndex = 0
 
-  return !hasVisibleContent(residue)
+  return !hasVisibleContent(residue) || SOCIAL_BRAND_LABEL_RE.test(signatureCore(residue))
 }
 
 // Apara a cauda social do FIM de uma linha, preservando tudo antes dela.
