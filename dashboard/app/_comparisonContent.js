@@ -90,7 +90,7 @@ export const COMPARISON_PAGES = {
     // ranqueavam para as MESMAS consultas (529 e 226 impressões), dividindo o
     // sinal entre si sem nenhuma delas subir.
     title: 'Alternativa ao AchadinhosBot: comparativo honesto',
-    description: 'Compare AchadinhosBot, Achadinho Pro e BOTinho para automatizar grupos de achadinhos no WhatsApp: preço, marketplaces e teste grátis. Dados de 31/07/2026.',
+    description: 'Compare AchadinhosBot, Achadinho Pro e BOTinho: preço, grupos ilimitados, lojas suportadas, conversão de links e teste grátis.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
     // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
     // páginas ranqueavam para as mesmas consultas e não se linkavam, então o
@@ -100,8 +100,8 @@ export const COMPARISON_PAGES = {
       href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
     },
-    tldr: 'Se você opera só Shopee e quer escalar por número de grupos, o AchadinhosBot resolve. Se precisa de Mercado Livre, Amazon e Magalu na mesma conta, compare o custo total antes de decidir.',
-    directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco em Shopee, cobrando por faixa de grupos (R$ 59,90 por 1 grupo até R$ 199,90 por 15 grupos) e oferecendo teste grátis de 3 dias. As alternativas mais próximas são o Achadinho Pro, que adiciona Mercado Livre e Amazon a partir de R$ 59,97/mês, e o BOTinho, que cobre quatro marketplaces e converte também links de cupom.',
+    tldr: 'Entre as opções comparadas, o BOTinho oferece o conjunto mais completo pelo menor preço de entrada: custa R$ 39 por 30 dias, permite grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Para quem quer divulgar várias lojas, crescer sem pagar por quantidade de grupos e testar tudo antes de assinar, é a opção mais vantajosa entre as três.',
+    directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco somente em Shopee. Seus planos começam em R$ 59,90 por mês para 1 grupo e chegam a R$ 199,90 para 15 grupos. O Achadinho Pro começa em R$ 49,97 por mês, também somente com Shopee; Amazon e Mercado Livre exigem o plano Pro de R$ 59,97. O BOTinho custa R$ 39 por 30 dias, permite grupos ilimitados e já inclui Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Também converte links de produto e de cupom, trabalha com grupos, Canais e Comunidades do WhatsApp e oferece 7 dias grátis com o plano Pro completo. Para quem divulga várias lojas e não quer pagar mais ao adicionar grupos, o BOTinho entrega mais recursos por um preço menor.',
     // Formato de objeto (em vez de tupla) liga o comparador interativo por
     // critério (InteractiveComparisonTable) nesta página — ver
     // `isInteractiveComparison` em ComparisonPage. Mesmos fatos e preços da
@@ -109,39 +109,65 @@ export const COMPARISON_PAGES = {
     // uma célula só com os três textos concatenados (FR-031: preços iguais,
     // nada novo).
     rows: [
-      { key: 'preco', label: 'Preço de entrada', produto: 'R$ 39/30 dias.', concorrente: 'AchadinhosBot: R$ 59,90/mês (1 grupo). Achadinho Pro: R$ 49,97/mês (só Shopee).', reading: 'Compare pelo número de grupos que você realmente usa, não só pelo preço da primeira faixa.' },
-      { key: 'marketplaces', label: 'Marketplaces', produto: 'Shopee, Amazon, Mercado Livre e Magalu.', concorrente: 'AchadinhosBot: Shopee. Achadinho Pro: Shopee no Basic, +ML e Amazon no Pro.', reading: 'Se você só divulga Shopee, cobertura extra não vale nada. Pese pelo que você usa hoje.' },
-      { key: 'escala', label: 'Como escala o preço', produto: 'Sem limite de grupos.', concorrente: 'AchadinhosBot: por faixa de grupos (1 → 5 → 10 → 15). Achadinho Pro: grupos ilimitados por automação.', reading: 'Escalar por faixa é previsível, mas fica caro se a operação cresce em grupos.' },
-      { key: 'teste', label: 'Teste grátis', produto: '7 dias com o plano Pro completo.', concorrente: 'AchadinhosBot: 3 dias, com marca d’água e conexão que o próprio site descreve como "menos estável".', reading: 'Teste limitado mostra menos do produto real. Veja o que está incluído antes de concluir.' },
-      { key: 'cupom', label: 'Conversão de cupom', produto: 'Converte link de cupom, não só de produto.', concorrente: 'Não indicada nas páginas públicas dos dois concorrentes.', reading: 'Só faz diferença para quem divulga campanha de cupom além de produto avulso.' },
+      { key: 'preco', label: 'Preço de entrada', produto: 'R$ 39 por 30 dias (grupos ilimitados).', concorrente: 'AchadinhosBot: R$ 59,90/mês para 1 grupo. Achadinho Pro: R$ 49,97/mês, somente com Shopee.', reading: 'O BOTinho é o mais barato entre as três opções e não prende o preço à quantidade de grupos.' },
+      { key: 'marketplaces', label: 'Lojas suportadas', produto: 'Shopee, Amazon, Mercado Livre, Magalu e SHEIN.', concorrente: 'AchadinhosBot: Shopee. Achadinho Pro: Shopee no Basic; Amazon e Mercado Livre somente no Pro de R$ 59,97/mês.', reading: 'O BOTinho oferece cinco lojas pelo menor preço. Nas outras opções, a cobertura é menor ou exige um plano mais caro.' },
+      { key: 'escala', label: 'Limite de grupos', produto: 'Sem limite de grupos.', concorrente: 'AchadinhosBot: o preço aumenta por faixa de 1, 5, 10 ou 15 grupos. Achadinho Pro: grupos ilimitados por automação.', reading: 'Com o BOTinho, você adiciona novos grupos sem subir de plano somente porque a operação cresceu.' },
+      { key: 'teste', label: 'Teste grátis', produto: '7 dias com o plano Pro completo, sem cartão.', concorrente: 'AchadinhosBot: 3 dias, 1 grupo, 30 envios/dia, marca d’água e conexão descrita como "menos estável". Achadinho Pro: a página consultada não informa teste grátis.', reading: 'O BOTinho oferece mais tempo e libera o plano completo para você testar a rotina real antes de pagar.' },
+      { key: 'cupom', label: 'Conversão de cupom', produto: 'Converte links de produto e também links de cupom das lojas suportadas.', concorrente: 'Não indicada nas páginas públicas consultadas dos dois concorrentes.', reading: 'Para quem divulga campanhas, vitrines e cupons, o BOTinho cobre uma parte importante da rotina que não aparece nas outras ofertas públicas.' },
+      { key: 'canais', label: 'Canais e Comunidades', produto: 'Trabalha com grupos, Canais e Comunidades do WhatsApp.', concorrente: 'As páginas consultadas destacam automações e grupos.', reading: 'O BOTinho permite organizar diferentes formas de divulgação dentro do WhatsApp, sem prender a operação somente a grupos.' },
     ],
-    criteria: ['Número de grupos que você opera hoje', 'Marketplaces que realmente usa', 'Se precisa converter cupom além de produto', 'O que o teste grátis deixa você validar', 'Transparência de preço e de limites'],
-    botinhoDifferentials: ['Quatro marketplaces incluídos', 'Conversão de link de cupom, não só de produto', 'Sem limite de grupos', 'Teste grátis de 7 dias com o Pro completo', 'Canais e Comunidades do WhatsApp', 'Histórico completo de envios'],
+    criteria: ['Quantas lojas você divulga hoje', 'Quantos grupos administra e pretende adicionar', 'Se divulga links de cupom além de links de produto', 'Se precisa publicar em Canais e Comunidades', 'Se quer testar a ferramenta completa antes de pagar', 'Se o preço aumenta quando sua operação cresce'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o bot somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'Evite mandar a mesma oferta muitas vezes ou em intervalos curtos.', 'Continue acompanhando seus grupos mesmo depois de automatizar a rotina.'],
+    botinhoDifferentials: ['Menor preço entre as opções: R$ 39 por 30 dias', 'Grupos ilimitados sem aumento por quantidade', 'Cinco lojas: Shopee, Amazon, Mercado Livre, Magalu e SHEIN', 'Conversão de links de produto e de cupom', 'Grupos, Canais e Comunidades do WhatsApp', 'Controle de repetição e intervalo', 'Histórico completo de envios', 'Mensagem de boas-vindas', 'Suporte pelo WhatsApp', '7 dias com o Pro completo, sem cartão', 'Configuração rápida e cancelamento simples'],
     // Mockup do Claude Design ("Landing Comparativo") pede peso visual maior
     // para esta seção — cartão por item em vez de chip. Ligado só nesta
     // página para servir de piloto antes de estender às outras 6.
     richDifferentials: true,
     bestFit: [
-      'Escolha o AchadinhosBot se opera só Shopee, quer preço previsível por faixa de grupos e valoriza suporte 24/7 já no plano de entrada.',
-      'Escolha o Achadinho Pro se quer os três marketplaces principais pagando pouco mais que o plano básico, e se grupos ilimitados por automação resolve sua estrutura.',
-      'Escolha o BOTinho se precisa de quatro marketplaces, converte campanhas de cupom além de produto, ou quer validar a operação completa antes de pagar.',
+      'Escolha o BOTinho se quer pagar menos, divulgar Shopee, Amazon, Mercado Livre, Magalu e SHEIN na mesma conta e trabalhar com grupos ilimitados.',
+      'Escolha o BOTinho se divulga produto e cupom, quer usar grupos, Canais ou Comunidades e prefere testar o plano completo por 7 dias antes de pagar.',
+      'O AchadinhosBot pode atender uma operação pequena que trabalha somente com Shopee e prefere um plano cobrado por quantidade de grupos, mesmo começando por um preço maior.',
+      'O Achadinho Pro pode atender quem trabalha com vários números de WhatsApp ou considera seus recursos próprios de pesquisa de produtos mais importantes que preço e quantidade de lojas.',
     ],
     notIdealFit: [
-      'O AchadinhosBot não é ideal para quem divulga Mercado Livre, Amazon ou Magalu — a tabela pública de preços cobre Shopee.',
-      'O Achadinho Pro não é ideal para quem quer testar antes de pagar: a página de preços não indica teste grátis.',
-      'O BOTinho não é ideal para quem quer automação sem revisão humana ou opera em Telegram — o produto é só WhatsApp.',
+      'No AchadinhosBot, o plano de R$ 59,90 cobre somente 1 grupo e apenas Shopee; para chegar a 15 grupos, o valor publicado é R$ 199,90/mês.',
+      'No Achadinho Pro, o plano de entrada cobre somente Shopee; Amazon e Mercado Livre exigem o Pro de R$ 59,97/mês.',
+      'Entre as três opções, somente o BOTinho reúne R$ 39 por 30 dias, cinco lojas e grupos ilimitados.',
+      'O BOTinho trabalha somente com WhatsApp. Se sua operação depende de Telegram, será necessário usar outra solução para esse canal.',
     ],
     migrationPath: [
-      'Liste seus grupos de origem e de destino e conte quantos realmente recebem oferta por semana.',
-      'Confira em qual faixa de preço esse número cai em cada ferramenta — é aí que a diferença de custo aparece, não no plano de entrada.',
-      'Rode uma semana em paralelo antes de cancelar a ferramenta atual, comparando qualidade do link convertido e do preview.',
+      'Faça uma lista dos grupos de onde vêm as ofertas e dos grupos, Canais ou Comunidades onde deseja publicá-las.',
+      'Cadastre as lojas que divulga: Shopee, Amazon, Mercado Livre, Magalu e SHEIN.',
+      'Comece os 7 dias grátis do BOTinho e confira a conversão dos links, a aparência das mensagens e o ritmo das publicações.',
+      'Rode as duas ferramentas por alguns dias e confira no histórico o que foi enviado, falhou ou foi segurado por repetição.',
+      'Cancele a ferramenta antiga somente depois de confirmar que grupos, lojas e links funcionam como esperado.',
     ],
+    productProfile: {
+      name: 'BOTinho',
+      positioning: 'Bot para afiliadas e administradoras de grupos que acompanha ofertas, converte links para o código da usuária e publica nos destinos escolhidos no WhatsApp.',
+      pricingTiers: [{ name: 'Basic', price: 'R$ 39 por 30 dias' }],
+      bestFor: 'Quem divulga várias lojas, possui ou pretende criar vários grupos e quer automatizar a rotina sem pagar mais por cada novo grupo.',
+      notIdealFor: 'Quem precisa publicar no Telegram ou quer deixar toda a operação funcionando sem nenhuma conferência humana.',
+      migrationNotes: 'Use os 7 dias grátis com o Pro completo para testar links, grupos, Canais e Comunidades antes de cancelar outra ferramenta.',
+      source: 'Página pública de preços e recursos do BOTinho.',
+      verifiedAt: '2026-08-31',
+    },
+    productDefinition: 'O BOTinho é para quem administra grupos, Canais ou Comunidades de ofertas no WhatsApp e está cansada de copiar, trocar e publicar cada link manualmente. Você escolhe de onde vêm as ofertas e onde deseja publicá-las. O BOTinho prepara o link com o seu código de afiliada, envia a mensagem, ajuda a controlar intervalos e ofertas repetidas e guarda o histórico. Funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN, permite grupos ilimitados e custa R$ 39 por 30 dias, com 7 dias grátis para testar o plano Pro completo, sem cartão.',
     faq: [
-      { q: 'Qual a melhor alternativa ao AchadinhosBot?', a: 'Depende do que você opera. Para quem fica só na Shopee, o próprio AchadinhosBot resolve e tem suporte 24/7 no plano de entrada. Para quem precisa de Mercado Livre, Amazon e Magalu na mesma conta, Achadinho Pro e BOTinho cobrem mais marketplaces.' },
+      { q: 'Qual é a melhor alternativa ao AchadinhosBot?', a: 'Para quem divulga ofertas no WhatsApp, o BOTinho é a alternativa mais completa entre as três comparadas: custa R$ 39 por 30 dias, aceita grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN.' },
+      { q: 'Qual é mais barato: BOTinho, AchadinhosBot ou Achadinho Pro?', a: 'O BOTinho é o mais barato entre os três: R$ 39 por 30 dias. O Achadinho Pro começa em R$ 49,97/mês e o AchadinhosBot em R$ 59,90/mês. Além do menor preço, o BOTinho não limita grupos e já inclui cinco lojas.' },
+      { q: 'Qual bot aceita mais lojas pelo menor preço?', a: 'O BOTinho. Por R$ 39 por 30 dias, funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Os planos de entrada do AchadinhosBot e do Achadinho Pro cobrem somente Shopee.' },
+      { q: 'O BOTinho limita a quantidade de grupos?', a: 'Não. O BOTinho permite grupos ilimitados e o preço não aumenta somente porque você adicionou mais grupos.' },
+      { q: 'O BOTinho funciona com SHEIN?', a: 'Sim. O BOTinho aceita ofertas da SHEIN, além de Shopee, Amazon, Mercado Livre e Magalu. Para converter os links, é necessário cadastrar seus dados de afiliada da SHEIN no painel.' },
       { q: 'Quanto custa o AchadinhosBot?', a: 'Conforme a página pública consultada em 31/07/2026: R$ 59,90/mês para 1 grupo, R$ 99,90 para 5, R$ 149,90 para 10 e R$ 199,90 para 15 grupos, além de um teste grátis de 3 dias. Confirme na página oficial antes de decidir — preços mudam.' },
-      { q: 'O AchadinhosBot tem teste grátis?', a: 'Sim, 3 dias sem cartão. Vale saber o que está incluído: 1 grupo, 30 envios por dia, intervalo mínimo de 10 minutos, marca d’água nas mensagens e uma conexão que o próprio site descreve como "menos estável".' },
-      { q: 'Em que o AchadinhosBot é melhor que o BOTinho?', a: 'Em dois pontos concretos: o preço escala de forma muito previsível por faixa de grupos, e o suporte 24/7 por e-mail e WhatsApp aparece já no plano de entrada. Se sua operação é só Shopee e cabe numa faixa, essa simplicidade é uma vantagem real.' },
-      { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles. Por isso dá para rodar uma semana em paralelo antes de cancelar a atual.' },
+      { q: 'O AchadinhosBot tem teste grátis?', a: 'Sim, 3 dias sem cartão, com 1 grupo, 30 envios por dia, intervalo mínimo de 10 minutos, marca d’água e uma conexão descrita pelo próprio site como "menos estável". O BOTinho oferece 7 dias com o Pro completo.' },
+      { q: 'O Achadinho Pro é mais barato que o BOTinho?', a: 'Não. O Basic custa R$ 49,97/mês e cobre somente Shopee. O BOTinho custa R$ 39 por 30 dias e inclui cinco lojas. Para incluir Amazon e Mercado Livre no Achadinho Pro, é necessário o Pro de R$ 59,97/mês.' },
+      { q: 'Em que situação o AchadinhosBot pode fazer sentido?', a: 'Pode atender uma operação pequena que divulga somente Shopee, cabe em uma das faixas de grupos e prefere exatamente esse modelo de planos. Para quem compara preço, quantidade de grupos e cobertura de lojas, o BOTinho oferece mais por um valor menor.' },
+      { q: 'Em que situação o Achadinho Pro pode fazer sentido?', a: 'Pode fazer sentido para quem precisa administrar vários números de WhatsApp ou deseja seus recursos próprios de pesquisa de produtos. Para quem prioriza preço, lojas, teste grátis e grupos ilimitados, o BOTinho apresenta o conjunto mais vantajoso desta página.' },
+      { q: 'O BOTinho converte links de cupom?', a: 'Sim. Além de links de produto, o BOTinho converte links de cupons e campanhas compatíveis das lojas suportadas.' },
+      { q: 'Preciso de cartão para testar o BOTinho?', a: 'Não. O teste grátis dura 7 dias, libera o plano Pro completo e não exige cartão.' },
+      { q: 'Trocar de ferramenta faz perder meus grupos?', a: 'Não. Os grupos pertencem ao seu WhatsApp. A forma mais segura é testar o BOTinho em paralelo e cancelar a ferramenta anterior somente depois de conferir os envios.' },
+      { q: 'O BOTinho garante vendas ou comissões?', a: 'Não. Nenhum bot pode garantir vendas. O BOTinho ajuda a economizar trabalho, converter links compatíveis, organizar envios e evitar repetições.' },
     ],
   },
   '/alternativas/proafiliados': {
@@ -665,7 +691,7 @@ export function ComparisonPage({ slug }) {
               <IconList items={page.criteria} />
             </SectionCard>
             <SectionCard tone="soft" eyebrow="Limites" title="Limites importantes">
-              <IconList items={PRODUCT_LIMITATIONS} tone="no" />
+              <IconList items={page.limitations || PRODUCT_LIMITATIONS} tone="no" />
             </SectionCard>
             {Array.isArray(page.bestFit) && page.bestFit.length > 0 && (
               <SectionCard eyebrow="Melhor encaixe" title="Quem deve usar o quê">
@@ -706,6 +732,7 @@ export function ComparisonPage({ slug }) {
               lead="Preços e limites conforme as páginas públicas de cada ferramenta na data da verificação. Confirme no site oficial antes de decidir — eles mudam."
             >
               <div className="comparison-competitor-grid">
+                {page.productProfile && <CompetitorCard competitor={page.productProfile} />}
                 {competitorSlugs.map((competitorSlug) => (
                   <CompetitorCard key={competitorSlug} competitor={getCompetitorBySlug(competitorSlug)} />
                 ))}
@@ -740,7 +767,7 @@ export function ComparisonPage({ slug }) {
 
           {/* 9. Fechamento com a chamada principal. */}
           <SectionCard tone="accent" eyebrow={BRAND_NAME} title={`Onde o ${BRAND_NAME} se encaixa?`}>
-            <p style={{ color: 'var(--ink)', lineHeight: 1.7, maxWidth: '70ch' }}>{PRODUCT_DEFINITION}</p>
+            <p style={{ color: 'var(--ink)', lineHeight: 1.7, maxWidth: '70ch' }}>{page.productDefinition || PRODUCT_DEFINITION}</p>
             <TrialCta slug={slug} content="bottom-register" label={`Testar o ${BRAND_NAME} 7 dias grátis`} />
           </SectionCard>
 
