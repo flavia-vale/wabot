@@ -35,6 +35,7 @@ export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
       { token: '{vendas}', label: 'Vendas', example: '🛒 1.200+ vendidos' },
       { token: '{link}', label: 'Link da oferta', example: 'https://shope.ee/abc' },
       { token: '{loja}', label: 'Loja/plataforma', example: 'Shopee' },
+      { token: '{linhaDeCupom}', label: 'Linha de cupom', example: '🎟️ Use o cupom: OFERTA10' },
     ],
   },
   {
@@ -140,8 +141,10 @@ export function stripAutomationTemplatePlaceholders(text = '') {
     .trim()
 }
 
-export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '' } = {}) {
-  let result = body
+export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '', couponLine = '' } = {}) {
+  let result = (couponLine
+    ? body
+    : body.replace(/^[ \t]*\{linhaDeCupom\}[ \t]*(?:\r?\n|$)/gm, ''))
     .replace(/\{produto\}/g, title || '{produto}')
     .replace(/\{preço\}/g, price || '{preço}')
     .replace(/\{link\}/g, link || '{link}')
@@ -149,6 +152,7 @@ export function applyTemplateVariables(body, { title = '', price = '', oldPrice 
     .replace(/\{rating\}/g, rating || '')
     .replace(/\{vendas\}/g, sales || '')
     .replace(/\{loja\}/g, storeName || '')
+    .replace(/\{linhaDeCupom\}/g, couponLine || '')
   if (oldPrice) {
     result = result.replace(/\{preço_de\}/g, oldPrice)
   } else {
@@ -195,6 +199,7 @@ export function buildMobileOfferText({
       rating: normalized.rating,
       sales: normalized.sales,
       storeName: normalized.storeName,
+      couponLine: product?.couponLine,
     })
     lines = (preserveAutomationPlaceholders ? bodyText : stripAutomationTemplatePlaceholders(bodyText)).split('\n')
   } else {
