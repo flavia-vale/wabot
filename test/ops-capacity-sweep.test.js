@@ -10,7 +10,7 @@ test('server encaminha roots operacionais validados ao coletor', async () => {
 })
 import { evaluateCapacityAlerts } from '../src/ops/capacity/alerts.js'
 import { createCapacityService } from '../src/ops/capacity/service.js'
-test('sweep executa no boot, persiste e agenda timer unref', async () => { const calls = []; let tick; let unref = false; const repository = { ensureHostProfile: async () => ({ id: 'h' }), createSnapshot: async (_, value) => ({ ...value, collectedAt: new Date() }), rollup: async (_, kind) => calls.push(kind), applyRetention: async () => calls.push('retention') }; startCapacitySweep({ repository, collect: async () => ({ completeness: 'partial' }), setInterval: (fn, ms) => { tick = fn; calls.push(ms); return { unref: () => { unref = true } } } }); await new Promise(setImmediate); assert.equal(unref, true); assert.equal(typeof tick, 'function'); assert.ok(calls.includes(300000)); assert.ok(calls.includes('hour')); assert.ok(calls.includes('day')) })
+test('sweep executa no boot, persiste e agenda timer unref', async () => { const calls = []; let tick; let unref = false; const repository = { ensureHostProfile: async () => ({ id: 'h' }), createSnapshot: async (_, value) => ({ ...value, collectedAt: new Date() }), rollup: async (_, kind) => calls.push(kind), applyRetention: async () => calls.push('retention') }; startCapacitySweep({ repository, collect: async () => ({ completeness: 'partial' }), setInterval: (fn, ms) => { tick = fn; calls.push(ms); return { unref: () => { unref = true } } } }); await new Promise(setImmediate); assert.equal(unref, true); assert.equal(typeof tick, 'function'); assert.ok(calls.includes(3600000)); assert.ok(calls.includes('hour')); assert.ok(calls.includes('day')) })
 test('sweep persiste contagens e decisao completa usando historico confiavel', async () => {
   let persisted
   const repository = { ensureHostProfile: async () => ({ id: 'h' }), latestSnapshot: async () => null, workerHistorySummary: async () => ({ historyDays: 20, fixedBaseP95Mb: 1600, workerRssP95Mb: 410 }), createSnapshot: async (_, value) => (persisted = value, { ...value, collectedAt: new Date() }), rollup: async () => {}, applyRetention: async () => {} }
@@ -146,7 +146,7 @@ test('wiring real persiste identidade e deduplica deploy e mudança de capacidad
 
 test('snapshot failed não substitui último bom e collection_stale ativa e recupera', async () => {
   resetCapacityRefreshForTests()
-  let now = new Date('2026-08-27T12:16:00Z'); let fail = true; let creates = 0
+  let now = new Date('2026-08-27T14:01:00Z'); let fail = true; let creates = 0
   const host = { id: 'h' }; const good = { collectedAt: new Date('2026-08-27T12:00:00Z'), completeness: 'complete', policyVersion: 'capacity-policy-v1' }
   const alerts = new Map()
   const repository = {
@@ -160,11 +160,11 @@ test('snapshot failed não substitui último bom e collection_stale ativa e recu
   }
   const evaluateAlerts = (snapshot, currentHost, previous) => evaluateCapacityAlerts({ repository, host: currentHost, snapshot, previous, now })
   const { tick } = startCapacitySweep({ repository, now: () => now, collect: async () => fail ? ({ completeness: 'failed', collectedAt: now }) : ({ ...good, collectedAt: now, sources: [], components: [] }), evaluateAlerts, setInterval: () => ({ unref() {} }) })
-  await tick(); now = new Date('2026-08-27T12:21:00Z'); await tick()
+  await tick(); now = new Date('2026-08-27T14:02:00Z'); await tick()
   assert.equal(creates, 0)
   assert.equal(alerts.get('collection_stale').status, 'active')
-  fail = false; now = new Date('2026-08-27T12:22:00Z'); await tick()
-  now = new Date('2026-08-27T12:23:00Z'); await tick()
+  fail = false; now = new Date('2026-08-27T14:03:00Z'); await tick()
+  now = new Date('2026-08-27T14:04:00Z'); await tick()
   assert.equal(creates, 2)
   assert.equal(alerts.get('collection_stale').status, 'recovered')
 })

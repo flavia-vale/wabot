@@ -399,7 +399,7 @@ em `src/ops/stagingPower.js`; rotas `GET/POST /api/admin/staging-power`
 
 A rota `/admin/capacidade` (permissão `tech:read`) apresenta o host contratado,
 RAM/CPU/disco/swap, processos PM2, workers reais, staging, histórico, forecast e
-alertas. A coleta roda dentro da API a cada 5 minutos, com `unref()` e
+alertas. A coleta roda dentro da API a cada 1 hora, com `unref()` e
 single-flight; **não existe processo PM2 novo** e a tela nunca cria, apaga ou
 redimensiona recursos Hetzner. Atualização manual exige `tech:write` e é
 auditada como `admin.capacity.refresh`.
@@ -412,7 +412,7 @@ contínua, pouca `MemAvailable`, disco e headroom determinam atenção/criticida
 O forecast só fornece horizonte quando há cobertura suficiente e crescimento
 positivo, sempre com faixa e confiança.
 
-Snapshots de 5 minutos são retidos por 90 dias; rollups horários por 12 meses
+Snapshots horários são retidos por 90 dias; rollups horários por 12 meses
 e diários permanecem. Alertas exigem confirmação em duas amostras, possuem
 cooldown de 24 h, registram piora e recuperação e nunca executam ações. Eventos
 de restart, staging, reboot/OOM e mudança de host/política explicam o histórico
@@ -424,7 +424,7 @@ Integração Hetzner é opcional e somente leitura:
 HCLOUD_READ_TOKEN=<token read-only, nunca enviar ao browser/log>
 HCLOUD_PROJECT_ID=14422101
 HCLOUD_SERVER_ID=128727108
-CAPACITY_SWEEP_INTERVAL_MS=300000
+CAPACITY_SWEEP_INTERVAL_MS=3600000
 ```
 
 Sem token, usa o baseline `wabot-prod / CX33 / 4 vCPU / 8 GB / 40 GB` e marca
