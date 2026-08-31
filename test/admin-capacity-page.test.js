@@ -39,6 +39,17 @@ test('capacidade apresenta recursos, processos e staging sem acao automatica', {
   assert.doesNotMatch(environments, /useEffect/)
 })
 
+test('capacidade traduz criticidade em impacto e plano de ação sem inventar saúde', { skip }, async () => {
+  const harness = await renderJsxComponent(new URL('../dashboard/app/admin/capacidade/components/CapacityActionPlan.js', import.meta.url))
+  const tree = harness.render({ decision: { state: 'critical' }, health: { memory: { state: 'critical' }, cpu: { state: 'healthy' }, disk: { state: 'unknown' }, swap: { state: 'attention' } } })
+  const text = textContent(tree)
+  assert.match(text, /Situação geral:\s*Crítico/)
+  assert.match(text, /Linux pode encerrar bots sem aviso/)
+  assert.match(text, /Não abra novas sessões/)
+  assert.match(text, /Sem medição/)
+  assert.match(text, /atraso ponta a ponta/)
+})
+
 test('capacidade oferece periodos, grafico SVG acessivel e tabela equivalente', { skip }, async () => {
   const page = await readFile(new URL('../dashboard/app/admin/capacidade/page.js', import.meta.url), 'utf8')
   const chart = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityHistoryChart.js', import.meta.url), 'utf8')
@@ -171,7 +182,8 @@ test('rota renderizada respeita permissão, mount lazy, visibilidade, período e
       './components/CapacityHistoryChart': { default: placeholder('history') },
       './components/CapacityScenarioSimulator': { default: placeholder('scenario') },
       './components/CapacityInventory': { default: placeholder('inventory') },
-      './components/CapacityAlerts': { default: placeholder('alerts') }
+      './components/CapacityAlerts': { default: placeholder('alerts') },
+      './components/CapacityActionPlan': { default: placeholder('action-plan') }
     },
     globals: {
       document: { visibilityState: 'visible' },

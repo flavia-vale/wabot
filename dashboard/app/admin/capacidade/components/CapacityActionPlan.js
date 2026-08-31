@@ -1,0 +1,20 @@
+const STATE = {
+  healthy: { label: 'Estável', className: 'border-emerald-200 bg-emerald-50 text-emerald-950' },
+  attention: { label: 'Atenção', className: 'border-amber-200 bg-amber-50 text-amber-950' },
+  plan_now: { label: 'Planejar agora', className: 'border-orange-200 bg-orange-50 text-orange-950' },
+  critical: { label: 'Crítico', className: 'border-red-300 bg-red-50 text-red-950' },
+  stale: { label: 'Dado vencido', className: 'border-slate-300 bg-slate-100 text-slate-950' },
+  insufficient_data: { label: 'Sem medição', className: 'border-slate-300 bg-slate-100 text-slate-950' },
+}
+const COPY = {
+  memory: { title: 'Fôlego para manter sessões conectadas', meaning: 'RAM guarda as conexões e o trabalho em andamento. Quando falta, o Linux pode encerrar bots sem aviso.', attention: 'Pare staging fora da validação e investigue os processos que mais crescem.', critical: 'Não abra novas sessões; reduza carga e planeje aumento de RAM.' },
+  cpu: { title: 'Velocidade para processar promoções', meaning: 'CPU alta por vários minutos aumenta o atraso entre capturar, converter e enviar uma oferta.', attention: 'Compare o pico com filas e conversões externas; limite concorrência se o atraso subir.', critical: 'Reduza concorrência e separe workers antes do próximo pico.' },
+  disk: { title: 'Espaço para banco, credenciais e logs', meaning: 'Disco cheio impede gravações, corrompe rotinas e pode interromper a API e o WhatsApp.', attention: 'Revise retenção de logs, backups e crescimento do banco.', critical: 'Libere espaço imediatamente e mova backups para armazenamento externo.' },
+  swap: { title: 'Sinal de pressão de memória', meaning: 'Swap ocupado não é RAM extra. Movimento de swap deixa o processamento lento e indica falta de memória.', attention: 'Observe entrada/saída de swap junto com RAM disponível por pelo menos 15 minutos.', critical: 'Reduza a carga agora e aumente RAM; não conte swap como capacidade.' },
+}
+const normalize = (state) => STATE[state] ? state : 'insufficient_data'
+export default function CapacityActionPlan({ decision, health = {} }) {
+  const overall = normalize(decision?.state)
+  const rows = Object.entries(COPY).map(([key, copy]) => { const state = normalize(health[key]?.state === 'unknown' ? 'insufficient_data' : health[key]?.state); return { key, ...copy, state, action: copy[state] || (state === 'healthy' ? 'Nenhuma correção agora; acompanhe a tendência e os picos.' : 'Conclua a coleta da VPS antes de decidir ou dimensionar.') } })
+  return <section aria-labelledby="capacity-action-title" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[.16em] text-cyan-700">Diagnóstico traduzido</p><h2 id="capacity-action-title" className="mt-1 text-xl font-black text-slate-950">O que pode parar a operação e o que fazer</h2></div><span className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${STATE[overall].className}`}>Situação geral: {STATE[overall].label}</span></div><p className="mt-2 max-w-3xl text-sm text-slate-600">A criticidade usa a medição atual do servidor. “Sem medição” nunca significa saudável.</p><div className="mt-5 grid gap-3 lg:grid-cols-2">{rows.map((row) => <article key={row.key} className={`rounded-xl border p-4 ${STATE[row.state].className}`}><div className="flex items-start justify-between gap-3"><h3 className="font-black">{row.title}</h3><span className="shrink-0 text-xs font-black uppercase">{STATE[row.state].label}</span></div><p className="mt-2 text-sm"><strong>Em termos simples:</strong> {row.meaning}</p><p className="mt-2 text-sm"><strong>Próxima ação:</strong> {row.action}</p></article>)}</div><div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-950"><strong>O limite desta leitura:</strong> RAM, CPU e disco mostram risco do host, mas ainda não medem o atraso ponta a ponta, ocupação das filas, erros de APIs afiliadas nem bloqueios do WhatsApp. Esses indicadores devem ser instrumentados antes de prometer capacidade por número de grupos.</div></section>
+}
