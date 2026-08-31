@@ -60,7 +60,7 @@ test('servico retorna dados insuficientes, e nunca zeros saudaveis, sem snapshot
 
 test('servico marca snapshot antigo como stale e remove campos proibidos', async () => {
   const repository = { ensureHostProfile: async () => ({ id: 'host', hostname: 'wabot-prod', serverType: 'CX33' }), latestSnapshot: async () => ({ collectedAt: new Date('2026-08-27T10:00:00Z'), completeness: 'partial', memoryTotalMb: 8192, memoryAvailableMb: 4096, productionWorkers: 17, sourcesJson: JSON.stringify([{ name: 'linux', status: 'ok', token: 'never' }]), componentsJson: '[]' }) }
-  const result = await createCapacityService({ repository, now: () => new Date('2026-08-27T11:00:00Z') }).current()
+  const result = await createCapacityService({ repository, now: () => new Date('2026-08-27T13:00:00Z') }).current()
   assert.equal(result.snapshot.decision.state, 'stale')
   assert.equal(result.sources[0].token, undefined)
 })

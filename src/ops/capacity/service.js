@@ -8,7 +8,7 @@ import { getCapacityRefreshState, requestCapacityRefresh } from './sweep.js'
 
 const parseArray = (value) => { try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed : [] } catch { return [] } }
 const iso = (value) => value ? new Date(value).toISOString() : null
-export function createCapacityService({ db, repository = db ? createCapacityRepository(db) : null, now = () => new Date(), staleAfterMs = 15 * 60 * 1000, refreshCapacity } = {}) {
+export function createCapacityService({ db, repository = db ? createCapacityRepository(db) : null, now = () => new Date(), staleAfterMs = 2 * 60 * 60 * 1000, refreshCapacity } = {}) {
   if (!repository) throw new TypeError('capacity service requires db or repository')
   async function current() {
     const host = await repository.ensureHostProfile(); const raw = await repository.latestSnapshot(host.id)
@@ -80,7 +80,7 @@ export function createCapacityService({ db, repository = db ? createCapacityRepo
     const raw = selected.granularity === 'raw' || !repository.listRollups ? await repository.listSnapshots(host.id, { since, until, limit: 600 }) : await repository.listRollups(host.id, { granularity: selected.granularity, since, until, limit: 600 })
     const points = raw.map((item) => selected.granularity === 'raw' ? presentHistoryPoint(item.collectedAt, item) : (() => { const metrics = (() => { try { return JSON.parse(item.metricsJson || '{}') } catch { return {} } })(); return presentHistoryPoint(item.bucketStart, { memoryAvailableMb: metrics.memoryAvailableMb?.avg, memoryFreeMb: metrics.memoryFreeMb?.avg, memoryCacheMb: metrics.memoryCacheMb?.avg, processRssTotalMb: metrics.processRssTotalMb?.avg, cpuPercent: metrics.cpuPercent?.avg, load1: metrics.load1?.avg, load5: metrics.load5?.avg, load15: metrics.load15?.avg, diskUsedPercent: metrics.diskUsedPercent?.avg, diskUsedMb: metrics.diskUsedMb?.avg, diskAvailableMb: metrics.diskAvailableMb?.avg, inodeUsedPercent: metrics.inodeUsedPercent?.max, swapUsedMb: metrics.swapUsedMb?.avg, swapInKbPerSec: metrics.swapInKbPerSec?.max, swapOutKbPerSec: metrics.swapOutKbPerSec?.max, connectedSessions: item.sessionPeak, productionWorkers: item.workerPeak, safeSessionLimit: item.safeLimitMin, operationalState: item.worstState, sampleCount: item.sampleCount, expectedSampleCount: item.expectedSampleCount }) })())
     const events = repository.listEvents ? await repository.listEvents(host.id, { since, until, limit: 100 }) : []
-    const expectedPoints = selected.granularity === 'raw' ? 288 : selected.granularity === 'hour' ? Math.ceil(selected.ms / 3600000) : Math.ceil(selected.ms / 86400000)
+    const expectedPoints = selected.granularity === 'raw' ? 24 : selected.granularity === 'hour' ? Math.ceil(selected.ms / 3600000) : Math.ceil(selected.ms / 86400000)
     return { version: CAPACITY_SERVICE_VERSION, period, granularity: selected.granularity, since: iso(since), until: iso(until), points, events: events.map((event) => ({ type: event.type, occurredAt: iso(event.occurredAt), severity: event.severity, title: event.title, source: event.source })), coverage: { pointCount: points.length, expectedPoints, ratio: expectedPoints ? Math.min(1, points.length / expectedPoints) : 0, firstPointAt: points[0]?.at ?? null, lastPointAt: points.at(-1)?.at ?? null } }
   }
   async function forecast() {

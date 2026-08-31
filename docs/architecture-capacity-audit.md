@@ -58,19 +58,115 @@ limita concorrência de escrita e não oferece alta disponibilidade.
 
 ## Roteiro de coleta na VPS
 
-O script é somente leitura, impõe timeout por comando, remove variáveis de
-ambiente do `pm2 prettylist` e faz uma sanitização básica dos logs:
+### Resumo curto para colar no atendimento
+
+Quando não for necessário o diagnóstico completo, use o coletor breve. Ele
+retorna apenas agregados, normalmente menos de 60 linhas, sem IPs remotos,
+variáveis do PM2, conteúdo dos logs ou nomes de chaves Redis:
 
 ```bash
 cd ~/wabot
-bash scripts/collect-capacity-audit.sh
+chmod +x scripts/collect-capacity-brief.sh
+./scripts/collect-capacity-brief.sh
 ```
 
-Para escolher o arquivo de saída:
+Use `collect-capacity-audit.sh` somente quando o resumo apontar um problema que
+precisa de investigação detalhada.
+
+### Opção recomendada: um comando
+
+Copie e cole **este bloco inteiro** na VPS de produção. Ele entra no diretório,
+executa a coleta somente leitura e mostra no final onde salvou o relatório:
 
 ```bash
-bash scripts/collect-capacity-audit.sh /tmp/capacidade-promocao.txt
+cd ~/wabot
+chmod +x scripts/collect-capacity-audit.sh
+./scripts/collect-capacity-audit.sh /tmp/wabot-capacidade.txt
+echo "RELATORIO=/tmp/wabot-capacidade.txt"
 ```
+
+Depois, confira o tamanho e leia o arquivo antes de retorná-lo:
+
+```bash
+wc -l -c /tmp/wabot-capacidade.txt
+less /tmp/wabot-capacidade.txt
+```
+
+O script impõe timeout por comando, não reinicia processos, não escreve no
+Redis/banco e não inclui o bloco de variáveis do PM2. Ainda assim, o relatório
+pode conter IPs, nomes de processos e trechos residuais de log: revise antes de
+compartilhar.
+
+### Se o script ainda não chegou à VPS: coleta manual
+
+Copie e cole os blocos abaixo. Todos são de leitura.
+
+**1. CPU, RAM, swap e processos:**
+
+```bash
+date -u; uptime; nproc
+free -h
+vmstat 1 10
+ps -eo pid,ppid,user,%cpu,%mem,rss,vsz,etime,stat,comm --sort=-rss | head -31
+```
+
+**2. Disco, inodes e I/O:**
+
+```bash
+df -hT
+df -ih
+du -xhd1 ~/wabot ~/wabot-staging 2>/dev/null | sort -h
+iostat -xz 1 10
+find ~/wabot/prisma ~/wabot-staging/prisma -maxdepth 1 -type f -printf '%p %s bytes\n' 2>/dev/null | sort -k2 -n
+```
+
+**3. PM2 e workers WhatsApp (sem imprimir variáveis/segredos):**
+
+```bash
+pm2 status
+ps -eo pid,ppid,%cpu,%mem,rss,etime,nlwp,cmd --sort=-rss | grep -E '(node|redis|python|docker|sqlite|wabot)' | grep -v grep | head -80
+ps -eo pid,rss,etime,cmd | grep 'wabot/src/bot-worker' | grep -v grep
+```
+
+**4. Rede, portas e sockets:**
+
+```bash
+ss -s
+ss -lntup
+ss -Htan state established | awk '{print $1, $4, $5}' | head -200
+cat /proc/net/sockstat
+cat /proc/net/sockstat6
+ip -s link
+```
+
+**5. Redis/BullMQ de produção e staging:**
+
+```bash
+redis-cli -u redis://127.0.0.1:6379/0 PING
+redis-cli -u redis://127.0.0.1:6379/0 INFO memory persistence stats clients keyspace | grep -E '^(connected_clients|blocked_clients|used_memory_human|used_memory_peak_human|maxmemory_human|mem_fragmentation_ratio|rdb_last_bgsave_status|aof_enabled|aof_last_bgrewrite_status|instantaneous_ops_per_sec|total_error_replies|evicted_keys|db[0-9]+:)'
+redis-cli -u redis://127.0.0.1:6379/0 --scan --pattern 'bull:*' | awk -F: '{count[$1 FS $2 FS $3]++} END {for (k in count) print count[k], k}' | sort -nr | head -50
+redis-cli -u redis://127.0.0.1:6379/1 INFO memory persistence stats clients keyspace | grep -E '^(connected_clients|blocked_clients|used_memory_human|used_memory_peak_human|maxmemory_human|mem_fragmentation_ratio|rdb_last_bgsave_status|aof_enabled|aof_last_bgrewrite_status|instantaneous_ops_per_sec|total_error_replies|evicted_keys|db[0-9]+:)'
+```
+
+**6. SQLite:**
+
+```bash
+find ~/wabot/prisma ~/wabot-staging/prisma -maxdepth 1 -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' \) -printf '%p %s bytes\n' 2>/dev/null
+for db in ~/wabot/prisma/*.db ~/wabot-staging/prisma/*.db; do [ -f "$db" ] || continue; echo "-- $db"; sqlite3 "$db" 'PRAGMA quick_check; PRAGMA journal_mode; PRAGMA page_count; PRAGMA freelist_count;'; done
+```
+
+**7. OOM, falhas de disco, Redis, WhatsApp e integrações:**
+
+```bash
+journalctl -k --since '24 hours ago' --no-pager | grep -Ei 'oom|out of memory|killed process|I/O error|ext4|xfs|nvme|segfault' | tail -200
+journalctl -u redis-server --since '24 hours ago' --no-pager | grep -Ei 'error|fail|oom|latency|slow' | tail -100
+pm2 logs --nostream --lines 2000 2>&1 | grep -Ei 'fatal|uncaught|unhandled|out of memory|heap|timeout|rate.?limit|429|stream.?error|connection.*(closed|lost)|SQLITE_(BUSY|FULL|CORRUPT)|redis.*(error|closed)' | tail -300
+```
+
+O último comando pode conter dados vindos de logs. Revise o conteúdo antes de
+enviar. Não cole `.env`, `pm2 prettylist`, tokens, cookies ou credenciais.
+
+### Coleta durante um pico de promoção
 
 Execute uma vez em horário normal e outra durante uma promoção. Para observar
 um pico durante 15 minutos sem instalar agente:
@@ -81,8 +177,9 @@ pidstat -rud -p ALL 5 180 | tee /tmp/pidstat-pico.txt
 iostat -xz 5 180 | tee /tmp/iostat-pico.txt
 ```
 
-`pidstat` e `iostat` pertencem ao pacote `sysstat`. O relatório pode conter IPs,
-nomes de processo e trechos residuais de log; deve ser revisado antes do envio.
+`pidstat` e `iostat` pertencem ao pacote `sysstat`. Se aparecer “comando não
+encontrado”, instale antes com `sudo apt-get install -y sysstat` ou simplesmente
+retorne as demais seções.
 
 ## Critérios objetivos de criticidade e ação
 
@@ -110,7 +207,7 @@ nomes de processo e trechos residuais de log; deve ser revisado antes do envio.
 
 | Métrica | Definição | Visualização / alerta |
 |---|---|---|
-| Latência captura→envio | `sent_at - captured_at`, p50/p95/p99 por 5 min | Série e SLO; separar conversão, espera e envio |
+| Latência captura→envio | `sent_at - captured_at`, p50/p95/p99 por janela | Série e SLO; separar conversão, espera e envio |
 | Taxa de entrega | enviados com sucesso / tentativas | 5 min e 24 h, por sessão e destino |
 | Ocupação das filas | waiting, active, delayed, failed, DLQ | total, variação e capacidade de drenagem |
 | Idade do item mais antigo | agora − `createdAt` do primeiro waiting | principal sinal de backlog; alerta por SLO |
@@ -144,4 +241,3 @@ e um teste de pico comparável. Caso contrário, mostrar faixa e confiança.
 4. **Quando os dados exigirem:** mover SQLite para PostgreSQL por contenção;
    separar Redis/persistência por RTO; escalar workers horizontalmente somente
    com ownership de sessão, idempotência e rate limit distribuído.
-

@@ -26,7 +26,9 @@ run 'find ~/wabot/prisma ~/wabot-staging/prisma -maxdepth 1 -type f -printf "%p 
 
 section "PROCESSOS DA APLICAÇÃO"
 run 'pm2 status'
-run 'pm2 prettylist | sed -E "/(env|password|secret|token|cookie|authorization)/Id" | sed -n "1,500p"'
+# Nunca use `pm2 prettylist` neste relatório: o bloco pm2_env contém todas as
+# variáveis e apagar apenas a linha "env" não remove os segredos nas linhas seguintes.
+run 'pm2 jlist | node -e "let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{for(const p of JSON.parse(s)){const e=p.pm2_env||{};console.log(JSON.stringify({name:p.name,pid:p.pid,status:e.status,restarts:e.restart_time,uptime:e.pm_uptime,monit:p.monit||{}}))}})"'
 run 'ps -eo pid,ppid,%cpu,%mem,rss,etime,nlwp,cmd --sort=-rss | grep -E "(node|redis|python|docker|sqlite|wabot)" | grep -v grep | head -80'
 run 'ps -eo pid,rss,etime,cmd | grep "wabot/src/bot-worker" | grep -v grep'
 
