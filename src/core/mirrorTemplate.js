@@ -13,7 +13,7 @@ const MIRROR_TEMPLATE_SCRAPE_BUDGET_MS = Math.max(
   Number(process.env.MIRROR_TEMPLATE_SCRAPE_BUDGET_MS) || 6000,
 )
 
-const UNRESOLVED_OFFER_PLACEHOLDER_RE = /\{(?:produto|preço|preço_de|desconto|rating|vendas|link|loja|linhaDeCupom)\}/g
+const UNRESOLVED_OFFER_PLACEHOLDER_RE = /\{(?:produto|preço|preço_de|desconto|rating|vendas|link|loja|linhaDeCupom|preçoDoTexto)\}/g
 const PLATFORM_LABELS = {
   amazon: 'Amazon',
   mercadolivre: 'Mercado Livre',
@@ -71,6 +71,36 @@ export function extractCouponLine(text = '') {
   candidates.sort((a, b) => b.score - a.score || a.index - b.index)
   const winner = candidates[0]
   return winner && winner.score >= 3 ? winner.line : ''
+}
+
+const TEXT_PRICE_DE_RE = /\bde\s*:?\s*(?:R\$\s*)?\d/i
+const TEXT_PRICE_POR_RE = /\bpor\s*:?\s*(?:R\$\s*)?\d/i
+
+// O valor final anunciado com cupom muitas vezes existe apenas na copy do
+// grupo, não na página da loja. Capturamos o bloco "De/Por" anterior ao cupom:
+// ele pode estar inteiro numa linha ou dividido em duas linhas consecutivas.
+// Mantemos emojis, "no Pix", parcelas e demais texto editorial intactos.
+export function extractTextPrice(text = '', couponLine = extractCouponLine(text)) {
+  if (!couponLine) return ''
+
+  const lines = String(text || '').split(/\r?\n/).map(line => line.trim())
+  const couponIndex = lines.findIndex(line => line === couponLine)
+  const searchEnd = couponIndex >= 0 ? couponIndex : lines.length
+
+  for (let index = searchEnd - 1; index >= 0; index -= 1) {
+    const line = lines[index]
+    if (!TEXT_PRICE_POR_RE.test(line)) continue
+    if (TEXT_PRICE_DE_RE.test(line)) return line
+
+    let previousIndex = index - 1
+    while (previousIndex >= 0 && !lines[previousIndex]) previousIndex -= 1
+    if (previousIndex >= 0 && TEXT_PRICE_DE_RE.test(lines[previousIndex])) {
+      return `${lines[previousIndex]}\n${line}`
+    }
+    return line
+  }
+
+  return ''
 }
 
 export function resolveMirrorTemplateBody(botConfig, templateKey) {
@@ -188,9 +218,17 @@ export async function applyMirrorTemplate(text, {
   // cliente pediu explicitamente a variável. Além de evitar trabalho em todos
   // os templates existentes, isso mantém a separação histórica: sem o token,
   // título/preço continuam vindo exclusivamente do scrape da oferta.
-  const couponLine = body.includes('{linhaDeCupom}') ? extractCouponLine(text) : ''
+  const usesCouponCopy = body.includes('{linhaDeCupom}') || body.includes('{preçoDoTexto}')
+  const couponLine = usesCouponCopy ? extractCouponLine(text) : ''
+  const usesTextPrice = body.includes('{preçoDoTexto}')
+  // `{preçoDoTexto}` nunca pode abrir um buraco no template: a copy editorial
+  // tem prioridade quando foi encontrada; caso contrário, usa o preço atual
+  // confiável que o scraper da loja já colocou em `{preço}`.
+  const textPrice = usesTextPrice
+    ? (extractTextPrice(text, couponLine) || fields.price || '')
+    : ''
   const rendered = buildMobileOfferText({
-    product: { ...fields, couponLine },
+    product: { ...fields, couponLine, textPrice },
     link: fields.link,
     template: templateKey,
     templateBody: applyMirrorGlobalLinkVariables(body, botConfig),
