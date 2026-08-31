@@ -28,12 +28,12 @@ ps -eo ppid=,rss=,cmd= | awk '/wabot\/src\/bot-worker/ && !/wabot-staging/ {coun
 title "REDIS"
 for db in 0 1; do
   printf 'db=%s ' "$db"
-  redis-cli --no-auth-warning -u "redis://127.0.0.1:6379/$db" INFO memory persistence stats clients keyspace 2>/dev/null | awk -F: '/^(connected_clients|blocked_clients|used_memory_human|used_memory_peak_human|mem_fragmentation_ratio|aof_enabled|aof_last_bgrewrite_status|rdb_last_bgsave_status|evicted_keys|total_error_replies):/ {gsub(/\r/,"",$2);printf "%s=%s ",$1,$2} END {print ""}'
+  redis-cli --no-auth-warning -u "redis://127.0.0.1:6379/$db" INFO memory persistence stats clients keyspace server 2>/dev/null | awk -F: -v selected="db" '/^(uptime_in_seconds|connected_clients|blocked_clients|used_memory_human|used_memory_peak_human|mem_fragmentation_ratio|aof_enabled|aof_last_bgrewrite_status|rdb_last_bgsave_status|evicted_keys|total_error_replies):/ {gsub(/\r/,"",$2);printf "%s=%s ",$1,$2} $1==selected {gsub(/\r/,"",$2);printf "keyspace=%s ",$2} END {print ""}'
 done
 
 title "SQLITE"
 find ~/wabot/prisma ~/wabot-staging/prisma -maxdepth 1 -type f \( -name '*.db' -o -name '*.db-wal' \) -printf '%p %s\n' 2>/dev/null | awk '{printf "arquivo=%s tamanho_mb=%.1f\n",$1,$2/1048576}' | sort
 
-title "ERROS_24H_CONTAGEM"
+title "ERROS"
 printf 'kernel_oom_ou_io='; journalctl -k --since '24 hours ago' --no-pager 2>/dev/null | grep -Eic 'oom|out of memory|killed process|I/O error|segfault' || true
-printf 'pm2_criticos='; pm2 logs --nostream --lines 2000 2>&1 | grep -Eic 'fatal|uncaught|unhandled|out of memory|heap|rate.?limit|429|SQLITE_(BUSY|FULL|CORRUPT)|redis.*(error|closed)' || true
+printf 'pm2_criticos_ultimas_2000_linhas='; pm2 logs --nostream --lines 2000 2>&1 | grep -Eic 'fatal|uncaught|unhandled|out of memory|heap|rate.?limit|429|SQLITE_(BUSY|FULL|CORRUPT)|redis.*(error|closed)' || true

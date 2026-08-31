@@ -28,7 +28,7 @@ export default function CapacityPage() {
   const refresh = async () => {
     if (!admin?.permissions?.includes('tech:write') || !window.confirm('Atualizar agora as métricas locais e o inventário somente leitura?')) return
     setRefreshing(true); setRefreshNotice('')
-    try { await api.adminCapacityRefresh(); setRefreshNotice('Atualização iniciada. Os dados serão renovados em instantes.'); window.setTimeout(() => { void load(); void loadAlerts() }, 1500) }
+    try { await api.adminCapacityRefresh(); setRefreshNotice('Atualização iniciada. A nova medição aparecerá em até 15 segundos.'); window.setTimeout(() => { void load(); void loadAlerts() }, 12_000) }
     catch (err) { setRefreshNotice(err?.message || 'Não foi possível iniciar a atualização. Tente novamente em instantes.') }
     finally { setRefreshing(false) }
   }
