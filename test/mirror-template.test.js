@@ -136,6 +136,20 @@ test('applyMirrorTemplate remove linhaDeCupom sem deixar placeholder quando a or
   assert.equal(text, 'Produto real\nhttps://loja.test/produto?tag=afiliado')
 })
 
+test('applyMirrorTemplate não leva a copy de cupom para template que não pediu a variável', async () => {
+  const text = await applyMirrorTemplate('🎟️ CUPOM: NAODEVEENTRAR\nhttps://loja.test/produto', {
+    templateKey: 'tpl_sem_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_sem_cupom', name: 'Sem cupom', body: '{produto}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: '', newPrice: 'R$ 55,23' }),
+  })
+
+  assert.equal(text, 'Produto real\nhttps://loja.test/produto?tag=afiliado')
+  assert.doesNotMatch(text, /NAODEVEENTRAR/)
+})
+
 test('applyMirrorTemplate substitui grupoLink e cupomLink apenas quando o template contém as variáveis', async () => {
   const text = await applyMirrorTemplate('Texto original https://ex.com/a', {
     templateKey: 'tpl_links',

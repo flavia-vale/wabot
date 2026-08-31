@@ -69,7 +69,8 @@ export function extractCouponLine(text = '') {
     })
 
   candidates.sort((a, b) => b.score - a.score || a.index - b.index)
-  return candidates[0]?.score >= 3 ? candidates[0].line : ''
+  const winner = candidates[0]
+  return winner && winner.score >= 3 ? winner.line : ''
 }
 
 export function resolveMirrorTemplateBody(botConfig, templateKey) {
@@ -183,8 +184,13 @@ export async function applyMirrorTemplate(text, {
     logger?.warn?.({ originalUrl, convertedUrl, platform }, 'Template de espelhamento: scrape sem título confiável; mantendo texto original (relay)')
     return text
   }
+  // A copy da origem só deve participar do caminho de template quando a
+  // cliente pediu explicitamente a variável. Além de evitar trabalho em todos
+  // os templates existentes, isso mantém a separação histórica: sem o token,
+  // título/preço continuam vindo exclusivamente do scrape da oferta.
+  const couponLine = body.includes('{linhaDeCupom}') ? extractCouponLine(text) : ''
   const rendered = buildMobileOfferText({
-    product: { ...fields, couponLine: extractCouponLine(text) },
+    product: { ...fields, couponLine },
     link: fields.link,
     template: templateKey,
     templateBody: applyMirrorGlobalLinkVariables(body, botConfig),
