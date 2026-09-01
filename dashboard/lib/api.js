@@ -335,6 +335,8 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/payments${query ? `?${query}` : ''}`)
   },
+  adminCreateManualPayment: (data) =>
+    apiFetch('/api/admin/payments/manual', { method: 'POST', body: JSON.stringify(data) }),
   adminBillingWebhooks: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/billing/webhooks${query ? `?${query}` : ''}`)
