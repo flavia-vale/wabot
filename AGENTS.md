@@ -3511,42 +3511,64 @@ re-estimar por sinal de SERP quando este dado real já existe.**
 Ordem de prioridade dos marketplaces (Trends, estável salvo Magalu):
 **Shopee ≫ Mercado Livre > Amazon ≫ Magalu (em queda)**.
 
-### Baseline do site (Search Console — atualizado 2026-08-16)
+### Baseline do site (Search Console — atualizado 2026-09-01)
 
-| Métrica | 30/07 | **16/08** |
-|---|---:|---:|
-| Cliques (soma da aba "Países") | 40 | **93** |
-| Impressões | 1.102 | **2.902** |
-| CTR | 3,63% | 3,20% |
-| Posição média (Brasil) | 7,85 | 7,60 |
-| Consultas distintas | 13 | **29** ← métrica mais honesta de progresso |
-| Páginas com impressão | 60 | 77 |
+| Métrica | 30/07 | 16/08 | **01/09** |
+|---|---:|---:|---:|
+| Cliques (soma da aba "Países") | 40 | 93 | **177** |
+| Impressões | 1.102 | 2.902 | **5.773** |
+| CTR | 3,63% | 3,20% | 3,07% |
+| Posição média (Brasil) | 7,85 | 7,60 | 7,68 |
+| Consultas distintas | 13 | 29 | **115** ← métrica mais honesta de progresso |
+| Páginas com impressão | 60 | 77 | 79 |
 
 Compare sempre pela soma da aba "Países" (o painel-resumo dá 41/1.154 em 30/07
 porque inclui linhas sem país atribuído — as duas metodologias não se misturam).
 
-**As impressões multiplicaram por 5,3 nas duas semanas seguintes a 04/08**
-(183 → 741 → 965 por semana), data em que entraram juntos: desbloqueio do
-robots.txt da Cloudflare, IndexNow no deploy, unificação da marca e pedidos
-manuais de indexação.
+Por mês fechado: junho 8 cliques/365 impressões, julho 33/656, **agosto
+136/4.739**. O salto que começou em 04/08 (desbloqueio do robots.txt da
+Cloudflare, IndexNow no deploy, unificação da marca, indexações pedidas à mão)
+sustentou-se o mês inteiro — não foi pico.
 
-**A página com mais impressões do site hoje é `/bot-achadinhos-whatsapp`** (529),
-que em 30/07 tinha 5. Ela e `/alternativas/achadinhos-bot` (226) atendem buscas
-pelo **nome de um concorrente** (`achadinhoosbot`/`achadinhosbot`/`achadinhos
-bot` = 443 impressões, 15% do total, CTR ~1%). `fluxopromo` e `shozap` já
-aparecem também. **As páginas de comparação com concorrente são o motor de
-crescimento** — é nelas que vale produzir, não em cidade nem em nicho.
+**Consultas distintas quadruplicaram (29 → 115) enquanto as páginas com
+impressão quase não mudaram (77 → 79).** O crescimento veio das MESMAS páginas
+aparecendo em mais buscas, não de páginas novas entrando no índice.
 
-O gargalo mudou de lugar: já há impressão, falta **clique**. Sete páginas somam
-464 impressões e ZERO clique (a maior: `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp`,
-176 impressões em posição 7,1) — é problema de título/descrição, não de
-conteúdo. Celular traz 62% das impressões com CTR de 2,07% contra 5,10% no
-computador. Análise completa e lista de ação priorizada em
-`docs/marketing/ANALISE_SEO_2026-08-16.md`.
+**As buscas por nome de CONCORRENTE são 92% das impressões de consulta**
+(1.933 de 2.094, contra 15% em 16/08) e rendem 19 cliques — CTR de ~1% em
+posição 5–7. Maior: `achadinho pro` (742 impressões). As páginas que atendem são
+`/alternativas/achadinhos-bot` (1.281 impressões, a maior do site),
+`/bot-achadinhos-whatsapp` (1.234) e as demais `/alternativas/*`. **A linha de
+comparação com concorrente é o motor de crescimento** — é nela que vale
+produzir, não em cidade nem em nicho. O gargalo é o **clique**, não a
+impressão: título e descrição precisam dizer que aqui há uma alternativa (nunca
+se passar pelo concorrente, nunca prometer o que ele não entrega sem fonte).
+
+Dez páginas somam **879 impressões e ZERO clique** — pior caso
+`/blog/quanto-custa-bot-para-whatsapp-afiliados` em **posição 4,35**. As sete
+apontadas em 16/08 não foram consertadas e hoje desperdiçam o dobro. Celular
+traz 57% das impressões, ranqueia MELHOR que o computador (7,07 vs 11,32) e
+converte metade (2,15% vs 4,33%) — isso aponta para título cortado na tela
+pequena, não para público diferente.
+
+**Indexação (novo nesta rodada):** 77 páginas indexadas contra **51 não
+indexadas** — 26 "rastreada, mas não indexada", 11 "detectada, mas não
+indexada", 1 bloqueada pelo robots.txt. Tratar isso antes de produzir mais
+páginas parecidas.
+
+**43% dos cadastros vêm do ChatGPT** (31 de 72 em 30 dias, carimbados com
+`utm_source=chatgpt.com`), com apenas 18% das visitas — enquanto o Google traz
+70% das visitas. Citação por IA deixou de ser aposta de futuro: é hoje o canal
+que mais traz cliente. 86% dos pagantes entraram por página de conteúdo.
+
+Análise completa e lista de ação priorizada em
+`docs/marketing/ANALISE_SEO_2026-09-01.md`.
 
 Tier 1 (`shopee afiliados` etc., 50.000/mês, concorrência baixa) segue com
-**zero consulta** — não existe página nossa disputando. Maior oportunidade
-aberta.
+**41 impressões (2%) e zero clique** — não existe página comercial nossa
+disputando, pelo terceiro relatório seguido. Maior oportunidade aberta. Sinal
+novo: `/blog/como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
+`/blog/como-ser-afiliado-shopee-whatsapp` (433) já pegam a periferia do tema.
 
 ### Concorrentes mapeados
 
@@ -3562,7 +3584,10 @@ No começo de cada mês, sugerir à usuária repetir **só o Relatório 1 (Searc
 Console)** do passo a passo de
 `docs/marketing/COLETA_DADOS_KEYWORDS_PASSO_A_PASSO.md` e comparar contra o
 baseline acima — principalmente **consultas distintas** e as páginas com muita
-impressão e pouco clique. Atualizar esta seção e a data do cabeçalho.
+impressão e pouco clique. Rodar junto o relatório de **Cobertura/Indexação** e
+os dois diagnósticos próprios (`scripts/diag-origem-cadastros.mjs` e
+`scripts/diag-paginas-seo.mjs`, 30 dias). Atualizar esta seção e a data do
+cabeçalho.
 
 **Não refazer Planejador e Trends todo mês.** Os dois medem volume de mercado,
 que não muda em semanas, e as decisões que dependem deles já estão congeladas
