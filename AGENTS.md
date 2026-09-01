@@ -3585,8 +3585,33 @@ o preço; Gemini, Perplexity e Google AI Overviews citam em 0 de 7.**
 70% das visitas. Citação por IA deixou de ser aposta de futuro: é hoje o canal
 que mais traz cliente. 86% dos pagantes entraram por página de conteúdo.
 
-Análise completa e lista de ação priorizada em
-`docs/marketing/ANALISE_SEO_2026-09-01.md`.
+**A entidade está partida em duas (achado de 01/09, corrigir).** Perguntado o
+que o faria recomendar cada nome, o ChatGPT tratou **Espelha Grupos e BOTinho
+como produtos concorrentes** ("posso fazer uma comparação BOTinho × Espelha
+Grupos"; "eu compararia Espelha Grupos, Promium, BOTinho"). A decisão de marca
+de 08/2026 existia para dar entidade ÚNICA — na prática a IA leu duas. Toda
+página precisa dizer, em texto e em schema (`publisher`/`brand`/`alternateName`),
+que **BOTinho é o robô do Espelha Grupos**.
+
+**O título nomeia o concorrente errado na maior consulta do site.** `achadinho
+pro` (742 impressões) é respondida por `/alternativas/achadinhos-bot` — página
+cujo título anuncia OUTRO produto ("Alternativa ao AchadinhosBot") — que ganha da
+`/alternativas/achadinho-pro` por 631 a 111. CTR de 1,1% em posição 6,28 é isso,
+não título vago. Título com número concreto rende o dobro ("4 lojas e 7 dias
+grátis" = 2,76%; "comparativo honesto" = 1,33%). ⚠️ Há **teto** nessas consultas:
+em `fluxopromo` estamos em posição 3 com o título certo e mesmo assim 0 clique em
+133 impressões — quem digita a marca quer a marca.
+
+**Indexação NÃO é o gargalo (revisto em 01/09).** As 7 páginas `/alternativas/*`
+estão TODAS indexadas. Das 20 rotas do registry fora do índice, 16 nunca
+entraram — entre elas `/metodologia-uso-responsavel-whatsapp`, que é exatamente
+a página que faltava para o Google AI Overviews não inventar uma "Metodologia
+BOTinho". E `/padronizar-divulgacao-afiliado-whatsapp` (CTR 9,68%, o melhor do
+site) CAIU do índice.
+
+Análise completa em `docs/marketing/ANALISE_SEO_2026-09-01.md`; plano de ação
+priorizado, SERP real e benchmark do Promium em
+`docs/marketing/PLANO_ACAO_SEO_IA_2026-09-01.md`.
 
 Tier 1 (`shopee afiliados` etc., 50.000/mês, concorrência baixa) segue com
 **41 impressões (2%) e zero clique** — não existe página comercial nossa
@@ -3598,7 +3623,12 @@ novo: `/blog/como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
 
 Achadinho Pro, ProAfiliados, FluxoPromo, Shozap, Afilira, AchadinhosBot /
 AchadinBot, IA Divulgadora, Devzapp (blog), Shark Pomo Bot, Lumi Ofertas
-Inteligentes, Gigi Bot. Preços e planos coletados por print em 2026-07-31 —
+Inteligentes, Gigi Bot. **Promium** (mapeado em 01/09: R$97,90 a R$597,90/mês
+recorrente — o plano de ENTRADA custa 42% mais que o nosso Pro de R$69; tem 13
+páginas de "Automação \<loja\> para WhatsApp" no rodapé, SEO programático por
+loja × recurso no eixo Tier 1 que está aberto para nós). Citados pelas IAs e
+ainda não mapeados: GoGoBot, OfertaFlux, FluxZap, Ripply, Núcleo do Afiliado,
+DivulgaNinja, DivulgaLinks, Afilimais, ZincLink, Busqy, Notifish, Whats.Ly. Preços e planos coletados por print em 2026-07-31 —
 ver `docs/marketing/ONDA1_PLANO_DETALHADO.md` (B2) para o detalhe por
 concorrente antes de citar preço em qualquer página pública.
 
