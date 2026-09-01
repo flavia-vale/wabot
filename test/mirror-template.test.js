@@ -1,6 +1,45 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyMirrorTemplate, resolveMirrorOfferFromLink } from '../src/core/mirrorTemplate.js'
+import { applyMirrorTemplate, extractCouponLine, extractTextPrice, resolveMirrorOfferFromLink } from '../src/core/mirrorTemplate.js'
+
+const COUPON_LINE_CASES = [
+  ['- Resgate o cupom: VANTAGEMJA', '- Resgate o cupom: VANTAGEMJA'],
+  ['⚠️ cupom: QUEIMADE', '⚠️ cupom: QUEIMADE'],
+  ['🎟️ CUPOM: PEGUEISEU', '🎟️ CUPOM: PEGUEISEU'],
+  ['Use o Cupom: TECNO200 🎟️', 'Use o Cupom: TECNO200 🎟️'],
+  ['Use o Cupom: PROMOCERTA 🎟️', 'Use o Cupom: PROMOCERTA 🎟️'],
+  ['🎟️ CUPOM: GARIMPEI ou ECONOMIAML', '🎟️ CUPOM: GARIMPEI ou ECONOMIAML'],
+  ['🎟️ Use o cupom 3SP3C14L99 para R$10 OFF!', '🎟️ Use o cupom 3SP3C14L99 para R$10 OFF!'],
+  ['✅Por: 180,70 c/cupom 🆘\n\n🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:', '🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:'],
+  ['🎟️Use o cupom: 3SP3C14L99', '🎟️Use o cupom: 3SP3C14L99'],
+  ['- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio', '- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio'],
+]
+
+test('extractCouponLine isola a linha completa de cupom nos formatos reais', () => {
+  for (const [source, expected] of COUPON_LINE_CASES) {
+    assert.equal(extractCouponLine(`Título da oferta\n${source}\nhttps://loja.test/produto`), expected)
+  }
+  assert.equal(extractCouponLine('Produto sem promoção\nhttps://loja.test/produto'), '')
+})
+
+const TEXT_PRICE_CASES = [
+  ['💵 De R$ 1.890 por R$ 1.458,26\n- Resgate o cupom: VANTAGEMJA', '💵 De R$ 1.890 por R$ 1.458,26'],
+  ['De: 159 | Por: R$47 👑\n⚠️ cupom: QUEIMADE', 'De: 159 | Por: R$47 👑'],
+  ['🔥 DE 599 | POR 269,53 no Pix\n🎟️ CUPOM: PEGUEISEU', '🔥 DE 599 | POR 269,53 no Pix'],
+  ['De R$ 999 por R$ 499 em 7x\nUse o Cupom: TECNO200 🎟️', 'De R$ 999 por R$ 499 em 7x'],
+  ['De R$ 212 por R$ 112\nUse o Cupom: PROMOCERTA 🎟️', 'De R$ 212 por R$ 112'],
+  ['🔥DE 111 l POR 55,23\n🎟️ CUPOM: GARIMPEI ou ECONOMIAML', '🔥DE 111 l POR 55,23'],
+  ['De:149,91\nPor: 69,45 ✅\n\n🎟️ Use o cupom 3SP3C14L99 para R$10 OFF!', 'De:149,91\nPor: 69,45 ✅'],
+  ['❌De:223,00\n✅Por: 180,70 c/cupom 🆘\n\n🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:', '❌De:223,00\n✅Por: 180,70 c/cupom 🆘'],
+  ['❌ De: R$ 112,99\n💸Por: R$ 102,99 😍\n\n🎟️Use o cupom: 3SP3C14L99', '❌ De: R$ 112,99\n💸Por: R$ 102,99 😍'],
+]
+
+test('extractTextPrice isola o preço editorial nos nove formatos reais com cupom', () => {
+  for (const [source, expected] of TEXT_PRICE_CASES) {
+    assert.equal(extractTextPrice(`Produto\n${source}\nhttps://loja.test/produto`), expected)
+  }
+  assert.equal(extractTextPrice('De R$ 100 por R$ 80\nOferta sem cupom'), 'De R$ 100 por R$ 80')
+})
 
 test('resolveMirrorOfferFromLink lê o link ORIGINAL do produto e emite o link convertido', async () => {
   const scraped = []
@@ -85,6 +124,179 @@ test('applyMirrorTemplate renderiza com título/preço vindos do scraper, não d
 
   assert.equal(text, '🔥 Título real do link\n💰 R$ 99,90\n👉 https://loja.test/produto?tag=afiliado')
   assert.doesNotMatch(text, /Caption upstream errado|R\$ 1,00/)
+})
+
+test('applyMirrorTemplate injeta a linha de cupom da mensagem de origem quando o template pede', async () => {
+  const text = await applyMirrorTemplate([
+    'Oferta upstream',
+    '🎟️ CUPOM: GARIMPEI ou ECONOMIAML',
+    'https://loja.test/produto',
+  ].join('\n'), {
+    templateKey: 'tpl_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_cupom', name: 'Cupom', body: '{produto}\n{linhaDeCupom}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: '', newPrice: 'R$ 55,23' }),
+  })
+
+  assert.equal(text, 'Produto real\n🎟️ CUPOM: GARIMPEI ou ECONOMIAML\nhttps://loja.test/produto?tag=afiliado')
+})
+
+test('applyMirrorTemplate injeta preçoDoTexto junto da linha de cupom quando o template pede', async () => {
+  const text = await applyMirrorTemplate([
+    'Oferta upstream',
+    '❌De:223,00',
+    '✅Por: 180,70 c/cupom 🆘',
+    '',
+    '🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:',
+    'https://loja.test/produto',
+  ].join('\n'), {
+    templateKey: 'tpl_preco_texto',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_preco_texto', name: 'Preço do texto', body: '{produto}\n{preçoDoTexto}\n{linhaDeCupom}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: 'R$ 223,00', newPrice: 'R$ 199,00' }),
+  })
+
+  assert.equal(text, [
+    'Produto real',
+    '❌De:223,00',
+    '✅Por: 180,70 c/cupom 🆘',
+    '🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:',
+    'https://loja.test/produto?tag=afiliado',
+  ].join('\n'))
+  assert.doesNotMatch(text, /R\$ 199,00/)
+})
+
+test('applyMirrorTemplate usa preço da loja em preçoDoTexto quando a copy não traz preço editorial', async () => {
+  const text = await applyMirrorTemplate('Oferta sem linha de preço\n🎟️ CUPOM: LOJA10\nhttps://loja.test/produto', {
+    templateKey: 'tpl_preco_fallback',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_preco_fallback', name: 'Preço fallback', body: '{produto}\n{preçoDoTexto}\n{linhaDeCupom}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: 'R$ 129,90', newPrice: 'R$ 89,90' }),
+  })
+
+  assert.equal(text, 'Produto real\nR$ 89,90\n🎟️ CUPOM: LOJA10\nhttps://loja.test/produto?tag=afiliado')
+})
+
+test('applyMirrorTemplate usa preço da loja em preçoDoTexto mesmo quando a mensagem não tem cupom', async () => {
+  const text = await applyMirrorTemplate('Oferta sem cupom nem preço\nhttps://loja.test/produto', {
+    templateKey: 'tpl_preco_fallback_sem_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_preco_fallback_sem_cupom', name: 'Preço fallback', body: '{produto}\n{preçoDoTexto}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: '', newPrice: 'R$ 79,90' }),
+  })
+
+  assert.equal(text, 'Produto real\nR$ 79,90\nhttps://loja.test/produto?tag=afiliado')
+})
+
+test('applyMirrorTemplate preserva preço e instrução de adicionar cupom percentual', async () => {
+  const text = await applyMirrorTemplate([
+    'CORRE QUE CAIU O PREÇO',
+    '',
+    '📹 TP-Link Tapo C100 Câmera de Segurança Wifi 1080P Full HD',
+    '💵 De R$169,90 por R$113,36 no pix',
+    '- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio',
+    '',
+    'https://meli.la/1Z6Ceo9',
+  ].join('\n'), {
+    templateKey: 'tpl_cupom_percentual',
+    originalUrl: 'https://meli.la/1Z6Ceo9',
+    convertedUrl: 'https://meli.la/21xyU8m',
+    platform: 'mercadolivre',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{
+      key: 'tpl_cupom_percentual',
+      name: 'Cupom percentual',
+      body: '🛒️ {produto}\n\n💰 {preçoDoTexto}\n\n*{linhaDeCupom}*\n\n🔗 Link: {link}',
+    }] }) },
+    fetchInfo: async () => ({
+      title: 'TP-Link Tapo C100 Câmera de Segurança Wifi 1080P Full HD',
+      oldPrice: 'R$ 169,90',
+      newPrice: '131,36',
+    }),
+  })
+
+  assert.equal(text, [
+    '🛒️ TP-Link Tapo C100 Câmera de Segurança Wifi 1080P Full HD',
+    '',
+    '💰 💵 De R$169,90 por R$113,36 no pix',
+    '',
+    '*- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio*',
+    '',
+    '🔗 Link: https://meli.la/21xyU8m',
+  ].join('\n'))
+  assert.doesNotMatch(text, /131,36/)
+})
+
+test('applyMirrorTemplate preserva linha De/Por completa mesmo sem cupom', async () => {
+  const text = await applyMirrorTemplate([
+    '> 🧡 Impressora 3d Bambu Lab A1 Prateado',
+    '',
+    '📴 Com desconto de até 14%',
+    '',
+    'De: R$ 3529,00 | 🛒 Por: R$ 3039,00🤩',
+    '',
+    '💳 Parcelinha que cabe no bolso 10x de R$ 319,90 sem juros',
+    '',
+    '🔗 COMPRE AQUI:',
+    'https://meli.la/1MbLwQx',
+  ].join('\n'), {
+    templateKey: 'automatico_classico',
+    originalUrl: 'https://meli.la/1MbLwQx',
+    convertedUrl: 'https://www.mercadolivre.com.br/p/MLB53283626?partner_id=475630078',
+    platform: 'mercadolivre',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ overrides: {
+      automatico_classico: '🏷️ {produto}\n\n💰 {preçoDoTexto}\n\n👉 {link}',
+    } }) },
+    fetchInfo: async () => ({
+      title: 'Impressora 3d Bambu Lab A1 Prateado',
+      oldPrice: 'R$ 3529,00',
+      newPrice: '3039,00',
+    }),
+  })
+
+  assert.equal(text, [
+    '🏷️ Impressora 3d Bambu Lab A1 Prateado',
+    '',
+    '💰 De: R$ 3529,00 | 🛒 Por: R$ 3039,00🤩',
+    '',
+    '👉 https://www.mercadolivre.com.br/p/MLB53283626?partner_id=475630078',
+  ].join('\n'))
+  assert.doesNotMatch(text, /^\ud83d\udcb0 3039,00$/m)
+  assert.doesNotMatch(text, /319,90/)
+})
+
+test('applyMirrorTemplate remove linhaDeCupom sem deixar placeholder quando a origem não tem cupom', async () => {
+  const text = await applyMirrorTemplate('Oferta sem cupom informado\nhttps://loja.test/produto', {
+    templateKey: 'tpl_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_cupom', name: 'Cupom', body: '{produto}\n{linhaDeCupom}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: '', newPrice: 'R$ 55,23' }),
+  })
+
+  assert.equal(text, 'Produto real\nhttps://loja.test/produto?tag=afiliado')
+})
+
+test('applyMirrorTemplate não leva a copy de cupom para template que não pediu a variável', async () => {
+  const text = await applyMirrorTemplate('🎟️ CUPOM: NAODEVEENTRAR\nhttps://loja.test/produto', {
+    templateKey: 'tpl_sem_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_sem_cupom', name: 'Sem cupom', body: '{produto}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: '', newPrice: 'R$ 55,23' }),
+  })
+
+  assert.equal(text, 'Produto real\nhttps://loja.test/produto?tag=afiliado')
+  assert.doesNotMatch(text, /NAODEVEENTRAR/)
 })
 
 test('applyMirrorTemplate substitui grupoLink e cupomLink apenas quando o template contém as variáveis', async () => {
