@@ -1259,7 +1259,7 @@ function ManualPaymentModal({ onClose, onSaved }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (selected || search.trim().length < 2) { setResults([]); return }
+    if (selected || search.trim().length < 2) return
     let active = true
     const timer = setTimeout(async () => {
       setSearching(true)
@@ -1307,7 +1307,7 @@ function ManualPaymentModal({ onClose, onSaved }) {
             ) : (
               <div className="relative mt-2">
                 <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Busque por nome, e-mail ou telefone" autoFocus className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
-                {(searching || results.length > 0) && <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                {search.trim().length >= 2 && (searching || results.length > 0) && <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
                   {searching ? <p className="p-3 text-sm text-gray-500">Buscando...</p> : results.map(user => <button key={user.id} type="button" onClick={() => setSelected(user)} className="block w-full border-b border-gray-100 p-3 text-left last:border-0 hover:bg-emerald-50"><span className="block text-sm font-bold text-gray-900">{user.name || 'Sem nome'}</span><span className="block text-xs text-gray-500">{user.email} · {user.contactPhone || 'sem telefone'}</span></button>)}
                 </div>}
               </div>
