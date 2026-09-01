@@ -210,16 +210,20 @@ O conteúdo não traz só volume: traz quem paga.
 | Página | Impressões (Google) | Visitas | Clique em CTA | Cadastros |
 |---|---:|---:|---:|---:|
 | `/bot-achadinhos-whatsapp` | 1.234 | 42 | 18 (42,9%) | **10** |
-| `/alternativas/achadinhos-bot` | 1.281 | ~0 | — | 0 |
+| `/alternativas/achadinhos-bot` | 1.281 | não medido | — | não medido |
 | `/bot-ofertas-afiliados-whatsapp` | 37 | 21 | 6 (28,6%) | 6 |
 | `/automatizar-divulgacao-em-grupos-whatsapp` | 236 | 15 | 6 (40%) | 8 |
 
 `/bot-achadinhos-whatsapp` é a prova: quando a pessoa chega, **43% clicam no CTA
 e 10 viraram cadastro**. A página funciona. O que falta é clique no Google.
 
-`/alternativas/achadinhos-bot` é o oposto e o alerta da rodada: **1.281
-impressões, a maior do site, e visita quase nenhuma registrada no painel.** A
-página de comparação atrai o Google e não atrai a pessoa.
+⚠️ **A linha de `/alternativas/achadinhos-bot` não é comparável com as
+outras.** As páginas `/alternativas/*` disparam `comparison_page_view`, e
+`scripts/diag-paginas-seo.mjs` só lê `organic_page_view` — o script é cego para
+elas. O dado existe no banco; a leitura é que não o alcança. Não concluir daí
+que a página não recebe visita: **o funil dela simplesmente não foi medido
+nesta rodada.** Corrigir o script antes de tirar qualquer conclusão sobre a
+maior página de impressão do site.
 
 **`/precos`: 19 visitas e ZERO clique em CTA.** É a única página com visita
 relevante e nenhuma ação. Vale olhar antes de investir em trazer mais gente.
@@ -263,9 +267,11 @@ a página comercial de destino para esses termos.
 3. **Conferir títulos acima de 60 caracteres.** O celular traz 57% das
    impressões, ranqueia melhor que o computador e converte metade — corte de
    título é a explicação mais provável.
-4. **Investigar `/alternativas/achadinhos-bot`**: maior impressão do site e
-   quase nenhuma visita chegando ao painel. Ou o título não ganha o clique, ou
-   há problema de rastreio do evento na página.
+4. **Corrigir `scripts/diag-paginas-seo.mjs` para ler também
+   `comparison_page_view`.** Hoje ele enxerga só `organic_page_view`, então
+   toda a linha `/alternativas/*` — incluindo a maior página de impressão do
+   site — fica invisível no diagnóstico. Sem isso não dá para saber se o
+   problema dela é clique no Google ou conversão na página.
 5. **Olhar `/precos`** — 19 visitas, zero clique em CTA.
 6. **Tratar as 26 páginas "rastreada, mas não indexada"** antes de produzir mais
    `/alternativas/`. Produzir mais páginas parecidas com um terço da casa fora do
