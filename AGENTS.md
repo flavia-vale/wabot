@@ -657,6 +657,21 @@ staging. Token de produção lá **cobra de verdade**. Trocar env exige
 `pm2 delete` + `start` (pegadinha #1). Teste:
 `test/subscription-policy.test.js`.
 
+Roteiro de validação em staging (nesta ordem):
+
+1. Ligar a cobrança automática e concluir no MP → o painel precisa mostrar
+   "Renovação automática ligada" e a data da próxima cobrança.
+2. Tentar ligar de novo → tem que recusar com o aviso de que já está ligada.
+3. Desligar → confirmar em dois passos, e o acesso continuar até a data que a
+   tela mostrou (conferir `accessExpiresAt` no banco, não só na tela).
+4. Assinar de novo depois de cancelar → tem que funcionar (o cancelamento não
+   pode deixar a conta travada).
+5. Conta com e-mail que o MP recusa → a tela precisa oferecer a troca de e-mail
+   e o pagamento avulso, nunca um erro sem saída.
+6. Renovação sem aviso: apagar/ignorar o webhook de um ciclo e conferir que a
+   passada de reconciliação estendeu o acesso até a próxima cobrança
+   (`AnalyticsEvent('subscription_access_extended')`).
+
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
 O e-mail de boas-vindas pós-signup (`src/email/welcomeEmail.js`) é enviado
