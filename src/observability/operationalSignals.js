@@ -87,6 +87,10 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // automático). Todos esses caminhos são best-effort e eram silenciosos — a
   // marca sumia e só a reclamação da cliente denunciava (RCA 2026-08-31).
   watermark_missing: 'ops_watermark_missing',
+  // O supervisor recusou ligar um robô porque o teto de sessões por processo
+  // estava cheio. Antes isso só existia como linha de log e contador no Redis:
+  // 183 recusas de clientes passaram sem ninguém saber (RCA 2026-09-01).
+  session_capacity_limit: 'ops_session_capacity_limit',
 }
 
 let cachedTrackFn = null

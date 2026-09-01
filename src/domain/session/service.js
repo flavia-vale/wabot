@@ -49,3 +49,33 @@ export function createSessionService({ db } = {}) {
 
   return { findSessionStartUser, validateSessionStartUser }
 }
+
+// Resultado de "mandei ligar o robô". Distingue RECUSA do servidor (não havia
+// onde ligar: teto de sessões por processo atingido, ou sessão fora do shard)
+// de "mandei ligar e ele não subiu a tempo".
+//
+// RCA 2026-09-01: as rotas de conectar descartavam o retorno do startBot. Com o
+// supervisor no teto (20/20), o robô simplesmente não subia e a cliente lia
+// "Bot não está conectado" — texto que não diz nada e a faz tentar de novo sem
+// chance nenhuma de sucesso. Foram 183 recusas invisíveis antes de alguém
+// perceber. Linguagem leiga obrigatória aqui (a mensagem vai direto para a
+// tela): nada de "worker", "supervisor", "circuit breaker" ou "shard".
+export function classifyBotStartOutcome({ startAccepted, running }) {
+  if (running) return { ok: true }
+  if (startAccepted === false) {
+    return {
+      ok: false,
+      statusCode: 503,
+      code: 'WA_CAPACITY_LIMIT',
+      error: 'Nosso servidor está no limite de robôs ligados ao mesmo tempo. Nossa equipe já foi avisada — tente de novo em alguns minutos.',
+      retryable: true,
+    }
+  }
+  return {
+    ok: false,
+    statusCode: 503,
+    code: 'WA_START_FAILED',
+    error: 'Não conseguimos ligar seu robô agora. Tente de novo em instantes.',
+    retryable: true,
+  }
+}

@@ -233,6 +233,12 @@ model Payment {
   plan                         String
   status                       String    @default("pending")
   amount                       Float
+  // Origem contábil do recebimento. Legado/default = Mercado Pago;
+  // `manual` identifica pagamentos conferidos e registrados pelo admin.
+  provider                     String    @default("mercado_pago")
+  paymentMethod                String?
+  daysGranted                  Int?
+  note                         String?
   expiresAt                    DateTime?
   gatewayEventId               String?
   lastSyncedAt                 DateTime?
@@ -245,6 +251,7 @@ model Payment {
   affiliateCommission AffiliateCommission?
 
   @@index([status, createdAt])
+  @@index([provider, createdAt])
   @@index([gatewayEventId])
   @@index([affiliateProfileIdAtCheckout, createdAt])
 }
@@ -881,6 +888,11 @@ model AffiliateCommissionLedger {
 model EmailTemplate {
   slug            String   @id
   subject         String
+  // Título que aparece DENTRO do corpo do e-mail (o <h1> acima do texto).
+  // Nulo = usa o do catálogo em src/email/registry.js; string vazia = a admin
+  // escolheu NÃO mostrar título nenhum. Antes o campo não existia aqui e o
+  // título vinha sempre do código, sem jeito de editar nem tirar pelo painel.
+  title           String?
   body            String
   enabled         Boolean  @default(true)
   updatedByUserId String?

@@ -4,7 +4,7 @@ import { rm } from 'fs/promises'
 import { getAuthInfoDir } from '../../paths.js'
 import { mapInfraError } from '../../errors.js'
 import { appContainer } from '../../app/container.js'
-import { normalizePairingPhone } from '../../domain/session/service.js'
+import { classifyBotStartOutcome, normalizePairingPhone } from '../../domain/session/service.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
@@ -110,7 +110,19 @@ export async function sessionRoutes(app) {
         metadata: { source: 'session_start', wasRunning: running, previousStatus: previousSession.status, previousLifecycle: previousSession.lifecycle },
       })
     }
-    await startBot(userId)
+    // O retorno do startBot NÃO pode ser descartado: em modo remote ele vem
+    // `false` quando o supervisor RECUSA ligar (teto de sessões por processo
+    // atingido, ou sessão fora do shard). Antes, a rota respondia "Bot iniciado"
+    // e o QR simplesmente nunca chegava — a cliente ficava tentando sem chance
+    // de sucesso e nada era registrado (RCA 2026-09-01).
+    const startAccepted = await startBot(userId)
+    if (startAccepted === false) {
+      const outcome = classifyBotStartOutcome({ startAccepted, running: Boolean(await isRunning(userId)) })
+      if (!outcome.ok) {
+        req.log.error({ userId, code: outcome.code }, 'Não foi possível ligar o robô em /start')
+        return reply.code(outcome.statusCode).send({ error: outcome.error, code: outcome.code, retryable: outcome.retryable })
+      }
+    }
     return { ok: true, message: 'Bot iniciado — aguarde o QR' }
   })
 
@@ -222,11 +234,26 @@ export async function sessionRoutes(app) {
     // 'requestPairingCode', então só precisamos garantir que o processo worker
     // esteja vivo pra receber a mensagem.
     if (!(await isRunning(userId))) {
-      await startBot(userId)
+      const startAccepted = await startBot(userId)
       // Pequena espera pro fork concluir e o handler IPC estar registrado.
       // requestWithTimeout no manager retorna 'Bot não está rodando' se chegar
       // antes do bots.set(userId, …); 600ms é folga sobre o tempo típico de fork.
       await new Promise(r => setTimeout(r, 600))
+      // Se o robô não subiu, a falha é AQUI e tem motivo conhecido. Sem esta
+      // checagem o pedido seguia adiante e estourava no manager com "Bot não
+      // está rodando", que a tela mostra como "Bot não está conectado" — texto
+      // cego que escondeu 183 recusas por capacidade (RCA 2026-09-01).
+      const outcome = classifyBotStartOutcome({ startAccepted, running: Boolean(await isRunning(userId)) })
+      if (!outcome.ok) {
+        req.log.error({ userId, phone: normalized, code: outcome.code, startAccepted }, 'Não foi possível ligar o robô para o pareamento')
+        recordWaConnectionEventSafe({
+          userId,
+          type: 'manual_pairing_requested',
+          lifecycle: 'pairing_requested',
+          metadata: { source: 'pairing_code', workerWasRunning: false, refused: outcome.code },
+        })
+        return reply.code(outcome.statusCode).send({ error: outcome.error, code: outcome.code, retryable: outcome.retryable })
+      }
     }
     recordWaConnectionEventSafe({
       userId,

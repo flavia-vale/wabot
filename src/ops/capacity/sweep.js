@@ -14,7 +14,7 @@ export function requestCapacityRefresh() {
   return { accepted: true, inProgress: true }
 }
 
-export const DEFAULT_CAPACITY_SWEEP_INTERVAL_MS = 5 * 60 * 1000
+export const DEFAULT_CAPACITY_SWEEP_INTERVAL_MS = 60 * 60 * 1000
 export function startCapacitySweep(options = {}) {
   if (!options.repository && !options.db) throw new TypeError('capacity sweep requires db or repository')
   const repository = options.repository || createCapacityRepository(options.db)

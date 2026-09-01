@@ -21,6 +21,7 @@ import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
 import { createCapacityService } from '../../ops/capacity/service.js'
 import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
+import { calculateManualPaymentExpiry, parseManualPaymentInput } from '../../domain/payments/manualPayment.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1885,7 +1886,12 @@ export async function adminRoutes(app) {
     // exato varia por método/prazo, mas 4,99% reproduz o caso observado.
     const mpFeePercent = Number.parseFloat(process.env.MP_FEE_PERCENT ?? '4.99') || 0
     const mpFeeFixedCents = Number.parseInt(process.env.MP_FEE_FIXED_CENTS ?? '0', 10) || 0
-    const mpFees30d = Math.round((revenue30d * (mpFeePercent / 100) + (approved30d._count._all * mpFeeFixedCents) / 100) * 100) / 100
+    const mercadoPago30d = await db.payment.aggregate({
+      where: { status: 'approved', provider: 'mercado_pago', createdAt: { gte: since30d } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    })
+    const mpFees30d = Math.round((((mercadoPago30d._sum.amount ?? 0) * (mpFeePercent / 100)) + (mercadoPago30d._count._all * mpFeeFixedCents) / 100) * 100) / 100
     const netRevenue30d = Math.round((revenue30d - affiliateCommissions30d - mpFees30d) * 100) / 100
 
     await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance' })
@@ -1956,6 +1962,47 @@ export async function adminRoutes(app) {
       amount: amount._sum.amount ?? 0,
       payments: payments.map(payment => ({ ...payment, user: sanitizeUser(payment.user, req.admin.role) })),
     }
+  })
+
+  app.post('/payments/manual', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:write'))) return
+
+    const validation = parseManualPaymentInput(req.body)
+    if (!validation.ok) return reply.code(400).send({ error: validation.error })
+    const { userId, plan, days, amount, paymentMethod, note } = validation.data
+    const before = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, plan: true, accessExpiresAt: true, status: true },
+    })
+    if (!before) return reply.code(404).send({ error: 'Cliente não encontrado.' })
+
+    const expiresAt = calculateManualPaymentExpiry({ currentExpiry: before.accessExpiresAt, days })
+    const result = await db.$transaction(async tx => {
+      const payment = await tx.payment.create({
+        data: { userId, plan, status: 'approved', amount, provider: 'manual', paymentMethod, daysGranted: days, note, expiresAt, lastSyncedAt: new Date() },
+      })
+      const user = await tx.user.update({
+        where: { id: userId },
+        // Espelha o fluxo do Mercado Pago: renova plano/vencimento, mas nunca
+        // remove uma suspensão ou um banimento administrativo em silêncio.
+        data: { plan, accessExpiresAt: expiresAt },
+        select: { id: true, name: true, email: true, plan: true, accessExpiresAt: true, status: true },
+      })
+      return { payment, user }
+    })
+
+    trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, amount, provider: 'manual', payment_method: paymentMethod, days } })
+    await writeAdminAuditLog(req, {
+      action: 'admin.payment.manual.create',
+      resource: 'payment',
+      resourceId: result.payment.id,
+      targetUserId: userId,
+      before,
+      after: { user: result.user, payment: result.payment },
+      reason: note || `Pagamento por fora via ${paymentMethod}`,
+    })
+
+    return reply.code(201).send({ ok: true, ...result })
   })
 
 

@@ -33,6 +33,7 @@ jobs:
       # develop e passou a deixar o gate vermelho para todo mundo.
       - run: npm ci --prefix dashboard
 
-      - run: npm test
-
-      - run: npm run arch:check
+      # Mantém CI e diagnóstico local no mesmo comando. Assim, uma correção
+      # pode ser validada com `npm run quality:gate` antes de abrir/reexecutar
+      # o PR, sem esquecer a checagem de arquitetura.
+      - run: npm run quality:gate
