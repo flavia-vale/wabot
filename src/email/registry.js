@@ -374,6 +374,33 @@ Como resolver, em menos de dois minutos:
 [[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
   },
   {
+    slug: 'nao_conseguiu_conectar_sem_vaga',
+    name: 'Não conseguiu conectar (servidor estava lotado)',
+    description:
+      'Para quem tentou ligar o robô e recebeu erro porque o servidor tinha batido o limite de robôs ' +
+      'ligados ao mesmo tempo. Disparo MANUAL pela aba E-mails, com a lista que o script ' +
+      'scripts/diag-clientes-sem-vaga.mjs produz. Não é gatilho automático de propósito: a hora de ' +
+      'avisar é depois de a vaga já existir, senão a cliente tenta de novo e esbarra no mesmo erro.',
+    group: 'saude',
+    // Aviso de serviço (o robô dela não ligou por causa nossa), não divulgação:
+    // vai para quem descadastrou de marketing e não leva link de descadastro.
+    category: 'transactional',
+    trigger: 'manual',
+    dedupDays: 7,
+    variables: [],
+    title: 'Já dá para conectar seu robô',
+    subject: 'O erro ao conectar seu robô era nosso — já está resolvido',
+    body: `{{saudacao}} Se você tentou ligar seu robô nos últimos dias e apareceu um erro na tela, a causa era nossa: nosso servidor tinha chegado ao limite de robôs ligados ao mesmo tempo, e o seu não conseguia entrar. Não era problema do seu número, nem da sua conta, nem de nada que você tenha feito.
+
+Já trocamos o servidor por um bem maior e o limite subiu. **Agora é só entrar no painel e conectar normalmente.**
+
+[[botao:Conectar meu robô|{{link_painel}}]]
+
+Se aparecer qualquer coisa estranha na tela, responde este e-mail ou chama a gente no WhatsApp ({{whatsapp_suporte}}) que a gente resolve com você.
+
+Desculpa pelo transtorno — e obrigada pela paciência.`,
+  },
+  {
     slug: 'whatsapp_desconectado',
     name: 'WhatsApp caiu e não voltou',
     description: 'Sai quando o WhatsApp fica desconectado por mais de 24h com plano ativo.',

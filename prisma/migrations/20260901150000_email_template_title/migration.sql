@@ -1,0 +1,12 @@
+-- Título que aparece DENTRO do corpo do e-mail passa a ser editável pelo painel.
+-- Antes ele vinha sempre do catálogo em src/email/registry.js e a admin não
+-- tinha como mudar nem remover — a queixa era exatamente "todo e-mail vem com
+-- um título no corpo que não consigo editar".
+--
+-- Coluna NULÁVEL de propósito: NULL = "não mexi, use o título do código"
+-- (comportamento de hoje, então nenhuma linha existente muda de aparência);
+-- string vazia = "não quero título nenhum neste e-mail".
+--
+-- É DDL (ALTER TABLE), então exige lock exclusivo do SQLite — os scripts de
+-- deploy já param os apps PM2 quando há migration pendente (pegadinha #8).
+ALTER TABLE "EmailTemplate" ADD COLUMN "title" TEXT;

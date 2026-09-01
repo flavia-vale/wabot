@@ -156,6 +156,11 @@ export const ANALYTICS_EVENTS = new Set([
   // O destino pediu marca d'água e ela não entrou na imagem que saiu (RCA
   // 2026-08-31). Ver reportWatermarkMissing em src/bot-worker.js.
   'ops_watermark_missing',
+  // O servidor está no teto de robôs ligados ao mesmo tempo e RECUSOU ligar
+  // mais um: a cliente não consegue conectar de jeito nenhum até abrir vaga.
+  // É sinal de capacidade (hora de subir o teto ou a RAM do VPS), não de
+  // defeito da conta — ver MAX_SESSIONS_PER_PROCESS em src/supervisor/index.js.
+  'ops_session_capacity_limit',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

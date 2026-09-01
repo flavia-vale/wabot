@@ -58,10 +58,11 @@ export async function adminEmailsRoutes(app, opts = {}) {
       trigger: definition.trigger,
       dedupDays: definition.dedupDays,
       subject: template.subject,
+      title: template.title ?? '',
       body: template.body,
       enabled: template.enabled,
       customized: template.customized,
-      defaults: { subject: definition.subject, body: definition.body },
+      defaults: { subject: definition.subject, title: definition.title ?? '', body: definition.body },
       variables: variablesForTemplate(slug),
     }
   }
@@ -107,7 +108,7 @@ export async function adminEmailsRoutes(app, opts = {}) {
     const described = await describeTemplate(req.params.slug)
     if (!described) return reply.code(404).send({ error: 'E-mail não encontrado' })
     const preview = renderTemplate({
-      template: { ...described, title: getTemplateDefinition(req.params.slug).title },
+      template: described,
       vars: exampleVars(req.params.slug),
       unsubscribeUrl: 'https://espelhagrupos.com.br/api/emails/unsubscribe?token=exemplo',
     })
@@ -122,6 +123,9 @@ export async function adminEmailsRoutes(app, opts = {}) {
 
     const subject = typeof req.body?.subject === 'string' ? req.body.subject.trim() : ''
     const body = typeof req.body?.body === 'string' ? req.body.body.trim() : ''
+    // Título do corpo: campo opcional em que o VAZIO é uma escolha ("sem
+    // título"), diferente de não enviar o campo (mantém o que já estava).
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : undefined
     const enabled = req.body?.enabled === undefined ? true : Boolean(req.body.enabled)
     if (!subject) return reply.code(400).send({ error: 'O assunto não pode ficar vazio.' })
     if (!body) return reply.code(400).send({ error: 'O texto do e-mail não pode ficar vazio.' })
@@ -129,7 +133,7 @@ export async function adminEmailsRoutes(app, opts = {}) {
     // Variável inventada sairia em branco na caixa da cliente: recusa o save e
     // diz qual é, em vez de deixar o e-mail sair capenga.
     const conhecidas = new Set(variablesForTemplate(slug).map((v) => v.name))
-    const desconhecidas = [...extractVariables(subject), ...extractVariables(body)].filter((name) => !conhecidas.has(name))
+    const desconhecidas = [...extractVariables(subject), ...extractVariables(title ?? ''), ...extractVariables(body)].filter((name) => !conhecidas.has(name))
     if (desconhecidas.length) {
       return reply.code(400).send({
         error: `Estas variáveis não existem neste e-mail: ${desconhecidas.map((n) => `{{${n}}}`).join(', ')}. Use as da lista ao lado.`,
@@ -140,8 +144,8 @@ export async function adminEmailsRoutes(app, opts = {}) {
     const before = await db.emailTemplate.findUnique({ where: { slug } }).catch(() => null)
     const saved = await db.emailTemplate.upsert({
       where: { slug },
-      create: { slug, subject, body, enabled, updatedByUserId: req.user.sub },
-      update: { subject, body, enabled, updatedByUserId: req.user.sub },
+      create: { slug, subject, body, enabled, updatedByUserId: req.user.sub, ...(title === undefined ? {} : { title }) },
+      update: { subject, body, enabled, updatedByUserId: req.user.sub, ...(title === undefined ? {} : { title }) },
     })
     await writeAdminAuditLog(req, {
       action: 'admin.email.template.update',
@@ -178,7 +182,12 @@ export async function adminEmailsRoutes(app, opts = {}) {
     const body = typeof req.body?.body === 'string' && req.body.body.trim() ? req.body.body : undefined
     const saved = await loadTemplate({ db, slug })
     const preview = renderTemplate({
-      template: { ...saved, title: definition.title, subject: subject ?? saved.subject, body: body ?? saved.body },
+      template: {
+        ...saved,
+        title: typeof req.body?.title === 'string' ? req.body.title : (saved.title ?? definition.title ?? ''),
+        subject: subject ?? saved.subject,
+        body: body ?? saved.body,
+      },
       vars: exampleVars(slug, req.body?.vars ?? {}),
       unsubscribeUrl: 'https://espelhagrupos.com.br/api/emails/unsubscribe?token=exemplo',
     })
