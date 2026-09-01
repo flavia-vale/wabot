@@ -76,6 +76,12 @@ export async function loadTemplate({ db, slug }) {
   return {
     ...definition,
     subject: override?.subject?.trim() ? override.subject : definition.subject,
+    // `title` é o único campo em que a string VAZIA é uma escolha válida
+    // ("não quero título dentro do e-mail"), então aqui a checagem é por
+    // null/undefined, não por texto preenchido como nos outros dois.
+    title: override && override.title !== null && override.title !== undefined
+      ? override.title
+      : (definition.title ?? ''),
     body: override?.body?.trim() ? override.body : definition.body,
     enabled: override ? override.enabled !== false : true,
     customized: Boolean(override),

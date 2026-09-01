@@ -12,7 +12,8 @@ test('rota Capacidade faz fetch lazy, preserva ultimo valor e tem estados textua
   const page = await readFile(new URL('../dashboard/app/admin/capacidade/page.js', import.meta.url), 'utf8')
   assert.match(page, /adminCapacityCurrent/)
   assert.match(page, /visibilityState/)
-  assert.match(page, /30_000/)
+  assert.match(page, /60 \* 60_000/)
+  assert.match(page, /12_000/)
   assert.match(page, /setError/)
   assert.doesNotMatch(page, /setData\(null\).*catch/s)
   assert.match(page, /Dados insuficientes|desatualizados/i)
@@ -37,6 +38,31 @@ test('capacidade apresenta recursos, processos e staging sem acao automatica', {
   assert.match(environments, /partial: 'Parcial'/)
   assert.match(environments, /window\.confirm/)
   assert.doesNotMatch(environments, /useEffect/)
+})
+
+test('capacidade traduz criticidade em impacto e plano de ação sem inventar saúde', { skip }, async () => {
+  const harness = await renderJsxComponent(new URL('../dashboard/app/admin/capacidade/components/CapacityActionPlan.js', import.meta.url))
+  const tree = harness.render({ decision: { state: 'critical' }, health: { memory: { state: 'critical' }, cpu: { state: 'healthy' }, disk: { state: 'unknown' }, swap: { state: 'attention' } } })
+  const text = textContent(tree)
+  assert.match(text, /Situação geral:\s*Crítico/)
+  assert.match(text, /Linux pode encerrar bots sem aviso/)
+  assert.match(text, /Não abra novas sessões/)
+  assert.match(text, /Sem medição/)
+  assert.match(text, /atraso ponta a ponta/)
+})
+
+test('capacidade explica a cadência viva e sinaliza coleta atrasada', { skip }, async () => {
+  const harness = await renderJsxComponent(new URL('../dashboard/app/admin/capacidade/components/CapacityLiveStatus.js', import.meta.url))
+  const current = textContent(harness.render({ collectedAt: new Date(Date.now() - 50_000).toISOString(), ageSeconds: 50, completeness: 'complete', sources: [{ name: 'linux', status: 'ok' }] }))
+  assert.match(current, /Última medição disponível/)
+  assert.match(current, /Coletada em:/)
+  assert.match(current, /mede a capacidade uma vez por hora/)
+  assert.match(current, /Atualizar agora/)
+  assert.match(current, /scripts de diagnóstico.*somente leitura/i)
+  assert.doesNotMatch(current, /há \d|contador/)
+  const stale = textContent(harness.render({ ageSeconds: 7_201, completeness: 'partial', sources: [] }))
+  assert.match(stale, /Medição atrasada/)
+  assert.match(stale, /Coleta parcial/)
 })
 
 test('capacidade oferece periodos, grafico SVG acessivel e tabela equivalente', { skip }, async () => {
@@ -171,7 +197,9 @@ test('rota renderizada respeita permissão, mount lazy, visibilidade, período e
       './components/CapacityHistoryChart': { default: placeholder('history') },
       './components/CapacityScenarioSimulator': { default: placeholder('scenario') },
       './components/CapacityInventory': { default: placeholder('inventory') },
-      './components/CapacityAlerts': { default: placeholder('alerts') }
+      './components/CapacityAlerts': { default: placeholder('alerts') },
+      './components/CapacityActionPlan': { default: placeholder('action-plan') },
+      './components/CapacityLiveStatus': { default: placeholder('live-status') }
     },
     globals: {
       document: { visibilityState: 'visible' },

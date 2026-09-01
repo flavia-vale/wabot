@@ -67,7 +67,7 @@ export const EDITORIAL_DATES = {
   '/materiais/checklist-operacao-whatsapp': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
   '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp': { publishedAt: '2026-05-14', updatedAt: '2026-05-15' },
   '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
-  '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-08-03' },
+  '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-08-31' },
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
   // desta rodada, publicada em 2026-08-19.
   '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-08-19' },

@@ -399,7 +399,7 @@ em `src/ops/stagingPower.js`; rotas `GET/POST /api/admin/staging-power`
 
 A rota `/admin/capacidade` (permissão `tech:read`) apresenta o host contratado,
 RAM/CPU/disco/swap, processos PM2, workers reais, staging, histórico, forecast e
-alertas. A coleta roda dentro da API a cada 5 minutos, com `unref()` e
+alertas. A coleta roda dentro da API a cada 1 hora, com `unref()` e
 single-flight; **não existe processo PM2 novo** e a tela nunca cria, apaga ou
 redimensiona recursos Hetzner. Atualização manual exige `tech:write` e é
 auditada como `admin.capacity.refresh`.
@@ -412,7 +412,7 @@ contínua, pouca `MemAvailable`, disco e headroom determinam atenção/criticida
 O forecast só fornece horizonte quando há cobertura suficiente e crescimento
 positivo, sempre com faixa e confiança.
 
-Snapshots de 5 minutos são retidos por 90 dias; rollups horários por 12 meses
+Snapshots horários são retidos por 90 dias; rollups horários por 12 meses
 e diários permanecem. Alertas exigem confirmação em duas amostras, possuem
 cooldown de 24 h, registram piora e recuperação e nunca executam ações. Eventos
 de restart, staging, reboot/OOM e mudança de host/política explicam o histórico
@@ -424,7 +424,7 @@ Integração Hetzner é opcional e somente leitura:
 HCLOUD_READ_TOKEN=<token read-only, nunca enviar ao browser/log>
 HCLOUD_PROJECT_ID=14422101
 HCLOUD_SERVER_ID=128727108
-CAPACITY_SWEEP_INTERVAL_MS=300000
+CAPACITY_SWEEP_INTERVAL_MS=3600000
 ```
 
 Sem token, usa o baseline `wabot-prod / CX33 / 4 vCPU / 8 GB / 40 GB` e marca
@@ -2231,6 +2231,58 @@ Limitação: o flag limita só o heap JS, não a memória externa (Buffers de
 mídia). É mitigação de pico de GC, **não** teto rígido de RSS — em VPS
 subdimensionado, **swap continua sendo pré-requisito** (a primeira linha de
 defesa). Teste: `test/core/worker-spawn-options.test.js`.
+
+## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
+
+O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
+(default **20**) robôs vivos — `checkSessionCircuitBreaker` em
+`src/supervisor/index.js`. **Isso é o teto comercial da operação**: cheio,
+NENHUMA cliente nova consegue conectar, e quem desligar o próprio robô não
+consegue voltar (perde a vaga para outra conta).
+
+**O que aconteceu:** uma cliente desligou o robô, tentou reconectar por número
+de celular 7 vezes em 40min e leu sempre "Falha na conexão / Bot não está
+conectado". O servidor estava em 20/20. As rotas de conectar
+(`POST /session/start` e `POST /session/pairing-code`) **descartavam o retorno
+do `startBot`**, então a recusa virava, no QR, um código que nunca chega, e no
+pareamento o erro cru `Bot não está rodando` → `WA_NOT_CONNECTED` → um texto que
+não diz nada. **183 recusas** acumularam no contador do Redis sem que ninguém
+percebesse.
+
+Hoje:
+- as duas rotas conferem o resultado via `classifyBotStartOutcome`
+  (`src/domain/session/service.js`, pura/testada) e devolvem **503** com texto
+  leigo: `WA_CAPACITY_LIMIT` (o servidor recusou — teto cheio ou shard) vs.
+  `WA_START_FAILED` (aceitou e não subiu). Linguagem obrigatória: nada de
+  "worker", "supervisor", "circuit breaker", "shard" na tela — teste
+  `test/session-service.test.js` falha se jargão voltar;
+- a recusa vira sinal durável `ops_session_capacity_limit`
+  (`recordOperationalSignal` no supervisor, allowlist em `src/analytics.js`,
+  mapa em `src/observability/operationalSignals.js`) — visível em
+  `AnalyticsEvent` e no `/metrics`, em vez de só no log;
+- `startBot` devolver `false` **não é sempre erro**: no caminho inline ele
+  devolve `false` quando o robô JÁ estava ligado. Por isso a decisão olha
+  `isRunning` junto — não voltar a tratar o booleano sozinho como falha.
+
+**Medição real (2026-09-01, prod):** 20 robôs = **5,31 GB de RSS**, média
+**272 MB por robô**. Base fixa (api 226 MB + dashboard 225 MB + supervisor
+92 MB + staging ~344 MB + logrotate) ≈ 0,9 GB. VPS de 7,6 GB ficava com 2,0 GB
+livres e **1,6 GB já em swap**. Ou seja: **cada vaga nova custa ~272 MB** e o
+teto de 20 não era capricho, era o que cabia. Subir o teto é mudança
+memory-heavy → REGRA #1 da política de memória abaixo (avisar antes, com
+estimativa).
+
+⚠️ **Mudar o teto exige reiniciar o `bot-supervisor`** (o valor é lido no boot),
+e isso **reconecta TODAS as sessões de uma vez** — decisão humana, anunciada
+antes, nunca às cegas.
+
+Diagnóstico rápido no VPS:
+```bash
+grep -ihE "circuit breaker|limite de sessões" ~/.pm2/logs/bot-supervisor-*.log | tail
+redis-cli -n 0 get supervisor:session_circuit_breaker_alert:shard-1-of-1
+for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do awk '/VmRSS/{print $2}' /proc/$p/status; done \
+ | awk '{s+=$1; n++} END {printf "%d robos | RSS total %.2f GB | media %.0f MB\n", n, s/1048576, s/n/1024}'
+```
 
 ## Política de memória (CANÔNICA — LEIA antes de qualquer mudança que afete RAM)
 

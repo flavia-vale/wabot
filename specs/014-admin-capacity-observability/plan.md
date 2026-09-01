@@ -18,7 +18,7 @@ Adicionar uma rota ADMIN dedicada e carregada sob demanda que converte métricas
 **Project Type**: Aplicação web monorepo lógico (API Node em `src/`, dashboard Next em `dashboard/`)  
 **Performance Goals**: snapshot recente servido em <2 s p95; coleta <1% CPU média e <50 MB adicionais em 24 h; alerta persistente detectado em até 10 min  
 **Constraints**: nenhum processo PM2 novo; intervalo padrão de 5 min; sem shell com entrada variável; Hetzner read-only e cache ≥6 h; token nunca serializado; falha parcial localizada; demais abas não carregam capacidade; swap não conta como capacidade; SQLite single-host  
-**Scale/Scope**: um host inicial CX33, ~17 workers atuais, 288 amostras/dia, 25.920 amostras detalhadas/90 d e até 8.760 rollups horários/ano; estrutura preparada para identificar host sem prometer coleta multi-host nesta entrega
+**Scale/Scope**: um host inicial CX33, ~17 workers atuais, 24 amostras/dia, 2.160 amostras detalhadas/90 d e até 8.760 rollups horários/ano; estrutura preparada para identificar host sem prometer coleta multi-host nesta entrega
 
 ## Constitution Check
 

@@ -104,6 +104,7 @@ function Resumo({ summary }) {
 function Editor({ slug, onClose, onSaved }) {
   const [detalhe, setDetalhe] = useState(null)
   const [subject, setSubject] = useState('')
+  const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [enabled, setEnabled] = useState(true)
   const [preview, setPreview] = useState(null)
@@ -118,6 +119,7 @@ function Editor({ slug, onClose, onSaved }) {
         if (!ativo) return
         setDetalhe(data)
         setSubject(data.subject)
+        setTitle(data.title ?? '')
         setBody(data.body)
         setEnabled(data.enabled !== false)
         setPreview(data.preview)
@@ -128,26 +130,26 @@ function Editor({ slug, onClose, onSaved }) {
 
   const atualizarPreview = useCallback(async () => {
     try {
-      setPreview(await api.adminEmailTemplatePreview(slug, { subject, body }))
+      setPreview(await api.adminEmailTemplatePreview(slug, { subject, title, body }))
       setErro('')
     } catch (err) {
       setErro(err.message)
     }
-  }, [slug, subject, body])
+  }, [slug, subject, title, body])
 
   // Espera a admin parar de digitar antes de redesenhar a prévia.
   useEffect(() => {
     if (!detalhe) return
     const timer = setTimeout(() => { atualizarPreview() }, 600)
     return () => clearTimeout(timer)
-  }, [detalhe, subject, body, atualizarPreview])
+  }, [detalhe, subject, title, body, atualizarPreview])
 
   async function salvar() {
     setSalvando(true)
     setErro('')
     setAviso('')
     try {
-      const salvo = await api.adminEmailTemplateSave(slug, { subject, body, enabled })
+      const salvo = await api.adminEmailTemplateSave(slug, { subject, title, body, enabled })
       setDetalhe(salvo)
       setAviso('Texto salvo. Os próximos envios já usam esta versão.')
       onSaved?.()
@@ -165,6 +167,7 @@ function Editor({ slug, onClose, onSaved }) {
       const restaurado = await api.adminEmailTemplateReset(slug)
       setDetalhe(restaurado)
       setSubject(restaurado.subject)
+      setTitle(restaurado.title ?? '')
       setBody(restaurado.body)
       setAviso('Voltamos ao texto padrão.')
       onSaved?.()
@@ -209,6 +212,17 @@ function Editor({ slug, onClose, onSaved }) {
             onChange={(e) => setSubject(e.target.value)}
             className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
           />
+
+          <label className="mb-1 block text-xs font-bold text-gray-600">Título dentro do e-mail</label>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="deixe em branco para não mostrar título"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+          />
+          <p className="mb-3 mt-1 text-xs text-gray-500">
+            Aparece em letra grande acima do texto. Apague tudo para o e-mail começar direto no texto.
+          </p>
 
           <label className="mb-1 block text-xs font-bold text-gray-600">Texto do e-mail</label>
           <textarea
