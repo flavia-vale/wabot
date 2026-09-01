@@ -82,10 +82,14 @@ const TEXT_PRICE_POR_RE = /\bpor\s*:?\s*(?:R\$\s*)?\d/i
 // ele pode estar inteiro numa linha ou dividido em duas linhas consecutivas.
 // Mantemos emojis, "no Pix", parcelas e demais texto editorial intactos.
 export function extractTextPrice(text = '', couponLine = extractCouponLine(text)) {
-  if (!couponLine) return ''
-
   const lines = String(text || '').split(/\r?\n/).map(line => line.trim())
-  const couponIndex = lines.findIndex(line => line === couponLine)
+  // String vazia não representa um cupom: sem esta guarda, findIndex casaria
+  // com a primeira linha em branco da mensagem e encerraria a busca antes do
+  // bloco de preço.
+  const couponIndex = couponLine ? lines.findIndex(line => line === couponLine) : -1
+  // Com cupom, o limite evita confundir valores de "R$ X OFF" da instrução
+  // com o preço do produto. Sem cupom, percorremos a mensagem inteira: ofertas
+  // também anunciam um "De/Por" editorial sem necessariamente trazer cupom.
   const searchEnd = couponIndex >= 0 ? couponIndex : lines.length
 
   for (let index = searchEnd - 1; index >= 0; index -= 1) {
