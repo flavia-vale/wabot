@@ -169,3 +169,36 @@ grep -n 'pm2 jlist' scripts/collect-capacity-audit.sh
 4. **Antes de crescer a frota:** se os números se confirmarem, subir de 8 para
    16 GB traz mais benefício imediato que adicionar CPU.
 
+## Segunda amostra — 2026-08-31 22:41 UTC
+
+A coleta breve confirmou o quadro geral sem sinal de saturação instantânea:
+
+- CPU continuou folgada, com 98,4% ociosa em média;
+- disco permaneceu em 75%, com I/O ocioso na amostra;
+- RAM disponível permaneceu em ~2.999 MiB;
+- swap ocupada subiu para ~2.008 MiB, mas sem `swap-out` e com `swap-in` médio
+  baixo (11 KiB/s); é atenção por pressão passada, não pane ativa;
+- os 20 workers somaram ~4.636 MiB de RSS; o maior caiu de ~552 para ~394 MiB,
+  reforçando que a primeira fotografia não provava vazamento;
+- Redis usou apenas ~7,8 MiB, AOF e RDB estavam saudáveis, sem evictions;
+- não houve OOM nem erro de I/O do kernel nas últimas 24 horas.
+
+O `total_error_replies=962` do Redis é contador acumulado do servidor e os DBs
+0/1 compartilham processo, clientes e memória; valores iguais não significam que
+as filas sejam iguais. É preciso comparar o contador ao longo do tempo e mostrar
+as chaves de cada DB para avaliar crescimento.
+
+O antigo campo `pm2_criticos=41` não comprovava 41 erros nas últimas 24 horas:
+ele contava correspondências nas últimas 2.000 linhas disponíveis, que podem ser
+antigas ou repetidas. O coletor foi renomeado para deixar essa semântica clara.
+
+### Mudança de prioridade após a segunda amostra
+
+1. **Sem emergência de CPU, I/O, Redis ou OOM.**
+2. **Memória continua em atenção**, mas o maior worker normalizou; medir tendência
+   é mais importante que reiniciar processos ou fazer upgrade imediato.
+3. **Disco continua em atenção a 75%** e deve ser acompanhado semanalmente.
+4. **`api-staging` passou de 1.894 para 1.896 reinícios** entre as amostras. Parte
+   pode ser deploy, mas o contador precisa ser correlacionado com uptime/logs.
+5. **As 41 correspondências de log precisam ser atribuídas por aplicativo e
+   horário** antes de abrir qualquer incidente.
