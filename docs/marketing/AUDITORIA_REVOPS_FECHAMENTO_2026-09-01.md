@@ -141,7 +141,12 @@ Lacunas pontuais: `checkout_started` só é gravado quando a API cria a preferê
 
 ## 3. Plano de ação
 
-### Curto prazo (0–15 dias) — estancar
+### Curto prazo (0–15 dias) — estancar ✅ CONCLUÍDO (2026-09-01)
+
+As seis ações abaixo foram feitas no mesmo dia da auditoria (commits `6dcfd1c`
+"Conectar: dizer quando o servidor está no limite de robôs" e `1832257` "aviso
+para quem ficou sem vaga e lista de contatos", entre outros). O que segue é o
+registro do que era; a fila de trabalho agora é a seção de médio prazo.
 
 | # | Ação | Onde | Ganho |
 |---|---|---|---|
@@ -152,23 +157,31 @@ Lacunas pontuais: `checkout_started` só é gravado quando a API cria a preferê
 | 5 | **E-mail/WhatsApp no dia 1 e 3 para quem não pareou** — os gatilhos já existem (`onboarding_conecte_whatsapp`, `configuracao_incompleta`); validar que estão saindo | `emailTriggers/` | resgate barato do maior vazamento |
 | 6 | **Aviso "sua oferta não está saindo"** quando houver `skip:no_valid_conversions` recorrente e nenhuma credencial válida | painel + e-mail | mata a ativação falsa |
 
-### Médio prazo (15–60 dias) — otimizar
+### Médio prazo (15–60 dias) — otimizar ← **fila atual**
 
-1. **Contar o teste a partir da ativação** (primeiro pareamento), com teto
-   absoluto (ex.: 21 dias desde o cadastro) para não virar acesso eterno.
-2. **Ligar a assinatura recorrente** que já está no código: cartão como opção
-   padrão na tela de planos, PIX avulso como alternativa. Validar em staging com
-   token de sandbox (token de produção em staging cobra de verdade).
-3. **Carência de 48h no vencimento** + aviso claro antes do corte, em vez do
-   bloqueio seco.
-4. **Valor antes do QR:** deixar colar um link e ver a oferta convertida sem
-   conectar nada (o motor `buildScrapedOffer` já faz isso). É o maior ganho de
-   ativação disponível e ataca direto o medo de entregar o WhatsApp.
-5. **Qualificação mínima na entrada** (2 perguntas no cadastro: "já tem grupo ou
-   canal?" e "já é afiliada de qual loja?"). Quem responde "nenhum" não é lead
-   ruim — é lead de outro momento, e deve ir para nutrição, não para o teste.
-6. **Painel de funil** (cadastro → pareamento → 1º envio → checkout → pagante),
-   semanal, por origem.
+Reordenado em 2026-09-01 com o dado de origem que entrou no `AGENTS.md` no mesmo
+dia: **72 cadastros em 30 dias**, **43% deles vindos do ChatGPT** (31 de 72,
+carimbados `utm_source=chatgpt.com`) e **86% dos pagantes entraram por página de
+conteúdo**. O topo deixou de ser o problema — e isso muda a prioridade abaixo.
+
+**A conta que manda na fila:** entram ~72 pessoas/mês e o servidor tem um número
+fixo de vagas de robô (`MAX_SESSIONS_PER_PROCESS`). Enquanto entrar mais gente
+por mês do que existe vaga, **tudo o que melhora conversão esbarra no mesmo
+teto** — por isso o item 1 é decidir quem ocupa a vaga, não convencer mais gente.
+
+| # | Ação | Por que agora | Onde mexe | Risco |
+|---|---|---|---|---|
+| 1 | **Vaga vai para quem tem grupo pronto** — 2 perguntas no cadastro ("já tem grupo ou canal?", "já é afiliada de qual loja?") usadas para ordenar a fila de espera, não para barrar ninguém | com vaga escassa e 72 entradas/mês, a decisão que mais move receita é **alocação**, não persuasão | `POST /register` + a lista de espera criada no curto prazo | baixo |
+| 2 | **Ligar a assinatura recorrente que já existe** | `POST /payments/create-subscription` e `api.paymentsCreateSubscription` estão prontos e **nenhuma tela chama** — hoje toda receita é refechada na mão a cada 30 dias | `dashboard/app/painel/plano/page.js` (+ `/precos`) | médio — validar em staging com token **sandbox** (token de produção em staging cobra de verdade) |
+| 3 | **Contar o teste a partir da ativação**, com teto absoluto (ex.: 21 dias desde o cadastro) | hoje `accessExpiresAt = cadastro + 7 dias`; quem espera vaga ou hesita perde o teste sem ter visto o robô funcionar | `src/api/routes/auth.js` (`STANDARD_TRIAL_DAYS`) + marco de ativação | médio — mexe em acesso; precisa do teto para não virar acesso eterno |
+| 4 | **Valor antes do QR**: colar um link e ver a oferta convertida sem conectar nada | o motor `buildScrapedOffer` já faz isso; ataca o medo de entregar o WhatsApp **e** serve à visita que chegou pelo ChatGPT sem contexto nenhum | painel (primeiro passo) reaproveitando `/criar-oferta` | baixo |
+| 5 | **Carência de 48h no vencimento**, com aviso antes do corte | hoje o worker derruba a sessão seco (`Acesso expirado — bot bloqueado`); o corte cai no momento em que a pessoa ainda decidia | `loadConfig` (`bot-worker.js`) + `startBot` | médio — é regra de cobrança, exige decisão sua |
+| 6 | **Painel de funil** (cadastro → pareamento → 1º envio → checkout → pagante, por origem e semana) | os dados e os scripts existem; falta a tela. Sem ela, o efeito dos itens 1-5 é invisível | admin | baixo |
+
+**Duas coisas que o dado novo desaconselha:** (a) investir em mais tráfego antes
+do item 1 — trazer gente para uma fila cheia piora a experiência e queima o
+canal; (b) tratar ChatGPT como canal experimental — ele já é o que mais traz
+cliente por visita, e merece o mesmo cuidado de conteúdo que o Google.
 
 ### Longo prazo (60+ dias) — estruturar
 
@@ -193,3 +206,6 @@ Lacunas pontuais: `checkout_started` só é gravado quando a API cria a preferê
    Isso decide onde investir os próximos 60 dias.
 4. Há disposição para ligar assinatura recorrente no cartão, ou o público paga
    quase só por PIX? (muda completamente a ação de médio prazo nº 2)
+5. **Qual é o teto de vagas hoje** (`MAX_SESSIONS_PER_PROCESS` no `.env` de
+   produção) e quantas estão ocupadas? Com 72 cadastros/mês, esse número decide
+   sozinho quanto do resto do plano vale a pena.
