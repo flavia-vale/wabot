@@ -61,9 +61,10 @@ export function extractCouponLine(text = '') {
     .map(({ line, index }) => {
       let score = 1
       if (/🎟(?:️)?/.test(line)) score += 4
-      if (/\b(?:use|usar|resgate|resgatar|aplique|aplicar|insira|digite)\b/i.test(line)) score += 5
+      if (/\b(?:use|usar|resgate|resgatar|aplique|aplicar|insira|digite|adicione|adicionar|selecione|selecionar|ative|ativar)\b/i.test(line)) score += 5
       if (/\b(?:cupom|cupons)\s*:/i.test(line)) score += 3
       if (/\b(?:cupom|cupons)\b[^\n]{0,30}\b[A-Z0-9]{5,}\b/.test(line)) score += 2
+      if (/\b(?:cupom|cupons)\b[^\n]{0,40}\b\d{1,3}\s*%\s*off\b/i.test(line)) score += 3
       if (/\bc\s*\/\s*cupom\b/i.test(line)) score -= 3
       return { line, index, score }
     })

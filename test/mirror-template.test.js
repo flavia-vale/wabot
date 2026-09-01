@@ -12,6 +12,7 @@ const COUPON_LINE_CASES = [
   ['🎟️ Use o cupom 3SP3C14L99 para R$10 OFF!', '🎟️ Use o cupom 3SP3C14L99 para R$10 OFF!'],
   ['✅Por: 180,70 c/cupom 🆘\n\n🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:', '🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:'],
   ['🎟️Use o cupom: 3SP3C14L99', '🎟️Use o cupom: 3SP3C14L99'],
+  ['- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio', '- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio'],
 ]
 
 test('extractCouponLine isola a linha completa de cupom nos formatos reais', () => {
@@ -193,6 +194,44 @@ test('applyMirrorTemplate usa preço da loja em preçoDoTexto mesmo quando a men
   })
 
   assert.equal(text, 'Produto real\nR$ 79,90\nhttps://loja.test/produto?tag=afiliado')
+})
+
+test('applyMirrorTemplate preserva preço e instrução de adicionar cupom percentual', async () => {
+  const text = await applyMirrorTemplate([
+    'CORRE QUE CAIU O PREÇO',
+    '',
+    '📹 TP-Link Tapo C100 Câmera de Segurança Wifi 1080P Full HD',
+    '💵 De R$169,90 por R$113,36 no pix',
+    '- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio',
+    '',
+    'https://meli.la/1Z6Ceo9',
+  ].join('\n'), {
+    templateKey: 'tpl_cupom_percentual',
+    originalUrl: 'https://meli.la/1Z6Ceo9',
+    convertedUrl: 'https://meli.la/21xyU8m',
+    platform: 'mercadolivre',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{
+      key: 'tpl_cupom_percentual',
+      name: 'Cupom percentual',
+      body: '🛒️ {produto}\n\n💰 {preçoDoTexto}\n\n*{linhaDeCupom}*\n\n🔗 Link: {link}',
+    }] }) },
+    fetchInfo: async () => ({
+      title: 'TP-Link Tapo C100 Câmera de Segurança Wifi 1080P Full HD',
+      oldPrice: 'R$ 169,90',
+      newPrice: '131,36',
+    }),
+  })
+
+  assert.equal(text, [
+    '🛒️ TP-Link Tapo C100 Câmera de Segurança Wifi 1080P Full HD',
+    '',
+    '💰 💵 De R$169,90 por R$113,36 no pix',
+    '',
+    '*- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio*',
+    '',
+    '🔗 Link: https://meli.la/21xyU8m',
+  ].join('\n'))
+  assert.doesNotMatch(text, /131,36/)
 })
 
 test('applyMirrorTemplate remove linhaDeCupom sem deixar placeholder quando a origem não tem cupom', async () => {
