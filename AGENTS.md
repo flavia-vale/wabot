@@ -3556,6 +3556,19 @@ indexadas** — 26 "rastreada, mas não indexada", 11 "detectada, mas não
 indexada", 1 bloqueada pelo robots.txt. Tratar isso antes de produzir mais
 páginas parecidas.
 
+**Citação por IA, medido em campo pela 1ª vez em 01/09** (7 consultas
+prioritárias, registro em `docs/marketing/ai_visibility_tracking.csv`):
+**ChatGPT cita em 3 de 7 e acerta o preço; Gemini cita em 0 de 7.** No Gemini,
+`BOTinho preço` devolve **calçado infantil e Corpo de Bombeiros** — confirmação
+em campo do risco do homônimo, então **sempre qualificar a marca** em texto
+público ("BOTinho WhatsApp" / "Espelha Grupos"), nunca "BOTinho" sozinho. Em
+`BOTinho metodologia WhatsApp` o Gemini **inventou** uma metodologia e a
+apresentou como nossa: página que não existe de forma citável não fica neutra,
+vira alucinação. Concorrentes que as IAs citam são **quase disjuntos** dos que
+o Search Console mostra (Promium, GoGoBot, OfertaFlux, FluxZap, Ripply,
+DivulgaNinja e outros) — são dois mercados, e só um tem página nossa
+disputando.
+
 **43% dos cadastros vêm do ChatGPT** (31 de 72 em 30 dias, carimbados com
 `utm_source=chatgpt.com`), com apenas 18% das visitas — enquanto o Google traz
 70% das visitas. Citação por IA deixou de ser aposta de futuro: é hoje o canal
