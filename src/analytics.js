@@ -47,6 +47,20 @@ export const ANALYTICS_EVENTS = new Set([
   'payment_pending',
   'payment_approved',
   'payment_failed',
+  // Assinatura recorrente (Mercado Pago preapproval). Os quatro primeiros já
+  // eram EMITIDOS pelas rotas desde que a assinatura foi implementada, mas
+  // faltavam nesta allowlist — ou seja, eram descartados em silêncio e não
+  // havia como saber quem tentou assinar, nem por que parou. Mesmo padrão de
+  // falha do `organic_page_view` (ver comentário acima).
+  'subscription_started',
+  'subscription_email_blocked',
+  'subscription_provider_rejected',
+  'subscription_payment_approved',
+  'subscription_cancelled',
+  // Acesso estendido pela reconciliação porque o aviso de cobrança do MP não
+  // chegou. Cada evento destes é uma cliente que teria ficado sem robô depois
+  // de pagar — se aparecer com frequência, o problema está no webhook.
+  'subscription_access_extended',
   'first_send_success',
   'send_error',
   'organic_page_view',

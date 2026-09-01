@@ -594,6 +594,69 @@ pm2 save
 de produção em staging dispara cobranças reais. Para testes, usar token de
 sandbox no `.env` de staging.
 
+## Assinatura recorrente (Mercado Pago `preapproval`) — canônico, 2026-09-01
+
+Até aqui todo cliente pagava **30 dias avulsos** e precisava refechar a compra
+todo mês. O caminho recorrente já existia no back (`POST /payments/create-subscription`,
+webhook tratando `subscription_preapproval` e `subscription_authorized_payment`)
+mas **nenhuma tela chamava** — estava pronto e dormente. Agora está ligado.
+
+| Peça | Onde |
+|---|---|
+| Regras puras (ativa? pode cancelar? estende acesso?) | `src/domain/payments/subscriptionPolicy.js` |
+| Criar assinatura + guarda de duplicidade | `POST /payments/create-subscription` |
+| Desligar a cobrança automática | `POST /payments/subscription/cancel` |
+| Estado para o painel | `GET /payments/overview` → campo `subscription` |
+| Rede de segurança da renovação | `runSubscriptionReconciliation` (mesmo tick da reconciliação de pagamento) |
+| Tela | `dashboard/app/painel/plano/page.js` |
+
+**Não regredir:**
+
+- **`pending` não é renovação ligada.** O MP cria o preapproval como `pending` e
+  só vira `authorized` quando a pessoa conclui. Mostrar "renovação automática
+  ligada" para um checkout abandonado faria a cliente achar que está coberta sem
+  estar. Quem decide é `summarizeSubscriptionForPanel`, nunca `Boolean(sub)`.
+- **Uma assinatura ativa por conta.** `blocksNewSubscription` barra criar a
+  segunda enquanto houver uma `authorized` — duas cobrariam a mesma pessoa duas
+  vezes por mês. `pending` de propósito **não** bloqueia: é checkout aberto e
+  abandonado, e barrar por causa dele travaria a conta para sempre.
+- **Cancelar só marca como cancelada DEPOIS que o MP aceita.** Dizer "cancelei" e
+  continuar cobrando é o pior desfecho possível — falha do provedor devolve 502 e
+  não altera nada aqui. A exceção é `404` no provedor (`provider_not_found`): a
+  assinatura não existe mais lá, então cancelar aqui é o que iguala os dois lados.
+- **Cancelar NÃO corta o acesso na hora.** O período já pago vale até
+  `accessExpiresAt`; cortar seria cobrar o mês e não entregar. A tela diz isso
+  antes de confirmar, e o cancelamento pede confirmação (dois cliques).
+- **A reconciliação só ESTENDE acesso, nunca encurta**
+  (`decideAccessExtensionFromSubscription`). Ela existe porque a renovação
+  depende do aviso `subscription_authorized_payment`: se esse aviso se perder
+  (rede, deploy no meio, fila em erro), a cobrança acontece e o acesso corta
+  assim mesmo — cliente paga e fica sem robô. Como o MP informa a **próxima**
+  cobrança, o período pago vai até lá; assinatura `authorized` com acesso
+  vencendo antes disso é estendida até a data do MP. Assinatura pausada,
+  cancelada ou sem data confiável **não** estende nada.
+- **Sem processo PM2 novo** — a passada roda no `setInterval` que já existia para
+  a reconciliação de pagamento (política de memória).
+- **Linguagem leiga**: "cobrança automática", "desligar", "próxima cobrança".
+  Nunca `preapproval`, `authorized`, `gateway` na tela — teste falha se voltar.
+- **O identificador do provedor não vai para o navegador** (`mpSubscriptionId`
+  fica fora do resumo do painel).
+
+**Eventos que estavam sendo descartados:** `subscription_started`,
+`subscription_email_blocked`, `subscription_provider_rejected` e
+`subscription_payment_approved` eram EMITIDOS pelas rotas desde sempre e não
+estavam na allowlist de `src/analytics.js` — sumiam em silêncio, e por isso não
+havia como saber quem tentou assinar nem onde parou (mesmo modo de falha do
+`organic_page_view`). Entraram na allowlist junto com `subscription_cancelled` e
+`subscription_access_extended`. **Cada `subscription_access_extended` é uma
+cliente que teria ficado sem robô depois de pagar** — se aparecer com
+frequência, o problema está no webhook, não na reconciliação.
+
+**Antes de validar em staging:** usar token de **sandbox** do MP no `.env` de
+staging. Token de produção lá **cobra de verdade**. Trocar env exige
+`pm2 delete` + `start` (pegadinha #1). Teste:
+`test/subscription-policy.test.js`.
+
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
 O e-mail de boas-vindas pós-signup (`src/email/welcomeEmail.js`) é enviado
