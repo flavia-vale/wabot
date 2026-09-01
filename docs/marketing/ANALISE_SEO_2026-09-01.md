@@ -285,89 +285,124 @@ dias. Itens 6 a 8 são trabalho estrutural — efeito em semanas.
 ## 8. Citação por IA — primeira medição de campo (01/09)
 
 As 20 consultas do `AI_SEO_MONITORAMENTO_MENSAL_PLAYBOOK.md` nunca tinham sido
-rodadas: `ai_visibility_tracking.csv` estava com a coluna `checked_at` vazia
-desde 05/2026. Nesta rodada foram medidas as 7 consultas prioritárias em
-**ChatGPT** e **Gemini**. Perplexity e AI Overviews ficaram de fora e seguem em
-branco — Gemini foi registrado como plataforma própria, não como AI Overviews.
+rodadas: `ai_visibility_tracking.csv` estava com `checked_at` vazio desde
+05/2026. Nesta rodada as 7 consultas prioritárias foram medidas nas **quatro**
+superfícies — ChatGPT, Gemini, Perplexity e Google AI Overviews. **28 de 28
+linhas preenchidas.** Gemini foi registrado como plataforma própria, não como
+AI Overviews: são superfícies diferentes e misturá-las estragaria a série.
 
-**Placar: ChatGPT 3 de 7. Gemini 0 de 7.**
+### Placar: ChatGPT 3 de 7. Todas as outras, 0 de 7.
 
-| Consulta | ChatGPT | Gemini |
-|---|---|---|
-| como postar em vários grupos sem spam | ✅ **1º lugar**, com link | ❌ nenhuma ferramenta citada |
-| como padronizar divulgação de cupons | ✅ 2º lugar, no top-4 | ❌ leu como CRM/atendimento |
-| BOTinho preço | ✅ **preço correto** (Pro R$69/30 dias, teste 7 dias) | ❌ respondeu calçado infantil |
-| bot para afiliados no WhatsApp | ❌ | ❌ |
-| ferramenta para divulgar ofertas em grupos | ❌ | ❌ |
-| como espelhar mensagens entre grupos | ❌ | ❌ |
-| BOTinho metodologia WhatsApp | ❌ | ❌ **inventou** uma metodologia |
+| Consulta | ChatGPT | Gemini | Perplexity | AI Overviews |
+|---|---|---|---|---|
+| postar em vários grupos sem spam | ✅ **1º lugar** | ❌ | ❌ | ❌ |
+| padronizar divulgação de cupons | ✅ 2º lugar | ❌ | ❌ | ❌ |
+| BOTinho preço | ✅ **preço correto** | ❌ calçado | ❌ calçado | ❌ calçado |
+| bot para afiliados no WhatsApp | ❌ | ❌ | ❌ | ❌ |
+| ferramenta para divulgar ofertas | ❌ | ❌ | ❌ | ❌ |
+| espelhar mensagens entre grupos | ❌ | ❌ | ❌ | ❌ |
+| BOTinho metodologia | ❌ | ❌ **inventou** | ❌ (honesta) | ❌ **inventou com fontes** |
 
-### O ChatGPT nos conhece. O Gemini não faz ideia de que existimos.
+### O ChatGPT nos conhece. As outras três não fazem ideia de que existimos.
 
-Isso bate exatamente com a seção 5: 43% dos cadastros vêm do ChatGPT e nenhum
-do Gemini. Não é sorte de amostra — é reconhecimento de marca medido.
+Isso bate exatamente com a seção 5: **43% dos cadastros vêm do ChatGPT** e
+nenhum das outras. Não é sorte de amostra — é reconhecimento de marca medido em
+duas fontes independentes.
 
 No ChatGPT, `BOTinho preço` devolve **R$69/30 dias e teste de 7 dias sem
-cartão**, que é o preço certo, com link. Ele ainda apontou uma lacuna real que
-não tínhamos visto: **o preço do plano Basic não está legível na página**.
+cartão**, com link. Ele ainda apontou uma lacuna real que não tínhamos visto: **o
+preço do plano Basic não está legível na página**.
 
-No Gemini, a MESMA consulta devolve colônia de férias do Corpo de Bombeiros,
-calçado infantil e rede de pesca de nylon. Zero linhas sobre nós. É a
-confirmação em campo do risco do homônimo que o `AGENTS.md` já registrava desde
-a pesquisa de domínio ("a busca por 'botinho' puro devolve calçado") — só que
-agora com evidência, não com previsão.
+### Três das quatro IAs acham que somos calçado infantil
 
-### O vazio de conteúdo está sendo preenchido por alucinação
+`BOTinho preço` devolve:
 
-Em `BOTinho metodologia WhatsApp` o Gemini **inventou** uma metodologia de
-vendas completa — trigger, qualificação, transbordo para humano, follow-up — e
-apresentou como se fosse nossa. Não é. O ChatGPT fez o mesmo em menor grau,
-reconstruindo algo plausível sem citar fonte.
+- **Gemini** — colônia de férias do Corpo de Bombeiros, calçado infantil, rede
+  de pesca de nylon;
+- **Perplexity** — botinha de bebê (R$40–200) e kits "Boti Baby" do Boticário;
+  pediu para a pessoa esclarecer se era calçado "ou algum produto chamado
+  BOTinho";
+- **Google AI Overviews** — *"calçados infantis da marca Botinho custam entre
+  R$49,99 e R$109,99"*, com links para Pittol, Centauro e Amazon.
 
-Página de metodologia que não existe de forma citável não fica neutra: a IA
-preenche o espaço com outra coisa e entrega isso a quem perguntou pela marca.
+Não é ruído: é o nome. O `AGENTS.md` já registrava o risco do homônimo desde a
+pesquisa de domínio ("a busca por 'botinho' puro devolve calçado") — agora está
+medido em três superfícies. **Escrever "BOTinho" sozinho em texto público
+entrega a consulta para uma fábrica de calçados.**
 
-### As duas IAs discordam por completo numa consulta
+### O vazio de conteúdo vira alucinação — e o pior caso é o do Google
+
+Em `BOTinho metodologia WhatsApp`:
+
+- o **AI Overviews** inventou uma "Metodologia BOTinho" com pilares nomeados
+  (Atração e Gatilho, Qualificação, Fluxo de Valor, Integração CRM, Transição
+  Humana) **e citou fontes para sustentá-la**. Alucinação com aparência de fato
+  verificado, na superfície de maior alcance;
+- o **Gemini** fez o mesmo, sem fontes;
+- a **Perplexity** foi a única honesta: disse que "BOTinho" não é uma metodologia
+  reconhecida e pediu o material.
+
+Página que não existe de forma citável não fica neutra. O espaço é preenchido, e
+entregue a quem perguntou pela marca.
+
+### Espelhamento: a categoria existe e não estamos nela
+
+A **Perplexity** foi a única a tratar espelhamento como **categoria de produto
+com nome próprio** — "espelhador de grupos" — e listou concorrentes que a
+oferecem, chegando a descrever o menu de outro produto. É a consulta que mais se
+parece com o que fazemos, e não aparecemos em nenhuma das quatro.
+
+No **AI Overviews** a mesma consulta cita **uma ferramenta só** (WHAMetrics
+Bridge). É a consulta com menos concorrência de citação das sete — o alvo mais
+barato do levantamento.
+
+### Cupom: três das quatro leram como CRM, não como afiliado
+
+Gemini, Perplexity e AI Overviews responderam `como padronizar divulgação de
+cupons` com ManyChat, WATI, Blip, Zenvia, RD Station, Kommo, SleekFlow,
+AiSensy — atendimento corporativo. Nenhuma ferramenta de afiliado. **Só o
+ChatGPT entendeu o contexto certo — e é exatamente onde somos citados.**
+
+### As quatro IAs discordam por completo numa consulta
 
 `como postar em vários grupos sem spam` é onde o ChatGPT nos coloca em primeiro
-lugar com recomendação explícita — e onde o Gemini não cita ferramenta nenhuma,
-afirmando que automação não oficial resulta em banimento definitivo. É a
-consulta de maior valor comercial das sete e a de leitura mais oposta.
+lugar com recomendação explícita. Gemini, Perplexity e AI Overviews não citam
+**ferramenta nenhuma** ali: respondem com Comunidades do WhatsApp, API oficial e
+aviso de banimento. É a consulta de maior valor comercial das sete e a de
+leitura mais oposta entre as superfícies.
 
-### Espelhamento não é lido como produto
+### O mapa de concorrentes está desatualizado
 
-Nas duas IAs, `como espelhar mensagens entre grupos` devolve **API e
-gambiarra** — GREEN-API, Z-API, Evolution, n8n, MacroDroid, Make — e nenhum
-produto pronto. Nossa página existe e não entra. A consulta é tratada como
-problema técnico de desenvolvedor, não como necessidade de quem quer comprar.
+Nomes citados pelas IAs e ausentes do nosso mapa: **Promium, GoGoBot, OfertaFlux,
+FluxZap, Ripply, Núcleo do Afiliado, DivulgaNinja, DivulgaLinks, Afilimais, Lumi
+Ofertas, Whats.Ly, Notifish, Radar das Promos, ZincLink, Ofertiva, Busqy,
+BotAdmin, Afiliados Pro Bot, GeekZap, HouSoft, WHAMetrics Bridge**. O ChatGPT
+chamou o **Promium** de "o mais completo" na consulta de cupons, à nossa frente.
 
-### Sete concorrentes novos, não mapeados
+⚠️ Duas observações que mudam o mapa:
 
-Fora do nosso mapa atual: **Promium, FluxZap, Ripply, Núcleo do Afiliado,
-DivulgaNinja, DivulgaLinks, GoGoBot, OfertaFlux, Radar das Promos, Afilimais,
-Lumi Ofertas, Whats.Ly, Notifish**. O ChatGPT chamou o **Promium** de "o mais
-completo" na consulta de cupons, à nossa frente.
-
-⚠️ Note que a lista de concorrentes que as IAs citam é **quase disjunta** da
-lista que o Search Console mostra (seção 2). Quem o Google conhece
-(AchadinhosBot, Achadinho Pro, FluxoPromo, Shozap) não é quem a IA recomenda.
-São dois mercados diferentes, e só um deles tem página nossa disputando.
+1. a lista que as IAs citam é **quase disjunta** da que o Search Console mostra
+   (AchadinhosBot, Achadinho Pro, FluxoPromo, Shozap). São dois mercados
+   diferentes, e só um tem página nossa disputando;
+2. as listas das próprias IAs **quase não se sobrepõem entre si** — ChatGPT e
+   Perplexity não citaram um único nome em comum na consulta de ferramentas. Não
+   existe "o ranking do mercado": existe o ranking de cada IA.
 
 ### O que fazer com isso
 
 1. **Expor o preço do Basic** na página de preços, em texto legível por robô —
    apontado pela própria IA, conserto de minutos.
 2. **Publicar a metodologia** como página citável (passos numerados, definições,
-   nome próprio) — hoje o espaço é preenchido por invenção.
+   nome próprio). É o que o Google está preenchendo com invenção agora.
 3. **Sempre qualificar a marca** ("BOTinho WhatsApp", "Espelha Grupos") em todo
-   texto público. "BOTinho" sozinho é calçado.
-4. **Reescrever a página de espelhamento** para responder como produto pronto,
-   não como conceito técnico.
+   texto público. Três de quatro IAs entendem "BOTinho" como calçado.
+4. **Atacar `espelhar mensagens entre grupos`** — nossa categoria principal, e a
+   consulta com menos concorrência de citação das sete.
 5. **Amarrar o vocabulário de cupom ao contexto de afiliado**, não ao de
-   atendimento — foi assim que o Gemini errou a intenção.
+   atendimento — foi assim que três IAs erraram a intenção.
 6. **Mapear os concorrentes novos**, começando por Promium.
 
-Registro completo, consulta por consulta, em
+Registro completo, consulta por consulta e plataforma por plataforma, em
 `docs/marketing/ai_visibility_tracking.csv`.
 
 ---
@@ -380,7 +415,7 @@ Registro completo, consulta por consulta, em
 | 2 — Planejador de palavras-chave | ❌ | mede volume de mercado; decisões congeladas no `AGENTS.md` |
 | 3 — Google Trends | ❌ | idem |
 | 4 — Referrals de IA | ✅ automático | `diag-origem-cadastros.mjs` |
-| Citação por IA (playbook manual) | ✅ **1ª vez** | ChatGPT e Gemini; Perplexity e AI Overviews pendentes |
+| Citação por IA (playbook manual) | ✅ **1ª vez, completa** | ChatGPT, Gemini, Perplexity e AI Overviews — 28/28 linhas |
 | Cobertura / Indexação | ✅ **novo** | passa a fazer parte da rodada mensal |
 
 Próxima rodada **completa** (os quatro relatórios): **início de outubro/2026**.

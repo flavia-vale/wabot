@@ -3557,17 +3557,28 @@ indexada", 1 bloqueada pelo robots.txt. Tratar isso antes de produzir mais
 páginas parecidas.
 
 **Citação por IA, medido em campo pela 1ª vez em 01/09** (7 consultas
-prioritárias, registro em `docs/marketing/ai_visibility_tracking.csv`):
-**ChatGPT cita em 3 de 7 e acerta o preço; Gemini cita em 0 de 7.** No Gemini,
-`BOTinho preço` devolve **calçado infantil e Corpo de Bombeiros** — confirmação
-em campo do risco do homônimo, então **sempre qualificar a marca** em texto
-público ("BOTinho WhatsApp" / "Espelha Grupos"), nunca "BOTinho" sozinho. Em
-`BOTinho metodologia WhatsApp` o Gemini **inventou** uma metodologia e a
-apresentou como nossa: página que não existe de forma citável não fica neutra,
-vira alucinação. Concorrentes que as IAs citam são **quase disjuntos** dos que
-o Search Console mostra (Promium, GoGoBot, OfertaFlux, FluxZap, Ripply,
-DivulgaNinja e outros) — são dois mercados, e só um tem página nossa
-disputando.
+prioritárias × 4 superfícies, 28/28 linhas em
+`docs/marketing/ai_visibility_tracking.csv`): **ChatGPT cita em 3 de 7 e acerta
+o preço; Gemini, Perplexity e Google AI Overviews citam em 0 de 7.**
+
+- **Três das quatro IAs acham que a marca é calçado.** `BOTinho preço` devolve
+  botinha infantil no Gemini, na Perplexity e no AI Overviews (este último com
+  preço e links de loja). **Nunca escrever "BOTinho" sozinho em texto público** —
+  sempre "BOTinho WhatsApp" ou "Espelha Grupos".
+- **Página que não existe de forma citável vira alucinação.** Em `BOTinho
+  metodologia` o AI Overviews **inventou** uma metodologia com pilares nomeados
+  **e citou fontes**; o Gemini fez o mesmo sem fontes; só a Perplexity foi
+  honesta e disse que não conhecia.
+- **Espelhamento não é lido como produto nosso**: a Perplexity trata
+  "espelhador de grupos" como categoria com nome próprio e lista concorrentes;
+  o AI Overviews cita uma ferramenta só. É a consulta com menos concorrência de
+  citação — o alvo mais barato.
+- **Cupom foi lido como CRM/atendimento** por Gemini, Perplexity e AI Overviews;
+  só o ChatGPT entendeu o contexto de afiliado, e é onde somos citados.
+- Concorrentes que as IAs citam são **quase disjuntos** dos do Search Console
+  (Promium, GoGoBot, OfertaFlux, FluxZap, Ripply, ZincLink, Busqy, DivulgaNinja
+  e outros) — e as listas das próprias IAs quase não se sobrepõem entre si: não
+  existe "o ranking do mercado", existe o ranking de cada IA.
 
 **43% dos cadastros vêm do ChatGPT** (31 de 72 em 30 dias, carimbados com
 `utm_source=chatgpt.com`), com apenas 18% das visitas — enquanto o Google traz
