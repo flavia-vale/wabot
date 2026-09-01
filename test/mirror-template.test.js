@@ -38,7 +38,7 @@ test('extractTextPrice isola o preço editorial nos nove formatos reais com cupo
   for (const [source, expected] of TEXT_PRICE_CASES) {
     assert.equal(extractTextPrice(`Produto\n${source}\nhttps://loja.test/produto`), expected)
   }
-  assert.equal(extractTextPrice('De R$ 100 por R$ 80\nOferta sem cupom'), '')
+  assert.equal(extractTextPrice('De R$ 100 por R$ 80\nOferta sem cupom'), 'De R$ 100 por R$ 80')
 })
 
 test('resolveMirrorOfferFromLink lê o link ORIGINAL do produto e emite o link convertido', async () => {
@@ -232,6 +232,44 @@ test('applyMirrorTemplate preserva preço e instrução de adicionar cupom perce
     '🔗 Link: https://meli.la/21xyU8m',
   ].join('\n'))
   assert.doesNotMatch(text, /131,36/)
+})
+
+test('applyMirrorTemplate preserva linha De/Por completa mesmo sem cupom', async () => {
+  const text = await applyMirrorTemplate([
+    '> 🧡 Impressora 3d Bambu Lab A1 Prateado',
+    '',
+    '📴 Com desconto de até 14%',
+    '',
+    'De: R$ 3529,00 | 🛒 Por: R$ 3039,00🤩',
+    '',
+    '💳 Parcelinha que cabe no bolso 10x de R$ 319,90 sem juros',
+    '',
+    '🔗 COMPRE AQUI:',
+    'https://meli.la/1MbLwQx',
+  ].join('\n'), {
+    templateKey: 'automatico_classico',
+    originalUrl: 'https://meli.la/1MbLwQx',
+    convertedUrl: 'https://www.mercadolivre.com.br/p/MLB53283626?partner_id=475630078',
+    platform: 'mercadolivre',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ overrides: {
+      automatico_classico: '🏷️ {produto}\n\n💰 {preçoDoTexto}\n\n👉 {link}',
+    } }) },
+    fetchInfo: async () => ({
+      title: 'Impressora 3d Bambu Lab A1 Prateado',
+      oldPrice: 'R$ 3529,00',
+      newPrice: '3039,00',
+    }),
+  })
+
+  assert.equal(text, [
+    '🏷️ Impressora 3d Bambu Lab A1 Prateado',
+    '',
+    '💰 De: R$ 3529,00 | 🛒 Por: R$ 3039,00🤩',
+    '',
+    '👉 https://www.mercadolivre.com.br/p/MLB53283626?partner_id=475630078',
+  ].join('\n'))
+  assert.doesNotMatch(text, /^\ud83d\udcb0 3039,00$/m)
+  assert.doesNotMatch(text, /319,90/)
 })
 
 test('applyMirrorTemplate remove linhaDeCupom sem deixar placeholder quando a origem não tem cupom', async () => {
