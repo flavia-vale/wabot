@@ -233,6 +233,12 @@ model Payment {
   plan                         String
   status                       String    @default("pending")
   amount                       Float
+  // Origem contábil do recebimento. Legado/default = Mercado Pago;
+  // `manual` identifica pagamentos conferidos e registrados pelo admin.
+  provider                     String    @default("mercado_pago")
+  paymentMethod                String?
+  daysGranted                  Int?
+  note                         String?
   expiresAt                    DateTime?
   gatewayEventId               String?
   lastSyncedAt                 DateTime?
@@ -245,6 +251,7 @@ model Payment {
   affiliateCommission AffiliateCommission?
 
   @@index([status, createdAt])
+  @@index([provider, createdAt])
   @@index([gatewayEventId])
   @@index([affiliateProfileIdAtCheckout, createdAt])
 }

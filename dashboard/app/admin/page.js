@@ -1249,6 +1249,85 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
   )
 }
 
+function ManualPaymentModal({ onClose, onSaved }) {
+  const [search, setSearch] = useState('')
+  const [results, setResults] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [form, setForm] = useState({ plan: 'pro', days: '30', amount: '55,20', paymentMethod: 'pix', note: '' })
+  const [searching, setSearching] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (selected || search.trim().length < 2) { setResults([]); return }
+    let active = true
+    const timer = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const data = await api.adminUsers({ search: search.trim(), limit: 8, incluirVencidos: 1 })
+        if (active) setResults(asArray(data?.users))
+      } catch (err) {
+        if (active) setError(err.message || 'Não foi possível buscar clientes.')
+      } finally { if (active) setSearching(false) }
+    }, 300)
+    return () => { active = false; clearTimeout(timer) }
+  }, [search, selected])
+
+  async function submit(event) {
+    event.preventDefault()
+    setError('')
+    if (!selected) { setError('Selecione a cliente que pagou.'); return }
+    setSaving(true)
+    try {
+      const result = await api.adminCreateManualPayment({ userId: selected.id, ...form })
+      await onSaved(result)
+    } catch (err) {
+      setError(err.message || 'Não foi possível registrar o pagamento.')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm" onClick={onClose}>
+      <form onSubmit={submit} className="my-8 w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={event => event.stopPropagation()}>
+        <div className="bg-slate-950 px-6 py-5 text-white">
+          <div className="flex items-start justify-between gap-4">
+            <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">Financeiro</p><h2 className="mt-1 text-xl font-black">Registrar pagamento por fora</h2><p className="mt-1 text-sm text-slate-300">Confirme o recebimento e libere o acesso em uma só operação auditada.</p></div>
+            <button type="button" onClick={onClose} className="rounded-full bg-white/10 px-3 py-1.5 text-sm font-bold hover:bg-white/20" aria-label="Fechar">Fechar</button>
+          </div>
+        </div>
+        <div className="space-y-5 p-6">
+          {error && <Alert type="error">{error}</Alert>}
+          <div>
+            <label className="text-sm font-bold text-gray-800">Cliente</label>
+            {selected ? (
+              <div className="mt-2 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                <div><p className="font-bold text-emerald-950">{selected.name || selected.email}</p><p className="text-xs text-emerald-700">{selected.email} · vence {formatDate(selected.accessExpiresAt)}</p></div>
+                <button type="button" onClick={() => { setSelected(null); setSearch('') }} className="text-xs font-bold text-emerald-800 underline">Trocar</button>
+              </div>
+            ) : (
+              <div className="relative mt-2">
+                <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Busque por nome, e-mail ou telefone" autoFocus className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                {(searching || results.length > 0) && <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                  {searching ? <p className="p-3 text-sm text-gray-500">Buscando...</p> : results.map(user => <button key={user.id} type="button" onClick={() => setSelected(user)} className="block w-full border-b border-gray-100 p-3 text-left last:border-0 hover:bg-emerald-50"><span className="block text-sm font-bold text-gray-900">{user.name || 'Sem nome'}</span><span className="block text-xs text-gray-500">{user.email} · {user.contactPhone || 'sem telefone'}</span></button>)}
+                </div>}
+              </div>
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-bold text-gray-800">Plano<select value={form.plan} onChange={event => setForm({ ...form, plan: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-normal"><option value="basic">Basic</option><option value="pro">Pro</option></select></label>
+            <label className="text-sm font-bold text-gray-800">Dias de acesso<input type="number" min="1" max="3650" value={form.days} onChange={event => setForm({ ...form, days: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 font-normal" /></label>
+            <label className="text-sm font-bold text-gray-800">Valor recebido (R$)<input inputMode="decimal" value={form.amount} onChange={event => setForm({ ...form, amount: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 font-normal" /></label>
+            <label className="text-sm font-bold text-gray-800">Forma de pagamento<select value={form.paymentMethod} onChange={event => setForm({ ...form, paymentMethod: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-normal"><option value="pix">Pix</option><option value="transfer">Transferência</option><option value="cash">Dinheiro</option><option value="card">Cartão</option><option value="other">Outro</option></select></label>
+          </div>
+          <label className="block text-sm font-bold text-gray-800">Observação (opcional)<textarea value={form.note} maxLength={500} onChange={event => setForm({ ...form, note: event.target.value })} placeholder="Ex.: renovação com 20% de desconto, comprovante conferido" className="mt-2 min-h-20 w-full rounded-xl border border-gray-200 px-4 py-3 font-normal" /></label>
+          <div className="rounded-xl bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">Os dias serão somados ao vencimento atual se o acesso ainda estiver ativo. Se estiver vencido, contam a partir de hoje. O registro entra na receita e no histórico, sem taxa do Mercado Pago.</div>
+          <div className="flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-xl px-4 py-3 text-sm font-bold text-gray-600 hover:bg-gray-100">Cancelar</button><button disabled={saving} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60">{saving ? 'Registrando...' : 'Confirmar pagamento'}</button></div>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const [overview, setOverview] = useState(null)
   const [admin, setAdmin] = useState(null)
@@ -1288,6 +1367,17 @@ export default function AdminPage() {
   const [verVencidasAntigas, setVerVencidasAntigas] = useState(false)
   const [reconectando, setReconectando] = useState(null)
   const [onlineFiltering, setOnlineFiltering] = useState(false)
+  const [manualPaymentOpen, setManualPaymentOpen] = useState(false)
+
+  async function manualPaymentSaved() {
+    const [financeData, paymentsData, subscriptionsData] = await Promise.all([
+      api.adminFinanceOverview(), api.adminPayments({ limit: 10 }), api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }),
+    ])
+    setFinance(financeData)
+    setPayments(paymentsData)
+    setSubscriptions(subscriptionsData)
+    setManualPaymentOpen(false)
+  }
 
   async function reloadOnline(next = onlineFilters) {
     setOnlineFiltering(true)
@@ -1981,7 +2071,10 @@ export default function AdminPage() {
                 <h2 className="text-lg font-black text-gray-900">Assinaturas e pagamentos</h2>
                 <p className="text-sm text-gray-500">MRR ativo, LTV, inadimplência, expirações e últimos pagamentos.</p>
               </div>
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">MRR: {formatCurrency(finance.activeMrr)}</span>
+              <div className="flex items-center gap-2">
+                {admin?.permissions?.includes('billing:write') && <button onClick={() => setManualPaymentOpen(true)} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700">+ Registrar pagamento por fora</button>}
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">MRR: {formatCurrency(finance.activeMrr)}</span>
+              </div>
             </div>
 
             <div className="mb-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -2041,7 +2134,7 @@ export default function AdminPage() {
                         <p className="font-bold text-gray-900">{payment?.user?.email ?? 'Cliente sem e-mail'}</p>
                         <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${payment?.status === 'approved' ? 'bg-green-100 text-green-700' : payment?.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{payment?.status ?? '—'}</span>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">{payment?.plan ?? '—'} · {formatCurrency(payment?.amount)} · {formatDate(payment?.createdAt)}</p>
+                      <p className="mt-1 text-xs text-gray-500">{payment?.plan ?? '—'} · {formatCurrency(payment?.amount)} · {formatDate(payment?.createdAt)}{payment?.provider === 'manual' ? ` · Por fora (${payment.paymentMethod || 'outro'})` : ''}</p>
                     </div>
                   ))}
                   {!payments?.payments?.length && <p className="text-sm text-gray-400">Sem pagamentos no período.</p>}
@@ -2050,6 +2143,8 @@ export default function AdminPage() {
             </div>
           </section>
         )}
+
+        {manualPaymentOpen && <ManualPaymentModal onClose={() => setManualPaymentOpen(false)} onSaved={manualPaymentSaved} />}
 
         {tab === 'inicio' && <WhatsAppDisconnectedTable data={waDisconnectedUsers} onOpenDetail={openUserDetail} onRecordContact={recordContact} />}
 
