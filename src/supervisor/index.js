@@ -26,6 +26,7 @@ import { createRestartBudget, RESTART_BUDGET_MAX, RESTART_BUDGET_WINDOW_MS, REST
 import { shouldResurrectSession, buildResurrectionWhere, resolveIncludeReconnecting } from '../core/sessionResurrectionPolicy.js'
 import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
+import { recordOperationalSignal } from '../observability/operationalSignals.js'
 import {
   COMMAND,
   COMMAND_QUEUE,
@@ -168,6 +169,9 @@ async function checkSessionCircuitBreaker(userId) {
   } catch (err) {
     logger.warn({ err: err?.message }, 'Falha ao gravar alerta de circuit breaker')
   }
+  // Sinal durável: sem isso o teto cheio só aparecia no log do supervisor, e a
+  // recusa chegava à cliente como "Bot não está conectado" (RCA 2026-09-01).
+  recordOperationalSignal('session_capacity_limit', { userId, running, max: MAX_SESSIONS_PER_PROCESS, shard: SHARD_TAG })
   if (SESSION_CIRCUIT_BREAKER_MODE === 'open') return true
   return false
 }
