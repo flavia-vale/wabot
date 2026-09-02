@@ -71,6 +71,7 @@ export function buildActivationFunnel({
   firstDeliveryByUserId = new Map(),
   firstCheckoutByUserId = new Map(),
   firstPaymentByUserId = new Map(),
+  triedPairingUserIds = new Set(),
   credentialUserIds = new Set(),
   sourceGroupUserIds = new Set(),
   destGroupUserIds = new Set(),
@@ -123,7 +124,8 @@ export function buildActivationFunnel({
 
     // POR QUE parou — só para quem não pagou.
     const stallReason = classifyStallReason({
-      paired: reached.connected,
+      triedPairing: triedPairingUserIds.has(id) || reached.connected,
+      connected: reached.connected,
       hasCredential: credentialUserIds.has(id),
       hasSourceGroup: sourceGroupUserIds.has(id),
       hasDestGroup: destGroupUserIds.has(id),
@@ -217,9 +219,18 @@ export function buildActivationFunnel({
  */
 export const STALL_REASONS = Object.freeze([
   {
-    key: 'never_paired',
-    label: 'Nunca tentou conectar o WhatsApp',
-    hint: 'Criou a conta e parou na porta. Costuma ser receio de conectar o número ou dúvida no passo do QR.',
+    key: 'never_tried_pairing',
+    label: 'Nem chegou a pedir a conexão do WhatsApp',
+    hint: 'Criou a conta e não abriu a tela de conectar. Aqui a conversa é de confiança e de expectativa — ela ainda não decidiu entregar o número.',
+  },
+  {
+    // Separado do de cima porque são problemas OPOSTOS: um é decisão da
+    // pessoa, o outro é obstáculo nosso (QR que não lê, servidor sem vaga,
+    // recusa do WhatsApp). Juntos, viravam um balde cego onde defeito de
+    // produto se escondia atrás de "ela não quis".
+    key: 'pairing_failed',
+    label: 'Tentou conectar o WhatsApp e NÃO conseguiu',
+    hint: 'Ela quis, pediu a conexão e não chegou a conectar. Isso é obstáculo nosso: leitura do QR, servidor sem vaga ou recusa do WhatsApp. Vale abrir o histórico dela e ver o que aconteceu.',
   },
   {
     key: 'no_credential',
@@ -268,7 +279,8 @@ const STALL_REASON_BY_KEY = new Map(STALL_REASONS.map((reason) => [reason.key, r
  * nunca "última etapa concluída".
  */
 export function classifyStallReason({
-  paired = false,
+  triedPairing = false,
+  connected = false,
   hasCredential = false,
   hasSourceGroup = false,
   hasDestGroup = false,
@@ -278,7 +290,10 @@ export function classifyStallReason({
   paid = false,
 } = {}) {
   if (paid) return null
-  if (!paired) return 'never_paired'
+  // "Pediu a conexão" e "conectou" são sinais diferentes: o primeiro é a
+  // sessão criada quando ela clica em conectar; o segundo é o WhatsApp ter
+  // aceitado de fato.
+  if (!connected) return triedPairing ? 'pairing_failed' : 'never_tried_pairing'
   if (!hasCredential) return 'no_credential'
   if (!hasSourceGroup) return 'no_source_group'
   if (!hasDestGroup) return 'no_dest_group'

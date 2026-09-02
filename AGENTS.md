@@ -393,14 +393,22 @@ e `scripts/diag-origem-cadastros.mjs` — o que faltava era a leitura.
 | Tela | `dashboard/app/admin/funil/page.js` |
 
 Cinco etapas: criou a conta → conectou o WhatsApp → **teve oferta publicada** →
-começou o pagamento → pagou. Junto vem **POR QUE cada pessoa parou** (oito
+começou o pagamento → pagou. Junto vem **POR QUE cada pessoa parou** (nove
 motivos, `STALL_REASONS`) e, em cada motivo, quem contatar — com link para o
 histórico do cliente.
 
-**Os oito motivos e a regra de leitura:** a classificação devolve o **PRIMEIRO
+**Os nove motivos e a regra de leitura:** a classificação devolve o **PRIMEIRO
 obstáculo** que a pessoa encontrou, não a última etapa concluída — as etapas não
 são sequência obrigatória (dá para escolher grupo sem cadastrar loja), e alguém
-sem loja E sem grupo parou na loja. Os dois que mais mudam a ação:
+sem loja E sem grupo parou na loja. Os que mais mudam a ação:
+
+- **"Nem chegou a pedir a conexão" ≠ "tentou e NÃO conseguiu"** — os dois eram
+  um balde só até 2026-09-02, e a medição real (124 cadastros, 55 parados aí)
+  mostrou por que isso não serve: o primeiro é decisão da pessoa (confiança,
+  expectativa) e o segundo é **obstáculo nosso** (QR que não lê, servidor sem
+  vaga, recusa do WhatsApp). Juntos, defeito de produto se esconde atrás de
+  "ela não quis". O sinal que separa é a existência de `WaSession` (criada
+  quando ela clica em conectar) contra o `whatsapp_connected`.
 
 - **"O robô tentou e NENHUMA oferta saiu"** — o painel mostra atividade e nada
   chega ao grupo (`skip:no_valid_conversions`, quase sempre loja incompleta ou
