@@ -37,7 +37,7 @@ export const SHEIN_ARK_DEFAULT_RE = /\/ark\/default\/?$/i
 // aplicar a identidade da cliente — nunca copiados para a saída.
 export const THIRD_PARTY_PARAMS = [
   'url_from', 'koc_id', 'aff_id', 'src_identifier',
-  'onelink', 'requestId', 'behaviorId',
+  'onelink', 'requestId', 'behaviorId', 'shc', 'link',
 ]
 // + qualquer chave que case /^utm_/i (tratado à parte em stripSheinAffiliateTracking)
 
@@ -66,6 +66,30 @@ const BROWSER_UA =
 // truncar o `<input id="url">` real caso o hop sirva algo maior do que o
 // esperado.
 const SHORT_LINK_BODY_MAX_BYTES = 512 * 1024
+
+export const SHEIN_CONVERSION_ERROR = Object.freeze({
+  OPAQUE_PRODUCT_UNPROVEN: 'shein_opaque_product_unproven',
+  RESOLUTION_TRANSIENT: 'shein_resolution_transient',
+  UNKNOWN: 'shein_conversion_unknown',
+})
+
+export class SheinConversionError extends Error {
+  constructor(code) {
+    super(code)
+    this.name = 'SheinConversionError'
+    this.code = code
+  }
+}
+
+export function describeSheinConversionError(code) {
+  if (code === SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN) {
+    return 'Este link de compartilhamento da SHEIN não permitiu identificar o produto.'
+  }
+  if (code === SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT) {
+    return 'Não foi possível consultar esse link da SHEIN agora. Tente novamente mais tarde.'
+  }
+  return 'Não foi possível converter este link da SHEIN.'
+}
 
 // oneLink não devolve 302: serve uma página-interstício que redireciona por
 // JS. O destino real fica num `<input id="url">` escondido — por isso esse
@@ -155,6 +179,59 @@ export function hasOpaqueShareToken(url) {
   }
 }
 
+export function isSheinOpaqueShareEndpoint(url) {
+  try {
+    const u = new URL(String(url))
+    return u.protocol === 'https:' &&
+      u.hostname.toLowerCase() === 'api-shein.shein.com' &&
+      u.pathname === '/h5/sharejump/appjump' &&
+      !u.username && !u.password
+  } catch {
+    return false
+  }
+}
+
+function normalizeStaticCandidate(raw, baseUrl) {
+  try {
+    const decoded = String(raw)
+      .replace(/&amp;/gi, '&')
+      .replace(/\\u0026/gi, '&')
+      .replace(/\\\//g, '/')
+    const u = new URL(decoded, baseUrl)
+    if (u.protocol !== 'https:' || u.username || u.password || !isSheinHostname(u.hostname)) return null
+    const goodsId = extractSheinGoodsId(u.toString())
+    return goodsId ? { goodsId, url: u.toString() } : null
+  } catch {
+    return null
+  }
+}
+
+// Coleta apenas strings estáticas que já expõem goods_id. O conteúdo remoto
+// nunca é executado e shc/link nunca são interpretados como destino/prova.
+export function collectSheinProductCandidates(body, baseUrl) {
+  const text = String(body || '')
+  const raw = new Set()
+  for (const match of text.matchAll(/https:\/\/[^\s"'<>]+/gi)) {
+    raw.add(match[0])
+  }
+  for (const match of text.matchAll(/["']([^"']*(?:-p-\d+(?:-cat-\d+)?\.html|[?&]goods_id=\d+)[^"']*)["']/gi)) {
+    raw.add(match[1])
+  }
+  return [...raw].map(value => normalizeStaticCandidate(value, baseUrl)).filter(Boolean)
+}
+
+export function consolidateSheinProductEvidence(candidates) {
+  const safe = (Array.isArray(candidates) ? candidates : []).filter(candidate => {
+    const normalized = normalizeStaticCandidate(candidate?.url, 'https://api-shein.shein.com/')
+    return normalized && normalized.goodsId === String(candidate.goodsId || '')
+  })
+  const ids = new Set(safe.map(candidate => String(candidate.goodsId)))
+  if (ids.size !== 1) return { status: 'unproven' }
+  const goodsId = [...ids][0]
+  const canonical = safe.find(candidate => extractSheinGoodsId(candidate.url) === goodsId)
+  return canonical ? { status: 'resolved', goodsId, url: canonical.url } : { status: 'unproven' }
+}
+
 // Remove THIRD_PARTY_PARAMS e toda chave utm_*. Preserva caminho, goods_id e
 // todos os demais parâmetros de destino. URL inválida devolve a entrada
 // inalterada.
@@ -181,20 +258,35 @@ export function stripSheinAffiliateTracking(url) {
 // Lê o corpo até SHORT_LINK_BODY_MAX_BYTES e devolve o que foi coletado até
 // lá (nunca `null` por causa do teto — só por erro real de leitura). Mesmo
 // contrato de `readBodyLimited` em shopee.js/amazon.js.
-async function readBodyLimited(res) {
+async function readBodyLimited(res, { allowTextFallback = true } = {}) {
   try {
     if (!res?.body?.getReader) {
+      // `Response.text()` materializa o corpo inteiro antes de podermos
+      // cortá-lo. O caminho opaco nunca aceita esse fallback sem limite.
+      if (!allowTextFallback) return { text: null, truncated: false, readError: true }
       const text = await res?.text?.()
-      return typeof text === 'string' ? text.slice(0, SHORT_LINK_BODY_MAX_BYTES) : null
+      if (typeof text !== 'string') return { text: null, truncated: false, readError: true }
+      const bytes = new TextEncoder().encode(text)
+      return {
+        text: new TextDecoder().decode(bytes.slice(0, SHORT_LINK_BODY_MAX_BYTES)),
+        truncated: bytes.byteLength > SHORT_LINK_BODY_MAX_BYTES,
+        readError: false,
+      }
     }
     const reader = res.body.getReader()
     const chunks = []
     let received = 0
-    while (received < SHORT_LINK_BODY_MAX_BYTES) {
+    let truncated = false
+    while (received <= SHORT_LINK_BODY_MAX_BYTES) {
       const { done, value } = await reader.read()
       if (done) break
-      chunks.push(value)
-      received += value.byteLength
+      const remaining = SHORT_LINK_BODY_MAX_BYTES - received
+      if (remaining > 0) chunks.push(value.byteLength > remaining ? value.slice(0, remaining) : value)
+      received += Math.min(value.byteLength, Math.max(remaining, 0))
+      if (value.byteLength > remaining) {
+        truncated = true
+        break
+      }
     }
     await reader.cancel().catch(() => {})
     const body = new Uint8Array(received)
@@ -203,9 +295,18 @@ async function readBodyLimited(res) {
       body.set(chunk, offset)
       offset += chunk.byteLength
     }
-    return new TextDecoder().decode(body)
+    return { text: new TextDecoder().decode(body), truncated, readError: false }
   } catch {
-    return null
+    return { text: null, truncated: false, readError: true }
+  }
+}
+
+function isSafeResolutionHop(url) {
+  try {
+    const u = new URL(String(url))
+    return u.protocol === 'https:' && !u.username && !u.password && isSheinHostname(u.hostname)
+  } catch {
+    return false
   }
 }
 
@@ -235,11 +336,15 @@ function extractRedirectFromHtml(html, baseUrl) {
 // resta do orçamento (nunca o valor cheio de novo).
 export async function resolveSheinShortLink(
   url,
-  { totalTimeoutMs = 8000, maxHops = 6, fetchImpl = globalThis.fetch } = {},
+  { totalTimeoutMs = 8000, maxHops = 6, fetchImpl = globalThis.fetch, returnDetails = false } = {},
 ) {
   let current = String(url)
   const cookieJar = new Map()
   const deadlineAt = Date.now() + totalTimeoutMs
+  let errorCode = null
+  let evidence = null
+  const visited = new Set()
+  let exhaustedHops = false
 
   for (let i = 0; i < maxHops; i++) {
     // 1. A URL atual já revela o produto — para aqui.
@@ -247,7 +352,16 @@ export async function resolveSheinShortLink(
 
     // 2. Orçamento total esgotado — última URL conhecida, sem novo hop.
     const remainingMs = deadlineAt - Date.now()
-    if (remainingMs <= 0) break
+    if (remainingMs <= 0) {
+      errorCode = SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT
+      break
+    }
+
+    if (visited.has(current)) {
+      errorCode = SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT
+      break
+    }
+    visited.add(current)
 
     const cookieHeader = [...cookieJar].map(([k, v]) => `${k}=${v}`).join('; ')
     let res
@@ -264,6 +378,17 @@ export async function resolveSheinShortLink(
       })
     } catch {
       // erro de rede/timeout → última URL conhecida
+      errorCode = SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT
+      break
+    }
+
+    const currentIsOpaque = isSheinOpaqueShareEndpoint(current)
+    if (currentIsOpaque && (res.status >= 500 || res.status === 429)) {
+      errorCode = SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT
+      break
+    }
+    if (currentIsOpaque && res.status >= 400) {
+      errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
       break
     }
 
@@ -279,26 +404,67 @@ export async function resolveSheinShortLink(
       try {
         next = new URL(location, current).toString()
       } catch {
+        if (currentIsOpaque) errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
+        break
+      }
+      if (!isSafeResolutionHop(next)) {
+        errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
         break
       }
       // Não entrar no captcha: o hop atual é o mais informativo que teremos.
-      if (SHEIN_RISK_RE.test(next)) break
+      if (SHEIN_RISK_RE.test(next)) {
+        if (currentIsOpaque) errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
+        break
+      }
       current = next
+      exhaustedHops = i === maxHops - 1 && !hasProductId(current)
       continue
     }
 
-    if (!String(res.headers.get('content-type') || '').includes('text/html')) break
+    if (!String(res.headers.get('content-type') || '').includes('text/html')) {
+      if (currentIsOpaque) errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
+      break
+    }
 
-    const html = await readBodyLimited(res)
-    if (!html) break
+    const body = await readBodyLimited(res, { allowTextFallback: !currentIsOpaque })
+    if (body.readError || !body.text) {
+      errorCode = SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT
+      break
+    }
 
-    const next = extractRedirectFromHtml(html, current)
+    if (currentIsOpaque) {
+      if (body.truncated) {
+        errorCode = SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT
+        break
+      }
+      evidence = consolidateSheinProductEvidence(collectSheinProductCandidates(body.text, current))
+      if (evidence.status === 'resolved') {
+        current = evidence.url
+        break
+      }
+      errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
+      break
+    }
+
+    const next = extractRedirectFromHtml(body.text, current)
     if (!next || next === current) break
-    if (SHEIN_RISK_RE.test(next)) break
+    if (!isSafeResolutionHop(next)) {
+      errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
+      break
+    }
+    if (SHEIN_RISK_RE.test(next)) {
+      errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
+      break
+    }
     current = next
+    exhaustedHops = i === maxHops - 1 && !hasProductId(current)
   }
 
-  return current
+  if (exhaustedHops && !errorCode) errorCode = SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT
+  if (isSheinOpaqueShareEndpoint(current) && !hasProductId(current) && !errorCode) {
+    errorCode = SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN
+  }
+  return returnDetails ? { url: current, evidence, errorCode } : current
 }
 
 // Caminho CONFIRMADO ao vivo pela cliente (specs/012-shein-store-support,
@@ -568,8 +734,15 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch, shorte
     if (!tag) return null
 
     let resolved = String(url)
+    let provenGoodsId = null
+    if (isSheinOpaqueShareEndpoint(resolved)) {
+      throw new SheinConversionError(SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+    }
     if (isSheinShortLink(resolved)) {
-      resolved = await resolveSheinShortLink(resolved, { fetchImpl })
+      const resolution = await resolveSheinShortLink(resolved, { fetchImpl, returnDetails: true })
+      resolved = resolution.url
+      provenGoodsId = resolution.evidence?.status === 'resolved' ? resolution.evidence.goodsId : null
+      if (resolution.errorCode) throw new SheinConversionError(resolution.errorCode)
       // Resolução falhou (rede/timeout/captcha no 1º hop) e nunca saiu do
       // domínio de short link: o próprio código do short link (`/14/abc`) é
       // rastro de sessão de quem gerou — publicar isso vazaria a identidade
@@ -584,7 +757,7 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch, shorte
     // dela nem ser publicado com o rastro do terceiro intacto.
     if (!isSheinHost(resolved)) return null
 
-    if (hasOpaqueShareToken(resolved)) return null
+    if (hasOpaqueShareToken(resolved) && !provenGoodsId) return null
 
     const stripped = stripSheinAffiliateTracking(resolved)
 
@@ -614,6 +787,17 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch, shorte
     }
 
     const finalUrl = u.toString()
+
+    // Última fronteira de publicação: HTTPS oficial, sem userinfo, sem
+    // rastros da origem e com a identidade exata desta cliente.
+    const finalParsed = new URL(finalUrl)
+    if (finalParsed.protocol !== 'https:' || finalParsed.username || finalParsed.password || !isSheinHostname(finalParsed.hostname)) return null
+    const forbiddenLower = new Set([...THIRD_PARTY_PARAMS, ...OPAQUE_SHARE_PARAMS].map(key => key.toLowerCase()))
+    for (const key of finalParsed.searchParams.keys()) {
+      if (forbiddenLower.has(key.toLowerCase()) && !['koc_id', 'url_from'].includes(key.toLowerCase())) return null
+      if (/^utm_/i.test(key)) return null
+    }
+    if (finalParsed.searchParams.get('koc_id') !== tag || finalParsed.searchParams.get('url_from') !== AFFILIATE_URL_FROM_PREFIX + tag) return null
 
     // T077: rede de segurança final. O T074 contava toda ocorrência da
     // substring solta "koc" (case-insensitive) na URL final INTEIRA —
@@ -691,6 +875,9 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch, shorte
     }
 
     const goodsId = extractSheinGoodsId(finalUrl)
+    if (provenGoodsId && goodsId !== provenGoodsId) {
+      throw new SheinConversionError(SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+    }
     // Marca de "isto deveria ser um produto" mais frouxa que SHEIN_PRODUCT_RE
     // (que exige o id em dígitos): o marcador `-p-` no caminho aparece em toda
     // página de produto da SHEIN, com ou sem id capturável. Se o marcador
@@ -719,7 +906,8 @@ export async function convert(url, creds, { fetchImpl = globalThis.fetch, shorte
     }
 
     return { url: finalUrl, linkKind }
-  } catch {
-    return null
+  } catch (err) {
+    if (err instanceof SheinConversionError) throw err
+    throw new SheinConversionError(SHEIN_CONVERSION_ERROR.UNKNOWN)
   }
 }
