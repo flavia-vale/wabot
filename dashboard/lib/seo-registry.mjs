@@ -265,6 +265,15 @@ export const CONTENT_SEO_ROUTES = [
   // (fonte única, FR-001 — specs/013-inbound-leads-strategy). Removidos daqui em
   // 2026-08-19: viviam duplicados (e no caso de /bot-achadinhos-whatsapp,
   // divergentes — R2 de research.md) sem nenhum validador comparar os dois.
+  // Frente Tier 1 (ação 9 do PLANO_ACAO_SEO_IA_2026-09-01): "shopee afiliados"
+  // tem 50.000 buscas/mês com concorrência baixa, e não havia página COMERCIAL
+  // nossa entrando por esse termo — só artigo de blog, que responde outra
+  // intenção. UMA página por enquanto: Amazon e Mercado Livre só depois desta
+  // provar que indexa e ranqueia (a lição das dez LPs de dor que não indexaram).
+  { path: '/shopee-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/shopee-afiliados-whatsapp', '2026-09-02'), indexable: true },
+  { path: '/mercado-livre-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/mercado-livre-afiliados-whatsapp', '2026-09-02'), indexable: true },
+  { path: '/amazon-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/amazon-afiliados-whatsapp', '2026-09-02'), indexable: true },
+  { path: '/shein-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/shein-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/bot-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-afiliados-whatsapp', '2026-07-30'), indexable: true },
   { path: '/bot-achadinhos-whatsapp', template: 'commercial-seo', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-achadinhos-whatsapp', '2026-07-30'), indexable: true },
   { path: '/anti-ban-whatsapp', template: 'commercial-seo', priority: 0.85, changeFrequency: 'weekly', lastModified: resolveLastModified('/anti-ban-whatsapp', '2026-07-30'), indexable: true },
