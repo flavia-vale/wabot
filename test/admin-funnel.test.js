@@ -135,7 +135,7 @@ test('o módulo do funil é puro (não importa banco)', () => {
 import { STALL_REASONS, classifyStallReason, describeStallReason } from '../src/domain/admin/funnel.js'
 
 const CONFIGURADA = {
-  paired: true, hasCredential: true, hasSourceGroup: true, hasDestGroup: true,
+  triedPairing: true, connected: true, hasCredential: true, hasSourceGroup: true, hasDestGroup: true,
   attempted: true, delivered: true, checkout: true, paid: false,
 }
 
@@ -147,14 +147,21 @@ test('quem pagou não tem motivo de parada', () => {
 
 test('o motivo é o PRIMEIRO obstáculo, não a última etapa concluída', () => {
   // sem loja E sem grupo: a conversa é sobre a loja, não sobre o grupo
-  assert.equal(classifyStallReason({ paired: true }), 'no_credential')
-  assert.equal(classifyStallReason({}), 'never_paired')
-  assert.equal(classifyStallReason({ paired: true, hasCredential: true }), 'no_source_group')
-  assert.equal(classifyStallReason({ paired: true, hasCredential: true, hasSourceGroup: true }), 'no_dest_group')
+  assert.equal(classifyStallReason({ connected: true }), 'no_credential')
+  assert.equal(classifyStallReason({ connected: true, hasCredential: true }), 'no_source_group')
+  assert.equal(classifyStallReason({ connected: true, hasCredential: true, hasSourceGroup: true }), 'no_dest_group')
+})
+
+test('quem TENTOU conectar e não conseguiu não pode virar "não quis"', () => {
+  // são problemas opostos: um é decisão dela, o outro é obstáculo nosso
+  assert.equal(classifyStallReason({}), 'never_tried_pairing')
+  assert.equal(classifyStallReason({ triedPairing: true }), 'pairing_failed')
+  // conectou depois de tentar: o pareamento deixa de ser o obstáculo
+  assert.equal(classifyStallReason({ triedPairing: true, connected: true }), 'no_credential')
 })
 
 test('separa "tentou e nada saiu" de "nunca usou" — são conversas opostas', () => {
-  const base = { paired: true, hasCredential: true, hasSourceGroup: true, hasDestGroup: true }
+  const base = { triedPairing: true, connected: true, hasCredential: true, hasSourceGroup: true, hasDestGroup: true }
   assert.equal(classifyStallReason({ ...base, attempted: true, delivered: false }), 'tried_nothing_sent')
   assert.equal(classifyStallReason({ ...base, attempted: false, delivered: false }), 'configured_never_sent')
 })
@@ -174,7 +181,7 @@ test('todo motivo tem texto e diz o que fazer', () => {
       `jargão vazando em ${reason.key}`
     )
   }
-  assert.equal(describeStallReason('never_paired').key, 'never_paired')
+  assert.equal(describeStallReason('never_tried_pairing').key, 'never_tried_pairing')
   assert.equal(describeStallReason('inexistente'), null)
 })
 
@@ -198,7 +205,7 @@ test('o funil devolve os motivos ordenados, com quem contatar e sem inventar gen
   assert.equal(funil.unpaidCount, 3)
   assert.equal(funil.stalls.reduce((soma, m) => soma + m.count, 0), 3, 'todo mundo que não pagou aparece uma vez')
   const chaves = funil.stalls.map((m) => m.key)
-  assert.deepEqual(chaves.sort(), ['never_paired', 'no_credential', 'tried_nothing_sent'])
+  assert.deepEqual(chaves.sort(), ['never_tried_pairing', 'no_credential', 'tried_nothing_sent'])
   const semLoja = funil.stalls.find((m) => m.key === 'no_credential')
   assert.deepEqual(semLoja.people.map((p) => p.email), ['cida@x.com'])
   // quem pagou nunca entra na lista de contato
@@ -211,7 +218,7 @@ test('a lista de contato é curta e diz quantas ficaram de fora', () => {
   }))
   const funil = buildActivationFunnel({ users, peoplePerReason: 3 })
   const motivo = funil.stalls[0]
-  assert.equal(motivo.key, 'never_paired')
+  assert.equal(motivo.key, 'never_tried_pairing')
   assert.equal(motivo.count, 12)
   assert.equal(motivo.people.length, 3)
 })
@@ -220,4 +227,39 @@ test('o script de diagnóstico usa a MESMA classificação da tela', () => {
   const diag = readFileSync(new URL('../scripts/diag-funil-ativacao.mjs', import.meta.url), 'utf8')
   assert.ok(diag.includes("from '../src/domain/admin/funnel.js'"), 'o script precisa importar a regra compartilhada')
   assert.ok(!/rotulo = 'nunca tentou parear/.test(diag), 'não voltar a duplicar os rótulos no script')
+})
+
+test('o funil separa quem nem pediu conexão de quem tentou e não conseguiu', () => {
+  const users = [
+    { id: 'a', createdAt: new Date('2026-09-01'), name: 'Ana', email: 'ana@x.com' },
+    { id: 'b', createdAt: new Date('2026-09-01'), name: 'Bia', email: 'bia@x.com' },
+  ]
+  const funil = buildActivationFunnel({
+    users,
+    // Bia clicou em conectar (sessão criada) e nunca conectou.
+    triedPairingUserIds: new Set(['b']),
+  })
+  const chaves = funil.stalls.map((m) => m.key).sort()
+  assert.deepEqual(chaves, ['never_tried_pairing', 'pairing_failed'])
+  assert.deepEqual(
+    funil.stalls.find((m) => m.key === 'pairing_failed').people.map((p) => p.email),
+    ['bia@x.com']
+  )
+})
+
+test('quem conectou nunca aparece como problema de pareamento', () => {
+  const funil = buildActivationFunnel({
+    users: [{ id: 'a', createdAt: new Date('2026-09-01') }],
+    connectedUserIds: new Set(['a']),
+    // mesmo sem registro de "pediu a conexão" (conta anterior ao sinal)
+    triedPairingUserIds: new Set(),
+  })
+  assert.equal(funil.stalls[0].key, 'no_credential')
+})
+
+test('o script de diagnóstico usa os DOIS sinais de pareamento', () => {
+  const diag = readFileSync(new URL('../scripts/diag-funil-ativacao.mjs', import.meta.url), 'utf8')
+  assert.match(diag, /triedPairing:/)
+  assert.match(diag, /connected:/)
+  assert.match(diag, /whatsapp_connected/)
 })

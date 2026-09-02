@@ -596,6 +596,9 @@ export function createAdminService({
     // (`whatsapp_connected`) e a própria sessão com telefone/status — o evento
     // só existe para quem se cadastrou depois que ele foi criado, e a sessão
     // sozinha não conta quem conectou e desconectou faz tempo.
+    // Existe linha de sessão = ela CLICOU em conectar. É o que separa quem nem
+    // tentou de quem tentou e não conseguiu — dois problemas opostos.
+    const triedPairingUserIds = new Set(waSessions.map((session) => session.userId).filter(Boolean))
     const connectedUserIds = new Set(connectedEvents.map((row) => row.userId).filter(Boolean))
     for (const session of waSessions) {
       if (session.status === 'connected' || session.phone) connectedUserIds.add(session.userId)
@@ -623,6 +626,7 @@ export function createAdminService({
         firstDeliveryByUserId: toDateMap(deliveries, 'sentAt'),
         firstCheckoutByUserId: toDateMap(checkouts, 'createdAt'),
         firstPaymentByUserId: toDateMap(payments, 'createdAt'),
+        triedPairingUserIds,
         credentialUserIds,
         sourceGroupUserIds,
         destGroupUserIds,
