@@ -7,7 +7,7 @@ import { verifyUnsubscribeToken } from '../../leadNurture/unsubscribeToken.js'
 import { trackAnalyticsEvent } from '../../analytics.js'
 import { isUnsubscribed } from '../../leadNurture/sweep.js'
 
-const BRAND_NAME = 'BOTinho'
+const BRAND_NAME = 'Espelha Grupos'
 
 function renderPage({ title, message }) {
   return `<!doctype html>

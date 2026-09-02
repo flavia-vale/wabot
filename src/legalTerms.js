@@ -10,20 +10,20 @@ export const DEFAULT_TERMS_DOCUMENT = {
   updatedAt: null,
   content: {
     lastUpdatedLabel: DEFAULT_TERMS_UPDATED_LABEL,
-    intro: 'Resumo importante: o BOTinho pode ajudar a organizar e reduzir riscos operacionais, mas automação de mensagens em WhatsApp Web/grupos envolve risco real de bloqueio ou banimento. Ao usar, você confirma que entende esse risco e assume responsabilidade pela sua operação.',
+    intro: 'Resumo importante: o Espelha Grupos pode ajudar a organizar e reduzir riscos operacionais, mas automação de mensagens em WhatsApp Web/grupos envolve risco real de bloqueio ou banimento. Ao usar, você confirma que entende esse risco e assume responsabilidade pela sua operação.',
     sections: [
       {
         title: '1. Aceite e escopo destes Termos',
         body: [
-          'Ao criar uma conta, acessar o painel, conectar um número de WhatsApp, configurar grupos/canais, converter links, agendar mensagens ou utilizar qualquer recurso do BOTinho, você declara que leu, compreendeu e aceitou estes Termos de Uso, a Política de Privacidade e a ciência expressa de riscos operacionais descrita neste documento.',
+          'Ao criar uma conta, acessar o painel, conectar um número de WhatsApp, configurar grupos/canais, converter links, agendar mensagens ou utilizar qualquer recurso do Espelha Grupos, você declara que leu, compreendeu e aceitou estes Termos de Uso, a Política de Privacidade e a ciência expressa de riscos operacionais descrita neste documento.',
           'Se você estiver utilizando a ferramenta em nome de empresa, agência, equipe, loja, comunidade ou terceiro, você declara ter autorização para aceitar estes termos e responder pela operação configurada na conta.',
           'Estes termos podem ser atualizados para refletir mudanças do produto, exigências legais, regras de plataformas ou melhorias operacionais. A continuidade de uso após a atualização significa concordância com a versão vigente.',
         ],
       },
       {
-        title: '2. O que é o BOTinho',
+        title: '2. O que é o Espelha Grupos',
         body: [
-          'O BOTinho é uma ferramenta operacional para afiliados, criadores de comunidades, lojistas e operadores de grupos que precisam organizar links, espelhar mensagens autorizadas, criar ofertas, gerenciar grupos de origem e destino, aplicar cadência de envio, acompanhar logs e reduzir trabalho manual.',
+          'O Espelha Grupos é uma ferramenta operacional para afiliados, criadores de comunidades, lojistas e operadores de grupos que precisam organizar links, espelhar mensagens autorizadas, criar ofertas, gerenciar grupos de origem e destino, aplicar cadência de envio, acompanhar logs e reduzir trabalho manual.',
           'A ferramenta não garante faturamento, aprovação em programas de afiliados, alcance, entregabilidade, manutenção de grupos, permanência de números no WhatsApp, ausência de denúncias, ausência de bloqueios ou continuidade de qualquer plataforma de terceiros.',
         ],
       },
@@ -31,9 +31,9 @@ export const DEFAULT_TERMS_DOCUMENT = {
         title: '3. Ciência expressa: automação no WhatsApp e ausência de API oficial',
         warning: true,
         body: [
-          'Você reconhece que, como toda automação que envia mensagens para grupos/canais via WhatsApp Web ou mecanismos equivalentes de sessão, o BOTinho não utiliza a API oficial do WhatsApp/Meta para esse tipo de envio em grupos. O uso depende de uma sessão conectada pelo usuário e pode ser interpretado pelas plataformas como automação não oficial.',
-          'O WhatsApp, a Meta e outras plataformas podem alterar regras, limites, comportamento técnico, detecção de automação, políticas de uso, mecanismos de denúncia, qualidade de conta e critérios internos sem aviso prévio. Essas mudanças podem afetar total ou parcialmente a operação do BOTinho e dos usuários.',
-          'O BOTinho não é afiliado, patrocinado, endossado ou operado pelo WhatsApp, Meta, Mercado Livre, Amazon, Shopee, Telegram ou qualquer plataforma de afiliados citada no produto, salvo quando houver declaração expressa em contrato específico.',
+          'Você reconhece que, como toda automação que envia mensagens para grupos/canais via WhatsApp Web ou mecanismos equivalentes de sessão, o Espelha Grupos não utiliza a API oficial do WhatsApp/Meta para esse tipo de envio em grupos. O uso depende de uma sessão conectada pelo usuário e pode ser interpretado pelas plataformas como automação não oficial.',
+          'O WhatsApp, a Meta e outras plataformas podem alterar regras, limites, comportamento técnico, detecção de automação, políticas de uso, mecanismos de denúncia, qualidade de conta e critérios internos sem aviso prévio. Essas mudanças podem afetar total ou parcialmente a operação do Espelha Grupos e dos usuários.',
+          'O Espelha Grupos não é afiliado, patrocinado, endossado ou operado pelo WhatsApp, Meta, Mercado Livre, Amazon, Shopee, Telegram ou qualquer plataforma de afiliados citada no produto, salvo quando houver declaração expressa em contrato específico.',
         ],
       },
       {
@@ -42,7 +42,7 @@ export const DEFAULT_TERMS_DOCUMENT = {
         body: [
           'Você está ciente de que o uso de automação para envio de mensagens pode gerar bloqueios temporários, restrições de envio, pedidos de verificação, perda de sessão, desconexões, limitação de alcance, shadowban, banimento permanente do número de WhatsApp, banimento ou restrição de grupos/canais, remoção de administradores, perda de confiança dos participantes e impacto comercial.',
           'Esses riscos podem ocorrer por diversos fatores, incluindo volume excessivo de envios, repetição de texto, repetição de imagens, links suspeitos, encurtadores, denúncias de participantes, entrada recente do número em muitos grupos, número novo ou pouco aquecido, ausência de consentimento dos destinatários, conteúdo sensível, promessas enganosas, mudança de comportamento da conta, uso fora das regras do WhatsApp ou das plataformas de afiliados, entre outros.',
-          'O usuário assume integralmente os riscos de usar a ferramenta em seus números, chips, contas, grupos, canais, comunidades, domínios, links, credenciais e programas de afiliados. O BOTinho não se responsabiliza por banimentos, bloqueios, perda de grupos, perda de receita, perda de comissões, suspensão em marketplace, suspensão em programa de afiliados ou dano reputacional decorrente da operação do usuário.',
+          'O usuário assume integralmente os riscos de usar a ferramenta em seus números, chips, contas, grupos, canais, comunidades, domínios, links, credenciais e programas de afiliados. O Espelha Grupos não se responsabiliza por banimentos, bloqueios, perda de grupos, perda de receita, perda de comissões, suspensão em marketplace, suspensão em programa de afiliados ou dano reputacional decorrente da operação do usuário.',
         ],
       },
       {
@@ -71,7 +71,7 @@ export const DEFAULT_TERMS_DOCUMENT = {
       {
         title: '8. Disponibilidade, manutenção e limitações técnicas',
         body: [
-          'O BOTinho pode passar por manutenções, atualizações, indisponibilidades pontuais, filas, timeouts, falhas de provedores, falhas de WhatsApp Web, desconexões de sessão, instabilidade de VPS, banco, rede, APIs de terceiros ou mudanças técnicas externas.',
+          'O Espelha Grupos pode passar por manutenções, atualizações, indisponibilidades pontuais, filas, timeouts, falhas de provedores, falhas de WhatsApp Web, desconexões de sessão, instabilidade de VPS, banco, rede, APIs de terceiros ou mudanças técnicas externas.',
           'A ferramenta busca registrar logs e estados operacionais, mas não garante entrega, leitura, permanência da mensagem, preservação de mídia, sincronização perfeita, recuperação de todas as mensagens em trânsito ou ausência de duplicidades em cenários extremos.',
         ],
       },
@@ -92,7 +92,7 @@ export const DEFAULT_TERMS_DOCUMENT = {
       {
         title: '11. Suporte e comunicação',
         body: [
-          'O suporte é prestado pelos canais oficiais informados no site ou painel. O BOTinho pode usar o telefone/WhatsApp e email informados no cadastro para suporte, avisos operacionais, onboarding, recuperação de configuração, alertas de risco ou comunicações relacionadas à conta.',
+          'O suporte é prestado pelos canais oficiais informados no site ou painel. O Espelha Grupos pode usar o telefone/WhatsApp e email informados no cadastro para suporte, avisos operacionais, onboarding, recuperação de configuração, alertas de risco ou comunicações relacionadas à conta.',
           'O suporte pode orientar boas práticas, mas não assume a operação do usuário nem garante resultado. Decisões de envio, conteúdo, volume, grupo e estratégia continuam sob responsabilidade do usuário.',
         ],
       },
@@ -107,7 +107,7 @@ export const DEFAULT_TERMS_DOCUMENT = {
         title: '13. Limitação de responsabilidade',
         warning: true,
         body: [
-          'Na máxima extensão permitida pela lei, o BOTinho não será responsável por lucros cessantes, perda de receita, perda de comissões, bloqueio ou banimento de contas/números/grupos/canais, perda de dados causada por terceiros, indisponibilidade de plataformas externas, mudanças de regras de terceiros, denúncias de participantes, falhas de marketplaces, uso indevido pelo usuário ou decisões comerciais tomadas com base na ferramenta.',
+          'Na máxima extensão permitida pela lei, o Espelha Grupos não será responsável por lucros cessantes, perda de receita, perda de comissões, bloqueio ou banimento de contas/números/grupos/canais, perda de dados causada por terceiros, indisponibilidade de plataformas externas, mudanças de regras de terceiros, denúncias de participantes, falhas de marketplaces, uso indevido pelo usuário ou decisões comerciais tomadas com base na ferramenta.',
           'A ferramenta é fornecida como apoio operacional. O usuário deve avaliar riscos, testar em baixa escala, validar em ambiente controlado e manter backups/planos de contingência para sua operação.',
         ],
       },
