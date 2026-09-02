@@ -317,8 +317,8 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'quanto-custa-bot-para-whatsapp-afiliados': {
     slug: '/blog/quanto-custa-bot-para-whatsapp-afiliados',
-    title: 'Quanto custa um bot para WhatsApp de afiliados? Preços e o que avaliar',
-    description: 'Entenda quanto custa um bot para WhatsApp de afiliados, o que muda entre plano básico e avançado e como avaliar custo real além do preço da mensalidade.',
+    title: 'Quanto custa um bot de afiliados: R$ 39 a R$ 69',
+    description: 'Quanto custa um bot para WhatsApp de afiliados: preço de cada plano, o que muda entre eles e o custo que não aparece na mensalidade. 7 dias grátis para testar.',
     eyebrow: 'Custo · Decisão de compra',
     origin: 'blog_quanto_custa_bot_para_whatsapp_afiliados',
     usePersonAuthor: true,
@@ -346,8 +346,8 @@ export const PRESERVATION_BLOG_POSTS = {
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 64 chars de texto próprio, o que empurrava o corte do Google no
     // celular. Motivo pra clicar ("horário certo") na frente.
-    title: 'Horário certo pra postar oferta no WhatsApp: veja',
-    description: 'Descubra os melhores horários para postar ofertas no WhatsApp, por que a cadência importa mais que o horário exato e como distribuir envios sem parecer disparo.',
+    title: 'Melhor horário para postar oferta: 7h, 12h e 19h',
+    description: 'Os três horários em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
     usePersonAuthor: true,
@@ -372,8 +372,8 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-converter-link-de-afiliado-automaticamente-whatsapp': {
     slug: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp',
-    title: 'Como converter link de afiliado automaticamente no WhatsApp',
-    description: 'Entenda como converter link de afiliado automaticamente no WhatsApp para Shopee, Amazon, Mercado Livre e Magalu, sem perder comissão nem encaminhar link de terceiro.',
+    title: 'Converter link de afiliado sozinho: 4 lojas',
+    description: 'Como o link de produto ou cupom vira o seu link de afiliado na hora do envio, em Shopee, Amazon, Mercado Livre e Magalu — sem copiar e colar oferta por oferta.',
     eyebrow: 'Conversão de link · Automação',
     origin: 'blog_como_converter_link_de_afiliado_automaticamente_whatsapp',
     usePersonAuthor: true,
@@ -426,7 +426,7 @@ export const PRESERVATION_BLOG_POSTS = {
     slug: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero',
     // Título ajustado em 2026-08-19 (P1): já cabia em 55, mas o passo a passo
     // ("do zero") reforça o motivo pra quem está começando clicar.
-    title: 'Monte um grupo de ofertas no WhatsApp do zero',
+    title: 'Grupo de ofertas no WhatsApp: montar do zero',
     description: 'Guia para montar um grupo de ofertas no WhatsApp do zero: chip dedicado, primeiras fontes de oferta, conversão de link, cadência e quando migrar para canal.',
     eyebrow: 'Começando · Grupo de ofertas',
     origin: 'blog_como_montar_grupo_de_ofertas_no_whatsapp_do_zero',
