@@ -125,6 +125,41 @@ test('o recado de link inválido não revela se a conta existe', async (t) => {
   assert.match(res.json().error, /não vale mais/)
 })
 
+// RCA 2026-09: o pedido de link consumia o MESMO balde de tentativas do login.
+// Quem erra a senha 8 vezes é exatamente quem clica em "esqueci minha senha"
+// logo depois — e recebia 429 em vez do e-mail. A recuperação ficava
+// indisponível justamente para quem precisa dela. Não voltar a compartilhar.
+test('errar a senha várias vezes não impede pedir o link de nova senha', async (t) => {
+  process.env.JWT_SECRET = SECRET
+  const app = await buildApp()
+  t.after(() => app.close())
+
+  const email = `trancada-${Date.now()}@exemplo.com`
+  let bloqueouLogin = false
+  for (let i = 0; i < 12; i += 1) {
+    const tentativa = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: 'errada' } })
+    if (tentativa.statusCode === 429) bloqueouLogin = true
+  }
+  assert.equal(bloqueouLogin, true, 'o login precisa mesmo travar depois de tantas tentativas')
+
+  const pedido = await app.inject({ method: 'POST', url: '/api/auth/forgot-password', payload: { email } })
+  assert.equal(pedido.statusCode, 200)
+  assert.match(pedido.json().message, /Se existir uma conta/)
+})
+
+test('pedir link muitas vezes seguidas ainda é barrado (balde próprio)', async (t) => {
+  process.env.JWT_SECRET = SECRET
+  const app = await buildApp()
+  t.after(() => app.close())
+
+  const email = `insistente-${Date.now()}@exemplo.com`
+  let ultimo = null
+  for (let i = 0; i < 12; i += 1) {
+    ultimo = await app.inject({ method: 'POST', url: '/api/auth/forgot-password', payload: { email } })
+  }
+  assert.equal(ultimo.statusCode, 429)
+})
+
 test('o hash guardado muda de verdade quando a senha é trocada', async () => {
   // Prova o contrato que o token depende: bcrypt gera hash novo, então a
   // assinatura antiga deixa de bater (uso único).

@@ -38,6 +38,17 @@ export function sanitizeAttributionValue(value, maxLength = 500) {
 // que o limite por IP e o rate limit global do servidor não cobririam.
 const loginAttempts = new Map()
 const loginAttemptsByEmail = new Map()
+
+// Balde SEPARADO para "esqueci minha senha" (RCA 2026-09).
+//
+// Antes esta rota consumia o MESMO balde do login — e é justamente quem errou a
+// senha várias vezes que vai pedir a recuperação. Oito tentativas de entrar
+// queimavam o orçamento inteiro, e o clique em "esqueci minha senha" logo em
+// seguida devolvia 429 em vez de mandar o e-mail: a recuperação ficava
+// indisponível exatamente para quem precisa dela. O limite continua existindo
+// (a rota não pode virar varredura de e-mails), só que com contagem própria.
+const passwordResetAttempts = new Map()
+const passwordResetAttemptsByEmail = new Map()
 export const STANDARD_TRIAL_DAYS = 7
 export const PROMO_VIP_TRIAL_DAYS = 7
 export const TERMS_VERSION = DEFAULT_TERMS_VERSION
@@ -65,6 +76,8 @@ function pruneLoginAttempts(now = Date.now()) {
   const maxEntries = getLoginAttemptMaxEntries()
   pruneMap(loginAttempts, now, maxEntries)
   pruneMap(loginAttemptsByEmail, now, maxEntries)
+  pruneMap(passwordResetAttempts, now, maxEntries)
+  pruneMap(passwordResetAttemptsByEmail, now, maxEntries)
 }
 
 // Limpeza periódica: sem isso, uma chave só some na próxima requisição que a
@@ -132,16 +145,13 @@ function bumpAttempt(map, key, windowMs, now) {
   return item
 }
 
-export function consumeLoginAttempt({ email, ip }) {
+function consumeAttempt({ email, ip, byIp, byEmail, windowMs, maxAttempts, emailMaxAttempts }) {
   const ipKey = `${email}|${ip ?? 'unknown'}`
   const now = Date.now()
   pruneLoginAttempts(now)
-  const windowMs = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000)
-  const maxAttempts = Number(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS ?? 8)
-  const emailMaxAttempts = Number(process.env.LOGIN_RATE_LIMIT_EMAIL_MAX_ATTEMPTS ?? 8)
 
-  const ipItem = bumpAttempt(loginAttempts, ipKey, windowMs, now)
-  const emailItem = bumpAttempt(loginAttemptsByEmail, email, windowMs, now)
+  const ipItem = bumpAttempt(byIp, ipKey, windowMs, now)
+  const emailItem = bumpAttempt(byEmail, email, windowMs, now)
 
   const ipBlocked = ipItem.attempts > maxAttempts
   const emailBlocked = emailItem.attempts > emailMaxAttempts
@@ -158,9 +168,39 @@ export function consumeLoginAttempt({ email, ip }) {
   }
 }
 
+export function consumeLoginAttempt({ email, ip }) {
+  return consumeAttempt({
+    email,
+    ip,
+    byIp: loginAttempts,
+    byEmail: loginAttemptsByEmail,
+    windowMs: Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000),
+    maxAttempts: Number(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS ?? 8),
+    emailMaxAttempts: Number(process.env.LOGIN_RATE_LIMIT_EMAIL_MAX_ATTEMPTS ?? 8),
+  })
+}
+
+// Pedido de link de nova senha. Balde próprio (ver comentário lá em cima) e
+// teto mais folgado: cada pedido é uma ação deliberada da pessoa, e o custo de
+// um pedido a mais é um e-mail — bem menor que o de trancar quem perdeu a senha
+// para fora da conta.
+export function consumePasswordResetAttempt({ email, ip }) {
+  return consumeAttempt({
+    email,
+    ip,
+    byIp: passwordResetAttempts,
+    byEmail: passwordResetAttemptsByEmail,
+    windowMs: Number(process.env.PASSWORD_RESET_RATE_LIMIT_WINDOW_MS ?? 60 * 60 * 1000),
+    maxAttempts: Number(process.env.PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS ?? 5),
+    emailMaxAttempts: Number(process.env.PASSWORD_RESET_RATE_LIMIT_EMAIL_MAX_ATTEMPTS ?? 5),
+  })
+}
+
 export function clearLoginAttempts({ email, ip }) {
   loginAttempts.delete(`${email}|${ip ?? 'unknown'}`)
   loginAttemptsByEmail.delete(email)
+  passwordResetAttempts.delete(`${email}|${ip ?? 'unknown'}`)
+  passwordResetAttemptsByEmail.delete(email)
 }
 
 function isPrismaShapeMismatch(err) {
@@ -637,8 +677,10 @@ export async function authRoutes(app) {
     }
     if (!email) return reply.code(200).send(respostaNeutra)
 
-    // Mesmo balde de tentativas do login: impede varrer e-mails por aqui.
-    const rate = consumeLoginAttempt({ email, ip: req.ip })
+    // Balde PRÓPRIO (não o do login): quem errou a senha várias vezes é
+    // justamente quem vem pedir o link, e o balde compartilhado já vinha
+    // vazio — a recuperação respondia 429 em vez de mandar o e-mail.
+    const rate = consumePasswordResetAttempt({ email, ip: req.ip })
     if (rate.blocked) {
       reply.header('Retry-After', Math.max(1, Math.ceil((rate.resetAt - Date.now()) / 1000)))
       return reply.code(429).send({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' })
