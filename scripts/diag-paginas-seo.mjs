@@ -6,12 +6,24 @@
 // aqueles 11 fizeram na página. Sem esse número, decidir entre "mexer no título"
 // (trazer mais gente) e "mexer na página" (converter quem já chegou) é chute.
 //
-// Cruza três eventos de `AnalyticsEvent`:
+// Cruza os eventos de `AnalyticsEvent`:
 //
-//   1. organic_page_view  — chegou na página
-//   2. organic_cta_click  — clicou em algum CTA (qual, e em que posição)
-//   3. signup_created     — criou conta, com `landing_page` = primeira página da
-//                           sessão (cookie first-touch)
+//   1. organic_page_view      — chegou na página
+//   2. organic_cta_click      — clicou em algum CTA (qual, e em que posição)
+//   3. comparison_page_view   — idem (1), nas páginas de comparação
+//   4. comparison_cta_click   — idem (2), nas páginas de comparação
+//   5. comparison_scroll_50   — leu até a metade da página de comparação
+//   6. signup_created         — criou conta, com `landing_page` = primeira página
+//                               da sessão (cookie first-touch)
+//
+// POR QUE OS EVENTOS DE COMPARAÇÃO ENTRARAM (2026-09-01): as páginas
+// `/alternativas/*` usam o `ComparisonPageTracker`, que grava
+// `comparison_page_view` com a página em `page_slug`. O script lia SÓ
+// `organic_page_view` e SÓ os campos `page_path`/`path`/`slug` — então a linha
+// inteira de comparativos ficava invisível, incluindo
+// `/alternativas/achadinhos-bot`, a página com MAIS impressão do site (1.281).
+// Na análise de 01/09 isso quase virou a conclusão errada "a página não recebe
+// visita": o dado estava no banco, a leitura é que não o alcançava.
 //
 // Nada é escrito. Só leitura.
 //
@@ -51,8 +63,10 @@ function parse(ev) {
 // A página vem em `page_path` (normalizada pela rota pública a partir do
 // `pathname` do navegador) ou em `path`/`slug` do contexto de rota do tracker.
 // Aceita as três porque páginas de templates diferentes preenchem diferente.
+// `page_slug` é o campo do ComparisonPageTracker e já vem como caminho
+// completo ('/alternativas/achadinhos-bot'); os demais vêm do OrganicPageTracker.
 function paginaDoEvento(m) {
-  const bruto = m.page_path || m.path || (m.slug ? `/${m.slug}` : '')
+  const bruto = m.page_path || m.path || m.page_slug || (m.slug ? `/${m.slug}` : '')
   return String(bruto).split('?')[0] || '(sem registro)'
 }
 
@@ -61,10 +75,14 @@ function titulo(t) {
 }
 
 async function main() {
-  const [visitas, cliques, signups] = await Promise.all([
-    db.analyticsEvent.findMany({ where: { event: 'organic_page_view', createdAt: { gte: desde } } }),
-    db.analyticsEvent.findMany({ where: { event: 'organic_cta_click', createdAt: { gte: desde } } }),
-    db.analyticsEvent.findMany({ where: { event: 'signup_created', createdAt: { gte: desde } } }),
+  const buscar = (eventos) =>
+    db.analyticsEvent.findMany({ where: { event: { in: eventos }, createdAt: { gte: desde } } })
+
+  const [visitas, cliques, leituras, signups] = await Promise.all([
+    buscar(['organic_page_view', 'comparison_page_view']),
+    buscar(['organic_cta_click', 'comparison_cta_click']),
+    buscar(['comparison_scroll_50']),
+    buscar(['signup_created']),
   ])
 
   console.log(`\nPeríodo: últimos ${dias} dias (desde ${desde.toISOString().slice(0, 10)})`)
@@ -73,14 +91,15 @@ async function main() {
   if (!visitas.length && !cliques.length) {
     titulo('SEM DADO DE VISITA NO PERÍODO')
     console.log(`
-  Nenhum 'organic_page_view' nem 'organic_cta_click' gravado.
+  Nenhum evento de visita ou clique gravado (nem os 'organic_*' das páginas
+  comuns, nem os 'comparison_*' das páginas /alternativas/).
 
   Se hoje é próximo de ${RASTREAMENTO_DESDE}, isso é ESPERADO: os dois eventos só
   passaram a ser gravados nessa data. Antes eram descartados em silêncio por
   faltarem nas allowlists.
 
   Se já passou tempo suficiente e continua vazio, conferir nesta ordem:
-    1. 'organic_page_view' está em PUBLIC_ANALYTICS_EVENTS (src/analytics.js)?
+    1. o evento está em PUBLIC_ANALYTICS_EVENTS (src/analytics.js)?
     2. E em PUBLIC_PERSISTED_EVENTS (dashboard/lib/analytics.js)?
     3. O dashboard foi reconstruído depois da mudança? (o allowlist do cliente
        vai para o bundle — 'git pull' sem 'npm run build' não aplica)
@@ -94,13 +113,21 @@ async function main() {
   // ------------------------------------------------------- funil por página ---
   const porPagina = new Map()
   const garante = (p) => {
-    if (!porPagina.has(p)) porPagina.set(p, { visitas: 0, cliques: 0, signups: 0, ctas: new Map() })
+    if (!porPagina.has(p)) porPagina.set(p, { visitas: 0, cliques: 0, leituras: 0, signups: 0, comparativo: false, ctas: new Map() })
     return porPagina.get(p)
   }
 
   for (const ev of visitas) {
     const p = paginaDoEvento(parse(ev))
-    if (combina(p)) garante(p).visitas += 1
+    if (!combina(p)) continue
+    const linha = garante(p)
+    linha.visitas += 1
+    if (ev.event === 'comparison_page_view') linha.comparativo = true
+  }
+
+  for (const ev of leituras) {
+    const p = paginaDoEvento(parse(ev))
+    if (combina(p)) garante(p).leituras += 1
   }
 
   for (const ev of cliques) {
@@ -124,14 +151,15 @@ async function main() {
   }
 
   titulo(`FUNIL POR PÁGINA — ${porPagina.size} páginas com atividade`)
-  console.log('\n  página                                        visitas  cliques   CTA%  cadastros')
-  console.log('  --------------------------------------------  -------  -------  -----  ---------')
+  console.log('\n  página                                        visitas  cliques   CTA%  leu 50%  cadastros')
+  console.log('  --------------------------------------------  -------  -------  -----  -------  ---------')
 
   const ordenado = [...porPagina.entries()].sort((a, b) => b[1].visitas - a[1].visitas)
   for (const [p, d] of ordenado) {
     console.log(
       `  ${p.slice(0, 44).padEnd(44)}  ${String(d.visitas).padStart(7)}  ${String(d.cliques).padStart(7)}  ` +
-      `${pct(d.cliques, d.visitas).padStart(5)}  ${String(d.signups).padStart(9)}`
+      `${pct(d.cliques, d.visitas).padStart(5)}  ${(d.comparativo ? pct(d.leituras, d.visitas) : '—').padStart(7)}  ` +
+      `${String(d.signups).padStart(9)}`
     )
   }
 
@@ -158,12 +186,14 @@ async function main() {
   const totalVisitas = ordenado.reduce((s, [, d]) => s + d.visitas, 0)
   const totalCliques = ordenado.reduce((s, [, d]) => s + d.cliques, 0)
   const totalSignups = ordenado.reduce((s, [, d]) => s + d.signups, 0)
+  const comparativos = ordenado.filter(([, d]) => d.comparativo)
 
   titulo('RESUMO')
   console.log(`
   Visitas registradas .................. ${totalVisitas}
   Cliques em CTA ....................... ${totalCliques} (${pct(totalCliques, totalVisitas)} das visitas)
   Cadastros atribuídos a uma página .... ${totalSignups}
+  Páginas de comparação medidas ........ ${comparativos.length} (${comparativos.reduce((n, [, d]) => n + d.visitas, 0)} visitas)
 
   Como decidir com isso:
 
@@ -173,6 +203,11 @@ async function main() {
     (a pessoa chegou e não se convenceu, ou não achou o que buscou).
   * Muito clique e POUCO cadastro                  -> conserto é o cadastro,
     não a página — ver scripts/diag-funil-ativacao.mjs.
+
+  A coluna 'leu 50%' só existe nas páginas /alternativas/ (é o
+  comparison_scroll_50). Visita alta com leitura baixa ali quer dizer que o
+  título ganhou o clique e a PÁGINA perdeu a pessoa — diagnóstico diferente de
+  "ninguém clicou no Google", e o único jeito de separar os dois.
 
   As impressões do Google não estão aqui: elas vêm do Search Console
   (docs/marketing/COLETA_DADOS_KEYWORDS_PASSO_A_PASSO.md, Relatório 1).
