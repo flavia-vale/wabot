@@ -19,6 +19,9 @@
 // quando ele não parou.
 
 import { VIDEO_ETIQUETAS_CAPITULOS, videoEtiquetasEm } from './layout.js'
+// Mesmas garantias exibidas na tela de conexão do painel — texto único, para a
+// cliente ler a MESMA frase no e-mail e na tela (regra de linguagem do projeto).
+import { whatsappSafetyEmailBlock } from '../domain/painel/whatsappSafety.js'
 
 export const EMAIL_CATEGORIES = Object.freeze(['transactional', 'marketing'])
 
@@ -437,6 +440,10 @@ Se o código não aparecer ou der erro, me chama no {{whatsapp_suporte}} que eu 
     body: `{{saudacao}} Sua conta está criada, mas o WhatsApp ainda não foi conectado — e é ele que faz o robô trabalhar.
 
 São dois minutos: abre a tela do WhatsApp no painel, clica em Conectar e lê o código com o celular. Depois disso o robô já começa a espelhar as ofertas nos grupos que você escolher.
+
+Se ficou com o pé atrás em conectar o seu WhatsApp, é justo — então vale dizer o que acontece:
+
+${whatsappSafetyEmailBlock()}
 
 [[botao:Conectar meu WhatsApp|{{link_whatsapp}}]]
 

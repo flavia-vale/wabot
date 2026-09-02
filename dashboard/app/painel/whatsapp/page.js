@@ -13,6 +13,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { HelpLink } from '@/components/HelpLink'
 import { useToast } from '@/components/ToastProvider'
 import { usePainelHeader, usePainel } from '../PainelShell'
+import { WHATSAPP_SAFETY_HEADLINE, WHATSAPP_SAFETY_POINTS } from '../../../../src/domain/painel/whatsappSafety.js'
+import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 
 const QR_TIMEOUT_SECONDS = 20
 const QR_EXPIRY_SECONDS = 60
@@ -744,6 +746,34 @@ export default function WhatsAppPage() {
               Voltar para QR Code
             </button>
           </div>
+        </section>
+      )}
+
+      {/* Segurança: o que o robô faz (e não faz) com o WhatsApp dela. Aparece
+          ANTES do formulário, e só para quem ainda não conectou — é aí que a
+          dúvida existe. Metade de quem não paga nunca chegou a pedir a conexão
+          (funil, 2026-09) e esta tela não dizia nada sobre isso.
+          Texto único, compartilhado com o e-mail de "cadastrou e não conectou":
+          src/domain/painel/whatsappSafety.js — inclusive a regra de nunca
+          prometer que não recebemos as mensagens. */}
+      {!isRunning && !statusLoading && !isAwaitingConnectStart && !pairingCode && (
+        <section className="pnl-card" style={{ marginBottom: 16 }}>
+          <div className="pnl-card-title">🔒 {WHATSAPP_SAFETY_HEADLINE}</div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'grid', gap: 10 }}>
+            {WHATSAPP_SAFETY_POINTS.map((p) => (
+              <li key={p.chave} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span aria-hidden="true" style={{ color: 'var(--accent-strong)', fontWeight: 700, lineHeight: 1.5 }}>✓</span>
+                <span style={{ fontSize: 13.5, lineHeight: 1.5 }}>
+                  <strong style={{ fontWeight: 600 }}>{p.titulo}.</strong> {p.texto}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="pnl-card-note" style={{ marginTop: 12 }}>
+            <a href={VIDEO_ATIVACAO_ROBO_URL} target="_blank" rel="noreferrer" style={{ fontWeight: 600, textDecoration: 'underline' }}>
+              🎥 Ver no vídeo como conectar, do começo ao fim
+            </a>
+          </p>
         </section>
       )}
 

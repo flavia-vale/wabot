@@ -1,6 +1,7 @@
 'use client'
 import { ActivationChecklist } from '@/components/ActivationChecklist'
 import { usePainelHeader } from '../PainelShell'
+import { VIDEO_ATIVACAO_ROBO_URL, VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../../src/tutorialVideo.js'
 
 function PlayIcon() {
   return (
@@ -43,12 +44,12 @@ export default function ChecklistPage() {
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
       <VideoBanner
-        href="https://youtu.be/IKsjAYolwLM?is=ojds8lZO5o9RdKPm"
+        href={VIDEO_ATIVACAO_ROBO_URL}
         title="🎥 Vídeo-aula: Como ativar seu robô"
         desc="Conectar o WhatsApp e configurar os grupos espelhados, passo a passo."
       />
       <VideoBanner
-        href="https://youtu.be/6F2AUM88FKk?is=Tafcm6QdDvJo9UgH"
+        href={VIDEO_CADASTRO_ETIQUETAS_URL}
         title="🎥 Vídeo-aula: Como cadastrar suas credenciais"
         desc="Shopee, Mercado Livre, Amazon e Magazine Luiza, passo a passo."
       />
