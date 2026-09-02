@@ -9,6 +9,14 @@ import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
 
+// Subprotocolos aceitos no handshake do WebSocket do QR. São TOKENS do HTTP
+// (RFC 6455 §4.1): não aceitam espaço. O nome vigente é 'espelhagrupos-auth';
+// 'BOTinho-auth' continua aceito porque um navegador com bundle antigo em
+// cache ainda o envia, e recusá-lo tiraria o QR em tempo real dessa pessoa
+// sem que ela tenha feito nada. Precisa continuar batendo com
+// QR_WS_SUBPROTOCOL em dashboard/lib/api.js.
+const QR_WS_SUBPROTOCOLS = new Set(['espelhagrupos-auth', 'BOTinho-auth'])
+
 const WA_GROUPS_RECOVERY_TIMEOUT_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_TIMEOUT_MS || 15000), 0)
 const WA_GROUPS_RECOVERY_RETRY_MS = Math.max(Number(process.env.WA_GROUPS_RECOVERY_RETRY_MS || 1000), 100)
 const RESUMABLE_SESSION_STATUSES = new Set(['connected', 'connecting'])
@@ -334,7 +342,7 @@ export async function sessionRoutes(app) {
       const rawProtocols = req.headers['sec-websocket-protocol'] ?? ''
       const protocols = rawProtocols.split(',').map((value) => value.trim()).filter(Boolean)
       const [scheme, token] = protocols
-      if (scheme !== 'BOTinho-auth' || !token) throw new Error('Token WS ausente')
+      if (!QR_WS_SUBPROTOCOLS.has(scheme) || !token) throw new Error('Token WS ausente')
       const decoded = app.jwt.verify(token)
       if (decoded.purpose !== 'qr_ws') throw new Error('Ticket WS inválido')
       userId = decoded.sub
