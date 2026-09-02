@@ -1147,6 +1147,38 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## Minutos do GitHub Actions (repo PRIVADO — 2.000 min/mês no plano gratuito)
+
+Repo privado consome minutos. Medição de 2026-09-02 (amostra de 30 runs em 12h)
+apontava **~3.450 min/mês** — acima do teto. Onde estava o desperdício e o que
+foi feito (não regredir sem refazer a conta):
+
+| Repetição encontrada | Correção |
+|---|---|
+| `deploy.yml` e `backend-lint.yml` disparavam em `push` **e** `pull_request` nas MESMAS branches. Como o fluxo canônico é PR `develop → main`, todo push em develop com a PR aberta rodava tudo **2x no mesmo commit** | `backend-lint` só em `pull_request`; `pull_request` do `deploy.yml` limitado a `branches: [develop]` |
+| No `push`, o `deploy.yml` gastava ~1m50 com npm ci ×2 + lint + `next build` + smoke **no runner**, e o `deploy_safe_*.sh` refazia tudo no VPS logo em seguida | steps do gate ganharam `if: github.event_name == 'pull_request'` |
+| `cancel-in-progress: false` fazia PR com N commits enfileirar N builds completos | `cancel-in-progress` agora é `true` em `pull_request` (e continua `false` em `push` — **nunca** cancelar deploy no meio do SSH) |
+| Push só de documentação disparava deploy completo | `paths-ignore` (`docs/**`, `specs/**`, `*.md`) **só no `push`** |
+
+**Três armadilhas nessa configuração:**
+
+1. **`paths-ignore` não pode usar `**.md`.** `dashboard/public/pricing.md` e
+   `dashboard/public/materiais/*.md` são servidos publicamente e precisam subir.
+   `*.md` casa só a raiz do repo — é o que está lá, de propósito.
+2. **`paths-ignore` fica só no `push`.** Check pulado numa PR conta como
+   pendente para branch protection; aplicá-lo ao `pull_request` travaria PRs de
+   documentação para sempre.
+3. **Nada depois do SSH pode precisar de `node_modules`.** Sem o `npm ci` no
+   caminho de push, os steps finais têm que rodar com Node pelado —
+   `notify-indexnow.mjs` só importa `dashboard/lib/*.mjs`/`.js` puros. Passo
+   novo ali que exija dependência precisa reativar o `npm ci` (com `if`
+   próprio), não remover o gate.
+
+**O que se perde com o gate PR-only:** o aviso antecipado antes de tocar o VPS.
+Quem reprova build quebrado num push passa a ser o próprio `deploy_safe_*.sh`,
+que aborta em qualquer falha antes do restart do PM2. A PR continua com o gate
+completo (lint + build + smoke + `quality:gate` + `no-undef`).
+
 ## IndexNow — notificação automática de URLs ao Bing (2026-07, canônico)
 
 A cada deploy de **produção** (`main`), o step "Notificar IndexNow (produção)"
