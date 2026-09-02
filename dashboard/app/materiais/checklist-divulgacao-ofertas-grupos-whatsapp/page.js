@@ -23,8 +23,8 @@ const faq = [
     a: 'Sim. Ele prioriza conferência de link monetizado, tag ou código de afiliado antes da distribuição para reduzir risco de perda de comissão.',
   },
   {
-    q: 'Posso usar o BOTinho para divulgar qualquer oferta?',
-    a: 'Use apenas ofertas permitidas pelas regras dos grupos, do WhatsApp e das plataformas envolvidas. O BOTinho organiza a operação, não valida autorização comercial externa.',
+    q: 'Posso usar o Espelha Grupos para divulgar qualquer oferta?',
+    a: 'Use apenas ofertas permitidas pelas regras dos grupos, do WhatsApp e das plataformas envolvidas. O Espelha Grupos organiza a operação, não valida autorização comercial externa.',
   },
   {
     q: 'Quando automatizar a distribuição?',
@@ -54,7 +54,7 @@ export default function Page() {
             <section>
               <h2 className="text-2xl font-black tracking-tight text-gray-950">Resposta direta</h2>
               <p className="mt-3">
-                Antes de divulgar ofertas em grupos de WhatsApp, valide a oferta, confira se o link monetizado carrega a tag ou código de afiliado, revise a copy e escolha grupos com permissão e contexto. Só depois automatize o espelhamento com o BOTinho.
+                Antes de divulgar ofertas em grupos de WhatsApp, valide a oferta, confira se o link monetizado carrega a tag ou código de afiliado, revise a copy e escolha grupos com permissão e contexto. Só depois automatize o espelhamento com o Espelha Grupos.
               </p>
             </section>
 

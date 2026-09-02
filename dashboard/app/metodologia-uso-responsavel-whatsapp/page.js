@@ -5,7 +5,7 @@ import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS } from '@/lib/marke
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
 const title = 'Metodologia de uso responsável para automação no WhatsApp'
-const description = 'Critérios públicos do BOTinho para operar divulgação em grupos de WhatsApp com revisão humana, consentimento, cadência e respeito às regras das plataformas.'
+const description = 'Critérios públicos do Espelha Grupos para operar divulgação em grupos de WhatsApp com revisão humana, consentimento, cadência e respeito às regras das plataformas.'
 const slug = '/metodologia-uso-responsavel-whatsapp'
 const dates = getEditorialDates(slug)
 
@@ -28,10 +28,10 @@ const steps = [
 const faq = [
   {
     q: 'Automação de WhatsApp é spam?',
-    a: 'Pode virar spam quando ignora consentimento, contexto, frequência e relevância. A metodologia do BOTinho exige revisão humana, grupos autorizados e cadência responsável.',
+    a: 'Pode virar spam quando ignora consentimento, contexto, frequência e relevância. A metodologia do Espelha Grupos exige revisão humana, grupos autorizados e cadência responsável.',
   },
   {
-    q: 'O BOTinho garante que uma conta nunca será bloqueada?',
+    q: 'O Espelha Grupos garante que uma conta nunca será bloqueada?',
     a: 'Não. Nenhuma ferramenta elimina risco de bloqueio. O objetivo é reduzir ruído operacional com filtros, intervalos, logs e boas práticas.',
   },
   {

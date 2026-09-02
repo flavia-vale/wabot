@@ -90,7 +90,7 @@ export default function PromoVipPage() {
           <div className="rounded-2xl border border-amber-300/50 bg-amber-50 p-4 text-amber-950">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Aceite obrigatório</p>
             <p className="mt-2 text-sm leading-6">
-              O BOTinho automatiza envios no WhatsApp Web e não utiliza a API oficial do WhatsApp/Meta para mensagens em grupos. Há risco de bloqueio, limitação ou banimento do número conectado e dos grupos/canais.
+              O Espelha Grupos automatiza envios no WhatsApp Web e não utiliza a API oficial do WhatsApp/Meta para mensagens em grupos. Há risco de bloqueio, limitação ou banimento do número conectado e dos grupos/canais.
             </p>
             <label htmlFor="termsAccepted" className="mt-3 flex cursor-pointer gap-3 rounded-xl border border-amber-300 bg-white/80 p-3 text-sm leading-5">
               <input id="termsAccepted" type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} required className="mt-1 h-4 w-4 shrink-0" />

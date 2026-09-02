@@ -26,7 +26,7 @@ const pages = {
       'Conferir se a oferta ainda está ativa, com preço e disponibilidade corretos.',
       'Separar grupos/canais por região, perfil de compra e momento de consumo.',
       'Padronizar a mensagem com benefício direto, validade e instrução de pedido.',
-      'Automatizar a distribuição no BOTinho mantendo revisão humana das campanhas.',
+      'Automatizar a distribuição no Espelha Grupos mantendo revisão humana das campanhas.',
       'Registrar cliques, pedidos informados e aprendizados para ajustar os próximos envios.',
     ],
     affiliateBox: null,
@@ -38,7 +38,7 @@ const pages = {
     ],
     faq: [
       { q: 'Restaurante precisa revisar cada oferta antes de automatizar?', a: 'Sim. A automação deve começar depois da validação de preço, disponibilidade, área de entrega, horário e regra do cupom.' },
-      { q: 'O BOTinho substitui a estratégia comercial do restaurante?', a: 'Não. Ele apoia a rotina de distribuição e padronização; a curadoria da oferta e os claims comerciais continuam sob responsabilidade humana.' },
+      { q: 'O Espelha Grupos substitui a estratégia comercial do restaurante?', a: 'Não. Ele apoia a rotina de distribuição e padronização; a curadoria da oferta e os claims comerciais continuam sob responsabilidade humana.' },
       { q: 'Posso divulgar em vários grupos e/ou canais ao mesmo tempo?', a: 'A recomendação é distribuir com cadência, segmentação e respeito às regras de cada grupo/canal para evitar excesso de repetição.' },
     ],
     social: {
@@ -83,7 +83,7 @@ const pages = {
       { href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp', label: 'Checklist de divulgação de ofertas' },
     ],
     faq: [
-      { q: 'O bot garante comissão em marketplaces?', a: 'Não. A comissão depende das regras do programa e do link correto. O BOTinho ajuda a padronizar conferência, copy e distribuição.' },
+      { q: 'O bot garante comissão em marketplaces?', a: 'Não. A comissão depende das regras do programa e do link correto. O Espelha Grupos ajuda a padronizar conferência, copy e distribuição.' },
       { q: 'Como reduzir o risco de perder comissão?', a: 'Valide o link monetizado no celular, confira tag/código no destino final, teste redirecionamentos e não remova parâmetros antes de divulgar.' },
       { q: 'Existe promessa de integração oficial com marketplaces?', a: 'Não. O conteúdo fala de processo operacional e não promete integração não aprovada com plataformas externas.' },
     ],
@@ -108,7 +108,7 @@ export function getOrganicNicheMetadata(key) {
       title: page.title,
       description: page.description,
       url: `${siteUrl}${page.slug}`,
-      siteName: 'BOTinho',
+      siteName: 'Espelha Grupos',
       locale: 'pt_BR',
       type: 'website',
     },

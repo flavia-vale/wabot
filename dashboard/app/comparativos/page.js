@@ -5,7 +5,7 @@ import { getSiteUrl } from '@/lib/site-url'
 
 const slug = '/comparativos'
 const title = 'Comparativos e alternativas para operação de afiliados no WhatsApp'
-const description = 'Hub com páginas de comparativos e alternativas para avaliar BOTinho, planilha manual e automações genéricas com critérios transparentes.'
+const description = 'Hub com páginas de comparativos e alternativas para avaliar Espelha Grupos, planilha manual e automações genéricas com critérios transparentes.'
 
 export const metadata = {
   title,
@@ -21,7 +21,7 @@ export const metadata = {
 }
 
 const p2ComparisonItems = [
-  { href: '/bot-comum-vs-botinho', title: 'Bot comum vs BOTinho', description: 'Compare repostagem simples com operação preservada para afiliados em grupos e Canais do WhatsApp.' },
+  { href: '/bot-comum-vs-botinho', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada para afiliados em grupos e Canais do WhatsApp.' },
 ]
 
 export default function Page() {

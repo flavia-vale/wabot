@@ -20,7 +20,7 @@ const checklistBlocks = [
 
 const faq = [
   { q: 'Este checklist é “anti-ban” 100%?', a: 'Não. O checklist usa a linguagem que o mercado pesquisa, mas a entrega correta é preservação avançada: camadas para reduzir exposição, não garantia absoluta.' },
-  { q: 'Preciso aplicar tudo antes de usar o BOTinho?', a: 'Não precisa travar a operação, mas chip dedicado, cadência e monitoramento deveriam vir antes de escalar volume.' },
+  { q: 'Preciso aplicar tudo antes de usar o Espelha Grupos?', a: 'Não precisa travar a operação, mas chip dedicado, cadência e monitoramento deveriam vir antes de escalar volume.' },
   { q: 'O checklist substitui a calculadora de risco?', a: 'Não. A calculadora estima a exposição; o checklist transforma o resultado em rotina operacional.' },
 ]
 
@@ -103,7 +103,7 @@ export default function Page() {
             <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Captura leve</p>
               <h2 className="mt-3 text-2xl font-black tracking-tight text-gray-950">Receber o checklist no cadastro</h2>
-              <p className="mt-3 text-sm leading-6 text-gray-700">Informe e-mail e perfil para levar este checklist como contexto da sua conta BOTinho.</p>
+              <p className="mt-3 text-sm leading-6 text-gray-700">Informe e-mail e perfil para levar este checklist como contexto da sua conta Espelha Grupos.</p>
               <form action="/login" method="get" className="mt-5 grid gap-3" data-crm-stage="Lead" data-crm-source="checklist_antiban_whatsapp">
                 <input type="hidden" name="mode" value="register" />
                 <input type="hidden" name="source" value="checklist_antiban_whatsapp" />

@@ -5,7 +5,7 @@ import { getSiteUrl } from '@/lib/site-url'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
 
 const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
-const description = 'Central de conteúdos do BOTinho com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
+const description = 'Central de conteúdos do Espelha Grupos com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
 const slug = '/conteudos'
 
 const lastUpdated = '2026-05-15'
@@ -137,12 +137,12 @@ const methodologyPages = [
   },
   {
     href: '/como-funciona-botinho-canais',
-    title: 'Como funciona o BOTinho para Canais do WhatsApp',
+    title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
     description: 'Fluxo operacional de fontes, destinos, cadência, monitoramento e recuperação.',
   },
   {
     href: '/protecao-antiban-botinho',
-    title: 'Proteção anti-ban no BOTinho',
+    title: 'Proteção anti-ban no Espelha Grupos',
     description: 'Camadas do Módulo de Preservação Avançada: limites, variações, monitoramento e plano B.',
   },
   {
@@ -156,27 +156,27 @@ const methodologyPages = [
 const comparisonPages = [
   {
     href: '/bot-comum-vs-botinho',
-    title: 'Bot comum vs BOTinho',
+    title: 'Bot comum vs Espelha Grupos',
     description: 'Compare repostagem simples com operação preservada para grupos e Canais do WhatsApp.',
   },
   {
     href: '/comparativos',
-    title: 'Hub de comparativos do BOTinho',
+    title: 'Hub de comparativos do Espelha Grupos',
     description: 'Página índice com comparativos e alternativas para escolher ferramenta por estágio e tipo de operação.',
   },
   {
     href: '/alternativas/bot-para-whatsapp-afiliados',
     title: 'Alternativas de bot para WhatsApp para afiliados',
-    description: 'Comparativo equilibrado entre planilha, automação genérica, ferramentas oficiais e BOTinho.',
+    description: 'Comparativo equilibrado entre planilha, automação genérica, ferramentas oficiais e Espelha Grupos.',
   },
   {
     href: '/botinho-vs-planilha-manual',
-    title: 'BOTinho vs planilha manual',
+    title: 'Espelha Grupos vs planilha manual',
     description: 'Quando a planilha basta e quando logs, cadência e origem/destino viram prioridade.',
   },
   {
     href: '/botinho-vs-ferramentas-genericas-automacao',
-    title: 'BOTinho vs ferramentas genéricas de automação',
+    title: 'Espelha Grupos vs ferramentas genéricas de automação',
     description: 'Comparação para times que avaliam construir fluxos próprios ou usar ferramenta focada em grupos.',
   },
   {
@@ -194,7 +194,7 @@ const authorityPages = [
   },
   {
     href: '/estudos-de-caso',
-    title: 'Estudos de caso do BOTinho',
+    title: 'Estudos de caso do Espelha Grupos',
     description: 'Política pública para publicar cases somente com consentimento e dados verificáveis.',
   },
 ]

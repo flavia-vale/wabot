@@ -31,7 +31,7 @@ const faqItems = [
     answer: 'Não. O resultado é uma estimativa de tempo operacional. Preço, cupom, estoque, tag de afiliado e regras das plataformas sempre devem ser revisados pela operação.',
   },
   {
-    question: 'Como usar o resultado no BOTinho?',
+    question: 'Como usar o resultado no Espelha Grupos?',
     answer: 'Use a estimativa para definir grupos de origem e destino, intervalos de postagem, filtros e rotina de revisão antes de escalar a divulgação.',
   },
 ]
@@ -48,7 +48,7 @@ function buildJsonLd() {
         applicationCategory: 'BusinessApplication',
         operatingSystem: 'Web',
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'BRL' },
-        isPartOf: { '@type': 'WebSite', name: 'BOTinho', url: siteUrl },
+        isPartOf: { '@type': 'WebSite', name: 'Espelha Grupos', url: siteUrl },
       },
       {
         '@type': 'BreadcrumbList',

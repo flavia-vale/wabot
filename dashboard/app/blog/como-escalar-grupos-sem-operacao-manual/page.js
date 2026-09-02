@@ -55,7 +55,7 @@ export default function Page() {
             <li><strong>Monitoramento:</strong> acompanhe envio, falha, timing e primeira conversão para ajustar a cadência.</li>
           </ol>
           <p>
-            O BOTinho entra na terceira e quarta camadas: replica a mensagem para múltiplos destinos, reduz retrabalho e mantém logs para o operador saber se a rotina foi executada.
+            O Espelha Grupos entra na terceira e quarta camadas: replica a mensagem para múltiplos destinos, reduz retrabalho e mantém logs para o operador saber se a rotina foi executada.
           </p>
         </section>
 

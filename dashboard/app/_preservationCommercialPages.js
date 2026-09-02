@@ -20,7 +20,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Converta links de afiliado da Shopee, Amazon, Mercado Livre e Magalu e publique as ofertas nos seus grupos e Canais do WhatsApp automaticamente. Teste grátis por 7 dias.',
     eyebrow: 'Bot para afiliados',
     h1: 'Bot para afiliados no WhatsApp que converte seus links automaticamente',
-    lead: 'Um bot para afiliados no WhatsApp monitora grupos de origem, converte cada link de produto ou cupom para o seu código de afiliado e republica a oferta nos seus grupos e canais. O BOTinho faz isso com Shopee, Amazon, Mercado Livre e Magalu, com intervalos controlados e histórico de envio.',
+    lead: 'Um bot para afiliados no WhatsApp monitora grupos de origem, converte cada link de produto ou cupom para o seu código de afiliado e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso com Shopee, Amazon, Mercado Livre e Magalu, com intervalos controlados e histórico de envio.',
     intent: 'bot para afiliados whatsapp',
     related: [
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
@@ -123,7 +123,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     faqs: [
       ['O que é um bot de achadinhos?', 'É um programa que acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.'],
       ['De onde vêm os achadinhos?', 'Dos grupos que você já acompanha e escolhe como fonte. O bot não inventa oferta nem busca em lugar nenhum sozinho: ele repassa o que aparece nas fontes que você indicou, com o seu link no lugar do original.'],
-      ['A comissão fica comigo mesmo se a oferta veio de outro grupo?', 'Fica, desde que o link seja convertido antes de sair. É esse o ponto: encaminhar o link do jeito que veio credita a venda para quem publicou primeiro. O BOTinho troca pelo seu código de Shopee, Amazon, Mercado Livre ou Magalu antes de publicar.'],
+      ['A comissão fica comigo mesmo se a oferta veio de outro grupo?', 'Fica, desde que o link seja convertido antes de sair. É esse o ponto: encaminhar o link do jeito que veio credita a venda para quem publicou primeiro. O Espelha Grupos troca pelo seu código de Shopee, Amazon, Mercado Livre ou Magalu antes de publicar.'],
       ['Ele posta a mesma promoção várias vezes?', 'Não no mesmo grupo dentro da janela de repetição. Se a mesma oferta chega por duas fontes diferentes, ela sai uma vez só — e o histórico mostra quantas repetições foram bloqueadas.'],
       ['Preciso ficar com o celular ligado?', 'O aparelho precisa estar conectado à internet, como no WhatsApp Web. Mas você não precisa estar olhando: as ofertas saem sozinhas conforme as regras que você definiu.'],
       ['Serve para cupom, ou só para produto?', 'Serve para os dois. Links de cupom e campanha também são convertidos para o seu código, não só links de produto — que é onde muita ferramenta simplesmente remove o link.'],
@@ -165,16 +165,16 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['Usar um bot aumenta o risco de tomar ban?', 'Depende de como ele envia. Uma ferramenta que dispara tudo de uma vez, com texto idêntico, aumenta. Uma que espaça os envios, varia o texto e respeita limite por grupo tende a parecer mais com uso humano do que a pessoa copiando e colando às pressas em vinte grupos seguidos.'],
       ['Quantas mensagens posso mandar por dia sem risco?', 'Não existe número oficial, e desconfie de quem cita um. O que importa mais que a quantidade é o padrão: cem mensagens espaçadas, com texto variado, para grupos que pediram para receber, são mais seguras que vinte idênticas em dois minutos.'],
       ['Chip dedicado resolve?', 'Não impede o banimento, mas limita o estrago. Se o número da operação cair, seus contatos pessoais, suas conversas e seu histórico continuam intactos em outro número. É a medida mais barata de todas.'],
-      ['O BOTinho garante que eu não seja banido?', 'Não, e desconfie de qualquer ferramenta que garanta. O que ele faz é controlar o que está sob controle: intervalo entre envios, variação de texto, limite por destino e histórico do que saiu.'],
+      ['O Espelha Grupos garante que eu não seja banido?', 'Não, e desconfie de qualquer ferramenta que garanta. O que ele faz é controlar o que está sob controle: intervalo entre envios, variação de texto, limite por destino e histórico do que saiu.'],
     ],
   },
   'grupo-para-canal-whatsapp': {
     path: '/grupo-para-canal-whatsapp',
     title: 'Como migrar grupo de achadinhos para Canal do WhatsApp',
-    description: 'Planeje a migração de grupos de achadinhos para Canais do WhatsApp com o BOTinho, mantendo grupos como fonte/comunidade e canais como vitrine preservada.',
+    description: 'Planeje a migração de grupos de achadinhos para Canais do WhatsApp com o Espelha Grupos, mantendo grupos como fonte/comunidade e canais como vitrine preservada.',
     eyebrow: 'Migração grupo → canal',
     h1: 'Migre grupos de achadinhos para canais sem parar a operação',
-    lead: 'O BOTinho permite uma transição gradual: grupos continuam úteis como comunidade ou fonte, enquanto os Canais do WhatsApp viram uma vitrine organizada com cadência e preservação avançada.',
+    lead: 'O Espelha Grupos permite uma transição gradual: grupos continuam úteis como comunidade ou fonte, enquanto os Canais do WhatsApp viram uma vitrine organizada com cadência e preservação avançada.',
     intent: 'migrar grupo para canal whatsapp',
     relatedTitle: 'Continue: grupos, canais e o que publicar',
     related: [
@@ -206,10 +206,10 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
   'bot-canal-whatsapp': {
     path: '/bot-canal-whatsapp',
     title: 'Bot para Canal do WhatsApp com cadência e preservação',
-    description: 'Publique ofertas em Canal do WhatsApp com o BOTinho usando cadência humana, variações, monitoramento e Módulo de Preservação Avançada.',
+    description: 'Publique ofertas em Canal do WhatsApp com o Espelha Grupos usando cadência humana, variações, monitoramento e Módulo de Preservação Avançada.',
     eyebrow: 'Bot para Canal do WhatsApp',
     h1: 'Canal do WhatsApp precisa de bot com cadência, não disparo',
-    lead: 'O BOTinho transforma o canal em vitrine de ofertas com regras de publicação, variações e monitoramento. O objetivo é preservar a operação, não apenas postar mais rápido.',
+    lead: 'O Espelha Grupos transforma o canal em vitrine de ofertas com regras de publicação, variações e monitoramento. O objetivo é preservar a operação, não apenas postar mais rápido.',
     intent: 'bot para canal whatsapp',
     relatedTitle: 'Continue: cadência, canal e o que publicar',
     related: [
@@ -257,7 +257,7 @@ export function getPreservationCommercialMetadata(pageKey) {
       title: page.title,
       description: page.description,
       url: `${siteUrl}${page.path}`,
-      siteName: 'BOTinho',
+      siteName: 'Espelha Grupos',
       locale: 'pt_BR',
       type: 'website',
       images: [{ url: ogImage, width: 1200, height: 630, alt: page.title }],
@@ -347,7 +347,7 @@ export function PreservationCommercialPage({ pageKey }) {
   const aside = page.aside ?? {
     pill: 'Módulo de Preservação Avançada',
     title: 'Redução de risco sem promessa absoluta.',
-    body: 'O BOTinho usa cadência, variações, limites, monitoramento e plano de recuperação. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
+    body: 'O Espelha Grupos usa cadência, variações, limites, monitoramento e plano de recuperação. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
   }
   // Links internos para o conteúdo editorial. Antes destas páginas comerciais só
   // apontarem para cadastro/diagnóstico/checklist, a força que elas acumulam ficava

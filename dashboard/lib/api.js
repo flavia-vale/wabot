@@ -524,7 +524,7 @@ export function openQRSocket(token, handlers = {}) {
   const fallbackOrigin = browserOrigin
   const wsUrl = new URL('/api/session/qr', apiOrigin)
   wsUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
-  const ws = new WebSocket(wsUrl.toString(), ['BOTinho-auth', token])
+  const ws = new WebSocket(wsUrl.toString(), ['Espelha Grupos-auth', token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
@@ -541,7 +541,7 @@ export function openQRSocket(token, handlers = {}) {
     try {
       const fallbackUrl = new URL('/api/session/qr', fallbackOrigin)
       fallbackUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
-      const fallbackWs = new WebSocket(fallbackUrl.toString(), ['BOTinho-auth', token])
+      const fallbackWs = new WebSocket(fallbackUrl.toString(), ['Espelha Grupos-auth', token])
       fallbackWs.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
       fallbackWs.onerror = (fallbackEvent) => onError?.(fallbackEvent)
       fallbackWs.onclose = (fallbackEvent) => onClose?.(fallbackEvent)

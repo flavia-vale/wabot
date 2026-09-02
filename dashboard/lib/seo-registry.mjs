@@ -256,7 +256,7 @@ export const CORE_SEO_ROUTES = [
 export const CONTENT_SEO_ROUTES = [
   // title/description ficam só em app/precos/page.js (fonte única, FR-001).
   { path: '/precos', template: 'pricing', priority: 0.95, changeFrequency: 'weekly', lastModified: resolveLastModified('/precos', '2026-08-05'), indexable: true },
-  { path: '/cadastro', title: 'Cadastro BOTinho — teste grátis para automatizar ofertas no WhatsApp', description: 'Crie sua conta no BOTinho e comece a automatizar a divulgação de ofertas em grupos e canais do WhatsApp.', template: 'signup', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/cadastro'), indexable: true },
+  { path: '/cadastro', title: 'Cadastro Espelha Grupos — teste grátis para automatizar ofertas no WhatsApp', description: 'Crie sua conta no Espelha Grupos e comece a automatizar a divulgação de ofertas em grupos e canais do WhatsApp.', template: 'signup', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/cadastro'), indexable: true },
   // title/description ficam só em app/parcerias/page.js (fonte única, FR-001).
   { path: '/parcerias', template: 'partnerships', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/parcerias'), indexable: true },
   // title/description ficam só em app/bot-canais-whatsapp/page.js (fonte única, FR-001).

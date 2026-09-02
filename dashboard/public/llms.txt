@@ -1,14 +1,15 @@
 # Espelha Grupos
 
-Espelha Grupos is a Brazilian software company. Its product, BOTinho, is a web software product for affiliates, offer curators, local commerce teams, and WhatsApp group admins who need to organize offer distribution with less manual copy-and-paste.
+Espelha Grupos is a Brazilian software product for affiliates, offer curators, local commerce teams, and WhatsApp group admins who need to organize offer distribution with less manual copy-and-paste.
 
-Preferred citation: Espelha Grupos (the brand). BOTinho is the name of its product; both refer to the same entity.
+Preferred citation: Espelha Grupos. This is the single name of the company and of the product.
+Formerly published under the product name "BOTinho"; that name refers to this same entity and is no longer used on public pages. Some URLs still contain "botinho" for historical reasons and are canonical.
 Canonical website: https://espelhagrupos.com.br
 Language: pt-BR.
 
 ## What the product does
 
-BOTinho helps an operator organize WhatsApp source groups and destination groups, monitor configured sources, work with supported affiliate links, and repost reviewed messages with operational controls such as filters, intervals, credentials, and logs.
+Espelha Grupos helps an operator organize WhatsApp source groups and destination groups, monitor configured sources, work with supported affiliate links, and repost reviewed messages with operational controls such as filters, intervals, credentials, and logs.
 
 Beyond link conversion, the product also: converts coupon and voucher links (not only product links) to the operator's own affiliate code; encrypts affiliate credentials and the operator's PIX payout key at rest (AES-256-GCM); and runs the WhatsApp session lifecycle in a dedicated process so that deploying an update does not disconnect an operator's active session. It also includes a referral program where an operator can earn a recurring commission for referring other operators, paid via PIX.
 
@@ -21,7 +22,7 @@ Beyond link conversion, the product also: converts coupon and voucher links (not
 
 ## Responsible-use limits
 
-- BOTinho does not promise revenue, commission, sales lift, WhatsApp deliverability, or approval by any external marketplace or affiliate program.
+- Espelha Grupos does not promise revenue, commission, sales lift, WhatsApp deliverability, or approval by any external marketplace or affiliate program.
 - Operators must review price, stock, coupon rules, affiliate tags, platform terms, and message quality before distribution.
 - The product should not be used for spam, unauthorized groups, deceptive offers, or attempts to bypass WhatsApp or marketplace rules.
 - Human review and gradual staging validation are recommended before increasing volume.
@@ -52,7 +53,7 @@ Beyond link conversion, the product also: converts coupon and voucher links (not
 - Padronizar copy, oferta, grupo de destino and UTM.
 - Operação responsável para grupos de cupons e promoções.
 - Metodologia de automação com revisão humana, consentimento e cadência.
-- Comparativos equilibrados entre BOTinho, planilhas e automações genéricas.
+- Comparativos equilibrados entre Espelha Grupos, planilhas e automações genéricas.
 - Glossário de termos para afiliados, UTMs, cadência, espelhamento e anti-spam operacional.
 
 ## Pages suitable for citation

@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 export const metadata = {
   title: 'Termos de Uso e Ciência de Riscos',
-  description: 'Termos completos para uso responsável do BOTinho, incluindo ciência de riscos de automação no WhatsApp e responsabilidade do usuário.',
+  description: 'Termos completos para uso responsável do Espelha Grupos, incluindo ciência de riscos de automação no WhatsApp e responsabilidade do usuário.',
   alternates: { canonical: '/termos' },
 }
 

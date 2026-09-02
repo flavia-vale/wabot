@@ -3,8 +3,8 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
-const title = 'Confiabilidade da sessão do WhatsApp no BOTinho'
-const description = 'Como o BOTinho mantém sua sessão do WhatsApp conectada durante atualizações do sistema, com um processo dedicado ao ciclo de vida do bot e status honesto no painel.'
+const title = 'Confiabilidade da sessão do WhatsApp no Espelha Grupos'
+const description = 'Como o Espelha Grupos mantém sua sessão do WhatsApp conectada durante atualizações do sistema, com um processo dedicado ao ciclo de vida do bot e status honesto no painel.'
 const slug = '/confiabilidade-sessao-whatsapp'
 const dates = getEditorialDates(slug)
 
@@ -57,7 +57,7 @@ export default function Page() {
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_strong]:text-gray-950">
             <section>
               <h2>Resposta direta</h2>
-              <p>Um dos problemas mais comuns em bots de WhatsApp é a sessão cair sempre que o sistema é atualizado — porque o próprio processo que fala com o WhatsApp reinicia junto com a aplicação. No BOTinho, o ciclo de vida da sessão roda em um processo separado, então atualizar o sistema não é mais sinônimo de desconectar sua operação.</p>
+              <p>Um dos problemas mais comuns em bots de WhatsApp é a sessão cair sempre que o sistema é atualizado — porque o próprio processo que fala com o WhatsApp reinicia junto com a aplicação. No Espelha Grupos, o ciclo de vida da sessão roda em um processo separado, então atualizar o sistema não é mais sinônimo de desconectar sua operação.</p>
             </section>
 
             <section>
@@ -89,7 +89,7 @@ export default function Page() {
 
             <section>
               <h2>Próximos passos</h2>
-              <p>Veja também como o BOTinho protege <Link href="/seguranca-credenciais-afiliado" className="font-bold text-emerald-700 underline underline-offset-4">suas credenciais de afiliado</Link> e a <Link href="/metodologia-uso-responsavel-whatsapp" className="font-bold text-emerald-700 underline underline-offset-4">metodologia de uso responsável</Link> que orienta toda a operação.</p>
+              <p>Veja também como o Espelha Grupos protege <Link href="/seguranca-credenciais-afiliado" className="font-bold text-emerald-700 underline underline-offset-4">suas credenciais de afiliado</Link> e a <Link href="/metodologia-uso-responsavel-whatsapp" className="font-bold text-emerald-700 underline underline-offset-4">metodologia de uso responsável</Link> que orienta toda a operação.</p>
             </section>
           </div>
         </article>

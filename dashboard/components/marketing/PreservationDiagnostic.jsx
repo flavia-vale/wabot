@@ -91,7 +91,7 @@ const resultBands = [
     label: 'Exposição crítica',
     tone: 'red',
     summary: 'O risco operacional está concentrado: chip, audiência, cadência e recuperação dependem de improviso. Trate a operação como ativo antes de ampliar divulgação.',
-    actions: ['Comece por chip dedicado e redução de volume.', 'Crie plano de recuperação para canais e grupos.', 'Use o BOTinho para estruturar preservação antes de escalar.'],
+    actions: ['Comece por chip dedicado e redução de volume.', 'Crie plano de recuperação para canais e grupos.', 'Use o Espelha Grupos para estruturar preservação antes de escalar.'],
   },
 ]
 
@@ -243,7 +243,7 @@ export function PreservationDiagnostic({ origin = 'diagnostico_antiban_whatsapp'
           <input type="hidden" name="diagnostic_score" value={score} />
           <input type="hidden" name="diagnostic_score_band" value={result.id} />
           <h3 className="text-xl font-black tracking-tight text-gray-950">Receber plano de preservação no cadastro</h3>
-          <p className="mt-2 text-sm leading-6 text-gray-700">Leve o resultado para o cadastro do BOTinho e comece com contexto de risco, cadência e canais.</p>
+          <p className="mt-2 text-sm leading-6 text-gray-700">Leve o resultado para o cadastro do Espelha Grupos e comece com contexto de risco, cadência e canais.</p>
           <label className="mt-4 block text-sm font-bold text-gray-800" htmlFor="diagnostic-email">E-mail</label>
           <input
             id="diagnostic-email"

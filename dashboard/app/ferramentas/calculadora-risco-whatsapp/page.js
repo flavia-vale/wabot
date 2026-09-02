@@ -20,7 +20,7 @@ const faqItems = [
   },
   {
     question: 'Qual o próximo passo depois do score?',
-    answer: 'Use as recomendações para aplicar o checklist de preservação, revisar cadência e levar a faixa de risco para o cadastro do BOTinho.',
+    answer: 'Use as recomendações para aplicar o checklist de preservação, revisar cadência e levar a faixa de risco para o cadastro do Espelha Grupos.',
   },
 ]
 
@@ -49,7 +49,7 @@ function buildJsonLd() {
         applicationCategory: 'BusinessApplication',
         operatingSystem: 'Web',
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'BRL' },
-        isPartOf: { '@type': 'WebSite', name: 'BOTinho', url: siteUrl },
+        isPartOf: { '@type': 'WebSite', name: 'Espelha Grupos', url: siteUrl },
       },
       {
         '@type': 'FAQPage',

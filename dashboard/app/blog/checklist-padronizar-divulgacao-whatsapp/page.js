@@ -11,7 +11,7 @@ const dates = getEditorialDates(slug)
 const faq = [
   { q: 'Por que padronizar divulgação antes de automatizar?', a: 'Porque automação amplia o processo existente. Se oferta, link, copy e destino não estiverem padronizados, o erro também escala para mais grupos.' },
   { q: 'O checklist substitui revisão humana?', a: 'Não. Ele organiza a revisão humana antes da automação e reduz esquecimento de pontos como preço, cupom, tag de afiliado, grupo e horário.' },
-  { q: 'Como usar o checklist com o BOTinho?', a: 'Use o checklist para aprovar a mensagem e os grupos; depois configure origem, destino, filtros e intervalos no BOTinho e revise os primeiros logs.' },
+  { q: 'Como usar o checklist com o Espelha Grupos?', a: 'Use o checklist para aprovar a mensagem e os grupos; depois configure origem, destino, filtros e intervalos no Espelha Grupos e revise os primeiros logs.' },
 ]
 
 export const metadata = {
@@ -81,7 +81,7 @@ export default function Page() {
         </section>
 
         <section>
-          <h2>Como conectar esse checklist ao BOTinho</h2>
+          <h2>Como conectar esse checklist ao Espelha Grupos</h2>
           <ol>
             <li>Use o checklist para definir quais grupos são origem e quais são destino.</li>
             <li>Transforme a copy padrão em modelo de campanha recorrente.</li>
