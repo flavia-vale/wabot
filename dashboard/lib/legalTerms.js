@@ -9,13 +9,13 @@ export const FALLBACK_TERMS = {
   version: '2026-06-09-whatsapp-risk-acceptance',
   content: {
     lastUpdatedLabel: '09 de junho de 2026',
-    intro: 'Resumo importante: o BOTinho pode ajudar a organizar e reduzir riscos operacionais, mas automação de mensagens em WhatsApp Web/grupos envolve risco real de bloqueio ou banimento. Ao usar, você confirma que entende esse risco e assume responsabilidade pela sua operação.',
+    intro: 'Resumo importante: o Espelha Grupos pode ajudar a organizar e reduzir riscos operacionais, mas automação de mensagens em WhatsApp Web/grupos envolve risco real de bloqueio ou banimento. Ao usar, você confirma que entende esse risco e assume responsabilidade pela sua operação.',
     sections: [
       {
         title: 'Ciência expressa: automação no WhatsApp e ausência de API oficial',
         warning: true,
         body: [
-          'Você reconhece que, como toda automação que envia mensagens para grupos/canais via WhatsApp Web ou mecanismos equivalentes de sessão, o BOTinho não utiliza a API oficial do WhatsApp/Meta para esse tipo de envio em grupos.',
+          'Você reconhece que, como toda automação que envia mensagens para grupos/canais via WhatsApp Web ou mecanismos equivalentes de sessão, o Espelha Grupos não utiliza a API oficial do WhatsApp/Meta para esse tipo de envio em grupos.',
           'O uso pode gerar bloqueios, limitações ou banimento do número conectado e dos grupos/canais. Pausas, pausa noturna, variações de texto e ajustes de imagem reduzem risco operacional, mas não eliminam risco nem substituem a responsabilidade do usuário.',
         ],
       },

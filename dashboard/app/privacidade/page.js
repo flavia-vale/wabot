@@ -3,7 +3,7 @@ import { PublicPage } from '@/components/PublicShell'
 
 export const metadata = {
   title: 'Política de Privacidade',
-  description: 'Política mínima de privacidade do BOTinho para usuários e visitantes.',
+  description: 'Política mínima de privacidade do Espelha Grupos para usuários e visitantes.',
   alternates: { canonical: '/privacidade' },
 }
 
@@ -21,7 +21,7 @@ export default function PrivacyPage() {
     <PublicPage
       eyebrow="Privacidade"
       title="Política de Privacidade"
-      description="Resumo transparente sobre quais dados usamos para operar o BOTinho e prestar suporte."
+      description="Resumo transparente sobre quais dados usamos para operar o Espelha Grupos e prestar suporte."
     >
       <div className="space-y-6 text-sm leading-7 text-gray-600">
         <p className="rounded-2xl bg-green-50 p-4 text-green-800">
@@ -34,7 +34,7 @@ export default function PrivacyPage() {
           </section>
         ))}
         <p>
-          Para dúvidas, solicitações de acesso, correção ou exclusão de dados, fale com o <Link href="/suporte" className="font-semibold text-green-700 hover:underline">suporte do BOTinho</Link>.
+          Para dúvidas, solicitações de acesso, correção ou exclusão de dados, fale com o <Link href="/suporte" className="font-semibold text-green-700 hover:underline">suporte do Espelha Grupos</Link>.
         </p>
       </div>
     </PublicPage>

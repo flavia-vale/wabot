@@ -20,7 +20,7 @@ const LOGIN_BENEFITS = [
 ]
 
 const PHONE_ALREADY_REGISTERED_ERROR = 'Este número de telefone já está cadastrado'
-const PHONE_RECOVERY_WHATSAPP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Meu WhatsApp já está cadastrado no BOTinho e preciso recuperar o acesso da minha conta.')}`
+const PHONE_RECOVERY_WHATSAPP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Meu WhatsApp já está cadastrado no Espelha Grupos e preciso recuperar o acesso da minha conta.')}`
 
 function normalizePhoneInput(value) {
   return String(value ?? '').replace(/\D/g, '').slice(0, 15)
@@ -232,7 +232,7 @@ function LoginContent() {
           <div className={`rounded-2xl p-3 shadow-sm ${isRegister ? 'bg-emerald-900' : 'bg-green-50'}`}>
             <Image
               src="/botinho-logo.svg"
-              alt="Logo do BOTinho, ferramenta para espelhar grupos e espalhar ofertas no WhatsApp"
+              alt="Logo do Espelha Grupos, ferramenta para espelhar grupos e espalhar ofertas no WhatsApp"
               width={64}
               height={64}
               priority
@@ -243,7 +243,7 @@ function LoginContent() {
         <div className="mb-5 flex justify-center">
           <Link
             href="/"
-            aria-label="Voltar para a página principal do BOTinho"
+            aria-label="Voltar para a página principal do Espelha Grupos"
             className={`group inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold shadow-sm transition focus-visible:outline-none focus-visible:ring-2 ${
               isRegister
                 ? 'border-emerald-400/40 bg-emerald-900/70 text-emerald-100 hover:border-emerald-300 hover:bg-emerald-800 focus-visible:ring-emerald-300'
@@ -256,7 +256,7 @@ function LoginContent() {
         </div>
 
         <div className="mb-2 text-center">
-          <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> O BOTinho que espelha grupos</p>
+          <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> O Espelha Grupos que espelha grupos</p>
           <h1 className={`mt-2 text-xl sm:text-2xl font-bold leading-tight ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
         </div>
         <p className={`text-center text-sm mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>

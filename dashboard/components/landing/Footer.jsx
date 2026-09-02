@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Icon } from './Icon';
 import { buildRegisterHref } from '@/lib/marketing-attribution';
+import { BRAND_ORG_NAME } from '@/lib/marketing-content';
 
 const s = {
   cta: {
@@ -68,7 +69,7 @@ function Footer() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 600, fontSize: 17 }}>
               <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14 }}>b</div>
-              <span>BOTinho</span>
+              <span>Espelha Grupos</span>
             </div>
             <p style={s.brand}>Software web para afiliados e admins organizarem links suportados, grupos, canais e rotinas de divulgação no WhatsApp com revisão humana.</p>
           </div>
@@ -94,7 +95,7 @@ function Footer() {
           </div>
         </div>
         <div style={s.bottom} className="landing-footer-bottom">
-          <span>© 2026 Bot Conversor. Feito no Brasil 💜</span>
+          <span>© 2026 {BRAND_ORG_NAME}. Feito no Brasil 💜</span>
           <span>Não somos afiliados oficialmente ao WhatsApp Inc.</span>
         </div>
       </div>

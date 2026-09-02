@@ -38,7 +38,7 @@ const LEAD_MAGNET_VARIANTS = {
     offerId: 'trial-afiliados-marketplace',
     eyebrow: 'Teste grátis',
     title: 'Comece a divulgar com o link de afiliado já convertido',
-    body: 'Teste o BOTinho por 7 dias, sem cartão de crédito. Ele converte os links de Shopee, Amazon, Mercado Livre e Magalu para o seu código antes de publicar nos seus grupos e canais.',
+    body: 'Teste o Espelha Grupos por 7 dias, sem cartão de crédito. Ele converte os links de Shopee, Amazon, Mercado Livre e Magalu para o seu código antes de publicar nos seus grupos e canais.',
     emailLabel: 'E-mail para criar sua conta',
     emailErrorEmpty: 'Informe seu e-mail para criar sua conta.',
     submitLabel: 'Testar grátis por 7 dias',

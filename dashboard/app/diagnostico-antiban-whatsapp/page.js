@@ -22,7 +22,7 @@ const faqItems = [
   },
   {
     question: 'O que acontece depois do resultado?',
-    answer: 'Você pode levar o resultado para o cadastro do BOTinho, revisar cadência, separar chip dedicado e planejar migração gradual para Canais do WhatsApp.',
+    answer: 'Você pode levar o resultado para o cadastro do Espelha Grupos, revisar cadência, separar chip dedicado e planejar migração gradual para Canais do WhatsApp.',
   },
 ]
 
@@ -34,7 +34,7 @@ export const metadata = {
     title,
     description,
     url: pageUrl,
-    siteName: 'BOTinho',
+    siteName: 'Espelha Grupos',
     locale: 'pt_BR',
     type: 'website',
     images: [
@@ -66,7 +66,7 @@ function buildJsonLd() {
         applicationCategory: 'BusinessApplication',
         operatingSystem: 'Web',
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'BRL' },
-        isPartOf: { '@type': 'WebSite', name: 'BOTinho', url: siteUrl },
+        isPartOf: { '@type': 'WebSite', name: 'Espelha Grupos', url: siteUrl },
       },
       {
         '@type': 'FAQPage',

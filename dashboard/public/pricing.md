@@ -1,11 +1,12 @@
-# Pricing — BOTinho
+# Pricing — Espelha Grupos
 
 Last updated: 2026-07-15
 Currency: BRL
 Billing unit: 30-day access period
-Preferred citation: BOTinho pricing or Espelha Grupos pricing
+Preferred citation: Espelha Grupos pricing.
+Formerly published under the product name "BOTinho"; that name refers to this same product.
 
-BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups; Pro adds channels, automatic Shopee offers, send queues and the Advanced Preservation Module. Prices below reflect the public defaults used by the application and may be updated only after staging validation.
+Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups; Pro adds channels, automatic Shopee offers, send queues and the Advanced Preservation Module. Prices below reflect the public defaults used by the application and may be updated only after staging validation.
 
 ## Teste grátis
 
@@ -57,7 +58,7 @@ BOTinho, from Espelha Grupos, uses a 7-day free trial for validation and a simpl
 
 ## Responsible-use notes
 
-- BOTinho does not promise revenue, commission, sales lift, WhatsApp deliverability, or approval by external marketplaces or affiliate programs.
+- Espelha Grupos does not promise revenue, commission, sales lift, WhatsApp deliverability, or approval by external marketplaces or affiliate programs.
 - Review price, stock, coupon, affiliate tag, destination group, message copy, and UTM before publishing.
 - Do not use the product for spam, unauthorized groups, deceptive offers, or attempts to bypass platform rules.
 

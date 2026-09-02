@@ -32,4 +32,4 @@ Use este roteiro antes de escalar campanhas de ofertas, cupons ou links de afili
 - [ ] Falhas de envio revisadas
 - [ ] Aprendizados registrados para o próximo disparo
 
-Próximo passo: entrar na lista VIP do BOTinho e configurar o primeiro espelhamento guiado.
+Próximo passo: entrar na lista VIP do Espelha Grupos e configurar o primeiro espelhamento guiado.

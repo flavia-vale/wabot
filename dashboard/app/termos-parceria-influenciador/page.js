@@ -5,7 +5,7 @@ import { buildArticleJsonLd, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DE
 
 const slug = '/termos-parceria-influenciador'
 const title = 'Regras da parceria com criadores: cortesia e comissão recorrente'
-const description = 'As regras da parceria do BOTinho com criadores: como funciona a cortesia do robô, por quanto tempo ela vale, o que renova, como é calculada a comissão de 30% recorrente e quando ela é paga.'
+const description = 'As regras da parceria do Espelha Grupos com criadores: como funciona a cortesia do robô, por quanto tempo ela vale, o que renova, como é calculada a comissão de 30% recorrente e quando ela é paga.'
 
 // Esta página existe para que a cortesia possa ser encerrada sem virar briga:
 // se as condições não estão escritas em lugar público, qualquer corte é lido
@@ -57,7 +57,7 @@ const sections = [
       'Pode-se dizer que a ferramenta reduz o risco, e explicar como: envios espaçados, limite por grupo, respeito a horário e variação de mensagem.',
       'Não prometa valor de ganho ("faça R$X por mês com o robô"). O resultado depende do público e da operação de cada pessoa.',
       'Não apresente a ferramenta como disparo em massa ou envio para lista comprada. Não é isso que ela faz, e esse uso é contra nossos termos.',
-      'Não use o nome ou a marca do BOTinho em perfil, domínio ou anúncio de forma que pareça um canal oficial da empresa.',
+      'Não use o nome ou a marca do Espelha Grupos em perfil, domínio ou anúncio de forma que pareça um canal oficial da empresa.',
     ],
   },
   {

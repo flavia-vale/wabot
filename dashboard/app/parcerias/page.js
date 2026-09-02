@@ -7,7 +7,7 @@ import { getSiteUrl } from '@/lib/site-url'
 const slug = '/parcerias'
 const siteUrl = getSiteUrl()
 const title = 'Parcerias | Co-marketing para admins e afiliados de ofertas'
-const description = 'Programa de parcerias do BOTinho para admins, creators e comunidades que operam ofertas no WhatsApp com piloto guiado, UTMs e operação responsável.'
+const description = 'Programa de parcerias do Espelha Grupos para admins, creators e comunidades que operam ofertas no WhatsApp com piloto guiado, UTMs e operação responsável.'
 
 const partnerTypes = [
   {
@@ -99,8 +99,8 @@ export default function Page() {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(buildJsonLd()) }} />
 
         <section className="rounded-[2rem] bg-emerald-950 p-7 text-white shadow-sm md:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Programa de parcerias BOTinho</p>
-          <h1 className="mt-3 max-w-4xl text-4xl font-black tracking-tight md:text-6xl">Faça co-marketing com o BOTinho e leve mais consistência operacional para sua audiência</h1>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Programa de parcerias Espelha Grupos</p>
+          <h1 className="mt-3 max-w-4xl text-4xl font-black tracking-tight md:text-6xl">Faça co-marketing com o Espelha Grupos e leve mais consistência operacional para sua audiência</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-emerald-50">Para admins, creators e comunidades que já trabalham com ofertas no WhatsApp e querem campanhas conjuntas com rastreio, checklist e piloto guiado.</p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link href="/login?mode=register&utm_source=parcerias&utm_medium=co-marketing&utm_campaign=partner-program-2026q2&utm_content=hero-cta" data-seo-cta="partner-hero-cta" data-cta-position="hero" data-cta-stage="partnership" data-cta-destination="login-register" className="inline-flex min-h-12 items-center rounded-xl bg-white px-5 font-black text-emerald-900 hover:bg-emerald-100">Quero ser parceiro(a)</Link>

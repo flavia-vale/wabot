@@ -3,8 +3,8 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
-const title = 'Segurança das credenciais de afiliado no BOTinho'
-const description = 'Como o BOTinho protege as credenciais das suas contas de afiliado e sua chave PIX: criptografia em repouso, proteção contra força bruta no login e isolamento entre ambientes.'
+const title = 'Segurança das credenciais de afiliado no Espelha Grupos'
+const description = 'Como o Espelha Grupos protege as credenciais das suas contas de afiliado e sua chave PIX: criptografia em repouso, proteção contra força bruta no login e isolamento entre ambientes.'
 const slug = '/seguranca-credenciais-afiliado'
 const dates = getEditorialDates(slug)
 
@@ -66,7 +66,7 @@ export default function Page() {
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_strong]:text-gray-950">
             <section>
               <h2>Resposta direta</h2>
-              <p>Usar um bot de terceiro para automatizar suas contas de afiliado significa confiar suas credenciais a esse sistema. No BOTinho, essas credenciais — incluindo a chave PIX usada para receber comissões — ficam criptografadas em repouso (AES-256-GCM), não guardadas em texto puro.</p>
+              <p>Usar um bot de terceiro para automatizar suas contas de afiliado significa confiar suas credenciais a esse sistema. No Espelha Grupos, essas credenciais — incluindo a chave PIX usada para receber comissões — ficam criptografadas em repouso (AES-256-GCM), não guardadas em texto puro.</p>
             </section>
 
             <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
@@ -93,7 +93,7 @@ export default function Page() {
 
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
               <h2>O que isso não é</h2>
-              <p>Criptografia em repouso e proteção de login reduzem risco técnico de exposição de dados — não eliminam a responsabilidade do operador de usar senha forte, não compartilhar acesso à conta e revisar permissões concedidas a qualquer ferramenta de terceiro, incluindo o BOTinho.</p>
+              <p>Criptografia em repouso e proteção de login reduzem risco técnico de exposição de dados — não eliminam a responsabilidade do operador de usar senha forte, não compartilhar acesso à conta e revisar permissões concedidas a qualquer ferramenta de terceiro, incluindo o Espelha Grupos.</p>
             </section>
 
             <section>
@@ -108,7 +108,7 @@ export default function Page() {
 
             <section>
               <h2>Próximos passos</h2>
-              <p>Veja também como o BOTinho mantém sua <Link href="/confiabilidade-sessao-whatsapp" className="font-bold text-emerald-700 underline underline-offset-4">sessão do WhatsApp estável</Link> e a <Link href="/metodologia-uso-responsavel-whatsapp" className="font-bold text-emerald-700 underline underline-offset-4">metodologia de uso responsável</Link> que orienta toda a operação.</p>
+              <p>Veja também como o Espelha Grupos mantém sua <Link href="/confiabilidade-sessao-whatsapp" className="font-bold text-emerald-700 underline underline-offset-4">sessão do WhatsApp estável</Link> e a <Link href="/metodologia-uso-responsavel-whatsapp" className="font-bold text-emerald-700 underline underline-offset-4">metodologia de uso responsável</Link> que orienta toda a operação.</p>
             </section>
           </div>
         </article>
