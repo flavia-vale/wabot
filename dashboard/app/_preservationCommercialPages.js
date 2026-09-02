@@ -133,8 +133,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
   },
   'anti-ban-whatsapp': {
     path: '/anti-ban-whatsapp',
-    title: 'WhatsApp banido por divulgar ofertas: como reduzir o risco',
-    description: 'Por que o WhatsApp bane quem divulga ofertas em grupos, o que aumenta o risco e o que dá para controlar de verdade. Sem promessa de “anti-ban 100%” — isso ninguém pode garantir.',
+    title: 'WhatsApp banido divulgando ofertas: o que controlar',
+    description: 'Por que o WhatsApp bane quem divulga ofertas em grupos, o que aumenta o risco e o que dá para controlar de verdade. Ninguém pode garantir imunidade.',
     eyebrow: 'WhatsApp banido: o que dá para controlar',
     h1: 'Teve o WhatsApp banido divulgando ofertas? Veja o que dá para controlar',
     lead: 'Contas de WhatsApp usadas para divulgar ofertas costumam ser banidas quando o comportamento parece automático demais: muitas mensagens iguais em sequência, links repetidos e denúncias de membros. Nenhuma ferramenta garante imunidade — o que dá para controlar é ritmo, variação de texto e volume por destino.',
