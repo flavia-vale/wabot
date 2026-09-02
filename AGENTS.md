@@ -393,7 +393,26 @@ e `scripts/diag-origem-cadastros.mjs` — o que faltava era a leitura.
 | Tela | `dashboard/app/admin/funil/page.js` |
 
 Cinco etapas: criou a conta → conectou o WhatsApp → **teve oferta publicada** →
-começou o pagamento → pagou.
+começou o pagamento → pagou. Junto vem **POR QUE cada pessoa parou** (oito
+motivos, `STALL_REASONS`) e, em cada motivo, quem contatar — com link para o
+histórico do cliente.
+
+**Os oito motivos e a regra de leitura:** a classificação devolve o **PRIMEIRO
+obstáculo** que a pessoa encontrou, não a última etapa concluída — as etapas não
+são sequência obrigatória (dá para escolher grupo sem cadastrar loja), e alguém
+sem loja E sem grupo parou na loja. Os dois que mais mudam a ação:
+
+- **"O robô tentou e NENHUMA oferta saiu"** — o painel mostra atividade e nada
+  chega ao grupo (`skip:no_valid_conversions`, quase sempre loja incompleta ou
+  chave recusada). Ela acha que testou o produto e nunca o viu funcionar. É a
+  conversa mais urgente do funil e a que ninguém abre sozinha.
+- **"Viu oferta sair e não foi para o pagamento"** — aqui o produto funcionou;
+  se este grupo for grande, o assunto é preço/confiança, não configuração.
+
+`classifyStallReason` + `describeStallReason` são consumidos TAMBÉM pelo
+`scripts/diag-funil-ativacao.mjs`, que antes duplicava os rótulos. Guarda em
+`test/admin-funnel.test.js` e em `test/diag-atribuicao.test.js` (esta exige que
+o script importe a regra em vez de reescrevê-la).
 
 **Não regredir:**
 
@@ -413,6 +432,10 @@ começou o pagamento → pagou.
   `whatsapp_connected` e a própria `WaSession` (status conectado ou telefone
   preenchido). O evento não existe para conta anterior à sua criação; a sessão
   sozinha não enxerga quem conectou e desconectou faz tempo.
+- **A lista de "falar com" é curta de propósito** (8 por motivo) e traz nome,
+  e-mail e link para o histórico — **nunca telefone**, que tem mascaramento por
+  papel (`sanitizeUser`). Ela existe para a conversa começar hoje, não para
+  virar exportação de base.
 - **Custo:** só leitura, **zero processo novo e zero impacto de RAM**. As duas
   tabelas grandes (`MessageLog`, `AnalyticsEvent`) entram por `groupBy`
   (agregação no SQLite) com `in` na coorte — nunca `distinct` do Prisma, que

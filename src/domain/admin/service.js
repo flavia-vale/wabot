@@ -529,7 +529,10 @@ export function createAdminService({
 
     const users = await db.user.findMany({
       where: { createdAt: { gte: since } },
-      select: { id: true, createdAt: true },
+      // Nome e e-mail entram para a lista de "com quem falar" de cada motivo.
+      // Telefone NÃO — a tela é para começar a conversa, e telefone tem regra
+      // de mascaramento por papel (`sanitizeUser`).
+      select: { id: true, createdAt: true, name: true, email: true },
       orderBy: { createdAt: 'asc' },
     })
 
@@ -538,7 +541,10 @@ export function createAdminService({
       return { weeksCount, since, generatedAt: now, ...buildActivationFunnel({ users: [] }) }
     }
 
-    const [signupEvents, waSessions, connectedEvents, deliveries, checkouts, payments] = await Promise.all([
+    const [
+      signupEvents, waSessions, connectedEvents, deliveries, checkouts, payments,
+      credentials, groups, attempts,
+    ] = await Promise.all([
       db.analyticsEvent.findMany({
         where: { event: 'signup_created', userId: { in: ids } },
         select: { userId: true, metadata: true },
@@ -570,6 +576,12 @@ export function createAdminService({
         where: { userId: { in: ids }, status: 'approved' },
         _min: { createdAt: true },
       }),
+      // As três abaixo respondem POR QUE a pessoa parou. Todas agregadas.
+      db.credential.groupBy({ by: ['userId'], where: { userId: { in: ids } }, _count: { _all: true } }),
+      db.group.groupBy({ by: ['userId', 'role'], where: { userId: { in: ids } }, _count: { _all: true } }),
+      // Sem filtro de status: aqui interessa se o robô TENTOU. Cruzado com as
+      // entregas, é o que separa "nunca usou" de "usou e nada saiu".
+      db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids } }, _count: { _all: true } }),
     ])
 
     const originByUserId = new Map()
@@ -589,6 +601,11 @@ export function createAdminService({
       if (session.status === 'connected' || session.phone) connectedUserIds.add(session.userId)
     }
 
+    const credentialUserIds = new Set(credentials.map((row) => row.userId).filter(Boolean))
+    const attemptedUserIds = new Set(attempts.map((row) => row.userId).filter(Boolean))
+    const sourceGroupUserIds = new Set(groups.filter((row) => row.role === 'monitor').map((row) => row.userId))
+    const destGroupUserIds = new Set(groups.filter((row) => row.role === 'post').map((row) => row.userId))
+
     const toDateMap = (rows, field) => new Map(
       rows
         .filter((row) => row.userId && row._min?.[field])
@@ -606,6 +623,10 @@ export function createAdminService({
         firstDeliveryByUserId: toDateMap(deliveries, 'sentAt'),
         firstCheckoutByUserId: toDateMap(checkouts, 'createdAt'),
         firstPaymentByUserId: toDateMap(payments, 'createdAt'),
+        credentialUserIds,
+        sourceGroupUserIds,
+        destGroupUserIds,
+        attemptedUserIds,
       }),
     }
   }

@@ -71,6 +71,11 @@ export function buildActivationFunnel({
   firstDeliveryByUserId = new Map(),
   firstCheckoutByUserId = new Map(),
   firstPaymentByUserId = new Map(),
+  credentialUserIds = new Set(),
+  sourceGroupUserIds = new Set(),
+  destGroupUserIds = new Set(),
+  attemptedUserIds = new Set(),
+  peoplePerReason = 8,
 } = {}) {
   const totals = { signups: 0, connected: 0, delivered: 0, checkout: 0, paid: 0 }
   const byWeek = new Map()
@@ -79,6 +84,8 @@ export function buildActivationFunnel({
   const timeToDelivery = []
 
   const emptyCounters = () => ({ signups: 0, connected: 0, delivered: 0, checkout: 0, paid: 0 })
+  const stallCounts = new Map()
+  const stallPeople = new Map()
 
   for (const user of users) {
     const id = user?.id
@@ -114,6 +121,28 @@ export function buildActivationFunnel({
     const originRow = byOrigin.get(origin)
     for (const step of FUNNEL_STEPS) if (reached[step.key]) originRow[step.key] += 1
 
+    // POR QUE parou — só para quem não pagou.
+    const stallReason = classifyStallReason({
+      paired: reached.connected,
+      hasCredential: credentialUserIds.has(id),
+      hasSourceGroup: sourceGroupUserIds.has(id),
+      hasDestGroup: destGroupUserIds.has(id),
+      attempted: attemptedUserIds.has(id) || delivered,
+      delivered: reached.delivered,
+      checkout: reached.checkout,
+      paid,
+    })
+    if (stallReason) {
+      stallCounts.set(stallReason, (stallCounts.get(stallReason) ?? 0) + 1)
+      if (!stallPeople.has(stallReason)) stallPeople.set(stallReason, [])
+      const lista = stallPeople.get(stallReason)
+      // Lista curta de propósito: ela existe para a conversa começar hoje, não
+      // para virar exportação de base.
+      if (lista.length < peoplePerReason) {
+        lista.push({ id, name: user.name ?? null, email: user.email ?? null, createdAt: user.createdAt ?? null })
+      }
+    }
+
     if (paid) {
       const dias = daysBetween(user.createdAt, firstPaymentByUserId.get(id))
       if (dias !== null) timeToPaid.push(dias)
@@ -148,9 +177,24 @@ export function buildActivationFunnel({
     pctPaid: pct(row.paid, row.signups),
   })
 
+  const naoPagaram = totals.signups - totals.paid
+  const stalls = STALL_REASONS
+    .map((reason) => ({
+      key: reason.key,
+      label: reason.label,
+      hint: reason.hint,
+      count: stallCounts.get(reason.key) ?? 0,
+      pctOfUnpaid: pct(stallCounts.get(reason.key) ?? 0, naoPagaram),
+      people: stallPeople.get(reason.key) ?? [],
+    }))
+    .filter((reason) => reason.count > 0)
+    .sort((a, b) => b.count - a.count)
+
   return {
     totals,
     steps,
+    stalls,
+    unpaidCount: naoPagaram,
     biggestDrop: biggestDrop && biggestDrop.lostFromPrevious > 0
       ? { key: biggestDrop.key, label: biggestDrop.label, lost: biggestDrop.lostFromPrevious }
       : null,
@@ -159,6 +203,94 @@ export function buildActivationFunnel({
     medianDaysToDelivery: median(timeToDelivery),
     medianDaysToPaid: median(timeToPaid),
   }
+}
+
+/**
+ * POR QUE parou — os oito motivos, na ordem em que o produto os produz.
+ *
+ * A ordem importa: a classificação devolve o PRIMEIRO motivo que se aplica,
+ * porque é o primeiro obstáculo que a pessoa encontrou. Alguém sem credencial
+ * e sem grupo parou na credencial; dizer "sem grupo" mandaria a conversa para
+ * o lugar errado.
+ *
+ * `hint` é o que fazer — a tela existe para virar ação, não para informar.
+ */
+export const STALL_REASONS = Object.freeze([
+  {
+    key: 'never_paired',
+    label: 'Nunca tentou conectar o WhatsApp',
+    hint: 'Criou a conta e parou na porta. Costuma ser receio de conectar o número ou dúvida no passo do QR.',
+  },
+  {
+    key: 'no_credential',
+    label: 'Conectou, mas não cadastrou nenhuma loja',
+    hint: 'Sem a etiqueta de afiliada o robô não publica nada — ele se recusa a mandar link que daria comissão para outra pessoa.',
+  },
+  {
+    key: 'no_source_group',
+    label: 'Tem loja cadastrada, falta escolher de onde vêm as ofertas',
+    hint: 'Falta indicar os grupos ou canais que o robô deve acompanhar.',
+  },
+  {
+    key: 'no_dest_group',
+    label: 'Tem origem, falta escolher para onde as ofertas vão',
+    hint: 'Falta indicar o grupo ou canal dela, onde a oferta deve aparecer.',
+  },
+  {
+    key: 'tried_nothing_sent',
+    label: 'O robô tentou e NENHUMA oferta saiu',
+    hint: 'O pior caso: o painel mostra atividade e nada chega no grupo. Quase sempre é loja sem cadastro completo ou chave recusada. Ela acha que o produto é fraco.',
+  },
+  {
+    key: 'configured_never_sent',
+    label: 'Configurou tudo e nunca chegou a enviar',
+    hint: 'Montou e não usou. Vale perguntar se as origens escolhidas publicam oferta de verdade.',
+  },
+  {
+    key: 'sent_no_checkout',
+    label: 'Viu oferta sair e não foi para o pagamento',
+    hint: 'Aqui o produto funcionou. Se este grupo for grande, o assunto é preço, prazo do teste ou confiança — não configuração.',
+  },
+  {
+    key: 'checkout_no_payment',
+    label: 'Começou o pagamento e não concluiu',
+    hint: 'Parou no Mercado Pago. Vale conferir se o e-mail da conta é aceito e se o meio de pagamento é o que ela usa.',
+  },
+])
+
+const STALL_REASON_BY_KEY = new Map(STALL_REASONS.map((reason) => [reason.key, reason]))
+
+/**
+ * Devolve o motivo (chave) ou `null` para quem pagou.
+ *
+ * As etapas NÃO são uma sequência obrigatória — dá para escolher grupo sem ter
+ * salvado a loja —, então a leitura correta é "primeiro obstáculo encontrado",
+ * nunca "última etapa concluída".
+ */
+export function classifyStallReason({
+  paired = false,
+  hasCredential = false,
+  hasSourceGroup = false,
+  hasDestGroup = false,
+  attempted = false,
+  delivered = false,
+  checkout = false,
+  paid = false,
+} = {}) {
+  if (paid) return null
+  if (!paired) return 'never_paired'
+  if (!hasCredential) return 'no_credential'
+  if (!hasSourceGroup) return 'no_source_group'
+  if (!hasDestGroup) return 'no_dest_group'
+  // Separado de "nunca enviou": aqui o robô TENTOU e não publicou nenhuma vez.
+  if (attempted && !delivered) return 'tried_nothing_sent'
+  if (!delivered) return 'configured_never_sent'
+  if (!checkout) return 'sent_no_checkout'
+  return 'checkout_no_payment'
+}
+
+export function describeStallReason(key) {
+  return STALL_REASON_BY_KEY.get(key) ?? null
 }
 
 function median(values) {
