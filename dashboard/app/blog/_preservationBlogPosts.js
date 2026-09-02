@@ -166,7 +166,7 @@ export const PRESERVATION_BLOG_POSTS = {
   'comecar-afiliado-whatsapp-sem-grupo-grande': {
     slug: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande',
     title: 'Começar como afiliado no WhatsApp sem grupo grande',
-    description: 'Guia para afiliado iniciante começar a divulgar ofertas no WhatsApp mesmo sem audiência grande: chip dedicado, primeiros grupos, conversão de link e cadência responsável.',
+    description: 'Como um afiliado iniciante começa a divulgar ofertas no WhatsApp sem audiência: chip dedicado, primeiros grupos, conversão de link e ritmo responsável.',
     eyebrow: 'Para quem está começando · Passo a passo',
     origin: 'blog_comecar_afiliado_whatsapp_sem_grupo_grande',
     usePersonAuthor: true,
@@ -399,7 +399,7 @@ export const PRESERVATION_BLOG_POSTS = {
   'amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp': {
     slug: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp',
     title: 'Amazon, Shopee e Mercado Livre no mesmo grupo',
-    description: 'Estratégia para operar os três programas de afiliados ao mesmo tempo no WhatsApp: qual loja usar para cada tipo de oferta, como não misturar os códigos e como medir qual rende mais no seu público.',
+    description: 'Como operar os três programas de afiliados ao mesmo tempo no WhatsApp: qual loja usar em cada oferta, como não misturar os códigos e qual rende mais.',
     eyebrow: 'Estratégia · Operar os três programas',
     origin: 'blog_amazon_shopee_ou_mercado_livre_para_afiliados_whatsapp',
     leadMagnetVariant: 'afiliados',
