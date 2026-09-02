@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
-import { explainErrorMsg, STATUS_TABS, statusTag } from '@/lib/painel/logsCopy'
+import Link from 'next/link'
+import { buildCredentialBlockHelp, explainErrorMsg, isCredentialBlockErrorMsg, STATUS_TABS, statusTagForLog } from '@/lib/painel/logsCopy'
+import { videoEtiquetasParaLoja } from '../../../../src/tutorialVideo.js'
 
 const LIMIT = 20
 const PERIODS = [['today', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias']]
@@ -28,9 +30,54 @@ function logOriginLabel(log) {
   return log?.sourceGroupName || log?.sourceGroup || '—'
 }
 
-function StatusTag({ status }) {
-  const t = statusTag(status)
+function StatusTag({ log }) {
+  const t = statusTagForLog(log)
   return <span className={`pnl-tag ${t.cls}`}>{t.label}</span>
+}
+
+/* Botão de ajuda (?) + diálogo explicando a falta de cadastro da loja, com o
+ * vídeo já posicionado no trecho DAQUELA loja. Só aparece na linha em que a
+ * oferta se perdeu por isso — em qualquer outra ele seria ruído. */
+function CredentialHelpButton({ log, open, onOpen, onClose }) {
+  if (!isCredentialBlockErrorMsg(log?.errorMsg)) return null
+  const help = buildCredentialBlockHelp(log.platform)
+  const videoUrl = videoEtiquetasParaLoja(log.platform)
+
+  return (
+    <>
+      <button
+        type="button"
+        className="pnl-help-btn"
+        onClick={onOpen}
+        aria-label={help.title}
+        title="Entenda e resolva"
+      >
+        ? Como resolver
+      </button>
+      {open && (
+        <div className="pnl-modal-overlay" role="presentation" onClick={onClose}>
+          <div
+            className="pnl-modal" style={{ maxWidth: 520 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={help.title}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{help.title}</h3>
+            {help.paragraphs.map((paragraph) => (
+              <p key={paragraph} style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 10 }}>{paragraph}</p>
+            ))}
+            <p style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 10, fontWeight: 600 }}>{help.nextStep}</p>
+            <div className="pnl-toolbar" style={{ marginTop: 16, gap: 10, flexWrap: 'wrap' }}>
+              <Link href={help.credentialsHref} className="pnl-btn is-primary">{help.credentialsLabel}</Link>
+              <a href={videoUrl} target="_blank" rel="noreferrer" className="pnl-btn">🎥 {help.videoLabel}</a>
+              <button type="button" className="pnl-btn" onClick={onClose}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
 
 function DedupChip({ hits }) {
@@ -69,6 +116,7 @@ export default function SendHistory() {
   const [confirmClearQueue, setConfirmClearQueue] = useState(false)
   const [clearingQueue, setClearingQueue] = useState(false)
   const [queueNotice, setQueueNotice] = useState('')
+  const [helpFor, setHelpFor] = useState(null)
 
   // Summary (cards) por período.
   useEffect(() => {
@@ -267,7 +315,8 @@ export default function SendHistory() {
                     <tr key={log.id}>
                       <td className="pnl-faint" style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{formatDateTime(log.sentAt)}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <div><StatusTag status={log.status} /><DedupChip hits={log.dedupHits} /></div>
+                        <div><StatusTag log={log} /><DedupChip hits={log.dedupHits} /></div>
+                        <CredentialHelpButton log={log} open={helpFor === log.id} onOpen={() => setHelpFor(log.id)} onClose={() => setHelpFor(null)} />
                         <ErrorDetails log={log} expanded={expanded.has(log.id)} onToggle={() => toggle(log.id)} />
                       </td>
                       <td className="pnl-td-clip" title={log.messageText}>{shortText(log.messageText)}</td>
@@ -294,7 +343,8 @@ export default function SendHistory() {
                   </div>
                   <p style={{ fontSize: 13, margin: '8px 0 4px' }}>{shortText(log.messageText)}</p>
                   <p className="pnl-muted" style={{ fontSize: 12 }}>{logOriginLabel(log)}{dest ? ` → ${dest}` : ''}</p>
-                  <div style={{ marginTop: 8 }}><StatusTag status={log.status} /><DedupChip hits={log.dedupHits} /></div>
+                  <div style={{ marginTop: 8 }}><StatusTag log={log} /><DedupChip hits={log.dedupHits} /></div>
+                  <CredentialHelpButton log={log} open={helpFor === `m-${log.id}`} onOpen={() => setHelpFor(`m-${log.id}`)} onClose={() => setHelpFor(null)} />
                   <ErrorDetails log={log} expanded={expanded.has(log.id)} onToggle={() => toggle(log.id)} />
                 </div>
               )

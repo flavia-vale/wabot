@@ -3,7 +3,12 @@
  * com a taxonomia canônica de erros exibida no painel de envios.
  * É copy de UI — não muda nenhuma regra de negócio. */
 
-import { buildCredentialBlockAlerts } from '../../../src/credentialBlockAlert/message.js'
+import {
+  buildCredentialBlockAlerts,
+  buildCredentialBlockHelp,
+  isCredentialBlockErrorMsg,
+  CREDENTIAL_BLOCK_STATUS_TAG,
+} from '../../../src/credentialBlockAlert/message.js'
 
 // P3 (specs/013-inbound-leads-strategy): terceiro ponto de exibição da
 // Assumption (histórico de envios) — mesma fonte de vocabulário do aviso
@@ -75,9 +80,13 @@ export function explainErrorMsg(errorMsg, platform) {
     // Antes: texto genérico, igual para toda loja, sem próximo passo. Agora
     // nomeia a loja e diz o que fazer — mesma inversão Shopee/ML-Amazon-Magalu
     // do aviso novo do painel (P3, specs/013-inbound-leads-strategy).
-    const copy = credentialBlockCopyForPlatform(platform)
-    if (copy) return `${copy.body} ${copy.nextStep}`
-    return 'Nenhum link da mensagem pôde ser convertido em link de afiliado. Confira se a credencial dessa loja está cadastrada em "Minhas credenciais".'
+    // O primeiro parágrafo NÃO pode ser `copy.body`: para Mercado Livre,
+    // Amazon e Magalu ele diz "as ofertas continuam saindo, só com o link mais
+    // comprido" — verdade quando o código de acesso venceu, mentira nesta
+    // linha, onde a oferta comprovadamente não saiu. buildCredentialBlockHelp
+    // já resolve essa diferença (2026-09-02).
+    const help = buildCredentialBlockHelp(platform)
+    return `${help.paragraphs[0]} ${help.nextStep}`
   }
   if (errorMsg.startsWith('skip:policy')) {
     if (errorMsg.endsWith(':unsupported_store')) return 'Essa promoção foi ignorada porque ainda não fazemos conversão automática de afiliado para essa loja.'
@@ -136,3 +145,19 @@ export const STATUS_TABS = [
 export function statusTag(status) {
   return STATUS_TAG[status] || { cls: 'is-skip', label: status || '—' }
 }
+
+/**
+ * Etiqueta de status olhando a linha inteira, não só o `status`.
+ *
+ * Existe por causa de um relato recorrente do suporte: a oferta perdida por
+ * falta de cadastro da loja aparecia como "ignorado" (ou "falhou", em linhas
+ * antigas), e a cliente mandava print perguntando o que era — o motivo real só
+ * saía depois de clicar em "Ver motivo", coisa que quase ninguém fazia. Aqui a
+ * causa vai na própria etiqueta. Não trocar de volta por um rótulo genérico.
+ */
+export function statusTagForLog(log) {
+  if (isCredentialBlockErrorMsg(log?.errorMsg)) return CREDENTIAL_BLOCK_STATUS_TAG
+  return statusTag(log?.status)
+}
+
+export { buildCredentialBlockHelp, isCredentialBlockErrorMsg }

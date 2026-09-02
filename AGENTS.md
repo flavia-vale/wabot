@@ -3849,6 +3849,62 @@ ligado, os robôs de *resposta* (OAI-SearchBot, Claude-SearchBot) passavam, mas
 os de *indexação/treino* não. Se voltar a ligar, o trabalho de IA para de valer
 em silêncio.
 
+## Clareza da falta de cadastro da loja + vídeo tutorial (2026-09-02)
+
+Quatro buracos da mesma conversa: a cliente não descobria sozinha por que a
+oferta não saiu, e o vídeo que explica isso estava colado na mão em três
+lugares.
+
+| Peça | Onde |
+|---|---|
+| Vídeo tutorial (endereço + capítulos por loja) — FONTE ÚNICA | `src/tutorialVideo.js` |
+| Texto do bloqueio por falta de cadastro (etiqueta, diálogo, aviso global) | `src/credentialBlockAlert/message.js` |
+| Garantias da tela de conexão do WhatsApp | `src/domain/painel/whatsappSafety.js` |
+| Aviso de fim de teste com prova de valor | `src/domain/painel/trialNotice.js` |
+
+**Não regredir:**
+
+- **"Ignorado" não é resposta.** A linha do histórico com
+  `skip:no_valid_conversions` agora sai com a etiqueta **"faltou cadastrar a
+  loja"** (`statusTagForLog`, `dashboard/lib/painel/logsCopy.js`) e um botão de
+  ajuda que abre o diálogo com o vídeo já no trecho DAQUELA loja. O motivo real
+  vivia atrás de "Ver motivo", que quase ninguém clicava — a cliente mandava
+  print escrito "falhou" e o suporte descobria na mão.
+- **O diálogo NÃO pode dizer "as ofertas continuam saindo".** Esse texto
+  (`buildSessionAlert`) é verdade para ML/Amazon/Magalu quando o código de
+  acesso VENCEU — e mentira nesta linha, onde a oferta comprovadamente não foi
+  publicada. `buildCredentialBlockHelp` separa os dois; o mesmo conserto foi
+  aplicado ao `explainErrorMsg`, que reaproveitava o `body` errado.
+- **Sem NENHUMA loja cadastrada, o aviso é global** (`NoCredentialBanner` no
+  `PainelShell`, todas as abas): o robô recebe as ofertas e não publica nada,
+  o painel fica verde, e a cliente conclui que o produto não funciona.
+  `hasAnyCredential === null` (carregando ou falha de rede) **não** mostra
+  nada — acusar falta de cadastro por causa de um blip mandaria refazer um
+  cadastro que já existe.
+- **A tela de conexão diz o que o robô faz com o WhatsApp dela**
+  (`WHATSAPP_SAFETY_POINTS`, mesmo texto no e-mail
+  `onboarding_conecte_whatsapp`). ⚠️ **É PROIBIDO escrever que "não temos
+  acesso às suas mensagens"** — as mensagens dos grupos chegam ao robô, é assim
+  que o espelhamento funciona. O que é verdade e tranquiliza: só os grupos
+  escolhidos são usados, o resto é descartado na hora e não fica guardado; ele
+  não responde ninguém; ela desconecta quando quiser; pode usar outro chip.
+  Guarda: `test/painel-whatsapp-seguranca.test.js`.
+- **O aviso de fim de teste sempre carrega a PROVA** ("o robô já publicou N
+  ofertas"). Com N = 0 ele **muda de assunto**: leva ao checklist, não ao
+  pagamento — cobrar de quem nunca viu o produto funcionar é o jeito mais
+  rápido de perder a cliente. Não aparece para trial já vencido (quem avisa
+  ali é o banner de plano vencido, que tem outra ação).
+- **O endereço do vídeo mora em `src/tutorialVideo.js`**, com capítulo por
+  loja. Estava colado na mão em `painel/tutorial`, `painel/checklist` e em
+  `src/email/layout.js` — três cópias é como um vídeo regravado passa a existir
+  só em parte do produto. `layout.js` re-exporta para os consumidores antigos.
+  Teste falha se `https://youtu.be/` voltar a aparecer numa tela do painel.
+
+**Custo:** duas chamadas a mais no shell (`/credentials` sempre,
+`/logs/summary` só em trial), nenhum processo novo, zero impacto de RAM.
+Testes: `test/painel-credencial-clareza.test.js`,
+`test/painel-whatsapp-seguranca.test.js`.
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos

@@ -6,6 +6,9 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { NAV_GROUPS } from './nav'
 import SidebarOnboarding from '@/components/SidebarOnboarding'
+import { buildNoCredentialBanner } from '../../../src/credentialBlockAlert/message.js'
+import { buildTrialEndingNotice } from '../../../src/domain/painel/trialNotice.js'
+import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../src/tutorialVideo.js'
 
 /* Contexto compartilhado: dados de sessão/usuário reusados pelas páginas. O
  * status de sessão (`online`/`phone`) é re-buscado periodicamente e ao focar a
@@ -95,6 +98,53 @@ function ExpiredMlSsidBanner({ expired }) {
   )
 }
 
+/* Sem NENHUMA loja cadastrada o robô recebe as ofertas e não publica nada —
+ * e, como o painel fica verde e o histórico diz "ignorado", a cliente conclui
+ * que o produto não funciona. O aviso é global (todas as abas) por isso:
+ * qualquer tela que ela abra antes de cadastrar está mostrando um robô que não
+ * vai enviar. Some sozinho no instante em que existe uma loja cadastrada. */
+function NoCredentialBanner({ show }) {
+  if (!show) return null
+  const copy = buildNoCredentialBanner()
+
+  return (
+    <div className="pnl-note-box is-error pnl-expired-plan-banner" role="alert">
+      <div>
+        <strong style={{ fontWeight: 600 }}>{copy.headline}</strong>
+        <p style={{ marginTop: 6 }}>{copy.body}</p>
+        <p style={{ marginTop: 6 }}>
+          <a href={VIDEO_CADASTRO_ETIQUETAS_URL} target="_blank" rel="noreferrer" style={{ fontWeight: 600, textDecoration: 'underline' }}>
+            🎥 {copy.videoLabel}
+          </a>
+        </p>
+      </div>
+      <Link href={copy.ctaHref} className="pnl-btn is-primary" style={{ flexShrink: 0 }}>{copy.ctaLabel}</Link>
+    </div>
+  )
+}
+
+/* Fim do teste com a PROVA do que o robô já fez. Ver o porquê em
+ * src/domain/painel/trialNotice.js — o teste acabava em silêncio, e quem paga
+ * decide exatamente nesse dia. */
+function TrialEndingBanner({ notice }) {
+  if (!notice) return null
+
+  return (
+    <div className="pnl-note-box pnl-expired-plan-banner" role="status">
+      <div>
+        <strong style={{ fontWeight: 600 }}>{notice.headline}</strong>
+        <p style={{ marginTop: 6 }}>{notice.body}</p>
+        {notice.secondaryHref && (
+          <p style={{ marginTop: 6 }}>
+            <Link href={notice.secondaryHref} style={{ fontWeight: 600, textDecoration: 'underline' }}>{notice.secondaryLabel}</Link>
+          </p>
+        )}
+      </div>
+      <Link href={notice.ctaHref} className="pnl-btn is-primary" style={{ flexShrink: 0 }}>{notice.ctaLabel}</Link>
+    </div>
+  )
+}
+
 function planInfo(user) {
   const plan = user?.plan
   const exp = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
@@ -158,6 +208,8 @@ export default function PainelShell({ children }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [header, setHeader] = useState({ title: 'Painel', subtitle: '' })
   const [mlSsidExpired, setMlSsidExpired] = useState(false)
+  const [hasAnyCredential, setHasAnyCredential] = useState(null)
+  const [offersPublished, setOffersPublished] = useState(null)
 
   // Autenticação — mesmo contrato do dashboard atual (api.me → /login no erro).
   useEffect(() => {
@@ -183,6 +235,34 @@ export default function PainelShell({ children }) {
       .catch(() => { if (active) setMlSsidExpired(false) })
     return () => { active = false }
   }, [checking])
+
+  // Existe ALGUMA loja cadastrada? Uma chamada só, no shell (que monta uma vez
+  // para todo o painel), igual ao banner de SSID vencido acima. Enquanto a
+  // resposta não chega, `null` mantém o aviso escondido — banner que pisca a
+  // cada navegação é pior que banner nenhum. Falha de rede também não alarma:
+  // acusar falta de cadastro por causa de um blip mandaria a cliente refazer
+  // um cadastro que já existe.
+  useEffect(() => {
+    if (checking) return undefined
+    let active = true
+    api.credentials()
+      .then((list) => { if (active) setHasAnyCredential(Array.isArray(list) && list.length > 0) })
+      .catch(() => { if (active) setHasAnyCredential(null) })
+    return () => { active = false }
+  }, [checking])
+
+  // Prova de valor do aviso de fim de teste: quantas ofertas o robô já
+  // publicou. Só buscamos para quem está em trial — o resto do painel não usa
+  // esse número, e uma chamada a mais por navegação sem uso é desperdício.
+  const isTrial = user?.plan === 'trial'
+  useEffect(() => {
+    if (checking || !isTrial) return undefined
+    let active = true
+    api.logsSummary('30d')
+      .then((s) => { if (active) setOffersPublished(Number(s?.success) || 0) })
+      .catch(() => { if (active) setOffersPublished(null) })
+    return () => { active = false }
+  }, [checking, isTrial])
 
   // Status de sessão + contagem de grupos (compartilhado com a tag do header
   // e a página de espelhamento, que leem `online` deste contexto). Precisa ser
@@ -247,6 +327,20 @@ export default function PainelShell({ children }) {
     await api.logout().catch(() => {})
     router.push('/login')
   }
+
+  // O aviso de fim de teste só aparece com a prova de valor já carregada
+  // (`offersPublished !== null`): sem ela o texto cairia no ramo "o robô ainda
+  // não publicou nada", que é o oposto do que a cliente ativa deveria ler.
+  const trialNotice = useMemo(
+    () => (offersPublished === null
+      ? null
+      : buildTrialEndingNotice({
+        plan: user?.plan,
+        accessExpiresAt: user?.accessExpiresAt,
+        offersPublished,
+      })),
+    [user?.plan, user?.accessExpiresAt, offersPublished],
+  )
 
   const ctxValue = useMemo(
     () => ({ user, online, phone, groupCount, sessionHealth, refreshSession, setHeader }),
@@ -402,6 +496,8 @@ export default function PainelShell({ children }) {
                 mais. sessionHealth segue exposto no contexto/metrics para
                 observabilidade, sem alarmar o usuário com uma ação enganosa. */}
             <ExpiredPlanBanner user={user} />
+            <TrialEndingBanner notice={trialNotice} />
+            <NoCredentialBanner show={hasAnyCredential === false} />
             <ExpiredMlSsidBanner expired={mlSsidExpired} />
             {children}
           </div>
