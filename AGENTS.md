@@ -3787,12 +3787,26 @@ novo: `/blog/como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
 
 Achadinho Pro, ProAfiliados, FluxoPromo, Shozap, Afilira, AchadinhosBot /
 AchadinBot, IA Divulgadora, Devzapp (blog), Shark Pomo Bot, Lumi Ofertas
-Inteligentes, Gigi Bot. **Promium** (mapeado em 01/09: R$97,90 a R$597,90/mês
-recorrente — o plano de ENTRADA custa 42% mais que o nosso Pro de R$69; tem 13
-páginas de "Automação \<loja\> para WhatsApp" no rodapé, SEO programático por
-loja × recurso no eixo Tier 1 que está aberto para nós). Citados pelas IAs e
-ainda não mapeados: GoGoBot, OfertaFlux, FluxZap, Ripply, Núcleo do Afiliado,
-DivulgaNinja, DivulgaLinks, Afilimais, ZincLink, Busqy, Notifish, Whats.Ly. Preços e planos coletados por print em 2026-07-31 —
+Inteligentes, Gigi Bot. **Promium** — agora com página própria
+(`/alternativas/promium`, 02/09) e ficha completa em `competitors-data.js`:
+R$97,90 a R$597,90/mês no valor **recorrente**, cobrando por faixa de grupos
+(5/20/50/200) e por número de conexões. O plano de ENTRADA custa 42% mais que o
+nosso Pro de R$69. ⚠️ Todos os planos dele anunciam preço promocional no 1º mês
+— comparar pelo promocional é comparar coisa diferente, e por isso o campo
+`price` de cada faixa carrega os dois números. Ele cobre MAIS que nós (10 lojas,
+Telegram, vitrine com domínio próprio, rotador de links com pixel de
+Meta/TikTok/GA4) e tem 13 páginas de "Automação \<loja\> para WhatsApp" no
+rodapé — SEO programático por loja × recurso, o mesmo eixo da nossa frente
+Tier 1.
+
+Citados pelas IAs em 01/09 e **ainda não mapeados** (nenhum tem ficha em
+`competitors-data.js`, então nenhum preço deles pode ser citado em página
+pública): GoGoBot, OfertaFlux, FluxZap, Ripply, Núcleo do Afiliado,
+DivulgaNinja, DivulgaLinks, Afilimais, ZincLink, Busqy, Notifish, Whats.Ly,
+Radar das Promos, Ofertiva, BotAdmin, Afiliados Pro Bot, GeekZap, HouSoft,
+WHAMetrics Bridge. Lembre que essa lista é **quase disjunta** da que o Search
+Console mostra (AchadinhosBot, Achadinho Pro, FluxoPromo, Shozap) — são dois
+mercados diferentes, e só um tem página nossa disputando. Preços e planos coletados por print em 2026-07-31 —
 ver `docs/marketing/ONDA1_PLANO_DETALHADO.md` (B2) para o detalhe por
 concorrente antes de citar preço em qualquer página pública.
 

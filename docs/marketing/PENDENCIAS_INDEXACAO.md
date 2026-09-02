@@ -54,6 +54,7 @@ títulos. Pedir antes indexa a versão velha.
 - [ ] `/amazon-afiliados-whatsapp`
 - [ ] `/shein-afiliados-whatsapp`
 - [ ] `/magalu-afiliados-whatsapp`
+- [ ] `/alternativas/promium`
 
 ### O que a evidência diz sobre pedir
 
