@@ -68,6 +68,26 @@ export const PRODUCT_LIMITATIONS = [
 
 // Fallback dos planos públicos. A fonte dinâmica é a tabela LpPlan (editável
 // pelo admin, atualizada por migration aditiva) — manter os DOIS em sincronia.
+/* Converte o preço EXIBIDO ("R$39", "R$ 1.299,90") no número que vai para o
+ * schema Offer. Antes, `priceValue` vinha sempre do default hardcoded, nos DOIS
+ * caminhos de merge (lib/plans-server.js no servidor e components/landing/
+ * Pricing.jsx no cliente): trocar o preço no painel admin mudava o que a pessoa
+ * lê e NÃO mudava o que o Google e as IAs leem — as duas pontas passavam a
+ * discordar em silêncio. Formato inesperado devolve null e o chamador cai no
+ * default; nunca publica preço inventado.
+ *
+ * Mora aqui, e não no componente, porque `plans-server.js` roda no SERVIDOR:
+ * importar de um módulo 'use client' arrastaria a fronteira de cliente para
+ * dentro do render estático.
+ */
+export function parsePriceValue(price) {
+  if (typeof price !== 'string') return null
+  const limpo = price.replace(/[^\d.,]/g, '')
+  if (!limpo) return null
+  const n = Number(limpo.replace(/\./g, '').replace(',', '.'))
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+
 export const DEFAULT_LANDING_PLANS = [
   {
     id: 'trial',
