@@ -79,8 +79,8 @@ test('e-mail transacional NÃO leva descadastro; marketing leva', () => {
 
 test('toda mensagem é assinada pela equipe', () => {
   const { text, html } = wrapEmail({ body: 'corpo' })
-  assert.match(text, /Equipe BOTinho/)
-  assert.match(html, /Equipe BOTinho/)
+  assert.match(text, /Equipe Espelha Grupos/)
+  assert.match(html, /Equipe Espelha Grupos/)
 })
 
 // ------------------------------------------------------------------ catálogo
@@ -136,7 +136,7 @@ test('standardVars monta primeiro nome e links do painel', () => {
   const vars = standardVars({ user: { name: 'Juliane Pumuceno' }, dashboardUrl: 'https://x.com' })
   assert.equal(vars.primeiro_nome, 'Juliane')
   assert.equal(vars.link_login, 'https://x.com/login')
-  assert.equal(vars.marca, 'BOTinho')
+  assert.equal(vars.marca, 'Espelha Grupos')
 })
 
 function makeDb({ templates = [], logs = [], optOuts = [], users = [], batches = [] } = {}) {
@@ -209,7 +209,7 @@ test('envio simples grava histórico e usa o texto do catálogo', async () => {
   })
   assert.equal(result.sent, true)
   assert.equal(sent.length, 1)
-  assert.match(sent[0].subject, /Bem-vinda ao BOTinho/)
+  assert.match(sent[0].subject, /Bem-vinda ao Espelha Grupos/)
   assert.match(sent[0].text, /Olá, Juliane!/)
   assert.match(sent[0].text, /23\/08\/2026/)
   assert.equal(db.logs.length, 1)

@@ -1,130 +1,109 @@
-# Naming do Projeto — Decisão Canônica (2026-05-17)
+# Naming do projeto — decisão canônica (revista em 2026-09-02)
 
-## Classificação da demanda
-**[MARKETING]** com impacto em produto e marca.
+> Substitui as decisões de **2026-05-17** ("marca oficial: BOTinho") e de
+> **2026-08-04** ("dois nomes amarrados por schema"). As duas estão medidas e
+> reprovadas — a seção "Histórico" no fim guarda o que foi tentado e por quê,
+> para ninguém refazer o mesmo caminho.
 
-## Protocolo de risco (STRICT)
-1. **Erros fatais:** este documento não altera runtime, build ou tipagem.
-2. **Breaking changes:** não há mudanças de API, schema, contratos ou props.
-3. **Efeito cascata:** sem efeito técnico imediato; cria diretriz para reduzir inconsistência futura.
-4. **Isolamento de ambiente:** nenhuma alteração em `.env`, banco ou deploy.
-5. **Bloqueio:** sem risco fatal identificado; execução liberada.
+## Decisão
 
----
+## **Um nome só na superfície pública: Espelha Grupos**
 
-## Diagnóstico crítico de naming atual
-Hoje existem **3 nomes ativos**, com papéis misturados:
+Marca, produto e domínio são a mesma coisa. Não existe segundo nome público.
 
-- **Wabot**: nome técnico/interno do repositório e infraestrutura.
-- **BOTinho**: nome de produto/marca em páginas e materiais.
-- **Espelha Grupos / espelhagrupos.com.br**: domínio e expressão SEO orientada à intenção de busca.
+| Onde | O que escrever |
+|---|---|
+| Site, blog, LPs, título, descrição, schema | **Espelha Grupos** |
+| E-mails transacionais e de divulgação | **Espelha Grupos** ("Equipe Espelha Grupos") |
+| Termos de uso e política de privacidade | **Espelha Grupos** |
+| Fatura do cartão (`statement_descriptor`) | **Espelha Grupos** |
+| Nome dos planos na cobrança | **Espelha Grupos Basic / Pro** |
+| Painel logado (voz do robô falando com a cliente) | **BOTinho** é tolerado |
+| Schema.org `alternateName` | **BOTinho**, só como apelido |
+| Repositório, PM2, diretórios, logs, variáveis | **wabot** (nome técnico, nunca público) |
 
-### Evidência quantitativa no código
-Levantamento local (2026-05-17):
+## Por que Espelha Grupos e não BOTinho
 
-- `BOTinho`: **1015 ocorrências** em **103 arquivos**
-- `espelha grupos` / `espelhagrupos`: **258 ocorrências** em **36 arquivos**
-- `wabot`: **126 ocorrências** em **30 arquivos**
+Quatro motivos, todos medidos — nenhum é gosto:
 
-Interpretação: o projeto já converge organicamente para **BOTinho como marca principal**, enquanto `wabot` é majoritariamente técnico e `espelha grupos` funciona como ativo de descoberta SEO.
+1. **É o domínio que temos.** `espelhagrupos.com.br` está registrado;
+   `botinho.com.br` não está disponível. Marca com nome diferente do endereço
+   é atrito de confiança na hora de pagar.
+2. **"BOTinho" sozinho é lido como CALÇADO INFANTIL** por três das quatro IAs
+   medidas em 01/09. Gemini, Perplexity e Google AI Overviews devolvem botinha
+   de bebê e preço de loja de sapato para a consulta "BOTinho preço" — o
+   último com links de loja. Disputar a palavra crua contra o varejo de calçado
+   é caro e não tem fim.
+3. **Não há patrimônio a perder.** `botinho` teve **1 impressão em 3 meses** no
+   Search Console. As consultas que funcionam são qualificadas
+   ("achadinho pro", "espelhar grupos whatsapp"), não a marca crua.
+4. **Dois nomes viraram dois produtos na cabeça da IA.** O ChatGPT ofereceu
+   "uma comparação objetiva BOTinho × Espelha Grupos" e listou os dois lado a
+   lado com o Promium, como três empresas diferentes. A IA lia exatamente o que
+   o site mostrava.
 
----
+## Regras de escrita (obrigatórias)
 
-## Critérios de decisão (marketing)
-A análise usou princípios de posicionamento e psicologia de marca:
+- **Nunca escrever "BOTinho" sozinho em texto público.** Se precisar aparecer,
+  é sempre "BOTinho, o robô do Espelha Grupos" ou "BOTinho WhatsApp".
+- **Título de página não leva sufixo de marca próprio.** O
+  `title.template` do layout já anexa ` | Espelha Grupos`. Guarda em
+  `test/inbound-titulos-clique.test.js`.
+- **"Bot Conversor" está aposentado.** Era sobra de uma nomeação ainda mais
+  antiga e vivia no rodapé de todas as páginas. Não voltar.
+- **O nome técnico não é nome público.** `wabot`, `api-staging`,
+  `bot-supervisor`, `BOTinho-shared` (diretório no VPS) são infraestrutura e
+  não devem aparecer para a cliente.
+- **Nome de marca não entra em identificador.** Subprotocolo de WebSocket,
+  cabeçalho, chave de env, slug e id são contratos técnicos: renomear marca
+  por varredura de texto neles quebra o produto. Foi o que aconteceu em
+  02/09 com o subprotocolo do QR (`'Espelha Grupos-auth'` — inválido pelo
+  RFC 6455 e divergente da API). Guarda em
+  `test/qr-websocket-subprotocol.test.js`.
 
-1. **Memorabilidade**: nome curto, humano e fácil de lembrar.
-2. **Distintividade**: evita ser genérico no mar de “bots”.
-3. **Transferência de confiança**: funciona em produto, conteúdo e vendas.
-4. **Escalabilidade de categoria**: permite expansão além de “espelhar grupos”.
-5. **Sinergia SEO + Brand**: separa claramente nome de marca vs termo de busca.
+## Onde a decisão está codificada
 
----
+| Peça | Onde |
+|---|---|
+| Constantes de marca | `dashboard/lib/marketing-content.js` (`BRAND_LEGACY_NAME = 'BOTinho'` só como `alternateName`) |
+| Nome nos e-mails | `BRAND_NAME` em `src/email/layout.js` |
+| Termos e privacidade | `src/legalTerms.js` |
+| Cobrança | `src/domain/payments/service.js`, `statement_descriptor` em `src/api/routes/payments.js` |
 
-## Decisão recomendada (canônica)
+## Como medir se está funcionando
 
-## **Marca oficial: BOTinho**
+Repetir a coleta de citação por IA (7 consultas × 4 superfícies,
+`docs/marketing/ai_visibility_tracking.csv`) e conferir dois sinais:
 
-### Por quê
-- Já é o naming dominante no conteúdo e na interface.
-- É mais “brandável” que `Wabot` (que soa nome de código).
-- Permite estratégia de marca própria sem depender de keyword exata.
-- Convive bem com SEO de intenção via “espelhar grupos”, “bot de ofertas”, etc.
+- **"BOTinho preço" deixa de devolver calçado** em Gemini, Perplexity e AI
+  Overviews;
+- **nenhuma IA oferece "comparação BOTinho × Espelha Grupos"** — entidade única
+  é o objetivo inteiro desta decisão.
 
----
-
-## Arquitetura de naming (como usar cada nome)
-
-### 1) **BOTinho** → nome de marca (externo e interno de produto)
-Use em:
-- Site, dashboard, LPs, blog, social, vendas, onboarding, suporte.
-- Mensagens de produto (“O BOTinho organiza sua operação...”).
-
-### 2) **Espelha Grupos** → território semântico / SEO
-Use em:
-- Slugs, headlines SEO, cluster de conteúdo e variações de busca.
-- Exemplos: “espelhar grupos WhatsApp”, “bot para espelhar grupos”.
-
-**Regra:** tratar como **keyword/tema**, não como marca principal.
-
-### 3) **wabot** → nome técnico (infra)
-Use apenas em:
-- Nome do repositório, paths de servidor, scripts, CI/CD, variáveis internas.
-
-**Regra:** não usar em peças de marketing nem em copy de produto.
-
----
-
-## Guia prático de padronização
-
-## Linguagem de marca (do)
-- “BOTinho” (respeitar capitalização: **BOT** + **inho**).
-- “O BOTinho que espelha grupos.”
-- “Espelha grupos com o BOTinho.”
-- “espelhagrupos.com.br” como domínio principal.
-
-## Evitar (don’t)
-- Misturar “Wabot” em títulos públicos.
-- Alternar “Botinho”, “BOTinho” e “botinho” sem regra.
-- Usar “Espelha Grupos” como se fosse produto separado sem contexto.
+No Search Console, acompanhar as consultas de marca. Elas eram ~zero, então
+qualquer volume novo é ganho; a métrica que não pode piorar é a das consultas
+qualificadas, que já funcionam.
 
 ---
 
-## Plano de rollout sugerido (sem breaking)
+## Histórico (o que foi tentado e por que não serve)
 
-### Fase 1 — Governança (imediata)
-- Criar este documento como fonte única de naming.
-- Definir checklist em PR: “naming está conforme padrão?”
+### 2026-05-17 — "marca oficial: BOTinho"
+Decidido por contagem de ocorrências no código (`BOTinho` 1.015× contra
+`espelha grupos` 258×) e por soar mais "brandável" que `Wabot`. O critério era
+frequência interna, não comportamento de busca — nada foi medido fora do
+repositório. Reprovado quando o dado externo apareceu: o nome não tinha
+domínio, não tinha impressão e colidia com varejo de calçado.
 
-### Fase 2 — Superfícies de alto impacto
-- Header, title templates, meta title/description, e-mail transacional, mensagens de login.
-- Materiais de vendas e docs de onboarding.
+### 2026-08-04 — dois nomes amarrados por schema
+"Espelha Grupos" como marca e "BOTinho" como nome do produto, ligados por
+`alternateName` no schema. A hipótese era que o schema ensinaria a relação às
+IAs. A medição de 01/09 mostrou que não ensinou: as IAs leram dois produtos
+concorrentes. Restou disso o `alternateName`, que continua útil como apelido —
+mas não como segunda marca.
 
-### Fase 3 — Higiene técnica progressiva
-- Manter `wabot` apenas em infraestrutura.
-- Revisar textos residuais quando tocar nos arquivos (abordagem oportunística, sem mutação massiva arriscada).
-
----
-
-## Mini style guide
-
-- **Produto/marca:** BOTinho
-- **Domínio:** espelhagrupos.com.br
-- **Categoria/keyword:** espelhar grupos no WhatsApp
-- **Repositório/infra:** wabot
-
-Modelo de frase institucional:
-
-> “O BOTinho espelha grupos e espalha ofertas no WhatsApp com controle, cadência e consistência operacional.”
-
----
-
-## Decisão final
-Se o objetivo é reduzir confusão e maximizar valor de marca + performance orgânica, o melhor naming mestre é:
-
-## ✅ **BOTinho** (marca)
-com
-## ✅ **Espelha Grupos** (território SEO)
-
-E manter:
-## ✅ **wabot** apenas no backend operacional.
+### 2026-09-02 — um nome só
+Esta decisão. Migração aplicada no site, nos e-mails, nos termos e na
+cobrança. O painel logado mantém "BOTinho" como voz do robô: ali a pessoa já
+sabe onde está, e o apelido do robô é o que dá personalidade sem custar
+entidade lá fora.

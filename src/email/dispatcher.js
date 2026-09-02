@@ -1,4 +1,4 @@
-// Despachante: o ÚNICO caminho por onde um e-mail do BOTinho sai.
+// Despachante: o ÚNICO caminho por onde um e-mail do Espelha Grupos sai.
 //
 // Toda trava mora aqui, para nenhum gatilho novo precisar lembrar delas:
 //   - e-mail fabricado (user_*@sistema.com) nunca recebe;

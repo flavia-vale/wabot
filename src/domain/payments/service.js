@@ -1,6 +1,6 @@
 const DEFAULT_PLANS = {
-  basic: { title: 'BOTinho Basic - acesso por 30 dias', price: 39 },
-  pro: { title: 'BOTinho Pro - acesso por 30 dias', price: 69 },
+  basic: { title: 'Espelha Grupos Basic - acesso por 30 dias', price: 39 },
+  pro: { title: 'Espelha Grupos Pro - acesso por 30 dias', price: 69 },
 }
 
 function parseCurrencyAmount(value) {

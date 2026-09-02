@@ -1,4 +1,4 @@
-// Moldura visual única de todo e-mail do BOTinho (cabeçalho, corpo, rodapé).
+// Moldura visual única de todo e-mail do Espelha Grupos (cabeçalho, corpo, rodapé).
 //
 // Puro. A admin edita só o miolo pelo painel; a moldura fica aqui para que
 // nenhum texto editado consiga quebrar o layout — e para trocar a identidade
@@ -6,7 +6,7 @@
 
 import { escapeHtml, renderBody } from './markup.js'
 
-export const BRAND_NAME = 'BOTinho'
+export const BRAND_NAME = 'Espelha Grupos'
 export const DEFAULT_DASHBOARD_URL = 'https://espelhagrupos.com.br'
 export const DEFAULT_SUPPORT_EMAIL = 'contato@espelhagrupos.com.br'
 export const DEFAULT_SUPPORT_WHATSAPP = 'https://wa.me/5532999844020'
