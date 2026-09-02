@@ -1,5 +1,7 @@
 import { buildLongExpiredWhere, wantsLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 import { planLabel } from './customerHistory.js'
+import { buildActivationFunnel } from './funnel.js'
+import { resolveSignupOrigin } from './signupOrigin.js'
 
 const ORIGIN_SOURCE_LABELS = {
   direct: 'Direto',
@@ -513,5 +515,100 @@ export function createAdminService({
     }
   }
 
-  return { getOverview, listUsers, listCustomers, listWaDisconnectedUsers, listLogs }
+  /**
+   * Funil de ativação por coorte de cadastro. Só LEITURA e tudo em lote — nunca
+   * uma consulta por cliente. `MessageLog` e `AnalyticsEvent` são as duas
+   * tabelas grandes do banco, então as duas entram por `groupBy` (agregação no
+   * SQLite, não em memória) com filtro `in` na coorte, que é de dezenas de
+   * linhas. Sem processo novo, sem impacto de RAM.
+   */
+  async function getActivationFunnel({ weeks = 8 } = {}) {
+    const weeksCount = Math.min(26, Math.max(1, Number(weeks) || 8))
+    const now = new Date()
+    const since = addDays(now, -weeksCount * 7)
+
+    const users = await db.user.findMany({
+      where: { createdAt: { gte: since } },
+      select: { id: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    const ids = users.map((user) => user.id)
+    if (!ids.length) {
+      return { weeksCount, since, generatedAt: now, ...buildActivationFunnel({ users: [] }) }
+    }
+
+    const [signupEvents, waSessions, connectedEvents, deliveries, checkouts, payments] = await Promise.all([
+      db.analyticsEvent.findMany({
+        where: { event: 'signup_created', userId: { in: ids } },
+        select: { userId: true, metadata: true },
+      }),
+      db.waSession.findMany({
+        where: { userId: { in: ids } },
+        select: { userId: true, status: true, phone: true },
+      }),
+      db.analyticsEvent.groupBy({
+        by: ['userId'],
+        where: { event: 'whatsapp_connected', userId: { in: ids } },
+        _min: { createdAt: true },
+      }),
+      // Só `success`: linha de `MessageLog` que não saiu (o caso mais comum é
+      // `skip:no_valid_conversions`, sem etiqueta de afiliada cadastrada) não
+      // é "viu o produto funcionar".
+      db.messageLog.groupBy({
+        by: ['userId'],
+        where: { userId: { in: ids }, status: 'success' },
+        _min: { sentAt: true },
+      }),
+      db.analyticsEvent.groupBy({
+        by: ['userId'],
+        where: { event: 'checkout_started', userId: { in: ids } },
+        _min: { createdAt: true },
+      }),
+      db.payment.groupBy({
+        by: ['userId'],
+        where: { userId: { in: ids }, status: 'approved' },
+        _min: { createdAt: true },
+      }),
+    ])
+
+    const originByUserId = new Map()
+    for (const event of signupEvents) {
+      if (!event.userId || originByUserId.has(event.userId)) continue
+      let metadata = {}
+      try { metadata = JSON.parse(event.metadata || '{}') } catch { metadata = {} }
+      originByUserId.set(event.userId, resolveSignupOrigin(metadata))
+    }
+
+    // "Chegou a conectar" tem duas fontes de propósito: o evento durável
+    // (`whatsapp_connected`) e a própria sessão com telefone/status — o evento
+    // só existe para quem se cadastrou depois que ele foi criado, e a sessão
+    // sozinha não conta quem conectou e desconectou faz tempo.
+    const connectedUserIds = new Set(connectedEvents.map((row) => row.userId).filter(Boolean))
+    for (const session of waSessions) {
+      if (session.status === 'connected' || session.phone) connectedUserIds.add(session.userId)
+    }
+
+    const toDateMap = (rows, field) => new Map(
+      rows
+        .filter((row) => row.userId && row._min?.[field])
+        .map((row) => [row.userId, row._min[field]])
+    )
+
+    return {
+      weeksCount,
+      since,
+      generatedAt: now,
+      ...buildActivationFunnel({
+        users,
+        originByUserId,
+        connectedUserIds,
+        firstDeliveryByUserId: toDateMap(deliveries, 'sentAt'),
+        firstCheckoutByUserId: toDateMap(checkouts, 'createdAt'),
+        firstPaymentByUserId: toDateMap(payments, 'createdAt'),
+      }),
+    }
+  }
+
+  return { getOverview, listUsers, listCustomers, listWaDisconnectedUsers, listLogs, getActivationFunnel }
 }

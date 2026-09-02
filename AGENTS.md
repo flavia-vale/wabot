@@ -378,6 +378,59 @@ Telefone segue mascarado por papel (`sanitizeUser`/`canSeePhone`) e as duas
 rotas exigem `support:read` e gravam `AdminAuditLog`. Testes:
 `test/admin-customer-history.test.js`.
 
+## ADMIN > Funil (`/admin/funil`, 2026-09-02)
+
+Responde "onde as pessoas param entre criar a conta e pagar" sem ninguém
+precisar rodar script. Os números já existiam em `scripts/diag-funil-ativacao.mjs`
+e `scripts/diag-origem-cadastros.mjs` — o que faltava era a leitura.
+
+| Peça | Onde |
+|---|---|
+| Montagem das etapas, semanas e origens (PURO, sem banco) | `src/domain/admin/funnel.js` |
+| Classificação de origem do cadastro (PURA, compartilhada com o script) | `src/domain/admin/signupOrigin.js` |
+| Carregador em lote | `getActivationFunnel` em `src/domain/admin/service.js` |
+| Rota | `GET /api/admin/funnel?weeks=8` (`support:read`, auditada) |
+| Tela | `dashboard/app/admin/funil/page.js` |
+
+Cinco etapas: criou a conta → conectou o WhatsApp → **teve oferta publicada** →
+começou o pagamento → pagou.
+
+**Não regredir:**
+
+- **"Teve oferta publicada" é só `MessageLog.status='success'`.** A linha mais
+  comum de quem não cadastrou a etiqueta de afiliada é
+  `skip:no_valid_conversions` — o robô se recusa a publicar link não convertido.
+  Contar qualquer linha colocaria no grupo "viu o produto funcionar" justamente
+  quem nunca teve uma oferta chegando ao grupo, que é o oposto da conversa que
+  essa pessoa precisa.
+- **A coorte é a semana do CADASTRO**, nunca a semana do evento. Misturar as
+  duas produz percentual acima de 100% quando alguém paga semanas depois.
+- **Etapa posterior implica as anteriores.** Quem pagou conta como tendo
+  conectado mesmo se o sinal de conexão se perdeu (retenção de
+  `WaConnectionEvent`, conta anterior ao evento) — senão a tela mostra funil
+  crescendo, que só confunde.
+- **"Chegou a conectar" tem duas fontes de propósito:** o evento durável
+  `whatsapp_connected` e a própria `WaSession` (status conectado ou telefone
+  preenchido). O evento não existe para conta anterior à sua criação; a sessão
+  sozinha não enxerga quem conectou e desconectou faz tempo.
+- **Custo:** só leitura, **zero processo novo e zero impacto de RAM**. As duas
+  tabelas grandes (`MessageLog`, `AnalyticsEvent`) entram por `groupBy`
+  (agregação no SQLite) com `in` na coorte — nunca `distinct` do Prisma, que
+  agrega em memória depois de trazer as linhas. Janela máxima de 26 semanas.
+- **Linguagem leiga:** "onde as pessoas param", "conectaram o WhatsApp",
+  "tiveram oferta publicada". Nada de "coorte", "funil de conversão" ou nome de
+  tabela na tela.
+- **A classificação de origem mora em UM lugar** (`signupOrigin.js`), usada pelo
+  painel e pelo `scripts/diag-origem-cadastros.mjs`. Duplicada, script e tela
+  discordavam sobre quantos cadastros vieram de conteúdo e não havia como saber
+  qual estava certo.
+
+⚠️ Atribuição é aproximação: "Direto / ambíguo" **não** significa "veio
+sozinho" — quem achou no Google, fechou e voltou depois digitando o endereço cai
+aí, e o SEO fica sem crédito. Semana recente está sempre em andamento.
+
+Teste: `test/admin-funnel.test.js`.
+
 ## Liga/desliga staging pelo painel admin (economia de RAM)
 
 Como staging e prod dividem o mesmo VPS, o painel admin de prod tem um botão
