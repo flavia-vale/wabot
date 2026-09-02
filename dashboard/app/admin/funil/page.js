@@ -7,7 +7,7 @@
 // Linguagem leiga como no resto do produto — nada de "coorte", "funil de
 // conversão" ou nome de tabela na tela.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
@@ -45,23 +45,24 @@ function Barra({ pct }) {
 
 export default function AdminFunilPage() {
   const [weeks, setWeeks] = useState(8)
-  const [data, setData] = useState(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  // Mesmo padrão da lista de clientes: o resultado carrega a janela que o
+  // produziu, e "carregando" é derivado disso. Assim o efeito não mexe em
+  // estado de forma síncrona (o que dispara renderização em cascata) e a tela
+  // anterior não pisca vazia enquanto a próxima janela chega.
+  const [result, setResult] = useState(null)
 
-  const carregar = useCallback(async (semanas) => {
-    setLoading(true)
-    setError('')
-    try {
-      setData(await api.adminFunnel(semanas))
-    } catch (err) {
-      setError(err?.message || 'Não foi possível carregar o funil agora.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  useEffect(() => {
+    let cancelled = false
+    api.adminFunnel(weeks)
+      .then((data) => { if (!cancelled) setResult({ key: weeks, data, error: '' }) })
+      .catch((err) => { if (!cancelled) setResult({ key: weeks, data: null, error: err?.message || 'Não foi possível carregar o funil agora.' }) })
+    return () => { cancelled = true }
+  }, [weeks])
 
-  useEffect(() => { carregar(weeks) }, [carregar, weeks])
+  const isCurrent = result?.key === weeks
+  const loading = !isCurrent
+  const error = isCurrent ? result.error : ''
+  const data = isCurrent ? result.data : null
 
   const steps = asArray(data?.steps)
   const semanas = asArray(data?.weeks)
