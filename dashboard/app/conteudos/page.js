@@ -143,6 +143,21 @@ const nichePages = [
     title: 'Shopee Afiliados: divulgar no WhatsApp',
     description: 'Para quem já é afiliada Shopee e quer publicar as ofertas sem copiar e colar.',
   },
+  {
+    href: '/mercado-livre-afiliados-whatsapp',
+    title: 'Afiliado Mercado Livre: divulgar no WhatsApp',
+    description: 'Para quem já é afiliada do Mercado Livre e quer publicar sem copiar e colar.',
+  },
+  {
+    href: '/amazon-afiliados-whatsapp',
+    title: 'Afiliado Amazon: divulgar ofertas no WhatsApp',
+    description: 'Para quem já é afiliada Amazon e quer publicar sem perder a tag no caminho.',
+  },
+  {
+    href: '/shein-afiliados-whatsapp',
+    title: 'SHEIN Afiliados: divulgar no WhatsApp',
+    description: 'Para quem já é afiliada SHEIN e quer publicar com o link curto da própria loja.',
+  },
 ]
 
 /* As dez LPs de "dor" (painSlugs em lib/seo-registry.mjs). Estavam no sitemap e

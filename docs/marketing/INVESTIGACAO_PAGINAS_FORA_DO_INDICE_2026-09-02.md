@@ -91,3 +91,29 @@ caracteres de conteúdo próprio cada, sobre variações do mesmo assunto, é
 exatamente o perfil que o Google recusa. Se for isso, adicionar link interno
 ajuda pouco — o conserto seria juntar as dez em duas ou três páginas boas.
 Não dá para saber sem o passo 1.
+
+
+---
+
+## Correção de 02/09 (mesmo dia): a causa mais provável é bem mais simples
+
+A dona do produto apontou o que faltava conferir: **pedido de indexação**.
+
+Cruzando com `PENDENCIAS_INDEXACAO.md`:
+
+- as **15 URLs pedidas em 04/08** estão **todas** indexadas hoje;
+- as **10 páginas** deste documento (as 6 que nunca entraram e as 4 que caíram)
+  **nunca foram pedidas** — nenhuma delas.
+
+A correlação é limpa nas duas direções. Isso enfraquece bastante a hipótese
+alternativa levantada acima (conteúdo fino sendo recusado por qualidade) e
+aponta para a explicação mais simples: o Google não indexa sozinho páginas de
+site pequeno em tempo hábil, e o IndexNow — que roda a cada deploy — **não é
+usado pelo Google**.
+
+Ordem revista: **pedir indexação primeiro**, esperar duas semanas, e só então
+tratar qualidade de conteúdo como hipótese. A lista dividida em lotes está em
+`PENDENCIAS_INDEXACAO.md`.
+
+O conserto de orfandade continua valendo — página sem link interno é frágil
+mesmo depois de indexada.

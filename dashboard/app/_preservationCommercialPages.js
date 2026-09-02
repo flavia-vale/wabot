@@ -88,6 +88,174 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['Dá para divulgar outras lojas além da Shopee?', 'Dá. Amazon, Mercado Livre e Magalu entram no mesmo plano de entrada, sem custo a mais por loja. Se você divulga mais de uma, vale comparar pelo plano que cobre todas.'],
     ],
   },
+  /* Segunda loja da frente Tier 1 (ver o comentário em shopee-afiliados-whatsapp).
+   * Mercado Livre é o segundo do Trends. Assim como na Shopee, NÃO substitui o
+   * artigo de blog — o blog responde "quanto paga e como entrar", esta responde
+   * "já sou afiliada, como distribuo". As duas se linkam.
+   *
+   * O `aside` usa o fato que é só do ML: o RCA de 2026-08-15, em que endereço de
+   * anúncio montado por nós ia ao ar quebrado. É verdade verificável e útil para
+   * a afiliada, não argumento de venda. */
+  'mercado-livre-afiliados-whatsapp': {
+    path: '/mercado-livre-afiliados-whatsapp',
+    title: 'Afiliado Mercado Livre: divulgar no WhatsApp',
+    description: 'Já é afiliada do Mercado Livre? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link, sem copiar e colar oferta por oferta.',
+    eyebrow: 'Mercado Livre Afiliados',
+    h1: 'Afiliado do Mercado Livre: como divulgar suas ofertas no WhatsApp sem copiar e colar',
+    lead: 'Depois de entrar no programa de afiliados do Mercado Livre, o trabalho vira publicação: gerar o link com o seu código, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
+    intent: 'mercado livre afiliados whatsapp',
+    related: [
+      { href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', label: 'Ainda não é afiliada do Mercado Livre?', note: 'Comissão por categoria, prazo de pagamento e como não perder a atribuição.' },
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
+      { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'As três lado a lado, com fonte e data.' },
+    ],
+    about: ['Mercado Livre Afiliados', 'Link de afiliado', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'Já sou afiliada do Mercado Livre. O que isso resolve?',
+        a: 'A parte repetitiva: pegar a oferta, gerar o link com o seu código, montar a mensagem e repetir em cada grupo. O robô acompanha as origens que você escolher, converte o link e publica nos seus grupos e canais, com intervalo entre os envios.',
+      },
+      {
+        q: 'O link de catálogo e o de anúncio funcionam igual?',
+        a: 'O Mercado Livre tem os dois formatos e eles não são a mesma coisa. A conversão reconhece cada um e usa o caminho certo para creditar você. Quando não é possível converter com segurança, a oferta não é publicada — e isso aparece no histórico com o motivo.',
+      },
+      {
+        q: 'Preciso de programação, API ou n8n?',
+        a: 'Não. Você conecta o WhatsApp lendo um QR, escolhe de quais grupos as ofertas vêm e para quais grupos ou canais elas vão. Não há código, integração para montar nem servidor para manter.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Sete dias grátis, sem cartão, com o plano Pro completo. Depois, plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias. Sem fidelidade.',
+      },
+    ],
+    aside: {
+      pill: 'O cuidado que é só do Mercado Livre',
+      title: 'Endereço montado por nós nunca é publicado.',
+      body: 'Um link de anúncio do Mercado Livre montado a partir do código do produto pode apontar para uma página que não existe — a cliente clica e vê "esta página não existe". Quando a conversão falha, a oferta simplesmente não sai, em vez de sair com um endereço quebrado. Isso veio de um caso real e virou regra no código.',
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'O gargalo de quem já é afiliada do Mercado Livre não é achar oferta.',
+    problem: 'É publicar. Você acha a oferta boa, gera o link, monta o texto, cola no primeiro grupo, no segundo, no terceiro. Quando chega no último, o preço mudou. E no caminho manual três coisas acontecem sempre: link que escapa sem o seu código e paga comissão para outra pessoa, a mesma oferta publicada duas vezes no mesmo grupo, e tudo saindo de uma vez porque só sobrou aquela janela.',
+    bullets: ['Cada link de produto do Mercado Livre sai com o seu código, convertido antes do envio.', 'A mesma oferta não sai duas vezes no mesmo grupo: a repetição é bloqueada e fica registrada.', 'Publicação espaçada em vez de tudo de uma vez, com limite por destino.', 'Histórico do que saiu, para onde e o que foi bloqueado ou falhou na conversão.'],
+    process: ['Cadastre o seu código de afiliada do Mercado Livre no painel.', 'Escolha de quais grupos ou canais as ofertas vêm e para quais destinos elas vão.', 'Defina o intervalo entre envios e o limite por destino conforme o tamanho da sua operação.', 'Acompanhe no histórico o que saiu, o que foi bloqueado por repetição e o que falhou na conversão.'],
+    faqs: [
+      ['Isso substitui o meu cadastro no programa do Mercado Livre?', 'Não. O programa continua sendo do Mercado Livre e a comissão é paga por ele, direto para você. O que muda é a distribuição.'],
+      ['E o link de cupom do Mercado Livre?', 'O link de produto é o caso coberto. Para campanha e cupom do Mercado Livre, o mecanismo de crédito é diferente do das outras lojas e não afirmamos que funciona — preferimos dizer isso a prometer comissão que talvez não caia.'],
+      ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o afiliado do grupo de origem, que costuma ser um concorrente. Melhor não enviar do que enviar pagando para outra pessoa.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
+      ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Amazon e Magalu entram no mesmo plano de entrada, sem custo a mais por loja.'],
+    ],
+  },
+  /* Terceira loja da frente Tier 1. O `aside` usa o RCA de 2026-07: o link curto
+   * da Amazon nascia SEM a tag, a oferta saía bonita e a comissão não caía —
+   * ficou sete dias assim antes de alguém perceber. É o alerta mais útil que
+   * temos para uma afiliada Amazon, e é verdade nossa, verificada. */
+  'amazon-afiliados-whatsapp': {
+    path: '/amazon-afiliados-whatsapp',
+    title: 'Afiliado Amazon: divulgar ofertas no WhatsApp',
+    description: 'Já é afiliada Amazon? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com a sua tag, sem copiar e colar oferta por oferta. 7 dias grátis.',
+    eyebrow: 'Amazon Associados',
+    h1: 'Afiliado Amazon: como divulgar suas ofertas no WhatsApp sem copiar e colar',
+    lead: 'Depois de entrar no Amazon Associados, o trabalho vira publicação: gerar o link com a sua tag, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
+    intent: 'afiliado amazon whatsapp',
+    related: [
+      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Ainda não é afiliada Amazon?', note: 'Comissão por categoria, de 0% a 13% conforme o produto.' },
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
+      { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'As três lado a lado, com fonte e data.' },
+    ],
+    about: ['Amazon Associados', 'Link de afiliado', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'Já sou afiliada Amazon. O que isso resolve?',
+        a: 'A parte repetitiva: pegar a oferta, gerar o link com a sua tag, montar a mensagem e repetir em cada grupo. O robô acompanha as origens que você escolher, converte o link e publica nos seus grupos e canais, com intervalo entre os envios.',
+      },
+      {
+        q: 'A tag vai mesmo no link curto?',
+        a: 'Vai — e esse é o detalhe que mais custa caro na Amazon. Um link curto pode nascer sem a tag: ele funciona, abre o produto, a pessoa compra e a comissão não é sua. Aqui a tag entra no endereço antes de o link ser encurtado, para não existir versão sem ela.',
+      },
+      {
+        q: 'Preciso de programação, API ou n8n?',
+        a: 'Não. Você conecta o WhatsApp lendo um QR, escolhe de quais grupos as ofertas vêm e para quais grupos ou canais elas vão. Não há código, integração para montar nem servidor para manter.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Sete dias grátis, sem cartão, com o plano Pro completo. Depois, plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias. Sem fidelidade.',
+      },
+    ],
+    aside: {
+      pill: 'O erro que mais custa caro na Amazon',
+      title: 'Link curto sem a tag funciona igual — e não paga nada.',
+      body: 'É o pior tipo de perda, porque não dá sinal nenhum: a oferta sai bonita, o link abre o produto certo, a pessoa compra e a comissão vai para o vazio. Ninguém reclama, nada aparece no painel, e você só descobre quando olha o relatório da Amazon e vê zero clique atribuído. A tag precisa estar no endereço antes do encurtamento — depois não dá para consertar.',
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'O gargalo de quem já é afiliada Amazon não é achar oferta.',
+    problem: 'É publicar sem perder comissão no caminho. Você acha a oferta, gera o link, monta o texto e repete em cada grupo. Nesse caminho manual três coisas acontecem: link que sai sem a sua tag e não paga nada, a mesma oferta publicada duas vezes no mesmo grupo, e tudo saindo de uma vez porque só sobrou aquela janela do dia.',
+    bullets: ['Cada link de produto ou cupom da Amazon sai com a sua tag, aplicada antes do encurtamento.', 'A mesma oferta não sai duas vezes no mesmo grupo: a repetição é bloqueada e fica registrada.', 'Publicação espaçada em vez de tudo de uma vez, com limite por destino.', 'Histórico do que saiu, para onde e o que foi bloqueado ou falhou na conversão.'],
+    process: ['Cadastre a sua tag de associada Amazon no painel.', 'Escolha de quais grupos ou canais as ofertas vêm e para quais destinos elas vão.', 'Defina o intervalo entre envios e o limite por destino conforme o tamanho da sua operação.', 'Acompanhe no histórico o que saiu, o que foi bloqueado por repetição e o que falhou na conversão.'],
+    faqs: [
+      ['Isso substitui o meu cadastro no Amazon Associados?', 'Não. O programa continua sendo da Amazon e a comissão é paga por ela, direto para você. O que muda é a distribuição.'],
+      ['Funciona com cupom da Amazon, ou só com produto?', 'Com os dois. O link de campanha e de cupom também sai com a sua tag, o que importa quando o preço anunciado só fecha com o cupom aplicado.'],
+      ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o afiliado do grupo de origem. Melhor não enviar do que enviar pagando para outra pessoa.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
+      ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Mercado Livre e Magalu entram no mesmo plano de entrada, sem custo a mais por loja.'],
+    ],
+  },
+  /* Quinta loja da frente Tier 1. O `aside` diz o que a SHEIN tem de específico:
+   * o link curto vem da própria loja e é publicado como veio, e a falha degrada
+   * para o link comprido em vez de barrar a oferta. Isso é a regra que está no
+   * código (src/converters/shein.js) — não é promessa de marketing. */
+  'shein-afiliados-whatsapp': {
+    path: '/shein-afiliados-whatsapp',
+    title: 'SHEIN Afiliados: divulgar no WhatsApp',
+    description: 'Já é afiliada SHEIN? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link curto, sem copiar e colar oferta por oferta.',
+    eyebrow: 'SHEIN Afiliados',
+    h1: 'SHEIN Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
+    lead: 'Depois de entrar no programa de afiliados da SHEIN, o trabalho vira publicação: gerar o link com o seu código, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
+    intent: 'shein afiliados whatsapp',
+    related: [
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
+      { href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', label: 'Como a conversão de link funciona', note: 'O que acontece com o link entre a origem e o seu grupo.' },
+      { href: '/programa-de-afiliados', label: 'Comparar programas de afiliado', note: 'Comissão e prazo de atribuição das principais lojas, com fonte e data.' },
+    ],
+    about: ['SHEIN Afiliados', 'Link de afiliado', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'Já sou afiliada SHEIN. O que isso resolve?',
+        a: 'A parte repetitiva: pegar a oferta, gerar o link com o seu código, montar a mensagem e repetir em cada grupo. O robô acompanha as origens que você escolher, converte o link e publica nos seus grupos e canais.',
+      },
+      {
+        q: 'O link da SHEIN sai curto?',
+        a: 'Sai. O endereço da SHEIN é longo e ocupa boa parte da mensagem; a conversão pede à própria SHEIN o link curto do programa de afiliados e publica esse. Se a SHEIN não responder, a oferta sai mesmo assim, só com o link comprido — nunca deixa de sair por causa disso.',
+      },
+      {
+        q: 'Preciso de programação, API ou n8n?',
+        a: 'Não. Você conecta o WhatsApp lendo um QR, escolhe de quais grupos as ofertas vêm e para quais grupos ou canais elas vão. Não há código, integração para montar nem servidor para manter.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Sete dias grátis, sem cartão, com o plano Pro completo. Depois, plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias. Sem fidelidade.',
+      },
+    ],
+    aside: {
+      pill: 'O detalhe que é só da SHEIN',
+      title: 'O link curto vem da própria SHEIN, não de um encurtador nosso.',
+      body: 'O endereço da SHEIN é longo e come o espaço da mensagem. A conversão pede o link curto ao próprio programa de afiliados da loja, e publica exatamente o que a SHEIN devolveu — sem reescrever nem acrescentar parâmetro. Se a resposta não vier, a oferta sai com o link comprido em vez de não sair: link comprido é feio, oferta que não sai é prejuízo.',
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'O gargalo de quem já é afiliada SHEIN não é achar oferta.',
+    problem: 'É publicar. Você acha a oferta, gera o link, monta o texto e repete em cada grupo. Nesse caminho manual três coisas acontecem: link que escapa sem o seu código, a mesma oferta publicada duas vezes no mesmo grupo, e tudo saindo de uma vez porque só sobrou aquela janela do dia.',
+    bullets: ['Cada link da SHEIN sai com o seu código, e curto quando a loja devolve o link curto.', 'A mesma oferta não sai duas vezes no mesmo grupo: a repetição é bloqueada e fica registrada.', 'Publicação espaçada em vez de tudo de uma vez, com limite por destino.', 'Histórico do que saiu, para onde e o que foi bloqueado ou falhou na conversão.'],
+    process: ['Cadastre as suas credenciais de afiliada da SHEIN no painel.', 'Escolha de quais grupos ou canais as ofertas vêm e para quais destinos elas vão.', 'Defina o intervalo entre envios e o limite por destino conforme o tamanho da sua operação.', 'Acompanhe no histórico o que saiu e o que foi bloqueado por repetição.'],
+    faqs: [
+      ['Isso substitui o meu cadastro no programa da SHEIN?', 'Não. O programa continua sendo da SHEIN e a comissão é paga por ela, direto para você. O que muda é a distribuição.'],
+      ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o afiliado do grupo de origem. Melhor não enviar do que enviar pagando para outra pessoa.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
+      ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Amazon, Mercado Livre e Magalu entram no mesmo plano de entrada.'],
+    ],
+  },
   'bot-afiliados-whatsapp': {
     path: '/bot-afiliados-whatsapp',
     title: 'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',
