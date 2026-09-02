@@ -13,8 +13,12 @@ const hubRoutes = [
     slug: 'espelhar-grupos-whatsapp',
     path: '/espelhar-grupos-whatsapp',
     label: 'Espelhar grupos WhatsApp',
-    title: 'Espelhar grupos WhatsApp por cidade e operação regional',
-    description: 'Hub para operações regionais que querem espelhar ofertas em grupos de WhatsApp com cadência, revisão e controle.',
+    // Título e descrição moram em dashboard/app/_seoHubShared.js desde
+    // 2026-09-02 — fonte única (FR-001), mesmo caminho que 'bot-ofertas-whatsapp'
+    // seguiu em 19/08. Os antigos falavam em "por cidade e operação regional",
+    // apontando para a linha de LPs de cidade que está congelada e fora do
+    // índice; a página passou a responder pelo produto, não pelo índice de
+    // páginas mortas.
     type: 'hub',
     cluster: 'localizacoes',
     intent: 'espelhar grupos whatsapp',
