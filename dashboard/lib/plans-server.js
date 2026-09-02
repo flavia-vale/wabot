@@ -1,5 +1,5 @@
 import { getApiPort } from '@/app/api/[...path]/route'
-import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
+import { DEFAULT_LANDING_PLANS, parsePriceValue } from '@/lib/marketing-content'
 
 /* Carga dos planos NO SERVIDOR (auditoria de funil 2026-08-05, §1.4).
  *
@@ -48,6 +48,9 @@ function mergeWithDefaults(remotePlans) {
       ...defaultPlan,
       name: remote.title || defaultPlan.name,
       price: remote.price || defaultPlan.price,
+      // O número do schema Offer TEM que seguir o preço exibido — ver o
+      // comentário de `parsePriceValue` em lib/marketing-content.js.
+      priceValue: parsePriceValue(remote.price) ?? defaultPlan.priceValue,
       period: remote.period || defaultPlan.period,
       desc: remote.description || defaultPlan.desc,
       features:
