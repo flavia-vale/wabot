@@ -202,6 +202,66 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Mercado Livre e Magalu entram no mesmo plano de entrada, sem custo a mais por loja.'],
     ],
   },
+  /* Frente Tier 1 — Magalu. LINHA REABERTA em 2026-09-02 por decisão explícita
+   * da dona do produto: o congelamento vinha do Trends (único marketplace da
+   * lista em queda) e era argumento de prioridade, não de correção. A guarda
+   * FR-033 em test/marketing-limites-que-nao-se-cruzam.test.js passou a aceitar
+   * ESTA rota e só ela — não foi apagada. Ver a nota no AGENTS.md.
+   *
+   * O Magalu é o caso mais simples de todos: o código vale em qualquer endereço
+   * da loja, cupom e campanha inclusive, e o `aside` usa exatamente isso. É um
+   * diferencial real e verificável, e é honesto dizê-lo aqui porque nas outras
+   * lojas essa parte NÃO é garantida. */
+  'magalu-afiliados-whatsapp': {
+    path: '/magalu-afiliados-whatsapp',
+    title: 'Divulgador Magalu: publicar ofertas no WhatsApp',
+    description: 'Já é divulgadora do Magalu? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu código, sem copiar e colar oferta por oferta.',
+    eyebrow: 'Divulgador Magalu',
+    h1: 'Divulgador Magalu: como publicar suas ofertas no WhatsApp sem copiar e colar',
+    lead: 'Depois de entrar no programa de divulgação do Magalu, o trabalho vira publicação: aplicar o seu código no link, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
+    intent: 'divulgador magalu whatsapp',
+    related: [
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
+      { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'Comparação de comissão entre os programas, com fonte e data.' },
+      { href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', label: 'Como a conversão de link funciona', note: 'O que acontece com o link entre a origem e o seu grupo.' },
+    ],
+    about: ['Divulgador Magalu', 'Link de afiliado', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'Já sou divulgadora Magalu. O que isso resolve?',
+        a: 'A parte repetitiva: pegar a oferta, aplicar o seu código no link, montar a mensagem e repetir em cada grupo. O robô acompanha as origens que você escolher, converte o link e publica nos seus grupos e canais.',
+      },
+      {
+        q: 'Cupom do Magalu também é convertido?',
+        a: 'Também. No Magalu o seu código vale em qualquer endereço da loja, então link de produto, de campanha e de cupom saem todos com você creditada — é a loja mais simples nesse ponto.',
+      },
+      {
+        q: 'Preciso de programação, API ou n8n?',
+        a: 'Não. Você conecta o WhatsApp lendo um QR, escolhe de quais grupos as ofertas vêm e para quais grupos ou canais elas vão. Não há código, integração para montar nem servidor para manter.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Sete dias grátis, sem cartão, com o plano Pro completo. Depois, plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias. Sem fidelidade.',
+      },
+    ],
+    aside: {
+      pill: 'Por que o Magalu é o caso mais simples',
+      title: 'No Magalu o seu código vale em qualquer endereço da loja.',
+      body: 'Nas outras lojas, converter um link de cupom ou de campanha depende do mecanismo de cada programa, e nem sempre credita. No Magalu não: produto, campanha e cupom são tratados igual, e a oferta sai com você creditada em qualquer um deles. Se você divulga muita campanha e vitrine, essa diferença aparece no fim do mês.',
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'O gargalo de quem já divulga Magalu não é achar oferta.',
+    problem: 'É publicar. Você acha a oferta, aplica o seu código, monta o texto e repete em cada grupo. Nesse caminho manual três coisas acontecem: link que escapa sem o seu código, a mesma oferta publicada duas vezes no mesmo grupo, e tudo saindo de uma vez porque só sobrou aquela janela do dia.',
+    bullets: ['Link de produto, de campanha e de cupom do Magalu saem com o seu código.', 'A mesma oferta não sai duas vezes no mesmo grupo: a repetição é bloqueada e fica registrada.', 'Publicação espaçada em vez de tudo de uma vez, com limite por destino.', 'Histórico do que saiu, para onde e o que foi bloqueado ou falhou na conversão.'],
+    process: ['Cadastre o seu código de divulgadora do Magalu no painel.', 'Escolha de quais grupos ou canais as ofertas vêm e para quais destinos elas vão.', 'Defina o intervalo entre envios e o limite por destino conforme o tamanho da sua operação.', 'Acompanhe no histórico o que saiu e o que foi bloqueado por repetição.'],
+    faqs: [
+      ['Isso substitui o meu cadastro no programa do Magalu?', 'Não. O programa continua sendo do Magalu e a comissão é paga por ele, direto para você. O que muda é a distribuição.'],
+      ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o divulgador do grupo de origem. Melhor não enviar do que enviar pagando para outra pessoa.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
+      ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Amazon e Mercado Livre entram no mesmo plano de entrada, sem custo a mais por loja.'],
+    ],
+  },
   /* Quinta loja da frente Tier 1. O `aside` diz o que a SHEIN tem de específico:
    * o link curto vem da própria loja e é publicado como veio, e a falha degrada
    * para o link comprido em vez de barrar a oferta. Isso é a regra que está no

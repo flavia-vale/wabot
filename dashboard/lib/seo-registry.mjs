@@ -274,6 +274,7 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/mercado-livre-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/mercado-livre-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/amazon-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/amazon-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/shein-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/shein-afiliados-whatsapp', '2026-09-02'), indexable: true },
+  { path: '/magalu-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/magalu-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/bot-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-afiliados-whatsapp', '2026-07-30'), indexable: true },
   { path: '/bot-achadinhos-whatsapp', template: 'commercial-seo', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-achadinhos-whatsapp', '2026-07-30'), indexable: true },
   { path: '/anti-ban-whatsapp', template: 'commercial-seo', priority: 0.85, changeFrequency: 'weekly', lastModified: resolveLastModified('/anti-ban-whatsapp', '2026-07-30'), indexable: true },

@@ -467,9 +467,28 @@ test('FR-033: "robô" não vira termo próprio de cluster (Trends: "robô whatsa
   }
 })
 
-test('FR-033: Magalu não vira frente nova (é em queda no Trends — só entra como uma das 4 lojas suportadas)', () => {
+// LINHA REABERTA EM 2026-09-02, por decisão explícita da dona do produto.
+//
+// O congelamento original vinha do Trends: Magalu é o único marketplace da
+// nossa lista em queda, então "não invista uma frente nova aí". Isso era um
+// argumento de PRIORIZAÇÃO, não de correção — e a prioridade é decisão dela.
+//
+// A guarda não foi apagada, e é de propósito. Ela deixou de proibir Magalu por
+// completo e passou a proibir a REABERTURA da linha antiga: uma página
+// comercial por loja é o padrão da frente Tier 1 (mesma forma de Shopee,
+// Mercado Livre, Amazon e SHEIN), mas cidade, nicho e dor seguem congelados, e
+// nenhuma outra rota de Magalu pode nascer sem passar por aqui de novo.
+const ROTAS_MAGALU_APROVADAS = new Set(['/magalu-afiliados-whatsapp'])
+
+test('FR-033: Magalu só existe na rota comercial aprovada em 02/09 — nenhuma outra', () => {
   for (const route of SEO_ROUTES) {
-    assert.doesNotMatch(route.path, /magalu|magazine-?luiza/i, `${route.path}: rota dedicada a Magalu — linha congelada, Magalu só entra como uma das lojas suportadas dentro de outra página`)
+    if (!/magalu|magazine-?luiza/i.test(route.path)) continue
+    assert.ok(
+      ROTAS_MAGALU_APROVADAS.has(route.path),
+      `${route.path}: rota nova de Magalu. A linha foi reaberta em 02/09 SÓ para a página comercial ` +
+        `/magalu-afiliados-whatsapp, no mesmo padrão das outras lojas. Magalu é o único marketplace ` +
+        `em queda no Trends — qualquer rota além dessa precisa de decisão nova, não de um append aqui.`
+    )
   }
 })
 
