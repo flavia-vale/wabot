@@ -860,7 +860,42 @@ apontava para um `mailto:` de um domínio que não é nosso. Agora:
   que inclui a impressão do hash da senha ATUAL. Isso dá **uso único de graça**
   (trocou a senha, todo link antigo morre) e validade de 1h.
 - **Resposta sempre igual**, exista ou não a conta — a rota não pode virar
-  detector de quem tem conta aqui. Usa o mesmo balde de tentativas do login.
+  detector de quem tem conta aqui.
+- **Balde de tentativas PRÓPRIO, nunca o do login** (RCA 2026-09, abaixo).
+
+#### O e-mail de nova senha não chegava (RCA 2026-09 — não regredir)
+
+Duas travas, cada uma sozinha suficiente para deixar a recuperação de senha
+sem funcionar. As duas atingiam exatamente quem precisa dela.
+
+1. **O pedido consumia o balde de tentativas do LOGIN.** Quem esqueceu a senha
+   erra o login várias vezes antes de clicar em "esqueci minha senha" — e o
+   orçamento (8 tentativas / 15min, por e-mail e por IP) já vinha zerado. A
+   rota respondia **429 "Muitas tentativas"** em vez de mandar o e-mail. Hoje
+   `consumePasswordResetAttempt` (`src/api/routes/auth.js`) tem mapas próprios
+   e teto próprio (`PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS`, 5 por hora, e as
+   irmãs `_WINDOW_MS` / `_EMAIL_MAX_ATTEMPTS`). O limite continua existindo —
+   a rota não pode virar varredura de e-mails —, só que com contagem separada.
+   **Não voltar a compartilhar o balde com o login.**
+2. **O teto diário do motor de e-mails engolia o envio, em silêncio.** O teto
+   (`EMAIL_DAILY_CAP`, 300) protege o domínio dos **disparos em massa**, que
+   saem pela fila lenta e voltam na virada das 8h. O e-mail de nova senha não
+   volta: o gatilho é dispare-e-esqueça, não item de fila. Num dia de campanha
+   grande, batido o teto, toda recuperação de senha parava até o dia seguinte —
+   e o caminho do teto ia embora **sem gravar linha nenhuma** no `EmailSendLog`,
+   então o e-mail não aparecia nem como enviado nem como barrado.
+   `DAILY_CAP_EXEMPT_SLUGS` (`src/email/dispatcher.js`) tira `recuperar_senha`
+   do teto — a pessoa está na tela, agora, sem entrar na conta, e "sai amanhã de
+   manhã" é a mesma coisa que "não funciona". Volume é desprezível: a rota já é
+   limitada por e-mail e por IP. **Não pôr `recuperar_senha` de volta no teto.**
+   Junto: descarte por teto em gatilho **sem fila** agora vira linha `skipped`
+   com o motivo (item de fila segue sem marcação — ele de fato volta amanhã).
+
+⚠️ **Antes de procurar defeito no código, confira o SMTP.** Sem `SMTP_*` no
+`.env` o envio é no-op silencioso e NENHUM e-mail sai — inclusive este. Sinal:
+zero linha `sent` recente em `EmailSendLog`.
+
+Testes: `test/password-reset.test.js`, `test/email-engine.test.js`.
 
 **Contato de suporte (dashboard):** o e-mail e WhatsApp de suporte exibidos no
 site vêm de constantes em `dashboard/lib/marketing-content.js`
