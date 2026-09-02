@@ -1,6 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveSheinShortLink, isSheinShortLink, extractSheinGoodsId } from '../src/converters/shein.js'
+import {
+  collectSheinProductCandidates,
+  consolidateSheinProductEvidence,
+  extractSheinGoodsId,
+  isSheinOpaqueShareEndpoint,
+  isSheinShortLink,
+  resolveSheinShortLink,
+  SHEIN_CONVERSION_ERROR,
+} from '../src/converters/shein.js'
 
 // ---------------------------------------------------------------------------
 // Contexto: o oneLink.shein.com não devolve 302 no 1º hop — serve um
@@ -24,6 +32,8 @@ function redirectResponse(location, url) {
 }
 
 function htmlResponse(html, url, { setCookie = [] } = {}) {
+  const bytes = new TextEncoder().encode(html)
+  let consumed = false
   return {
     ok: true,
     status: 200,
@@ -36,6 +46,10 @@ function htmlResponse(html, url, { setCookie = [] } = {}) {
       },
       getSetCookie: () => setCookie,
     },
+    body: { getReader: () => ({
+      read: async () => consumed ? { done: true } : (consumed = true, { done: false, value: bytes }),
+      cancel: async () => {},
+    }) },
     text: async () => html,
   }
 }
@@ -228,4 +242,195 @@ test('extractSheinGoodsId cobre caminho -p-<id>.html e query goods_id', () => {
   assert.equal(extractSheinGoodsId('https://br.shein.com/algo-p-485735309-cat-123.html'), '485735309')
   assert.equal(extractSheinGoodsId('https://m.shein.com/br/ark/default?goods_id=1234'), '1234')
   assert.equal(extractSheinGoodsId('https://m.shein.com/br/ark/default'), null)
+})
+
+test('endpoint opaco exige protocolo, host e caminho exatos e rejeita credenciais', () => {
+  assert.equal(isSheinOpaqueShareEndpoint('https://api-shein.shein.com/h5/sharejump/appjump?shc=x'), true)
+  for (const value of [
+    'http://api-shein.shein.com/h5/sharejump/appjump',
+    'https://user:pass@api-shein.shein.com/h5/sharejump/appjump',
+    'https://x.api-shein.shein.com/h5/sharejump/appjump',
+    'https://api-shein.shein.com.evil.test/h5/sharejump/appjump',
+    'https://api-shein.shein.com/h5/sharejump/appjump/extra',
+  ]) assert.equal(isSheinOpaqueShareEndpoint(value), false, value)
+})
+
+test('extração estática aceita só produto HTTPS oficial sem credenciais', () => {
+  const body = `
+    <link rel="canonical" href="https://br.shein.com/item-p-123456.html?utm_source=x">
+    <a href="/br/ark/default?goods_id=123456">ok</a>
+    <a href="http://br.shein.com/item-p-9.html">http</a>
+    <a href="https://shein.com.evil.test/item-p-8.html">evil</a>
+    <a href="https://u:p@br.shein.com/item-p-7.html">creds</a>
+  `
+  const candidates = collectSheinProductCandidates(body, 'https://api-shein.shein.com/h5/sharejump/appjump')
+  assert.deepEqual(new Set(candidates.map(x => x.goodsId)), new Set(['123456']))
+})
+
+test('prova deduplica mesmo produto e falha fechado para zero ou ambiguidade', () => {
+  const one = { goodsId: '123456', url: 'https://br.shein.com/item-p-123456.html' }
+  const same = { goodsId: '123456', url: 'https://m.shein.com/br/ark/default?goods_id=123456' }
+  assert.deepEqual(consolidateSheinProductEvidence([one, same]), { status: 'resolved', goodsId: '123456', url: one.url })
+  assert.deepEqual(consolidateSheinProductEvidence([]), { status: 'unproven' })
+  assert.deepEqual(consolidateSheinProductEvidence([one, { goodsId: '9', url: 'https://br.shein.com/x-p-9.html' }]), { status: 'unproven' })
+})
+
+test('cadeia opaca usa os mesmos hops/cookies e só retorna produto provado', async () => {
+  const start = 'https://onelink.shein.com/50/synthetic?shc=synthetic'
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=synthetic&link=synthetic'
+  const product = 'https://m.shein.com/br/ark/default?goods_id=123456'
+  const seen = []
+  const fetchImpl = async (url, init) => {
+    seen.push({ url, cookie: init.headers.Cookie || null })
+    if (url === start) return htmlResponse(`<input id="url" value="${opaque}">`, url, { setCookie: ['session=synthetic; Path=/'] })
+    return htmlResponse(`<script type="application/json">{"canonical":"${product}"}</script>`, url)
+  }
+  const result = await resolveSheinShortLink(start, { fetchImpl, returnDetails: true })
+  assert.equal(result.url, product)
+  assert.equal(result.evidence.goodsId, '123456')
+  assert.equal(result.errorCode, null)
+  assert.equal(seen.length, 2)
+  assert.match(seen[1].cookie, /session=synthetic/)
+})
+
+test('endpoint opaco sem prova retorna classificação segura, nunca intermediário como prova', async () => {
+  const start = 'https://onelink.shein.com/50/synthetic'
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=synthetic&link=synthetic'
+  const fetchImpl = async (url) => htmlResponse(
+    url === start ? `<input id="url" value="${opaque}">` : '<html>sem produto</html>',
+    url,
+  )
+  const result = await resolveSheinShortLink(start, { fetchImpl, returnDetails: true })
+  assert.equal(result.errorCode, SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+  assert.equal(result.evidence?.status, 'unproven')
+})
+
+function opaqueStartResponse(start, opaque) {
+  return htmlResponse(`<input id="url" value="${opaque}">`, start)
+}
+
+test('corpo opaco truncado falha fechado mesmo com candidato antes de 512 KiB', async () => {
+  const start = 'https://onelink.shein.com/50/body-limit'
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=x&link=y'
+  const encoder = new TextEncoder()
+  const prefix = encoder.encode('https://m.shein.com/br/ark/default?goods_id=123456\n')
+  const chunks = [prefix, ...Array.from({ length: 7 }, () => encoder.encode('x'.repeat(100 * 1024)))]
+  const fetchImpl = async (url) => {
+    if (url === start) return opaqueStartResponse(start, opaque)
+    return {
+      ...htmlResponse('', opaque),
+      body: { getReader: () => ({
+        read: async () => chunks.length ? { done: false, value: chunks.shift() } : { done: true },
+        cancel: async () => {},
+      }) },
+    }
+  }
+  const result = await resolveSheinShortLink(start, { fetchImpl, returnDetails: true })
+  assert.equal(result.errorCode, SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT)
+  assert.equal(result.evidence, null)
+})
+
+test('ciclo e esgotamento de hops são transitórios e nunca viram prova', async () => {
+  const start = 'https://onelink.shein.com/50/cycle'
+  const hop = 'https://onelink.shein.com/50/hop'
+  const cycleFetch = async url => redirectResponse(url === start ? hop : start, url)
+  const cycle = await resolveSheinShortLink(start, { fetchImpl: cycleFetch, returnDetails: true })
+  assert.equal(cycle.errorCode, SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT)
+  assert.equal(cycle.evidence, null)
+
+  const hopsFetch = async url => redirectResponse(`${url}/next`, url)
+  const hops = await resolveSheinShortLink(start, { fetchImpl: hopsFetch, maxHops: 6, returnDetails: true })
+  assert.equal(hops.errorCode, SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT)
+  assert.equal(hops.evidence, null)
+})
+
+test('deadline no caminho opaco é transitório e não publica evidência parcial', async () => {
+  const start = 'https://onelink.shein.com/50/deadline'
+  const fetchImpl = async (_url, init) => new Promise((_resolve, reject) => {
+    const keepAlive = setTimeout(() => {}, 100)
+    init.signal.addEventListener('abort', () => {
+      clearTimeout(keepAlive)
+      reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+    })
+  })
+  const result = await resolveSheinShortLink(start, { fetchImpl, totalTimeoutMs: 10, returnDetails: true })
+  assert.equal(result.errorCode, SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT)
+  assert.equal(result.evidence, null)
+})
+
+test('redirect inseguro nunca recebe fetch e não vira fallback', async () => {
+  for (const unsafe of [
+    'http://m.shein.com/br/ark/default?goods_id=1',
+    'https://user:pass@m.shein.com/br/ark/default?goods_id=1',
+    'https://shein.com.evil.test/item-p-1.html',
+  ]) {
+    let calls = 0
+    const fetchImpl = async url => {
+      calls++
+      if (calls > 1) throw new Error(`destino inseguro recebeu fetch: ${url}`)
+      return redirectResponse(unsafe, url)
+    }
+    const result = await resolveSheinShortLink('https://onelink.shein.com/50/unsafe', { fetchImpl, returnDetails: true })
+    assert.equal(calls, 1)
+    assert.equal(result.errorCode, SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+    assert.equal(result.evidence, null)
+  }
+})
+
+test('HTML opaco ambíguo ou só com candidatos inseguros não comprova produto', async () => {
+  const start = 'https://onelink.shein.com/50/adversarial'
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=x&link=y'
+  for (const html of [
+    '<a href="https://m.shein.com/a-p-1.html"></a><a href="https://br.shein.com/b-p-2.html"></a>',
+    '<a href="http://m.shein.com/a-p-1.html"></a><a href="https://evil.test/b-p-1.html"></a><a href="https://u:p@m.shein.com/c-p-1.html"></a>',
+  ]) {
+    const fetchImpl = async url => url === start ? opaqueStartResponse(start, opaque) : htmlResponse(html, opaque)
+    const result = await resolveSheinShortLink(start, { fetchImpl, returnDetails: true })
+    assert.equal(result.errorCode, SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+    assert.notEqual(result.evidence?.status, 'resolved')
+  }
+})
+
+test('endpoint opaco sem Web Stream recusa antes de materializar res.text()', async () => {
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=x&link=y'
+  let textCalls = 0
+  const fetchImpl = async () => ({
+    status: 200,
+    headers: { get: name => name.toLowerCase() === 'content-type' ? 'text/html' : null, getSetCookie: () => [] },
+    text: async () => {
+      textCalls++
+      return `https://m.shein.com/a-p-123456.html${'x'.repeat(2 * 1024 * 1024)}`
+    },
+  })
+  const result = await resolveSheinShortLink(opaque, { fetchImpl, returnDetails: true })
+  assert.equal(textCalls, 0)
+  assert.equal(result.errorCode, SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT)
+  assert.equal(result.evidence, null)
+})
+
+test('todas as respostas opacas sem prova recebem classificação explícita', async () => {
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=x&link=y'
+  const response = ({ status = 200, contentType = 'text/html', location = null, html = '' }) => {
+    const res = htmlResponse(html, opaque)
+    res.status = status
+    res.headers.get = name => {
+      if (name.toLowerCase() === 'content-type') return contentType
+      if (name.toLowerCase() === 'location') return location
+      return null
+    }
+    return res
+  }
+  const cases = [
+    [response({ status: 503 }), SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT],
+    [response({ status: 429 }), SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT],
+    [response({ status: 404 }), SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN],
+    [response({ contentType: 'application/json', html: '{}' }), SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN],
+    [response({ location: 'http://[malformed' }), SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN],
+    [response({ location: 'https://br.shein.com/risk/challenge' }), SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN],
+  ]
+  for (const [res, expected] of cases) {
+    const result = await resolveSheinShortLink(opaque, { fetchImpl: async () => res, returnDetails: true })
+    assert.equal(result.errorCode, expected)
+    assert.equal(result.evidence, null)
+  }
 })

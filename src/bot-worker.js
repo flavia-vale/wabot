@@ -16,6 +16,7 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
+import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
@@ -36,7 +37,7 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
-import { describeMissingCredentials, validateCredentialData } from './credentialHealth.js'
+import { validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
@@ -3634,12 +3635,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         logger.info({ platform, url }, 'Link detectado')
         const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
         if (!credentialValidation.configured) {
+          const issue = buildConversionIssue({ platform, credentialValidation })
           await recordConversionIssue({
             platform,
             url,
             jid,
             text,
-            reason: describeMissingCredentials(credentialValidation),
+            reason: issue.reason,
           })
           return null
         }
@@ -3678,6 +3680,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               reason: err.message,
               errorMsg: err.conversionLogErrorMsg,
               status: err.conversionLogStatus,
+            })
+            return null
+          }
+          const classifiedIssue = buildConversionIssue({ platform, credentialValidation, error: err })
+          if (classifiedIssue?.kind === 'classified_conversion') {
+            await recordConversionIssue({
+              platform,
+              url,
+              jid,
+              text,
+              reason: classifiedIssue.reason,
+              errorMsg: classifiedIssue.errorMsg,
             })
             return null
           }
