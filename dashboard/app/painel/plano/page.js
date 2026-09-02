@@ -55,6 +55,23 @@ export default function PlanoPage() {
   const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
+  // 'auto' = renovação automática (assinatura no Mercado Pago);
+  // 'once' = pagamento único de 30 dias (comportamento histórico).
+  const [billingMode, setBillingMode] = useState('auto')
+  const [emailPrompt, setEmailPrompt] = useState(null)
+  const [newEmail, setNewEmail] = useState('')
+  const [savingEmail, setSavingEmail] = useState(false)
+  const [cancelState, setCancelState] = useState('idle')
+  const [cancelMessage, setCancelMessage] = useState('')
+
+  async function refreshOverview() {
+    try {
+      const data = await api.paymentsOverview()
+      setOverview(data || null)
+    } catch {
+      // Falha ao reler o resumo não desfaz a ação que acabou de dar certo.
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -79,6 +96,65 @@ export default function PlanoPage() {
     } catch (err) {
       setCheckoutError(err?.message || 'Não foi possível iniciar o checkout. Tente novamente ou fale com o suporte.')
       setCheckoutPlan('')
+    }
+  }
+
+  async function handleSubscribe(planId) {
+    if (checkoutPlan) return
+    setCheckoutError('')
+    setEmailPrompt(null)
+    setCheckoutPlan(planId)
+    try {
+      const data = await api.paymentsCreateSubscription(planId)
+      if (!data?.init_point) throw new Error('Assinatura indisponível no momento. Tente novamente ou fale com o suporte.')
+      window.location.assign(data.init_point)
+    } catch (err) {
+      // O Mercado Pago só aceita assinatura com um e-mail válido e conhecido
+      // por ele. Em vez de um erro sem saída, a tela oferece a troca ali mesmo.
+      if (err?.needsEmailUpdate) {
+        setEmailPrompt({ plan: planId, message: err?.message || 'Confira o e-mail da sua conta para assinar com renovação automática.' })
+      } else {
+        setCheckoutError(err?.message || 'Não foi possível iniciar a assinatura. Tente novamente ou fale com o suporte.')
+      }
+      setCheckoutPlan('')
+    }
+  }
+
+  async function handleSaveEmailAndRetry() {
+    if (savingEmail) return
+    const email = newEmail.trim()
+    if (!email) return
+    setSavingEmail(true)
+    setCheckoutError('')
+    try {
+      await api.updateAccountEmail(email)
+      const plan = emailPrompt?.plan ?? selectedPlanId
+      setEmailPrompt(null)
+      setNewEmail('')
+      await handleSubscribe(plan)
+    } catch (err) {
+      setCheckoutError(err?.message || 'Não foi possível salvar o e-mail. Tente novamente.')
+    } finally {
+      setSavingEmail(false)
+    }
+  }
+
+  async function handleCancelSubscription() {
+    if (cancelState === 'sending') return
+    if (cancelState !== 'confirming') {
+      setCancelState('confirming')
+      return
+    }
+    setCancelState('sending')
+    setCancelMessage('')
+    try {
+      const data = await api.paymentsCancelSubscription()
+      setCancelMessage(data?.message || 'Renovação automática desligada.')
+      setCancelState('done')
+      await refreshOverview()
+    } catch (err) {
+      setCancelMessage(err?.message || 'Não conseguimos desligar agora. Tente de novo ou fale com o suporte.')
+      setCancelState('error')
     }
   }
 
@@ -108,6 +184,39 @@ export default function PlanoPage() {
           </div>
           <p className="pnl-hero-sub" style={{ marginTop: 12 }}>{overview.billingModel} · Pagamento via {overview.paymentMethod}</p>
           {lastAmount && lastDate && <p className="pnl-hero-sub">Último pagamento: {lastAmount} em {lastDate}</p>}
+          {overview.autoRenew && (
+            <div style={{ marginTop: 14, borderTop: '1px solid color-mix(in oklab, var(--surface) 25%, transparent)', paddingTop: 12 }}>
+              <p className="pnl-hero-sub">
+                A cobrança acontece sozinha todo mês{nextChargeLabel ? `, a próxima em ${nextChargeLabel}` : ''}. Você pode desligar quando quiser.
+              </p>
+              {cancelState !== 'done' && (
+                <button
+                  type="button"
+                  className="pnl-btn is-ghost"
+                  style={{ marginTop: 10 }}
+                  onClick={handleCancelSubscription}
+                  disabled={cancelState === 'sending'}
+                >
+                  {cancelState === 'sending'
+                    ? 'Desligando…'
+                    : cancelState === 'confirming'
+                      ? 'Confirmar: desligar a cobrança automática'
+                      : 'Desligar cobrança automática'}
+                </button>
+              )}
+              {cancelState === 'confirming' && (
+                <p className="pnl-hero-sub" style={{ marginTop: 8 }}>
+                  Seu acesso continua até {expiresAtLabel ?? 'o fim do período já pago'} — só não será cobrado de novo.
+                </p>
+              )}
+              {cancelMessage && <p className="pnl-hero-sub" style={{ marginTop: 8 }}>{cancelMessage}</p>}
+            </div>
+          )}
+          {!overview.autoRenew && overview.subscription?.status === 'pending' && (
+            <p className="pnl-hero-sub" style={{ marginTop: 12 }}>
+              Você começou a ligar a cobrança automática e não terminou no Mercado Pago. Enquanto isso, a renovação continua manual.
+            </p>
+          )}
         </section>
       )}
       {/* Planos */}
@@ -144,10 +253,65 @@ export default function PlanoPage() {
           </div>
         )}
 
-        <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={() => handleCheckout(selectedPlanId)} disabled={!!checkoutPlan}>
-          {checkoutPlan === selectedPlanId ? 'Aguarde…' : `Pagar 30 dias — ${selectedPlan.name}`}
+        {emailPrompt && (
+          <div className="pnl-note-box is-warn" style={{ marginTop: 14 }} role="alert">
+            <strong style={{ fontWeight: 600 }}>Confirme seu e-mail para a cobrança automática</strong>
+            <p style={{ marginTop: 4 }}>{emailPrompt.message}</p>
+            <input
+              type="email"
+              className="pnl-input"
+              style={{ marginTop: 10, width: '100%' }}
+              placeholder="seu@email.com"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+            />
+            <div className="pnl-toolbar" style={{ marginTop: 10, gap: 8 }}>
+              <button type="button" className="pnl-btn is-primary" onClick={handleSaveEmailAndRetry} disabled={savingEmail || !newEmail.trim()}>
+                {savingEmail ? 'Salvando…' : 'Salvar e continuar'}
+              </button>
+              <button type="button" className="pnl-btn is-ghost" onClick={() => { setEmailPrompt(null); setBillingMode('once') }}>
+                Pagar uma vez, sem cobrança automática
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="pnl-presets" style={{ gridTemplateColumns: 'repeat(2, 1fr)', marginTop: 16 }}>
+          {[
+            { id: 'auto', title: 'Cobrança automática', desc: 'Renova sozinho todo mês no cartão. Você desliga quando quiser.' },
+            { id: 'once', title: 'Pagar uma vez', desc: '30 dias de acesso via PIX ou cartão. Você renova na mão ao acabar.' },
+          ].map((option) => {
+            const selected = billingMode === option.id
+            return (
+              <button key={option.id} type="button" className={`pnl-preset${selected ? ' is-active' : ''}`} onClick={() => setBillingMode(option.id)} aria-pressed={selected}>
+                <div className="pnl-toolbar" style={{ justifyContent: 'space-between' }}>
+                  <b>{option.title}</b>
+                  <span className={`pnl-tag ${selected ? 'is-success' : 'is-skip'}`}>{selected ? 'Selecionado' : 'Escolher'}</span>
+                </div>
+                <small>{option.desc}</small>
+              </button>
+            )
+          })}
+        </div>
+
+        <button
+          type="button"
+          className="pnl-btn is-primary"
+          style={{ marginTop: 16, width: '100%', justifyContent: 'center' }}
+          onClick={() => (billingMode === 'auto' ? handleSubscribe(selectedPlanId) : handleCheckout(selectedPlanId))}
+          disabled={!!checkoutPlan}
+        >
+          {checkoutPlan === selectedPlanId
+            ? 'Aguarde…'
+            : billingMode === 'auto'
+              ? `Ligar cobrança automática — ${selectedPlan.name}`
+              : `Pagar 30 dias — ${selectedPlan.name}`}
         </button>
-        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>Pagamento único de 30 dias via PIX ou cartão. Você renova manualmente ao expirar.</p>
+        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>
+          {billingMode === 'auto'
+            ? 'Cobrança automática no cartão, todo mês, sem fidelidade. Desligue quando quiser aqui mesmo.'
+            : 'Pagamento único de 30 dias via PIX ou cartão. Você renova manualmente ao expirar.'}
+        </p>
       </section>
 
       {/* Dificuldades no pagamento */}
