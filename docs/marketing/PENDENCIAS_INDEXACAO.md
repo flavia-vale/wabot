@@ -53,6 +53,7 @@ títulos. Pedir antes indexa a versão velha.
 - [ ] `/mercado-livre-afiliados-whatsapp`
 - [ ] `/amazon-afiliados-whatsapp`
 - [ ] `/shein-afiliados-whatsapp`
+- [ ] `/magalu-afiliados-whatsapp`
 
 ### O que a evidência diz sobre pedir
 

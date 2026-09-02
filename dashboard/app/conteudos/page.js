@@ -158,6 +158,11 @@ const nichePages = [
     title: 'SHEIN Afiliados: divulgar no WhatsApp',
     description: 'Para quem já é afiliada SHEIN e quer publicar com o link curto da própria loja.',
   },
+  {
+    href: '/magalu-afiliados-whatsapp',
+    title: 'Divulgador Magalu: publicar no WhatsApp',
+    description: 'Para quem já divulga Magalu, onde o código vale inclusive em cupom e campanha.',
+  },
 ]
 
 /* As dez LPs de "dor" (painSlugs em lib/seo-registry.mjs). Estavam no sitemap e
