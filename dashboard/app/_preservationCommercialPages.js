@@ -14,6 +14,80 @@ const checklistHref = '/materiais/checklist-antiban-whatsapp?utm_source=seo&utm_
 const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_calculadora_risco'
 
 export const PRESERVATION_COMMERCIAL_PAGES = {
+  /* Frente Tier 1 (PLANO_ACAO_SEO_IA_2026-09-01, ação 9). "shopee afiliados" tem
+   * 50.000 buscas/mês com concorrência BAIXA — o maior volume do levantamento
+   * inteiro, e a Shopee é a primeira do Trends (Shopee >> ML > Amazon > Magalu).
+   *
+   * Já existe /blog/como-ser-afiliado-shopee-whatsapp ("Shopee Afiliados: como
+   * entrar e quanto paga"), e ela NÃO é substituída nem duplicada aqui — as duas
+   * respondem intenções diferentes, e é isso que evita a canibalização que já
+   * custou clique nas páginas de achadinhos (seção 2 do plano):
+   *
+   *   blog     -> quem AINDA NÃO é afiliada: como entrar, quanto paga, prazo.
+   *   esta     -> quem JÁ é afiliada e precisa distribuir a oferta sem copiar
+   *               e colar. Intenção transacional, destino comercial.
+   *
+   * As duas se linkam explicitamente, em `related`, para o Google saber qual
+   * responde o quê.
+   *
+   * UMA página, não treze. O Promium ocupa esse eixo com 13 páginas de
+   * "Automação <loja> para WhatsApp", mas a lição da ação 8 é fresca: dez LPs de
+   * dor com ~1.100 chars cada estão em "rastreada, mas não indexada", e quatro
+   * caíram do índice. Página em série fina é justamente o que o Google recusa.
+   * Amazon e Mercado Livre só entram DEPOIS de esta provar que indexa e ranqueia.
+   */
+  'shopee-afiliados-whatsapp': {
+    path: '/shopee-afiliados-whatsapp',
+    title: 'Shopee Afiliados: divulgar no WhatsApp sem copiar',
+    description: 'Já é afiliada Shopee? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link, sem copiar e colar oferta por oferta. 7 dias grátis.',
+    eyebrow: 'Shopee Afiliados',
+    h1: 'Shopee Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
+    lead: 'Depois de entrar no Shopee Afiliados, o trabalho deixa de ser achar oferta e passa a ser publicar. Cada produto precisa virar link com o seu código, o texto precisa ser montado, e tudo isso repetido em cada grupo. O Espelha Grupos faz esse caminho sozinho: acompanha as origens que você escolhe, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e registro do que saiu.',
+    intent: 'shopee afiliados whatsapp',
+    related: [
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Ainda não é afiliada Shopee?', note: 'Cadastro gratuito, quanto a Shopee paga por tipo de venda e o prazo de atribuição.' },
+      { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'O caminho completo: origens, conversão de link, destinos e histórico.' },
+      { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'Comissão e prazo de atribuição das três lado a lado, com fonte e data.' },
+    ],
+    about: ['Shopee Afiliados', 'Link de afiliado', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'Já sou afiliada Shopee. O que isso resolve?',
+        a: 'A parte que consome o dia: pegar a oferta, gerar o link com o seu código, montar a mensagem e repetir isso em cada grupo. O robô acompanha as origens que você escolher, converte o link para o seu e publica nos seus grupos e canais, um a um, com intervalo entre os envios.',
+      },
+      {
+        q: 'Funciona com cupom da Shopee, ou só com link de produto?',
+        a: 'Com os dois. Isso importa mais na Shopee do que nas outras lojas, porque muita oferta só fecha no preço anunciado com o cupom aplicado — tirar o cupom da mensagem quebra a oferta. O link de campanha também sai com o seu código.',
+      },
+      {
+        q: 'Preciso de programação, API ou n8n?',
+        a: 'Não. Você conecta o WhatsApp lendo um QR, escolhe de quais grupos as ofertas vêm e para quais grupos ou canais elas vão, e pronto. Não há código, integração para montar nem servidor para manter.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'Sete dias grátis, sem cartão, com o plano Pro completo. Depois, plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias. O Pro acrescenta Canais do WhatsApp e as ofertas automáticas da Shopee por palavra-chave. Sem fidelidade.',
+      },
+    ],
+    aside: {
+      pill: 'O que a Shopee tem de diferente',
+      title: 'Na Shopee, a chave recusada para a oferta inteira — não só encurta o link.',
+      body: 'Nas outras lojas, credencial vencida faz o link sair mais comprido e a comissão continua sendo sua. Na Shopee não: sem chave aceita, a conversão falha e a oferta não é publicada. Por isso o painel avisa em verde ou vermelho o estado da sua chave, e você recebe e-mail quando ela para de ser aceita.',
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona a operação',
+    problemTitle: 'O gargalo de quem já é afiliada Shopee não é achar oferta.',
+    problem: 'É publicar. A oferta boa aparece, você gera o link, monta o texto, cola no primeiro grupo, no segundo, no terceiro. Quando chega no último, o preço já mudou. E nesse caminho manual três coisas acontecem sempre: link que escapa sem o seu código e paga comissão para outra pessoa, a mesma oferta publicada duas vezes no mesmo grupo, e tudo saindo de uma vez porque só sobrou aquela janela do dia.',
+    bullets: ['Cada link de produto ou cupom da Shopee sai com o seu código de afiliada, convertido antes do envio.', 'A mesma oferta não sai duas vezes no mesmo grupo: a repetição é bloqueada e fica registrada.', 'Publicação espaçada em vez de tudo de uma vez, com limite por destino.', 'Histórico do que saiu, para onde e o que foi bloqueado — inclusive quando a chave da Shopee para de ser aceita.'],
+    process: ['Cadastre a sua chave de afiliada da Shopee no painel (App ID e chave secreta).', 'Escolha de quais grupos ou canais as ofertas vêm e para quais destinos elas vão.', 'Defina o intervalo entre envios e o limite por destino conforme o tamanho da sua operação.', 'Acompanhe no histórico o que saiu, o que foi bloqueado por repetição e o que falhou na conversão.'],
+    faqs: [
+      ['Isso substitui o meu cadastro no Shopee Afiliados?', 'Não. O programa continua sendo da Shopee e a comissão é paga por ela, direto para você. O que muda é a distribuição: em vez de copiar e colar oferta por oferta, o robô publica com o seu link já aplicado.'],
+      ['E se a conversão do link falhar?', 'A oferta não é publicada. É deliberado: encaminhar o link original significaria dar a sua comissão para o afiliado do grupo de origem, que normalmente é um concorrente. Melhor não enviar do que enviar pagando para outra pessoa — e a falha aparece no histórico com o motivo.'],
+      ['Posso divulgar em Canais do WhatsApp, não só em grupos?', 'Pode, no plano Pro. Grupo e canal têm papéis diferentes: o grupo funciona como comunidade e como origem de ofertas, o canal como vitrine. Dá para usar os dois juntos.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp, e quem garante banimento zero está vendendo o que não pode entregar. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino, variação de texto e horários de descanso.'],
+      ['Preciso de grupo grande para valer a pena?', 'Não. O ganho é de tempo e de comissão que deixa de se perder no caminho, e isso vale desde o primeiro grupo. Volume grande muda a conta, não a lógica.'],
+      ['Dá para divulgar outras lojas além da Shopee?', 'Dá. Amazon, Mercado Livre e Magalu entram no mesmo plano de entrada, sem custo a mais por loja. Se você divulga mais de uma, vale comparar pelo plano que cobre todas.'],
+    ],
+  },
   'bot-afiliados-whatsapp': {
     path: '/bot-afiliados-whatsapp',
     title: 'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',

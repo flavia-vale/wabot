@@ -136,6 +136,13 @@ const nichePages = [
     title: 'Bot de ofertas para afiliados no WhatsApp',
     description: 'Como a divulgação de ofertas de afiliado funciona em grupo e em canal.',
   },
+  // Nasce linkada de propósito: a ação 8 mostrou que página que só existe no
+  // sitemap acaba em "rastreada, mas não indexada".
+  {
+    href: '/shopee-afiliados-whatsapp',
+    title: 'Shopee Afiliados: divulgar no WhatsApp',
+    description: 'Para quem já é afiliada Shopee e quer publicar as ofertas sem copiar e colar.',
+  },
 ]
 
 /* As dez LPs de "dor" (painSlugs em lib/seo-registry.mjs). Estavam no sitemap e
