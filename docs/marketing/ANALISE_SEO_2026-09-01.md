@@ -219,14 +219,19 @@ e 10 viraram cadastro**. A página funciona. O que falta é clique no Google.
 
 ⚠️ **A linha de `/alternativas/achadinhos-bot` não é comparável com as
 outras.** As páginas `/alternativas/*` disparam `comparison_page_view`, e
-`scripts/diag-paginas-seo.mjs` só lê `organic_page_view` — o script é cego para
-elas. O dado existe no banco; a leitura é que não o alcança. Não concluir daí
-que a página não recebe visita: **o funil dela simplesmente não foi medido
-nesta rodada.** Corrigir o script antes de tirar qualquer conclusão sobre a
-maior página de impressão do site.
+`scripts/diag-paginas-seo.mjs` lia só `organic_page_view` — o script era cego
+para elas. O dado existe no banco; a leitura é que não o alcançava. **O funil
+dela não foi medido nesta rodada**, e o número acima não diz nada sobre a
+página. Corrigido em 02/09: o diagnóstico passou a ler os três eventos de
+comparação, inclusive `comparison_scroll_50`, que separa "o título ganhou o
+clique e a página perdeu a pessoa" de "ninguém clicou no Google".
 
-**`/precos`: 19 visitas e ZERO clique em CTA.** É a única página com visita
-relevante e nenhuma ação. Vale olhar antes de investir em trazer mais gente.
+⚠️ **`/precos`: os 19 visitantes e o "zero clique em CTA" NÃO sustentam a
+conclusão que estava aqui.** Os botões "Assinar Basic" e "Assinar Pro"
+(`components/landing/Pricing.jsx`) não tinham `data-seo-cta`, e o
+`OrganicPageTracker` só conta clique em elemento que carrega esse atributo —
+não havia o que contar. Instrumentado em 02/09; a próxima rodada é a primeira
+que consegue dizer se a página converte.
 
 ---
 
@@ -267,11 +272,11 @@ a página comercial de destino para esses termos.
 3. **Conferir títulos acima de 60 caracteres.** O celular traz 57% das
    impressões, ranqueia melhor que o computador e converte metade — corte de
    título é a explicação mais provável.
-4. **Corrigir `scripts/diag-paginas-seo.mjs` para ler também
-   `comparison_page_view`.** Hoje ele enxerga só `organic_page_view`, então
-   toda a linha `/alternativas/*` — incluindo a maior página de impressão do
-   site — fica invisível no diagnóstico. Sem isso não dá para saber se o
-   problema dela é clique no Google ou conversão na página.
+4. ~~**Corrigir `scripts/diag-paginas-seo.mjs` para ler também
+   `comparison_page_view`.**~~ **Feito em 02/09.** O diagnóstico passou a ler
+   `comparison_page_view`, `comparison_cta_click` e `comparison_scroll_50`, e a
+   aceitar o campo `page_slug`. A linha `/alternativas/*` — incluindo a maior
+   página de impressão do site — deixa de ser invisível no funil.
 5. **Olhar `/precos`** — 19 visitas, zero clique em CTA.
 6. **Tratar as 26 páginas "rastreada, mas não indexada"** antes de produzir mais
    `/alternativas/`. Produzir mais páginas parecidas com um terço da casa fora do
