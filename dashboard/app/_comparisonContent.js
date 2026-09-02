@@ -461,7 +461,7 @@ export const COMPARISON_PAGES = {
   '/botinho-vs-planilha-manual': {
     format: 'vs',
     eyebrow: 'Comparativo · Operação manual',
-    title: 'Planilha ou bot para divulgar ofertas no WhatsApp: quando vale automatizar',
+    title: 'Planilha ou bot para divulgar ofertas: quando vale',
     description: 'Compare BOTinho e planilha manual para organizar grupos, links de afiliado, cadência e logs de divulgação em WhatsApp.',
     competitorSlugs: ['manual-spreadsheet-workflow'],
     tldr: 'Planilha manual funciona para operação pequena; BOTinho tende a ganhar quando volume e repetição aumentam e você precisa de logs e consistência.',
@@ -495,7 +495,7 @@ export const COMPARISON_PAGES = {
   '/botinho-vs-ferramentas-genericas-automacao': {
     format: 'vs',
     eyebrow: 'Comparativo · Automação genérica',
-    title: 'Bot de afiliados ou automação genérica de WhatsApp: qual usar',
+    title: 'Bot de afiliados ou automação genérica: qual usar',
     description: 'Entenda quando usar BOTinho ou ferramentas genéricas como automações de fluxo, conectores e scripts para rotinas de WhatsApp com afiliados.',
     competitorSlugs: ['generic-automation-tools'],
     tldr: 'Ferramentas genéricas priorizam flexibilidade técnica; BOTinho prioriza velocidade de operação para grupos de ofertas sem projeto técnico do zero.',
@@ -529,7 +529,7 @@ export const COMPARISON_PAGES = {
   '/melhores-bots-para-afiliados-whatsapp': {
     format: 'alternative-plural',
     eyebrow: 'Critérios · Avaliação de ferramentas',
-    title: 'Melhores bots para afiliados no WhatsApp em 2026: como comparar',
+    title: 'Melhores bots para afiliados no WhatsApp: como comparar',
     description: 'Lista de critérios para avaliar bots e ferramentas de WhatsApp para afiliados sem ranking falso, promessa de ganho ou prova social inventada.',
     tldr: 'Não escolha por promessa de ganho: escolha por processo confiável, rastreabilidade e aderência às políticas das plataformas.',
     directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação.',
