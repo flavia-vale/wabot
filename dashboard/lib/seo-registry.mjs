@@ -341,6 +341,10 @@ export const CONTENT_SEO_ROUTES = [
   // US5 (specs/013-inbound-leads-strategy) — única página nova desta rodada.
   // title/description ficam só em _comparisonContent.js (fonte única, FR-001).
   { path: '/alternativas/achadinho-pro', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/achadinho-pro'), indexable: true },
+  // Único concorrente que uma IA colocou explicitamente à nossa frente (o
+  // ChatGPT chamou o Promium de "o mais completo" na consulta de cupons,
+  // medição de 01/09) — e que nem estava no mapa de concorrentes.
+  { path: '/alternativas/promium', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/promium', '2026-09-02'), indexable: true },
   // Busca pelo NOME do concorrente — a linha que virou o motor de impressão
   // do site (15% do total em 2026-08-16). title/description ficam só em
   // _comparisonContent.js (fonte única, FR-001).
