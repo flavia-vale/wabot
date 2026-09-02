@@ -6,6 +6,13 @@ on:
       - develop
       - main
 
+# Economia de minutos (2026-09-02): push novo na mesma PR cancela a execução
+# anterior. Antes, uma PR com 5 commits enfileirava 5 suites completas (~2,5min
+# cada) e o resultado das 4 primeiras já não interessava a ninguém.
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest

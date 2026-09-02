@@ -3,10 +3,24 @@ name: Deploy Automático Wabot
 on:
   push:
     branches: [ main, develop ]
-  # Roda em toda PR contra develop ou main — lint+build+smoke funcionam como
-  # gate pré-merge. A etapa de SSH deploy é pulada (condição push-only).
+    # Economia de minutos (2026-09-02): mudança só de documentação não precisa
+    # de deploy (nada em docs/ e specs/ é servido). NÃO incluir `**.md` aqui:
+    # dashboard/public/pricing.md e dashboard/public/materiais/*.md SÃO
+    # servidos publicamente e precisam subir. `*.md` casa só a raiz do repo.
+    paths-ignore:
+      - 'docs/**'
+      - 'specs/**'
+      - '*.md'
+  # Gate pré-merge (lint+build+smoke) das PRs de feature contra develop. A
+  # etapa de SSH deploy é pulada (condição push-only).
+  #
+  # `main` foi REMOVIDO daqui de propósito (economia de minutos, 2026-09-02):
+  # a PR develop->main carrega exatamente os commits que já rodaram este gate
+  # ao entrar em develop, então re-executá-lo era build duplicado. Pior: com a
+  # PR aberta, todo push em develop disparava este workflow duas vezes no MESMO
+  # commit (uma vez por evento) — era o que o print de 5 checks mostrava.
   pull_request:
-    branches: [ main, develop ]
+    branches: [ develop ]
   # Permite disparar manualmente pela UI do GitHub Actions ("Run workflow").
   # Útil para re-rodar deploy no HEAD atual de develop/main sem precisar de
   # commit novo (ex: quando uma execução antiga falhou em SHA já corrigido
@@ -35,9 +49,13 @@ on:
 # "_webpack.WebpackError is not a constructor" + "rm: Directory not empty".
 # cancel-in-progress:false faz os runs ENFILEIRAREM (nunca cancela um deploy
 # no meio do SSH, o que deixaria o VPS num estado inconsistente).
+#
+# cancel-in-progress é FALSE em push (nunca cancelar um deploy no meio do SSH)
+# e TRUE em pull_request: ali o run é só gate de CI, então push novo na mesma
+# PR pode descartar o build do commit antigo sem risco nenhum.
 concurrency:
   group: deploy-${{ github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   deploy:
@@ -65,7 +83,25 @@ jobs:
           git config --global --replace-all url."https://github.com/".insteadOf "ssh://git@github.com/"
           git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
+      # ------------------------------------------------------------------
+      # GATE DE CI — SÓ EM pull_request (economia de minutos, 2026-09-02).
+      #
+      # Em `push` estes passos eram trabalho jogado fora: gastavam ~1m50 do
+      # runner com npm ci (raiz) + npm ci (dashboard) + lint + next build +
+      # smoke e, logo em seguida, o `deploy_safe_*.sh` refazia EXATAMENTE isso
+      # no VPS (npm ci, prisma, npm ci dashboard, rm -rf .next, npm run build).
+      # Build duplicado, e o gate já tinha rodado na PR que originou o commit.
+      #
+      # O que se perde: o aviso antecipado antes de tocar o VPS. Quem reprova
+      # um build quebrado passa a ser o próprio script de deploy, que aborta
+      # (qualquer falha aborta — ver "Ordem do deploy automático" no AGENTS.md)
+      # antes do restart do PM2. A PR continua com o gate completo.
+      #
+      # Os passos abaixo do SSH (Cloudflare, IndexNow) NÃO dependem de
+      # node_modules — notify-indexnow.mjs só importa dashboard/lib/*.mjs puros.
+      # ------------------------------------------------------------------
       - name: Instalar dependências da API sem alterar lockfile
+        if: github.event_name == 'pull_request'
         run: |
           for attempt in 1 2 3; do
             echo "npm ci (API) — tentativa ${attempt}/3"
@@ -83,11 +119,13 @@ jobs:
           exit "${status:-1}"
 
       - name: Validar Prisma e gerar client
+        if: github.event_name == 'pull_request'
         run: |
           npx prisma validate
           npx prisma generate
 
       - name: Instalar dependências do dashboard sem alterar lockfile
+        if: github.event_name == 'pull_request'
         working-directory: dashboard
         run: |
           for attempt in 1 2 3; do
@@ -106,23 +144,28 @@ jobs:
           exit "${status:-1}"
 
       - name: Guardrail da página de configurações
+        if: github.event_name == 'pull_request'
         working-directory: dashboard
         run: npm run guard:config-page
 
       - name: Lint do dashboard
+        if: github.event_name == 'pull_request'
         working-directory: dashboard
         run: npm run lint
 
       - name: Build Check do dashboard (hard gate)
+        if: github.event_name == 'pull_request'
         working-directory: dashboard
         run: |
           rm -rf .next
           npm run build
 
       - name: Verificar artefatos críticos do build
+        if: github.event_name == 'pull_request'
         run: node scripts/verify-dashboard-api-proxy.mjs
 
       - name: Smoke mobile local do dashboard
+        if: github.event_name == 'pull_request'
         run: |
           cd dashboard
           npm run start -- -H 127.0.0.1 -p 4016 > /tmp/wabot-next-start.log 2>&1 &
