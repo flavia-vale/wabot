@@ -9,7 +9,7 @@ const siteUrl = getSiteUrl()
 export const PRESERVATION_BLOG_POSTS = {
   'grupo-ou-canal-whatsapp-achadinhos': {
     slug: '/blog/grupo-ou-canal-whatsapp-achadinhos',
-    title: 'Grupo ou Canal do WhatsApp: qual é melhor para achadinhos?',
+    title: 'Grupo ou Canal do WhatsApp: qual é melhor?',
     description: 'Entenda quando usar grupo, quando usar Canal do WhatsApp e como combinar os dois para divulgar achadinhos com mais organização e preservação operacional.',
     eyebrow: 'Canais · Estratégia de migração',
     origin: 'blog_grupo_ou_canal_whatsapp_achadinhos',
@@ -35,7 +35,7 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-evitar-banimento-whatsapp-afiliados': {
     slug: '/blog/como-evitar-banimento-whatsapp-afiliados',
-    title: 'Como reduzir o risco de banimento no WhatsApp para afiliados',
+    title: 'Como reduzir o risco de banimento no WhatsApp',
     description: 'Guia honesto para afiliados reduzirem risco no WhatsApp com chip dedicado, cadência, variações, canais e Módulo de Preservação Avançada.',
     eyebrow: 'Preservação avançada · Risco operacional',
     origin: 'blog_como_evitar_banimento_whatsapp_afiliados',
@@ -61,7 +61,7 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'shadowban-whatsapp-canais': {
     slug: '/blog/shadowban-whatsapp-canais',
-    title: 'Shadowban em Canais do WhatsApp: sinais silenciosos para monitorar',
+    title: 'Shadowban em Canais do WhatsApp: sinais para notar',
     description: 'Veja sinais de queda silenciosa em Canais do WhatsApp e como afiliados podem monitorar entrega, cliques e saúde antes do prejuízo.',
     eyebrow: 'Monitoramento · Canais do WhatsApp',
     origin: 'blog_shadowban_whatsapp_canais',
@@ -87,7 +87,7 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'migrar-grupo-achadinhos-para-canal': {
     slug: '/blog/migrar-grupo-achadinhos-para-canal',
-    title: 'Como migrar um grupo de achadinhos para Canal do WhatsApp',
+    title: 'Migrar um grupo de achadinhos para Canal do WhatsApp',
     description: 'Passo a passo para migrar grupos de achadinhos para Canais do WhatsApp sem interromper a operação e preservando audiência.',
     eyebrow: 'Migração · Grupo para canal',
     origin: 'blog_migrar_grupo_achadinhos_para_canal',
@@ -113,7 +113,7 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'chip-dedicado-bot-whatsapp': {
     slug: '/blog/chip-dedicado-bot-whatsapp',
-    title: 'Por que afiliados devem usar chip dedicado no bot do WhatsApp',
+    title: 'Por que usar um chip só para o bot do WhatsApp',
     description: 'Entenda por que chip dedicado protege sua operação de afiliados no WhatsApp e evita misturar número pessoal com canais e grupos de ofertas.',
     eyebrow: 'Operação responsável · Chip dedicado',
     origin: 'blog_chip_dedicado_bot_whatsapp',
@@ -165,7 +165,7 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'comecar-afiliado-whatsapp-sem-grupo-grande': {
     slug: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande',
-    title: 'Como começar como afiliado no WhatsApp sem ter grupo grande',
+    title: 'Começar como afiliado no WhatsApp sem grupo grande',
     description: 'Guia para afiliado iniciante começar a divulgar ofertas no WhatsApp mesmo sem audiência grande: chip dedicado, primeiros grupos, conversão de link e cadência responsável.',
     eyebrow: 'Para quem está começando · Passo a passo',
     origin: 'blog_comecar_afiliado_whatsapp_sem_grupo_grande',
@@ -317,8 +317,8 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'quanto-custa-bot-para-whatsapp-afiliados': {
     slug: '/blog/quanto-custa-bot-para-whatsapp-afiliados',
-    title: 'Quanto custa um bot para WhatsApp de afiliados? Preços e o que avaliar',
-    description: 'Entenda quanto custa um bot para WhatsApp de afiliados, o que muda entre plano básico e avançado e como avaliar custo real além do preço da mensalidade.',
+    title: 'Quanto custa um bot de afiliados: R$ 39 a R$ 69',
+    description: 'Quanto custa um bot para WhatsApp de afiliados: preço de cada plano, o que muda entre eles e o custo que não aparece na mensalidade. 7 dias grátis para testar.',
     eyebrow: 'Custo · Decisão de compra',
     origin: 'blog_quanto_custa_bot_para_whatsapp_afiliados',
     usePersonAuthor: true,
@@ -346,8 +346,8 @@ export const PRESERVATION_BLOG_POSTS = {
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 64 chars de texto próprio, o que empurrava o corte do Google no
     // celular. Motivo pra clicar ("horário certo") na frente.
-    title: 'Horário certo pra postar oferta no WhatsApp: veja',
-    description: 'Descubra os melhores horários para postar ofertas no WhatsApp, por que a cadência importa mais que o horário exato e como distribuir envios sem parecer disparo.',
+    title: 'Melhor horário para postar oferta: 7h, 12h e 19h',
+    description: 'Os três horários em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
     usePersonAuthor: true,
@@ -372,8 +372,8 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-converter-link-de-afiliado-automaticamente-whatsapp': {
     slug: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp',
-    title: 'Como converter link de afiliado automaticamente no WhatsApp',
-    description: 'Entenda como converter link de afiliado automaticamente no WhatsApp para Shopee, Amazon, Mercado Livre e Magalu, sem perder comissão nem encaminhar link de terceiro.',
+    title: 'Converter link de afiliado sozinho: 4 lojas',
+    description: 'Como o link de produto ou cupom vira o seu link de afiliado na hora do envio, em Shopee, Amazon, Mercado Livre e Magalu — sem copiar e colar oferta por oferta.',
     eyebrow: 'Conversão de link · Automação',
     origin: 'blog_como_converter_link_de_afiliado_automaticamente_whatsapp',
     usePersonAuthor: true,
@@ -398,7 +398,7 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp': {
     slug: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp',
-    title: 'Como combinar Amazon, Shopee e Mercado Livre no mesmo grupo de ofertas',
+    title: 'Amazon, Shopee e Mercado Livre no mesmo grupo',
     description: 'Estratégia para operar os três programas de afiliados ao mesmo tempo no WhatsApp: qual loja usar para cada tipo de oferta, como não misturar os códigos e como medir qual rende mais no seu público.',
     eyebrow: 'Estratégia · Operar os três programas',
     origin: 'blog_amazon_shopee_ou_mercado_livre_para_afiliados_whatsapp',
@@ -426,7 +426,7 @@ export const PRESERVATION_BLOG_POSTS = {
     slug: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero',
     // Título ajustado em 2026-08-19 (P1): já cabia em 55, mas o passo a passo
     // ("do zero") reforça o motivo pra quem está começando clicar.
-    title: 'Monte um grupo de ofertas no WhatsApp do zero',
+    title: 'Grupo de ofertas no WhatsApp: montar do zero',
     description: 'Guia para montar um grupo de ofertas no WhatsApp do zero: chip dedicado, primeiras fontes de oferta, conversão de link, cadência e quando migrar para canal.',
     eyebrow: 'Começando · Grupo de ofertas',
     origin: 'blog_como_montar_grupo_de_ofertas_no_whatsapp_do_zero',

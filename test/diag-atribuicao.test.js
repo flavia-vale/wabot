@@ -65,6 +65,12 @@ test('o funil só conta como envio a linha que SAIU', () => {
   // credencial: skip:no_valid_conversions) contava como "enviou" e jogava a
   // pessoa no grupo "viu o produto funcionar" — conversa oposta à necessária.
   assert.match(fonte, /status: 'success'[^)]*distinct: \['userId'\]/)
-  assert.match(fonte, /tentou enviar e NENHUM envio saiu/)
-  assert.match(fonte, /ENVIOU DE VERDADE e não foi para o checkout/)
+  // Os rótulos saíram daqui para `src/domain/admin/funnel.js` (o mesmo módulo
+  // que o painel /admin/funil usa) — a distinção continua obrigatória, só
+  // mudou de casa. Sem ela, "tentou e nada saiu" some dentro de "nunca enviou"
+  // e a conversa mais urgente do funil desaparece.
+  assert.match(fonte, /classifyStallReason/)
+  const motivos = readFileSync(new URL('src/domain/admin/funnel.js', raiz), 'utf8')
+  assert.match(motivos, /'tried_nothing_sent'/)
+  assert.match(motivos, /'sent_no_checkout'/)
 })

@@ -3,6 +3,13 @@ import { createHmac } from 'crypto'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
 import { classifyPayerEmail } from '../../domain/payments/payerEmail.js'
+import {
+  SUBSCRIPTION_OPEN_STATUSES,
+  blocksNewSubscription,
+  decideAccessExtensionFromSubscription,
+  decideSubscriptionCancellation,
+  summarizeSubscriptionForPanel,
+} from '../../domain/payments/subscriptionPolicy.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
 import { notifyPaymentApproved } from '../../emailTriggers/events.js'
@@ -281,6 +288,35 @@ async function fetchMercadoPagoAuthorizedPaymentSnapshot(authorizedPaymentId) {
   }
 }
 
+/**
+ * Cancela a assinatura no Mercado Pago. `provider_not_found` é tratado como
+ * sucesso pelo chamador: se o preapproval não existe mais lá, manter a linha
+ * como ativa aqui só faria a cliente ver "renovação ligada" para uma cobrança
+ * que nunca vai acontecer.
+ */
+async function cancelMercadoPagoSubscription(preapprovalId) {
+  const accessToken = getMpAccessToken()
+  if (!accessToken) return { ok: false, reason: 'missing_access_token' }
+
+  try {
+    await axios.put(
+      `https://api.mercadopago.com/preapproval/${preapprovalId}`,
+      { status: 'cancelled' },
+      { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 8000 }
+    )
+    return { ok: true }
+  } catch (err) {
+    const httpStatus = err?.response?.status ?? null
+    if (httpStatus === 404) return { ok: false, reason: 'provider_not_found', httpStatus }
+    return {
+      ok: false,
+      reason: 'provider_error',
+      httpStatus,
+      message: String(err?.response?.data?.message ?? err?.message ?? 'unknown_error').slice(0, 500),
+    }
+  }
+}
+
 async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
   if (!payerEmail) {
     const err = new Error('payer_email obrigatório para criar assinatura')
@@ -468,6 +504,91 @@ async function runPaymentReconciliation({ log } = {}) {
     fixed++
   }
   return { checked: pending.length, fixed }
+}
+
+/**
+ * Reconciliação da assinatura recorrente — rede de segurança do "renova sozinho".
+ *
+ * A renovação do acesso depende do aviso `subscription_authorized_payment` do
+ * Mercado Pago. Se esse aviso se perder (rede, deploy no meio, fila em erro), a
+ * cobrança acontece e o acesso corta assim mesmo: a cliente paga e fica sem
+ * robô, que é o pior desfecho possível deste projeto. Esta passada consulta o
+ * próprio MP e conserta as duas pontas:
+ *
+ *  - status e próxima cobrança da assinatura (inclusive cancelamento feito
+ *    pela cliente direto no app do Mercado Pago, que de outro jeito só
+ *    apareceria aqui quando a cobrança falhasse);
+ *  - acesso vencendo antes da próxima cobrança de uma assinatura que está
+ *    cobrando — nesse caso o período já pago vai até lá, então o acesso é
+ *    estendido até a data que o MP informa.
+ *
+ * Só ESTENDE acesso, nunca encurta (`decideAccessExtensionFromSubscription`).
+ * Roda no mesmo tick da reconciliação de pagamento — sem processo PM2 novo.
+ */
+async function runSubscriptionReconciliation({ log } = {}) {
+  const subscriptions = await db.subscription.findMany({
+    where: { status: { in: SUBSCRIPTION_OPEN_STATUSES } },
+    take: PAYMENT_RECONCILIATION_BATCH,
+    orderBy: { updatedAt: 'asc' },
+  })
+
+  let synced = 0
+  let extended = 0
+
+  for (const subscription of subscriptions) {
+    if (!subscription.mpSubscriptionId) continue
+
+    const snapshot = await fetchMercadoPagoSubscriptionSnapshot(subscription.mpSubscriptionId)
+    if (!snapshot.ok || !snapshot.status) continue
+
+    try {
+      await db.$transaction(async (tx) =>
+        paymentsService.upsertSubscription(tx, {
+          userId: subscription.userId,
+          mpSubscriptionId: subscription.mpSubscriptionId,
+          plan: subscription.plan,
+          status: snapshot.status,
+          nextChargeAt: snapshot.nextChargeAt ?? null,
+        })
+      )
+      synced++
+    } catch (err) {
+      log?.warn?.({ err: err?.message, userId: subscription.userId }, 'subscription_reconciliation_upsert_failed')
+      continue
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: subscription.userId },
+      select: { accessExpiresAt: true },
+    }).catch(() => null)
+    if (!user) continue
+
+    const decision = decideAccessExtensionFromSubscription({
+      status: snapshot.status,
+      nextChargeAt: snapshot.nextChargeAt,
+      accessExpiresAt: user.accessExpiresAt,
+    })
+    if (!decision.extend) continue
+
+    try {
+      await db.user.update({
+        where: { id: subscription.userId },
+        data: { plan: subscription.plan, accessExpiresAt: decision.until },
+      })
+      await invalidatePaymentCache(subscription.userId, log)
+      trackAnalyticsEventSafe({
+        userId: subscription.userId,
+        event: 'subscription_access_extended',
+        metadata: { plan: subscription.plan, reason: decision.reason },
+      })
+      log?.warn?.({ userId: subscription.userId, until: decision.until, reason: decision.reason }, 'subscription_access_extended: acesso estava vencendo antes da próxima cobrança')
+      extended++
+    } catch (err) {
+      log?.error?.({ err: err?.message, userId: subscription.userId }, 'subscription_reconciliation_extend_failed')
+    }
+  }
+
+  return { checked: subscriptions.length, synced, extended }
 }
 
 async function processPendingWebhookEvents({ limit = 50, log } = {}) {
@@ -701,6 +822,12 @@ function startWebhookProcessor(app) {
       // fire-and-forget e pode falhar (SQLITE_BUSY, restart) sem retry; este
       // passo recria comissões faltantes de pagamentos já aprovados.
       try {
+        const result = await runSubscriptionReconciliation({ log: app.log })
+        if (result.checked > 0) app.log.info({ result }, 'subscription_reconciliation_cycle_completed')
+      } catch (err) {
+        app.log.error({ err: err?.message }, 'subscription_reconciliation_cycle_failed')
+      }
+      try {
         const result = await reconcileAffiliateCommissions({ log: app.log })
         if (result.created > 0 || result.failed > 0) {
           app.log.info({ result }, 'affiliate_commission_reconciliation_cycle_completed')
@@ -787,6 +914,23 @@ export async function paymentsRoutes(app) {
         })
       }
 
+      // Duas assinaturas valendo ao mesmo tempo = a mesma pessoa cobrada duas
+      // vezes por mês. `pending` de propósito NÃO bloqueia (é checkout aberto e
+      // abandonado; barrar por causa dele travaria a conta para sempre).
+      const activeSubscription = await db.subscription.findFirst({
+        where: { userId, status: 'authorized' },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (blocksNewSubscription(activeSubscription)) {
+        return reply.code(409).send({
+          code: 'SUBSCRIPTION_ALREADY_ACTIVE',
+          error: {
+            code: 'SUBSCRIPTION_ALREADY_ACTIVE',
+            message: 'Sua renovação automática já está ligada. Para trocar de plano, cancele a atual e assine de novo.',
+          },
+        })
+      }
+
       trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan } })
 
       const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
@@ -829,6 +973,63 @@ export async function paymentsRoutes(app) {
       }
       req.log.error({ err: err?.message, code: err?.code, plan, userId }, 'Falha ao criar assinatura MP')
       return sendError(reply, 502, 'SUBSCRIPTION_CREATION_FAILED', 'Não foi possível iniciar a assinatura. Tente novamente.')
+    }
+  })
+
+  /**
+   * Desligar a renovação automática. Idempotente: sem assinatura ativa devolve
+   * 200 com `cancelled:false` em vez de erro (mesmo padrão de
+   * `DELETE /credentials/:platform`) — a pessoa clicou para não ser mais
+   * cobrada, e é isso que ela já tem.
+   *
+   * O acesso JÁ PAGO continua até `accessExpiresAt`. Cortar na hora seria
+   * cobrar o mês e não entregar.
+   */
+  app.post('/subscription/cancel', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const userId = req.user.sub
+
+    const subscription = await db.subscription.findFirst({
+      where: { userId, status: { in: SUBSCRIPTION_OPEN_STATUSES } },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const decision = decideSubscriptionCancellation(subscription)
+    if (!decision.ok) {
+      const user = await db.user.findUnique({ where: { id: userId }, select: { accessExpiresAt: true } }).catch(() => null)
+      return {
+        cancelled: false,
+        reason: decision.reason,
+        accessExpiresAt: user?.accessExpiresAt ?? null,
+        message: 'Você não tem renovação automática ligada. Nada será cobrado.',
+      }
+    }
+
+    const providerResult = await cancelMercadoPagoSubscription(subscription.mpSubscriptionId)
+    // `provider_not_found`: já não existe no Mercado Pago — cancelar aqui é o
+    // que deixa os dois lados iguais. Qualquer outra falha NÃO marca como
+    // cancelada: dizer "cancelei" e continuar cobrando é o pior desfecho.
+    if (!providerResult.ok && providerResult.reason !== 'provider_not_found') {
+      req.log.error({ reason: providerResult.reason, httpStatus: providerResult.httpStatus, message: providerResult.message, userId }, 'Falha ao cancelar assinatura no Mercado Pago')
+      return sendError(reply, 502, 'SUBSCRIPTION_CANCEL_FAILED', 'Não conseguimos desligar a renovação automática agora. Tente de novo em alguns minutos ou fale com o suporte — nada foi alterado.')
+    }
+
+    const now = new Date()
+    await db.subscription.update({
+      where: { id: subscription.id },
+      data: { status: 'cancelled', cancelledAt: now, updatedAt: now },
+    })
+
+    const user = await db.user.findUnique({ where: { id: userId }, select: { accessExpiresAt: true } }).catch(() => null)
+    trackAnalyticsEventSafe({
+      userId,
+      event: 'subscription_cancelled',
+      metadata: { plan: subscription.plan, providerMissing: providerResult.reason === 'provider_not_found' },
+    })
+
+    return {
+      cancelled: true,
+      accessExpiresAt: user?.accessExpiresAt ?? null,
+      message: 'Renovação automática desligada. Seu acesso continua até o fim do período já pago.',
     }
   })
 
@@ -1070,7 +1271,10 @@ export async function paymentsRoutes(app) {
     const [user, lastApprovedPayment, activeSubscription] = await Promise.all([
       db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } }),
       db.payment.findFirst({ where: { userId, status: 'approved' }, orderBy: { createdAt: 'desc' } }),
-      db.subscription.findFirst({ where: { userId, status: 'authorized' }, orderBy: { createdAt: 'desc' } }),
+      db.subscription.findFirst({
+        where: { userId, status: { in: SUBSCRIPTION_OPEN_STATUSES } },
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      }),
     ])
 
     const accessExpiresAt = user?.accessExpiresAt ?? null
@@ -1081,11 +1285,15 @@ export async function paymentsRoutes(app) {
       ? null
       : 'Seu acesso está expirado. Escolha um plano abaixo para renovar.'
 
-    const billingModel = activeSubscription
+    // `activeSubscription` pode vir `pending` (checkout aberto e não concluído):
+    // isso NÃO é renovação automática ligada, e dizer que é faria a cliente
+    // achar que está coberta sem estar. Quem decide é o resumo puro.
+    const subscription = summarizeSubscriptionForPanel(activeSubscription)
+    const autoRenew = subscription.autoRenew
+    const billingModel = autoRenew
       ? 'Assinatura recorrente mensal'
       : 'Renovação manual a cada 30 dias'
-    const autoRenew = Boolean(activeSubscription)
-    const nextChargeAt = activeSubscription?.nextChargeAt ?? null
+    const nextChargeAt = autoRenew ? (activeSubscription?.nextChargeAt ?? null) : null
 
     return {
       billingModel,
@@ -1094,6 +1302,7 @@ export async function paymentsRoutes(app) {
       plan: user?.plan ?? 'trial',
       accessExpiresAt,
       nextChargeAt,
+      subscription,
       isActive,
       expiresInDays,
       actionRequired,

@@ -378,6 +378,82 @@ Telefone segue mascarado por papel (`sanitizeUser`/`canSeePhone`) e as duas
 rotas exigem `support:read` e gravam `AdminAuditLog`. Testes:
 `test/admin-customer-history.test.js`.
 
+## ADMIN > Funil (`/admin/funil`, 2026-09-02)
+
+Responde "onde as pessoas param entre criar a conta e pagar" sem ninguém
+precisar rodar script. Os números já existiam em `scripts/diag-funil-ativacao.mjs`
+e `scripts/diag-origem-cadastros.mjs` — o que faltava era a leitura.
+
+| Peça | Onde |
+|---|---|
+| Montagem das etapas, semanas e origens (PURO, sem banco) | `src/domain/admin/funnel.js` |
+| Classificação de origem do cadastro (PURA, compartilhada com o script) | `src/domain/admin/signupOrigin.js` |
+| Carregador em lote | `getActivationFunnel` em `src/domain/admin/service.js` |
+| Rota | `GET /api/admin/funnel?weeks=8` (`support:read`, auditada) |
+| Tela | `dashboard/app/admin/funil/page.js` |
+
+Cinco etapas: criou a conta → conectou o WhatsApp → **teve oferta publicada** →
+começou o pagamento → pagou. Junto vem **POR QUE cada pessoa parou** (oito
+motivos, `STALL_REASONS`) e, em cada motivo, quem contatar — com link para o
+histórico do cliente.
+
+**Os oito motivos e a regra de leitura:** a classificação devolve o **PRIMEIRO
+obstáculo** que a pessoa encontrou, não a última etapa concluída — as etapas não
+são sequência obrigatória (dá para escolher grupo sem cadastrar loja), e alguém
+sem loja E sem grupo parou na loja. Os dois que mais mudam a ação:
+
+- **"O robô tentou e NENHUMA oferta saiu"** — o painel mostra atividade e nada
+  chega ao grupo (`skip:no_valid_conversions`, quase sempre loja incompleta ou
+  chave recusada). Ela acha que testou o produto e nunca o viu funcionar. É a
+  conversa mais urgente do funil e a que ninguém abre sozinha.
+- **"Viu oferta sair e não foi para o pagamento"** — aqui o produto funcionou;
+  se este grupo for grande, o assunto é preço/confiança, não configuração.
+
+`classifyStallReason` + `describeStallReason` são consumidos TAMBÉM pelo
+`scripts/diag-funil-ativacao.mjs`, que antes duplicava os rótulos. Guarda em
+`test/admin-funnel.test.js` e em `test/diag-atribuicao.test.js` (esta exige que
+o script importe a regra em vez de reescrevê-la).
+
+**Não regredir:**
+
+- **"Teve oferta publicada" é só `MessageLog.status='success'`.** A linha mais
+  comum de quem não cadastrou a etiqueta de afiliada é
+  `skip:no_valid_conversions` — o robô se recusa a publicar link não convertido.
+  Contar qualquer linha colocaria no grupo "viu o produto funcionar" justamente
+  quem nunca teve uma oferta chegando ao grupo, que é o oposto da conversa que
+  essa pessoa precisa.
+- **A coorte é a semana do CADASTRO**, nunca a semana do evento. Misturar as
+  duas produz percentual acima de 100% quando alguém paga semanas depois.
+- **Etapa posterior implica as anteriores.** Quem pagou conta como tendo
+  conectado mesmo se o sinal de conexão se perdeu (retenção de
+  `WaConnectionEvent`, conta anterior ao evento) — senão a tela mostra funil
+  crescendo, que só confunde.
+- **"Chegou a conectar" tem duas fontes de propósito:** o evento durável
+  `whatsapp_connected` e a própria `WaSession` (status conectado ou telefone
+  preenchido). O evento não existe para conta anterior à sua criação; a sessão
+  sozinha não enxerga quem conectou e desconectou faz tempo.
+- **A lista de "falar com" é curta de propósito** (8 por motivo) e traz nome,
+  e-mail e link para o histórico — **nunca telefone**, que tem mascaramento por
+  papel (`sanitizeUser`). Ela existe para a conversa começar hoje, não para
+  virar exportação de base.
+- **Custo:** só leitura, **zero processo novo e zero impacto de RAM**. As duas
+  tabelas grandes (`MessageLog`, `AnalyticsEvent`) entram por `groupBy`
+  (agregação no SQLite) com `in` na coorte — nunca `distinct` do Prisma, que
+  agrega em memória depois de trazer as linhas. Janela máxima de 26 semanas.
+- **Linguagem leiga:** "onde as pessoas param", "conectaram o WhatsApp",
+  "tiveram oferta publicada". Nada de "coorte", "funil de conversão" ou nome de
+  tabela na tela.
+- **A classificação de origem mora em UM lugar** (`signupOrigin.js`), usada pelo
+  painel e pelo `scripts/diag-origem-cadastros.mjs`. Duplicada, script e tela
+  discordavam sobre quantos cadastros vieram de conteúdo e não havia como saber
+  qual estava certo.
+
+⚠️ Atribuição é aproximação: "Direto / ambíguo" **não** significa "veio
+sozinho" — quem achou no Google, fechou e voltou depois digitando o endereço cai
+aí, e o SEO fica sem crédito. Semana recente está sempre em andamento.
+
+Teste: `test/admin-funnel.test.js`.
+
 ## Liga/desliga staging pelo painel admin (economia de RAM)
 
 Como staging e prod dividem o mesmo VPS, o painel admin de prod tem um botão
@@ -593,6 +669,84 @@ pm2 save
 **Token de sandbox vs produção:** o MP fornece tokens separados. Usar token
 de produção em staging dispara cobranças reais. Para testes, usar token de
 sandbox no `.env` de staging.
+
+## Assinatura recorrente (Mercado Pago `preapproval`) — canônico, 2026-09-01
+
+Até aqui todo cliente pagava **30 dias avulsos** e precisava refechar a compra
+todo mês. O caminho recorrente já existia no back (`POST /payments/create-subscription`,
+webhook tratando `subscription_preapproval` e `subscription_authorized_payment`)
+mas **nenhuma tela chamava** — estava pronto e dormente. Agora está ligado.
+
+| Peça | Onde |
+|---|---|
+| Regras puras (ativa? pode cancelar? estende acesso?) | `src/domain/payments/subscriptionPolicy.js` |
+| Criar assinatura + guarda de duplicidade | `POST /payments/create-subscription` |
+| Desligar a cobrança automática | `POST /payments/subscription/cancel` |
+| Estado para o painel | `GET /payments/overview` → campo `subscription` |
+| Rede de segurança da renovação | `runSubscriptionReconciliation` (mesmo tick da reconciliação de pagamento) |
+| Tela | `dashboard/app/painel/plano/page.js` |
+
+**Não regredir:**
+
+- **`pending` não é renovação ligada.** O MP cria o preapproval como `pending` e
+  só vira `authorized` quando a pessoa conclui. Mostrar "renovação automática
+  ligada" para um checkout abandonado faria a cliente achar que está coberta sem
+  estar. Quem decide é `summarizeSubscriptionForPanel`, nunca `Boolean(sub)`.
+- **Uma assinatura ativa por conta.** `blocksNewSubscription` barra criar a
+  segunda enquanto houver uma `authorized` — duas cobrariam a mesma pessoa duas
+  vezes por mês. `pending` de propósito **não** bloqueia: é checkout aberto e
+  abandonado, e barrar por causa dele travaria a conta para sempre.
+- **Cancelar só marca como cancelada DEPOIS que o MP aceita.** Dizer "cancelei" e
+  continuar cobrando é o pior desfecho possível — falha do provedor devolve 502 e
+  não altera nada aqui. A exceção é `404` no provedor (`provider_not_found`): a
+  assinatura não existe mais lá, então cancelar aqui é o que iguala os dois lados.
+- **Cancelar NÃO corta o acesso na hora.** O período já pago vale até
+  `accessExpiresAt`; cortar seria cobrar o mês e não entregar. A tela diz isso
+  antes de confirmar, e o cancelamento pede confirmação (dois cliques).
+- **A reconciliação só ESTENDE acesso, nunca encurta**
+  (`decideAccessExtensionFromSubscription`). Ela existe porque a renovação
+  depende do aviso `subscription_authorized_payment`: se esse aviso se perder
+  (rede, deploy no meio, fila em erro), a cobrança acontece e o acesso corta
+  assim mesmo — cliente paga e fica sem robô. Como o MP informa a **próxima**
+  cobrança, o período pago vai até lá; assinatura `authorized` com acesso
+  vencendo antes disso é estendida até a data do MP. Assinatura pausada,
+  cancelada ou sem data confiável **não** estende nada.
+- **Sem processo PM2 novo** — a passada roda no `setInterval` que já existia para
+  a reconciliação de pagamento (política de memória).
+- **Linguagem leiga**: "cobrança automática", "desligar", "próxima cobrança".
+  Nunca `preapproval`, `authorized`, `gateway` na tela — teste falha se voltar.
+- **O identificador do provedor não vai para o navegador** (`mpSubscriptionId`
+  fica fora do resumo do painel).
+
+**Eventos que estavam sendo descartados:** `subscription_started`,
+`subscription_email_blocked`, `subscription_provider_rejected` e
+`subscription_payment_approved` eram EMITIDOS pelas rotas desde sempre e não
+estavam na allowlist de `src/analytics.js` — sumiam em silêncio, e por isso não
+havia como saber quem tentou assinar nem onde parou (mesmo modo de falha do
+`organic_page_view`). Entraram na allowlist junto com `subscription_cancelled` e
+`subscription_access_extended`. **Cada `subscription_access_extended` é uma
+cliente que teria ficado sem robô depois de pagar** — se aparecer com
+frequência, o problema está no webhook, não na reconciliação.
+
+**Antes de validar em staging:** usar token de **sandbox** do MP no `.env` de
+staging. Token de produção lá **cobra de verdade**. Trocar env exige
+`pm2 delete` + `start` (pegadinha #1). Teste:
+`test/subscription-policy.test.js`.
+
+Roteiro de validação em staging (nesta ordem):
+
+1. Ligar a cobrança automática e concluir no MP → o painel precisa mostrar
+   "Renovação automática ligada" e a data da próxima cobrança.
+2. Tentar ligar de novo → tem que recusar com o aviso de que já está ligada.
+3. Desligar → confirmar em dois passos, e o acesso continuar até a data que a
+   tela mostrou (conferir `accessExpiresAt` no banco, não só na tela).
+4. Assinar de novo depois de cancelar → tem que funcionar (o cancelamento não
+   pode deixar a conta travada).
+5. Conta com e-mail que o MP recusa → a tela precisa oferecer a troca de e-mail
+   e o pagamento avulso, nunca um erro sem saída.
+6. Renovação sem aviso: apagar/ignorar o webhook de um ciclo e conferir que a
+   passada de reconciliação estendeu o acesso até a próxima cobrança
+   (`AnalyticsEvent('subscription_access_extended')`).
 
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
@@ -3511,48 +3665,124 @@ re-estimar por sinal de SERP quando este dado real já existe.**
 Ordem de prioridade dos marketplaces (Trends, estável salvo Magalu):
 **Shopee ≫ Mercado Livre > Amazon ≫ Magalu (em queda)**.
 
-### Baseline do site (Search Console — atualizado 2026-08-16)
+### Baseline do site (Search Console — atualizado 2026-09-01)
 
-| Métrica | 30/07 | **16/08** |
-|---|---:|---:|
-| Cliques (soma da aba "Países") | 40 | **93** |
-| Impressões | 1.102 | **2.902** |
-| CTR | 3,63% | 3,20% |
-| Posição média (Brasil) | 7,85 | 7,60 |
-| Consultas distintas | 13 | **29** ← métrica mais honesta de progresso |
-| Páginas com impressão | 60 | 77 |
+| Métrica | 30/07 | 16/08 | **01/09** |
+|---|---:|---:|---:|
+| Cliques (soma da aba "Países") | 40 | 93 | **177** |
+| Impressões | 1.102 | 2.902 | **5.773** |
+| CTR | 3,63% | 3,20% | 3,07% |
+| Posição média (Brasil) | 7,85 | 7,60 | 7,68 |
+| Consultas distintas | 13 | 29 | **115** ← métrica mais honesta de progresso |
+| Páginas com impressão | 60 | 77 | 79 |
 
 Compare sempre pela soma da aba "Países" (o painel-resumo dá 41/1.154 em 30/07
 porque inclui linhas sem país atribuído — as duas metodologias não se misturam).
 
-**As impressões multiplicaram por 5,3 nas duas semanas seguintes a 04/08**
-(183 → 741 → 965 por semana), data em que entraram juntos: desbloqueio do
-robots.txt da Cloudflare, IndexNow no deploy, unificação da marca e pedidos
-manuais de indexação.
+Por mês fechado: junho 8 cliques/365 impressões, julho 33/656, **agosto
+136/4.739**. O salto que começou em 04/08 (desbloqueio do robots.txt da
+Cloudflare, IndexNow no deploy, unificação da marca, indexações pedidas à mão)
+sustentou-se o mês inteiro — não foi pico.
 
-**A página com mais impressões do site hoje é `/bot-achadinhos-whatsapp`** (529),
-que em 30/07 tinha 5. Ela e `/alternativas/achadinhos-bot` (226) atendem buscas
-pelo **nome de um concorrente** (`achadinhoosbot`/`achadinhosbot`/`achadinhos
-bot` = 443 impressões, 15% do total, CTR ~1%). `fluxopromo` e `shozap` já
-aparecem também. **As páginas de comparação com concorrente são o motor de
-crescimento** — é nelas que vale produzir, não em cidade nem em nicho.
+**Consultas distintas quadruplicaram (29 → 115) enquanto as páginas com
+impressão quase não mudaram (77 → 79).** O crescimento veio das MESMAS páginas
+aparecendo em mais buscas, não de páginas novas entrando no índice.
 
-O gargalo mudou de lugar: já há impressão, falta **clique**. Sete páginas somam
-464 impressões e ZERO clique (a maior: `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp`,
-176 impressões em posição 7,1) — é problema de título/descrição, não de
-conteúdo. Celular traz 62% das impressões com CTR de 2,07% contra 5,10% no
-computador. Análise completa e lista de ação priorizada em
-`docs/marketing/ANALISE_SEO_2026-08-16.md`.
+**As buscas por nome de CONCORRENTE são 92% das impressões de consulta**
+(1.933 de 2.094, contra 15% em 16/08) e rendem 19 cliques — CTR de ~1% em
+posição 5–7. Maior: `achadinho pro` (742 impressões). As páginas que atendem são
+`/alternativas/achadinhos-bot` (1.281 impressões, a maior do site),
+`/bot-achadinhos-whatsapp` (1.234) e as demais `/alternativas/*`. **A linha de
+comparação com concorrente é o motor de crescimento** — é nela que vale
+produzir, não em cidade nem em nicho. O gargalo é o **clique**, não a
+impressão: título e descrição precisam dizer que aqui há uma alternativa (nunca
+se passar pelo concorrente, nunca prometer o que ele não entrega sem fonte).
+
+Dez páginas somam **879 impressões e ZERO clique** — pior caso
+`/blog/quanto-custa-bot-para-whatsapp-afiliados` em **posição 4,35**. As sete
+apontadas em 16/08 não foram consertadas e hoje desperdiçam o dobro. Celular
+traz 57% das impressões, ranqueia MELHOR que o computador (7,07 vs 11,32) e
+converte metade (2,15% vs 4,33%) — isso aponta para título cortado na tela
+pequena, não para público diferente.
+
+**Indexação (novo nesta rodada):** 77 páginas indexadas contra **51 não
+indexadas** — 26 "rastreada, mas não indexada", 11 "detectada, mas não
+indexada", 1 bloqueada pelo robots.txt. Tratar isso antes de produzir mais
+páginas parecidas.
+
+**Citação por IA, medido em campo pela 1ª vez em 01/09** (7 consultas
+prioritárias × 4 superfícies, 28/28 linhas em
+`docs/marketing/ai_visibility_tracking.csv`): **ChatGPT cita em 3 de 7 e acerta
+o preço; Gemini, Perplexity e Google AI Overviews citam em 0 de 7.**
+
+- **Três das quatro IAs acham que a marca é calçado.** `BOTinho preço` devolve
+  botinha infantil no Gemini, na Perplexity e no AI Overviews (este último com
+  preço e links de loja). **Nunca escrever "BOTinho" sozinho em texto público** —
+  sempre "BOTinho WhatsApp" ou "Espelha Grupos".
+- **Página que não existe de forma citável vira alucinação.** Em `BOTinho
+  metodologia` o AI Overviews **inventou** uma metodologia com pilares nomeados
+  **e citou fontes**; o Gemini fez o mesmo sem fontes; só a Perplexity foi
+  honesta e disse que não conhecia.
+- **Espelhamento não é lido como produto nosso**: a Perplexity trata
+  "espelhador de grupos" como categoria com nome próprio e lista concorrentes;
+  o AI Overviews cita uma ferramenta só. É a consulta com menos concorrência de
+  citação — o alvo mais barato.
+- **Cupom foi lido como CRM/atendimento** por Gemini, Perplexity e AI Overviews;
+  só o ChatGPT entendeu o contexto de afiliado, e é onde somos citados.
+- Concorrentes que as IAs citam são **quase disjuntos** dos do Search Console
+  (Promium, GoGoBot, OfertaFlux, FluxZap, Ripply, ZincLink, Busqy, DivulgaNinja
+  e outros) — e as listas das próprias IAs quase não se sobrepõem entre si: não
+  existe "o ranking do mercado", existe o ranking de cada IA.
+
+**43% dos cadastros vêm do ChatGPT** (31 de 72 em 30 dias, carimbados com
+`utm_source=chatgpt.com`), com apenas 18% das visitas — enquanto o Google traz
+70% das visitas. Citação por IA deixou de ser aposta de futuro: é hoje o canal
+que mais traz cliente. 86% dos pagantes entraram por página de conteúdo.
+
+**A entidade está partida em duas (achado de 01/09, corrigir).** Perguntado o
+que o faria recomendar cada nome, o ChatGPT tratou **Espelha Grupos e BOTinho
+como produtos concorrentes** ("posso fazer uma comparação BOTinho × Espelha
+Grupos"; "eu compararia Espelha Grupos, Promium, BOTinho"). A decisão de marca
+de 08/2026 existia para dar entidade ÚNICA — na prática a IA leu duas. Toda
+página precisa dizer, em texto e em schema (`publisher`/`brand`/`alternateName`),
+que **BOTinho é o robô do Espelha Grupos**.
+
+**O título nomeia o concorrente errado na maior consulta do site.** `achadinho
+pro` (742 impressões) é respondida por `/alternativas/achadinhos-bot` — página
+cujo título anuncia OUTRO produto ("Alternativa ao AchadinhosBot") — que ganha da
+`/alternativas/achadinho-pro` por 631 a 111. CTR de 1,1% em posição 6,28 é isso,
+não título vago. Título com número concreto rende o dobro ("4 lojas e 7 dias
+grátis" = 2,76%; "comparativo honesto" = 1,33%). ⚠️ Há **teto** nessas consultas:
+em `fluxopromo` estamos em posição 3 com o título certo e mesmo assim 0 clique em
+133 impressões — quem digita a marca quer a marca.
+
+**Indexação NÃO é o gargalo (revisto em 01/09).** As 7 páginas `/alternativas/*`
+estão TODAS indexadas. Das 20 rotas do registry fora do índice, 16 nunca
+entraram — entre elas `/metodologia-uso-responsavel-whatsapp`, que é exatamente
+a página que faltava para o Google AI Overviews não inventar uma "Metodologia
+BOTinho". E `/padronizar-divulgacao-afiliado-whatsapp` (CTR 9,68%, o melhor do
+site) CAIU do índice.
+
+Análise completa em `docs/marketing/ANALISE_SEO_2026-09-01.md`; plano de ação
+priorizado, SERP real e benchmark do Promium em
+`docs/marketing/PLANO_ACAO_SEO_IA_2026-09-01.md`.
 
 Tier 1 (`shopee afiliados` etc., 50.000/mês, concorrência baixa) segue com
-**zero consulta** — não existe página nossa disputando. Maior oportunidade
-aberta.
+**41 impressões (2%) e zero clique** — não existe página comercial nossa
+disputando, pelo terceiro relatório seguido. Maior oportunidade aberta. Sinal
+novo: `/blog/como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
+`/blog/como-ser-afiliado-shopee-whatsapp` (433) já pegam a periferia do tema.
 
 ### Concorrentes mapeados
 
 Achadinho Pro, ProAfiliados, FluxoPromo, Shozap, Afilira, AchadinhosBot /
 AchadinBot, IA Divulgadora, Devzapp (blog), Shark Pomo Bot, Lumi Ofertas
-Inteligentes, Gigi Bot. Preços e planos coletados por print em 2026-07-31 —
+Inteligentes, Gigi Bot. **Promium** (mapeado em 01/09: R$97,90 a R$597,90/mês
+recorrente — o plano de ENTRADA custa 42% mais que o nosso Pro de R$69; tem 13
+páginas de "Automação \<loja\> para WhatsApp" no rodapé, SEO programático por
+loja × recurso no eixo Tier 1 que está aberto para nós). Citados pelas IAs e
+ainda não mapeados: GoGoBot, OfertaFlux, FluxZap, Ripply, Núcleo do Afiliado,
+DivulgaNinja, DivulgaLinks, Afilimais, ZincLink, Busqy, Notifish, Whats.Ly. Preços e planos coletados por print em 2026-07-31 —
 ver `docs/marketing/ONDA1_PLANO_DETALHADO.md` (B2) para o detalhe por
 concorrente antes de citar preço em qualquer página pública.
 
@@ -3562,7 +3792,10 @@ No começo de cada mês, sugerir à usuária repetir **só o Relatório 1 (Searc
 Console)** do passo a passo de
 `docs/marketing/COLETA_DADOS_KEYWORDS_PASSO_A_PASSO.md` e comparar contra o
 baseline acima — principalmente **consultas distintas** e as páginas com muita
-impressão e pouco clique. Atualizar esta seção e a data do cabeçalho.
+impressão e pouco clique. Rodar junto o relatório de **Cobertura/Indexação** e
+os dois diagnósticos próprios (`scripts/diag-origem-cadastros.mjs` e
+`scripts/diag-paginas-seo.mjs`, 30 dias). Atualizar esta seção e a data do
+cabeçalho.
 
 **Não refazer Planejador e Trends todo mês.** Os dois medem volume de mercado,
 que não muda em semanas, e as decisões que dependem deles já estão congeladas

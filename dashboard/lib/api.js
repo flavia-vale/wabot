@@ -216,6 +216,8 @@ export const api = {
     apiFetch('/api/payments/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
   paymentsCreateSubscription: (plan) =>
     apiFetch('/api/payments/create-subscription', { method: 'POST', body: JSON.stringify({ plan }) }),
+  paymentsCancelSubscription: () =>
+    apiFetch('/api/payments/subscription/cancel', { method: 'POST' }),
   paymentsRecover: (paymentId) =>
     apiFetch('/api/payments/recover', { method: 'POST', body: JSON.stringify({ paymentId }) }),
 
@@ -313,6 +315,7 @@ export const api = {
   adminSystemHealth: () => apiFetch('/api/admin/system/health'),
   adminSystemMetrics: () => apiFetch('/api/admin/system/metrics'),
   adminSystemObservability: () => apiFetch('/api/admin/system/observability'),
+  adminFunnel: (weeks = 8) => apiFetch(`/api/admin/funnel?weeks=${encodeURIComponent(weeks)}`),
   adminCapacityCurrent: () => apiFetch('/api/admin/capacity/current'),
   adminCapacityHistory: (period = '30d') => apiFetch(`/api/admin/capacity/history?period=${encodeURIComponent(period)}`),
   adminCapacityForecast: () => apiFetch('/api/admin/capacity/forecast'),

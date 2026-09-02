@@ -29,6 +29,11 @@
 //   cd ~/wabot && node scripts/diag-funil-ativacao.mjs --listar   (quem parou onde)
 
 import db from '../src/db.js'
+// A classificação de "por que parou" vive em src/domain/admin/funnel.js — o
+// MESMO módulo que o painel /admin/funil usa. Duplicada, script e tela
+// discordariam sobre onde cada pessoa parou e não haveria como saber qual
+// estava certo.
+import { classifyStallReason, describeStallReason } from '../src/domain/admin/funnel.js'
 
 const args = process.argv.slice(2)
 const flag = (n, d = null) => {
@@ -85,11 +90,6 @@ async function main() {
   const comTentativa = new Set(tentativas.map((m) => m.userId))
   const comCheckout = new Set(checkouts.map((c) => c.userId))
   const pagantes = new Set(pagamentos.map((p) => p.userId))
-
-  // Quem gerou linha de envio mas nunca teve UMA que saísse. É o grupo que mais
-  // engana na leitura: parece ativado e não é. Quase sempre é falta de
-  // credencial de loja (`skip:no_valid_conversions`).
-  const soTentou = new Set([...comTentativa].filter((id) => !comEnvio.has(id)))
 
   const etapas = [
     ['1. Criou a conta', new Set(ids)],
@@ -153,17 +153,17 @@ async function main() {
   const exemplos = new Map()
   for (const u of usuarios) {
     if (pagantes.has(u.id)) continue
-    let rotulo
-    if (!comSessao.has(u.id)) rotulo = 'nunca tentou parear o WhatsApp'
-    else if (!comCredencial.has(u.id)) rotulo = 'pareou, mas não cadastrou credencial'
-    else if (!comMonitor.has(u.id)) rotulo = 'tem credencial, sem grupo de ORIGEM'
-    else if (!comDestino.has(u.id)) rotulo = 'tem origem, sem grupo de DESTINO'
-    // Separado de "nunca enviou": aqui o robô TENTOU e não conseguiu publicar
-    // nenhuma vez. A pessoa acha que está usando o produto e não está.
-    else if (soTentou.has(u.id)) rotulo = 'tentou enviar e NENHUM envio saiu'
-    else if (!comEnvio.has(u.id)) rotulo = 'configurou tudo, nunca enviou'
-    else if (!comCheckout.has(u.id)) rotulo = 'ENVIOU DE VERDADE e não foi para o checkout'
-    else rotulo = 'foi ao checkout e não pagou'
+    const motivo = classifyStallReason({
+      paired: comSessao.has(u.id),
+      hasCredential: comCredencial.has(u.id),
+      hasSourceGroup: comMonitor.has(u.id),
+      hasDestGroup: comDestino.has(u.id),
+      attempted: comTentativa.has(u.id),
+      delivered: comEnvio.has(u.id),
+      checkout: comCheckout.has(u.id),
+      paid: false,
+    })
+    const rotulo = describeStallReason(motivo)?.label ?? motivo
 
     parou.set(rotulo, (parou.get(rotulo) || 0) + 1)
     if (!exemplos.has(rotulo)) exemplos.set(rotulo, [])
@@ -190,9 +190,12 @@ async function main() {
   }
 
   // ------------------------------------------------------------ leitura ---
-  const semPareamento = parou.get('nunca tentou parear o WhatsApp') || 0
-  const enviouNaoPagou = parou.get('ENVIOU DE VERDADE e não foi para o checkout') || 0
-  const soTentouNaoPagou = parou.get('tentou enviar e NENHUM envio saiu') || 0
+  // Os rótulos vêm do módulo compartilhado — buscar por string literal aqui
+  // faria estes números virarem zero em silêncio no dia em que um texto mudar.
+  const contaMotivo = (chave) => parou.get(describeStallReason(chave)?.label) || 0
+  const semPareamento = contaMotivo('never_paired')
+  const enviouNaoPagou = contaMotivo('sent_no_checkout')
+  const soTentouNaoPagou = contaMotivo('tried_nothing_sent')
 
   console.log(`\n${'='.repeat(74)}`)
   console.log('COMO LER')

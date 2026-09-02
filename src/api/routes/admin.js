@@ -2475,6 +2475,16 @@ export async function adminRoutes(app) {
   // Lista larga de clientes (página /admin/clientes). É a porta de entrada do
   // histórico por cliente — varrível, buscável e ordenável, ao contrário da
   // gestão por risco em /users.
+  // Funil de ativação: cadastro → conectou → oferta publicada → começou o
+  // pagamento → pagou, por semana de cadastro e por origem. Toda a montagem
+  // fica no módulo puro `funnel.js`; aqui só carregamos e auditamos.
+  app.get('/funnel', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const result = await adminService.getActivationFunnel({ weeks: req.query?.weeks })
+    await writeAdminAuditLog(req, { action: 'admin.funnel.read', resource: 'analytics' })
+    return result
+  })
+
   app.get('/customers', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
     const result = await adminService.listCustomers({ query: req.query ?? {}, adminRole: req.admin.role })

@@ -33,7 +33,7 @@ export const COMPARISON_PAGES = {
   '/alternativas/bot-para-whatsapp-afiliados': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Afiliados',
-    title: 'Alternativas de bot para afiliados no WhatsApp: como escolher em 2026',
+    title: 'Alternativas de bot para afiliados: como escolher',
     description: 'Compare caminhos para divulgar ofertas em grupos de WhatsApp: operação manual, planilha, automação genérica, ferramenta oficial de mensagens e BOTinho.',
     competitorSlugs: ['achadinho-pro', 'achadinhosbot', 'proafiliados-com', 'lumi-ofertas-inteligentes', 'gigi-bot', 'manual-spreadsheet-workflow', 'generic-automation-tools', 'official-service-api-tools'],
     tldr: 'Se você está pesquisando alternativas de bot para WhatsApp, compare foco operacional, capacidade de governança e custo de manutenção contínua antes de decidir.',
@@ -89,8 +89,8 @@ export const COMPARISON_PAGES = {
     // /bot-achadinhos-whatsapp deixou de disputar o mesmo termo. As duas
     // ranqueavam para as MESMAS consultas (529 e 226 impressões), dividindo o
     // sinal entre si sem nenhuma delas subir.
-    title: 'Alternativa ao AchadinhosBot: comparativo honesto',
-    description: 'Compare AchadinhosBot, Achadinho Pro e BOTinho: preço, grupos ilimitados, lojas suportadas, conversão de links e teste grátis.',
+    title: 'Alternativa ao AchadinhosBot: grupos ilimitados',
+    description: 'O AchadinhosBot cobra por número de grupos e cobre só Shopee. No BOTinho: grupos ilimitados, 4 lojas e 7 dias grátis por R$ 39/30 dias.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
     // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
     // páginas ranqueavam para as mesmas consultas e não se linkavam, então o
@@ -101,7 +101,7 @@ export const COMPARISON_PAGES = {
       label: 'Como funciona o bot para achadinhos no WhatsApp',
     },
     tldr: 'Entre as opções comparadas, o BOTinho oferece o conjunto mais completo pelo menor preço de entrada: custa R$ 39 por 30 dias, permite grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Para quem quer divulgar várias lojas, crescer sem pagar por quantidade de grupos e testar tudo antes de assinar, é a opção mais vantajosa entre as três.',
-    directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco somente em Shopee. Seus planos começam em R$ 59,90 por mês para 1 grupo e chegam a R$ 199,90 para 15 grupos. O Achadinho Pro começa em R$ 49,97 por mês, também somente com Shopee; Amazon e Mercado Livre exigem o plano Pro de R$ 59,97. O BOTinho custa R$ 39 por 30 dias, permite grupos ilimitados e já inclui Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Também converte links de produto e de cupom, trabalha com grupos, Canais e Comunidades do WhatsApp e oferece 7 dias grátis com o plano Pro completo. Para quem divulga várias lojas e não quer pagar mais ao adicionar grupos, o BOTinho entrega mais recursos por um preço menor.',
+    directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco somente em Shopee. Seus planos começam em R$ 59,90 por mês para 1 grupo e chegam a R$ 199,90 para 15 grupos. O BOTinho custa R$ 39 por 30 dias, permite grupos ilimitados e já inclui Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Também converte links de produto e de cupom, trabalha com grupos, Canais e Comunidades do WhatsApp e oferece 7 dias grátis com o plano Pro completo. Para quem divulga várias lojas e não quer pagar mais ao adicionar grupos, o BOTinho entrega mais recursos por um preço menor. O Achadinho Pro, apesar do nome parecido, é outra ferramenta, de outra empresa: começa em R$ 49,97 por mês, também somente com Shopee, e tem página de comparação própria aqui no site.',
     // Formato de objeto (em vez de tupla) liga o comparador interativo por
     // critério (InteractiveComparisonTable) nesta página — ver
     // `isInteractiveComparison` em ComparisonPage. Mesmos fatos e preços da
@@ -173,8 +173,8 @@ export const COMPARISON_PAGES = {
   '/alternativas/proafiliados': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · ProAfiliados',
-    title: 'Alternativa ao ProAfiliados: comparativo honesto para bot de afiliados no WhatsApp',
-    description: 'Compare ProAfiliados e BOTinho para automatizar ofertas de afiliado no WhatsApp: plano grátis, preço por plano, tag nas mensagens e o que cada um cobre. Dados verificados em 04/08/2026.',
+    title: 'Alternativa ao ProAfiliados: sem tag nas mensagens',
+    description: 'O ProAfiliados tem plano grátis, mas assina as mensagens com a tag dele. Compare preço por plano e o que cada um cobre. Verificado em 04/08/2026.',
     competitorSlugs: ['proafiliados-com'],
     tldr: 'Se você quer testar automação de afiliados sem pagar nada, o plano grátis do ProAfiliados é o mais generoso do mercado — e não é trial, é grátis para sempre. O custo é a tag deles nas suas mensagens.',
     directAnswer: 'O ProAfiliados é um bot de afiliados para WhatsApp e Telegram com plano gratuito permanente (grupos ilimitados, monitoramento 24/7 e 5 plataformas), cobrando R$ 50/mês no Premium para remover a tag "proafiliados" das mensagens e R$ 100/mês no Premium Plus para tirar os anúncios do sistema. O pagamento é via PIX, sem cartão. A alternativa mais próxima é o BOTinho, que não insere tag nem anúncio em nenhum plano, mas não tem camada gratuita permanente — o teste grátis é de 7 dias.',
@@ -218,8 +218,8 @@ export const COMPARISON_PAGES = {
   '/alternativas/shozap': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Shozap',
-    title: 'Alternativa ao Shozap: comparativo honesto de preço e limites por plano',
-    description: 'Compare Shozap e BOTinho para divulgar ofertas no WhatsApp: preço por plano, quantas conexões e grupos cabem, e quais marketplaces entram em cada faixa. Dados verificados em 04/08/2026.',
+    title: 'Alternativa ao Shozap: preço e limites por plano',
+    description: 'Shozap e BOTinho lado a lado: preço por plano, quantas conexões e grupos cabem e quais lojas entram em cada faixa. Verificado em 04/08/2026.',
     competitorSlugs: ['shozap'],
     tldr: 'O Shozap escala por cota — conexões, campanhas, grupos por campanha e contas de marketplace. Some seus grupos antes de comparar preço: o plano de entrada cobre 3 grupos por campanha e só Shopee.',
     directAnswer: 'O Shozap é uma plataforma de divulgação para WhatsApp e Telegram que cobra por cota de uso: R$ 50/mês no Básico (1 conexão de cada, 3 campanhas, 3 grupos por campanha, só Shopee), R$ 100/mês no Intermediário (adiciona Mercado Livre e Amazon), R$ 150/mês no Elite (adiciona Shein e Magalu) e R$ 300/mês no Avançado. A alternativa mais próxima é o BOTinho, que cobre quatro marketplaces já no plano de R$ 39 e não limita número de grupos, mas atende só WhatsApp.',
@@ -263,8 +263,8 @@ export const COMPARISON_PAGES = {
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 72 chars de texto próprio, cortado no celular. Mantém "Alternativa
     // ao" na frente (FR-030 — nunca se apresenta como o concorrente).
-    title: 'Alternativa ao FluxoPromo: preço e o que muda',
-    description: 'Compare FluxoPromo e BOTinho: plano grátis, preço por plano, limite de ofertas por dia e feed pronto vs. espelhamento de grupos. Verificado em 04/08/2026.',
+    title: 'Alternativa ao FluxoPromo: sem teto de ofertas/dia',
+    description: 'O FluxoPromo limita ofertas por dia em todos os planos, menos no de R$ 197. No BOTinho não há teto, e o espelhamento parte dos grupos que você escolhe.',
     competitorSlugs: ['fluxopromo'],
     tldr: 'Antes de comparar preço, entenda que são propostas diferentes: o FluxoPromo entrega ofertas prontas por nicho, o BOTinho espelha os grupos que você escolhe acompanhar. Uma não substitui a outra.',
     directAnswer: 'O FluxoPromo distribui ofertas de afiliado por nicho para canais de Telegram e destinos de WhatsApp, com plano gratuito permanente (20 ofertas/dia, 3 lojas, 1 canal de Telegram) e planos pagos de R$ 37 a R$ 197/mês cobrados por teto de ofertas por dia. O BOTinho funciona de outra forma: monitora os grupos de origem que você escolhe, converte os links para o seu código e republica nos seus destinos, a partir de R$ 39/30 dias.',
@@ -313,15 +313,15 @@ export const COMPARISON_PAGES = {
   '/alternativas/achadinho-pro': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Achadinho Pro',
-    title: 'Alternativa ao Achadinho Pro: preço e marketplaces',
-    description: 'Compare Achadinho Pro e BOTinho: preço por plano, marketplaces cobertos e o que cada um resolve primeiro. Dados verificados em 31/07/2026.',
+    title: 'Alternativa ao Achadinho Pro: 4 lojas por R$ 39',
+    description: 'O Achadinho Pro cobre só Shopee no plano de entrada. No BOTinho, Shopee, Amazon, Mercado Livre e Magalu já entram por R$ 39/30 dias, com 7 dias grátis.',
     competitorSlugs: ['achadinho-pro'],
     productPage: {
       href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
     },
     tldr: 'Se você vai começar só com Shopee e não se importa em pagar mais depois para somar Mercado Livre e Amazon, o Achadinho Pro resolve. Se já divulga as três lojas (ou Magalu) desde o início, compare o custo total antes de decidir.',
-    directAnswer: 'O Achadinho Pro é um bot de afiliados para WhatsApp com IA para selecionar produtos: o plano Basic (R$ 49,97/mês) cobre só Shopee, com grupos ilimitados por automação e até 5 números de WhatsApp; o Pro (R$ 59,97/mês) soma Mercado Livre e Amazon pelo mesmo custo de apenas R$10 a mais. A página de preços consultada não indica teste grátis. A alternativa mais próxima é o BOTinho, que cobre Shopee, Amazon, Mercado Livre e Magalu já no plano de entrada (R$39/30 dias) e converte também links de cupom, com teste grátis de 7 dias.',
+    directAnswer: 'O Achadinho Pro é um bot de afiliados para WhatsApp com IA para selecionar produtos — e não é o mesmo produto que o AchadinhosBot, apesar do nome parecido. No Achadinho Pro, o plano Basic (R$ 49,97/mês) cobre só Shopee, com grupos ilimitados por automação e até 5 números de WhatsApp; o Pro (R$ 59,97/mês) soma Mercado Livre e Amazon pelo mesmo custo de apenas R$10 a mais. A página de preços consultada não indica teste grátis. A alternativa mais próxima é o BOTinho, que cobre Shopee, Amazon, Mercado Livre e Magalu já no plano de entrada (R$39/30 dias) e converte também links de cupom, com teste grátis de 7 dias.',
     rows: [
       { key: 'marketplaces', label: 'Marketplaces no plano de entrada', produto: 'Shopee, Amazon, Mercado Livre e Magalu já no Basic (R$39/30 dias).', concorrente: 'Achadinho Pro: só Shopee no Basic (R$ 49,97/mês); Mercado Livre e Amazon entram no Pro (R$ 59,97/mês).', reading: 'Se você já divulga mais de uma loja, compare pelo plano que cobre todas — não pelo preço de entrada.' },
       { key: 'diferenca-planos', label: 'Diferença de preço entre os planos', produto: 'R$30 a mais (Basic → Pro) para Canais do WhatsApp e ofertas automáticas — os marketplaces já vêm todos no Basic.', concorrente: 'Achadinho Pro: R$10/mês a mais para triplicar o número de marketplaces (Basic → Pro).', reading: 'São upgrades diferentes: no Achadinho Pro o upgrade é sobre LOJA; no BOTinho é sobre CANAL e AUTOMAÇÃO.' },
@@ -347,6 +347,7 @@ export const COMPARISON_PAGES = {
       'Se decidir pelo BOTinho, use os 7 dias de teste grátis para validar a conversão de link e o preview antes de assinar.',
     ],
     faq: [
+      { q: 'Achadinho Pro e AchadinhosBot são a mesma ferramenta?', a: 'Não. São dois produtos diferentes, de empresas diferentes, com nomes parecidos — o que faz muita gente procurar um e encontrar o outro. Esta página compara o Achadinho Pro. Se você procurava o AchadinhosBot, o site tem uma página só para ele.' },
       { q: 'Quanto custa o Achadinho Pro?', a: 'Conforme a página pública consultada em 31/07/2026: Basic R$ 49,97/mês (só Shopee, grupos ilimitados por automação, até 5 números de WhatsApp) e Pro R$ 59,97/mês (soma Mercado Livre e Amazon, mais Listas Personalizadas com 48h de auto-expiração). Confirme na página oficial antes de decidir — preços mudam.' },
       { q: 'O Achadinho Pro tem teste grátis?', a: 'A página de preços consultada em 31/07/2026 não indica teste grátis nem número de dias de trial. Se isso for importante para você, confirme diretamente no site oficial antes de assinar.' },
       { q: 'Em que o Achadinho Pro é melhor que o BOTinho?', a: 'Em dois pontos concretos: a diferença de preço entre os planos é pequena (R$10/mês) para triplicar o número de marketplaces cobertos, e ele permite até 5 números de WhatsApp na mesma conta — o BOTinho é uma sessão por conta.' },
@@ -408,7 +409,7 @@ export const COMPARISON_PAGES = {
   '/alternativas/gigi-bot': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Gigi Bot',
-    title: 'Alternativa ao Gigi Bot: comparativo honesto',
+    title: 'Alternativa ao Gigi Bot: o que o plano grátis faz',
     description: 'Comparativo entre Gigi Bot e BOTinho: qual plano envia sozinho para o WhatsApp, quanto custa e o que o plano gratuito faz. Tabela verificada em 26/08/2026.',
     competitorSlugs: ['gigi-bot'],
     productPage: {
@@ -460,7 +461,7 @@ export const COMPARISON_PAGES = {
   '/botinho-vs-planilha-manual': {
     format: 'vs',
     eyebrow: 'Comparativo · Operação manual',
-    title: 'Planilha ou bot para divulgar ofertas no WhatsApp: quando vale automatizar',
+    title: 'Planilha ou bot para divulgar ofertas: quando vale',
     description: 'Compare BOTinho e planilha manual para organizar grupos, links de afiliado, cadência e logs de divulgação em WhatsApp.',
     competitorSlugs: ['manual-spreadsheet-workflow'],
     tldr: 'Planilha manual funciona para operação pequena; BOTinho tende a ganhar quando volume e repetição aumentam e você precisa de logs e consistência.',
@@ -494,7 +495,7 @@ export const COMPARISON_PAGES = {
   '/botinho-vs-ferramentas-genericas-automacao': {
     format: 'vs',
     eyebrow: 'Comparativo · Automação genérica',
-    title: 'Bot de afiliados ou automação genérica de WhatsApp: qual usar',
+    title: 'Bot de afiliados ou automação genérica: qual usar',
     description: 'Entenda quando usar BOTinho ou ferramentas genéricas como automações de fluxo, conectores e scripts para rotinas de WhatsApp com afiliados.',
     competitorSlugs: ['generic-automation-tools'],
     tldr: 'Ferramentas genéricas priorizam flexibilidade técnica; BOTinho prioriza velocidade de operação para grupos de ofertas sem projeto técnico do zero.',
@@ -528,7 +529,7 @@ export const COMPARISON_PAGES = {
   '/melhores-bots-para-afiliados-whatsapp': {
     format: 'alternative-plural',
     eyebrow: 'Critérios · Avaliação de ferramentas',
-    title: 'Melhores bots para afiliados no WhatsApp em 2026: como comparar',
+    title: 'Melhores bots para afiliados no WhatsApp: como comparar',
     description: 'Lista de critérios para avaliar bots e ferramentas de WhatsApp para afiliados sem ranking falso, promessa de ganho ou prova social inventada.',
     tldr: 'Não escolha por promessa de ganho: escolha por processo confiável, rastreabilidade e aderência às políticas das plataformas.',
     directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação.',

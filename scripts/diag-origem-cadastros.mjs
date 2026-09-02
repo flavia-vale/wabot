@@ -62,47 +62,12 @@ function tabela(mapa, total, rotulo) {
   }
 }
 
-// Classifica a página de entrada em "isso é conteúdo de SEO?" — a distinção
-// que responde a pergunta original.
-// O sanitizador de atribuição troca '?' e '=' por '-', então a query vira parte
-// do caminho: `/x?utm_source=chatgpt.com` chega como `/x-utm_source-chatgpt.com`.
-// Cortar em '?' não resolve — é preciso cortar no '-utm'.
-function limpaLanding(landing) {
-  return String(landing || '')
-    .split('?')[0]
-    .replace(/-utm[-_].*$/, '')
-    .replace(/-source-.*$/, '')
-}
-
-// Marca de IA: quando a pessoa clica num link dentro do ChatGPT/Perplexity, a
-// própria ferramenta carimba `utm_source` na URL. É o rastro mais confiável de
-// origem em IA que existe hoje, e vale mais que a classificação da página.
-// O separador varia: `=` na URL crua, `-` depois do sanitizador de atribuição.
-const MARCAS_DE_IA = /utm[-_]source[-_=](chatgpt|openai|perplexity|copilot|claude|gemini)/i
-
-export function origemDeIA(landing) {
-  const m = String(landing || '').match(MARCAS_DE_IA)
-  return m ? m[1].toLowerCase() : null
-}
-
-export function classificaLanding(landing) {
-  const p = limpaLanding(landing)
-  if (!p) return 'sem registro'
-  if (p.startsWith('/blog/')) return 'CONTEÚDO (blog)'
-  if (p.startsWith('/alternativas/')) return 'CONTEÚDO (comparativo)'
-  if (p.startsWith('/materiais/') || p.startsWith('/ferramentas/')) return 'CONTEÚDO (ferramenta/material)'
-  // `automatizar-`, `padronizar-`, `postar-` e `reduzir-` faltavam nesta lista e
-  // caíam em "outro" — subnotificando justamente as páginas comerciais de SEO
-  // que mais trazem gente. Ao adicionar prefixo aqui, conferir contra a lista
-  // real de rotas (dashboard/lib/seo-registry.mjs), não de memória.
-  if (/^\/(bot-|anti-ban|faq-antiban|protecao-|programa-de-afiliados|espelhar-|automacao-|automatizar-|padronizar-|postar-|reduzir-|rastrear-|grupo-para-canal|como-funciona|comparativos|melhores-bots|botinho-vs|glossario|conteudos|diagnostico-|benchmarks|estudos-de-caso)/.test(p)) {
-    return 'CONTEÚDO (página de busca)'
-  }
-  if (p === '/') return 'home (ambíguo)'
-  if (p.startsWith('/login') || p.startsWith('/cadastro')) return 'direto no cadastro (ambíguo)'
-  if (p.startsWith('/r/')) return 'link de indicação'
-  return `outro: ${p}`
-}
+// A classificação de origem vive em `src/domain/admin/signupOrigin.js` — o
+// MESMO módulo que o painel de funil do admin usa. Quando estava duplicada
+// aqui, script e tela podiam discordar sobre quantos cadastros vieram de
+// conteúdo, e não havia como saber qual dos dois estava certo.
+export { classifyLandingPage as classificaLanding, detectAiSource as origemDeIA } from '../src/domain/admin/signupOrigin.js'
+import { classifyLandingPage as classificaLanding, detectAiSource as origemDeIA } from '../src/domain/admin/signupOrigin.js'
 
 async function main() {
   console.log(`\nPeríodo: desde ${fmt(desde)}\n`)
