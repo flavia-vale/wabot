@@ -129,9 +129,9 @@ test('o comparativo apresenta preço, grupos e as cinco lojas do BOTinho em toda
 
   assert.match(bloco, /R\$ 39 por 30 dias \(grupos ilimitados\)/)
   assert.match(bloco, /Shopee, Amazon, Mercado Livre, Magalu e SHEIN/)
-  assert.match(bloco, /productProfile:\s*{[\s\S]*name: 'BOTinho'/)
-  assert.match(bloco, /productDefinition: 'O BOTinho é para quem administra grupos/)
-  assert.match(bloco, /Qual é mais barato: BOTinho, AchadinhosBot ou Achadinho Pro\?/)
+  assert.match(bloco, /productProfile:\s*{[\s\S]*name: 'Espelha Grupos'/)
+  assert.match(bloco, /productDefinition: 'O Espelha Grupos é para quem administra grupos/)
+  assert.match(bloco, /Qual é mais barato: Espelha Grupos, AchadinhosBot ou Achadinho Pro\?/)
   assert.match(bloco, /Qual bot aceita mais lojas pelo menor preço\?/)
 })
 

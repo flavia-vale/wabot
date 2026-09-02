@@ -28,7 +28,7 @@ import {
 export const metadata = {
   title: 'Preços e planos: quanto custa o robô de ofertas para WhatsApp',
   description:
-    'Quanto custa automatizar a divulgação de ofertas de afiliado no WhatsApp: teste 7 dias grátis sem cartão, Basic a partir de R$39 e Pro com canais e ofertas automáticas. Sem fidelidade, cancela quando quiser.',
+    'Quanto custa automatizar a divulgação de ofertas de afiliado no WhatsApp: 7 dias grátis sem cartão, plano Basic por R$39 e plano Pro por R$69 a cada 30 dias. Sem fidelidade, cancela pelo painel.',
   alternates: { canonical: '/precos' },
   openGraph: {
     title: 'Preços e planos | Quanto custa o robô de ofertas para WhatsApp',
@@ -73,6 +73,20 @@ const BILLING_FAQ = [
   },
 ]
 
+/* "plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias" — em texto
+ * corrido, no HTML servido, sem depender de JS. Só planos pagos entram (o teste
+ * grátis é anunciado na frase anterior). Sem plano pago resolvido, devolve uma
+ * frase honesta em vez de um valor inventado. */
+export function formatPlanPricingSentence(plans) {
+  const pagos = (plans ?? []).filter((plan) => Number(plan.priceValue) > 0)
+  if (!pagos.length) return 'os planos ficam abaixo'
+  const periodo = pagos[0].period ? ` a cada ${pagos[0].period}` : ''
+  const partes = pagos.map((plan) => `plano ${plan.name} por ${plan.price}`)
+  const lista =
+    partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(', ')} ou ${partes[partes.length - 1]}`
+  return `${lista}${periodo}`
+}
+
 function buildPricingJsonLd(plans) {
   const paid = plans.filter((plan) => Number(plan.priceValue) > 0)
   return [
@@ -107,6 +121,13 @@ function buildPricingJsonLd(plans) {
 export default async function PrecosPage() {
   const plans = await getLandingPlans()
   const jsonLd = buildPricingJsonLd(plans)
+  // Frase de preço montada a partir dos planos REAIS. Hardcodar "R$39 ou R$69"
+  // aqui faria a abertura da página mentir na primeira troca de preço feita no
+  // painel — e é justamente esta frase que o robô lê antes de qualquer card.
+  // Nomear o plano junto do valor é o que faltava: "a partir de R$39" não diz
+  // se R$39 É o Basic ou só o piso, e foi assim que o preço do Basic ficou
+  // ilegível para as IAs (medição de 01/09).
+  const precoPorPlano = formatPlanPricingSentence(plans)
 
   return (
     <div className="landing-root">
@@ -140,7 +161,7 @@ export default async function PrecosPage() {
               lineHeight: 1.6,
             }}
           >
-            Teste 7 dias com tudo liberado, sem cartão. Depois são R$39 ou R$69 por 30 dias,
+            Teste 7 dias com tudo liberado, sem cartão. Depois, {precoPorPlano},
             sem fidelidade e com cancelamento pelo próprio painel.
           </p>
         </div>

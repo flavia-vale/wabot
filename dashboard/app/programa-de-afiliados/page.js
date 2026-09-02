@@ -164,7 +164,7 @@ export default function Page() {
               link encaminhado credita a comissão para quem publicou primeiro.
             </p>
             <p className="mt-3 leading-8 text-gray-700">
-              O <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/bot-afiliados-whatsapp">BOTinho</Link>{' '}
+              O <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/bot-afiliados-whatsapp">Espelha Grupos</Link>{' '}
               converte automaticamente os links de Shopee, Amazon, Mercado Livre e Magalu para o seu código antes de
               publicar nos seus grupos e canais, com intervalos controlados entre envios.
             </p>

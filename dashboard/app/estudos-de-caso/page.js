@@ -4,8 +4,8 @@ import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
 const slug = '/estudos-de-caso'
-const title = 'Estudos de caso do BOTinho'
-const description = 'Política pública para publicar estudos de caso do BOTinho somente com consentimento, contexto, metodologia e dados verificáveis.'
+const title = 'Estudos de caso do Espelha Grupos'
+const description = 'Política pública para publicar estudos de caso do Espelha Grupos somente com consentimento, contexto, metodologia e dados verificáveis.'
 const dates = getEditorialDates(slug)
 
 const requirements = [
@@ -46,7 +46,7 @@ export default function Page() {
 
           <section className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5">
             <h2 className="text-2xl font-black tracking-tight text-gray-950">Status dos estudos públicos</h2>
-            <p className="mt-3 leading-8 text-gray-700">O BOTinho ainda não publica estudos de caso com métricas de clientes nesta página porque a política do site exige consentimento, período, metodologia e dados verificáveis. Essa decisão evita prova social falsa e protege compradores.</p>
+            <p className="mt-3 leading-8 text-gray-700">O Espelha Grupos ainda não publica estudos de caso com métricas de clientes nesta página porque a política do site exige consentimento, período, metodologia e dados verificáveis. Essa decisão evita prova social falsa e protege compradores.</p>
           </section>
 
           <section className="mt-8">
@@ -59,7 +59,7 @@ export default function Page() {
           <section className="mt-8 grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
               <h2 className="text-xl font-black text-gray-950">Modelo de evidência</h2>
-              <p className="mt-3 leading-7 text-gray-700">Nicho, tamanho da operação, período, rotina anterior, rotina com BOTinho, métrica operacional, evidência, responsável pela aprovação e limitações.</p>
+              <p className="mt-3 leading-7 text-gray-700">Nicho, tamanho da operação, período, rotina anterior, rotina com Espelha Grupos, métrica operacional, evidência, responsável pela aprovação e limitações.</p>
             </div>
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
               <h2 className="text-xl font-black text-gray-950">Claims proibidos</h2>

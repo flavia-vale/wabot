@@ -21,7 +21,7 @@ const faq = [
     a: 'Se a URL final não tiver o identificador de afiliado, se redirecionar para outro vendedor ou se quebrar no celular, a plataforma pode não atribuir a venda ao afiliado certo.',
   },
   {
-    q: 'O BOTinho promete integração aprovada com marketplaces ou redes de afiliados?',
+    q: 'O Espelha Grupos promete integração aprovada com marketplaces ou redes de afiliados?',
     a: 'Não. O conteúdo orienta conferência operacional de links e divulgação no WhatsApp; qualquer integração depende das regras e aprovações de cada plataforma.',
   },
 ]
@@ -48,7 +48,7 @@ export default function Page() {
             Antes de divulgar no WhatsApp, o afiliado deve abrir a URL final no celular, confirmar se a tag ou o código de afiliado aparece no destino esperado e registrar qual link monetizado será enviado. Essa conferência reduz o risco de publicar uma oferta com link sem comissão, cupom errado ou redirecionamento quebrado.
           </p>
           <p>
-            O BOTinho ajuda na rotina de organização e distribuição de mensagens em grupos, mas não promete integração aprovada com marketplaces, redes de afiliados ou programas externos. A responsabilidade de validar as regras de cada plataforma continua sendo do operador.
+            O Espelha Grupos ajuda na rotina de organização e distribuição de mensagens em grupos, mas não promete integração aprovada com marketplaces, redes de afiliados ou programas externos. A responsabilidade de validar as regras de cada plataforma continua sendo do operador.
           </p>
         </section>
 
@@ -71,7 +71,7 @@ export default function Page() {
             <li>Verifique se a tag, código ou parâmetro de afiliado continua presente depois do redirecionamento.</li>
             <li>Compare produto, preço e cupom com a copy que será enviada.</li>
             <li>Salve o link aprovado em uma planilha ou rotina interna com data, nicho e campanha.</li>
-            <li>Use o BOTinho para distribuir apenas a mensagem já conferida para os grupos corretos.</li>
+            <li>Use o Espelha Grupos para distribuir apenas a mensagem já conferida para os grupos corretos.</li>
           </ol>
         </section>
 
@@ -98,7 +98,7 @@ export default function Page() {
         <section>
           <h2>CTA</h2>
           <p>
-            Se a sua rotina já tem ofertas conferidas e o gargalo está em publicar com consistência, entre na lista VIP do BOTinho e teste uma operação mais organizada para grupos de WhatsApp.
+            Se a sua rotina já tem ofertas conferidas e o gargalo está em publicar com consistência, entre na lista VIP do Espelha Grupos e teste uma operação mais organizada para grupos de WhatsApp.
           </p>
           <p>
             <Link href="/login?mode=register&utm_source=blog&utm_medium=organic&utm_campaign=organic-marketing-sprint-1&utm_content=cta-link-afiliado" className="inline-flex min-h-12 items-center rounded-xl bg-emerald-600 px-5 font-black text-white hover:bg-emerald-700">

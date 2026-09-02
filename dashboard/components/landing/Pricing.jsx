@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from './Icon';
-import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content';
+import { DEFAULT_LANDING_PLANS, parsePriceValue } from '@/lib/marketing-content';
 import { buildRegisterHref } from '@/lib/marketing-attribution';
 
 const s = {
@@ -42,7 +42,7 @@ function mergePlanContent(plans) {
       ...defaultPlan,
       name: dynamicPlan?.title || defaultPlan.name,
       price: dynamicPlan?.price || defaultPlan.price,
-      priceValue: defaultPlan.priceValue,
+      priceValue: parsePriceValue(dynamicPlan?.price) ?? defaultPlan.priceValue,
       period: dynamicPlan?.period || defaultPlan.period,
       desc: dynamicPlan?.description || defaultPlan.desc,
       features: Array.isArray(dynamicPlan?.features) && dynamicPlan.features.length ? dynamicPlan.features : defaultPlan.features,
@@ -130,6 +130,10 @@ export function Pricing({ initialPlans = null, showHeading = true }) {
               <Link
                 href={buildRegisterHref({ source: 'landing', campaign: 'home-pricing', content: `plan-${p.id}` })}
                 className="landing-pricing-cta"
+                data-seo-cta={`plan-${p.id}`}
+                data-cta-position="pricing-card"
+                data-cta-stage="decision"
+                data-cta-destination="register"
                 style={{
                   display: 'block', textAlign: 'center', padding: '14px 22px', borderRadius: 999,
                   fontWeight: 600, fontSize: 15, textDecoration: 'none',

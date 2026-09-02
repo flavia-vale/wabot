@@ -3,7 +3,7 @@ import { ToastProvider } from "@/components/ToastProvider";
 import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
 import { GoogleAdsTag } from "@/components/marketing/GoogleAdsTag";
 import { getSiteUrl } from '@/lib/site-url'
-import { BRAND_ORG_NAME, BRAND_PRODUCT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORT_EMAIL } from '@/lib/marketing-content'
+import { BRAND_LEGACY_NAME, BRAND_ORG_NAME, BRAND_PRODUCT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORT_EMAIL } from '@/lib/marketing-content'
 
 // Não use `next/font/google` aqui. Ele baixa CSS/arquivos do Google em tempo
 // de build; quando o VPS/GitHub Actions fica sem acesso ao Google Fonts, o build
@@ -44,13 +44,13 @@ function buildGlobalJsonLd() {
     {
       '@context': 'https://schema.org',
       '@type': 'Organization',
-      // A Organization é a MARCA (Espelha Grupos); o produto que ela publica é o
-      // BOTinho, declarado abaixo como SoftwareApplication com `publisher`
-      // apontando de volta. É esse par que faz Google/IA entenderem os dois
-      // nomes como uma entidade só em vez de duas marcas soltas.
+      // Marca e produto passaram a ter o MESMO nome (2026-09-02 — ver o
+      // comentário em lib/marketing-content.js). O nome antigo entra como
+      // `alternateName` para o Google e as IAs ligarem as citações anteriores a
+      // esta mesma entidade em vez de tratá-las como um produto concorrente.
       '@id': `${siteUrl}#organization`,
       name: BRAND_ORG_NAME,
-      alternateName: [BRAND_PRODUCT_NAME],
+      alternateName: [BRAND_LEGACY_NAME],
       url: siteUrl,
       logo: `${siteUrl}/botinho-logo.svg`,
       contactPoint: [{ '@type': 'ContactPoint', contactType: 'customer support', email: SUPPORT_EMAIL, url: `${siteUrl}/suporte` }],
@@ -60,7 +60,11 @@ function buildGlobalJsonLd() {
       '@context': 'https://schema.org',
       '@type': 'SoftwareApplication',
       name: BRAND_PRODUCT_NAME,
+      alternateName: [BRAND_LEGACY_NAME],
+      // `publisher` e `brand` apontam para a MESMA Organization: é o par que
+      // impede a IA de ler o produto e a marca como duas empresas diferentes.
       publisher: { '@id': `${siteUrl}#organization` },
+      brand: { '@id': `${siteUrl}#organization` },
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web',
       url: siteUrl,

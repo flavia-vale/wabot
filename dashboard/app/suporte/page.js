@@ -11,7 +11,7 @@ import {
 
 export const metadata = {
   title: 'Suporte',
-  description: 'Canais de suporte e orientações iniciais para usar o BOTinho.',
+  description: 'Canais de suporte e orientações iniciais para usar o Espelha Grupos.',
   alternates: { canonical: '/suporte' },
 }
 
@@ -54,11 +54,11 @@ function buildSupportJsonLd() {
   const contactSchema = {
     '@context': 'https://schema.org',
     '@type': 'ContactPage',
-    name: 'Suporte BOTinho',
+    name: 'Suporte Espelha Grupos',
     url: `${siteUrl}/suporte`,
     mainEntity: {
       '@type': 'Organization',
-      name: 'BOTinho',
+      name: 'Espelha Grupos',
       url: siteUrl,
       contactPoint: [
         {

@@ -3619,8 +3619,18 @@ termos + Trends). Análise completa em
 | LPs por **cidade** (`espelhar-grupos-whatsapp-<cidade>`) | as 15 somaram ~25 impressões em 2,5 meses; 5 delas em zero |
 | LPs de **nicho** novo (farmácia, autopeças, pet shop, beleza) | zero impressão em 2,5 meses |
 | Cluster **"robô"** como termo próprio | Trends: "robô whatsapp" é 12× menor que "bot whatsapp" |
-| **Magalu** como frente nova | único marketplace em queda no Trends |
+| ~~**Magalu** como frente nova~~ **(reaberto em 02/09 — ver nota abaixo)** | único marketplace em queda no Trends |
 | `automação whatsapp` / `disparo em massa` | 5.000/mês mas concorrência **alta**, e é mercado de atendimento corporativo (Blip/Wati), não afiliado |
+
+**Magalu foi reaberto em 2026-09-02, por decisão explícita da dona do produto.**
+O congelamento vinha do Trends (único marketplace da lista em queda), e isso é
+argumento de **prioridade**, não de correção — a prioridade é decisão dela. A
+reabertura vale **só** para a página comercial `/magalu-afiliados-whatsapp`, no
+mesmo padrão das outras lojas da frente Tier 1 (Shopee, Mercado Livre, Amazon e
+SHEIN). Cidade, nicho e dor seguem congelados, e qualquer OUTRA rota de Magalu
+exige decisão nova — a guarda `FR-033` em
+`test/marketing-limites-que-nao-se-cruzam.test.js` passou a aceitar essa rota e
+só ela, em vez de ter sido apagada.
 
 **Não deletar as páginas existentes** — perder link e histórico não ajuda. Só
 parar de investir.

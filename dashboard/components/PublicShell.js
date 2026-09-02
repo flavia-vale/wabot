@@ -15,7 +15,7 @@ export function PublicHeader() {
     <header className="border-b border-green-100 bg-white/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-8">
         <Link href="/" className="text-xl font-black text-green-700">
-          🤖 BOTinho
+          🤖 Espelha Grupos
         </Link>
         <nav className="flex flex-wrap items-center gap-4 text-sm font-semibold text-gray-600">
           <Link href="/bot-ofertas-whatsapp" className="hover:text-green-700">Nichos</Link>
@@ -34,7 +34,7 @@ export function PublicFooter() {
   return (
     <footer className="border-t border-green-100 bg-white">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-5 py-8 text-sm text-gray-500 md:flex-row md:items-center md:justify-between md:px-8">
-        <p>© {new Date().getFullYear()} BOTinho. Software para afiliados no WhatsApp.</p>
+        <p>© {new Date().getFullYear()} Espelha Grupos. Software para afiliados no WhatsApp.</p>
         <nav className="flex flex-wrap gap-4">
           {footerLinks.map(link => (
             <Link key={link.href} href={link.href} className="font-medium text-gray-600 hover:text-green-700">

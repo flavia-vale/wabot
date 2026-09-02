@@ -5,7 +5,7 @@ import { getSiteUrl } from '@/lib/site-url'
 const slug = '/ferramentas'
 const siteUrl = getSiteUrl()
 const title = 'Ferramentas gratuitas para afiliados no WhatsApp'
-const description = 'Use ferramentas gratuitas do BOTinho para calcular tempo operacional, planejar cadência e organizar divulgação de ofertas em grupos de WhatsApp com responsabilidade.'
+const description = 'Use ferramentas gratuitas do Espelha Grupos para calcular tempo operacional, planejar cadência e organizar divulgação de ofertas em grupos de WhatsApp com responsabilidade.'
 
 const tools = [
   {
@@ -53,11 +53,11 @@ function buildJsonLd() {
         name: title,
         description,
         url: `${siteUrl}${slug}`,
-        isPartOf: { '@type': 'WebSite', name: 'BOTinho', url: siteUrl },
+        isPartOf: { '@type': 'WebSite', name: 'Espelha Grupos', url: siteUrl },
       },
       {
         '@type': 'ItemList',
-        name: 'Ferramentas gratuitas do BOTinho',
+        name: 'Ferramentas gratuitas do Espelha Grupos',
         itemListElement: tools.map((tool, index) => ({
           '@type': 'ListItem',
           position: index + 1,

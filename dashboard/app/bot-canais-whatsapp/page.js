@@ -13,14 +13,14 @@ const diagnosticHref = '/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=
 const checklistHref = '/materiais/checklist-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=landing_checklist'
 const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=landing_calculadora_risco'
 const decisionPages = [
-  { href: '/bot-comum-vs-botinho?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_bot_comum', title: 'Bot comum vs BOTinho', description: 'Compare repostagem simples com operação preservada.' },
+  { href: '/bot-comum-vs-botinho?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_bot_comum', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada.' },
   { href: '/faq-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_faq', title: 'FAQ “anti-ban” honesto', description: 'Respostas diretas sem promessa de banimento zero.' },
   { href: '/como-funciona-botinho-canais?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_como_funciona', title: 'Como funciona em canais', description: 'Fluxo de fontes, destinos, cadência e monitoramento.' },
   { href: '/protecao-antiban-botinho?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_protecao', title: 'Proteção avançada', description: 'Limites, variações, pausa preventiva e recuperação.' },
 ]
 
 const title = 'Bot para Canais do WhatsApp com Módulo de Preservação Avançada'
-const description = 'Migre achadinhos para Canais do WhatsApp com o BOTinho: espelhamento entre grupos e canais, ritmo humano, variações, monitoramento e Módulo de Preservação Avançada (o chamado "anti-ban").'
+const description = 'Migre achadinhos para Canais do WhatsApp com o Espelha Grupos: espelhamento entre grupos e canais, ritmo humano, variações, monitoramento e Módulo de Preservação Avançada (o chamado "anti-ban").'
 
 export const metadata = {
   title,
@@ -30,7 +30,7 @@ export const metadata = {
     title,
     description,
     url: pageUrl,
-    siteName: 'BOTinho',
+    siteName: 'Espelha Grupos',
     locale: 'pt_BR',
     type: 'website',
     images: [
@@ -120,7 +120,7 @@ const faqs = [
     answer: 'Não. A estratégia recomendada é usar grupos e canais juntos quando fizer sentido: grupos como fonte ou comunidade, e canais como vitrine mais organizada para ofertas.',
   },
   {
-    question: 'O BOTinho consegue postar de grupos para canais?',
+    question: 'O Espelha Grupos consegue postar de grupos para canais?',
     answer: 'Sim. O fluxo da campanha cobre espelhamento flexível: grupo para canal, canal para grupo, canal para canal e grupo para grupo, respeitando regras de cadência configuradas.',
   },
   {
@@ -177,7 +177,7 @@ function JsonLd() {
     {
       '@context': 'https://schema.org',
       '@type': 'SoftwareApplication',
-      name: 'BOTinho',
+      name: 'Espelha Grupos',
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web',
       url: pageUrl,
@@ -272,14 +272,14 @@ export default function BotCanaisWhatsAppPage() {
                 Migre seus achadinhos para <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>Canais do WhatsApp</span> com preservação avançada.
               </h1>
               <p style={s.lead}>
-                O BOTinho espelha ofertas entre grupos e canais, publica em ritmo humano, cria variações naturais e monitora sinais de risco para preservar sua operação de afiliados.
+                O Espelha Grupos espelha ofertas entre grupos e canais, publica em ritmo humano, cria variações naturais e monitora sinais de risco para preservar sua operação de afiliados.
               </p>
               <div style={s.ctaRow}>
                 <Link className="btn btn-accent" href={primaryCtaHref} data-seo-cta="signup_preservar_canais" data-cta-position="hero_primary" data-cta-stage="conversion" data-cta-destination="signup">Quero preservar meus canais</Link>
                 <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="diagnostico_preservacao" data-cta-position="hero_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Fazer diagnóstico de preservação</Link>
               </div>
               <p style={{ ...s.small, marginTop: 16 }}>
-                Aviso honesto: nenhuma automação séria garante banimento zero. O BOTinho trabalha com redução de risco, uso responsável, monitoramento preventivo e plano de recuperação.
+                Aviso honesto: nenhuma automação séria garante banimento zero. O Espelha Grupos trabalha com redução de risco, uso responsável, monitoramento preventivo e plano de recuperação.
               </p>
             </div>
             <MiniDashboard />
@@ -296,7 +296,7 @@ export default function BotCanaisWhatsAppPage() {
             <div style={s.grid2}>
               <div style={s.softCard}>
                 <h3 id="risco-title" style={{ fontSize: 26, marginBottom: 14 }}>Seus canais são ativos, não improviso.</h3>
-                <p style={s.small}>Grupo, canal, chip e audiência precisam ser tratados como partes de uma operação. O BOTinho organiza esse fluxo para reduzir comportamento robótico e preparar um plano B.</p>
+                <p style={s.small}>Grupo, canal, chip e audiência precisam ser tratados como partes de uma operação. O Espelha Grupos organiza esse fluxo para reduzir comportamento robótico e preparar um plano B.</p>
               </div>
               <ul style={{ ...s.card, margin: 0, paddingLeft: 44, lineHeight: 1.75 }}>
                 {painPoints.map((item) => <li key={item}>{item}</li>)}
@@ -310,7 +310,7 @@ export default function BotCanaisWhatsAppPage() {
             <SectionHeader
               eyebrow="A virada"
               title="Use grupos e canais juntos, com cada um no papel certo."
-              body="Grupos podem continuar como fonte ou comunidade. Canais podem virar a vitrine organizada das ofertas. O diferencial do BOTinho é conectar os dois lados com regras de cadência."
+              body="Grupos podem continuar como fonte ou comunidade. Canais podem virar a vitrine organizada das ofertas. O diferencial do Espelha Grupos é conectar os dois lados com regras de cadência."
             />
             <div style={s.grid3}>
               {flows.map((flow) => (
@@ -346,7 +346,7 @@ export default function BotCanaisWhatsAppPage() {
             <SectionHeader
               eyebrow="Preservação avançada"
               title="Defesa em profundidade: camada sobre camada."
-              body="O BOTinho não promete mágica. O Módulo de Preservação Avançada reduz risco combinando comportamento mais natural, controle de volume, monitoramento e recuperação."
+              body="O Espelha Grupos não promete mágica. O Módulo de Preservação Avançada reduz risco combinando comportamento mais natural, controle de volume, monitoramento e recuperação."
             />
             <div style={s.grid2}>
               {pillars.map((pillar) => (
@@ -364,7 +364,7 @@ export default function BotCanaisWhatsAppPage() {
           <div className="wrap">
             <SectionHeader
               eyebrow="Comparativo"
-              title="Bot comum espalha. BOTinho opera com preservação."
+              title="Bot comum espalha. Espelha Grupos opera com preservação."
               body="A diferença não está apenas em postar ofertas. Está em publicar com cadência, variações, sinais de saúde e plano de recuperação."
             />
             <div style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 24, background: 'var(--surface)' }}>
@@ -373,7 +373,7 @@ export default function BotCanaisWhatsAppPage() {
                   <tr style={{ background: 'color-mix(in oklab, var(--accent-3) 42%, var(--surface))' }}>
                     <th style={{ textAlign: 'left', padding: 18 }}>Recurso</th>
                     <th style={{ textAlign: 'center', padding: 18 }}>Bots comuns</th>
-                    <th style={{ textAlign: 'center', padding: 18 }}>BOTinho</th>
+                    <th style={{ textAlign: 'center', padding: 18 }}>Espelha Grupos</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -398,7 +398,7 @@ export default function BotCanaisWhatsAppPage() {
                 <h2 id="honestidade-title" style={s.h2}>Promessa absoluta é sinal de alerta.</h2>
               </div>
               <p style={{ ...s.lead, fontSize: 18 }}>
-                O BOTinho não controla decisões da plataforma. O Módulo de Preservação Avançada — buscado por muitos afiliados como “anti-ban” — entrega processo: chip dedicado, cadência responsável, variações, monitoramento, pausa preventiva e plano de recuperação para reduzir exposição.
+                O Espelha Grupos não controla decisões da plataforma. O Módulo de Preservação Avançada — buscado por muitos afiliados como “anti-ban” — entrega processo: chip dedicado, cadência responsável, variações, monitoramento, pausa preventiva e plano de recuperação para reduzir exposição.
               </p>
             </div>
           </div>
@@ -436,7 +436,7 @@ export default function BotCanaisWhatsAppPage() {
             <div style={s.grid2}>
               {decisionPages.map((page) => (
                 <article key={page.href} style={s.card}>
-                  <h3 id={page.title === 'Bot comum vs BOTinho' ? 'decisao-p2-title' : undefined} style={{ fontSize: 22, marginBottom: 10 }}>{page.title}</h3>
+                  <h3 id={page.title === 'Bot comum vs Espelha Grupos' ? 'decisao-p2-title' : undefined} style={{ fontSize: 22, marginBottom: 10 }}>{page.title}</h3>
                   <p style={s.small}>{page.description}</p>
                   <Link className="btn btn-ghost" style={{ marginTop: 18 }} href={page.href} data-seo-cta="landing_p2_decision" data-cta-position="p2_assets" data-cta-stage="decision" data-cta-destination="decision_page">Abrir página</Link>
                 </article>

@@ -46,12 +46,12 @@ const s = {
 function Nav({ registerHref }) {
   return (
     <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
-      {/* Marca única na superfície pública (auditoria de funil 2026-08-05, §1.2).
-        * O visitante chega de um resultado do Google que diz "Espelha Grupos" e
-        * lia só "BOTinho" no topo — duas entidades diferentes no segundo mais
-        * caro do funil. A hierarquia já decidida em marketing-content.js
-        * (Organization = Espelha Grupos, produto = BOTinho) agora aparece
-        * também na tela, em vez de existir só no JSON-LD. */}
+      {/* Marca única na superfície pública. O visitante chegava de um resultado
+        * do Google que dizia "Espelha Grupos" e lia "BOTinho" no topo — duas
+        * entidades diferentes no segundo mais caro do funil (auditoria de funil
+        * 2026-08-05, §1.2). Desde 2026-09-02 existe UM nome só: marca e produto
+        * são "Espelha Grupos", e o nome antigo sobrevive apenas como
+        * `alternateName` no schema. Ver marketing-content.js. */}
       <div style={s.logo}>
         <div style={s.logoMark}>b</div>
         <span style={s.logoNames}>

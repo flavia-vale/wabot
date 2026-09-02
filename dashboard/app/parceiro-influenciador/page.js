@@ -6,12 +6,12 @@ import { buildRegisterHref } from '@/lib/marketing-attribution'
 
 const slug = '/parceiro-influenciador'
 const title = 'Parceria para criadores: robô grátis + 30% de comissão recorrente'
-const description = 'Se você ensina afiliação ou tem audiência de afiliados: use o BOTinho de graça e ganhe 30% de comissão recorrente de cada pessoa que assinar pelo seu link. Todo mês, enquanto ela for cliente.'
+const description = 'Se você ensina afiliação ou tem audiência de afiliados: use o Espelha Grupos de graça e ganhe 30% de comissão recorrente de cada pessoa que assinar pelo seu link. Todo mês, enquanto ela for cliente.'
 
 // Resposta direta em 40–60 palavras — bloco usado como snippet e citado por
 // motores de IA. Não transformar em parágrafo longo.
 const directAnswer =
-  'A parceria do BOTinho para criadores tem duas partes: você usa o robô de graça e recebe 30% de comissão recorrente de cada pessoa que assinar pelo seu link. Recorrente significa todo mês, enquanto a pessoa continuar cliente — não é comissão de uma venda só. O saque é por PIX.'
+  'A parceria do Espelha Grupos para criadores tem duas partes: você usa o robô de graça e recebe 30% de comissão recorrente de cada pessoa que assinar pelo seu link. Recorrente significa todo mês, enquanto a pessoa continuar cliente — não é comissão de uma venda só. O saque é por PIX.'
 
 // Valores derivados dos planos vigentes (dashboard/lib/marketing-content.js:
 // Basic R$39, Pro R$69) e do percentual configurado em AffiliateSettings
@@ -186,7 +186,7 @@ export default function Page() {
             <h2 className="text-2xl font-black tracking-tight text-gray-950">O que a gente pede em troca</h2>
             <p className="mt-3 leading-8 text-gray-700">
               Uma coisa só, e ela é séria: <strong>não prometa que o WhatsApp não bane</strong>. Nenhuma ferramenta
-              pode garantir isso, e quem promete está mentindo. O que o BOTinho faz é reduzir o risco — espaça os
+              pode garantir isso, e quem promete está mentindo. O que o Espelha Grupos faz é reduzir o risco — espaça os
               envios, limita volume por grupo, respeita horário e varia as mensagens. Isso é o oposto de disparo em
               massa, e é assim que a gente fala no site inteiro.
             </p>

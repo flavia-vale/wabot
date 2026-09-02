@@ -5,7 +5,7 @@ import { getSiteUrl } from '@/lib/site-url'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
 
 const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
-const description = 'Central de conteúdos do BOTinho com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
+const description = 'Central de conteúdos do Espelha Grupos com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
 const slug = '/conteudos'
 
 const lastUpdated = '2026-05-15'
@@ -127,6 +127,63 @@ const nichePages = [
     title: 'Bot de ofertas para marketplace no WhatsApp',
     description: 'Conferência de link monetizado, tag de afiliado e automação em grupos.',
   },
+  // Entrou aqui em 2026-09-02 por estar órfã (só no sitemap) apesar de ser uma
+  // das páginas que MAIS convertem: 21 visitas, 6 cliques em CTA e 6 cadastros
+  // em 30 dias. Página que converte e não é alcançável por link nenhum é a
+  // combinação mais cara que existe.
+  {
+    href: '/bot-ofertas-afiliados-whatsapp',
+    title: 'Bot de ofertas para afiliados no WhatsApp',
+    description: 'Como a divulgação de ofertas de afiliado funciona em grupo e em canal.',
+  },
+  // Nasce linkada de propósito: a ação 8 mostrou que página que só existe no
+  // sitemap acaba em "rastreada, mas não indexada".
+  {
+    href: '/shopee-afiliados-whatsapp',
+    title: 'Shopee Afiliados: divulgar no WhatsApp',
+    description: 'Para quem já é afiliada Shopee e quer publicar as ofertas sem copiar e colar.',
+  },
+  {
+    href: '/mercado-livre-afiliados-whatsapp',
+    title: 'Afiliado Mercado Livre: divulgar no WhatsApp',
+    description: 'Para quem já é afiliada do Mercado Livre e quer publicar sem copiar e colar.',
+  },
+  {
+    href: '/amazon-afiliados-whatsapp',
+    title: 'Afiliado Amazon: divulgar ofertas no WhatsApp',
+    description: 'Para quem já é afiliada Amazon e quer publicar sem perder a tag no caminho.',
+  },
+  {
+    href: '/shein-afiliados-whatsapp',
+    title: 'SHEIN Afiliados: divulgar no WhatsApp',
+    description: 'Para quem já é afiliada SHEIN e quer publicar com o link curto da própria loja.',
+  },
+  {
+    href: '/magalu-afiliados-whatsapp',
+    title: 'Divulgador Magalu: publicar no WhatsApp',
+    description: 'Para quem já divulga Magalu, onde o código vale inclusive em cupom e campanha.',
+  },
+]
+
+/* As dez LPs de "dor" (painSlugs em lib/seo-registry.mjs). Estavam no sitemap e
+ * em lugar NENHUM do site: seis delas não são citadas em ponto algum do código,
+ * nem por link estático nem dinâmico. Página que só existe no sitemap é a causa
+ * clássica de "rastreada, mas não indexada" — e quatro desta família caíram do
+ * índice depois de já terem ranqueado, entre elas
+ * /padronizar-divulgacao-afiliado-whatsapp, que tinha o MELHOR CTR do site
+ * (9,68%). Listá-las aqui dá a cada uma um caminho de verdade a partir de uma
+ * página que o Google já conhece. */
+const painPages = [
+  { href: '/automatizar-divulgacao-em-grupos-whatsapp', title: 'Automatizar a divulgação em grupos do WhatsApp', description: 'Como sair do copia-e-cola sem perder o controle do que foi publicado.' },
+  { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', title: 'Postar em vários grupos do WhatsApp de uma vez', description: 'Publicar a mesma oferta em vários destinos com intervalo entre os envios.' },
+  { href: '/padronizar-divulgacao-afiliado-whatsapp', title: 'Padronizar a divulgação de afiliado', description: 'Mesmo formato de oferta toda vez, sem depender de lembrar do passo a passo.' },
+  { href: '/escalar-grupos-ofertas-sem-equipe', title: 'Escalar grupos de ofertas sem equipe', description: 'O que dá para crescer sozinha e o que passa a exigir processo.' },
+  { href: '/aumentar-conversao-em-grupos-de-cupons', title: 'Aumentar a conversão em grupos de cupons', description: 'O que muda no resultado quando a oferta chega organizada e no horário certo.' },
+  { href: '/consistencia-postagens-em-grupos', title: 'Consistência nas postagens em grupos', description: 'Por que a regularidade pesa mais que o volume na divulgação em grupo.' },
+  { href: '/reduzir-tempo-operacional-em-grupos-whatsapp', title: 'Reduzir o tempo gasto operando grupos', description: 'Onde o tempo vai embora na rotina de divulgação e o que dá para tirar dela.' },
+  { href: '/organizar-calendario-de-ofertas-no-whatsapp', title: 'Organizar o calendário de ofertas', description: 'Planejar a semana de divulgação em vez de publicar no impulso.' },
+  { href: '/melhorar-alcance-em-grupos-de-promocoes', title: 'Melhorar o alcance em grupos de promoções', description: 'O que aumenta e o que derruba o alcance de uma oferta dentro do grupo.' },
+  { href: '/rastrear-resultados-de-divulgacao-em-grupos', title: 'Rastrear os resultados da divulgação', description: 'Saber o que saiu, o que foi bloqueado e o que deu retorno.' },
 ]
 
 const methodologyPages = [
@@ -137,12 +194,12 @@ const methodologyPages = [
   },
   {
     href: '/como-funciona-botinho-canais',
-    title: 'Como funciona o BOTinho para Canais do WhatsApp',
+    title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
     description: 'Fluxo operacional de fontes, destinos, cadência, monitoramento e recuperação.',
   },
   {
     href: '/protecao-antiban-botinho',
-    title: 'Proteção anti-ban no BOTinho',
+    title: 'Proteção anti-ban no Espelha Grupos',
     description: 'Camadas do Módulo de Preservação Avançada: limites, variações, monitoramento e plano B.',
   },
   {
@@ -156,27 +213,27 @@ const methodologyPages = [
 const comparisonPages = [
   {
     href: '/bot-comum-vs-botinho',
-    title: 'Bot comum vs BOTinho',
+    title: 'Bot comum vs Espelha Grupos',
     description: 'Compare repostagem simples com operação preservada para grupos e Canais do WhatsApp.',
   },
   {
     href: '/comparativos',
-    title: 'Hub de comparativos do BOTinho',
+    title: 'Hub de comparativos do Espelha Grupos',
     description: 'Página índice com comparativos e alternativas para escolher ferramenta por estágio e tipo de operação.',
   },
   {
     href: '/alternativas/bot-para-whatsapp-afiliados',
     title: 'Alternativas de bot para WhatsApp para afiliados',
-    description: 'Comparativo equilibrado entre planilha, automação genérica, ferramentas oficiais e BOTinho.',
+    description: 'Comparativo equilibrado entre planilha, automação genérica, ferramentas oficiais e Espelha Grupos.',
   },
   {
     href: '/botinho-vs-planilha-manual',
-    title: 'BOTinho vs planilha manual',
+    title: 'Espelha Grupos vs planilha manual',
     description: 'Quando a planilha basta e quando logs, cadência e origem/destino viram prioridade.',
   },
   {
     href: '/botinho-vs-ferramentas-genericas-automacao',
-    title: 'BOTinho vs ferramentas genéricas de automação',
+    title: 'Espelha Grupos vs ferramentas genéricas de automação',
     description: 'Comparação para times que avaliam construir fluxos próprios ou usar ferramenta focada em grupos.',
   },
   {
@@ -194,7 +251,7 @@ const authorityPages = [
   },
   {
     href: '/estudos-de-caso',
-    title: 'Estudos de caso do BOTinho',
+    title: 'Estudos de caso do Espelha Grupos',
     description: 'Política pública para publicar cases somente com consentimento e dados verificáveis.',
   },
 ]
@@ -442,6 +499,13 @@ export default function Page() {
           <h2 className="text-2xl font-black tracking-tight text-gray-950">Páginas por nicho</h2>
           <ul className="mt-4 grid gap-4 md:grid-cols-2">
             {nichePages.map((item) => <ContentCard key={item.href} item={item} />)}
+          </ul>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Rotina de divulgação em grupos</h2>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {painPages.map((item) => <ContentCard key={item.href} item={item} />)}
           </ul>
         </section>
 

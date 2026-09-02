@@ -1,25 +1,50 @@
-// Hierarquia de marca (decisão de 2026-08, P1 do estudo de inbound).
-//
-// Antes o site renderizava "BOTinho" num domínio "espelhagrupos.com.br" e as
-// duas coisas apareciam como marcas concorrentes. Para o Google e sobretudo
-// para as IAs, entidade é tudo: uma IA só cita com confiança uma marca que ela
-// consegue identificar de forma consistente, e não havia nada ligando um nome
-// ao outro. Como o domínio fica, "Espelha Grupos" passa a ser a MARCA
-// (Organization, title template, publisher) e "BOTinho" o NOME DO PRODUTO
-// (SoftwareApplication, corpo do texto, painel, mensagens).
-//
-// Não renomear as rotas que têm "botinho" no slug (/protecao-antiban-botinho,
-// /bot-comum-vs-botinho, etc.): trocar URL descarta o histórico que o Google já
-// acumulou nelas, que é justamente o ativo que estamos tentando crescer.
+/* NOME ÚNICO: Espelha Grupos (decisão de 2026-09-02).
+ *
+ * Antes havia TRÊS nomes circulando ao mesmo tempo: "Espelha Grupos" (marca no
+ * schema e no domínio), "BOTinho" (nome do produto no corpo do texto) e
+ * "Bot Conversor" (no rodapé de todas as páginas, sobra de uma nomeação ainda
+ * mais antiga). A tentativa de 08/2026 foi manter dois e amarrá-los; a medição
+ * de citação por IA de 01/09 mostrou que não funcionou:
+ *
+ *  - o ChatGPT trata "Espelha Grupos" e "BOTinho" como PRODUTOS CONCORRENTES —
+ *    ofereceu "uma comparação objetiva BOTinho x Espelha Grupos" e listou os
+ *    dois lado a lado com o Promium, como três empresas diferentes;
+ *  - "BOTinho" sozinho é lido como CALÇADO INFANTIL por três das quatro IAs
+ *    (Gemini, Perplexity e Google AI Overviews devolvem botinha de bebê e preço
+ *    de loja de sapato para a consulta "BOTinho preço").
+ *
+ * Por que o nome que fica é Espelha Grupos, e não o contrário:
+ *  - é o domínio que temos (espelhagrupos.com.br); "botinho.com.br" não está
+ *    disponível, e marca em nome diferente do endereço é o problema que a
+ *    auditoria de funil de 2026-08-05 (§1.2) já tinha apontado;
+ *  - `botinho` teve UMA impressão em 3 meses de Search Console. Não há marca a
+ *    perder — ninguém procura por esse nome;
+ *  - ganhar a palavra "botinho" sozinha exigiria superar páginas de produto de
+ *    loja de calçado (Pittol, Centauro, Amazon), que têm estoque, preço e dados
+ *    estruturados. Caro e lento, por uma palavra cujo domínio não podemos ter.
+ *
+ * O nome antigo NÃO é apagado do mundo:
+ *  - continua como `alternateName` no schema, para o Google e as IAs ligarem as
+ *    citações antigas a esta mesma entidade;
+ *  - continua no PAINEL (área logada), onde a pessoa já sabe onde está e não
+ *    existe ambiguidade nenhuma;
+ *  - as ROTAS com "botinho" no endereço (/protecao-antiban-botinho,
+ *    /botinho-vs-planilha-manual etc.) ficam como estão. Trocar URL descarta o
+ *    histórico que o Google acumulou nelas, que é o ativo que estamos tentando
+ *    crescer.
+ */
 export const BRAND_ORG_NAME = 'Espelha Grupos'
-export const BRAND_PRODUCT_NAME = 'BOTinho'
+export const BRAND_PRODUCT_NAME = 'Espelha Grupos'
 
-// Aliases históricos — os pontos de uso já aplicavam a semântica correta
-// (BRAND_NAME no corpo do texto = produto; BRAND_SHORT_NAME em eyebrow/Brand =
-// marca), então mantê-los evita reescrever dezenas de arquivos sem ganho.
-export const BRAND_NAME = BRAND_PRODUCT_NAME
+// Nome anterior. Só existe para entrar no `alternateName` do schema — é o que
+// faz uma citação antiga a "BOTinho" continuar apontando para esta entidade.
+// Não usar em texto novo de superfície pública.
+export const BRAND_LEGACY_NAME = 'BOTinho'
+
+// Aliases históricos — os pontos de uso continuam funcionando sem reescrita.
+export const BRAND_NAME = BRAND_ORG_NAME
 export const BRAND_SHORT_NAME = BRAND_ORG_NAME
-export const BRAND_LEGAL_CITATION = 'Espelha Grupos / BOTinho'
+export const BRAND_LEGAL_CITATION = 'Espelha Grupos'
 
 export const SUPPORT_WHATSAPP_NUMBER = '5532999844020'
 export const SUPPORT_WHATSAPP_URL = `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}`
@@ -68,6 +93,26 @@ export const PRODUCT_LIMITATIONS = [
 
 // Fallback dos planos públicos. A fonte dinâmica é a tabela LpPlan (editável
 // pelo admin, atualizada por migration aditiva) — manter os DOIS em sincronia.
+/* Converte o preço EXIBIDO ("R$39", "R$ 1.299,90") no número que vai para o
+ * schema Offer. Antes, `priceValue` vinha sempre do default hardcoded, nos DOIS
+ * caminhos de merge (lib/plans-server.js no servidor e components/landing/
+ * Pricing.jsx no cliente): trocar o preço no painel admin mudava o que a pessoa
+ * lê e NÃO mudava o que o Google e as IAs leem — as duas pontas passavam a
+ * discordar em silêncio. Formato inesperado devolve null e o chamador cai no
+ * default; nunca publica preço inventado.
+ *
+ * Mora aqui, e não no componente, porque `plans-server.js` roda no SERVIDOR:
+ * importar de um módulo 'use client' arrastaria a fronteira de cliente para
+ * dentro do render estático.
+ */
+export function parsePriceValue(price) {
+  if (typeof price !== 'string') return null
+  const limpo = price.replace(/[^\d.,]/g, '')
+  if (!limpo) return null
+  const n = Number(limpo.replace(/\./g, '').replace(',', '.'))
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+
 export const DEFAULT_LANDING_PLANS = [
   {
     id: 'trial',

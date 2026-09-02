@@ -9,7 +9,7 @@ import { buildArticleJsonLd, getEditorialDates, EDITORIAL_PERSON_AUTHOR, EDITORI
  * afiliado" / "clonar grupo de WhatsApp".
  *
  * Motivo: a Visão Geral criada por IA do Google responde essa busca listando
- * ferramentas concorrentes (TeleClone, Achadinhos Pro, Lumi) e o BOTinho não
+ * ferramentas concorrentes (TeleClone, Achadinhos Pro, Lumi) e o Espelha Grupos não
  * aparece — não existia nenhuma página nossa usando a palavra que a pessoa
  * digita. O site inteiro fala "espelhar"; o mercado busca "clonar".
  *
@@ -62,7 +62,7 @@ const steps = [
 
 const tools = [
   {
-    name: 'BOTinho (Espelha Grupos)',
+    name: 'Espelha Grupos',
     href: '/bot-achadinhos-whatsapp',
     text: 'Espelha grupo para grupo, grupo para canal, canal para grupo e canal para canal no WhatsApp, convertendo o link para o seu código de afiliada (Shopee, Amazon, Mercado Livre, Magalu, SHEIN) e também os links de cupom. Tem controle de cadência, limite por destino e registro do que saiu e do que foi bloqueado.',
   },
@@ -108,7 +108,7 @@ const faq = [
   },
   {
     q: 'O link de afiliado troca sozinho?',
-    a: 'Sim, quando você cadastra suas credenciais. O BOTinho reconhece links de Shopee, Amazon, Mercado Livre, Magalu e SHEIN, inclusive links encurtados, e reescreve com a sua identidade antes de publicar. Links de cupom e voucher também são convertidos, em vez de removidos.',
+    a: 'Sim, quando você cadastra suas credenciais. O Espelha Grupos reconhece links de Shopee, Amazon, Mercado Livre, Magalu e SHEIN, inclusive links encurtados, e reescreve com a sua identidade antes de publicar. Links de cupom e voucher também são convertidos, em vez de removidos.',
   },
   {
     q: 'Clonar grupo aumenta o risco de banimento?',
@@ -116,7 +116,7 @@ const faq = [
   },
   {
     q: 'Funciona com Telegram?',
-    a: 'O BOTinho é feito para WhatsApp: grupos e Canais. Ferramentas de clonagem de Telegram são outra categoria de produto. Muita gente usa o Telegram como fonte de ofertas e o WhatsApp como destino, porque é no WhatsApp que a audiência brasileira compra.',
+    a: 'O Espelha Grupos é feito para WhatsApp: grupos e Canais. Ferramentas de clonagem de Telegram são outra categoria de produto. Muita gente usa o Telegram como fonte de ofertas e o WhatsApp como destino, porque é no WhatsApp que a audiência brasileira compra.',
   },
   {
     q: 'Quantos grupos consigo espelhar ao mesmo tempo?',
@@ -237,7 +237,7 @@ export default function Page() {
             ))}
           </ul>
           <p>
-            Para Telegram existe uma categoria separada de programas de clonagem de canal. O BOTinho não atua nessa ponta: ele é feito para WhatsApp, que é onde a audiência brasileira de achadinhos compra.
+            Para Telegram existe uma categoria separada de programas de clonagem de canal. O Espelha Grupos não atua nessa ponta: ele é feito para WhatsApp, que é onde a audiência brasileira de achadinhos compra.
           </p>
           <p>
             Comparação lado a lado, com preço de cada plano: <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/melhores-bots-para-afiliados-whatsapp">melhores bots para afiliados no WhatsApp</Link>.
