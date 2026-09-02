@@ -65,6 +65,7 @@ export default function AdminFunilPage() {
   const data = isCurrent ? result.data : null
 
   const steps = asArray(data?.steps)
+  const motivos = asArray(data?.stalls)
   const semanas = asArray(data?.weeks)
   const origens = asArray(data?.origins)
 
@@ -131,6 +132,46 @@ export default function AdminFunilPage() {
                 e até {data.medianDaysToPaid ?? '—'} dia(s) para pagar.
               </p>
             )}
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-bold text-slate-900">Por que pararam</h2>
+            <p className="text-xs text-slate-500">
+              Só quem ainda não pagou ({data.unpaidCount ?? 0} {data.unpaidCount === 1 ? 'pessoa' : 'pessoas'}).
+              Cada uma aparece no PRIMEIRO obstáculo que encontrou.
+            </p>
+            <ul className="mt-3 space-y-3">
+              {motivos.map((motivo) => (
+                <li key={motivo.key} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm font-semibold text-slate-800">{motivo.label}</span>
+                    <span className="shrink-0 tabular-nums text-sm text-slate-600">
+                      {motivo.count} <span className="text-slate-400">({formatPct(motivo.pctOfUnpaid)})</span>
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">{motivo.hint}</p>
+                  {asArray(motivo.people).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                      <span className="text-slate-500">Falar com:</span>
+                      {motivo.people.map((pessoa) => (
+                        <Link
+                          key={pessoa.id}
+                          href={`/admin/clientes/${pessoa.id}`}
+                          className="font-medium text-indigo-700 underline decoration-indigo-200 underline-offset-2 hover:text-indigo-900"
+                          title={pessoa.email ?? ''}
+                        >
+                          {pessoa.name || pessoa.email || 'cliente'}
+                        </Link>
+                      ))}
+                      {motivo.count > motivo.people.length && (
+                        <span className="text-slate-400">+{motivo.count - motivo.people.length} outras</span>
+                      )}
+                    </div>
+                  )}
+                </li>
+              ))}
+              {!motivos.length && <li className="text-sm text-slate-500">Ninguém parado no período.</li>}
+            </ul>
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4">
