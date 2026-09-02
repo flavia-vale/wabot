@@ -3885,6 +3885,15 @@ mercados diferentes, e só um tem página nossa disputando. Preços e planos col
 ver `docs/marketing/ONDA1_PLANO_DETALHADO.md` (B2) para o detalhe por
 concorrente antes de citar preço em qualquer página pública.
 
+### Registro de execução (comparar contra ele, não recomeçar do zero)
+
+`docs/marketing/REGISTRO_EXECUCAO_2026-08-16_A_09-02.md` guarda o ciclo fechado
+em 02/09: os três marcos de medição lado a lado (30/07, 16/08, 01/09), as 25 PRs
+que entraram em produção, o que a medição **derrubou** (indexação não era
+qualidade de conteúdo; título longo não mata clique — os dois mais longos são os
+que mais convertem) e o que medir na rodada seguinte. Ao abrir a próxima
+análise, comece por ele.
+
 ### 🔁 Atualizar mensalmente
 
 No começo de cada mês, sugerir à usuária repetir **só o Relatório 1 (Search

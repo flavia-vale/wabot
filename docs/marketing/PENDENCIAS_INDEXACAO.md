@@ -17,28 +17,29 @@ para ser rastreada.
 Só pedir **depois** que a PR correspondente estiver mergeada e o deploy de
 produção tiver terminado — pedir antes indexa a versão velha e obriga a repetir.
 
-### Lote A — nunca foram pedidas, e nunca entraram no índice
+### Lote A — ✅ pedido em 02/09/2026
 
-Podem ser pedidas **assim que houver cota**: as páginas já estão no ar há
-semanas e não dependem de nenhuma PR desta rodada.
+- [x] `/metodologia-uso-responsavel-whatsapp`
+- [x] `/melhores-bots-para-afiliados-whatsapp`
+- [x] `/estudos-de-caso`
+- [x] `/confiabilidade-sessao-whatsapp`
+- [x] `/seguranca-credenciais-afiliado`
+- [x] `/botinho-vs-planilha-manual`
 
-- [ ] `/metodologia-uso-responsavel-whatsapp` ← **comece por esta**
-- [ ] `/melhores-bots-para-afiliados-whatsapp`
-- [ ] `/estudos-de-caso`
-- [ ] `/confiabilidade-sessao-whatsapp`
-- [ ] `/seguranca-credenciais-afiliado`
-- [ ] `/botinho-vs-planilha-manual`
+Nada a fazer além de conferir no relatório de Cobertura da próxima rodada se
+entraram no índice.
 
 `/metodologia-uso-responsavel-whatsapp` é prioridade porque o Google AI
 Overviews está preenchendo esse vazio com uma "Metodologia" INVENTADA, com
 pilares de nome próprio e fontes falsas (medição de 01/09). A página existe e
 responde exatamente isso — o Google só nunca a leu.
 
-### Lote B — caíram do índice depois de já terem ranqueado
+### Lote B — ⚠️ PEDIR DE NOVO
 
-⚠️ **Esperar o deploy de produção das PRs #1554 e #1562.** A #1562 deu link
-interno a estas quatro (eram alcançáveis só pelo sitemap) e a #1554 encurtou
-títulos. Pedir antes indexa a versão velha.
+Foram pedidas em 02/09, mas **antes** do deploy de produção das PRs #1554 e
+#1562 (concluído 02/09 17:54). O Google leu a versão velha: sem o link interno
+que a #1562 deu a estas quatro (eram alcançáveis só pelo sitemap) e com o
+título antigo da #1554.
 
 - [ ] `/padronizar-divulgacao-afiliado-whatsapp` ← tinha o **melhor CTR do site (9,68%)**
 - [ ] `/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo`
@@ -47,7 +48,10 @@ títulos. Pedir antes indexa a versão velha.
 
 ### Lote C — páginas novas da frente Tier 1
 
-⚠️ **Esperar o deploy de produção** das PRs que as criam.
+✅ **Liberado.** O deploy de produção terminou em 02/09 17:54 (PR #1577, verde).
+Estas seis nunca foram pedidas — a frente Tier 1 é a maior oportunidade aberta
+(50.000 buscas/mês, concorrência baixa) e até agora não tinha nenhuma página
+comercial nossa disputando.
 
 - [ ] `/shopee-afiliados-whatsapp`
 - [ ] `/mercado-livre-afiliados-whatsapp`
@@ -58,7 +62,7 @@ títulos. Pedir antes indexa a versão velha.
 
 ### Lote D — página reescrita
 
-⚠️ **Esperar o deploy de produção.** A página existe e já está indexada, mas o
+✅ **Liberado** (mesmo deploy). A página existe e já está indexada, mas o
 conteúdo mudou por completo — pedir a reindexação é o que faz o Google reler.
 
 - [ ] `/espelhar-grupos-whatsapp` ← era um índice de 567 caracteres para as LPs
