@@ -55,6 +55,15 @@ títulos. Pedir antes indexa a versão velha.
 - [ ] `/shein-afiliados-whatsapp`
 - [ ] `/magalu-afiliados-whatsapp`
 
+### Lote D — página reescrita
+
+⚠️ **Esperar o deploy de produção.** A página existe e já está indexada, mas o
+conteúdo mudou por completo — pedir a reindexação é o que faz o Google reler.
+
+- [ ] `/espelhar-grupos-whatsapp` ← era um índice de 567 caracteres para as LPs
+      de cidade (linha congelada, todas fora do índice); virou a página de
+      produto da nossa categoria principal
+
 ### O que a evidência diz sobre pedir
 
 Das 15 URLs pedidas em 04/08, **todas** estão indexadas hoje. Das 10 dos lotes A
