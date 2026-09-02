@@ -13,8 +13,12 @@ const hubRoutes = [
     slug: 'espelhar-grupos-whatsapp',
     path: '/espelhar-grupos-whatsapp',
     label: 'Espelhar grupos WhatsApp',
-    title: 'Espelhar grupos WhatsApp por cidade e operação regional',
-    description: 'Hub para operações regionais que querem espelhar ofertas em grupos de WhatsApp com cadência, revisão e controle.',
+    // Título e descrição moram em dashboard/app/_seoHubShared.js desde
+    // 2026-09-02 — fonte única (FR-001), mesmo caminho que 'bot-ofertas-whatsapp'
+    // seguiu em 19/08. Os antigos falavam em "por cidade e operação regional",
+    // apontando para a linha de LPs de cidade que está congelada e fora do
+    // índice; a página passou a responder pelo produto, não pelo índice de
+    // páginas mortas.
     type: 'hub',
     cluster: 'localizacoes',
     intent: 'espelhar grupos whatsapp',
@@ -341,6 +345,10 @@ export const CONTENT_SEO_ROUTES = [
   // US5 (specs/013-inbound-leads-strategy) — única página nova desta rodada.
   // title/description ficam só em _comparisonContent.js (fonte única, FR-001).
   { path: '/alternativas/achadinho-pro', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/achadinho-pro'), indexable: true },
+  // Único concorrente que uma IA colocou explicitamente à nossa frente (o
+  // ChatGPT chamou o Promium de "o mais completo" na consulta de cupons,
+  // medição de 01/09) — e que nem estava no mapa de concorrentes.
+  { path: '/alternativas/promium', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/promium', '2026-09-02'), indexable: true },
   // Busca pelo NOME do concorrente — a linha que virou o motor de impressão
   // do site (15% do total em 2026-08-16). title/description ficam só em
   // _comparisonContent.js (fonte única, FR-001).

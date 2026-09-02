@@ -102,3 +102,81 @@ export function buildCredentialBlockAlerts({ blockedByPlatform = [], configuredP
 
   return stores
 }
+
+// --------------------------------------------------------------------------
+// Como a MESMA falta de credencial é nomeada no histórico de envios e no aviso
+// global do painel (2026-09-02).
+//
+// Motivo: a cliente abria a aba Envios, lia "ignorado" e mandava print para o
+// suporte perguntando o que era — o motivo real só aparecia depois de clicar
+// em "Ver motivo", coisa que quase ninguém fez. O status agora diz a causa na
+// própria etiqueta, e o botão de ajuda abre a explicação junto com o vídeo.
+// Vocabulário obrigatório de sempre: "etiqueta de afiliada"/"código de acesso"
+// /"chave", nunca "credencial da API", "token" ou nome de campo técnico.
+
+/** Prefixo canônico de `MessageLog.errorMsg` para "nada pôde ser convertido". */
+export const CREDENTIAL_BLOCK_ERROR_PREFIX = 'skip:no_valid_conversions'
+
+/** A linha do histórico é uma oferta perdida por falta de cadastro da loja? */
+export function isCredentialBlockErrorMsg(errorMsg) {
+  return typeof errorMsg === 'string' && errorMsg.startsWith(CREDENTIAL_BLOCK_ERROR_PREFIX)
+}
+
+/**
+ * Etiqueta de status do histórico para esse caso. Deliberadamente NÃO é
+ * "ignorado" nem "falhou": as duas escondem que a oferta se perdeu por um
+ * cadastro que falta, que é a única informação capaz de gerar ação.
+ */
+export const CREDENTIAL_BLOCK_STATUS_TAG = Object.freeze({
+  cls: 'is-error',
+  label: 'faltou cadastrar a loja',
+})
+
+/**
+ * Conteúdo do diálogo de ajuda que abre ao lado da linha do histórico.
+ * `videoUrl` entra de fora (o painel resolve pelo `src/tutorialVideo.js`) para
+ * este módulo continuar sem dependência nenhuma.
+ */
+export function buildCredentialBlockHelp(platform) {
+  const storeLabel = STORE_LABELS[platform] || null
+  const buildAlert = ALERT_BUILDERS[platform]
+  const alert = buildAlert ? buildAlert(storeLabel) : null
+
+  return {
+    platform: platform || null,
+    storeLabel,
+    title: storeLabel
+      ? `Falta cadastrar a ${storeLabel} para essa oferta sair`
+      : 'Falta cadastrar a loja para essa oferta sair',
+    paragraphs: [
+      // NÃO reaproveitar `alert.body` aqui: para Mercado Livre/Amazon/Magalu
+      // ele diz "as ofertas continuam saindo, só com o link mais comprido",
+      // que é verdade quando o código de acesso VENCEU — e mentira nesta
+      // linha do histórico, onde a oferta comprovadamente não foi publicada.
+      storeLabel
+        ? `Essa oferta era da ${storeLabel} e não foi publicada: sem os seus dados da ${storeLabel} cadastrados, o robô não consegue montar o link com a sua identificação de afiliada.`
+        : 'Essa oferta não foi publicada: o robô não conseguiu transformar nenhum link da mensagem em link de afiliada com a sua identificação.',
+      'O robô nunca publica o link de outra pessoa: sem os seus dados da loja, a comissão iria para quem publicou a oferta original. Por isso ele prefere não enviar.',
+      'É um cadastro só, feito uma vez por loja — depois disso as ofertas dessa loja voltam a sair sozinhas.',
+    ],
+    nextStep: alert ? alert.nextStep : 'Cadastre os dados dessa loja em "Minhas credenciais" para as ofertas voltarem a sair.',
+    credentialsHref: '/painel/ids-afiliada',
+    credentialsLabel: 'Cadastrar agora',
+    videoLabel: storeLabel ? `Ver no vídeo como pegar os dados da ${storeLabel}` : 'Ver o vídeo passo a passo',
+  }
+}
+
+/**
+ * Aviso do topo de TODAS as abas do painel para quem não cadastrou NENHUMA
+ * loja. Sem isso o robô conecta, espelha e descarta tudo — e a cliente conclui
+ * que o produto não funciona.
+ */
+export function buildNoCredentialBanner() {
+  return {
+    headline: 'Falta cadastrar suas lojas — sem isso o robô não publica nenhuma oferta',
+    body: 'O robô só publica uma oferta depois de trocar o link pelo seu, com a sua identificação de afiliada. Enquanto nenhuma loja estiver cadastrada, ele recebe as ofertas e não envia nada.',
+    ctaLabel: 'Cadastrar minhas lojas',
+    ctaHref: '/painel/ids-afiliada',
+    videoLabel: 'Ver o vídeo passo a passo',
+  }
+}

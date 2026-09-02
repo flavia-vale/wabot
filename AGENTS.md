@@ -393,14 +393,22 @@ e `scripts/diag-origem-cadastros.mjs` — o que faltava era a leitura.
 | Tela | `dashboard/app/admin/funil/page.js` |
 
 Cinco etapas: criou a conta → conectou o WhatsApp → **teve oferta publicada** →
-começou o pagamento → pagou. Junto vem **POR QUE cada pessoa parou** (oito
+começou o pagamento → pagou. Junto vem **POR QUE cada pessoa parou** (nove
 motivos, `STALL_REASONS`) e, em cada motivo, quem contatar — com link para o
 histórico do cliente.
 
-**Os oito motivos e a regra de leitura:** a classificação devolve o **PRIMEIRO
+**Os nove motivos e a regra de leitura:** a classificação devolve o **PRIMEIRO
 obstáculo** que a pessoa encontrou, não a última etapa concluída — as etapas não
 são sequência obrigatória (dá para escolher grupo sem cadastrar loja), e alguém
-sem loja E sem grupo parou na loja. Os dois que mais mudam a ação:
+sem loja E sem grupo parou na loja. Os que mais mudam a ação:
+
+- **"Nem chegou a pedir a conexão" ≠ "tentou e NÃO conseguiu"** — os dois eram
+  um balde só até 2026-09-02, e a medição real (124 cadastros, 55 parados aí)
+  mostrou por que isso não serve: o primeiro é decisão da pessoa (confiança,
+  expectativa) e o segundo é **obstáculo nosso** (QR que não lê, servidor sem
+  vaga, recusa do WhatsApp). Juntos, defeito de produto se esconde atrás de
+  "ela não quis". O sinal que separa é a existência de `WaSession` (criada
+  quando ela clica em conectar) contra o `whatsapp_connected`.
 
 - **"O robô tentou e NENHUMA oferta saiu"** — o painel mostra atividade e nada
   chega ao grupo (`skip:no_valid_conversions`, quase sempre loja incompleta ou
@@ -3787,12 +3795,26 @@ novo: `/blog/como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
 
 Achadinho Pro, ProAfiliados, FluxoPromo, Shozap, Afilira, AchadinhosBot /
 AchadinBot, IA Divulgadora, Devzapp (blog), Shark Pomo Bot, Lumi Ofertas
-Inteligentes, Gigi Bot. **Promium** (mapeado em 01/09: R$97,90 a R$597,90/mês
-recorrente — o plano de ENTRADA custa 42% mais que o nosso Pro de R$69; tem 13
-páginas de "Automação \<loja\> para WhatsApp" no rodapé, SEO programático por
-loja × recurso no eixo Tier 1 que está aberto para nós). Citados pelas IAs e
-ainda não mapeados: GoGoBot, OfertaFlux, FluxZap, Ripply, Núcleo do Afiliado,
-DivulgaNinja, DivulgaLinks, Afilimais, ZincLink, Busqy, Notifish, Whats.Ly. Preços e planos coletados por print em 2026-07-31 —
+Inteligentes, Gigi Bot. **Promium** — agora com página própria
+(`/alternativas/promium`, 02/09) e ficha completa em `competitors-data.js`:
+R$97,90 a R$597,90/mês no valor **recorrente**, cobrando por faixa de grupos
+(5/20/50/200) e por número de conexões. O plano de ENTRADA custa 42% mais que o
+nosso Pro de R$69. ⚠️ Todos os planos dele anunciam preço promocional no 1º mês
+— comparar pelo promocional é comparar coisa diferente, e por isso o campo
+`price` de cada faixa carrega os dois números. Ele cobre MAIS que nós (10 lojas,
+Telegram, vitrine com domínio próprio, rotador de links com pixel de
+Meta/TikTok/GA4) e tem 13 páginas de "Automação \<loja\> para WhatsApp" no
+rodapé — SEO programático por loja × recurso, o mesmo eixo da nossa frente
+Tier 1.
+
+Citados pelas IAs em 01/09 e **ainda não mapeados** (nenhum tem ficha em
+`competitors-data.js`, então nenhum preço deles pode ser citado em página
+pública): GoGoBot, OfertaFlux, FluxZap, Ripply, Núcleo do Afiliado,
+DivulgaNinja, DivulgaLinks, Afilimais, ZincLink, Busqy, Notifish, Whats.Ly,
+Radar das Promos, Ofertiva, BotAdmin, Afiliados Pro Bot, GeekZap, HouSoft,
+WHAMetrics Bridge. Lembre que essa lista é **quase disjunta** da que o Search
+Console mostra (AchadinhosBot, Achadinho Pro, FluxoPromo, Shozap) — são dois
+mercados diferentes, e só um tem página nossa disputando. Preços e planos coletados por print em 2026-07-31 —
 ver `docs/marketing/ONDA1_PLANO_DETALHADO.md` (B2) para o detalhe por
 concorrente antes de citar preço em qualquer página pública.
 
@@ -3848,6 +3870,62 @@ O `Managed robots.txt` da Cloudflare veio **ligado por padrão** e colava
 ligado, os robôs de *resposta* (OAI-SearchBot, Claude-SearchBot) passavam, mas
 os de *indexação/treino* não. Se voltar a ligar, o trabalho de IA para de valer
 em silêncio.
+
+## Clareza da falta de cadastro da loja + vídeo tutorial (2026-09-02)
+
+Quatro buracos da mesma conversa: a cliente não descobria sozinha por que a
+oferta não saiu, e o vídeo que explica isso estava colado na mão em três
+lugares.
+
+| Peça | Onde |
+|---|---|
+| Vídeo tutorial (endereço + capítulos por loja) — FONTE ÚNICA | `src/tutorialVideo.js` |
+| Texto do bloqueio por falta de cadastro (etiqueta, diálogo, aviso global) | `src/credentialBlockAlert/message.js` |
+| Garantias da tela de conexão do WhatsApp | `src/domain/painel/whatsappSafety.js` |
+| Aviso de fim de teste com prova de valor | `src/domain/painel/trialNotice.js` |
+
+**Não regredir:**
+
+- **"Ignorado" não é resposta.** A linha do histórico com
+  `skip:no_valid_conversions` agora sai com a etiqueta **"faltou cadastrar a
+  loja"** (`statusTagForLog`, `dashboard/lib/painel/logsCopy.js`) e um botão de
+  ajuda que abre o diálogo com o vídeo já no trecho DAQUELA loja. O motivo real
+  vivia atrás de "Ver motivo", que quase ninguém clicava — a cliente mandava
+  print escrito "falhou" e o suporte descobria na mão.
+- **O diálogo NÃO pode dizer "as ofertas continuam saindo".** Esse texto
+  (`buildSessionAlert`) é verdade para ML/Amazon/Magalu quando o código de
+  acesso VENCEU — e mentira nesta linha, onde a oferta comprovadamente não foi
+  publicada. `buildCredentialBlockHelp` separa os dois; o mesmo conserto foi
+  aplicado ao `explainErrorMsg`, que reaproveitava o `body` errado.
+- **Sem NENHUMA loja cadastrada, o aviso é global** (`NoCredentialBanner` no
+  `PainelShell`, todas as abas): o robô recebe as ofertas e não publica nada,
+  o painel fica verde, e a cliente conclui que o produto não funciona.
+  `hasAnyCredential === null` (carregando ou falha de rede) **não** mostra
+  nada — acusar falta de cadastro por causa de um blip mandaria refazer um
+  cadastro que já existe.
+- **A tela de conexão diz o que o robô faz com o WhatsApp dela**
+  (`WHATSAPP_SAFETY_POINTS`, mesmo texto no e-mail
+  `onboarding_conecte_whatsapp`). ⚠️ **É PROIBIDO escrever que "não temos
+  acesso às suas mensagens"** — as mensagens dos grupos chegam ao robô, é assim
+  que o espelhamento funciona. O que é verdade e tranquiliza: só os grupos
+  escolhidos são usados, o resto é descartado na hora e não fica guardado; ele
+  não responde ninguém; ela desconecta quando quiser; pode usar outro chip.
+  Guarda: `test/painel-whatsapp-seguranca.test.js`.
+- **O aviso de fim de teste sempre carrega a PROVA** ("o robô já publicou N
+  ofertas"). Com N = 0 ele **muda de assunto**: leva ao checklist, não ao
+  pagamento — cobrar de quem nunca viu o produto funcionar é o jeito mais
+  rápido de perder a cliente. Não aparece para trial já vencido (quem avisa
+  ali é o banner de plano vencido, que tem outra ação).
+- **O endereço do vídeo mora em `src/tutorialVideo.js`**, com capítulo por
+  loja. Estava colado na mão em `painel/tutorial`, `painel/checklist` e em
+  `src/email/layout.js` — três cópias é como um vídeo regravado passa a existir
+  só em parte do produto. `layout.js` re-exporta para os consumidores antigos.
+  Teste falha se `https://youtu.be/` voltar a aparecer numa tela do painel.
+
+**Custo:** duas chamadas a mais no shell (`/credentials` sempre,
+`/logs/summary` só em trial), nenhum processo novo, zero impacto de RAM.
+Testes: `test/painel-credencial-clareza.test.js`,
+`test/painel-whatsapp-seguranca.test.js`.
 
 ## Triagem de novas demandas (implementar agora vs. backlog)
 

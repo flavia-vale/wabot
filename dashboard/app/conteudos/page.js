@@ -212,6 +212,11 @@ const methodologyPages = [
 
 const comparisonPages = [
   {
+    href: '/alternativas/promium',
+    title: 'Alternativa ao Promium: preço e limite de grupos',
+    description: 'O que o Promium cobre a mais, o que custa a mais, e quando cada um faz sentido.',
+  },
+  {
     href: '/bot-comum-vs-botinho',
     title: 'Bot comum vs Espelha Grupos',
     description: 'Compare repostagem simples com operação preservada para grupos e Canais do WhatsApp.',

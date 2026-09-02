@@ -4,6 +4,7 @@
  * ao conteúdo configurado no admin; o título vai para a topbar via usePainelHeader. */
 
 import { usePainelHeader } from '../PainelShell'
+import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../../src/tutorialVideo.js'
 
 const LINKS = {
   cookieEditor: 'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm',
@@ -184,7 +185,7 @@ export default function TutorialPage() {
           <Badge color="yellow">Ordem recomendada: ML → Amazon → Shopee</Badge>
         </div>
         <VideoBanner
-          href="https://youtu.be/6F2AUM88FKk?is=Tafcm6QdDvJo9UgH"
+          href={VIDEO_CADASTRO_ETIQUETAS_URL}
           title="🎥 Prefere assistir? Vídeo-aula: Como cadastrar suas credenciais"
           desc="Shopee, Mercado Livre, Amazon e Magazine Luiza passo a passo em vídeo."
         />

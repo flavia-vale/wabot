@@ -63,7 +63,7 @@ async function main() {
 
   // Estado real, uma consulta por etapa. `distinct` no userId para contar
   // PESSOAS, não linhas — um usuário com 40 envios conta uma vez.
-  const [sessoes, credenciais, grupos, envios, tentativas, checkouts, pagamentos] = await Promise.all([
+  const [sessoes, credenciais, grupos, envios, tentativas, conexoes, checkouts, pagamentos] = await Promise.all([
     db.waSession.findMany({ where: { userId: { in: ids } }, select: { userId: true, status: true } }),
     db.credential.findMany({ where: { userId: { in: ids } }, select: { userId: true, platform: true }, distinct: ['userId'] }),
     db.group.findMany({ where: { userId: { in: ids } }, select: { userId: true, role: true } }),
@@ -77,6 +77,7 @@ async function main() {
     // abaixo, que separa os dois casos.
     db.messageLog.findMany({ where: { userId: { in: ids }, status: 'success' }, select: { userId: true }, distinct: ['userId'] }),
     db.messageLog.findMany({ where: { userId: { in: ids } }, select: { userId: true }, distinct: ['userId'] }),
+    db.analyticsEvent.findMany({ where: { event: 'whatsapp_connected', userId: { in: ids } }, select: { userId: true }, distinct: ['userId'] }),
     db.analyticsEvent.findMany({ where: { event: 'checkout_started', userId: { in: ids } }, select: { userId: true }, distinct: ['userId'] }),
     db.payment.findMany({ where: { userId: { in: ids }, status: 'approved' }, select: { userId: true } }),
   ])
@@ -88,6 +89,10 @@ async function main() {
   const comDestino = new Set(grupos.filter((g) => g.role === 'post').map((g) => g.userId))
   const comEnvio = new Set(envios.map((m) => m.userId))
   const comTentativa = new Set(tentativas.map((m) => m.userId))
+  // "Pediu a conexão" (tem linha de sessão) e "chegou a conectar" são sinais
+  // diferentes — juntos escondiam defeito nosso atrás de "ela não quis".
+  const jaConectou = new Set(conexoes.map((c) => c.userId))
+  for (const s of sessoes) if (s.status === 'connected') jaConectou.add(s.userId)
   const comCheckout = new Set(checkouts.map((c) => c.userId))
   const pagantes = new Set(pagamentos.map((p) => p.userId))
 
@@ -154,7 +159,8 @@ async function main() {
   for (const u of usuarios) {
     if (pagantes.has(u.id)) continue
     const motivo = classifyStallReason({
-      paired: comSessao.has(u.id),
+      triedPairing: comSessao.has(u.id),
+      connected: jaConectou.has(u.id),
       hasCredential: comCredencial.has(u.id),
       hasSourceGroup: comMonitor.has(u.id),
       hasDestGroup: comDestino.has(u.id),
@@ -193,7 +199,8 @@ async function main() {
   // Os rótulos vêm do módulo compartilhado — buscar por string literal aqui
   // faria estes números virarem zero em silêncio no dia em que um texto mudar.
   const contaMotivo = (chave) => parou.get(describeStallReason(chave)?.label) || 0
-  const semPareamento = contaMotivo('never_paired')
+  const semPareamento = contaMotivo('never_tried_pairing')
+  const pareamentoFalhou = contaMotivo('pairing_failed')
   const enviouNaoPagou = contaMotivo('sent_no_checkout')
   const soTentouNaoPagou = contaMotivo('tried_nothing_sent')
 
@@ -205,10 +212,14 @@ async function main() {
 
   Duas leituras mudam a ação:
 
-  * Muita gente parando ANTES de parear o WhatsApp (${semPareamento} aqui) é
-    problema de ONBOARDING ou de expectativa: a pessoa criou conta e não
-    entendeu o que fazer, ou não estava pronta para conectar um número.
-    Se conserta com produto e comunicação, não com mais tráfego.
+  * Gente que NEM PEDIU a conexão (${semPareamento} aqui) é problema de
+    confiança e de expectativa: criou conta e não estava pronta para entregar
+    o número. Se conserta com produto e comunicação, não com mais tráfego.
+
+  * Gente que PEDIU a conexão e não conseguiu (${pareamentoFalhou} aqui) é
+    problema NOSSO — leitura do QR, servidor sem vaga, recusa do WhatsApp.
+    Confira o histórico dessas contas antes de qualquer ação de marketing:
+    aqui não é falta de interesse, é obstáculo técnico.
 
   * Gente que ENVIOU DE VERDADE e mesmo assim não pagou (${enviouNaoPagou} aqui)
     é o grupo mais valioso para conversar: ela viu o produto funcionar e mesmo

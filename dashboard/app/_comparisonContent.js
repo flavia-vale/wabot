@@ -310,6 +310,70 @@ export const COMPARISON_PAGES = {
    * specs/013-inbound-leads-strategy/checklist-comparativos.md, uma por
    * semana, só depois desta entrar no índice (SC-011, ≤14 dias).
    */
+  /* Promium — criado em 2026-09-02 (ação 11 do PLANO_ACAO_SEO_IA_2026-09-01).
+   *
+   * É o ÚNICO concorrente que uma IA colocou explicitamente à nossa frente: na
+   * medição de citação de 01/09, o ChatGPT chamou o Promium de "o mais
+   * completo" na consulta sobre padronizar divulgação de cupons. E ele nem
+   * estava no nosso mapa de concorrentes — veio da lista que as IAs citam, que
+   * é quase disjunta da que o Search Console mostra.
+   *
+   * O ângulo é honesto e desconfortável de dois lados, e é isso que o torna
+   * citável: eles cobrem MAIS coisa que nós (10 lojas, Telegram, vitrine com
+   * domínio próprio, rotador de links com pixel) e custam MUITO mais — o plano
+   * de ENTRADA deles, no valor recorrente, custa 42% mais que o nosso plano
+   * completo. Dizer só uma das duas metades seria propaganda.
+   *
+   * ⚠️ Armadilha de preço que a página precisa desfazer: todos os planos deles
+   * anunciam um valor promocional no primeiro mês. Comparar o nosso preço com
+   * o promocional deles é comparar coisa diferente — a página compara pelo
+   * valor recorrente e diz isso em voz alta. */
+  '/alternativas/promium': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Promium',
+    title: 'Alternativa ao Promium: R$ 69 contra R$ 97,90',
+    description: 'O plano de entrada do Promium custa R$ 97,90 por mês e cobre 5 grupos. Compare com o Espelha Grupos: grupos ilimitados por R$ 69, com 7 dias grátis.',
+    competitorSlugs: ['promium'],
+    productPage: {
+      href: '/espelhar-grupos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=promium&utm_content=comparison_product_backlink',
+      label: 'Como funciona o espelhamento de grupos',
+    },
+    tldr: 'O Promium cobre mais coisa que o Espelha Grupos — 10 lojas, Telegram, vitrine com domínio próprio e rotador de links com pixel de anúncio. E cobra por isso: o plano de entrada custa R$ 97,90 por mês a partir do segundo mês, contra R$ 69 do nosso plano completo, e cobre 5 grupos contra grupos ilimitados. Se você precisa de vitrine própria e pixel, o Promium entrega o que nós não temos. Se o que você precisa é espelhar grupos e converter link, está pagando por uma plataforma inteira para usar uma parte dela.',
+    directAnswer: 'O Promium é uma plataforma de divulgação de ofertas para WhatsApp e Telegram com replicador de grupos, captura de cupom por IA, vitrine de produtos com domínio próprio e rotador de links com pixel de Meta, TikTok e GA4. Os planos vão de R$ 97,90 a R$ 597,90 por mês no valor recorrente, cobrando por faixa de grupos (5, 20, 50 e 200) e por número de conexões de WhatsApp. O Espelha Grupos custa R$ 39 ou R$ 69 por 30 dias, não limita grupos, cobre Shopee, Amazon, Mercado Livre, Magalu e SHEIN, e oferece 7 dias grátis sem cartão. A escolha é entre uma plataforma ampla e paga por faixa, e uma ferramenta focada em espelhar grupos e converter link.',
+    rows: [
+      { key: 'preco-entrada', label: 'Preço de entrada (valor recorrente)', produto: 'R$ 39 por 30 dias no Basic, R$ 69 no Pro completo. Grupos ilimitados nos dois.', concorrente: 'Promium: R$ 97,90/mês no Starter, com 5 grupos. O primeiro mês sai por R$ 47,90 e o valor recorrente começa no segundo.', reading: 'Compare pelo segundo mês. O plano de entrada deles custa 42% mais que o nosso plano completo.' },
+      { key: 'grupos', label: 'Quantos grupos cabem', produto: 'Sem limite de grupos em qualquer plano.', concorrente: 'Promium: 5 grupos no Starter, 20 no Basic, 50 no Intermediário e 200 no Pro.', reading: 'Se a sua operação cresce em número de grupos, no Promium cada faixa nova é uma mensalidade nova; aqui não muda nada.' },
+      { key: 'lojas', label: 'Lojas cobertas', produto: 'Shopee, Amazon, Mercado Livre, Magalu e SHEIN.', concorrente: 'Promium: 10 lojas, conforme a página consultada.', reading: 'Aqui o Promium cobre mais. Se você divulga loja fora da nossa lista, isso pesa a favor dele.' },
+      { key: 'telegram', label: 'Telegram', produto: 'Não atendemos Telegram — só WhatsApp, em grupo e canal.', concorrente: 'Promium: publica em WhatsApp e Telegram.', reading: 'Se parte do seu público está no Telegram, nós não resolvemos essa parte.' },
+      { key: 'vitrine-pixel', label: 'Vitrine e rastreamento de anúncio', produto: 'Não temos vitrine com domínio próprio nem rotador de links com pixel.', concorrente: 'Promium: vitrine de produtos com domínio próprio e rotador de links com pixel de Meta, TikTok e GA4.', reading: 'Quem anuncia em cima do próprio tráfego precisa disso, e é uma diferença real a favor do Promium.' },
+      { key: 'teste', label: 'Teste antes de pagar', produto: '7 dias grátis com o plano Pro completo, sem cartão.', concorrente: 'Promium: a página de planos consultada não informa teste grátis. O que ela oferece é preço menor no primeiro mês.', reading: 'Desconto no primeiro mês e teste grátis não são a mesma coisa: num você já pagou.' },
+    ],
+    criteria: ['Quantos grupos você tem hoje e quantos pretende ter', 'Se você divulga loja fora de Shopee, Amazon, Mercado Livre, Magalu e SHEIN', 'Se parte do seu público está no Telegram', 'Se você anuncia em cima do próprio tráfego (vitrine e pixel)', 'Se você precisa de mais de uma conexão de WhatsApp', 'Se quer testar antes de pagar'],
+    botinhoDifferentials: ['Grupos ilimitados em qualquer plano', '7 dias grátis com o plano completo, sem cartão', 'Preço fixo que não sobe quando a operação cresce', 'Conversão de link de cupom, não só de produto', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
+    richDifferentials: true,
+    bestFit: [
+      'Escolha o Promium se você divulga loja fora da nossa lista de cinco, publica também em Telegram, quer vitrine de produtos com domínio próprio, precisa de rotador de links com pixel para anunciar em cima do próprio tráfego, ou opera mais de uma conexão de WhatsApp.',
+      'Escolha o Espelha Grupos se o que você precisa é espelhar grupos e converter link com o seu código, tem muitos grupos (ou pretende ter), quer testar antes de pagar, ou não quer que a mensalidade suba junto com a operação.',
+    ],
+    notIdealFit: [
+      'O Promium não é ideal para quem está começando ou opera poucos grupos: o plano de entrada cobre 5 grupos e já custa mais que o nosso plano completo.',
+      'O Promium também não é ideal para quem quer validar antes de pagar — a página consultada não indica teste grátis.',
+      'O Espelha Grupos não é ideal para quem precisa de Telegram, de vitrine com domínio próprio ou de pixel de anúncio: nada disso existe aqui.',
+    ],
+    migrationPath: [
+      'Conte quantos grupos você tem hoje. É o número que mais muda a conta entre as duas ferramentas.',
+      'Confira se as lojas que você divulga estão entre Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Se faltar alguma que é importante para você, o Promium cobre mais.',
+      'Se decidir pelo Promium, olhe o valor do SEGUNDO mês ao montar o orçamento — o do primeiro é promocional em todos os planos.',
+      'Se decidir pelo Espelha Grupos, use os 7 dias de teste para validar a conversão de link e o espelhamento antes de assinar.',
+    ],
+    faq: [
+      { q: 'Quanto custa o Promium?', a: 'Conforme a página de planos consultada em 01/09/2026: Starter R$ 97,90/mês (5 grupos, 1 conexão), Basic R$ 197,90/mês (20 grupos), Intermediário R$ 397,90/mês (50 grupos, 2 conexões) e Pro R$ 597,90/mês (200 grupos, 3 conexões). Todos anunciam um valor menor no primeiro mês. Confirme na página oficial antes de decidir — preços mudam.' },
+      { q: 'Por que comparar pelo segundo mês e não pelo preço anunciado?', a: 'Porque o preço anunciado é promocional e vale uma vez só. O Starter aparece como R$ 47,90, mas a partir do segundo mês é R$ 97,90 — e é esse o valor que você vai pagar todo mês. Comparar o nosso preço com o promocional deles seria comparar coisas diferentes.' },
+      { q: 'Em que o Promium é melhor que o Espelha Grupos?', a: 'Em cinco pontos concretos: cobre 10 lojas contra as nossas cinco, publica também em Telegram, tem vitrine de produtos com domínio próprio, tem rotador de links com pixel de Meta, TikTok e GA4, e permite até 3 conexões de WhatsApp. Nada disso existe aqui.' },
+      { q: 'O Promium tem teste grátis?', a: 'A página de planos consultada em 01/09/2026 não indica teste grátis — o que ela oferece é preço menor no primeiro mês. Se testar antes de pagar for importante para você, confirme diretamente no site oficial antes de assinar.' },
+      { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles, então dá para rodar as duas em paralelo por uma semana antes de cancelar a atual.' },
+    ],
+  },
   '/alternativas/achadinho-pro': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Achadinho Pro',
