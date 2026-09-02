@@ -246,3 +246,56 @@ test('as páginas da frente Tier 1 cabem em 55 chars e entram pelo termo de maio
     )
   }
 })
+
+// ---------------------------------------------------------------------------
+// Varredura geral (2026-09-02). Os testes acima cobrem listas NOMEADAS de
+// páginas — e foi exatamente por isso que
+// /blog/quanto-custa-bot-para-whatsapp-afiliados atravessou meses com título
+// de 70 chars na posição 4,35 e ZERO clique: ele não estava em nenhuma lista.
+// A varredura abaixo inverte o padrão: o teto vale para TODO título escrito à
+// mão nos módulos de conteúdo, e quem quiser ficar de fora precisa aparecer
+// nominalmente na exceção — o oposto de precisar ser lembrado para entrar.
+const MODULOS_VARREDURA = [
+  'dashboard/app/_lpShared.js',
+  'dashboard/app/_organicNicheLanding.js',
+  'dashboard/app/_comparisonContent.js',
+  'dashboard/app/_seoHubShared.js',
+  'dashboard/app/_preservationCommercialPages.js',
+  'dashboard/app/_preservationDecisionPages.js',
+  'dashboard/app/blog/_preservationBlogPosts.js',
+]
+
+// Exceções DELIBERADAS, não dívida. As duas são as páginas que mais convertem
+// no site e passam do teto justamente por dizerem um fato concreto no título
+// ("4 lojas e 7 dias grátis" rende 2,76% de clique; a lista das três lojas
+// rende 8,09%). O relatório de 01/09 registrou isso como contraprova da
+// hipótese de corte no celular — os dois títulos mais longos são os melhores
+// conversores. Ficam como grupo de controle até haver medição que os condene.
+// Entrar aqui exige DADO de Search Console, nunca conveniência de escrita.
+const TITULOS_LONGOS_DELIBERADOS = new Set([
+  'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',
+  'Bot para achadinhos no WhatsApp: 4 lojas e 7 dias grátis',
+])
+
+test('todo título de página nos módulos de conteúdo cabe em 55 chars, salvo exceção nominal medida', () => {
+  const estouros = []
+  for (const arquivo of MODULOS_VARREDURA) {
+    const fonte = lerFonte(arquivo)
+    // Só title/description de PÁGINA: indentação de 4 espaços é o nível do
+    // registro de rota nesses módulos. Títulos de seção interna vivem mais
+    // fundo e não são o que o Google mostra.
+    for (const m of fonte.matchAll(/^ {4}(title|description): '((?:[^'\\]|\\.)*)',?$/gm)) {
+      const [, campo, valor] = m
+      const teto = campo === 'title' ? ORCAMENTO_TITULO : ORCAMENTO_DESCRICAO
+      if (valor.length <= teto) continue
+      if (campo === 'title' && TITULOS_LONGOS_DELIBERADOS.has(valor)) continue
+      estouros.push(`${arquivo}: ${campo} com ${valor.length} chars (teto ${teto}) — "${valor}"`)
+    }
+  }
+
+  assert.deepEqual(
+    estouros,
+    [],
+    `Título/descrição acima do que o Google mostra no celular:\n${estouros.join('\n')}\n\nEncurte, ou — só com dado de Search Console que justifique — some o título a TITULOS_LONGOS_DELIBERADOS.`
+  )
+})

@@ -516,6 +516,14 @@ export const api = {
   adminAffiliateUpdate: (id, data) => apiFetch(`/api/admin/affiliates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 }
 
+// Subprotocolo do WebSocket do QR. Um subprotocolo é um TOKEN do HTTP (RFC
+// 6455 §4.1 / RFC 7230 §3.2.6): não aceita espaço. A troca de marca de
+// 2026-09-02 renomeou isto para 'Espelha Grupos-auth' por varredura de texto,
+// o que produziu um valor inválido E divergente do que a API confere — o
+// handshake do QR em tempo real passou a ser recusado. Precisa continuar
+// batendo com QR_WS_SUBPROTOCOLS em src/api/routes/session.js.
+export const QR_WS_SUBPROTOCOL = 'espelhagrupos-auth'
+
 export function openQRSocket(token, handlers = {}) {
   const browserOrigin = typeof window !== 'undefined' ? window.location.origin : BASE
   const apiOrigin = new URL(BASE, browserOrigin).origin
@@ -524,7 +532,7 @@ export function openQRSocket(token, handlers = {}) {
   const fallbackOrigin = browserOrigin
   const wsUrl = new URL('/api/session/qr', apiOrigin)
   wsUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
-  const ws = new WebSocket(wsUrl.toString(), ['Espelha Grupos-auth', token])
+  const ws = new WebSocket(wsUrl.toString(), [QR_WS_SUBPROTOCOL, token])
 
   if (typeof handlers === 'function') {
     ws.onmessage = (e) => { try { handlers(JSON.parse(e.data)) } catch {} }
@@ -541,7 +549,7 @@ export function openQRSocket(token, handlers = {}) {
     try {
       const fallbackUrl = new URL('/api/session/qr', fallbackOrigin)
       fallbackUrl.protocol = browserIsHttps ? 'wss:' : 'ws:'
-      const fallbackWs = new WebSocket(fallbackUrl.toString(), ['Espelha Grupos-auth', token])
+      const fallbackWs = new WebSocket(fallbackUrl.toString(), [QR_WS_SUBPROTOCOL, token])
       fallbackWs.onmessage = (e) => { try { onMessage?.(JSON.parse(e.data)) } catch {} }
       fallbackWs.onerror = (fallbackEvent) => onError?.(fallbackEvent)
       fallbackWs.onclose = (fallbackEvent) => onClose?.(fallbackEvent)

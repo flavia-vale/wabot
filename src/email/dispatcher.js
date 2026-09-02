@@ -1,4 +1,4 @@
-// Despachante: o ÚNICO caminho por onde um e-mail do BOTinho sai.
+// Despachante: o ÚNICO caminho por onde um e-mail do Espelha Grupos sai.
 //
 // Toda trava mora aqui, para nenhum gatilho novo precisar lembrar delas:
 //   - e-mail fabricado (user_*@sistema.com) nunca recebe;
@@ -40,6 +40,16 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
 // histórico. O limite de quanto tempo ainda vale avisar mora na política
 // (`lifecyclePolicy.js`), não aqui.
 const IDLE_GATE_EXEMPT_SLUGS = new Set(['whatsapp_desconectado'])
+
+// O teto diário existe para proteger o domínio e o limite do provedor dos
+// DISPAROS EM MASSA — que saem pela fila lenta e voltam na virada das 8h.
+// Recuperação de senha não é isso: a pessoa está na tela, agora, sem conseguir
+// entrar na conta, e "sai amanhã de manhã" é a mesma coisa que "não funciona".
+// Pior: o caminho do teto devolve `retryLater` e NINGUÉM tenta de novo (o
+// gatilho é dispare-e-esqueça, não item de fila), então um dia de campanha
+// grande derrubava toda recuperação de senha até o dia seguinte, em silêncio.
+// Volume é desprezível: a rota já é limitada por e-mail e por IP.
+const DAILY_CAP_EXEMPT_SLUGS = new Set(['recuperar_senha'])
 
 export function isRealEmail(email) {
   const trimmed = String(email ?? '').trim()
@@ -289,12 +299,17 @@ export async function sendTemplateEmail({
       }
     }
 
-    if (!ignoreDailyCap) {
+    if (!ignoreDailyCap && !DAILY_CAP_EXEMPT_SLUGS.has(slug)) {
       const cap = resolveDailyCap()
       if (cap > 0 && await sentInCurrentWindow({ db, now }) >= cap) {
         // NÃO marca a linha da fila como descartada: o teto diário é uma espera,
         // não uma recusa — ela continua na fila e sai na próxima virada das 8h.
         const retryAt = nextDailyWindowStart(now)
+        // Sem `logRowId` o envio veio de um gatilho dispare-e-esqueça: não há
+        // item de fila para voltar amanhã, então isto é um descarte de fato e
+        // precisa de linha no histórico. Sem ela o e-mail simplesmente sumia,
+        // sem aparecer nem como enviado nem como barrado.
+        if (!logRowId) await markSkipped('daily_cap')
         return {
           sent: false,
           skipped: true,

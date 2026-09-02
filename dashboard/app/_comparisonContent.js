@@ -474,7 +474,7 @@ export const COMPARISON_PAGES = {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Gigi Bot',
     title: 'Alternativa ao Gigi Bot: o que o plano grátis faz',
-    description: 'Comparativo entre Gigi Bot e Espelha Grupos: qual plano envia sozinho para o WhatsApp, quanto custa e o que o plano gratuito faz. Tabela verificada em 26/08/2026.',
+    description: 'Comparativo entre Gigi Bot e Espelha Grupos: qual envia sozinho para o WhatsApp, quanto custa e o que o plano grátis faz. Tabela verificada em 26/08/2026.',
     competitorSlugs: ['gigi-bot'],
     productPage: {
       href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',

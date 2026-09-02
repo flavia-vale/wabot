@@ -8,7 +8,7 @@
 //   - Linha em branco separa parágrafos.
 //   - Linhas começando com "- " viram lista com marcador.
 //   - Linhas começando com "1. " (qualquer número) viram lista numerada.
-//   - [[botao:Rótulo|https://link]] vira o botão verde do BOTinho.
+//   - [[botao:Rótulo|https://link]] vira o botão verde do Espelha Grupos.
 //   - [texto](https://link) vira link no meio da frase.
 //   - **texto** vira negrito.
 //   - {{variavel}} é trocado pelo valor correspondente.

@@ -6,7 +6,7 @@ import db from '../../db.js'
 import { optOut, verifyUnsubscribeToken, OPT_OUT_CATEGORY } from '../../email/optOut.js'
 import { trackAnalyticsEvent } from '../../analytics.js'
 
-const BRAND_NAME = 'BOTinho'
+const BRAND_NAME = 'Espelha Grupos'
 
 function renderPage({ title, message }) {
   return `<!doctype html>

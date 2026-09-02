@@ -83,7 +83,7 @@ export const BRAND_SAME_AS = [
   BRAND_YOUTUBE_URL,
 ].filter(Boolean)
 
-export const PRODUCT_DEFINITION = 'O BOTinho é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
+export const PRODUCT_DEFINITION = 'O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 
 export const PRODUCT_LIMITATIONS = [
   'Não prometemos ganho financeiro, comissão ou aumento garantido de vendas.',
@@ -151,7 +151,7 @@ export const CORE_FAQ_ITEMS = [
   {
     id: 'faq_seed_whatsapp_ban',
     question: 'Vou ser banida do WhatsApp?',
-    answer: 'O BOTinho permite intervalos configuráveis, filtros anti-spam e revisão da operação, mas nenhum software elimina risco de bloqueio. Use apenas grupos e canais autorizados, mensagens relevantes e cadência responsável.',
+    answer: 'O Espelha Grupos permite intervalos configuráveis, filtros anti-spam e revisão da operação, mas nenhum software elimina risco de bloqueio. Use apenas grupos e canais autorizados, mensagens relevantes e cadência responsável.',
   },
   {
     id: 'faq_seed_cancel',

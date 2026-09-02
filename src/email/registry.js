@@ -1,4 +1,4 @@
-// Catálogo dos e-mails do BOTinho: o TEXTO PADRÃO de cada um mora aqui, no
+// Catálogo dos e-mails do Espelha Grupos: o TEXTO PADRÃO de cada um mora aqui, no
 // código. O painel admin só grava OVERRIDE (tabela EmailTemplate) — sem linha
 // lá, vale o que está aqui. Assim o sistema nunca fica sem texto, e um erro de
 // edição no painel se conserta apagando o override.
@@ -46,7 +46,7 @@ export const STANDARD_VARIABLES = Object.freeze([
   { name: 'video_etiquetas', description: 'Vídeo-aula de como cadastrar a etiqueta de afiliada de cada loja (o mesmo do painel)', example: 'https://youtu.be/6F2AUM88FKk' },
   { name: 'email_suporte', description: 'E-mail de suporte', example: 'contato@espelhagrupos.com.br' },
   { name: 'whatsapp_suporte', description: 'WhatsApp de suporte', example: 'https://wa.me/5532999844020' },
-  { name: 'marca', description: 'Nome da marca', example: 'BOTinho' },
+  { name: 'marca', description: 'Nome da marca', example: 'Espelha Grupos' },
   // Um por capítulo do vídeo, gerados da MESMA tabela que monta os links —
   // declarar à mão abriria espaço para a lista e os links divergirem.
   ...VIDEO_ETIQUETAS_CAPITULOS.map((c) => ({
@@ -512,7 +512,7 @@ Se não achar o motivo em dois minutos, me chama no {{whatsapp_suporte}} que eu 
   {
     slug: 'seja_afiliado',
     name: 'Convite para o programa de afiliados',
-    description: 'Convite para indicar o BOTinho e ganhar comissão.',
+    description: 'Convite para indicar o Espelha Grupos e ganhar comissão.',
     group: 'afiliados',
     category: 'marketing',
     trigger: 'auto',

@@ -1022,7 +1022,42 @@ apontava para um `mailto:` de um domínio que não é nosso. Agora:
   que inclui a impressão do hash da senha ATUAL. Isso dá **uso único de graça**
   (trocou a senha, todo link antigo morre) e validade de 1h.
 - **Resposta sempre igual**, exista ou não a conta — a rota não pode virar
-  detector de quem tem conta aqui. Usa o mesmo balde de tentativas do login.
+  detector de quem tem conta aqui.
+- **Balde de tentativas PRÓPRIO, nunca o do login** (RCA 2026-09, abaixo).
+
+#### O e-mail de nova senha não chegava (RCA 2026-09 — não regredir)
+
+Duas travas, cada uma sozinha suficiente para deixar a recuperação de senha
+sem funcionar. As duas atingiam exatamente quem precisa dela.
+
+1. **O pedido consumia o balde de tentativas do LOGIN.** Quem esqueceu a senha
+   erra o login várias vezes antes de clicar em "esqueci minha senha" — e o
+   orçamento (8 tentativas / 15min, por e-mail e por IP) já vinha zerado. A
+   rota respondia **429 "Muitas tentativas"** em vez de mandar o e-mail. Hoje
+   `consumePasswordResetAttempt` (`src/api/routes/auth.js`) tem mapas próprios
+   e teto próprio (`PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS`, 5 por hora, e as
+   irmãs `_WINDOW_MS` / `_EMAIL_MAX_ATTEMPTS`). O limite continua existindo —
+   a rota não pode virar varredura de e-mails —, só que com contagem separada.
+   **Não voltar a compartilhar o balde com o login.**
+2. **O teto diário do motor de e-mails engolia o envio, em silêncio.** O teto
+   (`EMAIL_DAILY_CAP`, 300) protege o domínio dos **disparos em massa**, que
+   saem pela fila lenta e voltam na virada das 8h. O e-mail de nova senha não
+   volta: o gatilho é dispare-e-esqueça, não item de fila. Num dia de campanha
+   grande, batido o teto, toda recuperação de senha parava até o dia seguinte —
+   e o caminho do teto ia embora **sem gravar linha nenhuma** no `EmailSendLog`,
+   então o e-mail não aparecia nem como enviado nem como barrado.
+   `DAILY_CAP_EXEMPT_SLUGS` (`src/email/dispatcher.js`) tira `recuperar_senha`
+   do teto — a pessoa está na tela, agora, sem entrar na conta, e "sai amanhã de
+   manhã" é a mesma coisa que "não funciona". Volume é desprezível: a rota já é
+   limitada por e-mail e por IP. **Não pôr `recuperar_senha` de volta no teto.**
+   Junto: descarte por teto em gatilho **sem fila** agora vira linha `skipped`
+   com o motivo (item de fila segue sem marcação — ele de fato volta amanhã).
+
+⚠️ **Antes de procurar defeito no código, confira o SMTP.** Sem `SMTP_*` no
+`.env` o envio é no-op silencioso e NENHUM e-mail sai — inclusive este. Sinal:
+zero linha `sent` recente em `EmailSendLog`.
+
+Testes: `test/password-reset.test.js`, `test/email-engine.test.js`.
 
 **Contato de suporte (dashboard):** o e-mail e WhatsApp de suporte exibidos no
 site vêm de constantes em `dashboard/lib/marketing-content.js`
@@ -1111,6 +1146,38 @@ Settings → Secrets and variables → Actions:
 
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
+
+## Minutos do GitHub Actions (repo PRIVADO — 2.000 min/mês no plano gratuito)
+
+Repo privado consome minutos. Medição de 2026-09-02 (amostra de 30 runs em 12h)
+apontava **~3.450 min/mês** — acima do teto. Onde estava o desperdício e o que
+foi feito (não regredir sem refazer a conta):
+
+| Repetição encontrada | Correção |
+|---|---|
+| `deploy.yml` e `backend-lint.yml` disparavam em `push` **e** `pull_request` nas MESMAS branches. Como o fluxo canônico é PR `develop → main`, todo push em develop com a PR aberta rodava tudo **2x no mesmo commit** | `backend-lint` só em `pull_request`; `pull_request` do `deploy.yml` limitado a `branches: [develop]` |
+| No `push`, o `deploy.yml` gastava ~1m50 com npm ci ×2 + lint + `next build` + smoke **no runner**, e o `deploy_safe_*.sh` refazia tudo no VPS logo em seguida | steps do gate ganharam `if: github.event_name == 'pull_request'` |
+| `cancel-in-progress: false` fazia PR com N commits enfileirar N builds completos | `cancel-in-progress` agora é `true` em `pull_request` (e continua `false` em `push` — **nunca** cancelar deploy no meio do SSH) |
+| Push só de documentação disparava deploy completo | `paths-ignore` (`docs/**`, `specs/**`, `*.md`) **só no `push`** |
+
+**Três armadilhas nessa configuração:**
+
+1. **`paths-ignore` não pode usar `**.md`.** `dashboard/public/pricing.md` e
+   `dashboard/public/materiais/*.md` são servidos publicamente e precisam subir.
+   `*.md` casa só a raiz do repo — é o que está lá, de propósito.
+2. **`paths-ignore` fica só no `push`.** Check pulado numa PR conta como
+   pendente para branch protection; aplicá-lo ao `pull_request` travaria PRs de
+   documentação para sempre.
+3. **Nada depois do SSH pode precisar de `node_modules`.** Sem o `npm ci` no
+   caminho de push, os steps finais têm que rodar com Node pelado —
+   `notify-indexnow.mjs` só importa `dashboard/lib/*.mjs`/`.js` puros. Passo
+   novo ali que exija dependência precisa reativar o `npm ci` (com `if`
+   próprio), não remover o gate.
+
+**O que se perde com o gate PR-only:** o aviso antecipado antes de tocar o VPS.
+Quem reprova build quebrado num push passa a ser o próprio `deploy_safe_*.sh`,
+que aborta em qualquer falha antes do restart do PM2. A PR continua com o gate
+completo (lint + build + smoke + `quality:gate` + `no-undef`).
 
 ## IndexNow — notificação automática de URLs ao Bing (2026-07, canônico)
 

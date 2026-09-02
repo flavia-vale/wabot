@@ -79,8 +79,8 @@ test('e-mail transacional NÃO leva descadastro; marketing leva', () => {
 
 test('toda mensagem é assinada pela equipe', () => {
   const { text, html } = wrapEmail({ body: 'corpo' })
-  assert.match(text, /Equipe BOTinho/)
-  assert.match(html, /Equipe BOTinho/)
+  assert.match(text, /Equipe Espelha Grupos/)
+  assert.match(html, /Equipe Espelha Grupos/)
 })
 
 // ------------------------------------------------------------------ catálogo
@@ -136,7 +136,7 @@ test('standardVars monta primeiro nome e links do painel', () => {
   const vars = standardVars({ user: { name: 'Juliane Pumuceno' }, dashboardUrl: 'https://x.com' })
   assert.equal(vars.primeiro_nome, 'Juliane')
   assert.equal(vars.link_login, 'https://x.com/login')
-  assert.equal(vars.marca, 'BOTinho')
+  assert.equal(vars.marca, 'Espelha Grupos')
 })
 
 function makeDb({ templates = [], logs = [], optOuts = [], users = [], batches = [] } = {}) {
@@ -209,7 +209,7 @@ test('envio simples grava histórico e usa o texto do catálogo', async () => {
   })
   assert.equal(result.sent, true)
   assert.equal(sent.length, 1)
-  assert.match(sent[0].subject, /Bem-vinda ao BOTinho/)
+  assert.match(sent[0].subject, /Bem-vinda ao Espelha Grupos/)
   assert.match(sent[0].text, /Olá, Juliane!/)
   assert.match(sent[0].text, /23\/08\/2026/)
   assert.equal(db.logs.length, 1)
@@ -295,6 +295,49 @@ test('teto diário segura o envio', async () => {
     const result = await sendTemplateEmail({ db, sendMail, slug: 'boas_vindas', user: activeUser, vars: { fim_do_teste: 'x' }, now: NOW, logger: silentLogger })
     assert.equal(result.reason, 'daily_cap')
     assert.equal(sent.length, 0)
+  } finally {
+    delete process.env.EMAIL_DAILY_CAP
+  }
+})
+
+// RCA 2026-09 (recuperação de senha por e-mail não chegava): o teto diário
+// existe para os disparos em massa, que voltam na próxima virada das 8h. O
+// e-mail de nova senha não volta — o gatilho é dispare-e-esqueça —, então num
+// dia de campanha grande a recuperação simplesmente parava de funcionar, em
+// silêncio. Não voltar a submeter `recuperar_senha` ao teto.
+test('teto diário NÃO segura o e-mail de nova senha', async () => {
+  const logs = Array.from({ length: 3 }, (_, i) => ({ id: `l${i}`, slug: 'x', userId: `u${i}`, status: 'sent', createdAt: NOW }))
+  const db = makeDb({ logs })
+  const { sent, sendMail } = collectMails()
+  process.env.EMAIL_DAILY_CAP = '3'
+  try {
+    const result = await sendTemplateEmail({
+      db, sendMail, slug: 'recuperar_senha', user: activeUser,
+      vars: { link_nova_senha: 'https://exemplo.com/nova-senha?c=abc', validade_link: '60 minutos' },
+      now: NOW, logger: silentLogger,
+    })
+    assert.equal(result.sent, true)
+    assert.equal(sent.length, 1)
+    assert.match(sent[0].text, /nova-senha\?c=abc/)
+  } finally {
+    delete process.env.EMAIL_DAILY_CAP
+  }
+})
+
+// O caminho do teto devolvia `retryLater` e ia embora sem gravar nada. Para um
+// item de fila isso está certo (ele volta amanhã); para um gatilho
+// dispare-e-esqueça é descarte de fato, e sem linha no histórico fica
+// impossível descobrir por que o e-mail nunca chegou.
+test('teto diário em gatilho sem fila deixa rastro no histórico', async () => {
+  const logs = Array.from({ length: 3 }, (_, i) => ({ id: `l${i}`, slug: 'x', userId: `u${i}`, status: 'sent', createdAt: NOW }))
+  const db = makeDb({ logs })
+  const { sendMail } = collectMails()
+  process.env.EMAIL_DAILY_CAP = '3'
+  try {
+    await sendTemplateEmail({ db, sendMail, slug: 'boas_vindas', user: activeUser, vars: { fim_do_teste: 'x' }, now: NOW, logger: silentLogger })
+    const descarte = db.logs.find((row) => row.slug === 'boas_vindas')
+    assert.equal(descarte?.status, 'skipped')
+    assert.equal(descarte?.skipReason, 'daily_cap')
   } finally {
     delete process.env.EMAIL_DAILY_CAP
   }

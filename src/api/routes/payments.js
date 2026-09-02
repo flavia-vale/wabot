@@ -432,7 +432,7 @@ async function createMercadoPagoPreference({ userId, plan }) {
     auto_return: 'approved',
     notification_url: `${notificationOrigin}/api/payments/webhook`,
     // Back URL shown after payment for manual navigation
-    statement_descriptor: 'BOTinho',
+    statement_descriptor: 'Espelha Grupos',
   }
   const debugUrls = {
     dashboardUrl: callbackOrigin,

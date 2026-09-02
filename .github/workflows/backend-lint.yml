@@ -9,11 +9,19 @@ name: Backend lint (no-undef)
 # dispara o postinstall do Prisma e não depende do package-lock — só baixa o
 # ESLint e usa o eslint.config.js (que não importa nada).
 
+# Economia de minutos (2026-09-02): roda SÓ em pull_request. O gatilho `push`
+# em main/develop era redundante — `main` só recebe merge de `develop`, que já
+# foi lintado na PR, e com uma PR develop->main aberta todo push em develop
+# disparava este workflow DUAS vezes no mesmo commit (uma por evento).
 on:
   pull_request:
     branches: [ main, develop ]
-  push:
-    branches: [ main, develop ]
+
+# Push novo na mesma PR cancela o lint anterior — o resultado do commit antigo
+# não interessa mais e ficava ocupando minuto do plano gratuito.
+concurrency:
+  group: backend-lint-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   no-undef:
