@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { convert } from '../src/converters/shein.js'
+import { convert, describeSheinConversionError, SHEIN_CONVERSION_ERROR } from '../src/converters/shein.js'
 
 // ---------------------------------------------------------------------------
 // Invariantes do contrato (contracts/converter-shein.md). Todos db-free e sem
@@ -9,6 +9,8 @@ import { convert } from '../src/converters/shein.js'
 // ---------------------------------------------------------------------------
 
 function htmlResponse(html, url) {
+  const bytes = new TextEncoder().encode(html)
+  let consumed = false
   return {
     ok: true,
     status: 200,
@@ -17,6 +19,10 @@ function htmlResponse(html, url) {
       get: (name) => (name.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null),
       getSetCookie: () => [],
     },
+    body: { getReader: () => ({
+      read: async () => consumed ? { done: true } : (consumed = true, { done: false, value: bytes }),
+      cancel: async () => {},
+    }) },
     text: async () => html,
   }
 }
@@ -43,9 +49,9 @@ test('INV-1: destino de outro afiliado perde a identidade dele e ganha a da clie
   assert.equal(out.searchParams.get('goods_id'), '485735309')
 })
 
-test('INV-2: shc/link (token opaco de compartilhamento) → null', async () => {
+test('INV-2: shc/link (token opaco de compartilhamento) → falha tipada', async () => {
   const url = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=abc123&link=xyz&url_from=GM7999'
-  assert.equal(await convert(url, { tag: '12345' }), null)
+  await assert.rejects(convert(url, { tag: '12345' }), { code: SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN })
 })
 
 test('INV-3: link que se diz de produto (marcador -p- no caminho) sem goods_id extraível → null', async () => {
@@ -62,13 +68,14 @@ test('INV-4: onelink/requestId/behaviorId/utm_* ausentes da saída', async () =>
   }
 })
 
-test('INV-5: fetchImpl que rejeita → null (nunca a URL original)', async () => {
+test('INV-5: fetchImpl que rejeita → erro transitório seguro (nunca a URL original)', async () => {
   const fetchImpl = async () => { throw new Error('rede fora') }
   const url = 'https://onelink.shein.com/14/abc'
-  const result = await convert(url, { tag: '12345' }, { fetchImpl })
-  // sem produto revelado, a resolução degrada para a própria URL de entrada,
-  // que não tem goods_id — logo null (falha honesta, não a URL original)
-  assert.equal(result, null)
+  await assert.rejects(convert(url, { tag: '12345' }, { fetchImpl }), err => {
+    assert.equal(err.code, SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT)
+    assert.doesNotMatch(err.message, /onelink|12345/)
+    return true
+  })
 })
 
 test('INV-6: cupom/campanha converte com linkKind coupon sem depender de COUPON_LINK_CONVERT', async () => {
@@ -121,8 +128,10 @@ test('T061: cadeia de redirect que sai do domínio SHEIN é recusada, mesmo com 
   })
   const fetchImpl = async () =>
     redirectResponse('https://tracker-terceiro.example.com/x?goods_id=485735309&koc_id=OUTRO&url_from=affiliate_koc_OUTRO')
-  const result = await convert('https://onelink.shein.com/14/abc', { tag: '12345' }, { fetchImpl })
-  assert.equal(result, null)
+  await assert.rejects(convert('https://onelink.shein.com/14/abc', { tag: '12345' }, { fetchImpl }), err => {
+    assert.equal(err.code, SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+    return true
+  })
 })
 
 test('T061: link direto de host que não é SHEIN nunca converte (guarda de host)', async () => {
@@ -148,8 +157,10 @@ test('T070: cadeia de redirect que termina em domínio sósia (shein.company.io)
   })
   const fetchImpl = async () =>
     redirectResponse('https://shein.company.io/x-p-123.html?goods_id=123&koc_id=OUTRO&url_from=affiliate_koc_OUTRO')
-  const result = await convert('https://onelink.shein.com/14/abc', { tag: '12345' }, { fetchImpl })
-  assert.equal(result, null)
+  await assert.rejects(convert('https://onelink.shein.com/14/abc', { tag: '12345' }, { fetchImpl }), err => {
+    assert.equal(err.code, SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+    return true
+  })
 })
 
 test('T062: landing genérica do oneLink (/ark/default) sem goods_id e sem nenhum parâmetro de destino → null', async () => {
@@ -184,7 +195,7 @@ test('T063: campaign/campaign_id/ad_type/scene/test do link de origem chegam int
 
 test('T064: shc/link vazios (?shc=&link=) também são recusados (presença, não valor)', async () => {
   const url = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=&link=&url_from=GM7999'
-  assert.equal(await convert(url, { tag: '12345' }), null)
+  await assert.rejects(convert(url, { tag: '12345' }), { code: SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN })
 })
 
 // ---------------------------------------------------------------------------
@@ -458,7 +469,7 @@ test('T084: com cookie presente (encurtamento ligado), token opaco (shc/link) co
   const creds = { tag: '12345', cookie: 'algum-cookie=valor' }
   const fetchImpl = fetchImplComEncurtadorFalhando()
   const url = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=abc123&link=xyz&url_from=GM7999'
-  assert.equal(await convert(url, creds, { fetchImpl }), null)
+  await assert.rejects(convert(url, creds, { fetchImpl }), { code: SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN })
 })
 
 test('T084: com cookie presente (encurtamento ligado), link legítimo continua convertendo com koc_id/url_from da cliente (encurtador falhou → link longo)', async () => {
@@ -498,4 +509,93 @@ test('T084: as outras quatro lojas seguem intocadas pela mudança do Phase 16 (S
   // do módulo shein.js (módulos são independentes; nenhum import cruzado).
   const magaluResult = await convertMagalu('https://www.magazinevoce.com.br/magazinealguem/produto/p/123/', { tag: 'minhatag' })
   assert.ok(magaluResult)
+})
+
+function opaqueFixtureFetch({ shortenFails = false } = {}) {
+  const start = 'https://onelink.shein.com/50/synthetic?shc=origin-token'
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=origin-token&link=origin-link&requestId=origin-request'
+  const product = 'https://m.shein.com/br/ark/default?goods_id=987654321&koc_id=999999999&utm_source=origin#origin'
+  let calls = 0
+  return {
+    start,
+    get calls() { return calls },
+    fetchImpl: async (url) => {
+      calls++
+      if (url === start) return htmlResponse(`<input id="url" value="${opaque}">`, url)
+      if (url === opaque) return htmlResponse(`<script type="application/json">{"canonical":"${product}"}</script>`, url)
+      if (shortenFails) throw new Error('encurtador indisponível')
+      throw new Error(`fetch inesperado: ${url}`)
+    },
+  }
+}
+
+test('oneLink opaco com prova única publica produto longo sem cookie e sem rastros', async () => {
+  const fixture = opaqueFixtureFetch()
+  const result = await convert(fixture.start, { tag: '1234567890' }, { fetchImpl: fixture.fetchImpl })
+  assert.equal(fixture.calls, 2, 'sem cookie não chama o encurtador autenticado')
+  assert.equal(result.linkKind, 'product')
+  const out = new URL(result.url)
+  assert.equal(out.hostname, 'm.shein.com')
+  assert.equal(out.searchParams.get('goods_id'), '987654321')
+  assert.equal(out.searchParams.get('koc_id'), '1234567890')
+  assert.equal(out.searchParams.get('url_from'), 'affiliate_koc_1234567890')
+  assert.equal(out.hash, '')
+  for (const key of ['shc', 'link', 'onelink', 'requestid', 'behaviorid']) {
+    assert.equal([...out.searchParams.keys()].some(k => k.toLowerCase() === key), false)
+  }
+  assert.equal([...out.searchParams.keys()].some(k => /^utm_/i.test(k)), false)
+  assert.doesNotMatch(result.url, /999999999|origin-token|origin-link|origin-request/i)
+})
+
+test('cookie continua opcional: falha do encurtador preserva o longo comprovado', async () => {
+  const fixture = opaqueFixtureFetch({ shortenFails: true })
+  const result = await convert(fixture.start, { tag: '1234567890', cookie: 'session=synthetic' }, { fetchImpl: fixture.fetchImpl })
+  assert.ok(result?.url)
+  assert.equal(new URL(result.url).hostname, 'm.shein.com')
+  assert.equal(new URL(result.url).searchParams.get('goods_id'), '987654321')
+})
+
+test('falhas opacas são classificadas sem vazar token, URL, tag ou cookie', async () => {
+  const start = 'https://onelink.shein.com/50/synthetic?shc=secret-token'
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=secret-token&link=secret-link'
+  const fetchImpl = async (url) => htmlResponse(url === start ? `<input id="url" value="${opaque}">` : '<html>sem produto</html>', url)
+  await assert.rejects(
+    convert(start, { tag: '1234567890', cookie: 'secret-cookie' }, { fetchImpl }),
+    err => {
+      assert.equal(err.code, SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+      assert.equal(err.message, SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+      assert.doesNotMatch(JSON.stringify(err), /secret-token|secret-link|secret-cookie|1234567890/)
+      return true
+    },
+  )
+  assert.match(describeSheinConversionError(SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN), /não permitiu identificar o produto/i)
+  assert.match(describeSheinConversionError(SHEIN_CONVERSION_ERROR.RESOLUTION_TRANSIENT), /consultar.*agora/i)
+  assert.match(describeSheinConversionError(SHEIN_CONVERSION_ERROR.UNKNOWN), /não foi possível converter/i)
+})
+
+test('oneLink opaco ambíguo falha sem URL publicável', async () => {
+  const start = 'https://onelink.shein.com/50/ambiguous'
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=x&link=y'
+  const html = '<a href="https://m.shein.com/a-p-111111.html"></a><a href="https://br.shein.com/b-p-222222.html"></a>'
+  const fetchImpl = async url => htmlResponse(url === start ? `<input id="url" value="${opaque}">` : html, url)
+  await assert.rejects(convert(start, { tag: '1234567890' }, { fetchImpl }), err => {
+    assert.equal(err.code, SHEIN_CONVERSION_ERROR.OPAQUE_PRODUCT_UNPROVEN)
+    assert.equal('url' in err, false)
+    return true
+  })
+})
+
+test('prova opaca limpa rastros case-insensitive antes de publicar', async () => {
+  const start = 'https://onelink.shein.com/50/mixed-case'
+  const opaque = 'https://api-shein.shein.com/h5/sharejump/appjump?shc=x&link=y'
+  const product = 'https://m.shein.com/br/ark/default?goods_id=333333&SHC=x&LiNk=y&OneLink=z&REQUESTID=r&BehaviorID=b&UtM_Source=u'
+  const fetchImpl = async url => htmlResponse(
+    url === start ? `<input id="url" value="${opaque}">` : `<link rel="canonical" href="${product}">`,
+    url,
+  )
+  const result = await convert(start, { tag: '1234567890' }, { fetchImpl })
+  assert.equal(new URL(result.url).searchParams.get('goods_id'), '333333')
+  for (const key of new URL(result.url).searchParams.keys()) {
+    assert.doesNotMatch(key, /^(?:shc|link|onelink|requestid|behaviorid|utm_)/i)
+  }
 })

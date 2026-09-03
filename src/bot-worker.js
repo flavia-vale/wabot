@@ -16,8 +16,10 @@ import { dirname } from 'path'
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
+import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { buildInlineThumbnail } from './core/inlineThumbnail.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { shouldUseOriginPhotoFallback } from './core/previewImageFallbackPolicy.js'
 import { resolveLinkKind } from './converters/linkKind.js'
@@ -36,7 +38,7 @@ import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
-import { describeMissingCredentials, validateCredentialData } from './credentialHealth.js'
+import { validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
@@ -1746,7 +1748,11 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // O banner já nasce em 720x720 (bem acima de 500px) — mesma fonte para
     // os dois campos.
     const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
-    jpegThumbnail = banner
+    // O banner nasce em 720x720: grande demais para o campo embutido, que e' o
+    // que o WhatsApp desenha ANTES de baixar. A versao cheia continua sendo a
+    // fonte do upload em alta; so a miniatura embutida passa pelo gerador
+    // comum (core/inlineThumbnail.js).
+    jpegThumbnail = banner ? await buildInlineThumbnail(banner).catch(() => banner) : undefined
     hqSourceBuffer = banner
     if (banner) marcarFonte('banner')
   } else if (primary?.platform) {
@@ -3634,12 +3640,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         logger.info({ platform, url }, 'Link detectado')
         const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
         if (!credentialValidation.configured) {
+          const issue = buildConversionIssue({ platform, credentialValidation })
           await recordConversionIssue({
             platform,
             url,
             jid,
             text,
-            reason: describeMissingCredentials(credentialValidation),
+            reason: issue.reason,
           })
           return null
         }
@@ -3678,6 +3685,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               reason: err.message,
               errorMsg: err.conversionLogErrorMsg,
               status: err.conversionLogStatus,
+            })
+            return null
+          }
+          const classifiedIssue = buildConversionIssue({ platform, credentialValidation, error: err })
+          if (classifiedIssue?.kind === 'classified_conversion') {
+            await recordConversionIssue({
+              platform,
+              url,
+              jid,
+              text,
+              reason: classifiedIssue.reason,
+              errorMsg: classifiedIssue.errorMsg,
             })
             return null
           }

@@ -3,6 +3,7 @@ import { extractShopeeIds, resolveShopeeShortLink as resolveShopeeShortLinkShare
 import { resolveToCleanProductUrl, fetchFeaturedSocialImage, resolveSocialShareUrl, buildMlPictureUrl } from './mercadolivre.js'
 import { fetchMercadoLivreApiImageId } from './productInfoScraper.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
+import { buildInlineThumbnail } from '../core/inlineThumbnail.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
 
 const OG_IMAGE_RE = [
@@ -627,17 +628,15 @@ export async function normalizeImageForWhatsApp(buf, opts = {}) {
     }
 
     // jpegThumbnail é o que o WA exibe de cara em link previews e
-    // imageMessages enquanto a mídia full-res é carregada. 200x200 q=60
-    // estourava ao ser renderizado em cards grandes (~800px no retina).
-    // 500x500 q=80 cabe folgado no campo protobuf (~50-80KB) e mantém
-    // a foto nítida desde o primeiro frame. (O thumbnail não é mutado —
+    // imageMessages enquanto a mídia full-res é carregada — e é a ÚNICA coisa
+    // que aparece para quem está com download automático de mídia desligado.
+    // 200x200 q=60 estourava ao ser renderizado em cards grandes (~800px no
+    // retina), daí o histórico de 500x500 q=80. O tamanho passou a ser
+    // resolvido por `resolveInlineThumbnailSpec` (core/inlineThumbnailPolicy.js,
+    // default = os mesmos 500/80) para poder ser reduzido por env sem redeploy
+    // — ver o RCA no topo daquele módulo. (O thumbnail não é mutado —
     // anti-fingerprint sempre incidiu só sobre a imagem principal.)
-    const thumbnail = await sharp(buf, { failOn: 'none' })
-      .rotate()
-      .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true })
-      .sharpen({ sigma: 0.5 })
-      .jpeg({ quality: 80, mozjpeg: true })
-      .toBuffer()
+    const thumbnail = await buildInlineThumbnail(buf)
 
     // width/height do buffer FINAL (pós-resize/crop) precisam ir explícitos no
     // payload de envio: como já fornecemos jpegThumbnail pronto, o Baileys
