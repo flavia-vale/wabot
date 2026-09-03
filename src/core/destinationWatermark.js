@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { buildInlineThumbnail } from './inlineThumbnail.js'
 
 // 'center' é o padrão do produto (2026-08-29): a marca fica no meio da foto,
 // com 50% de transparência, para identificar a oferta sem esconder o produto e
@@ -249,11 +250,10 @@ export async function renderDestinationWatermark(input, rawConfig, options = {})
   const { data: main, info: mainInfo } = mainResult
 
   // A miniatura nasce da imagem principal ja marcada para nunca divergir no WhatsApp.
-  const thumbnail = await sharp(main)
-    .resize({ width: 500, height: 500, fit: 'inside', withoutEnlargement: true })
-    .sharpen({ sigma: 0.5 })
-    .jpeg({ quality: 80, mozjpeg: true })
-    .toBuffer()
+  // Tamanho pelo mesmo gerador dos outros caminhos (core/inlineThumbnail.js):
+  // a miniatura embutida e' o que aparece para quem esta com download
+  // automatico de midia desligado, e ela nao pode ficar grande so aqui.
+  const thumbnail = await buildInlineThumbnail(main)
 
   return {
     main,

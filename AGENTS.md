@@ -3212,6 +3212,74 @@ de já ter a foto". Lembre da armadilha do ML: o muro anti-robô vem com **statu
 `bot-supervisor` não for reiniciado, os avisos novos não aparecem no log (ver
 seção "código novo não carregado pelos bots").
 
+## "As imagens só aparecem se clicar" (RCA 2026-09-03 — não regredir)
+
+Cliente (`samaraoliveiraasam@gmail.com`) mandou dois prints: um card de Shopee
+com a área da foto preta e uma oferta com bloco chapado e botão `74 kB`. Nem a
+dona do produto nem as outras clientes viam isso.
+
+**O envio dela é idêntico ao das outras.** Medido em produção, 3 dias, mesma
+janela:
+
+| Conta | `card_loja` | `foto` | `card_origem` | `Foto (repasse)` |
+|---|---:|---:|---:|---:|
+| samara | 184 | 133 | 17 | **0** |
+| dona do produto | 725 | 1213 | 0 | **0** |
+
+Zero `relay` nas duas mata a hipótese de mídia repassada sem miniatura própria.
+A configuração também não separa: as duas têm destino em `preview_watermark`.
+
+**O que sobra é o APARELHO de quem olha.** O robô é um aparelho conectado: os
+bytes da foto nunca passaram pelo celular dela, que precisa baixá-los do
+servidor do WhatsApp. Com *Download automático de mídia* desligado, tudo que o
+robô manda vira bloco com botão — e os dois prints são da tela de QUEM ENVIA
+(mensagem à direita, com ✓), não de um membro do grupo. **Antes de procurar
+defeito neste relato, pergunte se algum MEMBRO do grupo viu o mesmo.**
+
+**O agravante é nosso, e é o que faz parecer defeito:** nos prints não existe a
+prévia borrada atrás do botão. Quem desenha essa prévia é a `jpegThumbnail`
+embutida no proto — a única coisa que o WhatsApp mostra ANTES de baixar. Medido:
+
+| | foto texturizada | foto de catálogo |
+|---|---:|---:|
+| nossa miniatura (500px q80) | 57.056 B | 3.239 B |
+| 160px q65 | 6.853 B | 788 B |
+| padrão do WhatsApp/Baileys (32px q50, `extractImageThumb(file, 32)`) | 392 B | 384 B |
+
+Na pior foto somos ~145× o padrão. **NÃO está provado que o cliente recusa a
+miniatura por tamanho** — não repetir isso como fato. O que está provado é o
+quadro acima: mesmo caminho de envio nas duas contas, e nenhuma prévia borrada
+nos prints. Encolher é a única alavanca nossa nesse ponto.
+
+Por isso entrou como interruptor de rollout, no mesmo padrão de
+`COUPON_BRAND_CARD_ENABLED` / `PREVIEW_CARD_HIDE_STORE_TITLE`:
+
+- `INLINE_THUMBNAIL_MAX_PX` — **ausente = 500px q80, byte a byte o
+  comportamento histórico**. `160` é o valor a validar. Fora da faixa é
+  grampeado em [32, 500]; valor inválido cai no histórico (`.env` mal
+  preenchido nunca pode deixar a oferta sem miniatura).
+- Decisão pura em `src/core/inlineThumbnailPolicy.js`; geração em
+  `src/core/inlineThumbnail.js` (`buildInlineThumbnail`), **ponto único** dos
+  três caminhos que alimentam o campo: foto normalizada
+  (`normalizeImageForWhatsApp`), foto com marca (`renderDestinationWatermark`) e
+  banner de cupom (que nascia em 720px e ia inteiro para o campo embutido).
+- O card **não perde nitidez de forma permanente**: a versão em alta continua
+  subindo em `highQualityThumbnail`. O custo é um instante de borrão; o ganho é
+  existir prévia para quem hoje vê bloco chapado.
+
+**Validação obrigatória antes de virar padrão** (é o gate desta mudança): em
+staging, `INLINE_THUMBNAIL_MAX_PX=160`, mandar oferta real e conferir num
+celular com *Download automático de mídia* **desligado** que a prévia borrada
+aparece sem tocar — nos dois formatos (card e foto). Só então promover o
+default. Aplicar a env exige `pm2 delete` + `start` (pegadinha #1) **e**, em
+modo `remote`, `pm2 restart bot-supervisor` para os workers carregarem o código
+(reconecta TODAS as sessões — anunciar antes).
+
+**Não regredir:** não voltar a gerar miniatura de 500px fora de
+`buildInlineThumbnail` (teste estrutural falha); não mandar o banner de cupom
+cheio para o campo embutido. Teste:
+`test/inline-thumbnail-policy.test.js`.
+
 ## Voltar ao CARD DE PREVIEW CLICÁVEL: as duas travas e como caíram (2026-08-21)
 
 Os dois formatos de oferta **não são a mesma coisa para a cliente**:

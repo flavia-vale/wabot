@@ -19,6 +19,7 @@ import { convertLink } from './converters/index.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { buildInlineThumbnail } from './core/inlineThumbnail.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { shouldUseOriginPhotoFallback } from './core/previewImageFallbackPolicy.js'
 import { resolveLinkKind } from './converters/linkKind.js'
@@ -1747,7 +1748,11 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // O banner já nasce em 720x720 (bem acima de 500px) — mesma fonte para
     // os dois campos.
     const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
-    jpegThumbnail = banner
+    // O banner nasce em 720x720: grande demais para o campo embutido, que e' o
+    // que o WhatsApp desenha ANTES de baixar. A versao cheia continua sendo a
+    // fonte do upload em alta; so a miniatura embutida passa pelo gerador
+    // comum (core/inlineThumbnail.js).
+    jpegThumbnail = banner ? await buildInlineThumbnail(banner).catch(() => banner) : undefined
     hqSourceBuffer = banner
     if (banner) marcarFonte('banner')
   } else if (primary?.platform) {
