@@ -290,6 +290,57 @@ espelha grupos
 
 ---
 
+## RELATÓRIO 5 — Cloudflare: carga no servidor (a partir de 09/2026)
+
+**O que é:** quanto o site está sendo pedido, e quanto disso o NOSSO servidor
+precisa atender. É a única fonte que liga o crescimento do marketing ao custo de
+infraestrutura — e o site divide a mesma VPS com os robôs das clientes.
+
+**Não substitui o Relatório 1.** "Visitante único" da Cloudflare conta robô,
+monitoramento, visita direta e retorno; "clique" do Search Console conta só quem
+veio de um resultado do Google. Foram 7.996 visitantes contra 177 cliques na
+mesma janela — escalas diferentes porque medem coisas diferentes. **Nunca
+comparar um número com o outro.**
+
+### Passos (5 minutos)
+
+1. Painel da Cloudflare → domínio `espelhagrupos.com.br` → **Analytics &
+   Logs → Traffic** (o overview).
+2. Período: **últimos 30 dias**.
+3. Baixar o CSV de cada um destes cinco gráficos (botão de download no canto de
+   cada card):
+   - **Unique visitors**
+   - **Total requests**
+   - **Total data served**
+   - **Percent cached**
+   - **Data cached**
+4. **Security → Bots** (ou "Requests by bot class"): baixar ou anotar a divisão
+   entre robô e pessoa. ⚠️ **Este é o que faltou na primeira coleta** — sem ele
+   não dá para provar que a subida de requisições é rastreamento, só inferir.
+5. Salvar os CSVs em `docs/marketing/dados/cloudflare-<AAAA-MM-DD>/`.
+
+### As três derivadas (nenhuma vem pronta no painel)
+
+| Derivada | Conta | O que significa |
+|---|---|---|
+| **Requisições ao origin** | `requisições × (1 − cache%)` | A carga real na VPS. É o número que conversa com a política de memória. |
+| **Requisições por visitante** | `requisições ÷ visitantes` | Sobe sem os visitantes subirem = rastreamento (robô de busca/IA varrendo). Sobem juntos = gente navegando mais. **Cair de repente com o site no ar = robô parou de vir** — conferir robots.txt e Cloudflare na hora. |
+| **KB por requisição** | `dados servidos ÷ requisições` | Estável em ~3-5 KB. Subida súbita = página nova pesada ou mídia sem otimização. |
+
+### Baseline para comparar (30 dias até 02/09/2026)
+
+| Métrica | Valor |
+|---|---:|
+| Cache (média ponderada) | **28,9%** |
+| Requisições por visitante | **64** (era 16 em 04/08) |
+| Requisições/dia no origin | **21,7 mil** (era 3,5 mil em 04/08) |
+| KB por requisição | **3,9** |
+
+Análise completa da primeira rodada:
+`docs/marketing/CLOUDFLARE_TRAFEGO_2026-09-03.md`.
+
+---
+
 ## RELATÓRIO 4 — Referrals de IA (a partir de 08/2026)
 
 **O que é:** quanta gente chegou ao site depois de ler uma resposta do ChatGPT,

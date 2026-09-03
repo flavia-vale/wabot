@@ -3902,8 +3902,8 @@ Console)** do passo a passo de
 baseline acima — principalmente **consultas distintas** e as páginas com muita
 impressão e pouco clique. Rodar junto o relatório de **Cobertura/Indexação** e
 os dois diagnósticos próprios (`scripts/diag-origem-cadastros.mjs` e
-`scripts/diag-paginas-seo.mjs`, 30 dias). Atualizar esta seção e a data do
-cabeçalho.
+`scripts/diag-paginas-seo.mjs`, 30 dias) e o **Relatório 5 (Cloudflare)**, que
+mede a carga no servidor. Atualizar esta seção e a data do cabeçalho.
 
 **Não refazer Planejador e Trends todo mês.** Os dois medem volume de mercado,
 que não muda em semanas, e as decisões que dependem deles já estão congeladas
@@ -3911,6 +3911,40 @@ que não muda em semanas, e as decisões que dependem deles já estão congelada
 relatórios: **a cada ~3 meses** (próxima em outubro/2026). O Relatório 4
 (referrals de IA) não precisa mais de coleta manual —
 `scripts/diag-origem-cadastros.mjs` já produz.
+
+**Carga no servidor (Relatório 5, baseline 2026-09-03).** Cinco séries do
+overview da Cloudflare — visitantes únicos, requisições, dados servidos, % em
+cache e dados em cache. **Elas não medem SEO**: medem quanto o site é pedido e
+quanto disso a nossa VPS precisa atender. Servem para ligar o crescimento de
+marketing ao custo de infraestrutura, e a VPS é a MESMA que roda os robôs das
+clientes.
+
+Baseline (30 dias até 02/09): **requisições cresceram 5,05x enquanto os
+visitantes cresceram 1,27x** — de 16 para **64 requisições por visitante**. Isso
+é assinatura de RASTREAMENTO (robô de busca/IA varrendo o site), não de mais
+gente chegando, e bate com o calendário do IndexNow + desbloqueio do robots.txt.
+⚠️ É **inferência, não medição**: o overview não separa robô de pessoa — o
+relatório que confirma é **Security → Bots**, que ficou faltando na primeira
+coleta e precisa entrar na próxima.
+
+**O número acionável é o cache: 28,9% de média ponderada**, ou seja **255 mil
+requisições/mês batendo no origin** (6,26x mais que em 04/08). A causa é
+conhecida: não há `Cache-Control` para as páginas e **a Cloudflare não guarda
+HTML por padrão** — só arquivo estático. Subir o cache para 80% levaria o origin
+a ~72 mil/mês; é capacidade de graça, sem trocar de servidor.
+
+⚠️ **Cache de HTML tem risco de segurança e não é "só ligar":** guardar página
+sem separar público de privado serviria **o painel de uma cliente para outra
+pessoa**. Qualquer regra precisa valer só para as rotas públicas de marketing e
+**nunca** tocar `/api/*`, `/painel/*`, `/admin/*` ou `/login`. Enquanto não for
+desenhado e validado em staging, o número é diagnóstico, não ação.
+
+⚠️ **Nunca comparar "visitante único" da Cloudflare com "clique" do Search
+Console** — 7.996 contra 177 na mesma janela, porque contam coisas diferentes
+(a Cloudflare inclui robô, monitoramento, visita direta e retorno). É a mesma
+regra que proíbe misturar o painel-resumo com a aba "Países". Análise:
+`docs/marketing/CLOUDFLARE_TRAFEGO_2026-09-03.md`; CSVs em
+`docs/marketing/dados/cloudflare-2026-09-03/`.
 
 **Referrals de IA (Relatório 4, baseline zera em 2026-08-04).** O site grava a
 origem de toda visita externa no evento `referral_visit` (`AnalyticsEvent`),
