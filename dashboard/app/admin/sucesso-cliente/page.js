@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import { PayingTag } from '@/components/PayingTag'
 
 const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
@@ -268,7 +269,7 @@ export default function CustomerSuccessPage() {
                   const phone = normalizePhone(user.contactPhone)
                   return (
                     <tr key={user.id}>
-                      <td className="px-3 py-3"><p className="font-bold text-gray-900">{user.email}</p><p className="text-xs text-gray-500">Plano: {user.plan} · WA: {user.waSession?.status || '—'}</p></td>
+                      <td className="px-3 py-3"><p className="flex flex-wrap items-center gap-2 font-bold text-gray-900">{user.email}<PayingTag status={user.payingStatus} compact /></p><p className="text-xs text-gray-500">Plano: {user.plan} · WA: {user.waSession?.status || '—'}</p></td>
                       <td className="px-3 py-3 text-xs">{user.contactPhone || 'Sem celular'}</td>
                       <td className="px-3 py-3 text-xs text-gray-600">{formatDate(user.createdAt)}</td>
                       <td className="px-3 py-3 text-xs">{(user.contactReasons || []).map(item => <span key={item} className="mb-1 mr-1 inline-block rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-700">{REASON_LABELS[item] || item}</span>)}</td>

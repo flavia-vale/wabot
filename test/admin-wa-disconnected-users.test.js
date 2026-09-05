@@ -28,10 +28,18 @@ const baseUser = {
   _count: { payments: 1, credentials: 1, messageLogs: 3 },
 }
 
-function makeService({ users = [baseUser], successCount = 2, sanitizeUser = user => user } = {}) {
+function makeService({ users = [baseUser], successCount = 2, sanitizeUser = user => user, pagamentosAprovados = ['u1'] } = {}) {
   const db = {
     user: {
       findMany: async () => users,
+    },
+    // A tag "Pagante" e o "pagante em risco" saem daqui — pagamento APROVADO,
+    // nunca do campo `plan` (liberação manual de acesso também o preenche).
+    payment: {
+      groupBy: async () => pagamentosAprovados.map(userId => ({ userId, _count: { _all: 1 } })),
+    },
+    waConnectionEvent: {
+      findMany: async () => [],
     },
     messageLog: {
       groupBy: async args => {
@@ -69,6 +77,10 @@ test('admin lista clientes com WhatsApp desconectado que já tiveram sucesso e m
   assert.equal(result.users[0].email, 'cliente@example.com')
   assert.equal(result.users[0].successCount, 2)
   assert.equal(result.users[0].priorityLabel, 'Pagante em risco')
+  assert.equal(result.users[0].payingStatus, 'pagante')
+  // POR QUE caiu, em frase — o painel mostrava só o código cru do WhatsApp.
+  assert.ok(result.users[0].disconnectReason?.label)
+  assert.doesNotMatch(result.users[0].disconnectReason.label, /\d/)
   assert.match(result.users[0].whatsappContactUrl, /^https:\/\/wa\.me\/5511999999999\?text=/)
 })
 
@@ -122,4 +134,15 @@ test('admin listUsers aceita filtro explícito de WhatsApp off', async () => {
     { waSession: { is: null } },
     { waSession: { is: { status: { not: 'connected' } } } },
   ])
+})
+
+test('plano pago sem pagamento aprovado não vira pagante', async () => {
+  // Acesso liberado na mão escreve `plan`, mas ninguém pagou: pintar de verde
+  // aqui faria a operação tratar cortesia como cliente pagante.
+  const service = makeService({ pagamentosAprovados: [] })
+  const result = await service.listWaDisconnectedUsers({ query: { minSuccess: '1' }, adminRole: 'owner' })
+
+  assert.equal(result.users[0].payingStatus, 'nunca_pagou')
+  assert.equal(result.summary.paidAtRisk, 0)
+  assert.notEqual(result.users[0].priorityLabel, 'Pagante em risco')
 })

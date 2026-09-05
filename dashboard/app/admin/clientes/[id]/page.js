@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import { PayingTag } from '@/components/PayingTag'
 
 const asArray = (value) => (Array.isArray(value) ? value : [])
 
@@ -341,7 +342,10 @@ export default function AdminClienteHistoricoPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Histórico do cliente</p>
-            <h1 className="text-2xl font-black text-slate-900">{history.cadastro?.name || history.cadastro?.email}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-black text-slate-900">{history.cadastro?.name || history.cadastro?.email}</h1>
+              <PayingTag status={history.paying?.status} />
+            </div>
             <p className="text-sm text-slate-500">{history.cadastro?.email} · {history.cadastro?.contactPhone || 'sem celular'}</p>
           </div>
           <Link href="/admin/clientes" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar à lista</Link>

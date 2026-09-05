@@ -8,6 +8,7 @@
 // detalhe): a linha do tempo só recebe MARCOS. Envio individual nunca vira um
 // evento próprio — vira agregado diário; quedas de WhatsApp idem.
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
+import { resolvePayingStatus } from './payingStatus.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -462,6 +463,14 @@ export function buildCustomerHistory({
 
   return {
     id: user?.id ?? null,
+    // Tag "Pagante" do cabeçalho. Fica FORA de `headline` de propósito: o
+    // cabeçalho tem seis números e só seis (teste falha se virar sete) — isto
+    // é etiqueta, não número.
+    paying: resolvePayingStatus({
+      everPaid: Number(financeiro.paidCount ?? 0) > 0,
+      accessExpiresAt: user?.accessExpiresAt ?? null,
+      now: new Date(now).getTime(),
+    }),
     // Os seis números do cabeçalho. Mais que isso vira parede.
     headline: {
       situacao: cadastro.status,

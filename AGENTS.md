@@ -378,6 +378,59 @@ Telefone segue mascarado por papel (`sanitizeUser`/`canSeePhone`) e as duas
 rotas exigem `support:read` e gravam `AdminAuditLog`. Testes:
 `test/admin-customer-history.test.js`.
 
+## Tag "Pagante" e leitura da aba Início do admin (2026-09-05)
+
+Duas queixas da dona do produto na mesma conversa: (1) nenhuma tabela de
+cliente dizia quem já tinha pago, então toda priorização passava por abrir o
+histórico um a um; (2) a aba Início virou parede — número sem explicação, card
+sem drill-down e tabela de trabalho de atendimento no meio do painel de
+decisão.
+
+| Peça | Onde |
+|---|---|
+| Regra da tag (PURA, sem banco) | `src/domain/admin/payingStatus.js` |
+| Carregador em lote de quem já pagou | `src/domain/admin/payingLoader.js` |
+| "Por que caiu", em linguagem leiga (PURO) | `src/domain/admin/disconnectReason.js` |
+| Etiqueta na tela | `dashboard/components/PayingTag.js` |
+| Balão "?" dos cards | `dashboard/components/HelpDot.js` |
+| Texto de cada card | `dashboard/lib/admin/cardHelp.js` |
+
+**Não regredir:**
+
+- **A tag sai de PAGAMENTO APROVADO, nunca do campo `plan`.** Liberação manual
+  de acesso e trial também escrevem `plan` — usá-lo pintaria de verde quem
+  nunca pagou, que é o oposto do que a tag serve para dizer. `paidAtRisk` e o
+  rótulo "Pagante em risco" seguem a mesma fonte.
+- **Dois estados, não um.** `pagante` (pagou e o acesso está em dia, verde com
+  cifrão) e `ex_pagante` (pagou e venceu, cinza). Quem venceu é conversa de
+  recuperação; jogá-lo no mesmo balde de quem nunca pagou apagaria isso.
+- **Verde já significa "online" no admin**, então a diferença da tag está no
+  cifrão e no texto, não só na cor.
+- **A tag é decidida no backend**, nunca por cada tela — senão duas tabelas
+  passam a discordar sobre quem é pagante. Aplicada em: gestão de clientes,
+  WhatsApp desconectado, fila de sucesso, aba Online, `/admin/clientes` e o
+  drill-down do cliente.
+- **A tabela de desconectados diz POR QUE caiu**, em frase — antes mostrava só
+  o código cru do WhatsApp, que junta num balde casos com ações opostas (QR
+  novo, chip recusado, plano vencido, ninguém tentando). A dona da desconexão
+  continua vindo de `resolveSessionOwner`; `describeDisconnectReason` só
+  traduz. **Acesso vencido e "ela desligou" vêm ANTES do código**: o código
+  gravado é o da queda anterior e contaria história errada.
+- **Todo card do Início tem drill-down e "?".** Card de gente abre a lista de
+  quem são (aba Online já filtrada); card técnico abre o detalhe do que está
+  pendente, montado do que a página **já carregou** — nenhuma chamada nova.
+- **A fila proativa saiu da aba Início** e continua na aba Sucesso do Cliente:
+  o Início é "o que precisa de decisão agora", a fila é trabalho de atendimento.
+- **Linguagem leiga nos cards e nos motivos**: "trabalhos parados" em vez de
+  DLQ, "falhas de site" em vez de 5xx, "ela desconectou pelo celular" em vez de
+  401. Teste falha se jargão voltar.
+- **Custo:** só leitura. Uma consulta agregada a mais por lista
+  (`payment.groupBy`) e uma de eventos de conexão na tabela de desconectados —
+  nunca uma por linha. **Nenhum processo novo, zero impacto de RAM.**
+
+Testes: `test/admin-paying-tag.test.js`, `test/admin-painel-inicio.test.js`,
+`test/admin-wa-disconnected-users.test.js`.
+
 ## ADMIN > Funil (`/admin/funil`, 2026-09-02)
 
 Responde "onde as pessoas param entre criar a conta e pagar" sem ninguém
