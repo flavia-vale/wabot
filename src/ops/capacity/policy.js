@@ -34,7 +34,11 @@ export function evaluateCapacity(input = {}) {
   const sessions = Math.max(connectedSessions ?? 0, productionWorkers ?? 0)
   const reasons = []
   if (connectedSessions != null && productionWorkers != null && connectedSessions !== productionWorkers) reasons.push({ code: 'SESSION_WORKER_DIVERGENCE', severity: 'attention', message: 'Sessões e workers divergem; foi usado o maior contador.' })
-  if (!memoryTotalMb || (connectedSessions == null && productionWorkers == null)) return { state: 'insufficient_data', sessions: connectedSessions ?? productionWorkers, safeLimit: null, estimatedMaximum: null, headroomSessions: null, headroomMemoryMb: null, bottleneck: null, recommendation: 'Aguardando uma coleta completa para calcular a capacidade.', reserveMb: null, sessionCostMb: null, policyVersion: CAPACITY_POLICY_VERSION, reasons: [...reasons, { code: 'MISSING_ESSENTIAL_DATA', severity: 'unknown', message: 'Memória total ou contagem de sessões indisponível.' }] }
+  // Mesmo sem saber a memória total (ou a contagem de sessões) ainda sabemos a
+  // saúde de CPU, disco e swap. Devolver a decisão sem `resourceHealth` fazia a
+  // tela mostrar "Sem medição" para tudo, escondendo o que estava medido.
+  const partialHealth = evaluateResourceHealth(input)
+  if (!memoryTotalMb || (connectedSessions == null && productionWorkers == null)) return { state: 'insufficient_data', sessions: connectedSessions ?? productionWorkers, safeLimit: null, estimatedMaximum: null, headroomSessions: null, headroomMemoryMb: null, bottleneck: partialHealth.bottleneck, resourceHealth: partialHealth.resources, recommendation: 'Aguardando uma coleta completa para calcular a capacidade.', reserveMb: null, sessionCostMb: null, policyVersion: CAPACITY_POLICY_VERSION, reasons: [...reasons, { code: 'MISSING_ESSENTIAL_DATA', severity: 'unknown', message: 'Memória total ou contagem de sessões indisponível.' }] }
   const reserveMb = Math.ceil(Math.max(memoryTotalMb * 0.2, 1536, finite(input.fixedBaseP95Mb) ?? 0))
   const observedP95 = finite(input.workerRssP95Mb)
   const p95Reliable = (finite(input.workerHistoryDays) ?? 0) >= 14 && observedP95 != null
@@ -51,7 +55,7 @@ export function evaluateCapacity(input = {}) {
   else if (ratio < 0.15) state = 'plan_now'
   else if (ratio <= 0.3) state = 'attention'
   const recommendation = state === 'healthy' ? 'Nenhuma mudança necessária; continue acompanhando o crescimento.' : `Planejar aumento de capacidade antes de ${safeLimit} sessões.`
-  const health = evaluateResourceHealth(input)
+  const health = partialHealth
   if (health.bottleneck && health.resources[health.bottleneck].state === 'critical') state = 'critical'
   else if (state === 'healthy' && health.bottleneck) state = 'attention'
   return { state, sessions, safeLimit, estimatedMaximum, headroomSessions, headroomMemoryMb, bottleneck: health.bottleneck || 'memory', resourceHealth: health.resources, recommendation, reserveMb, sessionCostMb, policyVersion: CAPACITY_POLICY_VERSION, reasons }

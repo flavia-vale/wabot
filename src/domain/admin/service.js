@@ -2,6 +2,30 @@ import { buildLongExpiredWhere, wantsLongExpired, resolveLongExpiredDays } from 
 import { planLabel } from './customerHistory.js'
 import { buildActivationFunnel } from './funnel.js'
 import { resolveSignupOrigin } from './signupOrigin.js'
+import { withPayingStatus } from './payingStatus.js'
+import { loadEverPaidUserIds } from './payingLoader.js'
+import { describeDisconnectReason } from './disconnectReason.js'
+import { resolveSessionOwner } from '../../core/sessionOwnership.js'
+
+// Último evento de conexão por cliente, em UMA consulta. Mesmo padrão do
+// `buildAdminOnlineOverview`: é o que separa "o robô está tentando" de
+// "precisa da cliente" e de "ninguém está tentando".
+async function loadLastConnectionEventByUser(db, userIds = [], { since = null } = {}) {
+  const ids = [...new Set((userIds ?? []).filter(Boolean))]
+  if (!db?.waConnectionEvent?.findMany || !ids.length) return new Map()
+  try {
+    const rows = await db.waConnectionEvent.findMany({
+      where: { userId: { in: ids }, ...(since ? { occurredAt: { gte: since } } : {}) },
+      orderBy: { occurredAt: 'asc' },
+      select: { userId: true, type: true, occurredAt: true },
+    })
+    const map = new Map()
+    for (const row of rows) map.set(row.userId, row)
+    return map
+  } catch {
+    return new Map()
+  }
+}
 
 const ORIGIN_SOURCE_LABELS = {
   direct: 'Direto',
@@ -146,11 +170,12 @@ export function createAdminService({
     ])
 
     const userIds = users.map(user => user.id)
-    const [successMap, successMap24h, errorMap, lastMessageMap] = await Promise.all([
+    const [successMap, successMap24h, errorMap, lastMessageMap, everPaidIds] = await Promise.all([
       getLogCountMap({ status: 'success', userIds }),
       getLogCountMap({ status: 'success', since: since24h, userIds }),
       getLogCountMap({ status: 'error', since: since24h, userIds }),
       getLogActivityMap({ userIds }),
+      loadEverPaidUserIds(db, userIds),
     ])
 
     // Origem do cliente (coluna "Origem" na gestão): quem NÃO veio por afiliado
@@ -199,7 +224,7 @@ export function createAdminService({
         const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
         const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
         const origin = buildUserOrigin(user, { referrerMap, signupMetaMap })
-        return sanitizeUser({
+        return sanitizeUser(withPayingStatus({
           ...user,
           origin,
           groups: undefined,
@@ -214,7 +239,7 @@ export function createAdminService({
           credentialHealth: summarizeCredentialHealth(user.credentials),
           credentials: undefined,
           riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running: userRunning }),
-        }, adminRole)
+        }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), adminRole)
       }),
     }
   }
@@ -272,7 +297,7 @@ export function createAdminService({
     })
 
     const userIds = users.map(user => user.id)
-    const [successMap, errorMap, lastMessageMap, lastSuccessRows, runningList] = await Promise.all([
+    const [successMap, errorMap, lastMessageMap, lastSuccessRows, runningList, everPaidIds, lastEventByUser] = await Promise.all([
       getLogCountMap({ status: 'success', userIds }),
       getLogCountMap({ status: 'error', since: since24h, userIds }),
       getLogActivityMap({ userIds }),
@@ -282,6 +307,10 @@ export function createAdminService({
         _max: { sentAt: true },
       }) : [],
       listRunningBots(),
+      loadEverPaidUserIds(db, userIds),
+      // Janela de 7 dias: quem está nesta tabela caiu faz tempo, e o evento
+      // que explica a queda pode ser bem anterior às 48h usadas na aba Online.
+      loadLastConnectionEventByUser(db, userIds, { since: addDays(now, -7) }),
     ])
     const running = new Set(runningList)
     const lastSuccessMap = new Map(lastSuccessRows.map(row => [row.userId, row._max.sentAt]))
@@ -302,12 +331,36 @@ export function createAdminService({
         const noContactWeight = user.lastSupportContactAt ? 0 : 15
         const configPenalty = (!groupCounts.monitor || !groupCounts.post || !user._count?.credentials) ? 10 : 0
         const priorityScore = Math.max(0, Math.min(100, planWeight + successWeight + noContactWeight + (errorCount24h >= 5 ? 10 : 0) - configPenalty))
-        const priorityLabel = user.plan === 'pro' || user.plan === 'basic'
+        // Pagante em risco é quem JÁ PAGOU, não quem tem o campo `plan`
+        // preenchido — liberação manual de acesso também escreve ali.
+        const priorityLabel = everPaidIds.has(user.id)
           ? 'Pagante em risco'
           : successCount > 0 ? 'Trial ativado' : 'Onboarding'
         const rawContactPhone = user.contactPhone || user.waSession?.phone || ''
-        const row = sanitizeUser({
+        // POR QUE caiu. Sem isso a tabela mostrava só o código cru do
+        // WhatsApp, que junta num balde só casos com ações opostas (QR novo,
+        // chip recusado, plano vencido, ninguém tentando).
+        const ownership = resolveSessionOwner({
+          status: user.waSession?.status ?? 'disconnected',
+          lifecycle: user.waSession?.lifecycle ?? null,
+          lastDisconnectCode: user.waSession?.lastDisconnectCode ?? null,
+          lastEventType: lastEventByUser.get(user.id)?.type ?? null,
+          workerRunning: botRunning,
+          lastHeartbeatAt: user.waSession?.lastHeartbeatAt ?? null,
+          accessExpiresAt: user.accessExpiresAt ?? null,
+          now: now.getTime(),
+        })
+        const disconnectReason = describeDisconnectReason({
+          owner: ownership.owner,
+          hasSession: Boolean(user.waSession),
+          lastDisconnectCode: user.waSession?.lastDisconnectCode ?? null,
+        })
+        const row = sanitizeUser(withPayingStatus({
           ...user,
+          sessionOwner: ownership.owner,
+          sessionOwnerReason: ownership.reason,
+          canAdminRetry: ownership.canAdminRetry,
+          disconnectReason,
           groups: undefined,
           credentials: undefined,
           groupCounts,
@@ -323,9 +376,9 @@ export function createAdminService({
           riskFlags,
           priorityScore,
           priorityLabel,
-          suggestedAction: 'Reconectar WhatsApp e validar sessão',
+          suggestedAction: ownership.canAdminRetry ? 'Reconectar WhatsApp e validar sessão' : disconnectReason.label,
           whatsappContactUrl: null,
-        }, adminRole)
+        }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), adminRole)
         const visiblePhone = row.contactPhone || row.waSession?.phone || ''
         const canUseVisiblePhone = visiblePhone && !String(visiblePhone).includes('*')
         return { ...row, whatsappContactUrl: canUseVisiblePhone ? buildWhatsAppContactUrl(rawContactPhone, user.name) : null }
@@ -335,7 +388,7 @@ export function createAdminService({
 
     const total = enriched.length
     const paginated = enriched.slice(skip, skip + limit)
-    const paidAtRisk = enriched.filter(user => ['basic', 'pro'].includes(user.plan)).length
+    const paidAtRisk = enriched.filter(user => user.everPaid).length
     const estimatedMrrAtRisk = enriched.reduce((sum, user) => sum + (user.plan === 'pro' ? 69 : user.plan === 'basic' ? 39 : 0), 0)
     const noRecentSupportContact = enriched.filter(user => !user.lastSupportContactAt).length
 
@@ -480,7 +533,9 @@ export function createAdminService({
       customers: users.map(user => {
         const payment = paymentMap.get(user.id) ?? null
         const subscription = subscriptionMap.get(user.id) ?? null
-        return sanitizeUser({
+        // `paymentMap` já é só pagamento APROVADO — é a mesma fonte da tag.
+        const everPaid = Number(payment?._count?._all ?? 0) > 0
+        return sanitizeUser(withPayingStatus({
           id: user.id,
           name: user.name,
           email: user.email,
@@ -510,7 +565,7 @@ export function createAdminService({
               cancelledAt: subscription.cancelledAt,
             }
             : null,
-        }, adminRole)
+        }, { everPaid, now: now.getTime() }), adminRole)
       }),
     }
   }
