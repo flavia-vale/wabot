@@ -447,6 +447,31 @@ proposital que pagamento conferido na mão conte como pagante**.
 Testes: `test/admin-paying-tag.test.js`, `test/admin-painel-inicio.test.js`,
 `test/admin-wa-disconnected-users.test.js`.
 
+## Balão de ajuda saindo da tela no celular (RCA 2026-09-05 — não regredir)
+
+Os dois balões de ajuda do produto — o "?" dos cards do admin
+(`dashboard/components/HelpDot.js`) e o "i" do histórico da cliente
+(`dashboard/components/Tooltip.js`) — nasciam com **largura fixa** (288px e
+256px) e posição **absoluta a partir do gatilho**. O gatilho fica no canto
+direito do card; numa tela de 375px o balão nascia fora da área visível: dava
+para ver abrir e não dava para ler.
+
+**Ancoragem por CSS não resolve isso.** Abrindo para a direita, estoura no card
+da direita; para a esquerda, estoura no da esquerda; centralizado no gatilho,
+estoura nos dois extremos. Sem medir a tela em JavaScript não existe um lado
+seguro — então os dois passaram a ser **fixos na TELA**: gaveta presa embaixo
+no celular (`fixed inset-x-3 bottom-3`) e, de `sm:` para cima, o
+comportamento de antes (diálogo centralizado no `HelpDot`, balão ancorado no
+`Tooltip`). O título dentro do balão diz de qual card ele fala, então perder a
+ancoragem no celular não perde o contexto.
+
+**Não regredir:** largura fixa (`w-72`, `w-64`) só a partir de `sm:`; no
+celular quem manda são as duas laterais presas à tela. Tabela larga dentro de
+diálogo é o outro jeito de o conteúdo sumir para a direita — `min-w-[...]`
+precisa de `overflow-x-auto` por perto. Teste:
+`test/dialogos-no-celular.test.js` (cobre os dois balões e varre as tabelas do
+admin).
+
 ## Enxugada do admin: capacidade legível, funil em jornada, duas páginas a menos (2026-09-05)
 
 Quatro telas na mesma conversa. O fio comum: número na tela sem dizer se está
