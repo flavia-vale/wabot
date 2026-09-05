@@ -5,11 +5,21 @@ import { readFileSync } from 'node:fs'
 const adminPage = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
 const onlinePage = readFileSync(new URL('../dashboard/app/admin/online/page.js', import.meta.url), 'utf8')
 const customersPage = readFileSync(new URL('../dashboard/app/admin/clientes/page.js', import.meta.url), 'utf8')
-const offersPage = readFileSync(new URL('../dashboard/app/admin/ofertas/page.js', import.meta.url), 'utf8')
 
-test('atalho de ofertas explica que a visão acompanha imagens', () => {
-  assert.match(adminPage, />Ofertas \(imagem\)<\/Link>/)
-  assert.doesNotMatch(adminPage, /Ofertas \(entrega\)/)
+test('a visão de imagem das ofertas vive no Início, não numa página à parte', () => {
+  // A página /admin/ofertas foi removida (2026-09-05): a pergunta "as ofertas
+  // estão saindo com foto?" é de olhar todo dia, e página separada não é aberta.
+  assert.doesNotMatch(adminPage, /href="\/admin\/ofertas"/)
+  assert.match(adminPage, /adminQualidadeEntrega\(48\)/)
+  assert.match(adminPage, /De que jeito as imagens saíram/)
+  assert.match(adminPage, /Envios e imagem por loja/)
+})
+
+test('a página de automações some e o limite passa a ser campo do cliente', () => {
+  assert.doesNotMatch(adminPage, /href="\/admin\/automacoes"/)
+  const customerHistory = readFileSync(new URL('../dashboard/app/admin/clientes/[id]/page.js', import.meta.url), 'utf8')
+  assert.match(customerHistory, /Limite de automações/)
+  assert.match(customerHistory, /adminAutomationQuotaUpdate/)
 })
 
 test('cards removidos não aparecem no início, na aba online nem na página online', () => {
@@ -24,7 +34,8 @@ test('lista de clientes apresenta o vencimento em dias', () => {
   assert.match(customersPage, /formatDaysUntil\(customer\.accessExpiresAt\)/)
 })
 
-test('página de ofertas usa a superfície clara das demais páginas admin', () => {
-  assert.match(offersPage, /min-h-screen bg-slate-50/)
-  assert.doesNotMatch(offersPage, /min-h-screen bg-slate-950/)
+test('a tela de capacidade não tem mais painel de fundo escuro', () => {
+  const decisionCard = readFileSync(new URL('../dashboard/app/admin/capacidade/components/CapacityDecisionCard.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(decisionCard, /bg-slate-950 p-6 text-white/)
+  assert.match(decisionCard, /bg-white/)
 })

@@ -2521,6 +2521,10 @@ export async function adminRoutes(app) {
       select: {
         id: true, name: true, email: true, contactPhone: true, contactPhoneVerifiedAt: true,
         status: true, plan: true, accessExpiresAt: true, sendCount: true, supportStatus: true,
+        // Limite de automações: a página /admin/automacoes existia só para
+        // editar este campo. Virou campo do histórico do cliente (2026-09-05),
+        // onde a pergunta "quantas ela pode ter?" de fato aparece.
+        maxAutomations: true,
         referralCode: true, referredBy: true, affiliateProfileId: true,
         termsAcceptedAt: true, termsVersion: true,
         lastLoginAt: true, lastActivityAt: true, createdAt: true,

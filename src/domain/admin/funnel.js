@@ -20,12 +20,23 @@
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+// A ordem é a JORNADA da cliente, não a ordem em que os dados aparecem no
+// banco (pedido da dona do produto, 2026-09-05): ela conecta o WhatsApp,
+// cadastra a loja, escolhe os grupos, vê a primeira oferta sair e só então
+// paga. Cadastro da loja e escolha dos grupos já eram carregados para explicar
+// POR QUE a pessoa parou — viraram etapas próprias sem nenhuma consulta nova.
+//
+// ⚠️ As etapas não são obrigatórias nesta sequência (dá para escolher grupo
+// antes de cadastrar a loja). O que a torna legível como pipeline é a regra de
+// implicação abaixo: etapa posterior alcançada conta as anteriores.
 export const FUNNEL_STEPS = Object.freeze([
-  { key: 'signups', label: 'Criaram a conta' },
-  { key: 'connected', label: 'Conectaram o WhatsApp' },
-  { key: 'delivered', label: 'Tiveram oferta publicada' },
-  { key: 'checkout', label: 'Começaram o pagamento' },
-  { key: 'paid', label: 'Pagaram' },
+  { key: 'signups', label: 'Criaram a conta', short: 'Criou a conta' },
+  { key: 'connected', label: 'Conectaram o WhatsApp', short: 'Conectou o WhatsApp' },
+  { key: 'store', label: 'Cadastraram a loja', short: 'Cadastrou a loja' },
+  { key: 'groups', label: 'Escolheram os grupos', short: 'Escolheu os grupos' },
+  { key: 'delivered', label: 'Tiveram oferta publicada', short: 'Primeira oferta' },
+  { key: 'checkout', label: 'Começaram o pagamento', short: 'Foi pagar' },
+  { key: 'paid', label: 'Pagaram', short: 'Pagou' },
 ])
 
 function toDate(value) {
@@ -78,13 +89,13 @@ export function buildActivationFunnel({
   attemptedUserIds = new Set(),
   peoplePerReason = 8,
 } = {}) {
-  const totals = { signups: 0, connected: 0, delivered: 0, checkout: 0, paid: 0 }
+  const totals = { signups: 0, connected: 0, store: 0, groups: 0, delivered: 0, checkout: 0, paid: 0 }
   const byWeek = new Map()
   const byOrigin = new Map()
   const timeToPaid = []
   const timeToDelivery = []
 
-  const emptyCounters = () => ({ signups: 0, connected: 0, delivered: 0, checkout: 0, paid: 0 })
+  const emptyCounters = () => ({ signups: 0, connected: 0, store: 0, groups: 0, delivered: 0, checkout: 0, paid: 0 })
   const stallCounts = new Map()
   const stallPeople = new Map()
 
@@ -101,9 +112,16 @@ export function buildActivationFunnel({
     // e quem teve oferta publicada obviamente conectou. Sem isso o funil mostra
     // etapa posterior maior que a anterior quando um sinal antigo se perdeu
     // (retenção de evento, conta migrada), o que só confunde quem lê.
+    const hasStore = credentialUserIds.has(id)
+    const hasGroups = sourceGroupUserIds.has(id) && destGroupUserIds.has(id)
     const reached = {
       signups: true,
       connected: connected || delivered || checkout || paid,
+      // Quem teve oferta publicada obviamente tinha loja e grupos na época —
+      // mesmo que tenha apagado depois. Sem a implicação, o pipeline mostraria
+      // etapa posterior maior que a anterior, que só confunde quem lê.
+      store: hasStore || delivered || paid,
+      groups: hasGroups || delivered || paid,
       delivered: delivered || paid,
       checkout: checkout || paid,
       paid,
@@ -126,7 +144,7 @@ export function buildActivationFunnel({
     const stallReason = classifyStallReason({
       triedPairing: triedPairingUserIds.has(id) || reached.connected,
       connected: reached.connected,
-      hasCredential: credentialUserIds.has(id),
+      hasCredential: hasStore,
       hasSourceGroup: sourceGroupUserIds.has(id),
       hasDestGroup: destGroupUserIds.has(id),
       attempted: attemptedUserIds.has(id) || delivered,
@@ -160,6 +178,8 @@ export function buildActivationFunnel({
     return {
       key: step.key,
       label: step.label,
+      short: step.short,
+      position: index + 1,
       count: totals[step.key],
       pctOfSignups: pct(totals[step.key], totals.signups),
       // Quanto se perde NESTA passagem — é o número que diz onde mexer.
@@ -175,6 +195,8 @@ export function buildActivationFunnel({
   const withRates = (row) => ({
     ...row,
     pctConnected: pct(row.connected, row.signups),
+    pctStore: pct(row.store, row.signups),
+    pctGroups: pct(row.groups, row.signups),
     pctDelivered: pct(row.delivered, row.signups),
     pctPaid: pct(row.paid, row.signups),
   })

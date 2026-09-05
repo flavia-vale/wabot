@@ -431,6 +431,78 @@ decisão.
 Testes: `test/admin-paying-tag.test.js`, `test/admin-painel-inicio.test.js`,
 `test/admin-wa-disconnected-users.test.js`.
 
+## Enxugada do admin: capacidade legível, funil em jornada, duas páginas a menos (2026-09-05)
+
+Quatro telas na mesma conversa. O fio comum: número na tela sem dizer se está
+bem ou mal, e página separada para pergunta que é de olhar todo dia.
+
+### Capacidade (`/admin/capacidade`)
+
+- **RCA: "Diagnóstico traduzido sempre sem medição".** `persistedDecision`
+  (`src/ops/capacity/service.js`) devolvia a decisão gravada **sem
+  `resourceHealth`** — e é ele que pinta RAM/CPU/disco/swap. Resultado: os
+  quatro cartões diziam "Sem medição" com o servidor medido e saudável, num
+  bloco cujo próprio texto avisa que "sem medição nunca significa saudável".
+  A saúde agora é recomposta das medições brutas do snapshot
+  (`evaluateResourceHealth`, puro, sem consulta nova). O retorno antecipado de
+  `evaluateCapacity` (`insufficient_data`) também passou a levá-la: sem saber a
+  memória total ainda sabemos CPU, disco e swap. **Não regredir:** nenhum
+  caminho pode devolver decisão sem `resourceHealth`.
+- **RCA: "Contratado vs utilizado sempre sem medição".** O bloco tinha esse
+  título e mostrava só o inventário da Hetzner — que é **opcional** e vem vazio
+  sem `HCLOUD_READ_TOKEN`. A comparação agora sai das medições do próprio
+  servidor (sempre presentes): RAM, disco, CPU e robôs conectados, cada um com
+  contratado / utilizado / livre. O inventário do provedor virou detalhe
+  recolhido. **Não regredir:** a comparação não pode voltar a depender do token.
+- **Fundo escuro removido** do cartão de decisão: destoava do admin, que é
+  claro, e o que precisa saltar é o estado — trabalho da cor da tarja.
+- **Cards de recurso** agora têm cor por estado (verde/âmbar/vermelho/cinza),
+  barra de uso e um chip com o estado. A barra mostra sempre **quanto está em
+  uso**, nunca o que sobra: duas barras com sentidos opostos na mesma tela é o
+  jeito mais rápido de ler errado.
+- **Gráficos** ganharam veredito em uma frase antes do desenho ("Estamos bem:
+  12 robôs de 18 que cabem"), eixos identificados (valores à esquerda, datas
+  embaixo, unidade nomeada) e, em cada série pequena, a tendência com sinal
+  certo — `goodWhenRising` existe porque subir é bom em "RAM disponível" e ruim
+  em "disco utilizado". Os rótulos ficam em HTML ao redor do SVG, nunca dentro:
+  o desenho usa `preserveAspectRatio="none"` e texto lá dentro sai deformado.
+
+### Funil (`/admin/funil`) — pipeline da jornada
+
+`FUNNEL_STEPS` passou de 5 para **7 etapas**, na ordem em que a cliente vive o
+produto: criou a conta → conectou o WhatsApp → **cadastrou a loja** → **escolheu
+os grupos** → teve oferta publicada → começou o pagamento → pagou. As duas
+etapas novas **não custam consulta nenhuma**: `credentialUserIds`,
+`sourceGroupUserIds` e `destGroupUserIds` já eram carregados para explicar POR
+QUE a pessoa parou. A tela virou colunas lado a lado com a perda entre elas; a
+lista antiga continua acessível, recolhida.
+
+**Não regredir:** a regra de implicação vale para as etapas novas também — quem
+teve oferta publicada conta como tendo loja e grupos, mesmo que tenha apagado
+depois; sem isso o pipeline encolhe para trás e confunde. E as etapas seguem
+**não sendo sequência obrigatória** (dá para escolher grupo antes de cadastrar
+a loja): é a implicação que as torna legíveis em fila.
+
+### Duas páginas a menos
+
+- **`/admin/ofertas` foi removida.** O percentual de ofertas com foto (48h)
+  virou card do Início, e "de que jeito as imagens saíram" + "envios e imagem
+  por loja" viraram blocos logo abaixo. "Onde a foto está se perdendo" continua
+  existindo, recolhido — é o detalhe que só se abre quando o número está ruim.
+  Mesma rota de dados (`GET /api/admin/qualidade-entrega`), só que com janela
+  fixa de 48h.
+- **`/admin/automacoes` foi removida.** Ela existia só para editar um campo
+  (`User.maxAutomations`) numa tabela de toda a base. Virou campo editável na
+  aba **Uso** do histórico do cliente (`/admin/clientes/[id]`), onde a pergunta
+  "quantas automações ela pode ter?" de fato nasce. As rotas
+  `GET/PATCH /api/admin/automation-quota` continuam as mesmas.
+
+**Custo:** uma chamada a mais no Início (qualidade de entrega, já existente),
+nenhum processo novo, **zero impacto de RAM**.
+
+Testes: `test/admin-capacidade-leitura.test.js`, `test/admin-funnel.test.js`,
+`test/admin-painel-inicio.test.js`, `test/admin-panel-visual-adjustments.test.js`.
+
 ## ADMIN > Funil (`/admin/funil`, 2026-09-02)
 
 Responde "onde as pessoas param entre criar a conta e pagar" sem ninguém

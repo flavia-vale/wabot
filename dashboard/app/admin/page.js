@@ -1294,6 +1294,90 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
 // Drill-down dos dois cards técnicos. Não tem pessoas por trás, então o que
 // ele abre é O QUE está pendente — construído do que a página já carregou
 // (nenhuma chamada nova, nenhum processo novo).
+// Como as ofertas estão CHEGANDO no grupo. Era a página /admin/ofertas; virou
+// bloco do Início (2026-09-05) porque a pergunta é de olhar todo dia.
+//
+// "Sucesso" no histórico só quer dizer que o WhatsApp aceitou a mensagem — não
+// que ela chegou bonita. Três incidentes seguidos de imagem foram descobertos
+// pela CLIENTE, e é isso que estes dois blocos existem para antecipar.
+function BarraTipoImagem({ item, total }) {
+  const largura = total > 0 ? Math.max(2, Math.round((item.quantidade / total) * 100)) : 0
+  const ruim = item.kind === 'texto'
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className={`font-bold ${ruim ? 'text-red-700' : 'text-slate-700'}`}>{item.rotulo}</span>
+        <span className="text-slate-500">{formatNumber(item.quantidade)} · {largura}%</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${ruim ? 'bg-red-500' : 'bg-cyan-500'}`} style={{ width: `${largura}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function bytesCurto(value) {
+  if (!Number.isFinite(value)) return '—'
+  if (value >= 1024) return `${Math.round(value / 1024)} KB`
+  return `${value} B`
+}
+
+function OfertasImagemSecoes({ entrega }) {
+  const resumo = entrega?.resumo
+  if (!resumo) return null
+  const totalTipos = asArray(resumo.porTipo).reduce((acc, item) => acc + item.quantidade, 0)
+  const perdas = asArray(entrega?.origensComPerda)
+  return (
+    <>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">De que jeito as imagens saíram</h2>
+          <p className="mt-1 text-xs text-gray-500">Últimas 48h. &quot;Só texto&quot; é o que a cliente enxerga como oferta sem imagem.</p>
+          <div className="mt-5 space-y-3">
+            {asArray(resumo.porTipo).map(item => <BarraTipoImagem key={item.kind} item={item} total={totalTipos} />)}
+            {!asArray(resumo.porTipo).length && <p className="text-sm text-gray-400">Nenhuma oferta publicada nas últimas 48h.</p>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">Envios e imagem por loja</h2>
+          <p className="mt-1 text-xs text-gray-500">Loja que parou de entregar a foto do produto aparece aqui antes de virar reclamação.</p>
+          <div className="mt-5 space-y-2">
+            {asArray(resumo.porLoja).map(loja => (
+              <div key={loja.loja} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                <span className="font-bold text-slate-900">{loja.loja}</span>
+                <span className="text-slate-500">
+                  {formatNumber(loja.total)} envios · {formatNumber(loja.comImagem)} com imagem
+                  {loja.perderamImagem > 0 && <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 font-bold text-red-700">{formatNumber(loja.perderamImagem)} perderam a foto</span>}
+                </span>
+              </div>
+            ))}
+            {!asArray(resumo.porLoja).length && <p className="text-sm text-gray-400">Sem envios por loja nas últimas 48h.</p>}
+          </div>
+        </div>
+      </section>
+
+      {/* A lista de quem perdeu foto continua existindo, recolhida: é o detalhe
+          que só se abre quando o número lá em cima está ruim. */}
+      <SecondarySection title="Onde a foto está se perdendo" eyebrow={`${formatNumber(resumo.perderamImagem ?? 0)} ofertas saíram só com texto tendo foto na origem`}>
+        <div className="space-y-2">
+          {!perdas.length && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">Nenhuma oferta perdeu a foto nesta janela.</p>}
+          {perdas.map(perda => (
+            <div key={`${perda.userId}-${perda.sourceGroup}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-bold text-slate-900">{perda.cliente}</span>
+                <span className="rounded-full bg-red-100 px-3 py-1 text-[11px] font-black text-red-700">{formatNumber(perda.quantidade)} sem foto</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Origem: {perda.origemNome || '(grupo não cadastrado)'} · {perda.sourceGroup}</p>
+              <p className="mt-1 text-xs text-slate-500">Lojas: {asArray(perda.lojas).join(', ') || '—'} · imagem na origem entre {bytesCurto(perda.menorBytes)} e {bytesCurto(perda.maiorBytes)}</p>
+            </div>
+          ))}
+        </div>
+      </SecondarySection>
+    </>
+  )
+}
+
 function TechDrilldownModal({ kind, observability, metrics, onClose }) {
   if (!kind) return null
   const erros5xx = asArray(metrics?.recentErrors)
@@ -1493,6 +1577,11 @@ export default function AdminPage() {
   // Drill-down dos cards técnicos ('infra' | 'filas' | null). Não busca nada
   // novo: mostra o detalhe do que a página já carregou.
   const [techDrilldown, setTechDrilldown] = useState(null)
+  // Qualidade de imagem das ofertas (48h). Era a página /admin/ofertas; virou
+  // card no Início a pedido da dona do produto (2026-09-05) — a pergunta "as
+  // ofertas estão saindo com foto?" é de olhar todo dia, e página separada é
+  // página que ninguém abre.
+  const [entrega, setEntrega] = useState(null)
 
   async function manualPaymentSaved() {
     const [financeData, paymentsData, subscriptionsData] = await Promise.all([
@@ -1625,7 +1714,7 @@ export default function AdminPage() {
   async function loadAdminData(nextRisk = risk, nextSearch = search, nextVerVencidas = verVencidasAntigas) {
     if (accessDenied) return
     setError('')
-    const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData] = await Promise.all([
+    const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData, entregaData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20, incluirVencidos: nextVerVencidas ? 1 : '' }),
@@ -1645,6 +1734,7 @@ export default function AdminPage() {
       api.adminOnline({ limit: 120, incluirVencidos: nextVerVencidas ? 1 : '' }).catch(() => null),
       api.adminLpContent().catch(() => null),
       api.adminLegalTerms().catch(() => null),
+      api.adminQualidadeEntrega(48).catch(() => null),
     ])
     setAdmin(adminData)
     setOverview(overviewData)
@@ -1667,6 +1757,7 @@ export default function AdminPage() {
     setPlans(lpContentData?.plans ?? [])
     setTutorial(lpContentData?.tutorial ?? null)
     setTerms(termsData?.terms ?? null)
+    setEntrega(entregaData)
   }
 
   useEffect(() => {
@@ -1696,11 +1787,12 @@ export default function AdminPage() {
           api.adminOnline({ limit: 120 }).catch(() => null),
           api.adminLpContent().catch(() => null),
           api.adminLegalTerms().catch(() => null),
+          api.adminQualidadeEntrega(48).catch(() => null),
         ])
       })
       .then((result) => {
         if (!active || !result) return
-        const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData] = result
+        const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData, entregaData] = result
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
@@ -1722,6 +1814,7 @@ export default function AdminPage() {
         setPlans(lpContentData?.plans ?? [])
         setTutorial(lpContentData?.tutorial ?? null)
         setTerms(termsData?.terms ?? null)
+        setEntrega(entregaData)
       })
       .catch((err) => {
         if (!active) return
@@ -1971,9 +2064,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-2">
               <Link href="/admin/clientes" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Clientes</Link>
               <Link href="/admin/funil" className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Funil</Link>
-              <Link href="/admin/automacoes" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Automações</Link>
               <Link href="/admin/emails" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">E-mails</Link>
-              <Link href="/admin/ofertas" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Ofertas (imagem)</Link>
               <button onClick={() => applyFilters()} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Atualizar</button>
               <Link href="/painel" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Voltar</Link>
             </div>
@@ -2048,7 +2139,7 @@ export default function AdminPage() {
                 onClick={() => openScenario('desync')}
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <CommandCard
                 label="Online agora"
                 value={online?.summary?.onlineUsers ?? '—'}
@@ -2064,6 +2155,13 @@ export default function AdminPage() {
                 helper="Acima de 10 = crítico"
                 help={CARD_HELP.erros24h}
                 onClick={() => openErrorsDrilldown()}
+              />
+              <CommandCard
+                label="Ofertas com foto (48h)"
+                value={entrega?.resumo?.percentualComImagem == null ? '—' : `${entrega.resumo.percentualComImagem}%`}
+                tone={entrega?.resumo?.percentualComImagem == null ? 'ok' : entrega.resumo.percentualComImagem >= 95 ? 'ok' : entrega.resumo.percentualComImagem >= 80 ? 'warning' : 'critical'}
+                helper={`${formatNumber(entrega?.resumo?.comImagem ?? 0)} de ${formatNumber(entrega?.resumo?.comRegistro ?? 0)} ofertas`}
+                help={CARD_HELP.ofertasComFoto}
               />
               <CommandCard
                 label="Banco / site"
@@ -2193,6 +2291,12 @@ export default function AdminPage() {
               </div>
             </div>
           </section>
+        )}
+
+        {tab === 'inicio' && entrega && (
+          <SectionErrorBoundary label="Imagem das ofertas">
+            <OfertasImagemSecoes entrega={entrega} />
+          </SectionErrorBoundary>
         )}
 
         {tab === 'inicio' && (

@@ -313,6 +313,8 @@ export function buildUsoBlock({
     sendCountTotal: Number(user?.sendCount) || 0,
     ...counters,
     automations,
+    // Teto de automações da conta — editável pelo admin na própria tela.
+    maxAutomations: Number.isFinite(Number(user?.maxAutomations)) ? Number(user.maxAutomations) : null,
     lastMessageAt: iso(lastMessageAt),
     byDay: summarizeSendsByDay(logs, { days: 30, now }),
   }

@@ -1,6 +1,6 @@
 export const CAPACITY_SERVICE_VERSION = 'admin-capacity-v1';
 import { buildCapacityResponse, sanitizeCapacityComponent, sanitizeCapacitySource } from './contract.js'
-import { evaluateCapacity } from './policy.js'
+import { evaluateCapacity, evaluateResourceHealth } from './policy.js'
 import { createCapacityRepository } from './repository.js'
 import { forecastCapacity } from './forecast.js'
 import { calculateCapacityScenario } from './scenario.js'
@@ -111,7 +111,13 @@ export function createCapacityService({ db, repository = db ? createCapacityRepo
 
 function persistedDecision(raw) {
   let reasons = []; try { reasons = JSON.parse(raw.decisionReasonsJson || '[]') } catch {}
-  if (raw.policyVersion && raw.safeSessionLimit != null) return { policyVersion: raw.policyVersion, state: raw.operationalState, safeLimit: raw.safeSessionLimit, estimatedMaximum: raw.estimatedMaximum, reserveMb: raw.reserveMb, sessionCostMb: raw.sessionCostMb, fixedBaseBudgetMb: raw.fixedBaseBudgetMb, headroomSessions: raw.headroomSessions, headroomMemoryMb: raw.headroomMemoryMb, bottleneck: raw.bottleneck, sessions: [raw.connectedSessions, raw.productionWorkers].filter(Number.isFinite).length ? Math.max(...[raw.connectedSessions, raw.productionWorkers].filter(Number.isFinite)) : null, reasons }
+  // RCA 2026-09-05: a decisão persistida voltava SEM `resourceHealth`, e era ele
+  // que a tela usa para pintar RAM/CPU/disco/swap. Resultado: o bloco
+  // "Diagnóstico traduzido" dizia "Sem medição" nos quatro cartões mesmo com o
+  // servidor medido e saudável — e "sem medição" nunca significa saudável, então
+  // a leitura ficava permanentemente inútil. A saúde é derivada das medições
+  // brutas do próprio snapshot (função pura, sem consulta nova).
+  if (raw.policyVersion && raw.safeSessionLimit != null) return { policyVersion: raw.policyVersion, state: raw.operationalState, resourceHealth: evaluateResourceHealth(raw).resources, safeLimit: raw.safeSessionLimit, estimatedMaximum: raw.estimatedMaximum, reserveMb: raw.reserveMb, sessionCostMb: raw.sessionCostMb, fixedBaseBudgetMb: raw.fixedBaseBudgetMb, headroomSessions: raw.headroomSessions, headroomMemoryMb: raw.headroomMemoryMb, bottleneck: raw.bottleneck, sessions: [raw.connectedSessions, raw.productionWorkers].filter(Number.isFinite).length ? Math.max(...[raw.connectedSessions, raw.productionWorkers].filter(Number.isFinite)) : null, reasons }
   return evaluateCapacity(raw)
 }
 

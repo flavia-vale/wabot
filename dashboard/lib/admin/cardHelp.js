@@ -56,6 +56,12 @@ export const CARD_HELP = {
     impacto: 'Banco fora do ar derruba tudo: painel, login e envios. Falhas de site aparecem para a cliente como página de erro.',
     comoResolver: 'Clique para ver as falhas recentes. Se aparecer "Revisar", é caso técnico — não adianta falar com cliente.',
   },
+  ofertasComFoto: {
+    title: 'Ofertas com foto (48h)',
+    oQueE: 'De cada 100 ofertas publicadas nos últimos dois dias, quantas chegaram ao grupo com imagem em vez de só texto.',
+    impacto: 'Oferta sem foto quase não é clicada. Quando esse número cai, a cliente percebe antes de nós e abre chamado dizendo que o robô parou de funcionar direito.',
+    comoResolver: 'Veja logo abaixo de que jeito as ofertas saíram e o resultado por loja: loja que parou de entregar a foto aparece isolada ali.',
+  },
   filasDlq: {
     title: 'Trabalhos parados',
     oQueE: 'Envios e avisos de pagamento que o sistema tentou processar, não conseguiu, e deixou de lado esperando decisão.',

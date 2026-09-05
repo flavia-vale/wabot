@@ -59,3 +59,19 @@ test('a tag de pagante aparece nas tabelas de cliente do painel', () => {
   const ocorrencias = painel.match(/<PayingTag/g) ?? []
   assert.ok(ocorrencias.length >= 5, `esperava a tag em todas as listas de cliente, achei ${ocorrencias.length}`)
 })
+
+// --- Funil em pipeline (2026-09-05) ---
+
+const funilPage = readFileSync(new URL('../dashboard/app/admin/funil/page.js', import.meta.url), 'utf8')
+
+test('o funil é desenhado como jornada em colunas, não como lista de blocos', () => {
+  assert.match(funilPage, /function Pipeline/)
+  assert.match(funilPage, /A jornada, passo a passo/)
+  // Colunas lado a lado com a perda entre elas.
+  assert.match(funilPage, /lostFromPrevious/)
+  assert.match(funilPage, /Passo \{step\.position/)
+})
+
+test('a lista antiga continua acessível, recolhida', () => {
+  assert.match(funilPage, /Ver a mesma coisa em lista/)
+})
