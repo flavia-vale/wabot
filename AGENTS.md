@@ -428,6 +428,22 @@ decisão.
   (`payment.groupBy`) e uma de eventos de conexão na tabela de desconectados —
   nunca uma por linha. **Nenhum processo novo, zero impacto de RAM.**
 
+- **A tag acompanha a cliente também nos DIÁLOGOS**, não só nas listas:
+  "Registrar contato de CS" e "Ajustar plano e expiração" em
+  `/admin/sucesso-cliente`. O segundo é o que mais importa — mexer no plano de
+  quem já pagou não é a mesma coisa que liberar acesso de cortesia.
+
+⚠️ **"A tag não aparece" quase nunca é defeito de tela.** Staging tem **banco
+próprio** (`staging.db`) e token de sandbox do Mercado Pago: se nenhuma conta de
+lá concluiu pagamento, **não existe pagante em staging** e a tag não aparece em
+tela nenhuma — corretamente. `node scripts/diag-tag-pagante.mjs` (read-only,
+roda no diretório do ambiente) separa os dois casos: mostra os pagamentos por
+situação, quantas contas têm `approved` e como cada uma sairia na tela. Para ver
+a tag funcionando em staging, registre um pagamento pelo próprio admin
+(Financeiro → "Registrar pagamento por fora") — esse caminho grava
+`status='approved'` com `provider='manual'`, igual ao Mercado Pago, e **é
+proposital que pagamento conferido na mão conte como pagante**.
+
 Testes: `test/admin-paying-tag.test.js`, `test/admin-painel-inicio.test.js`,
 `test/admin-wa-disconnected-users.test.js`.
 
