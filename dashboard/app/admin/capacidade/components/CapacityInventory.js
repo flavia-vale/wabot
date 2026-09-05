@@ -48,6 +48,12 @@ export default function CapacityInventory({ host, resources = {}, counts = {}, d
   const checked = host.checkedAt ? new Date(host.checkedAt).toLocaleString('pt-BR') : 'não conferido'
   const cost = inventory.cost
   const temInventario = Boolean(servers.length || totals.servers || cost)
+  // Frescor do inventário do provedor. Estava no cabeçalho antes de o bloco ser
+  // reformulado; continua importando porque falha externa PRESERVA o último
+  // inventário — sem esse aviso, dado velho passa por atual.
+  const idadeInventario = host.inventoryAgeSeconds == null
+    ? 'idade desconhecida'
+    : `${Math.floor(host.inventoryAgeSeconds / 3600)}h de idade`
 
   const ramTotal = finite(resources.memory?.totalMb) ?? finite(host.memoryTotalMb)
   const ramLivre = finite(resources.memory?.availableMb)
@@ -87,6 +93,14 @@ export default function CapacityInventory({ host, resources = {}, counts = {}, d
           não existe — e isso não pode mais fazer o bloco inteiro parecer vazio. */}
       <details className="mt-4">
         <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-cyan-800">Detalhe da conta no provedor {temInventario ? '' : '(não conectada)'}</summary>
+        {temInventario && (
+          <p className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className={`rounded-full px-3 py-1 font-black ${host.inventoryStale ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}>
+              {host.inventoryStale ? 'Fonte desatualizada' : 'Fonte atualizada'}
+            </span>
+            <span>{host.source || 'baseline'} · conferido em {checked} · {idadeInventario}</span>
+          </p>
+        )}
         {temInventario ? (
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
             <div><dt className="font-bold text-slate-500">Recursos</dt><dd className="tabular-nums text-slate-900">{totals.servers ?? servers.length} servidores · {totals.volumes ?? inventory.volumes?.length ?? '—'} volumes · {totals.primaryIps ?? inventory.primaryIps?.length ?? '—'} IPs</dd></div>
@@ -94,7 +108,7 @@ export default function CapacityInventory({ host, resources = {}, counts = {}, d
             <div><dt className="font-bold text-slate-500">Custo</dt><dd className="text-slate-900">{cost == null ? 'não informado' : `€ ${cost.monthlyEur}/mês`}</dd></div>
           </dl>
         ) : (
-          <p className="text-sm text-slate-600">A leitura da conta do provedor não está conectada (é opcional). Os números acima vêm da medição do próprio servidor e não dependem dela; o que falta aqui é só a lista de recursos contratados e o custo.</p>
+          <p className="text-sm text-slate-600">A leitura da conta do provedor não está conectada (é opcional) — o baseline local preservado continua alimentando os números acima, que vêm da medição do próprio servidor. O que falta aqui é só a lista de recursos contratados e o custo.</p>
         )}
       </details>
     </section>

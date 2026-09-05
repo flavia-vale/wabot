@@ -503,6 +503,13 @@ nenhum processo novo, **zero impacto de RAM**.
 Testes: `test/admin-capacidade-leitura.test.js`, `test/admin-funnel.test.js`,
 `test/admin-painel-inicio.test.js`, `test/admin-panel-visual-adjustments.test.js`.
 
+⚠️ **`test/admin-capacity-page.test.js` PULA sem as dependências do dashboard** —
+ele renderiza os componentes de verdade e, sem `npm ci --prefix dashboard`,
+`npm test` marca os 13 casos como `# SKIP` e passa. A CI instala, então lá eles
+rodam: mexeu em `dashboard/app/admin/capacidade/`, rode
+`npm ci --prefix dashboard` antes de concluir que está verde. Foi assim que
+quatro guardas de texto dessa tela só apareceram no gate da PR.
+
 ## ADMIN > Funil (`/admin/funil`, 2026-09-02)
 
 Responde "onde as pessoas param entre criar a conta e pagar" sem ninguém
