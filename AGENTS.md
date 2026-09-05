@@ -378,6 +378,138 @@ Telefone segue mascarado por papel (`sanitizeUser`/`canSeePhone`) e as duas
 rotas exigem `support:read` e gravam `AdminAuditLog`. Testes:
 `test/admin-customer-history.test.js`.
 
+## Tag "Pagante" e leitura da aba Início do admin (2026-09-05)
+
+Duas queixas da dona do produto na mesma conversa: (1) nenhuma tabela de
+cliente dizia quem já tinha pago, então toda priorização passava por abrir o
+histórico um a um; (2) a aba Início virou parede — número sem explicação, card
+sem drill-down e tabela de trabalho de atendimento no meio do painel de
+decisão.
+
+| Peça | Onde |
+|---|---|
+| Regra da tag (PURA, sem banco) | `src/domain/admin/payingStatus.js` |
+| Carregador em lote de quem já pagou | `src/domain/admin/payingLoader.js` |
+| "Por que caiu", em linguagem leiga (PURO) | `src/domain/admin/disconnectReason.js` |
+| Etiqueta na tela | `dashboard/components/PayingTag.js` |
+| Balão "?" dos cards | `dashboard/components/HelpDot.js` |
+| Texto de cada card | `dashboard/lib/admin/cardHelp.js` |
+
+**Não regredir:**
+
+- **A tag sai de PAGAMENTO APROVADO, nunca do campo `plan`.** Liberação manual
+  de acesso e trial também escrevem `plan` — usá-lo pintaria de verde quem
+  nunca pagou, que é o oposto do que a tag serve para dizer. `paidAtRisk` e o
+  rótulo "Pagante em risco" seguem a mesma fonte.
+- **Dois estados, não um.** `pagante` (pagou e o acesso está em dia, verde com
+  cifrão) e `ex_pagante` (pagou e venceu, cinza). Quem venceu é conversa de
+  recuperação; jogá-lo no mesmo balde de quem nunca pagou apagaria isso.
+- **Verde já significa "online" no admin**, então a diferença da tag está no
+  cifrão e no texto, não só na cor.
+- **A tag é decidida no backend**, nunca por cada tela — senão duas tabelas
+  passam a discordar sobre quem é pagante. Aplicada em: gestão de clientes,
+  WhatsApp desconectado, fila de sucesso, aba Online, `/admin/clientes` e o
+  drill-down do cliente.
+- **A tabela de desconectados diz POR QUE caiu**, em frase — antes mostrava só
+  o código cru do WhatsApp, que junta num balde casos com ações opostas (QR
+  novo, chip recusado, plano vencido, ninguém tentando). A dona da desconexão
+  continua vindo de `resolveSessionOwner`; `describeDisconnectReason` só
+  traduz. **Acesso vencido e "ela desligou" vêm ANTES do código**: o código
+  gravado é o da queda anterior e contaria história errada.
+- **Todo card do Início tem drill-down e "?".** Card de gente abre a lista de
+  quem são (aba Online já filtrada); card técnico abre o detalhe do que está
+  pendente, montado do que a página **já carregou** — nenhuma chamada nova.
+- **A fila proativa saiu da aba Início** e continua na aba Sucesso do Cliente:
+  o Início é "o que precisa de decisão agora", a fila é trabalho de atendimento.
+- **Linguagem leiga nos cards e nos motivos**: "trabalhos parados" em vez de
+  DLQ, "falhas de site" em vez de 5xx, "ela desconectou pelo celular" em vez de
+  401. Teste falha se jargão voltar.
+- **Custo:** só leitura. Uma consulta agregada a mais por lista
+  (`payment.groupBy`) e uma de eventos de conexão na tabela de desconectados —
+  nunca uma por linha. **Nenhum processo novo, zero impacto de RAM.**
+
+Testes: `test/admin-paying-tag.test.js`, `test/admin-painel-inicio.test.js`,
+`test/admin-wa-disconnected-users.test.js`.
+
+## Enxugada do admin: capacidade legível, funil em jornada, duas páginas a menos (2026-09-05)
+
+Quatro telas na mesma conversa. O fio comum: número na tela sem dizer se está
+bem ou mal, e página separada para pergunta que é de olhar todo dia.
+
+### Capacidade (`/admin/capacidade`)
+
+- **RCA: "Diagnóstico traduzido sempre sem medição".** `persistedDecision`
+  (`src/ops/capacity/service.js`) devolvia a decisão gravada **sem
+  `resourceHealth`** — e é ele que pinta RAM/CPU/disco/swap. Resultado: os
+  quatro cartões diziam "Sem medição" com o servidor medido e saudável, num
+  bloco cujo próprio texto avisa que "sem medição nunca significa saudável".
+  A saúde agora é recomposta das medições brutas do snapshot
+  (`evaluateResourceHealth`, puro, sem consulta nova). O retorno antecipado de
+  `evaluateCapacity` (`insufficient_data`) também passou a levá-la: sem saber a
+  memória total ainda sabemos CPU, disco e swap. **Não regredir:** nenhum
+  caminho pode devolver decisão sem `resourceHealth`.
+- **RCA: "Contratado vs utilizado sempre sem medição".** O bloco tinha esse
+  título e mostrava só o inventário da Hetzner — que é **opcional** e vem vazio
+  sem `HCLOUD_READ_TOKEN`. A comparação agora sai das medições do próprio
+  servidor (sempre presentes): RAM, disco, CPU e robôs conectados, cada um com
+  contratado / utilizado / livre. O inventário do provedor virou detalhe
+  recolhido. **Não regredir:** a comparação não pode voltar a depender do token.
+- **Fundo escuro removido** do cartão de decisão: destoava do admin, que é
+  claro, e o que precisa saltar é o estado — trabalho da cor da tarja.
+- **Cards de recurso** agora têm cor por estado (verde/âmbar/vermelho/cinza),
+  barra de uso e um chip com o estado. A barra mostra sempre **quanto está em
+  uso**, nunca o que sobra: duas barras com sentidos opostos na mesma tela é o
+  jeito mais rápido de ler errado.
+- **Gráficos** ganharam veredito em uma frase antes do desenho ("Estamos bem:
+  12 robôs de 18 que cabem"), eixos identificados (valores à esquerda, datas
+  embaixo, unidade nomeada) e, em cada série pequena, a tendência com sinal
+  certo — `goodWhenRising` existe porque subir é bom em "RAM disponível" e ruim
+  em "disco utilizado". Os rótulos ficam em HTML ao redor do SVG, nunca dentro:
+  o desenho usa `preserveAspectRatio="none"` e texto lá dentro sai deformado.
+
+### Funil (`/admin/funil`) — pipeline da jornada
+
+`FUNNEL_STEPS` passou de 5 para **7 etapas**, na ordem em que a cliente vive o
+produto: criou a conta → conectou o WhatsApp → **cadastrou a loja** → **escolheu
+os grupos** → teve oferta publicada → começou o pagamento → pagou. As duas
+etapas novas **não custam consulta nenhuma**: `credentialUserIds`,
+`sourceGroupUserIds` e `destGroupUserIds` já eram carregados para explicar POR
+QUE a pessoa parou. A tela virou colunas lado a lado com a perda entre elas; a
+lista antiga continua acessível, recolhida.
+
+**Não regredir:** a regra de implicação vale para as etapas novas também — quem
+teve oferta publicada conta como tendo loja e grupos, mesmo que tenha apagado
+depois; sem isso o pipeline encolhe para trás e confunde. E as etapas seguem
+**não sendo sequência obrigatória** (dá para escolher grupo antes de cadastrar
+a loja): é a implicação que as torna legíveis em fila.
+
+### Duas páginas a menos
+
+- **`/admin/ofertas` foi removida.** O percentual de ofertas com foto (48h)
+  virou card do Início, e "de que jeito as imagens saíram" + "envios e imagem
+  por loja" viraram blocos logo abaixo. "Onde a foto está se perdendo" continua
+  existindo, recolhido — é o detalhe que só se abre quando o número está ruim.
+  Mesma rota de dados (`GET /api/admin/qualidade-entrega`), só que com janela
+  fixa de 48h.
+- **`/admin/automacoes` foi removida.** Ela existia só para editar um campo
+  (`User.maxAutomations`) numa tabela de toda a base. Virou campo editável na
+  aba **Uso** do histórico do cliente (`/admin/clientes/[id]`), onde a pergunta
+  "quantas automações ela pode ter?" de fato nasce. As rotas
+  `GET/PATCH /api/admin/automation-quota` continuam as mesmas.
+
+**Custo:** uma chamada a mais no Início (qualidade de entrega, já existente),
+nenhum processo novo, **zero impacto de RAM**.
+
+Testes: `test/admin-capacidade-leitura.test.js`, `test/admin-funnel.test.js`,
+`test/admin-painel-inicio.test.js`, `test/admin-panel-visual-adjustments.test.js`.
+
+⚠️ **`test/admin-capacity-page.test.js` PULA sem as dependências do dashboard** —
+ele renderiza os componentes de verdade e, sem `npm ci --prefix dashboard`,
+`npm test` marca os 13 casos como `# SKIP` e passa. A CI instala, então lá eles
+rodam: mexeu em `dashboard/app/admin/capacidade/`, rode
+`npm ci --prefix dashboard` antes de concluir que está verde. Foi assim que
+quatro guardas de texto dessa tela só apareceram no gate da PR.
+
 ## ADMIN > Funil (`/admin/funil`, 2026-09-02)
 
 Responde "onde as pessoas param entre criar a conta e pagar" sem ninguém

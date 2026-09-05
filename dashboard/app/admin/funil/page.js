@@ -43,6 +43,57 @@ function Barra({ pct }) {
   )
 }
 
+// Cor da coluna pela retenção NAQUELA passagem — é o que responde "esse passo
+// está bem ou mal" sem precisar comparar número com número.
+function tomDaEtapa(pctOfPrevious, primeira) {
+  if (primeira) return 'border-slate-300 bg-white'
+  const valor = Number(pctOfPrevious ?? 0)
+  if (valor >= 80) return 'border-emerald-300 bg-emerald-50'
+  if (valor >= 50) return 'border-amber-300 bg-amber-50'
+  return 'border-red-300 bg-red-50'
+}
+
+// Pipeline da jornada: uma coluna por passo, na ordem em que a cliente vive o
+// produto, e entre as colunas quantas pessoas ficaram para trás.
+//
+// A dona do produto pediu isso no lugar da lista empilhada (2026-09-05): em
+// blocos, dava para ver os números e não a jornada. A altura da barra é a
+// porcentagem de quem chegou ali, então a queda aparece como desenho.
+function Pipeline({ steps }) {
+  const total = Number(steps[0]?.count ?? 0)
+  return (
+    <div className="overflow-x-auto pb-2">
+      <ol className="flex min-w-max items-stretch gap-1">
+        {steps.map((step, index) => (
+          <li key={step.key} className="flex items-stretch gap-1">
+            {index > 0 && (
+              <div className="flex w-14 shrink-0 flex-col items-center justify-center gap-1" aria-hidden="true">
+                <span className="text-lg leading-none text-slate-300">→</span>
+                {step.lostFromPrevious > 0 && (
+                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700" title={`${step.lostFromPrevious} não passaram daqui`}>−{step.lostFromPrevious}</span>
+                )}
+              </div>
+            )}
+            <div className={`flex w-40 flex-col rounded-2xl border-2 p-3 ${tomDaEtapa(step.pctOfPrevious, index === 0)}`}>
+              <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Passo {step.position ?? index + 1}</p>
+              <p className="mt-0.5 text-xs font-black leading-tight text-slate-900">{step.short || step.label}</p>
+              <p className="mt-2 text-2xl font-black tabular-nums text-slate-950">{step.count}</p>
+              <p className="text-[11px] font-bold text-slate-500">{formatPct(step.pctOfSignups)} de {total}</p>
+              {/* Coluna que preenche de baixo para cima: é o desenho do funil. */}
+              <div className="mt-2 flex h-16 items-end rounded-lg bg-white/70 ring-1 ring-black/5">
+                <div className="w-full rounded-lg bg-emerald-500/80" style={{ height: `${Math.max(4, Math.min(100, Number(step.pctOfSignups ?? 0)))}%` }} />
+              </div>
+              {index > 0 && (
+                <p className="mt-2 text-[11px] font-bold text-slate-600">{formatPct(step.pctOfPrevious)} de quem chegou no passo anterior</p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 export default function AdminFunilPage() {
   const [weeks, setWeeks] = useState(8)
   // Mesmo padrão da lista de clientes: o resultado carrega a janela que o
@@ -103,7 +154,11 @@ export default function AdminFunilPage() {
           )}
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-bold text-slate-900">Etapa por etapa</h2>
+            <h2 className="text-sm font-bold text-slate-900">A jornada, passo a passo</h2>
+            <p className="text-xs text-slate-500">Na ordem em que a cliente vive o produto. O número entre as colunas é quanta gente ficou para trás naquela passagem.</p>
+            <div className="mt-4"><Pipeline steps={steps} /></div>
+            <details className="mt-4">
+              <summary className="cursor-pointer py-2 text-xs font-bold text-indigo-700">Ver a mesma coisa em lista</summary>
             <ul className="mt-3 space-y-3">
               {steps.map((step) => (
                 <li key={step.key}>
@@ -122,6 +177,7 @@ export default function AdminFunilPage() {
                 </li>
               ))}
             </ul>
+            </details>
             <p className="mt-4 text-xs text-slate-500">
               “Tiveram oferta publicada” conta só oferta que saiu de verdade. Quem gerou tentativa sem
               cadastrar a etiqueta de afiliada não entra aqui — é justamente quem parece ativo e não é.
@@ -183,6 +239,7 @@ export default function AdminFunilPage() {
                     <th className="py-2">Origem</th>
                     <th className="py-2 text-right">Cadastros</th>
                     <th className="py-2 text-right">Conectaram</th>
+                    <th className="py-2 text-right">Cadastraram a loja</th>
                     <th className="py-2 text-right">Oferta publicada</th>
                     <th className="py-2 text-right">Pagaram</th>
                   </tr>
@@ -193,11 +250,12 @@ export default function AdminFunilPage() {
                       <td className="py-2 font-medium text-slate-800">{linha.origin}</td>
                       <td className="py-2 text-right tabular-nums">{linha.signups}</td>
                       <td className="py-2 text-right tabular-nums text-slate-600">{linha.connected} <span className="text-slate-400">({formatPct(linha.pctConnected)})</span></td>
+                      <td className="py-2 text-right tabular-nums text-slate-600">{linha.store} <span className="text-slate-400">({formatPct(linha.pctStore)})</span></td>
                       <td className="py-2 text-right tabular-nums text-slate-600">{linha.delivered} <span className="text-slate-400">({formatPct(linha.pctDelivered)})</span></td>
                       <td className="py-2 text-right tabular-nums font-semibold text-emerald-700">{linha.paid} <span className="font-normal text-slate-400">({formatPct(linha.pctPaid)})</span></td>
                     </tr>
                   ))}
-                  {!origens.length && <tr><td className="py-3 text-slate-500" colSpan={5}>Nenhum cadastro no período.</td></tr>}
+                  {!origens.length && <tr><td className="py-3 text-slate-500" colSpan={6}>Nenhum cadastro no período.</td></tr>}
                 </tbody>
               </table>
             </div>

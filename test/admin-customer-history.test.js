@@ -162,7 +162,9 @@ test('linha do tempo: só marcos — envio isolado nunca vira linha', () => {
 test('cabeçalho tem exatamente 6 números — mais que isso vira parede', () => {
   const historico = buildCustomerHistory({ user: baseUser, now: NOW })
   assert.equal(Object.keys(historico.headline).length, 6)
-  assert.deepEqual(Object.keys(historico).sort(), ['cadastro', 'financeiro', 'headline', 'id', 'tecnico', 'timeline', 'uso'])
+  // `paying` é a tag "Pagante" (2026-09-05) e fica FORA do cabeçalho de
+  // propósito: é etiqueta, não número — o limite de 6 acima segue valendo.
+  assert.deepEqual(Object.keys(historico).sort(), ['cadastro', 'financeiro', 'headline', 'id', 'paying', 'tecnico', 'timeline', 'uso'])
 })
 
 test('limite da linha do tempo é respeitado', () => {

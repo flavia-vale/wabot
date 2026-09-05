@@ -26,7 +26,7 @@ test('funil conta pessoas por etapa e mostra onde se perde mais', () => {
     firstPaymentByUserId: new Map([['a', new Date('2026-09-02')]]),
   })
 
-  assert.deepEqual(funil.totals, { signups: 4, connected: 2, delivered: 1, checkout: 1, paid: 1 })
+  assert.deepEqual(funil.totals, { signups: 4, connected: 2, store: 1, groups: 1, delivered: 1, checkout: 1, paid: 1 })
   const conectou = funil.steps.find((s) => s.key === 'connected')
   assert.equal(conectou.lostFromPrevious, 2)
   assert.equal(conectou.pctOfSignups, 50)
@@ -43,7 +43,7 @@ test('etapa posterior implica as anteriores — nunca mostra funil crescendo', (
     connectedUserIds: new Set(),
     firstPaymentByUserId: new Map([['a', new Date('2026-09-02')]]),
   })
-  assert.deepEqual(funil.totals, { signups: 1, connected: 1, delivered: 1, checkout: 1, paid: 1 })
+  assert.deepEqual(funil.totals, { signups: 1, connected: 1, store: 1, groups: 1, delivered: 1, checkout: 1, paid: 1 })
   for (let i = 1; i < funil.steps.length; i += 1) {
     assert.ok(funil.steps[i].count <= funil.steps[i - 1].count, 'etapa não pode superar a anterior')
   }
@@ -51,7 +51,7 @@ test('etapa posterior implica as anteriores — nunca mostra funil crescendo', (
 
 test('sem cadastro no período não quebra nem divide por zero', () => {
   const funil = buildActivationFunnel({ users: [] })
-  assert.deepEqual(funil.totals, { signups: 0, connected: 0, delivered: 0, checkout: 0, paid: 0 })
+  assert.deepEqual(funil.totals, { signups: 0, connected: 0, store: 0, groups: 0, delivered: 0, checkout: 0, paid: 0 })
   assert.equal(funil.biggestDrop, null)
   assert.deepEqual(funil.weeks, [])
   assert.deepEqual(funil.origins, [])
@@ -127,7 +127,11 @@ test('as tabelas grandes entram agregadas (nada de uma consulta por cliente)', (
 
 test('o módulo do funil é puro (não importa banco)', () => {
   assert.ok(!/from '.*db\.js'/.test(funnelSource))
-  assert.equal(FUNNEL_STEPS.length, 5)
+  // Sete etapas desde 2026-09-05: a jornada passou a mostrar o cadastro da loja
+  // e a escolha dos grupos, que já eram carregados para explicar onde a pessoa
+  // parou. Nenhuma consulta nova entrou por causa disso.
+  assert.equal(FUNNEL_STEPS.length, 7)
+  assert.deepEqual(FUNNEL_STEPS.map((step) => step.key), ['signups', 'connected', 'store', 'groups', 'delivered', 'checkout', 'paid'])
 })
 
 // --- POR QUE parou ---
@@ -262,4 +266,35 @@ test('o script de diagnóstico usa os DOIS sinais de pareamento', () => {
   assert.match(diag, /triedPairing:/)
   assert.match(diag, /connected:/)
   assert.match(diag, /whatsapp_connected/)
+})
+
+test('as duas etapas novas contam loja e grupos, e respeitam a implicação', () => {
+  const funil = buildActivationFunnel({
+    users: [user('a', '2026-09-01'), user('b', '2026-09-01'), user('c', '2026-09-01')],
+    connectedUserIds: new Set(['a', 'b', 'c']),
+    credentialUserIds: new Set(['a', 'b']),
+    sourceGroupUserIds: new Set(['a']),
+    destGroupUserIds: new Set(['a']),
+  })
+  assert.equal(funil.totals.store, 2)
+  // `b` cadastrou a loja e não escolheu os dois lados dos grupos.
+  assert.equal(funil.totals.groups, 1)
+  const grupos = funil.steps.find((s) => s.key === 'groups')
+  assert.equal(grupos.position, 4)
+  assert.equal(grupos.lostFromPrevious, 1)
+})
+
+test('quem teve oferta publicada conta como tendo loja e grupos', () => {
+  // A cliente pode ter apagado a loja depois; o pipeline não pode encolher para
+  // trás por causa disso.
+  const funil = buildActivationFunnel({
+    users: [user('a', '2026-09-01')],
+    connectedUserIds: new Set(['a']),
+    credentialUserIds: new Set(),
+    sourceGroupUserIds: new Set(),
+    destGroupUserIds: new Set(),
+    firstDeliveryByUserId: new Map([['a', new Date('2026-09-02')]]),
+  })
+  assert.equal(funil.totals.store, 1)
+  assert.equal(funil.totals.groups, 1)
 })

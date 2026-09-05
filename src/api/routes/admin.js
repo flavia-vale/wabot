@@ -16,6 +16,9 @@ import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedacti
 import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
+import { withPayingStatus } from '../../domain/admin/payingStatus.js'
+import { loadEverPaidUserIds } from '../../domain/admin/payingLoader.js'
+import { describeDisconnectReason } from '../../domain/admin/disconnectReason.js'
 import { buildLongExpiredWhere, wantsLongExpired, isLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/partnerCourtesy.js'
@@ -981,7 +984,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     }).catch(() => []),
   ])
   const userIds = users.map(user => user.id)
-  const [eventCounts24hRows, offlineEvents24h, successMap24h, errorMap24h, lastMessageMap] = await Promise.all([
+  const [eventCounts24hRows, offlineEvents24h, successMap24h, errorMap24h, lastMessageMap, everPaidIds] = await Promise.all([
     userIds.length ? db.waConnectionEvent.groupBy({
       by: ['userId', 'type'],
       where: { userId: { in: userIds }, occurredAt: { gte: since24h } },
@@ -998,6 +1001,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     getLogCountMap({ status: 'success', since: since24h, userIds }),
     getLogCountMap({ status: 'error', since: since24h, userIds }),
     getLogActivityMap({ userIds }),
+    loadEverPaidUserIds(db, userIds),
   ])
 
   // Último evento de conexão por usuário — é o que separa "o robô está
@@ -1037,13 +1041,14 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     const successCount24h = successMap24h.get(user.id) ?? 0
     const errorCount24h = errorMap24h.get(user.id) ?? 0
     const offline24h = offlineMetrics24h.get(user.id) || {}
-    return sanitizeUser({
+    return sanitizeUser(withPayingStatus({
       id: user.id,
       name: user.name,
       email: user.email,
       contactPhone: user.contactPhone,
       status: user.status,
       plan: user.plan,
+      accessExpiresAt: user.accessExpiresAt,
       lastActivityAt: user.lastActivityAt,
       createdAt: user.createdAt,
       effectiveLastActivityAt,
@@ -1065,8 +1070,13 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       automaticRecoveries24h: Number(offline24h.automaticRecoveries || 0),
       automaticOfflineMs24h: Number(offline24h.automaticOfflineMs || 0),
       ongoingOfflineMs24h: Number(offline24h.ongoingOfflineMs || 0),
+      disconnectReason: describeDisconnectReason({
+        owner: ownership.owner,
+        hasSession: Boolean(session),
+        lastDisconnectCode: session?.lastDisconnectCode ?? null,
+      }),
       waSession: session,
-    }, adminRole)
+    }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), adminRole)
   }).filter(row => {
     if (scenarioUserIds && !scenarioUserIds.has(row.id)) return false
     const sessionStatus = row.waSession?.status || 'none'
@@ -1656,7 +1666,11 @@ export async function adminRoutes(app) {
       getLogCountMap({ status: 'success' }),
       getLogCountMap({ status: 'error', since: since24h }),
     ])
-    const lastMessageMap = await getLogActivityMap({ userIds: users.map(user => user.id) })
+    const successQueueUserIds = users.map(user => user.id)
+    const [lastMessageMap, everPaidIds] = await Promise.all([
+      getLogActivityMap({ userIds: successQueueUserIds }),
+      loadEverPaidUserIds(db, successQueueUserIds),
+    ])
 
     const queue = users
       .map(user => {
@@ -1677,7 +1691,7 @@ export async function adminRoutes(app) {
         if (shouldTrackRiskDetected({ userId: user.id, strategy, reasons: contactReasons })) {
           trackAnalyticsEventSafe({ userId: user.id, event: 'cs_risk_detected', metadata: { strategy, reasons: contactReasons.join('|').slice(0, 80) } })
         }
-        return sanitizeUser({
+        return sanitizeUser(withPayingStatus({
           ...user,
           groups: undefined,
           botRunning,
@@ -1694,7 +1708,7 @@ export async function adminRoutes(app) {
           experimentVariant: selectContactExperimentVariant(user.id, strategy),
           riskAgeHours: user.lastActivityAt ? Math.max(0, Math.round((Date.now() - new Date(user.lastActivityAt).getTime()) / (60 * 60 * 1000))) : null,
           customerContacts: undefined,
-        }, req.admin.role)
+        }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), req.admin.role)
       })
       .filter(user => user.contactReasons.length > 0)
       .filter(user => reason === 'all' || user.contactReasons.includes(reason))
@@ -2440,7 +2454,7 @@ export async function adminRoutes(app) {
       db.messageLog.groupBy({ by: ['platform', 'status'], where: { userId: user.id, sentAt: { gte: addDays(now, -7) } }, _count: { _all: true } }),
       db.messageLog.findMany({ where: { userId: user.id }, orderBy: { sentAt: 'desc' }, take: 20 }),
       db.messageLog.findFirst({ where: { userId: user.id }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
-      db.payment.aggregate({ where: { userId: user.id, status: 'approved' }, _sum: { amount: true } }),
+      db.payment.aggregate({ where: { userId: user.id, status: 'approved' }, _sum: { amount: true }, _count: { _all: true } }),
     ])
     const running = (await listRunningBots()).includes(user.id)
     const lastMessageAt = lastMessage?.sentAt ?? null
@@ -2449,7 +2463,7 @@ export async function adminRoutes(app) {
 
     await writeAdminAuditLog(req, { action: 'admin.users.detail', resource: 'user', resourceId: user.id, targetUserId: user.id })
 
-    return sanitizeUser({
+    return sanitizeUser(withPayingStatus({
       ...user,
       groups: user.groups.map(group => ({
         ...group,
@@ -2469,7 +2483,7 @@ export async function adminRoutes(app) {
       successCount,
       errorCount24h,
       riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running }),
-    }, req.admin.role)
+    }, { everPaid: Number(ltv?._count?._all ?? 0) > 0, now: now.getTime() }), req.admin.role)
   })
 
   // Lista larga de clientes (página /admin/clientes). É a porta de entrada do
@@ -2507,6 +2521,10 @@ export async function adminRoutes(app) {
       select: {
         id: true, name: true, email: true, contactPhone: true, contactPhoneVerifiedAt: true,
         status: true, plan: true, accessExpiresAt: true, sendCount: true, supportStatus: true,
+        // Limite de automações: a página /admin/automacoes existia só para
+        // editar este campo. Virou campo do histórico do cliente (2026-09-05),
+        // onde a pergunta "quantas ela pode ter?" de fato aparece.
+        maxAutomations: true,
         referralCode: true, referredBy: true, affiliateProfileId: true,
         termsAcceptedAt: true, termsVersion: true,
         lastLoginAt: true, lastActivityAt: true, createdAt: true,
