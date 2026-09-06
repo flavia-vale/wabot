@@ -47,6 +47,31 @@ test('a tag NUNCA sai do campo plan — só de pagamento aprovado', () => {
   assert.equal(row.payingStatus, PAYING_STATUS.NEVER)
 })
 
+test('a tag acompanha a cliente em TODA superfície de sucesso do cliente', () => {
+  // Lista e diálogo: onde o nome da cliente aparece, a tag aparece junto.
+  // "Ajustar plano" é o caso que mais importa — mexer no plano de quem já pagou
+  // não é a mesma coisa que liberar acesso de cortesia.
+  const filaCs = readFileSync(new URL('../dashboard/app/admin/sucesso-cliente/page.js', import.meta.url), 'utf8')
+  const ocorrencias = filaCs.match(/<PayingTag/g) ?? []
+  assert.ok(ocorrencias.length >= 3, `esperava a tag na lista e nos dois diálogos, achei ${ocorrencias.length}`)
+  assert.match(filaCs, /contactTarget\.payingStatus/)
+  assert.match(filaCs, /accessTarget\.payingStatus/)
+
+  const painel = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  // As duas listas da aba "Sucesso do Cliente" do /admin.
+  assert.match(painel, /customer\?\.payingStatus/, 'fila proativa sem a tag')
+  assert.match(painel, /user\?\.payingStatus/, 'gestão de clientes sem a tag')
+})
+
+test('existe um jeito de responder "por que a tag não aparece" sem abrir o banco', () => {
+  // A causa mais comum não é a tela: staging tem banco próprio, e sem pagamento
+  // aprovado lá ninguém pode receber a tag. O script separa os dois casos.
+  const diag = readFileSync(new URL('../scripts/diag-tag-pagante.mjs', import.meta.url), 'utf8')
+  assert.match(diag, /status: 'approved'/)
+  assert.match(diag, /NÃO É DEFEITO DE TELA/)
+  assert.match(diag, /resolvePayingStatus/)
+})
+
 test('a regra da tag mora num lugar só', () => {
   const service = readFileSync(new URL('../src/domain/admin/service.js', import.meta.url), 'utf8')
   assert.match(service, /withPayingStatus/, 'as listas do admin precisam usar o módulo, não recalcular a regra')
