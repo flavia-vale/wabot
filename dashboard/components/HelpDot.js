@@ -36,12 +36,18 @@ export function HelpDot({ title, oQueE, impacto, comoResolver, className = '' })
       {open && (
         <>
           {/* Clique fora fecha. Fica atrás do balão e não bloqueia o resto. */}
-          <span className="fixed inset-0 z-30 cursor-default" onClick={(event) => { event.stopPropagation(); setOpen(false) }} />
+          <span className="fixed inset-0 z-40 cursor-default bg-slate-950/20" onClick={(event) => { event.stopPropagation(); setOpen(false) }} />
+          {/* Posição FIXA na tela, nunca ancorada ao "?" (RCA 2026-09-05): o "?"
+              fica no canto direito do card, e um balão de largura fixa nascendo
+              ali some para fora da tela no celular — dava para ver o balão abrir
+              e não dava para ler. Ancoragem por CSS não cabe nos dois extremos
+              da grade sem medir a tela, então vira gaveta embaixo no celular e
+              diálogo centralizado no computador. O título diz de qual card é. */}
           <span
             role="dialog"
             aria-label={title}
             onClick={(event) => event.stopPropagation()}
-            className="absolute left-0 top-7 z-40 block w-72 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xl"
+            className="fixed inset-x-3 bottom-3 z-50 block max-h-[75vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-96 sm:max-w-[calc(100vw-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2"
           >
             <span className="mb-2 flex items-start justify-between gap-2">
               <span className="text-sm font-black text-gray-900">{title}</span>

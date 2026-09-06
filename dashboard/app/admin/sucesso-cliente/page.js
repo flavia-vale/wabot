@@ -291,7 +291,9 @@ export default function CustomerSuccessPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
               <h3 className="text-lg font-black text-gray-900">Registrar contato de CS</h3>
-              <p className="mt-1 text-sm text-gray-500">{contactTarget.email}</p>
+              {/* A tag vem junto do e-mail em todo lugar que nomeia a cliente —
+                  quem está do outro lado da conversa muda o tom dela. */}
+              <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">{contactTarget.email}<PayingTag status={contactTarget.payingStatus} compact /></p>
               <div className="mt-4 grid gap-3">
                 <select value={contactPayload.channel} onChange={e => setContactPayload(prev => ({ ...prev, channel: e.target.value }))} className="rounded-xl border border-gray-200 px-3 py-2 text-sm"><option value="whatsapp">WhatsApp</option><option value="email">E-mail</option><option value="phone">Telefone</option><option value="internal">Interno</option></select>
                 <input value={contactPayload.reason} onChange={e => setContactPayload(prev => ({ ...prev, reason: e.target.value }))} placeholder="Motivo do contato" className="rounded-xl border border-gray-200 px-3 py-2 text-sm" />
@@ -308,7 +310,9 @@ export default function CustomerSuccessPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
               <h3 className="text-lg font-black text-gray-900">Ajustar plano e expiração</h3>
-              <p className="mt-1 text-sm text-gray-500">{accessTarget.email}</p>
+              {/* Aqui é o lugar em que mais importa: mexer no plano de quem já
+                  pagou não é a mesma coisa que liberar acesso de cortesia. */}
+              <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">{accessTarget.email}<PayingTag status={accessTarget.payingStatus} compact /></p>
               <p className="mt-1 text-xs text-gray-400">Plano atual: {accessTarget.plan || '—'} · Expira: {formatDate(accessTarget.accessExpiresAt)}</p>
               <div className="mt-4 grid gap-3">
                 <label className="text-xs font-semibold text-gray-600">Modalidade do plano
