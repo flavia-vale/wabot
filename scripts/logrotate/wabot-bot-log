@@ -1,0 +1,33 @@
+# Rotação do bot.log (produção e staging).
+#
+# POR QUE ESTE ARQUIVO EXISTE: o pm2-logrotate só rotaciona o que o PM2
+# captura (a saída padrão dos apps, em ~/.pm2/logs). O `bot.log` é escrito
+# DIRETO pelo pino (`src/logger.js`, alvo `pino/file`) no BOT_LOG_DIR, então
+# nunca passou por rotação nenhuma e cresce para sempre — já foi medido em
+# 835 MB no RCA de 2026-07.
+#
+# `copytruncate` é obrigatório aqui: os processos (API, supervisor e cada
+# bot-worker) mantêm o arquivo aberto e não sabem reabrir sozinhos. O pino
+# escreve em modo append, então truncar o arquivo é seguro — as escritas
+# seguintes recomeçam do início, sem buraco.
+#
+# Instalação (uma vez, como root):
+#   sudo cp ~/wabot/scripts/logrotate/wabot-bot-log /etc/logrotate.d/wabot-bot-log
+#   sudo logrotate -d /etc/logrotate.d/wabot-bot-log   # simula, não altera nada
+#   sudo logrotate -f /etc/logrotate.d/wabot-bot-log   # primeira rotação
+#
+# Ajuste os caminhos se BOT_LOG_DIR for diferente do canônico.
+
+/home/deploy/BOTinho-shared/logs/bot.log
+/home/deploy/wabot-staging-shared/logs/bot.log
+{
+    daily
+    rotate 7
+    size 100M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su deploy deploy
+}
