@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import { PayingTag } from '@/components/PayingTag'
 
 const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
 const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
@@ -268,7 +269,7 @@ export default function CustomerSuccessPage() {
                   const phone = normalizePhone(user.contactPhone)
                   return (
                     <tr key={user.id}>
-                      <td className="px-3 py-3"><p className="font-bold text-gray-900">{user.email}</p><p className="text-xs text-gray-500">Plano: {user.plan} · WA: {user.waSession?.status || '—'}</p></td>
+                      <td className="px-3 py-3"><p className="flex flex-wrap items-center gap-2 font-bold text-gray-900">{user.email}<PayingTag status={user.payingStatus} compact /></p><p className="text-xs text-gray-500">Plano: {user.plan} · WA: {user.waSession?.status || '—'}</p></td>
                       <td className="px-3 py-3 text-xs">{user.contactPhone || 'Sem celular'}</td>
                       <td className="px-3 py-3 text-xs text-gray-600">{formatDate(user.createdAt)}</td>
                       <td className="px-3 py-3 text-xs">{(user.contactReasons || []).map(item => <span key={item} className="mb-1 mr-1 inline-block rounded-full bg-amber-100 px-2 py-1 font-bold text-amber-700">{REASON_LABELS[item] || item}</span>)}</td>
@@ -290,7 +291,9 @@ export default function CustomerSuccessPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
               <h3 className="text-lg font-black text-gray-900">Registrar contato de CS</h3>
-              <p className="mt-1 text-sm text-gray-500">{contactTarget.email}</p>
+              {/* A tag vem junto do e-mail em todo lugar que nomeia a cliente —
+                  quem está do outro lado da conversa muda o tom dela. */}
+              <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">{contactTarget.email}<PayingTag status={contactTarget.payingStatus} compact /></p>
               <div className="mt-4 grid gap-3">
                 <select value={contactPayload.channel} onChange={e => setContactPayload(prev => ({ ...prev, channel: e.target.value }))} className="rounded-xl border border-gray-200 px-3 py-2 text-sm"><option value="whatsapp">WhatsApp</option><option value="email">E-mail</option><option value="phone">Telefone</option><option value="internal">Interno</option></select>
                 <input value={contactPayload.reason} onChange={e => setContactPayload(prev => ({ ...prev, reason: e.target.value }))} placeholder="Motivo do contato" className="rounded-xl border border-gray-200 px-3 py-2 text-sm" />
@@ -307,7 +310,9 @@ export default function CustomerSuccessPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
               <h3 className="text-lg font-black text-gray-900">Ajustar plano e expiração</h3>
-              <p className="mt-1 text-sm text-gray-500">{accessTarget.email}</p>
+              {/* Aqui é o lugar em que mais importa: mexer no plano de quem já
+                  pagou não é a mesma coisa que liberar acesso de cortesia. */}
+              <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">{accessTarget.email}<PayingTag status={accessTarget.payingStatus} compact /></p>
               <p className="mt-1 text-xs text-gray-400">Plano atual: {accessTarget.plan || '—'} · Expira: {formatDate(accessTarget.accessExpiresAt)}</p>
               <div className="mt-4 grid gap-3">
                 <label className="text-xs font-semibold text-gray-600">Modalidade do plano

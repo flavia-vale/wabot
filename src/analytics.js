@@ -57,6 +57,12 @@ export const ANALYTICS_EVENTS = new Set([
   'subscription_provider_rejected',
   'subscription_payment_approved',
   'subscription_cancelled',
+  // Checkout de assinatura reaproveitado em vez de criar outro idêntico. Cada
+  // evento destes é uma recusa por antifraude do MP que deixou de acontecer.
+  'subscription_checkout_reused',
+  // Tentativa de assinar adiada por repetição. Volume alto aqui é sinal de que
+  // muita gente está batendo na recusa do MP — não de que a trava está errada.
+  'subscription_attempt_throttled',
   // Acesso estendido pela reconciliação porque o aviso de cobrança do MP não
   // chegou. Cada evento destes é uma cliente que teria ficado sem robô depois
   // de pagar — se aparecer com frequência, o problema está no webhook.

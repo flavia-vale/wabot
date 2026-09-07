@@ -45,14 +45,19 @@ export function Tooltip({ content, label = 'Mais informações' }) {
         i
       </button>
       {open && (
+        /* Mesma correção do balão de ajuda do admin (2026-09-05): no celular a
+           dica vira uma faixa fixa embaixo, porque um balão de largura fixa
+           centralizado no "i" sai da tela quando o "i" está perto da borda — e
+           dica que não dá para ler é pior que dica nenhuma. */
         <span
           ref={tooltipRef}
           id={id}
           role="tooltip"
-          className="absolute bottom-full left-1/2 z-20 mb-2 w-64 -translate-x-1/2 rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal leading-snug text-white shadow-lg"
+          className="fixed inset-x-3 bottom-3 z-50 block rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal leading-snug text-white shadow-lg sm:absolute sm:inset-x-auto sm:bottom-full sm:left-1/2 sm:z-20 sm:mb-2 sm:w-64 sm:-translate-x-1/2"
         >
           {content}
-          <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900" aria-hidden="true" />
+          {/* A setinha só faz sentido quando o balão está grudado no "i". */}
+          <span className="hidden sm:block sm:absolute sm:left-1/2 sm:top-full sm:-translate-x-1/2 sm:border-4 sm:border-transparent sm:border-t-gray-900" aria-hidden="true" />
         </span>
       )}
     </span>

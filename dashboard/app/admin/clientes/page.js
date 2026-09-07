@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import { PayingTag } from '@/components/PayingTag'
 
 const asArray = (value) => (Array.isArray(value) ? value : [])
 
@@ -201,7 +202,10 @@ export default function AdminClientesPage() {
                   <tr key={customer.id} className="hover:bg-emerald-50/40">
                     <td className="px-4 py-3">
                       <Link href={`/admin/clientes/${customer.id}`} className="block">
-                        <span className="font-bold text-slate-900 hover:text-emerald-700">{customer.name || '—'}</span>
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-slate-900 hover:text-emerald-700">{customer.name || '—'}</span>
+                          <PayingTag status={customer.payingStatus} compact />
+                        </span>
                         <span className="block text-xs text-slate-500">{customer.email}</span>
                       </Link>
                     </td>

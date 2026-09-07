@@ -6,6 +6,9 @@ import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 import AdminTutorialAccordion from '@/components/AdminTutorialAccordion'
 import SectionErrorBoundary from '@/components/SectionErrorBoundary'
+import { PayingTag } from '@/components/PayingTag'
+import { HelpDot } from '@/components/HelpDot'
+import { CARD_HELP } from '@/lib/admin/cardHelp'
 
 const STAT_LABELS = {
   totalUsers: 'Clientes totais',
@@ -309,6 +312,17 @@ function VerVencidasToggle({ oculto = 0, ligado = false, janelaDias = 30, onTogg
   )
 }
 
+// Tom da etiqueta "por que caiu". Vermelho é o que exige ação hoje; roxo é
+// renovação; cinza é escolha da cliente ou queda comum.
+const REASON_TONE = {
+  red: 'bg-red-100 text-red-800',
+  amber: 'bg-amber-100 text-amber-800',
+  purple: 'bg-purple-100 text-purple-800',
+  sky: 'bg-sky-100 text-sky-800',
+  emerald: 'bg-emerald-100 text-emerald-800',
+  slate: 'bg-slate-100 text-slate-700',
+}
+
 // Quem resolve a desconexão — espelha src/core/sessionOwnership.js.
 const OWNER_META = {
   connected: { label: 'conectado', cls: 'bg-emerald-50 text-emerald-700' },
@@ -330,24 +344,39 @@ const SCENARIO_LABELS = {
   desync: 'Fonte dessincronizada',
 }
 
-function ScenarioCard({ label, value, tone = 'ok', helper, onClick }) {
+// Card do painel. Duas regras vindas do pedido de 2026-09-05:
+//   1. Todo card que representa PESSOAS abre a lista de quem são (`onClick`).
+//   2. Todo card explica o que é, o que dói e como resolver, atrás do "?"
+//      (`help`) — número sem contexto não ajuda ninguém a decidir.
+// O "?" fica FORA do botão de propósito: botão dentro de botão não é HTML
+// válido e o clique no "?" abriria o drill-down junto.
+function StatCard({ label, value, tone = 'ok', helper, onClick, help, actionLabel }) {
   const content = (
     <>
-      <p className="text-[11px] font-black uppercase tracking-wide opacity-80">{label}</p>
       <p className="mt-1 text-2xl font-black">{value}</p>
       {helper && <p className="mt-1 text-xs opacity-80">{helper}</p>}
+      {onClick && <p className="mt-2 text-[11px] font-black uppercase tracking-wide opacity-70">{actionLabel || 'Ver quem são →'}</p>}
     </>
   )
-  if (!onClick) return <article className={`rounded-2xl p-4 ring-1 shadow-sm ${toneClasses(tone)}`}>{content}</article>
   return (
-    <button type="button" onClick={onClick} className={`rounded-2xl p-4 text-left ring-1 shadow-sm transition hover:brightness-95 ${toneClasses(tone)}`}>
-      {content}
-    </button>
+    <article className={`rounded-2xl p-4 ring-1 shadow-sm ${toneClasses(tone)} ${onClick ? 'transition hover:brightness-95' : ''}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-black uppercase tracking-wide opacity-80">{label}</p>
+        {help && <HelpDot {...help} />}
+      </div>
+      {onClick
+        ? <button type="button" onClick={onClick} className="block w-full text-left">{content}</button>
+        : content}
+    </article>
   )
 }
 
-function CommandCard({ label, value, tone = 'ok', helper }) {
-  return <article className={`rounded-2xl p-4 ring-1 shadow-sm ${toneClasses(tone)}`}><p className="text-[11px] font-black uppercase tracking-wide opacity-80">{label}</p><p className="mt-1 text-2xl font-black">{value}</p>{helper && <p className="mt-1 text-xs opacity-80">{helper}</p>}</article>
+function ScenarioCard(props) {
+  return <StatCard {...props} />
+}
+
+function CommandCard(props) {
+  return <StatCard {...props} />
 }
 
 
@@ -595,7 +624,10 @@ function DetailPanel({ detail, onClose, onApplyAccess }) {
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Drill-down do cliente</p>
-          <h2 className="text-xl font-black text-gray-900">{detail.email}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-black text-gray-900">{detail.email}</h2>
+            <PayingTag status={detail.payingStatus} />
+          </div>
           <p className="text-sm text-gray-500">{detail.contactPhone || 'Sem celular'} · {detail.plan} · {detail.accessStatus}</p>
         </div>
         <button onClick={onClose} className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200">Fechar</button>
@@ -1202,6 +1234,7 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
           <thead className="text-xs uppercase tracking-wide text-gray-400">
             <tr>
               <th className="px-3 py-2">Cliente</th>
+              <th className="px-3 py-2">Por que caiu</th>
               <th className="px-3 py-2">Uso anterior</th>
               <th className="px-3 py-2">WhatsApp</th>
               <th className="px-3 py-2">Operação</th>
@@ -1215,10 +1248,19 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
               return (
                 <tr key={user?.id ?? user?.email} className="align-top bg-red-50/30">
                   <td className="px-3 py-3">
-                    <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
+                      <PayingTag status={user?.payingStatus} />
+                    </div>
                     <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.plan ?? '—'} · {user?.accessStatus ?? '—'}</p>
                     <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
                     <p className="text-[11px] text-gray-400">Contato CS: {formatDate(user?.lastSupportContactAt)}</p>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className={`inline-block whitespace-normal rounded-full px-2 py-1 text-[11px] font-black ${REASON_TONE[user?.disconnectReason?.tone] || REASON_TONE.slate}`}>
+                      {user?.disconnectReason?.label || 'Motivo não informado'}
+                    </span>
+                    <p className="mt-1 max-w-[260px] text-[11px] leading-snug text-gray-500">{user?.disconnectReason?.detail || ''}</p>
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-600">
                     <p><strong>{formatNumber(user?.successCount ?? 0)}</strong> sucessos · {formatNumber(user?.totalLogCount ?? 0)} logs</p>
@@ -1260,6 +1302,170 @@ function WhatsAppDisconnectedTable({ data, onOpenDetail, onRecordContact }) {
 
       {!hasUsers && <p className="rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">Nenhum cliente ativo com sucesso anterior e WhatsApp desconectado no momento.</p>}
     </section>
+  )
+}
+
+// Drill-down dos dois cards técnicos. Não tem pessoas por trás, então o que
+// ele abre é O QUE está pendente — construído do que a página já carregou
+// (nenhuma chamada nova, nenhum processo novo).
+// Como as ofertas estão CHEGANDO no grupo. Era a página /admin/ofertas; virou
+// bloco do Início (2026-09-05) porque a pergunta é de olhar todo dia.
+//
+// "Sucesso" no histórico só quer dizer que o WhatsApp aceitou a mensagem — não
+// que ela chegou bonita. Três incidentes seguidos de imagem foram descobertos
+// pela CLIENTE, e é isso que estes dois blocos existem para antecipar.
+function BarraTipoImagem({ item, total }) {
+  const largura = total > 0 ? Math.max(2, Math.round((item.quantidade / total) * 100)) : 0
+  const ruim = item.kind === 'texto'
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className={`font-bold ${ruim ? 'text-red-700' : 'text-slate-700'}`}>{item.rotulo}</span>
+        <span className="text-slate-500">{formatNumber(item.quantidade)} · {largura}%</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${ruim ? 'bg-red-500' : 'bg-cyan-500'}`} style={{ width: `${largura}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function bytesCurto(value) {
+  if (!Number.isFinite(value)) return '—'
+  if (value >= 1024) return `${Math.round(value / 1024)} KB`
+  return `${value} B`
+}
+
+function OfertasImagemSecoes({ entrega }) {
+  const resumo = entrega?.resumo
+  if (!resumo) return null
+  const totalTipos = asArray(resumo.porTipo).reduce((acc, item) => acc + item.quantidade, 0)
+  const perdas = asArray(entrega?.origensComPerda)
+  return (
+    <>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">De que jeito as imagens saíram</h2>
+          <p className="mt-1 text-xs text-gray-500">Últimas 48h. &quot;Só texto&quot; é o que a cliente enxerga como oferta sem imagem.</p>
+          <div className="mt-5 space-y-3">
+            {asArray(resumo.porTipo).map(item => <BarraTipoImagem key={item.kind} item={item} total={totalTipos} />)}
+            {!asArray(resumo.porTipo).length && <p className="text-sm text-gray-400">Nenhuma oferta publicada nas últimas 48h.</p>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <h2 className="text-lg font-black text-gray-900">Envios e imagem por loja</h2>
+          <p className="mt-1 text-xs text-gray-500">Loja que parou de entregar a foto do produto aparece aqui antes de virar reclamação.</p>
+          <div className="mt-5 space-y-2">
+            {asArray(resumo.porLoja).map(loja => (
+              <div key={loja.loja} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                <span className="font-bold text-slate-900">{loja.loja}</span>
+                <span className="text-slate-500">
+                  {formatNumber(loja.total)} envios · {formatNumber(loja.comImagem)} com imagem
+                  {loja.perderamImagem > 0 && <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 font-bold text-red-700">{formatNumber(loja.perderamImagem)} perderam a foto</span>}
+                </span>
+              </div>
+            ))}
+            {!asArray(resumo.porLoja).length && <p className="text-sm text-gray-400">Sem envios por loja nas últimas 48h.</p>}
+          </div>
+        </div>
+      </section>
+
+      {/* A lista de quem perdeu foto continua existindo, recolhida: é o detalhe
+          que só se abre quando o número lá em cima está ruim. */}
+      <SecondarySection title="Onde a foto está se perdendo" eyebrow={`${formatNumber(resumo.perderamImagem ?? 0)} ofertas saíram só com texto tendo foto na origem`}>
+        <div className="space-y-2">
+          {!perdas.length && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">Nenhuma oferta perdeu a foto nesta janela.</p>}
+          {perdas.map(perda => (
+            <div key={`${perda.userId}-${perda.sourceGroup}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-bold text-slate-900">{perda.cliente}</span>
+                <span className="rounded-full bg-red-100 px-3 py-1 text-[11px] font-black text-red-700">{formatNumber(perda.quantidade)} sem foto</span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Origem: {perda.origemNome || '(grupo não cadastrado)'} · {perda.sourceGroup}</p>
+              <p className="mt-1 text-xs text-slate-500">Lojas: {asArray(perda.lojas).join(', ') || '—'} · imagem na origem entre {bytesCurto(perda.menorBytes)} e {bytesCurto(perda.maiorBytes)}</p>
+            </div>
+          ))}
+        </div>
+      </SecondarySection>
+    </>
+  )
+}
+
+function TechDrilldownModal({ kind, observability, metrics, onClose }) {
+  if (!kind) return null
+  const erros5xx = asArray(metrics?.recentErrors)
+  const dlqPagamentos = Number(observability?.queues?.paymentWebhookDlq?.open ?? observability?.goNoGo?.paymentDlqOpen ?? 0)
+  const dlqEnvios = Number(observability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0)
+  const filaOfertas = asPlainObject(observability?.queues?.offerQueueItems)
+  const dependencias = asPlainObject(observability?.dependencies)
+  const isInfra = kind === 'infra'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
+      <div className="mt-10 w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl" onClick={event => event.stopPropagation()}>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Detalhe técnico</p>
+            <h3 className="text-lg font-black text-gray-900">{isInfra ? 'Banco e site' : 'Trabalhos parados'}</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              {isInfra
+                ? 'Não tem cliente por trás deste card: é o nosso servidor. Falha aqui aparece para todo mundo ao mesmo tempo.'
+                : 'Coisas que o sistema tentou fazer, não conseguiu, e deixou de lado esperando decisão.'}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200">Fechar</button>
+        </div>
+
+        {isInfra ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs text-gray-400">Banco de dados</p><p className="text-xl font-black">{dependencias?.database?.ok ? 'Respondendo' : 'Sem resposta'}</p></div>
+              <div className="rounded-xl bg-red-50 p-3"><p className="text-xs text-red-600">Falhas de site (24h)</p><p className="text-xl font-black text-red-700">{formatNumber(observability?.api?.total5xx ?? 0)}</p></div>
+              <div className="rounded-xl bg-blue-50 p-3"><p className="text-xs text-blue-600">Site no ar há</p><p className="text-xl font-black text-blue-700">{Math.round((observability?.goNoGo?.uptimeSeconds ?? 0) / 60)}min</p></div>
+            </div>
+            <div>
+              <h4 className="mb-2 text-sm font-bold text-gray-800">Últimas falhas de site</h4>
+              <div className="space-y-2">
+                {erros5xx.slice(0, 8).map((item, index) => (
+                  <div key={`${item?.at ?? 'erro'}-${index}`} className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700">
+                    <p className="font-bold">{item?.method ?? '—'} {item?.route ?? '—'}</p>
+                    <p>{item?.error || item?.url || 'Sem detalhe'} · {formatDate(item?.at)}</p>
+                  </div>
+                ))}
+                {!erros5xx.length && <p className="rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">Nenhuma falha de site registrada. Está tudo respondendo.</p>}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className={`rounded-xl p-4 ring-1 ${dlqPagamentos ? 'bg-amber-50 ring-amber-200' : 'bg-gray-50 ring-gray-100'}`}>
+                <p className="text-xs font-bold uppercase text-amber-600">Avisos de pagamento parados</p>
+                <p className="mt-1 text-2xl font-black text-amber-800">{formatNumber(dlqPagamentos)}</p>
+                <p className="mt-1 text-[11px] text-gray-600">Cliente que pagou e o aviso não foi processado. Confira se o acesso dela está liberado — este é o mais urgente dos dois.</p>
+              </div>
+              <div className={`rounded-xl p-4 ring-1 ${dlqEnvios ? 'bg-amber-50 ring-amber-200' : 'bg-gray-50 ring-gray-100'}`}>
+                <p className="text-xs font-bold uppercase text-amber-600">Envios parados</p>
+                <p className="mt-1 text-2xl font-black text-amber-800">{formatNumber(dlqEnvios)}</p>
+                <p className="mt-1 text-[11px] text-gray-600">Ofertas que o robô tentou publicar e desistiu depois das tentativas. Cada uma é uma oferta que não chegou ao grupo.</p>
+              </div>
+            </div>
+            {!!Object.keys(filaOfertas).length && (
+              <div>
+                <h4 className="mb-2 text-sm font-bold text-gray-800">Ofertas esperando na fila</h4>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(filaOfertas).map(([estado, quantidade]) => (
+                    <span key={estado} className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">{estado}: {formatNumber(quantidade)}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!dlqPagamentos && !dlqEnvios && <p className="rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">Nada parado no momento.</p>}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -1400,6 +1606,14 @@ export default function AdminPage() {
     })
     return () => { active = false }
   }, [tab, overduePaidList, paidCustomersList])
+  // Drill-down dos cards técnicos ('infra' | 'filas' | null). Não busca nada
+  // novo: mostra o detalhe do que a página já carregou.
+  const [techDrilldown, setTechDrilldown] = useState(null)
+  // Qualidade de imagem das ofertas (48h). Era a página /admin/ofertas; virou
+  // card no Início a pedido da dona do produto (2026-09-05) — a pergunta "as
+  // ofertas estão saindo com foto?" é de olhar todo dia, e página separada é
+  // página que ninguém abre.
+  const [entrega, setEntrega] = useState(null)
 
   async function manualPaymentSaved() {
     const [financeData, paymentsData, subscriptionsData] = await Promise.all([
@@ -1426,6 +1640,22 @@ export default function AdminPage() {
   // Abre a aba online já filtrada pelo cenário clicado nos cards do topo.
   function openScenario(cenario) {
     const next = { ...onlineFilters, cenario }
+    setOnlineFilters(next)
+    setTab('online')
+    reloadOnline(next)
+  }
+
+  // Cards que representam pessoas abrem a lista de quem são, na aba Online já
+  // filtrada — mesmo caminho dos cards de cenário.
+  function openWaStatus(waStatus) {
+    const next = { ...onlineFilters, cenario: 'all', minErrors: '', waStatus }
+    setOnlineFilters(next)
+    setTab('online')
+    reloadOnline(next)
+  }
+
+  function openErrorsDrilldown() {
+    const next = { ...onlineFilters, cenario: 'all', waStatus: 'all', minErrors: '1' }
     setOnlineFilters(next)
     setTab('online')
     reloadOnline(next)
@@ -1516,7 +1746,7 @@ export default function AdminPage() {
   async function loadAdminData(nextRisk = risk, nextSearch = search, nextVerVencidas = verVencidasAntigas) {
     if (accessDenied) return
     setError('')
-    const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData] = await Promise.all([
+    const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData, entregaData] = await Promise.all([
       api.adminMe(),
       api.adminOverview(),
       api.adminUsers({ risk: nextRisk, search: nextSearch, limit: 20, incluirVencidos: nextVerVencidas ? 1 : '' }),
@@ -1536,6 +1766,7 @@ export default function AdminPage() {
       api.adminOnline({ limit: 120, incluirVencidos: nextVerVencidas ? 1 : '' }).catch(() => null),
       api.adminLpContent().catch(() => null),
       api.adminLegalTerms().catch(() => null),
+      api.adminQualidadeEntrega(48).catch(() => null),
     ])
     setAdmin(adminData)
     setOverview(overviewData)
@@ -1558,6 +1789,7 @@ export default function AdminPage() {
     setPlans(lpContentData?.plans ?? [])
     setTutorial(lpContentData?.tutorial ?? null)
     setTerms(termsData?.terms ?? null)
+    setEntrega(entregaData)
   }
 
   useEffect(() => {
@@ -1587,11 +1819,12 @@ export default function AdminPage() {
           api.adminOnline({ limit: 120 }).catch(() => null),
           api.adminLpContent().catch(() => null),
           api.adminLegalTerms().catch(() => null),
+          api.adminQualidadeEntrega(48).catch(() => null),
         ])
       })
       .then((result) => {
         if (!active || !result) return
-        const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData] = result
+        const [adminData, overviewData, usersData, waDisconnectedUsersData, sessionsData, sessionTelemetryData, logsData, logsSummary24hData, financeData, paymentsData, subscriptionsData, successData, successQueueData, systemHealthData, systemMetricsData, systemObservabilityData, onlineData, lpContentData, termsData, entregaData] = result
         setAdmin(adminData)
         setOverview(overviewData)
         setUsers(usersData)
@@ -1613,6 +1846,7 @@ export default function AdminPage() {
         setPlans(lpContentData?.plans ?? [])
         setTutorial(lpContentData?.tutorial ?? null)
         setTerms(termsData?.terms ?? null)
+        setEntrega(entregaData)
       })
       .catch((err) => {
         if (!active) return
@@ -1675,7 +1909,10 @@ export default function AdminPage() {
             {sortedUsers.map(user => (
               <tr key={user?.id ?? user?.email} className={`align-top ${asArray(user?.riskFlags).length ? 'bg-amber-50/40' : ''}`}>
                 <td className="px-3 py-3">
-                  <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-bold text-gray-900">{user?.email ?? 'Cliente sem e-mail'}</p>
+                    <PayingTag status={user?.payingStatus} />
+                  </div>
                   <p className="text-xs text-gray-500">{user?.contactPhone || 'Sem celular'} · {user?.status ?? '—'}</p>
                   <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
                 </td>
@@ -1859,9 +2096,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-2">
               <Link href="/admin/clientes" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Clientes</Link>
               <Link href="/admin/funil" className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Funil</Link>
-              <Link href="/admin/automacoes" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Automações</Link>
               <Link href="/admin/emails" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">E-mails</Link>
-              <Link href="/admin/ofertas" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Ofertas (imagem)</Link>
               <button onClick={() => applyFilters()} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Atualizar</button>
               <Link href="/painel" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Voltar</Link>
             </div>
@@ -1874,6 +2109,13 @@ export default function AdminPage() {
         </div>
 
         {error && <Alert type="error" title="Painel admin" message={error} />}
+
+        <TechDrilldownModal
+          kind={techDrilldown}
+          observability={systemObservability}
+          metrics={systemMetrics}
+          onClose={() => setTechDrilldown(null)}
+        />
 
         {(tab === 'inicio' || tab === 'online') && (overview || systemObservability || online) && (
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1893,6 +2135,7 @@ export default function AdminPage() {
                 value={formatNumber(online?.summary?.scenarios?.paradasSemNinguem ?? 0)}
                 tone={severityTone(online?.summary?.scenarios?.paradasSemNinguem ?? 0, 1, 3)}
                 helper="caídas, sem nenhum robô no ar — um clique resolve"
+                help={CARD_HELP.paradasSemNinguem}
                 onClick={() => openScenario('parado')}
               />
               <ScenarioCard
@@ -1900,6 +2143,7 @@ export default function AdminPage() {
                 value={formatNumber(online?.summary?.scenarios?.semReceber ?? 0)}
                 tone={severityTone(online?.summary?.scenarios?.semReceber ?? 0, 1, 3)}
                 helper="conectadas e sem mensagem chegando"
+                help={CARD_HELP.semReceber}
                 onClick={() => openScenario('blind')}
               />
               <ScenarioCard
@@ -1907,6 +2151,7 @@ export default function AdminPage() {
                 value={formatNumber(online?.summary?.scenarios?.caindoDemais ?? 0)}
                 tone={severityTone(online?.summary?.scenarios?.caindoDemais ?? 0, 1, 3)}
                 helper={`acima de ${formatNumber(online?.summary?.scenarios?.dropsAlertThreshold ?? 20)} quedas em 24h`}
+                help={CARD_HELP.caindoDemais}
                 onClick={() => openScenario('quedas')}
               />
               <ScenarioCard
@@ -1914,6 +2159,7 @@ export default function AdminPage() {
                 value={formatNumber(online?.summary?.scenarios?.clienteAgiu ?? 0)}
                 tone={severityTone(online?.summary?.scenarios?.clienteAgiu ?? 0, 1, 2)}
                 helper={`${formatDurationMs(online?.summary?.scenarios?.manualOfflineMs24h)} parados até agir`}
+                help={CARD_HELP.clienteAgiu}
                 onClick={() => openScenario('manual')}
               />
               <ScenarioCard
@@ -1921,14 +2167,52 @@ export default function AdminPage() {
                 value={formatNumber(online?.summary?.scenarios?.fonteQuebrada ?? 0)}
                 tone={severityTone(online?.summary?.scenarios?.fonteQuebrada ?? 0, 1, 5)}
                 helper="conserto automático não resolveu (7d)"
+                help={CARD_HELP.fonteQuebrada}
                 onClick={() => openScenario('desync')}
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <CommandCard label="Online agora" value={online?.summary?.onlineUsers ?? '—'} tone={severityTone(0)} helper={`${online?.summary?.stabilityPct ?? '—'}% estabilidade`} />
-              <CommandCard label="Erros 24h" value={overview?.errors24h ?? 0} tone={severityTone(overview?.errors24h, 1, 10)} helper="Acima de 10 = crítico" />
-              <CommandCard label="DB / API" value={systemObservability?.goNoGo?.dbOk ? 'OK' : 'Revisar'} tone={systemObservability?.goNoGo?.dbOk ? 'ok' : 'critical'} helper={`${systemObservability?.api?.total5xx ?? 0} erros 5xx`} />
-              <CommandCard label="Filas/DLQ" value={(systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0)} tone={severityTone((systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0), 1, 3)} helper="Pendências técnicas" />
+              <CommandCard
+                label="Online agora"
+                value={online?.summary?.onlineUsers ?? '—'}
+                tone={severityTone(0)}
+                helper={`${online?.summary?.stabilityPct ?? '—'}% estabilidade`}
+                help={CARD_HELP.onlineAgora}
+                onClick={() => openWaStatus('connected')}
+              />
+              <CommandCard
+                label="Erros 24h"
+                value={overview?.errors24h ?? 0}
+                tone={severityTone(overview?.errors24h, 1, 10)}
+                helper="Acima de 10 = crítico"
+                help={CARD_HELP.erros24h}
+                onClick={() => openErrorsDrilldown()}
+              />
+              <CommandCard
+                label="Ofertas com foto (48h)"
+                value={entrega?.resumo?.percentualComImagem == null ? '—' : `${entrega.resumo.percentualComImagem}%`}
+                tone={entrega?.resumo?.percentualComImagem == null ? 'ok' : entrega.resumo.percentualComImagem >= 95 ? 'ok' : entrega.resumo.percentualComImagem >= 80 ? 'warning' : 'critical'}
+                helper={`${formatNumber(entrega?.resumo?.comImagem ?? 0)} de ${formatNumber(entrega?.resumo?.comRegistro ?? 0)} ofertas`}
+                help={CARD_HELP.ofertasComFoto}
+              />
+              <CommandCard
+                label="Banco / site"
+                value={systemObservability?.goNoGo?.dbOk ? 'OK' : 'Revisar'}
+                tone={systemObservability?.goNoGo?.dbOk ? 'ok' : 'critical'}
+                helper={`${systemObservability?.api?.total5xx ?? 0} falhas de site`}
+                help={CARD_HELP.dbApi}
+                onClick={() => setTechDrilldown('infra')}
+                actionLabel="Ver o que falhou →"
+              />
+              <CommandCard
+                label="Trabalhos parados"
+                value={(systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0)}
+                tone={severityTone((systemObservability?.goNoGo?.paymentDlqOpen ?? 0) + (systemObservability?.queues?.sendDlq?.lastKnownDlqTotal ?? 0), 1, 3)}
+                helper="Envios e avisos de pagamento"
+                help={CARD_HELP.filasDlq}
+                onClick={() => setTechDrilldown('filas')}
+                actionLabel="Ver o que está parado →"
+              />
             </div>
           </section>
         )}
@@ -2041,6 +2325,12 @@ export default function AdminPage() {
           </section>
         )}
 
+        {tab === 'inicio' && entrega && (
+          <SectionErrorBoundary label="Imagem das ofertas">
+            <OfertasImagemSecoes entrega={entrega} />
+          </SectionErrorBoundary>
+        )}
+
         {tab === 'inicio' && (
           <SectionErrorBoundary label="Staging (liga/desliga)">
             <StagingPowerCard admin={admin} />
@@ -2049,7 +2339,10 @@ export default function AdminPage() {
 
         {tab === 'sucesso' && gestaoClientesSection}
 
-        {(tab === 'inicio' || tab === 'sucesso') && success && (
+        {/* Fila proativa saiu da aba Início a pedido da dona do produto
+            (2026-09-05): o Início virou "o que precisa de decisão agora" e a
+            fila é trabalho de atendimento, que tem aba própria. */}
+        {tab === 'sucesso' && success && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -2074,7 +2367,10 @@ export default function AdminPage() {
                 <div key={customer?.id ?? customer?.email} className="rounded-xl border border-gray-100 p-3 text-sm">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                      <p className="font-bold text-gray-900">{customer?.email ?? 'Cliente sem e-mail'}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-gray-900">{customer?.email ?? 'Cliente sem e-mail'}</p>
+                        <PayingTag status={customer?.payingStatus} />
+                      </div>
                       <p className="text-xs text-gray-500">{customer?.contactPhone || 'Sem celular'} · {customer?.plan ?? '—'} · último contato {formatDate(customer?.lastSupportContactAt)}</p>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {asArray(customer.contactReasons).map(reason => (
@@ -2356,7 +2652,10 @@ export default function AdminPage() {
                     return (
                       <tr key={user?.id ?? user?.email} className={`align-top ${errors || drops ? 'bg-red-50/40' : ''}`}>
                         <td className="px-3 py-3">
-                          <p className="font-bold text-gray-900">{user?.name || user?.email || 'Cliente sem e-mail'}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-gray-900">{user?.name || user?.email || 'Cliente sem e-mail'}</p>
+                            <PayingTag status={user?.payingStatus} />
+                          </div>
                           <p className="text-xs text-gray-500">{user?.email} · {user?.plan ?? '—'}</p>
                           <p className="mt-1 text-[11px] text-gray-400">Criado em: {formatDate(user?.createdAt)}</p>
                         </td>

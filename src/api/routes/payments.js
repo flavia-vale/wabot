@@ -3,9 +3,16 @@ import { createHmac } from 'crypto'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
 import { classifyPayerEmail } from '../../domain/payments/payerEmail.js'
+import { classifyMpAccessTokenMode, isSandboxTokenInProduction, SANDBOX_TOKEN_USER_MESSAGE } from '../../domain/payments/accessTokenMode.js'
 import {
   SUBSCRIPTION_OPEN_STATUSES,
   blocksNewSubscription,
+  decidePendingSubscriptionReuse,
+  decideSubscriptionAttemptCooldown,
+  describeSubscriptionCooldown,
+  SUBSCRIPTION_ATTEMPT_WINDOW_MS as DEFAULT_ATTEMPT_WINDOW_MS,
+  SUBSCRIPTION_ATTEMPT_MAX as DEFAULT_ATTEMPT_MAX,
+  SUBSCRIPTION_ATTEMPT_COOLDOWN_MS as DEFAULT_ATTEMPT_COOLDOWN_MS,
   decideAccessExtensionFromSubscription,
   decideSubscriptionCancellation,
   summarizeSubscriptionForPanel,
@@ -22,6 +29,12 @@ const PAYMENT_RECONCILIATION_ENABLED = String(process.env.PAYMENT_RECONCILIATION
 const PAYMENT_RECONCILIATION_INTERVAL_MS = Math.max(60000, Number(process.env.PAYMENT_RECONCILIATION_INTERVAL_MS ?? 3600000))
 const PAYMENT_RECONCILIATION_PENDING_MINUTES = Math.max(5, Number(process.env.PAYMENT_RECONCILIATION_PENDING_MINUTES ?? 15))
 const PAYMENT_RECONCILIATION_BATCH = Math.min(200, Math.max(1, Number(process.env.PAYMENT_RECONCILIATION_BATCH ?? 50)))
+
+// Intervalo mínimo entre tentativas de ligar a cobrança automática. Escape
+// hatch: `SUBSCRIPTION_ATTEMPT_MAX=0` desliga a espera sem redeploy.
+const SUBSCRIPTION_ATTEMPT_WINDOW_MS = Math.max(0, Number(process.env.SUBSCRIPTION_ATTEMPT_WINDOW_MS ?? DEFAULT_ATTEMPT_WINDOW_MS))
+const SUBSCRIPTION_ATTEMPT_MAX = Math.max(0, Number(process.env.SUBSCRIPTION_ATTEMPT_MAX ?? DEFAULT_ATTEMPT_MAX))
+const SUBSCRIPTION_ATTEMPT_COOLDOWN_MS = Math.max(0, Number(process.env.SUBSCRIPTION_ATTEMPT_COOLDOWN_MS ?? DEFAULT_ATTEMPT_COOLDOWN_MS))
 
 const OFFICIAL_PUBLIC_ORIGIN = 'http://espelhagrupos.com.br'
 const OFFICIAL_SECURE_PUBLIC_ORIGIN = 'https://espelhagrupos.com.br'
@@ -146,6 +159,12 @@ function warnMissingProductionEnv(log) {
   if (missing.length > 0) {
     log.error({ missing }, 'PAGAMENTOS: variáveis de ambiente obrigatórias não configuradas em produção')
   }
+  // Token de sandbox em produção faz TODO cartão real ser recusado, com a mesma
+  // tela de uma recusa do banco. Avisa no boot para o motivo não ficar
+  // invisível até alguém abrir o `.env` no VPS.
+  if (isSandboxTokenInProduction({ token: getMpAccessToken(), isProduction: IS_PRODUCTION })) {
+    log.error({ mpTokenMode: 'test' }, 'PAGAMENTOS: MP_ACCESS_TOKEN é de TESTE em produção — nenhum cartão real será aceito')
+  }
 }
 
 function toSafeString(value, max = 120) {
@@ -250,6 +269,10 @@ async function fetchMercadoPagoSubscriptionSnapshot(preapprovalId) {
       status: response.data?.status ?? null,
       externalReference: response.data?.external_reference ?? null,
       payerEmail: response.data?.payer_email ?? null,
+      // Usado para REAPROVEITAR o checkout ainda em aberto em vez de criar
+      // outro idêntico (o que dispara o antifraude do MP — ver
+      // `decidePendingSubscriptionReuse`).
+      initPoint: response.data?.init_point ?? null,
       nextChargeAt: response.data?.next_payment_date ?? response.data?.auto_recurring?.next_payment_date ?? null,
       transactionAmount: response.data?.auto_recurring?.transaction_amount ?? null,
     }
@@ -343,7 +366,16 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
     throw err
   }
 
-  const { dashboardUrl } = getCheckoutPublicOrigins()
+  // Token de teste em produção recusa TODO cartão real com a mesma tela de
+  // "pagamento recusado" de uma recusa do banco. Falhar aqui com motivo próprio
+  // evita procurar defeito no cartão da cliente.
+  if (isSandboxTokenInProduction({ token: accessToken, isProduction: IS_PRODUCTION })) {
+    const err = new Error('MP_ACCESS_TOKEN de sandbox em produção')
+    err.code = 'PAYMENT_PROVIDER_SANDBOX_TOKEN'
+    throw err
+  }
+
+  const { dashboardUrl, apiUrl } = getCheckoutPublicOrigins()
 
   try {
     const response = await axios.post(
@@ -359,6 +391,10 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
           currency_id: 'BRL',
         },
         back_url: `${dashboardUrl}/painel/pagamento/sucesso`,
+        // Sem isso os avisos da assinatura dependem só do que estiver marcado no
+        // painel do MP — e o checkout avulso já manda o dele. Perder o aviso de
+        // renovação é a cliente pagar e ficar sem robô.
+        notification_url: `${apiUrl}/api/payments/webhook`,
         status: 'pending',
       },
       { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 10000 }
@@ -931,6 +967,65 @@ export async function paymentsRoutes(app) {
         })
       }
 
+      // Antes de criar outro checkout: se já existe um em aberto para o MESMO
+      // plano, mande a pessoa de volta para ELE. Criar um preapproval novo com
+      // parâmetros idênticos a cada tentativa é o que o antifraude do MP lê como
+      // cobrança duplicada e recusa ("Seu pagamento foi recusado"). Ver
+      // `decidePendingSubscriptionReuse`.
+      const pendingSubscription = await db.subscription.findFirst({
+        where: { userId, status: 'pending' },
+        orderBy: { createdAt: 'desc' },
+      }).catch(() => null)
+
+      const reuseDecision = decidePendingSubscriptionReuse({ subscription: pendingSubscription, plan })
+      if (reuseDecision.reuse) {
+        const snapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
+        // Só reaproveita o que o MP confirma que continua em aberto. Falha de
+        // rede, checkout já concluído ou apagado no MP caem no caminho normal —
+        // checkout em aberto nunca pode deixar a conta sem conseguir assinar.
+        if (snapshot.ok && String(snapshot.status ?? '').toLowerCase() === 'pending' && snapshot.initPoint) {
+          trackAnalyticsEventSafe({ userId, event: 'subscription_checkout_reused', metadata: { plan } })
+          req.log.info({ userId, plan }, 'Checkout de assinatura reaproveitado em vez de criar outro igual')
+          return { init_point: snapshot.initPoint }
+        }
+      }
+
+      // Nada para reaproveitar não significa "pode criar outro igual". Quando os
+      // checkouts anteriores já foram encerrados e nenhum virou assinatura, mais
+      // um preapproval idêntico só piora a leitura do antifraude do MP. A espera
+      // é limitada e o pagamento avulso segue aberto — ver
+      // `decideSubscriptionAttemptCooldown`.
+      const recentSubscriptions = await db.subscription.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }).catch(() => null)
+
+      const cooldown = decideSubscriptionAttemptCooldown({
+        recentSubscriptions,
+        plan,
+        windowMs: SUBSCRIPTION_ATTEMPT_WINDOW_MS,
+        maxAttempts: SUBSCRIPTION_ATTEMPT_MAX,
+        cooldownMs: SUBSCRIPTION_ATTEMPT_COOLDOWN_MS,
+      })
+      if (cooldown.wait) {
+        req.log.warn({ userId, plan, attempts: cooldown.attempts, retryAt: cooldown.retryAt }, 'Tentativas seguidas de assinar — nova cobrança adiada para não alimentar a recusa do Mercado Pago')
+        trackAnalyticsEventSafe({ userId, event: 'subscription_attempt_throttled', metadata: { plan, attempts: cooldown.attempts } })
+        return reply.code(429).send({
+          code: 'SUBSCRIPTION_TOO_MANY_ATTEMPTS',
+          retryAt: cooldown.retryAt,
+          error: {
+            code: 'SUBSCRIPTION_TOO_MANY_ATTEMPTS',
+            message: describeSubscriptionCooldown(cooldown.retryAt),
+          },
+        })
+      }
+
+      // Emitido só quando um checkout NOVO nasce de fato. Antes ele saía logo
+      // após as validações, então contava junto o clique que foi devolvido ao
+      // checkout em aberto (`subscription_checkout_reused`) e o que foi adiado
+      // (`subscription_attempt_throttled`) — os três caminhos viravam um número
+      // só, e era impossível ver quantas clientes estavam batendo em cada um.
       trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan } })
 
       const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
@@ -947,6 +1042,11 @@ export async function paymentsRoutes(app) {
       }
       if (err?.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') {
         return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Pagamentos temporariamente indisponíveis.')
+      }
+      if (err?.code === 'PAYMENT_PROVIDER_SANDBOX_TOKEN') {
+        req.log.error({ userId, plan }, 'MP_ACCESS_TOKEN de sandbox em produção — nenhum cartão real seria aceito')
+        trackAnalyticsEventSafe({ userId, event: 'subscription_provider_rejected', metadata: { plan, providerStatus: null, reason: 'sandbox_token' } })
+        return sendError(reply, 500, 'PAYMENT_PROVIDER_MISCONFIGURED', SANDBOX_TOKEN_USER_MESSAGE)
       }
       if (err?.code === 'MISSING_PAYER_EMAIL') {
         return reply.code(400).send({

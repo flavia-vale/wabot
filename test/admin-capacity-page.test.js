@@ -32,7 +32,11 @@ test('capacidade apresenta recursos, processos e staging sem acao automatica', {
   const environments = await readFile(new URL('../dashboard/app/admin/capacidade/components/CapacityEnvironments.js', import.meta.url), 'utf8')
   assert.match(page, /CapacityResourceCards/)
   assert.match(resources, /Memória RAM/)
-  assert.match(resources, /ocupado sem pressão atual/)
+  // A frase foi reescrita em 2026-09-05 ("Ocupado, sem movimento: não é falta de
+  // memória agora"), mas a garantia é a mesma: swap OCUPADO sem MOVIMENTO é
+  // informativo, nunca alarme. É isso que não pode voltar a sumir.
+  assert.match(resources, /sem movimento/)
+  assert.match(resources, /não é falta de memória/)
   assert.match(processes, /<table/)
   assert.match(processes, /Worker p95/)
   assert.match(environments, /partial: 'Parcial'/)
@@ -75,8 +79,15 @@ test('capacidade oferece periodos, grafico SVG acessivel e tabela equivalente', 
   assert.match(chart, /role="img"/)
   assert.match(chart, /<table/)
   assert.match(chart, /strokeDasharray/)
-  assert.match(chart, /Crescimento líquido/)
-  assert.match(chart, /Eventos no período/)
+  // Renomeados para linguagem leiga em 2026-09-05 ("Crescimento líquido" →
+  // "Quantos robôs entraram"; "Eventos" → "Acontecimentos"). Os dois blocos
+  // continuam obrigatórios.
+  assert.match(chart, /Quantos robôs entraram/)
+  assert.match(chart, /Acontecimentos no período/)
+  // A leitura "estamos bem ou mal" e os eixos identificados entraram na mesma
+  // rodada e não podem sair: gráfico sem eles não respondia nada.
+  assert.match(chart, /Estamos bem/)
+  assert.match(chart, /tempo →/)
   for (const resource of ['RAM disponível', 'Swap utilizado', 'CPU utilizada', 'Disco utilizado']) assert.match(chart, new RegExp(resource))
   assert.match(chart, /resourceSeries/)
   assert.match(chart, /segments/)
@@ -92,7 +103,9 @@ test('decisão e recursos explicam margem, horizonte e totais sem depender somen
   assert.match(decision, /Próximo gargalo/)
   assert.match(decision, /Faixa provável/)
   assert.match(decision, /aria-hidden/)
-  for (const label of ['Livre:', 'Cache recuperável:', 'Processos', 'Load 15 min:', 'Inodes usados:', 'Entrada:', 'Saída:']) assert.match(resources, new RegExp(label))
+  // 'Livre de fato:' era 'Livre:' — o nome ficou explícito para separar memória
+  // livre de memória disponível, que é o número que a política usa.
+  for (const label of ['Livre de fato:', 'Cache recuperável:', 'Processos', 'Load 15 min:', 'Inodes usados:', 'Entrada:', 'Saída:']) assert.match(resources, new RegExp(label))
   assert.match(processes, /Tempo ativo/)
 })
 

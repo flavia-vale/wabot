@@ -799,6 +799,84 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-link-btn { background: none; border: 0; padding: 0; font-size: 12px; font-weight: 600; color: var(--accent-strong); cursor: pointer; flex-shrink: 0; }
 .pnl-link-btn:hover { text-decoration: underline; }
 
+/* ── Espelhamento: pílulas de contagem e diagrama de conexões ──────────── */
+.pnl-esp-pill {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+.pnl-esp-pill.is-origin { background: color-mix(in oklab, var(--success) 16%, var(--surface)); color: var(--accent-strong); }
+.pnl-esp-pill.is-dest { background: color-mix(in oklab, var(--warn) 22%, var(--surface)); color: #8a5a1e; }
+
+.pnl-esp-flow {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.pnl-esp-flow strong { color: var(--ink); font-weight: 600; }
+/* Marca a origem em targetsMode 'all': alcança todos os destinos por padrão,
+ * não por escolha da cliente (ver src/core/destinationRouting.js). */
+.pnl-esp-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--ink-soft);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.pnl-esp-diagram-scroll { overflow-x: auto; padding: 4px; }
+.pnl-esp-diagram { position: relative; min-width: 480px; max-width: 760px; margin: 0 auto; }
+.pnl-esp-node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  font: inherit;
+  transition: opacity .15s, border-color .15s, box-shadow .15s;
+}
+.pnl-esp-node.is-origin { left: 0; cursor: pointer; }
+.pnl-esp-node.is-origin:hover { border-color: var(--line-strong); }
+.pnl-esp-node.is-dest { right: 0; }
+.pnl-esp-node-name { display: block; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+.pnl-esp-node-sub { display: block; font-size: 11px; color: var(--ink-faint); }
+.pnl-esp-node-avatar { display: inline-flex; flex-shrink: 0; }
+
+/* No mobile o diagrama cabe inteiro na tela (nada de arrastar pro lado): o
+ * avatar sai e a cor do grupo passa para a faixa lateral do nó, liberando a
+ * largura para o nome, que então quebra em até duas linhas. As colunas seguem
+ * em NODE_PCT (42%) para as curvas do SVG continuarem ancoradas na borda. */
+@media (max-width: 600px) {
+  .pnl-esp-diagram { min-width: 0; }
+  .pnl-esp-diagram-scroll { padding: 2px; }
+  .pnl-esp-node { padding: 0 9px; gap: 8px; border-radius: 10px; }
+  .pnl-esp-node-avatar { display: none; }
+  .pnl-esp-node.is-origin { border-left: 3px solid var(--node-color, var(--line)); }
+  .pnl-esp-node.is-dest { border-right: 3px solid var(--node-color, var(--line)); }
+  .pnl-esp-node-name {
+    font-size: 11.5px;
+    line-height: 1.25;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .pnl-esp-node-sub { font-size: 10px; }
+}
+
 .pnl-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .pnl-preset {
   text-align: left;
@@ -869,7 +947,16 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   .pnl-online { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pnl-card { padding: 16px; border-radius: 15px; }
   .pnl-hero { padding: 20px; align-items: flex-start; }
-  .pnl-master { align-items: flex-start; flex-wrap: wrap; padding: 18px; }
+  .pnl-master { align-items: flex-start; flex-wrap: wrap; padding: 18px; row-gap: 14px; }
+  /* O card-mestre tem sempre 3 partes: ícone, bloco de texto e ação(ões).
+   * `flex-wrap: wrap` sozinho não quebra a linha porque o bloco do meio leva
+   * `flex:1;min-width:0` inline e encolhe até ~60px — as ações acabavam por
+   * cima do título e o texto virava uma coluna de uma palavra por linha.
+   * Damos ao texto uma base que ocupa a linha (descontado ícone + gap) para
+   * empurrar as ações para a linha de baixo, em largura total. Vale para
+   * Espelhamento, Ofertas automáticas e Filas, que compartilham a estrutura. */
+  .pnl-master > :nth-child(2) { flex: 1 1 calc(100% - 66px) !important; }
+  .pnl-master > :nth-child(n+3) { flex: 1 1 100%; justify-content: flex-start !important; }
   .pnl-card-head,
   .pnl-pager,
   .pnl-field-row { flex-direction: column; align-items: stretch; }

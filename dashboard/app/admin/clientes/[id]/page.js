@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import { PayingTag } from '@/components/PayingTag'
 
 const asArray = (value) => (Array.isArray(value) ? value : [])
 
@@ -247,15 +248,84 @@ function Sparkline({ series }) {
   )
 }
 
-function UsoTab({ uso }) {
+// Limite de automações da conta, editável aqui.
+//
+// A página /admin/automacoes existia só para isto: uma tabela de todas as
+// clientes com um campo numérico. Foi removida a pedido da dona do produto
+// (2026-09-05) — a pergunta "quantas automações ela pode ter?" nasce olhando
+// UMA cliente, não varrendo a base.
+function LimiteAutomacoes({ userId, valorAtual, ativas, onSaved }) {
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState(String(valorAtual ?? ''))
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function salvar(event) {
+    event.preventDefault()
+    const numero = Number(valor)
+    if (!Number.isInteger(numero) || numero < 1 || numero > 200) {
+      setErro('O limite precisa ser um número inteiro entre 1 e 200.')
+      return
+    }
+    setSalvando(true)
+    setErro('')
+    try {
+      await api.adminAutomationQuotaUpdate(userId, numero)
+      setEditando(false)
+      await onSaved?.()
+    } catch (err) {
+      setErro(err?.message || 'Não consegui salvar o limite.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800">Limite de automações</h3>
+          <p className="mt-1 text-xs text-slate-500">Quantas automações de oferta esta cliente pode manter. Hoje ela tem {formatNumber(ativas)} ligada(s).</p>
+        </div>
+        {!editando && (
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-black tabular-nums text-slate-900">{valorAtual ?? '—'}</span>
+            <button type="button" onClick={() => { setValor(String(valorAtual ?? '')); setEditando(true) }} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Alterar</button>
+          </div>
+        )}
+      </div>
+      {editando && (
+        <form onSubmit={salvar} className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            type="number"
+            min="1"
+            max="200"
+            step="1"
+            value={valor}
+            onChange={(event) => setValor(event.target.value)}
+            className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            aria-label="Novo limite de automações"
+          />
+          <button type="submit" disabled={salvando} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{salvando ? 'Salvando…' : 'Salvar'}</button>
+          <button type="button" onClick={() => { setEditando(false); setErro('') }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">Cancelar</button>
+        </form>
+      )}
+      {erro && <p className="mt-2 text-xs font-semibold text-red-700">{erro}</p>}
+    </div>
+  )
+}
+
+function UsoTab({ uso, userId, onSaved }) {
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card label="Grupos monitorados" value={formatNumber(uso?.groupCounts?.monitor)} helper={`${formatNumber(uso?.groupCounts?.post)} de destino`} />
         <Card label="Enviadas em 30 dias" value={formatNumber(uso?.success30d)} helper={`7 dias: ${formatNumber(uso?.success7d)} · 24h: ${formatNumber(uso?.success24h)}`} />
         <Card label="Enviadas desde sempre" value={formatNumber(uso?.sendCountTotal)} helper={uso?.lastMessageAt ? `última ${formatDateTime(uso.lastMessageAt)}` : 'nunca enviou'} />
-        <Card label="Automações" value={formatNumber(uso?.automations?.enabled)} helper={`${formatNumber(uso?.automations?.total)} cadastradas`} />
+        <Card label="Automações" value={formatNumber(uso?.automations?.enabled)} helper={`${formatNumber(uso?.automations?.total)} cadastradas de um limite de ${uso?.maxAutomations ?? '—'}`} />
       </div>
+
+      <LimiteAutomacoes userId={userId} valorAtual={uso?.maxAutomations} ativas={uso?.automations?.enabled} onSaved={onSaved} />
 
       <div className="rounded-2xl border border-slate-100 p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -324,6 +394,18 @@ export default function AdminClienteHistoricoPage() {
     return () => { cancelled = true }
   }, [id])
 
+  // Recarrega o histórico depois de uma edição na própria tela (limite de
+  // automações), sem piscar a página inteira.
+  async function reload() {
+    if (!id) return
+    try {
+      const history = await api.adminCustomerHistory(id)
+      setResult({ id, history, error: '' })
+    } catch (err) {
+      setResult({ id, history: null, error: err?.message || 'Não foi possível recarregar o histórico.' })
+    }
+  }
+
   const isCurrent = result?.id === id
   const loading = !isCurrent
   const error = isCurrent ? result.error : ''
@@ -341,7 +423,10 @@ export default function AdminClienteHistoricoPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Histórico do cliente</p>
-            <h1 className="text-2xl font-black text-slate-900">{history.cadastro?.name || history.cadastro?.email}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-black text-slate-900">{history.cadastro?.name || history.cadastro?.email}</h1>
+              <PayingTag status={history.paying?.status} />
+            </div>
             <p className="text-sm text-slate-500">{history.cadastro?.email} · {history.cadastro?.contactPhone || 'sem celular'}</p>
           </div>
           <Link href="/admin/clientes" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Voltar à lista</Link>
@@ -373,7 +458,7 @@ export default function AdminClienteHistoricoPage() {
             {tab === 'cadastro' && <CadastroTab cadastro={history.cadastro} />}
             {tab === 'financeiro' && <FinanceiroTab financeiro={history.financeiro} />}
             {tab === 'tecnico' && <TecnicoTab tecnico={history.tecnico} />}
-            {tab === 'uso' && <UsoTab uso={history.uso} />}
+            {tab === 'uso' && <UsoTab uso={history.uso} userId={history.id} onSaved={reload} />}
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -378,6 +378,179 @@ Telefone segue mascarado por papel (`sanitizeUser`/`canSeePhone`) e as duas
 rotas exigem `support:read` e gravam `AdminAuditLog`. Testes:
 `test/admin-customer-history.test.js`.
 
+## Tag "Pagante" e leitura da aba Início do admin (2026-09-05)
+
+Duas queixas da dona do produto na mesma conversa: (1) nenhuma tabela de
+cliente dizia quem já tinha pago, então toda priorização passava por abrir o
+histórico um a um; (2) a aba Início virou parede — número sem explicação, card
+sem drill-down e tabela de trabalho de atendimento no meio do painel de
+decisão.
+
+| Peça | Onde |
+|---|---|
+| Regra da tag (PURA, sem banco) | `src/domain/admin/payingStatus.js` |
+| Carregador em lote de quem já pagou | `src/domain/admin/payingLoader.js` |
+| "Por que caiu", em linguagem leiga (PURO) | `src/domain/admin/disconnectReason.js` |
+| Etiqueta na tela | `dashboard/components/PayingTag.js` |
+| Balão "?" dos cards | `dashboard/components/HelpDot.js` |
+| Texto de cada card | `dashboard/lib/admin/cardHelp.js` |
+
+**Não regredir:**
+
+- **A tag sai de PAGAMENTO APROVADO, nunca do campo `plan`.** Liberação manual
+  de acesso e trial também escrevem `plan` — usá-lo pintaria de verde quem
+  nunca pagou, que é o oposto do que a tag serve para dizer. `paidAtRisk` e o
+  rótulo "Pagante em risco" seguem a mesma fonte.
+- **Dois estados, não um.** `pagante` (pagou e o acesso está em dia, verde com
+  cifrão) e `ex_pagante` (pagou e venceu, cinza). Quem venceu é conversa de
+  recuperação; jogá-lo no mesmo balde de quem nunca pagou apagaria isso.
+- **Verde já significa "online" no admin**, então a diferença da tag está no
+  cifrão e no texto, não só na cor.
+- **A tag é decidida no backend**, nunca por cada tela — senão duas tabelas
+  passam a discordar sobre quem é pagante. Aplicada em: gestão de clientes,
+  WhatsApp desconectado, fila de sucesso, aba Online, `/admin/clientes` e o
+  drill-down do cliente.
+- **A tabela de desconectados diz POR QUE caiu**, em frase — antes mostrava só
+  o código cru do WhatsApp, que junta num balde casos com ações opostas (QR
+  novo, chip recusado, plano vencido, ninguém tentando). A dona da desconexão
+  continua vindo de `resolveSessionOwner`; `describeDisconnectReason` só
+  traduz. **Acesso vencido e "ela desligou" vêm ANTES do código**: o código
+  gravado é o da queda anterior e contaria história errada.
+- **Todo card do Início tem drill-down e "?".** Card de gente abre a lista de
+  quem são (aba Online já filtrada); card técnico abre o detalhe do que está
+  pendente, montado do que a página **já carregou** — nenhuma chamada nova.
+- **A fila proativa saiu da aba Início** e continua na aba Sucesso do Cliente:
+  o Início é "o que precisa de decisão agora", a fila é trabalho de atendimento.
+- **Linguagem leiga nos cards e nos motivos**: "trabalhos parados" em vez de
+  DLQ, "falhas de site" em vez de 5xx, "ela desconectou pelo celular" em vez de
+  401. Teste falha se jargão voltar.
+- **Custo:** só leitura. Uma consulta agregada a mais por lista
+  (`payment.groupBy`) e uma de eventos de conexão na tabela de desconectados —
+  nunca uma por linha. **Nenhum processo novo, zero impacto de RAM.**
+
+- **A tag acompanha a cliente também nos DIÁLOGOS**, não só nas listas:
+  "Registrar contato de CS" e "Ajustar plano e expiração" em
+  `/admin/sucesso-cliente`. O segundo é o que mais importa — mexer no plano de
+  quem já pagou não é a mesma coisa que liberar acesso de cortesia.
+
+⚠️ **"A tag não aparece" quase nunca é defeito de tela.** Staging tem **banco
+próprio** (`staging.db`) e token de sandbox do Mercado Pago: se nenhuma conta de
+lá concluiu pagamento, **não existe pagante em staging** e a tag não aparece em
+tela nenhuma — corretamente. `node scripts/diag-tag-pagante.mjs` (read-only,
+roda no diretório do ambiente) separa os dois casos: mostra os pagamentos por
+situação, quantas contas têm `approved` e como cada uma sairia na tela. Para ver
+a tag funcionando em staging, registre um pagamento pelo próprio admin
+(Financeiro → "Registrar pagamento por fora") — esse caminho grava
+`status='approved'` com `provider='manual'`, igual ao Mercado Pago, e **é
+proposital que pagamento conferido na mão conte como pagante**.
+
+Testes: `test/admin-paying-tag.test.js`, `test/admin-painel-inicio.test.js`,
+`test/admin-wa-disconnected-users.test.js`.
+
+## Balão de ajuda saindo da tela no celular (RCA 2026-09-05 — não regredir)
+
+Os dois balões de ajuda do produto — o "?" dos cards do admin
+(`dashboard/components/HelpDot.js`) e o "i" do histórico da cliente
+(`dashboard/components/Tooltip.js`) — nasciam com **largura fixa** (288px e
+256px) e posição **absoluta a partir do gatilho**. O gatilho fica no canto
+direito do card; numa tela de 375px o balão nascia fora da área visível: dava
+para ver abrir e não dava para ler.
+
+**Ancoragem por CSS não resolve isso.** Abrindo para a direita, estoura no card
+da direita; para a esquerda, estoura no da esquerda; centralizado no gatilho,
+estoura nos dois extremos. Sem medir a tela em JavaScript não existe um lado
+seguro — então os dois passaram a ser **fixos na TELA**: gaveta presa embaixo
+no celular (`fixed inset-x-3 bottom-3`) e, de `sm:` para cima, o
+comportamento de antes (diálogo centralizado no `HelpDot`, balão ancorado no
+`Tooltip`). O título dentro do balão diz de qual card ele fala, então perder a
+ancoragem no celular não perde o contexto.
+
+**Não regredir:** largura fixa (`w-72`, `w-64`) só a partir de `sm:`; no
+celular quem manda são as duas laterais presas à tela. Tabela larga dentro de
+diálogo é o outro jeito de o conteúdo sumir para a direita — `min-w-[...]`
+precisa de `overflow-x-auto` por perto. Teste:
+`test/dialogos-no-celular.test.js` (cobre os dois balões e varre as tabelas do
+admin).
+
+## Enxugada do admin: capacidade legível, funil em jornada, duas páginas a menos (2026-09-05)
+
+Quatro telas na mesma conversa. O fio comum: número na tela sem dizer se está
+bem ou mal, e página separada para pergunta que é de olhar todo dia.
+
+### Capacidade (`/admin/capacidade`)
+
+- **RCA: "Diagnóstico traduzido sempre sem medição".** `persistedDecision`
+  (`src/ops/capacity/service.js`) devolvia a decisão gravada **sem
+  `resourceHealth`** — e é ele que pinta RAM/CPU/disco/swap. Resultado: os
+  quatro cartões diziam "Sem medição" com o servidor medido e saudável, num
+  bloco cujo próprio texto avisa que "sem medição nunca significa saudável".
+  A saúde agora é recomposta das medições brutas do snapshot
+  (`evaluateResourceHealth`, puro, sem consulta nova). O retorno antecipado de
+  `evaluateCapacity` (`insufficient_data`) também passou a levá-la: sem saber a
+  memória total ainda sabemos CPU, disco e swap. **Não regredir:** nenhum
+  caminho pode devolver decisão sem `resourceHealth`.
+- **RCA: "Contratado vs utilizado sempre sem medição".** O bloco tinha esse
+  título e mostrava só o inventário da Hetzner — que é **opcional** e vem vazio
+  sem `HCLOUD_READ_TOKEN`. A comparação agora sai das medições do próprio
+  servidor (sempre presentes): RAM, disco, CPU e robôs conectados, cada um com
+  contratado / utilizado / livre. O inventário do provedor virou detalhe
+  recolhido. **Não regredir:** a comparação não pode voltar a depender do token.
+- **Fundo escuro removido** do cartão de decisão: destoava do admin, que é
+  claro, e o que precisa saltar é o estado — trabalho da cor da tarja.
+- **Cards de recurso** agora têm cor por estado (verde/âmbar/vermelho/cinza),
+  barra de uso e um chip com o estado. A barra mostra sempre **quanto está em
+  uso**, nunca o que sobra: duas barras com sentidos opostos na mesma tela é o
+  jeito mais rápido de ler errado.
+- **Gráficos** ganharam veredito em uma frase antes do desenho ("Estamos bem:
+  12 robôs de 18 que cabem"), eixos identificados (valores à esquerda, datas
+  embaixo, unidade nomeada) e, em cada série pequena, a tendência com sinal
+  certo — `goodWhenRising` existe porque subir é bom em "RAM disponível" e ruim
+  em "disco utilizado". Os rótulos ficam em HTML ao redor do SVG, nunca dentro:
+  o desenho usa `preserveAspectRatio="none"` e texto lá dentro sai deformado.
+
+### Funil (`/admin/funil`) — pipeline da jornada
+
+`FUNNEL_STEPS` passou de 5 para **7 etapas**, na ordem em que a cliente vive o
+produto: criou a conta → conectou o WhatsApp → **cadastrou a loja** → **escolheu
+os grupos** → teve oferta publicada → começou o pagamento → pagou. As duas
+etapas novas **não custam consulta nenhuma**: `credentialUserIds`,
+`sourceGroupUserIds` e `destGroupUserIds` já eram carregados para explicar POR
+QUE a pessoa parou. A tela virou colunas lado a lado com a perda entre elas; a
+lista antiga continua acessível, recolhida.
+
+**Não regredir:** a regra de implicação vale para as etapas novas também — quem
+teve oferta publicada conta como tendo loja e grupos, mesmo que tenha apagado
+depois; sem isso o pipeline encolhe para trás e confunde. E as etapas seguem
+**não sendo sequência obrigatória** (dá para escolher grupo antes de cadastrar
+a loja): é a implicação que as torna legíveis em fila.
+
+### Duas páginas a menos
+
+- **`/admin/ofertas` foi removida.** O percentual de ofertas com foto (48h)
+  virou card do Início, e "de que jeito as imagens saíram" + "envios e imagem
+  por loja" viraram blocos logo abaixo. "Onde a foto está se perdendo" continua
+  existindo, recolhido — é o detalhe que só se abre quando o número está ruim.
+  Mesma rota de dados (`GET /api/admin/qualidade-entrega`), só que com janela
+  fixa de 48h.
+- **`/admin/automacoes` foi removida.** Ela existia só para editar um campo
+  (`User.maxAutomations`) numa tabela de toda a base. Virou campo editável na
+  aba **Uso** do histórico do cliente (`/admin/clientes/[id]`), onde a pergunta
+  "quantas automações ela pode ter?" de fato nasce. As rotas
+  `GET/PATCH /api/admin/automation-quota` continuam as mesmas.
+
+**Custo:** uma chamada a mais no Início (qualidade de entrega, já existente),
+nenhum processo novo, **zero impacto de RAM**.
+
+Testes: `test/admin-capacidade-leitura.test.js`, `test/admin-funnel.test.js`,
+`test/admin-painel-inicio.test.js`, `test/admin-panel-visual-adjustments.test.js`.
+
+⚠️ **`test/admin-capacity-page.test.js` PULA sem as dependências do dashboard** —
+ele renderiza os componentes de verdade e, sem `npm ci --prefix dashboard`,
+`npm test` marca os 13 casos como `# SKIP` e passa. A CI instala, então lá eles
+rodam: mexeu em `dashboard/app/admin/capacidade/`, rode
+`npm ci --prefix dashboard` antes de concluir que está verde. Foi assim que
+quatro guardas de texto dessa tela só apareceram no gate da PR.
+
 ## ADMIN > Funil (`/admin/funil`, 2026-09-02)
 
 Responde "onde as pessoas param entre criar a conta e pagar" sem ninguém
@@ -755,6 +928,202 @@ Roteiro de validação em staging (nesta ordem):
 6. Renovação sem aviso: apagar/ignorar o webhook de um ciclo e conferir que a
    passada de reconciliação estendeu o acesso até a próxima cobrança
    (`AnalyticsEvent('subscription_access_extended')`).
+
+### "Seu pagamento foi recusado" no checkout de assinatura (RCA 2026-09-07 — não regredir)
+
+Cliente mandou print do checkout recorrente (Pro, R$69, cartão Visa Santander)
+com **"Seu pagamento foi recusado. Recomendamos que você pague com o meio de
+pagamento e dispositivo que costuma usar para compras on-line."** Essa frase é
+do **antifraude do Mercado Pago** (`cc_rejected_high_risk`), não do banco
+emissor — banco recusa com outro texto ("sem limite", "cartão desabilitado").
+
+**A documentação do próprio MP nomeia a causa:** quando duas cobranças seguidas
+saem com itens idênticos ou parâmetros muito parecidos, o motor de antifraude
+lê como cobrança duplicada e recusa por precaução; a recomendação é
+"implementar controles para evitar novas tentativas imediatas com os mesmos
+dados de pagamento".
+
+**Nós não tínhamos esse controle — e produzíamos exatamente o padrão que ele
+recusa.** `pending` de propósito não bloqueia (senão um checkout abandonado
+travaria a conta para sempre), então **cada clique em "Assinar" criava um
+preapproval NOVO** com `reason`, `external_reference`, `payer_email` e
+`transaction_amount` byte a byte iguais. Quem tentava de novo depois de uma
+recusa alimentava a recusa seguinte. Como `Subscription` não guardava o
+`init_point`, não havia nem como voltar ao checkout que já existia.
+
+Hoje `decidePendingSubscriptionReuse` (`src/domain/payments/subscriptionPolicy.js`,
+pura) manda a pessoa de volta ao checkout em aberto do MESMO plano, e o
+`init_point` é recuperado do próprio MP (`GET /preapproval/:id` → campo
+`initPoint` do snapshot) — **sem migration, sem coluna nova**.
+
+**Não regredir:**
+
+- **A invariante de que `pending` não trava a conta continua valendo** e é o
+  que limita o reaproveitamento: fora da janela de 24h
+  (`SUBSCRIPTION_REUSE_MAX_AGE_MS`), com plano diferente, sem identificador do
+  provedor ou sem data confiável → cria checkout novo. E só reaproveita o que o
+  MP **confirma** que ainda está `pending`: falha de rede ou checkout já
+  concluído caem no caminho normal.
+- **Não voltar a criar preapproval sem tentar reaproveitar antes** (guarda
+  estrutural no teste exige que a decisão venha ANTES da criação).
+- **O preapproval manda `notification_url`.** Ele não mandava — só o checkout
+  avulso mandava —, então os avisos da assinatura dependiam inteiramente do que
+  estivesse marcado no painel do MP, e configurar os eventos
+  `subscription_preapproval`/`subscription_authorized_payment` lá era um TODO
+  em aberto desde a implementação. Aviso de renovação perdido é a cliente pagar
+  e ficar sem robô.
+- **Chave de TESTE em produção recusa todo cartão real com ESTA MESMA TELA.**
+  `isSandboxTokenInProduction` (`src/domain/payments/accessTokenMode.js`) avisa
+  no boot e faz a rota devolver erro próprio, em vez de deixar o time procurar
+  defeito no cartão da cliente. Prefixo fora do padrão do MP (`unknown`)
+  **não** acusa — alarme falso recorrente treina a pessoa a ignorar o aviso.
+- **Linguagem leiga**: a frase da chave errada diz "não pelo seu cartão" e não
+  pode conter "sandbox", "token", "gateway" ou "preapproval". Teste falha se
+  jargão voltar.
+
+#### O reaproveitamento sozinho NÃO fecha o caso (medição da conta real)
+
+Os três checkouts da cliente que reportou, com os horários do banco:
+
+| checkout | criado | encerrado | viveu |
+|---|---|---|---|
+| #1 | 09:05:13 | 09:32:44 | 27,5 min |
+| #2 | 09:08:31 | 09:32:44 | 24,2 min |
+| #3 | **10:02:11** (a recusa do print) | 10:32:44 | 30,6 min |
+
+- **#1 ainda estava `pending` às 09:08:31** → o reaproveitamento cobre o #2.
+- **#3 nasceu com #1 e #2 já encerrados** → não havia o que reaproveitar, e um
+  checkout novo e idêntico nascia mesmo assim. Era esse o recusado.
+- #1 e #2 foram encerrados com **214 ms de diferença**, os dois às `:32:44` —
+  é a **nossa reconciliação horária**, não o MP em tempo real.
+- ⚠️ **A tabela de pagamentos da conta está VAZIA.** O MP não nos manda aviso
+  de pagamento recusado nesse fluxo: não existe registro da recusa em lugar
+  nenhum, então **não dá para reagir a ela**. O único sinal que temos é a
+  repetição — vários checkouts do mesmo plano em pouco tempo, nenhum virando
+  assinatura.
+
+Por isso `decideSubscriptionAttemptCooldown` (pura) segura a tentativa quando
+já houve `SUBSCRIPTION_ATTEMPT_MAX` (2) checkouts do mesmo plano em
+`SUBSCRIPTION_ATTEMPT_WINDOW_MS` (6h) sem nenhum virar assinatura ativa,
+liberando de novo `SUBSCRIPTION_ATTEMPT_COOLDOWN_MS` (2h) depois da última.
+
+**Não regredir:**
+
+- **A espera é sempre LIMITADA e o pagamento avulso continua aberto** — a conta
+  nunca fica sem forma de pagar. Segurar a terceira tentativa protege a
+  cliente: cada checkout idêntico a mais piora a leitura do antifraude, e
+  insistir é o caminho mais rápido para nenhuma tentativa passar.
+- **Fail-safe é DEIXAR TENTAR**, nunca barrar por dúvida: sem histórico
+  confiável, com assinatura ativa na janela, sem data ou com
+  `SUBSCRIPTION_ATTEMPT_MAX=0` (escape hatch), a tentativa passa. Barrar por
+  dúvida impediria uma compra legítima, que é pior que a recusa.
+- **Plano diferente não conta** — trocar de plano é intenção nova, não
+  repetição.
+- **O texto diz as três coisas ou não serve**: que o cartão dela não é o
+  problema, quando ela pode voltar, e que o avulso está disponível agora. Nada
+  de "antifraude", "preapproval", "gateway", "checkout" na tela — teste falha
+  se jargão voltar.
+
+Sinais `subscription_checkout_reused` e `subscription_attempt_throttled`
+(allowlist em `src/analytics.js`) — cada um é uma recusa por antifraude que
+deixou de acontecer. Volume alto no segundo é sinal de que muita gente está
+batendo na recusa, **não** de que a trava está apertada demais.
+
+⚠️ **A tela de recusa é a mesma para causas com ações opostas.** Antes de
+responder à cliente, rode o diagnóstico (read-only, no diretório do ambiente):
+
+```bash
+cd ~/wabot && node scripts/diag-assinatura-recusada.mjs <email> --days=7
+```
+
+Ele separa os três casos: chave de teste em produção, checkouts repetidos e
+idênticos, ou recusa que veio de fato do banco/cartão dela (aí a ação é outro
+cartão ou o pagamento avulso). Não imprime segredo — da chave só sai o modo.
+
+#### A repetição nunca explicou a PRIMEIRA tentativa (revisão 2026-09-07)
+
+Na conta medida, o #1 é de 09:05:13 e o #2 de 09:08:31 — **três minutos
+depois**. Não havia o que repetir no #1, e mesmo assim ela tentou de novo: o
+#1 já tinha falhado por outra coisa. A repetição explica o #2 e o #3, **não a
+causa de origem**, e enquanto ela não for conhecida corremos o risco de
+consertar o sintoma.
+
+⚠️ **"O MP não nos manda aviso de pagamento recusado nesse fluxo" é inferência
+a partir da tabela vazia, NÃO medição — e a doc do MP diz o contrário:** para
+assinatura sem plano associado, além de `subscription_preapproval` /
+`subscription_authorized_payment`, o painel precisa ter o evento **`payment`**
+marcado, "que permite receber notificações sobre os pagamentos associados a
+essas assinaturas". A tabela vazia tem duas explicações e só uma foi
+verificada, porque **nós jogamos a recusa fora**: em
+`src/api/routes/payments.js`, o processamento do evento `payment` só tem dois
+ramos — estorno (`isReversiblePaymentStatus`) e `approved`. **`rejected` não
+cai em nenhum dos dois**: não vira linha em `Payment`, não vira log, não vira
+sinal, e o `status_detail` (que `fetchMercadoPagoPaymentSnapshot` já lê) é
+descartado. O payload cru, porém, **está gravado em `WebhookEvent`** desde
+sempre — é de lá que o diagnóstico recupera o motivo.
+
+Os blocos `[3]` e `[4]` do script perguntam ao MP o que ele registrou:
+
+- **`[3]` o motivo exato** — lê os `WebhookEvent` de tipo `payment` da janela e
+  consulta `GET /v1/payments/:id` → `status_detail`, traduzido para o que
+  significa e de quem é a ação. **Nenhum aviso na janela também é achado:**
+  significa que nenhuma cobrança chegou a ser tentada, e aí "cobrança recusada"
+  deixa de explicar o caso.
+- **`[4]` o estado do checkout** — `GET /preapproval/:id` → `card_id` /
+  `payment_method_id` vazios provam que **nenhum cartão foi vinculado** (ela
+  não concluiu, nada foi cobrado), `summarized.charged_quantity` conta as
+  cobranças e `last_modified` diz **quando o MP encerrou de verdade** (a hora
+  do nosso banco é a da passada horária que copiou o estado).
+
+O `GET /preapproval/:id` **não tem `status_detail`** — o motivo da recusa mora
+na fatura (`GET /authorized_payments/:id` → `payment.status_detail`). Não
+procurar no lugar errado.
+
+#### O diagnóstico mentia por dois defeitos próprios (2026-09-07)
+
+Rodado em produção com o e-mail da cliente, o script respondeu **"nenhuma conta
+encontrada"** — e a conta existe com exatamente esse e-mail. Rodado sem alvo,
+ela aparece, e aí ele concluiu **"a recusa veio do cartão/banco da cliente"**
+para três checkouts do mesmo plano em 57 minutos. As duas respostas estavam
+erradas, por motivos diferentes:
+
+- **`User` não tem coluna `phone`, tem `contactPhone`.** Com o nome errado o
+  Prisma recusa a consulta INTEIRA, e o `.catch(() => [])` transformava o erro
+  em resposta: "não achei" em vez de "não consegui procurar". Erro engolido em
+  script de diagnóstico é pior que erro na cara — ele vira conclusão. Agora a
+  falha é impressa.
+- **A repetição era medida pelo que continua `pending` AGORA.** A reconciliação
+  horária encerra os checkouts anteriores, então o padrão que a correção existe
+  para tratar fica invisível justamente depois que ele acontece. Passou a ser
+  medida por checkouts **criados** dentro de `SUBSCRIPTION_ATTEMPT_WINDOW_MS`
+  (a mesma constante da regra de espera, para diagnóstico e produto não
+  discordarem).
+
+Junto: os horários do script saem em **UTC** e agora são marcados com `Z`. Os
+mesmos três checkouts são 09:05/09:08/10:02 na tabela acima (Brasília) e
+12:05/12:08/13:02 no banco — sem a marca, parecem checkouts diferentes.
+
+⚠️ **Achado de produção que confirma a correção do `updatedAt`:** a conta
+`flavia.vale@usp.br` tinha um checkout `pending` de **5 dias antes** marcado
+como `reaproveitavel=sim`. Fora da janela de 24h declarada, exatamente como
+descrito abaixo.
+
+#### Duas correções na própria correção (2026-09-07)
+
+- **A janela de reaproveitamento conta do `createdAt`, nunca do `updatedAt`.**
+  `Subscription.updatedAt` é `@updatedAt` no schema: a reconciliação horária e
+  o webhook renovam o campo sozinhos. Contando por ele, um checkout de dias
+  atrás parecia recém-criado, **a janela de 24h nunca expirava** e a cliente
+  era devolvida para sempre ao mesmo link velho — e o freio entre tentativas
+  nunca rodava, porque o reaproveitamento responde antes dele.
+- **`subscription_started` só sai quando um checkout NOVO nasce.** Emitido
+  antes do reaproveitamento, ele contava junto o clique devolvido ao checkout
+  em aberto e o adiado pela espera: os três caminhos viravam um número só e não
+  dava para ver quantas clientes batiam em cada um. Hoje cada caminho tem o seu
+  (`subscription_checkout_reused`, `subscription_attempt_throttled`,
+  `subscription_started`), sem sobreposição.
+
+Teste: `test/subscription-checkout-reuse.test.js`.
 
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
@@ -2512,6 +2881,56 @@ redis-cli -n 0 get supervisor:session_circuit_breaker_alert:shard-1-of-1
 for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do awk '/VmRSS/{print $2}' /proc/$p/status; done \
  | awk '{s+=$1; n++} END {printf "%d robos | RSS total %.2f GB | media %.0f MB\n", n, s/1048576, s/n/1024}'
 ```
+
+### "Limite de robôs" era a frase de TRÊS causas diferentes (RCA 2026-09-07 — não regredir)
+
+Cliente mandou print de **"Nosso servidor está no limite de robôs ligados ao
+mesmo tempo"** com o servidor comprovadamente fora do teto. O texto não estava
+errado por acaso: `classifyBotStartOutcome` devolvia essa frase para
+**qualquer** `startAccepted === false`, e o supervisor devolve `false` por três
+motivos distintos — teto cheio (`checkSessionCircuitBreaker`), conta fora do
+shard (`belongsToThisShard`) e vaga presa por robô que não terminou de
+desligar. Nem a tela nem o log da API diziam qual tinha sido: só o log do
+`bot-supervisor`, no VPS.
+
+Duas armadilhas de leitura que isso escondia:
+
+- **"Robô ligado" ≠ "robô conectado".** O teto conta `listRunningBots()`, que é
+  **processo forkado** — robô desconectado, reconectando ou em teardown ocupa
+  vaga. O painel pode mostrar 12 conectados com o servidor em 20/20 e recusando.
+- **Shard errado recusa UMA conta só**, com o servidor vazio — e aparecia como
+  "estamos lotados", que manda a cliente esperar por uma vaga que já existe.
+
+`src/domain/session/startRefusal.js` (`classifyStartRefusal`, puro) decide o
+motivo **do lado da API**, e as duas rotas de conectar (`/session/start` e
+`/session/pairing-code`) o passam para `classifyBotStartOutcome`:
+
+| Motivo | Código | O que a cliente lê |
+|---|---|---|
+| teto de fato cheio | `WA_CAPACITY_LIMIT` | texto histórico, "tente de novo em alguns minutos" |
+| conta em servidor que não a atende | `WA_SESSION_MISPLACED` | "não adianta tentar de novo, vamos resolver" (`retryable: false`) |
+| recusa sem teto cheio / sem medição | `WA_START_REFUSED` | "espere um minuto e tente de novo" |
+
+**Não regredir:**
+
+- **A classificação mora na API, não no protocolo.** `src/supervisor/protocol.js`
+  é [PROTECTED_CORE] e, em modo `remote`, **o supervisor não é reiniciado no
+  deploy** — mudar o retorno de `START_BOT` ficaria dormente e deixaria as duas
+  pontas divergentes. A API já tem os dados: carrega o MESMO `.env`
+  (`MAX_SESSIONS_PER_PROCESS`, `SHARD_COUNT`, `SHARD_INDEX`) e `listRunningBots()`
+  é comando existente.
+- **Servidor errado é avaliado ANTES do teto.** Conta fora do shard é recusada
+  mesmo com o servidor vazio; concluir "teto" ali contaria a história errada.
+- **Sem medição confiável NUNCA afirmar teto.** `listRunningBots()` falhou →
+  `runningCount: null` → texto genérico. `toCount` trata `null` como `null` e
+  nunca como `0` (`Number(null)` é 0 — foi exatamente esse o erro pego no teste).
+- **Ordem no `startRefusal.js` é a fonte única** — não reintroduzir texto de
+  recusa nas rotas. E o log da recusa leva `reason`, `running` e `max`: é o que
+  permite responder à cliente **sem** entrar no VPS.
+- Linguagem leiga nas três frases (nada de "shard", "worker", "supervisor",
+  "processo"). Teste falha se jargão voltar.
+
+Teste: `test/session-start-refusal.test.js`.
 
 ## Política de memória (CANÔNICA — LEIA antes de qualquer mudança que afete RAM)
 

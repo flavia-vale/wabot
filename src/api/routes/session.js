@@ -1,10 +1,11 @@
-import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR, refreshWaGroups } from '../../manager.js'
+import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR, refreshWaGroups, listRunningBots } from '../../manager.js'
 import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { getAuthInfoDir } from '../../paths.js'
 import { mapInfraError } from '../../errors.js'
 import { appContainer } from '../../app/container.js'
 import { classifyBotStartOutcome, normalizePairingPhone } from '../../domain/session/service.js'
+import { classifyStartRefusal } from '../../domain/session/startRefusal.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
@@ -26,6 +27,33 @@ const CLIENT_GRACE_MS = Math.max(0, Number(process.env.WA_CLIENT_GRACE_MS ?? DEF
 const CLIENT_GRACE_CAP_MS = Math.max(30_000, Number(process.env.WA_HEARTBEAT_MAX_RECONNECTING_MS || 120_000))
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Mesmos valores que o bot-supervisor lê — API e supervisor carregam o MESMO
+// `.env` em cada ambiente, então a API consegue explicar a recusa sem mudar o
+// contrato do supervisor (que, em modo `remote`, sequer é reiniciado no
+// deploy). Ver domain/session/startRefusal.js.
+const MAX_SESSIONS_PER_PROCESS = Math.max(1, Number(process.env.MAX_SESSIONS_PER_PROCESS || 20))
+const SHARD_COUNT = Math.max(1, Math.floor(Number(process.env.SHARD_COUNT || 1)) || 1)
+const SHARD_INDEX = Number(process.env.SHARD_INDEX ?? 0)
+
+// Mede quantos robôs estão de fato ligados NA HORA da recusa. Best-effort: se
+// a consulta falhar, devolve `null` e a classificação não afirma teto cheio.
+async function describeStartRefusal(userId) {
+  let runningCount = null
+  try {
+    const list = await listRunningBots()
+    if (Array.isArray(list)) runningCount = list.length
+  } catch {
+    runningCount = null
+  }
+  return classifyStartRefusal({
+    userId,
+    shardCount: SHARD_COUNT,
+    shardIndex: SHARD_INDEX,
+    runningCount,
+    maxSessions: MAX_SESSIONS_PER_PROCESS,
+  })
+}
 
 function isRecoverableGroupLoadError(err) {
   const message = String(err?.message ?? err ?? '')
@@ -125,9 +153,17 @@ export async function sessionRoutes(app) {
     // de sucesso e nada era registrado (RCA 2026-09-01).
     const startAccepted = await startBot(userId)
     if (startAccepted === false) {
-      const outcome = classifyBotStartOutcome({ startAccepted, running: Boolean(await isRunning(userId)) })
+      const stillRunning = Boolean(await isRunning(userId))
+      const refusal = stillRunning ? null : await describeStartRefusal(userId)
+      const outcome = classifyBotStartOutcome({ startAccepted, running: stillRunning, refusal })
       if (!outcome.ok) {
-        req.log.error({ userId, code: outcome.code }, 'Não foi possível ligar o robô em /start')
+        // O motivo E os números medidos vão para o log: sem eles, separar
+        // "teto cheio" de "conta no servidor errado" exigia entrar no VPS e ler
+        // o log do supervisor (RCA 2026-09-07).
+        req.log.error(
+          { userId, code: outcome.code, reason: refusal?.reason, running: refusal?.running, max: refusal?.max },
+          'Não foi possível ligar o robô em /start',
+        )
         return reply.code(outcome.statusCode).send({ error: outcome.error, code: outcome.code, retryable: outcome.retryable })
       }
     }
@@ -251,14 +287,19 @@ export async function sessionRoutes(app) {
       // checagem o pedido seguia adiante e estourava no manager com "Bot não
       // está rodando", que a tela mostra como "Bot não está conectado" — texto
       // cego que escondeu 183 recusas por capacidade (RCA 2026-09-01).
-      const outcome = classifyBotStartOutcome({ startAccepted, running: Boolean(await isRunning(userId)) })
+      const stillRunning = Boolean(await isRunning(userId))
+      const refusal = startAccepted === false && !stillRunning ? await describeStartRefusal(userId) : null
+      const outcome = classifyBotStartOutcome({ startAccepted, running: stillRunning, refusal })
       if (!outcome.ok) {
-        req.log.error({ userId, phone: normalized, code: outcome.code, startAccepted }, 'Não foi possível ligar o robô para o pareamento')
+        req.log.error(
+          { userId, phone: normalized, code: outcome.code, startAccepted, reason: refusal?.reason, running: refusal?.running, max: refusal?.max },
+          'Não foi possível ligar o robô para o pareamento',
+        )
         recordWaConnectionEventSafe({
           userId,
           type: 'manual_pairing_requested',
           lifecycle: 'pairing_requested',
-          metadata: { source: 'pairing_code', workerWasRunning: false, refused: outcome.code },
+          metadata: { source: 'pairing_code', workerWasRunning: false, refused: outcome.code, refusedReason: refusal?.reason ?? null },
         })
         return reply.code(outcome.statusCode).send({ error: outcome.error, code: outcome.code, retryable: outcome.retryable })
       }
