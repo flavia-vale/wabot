@@ -1447,6 +1447,60 @@ Contrato garantido por `test/email-contato-escuta.test.js`:
 - Sem cobrança, sem culpa, sem promessa de resultado (o teste falha em
   "culpa sua", "garantimos", "última chance" e afins).
 
+### Jornada de quem deixou o plano vencer (2026-09-07 — não regredir)
+
+Depois do vencimento existiam **dois** e-mails (o aviso no dia e um "volta" na
+semana seguinte) e o assunto morria ali: passados ~9 dias a conta nunca mais
+recebia nada, com tudo dela ainda guardado no sistema. Quem não renovava no
+primeiro susto simplesmente sumia. Hoje são o aviso **mais cinco** e-mails
+espaçados.
+
+| Peça | Onde |
+|---|---|
+| Os dias de cada etapa (PURO, sem banco) | `src/emailTriggers/expiredPlanJourney.js` |
+| Quem decide o e-mail do dia | `decideLifecycleEmail` em `lifecyclePolicy.js` |
+| Os textos | `src/email/registry.js` (grupo `plano`) |
+| Diagnóstico "saiu ou não, e por quê" | `scripts/diag-email-vencimento.mjs` |
+
+Etapas, em dias desde o vencimento: `plano_venceu` **0-2** →
+`plano_vencido_primeiros_dias` **4-6** → `plano_vencido_volta` **8-11** →
+`plano_vencido_2_semanas` **14-17** → `plano_vencido_1_mes` **25-28** →
+`plano_vencido_ultimo_aviso` **40-44**. Depois disso, **nada**.
+
+**Não regredir:**
+
+- **As janelas são largas (3 a 5 dias), nunca um dia só.** A passada roda 1×/dia
+  ancorada na hora em que a API subiu — um deploy no horário errado, uma passada
+  que falhou ou um dia de API fora do ar pulariam a data exata e o e-mail **nunca
+  sairia**. Com a janela larga o envio atrasa, mas acontece.
+- **As janelas não se encostam.** O espaçamento É o vão entre elas; duas janelas
+  coladas mandam dois assuntos diferentes em dias seguidos, que é o jeito mais
+  rápido de virar spam ignorado. Teste falha se encostarem ou se sobrepuserem.
+- **A jornada TERMINA.** Insistir para sempre faz a pessoa marcar como spam — e
+  aí perdemos também os avisos que ela precisa receber. O último e-mail **diz**
+  que é o último.
+- **Só o aviso do vencimento é `transactional`** (o robô parou, é obrigação de
+  serviço). Os cinco de recuperação são `marketing`: respeitam descadastro e
+  levam o link no rodapé. Sem isso, quem não quer mais ser chamada de volta só
+  teria a opção de marcar como spam.
+- **É jornada de plano PAGO.** Teste grátis tem trilha própria (`teste_acabou`)
+  e continua sem jornada depois — buraco conhecido, não corrigido aqui.
+- **Nenhum texto usa pressão falsa** ("última chance", "vamos apagar seus
+  dados") — e é mentira: nada é apagado. Teste falha se voltar.
+- Custo: zero. Mesma passada diária, nenhum processo novo, **zero impacto de RAM**.
+
+⚠️ **"O e-mail não está sendo enviado" tem SEIS causas com ações opostas** — SMTP
+desligado (aí nenhum e-mail sai, nem este), passada desligada, texto desligado na
+aba E-mails, descadastro, janela anti-repetição e teto diário — e todas aparecem
+igual de fora. Rode o diagnóstico antes de procurar defeito no código:
+
+```bash
+cd ~/wabot && node scripts/diag-email-vencimento.mjs [<email>] [--dias=60]
+```
+
+Ele separa os seis casos e ainda distingue "não saiu" de "não havia a quem
+mandar". Testes: `test/email-plano-vencido-jornada.test.js`.
+
 ### Recuperação de senha (não existia até 2026-08)
 
 Quem perdia a senha só voltava pelo suporte — e o link "Esqueci minha senha"
