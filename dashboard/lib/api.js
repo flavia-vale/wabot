@@ -338,6 +338,12 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/payments${query ? `?${query}` : ''}`)
   },
+  // Sub-aba "Cobranças recorrentes" do Financeiro: tentativa a tentativa, com
+  // o código e a mensagem que o banco devolveu.
+  adminSubscriptionCharges: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/finance/subscription-charges${query ? `?${query}` : ''}`)
+  },
   adminCreateManualPayment: (data) =>
     apiFetch('/api/admin/payments/manual', { method: 'POST', body: JSON.stringify(data) }),
   adminBillingWebhooks: (params = {}) => {

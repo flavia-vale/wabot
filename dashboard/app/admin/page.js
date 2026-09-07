@@ -177,6 +177,178 @@ function formatNumber(value) {
 
 // Avulso (pagou 30 dias, sem renovação automática) vs. recorrente (assinatura
 // Mercado Pago, cobra sozinha) — mesmo plano pode ter vindo dos dois jeitos.
+// Sub-aba "Cobranças recorrentes" (Financeiro). Uma linha por TENTATIVA de
+// cobrança da assinatura, com o que o banco devolveu: código cru (para abrir
+// caso no Mercado Pago) E a frase do que fazer (o código sozinho manda a
+// pessoa tomar ações opostas). Quem decide o texto é o backend — tela e script
+// de diagnóstico não podem discordar sobre o motivo de uma recusa.
+const CHARGE_OUTCOME_TONES = {
+  aprovada: 'bg-emerald-100 text-emerald-800',
+  recusada: 'bg-rose-100 text-rose-700',
+  pendente: 'bg-amber-100 text-amber-700',
+  devolvida: 'bg-slate-200 text-slate-700',
+  desconhecida: 'bg-gray-100 text-gray-500',
+}
+
+const CHARGE_ACTION_LABELS = {
+  cliente: 'Ação da cliente',
+  nossa: 'Ação nossa',
+  mercado_pago: 'Ação do Mercado Pago',
+  esperar: 'Só esperar',
+  ninguem: '—',
+}
+
+function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, onSearch, onOpenDetail }) {
+  const summary = data?.summary ?? null
+  const rows = asArray(data?.charges)
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-end gap-2">
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">Período</label>
+          <select
+            value={filters.days}
+            onChange={(event) => onFilters({ ...filters, days: Number(event.target.value) })}
+            className="mt-1 rounded-xl border border-gray-200 px-3 py-1.5 text-sm"
+          >
+            <option value={30}>Últimos 30 dias</option>
+            <option value={90}>Últimos 90 dias</option>
+            <option value={180}>Últimos 180 dias</option>
+            <option value={365}>Último ano</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">Resultado</label>
+          <select
+            value={filters.outcome}
+            onChange={(event) => onFilters({ ...filters, outcome: event.target.value })}
+            className="mt-1 rounded-xl border border-gray-200 px-3 py-1.5 text-sm"
+          >
+            <option value="all">Todos</option>
+            <option value="aprovada">Cobrou</option>
+            <option value="recusada">Recusada</option>
+            <option value="pendente">Em andamento</option>
+            <option value="devolvida">Estornada</option>
+          </select>
+        </div>
+        <form
+          className="flex items-end gap-2"
+          onSubmit={(event) => { event.preventDefault(); onFilters({ ...filters, q: search }) }}
+        >
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">Cliente</label>
+            <input
+              value={search}
+              onChange={(event) => onSearch(event.target.value)}
+              placeholder="e-mail ou nome"
+              className="mt-1 rounded-xl border border-gray-200 px-3 py-1.5 text-sm"
+            />
+          </div>
+          <button type="submit" className="rounded-xl bg-gray-900 px-3 py-1.5 text-xs font-black text-white">Buscar</button>
+        </form>
+      </div>
+
+      {summary && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-xl bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">Tentativas no período</p>
+            <p className="text-xl font-black text-gray-900">{formatNumber(summary.tentativas)}</p>
+            <p className="text-[11px] text-gray-500">{formatNumber(summary.assinaturasCobradas)} assinatura(s) cobraram</p>
+          </div>
+          <div className="rounded-xl bg-emerald-50 p-3">
+            <p className="text-xs text-emerald-600">Cobrou</p>
+            <p className="text-xl font-black text-emerald-800">{formatNumber(summary.aprovadas)}</p>
+            <p className="text-[11px] text-emerald-600">{formatCurrency(summary.valorAprovado)}</p>
+          </div>
+          <div className="rounded-xl bg-rose-50 p-3">
+            <p className="text-xs text-rose-600">Recusadas</p>
+            <p className="text-xl font-black text-rose-700">{formatNumber(summary.recusadas)}</p>
+            <p className="text-[11px] text-rose-600">{formatCurrency(summary.valorRecusado)} não entraram</p>
+          </div>
+          <div className="rounded-xl bg-sky-50 p-3">
+            <p className="text-xs text-sky-600">Taxa de sucesso</p>
+            <p className="text-xl font-black text-sky-800">{summary.taxaSucesso == null ? '—' : `${summary.taxaSucesso}%`}</p>
+            <p className="text-[11px] text-sky-600">das cobranças decididas</p>
+          </div>
+          <div className="rounded-xl bg-amber-50 p-3">
+            <p className="text-xs text-amber-700">Assinaturas em risco</p>
+            <p className="text-xl font-black text-amber-800">{formatNumber(summary.clientesEmRisco)}</p>
+            <p className="text-[11px] text-amber-700">última cobrança recusada</p>
+          </div>
+        </div>
+      )}
+
+      {summary && asArray(summary.motivos).length > 0 && (
+        <div className="mb-4 rounded-xl border border-gray-100 p-3">
+          <h3 className="mb-2 text-sm font-bold text-gray-800">Por que as cobranças foram recusadas</h3>
+          <div className="space-y-1">
+            {summary.motivos.map(motivo => (
+              <div key={motivo.code} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="text-gray-700">{motivo.label}</span>
+                <span className="text-xs text-gray-500">{formatNumber(motivo.total)}× · {formatCurrency(motivo.valor)} · <code className="text-[11px]">{motivo.code}</code></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-gray-100">
+        <table className="min-w-[900px] w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th className="px-3 py-2 font-bold">Tentativa em</th>
+              <th className="px-3 py-2 font-bold">Cliente</th>
+              <th className="px-3 py-2 font-bold">Plano</th>
+              <th className="px-3 py-2 font-bold">Valor</th>
+              <th className="px-3 py-2 font-bold">Resultado</th>
+              <th className="px-3 py-2 font-bold">Código do Mercado Pago</th>
+              <th className="px-3 py-2 font-bold">O que isso quer dizer</th>
+              <th className="px-3 py-2 font-bold">Nº da tentativa</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map(charge => (
+              <tr key={charge.id} className={onOpenDetail ? 'cursor-pointer hover:bg-gray-50' : ''} onClick={() => charge.userId && onOpenDetail?.(charge.userId)}>
+                <td className="whitespace-nowrap px-3 py-2 text-gray-700">{formatDate(charge.attemptedAt)}</td>
+                <td className="px-3 py-2 font-semibold text-gray-900">{charge.email ?? '—'}</td>
+                <td className="px-3 py-2 text-gray-600">{charge.plan ?? '—'}</td>
+                <td className="px-3 py-2 text-gray-600">{charge.amount == null ? '—' : formatCurrency(charge.amount)}</td>
+                <td className="px-3 py-2">
+                  <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${CHARGE_OUTCOME_TONES[charge.outcome] ?? CHARGE_OUTCOME_TONES.desconhecida}`}>{charge.statusLabel}</span>
+                </td>
+                <td className="px-3 py-2 text-xs text-gray-500">
+                  <code>{charge.returnCode ?? '—'}</code>
+                  {charge.providerStatus && <span className="ml-1 text-gray-400">({charge.providerStatus})</span>}
+                </td>
+                <td className="px-3 py-2 text-gray-700">
+                  {charge.returnMessage}
+                  {charge.actionOwner && charge.actionOwner !== 'ninguem' && (
+                    <span className="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-600">{CHARGE_ACTION_LABELS[charge.actionOwner] ?? charge.actionOwner}</span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-gray-600">
+                  {charge.retryAttempt ?? '—'}
+                  {charge.nextRetryAt && <span className="block text-[11px] text-gray-400">tenta de novo {formatDate(charge.nextRetryAt)}</span>}
+                </td>
+              </tr>
+            ))}
+            {!loading && !rows.length && (
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Nenhuma cobrança de assinatura no período. Cobrança só aparece aqui depois que o Mercado Pago tenta — assinatura recém-ligada ainda não tem histórico.</td></tr>
+            )}
+            {loading && (
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Carregando…</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[11px] text-gray-400">
+        As cobranças vêm do próprio Mercado Pago e são atualizadas de hora em hora — recusa que não gera aviso também aparece aqui.
+      </p>
+    </div>
+  )
+}
+
 function BillingKindBadge({ customer }) {
   const sub = customer?.recurringSubscription
   if (customer?.billingKind === 'recorrente' && sub) {
@@ -1596,6 +1768,13 @@ export default function AdminPage() {
   // pessoa abre a aba — não entram no Promise.all gigante do boot.
   const [overduePaidList, setOverduePaidList] = useState(null)
   const [paidCustomersList, setPaidCustomersList] = useState(null)
+  // Sub-abas do Financeiro. "Cobranças recorrentes" é tentativa a tentativa da
+  // assinatura, com o retorno do banco — pergunta de outra natureza que a
+  // visão geral, e misturar as duas faz a aba virar parede.
+  const [financeTab, setFinanceTab] = useState('visao')
+  const [chargeFilters, setChargeFilters] = useState({ days: 90, outcome: 'all', q: '' })
+  const [chargeSearch, setChargeSearch] = useState('')
+  const [charges, setCharges] = useState(null)
 
   useEffect(() => {
     if (tab !== 'financeiro' || overduePaidList || paidCustomersList) return
@@ -1610,6 +1789,21 @@ export default function AdminPage() {
     })
     return () => { active = false }
   }, [tab, overduePaidList, paidCustomersList])
+
+  // "Carregando" é DERIVADO do filtro que já foi respondido — o resultado
+  // carrega a chave do filtro que o gerou. Sem isso, trocar o período mostraria
+  // por um instante o número do período anterior como se fosse o novo.
+  const chargeKey = `${chargeFilters.days}|${chargeFilters.outcome}|${chargeFilters.q}`
+  const chargesLoading = tab === 'financeiro' && financeTab === 'cobrancas' && charges?.key !== chargeKey
+
+  useEffect(() => {
+    if (tab !== 'financeiro' || financeTab !== 'cobrancas') return
+    let active = true
+    api.adminSubscriptionCharges({ ...chargeFilters, limit: 100 })
+      .then(data => { if (active) setCharges({ ...data, key: chargeKey }) })
+      .catch(() => { if (active) setCharges({ charges: [], summary: null, erro: true, key: chargeKey }) })
+    return () => { active = false }
+  }, [tab, financeTab, chargeFilters, chargeKey])
   // Drill-down dos cards técnicos ('infra' | 'filas' | null). Não busca nada
   // novo: mostra o detalhe do que a página já carregou.
   const [techDrilldown, setTechDrilldown] = useState(null)
@@ -2410,6 +2604,32 @@ export default function AdminPage() {
               </div>
             </div>
 
+            <div className="mb-5 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
+              {[['visao', 'Visão geral'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFinanceTab(id)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-black ${financeTab === id ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {financeTab === 'cobrancas' && (
+              <SubscriptionChargesPanel
+                data={charges}
+                loading={chargesLoading}
+                filters={chargeFilters}
+                onFilters={setChargeFilters}
+                search={chargeSearch}
+                onSearch={setChargeSearch}
+                onOpenDetail={openUserDetail}
+              />
+            )}
+
+            {financeTab === 'visao' && (<>
             <div className="mb-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
                 <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Receita bruta 30d</p>
@@ -2560,6 +2780,7 @@ export default function AdminPage() {
                 </table>
               </div>
             </div>
+            </>)}
           </section>
         )}
 
