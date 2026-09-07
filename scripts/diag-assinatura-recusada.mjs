@@ -32,7 +32,7 @@
 import 'dotenv/config'
 import db from '../src/db.js'
 import { classifyMpAccessTokenMode } from '../src/domain/payments/accessTokenMode.js'
-import { decidePendingSubscriptionReuse } from '../src/domain/payments/subscriptionPolicy.js'
+import { decidePendingSubscriptionReuse, SUBSCRIPTION_ATTEMPT_WINDOW_MS } from '../src/domain/payments/subscriptionPolicy.js'
 
 const args = process.argv.slice(2)
 const dias = Math.max(1, Number((args.find(a => a.startsWith('--days=')) || '').split('=')[1] || 7))
@@ -40,8 +40,11 @@ const alvo = args.find(a => !a.startsWith('--')) || null
 const semLive = args.includes('--no-live')
 const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000)
 
+// Horário em UTC, como está gravado no banco. Marcado de propósito: os mesmos
+// três checkouts aparecem como 09:05/09:08/10:02 no RCA (Brasília) e como
+// 12:05/12:08/13:02 aqui, e sem a marca isso parece checkout diferente.
 function fmt(d) {
-  return d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : '—'
+  return d ? `${new Date(d).toISOString().slice(0, 19).replace('T', ' ')}Z` : '—'
 }
 
 const MP_TOKEN = String(process.env.MP_ACCESS_TOKEN || '').trim()
@@ -89,6 +92,35 @@ function explicarMotivo(detalhe) {
   return MOTIVOS[detalhe] || `motivo fora da nossa lista ("${detalhe}") — conferir na tabela de recusas do MP`
 }
 
+/**
+ * Maior número de checkouts do MESMO plano criados dentro de uma janela — a
+ * mesma da regra de espera (`SUBSCRIPTION_ATTEMPT_WINDOW_MS`), para o
+ * diagnóstico não usar critério próprio.
+ */
+function maiorRepeticaoNaJanela(lista) {
+  const ordenada = [...lista]
+    .filter(s => s.createdAt)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+
+  let melhor = { total: 0, plan: null, minutos: 0 }
+  for (let i = 0; i < ordenada.length; i++) {
+    const inicio = new Date(ordenada[i].createdAt).getTime()
+    let total = 0
+    let fim = inicio
+    for (let j = i; j < ordenada.length; j++) {
+      const quando = new Date(ordenada[j].createdAt).getTime()
+      if (quando - inicio > SUBSCRIPTION_ATTEMPT_WINDOW_MS) break
+      if (String(ordenada[j].plan) !== String(ordenada[i].plan)) continue
+      total++
+      fim = quando
+    }
+    if (total > melhor.total) {
+      melhor = { total, plan: ordenada[i].plan, minutos: Math.round((fim - inicio) / 60000) }
+    }
+  }
+  return melhor
+}
+
 function idDoAviso(aviso) {
   if (aviso?.dataId) return String(aviso.dataId)
   try {
@@ -122,10 +154,23 @@ async function main() {
   let where = { createdAt: { gte: desde } }
   let idsAlvo = null
   if (alvo) {
+    // `contactPhone` é o nome real da coluna. Com `phone` a consulta INTEIRA
+    // era recusada pelo Prisma e o `catch` devolvia lista vazia — o script
+    // dizia "nenhuma conta" para uma conta que existe, com esse e-mail exato.
+    // Por isso o erro agora aparece em vez de virar resposta.
     const users = await db.user.findMany({
-      where: { OR: [{ email: { contains: alvo } }, { phone: { contains: alvo } }, { name: { contains: alvo } }] },
+      where: {
+        OR: [
+          { email: { contains: alvo } },
+          { contactPhone: { contains: alvo } },
+          { name: { contains: alvo } },
+        ],
+      },
       select: { id: true, email: true, name: true },
-    }).catch(() => [])
+    }).catch(err => {
+      console.log(`\n  Falha ao procurar a conta: ${err?.message || err}`)
+      return []
+    })
     if (!users.length) {
       // Sem `return`: os avisos do Mercado Pago vivem em `WebhookEvent`, que
       // NÃO tem vínculo com a conta e sobrevive ao apagamento dela. Desistir
@@ -160,11 +205,16 @@ async function main() {
     const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, name: true } }).catch(() => null)
     const rotulo = user?.email || user?.name || userId
     const pendentes = lista.filter(s => String(s.status).toLowerCase() === 'pending')
-    // Duas ou mais tentativas idênticas em aberto é exatamente o padrão que o
-    // antifraude do MP recusa. Uma tentativa só nunca é este caso.
-    const repetido = pendentes.length >= 2
+    // A repetição é medida por checkouts CRIADOS na mesma janela, nunca pelos
+    // que continuam em aberto agora: a reconciliação horária encerra os
+    // anteriores, e contando o estado atual três tentativas em 57 minutos
+    // apareciam como "sem repetição" — foi o que fez o script concluir que a
+    // recusa tinha vindo do cartão da cliente. Mesma janela da regra de espera,
+    // para diagnóstico e produto não discordarem.
+    const repeticao = maiorRepeticaoNaJanela(lista)
+    const repetido = repeticao.total >= 2
     if (repetido) suspeitas++
-    console.log(`\n  ${rotulo} — ${lista.length} checkout(s), ${pendentes.length} em aberto${repetido ? '   << PADRÃO DE RECUSA POR REPETIÇÃO' : ''}`)
+    console.log(`\n  ${rotulo} — ${lista.length} checkout(s), ${pendentes.length} em aberto${repetido ? `   << ${repeticao.total} tentativas do plano ${repeticao.plan} em ${repeticao.minutos} min` : ''}`)
     for (const s of lista) {
       const decisao = decidePendingSubscriptionReuse({ subscription: s, plan: s.plan })
       console.log(`    ${fmt(s.createdAt)}  plano=${String(s.plan).padEnd(6)} situacao=${String(s.status).padEnd(10)} reaproveitavel=${decisao.reuse ? 'sim' : `nao (${decisao.reason})`}`)

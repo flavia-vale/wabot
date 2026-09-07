@@ -246,3 +246,40 @@ test('o diagnóstico pergunta o motivo ao Mercado Pago e não imprime a chave', 
     assert.ok(!/\$\{[^}]*(MP_TOKEN|MP_ACCESS_TOKEN)/.test(linha), `a chave pode vazar nesta linha: ${linha.trim()}`)
   }
 })
+test('o diagnóstico mede repetição pelo que foi CRIADO, não pelo que segue em aberto', () => {
+  const diag = readFileSync(new URL('../scripts/diag-assinatura-recusada.mjs', import.meta.url), 'utf8')
+
+  // A conta procurada existe com esse e-mail exato e o script dizia "nenhuma
+  // conta": a coluna é `contactPhone`, e com `phone` o Prisma recusava a
+  // consulta inteira — o catch transformava o erro em resposta vazia.
+  assert.match(diag, /contactPhone/, 'a busca precisa usar o nome real da coluna')
+  assert.ok(!/\{ phone: \{ contains/.test(diag), 'campo inexistente voltou à busca')
+
+  // Roda a função de verdade extraída do script, com os três checkouts reais
+  // da conta medida (mesmo plano, 57 minutos). Contando só os que continuam em
+  // aberto, isso dava ZERO e o script concluía que a recusa veio do cartão.
+  const fonte = diag.slice(diag.indexOf('function maiorRepeticaoNaJanela'))
+  const corpo = fonte.slice(0, fonte.indexOf('\nfunction ', 1))
+  const maiorRepeticaoNaJanela = new Function(
+    'SUBSCRIPTION_ATTEMPT_WINDOW_MS',
+    `${corpo}; return maiorRepeticaoNaJanela`
+  )(SUBSCRIPTION_ATTEMPT_WINDOW_MS)
+
+  const encerrados = [
+    { plan: 'pro', status: 'cancelled', createdAt: new Date('2026-09-07T12:05:13Z') },
+    { plan: 'pro', status: 'cancelled', createdAt: new Date('2026-09-07T12:08:31Z') },
+    { plan: 'pro', status: 'cancelled', createdAt: new Date('2026-09-07T13:02:11Z') },
+  ]
+  const achado = maiorRepeticaoNaJanela(encerrados)
+  assert.equal(achado.total, 3)
+  assert.equal(achado.plan, 'pro')
+  assert.equal(achado.minutos, 57)
+
+  // Uma tentativa só nunca pode virar "padrão de repetição".
+  assert.equal(maiorRepeticaoNaJanela([encerrados[0]]).total, 1)
+  // Plano diferente é intenção nova, igual à regra de espera.
+  assert.equal(
+    maiorRepeticaoNaJanela([encerrados[0], { ...encerrados[1], plan: 'basic' }]).total,
+    1
+  )
+})

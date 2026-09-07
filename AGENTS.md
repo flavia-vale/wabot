@@ -1079,6 +1079,35 @@ O `GET /preapproval/:id` **não tem `status_detail`** — o motivo da recusa mor
 na fatura (`GET /authorized_payments/:id` → `payment.status_detail`). Não
 procurar no lugar errado.
 
+#### O diagnóstico mentia por dois defeitos próprios (2026-09-07)
+
+Rodado em produção com o e-mail da cliente, o script respondeu **"nenhuma conta
+encontrada"** — e a conta existe com exatamente esse e-mail. Rodado sem alvo,
+ela aparece, e aí ele concluiu **"a recusa veio do cartão/banco da cliente"**
+para três checkouts do mesmo plano em 57 minutos. As duas respostas estavam
+erradas, por motivos diferentes:
+
+- **`User` não tem coluna `phone`, tem `contactPhone`.** Com o nome errado o
+  Prisma recusa a consulta INTEIRA, e o `.catch(() => [])` transformava o erro
+  em resposta: "não achei" em vez de "não consegui procurar". Erro engolido em
+  script de diagnóstico é pior que erro na cara — ele vira conclusão. Agora a
+  falha é impressa.
+- **A repetição era medida pelo que continua `pending` AGORA.** A reconciliação
+  horária encerra os checkouts anteriores, então o padrão que a correção existe
+  para tratar fica invisível justamente depois que ele acontece. Passou a ser
+  medida por checkouts **criados** dentro de `SUBSCRIPTION_ATTEMPT_WINDOW_MS`
+  (a mesma constante da regra de espera, para diagnóstico e produto não
+  discordarem).
+
+Junto: os horários do script saem em **UTC** e agora são marcados com `Z`. Os
+mesmos três checkouts são 09:05/09:08/10:02 na tabela acima (Brasília) e
+12:05/12:08/13:02 no banco — sem a marca, parecem checkouts diferentes.
+
+⚠️ **Achado de produção que confirma a correção do `updatedAt`:** a conta
+`flavia.vale@usp.br` tinha um checkout `pending` de **5 dias antes** marcado
+como `reaproveitavel=sim`. Fora da janela de 24h declarada, exatamente como
+descrito abaixo.
+
 #### Duas correções na própria correção (2026-09-07)
 
 - **A janela de reaproveitamento conta do `createdAt`, nunca do `updatedAt`.**
