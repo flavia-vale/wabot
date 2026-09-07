@@ -1181,6 +1181,17 @@ uma cliente que teria lido "falta concluir" depois de pagar. Volume alto aponta
 para aviso de preapproval não chegando — conferir os eventos marcados no painel
 do MP.
 
+**Como conferir que a cobrança automática vai mesmo acontecer, sem esperar 30
+dias:** `node scripts/testar-recorrencia.mjs <email>` (read-only) confere os
+seis elos um a um — assinatura valendo no MP com cartão vinculado, cobrança já
+feita, aviso chegando, aviso processado sem erro, nosso banco espelhando o MP e
+acesso cobrindo até a próxima cobrança. O elo que mais quebra é o **aviso**, e
+ele quebra em silêncio: cobrança registrada no MP (item 2) sem aviso nenhum
+(item 3) significa evento não marcado no painel do Mercado Pago —
+`subscription_preapproval`, `subscription_authorized_payment` **e** `payment`.
+Um `subscription_access_extended` na janela é a rede de segurança tapando
+exatamente esse buraco.
+
 Para acertar uma conta AGORA (e responder "ela precisa fazer algo no Mercado
 Pago?"), read-only por padrão:
 
