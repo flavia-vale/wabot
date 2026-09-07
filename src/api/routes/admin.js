@@ -25,7 +25,7 @@ import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/part
 import { createCapacityService } from '../../ops/capacity/service.js'
 import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 import { calculateManualPaymentExpiry, parseManualPaymentInput } from '../../domain/payments/manualPayment.js'
-import { isSubscriptionActive, describeSubscriptionStatus } from '../../domain/payments/subscriptionPolicy.js'
+import { isSubscriptionActive, describeSubscriptionStatus, describePendingSubscriptionNotice } from '../../domain/payments/subscriptionPolicy.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -2360,10 +2360,13 @@ export async function adminRoutes(app) {
           payments: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       }),
-      db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true }, _count: { _all: true } }),
+      db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true }, _count: { _all: true }, _max: { createdAt: true } }),
     ])
     const ltvMap = new Map(ltvRows.map(row => [row.userId, row._sum.amount ?? 0]))
     const paidCountMap = new Map(ltvRows.map(row => [row.userId, row._count._all]))
+    // Último pagamento APROVADO — é o que separa "abandonou o checkout" de
+    // "pagou e a confirmação ainda não chegou" numa assinatura `pending`.
+    const lastPaidAtMap = new Map(ltvRows.map(row => [row.userId, row._max?.createdAt ?? null]))
 
     // Assinatura recorrente mais recente de cada cliente da página — é o que
     // separa "pagou avulso" de "pagou recorrente" (e se cancelou a renovação).
@@ -2394,6 +2397,15 @@ export async function adminRoutes(app) {
       subscriptions: users.map(user => {
         const subscription = subscriptionMap.get(user.id) ?? null
         const paidCount = paidCountMap.get(user.id) ?? 0
+        // "Falta concluir no Mercado Pago" era dito também para quem já tinha
+        // pagado — a conta estava cobrando e a tag mandava cobrar a cliente.
+        const pendingNotice = subscription
+          ? describePendingSubscriptionNotice({
+            status: subscription.status,
+            subscriptionStartedAt: subscription.createdAt,
+            lastApprovedPaymentAt: lastPaidAtMap.get(user.id) ?? null,
+          })
+          : null
         // "recorrente" = já existiu registro de assinatura (Mercado Pago
         // preapproval), mesmo que hoje esteja pausada/cancelada — é o
         // caminho de cobrança que a conta usou, não o estado atual dele.
@@ -2410,7 +2422,8 @@ export async function adminRoutes(app) {
           recurringSubscription: subscription
             ? {
               status: subscription.status,
-              statusLabel: describeSubscriptionStatus(subscription.status),
+              statusLabel: pendingNotice?.label ?? describeSubscriptionStatus(subscription.status),
+              awaitingConfirmation: Boolean(pendingNotice?.awaitingConfirmation),
               autoRenew: isSubscriptionActive(subscription.status),
               startedAt: subscription.createdAt,
               nextChargeAt: subscription.nextChargeAt,

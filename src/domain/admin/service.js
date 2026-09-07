@@ -6,6 +6,7 @@ import { withPayingStatus } from './payingStatus.js'
 import { loadEverPaidUserIds } from './payingLoader.js'
 import { describeDisconnectReason } from './disconnectReason.js'
 import { resolveSessionOwner } from '../../core/sessionOwnership.js'
+import { describeSubscriptionStatus, describePendingSubscriptionNotice } from '../payments/subscriptionPolicy.js'
 
 // Último evento de conexão por cliente, em UMA consulta. Mesmo padrão do
 // `buildAdminOnlineOverview`: é o que separa "o robô está tentando" de
@@ -499,6 +500,9 @@ export function createAdminService({
           _sum: { amount: true },
           _count: { _all: true },
           _min: { createdAt: true },
+          // `_max` sai de graça no mesmo groupBy e é o que separa "abandonou o
+          // checkout" de "pagou e a confirmação ainda não chegou".
+          _max: { createdAt: true },
         })
         : [],
       userIds.length
@@ -535,6 +539,13 @@ export function createAdminService({
         const subscription = subscriptionMap.get(user.id) ?? null
         // `paymentMap` já é só pagamento APROVADO — é a mesma fonte da tag.
         const everPaid = Number(payment?._count?._all ?? 0) > 0
+        const pendingNotice = subscription
+          ? describePendingSubscriptionNotice({
+            status: subscription.status,
+            subscriptionStartedAt: subscription.createdAt,
+            lastApprovedPaymentAt: payment?._max?.createdAt ?? null,
+          })
+          : null
         return sanitizeUser(withPayingStatus({
           id: user.id,
           name: user.name,
@@ -560,6 +571,8 @@ export function createAdminService({
               plan: subscription.plan,
               planLabel: planLabel(subscription.plan),
               status: subscription.status,
+              statusLabel: pendingNotice?.label ?? describeSubscriptionStatus(subscription.status),
+              awaitingConfirmation: Boolean(pendingNotice?.awaitingConfirmation),
               startedAt: subscription.createdAt,
               nextChargeAt: subscription.nextChargeAt,
               cancelledAt: subscription.cancelledAt,

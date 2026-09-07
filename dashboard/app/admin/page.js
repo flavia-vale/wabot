@@ -180,7 +180,11 @@ function formatNumber(value) {
 function BillingKindBadge({ customer }) {
   const sub = customer?.recurringSubscription
   if (customer?.billingKind === 'recorrente' && sub) {
-    const tone = sub.autoRenew ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+    // `awaitingConfirmation`: já pagou, falta só a confirmação do Mercado Pago
+    // chegar até nós — não é conta parada no meio do caminho.
+    const tone = sub.autoRenew
+      ? 'bg-emerald-100 text-emerald-800'
+      : sub.awaitingConfirmation ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
     return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${tone}`}>Recorrente · {sub.statusLabel}</span>
   }
   if (customer?.billingKind === 'avulso') {

@@ -67,6 +67,10 @@ export const ANALYTICS_EVENTS = new Set([
   // chegou. Cada evento destes é uma cliente que teria ficado sem robô depois
   // de pagar — se aparecer com frequência, o problema está no webhook.
   'subscription_access_extended',
+  // Assinatura que estava `pending` no nosso banco e o Mercado Pago confirmou
+  // como valendo (pela cobrança aprovada ou pela consulta ao abrir o painel).
+  // Cada um destes é uma cliente que veria "falta concluir" depois de pagar.
+  'subscription_status_synced',
   'first_send_success',
   'send_error',
   'organic_page_view',

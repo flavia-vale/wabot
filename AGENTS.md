@@ -1125,6 +1125,72 @@ descrito abaixo.
 
 Teste: `test/subscription-checkout-reuse.test.js`.
 
+### "Assinou recorrente e o painel diz que ela não terminou" (RCA 2026-09-07 — não regredir)
+
+Cliente assinou com renovação automática, viu a mensagem de sucesso, o acesso
+foi liberado e o pagamento entrou. Mesmo assim o painel dela dizia **"Renova
+manualmente"** e **"Você começou a ligar a cobrança automática e não terminou no
+Mercado Pago"**, e no admin a tag era "Recorrente · Falta concluir no Mercado
+Pago" — para uma conta que estava pagando.
+
+**Causa raiz: o aviso da COBRANÇA nunca encostava no status da assinatura.**
+Em `src/api/routes/payments.js`, o ramo `subscription_authorized_payment`
+liberava o acesso (`activateSubscriptionAccess`) e ia embora. Quem sincroniza o
+status é o ramo `subscription_preapproval` **ou** a reconciliação, que passa de
+**hora em hora**. Então: (1) quem só recebe o aviso da cobrança fica `pending`
+para sempre, cobrando todo mês; (2) mesmo quando o outro aviso chega, existe uma
+janela de até uma hora em que a cliente lê "você não terminou" logo depois de
+pagar — e é justamente aí que ela abre o painel.
+
+Três consertos, todos com regra pura em `subscriptionPolicy.js`:
+
+- **`decideSubscriptionStatusFromCharge`** — a cobrança aprovada acerta o
+  status. O que o MP responde na consulta do preapproval é a verdade e ganha de
+  tudo; sem resposta (rede/token), a própria cobrança é prova e **só promove
+  `pending`** — assinatura pausada ou cancelada nunca é ressuscitada por aqui.
+- **`shouldRefreshPendingSubscription`** — `GET /payments/overview` consulta o
+  MP sob demanda quando o checkout ainda está `pending`. Limitado de propósito:
+  só checkout criado nas últimas 24h e **no máximo uma consulta por minuto por
+  assinatura** (o painel é aberto o tempo todo, isso não pode virar uma chamada
+  ao provedor por carregamento de tela). Falha na consulta **nunca** derruba a
+  tela de plano.
+- **`describePendingSubscriptionNotice`** — `pending` significa duas coisas
+  OPOSTAS e tinha uma frase só. Sem pagamento depois do checkout, ela de fato
+  parou no meio. **Com** pagamento aprovado depois do checkout, o MP cobrou e o
+  que falta é a confirmação chegar até nós: a frase passa a ser "seu acesso já
+  está liberado, estamos confirmando, você não precisa fazer nada, **não assine
+  de novo**". Isso não é cosmético — mandar quem já pagou assinar de novo é
+  exatamente o padrão que dispara a recusa do antifraude (seção acima).
+
+**Não regredir:**
+
+- **O texto mora no backend** (`summarizeSubscriptionForPanel().notice`), não na
+  tela: painel e admin precisam dizer a mesma coisa sobre a mesma assinatura.
+  Teste falha se a frase fixa voltar para `dashboard/app/painel/plano/page.js`.
+- **A tag do admin separa os dois casos** ("Recorrente (confirmando)", âmbar, vs.
+  "Recorrente (não concluída)"), decidida pelo backend com o **último pagamento
+  aprovado** — que sai do `_max` do `groupBy` que já existia, **sem consulta
+  nova**. Pagamento antigo (avulso de meses atrás) não vira "confirmando":
+  a janela é o pagamento a partir do nascimento daquele checkout.
+- **`pending` continua não sendo "renovação ligada"** e continua não travando a
+  conta — nada aqui mexe nessas duas invariantes.
+- Linguagem leiga: nada de `preapproval`, `authorized`, `webhook` na tela.
+
+Sinal `subscription_status_synced` (allowlist em `src/analytics.js`): cada um é
+uma cliente que teria lido "falta concluir" depois de pagar. Volume alto aponta
+para aviso de preapproval não chegando — conferir os eventos marcados no painel
+do MP.
+
+Para acertar uma conta AGORA (e responder "ela precisa fazer algo no Mercado
+Pago?"), read-only por padrão:
+
+```bash
+cd ~/wabot && node scripts/sincronizar-assinatura.mjs <email>          # só mostra
+cd ~/wabot && node scripts/sincronizar-assinatura.mjs <email> --aplicar # grava o que o MP respondeu
+```
+
+Teste: `test/subscription-policy.test.js`.
+
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
 O e-mail de boas-vindas pós-signup (`src/email/welcomeEmail.js`) é enviado

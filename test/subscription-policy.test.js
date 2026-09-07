@@ -9,6 +9,9 @@ import {
   describeSubscriptionStatus,
   isSubscriptionActive,
   summarizeSubscriptionForPanel,
+  decideSubscriptionStatusFromCharge,
+  shouldRefreshPendingSubscription,
+  describePendingSubscriptionNotice,
 } from '../src/domain/payments/subscriptionPolicy.js'
 
 const NOW = new Date('2026-09-01T12:00:00Z')
@@ -123,6 +126,8 @@ test('resumo do painel sem assinatura nenhuma', () => {
     nextChargeAt: null,
     cancelledAt: null,
     canCancel: false,
+    awaitingConfirmation: false,
+    notice: null,
   })
 })
 
@@ -179,4 +184,119 @@ test('a tela oferece assinar E desligar — sem saída, a cobrança automática 
 test('desligar pede confirmação e explica que o acesso pago continua', () => {
   assert.ok(planoPageSource.includes("cancelState === 'confirming'"), 'cancelar não pode ser um clique só')
   assert.ok(/acesso continua at/i.test(planoPageSource), 'a tela precisa dizer que o acesso já pago continua')
+})
+
+/*
+ * RCA 2026-09-07 — "assinou recorrente e o painel diz que ela não terminou".
+ *
+ * A cliente concluiu a assinatura, o Mercado Pago cobrou, o acesso foi
+ * liberado — e o painel seguia dizendo "você começou a ligar a cobrança
+ * automática e não terminou no Mercado Pago", com o admin marcando "falta
+ * concluir". O aviso da COBRANÇA liberava o acesso e nunca encostava no status
+ * da assinatura, e quem sincroniza o status só passa de hora em hora.
+ */
+
+test('cobrança aprovada promove assinatura presa em `pending`', () => {
+  const decisao = decideSubscriptionStatusFromCharge({ storedStatus: 'pending', snapshotStatus: null })
+  assert.equal(decisao.update, true)
+  assert.equal(decisao.status, 'authorized')
+  assert.equal(decisao.reason, 'charge_is_proof')
+})
+
+test('o que o Mercado Pago responde ganha do nosso registro', () => {
+  const decisao = decideSubscriptionStatusFromCharge({ storedStatus: 'pending', snapshotStatus: 'authorized' })
+  assert.equal(decisao.update, true)
+  assert.equal(decisao.status, 'authorized')
+  assert.equal(decisao.reason, 'provider_status')
+
+  const iguais = decideSubscriptionStatusFromCharge({ storedStatus: 'authorized', snapshotStatus: 'authorized' })
+  assert.equal(iguais.update, false)
+})
+
+test('cobrança NUNCA ressuscita assinatura pausada ou cancelada sem o MP confirmar', () => {
+  for (const status of ['paused', 'cancelled']) {
+    const decisao = decideSubscriptionStatusFromCharge({ storedStatus: status, snapshotStatus: null })
+    assert.equal(decisao.update, false, `${status} não pode virar ativa sem resposta do provedor`)
+  }
+})
+
+test('checkout novo é consultado sob demanda; velho e recém-consultado não', () => {
+  const base = { status: 'pending', mpSubscriptionId: 'preap-1', createdAt: new Date('2026-09-01T11:00:00Z'), updatedAt: new Date('2026-09-01T11:00:00Z') }
+  assert.equal(shouldRefreshPendingSubscription({ subscription: base, now: NOW }).refresh, true)
+
+  // consulta no máximo uma vez por minuto — o painel é aberto o tempo todo
+  const agoraMesmo = { ...base, updatedAt: new Date('2026-09-01T11:59:40Z') }
+  assert.equal(shouldRefreshPendingSubscription({ subscription: agoraMesmo, now: NOW }).refresh, false)
+
+  const velho = { ...base, createdAt: new Date('2026-08-20T11:00:00Z'), updatedAt: new Date('2026-08-20T11:00:00Z') }
+  assert.equal(shouldRefreshPendingSubscription({ subscription: velho, now: NOW }).refresh, false)
+
+  for (const status of ['authorized', 'cancelled', 'paused']) {
+    assert.equal(shouldRefreshPendingSubscription({ subscription: { ...base, status }, now: NOW }).refresh, false)
+  }
+  assert.equal(shouldRefreshPendingSubscription({ subscription: { ...base, mpSubscriptionId: null }, now: NOW }).refresh, false)
+  assert.equal(shouldRefreshPendingSubscription({ subscription: null, now: NOW }).refresh, false)
+})
+
+test('quem já pagou NÃO lê "você não terminou" — lê que está sendo confirmado', () => {
+  const aviso = describePendingSubscriptionNotice({
+    status: 'pending',
+    subscriptionStartedAt: new Date('2026-09-01T11:00:00Z'),
+    lastApprovedPaymentAt: new Date('2026-09-01T11:05:00Z'),
+  })
+  assert.equal(aviso.awaitingConfirmation, true)
+  assert.match(aviso.notice, /acesso já está liberado/i)
+  assert.match(aviso.notice, /não precisa fazer nada/i)
+  assert.match(aviso.notice, /Não assine de novo/i)
+  assert.doesNotMatch(aviso.notice, /não terminou/i)
+  // linguagem leiga obrigatória nesta superfície
+  assert.doesNotMatch(aviso.notice, /preapproval|authorized|gateway|webhook/i)
+})
+
+test('quem abandonou o checkout continua lendo que falta concluir', () => {
+  const aviso = describePendingSubscriptionNotice({
+    status: 'pending',
+    subscriptionStartedAt: new Date('2026-09-01T11:00:00Z'),
+    lastApprovedPaymentAt: null,
+  })
+  assert.equal(aviso.awaitingConfirmation, false)
+  assert.match(aviso.notice, /não terminou no Mercado Pago/i)
+
+  // pagamento de meses atrás (avulso) não vira "confirmando"
+  const antigo = describePendingSubscriptionNotice({
+    status: 'pending',
+    subscriptionStartedAt: new Date('2026-09-01T11:00:00Z'),
+    lastApprovedPaymentAt: new Date('2026-06-01T11:00:00Z'),
+  })
+  assert.equal(antigo.awaitingConfirmation, false)
+
+  assert.equal(describePendingSubscriptionNotice({ status: 'authorized' }), null)
+})
+
+test('o resumo do painel carrega o aviso certo e não vaza identificador do provedor', () => {
+  const resumo = summarizeSubscriptionForPanel(
+    { status: 'pending', plan: 'basic', mpSubscriptionId: 'preap-9', createdAt: new Date('2026-09-01T11:00:00Z') },
+    { lastApprovedPaymentAt: new Date('2026-09-01T11:10:00Z') }
+  )
+  assert.equal(resumo.autoRenew, false, 'pendente nunca pode dizer que a renovação está ligada')
+  assert.equal(resumo.awaitingConfirmation, true)
+  assert.match(resumo.statusLabel, /Confirmando/i)
+  assert.ok(!('mpSubscriptionId' in resumo))
+})
+
+test('o webhook da cobrança sincroniza o status da assinatura', () => {
+  assert.ok(
+    paymentsSource.includes('syncSubscriptionStatusAfterCharge'),
+    'a cobrança aprovada precisa acertar o status — sem isso a assinatura fica `pending` para sempre'
+  )
+  assert.ok(paymentsSource.includes('decideSubscriptionStatusFromCharge'))
+  assert.ok(paymentsSource.includes('shouldRefreshPendingSubscription'), 'o painel precisa conseguir se acertar sozinho')
+})
+
+test('a tela mostra o aviso vindo do backend, não um texto próprio', () => {
+  assert.ok(planoPageSource.includes('overview.subscription.notice'))
+  assert.ok(
+    !planoPageSource.includes('não terminou no Mercado Pago'),
+    'o texto do checkout em aberto não pode voltar a ser fixo na tela — pending significa duas coisas opostas'
+  )
 })
