@@ -60,15 +60,23 @@ export function createSessionService({ db } = {}) {
 // chance nenhuma de sucesso. Foram 183 recusas invisíveis antes de alguém
 // perceber. Linguagem leiga obrigatória aqui (a mensagem vai direto para a
 // tela): nada de "worker", "supervisor", "circuit breaker" ou "shard".
-export function classifyBotStartOutcome({ startAccepted, running }) {
+//
+// RCA 2026-09-07: a recusa tinha TRÊS causas e UMA frase só ("estamos no
+// limite"), então uma cliente leu "servidor lotado" com o servidor fora do
+// teto e ninguém conseguia saber, pela tela ou pelo log da API, qual das
+// causas tinha sido. Quando o chamador passa `refusal`
+// (`classifyStartRefusal`, domain/session/startRefusal.js) a resposta carrega
+// o motivo de verdade; sem ele, o texto histórico é preservado.
+export function classifyBotStartOutcome({ startAccepted, running, refusal } = {}) {
   if (running) return { ok: true }
   if (startAccepted === false) {
     return {
       ok: false,
       statusCode: 503,
-      code: 'WA_CAPACITY_LIMIT',
-      error: 'Nosso servidor está no limite de robôs ligados ao mesmo tempo. Nossa equipe já foi avisada — tente de novo em alguns minutos.',
-      retryable: true,
+      code: refusal?.code ?? 'WA_CAPACITY_LIMIT',
+      error: refusal?.error ?? 'Nosso servidor está no limite de robôs ligados ao mesmo tempo. Nossa equipe já foi avisada — tente de novo em alguns minutos.',
+      reason: refusal?.reason ?? null,
+      retryable: refusal?.reason !== 'session_misplaced',
     }
   }
   return {
