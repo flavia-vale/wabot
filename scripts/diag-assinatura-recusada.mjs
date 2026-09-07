@@ -127,12 +127,18 @@ async function main() {
       select: { id: true, email: true, name: true },
     }).catch(() => [])
     if (!users.length) {
-      console.log(`\nNenhuma conta encontrada para "${alvo}".`)
-      return
+      // Sem `return`: os avisos do Mercado Pago vivem em `WebhookEvent`, que
+      // NÃO tem vínculo com a conta e sobrevive ao apagamento dela. Desistir
+      // aqui jogaria fora justamente o registro que ainda existe.
+      console.log(`\nNenhuma conta com "${alvo}" no banco.`)
+      console.log('  Pode ser grafia diferente (tente um pedaço: "vitorio"), outro e-mail no cadastro,')
+      console.log('  ou conta apagada. Seguindo SEM filtro de conta — os avisos do Mercado Pago')
+      console.log('  continuam no banco mesmo que a conta não exista mais.')
+    } else {
+      console.log(`\nContas: ${users.map(u => u.email || u.name || u.id).join(', ')}`)
+      idsAlvo = users.map(u => u.id)
+      where = { ...where, userId: { in: idsAlvo } }
     }
-    console.log(`\nContas: ${users.map(u => u.email || u.name || u.id).join(', ')}`)
-    idsAlvo = users.map(u => u.id)
-    where = { ...where, userId: { in: idsAlvo } }
   }
 
   const assinaturas = await db.subscription.findMany({
@@ -215,8 +221,17 @@ async function main() {
       if (idsAlvo && dono && !idsAlvo.includes(dono)) continue
 
       const situacao = String(pag.status || '?')
-      const linha = `    ${fmt(pag.date_created)}  R$${pag.transaction_amount ?? '?'}  ${situacao.toUpperCase()}  ${explicarMotivo(pag.status_detail)}`
-      console.log(linha)
+      // De quem é: a conta no nosso banco quando ela existe; senão o e-mail que
+      // o MP guardou. Sem isso, uma varredura sem filtro lista recusas anônimas
+      // e não dá para saber qual cliente chamar.
+      let dequem = pag.payer?.email || 'pagador não informado'
+      if (dono) {
+        const u = await db.user.findUnique({ where: { id: dono }, select: { email: true, name: true } }).catch(() => null)
+        if (u) dequem = u.email || u.name || dono
+        else dequem += ' (conta não existe mais no nosso banco)'
+      }
+      console.log(`    ${fmt(pag.date_created)}  R$${pag.transaction_amount ?? '?'}  ${situacao.toUpperCase()}  ${dequem}`)
+      console.log(`        ${explicarMotivo(pag.status_detail)}`)
       if (situacao === 'rejected') recusas.push({ id, detalhe: pag.status_detail, quando: pag.date_created })
     }
   }
