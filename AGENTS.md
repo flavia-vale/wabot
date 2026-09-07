@@ -1040,6 +1040,89 @@ Ele separa os três casos: chave de teste em produção, checkouts repetidos e
 idênticos, ou recusa que veio de fato do banco/cartão dela (aí a ação é outro
 cartão ou o pagamento avulso). Não imprime segredo — da chave só sai o modo.
 
+#### A repetição nunca explicou a PRIMEIRA tentativa (revisão 2026-09-07)
+
+Na conta medida, o #1 é de 09:05:13 e o #2 de 09:08:31 — **três minutos
+depois**. Não havia o que repetir no #1, e mesmo assim ela tentou de novo: o
+#1 já tinha falhado por outra coisa. A repetição explica o #2 e o #3, **não a
+causa de origem**, e enquanto ela não for conhecida corremos o risco de
+consertar o sintoma.
+
+⚠️ **"O MP não nos manda aviso de pagamento recusado nesse fluxo" é inferência
+a partir da tabela vazia, NÃO medição — e a doc do MP diz o contrário:** para
+assinatura sem plano associado, além de `subscription_preapproval` /
+`subscription_authorized_payment`, o painel precisa ter o evento **`payment`**
+marcado, "que permite receber notificações sobre os pagamentos associados a
+essas assinaturas". A tabela vazia tem duas explicações e só uma foi
+verificada, porque **nós jogamos a recusa fora**: em
+`src/api/routes/payments.js`, o processamento do evento `payment` só tem dois
+ramos — estorno (`isReversiblePaymentStatus`) e `approved`. **`rejected` não
+cai em nenhum dos dois**: não vira linha em `Payment`, não vira log, não vira
+sinal, e o `status_detail` (que `fetchMercadoPagoPaymentSnapshot` já lê) é
+descartado. O payload cru, porém, **está gravado em `WebhookEvent`** desde
+sempre — é de lá que o diagnóstico recupera o motivo.
+
+Os blocos `[3]` e `[4]` do script perguntam ao MP o que ele registrou:
+
+- **`[3]` o motivo exato** — lê os `WebhookEvent` de tipo `payment` da janela e
+  consulta `GET /v1/payments/:id` → `status_detail`, traduzido para o que
+  significa e de quem é a ação. **Nenhum aviso na janela também é achado:**
+  significa que nenhuma cobrança chegou a ser tentada, e aí "cobrança recusada"
+  deixa de explicar o caso.
+- **`[4]` o estado do checkout** — `GET /preapproval/:id` → `card_id` /
+  `payment_method_id` vazios provam que **nenhum cartão foi vinculado** (ela
+  não concluiu, nada foi cobrado), `summarized.charged_quantity` conta as
+  cobranças e `last_modified` diz **quando o MP encerrou de verdade** (a hora
+  do nosso banco é a da passada horária que copiou o estado).
+
+O `GET /preapproval/:id` **não tem `status_detail`** — o motivo da recusa mora
+na fatura (`GET /authorized_payments/:id` → `payment.status_detail`). Não
+procurar no lugar errado.
+
+#### O diagnóstico mentia por dois defeitos próprios (2026-09-07)
+
+Rodado em produção com o e-mail da cliente, o script respondeu **"nenhuma conta
+encontrada"** — e a conta existe com exatamente esse e-mail. Rodado sem alvo,
+ela aparece, e aí ele concluiu **"a recusa veio do cartão/banco da cliente"**
+para três checkouts do mesmo plano em 57 minutos. As duas respostas estavam
+erradas, por motivos diferentes:
+
+- **`User` não tem coluna `phone`, tem `contactPhone`.** Com o nome errado o
+  Prisma recusa a consulta INTEIRA, e o `.catch(() => [])` transformava o erro
+  em resposta: "não achei" em vez de "não consegui procurar". Erro engolido em
+  script de diagnóstico é pior que erro na cara — ele vira conclusão. Agora a
+  falha é impressa.
+- **A repetição era medida pelo que continua `pending` AGORA.** A reconciliação
+  horária encerra os checkouts anteriores, então o padrão que a correção existe
+  para tratar fica invisível justamente depois que ele acontece. Passou a ser
+  medida por checkouts **criados** dentro de `SUBSCRIPTION_ATTEMPT_WINDOW_MS`
+  (a mesma constante da regra de espera, para diagnóstico e produto não
+  discordarem).
+
+Junto: os horários do script saem em **UTC** e agora são marcados com `Z`. Os
+mesmos três checkouts são 09:05/09:08/10:02 na tabela acima (Brasília) e
+12:05/12:08/13:02 no banco — sem a marca, parecem checkouts diferentes.
+
+⚠️ **Achado de produção que confirma a correção do `updatedAt`:** a conta
+`flavia.vale@usp.br` tinha um checkout `pending` de **5 dias antes** marcado
+como `reaproveitavel=sim`. Fora da janela de 24h declarada, exatamente como
+descrito abaixo.
+
+#### Duas correções na própria correção (2026-09-07)
+
+- **A janela de reaproveitamento conta do `createdAt`, nunca do `updatedAt`.**
+  `Subscription.updatedAt` é `@updatedAt` no schema: a reconciliação horária e
+  o webhook renovam o campo sozinhos. Contando por ele, um checkout de dias
+  atrás parecia recém-criado, **a janela de 24h nunca expirava** e a cliente
+  era devolvida para sempre ao mesmo link velho — e o freio entre tentativas
+  nunca rodava, porque o reaproveitamento responde antes dele.
+- **`subscription_started` só sai quando um checkout NOVO nasce.** Emitido
+  antes do reaproveitamento, ele contava junto o clique devolvido ao checkout
+  em aberto e o adiado pela espera: os três caminhos viravam um número só e não
+  dava para ver quantas clientes batiam em cada um. Hoje cada caminho tem o seu
+  (`subscription_checkout_reused`, `subscription_attempt_throttled`,
+  `subscription_started`), sem sobreposição.
+
 Teste: `test/subscription-checkout-reuse.test.js`.
 
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP

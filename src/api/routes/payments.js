@@ -967,8 +967,6 @@ export async function paymentsRoutes(app) {
         })
       }
 
-      trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan } })
-
       // Antes de criar outro checkout: se já existe um em aberto para o MESMO
       // plano, mande a pessoa de volta para ELE. Criar um preapproval novo com
       // parâmetros idênticos a cada tentativa é o que o antifraude do MP lê como
@@ -1022,6 +1020,13 @@ export async function paymentsRoutes(app) {
           },
         })
       }
+
+      // Emitido só quando um checkout NOVO nasce de fato. Antes ele saía logo
+      // após as validações, então contava junto o clique que foi devolvido ao
+      // checkout em aberto (`subscription_checkout_reused`) e o que foi adiado
+      // (`subscription_attempt_throttled`) — os três caminhos viravam um número
+      // só, e era impossível ver quantas clientes estavam batendo em cada um.
+      trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan } })
 
       const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
       await db.subscription.upsert({

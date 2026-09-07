@@ -57,6 +57,26 @@ test('checkout em aberto NUNCA trava a conta: fora da janela, cria um novo', () 
   assert.equal(d.reason, 'too_old')
 })
 
+test('a janela conta do CHECKOUT, não da última escrita nossa na linha', () => {
+  // `updatedAt` é `@updatedAt` no schema: a reconciliação horária e o webhook
+  // renovam o campo sozinhos. Contando por ele, um checkout de 3 dias atrás
+  // parecia recém-criado, a janela de 24h nunca expirava e a cliente voltava
+  // para sempre ao mesmo link velho — além de o freio entre tentativas nunca
+  // rodar, porque o reaproveitamento responde antes dele.
+  const tocadoPelaReconciliacao = pendente({
+    createdAt: new Date(AGORA.getTime() - 3 * 24 * 60 * 60 * 1000),
+    updatedAt: new Date(AGORA.getTime() - 60 * 1000),
+  })
+  const d = decidePendingSubscriptionReuse({ subscription: tocadoPelaReconciliacao, plan: 'pro', now: AGORA })
+  assert.equal(d.reuse, false)
+  assert.equal(d.reason, 'too_old')
+})
+
+test('sem `createdAt`, ainda decide pela última escrita em vez de recusar por dúvida', () => {
+  const d = decidePendingSubscriptionReuse({ subscription: pendente({ createdAt: null }), plan: 'pro', now: AGORA })
+  assert.equal(d.reuse, true)
+})
+
 test('sem identificador do provedor ou sem data confiável, cria um novo', () => {
   assert.equal(decidePendingSubscriptionReuse({ subscription: pendente({ mpSubscriptionId: null }), plan: 'pro', now: AGORA }).reason, 'no_provider_id')
   assert.equal(decidePendingSubscriptionReuse({ subscription: pendente({ createdAt: null, updatedAt: null }), plan: 'pro', now: AGORA }).reason, 'no_timestamp')
@@ -197,4 +217,69 @@ test('a rota consulta a espera ANTES de criar o checkout no Mercado Pago', () =>
   const posCriacao = trecho.indexOf('await createMercadoPagoSubscription')
   assert.ok(posEspera > -1, 'a rota não consulta a política de espera')
   assert.ok(posEspera < posCriacao, 'a espera precisa vir antes da criação')
+})
+test('o evento de tentativa só é emitido quando um checkout NOVO nasce', () => {
+  // Emitido cedo demais, ele contava junto o clique devolvido ao checkout em
+  // aberto e o adiado pela espera — os três caminhos viravam um número só.
+  const inicio = rota.indexOf("app.post('/create-subscription'")
+  const trecho = rota.slice(inicio, inicio + 6000)
+  const posEvento = trecho.indexOf("event: 'subscription_started'")
+  const posReuso = trecho.indexOf('decidePendingSubscriptionReuse')
+  const posEspera = trecho.indexOf('decideSubscriptionAttemptCooldown')
+  const posCriacao = trecho.indexOf('await createMercadoPagoSubscription')
+  assert.ok(posEvento > -1, 'a rota não emite o evento de tentativa')
+  assert.ok(posEvento > posReuso, 'o evento não pode contar o clique reaproveitado')
+  assert.ok(posEvento > posEspera, 'o evento não pode contar o clique adiado')
+  assert.ok(posEvento < posCriacao, 'o evento precisa sair antes da criação')
+})
+
+test('o diagnóstico pergunta o motivo ao Mercado Pago e não imprime a chave', () => {
+  const diag = readFileSync(new URL('../scripts/diag-assinatura-recusada.mjs', import.meta.url), 'utf8')
+  // A repetição de checkout explica a 2ª e a 3ª tentativa, nunca a primeira:
+  // sem perguntar ao MP, o script conclui pela causa errada.
+  assert.match(diag, /\/v1\/payments\//, 'não consulta o motivo da recusa')
+  assert.match(diag, /\/preapproval\//, 'não consulta o estado do checkout')
+  assert.match(diag, /cc_rejected_high_risk/, 'não traduz o motivo do antifraude')
+  // Só o VALOR pode vazar: citar o nome da variável numa instrução é legítimo.
+  for (const linha of diag.split('\n')) {
+    if (!linha.includes('console.log')) continue
+    assert.ok(!/\$\{[^}]*(MP_TOKEN|MP_ACCESS_TOKEN)/.test(linha), `a chave pode vazar nesta linha: ${linha.trim()}`)
+  }
+})
+test('o diagnóstico mede repetição pelo que foi CRIADO, não pelo que segue em aberto', () => {
+  const diag = readFileSync(new URL('../scripts/diag-assinatura-recusada.mjs', import.meta.url), 'utf8')
+
+  // A conta procurada existe com esse e-mail exato e o script dizia "nenhuma
+  // conta": a coluna é `contactPhone`, e com `phone` o Prisma recusava a
+  // consulta inteira — o catch transformava o erro em resposta vazia.
+  assert.match(diag, /contactPhone/, 'a busca precisa usar o nome real da coluna')
+  assert.ok(!/\{ phone: \{ contains/.test(diag), 'campo inexistente voltou à busca')
+
+  // Roda a função de verdade extraída do script, com os três checkouts reais
+  // da conta medida (mesmo plano, 57 minutos). Contando só os que continuam em
+  // aberto, isso dava ZERO e o script concluía que a recusa veio do cartão.
+  const fonte = diag.slice(diag.indexOf('function maiorRepeticaoNaJanela'))
+  const corpo = fonte.slice(0, fonte.indexOf('\nfunction ', 1))
+  const maiorRepeticaoNaJanela = new Function(
+    'SUBSCRIPTION_ATTEMPT_WINDOW_MS',
+    `${corpo}; return maiorRepeticaoNaJanela`
+  )(SUBSCRIPTION_ATTEMPT_WINDOW_MS)
+
+  const encerrados = [
+    { plan: 'pro', status: 'cancelled', createdAt: new Date('2026-09-07T12:05:13Z') },
+    { plan: 'pro', status: 'cancelled', createdAt: new Date('2026-09-07T12:08:31Z') },
+    { plan: 'pro', status: 'cancelled', createdAt: new Date('2026-09-07T13:02:11Z') },
+  ]
+  const achado = maiorRepeticaoNaJanela(encerrados)
+  assert.equal(achado.total, 3)
+  assert.equal(achado.plan, 'pro')
+  assert.equal(achado.minutos, 57)
+
+  // Uma tentativa só nunca pode virar "padrão de repetição".
+  assert.equal(maiorRepeticaoNaJanela([encerrados[0]]).total, 1)
+  // Plano diferente é intenção nova, igual à regra de espera.
+  assert.equal(
+    maiorRepeticaoNaJanela([encerrados[0], { ...encerrados[1], plan: 'basic' }]).total,
+    1
+  )
 })

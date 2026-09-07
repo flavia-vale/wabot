@@ -77,7 +77,13 @@ export function decidePendingSubscriptionReuse({
     return { reuse: false, reason: 'plan_changed' }
   }
 
-  const startedAt = toDate(subscription.updatedAt) ?? toDate(subscription.createdAt)
+  // A idade é a do CHECKOUT, não a da linha. `updatedAt` é `@updatedAt` no
+  // schema: a reconciliação horária e o webhook renovam esse campo sozinhos, e
+  // com ele um checkout de dias atrás parecia recém-criado — a janela de 24h
+  // nunca expirava e a cliente era devolvida para sempre ao mesmo link velho
+  // (que também impede o freio entre tentativas de rodar, porque o
+  // reaproveitamento responde antes).
+  const startedAt = toDate(subscription.createdAt) ?? toDate(subscription.updatedAt)
   if (!startedAt) return { reuse: false, reason: 'no_timestamp' }
 
   const ageMs = ((toDate(now) ?? new Date()).getTime()) - startedAt.getTime()
