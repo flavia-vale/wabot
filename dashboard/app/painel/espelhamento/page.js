@@ -11,11 +11,16 @@
  * grupos). Editar/Adicionar levam ao /painel/grupos; o controle leva à conexão
  * WhatsApp. Nenhuma lógica de backend nova — só leitura derivada do que existe.
  *
- * Aba "Conexões": o backend não tem tabela de pares origem→destino (ver
- * src/api/routes/broadcastTargets.js resolveTargetJids) — toda origem
- * monitorada publica em todo destino cadastrado do mesmo usuário. O diagrama
- * e os textos "envia para/recebe de" refletem exatamente essa malha completa;
- * não inventam uma seleção por par que não existe hoje no produto. */
+ * Os vínculos vêm de GET /api/groups/:id/targets (api.groupTargets), a MESMA
+ * fonte que a tela de destinos em /painel/grupos grava. O endpoint já resolve a
+ * semântica de src/core/destinationRouting.js e devolve { postIds, mode }:
+ *   - mode 'explicit' → a cliente escolheu esses destinos para a origem.
+ *     Lista vazia significa NENHUM destino (a origem não espelha), nunca todos.
+ *   - mode 'all'      → origem que nunca teve escolha explícita; o fallback
+ *     canônico manda para todos os destinos, e o endpoint já devolve esses ids.
+ * Distinguimos os dois na UI porque "escolhi todos" e "nunca escolhi" levam ao
+ * mesmo desenho hoje, mas mudam de comportamento quando um destino é apagado
+ * (RCA 2026-08-26, documentada em destinationRouting.js). */
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -55,7 +60,37 @@ function num(v) {
   return Number.isFinite(Number(v)) ? Number(v) : 0
 }
 
-function GroupList({ title, hint, eyebrow, cards, emptyLabel, direction }) {
+/* Linha "envia para / recebe de" de um card. Estados possíveis, todos vindos
+ * do backend: carregando, sem vínculo (origem explícita que ficou sem destino
+ * — não espelha) e com vínculos. O selo "padrão" marca a origem em modo 'all',
+ * que hoje alcança todos os destinos por fallback, e não por escolha. */
+function FlowLine({ direction, card, loading }) {
+  if (loading) return <div className="pnl-esp-flow">carregando ligações…</div>
+
+  if (card.counterpartCount === 0) {
+    return (
+      <div className="pnl-esp-flow">
+        <strong>
+          {direction === 'origin'
+            ? 'nenhum destino escolhido — esta origem não está espelhando'
+            : 'nenhuma origem envia para este grupo'}
+        </strong>
+      </div>
+    )
+  }
+
+  return (
+    <div className="pnl-esp-flow">
+      {direction === 'origin' ? 'envia para ' : 'recebe de '}
+      <strong>{card.counterpartNames}</strong>
+      {direction === 'origin' && card.mode === 'all' && (
+        <span className="pnl-esp-tag" title="Esta origem nunca teve destinos escolhidos, então o padrão é enviar para todos os destinos cadastrados.">padrão: todos</span>
+      )}
+    </div>
+  )
+}
+
+function GroupList({ title, hint, eyebrow, cards, emptyLabel, direction, loading }) {
   return (
     <section className="pnl-card">
       <div className="pnl-eyebrow" style={eyebrow.style}>{eyebrow.label}</div>
@@ -80,10 +115,7 @@ function GroupList({ title, hint, eyebrow, cards, emptyLabel, direction }) {
                   {direction === 'origin' ? `${c.counterpartCount}→` : `←${c.counterpartCount}`}
                 </span>
               </div>
-              <div className="pnl-esp-flow">
-                {direction === 'origin' ? 'envia para ' : 'recebe de '}
-                <strong>{c.counterpartNames || (direction === 'origin' ? 'nenhum destino cadastrado ainda' : 'nenhuma origem cadastrada ainda')}</strong>
-              </div>
+              <FlowLine direction={direction} card={c} loading={loading} />
             </li>
           ))}
         </ul>
@@ -100,7 +132,7 @@ const ROW_GAP = 16
 const ROW_STEP = ROW_H + ROW_GAP
 const NODE_PCT = 42
 
-function ConnectionsDiagram({ origens, destinos, hasFullMesh, selectedOriginId, onToggleOrigin }) {
+function ConnectionsDiagram({ origens, destinos, destIdsOf, selectedOriginId, onToggleOrigin }) {
   if (origens.length === 0 && destinos.length === 0) {
     return <p className="pnl-empty">Cadastre grupos de origem e destino para ver o mapa de espelhamento.</p>
   }
@@ -110,26 +142,30 @@ function ConnectionsDiagram({ origens, destinos, hasFullMesh, selectedOriginId, 
   const leftEdge = NODE_PCT
   const rightEdge = 100 - NODE_PCT
 
+  // Índice do destino define a altura da curva; só entram os pares que existem
+  // de fato em GroupTarget (ou o fallback já resolvido pelo endpoint).
+  const destRow = new Map(destinos.map((d, i) => [d.id, i]))
+
   const paths = []
-  if (hasFullMesh) {
-    origens.forEach((o, oi) => {
-      const y1 = oi * ROW_STEP + ROW_H / 2
-      const active = selectedOriginId === o.id
-      const dim = selectedOriginId && !active
-      const color = STROKE_COLORS[oi % STROKE_COLORS.length]
-      destinos.forEach((d, di) => {
-        const y2 = di * ROW_STEP + ROW_H / 2
-        const c1 = leftEdge + 15, c2 = rightEdge - 15
-        paths.push({
-          key: `${o.id}-${d.id}`,
-          d: `M ${leftEdge} ${y1} C ${c1} ${y1}, ${c2} ${y2}, ${rightEdge} ${y2}`,
-          stroke: dim ? '#c7d3ce' : color,
-          width: active ? 2.5 : 1.5,
-          opacity: dim ? 0.25 : (selectedOriginId ? 1 : 0.55),
-        })
+  origens.forEach((o, oi) => {
+    const y1 = oi * ROW_STEP + ROW_H / 2
+    const active = selectedOriginId === o.id
+    const dim = selectedOriginId && !active
+    const color = STROKE_COLORS[oi % STROKE_COLORS.length]
+    destIdsOf(o.id).forEach((destId) => {
+      const di = destRow.get(destId)
+      if (di === undefined) return
+      const y2 = di * ROW_STEP + ROW_H / 2
+      const c1 = leftEdge + 15, c2 = rightEdge - 15
+      paths.push({
+        key: `${o.id}-${destId}`,
+        d: `M ${leftEdge} ${y1} C ${c1} ${y1}, ${c2} ${y2}, ${rightEdge} ${y2}`,
+        stroke: dim ? '#c7d3ce' : color,
+        width: active ? 2.5 : 1.5,
+        opacity: dim ? 0.25 : (selectedOriginId ? 1 : 0.55),
       })
     })
-  }
+  })
 
   return (
     <div className="pnl-esp-diagram-scroll">
@@ -162,7 +198,9 @@ function ConnectionsDiagram({ origens, destinos, hasFullMesh, selectedOriginId, 
               </span>
               <span style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
                 <span className="pnl-esp-node-name">{o.name}</span>
-                <span className="pnl-esp-node-sub">envia para {destinos.length}</span>
+                <span className="pnl-esp-node-sub">
+                  {destIdsOf(o.id).length === 0 ? 'sem destino' : `envia para ${destIdsOf(o.id).length}`}
+                </span>
               </span>
             </button>
           )
@@ -170,7 +208,8 @@ function ConnectionsDiagram({ origens, destinos, hasFullMesh, selectedOriginId, 
 
         {destinos.map((d, i) => {
           const y = i * ROW_STEP + ROW_H / 2
-          const connected = selectedOriginId ? hasFullMesh : true
+          const receivedFrom = origens.filter((o) => destIdsOf(o.id).includes(d.id))
+          const connected = selectedOriginId ? destIdsOf(selectedOriginId).includes(d.id) : true
           return (
             <div
               key={d.id}
@@ -183,7 +222,9 @@ function ConnectionsDiagram({ origens, destinos, hasFullMesh, selectedOriginId, 
             >
               <span style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
                 <span className="pnl-esp-node-name">{d.name}</span>
-                <span className="pnl-esp-node-sub">recebe de {origens.length}</span>
+                <span className="pnl-esp-node-sub">
+                  {receivedFrom.length === 0 ? 'não recebe' : `recebe de ${receivedFrom.length}`}
+                </span>
               </span>
               <span className="pnl-esp-node-avatar">
                 <Avatar name={d.name} gradient={GRADIENTS[i % GRADIENTS.length]} size={34} />
@@ -202,6 +243,8 @@ export default function EspelhamentoPage() {
 
   const [groups, setGroups] = useState([])
   const [summary, setSummary] = useState(null)
+  // { [monitorId]: { postIds: string[], mode: 'explicit' | 'all' } }
+  const [links, setLinks] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [switchingMirror, setSwitchingMirror] = useState(false)
   const [tab, setTab] = useState('grupos')
@@ -209,31 +252,74 @@ export default function EspelhamentoPage() {
 
   useEffect(() => {
     let active = true
-    Promise.allSettled([api.groups(), api.logsSummary('today')]).then(([g, s]) => {
+    ;(async () => {
+      const [g, s] = await Promise.allSettled([api.groups(), api.logsSummary('today')])
       if (!active) return
-      if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroups(g.value)
+
+      const list = g.status === 'fulfilled' && Array.isArray(g.value) ? g.value : []
+      if (g.status === 'fulfilled') setGroups(list)
       else setLoadError('Não foi possível carregar os grupos do espelhamento.')
       if (s.status === 'fulfilled') setSummary(s.value)
-    })
+
+      // Um GET por origem: é como /painel/grupos lê os destinos, e não existe
+      // rota que traga todos os vínculos de uma vez. São poucas origens por
+      // conta; se alguma falhar, avisamos em vez de desenhar ligação errada.
+      const monitors = list.filter((x) => x.role === 'monitor')
+      const results = await Promise.allSettled(monitors.map((m) => api.groupTargets(m.id)))
+      if (!active) return
+
+      const map = {}
+      let failed = 0
+      monitors.forEach((m, i) => {
+        const r = results[i]
+        if (r.status === 'fulfilled') {
+          map[m.id] = {
+            postIds: Array.isArray(r.value?.postIds) ? r.value.postIds : [],
+            mode: r.value?.mode === 'all' ? 'all' : 'explicit',
+          }
+        } else {
+          failed += 1
+        }
+      })
+      setLinks(map)
+      if (failed > 0) {
+        setLoadError(`Não foi possível carregar os destinos de ${failed} ${failed === 1 ? 'origem' : 'origens'}. As ligações mostradas podem estar incompletas.`)
+      }
+    })()
     return () => { active = false }
   }, [])
 
   const origens = groups.filter((g) => g.role === 'monitor')
   const destinos = groups.filter((g) => g.role === 'post')
-  const hasFullMesh = origens.length > 0 && destinos.length > 0
-  const destNamesJoined = destinos.map((d) => d.name).join(', ')
-  const originNamesJoined = origens.map((o) => o.name).join(', ')
+  const linksLoading = links === null
 
-  const originCards = origens.map((o) => ({
-    group: o,
-    counterpartCount: hasFullMesh ? destinos.length : 0,
-    counterpartNames: hasFullMesh ? destNamesJoined : '',
-  }))
-  const destCards = destinos.map((d) => ({
-    group: d,
-    counterpartCount: hasFullMesh ? origens.length : 0,
-    counterpartNames: hasFullMesh ? originNamesJoined : '',
-  }))
+  // Vínculos reais → só destinos que ainda existem entram no desenho (o
+  // endpoint pode devolver id de grupo apagado enquanto a lista não recarrega).
+  const destById = new Map(destinos.map((d) => [d.id, d]))
+  const destsByOrigin = new Map(origens.map((o) => [
+    o.id,
+    (links?.[o.id]?.postIds ?? []).map((id) => destById.get(id)).filter(Boolean),
+  ]))
+  const destsOf = (originId) => destsByOrigin.get(originId) ?? []
+  const destIdsOf = (originId) => destsOf(originId).map((d) => d.id)
+
+  const originCards = origens.map((o) => {
+    const ds = destsOf(o.id)
+    return {
+      group: o,
+      counterpartCount: ds.length,
+      counterpartNames: ds.map((d) => d.name).join(', '),
+      mode: links?.[o.id]?.mode ?? 'explicit',
+    }
+  })
+  const destCards = destinos.map((d) => {
+    const os = origens.filter((o) => destsOf(o.id).some((x) => x.id === d.id))
+    return {
+      group: d,
+      counterpartCount: os.length,
+      counterpartNames: os.map((o) => o.name).join(', '),
+    }
+  })
 
   const postadosHoje = num(summary?.counts?.success)
 
@@ -330,6 +416,7 @@ export default function EspelhamentoPage() {
             cards={originCards}
             emptyLabel="Nenhum grupo de origem cadastrado."
             direction="origin"
+            loading={linksLoading}
           />
           <GroupList
             eyebrow={{ label: '⚡ Destino · publica', style: { color: 'var(--accent-strong)' } }}
@@ -338,21 +425,24 @@ export default function EspelhamentoPage() {
             cards={destCards}
             emptyLabel="Nenhum grupo de destino cadastrado."
             direction="dest"
+            loading={linksLoading}
           />
         </div>
       ) : (
         <section className="pnl-card">
           <div className="pnl-note-box is-info" style={{ marginBottom: 18 }}>
-            {origens.length === 0 || destinos.length === 0
-              ? 'Cadastre pelo menos um grupo de origem e um de destino para o espelhamento entrar em ação.'
-              : selectedOriginId
-                ? `Mostrando para onde "${origens.find((o) => o.id === selectedOriginId)?.name}" envia. Clique de novo para limpar.`
-                : 'Clique em um grupo de origem para destacar a ligação com os destinos.'}
+            {linksLoading
+              ? 'Carregando as ligações entre os seus grupos…'
+              : origens.length === 0 || destinos.length === 0
+                ? 'Cadastre pelo menos um grupo de origem e um de destino para o espelhamento entrar em ação.'
+                : selectedOriginId
+                  ? `Mostrando para onde "${origens.find((o) => o.id === selectedOriginId)?.name}" envia. Clique de novo para limpar.`
+                  : 'Clique em um grupo de origem para destacar a ligação com os destinos. Para mudar quem envia para quem, use os destinos de cada origem em Grupos.'}
           </div>
           <ConnectionsDiagram
             origens={origens}
             destinos={destinos}
-            hasFullMesh={hasFullMesh}
+            destIdsOf={destIdsOf}
             selectedOriginId={selectedOriginId}
             onToggleOrigin={toggleOrigin}
           />
