@@ -2686,6 +2686,56 @@ for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do awk '/VmRSS/{print 
  | awk '{s+=$1; n++} END {printf "%d robos | RSS total %.2f GB | media %.0f MB\n", n, s/1048576, s/n/1024}'
 ```
 
+### "Limite de robôs" era a frase de TRÊS causas diferentes (RCA 2026-09-07 — não regredir)
+
+Cliente mandou print de **"Nosso servidor está no limite de robôs ligados ao
+mesmo tempo"** com o servidor comprovadamente fora do teto. O texto não estava
+errado por acaso: `classifyBotStartOutcome` devolvia essa frase para
+**qualquer** `startAccepted === false`, e o supervisor devolve `false` por três
+motivos distintos — teto cheio (`checkSessionCircuitBreaker`), conta fora do
+shard (`belongsToThisShard`) e vaga presa por robô que não terminou de
+desligar. Nem a tela nem o log da API diziam qual tinha sido: só o log do
+`bot-supervisor`, no VPS.
+
+Duas armadilhas de leitura que isso escondia:
+
+- **"Robô ligado" ≠ "robô conectado".** O teto conta `listRunningBots()`, que é
+  **processo forkado** — robô desconectado, reconectando ou em teardown ocupa
+  vaga. O painel pode mostrar 12 conectados com o servidor em 20/20 e recusando.
+- **Shard errado recusa UMA conta só**, com o servidor vazio — e aparecia como
+  "estamos lotados", que manda a cliente esperar por uma vaga que já existe.
+
+`src/domain/session/startRefusal.js` (`classifyStartRefusal`, puro) decide o
+motivo **do lado da API**, e as duas rotas de conectar (`/session/start` e
+`/session/pairing-code`) o passam para `classifyBotStartOutcome`:
+
+| Motivo | Código | O que a cliente lê |
+|---|---|---|
+| teto de fato cheio | `WA_CAPACITY_LIMIT` | texto histórico, "tente de novo em alguns minutos" |
+| conta em servidor que não a atende | `WA_SESSION_MISPLACED` | "não adianta tentar de novo, vamos resolver" (`retryable: false`) |
+| recusa sem teto cheio / sem medição | `WA_START_REFUSED` | "espere um minuto e tente de novo" |
+
+**Não regredir:**
+
+- **A classificação mora na API, não no protocolo.** `src/supervisor/protocol.js`
+  é [PROTECTED_CORE] e, em modo `remote`, **o supervisor não é reiniciado no
+  deploy** — mudar o retorno de `START_BOT` ficaria dormente e deixaria as duas
+  pontas divergentes. A API já tem os dados: carrega o MESMO `.env`
+  (`MAX_SESSIONS_PER_PROCESS`, `SHARD_COUNT`, `SHARD_INDEX`) e `listRunningBots()`
+  é comando existente.
+- **Servidor errado é avaliado ANTES do teto.** Conta fora do shard é recusada
+  mesmo com o servidor vazio; concluir "teto" ali contaria a história errada.
+- **Sem medição confiável NUNCA afirmar teto.** `listRunningBots()` falhou →
+  `runningCount: null` → texto genérico. `toCount` trata `null` como `null` e
+  nunca como `0` (`Number(null)` é 0 — foi exatamente esse o erro pego no teste).
+- **Ordem no `startRefusal.js` é a fonte única** — não reintroduzir texto de
+  recusa nas rotas. E o log da recusa leva `reason`, `running` e `max`: é o que
+  permite responder à cliente **sem** entrar no VPS.
+- Linguagem leiga nas três frases (nada de "shard", "worker", "supervisor",
+  "processo"). Teste falha se jargão voltar.
+
+Teste: `test/session-start-refusal.test.js`.
+
 ## Política de memória (CANÔNICA — LEIA antes de qualquer mudança que afete RAM)
 
 > **REGRA #1 — SUPER SINALIZAR antes de executar.** Qualquer decisão/mudança
