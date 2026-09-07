@@ -13,6 +13,21 @@
 //   3. nada disso -> a recusa veio do banco/cartão da cliente mesmo, e a ação
 //      é ela usar outro meio de pagamento.
 //
+// Os blocos [3] e [4] perguntam ao Mercado Pago o que ELE registrou, porque a
+// repetição de checkout explica a segunda e a terceira tentativa e nunca a
+// PRIMEIRA — que é onde mora a causa de verdade. Os dois motivos que só o MP
+// sabe:
+//
+//   [3] o motivo exato da recusa. O aviso de pagamento já chega e é gravado
+//       cru em `WebhookEvent`, mas o processamento só trata aprovado e
+//       estornado: recusado cai fora dos dois ramos, não vira linha em
+//       `Payment` e o `status_detail` é descartado. Aqui ele é lido de volta.
+//   [4] se algum cartão chegou a ser vinculado ao checkout (`card_id`), se
+//       houve cobrança (`summarized.charged_quantity`) e QUANDO o MP encerrou
+//       de verdade (`last_modified`) — a hora que aparece no nosso banco é a
+//       da passada horária, não a do MP.
+//
+// `--no-live` pula as consultas ao Mercado Pago (só banco).
 // Não imprime segredo nenhum: da chave só sai o MODO (teste/produção).
 import 'dotenv/config'
 import db from '../src/db.js'
@@ -22,10 +37,67 @@ import { decidePendingSubscriptionReuse } from '../src/domain/payments/subscript
 const args = process.argv.slice(2)
 const dias = Math.max(1, Number((args.find(a => a.startsWith('--days=')) || '').split('=')[1] || 7))
 const alvo = args.find(a => !a.startsWith('--')) || null
+const semLive = args.includes('--no-live')
 const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000)
 
 function fmt(d) {
   return d ? new Date(d).toISOString().slice(0, 19).replace('T', ' ') : '—'
+}
+
+const MP_TOKEN = String(process.env.MP_ACCESS_TOKEN || '').trim()
+
+// Somente leitura. Nunca imprime a chave — só o resultado da consulta.
+async function mpGet(caminho) {
+  if (!MP_TOKEN) return { ok: false, motivo: 'chave do Mercado Pago não configurada neste ambiente' }
+  try {
+    const r = await fetch(`https://api.mercadopago.com${caminho}`, {
+      headers: { Authorization: `Bearer ${MP_TOKEN}` },
+      signal: AbortSignal.timeout(10000),
+    })
+    const corpo = await r.json().catch(() => null)
+    if (!r.ok) return { ok: false, motivo: `o Mercado Pago respondeu ${r.status}`, corpo }
+    return { ok: true, corpo }
+  } catch (err) {
+    return { ok: false, motivo: String(err?.message || err).slice(0, 140) }
+  }
+}
+
+// O que cada motivo do MP significa E o que fazer. Sem isso o código cru não
+// diz para ninguém se a ação é nossa ou da cliente.
+const MOTIVOS = {
+  accredited: 'aprovado — o dinheiro entrou',
+  pending_contingency: 'em análise pelo MP — costuma resolver sozinho',
+  pending_review_manual: 'em análise manual pelo MP',
+  cc_rejected_high_risk: 'O MERCADO PAGO barrou por suspeita (antifraude). NÃO foi o banco dela. Ação nossa: não deixar repetir tentativa idêntica; ação dela: pagar do aparelho/cartão que ela costuma usar',
+  cc_rejected_duplicated_payment: 'o MP entendeu como cobrança repetida. Ação nossa: espaçar as tentativas',
+  cc_rejected_insufficient_amount: 'sem limite ou saldo. Ação dela: outro cartão',
+  cc_rejected_call_for_authorize: 'o banco quer que ela autorize a compra. Ação dela: ligar para o banco e liberar',
+  cc_rejected_card_disabled: 'cartão não habilitado para compra on-line. Ação dela: falar com o banco',
+  cc_rejected_card_type_not_allowed: 'esse tipo de cartão não é aceito. Ação dela: usar cartão de crédito',
+  cc_rejected_invalid_installments: 'o parcelamento pedido não é aceito nesse cartão',
+  cc_rejected_max_attempts: 'tentativas demais no mesmo cartão. Ação dela: esperar e usar outro',
+  cc_rejected_blacklist: 'recusado por restrição do próprio MP. Ação dela: falar com o Mercado Pago',
+  cc_rejected_other_reason: 'o banco recusou sem dizer o motivo. Ação dela: outro cartão ou o pagamento avulso',
+  cc_rejected_bad_filled_card_number: 'número do cartão digitado errado',
+  cc_rejected_bad_filled_date: 'validade digitada errada',
+  cc_rejected_bad_filled_security_code: 'código de segurança digitado errado',
+  cc_rejected_bad_filled_other: 'algum dado do cartão digitado errado',
+}
+
+function explicarMotivo(detalhe) {
+  if (!detalhe) return 'o MP não informou o motivo'
+  return MOTIVOS[detalhe] || `motivo fora da nossa lista ("${detalhe}") — conferir na tabela de recusas do MP`
+}
+
+function idDoAviso(aviso) {
+  if (aviso?.dataId) return String(aviso.dataId)
+  try {
+    const corpo = JSON.parse(aviso?.payload || '{}')
+    const id = corpo?.data?.id ?? corpo?.resource
+    return id ? String(id).split('/').pop() : null
+  } catch {
+    return null
+  }
 }
 
 async function main() {
@@ -48,6 +120,7 @@ async function main() {
 
   // ---- Causa 2: checkouts repetidos --------------------------------------
   let where = { createdAt: { gte: desde } }
+  let idsAlvo = null
   if (alvo) {
     const users = await db.user.findMany({
       where: { OR: [{ email: { contains: alvo } }, { phone: { contains: alvo } }, { name: { contains: alvo } }] },
@@ -58,7 +131,8 @@ async function main() {
       return
     }
     console.log(`\nContas: ${users.map(u => u.email || u.name || u.id).join(', ')}`)
-    where = { ...where, userId: { in: users.map(u => u.id) } }
+    idsAlvo = users.map(u => u.id)
+    where = { ...where, userId: { in: idsAlvo } }
   }
 
   const assinaturas = await db.subscription.findMany({
@@ -91,13 +165,108 @@ async function main() {
     }
   }
 
-  console.log('')
   if (suspeitas > 0) {
-    console.log(`>> ${suspeitas} conta(s) com checkouts repetidos e idênticos — causa 2 confirmada.`)
-    console.log('   A correção (reaproveitar o checkout em aberto) só passa a valer depois do deploy da API.')
+    console.log(`\n>> ${suspeitas} conta(s) com checkouts repetidos e idênticos — o padrão que o antifraude do MP recusa.`)
+  }
+
+  // ---- Causa 3: o motivo que só o Mercado Pago sabe ----------------------
+  // A repetição explica a segunda e a terceira tentativa; a PRIMEIRA, não. O
+  // aviso de pagamento chega e é gravado cru, mas quem processa só trata
+  // aprovado e estornado — recusado some sem deixar linha. Aqui ele volta.
+  const recusas = []
+  console.log(`\n[3] Motivo da recusa, direto do Mercado Pago`)
+  if (semLive) {
+    console.log('    (pulado por --no-live)')
+  } else if (!MP_TOKEN) {
+    console.log('    Sem chave configurada neste ambiente — rode dentro do diretório do ambiente certo.')
+  } else {
+    // `eventType` vem do corpo do aviso; o formato antigo do MP manda o tipo na
+    // query e deixa o campo vazio. Por isso os sem tipo entram também, e a
+    // separação real é o formato do id: pagamento é numérico, assinatura não.
+    const avisos = await db.webhookEvent.findMany({
+      where: {
+        provider: 'mercado_pago',
+        createdAt: { gte: desde },
+        OR: [{ eventType: 'payment' }, { eventType: null }],
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true, dataId: true, payload: true },
+      take: 300,
+    }).catch(() => [])
+
+    const ids = [...new Set(avisos.map(idDoAviso).filter(id => id && /^\d+$/.test(id)))].slice(0, 60)
+    console.log(`    ${avisos.length} aviso(s) de pagamento recebido(s), ${ids.length} pagamento(s) distinto(s) a consultar.`)
+
+    if (!ids.length) {
+      console.log('    >> NENHUM aviso de pagamento na janela.')
+      console.log('       Isso é um achado, não um vazio: se nenhum pagamento foi sequer tentado, a recusa')
+      console.log('       aconteceu ANTES da cobrança e a teoria de "cobrança recusada" não se sustenta.')
+      console.log('       Confira também se o evento `payment` está marcado no painel do Mercado Pago.')
+    }
+
+    for (const id of ids) {
+      const r = await mpGet(`/v1/payments/${id}`)
+      if (!r.ok) {
+        console.log(`    ${id}: não deu para consultar (${r.motivo})`)
+        continue
+      }
+      const pag = r.corpo || {}
+      const dono = pag.external_reference ? String(pag.external_reference) : null
+      if (idsAlvo && dono && !idsAlvo.includes(dono)) continue
+
+      const situacao = String(pag.status || '?')
+      const linha = `    ${fmt(pag.date_created)}  R$${pag.transaction_amount ?? '?'}  ${situacao.toUpperCase()}  ${explicarMotivo(pag.status_detail)}`
+      console.log(linha)
+      if (situacao === 'rejected') recusas.push({ id, detalhe: pag.status_detail, quando: pag.date_created })
+    }
+  }
+
+  // ---- Causa 4: o checkout chegou a receber um cartão? -------------------
+  // `card_id`/`payment_method_id` vazios provam que nenhum cartão foi vinculado
+  // (ela não concluiu), e `charged_quantity` prova que nada foi cobrado.
+  // `last_modified` é a hora em que o MP encerrou de verdade — a do nosso banco
+  // é só a da passada horária que copiou o estado.
+  console.log(`\n[4] Estado de cada checkout no Mercado Pago`)
+  const comId = assinaturas.filter(a => a.mpSubscriptionId).slice(0, 20)
+  if (semLive) {
+    console.log('    (pulado por --no-live)')
+  } else if (!MP_TOKEN) {
+    console.log('    Sem chave configurada neste ambiente.')
+  } else if (!comId.length) {
+    console.log('    Nenhum checkout com identificador do Mercado Pago na janela.')
+  } else {
+    for (const a of comId) {
+      const r = await mpGet(`/preapproval/${a.mpSubscriptionId}`)
+      if (!r.ok) {
+        console.log(`    ${fmt(a.createdAt)}  ${a.mpSubscriptionId}: não deu para consultar (${r.motivo})`)
+        continue
+      }
+      const c = r.corpo || {}
+      const cartao = c.card_id || c.payment_method_id
+      const cobrancas = c.summarized?.charged_quantity ?? 0
+      console.log(`    ${fmt(a.createdAt)}  situacao=${String(c.status || '?').padEnd(10)} cartao=${cartao ? 'vinculado' : 'NENHUM'} cobrancas=${cobrancas} encerrado_em=${fmt(c.last_modified)}`)
+    }
+    console.log('    (cartao=NENHUM significa que ela não chegou a concluir o checkout — nada foi cobrado.)')
+  }
+
+  // ---- Conclusão ---------------------------------------------------------
+  console.log('')
+  if (recusas.length) {
+    const antifraude = recusas.filter(r => r.detalhe === 'cc_rejected_high_risk' || r.detalhe === 'cc_rejected_duplicated_payment')
+    if (antifraude.length) {
+      console.log(`>> CAUSA ENCONTRADA: ${antifraude.length} recusa(s) do antifraude do Mercado Pago.`)
+      console.log('   Não é o cartão dela. Ação nossa: não deixar repetir tentativa idêntica.')
+      console.log('   Ação com ela: tentar do aparelho e do cartão que ela costuma usar, ou o pagamento avulso.')
+    } else {
+      console.log(`>> CAUSA ENCONTRADA: ${recusas.length} recusa(s), motivo do banco/cartão — ver as linhas do bloco [3].`)
+      console.log('   Ação com ela: outro cartão, ou o pagamento avulso.')
+    }
+  } else if (suspeitas > 0) {
+    console.log('>> Há repetição de checkout, mas nenhuma recusa registrada na janela.')
+    console.log('   Amplie a janela com --days ou confirme se o evento `payment` está marcado no painel do MP.')
   } else if (assinaturas.length) {
-    console.log('>> Sem repetição de checkout e sem chave de teste: a recusa veio do cartão/banco da cliente.')
-    console.log('   Ação com ela: outro cartão, ou o pagamento avulso.')
+    console.log('>> Sem repetição de checkout, sem chave de teste e sem recusa registrada.')
+    console.log('   O caminho mais provável é ela não ter concluído o checkout — confira `cartao=` no bloco [4].')
   }
 }
 
