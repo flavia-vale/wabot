@@ -85,8 +85,13 @@ async function main() {
   // "Ela desligou de propósito" = pedido manual de parada SEM conexão depois.
   // Mesma leitura de `wasStoppedByUser` (email/accountActivity.js): desligar o
   // robô é escolha, não problema.
+  // ⚠️ Os tipos de conexão nesta tabela são 'connected' e 'reconnect_success'
+  // (`src/bot-worker.js`). Na primeira versão deste script eu filtrei por
+  // 'connect'/'whatsapp_connected' — o segundo é AnalyticsEvent, o primeiro não
+  // existe —, então NENHUMA reconexão era vista e quem tinha voltado ao ar
+  // aparecia como "desligou de propósito". Não trocar sem conferir na fonte.
   const eventos = await db.waConnectionEvent.findMany({
-    where: { userId: { in: userIds }, occurredAt: { gte: desde }, type: { in: [MANUAL_STOP_EVENT, 'connect', 'whatsapp_connected'] } },
+    where: { userId: { in: userIds }, occurredAt: { gte: desde }, type: { in: [MANUAL_STOP_EVENT, 'connected', 'reconnect_success'] } },
     select: { userId: true, type: true, occurredAt: true },
     orderBy: { occurredAt: 'asc' },
   }).catch(() => [])
@@ -103,7 +108,11 @@ async function main() {
     const user = userById.get(sessao.userId)
     const parada = ultimaParada.get(sessao.userId)
     const conexao = ultimaConexao.get(sessao.userId)
-    const parouSozinha = Boolean(parada) && (!conexao || conexao < parada)
+    // Duas provas de que ela voltou depois de pedir parada: um evento de
+    // conexão, ou o heartbeat do worker (que não depende de tipo de evento
+    // nenhum e por isso segura o caso em que o evento se perdeu).
+    const voltouDepois = (conexao && conexao > parada) || (sessao.lastHeartbeatAt && parada && sessao.lastHeartbeatAt > parada)
+    const parouSozinha = Boolean(parada) && !voltouDepois
     const { balde, gastaVaga } = classificar({ sessao, user, parouSozinha })
     const atual = baldes.get(balde) || { total: 0, gastaVaga: 0 }
     atual.total += 1
