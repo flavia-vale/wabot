@@ -929,6 +929,74 @@ Roteiro de validação em staging (nesta ordem):
    passada de reconciliação estendeu o acesso até a próxima cobrança
    (`AnalyticsEvent('subscription_access_extended')`).
 
+### "Seu pagamento foi recusado" no checkout de assinatura (RCA 2026-09-07 — não regredir)
+
+Cliente mandou print do checkout recorrente (Pro, R$69, cartão Visa Santander)
+com **"Seu pagamento foi recusado. Recomendamos que você pague com o meio de
+pagamento e dispositivo que costuma usar para compras on-line."** Essa frase é
+do **antifraude do Mercado Pago** (`cc_rejected_high_risk`), não do banco
+emissor — banco recusa com outro texto ("sem limite", "cartão desabilitado").
+
+**A documentação do próprio MP nomeia a causa:** quando duas cobranças seguidas
+saem com itens idênticos ou parâmetros muito parecidos, o motor de antifraude
+lê como cobrança duplicada e recusa por precaução; a recomendação é
+"implementar controles para evitar novas tentativas imediatas com os mesmos
+dados de pagamento".
+
+**Nós não tínhamos esse controle — e produzíamos exatamente o padrão que ele
+recusa.** `pending` de propósito não bloqueia (senão um checkout abandonado
+travaria a conta para sempre), então **cada clique em "Assinar" criava um
+preapproval NOVO** com `reason`, `external_reference`, `payer_email` e
+`transaction_amount` byte a byte iguais. Quem tentava de novo depois de uma
+recusa alimentava a recusa seguinte. Como `Subscription` não guardava o
+`init_point`, não havia nem como voltar ao checkout que já existia.
+
+Hoje `decidePendingSubscriptionReuse` (`src/domain/payments/subscriptionPolicy.js`,
+pura) manda a pessoa de volta ao checkout em aberto do MESMO plano, e o
+`init_point` é recuperado do próprio MP (`GET /preapproval/:id` → campo
+`initPoint` do snapshot) — **sem migration, sem coluna nova**.
+
+**Não regredir:**
+
+- **A invariante de que `pending` não trava a conta continua valendo** e é o
+  que limita o reaproveitamento: fora da janela de 24h
+  (`SUBSCRIPTION_REUSE_MAX_AGE_MS`), com plano diferente, sem identificador do
+  provedor ou sem data confiável → cria checkout novo. E só reaproveita o que o
+  MP **confirma** que ainda está `pending`: falha de rede ou checkout já
+  concluído caem no caminho normal.
+- **Não voltar a criar preapproval sem tentar reaproveitar antes** (guarda
+  estrutural no teste exige que a decisão venha ANTES da criação).
+- **O preapproval manda `notification_url`.** Ele não mandava — só o checkout
+  avulso mandava —, então os avisos da assinatura dependiam inteiramente do que
+  estivesse marcado no painel do MP, e configurar os eventos
+  `subscription_preapproval`/`subscription_authorized_payment` lá era um TODO
+  em aberto desde a implementação. Aviso de renovação perdido é a cliente pagar
+  e ficar sem robô.
+- **Chave de TESTE em produção recusa todo cartão real com ESTA MESMA TELA.**
+  `isSandboxTokenInProduction` (`src/domain/payments/accessTokenMode.js`) avisa
+  no boot e faz a rota devolver erro próprio, em vez de deixar o time procurar
+  defeito no cartão da cliente. Prefixo fora do padrão do MP (`unknown`)
+  **não** acusa — alarme falso recorrente treina a pessoa a ignorar o aviso.
+- **Linguagem leiga**: a frase da chave errada diz "não pelo seu cartão" e não
+  pode conter "sandbox", "token", "gateway" ou "preapproval". Teste falha se
+  jargão voltar.
+
+Sinal `subscription_checkout_reused` (allowlist em `src/analytics.js`) — cada
+evento é uma recusa por antifraude que deixou de acontecer.
+
+⚠️ **A tela de recusa é a mesma para causas com ações opostas.** Antes de
+responder à cliente, rode o diagnóstico (read-only, no diretório do ambiente):
+
+```bash
+cd ~/wabot && node scripts/diag-assinatura-recusada.mjs <email> --days=7
+```
+
+Ele separa os três casos: chave de teste em produção, checkouts repetidos e
+idênticos, ou recusa que veio de fato do banco/cartão dela (aí a ação é outro
+cartão ou o pagamento avulso). Não imprime segredo — da chave só sai o modo.
+
+Teste: `test/subscription-checkout-reuse.test.js`.
+
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
 O e-mail de boas-vindas pós-signup (`src/email/welcomeEmail.js`) é enviado
