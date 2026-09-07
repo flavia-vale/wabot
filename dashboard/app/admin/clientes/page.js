@@ -76,7 +76,12 @@ function CobrancaBadge({ customer }) {
     return <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800">Recorrente</span>
   }
   if (sub) {
-    const label = subStatus === 'pending' ? 'Recorrente (aguardando)' : subStatus === 'paused' ? 'Recorrente (pausada)' : 'Recorrente (cancelada)'
+    // "Aguardando" era dito também para quem JÁ pagou e só falta a confirmação
+    // do Mercado Pago chegar — o backend separa os dois casos.
+    if (sub.awaitingConfirmation) {
+      return <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Recorrente (confirmando)</span>
+    }
+    const label = subStatus === 'pending' ? 'Recorrente (não concluída)' : subStatus === 'paused' ? 'Recorrente (pausada)' : 'Recorrente (cancelada)'
     return <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{label}</span>
   }
   if ((customer.paidCount ?? 0) > 0) {

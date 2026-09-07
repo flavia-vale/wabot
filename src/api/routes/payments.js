@@ -15,6 +15,8 @@ import {
   SUBSCRIPTION_ATTEMPT_COOLDOWN_MS as DEFAULT_ATTEMPT_COOLDOWN_MS,
   decideAccessExtensionFromSubscription,
   decideSubscriptionCancellation,
+  decideSubscriptionStatusFromCharge,
+  shouldRefreshPendingSubscription,
   summarizeSubscriptionForPanel,
 } from '../../domain/payments/subscriptionPolicy.js'
 import { appContainer } from '../../app/container.js'
@@ -543,6 +545,47 @@ async function runPaymentReconciliation({ log } = {}) {
 }
 
 /**
+ * Acerta o status da assinatura depois de uma cobrança aprovada.
+ *
+ * Pergunta primeiro ao Mercado Pago (resposta dele é a verdade); sem resposta,
+ * a própria cobrança é prova suficiente para promover um `pending`. Nunca
+ * ressuscita assinatura pausada/cancelada — quem decide é a regra pura.
+ *
+ * Best-effort: falha aqui não pode derrubar o webhook, porque o acesso da
+ * cliente já foi liberado antes.
+ */
+async function syncSubscriptionStatusAfterCharge({ subscription, preapprovalId, log }) {
+  try {
+    const snapshot = preapprovalId ? await fetchMercadoPagoSubscriptionSnapshot(preapprovalId) : { ok: false }
+    const decision = decideSubscriptionStatusFromCharge({
+      storedStatus: subscription.status,
+      snapshotStatus: snapshot.ok ? snapshot.status : null,
+    })
+    if (!decision.update) return decision
+
+    await db.$transaction(async (tx) =>
+      paymentsService.upsertSubscription(tx, {
+        userId: subscription.userId,
+        mpSubscriptionId: subscription.mpSubscriptionId,
+        plan: subscription.plan,
+        status: decision.status,
+        nextChargeAt: (snapshot.ok ? snapshot.nextChargeAt : null) ?? subscription.nextChargeAt ?? null,
+      })
+    )
+    trackAnalyticsEventSafe({
+      userId: subscription.userId,
+      event: 'subscription_status_synced',
+      metadata: { from: subscription.status, to: decision.status, reason: decision.reason, source: 'charge' },
+    })
+    log?.info?.({ userId: subscription.userId, from: subscription.status, to: decision.status, reason: decision.reason }, 'Status da assinatura acertado a partir da cobrança aprovada')
+    return decision
+  } catch (err) {
+    log?.warn?.({ err: err?.message, userId: subscription?.userId }, 'subscription_status_sync_after_charge_failed')
+    return { update: false, status: null, reason: 'sync_failed' }
+  }
+}
+
+/**
  * Reconciliação da assinatura recorrente — rede de segurança do "renova sozinho".
  *
  * A renovação do acesso depende do aviso `subscription_authorized_payment` do
@@ -762,6 +805,17 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
                 return activationResult
               })
               activation = { triggered: true, ...result }
+
+              // A cobrança liberava o acesso e NÃO encostava no status da
+              // assinatura: quem só recebia este aviso (e não o do preapproval)
+              // ficava `pending` para sempre, cobrando todo mês, e lia no painel
+              // "você começou e não terminou no Mercado Pago". Ver
+              // `decideSubscriptionStatusFromCharge`.
+              await syncSubscriptionStatusAfterCharge({
+                subscription,
+                preapprovalId: authorizedSnapshot.preapprovalId,
+                log,
+              })
 
               if (!result.alreadyActivated) {
                 trackAnalyticsEventSafe({ userId: subscription.userId, event: 'subscription_payment_approved', metadata: { plan, mpSubscriptionId: authorizedSnapshot.preapprovalId, source: 'webhook' } })
@@ -1377,6 +1431,39 @@ export async function paymentsRoutes(app) {
       }),
     ])
 
+    // O status da assinatura é sincronizado de hora em hora. Quem acabou de
+    // concluir no Mercado Pago abria o painel ANTES disso e lia "você começou e
+    // não terminou" logo depois de pagar. Uma consulta sob demanda (no máximo
+    // uma por minuto, e só para checkout novo) fecha essa janela.
+    let openSubscription = activeSubscription
+    const refreshDecision = shouldRefreshPendingSubscription({ subscription: openSubscription, now })
+    if (refreshDecision.refresh) {
+      try {
+        const snapshot = await fetchMercadoPagoSubscriptionSnapshot(openSubscription.mpSubscriptionId)
+        if (snapshot.ok && snapshot.status) {
+          openSubscription = await db.$transaction(async (tx) =>
+            paymentsService.upsertSubscription(tx, {
+              userId,
+              mpSubscriptionId: openSubscription.mpSubscriptionId,
+              plan: openSubscription.plan,
+              status: snapshot.status,
+              nextChargeAt: snapshot.nextChargeAt ?? null,
+            })
+          )
+          if (snapshot.status !== activeSubscription.status) {
+            trackAnalyticsEventSafe({
+              userId,
+              event: 'subscription_status_synced',
+              metadata: { from: activeSubscription.status, to: snapshot.status, reason: 'provider_status', source: 'panel' },
+            })
+          }
+        }
+      } catch (err) {
+        // Falha aqui NUNCA pode derrubar a tela de plano: segue com o que temos.
+        req.log?.warn?.({ err: err?.message, userId }, 'subscription_panel_refresh_failed')
+      }
+    }
+
     const accessExpiresAt = user?.accessExpiresAt ?? null
     const isActive = !accessExpiresAt || accessExpiresAt > now
     const expiresInDays = accessExpiresAt ? Math.max(0, Math.ceil((new Date(accessExpiresAt) - now) / 86400000)) : null
@@ -1388,12 +1475,16 @@ export async function paymentsRoutes(app) {
     // `activeSubscription` pode vir `pending` (checkout aberto e não concluído):
     // isso NÃO é renovação automática ligada, e dizer que é faria a cliente
     // achar que está coberta sem estar. Quem decide é o resumo puro.
-    const subscription = summarizeSubscriptionForPanel(activeSubscription)
+    const subscription = summarizeSubscriptionForPanel(openSubscription, {
+      lastApprovedPaymentAt: lastApprovedPayment?.createdAt ?? null,
+    })
     const autoRenew = subscription.autoRenew
     const billingModel = autoRenew
       ? 'Assinatura recorrente mensal'
-      : 'Renovação manual a cada 30 dias'
-    const nextChargeAt = autoRenew ? (activeSubscription?.nextChargeAt ?? null) : null
+      : subscription.awaitingConfirmation
+        ? 'Assinatura recorrente mensal (confirmando)'
+        : 'Renovação manual a cada 30 dias'
+    const nextChargeAt = autoRenew ? (openSubscription?.nextChargeAt ?? null) : null
 
     return {
       billingModel,
