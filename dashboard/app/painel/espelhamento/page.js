@@ -151,14 +151,17 @@ function ConnectionsDiagram({ origens, destinos, hasFullMesh, selectedOriginId, 
               className="pnl-esp-node is-origin"
               style={{
                 top: y - ROW_H / 2, height: ROW_H, width: `${NODE_PCT}%`,
+                '--node-color': STROKE_COLORS[i % STROKE_COLORS.length],
                 borderColor: isSel ? STROKE_COLORS[i % STROKE_COLORS.length] : undefined,
                 boxShadow: isSel ? '0 2px 8px rgba(31,45,42,0.12)' : undefined,
               }}
               aria-pressed={isSel}
             >
-              <Avatar name={o.name} gradient={GRADIENTS[i % GRADIENTS.length]} size={34} />
+              <span className="pnl-esp-node-avatar">
+                <Avatar name={o.name} gradient={GRADIENTS[i % GRADIENTS.length]} size={34} />
+              </span>
               <span style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
-                <span className="pnl-esp-node-name" style={{ display: 'block' }}>{o.name}</span>
+                <span className="pnl-esp-node-name">{o.name}</span>
                 <span className="pnl-esp-node-sub">envia para {destinos.length}</span>
               </span>
             </button>
@@ -174,14 +177,17 @@ function ConnectionsDiagram({ origens, destinos, hasFullMesh, selectedOriginId, 
               className="pnl-esp-node is-dest"
               style={{
                 top: y - ROW_H / 2, height: ROW_H, width: `${NODE_PCT}%`,
+                '--node-color': STROKE_COLORS[i % STROKE_COLORS.length],
                 opacity: selectedOriginId && !connected ? 0.35 : 1,
               }}
             >
               <span style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
-                <span className="pnl-esp-node-name" style={{ display: 'block' }}>{d.name}</span>
+                <span className="pnl-esp-node-name">{d.name}</span>
                 <span className="pnl-esp-node-sub">recebe de {origens.length}</span>
               </span>
-              <Avatar name={d.name} gradient={GRADIENTS[i % GRADIENTS.length]} size={34} />
+              <span className="pnl-esp-node-avatar">
+                <Avatar name={d.name} gradient={GRADIENTS[i % GRADIENTS.length]} size={34} />
+              </span>
             </div>
           )
         })}
@@ -196,7 +202,6 @@ export default function EspelhamentoPage() {
 
   const [groups, setGroups] = useState([])
   const [summary, setSummary] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [switchingMirror, setSwitchingMirror] = useState(false)
   const [tab, setTab] = useState('grupos')
@@ -209,7 +214,6 @@ export default function EspelhamentoPage() {
       if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroups(g.value)
       else setLoadError('Não foi possível carregar os grupos do espelhamento.')
       if (s.status === 'fulfilled') setSummary(s.value)
-      setLoading(false)
     })
     return () => { active = false }
   }, [])
@@ -231,12 +235,7 @@ export default function EspelhamentoPage() {
     counterpartNames: hasFullMesh ? originNamesJoined : '',
   }))
 
-  const c = summary?.counts
-  const postadosHoje = num(c?.success)
-  const errosHoje = num(c?.timeoutTotal) + num(c?.errorOther)
-  const vistosHoje = c
-    ? num(c.success) + num(c.skippedDedup) + num(c.skippedConfig) + num(c.timeoutTotal) + num(c.errorOther) + num(c.inFlight)
-    : 0
+  const postadosHoje = num(summary?.counts?.success)
 
   const lastSendLabel = summary?.lastSendAt
     ? new Date(summary.lastSendAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -311,25 +310,6 @@ export default function EspelhamentoPage() {
           <Link href="/painel/whatsapp" className="pnl-btn">Conexão</Link>
         </div>
       </section>
-
-      {/* Stats factuais do dia */}
-      <div className="pnl-kpis" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-        <div className="pnl-kpi">
-          <div className="pnl-kpi-label">Repostados hoje</div>
-          <div className="pnl-kpi-num">{loading ? '…' : postadosHoje}</div>
-          <div className="pnl-kpi-foot">nos seus grupos de destino</div>
-        </div>
-        <div className="pnl-kpi">
-          <div className="pnl-kpi-label">Vistos hoje</div>
-          <div className="pnl-kpi-num">{loading ? '…' : vistosHoje}</div>
-          <div className="pnl-kpi-foot">links detectados nas origens</div>
-        </div>
-        <div className="pnl-kpi">
-          <div className="pnl-kpi-label">Erros hoje</div>
-          <div className="pnl-kpi-num" style={{ color: errosHoje > 0 ? 'var(--danger)' : undefined }}>{loading ? '…' : errosHoje}</div>
-          <div className="pnl-kpi-foot">{errosHoje > 0 ? 'ver em Envios' : 'tudo certo'}</div>
-        </div>
-      </div>
 
       {/* Abas Grupos / Conexões */}
       <div className="pnl-seg" role="tablist" aria-label="Ver como listas ou como mapa de conexões" style={{ justifySelf: 'start' }}>
