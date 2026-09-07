@@ -212,9 +212,13 @@ export default function PlanoPage() {
               {cancelMessage && <p className="pnl-hero-sub" style={{ marginTop: 8 }}>{cancelMessage}</p>}
             </div>
           )}
-          {!overview.autoRenew && overview.subscription?.status === 'pending' && (
+          {/* O texto do checkout em aberto vem do backend: "pending" significa
+              coisas opostas conforme já exista pagamento (quem pagou está só
+              esperando a confirmação e não tem nada a fazer) — e painel e admin
+              precisam dizer a MESMA coisa. */}
+          {!overview.autoRenew && overview.subscription?.notice && (
             <p className="pnl-hero-sub" style={{ marginTop: 12 }}>
-              Você começou a ligar a cobrança automática e não terminou no Mercado Pago. Enquanto isso, a renovação continua manual.
+              {overview.subscription.notice}
             </p>
           )}
         </section>

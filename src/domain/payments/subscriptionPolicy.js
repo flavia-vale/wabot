@@ -189,6 +189,85 @@ export function describeSubscriptionCooldown(retryAt, now = new Date()) {
 }
 
 /**
+ * Janela em que um checkout ainda recém-criado é consultado no MP sob demanda
+ * (quando a cliente abre o painel), e intervalo mínimo entre duas consultas da
+ * mesma assinatura.
+ */
+export const SUBSCRIPTION_PENDING_REFRESH_MAX_AGE_MS = 24 * 60 * 60 * 1000
+export const SUBSCRIPTION_PENDING_REFRESH_MIN_INTERVAL_MS = 60 * 1000
+
+/**
+ * Decide se vale consultar o Mercado Pago AGORA para saber se um checkout
+ * ainda marcado como `pending` já virou assinatura valendo.
+ *
+ * RCA 2026-09-07: a cliente concluía a assinatura, o Mercado Pago cobrava, o
+ * acesso era liberado — e o painel continuava dizendo "você começou e não
+ * terminou no Mercado Pago", porque quem sincroniza o status é uma passada de
+ * HORA EM HORA. Ela lia isso logo depois de pagar, e no admin aparecia
+ * "falta concluir" para uma conta que já tinha pago.
+ *
+ * A consulta é limitada de propósito: só checkout novo (dentro da janela) e no
+ * máximo uma vez por minuto por assinatura — o painel é aberto muitas vezes e
+ * isso não pode virar uma chamada ao provedor por carregamento de tela.
+ *
+ * @returns {{ refresh: boolean, reason: string }}
+ */
+export function shouldRefreshPendingSubscription({
+  subscription,
+  now = new Date(),
+  maxAgeMs = SUBSCRIPTION_PENDING_REFRESH_MAX_AGE_MS,
+  minIntervalMs = SUBSCRIPTION_PENDING_REFRESH_MIN_INTERVAL_MS,
+} = {}) {
+  if (!subscription) return { refresh: false, reason: 'no_subscription' }
+  if (normalizeStatus(subscription.status) !== 'pending') return { refresh: false, reason: 'not_pending' }
+  if (!subscription.mpSubscriptionId) return { refresh: false, reason: 'no_provider_id' }
+
+  const nowDate = toDate(now) ?? new Date()
+  const createdAt = toDate(subscription.createdAt)
+  if (!createdAt) return { refresh: false, reason: 'no_timestamp' }
+  if (nowDate.getTime() - createdAt.getTime() > Math.max(0, Number(maxAgeMs) || 0)) {
+    return { refresh: false, reason: 'too_old' }
+  }
+
+  const lastSyncedAt = toDate(subscription.updatedAt) ?? createdAt
+  if (nowDate.getTime() - lastSyncedAt.getTime() < Math.max(0, Number(minIntervalMs) || 0)) {
+    return { refresh: false, reason: 'checked_recently' }
+  }
+
+  return { refresh: true, reason: 'pending_may_be_authorized' }
+}
+
+/**
+ * Decide o status da assinatura depois de uma COBRANÇA aprovada do Mercado
+ * Pago (aviso `subscription_authorized_payment`).
+ *
+ * Mesmo RCA: esse aviso liberava o acesso e **não encostava no status da
+ * assinatura**. Quem só recebe o aviso da cobrança (e não o do preapproval)
+ * ficava `pending` para sempre no nosso banco, mesmo cobrando todo mês — daí
+ * "Renova manualmente" no painel e "falta concluir" no admin para quem já
+ * estava pagando.
+ *
+ * O que o MP responde na consulta do preapproval é sempre a verdade e ganha de
+ * tudo. Sem essa resposta (rede, token), a própria cobrança é prova de que a
+ * assinatura estava valendo — mas isso só PROMOVE `pending`; assinatura
+ * pausada ou cancelada nunca é ressuscitada por aqui.
+ *
+ * @returns {{ update: boolean, status: string|null, reason: string }}
+ */
+export function decideSubscriptionStatusFromCharge({ storedStatus, snapshotStatus } = {}) {
+  const stored = normalizeStatus(storedStatus)
+  const fromProvider = normalizeStatus(snapshotStatus)
+
+  if (fromProvider) {
+    if (fromProvider === stored) return { update: false, status: fromProvider, reason: 'already_in_sync' }
+    return { update: true, status: fromProvider, reason: 'provider_status' }
+  }
+
+  if (stored === 'pending') return { update: true, status: SUBSCRIPTION_ACTIVE_STATUS, reason: 'charge_is_proof' }
+  return { update: false, status: null, reason: 'no_provider_status' }
+}
+
+/**
  * @returns {{ ok: boolean, reason: 'ok'|'not_found'|'already_cancelled' }}
  */
 export function decideSubscriptionCancellation(subscription) {
@@ -248,23 +327,68 @@ export function describeSubscriptionStatus(status) {
 }
 
 /**
+ * Um checkout `pending` tem DOIS significados opostos, e tratá-los com a mesma
+ * frase foi o que fez uma cliente que já tinha pago ler "você não terminou":
+ *
+ *  - ninguém pagou nada depois de abrir o checkout → ela de fato parou no meio
+ *    e precisa concluir (ou o avulso continua aberto);
+ *  - já existe pagamento aprovado depois de o checkout nascer → o Mercado Pago
+ *    cobrou, o acesso foi liberado e o que falta é só a confirmação chegar até
+ *    nós. Nesse caso ela não tem NADA a fazer, e dizer o contrário faz a pessoa
+ *    tentar assinar de novo — que é exatamente o que dispara a recusa do
+ *    antifraude (ver `decideSubscriptionAttemptCooldown`).
+ *
+ * @returns {{ awaitingConfirmation: boolean, label: string, notice: string }|null}
+ */
+export function describePendingSubscriptionNotice({ status, subscriptionStartedAt, lastApprovedPaymentAt } = {}) {
+  if (normalizeStatus(status) !== 'pending') return null
+
+  const startedAt = toDate(subscriptionStartedAt)
+  const paidAt = toDate(lastApprovedPaymentAt)
+  const paidAfterStart = Boolean(paidAt && (!startedAt || paidAt.getTime() >= startedAt.getTime() - 5 * 60 * 1000))
+
+  if (paidAfterStart) {
+    return {
+      awaitingConfirmation: true,
+      label: 'Confirmando a renovação automática',
+      notice: 'Recebemos seu pagamento e seu acesso já está liberado. Estamos confirmando a renovação automática com o Mercado Pago — isso costuma levar alguns minutos e você não precisa fazer nada. Não assine de novo.',
+    }
+  }
+
+  return {
+    awaitingConfirmation: false,
+    label: describeSubscriptionStatus('pending'),
+    notice: 'Você começou a ligar a cobrança automática e não terminou no Mercado Pago. Enquanto isso, a renovação continua manual.',
+  }
+}
+
+/**
  * Resumo para o painel. Nunca devolve identificador do provedor — a tela não
  * precisa e ele não deve circular no navegador.
  */
-export function summarizeSubscriptionForPanel(subscription) {
+export function summarizeSubscriptionForPanel(subscription, { lastApprovedPaymentAt = null } = {}) {
   if (!subscription) {
-    return { hasSubscription: false, autoRenew: false, status: null, statusLabel: describeSubscriptionStatus(null), plan: null, nextChargeAt: null, cancelledAt: null, canCancel: false }
+    return { hasSubscription: false, autoRenew: false, status: null, statusLabel: describeSubscriptionStatus(null), plan: null, nextChargeAt: null, cancelledAt: null, canCancel: false, awaitingConfirmation: false, notice: null }
   }
   const status = normalizeStatus(subscription.status)
   const nextCharge = toDate(subscription.nextChargeAt)
+  const pendingNotice = describePendingSubscriptionNotice({
+    status,
+    subscriptionStartedAt: subscription.createdAt,
+    lastApprovedPaymentAt,
+  })
   return {
     hasSubscription: true,
     autoRenew: isSubscriptionActive(status),
     status,
-    statusLabel: describeSubscriptionStatus(status),
+    statusLabel: pendingNotice?.label ?? describeSubscriptionStatus(status),
     plan: subscription.plan ?? null,
     nextChargeAt: nextCharge,
     cancelledAt: toDate(subscription.cancelledAt),
     canCancel: decideSubscriptionCancellation(subscription).ok,
+    awaitingConfirmation: Boolean(pendingNotice?.awaitingConfirmation),
+    // A tela mostra ESTE texto — assim painel e admin nunca discordam sobre o
+    // que dizer para a mesma assinatura.
+    notice: pendingNotice?.notice ?? null,
   }
 }
