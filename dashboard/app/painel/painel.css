@@ -818,6 +818,20 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   color: var(--ink-soft);
 }
 .pnl-esp-flow strong { color: var(--ink); font-weight: 600; }
+/* Marca a origem em targetsMode 'all': alcança todos os destinos por padrão,
+ * não por escolha da cliente (ver src/core/destinationRouting.js). */
+.pnl-esp-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--ink-soft);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
 
 .pnl-esp-diagram-scroll { overflow-x: auto; padding: 4px; }
 .pnl-esp-diagram { position: relative; min-width: 480px; max-width: 760px; margin: 0 auto; }
