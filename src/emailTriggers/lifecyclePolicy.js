@@ -10,6 +10,7 @@
 // `dedupDays` de cada e-mail no catálogo, aplicado pelo despachante.
 
 import { wasStoppedByUser } from '../email/accountActivity.js'
+import { resolveExpiredPlanEmail } from './expiredPlanJourney.js'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const MS_PER_HOUR = 60 * 60 * 1000
@@ -110,7 +111,6 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
   // 1) Cobrança primeiro: é o aviso que a pessoa mais precisa receber na hora.
   if (snapshot.accessExpiresAt && restam !== null) {
     if (isPaidPlan) {
-      if (restam <= 0 && restam >= -2) return { slug: 'plano_venceu', vars: {} }
       const slug = COUNTDOWN_SLUGS.paid[restam]
       if (slug) {
         return {
@@ -118,7 +118,14 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
           vars: { data_vencimento: formatDateBR(snapshot.accessExpiresAt), dias_restantes: String(restam) },
         }
       }
-      if (restam <= -6 && restam >= -9) return { slug: 'plano_vencido_volta', vars: {} }
+      // Já venceu: a jornada de recuperação decide o e-mail do dia (aviso no
+      // vencimento e os cinco espaçados depois dele).
+      if (restam <= 0) {
+        const passo = resolveExpiredPlanEmail(-restam)
+        if (passo) {
+          return { slug: passo, vars: { data_vencimento: formatDateBR(snapshot.accessExpiresAt) } }
+        }
+      }
     } else {
       if (restam <= 0 && restam >= -2) return { slug: 'teste_acabou', vars: {} }
       const slug = COUNTDOWN_SLUGS.trial[restam]
