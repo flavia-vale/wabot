@@ -40,6 +40,54 @@ export function blocksNewSubscription(subscription) {
 }
 
 /**
+ * Janela em que um checkout de assinatura ainda vale a pena reaproveitar.
+ * Passou disso, a pessoa desistiu faz tempo e um link novo é mais honesto.
+ */
+export const SUBSCRIPTION_REUSE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Decide se um checkout de assinatura ainda em aberto deve ser REAPROVEITADO
+ * em vez de criar outro idêntico.
+ *
+ * RCA 2026-09 ("pagamento recusado" no checkout recorrente): o antifraude do
+ * Mercado Pago recusa tentativas seguidas com parâmetros iguais ou muito
+ * parecidos — ele lê a repetição como cobrança duplicada. Como `pending` de
+ * propósito não bloqueia, cada clique em "Assinar" criava um preapproval NOVO
+ * com exatamente os mesmos dados (mesmo valor, mesmo e-mail, mesma descrição,
+ * mesma conta). Quem tentava de novo depois de uma recusa alimentava
+ * justamente o padrão que gera a recusa. Reaproveitar o checkout que já existe
+ * é o controle que o próprio MP recomenda.
+ *
+ * Continua valendo a invariante de que `pending` NUNCA trava a conta: fora da
+ * janela, com plano diferente, sem identificador do provedor ou sem data
+ * confiável, a resposta é criar um checkout novo.
+ *
+ * @returns {{ reuse: boolean, reason: string }}
+ */
+export function decidePendingSubscriptionReuse({
+  subscription,
+  plan,
+  now = new Date(),
+  maxAgeMs = SUBSCRIPTION_REUSE_MAX_AGE_MS,
+} = {}) {
+  if (!subscription) return { reuse: false, reason: 'no_pending' }
+  if (normalizeStatus(subscription.status) !== 'pending') return { reuse: false, reason: 'not_pending' }
+  if (!subscription.mpSubscriptionId) return { reuse: false, reason: 'no_provider_id' }
+  if (plan && subscription.plan && normalizeStatus(subscription.plan) !== normalizeStatus(plan)) {
+    return { reuse: false, reason: 'plan_changed' }
+  }
+
+  const startedAt = toDate(subscription.updatedAt) ?? toDate(subscription.createdAt)
+  if (!startedAt) return { reuse: false, reason: 'no_timestamp' }
+
+  const ageMs = ((toDate(now) ?? new Date()).getTime()) - startedAt.getTime()
+  if (!Number.isFinite(ageMs)) return { reuse: false, reason: 'no_timestamp' }
+  if (ageMs > Math.max(0, Number(maxAgeMs) || 0)) return { reuse: false, reason: 'too_old' }
+
+  return { reuse: true, reason: 'reusable_pending' }
+}
+
+/**
  * @returns {{ ok: boolean, reason: 'ok'|'not_found'|'already_cancelled' }}
  */
 export function decideSubscriptionCancellation(subscription) {
