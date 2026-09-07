@@ -88,6 +88,101 @@ export function decidePendingSubscriptionReuse({
 }
 
 /**
+ * Intervalo mínimo antes de recriar um checkout idêntico depois de tentativas
+ * seguidas que não deram em pagamento.
+ *
+ * Medido no caso real (2026-09-07): a cliente criou TRÊS checkouts do mesmo
+ * plano em 57 minutos (09:05, 09:08, 10:02) e viu a recusa do antifraude no
+ * terceiro. O reaproveitamento acima cobre o segundo (o primeiro ainda estava
+ * em aberto às 09:08), mas NÃO o terceiro: às 10:02 os dois anteriores já
+ * tinham sido encerrados pela reconciliação, então não havia o que
+ * reaproveitar e um checkout novo e idêntico nascia mesmo assim.
+ *
+ * Não dá para decidir isso pela recusa em si: o Mercado Pago não nos manda
+ * aviso de pagamento recusado nesse fluxo e a tabela de pagamentos da conta
+ * fica vazia. O sinal que TEMOS é a repetição — vários checkouts do mesmo
+ * plano em pouco tempo, nenhum virando assinatura ativa.
+ */
+export const SUBSCRIPTION_ATTEMPT_WINDOW_MS = 6 * 60 * 60 * 1000
+export const SUBSCRIPTION_ATTEMPT_MAX = 2
+export const SUBSCRIPTION_ATTEMPT_COOLDOWN_MS = 2 * 60 * 60 * 1000
+
+/**
+ * Decide se uma NOVA tentativa de assinar deve esperar.
+ *
+ * Segurar a terceira tentativa protege a própria cliente: cada checkout
+ * idêntico a mais piora a leitura do antifraude, e insistir é o caminho mais
+ * rápido para nenhuma tentativa passar. A espera é sempre LIMITADA e o
+ * pagamento avulso continua aberto — a conta nunca fica sem forma de pagar.
+ *
+ * Fail-safe em tudo: sem lista confiável, com assinatura ativa no meio, ou com
+ * teto desligado (`maxAttempts <= 0`), a resposta é DEIXAR TENTAR. Barrar por
+ * dúvida seria impedir uma compra legítima.
+ *
+ * @returns {{ wait: boolean, reason: string, retryAt: Date|null, attempts: number }}
+ */
+export function decideSubscriptionAttemptCooldown({
+  recentSubscriptions,
+  plan,
+  now = new Date(),
+  windowMs = SUBSCRIPTION_ATTEMPT_WINDOW_MS,
+  maxAttempts = SUBSCRIPTION_ATTEMPT_MAX,
+  cooldownMs = SUBSCRIPTION_ATTEMPT_COOLDOWN_MS,
+} = {}) {
+  const allow = (reason, attempts = 0) => ({ wait: false, reason, retryAt: null, attempts })
+
+  const limit = Number(maxAttempts)
+  if (!Number.isFinite(limit) || limit <= 0) return allow('cooldown_disabled')
+  if (!Array.isArray(recentSubscriptions) || recentSubscriptions.length === 0) return allow('no_history')
+
+  const nowDate = toDate(now) ?? new Date()
+  const windowStart = nowDate.getTime() - Math.max(0, Number(windowMs) || 0)
+
+  let attempts = 0
+  let lastAttemptAt = null
+  for (const subscription of recentSubscriptions) {
+    // Assinatura valendo no meio da janela significa que a conta consegue
+    // pagar — quem barra a segunda assinatura é `blocksNewSubscription`.
+    if (isSubscriptionActive(subscription?.status)) return allow('has_active_subscription')
+
+    if (plan && subscription?.plan && normalizeStatus(subscription.plan) !== normalizeStatus(plan)) continue
+
+    const createdAt = toDate(subscription?.createdAt)
+    if (!createdAt || createdAt.getTime() < windowStart) continue
+
+    attempts += 1
+    if (!lastAttemptAt || createdAt > lastAttemptAt) lastAttemptAt = createdAt
+  }
+
+  if (attempts < limit) return allow('under_limit', attempts)
+  if (!lastAttemptAt) return allow('no_timestamp', attempts)
+
+  const retryAt = new Date(lastAttemptAt.getTime() + Math.max(0, Number(cooldownMs) || 0))
+  if (retryAt <= nowDate) return allow('cooldown_elapsed', attempts)
+
+  return { wait: true, reason: 'too_many_recent_attempts', retryAt, attempts }
+}
+
+/**
+ * Texto que a cliente lê quando a tentativa precisa esperar. Linguagem leiga
+ * obrigatória, e três coisas que ele NUNCA pode deixar de dizer: que o cartão
+ * dela não é o problema, quando ela pode tentar de novo, e que o pagamento
+ * avulso continua disponível agora.
+ */
+export function describeSubscriptionCooldown(retryAt, now = new Date()) {
+  const target = toDate(retryAt)
+  const nowDate = toDate(now) ?? new Date()
+  const minutes = target ? Math.max(1, Math.ceil((target.getTime() - nowDate.getTime()) / 60000)) : null
+  const quando = minutes === null
+    ? 'daqui a pouco'
+    : minutes >= 60
+      ? `daqui a ${Math.round(minutes / 60)} hora${Math.round(minutes / 60) > 1 ? 's' : ''}`
+      : `daqui a ${minutes} minutos`
+
+  return `Você abriu a cobrança automática algumas vezes seguidas e o banco costuma recusar quando isso se repete — não é problema com o seu cartão. Espere ${quando} para ligar a cobrança automática. Se preferir não esperar, o pagamento avulso continua disponível agora.`
+}
+
+/**
  * @returns {{ ok: boolean, reason: 'ok'|'not_found'|'already_cancelled' }}
  */
 export function decideSubscriptionCancellation(subscription) {

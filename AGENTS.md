@@ -981,8 +981,53 @@ pura) manda a pessoa de volta ao checkout em aberto do MESMO plano, e o
   pode conter "sandbox", "token", "gateway" ou "preapproval". Teste falha se
   jargão voltar.
 
-Sinal `subscription_checkout_reused` (allowlist em `src/analytics.js`) — cada
-evento é uma recusa por antifraude que deixou de acontecer.
+#### O reaproveitamento sozinho NÃO fecha o caso (medição da conta real)
+
+Os três checkouts da cliente que reportou, com os horários do banco:
+
+| checkout | criado | encerrado | viveu |
+|---|---|---|---|
+| #1 | 09:05:13 | 09:32:44 | 27,5 min |
+| #2 | 09:08:31 | 09:32:44 | 24,2 min |
+| #3 | **10:02:11** (a recusa do print) | 10:32:44 | 30,6 min |
+
+- **#1 ainda estava `pending` às 09:08:31** → o reaproveitamento cobre o #2.
+- **#3 nasceu com #1 e #2 já encerrados** → não havia o que reaproveitar, e um
+  checkout novo e idêntico nascia mesmo assim. Era esse o recusado.
+- #1 e #2 foram encerrados com **214 ms de diferença**, os dois às `:32:44` —
+  é a **nossa reconciliação horária**, não o MP em tempo real.
+- ⚠️ **A tabela de pagamentos da conta está VAZIA.** O MP não nos manda aviso
+  de pagamento recusado nesse fluxo: não existe registro da recusa em lugar
+  nenhum, então **não dá para reagir a ela**. O único sinal que temos é a
+  repetição — vários checkouts do mesmo plano em pouco tempo, nenhum virando
+  assinatura.
+
+Por isso `decideSubscriptionAttemptCooldown` (pura) segura a tentativa quando
+já houve `SUBSCRIPTION_ATTEMPT_MAX` (2) checkouts do mesmo plano em
+`SUBSCRIPTION_ATTEMPT_WINDOW_MS` (6h) sem nenhum virar assinatura ativa,
+liberando de novo `SUBSCRIPTION_ATTEMPT_COOLDOWN_MS` (2h) depois da última.
+
+**Não regredir:**
+
+- **A espera é sempre LIMITADA e o pagamento avulso continua aberto** — a conta
+  nunca fica sem forma de pagar. Segurar a terceira tentativa protege a
+  cliente: cada checkout idêntico a mais piora a leitura do antifraude, e
+  insistir é o caminho mais rápido para nenhuma tentativa passar.
+- **Fail-safe é DEIXAR TENTAR**, nunca barrar por dúvida: sem histórico
+  confiável, com assinatura ativa na janela, sem data ou com
+  `SUBSCRIPTION_ATTEMPT_MAX=0` (escape hatch), a tentativa passa. Barrar por
+  dúvida impediria uma compra legítima, que é pior que a recusa.
+- **Plano diferente não conta** — trocar de plano é intenção nova, não
+  repetição.
+- **O texto diz as três coisas ou não serve**: que o cartão dela não é o
+  problema, quando ela pode voltar, e que o avulso está disponível agora. Nada
+  de "antifraude", "preapproval", "gateway", "checkout" na tela — teste falha
+  se jargão voltar.
+
+Sinais `subscription_checkout_reused` e `subscription_attempt_throttled`
+(allowlist em `src/analytics.js`) — cada um é uma recusa por antifraude que
+deixou de acontecer. Volume alto no segundo é sinal de que muita gente está
+batendo na recusa, **não** de que a trava está apertada demais.
 
 ⚠️ **A tela de recusa é a mesma para causas com ações opostas.** Antes de
 responder à cliente, rode o diagnóstico (read-only, no diretório do ambiente):

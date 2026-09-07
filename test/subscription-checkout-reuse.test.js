@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs'
 import {
   decidePendingSubscriptionReuse,
   SUBSCRIPTION_REUSE_MAX_AGE_MS,
+  decideSubscriptionAttemptCooldown,
+  describeSubscriptionCooldown,
+  SUBSCRIPTION_ATTEMPT_WINDOW_MS,
+  SUBSCRIPTION_ATTEMPT_COOLDOWN_MS,
 } from '../src/domain/payments/subscriptionPolicy.js'
 import {
   classifyMpAccessTokenMode,
@@ -88,9 +92,109 @@ test('o preapproval manda notification_url (senão o aviso de renovação depend
 
 test('a rota tenta reaproveitar o checkout ANTES de criar outro', () => {
   const inicio = rota.indexOf("app.post('/create-subscription'")
-  const trecho = rota.slice(inicio, inicio + 4000)
+  const trecho = rota.slice(inicio, inicio + 6000)
   const posReuso = trecho.indexOf('decidePendingSubscriptionReuse')
   const posCriacao = trecho.indexOf('await createMercadoPagoSubscription')
   assert.ok(posReuso > -1, 'a rota não consulta a política de reaproveitamento')
   assert.ok(posReuso < posCriacao, 'o reaproveitamento precisa vir antes da criação')
+})
+
+// ---------------------------------------------------------------------------
+// Intervalo mínimo entre tentativas (RCA 2026-09-07, conta camilla_*)
+// ---------------------------------------------------------------------------
+
+const ATTEMPT_1 = new Date(1788782713313) // 09:05:13 BRT
+const ATTEMPT_2 = new Date(1788782911311) // 09:08:31 BRT
+const ATTEMPT_3 = new Date(1788786131304) // 10:02:11 BRT — a recusa do print
+const CANCELADOS_EM = new Date(1788784364764) // 09:32:44 BRT, pela reconciliação
+
+test('caso real: a TERCEIRA tentativa em 57min espera em vez de criar outro checkout', () => {
+  // Os dois anteriores já tinham sido encerrados às 09:32 — não havia o que
+  // reaproveitar, e era exatamente aí que nascia o checkout que foi recusado.
+  const historico = [
+    { plan: 'pro', status: 'cancelled', createdAt: ATTEMPT_2, updatedAt: CANCELADOS_EM },
+    { plan: 'pro', status: 'cancelled', createdAt: ATTEMPT_1, updatedAt: CANCELADOS_EM },
+  ]
+  const d = decideSubscriptionAttemptCooldown({ recentSubscriptions: historico, plan: 'pro', now: ATTEMPT_3 })
+  assert.equal(d.wait, true)
+  assert.equal(d.reason, 'too_many_recent_attempts')
+  assert.equal(d.attempts, 2)
+  assert.ok(d.retryAt > ATTEMPT_3, 'a espera precisa apontar para o futuro')
+})
+
+test('a espera é LIMITADA: passado o intervalo, a pessoa tenta de novo', () => {
+  const historico = [
+    { plan: 'pro', status: 'cancelled', createdAt: ATTEMPT_2 },
+    { plan: 'pro', status: 'cancelled', createdAt: ATTEMPT_1 },
+  ]
+  const depois = new Date(ATTEMPT_2.getTime() + SUBSCRIPTION_ATTEMPT_COOLDOWN_MS + 1000)
+  assert.equal(decideSubscriptionAttemptCooldown({ recentSubscriptions: historico, plan: 'pro', now: depois }).wait, false)
+})
+
+test('uma tentativa só nunca espera', () => {
+  const d = decideSubscriptionAttemptCooldown({
+    recentSubscriptions: [{ plan: 'pro', status: 'cancelled', createdAt: ATTEMPT_1 }],
+    plan: 'pro',
+    now: ATTEMPT_2,
+  })
+  assert.equal(d.wait, false)
+  assert.equal(d.reason, 'under_limit')
+})
+
+test('tentativa de OUTRO plano não conta para a espera', () => {
+  const historico = [
+    { plan: 'basic', status: 'cancelled', createdAt: ATTEMPT_1 },
+    { plan: 'basic', status: 'cancelled', createdAt: ATTEMPT_2 },
+  ]
+  assert.equal(decideSubscriptionAttemptCooldown({ recentSubscriptions: historico, plan: 'pro', now: ATTEMPT_3 }).wait, false)
+})
+
+test('tentativa velha (fora da janela) não conta', () => {
+  const antiga = new Date(ATTEMPT_3.getTime() - SUBSCRIPTION_ATTEMPT_WINDOW_MS - 1000)
+  const historico = [
+    { plan: 'pro', status: 'cancelled', createdAt: antiga },
+    { plan: 'pro', status: 'cancelled', createdAt: antiga },
+  ]
+  assert.equal(decideSubscriptionAttemptCooldown({ recentSubscriptions: historico, plan: 'pro', now: ATTEMPT_3 }).wait, false)
+})
+
+test('fail-safe: sem histórico confiável, com assinatura ativa ou com teto desligado, DEIXA tentar', () => {
+  assert.equal(decideSubscriptionAttemptCooldown({ recentSubscriptions: null, plan: 'pro' }).wait, false)
+  assert.equal(decideSubscriptionAttemptCooldown({ recentSubscriptions: [], plan: 'pro' }).wait, false)
+  assert.equal(decideSubscriptionAttemptCooldown({
+    recentSubscriptions: [
+      { plan: 'pro', status: 'authorized', createdAt: ATTEMPT_1 },
+      { plan: 'pro', status: 'cancelled', createdAt: ATTEMPT_2 },
+    ],
+    plan: 'pro',
+    now: ATTEMPT_3,
+  }).wait, false, 'assinatura valendo é assunto de blocksNewSubscription, não da espera')
+  assert.equal(decideSubscriptionAttemptCooldown({
+    recentSubscriptions: [
+      { plan: 'pro', status: 'cancelled', createdAt: ATTEMPT_1 },
+      { plan: 'pro', status: 'cancelled', createdAt: ATTEMPT_2 },
+    ],
+    plan: 'pro',
+    now: ATTEMPT_3,
+    maxAttempts: 0,
+  }).wait, false, 'maxAttempts=0 é o escape hatch')
+})
+
+test('o texto da espera não culpa o cartão, diz quando voltar e oferece o avulso', () => {
+  const texto = describeSubscriptionCooldown(new Date(Date.now() + 2 * 60 * 60 * 1000))
+  assert.match(texto, /não é problema com o seu cartão/i)
+  assert.match(texto, /avulso/i)
+  assert.match(texto, /daqui a 2 horas/i)
+  for (const jargao of ['preapproval', 'antifraude', 'gateway', 'cooldown', 'token', 'checkout']) {
+    assert.ok(!texto.toLowerCase().includes(jargao), `jargão "${jargao}" chegou à tela`)
+  }
+})
+
+test('a rota consulta a espera ANTES de criar o checkout no Mercado Pago', () => {
+  const inicio = rota.indexOf("app.post('/create-subscription'")
+  const trecho = rota.slice(inicio, inicio + 6000)
+  const posEspera = trecho.indexOf('decideSubscriptionAttemptCooldown')
+  const posCriacao = trecho.indexOf('await createMercadoPagoSubscription')
+  assert.ok(posEspera > -1, 'a rota não consulta a política de espera')
+  assert.ok(posEspera < posCriacao, 'a espera precisa vir antes da criação')
 })

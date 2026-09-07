@@ -8,6 +8,11 @@ import {
   SUBSCRIPTION_OPEN_STATUSES,
   blocksNewSubscription,
   decidePendingSubscriptionReuse,
+  decideSubscriptionAttemptCooldown,
+  describeSubscriptionCooldown,
+  SUBSCRIPTION_ATTEMPT_WINDOW_MS as DEFAULT_ATTEMPT_WINDOW_MS,
+  SUBSCRIPTION_ATTEMPT_MAX as DEFAULT_ATTEMPT_MAX,
+  SUBSCRIPTION_ATTEMPT_COOLDOWN_MS as DEFAULT_ATTEMPT_COOLDOWN_MS,
   decideAccessExtensionFromSubscription,
   decideSubscriptionCancellation,
   summarizeSubscriptionForPanel,
@@ -24,6 +29,12 @@ const PAYMENT_RECONCILIATION_ENABLED = String(process.env.PAYMENT_RECONCILIATION
 const PAYMENT_RECONCILIATION_INTERVAL_MS = Math.max(60000, Number(process.env.PAYMENT_RECONCILIATION_INTERVAL_MS ?? 3600000))
 const PAYMENT_RECONCILIATION_PENDING_MINUTES = Math.max(5, Number(process.env.PAYMENT_RECONCILIATION_PENDING_MINUTES ?? 15))
 const PAYMENT_RECONCILIATION_BATCH = Math.min(200, Math.max(1, Number(process.env.PAYMENT_RECONCILIATION_BATCH ?? 50)))
+
+// Intervalo mínimo entre tentativas de ligar a cobrança automática. Escape
+// hatch: `SUBSCRIPTION_ATTEMPT_MAX=0` desliga a espera sem redeploy.
+const SUBSCRIPTION_ATTEMPT_WINDOW_MS = Math.max(0, Number(process.env.SUBSCRIPTION_ATTEMPT_WINDOW_MS ?? DEFAULT_ATTEMPT_WINDOW_MS))
+const SUBSCRIPTION_ATTEMPT_MAX = Math.max(0, Number(process.env.SUBSCRIPTION_ATTEMPT_MAX ?? DEFAULT_ATTEMPT_MAX))
+const SUBSCRIPTION_ATTEMPT_COOLDOWN_MS = Math.max(0, Number(process.env.SUBSCRIPTION_ATTEMPT_COOLDOWN_MS ?? DEFAULT_ATTEMPT_COOLDOWN_MS))
 
 const OFFICIAL_PUBLIC_ORIGIN = 'http://espelhagrupos.com.br'
 const OFFICIAL_SECURE_PUBLIC_ORIGIN = 'https://espelhagrupos.com.br'
@@ -979,6 +990,37 @@ export async function paymentsRoutes(app) {
           req.log.info({ userId, plan }, 'Checkout de assinatura reaproveitado em vez de criar outro igual')
           return { init_point: snapshot.initPoint }
         }
+      }
+
+      // Nada para reaproveitar não significa "pode criar outro igual". Quando os
+      // checkouts anteriores já foram encerrados e nenhum virou assinatura, mais
+      // um preapproval idêntico só piora a leitura do antifraude do MP. A espera
+      // é limitada e o pagamento avulso segue aberto — ver
+      // `decideSubscriptionAttemptCooldown`.
+      const recentSubscriptions = await db.subscription.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }).catch(() => null)
+
+      const cooldown = decideSubscriptionAttemptCooldown({
+        recentSubscriptions,
+        plan,
+        windowMs: SUBSCRIPTION_ATTEMPT_WINDOW_MS,
+        maxAttempts: SUBSCRIPTION_ATTEMPT_MAX,
+        cooldownMs: SUBSCRIPTION_ATTEMPT_COOLDOWN_MS,
+      })
+      if (cooldown.wait) {
+        req.log.warn({ userId, plan, attempts: cooldown.attempts, retryAt: cooldown.retryAt }, 'Tentativas seguidas de assinar — nova cobrança adiada para não alimentar a recusa do Mercado Pago')
+        trackAnalyticsEventSafe({ userId, event: 'subscription_attempt_throttled', metadata: { plan, attempts: cooldown.attempts } })
+        return reply.code(429).send({
+          code: 'SUBSCRIPTION_TOO_MANY_ATTEMPTS',
+          retryAt: cooldown.retryAt,
+          error: {
+            code: 'SUBSCRIPTION_TOO_MANY_ATTEMPTS',
+            message: describeSubscriptionCooldown(cooldown.retryAt),
+          },
+        })
       }
 
       const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
