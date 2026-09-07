@@ -1463,13 +1463,18 @@ espaçados.
 | Diagnóstico "saiu ou não, e por quê" | `scripts/diag-email-vencimento.mjs` |
 
 Etapas, em dias desde o vencimento: `plano_venceu` **0-2** →
-`plano_vencido_primeiros_dias` **4-6** → `plano_vencido_volta` **8-11** →
-`plano_vencido_2_semanas` **14-17** → `plano_vencido_1_mes` **25-28** →
-`plano_vencido_ultimo_aviso` **40-44**. Depois disso, **nada**.
+`plano_vencido_primeiros_dias` **4-6** → `plano_vencido_volta` **8-10** →
+`plano_vencido_2_semanas` **12-14** → `plano_vencido_conta_guardada` **16-18** →
+`plano_vencido_ultimo_aviso` **20-22**. Depois disso, **nada**.
 
 **Não regredir:**
 
-- **As janelas são largas (3 a 5 dias), nunca um dia só.** A passada roda 1×/dia
+- **A jornada inteira cabe em ~3 semanas** (decisão da dona do produto,
+  2026-09-07 — a primeira versão terminava em 44 dias e ficou longe demais).
+  Quem não voltou nesse prazo não volta por insistência, e cada e-mail a mais
+  depois daqui custa mais reputação de domínio do que traz cliente. Teste falha
+  se alguém esticar de novo.
+- **As janelas são largas (3 dias), nunca um dia só.** A passada roda 1×/dia
   ancorada na hora em que a API subiu — um deploy no horário errado, uma passada
   que falhou ou um dia de API fora do ar pulariam a data exata e o e-mail **nunca
   sairia**. Com a janela larga o envio atrasa, mas acontece.

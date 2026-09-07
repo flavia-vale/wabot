@@ -359,7 +359,7 @@ Se o que travou foi o pagamento (cartão recusado, boleto que não fechou), me c
     variables: [],
     title: 'O que fez você parar?',
     subject: 'Duas semanas sem o robô — o que fez você parar?',
-    body: `{{saudacao}} Faz duas semanas que seu plano venceu e o robô está parado.
+    body: `{{saudacao}} Faz cerca de duas semanas que seu plano venceu e o robô está parado.
 
 A gente não sabe o motivo, e queria saber de verdade. Normalmente é uma destas três coisas:
 
@@ -372,17 +372,17 @@ A gente não sabe o motivo, e queria saber de verdade. Normalmente é uma destas
 Sua conta continua inteira aqui: grupos, etiquetas de afiliada e configurações não foram apagados.`,
   },
   {
-    slug: 'plano_vencido_1_mes',
-    name: 'Vencido há 1 mês',
-    description: 'Sai cerca de um mês depois do vencimento, para quem ainda não renovou.',
+    slug: 'plano_vencido_conta_guardada',
+    name: 'Vencido: a conta continua guardada',
+    description: 'Sai cerca de duas semanas e meia depois do vencimento, para quem ainda não renovou.',
     group: 'plano',
     category: 'marketing',
     trigger: 'auto',
     dedupDays: 30,
     variables: [],
     title: 'Sua conta continua guardada',
-    subject: 'Faz um mês — sua conta ainda está guardada aqui',
-    body: `{{saudacao}} Faz cerca de um mês que o robô parou por aqui, e eu passei só para dizer uma coisa: **nada foi apagado**.
+    subject: 'Sua conta ainda está guardada aqui',
+    body: `{{saudacao}} O robô está parado por aqui faz um tempo, e eu passei só para dizer uma coisa: **nada foi apagado**.
 
 Seus grupos de origem, seus grupos de destino, suas etiquetas de afiliada de cada loja e todas as suas configurações de envio continuam exatamente como você deixou. Se um dia você voltar, é escolher um plano e pronto — não tem nada para configurar de novo.
 

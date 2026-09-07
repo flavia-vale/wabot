@@ -122,7 +122,9 @@ test('cliente pagante parado há 2 dias vira aviso; quem nunca enviou não', () 
 })
 
 test('sem acesso ativo, aviso de saúde do robô não é enviado', () => {
-  const semAcesso = base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 20 * DAY), waConnected: false, waDisconnectedSince: new Date(NOW.getTime() - 5 * DAY) })
+  // 40 dias vencida: já passou da jornada de recuperação, então o único e-mail
+  // que poderia sair aqui seria o de saúde do robô — e ele não sai.
+  const semAcesso = base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 40 * DAY), waConnected: false, waDisconnectedSince: new Date(NOW.getTime() - 5 * DAY) })
   assert.equal(decideLifecycleEmail(semAcesso, NOW), null)
 })
 

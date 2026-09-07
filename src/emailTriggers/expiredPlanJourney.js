@@ -10,7 +10,7 @@
 //
 // Duas regras de leitura que a tabela precisa respeitar:
 //
-// 1. As janelas são LARGAS (3 a 5 dias), nunca um dia só. A passada de e-mails
+// 1. As janelas são LARGAS (3 dias), nunca um dia só. A passada de e-mails
 //    roda uma vez por dia, ancorada na hora em que a API subiu — um deploy no
 //    horário errado, uma passada que falhou ou um dia em que a API ficou fora
 //    do ar pulariam a data exata e o e-mail nunca sairia. Com a janela larga o
@@ -33,14 +33,18 @@ export const EXPIRED_PLAN_JOURNEY = Object.freeze([
   { slug: 'plano_venceu', de: 0, ate: 2 },
   // Primeira semana: o prejuízo ainda é concreto na cabeça dela.
   { slug: 'plano_vencido_primeiros_dias', de: 4, ate: 6 },
-  { slug: 'plano_vencido_volta', de: 8, ate: 11 },
+  { slug: 'plano_vencido_volta', de: 8, ate: 10 },
   // Depois disso o assunto deixa de ser urgência e passa a ser "o que travou".
-  { slug: 'plano_vencido_2_semanas', de: 14, ate: 17 },
-  { slug: 'plano_vencido_1_mes', de: 25, ate: 28 },
+  { slug: 'plano_vencido_2_semanas', de: 12, ate: 14 },
+  { slug: 'plano_vencido_conta_guardada', de: 16, ate: 18 },
   // Último da jornada: depois daqui a conta não recebe mais e-mail automático
   // de recuperação. Insistir para sempre é o que faz a pessoa marcar como spam
   // — e aí a gente perde também os avisos que ela precisa receber.
-  { slug: 'plano_vencido_ultimo_aviso', de: 40, ate: 44 },
+  //
+  // A jornada inteira cabe em ~3 semanas de propósito: quem não voltou nesse
+  // prazo não volta por insistência, e cada e-mail a mais depois daqui custa
+  // mais reputação de domínio do que traz cliente.
+  { slug: 'plano_vencido_ultimo_aviso', de: 20, ate: 22 },
 ])
 
 /** Último dia da jornada. Depois dele nenhum e-mail de recuperação sai. */

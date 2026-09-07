@@ -48,6 +48,17 @@ test('a jornada tem o aviso do vencimento e mais cinco e-mails depois dele', () 
   assert.equal(EXPIRED_PLAN_JOURNEY.length, 6, 'aviso do vencimento + 5 da jornada')
 })
 
+// Pedido explícito da dona do produto (2026-09-07): a jornada inteira cabe em
+// ~3 semanas. Quem não voltou nesse prazo não volta por insistência, e cada
+// e-mail a mais depois daqui custa mais reputação de domínio do que traz
+// cliente. Se alguém esticar a jornada de novo, este teste avisa.
+test('o último e-mail começa no vigésimo dia e a jornada acaba ali', () => {
+  const ultimo = EXPIRED_PLAN_JOURNEY[EXPIRED_PLAN_JOURNEY.length - 1]
+  assert.equal(ultimo.slug, 'plano_vencido_ultimo_aviso')
+  assert.equal(ultimo.de, 20)
+  assert.ok(EXPIRED_PLAN_JOURNEY_LAST_DAY <= 22, 'a jornada não pode passar de três semanas')
+})
+
 test('toda etapa existe no catálogo, é automática e fala de plano', () => {
   for (const etapa of EXPIRED_PLAN_JOURNEY) {
     const definition = getTemplateDefinition(etapa.slug)
@@ -106,8 +117,8 @@ test('a política entrega o e-mail certo em cada etapa da jornada', () => {
 })
 
 test('no intervalo entre duas etapas a política não manda e-mail de plano', () => {
-  // Dia 12 fica entre a etapa da primeira semana e a de duas semanas.
-  const decision = decideLifecycleEmail(vencidoHa(12), NOW)
+  // Dia 15 fica entre a etapa de duas semanas e a seguinte.
+  const decision = decideLifecycleEmail(vencidoHa(15), NOW)
   assert.notEqual(getTemplateDefinition(decision?.slug ?? '')?.group, 'plano')
 })
 
@@ -122,7 +133,7 @@ test('quem renovou sai da jornada na hora', () => {
 })
 
 test('a jornada é só de plano pago — teste grátis tem trilha própria', () => {
-  for (const dia of [3, 14, 25, 40]) {
+  for (const dia of EXPIRED_PLAN_JOURNEY.map((etapa) => etapa.de)) {
     const decision = decideLifecycleEmail(vencidoHa(dia, { plan: 'trial' }), NOW)
     assert.notEqual(decision?.slug, resolveExpiredPlanEmail(dia), `trial não entra na jornada (dia ${dia})`)
   }
