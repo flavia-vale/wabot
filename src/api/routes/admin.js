@@ -26,6 +26,7 @@ import { createCapacityService } from '../../ops/capacity/service.js'
 import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 import { calculateManualPaymentExpiry, parseManualPaymentInput } from '../../domain/payments/manualPayment.js'
 import { isSubscriptionActive, describeSubscriptionStatus, describePendingSubscriptionNotice } from '../../domain/payments/subscriptionPolicy.js'
+import { summarizeSubscriptionCharges, presentSubscriptionCharge } from '../../domain/payments/chargeOutcome.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1940,6 +1941,87 @@ export async function adminRoutes(app) {
       mpFeeFixedCents,
       mpFees30d,
       netRevenue30d,
+    }
+  })
+
+  /**
+   * Sub-aba "Cobranças recorrentes" do Financeiro.
+   *
+   * Responde o que nenhuma tela respondia: quando cada cobrança da assinatura
+   * foi TENTADA, o que o banco devolveu (código cru + tradução com a ação) e
+   * quantas assinaturas estão perdendo receita sem ninguém decidir nada.
+   *
+   * Só leitura, tudo em lote: uma consulta de linhas, uma de contagem e uma de
+   * e-mails da página. Nenhum processo novo, nenhuma chamada ao Mercado Pago
+   * aqui — quem fala com o MP é a passada horária que já existia.
+   */
+  app.get('/finance/subscription-charges', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+
+    const { page, limit, skip } = getPagination(req.query, 50)
+    const days = Math.min(365, Math.max(1, Number(req.query?.days) || 90))
+    const outcome = String(req.query?.outcome ?? 'all').trim().toLowerCase()
+    const search = String(req.query?.q ?? '').trim()
+    const since = addDays(new Date(), -days)
+
+    // O filtro é por RESULTADO (o que a pessoa pensa), não pelo status cru do
+    // provedor — um balde pode ter mais de um status do MP dentro.
+    const statusByOutcome = {
+      aprovada: ['approved', 'accredited', 'processed'],
+      recusada: ['rejected', 'cancelled', 'expired'],
+      pendente: ['pending', 'in_process', 'authorized', 'scheduled', 'recycling', 'retried'],
+      devolvida: ['refunded', 'charged_back'],
+    }
+
+    let userIdFilter = null
+    if (search) {
+      const found = await db.user.findMany({
+        where: { OR: [{ email: { contains: search } }, { name: { contains: search } }] },
+        select: { id: true },
+        take: 200,
+      }).catch(() => [])
+      userIdFilter = found.map(row => row.id)
+      // Busca sem resultado precisa devolver VAZIO, nunca a lista inteira.
+      if (!userIdFilter.length) userIdFilter = ['__sem_resultado__']
+    }
+
+    const where = {
+      attemptedAt: { gte: since },
+      ...(statusByOutcome[outcome] ? { status: { in: statusByOutcome[outcome] } } : {}),
+      ...(userIdFilter ? { userId: { in: userIdFilter } } : {}),
+    }
+
+    const [total, rows, allInWindow] = await Promise.all([
+      db.subscriptionCharge.count({ where }),
+      db.subscriptionCharge.findMany({ where, orderBy: { attemptedAt: 'desc' }, take: limit, skip }),
+      // O resumo é do PERÍODO inteiro, não da página — senão o número muda
+      // quando a pessoa vira a página, que é o jeito mais rápido de ninguém
+      // confiar na tela. Teto para não carregar a base inteira em memória.
+      db.subscriptionCharge.findMany({
+        where: { attemptedAt: { gte: since }, ...(userIdFilter ? { userId: { in: userIdFilter } } : {}) },
+        orderBy: { attemptedAt: 'desc' },
+        take: 5000,
+        select: { userId: true, mpSubscriptionId: true, subscriptionId: true, status: true, statusDetail: true, amount: true, attemptedAt: true },
+      }),
+    ])
+
+    const emails = new Map()
+    const userIds = [...new Set(rows.map(row => row.userId).filter(Boolean))]
+    if (userIds.length) {
+      const users = await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } }).catch(() => [])
+      for (const user of users) emails.set(user.id, user.email)
+    }
+
+    await writeAdminAuditLog(req, { action: 'admin.finance.subscription_charges.list', resource: 'subscription_charge' })
+
+    return {
+      total,
+      page,
+      limit,
+      days,
+      outcome,
+      summary: summarizeSubscriptionCharges(allInWindow),
+      charges: rows.map(row => presentSubscriptionCharge(row, { email: emails.get(row.userId) ?? null })),
     }
   })
 

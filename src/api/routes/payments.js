@@ -257,6 +257,100 @@ async function fetchMercadoPagoPaymentSnapshot(paymentId) {
   }
 }
 
+/**
+ * Faturas (cobranças) de uma assinatura, direto no Mercado Pago.
+ *
+ * É a ÚNICA fonte completa: a recusada não vira `Payment` aqui e pode nem
+ * gerar aviso, então sem esta consulta o histórico de tentativas fica com
+ * buraco justamente onde dói (a cobrança que falhou).
+ */
+async function fetchMercadoPagoSubscriptionInvoices(preapprovalId, { limit = 50 } = {}) {
+  const accessToken = getMpAccessToken()
+  if (!accessToken) return { ok: false, reason: 'missing_access_token', invoices: [] }
+
+  try {
+    const response = await axios.get('https://api.mercadopago.com/authorized_payments/search', {
+      params: { preapproval_id: preapprovalId, limit },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 8000,
+    })
+    const results = Array.isArray(response.data?.results) ? response.data.results : []
+    return {
+      ok: true,
+      invoices: results.map(row => ({
+        mpAuthorizedPaymentId: row?.id != null ? String(row.id) : null,
+        mpPaymentId: row?.payment?.id != null ? String(row.payment.id) : null,
+        status: row?.status ?? row?.payment?.status ?? null,
+        statusDetail: row?.payment?.status_detail ?? null,
+        amount: row?.transaction_amount ?? row?.payment?.transaction_amount ?? null,
+        retryAttempt: row?.retry_attempt ?? null,
+        attemptedAt: row?.date_created ?? null,
+        debitedAt: row?.debit_date ?? null,
+        nextRetryAt: row?.next_retry_date ?? null,
+        paymentMethod: row?.payment?.payment_method_id ?? row?.payment_method_id ?? null,
+      })),
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      reason: 'provider_fetch_error',
+      httpStatus: err?.response?.status ?? null,
+      message: String(err?.message ?? 'unknown_error').slice(0, 500),
+      invoices: [],
+    }
+  }
+}
+
+/**
+ * Grava (ou atualiza) UMA tentativa de cobrança. Chave é o id da fatura no MP,
+ * então webhook e sincronização horária escrevem a MESMA linha — receber o
+ * aviso duas vezes não duplica o histórico.
+ *
+ * Best-effort em todos os caminhos: isto é registro para leitura humana, nunca
+ * pode derrubar o webhook nem a reconciliação (o dinheiro e o acesso da cliente
+ * são decididos antes e não dependem daqui).
+ */
+async function recordSubscriptionCharge(charge, { log } = {}) {
+  const attemptedAt = charge?.attemptedAt ? new Date(charge.attemptedAt) : new Date()
+  if (Number.isNaN(attemptedAt.getTime())) return { saved: false, reason: 'invalid_attempted_at' }
+  if (!charge?.userId) return { saved: false, reason: 'missing_user' }
+
+  const data = {
+    userId: String(charge.userId),
+    subscriptionId: charge.subscriptionId ?? null,
+    mpSubscriptionId: charge.mpSubscriptionId ? String(charge.mpSubscriptionId) : null,
+    mpPaymentId: charge.mpPaymentId ? String(charge.mpPaymentId) : null,
+    plan: charge.plan ?? null,
+    amount: charge.amount != null ? Number(charge.amount) : null,
+    status: String(charge.status ?? 'unknown'),
+    statusDetail: charge.statusDetail ?? null,
+    paymentMethod: charge.paymentMethod ?? null,
+    retryAttempt: charge.retryAttempt != null ? Number(charge.retryAttempt) : null,
+    attemptedAt,
+    debitedAt: charge.debitedAt ? new Date(charge.debitedAt) : null,
+    nextRetryAt: charge.nextRetryAt ? new Date(charge.nextRetryAt) : null,
+    source: charge.source ?? 'mp_sync',
+    syncedAt: new Date(),
+  }
+
+  try {
+    const key = charge.mpAuthorizedPaymentId ? String(charge.mpAuthorizedPaymentId) : null
+    if (!key) {
+      await db.subscriptionCharge.create({ data })
+      return { saved: true, created: true }
+    }
+    await db.subscriptionCharge.upsert({
+      where: { mpAuthorizedPaymentId: key },
+      update: data,
+      create: { ...data, mpAuthorizedPaymentId: key },
+    })
+    return { saved: true }
+  } catch (err) {
+    log?.warn?.({ err: err?.message, mpAuthorizedPaymentId: charge?.mpAuthorizedPaymentId }, 'subscription_charge_record_failed')
+    return { saved: false, reason: 'db_error' }
+  }
+}
+
 async function fetchMercadoPagoSubscriptionSnapshot(preapprovalId) {
   const accessToken = getMpAccessToken()
   if (!accessToken) return { ok: false, reason: 'missing_access_token' }
@@ -302,6 +396,16 @@ async function fetchMercadoPagoAuthorizedPaymentSnapshot(authorizedPaymentId) {
       status: response.data?.status ?? null,
       preapprovalId: response.data?.preapproval_id ?? null,
       transactionAmount: response.data?.transaction_amount ?? response.data?.payment?.transaction_amount ?? null,
+      // O retorno do banco vive na FATURA, não no preapproval — era descartado
+      // aqui e por isso não existia registro nenhum de cobrança recusada.
+      statusDetail: response.data?.payment?.status_detail ?? null,
+      paymentStatus: response.data?.payment?.status ?? null,
+      paymentId: response.data?.payment?.id ?? null,
+      retryAttempt: response.data?.retry_attempt ?? null,
+      attemptedAt: response.data?.date_created ?? null,
+      debitedAt: response.data?.debit_date ?? null,
+      nextRetryAt: response.data?.next_retry_date ?? null,
+      paymentMethod: response.data?.payment?.payment_method_id ?? response.data?.payment_method_id ?? null,
     }
   } catch (err) {
     return {
@@ -613,6 +717,7 @@ async function runSubscriptionReconciliation({ log } = {}) {
 
   let synced = 0
   let extended = 0
+  let chargesSynced = 0
 
   for (const subscription of subscriptions) {
     if (!subscription.mpSubscriptionId) continue
@@ -634,6 +739,21 @@ async function runSubscriptionReconciliation({ log } = {}) {
     } catch (err) {
       log?.warn?.({ err: err?.message, userId: subscription.userId }, 'subscription_reconciliation_upsert_failed')
       continue
+    }
+
+    // Histórico de cobranças direto do MP: é o que enxerga a tentativa
+    // RECUSADA, que pode não gerar aviso nenhum. Mesma passada, sem timer novo.
+    const invoices = await fetchMercadoPagoSubscriptionInvoices(subscription.mpSubscriptionId)
+    for (const invoice of invoices.invoices) {
+      const saved = await recordSubscriptionCharge({
+        ...invoice,
+        userId: subscription.userId,
+        subscriptionId: subscription.id,
+        mpSubscriptionId: subscription.mpSubscriptionId,
+        plan: subscription.plan,
+        source: 'mp_sync',
+      }, { log })
+      if (saved.saved) chargesSynced++
     }
 
     const user = await db.user.findUnique({
@@ -667,7 +787,7 @@ async function runSubscriptionReconciliation({ log } = {}) {
     }
   }
 
-  return { checked: subscriptions.length, synced, extended }
+  return { checked: subscriptions.length, synced, extended, chargesSynced }
 }
 
 async function processPendingWebhookEvents({ limit = 50, log } = {}) {
@@ -785,6 +905,33 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
       } else if (shouldHandleSubscriptionAuthorizedPayment(summary)) {
         const authorizedSnapshot = await fetchMercadoPagoAuthorizedPaymentSnapshot(summary.dataResourceId)
         reconciliation = { ok: authorizedSnapshot.ok, status: authorizedSnapshot.status, transactionAmount: authorizedSnapshot.transactionAmount }
+
+        // A tentativa vira registro ANTES de qualquer decisão de acesso, e
+        // vale para TODO status. Cobrança recusada não mexe em acesso nenhum,
+        // mas é exatamente ela que precisa aparecer no Financeiro com o código
+        // e a mensagem que o banco devolveu.
+        if (authorizedSnapshot.ok && authorizedSnapshot.preapprovalId) {
+          const subscriptionForCharge = await paymentsService.findSubscriptionByMpId(String(authorizedSnapshot.preapprovalId))
+          if (subscriptionForCharge?.userId) {
+            await recordSubscriptionCharge({
+              userId: subscriptionForCharge.userId,
+              subscriptionId: subscriptionForCharge.id,
+              mpSubscriptionId: authorizedSnapshot.preapprovalId,
+              mpAuthorizedPaymentId: summary.dataResourceId,
+              mpPaymentId: authorizedSnapshot.paymentId,
+              plan: subscriptionForCharge.plan,
+              amount: authorizedSnapshot.transactionAmount,
+              status: authorizedSnapshot.paymentStatus ?? authorizedSnapshot.status,
+              statusDetail: authorizedSnapshot.statusDetail,
+              paymentMethod: authorizedSnapshot.paymentMethod,
+              retryAttempt: authorizedSnapshot.retryAttempt,
+              attemptedAt: authorizedSnapshot.attemptedAt,
+              debitedAt: authorizedSnapshot.debitedAt,
+              nextRetryAt: authorizedSnapshot.nextRetryAt,
+              source: 'webhook',
+            }, { log })
+          }
+        }
 
         if (authorizedSnapshot.ok && (authorizedSnapshot.status === 'approved' || authorizedSnapshot.status === 'processed') && authorizedSnapshot.preapprovalId) {
           const subscription = await paymentsService.findSubscriptionByMpId(String(authorizedSnapshot.preapprovalId))

@@ -1181,6 +1181,17 @@ uma cliente que teria lido "falta concluir" depois de pagar. Volume alto aponta
 para aviso de preapproval não chegando — conferir os eventos marcados no painel
 do MP.
 
+**Como conferir que a cobrança automática vai mesmo acontecer, sem esperar 30
+dias:** `node scripts/testar-recorrencia.mjs <email>` (read-only) confere os
+seis elos um a um — assinatura valendo no MP com cartão vinculado, cobrança já
+feita, aviso chegando, aviso processado sem erro, nosso banco espelhando o MP e
+acesso cobrindo até a próxima cobrança. O elo que mais quebra é o **aviso**, e
+ele quebra em silêncio: cobrança registrada no MP (item 2) sem aviso nenhum
+(item 3) significa evento não marcado no painel do Mercado Pago —
+`subscription_preapproval`, `subscription_authorized_payment` **e** `payment`.
+Um `subscription_access_extended` na janela é a rede de segurança tapando
+exatamente esse buraco.
+
 Para acertar uma conta AGORA (e responder "ela precisa fazer algo no Mercado
 Pago?"), read-only por padrão:
 
@@ -1190,6 +1201,70 @@ cd ~/wabot && node scripts/sincronizar-assinatura.mjs <email> --aplicar # grava 
 ```
 
 Teste: `test/subscription-policy.test.js`.
+
+## ADMIN > Financeiro > Cobranças recorrentes (2026-09-07)
+
+Sub-aba dentro do Financeiro com **uma linha por TENTATIVA de cobrança** da
+assinatura recorrente: quando foi tentada, de quem, plano, valor, resultado,
+**código de retorno do Mercado Pago** (`status_detail`, cru) e **o que ele
+significa junto de quem precisa agir**, número da tentativa e quando o MP tenta
+de novo.
+
+| Peça | Onde |
+|---|---|
+| Tradução do retorno + resumo (PURO, sem banco) | `src/domain/payments/chargeOutcome.js` |
+| Tabela da tentativa | `SubscriptionCharge` (migration `20260907190000_subscription_charge`) |
+| Gravação na hora do aviso | ramo `subscription_authorized_payment` em `src/api/routes/payments.js` |
+| Histórico completo (inclusive recusa sem aviso) | `fetchMercadoPagoSubscriptionInvoices` em `runSubscriptionReconciliation` |
+| Rota | `GET /api/admin/finance/subscription-charges` (`billing:read`, auditada) |
+| Tela | `SubscriptionChargesPanel` em `dashboard/app/admin/page.js` |
+
+**Por que a tabela precisou existir:** cobrança **recusada não virava registro
+nenhum**. O ramo `payment` do webhook só trata estorno e aprovado, então
+`rejected` caía fora dos dois, não gerava linha em `Payment`, não virava log e o
+`status_detail` era descartado — só o payload cru sobrevivia em `WebhookEvent`.
+Não havia como responder "o que o banco respondeu e quando" sem consultar o MP
+link a link.
+
+**Não regredir:**
+
+- **A tentativa é gravada ANTES de qualquer decisão de acesso e para TODO
+  status.** Recusa não mexe em acesso — é justamente ela que precisa aparecer.
+  Teste falha se a gravação voltar para dentro do ramo de aprovado.
+- **O Mercado Pago é a fonte da verdade, não o nosso webhook.** A recusa pode
+  não gerar aviso nenhum; por isso a passada horária lê
+  `/authorized_payments/search` por assinatura. Chave é o id da fatura
+  (`mpAuthorizedPaymentId`), então webhook e sincronização escrevem a MESMA
+  linha — aviso repetido não duplica histórico.
+- **Sem processo PM2 novo e sem timer novo**: roda no tick da reconciliação que
+  já existia (política de memória). Uma chamada a mais por assinatura aberta,
+  por hora.
+- **A tela NUNCA chama o Mercado Pago.** Consulta ao provedor por carregamento
+  de tela é o caminho mais rápido para a aba ficar lenta e estourar limite.
+- **O código cru fica visível.** É ele que abre caso no Mercado Pago. O que a
+  tradução acrescenta é **de quem é a ação** (`CHARGE_ACTION_OWNERS`) — o mesmo
+  código manda fazer coisas opostas: `cc_rejected_high_risk` é ação NOSSA (não
+  repetir tentativa idêntica), `cc_rejected_insufficient_amount` é da cliente
+  (outro cartão), `cc_rejected_blacklist` é do próprio MP.
+- **Código que ainda não mapeamos aparece cru com "fora da nossa lista"** — nunca
+  vira tela vazia nem uma explicação inventada.
+- **A tradução mora em UM lugar**, compartilhada com
+  `scripts/diag-assinatura-recusada.mjs` (que antes tinha cópia própria).
+- **O resumo é do PERÍODO, não da página** (teto de 5.000 linhas) — número que
+  muda ao virar a página é número em que ninguém confia. E **`taxaSucesso` é
+  `null` sem cobrança decidida**: 0% seria mentira.
+- **"Assinaturas em risco" é o número que mais importa**: assinatura cuja ÚLTIMA
+  tentativa foi recusada é receita que já existe indo embora sem ninguém decidir
+  nada. Quem voltou a cobrar depois da recusa não conta.
+- Busca sem resultado devolve **vazio**, nunca a lista inteira.
+- A sub-aba só busca dados **quando é aberta**.
+
+⚠️ **Histórico começa no deploy.** A tabela nasce vazia e a passada horária só
+enxerga assinaturas ainda abertas (`SUBSCRIPTION_OPEN_STATUSES`) — cobrança de
+assinatura já cancelada antes do deploy não entra sozinha. Aba vazia em conta
+recém-assinada é o esperado: só aparece linha depois que o MP tenta cobrar.
+
+Teste: `test/admin-cobrancas-recorrentes.test.js`.
 
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 

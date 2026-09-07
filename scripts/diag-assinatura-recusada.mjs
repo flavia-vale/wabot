@@ -33,6 +33,7 @@ import 'dotenv/config'
 import db from '../src/db.js'
 import { classifyMpAccessTokenMode } from '../src/domain/payments/accessTokenMode.js'
 import { decidePendingSubscriptionReuse, SUBSCRIPTION_ATTEMPT_WINDOW_MS } from '../src/domain/payments/subscriptionPolicy.js'
+import { describeChargeStatusDetail } from '../src/domain/payments/chargeOutcome.js'
 
 const args = process.argv.slice(2)
 const dias = Math.max(1, Number((args.find(a => a.startsWith('--days=')) || '').split('=')[1] || 7))
@@ -65,31 +66,12 @@ async function mpGet(caminho) {
   }
 }
 
-// O que cada motivo do MP significa E o que fazer. Sem isso o código cru não
-// diz para ninguém se a ação é nossa ou da cliente.
-const MOTIVOS = {
-  accredited: 'aprovado — o dinheiro entrou',
-  pending_contingency: 'em análise pelo MP — costuma resolver sozinho',
-  pending_review_manual: 'em análise manual pelo MP',
-  cc_rejected_high_risk: 'O MERCADO PAGO barrou por suspeita (antifraude). NÃO foi o banco dela. Ação nossa: não deixar repetir tentativa idêntica; ação dela: pagar do aparelho/cartão que ela costuma usar',
-  cc_rejected_duplicated_payment: 'o MP entendeu como cobrança repetida. Ação nossa: espaçar as tentativas',
-  cc_rejected_insufficient_amount: 'sem limite ou saldo. Ação dela: outro cartão',
-  cc_rejected_call_for_authorize: 'o banco quer que ela autorize a compra. Ação dela: ligar para o banco e liberar',
-  cc_rejected_card_disabled: 'cartão não habilitado para compra on-line. Ação dela: falar com o banco',
-  cc_rejected_card_type_not_allowed: 'esse tipo de cartão não é aceito. Ação dela: usar cartão de crédito',
-  cc_rejected_invalid_installments: 'o parcelamento pedido não é aceito nesse cartão',
-  cc_rejected_max_attempts: 'tentativas demais no mesmo cartão. Ação dela: esperar e usar outro',
-  cc_rejected_blacklist: 'recusado por restrição do próprio MP. Ação dela: falar com o Mercado Pago',
-  cc_rejected_other_reason: 'o banco recusou sem dizer o motivo. Ação dela: outro cartão ou o pagamento avulso',
-  cc_rejected_bad_filled_card_number: 'número do cartão digitado errado',
-  cc_rejected_bad_filled_date: 'validade digitada errada',
-  cc_rejected_bad_filled_security_code: 'código de segurança digitado errado',
-  cc_rejected_bad_filled_other: 'algum dado do cartão digitado errado',
-}
-
+// A tradução do código de retorno mora em UM lugar (`chargeOutcome.js`), o
+// mesmo consumido pela sub-aba "Cobranças recorrentes" do Financeiro.
+// Duplicada, script e tela discordavam sobre o motivo da recusa e não havia
+// como saber qual estava certo.
 function explicarMotivo(detalhe) {
-  if (!detalhe) return 'o MP não informou o motivo'
-  return MOTIVOS[detalhe] || `motivo fora da nossa lista ("${detalhe}") — conferir na tabela de recusas do MP`
+  return describeChargeStatusDetail(detalhe).label
 }
 
 /**
