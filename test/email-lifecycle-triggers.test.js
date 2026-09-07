@@ -74,7 +74,9 @@ test('plano pago tem contagem regressiva própria e aviso de vencido', () => {
     assert.match(decision.vars.data_vencimento, /^\d{2}\/\d{2}\/\d{4}$/)
   }
   assert.equal(decideLifecycleEmail(base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - DAY) }), NOW)?.slug, 'plano_venceu')
-  assert.equal(decideLifecycleEmail(base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 7 * DAY) }), NOW)?.slug, 'plano_vencido_volta')
+  // Os dias de cada etapa depois do vencimento moram em expiredPlanJourney.js —
+  // a jornada completa é coberta em test/email-plano-vencido-jornada.test.js.
+  assert.equal(decideLifecycleEmail(base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 9 * DAY) }), NOW)?.slug, 'plano_vencido_volta')
 })
 
 test('conta banida ou suspensa não recebe nada', () => {
@@ -120,7 +122,9 @@ test('cliente pagante parado há 2 dias vira aviso; quem nunca enviou não', () 
 })
 
 test('sem acesso ativo, aviso de saúde do robô não é enviado', () => {
-  const semAcesso = base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 20 * DAY), waConnected: false, waDisconnectedSince: new Date(NOW.getTime() - 5 * DAY) })
+  // 40 dias vencida: já passou da jornada de recuperação, então o único e-mail
+  // que poderia sair aqui seria o de saúde do robô — e ele não sai.
+  const semAcesso = base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 40 * DAY), waConnected: false, waDisconnectedSince: new Date(NOW.getTime() - 5 * DAY) })
   assert.equal(decideLifecycleEmail(semAcesso, NOW), null)
 })
 
@@ -233,7 +237,7 @@ test('todo e-mail que a política pede existe no catálogo', () => {
     base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() + 2 * DAY) }),
     base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() + DAY) }),
     base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - DAY) }),
-    base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 7 * DAY) }),
+    base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 9 * DAY) }),
     base({ waConnected: false, waDisconnectedSince: new Date(NOW.getTime() - 30 * HOUR) }),
     base({ waEverConnected: false, waConnected: false, createdAt: new Date(NOW.getTime() - 3 * DAY) }),
     base({ hasPostGroup: false }),

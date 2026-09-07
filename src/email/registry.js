@@ -306,21 +306,110 @@ Enquanto ele está parado, cada promoção que passa nos grupos de origem é uma
   {
     slug: 'plano_vencido_volta',
     name: 'Voltar depois de vencido (7 dias)',
-    description: 'Sai uma semana depois do vencimento, para quem não renovou.',
+    description: 'Sai pouco mais de uma semana depois do vencimento, para quem não renovou.',
     group: 'plano',
     category: 'marketing',
     trigger: 'auto',
     dedupDays: 60,
     variables: [],
     title: 'Que tal voltar a vender no automático?',
-    subject: 'Seus grupos estão sem oferta há uma semana',
-    body: `{{saudacao}} Faz uma semana que o robô está parado por aqui.
+    subject: 'Seus grupos estão sem oferta há mais de uma semana',
+    body: `{{saudacao}} Faz mais de uma semana que o robô está parado por aqui.
 
 Seus grupos, suas etiquetas de afiliada e todas as suas configurações continuam guardados. É só escolher um plano que ele volta a espelhar as ofertas no mesmo minuto — sem reconfigurar nada.
 
 [[botao:Ligar o robô de novo|{{link_planos}}]]
 
 Se você desistiu por algum motivo específico, responde este e-mail contando qual foi. A gente lê tudo.`,
+  },
+  // Os quatro abaixo completam a jornada de quem não renovou. A ordem, os dias
+  // e o espaçamento moram em src/emailTriggers/expiredPlanJourney.js — aqui só
+  // o texto. Todos são de divulgação: respeitam descadastro e levam o link no
+  // rodapé, porque quem não quer mais ser chamada de volta tem que conseguir
+  // sair sem perder os avisos da conta.
+  {
+    slug: 'plano_vencido_primeiros_dias',
+    name: 'Vencido há alguns dias',
+    description: 'Sai poucos dias depois do vencimento, para quem ainda não renovou.',
+    group: 'plano',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 30,
+    variables: [VAR_VENCIMENTO],
+    title: 'Seus grupos estão parados',
+    subject: 'Seus grupos estão sem oferta desde {{data_vencimento}}',
+    body: `{{saudacao}} Seu plano venceu em **{{data_vencimento}}** e desde então o robô não publicou nenhuma oferta nos seus grupos.
+
+Nesses dias as promoções continuaram acontecendo nas lojas e nos grupos de onde você copia — só não chegaram nos seus. Cada uma delas era uma chance de comissão.
+
+Renovando, ele volta a trabalhar no mesmo minuto: seus grupos, suas etiquetas de afiliada e todas as suas configurações continuam salvas, do jeito que você deixou.
+
+[[botao:Ligar o robô de novo|{{link_planos}}]]
+
+Se o que travou foi o pagamento (cartão recusado, boleto que não fechou), me conta que a gente resolve junto — é só responder este e-mail.`,
+  },
+  {
+    slug: 'plano_vencido_2_semanas',
+    name: 'Vencido há 2 semanas',
+    description: 'Sai duas semanas depois do vencimento, para quem ainda não renovou.',
+    group: 'plano',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 30,
+    variables: [],
+    title: 'O que fez você parar?',
+    subject: 'Duas semanas sem o robô — o que fez você parar?',
+    body: `{{saudacao}} Faz cerca de duas semanas que seu plano venceu e o robô está parado.
+
+A gente não sabe o motivo, e queria saber de verdade. Normalmente é uma destas três coisas:
+
+- **O preço não fechou para o seu momento.** Responde este e-mail contando: dependendo do caso a gente consegue te ajudar a escolher um plano que caiba.
+- **Alguma coisa não funcionou como você esperava.** Se foi isso, me conta o que aconteceu — é assim que o robô melhora.
+- **Você só não teve tempo de renovar.** Aí é um clique e ele volta agora.
+
+[[botao:Ver os planos|{{link_planos}}]]
+
+Sua conta continua inteira aqui: grupos, etiquetas de afiliada e configurações não foram apagados.`,
+  },
+  {
+    slug: 'plano_vencido_conta_guardada',
+    name: 'Vencido: a conta continua guardada',
+    description: 'Sai cerca de duas semanas e meia depois do vencimento, para quem ainda não renovou.',
+    group: 'plano',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 30,
+    variables: [],
+    title: 'Sua conta continua guardada',
+    subject: 'Sua conta ainda está guardada aqui',
+    body: `{{saudacao}} O robô está parado por aqui faz um tempo, e eu passei só para dizer uma coisa: **nada foi apagado**.
+
+Seus grupos de origem, seus grupos de destino, suas etiquetas de afiliada de cada loja e todas as suas configurações de envio continuam exatamente como você deixou. Se um dia você voltar, é escolher um plano e pronto — não tem nada para configurar de novo.
+
+[[botao:Voltar a usar o robô|{{link_planos}}]]
+
+E se você mudou de ideia sobre divulgar em grupos, tudo bem também. Só me conta o que aconteceu, respondendo este e-mail — ajuda muito a gente entender o que faltou.`,
+  },
+  {
+    slug: 'plano_vencido_ultimo_aviso',
+    name: 'Vencido: último e-mail da jornada',
+    description: 'Último e-mail automático de recuperação, cerca de 40 dias depois do vencimento.',
+    group: 'plano',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 30,
+    variables: [],
+    title: 'Este é o último e-mail sobre isso',
+    subject: 'Último e-mail sobre o seu plano parado',
+    body: `{{saudacao}} Este é o último e-mail automático que a gente manda sobre o seu plano parado. Não é ameaça nem prazo acabando — é só respeito pela sua caixa de entrada.
+
+Sua conta continua no ar e sem nada apagado. Quando quiser, entra e escolhe um plano: o robô volta a espelhar as ofertas no mesmo minuto, com tudo que você já tinha configurado.
+
+[[botao:Entrar na minha conta|{{link_login}}]]
+
+Se quiser conversar antes de decidir — ou contar o que fez você parar — é só responder este e-mail ou chamar no WhatsApp {{whatsapp_suporte}}. A gente responde pessoalmente.
+
+Obrigada por ter dado uma chance ao robô.`,
   },
 
   // ------------------------------------------------------------ saúde do robô

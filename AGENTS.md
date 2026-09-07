@@ -1181,6 +1181,17 @@ uma cliente que teria lido "falta concluir" depois de pagar. Volume alto aponta
 para aviso de preapproval não chegando — conferir os eventos marcados no painel
 do MP.
 
+**Como conferir que a cobrança automática vai mesmo acontecer, sem esperar 30
+dias:** `node scripts/testar-recorrencia.mjs <email>` (read-only) confere os
+seis elos um a um — assinatura valendo no MP com cartão vinculado, cobrança já
+feita, aviso chegando, aviso processado sem erro, nosso banco espelhando o MP e
+acesso cobrindo até a próxima cobrança. O elo que mais quebra é o **aviso**, e
+ele quebra em silêncio: cobrança registrada no MP (item 2) sem aviso nenhum
+(item 3) significa evento não marcado no painel do Mercado Pago —
+`subscription_preapproval`, `subscription_authorized_payment` **e** `payment`.
+Um `subscription_access_extended` na janela é a rede de segurança tapando
+exatamente esse buraco.
+
 Para acertar uma conta AGORA (e responder "ela precisa fazer algo no Mercado
 Pago?"), read-only por padrão:
 
@@ -1190,6 +1201,70 @@ cd ~/wabot && node scripts/sincronizar-assinatura.mjs <email> --aplicar # grava 
 ```
 
 Teste: `test/subscription-policy.test.js`.
+
+## ADMIN > Financeiro > Cobranças recorrentes (2026-09-07)
+
+Sub-aba dentro do Financeiro com **uma linha por TENTATIVA de cobrança** da
+assinatura recorrente: quando foi tentada, de quem, plano, valor, resultado,
+**código de retorno do Mercado Pago** (`status_detail`, cru) e **o que ele
+significa junto de quem precisa agir**, número da tentativa e quando o MP tenta
+de novo.
+
+| Peça | Onde |
+|---|---|
+| Tradução do retorno + resumo (PURO, sem banco) | `src/domain/payments/chargeOutcome.js` |
+| Tabela da tentativa | `SubscriptionCharge` (migration `20260907190000_subscription_charge`) |
+| Gravação na hora do aviso | ramo `subscription_authorized_payment` em `src/api/routes/payments.js` |
+| Histórico completo (inclusive recusa sem aviso) | `fetchMercadoPagoSubscriptionInvoices` em `runSubscriptionReconciliation` |
+| Rota | `GET /api/admin/finance/subscription-charges` (`billing:read`, auditada) |
+| Tela | `SubscriptionChargesPanel` em `dashboard/app/admin/page.js` |
+
+**Por que a tabela precisou existir:** cobrança **recusada não virava registro
+nenhum**. O ramo `payment` do webhook só trata estorno e aprovado, então
+`rejected` caía fora dos dois, não gerava linha em `Payment`, não virava log e o
+`status_detail` era descartado — só o payload cru sobrevivia em `WebhookEvent`.
+Não havia como responder "o que o banco respondeu e quando" sem consultar o MP
+link a link.
+
+**Não regredir:**
+
+- **A tentativa é gravada ANTES de qualquer decisão de acesso e para TODO
+  status.** Recusa não mexe em acesso — é justamente ela que precisa aparecer.
+  Teste falha se a gravação voltar para dentro do ramo de aprovado.
+- **O Mercado Pago é a fonte da verdade, não o nosso webhook.** A recusa pode
+  não gerar aviso nenhum; por isso a passada horária lê
+  `/authorized_payments/search` por assinatura. Chave é o id da fatura
+  (`mpAuthorizedPaymentId`), então webhook e sincronização escrevem a MESMA
+  linha — aviso repetido não duplica histórico.
+- **Sem processo PM2 novo e sem timer novo**: roda no tick da reconciliação que
+  já existia (política de memória). Uma chamada a mais por assinatura aberta,
+  por hora.
+- **A tela NUNCA chama o Mercado Pago.** Consulta ao provedor por carregamento
+  de tela é o caminho mais rápido para a aba ficar lenta e estourar limite.
+- **O código cru fica visível.** É ele que abre caso no Mercado Pago. O que a
+  tradução acrescenta é **de quem é a ação** (`CHARGE_ACTION_OWNERS`) — o mesmo
+  código manda fazer coisas opostas: `cc_rejected_high_risk` é ação NOSSA (não
+  repetir tentativa idêntica), `cc_rejected_insufficient_amount` é da cliente
+  (outro cartão), `cc_rejected_blacklist` é do próprio MP.
+- **Código que ainda não mapeamos aparece cru com "fora da nossa lista"** — nunca
+  vira tela vazia nem uma explicação inventada.
+- **A tradução mora em UM lugar**, compartilhada com
+  `scripts/diag-assinatura-recusada.mjs` (que antes tinha cópia própria).
+- **O resumo é do PERÍODO, não da página** (teto de 5.000 linhas) — número que
+  muda ao virar a página é número em que ninguém confia. E **`taxaSucesso` é
+  `null` sem cobrança decidida**: 0% seria mentira.
+- **"Assinaturas em risco" é o número que mais importa**: assinatura cuja ÚLTIMA
+  tentativa foi recusada é receita que já existe indo embora sem ninguém decidir
+  nada. Quem voltou a cobrar depois da recusa não conta.
+- Busca sem resultado devolve **vazio**, nunca a lista inteira.
+- A sub-aba só busca dados **quando é aberta**.
+
+⚠️ **Histórico começa no deploy.** A tabela nasce vazia e a passada horária só
+enxerga assinaturas ainda abertas (`SUBSCRIPTION_OPEN_STATUSES`) — cobrança de
+assinatura já cancelada antes do deploy não entra sozinha. Aba vazia em conta
+recém-assinada é o esperado: só aparece linha depois que o MP tenta cobrar.
+
+Teste: `test/admin-cobrancas-recorrentes.test.js`.
 
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
@@ -1446,6 +1521,65 @@ Contrato garantido por `test/email-contato-escuta.test.js`:
 - **`dedupDays >= 21`**: ninguém pode ser sondada toda semana.
 - Sem cobrança, sem culpa, sem promessa de resultado (o teste falha em
   "culpa sua", "garantimos", "última chance" e afins).
+
+### Jornada de quem deixou o plano vencer (2026-09-07 — não regredir)
+
+Depois do vencimento existiam **dois** e-mails (o aviso no dia e um "volta" na
+semana seguinte) e o assunto morria ali: passados ~9 dias a conta nunca mais
+recebia nada, com tudo dela ainda guardado no sistema. Quem não renovava no
+primeiro susto simplesmente sumia. Hoje são o aviso **mais cinco** e-mails
+espaçados.
+
+| Peça | Onde |
+|---|---|
+| Os dias de cada etapa (PURO, sem banco) | `src/emailTriggers/expiredPlanJourney.js` |
+| Quem decide o e-mail do dia | `decideLifecycleEmail` em `lifecyclePolicy.js` |
+| Os textos | `src/email/registry.js` (grupo `plano`) |
+| Diagnóstico "saiu ou não, e por quê" | `scripts/diag-email-vencimento.mjs` |
+
+Etapas, em dias desde o vencimento: `plano_venceu` **0-2** →
+`plano_vencido_primeiros_dias` **4-6** → `plano_vencido_volta` **8-10** →
+`plano_vencido_2_semanas` **12-14** → `plano_vencido_conta_guardada` **16-18** →
+`plano_vencido_ultimo_aviso` **20-22**. Depois disso, **nada**.
+
+**Não regredir:**
+
+- **A jornada inteira cabe em ~3 semanas** (decisão da dona do produto,
+  2026-09-07 — a primeira versão terminava em 44 dias e ficou longe demais).
+  Quem não voltou nesse prazo não volta por insistência, e cada e-mail a mais
+  depois daqui custa mais reputação de domínio do que traz cliente. Teste falha
+  se alguém esticar de novo.
+- **As janelas são largas (3 dias), nunca um dia só.** A passada roda 1×/dia
+  ancorada na hora em que a API subiu — um deploy no horário errado, uma passada
+  que falhou ou um dia de API fora do ar pulariam a data exata e o e-mail **nunca
+  sairia**. Com a janela larga o envio atrasa, mas acontece.
+- **As janelas não se encostam.** O espaçamento É o vão entre elas; duas janelas
+  coladas mandam dois assuntos diferentes em dias seguidos, que é o jeito mais
+  rápido de virar spam ignorado. Teste falha se encostarem ou se sobrepuserem.
+- **A jornada TERMINA.** Insistir para sempre faz a pessoa marcar como spam — e
+  aí perdemos também os avisos que ela precisa receber. O último e-mail **diz**
+  que é o último.
+- **Só o aviso do vencimento é `transactional`** (o robô parou, é obrigação de
+  serviço). Os cinco de recuperação são `marketing`: respeitam descadastro e
+  levam o link no rodapé. Sem isso, quem não quer mais ser chamada de volta só
+  teria a opção de marcar como spam.
+- **É jornada de plano PAGO.** Teste grátis tem trilha própria (`teste_acabou`)
+  e continua sem jornada depois — buraco conhecido, não corrigido aqui.
+- **Nenhum texto usa pressão falsa** ("última chance", "vamos apagar seus
+  dados") — e é mentira: nada é apagado. Teste falha se voltar.
+- Custo: zero. Mesma passada diária, nenhum processo novo, **zero impacto de RAM**.
+
+⚠️ **"O e-mail não está sendo enviado" tem SEIS causas com ações opostas** — SMTP
+desligado (aí nenhum e-mail sai, nem este), passada desligada, texto desligado na
+aba E-mails, descadastro, janela anti-repetição e teto diário — e todas aparecem
+igual de fora. Rode o diagnóstico antes de procurar defeito no código:
+
+```bash
+cd ~/wabot && node scripts/diag-email-vencimento.mjs [<email>] [--dias=60]
+```
+
+Ele separa os seis casos e ainda distingue "não saiu" de "não havia a quem
+mandar". Testes: `test/email-plano-vencido-jornada.test.js`.
 
 ### Recuperação de senha (não existia até 2026-08)
 

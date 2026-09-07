@@ -62,6 +62,7 @@ model User {
   approvedCommissions         AffiliateCommission[]       @relation("ApprovedCommissions")
   resolvedPayoutRequests      AffiliatePayoutRequest[]    @relation("ResolvedPayoutRequests")
   subscriptions               Subscription[]
+  subscriptionCharges         SubscriptionCharge[]
   affiliateAttributionTouches AffiliateAttributionTouch[]
   maxAutomations              Int                         @default(30)
 
@@ -306,6 +307,43 @@ model WebhookEvent {
   @@unique([provider, eventId])
   @@index([provider, createdAt])
   @@index([processingStatus, createdAt])
+}
+
+// Uma linha por TENTATIVA de cobrança de assinatura recorrente — inclusive as
+// RECUSADAS, que antes não viravam registro nenhum (o webhook de `payment` só
+// tratava aprovado e estornado, e o `status_detail` era descartado). Sem isso
+// não havia como responder "o que o banco respondeu e quando".
+//
+// Fonte da verdade é o Mercado Pago: a sincronização horária lê as faturas da
+// assinatura (`/authorized_payments/search`) e faz upsert por
+// `mpAuthorizedPaymentId`. O webhook grava a mesma linha na hora — os dois
+// caminhos convergem para a mesma chave, então avisar duas vezes não duplica.
+model SubscriptionCharge {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId        String?
+  mpSubscriptionId      String?
+  mpAuthorizedPaymentId String?   @unique
+  mpPaymentId           String?
+  plan                  String?
+  amount                Float?
+  status                String    @default("unknown")
+  statusDetail          String?
+  paymentMethod         String?
+  retryAttempt          Int?
+  attemptedAt           DateTime
+  debitedAt             DateTime?
+  nextRetryAt           DateTime?
+  source                String    @default("mp_sync")
+  syncedAt              DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([attemptedAt])
+  @@index([status, attemptedAt])
+  @@index([userId, attemptedAt])
+  @@index([mpSubscriptionId, attemptedAt])
 }
 
 model BotConfig {
