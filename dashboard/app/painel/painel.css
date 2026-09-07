@@ -799,6 +799,46 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-link-btn { background: none; border: 0; padding: 0; font-size: 12px; font-weight: 600; color: var(--accent-strong); cursor: pointer; flex-shrink: 0; }
 .pnl-link-btn:hover { text-decoration: underline; }
 
+/* ── Espelhamento: pílulas de contagem e diagrama de conexões ──────────── */
+.pnl-esp-pill {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+.pnl-esp-pill.is-origin { background: color-mix(in oklab, var(--success) 16%, var(--surface)); color: var(--accent-strong); }
+.pnl-esp-pill.is-dest { background: color-mix(in oklab, var(--warn) 22%, var(--surface)); color: #8a5a1e; }
+
+.pnl-esp-flow {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.pnl-esp-flow strong { color: var(--ink); font-weight: 600; }
+
+.pnl-esp-diagram-scroll { overflow-x: auto; padding: 4px; }
+.pnl-esp-diagram { position: relative; min-width: 480px; max-width: 760px; margin: 0 auto; }
+.pnl-esp-node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  font: inherit;
+  transition: opacity .15s, border-color .15s, box-shadow .15s;
+}
+.pnl-esp-node.is-origin { left: 0; cursor: pointer; }
+.pnl-esp-node.is-origin:hover { border-color: var(--line-strong); }
+.pnl-esp-node.is-dest { right: 0; }
+.pnl-esp-node-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+.pnl-esp-node-sub { font-size: 11px; color: var(--ink-faint); }
+
 .pnl-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .pnl-preset {
   text-align: left;
