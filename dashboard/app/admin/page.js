@@ -172,6 +172,20 @@ function formatNumber(value) {
   return new Intl.NumberFormat('pt-BR').format(Number(value ?? 0))
 }
 
+// Avulso (pagou 30 dias, sem renovação automática) vs. recorrente (assinatura
+// Mercado Pago, cobra sozinha) — mesmo plano pode ter vindo dos dois jeitos.
+function BillingKindBadge({ customer }) {
+  const sub = customer?.recurringSubscription
+  if (customer?.billingKind === 'recorrente' && sub) {
+    const tone = sub.autoRenew ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+    return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${tone}`}>Recorrente · {sub.statusLabel}</span>
+  }
+  if (customer?.billingKind === 'avulso') {
+    return <span className="inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-800">Avulso</span>
+  }
+  return <span className="text-xs text-gray-400">—</span>
+}
+
 function formatRelative(value) {
   if (!value) return 'sem atividade'
   const ms = Date.now() - new Date(value).getTime()
@@ -1368,6 +1382,24 @@ export default function AdminPage() {
   const [reconectando, setReconectando] = useState(null)
   const [onlineFiltering, setOnlineFiltering] = useState(false)
   const [manualPaymentOpen, setManualPaymentOpen] = useState(false)
+  // Duas tabelas da aba Financeiro que só valem a pena carregar quando a
+  // pessoa abre a aba — não entram no Promise.all gigante do boot.
+  const [overduePaidList, setOverduePaidList] = useState(null)
+  const [paidCustomersList, setPaidCustomersList] = useState(null)
+
+  useEffect(() => {
+    if (tab !== 'financeiro' || overduePaidList || paidCustomersList) return
+    let active = true
+    Promise.all([
+      api.adminSubscriptions({ limit: 50, status: 'overdue' }).catch(() => null),
+      api.adminSubscriptions({ limit: 50, status: 'paid' }).catch(() => null),
+    ]).then(([overdueData, paidData]) => {
+      if (!active) return
+      setOverduePaidList(overdueData)
+      setPaidCustomersList(paidData)
+    })
+    return () => { active = false }
+  }, [tab, overduePaidList, paidCustomersList])
 
   async function manualPaymentSaved() {
     const [financeData, paymentsData, subscriptionsData] = await Promise.all([
@@ -2140,6 +2172,92 @@ export default function AdminPage() {
                   ))}
                   {!payments?.payments?.length && <p className="text-sm text-gray-400">Sem pagamentos no período.</p>}
                 </div>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <h3 className="mb-3 text-sm font-bold text-gray-800">Pagos vencidos ({formatNumber(overduePaidList?.total ?? finance.overduePaid ?? 0)})</h3>
+              <p className="mb-2 text-xs text-gray-500">Plano pago, conta ainda ativa, acesso já vencido — cobrar renovação.</p>
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th className="px-3 py-2 font-bold">Cliente</th>
+                      <th className="px-3 py-2 font-bold">Plano</th>
+                      <th className="px-3 py-2 font-bold">Cobrança</th>
+                      <th className="px-3 py-2 font-bold">Venceu em</th>
+                      <th className="px-3 py-2 font-bold">Total pago</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {asArray(overduePaidList?.subscriptions).map(customer => (
+                      <tr key={customer.id} className="cursor-pointer hover:bg-gray-50" onClick={() => openUserDetail(customer.id)}>
+                        <td className="px-3 py-2"><span className="font-bold text-gray-900">{customer.email}</span></td>
+                        <td className="px-3 py-2 text-gray-600">{customer.plan}</td>
+                        <td className="px-3 py-2"><BillingKindBadge customer={customer} /></td>
+                        <td className="px-3 py-2 text-red-700 font-semibold">{formatDate(customer.accessExpiresAt)}</td>
+                        <td className="px-3 py-2 text-gray-600">{formatCurrency(customer.ltv)}</td>
+                      </tr>
+                    ))}
+                    {overduePaidList && !asArray(overduePaidList?.subscriptions).length && (
+                      <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Nenhum cliente pago com acesso vencido agora.</td></tr>
+                    )}
+                    {!overduePaidList && (
+                      <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Carregando…</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <h3 className="mb-3 text-sm font-bold text-gray-800">Todos que já pagaram ({formatNumber(paidCustomersList?.total ?? 0)})</h3>
+              <p className="mb-2 text-xs text-gray-500">Todo cliente com ao menos um pagamento aprovado, avulso ou recorrente, em qualquer situação atual.</p>
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th className="px-3 py-2 font-bold">Cliente</th>
+                      <th className="px-3 py-2 font-bold">Plano atual</th>
+                      <th className="px-3 py-2 font-bold">Cobrança</th>
+                      <th className="px-3 py-2 font-bold">Último pagamento</th>
+                      <th className="px-3 py-2 font-bold">Vence em</th>
+                      <th className="px-3 py-2 font-bold">Próxima cobrança / cancelou</th>
+                      <th className="px-3 py-2 font-bold">Pagamentos</th>
+                      <th className="px-3 py-2 font-bold">Total pago</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {asArray(paidCustomersList?.subscriptions).map(customer => {
+                      const sub = customer.recurringSubscription
+                      const isExpired = customer.accessExpiresAt && new Date(customer.accessExpiresAt) < new Date()
+                      return (
+                        <tr key={customer.id} className="cursor-pointer hover:bg-gray-50" onClick={() => openUserDetail(customer.id)}>
+                          <td className="px-3 py-2"><span className="font-bold text-gray-900">{customer.email}</span></td>
+                          <td className="px-3 py-2 text-gray-600">{customer.plan}</td>
+                          <td className="px-3 py-2"><BillingKindBadge customer={customer} /></td>
+                          <td className="px-3 py-2 text-gray-600">{formatDate(customer.lastPayment?.createdAt)}</td>
+                          <td className={`px-3 py-2 font-semibold ${isExpired ? 'text-red-700' : 'text-gray-700'}`}>{formatDate(customer.accessExpiresAt)}</td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {sub?.cancelledAt
+                              ? `Cancelou ${formatDate(sub.cancelledAt)}`
+                              : sub?.autoRenew
+                                ? `Cobra ${formatDate(sub.nextChargeAt)}`
+                                : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">{formatNumber(customer.paidCount)}</td>
+                          <td className="px-3 py-2 text-gray-600">{formatCurrency(customer.ltv)}</td>
+                        </tr>
+                      )
+                    })}
+                    {paidCustomersList && !asArray(paidCustomersList?.subscriptions).length && (
+                      <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Ninguém pagou ainda.</td></tr>
+                    )}
+                    {!paidCustomersList && (
+                      <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Carregando…</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </section>

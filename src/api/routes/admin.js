@@ -22,6 +22,7 @@ import { buildPartnerCourtesyReason, normalizePartnerCode } from '../../ops/part
 import { createCapacityService } from '../../ops/capacity/service.js'
 import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 import { calculateManualPaymentExpiry, parseManualPaymentInput } from '../../domain/payments/manualPayment.js'
+import { isSubscriptionActive, describeSubscriptionStatus } from '../../domain/payments/subscriptionPolicy.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -2316,13 +2317,20 @@ export async function adminRoutes(app) {
       ...(status === 'active' ? { status: 'active', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }] } : {}),
       ...(status === 'expired' ? { accessExpiresAt: { lt: now } } : {}),
       ...(status === 'expiring_soon' ? { accessExpiresAt: { gt: now, lte: addDays(now, 7) } } : {}),
+      // "Pagos vencidos": mesmo critério do card `finance.overduePaid` — plano
+      // pago, conta ainda ativa, acesso já vencido. Trial vencido não entra
+      // aqui (não pagou nada para "vencer").
+      ...(status === 'overdue' ? { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { lt: now } } : {}),
+      // "Todos que já pagaram": qualquer status atual (inclusive banida/vencida),
+      // desde que exista ao menos um pagamento aprovado no histórico.
+      ...(status === 'paid' ? { payments: { some: { status: 'approved' } } } : {}),
     }
 
     const [total, users, ltvRows] = await Promise.all([
       db.user.count({ where }),
       db.user.findMany({
         where,
-        orderBy: { accessExpiresAt: 'asc' },
+        orderBy: status === 'paid' || status === 'overdue' ? { accessExpiresAt: 'desc' } : { accessExpiresAt: 'asc' },
         take: limit,
         skip,
         select: {
@@ -2338,9 +2346,30 @@ export async function adminRoutes(app) {
           payments: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       }),
-      db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true } }),
+      db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true }, _count: { _all: true } }),
     ])
     const ltvMap = new Map(ltvRows.map(row => [row.userId, row._sum.amount ?? 0]))
+    const paidCountMap = new Map(ltvRows.map(row => [row.userId, row._count._all]))
+
+    // Assinatura recorrente mais recente de cada cliente da página — é o que
+    // separa "pagou avulso" de "pagou recorrente" (e se cancelou a renovação).
+    // Só busca para os IDs desta página; não precisa de tudo.
+    const userIds = users.map(user => user.id)
+    const subscriptionRows = userIds.length
+      ? await db.subscription.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { createdAt: 'desc' },
+        select: { userId: true, plan: true, status: true, createdAt: true, nextChargeAt: true, cancelledAt: true },
+      })
+      : []
+    const subscriptionMap = new Map()
+    for (const row of subscriptionRows) {
+      const current = subscriptionMap.get(row.userId)
+      const isActive = isSubscriptionActive(row.status)
+      if (!current || (isActive && !isSubscriptionActive(current.status))) {
+        subscriptionMap.set(row.userId, row)
+      }
+    }
 
     await writeAdminAuditLog(req, { action: 'admin.subscriptions.list', resource: 'subscription' })
 
@@ -2348,13 +2377,34 @@ export async function adminRoutes(app) {
       total,
       page,
       limit,
-      subscriptions: users.map(user => sanitizeUser({
-        ...user,
-        subscriptionStatus: getSubscriptionStatus(user, now),
-        daysRemaining: getDaysRemaining(user.accessExpiresAt, now),
-        ltv: ltvMap.get(user.id) ?? 0,
-        lastPayment: user.payments?.[0] ?? null,
-      }, req.admin.role)),
+      subscriptions: users.map(user => {
+        const subscription = subscriptionMap.get(user.id) ?? null
+        const paidCount = paidCountMap.get(user.id) ?? 0
+        // "recorrente" = já existiu registro de assinatura (Mercado Pago
+        // preapproval), mesmo que hoje esteja pausada/cancelada — é o
+        // caminho de cobrança que a conta usou, não o estado atual dele.
+        // "avulso" = só pagamento de 30 dias, nunca abriu uma recorrência.
+        const billingKind = subscription ? 'recorrente' : paidCount > 0 ? 'avulso' : null
+        return sanitizeUser({
+          ...user,
+          subscriptionStatus: getSubscriptionStatus(user, now),
+          daysRemaining: getDaysRemaining(user.accessExpiresAt, now),
+          ltv: ltvMap.get(user.id) ?? 0,
+          paidCount,
+          lastPayment: user.payments?.[0] ?? null,
+          billingKind,
+          recurringSubscription: subscription
+            ? {
+              status: subscription.status,
+              statusLabel: describeSubscriptionStatus(subscription.status),
+              autoRenew: isSubscriptionActive(subscription.status),
+              startedAt: subscription.createdAt,
+              nextChargeAt: subscription.nextChargeAt,
+              cancelledAt: subscription.cancelledAt,
+            }
+            : null,
+        }, req.admin.role)
+      }),
     }
   })
 

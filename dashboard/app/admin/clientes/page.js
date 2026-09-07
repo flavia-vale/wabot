@@ -64,11 +64,32 @@ function WaDot({ status }) {
   )
 }
 
+// Se assinou de forma recorrente (Mercado Pago cobrando sozinho) ou pagou
+// avulso (30 dias, sem renovação automática) — ou nunca pagou nada. Só olhar
+// "Plano" não responde isso: o mesmo plano (ex.: Pro) pode ter vindo de
+// qualquer um dos dois caminhos.
+function CobrancaBadge({ customer }) {
+  const sub = customer.subscription
+  const subStatus = String(sub?.status ?? '').toLowerCase()
+  if (sub && ['authorized', 'active'].includes(subStatus)) {
+    return <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800">Recorrente</span>
+  }
+  if (sub) {
+    const label = subStatus === 'pending' ? 'Recorrente (aguardando)' : subStatus === 'paused' ? 'Recorrente (pausada)' : 'Recorrente (cancelada)'
+    return <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{label}</span>
+  }
+  if ((customer.paidCount ?? 0) > 0) {
+    return <span className="inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-bold text-sky-800">Avulso</span>
+  }
+  return <span className="text-xs text-slate-400">—</span>
+}
+
 const COLUMNS = [
   { key: 'name', label: 'Cliente', sortable: true },
   { key: 'createdAt', label: 'Cadastro', sortable: true },
   { key: 'situacao', label: 'Situação', sortable: false },
   { key: 'plan', label: 'Plano', sortable: true },
+  { key: 'cobranca', label: 'Cobrança', sortable: false },
   { key: 'accessExpiresAt', label: 'Vence em', sortable: true },
   { key: 'ltv', label: 'Pago', sortable: false },
   { key: 'grupos', label: 'Grupos', sortable: false },
@@ -187,6 +208,7 @@ export default function AdminClientesPage() {
                     <td className="px-4 py-3 text-slate-600">{formatDate(customer.createdAt)}</td>
                     <td className="px-4 py-3"><SituacaoBadge customer={customer} /></td>
                     <td className="px-4 py-3 text-slate-600">{customer.planLabel}</td>
+                    <td className="px-4 py-3"><CobrancaBadge customer={customer} /></td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">{formatDaysUntil(customer.accessExpiresAt)}</td>
                     <td className="px-4 py-3 font-semibold text-slate-700">{formatCurrency(customer.ltv)}</td>
                     <td className="px-4 py-3 text-slate-600">{customer.groupCounts?.monitor ?? 0}/{customer.groupCounts?.post ?? 0}</td>
