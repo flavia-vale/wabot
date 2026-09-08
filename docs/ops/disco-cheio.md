@@ -4,6 +4,22 @@ Estudo feito a partir do código e do último relatório de capacidade
 (`docs/capacity-audit-2026-08-31.md`). O disco é de **38 GiB**; em 31/08 estava
 em **75%** (27 GiB usados, 9,2 GiB livres) e hoje o painel marca **80%**.
 
+## Resultado medido em produção (2026-09-07)
+
+Executado no VPS: **85% → 55%**, 10,6 GB liberados de uma vez, sem derrubar
+sessão nenhuma e sem reiniciar processo.
+
+| Item | Liberado |
+|---|---:|
+| `bot.log` de produção (estava em **4,2 GB**) | 4,1 GB |
+| Logs do PM2 já rotacionados | 3,6 GB |
+| Cache do npm (estava em 2,5 GB) | 2,5 GB |
+| `bot.log` de staging (455,9 MB) | 405,9 MB |
+
+O `bot.log` de produção sozinho era **4,2 GB** — cinco vezes o tamanho medido no
+RCA de julho, e mais que o banco, os backups e as sessões somados. Confirma o
+diagnóstico: o gasto de disco é log sem rotação, não dado de cliente.
+
 ## 1. O QUE ACONTECEU
 
 O disco encheu de **log**, não de dado de cliente. O banco de produção inteiro
