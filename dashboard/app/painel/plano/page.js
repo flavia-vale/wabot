@@ -9,8 +9,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { DEFAULT_LANDING_PLANS, SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
-import { usePainelHeader } from '../PainelShell'
+import { usePainel, usePainelHeader } from '../PainelShell'
 import { CONFIG_PRESERVED_NOTE } from '../../../../src/domain/painel/trialNotice.js'
+import { buildPricePerOffer, parsePriceToCents } from '../../../../src/domain/painel/pricePerOffer.js'
 
 const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do BOTinho, pode me ajudar?')}`
 
@@ -85,6 +86,18 @@ export default function PlanoPage() {
   }, [])
 
   const selectedPlan = useMemo(() => plans.find((p) => p.id === selectedPlanId) ?? plans[0], [plans, selectedPlanId])
+
+  // D5 do plano de ativação de 2026-09-08: o mesmo preço, medido no uso REAL
+  // dela. "R$ 69" é um número solto; "R$ 1,47 por oferta publicada" é a conta
+  // que ela consegue refazer sozinha, com o número que é dela.
+  const { offersPublished } = usePainel()
+  const precoPorOferta = useMemo(
+    () => buildPricePerOffer({
+      priceCents: parsePriceToCents(selectedPlan?.price),
+      offersPublished,
+    }),
+    [selectedPlan?.price, offersPublished],
+  )
 
   async function handleCheckout(planId) {
     if (checkoutPlan) return
@@ -337,6 +350,13 @@ export default function PlanoPage() {
         <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4 }}>
           {CONFIG_PRESERVED_NOTE}
         </p>
+        {/* Só aparece para quem JÁ tem ofertas publicadas: sem uso, essa conta
+            viraria promessa de volume que a gente não fez. */}
+        {precoPorOferta && (
+          <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4, fontWeight: 600 }}>
+            {precoPorOferta.texto}
+          </p>
+        )}
       </section>
 
       {/* Dificuldades no pagamento */}

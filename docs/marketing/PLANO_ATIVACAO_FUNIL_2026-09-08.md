@@ -138,7 +138,7 @@ ordem exata do maior para o menor risco percebido.
 | # | Mudança | Esforço |
 |---|---|---|
 | A1 | **Contar o teste a partir da 1ª conexão**, não do cadastro (com teto de janela para começar). Quem nunca conectou não gastou teste. Beneficia TODAS as frentes de uma vez. **Implementado, DESLIGADO** (`TRIAL_ANCHOR_ON_CONNECT`) — mexe em acesso pago, então só liga depois de validado em staging e com OK explícito. | M |
-| A2 | **Valor antes do acesso:** primeiro passo do checklist vira colar um link no `/painel/converte-links` — que já funciona sem WhatsApp — e ver o link voltar com a etiqueta dela. Entende o produto em 40 segundos sem entregar nada. | M |
+| A2 | **Valor antes do acesso:** atalho no topo do checklist para cadastrar uma loja e colar um link no `/painel/converte-links` — que já funciona sem WhatsApp. **Dois desvios do texto original, os dois de propósito:** (1) converter exige UMA loja cadastrada, então o atalho tem dois passos e a loja vem primeiro, senão a cliente cai num conversor que falha na cara dela; (2) não virou um passo da checklist porque aquela lista é dirigida pelo estado do servidor e o mesmo contador governa a celebração e o modo de recuperação. | M |
 | A3 | **Garantias antes do botão:** os `WHATSAPP_SAFETY_POINTS` já existem e estão certos — estão embaixo. Subir para bloco de destaque acima do CTA. | P |
 | A4 | **CTA:** trocar "Conectar" por **"Ligar o robô no meu WhatsApp"** + "leva 30 segundos e você desliga quando quiser". | P |
 | A5 | **Falar do chip separado já no cadastro**, não só na tela de conexão. É a objeção nº 1 respondida tarde demais. | P |

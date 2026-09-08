@@ -145,5 +145,11 @@ test('C1: o painel expõe o estado das lojas para a tela de conexão', () => {
     new URL('../dashboard/app/painel/PainelShell.js', import.meta.url),
     'utf8',
   )
-  assert.match(shell, /hasAnyCredential,\s*refreshSession, setHeader \}\)/)
+  // Asserção sobre o CAMPO estar no contexto, não sobre a ordem dos vizinhos:
+  // travar a vizinhança quebra quando outro campo entra na lista, sem que nada
+  // do comportamento tenha mudado.
+  const inicio = shell.indexOf('const ctxValue')
+  const ctx = shell.slice(inicio, shell.indexOf(')', shell.indexOf('setHeader', inicio)) + 1)
+  assert.match(ctx, /hasAnyCredential/)
+  assert.match(ctx, /setHeader/)
 })
