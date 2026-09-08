@@ -1216,6 +1216,35 @@ Se ficar qualquer dúvida, é só responder este e-mail.`,
   // pagamento é silenciosa por natureza: ninguém reclama de uma cobrança que
   // não aconteceu, e o dinheiro simplesmente deixa de entrar.
   {
+    // B2 do plano de ativação de 2026-09-08. O funil separa "nem chegou a pedir
+    // a conexão" de "tentou e NÃO conseguiu" porque o segundo é obstáculo
+    // NOSSO — mas esse número só aparecia para quem abrisse o /admin/funil e
+    // fosse procurar. Aviso que ninguém lê não é aviso.
+    slug: 'admin_conexao_falhou',
+    name: '[Interno] Gente que tentou conectar e não conseguiu',
+    description: 'Avisa a administradora quando há contas que pediram a conexão do WhatsApp e continuam sem conectar depois de 24h. É obstáculo nosso, não desistência delas.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Quantas pessoas estão nessa situação', example: '3 pessoas pediram a conexão do WhatsApp e não conseguiram' },
+      { name: 'lista', description: 'Quem são, com há quanto tempo tentaram', example: '- Ana (ana@exemplo.com) — pediu a conexão há 30h e não conectou' },
+    ],
+    title: '{{resumo}}',
+    subject: '[Interno] {{resumo}}',
+    body: `{{resumo}} nas últimas 24h a 7 dias.
+
+{{lista}}
+
+Isso é obstáculo nosso, não desistência delas: leitura do QR, servidor sem vaga ou recusa do WhatsApp. Vale abrir o histórico de cada uma antes de qualquer ação de marketing.
+
+Se várias caírem no mesmo dia, provavelmente é um incidente — confira os eventos de conexão daquelas datas.
+
+[[botao:Abrir o funil|{{link_painel}}/admin/funil]]`,
+  },
+  {
     slug: 'admin_cobranca_recusada',
     name: '[Interno] Uma cobrança foi recusada',
     description: 'Avisa a administradora quando a cobrança de uma assinatura é recusada, com cliente, valor e o código que o Mercado Pago devolveu.',

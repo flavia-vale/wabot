@@ -46,6 +46,7 @@ import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { shopeeSalesRoutes } from './routes/shopeeSales.js'
 import { runEmailQueueTick } from '../email/queue.js'
 import { runLifecycleEmailSweep } from '../emailTriggers/lifecycleSweep.js'
+import { runPairingStalledSweep } from '../emailTriggers/pairingStalledSweep.js'
 import { runWeeklySummarySweep } from '../emailTriggers/weeklySummary.js'
 import { startCapacitySweep } from '../ops/capacity/sweep.js'
 import { createCapacityRepository } from '../ops/capacity/repository.js'
@@ -259,6 +260,13 @@ async function runLifecycleEmailTick() {
     const summary = await runLifecycleEmailSweep({ db, sendMail, logger: app.log })
     if (summary.sent > 0 || summary.failed > 0) {
       app.log.info({ ...summary }, 'e-mails de ciclo de vida: passada concluída')
+    }
+    // B2 do plano de ativação: quem PEDIU a conexão e não conseguiu é obstáculo
+    // nosso, e esse número só aparecia para quem abrisse o /admin/funil. Pega
+    // carona no mesmo tick — nenhum processo PM2 novo, nenhum timer novo.
+    const travadas = await runPairingStalledSweep({ db, sendMail, logger: app.log })
+    if (travadas.found > 0) {
+      app.log.warn({ ...travadas }, 'contas que pediram a conexão e não conectaram')
     }
   } catch (err) {
     app.log.error({ err: err.message }, 'e-mails de ciclo de vida: passada falhou')
