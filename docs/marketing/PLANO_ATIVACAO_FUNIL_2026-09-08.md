@@ -91,7 +91,7 @@ porque está tudo funcionando sozinho.
 
 | # | Mudança | Esforço |
 |---|---|---|
-| D1 | **Levar a prova para fora do painel:** e-mail no dia 3 e no dia 6 do teste com o número dela — *"Seu robô publicou 47 ofertas em 3 dias."* Motor de e-mail e resumo semanal já existem. | M |
+| D1 | **Levar a prova para fora do painel:** e-mail no dia 3 do teste com o número dela. ⚠️ **Desvio do plano original, de propósito:** o "dia 6" já é ocupado pela contagem regressiva (`teste_acaba_em_1_dia`), e a regra da casa é no máximo UM e-mail de ciclo de vida por passada — encaixar a prova ali roubaria o lugar do aviso mais urgente. Os últimos três dias continuam cobertos pelo aviso com prova DENTRO do painel (D3/D4). | M |
 | D2 | **Traduzir para o trabalho poupado, não para volume:** "47 ofertas × 3 grupos = 141 mensagens que você não digitou". | P |
 | D3 | **Tocar no DIA do vencimento**, não só 3 dias antes — a decisão é no dia 7. | P |
 | D4 | **"Sua configuração continua salva"** em todo pedido de pagamento. O medo real é perder grupos, lojas e regras. | P |

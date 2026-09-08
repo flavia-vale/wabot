@@ -53,6 +53,40 @@ export async function buildUserSnapshot({ db, user, now = new Date(), settings =
     affiliateAvailableCents = commissions.reduce((total, row) => total + (Number(row.commissionAmountCents) || 0), 0)
   }
 
+  // As duas consultas abaixo só valem para conta em TESTE com acesso ativo, e
+  // só são feitas nesse caso: a passada roda sobre a base inteira todo dia, e
+  // uma consulta a mais por cliente pagante seria custo puro sem decisão nova.
+  const emTeste = String(user.plan ?? 'trial').toLowerCase() === 'trial'
+  const acessoValendo = !user.accessExpiresAt || new Date(user.accessExpiresAt) > new Date(now)
+  const precisaDeAtivacao = emTeste && acessoValendo
+
+  // `null` = não deu para saber. A política trata null como "não sei" e NÃO
+  // dispara o aviso de falta de loja — acusar por dúvida manda a cliente
+  // refazer um cadastro que já existe.
+  let hasAnyCredential = null
+  let offersPublished = 0
+  let destGroupCount = 0
+  if (precisaDeAtivacao) {
+    // `.catch()` sozinho não protege: se o cliente do banco não expõe o modelo,
+    // a chamada estoura ANTES de virar promessa e derruba a foto inteira do
+    // cliente — com ela, o aviso de cobrança que não tem nada a ver com isto.
+    const contar = async (modelo, where, fallback) => {
+      try {
+        return await db?.[modelo]?.count?.({ where }) ?? fallback
+      } catch {
+        return fallback
+      }
+    }
+    const [credenciais, publicadas, destinos] = await Promise.all([
+      contar('credential', { userId: user.id }, null),
+      contar('messageLog', { userId: user.id, status: 'success' }, 0),
+      contar('group', { userId: user.id, role: 'post' }, 0),
+    ])
+    hasAnyCredential = credenciais === null ? null : credenciais > 0
+    offersPublished = Number(publicadas) || 0
+    destGroupCount = Number(destinos) || 0
+  }
+
   const connected = waSession?.status === 'connected'
   // Só consulta quem pediu para desconectar quando de fato está desconectado —
   // é a única situação em que a resposta muda alguma decisão.
@@ -73,6 +107,9 @@ export async function buildUserSnapshot({ db, user, now = new Date(), settings =
     waDisconnectedSince: connected ? null : (waSession?.updatedAt ?? null),
     hasMonitorGroup: Boolean(monitorGroup),
     hasPostGroup: Boolean(postGroup),
+    hasAnyCredential,
+    offersPublished,
+    destGroupCount,
     lastSuccessAt: lastSuccess?.sentAt ?? null,
     pendingPaymentAt: pendingPayment?.createdAt ?? null,
     pendingPaymentPlan: pendingPayment?.plan ?? null,

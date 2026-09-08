@@ -65,6 +65,9 @@ const VAR_DIAS = { name: 'dias_restantes', description: 'Quantos dias faltam', e
 const VAR_VENCIMENTO = { name: 'data_vencimento', description: 'Data em que o plano vence', example: '19/08/2026' }
 const VAR_VALOR = { name: 'valor', description: 'Valor em reais', example: 'R$ 69,00' }
 const VAR_LOJA = { name: 'loja', description: 'Nome da loja', example: 'Mercado Livre' }
+const VAR_OFERTAS = { name: 'ofertas_publicadas', description: 'Quantas ofertas o robô já publicou no teste', example: '47' }
+const VAR_MENSAGENS = { name: 'mensagens_poupadas', description: 'Mensagens que a cliente não precisou digitar', example: '141' }
+const VAR_GRUPOS = { name: 'grupos', description: 'Em quantos grupos as ofertas saíram', example: '3' }
 
 // Trecho repetido nos avisos de contagem regressiva do teste grátis.
 function trialCountdownBody(chamada) {
@@ -167,6 +170,63 @@ Travou em algum passo? A gente te ajuda pessoalmente pelo e-mail {{email_suporte
     title: 'Último dia do seu teste grátis',
     subject: 'Hoje é o último dia do seu teste grátis no {{marca}}',
     body: trialCountdownBody('É hoje:'),
+  },
+  {
+    // D1/D2 do plano de ativação de 2026-09-08. O aviso com a prova já existia,
+    // mas só DENTRO do painel — e a cliente cujo robô está funcionando não abre
+    // o painel, justamente porque está tudo funcionando sozinho. Sai no
+    // terceiro dia do teste, o único ponto em que não disputa espaço com a
+    // contagem regressiva.
+    slug: 'teste_prova_de_valor',
+    name: 'Teste grátis: o que o robô já fez por você',
+    description: 'Sai no 3º dia do teste, com o número de ofertas já publicadas. Só sai para quem já teve oferta publicada — sem isso não há prova nenhuma a mostrar.',
+    group: 'conta',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 10,
+    variables: [VAR_OFERTAS, VAR_MENSAGENS, VAR_GRUPOS, VAR_FIM_TESTE],
+    title: 'O robô já publicou {{ofertas_publicadas}} ofertas para você',
+    subject: 'Seu robô já publicou {{ofertas_publicadas}} ofertas — e você não digitou nenhuma',
+    body: `{{saudacao}} Passando só para te mostrar o que aconteceu enquanto você tocava a sua vida.
+
+Nestes primeiros dias de teste, o robô publicou **{{ofertas_publicadas}} ofertas** em {{grupos}} grupo(s). Isso são **{{mensagens_poupadas}} mensagens** que você não precisou copiar, colar nem converter uma por uma — cada uma com a sua etiqueta de afiliada, para a comissão ser sua.
+
+Seu teste vai até {{fim_do_teste}}. Se quiser continuar, seus grupos, suas lojas e suas regras ficam do jeito que estão — escolher um plano só religa o envio.
+
+[[botao:Continuar com o robô|{{link_planos}}]]
+
+Se alguma oferta saiu diferente do que você esperava, responde aqui contando: dá para ajustar.`,
+  },
+  {
+    // C5 do mesmo plano: 18 pessoas conectaram o WhatsApp e nunca cadastraram
+    // loja. Sem etiqueta o robô se RECUSA a publicar, e do lado de fora isso
+    // parece produto quebrado — o painel fica verde e nada chega no grupo.
+    //
+    // O texto de `contato_sem_etiqueta_nada_sai` (grupo "contato e escuta")
+    // continua MANUAL de propósito: aquele grupo tem contrato de nunca disparar
+    // sozinho. Este aqui é irmão dele, no grupo de saúde, e por isso herda a
+    // trava de conta parada do despachante.
+    slug: 'sem_loja_cadastrada',
+    name: 'Conectou e não cadastrou nenhuma loja',
+    description: 'Sai um dia depois de conectar o WhatsApp quando não há nenhuma loja cadastrada. Sem etiqueta o robô não publica nada.',
+    group: 'saude',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 7,
+    variables: [],
+    title: 'Seu robô está pronto — falta cadastrar uma loja',
+    subject: 'Falta um passo: sem a sua etiqueta o robô não publica nada',
+    body: `{{saudacao}} Você já conectou o WhatsApp, que é a parte mais chata de todas. Só falta uma coisa.
+
+Enquanto não houver nenhuma loja cadastrada, **o robô não publica nenhuma oferta**. E isso não é defeito: sem a sua etiqueta de afiliada, a comissão daquela venda iria para outra pessoa. Ele prefere não enviar a te fazer trabalhar de graça.
+
+Uma loja só já resolve, e tem loja que pede só a sua etiqueta — leva menos de um minuto.
+
+[[botao:Cadastrar minha primeira loja|{{link_lojas}}]]
+
+Se preferir ver antes: {{video_etiquetas}} mostra o passo a passo de cada loja.
+
+Se travar em algum passo, responde este e-mail que a gente faz junto com você.`,
   },
   {
     slug: 'teste_acabou',
@@ -442,7 +502,7 @@ Como resolver, em menos de um minuto:
 2. Escolha a loja avisada aqui.
 3. Cole o código de acesso novo e salve. A gente testa na hora e te diz se ficou certo.
 
-[[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
+[[botao:Abrir minhas credenciais|{{link_lojas}}]]`,
   },
   {
     slug: 'chave_shopee_recusada',
@@ -467,7 +527,7 @@ Como resolver, em menos de dois minutos:
 2. Aqui no nosso painel, abra "Minhas credenciais" e escolha a Shopee.
 3. Cole os dois e salve. A gente testa na hora e te diz se ficou certo.
 
-[[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
+[[botao:Abrir minhas credenciais|{{link_lojas}}]]`,
   },
   {
     slug: 'nao_conseguiu_conectar_sem_vaga',
