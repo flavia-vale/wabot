@@ -5,6 +5,40 @@ produção, 128 cadastros, 14 pagantes (**10,9%**).
 
 ---
 
+## 0. Estado da execução (2026-09-08)
+
+Tudo o que era código foi implementado e está no `develop` — sete commits,
+`npm test` com 3.132 passando e 0 falhas. O que sobra é seu.
+
+| Item | Estado |
+|---|---|
+| D3, D4 — aviso de fim de teste diz "hoje" e promete a configuração salva | ✅ no ar |
+| C2, C4 — por onde começar e o marco da primeira loja | ✅ no ar |
+| C1, A3, A4 — próximo passo depois de conectar, garantias e CTA | ✅ no ar |
+| **A1 — teste contado da 1ª conexão** | ⚠️ **implementado e DESLIGADO** |
+| D1, D2, C5 — prova por e-mail e aviso de "sem loja" | ✅ no ar |
+| B2 — aviso interno de quem tentou conectar e não conseguiu | ✅ no ar |
+| E1, E2 — separar "nunca ativou" de "ativou e largou" | ✅ no ar |
+| A2, D5 — ver funcionando antes de conectar; preço no uso dela | ✅ no ar |
+| **D6 — falar com as 32** | 🔴 **é seu, e é a Onda 1** |
+| **B1 — investigar o cluster de 22–23/08** | 🔴 **é seu** |
+
+**Três coisas exigem decisão ou ação sua:**
+
+1. **A1 está desligado** (`TRIAL_ANCHOR_ON_CONNECT`). É a única mudança que dá
+   dias de produto de graça, então segue o padrão da casa: valida em staging,
+   depois liga em produção. Aplicar exige `pm2 delete` + `start` — pegadinha #1.
+2. **Metade do plano é e-mail, e sem `SMTP_*` no `.env` nada sai, em silêncio.**
+   Confira `EmailSendLog` antes de concluir que uma onda não funcionou.
+3. **D6 e B1 não são código.** A lista das 32 sai do `--listar`; o cluster de
+   22–23/08 se investiga no `WaConnectionEvent` daquelas datas.
+
+⚠️ Em modo `remote`, deploy da API **não** recarrega os bot-workers — mas nada
+aqui mexe em código de worker, então nenhuma sessão precisa ser reconectada por
+causa destas mudanças.
+
+---
+
 ## 1. A foto
 
 | Etapa | Pessoas | % do topo |
