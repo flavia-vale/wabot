@@ -249,6 +249,22 @@ function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, o
         </form>
       </div>
 
+      {/* A tabela não responde "e se a cobrança parou de rodar?" — vazio pode
+          ser mês tranquilo ou máquina parada. Esta faixa separa os dois. */}
+      {data?.health && data.health.severity !== 'ok' && (
+        <div className={`mb-4 rounded-xl p-4 ring-1 ${data.health.severity === 'critico' ? 'bg-rose-50 ring-rose-200' : data.health.severity === 'atencao' ? 'bg-amber-50 ring-amber-200' : 'bg-gray-50 ring-gray-200'}`}>
+          <p className={`text-sm font-black ${data.health.severity === 'critico' ? 'text-rose-800' : 'text-amber-800'}`}>{data.health.headline}</p>
+          <ul className="mt-2 space-y-2">
+            {asArray(data.health.problems).map(problema => (
+              <li key={problema.code} className="text-sm text-gray-700">
+                <span className="font-bold">{problema.title}.</span> {problema.detail}
+                <span className="block text-xs text-gray-500">O que fazer: {problema.fix}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {summary && (
         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl bg-gray-50 p-3">

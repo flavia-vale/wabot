@@ -223,6 +223,19 @@ export default function PlanoPage() {
           )}
         </section>
       )}
+      {/* A cobrança automática não passou. A faixa aparece ANTES dos planos:
+          resolver isso é a decisão do momento, e o acesso ainda está valendo. */}
+      {overview?.chargeFailure && (
+        <section className="pnl-note-box is-warn" role="alert">
+          <strong style={{ fontWeight: 600 }}>A cobrança automática do seu plano não passou</strong>
+          <p style={{ marginTop: 6 }}>{overview.chargeFailure.motivo}</p>
+          <p style={{ marginTop: 6 }}>{overview.chargeFailure.oQueFazer}</p>
+          {expiresAtLabel && (
+            <p style={{ marginTop: 6 }}>Seu robô continua trabalhando até {expiresAtLabel}.</p>
+          )}
+        </section>
+      )}
+
       {/* Planos */}
       <section className="pnl-card">
         <div className="pnl-card-title" style={{ marginBottom: 4 }}>{overview?.isActive ? 'Renovar ou trocar de plano' : 'Escolha seu plano'}</div>

@@ -27,6 +27,8 @@ import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 import { calculateManualPaymentExpiry, parseManualPaymentInput } from '../../domain/payments/manualPayment.js'
 import { isSubscriptionActive, describeSubscriptionStatus, describePendingSubscriptionNotice } from '../../domain/payments/subscriptionPolicy.js'
 import { summarizeSubscriptionCharges, presentSubscriptionCharge } from '../../domain/payments/chargeOutcome.js'
+import { assessBillingMachine, checkBillingConfig, describeBillingMachine } from '../../domain/payments/billingHealth.js'
+import { isSandboxTokenInProduction } from '../../domain/payments/accessTokenMode.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -2012,6 +2014,35 @@ export async function adminRoutes(app) {
       for (const user of users) emails.set(user.id, user.email)
     }
 
+    // Estado da MÁQUINA de cobrança — a pergunta que a tabela não responde:
+    // "e se nenhuma cobrança aparecer aqui porque a cobrança parou de rodar?".
+    // Tudo em lote e sem tocar no Mercado Pago (quem fala com ele é a passada
+    // horária).
+    const agora = new Date()
+    const [assinaturasAtivas, ultimaCobranca, ultimaSincronizacao, recusadas7d, aprovadas7d] = await Promise.all([
+      db.subscription.count({ where: { status: 'authorized' } }).catch(() => null),
+      db.subscriptionCharge.findFirst({ orderBy: { attemptedAt: 'desc' }, select: { attemptedAt: true } }).catch(() => null),
+      db.subscriptionCharge.findFirst({ orderBy: { syncedAt: 'desc' }, select: { syncedAt: true } }).catch(() => null),
+      db.subscriptionCharge.count({ where: { status: { in: ['rejected', 'cancelled', 'expired'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),
+      db.subscriptionCharge.count({ where: { status: { in: ['approved', 'accredited', 'processed'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),
+    ])
+
+    const mpToken = String(process.env.MP_ACCESS_TOKEN ?? '').trim()
+    const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === 'production'
+    const health = assessBillingMachine({
+      config: checkBillingConfig({
+        env: process.env,
+        isProduction: isProd,
+        isSandboxToken: isSandboxTokenInProduction({ token: mpToken, isProduction: isProd }),
+      }),
+      activeSubscriptions: assinaturasAtivas,
+      lastChargeAt: ultimaCobranca?.attemptedAt ?? null,
+      lastReconciliationAt: ultimaSincronizacao?.syncedAt ?? null,
+      recentRejected: recusadas7d,
+      recentApproved: aprovadas7d,
+      now: agora,
+    })
+
     await writeAdminAuditLog(req, { action: 'admin.finance.subscription_charges.list', resource: 'subscription_charge' })
 
     return {
@@ -2020,6 +2051,7 @@ export async function adminRoutes(app) {
       limit,
       days,
       outcome,
+      health: { ...health, headline: describeBillingMachine(health), activeSubscriptions: assinaturasAtivas },
       summary: summarizeSubscriptionCharges(allInWindow),
       charges: rows.map(row => presentSubscriptionCharge(row, { email: emails.get(row.userId) ?? null })),
     }

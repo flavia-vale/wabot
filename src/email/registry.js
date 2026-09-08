@@ -32,6 +32,10 @@ export const EMAIL_GROUPS = Object.freeze({
   afiliados: 'Programa de afiliados',
   marketing: 'Marketing e avisos',
   contato: 'Contato e escuta',
+  // Avisos que vão para a ADMIN do produto, não para a cliente. Ficam no mesmo
+  // catálogo (dá para editar o texto pelo painel), mas saem por um caminho
+  // próprio: `src/email/adminAlerts.js`. Disparo em massa é BARRADO para eles.
+  interno: 'Avisos internos (para a administradora)',
 })
 
 // Variáveis que TODO e-mail recebe, sem precisar declarar.
@@ -1025,6 +1029,131 @@ Topa? Me responde com dois horários que funcionam para você.`),
 **{{pergunta}}**
 
 Pode responder em uma linha, do jeito que vier à cabeça. Não tem resposta errada, e eu leio todas.`),
+  },
+  // ------------------------------------------------------- plano (cobrança)
+  {
+    slug: 'cobranca_recusada',
+    name: 'A cobrança automática não passou',
+    description: 'Sai quando o Mercado Pago tenta cobrar a assinatura e o pagamento é recusado. É o plano B de cobrar: avisa ENQUANTO o acesso ainda vale.',
+    group: 'plano',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 2,
+    variables: [
+      { name: 'plano', description: 'Plano da assinatura', example: 'Pro' },
+      VAR_VALOR,
+      { name: 'motivo', description: 'Por que a cobrança não passou, em linguagem de gente', example: 'Sem limite ou saldo no cartão.' },
+      { name: 'o_que_fazer', description: 'O que a cliente precisa fazer (muda conforme o motivo)', example: 'Atualize o cartão da cobrança automática ou use outro.' },
+      { name: 'vale_ate', description: 'Até quando o acesso atual continua valendo', example: '16/09/2026' },
+    ],
+    title: 'A cobrança do seu plano não passou',
+    subject: 'A cobrança automática do seu plano não passou',
+    body: `{{saudacao}} O Mercado Pago tentou cobrar **{{valor}}** do seu plano **{{plano}}** e a cobrança não passou.
+
+**Por quê:** {{motivo}}
+
+**O que fazer:** {{o_que_fazer}}
+
+Seu robô continua trabalhando normalmente até **{{vale_ate}}** — dá tempo de resolver sem parar nada.
+
+[[botao:Resolver agora|{{link_planos}}]]
+
+Se ficar qualquer dúvida, é só responder este e-mail.`,
+  },
+
+  // ------------------------------------------------------------ interno
+  //
+  // Estes três não vão para cliente nenhuma. Existem porque toda falha de
+  // pagamento é silenciosa por natureza: ninguém reclama de uma cobrança que
+  // não aconteceu, e o dinheiro simplesmente deixa de entrar.
+  {
+    slug: 'admin_cobranca_recusada',
+    name: '[Interno] Uma cobrança foi recusada',
+    description: 'Avisa a administradora quando a cobrança de uma assinatura é recusada, com cliente, valor e o código que o Mercado Pago devolveu.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'cliente', description: 'E-mail da cliente', example: 'cliente@exemplo.com' },
+      { name: 'plano', description: 'Plano da assinatura', example: 'Pro' },
+      VAR_VALOR,
+      { name: 'codigo', description: 'Código de retorno do Mercado Pago', example: 'cc_rejected_insufficient_amount' },
+      { name: 'motivo', description: 'O que o código significa e de quem é a ação', example: 'Sem limite ou saldo. Ação dela: outro cartão.' },
+      { name: 'quando', description: 'Quando a cobrança foi tentada', example: '08/09/2026 09:12' },
+      { name: 'link_cobrancas', description: 'Endereço da aba Financeiro do admin', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: 'Cobrança recusada',
+    subject: '[BOTinho] Cobrança recusada — {{cliente}}',
+    body: `A cobrança da assinatura de **{{cliente}}** foi recusada.
+
+[[lista]]
+Plano: {{plano}}
+Valor: {{valor}}
+Quando: {{quando}}
+Código do Mercado Pago: {{codigo}}
+O que significa: {{motivo}}
+[[/lista]]
+
+A cliente já foi avisada por e-mail, com o que ela precisa fazer.
+
+[[botao:Ver todas as cobranças|{{link_cobrancas}}]]`,
+  },
+  {
+    slug: 'admin_cobranca_maquina_parada',
+    name: '[Interno] A máquina de cobrança tem problema',
+    description: 'Avisa a administradora quando a cobrança para de funcionar em silêncio: chave errada, avisos do Mercado Pago não chegando, rede de segurança parada ou recusa em série.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Frase do estado geral', example: 'A cobrança tem problema agora.' },
+      { name: 'problemas', description: 'Lista do que está errado e o que fazer', example: 'A chave em uso é de TESTE — nenhum cartão real é aceito.' },
+      { name: 'link_cobrancas', description: 'Endereço da aba Financeiro do admin', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: 'A cobrança precisa de atenção',
+    subject: '[BOTinho] A cobrança precisa de atenção',
+    body: `{{resumo}}
+
+{{problemas}}
+
+[[botao:Abrir o Financeiro|{{link_cobrancas}}]]
+
+Este aviso sai no máximo uma vez por dia para cada problema.`,
+  },
+  {
+    slug: 'admin_pagamento_com_falha',
+    name: '[Interno] Falha ao processar um pagamento',
+    description: 'Avisa a administradora quando um aviso de pagamento do Mercado Pago não pôde ser processado por erro nosso — é o caso em que a cliente pagou e o acesso pode não ter sido liberado.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'o_que_falhou', description: 'Qual etapa falhou', example: 'Liberar o acesso depois do pagamento aprovado' },
+      { name: 'detalhe', description: 'Detalhe técnico do erro', example: 'SQLITE_BUSY: database is locked' },
+      { name: 'cliente', description: 'Cliente afetada, quando dá para saber', example: 'cliente@exemplo.com' },
+      { name: 'quando', description: 'Quando aconteceu', example: '08/09/2026 09:12' },
+      { name: 'link_cobrancas', description: 'Endereço da aba Financeiro do admin', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: 'Um pagamento não foi processado',
+    subject: '[BOTinho] Falha ao processar pagamento — conferir',
+    body: `Um aviso de pagamento do Mercado Pago não pôde ser processado.
+
+[[lista]]
+Etapa: {{o_que_falhou}}
+Cliente: {{cliente}}
+Quando: {{quando}}
+Detalhe: {{detalhe}}
+[[/lista]]
+
+**Isso pode significar cliente que pagou e ficou sem acesso.** A conferência automática tenta de novo na próxima passada; se o aviso se repetir, é caso de olhar na mão.
+
+[[botao:Abrir o Financeiro|{{link_cobrancas}}]]`,
   },
 ]
 

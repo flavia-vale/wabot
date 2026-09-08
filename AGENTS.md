@@ -296,6 +296,10 @@ API_URL=http://espelhagrupos.com.br
 # Ver seção "Processos PM2" para detalhes sobre cutover inline -> remote.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/0
+# Para onde vão os avisos internos de falha de pagamento (ver "Plano B da
+# cobrança"). Ausente = flaviaroberta.1496@gmail.com. ADMIN_ALERT_ENABLED=false
+# desliga; só o valor exatamente 'false' tem efeito.
+# ADMIN_ALERT_EMAIL=flaviaroberta.1496@gmail.com
 # WA_WEB_VERSION: pin manual da versão do WhatsApp Web (botão de emergência do
 # incidente 405 — ver seção própria). Ausente = resolve sozinho.
 # WA_WEB_VERSION=2.3000.1044015310
@@ -1265,6 +1269,105 @@ assinatura já cancelada antes do deploy não entra sozinha. Aba vazia em conta
 recém-assinada é o esperado: só aparece linha depois que o MP tenta cobrar.
 
 Teste: `test/admin-cobrancas-recorrentes.test.js`.
+
+## Plano B da cobrança: o que fazer quando ela quebra em silêncio (2026-09-08)
+
+Toda a corrente da cobrança quebra **sem derrubar nada**: o aviso do Mercado
+Pago que deixa de chegar, a chave que vence, a rede de segurança desligada, a
+cobrança que passa a ser recusada. O sistema fica verde e o dinheiro para de
+entrar. Três frentes, e um canal novo de aviso.
+
+| Peça | Onde |
+|---|---|
+| "A máquina está de pé?" (PURO) | `src/domain/payments/billingHealth.js` |
+| Quem avisar quando a cobrança é recusada (PURO) | `src/domain/payments/chargeFailureNotice.js` |
+| Reação à recusa (cliente + admin) | `reagirACobrancaRecusada` em `src/api/routes/payments.js` |
+| Rede de segurança com interruptor PRÓPRIO | `startBillingReconciliation` (idem) |
+| Conferência no boot | `checkBillingConfigAtBoot` (idem) |
+| Avisos internos por e-mail (para a administradora) | `src/email/adminAlerts.js` |
+| Faixa de alarme no Financeiro | `SubscriptionChargesPanel` (campo `health`) |
+| Faixa da cobrança recusada no painel da cliente | `dashboard/app/painel/plano/page.js` (`chargeFailure`) |
+
+### 1. A rede de segurança não podia depender de OUTRA env (era o pior defeito)
+
+`runPaymentReconciliation` / `runSubscriptionReconciliation` viviam **dentro**
+de `startWebhookProcessor`, que retorna cedo quando `BILLING_WEBHOOK_AUTOPROCESS`
+não é `'true'` — e o default dela é `false`. Ou seja: quem não ligou o
+processamento imediato do aviso estava, sem saber, **sem a única coisa que
+conserta um aviso perdido**. `PAYMENT_RECONCILIATION_ENABLED` existia e não
+valia de nada nesse caso. **Não regredir:** teste falha se `startWebhookProcessor`
+voltar a conter `PAYMENT_RECONCILIATION_ENABLED`.
+
+### 2. A cliente é avisada ENQUANTO o acesso dela ainda vale
+
+Cobrança recusada dispara o e-mail `cobranca_recusada` — com o motivo traduzido
+e **o que fazer, que muda conforme de quem é a ação**: mandar "atualize seu
+cartão" quando o bloqueio foi do lado do Mercado Pago faz ela mexer no que está
+certo e desconfiar do produto. A mesma explicação vira faixa no painel, **antes
+dos planos**.
+
+**Não regredir:**
+- **Nunca mandar "assine de novo"** — tentativa idêntica repetida é o padrão que
+  dispara a recusa por suspeita do próprio MP (RCA 2026-09-07). O texto oferece
+  **atualizar o cartão** ou **o pagamento avulso**, nunca refazer a assinatura.
+- **Recusa com mais de 72h não vira e-mail** (`recusa_antiga`): a passada
+  horária lê o histórico INTEIRO do MP, e sem esse teto o primeiro deploy
+  mandaria e-mail de cobranças de meses atrás, algumas já resolvidas.
+- **Cobrou depois → não avisa** (`ja_cobrou_depois`), e no máximo 1 aviso por
+  cliente a cada `CHARGE_FAILURE_NOTICE_COOLDOWN_HOURS` (48h).
+- **Não corta acesso**: o período já pago vale até o fim, e o texto diz isso.
+
+### 3. Alarme quando a máquina para (aba Financeiro + boot)
+
+`assessBillingMachine` cruza configuração + medições e devolve os problemas em
+frase, com o que fazer. O que ele pega: chave ausente/de teste, aviso sem
+assinatura, processamento e rede de segurança desligados, conferência parada há
+mais de 3h, assinatura ativa sem cobrança nenhuma há mais de 48h e **recusa em
+série** (>50% em 7 dias, com amostra mínima de 5 — aí a causa costuma ser nossa,
+não o cartão de cada cliente).
+
+**Não regredir:** **sem medição confiável NÃO se alarma** — vira `sem_medicao`
+(cinza), nunca vermelho; alarme falso recorrente treina a pessoa a ignorar
+justamente este. Silêncio de cobrança só conta com assinatura ativa. Chave de
+teste e webhook sem assinatura só acusam em **produção** (em staging é o estado
+correto).
+
+### 4. Avisos internos: e-mail para a ADMINISTRADORA
+
+`src/email/adminAlerts.js` manda para `ADMIN_ALERT_EMAIL` (default
+`flaviaroberta.1496@gmail.com`). Três avisos, no grupo `interno` do catálogo —
+**editáveis pela aba E-mails** como qualquer outro:
+
+| Slug | Quando sai |
+|---|---|
+| `admin_cobranca_recusada` | uma cobrança de assinatura foi recusada (com cliente, valor, código e o que significa) |
+| `admin_cobranca_maquina_parada` | a cobrança está mal configurada ou parou (boot e diagnóstico) |
+| `admin_pagamento_com_falha` | pagamento aprovado que **não virou acesso** — cliente pagou e ficou sem robô |
+
+**Não regredir:**
+- **Caminho PRÓPRIO, fora do despachante da cliente.** As travas de lá
+  (descadastro, conta parada, teto semanal, endereço fabricado) são regras de
+  relacionamento com a CLIENTE e nenhuma pode calar um alerta de operação. As
+  travas que valem aqui são outras: **cooldown de 24h por assunto** (rajada de
+  falha não pode virar rajada de e-mail) e o mesmo `EmailSendLog` para auditar.
+- **`audience: 'admin'` é barrado nos dois sentidos**: `sendAdminAlert` recusa
+  template que não seja interno, e o disparo em massa (`POST /emails/send`)
+  recusa template interno — o texto fala de problema nosso e é endereçado a você.
+- **Sem SMTP não grava "enviado"**, senão a janela de cooldown queimaria sem
+  ninguém ter recebido nada (mesma regra do resto do motor).
+- Envs: `ADMIN_ALERT_EMAIL`, `ADMIN_ALERT_ENABLED` (só o valor exato `false`
+  desliga). Desligar não esconde nada: os problemas seguem no log e na aba
+  Financeiro.
+
+Sinais: `subscription_charge_failed_notified` (cada um é uma cliente avisada a
+tempo) e `ops_billing_config_problem`. **Zero do primeiro com recusa
+acontecendo significa que o aviso parou de sair.**
+
+⚠️ **Nada disso funciona sem SMTP.** Sem `SMTP_*` no `.env`, todo envio é no-op
+silencioso — inclusive os avisos internos. Conferir antes de concluir que o
+alarme não dispara.
+
+Teste: `test/cobranca-plano-b.test.js`.
 
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
