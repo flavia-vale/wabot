@@ -13,7 +13,7 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
-import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
+import { buildErrorObservability, buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
@@ -2739,6 +2739,38 @@ export async function adminRoutes(app) {
     const result = await adminService.listLogs({ query: req.query ?? {}, adminRole: req.admin.role })
     await writeAdminAuditLog(req, { action: 'admin.logs.list', resource: 'messageLog' })
     return result
+  })
+
+  app.get('/errors/observability', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const periodMsByKey = { '6h': 6 * 3600_000, '24h': 24 * 3600_000, '7d': 7 * 24 * 3600_000 }
+    const period = periodMsByKey[String(req.query?.period || '24h')] ? String(req.query.period || '24h') : '24h'
+    const periodMs = periodMsByKey[period]
+    const to = new Date()
+    const from = new Date(to.getTime() - periodMs)
+    // Sete dias anteriores dão contexto suficiente para chamar uma assinatura
+    // de "nova" sem transformar esta leitura operacional em busca histórica ilimitada.
+    const baselineFrom = new Date(from.getTime() - 7 * 24 * 3600_000)
+    const fields = { userId: true, status: true, errorMsg: true, sentAt: true }
+    const rowLimit = 20_000
+    const [currentRows, baselineRows] = await Promise.all([
+      db.messageLog.findMany({ where: { sentAt: { gte: from, lte: to }, errorMsg: { not: null } }, select: fields, orderBy: { sentAt: 'desc' }, take: rowLimit + 1 }),
+      db.messageLog.findMany({ where: { sentAt: { gte: baselineFrom, lt: from }, errorMsg: { not: null } }, select: fields, orderBy: { sentAt: 'desc' }, take: rowLimit + 1 }),
+    ])
+    const currentLogs = currentRows.slice(0, rowLimit)
+    const baselineLogs = baselineRows.slice(0, rowLimit)
+    const userIds = [...new Set(currentLogs.map(log => log.userId).filter(Boolean))]
+    const users = userIds.length
+      ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true, plan: true } })
+      : []
+    const result = buildErrorObservability(currentLogs, baselineLogs, users, { from, to })
+    await writeAdminAuditLog(req, { action: 'admin.errors.observability.read', resource: 'messageLog' })
+    return {
+      period,
+      baseline: { from: baselineFrom.toISOString(), to: from.toISOString() },
+      dataCoverage: { rowLimit, currentTruncated: currentRows.length > rowLimit, baselineTruncated: baselineRows.length > rowLimit },
+      ...result,
+    }
   })
 
   // Métricas operacionais cross-user para o painel admin.
