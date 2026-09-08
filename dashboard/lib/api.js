@@ -304,6 +304,7 @@ export const api = {
     const query = new URLSearchParams(Object.entries({ period, ...params }).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/logs/summary?${query}`)
   },
+  adminErrorObservability: (period = '24h') => apiFetch(`/api/admin/errors/observability?period=${encodeURIComponent(period)}`),
   adminSessions: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)

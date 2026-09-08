@@ -13,7 +13,7 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
-import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
+import { buildErrorObservability, buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
@@ -27,6 +27,8 @@ import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 import { calculateManualPaymentExpiry, parseManualPaymentInput } from '../../domain/payments/manualPayment.js'
 import { isSubscriptionActive, describeSubscriptionStatus, describePendingSubscriptionNotice } from '../../domain/payments/subscriptionPolicy.js'
 import { summarizeSubscriptionCharges, presentSubscriptionCharge } from '../../domain/payments/chargeOutcome.js'
+import { assessBillingMachine, checkBillingConfig, describeBillingMachine } from '../../domain/payments/billingHealth.js'
+import { isSandboxTokenInProduction } from '../../domain/payments/accessTokenMode.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -2012,6 +2014,35 @@ export async function adminRoutes(app) {
       for (const user of users) emails.set(user.id, user.email)
     }
 
+    // Estado da MÁQUINA de cobrança — a pergunta que a tabela não responde:
+    // "e se nenhuma cobrança aparecer aqui porque a cobrança parou de rodar?".
+    // Tudo em lote e sem tocar no Mercado Pago (quem fala com ele é a passada
+    // horária).
+    const agora = new Date()
+    const [assinaturasAtivas, ultimaCobranca, ultimaSincronizacao, recusadas7d, aprovadas7d] = await Promise.all([
+      db.subscription.count({ where: { status: 'authorized' } }).catch(() => null),
+      db.subscriptionCharge.findFirst({ orderBy: { attemptedAt: 'desc' }, select: { attemptedAt: true } }).catch(() => null),
+      db.subscriptionCharge.findFirst({ orderBy: { syncedAt: 'desc' }, select: { syncedAt: true } }).catch(() => null),
+      db.subscriptionCharge.count({ where: { status: { in: ['rejected', 'cancelled', 'expired'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),
+      db.subscriptionCharge.count({ where: { status: { in: ['approved', 'accredited', 'processed'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),
+    ])
+
+    const mpToken = String(process.env.MP_ACCESS_TOKEN ?? '').trim()
+    const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === 'production'
+    const health = assessBillingMachine({
+      config: checkBillingConfig({
+        env: process.env,
+        isProduction: isProd,
+        isSandboxToken: isSandboxTokenInProduction({ token: mpToken, isProduction: isProd }),
+      }),
+      activeSubscriptions: assinaturasAtivas,
+      lastChargeAt: ultimaCobranca?.attemptedAt ?? null,
+      lastReconciliationAt: ultimaSincronizacao?.syncedAt ?? null,
+      recentRejected: recusadas7d,
+      recentApproved: aprovadas7d,
+      now: agora,
+    })
+
     await writeAdminAuditLog(req, { action: 'admin.finance.subscription_charges.list', resource: 'subscription_charge' })
 
     return {
@@ -2020,6 +2051,7 @@ export async function adminRoutes(app) {
       limit,
       days,
       outcome,
+      health: { ...health, headline: describeBillingMachine(health), activeSubscriptions: assinaturasAtivas },
       summary: summarizeSubscriptionCharges(allInWindow),
       charges: rows.map(row => presentSubscriptionCharge(row, { email: emails.get(row.userId) ?? null })),
     }
@@ -2739,6 +2771,38 @@ export async function adminRoutes(app) {
     const result = await adminService.listLogs({ query: req.query ?? {}, adminRole: req.admin.role })
     await writeAdminAuditLog(req, { action: 'admin.logs.list', resource: 'messageLog' })
     return result
+  })
+
+  app.get('/errors/observability', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const periodMsByKey = { '6h': 6 * 3600_000, '24h': 24 * 3600_000, '7d': 7 * 24 * 3600_000 }
+    const period = periodMsByKey[String(req.query?.period || '24h')] ? String(req.query.period || '24h') : '24h'
+    const periodMs = periodMsByKey[period]
+    const to = new Date()
+    const from = new Date(to.getTime() - periodMs)
+    // Sete dias anteriores dão contexto suficiente para chamar uma assinatura
+    // de "nova" sem transformar esta leitura operacional em busca histórica ilimitada.
+    const baselineFrom = new Date(from.getTime() - 7 * 24 * 3600_000)
+    const fields = { userId: true, status: true, errorMsg: true, sentAt: true }
+    const rowLimit = 20_000
+    const [currentRows, baselineRows] = await Promise.all([
+      db.messageLog.findMany({ where: { sentAt: { gte: from, lte: to }, errorMsg: { not: null } }, select: fields, orderBy: { sentAt: 'desc' }, take: rowLimit + 1 }),
+      db.messageLog.findMany({ where: { sentAt: { gte: baselineFrom, lt: from }, errorMsg: { not: null } }, select: fields, orderBy: { sentAt: 'desc' }, take: rowLimit + 1 }),
+    ])
+    const currentLogs = currentRows.slice(0, rowLimit)
+    const baselineLogs = baselineRows.slice(0, rowLimit)
+    const userIds = [...new Set(currentLogs.map(log => log.userId).filter(Boolean))]
+    const users = userIds.length
+      ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true, plan: true } })
+      : []
+    const result = buildErrorObservability(currentLogs, baselineLogs, users, { from, to })
+    await writeAdminAuditLog(req, { action: 'admin.errors.observability.read', resource: 'messageLog' })
+    return {
+      period,
+      baseline: { from: baselineFrom.toISOString(), to: from.toISOString() },
+      dataCoverage: { rowLimit, currentTruncated: currentRows.length > rowLimit, baselineTruncated: baselineRows.length > rowLimit },
+      ...result,
+    }
   })
 
   // Métricas operacionais cross-user para o painel admin.

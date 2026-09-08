@@ -4,6 +4,22 @@ Estudo feito a partir do código e do último relatório de capacidade
 (`docs/capacity-audit-2026-08-31.md`). O disco é de **38 GiB**; em 31/08 estava
 em **75%** (27 GiB usados, 9,2 GiB livres) e hoje o painel marca **80%**.
 
+## Resultado medido em produção (2026-09-07)
+
+Executado no VPS: **85% → 55%**, 10,6 GB liberados de uma vez, sem derrubar
+sessão nenhuma e sem reiniciar processo.
+
+| Item | Liberado |
+|---|---:|
+| `bot.log` de produção (estava em **4,2 GB**) | 4,1 GB |
+| Logs do PM2 já rotacionados | 3,6 GB |
+| Cache do npm (estava em 2,5 GB) | 2,5 GB |
+| `bot.log` de staging (455,9 MB) | 405,9 MB |
+
+O `bot.log` de produção sozinho era **4,2 GB** — cinco vezes o tamanho medido no
+RCA de julho, e mais que o banco, os backups e as sessões somados. Confirma o
+diagnóstico: o gasto de disco é log sem rotação, não dado de cliente.
+
 ## 1. O QUE ACONTECEU
 
 O disco encheu de **log**, não de dado de cliente. O banco de produção inteiro
@@ -84,6 +100,10 @@ sudo cp ~/wabot/scripts/logrotate/wabot-bot-log /etc/logrotate.d/wabot-bot-log
 sudo logrotate -d /etc/logrotate.d/wabot-bot-log   # simula
 sudo logrotate -f /etc/logrotate.d/wabot-bot-log   # primeira rotação
 ```
+
+A rotação é **por tamanho** (100 MB), não por dia: `size` junto de `daily` faz
+o logrotate ignorar o `daily` e avisar no debug. Teto por ambiente: o arquivo em
+uso + 7 rotações comprimidas.
 
 `copytruncate` é obrigatório: API, supervisor e cada bot-worker mantêm o
 arquivo aberto e não sabem reabrir sozinhos. O pino escreve em modo *append*,
