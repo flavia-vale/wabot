@@ -37,7 +37,9 @@ humano() {
   awk -v b="${1:-0}" 'BEGIN{ split("B KB MB GB TB", u, " "); i=1
     while (b >= 1024 && i < 5) { b /= 1024; i++ } printf "%.1f %s", b, u[i] }'
 }
-bytes() { [[ -e "$1" ]] || { echo 0; return; }; du -sb "$1" 2>/dev/null | awk '{print $1}'; }
+# NR==1 + fallback: `du` pode nao imprimir nada (permissao negada) ou mais de
+# uma linha; sem isso as contas de bytes recebiam texto de varias linhas.
+bytes() { [[ -e "$1" ]] || { echo 0; return; }; du -sb "$1" 2>/dev/null | awk 'NR==1 { print $1 + 0; ok = 1 } END { if (!ok) print 0 }'; }
 
 if [[ $APLICAR -eq 1 ]]; then
   echo "MODO APLICAR — os itens abaixo serão removidos."

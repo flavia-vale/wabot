@@ -33,7 +33,9 @@ sub() { printf '\n-- %s\n' "$*"; }
 bytes() {
   local alvo="$1"
   [[ -e "$alvo" ]] || { echo 0; return; }
-  du -sb "$alvo" 2>/dev/null | awk '{print $1}' || echo 0
+  # NR==1 + fallback: `du` pode nao imprimir nada (permissao negada) ou mais de
+  # uma linha; sem isso a soma recebia "0\n0" e o shell quebrava a expressao.
+  du -sb "$alvo" 2>/dev/null | awk 'NR==1 { print $1 + 0; ok = 1 } END { if (!ok) print 0 }'
 }
 
 humano() {
@@ -49,7 +51,13 @@ linha() { # nome  bytes  observacao
 }
 
 LIBERAVEL=0
-somar_liberavel() { LIBERAVEL=$(( LIBERAVEL + ${1:-0} )); }
+# Sanitiza a entrada: um numero so, primeira linha, vazio vira 0. A soma nao
+# pode quebrar o relatorio inteiro por causa de um `du` que respondeu torto.
+somar_liberavel() {
+  local valor
+  valor=$(printf '%s' "${1:-0}" | head -n1 | tr -cd '0-9')
+  LIBERAVEL=$(( LIBERAVEL + ${valor:-0} ))
+}
 
 echo "Diagnóstico de disco — $(date -u '+%Y-%m-%dT%H:%M:%SZ') (UTC) — host $(hostname)"
 echo "SOMENTE LEITURA: este script não apaga nem move nada."
