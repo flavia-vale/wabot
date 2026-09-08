@@ -20,8 +20,11 @@
 
 /home/deploy/BOTinho-shared/logs/bot.log
 /home/deploy/wabot-staging-shared/logs/bot.log
+# Rotaciona por TAMANHO, nao por dia: um `daily` junto de `size` e ignorado
+# pelo logrotate ("note: 'size' overrides previously specified 'daily'"), e
+# deixa-lo aqui so faria a configuracao prometer uma coisa e fazer outra.
+# Teto por ambiente: 100 MB do arquivo em uso + 7 rotacoes comprimidas.
 {
-    daily
     rotate 7
     size 100M
     compress

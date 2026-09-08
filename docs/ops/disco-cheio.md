@@ -101,6 +101,10 @@ sudo logrotate -d /etc/logrotate.d/wabot-bot-log   # simula
 sudo logrotate -f /etc/logrotate.d/wabot-bot-log   # primeira rotação
 ```
 
+A rotação é **por tamanho** (100 MB), não por dia: `size` junto de `daily` faz
+o logrotate ignorar o `daily` e avisar no debug. Teto por ambiente: o arquivo em
+uso + 7 rotações comprimidas.
+
 `copytruncate` é obrigatório: API, supervisor e cada bot-worker mantêm o
 arquivo aberto e não sabem reabrir sozinhos. O pino escreve em modo *append*,
 então truncar é seguro — **não** precisa reiniciar nada.
