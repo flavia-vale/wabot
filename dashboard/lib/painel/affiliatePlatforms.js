@@ -83,11 +83,15 @@ export const AFFILIATE_PLATFORMS = [
         href: 'https://www.magazinevoce.com.br/admin',
       },
     ],
+    // Uma etiqueta e pronto: é a loja mais rápida de cadastrar do painel.
+    quickSetup: true,
     fields: [{ key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'Ex.: parceiro123' }],
   },
   {
     id: 'shein',
     label: 'SHEIN',
+    // O código de acesso é opcional aqui: só o ID já deixa a oferta sair.
+    quickSetup: true,
     instructions: 'Você pode preencher de dois jeitos, o que for mais fácil. (1) Pelo ID: no painel de afiliada da SHEIN, vá em Minha conta e copie o ID de afiliado. (2) Pelo link: ainda no painel, use o Gerador de Link em qualquer produto e cole aqui o link inteiro. O link do botão de compartilhar do aplicativo não serve — ele é para uso pessoal, não para cadastro.',
     actionLinks: [
       {
@@ -116,6 +120,28 @@ export const AFFILIATE_PLATFORMS = [
     ],
   },
 ]
+
+/**
+ * Lojas que ficam prontas com UM campo obrigatório só.
+ *
+ * Frente C do plano de ativação de 2026-09-08: a tela mostra cinco lojas com o
+ * mesmo peso, e a primeira da lista (Shopee) pede duas chaves geradas num
+ * painel de API — enquanto Magalu e SHEIN pedem só a etiqueta. Quem chega sem
+ * nenhuma loja cadastrada precisa saber por onde o caminho é curto; a medição
+ * mostra que mais gente configura GRUPO (57 e 61 contas) do que cadastra LOJA
+ * (53), ou seja, a loja é o obstáculo, não a falta de vontade.
+ *
+ * Deriva dos próprios campos — não é uma segunda lista para desencontrar da
+ * primeira quando alguém mudar o formulário de uma loja.
+ */
+export function isQuickSetupPlatform(platform) {
+  if (!platform?.quickSetup) return false
+  return platform.fields.filter((f) => f.required !== false).length === 1
+}
+
+export function quickSetupPlatforms(platforms = AFFILIATE_PLATFORMS) {
+  return platforms.filter(isQuickSetupPlatform)
+}
 
 export const CRED_STATUS = {
   configured: { label: 'Pronta para usar', cls: 'is-success' },

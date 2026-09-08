@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
-import { AFFILIATE_PLATFORMS, CRED_STATUS, describeInvalidAffiliateValue, getPlatformStatus } from '@/lib/painel/affiliatePlatforms'
+import { AFFILIATE_PLATFORMS, CRED_STATUS, describeInvalidAffiliateValue, getPlatformStatus, isQuickSetupPlatform, quickSetupPlatforms } from '@/lib/painel/affiliatePlatforms'
 
 
 function PlatformActionLinks({ links }) {
@@ -91,6 +91,39 @@ function CookiePrivacyDetails({ platform }) {
   )
 }
 
+/**
+ * Só aparece para quem não tem NENHUMA loja cadastrada.
+ *
+ * Frente C do plano de ativação de 2026-09-08: sem etiqueta o robô se recusa a
+ * publicar, e a pessoa conclui que o produto não funciona. As cinco lojas
+ * aparecem com o mesmo peso e a primeira da lista pede duas chaves geradas num
+ * painel de API — então quem abre esta tela para "resolver rápido" bate logo na
+ * mais difícil. Aqui a tela diz por onde o caminho é curto.
+ *
+ * Some assim que a primeira loja é salva: cartaz permanente vira paisagem.
+ */
+function StartHereCard({ platforms }) {
+  if (!platforms.length) return null
+  const nomes = platforms.map((p) => p.label)
+  const lista = nomes.length > 1
+    ? `${nomes.slice(0, -1).join(', ')} ou ${nomes[nomes.length - 1]}`
+    : nomes[0]
+  return (
+    <div className="pnl-note-box is-warn" role="status">
+      <strong>Comece por uma loja só — leva menos de um minuto.</strong>
+      <p style={{ margin: '6px 0 0' }}>
+        Enquanto não houver nenhuma loja aqui, o robô <strong>não publica nenhuma oferta</strong>. Isso é de propósito,
+        não é defeito: sem a sua etiqueta a comissão da venda iria para outra pessoa, e ele prefere não enviar a te
+        fazer trabalhar de graça.
+      </p>
+      <p style={{ margin: '6px 0 0' }}>
+        A saída mais rápida é {lista}: pede só a sua etiqueta de afiliada, um campo. As outras lojas você cadastra
+        depois, com calma.
+      </p>
+    </div>
+  )
+}
+
 function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessionStatus }) {
   const [draft, setDraft] = useState({})
   const [dirty, setDirty] = useState(false)
@@ -175,7 +208,12 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
   return (
     <form className="pnl-card" onSubmit={submit}>
       <div className="pnl-card-head">
-        <div className="pnl-card-title">{platform.label}</div>
+        <div className="pnl-card-title">
+          {platform.label}
+          {isQuickSetupPlatform(platform) && !hasStoredCredential && (
+            <span className="pnl-tag is-success" style={{ marginLeft: 8, fontWeight: 600 }}>Mais rápida · 1 campo</span>
+          )}
+        </div>
         <span className={`pnl-tag ${status.cls}`}>{status.label}</span>
       </div>
       {platform.instructions && <p className="pnl-card-note" style={{ marginBottom: 12 }}>{platform.instructions}</p>}
@@ -366,6 +404,12 @@ export default function IdsAfiliadaPage() {
           <p className="pnl-card-title" style={{ color: 'var(--danger)' }}>Falha ao carregar credenciais</p>
           <p className="pnl-card-note">{loadError}</p>
         </div>
+      )}
+
+      {/* `credMap` ainda nulo = carregando ou falhou: não acusar falta de
+          cadastro por causa de um blip de rede (mesma regra do NoCredentialBanner). */}
+      {credMap !== null && Object.keys(credMap).length === 0 && (
+        <StartHereCard platforms={quickSetupPlatforms()} />
       )}
 
       {loading
