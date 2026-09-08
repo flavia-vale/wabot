@@ -12,6 +12,7 @@ import { sendMail as defaultSendMail } from '../email/mailer.js'
 import { sendTemplateEmail } from '../email/dispatcher.js'
 import { resolveDashboardUrl } from '../email/layout.js'
 import { formatDateBR, formatMoneyBR } from './lifecyclePolicy.js'
+import { describeChargeFailureForCustomer } from '../domain/payments/chargeFailureNotice.js'
 
 function panelLinks(dashboardUrl = resolveDashboardUrl()) {
   return {
@@ -75,6 +76,29 @@ export function notifyPaymentApproved({ db, sendMail, userId, user, plan, amount
     vars: {
       plano: planLabel(plan),
       valor: typeof amount === 'number' ? formatMoneyBR(Math.round(amount * 100)) : String(amount ?? ''),
+      vale_ate: formatDateBR(accessExpiresAt),
+    },
+  })
+}
+
+/**
+ * A cobrança automática foi recusada — o plano B de cobrar.
+ *
+ * Avisa a cliente ENQUANTO o acesso dela ainda vale, com o motivo traduzido e
+ * o que fazer (que MUDA conforme de quem é a ação — ver
+ * `describeChargeFailureForCustomer`). Nunca manda "assine de novo": tentativa
+ * idêntica repetida é o padrão que dispara a recusa por suspeita do próprio
+ * Mercado Pago.
+ */
+export function notifyChargeFailed({ db, sendMail, userId, user, plan, amount, statusDetail, accessExpiresAt, logger } = {}) {
+  const explicacao = describeChargeFailureForCustomer(statusDetail)
+  return fire({
+    db, sendMail, slug: 'cobranca_recusada', user, userId, logger,
+    vars: {
+      plano: planLabel(plan),
+      valor: typeof amount === 'number' ? formatMoneyBR(Math.round(amount * 100)) : String(amount ?? ''),
+      motivo: explicacao.motivo,
+      o_que_fazer: explicacao.oQueFazer,
       vale_ate: formatDateBR(accessExpiresAt),
     },
   })

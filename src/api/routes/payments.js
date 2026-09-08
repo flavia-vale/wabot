@@ -21,7 +21,11 @@ import {
 } from '../../domain/payments/subscriptionPolicy.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
-import { notifyPaymentApproved } from '../../emailTriggers/events.js'
+import { notifyPaymentApproved, notifyChargeFailed } from '../../emailTriggers/events.js'
+import { sendAdminAlert } from '../../email/adminAlerts.js'
+import { checkBillingConfig, describeBillingMachine, BILLING_SEVERITY } from '../../domain/payments/billingHealth.js'
+import { decideChargeFailureNotice, describeChargeFailureForCustomer } from '../../domain/payments/chargeFailureNotice.js'
+import { describeChargeStatusDetail, classifyChargeOutcome } from '../../domain/payments/chargeOutcome.js'
 import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment, checkStuckPromotions } from '../../domain/affiliate/service.js'
 export { resolvePlanForPayment }
 
@@ -689,6 +693,91 @@ async function syncSubscriptionStatusAfterCharge({ subscription, preapprovalId, 
   }
 }
 
+const FALHA_DE_COBRANCA_MARCADOR = 'cobranca_recusada'
+
+function formatarQuando(value) {
+  const date = value ? new Date(value) : null
+  if (!date || Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+}
+
+/**
+ * Plano B de cobrar: cobrança recusada vira aviso para a CLIENTE (enquanto o
+ * acesso dela ainda vale) e para a ADMINISTRADORA (que de outro jeito só
+ * descobriria pelo dinheiro que não entrou).
+ *
+ * Best-effort dos dois lados: nada aqui pode derrubar webhook nem reconciliação.
+ */
+async function reagirACobrancaRecusada({ charge, subscription, log }) {
+  try {
+    if (classifyChargeOutcome(charge?.status) !== 'recusada') return { notified: false, reason: 'nao_foi_recusa' }
+
+    const userId = charge?.userId ?? subscription?.userId ?? null
+    if (!userId) return { notified: false, reason: 'sem_conta' }
+
+    // Cobrou depois? Então já se resolveu e avisar assustaria à toa.
+    const aprovadaDepois = await db.subscriptionCharge.findFirst({
+      where: { userId, status: { in: ['approved', 'accredited', 'processed'] }, attemptedAt: { gte: charge.attemptedAt } },
+      orderBy: { attemptedAt: 'desc' },
+      select: { attemptedAt: true },
+    }).catch(() => null)
+
+    const ultimoAviso = await db.emailSendLog.findFirst({
+      where: { slug: FALHA_DE_COBRANCA_MARCADOR, userId, status: 'sent' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }).catch(() => null)
+
+    const decisao = decideChargeFailureNotice({
+      charge,
+      lastNoticeAt: ultimoAviso?.createdAt ?? null,
+      laterApprovedChargeAt: aprovadaDepois?.attemptedAt ?? null,
+    })
+    if (!decisao.notify) return { notified: false, reason: decisao.reason }
+
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, status: true, accessExpiresAt: true },
+    }).catch(() => null)
+    if (!user) return { notified: false, reason: 'conta_nao_encontrada' }
+
+    await notifyChargeFailed({
+      db,
+      user,
+      userId,
+      plan: charge.plan ?? subscription?.plan ?? null,
+      amount: charge.amount ?? null,
+      statusDetail: charge.statusDetail ?? null,
+      accessExpiresAt: user.accessExpiresAt,
+      logger: log,
+    })
+
+    const detalhe = describeChargeStatusDetail(charge.statusDetail)
+    await sendAdminAlert({
+      db,
+      slug: 'admin_cobranca_recusada',
+      // Uma linha por cobrança: cada recusa é um caso, não um estado repetido.
+      key: String(charge.mpAuthorizedPaymentId ?? charge.id ?? userId),
+      vars: {
+        cliente: user.email ?? userId,
+        plano: charge.plan ?? subscription?.plan ?? '—',
+        valor: charge.amount != null ? `R$ ${Number(charge.amount).toFixed(2)}` : '—',
+        codigo: detalhe.code ?? '—',
+        motivo: detalhe.label,
+        quando: formatarQuando(charge.attemptedAt),
+      },
+      logger: log,
+    })
+
+    trackAnalyticsEventSafe({ userId, event: 'subscription_charge_failed_notified', metadata: { code: detalhe.code ?? null } })
+    log?.warn?.({ userId, code: detalhe.code ?? null }, 'Cobrança de assinatura recusada — cliente e administradora avisadas')
+    return { notified: true }
+  } catch (err) {
+    log?.warn?.({ err: err?.message }, 'charge_failure_notice_failed')
+    return { notified: false, reason: 'erro' }
+  }
+}
+
 /**
  * Reconciliação da assinatura recorrente — rede de segurança do "renova sozinho".
  *
@@ -754,6 +843,12 @@ async function runSubscriptionReconciliation({ log } = {}) {
         source: 'mp_sync',
       }, { log })
       if (saved.saved) chargesSynced++
+      // A recusa pode chegar SÓ por aqui (o Mercado Pago nem sempre avisa).
+      await reagirACobrancaRecusada({
+        charge: { ...invoice, userId: subscription.userId, plan: subscription.plan },
+        subscription,
+        log,
+      })
     }
 
     const user = await db.user.findUnique({
@@ -868,6 +963,21 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
             } catch (activationErr) {
               activation = { triggered: true, error: activationErr?.code ?? activationErr?.message }
               log?.warn?.({ err: activationErr?.message, userId }, 'Webhook activation failed')
+              // Pagamento aprovado que não virou acesso é o pior desfecho do
+              // produto: a cliente pagou e o robô não voltou. Isso NÃO pode
+              // morrer no log.
+              await sendAdminAlert({
+                db,
+                slug: 'admin_pagamento_com_falha',
+                key: `ativacao:${userId}`,
+                vars: {
+                  o_que_falhou: 'Liberar o acesso depois do pagamento aprovado',
+                  detalhe: String(activationErr?.message ?? activationErr?.code ?? 'erro desconhecido').slice(0, 300),
+                  cliente: userId,
+                  quando: formatarQuando(new Date()),
+                },
+                logger: log,
+              })
             }
           } else {
             activation = { triggered: false, reason: 'unrecognized_amount', amount: reconciliation.transactionAmount }
@@ -930,6 +1040,20 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
               nextRetryAt: authorizedSnapshot.nextRetryAt,
               source: 'webhook',
             }, { log })
+            await reagirACobrancaRecusada({
+              charge: {
+                id: null,
+                userId: subscriptionForCharge.userId,
+                plan: subscriptionForCharge.plan,
+                amount: authorizedSnapshot.transactionAmount,
+                status: authorizedSnapshot.paymentStatus ?? authorizedSnapshot.status,
+                statusDetail: authorizedSnapshot.statusDetail,
+                attemptedAt: authorizedSnapshot.attemptedAt ?? new Date(),
+                mpAuthorizedPaymentId: summary.dataResourceId,
+              },
+              subscription: subscriptionForCharge,
+              log,
+            })
           }
         }
 
@@ -1046,7 +1170,20 @@ function startWebhookProcessor(app) {
 
   timer.unref?.()
   app.log.info({ cfg }, 'Billing webhook processor enabled')
+}
 
+/**
+ * Rede de segurança da cobrança — NÃO pode depender da env do processador de
+ * avisos.
+ *
+ * Ela vivia DENTRO de `startWebhookProcessor`, que retorna cedo quando
+ * `BILLING_WEBHOOK_AUTOPROCESS` não é 'true' (o default). Ou seja: desligar o
+ * processamento imediato do aviso desligava junto, em silêncio, a única coisa
+ * que conserta um aviso perdido — e "cliente paga e fica sem robô" passava a
+ * não ter mais nenhuma rede embaixo. Duas coisas diferentes, dois interruptores
+ * diferentes.
+ */
+function startBillingReconciliation(app) {
   if (PAYMENT_RECONCILIATION_ENABLED) {
     const reconciliationTimer = setInterval(async () => {
       try {
@@ -1090,12 +1227,59 @@ function startWebhookProcessor(app) {
     }, PAYMENT_RECONCILIATION_INTERVAL_MS)
     reconciliationTimer.unref?.()
     app.log.info({ intervalMs: PAYMENT_RECONCILIATION_INTERVAL_MS, pendingMinutes: PAYMENT_RECONCILIATION_PENDING_MINUTES }, 'Payment reconciliation worker enabled')
+  } else {
+    app.log.error('A rede de segurança da cobrança está DESLIGADA (PAYMENT_RECONCILIATION_ENABLED=false): aviso perdido do Mercado Pago não será consertado por ninguém.')
   }
+}
+
+/**
+ * Confere no BOOT se a máquina de cobrança está configurada — e avisa a
+ * administradora por e-mail quando não está.
+ *
+ * Chave errada, aviso sem assinatura e rede de segurança desligada não
+ * derrubam nada: o sistema sobe verde e o dinheiro deixa de entrar. Só avisa
+ * (nunca bloqueia o boot), pelo mesmo motivo do guard de reversão de modo.
+ */
+function checkBillingConfigAtBoot(app) {
+  const token = getMpAccessToken()
+  const relatorio = checkBillingConfig({
+    env: process.env,
+    isProduction: IS_PRODUCTION,
+    isSandboxToken: isSandboxTokenInProduction({ token, isProduction: IS_PRODUCTION }),
+  })
+  if (relatorio.ok) {
+    app.log.info('Configuração de cobrança conferida: sem problemas.')
+    return relatorio
+  }
+
+  for (const problema of relatorio.problems) {
+    const linha = { code: problema.code, fix: problema.fix }
+    if (problema.severity === BILLING_SEVERITY.CRITICO) app.log.error(linha, problema.title)
+    else app.log.warn(linha, problema.title)
+  }
+  trackAnalyticsEventSafe({ event: 'ops_billing_config_problem', metadata: { codes: relatorio.problems.map(p => p.code) } })
+
+  sendAdminAlert({
+    db,
+    slug: 'admin_cobranca_maquina_parada',
+    key: relatorio.problems.map(p => p.code).join(','),
+    vars: {
+      resumo: describeBillingMachine(relatorio),
+      problemas: relatorio.problems.map(p => `**${p.title}**\n${p.detail}\nO que fazer: ${p.fix}`).join('\n\n'),
+    },
+    logger: app.log,
+  }).catch(() => {})
+
+  return relatorio
 }
 
 export async function paymentsRoutes(app) {
   warnMissingProductionEnv(app.log)
   startWebhookProcessor(app)
+  // Interruptor próprio: a rede de segurança não pode morrer junto com o
+  // processamento imediato de aviso (ver comentário em startBillingReconciliation).
+  startBillingReconciliation(app)
+  checkBillingConfigAtBoot(app)
 
   // Creates a dynamic Mercado Pago Preference (supports PIX + credit card) and returns the checkout URL
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -1622,6 +1806,32 @@ export async function paymentsRoutes(app) {
     // `activeSubscription` pode vir `pending` (checkout aberto e não concluído):
     // isso NÃO é renovação automática ligada, e dizer que é faria a cliente
     // achar que está coberta sem estar. Quem decide é o resumo puro.
+    // Plano B do lado da cliente: se a última cobrança da assinatura foi
+    // recusada e não houve nenhuma aprovada depois, a tela precisa dizer isso
+    // ENQUANTO o acesso ainda vale — descobrir pelo robô parado é o pior jeito.
+    let chargeFailure = null
+    try {
+      const ultimaCobranca = await db.subscriptionCharge.findFirst({
+        where: { userId },
+        orderBy: { attemptedAt: 'desc' },
+        select: { status: true, statusDetail: true, attemptedAt: true, amount: true },
+      })
+      if (ultimaCobranca && classifyChargeOutcome(ultimaCobranca.status) === 'recusada') {
+        const explicacao = describeChargeFailureForCustomer(ultimaCobranca.statusDetail)
+        chargeFailure = {
+          attemptedAt: ultimaCobranca.attemptedAt,
+          amount: ultimaCobranca.amount ?? null,
+          motivo: explicacao.motivo,
+          oQueFazer: explicacao.oQueFazer,
+          pedirCartaoNovo: explicacao.pedirCartaoNovo,
+        }
+      }
+    } catch {
+      // Sem a tabela (ou com falha de leitura) a tela segue como antes: a
+      // faixa é a mais, nunca pode derrubar a página de plano.
+      chargeFailure = null
+    }
+
     const subscription = summarizeSubscriptionForPanel(openSubscription, {
       lastApprovedPaymentAt: lastApprovedPayment?.createdAt ?? null,
     })
@@ -1641,6 +1851,7 @@ export async function paymentsRoutes(app) {
       accessExpiresAt,
       nextChargeAt,
       subscription,
+      chargeFailure,
       isActive,
       expiresInDays,
       actionRequired,

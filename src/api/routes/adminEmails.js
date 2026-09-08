@@ -261,6 +261,11 @@ export async function adminEmailsRoutes(app, opts = {}) {
     const slug = String(req.body?.slug ?? '')
     const definition = getTemplateDefinition(slug)
     if (!definition) return reply.code(404).send({ error: 'E-mail não encontrado' })
+    // Aviso INTERNO nunca pode ser disparado para a base: o texto fala de
+    // problema de cobrança nosso e é endereçado à administradora.
+    if (definition.audience === 'admin') {
+      return reply.code(400).send({ error: 'Este é um aviso interno (vai para a administradora) e não pode ser enviado para clientes.' })
+    }
     if (!isEmailConfigured()) {
       return reply.code(409).send({ error: 'O envio de e-mail ainda não está ligado neste ambiente.' })
     }

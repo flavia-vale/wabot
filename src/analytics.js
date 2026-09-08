@@ -71,6 +71,13 @@ export const ANALYTICS_EVENTS = new Set([
   // como valendo (pela cobrança aprovada ou pela consulta ao abrir o painel).
   // Cada um destes é uma cliente que veria "falta concluir" depois de pagar.
   'subscription_status_synced',
+  // Cobrança recusada que virou aviso para a cliente e para a administradora —
+  // é o plano B de cobrar funcionando. Zero disso com recusa acontecendo
+  // significa que o aviso parou de sair.
+  'subscription_charge_failed_notified',
+  // A cobrança está mal configurada (chave, assinatura do aviso ou rede de
+  // segurança). Só avisa; nunca bloqueia o boot.
+  'ops_billing_config_problem',
   'first_send_success',
   'send_error',
   'organic_page_view',
