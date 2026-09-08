@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import { NAV_GROUPS } from './nav'
 import SidebarOnboarding from '@/components/SidebarOnboarding'
 import { buildNoCredentialBanner } from '../../../src/credentialBlockAlert/message.js'
+import { shouldShowNoCredentialBanner } from '../../../src/domain/painel/journeyBanners.js'
 import { buildTrialEndingNotice } from '../../../src/domain/painel/trialNotice.js'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../src/tutorialVideo.js'
 
@@ -497,7 +498,10 @@ export default function PainelShell({ children }) {
                 observabilidade, sem alarmar o usuário com uma ação enganosa. */}
             <ExpiredPlanBanner user={user} />
             <TrialEndingBanner notice={trialNotice} />
-            <NoCredentialBanner show={hasAnyCredential === false} />
+            {/* A loja só é cobrada DEPOIS de conectar o WhatsApp — a mesma
+                regra do próximo passo na tela de conexão. Antes disso o robô
+                nem foi ligado, e o alarme não corresponde a nada. */}
+            <NoCredentialBanner show={shouldShowNoCredentialBanner({ hasAnyCredential, online, phone })} />
             <ExpiredMlSsidBanner expired={mlSsidExpired} />
             {children}
           </div>
