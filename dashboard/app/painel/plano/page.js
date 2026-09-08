@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { DEFAULT_LANDING_PLANS, SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { usePainelHeader } from '../PainelShell'
+import { CONFIG_PRESERVED_NOTE } from '../../../../src/domain/painel/trialNotice.js'
 
 const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do BOTinho, pode me ajudar?')}`
 
@@ -328,6 +329,13 @@ export default function PlanoPage() {
           {billingMode === 'auto'
             ? 'Cobrança automática no cartão, todo mês, sem fidelidade. Desligue quando quiser aqui mesmo.'
             : 'Pagamento único de 30 dias via PIX ou cartão. Você renova manualmente ao expirar.'}
+        </p>
+        {/* D4 do plano de ativação: o medo de quem para aqui é perder a
+            configuração, não o preço. A frase é a MESMA do aviso de fim de
+            teste (fonte única em trialNotice.js) — duas redações da mesma
+            promessa é como uma delas envelhece errada. */}
+        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4 }}>
+          {CONFIG_PRESERVED_NOTE}
         </p>
       </section>
 
