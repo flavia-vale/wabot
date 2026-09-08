@@ -137,7 +137,7 @@ ordem exata do maior para o menor risco percebido.
 
 | # | Mudança | Esforço |
 |---|---|---|
-| A1 | **Contar o teste a partir da 1ª conexão**, não do cadastro (com teto de janela para começar). Quem nunca conectou não gastou teste. Beneficia TODAS as frentes de uma vez. | M |
+| A1 | **Contar o teste a partir da 1ª conexão**, não do cadastro (com teto de janela para começar). Quem nunca conectou não gastou teste. Beneficia TODAS as frentes de uma vez. **Implementado, DESLIGADO** (`TRIAL_ANCHOR_ON_CONNECT`) — mexe em acesso pago, então só liga depois de validado em staging e com OK explícito. | M |
 | A2 | **Valor antes do acesso:** primeiro passo do checklist vira colar um link no `/painel/converte-links` — que já funciona sem WhatsApp — e ver o link voltar com a etiqueta dela. Entende o produto em 40 segundos sem entregar nada. | M |
 | A3 | **Garantias antes do botão:** os `WHATSAPP_SAFETY_POINTS` já existem e estão certos — estão embaixo. Subir para bloco de destaque acima do CTA. | P |
 | A4 | **CTA:** trocar "Conectar" por **"Ligar o robô no meu WhatsApp"** + "leva 30 segundos e você desliga quando quiser". | P |
