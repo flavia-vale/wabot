@@ -343,8 +343,8 @@ export default function PainelShell({ children }) {
   )
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, sessionHealth, refreshSession, setHeader }),
-    [user, online, phone, groupCount, sessionHealth, refreshSession],
+    () => ({ user, online, phone, groupCount, sessionHealth, hasAnyCredential, refreshSession, setHeader }),
+    [user, online, phone, groupCount, sessionHealth, hasAnyCredential, refreshSession],
   )
 
   if (checking) {
