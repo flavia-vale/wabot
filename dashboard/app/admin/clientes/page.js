@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 import { PayingTag } from '@/components/PayingTag'
+import { SharedPhoneTag } from '@/components/SharedPhoneTag'
 
 const asArray = (value) => (Array.isArray(value) ? value : [])
 
@@ -229,6 +230,7 @@ export default function AdminClientesPage() {
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="font-bold text-slate-900 hover:text-emerald-700">{customer.name || '—'}</span>
                           <PayingTag status={customer.payingStatus} compact />
+                          <SharedPhoneTag status={customer.sharedPhoneStatus} contas={customer.sharedPhoneAccounts} compact />
                         </span>
                         <span className="block text-xs text-slate-500">{customer.email}</span>
                       </Link>

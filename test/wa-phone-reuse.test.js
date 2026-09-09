@@ -124,3 +124,60 @@ test('os números aparecem nas duas telas do admin', () => {
   // Carregamento em LOTE: uma consulta por página, nunca uma por linha.
   assert.match(ler('../src/domain/admin/service.js'), /waPhoneOwnership\.findMany\(\{\s*where: \{ userId: \{ in: userIds \} \}/)
 })
+
+// ---------------------------------------------------------------------------
+// A tag no admin e o aviso interno. Sinal que fica só no log não conta como
+// aviso — a lição do `ops_stale_worker_code`.
+
+test('a tag descreve o FATO e é decidida no backend', async () => {
+  const { resolveSharedPhoneStatus, withSharedPhoneStatus } = await import('../src/domain/admin/sharedPhoneStatus.js')
+  assert.deepEqual(resolveSharedPhoneStatus({ sharedPhoneAccounts: 1 }), { status: null, contas: 0 })
+  assert.deepEqual(resolveSharedPhoneStatus({ sharedPhoneAccounts: 4 }), { status: 'numero_repetido', contas: 4 })
+  // Sem dado confiável, sem tag: falta de tag é ausência de informação, tag
+  // errada é informação falsa.
+  assert.equal(resolveSharedPhoneStatus({}).status, null)
+  assert.equal(resolveSharedPhoneStatus({ sharedPhoneAccounts: 'x' }).status, null)
+  assert.equal(withSharedPhoneStatus({ id: 'a' }, 3).sharedPhoneStatus, 'numero_repetido')
+})
+
+test('o carregador da tag é em LOTE e nunca derruba a listagem', async () => {
+  const { loadSharedPhoneCounts } = await import('../src/domain/admin/sharedPhoneLoader.js')
+  let chamadas = 0
+  const dbFake = {
+    waPhoneOwnership: {
+      findMany: async () => { chamadas++; return [{ userId: 'a', phone: '551199' }, { userId: 'b', phone: '551199' }] },
+      groupBy: async () => { chamadas++; return [{ phone: '551199', _count: { _all: 2 } }] },
+    },
+  }
+  const mapa = await loadSharedPhoneCounts(dbFake, ['a', 'b'])
+  assert.equal(mapa.get('a'), 2)
+  assert.equal(chamadas, 2, 'duas consultas por lista, nunca uma por linha')
+
+  const quebrado = { waPhoneOwnership: { findMany: async () => { throw new Error('boom') }, groupBy: async () => [] } }
+  assert.equal((await loadSharedPhoneCounts(quebrado, ['a'])).size, 0)
+})
+
+test('a tag aparece nas três telas do admin', () => {
+  for (const tela of ['clientes', 'online', 'sucesso-cliente']) {
+    const src = ler(`../dashboard/app/admin/${tela}/page.js`)
+    assert.match(src, /SharedPhoneTag/, `a tag não chegou na aba ${tela}`)
+  }
+})
+
+test('o aviso interno existe e não acusa ninguém', async () => {
+  const { getTemplateDefinition } = await import('../src/email/registry.js')
+  const t = getTemplateDefinition('admin_numero_repetido')
+  assert.ok(t)
+  assert.equal(t.group, 'interno')
+  assert.equal(t.audience, 'admin')
+  assert.match(t.body, /não é prova de nada sozinho/i)
+  // E o worker precisa de fato dispará-lo, senão o aviso não sai de lugar nenhum.
+  assert.match(ler('../src/bot-worker.js'), /slug: 'admin_numero_repetido'/)
+})
+
+test('o aviso sai TAMBÉM em modo aviso, não só quando bloqueia', () => {
+  const worker = ler('../src/bot-worker.js')
+  const inicio = worker.indexOf("slug: 'admin_numero_repetido'")
+  const bloqueio = worker.indexOf("if (decisao.acao !== 'bloquear') return")
+  assert.ok(inicio > 0 && bloqueio > inicio, 'o e-mail precisa sair ANTES do corte de "só se bloquear"')
+})

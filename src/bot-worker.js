@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { resolvePhoneReuseMode, decidePhoneReuse, buildPhoneReuseNotice } from './domain/session/phoneReuse.js'
 import { recordPhoneOwnership, loadPreviousPhoneOwners } from './domain/session/phoneOwnership.js'
+import { sendAdminAlert } from './email/adminAlerts.js'
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -709,7 +710,7 @@ async function handlePhoneOwnership({ phone, sock }) {
 
   const [anteriores, user] = await Promise.all([
     loadPreviousPhoneOwners({ db, phone, currentUserId: userId }),
-    db.user.findUnique({ where: { id: userId }, select: { id: true, plan: true, accessExpiresAt: true } }),
+    db.user.findUnique({ where: { id: userId }, select: { id: true, email: true, plan: true, accessExpiresAt: true } }),
   ])
   const decisao = decidePhoneReuse({ phone, currentUser: user ?? { id: userId }, previousOwners: anteriores, mode: modo })
   if (decisao.acao === 'permitir') return
@@ -720,6 +721,25 @@ async function handlePhoneOwnership({ phone, sock }) {
     event: decisao.acao === 'bloquear' ? 'ops_wa_phone_reuse_blocked' : 'ops_wa_phone_reuse_detected',
     metadata: { motivo: decisao.motivo, contas: decisao.contas.length },
   })
+  // E-mail interno: sinal em `AnalyticsEvent` fica no banco e ninguém consulta
+  // — foi essa a lição do `ops_stale_worker_code`. O canal interno tem cooldown
+  // de 24h por assunto e `key` leva a conta, então duas contas no mesmo dia
+  // geram dois avisos, e a mesma conta reconectando não vira rajada.
+  sendAdminAlert({
+    db,
+    slug: 'admin_numero_repetido',
+    key: userId,
+    vars: {
+      cliente: user?.email ?? userId,
+      contas_anteriores: decisao.contas.join(', '),
+      o_que_aconteceu: decisao.acao === 'bloquear'
+        ? 'A conexão foi recusada (trava ligada)'
+        : 'A conexão foi permitida (modo aviso)',
+      quando: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+    },
+    logger,
+  }).catch(() => {})
+
   if (decisao.acao !== 'bloquear') return
 
   const aviso = buildPhoneReuseNotice({ motivo: decisao.motivo, previousEmail: anteriores[0]?.email })
