@@ -82,28 +82,6 @@ function ExpiredPlanBanner({ user }) {
   )
 }
 
-/* Faixa fina, UMA frase, cor de aviso — nunca vermelho.
- *
- * Vermelho e quatro linhas diziam que algo parou, e nada parou: sem o código de
- * acesso o plano B segue publicando e a comissão continua sendo dela; o que muda
- * é o link ficar mais comprido. Mesma regra da tela de credenciais e do e-mail
- * de código vencido — as três superfícies precisam dizer a MESMA coisa.
- *
- * Vocabulário obrigatório: "código de acesso" e "venceu". Nunca "SSID",
- * "credencial expirada" ou "link de afiliado" (test/painel-aviso-ml-vencido.test.js). */
-function ExpiredMlSsidBanner({ expired }) {
-  if (!expired) return null
-
-  return (
-    <div className="pnl-slim-banner is-warn" role="status">
-      <span>
-        O código de acesso do Mercado Livre venceu — suas ofertas continuam saindo, só com link mais comprido.
-      </span>
-      <Link href="/painel/ids-afiliada" className="pnl-slim-banner-cta">Colar código novo</Link>
-    </div>
-  )
-}
-
 /* Motivo do encerramento escrito pela admin, mostrado para a CLIENTE.
  * Fica antes de qualquer outro aviso porque explica todos eles: com o acesso
  * encerrado por decisão nossa, a tela de plano vencido sozinha faria a pessoa
@@ -122,6 +100,28 @@ function BlockedReasonBanner({ user }) {
           Seus grupos, suas lojas e suas regras continuam salvos. Se você achar que houve engano, fale com a gente.
         </p>
       </div>
+    </div>
+  )
+}
+
+/* Faixa fina, UMA frase, cor de aviso — nunca vermelho.
+ *
+ * Vermelho e quatro linhas diziam que algo parou, e nada parou: sem o código de
+ * acesso o plano B segue publicando e a comissão continua sendo dela; o que muda
+ * é o link ficar mais comprido. Mesma regra da tela de credenciais e do e-mail
+ * de código vencido — as três superfícies precisam dizer a MESMA coisa.
+ *
+ * Vocabulário obrigatório: "código de acesso" e "venceu". Nunca "SSID",
+ * "credencial expirada" ou "link de afiliado" (test/painel-aviso-ml-vencido.test.js). */
+function ExpiredMlSsidBanner({ expired }) {
+  if (!expired) return null
+
+  return (
+    <div className="pnl-slim-banner is-warn" role="status">
+      <span>
+        O código de acesso do Mercado Livre venceu — suas ofertas continuam saindo, só com link mais comprido.
+      </span>
+      <Link href="/painel/ids-afiliada" className="pnl-slim-banner-cta">Colar código novo</Link>
     </div>
   )
 }
