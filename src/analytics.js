@@ -37,6 +37,11 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
 
 export const ANALYTICS_EVENTS = new Set([
   'signup_created',
+  // Cadastro que parece repetir o teste de outra conta (mesmo nome ou mesma
+  // raiz de e-mail de uma conta com teste vencido). AVISO, nunca bloqueio:
+  // quem decide encerrar acesso é uma pessoa. Ver
+  // src/domain/signup/duplicateTrialSignal.js.
+  'signup_duplicate_trial_suspect',
   // Número de WhatsApp que já tinha sido usado por outra conta. `detected` sai
   // em modo aviso, `blocked` quando a conexão é de fato recusada. Ver
   // src/domain/session/phoneReuse.js.
