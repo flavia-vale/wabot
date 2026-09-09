@@ -63,6 +63,7 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
+import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -3699,7 +3700,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const linkResults = await Promise.all(links.map(async ({ platform, url }) => {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
-          return null
+          // Devolve o MOTIVO em vez de null: sem `converted` o item continua
+          // fora de `conversions`, mas a mensagem deixa de ser gravada como
+          // "faltou cadastrar a loja" quando o cadastro está perfeito e a loja
+          // só está desligada NESTE grupo (RCA 2026-09-09).
+          return { platform, url, failureReason: CONVERSION_FAILURE.STORE_DISABLED }
         }
         logger.info({ platform, url }, 'Link detectado')
         const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
@@ -3712,14 +3717,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             text,
             reason: issue.reason,
           })
-          return null
+          return { platform, url, failureReason: CONVERSION_FAILURE.MISSING_CREDENTIAL }
         }
 
         try {
           const conversionResult = await convertLink(platform, url, cfg.credentials)
           if (!conversionResult) {
             await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
-            return null
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
           // amazon.js/mercadolivre.js/shopee.js já marcam linkKind no próprio
@@ -3750,7 +3755,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               errorMsg: err.conversionLogErrorMsg,
               status: err.conversionLogStatus,
             })
-            return null
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           const classifiedIssue = buildConversionIssue({ platform, credentialValidation, error: err })
           if (classifiedIssue?.kind === 'classified_conversion') {
@@ -3762,10 +3767,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               reason: classifiedIssue.reason,
               errorMsg: classifiedIssue.errorMsg,
             })
-            return null
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
-          return null
+          return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
         }
       }))
       const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && r.converted))
@@ -3809,7 +3814,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || ''),
             status: 'skipped',
-            errorMsg: 'skip:no_valid_conversions',
+            errorMsg: buildNoValidConversionsErrorMsg(linkResults.map(r => r?.failureReason)),
           },
         }).catch(() => {})
         return

@@ -6,6 +6,7 @@
 import {
   buildCredentialBlockAlerts,
   buildCredentialBlockHelp,
+  describeConversionFailure,
   isCredentialBlockErrorMsg,
   CREDENTIAL_BLOCK_STATUS_TAG,
 } from '../../../src/credentialBlockAlert/message.js'
@@ -77,6 +78,11 @@ export function explainErrorMsg(errorMsg, platform) {
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
   if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'
   if (errorMsg.startsWith('skip:no_valid_conversions')) {
+    // O motivo viaja no próprio errorMsg desde 2026-09-09. Só o motivo de
+    // falta de cadastro pode mandar a cliente cadastrar alguma coisa; os
+    // outros dizem, com todas as letras, que o cadastro dela está certo.
+    const falha = describeConversionFailure(errorMsg, platform)
+    if (falha?.texto) return falha.texto
     // Antes: texto genérico, igual para toda loja, sem próximo passo. Agora
     // nomeia a loja e diz o que fazer — mesma inversão Shopee/ML-Amazon-Magalu
     // do aviso novo do painel (P3, specs/013-inbound-leads-strategy).
@@ -156,8 +162,9 @@ export function statusTag(status) {
  * causa vai na própria etiqueta. Não trocar de volta por um rótulo genérico.
  */
 export function statusTagForLog(log) {
-  if (isCredentialBlockErrorMsg(log?.errorMsg)) return CREDENTIAL_BLOCK_STATUS_TAG
+  const falha = describeConversionFailure(log?.errorMsg, log?.platform)
+  if (falha) return falha.tag
   return statusTag(log?.status)
 }
 
-export { buildCredentialBlockHelp, isCredentialBlockErrorMsg }
+export { buildCredentialBlockHelp, describeConversionFailure, isCredentialBlockErrorMsg }

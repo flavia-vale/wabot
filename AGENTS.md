@@ -3239,8 +3239,10 @@ Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv
 então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
 ```bash
 grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20"
-# o que o supervisor de fato leu no boot (o nome do arquivo de log varia):
-grep -h "maxSessionsPerProcess" ~/.pm2/logs/*supervisor*out*.log | tail -1
+# o que o supervisor de PRODUCAO leu no boot. Dois cuidados: o pm2 numera o
+# arquivo por instancia (pegue o mais recente por data, nao por nome) e
+# `*supervisor*` casaria tambem os logs de STAGING, que tem outro teto.
+grep -h "maxSessionsPerProcess" "$(ls -t ~/.pm2/logs/bot-supervisor-out-*.log | head -1)" | tail -1
 pgrep -fc "/home/deploy/wabot/src/bot-worker"   # robos ligados agora
 ```
 
