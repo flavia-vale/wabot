@@ -182,6 +182,25 @@ function TecnicoTab({ tecnico }) {
         <Card label="Última queda" value={tecnico?.lastDisconnectCode || '—'} helper="código informado pelo WhatsApp" />
       </div>
 
+      {/* Todos os números que esta conta já ligou. O card de cima mostra só o
+          atual; a lista é o que permite ver troca de chip e cruzar com outras
+          contas. Mais de um número não é defeito por si só. */}
+      <div>
+        <h3 className="mb-2 text-sm font-bold text-slate-800">Números de WhatsApp já ligados</h3>
+        {asArray(tecnico?.waPhones).length > 0 ? (
+          <ul className="flex flex-wrap gap-2">
+            {asArray(tecnico.waPhones).map(phone => (
+              <li key={phone} className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm font-semibold text-slate-700">
+                {phone}
+                {phone === tecnico?.waPhone && <span className="ml-2 text-xs font-normal text-emerald-700">atual</span>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-slate-400">Nenhuma conexão registrada ainda.</p>
+        )}
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           <h3 className="mb-2 text-sm font-bold text-slate-800">Por que caiu (30 dias)</h3>

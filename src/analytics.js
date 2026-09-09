@@ -42,6 +42,11 @@ export const ANALYTICS_EVENTS = new Set([
   // quem decide encerrar acesso é uma pessoa. Ver
   // src/domain/signup/duplicateTrialSignal.js.
   'signup_duplicate_trial_suspect',
+  // Número de WhatsApp que já tinha sido usado por outra conta. `detected` sai
+  // em modo aviso, `blocked` quando a conexão é de fato recusada. Ver
+  // src/domain/session/phoneReuse.js.
+  'ops_wa_phone_reuse_detected',
+  'ops_wa_phone_reuse_blocked',
   'login_completed',
   'whatsapp_connected',
   'credential_saved',
@@ -200,6 +205,11 @@ export const ANALYTICS_EVENTS = new Set([
   // É sinal de capacidade (hora de subir o teto ou a RAM do VPS), não de
   // defeito da conta — ver MAX_SESSIONS_PER_PROCESS em src/supervisor/index.js.
   'ops_session_capacity_limit',
+  // Aviso PREVENTIVO: as vagas de robô estão acabando (default: faltando 2).
+  // Diferente de `ops_session_capacity_limit`, que só nasce depois da primeira
+  // recusa — quando a cliente já ficou sem conectar. Ver
+  // src/ops/sessionCapacityAlertPolicy.js.
+  'ops_session_capacity_warning',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

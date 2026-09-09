@@ -247,12 +247,17 @@ export function buildTecnicoBlock({
   connectionEvents = [],
   logs = [],
   credentialHealth = null,
+  waPhones = [],
   now = new Date(),
 } = {}) {
   return {
     waStatus: waSession?.status ?? null,
     waLifecycle: waSession?.lifecycle ?? null,
     waPhone: waSession?.phone ?? null,
+    // TODOS os números que esta conta já ligou, do mais antigo ao mais novo.
+    // `waPhone` é só o atual e é sobrescrito a cada conexão — sem a lista não
+    // dá para ver troca de chip nem número repetido entre contas.
+    waPhones: Array.isArray(waPhones) ? waPhones : [],
     lastHeartbeatAt: iso(waSession?.lastHeartbeatAt),
     lastDisconnectCode: waSession?.lastDisconnectCode ?? null,
     botRunning: Boolean(botRunning),
@@ -440,6 +445,7 @@ export function buildCustomerHistory({
   contactLogs = [],
   logs = [],
   groupCounts = { total: 0, monitor: 0, post: 0 },
+  waPhones = [],
   automations = { total: 0, enabled: 0 },
   credentialHealth = null,
   waSession = null,
@@ -450,7 +456,7 @@ export function buildCustomerHistory({
 } = {}) {
   const cadastro = buildCadastroBlock({ user, origin })
   const financeiro = buildFinanceiroBlock({ user, payments, subscriptions, manualGrants, now })
-  const tecnico = buildTecnicoBlock({ waSession, botRunning, connectionEvents, logs, credentialHealth, now })
+  const tecnico = buildTecnicoBlock({ waSession, botRunning, connectionEvents, logs, credentialHealth, waPhones, now })
   const uso = buildUsoBlock({ user, groupCounts, logs, automations, lastMessageAt, now })
   const timeline = buildCustomerTimeline({
     user,

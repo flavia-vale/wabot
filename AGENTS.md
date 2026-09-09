@@ -3185,6 +3185,65 @@ for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do awk '/VmRSS/{print 
  | awk '{s+=$1; n++} END {printf "%d robos | RSS total %.2f GB | media %.0f MB\n", n, s/1048576, s/n/1024}'
 ```
 
+### Aviso por e-mail ANTES de acabar a vaga (2026-09-09 — não regredir)
+
+`ops_session_capacity_limit` só nasce **depois** da primeira recusa: quando ele
+aparece, alguma cliente já ficou sem conectar. Este aviso é o contrário — chega
+enquanto ainda faltam vagas (default **2**), com tempo de liberar memória ou
+aumentar o servidor.
+
+| Peça | Onde |
+|---|---|
+| Decisão (PURA, sem banco/rede) | `src/ops/sessionCapacityAlertPolicy.js` |
+| Passada | `src/ops/sessionCapacityAlertSweep.js` |
+| Texto (editável pela aba E-mails) | `admin_vagas_acabando` em `src/email/registry.js` |
+| Boot | `startSessionCapacityAlertSweep()` em `src/api/server.js` |
+
+Onde roda: `setInterval` + `unref()` dentro da API, mesmo padrão de
+`startCredentialExpirySweep` — **sem processo PM2 novo, zero impacto de RAM**
+(uma contagem a cada 15min). A contagem vem de `listRunningBots()` do
+`manager.js`, a **mesma fonte** que o circuit breaker usa, então o aviso não
+pode discordar do que recusa a cliente. O teto é lido pela **mesma fórmula** do
+supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20).
+
+**Não regredir:**
+
+- **Sai pelo caminho de AVISO INTERNO** (`sendAdminAlert`), nunca pelo
+  despachante da cliente — de lá vêm o endereço (`ADMIN_ALERT_EMAIL`), o
+  cooldown por assunto e o histórico em `EmailSendLog`. As travas do
+  despachante (descadastro, conta parada, teto semanal) são regras de
+  relacionamento com a CLIENTE e nenhuma pode calar um alerta de operação.
+- **O assunto do cooldown carrega o teto** (`max=<n>`): subir o teto é situação
+  nova e pode avisar de novo sem esperar a janela do teto antigo.
+- **Fail-safe em todo caminho.** Contagem indisponível (supervisor fora do ar,
+  comando estourado) ou teto não confiável → **não avisa**. Alarme falso
+  recorrente treina a pessoa a ignorar justamente este alerta.
+- **Aviso barrado não vira sinal de envio** — sem SMTP ou dentro do cooldown,
+  nada é gravado.
+- **Linguagem leiga:** "vagas de robô", nunca "sessão por processo", "worker",
+  "shard" ou "circuit breaker". Teste falha se jargão voltar.
+
+Envs (todas opcionais): `CAPACITY_ALERT_FREE_SLOTS` (2),
+`CAPACITY_ALERT_COOLDOWN_HOURS` (12), `CAPACITY_ALERT_SWEEP_INTERVAL_MS`
+(15min), `CAPACITY_ALERT_ENABLED` (`false` desliga). Aplicar env exige
+`pm2 delete` + `start` (pegadinha #1).
+
+⚠️ **Sem `SMTP_*` no `.env` nenhum e-mail sai** — inclusive este. Conferir isso
+antes de procurar defeito. Teste: `test/ops-session-capacity-alert.test.js`.
+
+⚠️ **API e supervisor releem o teto só no PRÓPRIO boot.** Mudar
+`MAX_SESSIONS_PER_PROCESS` e reiniciar só uma das pontas faz o aviso e a recusa
+real discordarem até a outra subir.
+
+Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv,
+então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
+```bash
+grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20"
+# o que o supervisor de fato leu no boot (o nome do arquivo de log varia):
+grep -h "maxSessionsPerProcess" ~/.pm2/logs/*supervisor*out*.log | tail -1
+pgrep -fc "/home/deploy/wabot/src/bot-worker"   # robos ligados agora
+```
+
 ### "Limite de robôs" era a frase de TRÊS causas diferentes (RCA 2026-09-07 — não regredir)
 
 Cliente mandou print de **"Nosso servidor está no limite de robôs ligados ao

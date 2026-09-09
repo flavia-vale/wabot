@@ -1245,6 +1245,35 @@ Se várias caírem no mesmo dia, provavelmente é um incidente — confira os ev
 [[botao:Abrir o funil|{{link_painel}}/admin/funil]]`,
   },
   {
+    // As vagas de robô acabando. O sinal que já existia
+    // (`ops_session_capacity_limit`) só nasce DEPOIS da primeira recusa —
+    // quando alguma cliente já ficou sem conseguir conectar. Este chega antes.
+    slug: 'admin_vagas_acabando',
+    name: '[Interno] Estão acabando as vagas de robô',
+    description: 'Avisa a administradora quando faltam poucas vagas para o servidor parar de aceitar robô novo. Cliente nova não consegue conectar quando acaba.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Quantos robôs estão ligados e quantos cabem', example: '18 robôs ligados de 20 que cabem' },
+      { name: 'situacao', description: 'O que acontece agora', example: 'Sobram 2 vagas.' },
+      { name: 'link_capacidade', description: 'Endereço da aba Capacidade do admin', example: 'https://espelhagrupos.com.br/admin/capacidade' },
+    ],
+    title: 'Estão acabando as vagas de robô',
+    subject: '[BOTinho] {{resumo}}',
+    body: `{{resumo}}.
+
+{{situacao}}
+
+Quando acabam as vagas, **cliente nova não consegue conectar** e quem desligou o próprio robô não consegue voltar.
+
+O que dá para fazer: desligar o staging enquanto não estiver validando, ou aumentar o servidor. Cada robô ocupa cerca de 272 MB.
+
+[[botao:Ver a capacidade do servidor|{{link_capacidade}}]]`,
+  },
+  {
     slug: 'admin_cobranca_recusada',
     name: '[Interno] Uma cobrança foi recusada',
     description: 'Avisa a administradora quando a cobrança de uma assinatura é recusada, com cliente, valor e o código que o Mercado Pago devolveu.',
@@ -1301,6 +1330,38 @@ A cliente já foi avisada por e-mail, com o que ela precisa fazer.
 [[botao:Abrir o Financeiro|{{link_cobrancas}}]]
 
 Este aviso sai no máximo uma vez por dia para cada problema.`,
+  },
+  {
+    slug: 'admin_numero_repetido',
+    name: '[Interno] Número de WhatsApp já usado em outra conta',
+    description: 'Avisa a administradora quando uma conta liga um número de WhatsApp que já foi ligado por outra conta. É aviso para conferir; a recusa automática só acontece se a trava estiver ligada.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'cliente', description: 'E-mail da conta que acabou de ligar', example: 'novaconta@exemplo.com' },
+      { name: 'contas_anteriores', description: 'Contas que já usaram este número', example: 'contaantiga@exemplo.com' },
+      { name: 'o_que_aconteceu', description: 'Se a conexão foi recusada ou só registrada', example: 'A conexão foi permitida (modo aviso)' },
+      { name: 'quando', description: 'Quando aconteceu', example: '09/09/2026 15:40' },
+    ],
+    title: 'Um número de WhatsApp está em mais de uma conta',
+    subject: '[BOTinho] Número de WhatsApp repetido entre contas',
+    body: `Uma conta acabou de ligar um número de WhatsApp que já tinha sido ligado por outra conta.
+
+[[lista]]
+Conta atual: {{cliente}}
+Contas que já usaram este número: {{contas_anteriores}}
+O que aconteceu: {{o_que_aconteceu}}
+Quando: {{quando}}
+[[/lista]]
+
+Número repetido não é prova de nada sozinho: a mesma pessoa pode ter trocado de chip, ou ter uma conta antiga abandonada. Vale abrir o histórico das duas contas antes de decidir qualquer coisa.
+
+A etiqueta também aparece nas listas de clientes, na aba Online e na fila de Sucesso do Cliente.
+
+Este aviso sai no máximo uma vez por dia para cada conta.`,
   },
   {
     slug: 'admin_teste_repetido',
