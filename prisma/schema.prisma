@@ -25,6 +25,14 @@ model User {
   lastActivityAt         DateTime?
   lastSupportContactAt   DateTime?
   supportStatus          String    @default("new")
+  // Por que a conta foi bloqueada ou teve o acesso encerrado, em linguagem
+  // leiga. Escrito pela admin e MOSTRADO PARA A CLIENTE (login e painel).
+  // As COLUNAS já existem no banco desde a migration
+  // 20260909120000_user_blocked_reason — o que faltava aqui era a declaração,
+  // perdida na resolução de um conflito. Sem ela o Prisma Client não conhece
+  // os campos e `findCurrentUser` (GET /me) lança em toda chamada.
+  blockedReason          String?
+  blockedAt              DateTime?
   waPhoneOwnerships      WaPhoneOwnership[]
   termsAcceptedAt        DateTime?
   termsVersion           String?
