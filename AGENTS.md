@@ -3239,8 +3239,9 @@ Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv
 então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
 ```bash
 grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20"
-grep -h "maxSessionsPerProcess" ~/.pm2/logs/bot-supervisor-out.log | tail -1   # o que o supervisor leu no boot
-pgrep -fc "/home/deploy/wabot/src/bot-worker"                                   # robos ligados agora
+# o que o supervisor de fato leu no boot (o nome do arquivo de log varia):
+grep -h "maxSessionsPerProcess" ~/.pm2/logs/*supervisor*out*.log | tail -1
+pgrep -fc "/home/deploy/wabot/src/bot-worker"   # robos ligados agora
 ```
 
 ### "Limite de robôs" era a frase de TRÊS causas diferentes (RCA 2026-09-07 — não regredir)
