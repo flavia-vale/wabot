@@ -2593,6 +2593,73 @@ export async function adminRoutes(app) {
     return { ok: true, user: after }
   })
 
+  // Bloquear/desbloquear conta COM MOTIVO — o motivo é mostrado para a
+  // cliente no login e no painel. Antes existia só o texto fixo "Conta
+  // bloqueada. Entre em contato com o suporte", igual para qualquer causa, e a
+  // pessoa precisava abrir chamado para descobrir o que nós já sabíamos.
+  app.post('/users/:id/block', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:write'))) return
+
+    const status = String(req.body?.status ?? 'suspended').trim()
+    if (status !== 'suspended' && status !== 'banned') {
+      return reply.code(400).send({ error: 'status deve ser suspended ou banned' })
+    }
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 400)
+    if (!reason) return reply.code(400).send({ error: 'Escreva o motivo — ele é mostrado para a cliente' })
+
+    const before = await db.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
+    })
+    if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const after = await db.user.update({
+      where: { id: before.id },
+      data: { status, blockedReason: reason, blockedAt: new Date() },
+      select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.user.block',
+      resource: 'user',
+      resourceId: before.id,
+      targetUserId: before.id,
+      before,
+      after,
+      reason,
+    })
+
+    return { ok: true, user: after }
+  })
+
+  app.post('/users/:id/unblock', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:write'))) return
+
+    const before = await db.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
+    })
+    if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const after = await db.user.update({
+      where: { id: before.id },
+      data: { status: 'active', blockedReason: null, blockedAt: null },
+      select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.user.unblock',
+      resource: 'user',
+      resourceId: before.id,
+      targetUserId: before.id,
+      before,
+      after,
+      reason: String(req.body?.reason ?? '').trim().slice(0, 400) || null,
+    })
+
+    return { ok: true, user: after }
+  })
+
   app.get('/users/:id', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
 

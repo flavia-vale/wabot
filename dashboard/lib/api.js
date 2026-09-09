@@ -50,7 +50,7 @@ function resolveApiBase() {
 const BASE = resolveApiBase()
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
 const AUTH_TOKEN_KEY = 'wb_auth_token'
-export const TERMS_VERSION = '2026-06-09-whatsapp-risk-acceptance'
+export const TERMS_VERSION = '2026-09-09-teste-unico-por-pessoa'
 
 function getAuthToken() {
   if (typeof window === 'undefined') return ''
