@@ -1278,3 +1278,141 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   cursor: pointer;
 }
 .pnl-help-btn:hover { background: color-mix(in oklab, var(--danger) 18%, var(--surface)); }
+
+/* ==========================================================================
+ * Minhas credenciais (/painel/ids-afiliada) — lista em acordeão.
+ *
+ * A tela antiga empilhava, por loja, cinco blocos de texto sempre abertos
+ * (instrução, ganho do código, cuidado de não sair da conta, privacidade e as
+ * dicas de campo) mais todos os campos — inclusive os três códigos
+ * alternativos da Amazon, que quase ninguém usa. Resultado: parede de texto.
+ *
+ * Agora cada loja é uma linha fechada com marca, nome e estado; o formulário e
+ * o texto longo abrem sob demanda. Nenhum conteúdo foi removido — só deixou de
+ * estar todo aberto ao mesmo tempo.
+ * ========================================================================== */
+.pnl-cred-page { max-width: 640px; width: 100%; margin: 0 auto; }
+.pnl-cred-lede { font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; margin: 0 0 16px; }
+
+.pnl-cred-note {
+  display: flex; align-items: flex-start; gap: 9px;
+  font-size: 12px; color: var(--ink-soft); line-height: 1.55;
+  background: var(--bg-soft); border-radius: var(--pnl-radius-sm);
+  padding: 11px 14px; margin-bottom: 12px;
+}
+.pnl-cred-note svg { flex-shrink: 0; margin-top: 2px; }
+
+.pnl-cred-tip {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 600; color: var(--accent-strong);
+  margin: 0 0 20px;
+}
+.pnl-cred-tip svg { flex-shrink: 0; }
+
+/* Avisos soltos no topo (falha de carregamento, "comece por aqui"). */
+.pnl-cred-page > .pnl-note-box { margin-bottom: 12px; }
+
+.pnl-cred-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; margin-bottom: 10px; overflow: hidden;
+}
+.pnl-cred-card.is-attention { border-color: color-mix(in oklab, var(--warn) 45%, var(--line)); }
+
+.pnl-cred-head {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 14px 16px; background: none; border: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.pnl-cred-head:hover { background: color-mix(in oklab, var(--bg-soft) 45%, var(--surface)); }
+.pnl-cred-head:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+
+.pnl-cred-badge {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 12px; letter-spacing: .02em;
+}
+
+.pnl-cred-head-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pnl-cred-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14.5px; font-weight: 600; }
+.pnl-cred-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-faint); }
+.pnl-cred-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.pnl-cred-status.is-configured { color: var(--success); font-weight: 600; }
+.pnl-cred-status.is-incomplete { color: #b5742a; font-weight: 600; }
+
+/* Loja com problema NUNCA fica verde: a Shopee com chave recusada tem os dois
+ * campos preenchidos, então o estado calculado é "pronta para usar" — e verde
+ * ao lado de "não está aceitando sua chave" é o pior sinal possível. */
+.pnl-cred-card.is-attention .pnl-cred-status { color: #b5742a; font-weight: 600; }
+
+.pnl-cred-chev { color: var(--ink-soft); flex-shrink: 0; display: flex; transition: transform .15s; }
+.pnl-cred-chev.is-open { transform: rotate(180deg); }
+
+.pnl-cred-body { display: none; padding: 16px 16px 18px; border-top: 1px solid var(--line); }
+.pnl-cred-body.is-open { display: block; }
+
+.pnl-cred-onde { font-size: 12px; color: var(--ink-soft); line-height: 1.55; margin: 0 0 14px; }
+.pnl-cred-ctas { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.pnl-cred-ctas .pnl-btn { flex: 1; min-width: 150px; justify-content: center; text-align: center; }
+
+.pnl-cred-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 13px; }
+.pnl-cred-label { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 12.5px; font-weight: 600; }
+.pnl-cred-rec {
+  font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+  background: var(--bg-soft); color: var(--ink-soft); text-transform: lowercase;
+}
+.pnl-cred-input-wrap { position: relative; display: flex; }
+.pnl-cred-input-wrap .pnl-input { width: 100%; }
+.pnl-cred-secret { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; padding-right: 84px; }
+.pnl-cred-eye {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  border: none; background: transparent; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--accent-strong);
+  padding: 6px 8px; border-radius: 8px;
+}
+.pnl-cred-eye:hover { background: var(--bg-soft); }
+.pnl-cred-eye:disabled { color: var(--ink-faint); cursor: default; }
+
+.pnl-cred-more-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; padding: 0;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--accent-strong);
+  margin: 2px 0 14px;
+}
+.pnl-cred-more-btn svg { transition: transform .15s; }
+.pnl-cred-more-btn.is-open svg { transform: rotate(180deg); }
+.pnl-cred-advanced { margin-bottom: 4px; }
+
+.pnl-cred-more { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 14px; }
+.pnl-cred-more > summary { cursor: pointer; font-weight: 600; color: var(--accent-strong); font-size: 12px; }
+.pnl-cred-more-body { margin-top: 8px; line-height: 1.55; }
+.pnl-cred-more-body p { margin: 0 0 8px; }
+.pnl-cred-more-body ul { margin: 0 0 8px; padding-left: 16px; }
+.pnl-cred-more-body li { margin-bottom: 4px; }
+.pnl-cred-more-title { font-weight: 600; color: var(--ink); }
+
+.pnl-cred-save { width: 100%; justify-content: center; }
+.pnl-cred-delete {
+  display: block; width: 100%; margin-top: 10px;
+  background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600; color: var(--danger);
+  padding: 6px; border-radius: 10px; text-align: center;
+}
+.pnl-cred-delete:hover { background: color-mix(in oklab, var(--danger) 8%, transparent); }
+.pnl-cred-delete:disabled { color: var(--ink-faint); cursor: default; }
+
+@media (max-width: 480px) {
+  .pnl-cred-ctas { flex-direction: column; }
+  .pnl-cred-ctas .pnl-btn { min-width: 0; }
+}
+
+/* Aviso "não saia da conta": sempre visível, uma linha, frase inteira a um
+ * clique. NÃO mover para dentro do "Saiba mais" — lido tarde, esse aviso não
+ * tem conserto senão recadastrar (investigação 18/08/2026). */
+.pnl-cred-care { font-size: 11px; color: var(--ink-faint); margin: 2px 0 14px; }
+.pnl-cred-care > summary {
+  display: flex; align-items: flex-start; gap: 7px; cursor: pointer;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.pnl-cred-care > summary svg { flex-shrink: 0; margin-top: 1px; }
+.pnl-cred-care > summary::marker, .pnl-cred-care > summary::-webkit-details-marker { content: ''; display: none; }
+.pnl-cred-care p { margin: 7px 0 0; line-height: 1.55; color: var(--ink-soft); }
