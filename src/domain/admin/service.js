@@ -517,6 +517,24 @@ export function createAdminService({
       getLogActivityMap({ userIds }),
     ])
 
+    // Todos os números de WhatsApp que cada conta já ligou. `WaSession.phone`
+    // guarda só o ATUAL e é sobrescrito, então sem este histórico não dava para
+    // ver que quatro contas tinham ligado o mesmo número (medido 2026-09-09).
+    // Uma consulta por página, nunca uma por linha.
+    const phoneRows = userIds.length
+      ? await db.waPhoneOwnership.findMany({
+        where: { userId: { in: userIds } },
+        select: { userId: true, phone: true, lastConnectedAt: true },
+        orderBy: { firstConnectedAt: 'asc' },
+      }).catch(() => [])
+      : []
+    const phonesByUser = new Map()
+    for (const row of phoneRows) {
+      const lista = phonesByUser.get(row.userId) ?? []
+      lista.push(row.phone)
+      phonesByUser.set(row.userId, lista)
+    }
+
     const paymentMap = new Map(paymentRows.map(row => [row.userId, row]))
     const subscriptionMap = new Map()
     for (const row of subscriptionRows) {
@@ -560,6 +578,9 @@ export function createAdminService({
           createdAt: user.createdAt,
           lastLoginAt: user.lastLoginAt,
           waSession: user.waSession ?? null,
+          // Todos os números já ligados por esta conta, do mais antigo ao mais
+          // novo. Mais de um não é defeito: a cliente pode ter trocado de chip.
+          waPhones: phonesByUser.get(user.id) ?? [],
           groupCounts: getGroupCounts(user.groups),
           sendCount: user.sendCount ?? 0,
           sends30d: sendMap30d.get(user.id) ?? 0,

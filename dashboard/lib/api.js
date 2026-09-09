@@ -178,6 +178,9 @@ export const api = {
   sessionStatusFast: () => apiFetch('/api/session/status?metrics=0'),
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
+  // Botão "Recuperar senha" da tela de conexão recusada: o servidor manda o
+  // link para o e-mail da conta anterior; o endereço nunca vem para cá.
+  sessionBlockedRecover: () => apiFetch('/api/session/blocked-recover', { method: 'POST' }),
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),

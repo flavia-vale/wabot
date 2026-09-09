@@ -10,7 +10,7 @@ import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
 import { anchorTrialOnFirstConnection } from '../../domain/painel/trialAnchorApply.js'
-import { STANDARD_TRIAL_DAYS } from './auth.js'
+import { STANDARD_TRIAL_DAYS, requestPasswordResetForEmail } from './auth.js'
 
 // Subprotocolos aceitos no handshake do WebSocket do QR. São TOKENS do HTTP
 // (RFC 6455 §4.1): não aceitam espaço. O nome vigente é 'espelhagrupos-auth';
@@ -196,6 +196,60 @@ export async function sessionRoutes(app) {
     return { ok: true }
   })
 
+
+/**
+ * O aviso de recusa, pronto para a tela — sem o e-mail completo.
+ *
+ * Mostrar o endereço inteiro entregaria o e-mail de outra pessoa a quem só
+ * teve posse do número. O mascarado basta para a cliente reconhecer a própria
+ * conta, e o botão de recuperar senha resolve o resto pelo servidor.
+ */
+function parseBlockNoticeForClient(raw) {
+  if (!raw) return null
+  try {
+    const aviso = JSON.parse(raw)
+    if (!aviso || typeof aviso !== 'object') return null
+    return {
+      tipo: aviso.tipo ?? null,
+      motivo: aviso.motivo ?? null,
+      texto: aviso.texto ?? null,
+      emailMascarado: aviso.emailMascarado ?? null,
+      podeRecuperarSenha: Boolean(aviso.emailCompleto),
+    }
+  } catch {
+    return null
+  }
+}
+
+  /**
+   * Botão "Recuperar senha" da tela de conexão recusada.
+   *
+   * A cliente está logada na conta NOVA e precisa voltar para a ANTIGA, cujo
+   * e-mail ela pode nem lembrar. O endereço completo nunca chega ao navegador:
+   * ela clica, o servidor lê o aviso gravado na sessão e dispara o link para o
+   * e-mail de lá. Quem é dona recebe; quem não é, não descobre endereço nenhum.
+   *
+   * Resposta sempre igual, pelo mesmo motivo do /forgot-password: não pode
+   * virar detector de conta.
+   */
+  app.post('/blocked-recover', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const respostaNeutra = {
+      ok: true,
+      message: 'Se essa conta existir, enviamos o link para criar uma nova senha. Confira também a caixa de spam.',
+    }
+    const session = await db.waSession.findUnique({ where: { userId: req.user.sub }, select: { blockNotice: true } }).catch(() => null)
+    let email = null
+    try {
+      email = JSON.parse(session?.blockNotice ?? 'null')?.emailCompleto ?? null
+    } catch {
+      email = null
+    }
+    if (!email) return reply.code(200).send(respostaNeutra)
+
+    await requestPasswordResetForEmail({ email, logger: req.log }).catch(() => {})
+    return reply.code(200).send(respostaNeutra)
+  })
+
   app.get('/status', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
     const running = Boolean(await isRunning(userId))
@@ -227,6 +281,10 @@ export async function sessionRoutes(app) {
       // Permite ao painel tranquilizar sem mascarar o status honesto.
       lifecycle: session?.lifecycle ?? null,
       phone: session?.phone ?? null,
+      // Recusa por número já usado em outra conta. O e-mail vai MASCARADO para
+      // o navegador; o endereço completo fica no servidor e só é usado pelo
+      // botão de recuperar senha (POST /session/blocked-recover).
+      blockNotice: parseBlockNoticeForClient(session?.blockNotice),
       metrics,
       // Atalho de topo para o painel decidir o banner "reconecte" sem ter que
       // cavar dentro de metrics. Só presente quando métricas foram coletadas.

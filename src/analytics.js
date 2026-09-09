@@ -37,6 +37,11 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
 
 export const ANALYTICS_EVENTS = new Set([
   'signup_created',
+  // Número de WhatsApp que já tinha sido usado por outra conta. `detected` sai
+  // em modo aviso, `blocked` quando a conexão é de fato recusada. Ver
+  // src/domain/session/phoneReuse.js.
+  'ops_wa_phone_reuse_detected',
+  'ops_wa_phone_reuse_blocked',
   'login_completed',
   'whatsapp_connected',
   'credential_saved',
