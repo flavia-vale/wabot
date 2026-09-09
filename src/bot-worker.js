@@ -1,4 +1,6 @@
 import 'dotenv/config'
+import { resolvePhoneReuseMode, decidePhoneReuse, buildPhoneReuseNotice } from './domain/session/phoneReuse.js'
+import { recordPhoneOwnership, loadPreviousPhoneOwners } from './domain/session/phoneOwnership.js'
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -694,6 +696,42 @@ async function ensureChannelSubscriptions() {
     logger,
   })
   logger.info(result, 'channels: inscrição de canais-monitor concluída')
+}
+
+// Confere se o número que acabou de conectar já foi usado por outra conta e,
+// conforme o modo, avisa ou recusa. Ver src/domain/session/phoneReuse.js para
+// as quatro invariantes — em especial: conta pagante nunca é bloqueada, e sem
+// dado confiável a sessão CONTINUA conectada.
+async function handlePhoneOwnership({ phone, sock }) {
+  const modo = resolvePhoneReuseMode()
+  await recordPhoneOwnership({ db, userId, phone })
+  if (modo === 'off') return
+
+  const [anteriores, user] = await Promise.all([
+    loadPreviousPhoneOwners({ db, phone, currentUserId: userId }),
+    db.user.findUnique({ where: { id: userId }, select: { id: true, plan: true, accessExpiresAt: true } }),
+  ])
+  const decisao = decidePhoneReuse({ phone, currentUser: user ?? { id: userId }, previousOwners: anteriores, mode: modo })
+  if (decisao.acao === 'permitir') return
+
+  logger.warn({ motivo: decisao.motivo, contas: decisao.contas.length, acao: decisao.acao }, 'Número de WhatsApp já usado por outra conta')
+  trackAnalyticsEventSafe({
+    userId,
+    event: decisao.acao === 'bloquear' ? 'ops_wa_phone_reuse_blocked' : 'ops_wa_phone_reuse_detected',
+    metadata: { motivo: decisao.motivo, contas: decisao.contas.length },
+  })
+  if (decisao.acao !== 'bloquear') return
+
+  const aviso = buildPhoneReuseNotice({ motivo: decisao.motivo, previousEmail: anteriores[0]?.email })
+  await persistSessionPatch({
+    status: 'disconnected',
+    lifecycle: 'phone_reuse_blocked',
+    blockNotice: JSON.stringify(aviso),
+  }).catch(() => {})
+  // Encerra a sessão SEM apagar credencial: a recusa é de política, não de
+  // pareamento, e apagar o auth faria a cliente escanear um QR novo para bater
+  // na mesma parede.
+  try { sock?.end?.(new Error('phone_reuse_blocked')) } catch { /* best-effort */ }
 }
 
 async function loadConfig() {
@@ -2881,7 +2919,13 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // histórico e as notificações que alimentam "Canais que sigo".
       selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
-await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
+await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
+      // Este número já fez o teste em outra conta? O número só é conhecido
+      // DEPOIS do open — é por isso que a checagem mora aqui e não na rota de
+      // conectar. Best-effort e fail-safe: qualquer falha deixa conectar.
+      handlePhoneOwnership({ phone, sock }).catch(err => {
+        logger.warn({ err: String(err?.message ?? err) }, 'Falha ao conferir número já usado (best-effort)')
+      })
       recordWaConnectionEventSafe({
         userId,
         type: wasReconnecting ? 'reconnect_success' : 'connected',
