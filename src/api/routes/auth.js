@@ -10,6 +10,7 @@ import { attachAffiliateAttributionTouchesToUser, attachOrphanTouchesByDevice, r
 import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
 import { isRealEmail } from '../../leadNurture/policy.js'
 import { isUnsubscribed } from '../../leadNurture/sweep.js'
+import { checkDuplicateTrialAtSignup } from '../../domain/signup/duplicateTrialAlert.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
 // no caminho "usuário não existe". Sem ele, login com e-mail inexistente
@@ -318,6 +319,11 @@ async function findCurrentUser(userId) {
     referralCode: true,
     status: true,
     supportStatus: true,
+    // Mostrado para a cliente no painel. Sem isto, conta com acesso encerrado
+    // só via a tela normal de plano vencido e não tinha como saber que a
+    // decisão foi nossa nem por quê.
+    blockedReason: true,
+    blockedAt: true,
     lastLoginAt: true,
     lastActivityAt: true,
     createdAt: true,
@@ -576,6 +582,19 @@ export async function authRoutes(app) {
         terms_version: acceptedTermsVersion,
       },
     })
+    // Esta conta parece repetir o teste de outra? Só AVISA (log + sinal +
+    // e-mail interno) — nunca bloqueia o cadastro. Ver
+    // src/domain/signup/duplicateTrialSignal.js para o porquê da regra e das
+    // invariantes. Best-effort: falha aqui não pode custar uma cliente.
+    checkDuplicateTrialAtSignup({
+      db,
+      user,
+      trackEvent: trackAnalyticsEventSafe,
+      logger: req.log,
+    }).catch(err => {
+      req.log?.warn?.({ err, userId: user.id }, 'register: falha ao checar teste repetido (best-effort)')
+    })
+
     // E-mail de boas-vindas: fire-and-forget, só para e-mails reais
     // informados pelo usuário (não para o fallback user_*@sistema.com).
     // No-op quando SMTP não está configurado; nunca derruba o signup.
@@ -644,7 +663,10 @@ export async function authRoutes(app) {
       return reply.code(401).send({ error: 'Credenciais inválidas' })
     }
     if (user.status === 'banned' || user.status === 'suspended') {
-      return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
+      // O motivo escrito pela admin ganha do texto genérico: a pessoa merece
+      // saber por que perdeu o acesso sem precisar abrir chamado.
+      const motivo = String(user.blockedReason ?? '').trim()
+      return reply.code(403).send({ error: motivo || 'Conta bloqueada. Entre em contato com o suporte.' })
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash)
