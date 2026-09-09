@@ -5,6 +5,40 @@ produção, 128 cadastros, 14 pagantes (**10,9%**).
 
 ---
 
+## 0. Estado da execução (2026-09-08)
+
+Tudo o que era código foi implementado e está no `develop` — sete commits,
+`npm test` com 3.132 passando e 0 falhas. O que sobra é seu.
+
+| Item | Estado |
+|---|---|
+| D3, D4 — aviso de fim de teste diz "hoje" e promete a configuração salva | ✅ no ar |
+| C2, C4 — por onde começar e o marco da primeira loja | ✅ no ar |
+| C1, A3, A4 — próximo passo depois de conectar, garantias e CTA | ✅ no ar |
+| **A1 — teste contado da 1ª conexão** | ⚠️ **implementado e DESLIGADO** |
+| D1, D2, C5 — prova por e-mail e aviso de "sem loja" | ✅ no ar |
+| B2 — aviso interno de quem tentou conectar e não conseguiu | ✅ no ar |
+| E1, E2 — separar "nunca ativou" de "ativou e largou" | ✅ no ar |
+| A2, D5 — ver funcionando antes de conectar; preço no uso dela | ✅ no ar |
+| **D6 — falar com as 32** | 🔴 **é seu, e é a Onda 1** |
+| **B1 — investigar o cluster de 22–23/08** | 🔴 **é seu** |
+
+**Três coisas exigem decisão ou ação sua:**
+
+1. **A1 está desligado** (`TRIAL_ANCHOR_ON_CONNECT`). É a única mudança que dá
+   dias de produto de graça, então segue o padrão da casa: valida em staging,
+   depois liga em produção. Aplicar exige `pm2 delete` + `start` — pegadinha #1.
+2. **Metade do plano é e-mail, e sem `SMTP_*` no `.env` nada sai, em silêncio.**
+   Confira `EmailSendLog` antes de concluir que uma onda não funcionou.
+3. **D6 e B1 não são código.** A lista das 32 sai do `--listar`; o cluster de
+   22–23/08 se investiga no `WaConnectionEvent` daquelas datas.
+
+⚠️ Em modo `remote`, deploy da API **não** recarrega os bot-workers — mas nada
+aqui mexe em código de worker, então nenhuma sessão precisa ser reconectada por
+causa destas mudanças.
+
+---
+
 ## 1. A foto
 
 | Etapa | Pessoas | % do topo |
@@ -91,7 +125,7 @@ porque está tudo funcionando sozinho.
 
 | # | Mudança | Esforço |
 |---|---|---|
-| D1 | **Levar a prova para fora do painel:** e-mail no dia 3 e no dia 6 do teste com o número dela — *"Seu robô publicou 47 ofertas em 3 dias."* Motor de e-mail e resumo semanal já existem. | M |
+| D1 | **Levar a prova para fora do painel:** e-mail no dia 3 do teste com o número dela. ⚠️ **Desvio do plano original, de propósito:** o "dia 6" já é ocupado pela contagem regressiva (`teste_acaba_em_1_dia`), e a regra da casa é no máximo UM e-mail de ciclo de vida por passada — encaixar a prova ali roubaria o lugar do aviso mais urgente. Os últimos três dias continuam cobertos pelo aviso com prova DENTRO do painel (D3/D4). | M |
 | D2 | **Traduzir para o trabalho poupado, não para volume:** "47 ofertas × 3 grupos = 141 mensagens que você não digitou". | P |
 | D3 | **Tocar no DIA do vencimento**, não só 3 dias antes — a decisão é no dia 7. | P |
 | D4 | **"Sua configuração continua salva"** em todo pedido de pagamento. O medo real é perder grupos, lojas e regras. | P |
@@ -137,8 +171,8 @@ ordem exata do maior para o menor risco percebido.
 
 | # | Mudança | Esforço |
 |---|---|---|
-| A1 | **Contar o teste a partir da 1ª conexão**, não do cadastro (com teto de janela para começar). Quem nunca conectou não gastou teste. Beneficia TODAS as frentes de uma vez. | M |
-| A2 | **Valor antes do acesso:** primeiro passo do checklist vira colar um link no `/painel/converte-links` — que já funciona sem WhatsApp — e ver o link voltar com a etiqueta dela. Entende o produto em 40 segundos sem entregar nada. | M |
+| A1 | **Contar o teste a partir da 1ª conexão**, não do cadastro (com teto de janela para começar). Quem nunca conectou não gastou teste. Beneficia TODAS as frentes de uma vez. **Implementado, DESLIGADO** (`TRIAL_ANCHOR_ON_CONNECT`) — mexe em acesso pago, então só liga depois de validado em staging e com OK explícito. | M |
+| A2 | **Valor antes do acesso:** atalho no topo do checklist para cadastrar uma loja e colar um link no `/painel/converte-links` — que já funciona sem WhatsApp. **Dois desvios do texto original, os dois de propósito:** (1) converter exige UMA loja cadastrada, então o atalho tem dois passos e a loja vem primeiro, senão a cliente cai num conversor que falha na cara dela; (2) não virou um passo da checklist porque aquela lista é dirigida pelo estado do servidor e o mesmo contador governa a celebração e o modo de recuperação. | M |
 | A3 | **Garantias antes do botão:** os `WHATSAPP_SAFETY_POINTS` já existem e estão certos — estão embaixo. Subir para bloco de destaque acima do CTA. | P |
 | A4 | **CTA:** trocar "Conectar" por **"Ligar o robô no meu WhatsApp"** + "leva 30 segundos e você desliga quando quiser". | P |
 | A5 | **Falar do chip separado já no cadastro**, não só na tela de conexão. É a objeção nº 1 respondida tarde demais. | P |

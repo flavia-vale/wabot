@@ -18,7 +18,12 @@ import {
   videoEtiquetasParaLoja,
   videoEtiquetasEm,
 } from '../src/tutorialVideo.js'
-import { buildTrialEndingNotice, TRIAL_NOTICE_WINDOW_DAYS } from '../src/domain/painel/trialNotice.js'
+import {
+  buildTrialEndingNotice,
+  calendarDaysUntil,
+  CONFIG_PRESERVED_NOTE,
+  TRIAL_NOTICE_WINDOW_DAYS,
+} from '../src/domain/painel/trialNotice.js'
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
 
@@ -181,4 +186,83 @@ test('o aviso de fim de teste fala em linguagem de gente', () => {
     const texto = `${n.headline} ${n.body} ${n.ctaLabel} ${n.secondaryLabel || ''}`.toLowerCase()
     for (const termo of JARGAO) assert.ok(!texto.includes(termo), `"${termo}" em: ${texto}`)
   }
+})
+
+// --- D3/D4 do plano de ativação de 2026-09-08 --------------------------------
+
+test('no DIA do vencimento o aviso diz "hoje" — não "amanhã"', () => {
+  // Regressão: `Math.ceil(msLeft / DAY_MS)` com msLeft sempre positivo nunca
+  // devolvia 0, então o ramo 'hoje' era código morto e o aviso do último dia
+  // dizia "amanhã". A decisão de pagar acontece no dia do vencimento (mediana
+  // de 6,2 a 7 dias entre cadastro e pagamento) — adiar a frase adia a venda.
+  const notice = buildTrialEndingNotice({
+    plan: 'trial',
+    accessExpiresAt: '2026-09-08T23:00:00-03:00',
+    offersPublished: 47,
+    now: new Date('2026-09-08T09:00:00-03:00'),
+  })
+  assert.equal(notice.daysLeft, 0)
+  assert.ok(notice.headline.includes('hoje'), notice.headline)
+  assert.ok(!notice.headline.includes('amanhã'), notice.headline)
+})
+
+test('vencimento no dia seguinte continua sendo "amanhã"', () => {
+  const notice = buildTrialEndingNotice({
+    plan: 'trial',
+    accessExpiresAt: '2026-09-09T02:00:00-03:00',
+    offersPublished: 5,
+    now: new Date('2026-09-08T22:00:00-03:00'),
+  })
+  assert.equal(notice.daysLeft, 1)
+  assert.ok(notice.headline.includes('amanhã'), notice.headline)
+})
+
+test('fuso inválido não deixa a cliente sem aviso (fail-safe)', () => {
+  const dias = calendarDaysUntil(
+    new Date('2026-09-08T09:00:00Z'),
+    new Date('2026-09-10T09:00:00Z'),
+    'Fuso/Inventado',
+  )
+  assert.equal(dias, 2)
+})
+
+test('todo pedido de pagamento promete que a configuração continua salva', () => {
+  // O medo de quem chega ao fim do teste é perder grupos, lojas e regras — não
+  // o preço. Sem essa frase o pedido de pagamento parece recomeçar do zero.
+  const notice = buildTrialEndingNotice({
+    plan: 'trial',
+    accessExpiresAt: '2026-09-10T10:00:00Z',
+    offersPublished: 47,
+    now: new Date('2026-09-08T10:00:00Z'),
+  })
+  assert.ok(notice.body.includes(CONFIG_PRESERVED_NOTE), notice.body)
+  for (const termo of ['grupos', 'lojas', 'regras']) {
+    assert.ok(CONFIG_PRESERVED_NOTE.toLowerCase().includes(termo), termo)
+  }
+})
+
+test('quem nunca viu oferta sair NÃO recebe promessa de pagamento', () => {
+  // Esse ramo leva ao checklist, não ao plano: falar de "religar o envio" para
+  // quem nunca viu envio nenhum é cobrar por algo que ela não experimentou.
+  const notice = buildTrialEndingNotice({
+    plan: 'trial',
+    accessExpiresAt: '2026-09-10T10:00:00Z',
+    offersPublished: 0,
+    now: new Date('2026-09-08T10:00:00Z'),
+  })
+  assert.ok(!notice.body.includes(CONFIG_PRESERVED_NOTE))
+  assert.equal(notice.ctaHref, '/painel/checklist')
+})
+
+test('a tela de plano usa a MESMA frase, importada — não uma cópia', () => {
+  const page = readFileSync(
+    new URL('../dashboard/app/painel/plano/page.js', import.meta.url),
+    'utf8',
+  )
+  assert.match(page, /import \{ CONFIG_PRESERVED_NOTE \} from/)
+  assert.match(page, /\{CONFIG_PRESERVED_NOTE\}/)
+  assert.ok(
+    !page.includes('continuam salvos do jeito que estão'),
+    'a frase foi colada na tela em vez de importada da fonte única',
+  )
 })

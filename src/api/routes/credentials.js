@@ -213,6 +213,17 @@ export async function credentialsRoutes(app, opts = {}) {
       })
     }
 
+    // ANTES de gravar: esta é a primeira loja da conta? Depois do upsert a
+    // resposta seria sempre "não" — e é justamente este save que tira o robô do
+    // estado em que ele não publica nada (frente C do plano de ativação).
+    // Best-effort: falha de leitura só apaga o marco, nunca derruba o save.
+    let isFirstCredential = false
+    try {
+      isFirstCredential = (await db.credential.count({ where: { userId: req.user.sub } })) === 0
+    } catch (err) {
+      app.log.warn({ platform, err: err?.message }, 'Não deu para saber se esta é a primeira loja da conta')
+    }
+
     const encryptedData = encryptCredential(JSON.stringify(sanitizedBody))
     const cred = await db.credential.upsert({
       where: { userId_platform: { userId: req.user.sub, platform } },
@@ -282,6 +293,7 @@ export async function credentialsRoutes(app, opts = {}) {
       validation,
       probe: sessionCheck,
       fallbackMessage: getCredentialSaveMessage(validation),
+      isFirstCredential,
     })
     trackAnalyticsEventSafe({
       userId: req.user.sub,
@@ -289,7 +301,9 @@ export async function credentialsRoutes(app, opts = {}) {
       // `sessionAlive` responde, no histórico, quantas vezes alguém salvou um
       // código que a loja recusa — o sinal que faltava para enxergar o cliente
       // preso tentando de novo em vez de esperar ele reclamar no WhatsApp.
-      metadata: { platform, status: validation.status, sessionAlive: sessionCheck?.alive ?? null, sessionReason: sessionCheck?.reason ?? null },
+      // `firstCredential` responde, no histórico, quantas contas chegam de fato
+      // a destravar o robô — a passagem que a frente C existe para melhorar.
+      metadata: { platform, status: validation.status, sessionAlive: sessionCheck?.alive ?? null, sessionReason: sessionCheck?.reason ?? null, firstCredential: isFirstCredential },
     })
     return {
       ...cred,

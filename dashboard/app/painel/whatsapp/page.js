@@ -14,6 +14,7 @@ import { HelpLink } from '@/components/HelpLink'
 import { useToast } from '@/components/ToastProvider'
 import { usePainelHeader, usePainel } from '../PainelShell'
 import { WHATSAPP_SAFETY_HEADLINE, WHATSAPP_SAFETY_POINTS } from '../../../../src/domain/painel/whatsappSafety.js'
+import { buildJustConnectedNextStep } from '../../../../src/credentialBlockAlert/message.js'
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 
 const QR_TIMEOUT_SECONDS = 20
@@ -34,7 +35,7 @@ function NoteBox({ variant = 'is-warn', title, message }) {
 
 export default function WhatsAppPage() {
   usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
-  const { refreshSession } = usePainel()
+  const { refreshSession, hasAnyCredential } = usePainel()
   const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
@@ -602,6 +603,7 @@ export default function WhatsAppPage() {
 
   // Durante a carência a bolinha continua verde: piscar amarelo a cada
   // reconexão automática é exatamente o susto que queremos evitar.
+  const nextStep = buildJustConnectedNextStep()
   const statusDotColor = (isConnected || status?.clientState?.hiddenByGrace) ? 'var(--success)' : (isConnecting || clientState === 'recovering') ? 'var(--warn)' : 'var(--line)'
 
   return (
@@ -614,6 +616,29 @@ export default function WhatsAppPage() {
       <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
         <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
       </div>
+
+      {/* Frente C do plano de ativação de 2026-09-08: quem conecta e não
+          cadastra loja fica com o robô recebendo ofertas e publicando ZERO —
+          e some achando que o produto não funciona. A tela de conexão
+          terminava em "conectado", como se fosse o fim.
+
+          `hasAnyCredential === null` (carregando ou falha de rede) NÃO mostra
+          nada: acusar falta de cadastro por causa de um blip mandaria a pessoa
+          refazer um cadastro que já existe. Mesma regra do NoCredentialBanner. */}
+      {isConnected && hasAnyCredential === false && (
+        <section className="pnl-note-box is-warn" role="status">
+          <strong style={{ fontWeight: 700, display: 'block' }}>{nextStep.headline}</strong>
+          <p style={{ marginTop: 6 }}>{nextStep.body}</p>
+          <a
+            className="pnl-btn is-primary"
+            href={nextStep.ctaHref}
+            style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}
+          >
+            {nextStep.ctaLabel}
+          </a>
+          <p className="pnl-hint" style={{ marginTop: 8, textAlign: 'center' }}>{nextStep.hint}</p>
+        </section>
+      )}
 
       {/* Progresso da conexão */}
       <section className="pnl-card">
@@ -781,6 +806,14 @@ export default function WhatsAppPage() {
       {!isRunning && !statusLoading && !isAwaitingConnectStart && !pairingCode && (
         <div className="pnl-grid">
           <section className="pnl-card">
+            {/* A4: "Gerar QR Code" e "Obter código" descrevem o que o BOTÃO faz,
+                não o que ela ganha — e nada dizia como sair depois. O verbo do
+                botão continua exato (clicar gera um código, não conecta na
+                hora); o resultado e a saída passam a estar acima dele. */}
+            <div className="pnl-card-title">Ligue o robô no seu WhatsApp</div>
+            <p className="pnl-card-note" style={{ marginTop: 4, marginBottom: 16 }}>
+              Leva menos de um minuto. Você desliga quando quiser, aqui mesmo — é a mesma conexão do WhatsApp Web.
+            </p>
             <div role="tablist" aria-label="Método de conexão" style={{ display: 'flex', gap: 4, background: 'var(--bg-soft)', borderRadius: 'var(--pnl-radius-sm)', padding: 4, marginBottom: 16 }}>
               <button
                 role="tab"

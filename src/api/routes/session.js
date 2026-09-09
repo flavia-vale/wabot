@@ -9,6 +9,8 @@ import { classifyStartRefusal } from '../../domain/session/startRefusal.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
+import { anchorTrialOnFirstConnection } from '../../domain/painel/trialAnchorApply.js'
+import { STANDARD_TRIAL_DAYS } from './auth.js'
 
 // Subprotocolos aceitos no handshake do WebSocket do QR. São TOKENS do HTTP
 // (RFC 6455 §4.1): não aceitam espaço. O nome vigente é 'espelhagrupos-auth';
@@ -202,6 +204,21 @@ export async function sessionRoutes(app) {
       db.waSession.findUnique({ where: { userId } }),
       includeMetrics && running ? getBotMetrics(userId).catch(() => null) : Promise.resolve(null),
     ])
+    // A1 do plano de ativação de 2026-09-08: o teste passa a contar da PRIMEIRA
+    // conexão, não do cadastro — quem leva quatro dias para conectar testava 3
+    // dias, não 7. Dispare-e-esqueça de propósito: o status da sessão é a rota
+    // mais quente do painel e não pode esperar (nem quebrar) por causa disso.
+    // Desligado por padrão (TRIAL_ANCHOR_ON_CONNECT), e nesse caso nem toca no
+    // banco — ver src/domain/painel/trialAnchor.js.
+    if (session?.status === 'connected') {
+      anchorTrialOnFirstConnection({
+        db,
+        userId,
+        trialDays: STANDARD_TRIAL_DAYS,
+        logger: req.log,
+      }).catch(() => {})
+    }
+
     return {
       running,
       status: session?.status ?? 'disconnected',

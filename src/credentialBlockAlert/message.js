@@ -180,3 +180,27 @@ export function buildNoCredentialBanner() {
     videoLabel: 'Ver o vídeo passo a passo',
   }
 }
+
+/**
+ * O passo seguinte, na tela de conexão, para quem ACABOU de conectar o WhatsApp
+ * e não tem nenhuma loja cadastrada.
+ *
+ * Frente C do plano de ativação de 2026-09-08. É o mesmo fato do
+ * `buildNoCredentialBanner`, dito em outro momento — e o momento muda o texto:
+ * ali a pessoa está navegando e descobre que algo está errado; aqui ela acabou
+ * de vencer a parte mais difícil do produto (entregar o WhatsApp) e o que ela
+ * precisa é saber que falta UMA coisa, não levar um susto.
+ *
+ * Sem isso, a tela de conexão terminava em "conectado" — e 18 das 114 pessoas
+ * que não pagaram pararam exatamente aí, achando que tinham terminado, com o
+ * robô recebendo ofertas e publicando zero.
+ */
+export function buildJustConnectedNextStep() {
+  return {
+    headline: 'WhatsApp conectado! Falta um passo — e é o rápido.',
+    body: 'Você já passou pela parte mais chata. Agora cadastre pelo menos uma loja: sem a sua etiqueta de afiliada o robô não publica nenhuma oferta, porque a comissão da venda iria para outra pessoa. Ele prefere não enviar a te fazer trabalhar de graça.',
+    ctaLabel: 'Cadastrar minha primeira loja',
+    ctaHref: '/painel/ids-afiliada',
+    hint: 'Leva menos de um minuto: tem loja que pede só a sua etiqueta.',
+  }
+}

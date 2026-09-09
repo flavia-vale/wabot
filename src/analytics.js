@@ -40,6 +40,9 @@ export const ANALYTICS_EVENTS = new Set([
   'login_completed',
   'whatsapp_connected',
   'credential_saved',
+  // Cada um é uma cliente cujo teste passou a contar da primeira conexão em vez
+  // do cadastro (item A1 do plano de ativação de 2026-09-08).
+  'trial_anchored_at_connection',
   'credential_deleted',
   'monitor_group_created',
   'post_group_created',

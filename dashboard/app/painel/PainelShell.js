@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import { NAV_GROUPS } from './nav'
 import SidebarOnboarding from '@/components/SidebarOnboarding'
 import { buildNoCredentialBanner } from '../../../src/credentialBlockAlert/message.js'
+import { shouldShowNoCredentialBanner } from '../../../src/domain/painel/journeyBanners.js'
 import { buildTrialEndingNotice } from '../../../src/domain/painel/trialNotice.js'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../src/tutorialVideo.js'
 
@@ -81,19 +82,24 @@ function ExpiredPlanBanner({ user }) {
   )
 }
 
+/* Faixa fina, UMA frase, cor de aviso — nunca vermelho.
+ *
+ * Vermelho e quatro linhas diziam que algo parou, e nada parou: sem o código de
+ * acesso o plano B segue publicando e a comissão continua sendo dela; o que muda
+ * é o link ficar mais comprido. Mesma regra da tela de credenciais e do e-mail
+ * de código vencido — as três superfícies precisam dizer a MESMA coisa.
+ *
+ * Vocabulário obrigatório: "código de acesso" e "venceu". Nunca "SSID",
+ * "credencial expirada" ou "link de afiliado" (test/painel-aviso-ml-vencido.test.js). */
 function ExpiredMlSsidBanner({ expired }) {
   if (!expired) return null
 
   return (
-    <div className="pnl-note-box is-error pnl-expired-plan-banner" role="alert">
-      <div>
-        <strong style={{ fontWeight: 600 }}>Credencial do Mercado Livre expirada</strong>
-        <p style={{ marginTop: 6 }}>
-          Seu SSID do Mercado Livre expirou. As ofertas continuam saindo, mas com o link
-          de afiliado longo em vez do link curto. Renove o SSID para voltar a gerar links curtos.
-        </p>
-      </div>
-      <Link href="/painel/ids-afiliada" className="pnl-btn is-primary" style={{ flexShrink: 0 }}>Renovar SSID</Link>
+    <div className="pnl-slim-banner is-warn" role="status">
+      <span>
+        O código de acesso do Mercado Livre venceu — suas ofertas continuam saindo, só com link mais comprido.
+      </span>
+      <Link href="/painel/ids-afiliada" className="pnl-slim-banner-cta">Colar código novo</Link>
     </div>
   )
 }
@@ -343,8 +349,8 @@ export default function PainelShell({ children }) {
   )
 
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, sessionHealth, refreshSession, setHeader }),
-    [user, online, phone, groupCount, sessionHealth, refreshSession],
+    () => ({ user, online, phone, groupCount, sessionHealth, hasAnyCredential, offersPublished, refreshSession, setHeader }),
+    [user, online, phone, groupCount, sessionHealth, hasAnyCredential, offersPublished, refreshSession],
   )
 
   if (checking) {
@@ -497,7 +503,10 @@ export default function PainelShell({ children }) {
                 observabilidade, sem alarmar o usuário com uma ação enganosa. */}
             <ExpiredPlanBanner user={user} />
             <TrialEndingBanner notice={trialNotice} />
-            <NoCredentialBanner show={hasAnyCredential === false} />
+            {/* A loja só é cobrada DEPOIS de conectar o WhatsApp — a mesma
+                regra do próximo passo na tela de conexão. Antes disso o robô
+                nem foi ligado, e o alarme não corresponde a nada. */}
+            <NoCredentialBanner show={shouldShowNoCredentialBanner({ hasAnyCredential, online, phone })} />
             <ExpiredMlSsidBanner expired={mlSsidExpired} />
             {children}
           </div>
