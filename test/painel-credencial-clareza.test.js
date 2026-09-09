@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import {
   buildCredentialBlockHelp,
   buildNoCredentialBanner,
+  describeConversionFailure,
   isCredentialBlockErrorMsg,
   CREDENTIAL_BLOCK_ERROR_PREFIX,
   CREDENTIAL_BLOCK_STATUS_TAG,
@@ -29,12 +30,48 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
 
 // --- Reconhecimento da linha -----------------------------------------------
 
-test('reconhece a linha de oferta perdida por falta de cadastro da loja', () => {
+test('só AFIRMA falta de cadastro quando o robô gravou esse motivo', () => {
   assert.equal(CREDENTIAL_BLOCK_ERROR_PREFIX, 'skip:no_valid_conversions')
-  assert.ok(isCredentialBlockErrorMsg('skip:no_valid_conversions'))
-  assert.ok(isCredentialBlockErrorMsg('skip:no_valid_conversions:amazon'))
+  assert.ok(isCredentialBlockErrorMsg('skip:no_valid_conversions:missing_credential'))
+  // RCA 2026-09-09: antes qualquer "nenhum link convertido" era tratado como
+  // falta de cadastro. Numa conta real isso marcou 398 ofertas de Shopee como
+  // "faltou cadastrar a loja" no mesmo dia em que a chave respondia viva e 248
+  // ofertas da MESMA loja saíram com sucesso — a cliente foi mexer num cadastro
+  // que estava certo. Loja desligada no grupo e falha passageira de conversão
+  // têm texto próprio, e linha antiga (sem motivo) não afirma nada.
+  assert.ok(!isCredentialBlockErrorMsg('skip:no_valid_conversions:store_disabled'))
+  assert.ok(!isCredentialBlockErrorMsg('skip:no_valid_conversions:conversion_failed'))
+  assert.ok(!isCredentialBlockErrorMsg('skip:no_valid_conversions'))
   assert.ok(!isCredentialBlockErrorMsg('skip:dedup_recent_link'))
   assert.ok(!isCredentialBlockErrorMsg(null))
+})
+
+test('cada motivo tem etiqueta própria, e só um manda cadastrar loja', () => {
+  const porMotivo = (msg) => describeConversionFailure(msg, 'shopee')
+  assert.equal(porMotivo('skip:no_valid_conversions:missing_credential').tag.label, 'faltou cadastrar a loja')
+  const desligada = porMotivo('skip:no_valid_conversions:store_disabled')
+  const falhou = porMotivo('skip:no_valid_conversions:conversion_failed')
+  const antiga = porMotivo('skip:no_valid_conversions')
+  for (const caso of [desligada, falhou, antiga]) {
+    assert.ok(caso.tag.label.length > 0)
+    assert.ok(!caso.tag.label.includes('cadastrar a loja'), caso.tag.label)
+    assert.ok(caso.texto && caso.texto.length > 0)
+    assert.ok(!/cadastre|cadastrar sua loja/i.test(caso.texto), caso.texto)
+  }
+  // Os dois casos em que sabemos que o cadastro está certo precisam DIZER isso:
+  // é o que impede a cliente de refazer um cadastro que já funciona.
+  assert.ok(/cadastro está certo/i.test(desligada.texto), desligada.texto)
+  assert.ok(/cadastro está certo/i.test(falhou.texto), falhou.texto)
+  assert.equal(describeConversionFailure('skip:dedup_recent_link', 'shopee'), null)
+})
+
+test('a explicação não usa jargão nem nome de campo técnico', () => {
+  for (const msg of ['skip:no_valid_conversions:store_disabled', 'skip:no_valid_conversions:conversion_failed', 'skip:no_valid_conversions']) {
+    const texto = describeConversionFailure(msg, 'shopee').texto.toLowerCase()
+    for (const jargao of ['token', 'api', 'cookie', 'ssid', 'credencial', 'conversion', 'timeout', 'null']) {
+      assert.ok(!texto.includes(jargao), `${jargao} vazou em: ${texto}`)
+    }
+  }
 })
 
 test('a etiqueta do histórico nomeia a causa — nunca "ignorado"/"falhou"', () => {

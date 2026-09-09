@@ -143,6 +143,34 @@ if (live && falhas.length) {
   }
 }
 
+// --------------------------------------------------------------------- 2b
+line('2b. A LOJA ESTÁ LIGADA NO GRUPO DE ORIGEM?')
+// Uma origem pode ter lista própria de lojas permitidas (allowedPlatforms).
+// Loja fora da lista faz o robô NEM tentar converter — e a linha saía como
+// "faltou cadastrar a loja", com o cadastro perfeito.
+const porOrigem = new Map()
+for (const f of falhas) porOrigem.set(f.sourceGroup, (porOrigem.get(f.sourceGroup) || 0) + 1)
+const origens = await db.group.findMany({
+  where: { userId, role: 'monitor' },
+  select: { waJid: true, name: true, allowedPlatforms: true },
+})
+const botConfig = await db.botConfig.findUnique({ where: { userId }, select: { platforms: true } })
+console.log('lista global de lojas da conta:', botConfig?.platforms || '(não definida)')
+for (const [jid, n] of [...porOrigem.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)) {
+  const g = origens.find(o => o.waJid === jid)
+  const lista = (g?.allowedPlatforms || '').trim() || botConfig?.platforms || ''
+  const ligadas = lista.split(',').filter(Boolean)
+  console.log(`\n-- ${g?.name || jid}: ${n} falha(s)`)
+  console.log('   lojas ligadas nesta origem:', ligadas.join(', ') || '(nenhuma)')
+  console.log('   fonte da lista:', g?.allowedPlatforms?.trim() ? 'escolha própria deste grupo' : 'lista global da conta')
+  for (const plat of porPlataforma.keys()) {
+    const base = String(plat).split('+')[0]
+    if (ligadas.length && !ligadas.includes(base)) {
+      console.log(`   ⚠ ${base} está DESLIGADA nesta origem — o robô nem tenta converter, e a linha saía como "faltou cadastrar a loja".`)
+    }
+  }
+}
+
 // ---------------------------------------------------------------------- 3
 line('3. REINÍCIOS DO ROBÔ (envios em vôo perdidos)')
 const restarts = await db.messageLog.findMany({
