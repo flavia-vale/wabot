@@ -6,9 +6,9 @@ const apiPortByDashboardPort = {
 export const FALLBACK_TERMS = {
   title: 'Termos de Uso e Ciência de Riscos',
   summary: 'Leia com atenção antes de criar conta, conectar seu WhatsApp ou automatizar envios. Este documento explica responsabilidades, riscos de banimento e cuidados de uso responsável.',
-  version: '2026-06-09-whatsapp-risk-acceptance',
+  version: '2026-09-09-teste-unico-por-pessoa',
   content: {
-    lastUpdatedLabel: '09 de junho de 2026',
+    lastUpdatedLabel: '09 de setembro de 2026',
     intro: 'Resumo importante: o Espelha Grupos pode ajudar a organizar e reduzir riscos operacionais, mas automação de mensagens em WhatsApp Web/grupos envolve risco real de bloqueio ou banimento. Ao usar, você confirma que entende esse risco e assume responsabilidade pela sua operação.',
     sections: [
       {
