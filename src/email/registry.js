@@ -1245,6 +1245,35 @@ Se várias caírem no mesmo dia, provavelmente é um incidente — confira os ev
 [[botao:Abrir o funil|{{link_painel}}/admin/funil]]`,
   },
   {
+    // As vagas de robô acabando. O sinal que já existia
+    // (`ops_session_capacity_limit`) só nasce DEPOIS da primeira recusa —
+    // quando alguma cliente já ficou sem conseguir conectar. Este chega antes.
+    slug: 'admin_vagas_acabando',
+    name: '[Interno] Estão acabando as vagas de robô',
+    description: 'Avisa a administradora quando faltam poucas vagas para o servidor parar de aceitar robô novo. Cliente nova não consegue conectar quando acaba.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Quantos robôs estão ligados e quantos cabem', example: '18 robôs ligados de 20 que cabem' },
+      { name: 'situacao', description: 'O que acontece agora', example: 'Sobram 2 vagas.' },
+      { name: 'link_capacidade', description: 'Endereço da aba Capacidade do admin', example: 'https://espelhagrupos.com.br/admin/capacidade' },
+    ],
+    title: 'Estão acabando as vagas de robô',
+    subject: '[BOTinho] {{resumo}}',
+    body: `{{resumo}}.
+
+{{situacao}}
+
+Quando acabam as vagas, **cliente nova não consegue conectar** e quem desligou o próprio robô não consegue voltar.
+
+O que dá para fazer: desligar o staging enquanto não estiver validando, ou aumentar o servidor. Cada robô ocupa cerca de 272 MB.
+
+[[botao:Ver a capacidade do servidor|{{link_capacidade}}]]`,
+  },
+  {
     slug: 'admin_cobranca_recusada',
     name: '[Interno] Uma cobrança foi recusada',
     description: 'Avisa a administradora quando a cobrança de uma assinatura é recusada, com cliente, valor e o código que o Mercado Pago devolveu.',

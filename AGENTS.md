@@ -3195,7 +3195,8 @@ aumentar o servidor.
 | Peça | Onde |
 |---|---|
 | Decisão (PURA, sem banco/rede) | `src/ops/sessionCapacityAlertPolicy.js` |
-| Passada + texto do e-mail | `src/ops/sessionCapacityAlertSweep.js` |
+| Passada | `src/ops/sessionCapacityAlertSweep.js` |
+| Texto (editável pela aba E-mails) | `admin_vagas_acabando` em `src/email/registry.js` |
 | Boot | `startSessionCapacityAlertSweep()` em `src/api/server.js` |
 
 Onde roda: `setInterval` + `unref()` dentro da API, mesmo padrão de
@@ -3207,34 +3208,39 @@ supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20).
 
 **Não regredir:**
 
-- **Não passa pelo despachante de e-mails, de propósito.** O despachante barra
-  por descadastro, conta banida, conta parada e teto diário — todas travas que
-  leem um registro de `User`. Este aviso não tem cliente: é operacional, vai
-  para endereço fixo da dona e não pode ser engolido por um teto que existe
-  para proteger reputação de domínio em disparo em massa (mesma razão de
-  `DAILY_CAP_EXEMPT_SLUGS`). O anti-spam próprio é o cooldown.
+- **Sai pelo caminho de AVISO INTERNO** (`sendAdminAlert`), nunca pelo
+  despachante da cliente — de lá vêm o endereço (`ADMIN_ALERT_EMAIL`), o
+  cooldown por assunto e o histórico em `EmailSendLog`. As travas do
+  despachante (descadastro, conta parada, teto semanal) são regras de
+  relacionamento com a CLIENTE e nenhuma pode calar um alerta de operação.
+- **O assunto do cooldown carrega o teto** (`max=<n>`): subir o teto é situação
+  nova e pode avisar de novo sem esperar a janela do teto antigo.
 - **Fail-safe em todo caminho.** Contagem indisponível (supervisor fora do ar,
   comando estourado) ou teto não confiável → **não avisa**. Alarme falso
   recorrente treina a pessoa a ignorar justamente este alerta.
-- **Sem SMTP não grava o evento** — a janela anti-spam não pode queimar sem o
-  e-mail ter saído (mesma regra do aviso de código de acesso vencido).
+- **Aviso barrado não vira sinal de envio** — sem SMTP ou dentro do cooldown,
+  nada é gravado.
 - **Linguagem leiga:** "vagas de robô", nunca "sessão por processo", "worker",
   "shard" ou "circuit breaker". Teste falha se jargão voltar.
 
-Envs (todas opcionais): `CAPACITY_ALERT_EMAIL` (default
-`flaviaroberta.1496@gmail.com`; vários separados por vírgula; **vazio
-desliga**), `CAPACITY_ALERT_FREE_SLOTS` (2), `CAPACITY_ALERT_COOLDOWN_MS` (12h),
-`CAPACITY_ALERT_SWEEP_INTERVAL_MS` (15min), `CAPACITY_ALERT_ENABLED` (`false`
-desliga). Aplicar env exige `pm2 delete` + `start` (pegadinha #1).
+Envs (todas opcionais): `CAPACITY_ALERT_FREE_SLOTS` (2),
+`CAPACITY_ALERT_COOLDOWN_HOURS` (12), `CAPACITY_ALERT_SWEEP_INTERVAL_MS`
+(15min), `CAPACITY_ALERT_ENABLED` (`false` desliga). Aplicar env exige
+`pm2 delete` + `start` (pegadinha #1).
 
 ⚠️ **Sem `SMTP_*` no `.env` nenhum e-mail sai** — inclusive este. Conferir isso
 antes de procurar defeito. Teste: `test/ops-session-capacity-alert.test.js`.
 
-Conferir o teto vigente em produção:
+⚠️ **API e supervisor releem o teto só no PRÓPRIO boot.** Mudar
+`MAX_SESSIONS_PER_PROCESS` e reiniciar só uma das pontas faz o aviso e a recusa
+real discordarem até a outra subir.
+
+Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv,
+então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
 ```bash
 grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20"
-tr '\0' '\n' < /proc/$(pgrep -f "wabot/src/supervisor/index.js" | head -1)/environ | grep -E "MAX_SESSIONS_PER_PROCESS|CAPACITY_ALERT" || echo "supervisor sem override -> padrao 20"
-pgrep -fc "/home/deploy/wabot/src/bot-worker"   # robos ligados agora
+grep -h "maxSessionsPerProcess" ~/.pm2/logs/bot-supervisor-out.log | tail -1   # o que o supervisor leu no boot
+pgrep -fc "/home/deploy/wabot/src/bot-worker"                                   # robos ligados agora
 ```
 
 ### "Limite de robôs" era a frase de TRÊS causas diferentes (RCA 2026-09-07 — não regredir)

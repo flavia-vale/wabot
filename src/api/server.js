@@ -254,14 +254,14 @@ function startCredentialExpirySweep() {
 // memória). Contagem indisponível ou sem SMTP: não avisa e não queima o
 // cooldown. Ver src/ops/sessionCapacityAlertPolicy.js.
 //   CAPACITY_ALERT_ENABLED           — 'false' desliga.
-//   CAPACITY_ALERT_EMAIL             — destinatários (vírgula). Vazio desliga.
 //   CAPACITY_ALERT_FREE_SLOTS        — vagas livres que disparam (default 2).
-//   CAPACITY_ALERT_COOLDOWN_MS       — janela anti-spam (default 12h).
+//   CAPACITY_ALERT_COOLDOWN_HOURS    — janela anti-spam (default 12h).
 //   CAPACITY_ALERT_SWEEP_INTERVAL_MS — intervalo entre passadas (default 15min).
+// O destinatário vem de ADMIN_ALERT_EMAIL (caminho de aviso interno).
 const CAPACITY_ALERT_SWEEP_INTERVAL_MS = Math.max(Number(process.env.CAPACITY_ALERT_SWEEP_INTERVAL_MS) || 15 * 60 * 1000, 60 * 1000)
 async function runSessionCapacityAlertTick() {
   try {
-    const summary = await runSessionCapacityAlertSweep({ db, listRunningBots, sendMail, logger: app.log })
+    const summary = await runSessionCapacityAlertSweep({ db, listRunningBots, logger: app.log })
     if (summary.sent > 0) app.log.warn({ ...summary }, 'aviso de vagas: passada concluída')
   } catch (err) {
     app.log.error({ err: err.message }, 'aviso de vagas: passada falhou')
