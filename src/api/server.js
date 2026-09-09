@@ -33,13 +33,14 @@ import { startDlqMaintenanceJob, getDlqMaintenanceSnapshot } from '../jobs/dlqMa
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, SUPERVISOR_MODE } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
 import { trackAnalyticsEventSafe } from '../analytics.js'
 import { runNurtureSweep } from '../leadNurture/sweep.js'
 import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
+import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
@@ -245,6 +246,29 @@ async function runCredentialExpirySweepTick() {
 function startCredentialExpirySweep() {
   runCredentialExpirySweepTick()
   const timer = setInterval(runCredentialExpirySweepTick, CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
+// Aviso "está acabando vaga de robô" (default: faltando 2 para o teto).
+// In-process, setInterval + unref — sem processo PM2 novo (política de
+// memória). Contagem indisponível ou sem SMTP: não avisa e não queima o
+// cooldown. Ver src/ops/sessionCapacityAlertPolicy.js.
+//   CAPACITY_ALERT_ENABLED           — 'false' desliga.
+//   CAPACITY_ALERT_EMAIL             — destinatários (vírgula). Vazio desliga.
+//   CAPACITY_ALERT_FREE_SLOTS        — vagas livres que disparam (default 2).
+//   CAPACITY_ALERT_COOLDOWN_MS       — janela anti-spam (default 12h).
+//   CAPACITY_ALERT_SWEEP_INTERVAL_MS — intervalo entre passadas (default 15min).
+const CAPACITY_ALERT_SWEEP_INTERVAL_MS = Math.max(Number(process.env.CAPACITY_ALERT_SWEEP_INTERVAL_MS) || 15 * 60 * 1000, 60 * 1000)
+async function runSessionCapacityAlertTick() {
+  try {
+    const summary = await runSessionCapacityAlertSweep({ db, listRunningBots, sendMail, logger: app.log })
+    if (summary.sent > 0) app.log.warn({ ...summary }, 'aviso de vagas: passada concluída')
+  } catch (err) {
+    app.log.error({ err: err.message }, 'aviso de vagas: passada falhou')
+  }
+}
+function startSessionCapacityAlertSweep() {
+  const timer = setInterval(runSessionCapacityAlertTick, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
@@ -613,6 +637,7 @@ startLogRetentionJob()
 startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
+startSessionCapacityAlertSweep()
 startEmailQueueJob()
 startLifecycleEmailSweep()
 startWeeklySummarySweep()
