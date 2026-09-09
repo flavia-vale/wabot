@@ -101,7 +101,26 @@ const COLUMNS = [
   { key: 'grupos', label: 'Grupos', sortable: false },
   { key: 'sends30d', label: 'Envios 30d', sortable: false },
   { key: 'wa', label: 'WhatsApp', sortable: false },
+  { key: 'numeros', label: 'Números ligados', sortable: false },
 ]
+
+/* Todos os números de WhatsApp que a conta já ligou.
+ *
+ * Mais de um NÃO é defeito: a cliente pode ter trocado de chip. O que importa
+ * é conseguir cruzar com outras contas — foi assim que apareceram quatro
+ * contas ligando o mesmo número. O primeiro fica visível e o resto entra na
+ * contagem, para a coluna não empurrar a tabela para fora da tela. */
+function WaPhones({ phones }) {
+  const lista = Array.isArray(phones) ? phones : []
+  if (!lista.length) return <span className="text-slate-400">—</span>
+  const [primeiro, ...resto] = lista
+  return (
+    <span className="whitespace-nowrap text-xs text-slate-600" title={lista.join(', ')}>
+      {primeiro}
+      {resto.length > 0 && <span className="ml-1 font-semibold text-amber-700">+{resto.length}</span>}
+    </span>
+  )
+}
 
 export default function AdminClientesPage() {
   const [searchInput, setSearchInput] = useState('')
@@ -223,6 +242,7 @@ export default function AdminClientesPage() {
                     <td className="px-4 py-3 text-slate-600">{customer.groupCounts?.monitor ?? 0}/{customer.groupCounts?.post ?? 0}</td>
                     <td className="px-4 py-3 text-slate-600">{formatNumber(customer.sends30d)}</td>
                     <td className="px-4 py-3"><WaDot status={customer.waSession?.status} /></td>
+                    <td className="px-4 py-3"><WaPhones phones={customer.waPhones} /></td>
                   </tr>
                 ))}
                 {!customers.length && !loading && (

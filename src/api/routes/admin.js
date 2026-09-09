@@ -2782,7 +2782,7 @@ export async function adminRoutes(app) {
 
     const [
       payments, subscriptions, manualGrants, connectionEvents, contactLogs, logs,
-      automationsTotal, automationsEnabled, lastMessage, signupEvents, referrerRows,
+      automationsTotal, automationsEnabled, lastMessage, signupEvents, referrerRows, phoneRows,
     ] = await Promise.all([
       db.payment.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 60, select: { id: true, plan: true, status: true, amount: true, createdAt: true, expiresAt: true } }),
       db.subscription.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, plan: true, status: true, createdAt: true, nextChargeAt: true, cancelledAt: true } }),
@@ -2797,6 +2797,8 @@ export async function adminRoutes(app) {
       db.messageLog.findFirst({ where: { userId }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
       user.affiliateProfileId ? [] : db.analyticsEvent.findMany({ where: { userId, event: 'signup_created' }, orderBy: { createdAt: 'desc' }, take: 1, select: { userId: true, metadata: true } }),
       user.referredBy ? db.user.findMany({ where: { id: user.referredBy }, select: { id: true, name: true, email: true } }) : [],
+      // Todos os números de WhatsApp que esta conta já ligou.
+      db.waPhoneOwnership.findMany({ where: { userId }, orderBy: { firstConnectedAt: 'asc' }, select: { phone: true } }).catch(() => []),
     ])
 
     const signupMetaMap = new Map()
@@ -2820,6 +2822,7 @@ export async function adminRoutes(app) {
       contactLogs,
       logs,
       groupCounts: getGroupCounts(user.groups),
+      waPhones: phoneRows.map(row => row.phone),
       automations: { total: automationsTotal, enabled: automationsEnabled },
       credentialHealth: summarizeCredentialHealth(user.credentials),
       waSession: safeUser.waSession,

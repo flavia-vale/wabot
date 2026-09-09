@@ -273,6 +273,39 @@ async function updateLoginActivity(user) {
   }
 }
 
+
+/**
+ * Dispara o e-mail de nova senha para um endereço. Caminho ÚNICO: usado pela
+ * rota /forgot-password e pelo botão da tela de conexão recusada
+ * (POST /session/blocked-recover), que precisa mandar o link para a conta
+ * ANTERIOR sem nunca expor aquele endereço ao navegador.
+ *
+ * Nunca lança e nunca revela se a conta existe — quem chama responde sempre a
+ * mesma coisa.
+ */
+export async function requestPasswordResetForEmail({ email, logger } = {}) {
+  const alvo = normalizeEmail(email)
+  if (!alvo) return { sent: false }
+  const user = await findUserByNormalizedEmail(alvo).catch(() => null)
+  if (!user || user.status === 'banned' || user.status === 'suspended' || String(user.email).endsWith('@sistema.com')) {
+    return { sent: false }
+  }
+  const secret = resolveJwtSecretForReset()
+  if (!secret) return { sent: false }
+
+  const token = signPasswordResetToken({ userId: user.id, passwordHash: user.passwordHash, secret })
+  const dashboardUrl = String(process.env.DASHBOARD_URL || process.env.API_URL || 'https://espelhagrupos.com.br').replace(/\/+$/, '')
+  notifyPasswordReset({
+    db,
+    user,
+    resetUrl: `${dashboardUrl}/nova-senha?c=${encodeURIComponent(token)}`,
+    validity: `${Math.round(PASSWORD_RESET_TTL_MS / 60000)} minutos`,
+    logger,
+  }).catch(() => {})
+  trackAnalyticsEventSafe({ userId: user.id, event: 'password_reset_requested' })
+  return { sent: true }
+}
+
 async function findCurrentUser(userId) {
   const secureSelect = {
     id: true,
@@ -708,22 +741,7 @@ export async function authRoutes(app) {
       return reply.code(429).send({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' })
     }
 
-    const user = await findUserByNormalizedEmail(email).catch(() => null)
-    if (user && user.status !== 'banned' && user.status !== 'suspended' && !String(user.email).endsWith('@sistema.com')) {
-      const secret = resolveJwtSecretForReset()
-      if (secret) {
-        const token = signPasswordResetToken({ userId: user.id, passwordHash: user.passwordHash, secret })
-        const dashboardUrl = String(process.env.DASHBOARD_URL || process.env.API_URL || 'https://espelhagrupos.com.br').replace(/\/+$/, '')
-        notifyPasswordReset({
-          db,
-          user,
-          resetUrl: `${dashboardUrl}/nova-senha?c=${encodeURIComponent(token)}`,
-          validity: `${Math.round(PASSWORD_RESET_TTL_MS / 60000)} minutos`,
-          logger: req.log,
-        }).catch(() => {})
-        trackAnalyticsEventSafe({ userId: user.id, event: 'password_reset_requested' })
-      }
-    }
+    await requestPasswordResetForEmail({ email, logger: req.log })
     return reply.code(200).send(respostaNeutra)
   })
 

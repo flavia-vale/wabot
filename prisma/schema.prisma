@@ -25,13 +25,7 @@ model User {
   lastActivityAt         DateTime?
   lastSupportContactAt   DateTime?
   supportStatus          String    @default("new")
-  // Por que a conta foi bloqueada ou teve o acesso encerrado, em linguagem
-  // leiga. Escrito pela admin e MOSTRADO PARA A CLIENTE (login e painel):
-  // antes, conta bloqueada via só "Conta bloqueada. Entre em contato com o
-  // suporte", texto igual para qualquer motivo, e a pessoa abria chamado para
-  // descobrir o que já sabíamos. Nulo = sem motivo registrado.
-  blockedReason          String?
-  blockedAt              DateTime?
+  waPhoneOwnerships      WaPhoneOwnership[]
   termsAcceptedAt        DateTime?
   termsVersion           String?
   termsAcceptedIp        String?
@@ -90,9 +84,33 @@ model WaSession {
   ownerInstance      String?
   lastHeartbeatAt    DateTime?
   lastDisconnectCode String?
+  // Aviso que a CLIENTE precisa ler quando a conexão foi recusada por regra
+  // nossa (hoje: número já usado em outra conta). JSON curto com o motivo e o
+  // e-mail da conta anterior, para a tela oferecer recuperar a senha em vez de
+  // virar parede. Nulo = nenhuma recusa pendente.
+  blockNotice        String?
   updatedAt          DateTime  @updatedAt
 
   @@index([status, lastHeartbeatAt])
+}
+
+// Histórico de qual conta conectou qual número de WhatsApp.
+//
+// `WaSession.phone` guarda só o número ATUAL e é sobrescrito a cada conexão,
+// então até aqui não havia como saber que quatro contas diferentes tinham
+// conectado o mesmo número (medido em produção: 12 contas em 4 pessoas). Uma
+// linha por par (número, conta) — o mesmo par reconectando só atualiza a data.
+model WaPhoneOwnership {
+  id              String   @id @default(cuid())
+  phone           String
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstConnectedAt DateTime @default(now())
+  lastConnectedAt  DateTime @default(now())
+
+  @@unique([phone, userId])
+  @@index([phone])
+  @@index([userId])
 }
 
 model WaConnectionEvent {

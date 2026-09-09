@@ -16,6 +16,7 @@ import { usePainelHeader, usePainel } from '../PainelShell'
 import { WHATSAPP_SAFETY_HEADLINE, WHATSAPP_SAFETY_POINTS } from '../../../../src/domain/painel/whatsappSafety.js'
 import { buildJustConnectedNextStep } from '../../../../src/credentialBlockAlert/message.js'
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
+import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 
 const QR_TIMEOUT_SECONDS = 20
 const QR_EXPIRY_SECONDS = 60
@@ -29,6 +30,40 @@ function NoteBox({ variant = 'is-warn', title, message }) {
     <div className={`pnl-note-box ${variant}`} role={variant === 'is-error' ? 'alert' : 'status'}>
       {title && <strong style={{ fontWeight: 600, display: 'block' }}>{title}</strong>}
       {message && <span>{message}</span>}
+    </div>
+  )
+}
+
+/* Conexão recusada porque este número já foi usado em outra conta.
+ *
+ * A recusa NUNCA pode virar parede: a cliente perde o acesso ao robô e não tem
+ * o que fazer na tela. Por isso a caixa traz as três saídas — de qual conta se
+ * trata (e-mail parcialmente escondido, o suficiente para ela reconhecer),
+ * recuperar a senha daquela conta (o link vai para o e-mail de lá, o endereço
+ * completo nunca chega ao navegador) e falar com uma pessoa, para o caso de
+ * engano ou de dificuldade técnica. */
+function PhoneReuseBlockedCard({ notice, onRecover, recovering, recoverMessage }) {
+  if (!notice || notice.tipo !== 'phone_reuse') return null
+  const ajuda = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Meu WhatsApp não conectou porque o número já teria sido usado em outra conta. Pode me ajudar?')}`
+
+  return (
+    <div className="pnl-note-box is-error" role="alert">
+      <strong style={{ fontWeight: 600, display: 'block' }}>Não consegui conectar este número</strong>
+      <p style={{ marginTop: 6 }}>{notice.texto}</p>
+      {notice.emailMascarado && (
+        <p style={{ marginTop: 6 }}>
+          A conta que já usou este número é <strong>{notice.emailMascarado}</strong>.
+        </p>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+        {notice.podeRecuperarSenha && (
+          <button type="button" className="pnl-btn is-primary" onClick={onRecover} disabled={recovering}>
+            {recovering ? 'Enviando…' : 'Recuperar senha dessa conta'}
+          </button>
+        )}
+        <a href={ajuda} target="_blank" rel="noreferrer" className="pnl-btn">Falar com o suporte</a>
+      </div>
+      {recoverMessage && <p style={{ marginTop: 8 }}>{recoverMessage}</p>}
     </div>
   )
 }
@@ -51,6 +86,8 @@ export default function WhatsAppPage() {
   const [socketState, setSocketState] = useState('idle')
   const [qrWaitElapsed, setQrWaitElapsed] = useState(0)
   const [wsErrorMessage, setWsErrorMessage] = useState('')
+  const [recovering, setRecovering] = useState(false)
+  const [recoverMessage, setRecoverMessage] = useState('')
   const [qrStartElapsed, setQrStartElapsed] = useState(0)
   const [qrRetrying, setQrRetrying] = useState(false)
   const wsRef = useRef(null)
@@ -616,6 +653,24 @@ export default function WhatsAppPage() {
       <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
         <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
       </div>
+
+      <PhoneReuseBlockedCard
+        notice={status?.blockNotice}
+        recovering={recovering}
+        recoverMessage={recoverMessage}
+        onRecover={async () => {
+          setRecovering(true)
+          setRecoverMessage('')
+          try {
+            const r = await api.sessionBlockedRecover()
+            setRecoverMessage(r?.message || 'Se essa conta existir, enviamos o link para criar uma nova senha.')
+          } catch {
+            setRecoverMessage('Não consegui enviar agora. Tente de novo em alguns minutos ou fale com o suporte.')
+          } finally {
+            setRecovering(false)
+          }
+        }}
+      />
 
       {/* Frente C do plano de ativação de 2026-09-08: quem conecta e não
           cadastra loja fica com o robô recebendo ofertas e publicando ZERO —
