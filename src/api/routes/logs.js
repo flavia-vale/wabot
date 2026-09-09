@@ -3,11 +3,16 @@ import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
 import { buildOfferQueueSource, parseOfferQueueSourceId } from '../../offerQueue/sourceTag.js'
 import { clearUserQueuedSendLogs } from '../../jobs/stuckSendLogs.js'
 import { buildCredentialBlockAlerts } from '../../credentialBlockAlert/message.js'
+import { MISSING_CREDENTIAL_ERROR_PREFIX } from '../../core/conversionFailureReason.js'
 
 // P3 (specs/013-inbound-leads-strategy): janela fixa de 7 dias, constante no
 // módulo — não vira query param para a rota não virar superfície de
 // varredura arbitrária do histórico (contracts/credential-block-alert.md).
-const CREDENTIAL_BLOCK_ERROR_PREFIX = 'skip:no_valid_conversions'
+//
+// O prefixo é o do motivo ESPECÍFICO de falta de cadastro, nunca o genérico
+// de "nenhum link convertido": mandar cadastrar uma loja que já está
+// cadastrada e funcionando é o defeito corrigido em 2026-09-09.
+const CREDENTIAL_BLOCK_ERROR_PREFIX = MISSING_CREDENTIAL_ERROR_PREFIX
 const CREDENTIAL_BLOCK_WINDOW_MS = 7 * 24 * 60 * 60_000
 
 // Cache leve do /summary — métricas não precisam ser real-time-real-time.
