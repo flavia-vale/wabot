@@ -3,14 +3,23 @@
  * UI (rótulos, campos, instruções), sem regra de negócio. O salvamento usa os
  * mesmos endpoints (api.credentials / api.saveCredential). */
 
+/* Endereço da extensão que copia o código de acesso das lojas. Fica numa
+ * constante porque três lojas apontam para ela: antes era um CARTÃO inteiro no
+ * meio da lista ("Extensão necessária"), lido por quem não precisava dele e
+ * ignorado por quem precisava. Agora vive na ajuda do campo que a usa. */
+export const COOKIE_EDITOR_URL =
+  'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm?pli=1'
+
 export const AFFILIATE_PLATFORMS = [
   {
     id: 'shopee',
     label: 'Shopee',
-    instructions: 'Onde pegar: no site de afiliados da Shopee, em Ferramentas → API de Afiliados → Gerar credenciais. A chave secreta é sua: não passe para ninguém.',
+    color: '#EE4D2D',
+    initials: 'SP',
+    instructions: 'No site de afiliados da Shopee, em Ferramentas → API de Afiliados.',
     actionLinks: [
       {
-        label: 'Pedir seu acesso na Shopee',
+        label: 'Pedir acesso',
         href: 'https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=',
       },
       {
@@ -19,102 +28,99 @@ export const AFFILIATE_PLATFORMS = [
       },
     ],
     fields: [
-      { key: 'appId', label: 'App ID da Shopee', hint: 'Número que identifica seu acesso na Shopee.' },
-      { key: 'secretKey', label: 'Chave secreta da Shopee', hint: 'Guarde só aqui — não passe para mais ninguém.', sensitive: true },
-    ],
-  },
-  {
-    id: 'cookieEditorInfo',
-    type: 'info',
-    label: 'Extensão necessária',
-    instructions: 'Para pegar os dados das lojas abaixo, use um computador com Google Chrome e instale esta extensão gratuita:',
-    actionLinks: [
-      {
-        label: 'Cookie-Editor',
-        href: 'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm?pli=1',
-      },
+      { key: 'appId', label: 'App ID da Shopee', hint: 'Número que identifica seu acesso.' },
+      { key: 'secretKey', label: 'Chave secreta da Shopee', hint: 'Guarde só aqui — não passe para ninguém.', sensitive: true },
     ],
   },
   {
     id: 'amazon',
     label: 'Amazon',
-    instructions: 'Onde pegar: no site de associados da Amazon (link abaixo). A etiqueta aparece na própria tela. O código de acesso é o que deixa o link curtinho — prefira o código completo: os três códigos separados vencem em poucos dias.',
+    color: '#FF9900',
+    initials: 'AZ',
+    badgeInk: true,
+    instructions: 'No site de associados da Amazon: a etiqueta aparece na tela; o código de acesso você copia com a extensão Cookie-Editor, no computador.',
     actionLinks: [
       {
         label: 'Abrir a página da loja',
         href: 'https://associados.amazon.com.br',
       },
     ],
-    platformWarning: 'Com a etiqueta e o código de acesso, o link da oferta sai curtinho. Só com a etiqueta, a oferta sai do mesmo jeito — o link só fica mais comprido.',
-    sessionCareNote: 'Depois de colar o código aqui, NÃO clique em "Sair" na Amazon e não use janela anônima. Sair da conta derruba o código na hora, e você vai precisar cadastrar tudo de novo. Pode fechar a aba normalmente — só não sair da conta.',
+    platformWarning: 'Com a etiqueta e o código de acesso o link sai curtinho; só com a etiqueta a oferta sai igual, o link é que fica mais comprido.',
+    sessionCareNote: 'Depois de colar o código aqui, não clique em "Sair" na Amazon e não use janela anônima — sair da conta derruba o código na hora e você precisa cadastrar tudo de novo (fechar a aba pode).',
     fields: [
-      { key: 'tag', label: 'Sua etiqueta de afiliada (ID de associado)', hint: 'É o código que identifica suas vendas. Ex.: suaetiqueta-20' },
-      { key: 'cookie', label: 'Código de acesso da sua conta (recomendado)', required: false, sensitive: true, cookieField: true, hint: 'Necessário para o link da oferta sair curtinho. Use este ou os três códigos alternativos abaixo.', help: 'No computador, entre em associados.amazon.com.br já logada, clique na extensão Cookie-Editor → botão Export (canto inferior direito) → JSON. O código é copiado sozinho; é só colar aqui.' },
-      { key: 'ubid-acbbr', label: 'Código alternativo 1 (ubid-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. É um dos três códigos separados da Amazon, encontrados na mesma extensão Cookie-Editor.' },
-      { key: 'at-acbbr', label: 'Código alternativo 2 (at-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. Mesmo lugar da extensão Cookie-Editor.' },
-      { key: 'x-acbbr', label: 'Código alternativo 3 (x-acbbr)', required: false, cookieField: true, hint: 'Só se você não usar o código completo acima.', sensitive: true, help: 'Só precisa se NÃO colou o código completo acima. Mesmo lugar da extensão Cookie-Editor.' },
+      { key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'É o código que identifica suas vendas. Ex.: suaetiqueta-20' },
+      { key: 'cookie', label: 'Código de acesso da conta', required: false, sensitive: true, cookieField: true, recommended: true, hint: 'Deixa o link da oferta curtinho.', help: 'No computador, entre em associados.amazon.com.br já logada, clique na extensão Cookie-Editor → botão Export (canto inferior direito) → JSON. O código é copiado sozinho; é só colar aqui.' },
+      { key: 'ubid-acbbr', label: 'Código alternativo (ubid-acbbr)', required: false, cookieField: true, sensitive: true, advanced: true, help: 'Só precisa se NÃO colou o código de acesso acima. Mesmo lugar, na extensão Cookie-Editor.' },
+      { key: 'at-acbbr', label: 'Código alternativo (at-acbbr)', required: false, cookieField: true, sensitive: true, advanced: true, help: 'Só precisa se NÃO colou o código de acesso acima. Mesmo lugar, na extensão Cookie-Editor.' },
+      { key: 'x-acbbr', label: 'Código alternativo (x-acbbr)', required: false, cookieField: true, sensitive: true, advanced: true, help: 'Só precisa se NÃO colou o código de acesso acima. Mesmo lugar, na extensão Cookie-Editor.' },
     ],
   },
   {
     id: 'mercadolivre',
     label: 'Mercado Livre',
-    instructions: 'Onde pegar: no Gerador de Links do Mercado Livre (link abaixo). A etiqueta aparece na própria tela; o código de acesso (SSID) você copia com a extensão Cookie-Editor, no computador.',
+    color: '#FFC400',
+    initials: 'ML',
+    badgeInk: true,
+    instructions: 'No Gerador de Links do Mercado Livre: a etiqueta aparece na tela; o código de acesso você copia com a extensão Cookie-Editor, no computador.',
     actionLinks: [
       {
         label: 'Abrir a página da loja',
         href: 'https://www.mercadolivre.com.br/afiliados/linkbuilder#hub',
       },
     ],
-    platformWarning: 'Com a etiqueta e o código de acesso, o link da oferta sai curtinho. Só com a etiqueta, a oferta sai do mesmo jeito — o link só fica mais comprido.',
-    sessionCareNote: 'Depois de colar o código aqui, NÃO clique em "Sair" no Mercado Livre e não use janela anônima. Sair da conta derruba o código na hora, e você vai precisar cadastrar tudo de novo. Pode fechar a aba normalmente — só não sair da conta.',
+    platformWarning: 'Com a etiqueta e o código de acesso o link sai curtinho; só com a etiqueta a oferta sai igual, o link é que fica mais comprido.',
+    sessionCareNote: 'Depois de colar o código aqui, não clique em "Sair" no Mercado Livre e não use janela anônima — sair da conta derruba o código na hora e você precisa cadastrar tudo de novo (fechar a aba pode).',
     fields: [
       { key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'Copie igualzinho ao que aparece no Mercado Livre.', help: 'É a "etiqueta em uso" que aparece na tela do Gerador de Links do Mercado Livre.' },
-      { key: 'ssid', label: 'Código de acesso da sua conta (SSID)', hint: 'Necessário para o link da oferta sair curtinho.', sensitive: true, cookieField: true, help: 'No computador, com o Mercado Livre aberto e logado, clique na extensão Cookie-Editor, procure o item chamado ssid e copie o valor dele. Não passe esse código para mais ninguém.' },
-      { key: 'vitrineUrl', label: 'Link da sua vitrine (opcional)', required: false, hint: 'Serve para quando chega um link da lojinha de outra pessoa, sem produto específico.', help: 'Cole o link da SUA vitrine no Mercado Livre (ex.: mercadolivre.com.br/social/seu-usuario). Quando chegar um link da vitrine de outra pessoa, em vez de descartar a mensagem o robô troca pelo link da sua.' },
+      { key: 'ssid', label: 'Código de acesso da conta (SSID)', hint: 'Deixa o link da oferta curtinho.', sensitive: true, cookieField: true, recommended: true, help: 'No computador, com o Mercado Livre aberto e logado, clique na extensão Cookie-Editor, procure o item chamado ssid e copie o valor dele. Não passe esse código para mais ninguém.' },
+      { key: 'vitrineUrl', label: 'Link da sua vitrine (opcional)', required: false, advanced: true, hint: 'Serve para quando chega um link da lojinha de outra pessoa, sem produto específico.', help: 'Cole o link da SUA vitrine no Mercado Livre (ex.: mercadolivre.com.br/social/seu-usuario). Quando chegar um link da vitrine de outra pessoa, em vez de descartar a mensagem o robô troca pelo link da sua.' },
     ],
   },
   {
     id: 'magazineluiza',
     label: 'Magazine Luiza',
-    instructions: 'Onde pegar: no painel de afiliados do Magazine Luiza. Copie a etiqueta que aparece nos seus links.',
+    color: '#0086FF',
+    initials: 'MG',
+    quickSetup: true,
+    instructions: 'No painel de afiliados do Magazine Luiza, copie a etiqueta que aparece nos seus links.',
     actionLinks: [
       {
         label: 'Abrir a página da loja',
         href: 'https://www.magazinevoce.com.br/admin',
       },
     ],
-    // Uma etiqueta e pronto: é a loja mais rápida de cadastrar do painel.
-    quickSetup: true,
     fields: [{ key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'Ex.: parceiro123' }],
   },
   {
     id: 'shein',
     label: 'SHEIN',
-    // O código de acesso é opcional aqui: só o ID já deixa a oferta sair.
+    color: '#1F2D2A',
+    initials: 'SH',
     quickSetup: true,
-    instructions: 'Você pode preencher de dois jeitos, o que for mais fácil. (1) Pelo ID: no painel de afiliada da SHEIN, vá em Minha conta e copie o ID de afiliado. (2) Pelo link: ainda no painel, use o Gerador de Link em qualquer produto e cole aqui o link inteiro. O link do botão de compartilhar do aplicativo não serve — ele é para uso pessoal, não para cadastro.',
+    instructions: 'No painel de afiliada da SHEIN, em Minha conta — ou cole aqui o link de qualquer produto gerado ali.',
     actionLinks: [
       {
         label: 'Abrir a página da loja',
         href: 'https://www.shein.com/affiliate',
       },
     ],
-    platformWarning: 'Com o ID e o código de acesso, o link da oferta sai curtinho. Só com o ID, a oferta sai do mesmo jeito — o link só fica mais comprido.',
-    sessionCareNote: 'Depois de colar o código aqui, NÃO clique em "Sair" na SHEIN e não use janela anônima. Sair da conta derruba o código na hora, e você vai precisar cadastrar tudo de novo. Pode fechar a aba normalmente — só não sair da conta.',
+    platformWarning: 'Com o ID e o código de acesso o link sai curtinho; só com o ID a oferta sai igual, o link é que fica mais comprido.',
+    sessionCareNote: 'Depois de colar o código aqui, não clique em "Sair" na SHEIN e não use janela anônima — sair da conta derruba o código na hora e você precisa cadastrar tudo de novo (fechar a aba pode).',
     fields: [
       {
         key: 'tag',
-        label: 'ID de afiliado ou um link de qualquer produto de afiliada da SHEIN',
-        hint: 'O ID fica no painel de afiliada, em Minha conta. O link você gera no Gerador de Link.',
-        help: 'Duas formas de preencher: copie o ID de afiliado em Painel de afiliada → Minha conta → ID de afiliado; ou abra o Gerador de Link, gere o link de um produto qualquer e cole aqui. Qualquer uma serve — o robô descobre o resto sozinho.',
+        label: 'ID de afiliada ou link de um produto',
+        hint: 'O ID fica no painel de afiliada, em Minha conta.',
+        help: 'Duas formas de preencher: copie o ID de afiliada em Painel de afiliada → Minha conta → ID de afiliada; ou abra o Gerador de Link, gere o link de um produto qualquer e cole aqui. Qualquer uma serve — o robô descobre o resto sozinho. O link do botão de compartilhar do aplicativo não serve: ele é de uso pessoal.',
       },
       {
         key: 'cookie',
-        label: 'Código de acesso da SHEIN (opcional)',
+        label: 'Código de acesso (opcional)',
         required: false,
         sensitive: true,
         cookieField: true,
-        hint: 'Necessário para o link da oferta sair curtinho. Sem ele, a oferta sai do mesmo jeito — o link só fica mais comprido.',
+        advanced: true,
+        hint: 'Deixa o link da oferta curtinho. Sem ele a oferta sai igual, só com link mais comprido.',
         help: 'No computador, entre em shein.com.br já logada, clique na extensão Cookie-Editor e use o botão Export (canto inferior direito). Não precisa escolher campo nenhum: pode ser Header string ou JSON, os dois funcionam. O código é copiado sozinho; é só colar aqui.',
       },
     ],
