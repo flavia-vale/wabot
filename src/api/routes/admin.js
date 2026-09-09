@@ -18,6 +18,8 @@ import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpiso
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
 import { loadEverPaidUserIds } from '../../domain/admin/payingLoader.js'
+import { withSharedPhoneStatus } from '../../domain/admin/sharedPhoneStatus.js'
+import { loadSharedPhoneCounts } from '../../domain/admin/sharedPhoneLoader.js'
 import { describeDisconnectReason } from '../../domain/admin/disconnectReason.js'
 import { buildLongExpiredWhere, wantsLongExpired, isLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
@@ -988,7 +990,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     }).catch(() => []),
   ])
   const userIds = users.map(user => user.id)
-  const [eventCounts24hRows, offlineEvents24h, successMap24h, errorMap24h, lastMessageMap, everPaidIds] = await Promise.all([
+  const [eventCounts24hRows, offlineEvents24h, successMap24h, errorMap24h, lastMessageMap, everPaidIds, sharedPhoneCounts] = await Promise.all([
     userIds.length ? db.waConnectionEvent.groupBy({
       by: ['userId', 'type'],
       where: { userId: { in: userIds }, occurredAt: { gte: since24h } },
@@ -1006,6 +1008,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     getLogCountMap({ status: 'error', since: since24h, userIds }),
     getLogActivityMap({ userIds }),
     loadEverPaidUserIds(db, userIds),
+    loadSharedPhoneCounts(db, userIds),
   ])
 
   // Último evento de conexão por usuário — é o que separa "o robô está
@@ -1045,7 +1048,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     const successCount24h = successMap24h.get(user.id) ?? 0
     const errorCount24h = errorMap24h.get(user.id) ?? 0
     const offline24h = offlineMetrics24h.get(user.id) || {}
-    return sanitizeUser(withPayingStatus({
+    return sanitizeUser(withSharedPhoneStatus(withPayingStatus({
       id: user.id,
       name: user.name,
       email: user.email,
@@ -1080,7 +1083,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
         lastDisconnectCode: session?.lastDisconnectCode ?? null,
       }),
       waSession: session,
-    }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), adminRole)
+    }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), sharedPhoneCounts.get(user.id)), adminRole)
   }).filter(row => {
     if (scenarioUserIds && !scenarioUserIds.has(row.id)) return false
     const sessionStatus = row.waSession?.status || 'none'
@@ -1671,9 +1674,10 @@ export async function adminRoutes(app) {
       getLogCountMap({ status: 'error', since: since24h }),
     ])
     const successQueueUserIds = users.map(user => user.id)
-    const [lastMessageMap, everPaidIds] = await Promise.all([
+    const [lastMessageMap, everPaidIds, sharedPhoneCounts] = await Promise.all([
       getLogActivityMap({ userIds: successQueueUserIds }),
       loadEverPaidUserIds(db, successQueueUserIds),
+      loadSharedPhoneCounts(db, successQueueUserIds),
     ])
 
     const queue = users
@@ -1695,7 +1699,7 @@ export async function adminRoutes(app) {
         if (shouldTrackRiskDetected({ userId: user.id, strategy, reasons: contactReasons })) {
           trackAnalyticsEventSafe({ userId: user.id, event: 'cs_risk_detected', metadata: { strategy, reasons: contactReasons.join('|').slice(0, 80) } })
         }
-        return sanitizeUser(withPayingStatus({
+        return sanitizeUser(withSharedPhoneStatus(withPayingStatus({
           ...user,
           groups: undefined,
           botRunning,
@@ -1712,7 +1716,7 @@ export async function adminRoutes(app) {
           experimentVariant: selectContactExperimentVariant(user.id, strategy),
           riskAgeHours: user.lastActivityAt ? Math.max(0, Math.round((Date.now() - new Date(user.lastActivityAt).getTime()) / (60 * 60 * 1000))) : null,
           customerContacts: undefined,
-        }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), req.admin.role)
+        }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), sharedPhoneCounts.get(user.id)), req.admin.role)
       })
       .filter(user => user.contactReasons.length > 0)
       .filter(user => reason === 'all' || user.contactReasons.includes(reason))

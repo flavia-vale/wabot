@@ -4,6 +4,8 @@ import { buildActivationFunnel } from './funnel.js'
 import { resolveSignupOrigin } from './signupOrigin.js'
 import { withPayingStatus } from './payingStatus.js'
 import { loadEverPaidUserIds } from './payingLoader.js'
+import { withSharedPhoneStatus } from './sharedPhoneStatus.js'
+import { loadSharedPhoneCounts } from './sharedPhoneLoader.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { describeDisconnectReason } from './disconnectReason.js'
 import { resolveSessionOwner } from '../../core/sessionOwnership.js'
@@ -534,6 +536,9 @@ export function createAdminService({
       lista.push(row.phone)
       phonesByUser.set(row.userId, lista)
     }
+    // Em quantas contas cada número aparece — é o que decide a tag "número
+    // repetido". Uma consulta agregada a mais por página, nunca uma por linha.
+    const sharedPhoneCounts = await loadSharedPhoneCounts(db, userIds)
 
     const paymentMap = new Map(paymentRows.map(row => [row.userId, row]))
     const subscriptionMap = new Map()
@@ -565,7 +570,7 @@ export function createAdminService({
             lastApprovedPaymentAt: payment?._max?.createdAt ?? null,
           })
           : null
-        return sanitizeUser(withPayingStatus({
+        return sanitizeUser(withSharedPhoneStatus(withPayingStatus({
           id: user.id,
           name: user.name,
           email: user.email,
@@ -600,7 +605,7 @@ export function createAdminService({
               cancelledAt: subscription.cancelledAt,
             }
             : null,
-        }, { everPaid, now: now.getTime() }), adminRole)
+        }, { everPaid, now: now.getTime() }), sharedPhoneCounts.get(user.id)), adminRole)
       }),
     }
   }

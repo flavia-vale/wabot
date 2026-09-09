@@ -1303,6 +1303,38 @@ A cliente já foi avisada por e-mail, com o que ela precisa fazer.
 Este aviso sai no máximo uma vez por dia para cada problema.`,
   },
   {
+    slug: 'admin_numero_repetido',
+    name: '[Interno] Número de WhatsApp já usado em outra conta',
+    description: 'Avisa a administradora quando uma conta liga um número de WhatsApp que já foi ligado por outra conta. É aviso para conferir; a recusa automática só acontece se a trava estiver ligada.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'cliente', description: 'E-mail da conta que acabou de ligar', example: 'novaconta@exemplo.com' },
+      { name: 'contas_anteriores', description: 'Contas que já usaram este número', example: 'contaantiga@exemplo.com' },
+      { name: 'o_que_aconteceu', description: 'Se a conexão foi recusada ou só registrada', example: 'A conexão foi permitida (modo aviso)' },
+      { name: 'quando', description: 'Quando aconteceu', example: '09/09/2026 15:40' },
+    ],
+    title: 'Um número de WhatsApp está em mais de uma conta',
+    subject: '[BOTinho] Número de WhatsApp repetido entre contas',
+    body: `Uma conta acabou de ligar um número de WhatsApp que já tinha sido ligado por outra conta.
+
+[[lista]]
+Conta atual: {{cliente}}
+Contas que já usaram este número: {{contas_anteriores}}
+O que aconteceu: {{o_que_aconteceu}}
+Quando: {{quando}}
+[[/lista]]
+
+Número repetido não é prova de nada sozinho: a mesma pessoa pode ter trocado de chip, ou ter uma conta antiga abandonada. Vale abrir o histórico das duas contas antes de decidir qualquer coisa.
+
+A etiqueta também aparece nas listas de clientes, na aba Online e na fila de Sucesso do Cliente.
+
+Este aviso sai no máximo uma vez por dia para cada conta.`,
+  },
+  {
     slug: 'admin_teste_repetido',
     name: '[Interno] Cadastro parece repetir o teste grátis',
     description: 'Avisa a administradora quando nasce uma conta com o mesmo nome ou a mesma raiz de e-mail de outra que já teve teste. É aviso para conferir, nunca bloqueio automático.',

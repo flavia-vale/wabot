@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 import { PayingTag } from '@/components/PayingTag'
+import { SharedPhoneTag } from '@/components/SharedPhoneTag'
 
 const asArray = (value) => Array.isArray(value) ? value : []
 
@@ -437,7 +438,7 @@ export default function AdminOnlinePage() {
                   return (
                     <tr key={user.id} className="align-top hover:bg-slate-50">
                       <td className="px-3 py-4">
-                        <p className="flex flex-wrap items-center gap-2 font-black text-slate-900">{user.name || user.email}<PayingTag status={user.payingStatus} compact /></p>
+                        <p className="flex flex-wrap items-center gap-2 font-black text-slate-900">{user.name || user.email}<PayingTag status={user.payingStatus} compact /><SharedPhoneTag status={user.sharedPhoneStatus} contas={user.sharedPhoneAccounts} compact /></p>
                         <p className="text-xs text-slate-500">{user.email} · {user.plan}</p>
                         <p className="mt-1 text-[11px] text-slate-400">Criado em: {formatDate(user.createdAt)}</p>
                       </td>
