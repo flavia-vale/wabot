@@ -99,6 +99,28 @@ function ExpiredMlSsidBanner({ expired }) {
   )
 }
 
+/* Motivo do encerramento escrito pela admin, mostrado para a CLIENTE.
+ * Fica antes de qualquer outro aviso porque explica todos eles: com o acesso
+ * encerrado por decisão nossa, a tela de plano vencido sozinha faria a pessoa
+ * tentar pagar sem entender o que aconteceu. Só aparece quando existe motivo
+ * escrito — sem motivo, nada muda na tela. */
+function BlockedReasonBanner({ user }) {
+  const motivo = String(user?.blockedReason ?? '').trim()
+  if (!motivo) return null
+
+  return (
+    <div className="pnl-note-box is-error pnl-expired-plan-banner" role="alert">
+      <div>
+        <strong style={{ fontWeight: 600 }}>Seu acesso foi encerrado</strong>
+        <p style={{ marginTop: 6 }}>{motivo}</p>
+        <p style={{ marginTop: 6 }}>
+          Seus grupos, suas lojas e suas regras continuam salvos. Se você achar que houve engano, fale com a gente.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /* Sem NENHUMA loja cadastrada o robô recebe as ofertas e não publica nada —
  * e, como o painel fica verde e o histórico diz "ignorado", a cliente conclui
  * que o produto não funciona. O aviso é global (todas as abas) por isso:
@@ -496,6 +518,7 @@ export default function PainelShell({ children }) {
                 ciclo. Como a ação correta não é reconectar, o banner não aparece
                 mais. sessionHealth segue exposto no contexto/metrics para
                 observabilidade, sem alarmar o usuário com uma ação enganosa. */}
+            <BlockedReasonBanner user={user} />
             <ExpiredPlanBanner user={user} />
             <TrialEndingBanner notice={trialNotice} />
             {/* A loja só é cobrada DEPOIS de conectar o WhatsApp — a mesma

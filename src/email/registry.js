@@ -1303,6 +1303,40 @@ A cliente já foi avisada por e-mail, com o que ela precisa fazer.
 Este aviso sai no máximo uma vez por dia para cada problema.`,
   },
   {
+    slug: 'admin_teste_repetido',
+    name: '[Interno] Cadastro parece repetir o teste grátis',
+    description: 'Avisa a administradora quando nasce uma conta com o mesmo nome ou a mesma raiz de e-mail de outra que já teve teste. É aviso para conferir, nunca bloqueio automático.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'cliente', description: 'E-mail da conta nova', example: 'novaconta@exemplo.com' },
+      { name: 'nome', description: 'Nome informado no cadastro novo', example: 'Fulana de Tal' },
+      { name: 'motivo', description: 'O que casou', example: 'mesma raiz de e-mail' },
+      { name: 'contas_anteriores', description: 'Contas anteriores parecidas', example: 'contaantiga@exemplo.com' },
+      { name: 'quando', description: 'Quando o cadastro aconteceu', example: '09/09/2026 10:20' },
+    ],
+    title: 'Um cadastro novo parece repetir o teste',
+    subject: '[BOTinho] Cadastro parece repetir o teste grátis',
+    body: `Uma conta nova se cadastrou e parece ser de alguém que já fez o teste.
+
+[[lista]]
+Conta nova: {{cliente}}
+Nome: {{nome}}
+O que casou: {{motivo}}
+Contas anteriores parecidas: {{contas_anteriores}}
+Quando: {{quando}}
+[[/lista]]
+
+Isto é só um aviso para você conferir. Nada foi bloqueado e a conta nova está funcionando normalmente.
+
+Nome repetido acontece, e a mesma pessoa pode ter recadastrado por ter perdido a senha ou errado o e-mail. Vale olhar o histórico das duas contas antes de decidir qualquer coisa.
+
+Este aviso sai no máximo uma vez por dia para cada cadastro.`,
+  },
+  {
     slug: 'admin_pagamento_com_falha',
     name: '[Interno] Falha ao processar um pagamento',
     description: 'Avisa a administradora quando um aviso de pagamento do Mercado Pago não pôde ser processado por erro nosso — é o caso em que a cliente pagou e o acesso pode não ter sido liberado.',

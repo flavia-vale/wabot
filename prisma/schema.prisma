@@ -25,6 +25,13 @@ model User {
   lastActivityAt         DateTime?
   lastSupportContactAt   DateTime?
   supportStatus          String    @default("new")
+  // Por que a conta foi bloqueada ou teve o acesso encerrado, em linguagem
+  // leiga. Escrito pela admin e MOSTRADO PARA A CLIENTE (login e painel):
+  // antes, conta bloqueada via só "Conta bloqueada. Entre em contato com o
+  // suporte", texto igual para qualquer motivo, e a pessoa abria chamado para
+  // descobrir o que já sabíamos. Nulo = sem motivo registrado.
+  blockedReason          String?
+  blockedAt              DateTime?
   termsAcceptedAt        DateTime?
   termsVersion           String?
   termsAcceptedIp        String?

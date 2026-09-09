@@ -37,6 +37,11 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
 
 export const ANALYTICS_EVENTS = new Set([
   'signup_created',
+  // Cadastro que parece repetir o teste de outra conta (mesmo nome ou mesma
+  // raiz de e-mail de uma conta com teste vencido). AVISO, nunca bloqueio:
+  // quem decide encerrar acesso é uma pessoa. Ver
+  // src/domain/signup/duplicateTrialSignal.js.
+  'signup_duplicate_trial_suspect',
   'login_completed',
   'whatsapp_connected',
   'credential_saved',
