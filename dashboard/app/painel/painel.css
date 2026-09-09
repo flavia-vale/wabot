@@ -1416,3 +1416,30 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-cred-care > summary svg { flex-shrink: 0; margin-top: 1px; }
 .pnl-cred-care > summary::marker, .pnl-cred-care > summary::-webkit-details-marker { content: ''; display: none; }
 .pnl-cred-care p { margin: 7px 0 0; line-height: 1.55; color: var(--ink-soft); }
+
+/* Faixa fina de aviso, uma linha, com ação inline.
+ *
+ * Existe para avisos que NÃO param nada — o aviso de código de acesso vencido é
+ * o caso: as ofertas continuam saindo, só o link fica mais comprido. Caixa
+ * vermelha de quatro linhas ali dizia que algo tinha parado, e ainda empurrava a
+ * página inteira para baixo em toda aba do painel. */
+.pnl-slim-banner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 8px 14px; margin-bottom: 12px;
+  border-radius: 999px;
+  font-size: 12.5px; line-height: 1.45;
+}
+.pnl-slim-banner.is-warn {
+  background: color-mix(in oklab, var(--warn) 16%, var(--surface));
+  color: #8a5a1e;
+}
+.pnl-slim-banner > span { flex: 1; min-width: 200px; }
+.pnl-slim-banner-cta {
+  flex-shrink: 0; font-weight: 600; color: inherit;
+  text-decoration: underline; text-underline-offset: 3px; white-space: nowrap;
+}
+.pnl-slim-banner-cta:hover { color: var(--ink); }
+
+@media (max-width: 480px) {
+  .pnl-slim-banner { border-radius: var(--pnl-radius-sm); }
+}

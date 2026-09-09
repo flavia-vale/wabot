@@ -82,19 +82,24 @@ function ExpiredPlanBanner({ user }) {
   )
 }
 
+/* Faixa fina, UMA frase, cor de aviso — nunca vermelho.
+ *
+ * Vermelho e quatro linhas diziam que algo parou, e nada parou: sem o código de
+ * acesso o plano B segue publicando e a comissão continua sendo dela; o que muda
+ * é o link ficar mais comprido. Mesma regra da tela de credenciais e do e-mail
+ * de código vencido — as três superfícies precisam dizer a MESMA coisa.
+ *
+ * Vocabulário obrigatório: "código de acesso" e "venceu". Nunca "SSID",
+ * "credencial expirada" ou "link de afiliado" (test/painel-aviso-ml-vencido.test.js). */
 function ExpiredMlSsidBanner({ expired }) {
   if (!expired) return null
 
   return (
-    <div className="pnl-note-box is-error pnl-expired-plan-banner" role="alert">
-      <div>
-        <strong style={{ fontWeight: 600 }}>Credencial do Mercado Livre expirada</strong>
-        <p style={{ marginTop: 6 }}>
-          Seu SSID do Mercado Livre expirou. As ofertas continuam saindo, mas com o link
-          de afiliado longo em vez do link curto. Renove o SSID para voltar a gerar links curtos.
-        </p>
-      </div>
-      <Link href="/painel/ids-afiliada" className="pnl-btn is-primary" style={{ flexShrink: 0 }}>Renovar SSID</Link>
+    <div className="pnl-slim-banner is-warn" role="status">
+      <span>
+        O código de acesso do Mercado Livre venceu — suas ofertas continuam saindo, só com link mais comprido.
+      </span>
+      <Link href="/painel/ids-afiliada" className="pnl-slim-banner-cta">Colar código novo</Link>
     </div>
   )
 }
