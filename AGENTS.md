@@ -3185,6 +3185,58 @@ for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do awk '/VmRSS/{print 
  | awk '{s+=$1; n++} END {printf "%d robos | RSS total %.2f GB | media %.0f MB\n", n, s/1048576, s/n/1024}'
 ```
 
+### Aviso por e-mail ANTES de acabar a vaga (2026-09-09 — não regredir)
+
+`ops_session_capacity_limit` só nasce **depois** da primeira recusa: quando ele
+aparece, alguma cliente já ficou sem conectar. Este aviso é o contrário — chega
+enquanto ainda faltam vagas (default **2**), com tempo de liberar memória ou
+aumentar o servidor.
+
+| Peça | Onde |
+|---|---|
+| Decisão (PURA, sem banco/rede) | `src/ops/sessionCapacityAlertPolicy.js` |
+| Passada + texto do e-mail | `src/ops/sessionCapacityAlertSweep.js` |
+| Boot | `startSessionCapacityAlertSweep()` em `src/api/server.js` |
+
+Onde roda: `setInterval` + `unref()` dentro da API, mesmo padrão de
+`startCredentialExpirySweep` — **sem processo PM2 novo, zero impacto de RAM**
+(uma contagem a cada 15min). A contagem vem de `listRunningBots()` do
+`manager.js`, a **mesma fonte** que o circuit breaker usa, então o aviso não
+pode discordar do que recusa a cliente. O teto é lido pela **mesma fórmula** do
+supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20).
+
+**Não regredir:**
+
+- **Não passa pelo despachante de e-mails, de propósito.** O despachante barra
+  por descadastro, conta banida, conta parada e teto diário — todas travas que
+  leem um registro de `User`. Este aviso não tem cliente: é operacional, vai
+  para endereço fixo da dona e não pode ser engolido por um teto que existe
+  para proteger reputação de domínio em disparo em massa (mesma razão de
+  `DAILY_CAP_EXEMPT_SLUGS`). O anti-spam próprio é o cooldown.
+- **Fail-safe em todo caminho.** Contagem indisponível (supervisor fora do ar,
+  comando estourado) ou teto não confiável → **não avisa**. Alarme falso
+  recorrente treina a pessoa a ignorar justamente este alerta.
+- **Sem SMTP não grava o evento** — a janela anti-spam não pode queimar sem o
+  e-mail ter saído (mesma regra do aviso de código de acesso vencido).
+- **Linguagem leiga:** "vagas de robô", nunca "sessão por processo", "worker",
+  "shard" ou "circuit breaker". Teste falha se jargão voltar.
+
+Envs (todas opcionais): `CAPACITY_ALERT_EMAIL` (default
+`flaviaroberta.1496@gmail.com`; vários separados por vírgula; **vazio
+desliga**), `CAPACITY_ALERT_FREE_SLOTS` (2), `CAPACITY_ALERT_COOLDOWN_MS` (12h),
+`CAPACITY_ALERT_SWEEP_INTERVAL_MS` (15min), `CAPACITY_ALERT_ENABLED` (`false`
+desliga). Aplicar env exige `pm2 delete` + `start` (pegadinha #1).
+
+⚠️ **Sem `SMTP_*` no `.env` nenhum e-mail sai** — inclusive este. Conferir isso
+antes de procurar defeito. Teste: `test/ops-session-capacity-alert.test.js`.
+
+Conferir o teto vigente em produção:
+```bash
+grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20"
+tr '\0' '\n' < /proc/$(pgrep -f "wabot/src/supervisor/index.js" | head -1)/environ | grep -E "MAX_SESSIONS_PER_PROCESS|CAPACITY_ALERT" || echo "supervisor sem override -> padrao 20"
+pgrep -fc "/home/deploy/wabot/src/bot-worker"   # robos ligados agora
+```
+
 ### "Limite de robôs" era a frase de TRÊS causas diferentes (RCA 2026-09-07 — não regredir)
 
 Cliente mandou print de **"Nosso servidor está no limite de robôs ligados ao

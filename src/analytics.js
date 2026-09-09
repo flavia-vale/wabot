@@ -200,6 +200,11 @@ export const ANALYTICS_EVENTS = new Set([
   // É sinal de capacidade (hora de subir o teto ou a RAM do VPS), não de
   // defeito da conta — ver MAX_SESSIONS_PER_PROCESS em src/supervisor/index.js.
   'ops_session_capacity_limit',
+  // Aviso PREVENTIVO: as vagas de robô estão acabando (default: faltando 2).
+  // Diferente de `ops_session_capacity_limit`, que só nasce depois da primeira
+  // recusa — quando a cliente já ficou sem conectar. Ver
+  // src/ops/sessionCapacityAlertPolicy.js.
+  'ops_session_capacity_warning',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está
