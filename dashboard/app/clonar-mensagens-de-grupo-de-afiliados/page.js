@@ -91,6 +91,11 @@ const tools = [
     href: '/alternativas/fluxopromo',
     text: 'Automação de divulgação de promoções em grupos, com curadoria de ofertas.',
   },
+  {
+    name: 'Promium',
+    href: '/alternativas/promium',
+    text: 'Cobra por faixa de grupos e por número de conexões; o plano de entrada custa mais que o nosso Pro.',
+  },
 ]
 
 const faq = [

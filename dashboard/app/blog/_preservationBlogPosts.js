@@ -228,6 +228,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Como o Espelha Grupos automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o Espelha Grupos converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
     ],
     relatedLinks: [
+      { href: '/shopee-afiliados-whatsapp', label: 'Divulgar Shopee no WhatsApp sem copiar e colar', note: 'o que muda na prática depois do cadastro' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'a Amazon paga de 0% a 13% dependendo do produto' },
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para não enviar link sem o seu código' },
@@ -269,6 +270,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Como o Espelha Grupos cuida da Amazon', paragraphs: ['Com a sua tag de associado cadastrada, o Espelha Grupos converte os links da Amazon automaticamente, busca a imagem em alta resolução para o preview do WhatsApp e distribui a oferta para seus grupos e canais com cadência responsável.', 'Isso evita o erro clássico de enviar um link sem tag e garante que a oferta chegue com cara profissional.'] },
     ],
     relatedLinks: [
+      { href: '/amazon-afiliados-whatsapp', label: 'Divulgar Amazon no WhatsApp sem copiar e colar', note: 'a etiqueta viaja junto com o link curto' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: '3% na venda padrão, até 30% na Comissão Extra' },
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para a tag nunca cair no caminho' },
@@ -301,6 +303,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Cadência que protege o número', paragraphs: ['Despejar 20 ofertas em sequência é o caminho mais rápido para o número entrar em risco. Distribua ao longo do dia, varie o texto e respeite horário de silêncio.', 'O Módulo de Preservação Avançada organiza essas camadas: limite por hora, variações de copy e pausas preventivas, para que a operação não pareça robótica.'] },
     ],
     relatedLinks: [
+      { href: '/mercado-livre-afiliados-whatsapp', label: 'Divulgar Mercado Livre no WhatsApp sem copiar e colar', note: 'produto, catálogo e vitrine saem convertidos' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o programa com maior volume de busca no Brasil' },
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'produto, cupom e short link' },
@@ -407,8 +410,10 @@ export const PRESERVATION_BLOG_POSTS = {
     intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta. Se você ainda está decidindo por onde começar, veja antes o comparativo de comissão dos três programas.',
     relatedLinks: [
       { href: '/programa-de-afiliados', label: 'Comparativo de comissão dos três programas', note: 'quanto cada um paga e prazo de atribuição' },
+      { href: '/shopee-afiliados-whatsapp', label: 'Divulgar Shopee no WhatsApp', note: 'como as ofertas saem já convertidas' },
+      { href: '/amazon-afiliados-whatsapp', label: 'Divulgar Amazon no WhatsApp', note: 'a etiqueta junto com o link curto' },
+      { href: '/mercado-livre-afiliados-whatsapp', label: 'Divulgar Mercado Livre no WhatsApp', note: 'produto, catálogo e vitrine' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: guia de cadastro', note: 'o programa com maior volume de busca' },
-      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'de 0% a 13% conforme o produto' },
     ],
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Use Shopee para achadinhos de baixo preço e campanhas de cupom, Amazon para variedade e produtos de marca com boa taxa de clique, e Mercado Livre para ticket médio maior e itens com frete competitivo.', 'O que decide a comissão real é a atribuição correta do link e a taxa de conversão do seu público, não só o percentual do programa.'] },
