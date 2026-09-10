@@ -48,6 +48,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Ainda não é afiliada Shopee?', note: 'Cadastro gratuito, quanto a Shopee paga por tipo de venda e o prazo de atribuição.' },
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'O caminho completo: origens, conversão de link, destinos e histórico.' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'Comissão e prazo de atribuição das três lado a lado, com fonte e data.' },
+      { href: '/shein-afiliados-whatsapp', label: 'Divulga SHEIN também?', note: 'O link sai encurtado pela própria loja, já com a sua identidade.' },
+      { href: '/magalu-afiliados-whatsapp', label: 'Divulga Magalu também?', note: 'O código de parceiro entra em qualquer endereço da loja, inclusive cupom.' },
     ],
     about: ['Shopee Afiliados', 'Link de afiliado', 'Grupos de WhatsApp'],
     decisionQA: [
@@ -328,6 +330,11 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'Cadastro gratuito, 3% na venda padrão e até 30% na Comissão Extra.' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'De 0% a 13% conforme o produto, e por que a tag precisa estar na URL da loja.' },
+      // Linkadas daqui de propósito (RCA 2026-09-11, AGENTS.md "Página nova
+      // NUNCA nasce órfã"): estas duas não têm guia de blog próprio, então
+      // esta é uma das poucas páginas fortes que lhes dá descoberta.
+      { href: '/shein-afiliados-whatsapp', label: 'Divulgar SHEIN no WhatsApp', note: 'O link sai encurtado pela própria loja, já com a sua identidade.' },
+      { href: '/magalu-afiliados-whatsapp', label: 'Divulgar Magalu no WhatsApp', note: 'O código de parceiro entra em qualquer endereço da loja, inclusive cupom.' },
     ],
     about: ['Marketing de afiliados', 'Link de afiliado', 'Grupos de WhatsApp'],
     // P4 (specs/013-inbound-leads-strategy, FR-023/FR-024): bloco de resposta
