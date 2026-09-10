@@ -60,7 +60,7 @@ export const REQUIRED_FIELDS = {
   mercadolivre: ['tag'],
   magazineluiza: ['tag'],
   shein: ['tag'],
-  aliexpress: ['appKey', 'appSecret', 'trackingId'],
+  aliexpress: ['cookie'],
 }
 
 function hasValue(value) {
@@ -69,6 +69,22 @@ function hasValue(value) {
 
 function getString(data, key) {
   return String(data?.[key] ?? '').trim()
+}
+
+function looksLikeCookieExport(value) {
+  if (value.includes('=')) return true
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) && parsed.some(item => item && typeof item.name === 'string' && 'value' in item)
+  } catch { return false }
+}
+
+function hasUnsafeCookieBreak(value) {
+  try {
+    const parsed = JSON.parse(value)
+    const list = Array.isArray(parsed) ? parsed : [parsed]
+    return list.some(item => /[\r\n\0]/.test(String(item?.name ?? '')) || /[\r\n\0]/.test(String(item?.value ?? '')))
+  } catch { return /[\r\n\0]/.test(value) }
 }
 
 function getFormatWarnings(platform, data = {}) {
@@ -185,6 +201,9 @@ const ACCESS_CODE_RULES = {
     { field: 'at-acbbr', singleToken: true },
     { field: 'x-acbbr', singleToken: true },
   ],
+  aliexpress: [
+    { field: 'cookie' },
+  ],
 }
 
 // Formato claramente errado no código de acesso. NÃO diz se a loja aceita o
@@ -202,12 +221,10 @@ const ACCESS_CODE_RULES = {
 export function describeInvalidCredentialFields(platform, data = {}) {
   const problemas = []
   if (platform === 'aliexpress') {
-    const appKey = getString(data, 'appKey')
-    const appSecret = getString(data, 'appSecret')
-    const trackingId = getString(data, 'trackingId')
-    if (appKey && !/^\d{2,32}$/.test(appKey)) problemas.push({ field: 'appKey', message: 'A chave do aplicativo deve conter somente números e ter no máximo 32 caracteres.' })
-    if (appSecret && (appSecret.length < 16 || appSecret.length > 256 || /\s/.test(appSecret))) problemas.push({ field: 'appSecret', message: 'O segredo do aplicativo deve ter entre 16 e 256 caracteres e não pode conter espaços.' })
-    if (trackingId && (trackingId.length > 128 || /[\u0000-\u001f\u007f]/.test(trackingId))) problemas.push({ field: 'trackingId', message: 'A identificação de rastreamento deve ter no máximo 128 caracteres e não pode conter caracteres de controle.' })
+    const cookie = getString(data, 'cookie')
+    if (cookie && cookie.length > 120_000) problemas.push({ field: 'cookie', message: 'Esse código está grande demais. Copie novamente usando o botão Export da extensão Cookie-Editor.' })
+    if (cookie && hasUnsafeCookieBreak(cookie)) problemas.push({ field: 'cookie', message: 'Esse código contém uma quebra inválida. Copie novamente usando o botão Export da extensão Cookie-Editor.' })
+    if (cookie && !looksLikeCookieExport(cookie)) problemas.push({ field: 'cookie', message: 'Esse código não parece completo. Copie novamente usando o botão Export da extensão Cookie-Editor.' })
     return problemas
   }
   for (const regra of ACCESS_CODE_RULES[platform] ?? []) {
@@ -418,11 +435,7 @@ export function sanitizeCredentialBody(platform, body = {}) {
   }
 
   if (platform === 'aliexpress') {
-    const cleaned = {}
-    for (const key of ['appKey', 'appSecret', 'trackingId']) {
-      cleaned[key] = typeof body[key] === 'string' ? body[key].trim() : body[key]
-    }
-    return cleaned
+    return { cookie: typeof body.cookie === 'string' ? body.cookie.trim() : body.cookie }
   }
 
   return body

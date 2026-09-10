@@ -1,16 +1,20 @@
-import crypto from 'node:crypto'
+import { normalizeAmazonCookie as normalizeCookieExport } from './amazon.js'
 
-const API_URL = 'https://api-sg.aliexpress.com/sync'
-const METHOD = 'aliexpress.affiliate.link.generate'
+// Caminho observado no próprio Gerador de Links do portal brasileiro. Ele usa
+// a sessão já autenticada da afiliada e NÃO pede App Key/App Secret/ID: o
+// `trackId=default` pertence à conta carregada pelo cookie do portal.
+const GENERATE_URL = 'https://portals.aliexpress.com/tools/linkGenerate/generatePromotionLinkV2.htm'
+const PORTAL_REFERER = 'https://portals.aliexpress.com/tools/linkGenerate.htm'
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 const MAX_HOPS = 6
 const TOTAL_TIMEOUT_MS = 8000
 
 const ALIEXPRESS_DOMAINS = ['aliexpress.com', 'aliexpress.us']
 const SHORT_HOSTS = new Set(['a.aliexpress.com', 's.click.aliexpress.com'])
-const PRODUCT_RE = /(?:\/item\/|[?&](?:productId|itemId)=)(\d{6,})/i
+const PRODUCT_RE = /(?:\/item\/|[?&](?:productIds?|itemId)=)(\d{6,})/i
 const TRACKING_KEYS = new Set([
   'aff_fcid', 'aff_fsk', 'aff_platform', 'aff_trace_key', 'terminal_id',
-  'af', 'cv', 'dp', 'src', 'pdp_ext_f', 'gatewayadapt',
+  'af', 'cv', 'dp', 'src', 'spm', 'pdp_ext_f', 'gatewayadapt',
 ])
 
 export class AliExpressConversionError extends Error {
@@ -27,12 +31,14 @@ export const ALIEXPRESS_CONVERSION_ERROR = Object.freeze({
   RESOLUTION_FAILED: 'aliexpress_resolution_failed',
   API_REJECTED: 'aliexpress_api_rejected',
   INVALID_RESPONSE: 'aliexpress_invalid_response',
+  SESSION_REJECTED: 'aliexpress_session_rejected',
 })
 
 export function describeAliExpressConversionError(code) {
   if (code === ALIEXPRESS_CONVERSION_ERROR.RESOLUTION_FAILED) return 'A AliExpress não respondeu a tempo para conferir esse link.'
   if (code === ALIEXPRESS_CONVERSION_ERROR.API_REJECTED) return 'A AliExpress recusou a geração do link de afiliado.'
   if (code === ALIEXPRESS_CONVERSION_ERROR.INVALID_RESPONSE) return 'A AliExpress não devolveu um link de afiliado válido.'
+  if (code === ALIEXPRESS_CONVERSION_ERROR.SESSION_REJECTED) return 'A AliExpress não aceitou o código de acesso. Entre novamente no portal e copie um código novo.'
   return 'Esse endereço não é um link válido da AliExpress.'
 }
 
@@ -125,69 +131,61 @@ export async function resolveAliExpressUrl(value, { fetchImpl = globalThis.fetch
   }
 }
 
-function timestamp(date = new Date()) {
-  return date.toISOString().slice(0, 19).replace('T', ' ')
+export function buildAliExpressPortalUrl(sourceUrl, { shipTo = 'BR', trackId = 'default' } = {}) {
+  const requestUrl = new URL(GENERATE_URL)
+  requestUrl.searchParams.set('shipTos', shipTo)
+  requestUrl.searchParams.set('trackId', trackId)
+  requestUrl.searchParams.set('targetUrl', sourceUrl)
+  return requestUrl.toString()
 }
 
-export function signAliExpressParams(params, appSecret) {
-  const canonical = Object.keys(params).sort().map(key => `${key}${params[key]}`).join('')
-  return crypto.createHmac('sha256', String(appSecret)).update(canonical).digest('hex').toUpperCase()
-}
-
-export function buildAliExpressApiRequest(sourceUrl, credentials, { now = new Date() } = {}) {
-  const params = {
-    app_key: String(credentials.appKey).trim(),
-    method: METHOD,
-    promotion_link_type: '0',
-    sign_method: 'sha256',
-    source_values: sourceUrl,
-    timestamp: timestamp(now),
-    tracking_id: String(credentials.trackingId).trim(),
-    v: '2.0',
-  }
-  params.sign = signAliExpressParams(params, credentials.appSecret)
-  return params
-}
-
-function findPromotionUrl(payload) {
-  const result = payload?.aliexpress_affiliate_link_generate_response?.resp_result?.result
-    ?? payload?.resp_result?.result
-    ?? payload?.result
-  const links = result?.promotion_links?.promotion_link ?? result?.promotion_links ?? result?.promotionLinks
-  const first = Array.isArray(links) ? links[0] : links
-  return first?.promotion_link ?? first?.promotionLink ?? first?.url ?? null
-}
-
-export async function generateAliExpressLink(sourceUrl, credentials, { fetchImpl = globalThis.fetch, now } = {}) {
-  const params = buildAliExpressApiRequest(sourceUrl, credentials, { now })
+export async function generateAliExpressLink(sourceUrl, credentials, { fetchImpl = globalThis.fetch, totalTimeoutMs = TOTAL_TIMEOUT_MS } = {}) {
+  const cookie = normalizeCookieExport(credentials?.cookie).trim()
+  if (!cookie) return null
   let response
   try {
-    response = await fetchImpl(API_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-      body: new URLSearchParams(params).toString(),
-      signal: AbortSignal.timeout(TOTAL_TIMEOUT_MS),
+    response = await fetchImpl(buildAliExpressPortalUrl(sourceUrl), {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        Cookie: cookie,
+        Referer: PORTAL_REFERER,
+        'User-Agent': BROWSER_UA,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      signal: AbortSignal.timeout(totalTimeoutMs),
     })
   } catch {
-    throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.API_REJECTED, 'AliExpress affiliate API unavailable')
+    throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.API_REJECTED, 'AliExpress link generator unavailable')
   }
-  if (!response?.ok) throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.API_REJECTED, 'AliExpress affiliate API rejected the request')
+  if (!response?.ok) {
+    const code = response?.status === 401 || response?.status === 403
+      ? ALIEXPRESS_CONVERSION_ERROR.SESSION_REJECTED
+      : ALIEXPRESS_CONVERSION_ERROR.API_REJECTED
+    throw new AliExpressConversionError(code, 'AliExpress link generator rejected the request')
+  }
   let payload
   try { payload = await response.json() } catch {
-    throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.INVALID_RESPONSE, 'AliExpress affiliate API returned invalid JSON')
+    throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.INVALID_RESPONSE, 'AliExpress link generator returned invalid JSON')
   }
-  const promotionUrl = findPromotionUrl(payload)
+  if (payload?.success !== true || payload?.code !== '00') {
+    throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.SESSION_REJECTED, 'AliExpress session was not accepted')
+  }
+  const promotionUrl = payload?.data?.shortLink
   if (typeof promotionUrl !== 'string' || !isAliExpressUrl(promotionUrl)) {
-    throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.INVALID_RESPONSE, 'AliExpress affiliate API returned an untrusted URL')
+    throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.INVALID_RESPONSE, 'AliExpress link generator returned an untrusted URL')
   }
   return promotionUrl
 }
 
 export async function convert(value, credentials, options = {}) {
-  if (!credentials?.appKey || !credentials?.appSecret || !credentials?.trackingId) return null
-  const resolved = await resolveAliExpressUrl(value, options)
+  if (!credentials?.cookie) return null
+  const totalTimeoutMs = Number(options.totalTimeoutMs) > 0 ? Number(options.totalTimeoutMs) : TOTAL_TIMEOUT_MS
+  const deadlineAt = Date.now() + totalTimeoutMs
+  const resolved = await resolveAliExpressUrl(value, { ...options, totalTimeoutMs })
   const clean = stripAliExpressTracking(resolved)
-  const converted = await generateAliExpressLink(clean, credentials, options)
+  const remainingMs = deadlineAt - Date.now()
+  if (remainingMs <= 0) throw new AliExpressConversionError(ALIEXPRESS_CONVERSION_ERROR.API_REJECTED, 'AliExpress conversion deadline reached')
+  const converted = await generateAliExpressLink(clean, credentials, { ...options, totalTimeoutMs: remainingMs })
   return { url: converted, linkKind: extractAliExpressProductId(clean) ? 'product' : 'coupon' }
 }
-
