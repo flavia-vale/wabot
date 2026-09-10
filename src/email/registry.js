@@ -1332,6 +1332,36 @@ A cliente já foi avisada por e-mail, com o que ela precisa fazer.
 Este aviso sai no máximo uma vez por dia para cada problema.`,
   },
   {
+    slug: 'admin_api_com_erro',
+    name: '[Interno] O painel está falhando por erro nosso',
+    description: 'Avisa a administradora quando a API passa a falhar por incompatibilidade entre o código e o banco — o tipo de erro que derruba o painel inteiro, não uma tela só.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'o_que_aconteceu', description: 'O tipo do problema, em uma frase', example: 'O código e o banco discordam sobre alguma coluna.' },
+      { name: 'onde', description: 'A chamada que falhou', example: 'GET /api/auth/me' },
+      { name: 'detalhe', description: 'Mensagem técnica do erro', example: 'Unknown field `blockedReason`' },
+      { name: 'quando', description: 'Quando aconteceu', example: '09/09/2026 18:20' },
+    ],
+    title: 'O painel está falhando',
+    subject: '[BOTinho] O painel está falhando por erro nosso',
+    body: `Uma chamada do painel falhou por erro nosso, não por algo que a cliente fez.
+
+[[lista]]
+O que aconteceu: {{o_que_aconteceu}}
+Onde: {{onde}}
+Detalhe: {{detalhe}}
+Quando: {{quando}}
+[[/lista]]
+
+Este aviso só sai para erro grave, do tipo que costuma afetar todas as contas ao mesmo tempo. Vale conferir agora se o painel abre.
+
+Este aviso sai no máximo uma vez por dia para cada tipo de problema.`,
+  },
+  {
     slug: 'admin_numero_repetido',
     name: '[Interno] Número de WhatsApp já usado em outra conta',
     description: 'Avisa a administradora quando uma conta liga um número de WhatsApp que já foi ligado por outra conta. É aviso para conferir; a recusa automática só acontece se a trava estiver ligada.',

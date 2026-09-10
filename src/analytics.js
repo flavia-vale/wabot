@@ -45,6 +45,9 @@ export const ANALYTICS_EVENTS = new Set([
   // Número de WhatsApp que já tinha sido usado por outra conta. `detected` sai
   // em modo aviso, `blocked` quando a conexão é de fato recusada. Ver
   // src/domain/session/phoneReuse.js.
+  // Chamada da API que falhou por erro NOSSO (5xx). Erro de cliente (4xx) fica
+  // de fora de propósito — ver src/ops/apiErrorSignal.js.
+  'ops_api_error',
   'ops_wa_phone_reuse_detected',
   'ops_wa_phone_reuse_blocked',
   'login_completed',
