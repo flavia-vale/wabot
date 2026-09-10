@@ -29,6 +29,38 @@ as citações antigas apontarem para a entidade certa. É a Issue 1.
 
 ---
 
+## Segunda correção: o conjunto de consultas media o nome errado
+
+Levantada pela dona do produto ao ler o plano, e ela está certa.
+
+As rodadas de 01/09 e 10/09 usaram 8 consultas, **duas delas sobre "BOTinho"** —
+o nome aposentado da superfície pública em 02/09. Contagem real de 10/09:
+
+| | medições de 10/09 |
+|---|---:|
+| nome aposentado (`BOTinho preço`, `BOTinho metodologia`) | **12 de 43 (28%)** |
+| nome atual (`espelha grupos whatsapp o que é`) | 3 |
+
+Ou seja: gastamos quatro vezes mais medição no nome que não usamos do que no que
+usamos, e concluímos que "a marca não é reconhecida". Era a pergunta errada.
+Ninguém procura "botinho" (uma impressão em três meses de Search Console), e o
+resultado — calçado, projeto social, peixe de aquário — fala do homônimo, não de
+nós.
+
+**O conjunto foi reescrito em `docs/marketing/ROTEIRO_MEDICAO_IA.md`**, em três
+trilhas: categoria (5, série contínua, texto inalterado), marca atual (4, com
+`espelha grupos preço` e `espelha grupos metodologia` substituindo as de
+BOTinho) e contaminação (1, que continua sendo `BOTinho preço` — mas lida como
+"algum concorrente está herdando nossas citações antigas?", que é o critério de
+aceite da Issue 1, e **fora do placar da marca**).
+
+⚠️ **Consequência no placar histórico:** o número de 10/09 sobe ao ser recontado
+por essa divisão, porque duas consultas saem do denominador da marca. Registrar
+as duas leituras lado a lado no relatório de 01/10 — nunca substituir a antiga
+em silêncio.
+
+---
+
 ## Ordem de ataque
 
 | # | Issue | Impacto medido | Esforço | Risco |
@@ -261,13 +293,14 @@ alucinação de recursos do Gemini. Nada disso sobrevive a uma coleta descuidada
 1. Um script que valide o CSV: colunas obrigatórias, plataforma dentro de uma
    lista fechada, `botinho_cited` em `sim`/`nao`/`parcial`, e que **falhe** se
    uma rodada não registrar a plataforma com o sufixo de conta neutra.
-2. Um roteiro fixo em `docs/marketing/` com as 8 consultas, as superfícies e as
-   três regras de método aprendidas hoje: conta neutra sempre, ChatGPT com busca
-   ativada, e pergunta indutora registrada como tal.
+2. ~~Um roteiro fixo~~ **FEITO**: `docs/marketing/ROTEIRO_MEDICAO_IA.md` é a
+   fonte de verdade do conjunto de consultas e do método. O script valida contra
+   ele.
 3. Um relatório que leia o CSV e imprima o placar por superfície e por rodada.
 
-**Aceite:** a rodada de outubro sai em menos de 20 minutos de trabalho manual e
-compara automaticamente contra 10/09 e 01/09.
+**Aceite:** a rodada de outubro sai em menos de 20 minutos de trabalho manual,
+usa as 10 consultas do roteiro e compara automaticamente contra 10/09 e 01/09
+pela Trilha A (a única com série contínua).
 
 **Por que importa:** hoje o placar é o único número que liga marketing a
 receita — 43% dos cadastros vieram do ChatGPT com 18% das visitas. Medição que
