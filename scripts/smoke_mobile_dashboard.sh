@@ -61,7 +61,41 @@ check_mobile_path() {
   echo "Trecho do body final:"
   head -c 1200 "$body_file" || true
   echo
+  diagnose_edge_cache "$url" "$headers_file"
   return 1
+}
+
+# Separa "o site está quebrado" de "a borda guardou uma resposta velha" — as
+# duas chegam aqui como o MESMO vermelho e pedem ações opostas (RCA 2026-09-10:
+# a home devolveu 404 na janela de restart do Next, a Cloudflare guardou essa
+# resposta com validade longa, e a partir daí todo deploy bom era reprovado por
+# ela). Refaz o pedido com um parâmetro descartável na ponta do endereço, o que
+# obriga a borda a buscar do servidor. Só imprime diagnóstico: o veredito não
+# muda, porque resposta velha na borda é problema de verdade para quem visita.
+diagnose_edge_cache() {
+  local url="$1"
+  local headers_file="$2"
+
+  grep -qi '^cf-cache-status:[[:space:]]*HIT' "$headers_file" || return 0
+
+  local separador='?'
+  [[ "$url" == *\?* ]] && separador='&'
+  local url_sem_cache="${url}${separador}smoke_cache_bust=$$-${RANDOM}"
+
+  local code
+  code=$(curl -sS -A "$MOBILE_USER_AGENT" -o /dev/null -w '%{http_code}' \
+    --max-time 15 "$url_sem_cache" || echo "000")
+
+  echo "  DIAGNÓSTICO: a borda (Cloudflare) respondeu com uma cópia guardada."
+  echo "  Pedindo de novo sem usar essa cópia -> HTTP ${code}"
+  if [[ "$code" =~ ^(200|301|302|307|308)$ ]]; then
+    echo "  >> O SERVIDOR ESTÁ BOM. O que reprovou foi a cópia velha guardada na borda."
+    echo "  >> Conserto: limpar o cache da Cloudflare (Caching -> Purge Everything)."
+    echo "  >> O passo 'Purgar cache da Cloudflare' deste mesmo deploy faz isso"
+    echo "  >> logo a seguir; se ele não rodar, limpe pelo painel."
+  else
+    echo "  >> O servidor também respondeu com erro. A falha NÃO é da borda."
+  fi
 }
 
 for path in "${PATHS[@]}"; do

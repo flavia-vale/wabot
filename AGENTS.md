@@ -1819,6 +1819,60 @@ Settings → Secrets and variables → Actions:
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
 
+## Cópia velha na borda reprovando deploy bom (RCA 2026-09-10 — não regredir)
+
+O deploy de produção ficou vermelho duas vezes seguidas com a home devolvendo
+**404**. O deploy tinha subido inteiro: build íntegro, PM2 no ar, `/login`,
+`/admin` e `/painel` em 200, todos os arquivos de JS e CSS em 200. O que
+reprovava era só a home, e só através da Cloudflare:
+
+```
+HTTP/2 404          cf-cache-status: HIT        age: 13522
+cache-control: max-age=14400, s-maxage=31536000
+```
+
+Pedindo a mesma home com um parâmetro descartável na ponta (o que obriga a
+borda a buscar do servidor) vinham **200 e 160 KB de página real**. Ou seja: o
+site estava de pé; a Cloudflare é que guardava um 404 antigo — a home devolveu
+404 na janela de restart do Next de um deploy anterior, e a resposta ficou
+guardada com validade de um ano.
+
+**O ciclo que fechava sozinho:** o smoke roda DENTRO do passo de SSH (etapa 9/9
+de `deploy_safe_dashboard.sh`) e lê a home através da Cloudflare; a limpeza do
+cache é um passo POSTERIOR, que só rodava com o deploy verde. Cópia velha
+reprova o deploy → deploy reprovado não limpa o cache → a cópia velha continua
+lá. Sem alguém limpar na mão pelo painel, todo deploy seguinte nascia vermelho
+e **a home ficava 404 para quem visitava o site** — a página principal do
+produto, e o destino da maior parte das buscas do Google.
+
+Dois consertos:
+
+- **`always()` na condição do passo "Purgar cache da Cloudflare"**
+  (`.github/workflows/deploy.yml`). Ele passa a rodar mesmo com o passo
+  anterior vermelho, e continua só em `main`. **Limpar o cache nunca piora
+  nada**: a borda só volta a buscar do servidor, que é a fonte da verdade.
+- **`diagnose_edge_cache`** em `scripts/smoke_mobile_dashboard.sh`: quando a
+  falha vem com `cf-cache-status: HIT`, o script refaz o pedido furando o cache
+  e diz em qual dos dois casos estamos. "O site está quebrado" e "a borda
+  guardou uma resposta velha" chegavam como o MESMO vermelho e pedem ações
+  opostas.
+
+**Não regredir:** o diagnóstico **não muda o veredito** — resposta velha na
+borda é problema de verdade para quem visita, então o smoke continua
+reprovando; o que muda é o deploy seguinte já nascer com o cache limpo. E não
+voltar a condicionar a limpeza do cache ao sucesso do deploy: é literalmente o
+que fecha o ciclo. Teste: `test/deploy-smoke-cache-da-borda.test.js` (sobe um
+servidor local que imita a borda e cobre os dois casos, mais a guarda
+estrutural do `always()` no YAML).
+
+⚠️ **Enquanto a home estiver 404 na borda, o conserto no código não basta** —
+ele só age no próximo deploy. Para destravar agora: painel da Cloudflare →
+Caching → Purge Everything. Confirmar com:
+
+```bash
+curl -s -o /dev/null -D - https://espelhagrupos.com.br/ | grep -iE "^HTTP/2|cf-cache-status|^age"
+```
+
 ## Minutos do GitHub Actions (repo PRIVADO — 2.000 min/mês no plano gratuito)
 
 Repo privado consome minutos. Medição de 2026-09-02 (amostra de 30 runs em 12h)
