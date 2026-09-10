@@ -30,6 +30,7 @@ const BRAND_STYLES = {
   mercadolivre: { store: 'Mercado Livre', bg: '#FFE600', fg: '#2D3277', accent: '#2D3277' },
   magazineluiza: { store: 'Magalu', bg: '#0086FF', fg: '#FFFFFF', accent: '#FFFFFF' },
   shein: { store: 'SHEIN', bg: '#000000', fg: '#FFFFFF', accent: '#FFFFFF' },
+  aliexpress: { store: 'AliExpress', bg: '#E43225', fg: '#FFFFFF', accent: '#FFD200' },
 }
 
 const WIDTH = 720

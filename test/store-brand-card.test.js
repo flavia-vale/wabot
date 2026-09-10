@@ -50,6 +50,11 @@ test('bot-worker: STORE_PREVIEW_TITLES.shein existe (title do card nunca omitido
   assert.match(botWorkerSource, /shein:\s*'SHEIN'/)
 })
 
+test('bot-worker: STORE_PREVIEW_TITLES.aliexpress existe (title do card nunca omitido)', () => {
+  const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(botWorkerSource, /aliexpress:\s*['"]AliExpress['"]/)
+})
+
 test('plataforma desconhecida devolve null sem lançar', async () => {
   assert.equal(await buildStoreBrandCardImage('lojainexistente'), null)
   assert.equal(await buildStoreBrandCardImage(null), null)

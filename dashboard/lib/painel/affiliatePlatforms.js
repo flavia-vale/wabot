@@ -125,6 +125,22 @@ export const AFFILIATE_PLATFORMS = [
       },
     ],
   },
+  {
+    id: 'aliexpress',
+    label: 'AliExpress',
+    color: '#E43225',
+    initials: 'AE',
+    instructions: 'No portal de afiliados da AliExpress, copie os dados do aplicativo e a identificação de rastreamento.',
+    actionLinks: [
+      { label: 'Abrir o portal de afiliados', href: 'https://portals.aliexpress.com' },
+    ],
+    platformWarning: 'Os três dados são usados somente para pedir à AliExpress um link novo com a sua comissão. O link de outra pessoa nunca é reaproveitado.',
+    fields: [
+      { key: 'appKey', label: 'Chave do aplicativo', hint: 'Número exibido nos dados do seu aplicativo AliExpress.', maxLength: 32 },
+      { key: 'appSecret', label: 'Segredo do aplicativo', hint: 'Guarde só aqui — não passe para ninguém.', sensitive: true, maxLength: 256 },
+      { key: 'trackingId', label: 'Identificação de rastreamento', hint: 'Nome de rastreamento criado no portal de afiliados.', maxLength: 128 },
+    ],
+  },
 ]
 
 /**
@@ -195,6 +211,14 @@ const ACCESS_CODE_RULES = {
 // Os textos precisam bater com os do servidor
 // (test/credential-format-validation.test.js falha se divergirem).
 export function describeInvalidAffiliateValue(platformId, fieldKey, rawValue) {
+  if (platformId === 'aliexpress') {
+    const value = String(rawValue ?? '').trim()
+    if (!value) return ''
+    if (fieldKey === 'appKey' && !/^\d{2,32}$/.test(value)) return 'A chave do aplicativo deve conter somente números e ter no máximo 32 caracteres.'
+    if (fieldKey === 'appSecret' && (value.length < 16 || value.length > 256 || /\s/.test(value))) return 'O segredo do aplicativo deve ter entre 16 e 256 caracteres e não pode conter espaços.'
+    if (fieldKey === 'trackingId' && (value.length > 128 || /[\u0000-\u001f\u007f]/.test(value))) return 'A identificação de rastreamento deve ter no máximo 128 caracteres e não pode conter caracteres de controle.'
+    return ''
+  }
   const regra = ACCESS_CODE_RULES[platformId]?.[fieldKey]
   if (!regra) return ''
   const value = String(rawValue ?? '').trim()

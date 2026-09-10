@@ -218,7 +218,7 @@ const PRODUCT_MATCH_STOPWORDS = new Set([
   'melhor', 'melhores', 'preco', 'precos', 'reais', 'valor', 'valores',
   'apenas', 'somente', 'agora', 'hoje', 'urgente', 'imperdivel', 'imperdiveis',
   'compre', 'compra', 'comprar', 'clique', 'link', 'confira', 'aproveite',
-  'amazon', 'shopee', 'mercadolivre', 'mercado', 'livre', 'magazine', 'luiza', 'magalu',
+  'amazon', 'shopee', 'mercadolivre', 'mercado', 'livre', 'magazine', 'luiza', 'magalu', 'shein', 'aliexpress',
   'pix', 'cartao', 'parcelas', 'parcelado', 'avista', 'vista',
 ])
 

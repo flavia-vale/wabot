@@ -4464,6 +4464,29 @@ comissão).
 ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
 `test/converters-amazon.test.js`.
 
+## AliExpress: conversão pela API oficial (não regredir)
+
+`src/converters/aliexpress.js` usa `aliexpress.affiliate.link.generate`. A
+cliente cadastra `appKey`, `appSecret` e `trackingId`; os dados seguem a mesma
+criptografia em repouso das outras credenciais. Links diretos e os encurtadores
+`a.aliexpress.com`/`s.click.aliexpress.com` são aceitos, mas todo redirect deve
+continuar em HTTPS dentro de `aliexpress.com` ou `aliexpress.us`.
+
+**Fail-closed é obrigatório:** antes de chamar a API, remover `aff_*`, `utm_*` e
+os demais rastros conhecidos da origem. Se resolução, assinatura, API, JSON ou
+validação da URL final falhar, não publicar o link original. A URL devolvida só
+é confiável quando é string HTTPS sem usuário/senha e pertence a host oficial
+ancorado — `aliexpress.com.evil.net` nunca é AliExpress. O segredo assina a
+requisição com HMAC-SHA256 e jamais entra no corpo, URL, erro ou log.
+
+A migration `20260910150000_botconfig_platforms_add_aliexpress` habilita a loja
+para configurações existentes e limpa a vírgula inicial legada criada por
+`platforms=''`. Gate real antes de produção: confirmar no staging o mesmo
+produto/variante no celular e a atribuição no relatório da afiliada. Testes:
+`test/converters-aliexpress.test.js`,
+`test/aliexpress-platform-integration.test.js` e
+`test/migrations-botconfig-platforms-aliexpress.test.js`.
+
 ## SHEIN: encurtamento de link (`SHEIN_SHORTLINK_ENABLED`, default LIGADO)
 
 `shortenSheinLink()` (`src/converters/shein.js`) troca o link longo da SHEIN

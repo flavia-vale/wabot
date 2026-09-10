@@ -32,6 +32,7 @@ const STORE_LABEL = {
   mercadolivre: 'Mercado Livre',
   amazon: 'Amazon',
   shopee: 'Shopee',
+  aliexpress: 'AliExpress',
 }
 
 // Como a credencial se chama na tela de cada loja. Na Shopee não é "código de
@@ -98,6 +99,12 @@ export function describeSaveSessionCheck({ platform, validation, probe, fallback
   // são justamente as lojas mais rápidas de cadastrar, então é por aqui que a
   // maioria vai destravar o robô pela primeira vez.
   if (!platformSupportsSessionCheck(platform)) {
+    if (platform === 'aliexpress') {
+      return {
+        tone: 'warn',
+        message: 'Salvamos os dados da AliExpress. A loja só consegue confirmá-los ao converter a primeira oferta; se algum dado for recusado, o motivo aparecerá nos registros.',
+      }
+    }
     return comMarco({ tone: validation.warnings?.length ? 'warn' : 'success', message: fallbackMessage })
   }
 

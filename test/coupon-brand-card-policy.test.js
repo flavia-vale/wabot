@@ -5,7 +5,7 @@ import { shouldUseCouponBrandCard } from '../src/converters/couponBrandCardPolic
 import { buildStoreBrandCardImage } from '../src/converters/storeBrandCard.js'
 import { decideSkipActiveFetchForCoupon } from '../src/monitoredImageResolver.js'
 
-const SUPPORTED_PLATFORMS = ['amazon', 'shopee', 'mercadolivre', 'magazineluiza', 'shein']
+const SUPPORTED_PLATFORMS = ['amazon', 'shopee', 'mercadolivre', 'magazineluiza', 'shein', 'aliexpress']
 
 // US1 (T005) — cupom de loja suportada, com sinal de texto e URL sem ID de
 // produto: banner precisa aparecer para as 4 lojas (FR-001/FR-002/FR-007).
@@ -211,10 +211,10 @@ test('shouldUseCouponBrandCard: plataforma não suportada pelo banner retorna fa
   assert.equal(
     shouldUseCouponBrandCard({
       enabled: true,
-      platform: 'aliexpress',
+      platform: 'lojainexistente',
       linkKind: 'coupon',
       couponTextSignal: true,
-      resolvedUrl: 'https://aliexpress.com/promo',
+      resolvedUrl: 'https://example.com/promo',
     }),
     false,
   )
