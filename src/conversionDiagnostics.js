@@ -1,7 +1,9 @@
 import { describeMissingCredentials } from './credentialHealth.js'
 import { describeSheinConversionError, SHEIN_CONVERSION_ERROR } from './converters/shein.js'
+import { describeAliExpressConversionError, ALIEXPRESS_CONVERSION_ERROR } from './converters/aliexpress.js'
 
 const SHEIN_CODES = new Set(Object.values(SHEIN_CONVERSION_ERROR))
+const ALIEXPRESS_CODES = new Set(Object.values(ALIEXPRESS_CONVERSION_ERROR))
 
 // Seam puro entre validação/conversor e persistência. Só devolve texto/código
 // estáveis; URLs e segredos continuam responsabilidade dos campos preexistentes
@@ -17,6 +19,13 @@ export function buildConversionIssue({ platform, credentialValidation, error = n
   if (platform === 'shein' && SHEIN_CODES.has(error?.code)) {
     return {
       reason: describeSheinConversionError(error.code),
+      errorMsg: `error:conversion:${error.code}`,
+      kind: 'classified_conversion',
+    }
+  }
+  if (platform === 'aliexpress' && ALIEXPRESS_CODES.has(error?.code)) {
+    return {
+      reason: describeAliExpressConversionError(error.code),
       errorMsg: `error:conversion:${error.code}`,
       kind: 'classified_conversion',
     }

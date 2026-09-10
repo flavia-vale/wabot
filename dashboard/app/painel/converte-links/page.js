@@ -19,7 +19,7 @@ const MAX_TEXT_LENGTH = 12_000
 // outras lojas, e o painel mostrava "0 links detectados"/"link não suportado"
 // para um link que o espelhamento converte normalmente (T071). As outras
 // entradas não mudam.
-const SUPPORTED_LINK_RE = /https?:\/\/(?:(?:www\.)?(?:mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|shope\.ee|shopee\.com\.br|s\.shopee\.com\.br|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)|(?:[a-z0-9-]+\.)*(?:shein\.com|onelink\.shein\.com|shein\.top)(?=[\/?#:]|\s|$))\S*/gi
+const SUPPORTED_LINK_RE = /https?:\/\/(?:(?:www\.)?(?:mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|shope\.ee|shopee\.com\.br|s\.shopee\.com\.br|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)|(?:[a-z0-9-]+\.)*(?:shein\.com|onelink\.shein\.com|shein\.top|aliexpress\.com|aliexpress\.us)(?=[\/?#:]|\s|$))\S*/gi
 
 function countSupportedLinks(text) {
   const matches = text.match(SUPPORTED_LINK_RE)
@@ -46,7 +46,7 @@ function classifyConversionError(errorMessage) {
   }
 
   if (message.includes('não suport') || message.includes('not support') || message.includes('unsupported')) {
-    return { badge: 'Link não suportado', hint: 'Use um link de Amazon, Mercado Livre, Shopee, Magazine Luiza ou SHEIN.' }
+    return { badge: 'Link não suportado', hint: 'Use um link de Amazon, Mercado Livre, Shopee, Magazine Luiza, SHEIN ou AliExpress.' }
   }
 
   if (message.includes('inválid') || message.includes('invalid') || message.includes('malform') || message.includes('url')) {

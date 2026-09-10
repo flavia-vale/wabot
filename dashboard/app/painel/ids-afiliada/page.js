@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
 import {
@@ -137,6 +137,7 @@ function CredentialField({ platform, field, value, onChange, disabled, error, vi
           className={`pnl-input ${field.sensitive ? 'pnl-cred-secret' : ''}`}
           type={hidden ? 'password' : 'text'}
           value={value}
+          maxLength={field.maxLength}
           onChange={(e) => onChange(field.key, e.target.value)}
           disabled={disabled}
           aria-invalid={!!error}
@@ -194,6 +195,8 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
   const [deleting, setDeleting] = useState(false)
   const [feedback, setFeedback] = useState(null) // { type, message, warnings }
   const [fieldErrors, setFieldErrors] = useState({})
+  const savingRef = useRef(false)
+  const deletingRef = useRef(false)
 
   const values = dirty ? draft : (initialData ?? {})
   const status = CRED_STATUS[getPlatformStatus(platform, values)]
@@ -217,9 +220,11 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
   }
 
   async function handleDelete() {
+    if (deletingRef.current || savingRef.current) return
     if (!window.confirm(
       `Apagar os dados da ${platform.label}?\n\nEles saem daqui agora. Suas ofertas dessa loja param de sair até você cadastrar de novo — e cadastrar leva menos de um minuto.`,
     )) return
+    deletingRef.current = true
     setDeleting(true)
     setFeedback(null)
     try {
@@ -230,12 +235,14 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
     } catch (err) {
       setFeedback({ type: 'error', message: err?.message || 'Não foi possível apagar a credencial.' })
     } finally {
+      deletingRef.current = false
       setDeleting(false)
     }
   }
 
   async function submit(e) {
     e.preventDefault()
+    if (savingRef.current || deletingRef.current) return
     const missing = platform.fields.filter((f) => f.required !== false && !String(values[f.key] ?? '').trim())
     if (missing.length) {
       setFieldErrors(Object.fromEntries(missing.map((f) => [f.key, `${f.label} é obrigatório.`])))
@@ -256,6 +263,7 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
       if (invalidos.some(([key]) => advancedFields.some((f) => f.key === key))) setShowAdvanced(true)
       return
     }
+    savingRef.current = true
     setSaving(true)
     setFeedback(null)
     try {
@@ -273,6 +281,7 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
     } catch (err) {
       setFeedback({ type: 'error', message: `${err?.message || 'Não foi possível salvar.'} Verifique os campos e tente novamente.` })
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -496,7 +505,7 @@ export default function IdsAfiliadaPage() {
 
   return (
     <div className="pnl-cred-page">
-      <p className="pnl-cred-lede">Cole o ID de cada loja — o robô usa para montar seus links já com a sua comissão.</p>
+      <p className="pnl-cred-lede">Cadastre os dados de afiliada de cada loja — o robô usa para montar seus links já com a sua comissão.</p>
 
       <div className="pnl-cred-note">
         <IconLock />

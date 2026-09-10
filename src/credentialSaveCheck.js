@@ -32,6 +32,7 @@ const STORE_LABEL = {
   mercadolivre: 'Mercado Livre',
   amazon: 'Amazon',
   shopee: 'Shopee',
+  aliexpress: 'AliExpress',
 }
 
 // Como a credencial se chama na tela de cada loja. Na Shopee não é "código de
@@ -94,10 +95,16 @@ export function describeSaveSessionCheck({ platform, validation, probe, fallback
 
   // Campo faltando ou loja sem sondagem: comportamento histórico intacto.
   if (!validation?.configured) return { tone: 'error', message: fallbackMessage }
-  // Magalu e SHEIN não têm sondagem (só etiqueta, que a loja não recusa) — e
-  // são justamente as lojas mais rápidas de cadastrar, então é por aqui que a
-  // maioria vai destravar o robô pela primeira vez.
+  // Magalu/SHEIN não têm sondagem (só etiqueta, que a loja não recusa).
+  // AliExpress também passa aqui, mas recebe texto próprio logo abaixo: seu
+  // cookie só pode ser provado contra um targetUrl real na primeira conversão.
   if (!platformSupportsSessionCheck(platform)) {
+    if (platform === 'aliexpress') {
+      return {
+        tone: 'warn',
+        message: 'Salvamos os dados da AliExpress. A loja só consegue confirmá-los ao converter a primeira oferta; se algum dado for recusado, o motivo aparecerá nos registros.',
+      }
+    }
     return comMarco({ tone: validation.warnings?.length ? 'warn' : 'success', message: fallbackMessage })
   }
 

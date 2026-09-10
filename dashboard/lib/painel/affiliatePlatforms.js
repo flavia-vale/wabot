@@ -125,6 +125,21 @@ export const AFFILIATE_PLATFORMS = [
       },
     ],
   },
+  {
+    id: 'aliexpress',
+    label: 'AliExpress',
+    color: '#E43225',
+    initials: 'AE',
+    instructions: 'Entre no portal de afiliados da AliExpress e exporte o JSON com a extensão Cookie-Editor.',
+    actionLinks: [
+      { label: 'Abrir o portal de afiliados', href: 'https://portals.aliexpress.com' },
+    ],
+    platformWarning: 'Não existe ID, chave ou segredo para procurar: o portal usa a sua conta conectada. Você só precisa colar o JSON exportado pelo Cookie-Editor.',
+    sessionCareNote: 'Depois de colar o código aqui, não clique em "Sair" na AliExpress e não use janela anônima — sair da conta pode invalidar o código e você precisará cadastrar novamente.',
+    fields: [
+      { key: 'cookie', label: 'JSON do Cookie-Editor', hint: 'Cole aqui o JSON completo exportado enquanto estiver conectada no portal da AliExpress.', sensitive: true, cookieField: true, maxLength: 120000, help: 'No computador, entre em portals.aliexpress.com já conectada, clique na extensão Cookie-Editor → Export → JSON. O JSON é copiado sozinho; é só colar aqui.' },
+    ],
+  },
 ]
 
 /**
@@ -195,6 +210,29 @@ const ACCESS_CODE_RULES = {
 // Os textos precisam bater com os do servidor
 // (test/credential-format-validation.test.js falha se divergirem).
 export function describeInvalidAffiliateValue(platformId, fieldKey, rawValue) {
+  if (platformId === 'aliexpress') {
+    const value = String(rawValue ?? '').trim()
+    if (!value) return ''
+    if (fieldKey === 'cookie' && value.length > 120000) return 'Esse código está grande demais. Copie novamente usando o botão Export da extensão Cookie-Editor.'
+    if (fieldKey === 'cookie' && /[\r\n\0]/.test(value)) {
+      let unsafe = true
+      try {
+        const parsed = JSON.parse(value)
+        const list = Array.isArray(parsed) ? parsed : [parsed]
+        unsafe = list.some((item) => /[\r\n\0]/.test(String(item?.name ?? '')) || /[\r\n\0]/.test(String(item?.value ?? '')))
+      } catch { unsafe = true }
+      if (unsafe) return 'Esse código contém uma quebra inválida. Copie novamente usando o botão Export da extensão Cookie-Editor.'
+    }
+    let cookieLike = value.includes('=')
+    if (!cookieLike && fieldKey === 'cookie') {
+      try {
+        const parsed = JSON.parse(value)
+        cookieLike = Array.isArray(parsed) && parsed.some((item) => item && typeof item.name === 'string' && 'value' in item)
+      } catch { cookieLike = false }
+    }
+    if (fieldKey === 'cookie' && !cookieLike) return 'Esse código não parece completo. Copie novamente usando o botão Export da extensão Cookie-Editor.'
+    return ''
+  }
   const regra = ACCESS_CODE_RULES[platformId]?.[fieldKey]
   if (!regra) return ''
   const value = String(rawValue ?? '').trim()

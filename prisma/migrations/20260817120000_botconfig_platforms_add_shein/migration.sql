@@ -8,5 +8,8 @@
 -- 'shein' (defesa em profundidade para linhas novas); esta migration cobre
 -- as linhas já existentes.
 UPDATE "BotConfig"
-   SET "platforms" = "platforms" || ',shein'
+   SET "platforms" = CASE
+     WHEN COALESCE("platforms", '') = '' THEN 'shein'
+     ELSE "platforms" || ',shein'
+   END
  WHERE ',' || COALESCE("platforms", '') || ',' NOT LIKE '%,shein,%';
