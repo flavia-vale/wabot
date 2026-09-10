@@ -254,15 +254,26 @@ jobs:
                 ROOT_DIR=~/wabot-staging BRANCH=develop SYNC_GIT=1 AUTO_STASH_ON_DIRTY=1 FORCE_RESET_ON_SYNC=1 ./scripts/deploy_safe_staging.sh
             fi
 
-      # Purga o cache da Cloudflare APÓS um deploy de PRODUÇÃO bem-sucedido.
+      # Purga o cache da Cloudflare em todo deploy de PRODUÇÃO.
       # Necessário para poder cachear o HTML das páginas públicas na borda com
       # TTL longo sem risco: a cada deploy o HTML antigo (que aponta para chunks
       # JS com hash que já foram removidos do .next) é invalidado, evitando
       # servir página quebrada. Só roda em main — prod está atrás da Cloudflare;
       # staging é acessada por IP, fora da CF. No-op silencioso se os secrets
       # CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID não estiverem configurados.
+      #
+      # `always()` é o conserto do RCA 2026-09-10 — NÃO REGREDIR. O smoke roda
+      # DENTRO do passo de SSH (etapa 9/9 do deploy_safe_dashboard.sh) e lê a
+      # home ATRAVÉS da Cloudflare. Um 404 cacheado na borda (a home devolveu
+      # 404 na janela de restart do Next de um deploy anterior e a CF guardou a
+      # resposta) reprova o smoke de um deploy que subiu certo — e, com a purga
+      # condicionada ao sucesso, o passo que consertaria o cache nunca rodava.
+      # Ciclo fechado: cache velho reprova o deploy, deploy reprovado não limpa
+      # o cache, e a home fica 404 para as visitantes até alguém purgar na mão.
+      # Purgar nunca piora nada: a borda só volta a buscar do servidor, que é a
+      # fonte da verdade. Por isso ela roda mesmo com o passo anterior vermelho.
       - name: Purgar cache da Cloudflare (produção)
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
