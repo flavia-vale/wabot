@@ -451,6 +451,73 @@ proposital que pagamento conferido na mão conte como pagante**.
 Testes: `test/admin-paying-tag.test.js`, `test/admin-painel-inicio.test.js`,
 `test/admin-wa-disconnected-users.test.js`.
 
+## Tag "número repetido" e a trava por número de WhatsApp (2026-09-09)
+
+Quatro pessoas usaram **doze contas** para renovar o teste grátis. Uma trocou
+nome E e-mail a cada conta, então nenhuma regra de nome ou e-mail a pegaria —
+só o número de WhatsApp em comum. No cadastro o número já era barrado quando
+repetido; **na hora de ligar a sessão do WhatsApp não havia conferência
+nenhuma**.
+
+| Peça | Onde |
+|---|---|
+| Decisão da trava (PURA, sem banco/rede) | `src/domain/session/phoneReuse.js` |
+| Histórico "quem já conectou este número" | `src/domain/session/phoneOwnership.js` |
+| Tabela | `WaPhoneOwnership` (`@@unique([phone, userId])`) |
+| Gancho no robô | `handlePhoneOwnership` em `src/bot-worker.js`, depois do `open` |
+| Regra da tag do admin (PURA) | `src/domain/admin/sharedPhoneStatus.js` |
+| Carregador em lote | `src/domain/admin/sharedPhoneLoader.js` |
+| Etiqueta na tela | `dashboard/components/SharedPhoneTag.js` |
+| Aviso interno | `admin_numero_repetido` em `src/email/registry.js` |
+| Trazer o histórico que já existe | `scripts/backfill-numeros-whatsapp.mjs` |
+
+`WA_PHONE_REUSE_MODE` tem três valores: `off` (padrão), `warn` (registra, avisa
+e **deixa conectar**) e `block` (recusa). Produção está em `warn`.
+
+**Não regredir:**
+
+- **O histórico é gravado ANTES do `if (modo === 'off')`.** É isso que faz o
+  modo `warn` acumular a base que a decisão de ligar o `block` vai usar —
+  gravar só quando a trava está ligada tornaria a decisão impossível de tomar
+  com dado.
+- **Conta pagante nunca é bloqueada**, e só quem está em teste entra na regra:
+  quem paga trocando de chip não pode ficar sem robô por causa disto.
+- **Fail-safe é DEIXAR CONECTAR.** Qualquer falha (banco, consulta, número
+  ilegível) passa. Barrar por dúvida deixaria uma cliente legítima sem produto,
+  que é pior que um teste repetido.
+- **A tag descreve um FATO, não uma acusação:** "este número aparece em N
+  contas". Troca de chip e conta antiga abandonada produzem o mesmo sinal;
+  quem conclui é gente. A decisão é do backend, nunca de cada tela — senão duas
+  tabelas do admin discordam sobre quem está marcado.
+- **A recusa NUNCA apaga credencial nem gera QR** — só encerra o socket.
+- **Custo:** duas consultas a mais por lista do admin (`findMany` + `groupBy`),
+  nenhum processo novo, **zero impacto de RAM**.
+
+⚠️ **O histórico NASCE VAZIO e só ganha linha quando um robô CONECTA** — então
+no dia do deploy a tag não aparece para ninguém, inclusive para os casos que a
+motivaram: três daquelas contas tiveram o acesso cortado e nunca mais vão
+conectar, e conta antiga abandonada também não. O número delas, porém, está em
+`WaSession.phone` desde sempre. `scripts/backfill-numeros-whatsapp.mjs` traz
+esses números para o histórico (read-only por padrão; grava com `--aplicar`) e,
+no modo de leitura, já responde qual é o caso: mostra quantos números existem,
+quais aparecem em mais de uma conta e quem são. **Rodar isso é o que faz a tag
+aparecer** — sem ele, "a tag não aparece" é ausência de histórico, não defeito
+de tela.
+
+```bash
+cd ~/wabot && node scripts/backfill-numeros-whatsapp.mjs            # só mostra
+cd ~/wabot && node scripts/backfill-numeros-whatsapp.mjs --aplicar  # grava
+```
+
+A gravação e a normalização são **importadas do produto**
+(`recordPhoneOwnership`), nunca reescritas no script: script que reimplementa a
+regra passa a discordar dela em silêncio e o histórico fica com dois formatos
+do mesmo número. Teste: `test/backfill-numeros-whatsapp.test.js`.
+
+⚠️ Em modo `remote`, o deploy da API **não** recarrega os bot-workers — a
+gravação do histórico só começa depois de `pm2 restart bot-supervisor`
+(reconecta TODAS as sessões: anunciar antes).
+
 ## Balão de ajuda saindo da tela no celular (RCA 2026-09-05 — não regredir)
 
 Os dois balões de ajuda do produto — o "?" dos cards do admin
