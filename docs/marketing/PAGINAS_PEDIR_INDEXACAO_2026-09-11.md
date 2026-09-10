@@ -14,12 +14,19 @@ causa, e a causa muda a ação.
 Existem em produção desde 02/09, respondem 200, estão no sitemap, sem noindex.
 Zero impressão em 9 dias. São o bloqueio da Issue 1.
 
+**Pedidas em 11/09** (cota do dia esgotou nas quatro):
+
 ```
-https://espelhagrupos.com.br/shopee-afiliados-whatsapp
-https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp
-https://espelhagrupos.com.br/amazon-afiliados-whatsapp
-https://espelhagrupos.com.br/shein-afiliados-whatsapp
-https://espelhagrupos.com.br/magalu-afiliados-whatsapp
+https://espelhagrupos.com.br/shopee-afiliados-whatsapp        ✅ pedida 11/09
+https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp ✅ pedida 11/09
+https://espelhagrupos.com.br/amazon-afiliados-whatsapp        ✅ pedida 11/09
+https://espelhagrupos.com.br/shein-afiliados-whatsapp         ✅ pedida 11/09
+```
+
+**Primeira da fila de 12/09** — a cota acabou antes dela:
+
+```
+https://espelhagrupos.com.br/magalu-afiliados-whatsapp        ⏳ pendente
 ```
 
 Anote o veredito de cada uma. Três respostas possíveis, com ações opostas:
@@ -33,7 +40,7 @@ Anote o veredito de cada uma. Três respostas possíveis, com ações opostas:
 - **"Duplicada, o Google escolheu outra canônica"** → confirma o diagnóstico de
   conteúdo duplicado, e a tela diz qual página ele preferiu.
 
-## Prioridade 2 — criadas em 02/09 junto com as outras
+## Prioridade 2 — resto da fila de 12/09 (criadas em 02/09)
 
 Mesma leva de 16 páginas; nove pegaram impressão e estas não.
 
@@ -73,6 +80,17 @@ atual.
 
 ## Limite prático
 
-O Search Console aceita poucas solicitações por dia. Faça a Prioridade 1 hoje,
-inteira, e as demais nos dias seguintes. E lembre: pedir indexação de página
-que o Google já leu e recusou não muda nada — o que muda é o conteúdo dela.
+O Search Console corta a cota de solicitações por dia, sem avisar antes — foi o
+que aconteceu em 11/09, com a quinta página do Tier 1 já na fila. Por isso a
+ordem importa: comece sempre pela página mais valiosa que ainda está pendente.
+
+Fila de 12/09, nesta ordem:
+
+1. `/magalu-afiliados-whatsapp` (sobra do Tier 1)
+2. `/alternativas/promium`
+3. `/estudos-de-caso`
+4. `/parcerias`
+5. as duas calculadoras em `/ferramentas`
+
+E lembre: pedir indexação de página que o Google já leu e recusou não muda nada
+— o que muda é o conteúdo dela.
