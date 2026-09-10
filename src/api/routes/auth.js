@@ -11,6 +11,9 @@ import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerm
 import { isRealEmail } from '../../leadNurture/policy.js'
 import { isUnsubscribed } from '../../leadNurture/sweep.js'
 import { checkDuplicateTrialAtSignup } from '../../domain/signup/duplicateTrialAlert.js'
+// O celular do cadastro precisa do código do país para ser discável — ver
+// src/domain/signup/contactPhone.js para o porquê e a regra por comprimento.
+import { normalizeContactPhone } from '../../domain/signup/contactPhone.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
 // no caminho "usuário não existe". Sem ele, login com e-mail inexistente
@@ -109,13 +112,6 @@ function setAuthCookie(reply, token, req) {
   if (cookieDomain) parts.push(`Domain=${cookieDomain}`)
   if (secure) parts.push('Secure')
   reply.header('Set-Cookie', parts.join('; '))
-}
-
-function normalizeContactPhone(rawPhone) {
-  const digits = String(rawPhone ?? '').replace(/\D/g, '')
-  if (!digits) return null
-  if (digits.length < 10 || digits.length > 15) return null
-  return `+${digits}`
 }
 
 function normalizeName(rawName) {
