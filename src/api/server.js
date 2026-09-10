@@ -38,6 +38,8 @@ import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
 import { trackAnalyticsEventSafe } from '../analytics.js'
+import { classifyApiError, describeApiErrorKind } from '../ops/apiErrorSignal.js'
+import { sendAdminAlert } from '../email/adminAlerts.js'
 import { runNurtureSweep } from '../leadNurture/sweep.js'
 import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
 import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
@@ -407,6 +409,48 @@ await app.register(fastifyRateLimit, {
   timeWindow: RATE_LIMIT_WINDOW,
   allowList: (req) => RATE_LIMIT_ALLOWLIST.has(req.url),
   keyGenerator: (req) => req.ip,
+})
+
+// Falha por erro NOSSO ganha nome próprio, linha durável e — quando é do tipo
+// que derruba o painel inteiro — e-mail interno.
+//
+// Incidente 2026-09-09: o schema perdeu duas colunas que o código lia, GET /me
+// passou a lançar em toda chamada e o painel não abriu para ninguém. O Fastify
+// registrou o erro no stdout do processo e mais nada: sem termo para procurar,
+// sem linha no banco, sem ninguém avisado. Ver src/ops/apiErrorSignal.js.
+app.setErrorHandler((error, req, reply) => {
+  const status = Number(error?.statusCode ?? 500)
+  const { signal, kind, alert } = classifyApiError(error, { statusCode: status })
+
+  if (signal) {
+    // Termo fixo e pesquisável: é o que permite achar o incidente no log sem
+    // saber de antemão a mensagem da biblioteca que quebrou.
+    req.log.error({ err: error, kind, rota: `${req.method} ${req.routeOptions?.url ?? req.url}` }, 'FALHA DA API')
+    trackAnalyticsEventSafe({
+      event: 'ops_api_error',
+      metadata: { kind, rota: `${req.method} ${req.routeOptions?.url ?? req.url}`, detalhe: String(error?.message ?? '').slice(0, 200) },
+    })
+  }
+
+  if (alert) {
+    // Cooldown de 24h por assunto vem do próprio canal interno; a `key` é o
+    // tipo, para dois problemas diferentes no mesmo dia gerarem dois avisos.
+    sendAdminAlert({
+      db,
+      slug: 'admin_api_com_erro',
+      key: kind,
+      vars: {
+        o_que_aconteceu: describeApiErrorKind(kind),
+        onde: `${req.method} ${req.routeOptions?.url ?? req.url}`,
+        detalhe: String(error?.message ?? '').slice(0, 300),
+        quando: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      },
+      logger: app.log,
+    }).catch(() => {})
+  }
+
+  // Resposta INALTERADA: o comportamento visto pela cliente é o mesmo de antes.
+  reply.send(error)
 })
 
 app.addHook('onSend', async (req, reply) => {
