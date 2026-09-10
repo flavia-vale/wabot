@@ -30,6 +30,8 @@ const programs = [
     note: 'Comissão calculada sobre o valor líquido da venda, sem impostos, cupons e frete.',
     href: '/blog/como-ser-afiliado-shopee-whatsapp',
     hrefLabel: 'Guia completo do Shopee Afiliados',
+    automationHref: '/shopee-afiliados-whatsapp',
+    automationLabel: 'Divulgar Shopee no WhatsApp sem copiar e colar',
   },
   {
     name: 'Amazon Associados',
@@ -39,6 +41,8 @@ const programs = [
     note: 'Também paga recompensas fixas por assinatura de Prime, Kindle Unlimited e Amazon Music.',
     href: '/blog/como-divulgar-ofertas-amazon-whatsapp',
     hrefLabel: 'Guia completo do Amazon Associados',
+    automationHref: '/amazon-afiliados-whatsapp',
+    automationLabel: 'Divulgar Amazon no WhatsApp sem copiar e colar',
   },
   {
     name: 'Mercado Livre Afiliados',
@@ -48,7 +52,20 @@ const programs = [
     note: 'Atenção: a tabela pública vale para Afiliados generalistas. Quem se enquadra como Afiliado Divulgador de Ofertas recebe percentuais próprios por e-mail.',
     href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
     hrefLabel: 'Guia completo do Mercado Livre Afiliados',
+    automationHref: '/mercado-livre-afiliados-whatsapp',
+    automationLabel: 'Divulgar Mercado Livre no WhatsApp sem copiar e colar',
   },
+]
+
+// Linkado daqui de propósito: página que só existe no sitemap acaba em
+// "Detectada, mas não indexada" (RCA 2026-09-11, AGENTS.md "Página nova NUNCA
+// nasce órfã"). Esta é uma das páginas fortes que dá descoberta às cinco.
+const storeAutomationPages = [
+  { href: '/shopee-afiliados-whatsapp', label: 'Shopee no WhatsApp', note: 'o programa com maior volume de busca no Brasil.' },
+  { href: '/mercado-livre-afiliados-whatsapp', label: 'Mercado Livre no WhatsApp', note: 'link de produto, de catálogo e de vitrine saem convertidos.' },
+  { href: '/amazon-afiliados-whatsapp', label: 'Amazon no WhatsApp', note: 'a etiqueta viaja junto com o link curto.' },
+  { href: '/shein-afiliados-whatsapp', label: 'SHEIN no WhatsApp', note: 'link encurtado pela própria loja, com a sua identidade.' },
+  { href: '/magalu-afiliados-whatsapp', label: 'Magalu no WhatsApp', note: 'o código de parceiro entra em qualquer endereço da loja.' },
 ]
 
 const howToChoose = [
@@ -130,9 +147,31 @@ export default function Page() {
                   <Link className="mt-4 inline-block text-sm font-black text-emerald-700 no-underline hover:text-emerald-800" href={program.href}>
                     {program.hrefLabel} →
                   </Link>
+                  {program.automationHref ? (
+                    <Link className="mt-2 block text-sm font-black text-emerald-700 no-underline hover:text-emerald-800" href={program.automationHref}>
+                      {program.automationLabel} →
+                    </Link>
+                  ) : null}
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="mt-10">
+            <h2 className="text-2xl font-black tracking-tight text-gray-950">Automatizar a divulgação, loja por loja</h2>
+            <p className="mt-2 leading-8 text-gray-700">
+              Depois de entrar no programa, o trabalho que sobra é publicar oferta por oferta com o link já convertido. Cada loja tem uma página com o que muda na prática:
+            </p>
+            <ul className="mt-4 list-disc space-y-2 pl-6 leading-8 text-gray-700">
+              {storeAutomationPages.map((page) => (
+                <li key={page.href}>
+                  <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href={page.href}>
+                    {page.label}
+                  </Link>{' '}
+                  — {page.note}
+                </li>
+              ))}
+            </ul>
           </section>
 
           <section className="mt-10">

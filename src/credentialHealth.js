@@ -27,6 +27,9 @@ const FIELD_LABELS = {
   'x-acbbr': 'o código de acesso da sua conta',
   appId: 'o App ID da Shopee',
   secretKey: 'a chave secreta da Shopee',
+  appKey: 'a chave do aplicativo',
+  appSecret: 'o segredo do aplicativo',
+  trackingId: 'a identificação de rastreamento',
 }
 
 export function friendlyFieldName(field) {
@@ -115,6 +118,15 @@ function getFormatWarnings(platform, data = {}) {
   if (platform === 'magazineluiza') {
     const tag = getString(data, 'tag')
     if (tag && tag.length < 3) warnings.push('A tag do Magazine Luiza parece curta. Confira se copiou a tag completa.')
+  }
+
+  if (platform === 'aliexpress') {
+    const appKey = getString(data, 'appKey')
+    const appSecret = getString(data, 'appSecret')
+    const trackingId = getString(data, 'trackingId')
+    if (appKey && !/^\d+$/.test(appKey)) warnings.push('A chave do aplicativo da AliExpress normalmente contém apenas números.')
+    if (appSecret && appSecret.length < 16) warnings.push('O segredo do aplicativo da AliExpress parece curto. Confira se copiou o valor inteiro.')
+    if (trackingId && trackingId.length < 2) warnings.push('A identificação de rastreamento da AliExpress parece curta. Confira se copiou o valor inteiro.')
   }
 
   // Nota: a checagem de comprimento do número da SHEIN é recusa DURA (não

@@ -152,6 +152,11 @@ Googlebot. Reconferir com janela mensal.
 - **11/09:** a marca não era desconhecida pelas IAs — o conjunto de consultas é
   que media o nome aposentado. **28% das medições de 10/09 foram gastas num nome
   que ninguém procura.**
+- **11/09 (segunda correção):** "não existe página comercial nossa disputando
+  Tier 1" era **falso nas três análises que o afirmaram**. As cinco páginas de
+  loja existem em produção desde 02/09 e têm zero impressão porque não foram
+  indexadas. O relatório de Páginas do Search Console só lista páginas COM
+  impressão — ausência ali nunca prova ausência da página.
 
 ---
 
@@ -161,3 +166,15 @@ Googlebot. Reconferir com janela mensal.
   `botinho_cited`, e qualquer contagem exata as perdia — foi assim que o placar
   de 01/09 apareceu como 0 em vez de 3. Valores normalizados para minúsculas. A
   validação do CSV (Issue 8) precisa travar o domínio dessa coluna.
+
+- **11/09 — conferir o repositório antes de afirmar que algo não foi feito.**
+  Antes de escrever numa análise que uma página não existe:
+
+  ```bash
+  ls dashboard/app | grep -i <termo>
+  grep -c "<rota>" dashboard/lib/seo-registry.mjs
+  curl -s -o /dev/null -w "%{http_code}\n" https://espelhagrupos.com.br/<rota>
+  ```
+
+  Página com zero impressão **não aparece** no relatório de Páginas. "Não está no
+  relatório" e "não existe" são estados diferentes, com ações opostas.

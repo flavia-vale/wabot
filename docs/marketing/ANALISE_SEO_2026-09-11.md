@@ -181,9 +181,14 @@ Sete dias renderam 81% dos cliques de agosto inteiro, com CTR subindo junto com
 o volume. Indexação praticamente parada (81 contra 53) — **o crescimento veio das
 mesmas páginas aparecendo em mais buscas**, não de páginas novas.
 
-**Tier 1 continua em zero pelo quarto relatório seguido.** `shopee afiliados`,
-`afiliado amazon`, `mercado livre afiliados` somam 50.000 buscas/mês cada, com
-concorrência baixa, e não existe página comercial nossa disputando.
+**Tier 1 continua em zero pelo quarto relatório seguido — e a causa NÃO é a que
+eu escrevi.** As cinco páginas de loja (`/shopee-afiliados-whatsapp`,
+`/mercado-livre-afiliados-whatsapp`, `/amazon-afiliados-whatsapp`,
+`/magalu-afiliados-whatsapp`, `/shein-afiliados-whatsapp`) **existem em produção
+desde 02/09**, respondem 200, estão no sitemap, sem `noindex` e com canônica
+própria. Elas têm **zero impressão** porque o Google não as indexou — não porque
+não foram feitas. Correção registrada em `PLANO_ISSUES_2026-09-11.md`, seção "A
+falha de método que se repetiu três vezes".
 
 Agora sabemos o que isso custa. Página comercial converte 15,4% de visita em
 cadastro. **Projeção, com as premissas à vista:** 50.000 buscas/mês, 1% de

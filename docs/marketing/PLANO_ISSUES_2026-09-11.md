@@ -34,7 +34,7 @@ esforço de onde há impressão sem receita e pôr onde há receita sem impress�
 
 | # | Issue | Alavanca medida | Esforço | Prazo |
 |---|---|---|---|---|
-| **1** | Frente Tier 1 comercial | 150.000 buscas/mês sem página nossa; comerciais convertem 15,4% | G | 30d |
+| **1** | Tier 1: destravar o índice | 5 páginas no ar desde 02/09 com **zero impressão** | M | 21d |
 | **2** | Converter o cluster de comparação, ou parar de alimentá-lo | 147 visitas, 0 cadastros, 47% das impressões | M | 21d |
 | **3** | Industrializar a citação por IA | ChatGPT converte 2,69× acima da participação | M | 30d |
 | **4** | Ocupar `espelha grupos é confiável` | AI Overviews devolve golpe financeiro | P | 14d |
@@ -48,50 +48,65 @@ saber quais consultas alimentam a página de 30,8% (item 2 dos dados que faltam)
 
 ---
 
-## Issue 1 — Frente Tier 1 comercial
+## Issue 1 — Tier 1: as páginas EXISTEM e não entraram no índice
 
-**A maior alavanca do plano, com folga.**
+⚠️ **Esta issue foi reescrita em 2026-09-11, depois do plano publicado.** A versão
+anterior mandava CRIAR as páginas Tier 1. Elas já existiam. Ver
+"A falha de método que se repetiu três vezes", no fim deste arquivo.
 
-`shopee afiliados`, `afiliado amazon`, `mercado livre afiliados`: 50.000
-buscas/mês cada, concorrência **baixa**, e **zero clique nosso pelo quarto
-relatório seguido**. Não existe página comercial nossa disputando.
+**O que existe, verificado no repositório e em produção:**
 
-O que a medição de hoje acrescenta é o **preço de não fazer**:
+| Página | Criada | Em `main` | HTTP | Tamanho | Sitemap | Impressões (3m) |
+|---|---|---|---|---:|---|---:|
+| `/shopee-afiliados-whatsapp` | 02/09 | sim | 200 | 83 KB | sim | **0** |
+| `/mercado-livre-afiliados-whatsapp` | 02/09 | sim | 200 | 80 KB | sim | **0** |
+| `/amazon-afiliados-whatsapp` | 02/09 | sim | 200 | 79 KB | sim | **0** |
+| `/magalu-afiliados-whatsapp` | 02/09 | sim | — | — | sim | **0** |
+| `/shein-afiliados-whatsapp` | 02/09 | sim | — | — | sim | **0** |
 
-| Premissa | Valor | Origem |
-|---|---:|---|
-| Buscas/mês por termo | 50.000 | Planejador, 30/07 |
-| CTR na posição 5-8 | 1% | premissa conservadora |
-| Visita → cadastro | 15,4% | **medido**, cluster comercial |
-| Cadastro → pagante | 10% | **medido**, 12 de 119 |
-| Ticket | R$69 | Pro |
+Sem `noindex`, com canônica própria e correta. **O trabalho foi feito. O Google
+não indexou.**
 
-→ **~8 pagantes/mês por frente**, ~R$530 de receita recorrente adicionada por mês.
+**Não é "página nova demora".** Das 16 páginas criadas no MESMO dia, nove
+ganharam impressão e sete não. As sem impressão são justamente as cinco de loja:
 
-⚠️ Projeção. As duas primeiras premissas não são medidas. **O gate é a primeira
-página:** se o CTR real ficar abaixo de 0,3% ou a conversão abaixo de 8%, a
-frente é reavaliada antes da segunda página.
+| Página criada em 02/09 | Impressões |
+|---|---:|
+| `/clonar-mensagens-de-grupo-de-afiliados` | 68 |
+| `/conteudos` | 51 |
+| `/precos` | 38 |
+| `/bot-canais-whatsapp` | 10 |
+| `/comparativos` | 9 |
+| **as cinco de loja** | **0** |
 
-**Escopo:** três páginas comerciais, na ordem do Trends (Shopee ≫ Mercado Livre >
-Amazon), no molde das que convertem — não no molde das de comparação.
+**Duas hipóteses, e as duas têm ação:**
 
-**O molde, extraído do que funciona:**
+1. **Quase-duplicata.** As cinco saem do mesmo gerador
+   (`dashboard/app/_preservationCommercialPages.js`) com a mesma estrutura,
+   trocando só o nome da loja. Isso é exatamente o que cai no balde "Rastreada,
+   mas não indexada" da Cobertura — que tem **24 páginas**.
+2. **Órfãs.** Cada uma recebe **um único link interno real** (de `/conteudos`).
+   Sem linkagem, o Google trata como periferia do site.
 
-| Elemento | Fonte |
-|---|---|
-| CTA principal no herói | `/bot-achadinhos-whatsapp`: 26 dos 52 cliques |
-| Segundo CTA de diagnóstico, não de venda | mesma página, 8 cliques |
-| CTA final repetido | 5 cliques |
-| Sem tabela comparativa | as páginas com tabela convertem 0% |
+**Escopo, nesta ordem:**
 
-**Aceite:** 30 dias após a primeira ir ao ar, ela aparece para o termo, e a
-conversão de visita a cadastro fica acima de 8%. Medir com
-`diag-paginas-seo.mjs --pagina`.
+1. **Inspeção de URL no Search Console** para as cinco, uma a uma. É o único
+   lugar que diz o motivo exato: "Rastreada mas não indexada", "Detectada mas
+   não indexada" ou "Duplicada sem canônica escolhida pelo usuário". **Pedir
+   indexação** para cada uma na mesma tela.
+2. **Diferenciar de verdade.** Se o motivo for duplicata, o conserto não é
+   editar o template: é dar a cada loja conteúdo que só ela tem — comissão
+   média da loja, prazo de aprovação do afiliado, particularidade do link
+   (short link da Shopee, `?tag=` da Amazon, `partner_id` do ML). Isso já existe
+   documentado no `AGENTS.md` e não está nas páginas.
+3. **Linkagem interna.** Cada página comercial que já converte
+   (`/bot-achadinhos-whatsapp`, `/automatizar-divulgacao-em-grupos-whatsapp`)
+   deve apontar para a loja correspondente, e a home para as cinco.
 
-**Limite:** entrar pela palavra do afiliado não vira promessa de ganho. A regra
-de nunca prometer resultado é justamente o que o Gemini e o ChatGPT elogiaram.
+**Aceite:** as cinco no índice em 21 dias, com impressão maior que zero. Só
+então a conversa passa a ser sobre CTR e conteúdo.
 
----
+**O que NÃO fazer:** criar página nova de Tier 1. Já existem cinco.
 
 ## Issue 2 — Converter a comparação, ou parar de alimentá-la
 
@@ -289,3 +304,40 @@ compara automaticamente contra 11/09, 10/09 e 01/09.
 | Conversão do cluster de comparação | 0,0% | 3% ou linha congelada |
 | Tier 1 | 0 cliques | primeira página no ar e medida |
 | LTV | desconhecido | medido |
+
+
+---
+
+## A falha de método que se repetiu três vezes
+
+**O que aconteceu.** As análises de 01/09, 10/09 e 11/09 afirmaram, cada uma,
+que "não existe página comercial nossa disputando Tier 1". As páginas existem em
+produção desde **02/09**. A de 11/09 chegou a abrir uma issue para criá-las.
+
+**Por que passou.** O relatório de Páginas do Search Console **só lista páginas
+que tiveram impressão**. Página com zero impressão não aparece — ela é invisível
+ali. Eu li a ausência no relatório como ausência da página, e nunca conferi o
+repositório.
+
+**Por que isso é grave.** Os dois estados pedem ações opostas:
+
+| Estado real | Ação correta |
+|---|---|
+| A página não existe | escrever a página |
+| A página existe e não indexou | inspeção de URL, diferenciação, linkagem |
+
+Três ciclos de análise apontaram para a ação errada, e o trabalho já entregue
+ficou invisível para quem decide.
+
+**A guarda, obrigatória a partir daqui.** Antes de escrever em qualquer análise
+que uma página "não existe" ou "não foi feita":
+
+```bash
+ls dashboard/app | grep -i <termo>
+grep -c "<rota>" dashboard/lib/seo-registry.mjs
+curl -s -o /dev/null -w "%{http_code}\n" https://espelhagrupos.com.br/<rota>
+```
+
+**Ausência no Search Console prova que ninguém viu a página. Nunca prova que ela
+não existe.** A frase honesta é "a página está no ar e não recebeu impressão" —
+que é um diagnóstico diferente, e mais acionável.
