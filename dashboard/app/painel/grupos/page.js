@@ -30,6 +30,7 @@ const ALL_PLATFORMS = [
   { id: 'mercadolivre', label: 'Mercado Livre' },
   { id: 'magazineluiza', label: 'Magazine Luiza' },
   { id: 'shein', label: 'SHEIN' },
+  { id: 'aliexpress', label: 'AliExpress' },
 ]
 
 const NO_LINK_SCOPE_OPTIONS = [

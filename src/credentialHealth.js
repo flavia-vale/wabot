@@ -7,6 +7,7 @@ const PLATFORM_LABELS = {
   mercadolivre: 'Mercado Livre',
   magazineluiza: 'Magazine Luiza',
   shein: 'SHEIN',
+  aliexpress: 'AliExpress',
 }
 
 export const PLATFORMS = Object.keys(PLATFORM_LABELS)
@@ -26,6 +27,9 @@ const FIELD_LABELS = {
   'x-acbbr': 'o código de acesso da sua conta',
   appId: 'o App ID da Shopee',
   secretKey: 'a chave secreta da Shopee',
+  appKey: 'a chave do aplicativo',
+  appSecret: 'o segredo do aplicativo',
+  trackingId: 'a identificação de rastreamento',
 }
 
 export function friendlyFieldName(field) {
@@ -56,6 +60,7 @@ export const REQUIRED_FIELDS = {
   mercadolivre: ['tag'],
   magazineluiza: ['tag'],
   shein: ['tag'],
+  aliexpress: ['appKey', 'appSecret', 'trackingId'],
 }
 
 function hasValue(value) {
@@ -97,6 +102,15 @@ function getFormatWarnings(platform, data = {}) {
   if (platform === 'magazineluiza') {
     const tag = getString(data, 'tag')
     if (tag && tag.length < 3) warnings.push('A tag do Magazine Luiza parece curta. Confira se copiou a tag completa.')
+  }
+
+  if (platform === 'aliexpress') {
+    const appKey = getString(data, 'appKey')
+    const appSecret = getString(data, 'appSecret')
+    const trackingId = getString(data, 'trackingId')
+    if (appKey && !/^\d+$/.test(appKey)) warnings.push('A chave do aplicativo da AliExpress normalmente contém apenas números.')
+    if (appSecret && appSecret.length < 16) warnings.push('O segredo do aplicativo da AliExpress parece curto. Confira se copiou o valor inteiro.')
+    if (trackingId && trackingId.length < 2) warnings.push('A identificação de rastreamento da AliExpress parece curta. Confira se copiou o valor inteiro.')
   }
 
   // Nota: a checagem de comprimento do número da SHEIN é recusa DURA (não
@@ -187,6 +201,15 @@ const ACCESS_CODE_RULES = {
 // (dashboard/lib/painel/affiliatePlatforms.js). Aqui é a autoridade.
 export function describeInvalidCredentialFields(platform, data = {}) {
   const problemas = []
+  if (platform === 'aliexpress') {
+    const appKey = getString(data, 'appKey')
+    const appSecret = getString(data, 'appSecret')
+    const trackingId = getString(data, 'trackingId')
+    if (appKey && !/^\d{2,32}$/.test(appKey)) problemas.push({ field: 'appKey', message: 'A chave do aplicativo deve conter somente números e ter no máximo 32 caracteres.' })
+    if (appSecret && (appSecret.length < 16 || appSecret.length > 256 || /\s/.test(appSecret))) problemas.push({ field: 'appSecret', message: 'O segredo do aplicativo deve ter entre 16 e 256 caracteres e não pode conter espaços.' })
+    if (trackingId && (trackingId.length > 128 || /[\u0000-\u001f\u007f]/.test(trackingId))) problemas.push({ field: 'trackingId', message: 'A identificação de rastreamento deve ter no máximo 128 caracteres e não pode conter caracteres de controle.' })
+    return problemas
+  }
   for (const regra of ACCESS_CODE_RULES[platform] ?? []) {
     const value = getString(data, regra.field)
     if (!value) continue
@@ -392,6 +415,14 @@ export function sanitizeCredentialBody(platform, body = {}) {
       // não é URL — mantém como veio, cai na recusa da validação
     }
     return body
+  }
+
+  if (platform === 'aliexpress') {
+    const cleaned = {}
+    for (const key of ['appKey', 'appSecret', 'trackingId']) {
+      cleaned[key] = typeof body[key] === 'string' ? body[key].trim() : body[key]
+    }
+    return cleaned
   }
 
   return body

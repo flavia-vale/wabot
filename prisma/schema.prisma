@@ -385,7 +385,7 @@ model BotConfig {
   user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   delayMin                 Int      @default(5)
   delayMax                 Int      @default(15)
-  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza,shein")
+  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress")
   blockedKeywords          String   @default("")
   welcomeMsg               String   @default("")
   postToStatus             Boolean  @default(false)
