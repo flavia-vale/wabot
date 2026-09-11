@@ -173,26 +173,99 @@ aquisição, e sem teto qualquer campanha é aposta.
 
 ---
 
+## Estado da execução (2026-09-11, fim do dia)
+
+Sete dos nove itens estão em `develop`, com teste de guarda em cada um. A
+suíte inteira passa (3.263 testes, zero falhas), `arch:check` limpo.
+
+| Item | Estado | O que mudou de fato |
+|---|---|---|
+| 1. Descoberta do Tier 1 | **feito** | as cinco saíram de 1 para 3+ links de entrada |
+| 2. Dívida de páginas órfãs | **feito** | de 9 rotas com zero e 26 com 1-2, para **zero abaixo de três** |
+| 3. UTM nos links internos | **feito** | de 119 links para **zero**; `/login` e `/cadastro` mantêm |
+| 4. Comparação → comercial | **feito** | as 8 páginas apontam para a comercial, em bloco próprio |
+| 5. Título com muita impressão e zero clique | **feito** | 3 títulos passaram a entregar o número |
+| 6. Entidade de marca | **feito** | frase citável em `/quem-somos` e na metodologia |
+| 7. Metodologia citável | **feito** | passou a ter 3 links; era o item 2 na prática |
+| 8. Colisões de nome | **feito** | `/espelha-grupos-e-confiavel` responde a pergunta |
+| 9. LTV e retenção | **pendente** | depende de medição no VPS — não dá para fazer daqui |
+
+### O que a execução DERRUBOU
+
+**A primeira guarda de páginas órfãs media errado.** Ela lia os arquivos-fonte,
+e link montado em laço não existe no texto do arquivo: páginas com ONZE links de
+entrada apareciam como órfãs com zero. A contagem passou a ser no HTML
+construído, que é o que o Google lê. Sem essa correção, o trabalho do item 2
+teria sido feito no lugar errado.
+
+**A causa da orfandade era estrutural, não falta de link escrito.** Tanto as
+páginas de dor quanto as comparações escolhiam relacionadas cortando nos três
+primeiros do grupo: todas linkavam as mesmas três e o resto ficava com um link
+em todo o site. A janela agora gira pela posição da própria rota — cada página
+continua mostrando três links, e o grupo inteiro virou alcançável.
+
+### Achados que não estavam no plano
+
+- **`/cadastro` estava no sitemap como indexável e é só um redirecionamento**
+  para `/login?mode=register`, que existe para preservar o `?aff=` das
+  indicações. Pedir indexação de um redirect não faz sentido. Saiu do índice; os
+  links de afiliada seguem funcionando igual.
+- **O `utm_content` dos links internos era redundante**: o evento de clique já
+  grava cta, posição, estágio, destino e href. Tirar o UTM não custou medição.
+
+### Decisão que ficou para a dona do produto
+
+**As cinco rotas com o nome aposentado no endereço** —
+`/protecao-antiban-botinho`, `/como-funciona-botinho-canais`,
+`/bot-comum-vs-botinho`, `/botinho-vs-planilha-manual` e
+`/botinho-vs-ferramentas-genericas-automacao`. Somam 27 impressões e 1 clique,
+então renomear custa quase nada de histórico — mas mexer em endereço público é
+mudança de fora para fora e exige redirecionamento. Não fiz por conta própria.
+
 ## Páginas para pedir reindexação AGORA
 
-Editadas nesta rodada, ganharam links para o Tier 1. O Google precisa relê-las
-para ver os links novos.
+Editadas ou criadas neste ciclo. O Google precisa relê-las para ver os links
+novos e os títulos novos. **Só depois do deploy em produção** — antes disso o
+link ainda não existe lá.
+
+Página nova (peça primeiro):
+
+```
+https://espelhagrupos.com.br/espelha-grupos-e-confiavel
+```
+
+Títulos que mudaram (o clique depende de o Google reler):
 
 ```
 https://espelhagrupos.com.br/programa-de-afiliados
-https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp
 https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp
-https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp
-https://espelhagrupos.com.br/bot-afiliados-whatsapp
-https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados
+https://espelhagrupos.com.br/alternativas/proafiliados
 ```
 
-Depois do deploy em produção, não antes — o Google precisa encontrar o link já
-publicado.
+Entidade de marca, agora dita em texto:
 
-Continua valendo a fila de páginas novas de `PAGINAS_PEDIR_INDEXACAO_2026-09-11.md`,
-com `/magalu-afiliados-whatsapp` na frente.
+```
+https://espelhagrupos.com.br/quem-somos
+https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
+```
+
+Ganharam links para o Tier 1 e para os posts que estavam órfãos:
+
+```
+https://espelhagrupos.com.br/bot-afiliados-whatsapp
+https://espelhagrupos.com.br/bot-achadinhos-whatsapp
+https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp
+https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp
+https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados
+https://espelhagrupos.com.br/parcerias
+```
+
+Continua valendo a fila de `PAGINAS_PEDIR_INDEXACAO_2026-09-11.md`, com
+`/magalu-afiliados-whatsapp` na frente.
+
+⚠️ A cota diária corta sem avisar. Comece sempre pela mais valiosa que ainda
+estiver pendente.
 
 ## O que NÃO fazer
 
