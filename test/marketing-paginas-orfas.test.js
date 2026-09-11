@@ -32,30 +32,12 @@ const raiz = new URL('..', import.meta.url).pathname
 const BUILD = path.join(raiz, 'dashboard/.next/server/app')
 
 // Só pode encolher. Ao linkar uma destas de três lugares, remova-a daqui.
-const DIVIDA_HISTORICA = new Set([
-  '/cadastro',
-  '/parcerias',
-  '/parceiro-influenciador',
-  '/termos-parceria-influenciador',
-  '/glossario',
-  '/grupo-para-canal-whatsapp',
-  '/bot-canal-whatsapp',
-  '/bot-ofertas-afiliados-whatsapp',
-  '/bot-ofertas-restaurantes-whatsapp',
-  '/bot-ofertas-marketplace-whatsapp',
-  '/aumentar-conversao-em-grupos-de-cupons',
-  '/consistencia-postagens-em-grupos',
-  '/reduzir-tempo-operacional-em-grupos-whatsapp',
-  '/rastrear-resultados-de-divulgacao-em-grupos',
-  '/organizar-calendario-de-ofertas-no-whatsapp',
-  '/melhorar-alcance-em-grupos-de-promocoes',
-  '/clonar-mensagens-de-grupo-de-afiliados',
-  '/confiabilidade-sessao-whatsapp',
-  '/seguranca-credenciais-afiliado',
-  '/blog/bot-para-afiliados-whatsapp-grupos-cupons',
-  '/blog/shadowban-whatsapp-canais',
-  '/blog/migrar-grupo-achadinhos-para-canal',
-])
+// A dívida foi QUITADA em 2026-09-11: todas as 86 rotas indexáveis passaram a
+// ter três ou mais links internos de entrada. A lista fica aqui, vazia, porque
+// só pode ser usada para uma coisa — registrar uma dívida que já existe — e
+// nunca para acomodar página nova. Rota nova entrando aqui reprova a revisão:
+// o certo é linkar a página, não registrar a dívida.
+const DIVIDA_HISTORICA = new Set([])
 
 const rotasIndexaveis = () =>
   getIndexableSeoRoutes()

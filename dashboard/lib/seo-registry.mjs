@@ -260,7 +260,13 @@ export const CORE_SEO_ROUTES = [
 export const CONTENT_SEO_ROUTES = [
   // title/description ficam só em app/precos/page.js (fonte única, FR-001).
   { path: '/precos', template: 'pricing', priority: 0.95, changeFrequency: 'weekly', lastModified: resolveLastModified('/precos', '2026-08-05'), indexable: true },
-  { path: '/cadastro', title: 'Cadastro Espelha Grupos — teste grátis para automatizar ofertas no WhatsApp', description: 'Crie sua conta no Espelha Grupos e comece a automatizar a divulgação de ofertas em grupos e canais do WhatsApp.', template: 'signup', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/cadastro'), indexable: true },
+  // `indexable: false` desde 2026-09-11: /cadastro NÃO é página, é um
+  // redirecionamento para /login?mode=register que só existe para preservar
+  // ?aff= dos links de indicação. Anunciá-la no sitemap e no IndexNow como
+  // indexável pedia ao Google para indexar um redirect — ele segue e indexa
+  // outra coisa, ou nada. Os links de afiliada continuam funcionando igual:
+  // indexação não tem relação com o redirect.
+  { path: '/cadastro', title: 'Cadastro Espelha Grupos — teste grátis para automatizar ofertas no WhatsApp', description: 'Crie sua conta no Espelha Grupos e comece a automatizar a divulgação de ofertas em grupos e canais do WhatsApp.', template: 'signup', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/cadastro'), indexable: false },
   // title/description ficam só em app/parcerias/page.js (fonte única, FR-001).
   { path: '/parcerias', template: 'partnerships', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/parcerias'), indexable: true },
   // title/description ficam só em app/bot-canais-whatsapp/page.js (fonte única, FR-001).
@@ -399,11 +405,27 @@ export function getSeoRoutesByCluster(cluster) {
   return SEO_ROUTES.filter((route) => route.cluster === cluster && route.type !== 'hub')
 }
 
+// A janela GIRA a partir da posição da própria rota, em vez de pegar sempre os
+// três primeiros do grupo (RCA 2026-09-11).
+//
+// Com `.slice(0, 3)` fixo, TODAS as páginas de um grupo linkavam exatamente as
+// mesmas três, e as demais ficavam com um link de entrada em todo o site —
+// medido no HTML construído: /aumentar-conversao-em-grupos-de-cupons,
+// /consistencia-postagens-em-grupos, /reduzir-tempo-operacional-em-grupos-whatsapp
+// e /rastrear-resultados-de-divulgacao-em-grupos tinham UM cada, enquanto as
+// três do topo do grupo acumulavam todos.
+//
+// Girando, cada página continua mostrando três links (a leitura não muda) e o
+// grupo inteiro passa a ser alcançável. Página com menos de três links de
+// entrada acaba em "Detectada, mas não indexada" — o Google nem chega a ler.
 export function getRelatedProgrammaticSeoRoutes(route, limit = 3) {
   if (!route?.cluster) return []
-  return getSeoRoutesByCluster(route.cluster)
-    .filter((candidate) => candidate.path !== route.path)
-    .slice(0, limit)
+  const grupo = getSeoRoutesByCluster(route.cluster)
+  const posicao = grupo.findIndex((candidate) => candidate.path === route.path)
+  const vizinhos = grupo.filter((candidate) => candidate.path !== route.path)
+  if (!vizinhos.length || posicao < 0) return vizinhos.slice(0, limit)
+  const inicio = posicao % vizinhos.length
+  return Array.from({ length: Math.min(limit, vizinhos.length) }, (_, i) => vizinhos[(inicio + i) % vizinhos.length])
 }
 
 export function getIndexableSeoRoutes() {

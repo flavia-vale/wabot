@@ -24,6 +24,8 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: o que divulgar nos seus achadinhos',
     relatedLinks: [
+      { href: '/grupo-para-canal-whatsapp', label: 'Como levar um grupo para o Canal', note: 'o caminho prático, sem perder quem já está no grupo' },
+      { href: '/blog/shadowban-whatsapp-canais', label: 'Canal com alcance despencando', note: 'o que costuma estar por trás e o que dá para fazer' },
       { href: '/blog/bot-whatsapp-antiban-existe', label: 'Existe bot que não é banido?', note: 'o que ninguém pode prometer, e o que dá para reduzir' },
       { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Quando o trabalho manual deixa de caber', note: 'o sinal de que a operação passou do ponto' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comissão e prazo de atribuição dos três, lado a lado' },
@@ -78,6 +80,7 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: risco de bloqueio no WhatsApp',
     relatedLinks: [
+      { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Levar o grupo para o Canal sem perder ninguém', note: 'o caminho prático, passo a passo' },
       { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'sem promessa de imunidade' },
       { href: '/blog/bot-whatsapp-antiban-existe', label: 'Bot antiban existe mesmo?', note: 'o que nenhuma ferramenta pode garantir' },
       { href: '/faq-antiban-whatsapp', label: 'Perguntas frequentes sobre banimento', note: 'respostas diretas' },
@@ -104,6 +107,8 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: grupos, canais e achadinhos',
     relatedLinks: [
+      { href: '/blog/shadowban-whatsapp-canais', label: 'Canal com alcance despencando', note: 'depois de migrar, é o próximo susto comum' },
+      { href: '/glossario', label: 'Glossário: os termos que aparecem no painel', note: 'em português claro, sem jargão' },
       { href: '/blog/grupo-ou-canal-whatsapp-achadinhos', label: 'Grupo ou canal para achadinhos?', note: 'o que muda em alcance e em risco' },
       { href: '/bot-achadinhos-whatsapp', label: 'Automatizar um grupo de achadinhos', note: 'da conversão do link ao envio' },
       { href: '/bot-canal-whatsapp', label: 'Publicar em Canais do WhatsApp', note: 'como o Espelha Grupos envia para canal' },
@@ -347,6 +352,8 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: quanto custa e quanto rende',
     relatedLinks: [
+      { href: '/blog/bot-para-afiliados-whatsapp-grupos-cupons', label: 'O que um bot de afiliados faz, na prática', note: 'antes de comparar preço, veja o que está sendo comprado' },
+      { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'a mensagem sai como publicação sua, com o seu link' },
       { href: '/programa-de-afiliados', label: 'Quanto cada programa de afiliados paga', note: 'o outro lado da conta: a comissão real' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: comissão e prazo de atribuição', note: '3% na venda padrão, até 30% na Comissão Extra' },
       { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Comparativo de bots para afiliados', note: 'o que avaliar antes de assinar' },
@@ -404,6 +411,8 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue no cluster de afiliados',
     relatedLinks: [
+      { href: '/blog/bot-para-afiliados-whatsapp-grupos-cupons', label: 'Como o robô trata cupom e link de produto', note: 'cupom quebra a oferta quando é removido da mensagem' },
+      { href: '/glossario', label: 'Glossário: os termos que aparecem no painel', note: 'conversão de link, espelhamento, cadência' },
       { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa automatizar isso', note: 'preço das ferramentas do mercado, lado a lado' },
       { href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', label: 'Começar sem ter grupo grande', note: 'o que dá para fazer com poucos contatos' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'onde ficam suas credenciais de afiliada' },
@@ -461,6 +470,7 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: o que publicar no grupo novo',
     relatedLinks: [
+      { href: '/blog/bot-para-afiliados-whatsapp-grupos-cupons', label: 'Como o robô trata cupom e link de produto', note: 'o que muda quando a oferta só fecha com cupom' },
       { href: '/blog/chip-dedicado-bot-whatsapp', label: 'Vale a pena usar um chip só para o robô', note: 'decidir isso no começo evita retrabalho' },
       { href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', label: 'Começar sem ter grupo grande', note: 'não é preciso ter audiência antes de começar' },
       { href: '/blog/checklist-padronizar-divulgacao-whatsapp', label: 'Checklist para padronizar o que você publica', note: 'o que conferir antes de cada oferta sair' },

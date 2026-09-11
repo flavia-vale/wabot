@@ -145,6 +145,39 @@ export default function Page() {
         <section className="mt-8">
           <PartnerLeadForm />
         </section>
+
+        {/*
+          Linkadas daqui de propósito (RCA 2026-09-11, "Página nova NUNCA nasce
+          órfã"): as duas só se linkavam uma à outra, então nenhum caminho novo
+          chegava nelas e o Google nunca as leu.
+        */}
+        <section className="mt-10">
+          <h2 className="text-2xl font-black tracking-tight text-gray-950">Se você cria conteúdo</h2>
+          <p className="mt-2 leading-8 text-gray-700">
+            Existe um caminho separado para quem tem audiência e quer indicar o robô, com regras próprias de
+            comissão e de divulgação.
+          </p>
+          <ul className="mt-4 list-disc space-y-2 pl-6 leading-8 text-gray-700">
+            <li>
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/parceiro-influenciador">
+                Parceria para criadores de conteúdo
+              </Link>{' '}
+              — como funciona a indicação e quanto é pago.
+            </li>
+            <li>
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/termos-parceria-influenciador">
+                Termos da parceria
+              </Link>{' '}
+              — as regras completas, antes de você aceitar.
+            </li>
+            <li>
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/programa-de-afiliados">
+                Programa de afiliados das lojas
+              </Link>{' '}
+              — Shopee, Amazon e Mercado Livre, com comissão e prazo lado a lado.
+            </li>
+          </ul>
+        </section>
       </main>
     </PublicShell>
   )

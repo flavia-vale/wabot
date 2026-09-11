@@ -174,6 +174,26 @@ export default function Page() {
             </ul>
           </section>
 
+          {/*
+            Terceiro link de entrada das duas páginas de parceria (RCA
+            2026-09-11): antes só /parcerias e elas mesmas linkavam uma à outra.
+          */}
+          <section className="mt-10">
+            <h2 className="text-2xl font-black tracking-tight text-gray-950">Indicar em vez de divulgar</h2>
+            <p className="mt-2 leading-8 text-gray-700">
+              Se o seu público são outras pessoas que divulgam ofertas, dá para ganhar indicando a ferramenta em
+              vez de vender produto:{' '}
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/parceiro-influenciador">
+                parceria para criadores de conteúdo
+              </Link>
+              , com as{' '}
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/termos-parceria-influenciador">
+                regras completas
+              </Link>{' '}
+              publicadas antes de você aceitar.
+            </p>
+          </section>
+
           <section className="mt-10">
             <h2 className="text-2xl font-black tracking-tight text-gray-950">Como escolher entre eles</h2>
             <ul className="mt-4 list-disc space-y-2 pl-6 leading-8 text-gray-700">
