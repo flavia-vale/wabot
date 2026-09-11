@@ -5,21 +5,22 @@
 
 ## Contrato do produto
 
-A cliente cadastra os três dados do aplicativo no portal de afiliados da
-AliExpress: chave do aplicativo, segredo do aplicativo e identificação de
-rastreamento. Ao encontrar um endereço `aliexpress.com`/`aliexpress.us`, o robô
-remove a atribuição do afiliado de origem e solicita à API oficial
-`aliexpress.affiliate.link.generate` um novo link. O endereço original ou uma
-conversão parcial **nunca** é publicado como fallback.
+A cliente cadastra o código de acesso exportado da sessão autenticada em
+`portals.aliexpress.com`; ela não precisa procurar ID, App Key nem segredo. Ao
+encontrar um endereço `aliexpress.com`/`aliexpress.us`, o robô remove a
+atribuição do afiliado de origem e chama o mesmo gerador usado pelo portal,
+`generatePromotionLinkV2.htm`, com `shipTos=BR` e `trackId=default`. O endereço
+original ou uma conversão parcial **nunca** é publicado como fallback.
 
 ## Histórias e critérios de aceite
 
 ### US1 — Configurar a loja
 
 1. AliExpress aparece nas credenciais e nos seletores de loja.
-2. Os três campos são obrigatórios, espaços externos são removidos e valores
-   vazios/malformados são recusados em linguagem leiga.
-3. O segredo aparece mascarado e é armazenado pela criptografia comum de
+2. A tela pede **somente o JSON do Cookie-Editor** em um único campo obrigatório;
+   espaços externos são removidos e exportações vazias/malformadas são recusadas
+   em linguagem leiga. ID, App Key, App Secret e tracking ID não aparecem.
+3. O código aparece mascarado e é armazenado pela criptografia comum de
    credenciais.
 4. Salvar/apagar exige autenticação e só altera a conta do JWT.
 
@@ -54,12 +55,11 @@ conversão parcial **nunca** é publicado como fallback.
 
 - Hosts sósia (`aliexpress.com.evil.test`), credenciais embutidas no URL e HTTP
   são recusados.
-- O `appSecret` participa apenas da assinatura HMAC-SHA256 e nunca é incluído no
-  corpo da requisição, URL, erro ou log.
-- `appKey` tem no máximo 32 dígitos, `appSecret` 16–256 caracteres sem espaços e
-  `trackingId` no máximo 128 caracteres sem caracteres de controle.
-- A API recebe `application/x-www-form-urlencoded`; valores são codificados por
-  `URLSearchParams`, não concatenados manualmente.
+- O código de acesso segue somente no header `Cookie`; nunca entra na URL,
+  resposta, erro ou log.
+- O campo aceita Header string ou JSON do Cookie-Editor, com teto de 120.000
+  caracteres.
+- `targetUrl` é codificado por `URLSearchParams`, nunca concatenado manualmente.
 
 ## Gate manual obrigatório
 
@@ -71,4 +71,3 @@ Antes de promover para produção, usar credenciais reais em staging para:
 4. simular credencial inválida e indisponibilidade sem vazamento do link de
    origem;
 5. espelhar produto e cupom em grupo real, validando card e registro.
-

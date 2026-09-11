@@ -59,7 +59,7 @@ function buildAliExpressAlert(storeLabel) {
   return {
     headline: `As ofertas da ${storeLabel} não estão saindo`,
     body: `Sem os dados de afiliada da ${storeLabel}, não é seguro trocar a comissão: a oferta para e o link de outra pessoa nunca é publicado.`,
-    nextStep: `Cadastre os três dados da ${storeLabel} em "Minhas credenciais" para as ofertas voltarem a sair.`,
+    nextStep: `Cadastre o código de acesso da ${storeLabel} em "Minhas credenciais" para as ofertas voltarem a sair.`,
   }
 }
 

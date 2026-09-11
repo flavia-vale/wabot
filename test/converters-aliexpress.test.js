@@ -2,27 +2,22 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ALIEXPRESS_CONVERSION_ERROR,
-  buildAliExpressApiRequest,
+  buildAliExpressPortalUrl,
   convert,
   extractAliExpressProductId,
   isAliExpressUrl,
   resolveAliExpressUrl,
-  signAliExpressParams,
   stripAliExpressTracking,
 } from '../src/converters/aliexpress.js'
 
-const credentials = { appKey: '123456', appSecret: 'a-secret-with-enough-characters', trackingId: 'espelha' }
+const credentials = { cookie: 'xman_us_f=x_l=1; ali_apache_id=session-value' }
 
 function jsonResponse(body) {
   return { ok: true, async json() { return body } }
 }
 
 function apiPayload(url) {
-  return {
-    aliexpress_affiliate_link_generate_response: {
-      resp_result: { result: { promotion_links: { promotion_link: [{ promotion_link: url }] } } },
-    },
-  }
+  return { code: '00', data: { shortLink: url }, success: true }
 }
 
 test('reconhece hosts oficiais e recusa domínios sósia/credenciais embutidas/http', () => {
@@ -36,6 +31,7 @@ test('reconhece hosts oficiais e recusa domínios sósia/credenciais embutidas/h
 test('extrai item id de path, query e valor codificado', () => {
   assert.equal(extractAliExpressProductId('https://pt.aliexpress.com/item/1005001234567890.html'), '1005001234567890')
   assert.equal(extractAliExpressProductId('https://aliexpress.com/x?productId=1005009999999999'), '1005009999999999')
+  assert.equal(extractAliExpressProductId('https://aliexpress.com/ssr/x?productIds=1005010564956854'), '1005010564956854')
   assert.equal(extractAliExpressProductId(encodeURIComponent('https://aliexpress.com/item/1005007777777777.html')), '1005007777777777')
 })
 
@@ -44,28 +40,30 @@ test('remove identidade do afiliado de origem, utm e fragmento sem trocar o prod
   assert.equal(result, 'https://pt.aliexpress.com/item/1005001234567890.html?sku=red')
 })
 
-test('assinatura é determinística, maiúscula e não inclui o próprio sign', () => {
-  const params = { b: '2', a: '1' }
-  assert.equal(signAliExpressParams(params, 'secret'), signAliExpressParams({ a: '1', b: '2' }, 'secret'))
-  assert.match(signAliExpressParams(params, 'secret'), /^[A-F0-9]{64}$/)
-  const request = buildAliExpressApiRequest('https://aliexpress.com/item/1005001234567890.html', credentials, { now: new Date('2026-09-10T12:34:56Z') })
-  assert.equal(request.method, 'aliexpress.affiliate.link.generate')
-  assert.equal(request.timestamp, '2026-09-10 12:34:56')
-  assert.equal(request.tracking_id, 'espelha')
-  assert.match(request.sign, /^[A-F0-9]{64}$/)
+test('monta exatamente a chamada observada no portal, com targetUrl codificada', () => {
+  const source = 'https://www.aliexpress.com/ssr/x?productIds=1005010564956854&sku=azul'
+  const request = new URL(buildAliExpressPortalUrl(source))
+  assert.equal(request.origin, 'https://portals.aliexpress.com')
+  assert.equal(request.pathname, '/tools/linkGenerate/generatePromotionLinkV2.htm')
+  assert.equal(request.searchParams.get('shipTos'), 'BR')
+  assert.equal(request.searchParams.get('trackId'), 'default')
+  assert.equal(request.searchParams.get('targetUrl'), source)
 })
 
 test('happy path: limpa link de terceiro e publica somente URL oficial devolvida pela API', async () => {
-  let body
+  let requestUrl
+  let requestOptions
   const result = await convert(
     'https://pt.aliexpress.com/item/1005001234567890.html?aff_fcid=third&utm_source=third&sku=red',
     credentials,
-    { fetchImpl: async (_url, options) => { body = new URLSearchParams(options.body); return jsonResponse(apiPayload('https://s.click.aliexpress.com/e/_ourLink')) } },
+    { fetchImpl: async (url, options) => { requestUrl = new URL(url); requestOptions = options; return jsonResponse(apiPayload('https://s.click.aliexpress.com/e/_ourLink')) } },
   )
   assert.deepEqual(result, { url: 'https://s.click.aliexpress.com/e/_ourLink', linkKind: 'product' })
-  assert.equal(body.get('source_values'), 'https://pt.aliexpress.com/item/1005001234567890.html?sku=red')
-  assert.equal(body.get('tracking_id'), 'espelha')
-  assert.equal(body.has('app_secret'), false)
+  assert.equal(requestUrl.searchParams.get('targetUrl'), 'https://pt.aliexpress.com/item/1005001234567890.html?sku=red')
+  assert.equal(requestUrl.searchParams.get('trackId'), 'default')
+  assert.equal(requestOptions.method, 'GET')
+  assert.equal(requestOptions.headers.Cookie, credentials.cookie)
+  assert.doesNotMatch(requestUrl.toString(), /session-value/)
 })
 
 test('short link resolve apenas dentro de hosts oficiais antes de gerar', async () => {
@@ -103,10 +101,34 @@ test('resposta com URL maliciosa ou JSON inválido falha fechado', async () => {
   )
 })
 
-test('sem os três dados obrigatórios nunca chama rede nem publica original', async () => {
+test('sem código de acesso nunca chama rede nem publica original', async () => {
   let called = false
-  assert.equal(await convert('https://aliexpress.com/item/1005001234567890.html', { appKey: '1' }, { fetchImpl: async () => { called = true } }), null)
+  assert.equal(await convert('https://aliexpress.com/item/1005001234567890.html', {}, { fetchImpl: async () => { called = true } }), null)
   assert.equal(called, false)
+})
+
+test('aceita exportação JSON do Cookie-Editor e nunca a coloca na URL', async () => {
+  const cookieJson = JSON.stringify([{ name: 'session', value: 'very-secret', domain: '.aliexpress.com' }])
+  let requestUrl
+  let sentCookie
+  await convert('https://aliexpress.com/item/1005001234567890.html', { cookie: cookieJson }, {
+    fetchImpl: async (url, options) => {
+      requestUrl = String(url)
+      sentCookie = options.headers.Cookie
+      return jsonResponse(apiPayload('https://s.click.aliexpress.com/e/_ours'))
+    },
+  })
+  assert.equal(sentCookie, 'session=very-secret')
+  assert.doesNotMatch(requestUrl, /very-secret|session%3D/)
+})
+
+test('sessão recusada recebe classificação própria e nunca publica original', async () => {
+  await assert.rejects(
+    convert('https://aliexpress.com/item/1005001234567890.html', credentials, {
+      fetchImpl: async () => jsonResponse({ code: '12', data: null, success: false }),
+    }),
+    error => error.code === ALIEXPRESS_CONVERSION_ERROR.SESSION_REJECTED,
+  )
 })
 
 test('campanha converte como coupon via API, nunca por reescrita local', async () => {
@@ -117,3 +139,17 @@ test('campanha converte como coupon via API, nunca por reescrita local', async (
   assert.equal(result.url, 'https://s.click.aliexpress.com/e/_campaign')
 })
 
+test('caso real SSR/productIds usa o endpoint do portal e reconhece produto', async () => {
+  const original = 'https://www.aliexpress.com/ssr/300001995/N3KsYt2f3a?spm=a2g0o.best.3fornn.1.24972c256xSeys&disableNav=YES&pha_manifest=ssr&_immersiveMode=true&productIds=1005010564956854'
+  let calledUrl
+  const result = await convert(original, credentials, {
+    fetchImpl: async (url) => {
+      calledUrl = new URL(url)
+      return jsonResponse(apiPayload('https://s.click.aliexpress.com/e/_c2zl8sq9'))
+    },
+  })
+  assert.deepEqual(result, { url: 'https://s.click.aliexpress.com/e/_c2zl8sq9', linkKind: 'product' })
+  const target = new URL(calledUrl.searchParams.get('targetUrl'))
+  assert.equal(target.searchParams.get('productIds'), '1005010564956854')
+  assert.equal(target.searchParams.has('spm'), false)
+})

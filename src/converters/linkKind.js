@@ -27,7 +27,7 @@ const PRODUCT_ID_DETECTORS = {
   // explícito (que tem precedência via resolveLinkKind), então este detector
   // só entra em ação se a chamada vier fora do fluxo normal de conversão.
   shein: (url) => /-p-\d+|[?&]goods_id=\d+/i.test(url),
-  aliexpress: (url) => /\/item\/\d{6,}|[?&](?:productId|itemId)=\d{6,}/i.test(url),
+  aliexpress: (url) => /\/item\/\d{6,}|[?&](?:productIds?|itemId)=\d{6,}/i.test(url),
 }
 
 // `existingLinkKind` vence sempre que presente (respeita o que o converter

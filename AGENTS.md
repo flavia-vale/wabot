@@ -4466,18 +4466,21 @@ ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
 
 ## AliExpress: conversão pela API oficial (não regredir)
 
-`src/converters/aliexpress.js` usa `aliexpress.affiliate.link.generate`. A
-cliente cadastra `appKey`, `appSecret` e `trackingId`; os dados seguem a mesma
-criptografia em repouso das outras credenciais. Links diretos e os encurtadores
+`src/converters/aliexpress.js` usa o mesmo GET observado no Gerador de Links do
+portal: `/tools/linkGenerate/generatePromotionLinkV2.htm`, com `shipTos=BR`,
+`trackId=default` e o `targetUrl`. **Não existe ID/App Key/App Secret para a
+cliente procurar nesse fluxo.** Ela cadastra uma exportação da sessão de
+`portals.aliexpress.com` (Header string ou JSON do Cookie-Editor), protegida
+pela mesma criptografia em repouso das outras credenciais. Links diretos e os encurtadores
 `a.aliexpress.com`/`s.click.aliexpress.com` são aceitos, mas todo redirect deve
 continuar em HTTPS dentro de `aliexpress.com` ou `aliexpress.us`.
 
 **Fail-closed é obrigatório:** antes de chamar a API, remover `aff_*`, `utm_*` e
-os demais rastros conhecidos da origem. Se resolução, assinatura, API, JSON ou
+os demais rastros conhecidos da origem. Se resolução, sessão, API, JSON ou
 validação da URL final falhar, não publicar o link original. A URL devolvida só
 é confiável quando é string HTTPS sem usuário/senha e pertence a host oficial
-ancorado — `aliexpress.com.evil.net` nunca é AliExpress. O segredo assina a
-requisição com HMAC-SHA256 e jamais entra no corpo, URL, erro ou log.
+ancorado — `aliexpress.com.evil.net` nunca é AliExpress. O código de acesso vai
+somente no header `Cookie` e jamais entra na URL, erro ou log.
 
 A migration `20260910150000_botconfig_platforms_add_aliexpress` habilita a loja
 para configurações existentes e limpa a vírgula inicial legada criada por
