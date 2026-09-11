@@ -342,6 +342,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Um bot para afiliados no WhatsApp monitora grupos de origem, converte cada link de produto ou cupom para o seu código de afiliado e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso com Shopee, Amazon, Mercado Livre e Magalu, com intervalos controlados e histórico de envio.',
     intent: 'bot para afiliados whatsapp',
     related: [
+      { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?', note: 'Resposta direta, incluindo por que isto não tem relação com golpe de espelhamento de tela.' },
       { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com o código de acesso da sua loja', note: 'Onde ele fica, para que serve e como apagar quando quiser.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'Como a mensagem sai como publicação sua, com o seu link, e não como encaminhamento.' },
       { href: '/bot-canal-whatsapp', label: 'Publicar em Canal do WhatsApp', note: 'O Canal alcança mais gente e ninguém responde por cima da oferta.' },
@@ -419,6 +420,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'bot para achadinhos whatsapp',
     relatedTitle: 'Continue: o que publicar nos seus achadinhos',
     related: [
+      { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?', note: 'O que o produto é, o que fazemos com seus dados e o que não prometemos.' },
       { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho e o que você vê no painel enquanto isso.' },
       { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar para achadinhos', note: 'O que muda no alcance, no risco e em quem pode responder.' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'De onde vem a comissão dos achadinhos que você publica.' },

@@ -370,6 +370,9 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/ferramentas/calculadora-risco-whatsapp', template: 'tool-calculator', priority: 0.84, changeFrequency: 'weekly', lastModified: resolveLastModified('/ferramentas/calculadora-risco-whatsapp'), indexable: true },
   // title/description ficam só em app/confiabilidade-sessao-whatsapp/page.js (fonte única, FR-001).
   { path: '/confiabilidade-sessao-whatsapp', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'monthly', lastModified: resolveLastModified('/confiabilidade-sessao-whatsapp'), indexable: true },
+  // Responde "espelha grupos é confiável", consulta em que o Google AI
+  // Overviews devolvia conteúdo sobre o golpe de espelhamento de TELA (2026-09-11).
+  { path: '/espelha-grupos-e-confiavel', template: 'module-deep-dive', priority: 0.8, changeFrequency: 'monthly', lastModified: resolveLastModified('/espelha-grupos-e-confiavel'), indexable: true },
   // title/description ficam só em app/seguranca-credenciais-afiliado/page.js (fonte única, FR-001).
   { path: '/seguranca-credenciais-afiliado', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'monthly', lastModified: resolveLastModified('/seguranca-credenciais-afiliado'), indexable: true },
 ]
