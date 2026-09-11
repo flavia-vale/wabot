@@ -178,7 +178,7 @@ export function WhatsAppRiskCalculator() {
           </ul>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <Link
-              href="/materiais/checklist-antiban-whatsapp?utm_source=ferramentas&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=calculadora_risco_checklist"
+              href="/materiais/checklist-antiban-whatsapp"
               className="inline-flex min-h-12 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-black text-white hover:bg-emerald-700"
               data-seo-cta="risk_calculator_checklist"
               data-cta-position="result_primary"

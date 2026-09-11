@@ -24,6 +24,7 @@ const STORE_LABELS = {
   amazon: 'Amazon',
   magazineluiza: 'Magalu',
   shein: 'SHEIN',
+  aliexpress: 'AliExpress',
 }
 
 // --- Shopee: SEM chave aceita, a conversão falha por completo — nenhuma
@@ -54,6 +55,14 @@ function buildSheinAlert(storeLabel) {
   }
 }
 
+function buildAliExpressAlert(storeLabel) {
+  return {
+    headline: `As ofertas da ${storeLabel} não estão saindo`,
+    body: `Sem os dados de afiliada da ${storeLabel}, não é seguro trocar a comissão: a oferta para e o link de outra pessoa nunca é publicado.`,
+    nextStep: `Cadastre o código de acesso da ${storeLabel} em "Minhas credenciais" para as ofertas voltarem a sair.`,
+  }
+}
+
 // --- Mercado Livre / Amazon / Magalu: SEM o código de acesso, o plano B
 // continua publicando — só com o link mais comprido, sem a sua etiqueta de
 // afiliada curta. Magalu entra nesta família (e não na da Shopee) porque o
@@ -74,6 +83,7 @@ const ALERT_BUILDERS = {
   amazon: buildSessionAlert,
   magazineluiza: buildSessionAlert,
   shein: buildSheinAlert,
+  aliexpress: buildAliExpressAlert,
 }
 
 /**

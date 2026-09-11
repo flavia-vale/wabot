@@ -4464,6 +4464,32 @@ comissão).
 ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
 `test/converters-amazon.test.js`.
 
+## AliExpress: conversão pela API oficial (não regredir)
+
+`src/converters/aliexpress.js` usa o mesmo GET observado no Gerador de Links do
+portal: `/tools/linkGenerate/generatePromotionLinkV2.htm`, com `shipTos=BR`,
+`trackId=default` e o `targetUrl`. **Não existe ID/App Key/App Secret para a
+cliente procurar nesse fluxo.** Ela cadastra uma exportação da sessão de
+`portals.aliexpress.com` (Header string ou JSON do Cookie-Editor), protegida
+pela mesma criptografia em repouso das outras credenciais. Links diretos e os encurtadores
+`a.aliexpress.com`/`s.click.aliexpress.com` são aceitos, mas todo redirect deve
+continuar em HTTPS dentro de `aliexpress.com` ou `aliexpress.us`.
+
+**Fail-closed é obrigatório:** antes de chamar a API, remover `aff_*`, `utm_*` e
+os demais rastros conhecidos da origem. Se resolução, sessão, API, JSON ou
+validação da URL final falhar, não publicar o link original. A URL devolvida só
+é confiável quando é string HTTPS sem usuário/senha e pertence a host oficial
+ancorado — `aliexpress.com.evil.net` nunca é AliExpress. O código de acesso vai
+somente no header `Cookie` e jamais entra na URL, erro ou log.
+
+A migration `20260910150000_botconfig_platforms_add_aliexpress` habilita a loja
+para configurações existentes e limpa a vírgula inicial legada criada por
+`platforms=''`. Gate real antes de produção: confirmar no staging o mesmo
+produto/variante no celular e a atribuição no relatório da afiliada. Testes:
+`test/converters-aliexpress.test.js`,
+`test/aliexpress-platform-integration.test.js` e
+`test/migrations-botconfig-platforms-aliexpress.test.js`.
+
 ## SHEIN: encurtamento de link (`SHEIN_SHORTLINK_ENABLED`, default LIGADO)
 
 `shortenSheinLink()` (`src/converters/shein.js`) troca o link longo da SHEIN
@@ -4652,6 +4678,91 @@ convertido na oferta) + metadados de conversão na resposta.
 
 Testes: `test/offer-engine.test.js` (motor),
 `test/link-conversion-route.test.js`.
+
+## Página nova NUNCA nasce órfã (RCA 2026-09-11 — não regredir)
+
+As cinco páginas comerciais do Tier 1 (`/shopee-afiliados-whatsapp`,
+`/mercado-livre-afiliados-whatsapp`, `/amazon-afiliados-whatsapp`,
+`/shein-afiliados-whatsapp`, `/magalu-afiliados-whatsapp`) estão em produção
+desde **2026-09-02**, respondem 200, estão no `sitemap.xml`, sem `noindex`,
+com canônica correta — e passaram **9 dias com ZERO impressão**.
+
+A Inspeção de URL do Search Console deu o veredito exato:
+
+```
+A página não está indexada: Detectada, mas não indexada no momento
+Detecção        Sitemaps: https://espelhagrupos.com.br/sitemap.xml
+                Página de referência: Nenhuma página foi detectada
+Último rastreamento: N/D
+```
+
+**O Google NUNCA LEU essas páginas.** Não é conteúdo duplicado (ele não chegou
+a comparar), não é `noindex`, não é `robots.txt`. É **descoberta**: o único
+link interno para as cinco saía de `/conteudos`, que é a página mais fraca do
+site (posição 45, 51 impressões, 1 clique) e carrega 67 links na mesma tela.
+Link solitário vindo de página sem força não convence o Google a gastar
+rastreamento.
+
+⚠️ **Estar no sitemap NÃO é descoberta.** O sitemap diz que a página existe; o
+link interno diz que ela importa. Sem o segundo, ela entra numa fila que pode
+nunca ser atendida. O comentário em `dashboard/app/conteudos/page.js` já
+avisava disso ("Nasce linkada de propósito: a ação 8 mostrou que página que só
+existe no sitemap acaba em 'rastreada, mas não indexada'") — o erro foi achar
+que UM link de UMA página fraca cumpria a regra.
+
+### Regra obrigatória para toda página nova
+
+1. **Antes de abrir a PR**, escolher no mínimo **três** páginas já indexadas e
+   com impressão que tratem do mesmo assunto, e linkar a página nova a partir
+   delas. Preferir as de mais impressão no último relatório do Search Console
+   — o link vale pela força de quem o dá.
+2. `/conteudos` e o `sitemap.xml` **não contam** para esse mínimo. Os dois são
+   índice, não recomendação.
+3. **Pedir reindexação das páginas EDITADAS**, não só da página nova. O Google
+   precisa reler quem passou a apontar para ela; sem isso o link novo demora a
+   ser visto.
+4. Ao terminar, entregar à dona do produto a lista de endereços para Inspeção
+   de URL: a página nova **e** as que ganharam o link.
+
+Guarda: `test/marketing-paginas-orfas.test.js` — falha se uma rota de
+`getIndexableSeoRoutes()` tiver menos de 3 referências internas fora de
+`/conteudos`, do sitemap e do próprio arquivo da página.
+
+### ⚠️ O Tier 1 JÁ FOI EXECUTADO — não dizer de novo que falta fazer
+
+Três análises seguidas (01/09, 10/09, 11/09) afirmaram que "não existe página
+comercial nossa disputando Tier 1". **É FALSO.** As cinco existem desde
+02/09, em `main`, geradas por `dashboard/app/_preservationCommercialPages.js`.
+O plano de 11/09 chegou a abrir uma issue para CRIAR o que existia havia nove
+dias.
+
+**Causa do erro de método:** o relatório **Páginas** do Search Console lista
+somente página **com impressão**. Página com zero impressão simplesmente não
+aparece na exportação. Ler "ausente do relatório" como "não existe" é o erro —
+e ele se repete a cada rodada porque a exportação parece completa.
+
+**Regra de método (obrigatória em toda análise de SEO):** antes de escrever
+que uma página não existe, conferir no repositório:
+
+```bash
+node --input-type=module -e "
+import { getIndexableSeoRoutes } from './dashboard/lib/seo-registry.mjs';
+console.log(getIndexableSeoRoutes().map(r => r.path).join('\n'));
+"
+ls dashboard/app/<slug>/page.js
+```
+
+⚠️ **`getIndexableSeoRoutes()` devolve OBJETOS de rota, não strings** — sem o
+`.map(r => r.path)` a saída vira `[object Object]` e qualquer busca por slug dá
+zero, o que se lê exatamente como "a página não existe". Foi assim que uma
+checagem de 11/09 concluiu que as cinco páginas de loja não existiam; elas
+existem e estão indexáveis desde 02/09.
+
+Rota presente no registry + arquivo em disco = **a página existe**. Zero
+impressão é problema de **descoberta ou de indexação**, nunca prova de
+ausência. Os dois diagnósticos pedem ações opostas: criar página que já existe
+é desperdício; tratar como "falta criar" esconde o problema real, que é o
+Google não estar lendo.
 
 ## SEO orgânico — linhas CONGELADAS por dado (2026-07-30, não reabrir)
 

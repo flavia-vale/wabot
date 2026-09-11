@@ -91,6 +91,11 @@ const tools = [
     href: '/alternativas/fluxopromo',
     text: 'Automação de divulgação de promoções em grupos, com curadoria de ofertas.',
   },
+  {
+    name: 'Promium',
+    href: '/alternativas/promium',
+    text: 'Cobra por faixa de grupos e por número de conexões; o plano de entrada custa mais que o nosso Pro.',
+  },
 ]
 
 const faq = [
@@ -276,6 +281,7 @@ export default function Page() {
             <li><Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/bot-achadinhos-whatsapp">Bot de achadinhos para WhatsApp</Link> — conversão de link e cadência</li>
             <li><Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/blog/como-converter-link-de-afiliado-automaticamente-whatsapp">Converter link de afiliado automaticamente</Link> — o que acontece com cada loja</li>
             <li><Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/blog/grupo-ou-canal-whatsapp-achadinhos">Grupo ou canal para achadinhos?</Link> — onde publicar o que você espelhou</li>
+            <li><Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/copiaram-minha-oferta-no-whatsapp">Copiaram a sua oferta</Link> — o outro lado: marca d&apos;água, texto próprio e quem leva a comissão</li>
           </ul>
         </section>
 
@@ -297,7 +303,7 @@ export default function Page() {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/precos?utm_source=seo&utm_medium=organic&utm_campaign=clonar-grupo-afiliados&utm_content=article_pricing_cta"
+              href="/precos"
               data-seo-cta="article_clonar_grupo_pricing"
               data-cta-position="article_next_step_secondary"
               data-cta-stage="consideration"

@@ -10,6 +10,7 @@
 // capturar o link INTEIRO em texto corrido, não para dizer onde o host
 // termina).
 const SHEIN_DOMAINS = ['shein.com', 'onelink.shein.com', 'shein.top']
+const ALIEXPRESS_DOMAINS = ['aliexpress.com', 'aliexpress.us']
 
 // Verdadeiro se `hostname` for exatamente um dos domínios de `domains`, ou um
 // subdomínio dele com separador de ponto (`br.shein.com` sim,
@@ -25,6 +26,7 @@ export function isSheinHostname(hostname) {
 }
 
 const SHEIN_DOMAIN_ALT = SHEIN_DOMAINS.map((d) => d.replace(/\./g, '\\.')).join('|')
+const ALIEXPRESS_DOMAIN_ALT = ALIEXPRESS_DOMAINS.map((d) => d.replace(/\./g, '\\.')).join('|')
 
 // Aceita qualquer subdomínio antes do domínio registrável (produto., lista.,
 // m., www. etc.). `(?:[a-z0-9-]+\.)*` exige um ponto separador, então não
@@ -46,6 +48,10 @@ export const PATTERNS = {
   // qualidade e não pode mudar — FR-023).
   shein: new RegExp(
     String.raw`https?://(?:[a-z0-9-]+\.)*(?:${SHEIN_DOMAIN_ALT})(?=[/?#:]|\s|$)[^\s]*`,
+    'gi',
+  ),
+  aliexpress: new RegExp(
+    String.raw`https?://(?:[a-z0-9-]+\.)*(?:${ALIEXPRESS_DOMAIN_ALT})(?=[/?#:]|\s|$)[^\s]*`,
     'gi',
   ),
 }

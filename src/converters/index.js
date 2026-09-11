@@ -3,6 +3,7 @@ import { convert as convertAmazon } from './amazon.js'
 import { convert as convertShopee } from './shopee.js'
 import { convert as convertMagalu } from './magazineluiza.js'
 import { convert as convertShein }  from './shein.js'
+import { convert as convertAliExpress } from './aliexpress.js'
 
 const CONVERTERS = {
   mercadolivre:  convertML,
@@ -10,6 +11,7 @@ const CONVERTERS = {
   shopee:        convertShopee,
   magazineluiza: convertMagalu,
   shein:         convertShein,
+  aliexpress:    convertAliExpress,
 }
 
 // Normaliza retorno dos converters para `{ url, warning } | null`.

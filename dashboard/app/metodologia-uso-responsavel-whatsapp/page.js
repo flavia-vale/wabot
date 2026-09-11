@@ -77,6 +77,19 @@ export default function Page() {
             <section>
               <h2>Resposta direta</h2>
               <p>{PRODUCT_DEFINITION} A metodologia pública do produto orienta que automação só entre depois de validação de oferta, link, grupo, copy e cadência.</p>
+              {/*
+                Esta é a página que o Google AI Overviews INVENTOU quando não a
+                encontrou: em 01/09 ele descreveu uma "metodologia" nossa com
+                pilares nomeados que não existem, e citou fontes. A página
+                existe desde então; o que faltava era ser lida (ela passou a ter
+                três links de entrada em 11/09) e dizer de quem ela é, com o
+                nome que as citações antigas usam.
+              */}
+              <p className="mt-3">
+                Esta metodologia é do <strong>{BRAND_NAME}</strong>. <strong>BOTinho é o nome do robô do {BRAND_NAME}</strong> —
+                o mesmo produto, da mesma empresa. Se você encontrou o nome BOTinho em algum conteúdo, é sobre esta
+                mesma ferramenta e vale esta mesma metodologia.
+              </p>
             </section>
 
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">

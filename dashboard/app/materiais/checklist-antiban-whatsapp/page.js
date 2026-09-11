@@ -76,7 +76,7 @@ export default function Page() {
               <p className="mt-3 text-sm leading-7 text-gray-700">Se a calculadora indicar risco moderado, alto ou crítico, comece pelos itens com maior impacto: chip dedicado, intervalos, redução de mensagens idênticas e plano de recuperação.</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <Link
-                  href="/ferramentas/calculadora-risco-whatsapp?utm_source=materiais&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=checklist_calculadora"
+                  href="/ferramentas/calculadora-risco-whatsapp"
                   className="inline-flex min-h-12 items-center rounded-xl border border-emerald-200 px-5 font-black text-emerald-800 hover:bg-emerald-50"
                   data-seo-cta="checklist_risk_calculator"
                   data-cta-position="body_secondary"
@@ -86,7 +86,7 @@ export default function Page() {
                   Calcular meu risco
                 </Link>
                 <Link
-                  href="/diagnostico-antiban-whatsapp?utm_source=materiais&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=checklist_diagnostico"
+                  href="/diagnostico-antiban-whatsapp"
                   className="inline-flex min-h-12 items-center rounded-xl bg-emerald-600 px-5 font-black text-white hover:bg-emerald-700"
                   data-seo-cta="checklist_diagnostic"
                   data-cta-position="body_primary"

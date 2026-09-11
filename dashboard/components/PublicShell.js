@@ -8,6 +8,10 @@ const footerLinks = [
   { href: '/bot-ofertas-whatsapp', label: 'Nichos' },
   { href: '/automacao-whatsapp-afiliados', label: 'Automação' },
   { href: '/espelhar-grupos-whatsapp', label: 'Cidades' },
+  // Programa de parceria no rodapé (2026-09-11): /parcerias não tinha UM link
+  // de entrada em todo o site e por isso nunca recebeu impressão. Rodapé é o
+  // lugar convencional de página institucional desse tipo.
+  { href: '/parcerias', label: 'Parcerias' },
 ]
 
 export function PublicHeader() {

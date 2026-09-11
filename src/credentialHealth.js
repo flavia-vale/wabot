@@ -7,6 +7,7 @@ const PLATFORM_LABELS = {
   mercadolivre: 'Mercado Livre',
   magazineluiza: 'Magazine Luiza',
   shein: 'SHEIN',
+  aliexpress: 'AliExpress',
 }
 
 export const PLATFORMS = Object.keys(PLATFORM_LABELS)
@@ -26,6 +27,9 @@ const FIELD_LABELS = {
   'x-acbbr': 'o código de acesso da sua conta',
   appId: 'o App ID da Shopee',
   secretKey: 'a chave secreta da Shopee',
+  appKey: 'a chave do aplicativo',
+  appSecret: 'o segredo do aplicativo',
+  trackingId: 'a identificação de rastreamento',
 }
 
 export function friendlyFieldName(field) {
@@ -56,6 +60,7 @@ export const REQUIRED_FIELDS = {
   mercadolivre: ['tag'],
   magazineluiza: ['tag'],
   shein: ['tag'],
+  aliexpress: ['cookie'],
 }
 
 function hasValue(value) {
@@ -64,6 +69,22 @@ function hasValue(value) {
 
 function getString(data, key) {
   return String(data?.[key] ?? '').trim()
+}
+
+function looksLikeCookieExport(value) {
+  if (value.includes('=')) return true
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) && parsed.some(item => item && typeof item.name === 'string' && 'value' in item)
+  } catch { return false }
+}
+
+function hasUnsafeCookieBreak(value) {
+  try {
+    const parsed = JSON.parse(value)
+    const list = Array.isArray(parsed) ? parsed : [parsed]
+    return list.some(item => /[\r\n\0]/.test(String(item?.name ?? '')) || /[\r\n\0]/.test(String(item?.value ?? '')))
+  } catch { return /[\r\n\0]/.test(value) }
 }
 
 function getFormatWarnings(platform, data = {}) {
@@ -97,6 +118,15 @@ function getFormatWarnings(platform, data = {}) {
   if (platform === 'magazineluiza') {
     const tag = getString(data, 'tag')
     if (tag && tag.length < 3) warnings.push('A tag do Magazine Luiza parece curta. Confira se copiou a tag completa.')
+  }
+
+  if (platform === 'aliexpress') {
+    const appKey = getString(data, 'appKey')
+    const appSecret = getString(data, 'appSecret')
+    const trackingId = getString(data, 'trackingId')
+    if (appKey && !/^\d+$/.test(appKey)) warnings.push('A chave do aplicativo da AliExpress normalmente contém apenas números.')
+    if (appSecret && appSecret.length < 16) warnings.push('O segredo do aplicativo da AliExpress parece curto. Confira se copiou o valor inteiro.')
+    if (trackingId && trackingId.length < 2) warnings.push('A identificação de rastreamento da AliExpress parece curta. Confira se copiou o valor inteiro.')
   }
 
   // Nota: a checagem de comprimento do número da SHEIN é recusa DURA (não
@@ -171,6 +201,9 @@ const ACCESS_CODE_RULES = {
     { field: 'at-acbbr', singleToken: true },
     { field: 'x-acbbr', singleToken: true },
   ],
+  aliexpress: [
+    { field: 'cookie' },
+  ],
 }
 
 // Formato claramente errado no código de acesso. NÃO diz se a loja aceita o
@@ -187,6 +220,13 @@ const ACCESS_CODE_RULES = {
 // (dashboard/lib/painel/affiliatePlatforms.js). Aqui é a autoridade.
 export function describeInvalidCredentialFields(platform, data = {}) {
   const problemas = []
+  if (platform === 'aliexpress') {
+    const cookie = getString(data, 'cookie')
+    if (cookie && cookie.length > 120_000) problemas.push({ field: 'cookie', message: 'Esse código está grande demais. Copie novamente usando o botão Export da extensão Cookie-Editor.' })
+    if (cookie && hasUnsafeCookieBreak(cookie)) problemas.push({ field: 'cookie', message: 'Esse código contém uma quebra inválida. Copie novamente usando o botão Export da extensão Cookie-Editor.' })
+    if (cookie && !looksLikeCookieExport(cookie)) problemas.push({ field: 'cookie', message: 'Esse código não parece completo. Copie novamente usando o botão Export da extensão Cookie-Editor.' })
+    return problemas
+  }
   for (const regra of ACCESS_CODE_RULES[platform] ?? []) {
     const value = getString(data, regra.field)
     if (!value) continue
@@ -392,6 +432,10 @@ export function sanitizeCredentialBody(platform, body = {}) {
       // não é URL — mantém como veio, cai na recusa da validação
     }
     return body
+  }
+
+  if (platform === 'aliexpress') {
+    return { cookie: typeof body.cookie === 'string' ? body.cookie.trim() : body.cookie }
   }
 
   return body
