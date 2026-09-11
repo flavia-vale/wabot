@@ -46,6 +46,12 @@ replanejamento e não compra nada mensurável.
 **Quem fura a fila é a divulgação do que já existe** — não gasta semana de
 engenharia, e é onde a comparação está sendo perdida hoje.
 
+**A medição de 10/09 confirmou isso com número.** A demanda de busca por
+ferramenta de Telegram é de **50 por mês** (`bot telegram afiliados`), contra
+**~8.950 por mês** de gente querendo ENTRAR num grupo de ofertas do Telegram.
+E `ofertas telegram` ficou em zero em **90% das 262 semanas** medidas. Telegram
+é paridade competitiva, não demanda.
+
 ---
 
 ## 3. O que o produto faz e o mercado não sabe
@@ -129,8 +135,14 @@ concorrentes chamam de "espelhador". Quem monta grupo bom é copiado no dia
 seguinte, com a foto e tudo. Marca d'água é a resposta direta a isso, e nós já
 a temos.
 
-⚠️ **Isso ainda é hipótese.** Ausência de anúncio prova só que ninguém vende
-assim, não que a cliente pague por isso. É o que a pesquisa da §6 vai testar.
+**A pesquisa de 10/09 testou, e o resultado foi melhor do que a hipótese.**
+Os seis termos de busca deram zero — ninguém procura isso no Google. Mas o
+ChatGPT, perguntado "copiaram meu grupo de ofertas inteiro, como me proteger?",
+responde com uma lista cujo item 4 é literalmente **"Crie uma 'marca d'água'
+nas ofertas"** — e **não cita produto nenhum na resposta inteira**.
+
+Consulta sem concorrência de citação, funcionalidade pronta, nenhum concorrente
+anunciando. Vira **conteúdo**, não engenharia — item 5º da §5.
 
 ---
 
@@ -145,10 +157,24 @@ assim, não que a cliente pague por isso. É o que a pesquisa da §6 vai testar.
 
 **Custo:** zero engenharia de produto. É página, texto e imagem.
 
+⚠️ **A medição de 10/09 corrigiu o ALVO desta frente: é o canal de IA, não o
+SEO.** Nenhum termo de "medir minha venda" tem volume de busca —
+`relatorio de vendas shopee afiliado`, `saber qual link vendeu`,
+`painel de vendas afiliado` e `como saber quanto vendi como afiliado` voltaram
+todos **sem dados**, e `rastrear link afiliado` deu **zero em 262 de 262
+semanas** do Trends. **Não fazer landing page de busca para isso.**
+
+O que existe é pior e mais caro: perguntado qual bot mostra quanto se vendeu, o
+ChatGPT põe um concorrente em primeiro e diz sobre nós que *"não parece ser o
+melhor instrumento… o próprio site fala em logs de envio e rastreamento
+operacional"*. **Ele leu o nosso site e concluiu, corretamente pelo que está
+escrito, que não temos o que temos.**
+
 O que entra, em ordem de impacto:
 
-1. **Página de vendas e comissão.** É a resposta pronta ao "como sei o que
-   vendeu", que três concorrentes anunciam e nós escondemos.
+1. **Página de vendas e comissão — escrita para a IA ler.** É a resposta pronta
+   ao "como sei o que vendeu", que três concorrentes anunciam e nós
+   escondemos.
 2. **Corrigir a lista de lojas** em toda superfície: são **seis** (ML, Amazon,
    Shopee, Magalu, SHEIN, AliExpress), não quatro. Isso está errado hoje na
    tabela de planos, na home e no `pricing.md`.
@@ -208,172 +234,89 @@ proposta centrada em Instagram, acima do nosso Pro. Serve para não perder
 comparação e para justificar preço, não para ganhar cliente de concorrente
 sozinho.
 
+**A medição de 10/09 endureceu esse ajuste.** `stories de oferta` deu **zero em
+262 de 262 semanas** de Trends — cinco anos sem uma única busca.
+`divulgar ofertas no instagram` e `postar oferta automatica instagram` vieram
+**sem dados** no Planejador. As 13 variantes de "divulgar link de afiliado no
+Instagram" somam ~450/mês, e quatro delas são de infoproduto (Hotmart, Eduzz),
+que não é o nosso mercado.
+
+**A leitura correta:** Stories não é funcionalidade que alguém procura. É um
+canal de captação que entregamos **para a cliente usar** — o ChatGPT desenha
+exatamente o fluxo `Instagram → WhatsApp → Venda`. A mensagem de lançamento é
+"traga gente nova para o seu grupo", nunca "novidade que faz escolher a gente".
+
 ### 4º — Telegram
 
 O recurso ausente mais comum entre os concorrentes mapeados (10 de 14). Entra
-depois de Stories, pelo motivo da §2.
+depois de Stories, pelo motivo da §2 — agora com número: **50 buscas/mês pela
+ferramenta contra ~8.950 de gente querendo entrar num grupo**, e `ofertas
+telegram` em zero em 90% das 262 semanas.
+
+Se um dia for feito, o mapa por estado diz onde ele pega: **Paraíba 20%,
+Maranhão 18%, Alagoas 17%, Sergipe 16%** — Norte e Nordeste. No Sul e Sudeste
+o WhatsApp domina (Paraná 78%, São Paulo 75%).
+
+### 5º — Marca d'água como CONTEÚDO (novo, saiu da medição)
+
+**Custo:** conteúdo. A funcionalidade já existe.
+
+Perguntado "copiaram meu grupo de ofertas inteiro, como me proteger?", o
+ChatGPT responde com uma lista cujo item 4 é **"Crie uma 'marca d'água' nas
+ofertas"** — e não cita produto nenhum na resposta inteira. Junto, recomenda
+personalizar a mensagem para identificar a origem, que é o nosso template.
+
+Consulta sem concorrência de citação + funcionalidade pronta + nenhum
+concorrente anunciando. É o alvo mais barato do levantamento.
+
+⚠️ **Sem busca no Google** (os seis termos deram zero). Isso é peça para o canal
+de IA e para a página de comparação, não para SEO.
+
+### 6º — "Quanto ganha afiliado Shopee" (novo, saiu da medição)
+
+Sete variantes somam **~3.050 buscas/mês com concorrência baixa** (índice 16 a
+25), e não temos página nenhuma nisso. É a mesma lógica do Tier 1 do AGENTS.md:
+capturar quem procura o **negócio** antes de precisar do robô.
+
+Confirmado pelas consultas em ascensão de `comissao afiliado`: **shopee
++1.650%, comissao shopee +1.150%, afiliado mercado livre +550%**.
+
+⚠️ Vale a regra de página nova do AGENTS.md: **nasce linkada de pelo menos três
+páginas já indexadas**, e `/conteudos` não conta.
 
 ### Em observação, com o gatilho que os tira daqui
 
 | Item | Sai da observação quando |
 |---|---|
 | Camada gratuita permanente | decidido junto com a política de preço — o teto de robôs não é mais o impeditivo |
-| Vitrine / link na bio | a pesquisa da §6 mostrar demanda; 6 concorrentes têm |
-| Kabum, Temu, Natura, Nike | a medição do item 2 apontar volume real |
-| Marca d'água como frente de aquisição | os testes de §6.3 e §6.4 confirmarem a dor |
+| Vitrine / link na bio | 6 concorrentes têm; sem demanda medida ainda |
+| **Temu** | a medição do 2º mostrar link de Temu chegando. **Planejador diz 50.000/mês; Trends diz 1,8 e plano** — os dois não podem estar certos |
+| **TikTok Shop** | **+650%** nas consultas em ascensão de `afiliado shopee`; confirmar na próxima medição |
+| ~~Natura, Kabum~~ | **descartados por dado.** Natura é modelo de revenda com concorrência média; Kabum tem 500/mês e zero no Trends |
+| Fichar os 12 concorrentes citados pelo ChatGPT | quando houver dia para trial. **Comission e Ofertiva primeiro** |
 
 ---
 
-## 6. A pesquisa — pronta para colar
+## 6. A pesquisa foi executada em 10/09 — resultados
 
-Regra de corte, válida para tudo aqui: **se o resultado não muda a ordem da §5,
-não coleta.**
+Os quatro lotes do Planejador, as quatro rodadas do Trends, as consultas
+relacionadas e onze respostas do ChatGPT foram coletados e lidos.
 
-E a regra de leitura que continua valendo do plano anterior, porque está certa:
-**Planejador e Trends são UMA família de evidência, não duas provas
-independentes.** Volume alto não é dor; ausência de busca não é ausência de dor
-(marca d'água é exatamente esse caso).
+**Resultado completo: `docs/produto/pesquisa-mercado-2026-09-10.md`.**
 
-### 6.1 Google Ads — Planejador de Palavras-Chave
+O que ela mudou neste roadmap, em resumo:
 
-Configuração: **Brasil · Português · Google, sem parceiros · últimos 12 meses**,
-com detalhamento mensal. Se a conta mostrar faixa (`1 mil–10 mil`), **manter a
-faixa** — não inventar número.
+| Achado | Efeito |
+|---|---|
+| `stories de oferta` deu **zero em 262 de 262 semanas** (5 anos) | Stories continua no 3º lugar, com expectativa corrigida |
+| Telegram: **179 buscas de "quero entrar num grupo" para cada 1 de "quero a ferramenta"** | confirma o 4º lugar |
+| **Nenhum** termo de "medir minha venda" tem volume — e o ChatGPT diz que não fazemos relatório de comissão | o item 1º muda de alvo: canal de IA, não SEO |
+| Os seis termos de cópia/proteção deram zero, **mas o ChatGPT recomenda "marca d'água" pelo nome** e não cita produto nenhum | entra como item 5º, de conteúdo |
+| `quanto ganha afiliado shopee` soma **~3.050/mês com concorrência baixa** | entra como item 6º |
+| `afiliado temu` = 50.000/mês no Planejador **contra 1,8 e plano no Trends** | não vira roadmap; a instrumentação do 2º resolve |
+| Natura (concorrência média, modelo de revenda) e Kabum (500/mês) | descartados por dado |
+| **TikTok Shop +650%** nas consultas em ascensão de `afiliado shopee` | observação para a próxima medição |
 
-O estudo de 30/07 já tem 8.923 termos e cobre "afiliado \<loja\>". Conferi: ele
-**não tem uma linha** sobre Telegram, Instagram, Stories, vitrine, comissão,
-Kabum, Temu, Natura, SHEIN ou AliExpress. São esses quatro lotes, e só eles.
-
-**Lote A — canal (decide Telegram × Stories com número)**
-```
-bot telegram afiliados
-canal de ofertas telegram
-grupo de ofertas telegram
-criar canal de ofertas
-divulgar ofertas no instagram
-stories de ofertas
-como divulgar link de afiliado no instagram
-postar oferta automatica instagram
-```
-
-**Lote B — resultado e comissão (valida a página do item 1)**
-```
-como saber quanto vendi como afiliado
-relatorio de vendas shopee afiliado
-comissao shopee afiliado como ver
-rastrear link de afiliado
-saber qual link vendeu
-painel de vendas afiliado
-quanto ganha afiliado shopee
-```
-
-**Lote C — cópia e proteção (testa a hipótese da marca d'água)**
-```
-copiaram meu grupo de ofertas
-proteger grupo de ofertas whatsapp
-colocar marca no post de oferta
-personalizar mensagem de oferta
-como se diferenciar como afiliado
-meu grupo esta igual aos outros
-```
-
-**Lote D — lojas fora do nosso catálogo**
-```
-afiliado temu
-afiliado kabum
-afiliado natura
-divulgar ofertas kabum
-programa de afiliados temu brasil
-```
-
-Colunas a acrescentar sem apagar as originais: `cluster` (canal / resultado /
-proteção / loja), `intencao` (aprender · comparar · contratar), `marca` (sim ·
-não), `feature_candidata` e `observacao_ambiguidade`.
-
-**Leitura:** o que decide é o **cluster**, nunca um termo isolado. E separar
-loja de ferramenta: quem busca `afiliado temu` quer entrar no programa, não
-comprar robô.
-
-### 6.2 Google Trends
-
-**Brasil · Pesquisa na Web.** Rodar em **5 anos** (direção) e repetir em
-**12 meses** (momento). Manter `ofertas whatsapp` como **âncora repetida** em
-toda rodada — sem âncora comum, as rodadas não se comparam entre si.
-
-| Rodada | Termos | O que decide |
-|---|---|---|
-| Canal | `ofertas whatsapp` · `ofertas telegram` · `ofertas instagram` | Telegram está crescendo ou é herança? |
-| Formato | `canal de ofertas` · `grupo de ofertas` · `stories de oferta` | vale investir em canal? |
-| Resultado | `ofertas whatsapp` · `comissao afiliado` · `rastrear link afiliado` | o público mede o que ganha? |
-| Loja nova | `afiliado shopee` (âncora) · `afiliado temu` · `afiliado kabum` · `afiliado natura` | qual loja tem massa de verdade |
-
-Anotar picos de Black Friday, 9.9 e 11.11 — **sazonalidade não é crescimento.**
-Preferir "Tópico" quando o Trends oferecer um inequívoco, e registrar se foi
-tópico ou termo.
-
-### 6.3 As IAs — perguntar como CLIENTE, não como marca
-
-Esta é a frente com maior retorno e a que está sendo subaproveitada. O ChatGPT
-traz **35% dos cadastros com 13% das visitas** (índice 2,69×), e as rodadas de
-`ai_visibility_tracking.csv` até aqui mediram **a marca**. O que falta medir é a
-**decisão de compra**.
-
-Rodar cada pergunta em **ChatGPT, Gemini, Perplexity e Google AI Overviews**, e
-registrar três coisas: fomos citados, **quem** foi citado, e — o mais valioso —
-**qual critério a IA usou para recomendar**. Esse critério é o que precisa estar
-escrito na página.
-
-**Bloco 1 — escolha de ferramenta**
-```
-Qual a melhor ferramenta para divulgar ofertas de afiliado no WhatsApp em 2026?
-Quero automatizar meu grupo de ofertas. O que devo levar em conta para escolher?
-Qual bot de afiliados mostra quanto eu vendi e qual oferta deu comissão?
-Existe ferramenta de afiliado que funciona com SHEIN e AliExpress?
-```
-
-**Bloco 2 — a dor, sem nome de produto**
-```
-Copiaram meu grupo de ofertas inteiro. Como me proteger?
-Como fazer minhas ofertas ficarem diferentes das do concorrente?
-Meu WhatsApp foi banido divulgando ofertas. O que fazer para não acontecer de novo?
-Como saber qual oferta do meu grupo realmente vendeu?
-Vale mais a pena divulgar ofertas no WhatsApp, Telegram ou Instagram?
-```
-
-**Bloco 3 — objeção direta (é a que já nos derrubou uma vez)**
-```
-Ferramenta que só espelha grupo de terceiro vale a pena para afiliado?
-Qual ferramenta de afiliado tem garimpo próprio de ofertas?
-```
-
-**Como ler:** concorrente citado que não conhecemos vira linha nova para
-verificar. Critério repetido em três das quatro IAs vira seção de página. E
-lembre do que a medição de 01/09 já mostrou: **as listas das IAs quase não se
-sobrepõem** — não existe "o ranking do mercado", existe o de cada IA.
-
-### 6.4 Concorrentes — verificar 5, não 27
-
-Regra de `competitors-data.js`: sem URL e data, não entra, e preço sem prova
-não vai para página pública.
-
-Confirmados como reais hoje e **sem ficha**: **Afilira** (R$47, conta grátis,
-"18+ plataformas", WhatsApp+Telegram), **Pai das Ofertas** (R$35,90, 6 dias
-grátis, vitrine própria), **AfiliTools/trocalink** (R$99, relatório de vendas e
-de cliques), **Acelera Afiliado** (relatórios Shopee e AliExpress),
-**Zap Multigrupos** e **Ofertiva**.
-
-Duas correções ao que veio da lista anterior: **Notifish não retorna resultado
-de produto** em busca aberta, e **Growify aparece como site de guias**
-(`growify.pro/guias/…`), ou seja, concorrente de conteúdo, não de software. Os
-14 nomes daquela lista vieram da coluna `competitors_cited` de
-`ai_visibility_tracking.csv` — são citados por IA, não verificados.
-
-Nos que abrirem trial, executar a MESMA tarefa e cronometrar: cadastrar loja,
-converter um link de cupom, publicar em dois destinos, achar o erro quando não
-sair, e ver o relatório de comissão. É o que separa promessa de página de
-entrega real.
-
----
 
 ## 7. O que derruba este plano
 
