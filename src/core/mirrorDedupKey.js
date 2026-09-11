@@ -12,8 +12,24 @@
 // - primaryConverted: link final do afiliado. Bloqueia fontes diferentes que
 //   caiam no mesmo link convertido.
 // - fallbackSubject: msgId:texto, para mensagens sem link.
+//
+// Cinto e suspensório contra surrogate solto: a chave vai para a coluna
+// `SendDedupKey.dedupKey`, e meio par surrogate (emoji cortado ao meio por uma
+// truncagem a montante) faz o motor do Prisma recusar a gravação inteira com
+// `unexpected end of hex escape` — a reserva atômica cross-worker deixa de ser
+// gravada e a proteção contra envio duplicado cai para as camadas locais. Como
+// aqui é a fonte ÚNICA da construção da chave, a limpeza mora aqui e vale para
+// qualquer chamador, presente ou futuro.
+const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
+
+function stripLoneSurrogates(value) {
+  return String(value).replace(LONE_SURROGATE_RE, '')
+}
+
 export function buildMirrorDedupKeys({ destJid, primaryUrl, primaryConverted, fallbackSubject } = {}) {
   const dedupSubjects = [...new Set([primaryUrl, primaryConverted, fallbackSubject].filter(Boolean))]
-  const dedupKeys = dedupSubjects.map(subject => `${destJid}:${subject}`)
+    .map(stripLoneSurrogates)
+    .filter(Boolean)
+  const dedupKeys = dedupSubjects.map(subject => `${stripLoneSurrogates(destJid)}:${subject}`)
   return { dedupSubjects, dedupKeys }
 }
