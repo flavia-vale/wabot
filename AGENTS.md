@@ -4747,10 +4747,16 @@ que uma página não existe, conferir no repositório:
 ```bash
 node --input-type=module -e "
 import { getIndexableSeoRoutes } from './dashboard/lib/seo-registry.mjs';
-console.log(getIndexableSeoRoutes().join('\n'));
+console.log(getIndexableSeoRoutes().map(r => r.path).join('\n'));
 "
 ls dashboard/app/<slug>/page.js
 ```
+
+⚠️ **`getIndexableSeoRoutes()` devolve OBJETOS de rota, não strings** — sem o
+`.map(r => r.path)` a saída vira `[object Object]` e qualquer busca por slug dá
+zero, o que se lê exatamente como "a página não existe". Foi assim que uma
+checagem de 11/09 concluiu que as cinco páginas de loja não existiam; elas
+existem e estão indexáveis desde 02/09.
 
 Rota presente no registry + arquivo em disco = **a página existe**. Zero
 impressão é problema de **descoberta ou de indexação**, nunca prova de
