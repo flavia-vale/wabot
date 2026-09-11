@@ -54,25 +54,16 @@ coleta por print** antes.
 
 ### O que cada página nova precisa AGORA, da dona do produto
 
-As três nascem linkadas de páginas já indexadas, como exige a regra de página
-órfã. Falta o passo que só você pode dar: **Inspeção de URL no Search Console**,
-nas três novas e também nas que ganharam o link.
+As três nascem linkadas de páginas já indexadas (4 a 5 links de entrada cada),
+como exige a regra de página órfã. Falta o passo que só você pode dar:
+**Inspeção de URL no Search Console**, nas três novas e também nas que ganharam
+o link.
 
-Páginas novas:
-- `/quanto-ganha-afiliado-shopee`
-- `/vendas-e-comissao-afiliado-whatsapp`
-- `/copiaram-minha-oferta-no-whatsapp`
-
-Páginas editadas que passaram a apontar para elas (reindexar também — sem isso o
-Google demora a ver o link novo):
-- `/blog/como-ser-afiliado-shopee-whatsapp`
-- `/blog/quanto-custa-bot-para-whatsapp-afiliados`
-- `/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp`
-- `/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero`
-- `/blog/como-converter-link-de-afiliado-automaticamente-whatsapp`
-- `/shopee-afiliados-whatsapp`
-- `/bot-afiliados-whatsapp`
-- `/bot-achadinhos-whatsapp`
+A fila completa e única está em
+`docs/marketing/PLANO_MELHORIA_2026-09-11.md`, seção "Páginas para pedir
+reindexação AGORA" — as três novas foram somadas lá, junto com as quatro
+páginas editadas que passaram a apontar para elas. **Só depois do deploy em
+produção**: antes disso o link ainda não existe no ar.
 
 ---
 

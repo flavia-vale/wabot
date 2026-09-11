@@ -8,10 +8,10 @@ import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 
 const siteUrl = getSiteUrl()
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
-const mainLandingHref = '/bot-canais-whatsapp?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=sprint2_crosslink'
-const diagnosticHref = '/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_secondary'
-const checklistHref = '/materiais/checklist-antiban-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_checklist'
-const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_calculadora_risco'
+const mainLandingHref = '/bot-canais-whatsapp'
+const diagnosticHref = '/diagnostico-antiban-whatsapp'
+const checklistHref = '/materiais/checklist-antiban-whatsapp'
+const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp'
 
 export const PRESERVATION_COMMERCIAL_PAGES = {
   /* Frente Tier 1 (PLANO_ACAO_SEO_IA_2026-09-01, ação 9). "shopee afiliados" tem
@@ -45,6 +45,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Depois de entrar no Shopee Afiliados, o trabalho deixa de ser achar oferta e passa a ser publicar. Cada produto precisa virar link com o seu código, o texto precisa ser montado, e tudo isso repetido em cada grupo. O Espelha Grupos faz esse caminho sozinho: acompanha as origens que você escolhe, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e registro do que saiu.',
     intent: 'shopee afiliados whatsapp',
     related: [
+      { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com a chave da Shopee', note: 'Onde ela fica, para que serve e como apagar quando quiser.' },
+      { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'A mensagem sai como publicação sua, com o seu link.' },
+      { href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', label: 'Ainda não tem grupo grande?', note: 'O que dá para fazer com poucos contatos, sem esperar audiência chegar.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Ainda não é afiliada Shopee?', note: 'Cadastro gratuito, quanto a Shopee paga por tipo de venda e o prazo de atribuição.' },
       { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee', note: 'A tabela de comissão, o prazo de atribuição e como fazer a sua própria conta.' },
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'O caminho completo: origens, conversão de link, destinos e histórico.' },
@@ -108,6 +111,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Depois de entrar no programa de afiliados do Mercado Livre, o trabalho vira publicação: gerar o link com o seu código, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'mercado livre afiliados whatsapp',
     related: [
+      { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Levar o grupo para o Canal sem perder ninguém', note: 'O Canal alcança mais e ninguém responde por cima da oferta.' },
+      { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar', note: 'O que muda no alcance e em quem pode responder.' },
+      { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Quando o trabalho manual deixa de caber', note: 'O sinal de que a operação passou do ponto de fazer na mão.' },
       { href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', label: 'Ainda não é afiliada do Mercado Livre?', note: 'Comissão por categoria, prazo de pagamento e como não perder a atribuição.' },
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'As três lado a lado, com fonte e data.' },
@@ -163,6 +169,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Depois de entrar no Amazon Associados, o trabalho vira publicação: gerar o link com a sua tag, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'afiliado amazon whatsapp',
     related: [
+      { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho, sem você precisar reconectar.' },
+      { href: '/bot-canal-whatsapp', label: 'Publicar em Canal do WhatsApp', note: 'Alcança mais gente e ninguém responde por cima da oferta.' },
+      { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Amazon, Shopee ou Mercado Livre: qual paga mais', note: 'A comissão muda muito por categoria — compare a sua antes de decidir.' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Ainda não é afiliada Amazon?', note: 'Comissão por categoria, de 0% a 13% conforme o produto.' },
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'As três lado a lado, com fonte e data.' },
@@ -224,6 +233,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Depois de entrar no programa de divulgação do Magalu, o trabalho vira publicação: aplicar o seu código no link, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'divulgador magalu whatsapp',
     related: [
+      { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho e o que você vê no painel.' },
+      { href: '/bot-canal-whatsapp', label: 'Publicar em Canal do WhatsApp', note: 'Alcança mais gente e ninguém responde por cima da oferta.' },
+      { href: '/glossario', label: 'Glossário: os termos que aparecem no painel', note: 'Espelhamento, cadência, conversão de link e o resto, em português claro.' },
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'Comparação de comissão entre os programas, com fonte e data.' },
       { href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', label: 'Como a conversão de link funciona', note: 'O que acontece com o link entre a origem e o seu grupo.' },
@@ -278,6 +290,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Depois de entrar no programa de afiliados da SHEIN, o trabalho vira publicação: gerar o link com o seu código, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'shein afiliados whatsapp',
     related: [
+      { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com os seus dados de afiliada', note: 'Onde ficam, para que servem e como apagar quando quiser.' },
+      { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'A mensagem sai como publicação sua, com o seu link.' },
+      { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar', note: 'O que muda no alcance e em quem pode responder.' },
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'Origens, conversão de link, destinos e histórico de envio.' },
       { href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', label: 'Como a conversão de link funciona', note: 'O que acontece com o link entre a origem e o seu grupo.' },
       { href: '/programa-de-afiliados', label: 'Comparar programas de afiliado', note: 'Comissão e prazo de atribuição das principais lojas, com fonte e data.' },
@@ -328,6 +343,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Um bot para afiliados no WhatsApp monitora grupos de origem, converte cada link de produto ou cupom para o seu código de afiliado e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso com Shopee, Amazon, Mercado Livre e Magalu, com intervalos controlados e histórico de envio.',
     intent: 'bot para afiliados whatsapp',
     related: [
+      { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?', note: 'Resposta direta, incluindo por que isto não tem relação com golpe de espelhamento de tela.' },
+      { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com o código de acesso da sua loja', note: 'Onde ele fica, para que serve e como apagar quando quiser.' },
+      { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'Como a mensagem sai como publicação sua, com o seu link, e não como encaminhamento.' },
+      { href: '/bot-canal-whatsapp', label: 'Publicar em Canal do WhatsApp', note: 'O Canal alcança mais gente e ninguém responde por cima da oferta.' },
+      { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa um bot para WhatsApp', note: 'Preço das ferramentas do mercado lado a lado, com fonte e data.' },
+      { href: '/blog/checklist-padronizar-divulgacao-whatsapp', label: 'Checklist para padronizar o que você publica', note: 'O que conferir antes de cada oferta sair.' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
       { href: '/vendas-e-comissao-afiliado-whatsapp', label: 'Quanto você ganhou de comissão', note: 'Pedidos, valor vendido e comissão estimada e confirmada das ofertas que o robô publicou.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'Cadastro gratuito, 3% na venda padrão e até 30% na Comissão Extra.' },
@@ -401,6 +422,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'bot para achadinhos whatsapp',
     relatedTitle: 'Continue: o que publicar nos seus achadinhos',
     related: [
+      { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?', note: 'O que o produto é, o que fazemos com seus dados e o que não prometemos.' },
+      { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho e o que você vê no painel enquanto isso.' },
+      { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar para achadinhos', note: 'O que muda no alcance, no risco e em quem pode responder.' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'De onde vem a comissão dos achadinhos que você publica.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'O programa com maior volume de busca no Brasil.' },
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
@@ -426,7 +450,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     competitorNudge: {
       text: 'Procurando o AchadinhosBot?',
       label: 'Veja a comparação lado a lado',
-      href: '/alternativas/achadinhos-bot?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=commercial_competitor_nudge',
+      href: '/alternativas/achadinhos-bot',
     },
     problemTitle: 'O achadinho bom dura minutos — e você não está sempre no celular.',
     problem: 'Promoção de achadinho é por tempo limitado e estoque curto. Quem depende de ver a oferta, copiar o link, trocar pelo seu código de afiliado e colar em cada grupo sempre chega atrasado — ou desiste de postar em metade dos grupos.',
@@ -787,7 +811,7 @@ export function PreservationCommercialPage({ pageKey }) {
                     <Link
                       className="btn btn-ghost"
                       style={{ marginTop: 18 }}
-                      href={`${item.href}?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=commercial_related`}
+                      href={item.href}
                       data-seo-cta="commercial_related"
                       data-cta-position="related"
                       data-cta-stage="consideration"

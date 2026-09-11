@@ -6,8 +6,8 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_PERSON
 const slug = '/programa-de-afiliados'
 // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1): era
 // 73 chars de texto próprio. "Qual paga mais" é o motivo pra clicar.
-const title = 'Shopee, Amazon ou Mercado Livre: qual paga mais'
-const description = 'Compare Shopee, Amazon e Mercado Livre: quanto paga de comissão, prazo de atribuição e como divulgar no WhatsApp. Dados com fonte e data.'
+const title = 'Qual paga mais: ML até 16%, Amazon até 13%, Shopee 3%'
+const description = 'Mercado Livre paga de 0% a 16% por categoria, Amazon de 0% a 13% e Shopee 3% na venda padrão. Entrada gratuita nos três, com fonte e data.'
 const dates = getEditorialDates(slug)
 
 // Resposta direta em 40–60 palavras: é o bloco que o Google usa como snippet e
@@ -172,6 +172,26 @@ export default function Page() {
                 </li>
               ))}
             </ul>
+          </section>
+
+          {/*
+            Terceiro link de entrada das duas páginas de parceria (RCA
+            2026-09-11): antes só /parcerias e elas mesmas linkavam uma à outra.
+          */}
+          <section className="mt-10">
+            <h2 className="text-2xl font-black tracking-tight text-gray-950">Indicar em vez de divulgar</h2>
+            <p className="mt-2 leading-8 text-gray-700">
+              Se o seu público são outras pessoas que divulgam ofertas, dá para ganhar indicando a ferramenta em
+              vez de vender produto:{' '}
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/parceiro-influenciador">
+                parceria para criadores de conteúdo
+              </Link>
+              , com as{' '}
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/termos-parceria-influenciador">
+                regras completas
+              </Link>{' '}
+              publicadas antes de você aceitar.
+            </p>
           </section>
 
           <section className="mt-10">
