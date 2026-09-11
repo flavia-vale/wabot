@@ -30,17 +30,43 @@ http://178.105.54.0:3006/precos
 
 ## 1. Indexação — a fila, em ordem de prioridade
 
+### 📌 Estado em 11/09 — 11 pedidos feitos, 3 pendentes no Dia 3
+
+| Leva | Pedidas | Pendentes |
+|---|---|---|
+| Dia 1 — páginas novas | 4 de 4 ✅ | — |
+| Dia 2 — as cinco lojas | 5 de 5 ✅ | — |
+| Dia 3 — quem ganhou os links | 2 de 5 | 3 |
+| Dia 4 em diante | — | tudo |
+
+As onze já pedidas foram conferidas ao vivo: **todas respondem 200 em produção
+com o conteúdo novo**, incluindo os links de entrada e a página de confiança.
+Pedido de indexação de página que ainda não subiu não vale — essa conferência é
+o que separa "pedi e vai valer" de "pedi e o Google leu a versão velha".
+
+⚠️ **Quatro das cinco lojas do Dia 2 já tinham sido pedidas em 11/09 de manhã,
+antes de ganharem link de entrada**, e o veredito foi "Detectada, mas não
+indexada / Último rastreamento: N/D / nenhuma página de referência". Repetir o
+pedido **só faz sentido agora**, porque a causa mudou: antes não havia link
+apontando para elas, agora há. Se o veredito voltar igual depois desta rodada,
+o problema deixa de ser descoberta e passa a ser conteúdo quase igual entre as
+cinco — e aí a ação é diferenciar o texto, não pedir de novo.
+
+
 ⚠️ **A Inspeção de URL tem cota de ~10 pedidos por dia.** A ordem importa. Faça
 de cima para baixo, uma leva por dia.
 
 ### Dia 1 — as páginas novas (elas não existem no Google ainda)
 
 ```
-https://espelhagrupos.com.br/quanto-ganha-afiliado-shopee
-https://espelhagrupos.com.br/vendas-e-comissao-afiliado-whatsapp
-https://espelhagrupos.com.br/copiaram-minha-oferta-no-whatsapp
-https://espelhagrupos.com.br/espelha-grupos-e-confiavel
+https://espelhagrupos.com.br/quanto-ganha-afiliado-shopee          ✅ pedida 2026-09-11
+https://espelhagrupos.com.br/vendas-e-comissao-afiliado-whatsapp   ✅ pedida 2026-09-11
+https://espelhagrupos.com.br/copiaram-minha-oferta-no-whatsapp     ✅ pedida 2026-09-11
+https://espelhagrupos.com.br/espelha-grupos-e-confiavel            ✅ pedida 2026-09-11
 ```
+
+**Dia 1 concluído.** As quatro estão no ar (HTTP 200 conferido) com o conteúdo
+novo, e a indexação foi pedida.
 
 Das quatro, **só `/quanto-ganha-afiliado-shopee` tem volume de busca medido**
 (~3.050/mês, concorrência baixa). As outras três existem para o canal de IA e
@@ -51,12 +77,19 @@ para a comparação — indexe do mesmo jeito, mas não cobre tráfego de busca 
 São elas que motivaram a regra de página órfã. Agora têm links de entrada.
 
 ```
-https://espelhagrupos.com.br/magalu-afiliados-whatsapp
-https://espelhagrupos.com.br/shopee-afiliados-whatsapp
-https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp
-https://espelhagrupos.com.br/amazon-afiliados-whatsapp
-https://espelhagrupos.com.br/shein-afiliados-whatsapp
+https://espelhagrupos.com.br/magalu-afiliados-whatsapp         ✅ pedida 2026-09-11
+https://espelhagrupos.com.br/shopee-afiliados-whatsapp         ✅ pedida 2026-09-11 (2ª vez)
+https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp  ✅ pedida 2026-09-11 (2ª vez)
+https://espelhagrupos.com.br/amazon-afiliados-whatsapp         ✅ pedida 2026-09-11 (2ª vez)
+https://espelhagrupos.com.br/shein-afiliados-whatsapp          ✅ pedida 2026-09-11 (2ª vez)
 ```
+
+**Dia 2 concluído.** Quatro delas já tinham sido pedidas em 11/09, ANTES de
+ganharem os links de entrada — e o veredito naquele dia foi "Detectada, mas não
+indexada", com "Último rastreamento: N/D" e nenhuma página de referência. Este
+segundo pedido é o que vale: agora existe link interno apontando para elas.
+`/magalu-afiliados-whatsapp` ficou de fora no dia 11 porque a cota acabou; é a
+primeira vez que ela é pedida.
 
 ### Dia 3 — as páginas que GANHARAM os links novos
 
@@ -64,12 +97,16 @@ O Google precisa relê-las para ver que elas agora apontam para as páginas do
 Dia 1. Sem isso o link novo demora a valer.
 
 ```
-https://espelhagrupos.com.br/bot-afiliados-whatsapp
-https://espelhagrupos.com.br/bot-achadinhos-whatsapp
-https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados
-https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp
-https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados
+https://espelhagrupos.com.br/bot-afiliados-whatsapp                       ✅ pedida 2026-09-11
+https://espelhagrupos.com.br/bot-achadinhos-whatsapp                      ✅ pedida 2026-09-11
+https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados       ⏳ pendente
+https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp       ⏳ pendente
+https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados ⏳ pendente
 ```
+
+**Dia 3 pela metade.** As duas comerciais são as que mais carregam link novo
+(elas apontam para a página de confiança, para o espelhamento e para os posts
+que estavam órfãos), então foram bem escolhidas para ir primeiro. Faltam três.
 
 ### Dia 4 — o resto que ganhou link ou título novo
 
