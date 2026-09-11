@@ -224,73 +224,9 @@ mudança de fora para fora e exige redirecionamento. Não fiz por conta própria
 
 ## Páginas para pedir reindexação AGORA
 
-Editadas ou criadas neste ciclo. O Google precisa relê-las para ver os links
-novos e os títulos novos. **Só depois do deploy em produção** — antes disso o
-link ainda não existe lá.
+➡️ **A fila mudou de lugar.** Ela agora é única, priorizada por dia e leva
+em conta a cota de ~10 pedidos/dia da Inspeção de URL:
+`docs/marketing/ACOES_FLAVIA_2026-09-11.md`, seção 1.
 
-Páginas novas (peça primeiro):
-
-```
-https://espelhagrupos.com.br/espelha-grupos-e-confiavel
-https://espelhagrupos.com.br/quanto-ganha-afiliado-shopee
-https://espelhagrupos.com.br/vendas-e-comissao-afiliado-whatsapp
-https://espelhagrupos.com.br/copiaram-minha-oferta-no-whatsapp
-```
-
-⚠️ Das três de baixo, **só `/quanto-ganha-afiliado-shopee` tem volume de busca
-medido** (~3.050/mês, concorrência baixa). As outras duas voltaram *sem dados*
-no Planejador e existem para o canal de IA e para a comparação — peça a
-indexação delas do mesmo jeito, mas **não cobre tráfego de busca**. O motivo
-está no topo de cada `page.js` e em `docs/produto/pesquisa-mercado-2026-09-10.md`.
-
-Títulos que mudaram (o clique depende de o Google reler):
-
-```
-https://espelhagrupos.com.br/programa-de-afiliados
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp
-https://espelhagrupos.com.br/alternativas/proafiliados
-```
-
-Entidade de marca, agora dita em texto:
-
-```
-https://espelhagrupos.com.br/quem-somos
-https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
-```
-
-Ganharam links para o Tier 1 e para os posts que estavam órfãos:
-
-```
-https://espelhagrupos.com.br/bot-afiliados-whatsapp
-https://espelhagrupos.com.br/bot-achadinhos-whatsapp
-https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp
-https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp
-https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados
-https://espelhagrupos.com.br/parcerias
-```
-
-Ganharam links para as três páginas novas de vendas, comissão e cópia:
-
-```
-https://espelhagrupos.com.br/shopee-afiliados-whatsapp
-https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados
-https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero
-https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp
-```
-
-Continua valendo a fila de `PAGINAS_PEDIR_INDEXACAO_2026-09-11.md`, com
-`/magalu-afiliados-whatsapp` na frente.
-
-⚠️ A cota diária corta sem avisar. Comece sempre pela mais valiosa que ainda
-estiver pendente.
-
-## O que NÃO fazer
-
-- Não criar página nova enquanto houver 51 órfãs. Página que o Google não lê
-  não rende nada, e o custo editorial é o mesmo.
-- Não reabrir cidade, nicho ou o cluster "robô" (linhas congeladas por dado em
-  2026-07-30).
-- Não citar preço de concorrente sem ficha datada em `competitors-data.js`.
-  Preço dito por IA não é fonte.
-- Não prometer ausência de banimento, mesmo entrando pela palavra "banido".
+Manter a lista aqui também garantia que as duas divergissem na primeira
+página nova — foi o que começou a acontecer no mesmo dia.

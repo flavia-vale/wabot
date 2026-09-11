@@ -1,3 +1,7 @@
+> ⚠️ **Fila substituída em 11/09/2026.** A lista única, priorizada por dia e
+> com a cota da Inspeção de URL em conta, está em `ACOES_FLAVIA_2026-09-11.md`.
+> Esta fica como histórico — quatro listas paralelas divergem em uma semana.
+
 # Páginas para pedir indexação — 2026-09-11
 
 Método: cruzamento das 90 rotas indexáveis do `seo-registry.mjs` contra as 86
