@@ -179,7 +179,7 @@ export const COMPARISON_PAGES = {
   '/alternativas/proafiliados': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · ProAfiliados',
-    title: 'Alternativa ao ProAfiliados: sem tag nas mensagens',
+    title: 'Alternativa ao ProAfiliados: sem tag, sem pagar R$ 50',
     description: 'O ProAfiliados tem plano grátis, mas assina as mensagens com a tag dele. Compare preço por plano e o que cada um cobre. Verificado em 04/08/2026.',
     competitorSlugs: ['proafiliados-com'],
     productPage: {

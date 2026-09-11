@@ -6,8 +6,8 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_PERSON
 const slug = '/programa-de-afiliados'
 // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1): era
 // 73 chars de texto próprio. "Qual paga mais" é o motivo pra clicar.
-const title = 'Shopee, Amazon ou Mercado Livre: qual paga mais'
-const description = 'Compare Shopee, Amazon e Mercado Livre: quanto paga de comissão, prazo de atribuição e como divulgar no WhatsApp. Dados com fonte e data.'
+const title = 'Qual paga mais: ML até 16%, Amazon até 13%, Shopee 3%'
+const description = 'Mercado Livre paga de 0% a 16% por categoria, Amazon de 0% a 13% e Shopee 3% na venda padrão. Entrada gratuita nos três, com fonte e data.'
 const dates = getEditorialDates(slug)
 
 // Resposta direta em 40–60 palavras: é o bloco que o Google usa como snippet e
