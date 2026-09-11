@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
 import { hasProLikeAccess } from '@/lib/planEntitlements'
+import { findDestinationsWithoutQueue } from '@/lib/painel/queueCoverage'
 import { PainelContentActions, usePainelHeader } from '../PainelShell'
 
 const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [] }
@@ -146,6 +147,9 @@ export default function FilasPage() {
     const names = jids.map((jid) => groups.find((group) => group.waJid === jid)?.name || jid)
     return names.join(' · ')
   }
+  // Grupos de destino que nenhuma fila alcança. Cálculo puro sobre o que a
+  // página já carregou — sem chamada nova à API. Ver lib/painel/queueCoverage.
+  const destinationsWithoutQueue = findDestinationsWithoutQueue(groups, queues)
   const activeQueueCount = queues.filter((queue) => queue.enabled).length
   const allQueuesEnabled = queues.length > 0 && activeQueueCount === queues.length
   const bulkQueueLabel = allQueuesEnabled ? 'Desativar todas' : 'Ativar todas'
@@ -200,6 +204,11 @@ export default function FilasPage() {
     </section>}
     {message && <div className="pnl-note-box is-error" role="alert">{message}</div>}
     {notice && <div className="pnl-note-box" role="status">{notice}</div>}
+    {destinationsWithoutQueue.length > 0 && <div className="pnl-note-box is-warn" role="status">
+      <strong>{destinationsWithoutQueue.length === 1 ? 'Um grupo não está em nenhuma fila.' : `${destinationsWithoutQueue.length} grupos não estão em nenhuma fila.`}</strong>{' '}
+      {destinationsWithoutQueue.map((group) => group.name).join(' · ')} — as ofertas que você adiciona às filas não chegam {destinationsWithoutQueue.length === 1 ? 'nele' : 'neles'}. Para incluir, edite uma fila e marque o grupo na lista de destinos.
+      <p className="pnl-hint" style={{ marginTop: 6 }}>Se isso for proposital, pode ignorar: {destinationsWithoutQueue.length === 1 ? 'ele continua recebendo' : 'eles continuam recebendo'} normalmente as ofertas dos grupos monitorados.</p>
+    </div>}
     {showForm && <form className="pnl-card" onSubmit={save}>
       <div className="pnl-card-title">{editing ? 'Editar fila' : 'Nova fila'}</div>
       <div className="pnl-field" style={{ marginTop: 14 }}><label className="pnl-label" htmlFor="queue-name">Nome</label><input id="queue-name" className="pnl-input" value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} required maxLength={100} /></div>

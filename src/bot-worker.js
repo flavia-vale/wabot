@@ -42,7 +42,7 @@ import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
-import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
+import { sanitizeMessageForLog, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
@@ -4025,7 +4025,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         //   repostada logo depois, mesmo que o conversor gere outro shortlink.
         // - primary.converted: link final. Bloqueia fontes diferentes que caiam no
         //   mesmo link afiliado.
-        const fallbackDedupSubject = `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
+        // truncateByCodePoints (não `.slice`): cortar em 80 code UNITS parte o par
+        // surrogate de um emoji ao meio, e a metade solta faz a reserva de
+        // SendDedupKey morrer com `unexpected end of hex escape` no Prisma.
+        const fallbackDedupSubject = `${msg.key.id || 'nolink'}:${truncateByCodePoints(sanitizeMessageForLog(finalText), 80)}`
         const { dedupKeys } = buildMirrorDedupKeys({
           destJid,
           primaryUrl: primary.url,

@@ -2480,6 +2480,62 @@ histórico continua valendo e **não** custa rede a mais. Sinal durável
 não fazer a troca em mensagem de cupom; não deixar a oferta sair sem foto quando
 a loja falhar. Teste: `test/store-photo-over-origin.test.js`.
 
+## "A fila não envia para um grupo" (RCA 2026-09-11 — não regredir)
+
+Cliente (`julianepumuceno16@gmail.com`) abriu chamado dizendo que a fila `09/08`
+não enviava para o `Maternidade Econômica #5`. **Não havia defeito na fila**: o
+grupo entrou na lista de destinos dela naquele mesmo dia, e o primeiro envio da
+fila para ele saiu às 12:09:41 — 10 ofertas na sequência. Os outros destinos
+tinham 165 envios em 7 dias porque estavam na fila há 7 dias.
+
+O que custou a investigação inteira:
+
+- **O painel não dizia em lugar nenhum que um grupo de destino estava fora de
+  todas as filas.** A fila aparecia ativa, drenando e enviando; o grupo aparecia
+  cadastrado; e nada ligava as duas coisas. Descobrir exigia comparar na mão a
+  lista de destinos de cada fila com a lista de grupos de postagem.
+  `findDestinationsWithoutQueue` (`dashboard/lib/painel/queueCoverage.js`) faz
+  essa conta e a tela de Filas mostra o aviso.
+- **O aviso NÃO pode dizer que o grupo está sem receber nada.** O espelhamento
+  continua entregando nele — foi exatamente essa confusão que gerou o chamado.
+  Lista de destinos vazia numa fila significa TODOS os grupos de postagem
+  (legado) e zera o aviso; fila pausada conta como cobertura (pausa já tem
+  indicação própria; somar as duas geraria alarme duplo); sem fila nenhuma não
+  avisa. Cálculo puro sobre dados que a página já carregou: **nenhuma chamada
+  nova à API, nenhuma consulta nova ao banco, zero impacto de RAM.**
+- **A lista de destinos fica CONGELADA dentro de cada `OfferQueueItem`.** Marcar
+  o grupo na fila agora não alcança item já enfileirado — só os próximos.
+- **`status='success'` significa "entreguei ao WhatsApp", não "apareceu no
+  grupo".** Antes de procurar defeito, compare com o espelhamento: se ele chega
+  no mesmo grupo, o robô está lá e com permissão, e o assunto é a fila.
+
+Diagnóstico reutilizável (read-only): `scripts/diag-fila-grupo.mjs <email>
+[jid|nome] [--dias=7]` — cruza filas, itens, destinos, `blockReason` e o
+histórico por destino, e mostra o dia a dia do grupo separando fila de
+espelhamento. Teste: `test/painel-fila-grupo-sem-fila.test.js`.
+
+### Emoji cortado ao meio derrubava a reserva de `SendDedupKey` (mesma investigação)
+
+Achado secundário, defeito real e independente. O `bot.log` de produção trazia
+`Reserva SendDedupKey falhou; seguindo com dedup local/global` com
+`unexpected end of hex escape at line 1 column 304`.
+
+A chave era montada com `sanitizeMessageForLog(texto).slice(0, 80)`. O
+sanitizador já trunca por **code point** justamente para não partir emoji ao
+meio (ver `src/messageLogSanitizer.js`) — e o `.slice` aplicado DEPOIS, que
+conta code **units** UTF-16, reintroduzia a metade solta do par surrogate. O
+motor do Prisma recusa a gravação inteira nesse caso, então a **reserva atômica
+cross-worker** (a camada que fecha a corrida de milissegundos entre dois
+workers) simplesmente deixava de existir para essas mensagens, em silêncio —
+a proteção contra envio duplicado caía para as camadas local/Redis.
+
+Conserto em duas camadas: `truncateByCodePoints` (`messageLogSanitizer.js`,
+puro) no ponto de corte, e limpeza de surrogate solto dentro de
+`buildMirrorDedupKeys` (`src/core/mirrorDedupKey.js`), que é a fonte ÚNICA da
+chave e protege qualquer chamador futuro. **Não voltar a usar `.slice` em texto
+que vira chave de banco** — o teste reproduz o corte antigo e falha se ele
+voltar. Teste: `test/mirror-dedup-key-surrogate.test.js`.
+
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
 Em vez de criar N linhas de `skip:dedup_recent_link` quando a mesma
@@ -3257,7 +3313,8 @@ defesa). Teste: `test/core/worker-spawn-options.test.js`.
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
 O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
-(default **20**) robôs vivos — `checkSessionCircuitBreaker` em
+(default **20**; **produção está em 40** desde a ampliação do servidor — ver a
+medição de 2026-09-11 abaixo) robôs vivos — `checkSessionCircuitBreaker` em
 `src/supervisor/index.js`. **Isso é o teto comercial da operação**: cheio,
 NENHUMA cliente nova consegue conectar, e quem desligar o próprio robô não
 consegue voltar (perde a vaga para outra conta).
@@ -3294,6 +3351,49 @@ teto de 20 não era capricho, era o que cabia. Subir o teto é mudança
 memory-heavy → REGRA #1 da política de memória abaixo (avisar antes, com
 estimativa).
 
+**Medição real (2026-09-11, prod — números vigentes, use ESTES para estimar):**
+o servidor foi ampliado para **15,6 GB** (8 vCPU, disco de 38 GB) e o teto subiu
+para **40**. Com **36 robôs** ligados:
+
+| medida | valor |
+|---|---|
+| RAM total | 15.613 MB |
+| RAM disponível | 4.919 MB (31%) |
+| RSS somado dos 36 robôs | 11.832 MB |
+| média por robô | **329 MB** |
+| maior robô | 495 MB |
+| swap em uso | 41 MB, **sem tráfego** (`si`/`so` = 0) |
+| CPU ociosa | 98% |
+| disco / inodes | 62% / 19% |
+
+**A média por robô SUBIU de 272 para 329 MB** — estimativa nova usa 329, não
+272. Base fixa medida no mesmo instante: api 218 + dashboard 208 + supervisor
+120 + staging (api 163 + visual 124 + supervisor 111) + logrotate 80 ≈ **1,0 GB**.
+
+⚠️ **O teto de 40 é MAIOR que o limite seguro que a política calcula (35).**
+`evaluateCapacity` (`src/ops/capacity/policy.js`) reserva o maior valor entre 20%
+da RAM e 1.536 MB — aqui 3.123 MB — e divide o resto por 350 MB/robô:
+`(15.613 − 3.123) / 350 = 35`. Com 36 ligados a folga pela política é **zero**, e
+é por isso que `/admin/capacidade` mostra **atenção** com todos os recursos
+verdes: o amarelo vem da CONTAGEM DE VAGAS, não de RAM, disco, CPU ou swap.
+Não procurar defeito de recurso quando o painel amarela com swap parado.
+
+As duas leituras de margem respondem perguntas diferentes e as duas importam:
+**margem física** (4,9 GB livres ≈ 14 robôs a mais) e **margem pela política**
+(zero — a reserva de 3,1 GB já está sendo consumida). A reserva existe para
+absorver pico de GC e scrape pesado; gastá-la não quebra nada hoje, mas tira o
+colchão.
+
+**O sinal que muda a decisão é o SWAP, não a RAM livre.** Enquanto `swap_usada`
+ficar parada (os 41 MB são resíduo antigo) e `si`/`so` = 0, o servidor está
+confortável. Swap subindo de um dia para o outro = subdimensionado de verdade →
+aumentar RAM (alvo ~20 GB para 40 robôs com folga), não subir mais o teto.
+Vigilância de uma linha por dia:
+
+```bash
+free -m | awk 'NR==2{print "livre_mb="$7} NR==3{print "swap_usada_mb="$3}'
+```
+
 ⚠️ **Mudar o teto exige reiniciar o `bot-supervisor`** (o valor é lido no boot),
 e isso **reconecta TODAS as sessões de uma vez** — decisão humana, anunciada
 antes, nunca às cegas.
@@ -3325,7 +3425,7 @@ Onde roda: `setInterval` + `unref()` dentro da API, mesmo padrão de
 (uma contagem a cada 15min). A contagem vem de `listRunningBots()` do
 `manager.js`, a **mesma fonte** que o circuit breaker usa, então o aviso não
 pode discordar do que recusa a cliente. O teto é lido pela **mesma fórmula** do
-supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20).
+supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20; produção está em 40).
 
 **Não regredir:**
 
@@ -3359,7 +3459,7 @@ real discordarem até a outra subir.
 Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv,
 então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
 ```bash
-grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20"
+grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20 (prod tinha 40 em 2026-09-11)"
 # o que o supervisor de PRODUCAO leu no boot. Dois cuidados: o pm2 numera o
 # arquivo por instancia (pegue o mais recente por data, nao por nome) e
 # `*supervisor*` casaria tambem os logs de STAGING, que tem outro teto.
@@ -3466,9 +3566,12 @@ liga/desliga staging** (economia de RAM sob demanda) + **vigilância 403**
 
 ### Fatos de capacidade (use para estimar antes de sinalizar)
 
-- **Orçamento por sessão WhatsApp ativa:** ~**0,35 GB** de RSS (worker sob o
-  teto de 384 MB + overhead). Base fixa (api+dashboard+telegram+OS) ~**2 GB**.
-- **Fórmula:** `RAM ≈ 2 GB + N_sessões × 0,35 GB + (staging co-locado? +2 GB) + ~20% folga`.
+- **Orçamento por sessão WhatsApp ativa:** ~**0,33 GB** de RSS medidos em
+  2026-09-11 (média 329 MB, maior robô 495 MB; era 272 MB em 2026-09-01). Base
+  fixa (api+dashboard+supervisor+staging+OS) ~**1 GB** medido no mesmo instante.
+- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,33 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
+- **Servidor vigente (2026-09-11):** 15,6 GB de RAM, 8 vCPU, disco de 38 GB,
+  swap de 4 GB. Teto de vagas em 40; limite seguro da política em 35.
 - **Custo marginal de infra por cliente:** ~R$1,75/mês (marginal) a ~R$2-3/mês
   (com base amortizada). Não é o gargalo do produto — RAM é barata perto do ticket.
 - **Swap é pré-requisito, não muleta:** num VPS apertado, swap ativo é a 1ª

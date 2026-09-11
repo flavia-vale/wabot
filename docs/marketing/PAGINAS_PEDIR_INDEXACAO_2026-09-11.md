@@ -27,11 +27,16 @@ https://espelhagrupos.com.br/amazon-afiliados-whatsapp        ✅ pedida 11/09
 https://espelhagrupos.com.br/shein-afiliados-whatsapp         ✅ pedida 11/09
 ```
 
-**Primeira da fila de 12/09** — a cota acabou antes dela:
+**Pedida depois, no mesmo 11/09**, junto com a repetição das outras quatro (o
+pedido da manhã foi ANTES de elas ganharem link de entrada, e o veredito foi
+"Detectada, mas não indexada / Último rastreamento: N/D"):
 
 ```
-https://espelhagrupos.com.br/magalu-afiliados-whatsapp        ⏳ pendente
+https://espelhagrupos.com.br/magalu-afiliados-whatsapp        ✅ pedida 11/09
 ```
+
+➡️ O estado atual de TODA a fila está em `ACOES_FLAVIA_2026-09-11.md`. Não
+marcar pedido aqui — duas listas paralelas divergem em uma semana.
 
 Anote o veredito de cada uma. Três respostas possíveis, com ações opostas:
 

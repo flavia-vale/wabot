@@ -18,6 +18,22 @@ const CONTROL_CHARS_RE = new RegExp('[\\x00-\\x1F\\x7F-\\x9F]', 'g')
 // dois lados de um par válido (que formam 1 code point, ex. emoji).
 const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
 
+// Corta `text` em no máximo `maxCodePoints` CODE POINTS e remove qualquer
+// surrogate solto que sobre. `String.prototype.slice` conta code UNITS UTF-16,
+// então cortar em 80 no meio de um emoji deixa metade de um par surrogate na
+// ponta — e o motor do Prisma recusa a gravação inteira com
+// `unexpected end of hex escape`. Foi assim que a reserva de `SendDedupKey`
+// falhava em produção (o texto já passava por `sanitizeMessageForLog`, mas o
+// `.slice(0, 80)` aplicado DEPOIS reintroduzia o surrogate solto).
+// Não acrescenta reticências: isto serve para chave técnica, não para leitura.
+function truncateByCodePoints(text, maxCodePoints) {
+  const raw = String(text ?? '')
+  const limit = Math.max(0, Number(maxCodePoints) || 0)
+  const codePoints = Array.from(raw)
+  const sliced = (codePoints.length > limit ? codePoints.slice(0, limit) : codePoints).join('')
+  return sliced.replace(LONE_SURROGATE_RE, '')
+}
+
 function sanitizeMessageForLog(text) {
   const raw = String(text ?? '').replace(/\s+/g, ' ').trim()
   if (!raw) return ''
@@ -40,4 +56,4 @@ function sanitizeMessageForLog(text) {
   return truncated ? `${cleaned}…` : cleaned
 }
 
-export { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS }
+export { sanitizeMessageForLog, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS }
