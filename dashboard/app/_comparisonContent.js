@@ -32,6 +32,11 @@ export const COMPARISON_SOURCE_LINKS = [
 export const COMPARISON_PAGES = {
   '/alternativas/bot-para-whatsapp-afiliados': {
     format: 'alternative-plural',
+    productPage: {
+      href: '/bot-afiliados-whatsapp',
+      label: 'Como funciona a operação para afiliados, do começo ao fim',
+      note: 'Origens, conversão do link, destinos e histórico — sem comparar com ninguém.',
+    },
     eyebrow: 'Alternativas · Afiliados',
     title: 'Alternativas de bot para afiliados: como escolher',
     description: 'Compare caminhos para divulgar ofertas em grupos de WhatsApp: operação manual, planilha, automação genérica, ferramenta oficial de mensagens e Espelha Grupos.',
@@ -99,6 +104,7 @@ export const COMPARISON_PAGES = {
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
+      note: 'Grupos ilimitados, quatro lojas e 7 dias grátis.',
     },
     tldr: 'Entre as opções comparadas, o Espelha Grupos oferece o conjunto mais completo pelo menor preço de entrada: custa R$ 39 por 30 dias, permite grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Para quem quer divulgar várias lojas, crescer sem pagar por quantidade de grupos e testar tudo antes de assinar, é a opção mais vantajosa entre as três.',
     directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco somente em Shopee. Seus planos começam em R$ 59,90 por mês para 1 grupo e chegam a R$ 199,90 para 15 grupos. O Espelha Grupos custa R$ 39 por 30 dias, permite grupos ilimitados e já inclui Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Também converte links de produto e de cupom, trabalha com grupos, Canais e Comunidades do WhatsApp e oferece 7 dias grátis com o plano Pro completo. Para quem divulga várias lojas e não quer pagar mais ao adicionar grupos, o Espelha Grupos entrega mais recursos por um preço menor. O Achadinho Pro, apesar do nome parecido, é outra ferramenta, de outra empresa: começa em R$ 49,97 por mês, também somente com Shopee, e tem página de comparação própria aqui no site.',
@@ -172,6 +178,11 @@ export const COMPARISON_PAGES = {
   },
   '/alternativas/proafiliados': {
     format: 'alternative-plural',
+    productPage: {
+      href: '/bot-afiliados-whatsapp',
+      label: 'Como funciona a operação para afiliados, do começo ao fim',
+      note: 'Nenhum plano insere marca nas suas mensagens.',
+    },
     eyebrow: 'Alternativas · ProAfiliados',
     title: 'Alternativa ao ProAfiliados: sem tag nas mensagens',
     description: 'O ProAfiliados tem plano grátis, mas assina as mensagens com a tag dele. Compare preço por plano e o que cada um cobre. Verificado em 04/08/2026.',
@@ -217,6 +228,11 @@ export const COMPARISON_PAGES = {
   },
   '/alternativas/shozap': {
     format: 'alternative-plural',
+    productPage: {
+      href: '/bot-afiliados-whatsapp',
+      label: 'Como funciona a operação para afiliados, do começo ao fim',
+      note: 'Quatro lojas e grupos ilimitados já no plano de entrada.',
+    },
     eyebrow: 'Alternativas · Shozap',
     title: 'Alternativa ao Shozap: preço e limites por plano',
     description: 'Shozap e Espelha Grupos lado a lado: preço por plano, quantas conexões e grupos cabem e quais lojas entram em cada faixa. Verificado em 04/08/2026.',
@@ -259,6 +275,11 @@ export const COMPARISON_PAGES = {
   },
   '/alternativas/fluxopromo': {
     format: 'alternative-plural',
+    productPage: {
+      href: '/espelhar-grupos-whatsapp',
+      label: 'Como funciona o espelhamento dos grupos que você escolhe',
+      note: 'Parte dos seus grupos de origem, não de uma lista pronta de ofertas.',
+    },
     eyebrow: 'Alternativas · FluxoPromo',
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 72 chars de texto próprio, cortado no celular. Mantém "Alternativa
@@ -337,6 +358,7 @@ export const COMPARISON_PAGES = {
     productPage: {
       href: '/espelhar-grupos-whatsapp',
       label: 'Como funciona o espelhamento de grupos',
+      note: 'Grupos ilimitados por R$ 69, com 7 dias grátis.',
     },
     tldr: 'O Promium cobre mais coisa que o Espelha Grupos — 10 lojas, Telegram, vitrine com domínio próprio e rotador de links com pixel de anúncio. E cobra por isso: o plano de entrada custa R$ 97,90 por mês a partir do segundo mês, contra R$ 69 do nosso plano completo, e cobre 5 grupos contra grupos ilimitados. Se você precisa de vitrine própria e pixel, o Promium entrega o que nós não temos. Se o que você precisa é espelhar grupos e converter link, está pagando por uma plataforma inteira para usar uma parte dela.',
     directAnswer: 'O Promium é uma plataforma de divulgação de ofertas para WhatsApp e Telegram com replicador de grupos, captura de cupom por IA, vitrine de produtos com domínio próprio e rotador de links com pixel de Meta, TikTok e GA4. Os planos vão de R$ 97,90 a R$ 597,90 por mês no valor recorrente, cobrando por faixa de grupos (5, 20, 50 e 200) e por número de conexões de WhatsApp. O Espelha Grupos custa R$ 39 ou R$ 69 por 30 dias, não limita grupos, cobre Shopee, Amazon, Mercado Livre, Magalu e SHEIN, e oferece 7 dias grátis sem cartão. A escolha é entre uma plataforma ampla e paga por faixa, e uma ferramenta focada em espelhar grupos e converter link.',
@@ -383,6 +405,7 @@ export const COMPARISON_PAGES = {
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
+      note: 'Grupos ilimitados, quatro lojas e 7 dias grátis.',
     },
     tldr: 'Se você vai começar só com Shopee e não se importa em pagar mais depois para somar Mercado Livre e Amazon, o Achadinho Pro resolve. Se já divulga as três lojas (ou Magalu) desde o início, compare o custo total antes de decidir.',
     directAnswer: 'O Achadinho Pro é um bot de afiliados para WhatsApp com IA para selecionar produtos — e não é o mesmo produto que o AchadinhosBot, apesar do nome parecido. No Achadinho Pro, o plano Basic (R$ 49,97/mês) cobre só Shopee, com grupos ilimitados por automação e até 5 números de WhatsApp; o Pro (R$ 59,97/mês) soma Mercado Livre e Amazon pelo mesmo custo de apenas R$10 a mais. A página de preços consultada não indica teste grátis. A alternativa mais próxima é o Espelha Grupos, que cobre Shopee, Amazon, Mercado Livre e Magalu já no plano de entrada (R$39/30 dias) e converte também links de cupom, com teste grátis de 7 dias.',
@@ -479,6 +502,7 @@ export const COMPARISON_PAGES = {
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
+      note: 'Grupos ilimitados, quatro lojas e 7 dias grátis.',
     },
     tldr: 'O plano gratuito do Gigi Bot continua existindo, mas ele não publica no WhatsApp — nem ele, nem os dois planos seguintes. Envio automático e espelhamento de grupos só no plano mais caro. Se o que você precisa é o robô postando sozinho nos grupos, compare esse plano, não o de entrada.',
     directAnswer: 'O Gigi Bot tem quatro planos: um gratuito que converte links de 9 lojas com limite de 120 promoções por dia, o Guru Plus a R$ 19,99/mês, o Gigi Promo a R$ 39,99/mês (adiciona Amazon e site próprio) e o Gigi Prime, anunciado a R$ 49,90 no primeiro mês e R$ 67,99 depois. Na tabela pública, "autoenvio WhatsApp/Telegram" aparece riscado nos três primeiros planos: só o Gigi Prime publica sozinho no WhatsApp, com espelhamento de grupos e limite de 20 grupos por fila. A alternativa mais próxima para quem precisa do envio automático é o Espelha Grupos, a R$39/30 dias, com espelhamento e grupos ilimitados já no plano de entrada e 7 dias de teste grátis com o plano Pro. Dados da tabela verificada em 26/08/2026 — preços mudam, confirme na fonte oficial.',
@@ -833,6 +857,27 @@ export function ComparisonPage({ slug }) {
           {/* 9. Fechamento com a chamada principal. */}
           <SectionCard tone="accent" eyebrow={BRAND_NAME} title={`Onde o ${BRAND_NAME} se encaixa?`}>
             <p style={{ color: 'var(--ink)', lineHeight: 1.7, maxWidth: '70ch' }}>{page.productDefinition || PRODUCT_DEFINITION}</p>
+            {/*
+              A saída para a página comercial vem ANTES do teste, e por medição:
+              em 30 dias, as sete páginas /alternativas/* somaram 147 visitas e
+              ZERO cadastros, enquanto as comerciais converteram 15,4% da visita
+              em cadastro. Mesmo tema, resultados opostos —
+              /alternativas/achadinhos-bot fez 3.400 impressões e 0 cadastro; a
+              /bot-achadinhos-whatsapp fez 1.827 e 21.
+
+              Quem chega comparando ferramenta ainda não decidiu comprar; mandá-lo
+              direto ao cadastro pula a etapa que de fato converte. Este link era
+              a última linha de uma lista de rodapé chamada "Outros comparativos"
+              — ou seja, anunciado como mais um comparativo.
+            */}
+            {page.productPage ? (
+              <p style={{ marginTop: 18, color: 'var(--ink)', lineHeight: 1.7, maxWidth: '70ch' }}>
+                <Link href={page.productPage.href} data-comparison-cta="product-page" style={{ fontWeight: 800 }}>
+                  {page.productPage.label}
+                </Link>
+                {page.productPage.note ? ` — ${page.productPage.note}` : null}
+              </p>
+            ) : null}
             <TrialCta slug={slug} content="bottom-register" label={`Testar o ${BRAND_NAME} 7 dias grátis`} />
           </SectionCard>
 
@@ -840,11 +885,6 @@ export function ComparisonPage({ slug }) {
           <div className="comparison-decision-grid">
             <SectionCard eyebrow="Veja também" title="Outros comparativos">
               <ul className="comparison-links">
-                {page.productPage ? (
-                  <li>
-                    <Link href={page.productPage.href} data-comparison-cta="product-page">{page.productPage.label}</Link>
-                  </li>
-                ) : null}
                 <li><Link href="/comparativos" data-comparison-cta="related-hub">Hub de comparativos do {BRAND_NAME}</Link></li>
                 {relatedPages.map((related) => (
                   <li key={related.href}>
