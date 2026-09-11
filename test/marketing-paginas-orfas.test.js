@@ -40,25 +40,21 @@ const DIVIDA_HISTORICA = new Set([
   '/melhorar-alcance-em-grupos-de-promocoes',
   '/cadastro',
   '/grupo-para-canal-whatsapp',
-  '/diagnostico-antiban-whatsapp',
   '/blog/como-escalar-grupos-sem-operacao-manual',
   '/blog/checklist-padronizar-divulgacao-whatsapp',
   '/blog/comecar-afiliado-whatsapp-sem-grupo-grande',
   '/blog/quanto-custa-bot-para-whatsapp-afiliados',
   '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp',
   '/como-funciona-botinho-canais',
-  '/materiais/checklist-antiban-whatsapp',
   '/botinho-vs-ferramentas-genericas-automacao',
   '/glossario',
   '/alternativas/bot-para-whatsapp-afiliados',
   '/alternativas/promium',
   '/alternativas/gigi-bot',
   '/quem-somos',
-  '/espelhar-grupos-whatsapp',
   '/automatizar-divulgacao-em-grupos-whatsapp',
   '/padronizar-divulgacao-afiliado-whatsapp',
   '/parcerias',
-  '/bot-canais-whatsapp',
   '/bot-canal-whatsapp',
   '/comparativos',
   '/parceiro-influenciador',
@@ -66,16 +62,13 @@ const DIVIDA_HISTORICA = new Set([
   '/blog/bot-para-afiliados-whatsapp-grupos-cupons',
   '/blog/shadowban-whatsapp-canais',
   '/blog/migrar-grupo-achadinhos-para-canal',
-  '/bot-comum-vs-botinho',
   '/botinho-vs-planilha-manual',
   '/estudos-de-caso',
-  '/alternativas/achadinhos-bot',
   '/alternativas/proafiliados',
   '/alternativas/shozap',
   '/alternativas/fluxopromo',
   '/alternativas/achadinho-pro',
   '/clonar-mensagens-de-grupo-de-afiliados',
-  '/ferramentas/calculadora-risco-whatsapp',
   '/confiabilidade-sessao-whatsapp',
   '/seguranca-credenciais-afiliado',
 ])
@@ -157,4 +150,34 @@ test('DIVIDA_HISTORICA não guarda rota que saiu do registry', () => {
   const vivas = new Set(rotasIndexaveis())
   const fantasmas = [...DIVIDA_HISTORICA].filter((r) => !vivas.has(r))
   assert.deepEqual(fantasmas, [], 'Rotas removidas do site ainda listadas como dívida:\n  ' + fantasmas.join('\n  '))
+})
+
+// RCA 2026-09-11, 2ª parte: 119 links internos em 16 páginas apontavam para
+// `/rota?utm_source=seo&utm_medium=internal&…`. O endereço que o Google
+// descobre precisa ser o canônico — a variante com parâmetro gasta
+// rastreamento e joga a consolidação toda na canônica.
+//
+// `/login` e `/cadastro` seguem carregando os parâmetros: ali o UTM é a
+// atribuição do cadastro, não um link de conteúdo. E o clique interno continua
+// medido por `data-seo-cta` (o evento já grava cta, posição, estágio, destino e
+// href — o utm_content era redundante).
+
+const HREF_INTERNO_COM_UTM = /href[=:]\s*[{'"`]*(\/(?!login|cadastro)[A-Za-z0-9/_-]+)\?[^'"`\s}]*utm_/g
+
+test('link interno para página de conteúdo não carrega UTM', () => {
+  const ofensores = []
+  for (const arquivo of arquivosDeFonte()) {
+    const texto = fs.readFileSync(arquivo, 'utf8')
+    for (const achado of texto.matchAll(HREF_INTERNO_COM_UTM)) {
+      ofensores.push(`${path.relative(raiz, arquivo)} -> ${achado[1]}`)
+    }
+  }
+  assert.deepEqual(
+    ofensores,
+    [],
+    'Link interno com querystring faz o Google descobrir a variante em vez do endereço canônico. ' +
+      'Aponte para o endereço limpo; o clique já é medido por data-seo-cta. ' +
+      'Atribuição de cadastro continua em /login e /cadastro:\n  ' +
+      ofensores.join('\n  '),
+  )
 })

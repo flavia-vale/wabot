@@ -97,7 +97,7 @@ export const COMPARISON_PAGES = {
     // Google não tinha como saber qual responde o quê. Aqui fica a busca por
     // NOME do concorrente; lá, a busca genérica por "bot para achadinhos".
     productPage: {
-      href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
+      href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
     },
     tldr: 'Entre as opções comparadas, o Espelha Grupos oferece o conjunto mais completo pelo menor preço de entrada: custa R$ 39 por 30 dias, permite grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Para quem quer divulgar várias lojas, crescer sem pagar por quantidade de grupos e testar tudo antes de assinar, é a opção mais vantajosa entre as três.',
@@ -335,7 +335,7 @@ export const COMPARISON_PAGES = {
     description: 'O plano de entrada do Promium custa R$ 97,90 por mês e cobre 5 grupos. Compare com o Espelha Grupos: grupos ilimitados por R$ 69, com 7 dias grátis.',
     competitorSlugs: ['promium'],
     productPage: {
-      href: '/espelhar-grupos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=promium&utm_content=comparison_product_backlink',
+      href: '/espelhar-grupos-whatsapp',
       label: 'Como funciona o espelhamento de grupos',
     },
     tldr: 'O Promium cobre mais coisa que o Espelha Grupos — 10 lojas, Telegram, vitrine com domínio próprio e rotador de links com pixel de anúncio. E cobra por isso: o plano de entrada custa R$ 97,90 por mês a partir do segundo mês, contra R$ 69 do nosso plano completo, e cobre 5 grupos contra grupos ilimitados. Se você precisa de vitrine própria e pixel, o Promium entrega o que nós não temos. Se o que você precisa é espelhar grupos e converter link, está pagando por uma plataforma inteira para usar uma parte dela.',
@@ -381,7 +381,7 @@ export const COMPARISON_PAGES = {
     description: 'O Achadinho Pro cobre só Shopee no plano de entrada. No Espelha Grupos, Shopee, Amazon, Mercado Livre e Magalu já entram por R$ 39/30 dias, com 7 dias grátis.',
     competitorSlugs: ['achadinho-pro'],
     productPage: {
-      href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
+      href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
     },
     tldr: 'Se você vai começar só com Shopee e não se importa em pagar mais depois para somar Mercado Livre e Amazon, o Achadinho Pro resolve. Se já divulga as três lojas (ou Magalu) desde o início, compare o custo total antes de decidir.',
@@ -477,7 +477,7 @@ export const COMPARISON_PAGES = {
     description: 'Comparativo entre Gigi Bot e Espelha Grupos: qual envia sozinho para o WhatsApp, quanto custa e o que o plano grátis faz. Tabela verificada em 26/08/2026.',
     competitorSlugs: ['gigi-bot'],
     productPage: {
-      href: '/bot-achadinhos-whatsapp?utm_source=comparativo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=comparison_product_backlink',
+      href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
     },
     tldr: 'O plano gratuito do Gigi Bot continua existindo, mas ele não publica no WhatsApp — nem ele, nem os dois planos seguintes. Envio automático e espelhamento de grupos só no plano mais caro. Se o que você precisa é o robô postando sozinho nos grupos, compare esse plano, não o de entrada.',

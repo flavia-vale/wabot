@@ -9,14 +9,14 @@ const pagePath = '/bot-canais-whatsapp'
 const siteUrl = getSiteUrl()
 const pageUrl = `${siteUrl}${pagePath}`
 const primaryCtaHref = '/login?mode=register&utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=hero'
-const diagnosticHref = '/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=modulo_preservacao'
-const checklistHref = '/materiais/checklist-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=landing_checklist'
-const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=landing_calculadora_risco'
+const diagnosticHref = '/diagnostico-antiban-whatsapp'
+const checklistHref = '/materiais/checklist-antiban-whatsapp'
+const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp'
 const decisionPages = [
-  { href: '/bot-comum-vs-botinho?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_bot_comum', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada.' },
-  { href: '/faq-antiban-whatsapp?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_faq', title: 'FAQ “anti-ban” honesto', description: 'Respostas diretas sem promessa de banimento zero.' },
-  { href: '/como-funciona-botinho-canais?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_como_funciona', title: 'Como funciona em canais', description: 'Fluxo de fontes, destinos, cadência e monitoramento.' },
-  { href: '/protecao-antiban-botinho?utm_source=seo&utm_medium=landing&utm_campaign=canais-preservacao&utm_content=p2_protecao', title: 'Proteção avançada', description: 'Limites, variações, pausa preventiva e recuperação.' },
+  { href: '/bot-comum-vs-botinho', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada.' },
+  { href: '/faq-antiban-whatsapp', title: 'FAQ “anti-ban” honesto', description: 'Respostas diretas sem promessa de banimento zero.' },
+  { href: '/como-funciona-botinho-canais', title: 'Como funciona em canais', description: 'Fluxo de fontes, destinos, cadência e monitoramento.' },
+  { href: '/protecao-antiban-botinho', title: 'Proteção avançada', description: 'Limites, variações, pausa preventiva e recuperação.' },
 ]
 
 const title = 'Bot para Canais do WhatsApp com Módulo de Preservação Avançada'

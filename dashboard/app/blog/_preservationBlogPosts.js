@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
+import { internalContentHref } from '@/lib/marketing-attribution'
 
 const siteUrl = getSiteUrl()
 
@@ -488,7 +489,7 @@ function MidArticleBridge({ bridge, slug }) {
       <div className="mt-4 flex flex-wrap gap-3">
         <Link
           className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white no-underline hover:bg-emerald-700"
-          href={`${bridge.href}?${utm}&utm_term=primary`}
+          href={internalContentHref(bridge.href, `${utm}&utm_term=primary`)}
           data-seo-cta="blog_mid_bridge"
           data-cta-position="article_mid_bridge"
           data-cta-stage="consideration"
@@ -498,7 +499,7 @@ function MidArticleBridge({ bridge, slug }) {
         {bridge.secondary ? (
           <Link
             className="rounded-xl border border-emerald-200 bg-white px-5 py-3 text-sm font-black text-emerald-700 no-underline hover:border-emerald-300"
-            href={`${bridge.secondary.href}?${utm}&utm_term=secondary`}
+            href={internalContentHref(bridge.secondary.href, `${utm}&utm_term=secondary`)}
             data-seo-cta="blog_mid_bridge_secondary"
             data-cta-position="article_mid_bridge"
             data-cta-stage="awareness"
@@ -599,7 +600,7 @@ export function PreservationBlogPost({ postKey }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <Link
               className="rounded-2xl bg-emerald-600 px-5 py-4 text-center font-black text-white no-underline hover:bg-emerald-700"
-              href="/diagnostico-antiban-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_diagnostic_cta"
+              href="/diagnostico-antiban-whatsapp"
               data-seo-cta="blog_diagnostic"
               data-cta-position="article_next_step_primary"
               data-cta-stage="diagnostic"
@@ -609,7 +610,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/materiais/checklist-antiban-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_checklist_cta"
+              href="/materiais/checklist-antiban-whatsapp"
               data-seo-cta="blog_checklist"
               data-cta-position="article_next_step_secondary"
               data-cta-stage="lead_magnet"
@@ -619,7 +620,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/ferramentas/calculadora-risco-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_risk_calculator_cta"
+              href="/ferramentas/calculadora-risco-whatsapp"
               data-seo-cta="blog_risk_calculator"
               data-cta-position="article_next_step_tool"
               data-cta-stage="tool"
@@ -629,7 +630,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/bot-canais-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_landing_cta"
+              href="/bot-canais-whatsapp"
               data-seo-cta="blog_campaign_landing"
               data-cta-position="article_next_step_landing"
               data-cta-stage="consideration"

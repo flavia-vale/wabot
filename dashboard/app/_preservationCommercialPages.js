@@ -8,10 +8,10 @@ import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 
 const siteUrl = getSiteUrl()
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
-const mainLandingHref = '/bot-canais-whatsapp?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=sprint2_crosslink'
-const diagnosticHref = '/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_secondary'
-const checklistHref = '/materiais/checklist-antiban-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_checklist'
-const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp?utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=commercial_calculadora_risco'
+const mainLandingHref = '/bot-canais-whatsapp'
+const diagnosticHref = '/diagnostico-antiban-whatsapp'
+const checklistHref = '/materiais/checklist-antiban-whatsapp'
+const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp'
 
 export const PRESERVATION_COMMERCIAL_PAGES = {
   /* Frente Tier 1 (PLANO_ACAO_SEO_IA_2026-09-01, ação 9). "shopee afiliados" tem
@@ -423,7 +423,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     competitorNudge: {
       text: 'Procurando o AchadinhosBot?',
       label: 'Veja a comparação lado a lado',
-      href: '/alternativas/achadinhos-bot?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=commercial_competitor_nudge',
+      href: '/alternativas/achadinhos-bot',
     },
     problemTitle: 'O achadinho bom dura minutos — e você não está sempre no celular.',
     problem: 'Promoção de achadinho é por tempo limitado e estoque curto. Quem depende de ver a oferta, copiar o link, trocar pelo seu código de afiliado e colar em cada grupo sempre chega atrasado — ou desiste de postar em metade dos grupos.',
@@ -784,7 +784,7 @@ export function PreservationCommercialPage({ pageKey }) {
                     <Link
                       className="btn btn-ghost"
                       style={{ marginTop: 18 }}
-                      href={`${item.href}?utm_source=seo&utm_medium=internal&utm_campaign=canais-preservacao&utm_content=commercial_related`}
+                      href={item.href}
                       data-seo-cta="commercial_related"
                       data-cta-position="related"
                       data-cta-stage="consideration"

@@ -302,7 +302,7 @@ export default function Page() {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/precos?utm_source=seo&utm_medium=organic&utm_campaign=clonar-grupo-afiliados&utm_content=article_pricing_cta"
+              href="/precos"
               data-seo-cta="article_clonar_grupo_pricing"
               data-cta-position="article_next_step_secondary"
               data-cta-stage="consideration"
