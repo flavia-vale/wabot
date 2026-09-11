@@ -32,15 +32,15 @@ export const COMPARISON_SOURCE_LINKS = [
 export const COMPARISON_PAGES = {
   '/alternativas/bot-para-whatsapp-afiliados': {
     format: 'alternative-plural',
+    eyebrow: 'Alternativas · Afiliados',
+    title: 'Alternativas de bot para afiliados: como escolher',
+    description: 'Compare caminhos para divulgar ofertas em grupos de WhatsApp: operação manual, planilha, automação genérica, ferramenta oficial de mensagens e Espelha Grupos.',
+    competitorSlugs: ['achadinho-pro', 'achadinhosbot', 'proafiliados-com', 'lumi-ofertas-inteligentes', 'gigi-bot', 'manual-spreadsheet-workflow', 'generic-automation-tools', 'official-service-api-tools'],
     productPage: {
       href: '/bot-afiliados-whatsapp',
       label: 'Como funciona a operação para afiliados, do começo ao fim',
       note: 'Origens, conversão do link, destinos e histórico — sem comparar com ninguém.',
     },
-    eyebrow: 'Alternativas · Afiliados',
-    title: 'Alternativas de bot para afiliados: como escolher',
-    description: 'Compare caminhos para divulgar ofertas em grupos de WhatsApp: operação manual, planilha, automação genérica, ferramenta oficial de mensagens e Espelha Grupos.',
-    competitorSlugs: ['achadinho-pro', 'achadinhosbot', 'proafiliados-com', 'lumi-ofertas-inteligentes', 'gigi-bot', 'manual-spreadsheet-workflow', 'generic-automation-tools', 'official-service-api-tools'],
     tldr: 'Se você está pesquisando alternativas de bot para WhatsApp, compare foco operacional, capacidade de governança e custo de manutenção contínua antes de decidir.',
     directAnswer: 'A melhor alternativa de bot para WhatsApp para afiliados depende do estágio da operação. Para poucos grupos, planilha e revisão manual podem bastar. Para rotina com origem, destino, link monetizado, filtros, cadência e logs, o Espelha Grupos foi desenhado para organizar esse fluxo sem prometer ganho financeiro ou burlar regras das plataformas.',
     rows: [
@@ -178,15 +178,15 @@ export const COMPARISON_PAGES = {
   },
   '/alternativas/proafiliados': {
     format: 'alternative-plural',
+    eyebrow: 'Alternativas · ProAfiliados',
+    title: 'Alternativa ao ProAfiliados: sem tag nas mensagens',
+    description: 'O ProAfiliados tem plano grátis, mas assina as mensagens com a tag dele. Compare preço por plano e o que cada um cobre. Verificado em 04/08/2026.',
+    competitorSlugs: ['proafiliados-com'],
     productPage: {
       href: '/bot-afiliados-whatsapp',
       label: 'Como funciona a operação para afiliados, do começo ao fim',
       note: 'Nenhum plano insere marca nas suas mensagens.',
     },
-    eyebrow: 'Alternativas · ProAfiliados',
-    title: 'Alternativa ao ProAfiliados: sem tag nas mensagens',
-    description: 'O ProAfiliados tem plano grátis, mas assina as mensagens com a tag dele. Compare preço por plano e o que cada um cobre. Verificado em 04/08/2026.',
-    competitorSlugs: ['proafiliados-com'],
     tldr: 'Se você quer testar automação de afiliados sem pagar nada, o plano grátis do ProAfiliados é o mais generoso do mercado — e não é trial, é grátis para sempre. O custo é a tag deles nas suas mensagens.',
     directAnswer: 'O ProAfiliados é um bot de afiliados para WhatsApp e Telegram com plano gratuito permanente (grupos ilimitados, monitoramento 24/7 e 5 plataformas), cobrando R$ 50/mês no Premium para remover a tag "proafiliados" das mensagens e R$ 100/mês no Premium Plus para tirar os anúncios do sistema. O pagamento é via PIX, sem cartão. A alternativa mais próxima é o Espelha Grupos, que não insere tag nem anúncio em nenhum plano, mas não tem camada gratuita permanente — o teste grátis é de 7 dias.',
     // Formato de objeto liga o comparador interativo por critério (ver
@@ -228,15 +228,15 @@ export const COMPARISON_PAGES = {
   },
   '/alternativas/shozap': {
     format: 'alternative-plural',
+    eyebrow: 'Alternativas · Shozap',
+    title: 'Alternativa ao Shozap: preço e limites por plano',
+    description: 'Shozap e Espelha Grupos lado a lado: preço por plano, quantas conexões e grupos cabem e quais lojas entram em cada faixa. Verificado em 04/08/2026.',
+    competitorSlugs: ['shozap'],
     productPage: {
       href: '/bot-afiliados-whatsapp',
       label: 'Como funciona a operação para afiliados, do começo ao fim',
       note: 'Quatro lojas e grupos ilimitados já no plano de entrada.',
     },
-    eyebrow: 'Alternativas · Shozap',
-    title: 'Alternativa ao Shozap: preço e limites por plano',
-    description: 'Shozap e Espelha Grupos lado a lado: preço por plano, quantas conexões e grupos cabem e quais lojas entram em cada faixa. Verificado em 04/08/2026.',
-    competitorSlugs: ['shozap'],
     tldr: 'O Shozap escala por cota — conexões, campanhas, grupos por campanha e contas de marketplace. Some seus grupos antes de comparar preço: o plano de entrada cobre 3 grupos por campanha e só Shopee.',
     directAnswer: 'O Shozap é uma plataforma de divulgação para WhatsApp e Telegram que cobra por cota de uso: R$ 50/mês no Básico (1 conexão de cada, 3 campanhas, 3 grupos por campanha, só Shopee), R$ 100/mês no Intermediário (adiciona Mercado Livre e Amazon), R$ 150/mês no Elite (adiciona Shein e Magalu) e R$ 300/mês no Avançado. A alternativa mais próxima é o Espelha Grupos, que cobre quatro marketplaces já no plano de R$ 39 e não limita número de grupos, mas atende só WhatsApp.',
     rows: [
@@ -275,11 +275,6 @@ export const COMPARISON_PAGES = {
   },
   '/alternativas/fluxopromo': {
     format: 'alternative-plural',
-    productPage: {
-      href: '/espelhar-grupos-whatsapp',
-      label: 'Como funciona o espelhamento dos grupos que você escolhe',
-      note: 'Parte dos seus grupos de origem, não de uma lista pronta de ofertas.',
-    },
     eyebrow: 'Alternativas · FluxoPromo',
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 72 chars de texto próprio, cortado no celular. Mantém "Alternativa
@@ -287,6 +282,11 @@ export const COMPARISON_PAGES = {
     title: 'Alternativa ao FluxoPromo: sem teto de ofertas/dia',
     description: 'O FluxoPromo limita ofertas por dia em todos os planos, menos no de R$ 197. No Espelha Grupos não há teto, e o espelhamento parte dos grupos que você escolhe.',
     competitorSlugs: ['fluxopromo'],
+    productPage: {
+      href: '/espelhar-grupos-whatsapp',
+      label: 'Como funciona o espelhamento dos grupos que você escolhe',
+      note: 'Parte dos seus grupos de origem, não de uma lista pronta de ofertas.',
+    },
     tldr: 'Antes de comparar preço, entenda que são propostas diferentes: o FluxoPromo entrega ofertas prontas por nicho, o Espelha Grupos espelha os grupos que você escolhe acompanhar. Uma não substitui a outra.',
     directAnswer: 'O FluxoPromo distribui ofertas de afiliado por nicho para canais de Telegram e destinos de WhatsApp, com plano gratuito permanente (20 ofertas/dia, 3 lojas, 1 canal de Telegram) e planos pagos de R$ 37 a R$ 197/mês cobrados por teto de ofertas por dia. O Espelha Grupos funciona de outra forma: monitora os grupos de origem que você escolhe, converte os links para o seu código e republica nos seus destinos, a partir de R$ 39/30 dias.',
     rows: [
@@ -655,6 +655,8 @@ export function getComparisonMetadata(slug) {
   }
 }
 
+// `limit` aceita Infinity de propósito — ver o comentário no uso, em
+// ComparisonPage. A ordenação continua valendo: as mais próximas primeiro.
 function getRelatedComparisonPages(slug, limit = 3) {
   const current = COMPARISON_PAGES[slug]
   if (!current) return []
@@ -691,7 +693,14 @@ const SECTION_IDS = {
 
 export function ComparisonPage({ slug }) {
   const page = COMPARISON_PAGES[slug]
-  const relatedPages = getRelatedComparisonPages(slug, 3)
+  // Todas as outras comparações, não três. Medido em 11/09: o corte em 3, com
+  // ranking por sobreposição de concorrente, concentrava os links nas mesmas
+  // páginas — /alternativas/proafiliados, /shozap e /promium ficavam com DOIS
+  // links de entrada em todo o site, e são justamente as páginas que carregam
+  // a maior parte das impressões (buscas por nome de concorrente são 92% do
+  // total). Com oito comparações, a lista completa cabe e ainda serve ao
+  // leitor: quem está comparando ferramenta quer ver as outras.
+  const relatedPages = getRelatedComparisonPages(slug, Number.POSITIVE_INFINITY)
   const siteUrl = getSiteUrl()
   const dates = getEditorialDates(slug)
   const schemas = buildArticleJsonLd({ title: page.title, description: page.description, slug, siteUrl, faq: page.faq, type: 'Article' })
