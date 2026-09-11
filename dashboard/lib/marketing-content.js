@@ -120,9 +120,9 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$0',
     priceValue: 0,
     period: '7 dias de validação inicial',
-    desc: 'Experimente por 7 dias tudo do Pro: grupos, canais, ofertas automáticas, filas e o Módulo de Preservação Avançada.',
+    desc: 'Experimente por 7 dias tudo do Pro: grupos, canais, garimpo automático de ofertas, filas e controle do ritmo dos envios.',
     cta: 'Começar teste grátis',
-    features: ['Tudo do plano Pro por 7 dias', 'Espelhamento em grupos e canais', 'Ofertas automáticas e filas de envio', 'Módulo de Preservação Avançada', 'Relatórios de envio completos'],
+    features: ['Tudo do plano Pro por 7 dias', 'Espelhamento em grupos e canais', 'Garimpo automático de ofertas e filas de envio', 'Painel de vendas e comissão da Shopee', 'Marca d\u2019água e card de oferta clicável', 'Relatórios de envio completos'],
   },
   {
     id: 'basic',
@@ -132,7 +132,7 @@ export const DEFAULT_LANDING_PLANS = [
     period: '30 dias',
     desc: 'Para operar ofertas manualmente em grupos: espelhamento, conversão de links, criação de ofertas e agendamento.',
     cta: 'Assinar Basic',
-    features: ['Espelhamento de grupos (monitor → destinos)', 'Conversão de links: Mercado Livre, Amazon, Shopee e Magalu', 'Criar oferta a partir de link (título, preço e imagem)', 'Envio imediato e agendado', 'Templates de mensagem personalizáveis', 'Relatórios de envio com histórico completo'],
+    features: ['Espelhamento de grupos (monitor → destinos)', 'Conversão de links em 6 lojas: Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress', 'Painel de vendas e comissão da Shopee (pedidos, valor vendido e comissão)', 'Marca d\u2019água com o seu nome na foto da oferta', 'Card de oferta clicável: tocar no card abre a loja', 'Mensagem reescrita do seu jeito, não copiada da origem', 'Criar oferta a partir de link (título, preço e imagem)', 'Envio imediato e agendado', 'Relatórios de envio com histórico completo'],
   },
   {
     id: 'pro',
@@ -140,10 +140,10 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$69',
     priceValue: 69,
     period: '30 dias',
-    desc: 'Piloto automático e escala: tudo do Basic + canais, ofertas automáticas, filas de envio e Módulo de Preservação Avançada.',
+    desc: 'Piloto automático e escala: tudo do Basic + canais, ofertas automáticas, filas de envio e controle de ritmo dos envios.',
     cta: 'Assinar Pro',
     highlight: true,
-    features: ['Tudo do Basic', 'Monitoramento e envio em canais', 'Ofertas automáticas da Shopee (palavra-chave, filtros e dedup inteligente)', 'Filas de ofertas com limites por hora e por dia', 'Módulo de Preservação Avançada (cadência, horários de descanso, variação de copy e limites)'],
+    features: ['Tudo do Basic', 'Monitoramento e envio em canais', 'Garimpo automático de ofertas da Shopee: o robô acha as ofertas por palavra-chave e filtros, você não precisa colar link', 'Filas de ofertas com intervalo definido e limites por hora e por dia', 'Controle do ritmo dos envios por grupo (Módulo de Preservação Avançada): intervalo, horário de descanso, limite diário e variação do texto'],
   },
 ]
 
@@ -166,7 +166,7 @@ export const CORE_FAQ_ITEMS = [
   {
     id: 'faq_seed_programs',
     question: 'Funciona com quais programas de afiliados?',
-    answer: 'Hoje o fluxo é focado em links suportados de Shopee, Mercado Livre, Amazon e Magalu. Cadastre as credenciais exigidas para as plataformas que você usa e revise cada oferta antes de divulgar.',
+    answer: 'Hoje o fluxo é focado em links suportados de seis lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Cadastre as credenciais exigidas para as lojas que você usa e revise cada oferta antes de divulgar.',
   },
   {
     id: 'faq_seed_text',

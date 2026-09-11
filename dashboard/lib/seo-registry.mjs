@@ -286,6 +286,20 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/bot-canal-whatsapp', template: 'commercial-seo', priority: 0.82, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   // title/description ficam só em app/diagnostico-antiban-whatsapp/page.js (fonte única, FR-001).
   { path: '/diagnostico-antiban-whatsapp', template: 'diagnostic-tool', priority: 0.86, changeFrequency: 'weekly', lastModified: resolveLastModified('/diagnostico-antiban-whatsapp'), indexable: true },
+  // Saída do estudo de mercado de 10/09/2026 (docs/produto/pesquisa-mercado-2026-09-10.md).
+  //
+  // Só a PRIMEIRA das três tem volume de busca medido — "quanto ganha afiliado
+  // shopee" soma ~3.050/mês com concorrência baixa (16-25) e não havia página
+  // nossa respondendo. As outras duas voltaram SEM DADOS no Planejador (e
+  // "rastrear link afiliado" ficou em zero em 262 de 262 semanas do Trends):
+  // existem para o canal de IA e para a comparação, não para busca orgânica.
+  // Não cobrar tráfego de busca delas — o motivo está no topo de cada page.js.
+  //
+  // As três nascem linkadas de 3+ páginas já indexadas, como exige a regra de
+  // página órfã (RCA 2026-09-11) — guarda em test/marketing-paginas-orfas.test.js.
+  { path: '/quanto-ganha-afiliado-shopee', template: 'article', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/quanto-ganha-afiliado-shopee', '2026-09-11'), indexable: true },
+  { path: '/vendas-e-comissao-afiliado-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'monthly', lastModified: resolveLastModified('/vendas-e-comissao-afiliado-whatsapp', '2026-09-11'), indexable: true },
+  { path: '/copiaram-minha-oferta-no-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'monthly', lastModified: resolveLastModified('/copiaram-minha-oferta-no-whatsapp', '2026-09-11'), indexable: true },
   { path: '/comparativos', template: 'comparison-hub', priority: 0.75, changeFrequency: 'monthly', lastModified: resolveLastModified('/comparativos'), indexable: true },
   // title/description ficam só em app/programa-de-afiliados/page.js (fonte única, FR-001).
   { path: '/programa-de-afiliados', template: 'comparison-hub', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/programa-de-afiliados'), indexable: true },

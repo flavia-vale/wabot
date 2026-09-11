@@ -46,6 +46,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'shopee afiliados whatsapp',
     related: [
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Ainda não é afiliada Shopee?', note: 'Cadastro gratuito, quanto a Shopee paga por tipo de venda e o prazo de atribuição.' },
+      { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee', note: 'A tabela de comissão, o prazo de atribuição e como fazer a sua própria conta.' },
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'O caminho completo: origens, conversão de link, destinos e histórico.' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual paga mais', note: 'Comissão e prazo de atribuição das três lado a lado, com fonte e data.' },
       { href: '/shein-afiliados-whatsapp', label: 'Divulga SHEIN também?', note: 'O link sai encurtado pela própria loja, já com a sua identidade.' },
@@ -87,7 +88,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['Posso divulgar em Canais do WhatsApp, não só em grupos?', 'Pode, no plano Pro. Grupo e canal têm papéis diferentes: o grupo funciona como comunidade e como origem de ofertas, o canal como vitrine. Dá para usar os dois juntos.'],
       ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp, e quem garante banimento zero está vendendo o que não pode entregar. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino, variação de texto e horários de descanso.'],
       ['Preciso de grupo grande para valer a pena?', 'Não. O ganho é de tempo e de comissão que deixa de se perder no caminho, e isso vale desde o primeiro grupo. Volume grande muda a conta, não a lógica.'],
-      ['Dá para divulgar outras lojas além da Shopee?', 'Dá. Amazon, Mercado Livre e Magalu entram no mesmo plano de entrada, sem custo a mais por loja. Se você divulga mais de uma, vale comparar pelo plano que cobre todas.'],
+      ['Dá para divulgar outras lojas além da Shopee?', 'Dá. Amazon, Mercado Livre, Magalu, SHEIN e AliExpress entram no mesmo plano de entrada, sem custo a mais por loja. São seis lojas no total. Se você divulga mais de uma, vale comparar pelo plano que cobre todas.'],
     ],
   },
   /* Segunda loja da frente Tier 1 (ver o comentário em shopee-afiliados-whatsapp).
@@ -328,6 +329,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'bot para afiliados whatsapp',
     related: [
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
+      { href: '/vendas-e-comissao-afiliado-whatsapp', label: 'Quanto você ganhou de comissão', note: 'Pedidos, valor vendido e comissão estimada e confirmada das ofertas que o robô publicou.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'Cadastro gratuito, 3% na venda padrão e até 30% na Comissão Extra.' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'De 0% a 13% conforme o produto, e por que a tag precisa estar na URL da loja.' },
       // Linkadas daqui de propósito (RCA 2026-09-11, AGENTS.md "Página nova
@@ -403,6 +405,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'O programa com maior volume de busca no Brasil.' },
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'Clonar mensagens de um grupo de afiliados', note: 'O que a busca chama de "clonar" e como o link vira o seu.' },
+      { href: '/copiaram-minha-oferta-no-whatsapp', label: 'Copiaram a sua oferta?', note: 'Marca d\u2019água, texto próprio e link com o seu código: o que muda quem leva o crédito.' },
     ],
     about: ['Achadinhos', 'Afiliados', 'Grupos de WhatsApp'],
     aside: {

@@ -9,6 +9,73 @@ que não há.
 
 ---
 
+## Estado de execução (11/09/2026)
+
+| # | Issue | Estado |
+|---|---|---|
+| P0-1 | `pricing.md` — o arquivo que as IAs leem | **feito** |
+| P0-2 | Tabela de planos e FAQ em `marketing-content.js` | **feito** |
+| P0-3 | Página de vendas e comissão | **feito** — `/vendas-e-comissao-afiliado-whatsapp` |
+| P1-4 | Registrar loja não suportada | **backlog**, detalhada em `backlog-p1-4-loja-nao-suportada.md` |
+| P2-5 | "Copiaram minha oferta" | **feito** — `/copiaram-minha-oferta-no-whatsapp` |
+| P2-6 | "Quanto ganha afiliado Shopee" | **feito** — `/quanto-ganha-afiliado-shopee` |
+| P3-7 | Instagram Stories | trabalho em curso da dona do produto, fora desta rodada |
+| P3-8 | Telegram como destino | feature grande, precisa de spec própria |
+| P4-9 | Fichar Ofertiva e Comission | **bloqueada por dado externo** — ver abaixo |
+| P4-10 | Medir TikTok Shop e repetir as consultas de IA | próxima rodada de medição, não é código |
+
+### ⚠️ Correção num item desta própria lista: o rastreador de cliques NÃO existe como recurso
+
+A P0-1 original mandava anunciar "link curto próprio com rastreio de clique".
+**Isso teria sido uma afirmação falsa numa página pública.**
+
+O mecanismo existe (`src/core/clickTracker.js` + `GET /r/:hash`), mas **não está
+ligado ao robô**. O comentário no topo do próprio arquivo diz:
+
+> *"NÃO mexe em `src/converters/` (bloco protegido). A integração — fazer o bot
+> enviar o shortlink em vez do link original — fica para PR dedicada."*
+
+Nenhuma oferta publicada carrega link rastreado. O item foi **removido** de todo
+texto público antes de publicar. Foi pego conferindo o código antes de escrever
+a copy, que é a razão de a conferência existir.
+
+### Por que P4-9 não foi executada
+
+A convenção do repo é que preço de concorrente vai para `competitors-data.js`
+**com `verifiedAt`, coletado por print** (foi assim com os 17 existentes, em
+31/07). E o caso do Promium mostra por que: todos os planos dele anunciam preço
+promocional no 1º mês, e comparar pelo promocional é comparar coisa diferente —
+por isso o campo `price` dele carrega os dois números.
+
+Ofertiva (R$39,90) e Comission (R$47,90–97,90) vieram de **resposta de IA**, não
+de print da página de preços. Fichar com esse número seria dar `verifiedAt` a
+dado não verificado, e aí ele poderia ser citado em página pública. **Precisa de
+coleta por print** antes.
+
+### O que cada página nova precisa AGORA, da dona do produto
+
+As três nascem linkadas de páginas já indexadas, como exige a regra de página
+órfã. Falta o passo que só você pode dar: **Inspeção de URL no Search Console**,
+nas três novas e também nas que ganharam o link.
+
+Páginas novas:
+- `/quanto-ganha-afiliado-shopee`
+- `/vendas-e-comissao-afiliado-whatsapp`
+- `/copiaram-minha-oferta-no-whatsapp`
+
+Páginas editadas que passaram a apontar para elas (reindexar também — sem isso o
+Google demora a ver o link novo):
+- `/blog/como-ser-afiliado-shopee-whatsapp`
+- `/blog/quanto-custa-bot-para-whatsapp-afiliados`
+- `/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp`
+- `/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero`
+- `/blog/como-converter-link-de-afiliado-automaticamente-whatsapp`
+- `/shopee-afiliados-whatsapp`
+- `/bot-afiliados-whatsapp`
+- `/bot-achadinhos-whatsapp`
+
+---
+
 ## Correção de método aplicada antes de escrever esta lista
 
 `getIndexableSeoRoutes()` devolve **objetos de rota, não strings**. O comando
