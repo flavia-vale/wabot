@@ -3257,7 +3257,8 @@ defesa). Teste: `test/core/worker-spawn-options.test.js`.
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
 O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
-(default **20**) robôs vivos — `checkSessionCircuitBreaker` em
+(default **20**; **produção está em 40** desde a ampliação do servidor — ver a
+medição de 2026-09-11 abaixo) robôs vivos — `checkSessionCircuitBreaker` em
 `src/supervisor/index.js`. **Isso é o teto comercial da operação**: cheio,
 NENHUMA cliente nova consegue conectar, e quem desligar o próprio robô não
 consegue voltar (perde a vaga para outra conta).
@@ -3294,6 +3295,49 @@ teto de 20 não era capricho, era o que cabia. Subir o teto é mudança
 memory-heavy → REGRA #1 da política de memória abaixo (avisar antes, com
 estimativa).
 
+**Medição real (2026-09-11, prod — números vigentes, use ESTES para estimar):**
+o servidor foi ampliado para **15,6 GB** (8 vCPU, disco de 38 GB) e o teto subiu
+para **40**. Com **36 robôs** ligados:
+
+| medida | valor |
+|---|---|
+| RAM total | 15.613 MB |
+| RAM disponível | 4.919 MB (31%) |
+| RSS somado dos 36 robôs | 11.832 MB |
+| média por robô | **329 MB** |
+| maior robô | 495 MB |
+| swap em uso | 41 MB, **sem tráfego** (`si`/`so` = 0) |
+| CPU ociosa | 98% |
+| disco / inodes | 62% / 19% |
+
+**A média por robô SUBIU de 272 para 329 MB** — estimativa nova usa 329, não
+272. Base fixa medida no mesmo instante: api 218 + dashboard 208 + supervisor
+120 + staging (api 163 + visual 124 + supervisor 111) + logrotate 80 ≈ **1,0 GB**.
+
+⚠️ **O teto de 40 é MAIOR que o limite seguro que a política calcula (35).**
+`evaluateCapacity` (`src/ops/capacity/policy.js`) reserva o maior valor entre 20%
+da RAM e 1.536 MB — aqui 3.123 MB — e divide o resto por 350 MB/robô:
+`(15.613 − 3.123) / 350 = 35`. Com 36 ligados a folga pela política é **zero**, e
+é por isso que `/admin/capacidade` mostra **atenção** com todos os recursos
+verdes: o amarelo vem da CONTAGEM DE VAGAS, não de RAM, disco, CPU ou swap.
+Não procurar defeito de recurso quando o painel amarela com swap parado.
+
+As duas leituras de margem respondem perguntas diferentes e as duas importam:
+**margem física** (4,9 GB livres ≈ 14 robôs a mais) e **margem pela política**
+(zero — a reserva de 3,1 GB já está sendo consumida). A reserva existe para
+absorver pico de GC e scrape pesado; gastá-la não quebra nada hoje, mas tira o
+colchão.
+
+**O sinal que muda a decisão é o SWAP, não a RAM livre.** Enquanto `swap_usada`
+ficar parada (os 41 MB são resíduo antigo) e `si`/`so` = 0, o servidor está
+confortável. Swap subindo de um dia para o outro = subdimensionado de verdade →
+aumentar RAM (alvo ~20 GB para 40 robôs com folga), não subir mais o teto.
+Vigilância de uma linha por dia:
+
+```bash
+free -m | awk 'NR==2{print "livre_mb="$7} NR==3{print "swap_usada_mb="$3}'
+```
+
 ⚠️ **Mudar o teto exige reiniciar o `bot-supervisor`** (o valor é lido no boot),
 e isso **reconecta TODAS as sessões de uma vez** — decisão humana, anunciada
 antes, nunca às cegas.
@@ -3325,7 +3369,7 @@ Onde roda: `setInterval` + `unref()` dentro da API, mesmo padrão de
 (uma contagem a cada 15min). A contagem vem de `listRunningBots()` do
 `manager.js`, a **mesma fonte** que o circuit breaker usa, então o aviso não
 pode discordar do que recusa a cliente. O teto é lido pela **mesma fórmula** do
-supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20).
+supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20; produção está em 40).
 
 **Não regredir:**
 
@@ -3359,7 +3403,7 @@ real discordarem até a outra subir.
 Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv,
 então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
 ```bash
-grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20"
+grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20 (prod tinha 40 em 2026-09-11)"
 # o que o supervisor de PRODUCAO leu no boot. Dois cuidados: o pm2 numera o
 # arquivo por instancia (pegue o mais recente por data, nao por nome) e
 # `*supervisor*` casaria tambem os logs de STAGING, que tem outro teto.
@@ -3466,9 +3510,12 @@ liga/desliga staging** (economia de RAM sob demanda) + **vigilância 403**
 
 ### Fatos de capacidade (use para estimar antes de sinalizar)
 
-- **Orçamento por sessão WhatsApp ativa:** ~**0,35 GB** de RSS (worker sob o
-  teto de 384 MB + overhead). Base fixa (api+dashboard+telegram+OS) ~**2 GB**.
-- **Fórmula:** `RAM ≈ 2 GB + N_sessões × 0,35 GB + (staging co-locado? +2 GB) + ~20% folga`.
+- **Orçamento por sessão WhatsApp ativa:** ~**0,33 GB** de RSS medidos em
+  2026-09-11 (média 329 MB, maior robô 495 MB; era 272 MB em 2026-09-01). Base
+  fixa (api+dashboard+supervisor+staging+OS) ~**1 GB** medido no mesmo instante.
+- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,33 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
+- **Servidor vigente (2026-09-11):** 15,6 GB de RAM, 8 vCPU, disco de 38 GB,
+  swap de 4 GB. Teto de vagas em 40; limite seguro da política em 35.
 - **Custo marginal de infra por cliente:** ~R$1,75/mês (marginal) a ~R$2-3/mês
   (com base amortizada). Não é o gargalo do produto — RAM é barata perto do ticket.
 - **Swap é pré-requisito, não muleta:** num VPS apertado, swap ativo é a 1ª
