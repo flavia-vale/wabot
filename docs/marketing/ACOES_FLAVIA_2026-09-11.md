@@ -30,14 +30,16 @@ http://178.105.54.0:3006/precos
 
 ## 1. Indexação — a fila, em ordem de prioridade
 
-### 📌 Estado em 11/09 — 11 pedidos feitos, 3 pendentes no Dia 3
+### 📌 Estado em 12/09 — 14 pedidos feitos, Dias 1 a 3 concluídos
 
 | Leva | Pedidas | Pendentes |
 |---|---|---|
 | Dia 1 — páginas novas | 4 de 4 ✅ | — |
 | Dia 2 — as cinco lojas | 5 de 5 ✅ | — |
-| Dia 3 — quem ganhou os links | 2 de 5 | 3 |
+| Dia 3 — quem ganhou os links | 5 de 5 ✅ | — |
 | Dia 4 em diante | — | tudo |
+
+**Próxima leva: Dia 4** (os cinco posts de blog abaixo).
 
 As onze já pedidas foram conferidas ao vivo: **todas respondem 200 em produção
 com o conteúdo novo**, incluindo os links de entrada e a página de confiança.
@@ -99,14 +101,19 @@ Dia 1. Sem isso o link novo demora a valer.
 ```
 https://espelhagrupos.com.br/bot-afiliados-whatsapp                       ✅ pedida 2026-09-11
 https://espelhagrupos.com.br/bot-achadinhos-whatsapp                      ✅ pedida 2026-09-11
-https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados       ⏳ pendente
-https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp       ⏳ pendente
-https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados ⏳ pendente
+https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados       ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp       ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados ✅ pedida 2026-09-12
 ```
 
-**Dia 3 pela metade.** As duas comerciais são as que mais carregam link novo
-(elas apontam para a página de confiança, para o espelhamento e para os posts
-que estavam órfãos), então foram bem escolhidas para ir primeiro. Faltam três.
+**Dia 3 concluído** (2 em 11/09, 3 em 12/09). As duas comerciais são as que
+mais carregam link novo — elas apontam para a página de confiança, para o
+espelhamento e para os posts que estavam órfãos.
+
+⚠️ `/blog/quanto-custa-bot-para-whatsapp-afiliados` é o pior caso do site:
+posição 4,35 e **zero clique** em centenas de impressões. Relê-la serve para o
+link novo valer, mas o problema dela é o TÍTULO, não a indexação — está na
+lista de ajustes do plano de melhoria.
 
 ### Dia 4 — o resto que ganhou link ou título novo
 
