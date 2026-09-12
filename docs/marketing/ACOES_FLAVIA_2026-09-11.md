@@ -30,16 +30,17 @@ http://178.105.54.0:3006/precos
 
 ## 1. Indexação — a fila, em ordem de prioridade
 
-### 📌 Estado em 12/09 — 14 pedidos feitos, Dias 1 a 3 concluídos
+### 📌 Estado em 12/09 — 17 pedidos feitos; falta o fim do Dia 4
 
 | Leva | Pedidas | Pendentes |
 |---|---|---|
 | Dia 1 — páginas novas | 4 de 4 ✅ | — |
 | Dia 2 — as cinco lojas | 5 de 5 ✅ | — |
 | Dia 3 — quem ganhou os links | 5 de 5 ✅ | — |
-| Dia 4 em diante | — | tudo |
+| Dia 4 — blog que ganhou link | 3 de 5 | 2 |
+| Dia 5 em diante | — | tudo |
 
-**Próxima leva: Dia 4** (os cinco posts de blog abaixo).
+**Próxima leva:** os 2 que faltam do Dia 4 e, na sequência, o Dia 5.
 
 As onze já pedidas foram conferidas ao vivo: **todas respondem 200 em produção
 com o conteúdo novo**, incluindo os links de entrada e a página de confiança.
@@ -118,12 +119,17 @@ lista de ajustes do plano de melhoria.
 ### Dia 4 — o resto que ganhou link ou título novo
 
 ```
-https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero
-https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp
-https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp
+https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero          ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp  ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp    ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp                     ⏳ pendente
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp              ⏳ pendente
 ```
+
+**Dia 4 pela metade.** Os dois que faltam são os que mais aparecem hoje:
+`como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
+`como-divulgar-ofertas-mercado-livre-whatsapp` — já pegam a periferia do Tier 1,
+então relê-las é o que faz o link para as páginas de loja valer mais rápido.
 
 ### Dia 5 — títulos que mudaram e a entidade de marca
 
