@@ -44,13 +44,21 @@ export async function cleanupExpiredStoryAssets({ db, storage, now = () => new D
       // Mantém deletedAt nulo: a próxima varredura tentará novamente.
     }
   }
-  return { scanned: expired.length, removed }
+  // Varredura de ÓRFÃO: arquivo cuja linha sumiu (anonimização LGPD, queda
+  // entre gravar o arquivo e gravar a linha) era invisível para a limpeza
+  // acima, que é guiada pelo banco — e ficava no disco para sempre. O storage
+  // sabe a expiração pelo próprio nome do arquivo, então não precisa do banco.
+  let orphans = 0
+  if (storage.cleanup) {
+    try { orphans = (await storage.cleanup({ olderThan: now() }))?.removed ?? 0 } catch { /* próxima passada tenta */ }
+  }
+  return { scanned: expired.length, removed, orphans }
 }
 
 export function startStoryAssetCleanup({ db, storage, logger = console, intervalMs = 60 * 60_000 } = {}) {
   if (!db || !storage) return () => {}
   const tick = () => cleanupExpiredStoryAssets({ db, storage })
-    .then(result => { if (result.removed) logger.info?.(result, 'Assets expirados de Stories removidos') })
+    .then(result => { if (result.removed || result.orphans) logger.info?.(result, 'Assets expirados de Stories removidos') })
     .catch(error => logger.error?.({ err: error.message }, 'Falha ao limpar assets expirados de Stories'))
   const timer = setInterval(tick, Math.max(60_000, intervalMs))
   timer.unref?.()

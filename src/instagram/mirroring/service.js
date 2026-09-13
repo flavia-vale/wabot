@@ -4,8 +4,9 @@ import { getInstagramDeliveryRuntime } from '../publishing/runtime.js'
 import { DELIVERY_SOURCE_TYPE } from '../../domain/delivery/constants.js'
 import { fetchProductImage } from '../../converters/imageScrapers.js'
 import { parseCredentialData } from '../../credentialHealth.js'
+import { enrichMirrorOffer } from './offerEnrichment.js'
 
-export async function processInstagramMirrorIngress({ db = dbDefault, runtime = getInstagramDeliveryRuntime(), storyCreator = createAndEnqueueStory, imageResolver = fetchProductImage, now = () => new Date(), limit = 20 } = {}) {
+export async function processInstagramMirrorIngress({ db = dbDefault, runtime = getInstagramDeliveryRuntime(), storyCreator = createAndEnqueueStory, imageResolver = fetchProductImage, enrich = enrichMirrorOffer, now = () => new Date(), limit = 20 } = {}) {
   if (!runtime) return { skipped: 'runtime_unavailable' }
   const staleBefore = new Date(now().getTime() - 10 * 60_000)
   await db.instagramStoryIngress.updateMany({ where: { status: 'processing', OR: [{ claimedAt: null }, { claimedAt: { lt: staleBefore } }] }, data: { status: 'pending', claimedAt: null, nextAttemptAt: now(), lastError: 'Processamento anterior interrompido; recuperado automaticamente' } })
@@ -15,15 +16,20 @@ export async function processInstagramMirrorIngress({ db = dbDefault, runtime = 
     const claimed = await db.instagramStoryIngress.updateMany({ where: { id: row.id, status: 'pending' }, data: { status: 'processing', claimedAt: now(), attemptCount: { increment: 1 } } })
     if (!claimed.count) continue
     try {
-      const offer = JSON.parse(row.offerSnapshotJson)
+      const captured = JSON.parse(row.offerSnapshotJson)
+      const platform = captured.attributes?.sourcePlatform
+      // Credenciais da loja: o scrape do ML precisa do código de acesso da
+      // cliente, e a foto da Shopee só sai pela API de afiliado dela.
+      const credential = platform ? await db.credential.findUnique({ where: { userId_platform: { userId: row.userId, platform } } }) : null
+      const credentials = credential ? parseCredentialData(credential.data) : {}
+      // Título e preço reais. Sem isto o Story saía com o banner do grupo de
+      // origem no lugar do produto e sem preço nenhum.
+      const offer = await enrich(captured, { credentialsMap: { [platform]: credentials, ...(platform === 'mercadolivre' ? { mercadolivre: credentials } : {}), ...(platform === 'shopee' ? { shopee: credentials } : {}) } })
       if (!offer.imageUrl) {
-        const platform = offer.attributes?.sourcePlatform
-        const credential = platform ? await db.credential.findUnique({ where: { userId_platform: { userId: row.userId, platform } } }) : null
-        const credentials = credential ? parseCredentialData(credential.data) : {}
         offer.imageUrl = await imageResolver(platform, offer.attributes?.sourceUrl || offer.productUrl, credentials)
         if (!offer.imageUrl) throw Object.assign(new Error('Imagem da oferta espelhada indisponível'), { code: 'IMAGE_UNAVAILABLE' })
       }
-      await storyCreator({ userId: row.userId, destinationId: row.destinationId, offer, imageUrl: offer.imageUrl, sourceType: DELIVERY_SOURCE_TYPE.MIRROR, sourceId: row.sourceMessageKey, idempotencyKey: `mirror:${row.destinationId}:${row.sourceMessageKey}` }, runtime)
+      await storyCreator({ userId: row.userId, destinationId: row.destinationId, offer, imageUrl: offer.imageUrl, imageRefererUrl: offer.attributes?.sourceUrl || offer.productUrl, sourceType: DELIVERY_SOURCE_TYPE.MIRROR, sourceId: row.sourceMessageKey, idempotencyKey: `mirror:${row.destinationId}:${row.sourceMessageKey}` }, runtime)
       await db.instagramStoryIngress.update({ where: { id: row.id }, data: { status: 'processed', processedAt: now(), claimedAt: null, lastError: null } })
       processed++
     } catch (error) {

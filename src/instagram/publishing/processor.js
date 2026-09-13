@@ -4,9 +4,35 @@ import { createInstagramPublishingClient, InstagramPublishingError } from './cli
 
 const sleepDefault = ms => new Promise(resolve => setTimeout(resolve, ms))
 
+// A Meta permite 25 publicações por conta a cada 24h na Content Publishing
+// API. O default otimista de 100 fazia o pré-check passar e a recusa acontecer
+// só no `media_publish`, já com container criado.
+export const META_DEFAULT_QUOTA_TOTAL = 25
+
+// Cadência mínima entre Stories da MESMA conta. O WhatsApp tem um módulo de
+// preservação inteiro contra rajada; o Instagram não tinha nada e disparava
+// tantos containers quanto a concorrência da fila permitisse — que é o padrão
+// que a Meta associa a automação abusiva. Sai por env para virar 0 em teste.
+export const STORY_MIN_INTERVAL_MS = Number(process.env.INSTAGRAM_MIN_INTERVAL_MS ?? 90_000)
+
+// Quando a cota diária estoura, esperar minutos não adianta: a janela da Meta
+// é de 24h. Antes eram 5 tentativas com backoff de 30s (≈8 min) e a publicação
+// morria como `failed` — numa conta com automação, a maior parte do dia caía
+// aí. Agora o job volta para o fim da janela.
+export const PUBLISHING_LIMIT_RETRY_MS = Number(process.env.INSTAGRAM_LIMIT_RETRY_MS ?? 60 * 60_000)
+
 function quota(limit) {
   const row = Array.isArray(limit?.data) ? limit.data[0] : limit
-  return { used: Number(row?.quota_usage || 0), total: Number(row?.config?.quota_total || 100) }
+  const total = Number(row?.config?.quota_total)
+  return { used: Number(row?.quota_usage || 0), total: Number.isFinite(total) && total > 0 ? total : META_DEFAULT_QUOTA_TOTAL }
+}
+
+// Espaça o próximo Story da conta sem ocupar o slot da fila: devolve por quanto
+// tempo o job deve ser adiado, ou 0 quando já pode sair.
+export function storyPacingDelayMs(lastPublishedAt, now, minIntervalMs = STORY_MIN_INTERVAL_MS) {
+  if (!minIntervalMs || !lastPublishedAt) return 0
+  const elapsed = now.getTime() - new Date(lastPublishedAt).getTime()
+  return elapsed >= minIntervalMs ? 0 : minIntervalMs - elapsed
 }
 
 export async function processInstagramPublication(publicationId, { db, storage, config, clientFactory = createInstagramPublishingClient, sleep = sleepDefault, now = () => new Date() } = {}) {
@@ -34,8 +60,11 @@ export async function processInstagramPublication(publicationId, { db, storage, 
     if (!token || token.startsWith('v1:')) throw new InstagramPublishingError('INVALID_CREDENTIAL', 'Credencial Instagram inválida')
     const client = clientFactory(config, token)
     if (!containerId) {
+      const previous = await db.storyPublication.findFirst({ where: { userId: publication.userId, destinationId: publication.destinationId, status: 'published' }, orderBy: { publishedAt: 'desc' }, select: { publishedAt: true } })
+      const pacing = storyPacingDelayMs(previous?.publishedAt, now())
+      if (pacing > 0) throw new InstagramPublishingError('STORY_PACING', 'Aguardando o intervalo mínimo entre Stories da conta', { retryable: true, retryAfterMs: pacing })
       const budget = quota(await client.publishingLimit(connection.instagramAccountId))
-      if (budget.used >= budget.total) throw new InstagramPublishingError('PUBLISHING_LIMIT_REACHED', 'Limite diário de publicação atingido', { retryable: true })
+      if (budget.used >= budget.total) throw new InstagramPublishingError('PUBLISHING_LIMIT_REACHED', 'Limite diário de publicação da conta atingido', { retryable: true, retryAfterMs: PUBLISHING_LIMIT_RETRY_MS })
       const imageUrl = storage.signedUrl(publication.renderedAsset.storageKey, publication.renderedAsset.expiresAt)
       const created = await client.createContainer(connection.instagramAccountId, imageUrl)
       if (!created.id) throw new InstagramPublishingError('INVALID_META_RESPONSE', 'Meta não retornou container')

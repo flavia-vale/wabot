@@ -5,6 +5,19 @@ import { buildInstagramAuthorizationUrl } from './config.js'
 
 const hash = value => createHash('sha256').update(value).digest('hex')
 
+// Códigos em que a Meta afirma que a credencial morreu. Qualquer outra coisa
+// (rede, 5xx, 429, bug nosso) é tratada como transitória: a conexão fica de pé
+// e o sweep tenta de novo.
+const PERMANENT_OAUTH_CODES = new Set(['INVALID_CREDENTIAL', 'INSTAGRAM_ACCOUNT_SELECTION_REQUIRED'])
+
+export function isPermanentOAuthFailure(error) {
+  if (!error) return false
+  if (error.retryable === true) return false
+  if (PERMANENT_OAUTH_CODES.has(error.code)) return true
+  // 4xx da Meta que não seja 429: o token foi recusado, não é instabilidade.
+  return error.code === 'META_OAUTH_FAILED' && Number(error.status) >= 400 && Number(error.status) < 500 && Number(error.status) !== 429
+}
+
 export async function beginInstagramOAuth(userId, config, { db, now = () => new Date() } = {}) {
   const { entitlements } = await getPlanAccess(userId, { db, now: now().getTime() })
   if (!entitlements.canUseInstagramStories) throw Object.assign(new Error('Requer plano acima do Pro'), { code: 'FEATURE_REQUIRES_PREMIUM' })
@@ -17,13 +30,25 @@ export async function listInstagramConnections(userId, { db } = {}) {
   return db.instagramConnection.findMany({ where: { userId }, select: { id: true, instagramAccountId: true, username: true, accountType: true, loginMethod: true, scopesJson: true, tokenExpiresAt: true, lastValidatedAt: true, lastRefreshedAt: true, status: true, lastErrorCode: true, lastErrorAt: true, createdAt: true, updatedAt: true, destinations: { select: { id: true, name: true, enabled: true } } }, orderBy: { createdAt: 'desc' } })
 }
 
-export async function disconnectInstagram(userId, connectionId, { db, now = () => new Date() } = {}) {
-  return db.$transaction(async tx => {
+export async function disconnectInstagram(userId, connectionId, { db, queue = null, now = () => new Date() } = {}) {
+  const { cancelledPublicationIds, ...result } = await db.$transaction(async tx => {
     const changed = await tx.instagramConnection.updateMany({ where: { id: connectionId, userId }, data: { status: 'disconnected', encryptedToken: encryptCredential(''), lastErrorCode: null, lastErrorAt: now() } })
     if (!changed.count) throw Object.assign(new Error('Conexão Instagram não encontrada'), { code: 'NOT_FOUND' })
+    const destinations = await tx.destination.findMany({ where: { userId, instagramConnectionId: connectionId }, select: { id: true } })
+    const destinationIds = destinations.map(destination => destination.id)
     await tx.destination.updateMany({ where: { userId, instagramConnectionId: connectionId }, data: { enabled: false } })
-    return { ok: true }
+    if (!destinationIds.length) return { ok: true, cancelledPublicationIds: [], cancelledIngress: 0 }
+    // Quem desconecta não deveria colher uma pilha de "Falhou" depois. Antes,
+    // publicações e espelhamentos já enfileirados seguiam vivos, batiam em
+    // CONNECTION_UNAVAILABLE/DESTINATION_UNAVAILABLE e viravam falha na tela.
+    const pending = await tx.storyPublication.findMany({ where: { destinationId: { in: destinationIds }, userId, status: { in: ['queued', 'retry_scheduled'] } }, select: { id: true } })
+    const pendingIds = pending.map(row => row.id)
+    if (pendingIds.length) await tx.storyPublication.updateMany({ where: { id: { in: pendingIds } }, data: { status: 'cancelled' } })
+    const ingress = await tx.instagramStoryIngress.updateMany({ where: { destinationId: { in: destinationIds }, userId, status: { in: ['pending', 'processing'] } }, data: { status: 'cancelled', claimedAt: null, lastError: 'Conta do Instagram desconectada' } })
+    return { ok: true, cancelledPublicationIds: pendingIds, cancelledIngress: ingress.count }
   })
+  if (queue?.cancel) for (const id of cancelledPublicationIds) await queue.cancel(id).catch(() => {})
+  return { ...result, cancelledPublications: cancelledPublicationIds.length }
 }
 
 export async function refreshInstagramConnection(userId, connectionId, config, { db, client, now = () => new Date() } = {}) {
@@ -41,9 +66,14 @@ export async function refreshInstagramConnection(userId, connectionId, config, {
     await db.instagramConnection.update({ where: { id: row.id }, data: { encryptedToken: encryptCredential(accessToken), tokenExpiresAt: expiresAt, lastValidatedAt: now(), lastRefreshedAt: now(), lastErrorCode: null, lastErrorAt: null } })
     return { ok: true, tokenExpiresAt: expiresAt }
   } catch (error) {
-    const status = error.retryable ? 'connected' : 'needs_reconnect'
+    // Só falha COMPROVADAMENTE permanente da Meta pede login novo. Antes
+    // qualquer exceção sem a flag `retryable` — inclusive um TypeError nosso —
+    // marcava `needs_reconnect` e DESLIGAVA os destinos da cliente, que é
+    // exatamente o que a correção anterior queria evitar. Na dúvida, preserva.
+    const permanent = isPermanentOAuthFailure(error)
+    const status = permanent ? 'needs_reconnect' : 'connected'
     await db.instagramConnection.update({ where: { id: row.id }, data: { status, lastErrorCode: error.code || 'META_OAUTH_FAILED', lastErrorAt: now() } })
-    if (!error.retryable) await db.destination.updateMany({ where: { userId, instagramConnectionId: row.id }, data: { enabled: false } })
+    if (permanent) await db.destination.updateMany({ where: { userId, instagramConnectionId: row.id }, data: { enabled: false } })
     throw error
   }
 }

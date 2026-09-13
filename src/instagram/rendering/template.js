@@ -15,7 +15,7 @@ export const DEFAULT_STORY_TEMPLATE = Object.freeze({
   accent: '#F97316',
   muted: '#6B746E',
   product: { left: 90, top: 250, width: 900, height: 900 },
-  title: { left: 90, top: 1200, width: 900, fontSize: 58, maxLines: 3 },
+  title: { left: 90, top: 1240, width: 900, fontSize: 58, maxLines: 3 },
 })
 
 const COLOR_RE = /^#[0-9a-f]{6}$/i

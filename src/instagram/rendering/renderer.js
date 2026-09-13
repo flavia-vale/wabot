@@ -14,30 +14,99 @@ function brl(cents) {
 }
 
 function wrap(text, maxChars, maxLines) {
-  const words = String(text).replace(/\s+/g, ' ').trim().split(' ')
+  // Quebra por code point: `.split('')`/`.slice` contam code UNITS e partiriam
+  // emoji ao meio (mesma lição do RCA 2026-09-11 da chave de dedup).
+  const words = String(text).replace(/\s+/g, ' ').trim().split(' ').flatMap(word => {
+    const points = [...word]
+    if (points.length <= maxChars) return [word]
+    // Palavra maior que a linha (URL, código de produto) precisa ser partida,
+    // senão o texto sai do canvas sem aviso — o SVG não recorta, só extrapola.
+    const pieces = []
+    for (let i = 0; i < points.length; i += maxChars) pieces.push(points.slice(i, i + maxChars).join(''))
+    return pieces
+  })
   const lines = []
   for (const word of words) {
-    if (!lines.length || `${lines.at(-1)} ${word}`.length > maxChars) lines.push(word)
+    if (!lines.length || [...`${lines.at(-1)} ${word}`].length > maxChars) lines.push(word)
     else lines[lines.length - 1] += ` ${word}`
   }
   if (lines.length > maxLines) {
     lines.length = maxLines
-    lines[maxLines - 1] = `${lines[maxLines - 1].slice(0, Math.max(1, maxChars - 1)).trim()}…`
+    const points = [...lines[maxLines - 1]]
+    lines[maxLines - 1] = `${points.slice(0, Math.max(1, maxChars - 1)).join('').trim()}\u2026`
   }
   return lines
 }
 
+// A Content Publishing API da Meta NÃO cria sticker de link clicável: o Story
+// publicado por API é imagem pura. Por isso o card precisa dizer, em texto,
+// ONDE a pessoa encontra a oferta — senão publicamos uma peça sem saída e sem
+// comissão. `callToAction` do produto vence; o padrão é honesto e não promete
+// clique.
+export const DEFAULT_STORY_CALL_TO_ACTION = 'Link na bio \u2022 chame no direct'
+
+export function storyCallToAction(offer) {
+  const custom = typeof offer?.callToAction === 'string' ? offer.callToAction.trim() : ''
+  return custom || DEFAULT_STORY_CALL_TO_ACTION
+}
+
+// Monta o overlay de baixo para cima a partir do rodapé do canvas, em vez de
+// empilhar deslocamentos fixos a partir do título. Antes o preço, o cupom e a
+// CTA saíam do canvas em silêncio quando o título ocupava 3 linhas ou quando o
+// template subia `title.top` — a validação só olhava o título.
+const FOOTER_MARGIN = 96
+const CTA_FONT = 38
+const COUPON_HEIGHT = 110
+const PRICE_FONT = 86
+const OLD_PRICE_FONT = 36
+const STORE_FONT = 34
+
 function overlaySvg(offer, t) {
+  const left = t.title.left
   const chars = Math.max(12, Math.floor(t.title.width / (t.title.fontSize * 0.56)))
   const titleLines = wrap(offer.title, chars, t.title.maxLines)
-  const title = titleLines.map((line, i) => `<text x="${t.title.left}" y="${t.title.top + i * (t.title.fontSize + 12)}" class="title">${escapeXml(line)}</text>`).join('')
-  const priceY = t.title.top + titleLines.length * (t.title.fontSize + 12) + 55
-  const oldPrice = offer.oldPriceCents == null ? '' : `<text x="90" y="${priceY}" class="old">De ${escapeXml(brl(offer.oldPriceCents))}</text>`
-  const coupon = offer.couponCode ? `<rect x="90" y="${priceY + 170}" width="900" height="110" rx="24" fill="${t.accent}"/><text x="540" y="${priceY + 244}" text-anchor="middle" class="coupon">CUPOM ${escapeXml(offer.couponCode)}</text>` : ''
-  // A Content Publishing API não garante um link clicável neste asset. O
-  // fallback precisa ser honesto e neutro; CTA de clique só entra quando o
-  // produto fornecer explicitamente uma estratégia compatível.
-  return Buffer.from(`<svg width="${STORY_WIDTH}" height="${STORY_HEIGHT}" xmlns="http://www.w3.org/2000/svg"><style>.title{font:700 ${t.title.fontSize}px sans-serif;fill:${t.text}}.old{font:36px sans-serif;fill:${t.muted}}.price{font:800 86px sans-serif;fill:${t.accent}}.coupon{font:700 42px sans-serif;fill:#fff}.cta{font:700 38px sans-serif;fill:${t.text}}</style>${title}${oldPrice}<text x="90" y="${priceY + 100}" class="price">${escapeXml(brl(offer.priceCents))}</text>${coupon}<text x="540" y="1810" text-anchor="middle" class="cta">${escapeXml(offer.callToAction || 'Oferta por tempo limitado')}</text></svg>`)
+  const title = titleLines
+    .map((line, i) => `<text x="${left}" y="${t.title.top + i * (t.title.fontSize + 12)}" class="title">${escapeXml(line)}</text>`)
+    .join('')
+
+  // Rodapé para cima: CTA, cupom, preço, "de R$", loja.
+  let cursor = STORY_HEIGHT - FOOTER_MARGIN
+  const cta = `<text x="${STORY_WIDTH / 2}" y="${cursor}" text-anchor="middle" class="cta">${escapeXml(storyCallToAction(offer))}</text>`
+  cursor -= CTA_FONT + 40
+
+  let coupon = ''
+  if (offer.couponCode) {
+    const top = cursor - COUPON_HEIGHT
+    coupon = `<rect x="${left}" y="${top}" width="${STORY_WIDTH - left * 2}" height="${COUPON_HEIGHT}" rx="24" fill="${t.accent}"/>`
+      + `<text x="${STORY_WIDTH / 2}" y="${top + 74}" text-anchor="middle" class="coupon">CUPOM ${escapeXml(offer.couponCode)}</text>`
+    cursor = top - 36
+  }
+
+  // Preço ausente (espelhamento sem scrape) não pode virar um vão em branco no
+  // meio do card: cai para "Confira o preço", que é honesto.
+  const priceLabel = offer.priceCents == null ? 'Confira o preço' : brl(offer.priceCents)
+  const price = `<text x="${left}" y="${cursor}" class="price">${escapeXml(priceLabel)}</text>`
+  cursor -= PRICE_FONT
+
+  const oldPrice = offer.oldPriceCents == null || offer.oldPriceCents === offer.priceCents
+    ? ''
+    : `<text x="${left}" y="${cursor}" class="old">De ${escapeXml(brl(offer.oldPriceCents))}</text>`
+  if (oldPrice) cursor -= OLD_PRICE_FONT + 10
+
+  // Nome da loja: sem ele o Story publicado não diz de onde é a oferta, e o
+  // Story não tem link clicável para a pessoa descobrir.
+  const badge = [offer.storeName, offer.discountLabel].filter(Boolean).join('  \u00b7  ')
+  const store = badge ? `<text x="${left}" y="${cursor}" class="store">${escapeXml(badge.toUpperCase())}</text>` : ''
+
+  const style = `<style>`
+    + `.title{font:700 ${t.title.fontSize}px sans-serif;fill:${t.text}}`
+    + `.store{font:700 ${STORE_FONT}px sans-serif;fill:${t.accent};letter-spacing:2px}`
+    + `.old{font:${OLD_PRICE_FONT}px sans-serif;fill:${t.muted};text-decoration:line-through}`
+    + `.price{font:800 ${PRICE_FONT}px sans-serif;fill:${t.accent}}`
+    + `.coupon{font:700 42px sans-serif;fill:#fff}`
+    + `.cta{font:700 ${CTA_FONT}px sans-serif;fill:${t.text}}`
+    + `</style>`
+  return Buffer.from(`<svg width="${STORY_WIDTH}" height="${STORY_HEIGHT}" xmlns="http://www.w3.org/2000/svg">${style}${title}${store}${oldPrice}${price}${coupon}${cta}</svg>`)
 }
 
 export async function renderInstagramStory({ offer: rawOffer, productImage, template = DEFAULT_STORY_TEMPLATE, quality = 88 } = {}) {

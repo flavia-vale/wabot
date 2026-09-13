@@ -12,7 +12,9 @@ function dbFor(row) {
   const publicationUpdates = []; const attemptUpdates = []
   return { publicationUpdates, attemptUpdates, db: {
     user: { findUnique: async () => ({ plan: 'premium', accessExpiresAt: null }) },
-    storyPublication: { findUnique: async () => row, updateMany: async () => ({ count: 1 }), update: async args => { publicationUpdates.push(args.data) } },
+    // findFirst: última publicação da conta, usada pela cadência mínima entre
+    // Stories. Sem publicação anterior, não há espera.
+    storyPublication: { findUnique: async () => row, findFirst: async () => null, updateMany: async () => ({ count: 1 }), update: async args => { publicationUpdates.push(args.data) } },
     storyPublicationAttempt: { count: async () => 0, create: async () => ({ id: 'a1' }), update: async args => { attemptUpdates.push(args.data) } },
   } }
 }
@@ -80,4 +82,18 @@ test('BullMQ recebe somente publicationId, aplica retry e envia falha final à D
   await worker.listeners.failed({ id: 'j2', data: { publicationId: 'publication-2' }, attemptsMade: 1, opts: { attempts: 5 } }, fatal)
   assert.equal(queues.find(q => q.name === INSTAGRAM_DLQ).jobs.length, 2)
   assert.deepEqual(terminal, [['publication-1', 'fim'], ['publication-2', 'permanente']])
+})
+
+test('cadência segura o próximo Story sem gastar tentativa da fila', async () => {
+  const { storyPacingDelayMs, META_DEFAULT_QUOTA_TOTAL } = await import('../src/instagram/publishing/processor.js')
+  const agora = new Date('2026-09-13T12:00:00Z')
+  // Story recém-publicado: o próximo espera o que falta do intervalo.
+  assert.equal(storyPacingDelayMs(new Date('2026-09-13T11:59:30Z'), agora, 90_000), 60_000)
+  // Passado o intervalo, sai na hora.
+  assert.equal(storyPacingDelayMs(new Date('2026-09-13T11:50:00Z'), agora, 90_000), 0)
+  // Primeira publicação da conta nunca espera.
+  assert.equal(storyPacingDelayMs(null, agora, 90_000), 0)
+  // A Meta libera 25 Stories/24h; o default otimista de 100 fazia o pré-check
+  // passar e a recusa acontecer só depois do container criado.
+  assert.equal(META_DEFAULT_QUOTA_TOTAL, 25)
 })

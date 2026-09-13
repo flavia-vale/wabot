@@ -65,6 +65,7 @@ import { instagramOAuthConfig } from '../instagram/oauth/config.js'
 import { startInstagramTokenSweep } from '../instagram/oauth/sweep.js'
 import { startInstagramPublishingRuntime } from '../instagram/publishing/runtime.js'
 import { startInstagramMirrorIngressCron } from '../instagram/mirroring/service.js'
+import { startInstagramReconciliation } from '../instagram/publishing/reconcile.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
 const storyAssetStorage = createStoryAssetStorageFromEnv()
@@ -604,6 +605,10 @@ if (databaseReadyAtBoot) {
     if (storyAssetStorage && process.env.REDIS_URL) {
       await startInstagramPublishingRuntime({ db, storage: storyAssetStorage, config: instagramConfig, redisUrl: process.env.REDIS_URL, logger: app.log })
       startInstagramMirrorIngressCron({ db })
+      // Publicação presa em "aguardando conferência" era um beco sem saída:
+      // o processor sabe reconciliar (relê o container na Meta) e ninguém o
+      // chamava. Mesma passada in-process das demais — nenhum processo PM2 novo.
+      startInstagramReconciliation({ db, logger: app.log })
     }
   } catch (error) { app.log.info({ err: error.message }, 'Runtime Instagram desativado por configuração incompleta') }
   const capacityRepository = createCapacityRepository(db)

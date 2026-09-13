@@ -5,6 +5,7 @@ import { DELIVERY_SOURCE_TYPE, DESTINATION_TYPE } from '../domain/delivery/const
 import { createStoryPublication, ensureDefaultStoryTemplate } from './repository.js'
 import { renderAndStoreStory } from './storage/storyAssetService.js'
 import { getPlanAccess } from '../billing/plans.js'
+import { BROWSER_UA } from '../converters/imageScrapers.js'
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024
 
@@ -15,12 +16,28 @@ export function scopeStoryIdempotencyKey(userId, rawKey) {
   return `${prefix}${createHash('sha256').update(value).digest('hex')}`
 }
 
-export async function downloadStoryImage(url, { fetchImpl = fetch } = {}) {
+// CDN de marketplace recusa requisição sem cara de navegador: o caminho do
+// WhatsApp manda User-Agent e Referer por isso (ver o comentário de
+// fetchImageBufferRaw em converters/imageScrapers.js). Sem estes cabeçalhos a
+// Shopee/Amazon devolvem 403 e o Story falha com a MESMA foto que sai normal
+// no grupo. Não dá para reusar fetchImageBuffer direto: ele segue redirect
+// sozinho, e aqui a URL vem da cliente, então cada hop precisa passar pela
+// guarda anti-SSRF.
+function storyImageHeaders(refererUrl) {
+  const headers = { 'User-Agent': BROWSER_UA, Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' }
+  if (refererUrl) {
+    try { headers.Referer = `${new URL(refererUrl).origin}/` } catch { /* referer inválido não impede o download */ }
+  }
+  return headers
+}
+
+export async function downloadStoryImage(url, { fetchImpl = fetch, refererUrl = null } = {}) {
   await assertPublicUrl(url)
+  const headers = storyImageHeaders(refererUrl)
   let current = String(url)
   for (let redirects = 0; redirects <= 3; redirects++) {
     await assertPublicUrl(current)
-    const response = await fetchImpl(current, { redirect: 'manual', signal: AbortSignal.timeout(15_000) })
+    const response = await fetchImpl(current, { redirect: 'manual', headers, signal: AbortSignal.timeout(15_000) })
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location'); if (!location) throw new Error('Redirect de imagem sem destino')
       current = new URL(location, current).toString(); continue
@@ -36,7 +53,22 @@ export async function downloadStoryImage(url, { fetchImpl = fetch } = {}) {
   throw new Error('Imagem excedeu o limite de redirects')
 }
 
-export async function createAndEnqueueStory({ userId, destinationId, offer, imageUrl, sourceType = DELIVERY_SOURCE_TYPE.MANUAL, sourceId, idempotencyKey, scheduledFor = null }, { db, storage, publishingQueue, fetchImpl, now = () => new Date() } = {}) {
+/**
+ * Renderiza o Story UMA vez para um conjunto de destinos.
+ *
+ * O mesmo par (oferta, template) produz exatamente a mesma imagem em todos os
+ * destinos. Antes cada destino baixava a foto e rodava o `sharp` de novo: dez
+ * destinos num único POST eram dez downloads e dez renders de 1080x1920 em
+ * série, dentro do request HTTP — pico de RAM e request de minutos.
+ */
+export async function prepareStoryAsset({ userId, offer, template, imageRefererUrl = null, scheduledFor = null }, { db, storage, fetchImpl, now = () => new Date() } = {}) {
+  const productImage = await downloadStoryImage(offer.imageUrl, { fetchImpl, refererUrl: imageRefererUrl })
+  const minimumExpiresAt = scheduledFor ? new Date(new Date(scheduledFor).getTime() + 2 * 24 * 60 * 60_000) : null
+  const { asset } = await renderAndStoreStory({ userId, offer, productImage, template, minimumExpiresAt }, { db, storage, now })
+  return asset
+}
+
+export async function createAndEnqueueStory({ userId, destinationId, offer, imageUrl, imageRefererUrl = null, sourceType = DELIVERY_SOURCE_TYPE.MANUAL, sourceId, idempotencyKey, scheduledFor = null, preparedAsset = null }, { db, storage, publishingQueue, fetchImpl, now = () => new Date() } = {}) {
   if (!publishingQueue) throw Object.assign(new Error('Fila de Instagram indisponível'), { code: 'INSTAGRAM_RUNTIME_UNAVAILABLE' })
   if (!db || !storage) throw Object.assign(new Error('Runtime de Instagram incompleto'), { code: 'INSTAGRAM_RUNTIME_UNAVAILABLE' })
   const { entitlements } = await getPlanAccess(userId, { db, now: now().getTime() })
@@ -48,18 +80,23 @@ export async function createAndEnqueueStory({ userId, destinationId, offer, imag
   if (publication.status === 'published') return publication
   try {
     const existingAsset = publication.renderedAssetId ? await db.renderedAsset.findUnique({ where: { id: publication.renderedAssetId } }) : null
-    const assetAvailable = existingAsset && !existingAsset.deletedAt && existingAsset.expiresAt > now()
-    if (!assetAvailable) {
-      const productImage = await downloadStoryImage(request.offer.imageUrl, { fetchImpl })
-      const minimumExpiresAt = scheduledFor ? new Date(new Date(scheduledFor).getTime() + 2 * 24 * 60 * 60_000) : null
-      await renderAndStoreStory({ userId, offer: request.offer, productImage, template: JSON.parse(version.definitionJson), publicationId: publication.id, minimumExpiresAt }, { db, storage, now })
+    const usable = candidate => candidate && !candidate.deletedAt && candidate.expiresAt > now() && candidate.userId === userId
+    let asset = usable(existingAsset) ? existingAsset : null
+    if (!asset && usable(preparedAsset)) asset = preparedAsset
+    if (!asset) {
+      asset = await prepareStoryAsset({ userId, offer: request.offer, template: JSON.parse(version.definitionJson), imageRefererUrl, scheduledFor }, { db, storage, fetchImpl, now })
     }
-    const isManualRetry = ['failed', 'retry_scheduled'].includes(publication.status)
-    if (isManualRetry) await db.storyPublication.update({ where: { id: publication.id }, data: { status: 'queued', providerContainerId: null, providerMediaId: null, lastErrorCode: null, lastErrorMessage: null } })
+    const isManualRetry = ['failed', 'retry_scheduled', 'reconciliation_required'].includes(publication.status)
+    await db.storyPublication.update({ where: { id: publication.id }, data: {
+      renderedAssetId: asset.id,
+      // Reenvio manual precisa zerar o rastro da tentativa anterior, senão o
+      // processor tenta reconciliar um container que já morreu.
+      ...(isManualRetry ? { status: 'queued', providerContainerId: null, providerMediaId: null, lastErrorCode: null, lastErrorMessage: null } : {}),
+    } })
     const delay = scheduledFor ? Math.max(0, new Date(scheduledFor).getTime() - now().getTime()) : 0
     if (isManualRetry && publishingQueue.reenqueue) await publishingQueue.reenqueue(publication.id, { delay })
     else await publishingQueue.enqueue(publication.id, { delay })
-    return publication
+    return { ...publication, renderedAssetId: asset.id, status: isManualRetry ? 'queued' : publication.status }
   } catch (error) {
     await db.storyPublication.update({ where: { id: publication.id }, data: { status: 'failed', lastErrorCode: error.code || 'PREPARE_FAILED', lastErrorMessage: String(error.message).slice(0, 500) } }).catch(() => {})
     throw error
