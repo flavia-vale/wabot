@@ -1,6 +1,9 @@
 export class InstagramPublishingError extends Error {
-  constructor(code, message, { retryable = false, ambiguous = false, status = null } = {}) {
-    super(message); this.code = code; this.retryable = retryable; this.ambiguous = ambiguous; this.status = status
+  // `retryAfterMs` existe para a falha dizer QUANDO vale tentar de novo. Sem
+  // isso, cota diária da Meta (janela de 24h) e backoff de 30s da fila eram a
+  // mesma coisa, e a publicação morria como `failed` em minutos.
+  constructor(code, message, { retryable = false, ambiguous = false, status = null, retryAfterMs = null } = {}) {
+    super(message); this.code = code; this.retryable = retryable; this.ambiguous = ambiguous; this.status = status; this.retryAfterMs = retryAfterMs
   }
 }
 

@@ -41,7 +41,11 @@ const ROLE_PERMISSIONS = {
   read_only: ['admin:read', 'support:read'],
 }
 
-const PAID_PLANS = ['basic', 'pro']
+// `premium` é o plano técnico que libera Instagram Stories. Ele ainda NÃO é
+// vendido no checkout (só `basic` e `pro` têm preço); por enquanto o único
+// caminho é a liberação manual daqui. Sem ele nesta lista o recurso ficava
+// inalcançável para 100% das contas — nem por dentro do produto dava para ligar.
+const PAID_PLANS = ['basic', 'pro', 'premium']
 const PLAN_PRICES = { trial: 0, basic: 39, pro: 69 }
 const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
@@ -231,7 +235,7 @@ function parseManualAccessInput(body = {}) {
   const partnerCodeRaw = body.partnerCode === undefined || body.partnerCode === '' ? undefined : String(body.partnerCode)
 
   if (plan !== undefined && !['trial', ...PAID_PLANS].includes(plan)) {
-    return { ok: false, error: 'Plano inválido. Use trial, basic ou pro.' }
+    return { ok: false, error: 'Plano inválido. Use trial, basic, pro ou premium.' }
   }
   if (partnerCodeRaw !== undefined && !normalizePartnerCode(partnerCodeRaw)) {
     return { ok: false, error: 'Código do parceiro inválido. Use letras, números, hífen ou underline (até 32 caracteres).' }
@@ -951,7 +955,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const longExpiredWhere = buildLongExpiredWhere({ now, includeLongExpired })
   const where = {
     status: 'active',
-    ...(plan !== 'all' && ['trial', 'basic', 'pro'].includes(plan) ? { plan } : {}),
+    ...(plan !== 'all' && ['trial', 'basic', 'pro', 'premium'].includes(plan) ? { plan } : {}),
     ...(search ? { OR: [{ email: { contains: search } }, { name: { contains: search } }] } : {}),
     ...(longExpiredWhere ? { AND: [longExpiredWhere] } : {}),
   }

@@ -271,12 +271,17 @@ export async function runAutomation(automation, {
       random: true,
       autoInjectWhenMissing: false,
     })
-    let allChannelsAccepted = true
+    // Aceite por CANAL, não um booleano só. Com um booleano compartilhado,
+    // falha de um destino Instagram (Meta fora do ar) impedia o item de entrar
+    // em sentItemIds mesmo com o WhatsApp JÁ entregue — e o item voltava
+    // candidato a cada tick, indefinidamente, arriscando reenvio ao grupo.
+    let whatsappAccepted = true
+    let instagramAccepted = true
     // Se existe destino WhatsApp mas a sessão está offline, o Story ainda
     // pode sair; porém o item não entra em sentItemIds até o WhatsApp voltar.
     // Isso evita perder silenciosamente a entrega WhatsApp por causa do
     // sucesso do canal irmão.
-    if (automation.destGroupJid && !whatsappAvailable && whatsappEligible.has(String(offer.itemId))) allChannelsAccepted = false
+    if (automation.destGroupJid && !whatsappAvailable && whatsappEligible.has(String(offer.itemId))) whatsappAccepted = false
     if (whatsappAvailable && whatsappEligible.has(String(offer.itemId))) try {
       await sendBroadcastFn(automation.userId, text, [automation.destGroupJid], {
         imageUrl: offer.imageUrl,
@@ -294,9 +299,9 @@ export async function runAutomation(automation, {
       // enviar"). Loga e segue para o próximo item; o item que falhou fica de
       // fora de `sentItemIds`, então entra candidato de novo no próximo tick.
       failures.push({ itemId: offer.itemId, error: err?.message })
-      allChannelsAccepted = false
+      whatsappAccepted = false
     }
-    if (whatsappAvailable && whatsappEligible.has(String(offer.itemId)) && allChannelsAccepted) {
+    if (whatsappAvailable && whatsappEligible.has(String(offer.itemId)) && whatsappAccepted) {
       sentLogRows.push({ userId: automation.userId, destGroupJid: automation.destGroupJid, productKey: productDedupKey(offer), priceCents: offerPriceCents(offer), itemId: offer.itemId != null ? String(offer.itemId) : null })
     }
     for (const destination of instagramDestinations) {
@@ -316,10 +321,13 @@ export async function runAutomation(automation, {
         storiesQueued++
       } catch (err) {
         failures.push({ itemId: offer.itemId, destinationId: destination.id, error: err?.message })
-        allChannelsAccepted = false
+        instagramAccepted = false
       }
     }
-    if (allChannelsAccepted) sentIds.push(offer.itemId)
+    // O item só reentra como candidato enquanto o canal que FALHOU ainda tem o
+    // que entregar. O Story é idempotente pela chave (automação, destino,
+    // produto, preço), então reprocessar o item não republica o que já saiu.
+    if (whatsappAccepted && instagramAccepted) sentIds.push(offer.itemId)
   }
   if (sentLogRows.length) {
     await dbInstance.offerAutomationSentLog.createMany({ data: sentLogRows }).catch(() => {})

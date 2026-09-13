@@ -71,7 +71,7 @@ test('limpeza marca como apagado só depois de remover o arquivo', async () => {
   }
   const storage = { remove: async key => { if (key === 'key-2') throw new Error('disco') } }
   const result = await cleanupExpiredStoryAssets({ db, storage, now: () => new Date('2026-09-08T12:00:00Z') })
-  assert.deepEqual(result, { scanned: 2, removed: 1 })
+  assert.deepEqual(result, { scanned: 2, removed: 1, orphans: 0 })
   assert.equal(updates.length, 1)
   assert.equal(updates[0].where.id, 'a1')
 })

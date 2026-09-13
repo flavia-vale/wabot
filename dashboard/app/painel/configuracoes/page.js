@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
 import InstagramStoriesPanel from '@/components/InstagramStoriesPanel'
+import { hasInstagramStoriesAccess } from '@/lib/planEntitlements'
 
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? '').trim())
@@ -140,7 +141,11 @@ export default function ConfiguracoesPage() {
         </form>
       </section>
 
-      <InstagramStoriesPanel />
+      {/* Só quem tem o plano vê o bloco. Antes ele aparecia para todo mundo
+          com um botão "Conectar Instagram" que sempre devolvia 403, e ainda
+          disparava três chamadas de API (uma delas com nove contagens no
+          banco) por abertura desta tela. */}
+      {hasInstagramStoriesAccess(account || {}) && <InstagramStoriesPanel />}
 
       {feedback && <div className={`pnl-note-box is-${feedback.type}`} role="status">{feedback.message}</div>}
     </div>

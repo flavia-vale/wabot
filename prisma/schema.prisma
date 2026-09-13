@@ -886,6 +886,11 @@ model InstagramStoryIngress {
   destinationId    String
   destination      Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
   sourceMessageKey String
+  // Identidade do PRODUTO (host+path do link de origem). Existe para o Story
+  // espelhado não repetir quando a origem reposta a mesma oferta: a captura
+  // roda antes da dedup de link do WhatsApp e (destino, mensagem) não protege,
+  // porque cada repost chega com um key.id novo.
+  productKey       String?
   offerSnapshotJson String
   status           String      @default("pending")
   attemptCount     Int         @default(0)
@@ -896,6 +901,7 @@ model InstagramStoryIngress {
   processedAt      DateTime?
 
   @@unique([destinationId, sourceMessageKey])
+  @@index([destinationId, productKey, createdAt])
   @@index([status, nextAttemptAt])
   @@index([status, claimedAt])
   @@index([userId, createdAt])

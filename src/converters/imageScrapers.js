@@ -56,7 +56,7 @@ const IMAGE_HIRES_MIN_DIMENSION_PX = Number(process.env.IMAGE_HIRES_MIN_DIMENSIO
 
 // User-Agent de browser real: Shopee e outros sites bloqueiam UAs de bot e
 // devolvem HTML sem og:image, causando "sem imagem" nos anúncios.
-const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+export const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
 const imageCache = new Map()
 const domainFailureMetrics = new Map()

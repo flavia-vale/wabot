@@ -243,27 +243,44 @@ export default function CriarOfertaPage() {
       const oldPriceCents = parsedOldPriceCents && (!priceCents || parsedOldPriceCents >= priceCents) ? parsedOldPriceCents : null
       const offer = { offerKey: generated?.link || link, title: generated?.title || 'Oferta', priceCents, oldPriceCents, discountLabel: dp == null ? null : `${dp}% OFF`, storeName: store?.name || null, productUrl: generated?.link || link, imageUrl: generated?.imageUrl || null, callToAction: 'Oferta por tempo limitado' }
       const payload = { text: offerMessage, imageUrl: generated?.imageUrl, imageRefererUrl: generated?.imageRefererUrl, offer }
+      // Cada canal é um resultado próprio. Antes um erro do Instagram virava um
+      // throw único: a usuária lia só a falha, não sabia que o WhatsApp tinha
+      // saído, reclicava e o WhatsApp era enviado DE NOVO (o broadcast não tem
+      // chave de idempotência).
       const actions = []
-      if (mode === 'now' && selectedJids.length) actions.push(api.broadcastSend({ ...payload, jids: selectedJids }))
-      if (mode === 'schedule' && selectedJids.length) actions.push(api.scheduledCreate({ ...payload, jids: selectedJids, scheduledAt: new Date(scheduleAt).toISOString() }))
+      if (mode === 'now' && selectedJids.length) actions.push({ canal: 'WhatsApp', run: () => api.broadcastSend({ ...payload, jids: selectedJids }) })
+      if (mode === 'schedule' && selectedJids.length) actions.push({ canal: 'WhatsApp', run: () => api.scheduledCreate({ ...payload, jids: selectedJids, scheduledAt: new Date(scheduleAt).toISOString() }) })
       if ((mode === 'now' || mode === 'schedule') && selectedInstagramIds.length) {
-        if (!generated?.imageUrl) throw new Error('O Instagram exige uma imagem da oferta.')
-        actions.push(api.instagramStoryCreate({ destinationIds: selectedInstagramIds, offer, imageUrl: generated.imageUrl, scheduledFor: mode === 'schedule' ? new Date(scheduleAt).toISOString() : undefined, idempotencyKey: storyIdempotencyKey || undefined }).then((result) => {
-          if (result.errors?.length) throw new Error(result.errors.map((item) => item.error).join(' · '))
+        if (!generated?.imageUrl) throw new Error('O Instagram precisa de uma foto da oferta. Gere a oferta com imagem antes de publicar.')
+        actions.push({ canal: 'Instagram', run: async () => {
+          const result = await api.instagramStoryCreate({ destinationIds: selectedInstagramIds, offer, imageUrl: generated.imageUrl, imageRefererUrl: generated?.imageRefererUrl, scheduledFor: mode === 'schedule' ? new Date(scheduleAt).toISOString() : undefined, idempotencyKey: storyIdempotencyKey || undefined })
+          if (!result.publications?.length && result.errors?.length) throw new Error(result.errors.map((item) => item.error).join(' · '))
           return result
-        }))
+        } })
       }
+      let parcial = ''
       if (actions.length) {
-        const results = await Promise.allSettled(actions)
-        const failures = results.filter((result) => result.status === 'rejected')
-        if (failures.length) throw new Error(failures.map((result) => result.reason?.message || 'Falha em um canal').join(' · '))
+        const results = await Promise.allSettled(actions.map((action) => action.run()))
+        const ok = actions.filter((_, index) => results[index].status === 'fulfilled').map((action) => action.canal)
+        const failures = actions
+          .map((action, index) => ({ canal: action.canal, reason: results[index].reason }))
+          .filter((item, index) => results[index].status === 'rejected')
+        if (failures.length) {
+          const detalhe = failures.map((item) => `${item.canal}: ${item.reason?.message || 'não deu certo'}`).join(' · ')
+          // Dizer o que DEU certo é o que impede o reenvio duplicado.
+          throw new Error(ok.length ? `${detalhe}. O envio para ${ok.join(' e ')} já saiu — não repita esta oferta nesse canal.` : detalhe)
+        }
+        // O Story não é publicado na hora: a rota responde "na fila". Dizer
+        // "enviada" seria mentira, e é justamente aqui que ela pode falhar
+        // depois (foto recusada pela loja, limite diário da Meta).
+        if (ok.includes('Instagram')) parcial = mode === 'schedule' ? ' O Story do Instagram fica agendado.' : ' O Story do Instagram entrou na fila e aparece em Configurações quando publicar.'
       }
       // Na fila não enviamos jids: o item herda os grupos configurados na fila.
       if (mode === 'queue') await api.offerQueueItemAdd(queueId, payload)
       const channels = [selectedJids.length ? 'WhatsApp' : null, selectedInstagramIds.length ? 'Instagram' : null].filter(Boolean).join(' e ')
       setDispatchFeedback(createNew
-        ? (mode === 'now' ? `Oferta enviada para ${channels}. Nova oferta pronta para criação.` : mode === 'schedule' ? `Oferta agendada para ${channels}. Nova oferta pronta para criação.` : 'Oferta inserida na fila com sucesso. Nova oferta pronta para criação.')
-        : (mode === 'now' ? `Oferta enviada para ${channels}.` : mode === 'schedule' ? `Oferta agendada para ${channels}. Veja em Agendados.` : 'Oferta inserida na fila com sucesso.'))
+        ? (mode === 'now' ? `Oferta enviada para ${channels}.${parcial} Nova oferta pronta para criação.` : mode === 'schedule' ? `Oferta agendada para ${channels}.${parcial} Nova oferta pronta para criação.` : 'Oferta inserida na fila com sucesso. Nova oferta pronta para criação.')
+        : (mode === 'now' ? `Oferta enviada para ${channels}.${parcial}` : mode === 'schedule' ? `Oferta agendada para ${channels}.${parcial} Veja em Agendados.` : 'Oferta inserida na fila com sucesso.'))
       if (createNew) resetOfferForm()
     } catch (err) { setDispatchFeedback(err.message) }
     finally { setDispatching('') }

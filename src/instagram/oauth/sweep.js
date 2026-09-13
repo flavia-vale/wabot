@@ -4,10 +4,15 @@ import { refreshInstagramConnection } from './service.js'
 const REFRESH_AHEAD_MS = 15 * 24 * 60 * 60_000
 
 export async function runInstagramTokenSweep({ db, config, client = createInstagramOAuthClient(config), now = () => new Date(), limit = 50 } = {}) {
-  const rows = await db.instagramConnection.findMany({ where: { status: 'connected', loginMethod: config.loginMethod, OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { lte: new Date(now().getTime() + REFRESH_AHEAD_MS) } }] }, select: { id: true, userId: true }, take: limit, orderBy: { tokenExpiresAt: 'asc' } })
+  // NÃO filtrar por loginMethod: conexão feita sob outro método simplesmente
+  // deixava de ser renovada e vencia em silêncio. O cliente da Meta é montado
+  // por conexão, com o método que ELA usou.
+  const rows = await db.instagramConnection.findMany({ where: { status: 'connected', OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { lte: new Date(now().getTime() + REFRESH_AHEAD_MS) } }] }, select: { id: true, userId: true, loginMethod: true }, take: limit, orderBy: { tokenExpiresAt: 'asc' } })
   const result = { scanned: rows.length, refreshed: 0, failed: 0 }
   for (const row of rows) {
-    try { await refreshInstagramConnection(row.userId, row.id, config, { db, client, now }); result.refreshed++ } catch { result.failed++ }
+    const rowConfig = row.loginMethod === config.loginMethod ? config : { ...config, loginMethod: row.loginMethod }
+    const rowClient = rowConfig === config ? client : createInstagramOAuthClient(rowConfig)
+    try { await refreshInstagramConnection(row.userId, row.id, rowConfig, { db, client: rowClient, now }); result.refreshed++ } catch { result.failed++ }
   }
   return result
 }

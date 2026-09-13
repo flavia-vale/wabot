@@ -79,7 +79,13 @@ export async function evaluateQueueGate(queue, deps = {}) {
   const isRunning = deps.isRunning ?? isRunningDefault
   const now = deps.now ? deps.now() : new Date()
   if (!queue.enabled) return 'queue_disabled'
-  if (!queue.instagramDestinations?.length && !await isRunning(queue.userId)) return 'bot_offline'
+  // O gate do WhatsApp depende de a fila AINDA mandar no WhatsApp, não de ela
+  // ter ganhado um destino Instagram. Antes, uma fila híbrida com o bot fora do
+  // ar passava do gate, falhava no sendBroadcast, queimava tentativa e o item
+  // virava `failed` terminal — regressão: antes ele só ficava `pending` com o
+  // motivo `bot_offline` na tela. Fila Instagram-only tem whatsappEnabled=false.
+  const usaWhatsapp = queue.whatsappEnabled !== false
+  if (usaWhatsapp && !await isRunning(queue.userId)) return 'bot_offline'
   // Plano B / Fase 3: o horário próprio da fila é o único pré-check de janela
   // aqui. Sem horário próprio, NÃO pré-bloqueamos pela antiga janela silenciosa
   // global (aposentada) — a proteção anti-ban por destino é aplicada no envio
