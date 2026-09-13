@@ -5216,3 +5216,93 @@ Testes: `test/painel-credencial-clareza.test.js`,
   atual (`sqlite3 <db> "SELECT COUNT(*) FROM User"`).
 - Backups de prod são responsabilidade do `scripts/backup_prod.sh`
   (cron diário). Não tocar nele sem testar restauração.
+## Instagram Stories — fundações das fases 1–4 (2026-09-08)
+
+Instagram é um destino tipado (`instagram_story`), nunca um JID falso. Os
+contratos puros ficam em `src/domain/delivery/`; persistência e serviços ficam
+em `src/instagram/`. Basic, Pro e Trial (inclusive ativo) **não** têm acesso:
+todo futuro endpoint, cron, worker, retry ou ação admin deve conferir
+`entitlements.canUseInstagramStories`, exclusivo do plano técnico `premium`.
+
+O renderer produz somente JPEG sRGB 1080×1920, máximo 8 MB, a partir de Buffer;
+download/SSRF não pertence a essa fronteira. Template é versionado e versão
+existente nunca é sobrescrita. Assets usam URL HTTPS assinada com HMAC, TTL e
+limpeza que apaga o arquivo antes de marcar `deletedAt`. Variáveis obrigatórias
+para servir assets: `STORY_ASSET_PUBLIC_BASE_URL` e
+`STORY_ASSET_SIGNING_SECRET` (≥32 caracteres); `STORY_ASSET_DIR` é opcional.
+
+Migração: `prisma/migrations/20260908010000_instagram_stories_phase_2`.
+Testes: `test/instagram-story-schema.test.js`,
+`test/instagram-story-repository.test.js`,
+`test/instagram-story-renderer.test.js`, `test/instagram-story-storage.test.js`.
+
+### POC Meta (Fase 0)
+
+`npm run poc:instagram-story` executa a validação progressiva da Graph API em
+três modos: `inspect` (somente leitura), `container` (não publica) e `publish`
+(publica de verdade). A versão da API é obrigatoriamente pinada em
+`IG_GRAPH_API_VERSION`; nunca adicionar default `latest`. Tokens só entram por
+`IG_ACCESS_TOKEN` no ambiente e nunca em commit/log/PR. Runbook:
+`docs/instagram/phase-0-meta-poc-runbook.md`. Teste puro, sem Meta:
+`test/instagram-meta-poc.test.js`.
+
+### Publicação de Stories (Fase 6)
+
+A fila durável é `instagram-stories` e a DLQ é `instagram-stories-dlq`. Payload
+BullMQ contém **somente** `publicationId`: nunca Buffer, token ou snapshot.
+`processInstagramPublication` revalida Premium/conexão/asset no dequeue.
+Falha ambígua de `media_publish` vira `reconciliation_required`; não criar novo
+container nesse caso. O runtime roda na API e só inicia com Redis + OAuth +
+storage configurados. Teste: `test/instagram-publishing.test.js`; detalhes em
+`docs/instagram/phase-6-publishing-queue.md`.
+
+### Stories manuais/agendados (Fase 7)
+
+Endpoint canônico: `POST /api/instagram/stories`; não acrescentar Instagram em
+`broadcast.targetJids`. O download da imagem revalida anti-SSRF a cada redirect
+e tem teto de 15 MB. Fan-out é isolado por destino e responde sucessos/erros
+separadamente. Agendado é `StoryPublication` + delay BullMQ, não
+`ScheduledMessage` (que continua WhatsApp/JID). Cancelar só quando `queued` e
+no futuro. Teste: `test/instagram-manual-scheduled.test.js`.
+
+### Stories em ofertas automáticas (Fase 8)
+
+`OfferAutomationDestination` é o único vínculo entre automação e destino
+Instagram. Nunca grave conta Meta em `destGroupJid`. Automações Instagram-only
+não dependem de WhatsApp online; cron e trigger devem carregar a relação
+`instagramDestinations.destination` e revalidar `canUseInstagramStories`. A
+idempotência inclui automação, destino, produto e preço. Teste:
+`test/instagram-automation.test.js`.
+
+### Stories em filas e espelhamento (Fases 9–12)
+
+Filas usam `OfferQueueDestination` e snapshot imutável no item. Espelhamento
+usa `InstagramMirrorDestination` + outbox `InstagramStoryIngress`: o bot-worker
+só captura dados públicos e nunca carrega token Meta; a API é a única
+consumidora/renderizadora. Configuração, cron, dequeue e retry sempre revalidam
+`canUseInstagramStories`. Chaves: `offer-queue:<queue>:<item>:<destino>` e
+`mirror:<destino>:<mensagem-origem>`. Testes: `test/instagram-offer-queue.test.js`
+e `test/instagram-mirroring.test.js`.
+
+### Revisão crítica de confiabilidade (2026-09-11)
+
+- `StoryPublication.idempotencyKey` é sempre escopada por usuário; nunca volte
+  a persistir diretamente uma chave recebida pela API.
+- Falha final da BullMQ precisa atualizar também o estado durável no Prisma.
+- Ingressos de espelhamento usam lease por `claimedAt`; busca de imagem externa
+  nunca pode voltar ao hot path do `bot-worker`.
+- Assets agendados precisam permanecer válidos depois de `scheduledFor`.
+- Exportação/anonimização LGPD deve incluir toda nova tabela Instagram sem
+  jamais exportar `InstagramConnection.encryptedToken`.
+- A lista completa de bloqueadores e riscos residuais está em
+  `docs/instagram/critical-review-2026-09-11.md`.
+- As quatro superfícies de destino Instagram são: Criar oferta, Filas, Ofertas
+  automáticas e Espelhamento. Não adicionar suporte só no backend: todas devem
+  continuar selecionáveis na UI, sempre atrás de `plan === 'premium'`.
+- Renovação OAuth transitória (rede, 429, 5xx) nunca desativa destino nem exige
+  login novamente; somente erro permanente muda para `needs_reconnect`.
+- Item de fila que também vai ao Instagram precisa carregar `offerSnapshot`;
+  texto/imagem de WhatsApp sozinhos não bastam para o renderer vertical.
+- Em `OfferQueue`, `targetJids='[]'` é o fallback legado para todos os grupos.
+  Fila Instagram-only deve gravar `whatsappEnabled=false`; sem isso ela envia
+  acidentalmente também para todos os destinos WhatsApp.

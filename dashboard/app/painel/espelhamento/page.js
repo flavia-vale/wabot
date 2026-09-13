@@ -26,6 +26,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainel, usePainelHeader, PainelContentActions } from '../PainelShell'
+import { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
+import { hasInstagramStoriesAccess } from '@/lib/planEntitlements'
 
 const GRADIENTS = [
   'linear-gradient(135deg,#94A3B8,#475569)',
@@ -249,6 +251,9 @@ export default function EspelhamentoPage() {
   const [switchingMirror, setSwitchingMirror] = useState(false)
   const [tab, setTab] = useState('grupos')
   const [selectedOriginId, setSelectedOriginId] = useState(null)
+  const [instagramDestinations, setInstagramDestinations] = useState([])
+  const [instagramMirrorTargets, setInstagramMirrorTargets] = useState({})
+  const [savingInstagramOrigin, setSavingInstagramOrigin] = useState('')
 
   useEffect(() => {
     let active = true
@@ -286,6 +291,18 @@ export default function EspelhamentoPage() {
         setLoadError(`Não foi possível carregar os destinos de ${failed} ${failed === 1 ? 'origem' : 'origens'}. As ligações mostradas podem estar incompletas.`)
       }
     })()
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    Promise.all([api.instagramConnections().catch(() => []), api.instagramMirrorTargets().catch(() => []), api.me().catch(() => null)]).then(([connections, targets, me]) => {
+      if (!active) return
+      setInstagramDestinations(hasInstagramStoriesAccess(me || {}) ? instagramDestinationsFromConnections(connections) : [])
+      const mapped = {}
+      for (const target of targets) (mapped[target.sourceGroupId] ||= []).push(target.destinationId)
+      setInstagramMirrorTargets(mapped)
+    })
     return () => { active = false }
   }, [])
 
@@ -345,6 +362,18 @@ export default function EspelhamentoPage() {
     setSelectedOriginId((prev) => (prev === id ? null : id))
   }
 
+  async function toggleInstagramMirror(sourceGroupId, destinationId) {
+    const current = instagramMirrorTargets[sourceGroupId] || []
+    const next = current.includes(destinationId) ? current.filter((id) => id !== destinationId) : [...current, destinationId]
+    setSavingInstagramOrigin(sourceGroupId)
+    setLoadError('')
+    try {
+      await api.instagramMirrorTargetsUpdate(sourceGroupId, next)
+      setInstagramMirrorTargets((value) => ({ ...value, [sourceGroupId]: next }))
+    } catch (error) { setLoadError(error.message || 'Não foi possível atualizar os destinos Instagram.') }
+    finally { setSavingInstagramOrigin('') }
+  }
+
   return (
     <div className="pnl-grid" style={{ maxWidth: 1120, margin: '0 auto' }}>
       <PainelContentActions>
@@ -396,6 +425,24 @@ export default function EspelhamentoPage() {
           <Link href="/painel/whatsapp" className="pnl-btn">Conexão</Link>
         </div>
       </section>
+
+      {instagramDestinations.length > 0 && origens.length > 0 && (
+        <section className="pnl-card">
+          <div className="pnl-card-title">Espelhar também nos Stories</div>
+          <p className="pnl-card-note" style={{ marginTop: 6 }}>Escolha em quais contas cada grupo monitorado também publicará a oferta vertical.</p>
+          <div className="pnl-grid" style={{ marginTop: 14 }}>
+            {origens.map((origin) => <div className="pnl-subcard" key={origin.id}>
+              <strong>{origin.name}</strong>
+              <div className="pnl-grid" style={{ marginTop: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+                {instagramDestinations.map((destination) => <label className="pnl-check" key={destination.id}>
+                  <input type="checkbox" checked={(instagramMirrorTargets[origin.id] || []).includes(destination.id)} onChange={() => toggleInstagramMirror(origin.id, destination.id)} disabled={savingInstagramOrigin === origin.id} />
+                  {destination.name}
+                </label>)}
+              </div>
+            </div>)}
+          </div>
+        </section>
+      )}
 
       {/* Abas Grupos / Conexões */}
       <div className="pnl-seg" role="tablist" aria-label="Ver como listas ou como mapa de conexões" style={{ justifySelf: 'start' }}>

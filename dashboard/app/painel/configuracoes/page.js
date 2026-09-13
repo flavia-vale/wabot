@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
+import InstagramStoriesPanel from '@/components/InstagramStoriesPanel'
 
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? '').trim())
@@ -138,6 +139,8 @@ export default function ConfiguracoesPage() {
           </button>
         </form>
       </section>
+
+      <InstagramStoriesPanel />
 
       {feedback && <div className={`pnl-note-box is-${feedback.type}`} role="status">{feedback.message}</div>}
     </div>

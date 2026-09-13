@@ -35,9 +35,18 @@ export function buildAnonymizedUserFields(userId, now = new Date()) {
 }
 
 // Modelos cujas linhas do titular são DELETADAS na anonimização (dados
-// operacionais e credenciais; PII de conteúdo). Ordem irrelevante — todos
-// filtram por userId. NÃO inclui Payment nem AffiliateCommission (retenção).
+// operacionais e credenciais; PII de conteúdo). A ordem É relevante para os
+// modelos do Instagram: StoryPublication restringe a exclusão de Destination
+// e StoryTemplate, portanto publicações precisam sair primeiro. NÃO inclui
+// Payment nem AffiliateCommission (retenção).
 export const PURGED_MODELS = [
+  'storyPublication',
+  'renderedAsset',
+  'instagramStoryIngress',
+  'instagramOAuthState',
+  'instagramConnection',
+  'destination',
+  'storyTemplate',
   'messageLog',
   'scheduledMessage',
   'credential',
@@ -70,12 +79,24 @@ export const EXPORTED_MODELS = [
   'payment',
   'affiliateLink',
   'followLog',
+  'destination',
+  'instagramConnection',
+  'instagramOAuthState',
+  'storyTemplate',
+  'renderedAsset',
+  'storyPublication',
+  'instagramStoryIngress',
 ]
 
 export function redactUserForExport(user) {
   if (!user) return null
   const { passwordHash, ...rest } = user
   return { ...rest, passwordHash: '[redigido]' }
+}
+
+function redactExportRows(model, rows) {
+  if (model !== 'instagramConnection') return rows
+  return rows.map(({ encryptedToken, ...row }) => ({ ...row, encryptedToken: '[redigido]' }))
 }
 
 // Monta o pacote de exportação. db é o Prisma client (ou mock). Retorna objeto
@@ -92,7 +113,8 @@ export async function collectUserExport(db, userId, now = new Date()) {
     if (!db[model]?.findMany) continue
     // Credential.data fica de fora do export por conter segredos cifrados;
     // se um dia for incluído, redigir o campo data.
-    data[model] = await db[model].findMany({ where: { userId } })
+    const rows = await db[model].findMany({ where: { userId } })
+    data[model] = redactExportRows(model, rows)
   }
   return data
 }
