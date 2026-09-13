@@ -31,5 +31,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: ESLint no-undef (src + test)
-        run: npx --yes eslint@9 src test
+      - name: ESLint no-undef (src + test + telas do dashboard)
+        # `--no-inline-config`: as telas têm eslint-disable de regras de plugin
+        # (react-hooks, @next/next) que não existem nesta config pura.
+        run: npx --yes eslint@9 --no-inline-config src test dashboard/app dashboard/components dashboard/lib
