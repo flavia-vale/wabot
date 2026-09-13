@@ -19,6 +19,7 @@ export async function tickOfferAutomations(deps = {}) {
     const now = deps.now ? deps.now() : new Date()
     const automations = await database.offerAutomation.findMany({
       where: { enabled: true },
+      include: { instagramDestinations: { include: { destination: true } } },
     })
 
     // Curto-circuito: buscamos os bots rodando UMA vez por tick e pulamos
@@ -36,7 +37,7 @@ export async function tickOfferAutomations(deps = {}) {
 
     for (const automation of automations) {
       if (!isOfferAutomationDue(automation, now)) continue
-      if (runningSet && !runningSet.has(automation.userId)) continue
+      if (runningSet && !runningSet.has(automation.userId) && !automation.instagramDestinations?.length) continue
 
       // Ofertas automáticas são feature Pro/Trial ativo. Automações criadas
       // antes de um downgrade (ou com acesso expirado) ficam no banco, mas
@@ -46,9 +47,13 @@ export async function tickOfferAutomations(deps = {}) {
         console.warn(`[offer-cron] automation ${automation.id} skipped: plano do usuário ${automation.userId} não permite ofertas automáticas`)
         continue
       }
+      if (automation.instagramDestinations?.length && !entitlements.canUseInstagramStories) {
+        console.warn(`[offer-cron] automation ${automation.id}: destinos Instagram ignorados porque o plano não permite Stories`)
+        automation.instagramDestinations = []
+      }
 
       try {
-        await run(automation)
+        await run(automation, { dbOverride: database })
       } catch (err) {
         console.error(`[offer-cron] automation ${automation.id} failed:`, err.message)
       }

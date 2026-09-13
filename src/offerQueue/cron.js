@@ -21,7 +21,7 @@ export async function tickOfferQueues(deps = {}) {
     } catch (error) {
       console.error('[offer-queue-cron] watchdog failed:', error.message)
     }
-    const queues = await database.offerQueue.findMany({ where: { enabled: true, items: { some: { status: 'pending' } } } })
+    const queues = await database.offerQueue.findMany({ where: { enabled: true, items: { some: { status: 'pending' } } }, include: { instagramDestinations: { include: { destination: true } } } })
     for (const queue of queues) {
       // Filas de ofertas são feature Pro/Trial ativo. Filas criadas antes de
       // um downgrade (ou com acesso expirado) ficam no banco, mas não drenam
@@ -31,6 +31,7 @@ export async function tickOfferQueues(deps = {}) {
         console.warn(`[offer-queue-cron] queue ${queue.id} skipped: plano do usuário ${queue.userId} não permite filas de ofertas`)
         continue
       }
+      if (queue.instagramDestinations?.length && !entitlements.canUseInstagramStories) queue.instagramDestinations = []
       try { await drainQueueOnce(queue, { ...deps, db: database }) }
       catch (error) { console.error(`[offer-queue-cron] queue ${queue.id} failed:`, error.message) }
     }

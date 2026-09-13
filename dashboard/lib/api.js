@@ -494,6 +494,17 @@ export const api = {
     apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
   offerAutomationSearchPreview: (params) =>
     apiFetch('/api/offer-automations/search-preview', { method: 'POST', body: JSON.stringify(params) }),
+  instagramConnections: () => apiFetch('/api/instagram/connections'),
+  instagramHealth: () => apiFetch('/api/instagram/health'),
+  instagramOAuthStart: () => apiFetch('/api/instagram/oauth/start'),
+  instagramDisconnect: (id) => apiFetch(`/api/instagram/connections/${id}`, { method: 'DELETE' }),
+  instagramRefresh: (id) => apiFetch(`/api/instagram/connections/${id}/refresh`, { method: 'POST' }),
+  instagramStories: () => apiFetch('/api/instagram/stories'),
+  instagramStoryCreate: (data) => apiFetch('/api/instagram/stories', { method: 'POST', body: JSON.stringify(data) }),
+  instagramStoryCancel: (id) => apiFetch(`/api/instagram/stories/${id}`, { method: 'DELETE' }),
+  instagramStoryRetry: (id) => apiFetch(`/api/instagram/stories/${id}/retry`, { method: 'POST' }),
+  instagramMirrorTargets: () => apiFetch('/api/instagram/mirror-targets'),
+  instagramMirrorTargetsUpdate: (sourceGroupId, destinationIds) => apiFetch(`/api/instagram/mirror-targets/${sourceGroupId}`, { method: 'PUT', body: JSON.stringify({ destinationIds }) }),
   variationsGet: () => apiFetch('/api/config'),
   variationsUpdate: (data) =>
     apiFetch('/api/config', {

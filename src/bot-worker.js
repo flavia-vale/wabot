@@ -32,6 +32,7 @@ import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
+import { captureInstagramMirror } from './instagram/mirroring/capture.js'
 import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, effectiveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
@@ -860,7 +861,7 @@ async function loadConfig() {
   const preservation = await getAdvancedPreservationAccess(userId, { db })
   // Efetivo = plano permite (Pro/Trial) E o usuário ligou o flag mestre opt-in.
   const preservationActive = isPreservationActive(preservation, botConfig)
-  return { credentials, groups, plan: user.plan, botConfig, preservationActive }
+  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive }
 }
 
 async function getConfig() {
@@ -4018,6 +4019,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       if (routing.reason === DESTINATION_REASON.EXPLICIT_EMPTY) {
         logger.warn({ sourceJid: jid }, 'Origem com destinos escolhidos, porém nenhum destino válido restou — nada será enviado')
       }
+      // Outbox multicanal: captura uma vez por mensagem de origem, antes do
+      // fan-out WhatsApp. O consumidor da API renderiza/publica depois; o
+      // bot-worker nunca recebe token Meta nem transforma Instagram em JID.
+      await captureInstagramMirror({
+        user: { id: userId, plan: cfg.plan, accessExpiresAt: cfg.accessExpiresAt },
+        sourceGroupId: monitorGroup?.id,
+        sourceMessageKey: `${jid}:${msg.key.id}`,
+        text: finalText,
+        primary,
+      }, { db }).catch(err => logger.warn({ err: err?.message, msgId: msg.key.id }, 'Falha ao capturar Story espelhado'))
+
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.

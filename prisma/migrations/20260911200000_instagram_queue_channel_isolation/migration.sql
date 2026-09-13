@@ -1,0 +1,1 @@
+ALTER TABLE "OfferQueue" ADD COLUMN "whatsappEnabled" BOOLEAN NOT NULL DEFAULT true;
