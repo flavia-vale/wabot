@@ -259,21 +259,28 @@ async function readLimitedText(res) {
 
 /**
  * Segue a URL (redirects manuais, depois corpo HTML) até achar um link de
- * loja. Devolve `{ platform, url }` ou `null`. Nunca lança.
+ * loja. Devolve `{ platform, url, reason: null }`, ou `{ store: null, reason }`
+ * quando não consegue. Nunca lança.
+ *
+ * O `reason` existe porque este caminho já falhou em silêncio uma vez (staging,
+ * 2026-09-13): tudo certo — código no ar, rede boa, página com o link — e a
+ * única informação disponível era `null`. Sem motivo registrado, cada falha
+ * vira uma investigação do zero. Mesma lição de "o caminho do card de preview
+ * era MUDO".
  */
-export async function resolveStoreUrlFromCustomDomain(candidateUrl, options = {}) {
+export async function resolveStoreUrlFromCustomDomainDetailed(candidateUrl, options = {}) {
   const {
     fetchImpl = globalThis.fetch,
     timeoutMs = CUSTOM_DOMAIN_FETCH_TIMEOUT_MS,
     useCache = true,
   } = options
 
-  if (typeof fetchImpl !== 'function') return null
-  if (!isSafeCandidateUrl(candidateUrl)) return null
+  if (typeof fetchImpl !== 'function') return { store: null, reason: 'sem_suporte_a_rede' }
+  if (!isSafeCandidateUrl(candidateUrl)) return { store: null, reason: 'endereco_recusado' }
 
   if (useCache) {
     const cached = getCached(candidateUrl)
-    if (cached) return cached
+    if (cached) return { store: cached, reason: null }
   }
 
   let current = String(candidateUrl)
@@ -285,10 +292,10 @@ export async function resolveStoreUrlFromCustomDomain(candidateUrl, options = {}
         const best = pickBestStoreUrl(direct)
         if (best) {
           if (useCache) setCached(candidateUrl, best)
-          return best
+          return { store: best, reason: null }
         }
       }
-      if (!isSafeCandidateUrl(current)) return null
+      if (!isSafeCandidateUrl(current)) return { store: null, reason: 'redirect_para_endereco_recusado' }
 
       const res = await fetchImpl(current, {
         redirect: 'manual',
@@ -302,43 +309,60 @@ export async function resolveStoreUrlFromCustomDomain(candidateUrl, options = {}
         continue
       }
 
-      if (!res.ok) return null
+      if (!res.ok) return { store: null, reason: `recusado_http_${res.status}` }
       const contentType = res.headers?.get?.('content-type') || ''
       if (contentType && !/text\/html|application\/xhtml|text\/plain|application\/json/i.test(contentType)) {
-        return null
+        return { store: null, reason: `tipo_inesperado_${contentType.split(';')[0]}` }
       }
 
       const html = await readLimitedText(res)
       const best = pickBestStoreUrl(extractStoreUrlsFromHtml(html))
       // Fracasso NÃO é cacheado — de propósito.
       if (best && useCache) setCached(candidateUrl, best)
-      return best || null
+      if (best) return { store: best, reason: null }
+      return { store: null, reason: html ? 'pagina_sem_link_de_loja' : 'pagina_vazia' }
     }
-    return null
-  } catch {
-    return null
+    return { store: null, reason: 'redirects_demais' }
+  } catch (err) {
+    const nome = err?.name === 'TimeoutError' || err?.name === 'AbortError'
+      ? 'tempo_esgotado'
+      : `erro_de_rede:${err?.name || 'desconhecido'}`
+    return { store: null, reason: nome, detail: err?.message }
   }
 }
 
 /**
+ * Mesma resolução, devolvendo só o achado — para quem não precisa do motivo.
+ */
+export async function resolveStoreUrlFromCustomDomain(candidateUrl, options = {}) {
+  const { store } = await resolveStoreUrlFromCustomDomainDetailed(candidateUrl, options)
+  return store || null
+}
+
+/**
  * Troca no TEXTO as URLs de domínio próprio pela URL da loja que elas
- * escondem. Devolve `{ text, resolved }` — `text` é o original quando nada
- * foi resolvido (fail-safe).
+ * escondem. Devolve `{ text, resolved, failures }` — `text` é o original quando
+ * nada foi resolvido (fail-safe), e `failures` diz POR QUE cada candidato não
+ * resolveu, para o robô registrar no log em vez de falhar em silêncio.
  */
 export async function resolveCustomDomainLinks(text, options = {}) {
   const raw = String(text ?? '')
-  if (!raw || !isCustomDomainResolveEnabled()) return { text: raw, resolved: [] }
+  if (!raw || !isCustomDomainResolveEnabled()) return { text: raw, resolved: [], failures: [] }
 
   const candidates = findCandidateLinks(raw)
-  if (!candidates.length) return { text: raw, resolved: [] }
+  if (!candidates.length) return { text: raw, resolved: [], failures: [] }
 
   let output = raw
   const resolved = []
+  const failures = []
   for (const candidate of candidates) {
-    const store = await resolveStoreUrlFromCustomDomain(candidate, options)
-    if (!store) continue
+    const { store, reason, detail } = await resolveStoreUrlFromCustomDomainDetailed(candidate, options)
+    if (!store) {
+      failures.push({ url: candidate, reason, detail })
+      continue
+    }
     output = output.split(candidate).join(store.url)
     resolved.push({ from: candidate, to: store.url, platform: store.platform })
   }
-  return { text: output, resolved }
+  return { text: output, resolved, failures }
 }

@@ -303,6 +303,12 @@ async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
   if (!text) return text
   try {
     const desembrulhado = await resolveCustomDomainLinks(text)
+    // Candidato que NÃO resolveu precisa deixar rastro com o motivo: em
+    // 2026-09-13 este caminho devolveu só `null` em staging, com código no ar,
+    // rede boa e a página trazendo o link — e não havia por onde começar.
+    if (desembrulhado.failures?.length) {
+      logger.warn({ msgId, jid, falhas: desembrulhado.failures }, 'Link de domínio próprio NÃO resolveu até a loja')
+    }
     if (!desembrulhado.resolved.length) return text
     logger.info({ msgId, jid, resolvidos: desembrulhado.resolved }, 'Link de domínio próprio desembrulhado até a loja')
     for (const item of desembrulhado.resolved) {

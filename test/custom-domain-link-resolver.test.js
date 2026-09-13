@@ -10,6 +10,7 @@ import {
   extractStoreUrlsFromHtml,
   pickBestStoreUrl,
   resolveStoreUrlFromCustomDomain,
+  resolveStoreUrlFromCustomDomainDetailed,
   resolveCustomDomainLinks,
   clearCustomDomainCache,
 } from '../src/core/customDomainLinkResolver.js'
@@ -218,4 +219,57 @@ test('findCandidateLinks reconhece loja não suportada, mas não convite de grup
   // podem discordar sobre o que é "link de loja desconhecida".
   assert.equal(findCandidateLinks('confira https://www.netshoes.com.br/p/tenis-123').length, 1)
   assert.equal(findCandidateLinks('entra no grupo https://chat.whatsapp.com/ABC').length, 0)
+})
+
+test('o motivo da falha é devolvido, nunca só `null`', async () => {
+  // RCA staging 2026-09-13: a resolução devolveu `null` com o código no ar, a
+  // rede boa e a página trazendo o link — e não havia por onde começar a
+  // investigar. Falha sem motivo custa uma investigação inteira por ocorrência.
+  clearCustomDomainCache()
+
+  const semLoja = await resolveStoreUrlFromCustomDomainDetailed(LINK_PROPRIO, {
+    fetchImpl: async () => respostaHtml('<html><body>nada aqui</body></html>'),
+    useCache: false,
+  })
+  assert.equal(semLoja.store, null)
+  assert.equal(semLoja.reason, 'pagina_sem_link_de_loja')
+
+  const recusado = await resolveStoreUrlFromCustomDomainDetailed(LINK_PROPRIO, {
+    fetchImpl: async () => respostaHtml('', { status: 403 }),
+    useCache: false,
+  })
+  assert.equal(recusado.reason, 'recusado_http_403')
+
+  const estourou = await resolveStoreUrlFromCustomDomainDetailed(LINK_PROPRIO, {
+    fetchImpl: async () => { const e = new Error('timed out'); e.name = 'TimeoutError'; throw e },
+    useCache: false,
+  })
+  assert.equal(estourou.reason, 'tempo_esgotado')
+
+  const rede = await resolveStoreUrlFromCustomDomainDetailed(LINK_PROPRIO, {
+    fetchImpl: async () => { const e = new Error('socket hang up'); e.name = 'TypeError'; throw e },
+    useCache: false,
+  })
+  assert.match(rede.reason, /^erro_de_rede:/)
+  assert.equal(rede.detail, 'socket hang up')
+
+  const endereco = await resolveStoreUrlFromCustomDomainDetailed('http://127.0.0.1/x', { useCache: false })
+  assert.equal(endereco.reason, 'endereco_recusado')
+})
+
+test('resolveCustomDomainLinks devolve as falhas para o robô registrar', async () => {
+  clearCustomDomainCache()
+  const fetchImpl = async () => respostaHtml('<html><body>sem oferta</body></html>')
+  const { text, resolved, failures } = await resolveCustomDomainLinks(`veja ${LINK_PROPRIO}`, { fetchImpl, useCache: false })
+  assert.equal(text, `veja ${LINK_PROPRIO}`)
+  assert.deepEqual(resolved, [])
+  assert.equal(failures.length, 1)
+  assert.equal(failures[0].url, LINK_PROPRIO)
+  assert.equal(failures[0].reason, 'pagina_sem_link_de_loja')
+})
+
+test('guarda: o robô registra o motivo quando o link não resolve', () => {
+  const fonte = readFileSync(join(here, '..', 'src', 'bot-worker.js'), 'utf8')
+  assert.match(fonte, /desembrulhado\.failures\?\.length/)
+  assert.match(fonte, /Link de domínio próprio NÃO resolveu até a loja/)
 })
