@@ -13,6 +13,10 @@
 //   node scripts/apontar-grupos-para-template.mjs <email|telefone> --modelo=<chave>
 //   node scripts/apontar-grupos-para-template.mjs <email|telefone> --modelo=<chave> --aplicar
 //
+// `--modelo=nenhum` volta todos os grupos para "Manter texto original
+// convertido": o robô mantém o texto que veio do grupo de origem e só troca os
+// links pelos da cliente, sem remontar a mensagem num modelo.
+//
 // `--sem-padrao` muda só os grupos de hoje e não mexe no padrão da conta.
 //
 // O worker relê a config sozinho em até 60s (CONFIG_CACHE_TTL_MS) — NÃO
@@ -27,6 +31,10 @@ const aplicar = args.includes('--aplicar')
 const semPadrao = args.includes('--sem-padrao')
 const modeloArg = args.find((a) => a.startsWith('--modelo='))
 const modelo = modeloArg ? modeloArg.slice('--modelo='.length).trim() : ''
+// Texto original: o grupo grava string VAZIA (não null) — null herda o padrão
+// da conta, e herdar é justamente o que não queremos aqui.
+const semModelo = ['nenhum', 'none', 'relay', 'texto-original'].includes(modelo.toLowerCase())
+const valorNoGrupo = semModelo ? '' : modelo
 
 if (!alvo || !modelo) {
   console.error('uso: node scripts/apontar-grupos-para-template.mjs <email|telefone> --modelo=<chave> [--sem-padrao] [--aplicar]')
@@ -75,7 +83,9 @@ async function main() {
 
   // Apontar para modelo que não existe faz o robô cair no texto original EM
   // SILÊNCIO — é o modo de falha que mais parece "o template não funciona".
-  const resolvido = composeTemplates(parseStore(config.mobileTemplatesJson)).find((t) => t.key === modelo)
+  const resolvido = semModelo
+    ? { body: '(sem modelo — o texto que veio do grupo de origem sai como está, só com os links trocados)' }
+    : composeTemplates(parseStore(config.mobileTemplatesJson)).find((t) => t.key === modelo)
   if (!resolvido?.body) {
     console.error(`O modelo "${modelo}" não existe nessa conta. Modelos disponíveis:`)
     composeTemplates(parseStore(config.mobileTemplatesJson)).forEach((t) => console.error(`  - ${t.key} (${t.name})`))
@@ -89,11 +99,13 @@ async function main() {
   console.log(`[2] Grupos monitorados: ${monitores.length}`)
   monitores.forEach((g) => {
     const atual = g.templateKey || '(herda o padrão)'
-    console.log(`    - ${g.name} | de "${atual}" para "${modelo}"${(g.templateKey || '') === modelo ? ' (já está)' : ''}`)
+    const destino = semModelo ? 'texto original convertido' : modelo
+    console.log(`    - ${g.name} | de "${atual}" para "${destino}"${(g.templateKey || '') === valorNoGrupo ? ' (já está)' : ''}`)
   })
-  console.log(`[3] Padrão da conta: "${config.mirrorTemplateKeyDefault || '(nenhum)'}" -> ${semPadrao ? '(não vai mexer)' : `"${modelo}"`}`)
+  const destinoPadrao = semModelo ? '(nenhum)' : `"${modelo}"`
+  console.log(`[3] Padrão da conta: "${config.mirrorTemplateKeyDefault || '(nenhum)'}" -> ${semPadrao ? '(não vai mexer)' : destinoPadrao}`)
 
-  console.log('\n--- texto que os grupos vão passar a usar ---')
+  console.log(semModelo ? '\n--- como as ofertas vão sair ---' : '\n--- texto que os grupos vão passar a usar ---')
   console.log(resolvido.body)
   console.log('--- fim ---\n')
 
@@ -102,9 +114,12 @@ async function main() {
     return
   }
 
-  const r = await db.group.updateMany({ where: { userId: user.id, role: 'monitor' }, data: { templateKey: modelo } })
+  const r = await db.group.updateMany({ where: { userId: user.id, role: 'monitor' }, data: { templateKey: valorNoGrupo } })
   if (!semPadrao) {
-    await db.botConfig.update({ where: { userId: user.id }, data: { mirrorTemplateKeyDefault: modelo } })
+    await db.botConfig.update({
+      where: { userId: user.id },
+      data: { mirrorTemplateKeyDefault: semModelo ? null : modelo },
+    })
   }
 
   const depoisGrupos = await db.group.findMany({
