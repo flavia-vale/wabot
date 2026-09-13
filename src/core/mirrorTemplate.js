@@ -20,6 +20,7 @@ const PLATFORM_LABELS = {
   shopee: 'Shopee',
   magazineluiza: 'Magazine Luiza',
   shein: 'SHEIN',
+  aliexpress: 'AliExpress',
 }
 
 function parseTemplateStore(json) {

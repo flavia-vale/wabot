@@ -1,3 +1,5 @@
+> ⚠️ **Fila substituída em 11/09/2026** por `ACOES_FLAVIA_2026-09-11.md`.
+
 # Pendências de indexação no Google
 
 Lista viva. Quando uma URL for indexada, risque daqui.

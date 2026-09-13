@@ -87,6 +87,11 @@ export function buildActivationFunnel({
   sourceGroupUserIds = new Set(),
   destGroupUserIds = new Set(),
   attemptedUserIds = new Set(),
+  // Conjunto vazio = não sabemos quem segue conectada (chamada antiga, consulta
+  // que falhou). Nesse caso a classificação NÃO separa churn — ver
+  // `classifyStallReason`.
+  stillConnectedUserIds = new Set(),
+  stoppedByUserIds = new Set(),
   peoplePerReason = 8,
 } = {}) {
   const totals = { signups: 0, connected: 0, store: 0, groups: 0, delivered: 0, checkout: 0, paid: 0 }
@@ -151,6 +156,8 @@ export function buildActivationFunnel({
       delivered: reached.delivered,
       checkout: reached.checkout,
       paid,
+      stillConnected: stillConnectedUserIds.size ? stillConnectedUserIds.has(id) : undefined,
+      stoppedByUser: stoppedByUserIds.has(id),
     })
     if (stallReason) {
       stallCounts.set(stallReason, (stallCounts.get(stallReason) ?? 0) + 1)
@@ -280,9 +287,25 @@ export const STALL_REASONS = Object.freeze([
     hint: 'Montou e não usou. Vale perguntar se as origens escolhidas publicam oferta de verdade.',
   },
   {
+    // E1 do plano de ativação de 2026-09-08. Antes, estas caíam em
+    // `sent_no_checkout` junto com quem está usando o robô agora — e as duas
+    // conversas são opostas: uma é "por que você não comprou", a outra é "por
+    // que você parou de usar". Na medição de 60 dias, 52 contas tiveram envio
+    // real e só 19 seguiam conectadas: 33 pessoas viram o robô funcionando e
+    // hoje estão fora, contadas como se nunca tivessem ativado.
+    key: 'activated_then_stopped',
+    label: 'Usou o robô e DESLIGOU por escolha',
+    hint: 'Ela viu funcionar e pediu para desconectar. Desligar é decisão, não defeito — a pergunta aqui é o que deixou de valer a pena.',
+  },
+  {
+    key: 'activated_then_dropped',
+    label: 'Usou o robô e a conexão CAIU',
+    hint: 'Viu funcionar e hoje está fora do ar sem ter pedido. Isso é confiabilidade, não preço: confira as quedas dela antes de tratar como desistência.',
+  },
+  {
     key: 'sent_no_checkout',
-    label: 'Viu oferta sair e não foi para o pagamento',
-    hint: 'Aqui o produto funcionou. Se este grupo for grande, o assunto é preço, prazo do teste ou confiança — não configuração.',
+    label: 'Está usando o robô e não foi para o pagamento',
+    hint: 'Aqui o produto funcionou e ela continua conectada. Se este grupo for grande, o assunto é preço, prazo do teste ou confiança — não configuração.',
   },
   {
     key: 'checkout_no_payment',
@@ -310,6 +333,8 @@ export function classifyStallReason({
   delivered = false,
   checkout = false,
   paid = false,
+  stillConnected = undefined,
+  stoppedByUser = false,
 } = {}) {
   if (paid) return null
   // "Pediu a conexão" e "conectou" são sinais diferentes: o primeiro é a
@@ -322,7 +347,16 @@ export function classifyStallReason({
   // Separado de "nunca enviou": aqui o robô TENTOU e não publicou nenhuma vez.
   if (attempted && !delivered) return 'tried_nothing_sent'
   if (!delivered) return 'configured_never_sent'
-  if (!checkout) return 'sent_no_checkout'
+  if (!checkout) {
+    // "Nunca ativou" e "ativou e largou" pedem conversas opostas, e antes eram
+    // o mesmo balde. Só separamos quando SABEMOS que ela não está mais
+    // conectada: `stillConnected` indefinido mantém o motivo histórico — dado
+    // faltando não pode virar acusação de churn.
+    if (stillConnected === false) {
+      return stoppedByUser ? 'activated_then_stopped' : 'activated_then_dropped'
+    }
+    return 'sent_no_checkout'
+  }
   return 'checkout_no_payment'
 }
 

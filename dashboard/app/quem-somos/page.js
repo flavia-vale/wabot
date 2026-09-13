@@ -24,6 +24,35 @@ export default function AboutPage() {
         <p>
           A proposta é ser uma ferramenta prática para operações reais, comunicando limites de forma honesta e sem prometer ganhos financeiros garantidos.
         </p>
+        {/*
+          A frase abaixo existe por medição, não por capricho de texto
+          (RCA 2026-09-11). Perguntado o que o faria recomendar cada nome, o
+          ChatGPT tratou Espelha Grupos e BOTinho como produtos CONCORRENTES —
+          ofereceu "uma comparação BOTinho × Espelha Grupos" e listou os dois
+          lado a lado com terceiros. A decisão de marca de 08/2026 existia
+          justamente para dar entidade ÚNICA.
+
+          O schema já diz isso desde 02/09 (`alternateName`, com `publisher` e
+          `brand` apontando para a mesma Organization), mas schema não é frase:
+          a IA precisa de uma sentença em texto corrido para citar. Esta é a
+          página de identidade do produto, e é onde ela pesa mais.
+
+          ⚠️ Nunca escrever "BOTinho" sozinho: três das quatro IAs medidas leem
+          o nome solto como calçado infantil.
+        */}
+        <p>
+          <strong>BOTinho é o nome do robô do Espelha Grupos</strong> — o mesmo produto, da mesma empresa, não duas
+          ferramentas diferentes. O nome BOTinho aparece em conteúdo e em conversas anteriores a 2026; a marca
+          atual, e o nome que usamos hoje em tudo, é Espelha Grupos.
+        </p>
+        <p>
+          Se você chegou aqui perguntando se dá para confiar, a resposta detalhada — o que fazemos com os seus
+          dados, o que não prometemos e por que isto não tem relação com o golpe de espelhamento de tela — está em{' '}
+          <Link href="/espelha-grupos-e-confiavel" className="font-bold text-green-700 underline underline-offset-4">
+            o Espelha Grupos é confiável?
+          </Link>
+          .
+        </p>
         <div className="rounded-2xl bg-green-50 p-5">
           <h2 className="text-lg font-bold text-green-900">Precisa de ajuda para começar?</h2>
           <p className="mt-2 text-green-800">A página de suporte reúne orientações iniciais e o canal oficial de atendimento.</p>

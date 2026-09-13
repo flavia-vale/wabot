@@ -4,6 +4,9 @@ import { buildActivationFunnel } from './funnel.js'
 import { resolveSignupOrigin } from './signupOrigin.js'
 import { withPayingStatus } from './payingStatus.js'
 import { loadEverPaidUserIds } from './payingLoader.js'
+import { withSharedPhoneStatus } from './sharedPhoneStatus.js'
+import { loadSharedPhoneCounts } from './sharedPhoneLoader.js'
+import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { describeDisconnectReason } from './disconnectReason.js'
 import { resolveSessionOwner } from '../../core/sessionOwnership.js'
 import { describeSubscriptionStatus, describePendingSubscriptionNotice } from '../payments/subscriptionPolicy.js'
@@ -516,6 +519,27 @@ export function createAdminService({
       getLogActivityMap({ userIds }),
     ])
 
+    // Todos os números de WhatsApp que cada conta já ligou. `WaSession.phone`
+    // guarda só o ATUAL e é sobrescrito, então sem este histórico não dava para
+    // ver que quatro contas tinham ligado o mesmo número (medido 2026-09-09).
+    // Uma consulta por página, nunca uma por linha.
+    const phoneRows = userIds.length
+      ? await db.waPhoneOwnership.findMany({
+        where: { userId: { in: userIds } },
+        select: { userId: true, phone: true, lastConnectedAt: true },
+        orderBy: { firstConnectedAt: 'asc' },
+      }).catch(() => [])
+      : []
+    const phonesByUser = new Map()
+    for (const row of phoneRows) {
+      const lista = phonesByUser.get(row.userId) ?? []
+      lista.push(row.phone)
+      phonesByUser.set(row.userId, lista)
+    }
+    // Em quantas contas cada número aparece — é o que decide a tag "número
+    // repetido". Uma consulta agregada a mais por página, nunca uma por linha.
+    const sharedPhoneCounts = await loadSharedPhoneCounts(db, userIds)
+
     const paymentMap = new Map(paymentRows.map(row => [row.userId, row]))
     const subscriptionMap = new Map()
     for (const row of subscriptionRows) {
@@ -546,7 +570,7 @@ export function createAdminService({
             lastApprovedPaymentAt: payment?._max?.createdAt ?? null,
           })
           : null
-        return sanitizeUser(withPayingStatus({
+        return sanitizeUser(withSharedPhoneStatus(withPayingStatus({
           id: user.id,
           name: user.name,
           email: user.email,
@@ -559,6 +583,9 @@ export function createAdminService({
           createdAt: user.createdAt,
           lastLoginAt: user.lastLoginAt,
           waSession: user.waSession ?? null,
+          // Todos os números já ligados por esta conta, do mais antigo ao mais
+          // novo. Mais de um não é defeito: a cliente pode ter trocado de chip.
+          waPhones: phonesByUser.get(user.id) ?? [],
           groupCounts: getGroupCounts(user.groups),
           sendCount: user.sendCount ?? 0,
           sends30d: sendMap30d.get(user.id) ?? 0,
@@ -578,7 +605,7 @@ export function createAdminService({
               cancelledAt: subscription.cancelledAt,
             }
             : null,
-        }, { everPaid, now: now.getTime() }), adminRole)
+        }, { everPaid, now: now.getTime() }), sharedPhoneCounts.get(user.id)), adminRole)
       }),
     }
   }
@@ -611,7 +638,7 @@ export function createAdminService({
 
     const [
       signupEvents, waSessions, connectedEvents, deliveries, checkouts, payments,
-      credentials, groups, attempts,
+      credentials, groups, attempts, manualStops,
     ] = await Promise.all([
       db.analyticsEvent.findMany({
         where: { event: 'signup_created', userId: { in: ids } },
@@ -650,6 +677,14 @@ export function createAdminService({
       // Sem filtro de status: aqui interessa se o robô TENTOU. Cruzado com as
       // entregas, é o que separa "nunca usou" de "usou e nada saiu".
       db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids } }, _count: { _all: true } }),
+      // E1/E2: quem pediu para desligar. Desconectar é escolha (viagem, troca
+      // de chip, pausa), e tratar isso como queda mandaria a conversa para o
+      // lugar errado. Agregado por `groupBy`, nunca uma consulta por linha.
+      db.waConnectionEvent.groupBy({
+        by: ['userId'],
+        where: { userId: { in: ids }, type: MANUAL_STOP_EVENT },
+        _max: { occurredAt: true },
+      }).catch(() => []),
     ])
 
     const originByUserId = new Map()
@@ -671,6 +706,14 @@ export function createAdminService({
     for (const session of waSessions) {
       if (session.status === 'connected' || session.phone) connectedUserIds.add(session.userId)
     }
+
+    // Está conectada AGORA. Diferente de `connectedUserIds`, que é "chegou a
+    // conectar alguma vez" — é justamente a diferença entre as duas que separa
+    // quem nunca ativou de quem ativou e largou.
+    const stillConnectedUserIds = new Set(
+      waSessions.filter((session) => session.status === 'connected').map((session) => session.userId)
+    )
+    const stoppedByUserIds = new Set(manualStops.map((row) => row.userId).filter(Boolean))
 
     const credentialUserIds = new Set(credentials.map((row) => row.userId).filter(Boolean))
     const attemptedUserIds = new Set(attempts.map((row) => row.userId).filter(Boolean))
@@ -699,6 +742,8 @@ export function createAdminService({
         sourceGroupUserIds,
         destGroupUserIds,
         attemptedUserIds,
+        stillConnectedUserIds,
+        stoppedByUserIds,
       }),
     }
   }

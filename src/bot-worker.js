@@ -1,4 +1,7 @@
 import 'dotenv/config'
+import { resolvePhoneReuseMode, decidePhoneReuse, buildPhoneReuseNotice } from './domain/session/phoneReuse.js'
+import { recordPhoneOwnership, loadPreviousPhoneOwners } from './domain/session/phoneOwnership.js'
+import { sendAdminAlert } from './email/adminAlerts.js'
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -40,7 +43,7 @@ import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
-import { sanitizeMessageForLog, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
+import { sanitizeMessageForLog, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
@@ -61,6 +64,7 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
+import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -697,6 +701,61 @@ async function ensureChannelSubscriptions() {
   logger.info(result, 'channels: inscrição de canais-monitor concluída')
 }
 
+// Confere se o número que acabou de conectar já foi usado por outra conta e,
+// conforme o modo, avisa ou recusa. Ver src/domain/session/phoneReuse.js para
+// as quatro invariantes — em especial: conta pagante nunca é bloqueada, e sem
+// dado confiável a sessão CONTINUA conectada.
+async function handlePhoneOwnership({ phone, sock }) {
+  const modo = resolvePhoneReuseMode()
+  await recordPhoneOwnership({ db, userId, phone })
+  if (modo === 'off') return
+
+  const [anteriores, user] = await Promise.all([
+    loadPreviousPhoneOwners({ db, phone, currentUserId: userId }),
+    db.user.findUnique({ where: { id: userId }, select: { id: true, email: true, plan: true, accessExpiresAt: true } }),
+  ])
+  const decisao = decidePhoneReuse({ phone, currentUser: user ?? { id: userId }, previousOwners: anteriores, mode: modo })
+  if (decisao.acao === 'permitir') return
+
+  logger.warn({ motivo: decisao.motivo, contas: decisao.contas.length, acao: decisao.acao }, 'Número de WhatsApp já usado por outra conta')
+  trackAnalyticsEventSafe({
+    userId,
+    event: decisao.acao === 'bloquear' ? 'ops_wa_phone_reuse_blocked' : 'ops_wa_phone_reuse_detected',
+    metadata: { motivo: decisao.motivo, contas: decisao.contas.length },
+  })
+  // E-mail interno: sinal em `AnalyticsEvent` fica no banco e ninguém consulta
+  // — foi essa a lição do `ops_stale_worker_code`. O canal interno tem cooldown
+  // de 24h por assunto e `key` leva a conta, então duas contas no mesmo dia
+  // geram dois avisos, e a mesma conta reconectando não vira rajada.
+  sendAdminAlert({
+    db,
+    slug: 'admin_numero_repetido',
+    key: userId,
+    vars: {
+      cliente: user?.email ?? userId,
+      contas_anteriores: decisao.contas.join(', '),
+      o_que_aconteceu: decisao.acao === 'bloquear'
+        ? 'A conexão foi recusada (trava ligada)'
+        : 'A conexão foi permitida (modo aviso)',
+      quando: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+    },
+    logger,
+  }).catch(() => {})
+
+  if (decisao.acao !== 'bloquear') return
+
+  const aviso = buildPhoneReuseNotice({ motivo: decisao.motivo, previousEmail: anteriores[0]?.email })
+  await persistSessionPatch({
+    status: 'disconnected',
+    lifecycle: 'phone_reuse_blocked',
+    blockNotice: JSON.stringify(aviso),
+  }).catch(() => {})
+  // Encerra a sessão SEM apagar credencial: a recusa é de política, não de
+  // pareamento, e apagar o auth faria a cliente escanear um QR novo para bater
+  // na mesma parede.
+  try { sock?.end?.(new Error('phone_reuse_blocked')) } catch { /* best-effort */ }
+}
+
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -760,7 +819,7 @@ async function loadConfig() {
   const botConfig = {
     delayMin: 5,
     delayMax: 15,
-    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein',
+    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress',
     blockedKeywords: '',
     welcomeMsg: '',
     postToStatus: false,
@@ -1904,6 +1963,7 @@ const STORE_PREVIEW_TITLES = {
   mercadolivre: 'Mercado Livre',
   magazineluiza: 'Magalu',
   shein: 'SHEIN',
+  aliexpress: 'AliExpress',
 }
 
 // Flag experimental (default OFF) para testar em staging se dá pra esconder
@@ -2882,7 +2942,13 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // histórico e as notificações que alimentam "Canais que sigo".
       selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
       if (process.send) process.send({ type: 'status', data: 'connected', phone })
-await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null })
+await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
+      // Este número já fez o teste em outra conta? O número só é conhecido
+      // DEPOIS do open — é por isso que a checagem mora aqui e não na rota de
+      // conectar. Best-effort e fail-safe: qualquer falha deixa conectar.
+      handlePhoneOwnership({ phone, sock }).catch(err => {
+        logger.warn({ err: String(err?.message ?? err) }, 'Falha ao conferir número já usado (best-effort)')
+      })
       recordWaConnectionEventSafe({
         userId,
         type: wasReconnecting ? 'reconnect_success' : 'connected',
@@ -3636,7 +3702,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const linkResults = await Promise.all(links.map(async ({ platform, url }) => {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
-          return null
+          // Devolve o MOTIVO em vez de null: sem `converted` o item continua
+          // fora de `conversions`, mas a mensagem deixa de ser gravada como
+          // "faltou cadastrar a loja" quando o cadastro está perfeito e a loja
+          // só está desligada NESTE grupo (RCA 2026-09-09).
+          return { platform, url, failureReason: CONVERSION_FAILURE.STORE_DISABLED }
         }
         logger.info({ platform, url }, 'Link detectado')
         const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
@@ -3649,14 +3719,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             text,
             reason: issue.reason,
           })
-          return null
+          return { platform, url, failureReason: CONVERSION_FAILURE.MISSING_CREDENTIAL }
         }
 
         try {
           const conversionResult = await convertLink(platform, url, cfg.credentials)
           if (!conversionResult) {
             await recordConversionIssue({ platform, url, jid, text, reason: `Conversor de ${credentialValidation.label} não retornou link convertido. Confira se as credenciais estão válidas.` })
-            return null
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           logger.info({ platform, converted: conversionResult.url, warning: conversionResult.warning }, 'Link convertido')
           // amazon.js/mercadolivre.js/shopee.js já marcam linkKind no próprio
@@ -3687,7 +3757,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               errorMsg: err.conversionLogErrorMsg,
               status: err.conversionLogStatus,
             })
-            return null
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           const classifiedIssue = buildConversionIssue({ platform, credentialValidation, error: err })
           if (classifiedIssue?.kind === 'classified_conversion') {
@@ -3699,10 +3769,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               reason: classifiedIssue.reason,
               errorMsg: classifiedIssue.errorMsg,
             })
-            return null
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
-          return null
+          return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
         }
       }))
       const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && r.converted))
@@ -3746,7 +3816,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || ''),
             status: 'skipped',
-            errorMsg: 'skip:no_valid_conversions',
+            errorMsg: buildNoValidConversionsErrorMsg(linkResults.map(r => r?.failureReason)),
           },
         }).catch(() => {})
         return
@@ -3967,7 +4037,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         //   repostada logo depois, mesmo que o conversor gere outro shortlink.
         // - primary.converted: link final. Bloqueia fontes diferentes que caiam no
         //   mesmo link afiliado.
-        const fallbackDedupSubject = `${msg.key.id || 'nolink'}:${sanitizeMessageForLog(finalText).slice(0, 80)}`
+        // truncateByCodePoints (não `.slice`): cortar em 80 code UNITS parte o par
+        // surrogate de um emoji ao meio, e a metade solta faz a reserva de
+        // SendDedupKey morrer com `unexpected end of hex escape` no Prisma.
+        const fallbackDedupSubject = `${msg.key.id || 'nolink'}:${truncateByCodePoints(sanitizeMessageForLog(finalText), 80)}`
         const { dedupKeys } = buildMirrorDedupKeys({
           destJid,
           primaryUrl: primary.url,

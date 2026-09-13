@@ -6,8 +6,8 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_PERSON
 const slug = '/programa-de-afiliados'
 // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1): era
 // 73 chars de texto próprio. "Qual paga mais" é o motivo pra clicar.
-const title = 'Shopee, Amazon ou Mercado Livre: qual paga mais'
-const description = 'Compare Shopee, Amazon e Mercado Livre: quanto paga de comissão, prazo de atribuição e como divulgar no WhatsApp. Dados com fonte e data.'
+const title = 'Qual paga mais: ML até 16%, Amazon até 13%, Shopee 3%'
+const description = 'Mercado Livre paga de 0% a 16% por categoria, Amazon de 0% a 13% e Shopee 3% na venda padrão. Entrada gratuita nos três, com fonte e data.'
 const dates = getEditorialDates(slug)
 
 // Resposta direta em 40–60 palavras: é o bloco que o Google usa como snippet e
@@ -30,6 +30,8 @@ const programs = [
     note: 'Comissão calculada sobre o valor líquido da venda, sem impostos, cupons e frete.',
     href: '/blog/como-ser-afiliado-shopee-whatsapp',
     hrefLabel: 'Guia completo do Shopee Afiliados',
+    automationHref: '/shopee-afiliados-whatsapp',
+    automationLabel: 'Divulgar Shopee no WhatsApp sem copiar e colar',
   },
   {
     name: 'Amazon Associados',
@@ -39,6 +41,8 @@ const programs = [
     note: 'Também paga recompensas fixas por assinatura de Prime, Kindle Unlimited e Amazon Music.',
     href: '/blog/como-divulgar-ofertas-amazon-whatsapp',
     hrefLabel: 'Guia completo do Amazon Associados',
+    automationHref: '/amazon-afiliados-whatsapp',
+    automationLabel: 'Divulgar Amazon no WhatsApp sem copiar e colar',
   },
   {
     name: 'Mercado Livre Afiliados',
@@ -48,7 +52,20 @@ const programs = [
     note: 'Atenção: a tabela pública vale para Afiliados generalistas. Quem se enquadra como Afiliado Divulgador de Ofertas recebe percentuais próprios por e-mail.',
     href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
     hrefLabel: 'Guia completo do Mercado Livre Afiliados',
+    automationHref: '/mercado-livre-afiliados-whatsapp',
+    automationLabel: 'Divulgar Mercado Livre no WhatsApp sem copiar e colar',
   },
+]
+
+// Linkado daqui de propósito: página que só existe no sitemap acaba em
+// "Detectada, mas não indexada" (RCA 2026-09-11, AGENTS.md "Página nova NUNCA
+// nasce órfã"). Esta é uma das páginas fortes que dá descoberta às cinco.
+const storeAutomationPages = [
+  { href: '/shopee-afiliados-whatsapp', label: 'Shopee no WhatsApp', note: 'o programa com maior volume de busca no Brasil.' },
+  { href: '/mercado-livre-afiliados-whatsapp', label: 'Mercado Livre no WhatsApp', note: 'link de produto, de catálogo e de vitrine saem convertidos.' },
+  { href: '/amazon-afiliados-whatsapp', label: 'Amazon no WhatsApp', note: 'a etiqueta viaja junto com o link curto.' },
+  { href: '/shein-afiliados-whatsapp', label: 'SHEIN no WhatsApp', note: 'link encurtado pela própria loja, com a sua identidade.' },
+  { href: '/magalu-afiliados-whatsapp', label: 'Magalu no WhatsApp', note: 'o código de parceiro entra em qualquer endereço da loja.' },
 ]
 
 const howToChoose = [
@@ -130,9 +147,51 @@ export default function Page() {
                   <Link className="mt-4 inline-block text-sm font-black text-emerald-700 no-underline hover:text-emerald-800" href={program.href}>
                     {program.hrefLabel} →
                   </Link>
+                  {program.automationHref ? (
+                    <Link className="mt-2 block text-sm font-black text-emerald-700 no-underline hover:text-emerald-800" href={program.automationHref}>
+                      {program.automationLabel} →
+                    </Link>
+                  ) : null}
                 </div>
               ))}
             </div>
+          </section>
+
+          <section className="mt-10">
+            <h2 className="text-2xl font-black tracking-tight text-gray-950">Automatizar a divulgação, loja por loja</h2>
+            <p className="mt-2 leading-8 text-gray-700">
+              Depois de entrar no programa, o trabalho que sobra é publicar oferta por oferta com o link já convertido. Cada loja tem uma página com o que muda na prática:
+            </p>
+            <ul className="mt-4 list-disc space-y-2 pl-6 leading-8 text-gray-700">
+              {storeAutomationPages.map((page) => (
+                <li key={page.href}>
+                  <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href={page.href}>
+                    {page.label}
+                  </Link>{' '}
+                  — {page.note}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/*
+            Terceiro link de entrada das duas páginas de parceria (RCA
+            2026-09-11): antes só /parcerias e elas mesmas linkavam uma à outra.
+          */}
+          <section className="mt-10">
+            <h2 className="text-2xl font-black tracking-tight text-gray-950">Indicar em vez de divulgar</h2>
+            <p className="mt-2 leading-8 text-gray-700">
+              Se o seu público são outras pessoas que divulgam ofertas, dá para ganhar indicando a ferramenta em
+              vez de vender produto:{' '}
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/parceiro-influenciador">
+                parceria para criadores de conteúdo
+              </Link>
+              , com as{' '}
+              <Link className="font-black text-emerald-700 no-underline hover:text-emerald-800" href="/termos-parceria-influenciador">
+                regras completas
+              </Link>{' '}
+              publicadas antes de você aceitar.
+            </p>
           </section>
 
           <section className="mt-10">

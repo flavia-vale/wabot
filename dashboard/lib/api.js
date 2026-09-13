@@ -50,7 +50,7 @@ function resolveApiBase() {
 const BASE = resolveApiBase()
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça login novamente para continuar.'
 const AUTH_TOKEN_KEY = 'wb_auth_token'
-export const TERMS_VERSION = '2026-06-09-whatsapp-risk-acceptance'
+export const TERMS_VERSION = '2026-09-09-teste-unico-por-pessoa'
 
 function getAuthToken() {
   if (typeof window === 'undefined') return ''
@@ -178,6 +178,9 @@ export const api = {
   sessionStatusFast: () => apiFetch('/api/session/status?metrics=0'),
   sessionStart: () => apiFetch('/api/session/start', { method: 'POST' }),
   sessionStop: () => apiFetch('/api/session/stop', { method: 'POST' }),
+  // Botão "Recuperar senha" da tela de conexão recusada: o servidor manda o
+  // link para o e-mail da conta anterior; o endereço nunca vem para cá.
+  sessionBlockedRecover: () => apiFetch('/api/session/blocked-recover', { method: 'POST' }),
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
@@ -304,6 +307,7 @@ export const api = {
     const query = new URLSearchParams(Object.entries({ period, ...params }).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/logs/summary?${query}`)
   },
+  adminErrorObservability: (period = '24h') => apiFetch(`/api/admin/errors/observability?period=${encodeURIComponent(period)}`),
   adminSessions: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/sessions${query ? `?${query}` : ''}`)

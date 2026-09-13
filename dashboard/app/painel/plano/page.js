@@ -9,7 +9,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { DEFAULT_LANDING_PLANS, SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
-import { usePainelHeader } from '../PainelShell'
+import { usePainel, usePainelHeader } from '../PainelShell'
+import { CONFIG_PRESERVED_NOTE } from '../../../../src/domain/painel/trialNotice.js'
+import { buildPricePerOffer, parsePriceToCents } from '../../../../src/domain/painel/pricePerOffer.js'
 
 const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do BOTinho, pode me ajudar?')}`
 
@@ -84,6 +86,18 @@ export default function PlanoPage() {
   }, [])
 
   const selectedPlan = useMemo(() => plans.find((p) => p.id === selectedPlanId) ?? plans[0], [plans, selectedPlanId])
+
+  // D5 do plano de ativação de 2026-09-08: o mesmo preço, medido no uso REAL
+  // dela. "R$ 69" é um número solto; "R$ 1,47 por oferta publicada" é a conta
+  // que ela consegue refazer sozinha, com o número que é dela.
+  const { offersPublished } = usePainel()
+  const precoPorOferta = useMemo(
+    () => buildPricePerOffer({
+      priceCents: parsePriceToCents(selectedPlan?.price),
+      offersPublished,
+    }),
+    [selectedPlan?.price, offersPublished],
+  )
 
   async function handleCheckout(planId) {
     if (checkoutPlan) return
@@ -223,6 +237,19 @@ export default function PlanoPage() {
           )}
         </section>
       )}
+      {/* A cobrança automática não passou. A faixa aparece ANTES dos planos:
+          resolver isso é a decisão do momento, e o acesso ainda está valendo. */}
+      {overview?.chargeFailure && (
+        <section className="pnl-note-box is-warn" role="alert">
+          <strong style={{ fontWeight: 600 }}>A cobrança automática do seu plano não passou</strong>
+          <p style={{ marginTop: 6 }}>{overview.chargeFailure.motivo}</p>
+          <p style={{ marginTop: 6 }}>{overview.chargeFailure.oQueFazer}</p>
+          {expiresAtLabel && (
+            <p style={{ marginTop: 6 }}>Seu robô continua trabalhando até {expiresAtLabel}.</p>
+          )}
+        </section>
+      )}
+
       {/* Planos */}
       <section className="pnl-card">
         <div className="pnl-card-title" style={{ marginBottom: 4 }}>{overview?.isActive ? 'Renovar ou trocar de plano' : 'Escolha seu plano'}</div>
@@ -316,6 +343,20 @@ export default function PlanoPage() {
             ? 'Cobrança automática no cartão, todo mês, sem fidelidade. Desligue quando quiser aqui mesmo.'
             : 'Pagamento único de 30 dias via PIX ou cartão. Você renova manualmente ao expirar.'}
         </p>
+        {/* D4 do plano de ativação: o medo de quem para aqui é perder a
+            configuração, não o preço. A frase é a MESMA do aviso de fim de
+            teste (fonte única em trialNotice.js) — duas redações da mesma
+            promessa é como uma delas envelhece errada. */}
+        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4 }}>
+          {CONFIG_PRESERVED_NOTE}
+        </p>
+        {/* Só aparece para quem JÁ tem ofertas publicadas: sem uso, essa conta
+            viraria promessa de volume que a gente não fez. */}
+        {precoPorOferta && (
+          <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4, fontWeight: 600 }}>
+            {precoPorOferta.texto}
+          </p>
+        )}
       </section>
 
       {/* Dificuldades no pagamento */}

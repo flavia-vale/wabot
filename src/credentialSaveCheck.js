@@ -32,6 +32,7 @@ const STORE_LABEL = {
   mercadolivre: 'Mercado Livre',
   amazon: 'Amazon',
   shopee: 'Shopee',
+  aliexpress: 'AliExpress',
 }
 
 // Como a credencial se chama na tela de cada loja. Na Shopee não é "código de
@@ -50,6 +51,25 @@ const EXTRA_LOSS = {
 }
 
 /**
+ * O que muda quando esta é a PRIMEIRA loja da conta.
+ *
+ * Frente C do plano de ativação de 2026-09-08: 18 das 114 pessoas que não
+ * pagaram conectaram o WhatsApp e nunca cadastraram loja nenhuma. Sem etiqueta
+ * o robô se RECUSA a publicar (`skip:no_valid_conversions`), para não dar a
+ * comissão ao afiliado do grupo de origem — mas do lado de fora isso parece
+ * produto quebrado, e a pessoa some achando que não funciona.
+ *
+ * Esse save é o instante exato em que o robô sai de "não publica nada" para
+ * "publica" — e era o único momento do produto que não dizia isso. Uma frase
+ * genérica de "atualizado com sucesso" desperdiça o único marco que a cliente
+ * consegue sentir.
+ *
+ * Só entra em save que deu certo: anunciar destravamento junto de uma chave
+ * recusada seria a mentira mais cara da tela.
+ */
+export const FIRST_CREDENTIAL_HEADLINE = 'Pronto — agora o robô já pode publicar suas ofertas.'
+
+/**
  * Decide a mensagem e o tom do save a partir da validação de campos e do
  * resultado da sondagem.
  *
@@ -60,15 +80,32 @@ const EXTRA_LOSS = {
  *                                  (`alive`: true = funciona, false = recusado,
  *                                  null/ausente = não deu para saber)
  * @param {string} args.fallbackMessage  mensagem histórica (getCredentialSaveMessage)
+ * @param {boolean} [args.isFirstCredential]  esta é a primeira loja da conta
  * @returns {{ tone: 'success'|'error'|'warn', message: string }}
  */
-export function describeSaveSessionCheck({ platform, validation, probe, fallbackMessage }) {
+export function describeSaveSessionCheck({ platform, validation, probe, fallbackMessage, isFirstCredential = false }) {
   const label = STORE_LABEL[platform] || validation?.label || 'loja'
+
+  // O marco só se aplica ao save que deu certo — ver FIRST_CREDENTIAL_HEADLINE.
+  const comMarco = (resultado) => (
+    isFirstCredential && resultado.tone === 'success'
+      ? { ...resultado, message: `${FIRST_CREDENTIAL_HEADLINE} ${resultado.message}`, firstCredential: true }
+      : resultado
+  )
 
   // Campo faltando ou loja sem sondagem: comportamento histórico intacto.
   if (!validation?.configured) return { tone: 'error', message: fallbackMessage }
+  // Magalu/SHEIN não têm sondagem (só etiqueta, que a loja não recusa).
+  // AliExpress também passa aqui, mas recebe texto próprio logo abaixo: seu
+  // cookie só pode ser provado contra um targetUrl real na primeira conversão.
   if (!platformSupportsSessionCheck(platform)) {
-    return { tone: validation.warnings?.length ? 'warn' : 'success', message: fallbackMessage }
+    if (platform === 'aliexpress') {
+      return {
+        tone: 'warn',
+        message: 'Salvamos os dados da AliExpress. A loja só consegue confirmá-los ao converter a primeira oferta; se algum dado for recusado, o motivo aparecerá nos registros.',
+      }
+    }
+    return comMarco({ tone: validation.warnings?.length ? 'warn' : 'success', message: fallbackMessage })
   }
 
   const noun = CREDENTIAL_NOUN[platform] || 'código de acesso'
@@ -101,15 +138,15 @@ export function describeSaveSessionCheck({ platform, validation, probe, fallback
   if (probe?.alive === true) {
     if (validation.warnings?.length) return { tone: 'warn', message: fallbackMessage }
     if (platform === 'shopee') {
-      return {
+      return comMarco({
         tone: 'success',
         message: 'Testamos agora e a Shopee aceitou sua chave. Suas ofertas já saem com a sua comissão.',
-      }
+      })
     }
-    return {
+    return comMarco({
       tone: 'success',
       message: `Testamos agora e o ${noun} da ${label} está funcionando. Suas ofertas já saem com a sua comissão e com link curto.`,
-    }
+    })
   }
 
   // Não deu para saber (loja fora do ar, bloqueio momentâneo, limite de

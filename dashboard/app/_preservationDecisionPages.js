@@ -8,11 +8,11 @@ const siteUrl = getSiteUrl()
 const campaign = 'canais-preservacao'
 
 const sharedCtas = {
-  diagnostic: `/diagnostico-antiban-whatsapp?utm_source=seo&utm_medium=decision&utm_campaign=${campaign}&utm_content=p2_diagnostic`,
-  checklist: `/materiais/checklist-antiban-whatsapp?utm_source=seo&utm_medium=decision&utm_campaign=${campaign}&utm_content=p2_checklist`,
-  calculator: `/ferramentas/calculadora-risco-whatsapp?utm_source=seo&utm_medium=decision&utm_campaign=${campaign}&utm_content=p2_calculator`,
+  diagnostic: '/diagnostico-antiban-whatsapp',
+  checklist: '/materiais/checklist-antiban-whatsapp',
+  calculator: '/ferramentas/calculadora-risco-whatsapp',
   signup: `/login?mode=register&utm_source=seo&utm_medium=decision&utm_campaign=${campaign}&utm_content=p2_signup`,
-  landing: `/bot-canais-whatsapp?utm_source=seo&utm_medium=decision&utm_campaign=${campaign}&utm_content=p2_landing`,
+  landing: '/bot-canais-whatsapp',
 }
 
 export const PRESERVATION_DECISION_PAGES = {
@@ -298,7 +298,7 @@ export function PreservationDecisionPage({ slug }) {
           <h2 className="mt-2 text-3xl font-black tracking-tight text-gray-950">Continue a avaliação</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             {related.map((item) => (
-              <Link key={item.slug} href={`${item.slug}?utm_source=seo&utm_medium=internal&utm_campaign=${campaign}&utm_content=p2_related`} data-seo-cta="p2_related_page" data-cta-position="related" data-cta-stage="consideration" data-cta-destination="decision_page" className="rounded-2xl bg-white p-5 text-sm font-bold text-gray-800 shadow-sm ring-1 ring-emerald-100 hover:ring-emerald-300">
+              <Link key={item.slug} href={item.slug} data-seo-cta="p2_related_page" data-cta-position="related" data-cta-stage="consideration" data-cta-destination="decision_page" className="rounded-2xl bg-white p-5 text-sm font-bold text-gray-800 shadow-sm ring-1 ring-emerald-100 hover:ring-emerald-300">
                 {item.title}
               </Link>
             ))}

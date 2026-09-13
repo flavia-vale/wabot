@@ -11,6 +11,7 @@
 
 import { wasStoppedByUser } from '../email/accountActivity.js'
 import { resolveExpiredPlanEmail } from './expiredPlanJourney.js'
+import { buildTrialProofVars, shouldSendTrialProof } from './trialProof.js'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const MS_PER_HOUR = 60 * 60 * 1000
@@ -128,6 +129,19 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
       }
     } else {
       if (restam <= 0 && restam >= -2) return { slug: 'teste_acabou', vars: {} }
+      // D1/D2 do plano de ativação de 2026-09-08: a prova do que o robô já fez,
+      // no 3º dia do teste. Fica ANTES da contagem regressiva na ordem porque
+      // `restam === 4` não colide com nenhum dos avisos dela (3, 2 e 1) — e
+      // depois dela, para não roubar o lugar de um aviso mais urgente.
+      if (shouldSendTrialProof({ plan, daysLeft: restam, offersPublished: snapshot.offersPublished })) {
+        const prova = buildTrialProofVars({
+          offersPublished: snapshot.offersPublished,
+          destGroupCount: snapshot.destGroupCount,
+        })
+        if (prova) {
+          return { slug: 'teste_prova_de_valor', vars: { ...prova, fim_do_teste: formatDateBR(snapshot.accessExpiresAt) } }
+        }
+      }
       const slug = COUNTDOWN_SLUGS.trial[restam]
       if (slug) {
         return {
@@ -158,6 +172,16 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
     const diasDeConta = daysSince(snapshot.createdAt, now)
     if (!snapshot.waEverConnected && dentroDaJanelaDeCadastro(diasDeConta, 2, SIGNUP_WINDOW_DAYS.onboarding)) {
       return { slug: 'onboarding_conecte_whatsapp', vars: {} }
+    }
+
+    // C5: sem NENHUMA loja o robô não publica nada — vem antes da configuração
+    // de grupos porque é o bloqueio mais grave e o mais invisível: com grupos
+    // escolhidos e sem etiqueta, o painel fica verde e nada chega ao grupo.
+    // `hasAnyCredential === null` (não deu para saber) NÃO dispara: acusar
+    // falta de cadastro por dúvida manda refazer o que já existe.
+    if (snapshot.waEverConnected && snapshot.hasAnyCredential === false
+      && dentroDaJanelaDeCadastro(diasDeConta, 1, SIGNUP_WINDOW_DAYS.configuracao)) {
+      return { slug: 'sem_loja_cadastrada', vars: {} }
     }
 
     if (snapshot.waEverConnected && dentroDaJanelaDeCadastro(diasDeConta, 1, SIGNUP_WINDOW_DAYS.configuracao)

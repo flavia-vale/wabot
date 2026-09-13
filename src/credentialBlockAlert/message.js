@@ -1,3 +1,11 @@
+import {
+  CONVERSION_FAILURE,
+  NO_VALID_CONVERSIONS_PREFIX,
+  isMissingCredentialFailure,
+  isNoValidConversionsErrorMsg,
+  parseConversionFailureReason,
+} from '../core/conversionFailureReason.js'
+
 // Como o BLOQUEIO POR FALTA DE CREDENCIAL é descrito no painel. Puro — sem
 // DB, sem SMTP, testável isolado. Espelha o desenho de
 // src/credentialExpiry/message.js, onde a inversão de vocabulário da Shopee
@@ -16,6 +24,7 @@ const STORE_LABELS = {
   amazon: 'Amazon',
   magazineluiza: 'Magalu',
   shein: 'SHEIN',
+  aliexpress: 'AliExpress',
 }
 
 // --- Shopee: SEM chave aceita, a conversão falha por completo — nenhuma
@@ -46,6 +55,14 @@ function buildSheinAlert(storeLabel) {
   }
 }
 
+function buildAliExpressAlert(storeLabel) {
+  return {
+    headline: `As ofertas da ${storeLabel} não estão saindo`,
+    body: `Sem os dados de afiliada da ${storeLabel}, não é seguro trocar a comissão: a oferta para e o link de outra pessoa nunca é publicado.`,
+    nextStep: `Cadastre o código de acesso da ${storeLabel} em "Minhas credenciais" para as ofertas voltarem a sair.`,
+  }
+}
+
 // --- Mercado Livre / Amazon / Magalu: SEM o código de acesso, o plano B
 // continua publicando — só com o link mais comprido, sem a sua etiqueta de
 // afiliada curta. Magalu entra nesta família (e não na da Shopee) porque o
@@ -66,6 +83,7 @@ const ALERT_BUILDERS = {
   amazon: buildSessionAlert,
   magazineluiza: buildSessionAlert,
   shein: buildSheinAlert,
+  aliexpress: buildAliExpressAlert,
 }
 
 /**
@@ -115,11 +133,58 @@ export function buildCredentialBlockAlerts({ blockedByPlatform = [], configuredP
 // /"chave", nunca "credencial da API", "token" ou nome de campo técnico.
 
 /** Prefixo canônico de `MessageLog.errorMsg` para "nada pôde ser convertido". */
-export const CREDENTIAL_BLOCK_ERROR_PREFIX = 'skip:no_valid_conversions'
+export const CREDENTIAL_BLOCK_ERROR_PREFIX = NO_VALID_CONVERSIONS_PREFIX
 
-/** A linha do histórico é uma oferta perdida por falta de cadastro da loja? */
+/**
+ * A linha do histórico é uma oferta perdida por falta de cadastro da loja?
+ *
+ * Só quando o robô GRAVOU esse motivo. Até 2026-09-09 esta função respondia
+ * `true` para qualquer "nenhum link convertido", e a tela afirmava falta de
+ * cadastro em cima de loja cadastrada e funcionando — numa conta real, 398
+ * ofertas de Shopee marcadas assim no mesmo dia em que a chave respondia viva
+ * e 248 ofertas da mesma loja saíram com sucesso. Linha antiga, sem motivo
+ * gravado, não afirma nada: `describeConversionFailure` dá o texto honesto.
+ */
 export function isCredentialBlockErrorMsg(errorMsg) {
-  return typeof errorMsg === 'string' && errorMsg.startsWith(CREDENTIAL_BLOCK_ERROR_PREFIX)
+  return isMissingCredentialFailure(errorMsg)
+}
+
+/**
+ * Etiqueta e explicação da linha "nenhum link pôde ser convertido", por motivo.
+ * Devolve `null` quando a linha não é dessa família.
+ */
+export function describeConversionFailure(errorMsg, platform = null) {
+  if (!isNoValidConversionsErrorMsg(errorMsg)) return null
+  const motivo = parseConversionFailureReason(errorMsg)
+  const loja = STORE_LABELS[platform] || 'dessa loja'
+
+  if (motivo === CONVERSION_FAILURE.MISSING_CREDENTIAL) {
+    return { motivo, tag: CREDENTIAL_BLOCK_STATUS_TAG, texto: null }
+  }
+
+  if (motivo === CONVERSION_FAILURE.STORE_DISABLED) {
+    return {
+      motivo,
+      tag: Object.freeze({ cls: 'is-error', label: 'loja desligada neste grupo' }),
+      texto: `Seu cadastro está certo. Essa oferta era ${loja === 'dessa loja' ? 'de uma loja' : `da ${loja}`} e esse grupo está configurado para não espelhar ofertas dela, então o robô nem chegou a montar o link. Para receber, ligue essa loja nas configurações deste grupo monitorado.`,
+    }
+  }
+
+  if (motivo === CONVERSION_FAILURE.CONVERSION_FAILED) {
+    return {
+      motivo,
+      tag: Object.freeze({ cls: 'is-error', label: 'não conseguimos montar o link' }),
+      texto: `Seu cadastro está certo e não falta nada a fazer. O robô tentou trocar o link ${loja === 'dessa loja' ? 'da loja' : `da ${loja}`} pelo seu e a loja não respondeu a tempo desta vez. Costuma ser passageiro: a oferta seguinte normalmente sai. Se estiver acontecendo o dia inteiro, nos avise.`,
+    }
+  }
+
+  // Linha antiga, sem motivo gravado. Não sabemos a causa — e afirmar por
+  // dúvida foi exatamente o defeito corrigido aqui.
+  return {
+    motivo: null,
+    tag: Object.freeze({ cls: 'is-error', label: 'nenhum link pôde ser convertido' }),
+    texto: 'Essa oferta não foi publicada porque nenhum link dela virou link de afiliada com a sua identificação. Esta linha é anterior à melhoria que passou a registrar o motivo, então não dá para dizer a causa exata dela. Nas ofertas novas o motivo aparece aqui.',
+  }
 }
 
 /**
@@ -178,5 +243,29 @@ export function buildNoCredentialBanner() {
     ctaLabel: 'Cadastrar minhas lojas',
     ctaHref: '/painel/ids-afiliada',
     videoLabel: 'Ver o vídeo passo a passo',
+  }
+}
+
+/**
+ * O passo seguinte, na tela de conexão, para quem ACABOU de conectar o WhatsApp
+ * e não tem nenhuma loja cadastrada.
+ *
+ * Frente C do plano de ativação de 2026-09-08. É o mesmo fato do
+ * `buildNoCredentialBanner`, dito em outro momento — e o momento muda o texto:
+ * ali a pessoa está navegando e descobre que algo está errado; aqui ela acabou
+ * de vencer a parte mais difícil do produto (entregar o WhatsApp) e o que ela
+ * precisa é saber que falta UMA coisa, não levar um susto.
+ *
+ * Sem isso, a tela de conexão terminava em "conectado" — e 18 das 114 pessoas
+ * que não pagaram pararam exatamente aí, achando que tinham terminado, com o
+ * robô recebendo ofertas e publicando zero.
+ */
+export function buildJustConnectedNextStep() {
+  return {
+    headline: 'WhatsApp conectado! Falta um passo — e é o rápido.',
+    body: 'Você já passou pela parte mais chata. Agora cadastre pelo menos uma loja: sem a sua etiqueta de afiliada o robô não publica nenhuma oferta, porque a comissão da venda iria para outra pessoa. Ele prefere não enviar a te fazer trabalhar de graça.',
+    ctaLabel: 'Cadastrar minha primeira loja',
+    ctaHref: '/painel/ids-afiliada',
+    hint: 'Leva menos de um minuto: tem loja que pede só a sua etiqueta.',
   }
 }

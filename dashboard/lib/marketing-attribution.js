@@ -168,3 +168,25 @@ export function attributionForTracking(attribution = {}) {
       .map(([key, value]) => [key, sanitizeAttributionValue(value)])
   )
 }
+
+// RCA 2026-09-11 ("Página nova NUNCA nasce órfã"): link INTERNO para página de
+// conteúdo tem que apontar para o endereço limpo. O Google descobre a página
+// pelo endereço do link; se ele carregar querystring, a variante é o que entra
+// na fila de rastreamento e a consolidação passa a depender só da canônica.
+//
+// A atribuição de cadastro NÃO é afetada: ela vive em `/login?mode=register…`,
+// que continua carregando os parâmetros, e o primeiro toque é gravado em cookie
+// que nunca é sobrescrito. O clique interno segue medido por `data-seo-cta`.
+const INTERNAL_ATTRIBUTION_TARGETS = ['/login', '/cadastro']
+
+export function internalContentHref(href, queryString = '') {
+  const alvo = String(href ?? '').trim()
+  if (!alvo.startsWith('/')) return alvo
+  const mantemAtribuicao = INTERNAL_ATTRIBUTION_TARGETS.some(
+    (rota) => alvo === rota || alvo.startsWith(`${rota}?`) || alvo.startsWith(`${rota}/`),
+  )
+  if (!mantemAtribuicao) return alvo.split('?')[0]
+  const query = String(queryString ?? '').replace(/^[?&]+/, '')
+  if (!query) return alvo
+  return alvo.includes('?') ? `${alvo}&${query}` : `${alvo}?${query}`
+}

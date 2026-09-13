@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { isBotActive, resolveOnboardingView } from '@/lib/onboardingProgress'
+import { VALUE_FIRST_BODY, VALUE_FIRST_HEADLINE, VALUE_FIRST_STEPS } from '../../src/domain/painel/valueFirst.js'
 
 const ONBOARDING_DONE_KEY = 'wb_onboarding_done'
 
@@ -182,6 +183,40 @@ function CredentialBlockAlerts({ stores }) {
           </a>
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * A2 do plano de ativação de 2026-09-08: o caminho de ver o produto funcionar
+ * SEM entregar o WhatsApp. Fica acima da checklist e some assim que o robô
+ * conecta — a partir daí ela não precisa mais de prova, precisa de configuração.
+ *
+ * Não virou um passo da checklist de propósito: aquela lista é dirigida pelo
+ * estado que vem do servidor (`api.dashboardStatus`) e o mesmo contador governa
+ * a celebração e o modo de recuperação. Um passo sem estado no servidor
+ * quebraria os três. O objetivo do item — prova antes do pedido, como primeira
+ * coisa que ela vê — é entregue do mesmo jeito.
+ */
+function ValueFirstCard() {
+  return (
+    <div style={{
+      border: '1px solid var(--line-strong)', borderRadius: 20,
+      padding: '20px 22px', marginBottom: 22, background: 'var(--surface)',
+    }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>{VALUE_FIRST_HEADLINE}</div>
+      <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--ink-soft)', margin: '8px 0 0' }}>{VALUE_FIRST_BODY}</p>
+      <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+        {VALUE_FIRST_STEPS.map((passo) => (
+          <div key={passo.chave} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <span style={{ minWidth: 0, flex: '1 1 220px' }}>
+              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{passo.titulo}</span>
+              <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-soft)', marginTop: 2 }}>{passo.texto}</span>
+            </span>
+            <StepCta href={passo.href} label={passo.cta} isActive={false} />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -369,6 +404,14 @@ export function ActivationChecklist({ onActivated, persist = false, userId }) {
       {credentialAlerts.length > 0 && (
         <div style={{ padding: '18px 28px 0' }}>
           <CredentialBlockAlerts stores={credentialAlerts} />
+        </div>
+      )}
+
+      {/* A2: prova antes do pedido. Some quando o robô conecta — dali em
+          diante ela não precisa mais de prova, precisa de configuração. */}
+      {!botActive && (
+        <div style={{ padding: '18px 28px 0' }}>
+          <ValueFirstCard />
         </div>
       )}
 

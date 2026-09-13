@@ -296,6 +296,10 @@ API_URL=http://espelhagrupos.com.br
 # Ver seção "Processos PM2" para detalhes sobre cutover inline -> remote.
 BOT_SUPERVISOR_MODE=inline
 REDIS_URL=redis://127.0.0.1:6379/0
+# Para onde vão os avisos internos de falha de pagamento (ver "Plano B da
+# cobrança"). Ausente = flaviaroberta.1496@gmail.com. ADMIN_ALERT_ENABLED=false
+# desliga; só o valor exatamente 'false' tem efeito.
+# ADMIN_ALERT_EMAIL=flaviaroberta.1496@gmail.com
 # WA_WEB_VERSION: pin manual da versão do WhatsApp Web (botão de emergência do
 # incidente 405 — ver seção própria). Ausente = resolve sozinho.
 # WA_WEB_VERSION=2.3000.1044015310
@@ -446,6 +450,73 @@ proposital que pagamento conferido na mão conte como pagante**.
 
 Testes: `test/admin-paying-tag.test.js`, `test/admin-painel-inicio.test.js`,
 `test/admin-wa-disconnected-users.test.js`.
+
+## Tag "número repetido" e a trava por número de WhatsApp (2026-09-09)
+
+Quatro pessoas usaram **doze contas** para renovar o teste grátis. Uma trocou
+nome E e-mail a cada conta, então nenhuma regra de nome ou e-mail a pegaria —
+só o número de WhatsApp em comum. No cadastro o número já era barrado quando
+repetido; **na hora de ligar a sessão do WhatsApp não havia conferência
+nenhuma**.
+
+| Peça | Onde |
+|---|---|
+| Decisão da trava (PURA, sem banco/rede) | `src/domain/session/phoneReuse.js` |
+| Histórico "quem já conectou este número" | `src/domain/session/phoneOwnership.js` |
+| Tabela | `WaPhoneOwnership` (`@@unique([phone, userId])`) |
+| Gancho no robô | `handlePhoneOwnership` em `src/bot-worker.js`, depois do `open` |
+| Regra da tag do admin (PURA) | `src/domain/admin/sharedPhoneStatus.js` |
+| Carregador em lote | `src/domain/admin/sharedPhoneLoader.js` |
+| Etiqueta na tela | `dashboard/components/SharedPhoneTag.js` |
+| Aviso interno | `admin_numero_repetido` em `src/email/registry.js` |
+| Trazer o histórico que já existe | `scripts/backfill-numeros-whatsapp.mjs` |
+
+`WA_PHONE_REUSE_MODE` tem três valores: `off` (padrão), `warn` (registra, avisa
+e **deixa conectar**) e `block` (recusa). Produção está em `warn`.
+
+**Não regredir:**
+
+- **O histórico é gravado ANTES do `if (modo === 'off')`.** É isso que faz o
+  modo `warn` acumular a base que a decisão de ligar o `block` vai usar —
+  gravar só quando a trava está ligada tornaria a decisão impossível de tomar
+  com dado.
+- **Conta pagante nunca é bloqueada**, e só quem está em teste entra na regra:
+  quem paga trocando de chip não pode ficar sem robô por causa disto.
+- **Fail-safe é DEIXAR CONECTAR.** Qualquer falha (banco, consulta, número
+  ilegível) passa. Barrar por dúvida deixaria uma cliente legítima sem produto,
+  que é pior que um teste repetido.
+- **A tag descreve um FATO, não uma acusação:** "este número aparece em N
+  contas". Troca de chip e conta antiga abandonada produzem o mesmo sinal;
+  quem conclui é gente. A decisão é do backend, nunca de cada tela — senão duas
+  tabelas do admin discordam sobre quem está marcado.
+- **A recusa NUNCA apaga credencial nem gera QR** — só encerra o socket.
+- **Custo:** duas consultas a mais por lista do admin (`findMany` + `groupBy`),
+  nenhum processo novo, **zero impacto de RAM**.
+
+⚠️ **O histórico NASCE VAZIO e só ganha linha quando um robô CONECTA** — então
+no dia do deploy a tag não aparece para ninguém, inclusive para os casos que a
+motivaram: três daquelas contas tiveram o acesso cortado e nunca mais vão
+conectar, e conta antiga abandonada também não. O número delas, porém, está em
+`WaSession.phone` desde sempre. `scripts/backfill-numeros-whatsapp.mjs` traz
+esses números para o histórico (read-only por padrão; grava com `--aplicar`) e,
+no modo de leitura, já responde qual é o caso: mostra quantos números existem,
+quais aparecem em mais de uma conta e quem são. **Rodar isso é o que faz a tag
+aparecer** — sem ele, "a tag não aparece" é ausência de histórico, não defeito
+de tela.
+
+```bash
+cd ~/wabot && node scripts/backfill-numeros-whatsapp.mjs            # só mostra
+cd ~/wabot && node scripts/backfill-numeros-whatsapp.mjs --aplicar  # grava
+```
+
+A gravação e a normalização são **importadas do produto**
+(`recordPhoneOwnership`), nunca reescritas no script: script que reimplementa a
+regra passa a discordar dela em silêncio e o histórico fica com dois formatos
+do mesmo número. Teste: `test/backfill-numeros-whatsapp.test.js`.
+
+⚠️ Em modo `remote`, o deploy da API **não** recarrega os bot-workers — a
+gravação do histórico só começa depois de `pm2 restart bot-supervisor`
+(reconecta TODAS as sessões: anunciar antes).
 
 ## Balão de ajuda saindo da tela no celular (RCA 2026-09-05 — não regredir)
 
@@ -1266,6 +1337,105 @@ recém-assinada é o esperado: só aparece linha depois que o MP tenta cobrar.
 
 Teste: `test/admin-cobrancas-recorrentes.test.js`.
 
+## Plano B da cobrança: o que fazer quando ela quebra em silêncio (2026-09-08)
+
+Toda a corrente da cobrança quebra **sem derrubar nada**: o aviso do Mercado
+Pago que deixa de chegar, a chave que vence, a rede de segurança desligada, a
+cobrança que passa a ser recusada. O sistema fica verde e o dinheiro para de
+entrar. Três frentes, e um canal novo de aviso.
+
+| Peça | Onde |
+|---|---|
+| "A máquina está de pé?" (PURO) | `src/domain/payments/billingHealth.js` |
+| Quem avisar quando a cobrança é recusada (PURO) | `src/domain/payments/chargeFailureNotice.js` |
+| Reação à recusa (cliente + admin) | `reagirACobrancaRecusada` em `src/api/routes/payments.js` |
+| Rede de segurança com interruptor PRÓPRIO | `startBillingReconciliation` (idem) |
+| Conferência no boot | `checkBillingConfigAtBoot` (idem) |
+| Avisos internos por e-mail (para a administradora) | `src/email/adminAlerts.js` |
+| Faixa de alarme no Financeiro | `SubscriptionChargesPanel` (campo `health`) |
+| Faixa da cobrança recusada no painel da cliente | `dashboard/app/painel/plano/page.js` (`chargeFailure`) |
+
+### 1. A rede de segurança não podia depender de OUTRA env (era o pior defeito)
+
+`runPaymentReconciliation` / `runSubscriptionReconciliation` viviam **dentro**
+de `startWebhookProcessor`, que retorna cedo quando `BILLING_WEBHOOK_AUTOPROCESS`
+não é `'true'` — e o default dela é `false`. Ou seja: quem não ligou o
+processamento imediato do aviso estava, sem saber, **sem a única coisa que
+conserta um aviso perdido**. `PAYMENT_RECONCILIATION_ENABLED` existia e não
+valia de nada nesse caso. **Não regredir:** teste falha se `startWebhookProcessor`
+voltar a conter `PAYMENT_RECONCILIATION_ENABLED`.
+
+### 2. A cliente é avisada ENQUANTO o acesso dela ainda vale
+
+Cobrança recusada dispara o e-mail `cobranca_recusada` — com o motivo traduzido
+e **o que fazer, que muda conforme de quem é a ação**: mandar "atualize seu
+cartão" quando o bloqueio foi do lado do Mercado Pago faz ela mexer no que está
+certo e desconfiar do produto. A mesma explicação vira faixa no painel, **antes
+dos planos**.
+
+**Não regredir:**
+- **Nunca mandar "assine de novo"** — tentativa idêntica repetida é o padrão que
+  dispara a recusa por suspeita do próprio MP (RCA 2026-09-07). O texto oferece
+  **atualizar o cartão** ou **o pagamento avulso**, nunca refazer a assinatura.
+- **Recusa com mais de 72h não vira e-mail** (`recusa_antiga`): a passada
+  horária lê o histórico INTEIRO do MP, e sem esse teto o primeiro deploy
+  mandaria e-mail de cobranças de meses atrás, algumas já resolvidas.
+- **Cobrou depois → não avisa** (`ja_cobrou_depois`), e no máximo 1 aviso por
+  cliente a cada `CHARGE_FAILURE_NOTICE_COOLDOWN_HOURS` (48h).
+- **Não corta acesso**: o período já pago vale até o fim, e o texto diz isso.
+
+### 3. Alarme quando a máquina para (aba Financeiro + boot)
+
+`assessBillingMachine` cruza configuração + medições e devolve os problemas em
+frase, com o que fazer. O que ele pega: chave ausente/de teste, aviso sem
+assinatura, processamento e rede de segurança desligados, conferência parada há
+mais de 3h, assinatura ativa sem cobrança nenhuma há mais de 48h e **recusa em
+série** (>50% em 7 dias, com amostra mínima de 5 — aí a causa costuma ser nossa,
+não o cartão de cada cliente).
+
+**Não regredir:** **sem medição confiável NÃO se alarma** — vira `sem_medicao`
+(cinza), nunca vermelho; alarme falso recorrente treina a pessoa a ignorar
+justamente este. Silêncio de cobrança só conta com assinatura ativa. Chave de
+teste e webhook sem assinatura só acusam em **produção** (em staging é o estado
+correto).
+
+### 4. Avisos internos: e-mail para a ADMINISTRADORA
+
+`src/email/adminAlerts.js` manda para `ADMIN_ALERT_EMAIL` (default
+`flaviaroberta.1496@gmail.com`). Três avisos, no grupo `interno` do catálogo —
+**editáveis pela aba E-mails** como qualquer outro:
+
+| Slug | Quando sai |
+|---|---|
+| `admin_cobranca_recusada` | uma cobrança de assinatura foi recusada (com cliente, valor, código e o que significa) |
+| `admin_cobranca_maquina_parada` | a cobrança está mal configurada ou parou (boot e diagnóstico) |
+| `admin_pagamento_com_falha` | pagamento aprovado que **não virou acesso** — cliente pagou e ficou sem robô |
+
+**Não regredir:**
+- **Caminho PRÓPRIO, fora do despachante da cliente.** As travas de lá
+  (descadastro, conta parada, teto semanal, endereço fabricado) são regras de
+  relacionamento com a CLIENTE e nenhuma pode calar um alerta de operação. As
+  travas que valem aqui são outras: **cooldown de 24h por assunto** (rajada de
+  falha não pode virar rajada de e-mail) e o mesmo `EmailSendLog` para auditar.
+- **`audience: 'admin'` é barrado nos dois sentidos**: `sendAdminAlert` recusa
+  template que não seja interno, e o disparo em massa (`POST /emails/send`)
+  recusa template interno — o texto fala de problema nosso e é endereçado a você.
+- **Sem SMTP não grava "enviado"**, senão a janela de cooldown queimaria sem
+  ninguém ter recebido nada (mesma regra do resto do motor).
+- Envs: `ADMIN_ALERT_EMAIL`, `ADMIN_ALERT_ENABLED` (só o valor exato `false`
+  desliga). Desligar não esconde nada: os problemas seguem no log e na aba
+  Financeiro.
+
+Sinais: `subscription_charge_failed_notified` (cada um é uma cliente avisada a
+tempo) e `ops_billing_config_problem`. **Zero do primeiro com recusa
+acontecendo significa que o aviso parou de sair.**
+
+⚠️ **Nada disso funciona sem SMTP.** Sem `SMTP_*` no `.env`, todo envio é no-op
+silencioso — inclusive os avisos internos. Conferir antes de concluir que o
+alarme não dispara.
+
+Teste: `test/cobranca-plano-b.test.js`.
+
 ## E-mail transacional (boas-vindas) — opcional, no-op sem SMTP
 
 O e-mail de boas-vindas pós-signup (`src/email/welcomeEmail.js`) é enviado
@@ -1715,6 +1885,60 @@ Settings → Secrets and variables → Actions:
 
 Falha do smoke 9 geralmente é `.env` faltando, `JWT_SECRET` ausente
 ou porta divergente do que está em `apiPortByDashboardPort`.
+
+## Cópia velha na borda reprovando deploy bom (RCA 2026-09-10 — não regredir)
+
+O deploy de produção ficou vermelho duas vezes seguidas com a home devolvendo
+**404**. O deploy tinha subido inteiro: build íntegro, PM2 no ar, `/login`,
+`/admin` e `/painel` em 200, todos os arquivos de JS e CSS em 200. O que
+reprovava era só a home, e só através da Cloudflare:
+
+```
+HTTP/2 404          cf-cache-status: HIT        age: 13522
+cache-control: max-age=14400, s-maxage=31536000
+```
+
+Pedindo a mesma home com um parâmetro descartável na ponta (o que obriga a
+borda a buscar do servidor) vinham **200 e 160 KB de página real**. Ou seja: o
+site estava de pé; a Cloudflare é que guardava um 404 antigo — a home devolveu
+404 na janela de restart do Next de um deploy anterior, e a resposta ficou
+guardada com validade de um ano.
+
+**O ciclo que fechava sozinho:** o smoke roda DENTRO do passo de SSH (etapa 9/9
+de `deploy_safe_dashboard.sh`) e lê a home através da Cloudflare; a limpeza do
+cache é um passo POSTERIOR, que só rodava com o deploy verde. Cópia velha
+reprova o deploy → deploy reprovado não limpa o cache → a cópia velha continua
+lá. Sem alguém limpar na mão pelo painel, todo deploy seguinte nascia vermelho
+e **a home ficava 404 para quem visitava o site** — a página principal do
+produto, e o destino da maior parte das buscas do Google.
+
+Dois consertos:
+
+- **`always()` na condição do passo "Purgar cache da Cloudflare"**
+  (`.github/workflows/deploy.yml`). Ele passa a rodar mesmo com o passo
+  anterior vermelho, e continua só em `main`. **Limpar o cache nunca piora
+  nada**: a borda só volta a buscar do servidor, que é a fonte da verdade.
+- **`diagnose_edge_cache`** em `scripts/smoke_mobile_dashboard.sh`: quando a
+  falha vem com `cf-cache-status: HIT`, o script refaz o pedido furando o cache
+  e diz em qual dos dois casos estamos. "O site está quebrado" e "a borda
+  guardou uma resposta velha" chegavam como o MESMO vermelho e pedem ações
+  opostas.
+
+**Não regredir:** o diagnóstico **não muda o veredito** — resposta velha na
+borda é problema de verdade para quem visita, então o smoke continua
+reprovando; o que muda é o deploy seguinte já nascer com o cache limpo. E não
+voltar a condicionar a limpeza do cache ao sucesso do deploy: é literalmente o
+que fecha o ciclo. Teste: `test/deploy-smoke-cache-da-borda.test.js` (sobe um
+servidor local que imita a borda e cobre os dois casos, mais a guarda
+estrutural do `always()` no YAML).
+
+⚠️ **Enquanto a home estiver 404 na borda, o conserto no código não basta** —
+ele só age no próximo deploy. Para destravar agora: painel da Cloudflare →
+Caching → Purge Everything. Confirmar com:
+
+```bash
+curl -s -o /dev/null -D - https://espelhagrupos.com.br/ | grep -iE "^HTTP/2|cf-cache-status|^age"
+```
 
 ## Minutos do GitHub Actions (repo PRIVADO — 2.000 min/mês no plano gratuito)
 
@@ -2255,6 +2479,62 @@ histórico continua valendo e **não** custa rede a mais. Sinal durável
 **Não regredir:** não afrouxar a trava para trocar sem `linkKind === 'product'`;
 não fazer a troca em mensagem de cupom; não deixar a oferta sair sem foto quando
 a loja falhar. Teste: `test/store-photo-over-origin.test.js`.
+
+## "A fila não envia para um grupo" (RCA 2026-09-11 — não regredir)
+
+Cliente (`julianepumuceno16@gmail.com`) abriu chamado dizendo que a fila `09/08`
+não enviava para o `Maternidade Econômica #5`. **Não havia defeito na fila**: o
+grupo entrou na lista de destinos dela naquele mesmo dia, e o primeiro envio da
+fila para ele saiu às 12:09:41 — 10 ofertas na sequência. Os outros destinos
+tinham 165 envios em 7 dias porque estavam na fila há 7 dias.
+
+O que custou a investigação inteira:
+
+- **O painel não dizia em lugar nenhum que um grupo de destino estava fora de
+  todas as filas.** A fila aparecia ativa, drenando e enviando; o grupo aparecia
+  cadastrado; e nada ligava as duas coisas. Descobrir exigia comparar na mão a
+  lista de destinos de cada fila com a lista de grupos de postagem.
+  `findDestinationsWithoutQueue` (`dashboard/lib/painel/queueCoverage.js`) faz
+  essa conta e a tela de Filas mostra o aviso.
+- **O aviso NÃO pode dizer que o grupo está sem receber nada.** O espelhamento
+  continua entregando nele — foi exatamente essa confusão que gerou o chamado.
+  Lista de destinos vazia numa fila significa TODOS os grupos de postagem
+  (legado) e zera o aviso; fila pausada conta como cobertura (pausa já tem
+  indicação própria; somar as duas geraria alarme duplo); sem fila nenhuma não
+  avisa. Cálculo puro sobre dados que a página já carregou: **nenhuma chamada
+  nova à API, nenhuma consulta nova ao banco, zero impacto de RAM.**
+- **A lista de destinos fica CONGELADA dentro de cada `OfferQueueItem`.** Marcar
+  o grupo na fila agora não alcança item já enfileirado — só os próximos.
+- **`status='success'` significa "entreguei ao WhatsApp", não "apareceu no
+  grupo".** Antes de procurar defeito, compare com o espelhamento: se ele chega
+  no mesmo grupo, o robô está lá e com permissão, e o assunto é a fila.
+
+Diagnóstico reutilizável (read-only): `scripts/diag-fila-grupo.mjs <email>
+[jid|nome] [--dias=7]` — cruza filas, itens, destinos, `blockReason` e o
+histórico por destino, e mostra o dia a dia do grupo separando fila de
+espelhamento. Teste: `test/painel-fila-grupo-sem-fila.test.js`.
+
+### Emoji cortado ao meio derrubava a reserva de `SendDedupKey` (mesma investigação)
+
+Achado secundário, defeito real e independente. O `bot.log` de produção trazia
+`Reserva SendDedupKey falhou; seguindo com dedup local/global` com
+`unexpected end of hex escape at line 1 column 304`.
+
+A chave era montada com `sanitizeMessageForLog(texto).slice(0, 80)`. O
+sanitizador já trunca por **code point** justamente para não partir emoji ao
+meio (ver `src/messageLogSanitizer.js`) — e o `.slice` aplicado DEPOIS, que
+conta code **units** UTF-16, reintroduzia a metade solta do par surrogate. O
+motor do Prisma recusa a gravação inteira nesse caso, então a **reserva atômica
+cross-worker** (a camada que fecha a corrida de milissegundos entre dois
+workers) simplesmente deixava de existir para essas mensagens, em silêncio —
+a proteção contra envio duplicado caía para as camadas local/Redis.
+
+Conserto em duas camadas: `truncateByCodePoints` (`messageLogSanitizer.js`,
+puro) no ponto de corte, e limpeza de surrogate solto dentro de
+`buildMirrorDedupKeys` (`src/core/mirrorDedupKey.js`), que é a fonte ÚNICA da
+chave e protege qualquer chamador futuro. **Não voltar a usar `.slice` em texto
+que vira chave de banco** — o teste reproduz o corte antigo e falha se ele
+voltar. Teste: `test/mirror-dedup-key-surrogate.test.js`.
 
 ## Agregação de duplicatas em `MessageLog.dedupHits`
 
@@ -3033,7 +3313,8 @@ defesa). Teste: `test/core/worker-spawn-options.test.js`.
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
 O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
-(default **20**) robôs vivos — `checkSessionCircuitBreaker` em
+(default **20**; **produção está em 40** desde a ampliação do servidor — ver a
+medição de 2026-09-11 abaixo) robôs vivos — `checkSessionCircuitBreaker` em
 `src/supervisor/index.js`. **Isso é o teto comercial da operação**: cheio,
 NENHUMA cliente nova consegue conectar, e quem desligar o próprio robô não
 consegue voltar (perde a vaga para outra conta).
@@ -3070,6 +3351,49 @@ teto de 20 não era capricho, era o que cabia. Subir o teto é mudança
 memory-heavy → REGRA #1 da política de memória abaixo (avisar antes, com
 estimativa).
 
+**Medição real (2026-09-11, prod — números vigentes, use ESTES para estimar):**
+o servidor foi ampliado para **15,6 GB** (8 vCPU, disco de 38 GB) e o teto subiu
+para **40**. Com **36 robôs** ligados:
+
+| medida | valor |
+|---|---|
+| RAM total | 15.613 MB |
+| RAM disponível | 4.919 MB (31%) |
+| RSS somado dos 36 robôs | 11.832 MB |
+| média por robô | **329 MB** |
+| maior robô | 495 MB |
+| swap em uso | 41 MB, **sem tráfego** (`si`/`so` = 0) |
+| CPU ociosa | 98% |
+| disco / inodes | 62% / 19% |
+
+**A média por robô SUBIU de 272 para 329 MB** — estimativa nova usa 329, não
+272. Base fixa medida no mesmo instante: api 218 + dashboard 208 + supervisor
+120 + staging (api 163 + visual 124 + supervisor 111) + logrotate 80 ≈ **1,0 GB**.
+
+⚠️ **O teto de 40 é MAIOR que o limite seguro que a política calcula (35).**
+`evaluateCapacity` (`src/ops/capacity/policy.js`) reserva o maior valor entre 20%
+da RAM e 1.536 MB — aqui 3.123 MB — e divide o resto por 350 MB/robô:
+`(15.613 − 3.123) / 350 = 35`. Com 36 ligados a folga pela política é **zero**, e
+é por isso que `/admin/capacidade` mostra **atenção** com todos os recursos
+verdes: o amarelo vem da CONTAGEM DE VAGAS, não de RAM, disco, CPU ou swap.
+Não procurar defeito de recurso quando o painel amarela com swap parado.
+
+As duas leituras de margem respondem perguntas diferentes e as duas importam:
+**margem física** (4,9 GB livres ≈ 14 robôs a mais) e **margem pela política**
+(zero — a reserva de 3,1 GB já está sendo consumida). A reserva existe para
+absorver pico de GC e scrape pesado; gastá-la não quebra nada hoje, mas tira o
+colchão.
+
+**O sinal que muda a decisão é o SWAP, não a RAM livre.** Enquanto `swap_usada`
+ficar parada (os 41 MB são resíduo antigo) e `si`/`so` = 0, o servidor está
+confortável. Swap subindo de um dia para o outro = subdimensionado de verdade →
+aumentar RAM (alvo ~20 GB para 40 robôs com folga), não subir mais o teto.
+Vigilância de uma linha por dia:
+
+```bash
+free -m | awk 'NR==2{print "livre_mb="$7} NR==3{print "swap_usada_mb="$3}'
+```
+
 ⚠️ **Mudar o teto exige reiniciar o `bot-supervisor`** (o valor é lido no boot),
 e isso **reconecta TODAS as sessões de uma vez** — decisão humana, anunciada
 antes, nunca às cegas.
@@ -3080,6 +3404,67 @@ grep -ihE "circuit breaker|limite de sessões" ~/.pm2/logs/bot-supervisor-*.log 
 redis-cli -n 0 get supervisor:session_circuit_breaker_alert:shard-1-of-1
 for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do awk '/VmRSS/{print $2}' /proc/$p/status; done \
  | awk '{s+=$1; n++} END {printf "%d robos | RSS total %.2f GB | media %.0f MB\n", n, s/1048576, s/n/1024}'
+```
+
+### Aviso por e-mail ANTES de acabar a vaga (2026-09-09 — não regredir)
+
+`ops_session_capacity_limit` só nasce **depois** da primeira recusa: quando ele
+aparece, alguma cliente já ficou sem conectar. Este aviso é o contrário — chega
+enquanto ainda faltam vagas (default **2**), com tempo de liberar memória ou
+aumentar o servidor.
+
+| Peça | Onde |
+|---|---|
+| Decisão (PURA, sem banco/rede) | `src/ops/sessionCapacityAlertPolicy.js` |
+| Passada | `src/ops/sessionCapacityAlertSweep.js` |
+| Texto (editável pela aba E-mails) | `admin_vagas_acabando` em `src/email/registry.js` |
+| Boot | `startSessionCapacityAlertSweep()` em `src/api/server.js` |
+
+Onde roda: `setInterval` + `unref()` dentro da API, mesmo padrão de
+`startCredentialExpirySweep` — **sem processo PM2 novo, zero impacto de RAM**
+(uma contagem a cada 15min). A contagem vem de `listRunningBots()` do
+`manager.js`, a **mesma fonte** que o circuit breaker usa, então o aviso não
+pode discordar do que recusa a cliente. O teto é lido pela **mesma fórmula** do
+supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20; produção está em 40).
+
+**Não regredir:**
+
+- **Sai pelo caminho de AVISO INTERNO** (`sendAdminAlert`), nunca pelo
+  despachante da cliente — de lá vêm o endereço (`ADMIN_ALERT_EMAIL`), o
+  cooldown por assunto e o histórico em `EmailSendLog`. As travas do
+  despachante (descadastro, conta parada, teto semanal) são regras de
+  relacionamento com a CLIENTE e nenhuma pode calar um alerta de operação.
+- **O assunto do cooldown carrega o teto** (`max=<n>`): subir o teto é situação
+  nova e pode avisar de novo sem esperar a janela do teto antigo.
+- **Fail-safe em todo caminho.** Contagem indisponível (supervisor fora do ar,
+  comando estourado) ou teto não confiável → **não avisa**. Alarme falso
+  recorrente treina a pessoa a ignorar justamente este alerta.
+- **Aviso barrado não vira sinal de envio** — sem SMTP ou dentro do cooldown,
+  nada é gravado.
+- **Linguagem leiga:** "vagas de robô", nunca "sessão por processo", "worker",
+  "shard" ou "circuit breaker". Teste falha se jargão voltar.
+
+Envs (todas opcionais): `CAPACITY_ALERT_FREE_SLOTS` (2),
+`CAPACITY_ALERT_COOLDOWN_HOURS` (12), `CAPACITY_ALERT_SWEEP_INTERVAL_MS`
+(15min), `CAPACITY_ALERT_ENABLED` (`false` desliga). Aplicar env exige
+`pm2 delete` + `start` (pegadinha #1).
+
+⚠️ **Sem `SMTP_*` no `.env` nenhum e-mail sai** — inclusive este. Conferir isso
+antes de procurar defeito. Teste: `test/ops-session-capacity-alert.test.js`.
+
+⚠️ **API e supervisor releem o teto só no PRÓPRIO boot.** Mudar
+`MAX_SESSIONS_PER_PROCESS` e reiniciar só uma das pontas faz o aviso e a recusa
+real discordarem até a outra subir.
+
+Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv,
+então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
+```bash
+grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20 (prod tinha 40 em 2026-09-11)"
+# o que o supervisor de PRODUCAO leu no boot. Dois cuidados: o pm2 numera o
+# arquivo por instancia (pegue o mais recente por data, nao por nome) e
+# `*supervisor*` casaria tambem os logs de STAGING, que tem outro teto.
+grep -h "maxSessionsPerProcess" "$(ls -t ~/.pm2/logs/bot-supervisor-out-*.log | head -1)" | tail -1
+pgrep -fc "/home/deploy/wabot/src/bot-worker"   # robos ligados agora
 ```
 
 ### "Limite de robôs" era a frase de TRÊS causas diferentes (RCA 2026-09-07 — não regredir)
@@ -3181,9 +3566,12 @@ liga/desliga staging** (economia de RAM sob demanda) + **vigilância 403**
 
 ### Fatos de capacidade (use para estimar antes de sinalizar)
 
-- **Orçamento por sessão WhatsApp ativa:** ~**0,35 GB** de RSS (worker sob o
-  teto de 384 MB + overhead). Base fixa (api+dashboard+telegram+OS) ~**2 GB**.
-- **Fórmula:** `RAM ≈ 2 GB + N_sessões × 0,35 GB + (staging co-locado? +2 GB) + ~20% folga`.
+- **Orçamento por sessão WhatsApp ativa:** ~**0,33 GB** de RSS medidos em
+  2026-09-11 (média 329 MB, maior robô 495 MB; era 272 MB em 2026-09-01). Base
+  fixa (api+dashboard+supervisor+staging+OS) ~**1 GB** medido no mesmo instante.
+- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,33 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
+- **Servidor vigente (2026-09-11):** 15,6 GB de RAM, 8 vCPU, disco de 38 GB,
+  swap de 4 GB. Teto de vagas em 40; limite seguro da política em 35.
 - **Custo marginal de infra por cliente:** ~R$1,75/mês (marginal) a ~R$2-3/mês
   (com base amortizada). Não é o gargalo do produto — RAM é barata perto do ticket.
 - **Swap é pré-requisito, não muleta:** num VPS apertado, swap ativo é a 1ª
@@ -4179,6 +4567,32 @@ comissão).
 ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
 `test/converters-amazon.test.js`.
 
+## AliExpress: conversão pela API oficial (não regredir)
+
+`src/converters/aliexpress.js` usa o mesmo GET observado no Gerador de Links do
+portal: `/tools/linkGenerate/generatePromotionLinkV2.htm`, com `shipTos=BR`,
+`trackId=default` e o `targetUrl`. **Não existe ID/App Key/App Secret para a
+cliente procurar nesse fluxo.** Ela cadastra uma exportação da sessão de
+`portals.aliexpress.com` (Header string ou JSON do Cookie-Editor), protegida
+pela mesma criptografia em repouso das outras credenciais. Links diretos e os encurtadores
+`a.aliexpress.com`/`s.click.aliexpress.com` são aceitos, mas todo redirect deve
+continuar em HTTPS dentro de `aliexpress.com` ou `aliexpress.us`.
+
+**Fail-closed é obrigatório:** antes de chamar a API, remover `aff_*`, `utm_*` e
+os demais rastros conhecidos da origem. Se resolução, sessão, API, JSON ou
+validação da URL final falhar, não publicar o link original. A URL devolvida só
+é confiável quando é string HTTPS sem usuário/senha e pertence a host oficial
+ancorado — `aliexpress.com.evil.net` nunca é AliExpress. O código de acesso vai
+somente no header `Cookie` e jamais entra na URL, erro ou log.
+
+A migration `20260910150000_botconfig_platforms_add_aliexpress` habilita a loja
+para configurações existentes e limpa a vírgula inicial legada criada por
+`platforms=''`. Gate real antes de produção: confirmar no staging o mesmo
+produto/variante no celular e a atribuição no relatório da afiliada. Testes:
+`test/converters-aliexpress.test.js`,
+`test/aliexpress-platform-integration.test.js` e
+`test/migrations-botconfig-platforms-aliexpress.test.js`.
+
 ## SHEIN: encurtamento de link (`SHEIN_SHORTLINK_ENABLED`, default LIGADO)
 
 `shortenSheinLink()` (`src/converters/shein.js`) troca o link longo da SHEIN
@@ -4367,6 +4781,91 @@ convertido na oferta) + metadados de conversão na resposta.
 
 Testes: `test/offer-engine.test.js` (motor),
 `test/link-conversion-route.test.js`.
+
+## Página nova NUNCA nasce órfã (RCA 2026-09-11 — não regredir)
+
+As cinco páginas comerciais do Tier 1 (`/shopee-afiliados-whatsapp`,
+`/mercado-livre-afiliados-whatsapp`, `/amazon-afiliados-whatsapp`,
+`/shein-afiliados-whatsapp`, `/magalu-afiliados-whatsapp`) estão em produção
+desde **2026-09-02**, respondem 200, estão no `sitemap.xml`, sem `noindex`,
+com canônica correta — e passaram **9 dias com ZERO impressão**.
+
+A Inspeção de URL do Search Console deu o veredito exato:
+
+```
+A página não está indexada: Detectada, mas não indexada no momento
+Detecção        Sitemaps: https://espelhagrupos.com.br/sitemap.xml
+                Página de referência: Nenhuma página foi detectada
+Último rastreamento: N/D
+```
+
+**O Google NUNCA LEU essas páginas.** Não é conteúdo duplicado (ele não chegou
+a comparar), não é `noindex`, não é `robots.txt`. É **descoberta**: o único
+link interno para as cinco saía de `/conteudos`, que é a página mais fraca do
+site (posição 45, 51 impressões, 1 clique) e carrega 67 links na mesma tela.
+Link solitário vindo de página sem força não convence o Google a gastar
+rastreamento.
+
+⚠️ **Estar no sitemap NÃO é descoberta.** O sitemap diz que a página existe; o
+link interno diz que ela importa. Sem o segundo, ela entra numa fila que pode
+nunca ser atendida. O comentário em `dashboard/app/conteudos/page.js` já
+avisava disso ("Nasce linkada de propósito: a ação 8 mostrou que página que só
+existe no sitemap acaba em 'rastreada, mas não indexada'") — o erro foi achar
+que UM link de UMA página fraca cumpria a regra.
+
+### Regra obrigatória para toda página nova
+
+1. **Antes de abrir a PR**, escolher no mínimo **três** páginas já indexadas e
+   com impressão que tratem do mesmo assunto, e linkar a página nova a partir
+   delas. Preferir as de mais impressão no último relatório do Search Console
+   — o link vale pela força de quem o dá.
+2. `/conteudos` e o `sitemap.xml` **não contam** para esse mínimo. Os dois são
+   índice, não recomendação.
+3. **Pedir reindexação das páginas EDITADAS**, não só da página nova. O Google
+   precisa reler quem passou a apontar para ela; sem isso o link novo demora a
+   ser visto.
+4. Ao terminar, entregar à dona do produto a lista de endereços para Inspeção
+   de URL: a página nova **e** as que ganharam o link.
+
+Guarda: `test/marketing-paginas-orfas.test.js` — falha se uma rota de
+`getIndexableSeoRoutes()` tiver menos de 3 referências internas fora de
+`/conteudos`, do sitemap e do próprio arquivo da página.
+
+### ⚠️ O Tier 1 JÁ FOI EXECUTADO — não dizer de novo que falta fazer
+
+Três análises seguidas (01/09, 10/09, 11/09) afirmaram que "não existe página
+comercial nossa disputando Tier 1". **É FALSO.** As cinco existem desde
+02/09, em `main`, geradas por `dashboard/app/_preservationCommercialPages.js`.
+O plano de 11/09 chegou a abrir uma issue para CRIAR o que existia havia nove
+dias.
+
+**Causa do erro de método:** o relatório **Páginas** do Search Console lista
+somente página **com impressão**. Página com zero impressão simplesmente não
+aparece na exportação. Ler "ausente do relatório" como "não existe" é o erro —
+e ele se repete a cada rodada porque a exportação parece completa.
+
+**Regra de método (obrigatória em toda análise de SEO):** antes de escrever
+que uma página não existe, conferir no repositório:
+
+```bash
+node --input-type=module -e "
+import { getIndexableSeoRoutes } from './dashboard/lib/seo-registry.mjs';
+console.log(getIndexableSeoRoutes().map(r => r.path).join('\n'));
+"
+ls dashboard/app/<slug>/page.js
+```
+
+⚠️ **`getIndexableSeoRoutes()` devolve OBJETOS de rota, não strings** — sem o
+`.map(r => r.path)` a saída vira `[object Object]` e qualquer busca por slug dá
+zero, o que se lê exatamente como "a página não existe". Foi assim que uma
+checagem de 11/09 concluiu que as cinco páginas de loja não existiam; elas
+existem e estão indexáveis desde 02/09.
+
+Rota presente no registry + arquivo em disco = **a página existe**. Zero
+impressão é problema de **descoberta ou de indexação**, nunca prova de
+ausência. Os dois diagnósticos pedem ações opostas: criar página que já existe
+é desperdício; tratar como "falta criar" esconde o problema real, que é o
+Google não estar lendo.
 
 ## SEO orgânico — linhas CONGELADAS por dado (2026-07-30, não reabrir)
 

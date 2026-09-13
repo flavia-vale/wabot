@@ -32,6 +32,10 @@ export const EMAIL_GROUPS = Object.freeze({
   afiliados: 'Programa de afiliados',
   marketing: 'Marketing e avisos',
   contato: 'Contato e escuta',
+  // Avisos que vão para a ADMIN do produto, não para a cliente. Ficam no mesmo
+  // catálogo (dá para editar o texto pelo painel), mas saem por um caminho
+  // próprio: `src/email/adminAlerts.js`. Disparo em massa é BARRADO para eles.
+  interno: 'Avisos internos (para a administradora)',
 })
 
 // Variáveis que TODO e-mail recebe, sem precisar declarar.
@@ -61,6 +65,9 @@ const VAR_DIAS = { name: 'dias_restantes', description: 'Quantos dias faltam', e
 const VAR_VENCIMENTO = { name: 'data_vencimento', description: 'Data em que o plano vence', example: '19/08/2026' }
 const VAR_VALOR = { name: 'valor', description: 'Valor em reais', example: 'R$ 69,00' }
 const VAR_LOJA = { name: 'loja', description: 'Nome da loja', example: 'Mercado Livre' }
+const VAR_OFERTAS = { name: 'ofertas_publicadas', description: 'Quantas ofertas o robô já publicou no teste', example: '47' }
+const VAR_MENSAGENS = { name: 'mensagens_poupadas', description: 'Mensagens que a cliente não precisou digitar', example: '141' }
+const VAR_GRUPOS = { name: 'grupos', description: 'Em quantos grupos as ofertas saíram', example: '3' }
 
 // Trecho repetido nos avisos de contagem regressiva do teste grátis.
 function trialCountdownBody(chamada) {
@@ -163,6 +170,63 @@ Travou em algum passo? A gente te ajuda pessoalmente pelo e-mail {{email_suporte
     title: 'Último dia do seu teste grátis',
     subject: 'Hoje é o último dia do seu teste grátis no {{marca}}',
     body: trialCountdownBody('É hoje:'),
+  },
+  {
+    // D1/D2 do plano de ativação de 2026-09-08. O aviso com a prova já existia,
+    // mas só DENTRO do painel — e a cliente cujo robô está funcionando não abre
+    // o painel, justamente porque está tudo funcionando sozinho. Sai no
+    // terceiro dia do teste, o único ponto em que não disputa espaço com a
+    // contagem regressiva.
+    slug: 'teste_prova_de_valor',
+    name: 'Teste grátis: o que o robô já fez por você',
+    description: 'Sai no 3º dia do teste, com o número de ofertas já publicadas. Só sai para quem já teve oferta publicada — sem isso não há prova nenhuma a mostrar.',
+    group: 'conta',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 10,
+    variables: [VAR_OFERTAS, VAR_MENSAGENS, VAR_GRUPOS, VAR_FIM_TESTE],
+    title: 'O robô já publicou {{ofertas_publicadas}} ofertas para você',
+    subject: 'Seu robô já publicou {{ofertas_publicadas}} ofertas — e você não digitou nenhuma',
+    body: `{{saudacao}} Passando só para te mostrar o que aconteceu enquanto você tocava a sua vida.
+
+Nestes primeiros dias de teste, o robô publicou **{{ofertas_publicadas}} ofertas** em {{grupos}} grupo(s). Isso são **{{mensagens_poupadas}} mensagens** que você não precisou copiar, colar nem converter uma por uma — cada uma com a sua etiqueta de afiliada, para a comissão ser sua.
+
+Seu teste vai até {{fim_do_teste}}. Se quiser continuar, seus grupos, suas lojas e suas regras ficam do jeito que estão — escolher um plano só religa o envio.
+
+[[botao:Continuar com o robô|{{link_planos}}]]
+
+Se alguma oferta saiu diferente do que você esperava, responde aqui contando: dá para ajustar.`,
+  },
+  {
+    // C5 do mesmo plano: 18 pessoas conectaram o WhatsApp e nunca cadastraram
+    // loja. Sem etiqueta o robô se RECUSA a publicar, e do lado de fora isso
+    // parece produto quebrado — o painel fica verde e nada chega no grupo.
+    //
+    // O texto de `contato_sem_etiqueta_nada_sai` (grupo "contato e escuta")
+    // continua MANUAL de propósito: aquele grupo tem contrato de nunca disparar
+    // sozinho. Este aqui é irmão dele, no grupo de saúde, e por isso herda a
+    // trava de conta parada do despachante.
+    slug: 'sem_loja_cadastrada',
+    name: 'Conectou e não cadastrou nenhuma loja',
+    description: 'Sai um dia depois de conectar o WhatsApp quando não há nenhuma loja cadastrada. Sem etiqueta o robô não publica nada.',
+    group: 'saude',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 7,
+    variables: [],
+    title: 'Seu robô está pronto — falta cadastrar uma loja',
+    subject: 'Falta um passo: sem a sua etiqueta o robô não publica nada',
+    body: `{{saudacao}} Você já conectou o WhatsApp, que é a parte mais chata de todas. Só falta uma coisa.
+
+Enquanto não houver nenhuma loja cadastrada, **o robô não publica nenhuma oferta**. E isso não é defeito: sem a sua etiqueta de afiliada, a comissão daquela venda iria para outra pessoa. Ele prefere não enviar a te fazer trabalhar de graça.
+
+Uma loja só já resolve, e tem loja que pede só a sua etiqueta — leva menos de um minuto.
+
+[[botao:Cadastrar minha primeira loja|{{link_lojas}}]]
+
+Se preferir ver antes: {{video_etiquetas}} mostra o passo a passo de cada loja.
+
+Se travar em algum passo, responde este e-mail que a gente faz junto com você.`,
   },
   {
     slug: 'teste_acabou',
@@ -438,7 +502,7 @@ Como resolver, em menos de um minuto:
 2. Escolha a loja avisada aqui.
 3. Cole o código de acesso novo e salve. A gente testa na hora e te diz se ficou certo.
 
-[[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
+[[botao:Abrir minhas credenciais|{{link_lojas}}]]`,
   },
   {
     slug: 'chave_shopee_recusada',
@@ -463,7 +527,7 @@ Como resolver, em menos de dois minutos:
 2. Aqui no nosso painel, abra "Minhas credenciais" e escolha a Shopee.
 3. Cole os dois e salve. A gente testa na hora e te diz se ficou certo.
 
-[[botao:Abrir minhas credenciais|{{link_credenciais}}]]`,
+[[botao:Abrir minhas credenciais|{{link_lojas}}]]`,
   },
   {
     slug: 'nao_conseguiu_conectar_sem_vaga',
@@ -1114,6 +1178,285 @@ Topa? Me responde com dois horários que funcionam para você.`),
 **{{pergunta}}**
 
 Pode responder em uma linha, do jeito que vier à cabeça. Não tem resposta errada, e eu leio todas.`),
+  },
+  // ------------------------------------------------------- plano (cobrança)
+  {
+    slug: 'cobranca_recusada',
+    name: 'A cobrança automática não passou',
+    description: 'Sai quando o Mercado Pago tenta cobrar a assinatura e o pagamento é recusado. É o plano B de cobrar: avisa ENQUANTO o acesso ainda vale.',
+    group: 'plano',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 2,
+    variables: [
+      { name: 'plano', description: 'Plano da assinatura', example: 'Pro' },
+      VAR_VALOR,
+      { name: 'motivo', description: 'Por que a cobrança não passou, em linguagem de gente', example: 'Sem limite ou saldo no cartão.' },
+      { name: 'o_que_fazer', description: 'O que a cliente precisa fazer (muda conforme o motivo)', example: 'Atualize o cartão da cobrança automática ou use outro.' },
+      { name: 'vale_ate', description: 'Até quando o acesso atual continua valendo', example: '16/09/2026' },
+    ],
+    title: 'A cobrança do seu plano não passou',
+    subject: 'A cobrança automática do seu plano não passou',
+    body: `{{saudacao}} O Mercado Pago tentou cobrar **{{valor}}** do seu plano **{{plano}}** e a cobrança não passou.
+
+**Por quê:** {{motivo}}
+
+**O que fazer:** {{o_que_fazer}}
+
+Seu robô continua trabalhando normalmente até **{{vale_ate}}** — dá tempo de resolver sem parar nada.
+
+[[botao:Resolver agora|{{link_planos}}]]
+
+Se ficar qualquer dúvida, é só responder este e-mail.`,
+  },
+
+  // ------------------------------------------------------------ interno
+  //
+  // Estes três não vão para cliente nenhuma. Existem porque toda falha de
+  // pagamento é silenciosa por natureza: ninguém reclama de uma cobrança que
+  // não aconteceu, e o dinheiro simplesmente deixa de entrar.
+  {
+    // B2 do plano de ativação de 2026-09-08. O funil separa "nem chegou a pedir
+    // a conexão" de "tentou e NÃO conseguiu" porque o segundo é obstáculo
+    // NOSSO — mas esse número só aparecia para quem abrisse o /admin/funil e
+    // fosse procurar. Aviso que ninguém lê não é aviso.
+    slug: 'admin_conexao_falhou',
+    name: '[Interno] Gente que tentou conectar e não conseguiu',
+    description: 'Avisa a administradora quando há contas que pediram a conexão do WhatsApp e continuam sem conectar depois de 24h. É obstáculo nosso, não desistência delas.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Quantas pessoas estão nessa situação', example: '3 pessoas pediram a conexão do WhatsApp e não conseguiram' },
+      { name: 'lista', description: 'Quem são, com há quanto tempo tentaram', example: '- Ana (ana@exemplo.com) — pediu a conexão há 30h e não conectou' },
+    ],
+    title: '{{resumo}}',
+    subject: '[Interno] {{resumo}}',
+    body: `{{resumo}} nas últimas 24h a 7 dias.
+
+{{lista}}
+
+Isso é obstáculo nosso, não desistência delas: leitura do QR, servidor sem vaga ou recusa do WhatsApp. Vale abrir o histórico de cada uma antes de qualquer ação de marketing.
+
+Se várias caírem no mesmo dia, provavelmente é um incidente — confira os eventos de conexão daquelas datas.
+
+[[botao:Abrir o funil|{{link_painel}}/admin/funil]]`,
+  },
+  {
+    // As vagas de robô acabando. O sinal que já existia
+    // (`ops_session_capacity_limit`) só nasce DEPOIS da primeira recusa —
+    // quando alguma cliente já ficou sem conseguir conectar. Este chega antes.
+    slug: 'admin_vagas_acabando',
+    name: '[Interno] Estão acabando as vagas de robô',
+    description: 'Avisa a administradora quando faltam poucas vagas para o servidor parar de aceitar robô novo. Cliente nova não consegue conectar quando acaba.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Quantos robôs estão ligados e quantos cabem', example: '18 robôs ligados de 20 que cabem' },
+      { name: 'situacao', description: 'O que acontece agora', example: 'Sobram 2 vagas.' },
+      { name: 'link_capacidade', description: 'Endereço da aba Capacidade do admin', example: 'https://espelhagrupos.com.br/admin/capacidade' },
+    ],
+    title: 'Estão acabando as vagas de robô',
+    subject: '[BOTinho] {{resumo}}',
+    body: `{{resumo}}.
+
+{{situacao}}
+
+Quando acabam as vagas, **cliente nova não consegue conectar** e quem desligou o próprio robô não consegue voltar.
+
+O que dá para fazer: desligar o staging enquanto não estiver validando, ou aumentar o servidor. Cada robô ocupa cerca de 272 MB.
+
+[[botao:Ver a capacidade do servidor|{{link_capacidade}}]]`,
+  },
+  {
+    slug: 'admin_cobranca_recusada',
+    name: '[Interno] Uma cobrança foi recusada',
+    description: 'Avisa a administradora quando a cobrança de uma assinatura é recusada, com cliente, valor e o código que o Mercado Pago devolveu.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'cliente', description: 'E-mail da cliente', example: 'cliente@exemplo.com' },
+      { name: 'plano', description: 'Plano da assinatura', example: 'Pro' },
+      VAR_VALOR,
+      { name: 'codigo', description: 'Código de retorno do Mercado Pago', example: 'cc_rejected_insufficient_amount' },
+      { name: 'motivo', description: 'O que o código significa e de quem é a ação', example: 'Sem limite ou saldo. Ação dela: outro cartão.' },
+      { name: 'quando', description: 'Quando a cobrança foi tentada', example: '08/09/2026 09:12' },
+      { name: 'link_cobrancas', description: 'Endereço da aba Financeiro do admin', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: 'Cobrança recusada',
+    subject: '[BOTinho] Cobrança recusada — {{cliente}}',
+    body: `A cobrança da assinatura de **{{cliente}}** foi recusada.
+
+[[lista]]
+Plano: {{plano}}
+Valor: {{valor}}
+Quando: {{quando}}
+Código do Mercado Pago: {{codigo}}
+O que significa: {{motivo}}
+[[/lista]]
+
+A cliente já foi avisada por e-mail, com o que ela precisa fazer.
+
+[[botao:Ver todas as cobranças|{{link_cobrancas}}]]`,
+  },
+  {
+    slug: 'admin_cobranca_maquina_parada',
+    name: '[Interno] A máquina de cobrança tem problema',
+    description: 'Avisa a administradora quando a cobrança para de funcionar em silêncio: chave errada, avisos do Mercado Pago não chegando, rede de segurança parada ou recusa em série.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'resumo', description: 'Frase do estado geral', example: 'A cobrança tem problema agora.' },
+      { name: 'problemas', description: 'Lista do que está errado e o que fazer', example: 'A chave em uso é de TESTE — nenhum cartão real é aceito.' },
+      { name: 'link_cobrancas', description: 'Endereço da aba Financeiro do admin', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: 'A cobrança precisa de atenção',
+    subject: '[BOTinho] A cobrança precisa de atenção',
+    body: `{{resumo}}
+
+{{problemas}}
+
+[[botao:Abrir o Financeiro|{{link_cobrancas}}]]
+
+Este aviso sai no máximo uma vez por dia para cada problema.`,
+  },
+  {
+    slug: 'admin_api_com_erro',
+    name: '[Interno] O painel está falhando por erro nosso',
+    description: 'Avisa a administradora quando a API passa a falhar por incompatibilidade entre o código e o banco — o tipo de erro que derruba o painel inteiro, não uma tela só.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'o_que_aconteceu', description: 'O tipo do problema, em uma frase', example: 'O código e o banco discordam sobre alguma coluna.' },
+      { name: 'onde', description: 'A chamada que falhou', example: 'GET /api/auth/me' },
+      { name: 'detalhe', description: 'Mensagem técnica do erro', example: 'Unknown field `blockedReason`' },
+      { name: 'quando', description: 'Quando aconteceu', example: '09/09/2026 18:20' },
+    ],
+    title: 'O painel está falhando',
+    subject: '[BOTinho] O painel está falhando por erro nosso',
+    body: `Uma chamada do painel falhou por erro nosso, não por algo que a cliente fez.
+
+[[lista]]
+O que aconteceu: {{o_que_aconteceu}}
+Onde: {{onde}}
+Detalhe: {{detalhe}}
+Quando: {{quando}}
+[[/lista]]
+
+Este aviso só sai para erro grave, do tipo que costuma afetar todas as contas ao mesmo tempo. Vale conferir agora se o painel abre.
+
+Este aviso sai no máximo uma vez por dia para cada tipo de problema.`,
+  },
+  {
+    slug: 'admin_numero_repetido',
+    name: '[Interno] Número de WhatsApp já usado em outra conta',
+    description: 'Avisa a administradora quando uma conta liga um número de WhatsApp que já foi ligado por outra conta. É aviso para conferir; a recusa automática só acontece se a trava estiver ligada.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'cliente', description: 'E-mail da conta que acabou de ligar', example: 'novaconta@exemplo.com' },
+      { name: 'contas_anteriores', description: 'Contas que já usaram este número', example: 'contaantiga@exemplo.com' },
+      { name: 'o_que_aconteceu', description: 'Se a conexão foi recusada ou só registrada', example: 'A conexão foi permitida (modo aviso)' },
+      { name: 'quando', description: 'Quando aconteceu', example: '09/09/2026 15:40' },
+    ],
+    title: 'Um número de WhatsApp está em mais de uma conta',
+    subject: '[BOTinho] Número de WhatsApp repetido entre contas',
+    body: `Uma conta acabou de ligar um número de WhatsApp que já tinha sido ligado por outra conta.
+
+[[lista]]
+Conta atual: {{cliente}}
+Contas que já usaram este número: {{contas_anteriores}}
+O que aconteceu: {{o_que_aconteceu}}
+Quando: {{quando}}
+[[/lista]]
+
+Número repetido não é prova de nada sozinho: a mesma pessoa pode ter trocado de chip, ou ter uma conta antiga abandonada. Vale abrir o histórico das duas contas antes de decidir qualquer coisa.
+
+A etiqueta também aparece nas listas de clientes, na aba Online e na fila de Sucesso do Cliente.
+
+Este aviso sai no máximo uma vez por dia para cada conta.`,
+  },
+  {
+    slug: 'admin_teste_repetido',
+    name: '[Interno] Cadastro parece repetir o teste grátis',
+    description: 'Avisa a administradora quando nasce uma conta com o mesmo nome ou a mesma raiz de e-mail de outra que já teve teste. É aviso para conferir, nunca bloqueio automático.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'cliente', description: 'E-mail da conta nova', example: 'novaconta@exemplo.com' },
+      { name: 'nome', description: 'Nome informado no cadastro novo', example: 'Fulana de Tal' },
+      { name: 'motivo', description: 'O que casou', example: 'mesma raiz de e-mail' },
+      { name: 'contas_anteriores', description: 'Contas anteriores parecidas', example: 'contaantiga@exemplo.com' },
+      { name: 'quando', description: 'Quando o cadastro aconteceu', example: '09/09/2026 10:20' },
+    ],
+    title: 'Um cadastro novo parece repetir o teste',
+    subject: '[BOTinho] Cadastro parece repetir o teste grátis',
+    body: `Uma conta nova se cadastrou e parece ser de alguém que já fez o teste.
+
+[[lista]]
+Conta nova: {{cliente}}
+Nome: {{nome}}
+O que casou: {{motivo}}
+Contas anteriores parecidas: {{contas_anteriores}}
+Quando: {{quando}}
+[[/lista]]
+
+Isto é só um aviso para você conferir. Nada foi bloqueado e a conta nova está funcionando normalmente.
+
+Nome repetido acontece, e a mesma pessoa pode ter recadastrado por ter perdido a senha ou errado o e-mail. Vale olhar o histórico das duas contas antes de decidir qualquer coisa.
+
+Este aviso sai no máximo uma vez por dia para cada cadastro.`,
+  },
+  {
+    slug: 'admin_pagamento_com_falha',
+    name: '[Interno] Falha ao processar um pagamento',
+    description: 'Avisa a administradora quando um aviso de pagamento do Mercado Pago não pôde ser processado por erro nosso — é o caso em que a cliente pagou e o acesso pode não ter sido liberado.',
+    group: 'interno',
+    audience: 'admin',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 0,
+    variables: [
+      { name: 'o_que_falhou', description: 'Qual etapa falhou', example: 'Liberar o acesso depois do pagamento aprovado' },
+      { name: 'detalhe', description: 'Detalhe técnico do erro', example: 'SQLITE_BUSY: database is locked' },
+      { name: 'cliente', description: 'Cliente afetada, quando dá para saber', example: 'cliente@exemplo.com' },
+      { name: 'quando', description: 'Quando aconteceu', example: '08/09/2026 09:12' },
+      { name: 'link_cobrancas', description: 'Endereço da aba Financeiro do admin', example: 'https://espelhagrupos.com.br/admin' },
+    ],
+    title: 'Um pagamento não foi processado',
+    subject: '[BOTinho] Falha ao processar pagamento — conferir',
+    body: `Um aviso de pagamento do Mercado Pago não pôde ser processado.
+
+[[lista]]
+Etapa: {{o_que_falhou}}
+Cliente: {{cliente}}
+Quando: {{quando}}
+Detalhe: {{detalhe}}
+[[/lista]]
+
+**Isso pode significar cliente que pagou e ficou sem acesso.** A conferência automática tenta de novo na próxima passada; se o aviso se repetir, é caso de olhar na mão.
+
+[[botao:Abrir o Financeiro|{{link_cobrancas}}]]`,
   },
 ]
 

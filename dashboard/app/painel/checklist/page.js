@@ -9,6 +9,11 @@ function PlayIcon() {
   )
 }
 
+// Vídeo-aula é AJUDA, não erro. O bloco usava `--danger` no fundo, na borda e
+// no rótulo — que neste painel é a cor de alerta —, então uma conta nova abria
+// os "Primeiros passos" e via dois blocos vermelhos antes de qualquer coisa,
+// como se algo já tivesse dado errado. O círculo do play continua vermelho
+// (é o que faz o olho reconhecer "vídeo"); o resto é superfície neutra.
 function VideoBanner({ href, title, desc }) {
   return (
     <a
@@ -18,8 +23,8 @@ function VideoBanner({ href, title, desc }) {
       style={{
         display: 'flex', alignItems: 'center', gap: 14,
         borderRadius: 16, padding: '14px 16px', marginBottom: 14,
-        border: '1px solid color-mix(in oklab, var(--danger) 30%, var(--line))',
-        background: 'color-mix(in oklab, var(--danger) 8%, var(--surface))',
+        border: '1px solid var(--line)',
+        background: 'var(--surface)',
         textDecoration: 'none',
       }}
     >
@@ -34,7 +39,7 @@ function VideoBanner({ href, title, desc }) {
         <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: 'var(--ink)' }}>{title}</span>
         <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>{desc}</span>
       </span>
-      <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--danger)' }}>Assistir ▶</span>
+      <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 12, fontWeight: 700, color: 'var(--accent-strong)' }}>Assistir ▶</span>
     </a>
   )
 }

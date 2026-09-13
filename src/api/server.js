@@ -33,19 +33,23 @@ import { startDlqMaintenanceJob, getDlqMaintenanceSnapshot } from '../jobs/dlqMa
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, SUPERVISOR_MODE } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
 import { trackAnalyticsEventSafe } from '../analytics.js'
+import { classifyApiError, describeApiErrorKind } from '../ops/apiErrorSignal.js'
+import { sendAdminAlert } from '../email/adminAlerts.js'
 import { runNurtureSweep } from '../leadNurture/sweep.js'
 import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
+import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
 import { shopeeSalesRoutes } from './routes/shopeeSales.js'
 import { runEmailQueueTick } from '../email/queue.js'
 import { runLifecycleEmailSweep } from '../emailTriggers/lifecycleSweep.js'
+import { runPairingStalledSweep } from '../emailTriggers/pairingStalledSweep.js'
 import { runWeeklySummarySweep } from '../emailTriggers/weeklySummary.js'
 import { startCapacitySweep } from '../ops/capacity/sweep.js'
 import { createCapacityRepository } from '../ops/capacity/repository.js'
@@ -256,6 +260,29 @@ function startCredentialExpirySweep() {
   timer.unref?.()
 }
 
+// Aviso "está acabando vaga de robô" (default: faltando 2 para o teto).
+// In-process, setInterval + unref — sem processo PM2 novo (política de
+// memória). Contagem indisponível ou sem SMTP: não avisa e não queima o
+// cooldown. Ver src/ops/sessionCapacityAlertPolicy.js.
+//   CAPACITY_ALERT_ENABLED           — 'false' desliga.
+//   CAPACITY_ALERT_FREE_SLOTS        — vagas livres que disparam (default 2).
+//   CAPACITY_ALERT_COOLDOWN_HOURS    — janela anti-spam (default 12h).
+//   CAPACITY_ALERT_SWEEP_INTERVAL_MS — intervalo entre passadas (default 15min).
+// O destinatário vem de ADMIN_ALERT_EMAIL (caminho de aviso interno).
+const CAPACITY_ALERT_SWEEP_INTERVAL_MS = Math.max(Number(process.env.CAPACITY_ALERT_SWEEP_INTERVAL_MS) || 15 * 60 * 1000, 60 * 1000)
+async function runSessionCapacityAlertTick() {
+  try {
+    const summary = await runSessionCapacityAlertSweep({ db, listRunningBots, logger: app.log })
+    if (summary.sent > 0) app.log.warn({ ...summary }, 'aviso de vagas: passada concluída')
+  } catch (err) {
+    app.log.error({ err: err.message }, 'aviso de vagas: passada falhou')
+  }
+}
+function startSessionCapacityAlertSweep() {
+  const timer = setInterval(runSessionCapacityAlertTick, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
+  timer.unref?.()
+}
+
 // E-mails de ciclo de vida (vencimento de teste/plano, saúde do robô, saque
 // disponível): uma passada por dia, in-process. Sem SMTP a passada nem começa.
 //   LIFECYCLE_EMAIL_SWEEP_INTERVAL_MS — intervalo entre passadas (default 24h).
@@ -268,6 +295,13 @@ async function runLifecycleEmailTick() {
     const summary = await runLifecycleEmailSweep({ db, sendMail, logger: app.log })
     if (summary.sent > 0 || summary.failed > 0) {
       app.log.info({ ...summary }, 'e-mails de ciclo de vida: passada concluída')
+    }
+    // B2 do plano de ativação: quem PEDIU a conexão e não conseguiu é obstáculo
+    // nosso, e esse número só aparecia para quem abrisse o /admin/funil. Pega
+    // carona no mesmo tick — nenhum processo PM2 novo, nenhum timer novo.
+    const travadas = await runPairingStalledSweep({ db, sendMail, logger: app.log })
+    if (travadas.found > 0) {
+      app.log.warn({ ...travadas }, 'contas que pediram a conexão e não conectaram')
     }
   } catch (err) {
     app.log.error({ err: err.message }, 'e-mails de ciclo de vida: passada falhou')
@@ -384,6 +418,48 @@ await app.register(fastifyRateLimit, {
   timeWindow: RATE_LIMIT_WINDOW,
   allowList: (req) => RATE_LIMIT_ALLOWLIST.has(req.url),
   keyGenerator: (req) => req.ip,
+})
+
+// Falha por erro NOSSO ganha nome próprio, linha durável e — quando é do tipo
+// que derruba o painel inteiro — e-mail interno.
+//
+// Incidente 2026-09-09: o schema perdeu duas colunas que o código lia, GET /me
+// passou a lançar em toda chamada e o painel não abriu para ninguém. O Fastify
+// registrou o erro no stdout do processo e mais nada: sem termo para procurar,
+// sem linha no banco, sem ninguém avisado. Ver src/ops/apiErrorSignal.js.
+app.setErrorHandler((error, req, reply) => {
+  const status = Number(error?.statusCode ?? 500)
+  const { signal, kind, alert } = classifyApiError(error, { statusCode: status })
+
+  if (signal) {
+    // Termo fixo e pesquisável: é o que permite achar o incidente no log sem
+    // saber de antemão a mensagem da biblioteca que quebrou.
+    req.log.error({ err: error, kind, rota: `${req.method} ${req.routeOptions?.url ?? req.url}` }, 'FALHA DA API')
+    trackAnalyticsEventSafe({
+      event: 'ops_api_error',
+      metadata: { kind, rota: `${req.method} ${req.routeOptions?.url ?? req.url}`, detalhe: String(error?.message ?? '').slice(0, 200) },
+    })
+  }
+
+  if (alert) {
+    // Cooldown de 24h por assunto vem do próprio canal interno; a `key` é o
+    // tipo, para dois problemas diferentes no mesmo dia gerarem dois avisos.
+    sendAdminAlert({
+      db,
+      slug: 'admin_api_com_erro',
+      key: kind,
+      vars: {
+        o_que_aconteceu: describeApiErrorKind(kind),
+        onde: `${req.method} ${req.routeOptions?.url ?? req.url}`,
+        detalhe: String(error?.message ?? '').slice(0, 300),
+        quando: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      },
+      logger: app.log,
+    }).catch(() => {})
+  }
+
+  // Resposta INALTERADA: o comportamento visto pela cliente é o mesmo de antes.
+  reply.send(error)
 })
 
 app.addHook('onSend', async (req, reply) => {
@@ -625,6 +701,7 @@ startLogRetentionJob()
 startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
+startSessionCapacityAlertSweep()
 startEmailQueueJob()
 startLifecycleEmailSweep()
 startWeeklySummarySweep()

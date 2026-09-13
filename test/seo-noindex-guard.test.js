@@ -96,7 +96,18 @@ test('a retirada do índice pegou exatamente as rotas de grade mortas (15 cidade
     DORES_FORA,
     'rota de dor operacional saiu do índice — essa família CONVERTE (/automatizar-divulgacao-em-grupos-whatsapp tem 173 impressões e 8% de clique) e não pode ser retirada'
   )
-  assert.equal(fora.length, CIDADES_FORA + NICHOS_FORA + DORES_FORA)
+  // /cadastro entrou fora do índice em 2026-09-11 e NÃO é rota de grade: é um
+  // redirecionamento para /login?mode=register, que existe só para preservar o
+  // ?aff= dos links de indicação. Pedir indexação de um redirect não faz
+  // sentido — o Google segue e indexa outra coisa, ou nada.
+  const REDIRECIONAMENTOS_FORA = ['/cadastro']
+  for (const rota of REDIRECIONAMENTOS_FORA) {
+    assert.ok(
+      fora.some((r) => r.path === rota),
+      `${rota} é um redirecionamento e precisa continuar fora do índice`
+    )
+  }
+  assert.equal(fora.length, CIDADES_FORA + NICHOS_FORA + DORES_FORA + REDIRECIONAMENTOS_FORA.length)
 })
 
 test('a página de nicho que US1 reescreveu continua indexável (não desfazer entrega na mesma rodada)', () => {

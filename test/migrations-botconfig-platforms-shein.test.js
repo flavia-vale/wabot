@@ -66,7 +66,7 @@ test('migration acrescenta shein a todas as linhas existentes, preservando outra
       'shopee,amazon,mercadolivre,magazineluiza,shein',
     )
     assert.equal(rowsAfterFirstRun.find((r) => r.id === 'c-single').platforms, 'shopee,shein')
-    assert.equal(rowsAfterFirstRun.find((r) => r.id === 'c-empty').platforms, ',shein')
+    assert.equal(rowsAfterFirstRun.find((r) => r.id === 'c-empty').platforms, 'shein')
     // Nenhuma outra coluna tocada.
     assert.equal(rowsAfterFirstRun.find((r) => r.id === 'c-default').delayMin, 7)
 

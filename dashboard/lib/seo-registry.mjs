@@ -260,7 +260,13 @@ export const CORE_SEO_ROUTES = [
 export const CONTENT_SEO_ROUTES = [
   // title/description ficam só em app/precos/page.js (fonte única, FR-001).
   { path: '/precos', template: 'pricing', priority: 0.95, changeFrequency: 'weekly', lastModified: resolveLastModified('/precos', '2026-08-05'), indexable: true },
-  { path: '/cadastro', title: 'Cadastro Espelha Grupos — teste grátis para automatizar ofertas no WhatsApp', description: 'Crie sua conta no Espelha Grupos e comece a automatizar a divulgação de ofertas em grupos e canais do WhatsApp.', template: 'signup', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/cadastro'), indexable: true },
+  // `indexable: false` desde 2026-09-11: /cadastro NÃO é página, é um
+  // redirecionamento para /login?mode=register que só existe para preservar
+  // ?aff= dos links de indicação. Anunciá-la no sitemap e no IndexNow como
+  // indexável pedia ao Google para indexar um redirect — ele segue e indexa
+  // outra coisa, ou nada. Os links de afiliada continuam funcionando igual:
+  // indexação não tem relação com o redirect.
+  { path: '/cadastro', title: 'Cadastro Espelha Grupos — teste grátis para automatizar ofertas no WhatsApp', description: 'Crie sua conta no Espelha Grupos e comece a automatizar a divulgação de ofertas em grupos e canais do WhatsApp.', template: 'signup', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/cadastro'), indexable: false },
   // title/description ficam só em app/parcerias/page.js (fonte única, FR-001).
   { path: '/parcerias', template: 'partnerships', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/parcerias'), indexable: true },
   // title/description ficam só em app/bot-canais-whatsapp/page.js (fonte única, FR-001).
@@ -286,6 +292,20 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/bot-canal-whatsapp', template: 'commercial-seo', priority: 0.82, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   // title/description ficam só em app/diagnostico-antiban-whatsapp/page.js (fonte única, FR-001).
   { path: '/diagnostico-antiban-whatsapp', template: 'diagnostic-tool', priority: 0.86, changeFrequency: 'weekly', lastModified: resolveLastModified('/diagnostico-antiban-whatsapp'), indexable: true },
+  // Saída do estudo de mercado de 10/09/2026 (docs/produto/pesquisa-mercado-2026-09-10.md).
+  //
+  // Só a PRIMEIRA das três tem volume de busca medido — "quanto ganha afiliado
+  // shopee" soma ~3.050/mês com concorrência baixa (16-25) e não havia página
+  // nossa respondendo. As outras duas voltaram SEM DADOS no Planejador (e
+  // "rastrear link afiliado" ficou em zero em 262 de 262 semanas do Trends):
+  // existem para o canal de IA e para a comparação, não para busca orgânica.
+  // Não cobrar tráfego de busca delas — o motivo está no topo de cada page.js.
+  //
+  // As três nascem linkadas de 3+ páginas já indexadas, como exige a regra de
+  // página órfã (RCA 2026-09-11) — guarda em test/marketing-paginas-orfas.test.js.
+  { path: '/quanto-ganha-afiliado-shopee', template: 'article', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/quanto-ganha-afiliado-shopee', '2026-09-11'), indexable: true },
+  { path: '/vendas-e-comissao-afiliado-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'monthly', lastModified: resolveLastModified('/vendas-e-comissao-afiliado-whatsapp', '2026-09-11'), indexable: true },
+  { path: '/copiaram-minha-oferta-no-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'monthly', lastModified: resolveLastModified('/copiaram-minha-oferta-no-whatsapp', '2026-09-11'), indexable: true },
   { path: '/comparativos', template: 'comparison-hub', priority: 0.75, changeFrequency: 'monthly', lastModified: resolveLastModified('/comparativos'), indexable: true },
   // title/description ficam só em app/programa-de-afiliados/page.js (fonte única, FR-001).
   { path: '/programa-de-afiliados', template: 'comparison-hub', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/programa-de-afiliados'), indexable: true },
@@ -364,6 +384,9 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/ferramentas/calculadora-risco-whatsapp', template: 'tool-calculator', priority: 0.84, changeFrequency: 'weekly', lastModified: resolveLastModified('/ferramentas/calculadora-risco-whatsapp'), indexable: true },
   // title/description ficam só em app/confiabilidade-sessao-whatsapp/page.js (fonte única, FR-001).
   { path: '/confiabilidade-sessao-whatsapp', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'monthly', lastModified: resolveLastModified('/confiabilidade-sessao-whatsapp'), indexable: true },
+  // Responde "espelha grupos é confiável", consulta em que o Google AI
+  // Overviews devolvia conteúdo sobre o golpe de espelhamento de TELA (2026-09-11).
+  { path: '/espelha-grupos-e-confiavel', template: 'module-deep-dive', priority: 0.8, changeFrequency: 'monthly', lastModified: resolveLastModified('/espelha-grupos-e-confiavel'), indexable: true },
   // title/description ficam só em app/seguranca-credenciais-afiliado/page.js (fonte única, FR-001).
   { path: '/seguranca-credenciais-afiliado', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'monthly', lastModified: resolveLastModified('/seguranca-credenciais-afiliado'), indexable: true },
 ]
@@ -399,11 +422,27 @@ export function getSeoRoutesByCluster(cluster) {
   return SEO_ROUTES.filter((route) => route.cluster === cluster && route.type !== 'hub')
 }
 
+// A janela GIRA a partir da posição da própria rota, em vez de pegar sempre os
+// três primeiros do grupo (RCA 2026-09-11).
+//
+// Com `.slice(0, 3)` fixo, TODAS as páginas de um grupo linkavam exatamente as
+// mesmas três, e as demais ficavam com um link de entrada em todo o site —
+// medido no HTML construído: /aumentar-conversao-em-grupos-de-cupons,
+// /consistencia-postagens-em-grupos, /reduzir-tempo-operacional-em-grupos-whatsapp
+// e /rastrear-resultados-de-divulgacao-em-grupos tinham UM cada, enquanto as
+// três do topo do grupo acumulavam todos.
+//
+// Girando, cada página continua mostrando três links (a leitura não muda) e o
+// grupo inteiro passa a ser alcançável. Página com menos de três links de
+// entrada acaba em "Detectada, mas não indexada" — o Google nem chega a ler.
 export function getRelatedProgrammaticSeoRoutes(route, limit = 3) {
   if (!route?.cluster) return []
-  return getSeoRoutesByCluster(route.cluster)
-    .filter((candidate) => candidate.path !== route.path)
-    .slice(0, limit)
+  const grupo = getSeoRoutesByCluster(route.cluster)
+  const posicao = grupo.findIndex((candidate) => candidate.path === route.path)
+  const vizinhos = grupo.filter((candidate) => candidate.path !== route.path)
+  if (!vizinhos.length || posicao < 0) return vizinhos.slice(0, limit)
+  const inicio = posicao % vizinhos.length
+  return Array.from({ length: Math.min(limit, vizinhos.length) }, (_, i) => vizinhos[(inicio + i) % vizinhos.length])
 }
 
 export function getIndexableSeoRoutes() {

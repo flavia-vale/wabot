@@ -13,11 +13,13 @@ import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipe
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
 import { getDlqMaintenanceSnapshot } from '../../jobs/dlqMaintenance.js'
 import { redactAdminPayload, serializeAdminAuditValue } from '../../adminRedaction.js'
-import { buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
+import { buildErrorObservability, buildErrorsByMessage, summarizeDesyncGroups } from '../../adminLogSummary.js'
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
 import { loadEverPaidUserIds } from '../../domain/admin/payingLoader.js'
+import { withSharedPhoneStatus } from '../../domain/admin/sharedPhoneStatus.js'
+import { loadSharedPhoneCounts } from '../../domain/admin/sharedPhoneLoader.js'
 import { describeDisconnectReason } from '../../domain/admin/disconnectReason.js'
 import { buildLongExpiredWhere, wantsLongExpired, isLongExpired, resolveLongExpiredDays } from '../../core/adminVisibility.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
@@ -27,6 +29,8 @@ import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 import { calculateManualPaymentExpiry, parseManualPaymentInput } from '../../domain/payments/manualPayment.js'
 import { isSubscriptionActive, describeSubscriptionStatus, describePendingSubscriptionNotice } from '../../domain/payments/subscriptionPolicy.js'
 import { summarizeSubscriptionCharges, presentSubscriptionCharge } from '../../domain/payments/chargeOutcome.js'
+import { assessBillingMachine, checkBillingConfig, describeBillingMachine } from '../../domain/payments/billingHealth.js'
+import { isSandboxTokenInProduction } from '../../domain/payments/accessTokenMode.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -986,7 +990,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     }).catch(() => []),
   ])
   const userIds = users.map(user => user.id)
-  const [eventCounts24hRows, offlineEvents24h, successMap24h, errorMap24h, lastMessageMap, everPaidIds] = await Promise.all([
+  const [eventCounts24hRows, offlineEvents24h, successMap24h, errorMap24h, lastMessageMap, everPaidIds, sharedPhoneCounts] = await Promise.all([
     userIds.length ? db.waConnectionEvent.groupBy({
       by: ['userId', 'type'],
       where: { userId: { in: userIds }, occurredAt: { gte: since24h } },
@@ -1004,6 +1008,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     getLogCountMap({ status: 'error', since: since24h, userIds }),
     getLogActivityMap({ userIds }),
     loadEverPaidUserIds(db, userIds),
+    loadSharedPhoneCounts(db, userIds),
   ])
 
   // Último evento de conexão por usuário — é o que separa "o robô está
@@ -1043,7 +1048,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     const successCount24h = successMap24h.get(user.id) ?? 0
     const errorCount24h = errorMap24h.get(user.id) ?? 0
     const offline24h = offlineMetrics24h.get(user.id) || {}
-    return sanitizeUser(withPayingStatus({
+    return sanitizeUser(withSharedPhoneStatus(withPayingStatus({
       id: user.id,
       name: user.name,
       email: user.email,
@@ -1078,7 +1083,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
         lastDisconnectCode: session?.lastDisconnectCode ?? null,
       }),
       waSession: session,
-    }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), adminRole)
+    }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), sharedPhoneCounts.get(user.id)), adminRole)
   }).filter(row => {
     if (scenarioUserIds && !scenarioUserIds.has(row.id)) return false
     const sessionStatus = row.waSession?.status || 'none'
@@ -1669,9 +1674,10 @@ export async function adminRoutes(app) {
       getLogCountMap({ status: 'error', since: since24h }),
     ])
     const successQueueUserIds = users.map(user => user.id)
-    const [lastMessageMap, everPaidIds] = await Promise.all([
+    const [lastMessageMap, everPaidIds, sharedPhoneCounts] = await Promise.all([
       getLogActivityMap({ userIds: successQueueUserIds }),
       loadEverPaidUserIds(db, successQueueUserIds),
+      loadSharedPhoneCounts(db, successQueueUserIds),
     ])
 
     const queue = users
@@ -1693,7 +1699,7 @@ export async function adminRoutes(app) {
         if (shouldTrackRiskDetected({ userId: user.id, strategy, reasons: contactReasons })) {
           trackAnalyticsEventSafe({ userId: user.id, event: 'cs_risk_detected', metadata: { strategy, reasons: contactReasons.join('|').slice(0, 80) } })
         }
-        return sanitizeUser(withPayingStatus({
+        return sanitizeUser(withSharedPhoneStatus(withPayingStatus({
           ...user,
           groups: undefined,
           botRunning,
@@ -1710,7 +1716,7 @@ export async function adminRoutes(app) {
           experimentVariant: selectContactExperimentVariant(user.id, strategy),
           riskAgeHours: user.lastActivityAt ? Math.max(0, Math.round((Date.now() - new Date(user.lastActivityAt).getTime()) / (60 * 60 * 1000))) : null,
           customerContacts: undefined,
-        }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), req.admin.role)
+        }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), sharedPhoneCounts.get(user.id)), req.admin.role)
       })
       .filter(user => user.contactReasons.length > 0)
       .filter(user => reason === 'all' || user.contactReasons.includes(reason))
@@ -2012,6 +2018,35 @@ export async function adminRoutes(app) {
       for (const user of users) emails.set(user.id, user.email)
     }
 
+    // Estado da MÁQUINA de cobrança — a pergunta que a tabela não responde:
+    // "e se nenhuma cobrança aparecer aqui porque a cobrança parou de rodar?".
+    // Tudo em lote e sem tocar no Mercado Pago (quem fala com ele é a passada
+    // horária).
+    const agora = new Date()
+    const [assinaturasAtivas, ultimaCobranca, ultimaSincronizacao, recusadas7d, aprovadas7d] = await Promise.all([
+      db.subscription.count({ where: { status: 'authorized' } }).catch(() => null),
+      db.subscriptionCharge.findFirst({ orderBy: { attemptedAt: 'desc' }, select: { attemptedAt: true } }).catch(() => null),
+      db.subscriptionCharge.findFirst({ orderBy: { syncedAt: 'desc' }, select: { syncedAt: true } }).catch(() => null),
+      db.subscriptionCharge.count({ where: { status: { in: ['rejected', 'cancelled', 'expired'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),
+      db.subscriptionCharge.count({ where: { status: { in: ['approved', 'accredited', 'processed'] }, attemptedAt: { gte: addDays(agora, -7) } } }).catch(() => null),
+    ])
+
+    const mpToken = String(process.env.MP_ACCESS_TOKEN ?? '').trim()
+    const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === 'production'
+    const health = assessBillingMachine({
+      config: checkBillingConfig({
+        env: process.env,
+        isProduction: isProd,
+        isSandboxToken: isSandboxTokenInProduction({ token: mpToken, isProduction: isProd }),
+      }),
+      activeSubscriptions: assinaturasAtivas,
+      lastChargeAt: ultimaCobranca?.attemptedAt ?? null,
+      lastReconciliationAt: ultimaSincronizacao?.syncedAt ?? null,
+      recentRejected: recusadas7d,
+      recentApproved: aprovadas7d,
+      now: agora,
+    })
+
     await writeAdminAuditLog(req, { action: 'admin.finance.subscription_charges.list', resource: 'subscription_charge' })
 
     return {
@@ -2020,6 +2055,7 @@ export async function adminRoutes(app) {
       limit,
       days,
       outcome,
+      health: { ...health, headline: describeBillingMachine(health), activeSubscriptions: assinaturasAtivas },
       summary: summarizeSubscriptionCharges(allInWindow),
       charges: rows.map(row => presentSubscriptionCharge(row, { email: emails.get(row.userId) ?? null })),
     }
@@ -2557,6 +2593,73 @@ export async function adminRoutes(app) {
     return { ok: true, user: after }
   })
 
+  // Bloquear/desbloquear conta COM MOTIVO — o motivo é mostrado para a
+  // cliente no login e no painel. Antes existia só o texto fixo "Conta
+  // bloqueada. Entre em contato com o suporte", igual para qualquer causa, e a
+  // pessoa precisava abrir chamado para descobrir o que nós já sabíamos.
+  app.post('/users/:id/block', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:write'))) return
+
+    const status = String(req.body?.status ?? 'suspended').trim()
+    if (status !== 'suspended' && status !== 'banned') {
+      return reply.code(400).send({ error: 'status deve ser suspended ou banned' })
+    }
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 400)
+    if (!reason) return reply.code(400).send({ error: 'Escreva o motivo — ele é mostrado para a cliente' })
+
+    const before = await db.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
+    })
+    if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const after = await db.user.update({
+      where: { id: before.id },
+      data: { status, blockedReason: reason, blockedAt: new Date() },
+      select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.user.block',
+      resource: 'user',
+      resourceId: before.id,
+      targetUserId: before.id,
+      before,
+      after,
+      reason,
+    })
+
+    return { ok: true, user: after }
+  })
+
+  app.post('/users/:id/unblock', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:write'))) return
+
+    const before = await db.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
+    })
+    if (!before) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const after = await db.user.update({
+      where: { id: before.id },
+      data: { status: 'active', blockedReason: null, blockedAt: null },
+      select: { id: true, email: true, status: true, blockedReason: true, blockedAt: true },
+    })
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.user.unblock',
+      resource: 'user',
+      resourceId: before.id,
+      targetUserId: before.id,
+      before,
+      after,
+      reason: String(req.body?.reason ?? '').trim().slice(0, 400) || null,
+    })
+
+    return { ok: true, user: after }
+  })
+
   app.get('/users/:id', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'support:read'))) return
 
@@ -2683,7 +2786,7 @@ export async function adminRoutes(app) {
 
     const [
       payments, subscriptions, manualGrants, connectionEvents, contactLogs, logs,
-      automationsTotal, automationsEnabled, lastMessage, signupEvents, referrerRows,
+      automationsTotal, automationsEnabled, lastMessage, signupEvents, referrerRows, phoneRows,
     ] = await Promise.all([
       db.payment.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 60, select: { id: true, plan: true, status: true, amount: true, createdAt: true, expiresAt: true } }),
       db.subscription.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, plan: true, status: true, createdAt: true, nextChargeAt: true, cancelledAt: true } }),
@@ -2698,6 +2801,8 @@ export async function adminRoutes(app) {
       db.messageLog.findFirst({ where: { userId }, orderBy: { sentAt: 'desc' }, select: { sentAt: true } }),
       user.affiliateProfileId ? [] : db.analyticsEvent.findMany({ where: { userId, event: 'signup_created' }, orderBy: { createdAt: 'desc' }, take: 1, select: { userId: true, metadata: true } }),
       user.referredBy ? db.user.findMany({ where: { id: user.referredBy }, select: { id: true, name: true, email: true } }) : [],
+      // Todos os números de WhatsApp que esta conta já ligou.
+      db.waPhoneOwnership.findMany({ where: { userId }, orderBy: { firstConnectedAt: 'asc' }, select: { phone: true } }).catch(() => []),
     ])
 
     const signupMetaMap = new Map()
@@ -2721,6 +2826,7 @@ export async function adminRoutes(app) {
       contactLogs,
       logs,
       groupCounts: getGroupCounts(user.groups),
+      waPhones: phoneRows.map(row => row.phone),
       automations: { total: automationsTotal, enabled: automationsEnabled },
       credentialHealth: summarizeCredentialHealth(user.credentials),
       waSession: safeUser.waSession,
@@ -2739,6 +2845,38 @@ export async function adminRoutes(app) {
     const result = await adminService.listLogs({ query: req.query ?? {}, adminRole: req.admin.role })
     await writeAdminAuditLog(req, { action: 'admin.logs.list', resource: 'messageLog' })
     return result
+  })
+
+  app.get('/errors/observability', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'support:read'))) return
+    const periodMsByKey = { '6h': 6 * 3600_000, '24h': 24 * 3600_000, '7d': 7 * 24 * 3600_000 }
+    const period = periodMsByKey[String(req.query?.period || '24h')] ? String(req.query.period || '24h') : '24h'
+    const periodMs = periodMsByKey[period]
+    const to = new Date()
+    const from = new Date(to.getTime() - periodMs)
+    // Sete dias anteriores dão contexto suficiente para chamar uma assinatura
+    // de "nova" sem transformar esta leitura operacional em busca histórica ilimitada.
+    const baselineFrom = new Date(from.getTime() - 7 * 24 * 3600_000)
+    const fields = { userId: true, status: true, errorMsg: true, sentAt: true }
+    const rowLimit = 20_000
+    const [currentRows, baselineRows] = await Promise.all([
+      db.messageLog.findMany({ where: { sentAt: { gte: from, lte: to }, errorMsg: { not: null } }, select: fields, orderBy: { sentAt: 'desc' }, take: rowLimit + 1 }),
+      db.messageLog.findMany({ where: { sentAt: { gte: baselineFrom, lt: from }, errorMsg: { not: null } }, select: fields, orderBy: { sentAt: 'desc' }, take: rowLimit + 1 }),
+    ])
+    const currentLogs = currentRows.slice(0, rowLimit)
+    const baselineLogs = baselineRows.slice(0, rowLimit)
+    const userIds = [...new Set(currentLogs.map(log => log.userId).filter(Boolean))]
+    const users = userIds.length
+      ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true, plan: true } })
+      : []
+    const result = buildErrorObservability(currentLogs, baselineLogs, users, { from, to })
+    await writeAdminAuditLog(req, { action: 'admin.errors.observability.read', resource: 'messageLog' })
+    return {
+      period,
+      baseline: { from: baselineFrom.toISOString(), to: from.toISOString() },
+      dataCoverage: { rowLimit, currentTruncated: currentRows.length > rowLimit, baselineTruncated: baselineRows.length > rowLimit },
+      ...result,
+    }
   })
 
   // Métricas operacionais cross-user para o painel admin.

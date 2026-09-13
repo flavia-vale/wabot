@@ -10,6 +10,10 @@ import { attachAffiliateAttributionTouchesToUser, attachOrphanTouchesByDevice, r
 import { DEFAULT_TERMS_VERSION, getEffectiveTermsVersion } from '../../legalTerms.js'
 import { isRealEmail } from '../../leadNurture/policy.js'
 import { isUnsubscribed } from '../../leadNurture/sweep.js'
+import { checkDuplicateTrialAtSignup } from '../../domain/signup/duplicateTrialAlert.js'
+// O celular do cadastro precisa do código do país para ser discável — ver
+// src/domain/signup/contactPhone.js para o porquê e a regra por comprimento.
+import { normalizeContactPhone } from '../../domain/signup/contactPhone.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
 // no caminho "usuário não existe". Sem ele, login com e-mail inexistente
@@ -108,13 +112,6 @@ function setAuthCookie(reply, token, req) {
   if (cookieDomain) parts.push(`Domain=${cookieDomain}`)
   if (secure) parts.push('Secure')
   reply.header('Set-Cookie', parts.join('; '))
-}
-
-function normalizeContactPhone(rawPhone) {
-  const digits = String(rawPhone ?? '').replace(/\D/g, '')
-  if (!digits) return null
-  if (digits.length < 10 || digits.length > 15) return null
-  return `+${digits}`
 }
 
 function normalizeName(rawName) {
@@ -272,6 +269,39 @@ async function updateLoginActivity(user) {
   }
 }
 
+
+/**
+ * Dispara o e-mail de nova senha para um endereço. Caminho ÚNICO: usado pela
+ * rota /forgot-password e pelo botão da tela de conexão recusada
+ * (POST /session/blocked-recover), que precisa mandar o link para a conta
+ * ANTERIOR sem nunca expor aquele endereço ao navegador.
+ *
+ * Nunca lança e nunca revela se a conta existe — quem chama responde sempre a
+ * mesma coisa.
+ */
+export async function requestPasswordResetForEmail({ email, logger } = {}) {
+  const alvo = normalizeEmail(email)
+  if (!alvo) return { sent: false }
+  const user = await findUserByNormalizedEmail(alvo).catch(() => null)
+  if (!user || user.status === 'banned' || user.status === 'suspended' || String(user.email).endsWith('@sistema.com')) {
+    return { sent: false }
+  }
+  const secret = resolveJwtSecretForReset()
+  if (!secret) return { sent: false }
+
+  const token = signPasswordResetToken({ userId: user.id, passwordHash: user.passwordHash, secret })
+  const dashboardUrl = String(process.env.DASHBOARD_URL || process.env.API_URL || 'https://espelhagrupos.com.br').replace(/\/+$/, '')
+  notifyPasswordReset({
+    db,
+    user,
+    resetUrl: `${dashboardUrl}/nova-senha?c=${encodeURIComponent(token)}`,
+    validity: `${Math.round(PASSWORD_RESET_TTL_MS / 60000)} minutos`,
+    logger,
+  }).catch(() => {})
+  trackAnalyticsEventSafe({ userId: user.id, event: 'password_reset_requested' })
+  return { sent: true }
+}
+
 async function findCurrentUser(userId) {
   const secureSelect = {
     id: true,
@@ -285,6 +315,11 @@ async function findCurrentUser(userId) {
     referralCode: true,
     status: true,
     supportStatus: true,
+    // Mostrado para a cliente no painel. Sem isto, conta com acesso encerrado
+    // só via a tela normal de plano vencido e não tinha como saber que a
+    // decisão foi nossa nem por quê.
+    blockedReason: true,
+    blockedAt: true,
     lastLoginAt: true,
     lastActivityAt: true,
     createdAt: true,
@@ -543,6 +578,19 @@ export async function authRoutes(app) {
         terms_version: acceptedTermsVersion,
       },
     })
+    // Esta conta parece repetir o teste de outra? Só AVISA (log + sinal +
+    // e-mail interno) — nunca bloqueia o cadastro. Ver
+    // src/domain/signup/duplicateTrialSignal.js para o porquê da regra e das
+    // invariantes. Best-effort: falha aqui não pode custar uma cliente.
+    checkDuplicateTrialAtSignup({
+      db,
+      user,
+      trackEvent: trackAnalyticsEventSafe,
+      logger: req.log,
+    }).catch(err => {
+      req.log?.warn?.({ err, userId: user.id }, 'register: falha ao checar teste repetido (best-effort)')
+    })
+
     // E-mail de boas-vindas: fire-and-forget, só para e-mails reais
     // informados pelo usuário (não para o fallback user_*@sistema.com).
     // No-op quando SMTP não está configurado; nunca derruba o signup.
@@ -611,7 +659,10 @@ export async function authRoutes(app) {
       return reply.code(401).send({ error: 'Credenciais inválidas' })
     }
     if (user.status === 'banned' || user.status === 'suspended') {
-      return reply.code(403).send({ error: 'Conta bloqueada. Entre em contato com o suporte.' })
+      // O motivo escrito pela admin ganha do texto genérico: a pessoa merece
+      // saber por que perdeu o acesso sem precisar abrir chamado.
+      const motivo = String(user.blockedReason ?? '').trim()
+      return reply.code(403).send({ error: motivo || 'Conta bloqueada. Entre em contato com o suporte.' })
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash)
@@ -686,22 +737,7 @@ export async function authRoutes(app) {
       return reply.code(429).send({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' })
     }
 
-    const user = await findUserByNormalizedEmail(email).catch(() => null)
-    if (user && user.status !== 'banned' && user.status !== 'suspended' && !String(user.email).endsWith('@sistema.com')) {
-      const secret = resolveJwtSecretForReset()
-      if (secret) {
-        const token = signPasswordResetToken({ userId: user.id, passwordHash: user.passwordHash, secret })
-        const dashboardUrl = String(process.env.DASHBOARD_URL || process.env.API_URL || 'https://espelhagrupos.com.br').replace(/\/+$/, '')
-        notifyPasswordReset({
-          db,
-          user,
-          resetUrl: `${dashboardUrl}/nova-senha?c=${encodeURIComponent(token)}`,
-          validity: `${Math.round(PASSWORD_RESET_TTL_MS / 60000)} minutos`,
-          logger: req.log,
-        }).catch(() => {})
-        trackAnalyticsEventSafe({ userId: user.id, event: 'password_reset_requested' })
-      }
-    }
+    await requestPasswordResetForEmail({ email, logger: req.log })
     return reply.code(200).send(respostaNeutra)
   })
 

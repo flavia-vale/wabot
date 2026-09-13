@@ -37,9 +37,25 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
 
 export const ANALYTICS_EVENTS = new Set([
   'signup_created',
+  // Cadastro que parece repetir o teste de outra conta (mesmo nome ou mesma
+  // raiz de e-mail de uma conta com teste vencido). AVISO, nunca bloqueio:
+  // quem decide encerrar acesso é uma pessoa. Ver
+  // src/domain/signup/duplicateTrialSignal.js.
+  'signup_duplicate_trial_suspect',
+  // Número de WhatsApp que já tinha sido usado por outra conta. `detected` sai
+  // em modo aviso, `blocked` quando a conexão é de fato recusada. Ver
+  // src/domain/session/phoneReuse.js.
+  // Chamada da API que falhou por erro NOSSO (5xx). Erro de cliente (4xx) fica
+  // de fora de propósito — ver src/ops/apiErrorSignal.js.
+  'ops_api_error',
+  'ops_wa_phone_reuse_detected',
+  'ops_wa_phone_reuse_blocked',
   'login_completed',
   'whatsapp_connected',
   'credential_saved',
+  // Cada um é uma cliente cujo teste passou a contar da primeira conexão em vez
+  // do cadastro (item A1 do plano de ativação de 2026-09-08).
+  'trial_anchored_at_connection',
   'credential_deleted',
   'monitor_group_created',
   'post_group_created',
@@ -71,6 +87,13 @@ export const ANALYTICS_EVENTS = new Set([
   // como valendo (pela cobrança aprovada ou pela consulta ao abrir o painel).
   // Cada um destes é uma cliente que veria "falta concluir" depois de pagar.
   'subscription_status_synced',
+  // Cobrança recusada que virou aviso para a cliente e para a administradora —
+  // é o plano B de cobrar funcionando. Zero disso com recusa acontecendo
+  // significa que o aviso parou de sair.
+  'subscription_charge_failed_notified',
+  // A cobrança está mal configurada (chave, assinatura do aviso ou rede de
+  // segurança). Só avisa; nunca bloqueia o boot.
+  'ops_billing_config_problem',
   'first_send_success',
   'send_error',
   'organic_page_view',
@@ -185,6 +208,11 @@ export const ANALYTICS_EVENTS = new Set([
   // É sinal de capacidade (hora de subir o teto ou a RAM do VPS), não de
   // defeito da conta — ver MAX_SESSIONS_PER_PROCESS em src/supervisor/index.js.
   'ops_session_capacity_limit',
+  // Aviso PREVENTIVO: as vagas de robô estão acabando (default: faltando 2).
+  // Diferente de `ops_session_capacity_limit`, que só nasce depois da primeira
+  // recusa — quando a cliente já ficou sem conectar. Ver
+  // src/ops/sessionCapacityAlertPolicy.js.
+  'ops_session_capacity_warning',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

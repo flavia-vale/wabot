@@ -1,6 +1,6 @@
 export const TERMS_DOCUMENT_ID = 'terms_of_use'
-export const DEFAULT_TERMS_VERSION = '2026-06-09-whatsapp-risk-acceptance'
-export const DEFAULT_TERMS_UPDATED_LABEL = '09 de junho de 2026'
+export const DEFAULT_TERMS_VERSION = '2026-09-09-teste-unico-por-pessoa'
+export const DEFAULT_TERMS_UPDATED_LABEL = '09 de setembro de 2026'
 
 export const DEFAULT_TERMS_DOCUMENT = {
   id: TERMS_DOCUMENT_ID,
@@ -79,6 +79,7 @@ export const DEFAULT_TERMS_DOCUMENT = {
         title: '9. Pagamentos, planos e trial',
         body: [
           'Quando houver trial, o acesso gratuito é oferecido para teste operacional e pode ter duração, limites e recursos definidos no painel ou campanha vigente. Planos pagos liberam acesso conforme confirmação de pagamento e regras comerciais apresentadas no checkout.',
+          'O teste gratuito é liberado uma vez por pessoa. Criar contas adicionais para renovar o período de teste, ainda que com outro e-mail, outro telefone ou outro nome, caracteriza tentativa de burlar limites e permite o encerramento dos acessos criados dessa forma, conforme a seção de suspensão de conta e uso proibido. Os dados e configurações da conta original permanecem preservados, e a contratação de um plano restabelece o funcionamento.',
           'Valores, recursos, limites, bônus e condições comerciais podem mudar. Eventuais reembolsos, cancelamentos ou ajustes serão tratados conforme legislação aplicável, regras do meio de pagamento e comunicação comercial do produto.',
         ],
       },

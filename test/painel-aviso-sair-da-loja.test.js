@@ -32,15 +32,39 @@ test('as lojas sem código de acesso não ganham o aviso (não faz sentido lá)'
   }
 })
 
-test('o aviso é renderizado na tela, fora do bloco recolhível', () => {
+test('o aviso é renderizado na tela, fora do bloco "Saiba mais"', () => {
+  // A tela virou acordeão em 09/2026 e o texto longo de cada loja foi recolhido
+  // num "Saiba mais" (PlatformDetails). Este aviso é a ÚNICA exceção: ele fica
+  // sempre visível, numa linha, porque lido tarde não tem conserto senão
+  // recadastrar. Antes esta guarda apontava para `CookiePrivacyDetails`, função
+  // que deixou de existir — e passava à toa, medindo um trecho vazio.
   assert.match(pageSource, /platform\.sessionCareNote/, 'a tela precisa renderizar o aviso')
-  const trechoDetails = pageSource.slice(pageSource.indexOf('function CookiePrivacyDetails'), pageSource.indexOf('function PlatformCard'))
-  assert.doesNotMatch(trechoDetails, /sessionCareNote/, 'o aviso não pode ficar escondido dentro do "details"')
+  assert.match(pageSource, /function PlatformDetails/, 'o bloco recolhível mudou de nome — revise esta guarda')
+
+  const inicioDetails = pageSource.indexOf('function PlatformDetails')
+  const fimDetails = pageSource.indexOf('function SessionCareLine')
+  assert.ok(inicioDetails > 0 && fimDetails > inicioDetails, 'não achei o bloco recolhível')
+  const trechoDetails = pageSource.slice(inicioDetails, fimDetails)
+  assert.doesNotMatch(trechoDetails, /sessionCareNote/, 'o aviso não pode ficar escondido dentro do "Saiba mais"')
 })
 
-test('o aviso de código vencido repete o cuidado ao recadastrar', () => {
-  assert.match(pageSource, /n[ãa]o clique em &quot;Sair&quot; no Mercado Livre/i)
-  assert.match(pageSource, /n[ãa]o clique em &quot;Sair&quot; na Amazon/i)
+test('o cuidado ao recadastrar aparece em TODA loja que pede código, não só quando vence', () => {
+  // Antes o texto "não clique em Sair na Amazon" estava copiado dentro do aviso
+  // de código vencido, no JSX. Isso cobria só quem JÁ tinha perdido o código —
+  // e é justamente antes de copiar que a frase precisa ser lida.
+  //
+  // Agora `SessionCareLine` renderiza o aviso da própria loja em todo cartão que
+  // pede código de acesso, vencido ou não, e o aviso de vencimento não precisa
+  // repetir a frase (o que o manteria com três linhas de texto).
+  assert.match(pageSource, /function SessionCareLine/)
+  assert.match(pageSource, /<SessionCareLine platform=\{platform\} \/>/, 'o aviso não está sendo renderizado no cartão')
+
+  for (const id of ['mercadolivre', 'amazon']) {
+    assert.match(loja(id).sessionCareNote, /n[ãa]o clique em "Sair"/i, `${id}: o aviso perdeu o "não clique em Sair"`)
+  }
+
+  // O aviso de vencimento continua dizendo o que fazer (colar um código novo).
+  assert.match(pageSource, /colar um c[óo]digo novo aqui embaixo/i)
 })
 
 test('o aviso continua em linguagem de gente (sem jargão)', () => {

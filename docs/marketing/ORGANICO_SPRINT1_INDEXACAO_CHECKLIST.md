@@ -1,3 +1,5 @@
+> ⚠️ **Fila substituída em 11/09/2026** por `ACOES_FLAVIA_2026-09-11.md`.
+
 # Checklist de indexação — Sprint orgânica IA 1
 
 Data: 2026-05-14

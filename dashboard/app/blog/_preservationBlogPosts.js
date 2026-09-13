@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
+import { internalContentHref } from '@/lib/marketing-attribution'
 
 const siteUrl = getSiteUrl()
 
@@ -23,6 +24,10 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: o que divulgar nos seus achadinhos',
     relatedLinks: [
+      { href: '/grupo-para-canal-whatsapp', label: 'Como levar um grupo para o Canal', note: 'o caminho prático, sem perder quem já está no grupo' },
+      { href: '/blog/shadowban-whatsapp-canais', label: 'Canal com alcance despencando', note: 'o que costuma estar por trás e o que dá para fazer' },
+      { href: '/blog/bot-whatsapp-antiban-existe', label: 'Existe bot que não é banido?', note: 'o que ninguém pode prometer, e o que dá para reduzir' },
+      { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Quando o trabalho manual deixa de caber', note: 'o sinal de que a operação passou do ponto' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comissão e prazo de atribuição dos três, lado a lado' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o programa mais buscado no Brasil' },
       { href: '/bot-achadinhos-whatsapp', label: 'Automatizar um grupo de achadinhos', note: 'conversão de link e cadência controlada' },
@@ -75,6 +80,7 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: risco de bloqueio no WhatsApp',
     relatedLinks: [
+      { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Levar o grupo para o Canal sem perder ninguém', note: 'o caminho prático, passo a passo' },
       { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'sem promessa de imunidade' },
       { href: '/blog/bot-whatsapp-antiban-existe', label: 'Bot antiban existe mesmo?', note: 'o que nenhuma ferramenta pode garantir' },
       { href: '/faq-antiban-whatsapp', label: 'Perguntas frequentes sobre banimento', note: 'respostas diretas' },
@@ -101,6 +107,8 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: grupos, canais e achadinhos',
     relatedLinks: [
+      { href: '/blog/shadowban-whatsapp-canais', label: 'Canal com alcance despencando', note: 'depois de migrar, é o próximo susto comum' },
+      { href: '/glossario', label: 'Glossário: os termos que aparecem no painel', note: 'em português claro, sem jargão' },
       { href: '/blog/grupo-ou-canal-whatsapp-achadinhos', label: 'Grupo ou canal para achadinhos?', note: 'o que muda em alcance e em risco' },
       { href: '/bot-achadinhos-whatsapp', label: 'Automatizar um grupo de achadinhos', note: 'da conversão do link ao envio' },
       { href: '/bot-canal-whatsapp', label: 'Publicar em Canais do WhatsApp', note: 'como o Espelha Grupos envia para canal' },
@@ -127,6 +135,7 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: proteger o número da operação',
     relatedLinks: [
+      { href: '/blog/checklist-padronizar-divulgacao-whatsapp', label: 'Checklist para padronizar o que você publica', note: 'chip dedicado é só uma parte do cuidado' },
       { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'os fatores que realmente pesam' },
       { href: '/blog/como-evitar-banimento-whatsapp-afiliados', label: 'Reduzir risco de banimento como afiliado', note: 'cadência e variação de texto' },
       { href: '/protecao-antiban-botinho', label: 'Como o Espelha Grupos preserva a sessão', note: 'limites por destino e monitoramento' },
@@ -153,6 +162,7 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: o que dá e o que não dá para prometer',
     relatedLinks: [
+      { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa um bot para WhatsApp', note: 'preço das ferramentas do mercado, com fonte e data' },
       { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'redução de risco, não imunidade' },
       { href: '/faq-antiban-whatsapp', label: 'Perguntas frequentes sobre banimento', note: 'as dúvidas mais comuns' },
       { href: '/protecao-antiban-botinho', label: 'Como o Espelha Grupos preserva a sessão', note: 'o que a ferramenta faz de fato' },
@@ -179,6 +189,8 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue no cluster de afiliados',
     relatedLinks: [
+      { href: '/blog/como-evitar-banimento-whatsapp-afiliados', label: 'O que faz o WhatsApp restringir um número', note: 'vale saber antes de crescer, não depois' },
+      { href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', label: 'Que horas as ofertas rendem mais', note: 'com poucos contatos, a hora certa pesa mais' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'cadastro gratuito, comissão a partir de 3%' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre comparados' },
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'os primeiros passos' },
@@ -228,6 +240,10 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Como o Espelha Grupos automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o Espelha Grupos converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
     ],
     relatedLinks: [
+      { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee, na prática', note: 'a conta que transforma a tabela de comissão em dinheiro no mês' },
+      { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Shopee, Amazon ou Mercado Livre: qual escolher primeiro', note: 'comparação de comissão e prazo, para decidir por onde começar' },
+      { href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', label: 'Começar sem ter grupo grande', note: 'o que dá para fazer com poucos contatos' },
+      { href: '/shopee-afiliados-whatsapp', label: 'Divulgar Shopee no WhatsApp sem copiar e colar', note: 'o que muda na prática depois do cadastro' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'a Amazon paga de 0% a 13% dependendo do produto' },
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para não enviar link sem o seu código' },
@@ -269,6 +285,9 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Como o Espelha Grupos cuida da Amazon', paragraphs: ['Com a sua tag de associado cadastrada, o Espelha Grupos converte os links da Amazon automaticamente, busca a imagem em alta resolução para o preview do WhatsApp e distribui a oferta para seus grupos e canais com cadência responsável.', 'Isso evita o erro clássico de enviar um link sem tag e garante que a oferta chegue com cara profissional.'] },
     ],
     relatedLinks: [
+      { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Amazon, Shopee ou Mercado Livre: qual paga mais na sua categoria', note: 'a comissão muda muito conforme o produto' },
+      { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa automatizar isso', note: 'preço das ferramentas do mercado, lado a lado' },
+      { href: '/amazon-afiliados-whatsapp', label: 'Divulgar Amazon no WhatsApp sem copiar e colar', note: 'a etiqueta viaja junto com o link curto' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: '3% na venda padrão, até 30% na Comissão Extra' },
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para a tag nunca cair no caminho' },
@@ -283,7 +302,7 @@ export const PRESERVATION_BLOG_POSTS = {
   'como-divulgar-ofertas-mercado-livre-whatsapp': {
     slug: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
     // Título encurtado em 2026-08-19 (P1): era 74 chars de texto próprio.
-    title: 'Afiliado Mercado Livre: comissão por categoria',
+    title: 'Afiliado Mercado Livre: de 0% a 16% por categoria',
     description: 'Quanto o Mercado Livre paga de comissão por categoria (direta e indireta), prazo de pagamento e como divulgar no WhatsApp sem perder a atribuição.',
     eyebrow: 'Afiliado Mercado Livre · Guia completo',
     usePersonAuthor: true,
@@ -301,6 +320,9 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Cadência que protege o número', paragraphs: ['Despejar 20 ofertas em sequência é o caminho mais rápido para o número entrar em risco. Distribua ao longo do dia, varie o texto e respeite horário de silêncio.', 'O Módulo de Preservação Avançada organiza essas camadas: limite por hora, variações de copy e pausas preventivas, para que a operação não pareça robótica.'] },
     ],
     relatedLinks: [
+      { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Mercado Livre, Amazon ou Shopee: qual paga mais', note: 'comissão por categoria nos três programas' },
+      { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Quando o trabalho manual deixa de caber', note: 'o sinal de que a operação passou do ponto' },
+      { href: '/mercado-livre-afiliados-whatsapp', label: 'Divulgar Mercado Livre no WhatsApp sem copiar e colar', note: 'produto, catálogo e vitrine saem convertidos' },
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o programa com maior volume de busca no Brasil' },
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'produto, cupom e short link' },
@@ -331,7 +353,11 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: quanto custa e quanto rende',
     relatedLinks: [
+      { href: '/blog/bot-para-afiliados-whatsapp-grupos-cupons', label: 'O que um bot de afiliados faz, na prática', note: 'antes de comparar preço, veja o que está sendo comprado' },
+      { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'a mensagem sai como publicação sua, com o seu link' },
       { href: '/programa-de-afiliados', label: 'Quanto cada programa de afiliados paga', note: 'o outro lado da conta: a comissão real' },
+      { href: '/vendas-e-comissao-afiliado-whatsapp', label: 'Como saber quanto você já ganhou de comissão', note: 'a diferença entre relatório de envio e relatório de venda' },
+      { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee', note: 'para fechar a conta do outro lado do custo' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: comissão e prazo de atribuição', note: '3% na venda padrão, até 30% na Comissão Extra' },
       { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Comparativo de bots para afiliados', note: 'o que avaliar antes de assinar' },
     ],
@@ -360,6 +386,8 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue no cluster de afiliados',
     relatedLinks: [
+      { href: '/blog/checklist-padronizar-divulgacao-whatsapp', label: 'Checklist para padronizar o que você publica', note: 'horário é só uma das variáveis' },
+      { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Quando o trabalho manual deixa de caber', note: 'postar na hora certa em vários grupos não se faz na mão' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o que publicar nesses horários' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'de 0% a 13% conforme o produto' },
       { href: '/anti-ban-whatsapp', label: 'Frequência de envio e risco de banimento', note: 'por que concentrar tudo num horário só é arriscado' },
@@ -386,7 +414,13 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue no cluster de afiliados',
     relatedLinks: [
+      { href: '/blog/bot-para-afiliados-whatsapp-grupos-cupons', label: 'Como o robô trata cupom e link de produto', note: 'cupom quebra a oferta quando é removido da mensagem' },
+      { href: '/glossario', label: 'Glossário: os termos que aparecem no painel', note: 'conversão de link, espelhamento, cadência' },
+      { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa automatizar isso', note: 'preço das ferramentas do mercado, lado a lado' },
+      { href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', label: 'Começar sem ter grupo grande', note: 'o que dá para fazer com poucos contatos' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'onde ficam suas credenciais de afiliada' },
+      { href: '/vendas-e-comissao-afiliado-whatsapp', label: 'Conferir se o link convertido virou venda', note: 'pedidos, valor vendido e comissão estimada e confirmada' },
+      { href: '/copiaram-minha-oferta-no-whatsapp', label: 'Copiaram a sua oferta no WhatsApp', note: 'link com o seu código é a defesa que mexe no bolso' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: a tag na URL da loja', note: 'sem ela a venda não é atribuída a você' },
       { href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', label: 'Afiliado Mercado Livre: comissão por categoria', note: 'venda direta e venda indireta' },
     ],
@@ -407,8 +441,11 @@ export const PRESERVATION_BLOG_POSTS = {
     intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta. Se você ainda está decidindo por onde começar, veja antes o comparativo de comissão dos três programas.',
     relatedLinks: [
       { href: '/programa-de-afiliados', label: 'Comparativo de comissão dos três programas', note: 'quanto cada um paga e prazo de atribuição' },
+      { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee', note: 'a conta por trás dos 3% e da Comissão Extra' },
+      { href: '/shopee-afiliados-whatsapp', label: 'Divulgar Shopee no WhatsApp', note: 'como as ofertas saem já convertidas' },
+      { href: '/amazon-afiliados-whatsapp', label: 'Divulgar Amazon no WhatsApp', note: 'a etiqueta junto com o link curto' },
+      { href: '/mercado-livre-afiliados-whatsapp', label: 'Divulgar Mercado Livre no WhatsApp', note: 'produto, catálogo e vitrine' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: guia de cadastro', note: 'o programa com maior volume de busca' },
-      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'de 0% a 13% conforme o produto' },
     ],
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Use Shopee para achadinhos de baixo preço e campanhas de cupom, Amazon para variedade e produtos de marca com boa taxa de clique, e Mercado Livre para ticket médio maior e itens com frete competitivo.', 'O que decide a comissão real é a atribuição correta do link e a taxa de conversão do seu público, não só o percentual do programa.'] },
@@ -439,7 +476,12 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     relatedTitle: 'Continue: o que publicar no grupo novo',
     relatedLinks: [
+      { href: '/blog/bot-para-afiliados-whatsapp-grupos-cupons', label: 'Como o robô trata cupom e link de produto', note: 'o que muda quando a oferta só fecha com cupom' },
+      { href: '/blog/chip-dedicado-bot-whatsapp', label: 'Vale a pena usar um chip só para o robô', note: 'decidir isso no começo evita retrabalho' },
+      { href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', label: 'Começar sem ter grupo grande', note: 'não é preciso ter audiência antes de começar' },
+      { href: '/blog/checklist-padronizar-divulgacao-whatsapp', label: 'Checklist para padronizar o que você publica', note: 'o que conferir antes de cada oferta sair' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'comissão de Shopee, Amazon e Mercado Livre' },
+      { href: '/copiaram-minha-oferta-no-whatsapp', label: 'E quando copiarem as suas ofertas?', note: 'o que dá e o que não dá para fazer — e por que o link importa mais que a foto' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'cadastro gratuito, sem exigir audiência grande' },
       { href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', label: 'Melhores horários para postar ofertas', note: 'quando o grupo responde mais' },
     ],
@@ -483,7 +525,7 @@ function MidArticleBridge({ bridge, slug }) {
       <div className="mt-4 flex flex-wrap gap-3">
         <Link
           className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white no-underline hover:bg-emerald-700"
-          href={`${bridge.href}?${utm}&utm_term=primary`}
+          href={internalContentHref(bridge.href, `${utm}&utm_term=primary`)}
           data-seo-cta="blog_mid_bridge"
           data-cta-position="article_mid_bridge"
           data-cta-stage="consideration"
@@ -493,7 +535,7 @@ function MidArticleBridge({ bridge, slug }) {
         {bridge.secondary ? (
           <Link
             className="rounded-xl border border-emerald-200 bg-white px-5 py-3 text-sm font-black text-emerald-700 no-underline hover:border-emerald-300"
-            href={`${bridge.secondary.href}?${utm}&utm_term=secondary`}
+            href={internalContentHref(bridge.secondary.href, `${utm}&utm_term=secondary`)}
             data-seo-cta="blog_mid_bridge_secondary"
             data-cta-position="article_mid_bridge"
             data-cta-stage="awareness"
@@ -594,7 +636,7 @@ export function PreservationBlogPost({ postKey }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <Link
               className="rounded-2xl bg-emerald-600 px-5 py-4 text-center font-black text-white no-underline hover:bg-emerald-700"
-              href="/diagnostico-antiban-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_diagnostic_cta"
+              href="/diagnostico-antiban-whatsapp"
               data-seo-cta="blog_diagnostic"
               data-cta-position="article_next_step_primary"
               data-cta-stage="diagnostic"
@@ -604,7 +646,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/materiais/checklist-antiban-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_checklist_cta"
+              href="/materiais/checklist-antiban-whatsapp"
               data-seo-cta="blog_checklist"
               data-cta-position="article_next_step_secondary"
               data-cta-stage="lead_magnet"
@@ -614,7 +656,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/ferramentas/calculadora-risco-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_risk_calculator_cta"
+              href="/ferramentas/calculadora-risco-whatsapp"
               data-seo-cta="blog_risk_calculator"
               data-cta-position="article_next_step_tool"
               data-cta-stage="tool"
@@ -624,7 +666,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
             <Link
               className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
-              href="/bot-canais-whatsapp?utm_source=blog&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=article_landing_cta"
+              href="/bot-canais-whatsapp"
               data-seo-cta="blog_campaign_landing"
               data-cta-position="article_next_step_landing"
               data-cta-stage="consideration"

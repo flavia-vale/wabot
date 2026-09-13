@@ -1,109 +1,212 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
-import { AFFILIATE_PLATFORMS, CRED_STATUS, describeInvalidAffiliateValue, getPlatformStatus } from '@/lib/painel/affiliatePlatforms'
+import {
+  AFFILIATE_PLATFORMS,
+  COOKIE_EDITOR_URL,
+  CRED_STATUS,
+  describeInvalidAffiliateValue,
+  getPlatformStatus,
+  isQuickSetupPlatform,
+  quickSetupPlatforms,
+} from '@/lib/painel/affiliatePlatforms'
 
+const IconChevron = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+)
 
-function PlatformActionLinks({ links }) {
-  if (!links?.length) return null
+const IconLock = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <rect x="3" y="11" width="18" height="11" rx="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+)
 
-  return (
-    <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, marginBottom: 14 }}>
-      {links.map((link, index) => (
-        <a
-          key={link.href}
-          className={`pnl-btn ${index === 0 ? 'is-primary' : ''}`}
-          href={link.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ justifyContent: 'center', textAlign: 'center' }}
-        >
-          {link.label}
-        </a>
-      ))}
-    </div>
-  )
+const IconSpark = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+    <path d="m6 6 2 2M16 16l2 2M18 6l-2 2M8 16l-2 2" />
+  </svg>
+)
+
+// Uma frase por aviso. O texto inteiro continua a um clique de distância, no
+// "Saiba mais" do mesmo cartão — a tela poluída vinha de empilhar três
+// parágrafos por loja, não de o conteúdo existir.
+//
+// Shopee é o caso OPOSTO das outras: sem chave aceita a conversão falha inteira,
+// nada é publicado e as ofertas automáticas param junto. O texto tranquilizador
+// de "continua saindo" seria mentira aqui e faria a cliente ignorar prejuízo
+// real. Não fundir os dois textos.
+const SESSION_PROBLEM = {
+  shopee: {
+    tag: 'Chave recusada',
+    sub: 'A Shopee não está aceitando sua chave',
+    message:
+      'A Shopee parou de aceitar sua chave: as ofertas dessa loja param de sair até você colar um App ID e uma chave secreta novos aqui embaixo.',
+  },
+  amazon: {
+    tag: 'Código venceu',
+    sub: 'O código de acesso venceu',
+    message:
+      'O código de acesso da Amazon venceu: suas ofertas continuam saindo e a comissão continua sua, só o link fica mais comprido até você colar um código novo aqui embaixo.',
+  },
+  mercadolivre: {
+    tag: 'Código venceu',
+    sub: 'O código de acesso venceu',
+    message:
+      'O código de acesso do Mercado Livre venceu: suas ofertas continuam saindo e a comissão continua sua, só o link fica mais comprido (e cupom sem produto deixa de ser convertido) até você colar um código novo aqui embaixo.',
+  },
 }
 
-function PlatformInfoCard({ platform }) {
-  return (
-    <div className="pnl-card">
-      {platform.instructions && <p className="pnl-card-note" style={{ marginBottom: 12 }}>{platform.instructions}</p>}
-      <PlatformActionLinks links={platform.actionLinks} />
-    </div>
-  )
-}
-
-function SessionWarning({ platformId, sessionStatus }) {
+function sessionProblemFor(platformId, sessionStatus) {
   if (!sessionStatus || sessionStatus.alive !== false) return null
-  // Shopee é o caso GRAVE: sem chave aceita não há plano B — a oferta não é
-  // publicada e as ofertas automáticas param. O texto tranquilizador das outras
-  // duas lojas ("continuam saindo") seria mentira aqui e faria a cliente
-  // ignorar prejuízo real.
-  if (platformId === 'shopee') {
-    return (
-      <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
-        <strong>A Shopee parou de aceitar sua chave.</strong> Enquanto ela não for aceita, as ofertas da Shopee param de
-        sair — as outras lojas seguem normalmente. Gere um App ID e uma chave secreta novos no painel de afiliada da
-        Shopee e cole aqui embaixo.
-      </div>
-    )
-  }
-  if (platformId === 'amazon') {
-    return (
-      <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
-        <strong>O código de acesso da Amazon venceu.</strong> Suas ofertas continuam saindo normalmente e a comissão
-        continua sendo sua — só que o link fica mais comprido. Para voltar a encurtar, cole um código novo aqui embaixo
-        e não clique em &quot;Sair&quot; na Amazon depois de colar. Se preferir, deixe assim mesmo: nada se perde.
-      </div>
-    )
-  }
-  return (
-    <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">
-      <strong>O código de acesso do Mercado Livre venceu.</strong> Suas ofertas continuam saindo e a comissão continua
-      sendo sua — só que o link fica mais comprido e cupons sem produto deixam de ser convertidos. Para voltar ao link
-      curto, cole um código novo aqui embaixo — e, depois de colar, não clique em &quot;Sair&quot; no Mercado Livre.
-    </div>
-  )
+  return SESSION_PROBLEM[platformId] ?? null
 }
 
-// Explica, na tela onde o dado é pedido, o que fazemos com o código de acesso.
-// A dúvida "isso expõe meus dados pessoais?" é legítima e não se resolve com
-// texto tranquilizador solto: fica junto do campo, com o botão de apagar ao lado.
-// Linguagem simples de propósito — quem usa o painel quer divulgar oferta, não
-// aprender vocabulário técnico.
-function CookiePrivacyDetails({ platform }) {
-  // Só faz sentido nas lojas que pedem código de acesso da conta.
-  if (!platform.fields?.some((f) => f.cookieField)) return null
+// Todo o texto longo da loja num lugar só, recolhido. Antes eram três blocos
+// sempre abertos (ganho do código, cuidado de não sair da conta, privacidade) —
+// cada um nasceu de um problema real com cliente, então nada aqui pode
+// desaparecer; o que muda é só quando aparece.
+function PlatformDetails({ platform }) {
+  const pedeCodigo = platform.fields?.some((f) => f.cookieField)
+  if (!platform.platformWarning && !pedeCodigo) return null
+
   return (
-    <details className="pnl-help" style={{ marginBottom: 12 }}>
-      <summary>Esse código expõe meus dados pessoais?</summary>
-      <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
-        <li>Ele serve <strong>só para uma coisa</strong>: montar o link da oferta já com a sua comissão.</li>
-        <li>Fica guardado <strong>trancado (criptografado)</strong> e não é repassado para ninguém.</li>
-        <li>Não compramos nada, não mudamos nada na sua conta e não lemos suas conversas.</li>
-        <li>Você <strong>apaga quando quiser</strong>, no botão lá embaixo. Sair da sua conta na loja também derruba o código na hora.</li>
-        <li>Ele é usado só enquanto está válido; quando vence, a gente avisa aqui para você colar um novo.</li>
-      </ul>
+    <details className="pnl-cred-more">
+      <summary>Saiba mais sobre a {platform.label}</summary>
+      <div className="pnl-cred-more-body">
+        {platform.platformWarning && <p>{platform.platformWarning}</p>}
+        {pedeCodigo && (
+          <>
+            <p className="pnl-cred-more-title">Esse código expõe meus dados pessoais?</p>
+            <ul>
+              <li>Ele serve <strong>só para uma coisa</strong>: montar o link da oferta já com a sua comissão.</li>
+              <li>Fica guardado <strong>trancado (criptografado)</strong> e não é repassado para ninguém.</li>
+              <li>Não compramos nada, não mudamos nada na sua conta e não lemos suas conversas.</li>
+              <li>Você <strong>apaga quando quiser</strong>, no botão aqui embaixo. Sair da sua conta na loja também derruba o código na hora.</li>
+            </ul>
+            <p>
+              Para copiar o código você precisa de um computador com Google Chrome e da extensão gratuita{' '}
+              <a href={COOKIE_EDITOR_URL} target="_blank" rel="noopener noreferrer">Cookie-Editor</a>.
+            </p>
+          </>
+        )}
+      </div>
     </details>
   )
 }
 
-function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessionStatus }) {
+// O motivo nº 1 de "cadastrei e venceu de novo" (investigação 18/08/2026): sair
+// da conta da loja encerra a sessão e derruba o código na hora — confirmado em
+// teste controlado (um código válido virou vencido em menos de 4 min após o
+// clique em "Sair").
+//
+// Por isso este é o ÚNICO texto longo que NÃO foi para dentro do "Saiba mais":
+// quem lê depois de já ter saído da conta não tem mais conserto senão
+// recadastrar. Fechado ele ocupa uma linha; a frase inteira fica a um clique.
+function SessionCareLine({ platform }) {
+  if (!platform.sessionCareNote) return null
+  return (
+    <details className="pnl-cred-care">
+      <summary>
+        <IconLock />
+        Não saia da conta da {platform.label} depois de colar — por quê?
+      </summary>
+      <p>{platform.sessionCareNote}</p>
+    </details>
+  )
+}
+
+function CredentialField({ platform, field, value, onChange, disabled, error, visible, onToggleVisible }) {
+  const id = `${platform.id}-${field.key}`
+  const hidden = field.sensitive && !visible
+
+  return (
+    <div className="pnl-cred-field">
+      <label className="pnl-cred-label" htmlFor={id}>
+        {field.label}
+        {field.recommended && <span className="pnl-cred-rec">recomendado</span>}
+      </label>
+      <div className="pnl-cred-input-wrap">
+        <input
+          id={id}
+          className={`pnl-input ${field.sensitive ? 'pnl-cred-secret' : ''}`}
+          type={hidden ? 'password' : 'text'}
+          value={value}
+          maxLength={field.maxLength}
+          onChange={(e) => onChange(field.key, e.target.value)}
+          disabled={disabled}
+          aria-invalid={!!error}
+        />
+        {field.sensitive && (
+          <button
+            type="button"
+            className="pnl-cred-eye"
+            onClick={() => onToggleVisible(field.key)}
+            disabled={disabled}
+            aria-label={`${visible ? 'Ocultar' : 'Mostrar'} ${field.label}`}
+          >
+            {visible ? 'Ocultar' : 'Mostrar'}
+          </button>
+        )}
+      </div>
+      {field.hint && <p className="pnl-hint">{field.hint}</p>}
+      {field.help && (
+        <details className="pnl-help">
+          <summary>Como encontrar?</summary>
+          <p>{field.help}</p>
+        </details>
+      )}
+      {error && <p className="pnl-field-error" role="alert">{error}</p>}
+    </div>
+  )
+}
+
+function StartHereCard({ platforms }) {
+  if (!platforms.length) return null
+  const nomes = platforms.map((p) => p.label)
+  const lista = nomes.length > 1
+    ? `${nomes.slice(0, -1).join(', ')} ou ${nomes[nomes.length - 1]}`
+    : nomes[0]
+  return (
+    <div className="pnl-note-box is-warn" role="status">
+      <strong>Comece por uma loja só — leva menos de um minuto.</strong>
+      <p style={{ margin: '6px 0 0' }}>
+        Sem nenhuma loja aqui o robô <strong>não publica nenhuma oferta</strong> — é de propósito, não é defeito: sem a
+        sua etiqueta a comissão iria para outra pessoa.
+      </p>
+      <p style={{ margin: '6px 0 0' }}>
+        O caminho curto é {lista}: só a sua etiqueta de afiliada, um campo.
+      </p>
+    </div>
+  )
+}
+
+function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessionStatus, open, onToggleOpen }) {
   const [draft, setDraft] = useState({})
   const [dirty, setDirty] = useState(false)
   const [visible, setVisible] = useState({})
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [feedback, setFeedback] = useState(null) // { type, message, warnings }
   const [fieldErrors, setFieldErrors] = useState({})
+  const savingRef = useRef(false)
+  const deletingRef = useRef(false)
 
   const values = dirty ? draft : (initialData ?? {})
   const status = CRED_STATUS[getPlatformStatus(platform, values)]
+  const statusKey = getPlatformStatus(platform, values)
   const hasStoredCredential = !!initialData && Object.keys(initialData).length > 0
   const isDisabled = disabled || saving || deleting
+  const problem = sessionProblemFor(platform.id, sessionStatus)
+
+  const mainFields = platform.fields.filter((f) => !f.advanced)
+  const advancedFields = platform.fields.filter((f) => f.advanced)
 
   function update(key, value) {
     setFeedback(null)
@@ -112,10 +215,16 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
     setDirty(true)
   }
 
+  function toggleVisible(key) {
+    setVisible((cur) => ({ ...cur, [key]: !cur[key] }))
+  }
+
   async function handleDelete() {
+    if (deletingRef.current || savingRef.current) return
     if (!window.confirm(
       `Apagar os dados da ${platform.label}?\n\nEles saem daqui agora. Suas ofertas dessa loja param de sair até você cadastrar de novo — e cadastrar leva menos de um minuto.`,
     )) return
+    deletingRef.current = true
     setDeleting(true)
     setFeedback(null)
     try {
@@ -126,12 +235,14 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
     } catch (err) {
       setFeedback({ type: 'error', message: err?.message || 'Não foi possível apagar a credencial.' })
     } finally {
+      deletingRef.current = false
       setDeleting(false)
     }
   }
 
   async function submit(e) {
     e.preventDefault()
+    if (savingRef.current || deletingRef.current) return
     const missing = platform.fields.filter((f) => f.required !== false && !String(values[f.key] ?? '').trim())
     if (missing.length) {
       setFieldErrors(Object.fromEntries(missing.map((f) => [f.key, `${f.label} é obrigatório.`])))
@@ -147,8 +258,12 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
     if (invalidos.length) {
       setFieldErrors(Object.fromEntries(invalidos))
       setFeedback({ type: 'error', message: invalidos[0][1] })
+      // Campo escondido atrás de "Mais opções" com erro precisa aparecer,
+      // senão o aviso aponta para um campo que a pessoa não está vendo.
+      if (invalidos.some(([key]) => advancedFields.some((f) => f.key === key))) setShowAdvanced(true)
       return
     }
+    savingRef.current = true
     setSaving(true)
     setFeedback(null)
     try {
@@ -162,118 +277,152 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
       const tone = result?.messageTone || (warnings.length ? 'warn' : 'success')
       setFeedback({ type: tone, message: result?.message || 'Credenciais atualizadas com sucesso.', warnings })
       setDraft({})
-      // Código recusado: manter o formulário "sujo" seria confuso, mas limpar o
-      // rascunho sem avisar também. O banner vermelho acima é o aviso.
       setDirty(false)
     } catch (err) {
       setFeedback({ type: 'error', message: `${err?.message || 'Não foi possível salvar.'} Verifique os campos e tente novamente.` })
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
 
   return (
-    <form className="pnl-card" onSubmit={submit}>
-      <div className="pnl-card-head">
-        <div className="pnl-card-title">{platform.label}</div>
-        <span className={`pnl-tag ${status.cls}`}>{status.label}</span>
-      </div>
-      {platform.instructions && <p className="pnl-card-note" style={{ marginBottom: 12 }}>{platform.instructions}</p>}
-      <SessionWarning platformId={platform.id} sessionStatus={sessionStatus} />
-      <PlatformActionLinks links={platform.actionLinks} />
-      {platform.platformWarning && <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }}>{platform.platformWarning}</div>}
-      {/* O motivo nº 1 de "cadastrei e venceu de novo" (investigação 18/08/2026):
-          sair da conta da loja encerra a sessão e derruba o código na hora —
-          confirmado em teste controlado (código passou de válido a vencido em
-          menos de 4 min após o clique em "Sair"). Fica em destaque, fora do
-          bloco recolhível, porque quem lê depois de já ter saído não tem mais
-          conserto senão recadastrar. */}
-      {platform.sessionCareNote && (
-        <div className="pnl-note-box" style={{ marginBottom: 12 }}>{platform.sessionCareNote}</div>
-      )}
-
-      <CookiePrivacyDetails platform={platform} />
-
-      <div className="pnl-grid" style={{ gap: 12 }}>
-        {platform.fields.map((f) => {
-          const hidden = f.sensitive && !visible[f.key]
-          const id = `${platform.id}-${f.key}`
-          return (
-            <div key={f.key} className="pnl-field">
-              <label className="pnl-label" htmlFor={id}>{f.label}</label>
-              <div className="pnl-field-row">
-                <input
-                  id={id}
-                  className="pnl-input"
-                  type={hidden ? 'password' : 'text'}
-                  value={values[f.key] ?? ''}
-                  onChange={(e) => update(f.key, e.target.value)}
-                  disabled={isDisabled}
-                  aria-invalid={!!fieldErrors[f.key]}
-                />
-                {f.sensitive && (
-                  <button
-                    type="button"
-                    className="pnl-btn pnl-btn-sm"
-                    onClick={() => setVisible((cur) => ({ ...cur, [f.key]: !cur[f.key] }))}
-                    disabled={isDisabled}
-                    aria-label={`${visible[f.key] ? 'Ocultar' : 'Mostrar'} ${f.label}`}
-                  >
-                    {visible[f.key] ? 'Ocultar' : 'Mostrar'}
-                  </button>
-                )}
-              </div>
-              {f.hint && <p className="pnl-hint">{f.hint}</p>}
-              {f.help && (
-                <details className="pnl-help">
-                  <summary>Como encontrar?</summary>
-                  <p>{f.help}</p>
-                </details>
-              )}
-              {fieldErrors[f.key] && <p className="pnl-field-error" role="alert">{fieldErrors[f.key]}</p>}
-            </div>
-          )
-        })}
-      </div>
-
-      {feedback && (
-        <div className={`pnl-note-box is-${feedback.type}`} style={{ marginTop: 14 }} role="status">
-          {feedback.message}
-          {!!feedback.warnings?.length && (
-            <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
-              {feedback.warnings.map((w) => <li key={w}>{w}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
-
-      <button type="submit" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} disabled={isDisabled}>
-        {saving ? 'Salvando…' : 'Salvar'}
+    <div className={`pnl-cred-card ${problem ? 'is-attention' : ''}`}>
+      <button
+        type="button"
+        className="pnl-cred-head"
+        onClick={onToggleOpen}
+        aria-expanded={open}
+        aria-controls={`${platform.id}-body`}
+      >
+        <span
+          className="pnl-cred-badge"
+          style={{ background: platform.color, color: platform.badgeInk ? 'var(--ink)' : '#fff' }}
+          aria-hidden="true"
+        >
+          {platform.initials}
+        </span>
+        <span className="pnl-cred-head-main">
+          <span className="pnl-cred-name">
+            {platform.label}
+            {problem
+              ? <span className="pnl-tag is-flight">{problem.tag}</span>
+              : (isQuickSetupPlatform(platform) && !hasStoredCredential && <span className="pnl-tag is-info">Mais rápida · 1 campo</span>)}
+          </span>
+          <span className={`pnl-cred-status is-${statusKey}`}>
+            <span className="pnl-cred-dot" aria-hidden="true" />
+            {problem ? problem.sub : status.label}
+          </span>
+        </span>
+        <span className={`pnl-cred-chev ${open ? 'is-open' : ''}`} aria-hidden="true"><IconChevron /></span>
       </button>
 
-      {hasStoredCredential && (
-        <button
-          type="button"
-          className="pnl-btn"
-          style={{ marginTop: 8, width: '100%', justifyContent: 'center', color: 'var(--danger)' }}
-          onClick={handleDelete}
-          disabled={isDisabled}
-        >
-          {deleting ? 'Apagando…' : `Apagar meus dados da ${platform.label}`}
+      <form id={`${platform.id}-body`} className={`pnl-cred-body ${open ? 'is-open' : ''}`} onSubmit={submit}>
+        {problem && (
+          <div className="pnl-note-box is-warn" style={{ marginBottom: 12 }} role="alert">{problem.message}</div>
+        )}
+
+        {platform.instructions && <p className="pnl-cred-onde">{platform.instructions}</p>}
+
+        {!!platform.actionLinks?.length && (
+          <div className="pnl-cred-ctas">
+            {platform.actionLinks.map((link, index) => (
+              <a
+                key={link.href}
+                className={`pnl-btn ${index === 0 ? 'is-primary' : ''}`}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+        )}
+
+        {mainFields.map((f) => (
+          <CredentialField
+            key={f.key}
+            platform={platform}
+            field={f}
+            value={values[f.key] ?? ''}
+            onChange={update}
+            disabled={isDisabled}
+            error={fieldErrors[f.key]}
+            visible={!!visible[f.key]}
+            onToggleVisible={toggleVisible}
+          />
+        ))}
+
+        <SessionCareLine platform={platform} />
+
+        {!!advancedFields.length && (
+          <>
+            <button
+              type="button"
+              className={`pnl-cred-more-btn ${showAdvanced ? 'is-open' : ''}`}
+              onClick={() => setShowAdvanced((v) => !v)}
+              aria-expanded={showAdvanced}
+            >
+              <IconChevron />
+              {showAdvanced ? 'Ocultar mais opções' : `Mais opções (${advancedFields.length})`}
+            </button>
+            {showAdvanced && (
+              <div className="pnl-cred-advanced">
+                {advancedFields.map((f) => (
+                  <CredentialField
+                    key={f.key}
+                    platform={platform}
+                    field={f}
+                    value={values[f.key] ?? ''}
+                    onChange={update}
+                    disabled={isDisabled}
+                    error={fieldErrors[f.key]}
+                    visible={!!visible[f.key]}
+                    onToggleVisible={toggleVisible}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        <PlatformDetails platform={platform} />
+
+        {feedback && (
+          <div className={`pnl-note-box is-${feedback.type}`} style={{ marginTop: 4, marginBottom: 12 }} role="status">
+            {feedback.message}
+            {!!feedback.warnings?.length && (
+              <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
+                {feedback.warnings.map((w) => <li key={w}>{w}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <button type="submit" className="pnl-btn is-primary pnl-cred-save" disabled={isDisabled}>
+          {saving ? 'Salvando…' : 'Salvar'}
         </button>
-      )}
-    </form>
+
+        {hasStoredCredential && (
+          <button type="button" className="pnl-cred-delete" onClick={handleDelete} disabled={isDisabled}>
+            {deleting ? 'Apagando…' : `Apagar meus dados da ${platform.label}`}
+          </button>
+        )}
+      </form>
+    </div>
   )
 }
 
 export default function IdsAfiliadaPage() {
-  usePainelHeader({ title: 'Minhas credenciais', subtitle: 'Cole o ID de cada plataforma — o bot cuida do resto' })
+  usePainelHeader({ title: 'Minhas credenciais', subtitle: 'IDs de afiliada por loja' })
 
   const [credMap, setCredMap] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [mlSession, setMlSession] = useState(null)
   const [amazonSession, setAmazonSession] = useState(null)
   const [shopeeSession, setShopeeSession] = useState(null)
+  const [openId, setOpenId] = useState(null)
 
   // Checa a validade do SSID do ML (sessão de afiliado). Só roda quando há
   // cookie cadastrado — o endpoint faz um request autenticado ao ML.
@@ -355,40 +504,50 @@ export default function IdsAfiliadaPage() {
   const loading = credMap === null && !loadError
 
   return (
-    <div className="pnl-grid" style={{ maxWidth: 640, margin: '0 auto' }}>
-      <div className="pnl-note-box is-info">
-        Tudo o que você cola aqui serve só para uma coisa: montar seus links de oferta já com a sua comissão. Fica guardado trancado
-        (criptografado) e você apaga quando quiser. Fora daqui, não passe esses dados para ninguém.
+    <div className="pnl-cred-page">
+      <p className="pnl-cred-lede">Cadastre os dados de afiliada de cada loja — o robô usa para montar seus links já com a sua comissão.</p>
+
+      <div className="pnl-cred-note">
+        <IconLock />
+        <span>Guardado trancado (criptografado) e usado só para montar seus links. Você apaga quando quiser.</span>
       </div>
 
+      <p className="pnl-cred-tip">
+        <IconSpark />
+        Comece pela Magalu ou pela SHEIN — só 1 campo, menos de 1 minuto.
+      </p>
+
       {loadError && (
-        <div className="pnl-card" style={{ borderColor: 'color-mix(in oklab, var(--danger) 40%, transparent)' }}>
-          <p className="pnl-card-title" style={{ color: 'var(--danger)' }}>Falha ao carregar credenciais</p>
-          <p className="pnl-card-note">{loadError}</p>
+        <div className="pnl-note-box is-error" style={{ marginBottom: 12 }} role="alert">
+          Não conseguimos carregar suas credenciais: {loadError}
         </div>
       )}
 
+      {/* `credMap` ainda nulo = carregando ou falhou: não acusar falta de
+          cadastro por causa de um blip de rede (mesma regra do NoCredentialBanner). */}
+      {credMap !== null && Object.keys(credMap).length === 0 && (
+        <StartHereCard platforms={quickSetupPlatforms()} />
+      )}
+
       {loading
-        ? [0, 1, 2, 3].map((k) => <div key={k} className="pnl-skel" style={{ height: 160 }} />)
-        : AFFILIATE_PLATFORMS.map((p) =>
-            p.type === 'info' ? (
-              <PlatformInfoCard key={p.id} platform={p} />
-            ) : (
-              <PlatformCard
-                key={p.id}
-                platform={p}
-                initialData={credMap?.[p.id]}
-                onSave={handleSave}
-                onDelete={handleDelete}
-                disabled={!!loadError}
-                sessionStatus={
-                  p.id === 'mercadolivre' ? mlSession
-                    : p.id === 'amazon' ? amazonSession
-                      : p.id === 'shopee' ? shopeeSession : null
-                }
-              />
-            )
-          )}
+        ? [0, 1, 2, 3, 4].map((k) => <div key={k} className="pnl-skel" style={{ height: 72, marginBottom: 10 }} />)
+        : AFFILIATE_PLATFORMS.map((p) => (
+          <PlatformCard
+            key={p.id}
+            platform={p}
+            initialData={credMap?.[p.id]}
+            onSave={handleSave}
+            onDelete={handleDelete}
+            disabled={!!loadError}
+            open={openId === p.id}
+            onToggleOpen={() => setOpenId((cur) => (cur === p.id ? null : p.id))}
+            sessionStatus={
+              p.id === 'mercadolivre' ? mlSession
+                : p.id === 'amazon' ? amazonSession
+                  : p.id === 'shopee' ? shopeeSession : null
+            }
+          />
+        ))}
     </div>
   )
 }

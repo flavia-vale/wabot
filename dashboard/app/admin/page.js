@@ -249,6 +249,22 @@ function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, o
         </form>
       </div>
 
+      {/* A tabela não responde "e se a cobrança parou de rodar?" — vazio pode
+          ser mês tranquilo ou máquina parada. Esta faixa separa os dois. */}
+      {data?.health && data.health.severity !== 'ok' && (
+        <div className={`mb-4 rounded-xl p-4 ring-1 ${data.health.severity === 'critico' ? 'bg-rose-50 ring-rose-200' : data.health.severity === 'atencao' ? 'bg-amber-50 ring-amber-200' : 'bg-gray-50 ring-gray-200'}`}>
+          <p className={`text-sm font-black ${data.health.severity === 'critico' ? 'text-rose-800' : 'text-amber-800'}`}>{data.health.headline}</p>
+          <ul className="mt-2 space-y-2">
+            {asArray(data.health.problems).map(problema => (
+              <li key={problema.code} className="text-sm text-gray-700">
+                <span className="font-bold">{problema.title}.</span> {problema.detail}
+                <span className="block text-xs text-gray-500">O que fazer: {problema.fix}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {summary && (
         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl bg-gray-50 p-3">
@@ -2292,6 +2308,7 @@ export default function AdminPage() {
               ))}
             </nav>
             <div className="flex items-center gap-2">
+              <Link href="/admin/erros" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Erros</Link>
               <Link href="/admin/clientes" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Clientes</Link>
               <Link href="/admin/funil" className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Funil</Link>
               <Link href="/admin/emails" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">E-mails</Link>
