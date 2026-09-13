@@ -5,6 +5,9 @@ import { parseCredentialData } from '../credentialHealth.js'
 import { applyVariation, resolveCopyVariationPoolJson } from '../core/copyVariation.js'
 import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
 import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
+import { createAndEnqueueStory } from '../instagram/storyDeliveryService.js'
+import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
+import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
@@ -158,6 +161,8 @@ export async function runAutomation(automation, {
   isRunningFn = isRunning,
   fetchOffersFn = defaultFetchOffers,
   dbOverride,
+  sendStoryFn = createAndEnqueueStory,
+  instagramRuntimeFn = getInstagramDeliveryRuntime,
 } = {}) {
   const dbInstance = dbOverride ?? db
 
@@ -165,7 +170,9 @@ export async function runAutomation(automation, {
   // Promise. Sem await, `!Promise` é sempre false e o guard era ignorado em
   // remote — o dispatcher seguia pro sendBroadcast e falhava com "Bot não está
   // rodando" a cada tick do cron, floodando log e gastando CPU/IO à toa.
-  if (!(await isRunningFn(automation.userId))) return { skipped: 'bot_not_running' }
+  const instagramDestinations = (automation.instagramDestinations ?? []).map(link => link.destination ?? link).filter(destination => destination?.id && destination.enabled !== false)
+  const whatsappAvailable = automation.destGroupJid ? await isRunningFn(automation.userId) : false
+  if (!whatsappAvailable && !instagramDestinations.length) return { skipped: 'bot_not_running' }
 
   const credRow = await dbInstance.credential.findUnique({
     where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },
@@ -211,21 +218,21 @@ export async function runAutomation(automation, {
   // (independe de qual automação enviou). Liberamos se o PREÇO mudou — é uma
   // oferta nova de fato.
   const dedupSince = new Date(Date.now() - CROSS_GROUP_DEDUP_WINDOW_MS)
-  const recentSends = await dbInstance.offerAutomationSentLog.findMany({
+  const recentSends = automation.destGroupJid ? await dbInstance.offerAutomationSentLog.findMany({
     where: { userId: automation.userId, destGroupJid: automation.destGroupJid, sentAt: { gte: dedupSince } },
     select: { productKey: true, priceCents: true },
-  })
+  }) : []
   const recentPricesByKey = new Map()
   for (const row of recentSends) {
     if (!recentPricesByKey.has(row.productKey)) recentPricesByKey.set(row.productKey, new Set())
     recentPricesByKey.get(row.productKey).add(row.priceCents)
   }
-  offers = offers.filter((offer) => {
+  const whatsappEligible = new Set(offers.filter((offer) => {
     const prices = recentPricesByKey.get(productDedupKey(offer))
     return !prices || !prices.has(offerPriceCents(offer))
-  })
+  }).map(offer => String(offer.itemId)))
 
-  if (!offers.length) {
+  if (!offers.length || (!instagramDestinations.length && whatsappEligible.size === 0)) {
     // rawCount > 0 significa que a Shopee retornou produtos, mas o filtro de
     // desconto mínimo / a dedup (itens já enviados ou já enviados ao grupo no
     // dia) removeu todos — diferente de a busca não ter trazido nada.
@@ -252,6 +259,8 @@ export async function runAutomation(automation, {
   // N writes serializados no SQLite.
   const sentLogRows = []
   const failures = []
+  let storiesQueued = 0
+  const instagramRuntime = instagramDestinations.length ? instagramRuntimeFn() : null
   for (const offer of toSend) {
     const base = formatOfferMessage(offer, automation.keyword, templateBody)
     const text = applyVariation(base, {
@@ -262,7 +271,13 @@ export async function runAutomation(automation, {
       random: true,
       autoInjectWhenMissing: false,
     })
-    try {
+    let allChannelsAccepted = true
+    // Se existe destino WhatsApp mas a sessão está offline, o Story ainda
+    // pode sair; porém o item não entra em sentItemIds até o WhatsApp voltar.
+    // Isso evita perder silenciosamente a entrega WhatsApp por causa do
+    // sucesso do canal irmão.
+    if (automation.destGroupJid && !whatsappAvailable && whatsappEligible.has(String(offer.itemId))) allChannelsAccepted = false
+    if (whatsappAvailable && whatsappEligible.has(String(offer.itemId))) try {
       await sendBroadcastFn(automation.userId, text, [automation.destGroupJid], {
         imageUrl: offer.imageUrl,
         imageRefererUrl: offer.offerLink,
@@ -279,25 +294,39 @@ export async function runAutomation(automation, {
       // enviar"). Loga e segue para o próximo item; o item que falhou fica de
       // fora de `sentItemIds`, então entra candidato de novo no próximo tick.
       failures.push({ itemId: offer.itemId, error: err?.message })
-      continue
+      allChannelsAccepted = false
     }
-    sentIds.push(offer.itemId)
-    // Registra no log cruzado por grupo (com preço) pra próxima automação que
-    // mire o mesmo grupo não reenviar este produto no mesmo dia.
-    sentLogRows.push({
-      userId: automation.userId,
-      destGroupJid: automation.destGroupJid,
-      productKey: productDedupKey(offer),
-      priceCents: offerPriceCents(offer),
-      itemId: offer.itemId != null ? String(offer.itemId) : null,
-    })
+    if (whatsappAvailable && whatsappEligible.has(String(offer.itemId)) && allChannelsAccepted) {
+      sentLogRows.push({ userId: automation.userId, destGroupJid: automation.destGroupJid, productKey: productDedupKey(offer), priceCents: offerPriceCents(offer), itemId: offer.itemId != null ? String(offer.itemId) : null })
+    }
+    for (const destination of instagramDestinations) {
+      try {
+        if (!instagramRuntime) throw Object.assign(new Error('Fila de Instagram indisponível'), { code: 'INSTAGRAM_RUNTIME_UNAVAILABLE' })
+        const current = offerPriceCents(offer)
+        const discount = Number(offer.priceDiscountRate) || 0
+        const oldPriceCents = discount > 0 ? Math.round(current * 100 / (100 - discount)) : null
+        await sendStoryFn({
+          userId: automation.userId,
+          destinationId: destination.id,
+          sourceType: DELIVERY_SOURCE_TYPE.OFFER_AUTOMATION,
+          sourceId: automation.id,
+          idempotencyKey: `offer-automation:${automation.id}:${destination.id}:${productDedupKey(offer)}:${current}`,
+          offer: { offerKey: String(offer.itemId), title: offer.productName || 'Produto Shopee', priceCents: current, oldPriceCents, discountLabel: discount ? `${discount}% OFF` : null, storeName: 'Shopee', productUrl: offer.offerLink, imageUrl: offer.imageUrl, callToAction: 'Oferta por tempo limitado' },
+        }, instagramRuntime)
+        storiesQueued++
+      } catch (err) {
+        failures.push({ itemId: offer.itemId, destinationId: destination.id, error: err?.message })
+        allChannelsAccepted = false
+      }
+    }
+    if (allChannelsAccepted) sentIds.push(offer.itemId)
   }
   if (sentLogRows.length) {
     await dbInstance.offerAutomationSentLog.createMany({ data: sentLogRows }).catch(() => {})
   }
 
   // Poda registros fora da janela pra tabela não crescer indefinidamente.
-  await dbInstance.offerAutomationSentLog.deleteMany({
+  if (automation.destGroupJid) await dbInstance.offerAutomationSentLog.deleteMany({
     where: { userId: automation.userId, destGroupJid: automation.destGroupJid, sentAt: { lt: dedupSince } },
   }).catch(() => {})
 
@@ -307,7 +336,7 @@ export async function runAutomation(automation, {
     data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds), page: advancedPage },
   })
 
-  return { sent: sentIds.length, ...(failures.length ? { failed: failures.length, failures } : {}) }
+  return { sent: sentIds.length, ...(storiesQueued ? { storiesQueued } : {}), ...(failures.length ? { failed: failures.length, failures } : {}) }
 }
 
 // Dry-run da busca: roda a MESMA pipeline de fetch (resolveOffers + dedupe por

@@ -10,7 +10,8 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
-import { hasProLikeAccess } from '@/lib/planEntitlements'
+import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
+import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
 
@@ -66,6 +67,12 @@ function templatePreview(templates, key) {
   return body.split('\n').slice(0, 5).join('\n')
 }
 
+function automationDestinationLabel(automation, instagramDestinations) {
+  const labels = automation.destGroupName ? [automation.destGroupName] : []
+  for (const id of automation.instagramDestinationIds || []) labels.push(instagramDestinations.find((destination) => destination.id === id)?.name || 'Instagram')
+  return labels.join(' · ') || 'Nenhum destino'
+}
+
 const emptyForm = {
   destGroupJid: '',
   destGroupName: '',
@@ -76,6 +83,7 @@ const emptyForm = {
   offersPerSend: 1,
   minDiscountPct: 20,
   prioritizeAMS: false,
+  instagramDestinationIds: [],
 }
 
 function nextSendLabel(lastSentAt, intervalMinutes, dailyRunTime) {
@@ -98,6 +106,7 @@ export default function OfertasAutomaticasPage() {
   const [automations, setAutomations] = useState([])
   const [loading, setLoading] = useState(true)
   const [waGroups, setWaGroups] = useState([])
+  const [instagramDestinations, setInstagramDestinations] = useState([])
   const [templates, setTemplates] = useState([])
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -115,15 +124,17 @@ export default function OfertasAutomaticasPage() {
     setLoading(true)
     setError('')
     try {
-      const [list, groups, templateStore, me] = await Promise.all([
+      const [list, groups, templateStore, me, connections] = await Promise.all([
         api.offerAutomations(),
         api.groups().then((gs) => gs.filter((g) => g.role === 'post')),
         loadTemplateStore(),
         api.me().catch(() => null),
+        api.instagramConnections().catch(() => []),
       ])
       setAutomations(list)
       setWaGroups(groups)
       setTemplates(composeTemplates(templateStore))
+      setInstagramDestinations(hasInstagramStoriesAccess(me || {}) ? instagramDestinationsFromConnections(connections) : [])
       if (me) setPlanSubject({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null })
     } catch (err) {
       setError(err.message)
@@ -153,6 +164,7 @@ export default function OfertasAutomaticasPage() {
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
       prioritizeAMS: a.prioritizeAMS ?? false,
+      instagramDestinationIds: a.instagramDestinationIds || [],
     })
     setSaveError('')
     setShowForm(true)
@@ -161,6 +173,10 @@ export default function OfertasAutomaticasPage() {
   function handleGroupChange(jid) {
     const g = waGroups.find((g) => g.waJid === jid)
     setForm((f) => ({ ...f, destGroupJid: jid, destGroupName: g?.name ?? jid }))
+  }
+
+  function toggleInstagramDestination(id) {
+    setForm((current) => ({ ...current, instagramDestinationIds: current.instagramDestinationIds.includes(id) ? current.instagramDestinationIds.filter((value) => value !== id) : [...current.instagramDestinationIds, id] }))
   }
 
   async function handleSave() {
@@ -252,7 +268,7 @@ export default function OfertasAutomaticasPage() {
               <div key={a.id} style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{a.keyword}</strong>
-                  <p className="pnl-hint" style={{ marginTop: 2 }}>{a.destGroupName}</p>
+                  <p className="pnl-hint" style={{ marginTop: 2 }}>{automationDestinationLabel(a, instagramDestinations)}</p>
                 </div>
                 <button className="pnl-btn" onClick={() => setDeleteTarget(a)}>Excluir</button>
               </div>
@@ -411,6 +427,8 @@ export default function OfertasAutomaticasPage() {
             {!waGroups.length && <p className="pnl-field-error" style={{ marginTop: 4 }}>Nenhum grupo de destino cadastrado. Vá em Grupos para adicionar.</p>}
           </div>
 
+          <InstagramDestinationPicker destinations={instagramDestinations} selectedIds={form.instagramDestinationIds} onToggle={toggleInstagramDestination} title="Também publicar no Instagram" />
+
           <div>
             <label className="pnl-label">Com que frequência enviar?</label>
             <select
@@ -463,7 +481,7 @@ export default function OfertasAutomaticasPage() {
               type="button"
               className="pnl-btn is-primary"
               onClick={handleSave}
-              disabled={saving || !form.keyword.trim() || !form.destGroupJid || (form.intervalMinutes === DAILY_INTERVAL_MINUTES && !form.dailyRunTime)}
+              disabled={saving || !form.keyword.trim() || (!form.destGroupJid && !form.instagramDestinationIds.length) || (form.intervalMinutes === DAILY_INTERVAL_MINUTES && !form.dailyRunTime)}
             >
               {saving ? 'Salvando…' : 'Salvar'}
             </button>
@@ -483,7 +501,7 @@ export default function OfertasAutomaticasPage() {
                     <span style={{ width: 18, height: 18, borderRadius: 5, background: '#EE4D2D', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }} title="Shopee" aria-hidden="true">S</span>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>“{a.keyword}”</span>
                   </p>
-                  <p className="pnl-card-note" style={{ marginTop: 2 }}>→ {a.destGroupName}</p>
+                  <p className="pnl-card-note" style={{ marginTop: 2 }}>→ {automationDestinationLabel(a, instagramDestinations)}</p>
                   <p className="pnl-hint" style={{ marginTop: 4 }}>
                     {INTERVAL_OPTIONS.find((o) => o.value === a.intervalMinutes)?.label ?? `${a.intervalMinutes} min`}{a.intervalMinutes === DAILY_INTERVAL_MINUTES && a.dailyRunTime ? ` às ${a.dailyRunTime}` : ''}
                     {' · '}

@@ -2,6 +2,9 @@ import dbDefault from '../db.js'
 import { isRunning as isRunningDefault, sendBroadcast as sendBroadcastDefault } from '../manager.js'
 import { startOfSaoPauloDayUtc } from './time.js'
 import { isOutsideOperatingHours } from './operatingHours.js'
+import { createAndEnqueueStory } from '../instagram/storyDeliveryService.js'
+import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
+import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 
 const drainingQueues = new Set()
 
@@ -76,7 +79,7 @@ export async function evaluateQueueGate(queue, deps = {}) {
   const isRunning = deps.isRunning ?? isRunningDefault
   const now = deps.now ? deps.now() : new Date()
   if (!queue.enabled) return 'queue_disabled'
-  if (!await isRunning(queue.userId)) return 'bot_offline'
+  if (!queue.instagramDestinations?.length && !await isRunning(queue.userId)) return 'bot_offline'
   // Plano B / Fase 3: o horário próprio da fila é o único pré-check de janela
   // aqui. Sem horário próprio, NÃO pré-bloqueamos pela antiga janela silenciosa
   // global (aposentada) — a proteção anti-ban por destino é aplicada no envio
@@ -99,9 +102,11 @@ export async function evaluateQueueGate(queue, deps = {}) {
 async function drainQueueUnlocked(queue, deps = {}) {
   const db = deps.db ?? dbDefault
   const sendBroadcast = deps.sendBroadcast ?? sendBroadcastDefault
+  const sendStory = deps.sendStory ?? createAndEnqueueStory
+  const instagramRuntime = deps.instagramRuntime ?? getInstagramDeliveryRuntime()
   const now = deps.now ? deps.now() : new Date()
   if (!queue.enabled) return { skipped: 'queue_disabled' }
-  const currentQueue = await db.offerQueue.findFirst({ where: { id: queue.id, userId: queue.userId, enabled: true } })
+  const currentQueue = await db.offerQueue.findFirst({ where: { id: queue.id, userId: queue.userId, enabled: true }, include: { instagramDestinations: { include: { destination: true } } } })
   if (!currentQueue) return { skipped: 'queue_disabled' }
   queue = currentQueue
   // Gate centralizado (mesma lógica usada pelo diagnóstico read-only da rota).
@@ -129,7 +134,24 @@ async function drainQueueUnlocked(queue, deps = {}) {
     return { skipped: 'queue_disabled' }
   }
   try {
-    await sendBroadcast(queue.userId, item.text, JSON.parse(item.targetJids), { imageUrl: item.imageUrl ?? undefined, imageRefererUrl: item.imageRefererUrl ?? undefined, source: 'offerQueue', queueId: queue.id, ignoreGlobalQuietHours: queue.operatingHoursEnabled === true })
+    const targetJids = JSON.parse(item.targetJids)
+    // Instagram primeiro: se o WhatsApp estiver offline, o canal irmão não é
+    // bloqueado. O retry posterior é seguro pela idempotência do Story.
+    if (queue.instagramDestinations?.length) {
+      if (!instagramRuntime) throw Object.assign(new Error('Fila de Instagram indisponível'), { code: 'INSTAGRAM_RUNTIME_UNAVAILABLE' })
+      const offer = JSON.parse(item.offerSnapshot || 'null')
+      if (!offer) throw new Error('Item sem snapshot da oferta para Instagram')
+      for (const link of queue.instagramDestinations) {
+        const destination = link.destination ?? link
+        if (destination.enabled === false) continue
+        await sendStory({ userId: queue.userId, destinationId: destination.id, offer, imageUrl: offer.imageUrl, sourceType: DELIVERY_SOURCE_TYPE.OFFER_QUEUE, sourceId: item.id, idempotencyKey: `offer-queue:${queue.id}:${item.id}:${destination.id}` }, instagramRuntime)
+      }
+    }
+    if (targetJids.length) {
+      const online = await (deps.isRunning ?? isRunningDefault)(queue.userId)
+      if (!online) throw new Error('Bot não está rodando')
+      await sendBroadcast(queue.userId, item.text, targetJids, { imageUrl: item.imageUrl ?? undefined, imageRefererUrl: item.imageRefererUrl ?? undefined, source: 'offerQueue', queueId: queue.id, ignoreGlobalQuietHours: queue.operatingHoursEnabled === true })
+    }
     await db.$transaction([
       db.offerQueueItem.updateMany({ where: { id: item.id, queueId: queue.id, userId: queue.userId, status: 'queued' }, data: { status: 'sent', sentAt: now, lastError: null } }),
       db.offerQueue.updateMany({ where: { id: queue.id, userId: queue.userId }, data: { lastSentAt: now } }),

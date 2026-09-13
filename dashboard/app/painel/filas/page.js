@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
-import { hasProLikeAccess } from '@/lib/planEntitlements'
+import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
+import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
 import { PainelContentActions, usePainelHeader } from '../PainelShell'
 
-const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [] }
+const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [], instagramDestinationIds: [] }
 const LIMITS = [
   ['intervalEnabled', 'intervalMinutes', 'Intervalo mínimo entre ofertas', 'minutos'],
   ['hourlyCapEnabled', 'hourlyCap', 'Máximo de ofertas por hora', 'ofertas'],
@@ -44,6 +45,7 @@ export default function FilasPage() {
   usePainelHeader({ title: 'Filas', subtitle: 'Organize ofertas e preserve o ritmo de envio automaticamente' })
   const [queues, setQueues] = useState([])
   const [groups, setGroups] = useState([])
+  const [instagramDestinations, setInstagramDestinations] = useState([])
   const [form, setForm] = useState(EMPTY)
   const [editing, setEditing] = useState(null)
   const [showForm, setShowForm] = useState(false)
@@ -58,8 +60,9 @@ export default function FilasPage() {
   async function load() {
     setLoading(true)
     try {
-      const [allQueues, me] = await Promise.all([api.offerQueues(), api.me().catch(() => null)])
+      const [allQueues, me, connections] = await Promise.all([api.offerQueues(), api.me().catch(() => null), api.instagramConnections().catch(() => [])])
       setQueues(allQueues)
+      setInstagramDestinations(hasInstagramStoriesAccess(me || {}) ? instagramDestinationsFromConnections(connections) : [])
       if (me) setPlanSubject({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null })
     }
     catch (error) { setMessage(error.message) }
@@ -76,12 +79,15 @@ export default function FilasPage() {
   function openEdit(queue) { setEditing(queue.id); setForm({ ...EMPTY, ...queue, operatingHoursStart: queue.operatingHoursStart || EMPTY.operatingHoursStart, operatingHoursEnd: queue.operatingHoursEnd || EMPTY.operatingHoursEnd }); setShowForm(true); setMessage(''); setNotice('') }
   async function save(event) {
     event.preventDefault(); setMessage('')
-    if (!form.targetJids.length) { setMessage('Selecione pelo menos um grupo de destino para a fila.'); return }
+    if (!form.targetJids.length && !form.instagramDestinationIds.length) { setMessage('Selecione pelo menos um grupo ou conta do Instagram.'); return }
     try { if (editing) await api.offerQueueUpdate(editing, form); else await api.offerQueueCreate(form); setShowForm(false); await load() }
     catch (error) { setMessage(error.message) }
   }
   function toggleFormJid(jid) {
     setForm((current) => ({ ...current, targetJids: current.targetJids.includes(jid) ? current.targetJids.filter((j) => j !== jid) : [...current.targetJids, jid] }))
+  }
+  function toggleInstagramDestination(id) {
+    setForm((current) => ({ ...current, instagramDestinationIds: current.instagramDestinationIds.includes(id) ? current.instagramDestinationIds.filter((value) => value !== id) : [...current.instagramDestinationIds, id] }))
   }
   async function remove(queue) {
     if (!window.confirm(`Excluir a fila “${queue.name}” e todos os seus itens?`)) return
@@ -142,9 +148,10 @@ export default function FilasPage() {
   }
   const destinationsLabel = (queue) => {
     const jids = Array.isArray(queue.targetJids) ? queue.targetJids : []
-    if (!jids.length) return 'Todos os grupos de postagem'
     const names = jids.map((jid) => groups.find((group) => group.waJid === jid)?.name || jid)
-    return names.join(' · ')
+    const instagramNames = (queue.instagramDestinationIds || []).map((id) => instagramDestinations.find((destination) => destination.id === id)?.name || 'Instagram')
+    if (!names.length && !instagramNames.length) return 'Todos os grupos de postagem'
+    return [...names, ...instagramNames].join(' · ')
   }
   const activeQueueCount = queues.filter((queue) => queue.enabled).length
   const allQueuesEnabled = queues.length > 0 && activeQueueCount === queues.length
@@ -212,6 +219,7 @@ export default function FilasPage() {
         </div>
         {!groups.length && <p className="pnl-note-box is-error" style={{ marginTop: 8 }}>Nenhum grupo de postagem configurado. <Link href="/painel/grupos">Adicionar grupos</Link></p>}
       </div>
+      <InstagramDestinationPicker destinations={instagramDestinations} selectedIds={form.instagramDestinationIds} onToggle={toggleInstagramDestination} title="Contas do Instagram desta fila" />
       <div className="pnl-grid" style={{ marginTop: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>{LIMITS.map(([toggle, value, label, unit]) => <div className="pnl-card" key={toggle} style={{ boxShadow: 'none' }}><label className="pnl-check"><input type="checkbox" checked={form[toggle]} onChange={(e) => setForm((current) => ({ ...current, [toggle]: e.target.checked }))} />{label}</label>{form[toggle] && <div className="pnl-field" style={{ marginTop: 12 }}><label className="pnl-label" htmlFor={value}>Valor ({unit})</label><input id={value} className="pnl-input" type="number" min="1" step="1" value={form[value]} onChange={(e) => setForm((current) => ({ ...current, [value]: Number(e.target.value) }))} required /></div>}</div>)}</div>
       <div className="pnl-card" style={{ marginTop: 16, boxShadow: 'none' }}>
         <label className="pnl-check"><input type="checkbox" checked={form.operatingHoursEnabled} onChange={(e) => setForm((current) => ({ ...current, operatingHoursEnabled: e.target.checked }))} />Selecionar horário de funcionamento SÓ dessa fila?</label>
