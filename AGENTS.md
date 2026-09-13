@@ -5189,6 +5189,54 @@ lugares.
 Testes: `test/painel-credencial-clareza.test.js`,
 `test/painel-whatsapp-seguranca.test.js`.
 
+## Contato ativo semanal (lista de quem procurar, 2026-09-13)
+
+Pedido da dona do produto: rodar um comando por semana e receber **nome, e-mail
+e telefone** de quem precisa de contato — sem abrir o admin cliente a cliente.
+
+| Peça | Onde |
+|---|---|
+| Regra dos grupos (PURA, sem banco/rede) | `src/domain/admin/outreachSegments.js` |
+| Script read-only | `scripts/contato-ativo-semanal.mjs` |
+
+```bash
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs            # lista na tela
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --csv > /tmp/contatos.csv
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --so-pedidos
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --nao-falei-em=14
+```
+
+Dez grupos, em ordem de prioridade: cobrança recusada, vence em 5 dias, venceu
+até 3d / 4-20d / +20d, nunca publicou (conta ≤7d e 8-20d), robô caído, parou de
+publicar, sem loja cadastrada.
+
+**Não regredir:**
+
+- **Cada cliente entra em UM grupo só**, o de maior prioridade. Três mensagens
+  diferentes para a mesma pessoa na mesma semana é o jeito mais rápido de ela
+  parar de ler o que mandamos (mesma razão do teto semanal de e-mail automático
+  em `src/email/accountActivity.js`).
+- **Fail-safe é NÃO procurar.** Sem validade de acesso confiável, sem data de
+  cadastro ou com consulta que falhou, a cliente fica de fora — e a consulta que
+  falhou é impressa, nunca engolida (lição do `diag-assinatura-recusada.mjs`,
+  onde `.catch(() => [])` virou "nenhuma conta encontrada").
+- **Quem tem renovação automática ligada não entra em lista de cobrança**, e
+  **"ela desligou o robô" nunca vira aviso de robô caído** (`wasStoppedByUser`).
+- **"Publicou" é `MessageLog.status='success'`**, nunca qualquer linha: a linha
+  mais comum de quem não cadastrou a etiqueta é `skip:no_valid_conversions`, e
+  contá-la poria no balde de "já viu o produto funcionar" justamente quem nunca
+  viu (mesma regra do `/admin/funil`).
+- **Read-only**: nenhuma escrita, nenhum e-mail. Teste estrutural falha se
+  `.create(`/`.update(`/`sendTemplateEmail` aparecerem no script.
+- **Custo:** seis agregações em lote por execução (`groupBy`), nunca uma
+  consulta por cliente. Nenhum processo novo, **zero impacto de RAM**.
+
+⚠️ A saída tem **telefone e e-mail de cliente**. O painel mascara telefone por
+papel (`sanitizeUser`); aqui não mascara de propósito — é a dona do produto
+rodando no próprio servidor para conseguir ligar. Não repassar o CSV.
+
+Teste: `test/admin-contato-ativo.test.js` (puro, sem banco).
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos
