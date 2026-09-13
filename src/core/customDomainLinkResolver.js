@@ -55,8 +55,20 @@ export const isCustomDomainResolveEnabled = () =>
 // de 4s cabem com folga larga. Grupo que despeja 10 links por mensagem não
 // pode transformar isso em 40s de espera na fila serial.
 export const MAX_CANDIDATES_PER_MESSAGE = 2
+// 4s eram apertados: medido em staging (2026-09-13), o MESMO endereço respondeu
+// em 568ms numa chamada e estourou 4s na seguinte. O site oscila muito a partir
+// do servidor, e cada estouro custava a oferta inteira — a cliente via "loja não
+// suportada" para uma página que o robô sabe ler.
 export const CUSTOM_DOMAIN_FETCH_TIMEOUT_MS =
-  Number(process.env.CUSTOM_DOMAIN_FETCH_TIMEOUT_MS) || 4_000
+  Number(process.env.CUSTOM_DOMAIN_FETCH_TIMEOUT_MS) || 8_000
+// Teto do desembrulho na mensagem INTEIRA, não por link. Sem ele, subir o tempo
+// por link multiplicaria pelo número de candidatos e comeria o orçamento de 25s
+// do preparo da mensagem (`MSG_QUEUE_TIMEOUT_MS`), que ainda precisa converter
+// o link e buscar a foto depois daqui.
+export const CUSTOM_DOMAIN_TOTAL_BUDGET_MS =
+  Number(process.env.CUSTOM_DOMAIN_TOTAL_BUDGET_MS) || 9_000
+// Abaixo disso não vale tentar: o pedido estouraria no meio e só gastaria tempo.
+const MIN_USEFUL_BUDGET_MS = 1_500
 export const CUSTOM_DOMAIN_MAX_BYTES =
   Number(process.env.CUSTOM_DOMAIN_MAX_BYTES) || 512 * 1024
 export const CUSTOM_DOMAIN_MAX_REDIRECTS = 5
@@ -352,11 +364,27 @@ export async function resolveCustomDomainLinks(text, options = {}) {
   const candidates = findCandidateLinks(raw)
   if (!candidates.length) return { text: raw, resolved: [], failures: [] }
 
+  const comecouEm = Date.now()
+  const orcamentoTotal = Number.isFinite(options.totalBudgetMs)
+    ? options.totalBudgetMs
+    : CUSTOM_DOMAIN_TOTAL_BUDGET_MS
+  const tetoPorLink = Number.isFinite(options.timeoutMs)
+    ? options.timeoutMs
+    : CUSTOM_DOMAIN_FETCH_TIMEOUT_MS
+
   let output = raw
   const resolved = []
   const failures = []
   for (const candidate of candidates) {
-    const { store, reason, detail } = await resolveStoreUrlFromCustomDomainDetailed(candidate, options)
+    const restante = orcamentoTotal - (Date.now() - comecouEm)
+    if (restante < MIN_USEFUL_BUDGET_MS) {
+      failures.push({ url: candidate, reason: 'sem_tempo_no_orcamento' })
+      continue
+    }
+    const { store, reason, detail } = await resolveStoreUrlFromCustomDomainDetailed(candidate, {
+      ...options,
+      timeoutMs: Math.min(tetoPorLink, restante),
+    })
     if (!store) {
       failures.push({ url: candidate, reason, detail })
       continue

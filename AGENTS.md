@@ -4838,12 +4838,30 @@ conversor, dedup, imagem) segue byte a byte como já era — nenhum deles mudou.
   e porta fora de 80/443.
 - **Fracasso não é cacheado** (mesma lição do short link da Shopee); sucesso vale
   6h. **Fail-safe é não mexer no texto**: qualquer erro devolve o original.
-- **Teto de 2 links por mensagem, 4s cada** — o preparo da mensagem tem orçamento
-  de 25s (`MSG_QUEUE_TIMEOUT_MS`) e a fila de entrada é serial.
+- **Teto de 2 links por mensagem, com tempo generoso por link E teto na mensagem
+  inteira.** Medido em staging (2026-09-13): o MESMO endereço respondeu em
+  **568ms** numa chamada e **estourou 4s** na seguinte — o site oscila muito a
+  partir do servidor, e cada estouro custava a oferta inteira. Por link o tempo é
+  8s (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira, 9s
+  (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), porque o preparo tem orçamento de 25s
+  (`MSG_QUEUE_TIMEOUT_MS`) e ainda precisa converter o link e buscar a foto
+  depois daqui. **Não subir o tempo por link sem o teto total** — dois links
+  multiplicariam a espera numa fila que é serial.
+- **A falha NUNCA pode ser só `null`.** Foi assim que uma investigação inteira
+  precisou de quatro rodadas de comando em staging: código no ar, rede boa (200
+  em 568ms), página trazendo o link e cada peça acertando isoladamente — e a
+  única informação disponível era `null`.
+  `resolveStoreUrlFromCustomDomainDetailed` devolve `{ store, reason, detail }`
+  (`tempo_esgotado`, `recusado_http_<status>`, `pagina_sem_link_de_loja`,
+  `endereco_recusado`, `sem_tempo_no_orcamento`, `erro_de_rede:<nome>`…) e o
+  robô loga `Link de domínio próprio NÃO resolveu até a loja`. Mesma lição de
+  "o caminho do card de preview era MUDO".
 
 Envs (todas opcionais): `CUSTOM_DOMAIN_LINK_RESOLVE` (default LIGADO; só o valor
-exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (4000),
-`CUSTOM_DOMAIN_MAX_BYTES` (512KB), `CUSTOM_DOMAIN_CACHE_TTL_MS` (6h).
+exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (8000),
+`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (9000), `CUSTOM_DOMAIN_MAX_BYTES` (512KB),
+`CUSTOM_DOMAIN_CACHE_TTL_MS` (6h). Ajustar o tempo **não exige deploy** — é
+`.env` + `pm2 delete`/`start` (pegadinha #1).
 **Custo: nenhum processo novo, zero impacto de RAM** (cache em memória podado em
 500 entradas).
 

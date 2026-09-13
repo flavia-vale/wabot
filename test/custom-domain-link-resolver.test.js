@@ -13,6 +13,8 @@ import {
   resolveStoreUrlFromCustomDomainDetailed,
   resolveCustomDomainLinks,
   clearCustomDomainCache,
+  CUSTOM_DOMAIN_FETCH_TIMEOUT_MS,
+  CUSTOM_DOMAIN_TOTAL_BUDGET_MS,
 } from '../src/core/customDomainLinkResolver.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -272,4 +274,30 @@ test('guarda: o robô registra o motivo quando o link não resolve', () => {
   const fonte = readFileSync(join(here, '..', 'src', 'bot-worker.js'), 'utf8')
   assert.match(fonte, /desembrulhado\.failures\?\.length/)
   assert.match(fonte, /Link de domínio próprio NÃO resolveu até a loja/)
+})
+
+test('o tempo por link é generoso, mas a mensagem inteira tem teto', async () => {
+  // Medido em staging (2026-09-13): o MESMO endereço respondeu em 568ms e
+  // estourou 4s na chamada seguinte. Por link o tempo precisa ser folgado; na
+  // mensagem inteira não, senão dois links comeriam o orçamento de 25s do
+  // preparo, que ainda tem conversão e foto pela frente.
+  assert.ok(CUSTOM_DOMAIN_FETCH_TIMEOUT_MS >= 8000, 'tempo por link curto demais para este site')
+  assert.ok(CUSTOM_DOMAIN_TOTAL_BUDGET_MS <= 12000, 'orçamento total não pode ameaçar os 25s da mensagem')
+
+  clearCustomDomainCache()
+  const usados = []
+  const fetchImpl = async (_url, opts) => {
+    usados.push(opts?.signal ? 'com-limite' : 'sem-limite')
+    await new Promise(r => setTimeout(r, 300))
+    return respostaHtml('<html><body>sem oferta</body></html>')
+  }
+  const texto = ['https://dicasdeamigas.com.br/p/1', 'https://ofertasdaju.com.br/p/2'].join('\n')
+  const { failures } = await resolveCustomDomainLinks(texto, {
+    fetchImpl,
+    useCache: false,
+    totalBudgetMs: 1700,  // dá para o 1º link; o 2º já não cabe
+    timeoutMs: 8000,
+  })
+  assert.equal(usados.length, 1, 'o segundo link não pode ser buscado sem orçamento')
+  assert.equal(failures.at(-1).reason, 'sem_tempo_no_orcamento')
 })
