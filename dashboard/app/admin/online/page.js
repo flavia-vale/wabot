@@ -406,6 +406,7 @@ export default function AdminOnlinePage() {
                 <option value="trial">Trial</option>
                 <option value="basic">Basic</option>
                 <option value="pro">Pro</option>
+                <option value="premium">Premium</option>
               </select>
               <select value={activity} onChange={(event) => setActivity(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
                 <option value="all">Toda atividade</option>

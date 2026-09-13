@@ -792,6 +792,7 @@ function ManualAccessEditor({ detail, onApply }) {
           <option value="trial">trial</option>
           <option value="basic">basic</option>
           <option value="pro">pro</option>
+          <option value="premium">premium (Instagram Stories)</option>
         </select>
         <input value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} type="number" min="-365" max="365" placeholder="Dias (+/-)" className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" />
         <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Motivo (obrigatório)" className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" required minLength={5} />
@@ -1726,7 +1727,7 @@ function ManualPaymentModal({ onClose, onSaved }) {
             )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-bold text-gray-800">Plano<select value={form.plan} onChange={event => setForm({ ...form, plan: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-normal"><option value="basic">Basic</option><option value="pro">Pro</option></select></label>
+            <label className="text-sm font-bold text-gray-800">Plano<select value={form.plan} onChange={event => setForm({ ...form, plan: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-normal"><option value="basic">Basic</option><option value="pro">Pro</option><option value="premium">Premium</option></select></label>
             <label className="text-sm font-bold text-gray-800">Dias de acesso<input type="number" min="1" max="3650" value={form.days} onChange={event => setForm({ ...form, days: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 font-normal" /></label>
             <label className="text-sm font-bold text-gray-800">Valor recebido (R$)<input inputMode="decimal" value={form.amount} onChange={event => setForm({ ...form, amount: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 font-normal" /></label>
             <label className="text-sm font-bold text-gray-800">Forma de pagamento<select value={form.paymentMethod} onChange={event => setForm({ ...form, paymentMethod: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-normal"><option value="pix">Pix</option><option value="transfer">Transferência</option><option value="cash">Dinheiro</option><option value="card">Cartão</option><option value="other">Outro</option></select></label>
@@ -2849,6 +2850,7 @@ export default function AdminPage() {
                 <option value="trial">Trial</option>
                 <option value="basic">Basic</option>
                 <option value="pro">Pro</option>
+                <option value="premium">Premium</option>
               </select>
               <select value={onlineFilters.activity} onChange={(e) => onOnlineSelect('activity', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
                 <option value="all">Toda atividade</option>

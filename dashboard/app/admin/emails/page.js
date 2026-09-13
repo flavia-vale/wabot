@@ -364,6 +364,7 @@ function Enviar({ templates, onEnviado }) {
             <option value="trial">Teste grátis</option>
             <option value="basic">Básico</option>
             <option value="pro">Pro</option>
+            <option value="premium">Premium</option>
           </select>
         </div>
         <div>

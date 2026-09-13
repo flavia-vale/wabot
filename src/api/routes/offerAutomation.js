@@ -1,7 +1,7 @@
 import dbDefault from '../../db.js'
 import { ensureCountQuota } from '../quotas.js'
 import { loadUserPlanSubject, validateOwnedTargetJids } from './broadcastTargets.js'
-import { buildFeatureGateError, canUseOfferAutomations, FEATURE_CODES } from '../../billing/plans.js'
+import { buildFeatureGateError, canUseOfferAutomations, canUseInstagramStories, FEATURE_CODES } from '../../billing/plans.js'
 import { runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
 import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
@@ -32,6 +32,22 @@ async function resolveOwnedDestGroupJid(db, userId, destGroupJid) {
   return normalized ?? null
 }
 
+async function resolveInstagramDestinations(db, userId, ids, subject) {
+  const unique = [...new Set(Array.isArray(ids) ? ids.filter(Boolean) : [])]
+  if (unique.length > 10) throw Object.assign(new Error('Selecione no máximo 10 destinos Instagram'), { statusCode: 400 })
+  if (!unique.length) return []
+  if (!canUseInstagramStories(subject)) throw Object.assign(new Error('Instagram Stories exige o plano superior ao Pro'), { statusCode: 403, code: 'FEATURE_REQUIRES_PREMIUM' })
+  const rows = await db.destination.findMany({ where: { id: { in: unique }, userId, type: 'instagram_story', enabled: true, instagramConnection: { status: 'connected' } }, select: { id: true } })
+  if (rows.length !== unique.length) throw Object.assign(new Error('Um ou mais destinos Instagram são inválidos ou não pertencem à sua conta'), { statusCode: 400 })
+  return unique
+}
+
+function presentAutomation(row) {
+  const instagramDestinationIds = row.instagramDestinations?.map(item => item.destinationId) ?? []
+  const { instagramDestinations, ...automation } = row
+  return { ...automation, instagramDestinationIds }
+}
+
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
 
@@ -46,20 +62,26 @@ export async function offerAutomationRoutes(app, opts = {}) {
   }
 
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
-    return db.offerAutomation.findMany({
+    const rows = await db.offerAutomation.findMany({
       where: { userId: req.user.sub },
+      include: { instagramDestinations: { select: { destinationId: true } } },
       orderBy: { createdAt: 'desc' },
     })
+    return rows.map(presentAutomation)
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
-    const { destGroupJid, destGroupName, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
+    const { destGroupJid, destGroupName, instagramDestinationIds, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
-    if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
-    const ownedDestJid = await resolveOwnedDestGroupJid(db, req.user.sub, destGroupJid)
-    if (!ownedDestJid) return reply.code(400).send({ error: 'Grupo de destino inválido' })
+    const subject = await loadUserPlanSubject(db, req.user.sub)
+    let instagramIds
+    try { instagramIds = await resolveInstagramDestinations(db, req.user.sub, instagramDestinationIds, subject) } catch (error) { return reply.code(error.statusCode || 400).send(error.code ? buildFeatureGateError(FEATURE_CODES.INSTAGRAM_STORIES) : { error: error.message }) }
+    let ownedDestJid = null
+    if (destGroupJid) ownedDestJid = await resolveOwnedDestGroupJid(db, req.user.sub, destGroupJid)
+    if (destGroupJid && !ownedDestJid) return reply.code(400).send({ error: 'Grupo de destino inválido' })
+    if (!ownedDestJid && !instagramIds.length) return reply.code(400).send({ error: 'Escolha ao menos um grupo ou destino Instagram' })
     if (!VALID_INTERVALS.includes(Number(intervalMinutes))) {
       return reply.code(400).send({ error: `Intervalo inválido. Valores aceitos: ${VALID_INTERVALS.join(', ')} minutos` })
     }
@@ -94,7 +116,8 @@ export async function offerAutomationRoutes(app, opts = {}) {
       data: {
         userId: req.user.sub,
         destGroupJid: ownedDestJid,
-        destGroupName: destGroupName ?? destGroupJid,
+        destGroupName: ownedDestJid ? (destGroupName ?? destGroupJid) : null,
+        instagramDestinations: { create: instagramIds.map(destinationId => ({ destinationId })) },
         keyword: keyword.trim(),
         templateKey: parsedTemplateKey,
         intervalMinutes: parsedIntervalMinutes,
@@ -116,7 +139,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS, isKeySeller, sortType, listType, templateKey } = req.body ?? {}
+    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, instagramDestinationIds, prioritizeAMS, isKeySeller, sortType, listType, templateKey } = req.body ?? {}
     const updates = {}
 
     if (keyword !== undefined) {
@@ -125,10 +148,18 @@ export async function offerAutomationRoutes(app, opts = {}) {
       updates.keyword = k
     }
     if (destGroupJid !== undefined) {
-      if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
-      const ownedDestJid = await resolveOwnedDestGroupJid(db, req.user.sub, destGroupJid)
-      if (!ownedDestJid) return reply.code(400).send({ error: 'Grupo de destino inválido' })
+      const ownedDestJid = destGroupJid ? await resolveOwnedDestGroupJid(db, req.user.sub, destGroupJid) : null
+      if (destGroupJid && !ownedDestJid) return reply.code(400).send({ error: 'Grupo de destino inválido' })
       updates.destGroupJid = ownedDestJid
+      if (!ownedDestJid) updates.destGroupName = null
+    }
+    if (instagramDestinationIds !== undefined) {
+      try {
+        const subject = await loadUserPlanSubject(db, req.user.sub)
+        const ids = await resolveInstagramDestinations(db, req.user.sub, instagramDestinationIds, subject)
+        updates.instagramDestinations = { deleteMany: {}, create: ids.map(destinationId => ({ destinationId })) }
+        if (!(updates.destGroupJid ?? existing.destGroupJid) && !ids.length) return reply.code(400).send({ error: 'Escolha ao menos um grupo ou destino Instagram' })
+      } catch (error) { return reply.code(error.statusCode || 400).send(error.code ? buildFeatureGateError(FEATURE_CODES.INSTAGRAM_STORIES) : { error: error.message }) }
     }
     if (destGroupName !== undefined) updates.destGroupName = destGroupName
     if (intervalMinutes !== undefined) {
@@ -177,7 +208,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
       updates.templateKey = parsedTemplateKey
     }
 
-    return db.offerAutomation.update({ where: { id: req.params.id }, data: updates })
+    return presentAutomation(await db.offerAutomation.update({ where: { id: req.params.id }, data: updates, include: { instagramDestinations: { select: { destinationId: true } } } }))
   })
 
   app.delete('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -193,8 +224,11 @@ export async function offerAutomationRoutes(app, opts = {}) {
     if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
     const automation = await db.offerAutomation.findFirst({
       where: { id: req.params.id, userId: req.user.sub },
+      include: { instagramDestinations: { include: { destination: true } } },
     })
     if (!automation) return reply.code(404).send({ error: 'Automação não encontrada' })
+    const subject = await loadUserPlanSubject(db, req.user.sub)
+    if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
     try {
       const result = await runAutomation(automation)
       return { ok: true, result }

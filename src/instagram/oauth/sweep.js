@@ -1,0 +1,24 @@
+import { createInstagramOAuthClient } from './client.js'
+import { refreshInstagramConnection } from './service.js'
+
+const REFRESH_AHEAD_MS = 15 * 24 * 60 * 60_000
+
+export async function runInstagramTokenSweep({ db, config, client = createInstagramOAuthClient(config), now = () => new Date(), limit = 50 } = {}) {
+  // NÃO filtrar por loginMethod: conexão feita sob outro método simplesmente
+  // deixava de ser renovada e vencia em silêncio. O cliente da Meta é montado
+  // por conexão, com o método que ELA usou.
+  const rows = await db.instagramConnection.findMany({ where: { status: 'connected', OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { lte: new Date(now().getTime() + REFRESH_AHEAD_MS) } }] }, select: { id: true, userId: true, loginMethod: true }, take: limit, orderBy: { tokenExpiresAt: 'asc' } })
+  const result = { scanned: rows.length, refreshed: 0, failed: 0 }
+  for (const row of rows) {
+    const rowConfig = row.loginMethod === config.loginMethod ? config : { ...config, loginMethod: row.loginMethod }
+    const rowClient = rowConfig === config ? client : createInstagramOAuthClient(rowConfig)
+    try { await refreshInstagramConnection(row.userId, row.id, rowConfig, { db, client: rowClient, now }); result.refreshed++ } catch { result.failed++ }
+  }
+  return result
+}
+
+export function startInstagramTokenSweep({ db, config, logger = console, intervalMs = 24 * 60 * 60_000 } = {}) {
+  const tick = () => runInstagramTokenSweep({ db, config }).then(result => logger.info?.(result, 'Renovação preventiva de tokens Instagram concluída')).catch(error => logger.error?.({ err: error.message }, 'Falha na renovação preventiva de tokens Instagram'))
+  const timer = setInterval(tick, intervalMs); timer.unref?.(); tick()
+  return () => clearInterval(timer)
+}
