@@ -30,6 +30,7 @@ import { resolveLinkKind } from './converters/linkKind.js'
 import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { appendRelayFooter } from './core/relayFooter.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { captureInstagramMirror } from './instagram/mirroring/capture.js'
@@ -3930,6 +3931,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           finalText = templatedText
           templateApplied = true
         }
+      }
+      // O complemento pertence exclusivamente ao formato "Manter texto
+      // original convertido". Dois saltos separam claramente o texto vindo da
+      // origem da assinatura opcional escrita pela cliente.
+      if (!effectiveTemplateKey) {
+        finalText = appendRelayFooter(finalText, monitorGroup?.relayFooterText)
       }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {

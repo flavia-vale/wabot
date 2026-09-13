@@ -166,6 +166,9 @@ model Group {
   forwardMode           String              @default("LINK_ONLY")
   noLinkScope           String?
   templateKey           String?
+  // Texto opcional anexado ao fim do relay desta origem (texto original com
+  // links convertidos). Templates continuam controlando o texto inteiro.
+  relayFooterText       String?
   primaryLinkTarget     String?
   blockedKeywords       String?
   allowedPlatforms      String?
