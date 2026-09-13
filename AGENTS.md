@@ -2306,9 +2306,22 @@ inteira em `core/destinationRouting.js` (`resolveMonitorDestinations`):
 - `all` (quem nunca escolheu) → comportamento histórico preservado, agora com
   aviso no log e sinal `ops_mirror_fallback_all_destinations`.
 
-Salvar destinos no painel grava `explicit`; desmarcar tudo volta a `all` (é como
-a tela sempre se comportou). A migration marca como `explicit` toda origem que
-já tem vínculo hoje.
+Salvar destinos no painel grava **sempre `explicit`, inclusive com a lista
+vazia**. A migration marca como `explicit` toda origem que já tem vínculo hoje.
+
+⚠️ **Corrigido em 2026-09-13 — não regredir.** Até aqui, salvar sem nenhum
+marcado gravava `all`, "porque é como a tela sempre se comportou". O efeito era
+o relato da cliente: ela desmarcava todos, salvava, voltava e **encontrava tudo
+marcado de novo** — `all` faz o `GET /:id/targets` devolver TODOS os destinos da
+conta, e a tela obedientemente marcava todos. Pior que o incômodo visual: a
+origem continuava espelhando para grupos que ela acabara de desmarcar, que é
+exatamente o que o RCA acima existe para impedir. Desmarcar tudo e salvar é a
+cliente dizendo "não mande para ninguém" — a origem para de enviar até ela
+escolher de novo, e a tela avisa isso antes do salvamento. `all` ficou valendo
+só para quem **nunca** salvou destino nenhum naquela origem. Guardas:
+`test/groups-route-targets-mode.test.js` (reabrir a tela depois de salvar
+vazio), `test/painel-destinos-editor.test.js` (texto do aviso e `mode` gravado
+pela tela).
 
 ### 3) Job já enfileirado não era cancelado
 

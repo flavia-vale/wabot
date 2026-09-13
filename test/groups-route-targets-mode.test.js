@@ -90,14 +90,23 @@ test('origem que nunca escolheu destino continua mostrando todos (comportamento 
   await app.close()
 })
 
-test('desmarcar tudo volta ao padrão histórico (all)', async () => {
+// A cliente desmarcava todos, salvava, voltava e encontrava TUDO marcado de
+// novo: salvar vazio gravava 'all', e 'all' faz o GET devolver todos os
+// destinos da conta. Desmarcar tudo é "não mande para ninguém".
+test('desmarcar tudo e salvar guarda a escolha vazia (não volta a marcar todos)', async () => {
   const { app } = await buildApp()
-  const { monitor, postA } = await seed(app)
+  const { monitor, postA, postB } = await seed(app)
   await app.inject({ method: 'PUT', url: `/api/groups/${monitor.id}/targets`, payload: { postIds: [postA.id] } })
   const res = await app.inject({ method: 'PUT', url: `/api/groups/${monitor.id}/targets`, payload: { postIds: [] } })
-  assert.equal(JSON.parse(res.body).mode, 'all')
+  assert.equal(JSON.parse(res.body).mode, 'explicit')
   const row = await db.group.findUnique({ where: { id: monitor.id } })
-  assert.equal(row.targetsMode, 'all')
+  assert.equal(row.targetsMode, 'explicit')
+
+  // É o passo que reproduz o relato: reabrir a tela.
+  const reopened = JSON.parse((await app.inject({ method: 'GET', url: `/api/groups/${monitor.id}/targets` })).body)
+  assert.equal(reopened.mode, 'explicit')
+  assert.deepEqual(reopened.postIds, [], 'continua sem nenhum destino marcado')
+  assert.ok(!reopened.postIds.includes(postB.id))
   await app.close()
 })
 
