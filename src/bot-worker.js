@@ -18,6 +18,7 @@ import { dirname } from 'path'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
+import { resolveCustomDomainLinks, findCandidateLinks } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
@@ -286,6 +287,39 @@ let allowedChatJidsReady = false
 // para sobreviver às reconexões do MESMO worker.
 const MONITORED_DROP_LOG_INTERVAL_MS = Math.max(0, Number(process.env.MONITORED_DROP_LOG_INTERVAL_MS ?? 60_000))
 const monitoredDropLogState = new Map()
+
+// Oferta publicada pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13): o
+// texto não traz link de loja nenhum, só `https://<dominio-dele>/p/xxx`. Sem
+// este passo o sanitizador apaga essa URL (ela credita o concorrente),
+// `detectLinks` não acha nada e a oferta morre como `nolink` — do lado de fora,
+// "o robô não espelha".
+//
+// Desembrulhar ANTES do sanitizador faz o resto do pipeline (sanitizador,
+// detector, conversor, dedup, imagem) seguir sem NENHUMA mudança, e quem
+// converte continua sendo o conversor da loja com a credencial da cliente — a
+// comissão é dela, não de quem publicou. Só gasta rede quando não há link de
+// loja no texto; qualquer falha devolve o texto como veio.
+async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
+  if (!text) return text
+  try {
+    const desembrulhado = await resolveCustomDomainLinks(text)
+    // Candidato que NÃO resolveu precisa deixar rastro com o motivo: em
+    // 2026-09-13 este caminho devolveu só `null` em staging, com código no ar,
+    // rede boa e a página trazendo o link — e não havia por onde começar.
+    if (desembrulhado.failures?.length) {
+      logger.warn({ msgId, jid, falhas: desembrulhado.failures }, 'Link de domínio próprio NÃO resolveu até a loja')
+    }
+    if (!desembrulhado.resolved.length) return text
+    logger.info({ msgId, jid, resolvidos: desembrulhado.resolved }, 'Link de domínio próprio desembrulhado até a loja')
+    for (const item of desembrulhado.resolved) {
+      try { recordOperationalSignal('custom_domain_link_resolved', { userId, platform: item.platform }) } catch {}
+    }
+    return desembrulhado.text
+  } catch (err) {
+    logger.warn({ msgId, jid, err: err?.message }, 'Falha ao desembrulhar link de domínio próprio — seguindo com o texto original')
+    return text
+  }
+}
 
 function logMonitoredSourceDrop(jid, reason, details = {}) {
   const now = Date.now()
@@ -3418,7 +3452,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
       }
 
-      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
+      const textoParaEspelhar = await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
+      const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar) : ''
       if (text && !sanitizedText) {
         logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
         return
@@ -3463,7 +3498,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           })
           return
         }
-        const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
+        // `hasGenericUrl` lê o texto JÁ SANITIZADO, e o sanitizador REMOVE toda
+        // URL que não é de loja suportada. Ou seja: exatamente a mensagem que
+        // deveria ganhar o sufixo — a que só trazia link de loja desconhecida ou
+        // do site próprio do grupo de origem — chegava aqui sem URL nenhuma,
+        // ficava sem sufixo e a cliente lia "fora das regras de encaminhamento
+        // que VOCÊ configurou". Isso culpa a configuração dela por um problema
+        // que é de cobertura de loja, e manda mexer no lugar errado (foi o que
+        // aconteceu em 13/09/2026). O texto de ANTES do sanitizador é quem sabe
+        // a verdade; `findCandidateLinks` é a mesma regra do desembrulho de
+        // domínio próprio (ignora convite de grupo e rede social), então as duas
+        // pontas nunca discordam sobre o que é "link de loja desconhecida".
+        const hadUnsupportedStoreUrl = findCandidateLinks(textoParaEspelhar).length > 0
+        const unsupportedStoreSuffix =
+          links.length === 0 && (hasGenericUrl || hadUnsupportedStoreUrl) ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
             userId,

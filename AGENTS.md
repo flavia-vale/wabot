@@ -4787,6 +4787,110 @@ normalmente no fallback. Testes: `test/mercadolivre-resolve.test.js` (bloco
 — read-only, classifica o formato de cada link de ML publicado e marca com ⚠ os
 suspeitos (`listing_fabricado`, `vitrine_social`, `cupom_generico`).
 
+## Oferta que chega pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13)
+
+Cliente (`raelysouza98@gmail.com`) reportou "o robô não espelha". Não havia
+defeito: o grupo monitorado publica a oferta pelo **domínio próprio do dono
+dele** (`https://dicasdeamigas.com.br/p/yaQ4mlRhfU`), nunca pelo link da loja.
+`detectLinks` só conhece os domínios das lojas suportadas, então a mensagem
+chegava "sem link", o sanitizador apagava a URL de terceiro (corretamente — ela
+credita o concorrente) e a oferta morria em `skip:policy:...:nolink` /
+`skip:no_valid_conversions`.
+
+**Medido no link real antes de escrever o código** (não é suposição): NÃO é
+redirect HTTP — responde **200 com HTML** (Next.js), e o corpo traz **as duas**
+URLs: o short link de afiliado do concorrente (`https://link.amazon/...`) e a
+**URL limpa do produto** (`https://www.amazon.com.br/dp/B088PNBKTR/`).
+
+| Peça | Onde |
+|---|---|
+| Decisão + resolução (puro + I/O injetado) | `src/core/customDomainLinkResolver.js` |
+| Gancho no robô | `unwrapCustomDomainOfferLinks` em `src/bot-worker.js` |
+| Sinal durável | `ops_custom_domain_link_resolved` |
+
+O módulo devolve o **texto** com a URL de domínio próprio trocada pela da loja.
+Por rodar **antes** do sanitizador, o resto do pipeline (sanitizador, detector,
+conversor, dedup, imagem) segue byte a byte como já era — nenhum deles mudou.
+
+**Não regredir:**
+
+- **Só age quando a mensagem NÃO tem link de loja nenhum.** Mensagem que já traz
+  link de loja não gasta rede nem muda de caminho: risco e latência zero para o
+  fluxo que já funciona.
+- **Roda ANTES de `sanitizeInviteLinks`.** Invertido, a URL de domínio próprio já
+  foi apagada e não há o que desembrulhar — é exatamente o estado anterior ao
+  fix. Guarda estrutural no teste.
+- **O link de terceiro NUNCA é publicado.** Ele é substituído pelo da loja (que
+  ainda passa pela conversão com a credencial da cliente) ou fica como estava, e
+  aí o sanitizador o remove como sempre removeu. Falha aqui não vaza comissão.
+- **Preferir a URL com ID de produto** (`urlHasProductId`), não a primeira do
+  HTML. A limpa converte melhor (o conversor lê o ASIN direto) e não carrega a
+  etiqueta do concorrente.
+- ⚠️ **Não extrair do HTML com `PATTERNS` do detector.** O `[^\s]*` de lá foi
+  feito para TEXTO CORRIDO; em JSON minificado não há espaço, e — medido — o
+  primeiro link engolia milhares de caracteres e **escondia** a URL limpa do
+  produto, fazendo a preferência acima nunca ver a melhor opção. A URL é
+  recortada nos delimitadores de HTML/JSON **antes** de ser classificada.
+- **Anti-SSRF obrigatório** (`isSafeCandidateUrl`): o link vem de grupo de
+  TERCEIROS, é entrada hostil. Sem isso o robô viraria buscador de rede interna
+  para quem publicasse `http://169.254.169.254/...` no grupo monitorado. Recusa
+  IP literal (v4/v6), host sem ponto, sufixo de rede local, credencial embutida
+  e porta fora de 80/443.
+- **Fracasso não é cacheado** (mesma lição do short link da Shopee); sucesso vale
+  6h. **Fail-safe é não mexer no texto**: qualquer erro devolve o original.
+- **Teto de 2 links por mensagem, com tempo generoso por link E teto na mensagem
+  inteira.** Medido em staging (2026-09-13): o MESMO endereço respondeu em
+  **568ms** numa chamada e **estourou 4s** na seguinte — o site oscila muito a
+  partir do servidor, e cada estouro custava a oferta inteira. Por link o tempo é
+  8s (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira, 9s
+  (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), porque o preparo tem orçamento de 25s
+  (`MSG_QUEUE_TIMEOUT_MS`) e ainda precisa converter o link e buscar a foto
+  depois daqui. **Não subir o tempo por link sem o teto total** — dois links
+  multiplicariam a espera numa fila que é serial.
+- **A falha NUNCA pode ser só `null`.** Foi assim que uma investigação inteira
+  precisou de quatro rodadas de comando em staging: código no ar, rede boa (200
+  em 568ms), página trazendo o link e cada peça acertando isoladamente — e a
+  única informação disponível era `null`.
+  `resolveStoreUrlFromCustomDomainDetailed` devolve `{ store, reason, detail }`
+  (`tempo_esgotado`, `recusado_http_<status>`, `pagina_sem_link_de_loja`,
+  `endereco_recusado`, `sem_tempo_no_orcamento`, `erro_de_rede:<nome>`…) e o
+  robô loga `Link de domínio próprio NÃO resolveu até a loja`. Mesma lição de
+  "o caminho do card de preview era MUDO".
+
+Envs (todas opcionais): `CUSTOM_DOMAIN_LINK_RESOLVE` (default LIGADO; só o valor
+exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (8000),
+`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (9000), `CUSTOM_DOMAIN_MAX_BYTES` (512KB),
+`CUSTOM_DOMAIN_CACHE_TTL_MS` (6h). Ajustar o tempo **não exige deploy** — é
+`.env` + `pm2 delete`/`start` (pegadinha #1).
+**Custo: nenhum processo novo, zero impacto de RAM** (cache em memória podado em
+500 entradas).
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — isto só
+passa a valer nos bots depois de `pm2 restart bot-supervisor` (reconecta TODAS
+as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/custom-domain-link-resolver.test.js` (com fixture do HTML real em
+`test/fixtures/custom-domain-offer-page.html`).
+
+### O motivo no painel culpava a configuração da cliente (mesma investigação)
+
+"Mensagem fora das regras de encaminhamento que **você** configurou para este
+grupo" era o que a cliente lia — e a causa não tinha nada a ver com a
+configuração dela. `skip:policy:...` só ganha o sufixo `:unsupported_store`
+(que vira "ainda não fazemos conversão para essa loja") quando sobrou URL no
+texto, e o teste era feito no texto **já sanitizado** — de onde o sanitizador
+acabara de REMOVER toda URL que não é de loja suportada. Ou seja: exatamente a
+mensagem que deveria ganhar o sufixo chegava sem URL nenhuma e caía na frase
+genérica, mandando a cliente mexer em "Lojas aceitas" e no modo de
+encaminhamento, que estavam certos.
+
+**Não regredir:** o sufixo é decidido sobre o texto de ANTES do sanitizador
+(`findCandidateLinks(textoParaEspelhar)`) — a MESMA regra do desembrulho, para
+que as duas pontas nunca discordem sobre o que é "link de loja desconhecida"
+(ela ignora convite de grupo e rede social, que não são loja). `hasGenericUrl`
+segue como está no outro uso (o descarte silencioso de `messageKind === 'other'`)
+— ampliá-lo ali transformaria ruído de protocolo em linha no painel.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST
