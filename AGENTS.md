@@ -3939,6 +3939,50 @@ que será mergeado antes ou depois dele.
 
 Teste: `test/migrations-no-duplicate-column.test.js`.
 
+#### Aconteceu de novo, agora numa TELA (RCA 2026-09-13 — produção fora do ar)
+
+`/painel/filas` foi para produção abrindo **em branco**, com
+`Uncaught ReferenceError: findDestinationsWithoutQueue is not defined` no
+console. Servidor 200, todos os chunks 200 — a quebra era no navegador.
+
+Mesmo mecanismo da pegadinha #10, com um detalhe novo: **o conflito estava
+entre o USO e o IMPORT, em regiões distantes do mesmo arquivo.**
+
+| commit | import | uso |
+|---|---|---|
+| `08e8695` (PR #1641, aviso de grupo fora das filas) | ✅ | ✅ |
+| `40f6764` (PR #1644, Instagram — branch tirada ANTES da #1641) | ❌ | ❌ |
+| `2b47f6f` (merge de `develop` na branch do Instagram) | ❌ | **✅** |
+
+O merge pegou o uso de um lado e o bloco de imports do outro. Zero conflito
+textual, build passou (bundler não resolve identificador livre em tempo de
+build), e nenhum teste renderiza essa página.
+
+**Por que nada pegou:**
+- `eslint.config.js` **ignorava `dashboard/**` de propósito** — o comentário
+  dizia que "a CI só lintava o dashboard". Só que o lint do Next **não roda
+  `no-undef`**.
+- O gate do dashboard em `deploy.yml` roda só em `pull_request`, e a PR foi
+  mergeada com esse check ainda em andamento.
+
+**Correção:** o `no-undef` passou a cobrir `dashboard/app`, `dashboard/components`
+e `dashboard/lib` (bloco próprio no `eslint.config.js`, com globais de
+navegador), e o job da CI virou
+`eslint@9 --no-inline-config src test dashboard/app dashboard/components dashboard/lib`.
+
+⚠️ **`--no-inline-config` é obrigatório** nesse comando: as telas têm
+`eslint-disable` de regras de plugin (`react-hooks/*`, `@next/next/*`) que não
+existem nesta config pura (ela não importa nada, de propósito, para rodar com
+`npx` sem `npm ci`) e virariam erro de "rule not found".
+
+**Não regredir:** não voltar a pôr `dashboard/**` no `ignores`. A varredura do
+dashboard inteiro no dia da correção achou **só** esse caso — o custo de manter
+a rede ligada é um lint a mais por PR.
+
+⚠️ E a lição de processo continua a MESMA e continua sem estar aplicada:
+branch protection exigindo `quality` e `no-undef` verdes antes do merge. As
+duas PRs desta história foram mergeadas com check em andamento.
+
 ## "Imagem que veio na mensagem" tem UM caminho só: subir de novo (RCA 2026-08-21)
 
 Existiam **dois** caminhos para a mesma promessa de produto, e eles não eram
