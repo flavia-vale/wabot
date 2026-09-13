@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
+import { findDestinationsWithoutQueue } from '@/lib/painel/queueCoverage'
 import { PainelContentActions, usePainelHeader } from '../PainelShell'
 
 const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [], instagramDestinationIds: [] }
