@@ -23,6 +23,7 @@ import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { offerAutomationRoutes } from './routes/offerAutomation.js'
+import { offerAutomationReviewRoutes } from './routes/offerAutomationReview.js'
 import { offerQueueRoutes } from './routes/offerQueue.js'
 import { affiliateRoutes } from './routes/affiliate.js'
 import { startOfferAutomationCron } from '../offerAutomation/cron.js'
@@ -533,6 +534,7 @@ app.register(storyAssetRoutes, { prefix: '/api/public', storage: storyAssetStora
 app.register(instagramRoutes, { prefix: '/api/instagram', storage: storyAssetStorage })
 app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
+app.register(offerAutomationReviewRoutes, { prefix: '/api/offer-automations' })
 app.register(offerQueueRoutes, { prefix: '/api/offer-queues' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 app.register(affiliateRoutes, { prefix: '/api' })
