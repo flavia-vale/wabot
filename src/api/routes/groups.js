@@ -178,12 +178,14 @@ export async function groupsRoutes(app, opts = {}) {
     const usesChannel = monitor.kind === JID_KIND.CHANNEL || validPosts.some(post => post.kind === JID_KIND.CHANNEL)
     if (usesChannel && !(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
 
-    // `targetsMode` grava a INTENÇÃO da cliente. Escolheu destinos → 'explicit':
-    // daí em diante, se esses vínculos sumirem (ex.: ela apagar os grupos de
-    // destino, o que apaga GroupTarget por cascata), a origem NÃO volta a
-    // espelhar para todos os destinos da conta. Lista vazia mantém 'all' porque
-    // é assim que a tela sempre se comportou (desmarcar tudo = padrão histórico).
-    const targetsMode = postIds.length ? 'explicit' : 'all'
+    // `targetsMode` grava a INTENÇÃO da cliente. Salvar a escolha é SEMPRE
+    // 'explicit' — inclusive com a lista vazia. Desmarcar tudo e salvar é a
+    // cliente dizendo "não mande para ninguém"; gravar 'all' aqui fazia o GET
+    // devolver TODOS os destinos de volta (o fallback histórico), então ao
+    // reabrir a tela tudo aparecia marcado de novo e a origem seguia espelhando
+    // para grupos que ela acabara de desmarcar. 'all' continua existindo apenas
+    // para quem NUNCA escolheu destino (nenhum salvamento nesta origem).
+    const targetsMode = 'explicit'
     await db.$transaction([
       db.groupTarget.deleteMany({ where: { userId: req.user.sub, monitorId: monitor.id } }),
       ...postIds.map(postId => db.groupTarget.create({ data: { userId: req.user.sub, monitorId: monitor.id, postId } })),

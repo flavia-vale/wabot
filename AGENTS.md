@@ -2306,9 +2306,22 @@ inteira em `core/destinationRouting.js` (`resolveMonitorDestinations`):
 - `all` (quem nunca escolheu) → comportamento histórico preservado, agora com
   aviso no log e sinal `ops_mirror_fallback_all_destinations`.
 
-Salvar destinos no painel grava `explicit`; desmarcar tudo volta a `all` (é como
-a tela sempre se comportou). A migration marca como `explicit` toda origem que
-já tem vínculo hoje.
+Salvar destinos no painel grava **sempre `explicit`, inclusive com a lista
+vazia**. A migration marca como `explicit` toda origem que já tem vínculo hoje.
+
+⚠️ **Corrigido em 2026-09-13 — não regredir.** Até aqui, salvar sem nenhum
+marcado gravava `all`, "porque é como a tela sempre se comportou". O efeito era
+o relato da cliente: ela desmarcava todos, salvava, voltava e **encontrava tudo
+marcado de novo** — `all` faz o `GET /:id/targets` devolver TODOS os destinos da
+conta, e a tela obedientemente marcava todos. Pior que o incômodo visual: a
+origem continuava espelhando para grupos que ela acabara de desmarcar, que é
+exatamente o que o RCA acima existe para impedir. Desmarcar tudo e salvar é a
+cliente dizendo "não mande para ninguém" — a origem para de enviar até ela
+escolher de novo, e a tela avisa isso antes do salvamento. `all` ficou valendo
+só para quem **nunca** salvou destino nenhum naquela origem. Guardas:
+`test/groups-route-targets-mode.test.js` (reabrir a tela depois de salvar
+vazio), `test/painel-destinos-editor.test.js` (texto do aviso e `mode` gravado
+pela tela).
 
 ### 3) Job já enfileirado não era cancelado
 
@@ -4871,6 +4884,40 @@ as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
 
 Teste: `test/custom-domain-link-resolver.test.js` (com fixture do HTML real em
 `test/fixtures/custom-domain-offer-page.html`).
+
+### Nem todo site de domínio próprio entrega o link (medição antes de investir)
+
+Em produção o desembrulho passou a atender **oito sites diferentes** nas quatro
+lojas (clubedoachadinho, meli.ofertasluan, temdetudotchelo, centraldapromoo,
+compre.link, magazineluiza.onelink, dicasdeamigas, achadosdetenis). Os que
+falham caem em três motivos, e **cada um pede uma ação diferente** — por isso o
+motivo é registrado em vez de virar um "não deu" genérico:
+
+| Motivo | Exemplo medido | O que é |
+|---|---|---|
+| `pagina_sem_link_de_loja` | `oasisdeofertas.com.br` | **casca de 1.994 bytes**, idêntica em páginas diferentes: app React (Lovable) que monta tudo por JavaScript e busca de um backend próprio. O link não existe no HTML |
+| `recusado_http_403` | `pechin.co` | o site **barra o nosso servidor** (mesma família do muro do Mercado Livre) |
+| `tempo_esgotado` | `centraldapromoo.com.br` | lentidão pontual — o mesmo endereço resolveu depois |
+
+⚠️ **Renderizar a página num navegador de verdade (Playwright) está DESCARTADO**
+por memória: cada instância custa ~300 MB e o servidor já opera com folga zero
+pela política (`evaluateCapacity` dá limite seguro de 35 robôs com 36 ligados).
+É a REGRA #1 da política de memória — se alguém reabrir isso, precisa vir com
+estimativa e OK explícito.
+
+**Antes de investir em qualquer um desses caminhos, MEDIR** — a resposta muda
+conforme quantos sites e quantas clientes cada motivo afeta:
+
+```bash
+cd ~/wabot && node scripts/diag-dominio-proprio.mjs --horas=72
+```
+
+Read-only, lê o `bot.log` em stream (nunca carrega o arquivo na memória) e
+agrega por site, por motivo e por **quantas contas** cada site afeta — "3 sites
+falhando" pode ser uma cliente ou trinta, e as duas situações pedem decisões
+opostas. Falha ao cruzar com o banco é **impressa**, nunca engolida (lição do
+`diag-assinatura-recusada.mjs`, onde `.catch(() => [])` virou "nenhuma conta
+encontrada"). Teste: `test/diag-dominio-proprio.test.js`.
 
 ### O motivo no painel culpava a configuração da cliente (mesma investigação)
 

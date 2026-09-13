@@ -242,7 +242,7 @@ function DestinationPicker({ groupId, post, state, onLoad, onToggle, onSetAll, o
 
       {draft.length === 0 && (
         <p className="cfg-inline-warn" style={{ marginTop: 0 }}>
-          Sem nenhum marcado, esse grupo envia para <strong>todos</strong> os seus destinos. Para ele parar de enviar, remova o grupo monitorado.
+          Sem nenhum marcado, esse grupo <strong>não envia para lugar nenhum</strong> depois que você salvar. Marque ao menos um destino para ele voltar a enviar.
         </p>
       )}
 
@@ -831,7 +831,9 @@ export default function GruposPage() {
         error: '',
         savedIds: idsToSave,
         draftIds: idsToSave,
-        mode: idsToSave.length ? 'explicit' : 'all',
+        // Salvar é sempre escolha explícita, inclusive vazia: desmarcar tudo
+        // quer dizer "não mande para ninguém", e não o fallback de todos.
+        mode: 'explicit',
         savedAt: Date.now(),
       })
     } catch (err) {
