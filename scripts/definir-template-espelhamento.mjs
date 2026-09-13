@@ -14,7 +14,7 @@
 // precisa reiniciar nada, nem o bot-supervisor.
 import 'dotenv/config'
 import { readFileSync } from 'node:fs'
-import { db } from '../src/db.js'
+import db from '../src/db.js'
 import { canonicalizeTemplateBody } from '../src/core/templateVariables.js'
 import { composeTemplates } from '../dashboard/lib/mobileTemplateStore.js'
 
