@@ -15,6 +15,7 @@ import InstagramDestinationPicker, { instagramDestinationsFromConnections } from
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
 import { ReviewQueue } from '@/components/offerAutomation/ReviewQueue'
+import { validateOfferAutomationForm } from '@/lib/offerAutomationForm'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -188,6 +189,11 @@ export default function OfertasAutomaticasPage() {
   }
 
   async function handleSave() {
+    const validationError = validateOfferAutomationForm(form)
+    if (validationError) {
+      setSaveError(validationError)
+      return
+    }
     setSaving(true)
     setSaveError('')
     try {
@@ -502,7 +508,7 @@ export default function OfertasAutomaticasPage() {
               type="button"
               className="pnl-btn is-primary"
               onClick={handleSave}
-              disabled={saving || !form.keyword.trim() || (!form.destGroupJid && !form.instagramDestinationIds.length) || (form.intervalMinutes === DAILY_INTERVAL_MINUTES && !form.dailyRunTime)}
+              disabled={saving}
             >
               {saving ? 'Salvando…' : 'Salvar'}
             </button>
