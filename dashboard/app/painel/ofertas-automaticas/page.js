@@ -14,6 +14,7 @@ import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitleme
 import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
+import { ReviewQueue } from '@/components/offerAutomation/ReviewQueue'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -83,6 +84,8 @@ const emptyForm = {
   offersPerSend: 1,
   minDiscountPct: 20,
   prioritizeAMS: false,
+  publicationMode: 'direct',
+  reviewTargetSize: 10,
   instagramDestinationIds: [],
 }
 
@@ -119,23 +122,26 @@ export default function OfertasAutomaticasPage() {
   const [bulkToggling, setBulkToggling] = useState(null)
   const [triggerResult, setTriggerResult] = useState({})
   const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
+  const [reviewAvailable, setReviewAvailable] = useState(false)
 
   async function load() {
     setLoading(true)
     setError('')
     try {
-      const [list, groups, templateStore, me, connections] = await Promise.all([
+      const [list, groups, templateStore, me, connections, reviewCapability] = await Promise.all([
         api.offerAutomations(),
         api.groups().then((gs) => gs.filter((g) => g.role === 'post')),
         loadTemplateStore(),
         api.me().catch(() => null),
         api.instagramConnections().catch(() => []),
+        api.offerAutomationReviewCapability().catch(() => ({ enabled: false })),
       ])
       setAutomations(list)
       setWaGroups(groups)
       setTemplates(composeTemplates(templateStore))
       setInstagramDestinations(hasInstagramStoriesAccess(me || {}) ? instagramDestinationsFromConnections(connections) : [])
       if (me) setPlanSubject({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null })
+      setReviewAvailable(reviewCapability.enabled === true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -164,6 +170,8 @@ export default function OfertasAutomaticasPage() {
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
       prioritizeAMS: a.prioritizeAMS ?? false,
+      publicationMode: a.publicationMode || 'direct',
+      reviewTargetSize: a.reviewTargetSize || 10,
       instagramDestinationIds: a.instagramDestinationIds || [],
     })
     setSaveError('')
@@ -183,7 +191,10 @@ export default function OfertasAutomaticasPage() {
     setSaving(true)
     setSaveError('')
     try {
-      if (editId) await api.offerAutomationUpdate(editId, form)
+      if (editId) {
+        const previous = automations.find((item) => item.id === editId)
+        await api.offerAutomationUpdate(editId, { ...form, confirmPublicationModeChange: previous?.publicationMode !== form.publicationMode })
+      }
       else await api.offerAutomationCreate(form)
       setShowForm(false)
       await load()
@@ -418,6 +429,16 @@ export default function OfertasAutomaticasPage() {
             {selectedTemplatePreview && <pre className="pnl-pre" style={{ background: 'var(--bg-soft)', borderRadius: 8, padding: 12, marginTop: 8, maxHeight: 112 }}>{selectedTemplatePreview}</pre>}
           </div>
 
+          {reviewAvailable && <div>
+            <label className="pnl-label">Como publicar?</label>
+            <select className="pnl-input" value={form.publicationMode} onChange={(e) => setForm((f) => ({ ...f, publicationMode: e.target.value }))}>
+              <option value="direct">Publicar automaticamente</option>
+              <option value="review">Quero revisar antes de publicar</option>
+            </select>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>{form.publicationMode === 'review' ? 'O bot prepara as ofertas, mas só publica o que você aprovar.' : 'O bot busca e publica sozinho, como funciona hoje.'}</p>
+            {form.publicationMode === 'review' && <select aria-label="Quantidade de ofertas para revisão" className="pnl-input" style={{ marginTop: 8 }} value={form.reviewTargetSize} onChange={(e) => setForm((f) => ({ ...f, reviewTargetSize: Number(e.target.value) }))}><option value={5}>Guardar 5 ofertas</option><option value={10}>Guardar 10 ofertas</option><option value={20}>Guardar 20 ofertas</option></select>}
+          </div>}
+
           <div>
             <label className="pnl-label">Enviar para qual grupo?</label>
             <select className="pnl-input" value={form.destGroupJid} onChange={(e) => handleGroupChange(e.target.value)}>
@@ -510,6 +531,7 @@ export default function OfertasAutomaticasPage() {
                     {DISCOUNT_OPTIONS.find((o) => o.value === a.minDiscountPct)?.label ?? `${a.minDiscountPct}% OFF mín.`}
                   </p>
                   <p className="pnl-hint">Modelo: {templateName(templates, a.templateKey || 'automatico_classico')} · {nextSendLabel(a.lastSentAt, a.intervalMinutes, a.dailyRunTime)}</p>
+                  {a.publicationMode === 'review' && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>👀 Revisão antes de publicar</span>}
                   {a.prioritizeAMS && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>⚡ Comissão extra priorizada</span>}
                 </div>
                 <button
@@ -523,9 +545,9 @@ export default function OfertasAutomaticasPage() {
                 </button>
               </div>
               <div className="pnl-toolbar" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-                <button type="button" className="pnl-link-btn" onClick={() => handleTrigger(a)} disabled={triggering === a.id}>
+                {a.publicationMode !== 'review' && <button type="button" className="pnl-link-btn" onClick={() => handleTrigger(a)} disabled={triggering === a.id}>
                   {triggering === a.id ? 'Enviando…' : 'Enviar agora'}
-                </button>
+                </button>}
                 <button type="button" className="pnl-link-btn" style={{ color: 'var(--ink-soft)' }} onClick={() => openEdit(a)}>Editar</button>
                 <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(a)}>Remover</button>
               </div>
@@ -534,6 +556,7 @@ export default function OfertasAutomaticasPage() {
                   {result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped) : `✓ ${result.sent} produto(s) enviado(s)`}
                 </p>
               )}
+              {a.publicationMode === 'review' && <ReviewQueue automation={a} />}
             </div>
           )
         })}
