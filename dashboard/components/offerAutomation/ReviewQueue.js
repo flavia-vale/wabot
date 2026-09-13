@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { api } from '@/lib/api'
 
 const STATUS_LABEL = { awaiting_review: 'Para revisar', approved: 'Aprovada', failed: 'Falhou' }
@@ -16,7 +17,22 @@ export function ReviewQueue({ automation }) {
     catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [automation.id])
+  useEffect(() => {
+    let cancelled = false
+    api.offerAutomationReviewItems(automation.id)
+      .then((result) => {
+        if (cancelled) return
+        setData(result)
+        setError('')
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [automation.id])
 
   async function act(key, operation) {
     setBusy(key); setError('')
@@ -37,7 +53,7 @@ export function ReviewQueue({ automation }) {
         <div className="pnl-grid" style={{ marginTop: 12 }}>
           {data.items.map(item => (
             <article key={item.id} style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, display: 'grid', gridTemplateColumns: item.imageUrl ? '72px 1fr' : '1fr', gap: 12 }}>
-              {item.imageUrl && <img src={item.imageUrl} alt="" width="72" height="72" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8 }} />}
+              {item.imageUrl && <Image unoptimized src={item.imageUrl} alt="" width={72} height={72} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8 }} />}
               <div style={{ minWidth: 0 }}>
                 <span className={`pnl-tag ${item.status === 'approved' ? 'is-on' : item.status === 'failed' ? 'is-danger' : 'is-flight'}`}>{STATUS_LABEL[item.status] || item.status}</span>
                 <pre className="pnl-pre" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', marginTop: 8, maxHeight: 180, overflow: 'auto' }}>{item.renderedText}</pre>
