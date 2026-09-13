@@ -64,10 +64,20 @@ test('salvar manda só destinos que ainda existem e mostra a falha ao lado do bo
   assert.match(save, /if \(!current \|\| current\.loading \|\| current\.saving/)
 })
 
-test('a tela diz a verdade sobre lista vazia (vazio = envia para todos)', () => {
+test('a tela diz a verdade sobre lista vazia (vazio = não envia para ninguém)', () => {
   const picker = page.slice(page.indexOf('function DestinationPicker'), page.indexOf('/* ── Monitor group config panel'))
   assert.match(picker, /draft\.length === 0 && \(/)
-  assert.match(picker, /envia para <strong>todos<\/strong> os seus destinos/)
+  // Salvar sem nenhum marcado guarda a escolha vazia: a origem para de enviar.
+  // Dizer que ela "envia para todos" era o texto do comportamento antigo, que
+  // fazia a tela remarcar tudo ao reabrir.
+  assert.match(picker, /não envia para lugar nenhum/)
+  assert.doesNotMatch(picker, /envia para <strong>todos<\/strong> os seus destinos/)
+})
+
+test('salvar destinos guarda a escolha como explícita, inclusive vazia', () => {
+  const save = page.slice(page.indexOf('const saveTargets = useCallback'), page.indexOf('const targetsHandlers'))
+  assert.match(save, /mode: 'explicit'/)
+  assert.doesNotMatch(save, /idsToSave\.length \? 'explicit' : 'all'/)
 })
 
 test('a linha inteira do destino é clicável, com alvo de toque grande', () => {
