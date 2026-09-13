@@ -193,3 +193,29 @@ test('guarda estrutural: o desembrulho roda ANTES do sanitizador no bot-worker',
   // conseguir desembrulhá-la — que é exatamente o estado anterior ao fix.
   assert.ok(posResolve < posSanitize, 'desembrulhar DEPOIS do sanitizador não funciona: a URL já foi apagada')
 })
+
+test('guarda: o motivo "loja não suportada" é decidido ANTES do sanitizador', () => {
+  // RCA 13/09/2026: `hasGenericUrl` lia o texto já sanitizado, e o sanitizador
+  // remove toda URL que não é de loja suportada. A mensagem que DEVERIA ganhar
+  // o sufixo chegava sem URL nenhuma e a cliente lia "fora das regras de
+  // encaminhamento que você configurou" — culpando a configuração dela por um
+  // problema de cobertura de loja, e mandando mexer no lugar errado.
+  const fonte = readFileSync(join(here, '..', 'src', 'bot-worker.js'), 'utf8')
+  assert.match(
+    fonte,
+    /const hadUnsupportedStoreUrl = findCandidateLinks\(textoParaEspelhar\)\.length > 0/,
+    'o motivo precisa olhar o texto de antes do sanitizador',
+  )
+  assert.match(
+    fonte,
+    /links\.length === 0 && \(hasGenericUrl \|\| hadUnsupportedStoreUrl\) \? ':unsupported_store'/,
+    'link de loja desconhecida não pode voltar a ser lido como regra de encaminhamento',
+  )
+})
+
+test('findCandidateLinks reconhece loja não suportada, mas não convite de grupo', () => {
+  // É a mesma regra usada pelo desembrulho, de propósito: as duas pontas não
+  // podem discordar sobre o que é "link de loja desconhecida".
+  assert.equal(findCandidateLinks('confira https://www.netshoes.com.br/p/tenis-123').length, 1)
+  assert.equal(findCandidateLinks('entra no grupo https://chat.whatsapp.com/ABC').length, 0)
+})

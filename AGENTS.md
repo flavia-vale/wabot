@@ -4854,6 +4854,25 @@ as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
 Teste: `test/custom-domain-link-resolver.test.js` (com fixture do HTML real em
 `test/fixtures/custom-domain-offer-page.html`).
 
+### O motivo no painel culpava a configuração da cliente (mesma investigação)
+
+"Mensagem fora das regras de encaminhamento que **você** configurou para este
+grupo" era o que a cliente lia — e a causa não tinha nada a ver com a
+configuração dela. `skip:policy:...` só ganha o sufixo `:unsupported_store`
+(que vira "ainda não fazemos conversão para essa loja") quando sobrou URL no
+texto, e o teste era feito no texto **já sanitizado** — de onde o sanitizador
+acabara de REMOVER toda URL que não é de loja suportada. Ou seja: exatamente a
+mensagem que deveria ganhar o sufixo chegava sem URL nenhuma e caía na frase
+genérica, mandando a cliente mexer em "Lojas aceitas" e no modo de
+encaminhamento, que estavam certos.
+
+**Não regredir:** o sufixo é decidido sobre o texto de ANTES do sanitizador
+(`findCandidateLinks(textoParaEspelhar)`) — a MESMA regra do desembrulho, para
+que as duas pontas nunca discordem sobre o que é "link de loja desconhecida"
+(ela ignora convite de grupo e rede social, que não são loja). `hasGenericUrl`
+segue como está no outro uso (o descarte silencioso de `messageKind === 'other'`)
+— ampliá-lo ali transformaria ruído de protocolo em linha no painel.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST

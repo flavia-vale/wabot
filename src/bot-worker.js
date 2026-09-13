@@ -18,7 +18,7 @@ import { dirname } from 'path'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
-import { resolveCustomDomainLinks } from './core/customDomainLinkResolver.js'
+import { resolveCustomDomainLinks, findCandidateLinks } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
@@ -3492,7 +3492,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           })
           return
         }
-        const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
+        // `hasGenericUrl` lê o texto JÁ SANITIZADO, e o sanitizador REMOVE toda
+        // URL que não é de loja suportada. Ou seja: exatamente a mensagem que
+        // deveria ganhar o sufixo — a que só trazia link de loja desconhecida ou
+        // do site próprio do grupo de origem — chegava aqui sem URL nenhuma,
+        // ficava sem sufixo e a cliente lia "fora das regras de encaminhamento
+        // que VOCÊ configurou". Isso culpa a configuração dela por um problema
+        // que é de cobertura de loja, e manda mexer no lugar errado (foi o que
+        // aconteceu em 13/09/2026). O texto de ANTES do sanitizador é quem sabe
+        // a verdade; `findCandidateLinks` é a mesma regra do desembrulho de
+        // domínio próprio (ignora convite de grupo e rede social), então as duas
+        // pontas nunca discordam sobre o que é "link de loja desconhecida".
+        const hadUnsupportedStoreUrl = findCandidateLinks(textoParaEspelhar).length > 0
+        const unsupportedStoreSuffix =
+          links.length === 0 && (hasGenericUrl || hadUnsupportedStoreUrl) ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
             userId,
