@@ -49,6 +49,12 @@ export async function deliverApprovedReviewItems(automation, deps = {}) {
       const progress = parse(item.deliverySnapshot, {})
       progress.instagram ||= []
       try {
+        // Items created before the price validation fix may already be in the
+        // review queue. Never publish those stale snapshots without a price;
+        // failing permanently is safer than retrying the same invalid content.
+        if (!Number.isSafeInteger(item.priceCents) || item.priceCents <= 0) {
+          throw Object.assign(new Error('Oferta sem preço válido; busque novas opções'), { permanent: true })
+        }
         if (targets.whatsapp?.jid && !progress.whatsapp) {
           if (!await isRunning(automation.userId)) throw new Error('Bot não está conectado')
           await sendBroadcast(automation.userId, item.renderedText, [targets.whatsapp.jid], { imageUrl: item.imageUrl || undefined, imageRefererUrl: item.imageRefererUrl || undefined, source: 'offerAutomation' })
@@ -71,7 +77,7 @@ export async function deliverApprovedReviewItems(automation, deps = {}) {
         automation.sentItemIds = addSent(automation.sentItemIds, item.itemId)
         sent++
       } catch (error) {
-        const terminal = item.attemptCount >= REVIEW_ITEM_MAX_ATTEMPTS
+        const terminal = error.permanent === true || item.attemptCount >= REVIEW_ITEM_MAX_ATTEMPTS
         await db.offerAutomationReviewItem.updateMany({ where: { id: item.id, status: REVIEW_STATUS.SENDING }, data: terminal ? { status: REVIEW_STATUS.FAILED, claimedAt: null, lastError: String(error.message).slice(0, 500) } : { status: REVIEW_STATUS.APPROVED, claimedAt: null, nextAttemptAt: new Date(now.getTime() + retryDelay(item.attemptCount)), lastError: String(error.message).slice(0, 500), deliverySnapshot: JSON.stringify(progress) } })
         failed.push(item.id)
       }

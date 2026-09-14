@@ -4960,12 +4960,16 @@ conversor, dedup, imagem) segue byte a byte como já era — nenhum deles mudou.
 - **Teto de 2 links por mensagem, com tempo generoso por link E teto na mensagem
   inteira.** Medido em staging (2026-09-13): o MESMO endereço respondeu em
   **568ms** numa chamada e **estourou 4s** na seguinte — o site oscila muito a
-  partir do servidor, e cada estouro custava a oferta inteira. Por link o tempo é
-  8s (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira, 9s
-  (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), porque o preparo tem orçamento de 25s
-  (`MSG_QUEUE_TIMEOUT_MS`) e ainda precisa converter o link e buscar a foto
-  depois daqui. **Não subir o tempo por link sem o teto total** — dois links
-  multiplicariam a espera numa fila que é serial.
+  partir do servidor. Confirmado em produção (2026-09-14): os DNS IPv6 da
+  Hetzner falharam de forma intermitente, uma tentativa estourou os 8s e a
+  seguinte resolveu em 2,6s. Por isso há no máximo 2 tentativas, mas a segunda
+  só ocorre para `tempo_esgotado`/`erro_de_rede:*`; 403, HTML sem loja e recusas
+  de segurança nunca repetem. Por tentativa o teto segue 8s
+  (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira são 13s
+  (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), preservando ~12s dos 25s de preparo para
+  converter e buscar a foto. O teto é da mensagem inteira, inclusive com dois
+  links — não multiplicar por candidato. O log traz `attempts` e
+  `recoveredByRetry`, para medir recuperação sem esconder a primeira falha.
 - **A falha NUNCA pode ser só `null`.** Foi assim que uma investigação inteira
   precisou de quatro rodadas de comando em staging: código no ar, rede boa (200
   em 568ms), página trazendo o link e cada peça acertando isoladamente — e a
@@ -4978,7 +4982,8 @@ conversor, dedup, imagem) segue byte a byte como já era — nenhum deles mudou.
 
 Envs (todas opcionais): `CUSTOM_DOMAIN_LINK_RESOLVE` (default LIGADO; só o valor
 exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (8000),
-`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (9000), `CUSTOM_DOMAIN_MAX_BYTES` (512KB),
+`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (13000), `CUSTOM_DOMAIN_MAX_ATTEMPTS` (2),
+`CUSTOM_DOMAIN_MAX_BYTES` (512KB),
 `CUSTOM_DOMAIN_CACHE_TTL_MS` (6h). Ajustar o tempo **não exige deploy** — é
 `.env` + `pm2 delete`/`start` (pegadinha #1).
 **Custo: nenhum processo novo, zero impacto de RAM** (cache em memória podado em

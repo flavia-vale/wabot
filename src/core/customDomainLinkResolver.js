@@ -61,12 +61,19 @@ export const MAX_CANDIDATES_PER_MESSAGE = 2
 // suportada" para uma página que o robô sabe ler.
 export const CUSTOM_DOMAIN_FETCH_TIMEOUT_MS =
   Number(process.env.CUSTOM_DOMAIN_FETCH_TIMEOUT_MS) || 8_000
-// Teto do desembrulho na mensagem INTEIRA, não por link. Sem ele, subir o tempo
-// por link multiplicaria pelo número de candidatos e comeria o orçamento de 25s
-// do preparo da mensagem (`MSG_QUEUE_TIMEOUT_MS`), que ainda precisa converter
-// o link e buscar a foto depois daqui.
+// Teto do desembrulho na mensagem INTEIRA, não por link. Os 13s preservam a
+// primeira tentativa histórica de 8s e deixam até ~5s para UMA segunda tentativa
+// quando DNS/rede falham transitoriamente. Ainda sobram ~12s do orçamento de 25s
+// do preparo da mensagem (`MSG_QUEUE_TIMEOUT_MS`) para conversão e foto.
 export const CUSTOM_DOMAIN_TOTAL_BUDGET_MS =
-  Number(process.env.CUSTOM_DOMAIN_TOTAL_BUDGET_MS) || 9_000
+  Number(process.env.CUSTOM_DOMAIN_TOTAL_BUDGET_MS) || 13_000
+// Retry curto e seletivo: aumentar apenas o timeout prolongaria a tentativa
+// presa. Uma nova chamada permite ao resolvedor DNS usar cache/fallback sem
+// repetir respostas determinísticas (403, página sem loja, anti-SSRF etc.).
+export const CUSTOM_DOMAIN_MAX_ATTEMPTS = Math.max(
+  1,
+  Math.floor(Number(process.env.CUSTOM_DOMAIN_MAX_ATTEMPTS) || 2),
+)
 // Abaixo disso não vale tentar: o pedido estouraria no meio e só gastaria tempo.
 const MIN_USEFUL_BUDGET_MS = 1_500
 export const CUSTOM_DOMAIN_MAX_BYTES =
@@ -242,6 +249,10 @@ export function clearCustomDomainCache() {
   resolvedCache.clear()
 }
 
+export function isRetryableCustomDomainFailure(reason) {
+  return reason === 'tempo_esgotado' || String(reason ?? '').startsWith('erro_de_rede:')
+}
+
 async function readLimitedText(res) {
   const declared = Number(res.headers.get('content-length'))
   if (declared && declared > CUSTOM_DOMAIN_MAX_BYTES) return ''
@@ -371,6 +382,9 @@ export async function resolveCustomDomainLinks(text, options = {}) {
   const tetoPorLink = Number.isFinite(options.timeoutMs)
     ? options.timeoutMs
     : CUSTOM_DOMAIN_FETCH_TIMEOUT_MS
+  const maxTentativas = Number.isFinite(options.maxAttempts)
+    ? Math.max(1, Math.floor(options.maxAttempts))
+    : CUSTOM_DOMAIN_MAX_ATTEMPTS
 
   let output = raw
   const resolved = []
@@ -381,16 +395,48 @@ export async function resolveCustomDomainLinks(text, options = {}) {
       failures.push({ url: candidate, reason: 'sem_tempo_no_orcamento' })
       continue
     }
-    const { store, reason, detail } = await resolveStoreUrlFromCustomDomainDetailed(candidate, {
-      ...options,
-      timeoutMs: Math.min(tetoPorLink, restante),
-    })
+    let store = null
+    let reason = null
+    let detail
+    const attempts = []
+    for (let tentativa = 1; tentativa <= maxTentativas; tentativa += 1) {
+      const restanteDaTentativa = orcamentoTotal - (Date.now() - comecouEm)
+      if (restanteDaTentativa < MIN_USEFUL_BUDGET_MS) break
+
+      const iniciouEm = Date.now()
+      const resultado = await resolveStoreUrlFromCustomDomainDetailed(candidate, {
+        ...options,
+        timeoutMs: Math.min(tetoPorLink, restanteDaTentativa),
+      })
+      store = resultado.store
+      reason = resultado.reason
+      detail = resultado.detail
+      attempts.push({
+        attempt: tentativa,
+        durationMs: Date.now() - iniciouEm,
+        reason,
+        ...(detail ? { detail } : {}),
+      })
+
+      if (store || !isRetryableCustomDomainFailure(reason)) break
+    }
     if (!store) {
-      failures.push({ url: candidate, reason, detail })
+      failures.push({
+        url: candidate,
+        reason: reason || 'sem_tempo_no_orcamento',
+        detail,
+        attempts,
+      })
       continue
     }
     output = output.split(candidate).join(store.url)
-    resolved.push({ from: candidate, to: store.url, platform: store.platform })
+    resolved.push({
+      from: candidate,
+      to: store.url,
+      platform: store.platform,
+      attempts,
+      recoveredByRetry: attempts.length > 1,
+    })
   }
   return { text: output, resolved, failures }
 }
