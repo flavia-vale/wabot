@@ -1348,6 +1348,23 @@ const RECEPTION_MIN_FAILURES = Math.max(1, Number(process.env.WA_RECEPTION_MIN_F
 // `WA_BLIND_ACROSS_RECONNECTS_MS=0` desliga só a regra nova (rollback sem
 // redeploy), preservando a classificação histórica.
 const BLIND_ACROSS_RECONNECTS_MS = Math.max(0, Number(process.env.WA_BLIND_ACROSS_RECONNECTS_MS ?? DEFAULT_BLIND_ACROSS_RECONNECTS_MS))
+
+// Quais filtros de recepção este worker está aplicando — UMA linha por boot.
+//
+// Não é enfeite. `WA_IGNORE_UNMONITORED_GROUPS` descarta mensagem antes do
+// decrypt e NÃO escrevia nada em lugar nenhum: nem no boot, nem ao ignorar
+// (ignoredJidPolicy.js não tem logger). Ligá-la em produção e perguntar "pegou
+// nos robôs?" não tinha resposta — e em modo `remote` o worker só relê a env
+// quando o supervisor reinicia, que é exatamente o caso em que a pergunta
+// aparece (RCA 2026-09-14: a flag ficou no .env e nenhum dos 38 workers a
+// tinha lido, sem nenhum jeito de constatar isso pelo log).
+//
+// Volume: uma linha por processo de worker. Zero impacto de RAM.
+logger.info({
+  ignoreUnmonitoredGroups: IGNORE_UNMONITORED_GROUPS,
+  chatScopeMode: CHAT_SCOPE_MODE,
+  blindAcrossReconnectsMs: BLIND_ACROSS_RECONNECTS_MS,
+}, 'Filtros de recepção deste robô')
 const RECEPTION_SIGNAL_THROTTLE_MS = Math.max(5 * 60_000, Number(process.env.WA_RECEPTION_SIGNAL_THROTTLE_MS || 60 * 60_000))
 let lastUpsertAtMs = null
 let lastAcceptedAtMs = null
