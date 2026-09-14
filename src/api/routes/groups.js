@@ -20,6 +20,7 @@ import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRis
 import { registerProbeEvidence, resolveLatestSentForGroup } from '../../core/probeEvidence.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
+import { normalizeRelayFooter, RELAY_FOOTER_MAX_CHARS } from '../../core/relayFooter.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -201,7 +202,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, relayFooterText, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza', 'shein', 'aliexpress'].includes(p))
@@ -253,6 +254,13 @@ export async function groupsRoutes(app, opts = {}) {
     }
     if (templateKey !== undefined && templateKey !== null && String(templateKey).trim() && !/^[A-Za-z0-9_-]{1,80}$/.test(String(templateKey).trim())) {
       return reply.code(400).send({ error: 'templateKey inválido' })
+    }
+    const normalizedRelayFooter = normalizeRelayFooter(relayFooterText)
+    if (normalizedRelayFooter !== undefined && normalizedRelayFooter.length > RELAY_FOOTER_MAX_CHARS) {
+      return reply.code(400).send({ error: `O texto adicional deve ter no máximo ${RELAY_FOOTER_MAX_CHARS} caracteres.` })
+    }
+    if (relayFooterText !== undefined && group.role !== 'monitor') {
+      return reply.code(400).send({ error: 'Texto adicional só pode ser definido em grupos monitorados.' })
     }
 
     if (forwardMode === FORWARD_MODE.LINK_ONLY && noLinkScope !== undefined && noLinkScope !== null) {
@@ -312,6 +320,7 @@ export async function groupsRoutes(app, opts = {}) {
         // Três estados: null = herda o template padrão global; '' = relay explícito
         // (não aplica template mesmo havendo padrão global); 'chave' = template fixo.
         ...(templateKey !== undefined ? { templateKey: templateKey === null ? null : String(templateKey).trim() } : {}),
+        ...(normalizedRelayFooter !== undefined ? { relayFooterText: normalizedRelayFooter || null } : {}),
         ...(primaryLinkTarget !== undefined ? { primaryLinkTarget: primaryLinkTarget || null } : {}),
         ...((noLinkScope !== undefined || forwardMode !== undefined) ? { noLinkScope: requestedNoLinkScope } : {}),
         ...(normalizedChannelButtonJid !== undefined ? { channelButtonJid: normalizedChannelButtonJid || null } : {}),
