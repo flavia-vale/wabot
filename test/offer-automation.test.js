@@ -64,7 +64,8 @@ test('buildOffersQuery: usa lista ampla por padrão para evitar no_offers_found 
 test('buildOfferCandidateLimit: busca candidatos suficientes para filtrar descontos e deduplicados', () => {
   assert.equal(buildOfferCandidateLimit(1), 20)
   assert.equal(buildOfferCandidateLimit(3), 30)
-  assert.equal(buildOfferCandidateLimit(50), 100)
+  assert.equal(buildOfferCandidateLimit(5), 50)
+  assert.equal(buildOfferCandidateLimit(50), 50)
 })
 
 test('productDedupKey: normaliza nome (case/espaços) e cai em itemId quando sem nome', () => {
@@ -83,7 +84,7 @@ test('dedupeOffersByProduct: colapsa mesmo produto com itemIds diferentes manten
   assert.deepEqual(result.map(o => o.itemId), ['1', '3'])
 })
 
-import { formatOfferMessage, runAutomation, searchOffersPreview } from '../src/offerAutomation/dispatcher.js'
+import { automationOfferProduct, ensureRenderedAutomationPrice, formatOfferMessage, offerPriceCents, resolveOffers, runAutomation, searchOffersPreview } from '../src/offerAutomation/dispatcher.js'
 
 test('searchOffersPreview: roda a busca sem enviar e retorna funil + ofertas', async () => {
   const calls = []
@@ -164,6 +165,56 @@ test('formatOfferMessage: handles missing originPrice gracefully', () => {
   const msg = formatOfferMessage(offer, 'festa')
   assert.ok(msg.includes('Kit Festa Junina'))
   assert.ok(msg.includes('https://shope.ee/xyz456'))
+})
+
+test('preço usa price quando priceMin vem vazio da Shopee', () => {
+  const offer = { productName: 'Kit festa', priceMin: '', price: '29.90', priceMax: '39.90', priceDiscountRate: 20, offerLink: 'https://shopee.test/kit' }
+  assert.match(formatOfferMessage(offer, 'festa'), /R\$\s*29,90/)
+  assert.match(automationOfferProduct(offer).price, /R\$\s*29,90/)
+  assert.equal(offerPriceCents(offer), 2990)
+})
+
+test('automação preenche preçoDoTexto e recupera snapshots antigos que deixaram só o emoji', () => {
+  const product = automationOfferProduct({ price: '29.90', priceDiscountRate: 20 })
+  assert.match(product.textPrice, /De R\$.*37,00 por R\$.*29,90/)
+  assert.match(ensureRenderedAutomationPrice('OFERTA\n\n💰\n\n👉 https://shopee.test/p', product), /💰 ~R\$.*37,00~ → \*R\$.*29,90\*/)
+})
+
+test('template com preçoDoTexto recebe o preço da oferta automática', () => {
+  const offer = { productName: 'Kit festa', price: '29.90', priceDiscountRate: 20, offerLink: 'https://shopee.test/kit' }
+  const text = formatOfferMessage(offer, 'festa', '🏷️ {produto}\n\n💰\n{preçoDoTexto}\n\n👉 {link}')
+  assert.match(text, /R\$.*29,90/)
+  assert.doesNotMatch(text, /\{preçoDoTexto\}/)
+})
+
+test('filterOffers: descarta oferta quando a Shopee não informa preço em nenhum campo', () => {
+  const offers = [
+    { itemId: 'sem-preco', priceMin: '', price: null, priceMax: 'indisponível', priceDiscountRate: 40 },
+    { itemId: 'com-price', priceMin: '', price: '29.90', priceMax: null, priceDiscountRate: 20 },
+    { itemId: 'com-price-max', priceMin: 0, price: undefined, priceMax: '45.50', priceDiscountRate: 30 },
+  ]
+
+  assert.deepEqual(
+    filterOffers(offers, { minDiscountPct: 20, excludeItemIds: [] }).map(item => item.itemId),
+    ['com-price', 'com-price-max'],
+  )
+})
+
+test('resolveOffers aplica a trava de preço mesmo com um adaptador de busca alternativo', async () => {
+  const result = await resolveOffers({
+    automation: { keyword: 'festa', minDiscountPct: 20, offersPerSend: 2, prioritizeAMS: false },
+    sentItemIds: [],
+    creds: { appId: 'a', secretKey: 's' },
+    fetchOffersFn: async () => ({
+      rawCount: 2,
+      offers: [
+        { itemId: 'sem-preco', priceMin: null, price: '', priceMax: 0, priceDiscountRate: 30 },
+        { itemId: 'com-preco', price: '19.90', priceDiscountRate: 30 },
+      ],
+    }),
+  })
+
+  assert.deepEqual(result.offers.map(item => item.itemId), ['com-preco'])
 })
 
 function baseAutomation(overrides = {}) {

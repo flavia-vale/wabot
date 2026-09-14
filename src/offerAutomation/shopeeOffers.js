@@ -39,9 +39,25 @@ export function filterOffers(offers, { minDiscountPct, excludeItemIds }) {
   const excludeSet = new Set(excludeItemIds.map(String))
   return offers.filter(o => {
     if (excludeSet.has(String(o.itemId))) return false
+    // productOfferV2 occasionally returns an offer with a discount but with
+    // every price field empty/null. Such an item cannot produce a truthful
+    // preview or publication, so discard it at the API boundary instead of
+    // allowing the formatter to silently omit the price line.
+    if (resolveShopeeOfferPrice(o) === null) return false
     const rate = Number(o.priceDiscountRate) || 0
     return rate > 0 && rate >= minDiscountPct
   })
+}
+
+// Affiliate responses are not consistent about which of the three price
+// fields is populated. Empty strings must not win over a valid fallback, and
+// zero/negative/non-numeric values are not usable product prices.
+export function resolveShopeeOfferPrice(offer = {}) {
+  for (const value of [offer.priceMin, offer.price, offer.priceMax]) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return null
 }
 
 // A API de afiliado da Shopee frequentemente retorna o MESMO produto sob
@@ -72,7 +88,9 @@ export function dedupeOffersByProduct(offers, seenKeys = new Set()) {
 export function buildOfferCandidateLimit(limit) {
   // Fetch more than offersPerSend because filters remove already-sent items
   // and products that do not meet the user's minimum discount threshold.
-  return Math.min(Math.max(limit * 10, 20), 100)
+  // A API de afiliados rejeita qualquer `limit` acima de 50 (erro 11001),
+  // portanto este teto precisa valer para preview, envio direto e revisão.
+  return Math.min(Math.max(limit * 10, 20), 50)
 }
 
 export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, listType = 1, page = 1, isAMSOffer = false, isKeySeller = false }) {
