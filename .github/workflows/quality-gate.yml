@@ -35,6 +35,13 @@ jobs:
 
       - run: npm ci
 
+      # Não dependa apenas do lifecycle postinstall: o gate precisa provar de
+      # forma explícita que o client usado pelos testes corresponde ao schema
+      # deste checkout. Um client antigo transformava campos novos (como
+      # Group.targetsMode) em 500 e fazia várias suítes parecerem quebradas ao
+      # mesmo tempo.
+      - run: npx prisma generate
+
       # Alguns testes renderizam componentes do painel de verdade
       # (test/helpers/render-jsx-component.js usa o compilador do Next que vive
       # em dashboard/node_modules). Sem esta instalação eles falham em TODA PR,

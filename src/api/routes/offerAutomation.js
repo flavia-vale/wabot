@@ -7,6 +7,7 @@ import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
 import { canUseReview } from '../../offerAutomation/reviewFlags.js'
 import { REVIEW_STATUS } from '../../offerAutomation/reviewState.js'
+import { deliverApprovedReviewItems } from '../../offerAutomation/reviewDeliveryService.js'
 
 const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
@@ -52,6 +53,12 @@ function presentAutomation(row) {
 
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
+  // `env` pode ser tratado como opção reservada por versões do encapsulador
+  // de plugins do Fastify/Avvio. Use um nome próprio para que testes e callers
+  // injetem as flags de forma determinística em qualquer versão instalada.
+  const env = opts.reviewEnv ?? opts.env ?? process.env
+  const deliverReview = opts.deliverApprovedReviewItemsFn ?? deliverApprovedReviewItems
+  const canUseReviewFor = opts.canUseReviewFn ?? canUseReview
 
   // Ofertas automáticas são feature Pro (ou Trial ativo). Listar e deletar
   // seguem liberados: a UI precisa mostrar o que existe e o usuário pode
@@ -252,6 +259,16 @@ export async function offerAutomationRoutes(app, opts = {}) {
     const subject = await loadUserPlanSubject(db, req.user.sub)
     if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
     try {
+      if (automation.publicationMode === 'review') {
+        // A flag de delivery governa o envio AUTOMÁTICO do cron. O clique
+        // explícito em "Enviar agora" deve continuar disponível durante o
+        // piloto com delivery=false e ainda consome somente itens aprovados.
+        if (!canUseReviewFor(req.user.sub, env)) {
+          return reply.code(409).send({ error: 'A fila de revisão ainda não está liberada para esta conta' })
+        }
+        const result = await deliverReview(automation, { db })
+        return { ok: true, result: result.sent === 0 && result.failed === 0 ? { ...result, skipped: 'no_approved_review_items' } : result }
+      }
       const result = await runAutomation(automation)
       return { ok: true, result }
     } catch (err) {
