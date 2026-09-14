@@ -6,6 +6,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import Fastify from 'fastify'
 import { filterOffers, buildOffersQuery } from '../src/offerAutomation/shopeeOffers.js'
 import { formatOfferMessage, runAutomation } from '../src/offerAutomation/dispatcher.js'
@@ -17,7 +18,7 @@ import { configRoutes } from '../src/api/routes/config.js'
 // Helpers
 // ═══════════════════════════════════════════════
 
-function buildOfferApp(dbMock) {
+function buildOfferApp(dbMock, opts = {}) {
   const app = Fastify({ logger: false })
   app.decorate('authenticate', async (req) => { req.user = { sub: 'user-1' } })
   // destGroupJid agora é validado contra os grupos de destino do tenant
@@ -26,7 +27,7 @@ function buildOfferApp(dbMock) {
   if (dbMock.offerAutomation && !dbMock.offerAutomation.count) dbMock.offerAutomation.count = async () => 0
   // rotas de escrita exigem plano com canUseOfferAutomations (Pro/Trial ativo)
   if (!dbMock.user) dbMock.user = { findUnique: async () => ({ plan: 'pro', accessExpiresAt: null }) }
-  app.register(offerAutomationRoutes, { prefix: '/api/offer-automations', db: dbMock })
+  app.register(offerAutomationRoutes, { prefix: '/api/offer-automations', db: dbMock, ...opts })
   return app
 }
 
@@ -454,6 +455,35 @@ test('POST /:id/trigger: retorna 404 para automação de outro usuário', async 
   const app = buildOfferApp(dbMock)
   const res = await app.inject({ method: 'POST', url: '/api/offer-automations/outro/trigger' })
   assert.equal(res.statusCode, 404)
+})
+
+test('POST /:id/trigger: revisão envia somente item aprovado pela entrega da fila', async () => {
+  let delivered = 0
+  const automation = { id: 'review-1', userId: 'user-1', publicationMode: 'review', offersPerSend: 1, instagramDestinations: [] }
+  const dbMock = { offerAutomation: { findFirst: async () => automation } }
+  const app = buildOfferApp(dbMock, {
+    deliverApprovedReviewItemsFn: async (received, { db }) => {
+      assert.equal(received, automation)
+      assert.equal(db, dbMock)
+      delivered++
+      return { sent: 1, failed: 0 }
+    },
+  })
+
+  const res = await app.inject({ method: 'POST', url: '/api/offer-automations/review-1/trigger' })
+  assert.equal(res.statusCode, 200)
+  assert.equal(delivered, 1)
+  assert.deepEqual(JSON.parse(res.body).result, { sent: 1, failed: 0 })
+})
+
+test('POST /:id/trigger: não pode restaurar o bloqueio legado de revisão com 409', () => {
+  const source = readFileSync(new URL('../src/api/routes/offerAutomation.js', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(
+    source,
+    /publicationMode\s*===\s*['"]review['"][^\n]*reply\.code\(409\)/,
+    'o botão Enviar agora deve usar a entrega da fila aprovada, não recusar automações em revisão',
+  )
 })
 
 // ═══════════════════════════════════════════════
