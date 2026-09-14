@@ -43,3 +43,19 @@ test('delivery não seleciona item awaiting_review', async () => {
   assert.deepEqual(result, { sent: 0, failed: 0 })
   assert.equal(sends, 0)
 })
+
+test('delivery bloqueia snapshot antigo sem preço antes de publicar', async () => {
+  const item = { id: 'i1', automationId: 'a1', userId: 'u1', status: 'approved', position: 1, itemId: '42', productKey: 'produto', priceCents: 0, productSnapshot: '{}', targetSnapshot: JSON.stringify({ whatsapp: { jid: 'g@g.us' }, instagram: [] }), deliverySnapshot: '{}', renderedText: 'oferta sem preço', attemptCount: 1 }
+  const db = fakeDb(item)
+  let sends = 0
+
+  const result = await deliverApprovedReviewItems(
+    { id: 'a1', userId: 'u1', offersPerSend: 1, sentItemIds: '[]' },
+    { db, isRunning: async () => true, sendBroadcast: async () => { sends++ }, instagramRuntime: null },
+  )
+
+  assert.deepEqual(result, { sent: 0, failed: 1 })
+  assert.equal(sends, 0)
+  assert.equal(db.item.status, 'failed')
+  assert.match(db.item.lastError, /sem preço válido/)
+})

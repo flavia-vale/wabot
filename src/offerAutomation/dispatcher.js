@@ -1,4 +1,4 @@
-import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit } from './shopeeOffers.js'
+import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit, resolveShopeeOfferPrice } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
@@ -41,11 +41,7 @@ export function offerPriceCents(offer) {
 // nullish coalescing não pula string vazia e fazia a mensagem perder o preço.
 // Centralizar o fallback mantém snapshot, texto e deduplicação consistentes.
 export function resolveOfferPrice(offer = {}) {
-  for (const value of [offer.priceMin, offer.price, offer.priceMax]) {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed) && parsed > 0) return parsed
-  }
-  return 0
+  return resolveShopeeOfferPrice(offer) ?? 0
 }
 
 function priceStr(raw) {
@@ -177,7 +173,8 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
   }
 
   if (!automation.prioritizeAMS) {
-    return fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
+    const result = await fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
+    return { ...result, offers: result.offers.filter(offer => resolveOfferPrice(offer) > 0) }
   }
 
   const { offers: amsOffers, rawCount: amsRawCount } = await fetchOffersFn({ ...base, isAMSOffer: true, excludeItemIds: sentItemIds })
@@ -187,7 +184,10 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
     isAMSOffer: false,
     excludeItemIds: [...sentItemIds, ...amsItemIds],
   })
-  return { offers: [...amsOffers, ...regularOffers], rawCount: amsRawCount + regularRawCount }
+  return {
+    offers: [...amsOffers, ...regularOffers].filter(offer => resolveOfferPrice(offer) > 0),
+    rawCount: amsRawCount + regularRawCount,
+  }
 }
 
 export async function runAutomation(automation, {
