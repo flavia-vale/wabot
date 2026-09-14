@@ -494,6 +494,13 @@ export const api = {
     apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
   offerAutomationSearchPreview: (params) =>
     apiFetch('/api/offer-automations/search-preview', { method: 'POST', body: JSON.stringify(params) }),
+  offerAutomationReviewItems: (id, status = 'awaiting_review,approved,failed') =>
+    apiFetch(`/api/offer-automations/${id}/review-items?status=${encodeURIComponent(status)}`),
+  offerAutomationReviewDiscover: (id, options = {}) => apiFetch(`/api/offer-automations/${id}/review-items/discover`, { method: 'POST', body: JSON.stringify(options) }),
+  offerAutomationReviewApprove: (id, itemId) => apiFetch(`/api/offer-automations/${id}/review-items/${itemId}/approve`, { method: 'POST' }),
+  offerAutomationReviewRemove: (id, itemId) => apiFetch(`/api/offer-automations/${id}/review-items/${itemId}/remove`, { method: 'POST' }),
+  offerAutomationReviewRetry: (id, itemId) => apiFetch(`/api/offer-automations/${id}/review-items/${itemId}/retry`, { method: 'POST' }),
+  offerAutomationReviewCapability: () => apiFetch('/api/offer-automations/review-capability'),
   instagramConnections: () => apiFetch('/api/instagram/connections'),
   instagramHealth: () => apiFetch('/api/instagram/health'),
   instagramOAuthStart: () => apiFetch('/api/instagram/oauth/start'),

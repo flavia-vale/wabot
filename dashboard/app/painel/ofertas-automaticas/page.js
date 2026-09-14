@@ -14,6 +14,8 @@ import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitleme
 import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
+import { ReviewQueue } from '@/components/offerAutomation/ReviewQueue'
+import { validateOfferAutomationForm } from '@/lib/offerAutomationForm'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -52,6 +54,7 @@ const SKIP_LABELS = {
   invalid_shopee_credentials: 'Credenciais da Shopee incompletas (appId/secretKey).',
   no_offers_found: 'A Shopee não retornou produtos para essa palavra-chave.',
   all_offers_filtered: 'A Shopee trouxe produtos, mas todos foram filtrados (desconto mínimo alto ou já enviados). Tente reduzir o desconto mínimo.',
+  no_approved_review_items: 'Aprove pelo menos uma oferta na fila antes de enviar.',
 }
 
 function explainSkip(code) {
@@ -83,6 +86,8 @@ const emptyForm = {
   offersPerSend: 1,
   minDiscountPct: 20,
   prioritizeAMS: false,
+  publicationMode: 'direct',
+  reviewTargetSize: 10,
   instagramDestinationIds: [],
 }
 
@@ -118,24 +123,28 @@ export default function OfertasAutomaticasPage() {
   const [triggering, setTriggering] = useState(null)
   const [bulkToggling, setBulkToggling] = useState(null)
   const [triggerResult, setTriggerResult] = useState({})
+  const [openReviewQueues, setOpenReviewQueues] = useState(() => new Set())
   const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
+  const [reviewAvailable, setReviewAvailable] = useState(false)
 
   async function load() {
     setLoading(true)
     setError('')
     try {
-      const [list, groups, templateStore, me, connections] = await Promise.all([
+      const [list, groups, templateStore, me, connections, reviewCapability] = await Promise.all([
         api.offerAutomations(),
         api.groups().then((gs) => gs.filter((g) => g.role === 'post')),
         loadTemplateStore(),
         api.me().catch(() => null),
         api.instagramConnections().catch(() => []),
+        api.offerAutomationReviewCapability().catch(() => ({ enabled: false })),
       ])
       setAutomations(list)
       setWaGroups(groups)
       setTemplates(composeTemplates(templateStore))
       setInstagramDestinations(hasInstagramStoriesAccess(me || {}) ? instagramDestinationsFromConnections(connections) : [])
       if (me) setPlanSubject({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null })
+      setReviewAvailable(reviewCapability.enabled === true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -164,6 +173,8 @@ export default function OfertasAutomaticasPage() {
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
       prioritizeAMS: a.prioritizeAMS ?? false,
+      publicationMode: a.publicationMode || 'direct',
+      reviewTargetSize: a.reviewTargetSize || 10,
       instagramDestinationIds: a.instagramDestinationIds || [],
     })
     setSaveError('')
@@ -180,10 +191,18 @@ export default function OfertasAutomaticasPage() {
   }
 
   async function handleSave() {
+    const validationError = validateOfferAutomationForm(form)
+    if (validationError) {
+      setSaveError(validationError)
+      return
+    }
     setSaving(true)
     setSaveError('')
     try {
-      if (editId) await api.offerAutomationUpdate(editId, form)
+      if (editId) {
+        const previous = automations.find((item) => item.id === editId)
+        await api.offerAutomationUpdate(editId, { ...form, confirmPublicationModeChange: previous?.publicationMode !== form.publicationMode })
+      }
       else await api.offerAutomationCreate(form)
       setShowForm(false)
       await load()
@@ -311,6 +330,115 @@ export default function OfertasAutomaticasPage() {
   const allAutomationsEnabled = automations.length > 0 && activeCount === automations.length
   const bulkToggleLabel = allAutomationsEnabled ? 'Desativar todas' : 'Ativar todas'
 
+  function renderAutomationForm() {
+    return (
+        <section className="pnl-card pnl-grid">
+          <div className="pnl-card-title">{editId ? 'Editar automação' : 'Nova automação'}</div>
+
+          <div>
+            <label className="pnl-label">O que você quer vender?</label>
+            <input
+              type="text"
+              className="pnl-input"
+              value={form.keyword}
+              onChange={(e) => setForm((f) => ({ ...f, keyword: e.target.value }))}
+              placeholder="Ex: decoração de festas, eletrônicos, moda feminina"
+            />
+            <p className="pnl-hint" style={{ marginTop: 4 }}>Use palavras que descrevem o tipo de produto.</p>
+          </div>
+
+          <div>
+            <label className="pnl-label">Modelo da mensagem</label>
+            <select className="pnl-input" value={form.templateKey} onChange={(e) => setForm((f) => ({ ...f, templateKey: e.target.value }))}>
+              {templates.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
+            </select>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>Edite os modelos em Mensagens. O padrão “Automático clássico” mantém o texto atual.</p>
+            {selectedTemplatePreview && <pre className="pnl-pre" style={{ background: 'var(--bg-soft)', borderRadius: 8, padding: 12, marginTop: 8, maxHeight: 112 }}>{selectedTemplatePreview}</pre>}
+          </div>
+
+          {reviewAvailable && <div>
+            <label className="pnl-label">Como publicar?</label>
+            <select className="pnl-input" value={form.publicationMode} onChange={(e) => setForm((f) => ({ ...f, publicationMode: e.target.value }))}>
+              <option value="direct">Publicar automaticamente</option>
+              <option value="review">Quero revisar antes de publicar</option>
+            </select>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>{form.publicationMode === 'review' ? 'O bot prepara as ofertas, mas só publica o que você aprovar.' : 'O bot busca e publica sozinho, como funciona hoje.'}</p>
+            {form.publicationMode === 'review' && <select aria-label="Quantidade de ofertas para revisão" className="pnl-input" style={{ marginTop: 8 }} value={form.reviewTargetSize} onChange={(e) => setForm((f) => ({ ...f, reviewTargetSize: Number(e.target.value) }))}><option value={5}>Guardar 5 ofertas</option><option value={10}>Guardar 10 ofertas</option><option value={20}>Guardar 20 ofertas</option></select>}
+          </div>}
+
+          <div>
+            <label className="pnl-label">Enviar para qual grupo?</label>
+            <select className="pnl-input" value={form.destGroupJid} onChange={(e) => handleGroupChange(e.target.value)}>
+              <option value="">Selecione um grupo</option>
+              {waGroups.map((g) => <option key={g.id} value={g.waJid}>{g.name}</option>)}
+            </select>
+            {!waGroups.length && <p className="pnl-field-error" style={{ marginTop: 4 }}>Nenhum grupo de destino cadastrado. Vá em Grupos para adicionar.</p>}
+          </div>
+
+          <InstagramDestinationPicker destinations={instagramDestinations} selectedIds={form.instagramDestinationIds} onToggle={toggleInstagramDestination} title="Também publicar no Instagram" />
+
+          <div>
+            <label className="pnl-label">Com que frequência enviar?</label>
+            <select
+              className="pnl-input"
+              value={form.intervalMinutes}
+              onChange={(e) => {
+                const intervalMinutes = Number(e.target.value)
+                setForm((f) => ({ ...f, intervalMinutes, dailyRunTime: intervalMinutes === DAILY_INTERVAL_MINUTES ? (f.dailyRunTime || DEFAULT_DAILY_RUN_TIME) : f.dailyRunTime }))
+              }}
+            >
+              {INTERVAL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {form.intervalMinutes === DAILY_INTERVAL_MINUTES && (
+            <div>
+              <label className="pnl-label">Horário do envio diário</label>
+              <input type="time" className="pnl-input" value={form.dailyRunTime} onChange={(e) => setForm((f) => ({ ...f, dailyRunTime: e.target.value }))} />
+              <p className="pnl-hint" style={{ marginTop: 4 }}>A automação roda uma vez por dia nesse horário (horário de Brasília). Se o bot/API estiverem offline no minuto exato, ela envia assim que o cron voltar no mesmo dia.</p>
+            </div>
+          )}
+
+          <div>
+            <label className="pnl-label">Quantos produtos enviar de uma vez?</label>
+            <select className="pnl-input" value={form.offersPerSend} onChange={(e) => setForm((f) => ({ ...f, offersPerSend: Number(e.target.value) }))}>
+              {OFFERS_PER_SEND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="pnl-label">Qual o desconto mínimo para enviar?</label>
+            <select className="pnl-input" value={form.minDiscountPct} onChange={(e) => setForm((f) => ({ ...f, minDiscountPct: Number(e.target.value) }))}>
+              {DISCOUNT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>Só produtos com desconto real serão enviados.</p>
+          </div>
+
+          <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
+            <input type="checkbox" checked={form.prioritizeAMS} onChange={(e) => setForm((f) => ({ ...f, prioritizeAMS: e.target.checked }))} style={{ marginTop: 2 }} />
+            <span>
+              <span style={{ display: 'block', color: 'var(--ink)' }}>Priorizar ofertas com comissão extra do vendedor</span>
+              <span className="pnl-hint">Se ativado, o bot busca as duas e envia primeiro as com comissão extra.</span>
+            </span>
+          </label>
+
+          {saveError && <div className="pnl-note-box is-error" role="alert">{saveError}</div>}
+
+          <div className="pnl-toolbar">
+            <button
+              type="button"
+              className="pnl-btn is-primary"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? 'Salvando…' : 'Salvar'}
+            </button>
+            <button type="button" className="pnl-btn" onClick={() => setShowForm(false)}>Cancelar</button>
+          </div>
+        </section>
+    )
+  }
+
   return (
     <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
       <PainelContentActions>
@@ -393,106 +521,12 @@ export default function OfertasAutomaticasPage() {
         </div>
       )}
 
-      {showForm && (
-        <section className="pnl-card pnl-grid">
-          <div className="pnl-card-title">{editId ? 'Editar automação' : 'Nova automação'}</div>
-
-          <div>
-            <label className="pnl-label">O que você quer vender?</label>
-            <input
-              type="text"
-              className="pnl-input"
-              value={form.keyword}
-              onChange={(e) => setForm((f) => ({ ...f, keyword: e.target.value }))}
-              placeholder="Ex: decoração de festas, eletrônicos, moda feminina"
-            />
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Use palavras que descrevem o tipo de produto.</p>
-          </div>
-
-          <div>
-            <label className="pnl-label">Modelo da mensagem</label>
-            <select className="pnl-input" value={form.templateKey} onChange={(e) => setForm((f) => ({ ...f, templateKey: e.target.value }))}>
-              {templates.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
-            </select>
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Edite os modelos em Mensagens. O padrão “Automático clássico” mantém o texto atual.</p>
-            {selectedTemplatePreview && <pre className="pnl-pre" style={{ background: 'var(--bg-soft)', borderRadius: 8, padding: 12, marginTop: 8, maxHeight: 112 }}>{selectedTemplatePreview}</pre>}
-          </div>
-
-          <div>
-            <label className="pnl-label">Enviar para qual grupo?</label>
-            <select className="pnl-input" value={form.destGroupJid} onChange={(e) => handleGroupChange(e.target.value)}>
-              <option value="">Selecione um grupo</option>
-              {waGroups.map((g) => <option key={g.id} value={g.waJid}>{g.name}</option>)}
-            </select>
-            {!waGroups.length && <p className="pnl-field-error" style={{ marginTop: 4 }}>Nenhum grupo de destino cadastrado. Vá em Grupos para adicionar.</p>}
-          </div>
-
-          <InstagramDestinationPicker destinations={instagramDestinations} selectedIds={form.instagramDestinationIds} onToggle={toggleInstagramDestination} title="Também publicar no Instagram" />
-
-          <div>
-            <label className="pnl-label">Com que frequência enviar?</label>
-            <select
-              className="pnl-input"
-              value={form.intervalMinutes}
-              onChange={(e) => {
-                const intervalMinutes = Number(e.target.value)
-                setForm((f) => ({ ...f, intervalMinutes, dailyRunTime: intervalMinutes === DAILY_INTERVAL_MINUTES ? (f.dailyRunTime || DEFAULT_DAILY_RUN_TIME) : f.dailyRunTime }))
-              }}
-            >
-              {INTERVAL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-
-          {form.intervalMinutes === DAILY_INTERVAL_MINUTES && (
-            <div>
-              <label className="pnl-label">Horário do envio diário</label>
-              <input type="time" className="pnl-input" value={form.dailyRunTime} onChange={(e) => setForm((f) => ({ ...f, dailyRunTime: e.target.value }))} />
-              <p className="pnl-hint" style={{ marginTop: 4 }}>A automação roda uma vez por dia nesse horário (horário de Brasília). Se o bot/API estiverem offline no minuto exato, ela envia assim que o cron voltar no mesmo dia.</p>
-            </div>
-          )}
-
-          <div>
-            <label className="pnl-label">Quantos produtos enviar de uma vez?</label>
-            <select className="pnl-input" value={form.offersPerSend} onChange={(e) => setForm((f) => ({ ...f, offersPerSend: Number(e.target.value) }))}>
-              {OFFERS_PER_SEND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="pnl-label">Qual o desconto mínimo para enviar?</label>
-            <select className="pnl-input" value={form.minDiscountPct} onChange={(e) => setForm((f) => ({ ...f, minDiscountPct: Number(e.target.value) }))}>
-              {DISCOUNT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Só produtos com desconto real serão enviados.</p>
-          </div>
-
-          <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
-            <input type="checkbox" checked={form.prioritizeAMS} onChange={(e) => setForm((f) => ({ ...f, prioritizeAMS: e.target.checked }))} style={{ marginTop: 2 }} />
-            <span>
-              <span style={{ display: 'block', color: 'var(--ink)' }}>Priorizar ofertas com comissão extra do vendedor</span>
-              <span className="pnl-hint">Se ativado, o bot busca as duas e envia primeiro as com comissão extra.</span>
-            </span>
-          </label>
-
-          {saveError && <div className="pnl-note-box is-error" role="alert">{saveError}</div>}
-
-          <div className="pnl-toolbar">
-            <button
-              type="button"
-              className="pnl-btn is-primary"
-              onClick={handleSave}
-              disabled={saving || !form.keyword.trim() || (!form.destGroupJid && !form.instagramDestinationIds.length) || (form.intervalMinutes === DAILY_INTERVAL_MINUTES && !form.dailyRunTime)}
-            >
-              {saving ? 'Salvando…' : 'Salvar'}
-            </button>
-            <button type="button" className="pnl-btn" onClick={() => setShowForm(false)}>Cancelar</button>
-          </div>
-        </section>
-      )}
+      {showForm && !editId && renderAutomationForm()}
 
       <div className="pnl-grid">
         {automations.map((a) => {
           const result = triggerResult[a.id]
+          const reviewQueueOpen = openReviewQueues.has(a.id)
           return (
             <div key={a.id} className="pnl-card">
               <div className="pnl-card-head" style={{ marginBottom: 0, alignItems: 'flex-start' }}>
@@ -510,6 +544,7 @@ export default function OfertasAutomaticasPage() {
                     {DISCOUNT_OPTIONS.find((o) => o.value === a.minDiscountPct)?.label ?? `${a.minDiscountPct}% OFF mín.`}
                   </p>
                   <p className="pnl-hint">Modelo: {templateName(templates, a.templateKey || 'automatico_classico')} · {nextSendLabel(a.lastSentAt, a.intervalMinutes, a.dailyRunTime)}</p>
+                  {a.publicationMode === 'review' && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>👀 Revisão antes de publicar</span>}
                   {a.prioritizeAMS && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>⚡ Comissão extra priorizada</span>}
                 </div>
                 <button
@@ -522,9 +557,25 @@ export default function OfertasAutomaticasPage() {
                   <span />
                 </button>
               </div>
+              {showForm && editId === a.id && renderAutomationForm()}
               <div className="pnl-toolbar" style={{ marginTop: 10, flexWrap: 'wrap' }}>
                 <button type="button" className="pnl-link-btn" onClick={() => handleTrigger(a)} disabled={triggering === a.id}>
                   {triggering === a.id ? 'Enviando…' : 'Enviar agora'}
+                </button>
+                <button
+                  type="button"
+                  className="pnl-link-btn"
+                  hidden={a.publicationMode !== 'review'}
+                  aria-expanded={reviewQueueOpen}
+                  aria-controls={`review-queue-${a.id}`}
+                  onClick={() => setOpenReviewQueues((current) => {
+                    const next = new Set(current)
+                    if (next.has(a.id)) next.delete(a.id)
+                    else next.add(a.id)
+                    return next
+                  })}
+                >
+                  {reviewQueueOpen ? 'Recolher fila' : 'Ver fila'}
                 </button>
                 <button type="button" className="pnl-link-btn" style={{ color: 'var(--ink-soft)' }} onClick={() => openEdit(a)}>Editar</button>
                 <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(a)}>Remover</button>
@@ -534,6 +585,7 @@ export default function OfertasAutomaticasPage() {
                   {result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped) : `✓ ${result.sent} produto(s) enviado(s)`}
                 </p>
               )}
+              {a.publicationMode === 'review' && reviewQueueOpen && <div id={`review-queue-${a.id}`}><ReviewQueue automation={a} /></div>}
             </div>
           )
         })}
