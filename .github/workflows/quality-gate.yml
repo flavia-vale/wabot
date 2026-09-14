@@ -21,7 +21,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Use the same runtime as deploy and backend-lint. Running the full
+          # suite on an older major made CI disagree with the runtime that
+          # actually executes the application (and with local validation).
+          node-version: 24
 
       # sqlite3 CLI é pré-requisito dos testes de migration (aplicam o SQL de
       # verdade) e dos testes de backup. ubuntu-latest normalmente já o traz;
