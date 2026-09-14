@@ -2985,6 +2985,19 @@ Rollback sem redeploy: `WA_BLIND_ACROSS_RECONNECTS_MS=0` desliga só a regra
 nova. Testes: `test/reception-health.test.js` (com os números reais da conta),
 `test/bot-worker-reception-blindness-wiring.test.js` (guarda estrutural).
 
+**Todo worker agora diz no boot quais filtros de recepção está aplicando**
+(`'Filtros de recepção deste robô'`). `WA_IGNORE_UNMONITORED_GROUPS` descarta
+mensagem antes do decrypt e **não escrevia nada em lugar nenhum** — nem no boot,
+nem ao ignorar (`ignoredJidPolicy.js` não tem logger). Ligada em produção em
+14/09, não havia como responder "pegou nos robôs?": qualquer grep dava zero com
+a flag ligada ou desligada. Em modo `remote` o worker só relê a env quando o
+supervisor reinicia, que é exatamente quando a pergunta aparece — e de fato os
+38 workers estavam rodando desde antes da mudança, sem terem lido a flag.
+⚠️ **A ordem importa:** o log cita constantes de escopo de módulo e, se subir
+acima de qualquer uma delas, o módulo estoura ReferenceError (TDZ) no load e
+**todo worker morre no boot**. Guarda em
+`test/bot-worker-reception-blindness-wiring.test.js`.
+
 ⚠️ **O que este conserto NÃO faz: curar a causa da cegueira dela.** A poluição
 vinha de chats que o robô **nem monitora** — os retry receipts dela saíam com
 `retryCount: 5` para mensagens de DM na fila offline. O remédio de causa raiz

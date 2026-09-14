@@ -70,3 +70,34 @@ test('o vigia de silêncio não volta a ignorar a falha total', () => {
     'com todos calados a evidência de problema precisa ser exigida — silêncio sozinho não pode virar alarme'
   )
 })
+
+// A linha de boot que diz quais filtros de recepção estão valendo cita três
+// constantes de escopo de módulo. Se ela for parar ACIMA de qualquer uma delas,
+// o módulo estoura ReferenceError (TDZ) no load — ou seja, TODO worker morre no
+// boot. Isso quase foi enviado: a primeira versão do log ficava na linha ~315 e
+// citava BLIND_ACROSS_RECONNECTS_MS, declarada só na ~1330.
+test('o log de filtros de recepção vem DEPOIS de todas as constantes que cita', () => {
+  const logIndex = src.indexOf("'Filtros de recepção deste robô'")
+  assert.notEqual(logIndex, -1, 'linha de boot dos filtros de recepção não encontrada')
+  const citadas = [
+    'const IGNORE_UNMONITORED_GROUPS',
+    'const CHAT_SCOPE_MODE =',
+    'const BLIND_ACROSS_RECONNECTS_MS',
+  ]
+  for (const decl of citadas) {
+    const declIndex = src.indexOf(decl)
+    assert.notEqual(declIndex, -1, `declaração não encontrada: ${decl}`)
+    assert.ok(
+      declIndex < logIndex,
+      `${decl} é declarada DEPOIS do log — isso é ReferenceError (TDZ) no load e derruba todo worker no boot`
+    )
+  }
+})
+
+test('a regra de ignorar chat não-monitorado deixa de ser invisível', () => {
+  assert.match(
+    src,
+    /ignoreUnmonitoredGroups: IGNORE_UNMONITORED_GROUPS/,
+    'sem isso não há como confirmar, pelo log, se a flag chegou aos robôs — e em modo remote ela só vale após reiniciar o supervisor'
+  )
+})
