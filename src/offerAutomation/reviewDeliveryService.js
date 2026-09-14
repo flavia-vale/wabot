@@ -5,6 +5,7 @@ import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
 import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 import { claimNextReviewItem } from './reviewRepository.js'
 import { REVIEW_STATUS } from './reviewState.js'
+import { ensureRenderedAutomationPrice } from './dispatcher.js'
 
 export const REVIEW_ITEM_LEASE_MS = Math.max(60_000, Number(process.env.OFFER_AUTOMATION_REVIEW_LEASE_MS) || 5 * 60_000)
 export const REVIEW_ITEM_MAX_ATTEMPTS = Math.max(1, Number(process.env.OFFER_AUTOMATION_REVIEW_MAX_ATTEMPTS) || 3)
@@ -47,6 +48,7 @@ export async function deliverApprovedReviewItems(automation, deps = {}) {
       if (!item) break
       const targets = parse(item.targetSnapshot, {})
       const progress = parse(item.deliverySnapshot, {})
+      const product = parse(item.productSnapshot, {})
       progress.instagram ||= []
       try {
         // Items created before the price validation fix may already be in the
@@ -57,11 +59,10 @@ export async function deliverApprovedReviewItems(automation, deps = {}) {
         }
         if (targets.whatsapp?.jid && !progress.whatsapp) {
           if (!await isRunning(automation.userId)) throw new Error('Bot não está conectado')
-          await sendBroadcast(automation.userId, item.renderedText, [targets.whatsapp.jid], { imageUrl: item.imageUrl || undefined, imageRefererUrl: item.imageRefererUrl || undefined, source: 'offerAutomation' })
+          await sendBroadcast(automation.userId, ensureRenderedAutomationPrice(item.renderedText, product), [targets.whatsapp.jid], { imageUrl: item.imageUrl || undefined, imageRefererUrl: item.imageRefererUrl || undefined, source: 'offerAutomation' })
           progress.whatsapp = true
           await db.offerAutomationReviewItem.updateMany({ where: { id: item.id, status: REVIEW_STATUS.SENDING }, data: { deliverySnapshot: JSON.stringify(progress) } })
         }
-        const product = parse(item.productSnapshot, {})
         for (const destination of targets.instagram || []) {
           if (progress.instagram.includes(destination.id)) continue
           if (!runtime) throw new Error('Fila do Instagram indisponível')

@@ -5,6 +5,7 @@ import { canUseReview } from '../../offerAutomation/reviewFlags.js'
 import { discoverReviewItems } from '../../offerAutomation/reviewDiscoveryService.js'
 import { listReviewItems, reviewCounts, transitionReviewItems } from '../../offerAutomation/reviewRepository.js'
 import { REVIEW_STATUS } from '../../offerAutomation/reviewState.js'
+import { ensureRenderedAutomationPrice } from '../../offerAutomation/dispatcher.js'
 
 const PUBLIC_STATUSES = new Set(Object.values(REVIEW_STATUS))
 
@@ -30,7 +31,10 @@ export async function offerAutomationReviewRoutes(app, opts = {}) {
     const limit = Math.min(50, Math.max(1, Number(req.query?.limit) || 30))
     const rows = await listReviewItems(db, { userId: req.user.sub, automationId: req.params.id, statuses, cursor: req.query?.cursor, limit })
     const hasMore = rows.length > limit
-    const items = rows.slice(0, limit).map(item => ({ ...item, productSnapshot: JSON.parse(item.productSnapshot), targetSnapshot: JSON.parse(item.targetSnapshot), deliverySnapshot: undefined, lastError: item.lastError ? 'Não foi possível concluir o envio' : null }))
+    const items = rows.slice(0, limit).map(item => {
+      const productSnapshot = JSON.parse(item.productSnapshot)
+      return { ...item, productSnapshot, renderedText: ensureRenderedAutomationPrice(item.renderedText, productSnapshot), targetSnapshot: JSON.parse(item.targetSnapshot), deliverySnapshot: undefined, lastError: item.lastError ? 'Não foi possível concluir o envio' : null }
+    })
     return { items, counts: await reviewCounts(db, req.user.sub, req.params.id), nextCursor: hasMore ? items.at(-1)?.id : null }
   })
 

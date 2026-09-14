@@ -7,6 +7,7 @@ import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
 import { canUseReview } from '../../offerAutomation/reviewFlags.js'
 import { REVIEW_STATUS } from '../../offerAutomation/reviewState.js'
+import { deliverApprovedReviewItems as deliverApprovedReviewItemsService } from '../../offerAutomation/reviewDeliveryService.js'
 
 const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
@@ -18,6 +19,10 @@ const DAILY_INTERVAL_MINUTES = 1440
 // listType 0=Recomendados 1=Maior comissão 2=Melhor desempenho
 const VALID_SORT_TYPES = [1, 2, 3, 4, 5]
 const VALID_LIST_TYPES = [0, 1, 2]
+
+// A rota recebe banco e automação explicitamente. O serviço continua com
+// seu contrato interno (automation, deps), usado também pelo cron.
+const deliverApprovedReviewItems = (db, automation) => deliverApprovedReviewItemsService(automation, { db })
 
 function normalizeTemplateKey(value) {
   const key = String(value ?? DEFAULT_TEMPLATE_KEY).trim() || DEFAULT_TEMPLATE_KEY
@@ -52,6 +57,7 @@ function presentAutomation(row) {
 
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
+  const deliverReview = opts.deliverApprovedReviewItemsFn ?? deliverApprovedReviewItems
 
   // Ofertas automáticas são feature Pro (ou Trial ativo). Listar e deletar
   // seguem liberados: a UI precisa mostrar o que existe e o usuário pode
@@ -248,11 +254,16 @@ export async function offerAutomationRoutes(app, opts = {}) {
       include: { instagramDestinations: { include: { destination: true } } },
     })
     if (!automation) return reply.code(404).send({ error: 'Automação não encontrada' })
-    if (automation.publicationMode === 'review') return reply.code(409).send({ error: 'Aprove as ofertas na fila de revisão; este modo não permite envio direto' })
-    const subject = await loadUserPlanSubject(db, req.user.sub)
-    if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
+
     try {
-      const result = await runAutomation(automation)
+      let result
+      if (automation.publicationMode === 'review') {
+        result = await deliverReview(db, automation)
+      } else {
+        const subject = await loadUserPlanSubject(db, req.user.sub)
+        if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
+        result = await runAutomation(automation)
+      }
       return { ok: true, result }
     } catch (err) {
       return { ok: true, result: { error: err.message } }

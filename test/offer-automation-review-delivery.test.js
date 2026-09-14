@@ -59,3 +59,16 @@ test('delivery bloqueia snapshot antigo sem preço antes de publicar', async () 
   assert.equal(db.item.status, 'failed')
   assert.match(db.item.lastError, /sem preço válido/)
 })
+
+test('delivery recupera o preço de snapshot antigo cujo texto ficou só com o emoji', async () => {
+  const item = { id: 'i1', automationId: 'a1', userId: 'u1', status: 'approved', position: 1, itemId: '42', productKey: 'produto', priceCents: 1890, productSnapshot: JSON.stringify({ title: 'Produto', price: 'R$ 18,90', oldPrice: 'R$ 30,00' }), targetSnapshot: JSON.stringify({ whatsapp: { jid: 'g@g.us' }, instagram: [] }), deliverySnapshot: '{}', renderedText: 'Oferta\n\n💰\n\n👉 https://shopee.test/p', attemptCount: 0 }
+  const db = fakeDb(item)
+  const calls = []
+
+  await deliverApprovedReviewItems(
+    { id: 'a1', userId: 'u1', offersPerSend: 1, sentItemIds: '[]' },
+    { db, isRunning: async () => true, sendBroadcast: async (...args) => calls.push(args), instagramRuntime: null },
+  )
+
+  assert.match(calls[0][1], /💰 ~R\$ 30,00~ → \*R\$ 18,90\*/)
+})
