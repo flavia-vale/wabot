@@ -92,7 +92,7 @@ import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
-import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
+import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
 
 const userId = process.env.BOT_USER_ID
@@ -1022,10 +1022,28 @@ async function monitorSilenceWatchdog() {
     else if (lastIncomingByMonitorJid.has(jid)) hasActive = true
   }
 
-  if (!silent.length || !hasActive) return
+  if (!silent.length) return
+  // `hasActive` existe para não alarmar conta naturalmente parada: se NENHUM
+  // monitor tem tráfego, o silêncio pode ser a madrugada. Só que exigir isso
+  // deixava a FALHA TOTAL — todos os monitores calados — como o único estado que
+  // este vigia não enxerga, e é justamente o pior (RCA 2026-09-14: a conta ficou
+  // dois dias com 0 de 2 monitores recebendo e ele nunca rodou).
+  // Com todos calados, a evidência que substitui `hasActive` é a mesma da
+  // cegueira entre reconexões: a sessão está OCUPADA (falhando decrypt ou caindo
+  // repetidamente) e ainda assim não aceita nada. Sem essa evidência, silêncio
+  // segue sendo só silêncio.
+  const todosCalados = !hasActive
+  const ocupadaESemAceitar = failuresSinceLastAccepted > 0 || stableDropsSinceLastAccepted > 0
+  if (todosCalados && !ocupadaESemAceitar) return
 
   logger.warn(
-    { silent, thresholdMs: MONITOR_SILENCE_THRESHOLD_MS },
+    {
+      silent,
+      thresholdMs: MONITOR_SILENCE_THRESHOLD_MS,
+      todosCalados,
+      failuresSinceLastAccepted,
+      stableDropsSinceLastAccepted,
+    },
     'Monitor(es) silenciado(s) detectado(s); forçando refresh de sender_keys'
   )
   await triggerWaGroupsRefresh('silence_watchdog')
@@ -1327,11 +1345,23 @@ const INIT_QUERIES_LOG_RE = /unexpected error in 'init queries'/i
 // justamente a sessão que reconecta o tempo todo e não recebe nada.
 const RECEPTION_WINDOW_MS = Math.max(60_000, Number(process.env.WA_RECEPTION_WINDOW_MS || DEFAULT_RECEPTION_WINDOW_MS))
 const RECEPTION_MIN_FAILURES = Math.max(1, Number(process.env.WA_RECEPTION_MIN_FAILURES || DEFAULT_RECEPTION_MIN_FAILURES))
+// `WA_BLIND_ACROSS_RECONNECTS_MS=0` desliga só a regra nova (rollback sem
+// redeploy), preservando a classificação histórica.
+const BLIND_ACROSS_RECONNECTS_MS = Math.max(0, Number(process.env.WA_BLIND_ACROSS_RECONNECTS_MS ?? DEFAULT_BLIND_ACROSS_RECONNECTS_MS))
 const RECEPTION_SIGNAL_THROTTLE_MS = Math.max(5 * 60_000, Number(process.env.WA_RECEPTION_SIGNAL_THROTTLE_MS || 60 * 60_000))
 let lastUpsertAtMs = null
 let lastAcceptedAtMs = null
 let monitoredSourceCount = 0
 let lastReceptionSignalAt = 0
+
+// Cegueira que ATRAVESSA reconexões (RCA 2026-09-14, viviloppes@gmail.com).
+// Escopo de módulo e zerados SÓ em `markMessageAccepted` — nunca por reconexão
+// e nunca por janela de tempo. Era exatamente isso que faltava: todo contador
+// de recepção era medido a partir da conexão atual, e a conta do RCA reconecta
+// a cada ~50min, então nenhum deles chegava a concluir nada (ver o cabeçalho de
+// core/receptionHealth.js). Mesmo idioma de `chatScopeIgnoredSinceLastAccepted`.
+let failuresSinceLastAccepted = 0
+let stableDropsSinceLastAccepted = 0
 
 function markUpsertReceived() { lastUpsertAtMs = Date.now() }
 
@@ -1400,6 +1430,10 @@ function markMessageAccepted() {
   lastAcceptedAtMs = Date.now()
   acceptedTimestamps.push(lastAcceptedAtMs)
   chatScopeIgnoredSinceLastAccepted = 0
+  // Uma mensagem aceita é a única prova de que a recepção voltou a funcionar —
+  // e o único evento que zera a cegueira acumulada.
+  failuresSinceLastAccepted = 0
+  stableDropsSinceLastAccepted = 0
 }
 
 // `WA_RECEPTION_WINDOW_MS=0` desliga a classificação (rollback sem redeploy).
@@ -1412,6 +1446,12 @@ function getReceptionHealth() {
     lastUpsertAtMs,
     lastAcceptedAtMs,
     failuresInWindow: getSessionHealth().cryptoErrors,
+    // Relógio que não reseta na reconexão: a última aceitação ou, se a conta
+    // nunca aceitou nada neste worker, o boot dele.
+    observedSinceMs: lastAcceptedAtMs ?? workerStartedAt,
+    failuresSinceLastAccepted,
+    stableDropsSinceLastAccepted,
+    blindAcrossReconnectsMs: BLIND_ACROSS_RECONNECTS_MS,
     hasMonitoredSources: monitoredSourceCount > 0,
     incomingPending: incomingQueue.getStats().pending,
     lastProcessedAtMs: incomingQueue.getStats().lastCompletedAt,
@@ -1431,12 +1471,17 @@ function reportReceptionHealth(reception) {
     silentForMs: reception.silentForMs,
     failuresInWindow: reception.failuresInWindow,
     windowMs: reception.windowMs,
-  }, 'Sessão conectada e SEM receber mensagens: está chegando e falhando, nada foi aceito na janela')
+    motivo: reception.reason,
+    entreReconexoes: Boolean(reception.blindAcrossReconnects),
+  }, 'Sessão conectada e SEM receber mensagens')
   try {
     recordOperationalSignal('wa_reception_blind', {
       userId,
       silentForMs: reception.silentForMs,
       failuresInWindow: reception.failuresInWindow,
+      // Separa "parou agora" de "está cega há horas, atravessando reconexões" —
+      // a segunda é a que ninguém enxergava e a que pede ação humana.
+      acrossReconnects: Boolean(reception.blindAcrossReconnects),
     })
   } catch {}
 }
@@ -1445,6 +1490,10 @@ function recordCryptoError() {
   const now = Date.now()
   lastCryptoErrorAt = now
   cryptoErrorTimestamps.push(now)
+  // Cumulativo (não podado): a rajada de falhas acontece no dreno da fila
+  // offline logo após reconectar, e a janela curta a apagava antes de alguém
+  // conseguir julgar. Ver core/receptionHealth.js.
+  failuresSinceLastAccepted += 1
   const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
   // Poda barata: só varre quando o array cresce ou a cabeça já saiu da janela.
   if (cryptoErrorTimestamps.length > 1_000 || cryptoErrorTimestamps[0] < cutoff) {
@@ -2980,7 +3029,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // Uma vez estável, sempre "já estável": marca que esta credencial produziu
       // ao menos uma conexão saudável na vida deste worker (persiste entre
       // reconexões). Base da política keepEstablishedAuth em badSession.
-      if (wasStable) everHadStableOpen = true
+      if (wasStable) {
+        everHadStableOpen = true
+        // Queda de sessão ESTÁVEL sem nada ter sido aceito desde a última vez é
+        // a segunda evidência de cegueira (a conta do RCA caiu 29× em 24h, todas
+        // com `hadStableOpen`, sem aceitar uma única mensagem no meio).
+        stableDropsSinceLastAccepted += 1
+      }
       // Node bruto do stream:error (quando existir) — só ele revela se o close
       // foi causado por uma mensagem específica travada em loop de reentrega
       // (ver AGENTS.md "Loop de retry-receipt travado"). `code` sozinho não
