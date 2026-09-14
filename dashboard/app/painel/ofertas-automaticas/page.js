@@ -54,6 +54,7 @@ const SKIP_LABELS = {
   invalid_shopee_credentials: 'Credenciais da Shopee incompletas (appId/secretKey).',
   no_offers_found: 'A Shopee não retornou produtos para essa palavra-chave.',
   all_offers_filtered: 'A Shopee trouxe produtos, mas todos foram filtrados (desconto mínimo alto ou já enviados). Tente reduzir o desconto mínimo.',
+  no_approved_review_items: 'Aprove pelo menos uma oferta na fila antes de enviar.',
 }
 
 function explainSkip(code) {
@@ -329,89 +330,8 @@ export default function OfertasAutomaticasPage() {
   const allAutomationsEnabled = automations.length > 0 && activeCount === automations.length
   const bulkToggleLabel = allAutomationsEnabled ? 'Desativar todas' : 'Ativar todas'
 
-  return (
-    <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
-      <PainelContentActions>
-        <button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova automação</button>
-      </PainelContentActions>
-
-      {automations.length > 0 && (
-        <>
-          <section className="pnl-master">
-            <div className="pnl-master-ico">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="10" cy="10" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M10.5 6.5 8.5 10.2h3L9.5 13.8" />
-              </svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span className="pnl-master-title">{activeCount > 0 ? 'Garimpo automático ligado' : 'Garimpo automático pausado'}</span>
-                <span className="pnl-master-status">
-                  <span className={`pnl-dot ${activeCount > 0 ? 'is-on' : 'is-idle'}`} aria-hidden="true" />
-                  {activeCount > 0 ? 'buscando' : 'nada ativo'}
-                </span>
-              </div>
-              <div className="pnl-master-sub">
-                {activeCount} {activeCount === 1 ? 'automação ativa' : 'automações ativas'}
-                {lastRunLabel ? ` · última busca ${lastRunLabel}` : ' · ainda não buscou'}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="pnl-btn is-primary"
-              onClick={() => handleToggleAll(!allAutomationsEnabled)}
-              disabled={bulkToggling !== null}
-              aria-label={`${bulkToggleLabel} automações de ofertas`}
-              style={{ flexShrink: 0 }}
-            >
-              {bulkToggling ? 'Atualizando…' : bulkToggleLabel}
-            </button>
-          </section>
-
-          <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-            {[
-              { label: 'Automações ativas', value: activeCount, sub: `de ${automations.length}` },
-              { label: 'Pausadas', value: pausedCount, sub: pausedCount === 1 ? 'automação' : 'automações' },
-              { label: 'Grupos de destino', value: destGroupCount, sub: 'recebendo ofertas' },
-              { label: 'Última busca', value: lastRunLabel || '—', sub: 'envio automático' },
-            ].map((s) => (
-              <div key={s.label} className="pnl-kpi">
-                <div className="pnl-kpi-label">{s.label}</div>
-                <div className="pnl-kpi-num">{s.value}</div>
-                <div className="pnl-kpi-foot">{s.sub}</div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <Link className="pnl-note-box" href="/painel/mensagens" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
-        <span>🎲 Quer que cada mensagem saia diferente? Configure ganchos e CTAs.</span>
-        <span className="pnl-link-btn">Editar em Mensagens →</span>
-      </Link>
-
-      {/* Mesma regra da fila e do espelhamento: quem decide o formato é o grupo
-          de destino. Ver src/core/imageModePolicy.js. */}
-      <Link className="pnl-note-box" href="/painel/grupos" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
-        <span>🖼️ Como a oferta aparece (foto, foto com a sua marca ou card que abre a loja) é escolhido em cada grupo de destino.</span>
-        <span className="pnl-link-btn">Editar em Grupos →</span>
-      </Link>
-
-      <div className="pnl-note-box is-flight">
-        <strong style={{ fontWeight: 600 }}>Checklist antes de automatizar</strong>
-        <p style={{ marginTop: 4 }}>Conecte o WhatsApp, confira suas credenciais da Shopee, escolha um grupo de destino e use “Enviar agora” para validar o modelo antes de deixar a recorrência ligada.</p>
-      </div>
-
-      {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
-
-      {!automations.length && !showForm && (
-        <div className="pnl-card pnl-empty">
-          Nenhuma automação configurada ainda.<br />
-          Crie uma busca por nicho, escolha o modelo da mensagem e teste com <strong>Enviar agora</strong> antes de ativar a recorrência.
-        </div>
-      )}
-
-      {showForm && (
+  function renderAutomationForm() {
+    return (
         <section className="pnl-card pnl-grid">
           <div className="pnl-card-title">{editId ? 'Editar automação' : 'Nova automação'}</div>
 
@@ -516,7 +436,92 @@ export default function OfertasAutomaticasPage() {
             <button type="button" className="pnl-btn" onClick={() => setShowForm(false)}>Cancelar</button>
           </div>
         </section>
+    )
+  }
+
+  return (
+    <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
+      <PainelContentActions>
+        <button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova automação</button>
+      </PainelContentActions>
+
+      {automations.length > 0 && (
+        <>
+          <section className="pnl-master">
+            <div className="pnl-master-ico">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="10" cy="10" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M10.5 6.5 8.5 10.2h3L9.5 13.8" />
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="pnl-master-title">{activeCount > 0 ? 'Garimpo automático ligado' : 'Garimpo automático pausado'}</span>
+                <span className="pnl-master-status">
+                  <span className={`pnl-dot ${activeCount > 0 ? 'is-on' : 'is-idle'}`} aria-hidden="true" />
+                  {activeCount > 0 ? 'buscando' : 'nada ativo'}
+                </span>
+              </div>
+              <div className="pnl-master-sub">
+                {activeCount} {activeCount === 1 ? 'automação ativa' : 'automações ativas'}
+                {lastRunLabel ? ` · última busca ${lastRunLabel}` : ' · ainda não buscou'}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="pnl-btn is-primary"
+              onClick={() => handleToggleAll(!allAutomationsEnabled)}
+              disabled={bulkToggling !== null}
+              aria-label={`${bulkToggleLabel} automações de ofertas`}
+              style={{ flexShrink: 0 }}
+            >
+              {bulkToggling ? 'Atualizando…' : bulkToggleLabel}
+            </button>
+          </section>
+
+          <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+            {[
+              { label: 'Automações ativas', value: activeCount, sub: `de ${automations.length}` },
+              { label: 'Pausadas', value: pausedCount, sub: pausedCount === 1 ? 'automação' : 'automações' },
+              { label: 'Grupos de destino', value: destGroupCount, sub: 'recebendo ofertas' },
+              { label: 'Última busca', value: lastRunLabel || '—', sub: 'envio automático' },
+            ].map((s) => (
+              <div key={s.label} className="pnl-kpi">
+                <div className="pnl-kpi-label">{s.label}</div>
+                <div className="pnl-kpi-num">{s.value}</div>
+                <div className="pnl-kpi-foot">{s.sub}</div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
+
+      <Link className="pnl-note-box" href="/painel/mensagens" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
+        <span>🎲 Quer que cada mensagem saia diferente? Configure ganchos e CTAs.</span>
+        <span className="pnl-link-btn">Editar em Mensagens →</span>
+      </Link>
+
+      {/* Mesma regra da fila e do espelhamento: quem decide o formato é o grupo
+          de destino. Ver src/core/imageModePolicy.js. */}
+      <Link className="pnl-note-box" href="/painel/grupos" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
+        <span>🖼️ Como a oferta aparece (foto, foto com a sua marca ou card que abre a loja) é escolhido em cada grupo de destino.</span>
+        <span className="pnl-link-btn">Editar em Grupos →</span>
+      </Link>
+
+      <div className="pnl-note-box is-flight">
+        <strong style={{ fontWeight: 600 }}>Checklist antes de automatizar</strong>
+        <p style={{ marginTop: 4 }}>Conecte o WhatsApp, confira suas credenciais da Shopee, escolha um grupo de destino e use “Enviar agora” para validar o modelo antes de deixar a recorrência ligada.</p>
+      </div>
+
+      {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
+
+      {!automations.length && !showForm && (
+        <div className="pnl-card pnl-empty">
+          Nenhuma automação configurada ainda.<br />
+          Crie uma busca por nicho, escolha o modelo da mensagem e teste com <strong>Enviar agora</strong> antes de ativar a recorrência.
+        </div>
+      )}
+
+      {showForm && !editId && renderAutomationForm()}
 
       <div className="pnl-grid">
         {automations.map((a) => {
@@ -552,10 +557,11 @@ export default function OfertasAutomaticasPage() {
                   <span />
                 </button>
               </div>
+              {showForm && editId === a.id && renderAutomationForm()}
               <div className="pnl-toolbar" style={{ marginTop: 10, flexWrap: 'wrap' }}>
                 {a.publicationMode !== 'review' && <button type="button" className="pnl-link-btn" onClick={() => handleTrigger(a)} disabled={triggering === a.id}>
                   {triggering === a.id ? 'Enviando…' : 'Enviar agora'}
-                </button>}
+                </button>
                 {a.publicationMode === 'review' && <button
                   type="button"
                   className="pnl-link-btn"
