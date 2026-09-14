@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { validateOfferAutomationForm } from '../dashboard/lib/offerAutomationForm.js'
 
 const valid = {
@@ -25,4 +26,11 @@ test('salvar explica cada campo obrigatório em vez de ser um clique sem respost
 test('Instagram sozinho é destino válido e revisão valida o tamanho da fila', () => {
   assert.equal(validateOfferAutomationForm({ ...valid, destGroupJid: '', instagramDestinationIds: ['ig-1'] }), null)
   assert.equal(validateOfferAutomationForm({ ...valid, publicationMode: 'review', reviewTargetSize: 2 }), 'Escolha quantas ofertas quer guardar para revisão.')
+})
+
+test('fila de revisão começa recolhida e só monta ao clicar em Ver fila', async () => {
+  const source = await readFile(new URL('../dashboard/app/painel/ofertas-automaticas/page.js', import.meta.url), 'utf8')
+  assert.match(source, /reviewQueueOpen \? 'Recolher fila' : 'Ver fila'/)
+  assert.match(source, /publicationMode === 'review' && reviewQueueOpen &&/)
+  assert.match(source, /aria-expanded=\{reviewQueueOpen\}/)
 })

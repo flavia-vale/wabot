@@ -84,7 +84,7 @@ test('dedupeOffersByProduct: colapsa mesmo produto com itemIds diferentes manten
   assert.deepEqual(result.map(o => o.itemId), ['1', '3'])
 })
 
-import { formatOfferMessage, runAutomation, searchOffersPreview } from '../src/offerAutomation/dispatcher.js'
+import { automationOfferProduct, formatOfferMessage, offerPriceCents, runAutomation, searchOffersPreview } from '../src/offerAutomation/dispatcher.js'
 
 test('searchOffersPreview: roda a busca sem enviar e retorna funil + ofertas', async () => {
   const calls = []
@@ -165,6 +165,13 @@ test('formatOfferMessage: handles missing originPrice gracefully', () => {
   const msg = formatOfferMessage(offer, 'festa')
   assert.ok(msg.includes('Kit Festa Junina'))
   assert.ok(msg.includes('https://shope.ee/xyz456'))
+})
+
+test('preço usa price quando priceMin vem vazio da Shopee', () => {
+  const offer = { productName: 'Kit festa', priceMin: '', price: '29.90', priceMax: '39.90', priceDiscountRate: 20, offerLink: 'https://shopee.test/kit' }
+  assert.match(formatOfferMessage(offer, 'festa'), /R\$\s*29,90/)
+  assert.match(automationOfferProduct(offer).price, /R\$\s*29,90/)
+  assert.equal(offerPriceCents(offer), 2990)
 })
 
 function baseAutomation(overrides = {}) {

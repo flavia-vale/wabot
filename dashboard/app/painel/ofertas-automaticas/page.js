@@ -122,6 +122,7 @@ export default function OfertasAutomaticasPage() {
   const [triggering, setTriggering] = useState(null)
   const [bulkToggling, setBulkToggling] = useState(null)
   const [triggerResult, setTriggerResult] = useState({})
+  const [openReviewQueues, setOpenReviewQueues] = useState(() => new Set())
   const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
   const [reviewAvailable, setReviewAvailable] = useState(false)
 
@@ -520,6 +521,7 @@ export default function OfertasAutomaticasPage() {
       <div className="pnl-grid">
         {automations.map((a) => {
           const result = triggerResult[a.id]
+          const reviewQueueOpen = openReviewQueues.has(a.id)
           return (
             <div key={a.id} className="pnl-card">
               <div className="pnl-card-head" style={{ marginBottom: 0, alignItems: 'flex-start' }}>
@@ -554,6 +556,18 @@ export default function OfertasAutomaticasPage() {
                 {a.publicationMode !== 'review' && <button type="button" className="pnl-link-btn" onClick={() => handleTrigger(a)} disabled={triggering === a.id}>
                   {triggering === a.id ? 'Enviando…' : 'Enviar agora'}
                 </button>}
+                {a.publicationMode === 'review' && <button
+                  type="button"
+                  className="pnl-link-btn"
+                  aria-expanded={reviewQueueOpen}
+                  aria-controls={`review-queue-${a.id}`}
+                  onClick={() => setOpenReviewQueues((current) => {
+                    const next = new Set(current)
+                    if (next.has(a.id)) next.delete(a.id)
+                    else next.add(a.id)
+                    return next
+                  })}
+                >{reviewQueueOpen ? 'Recolher fila' : 'Ver fila'}</button>}
                 <button type="button" className="pnl-link-btn" style={{ color: 'var(--ink-soft)' }} onClick={() => openEdit(a)}>Editar</button>
                 <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)' }} onClick={() => setDeleteTarget(a)}>Remover</button>
               </div>
@@ -562,7 +576,7 @@ export default function OfertasAutomaticasPage() {
                   {result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped) : `✓ ${result.sent} produto(s) enviado(s)`}
                 </p>
               )}
-              {a.publicationMode === 'review' && <ReviewQueue automation={a} />}
+              {a.publicationMode === 'review' && reviewQueueOpen && <div id={`review-queue-${a.id}`}><ReviewQueue automation={a} /></div>}
             </div>
           )
         })}

@@ -34,7 +34,18 @@ function nextOfferPage(currentPage, rawCount) {
 }
 
 export function offerPriceCents(offer) {
-  return Math.round((Number(offer?.priceMin ?? offer?.price) || 0) * 100)
+  return Math.round(resolveOfferPrice(offer) * 100)
+}
+
+// A Shopee pode devolver `priceMin: ""` junto de `price` preenchido. O
+// nullish coalescing não pula string vazia e fazia a mensagem perder o preço.
+// Centralizar o fallback mantém snapshot, texto e deduplicação consistentes.
+export function resolveOfferPrice(offer = {}) {
+  for (const value of [offer.priceMin, offer.price, offer.priceMax]) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return 0
 }
 
 function priceStr(raw) {
@@ -61,7 +72,7 @@ function discountStr(raw) {
 }
 
 export function automationOfferProduct(offer) {
-  const currentRaw = Number(offer.priceMin ?? offer.price) || 0
+  const currentRaw = resolveOfferPrice(offer)
   const pct = Number(offer.priceDiscountRate) || 0
   const originalRaw = pct > 0 && currentRaw > 0 ? Math.round(currentRaw * 100 / (100 - pct)) : 0
   return {
@@ -123,7 +134,7 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
   }
 
   const name = offer.productName ?? 'Produto Shopee'
-  const currentRaw = Number(offer.priceMin ?? offer.price) || 0
+  const currentRaw = resolveOfferPrice(offer)
   const pct = Number(offer.priceDiscountRate) || 0
   const current = priceStr(currentRaw)
 
