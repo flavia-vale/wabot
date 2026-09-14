@@ -5,8 +5,9 @@ import { buildFeatureGateError, canUseOfferAutomations, canUseInstagramStories, 
 import { runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
 import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
-import { canUseReview } from '../../offerAutomation/reviewFlags.js'
+import { canDeliverReview, canUseReview } from '../../offerAutomation/reviewFlags.js'
 import { REVIEW_STATUS } from '../../offerAutomation/reviewState.js'
+import { deliverApprovedReviewItems } from '../../offerAutomation/reviewDeliveryService.js'
 
 const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
@@ -52,6 +53,8 @@ function presentAutomation(row) {
 
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
+  const env = opts.env ?? process.env
+  const deliverReview = opts.deliverApprovedReviewItemsFn ?? deliverApprovedReviewItems
 
   // Ofertas automáticas são feature Pro (ou Trial ativo). Listar e deletar
   // seguem liberados: a UI precisa mostrar o que existe e o usuário pode
@@ -252,6 +255,13 @@ export async function offerAutomationRoutes(app, opts = {}) {
     const subject = await loadUserPlanSubject(db, req.user.sub)
     if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
     try {
+      if (automation.publicationMode === 'review') {
+        if (!canUseReview(req.user.sub, env) || !canDeliverReview(req.user.sub, env)) {
+          return reply.code(409).send({ error: 'O envio da fila de revisão ainda não está liberado para esta conta' })
+        }
+        const result = await deliverReview(automation, { db })
+        return { ok: true, result: result.sent === 0 && result.failed === 0 ? { ...result, skipped: 'no_approved_review_items' } : result }
+      }
       const result = await runAutomation(automation)
       return { ok: true, result }
     } catch (err) {
