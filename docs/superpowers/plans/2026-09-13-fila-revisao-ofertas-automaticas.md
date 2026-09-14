@@ -6,7 +6,7 @@
 
 **Status:** implementação concluída atrás de flags; ativação/piloto pendentes.
 **Objetivo:** permitir revisão humana das ofertas encontradas sem alterar
-nenhum envio automático existente.  
+nenhum envio automático existente.
 **Stack:** Node.js, Fastify, Prisma/SQLite, Next.js, `node:test`.
 
 ### Situação da entrega
