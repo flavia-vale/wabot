@@ -80,3 +80,44 @@ test('descoberta limita a quantidade lógica mesmo com muitos itens já na fila'
 
   assert.ok(requestedLimit <= 50)
 })
+
+test('próximas opções usa a página seguinte e troca somente as não aprovadas', async () => {
+  let searchArgs
+  let removedWhere
+  let automationUpdate
+  const automation = { id: 'a3', userId: 'u3', keyword: 'festa', page: 1, reviewTargetSize: 5, offersPerSend: 1, sentItemIds: '[]', destGroupJid: 'grupo@g.us', instagramDestinations: [] }
+  const db = {
+    offerAutomationReviewItem: {
+      count: async ({ where }) => {
+        assert.deepEqual(where.status.in, ['approved', 'sending'])
+        return 1
+      },
+      findMany: async () => [
+        { productKey: 'já aprovada', priceCents: 1000 },
+        { productKey: 'ainda aguardando', priceCents: 1000 },
+      ],
+      findFirst: async () => ({ position: 2 }),
+      updateMany: async ({ where }) => { removedWhere = where; return { count: 1 } },
+      createMany: async () => {},
+    },
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: '123', secretKey: 'segredo-valido' }) }) },
+    botConfig: { findUnique: async () => null },
+    offerAutomation: { update: async (args) => { automationUpdate = args } },
+    $transaction: async (callback) => callback(db),
+  }
+
+  const result = await discoverReviewItems(automation, {
+    db,
+    nextPage: true,
+    fetchOffersFn: async (args) => {
+      searchArgs = args
+      return { offers: [offer('3', 'Opção nova')], rawCount: 1 }
+    },
+  })
+
+  assert.equal(searchArgs.page, 2)
+  assert.equal(searchArgs.sortType, 2)
+  assert.equal(removedWhere.status, 'awaiting_review')
+  assert.equal(automationUpdate.data.page, 2)
+  assert.equal(result.replaced, true)
+})

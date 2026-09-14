@@ -39,8 +39,10 @@ export async function offerAutomationReviewRoutes(app, opts = {}) {
     const automation = await owned(req, reply, true)
     if (!automation) return reply
     if (automation.publicationMode !== 'review') return reply.code(409).send({ error: 'Ative a revisão nesta automação primeiro' })
-    if (automation.lastDiscoveryAt && Date.now() - new Date(automation.lastDiscoveryAt).getTime() < 60_000) return reply.code(429).send({ error: 'Aguarde um minuto antes de buscar novamente' })
-    return discoverReviewItems(automation, { db })
+    const nextPage = req.body?.nextPage === true
+    const cooldownMs = nextPage ? 5_000 : 60_000
+    if (automation.lastDiscoveryAt && Date.now() - new Date(automation.lastDiscoveryAt).getTime() < cooldownMs) return reply.code(429).send({ error: nextPage ? 'Aguarde alguns segundos antes de buscar as próximas opções' : 'Aguarde um minuto antes de buscar novamente' })
+    return discoverReviewItems(automation, { db, nextPage })
   })
 
   async function mutate(req, reply, from, to, ids) {
