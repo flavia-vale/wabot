@@ -13,7 +13,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
-import { rm, rename, writeFile, readdir } from 'fs/promises'
+import { rm, rename, writeFile, readdir, access } from 'fs/promises'
 import { dirname } from 'path'
 
 import logger from './logger.js'
@@ -594,7 +594,7 @@ const AUTH_DIR = getAuthInfoDir(userId)
 // backup e volta se o pareamento falhar antes de o código chegar ao usuário.
 // Sem isso, um clique em "conectar" durante uma recusa do WhatsApp (405)
 // destruía a credencial boa e travava a sessão de vez (RCA 2026-07-28).
-const pairingAuthBackup = createPairingAuthBackup({ authDir: AUTH_DIR, fs: { rename, rm }, logger })
+const pairingAuthBackup = createPairingAuthBackup({ authDir: AUTH_DIR, fs: { rename, rm, access }, logger })
 const DEDUP_FILE = getDedupFile(userId)
 const KNOWN_CHANNELS_FILE = getKnownChannelsFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
@@ -2787,6 +2787,14 @@ async function startBotInner() {
   scheduleDedupSave(dedup)
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
+  // Pareamento que derrubou o processo deixa a credencial boa num backup que
+  // ninguém mais olha — e o próximo pareamento a apagaria. `recoverOrphan` só
+  // age quando NÃO há credencial no lugar e HÁ uma no backup; qualquer dúvida
+  // não mexe em nada (RCA 2026-09-14). Durante um pareamento em andamento
+  // NESTE processo o backup é legítimo e quem manda nele é o próprio fluxo.
+  if (!pairingAuthBackup.hasBackup()) {
+    await pairingAuthBackup.recoverOrphan().catch(() => false)
+  }
   mkdirSync(AUTH_DIR, { recursive: true })
   await clearAppStateSyncKeys()
   startHeartbeatIpc()
@@ -3100,8 +3108,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         try { recordOperationalSignal('wa_forbidden', { userId, code }) } catch {}
       }
       if (isLoggedOut) {
-        // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
+        // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo.
+        // O backup de pareamento vai junto: credencial revogada não pode ser
+        // devolvida ao lugar por `recoverOrphan` no próximo boot.
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+        await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
         logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
       } else if (wasPairing && isRestartRequired) {
         // Pairing aceito pelo WA: o servidor manda close com code 515 esperando
@@ -3218,6 +3229,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             try { recordOperationalSignal('wa_bad_session_reset', { userId, count: b.count }) } catch {}
             recordWaConnectionEventSafe({ userId, type: 'auth_reset', code, lifecycle: 'auth_reset_required', ownerInstance: OWNER_INSTANCE, metadata: { badSessionCount: b.count } })
             await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+            // Backup junto: a credencial guardada é da MESMA sessão corrompida.
+            await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
             await persistSessionPatch(buildAuthResetSessionPatch({ code, ownerInstance: OWNER_INSTANCE, now: new Date() })).catch(() => {})
             badSessionTimestamps = []
             reconnectAttempts = 0

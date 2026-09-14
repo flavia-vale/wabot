@@ -57,6 +57,7 @@ model User {
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
   followLogs            FollowLog[]
   offerAutomations      OfferAutomation[]
+  offerAutomationReviewItems OfferAutomationReviewItem[]
   offerQueues           OfferQueue[]
   offerQueueItems       OfferQueueItem[]
   affiliateLinks        AffiliateLink[]
@@ -801,6 +802,9 @@ model OfferAutomation {
   prioritizeAMS   Boolean   @default(false)
   isKeySeller     Boolean   @default(false)
   enabled         Boolean   @default(true)
+  publicationMode String    @default("direct")
+  lastDiscoveryAt DateTime?
+  reviewTargetSize Int      @default(10)
   lastSentAt      DateTime?
   sentItemIds     String    @default("[]")
   // Página atual da busca Shopee. Rotaciona a cada execução para que cada
@@ -810,9 +814,45 @@ model OfferAutomation {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   instagramDestinations OfferAutomationDestination[]
+  reviewItems OfferAutomationReviewItem[]
 
   @@index([userId, enabled])
   @@index([enabled, lastSentAt])
+}
+
+model OfferAutomationReviewItem {
+  id                String   @id @default(cuid())
+  automationId      String
+  automation        OfferAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            String   @default("awaiting_review")
+  productKey        String
+  itemId            String?
+  priceCents        Int
+  productUrl        String
+  imageUrl          String?
+  imageRefererUrl   String?
+  productSnapshot   String
+  renderedText      String
+  targetSnapshot    String
+  deliverySnapshot  String   @default("{}")
+  position          Int
+  discoveredAt      DateTime @default(now())
+  reviewedAt        DateTime?
+  reviewedAction    String?
+  sentAt            DateTime?
+  claimedAt         DateTime?
+  attemptCount      Int      @default(0)
+  nextAttemptAt     DateTime?
+  lastError         String?
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([automationId, status, position])
+  @@index([userId, status, createdAt])
+  @@index([automationId, productKey, priceCents])
 }
 
 // Dedup cruzada entre automações, por grupo de destino. `sentItemIds` é

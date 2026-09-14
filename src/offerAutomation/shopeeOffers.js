@@ -72,7 +72,9 @@ export function dedupeOffersByProduct(offers, seenKeys = new Set()) {
 export function buildOfferCandidateLimit(limit) {
   // Fetch more than offersPerSend because filters remove already-sent items
   // and products that do not meet the user's minimum discount threshold.
-  return Math.min(Math.max(limit * 10, 20), 100)
+  // A API de afiliados rejeita qualquer `limit` acima de 50 (erro 11001),
+  // portanto este teto precisa valer para preview, envio direto e revisão.
+  return Math.min(Math.max(limit * 10, 20), 50)
 }
 
 export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, listType = 1, page = 1, isAMSOffer = false, isKeySeller = false }) {
