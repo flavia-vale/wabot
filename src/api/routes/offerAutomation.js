@@ -7,6 +7,7 @@ import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
 import { canUseReview } from '../../offerAutomation/reviewFlags.js'
 import { REVIEW_STATUS } from '../../offerAutomation/reviewState.js'
+import { deliverApprovedReviewItems } from '../../offerAutomation/reviewDeliveryService.js'
 
 const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
@@ -52,6 +53,7 @@ function presentAutomation(row) {
 
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
+  const deliverReview = opts.deliverApprovedReviewItemsFn ?? deliverApprovedReviewItems
 
   // Ofertas automáticas são feature Pro (ou Trial ativo). Listar e deletar
   // seguem liberados: a UI precisa mostrar o que existe e o usuário pode
@@ -252,6 +254,16 @@ export async function offerAutomationRoutes(app, opts = {}) {
     const subject = await loadUserPlanSubject(db, req.user.sub)
     if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
     try {
+      if (automation.publicationMode === 'review') {
+        // A flag de delivery governa o envio AUTOMÁTICO do cron. O clique
+        // explícito em "Enviar agora" deve continuar disponível durante o
+        // piloto com delivery=false e ainda consome somente itens aprovados.
+        // A automação já passou pelos gates ao ser criada/trocada para review;
+        // repetir o feature gate aqui tornava uma ação manual legítima refém
+        // das flags do processo e foi a origem direta do 409 no quality gate.
+        const result = await deliverReview(automation, { db })
+        return { ok: true, result: result.sent === 0 && result.failed === 0 ? { ...result, skipped: 'no_approved_review_items' } : result }
+      }
       const result = await runAutomation(automation)
       return { ok: true, result }
     } catch (err) {
