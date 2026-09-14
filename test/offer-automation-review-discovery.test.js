@@ -52,3 +52,31 @@ test('resultado da busca sempre explica por que a fila continuou vazia', () => {
   assert.match(explainReviewDiscovery({ skipped: 'review_queue_full' }).text, /fila já está completa/)
   assert.equal(explainReviewDiscovery({ discovered: 3 }).tone, 'success')
 })
+
+test('descoberta limita a quantidade lógica mesmo com muitos itens já na fila', async () => {
+  let requestedLimit = 0
+  const automation = { id: 'a2', userId: 'u2', keyword: 'festa', reviewTargetSize: 30, offersPerSend: 1, sentItemIds: '[]', destGroupJid: 'grupo@g.us', instagramDestinations: [] }
+  const living = Array.from({ length: 29 }, (_, index) => ({ productKey: `produto ${index}`, priceCents: 1000 }))
+  const db = {
+    offerAutomationReviewItem: {
+      count: async () => 29,
+      findMany: async () => living,
+      findFirst: async () => ({ position: 29 }),
+      createMany: async () => {},
+    },
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: '123', secretKey: 'segredo-valido' }) }) },
+    botConfig: { findUnique: async () => null },
+    offerAutomation: { update: async () => {} },
+    $transaction: async (callback) => callback(db),
+  }
+
+  await discoverReviewItems(automation, {
+    db,
+    fetchOffersFn: async ({ limit }) => {
+      requestedLimit = limit
+      return { offers: [], rawCount: 0 }
+    },
+  })
+
+  assert.ok(requestedLimit <= 50)
+})

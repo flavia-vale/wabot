@@ -64,7 +64,8 @@ test('buildOffersQuery: usa lista ampla por padrão para evitar no_offers_found 
 test('buildOfferCandidateLimit: busca candidatos suficientes para filtrar descontos e deduplicados', () => {
   assert.equal(buildOfferCandidateLimit(1), 20)
   assert.equal(buildOfferCandidateLimit(3), 30)
-  assert.equal(buildOfferCandidateLimit(50), 100)
+  assert.equal(buildOfferCandidateLimit(5), 50)
+  assert.equal(buildOfferCandidateLimit(50), 50)
 })
 
 test('productDedupKey: normaliza nome (case/espaços) e cai em itemId quando sem nome', () => {
