@@ -13,8 +13,10 @@ import {
   resolveStoreUrlFromCustomDomainDetailed,
   resolveCustomDomainLinks,
   clearCustomDomainCache,
+  isRetryableCustomDomainFailure,
   CUSTOM_DOMAIN_FETCH_TIMEOUT_MS,
   CUSTOM_DOMAIN_TOTAL_BUDGET_MS,
+  CUSTOM_DOMAIN_MAX_ATTEMPTS,
 } from '../src/core/customDomainLinkResolver.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -270,6 +272,131 @@ test('resolveCustomDomainLinks devolve as falhas para o robô registrar', async 
   assert.equal(failures[0].reason, 'pagina_sem_link_de_loja')
 })
 
+test('timeout transitório ganha uma segunda tentativa e o sucesso é observado', async () => {
+  clearCustomDomainCache()
+  let chamadas = 0
+  const fetchImpl = async () => {
+    chamadas += 1
+    if (chamadas === 1) {
+      const erro = new Error('DNS demorou demais')
+      erro.name = 'TimeoutError'
+      throw erro
+    }
+    return respostaHtml(PAGINA_REAL)
+  }
+
+  const { resolved, failures } = await resolveCustomDomainLinks(`veja ${LINK_PROPRIO}`, {
+    fetchImpl,
+    useCache: false,
+    totalBudgetMs: 13_000,
+  })
+
+  assert.equal(chamadas, 2)
+  assert.deepEqual(failures, [])
+  assert.equal(resolved[0].to, 'https://www.amazon.com.br/dp/B088PNBKTR/')
+  assert.equal(resolved[0].recoveredByRetry, true)
+  assert.deepEqual(resolved[0].attempts.map(a => a.reason), ['tempo_esgotado', null])
+})
+
+test('erro de rede transitório também ganha retry', async () => {
+  clearCustomDomainCache()
+  let chamadas = 0
+  const fetchImpl = async () => {
+    chamadas += 1
+    if (chamadas === 1) {
+      const erro = new Error('socket hang up')
+      erro.name = 'TypeError'
+      throw erro
+    }
+    return respostaHtml(PAGINA_REAL)
+  }
+  const { resolved } = await resolveCustomDomainLinks(`veja ${LINK_PROPRIO}`, {
+    fetchImpl,
+    useCache: false,
+  })
+  assert.equal(chamadas, 2)
+  assert.equal(resolved[0].recoveredByRetry, true)
+})
+
+test('respostas determinísticas NÃO são repetidas', async () => {
+  for (const [nome, resposta, motivo] of [
+    ['HTTP 403', respostaHtml('', { status: 403 }), 'recusado_http_403'],
+    ['HTML sem loja', respostaHtml('<html><body>nada</body></html>'), 'pagina_sem_link_de_loja'],
+  ]) {
+    clearCustomDomainCache()
+    let chamadas = 0
+    const { failures } = await resolveCustomDomainLinks(`veja ${LINK_PROPRIO}`, {
+      fetchImpl: async () => { chamadas += 1; return resposta },
+      useCache: false,
+    })
+    assert.equal(chamadas, 1, `${nome} não pode gastar uma segunda chamada`)
+    assert.equal(failures[0].reason, motivo)
+    assert.equal(failures[0].attempts.length, 1)
+  }
+})
+
+test('duas falhas transitórias preservam o motivo e encerram no teto de tentativas', async () => {
+  clearCustomDomainCache()
+  let chamadas = 0
+  const { failures } = await resolveCustomDomainLinks(`veja ${LINK_PROPRIO}`, {
+    fetchImpl: async () => {
+      chamadas += 1
+      const erro = new Error(`timeout ${chamadas}`)
+      erro.name = 'TimeoutError'
+      throw erro
+    },
+    useCache: false,
+  })
+  assert.equal(chamadas, 2)
+  assert.equal(failures[0].reason, 'tempo_esgotado')
+  assert.equal(failures[0].attempts.length, 2)
+})
+
+test('não inicia retry sem orçamento útil e mantém o teto global da mensagem', async () => {
+  clearCustomDomainCache()
+  let chamadas = 0
+  const { failures } = await resolveCustomDomainLinks(`veja ${LINK_PROPRIO}`, {
+    fetchImpl: async () => {
+      chamadas += 1
+      await new Promise(resolve => setTimeout(resolve, 250))
+      const erro = new Error('DNS demorou')
+      erro.name = 'TimeoutError'
+      throw erro
+    },
+    useCache: false,
+    totalBudgetMs: 1700,
+  })
+  assert.equal(chamadas, 1, 'retry sem 1,5s livres ameaçaria o teto da mensagem')
+  assert.equal(failures[0].reason, 'tempo_esgotado')
+  assert.equal(failures[0].attempts.length, 1)
+})
+
+test('sucesso recuperado pelo retry entra no cache normalmente', async () => {
+  clearCustomDomainCache()
+  let chamadas = 0
+  const fetchImpl = async () => {
+    chamadas += 1
+    if (chamadas === 1) {
+      const erro = new Error('falha transitória')
+      erro.name = 'TimeoutError'
+      throw erro
+    }
+    return respostaHtml(PAGINA_REAL)
+  }
+  await resolveCustomDomainLinks(`veja ${LINK_PROPRIO}`, { fetchImpl })
+  await resolveCustomDomainLinks(`veja ${LINK_PROPRIO}`, { fetchImpl })
+  assert.equal(chamadas, 2, 'a segunda mensagem deve reutilizar o sucesso recuperado')
+  clearCustomDomainCache()
+})
+
+test('classificação de retry não repete erros determinísticos ou de segurança', () => {
+  assert.equal(isRetryableCustomDomainFailure('tempo_esgotado'), true)
+  assert.equal(isRetryableCustomDomainFailure('erro_de_rede:TypeError'), true)
+  assert.equal(isRetryableCustomDomainFailure('recusado_http_403'), false)
+  assert.equal(isRetryableCustomDomainFailure('pagina_sem_link_de_loja'), false)
+  assert.equal(isRetryableCustomDomainFailure('endereco_recusado'), false)
+})
+
 test('guarda: o robô registra o motivo quando o link não resolve', () => {
   const fonte = readFileSync(join(here, '..', 'src', 'bot-worker.js'), 'utf8')
   assert.match(fonte, /desembrulhado\.failures\?\.length/)
@@ -282,7 +409,8 @@ test('o tempo por link é generoso, mas a mensagem inteira tem teto', async () =
   // mensagem inteira não, senão dois links comeriam o orçamento de 25s do
   // preparo, que ainda tem conversão e foto pela frente.
   assert.ok(CUSTOM_DOMAIN_FETCH_TIMEOUT_MS >= 8000, 'tempo por link curto demais para este site')
-  assert.ok(CUSTOM_DOMAIN_TOTAL_BUDGET_MS <= 12000, 'orçamento total não pode ameaçar os 25s da mensagem')
+  assert.equal(CUSTOM_DOMAIN_TOTAL_BUDGET_MS, 13000, '13s preservam 8s + uma recuperação curta')
+  assert.equal(CUSTOM_DOMAIN_MAX_ATTEMPTS, 2, 'uma única repetição limita carga e latência')
 
   clearCustomDomainCache()
   const usados = []
