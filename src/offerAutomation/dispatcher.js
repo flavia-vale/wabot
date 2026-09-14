@@ -1,4 +1,4 @@
-import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit } from './shopeeOffers.js'
+import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit, resolveShopeeOfferPrice } from './shopeeOffers.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
@@ -33,8 +33,15 @@ function nextOfferPage(currentPage, rawCount) {
   return 1
 }
 
-function offerPriceCents(offer) {
-  return Math.round((Number(offer?.priceMin ?? offer?.price) || 0) * 100)
+export function offerPriceCents(offer) {
+  return Math.round(resolveOfferPrice(offer) * 100)
+}
+
+// A Shopee pode devolver `priceMin: ""` junto de `price` preenchido. O
+// nullish coalescing não pula string vazia e fazia a mensagem perder o preço.
+// Centralizar o fallback mantém snapshot, texto e deduplicação consistentes.
+export function resolveOfferPrice(offer = {}) {
+  return resolveShopeeOfferPrice(offer) ?? 0
 }
 
 function priceStr(raw) {
@@ -60,14 +67,20 @@ function discountStr(raw) {
   return pct > 0 ? `-${pct}% OFF` : ''
 }
 
-function automationOfferProduct(offer) {
-  const currentRaw = Number(offer.priceMin ?? offer.price) || 0
+export function automationOfferProduct(offer) {
+  const currentRaw = resolveOfferPrice(offer)
   const pct = Number(offer.priceDiscountRate) || 0
   const originalRaw = pct > 0 && currentRaw > 0 ? Math.round(currentRaw * 100 / (100 - pct)) : 0
+  const price = priceStr(currentRaw)
+  const oldPrice = priceStr(originalRaw)
   return {
     title: offer.productName ?? 'Produto Shopee',
-    price: priceStr(currentRaw),
-    oldPrice: priceStr(originalRaw),
+    price,
+    oldPrice,
+    // Alguns modelos salvos usam a variável editorial `{preçoDoTexto}` em
+    // vez de `{preço}`. A fila tinha preço no snapshot, mas não preenchia esse
+    // campo, então o compositor removia a variável e deixava apenas "💰".
+    textPrice: oldPrice ? `De ${oldPrice} por ${price}` : price,
     discount: discountStr(pct),
     rating: ratingStr(offer.ratingStar),
     sales: salesStr(offer.sales),
@@ -75,16 +88,51 @@ function automationOfferProduct(offer) {
   }
 }
 
+export function ensureRenderedAutomationPrice(renderedText, product = {}) {
+  const text = String(renderedText || '')
+  const price = String(product.price || '').trim()
+  if (!price || text.includes(price)) return text
+  const oldPrice = String(product.oldPrice || '').trim()
+  const priceLine = oldPrice ? `💰 ~${oldPrice}~ → *${price}*` : `💰 *${price}*`
+  if (/^\s*💰\s*$/m.test(text)) return text.replace(/^\s*💰\s*$/m, priceLine)
+  const linkIndex = text.search(/^\s*(?:👉|🛒).*https?:\/\//m)
+  if (linkIndex >= 0) return `${text.slice(0, linkIndex).trimEnd()}\n\n${priceLine}\n\n${text.slice(linkIndex)}`
+  return `${text.trimEnd()}\n\n${priceLine}`
+}
+
 function parseTemplateStore(mobileTemplatesJson) {
   try { return JSON.parse(mobileTemplatesJson || '{}') } catch { return {} }
 }
 
-function resolveAutomationTemplateBody(botConfig, templateKey) {
+export function resolveAutomationTemplateBody(botConfig, templateKey) {
   const templates = composeTemplates(parseTemplateStore(botConfig?.mobileTemplatesJson))
   const key = templateKey || DEFAULT_AUTOMATION_TEMPLATE_KEY
   return templates.find((template) => template.key === key)?.body
     || templates.find((template) => template.key === DEFAULT_AUTOMATION_TEMPLATE_KEY)?.body
     || null
+}
+
+export function materializeAutomationOffer(automation, offer, botConfig) {
+  const templateBody = resolveAutomationTemplateBody(botConfig, automation.templateKey)
+  const base = formatOfferMessage(offer, automation.keyword, templateBody)
+  const renderedText = applyVariation(base, {
+    groupId: automation.destGroupJid,
+    poolJson: resolveCopyVariationPoolJson(botConfig?.copyVariationPoolJson),
+    groupInviteLink: botConfig?.brandingGroupLink ?? '',
+    couponLink: botConfig?.couponLink ?? '',
+    random: true,
+    autoInjectWhenMissing: false,
+  })
+  return {
+    productKey: productDedupKey(offer),
+    itemId: offer.itemId == null ? null : String(offer.itemId),
+    priceCents: offerPriceCents(offer),
+    productUrl: offer.offerLink,
+    imageUrl: offer.imageUrl || null,
+    imageRefererUrl: offer.offerLink || null,
+    productSnapshot: automationOfferProduct(offer),
+    renderedText,
+  }
 }
 
 
@@ -100,7 +148,7 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
   }
 
   const name = offer.productName ?? 'Produto Shopee'
-  const currentRaw = Number(offer.priceMin ?? offer.price) || 0
+  const currentRaw = resolveOfferPrice(offer)
   const pct = Number(offer.priceDiscountRate) || 0
   const current = priceStr(currentRaw)
 
@@ -143,7 +191,8 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
   }
 
   if (!automation.prioritizeAMS) {
-    return fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
+    const result = await fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
+    return { ...result, offers: result.offers.filter(offer => resolveOfferPrice(offer) > 0) }
   }
 
   const { offers: amsOffers, rawCount: amsRawCount } = await fetchOffersFn({ ...base, isAMSOffer: true, excludeItemIds: sentItemIds })
@@ -153,7 +202,10 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
     isAMSOffer: false,
     excludeItemIds: [...sentItemIds, ...amsItemIds],
   })
-  return { offers: [...amsOffers, ...regularOffers], rawCount: amsRawCount + regularRawCount }
+  return {
+    offers: [...amsOffers, ...regularOffers].filter(offer => resolveOfferPrice(offer) > 0),
+    rawCount: amsRawCount + regularRawCount,
+  }
 }
 
 export async function runAutomation(automation, {
