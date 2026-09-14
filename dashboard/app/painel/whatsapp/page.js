@@ -17,10 +17,16 @@ import { WHATSAPP_SAFETY_HEADLINE, WHATSAPP_SAFETY_POINTS } from '../../../../sr
 import { buildJustConnectedNextStep } from '../../../../src/credentialBlockAlert/message.js'
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
+import {
+  QR_POLL_INTERVAL_MS,
+  INACTIVITY_RESET_SECONDS,
+  shouldPollQrCode,
+  nextQrFromPoll,
+  shouldOfferInactivityReset,
+} from '@/lib/painel/qrDelivery'
 
 const QR_TIMEOUT_SECONDS = 20
 const QR_EXPIRY_SECONDS = 60
-const INACTIVITY_RESET_SECONDS = 45
 const STATUS_LOADING_TIMEOUT_SECONDS = 15
 const STATUS_ERROR_MESSAGE = 'Não foi possível carregar o status da conexão. Tente novamente.'
 const WS_QR_RECONNECT_MAX_ATTEMPTS = 3
@@ -219,8 +225,16 @@ export default function WhatsAppPage() {
     openWSRef.current = openWS
   }, [openWS])
 
+  // Caminho PRINCIPAL de entrega do QR — não é mais "fallback" do WebSocket.
+  // Em produção o painel e a API dividem a mesma origem, e quem atende /api/*
+  // ali é o proxy HTTP do Next, que não faz upgrade de WebSocket: o canal de WS
+  // não entrega nada. Regra em lib/painel/qrDelivery.js (RCA 2026-09-14).
   useEffect(() => {
-    const shouldPoll = connectMethod === 'qr' && status?.running && status?.status === 'connecting' && !qr
+    const shouldPoll = shouldPollQrCode({
+      running: status?.running,
+      status: status?.status,
+      pairingCode,
+    })
     if (!shouldPoll) {
       if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       qrPollingRef.current = null
@@ -229,19 +243,22 @@ export default function WhatsAppPage() {
     if (qrPollingRef.current) return
     qrPollingRef.current = setInterval(async () => {
       const result = await api.sessionQRLatest().catch(() => null)
-      if (result?.qr) {
-        setQr(result.qr)
-        setQrStartElapsed(qrWaitElapsedRef.current)
-        setWsErrorMessage('')
-        trackTelemetry({ stage: 'authenticating', event: 'qr_received_polling_fallback' })
-        trackTelemetry({ stage: 'authenticating', event: 'qr_rendered' })
-      }
-    }, 3000)
+      // Segue consultando com QR na tela: o WhatsApp rotaciona o código a cada
+      // ~20s e é esta consulta que traz o próximo. `changed` evita reiniciar o
+      // contador de validade quando o QR veio igual.
+      const { qr: nextQr, changed } = nextQrFromPoll({ current: qrRef.current, incoming: result?.qr })
+      if (!changed) return
+      setQr(nextQr)
+      setQrStartElapsed(qrWaitElapsedRef.current)
+      setWsErrorMessage('')
+      trackTelemetry({ stage: 'authenticating', event: 'qr_received_polling_fallback' })
+      trackTelemetry({ stage: 'authenticating', event: 'qr_rendered' })
+    }, QR_POLL_INTERVAL_MS)
     return () => {
       if (qrPollingRef.current) clearInterval(qrPollingRef.current)
       qrPollingRef.current = null
     }
-  }, [status?.running, status?.status, qr, trackTelemetry, connectMethod])
+  }, [status?.running, status?.status, pairingCode, trackTelemetry])
 
   useEffect(() => {
     qrWaitElapsedRef.current = qrWaitElapsed
@@ -610,7 +627,14 @@ export default function WhatsAppPage() {
   const qrAgeSeconds = qr ? Math.max(qrWaitElapsed - qrStartElapsed, 0) : 0
   const qrExpiresIn = Math.max(QR_EXPIRY_SECONDS - qrAgeSeconds, 0)
   const showQrExpired = Boolean(qr) && qrExpiresIn === 0
-  const showInactivityReset = isRunning && isConnecting && !isConnected && qrWaitElapsed >= INACTIVITY_RESET_SECONDS
+  const showInactivityReset = shouldOfferInactivityReset({
+    running: isRunning,
+    status: status?.status,
+    connected: isConnected,
+    qr,
+    pairingCode,
+    elapsedSec: qrWaitElapsed,
+  })
   const canSubmitPairing = pairingPhone.trim().length >= 10
   const isValidatingSession = isRunning && isConnecting && !qr && !pairingCode && qrStartElapsed > 0
 
