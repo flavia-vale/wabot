@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { api } from '@/lib/api'
+import { explainReviewDiscovery } from '@/lib/offerAutomationReview'
 
 const STATUS_LABEL = { awaiting_review: 'Para revisar', approved: 'Aprovada', failed: 'Falhou' }
 
@@ -11,6 +12,7 @@ export function ReviewQueue({ automation }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState(null)
 
   async function load() {
     try { setData(await api.offerAutomationReviewItems(automation.id)); setError('') }
@@ -36,7 +38,11 @@ export function ReviewQueue({ automation }) {
 
   async function act(key, operation) {
     setBusy(key); setError('')
-    try { await operation(); await load() } catch (err) { setError(err.message) } finally { setBusy('') }
+    try {
+      const result = await operation()
+      if (key === 'discover') setNotice(explainReviewDiscovery(result))
+      await load()
+    } catch (err) { setError(err.message) } finally { setBusy('') }
   }
 
   return (
@@ -45,10 +51,12 @@ export function ReviewQueue({ automation }) {
         <div>
           <strong>Fila para você revisar</strong>
           <p className="pnl-hint">{data.counts.awaiting_review || 0} para revisar · {data.counts.approved || 0} aprovadas</p>
+          <p className="pnl-hint" style={{ marginTop: 4 }}>A cada {automation.intervalMinutes === 1440 ? 'dia' : `${automation.intervalMinutes / 60} hora(s)`}, o bot completa a fila até {automation.reviewTargetSize || 10} ofertas e publica até {automation.offersPerSend} das que você aprovou. A primeira aprovada pode sair assim que o bot estiver ativo.</p>
         </div>
         <button className="pnl-btn" disabled={busy === 'discover'} onClick={() => act('discover', () => api.offerAutomationReviewDiscover(automation.id))}>{busy === 'discover' ? 'Buscando…' : 'Buscar mais ofertas'}</button>
       </div>
       {error && <div className="pnl-note-box is-error" role="alert" style={{ marginTop: 10 }}>{error}</div>}
+      {notice && <div className={`pnl-note-box ${notice.tone === 'success' ? 'is-success' : 'is-warn'}`} role="status" style={{ marginTop: 10 }}>{notice.text}</div>}
       {loading ? <p className="pnl-hint" style={{ marginTop: 12 }}>Carregando fila…</p> : data.items.length === 0 ? <p className="pnl-hint" style={{ marginTop: 12 }}>Nenhuma oferta aguardando. Busque produtos para começar a revisão.</p> : (
         <div className="pnl-grid" style={{ marginTop: 12 }}>
           {data.items.map(item => (

@@ -28,17 +28,23 @@ export async function discoverReviewItems(automation, deps = {}) {
   if (!credential) return { skipped: 'no_shopee_credentials' }
   const creds = parseCredentialData(credential.data)
   if (!creds?.appId || !creds?.secretKey) return { skipped: 'invalid_shopee_credentials' }
-  let sentItemIds = []
-  try { sentItemIds = JSON.parse(automation.sentItemIds || '[]') } catch {}
-  const { offers, rawCount } = await resolveOffers({ automation: { ...automation, offersPerSend: capacity }, sentItemIds, creds, fetchOffersFn: deps.fetchOffersFn })
-  const candidates = dedupeOffersByProduct(offers).slice(0, capacity)
   const living = await db.offerAutomationReviewItem.findMany({
     where: { automationId: automation.id, userId: automation.userId, OR: [{ status: { in: [REVIEW_STATUS.AWAITING, REVIEW_STATUS.APPROVED, REVIEW_STATUS.SENDING] } }, { status: REVIEW_STATUS.REMOVED, reviewedAt: { gte: new Date(now.getTime() - 7 * 24 * 60 * 60_000) } }] },
     select: { productKey: true, priceCents: true },
   })
   const blocked = new Set(living.map(item => `${item.productKey}:${item.priceCents}`))
+  let sentItemIds = []
+  try { sentItemIds = JSON.parse(automation.sentItemIds || '[]') } catch {}
+  // Peça candidatos além das vagas livres. Caso contrário, uma nova busca
+  // podia receber novamente só os itens que já estavam na fila, descartá-los
+  // como repetidos e terminar vazia mesmo havendo outros produtos disponíveis.
+  const searchSize = Math.min(50, capacity + living.length)
+  const { offers, rawCount } = await resolveOffers({ automation: { ...automation, offersPerSend: searchSize }, sentItemIds, creds, fetchOffersFn: deps.fetchOffersFn })
   const botConfig = await db.botConfig.findUnique({ where: { userId: automation.userId } })
-  const prepared = candidates.map(offer => materializeAutomationOffer(automation, offer, botConfig)).filter(item => !blocked.has(`${item.productKey}:${item.priceCents}`))
+  const prepared = dedupeOffersByProduct(offers)
+    .map(offer => materializeAutomationOffer(automation, offer, botConfig))
+    .filter(item => !blocked.has(`${item.productKey}:${item.priceCents}`))
+    .slice(0, capacity)
   const last = await db.offerAutomationReviewItem.findFirst({ where: { automationId: automation.id, userId: automation.userId }, orderBy: { position: 'desc' }, select: { position: true } })
   const targetSnapshot = JSON.stringify(targets(automation))
   await db.$transaction(async tx => {
