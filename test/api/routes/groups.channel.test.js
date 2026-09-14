@@ -639,6 +639,39 @@ test('PUT /:id persiste templateKey para espelhamento e rejeita chave inválida'
   assert.equal(JSON.parse(inherit.body).templateKey, null)
 })
 
+test('PUT /:id persiste o texto adicional do relay somente em grupo monitorado', async (t) => {
+  const { app, userId } = await buildApp({}, { plan: 'pro' })
+  const monitor = await db.group.create({
+    data: { userId, waJid: 'footer-monitor@g.us', name: 'Origem', role: 'monitor', kind: 'group' },
+  })
+  const post = await db.group.create({
+    data: { userId, waJid: 'footer-post@g.us', name: 'Destino', role: 'post', kind: 'group' },
+  })
+  t.after(async () => { await app.close() })
+
+  const ok = await app.inject({
+    method: 'PUT',
+    url: `/api/groups/${monitor.id}`,
+    payload: { relayFooterText: '  Entre no grupo VIP!  ' },
+  })
+  assert.equal(ok.statusCode, 200)
+  assert.equal(JSON.parse(ok.body).relayFooterText, 'Entre no grupo VIP!')
+
+  const tooLong = await app.inject({
+    method: 'PUT',
+    url: `/api/groups/${monitor.id}`,
+    payload: { relayFooterText: 'x'.repeat(1001) },
+  })
+  assert.equal(tooLong.statusCode, 400)
+
+  const wrongRole = await app.inject({
+    method: 'PUT',
+    url: `/api/groups/${post.id}`,
+    payload: { relayFooterText: 'não pode' },
+  })
+  assert.equal(wrongRole.statusCode, 400)
+})
+
 test('PUT /:id persiste primaryLinkTarget e rejeita valor inválido', async (t) => {
   const { app, userId } = await buildApp({}, { plan: 'pro' })
   const group = await db.group.create({
