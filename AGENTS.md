@@ -2998,6 +2998,21 @@ acima de qualquer uma delas, o módulo estoura ReferenceError (TDZ) no load e
 **todo worker morre no boot**. Guarda em
 `test/bot-worker-reception-blindness-wiring.test.js`.
 
+**Varrer a frota inteira procurando o mesmo quadro** (read-only, roda no
+diretório do ambiente e **não depende deste conserto estar no ar**):
+
+```bash
+cd ~/wabot && node scripts/diag-frota-cega.mjs
+```
+
+Ele mapeia cada processo de robô para a conta (`BOT_USER_ID` em
+`/proc/<pid>/environ`), conta as linhas `mensagem recebida` **daquele pid** no
+`bot.log` (que é compartilhado por todas as contas — o pid é o que separa) e
+cruza com o banco. **"Cega" exige as duas evidências**: a conta espelhava antes
+E não recebe nada agora. Sem isso, conta parada e madrugada acusariam igual.
+Envio com `destGroup='broadcast'` (fila/garimpo) **não** conta como
+espelhamento: ele continua saindo com a recepção morta e esconderia o caso.
+
 ⚠️ **O que este conserto NÃO faz: curar a causa da cegueira dela.** A poluição
 vinha de chats que o robô **nem monitora** — os retry receipts dela saíam com
 `retryCount: 5` para mensagens de DM na fila offline. O remédio de causa raiz
