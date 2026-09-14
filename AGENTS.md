@@ -2805,6 +2805,80 @@ tentando reconectar sozinho — você não precisa fazer nada") **abaixo** do
 parada real → `lifecycle='disconnected'`. Invariante preservada: `idle` nunca
 vira "conectando"/"conectado".
 
+## O QR não chegava na tela e o botão de reset matava o robô (RCA 2026-09-14 — não regredir)
+
+Cliente (`taaianeribeiro@hotmail.com`) passou 25 minutos sem conseguir conectar
+e o robô dela subiu **15 vezes**. **O robô nunca falhou:** o `bot.log` de
+produção mostra `reason:"qr_generated"` menos de um segundo depois de CADA
+start, e o QR só morria ~160s depois com `QR refs attempts ended` (ninguém
+escaneou). O QR existia o tempo todo e não tinha por onde chegar à tela.
+
+| Peça | Onde |
+|---|---|
+| Decisão de entrega do QR (PURA, sem rede) | `dashboard/lib/painel/qrDelivery.js` |
+| Tela | `dashboard/app/painel/whatsapp/page.js` |
+| Diagnóstico read-only por conta | `scripts/diag-nao-conecta.mjs` |
+
+**O WebSocket de QR não funciona em produção, por construção.** O painel fala
+com a API na MESMA origem (`NEXT_PUBLIC_FORCE_SAME_ORIGIN_API=true`), e quem
+atende `/api/*` ali é o proxy do Next (`dashboard/app/api/[...path]/route.js`),
+um route handler HTTP que não faz upgrade de WebSocket — ele inclusive descarta
+o header `upgrade`. **Medido em 30 dias de produção: ZERO
+`session.telemetry('qr_received')` na base inteira** — nenhum QR jamais chegou
+por WS a ninguém. Todos os QR que apareceram vieram de
+`qr_received_polling_fallback`. Não voltar a tratar o WS como caminho
+principal, e não "consertar" o WS mexendo no proxy do Next: route handler não
+faz upgrade.
+
+**Não regredir:**
+
+- **A consulta periódica do QR não pode depender da aba escolhida na tela.**
+  Ela exigia `connectMethod === 'qr'`, e `handleRestart` ("Reiniciar conexão" /
+  "Resetar instância") nunca liga esse valor. Como a tela nasce em `pairing`,
+  todo clique em reiniciar caía num estado sem WS e sem consulta: o QR nascia no
+  servidor e não tinha caminho. Era esse o defeito relatado.
+- **A consulta não pode parar no primeiro QR.** O WhatsApp rotaciona o código a
+  cada ~20s; parando ali, a tela congela um QR que morre em segundos e depois se
+  declara expirado — com o servidor oferecendo um QR válido o tempo todo. Quem
+  atualiza é a consulta, não o WS (que não existe em produção).
+- **"Conexão sem progresso → Resetar instância" só quando não há NADA para
+  escanear.** Esse botão para o robô, apaga a credencial e recomeça; oferecido
+  aos 45s **com QR válido na tela**, foi ele que transformou um defeito de
+  exibição em 15 reinícios. Exige `!qr && !pairingCode`.
+- **Fail-safe é CONSULTAR/MOSTRAR**: consulta a mais custa uma chamada barata;
+  consulta a menos deixa a cliente olhando tela vazia.
+
+⚠️ **Armadilha de diagnóstico:** o `bot.log` do worker só carrega `userId` em
+poucas linhas (a de "Mode summary" é uma delas). `grep` por `userId` **não
+enxerga** as linhas de QR e de ciclo de vida — dá a falsa impressão de que o
+robô não fez nada. Filtre por **pid** (`"pid":<n>,`) ao investigar uma conta.
+
+⚠️ **`status='success'`/"robô ligado" não significa "a cliente vê alguma
+coisa".** Aqui tudo estava verde no servidor enquanto a tela ficava vazia. A
+fonte que separa os dois é a telemetria da própria tela
+(`AdminAuditLog('session.telemetry')`), que grava o funil de cliques
+(`connect_click` → `service_start_ok` → `qr_requested` → `qr_rendered`).
+
+### Backup de pareamento ficava órfão e a credencial se perdia (mesmo RCA)
+
+`restore()` de `src/core/pairingAuthBackup.js` só existe na memória do processo
+que fez o backup. Quando o pareamento derruba o próprio worker (na conta
+medida, um `stream:error 500` durante o pareamento), o processo morre com a
+credencial num `.pairing-backup` que ninguém mais olha — e o **próximo
+pareamento a APAGA** para liberar o lugar. A rede de segurança do RCA
+2026-07-28 existia e nesse caminho nunca era acionada.
+
+`recoverOrphan()` roda no boot do robô e devolve a credencial. **Só com certeza
+dos dois lados** (`decideOrphanBackupRecovery`): nada no lugar E algo no
+backup; qualquer dúvida (`null`) não mexe em nada. Não roda durante um
+pareamento em andamento no mesmo processo (`hasBackup()`).
+
+**Não regredir:** `POST /session/forget`, logout (401) e reset por `badSession`
+apagam o backup JUNTO do `auth_info` — credencial que a cliente mandou
+esquecer, ou que o WhatsApp revogou, nunca pode ser ressuscitada no boot
+seguinte. Testes: `test/painel-qr-entrega.test.js`,
+`test/pairing-auth-backup.test.js`.
+
 ## badSession (500): auto-apagar auth é o único gatilho de re-pareamento sob nosso controle (issue #1216, item #2)
 
 Apagar `auth_info` (→ QR novo no celular do cliente) quebra a promessa de
