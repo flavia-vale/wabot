@@ -17,7 +17,7 @@ import { configRoutes } from '../src/api/routes/config.js'
 // Helpers
 // ═══════════════════════════════════════════════
 
-function buildOfferApp(dbMock) {
+function buildOfferApp(dbMock, opts = {}) {
   const app = Fastify({ logger: false })
   app.decorate('authenticate', async (req) => { req.user = { sub: 'user-1' } })
   // destGroupJid agora é validado contra os grupos de destino do tenant
@@ -26,7 +26,7 @@ function buildOfferApp(dbMock) {
   if (dbMock.offerAutomation && !dbMock.offerAutomation.count) dbMock.offerAutomation.count = async () => 0
   // rotas de escrita exigem plano com canUseOfferAutomations (Pro/Trial ativo)
   if (!dbMock.user) dbMock.user = { findUnique: async () => ({ plan: 'pro', accessExpiresAt: null }) }
-  app.register(offerAutomationRoutes, { prefix: '/api/offer-automations', db: dbMock })
+  app.register(offerAutomationRoutes, { prefix: '/api/offer-automations', db: dbMock, ...opts })
   return app
 }
 
@@ -454,6 +454,30 @@ test('POST /:id/trigger: retorna 404 para automação de outro usuário', async 
   const app = buildOfferApp(dbMock)
   const res = await app.inject({ method: 'POST', url: '/api/offer-automations/outro/trigger' })
   assert.equal(res.statusCode, 404)
+})
+
+test('POST /:id/trigger: revisão envia somente item aprovado pela entrega da fila', async () => {
+  let delivered = 0
+  const automation = { id: 'review-1', userId: 'user-1', publicationMode: 'review', offersPerSend: 1, instagramDestinations: [] }
+  const dbMock = { offerAutomation: { findFirst: async () => automation } }
+  const env = {
+    OFFER_AUTOMATION_REVIEW_ENABLED: 'true',
+    OFFER_AUTOMATION_REVIEW_DELIVERY_ENABLED: 'false',
+  }
+  const app = buildOfferApp(dbMock, {
+    env,
+    deliverApprovedReviewItemsFn: async (received, { db }) => {
+      assert.equal(received, automation)
+      assert.equal(db, dbMock)
+      delivered++
+      return { sent: 1, failed: 0 }
+    },
+  })
+
+  const res = await app.inject({ method: 'POST', url: '/api/offer-automations/review-1/trigger' })
+  assert.equal(res.statusCode, 200)
+  assert.equal(delivered, 1)
+  assert.deepEqual(JSON.parse(res.body).result, { sent: 1, failed: 0 })
 })
 
 // ═══════════════════════════════════════════════
