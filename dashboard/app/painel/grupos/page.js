@@ -18,6 +18,7 @@ import { usePainelHeader, PainelContentActions } from '../PainelShell'
 const WATERMARK_TEXT_MAX_CHARS = 25
 // Quanto tempo a confirmação de "marca salva" fica na tela.
 const WATERMARK_SAVED_FEEDBACK_MS = 4000
+const RELAY_FOOTER_MAX_CHARS = 1000
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -126,6 +127,51 @@ function CfgRow({ label, hint, info, last, extra, children }) {
         {hint && <div className="cfg-row-hint">{hint}</div>}
       </div>
       <div>{children}</div>
+    </div>
+  )
+}
+
+function RelayFooterField({ group, onUpdate }) {
+  const savedValue = group.relayFooterText ?? ''
+  const [draft, setDraft] = useState(savedValue)
+  const [status, setStatus] = useState('idle')
+
+  const changed = draft !== savedValue
+
+  async function save() {
+    setStatus('saving')
+    const ok = await onUpdate(group.id, { relayFooterText: draft })
+    setStatus(ok ? 'saved' : 'error')
+  }
+
+  return (
+    <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surface-soft, #f8fafc)' }}>
+      <label htmlFor={`relay-footer-${group.id}`} style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--ink)' }}>
+        Adicionar texto ao final da mensagem <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}>(opcional)</span>
+      </label>
+      <p style={{ margin: '4px 0 10px', fontSize: 12, lineHeight: 1.45, color: 'var(--ink-soft)' }}>
+        O texto será incluído depois de toda mensagem espelhada deste grupo. Deixe em branco para não adicionar nada.
+      </p>
+      <textarea
+        id={`relay-footer-${group.id}`}
+        className="pnl-input"
+        rows={4}
+        maxLength={RELAY_FOOTER_MAX_CHARS}
+        value={draft}
+        onChange={(event) => { setDraft(event.target.value); setStatus('idle') }}
+        placeholder="Ex.: Entre no nosso grupo VIP para receber mais ofertas!"
+        style={{ width: '100%', resize: 'vertical', lineHeight: 1.5 }}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>{draft.length}/{RELAY_FOOTER_MAX_CHARS}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {status === 'saved' && <span role="status" style={{ fontSize: 12, color: 'var(--success, #15803d)' }}>Texto salvo</span>}
+          {status === 'error' && <span role="alert" style={{ fontSize: 12, color: 'var(--danger)' }}>Não foi possível salvar</span>}
+          <button type="button" className="pnl-btn pnl-btn-primary" disabled={!changed || status === 'saving'} onClick={save}>
+            {status === 'saving' ? 'Salvando…' : 'Salvar texto'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -485,6 +531,7 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, t
             <option value="__relay__">Manter texto original convertido</option>
             {templates.map((t) => <option key={t.key} value={t.key}>Template: {t.name}</option>)}
           </select>
+          {templateValue === '__relay__' && <RelayFooterField group={g} onUpdate={onUpdate} />}
           <Link
             href="/painel/mensagens"
             style={{ display: 'inline-block', marginTop: 8, fontSize: 12.5, color: 'var(--accent-strong)', textDecoration: 'none' }}
