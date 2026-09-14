@@ -2923,6 +2923,84 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
+## Cega e caindo: a conta pior é a que nenhum alarme enxergava (RCA 2026-09-14)
+
+Cliente (`viviloppes@gmail.com`) reportou que o espelhamento parou. Medido em
+produção: o espelhamento dela caiu de **1.099 envios no dia 10/09 para zero a
+partir de 12/09**, e o worker dela tinha **ZERO** linhas `mensagem recebida` em
+11h de vida — enquanto os outros 37 workers do host somavam 13.505. Não era um
+grupo: ela estava **100% cega**, sem receber nada de chat nenhum.
+
+O painel mostrou **"conectado"** o tempo todo, e **nenhuma** das redes de
+segurança acusou: `ops_wa_reception_blind` nunca saiu, a auto-cura de recepção
+nunca rodou, o vigia de silêncio nunca rodou.
+
+**A causa da invisibilidade é aritmética, e vale para qualquer conta assim.**
+Tudo era medido a partir da **conexão atual**, e a conexão dela reiniciava a
+cada ~50min (queda 500 com `stuckMsg:true`, **29 vezes em 24h**, todas com
+`hadStableOpen`). Com os defaults:
+
+| Rede de segurança | Por que nunca rodou |
+|---|---|
+| `computeReceptionState` → `blind` | carência de 20min devolve `ok` aconteça o que acontecer; a rajada de decrypt acontece no **dreno da fila offline** (`offline:"1"`) nos minutos 0-2, e a janela do contador é de **10min** — no minuto 20 já foi podada |
+| `computeReceptionState` → `starved` | exige **120min** de conexão; a dela morria aos ~50 |
+| `shouldSelfHealReception` | `lastAcceptedAtMs == null` → "nunca recebeu nada nesta sessão"; a conta totalmente cega é a única que a auto-cura não cobre |
+| `monitorSilenceWatchdog` | `!hasActive` → com **todos** os monitores calados ele desiste; a falha total era o único estado invisível |
+
+Ou seja: **quanto pior o estado, mais invisível ele ficava.** Reconexão
+frequente não é só sintoma — era o que impedia qualquer diagnóstico.
+
+**A correção é medir a cegueira num relógio que NÃO reseta na reconexão**
+(`evaluateBlindAcrossReconnects`, em `src/core/receptionHealth.js`):
+`observedSinceMs` (última aceitação, ou o boot do worker) + contadores
+**cumulativos** `failuresSinceLastAccepted` / `stableDropsSinceLastAccepted`,
+zerados **só** em `markMessageAccepted`. A regra roda **antes da carência** de
+propósito — é a carência que escondia o caso.
+
+**Não regredir:**
+
+- **Os contadores vivem em escopo de módulo e só zeram quando uma mensagem é
+  ACEITA.** Dentro de `startBotInner` eles zerariam a cada reconexão e a
+  cegueira volta a ser invisível (mesma lição do `msgRetryCounterCache`).
+- **`observedSinceMs` nunca pode vir de `connectionOpenedAt`** — é literalmente
+  a troca de relógio que causava o bug.
+- **Silêncio sozinho NUNCA vira alarme.** Exige evidência de que a sessão está
+  ocupada e mesmo assim não aceita nada (falhas de decrypt **ou** quedas de
+  sessão estável). Sem evidência, madrugada continua sendo madrugada.
+- **Fail-safe em todo caminho**: sem `observedSinceMs` confiável, cegueira curta
+  demais, ou sessão desconectada → **não acusa**.
+- **Só avisa — não reconecta.** A auto-cura existente fecha o socket, e isso
+  seria inútil aqui (ela já reconecta 29×/dia) e **prejudicial**: reconexão
+  repetida é o padrão que o WhatsApp associa a robô. Quem decide o próximo passo
+  é gente.
+- O vigia de silêncio passou a cobrir a falha total, **exigindo a mesma
+  evidência** quando todos os monitores estão calados.
+
+O painel já sabia falar disso: `clientVisibleSessionState` traduz
+`receptionState === 'blind'` em `NOT_RECEIVING`. **Faltava só o classificador
+chegar a essa conclusão** — agora que chega, a tela para de dizer "conectado"
+para quem não está recebendo nada.
+
+Rollback sem redeploy: `WA_BLIND_ACROSS_RECONNECTS_MS=0` desliga só a regra
+nova. Testes: `test/reception-health.test.js` (com os números reais da conta),
+`test/bot-worker-reception-blindness-wiring.test.js` (guarda estrutural).
+
+⚠️ **O que este conserto NÃO faz: curar a causa da cegueira dela.** A poluição
+vinha de chats que o robô **nem monitora** — os retry receipts dela saíam com
+`retryCount: 5` para mensagens de DM na fila offline. O remédio de causa raiz
+para esse quadro já existe e está **DESLIGADO**: `WA_IGNORE_UNMONITORED_GROUPS`
+(ver "Ignorar grupos NÃO-monitorados no socket"). Ligar isso reconecta todas as
+sessões e é decisão humana, anunciada antes.
+
+⚠️ **Armadilha de diagnóstico desta investigação:** `42172350988530@lid` aparecia
+em `ops_wa_group_desync_autoheal`/`unresolved` como "o grupo culpado", e a
+escalação recomendava "a cliente sair e reentrar no grupo". No log bruto esse
+jid é o **`recipient`** dos retry receipts, com `notify:"Viviane"` e
+`peer_recipient_pn` de um telefone — ou seja, **o endereço da própria conta
+dela**, não um grupo do qual ela possa sair. O auto-refresh disparou ~10×/dia
+contra isso, devolvendo 91 grupos, sem nunca curar nada. Investigar
+separadamente antes de agir sobre esse sinal.
+
 ## Conectado e sem receber: o robô refaz a conexão sozinho (RCA 2026-08-28)
 
 Terceira parada da mesma cliente (`cynthiatceles@gmail.com`) em quatro dias.
