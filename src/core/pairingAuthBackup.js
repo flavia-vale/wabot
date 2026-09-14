@@ -20,6 +20,32 @@
 
 export const PAIRING_BACKUP_SUFFIX = '.pairing-backup'
 
+/** Onde mora o backup de uma credencial — fonte única do caminho. */
+export function pairingBackupDirFor(authDir) {
+  return `${authDir}${PAIRING_BACKUP_SUFFIX}`
+}
+
+/**
+ * Devolver ao lugar um backup que ficou ÓRFÃO?
+ *
+ * RCA 2026-09-14: `restore()` só existe na memória do processo que fez o
+ * backup. Quando o pareamento derruba o próprio worker (na conta medida, um
+ * `stream:error 500` durante o pareamento), o processo morre com o backup
+ * ainda no disco: a credencial boa fica num diretório que ninguém mais olha, a
+ * sessão perde o que tinha e o próximo pareamento APAGA o backup para liberar
+ * o lugar. A rede de segurança do RCA 2026-07-28 existia e, nesse caminho,
+ * nunca era acionada.
+ *
+ * Fail-safe é NÃO MEXER: só devolve quando temos certeza dos dois lados — não
+ * há credencial no lugar (senão sobrescreveríamos a boa por uma velha) e há
+ * credencial no backup. Dúvida de qualquer lado (`null`) não recupera nada.
+ */
+export function decideOrphanBackupRecovery({ authHasCreds, backupHasCreds } = {}) {
+  if (authHasCreds !== false) return false
+  if (backupHasCreds !== true) return false
+  return true
+}
+
 /**
  * @param {object} deps
  * @param {string} deps.authDir  diretório de credenciais da sessão
@@ -30,7 +56,7 @@ export function createPairingAuthBackup({ authDir, fs, logger = null }) {
   if (!authDir) throw new Error('createPairingAuthBackup: authDir obrigatório')
   if (!fs?.rename || !fs?.rm) throw new Error('createPairingAuthBackup: fs.rename e fs.rm obrigatórios')
 
-  const backupDir = `${authDir}${PAIRING_BACKUP_SUFFIX}`
+  const backupDir = pairingBackupDirFor(authDir)
   let hasBackup = false
 
   /**
@@ -87,5 +113,42 @@ export function createPairingAuthBackup({ authDir, fs, logger = null }) {
     logger?.info?.({ backupDir }, 'Backup da credencial anterior descartado (pareamento concluído)')
   }
 
-  return { backup, restore, discard, hasBackup: () => hasBackup, backupDir }
+  /**
+   * Existe `creds.json` nesse diretório? `null` = não deu para saber (sem
+   * `fs.access` injetado, ou erro que não é "não existe") — a dúvida NUNCA
+   * vira recuperação.
+   */
+  async function credsPresent(dir) {
+    if (!fs.access) return null
+    try {
+      await fs.access(`${dir}/creds.json`)
+      return true
+    } catch (err) {
+      return err?.code === 'ENOENT' ? false : null
+    }
+  }
+
+  /**
+   * Chamado no boot do robô: devolve ao lugar um backup deixado por um
+   * pareamento que derrubou o processo. Sem isso a credencial fica perdida no
+   * disco até o próximo pareamento apagá-la.
+   */
+  async function recoverOrphan() {
+    const [authHasCreds, backupHasCreds] = await Promise.all([
+      credsPresent(authDir),
+      credsPresent(backupDir),
+    ])
+    if (!decideOrphanBackupRecovery({ authHasCreds, backupHasCreds })) return false
+    try {
+      await fs.rm(authDir, { recursive: true, force: true }).catch(() => {})
+      await fs.rename(backupDir, authDir)
+      logger?.info?.({ authDir }, 'Credencial de um pareamento interrompido devolvida ao lugar — sessão volta a conectar sem novo QR')
+      return true
+    } catch (err) {
+      logger?.warn?.({ err: err?.message, backupDir }, 'Falha ao devolver credencial de pareamento interrompido')
+      return false
+    }
+  }
+
+  return { backup, restore, discard, recoverOrphan, hasBackup: () => hasBackup, backupDir }
 }

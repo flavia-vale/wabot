@@ -255,6 +255,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
       include: { instagramDestinations: { include: { destination: true } } },
     })
     if (!automation) return reply.code(404).send({ error: 'Automação não encontrada' })
+    if (automation.publicationMode === 'review') return reply.code(409).send({ error: 'Aprove as ofertas na fila de revisão; este modo não permite envio direto' })
     const subject = await loadUserPlanSubject(db, req.user.sub)
     if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
     try {
