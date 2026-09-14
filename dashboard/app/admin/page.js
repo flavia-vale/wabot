@@ -2353,11 +2353,21 @@ export default function AdminPage() {
                 help={CARD_HELP.paradasSemNinguem}
                 onClick={() => openScenario('parado')}
               />
+              {/* "Sem receber" tem DOIS quadros com ações opostas, e contá-los
+                  juntos escondia o grave (RCA 2026-09-14): parar agora costuma
+                  se resolver sozinho; estar cega atravessando reconexões nunca
+                  se resolveu — foi o que deixou uma cliente dois dias sem
+                  espelhar nada, com o painel verde. Uma única conta nesse
+                  segundo quadro já pinta o card de vermelho. */}
               <ScenarioCard
                 label="Sem receber"
                 value={formatNumber(online?.summary?.scenarios?.semReceber ?? 0)}
-                tone={severityTone(online?.summary?.scenarios?.semReceber ?? 0, 1, 3)}
-                helper="conectadas e sem mensagem chegando"
+                tone={(online?.summary?.scenarios?.semReceberHaMuito ?? 0) > 0
+                  ? 'critical'
+                  : severityTone(online?.summary?.scenarios?.semReceber ?? 0, 1, 3)}
+                helper={(online?.summary?.scenarios?.semReceberHaMuito ?? 0) > 0
+                  ? `${formatNumber(online.summary.scenarios.semReceberHaMuito)} cega(s) há ${formatDurationMs(online?.summary?.scenarios?.semReceberPiorSilencioMs)} — não vai se resolver sozinha`
+                  : 'conectadas e sem mensagem chegando'}
                 help={CARD_HELP.semReceber}
                 onClick={() => openScenario('blind')}
               />
