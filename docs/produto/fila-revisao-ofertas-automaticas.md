@@ -1,7 +1,7 @@
 # Fila de revisão das ofertas automáticas — especificação técnica
 
-**Status:** proposta, sem implementação  
-**Data:** 2026-09-13  
+**Status:** proposta, sem implementação
+**Data:** 2026-09-13
 **Objetivo:** permitir que a cliente veja e descarte produtos antes da
 publicação, preservando integralmente o envio automático que já funciona.
 
@@ -248,7 +248,7 @@ estas ofertas”, não “eu criei mensagens numa fila manual”.
 
 - seção “Como publicar” com as duas opções;
 - ao escolher revisão: explicar “O bot prepara as ofertas, mas só publica as
-  que você aprovar”; 
+  que você aprovar”;
 - seletor simples de estoque desejado: 5, 10 ou 20 itens;
 - aviso de que preço e disponibilidade podem mudar e itens vencem.
 
