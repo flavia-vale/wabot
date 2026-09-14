@@ -559,7 +559,7 @@ export default function OfertasAutomaticasPage() {
               </div>
               {showForm && editId === a.id && renderAutomationForm()}
               <div className="pnl-toolbar" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-                <button type="button" className="pnl-link-btn" onClick={() => handleTrigger(a)} disabled={triggering === a.id}>
+                {a.publicationMode !== 'review' && <button type="button" className="pnl-link-btn" onClick={() => handleTrigger(a)} disabled={triggering === a.id}>
                   {triggering === a.id ? 'Enviando…' : 'Enviar agora'}
                 </button>
                 {a.publicationMode === 'review' && (
