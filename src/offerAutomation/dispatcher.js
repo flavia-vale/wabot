@@ -71,15 +71,33 @@ export function automationOfferProduct(offer) {
   const currentRaw = resolveOfferPrice(offer)
   const pct = Number(offer.priceDiscountRate) || 0
   const originalRaw = pct > 0 && currentRaw > 0 ? Math.round(currentRaw * 100 / (100 - pct)) : 0
+  const price = priceStr(currentRaw)
+  const oldPrice = priceStr(originalRaw)
   return {
     title: offer.productName ?? 'Produto Shopee',
-    price: priceStr(currentRaw),
-    oldPrice: priceStr(originalRaw),
+    price,
+    oldPrice,
+    // Alguns modelos salvos usam a variável editorial `{preçoDoTexto}` em
+    // vez de `{preço}`. A fila tinha preço no snapshot, mas não preenchia esse
+    // campo, então o compositor removia a variável e deixava apenas "💰".
+    textPrice: oldPrice ? `De ${oldPrice} por ${price}` : price,
     discount: discountStr(pct),
     rating: ratingStr(offer.ratingStar),
     sales: salesStr(offer.sales),
     storeName: 'Shopee',
   }
+}
+
+export function ensureRenderedAutomationPrice(renderedText, product = {}) {
+  const text = String(renderedText || '')
+  const price = String(product.price || '').trim()
+  if (!price || text.includes(price)) return text
+  const oldPrice = String(product.oldPrice || '').trim()
+  const priceLine = oldPrice ? `💰 ~${oldPrice}~ → *${price}*` : `💰 *${price}*`
+  if (/^\s*💰\s*$/m.test(text)) return text.replace(/^\s*💰\s*$/m, priceLine)
+  const linkIndex = text.search(/^\s*(?:👉|🛒).*https?:\/\//m)
+  if (linkIndex >= 0) return `${text.slice(0, linkIndex).trimEnd()}\n\n${priceLine}\n\n${text.slice(linkIndex)}`
+  return `${text.trimEnd()}\n\n${priceLine}`
 }
 
 function parseTemplateStore(mobileTemplatesJson) {

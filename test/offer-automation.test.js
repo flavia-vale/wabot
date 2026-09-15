@@ -84,7 +84,7 @@ test('dedupeOffersByProduct: colapsa mesmo produto com itemIds diferentes manten
   assert.deepEqual(result.map(o => o.itemId), ['1', '3'])
 })
 
-import { automationOfferProduct, formatOfferMessage, offerPriceCents, resolveOffers, runAutomation, searchOffersPreview } from '../src/offerAutomation/dispatcher.js'
+import { automationOfferProduct, ensureRenderedAutomationPrice, formatOfferMessage, offerPriceCents, resolveOffers, runAutomation, searchOffersPreview } from '../src/offerAutomation/dispatcher.js'
 
 test('searchOffersPreview: roda a busca sem enviar e retorna funil + ofertas', async () => {
   const calls = []
@@ -172,6 +172,19 @@ test('preço usa price quando priceMin vem vazio da Shopee', () => {
   assert.match(formatOfferMessage(offer, 'festa'), /R\$\s*29,90/)
   assert.match(automationOfferProduct(offer).price, /R\$\s*29,90/)
   assert.equal(offerPriceCents(offer), 2990)
+})
+
+test('automação preenche preçoDoTexto e recupera snapshots antigos que deixaram só o emoji', () => {
+  const product = automationOfferProduct({ price: '29.90', priceDiscountRate: 20 })
+  assert.match(product.textPrice, /De R\$.*37,00 por R\$.*29,90/)
+  assert.match(ensureRenderedAutomationPrice('OFERTA\n\n💰\n\n👉 https://shopee.test/p', product), /💰 ~R\$.*37,00~ → \*R\$.*29,90\*/)
+})
+
+test('template com preçoDoTexto recebe o preço da oferta automática', () => {
+  const offer = { productName: 'Kit festa', price: '29.90', priceDiscountRate: 20, offerLink: 'https://shopee.test/kit' }
+  const text = formatOfferMessage(offer, 'festa', '🏷️ {produto}\n\n💰\n{preçoDoTexto}\n\n👉 {link}')
+  assert.match(text, /R\$.*29,90/)
+  assert.doesNotMatch(text, /\{preçoDoTexto\}/)
 })
 
 test('filterOffers: descarta oferta quando a Shopee não informa preço em nenhum campo', () => {
