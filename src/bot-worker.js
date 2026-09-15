@@ -15,6 +15,7 @@ import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
 import { rm, rename, writeFile, readdir, access } from 'fs/promises'
 import { dirname } from 'path'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
@@ -101,6 +102,28 @@ import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS
 const userId = process.env.BOT_USER_ID
 const WORKER_STARTED_AT = Date.now()
 const workerMetadata = buildWorkerMetadata({ userId, startedAt: WORKER_STARTED_AT })
+const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 })
+eventLoopDelay.enable()
+
+function getRuntimeMemoryMetrics() {
+  const memory = process.memoryUsage()
+  const nsToMs = value => Number.isFinite(value) ? Math.round((value / 1e6) * 100) / 100 : null
+  return {
+    pid: process.pid,
+    uptimeSeconds: Math.round(process.uptime()),
+    rssBytes: memory.rss,
+    heapUsedBytes: memory.heapUsed,
+    heapTotalBytes: memory.heapTotal,
+    externalBytes: memory.external,
+    arrayBuffersBytes: memory.arrayBuffers,
+    eventLoopDelayMs: {
+      p50: nsToMs(eventLoopDelay.percentile(50)),
+      p95: nsToMs(eventLoopDelay.percentile(95)),
+      p99: nsToMs(eventLoopDelay.percentile(99)),
+      max: nsToMs(eventLoopDelay.max),
+    },
+  }
+}
 
 // Guardas de processo: um throw assíncrono benigno do Baileys num socket já
 // fechado (ex.: 428 "Connection Closed" disparado por sendRetryRequest após um
@@ -4945,6 +4968,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 async function shutdown(code = 0) {
   if (shuttingDown) return
   shuttingDown = true
+  eventLoopDelay.disable()
   stopHeartbeatIpc()
 
   // Drena jobs em vôo antes de marcar pendentes como interrompidos.
@@ -5093,7 +5117,7 @@ process.on('message', async msg => {
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata } })
+    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata, runtime: getRuntimeMemoryMetrics() } })
   }
 
   if (msg?.type === 'broadcast') {
