@@ -689,3 +689,14 @@ preservando isolamento lógico e limitando o blast radius. Antes disso, convém
 instrumentar heap/memória externa, reduzir o pipeline de mídia e corrigir
 operações que sobrevivem ao timeout. Redis, CPU e contagem de threads não são
 os gargalos indicados pelos dados atuais.
+
+## 13. Continuação: POC controlada de shard
+
+O desenho operacional completo para testar quatro sessões no mesmo processo,
+com painel administrativo, critérios objetivos e rollback rápido, está em
+[`poc-shard-4-sessoes-teste-controlado.md`](./poc-shard-4-sessoes-teste-controlado.md).
+
+Esse plano separa a POC em degraus de 1, 2 e 4 sessões e mantém a persistência
+de credenciais atual no primeiro experimento. A troca do auth store fica para
+um experimento posterior, evitando testar duas mudanças críticas ao mesmo
+tempo e preservando um retorno simples aos workers dedicados.

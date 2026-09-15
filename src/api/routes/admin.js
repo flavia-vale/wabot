@@ -1,7 +1,7 @@
 import db from '../../db.js'
 import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot } from '../../manager.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
@@ -31,6 +31,7 @@ import { isSubscriptionActive, describeSubscriptionStatus, describePendingSubscr
 import { summarizeSubscriptionCharges, presentSubscriptionCharge } from '../../domain/payments/chargeOutcome.js'
 import { assessBillingMachine, checkBillingConfig, describeBillingMachine } from '../../domain/payments/billingHealth.js'
 import { isSandboxTokenInProduction } from '../../domain/payments/accessTokenMode.js'
+import { selectShardPocCandidates, presentShardRuntimeMetrics } from '../../ops/shardPoc.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1328,6 +1329,55 @@ export async function adminRoutes(app) {
   app.get('/me', async (req, reply) => {
     if (!(await requireAdmin(req, reply))) return
     return req.admin
+  })
+
+  app.get('/shard-poc/overview', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const users = await db.user.findMany({
+      where: { OR: [{ waSession: { is: { status: 'connected' } } }, { email: 'flavia.vale@usp.br' }] },
+      select: { id: true, name: true, email: true, plan: true, waSession: { select: { status: true, lifecycle: true, ownerInstance: true, lastHeartbeatAt: true } } },
+    })
+    const ids = users.map(user => user.id)
+    const [messageCounts, mediaCounts] = await Promise.all([
+      db.messageLog.groupBy({ by: ['userId', 'status'], where: { userId: { in: ids }, sentAt: { gte: since } }, _count: { _all: true } }),
+      db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids }, sentAt: { gte: since }, originImageBytes: { gt: 0 } }, _count: { _all: true } }),
+    ])
+    const activity = new Map(users.map(({ waSession, ...user }) => [user.id, { ...user, session: waSession, messages24h: 0, failures24h: 0, mediaMessages24h: 0 }]))
+    for (const row of messageCounts) {
+      const target = activity.get(row.userId)
+      if (!target) continue
+      target.messages24h += row._count._all
+      if (!['success', 'sent'].includes(row.status)) target.failures24h += row._count._all
+    }
+    for (const row of mediaCounts) if (activity.has(row.userId)) activity.get(row.userId).mediaMessages24h = row._count._all
+    const candidates = selectShardPocCandidates([...activity.values()])
+    const candidateIds = candidates.map(candidate => candidate.id)
+    const [messageLogs, connectionLogs, runtimeResults] = await Promise.all([
+      candidateIds.length ? db.messageLog.findMany({ where: { userId: { in: candidateIds }, sentAt: { gte: since } }, orderBy: { sentAt: 'desc' }, take: 200, select: { id: true, userId: true, status: true, platform: true, deliveryKind: true, originImageBytes: true, errorMsg: true, sentAt: true } }) : [],
+      candidateIds.length ? db.waConnectionEvent.findMany({ where: { userId: { in: candidateIds }, occurredAt: { gte: since } }, orderBy: { occurredAt: 'desc' }, take: 200, select: { id: true, userId: true, type: true, code: true, lifecycle: true, ownerInstance: true, occurredAt: true } }) : [],
+      Promise.all(candidates.map(async candidate => {
+        try { return [candidate.id, presentShardRuntimeMetrics(await getBotMetrics(candidate.id)), null] }
+        catch (error) { return [candidate.id, null, error?.message || 'Métricas indisponíveis'] }
+      })),
+    ])
+    const runtimeByUser = new Map(runtimeResults.map(result => [result[0], { runtime: result[1], metricsError: result[2] }]))
+    const names = new Map(candidates.map(candidate => [candidate.id, candidate.name || candidate.email]))
+    const events = [
+      ...messageLogs.map(log => ({ id: `message:${log.id}`, kind: 'message', userId: log.userId, account: names.get(log.userId), outcome: ['success', 'sent'].includes(log.status) ? 'success' : 'failure', status: log.status, detail: log.errorMsg ? categorizeErrorMsg(log.errorMsg) : (log.deliveryKind || log.platform), mediaBytes: log.originImageBytes || 0, at: log.sentAt })),
+      ...connectionLogs.map(log => ({ id: `connection:${log.id}`, kind: 'connection', userId: log.userId, account: names.get(log.userId), outcome: ['connected', 'open', 'ready'].includes(log.type) ? 'success' : (log.code ? 'failure' : 'info'), status: log.type, detail: log.code || log.lifecycle || log.ownerInstance, at: log.occurredAt })),
+    ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 250)
+    const members = candidates.map(candidate => ({ ...candidate, ...runtimeByUser.get(candidate.id) }))
+    return {
+      generatedAt: new Date(),
+      environment: process.env.APP_ENV || process.env.NODE_ENV || 'unknown',
+      supervisorMode: SUPERVISOR_MODE,
+      experimentMode: process.env.WA_SESSION_SHARD_POC || 'observe',
+      ready: candidates.length === 4 && candidates.every(candidate => candidate.session?.status === 'connected'),
+      selectionNote: 'Sugestão automática: Flávia + perfis conectado leve, mediano e com maior uso de mídia nas últimas 24h.',
+      members,
+      events,
+    }
   })
 
   app.get('/capacity/current', async (req, reply) => {
