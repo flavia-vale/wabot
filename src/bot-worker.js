@@ -13,12 +13,13 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
-import { rm, rename, writeFile, readdir } from 'fs/promises'
+import { rm, rename, writeFile, readdir, access } from 'fs/promises'
 import { dirname } from 'path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
+import { resolveCustomDomainLinks, findCandidateLinks } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
@@ -30,6 +31,7 @@ import { resolveLinkKind } from './converters/linkKind.js'
 import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { appendRelayFooter } from './core/relayFooter.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { captureInstagramMirror } from './instagram/mirroring/capture.js'
@@ -94,7 +96,7 @@ import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
-import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
+import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
 
 const userId = process.env.BOT_USER_ID
@@ -309,6 +311,39 @@ let allowedChatJidsReady = false
 // para sobreviver às reconexões do MESMO worker.
 const MONITORED_DROP_LOG_INTERVAL_MS = Math.max(0, Number(process.env.MONITORED_DROP_LOG_INTERVAL_MS ?? 60_000))
 const monitoredDropLogState = new Map()
+
+// Oferta publicada pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13): o
+// texto não traz link de loja nenhum, só `https://<dominio-dele>/p/xxx`. Sem
+// este passo o sanitizador apaga essa URL (ela credita o concorrente),
+// `detectLinks` não acha nada e a oferta morre como `nolink` — do lado de fora,
+// "o robô não espelha".
+//
+// Desembrulhar ANTES do sanitizador faz o resto do pipeline (sanitizador,
+// detector, conversor, dedup, imagem) seguir sem NENHUMA mudança, e quem
+// converte continua sendo o conversor da loja com a credencial da cliente — a
+// comissão é dela, não de quem publicou. Só gasta rede quando não há link de
+// loja no texto; qualquer falha devolve o texto como veio.
+async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
+  if (!text) return text
+  try {
+    const desembrulhado = await resolveCustomDomainLinks(text)
+    // Candidato que NÃO resolveu precisa deixar rastro com o motivo: em
+    // 2026-09-13 este caminho devolveu só `null` em staging, com código no ar,
+    // rede boa e a página trazendo o link — e não havia por onde começar.
+    if (desembrulhado.failures?.length) {
+      logger.warn({ msgId, jid, falhas: desembrulhado.failures }, 'Link de domínio próprio NÃO resolveu até a loja')
+    }
+    if (!desembrulhado.resolved.length) return text
+    logger.info({ msgId, jid, resolvidos: desembrulhado.resolved }, 'Link de domínio próprio desembrulhado até a loja')
+    for (const item of desembrulhado.resolved) {
+      try { recordOperationalSignal('custom_domain_link_resolved', { userId, platform: item.platform }) } catch {}
+    }
+    return desembrulhado.text
+  } catch (err) {
+    logger.warn({ msgId, jid, err: err?.message }, 'Falha ao desembrulhar link de domínio próprio — seguindo com o texto original')
+    return text
+  }
+}
 
 function logMonitoredSourceDrop(jid, reason, details = {}) {
   const now = Date.now()
@@ -582,7 +617,7 @@ const AUTH_DIR = getAuthInfoDir(userId)
 // backup e volta se o pareamento falhar antes de o código chegar ao usuário.
 // Sem isso, um clique em "conectar" durante uma recusa do WhatsApp (405)
 // destruía a credencial boa e travava a sessão de vez (RCA 2026-07-28).
-const pairingAuthBackup = createPairingAuthBackup({ authDir: AUTH_DIR, fs: { rename, rm }, logger })
+const pairingAuthBackup = createPairingAuthBackup({ authDir: AUTH_DIR, fs: { rename, rm, access }, logger })
 const DEDUP_FILE = getDedupFile(userId)
 const KNOWN_CHANNELS_FILE = getKnownChannelsFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
@@ -1046,10 +1081,28 @@ async function monitorSilenceWatchdog() {
     else if (lastIncomingByMonitorJid.has(jid)) hasActive = true
   }
 
-  if (!silent.length || !hasActive) return
+  if (!silent.length) return
+  // `hasActive` existe para não alarmar conta naturalmente parada: se NENHUM
+  // monitor tem tráfego, o silêncio pode ser a madrugada. Só que exigir isso
+  // deixava a FALHA TOTAL — todos os monitores calados — como o único estado que
+  // este vigia não enxerga, e é justamente o pior (RCA 2026-09-14: a conta ficou
+  // dois dias com 0 de 2 monitores recebendo e ele nunca rodou).
+  // Com todos calados, a evidência que substitui `hasActive` é a mesma da
+  // cegueira entre reconexões: a sessão está OCUPADA (falhando decrypt ou caindo
+  // repetidamente) e ainda assim não aceita nada. Sem essa evidência, silêncio
+  // segue sendo só silêncio.
+  const todosCalados = !hasActive
+  const ocupadaESemAceitar = failuresSinceLastAccepted > 0 || stableDropsSinceLastAccepted > 0
+  if (todosCalados && !ocupadaESemAceitar) return
 
   logger.warn(
-    { silent, thresholdMs: MONITOR_SILENCE_THRESHOLD_MS },
+    {
+      silent,
+      thresholdMs: MONITOR_SILENCE_THRESHOLD_MS,
+      todosCalados,
+      failuresSinceLastAccepted,
+      stableDropsSinceLastAccepted,
+    },
     'Monitor(es) silenciado(s) detectado(s); forçando refresh de sender_keys'
   )
   await triggerWaGroupsRefresh('silence_watchdog')
@@ -1351,11 +1404,40 @@ const INIT_QUERIES_LOG_RE = /unexpected error in 'init queries'/i
 // justamente a sessão que reconecta o tempo todo e não recebe nada.
 const RECEPTION_WINDOW_MS = Math.max(60_000, Number(process.env.WA_RECEPTION_WINDOW_MS || DEFAULT_RECEPTION_WINDOW_MS))
 const RECEPTION_MIN_FAILURES = Math.max(1, Number(process.env.WA_RECEPTION_MIN_FAILURES || DEFAULT_RECEPTION_MIN_FAILURES))
+// `WA_BLIND_ACROSS_RECONNECTS_MS=0` desliga só a regra nova (rollback sem
+// redeploy), preservando a classificação histórica.
+const BLIND_ACROSS_RECONNECTS_MS = Math.max(0, Number(process.env.WA_BLIND_ACROSS_RECONNECTS_MS ?? DEFAULT_BLIND_ACROSS_RECONNECTS_MS))
+
+// Quais filtros de recepção este worker está aplicando — UMA linha por boot.
+//
+// Não é enfeite. `WA_IGNORE_UNMONITORED_GROUPS` descarta mensagem antes do
+// decrypt e NÃO escrevia nada em lugar nenhum: nem no boot, nem ao ignorar
+// (ignoredJidPolicy.js não tem logger). Ligá-la em produção e perguntar "pegou
+// nos robôs?" não tinha resposta — e em modo `remote` o worker só relê a env
+// quando o supervisor reinicia, que é exatamente o caso em que a pergunta
+// aparece (RCA 2026-09-14: a flag ficou no .env e nenhum dos 38 workers a
+// tinha lido, sem nenhum jeito de constatar isso pelo log).
+//
+// Volume: uma linha por processo de worker. Zero impacto de RAM.
+logger.info({
+  ignoreUnmonitoredGroups: IGNORE_UNMONITORED_GROUPS,
+  chatScopeMode: CHAT_SCOPE_MODE,
+  blindAcrossReconnectsMs: BLIND_ACROSS_RECONNECTS_MS,
+}, 'Filtros de recepção deste robô')
 const RECEPTION_SIGNAL_THROTTLE_MS = Math.max(5 * 60_000, Number(process.env.WA_RECEPTION_SIGNAL_THROTTLE_MS || 60 * 60_000))
 let lastUpsertAtMs = null
 let lastAcceptedAtMs = null
 let monitoredSourceCount = 0
 let lastReceptionSignalAt = 0
+
+// Cegueira que ATRAVESSA reconexões (RCA 2026-09-14, viviloppes@gmail.com).
+// Escopo de módulo e zerados SÓ em `markMessageAccepted` — nunca por reconexão
+// e nunca por janela de tempo. Era exatamente isso que faltava: todo contador
+// de recepção era medido a partir da conexão atual, e a conta do RCA reconecta
+// a cada ~50min, então nenhum deles chegava a concluir nada (ver o cabeçalho de
+// core/receptionHealth.js). Mesmo idioma de `chatScopeIgnoredSinceLastAccepted`.
+let failuresSinceLastAccepted = 0
+let stableDropsSinceLastAccepted = 0
 
 function markUpsertReceived() { lastUpsertAtMs = Date.now() }
 
@@ -1424,6 +1506,10 @@ function markMessageAccepted() {
   lastAcceptedAtMs = Date.now()
   acceptedTimestamps.push(lastAcceptedAtMs)
   chatScopeIgnoredSinceLastAccepted = 0
+  // Uma mensagem aceita é a única prova de que a recepção voltou a funcionar —
+  // e o único evento que zera a cegueira acumulada.
+  failuresSinceLastAccepted = 0
+  stableDropsSinceLastAccepted = 0
 }
 
 // `WA_RECEPTION_WINDOW_MS=0` desliga a classificação (rollback sem redeploy).
@@ -1436,6 +1522,12 @@ function getReceptionHealth() {
     lastUpsertAtMs,
     lastAcceptedAtMs,
     failuresInWindow: getSessionHealth().cryptoErrors,
+    // Relógio que não reseta na reconexão: a última aceitação ou, se a conta
+    // nunca aceitou nada neste worker, o boot dele.
+    observedSinceMs: lastAcceptedAtMs ?? workerStartedAt,
+    failuresSinceLastAccepted,
+    stableDropsSinceLastAccepted,
+    blindAcrossReconnectsMs: BLIND_ACROSS_RECONNECTS_MS,
     hasMonitoredSources: monitoredSourceCount > 0,
     incomingPending: incomingQueue.getStats().pending,
     lastProcessedAtMs: incomingQueue.getStats().lastCompletedAt,
@@ -1455,12 +1547,17 @@ function reportReceptionHealth(reception) {
     silentForMs: reception.silentForMs,
     failuresInWindow: reception.failuresInWindow,
     windowMs: reception.windowMs,
-  }, 'Sessão conectada e SEM receber mensagens: está chegando e falhando, nada foi aceito na janela')
+    motivo: reception.reason,
+    entreReconexoes: Boolean(reception.blindAcrossReconnects),
+  }, 'Sessão conectada e SEM receber mensagens')
   try {
     recordOperationalSignal('wa_reception_blind', {
       userId,
       silentForMs: reception.silentForMs,
       failuresInWindow: reception.failuresInWindow,
+      // Separa "parou agora" de "está cega há horas, atravessando reconexões" —
+      // a segunda é a que ninguém enxergava e a que pede ação humana.
+      acrossReconnects: Boolean(reception.blindAcrossReconnects),
     })
   } catch {}
 }
@@ -1469,6 +1566,10 @@ function recordCryptoError() {
   const now = Date.now()
   lastCryptoErrorAt = now
   cryptoErrorTimestamps.push(now)
+  // Cumulativo (não podado): a rajada de falhas acontece no dreno da fila
+  // offline logo após reconectar, e a janela curta a apagava antes de alguém
+  // conseguir julgar. Ver core/receptionHealth.js.
+  failuresSinceLastAccepted += 1
   const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
   // Poda barata: só varre quando o array cresce ou a cabeça já saiu da janela.
   if (cryptoErrorTimestamps.length > 1_000 || cryptoErrorTimestamps[0] < cutoff) {
@@ -2775,6 +2876,14 @@ async function startBotInner() {
   scheduleDedupSave(dedup)
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
+  // Pareamento que derrubou o processo deixa a credencial boa num backup que
+  // ninguém mais olha — e o próximo pareamento a apagaria. `recoverOrphan` só
+  // age quando NÃO há credencial no lugar e HÁ uma no backup; qualquer dúvida
+  // não mexe em nada (RCA 2026-09-14). Durante um pareamento em andamento
+  // NESTE processo o backup é legítimo e quem manda nele é o próprio fluxo.
+  if (!pairingAuthBackup.hasBackup()) {
+    await pairingAuthBackup.recoverOrphan().catch(() => false)
+  }
   mkdirSync(AUTH_DIR, { recursive: true })
   await clearAppStateSyncKeys()
   startHeartbeatIpc()
@@ -3004,7 +3113,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // Uma vez estável, sempre "já estável": marca que esta credencial produziu
       // ao menos uma conexão saudável na vida deste worker (persiste entre
       // reconexões). Base da política keepEstablishedAuth em badSession.
-      if (wasStable) everHadStableOpen = true
+      if (wasStable) {
+        everHadStableOpen = true
+        // Queda de sessão ESTÁVEL sem nada ter sido aceito desde a última vez é
+        // a segunda evidência de cegueira (a conta do RCA caiu 29× em 24h, todas
+        // com `hadStableOpen`, sem aceitar uma única mensagem no meio).
+        stableDropsSinceLastAccepted += 1
+      }
       // Node bruto do stream:error (quando existir) — só ele revela se o close
       // foi causado por uma mensagem específica travada em loop de reentrega
       // (ver AGENTS.md "Loop de retry-receipt travado"). `code` sozinho não
@@ -3088,8 +3203,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         try { recordOperationalSignal('wa_forbidden', { userId, code }) } catch {}
       }
       if (isLoggedOut) {
-        // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
+        // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo.
+        // O backup de pareamento vai junto: credencial revogada não pode ser
+        // devolvida ao lugar por `recoverOrphan` no próximo boot.
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+        await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
         logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
       } else if (wasPairing && isRestartRequired) {
         // Pairing aceito pelo WA: o servidor manda close com code 515 esperando
@@ -3206,6 +3324,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             try { recordOperationalSignal('wa_bad_session_reset', { userId, count: b.count }) } catch {}
             recordWaConnectionEventSafe({ userId, type: 'auth_reset', code, lifecycle: 'auth_reset_required', ownerInstance: OWNER_INSTANCE, metadata: { badSessionCount: b.count } })
             await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+            // Backup junto: a credencial guardada é da MESMA sessão corrompida.
+            await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
             await persistSessionPatch(buildAuthResetSessionPatch({ code, ownerInstance: OWNER_INSTANCE, now: new Date() })).catch(() => {})
             badSessionTimestamps = []
             reconnectAttempts = 0
@@ -3441,7 +3561,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
       }
 
-      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
+      const textoParaEspelhar = await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
+      const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar) : ''
       if (text && !sanitizedText) {
         logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
         return
@@ -3486,7 +3607,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           })
           return
         }
-        const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
+        // `hasGenericUrl` lê o texto JÁ SANITIZADO, e o sanitizador REMOVE toda
+        // URL que não é de loja suportada. Ou seja: exatamente a mensagem que
+        // deveria ganhar o sufixo — a que só trazia link de loja desconhecida ou
+        // do site próprio do grupo de origem — chegava aqui sem URL nenhuma,
+        // ficava sem sufixo e a cliente lia "fora das regras de encaminhamento
+        // que VOCÊ configurou". Isso culpa a configuração dela por um problema
+        // que é de cobertura de loja, e manda mexer no lugar errado (foi o que
+        // aconteceu em 13/09/2026). O texto de ANTES do sanitizador é quem sabe
+        // a verdade; `findCandidateLinks` é a mesma regra do desembrulho de
+        // domínio próprio (ignora convite de grupo e rede social), então as duas
+        // pontas nunca discordam sobre o que é "link de loja desconhecida".
+        const hadUnsupportedStoreUrl = findCandidateLinks(textoParaEspelhar).length > 0
+        const unsupportedStoreSuffix =
+          links.length === 0 && (hasGenericUrl || hadUnsupportedStoreUrl) ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
             userId,
@@ -3905,6 +4039,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           finalText = templatedText
           templateApplied = true
         }
+      }
+      // O complemento pertence exclusivamente ao formato "Manter texto
+      // original convertido". Dois saltos separam claramente o texto vindo da
+      // origem da assinatura opcional escrita pela cliente.
+      if (!effectiveTemplateKey) {
+        finalText = appendRelayFooter(finalText, monitorGroup?.relayFooterText)
       }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {

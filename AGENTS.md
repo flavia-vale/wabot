@@ -2306,9 +2306,22 @@ inteira em `core/destinationRouting.js` (`resolveMonitorDestinations`):
 - `all` (quem nunca escolheu) → comportamento histórico preservado, agora com
   aviso no log e sinal `ops_mirror_fallback_all_destinations`.
 
-Salvar destinos no painel grava `explicit`; desmarcar tudo volta a `all` (é como
-a tela sempre se comportou). A migration marca como `explicit` toda origem que
-já tem vínculo hoje.
+Salvar destinos no painel grava **sempre `explicit`, inclusive com a lista
+vazia**. A migration marca como `explicit` toda origem que já tem vínculo hoje.
+
+⚠️ **Corrigido em 2026-09-13 — não regredir.** Até aqui, salvar sem nenhum
+marcado gravava `all`, "porque é como a tela sempre se comportou". O efeito era
+o relato da cliente: ela desmarcava todos, salvava, voltava e **encontrava tudo
+marcado de novo** — `all` faz o `GET /:id/targets` devolver TODOS os destinos da
+conta, e a tela obedientemente marcava todos. Pior que o incômodo visual: a
+origem continuava espelhando para grupos que ela acabara de desmarcar, que é
+exatamente o que o RCA acima existe para impedir. Desmarcar tudo e salvar é a
+cliente dizendo "não mande para ninguém" — a origem para de enviar até ela
+escolher de novo, e a tela avisa isso antes do salvamento. `all` ficou valendo
+só para quem **nunca** salvou destino nenhum naquela origem. Guardas:
+`test/groups-route-targets-mode.test.js` (reabrir a tela depois de salvar
+vazio), `test/painel-destinos-editor.test.js` (texto do aviso e `mode` gravado
+pela tela).
 
 ### 3) Job já enfileirado não era cancelado
 
@@ -2909,6 +2922,112 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 `msgRetryCounterCache`); não ampliar o `shouldIgnoreChatJid` para ignorar
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
+
+## Cega e caindo: a conta pior é a que nenhum alarme enxergava (RCA 2026-09-14)
+
+Cliente (`viviloppes@gmail.com`) reportou que o espelhamento parou. Medido em
+produção: o espelhamento dela caiu de **1.099 envios no dia 10/09 para zero a
+partir de 12/09**, e o worker dela tinha **ZERO** linhas `mensagem recebida` em
+11h de vida — enquanto os outros 37 workers do host somavam 13.505. Não era um
+grupo: ela estava **100% cega**, sem receber nada de chat nenhum.
+
+O painel mostrou **"conectado"** o tempo todo, e **nenhuma** das redes de
+segurança acusou: `ops_wa_reception_blind` nunca saiu, a auto-cura de recepção
+nunca rodou, o vigia de silêncio nunca rodou.
+
+**A causa da invisibilidade é aritmética, e vale para qualquer conta assim.**
+Tudo era medido a partir da **conexão atual**, e a conexão dela reiniciava a
+cada ~50min (queda 500 com `stuckMsg:true`, **29 vezes em 24h**, todas com
+`hadStableOpen`). Com os defaults:
+
+| Rede de segurança | Por que nunca rodou |
+|---|---|
+| `computeReceptionState` → `blind` | carência de 20min devolve `ok` aconteça o que acontecer; a rajada de decrypt acontece no **dreno da fila offline** (`offline:"1"`) nos minutos 0-2, e a janela do contador é de **10min** — no minuto 20 já foi podada |
+| `computeReceptionState` → `starved` | exige **120min** de conexão; a dela morria aos ~50 |
+| `shouldSelfHealReception` | `lastAcceptedAtMs == null` → "nunca recebeu nada nesta sessão"; a conta totalmente cega é a única que a auto-cura não cobre |
+| `monitorSilenceWatchdog` | `!hasActive` → com **todos** os monitores calados ele desiste; a falha total era o único estado invisível |
+
+Ou seja: **quanto pior o estado, mais invisível ele ficava.** Reconexão
+frequente não é só sintoma — era o que impedia qualquer diagnóstico.
+
+**A correção é medir a cegueira num relógio que NÃO reseta na reconexão**
+(`evaluateBlindAcrossReconnects`, em `src/core/receptionHealth.js`):
+`observedSinceMs` (última aceitação, ou o boot do worker) + contadores
+**cumulativos** `failuresSinceLastAccepted` / `stableDropsSinceLastAccepted`,
+zerados **só** em `markMessageAccepted`. A regra roda **antes da carência** de
+propósito — é a carência que escondia o caso.
+
+**Não regredir:**
+
+- **Os contadores vivem em escopo de módulo e só zeram quando uma mensagem é
+  ACEITA.** Dentro de `startBotInner` eles zerariam a cada reconexão e a
+  cegueira volta a ser invisível (mesma lição do `msgRetryCounterCache`).
+- **`observedSinceMs` nunca pode vir de `connectionOpenedAt`** — é literalmente
+  a troca de relógio que causava o bug.
+- **Silêncio sozinho NUNCA vira alarme.** Exige evidência de que a sessão está
+  ocupada e mesmo assim não aceita nada (falhas de decrypt **ou** quedas de
+  sessão estável). Sem evidência, madrugada continua sendo madrugada.
+- **Fail-safe em todo caminho**: sem `observedSinceMs` confiável, cegueira curta
+  demais, ou sessão desconectada → **não acusa**.
+- **Só avisa — não reconecta.** A auto-cura existente fecha o socket, e isso
+  seria inútil aqui (ela já reconecta 29×/dia) e **prejudicial**: reconexão
+  repetida é o padrão que o WhatsApp associa a robô. Quem decide o próximo passo
+  é gente.
+- O vigia de silêncio passou a cobrir a falha total, **exigindo a mesma
+  evidência** quando todos os monitores estão calados.
+
+O painel já sabia falar disso: `clientVisibleSessionState` traduz
+`receptionState === 'blind'` em `NOT_RECEIVING`. **Faltava só o classificador
+chegar a essa conclusão** — agora que chega, a tela para de dizer "conectado"
+para quem não está recebendo nada.
+
+Rollback sem redeploy: `WA_BLIND_ACROSS_RECONNECTS_MS=0` desliga só a regra
+nova. Testes: `test/reception-health.test.js` (com os números reais da conta),
+`test/bot-worker-reception-blindness-wiring.test.js` (guarda estrutural).
+
+**Todo worker agora diz no boot quais filtros de recepção está aplicando**
+(`'Filtros de recepção deste robô'`). `WA_IGNORE_UNMONITORED_GROUPS` descarta
+mensagem antes do decrypt e **não escrevia nada em lugar nenhum** — nem no boot,
+nem ao ignorar (`ignoredJidPolicy.js` não tem logger). Ligada em produção em
+14/09, não havia como responder "pegou nos robôs?": qualquer grep dava zero com
+a flag ligada ou desligada. Em modo `remote` o worker só relê a env quando o
+supervisor reinicia, que é exatamente quando a pergunta aparece — e de fato os
+38 workers estavam rodando desde antes da mudança, sem terem lido a flag.
+⚠️ **A ordem importa:** o log cita constantes de escopo de módulo e, se subir
+acima de qualquer uma delas, o módulo estoura ReferenceError (TDZ) no load e
+**todo worker morre no boot**. Guarda em
+`test/bot-worker-reception-blindness-wiring.test.js`.
+
+**Varrer a frota inteira procurando o mesmo quadro** (read-only, roda no
+diretório do ambiente e **não depende deste conserto estar no ar**):
+
+```bash
+cd ~/wabot && node scripts/diag-frota-cega.mjs
+```
+
+Ele mapeia cada processo de robô para a conta (`BOT_USER_ID` em
+`/proc/<pid>/environ`), conta as linhas `mensagem recebida` **daquele pid** no
+`bot.log` (que é compartilhado por todas as contas — o pid é o que separa) e
+cruza com o banco. **"Cega" exige as duas evidências**: a conta espelhava antes
+E não recebe nada agora. Sem isso, conta parada e madrugada acusariam igual.
+Envio com `destGroup='broadcast'` (fila/garimpo) **não** conta como
+espelhamento: ele continua saindo com a recepção morta e esconderia o caso.
+
+⚠️ **O que este conserto NÃO faz: curar a causa da cegueira dela.** A poluição
+vinha de chats que o robô **nem monitora** — os retry receipts dela saíam com
+`retryCount: 5` para mensagens de DM na fila offline. O remédio de causa raiz
+para esse quadro já existe e está **DESLIGADO**: `WA_IGNORE_UNMONITORED_GROUPS`
+(ver "Ignorar grupos NÃO-monitorados no socket"). Ligar isso reconecta todas as
+sessões e é decisão humana, anunciada antes.
+
+⚠️ **Armadilha de diagnóstico desta investigação:** `42172350988530@lid` aparecia
+em `ops_wa_group_desync_autoheal`/`unresolved` como "o grupo culpado", e a
+escalação recomendava "a cliente sair e reentrar no grupo". No log bruto esse
+jid é o **`recipient`** dos retry receipts, com `notify:"Viviane"` e
+`peer_recipient_pn` de um telefone — ou seja, **o endereço da própria conta
+dela**, não um grupo do qual ela possa sair. O auto-refresh disparou ~10×/dia
+contra isso, devolvendo 91 grupos, sem nunca curar nada. Investigar
+separadamente antes de agir sobre esse sinal.
 
 ## Conectado e sem receber: o robô refaz a conexão sozinho (RCA 2026-08-28)
 
@@ -4786,6 +4905,149 @@ normalmente no fallback. Testes: `test/mercadolivre-resolve.test.js` (bloco
 **Diagnóstico reutilizável:** `scripts/diag-ml-sends.mjs <email|telefone|nome>`
 — read-only, classifica o formato de cada link de ML publicado e marca com ⚠ os
 suspeitos (`listing_fabricado`, `vitrine_social`, `cupom_generico`).
+
+## Oferta que chega pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13)
+
+Cliente (`raelysouza98@gmail.com`) reportou "o robô não espelha". Não havia
+defeito: o grupo monitorado publica a oferta pelo **domínio próprio do dono
+dele** (`https://dicasdeamigas.com.br/p/yaQ4mlRhfU`), nunca pelo link da loja.
+`detectLinks` só conhece os domínios das lojas suportadas, então a mensagem
+chegava "sem link", o sanitizador apagava a URL de terceiro (corretamente — ela
+credita o concorrente) e a oferta morria em `skip:policy:...:nolink` /
+`skip:no_valid_conversions`.
+
+**Medido no link real antes de escrever o código** (não é suposição): NÃO é
+redirect HTTP — responde **200 com HTML** (Next.js), e o corpo traz **as duas**
+URLs: o short link de afiliado do concorrente (`https://link.amazon/...`) e a
+**URL limpa do produto** (`https://www.amazon.com.br/dp/B088PNBKTR/`).
+
+| Peça | Onde |
+|---|---|
+| Decisão + resolução (puro + I/O injetado) | `src/core/customDomainLinkResolver.js` |
+| Gancho no robô | `unwrapCustomDomainOfferLinks` em `src/bot-worker.js` |
+| Sinal durável | `ops_custom_domain_link_resolved` |
+
+O módulo devolve o **texto** com a URL de domínio próprio trocada pela da loja.
+Por rodar **antes** do sanitizador, o resto do pipeline (sanitizador, detector,
+conversor, dedup, imagem) segue byte a byte como já era — nenhum deles mudou.
+
+**Não regredir:**
+
+- **Só age quando a mensagem NÃO tem link de loja nenhum.** Mensagem que já traz
+  link de loja não gasta rede nem muda de caminho: risco e latência zero para o
+  fluxo que já funciona.
+- **Roda ANTES de `sanitizeInviteLinks`.** Invertido, a URL de domínio próprio já
+  foi apagada e não há o que desembrulhar — é exatamente o estado anterior ao
+  fix. Guarda estrutural no teste.
+- **O link de terceiro NUNCA é publicado.** Ele é substituído pelo da loja (que
+  ainda passa pela conversão com a credencial da cliente) ou fica como estava, e
+  aí o sanitizador o remove como sempre removeu. Falha aqui não vaza comissão.
+- **Preferir a URL com ID de produto** (`urlHasProductId`), não a primeira do
+  HTML. A limpa converte melhor (o conversor lê o ASIN direto) e não carrega a
+  etiqueta do concorrente.
+- ⚠️ **Não extrair do HTML com `PATTERNS` do detector.** O `[^\s]*` de lá foi
+  feito para TEXTO CORRIDO; em JSON minificado não há espaço, e — medido — o
+  primeiro link engolia milhares de caracteres e **escondia** a URL limpa do
+  produto, fazendo a preferência acima nunca ver a melhor opção. A URL é
+  recortada nos delimitadores de HTML/JSON **antes** de ser classificada.
+- **Anti-SSRF obrigatório** (`isSafeCandidateUrl`): o link vem de grupo de
+  TERCEIROS, é entrada hostil. Sem isso o robô viraria buscador de rede interna
+  para quem publicasse `http://169.254.169.254/...` no grupo monitorado. Recusa
+  IP literal (v4/v6), host sem ponto, sufixo de rede local, credencial embutida
+  e porta fora de 80/443.
+- **Fracasso não é cacheado** (mesma lição do short link da Shopee); sucesso vale
+  6h. **Fail-safe é não mexer no texto**: qualquer erro devolve o original.
+- **Teto de 2 links por mensagem, com tempo generoso por link E teto na mensagem
+  inteira.** Medido em staging (2026-09-13): o MESMO endereço respondeu em
+  **568ms** numa chamada e **estourou 4s** na seguinte — o site oscila muito a
+  partir do servidor. Confirmado em produção (2026-09-14): os DNS IPv6 da
+  Hetzner falharam de forma intermitente, uma tentativa estourou os 8s e a
+  seguinte resolveu em 2,6s. Por isso há no máximo 2 tentativas, mas a segunda
+  só ocorre para `tempo_esgotado`/`erro_de_rede:*`; 403, HTML sem loja e recusas
+  de segurança nunca repetem. Por tentativa o teto segue 8s
+  (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira são 13s
+  (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), preservando ~12s dos 25s de preparo para
+  converter e buscar a foto. O teto é da mensagem inteira, inclusive com dois
+  links — não multiplicar por candidato. O log traz `attempts` e
+  `recoveredByRetry`, para medir recuperação sem esconder a primeira falha.
+- **A falha NUNCA pode ser só `null`.** Foi assim que uma investigação inteira
+  precisou de quatro rodadas de comando em staging: código no ar, rede boa (200
+  em 568ms), página trazendo o link e cada peça acertando isoladamente — e a
+  única informação disponível era `null`.
+  `resolveStoreUrlFromCustomDomainDetailed` devolve `{ store, reason, detail }`
+  (`tempo_esgotado`, `recusado_http_<status>`, `pagina_sem_link_de_loja`,
+  `endereco_recusado`, `sem_tempo_no_orcamento`, `erro_de_rede:<nome>`…) e o
+  robô loga `Link de domínio próprio NÃO resolveu até a loja`. Mesma lição de
+  "o caminho do card de preview era MUDO".
+
+Envs (todas opcionais): `CUSTOM_DOMAIN_LINK_RESOLVE` (default LIGADO; só o valor
+exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (8000),
+`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (13000), `CUSTOM_DOMAIN_MAX_ATTEMPTS` (2),
+`CUSTOM_DOMAIN_MAX_BYTES` (512KB),
+`CUSTOM_DOMAIN_CACHE_TTL_MS` (6h). Ajustar o tempo **não exige deploy** — é
+`.env` + `pm2 delete`/`start` (pegadinha #1).
+**Custo: nenhum processo novo, zero impacto de RAM** (cache em memória podado em
+500 entradas).
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — isto só
+passa a valer nos bots depois de `pm2 restart bot-supervisor` (reconecta TODAS
+as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/custom-domain-link-resolver.test.js` (com fixture do HTML real em
+`test/fixtures/custom-domain-offer-page.html`).
+
+### Nem todo site de domínio próprio entrega o link (medição antes de investir)
+
+Em produção o desembrulho passou a atender **oito sites diferentes** nas quatro
+lojas (clubedoachadinho, meli.ofertasluan, temdetudotchelo, centraldapromoo,
+compre.link, magazineluiza.onelink, dicasdeamigas, achadosdetenis). Os que
+falham caem em três motivos, e **cada um pede uma ação diferente** — por isso o
+motivo é registrado em vez de virar um "não deu" genérico:
+
+| Motivo | Exemplo medido | O que é |
+|---|---|---|
+| `pagina_sem_link_de_loja` | `oasisdeofertas.com.br` | **casca de 1.994 bytes**, idêntica em páginas diferentes: app React (Lovable) que monta tudo por JavaScript e busca de um backend próprio. O link não existe no HTML |
+| `recusado_http_403` | `pechin.co` | o site **barra o nosso servidor** (mesma família do muro do Mercado Livre) |
+| `tempo_esgotado` | `centraldapromoo.com.br` | lentidão pontual — o mesmo endereço resolveu depois |
+
+⚠️ **Renderizar a página num navegador de verdade (Playwright) está DESCARTADO**
+por memória: cada instância custa ~300 MB e o servidor já opera com folga zero
+pela política (`evaluateCapacity` dá limite seguro de 35 robôs com 36 ligados).
+É a REGRA #1 da política de memória — se alguém reabrir isso, precisa vir com
+estimativa e OK explícito.
+
+**Antes de investir em qualquer um desses caminhos, MEDIR** — a resposta muda
+conforme quantos sites e quantas clientes cada motivo afeta:
+
+```bash
+cd ~/wabot && node scripts/diag-dominio-proprio.mjs --horas=72
+```
+
+Read-only, lê o `bot.log` em stream (nunca carrega o arquivo na memória) e
+agrega por site, por motivo e por **quantas contas** cada site afeta — "3 sites
+falhando" pode ser uma cliente ou trinta, e as duas situações pedem decisões
+opostas. Falha ao cruzar com o banco é **impressa**, nunca engolida (lição do
+`diag-assinatura-recusada.mjs`, onde `.catch(() => [])` virou "nenhuma conta
+encontrada"). Teste: `test/diag-dominio-proprio.test.js`.
+
+### O motivo no painel culpava a configuração da cliente (mesma investigação)
+
+"Mensagem fora das regras de encaminhamento que **você** configurou para este
+grupo" era o que a cliente lia — e a causa não tinha nada a ver com a
+configuração dela. `skip:policy:...` só ganha o sufixo `:unsupported_store`
+(que vira "ainda não fazemos conversão para essa loja") quando sobrou URL no
+texto, e o teste era feito no texto **já sanitizado** — de onde o sanitizador
+acabara de REMOVER toda URL que não é de loja suportada. Ou seja: exatamente a
+mensagem que deveria ganhar o sufixo chegava sem URL nenhuma e caía na frase
+genérica, mandando a cliente mexer em "Lojas aceitas" e no modo de
+encaminhamento, que estavam certos.
+
+**Não regredir:** o sufixo é decidido sobre o texto de ANTES do sanitizador
+(`findCandidateLinks(textoParaEspelhar)`) — a MESMA regra do desembrulho, para
+que as duas pontas nunca discordem sobre o que é "link de loja desconhecida"
+(ela ignora convite de grupo e rede social, que não são loja). `hasGenericUrl`
+segue como está no outro uso (o descarte silencioso de `messageKind === 'other'`)
+— ampliá-lo ali transformaria ruído de protocolo em linha no painel.
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
