@@ -5376,6 +5376,31 @@ termos + Trends). Análise completa em
 | Cluster **"robô"** como termo próprio | Trends: "robô whatsapp" é 12× menor que "bot whatsapp" |
 | ~~**Magalu** como frente nova~~ **(reaberto em 02/09 — ver nota abaixo)** | único marketplace em queda no Trends |
 | `automação whatsapp` / `disparo em massa` | 5.000/mês mas concorrência **alta**, e é mercado de atendimento corporativo (Blip/Wati), não afiliado |
+| **`espelhamento de grupos`** e variações (congelado em 16/09) | abaixo do piso de reporte do Planejador; ver nota abaixo |
+
+**"Espelhamento" NÃO é porta de entrada — testado por três caminhos em 16/09.**
+A suspeita era razoável: usamos a palavra 79 vezes no corpo do site, os
+concorrentes usam, e ela nunca virou título nem H1. Os três métodos deram o
+mesmo veredito:
+
+| Método | Resultado |
+|---|---|
+| Autocomplete do Google | `espelhamento de` completa para **tela, tela iPhone, tela do celular no pc, Samsung, Roku TV, pintura, carro** — nada sobre grupos |
+| Search Console, 3 meses, filtro `espelh` | só `espelha grupos` (19 impressões, CTR 89%, posição 1,1 — **é a nossa marca**) e `quero espelhar` (1). Zero por "espelhamento" |
+| Planejador | `espelhamento de grupos`, `espelhamento de grupos whatsapp`, `espelhar grupos whatsapp`, `copiar mensagens de um grupo para outro`, `replicar mensagens whatsapp` → **todos abaixo do piso de reporte** (< 10/mês) |
+
+**A armadilha:** `espelhamento whatsapp` tem **5.000/mês com concorrência
+baixa** e, olhado isolado, parece a maior oportunidade do site. Não é. A
+vizinhança denuncia a intenção: `aplicativo para espelhar whatsapp em outro
+celular` (5.000), `espelhar whatsapp em outro celular` (500), `espelhamento
+whatsapp no pc` (500), `espelhar whatsapp na tv` (50). **Quem busca quer usar o
+WhatsApp em dois aparelhos** — é público de suporte técnico, não afiliado, e
+atraí-lo é abandono garantido.
+
+Há um motivo a mais para não ir: "espelhar whatsapp em outro celular" é o
+território dos aplicativos de espionagem de conversa alheia (o `-90% ano a ano`
+nesse termo tem cara de o Google ter derrubado o nicho). Não é vizinhança onde
+esta marca deve aparecer.
 
 **Magalu foi reaberto em 2026-09-02, por decisão explícita da dona do produto.**
 O congelamento vinha do Trends (único marketplace da lista em queda), e isso é
@@ -5399,7 +5424,9 @@ Livre > Amazon ≫ Magalu.
 **Regra de vocabulário:** título e H1 entram pela palavra que o cliente busca
 ("whatsapp banido", "achadinhos", "afiliado shopee"); o termo próprio da casa
 ("Módulo de Preservação Avançada", "cadência", "espelhamento") é explicado
-**dentro** da página, não usado como porta de entrada.
+**dentro** da página, não usado como porta de entrada. No caso de
+"espelhamento" isso deixou de ser convenção e virou dado medido — ver a linha
+congelada acima.
 
 ⚠️ **Limite que não se cruza:** entrar pela palavra "banido"/"anti-ban" **não**
 pode virar promessa de que não banem. Corrigir a expectativa dentro da página é
@@ -5430,50 +5457,69 @@ re-estimar por sinal de SERP quando este dado real já existe.**
 Ordem de prioridade dos marketplaces (Trends, estável salvo Magalu):
 **Shopee ≫ Mercado Livre > Amazon ≫ Magalu (em queda)**.
 
-### Baseline do site (Search Console — atualizado 2026-09-01)
+### Baseline do site (Search Console — atualizado 2026-09-16)
 
-| Métrica | 30/07 | 16/08 | **01/09** |
-|---|---:|---:|---:|
-| Cliques (soma da aba "Países") | 40 | 93 | **177** |
-| Impressões | 1.102 | 2.902 | **5.773** |
-| CTR | 3,63% | 3,20% | 3,07% |
-| Posição média (Brasil) | 7,85 | 7,60 | 7,68 |
-| Consultas distintas | 13 | 29 | **115** ← métrica mais honesta de progresso |
-| Páginas com impressão | 60 | 77 | 79 |
+| Métrica | 30/07 | 16/08 | 01/09 | **16/09** |
+|---|---:|---:|---:|---:|
+| Cliques (soma da aba "Países") | 40 | 93 | 177 | **490** |
+| Impressões | 1.102 | 2.902 | 5.773 | **13.362** |
+| CTR | 3,63% | 3,20% | 3,07% | **3,67%** |
+| Consultas distintas | 13 | 29 | 115 | **180** ← métrica mais honesta de progresso |
 
 Compare sempre pela soma da aba "Países" (o painel-resumo dá 41/1.154 em 30/07
 porque inclui linhas sem país atribuído — as duas metodologias não se misturam).
 
-Por mês fechado: junho 8 cliques/365 impressões, julho 33/656, **agosto
-136/4.739**. O salto que começou em 04/08 (desbloqueio do robots.txt da
-Cloudflare, IndexNow no deploy, unificação da marca, indexações pedidas à mão)
-sustentou-se o mês inteiro — não foi pico.
+**A entrega de 20/08 (títulos reescritos, marca duplicada removida, 25 rotas
+mortas fora do índice) funcionou, e dá para medir sem depender do acumulado.**
+Janelas de 25 dias, antes × depois, da série diária do `Gráfico.csv`:
 
-**Consultas distintas quadruplicaram (29 → 115) enquanto as páginas com
-impressão quase não mudaram (77 → 79).** O crescimento veio das MESMAS páginas
-aparecendo em mais buscas, não de páginas novas entrando no índice.
+| Janela | Impressões | Cliques | CTR |
+|---|---:|---:|---:|
+| 26/07 a 19/08 | 2.370 | 83 | 3,50% |
+| **21/08 a 14/09** | **10.129** | **375** | **3,70%** |
 
-**As buscas por nome de CONCORRENTE são 92% das impressões de consulta**
-(1.933 de 2.094, contra 15% em 16/08) e rendem 19 cliques — CTR de ~1% em
-posição 5–7. Maior: `achadinho pro` (742 impressões). As páginas que atendem são
-`/alternativas/achadinhos-bot` (1.281 impressões, a maior do site),
-`/bot-achadinhos-whatsapp` (1.234) e as demais `/alternativas/*`. **A linha de
-comparação com concorrente é o motor de crescimento** — é nela que vale
-produzir, não em cidade nem em nicho. O gargalo é o **clique**, não a
-impressão: título e descrição precisam dizer que aqui há uma alternativa (nunca
-se passar pelo concorrente, nunca prometer o que ele não entrega sem fonte).
+E o CTR ainda subia semana a semana conforme o Google recrawleava os títulos
+novos: **2,52% (25–31/08) → 3,53% (01–07/09) → 4,77% (08–14/09)**. Ao avaliar
+efeito de mudança de título, use a série diária — o acumulado de 3 meses
+dilui o depois com o antes e esconde exatamente o que se quer medir.
 
-Dez páginas somam **879 impressões e ZERO clique** — pior caso
-`/blog/quanto-custa-bot-para-whatsapp-afiliados` em **posição 4,35**. As sete
-apontadas em 16/08 não foram consertadas e hoje desperdiçam o dobro. Celular
-traz 57% das impressões, ranqueia MELHOR que o computador (7,07 vs 11,32) e
-converte metade (2,15% vs 4,33%) — isso aponta para título cortado na tela
-pequena, não para público diferente.
+**A hipótese do celular estava certa e o conserto pegou.** Em 16/08 o celular
+trazia 62% das impressões com CTR menos da metade do computador, e a leitura
+registrada foi "título cortado na tela pequena, não público diferente". Depois
+de encurtar os títulos para 55 caracteres e tirar o sufixo de marca duplicado:
 
-**Indexação (novo nesta rodada):** 77 páginas indexadas contra **51 não
-indexadas** — 26 "rastreada, mas não indexada", 11 "detectada, mas não
-indexada", 1 bloqueada pelo robots.txt. Tratar isso antes de produzir mais
-páginas parecidas.
+| | 16/08 | **16/09** |
+|---|---:|---:|
+| Celular | 2,07% | **3,20%** |
+| Computador | 5,10% | 4,31% |
+
+A distância caiu de 2,5× para 1,35×.
+
+**Buscas por nome de CONCORRENTE são ~47% de TODAS as impressões do site**
+(6.309 de 13.362) e 96% das impressões das consultas nomeadas. Maior consulta
+do site inteiro: **`achadinho pro`, 3.217 impressões**. As páginas que atendem:
+`/alternativas/achadinhos-bot` (4.930), `/bot-achadinhos-whatsapp` (2.514, com
+CTR de **5,0%** contra 2,08% em 16/08) e `/alternativas/achadinho-pro` (859,
+publicada em 20/08 — **uma** página, não seis, e pegou o maior termo do site).
+**A linha de comparação com concorrente é o motor de crescimento**, confirmado
+em escala. Nunca se passar pelo concorrente, nunca prometer o que ele não
+entrega sem fonte e data.
+
+**Três páginas continuam sem clique mesmo depois da reescrita de 20/08** — não
+insistir no mesmo ajuste, elas precisam de outra abordagem:
+
+| Página | Impressões | Cliques |
+|---|---:|---:|
+| `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp` | 477 | **1** |
+| `/programa-de-afiliados` | 185 | **0** |
+| `/bot-ofertas-whatsapp` (hub de nichos) | **8** (era 37) | 0 |
+
+O hub de nichos encolheu porque as 10 páginas-filhas saíram do índice em 20/08
+— custo previsto da decisão, registrado aqui para não ser diagnosticado como
+bug depois.
+
+**Tier 1 continua fechado:** 14 consultas de marketplace/afiliado somando ~30
+impressões. Segue sendo a maior oportunidade intocada do levantamento.
 
 **Citação por IA, medido em campo pela 1ª vez em 01/09** (7 consultas
 prioritárias × 4 superfícies, 28/28 linhas em
@@ -5584,6 +5630,12 @@ impressão e pouco clique. Rodar junto o relatório de **Cobertura/Indexação**
 os dois diagnósticos próprios (`scripts/diag-origem-cadastros.mjs` e
 `scripts/diag-paginas-seo.mjs`, 30 dias). Atualizar esta seção e a data do
 cabeçalho.
+
+**Para medir efeito de mudança de título, use a série diária (`Gráfico.csv`),
+não o acumulado.** O export de "Últimos 3 meses" mistura o antes com o depois e
+dilui justamente o que se quer medir — em 16/09, o acumulado dava CTR de 3,67%
+enquanto a semana corrente já estava em 4,77%. Recorte duas janelas do mesmo
+tamanho em volta da data da mudança e compare.
 
 **Não refazer Planejador e Trends todo mês.** Os dois medem volume de mercado,
 que não muda em semanas, e as decisões que dependem deles já estão congeladas
