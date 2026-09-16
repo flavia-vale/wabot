@@ -5543,6 +5543,130 @@ rodando no próprio servidor para conseguir ligar. Não repassar o CSV.
 
 Teste: `test/admin-contato-ativo.test.js` (puro, sem banco).
 
+## Fila de revisão das ofertas automáticas (2026-09-13, DESLIGADA por padrão)
+
+`OfferAutomation.publicationMode` aceita `direct` (histórico) e `review`: em
+`review` o cron não publica — ele DESCOBRE ofertas e enfileira em
+`OfferAutomationReviewItem` para a cliente aprovar antes de sair.
+
+| Peça | Onde |
+|---|---|
+| Interruptores | `src/offerAutomation/reviewFlags.js` |
+| Descoberta | `src/offerAutomation/reviewDiscoveryService.js` |
+| Entrega do que foi aprovado | `src/offerAutomation/reviewDeliveryService.js` |
+| Rotas | `src/api/routes/offerAutomationReview.js` |
+| Tela | `dashboard/app/painel/ofertas-automaticas/page.js` |
+
+**Não regredir:**
+
+- **Nasce DESLIGADA e em duas chaves.** `OFFER_AUTOMATION_REVIEW_ENABLED` liga
+  a fila; `OFFER_AUTOMATION_REVIEW_DELIVERY_ENABLED` libera a ENTREGA do que
+  foi aprovado. Separadas de propósito: dá para acumular fila e conferir o que
+  ela escolheria antes de deixar qualquer coisa sair.
+  `OFFER_AUTOMATION_REVIEW_USER_IDS` limita a contas nomeadas (vazio = todas).
+- **`destGroupJid` virou anulável** por causa deste modo. Todo caminho que o lê
+  precisa tolerar `null` — inclusive a dedup cruzada por grupo
+  (`OfferAutomationSentLog`), que é PULADA quando não há destino WhatsApp.
+- **`publicationMode` desconhecido PULA a automação**, nunca cai em `direct`:
+  publicar por engano é irreversível.
+- Sem processo PM2 novo — roda no cron de automação que já existia.
+
+## Texto adicional no fim da mensagem espelhada (`relayFooterText`, 2026-09-13)
+
+Campo por grupo monitorado ("Adicionar texto ao final da mensagem"), anexado
+depois do texto convertido, com dois saltos de linha. `src/core/relayFooter.js`
+(puro), aplicado em `src/bot-worker.js`.
+
+**Não regredir:**
+
+- **Pertence EXCLUSIVAMENTE ao formato "Manter texto original convertido".**
+  Com modelo ativo, o modelo controla o texto inteiro e o complemento é
+  descartado.
+- **Por isso a tela precisa saber qual é o modelo EFETIVO** (RCA 2026-09-16,
+  abaixo) — oferecer o campo onde ele não vale é prometer algo que o robô joga
+  fora, em silêncio.
+- É texto da cliente: não passa por conversão de link nem por palavra
+  bloqueada. Teto de 1.000 caracteres (`RELAY_FOOTER_MAX_CHARS`) — com foto, ele
+  entra na legenda e soma com o texto da origem.
+
+### "Escrevi o texto adicional e não sai nada" (RCA 2026-09-16 — não regredir)
+
+`Group.templateKey` tem TRÊS estados e a tela só enxergava dois:
+
+| Valor | O que o robô faz |
+|---|---|
+| `null` | **herda** `BotConfig.mirrorTemplateKeyDefault` (modelo padrão global) |
+| `''` | manter texto original, explícito |
+| chave | modelo fixo do grupo |
+
+A tela lia `null` e `''` como a mesma coisa. Quem tinha modelo padrão global e
+um grupo nunca tocado via "Manter texto original convertido" selecionado E o
+campo de texto adicional oferecido — enquanto o robô aplicava o modelo e
+ignorava o complemento. Ela escrevia, salvava, lia "Texto salvo", e a oferta
+saía sem nada. Hoje a tela carrega o padrão global e mostra o modelo que de
+fato vale. Teste: `test/painel-modelo-herdado-e-texto-adicional.test.js`.
+
+## Sites que recusam a leitura do nosso servidor (2026-09-16 — não regredir)
+
+O desembrulho de link de domínio próprio tem, além da lista de hosts que nunca
+são oferta (rede social, convite de grupo), uma lista de **sites de oferta que
+bloqueiam o nosso IP**: `BLOCKS_OUR_SERVER_HOST_RE` em
+`src/core/customDomainLinkResolver.js`.
+
+Medido em 72h de produção: `pechin.co` respondeu por **98 das 105** recusas
+`recusado_http_403`. Ele redireciona 301 para `pechinchou.com.br/oferta/<id>`,
+que está atrás de Cloudflare e devolve 403 para o nosso servidor em TODOS os
+cabeçalhos testados (navegador, celular, WhatsApp, `facebookexternalhit`) — a
+recusa é por endereço de servidor, e nenhum cabeçalho a contorna.
+
+**Não perde oferta nenhuma**: essas mensagens já não eram espelhadas (sem o
+desembrulho não existe link de loja para converter). O que muda é parar de
+bater num "não" garantido — economia de rede e, principalmente, de reputação do
+nosso IP, que é compartilhada com a busca de foto nas lojas.
+
+⚠️ **Critério para entrar na lista: bloqueio MEDIDO e reprodutível, nunca
+suspeita.** O teste é bater direto na página final com quatro cabeçalhos
+diferentes; só entra se os quatro derem 403. Se o bloqueio cair, remover a
+linha. Anti-teste junto: a lista é ancorada, `pechinchou.net` e `pechin.com.br`
+continuam passando.
+
+⚠️ **Não confundir com `pagina_sem_link_de_loja`** (~45 casos, em
+`go.promozone.ai`, `clubedoachadinho.com.br`, `grupos.garimpeiros.com.br`):
+ali a página abre normalmente e o link da loja só aparece depois que o
+JavaScript roda. Ler isso exigiria navegador de verdade (Playwright) — processo
+novo e memória, regra #1 da política de memória. **Não atacado de propósito.**
+
+E não repetir tentativa de erro definitivo: `isRetryableCustomDomainFailure` só
+repete `tempo_esgotado` e `erro_de_rede:` — 403, 404 e `pagina_sem_link_de_loja`
+saem na primeira. Ao ler o log, lembre que o motivo aparece DUAS vezes por
+falha (uma no resumo, uma dentro da tentativa): contar `"reason"` cru dá o dobro
+do número de falhas reais.
+
+## O deploy só recarrega os bots para os caminhos da lista (RCA 2026-09-16)
+
+`WORKER_CODE_PATHS_RE` (nos dois scripts de deploy) decide se o
+`bot-supervisor` é reiniciado — ou seja, se uma correção passa a valer nos
+bots. Ela é escrita à mão, e medindo o que o worker DE FATO importa apareceram
+**33 arquivos de fora**, entre eles `src/detector.js` (o fix dos links com
+formatação do WhatsApp), `src/messageDedup.js`, `src/messageQueue.js` e
+`src/messageLogSanitizer.js` (a correção do emoji cortado na chave de dedup).
+Correção neles chegava ao disco do VPS e **não valia nos bots** — mesma família
+do RCA 2026-08-31 ("a marca d'água não saía porque os bots estavam com código
+velho"), só que pela lista em vez da medição do commit.
+
+**Não regredir:** `test/deploy-worker-code-paths.test.js` calcula o que
+`src/bot-worker.js` e `src/supervisor/index.js` importam (transitivo) e falha se
+um arquivo novo não estiver nem na regex nem em `DELIBERADAMENTE_FORA`. Ele
+também exige que os DOIS scripts usem a mesma lista — produção e staging
+decidindo diferente faria staging validar um comportamento que produção não tem.
+
+**A lista não é "tudo que o worker importa"**, é "o que, se ficar velho, muda o
+comportamento do robô": cada caminho ali custa uma reconexão da frota inteira.
+`src/email/` e os módulos que ele arrasta ficam DE FORA de propósito (o worker
+só os carrega para o aviso interno de número repetido; texto velho ali não muda
+nada para a cliente, e incluí-los faria toda edição de e-mail reconectar todo
+mundo).
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos

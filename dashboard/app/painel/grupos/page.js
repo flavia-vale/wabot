@@ -400,7 +400,7 @@ function WatermarkTextField({ group, maxChars, draft, saving, savedAt, error, on
 }
 
 /* ── Monitor group config panel (redesigned) ────────────────────────── */
-function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, targetsHandlers, onSetActionError, templates }) {
+function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, targetsHandlers, onSetActionError, templates, defaultTemplateKey }) {
   const [draft, setDraft] = useState('')
 
   const keywords = (g.blockedKeywords || '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -427,8 +427,28 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, t
 
   const encaminhar = (g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'
 
-  const templateValue = (g.templateKey == null || g.templateKey === '') ? '__relay__' : g.templateKey
-  const templateApplied = g.templateKey !== null && g.templateKey !== ''
+  // Três estados de `templateKey`, iguais aos do robô (src/bot-worker.js, na
+  // resolução de `effectiveTemplateKey`): `null` HERDA o modelo padrão global,
+  // `''` é "manter texto original" explícito, e uma chave é o modelo fixo do
+  // grupo.
+  //
+  // A tela tratava `null` e `''` como a mesma coisa e mostrava "Manter texto
+  // original convertido" nos dois. Para quem tem um modelo padrão global, isso
+  // era mentira: o robô aplicava o modelo, e a tela ainda oferecia o campo de
+  // texto adicional — que o robô ignora quando há modelo. A cliente escrevia,
+  // salvava, lia "Texto salvo" e nada saía na oferta.
+  const inheritsDefault = g.templateKey == null
+  // O robô herda a chave CRUA: se o modelo padrão foi apagado depois de
+  // escolhido, ele ainda conta como "tem modelo" e o complemento segue
+  // descartado. Espelhar a chave crua (e não só as que ainda existem na lista)
+  // é o que impede a tela de voltar a prometer o complemento onde ele não vale.
+  const effectiveTemplateKey = inheritsDefault ? (defaultTemplateKey || '') : g.templateKey
+  const templateApplied = effectiveTemplateKey !== ''
+  // Já o <select> só pode exibir opção que existe; modelo padrão apagado cai
+  // no relay na CAIXA, sem mexer em `templateApplied` acima.
+  const templateValue = templateApplied && templates.some((t) => t.key === effectiveTemplateKey)
+    ? effectiveTemplateKey
+    : '__relay__'
 
   return (
     <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 16, display: 'grid', gap: 14 }}>
@@ -518,7 +538,11 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, t
         <CfgRow
           label="Formato da mensagem"
           info='"Manter texto original" converte os links dentro do texto que veio do grupo. Um template reescreve tudo num layout de oferta (um produto por vez).'
-          hint={templateApplied ? 'Reescreve num layout de oferta — ideal para um produto só.' : 'Mantém o texto do grupo e só troca os links pelos seus.'}
+          hint={
+            templateApplied
+              ? `Reescreve num layout de oferta — ideal para um produto só.${inheritsDefault ? ' Este grupo está usando o modelo padrão que você escolheu em Mensagens.' : ''}`
+              : 'Mantém o texto do grupo e só troca os links pelos seus.'
+          }
         >
           <select
             className="pnl-input"
@@ -531,7 +555,9 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, t
             <option value="__relay__">Manter texto original convertido</option>
             {templates.map((t) => <option key={t.key} value={t.key}>Template: {t.name}</option>)}
           </select>
-          {templateValue === '__relay__' && <RelayFooterField group={g} onUpdate={onUpdate} />}
+          {/* `templateApplied`, nunca `templateValue`: com modelo padrão apagado a
+              caixa cai no relay mas o robô ainda descarta o complemento. */}
+          {!templateApplied && <RelayFooterField group={g} onUpdate={onUpdate} />}
           <Link
             href="/painel/mensagens"
             style={{ display: 'inline-block', marginTop: 8, fontSize: 12.5, color: 'var(--accent-strong)', textDecoration: 'none' }}
@@ -633,6 +659,9 @@ export default function GruposPage() {
   const [expandedHealthId, setExpandedHealthId] = useState(null)
   const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
   const [templates, setTemplates] = useState([])
+  // Modelo padrão global (BotConfig.mirrorTemplateKeyDefault). Sem ele a tela não
+  // tem como saber o que um grupo com templateKey nulo realmente publica.
+  const [defaultTemplateKey, setDefaultTemplateKey] = useState('')
 
   async function load() {
     setLoadingGroups(true)
@@ -650,9 +679,10 @@ export default function GruposPage() {
   useEffect(() => {
     let active = true
     setLoadingGroups(true)
-    Promise.all([api.groups(), api.me(), loadTemplateStore().catch(() => ({}))])
-      .then(async ([data, me, templateStore]) => {
+    Promise.all([api.groups(), api.me(), loadTemplateStore().catch(() => ({})), api.getConfig().catch(() => null)])
+      .then(async ([data, me, templateStore, config]) => {
         setTemplates(composeTemplates(templateStore))
+        setDefaultTemplateKey(config?.mirrorTemplateKeyDefault || '')
         setPlanSubject({ plan: me?.plan ?? 'trial', accessExpiresAt: me?.accessExpiresAt ?? null })
         if (!active) return
         setGroups(data)
@@ -1173,6 +1203,7 @@ export default function GruposPage() {
                       targetsHandlers={targetsHandlers}
                       onSetActionError={setActionError}
                       templates={templates}
+                      defaultTemplateKey={defaultTemplateKey}
                     />
                   )}
                   {configOpen && tab === 'post' && renderPostConfig(g)}

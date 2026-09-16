@@ -93,6 +93,29 @@ const TRAILING_NOISE_RE = /[.,;!?)\]}'">]+$/
 const NEVER_RESOLVE_HOST_RE =
   /(?:^|\.)(?:whatsapp\.com|wa\.me|t\.me|telegram\.me|telegram\.dog|instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be|tiktok\.com|twitter\.com|x\.com|pinterest\.com|linkedin\.com)$/i
 
+// Sites de oferta que RECUSAM a leitura do nosso servidor. A diferença para a
+// lista acima é que estes PARECEM valer a pena — são exatamente o tipo de
+// página que o desembrulho existe para ler — e por isso só a medição os
+// identifica.
+//
+// Medido em produção (2026-09-16, 72h de `bot.log`): `pechin.co` respondeu por
+// 98 das 105 recusas `recusado_http_403`. Ele redireciona 301 para
+// `pechinchou.com.br/oferta/<id>`, que está atrás de Cloudflare e devolve 403
+// para o nosso IP em TODOS os cabeçalhos testados (navegador, celular,
+// WhatsApp e facebookexternalhit) — ou seja, a recusa é por endereço de
+// servidor, não por quem dizemos ser, e nenhum cabeçalho a contorna.
+//
+// Não perde oferta nenhuma: essas mensagens já não eram espelhadas (sem o
+// desembrulho não há link de loja para converter). O que muda é parar de
+// bater ~98 vezes por janela num site que sempre diz não — economia de rede e,
+// principalmente, de reputação do nosso IP, que é compartilhada com as buscas
+// de foto das lojas.
+//
+// Critério para entrar aqui: bloqueio MEDIDO e reprodutível, nunca suspeita.
+// Se o bloqueio cair, basta remover a linha.
+const BLOCKS_OUR_SERVER_HOST_RE =
+  /(?:^|\.)(?:pechin\.co|pechinchou\.com\.br)$/i
+
 // Arquivo, não página: imagem/vídeo/documento nunca contém link de loja.
 const FILE_EXTENSION_RE = /\.(?:jpe?g|png|gif|webp|svg|bmp|ico|mp4|mov|webm|mp3|pdf|zip|rar|css|js|json|xml)$/i
 
@@ -124,6 +147,7 @@ export function isSafeCandidateUrl(rawUrl) {
   if (!host.includes('.')) return false             // localhost e nomes de rede interna
   if (LOCAL_SUFFIX_RE.test(host)) return false
   if (NEVER_RESOLVE_HOST_RE.test(host)) return false
+  if (BLOCKS_OUR_SERVER_HOST_RE.test(host)) return false
   if (FILE_EXTENSION_RE.test(parsed.pathname)) return false
   return true
 }
