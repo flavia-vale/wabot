@@ -15,13 +15,15 @@ import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
 import { rm, rename, writeFile, readdir } from 'fs/promises'
 import { dirname } from 'path'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
+import { pathToFileURL } from 'node:url'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { convertLink } from './converters/index.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
-import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
 import { buildInlineThumbnail } from './core/inlineThumbnail.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { shouldUseOriginPhotoFallback } from './core/previewImageFallbackPolicy.js'
@@ -96,18 +98,52 @@ import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_IN
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
 
-const userId = process.env.BOT_USER_ID
+export async function createBotSessionRuntime({
+  userId = process.env.BOT_USER_ID,
+  sendIpc = message => process.send?.(message),
+  exitRuntime = code => process.exit(code),
+  registerProcessHandlers = false,
+  autoStart = false,
+  sharedLimits = {},
+  ownerInstance = process.env.NODE_APP_INSTANCE ?? '0',
+} = {}) {
+const withLimit = (semaphore, task) => semaphore?.run ? semaphore.run(task) : task()
+const fetchProductImage = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchProductImageBase(...args))
+const fetchImageBuffer = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchImageBufferBase(...args))
+const normalizeImageForWhatsApp = (...args) => withLimit(sharedLimits.sharpSemaphore, () => normalizeImageForWhatsAppBase(...args))
 const WORKER_STARTED_AT = Date.now()
 const workerMetadata = buildWorkerMetadata({ userId, startedAt: WORKER_STARTED_AT })
+const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 })
+eventLoopDelay.enable()
+
+function getRuntimeMemoryMetrics() {
+  const memory = process.memoryUsage()
+  const nsToMs = value => Number.isFinite(value) ? Math.round((value / 1e6) * 100) / 100 : null
+  return {
+    pid: process.pid,
+    uptimeSeconds: Math.round(process.uptime()),
+    rssBytes: memory.rss,
+    heapUsedBytes: memory.heapUsed,
+    heapTotalBytes: memory.heapTotal,
+    externalBytes: memory.external,
+    arrayBuffersBytes: memory.arrayBuffers,
+    eventLoopDelayMs: {
+      p50: nsToMs(eventLoopDelay.percentile(50)),
+      p95: nsToMs(eventLoopDelay.percentile(95)),
+      p99: nsToMs(eventLoopDelay.percentile(99)),
+      max: nsToMs(eventLoopDelay.max),
+    },
+  }
+}
 
 // Guardas de processo: um throw assíncrono benigno do Baileys num socket já
 // fechado (ex.: 428 "Connection Closed" disparado por sendRetryRequest após um
 // conflito/replaced 440) não pode matar o worker — senão a reconexão automática
 // agendada no connection.update nunca roda e a sessão fica offline até religar
 // manual. Ver src/core/workerCrashGuard.js.
-installWorkerCrashGuards({
+if (registerProcessHandlers) installWorkerCrashGuards({
   logger,
-  onFatal: () => { setTimeout(() => process.exit(1), 50).unref?.() },
+  onFatal: () => { setTimeout(() => exitRuntime(1), 50).unref?.() },
 })
 
 
@@ -226,8 +262,8 @@ async function globalDedupCheckAndSet(key, ttlMs) {
     return { duplicate: false }
   }
 }
-if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
-const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
+if (!userId) throw new Error('BOT_USER_ID não definido')
+const OWNER_INSTANCE = ownerInstance
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
@@ -540,7 +576,7 @@ function startHeartbeatIpc() {
       disconnectedForMs: disconnectedSinceMs == null ? 0 : Date.now() - disconnectedSinceMs,
       maxReconnectingMs: MAX_RECONNECTING_MS,
     })
-    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
+    if (sendIpc) sendIpc({ type: 'heartbeat', ts: Date.now(), state })
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
@@ -764,7 +800,7 @@ async function loadConfig() {
   if (!user) throw new Error(`Usuário ${userId} não encontrado`)
 
   if (user.accessExpiresAt && user.accessExpiresAt < new Date()) {
-    if (process.send) process.send({ type: 'status', data: 'blocked' })
+    if (sendIpc) sendIpc({ type: 'status', data: 'blocked' })
     // Sem isso, o WaSession.status fica preso no último valor antes do
     // vencimento (normalmente 'connected') — o health monitor do supervisor só
     // busca sessões com status IN ('connected','connecting') pra ressuscitar, e
@@ -776,7 +812,7 @@ async function loadConfig() {
       logger.warn({ err: String(err?.message ?? err) }, 'Falha ao persistir status de acesso expirado')
     })
     logger.error('Acesso expirado — bot bloqueado')
-    process.exit(0)
+    exitRuntime(0)
   }
 
   const credentials = {}
@@ -961,13 +997,13 @@ async function checkScheduledMessages() {
   }
 }
 
-setInterval(checkScheduledMessages, 30_000)
+const scheduledMessagesTimer = setInterval(checkScheduledMessages, 30_000)
 
 // Watchdog de MessageLog preso em 'sending' (safety net): roda a cada 5min e
 // reclassifica como erro recuperável as linhas paradas em 'sending' há mais que
 // o cutoff. unref() para não segurar o processo. Ver src/jobs/stuckSendLogs.js.
 const STUCK_SEND_LOG_SWEEP_MS = Math.max(60_000, Number(process.env.STUCK_SEND_LOG_SWEEP_MS || 5 * 60_000))
-setInterval(() => {
+const stuckSendLogsTimer = setInterval(() => {
   recoverStuckSendLogs({ userId })
     .then(({ recovered }) => {
       if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
@@ -1222,7 +1258,7 @@ function setLifecycleState(next, meta = {}) {
   const prev = lifecycleState
   lifecycleState = next
   logger.info({ prev, next, ...meta }, 'WA lifecycle transition')
-  if (process.send) process.send({ type: 'lifecycle', data: next, prev, meta })
+  if (sendIpc) sendIpc({ type: 'lifecycle', data: next, prev, meta })
 }
 
 const incomingQueue = createMessageQueue({
@@ -2871,7 +2907,7 @@ async function startBotInner() {
         if (!pairingState.ownsRequest(requestId)) return
         pairingState.markCode(code)
         logger.info({ requestId, codeLen: code?.length }, 'Pairing code recebido do WhatsApp')
-        if (process.send) process.send({ type: 'pairingCode', requestId, code })
+        if (sendIpc) sendIpc({ type: 'pairingCode', requestId, code })
       } catch (err) {
         if (!pairingState.ownsRequest(requestId)) return
         logger.error({ err: err.message, stack: err.stack, requestId }, 'Falha ao solicitar pairing code no socket WA')
@@ -2879,7 +2915,7 @@ async function startBotInner() {
         // O código nunca chegou ao usuário: nada foi trocado no WhatsApp, então
         // a credencial antiga continua válida e volta ao lugar.
         await pairingAuthBackup.restore()
-        if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
+        if (sendIpc) sendIpc({ type: 'pairingCode', requestId, error: err.message })
       }
     })()
   }
@@ -2916,7 +2952,7 @@ async function startBotInner() {
       setLifecycleState(WA_LIFECYCLE.AUTHENTICATING, { reason: 'qr_generated' })
       // Em pairing mode, NÃO vazar o QR pra UI — o usuário pediu código,
       // não scan. Baileys ainda gera QR internamente como fallback, ignoramos.
-      if (!pairingState.suppressQrEmission() && process.send) process.send({ type: 'qr', data: qr })
+      if (!pairingState.suppressQrEmission() && sendIpc) sendIpc({ type: 'qr', data: qr })
 await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date() })
     }
 
@@ -2941,7 +2977,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // nunca ignorar o que chega pela própria conta — é por aí que vêm o
       // histórico e as notificações que alimentam "Canais que sigo".
       selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
-      if (process.send) process.send({ type: 'status', data: 'connected', phone })
+      if (sendIpc) sendIpc({ type: 'status', data: 'connected', phone })
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
       // Este número já fez o teste em outra conta? O número só é conhecido
       // DEPOIS do open — é por isso que a checagem mora aqui e não na rota de
@@ -3009,7 +3045,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // retry) — é o que dá ao heartbeat a duração REAL do loop de reconexão,
       // mesmo que cada tentativa individual pareça "nova".
       if (disconnectedSinceMs == null) disconnectedSinceMs = now
-      if (process.send) process.send({ type: 'status', data: 'disconnected' })
+      if (sendIpc) sendIpc({ type: 'status', data: 'disconnected' })
       await persistSessionPatch(buildCloseSessionPatch({
         code,
         terminal: isLoggedOut,
@@ -4802,10 +4838,16 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 }
 
 
-async function shutdown(code = 0) {
+async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
   if (shuttingDown) return
   shuttingDown = true
+  eventLoopDelay.disable()
   stopHeartbeatIpc()
+  clearInterval(scheduledMessagesTimer)
+  clearInterval(stuckSendLogsTimer)
+  clearInterval(monitorSilenceTimer)
+  if (dedupFlushTimer) clearTimeout(dedupFlushTimer)
+  if (knownChannelsFlushTimer) clearTimeout(knownChannelsFlushTimer)
 
   // Drena jobs em vôo antes de marcar pendentes como interrompidos.
   // shuttingDown=true acima já desativa retries em processSendJob (linha 581),
@@ -4832,13 +4874,18 @@ async function shutdown(code = 0) {
       logger.error({ err: err.message }, 'Erro ao encerrar backend da fila de envios')
     }),
   ])
-  process.exit(code)
+  try { activeSock?.end?.(new Error('session shutdown')) } catch {}
+  try { pendingSock?.end?.(new Error('session shutdown')) } catch {}
+  activeSock = null
+  pendingSock = null
+  try { await runtimeRedis?.quit?.() } catch {}
+  if (exit) exitRuntime(code)
 }
 
-process.once('SIGTERM', () => { void shutdown(0) })
-process.once('SIGINT', () => { void shutdown(0) })
+if (registerProcessHandlers) process.once('SIGTERM', () => { void shutdown(0) })
+if (registerProcessHandlers) process.once('SIGINT', () => { void shutdown(0) })
 
-process.on('message', async msg => {
+const handleMessage = async msg => {
   if (msg?.type === 'stop') {
     logger.info('Bot parando por solicitação do manager')
     await shutdown(0)
@@ -4849,16 +4896,17 @@ process.on('message', async msg => {
     configCachePromise = null
     logger.info('Config recarregada')
     ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever após reload'))
+    if (msg.requestId) sendIpc({ type: 'reloadConfigResult', requestId: msg.requestId, data: true })
   }
 
   if (msg?.type === 'refreshWaGroups') {
     const result = await triggerWaGroupsRefresh('ipc_manual')
-    process.send({ type: 'refreshWaGroups', requestId: msg.requestId, data: result })
+    sendIpc({ type: 'refreshWaGroups', requestId: msg.requestId, data: result })
   }
 
   if (msg?.type === 'listGroups') {
     if (!activeSock) {
-      process.send({ type: 'groups', requestId: msg.requestId, data: [], error: 'Bot não conectado' })
+      sendIpc({ type: 'groups', requestId: msg.requestId, data: [], error: 'Bot não conectado' })
       return
     }
     activeSock.groupFetchAllParticipating()
@@ -4871,10 +4919,10 @@ process.on('message', async msg => {
             : g.subject
           return { waJid: id, name }
         })
-        process.send({ type: 'groups', requestId: msg.requestId, data: list })
+        sendIpc({ type: 'groups', requestId: msg.requestId, data: list })
       })
       .catch(err => {
-        process.send({ type: 'groups', requestId: msg.requestId, data: [], error: err.message })
+        sendIpc({ type: 'groups', requestId: msg.requestId, data: [], error: err.message })
       })
   }
 
@@ -4882,7 +4930,7 @@ process.on('message', async msg => {
     const requestId = msg.requestId
     const phone = msg.phone
     if (!phone) {
-      process.send({ type: 'pairingCode', requestId, error: 'Telefone obrigatório' })
+      sendIpc({ type: 'pairingCode', requestId, error: 'Telefone obrigatório' })
       return
     }
     // Fluxo atômico de pairing:
@@ -4916,7 +4964,7 @@ process.on('message', async msg => {
           // Janela venceu sem código: o pareamento não aconteceu, devolve a
           // credencial antiga para a sessão poder voltar sozinha.
           void pairingAuthBackup.restore()
-          if (process.send) process.send({ type: 'pairingCode', requestId: expired.requestId, error: 'Tempo esgotado aguardando código de pareamento' })
+          if (sendIpc) sendIpc({ type: 'pairingCode', requestId: expired.requestId, error: 'Tempo esgotado aguardando código de pareamento' })
         },
       })
 
@@ -4942,23 +4990,23 @@ process.on('message', async msg => {
         logger.error({ err: err.message, requestId }, 'startBot falhou durante pairing')
         pairingState.clear()
         await pairingAuthBackup.restore()
-        if (process.send) process.send({ type: 'pairingCode', requestId, error: `Falha ao iniciar sessão: ${err.message}` })
+        if (sendIpc) sendIpc({ type: 'pairingCode', requestId, error: `Falha ao iniciar sessão: ${err.message}` })
       })
     } catch (err) {
       logger.error({ err: err.message, requestId }, 'Erro inesperado no handler de pairing')
       pairingState.clear()
       await pairingAuthBackup.restore()
-      if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
+      if (sendIpc) sendIpc({ type: 'pairingCode', requestId, error: err.message })
     }
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata } })
+    sendIpc({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata, runtime: getRuntimeMemoryMetrics() } })
   }
 
   if (msg?.type === 'broadcast') {
     if (!activeSock) {
-      process.send({ type: 'broadcastResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      sendIpc({ type: 'broadcastResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
     let queued = 0
@@ -5020,12 +5068,12 @@ process.on('message', async msg => {
         }).catch(() => {})
       }
     }
-    process.send({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
+    sendIpc({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
   }
 
   if (msg?.type === 'channel:metadata') {
     if (!activeSock) {
-      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      sendIpc({ type: 'channel:metadataResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
     try {
@@ -5034,17 +5082,17 @@ process.on('message', async msg => {
         jid: msg.jid,
         inviteCode: msg.inviteCode,
       })
-      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, data })
+      sendIpc({ type: 'channel:metadataResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message, jid: msg.jid, inviteCode: msg.inviteCode }, 'channel:metadata falhou')
-      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, error: err.message })
+      sendIpc({ type: 'channel:metadataResult', requestId: msg.requestId, error: err.message })
     }
     return
   }
 
   if (msg?.type === 'channel:follow') {
     if (!activeSock) {
-      process.send({ type: 'channel:followResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      sendIpc({ type: 'channel:followResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
     try {
@@ -5056,17 +5104,17 @@ process.on('message', async msg => {
         logger,
       })
       rememberChannelJid(msg.jid)
-      process.send({ type: 'channel:followResult', requestId: msg.requestId, data })
+      sendIpc({ type: 'channel:followResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message, jid: msg.jid }, 'channel:follow falhou')
-      process.send({ type: 'channel:followResult', requestId: msg.requestId, error: err.message })
+      sendIpc({ type: 'channel:followResult', requestId: msg.requestId, error: err.message })
     }
     return
   }
 
   if (msg?.type === 'channel:listFollowed') {
     if (!activeSock) {
-      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      sendIpc({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
     try {
@@ -5076,16 +5124,30 @@ process.on('message', async msg => {
         sock: activeSock,
         followedSet: new Set([...followedChannelJids, ...knownChannelJids]),
       })
-      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, data })
+      sendIpc({ type: 'channel:listFollowedResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message }, 'channel:listFollowed falhou')
-      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: err.message })
+      sendIpc({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: err.message })
     }
     return
   }
-})
+}
 
-startBot().catch(err => {
-  logger.error(err, 'Erro fatal no worker')
-  process.exit(1)
-})
+if (registerProcessHandlers) process.on('message', handleMessage)
+if (autoStart) await startBot()
+return {
+  userId,
+  start: startBot,
+  stop: () => shutdown(0, { exit: false }),
+  drain: async () => waitUntilDrained({ isDrained: sendJobTracker.isDrained, timeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS, pollIntervalMs: 100 }),
+  command: handleMessage,
+  metrics: async () => ({ ...getRuntimeMemoryMetrics(), queue: { ...getSendQueueMetrics(), incoming: incomingQueue.getStats() }, sessionHealth: getSessionHealth() }),
+}
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  createBotSessionRuntime({ registerProcessHandlers: true, autoStart: true }).catch(err => {
+    logger.error(err, 'Erro fatal no worker')
+    process.exit(1)
+  })
+}
