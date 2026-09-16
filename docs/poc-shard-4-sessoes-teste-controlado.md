@@ -14,18 +14,33 @@
   RSS, heap, memória externa, ArrayBuffers, atraso do event loop e eventos.
 - `/admin/teste-shard` atualiza esses sinais a cada cinco segundos. Mensagens,
   links e JIDs não são enviados ao navegador.
-- O modo seguro é `WA_SESSION_SHARD_POC=observe`. A tela é somente leitura e
-  não move/reinicia sessões enquanto o runtime multi-sessão e o rollback
-  transacional ainda não estiverem implementados.
+- O modo seguro é `WA_SESSION_SHARD_POC=observe`. Nesse modo a tela monitora,
+  mas não mostra o botão de entrada. O rollback permanece disponível para uma
+  conta que tenha ownership residual de uma tentativa anterior.
 
 ### Gate incontornável para o cutover real
 
-O worker ainda depende de estado global (`BOT_USER_ID`, socket, timers, filas e
-caches). Abrir quatro sockets no mesmo processo antes de extrair um contexto
-por sessão pode cruzar credenciais, duplicar ownership ou derrubar as quatro
-contas. Portanto, nenhum botão de ativação foi exposto nesta entrega. O painel
-deve continuar informando que o cutover está bloqueado até os invariantes de
-isolamento e a troca compare-and-swap de ownership terem testes automatizados.
+O worker dedicado foi transformado em uma factory: cada chamada cria um escopo
+fechado por `userId`, e `BaileysSessionContext` passa a possuir o runtime e seus
+recursos. `session-shard-worker.js` mantém até quatro contextos no mesmo V8.
+O botão de entrada só aparece com `WA_SESSION_SHARD_POC=enabled`; `observe` é
+fail-closed. O handoff bloqueia comandos, drena e espera o exit real do dedicado
+antes de abrir a credencial no shard. O rollback faz a ordem inversa e pode ser
+repetido sem abrir sockets duplicados.
+
+### Arquivos executáveis da implementação
+
+- `src/core/BaileysSessionContext.js`: estado e descarte por tenant;
+- `src/core/baileysShardSessionFactory.js`: adapta o pipeline real do bot ao
+  contrato de contexto, sem listeners globais de IPC/sinais;
+- `src/core/sessionShardRuntime.js`: roteamento e teto rígido de quatro;
+- `src/session-shard-worker.js`: processo multi-sessão e semáforos globais;
+- `src/core/shardOwnershipCoordinator.js`: handoff/rollback idempotente;
+- `src/supervisor/shardProcessController.js`: IPC e ciclo de vida do shard.
+
+Mesmo implementado, o caminho permanece experimental: começar com uma conta,
+validar rollback, depois duas e somente então quatro. Nunca trocar diretamente
+de `observe` para quatro sessões em produção.
 
 ## 1. Decisão proposta
 

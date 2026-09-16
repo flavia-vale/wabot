@@ -429,3 +429,26 @@ test('o tempo por link é generoso, mas a mensagem inteira tem teto', async () =
   assert.equal(usados.length, 1, 'o segundo link não pode ser buscado sem orçamento')
   assert.equal(failures.at(-1).reason, 'sem_tempo_no_orcamento')
 })
+
+// ── Sites de oferta que recusam a leitura do nosso servidor ──────────────
+//
+// Medido em produção (2026-09-16): `pechin.co` respondeu por 98 das 105
+// recusas 403 do desembrulho. Ele redireciona 301 para `pechinchou.com.br`,
+// que está atrás de Cloudflare e devolve 403 para o nosso IP em todos os
+// cabeçalhos testados. Não perde oferta (essas mensagens já não eram
+// espelhadas); para de gastar rede e reputação de IP num "não" garantido.
+test('não tenta ler site que comprovadamente recusa o nosso servidor', () => {
+  assert.equal(isSafeCandidateUrl('https://pechin.co/147544'), false)
+  assert.equal(isSafeCandidateUrl('https://pechinchou.com.br/oferta/147544'), false)
+  assert.equal(isSafeCandidateUrl('https://www.pechinchou.com.br/oferta/1'), false)
+})
+
+test('a lista de bloqueio é ancorada — não pega domínio parecido', () => {
+  assert.equal(isSafeCandidateUrl('https://pechinchou.net/oferta/1'), true)
+  assert.equal(isSafeCandidateUrl('https://pechin.com.br/1'), true)
+  assert.equal(isSafeCandidateUrl('https://naopechin.co.uk/1'), true)
+})
+
+test('site bloqueado nem vira candidato no texto', () => {
+  assert.deepEqual(findCandidateLinks('Olha essa https://pechin.co/147544'), [])
+})

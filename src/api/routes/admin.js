@@ -1,7 +1,7 @@
 import db from '../../db.js'
 import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics } from '../../manager.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
@@ -1353,13 +1353,14 @@ export async function adminRoutes(app) {
     for (const row of mediaCounts) if (activity.has(row.userId)) activity.get(row.userId).mediaMessages24h = row._count._all
     const candidates = selectShardPocCandidates([...activity.values()])
     const candidateIds = candidates.map(candidate => candidate.id)
-    const [messageLogs, connectionLogs, runtimeResults] = await Promise.all([
+    const [messageLogs, connectionLogs, runtimeResults, shardMetrics] = await Promise.all([
       candidateIds.length ? db.messageLog.findMany({ where: { userId: { in: candidateIds }, sentAt: { gte: since } }, orderBy: { sentAt: 'desc' }, take: 200, select: { id: true, userId: true, status: true, platform: true, deliveryKind: true, originImageBytes: true, errorMsg: true, sentAt: true } }) : [],
       candidateIds.length ? db.waConnectionEvent.findMany({ where: { userId: { in: candidateIds }, occurredAt: { gte: since } }, orderBy: { occurredAt: 'desc' }, take: 200, select: { id: true, userId: true, type: true, code: true, lifecycle: true, ownerInstance: true, occurredAt: true } }) : [],
       Promise.all(candidates.map(async candidate => {
         try { return [candidate.id, presentShardRuntimeMetrics(await getBotMetrics(candidate.id)), null] }
         catch (error) { return [candidate.id, null, error?.message || 'Métricas indisponíveis'] }
       })),
+      getShardMetrics('poc-1').catch(() => null),
     ])
     const runtimeByUser = new Map(runtimeResults.map(result => [result[0], { runtime: result[1], metricsError: result[2] }]))
     const names = new Map(candidates.map(candidate => [candidate.id, candidate.name || candidate.email]))
@@ -1376,8 +1377,26 @@ export async function adminRoutes(app) {
       ready: candidates.length === 4 && candidates.every(candidate => candidate.session?.status === 'connected'),
       selectionNote: 'Sugestão automática: Flávia + perfis conectado leve, mediano e com maior uso de mídia nas últimas 24h.',
       members,
+      shard: shardMetrics,
       events,
     }
+  })
+
+  app.post('/shard-poc/members/:userId/start', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    if (String(process.env.WA_SESSION_SHARD_POC || 'observe') !== 'enabled') return reply.code(409).send({ code: 'SHARD_POC_DISABLED', error: 'Teste está em modo somente observação.' })
+    const userId = String(req.params.userId || '')
+    const session = await db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true } })
+    if (!session || session.status !== 'connected' || session.lifecycle !== 'ready') return reply.code(409).send({ code: 'SESSION_NOT_READY', error: 'A sessão precisa estar conectada e pronta.' })
+    await writeAdminAuditLog(req, { action: 'admin.shard_poc.member.start', resource: 'waSession', resourceId: userId, targetUserId: userId })
+    return reply.code(202).send(await moveSessionToShard(userId, 'poc-1'))
+  })
+
+  app.post('/shard-poc/members/:userId/rollback', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const userId = String(req.params.userId || '')
+    await writeAdminAuditLog(req, { action: 'admin.shard_poc.member.rollback', resource: 'waSession', resourceId: userId, targetUserId: userId })
+    return reply.code(202).send(await rollbackSessionFromShard(userId, 'poc-1'))
   })
 
   app.get('/capacity/current', async (req, reply) => {

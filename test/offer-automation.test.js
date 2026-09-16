@@ -1,6 +1,6 @@
 import test, { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { filterOffers, buildOffersQuery, buildOfferCandidateLimit, dedupeOffersByProduct, productDedupKey } from '../src/offerAutomation/shopeeOffers.js'
+import { filterOffers, buildOffersQuery, buildOfferCandidateLimit, dedupeOffersByProduct, productDedupKey, OFFER_DROP_REASON } from '../src/offerAutomation/shopeeOffers.js'
 
 test('filterOffers: remove offers below minDiscountPct', () => {
   const offers = [
@@ -838,4 +838,40 @@ test('runAutomation: template pode usar ganchos, CTAs e links globais como vari�
   assert.match(sent[0], /https:\/\/chat\.whatsapp\.com\/grupo/)
   assert.match(sent[0], /https:\/\/cupom\.test\/oferta/)
   assert.doesNotMatch(sent[0], /\{\{gancho\}\}|\{\{cta\}\}|\{\{convitegrupo\}\}|\{\{grupoLink\}\}|\{\{cupomLink\}\}/)
+})
+
+// ── Oferta descartada por falta de preço deixa rastro ────────────────────
+//
+// O descarte por preço ausente (2026-09-14) nasceu mudo: automação que parava
+// de enviar porque a Shopee devolveu preço vazio em tudo ficava idêntica, de
+// fora, a "não achei oferta com desconto" — que pede a ação OPOSTA (baixar o
+// desconto mínimo em vez de esperar a Shopee normalizar).
+test('filterOffers conta por que cada oferta foi descartada', () => {
+  const contagem = {}
+  const restantes = filterOffers(
+    [
+      { itemId: 1, priceMin: '10', priceDiscountRate: 30 },
+      { itemId: 2, priceMin: '', price: '', priceMax: null, priceDiscountRate: 40 },
+      { itemId: 3, priceMin: '10', priceDiscountRate: 5 },
+      { itemId: 4, priceMin: '10', priceDiscountRate: 50 },
+    ],
+    { minDiscountPct: 20, excludeItemIds: [4] },
+    contagem,
+  )
+
+  assert.deepEqual(restantes.map(o => o.itemId), [1])
+  assert.equal(contagem[OFFER_DROP_REASON.NO_PRICE], 1)
+  assert.equal(contagem[OFFER_DROP_REASON.BELOW_DISCOUNT], 1)
+  assert.equal(contagem[OFFER_DROP_REASON.ALREADY_SENT], 1)
+})
+
+test('sem contador, filterOffers segue com o mesmo resultado de sempre', () => {
+  const offers = [
+    { itemId: 1, priceMin: '10', priceDiscountRate: 30 },
+    { itemId: 2, priceMin: '', price: '', priceDiscountRate: 40 },
+  ]
+  assert.deepEqual(
+    filterOffers(offers, { minDiscountPct: 20, excludeItemIds: [] }).map(o => o.itemId),
+    [1],
+  )
 })

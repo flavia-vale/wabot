@@ -58,6 +58,9 @@ export const COMMAND = Object.freeze({
   CHANNEL_FOLLOW: 'channel:follow',
   CHANNEL_LIST_FOLLOWED: 'channel:listFollowed',
   GET_LAST_QR: 'getLastQR',
+  SHARD_MOVE_SESSION: 'shard:moveSession',
+  SHARD_ROLLBACK_SESSION: 'shard:rollbackSession',
+  SHARD_METRICS: 'shard:metrics',
 })
 
 // Tipos de evento publicados pelo supervisor.
@@ -103,6 +106,9 @@ export const COMMAND_TIMEOUTS_MS = Object.freeze({
   [COMMAND.CHANNEL_FOLLOW]: 15_000,
   [COMMAND.CHANNEL_LIST_FOLLOWED]: 20_000,
   [COMMAND.GET_LAST_QR]: 5_000,
+  [COMMAND.SHARD_MOVE_SESSION]: 90_000,
+  [COMMAND.SHARD_ROLLBACK_SESSION]: 90_000,
+  [COMMAND.SHARD_METRICS]: 10_000,
 })
 
 /**

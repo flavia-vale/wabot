@@ -327,6 +327,8 @@ export const api = {
   adminCapacityAlerts: (status = '', limit = 100) => apiFetch(`/api/admin/capacity/alerts?${new URLSearchParams({ ...(status ? { status } : {}), limit: String(limit) })}`),
   adminCapacityRefresh: () => apiFetch('/api/admin/capacity/refresh', { method: 'POST', body: '{}' }),
   adminShardPocOverview: () => apiFetch('/api/admin/shard-poc/overview'),
+  adminShardPocStart: (userId) => apiFetch(`/api/admin/shard-poc/members/${encodeURIComponent(userId)}/start`, { method: 'POST', body: '{}' }),
+  adminShardPocRollback: (userId) => apiFetch(`/api/admin/shard-poc/members/${encodeURIComponent(userId)}/rollback`, { method: 'POST', body: '{}' }),
   adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
   adminSuccessQueue: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
