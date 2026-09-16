@@ -4450,6 +4450,76 @@ modo `remote`, `pm2 restart bot-supervisor` para os workers carregarem o código
 cheio para o campo embutido. Teste:
 `test/inline-thumbnail-policy.test.js`.
 
+## Card de cada oferta saindo de um tamanho (RCA 2026-09-16 — não regredir)
+
+Três relatos da mesma cliente na mesma conversa: "imagens quebradas", "preview
+com imagem pequena" e "cada oferta vindo com a imagem de um tamanho". Ela
+comparou com grupos profissionais, onde o preview sai **sempre do mesmo
+tamanho**.
+
+**Os três são o MESMO defeito visto de ângulos diferentes.** O card de preview
+não tem tamanho próprio: quem decide como o WhatsApp o desenha é a miniatura
+que sobe em `highQualityThumbnail` — `prepareWAMessageMedia` lê width/height do
+buffer e grava em `thumbnailWidth`/`thumbnailHeight` do proto. Até aqui esse
+buffer era **a foto como ela veio da loja**:
+
+| fonte da foto | o que chegava ao proto |
+|---|---|
+| Mercado Livre (`D_NQ_NP_2X_`) | 1080x1080 |
+| Amazon (`_AC_SL1500_`) | 1500x1500 |
+| banner de cupom (`storeBrandCard`) | 720x720 |
+| plano B da foto de origem | o que a mensagem de origem tivesse (às vezes ~300px) |
+| foto larga/alta de vitrine | proporção qualquer |
+
+Como `normalizeImageForWhatsApp` usa `withoutEnlargement: true`, foto pequena
+continuava pequena. Daí: proporção diferente por loja → **card de tamanho
+diferente por oferta**; foto pequena → **card compacto** (o Desktop/Web respeita
+as dimensões gravadas — é o mesmo mecanismo já descrito no comentário de
+`buildManualLinkPreview`); foto muito larga ou muito alta → o cliente **corta no
+centro** para caber no card e o produto sai fatiado ("quebrada").
+
+Hoje toda foto de card passa por uma **tela fixa** antes do upload:
+`composePreviewCardImage` (`src/core/previewCardCanvas.js`), com a decisão pura
+em `previewCardCanvasPolicy.js`. Quadrada de 1080px por padrão — proporção
+nativa da foto de catálogo de Amazon/ML/Shopee, então na maioria das ofertas não
+sobra moldura nenhuma. A foto entra **inteira** (`fit: inside`, nunca cortada) e
+o que sobra vira um desfoque da própria foto (barra branca ficaria estranha em
+foto colorida).
+
+**Não regredir:**
+
+- **Os DOIS montadores de card passam pela tela fixa**: `buildManualLinkPreview`
+  (espelhamento, via `prepararFotoDoCard`, nas TRÊS fontes — loja, plano B da
+  origem e banner de cupom) e `buildBroadcastLinkPreview` (fila e ofertas
+  automáticas). Um caminho de fora e os cards voltam a divergir entre si, que é
+  exatamente o relato. Guarda estrutural no teste.
+- **A miniatura embutida nasce da imagem JÁ composta.** Ela é o que o WhatsApp
+  desenha antes de baixar; derivá-la da foto original faria o card mudar de
+  proporção ao terminar o download.
+- **Nunca cortar a foto para preencher a tela** (`fit: cover`): cortar é o que
+  fatiava o produto. O vazio é moldura, não corte.
+- **Não soma custo no caminho do card**: a tela fixa SUBSTITUI o
+  `normalizeImageForWhatsApp` ali (entrega os mesmos dois campos), não roda
+  depois dele. O **envio em modo foto continua sem tela fixa** — lá a imagem é o
+  corpo da mensagem e recortar/emoldurar mudaria o que a pessoa vê em tela cheia.
+- **Fail-safe é deixar a oferta sair**: composição que falha, entrada ilegível ou
+  tela desligada devolvem `null` e o caminho histórico assume. Card de tamanho
+  irregular é muito melhor que oferta sem foto.
+- A marca d'água continua sendo composta **depois** da tela fixa, então ela
+  preserva as dimensões do card (`renderDestinationWatermark` só reduz para
+  dentro de 1600px, `withoutEnlargement`).
+
+Envs (opcionais): `PREVIEW_CARD_CANVAS=off` volta ao comportamento histórico sem
+redeploy (aceita `off`/`false`/`0`) e `PREVIEW_CARD_CANVAS_PX` muda o tamanho
+(padrão 1080, grampeado em [480, 1600]). Aplicar exige `pm2 delete` + `start`
+(pegadinha #1) **e**, em modo `remote`, `pm2 restart bot-supervisor` para os
+workers carregarem o código — o que reconecta TODAS as sessões (anunciar antes).
+
+⚠️ **Validar em staging olhando o grupo, não só o teste**: mandar ofertas de
+lojas diferentes (ML, Amazon, Shopee) e uma de cupom no MESMO grupo e conferir no
+celular que os cards saem do mesmo tamanho, com a foto inteira. Teste:
+`test/preview-card-canvas.test.js`.
+
 ## Voltar ao CARD DE PREVIEW CLICÁVEL: as duas travas e como caíram (2026-08-21)
 
 Os dois formatos de oferta **não são a mesma coisa para a cliente**:
@@ -4831,6 +4901,63 @@ getShortUrl" e "fallback de produto não duplica ?tag=").
 credencial + formato do link enviado por dia + probe ao vivo) e
 `scripts/diag-amazon-shortlink-tag.mjs` (segue os `amzn.to` já enviados e lê a
 tag final). Os dois são read-only e não imprimem segredo.
+
+## Amazon: o preço publicado é o do BUY BOX (RCA 2026-09-16 — não regredir)
+
+Clientes reclamaram que a oferta de Amazon chegava ao grupo com um preço e a
+loja mostrava outro. Medido contra marcação real da Amazon, **cinco** caminhos
+do scraper produziam número errado — três para MAIS, dois para MENOS:
+
+| O que acontecia | Efeito no preço |
+|---|---|
+| O preço de TABELA riscado ("De: R$ 299,00") vem antes do preço a pagar; o regex antigo pegava o primeiro `a-offscreen` depois da âncora | mais caro |
+| `AggregateOffer.lowPrice` do JSON-LD ganhava do buy box — é o MENOR preço entre todos os vendedores e condições, inclusive usado | mais barato |
+| Preço de usado/outro vendedor (`usedbuyBox`) publicado quando o buy box está indisponível | mais barato |
+| `extractShopeePriceRangeFromHtml` e `extractShopeePriceFromHtml` varriam o HTML INTEIRO atrás de qualquer `R$ x,yy` — numa página da Amazon colhem acessório, "compre junto" e recomendação | qualquer coisa |
+| `a-price-whole` hoje carrega um `<span class="a-price-decimal">` aninhado; o regex exigia só dígitos e ponto, não casava, e a oferta caía nos fallbacks genéricos acima | — |
+
+A regra agora mora em **`src/converters/amazonPrice.js`** (`extractAmazonBuyBoxPrice`,
+puro e testável, sem rede): publicar o preço A PAGAR do buy box.
+
+**Não regredir:**
+
+- **Na Amazon o buy box ganha do JSON-LD.** `extractFromJsonLd` marca
+  `aggregate: true` quando o preço veio de `lowPrice`, e preço agregado passa a
+  valer só como ÚLTIMO recurso, nunca como primeira escolha. `highPrice` deixou
+  de virar "de": é o maior preço entre vendedores, não o preço cheio do anúncio
+  — como "de" ele inventa um desconto que não existe.
+- **Os extratores de faixa da Shopee só rodam em URL da Shopee.** Eles são
+  varredura cega de `R$` e não têm como saber de qual produto é o número.
+- **`a-price` precisa ser a classe INTEIRA.** `a-price-whole`, `a-price-symbol`
+  e `a-price-fraction` são pedaços do MESMO preço, não preços separados — um
+  `\ba-price\b` os trata como três ofertas e o valor sai picado.
+- **`priceToPay`/`apexPriceToPay` ganha de `a-text-price`.** A Amazon combina
+  as duas classes em alguns layouts; tratar `a-text-price` como riscado sempre
+  fazia a oferta sair SEM preço nenhum.
+- **Na dúvida, vazio.** Buy box indisponível não autoriza publicar o preço de
+  usado: oferta sem preço é recuperável, oferta com preço que não existe vira
+  reclamação e queima a confiança no resto das ofertas.
+- **"De" só sai quando é MAIOR que o "por"** — "de R$ 249,90 por R$ 249,90" faz
+  a cliente desconfiar do preço todo.
+
+⚠️ **Preço diferente nem sempre é defeito nosso:** oferta relâmpago muda de
+preço depois do envio. O que separa os dois casos é O QUANDO. Diagnóstico
+read-only, no diretório do ambiente:
+
+```bash
+cd ~/wabot && node scripts/diag-amazon-preco.mjs <email> --days=3
+```
+
+Ele põe lado a lado o preço que saiu no texto da mensagem e o preço que está na
+Amazon agora. `MUDOU` concentrado em envios de minutos atrás é defeito nosso;
+espalhado em envios antigos é a loja que mudou o preço depois.
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada
+disso vale nos bots antes de `pm2 restart bot-supervisor --update-env`
+(reconecta TODAS as sessões: avisar antes). Ver "código novo não carregado
+pelos bots".
+
+Testes: `test/amazon-preco-buy-box.test.js`, `test/product-info-scraper.test.js`.
 
 ## Vitrine `/social/?ref=`: usar o endereço do card, nunca fabricar (RCA 2026-07-28)
 
