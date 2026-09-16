@@ -823,6 +823,8 @@ function isSessionOnline(session, now = new Date()) {
 // recepção, RCA 2026-08-26). Cada número responde uma pergunta operacional
 // diferente e leva para a aba online já filtrada:
 //   semReceber     — conectado e sem receber (o "verde mentiroso")
+//   semReceberHaMuito — dessas, as que estão cegas ATRAVESSANDO reconexões:
+//                    não pararam agora, estão sem receber nada há horas/dias
 //   caindoDemais   — quedas acima do normal em 24h
 //   clienteAgiu    — precisou re-parear: é o número que mede a promessa
 //   fonteQuebrada  — auto-refresh não resolveu a dessincronização
@@ -830,7 +832,14 @@ function isSessionOnline(session, now = new Date()) {
 // Custo bounded: três groupBy e uma varredura de 48h dos eventos de conexão
 // (a mesma janela que a listagem já usa).
 const FLEET_DROPS_ALERT_24H = Math.max(1, Number(process.env.ADMIN_DROPS_ALERT_24H || 20))
-const FLEET_RECEPTION_BLIND_WINDOW_MS = Math.max(10 * 60_000, Number(process.env.ADMIN_RECEPTION_BLIND_WINDOW_MS || 60 * 60_000))
+// A janela precisa ser CONFORTAVELMENTE MAIOR que o throttle com que o worker
+// emite o sinal (`WA_RECEPTION_SIGNAL_THROTTLE_MS`, 1h). Os dois eram 60min —
+// exatamente iguais, ou seja, margem zero: um worker cego emite em T, T+1h,
+// T+2h…, e como a emissão sai no tique do heartbeat (a cada 15s) ela cai alguns
+// segundos DEPOIS da hora cheia. Nesse vão o evento anterior já passou de 60min
+// e o novo ainda não saiu — a conta some do card e a frota cega aparece como
+// zero. Card que pisca para zero é card em que ninguém confia.
+const FLEET_RECEPTION_BLIND_WINDOW_MS = Math.max(10 * 60_000, Number(process.env.ADMIN_RECEPTION_BLIND_WINDOW_MS || 3 * 60 * 60_000))
 
 async function buildFleetScenarios(now = new Date()) {
   const since24h = addDays(now, -1)
@@ -848,10 +857,13 @@ async function buildFleetScenarios(now = new Date()) {
       select: { userId: true },
       distinct: ['userId'],
     }).catch(() => []),
+    // Sem `distinct` de propósito: precisamos do `metadata` para separar quem
+    // parou agora de quem está cega há dias, e com `distinct` a linha que
+    // sobrevive é indefinida. Volume limitado por construção — o worker emite no
+    // máximo 1×/hora por conta.
     db.analyticsEvent.findMany({
       where: { event: 'ops_wa_reception_blind', createdAt: { gte: blindSince, lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
+      select: { userId: true, metadata: true },
     }).catch(() => []),
     db.analyticsEvent.findMany({
       where: { event: 'ops_wa_group_desync_unresolved', createdAt: { gte: since7d, lte: now } },
@@ -912,11 +924,30 @@ async function buildFleetScenarios(now = new Date()) {
     manualOfflineMs24h += Number(metrics.manualOfflineMs || 0)
   }
 
+  // Cegueira que ATRAVESSA reconexões (RCA 2026-09-14): a conta não parou agora,
+  // está sem receber NADA há horas ou dias. As duas pedem ações diferentes —
+  // a primeira costuma se resolver sozinha, a segunda nunca se resolveu e é a
+  // que fez uma cliente passar dois dias sem espelhar nada. Contar as duas no
+  // mesmo número esconde justamente a grave.
+  const blindUserIds = new Set()
+  const blindHaMuitoUserIds = new Set()
+  let blindPiorSilencioMs = 0
+  for (const row of blindRows) {
+    if (!row.userId) continue
+    blindUserIds.add(row.userId)
+    let meta = null
+    try { meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata } catch { meta = null }
+    if (meta?.acrossReconnects) blindHaMuitoUserIds.add(row.userId)
+    const silencio = Number(meta?.silentForMs)
+    if (Number.isFinite(silencio) && silencio > blindPiorSilencioMs) blindPiorSilencioMs = silencio
+  }
+
   const byScenario = {
     parado: paradas,
     qr: precisamDaCliente,
     vencido: acessoVencido,
-    blind: new Set(blindRows.map(row => row.userId).filter(Boolean)),
+    blind: blindUserIds,
+    blindHaMuito: blindHaMuitoUserIds,
     quedas: new Set(dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).map(row => row.userId).filter(Boolean)),
     manual: new Set(manualRows.map(row => row.userId).filter(Boolean)),
     desync: new Set(desyncRows.map(row => row.userId).filter(Boolean)),
@@ -927,7 +958,9 @@ async function buildFleetScenarios(now = new Date()) {
     paradasSemNinguem: paradas.size,
     precisamDeQr: precisamDaCliente.size,
     acessoVencido: acessoVencido.size,
-    semReceber: blindRows.filter(row => row.userId).length,
+    semReceber: blindUserIds.size,
+    semReceberHaMuito: blindHaMuitoUserIds.size,
+    semReceberPiorSilencioMs: blindPiorSilencioMs || null,
     caindoDemais: dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).length,
     clienteAgiu: manualRows.filter(row => row.userId).length,
     fonteQuebrada: desyncRows.filter(row => row.userId).length,

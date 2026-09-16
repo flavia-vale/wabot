@@ -56,15 +56,32 @@ export const PATTERNS = {
   ),
 }
 
+const TRAILING_URL_PUNCTUATION_RE = /[.,;!?)'">]+$/
+const WHATSAPP_FORMAT_MARKERS = new Set(['*', '_', '~', '`'])
+
+// O WhatsApp usa caracteres colados ao texto para formatar mensagens, por
+// exemplo `*https://meli.la/abc*`. Os padrões de marketplace capturam até o
+// próximo espaço, então o marcador de fechamento também entra no match. Só o
+// removemos quando existe o MESMO marcador imediatamente antes da URL: assim
+// um `_`/`~` que pertença de verdade ao caminho continua intacto.
+export function normalizeDetectedUrl(rawUrl, textBeforeUrl = '') {
+  let url = String(rawUrl || '').replace(TRAILING_URL_PUNCTUATION_RE, '')
+  const openingMarkers = String(textBeforeUrl || '').match(/[*_~`]+$/)?.[0] || ''
+
+  while (url && WHATSAPP_FORMAT_MARKERS.has(url.at(-1)) && openingMarkers.includes(url.at(-1))) {
+    url = url.slice(0, -1)
+  }
+
+  return url.replace(TRAILING_URL_PUNCTUATION_RE, '')
+}
+
 export function detectLinks(text) {
   const found = []
   for (const [platform, regex] of Object.entries(PATTERNS)) {
     regex.lastIndex = 0
-    const matches = text.match(regex)
-    if (matches) {
-      for (const url of matches) {
-        found.push({ platform, url: url.replace(/[.,;!?)'">]+$/, '') })
-      }
+    for (const match of String(text || '').matchAll(regex)) {
+      const url = normalizeDetectedUrl(match[0], String(text || '').slice(0, match.index))
+      if (url) found.push({ platform, url })
     }
   }
   return found

@@ -5,6 +5,9 @@ import { buildFeatureGateError, canUseOfferAutomations, canUseInstagramStories, 
 import { runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
 import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
+import { canUseReview } from '../../offerAutomation/reviewFlags.js'
+import { REVIEW_STATUS } from '../../offerAutomation/reviewState.js'
+import { deliverApprovedReviewItems as deliverApprovedReviewItemsService } from '../../offerAutomation/reviewDeliveryService.js'
 
 const VALID_INTERVALS = [15, 30, 45, 60, 120, 240, 360, 720, 1440]
 const MAX_OFFERS_PER_SEND = 5
@@ -16,6 +19,10 @@ const DAILY_INTERVAL_MINUTES = 1440
 // listType 0=Recomendados 1=Maior comissão 2=Melhor desempenho
 const VALID_SORT_TYPES = [1, 2, 3, 4, 5]
 const VALID_LIST_TYPES = [0, 1, 2]
+
+// A rota recebe banco e automação explicitamente. O serviço continua com
+// seu contrato interno (automation, deps), usado também pelo cron.
+const deliverApprovedReviewItems = (db, automation) => deliverApprovedReviewItemsService(automation, { db })
 
 function normalizeTemplateKey(value) {
   const key = String(value ?? DEFAULT_TEMPLATE_KEY).trim() || DEFAULT_TEMPLATE_KEY
@@ -50,6 +57,7 @@ function presentAutomation(row) {
 
 export async function offerAutomationRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
+  const deliverReview = opts.deliverApprovedReviewItemsFn ?? deliverApprovedReviewItems
 
   // Ofertas automáticas são feature Pro (ou Trial ativo). Listar e deletar
   // seguem liberados: a UI precisa mostrar o que existe e o usuário pode
@@ -72,9 +80,13 @@ export async function offerAutomationRoutes(app, opts = {}) {
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
-    const { destGroupJid, destGroupName, instagramDestinationIds, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
+    const { destGroupJid, destGroupName, instagramDestinationIds, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey, publicationMode = 'direct', reviewTargetSize = 10 } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
+    if (!['direct', 'review'].includes(publicationMode)) return reply.code(400).send({ error: 'Modo de publicação inválido' })
+    if (publicationMode === 'review' && !canUseReview(req.user.sub)) return reply.code(403).send({ error: 'Fila de revisão ainda não está liberada para esta conta' })
+    const targetSize = Number(reviewTargetSize)
+    if (!Number.isInteger(targetSize) || targetSize < 5 || targetSize > 30) return reply.code(400).send({ error: 'A fila deve guardar entre 5 e 30 ofertas' })
     const subject = await loadUserPlanSubject(db, req.user.sub)
     let instagramIds
     try { instagramIds = await resolveInstagramDestinations(db, req.user.sub, instagramDestinationIds, subject) } catch (error) { return reply.code(error.statusCode || 400).send(error.code ? buildFeatureGateError(FEATURE_CODES.INSTAGRAM_STORIES) : { error: error.message }) }
@@ -128,6 +140,8 @@ export async function offerAutomationRoutes(app, opts = {}) {
         listType: parsedListType,
         prioritizeAMS: Boolean(prioritizeAMS ?? false),
         isKeySeller: Boolean(isKeySeller ?? false),
+        publicationMode,
+        reviewTargetSize: targetSize,
       },
     })
   })
@@ -139,8 +153,19 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, instagramDestinationIds, prioritizeAMS, isKeySeller, sortType, listType, templateKey } = req.body ?? {}
+    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, instagramDestinationIds, prioritizeAMS, isKeySeller, sortType, listType, templateKey, publicationMode, reviewTargetSize, confirmPublicationModeChange } = req.body ?? {}
     const updates = {}
+    if (publicationMode !== undefined) {
+      if (!['direct', 'review'].includes(publicationMode)) return reply.code(400).send({ error: 'Modo de publicação inválido' })
+      if (publicationMode === 'review' && !canUseReview(req.user.sub)) return reply.code(403).send({ error: 'Fila de revisão ainda não está liberada para esta conta' })
+      if (publicationMode !== existing.publicationMode && confirmPublicationModeChange !== true) return reply.code(409).send({ error: 'Confirme a mudança do modo de publicação' })
+      updates.publicationMode = publicationMode
+    }
+    if (reviewTargetSize !== undefined) {
+      const size = Number(reviewTargetSize)
+      if (!Number.isInteger(size) || size < 5 || size > 30) return reply.code(400).send({ error: 'A fila deve guardar entre 5 e 30 ofertas' })
+      updates.reviewTargetSize = size
+    }
 
     if (keyword !== undefined) {
       const k = keyword.trim()
@@ -208,6 +233,8 @@ export async function offerAutomationRoutes(app, opts = {}) {
       updates.templateKey = parsedTemplateKey
     }
 
+    const invalidatesReview = existing.publicationMode === 'review' && (publicationMode === 'direct' || templateKey !== undefined || destGroupJid !== undefined || instagramDestinationIds !== undefined)
+    if (invalidatesReview) await db.offerAutomationReviewItem.updateMany({ where: { automationId: existing.id, userId: req.user.sub, status: { in: [REVIEW_STATUS.AWAITING, REVIEW_STATUS.APPROVED] } }, data: { status: REVIEW_STATUS.EXPIRED } })
     return presentAutomation(await db.offerAutomation.update({ where: { id: req.params.id }, data: updates, include: { instagramDestinations: { select: { destinationId: true } } } }))
   })
 
@@ -227,10 +254,16 @@ export async function offerAutomationRoutes(app, opts = {}) {
       include: { instagramDestinations: { include: { destination: true } } },
     })
     if (!automation) return reply.code(404).send({ error: 'Automação não encontrada' })
-    const subject = await loadUserPlanSubject(db, req.user.sub)
-    if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
+
     try {
-      const result = await runAutomation(automation)
+      let result
+      if (automation.publicationMode === 'review') {
+        result = await deliverReview(db, automation)
+      } else {
+        const subject = await loadUserPlanSubject(db, req.user.sub)
+        if (!canUseInstagramStories(subject)) automation.instagramDestinations = []
+        result = await runAutomation(automation)
+      }
       return { ok: true, result }
     } catch (err) {
       return { ok: true, result: { error: err.message } }
