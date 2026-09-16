@@ -4669,6 +4669,63 @@ credencial + formato do link enviado por dia + probe ao vivo) e
 `scripts/diag-amazon-shortlink-tag.mjs` (segue os `amzn.to` já enviados e lê a
 tag final). Os dois são read-only e não imprimem segredo.
 
+## Amazon: o preço publicado é o do BUY BOX (RCA 2026-09-16 — não regredir)
+
+Clientes reclamaram que a oferta de Amazon chegava ao grupo com um preço e a
+loja mostrava outro. Medido contra marcação real da Amazon, **cinco** caminhos
+do scraper produziam número errado — três para MAIS, dois para MENOS:
+
+| O que acontecia | Efeito no preço |
+|---|---|
+| O preço de TABELA riscado ("De: R$ 299,00") vem antes do preço a pagar; o regex antigo pegava o primeiro `a-offscreen` depois da âncora | mais caro |
+| `AggregateOffer.lowPrice` do JSON-LD ganhava do buy box — é o MENOR preço entre todos os vendedores e condições, inclusive usado | mais barato |
+| Preço de usado/outro vendedor (`usedbuyBox`) publicado quando o buy box está indisponível | mais barato |
+| `extractShopeePriceRangeFromHtml` e `extractShopeePriceFromHtml` varriam o HTML INTEIRO atrás de qualquer `R$ x,yy` — numa página da Amazon colhem acessório, "compre junto" e recomendação | qualquer coisa |
+| `a-price-whole` hoje carrega um `<span class="a-price-decimal">` aninhado; o regex exigia só dígitos e ponto, não casava, e a oferta caía nos fallbacks genéricos acima | — |
+
+A regra agora mora em **`src/converters/amazonPrice.js`** (`extractAmazonBuyBoxPrice`,
+puro e testável, sem rede): publicar o preço A PAGAR do buy box.
+
+**Não regredir:**
+
+- **Na Amazon o buy box ganha do JSON-LD.** `extractFromJsonLd` marca
+  `aggregate: true` quando o preço veio de `lowPrice`, e preço agregado passa a
+  valer só como ÚLTIMO recurso, nunca como primeira escolha. `highPrice` deixou
+  de virar "de": é o maior preço entre vendedores, não o preço cheio do anúncio
+  — como "de" ele inventa um desconto que não existe.
+- **Os extratores de faixa da Shopee só rodam em URL da Shopee.** Eles são
+  varredura cega de `R$` e não têm como saber de qual produto é o número.
+- **`a-price` precisa ser a classe INTEIRA.** `a-price-whole`, `a-price-symbol`
+  e `a-price-fraction` são pedaços do MESMO preço, não preços separados — um
+  `\ba-price\b` os trata como três ofertas e o valor sai picado.
+- **`priceToPay`/`apexPriceToPay` ganha de `a-text-price`.** A Amazon combina
+  as duas classes em alguns layouts; tratar `a-text-price` como riscado sempre
+  fazia a oferta sair SEM preço nenhum.
+- **Na dúvida, vazio.** Buy box indisponível não autoriza publicar o preço de
+  usado: oferta sem preço é recuperável, oferta com preço que não existe vira
+  reclamação e queima a confiança no resto das ofertas.
+- **"De" só sai quando é MAIOR que o "por"** — "de R$ 249,90 por R$ 249,90" faz
+  a cliente desconfiar do preço todo.
+
+⚠️ **Preço diferente nem sempre é defeito nosso:** oferta relâmpago muda de
+preço depois do envio. O que separa os dois casos é O QUANDO. Diagnóstico
+read-only, no diretório do ambiente:
+
+```bash
+cd ~/wabot && node scripts/diag-amazon-preco.mjs <email> --days=3
+```
+
+Ele põe lado a lado o preço que saiu no texto da mensagem e o preço que está na
+Amazon agora. `MUDOU` concentrado em envios de minutos atrás é defeito nosso;
+espalhado em envios antigos é a loja que mudou o preço depois.
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada
+disso vale nos bots antes de `pm2 restart bot-supervisor --update-env`
+(reconecta TODAS as sessões: avisar antes). Ver "código novo não carregado
+pelos bots".
+
+Testes: `test/amazon-preco-buy-box.test.js`, `test/product-info-scraper.test.js`.
+
 ## Vitrine `/social/?ref=`: usar o endereço do card, nunca fabricar (RCA 2026-07-28)
 
 Todo `meli.la` de canal resolve para `/social/<handle>?ref=<blob>`, e

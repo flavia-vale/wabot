@@ -5,6 +5,7 @@
 import { fetchShopeeProductInfo, extractShopeeIds, isShopeeShortLink, resolveShopeeShortLink } from './shopee.js'
 import { resolveToCleanProductUrl } from './mercadolivre.js'
 import { isAmazonShortLink, resolveAmazonShortLink } from './amazon.js'
+import { extractAmazonBuyBoxPrice, amountToNumber } from './amazonPrice.js'
 import { buildOAuthRefreshDecision, applyOAuthTokenResponse } from './mlOAuthTokenPolicy.js'
 import { withMercadoLivreCredentialLock } from './mercadolivreCredentialLock.js'
 
@@ -292,6 +293,11 @@ function extractFromJsonLd(html) {
   for (const product of products) {
     const title = normalizeText(product.name)
     const offer = pickOffer(product.offers)
+    // `lowPrice` só existe em AggregateOffer: é o MENOR preço entre todos os
+    // vendedores e condições (inclusive usado), não o preço que a pessoa paga.
+    // Publicá-lo como preço da oferta foi uma das causas de "na loja está um
+    // preço e o robô mandou outro" (RCA 2026-09-16) — por isso fica marcado.
+    const aggregate = offer?.price == null && offer?.lowPrice != null
     const newPrice = toPriceString(offer?.price ?? offer?.lowPrice)
     // priceSpecification pode trazer o preço cheio (de) — costuma estar no
     // próprio nó offer ou em offer.priceSpecification quando é AggregateOffer.
@@ -307,8 +313,11 @@ function extractFromJsonLd(html) {
     } else if (specs && typeof specs === 'object') {
       oldPrice = toPriceString(specs.price)
     }
-    if (!oldPrice) oldPrice = toPriceString(offer?.highPrice)
-    if (title || newPrice) return { title, oldPrice, newPrice }
+    // `highPrice` é o MAIOR preço entre os vendedores do agregado, não o
+    // preço cheio do anúncio — como "de" ele inventa um desconto que não
+    // existe (RCA 2026-09-16).
+    if (!oldPrice && !aggregate) oldPrice = toPriceString(offer?.highPrice)
+    if (title || newPrice) return { title, oldPrice, newPrice, aggregate }
   }
   return null
 }
@@ -533,19 +542,12 @@ async function fetchMercadoLivreItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_M
 }
 
 
-function extractAmazonPriceFromBuyBoxContext(html) {
-  // Nomes de classe que o buy box usa (Amazon muda com frequência; tentamos
-  // vários em ordem de confiança).
-  const buyBoxRe = /(?:apexPriceToPay|priceToPay|corePriceDisplay|corePrice_desktop|apex_desktop)[\s\S]{0,800}?a-offscreen[^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i
-  const buyBoxMatch = html.match(buyBoxRe)
-  if (buyBoxMatch?.[1]) return toPriceString(buyBoxMatch[1])
-
-  // Fallback: primeiro `a-offscreen` dentro de um `a-price` span (estrutura
-  // semântica que a Amazon usa para todos os preços exibidos em moeda).
-  const aPriceOffscreen = html.match(/<span[^>]+class=["'][^"']*a-price[^"']*["'][^>]*>[\s\S]{0,200}?<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
-  if (aPriceOffscreen?.[1]) return toPriceString(aPriceOffscreen[1])
-
-  return ''
+function isShopeeHost(url) {
+  try {
+    return /(^|\.)(?:shopee\.com\.br|shope\.ee)$/i.test(new URL(String(url)).hostname)
+  } catch {
+    return false
+  }
 }
 
 function isAmazonUrl(url) {
@@ -571,18 +573,12 @@ function isAmazonBlockedHtml(html) {
 function extractAmazonTitleAndPrice(html) {
   const titleMatch = html.match(/<span[^>]+id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i)
   const title = titleMatch?.[1] ? normalizeText(titleMatch[1]) : ''
-
-  const buyBoxPrice = extractAmazonPriceFromBuyBoxContext(html)
-  if (buyBoxPrice) return { title, newPrice: buyBoxPrice }
-
-  const offscreenPrice = html.match(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>[^0-9]*([0-9]{1,3}(?:\.[0-9]{3})+,[0-9]{2}|[0-9]+(?:[\.,][0-9]{2})?)<\/span>/i)
-  const whole = html.match(/<span[^>]+class=["'][^"']*a-price-whole[^"']*["'][^>]*>([0-9\.]+)<\/span>/i)?.[1]
-  const fraction = html.match(/<span[^>]+class=["'][^"']*a-price-fraction[^"']*["'][^>]*>([0-9]{2})<\/span>/i)?.[1]
-  const inlinePrice = whole && fraction ? `${whole},${fraction}` : ''
-  const newPrice = offscreenPrice?.[1] ? toPriceString(offscreenPrice[1]) : toPriceString(inlinePrice)
-  return { title, newPrice }
+  // Preço do buy box: regra inteira em amazonPrice.js (pura e testável). Ela
+  // descarta preço riscado, parcela e oferta de outro vendedor/usado — cada um
+  // desses já publicou preço diferente do que estava na loja (RCA 2026-09-16).
+  const { newPrice, oldPrice } = extractAmazonBuyBoxPrice(html)
+  return { title, newPrice, oldPrice }
 }
-
 
 // Parsing de IDs e resolução de short link delegados ao módulo shopee.js —
 // extractShopeeIds cobre IDs no path E URL-encoded em query param (anti-bot
@@ -636,6 +632,11 @@ function extractShopeePriceFromHtml(html) {
   return ''
 }
 
+// ⚠️ Estes dois extratores varrem o HTML INTEIRO atrás de qualquer "R$ x,yy" e
+// devolvem o menor como preço. Numa página da Amazon isso colhe o preço de um
+// acessório, de "compre junto" ou de produto recomendado — foi assim que
+// oferta de Amazon saiu com preço que não existia (RCA 2026-09-16). Só rodam
+// quando a URL é de fato da Shopee.
 function extractShopeePriceRangeFromHtml(html) {
   if (!html) return null
   const matches = [...html.matchAll(/R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/g)]
@@ -1020,8 +1021,12 @@ export async function fetchProductInfo(url, opts = {}) {
   // sem IDs) enquanto resolvedUrl preserva a URL do produto.
   const shopeeApiSourceUrl = [finalUrl, resolvedUrl, url].find((candidate) => extractShopeeIds(candidate)) || finalUrl || url
   const shopeeApiFallback = await fetchShopeeItemInfo(shopeeApiSourceUrl, { ...opts, shopeeCreds })
-  const shopeeHtmlRange = extractShopeePriceRangeFromHtml(html)
-  const shopeeJsonRange = extractShopeePriceRangeFromJsonInHtml(html)
+  const isAmazonPage = isAmazonUrl(finalUrl) || isAmazonUrl(resolvedUrl) || isAmazonUrl(url)
+  // Faixa de preço só para a Shopee: fora dela o extrator colhe qualquer "R$"
+  // da página (acessório, "compre junto", recomendação) e vira preço errado.
+  const isShopeePage = Boolean(extractShopeeIds(shopeeApiSourceUrl)) || isShopeeHost(finalUrl) || isShopeeHost(resolvedUrl) || isShopeeHost(url)
+  const shopeeHtmlRange = isShopeePage ? extractShopeePriceRangeFromHtml(html) : null
+  const shopeeJsonRange = isShopeePage ? extractShopeePriceRangeFromJsonInHtml(html) : null
 
   // ML Products API como último recurso: só chamar se não temos título E preço
   // do HTML (a API requer autenticação OAuth em acessos de IP de datacenter,
@@ -1055,7 +1060,22 @@ export async function fetchProductInfo(url, opts = {}) {
   const mlPrimaryNew = socialShare ? (mlLanding?.newPrice || mlHtml?.newPrice) : (mlHtml?.newPrice || mlLanding?.newPrice)
   const mlPrimaryOld = socialShare ? (mlLanding?.oldPrice || mlHtml?.oldPrice) : (mlHtml?.oldPrice || mlLanding?.oldPrice)
 
-  const newPrice = jsonLd?.newPrice || mlPrimaryNew || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || mlItemApiFallback?.newPrice || extractMetaPrice(html) || extractShopeePriceFromHtml(html)
-  const oldPrice = jsonLd?.oldPrice || mlPrimaryOld || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || mlItemApiFallback?.oldPrice || ''
+  // Na Amazon o buy box manda. O JSON-LD dela costuma trazer AggregateOffer,
+  // cujo `lowPrice` é o menor preço entre TODOS os vendedores (inclusive
+  // usado) — deixá-lo ganhar publicava um preço mais barato do que o da loja.
+  // Fora da Amazon, preço agregado continua valendo só como último recurso.
+  const amazonBuyBoxNew = isAmazonPage ? (amazonFallback?.newPrice || '') : ''
+  const jsonLdNew = jsonLd?.aggregate ? '' : (jsonLd?.newPrice || '')
+  const jsonLdAggregateNew = jsonLd?.aggregate ? (jsonLd?.newPrice || '') : ''
+
+  const newPrice = amazonBuyBoxNew || jsonLdNew || mlPrimaryNew || amazonFallback?.newPrice || shopeeApiFallback?.newPrice || shopeeJsonRange?.newPrice || shopeeHtmlRange?.newPrice || mercadoLivreApiFallback?.newPrice || mlItemApiFallback?.newPrice || extractMetaPrice(html) || (isShopeePage ? extractShopeePriceFromHtml(html) : '') || jsonLdAggregateNew
+  const amazonBuyBoxOld = isAmazonPage ? (amazonFallback?.oldPrice || '') : ''
+  const rawOldPrice = amazonBuyBoxOld || jsonLd?.oldPrice || mlPrimaryOld || shopeeApiFallback?.oldPrice || shopeeJsonRange?.oldPrice || shopeeHtmlRange?.oldPrice || mercadoLivreApiFallback?.oldPrice || mlItemApiFallback?.oldPrice || ''
+  // "De" que não é MAIOR que o "por" não é preço cheio — é o mesmo número
+  // vindo de outra fonte, e sair como "de R$ 249,90 por R$ 249,90" na oferta
+  // é o tipo de coisa que faz a cliente desconfiar do preço todo.
+  const oldNumber = amountToNumber(rawOldPrice)
+  const newNumber = amountToNumber(newPrice)
+  const oldPrice = (oldNumber != null && newNumber != null && oldNumber <= newNumber) ? '' : rawOldPrice
   return { title, oldPrice, newPrice, finalUrl }
 }
