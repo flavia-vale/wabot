@@ -590,7 +590,13 @@ function isAmazonBlockedHtml(html) {
 
 function extractAmazonTitleAndPrice(html) {
   const titleMatch = html.match(/<span[^>]+id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i)
-  const title = titleMatch?.[1] ? normalizeText(titleMatch[1]) : ''
+  // O HTML do productTitle vem com marcação (<b>, <span>) e com título de
+  // catálogo longo demais para a legenda da oferta. As duas limpezas se
+  // perderam no refactor do preço do buy box (PR #1701) e o título voltou a
+  // sair cru — não remover de novo.
+  const title = titleMatch?.[1]
+    ? normalizeAmazonOfferTitle(titleMatch[1].replace(/<[^>]+>/g, ' '))
+    : ''
   // Preço do buy box: regra inteira em amazonPrice.js (pura e testável). Ela
   // descarta preço riscado, parcela e oferta de outro vendedor/usado — cada um
   // desses já publicou preço diferente do que estava na loja (RCA 2026-09-16).
