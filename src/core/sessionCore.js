@@ -13,6 +13,7 @@ const workerPath = join(__dirname, '..', 'bot-worker.js')
 
 const bots = new Map()
 const pendingRequests = new Map()
+const commandBlocks = new Set()
 const MAX_PENDING_REQUESTS = Math.max(10, Number(process.env.MANAGER_MAX_PENDING_REQUESTS || 500))
 let healthTimer = null
 
@@ -142,6 +143,7 @@ export const getLastQR = userId => bots.get(userId)?.lastQR ?? null
 
 function requestWithTimeout(userId, type, payload = {}, timeout = 10000, timeoutMessage = 'Timeout') {
   return new Promise((resolve, reject) => {
+    if (commandBlocks.has(userId)) return reject(new Error('Sessão temporariamente bloqueada para transferência de ownership'))
     const entry = bots.get(userId)
     if (!entry) return reject(new Error('Bot não está rodando'))
     if (pendingRequests.size >= MAX_PENDING_REQUESTS) {
@@ -157,6 +159,29 @@ function requestWithTimeout(userId, type, payload = {}, timeout = 10000, timeout
 export const listGroups = userId => requestWithTimeout(userId, 'listGroups', {}, 10000, 'Timeout ao buscar grupos')
 export const sendBroadcast = (userId, text, jids, options = {}) => requestWithTimeout(userId, 'broadcast', { text, jids, options }, 30000, 'Timeout ao enviar mensagem')
 export const getBotMetrics = userId => bots.has(userId) ? requestWithTimeout(userId, 'metrics', {}, 5000, 'Timeout ao buscar métricas') : Promise.resolve(null)
+export const blockSessionCommands = userId => { commandBlocks.add(userId); return true }
+export const unblockSessionCommands = userId => commandBlocks.delete(userId)
+export const getSessionProcessInfo = userId => {
+  const entry = bots.get(userId)
+  return entry ? { pid: entry.proc?.pid ?? null, killed: Boolean(entry.proc?.killed), lastHeartbeatAt: entry.lastHeartbeatAt || 0, stopping: Boolean(entry.stopping) } : null
+}
+export async function waitForBotExit(userId, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (!bots.has(userId)) return true
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  return !bots.has(userId)
+}
+export async function waitForBotHeartbeat(userId, timeoutMs = 45_000, after = Date.now() - 1) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const entry = bots.get(userId)
+    if (entry && !entry.proc?.killed && entry.lastHeartbeatAt > after) return true
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  return false
+}
 export const requestPairingCode = (userId, phone) => requestWithTimeout(userId, 'requestPairingCode', { phone }, 45000, 'Timeout ao solicitar código de pareamento')
 export function reloadConfig(userId) { const e = bots.get(userId); if (!e) return false; try { e.proc.send({ type: 'reloadConfig' }) } catch {}; return true }
 
