@@ -492,3 +492,73 @@ Com o que está medido, a recomendação muda de "seguir com cuidado" para:
    continua intocado e ataca exatamente a memória nativa que este número
    revelou: log por mensagem, `pino-pretty` fora de produção, `sharp.cache`/
    `sharp.concurrency`, cap do `imageCache`, `AbortSignal` na fila e na rede.
+
+---
+
+## 10. O confundidor caiu — e apareceu algo maior (2026-09-16)
+
+A checagem de §9.5 respondeu, e respondeu ao contrário do esperado:
+
+```text
+primeiros 2min: PSS 292,8 MiB | ultimos 2min: PSS 400,3 MiB | delta +107,5
+```
+
+**O PSS não estava assentando: estava subindo.** +36,7% em 20 minutos, ~5,4
+MiB por minuto, com **uma sessão de staging praticamente ociosa**.
+
+Isso mata a hipótese do pico de sync inicial, que era a única defesa restante
+da POC. E fecha o veredito, porque **não existe instante da janela em que o
+shard tenha sido mais barato**:
+
+| Momento | custo da sessão | 1 sessão vs dedicado | 4 sessões vs 4 dedicados |
+|---|---:|---|---|
+| início da janela | 203 MiB | −34% | −3,5% |
+| fim da janela | 311 MiB | −84% | −53% |
+
+**POC de shard: reprovada.** Não há economia a extrair, e o risco de quatro
+clientes num processo só perde qualquer contrapartida.
+
+### 10.1 A pergunta que passou a valer mais que a POC
+
+O `bot-worker` dedicado faz o mesmo? A diferença entre as duas respostas muda
+a investigação inteira de RAM:
+
+- **Se os workers dedicados também crescem assim**, o veredito do diagnóstico
+  de 13/09 ("custo basal da arquitetura, não vazamento demonstrado") está
+  errado, e os 218 MiB de média são apenas onde cada worker está na própria
+  curva. Aí existe vazamento de verdade afetando os 42 robôs, e ele é o
+  problema — não a densidade por processo.
+- **Se só o shard cresce**, o crescimento foi introduzido pela refatoração
+  (todo o `bot-worker.js` virou closure, dois monitores de event loop por
+  processo, estado por sessão que antes era por processo).
+
+Nos dois casos a POC continua reprovada; o que muda é para onde vai o esforço.
+
+### 10.2 Teste de uma foto só, sem esperar nada
+
+A frota de produção tem robôs de idades diferentes rodando agora. Se o PSS
+sobe com o tempo de vida do processo, a assinatura do vazamento aparece numa
+única leitura:
+
+```bash
+for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do
+  age=$(ps -o etimes= -p $p 2>/dev/null | tr -d ' ')
+  pss=$(awk '/^Pss:/{print $2}' /proc/$p/smaps_rollup 2>/dev/null)
+  [ -n "$age" ] && [ -n "$pss" ] && echo "$age $pss"
+done | awk '{h=int($1/3600); s[h]+=$2; n[h]++} END {for(k in s) printf "%3dh de vida | %2d robos | PSS medio %.0f MiB\n", k, n[k], s[k]/n[k]/1024}' | sort -n
+```
+
+⚠️ **Leitura com cuidado:** robô mais velho também pode ser robô de conta mais
+movimentada (as que caem menos são as que ficam de pé), então correlação com
+idade **não prova** vazamento sozinha. O que ela faz é dizer se vale montar a
+medição direta — acompanhar 3 ou 4 workers de produção por algumas horas, com
+a mesma cadência usada aqui.
+
+### 10.3 Não extrapolar os 5,4 MiB/min
+
+Vinte minutos não autorizam projetar horas. O número serve para dizer
+**direção** (cresce, não assenta), não taxa sustentada. O próprio diagnóstico
+de 13/09 registrou workers de produção oscilando ±5% e vários **encolhendo**
+20-40 MiB em 30 minutos — comportamento incompatível com crescimento linear.
+As duas observações precisam ser reconciliadas pela medição de §10.2, não por
+argumento.
