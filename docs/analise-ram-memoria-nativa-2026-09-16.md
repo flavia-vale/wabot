@@ -94,17 +94,58 @@ opostas, e não dá para escolher a alavanca antes de saber qual delas é:
 cd ~/wabot && node scripts/diag-memoria-nativa.mjs --top=5
 ```
 
-**Dá para rodar HOJE, sem esperar deploy nenhum.** `scripts/diag-memoria-nativa.awk`
-é a mesma classificação em awk portável, feita para ser colada por SSH:
+**Dá para rodar HOJE, sem esperar deploy nenhum.** ⚠️ Em produção `~/wabot`
+está em `main`, então `scripts/diag-memoria-nativa.awk` **ainda não existe lá** —
+apontar `awk -f ~/wabot/scripts/...` devolve "cannot open source file". O bloco
+abaixo leva o awk junto e não depende de arquivo nenhum do repositório:
 
 ```bash
-for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do
-  awk -v PID=$p -f ~/wabot/scripts/diag-memoria-nativa.awk /proc/$p/smaps
-done
+# ---------- cole daqui ----------
+cat > /tmp/mem.awk <<'FIM'
+function hex(s,  i,c,v,n) { n=0; for (i=1;i<=length(s);i++) { c=substr(s,i,1); v=index("0123456789abcdef",c)-1; if(v<0)v=index("0123456789ABCDEF",c)-1; n=n*16+v } return n }
+/^[0-9a-fA-F]+-[0-9a-fA-F]+ / { split($1,r,"-"); idx++; st[idx]=hex(r[1]); pa[idx]=(NF>=6)?$6:""; next }
+/^Size:/ { sz[idx]=$2 } /^Rss:/ { rs[idx]=$2 } /^Pss:/ { ps[idx]=$2 }
+END {
+  for (i=1;i<=idx;i++) if (pa[i]=="") { b=int(st[i]/67108864); g[b]+=sz[i] }
+  for (i=1;i<=idx;i++) {
+    if (pa[i]=="[heap]") k="heap_principal"
+    else if (pa[i] ~ /^\[stack/) k="pilha"
+    else if (pa[i]=="") { b=int(st[i]/67108864); if (g[b]==65536) { k="arena_glibc"; if(!seen[b]++) arenas++ } else k="anonimo" }
+    else if (pa[i] ~ /\.(so|node)(\.[0-9]+)*$/) { k="biblioteca"; n=pa[i]; sub(/.*\//,"",n); L[n]+=ps[i] }
+    else if (pa[i] ~ /^\//) k="arquivo"
+    else k="outro"
+    P[k]+=ps[i]; totP+=ps[i]; totR+=rs[i]
+  }
+  if (DETALHE=="1") {
+    printf "\n-- bibliotecas nativas do pid %s (PSS acima de 1 MiB)\n", PID
+    for (n in L) if (L[n] > 1024) printf "   %-46s PSS %7.1f\n", n, L[n]/1024
+    exit
+  }
+  printf "pid %-7s thr %-4s PSS %7.1f RSS %7.1f arenas %3d |", PID, TH, totP/1024, totR/1024, arenas
+  split("arena_glibc heap_principal anonimo pilha biblioteca arquivo outro",o," ")
+  for (j=1;j<=7;j++) printf " %s=%.1f", o[j], P[o[j]]/1024
+  printf "\n"
+}
+FIM
+ALVO="/home/deploy/wabot/src/bot-worker"
+echo "== $(pgrep -fc "$ALVO") robos | valores em MiB | PSS e' o que vale para somar =="
+for p in $(pgrep -f "$ALVO"); do
+  awk -v PID=$p -v TH=$(ls /proc/$p/task 2>/dev/null | wc -l) -f /tmp/mem.awk /proc/$p/smaps 2>/dev/null
+done | sort -k6 -rn | tee /tmp/mem.txt
+awk '{pss+=$6; ar+=$10; for(i=1;i<=NF;i++){split($i,kv,"=");s[kv[1]]+=kv[2]}} END{
+  printf "\n== SOMA dos %d robos: PSS %.1f MiB | arenas %d\n", NR, pss, ar
+  printf "   arena_glibc %.1f | anonimo %.1f | heap_principal %.1f | biblioteca %.1f | arquivo %.1f\n", s["arena_glibc"], s["anonimo"], s["heap_principal"], s["biblioteca"], s["arquivo"]
+  printf "   arenas respondem por %.0f%% do PSS\n", (pss>0? s["arena_glibc"]*100/pss : 0)}' /tmp/mem.txt
+MAIOR=$(head -1 /tmp/mem.txt | awk '{print $2}')
+awk -v PID=$MAIOR -v DETALHE=1 -f /tmp/mem.awk /proc/$MAIOR/smaps 2>/dev/null
+# ---------- ate aqui ----------
 ```
 
-As duas foram conferidas lendo o MESMO arquivo congelado e devolveram o mesmo
-PSS, o mesmo RSS e a mesma contagem de arenas.
+Ele é o mesmo classificador de `src/ops/memory/smapsBreakdown.js` — as duas
+implementações foram conferidas lendo o MESMO arquivo congelado e devolveram o
+mesmo PSS, o mesmo RSS e a mesma contagem de arenas. Depois que este PR chegar a
+produção, o mesmo conteúdo está versionado em `scripts/diag-memoria-nativa.awk`
+e o `.mjs` imprime um pouco mais.
 
 ⚠️ Este PR **não reinicia o `bot-supervisor`**: nenhum dos arquivos que ele
 adiciona (`docs/`, `scripts/`, `src/ops/memory/`, `test/`) casa com
