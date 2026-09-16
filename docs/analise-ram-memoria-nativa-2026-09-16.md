@@ -94,6 +94,24 @@ opostas, e não dá para escolher a alavanca antes de saber qual delas é:
 cd ~/wabot && node scripts/diag-memoria-nativa.mjs --top=5
 ```
 
+**Dá para rodar HOJE, sem esperar deploy nenhum.** `scripts/diag-memoria-nativa.awk`
+é a mesma classificação em awk portável, feita para ser colada por SSH:
+
+```bash
+for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do
+  awk -v PID=$p -f ~/wabot/scripts/diag-memoria-nativa.awk /proc/$p/smaps
+done
+```
+
+As duas foram conferidas lendo o MESMO arquivo congelado e devolveram o mesmo
+PSS, o mesmo RSS e a mesma contagem de arenas.
+
+⚠️ Este PR **não reinicia o `bot-supervisor`**: nenhum dos arquivos que ele
+adiciona (`docs/`, `scripts/`, `src/ops/memory/`, `test/`) casa com
+`WORKER_CODE_PATHS_RE`, e a segunda rede (mtime dos arquivos do worker) também
+não é acionada, porque o `git pull` só reescreve arquivo alterado. As sessões
+seguem intactas.
+
 Ele imprime, por worker: PSS/RSS, número de threads, quantas arenas do glibc
 existem e quanto PSS cada classe de região ocupa, mais as bibliotecas nativas
 mais caras em PSS (aí aparece, com nome e tamanho, o motor do Prisma, o libvips
@@ -327,8 +345,8 @@ propósito e não dispara o aviso de robô caído), nunca por `kill`.
    escolhas; tudo o que vem depois muda conforme o resultado.
 2. **Rodar a medição da §3.5** (SQL somente leitura). Pode entregar o maior
    ganho da lista sem nenhuma mudança de código.
-3. **Desligar o que sobrou da POC reprovada** — ver §6. Não precisa reiniciar o
-   supervisor.
+3. **Tratar o resíduo da POC reprovada** — ver §6. Não é urgência de RAM (a
+   correção está lá) e deve ir junto do passo 4.
 4. **Preparar §3.2 (log) e §3.3 (Sharp) juntas**, validar em staging com PSS
    antes/depois, e só então levar a produção **numa reinicialização anunciada
    só** do `bot-supervisor`.
@@ -338,33 +356,42 @@ propósito e não dispara o aviso de robô caído), nunca por `kill`.
 
 Nenhum passo de 3 em diante é aplicado sem o OK explícito da dona do produto.
 
-## 6. Resíduo da POC reprovada que ainda custa em produção
+## 6. Resíduo da POC reprovada — o que ele custa de verdade
 
-A POC está em `develop` **e em `main`**, com o padrão `observe`:
+⚠️ **Correção de uma afirmação minha anterior.** Eu disse que o padrão `observe`
+deixa "uma rota consultando o SQLite a cada 5 segundos" e que
+`WA_SESSION_SHARD_POC=off` resolveria. **As duas partes estavam erradas**, e
+isso muda a ação — por isso fica registrado em vez de ser apagado:
 
-```js
-// src/supervisor/index.js
-const SHARD_POC_MODE = parseEnumEnv('WA_SESSION_SHARD_POC', process.env.WA_SESSION_SHARD_POC || 'observe', ...)
-```
+- `GET /shard-poc/overview` (`src/api/routes/admin.js`) **não lê a env em
+  lugar nenhum** — só exige `tech:read`. Desligar a env não a torna mais barata.
+- A tela (`dashboard/app/admin/teste-shard/page.js`) tem guarda de
+  `document.visibilityState`: os 5 segundos só correm **enquanto alguém está com
+  a página aberta e visível**. Com ninguém olhando, o custo é zero.
+- O que a env de fato governa hoje: o modo do supervisor no boot e o
+  `POST /shard-poc/members/:userId/start`, que **já está bloqueado** — ele exige
+  `enabled` e o padrão é `observe`.
 
-Isso contraria o padrão de interruptor de rollout deste repositório
-(`COUPON_BRAND_CARD_ENABLED`, `WA_IGNORE_UNMONITORED_GROUPS`,
-`BADSESSION_KEEP_ESTABLISHED_AUTH` nascem desligados) e deixa ligada uma rota
-que, aberta, consulta a cada 5 segundos: `user.findMany` com join de sessão,
-dois `messageLog.groupBy` de 24 h sobre todos os conectados, dois `findMany` de
-200 linhas, quatro `getBotMetrics` e um `getShardMetrics` — num SQLite de 478 MB
-com 42 workers escrevendo. É candidato direto a `SQLITE_BUSY`, que tem sinal
-próprio no produto (`ops_sqlite_busy`).
+**Então não há urgência de RAM aqui, e a ação não é mexer no `.env`.** O resíduo
+que importa é outro, e é de segurança operacional: um experimento **reprovado
+por medição** continua alcançável em produção, com um botão que move a sessão de
+uma cliente real para o shard — e o caminho de volta, como a revisão registrou
+em §4.C, nunca rodou uma vez contra processo de verdade (todos os testes usam
+runtime falso).
 
-**O caminho barato, hoje, sem reiniciar o supervisor:** `WA_SESSION_SHARD_POC=off`
-no `.env` de produção e `pm2 delete api && pm2 start ecosystem.config.cjs --only api`
-(pegadinha #1). Em modo `remote`, reiniciar a API **não toca nas sessões** — é
-exatamente para isso que o `bot-supervisor` existe.
+**O que sugiro**, e é decisão da dona do produto, não minha:
 
-O padrão do código deveria virar `off` num PR próprio, junto da decisão de
-manter ou remover o `src/session-shard-worker.js`. Isso é decisão da dona do
-produto, não minha: o código está testado e pode servir de base se um dia a
-premissa mudar.
+1. Um PR próprio que trate a POC como encerrada: padrão da env para `off` (que
+   é o padrão de todo interruptor de rollout deste repositório —
+   `COUPON_BRAND_CARD_ENABLED`, `WA_IGNORE_UNMONITORED_GROUPS`,
+   `BADSESSION_KEEP_ESTABLISHED_AUTH` nascem desligados) e a rota de `start`
+   recusando em qualquer modo enquanto o rollback não for testado de verdade.
+2. Manter `src/session-shard-worker.js` e os testes no repositório. O código
+   está testado e serve de base se a premissa mudar; apagar perderia o trabalho
+   e o registro do que foi medido.
+3. Esse PR toca `src/supervisor/index.js`, que está em `WORKER_CODE_PATHS_RE` —
+   ou seja, custa uma reconexão da frota. **Deve ir na mesma janela anunciada**
+   das alavancas §3.2 e §3.3, nunca sozinho.
 
 ## 7. Achado paralelo: 8 reinicializações do supervisor em 3 dias
 
