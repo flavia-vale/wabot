@@ -5215,6 +5215,67 @@ convertido na oferta) + metadados de conversão na resposta.
 Testes: `test/offer-engine.test.js` (motor),
 `test/link-conversion-route.test.js`.
 
+### "Criar oferta" com link da Shopee saía SEM IMAGEM (RCA 2026-09-16 — não regredir)
+
+A oferta chegava com **título e preço certos e sem foto**. A assimetria tem
+nome e lugar: a rota `POST /api/link-conversion/scrape-offer` buscava a foto
+por `offer.finalUrl` **cru**, e `finalUrl` é onde o fetch de HTML TERMINOU —
+na Shopee ele termina com frequência numa parede anti-bot
+(`/unsupported.html`, `verify/traffic`) que **perde (shopId, itemId)**. Sem os
+ids não existe foto: a Shopee tem uma fonte só que funciona, e ela precisa dos
+ids.
+
+O caminho de **título/preço já se protegia disso desde sempre** —
+`shopeeApiSourceUrl` (`productInfoScraper.js`) escolhe
+`[finalUrl, resolvedUrl, url].find(tem ids)` justamente porque "o fetch de HTML
+pode ter redirecionado para uma página anti-bot". O caminho da **foto** não
+escolhia nada. Era só isso.
+
+Medido ao vivo, com o resolver real e **sem credencial de Shopee**:
+
+| endereço passado ao resolver | resultado |
+|---|---|
+| `shopee.com.br/product/<shopId>/<itemId>` | **foto OK** |
+| `shopee.com.br/unsupported.html?...` | **sem foto** (todas as fontes) |
+
+Ou seja: **o endereço escolhido é o que decide se a foto vem**, não a
+credencial.
+
+| Peça | Onde |
+|---|---|
+| Escolha do endereço (PURA, sem rede) | `src/core/offerImageSource.js` |
+| `resolvedUrl` exposto pelo scraper | `fetchProductInfo` (`productInfoScraper.js`) |
+| Repassado pelo motor | `buildScrapedOffer` (`offerEngine.js`) |
+
+**Não regredir:**
+
+- **A ordem dos candidatos é `[finalUrl, resolvedUrl, offerUrl, url]`**, a
+  MESMA de `shopeeApiSourceUrl`. `finalUrl` primeiro preserva byte a byte o
+  comportamento de Amazon/ML/SHEIN; quem resgata a Shopee é a **preferência
+  por candidato com ids**, não a troca de ordem. Inverter a ordem muda loja
+  que hoje funciona.
+- **Parede anti-bot nunca é candidato** (`isDeadEndImageSourceUrl`:
+  `unsupported.html`, `/gz/account-verification`, `suspicious-traffic`).
+  `verify/traffic?next=...` **continua valendo** — `extractShopeeIds` decodifica
+  a URL embutida e os ids estão lá.
+- **Fail-safe é TENTAR**: sem candidato utilizável, usa o primeiro mesmo assim.
+  Desistir por dúvida é oferta sem foto garantida.
+- **A escolha é PURA e acontece antes de qualquer fetch** — zero ida à rede a
+  mais.
+- **O caminho da foto deixou de ser MUDO.** `fetchProductImage` trata o próprio
+  erro e devolve `null`, então "saiu sem imagem" chegava ao log sem motivo
+  nenhum (mesma família do RCA do card de preview). A rota agora passa
+  `onDiagnostic` e loga `Criar oferta: loja não devolveu foto do produto` com
+  o endereço usado e as etapas (`shopee_sem_credencial`, `shopee_sem_ids`,
+  `shopee_api_erro`, `shopee_item_fora_do_catalogo`…). É por aí que se separa
+  "chave recusada" de "item fora do catálogo de afiliado" sem adivinhar.
+
+⚠️ Isto **não conserta chave da Shopee recusada** (`10020`) nem item fora do
+catálogo de afiliado — nesses casos a foto segue impossível pela API, e agora
+o log diz qual dos dois é.
+
+Teste: `test/criar-oferta-imagem-shopee.test.js`.
+
 ## Página nova NUNCA nasce órfã (RCA 2026-09-11 — não regredir)
 
 As cinco páginas comerciais do Tier 1 (`/shopee-afiliados-whatsapp`,

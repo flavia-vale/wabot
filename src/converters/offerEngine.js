@@ -135,8 +135,8 @@ function injectOwnerTagInUrl(originalUrl, platform, credentialsMap) {
 //   true  (temporariamente, o painel) -> `displayUrl` = link original colado
 //          pelo usuário
 //
-// Retorno: { title, oldPrice, newPrice, finalUrl, offerUrl, displayUrl,
-//            conversionWarning, conversion, scrapeWarning? }
+// Retorno: { title, oldPrice, newPrice, finalUrl, resolvedUrl, offerUrl,
+//            displayUrl, conversionWarning, conversion, scrapeWarning? }
 export async function buildScrapedOffer({
   url,
   platform: platformArg,
@@ -247,6 +247,11 @@ export async function buildScrapedOffer({
       oldPrice: info?.oldPrice || '',
       newPrice: info?.newPrice || '',
       finalUrl: info?.finalUrl || offerUrl,
+      // URL do produto ANTES do fetch de HTML (short link já resolvido). Na
+      // Shopee, `finalUrl` costuma virar a parede anti-bot e perder
+      // (shopId, itemId); quem busca a FOTO precisa deste aqui
+      // (RCA 2026-09-16). Ver `src/core/offerImageSource.js`.
+      resolvedUrl: info?.resolvedUrl || null,
       offerUrl,
       displayUrl: displayUrlFor(info?.finalUrl),
       conversionWarning,
@@ -264,6 +269,7 @@ export async function buildScrapedOffer({
             oldPrice: originalInfo?.oldPrice || '',
             newPrice: originalInfo?.newPrice || '',
             finalUrl: originalInfo?.finalUrl || url,
+            resolvedUrl: originalInfo?.resolvedUrl || null,
             offerUrl,
             displayUrl: displayUrlFor(originalInfo?.finalUrl),
             conversionWarning,
@@ -285,6 +291,7 @@ export async function buildScrapedOffer({
       oldPrice: '',
       newPrice: '',
       finalUrl: offerUrl,
+      resolvedUrl: null,
       offerUrl,
       displayUrl: displayUrlFor(null),
       conversionWarning,
