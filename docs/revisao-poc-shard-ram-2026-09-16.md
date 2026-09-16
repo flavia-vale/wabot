@@ -380,3 +380,115 @@ Isso vai acontecer no degrau C e será atribuído erradamente ao multi-tenancy.
 `createBotSessionRuntime`, o guard de `argv[1]`, as envs da POC e a invariante
 "o shard nunca abre credencial sem exit confirmado do dedicado". Hoje nada disso
 está lá, e é o tipo de conhecimento que o projeto perde entre sessões.
+
+---
+
+## 9. Medição executada em 2026-09-16 (substitui as projeções acima)
+
+Rodada no VPS, em staging, com o shard real (`src/session-shard-worker.js`) e a
+única conta conectada de staging. Todos os números em **PSS** (mediana da
+janela), que é a métrica honesta para somar processos — RSS conta a mesma
+página compartilhada uma vez por processo.
+
+### 9.1 Os três números
+
+| Medida | PSS | RSS | amostras |
+|---|---:|---:|---:|
+| Shard **vazio** (custo fixo, `F`) | **89,6 MiB** | 148,4 MiB | 44 |
+| Shard com **1 sessão** | **333,1 MiB** | 398,9 MiB | 120 (20 min) |
+| Worker **dedicado** de produção (`D`, média de 42) | **218 MiB** | 314 MiB | 42 processos |
+
+### 9.2 O que isso significa
+
+| | custo da sessão |
+|---|---:|
+| dentro do worker dedicado (`D − F`) | **128 MiB** |
+| dentro do shard | **244 MiB** |
+
+**A sessão custa 90% a mais dentro do shard.** Com esse número, consolidar
+**gasta mais memória** do que manter um processo por sessão:
+
+| Sessões | Shard | Dedicados | Resultado |
+|---|---:|---:|---|
+| 2 | 577 MiB | 436 MiB | **−32%** |
+| 4 | 1.064 MiB | 872 MiB | **−22%** |
+| 8 | 2.038 MiB | 1.744 MiB | **−17%** |
+
+Para a POC **empatar** com 4 sessões, a sessão no shard precisaria custar menos
+de **196 MiB**; para entregar os 25% do critério, menos de **141 MiB**. Medido:
+**244 MiB**.
+
+A comparação ainda favorece o shard: a sessão medida é de **staging** (tráfego
+baixo), contra a média de 42 sessões de **produção** em uso real.
+
+### 9.3 A hipótese do teto de heap está DESCARTADA
+
+A revisão (§6.5) apontou que o shard é forkado sem `resolveWorkerExecArgv`,
+logo sem `--max-old-space-size=384`, e levantou isso como possível causa do
+excesso. **A medição derruba a hipótese:**
+
+| | vazio | 1 sessão | delta |
+|---|---:|---:|---:|
+| `heapTotal` | 36,9 MiB | 47,6 MiB | +10,7 |
+| `heapUsed` | 34,7 MiB | 44,0 MiB | +9,3 |
+| `external` | 3,7 MiB | 8,4 MiB | +4,7 |
+| **PSS** | 89,6 MiB | 333,1 MiB | **+243,5** |
+
+O heap sequer chega perto de 384 MiB — não há teto nenhum a aplicar. O defeito
+de `execArgv` continua sendo um defeito (§6.5), mas **não explica este número**.
+
+### 9.4 Achado que vale para além da POC: 94% do custo é invisível
+
+Dos 243,5 MiB que a sessão adicionou, apenas **14 MiB** aparecem em
+`process.memoryUsage()` (heap + `external`). Os outros **229,5 MiB — 94% —**
+são memória nativa que a API do Node não enxerga: contextos de OpenSSL/Signal,
+buffers de WebSocket, arenas do alocador do glibc.
+
+Isso invalida uma parte da instrumentação proposta no plano (P1, item 1:
+"publicar `process.memoryUsage()` por worker: `rss`, `heapUsed`, `heapTotal`,
+`external`, `arrayBuffers`"). Só `rss` — e de preferência **PSS**, lido de
+`/proc/<pid>/smaps_rollup` — descreve o custo real. Um painel construído sobre
+heap e `external` mostraria uma frota saudável enquanto a memória acaba.
+
+### 9.5 O que ainda NÃO foi descartado
+
+Um confundidor permanece, e ele é material: a sessão do shard foi medida nos
+**20 minutos seguintes ao start**, que é justamente a janela do sync inicial do
+WhatsApp; os 42 workers de produção estão no ar há horas ou dias, já com o
+pico assentado. O próprio diagnóstico de 13/09 observou workers **encolhendo**
+20-40 MiB ao longo de 30 minutos.
+
+A série temporal já coletada separa os dois casos, sem medir nada novo:
+
+```bash
+awk -F, '$2=="sessoes_1"{n++; if(n<=12) a+=$5; if(n>108) b+=$5} END{printf "primeiros 2min: PSS %.1f MiB | ultimos 2min: PSS %.1f MiB | delta %+.1f\n", a/12, b/12, b/12-a/12}' /tmp/shard-rss-*.csv
+```
+
+- **PSS caindo ao longo da janela** → é pico de sync; exige um soak mais longo
+  (2-4h) antes de concluir.
+- **PSS estável ou subindo** → o custo é estrutural e a POC está reprovada.
+
+### 9.6 Defeito do instrumento (corrigir antes de reusar)
+
+`scripts/diag-shard-rss.mjs` **trava no encerramento**: depois de pedir
+`SHUTDOWN_SHARD` ele espera o `exit` do processo filho **sem prazo**. Numa
+execução real com sessão conectada, o shard não terminou de fechar e o script
+ficou pendurado por horas. Os dados não se perdem (o CSV é escrito a cada
+amostra), mas o script precisa de um `kill` forçado após um prazo.
+
+⚠️ Isso não é só chateação de ferramenta: **o rollback da POC depende de o
+shard conseguir encerrar.** Um shard que não fecha com uma sessão é um achado
+sobre a arquitetura, não sobre o script.
+
+### 9.7 Recomendação atualizada
+
+Com o que está medido, a recomendação muda de "seguir com cuidado" para:
+
+1. Rodar a checagem de §9.5 (custo zero, dados já coletados).
+2. Se o PSS não estiver caindo: **encerrar a POC de shard** e registrar o
+   motivo — não há economia a extrair, e o risco de quatro clientes num
+   processo só deixa de ter contrapartida.
+3. Em qualquer dos casos, executar o **P1** do diagnóstico original, que
+   continua intocado e ataca exatamente a memória nativa que este número
+   revelou: log por mensagem, `pino-pretty` fora de produção, `sharp.cache`/
+   `sharp.concurrency`, cap do `imageCache`, `AbortSignal` na fila e na rede.
