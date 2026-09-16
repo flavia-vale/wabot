@@ -4450,6 +4450,76 @@ modo `remote`, `pm2 restart bot-supervisor` para os workers carregarem o código
 cheio para o campo embutido. Teste:
 `test/inline-thumbnail-policy.test.js`.
 
+## Card de cada oferta saindo de um tamanho (RCA 2026-09-16 — não regredir)
+
+Três relatos da mesma cliente na mesma conversa: "imagens quebradas", "preview
+com imagem pequena" e "cada oferta vindo com a imagem de um tamanho". Ela
+comparou com grupos profissionais, onde o preview sai **sempre do mesmo
+tamanho**.
+
+**Os três são o MESMO defeito visto de ângulos diferentes.** O card de preview
+não tem tamanho próprio: quem decide como o WhatsApp o desenha é a miniatura
+que sobe em `highQualityThumbnail` — `prepareWAMessageMedia` lê width/height do
+buffer e grava em `thumbnailWidth`/`thumbnailHeight` do proto. Até aqui esse
+buffer era **a foto como ela veio da loja**:
+
+| fonte da foto | o que chegava ao proto |
+|---|---|
+| Mercado Livre (`D_NQ_NP_2X_`) | 1080x1080 |
+| Amazon (`_AC_SL1500_`) | 1500x1500 |
+| banner de cupom (`storeBrandCard`) | 720x720 |
+| plano B da foto de origem | o que a mensagem de origem tivesse (às vezes ~300px) |
+| foto larga/alta de vitrine | proporção qualquer |
+
+Como `normalizeImageForWhatsApp` usa `withoutEnlargement: true`, foto pequena
+continuava pequena. Daí: proporção diferente por loja → **card de tamanho
+diferente por oferta**; foto pequena → **card compacto** (o Desktop/Web respeita
+as dimensões gravadas — é o mesmo mecanismo já descrito no comentário de
+`buildManualLinkPreview`); foto muito larga ou muito alta → o cliente **corta no
+centro** para caber no card e o produto sai fatiado ("quebrada").
+
+Hoje toda foto de card passa por uma **tela fixa** antes do upload:
+`composePreviewCardImage` (`src/core/previewCardCanvas.js`), com a decisão pura
+em `previewCardCanvasPolicy.js`. Quadrada de 1080px por padrão — proporção
+nativa da foto de catálogo de Amazon/ML/Shopee, então na maioria das ofertas não
+sobra moldura nenhuma. A foto entra **inteira** (`fit: inside`, nunca cortada) e
+o que sobra vira um desfoque da própria foto (barra branca ficaria estranha em
+foto colorida).
+
+**Não regredir:**
+
+- **Os DOIS montadores de card passam pela tela fixa**: `buildManualLinkPreview`
+  (espelhamento, via `prepararFotoDoCard`, nas TRÊS fontes — loja, plano B da
+  origem e banner de cupom) e `buildBroadcastLinkPreview` (fila e ofertas
+  automáticas). Um caminho de fora e os cards voltam a divergir entre si, que é
+  exatamente o relato. Guarda estrutural no teste.
+- **A miniatura embutida nasce da imagem JÁ composta.** Ela é o que o WhatsApp
+  desenha antes de baixar; derivá-la da foto original faria o card mudar de
+  proporção ao terminar o download.
+- **Nunca cortar a foto para preencher a tela** (`fit: cover`): cortar é o que
+  fatiava o produto. O vazio é moldura, não corte.
+- **Não soma custo no caminho do card**: a tela fixa SUBSTITUI o
+  `normalizeImageForWhatsApp` ali (entrega os mesmos dois campos), não roda
+  depois dele. O **envio em modo foto continua sem tela fixa** — lá a imagem é o
+  corpo da mensagem e recortar/emoldurar mudaria o que a pessoa vê em tela cheia.
+- **Fail-safe é deixar a oferta sair**: composição que falha, entrada ilegível ou
+  tela desligada devolvem `null` e o caminho histórico assume. Card de tamanho
+  irregular é muito melhor que oferta sem foto.
+- A marca d'água continua sendo composta **depois** da tela fixa, então ela
+  preserva as dimensões do card (`renderDestinationWatermark` só reduz para
+  dentro de 1600px, `withoutEnlargement`).
+
+Envs (opcionais): `PREVIEW_CARD_CANVAS=off` volta ao comportamento histórico sem
+redeploy (aceita `off`/`false`/`0`) e `PREVIEW_CARD_CANVAS_PX` muda o tamanho
+(padrão 1080, grampeado em [480, 1600]). Aplicar exige `pm2 delete` + `start`
+(pegadinha #1) **e**, em modo `remote`, `pm2 restart bot-supervisor` para os
+workers carregarem o código — o que reconecta TODAS as sessões (anunciar antes).
+
+⚠️ **Validar em staging olhando o grupo, não só o teste**: mandar ofertas de
+lojas diferentes (ML, Amazon, Shopee) e uma de cupom no MESMO grupo e conferir no
+celular que os cards saem do mesmo tamanho, com a foto inteira. Teste:
+`test/preview-card-canvas.test.js`.
+
 ## Voltar ao CARD DE PREVIEW CLICÁVEL: as duas travas e como caíram (2026-08-21)
 
 Os dois formatos de oferta **não são a mesma coisa para a cliente**:
