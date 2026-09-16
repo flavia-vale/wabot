@@ -1107,5 +1107,10 @@ export async function fetchProductInfo(url, opts = {}) {
   const oldNumber = amountToNumber(rawOldPrice)
   const newNumber = amountToNumber(newPrice)
   const oldPrice = (oldNumber != null && newNumber != null && oldNumber <= newNumber) ? '' : rawOldPrice
-  return { title, oldPrice, newPrice, finalUrl }
+  // `resolvedUrl` sai junto de propósito: é a URL do produto DEPOIS da
+  // resolução de short link e ANTES do fetch de HTML. Na Shopee o fetch
+  // costuma terminar numa parede anti-bot, e aí `finalUrl` perde
+  // (shopId, itemId) — quem só tem `finalUrl` não consegue buscar a foto
+  // (RCA 2026-09-16, "Criar oferta sem imagem na Shopee").
+  return { title, oldPrice, newPrice, finalUrl, resolvedUrl }
 }
