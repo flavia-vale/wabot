@@ -31,5 +31,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: ESLint no-undef (src + test)
-        run: npx --yes eslint@9 src test
+      - name: ESLint no-undef (src + test + telas do dashboard)
+        # `--no-inline-config`: as telas têm eslint-disable de regras de plugin
+        # (react-hooks, @next/next) que não existem nesta config pura.
+        # Fixe a versão: `eslint@9` resolveu para 9.39.5 no runner enquanto o
+        # lockfile validado usa 9.39.4. Além de tornar o gate não determinístico,
+        # essa diferença produziu um parsing error que não existia no build.
+        run: npx --yes eslint@9.39.4 --no-inline-config src test dashboard/app dashboard/components dashboard/lib

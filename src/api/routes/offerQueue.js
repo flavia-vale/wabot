@@ -1,7 +1,7 @@
 import dbDefault from '../../db.js'
 import { enforceChannelPlanGate, loadUserPlanSubject, normalizeTargetJids, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
 import { ensureCountQuota } from '../quotas.js'
-import { buildFeatureGateError, canUseOfferQueues, FEATURE_CODES } from '../../billing/plans.js'
+import { buildFeatureGateError, canUseOfferQueues, canUseInstagramStories, FEATURE_CODES } from '../../billing/plans.js'
 import { startOfSaoPauloDayUtc } from '../../offerQueue/time.js'
 
 const DEFAULTS = { intervalMinutes: 30, hourlyCap: 10, dailyCap: 50 }
@@ -39,7 +39,17 @@ function parseQueueTargetJids(queue) {
 }
 
 function presentQueue(queue) {
-  return { ...queue, targetJids: parseQueueTargetJids(queue) }
+  const instagramDestinationIds = Array.isArray(queue.instagramDestinations) ? queue.instagramDestinations.map(item => item.destinationId) : []
+  const { instagramDestinations, ...rest } = queue
+  return { ...rest, targetJids: parseQueueTargetJids(queue), instagramDestinationIds }
+}
+
+async function resolveInstagramDestinations(db, userId, ids, subject) {
+  const unique = [...new Set(Array.isArray(ids) ? ids.filter(Boolean) : [])]
+  if (!unique.length) return []
+  if (!canUseInstagramStories(subject)) return { gate: buildFeatureGateError(FEATURE_CODES.INSTAGRAM_STORIES) }
+  const rows = await db.destination.findMany({ where: { id: { in: unique }, userId, type: 'instagram_story', enabled: true, instagramConnection: { status: 'connected' } }, select: { id: true } })
+  return rows.length === unique.length ? unique : null
 }
 
 function optionalUrl(value) {
@@ -65,7 +75,7 @@ export async function offerQueueRoutes(app, opts = {}) {
 
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
-    const queues = await db.offerQueue.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })
+    const queues = await db.offerQueue.findMany({ where: { userId }, include: { instagramDestinations: { select: { destinationId: true } } }, orderBy: { createdAt: 'desc' } })
     const dayStart = startOfSaoPauloDayUtc(now())
     // Plano avaliado uma vez por requisição (o gate de plano vale para todas as
     // filas do usuário): fila com itens pendentes e plano sem acesso fica
@@ -91,6 +101,11 @@ export async function offerQueueRoutes(app, opts = {}) {
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await ensureOfferQueueAllowed(req, reply))) return reply
     const data = queueData(req.body)
+    const subject = await loadUserPlanSubject(db, req.user.sub)
+    const instagramIds = await resolveInstagramDestinations(db, req.user.sub, req.body?.instagramDestinationIds, subject)
+    if (instagramIds?.gate) return reply.code(403).send(instagramIds.gate)
+    if (instagramIds === null) return reply.code(400).send({ error: 'Destino Instagram inválido' })
+    data.whatsappEnabled = normalizeTargetJids(req.body?.targetJids).length > 0 || instagramIds.length === 0
     const error = validateQueue(data)
     if (error) return reply.code(400).send({ error })
     if (!(await ensureCountQuota(reply, {
@@ -99,26 +114,53 @@ export async function offerQueueRoutes(app, opts = {}) {
       count: () => db.offerQueue.count({ where: { userId: req.user.sub } }),
       label: 'filas de oferta',
     }))) return
-    return presentQueue(await db.offerQueue.create({ data: { ...data, userId: req.user.sub } }))
+    const destinations = instagramIds.length ? { instagramDestinations: { create: instagramIds.map(destinationId => ({ destinationId })) } } : {}
+    return presentQueue(await db.offerQueue.create({ data: { ...data, userId: req.user.sub, ...destinations }, include: { instagramDestinations: { select: { destinationId: true } } } }))
   })
 
   app.put('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await ensureOfferQueueAllowed(req, reply))) return reply
     const userId = req.user.sub
-    const current = await db.offerQueue.findFirst({ where: { id: req.params.id, userId } })
+    const current = await db.offerQueue.findFirst({ where: { id: req.params.id, userId }, include: { instagramDestinations: { select: { destinationId: true } } } })
     if (!current) return reply.code(404).send({ error: 'Fila não encontrada' })
     const data = queueData(req.body, true)
+    let nextInstagramIds = null
+    if (req.body?.instagramDestinationIds !== undefined) {
+      const ids = await resolveInstagramDestinations(db, userId, req.body.instagramDestinationIds, await loadUserPlanSubject(db, userId))
+      if (ids?.gate) return reply.code(403).send(ids.gate)
+      if (ids === null) return reply.code(400).send({ error: 'Destino Instagram inválido' })
+      nextInstagramIds = ids
+      data.instagramDestinations = { deleteMany: {}, create: ids.map(destinationId => ({ destinationId })) }
+    }
+    if (req.body?.targetJids !== undefined) {
+      const instagramCount = nextInstagramIds ? nextInstagramIds.length : (current.instagramDestinations?.length || 0)
+      data.whatsappEnabled = normalizeTargetJids(req.body.targetJids).length > 0 || instagramCount === 0
+    }
     const error = validateQueue(data, current)
     if (error) return reply.code(400).send({ error })
+    const destinationUpdate = data.instagramDestinations
+    delete data.instagramDestinations
     let reactivating = current.enabled === false && data.enabled === true
-    if (reactivating) {
+    if (destinationUpdate) {
+      await db.$transaction(async tx => {
+        if (reactivating) {
+          data.lastSentAt = null
+          const activationClaim = await tx.offerQueue.updateMany({ where: { id: current.id, userId, enabled: false }, data })
+          reactivating = activationClaim.count === 1
+          if (!reactivating) return
+          await tx.offerQueue.update({ where: { id: current.id }, data: { instagramDestinations: destinationUpdate } })
+          return
+        }
+        await tx.offerQueue.update({ where: { id: current.id }, data: { ...data, instagramDestinations: destinationUpdate } })
+      })
+    } else if (reactivating) {
       data.lastSentAt = null
       const activationClaim = await db.offerQueue.updateMany({ where: { id: current.id, userId, enabled: false }, data })
       reactivating = activationClaim.count === 1
     } else {
       await db.offerQueue.updateMany({ where: { id: current.id, userId }, data })
     }
-    const updated = await db.offerQueue.findFirst({ where: { id: current.id, userId } })
+    const updated = await db.offerQueue.findFirst({ where: { id: current.id, userId }, include: { instagramDestinations: { select: { destinationId: true } } } })
     let activation = null
     if (reactivating) {
       try { activation = await drainQueueOnce(updated, { db, now }) }
@@ -144,9 +186,9 @@ export async function offerQueueRoutes(app, opts = {}) {
   app.post('/:id/items', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await ensureOfferQueueAllowed(req, reply))) return reply
     const userId = req.user.sub
-    const queue = await db.offerQueue.findFirst({ where: { id: req.params.id, userId }, select: { id: true, targetJids: true } })
+    const queue = await db.offerQueue.findFirst({ where: { id: req.params.id, userId }, select: { id: true, targetJids: true, whatsappEnabled: true, instagramDestinations: { select: { destinationId: true } } } })
     if (!queue) return reply.code(404).send({ error: 'Fila não encontrada' })
-    const { text, jids, imageUrl, imageRefererUrl } = req.body ?? {}
+    const { text, jids, imageUrl, imageRefererUrl, offer } = req.body ?? {}
     if (!text?.trim()) return reply.code(400).send({ error: 'text obrigatório' })
     validateBroadcastText(text)
     if (!(await ensureCountQuota(reply, {
@@ -158,12 +200,14 @@ export async function offerQueueRoutes(app, opts = {}) {
     // Sem jids explícitos, o item herda os grupos configurados na própria
     // fila; fila legada sem grupos cai no fallback de todos os 'post'.
     const requestedJids = Array.isArray(jids) && jids.length ? jids : parseQueueTargetJids(queue)
-    const targetJids = await resolveTargetJids({ db, userId, jids: requestedJids })
+    const targetJids = queue.whatsappEnabled === false ? [] : await resolveTargetJids({ db, userId, jids: requestedJids })
     const gateError = enforceChannelPlanGate(targetJids, await loadUserPlanSubject(db, userId))
     if (gateError) return reply.code(403).send(gateError)
-    if (!targetJids.length) return reply.code(400).send({ error: 'Nenhum grupo/canal de destino configurado' })
+    const instagramDestinations = Array.isArray(queue.instagramDestinations) ? queue.instagramDestinations : []
+    if (!targetJids.length && !instagramDestinations.length) return reply.code(400).send({ error: 'Nenhum destino configurado' })
+    if (instagramDestinations.length && (!offer?.title || !(imageUrl || offer.imageUrl) || !offer.productUrl)) return reply.code(400).send({ error: 'Itens enviados ao Instagram exigem offer com título, imagem e productUrl' })
     const last = await db.offerQueueItem.findFirst({ where: { queueId: queue.id, userId }, orderBy: { position: 'desc' }, select: { position: true } })
-    return db.offerQueueItem.create({ data: { queueId: queue.id, userId, text: text.trim(), imageUrl: optionalUrl(imageUrl), imageRefererUrl: optionalUrl(imageRefererUrl), targetJids: JSON.stringify(targetJids), position: (last?.position ?? 0) + 1 } })
+    return db.offerQueueItem.create({ data: { queueId: queue.id, userId, text: text.trim(), imageUrl: optionalUrl(imageUrl), imageRefererUrl: optionalUrl(imageRefererUrl), offerSnapshot: offer ? JSON.stringify({ ...offer, imageUrl: imageUrl || offer.imageUrl }) : null, targetJids: JSON.stringify(targetJids), position: (last?.position ?? 0) + 1 } })
   })
 
   app.delete('/:id/items/:itemId', { onRequest: [app.authenticate] }, async (req, reply) => {

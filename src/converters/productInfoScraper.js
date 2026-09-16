@@ -14,6 +14,7 @@ const HTML_MAX_BYTES = Number(process.env.PRODUCT_INFO_MAX_BYTES) || 2 * 1024 * 
 const AMAZON_CAPTCHA_MAX_RETRIES = Number(process.env.AMAZON_CAPTCHA_MAX_RETRIES) || 4
 const AMAZON_CAPTCHA_RETRY_DELAY_MS = Number(process.env.AMAZON_CAPTCHA_RETRY_DELAY_MS) || 150
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+const AMAZON_OFFER_TITLE_MAX_CHARS = 96
 
 let _mlAppTokenCache = { token: null, expiresAt: 0 }
 async function getMlAppToken() {
@@ -126,6 +127,23 @@ function decodeEntities(value = '') {
 
 function normalizeText(value) {
   return decodeEntities(value || '').replace(/\s+/g, ' ').trim()
+}
+
+// O nome integral do catálogo da Amazon frequentemente inclui descrição,
+// variação, quantidade, público e marca repetida. Inserido sem limite em
+// `{produto}`, ele domina a oferta e pode ser quebrado pelo WhatsApp em várias
+// linhas difíceis de ler. Este limite é apenas de apresentação: preserva
+// palavras inteiras e não interfere no título usado pela própria página.
+function normalizeAmazonOfferTitle(value) {
+  const title = normalizeText(value).replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+  const chars = Array.from(title)
+  if (chars.length <= AMAZON_OFFER_TITLE_MAX_CHARS) return title
+  const prefix = chars.slice(0, AMAZON_OFFER_TITLE_MAX_CHARS + 1).join('')
+  const wordBoundary = prefix.lastIndexOf(' ')
+  const shortened = wordBoundary >= Math.floor(AMAZON_OFFER_TITLE_MAX_CHARS * 0.65)
+    ? prefix.slice(0, wordBoundary)
+    : chars.slice(0, AMAZON_OFFER_TITLE_MAX_CHARS).join('')
+  return `${shortened.replace(/[\s,;:\-–—]+$/u, '')}…`
 }
 
 function toPriceString(value) {
@@ -1015,7 +1033,8 @@ export async function fetchProductInfo(url, opts = {}) {
   const jsonLd = html ? extractFromJsonLd(html) : null
   const mlHtml = html ? extractMercadoLivreFromHtml(html) : null
   const mlLanding = html ? extractFromMercadoLivreLanding(html) : null
-  const amazonFallback = html ? extractAmazonTitleAndPrice(html) : null
+  const amazonPage = isAmazonUrl(resolvedUrl) || isAmazonUrl(finalUrl)
+  const amazonFallback = amazonPage && html ? extractAmazonTitleAndPrice(html) : null
   // Para a API da Shopee, prioriza a URL que de fato contém (shopId, itemId):
   // o fetch de HTML pode ter redirecionado para uma página anti-bot (finalUrl
   // sem IDs) enquanto resolvedUrl preserva a URL do produto.
@@ -1048,7 +1067,12 @@ export async function fetchProductInfo(url, opts = {}) {
   // genérico da página anti-bot ("Mercado Libre"/"Shopee"/"Amazon.com.br").
   // Filtra o título final por isBogusScrapeTitle para nunca apresentar um
   // rótulo de loja como nome de produto (vazaria na oferta espelhada).
-  const rawTitle = jsonLd?.title || mlHtml?.title || amazonFallback?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || mlItemApiFallback?.title || titleFromUrl || fallbackTitle
+  // Na Amazon, #productTitle e o buy box pertencem à variação que a pessoa vê
+  // na PDP. O JSON-LD pode anunciar outro seller/variante e ficar atrás do DOM
+  // visível; priorizá-lo foi a causa de texto com preço diferente do site.
+  const rawTitle = amazonPage
+    ? (amazonFallback?.title || jsonLd?.title || titleFromUrl || fallbackTitle)
+    : (jsonLd?.title || mlHtml?.title || shopeeApiFallback?.title || mercadoLivreApiFallback?.title || mlItemApiFallback?.title || titleFromUrl || fallbackTitle)
   const title = isBogusScrapeTitle(rawTitle) ? '' : rawTitle
 
   // Numa share /social/ a página tem VÁRIOS produtos; extractMercadoLivreFromHtml

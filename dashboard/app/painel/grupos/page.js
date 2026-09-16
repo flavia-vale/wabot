@@ -18,6 +18,7 @@ import { usePainelHeader, PainelContentActions } from '../PainelShell'
 const WATERMARK_TEXT_MAX_CHARS = 25
 // Quanto tempo a confirmação de "marca salva" fica na tela.
 const WATERMARK_SAVED_FEEDBACK_MS = 4000
+const RELAY_FOOTER_MAX_CHARS = 1000
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -126,6 +127,51 @@ function CfgRow({ label, hint, info, last, extra, children }) {
         {hint && <div className="cfg-row-hint">{hint}</div>}
       </div>
       <div>{children}</div>
+    </div>
+  )
+}
+
+function RelayFooterField({ group, onUpdate }) {
+  const savedValue = group.relayFooterText ?? ''
+  const [draft, setDraft] = useState(savedValue)
+  const [status, setStatus] = useState('idle')
+
+  const changed = draft !== savedValue
+
+  async function save() {
+    setStatus('saving')
+    const ok = await onUpdate(group.id, { relayFooterText: draft })
+    setStatus(ok ? 'saved' : 'error')
+  }
+
+  return (
+    <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surface-soft, #f8fafc)' }}>
+      <label htmlFor={`relay-footer-${group.id}`} style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--ink)' }}>
+        Adicionar texto ao final da mensagem <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}>(opcional)</span>
+      </label>
+      <p style={{ margin: '4px 0 10px', fontSize: 12, lineHeight: 1.45, color: 'var(--ink-soft)' }}>
+        O texto será incluído depois de toda mensagem espelhada deste grupo. Deixe em branco para não adicionar nada.
+      </p>
+      <textarea
+        id={`relay-footer-${group.id}`}
+        className="pnl-input"
+        rows={4}
+        maxLength={RELAY_FOOTER_MAX_CHARS}
+        value={draft}
+        onChange={(event) => { setDraft(event.target.value); setStatus('idle') }}
+        placeholder="Ex.: Entre no nosso grupo VIP para receber mais ofertas!"
+        style={{ width: '100%', resize: 'vertical', lineHeight: 1.5 }}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>{draft.length}/{RELAY_FOOTER_MAX_CHARS}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {status === 'saved' && <span role="status" style={{ fontSize: 12, color: 'var(--success, #15803d)' }}>Texto salvo</span>}
+          {status === 'error' && <span role="alert" style={{ fontSize: 12, color: 'var(--danger)' }}>Não foi possível salvar</span>}
+          <button type="button" className="pnl-btn pnl-btn-primary" disabled={!changed || status === 'saving'} onClick={save}>
+            {status === 'saving' ? 'Salvando…' : 'Salvar texto'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -242,7 +288,7 @@ function DestinationPicker({ groupId, post, state, onLoad, onToggle, onSetAll, o
 
       {draft.length === 0 && (
         <p className="cfg-inline-warn" style={{ marginTop: 0 }}>
-          Sem nenhum marcado, esse grupo envia para <strong>todos</strong> os seus destinos. Para ele parar de enviar, remova o grupo monitorado.
+          Sem nenhum marcado, esse grupo <strong>não envia para lugar nenhum</strong> depois que você salvar. Marque ao menos um destino para ele voltar a enviar.
         </p>
       )}
 
@@ -354,7 +400,7 @@ function WatermarkTextField({ group, maxChars, draft, saving, savedAt, error, on
 }
 
 /* ── Monitor group config panel (redesigned) ────────────────────────── */
-function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, targetsHandlers, onSetActionError, templates }) {
+function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, targetsHandlers, onSetActionError, templates, defaultTemplateKey }) {
   const [draft, setDraft] = useState('')
 
   const keywords = (g.blockedKeywords || '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -381,8 +427,28 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, t
 
   const encaminhar = (g.forwardMode ?? 'LINK_ONLY') === 'ALLOW_NO_LINK'
 
-  const templateValue = (g.templateKey == null || g.templateKey === '') ? '__relay__' : g.templateKey
-  const templateApplied = g.templateKey !== null && g.templateKey !== ''
+  // Três estados de `templateKey`, iguais aos do robô (src/bot-worker.js, na
+  // resolução de `effectiveTemplateKey`): `null` HERDA o modelo padrão global,
+  // `''` é "manter texto original" explícito, e uma chave é o modelo fixo do
+  // grupo.
+  //
+  // A tela tratava `null` e `''` como a mesma coisa e mostrava "Manter texto
+  // original convertido" nos dois. Para quem tem um modelo padrão global, isso
+  // era mentira: o robô aplicava o modelo, e a tela ainda oferecia o campo de
+  // texto adicional — que o robô ignora quando há modelo. A cliente escrevia,
+  // salvava, lia "Texto salvo" e nada saía na oferta.
+  const inheritsDefault = g.templateKey == null
+  // O robô herda a chave CRUA: se o modelo padrão foi apagado depois de
+  // escolhido, ele ainda conta como "tem modelo" e o complemento segue
+  // descartado. Espelhar a chave crua (e não só as que ainda existem na lista)
+  // é o que impede a tela de voltar a prometer o complemento onde ele não vale.
+  const effectiveTemplateKey = inheritsDefault ? (defaultTemplateKey || '') : g.templateKey
+  const templateApplied = effectiveTemplateKey !== ''
+  // Já o <select> só pode exibir opção que existe; modelo padrão apagado cai
+  // no relay na CAIXA, sem mexer em `templateApplied` acima.
+  const templateValue = templateApplied && templates.some((t) => t.key === effectiveTemplateKey)
+    ? effectiveTemplateKey
+    : '__relay__'
 
   return (
     <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 16, display: 'grid', gap: 14 }}>
@@ -472,7 +538,11 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, t
         <CfgRow
           label="Formato da mensagem"
           info='"Manter texto original" converte os links dentro do texto que veio do grupo. Um template reescreve tudo num layout de oferta (um produto por vez).'
-          hint={templateApplied ? 'Reescreve num layout de oferta — ideal para um produto só.' : 'Mantém o texto do grupo e só troca os links pelos seus.'}
+          hint={
+            templateApplied
+              ? `Reescreve num layout de oferta — ideal para um produto só.${inheritsDefault ? ' Este grupo está usando o modelo padrão que você escolheu em Mensagens.' : ''}`
+              : 'Mantém o texto do grupo e só troca os links pelos seus.'
+          }
         >
           <select
             className="pnl-input"
@@ -485,6 +555,9 @@ function MonitorGroupConfig({ g, onUpdate, canUseChannels, post, targetsState, t
             <option value="__relay__">Manter texto original convertido</option>
             {templates.map((t) => <option key={t.key} value={t.key}>Template: {t.name}</option>)}
           </select>
+          {/* `templateApplied`, nunca `templateValue`: com modelo padrão apagado a
+              caixa cai no relay mas o robô ainda descarta o complemento. */}
+          {!templateApplied && <RelayFooterField group={g} onUpdate={onUpdate} />}
           <Link
             href="/painel/mensagens"
             style={{ display: 'inline-block', marginTop: 8, fontSize: 12.5, color: 'var(--accent-strong)', textDecoration: 'none' }}
@@ -586,6 +659,9 @@ export default function GruposPage() {
   const [expandedHealthId, setExpandedHealthId] = useState(null)
   const [planSubject, setPlanSubject] = useState({ plan: 'trial', accessExpiresAt: null })
   const [templates, setTemplates] = useState([])
+  // Modelo padrão global (BotConfig.mirrorTemplateKeyDefault). Sem ele a tela não
+  // tem como saber o que um grupo com templateKey nulo realmente publica.
+  const [defaultTemplateKey, setDefaultTemplateKey] = useState('')
 
   async function load() {
     setLoadingGroups(true)
@@ -603,9 +679,10 @@ export default function GruposPage() {
   useEffect(() => {
     let active = true
     setLoadingGroups(true)
-    Promise.all([api.groups(), api.me(), loadTemplateStore().catch(() => ({}))])
-      .then(async ([data, me, templateStore]) => {
+    Promise.all([api.groups(), api.me(), loadTemplateStore().catch(() => ({})), api.getConfig().catch(() => null)])
+      .then(async ([data, me, templateStore, config]) => {
         setTemplates(composeTemplates(templateStore))
+        setDefaultTemplateKey(config?.mirrorTemplateKeyDefault || '')
         setPlanSubject({ plan: me?.plan ?? 'trial', accessExpiresAt: me?.accessExpiresAt ?? null })
         if (!active) return
         setGroups(data)
@@ -831,7 +908,9 @@ export default function GruposPage() {
         error: '',
         savedIds: idsToSave,
         draftIds: idsToSave,
-        mode: idsToSave.length ? 'explicit' : 'all',
+        // Salvar é sempre escolha explícita, inclusive vazia: desmarcar tudo
+        // quer dizer "não mande para ninguém", e não o fallback de todos.
+        mode: 'explicit',
         savedAt: Date.now(),
       })
     } catch (err) {
@@ -1124,6 +1203,7 @@ export default function GruposPage() {
                       targetsHandlers={targetsHandlers}
                       onSetActionError={setActionError}
                       templates={templates}
+                      defaultTemplateKey={defaultTemplateKey}
                     />
                   )}
                   {configOpen && tab === 'post' && renderPostConfig(g)}
