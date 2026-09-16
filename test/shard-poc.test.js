@@ -24,11 +24,12 @@ test('expõe apenas telemetria operacional necessária ao painel', () => {
   assert.deepEqual(result.incomingQueue, { queued: 1 })
 })
 
-test('painel é somente leitura, evita polling sobreposto e não exibe conteúdo das mensagens', () => {
+test('painel evita polling sobreposto, protege start por modo e não exibe conteúdo das mensagens', () => {
   const page = readFileSync(new URL('../dashboard/app/admin/teste-shard/page.js', import.meta.url), 'utf8')
   const route = readFileSync(new URL('../src/api/routes/admin.js', import.meta.url), 'utf8')
   assert.match(page, /loadingRef\.current/)
-  assert.doesNotMatch(page, /adminShardPoc(Start|Stop|Rollback)/)
+  assert.match(page, /experimentMode === 'enabled'/)
+  assert.match(page, /adminShardPocRollback/)
   assert.match(route, /requireAdmin\(req, reply, 'tech:read'\)/)
   const endpoint = route.slice(route.indexOf("app.get('/shard-poc/overview'"), route.indexOf("app.get('/capacity/current'"))
   assert.doesNotMatch(endpoint, /messageText: true|sourceGroup: true|destGroup: true/)
