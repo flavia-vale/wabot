@@ -146,30 +146,93 @@ pontas diferentes, e nenhuma das duas mexe em lógica de sessão.
 
 1. **`MALLOC_ARENA_MAX`** (era §3.1, 4º lugar) — passa a **primeira**, com
    58% do PSS medido atrás dela.
-2. **Reduzir threads** (novo, §3.6) — causalmente acima das arenas.
+2. **Reduzir threads** (novo, §3.6) — causalmente acima das arenas. **16 das
+   29 são do motor do Prisma** (§2-A.4).
 3. **Thread do transporte do log** (§3.2) — continua valendo, e agora por dois
    motivos: os 11,7 MiB da isolate **e** uma thread a menos alimentando arena.
-4. **Sharp** (§3.3) — idem: 50 MB de cache nativo **e** ~7 threads a menos.
+4. **Sharp** (§3.3) — só o cache nativo de 50 MB; a parte de threads caiu na
+   medição (§2-A.5).
 5. **Robôs que não precisam estar ligados** (§3.5) — inalterado.
-6. ~~Prisma (§3.4)~~ — **encerrado pela medição**.
+6. ~~Prisma (§3.4) como custo de código~~ — encerrado. Mas **reaberto como
+   produtor de threads**, dentro de §3.6.
 
 ⚠️ **O que ainda NÃO está medido:** quanto `MALLOC_ARENA_MAX=2` de fato devolve.
 Os 3,5 GB acima são o teto teórico se a fragmentação fosse a zero, não previsão.
 E limitar arenas aumenta disputa de trava no `malloc` entre as 30 threads — com
 CPU 98% ociosa há folga, mas o event loop precisa ser conferido depois.
 
-### 2-A.4 A leitura seguinte, também de graça
+### 2-A.4 De onde vêm as 29 threads (medido, 2026-09-16)
 
-Saber QUAIS threads existem diz qual alavanca corta mais arena. Somente leitura,
-sem reiniciar nada:
-
-```bash
-p=$(pgrep -f "/home/deploy/wabot/src/bot-worker" | head -1)
-cat /proc/$p/task/*/comm | sort | uniq -c | sort -rn
+```text
+     16 tokio-runtime-w     <- motor do Prisma (Rust)
+      7 node                <- plataforma do V8
+      4 libuv-worker        <- pool do libuv
+      1 opentelemetry-e     <- exportador do Prisma
+      1 DelayedTaskSche     <- agendador do V8
 ```
 
-Os nomes são autoexplicativos e vêm de quem criou a thread. É o que separa
-"cortar o Sharp vale 7 threads" de "vale 1".
+**O motor do Prisma é 55% das threads de cada robô.** Dezesseis threads
+assíncronas por processo — vezes 41 robôs, **656 threads no servidor** — para
+falar com um arquivo SQLite. SQLite é banco embutido: não há conexão de rede
+nem pool remoto que justifique esse número. É o padrão do tokio (threads =
+núcleos, mais o pool de bloqueio), e ninguém nunca o ajustou aqui.
+
+E são as threads que criam as arenas. Ou seja: o mesmo Prisma que a §2-A.2
+tinha ENCERRADO como custo de código volta como **o maior produtor de threads
+da frota** — mecanismo diferente, prioridade oposta.
+
+### 2-A.5 Duas correções minhas que a medição impôs
+
+**1. Sharp NÃO estava criando 8 threads.** Eu escrevi, na §3.3, "8 threads de
+libvips por worker". **Zero threads de vips na amostra.** O libvips está
+carregado (`libvips-cpp.so` aparece com 2,1 MiB de PSS), mas o pool dele é
+criado sob demanda e esse worker não tinha nenhuma operação em curso. O número
+veio do padrão documentado da biblioteca, não de medição — exatamente o tipo de
+analogia que esta análise diz para não fazer. **§3.3 cai de posição**: o cache
+de 50 MB continua de pé como hipótese (e mora dentro das arenas), mas a parte
+de threads não se sustenta como estava escrita.
+
+**2. §3.4 (Prisma) foi encerrada cedo demais.** A conclusão sobre CÓDIGO
+continua certa (2,2 MiB de PSS por worker, `libquery_engine` nem aparece). O que
+eu não vi é que o custo dele não estava no código nem nas arenas diretamente —
+está nas **16 threads** que produzem as arenas. Reaberta, com alavanca nova
+(§3.6), não com a reescrita de arquitetura que eu havia descartado.
+
+### 2-A.6 A leitura que fecha a conta (somente leitura, custo zero)
+
+Ela testa a hipótese central — **mais threads ⇒ mais arenas ⇒ mais memória** —
+e diz se os workers pesados são os que têm o pool do vips ligado. Reusa o
+`/tmp/mem.awk` já criado pelo comando da §3.0:
+
+```bash
+# ---------- cole daqui (reusa /tmp/mem.awk do comando anterior) ----------
+ALVO="/home/deploy/wabot/src/bot-worker"
+for p in $(pgrep -f "$ALVO"); do
+  L=$(awk -v PID=$p -v TH=0 -f /tmp/mem.awk /proc/$p/smaps 2>/dev/null) || continue
+  pss=$(echo "$L" | awk '{print $6}'); ar=$(echo "$L" | awk '{print $10}')
+  arena=$(echo "$L" | tr ' ' '\n' | awk -F= '/^arena_glibc=/{print $2}')
+  C=/proc/$p/task
+  th=$(ls $C 2>/dev/null | wc -l)
+  tk=$(cat $C/*/comm 2>/dev/null | grep -c tokio)
+  vp=$(cat $C/*/comm 2>/dev/null | grep -ci vips)
+  [ -n "$pss" ] && printf "%7s %-7s %4s %5s %5s %6s %8s\n" "$pss" "$p" "$th" "$tk" "$vp" "$ar" "$arena"
+done | sort -rn | awk 'BEGIN{printf "%7s %-7s %4s %5s %5s %6s %8s\n","PSS","pid","thr","tokio","vips","arenas","MiB_arena"}
+  {print; n++; t+=$3; k+=$4; v+=$5; a+=$6; m+=$7}
+  END{printf "\n%d robos | %d threads (tokio %d = %.0f%%, vips %d) | %d arenas | %.0f MiB em arena\n", n,t,k,k*100/t,v,a,m}'
+# ---------- ate aqui ----------
+```
+
+Leitura do resultado:
+
+- **`thr`/`arenas` crescendo junto com `PSS`** → a hipótese se confirma e a §3.6
+  vira a alavanca principal;
+- **`vips` só nos pesados** → o pool do Sharp é ligado por tráfego, e §3.3 volta
+  a valer pelas threads também;
+- **`vips` zero em todos** → a parte de threads de §3.3 está morta e sobra só o
+  cache de 50 MB;
+- **`arenas` igual em todos, com `MiB_arena` muito diferente** → a poça é a
+  mesma e o que varia é o quanto ficou preso nela: fragmentação pura, e o
+  caminho é §3.1 antes de §3.6.
 
 ## 3. As alavancas ainda não testadas
 
@@ -375,11 +438,13 @@ repositório (`grep -rn "sharp\.\(cache\|concurrency\)" src/` não devolve nada)
 
 - `sharp.cache()` → **50 MB de cache de operação, por processo**, memória nativa
   pura, invisível em `heapUsed`;
-- `sharp.concurrency()` → número de núcleos, ou seja **8 threads de libvips por
-  worker**, cada uma com pilha e arena próprias.
+- `sharp.concurrency()` → número de núcleos, ou seja até 8 threads de libvips
+  por worker. ⚠️ **Medido em 2026-09-16: ZERO threads de vips na amostra**
+  (§2-A.5). O pool é criado sob demanda; o "8 threads" era o padrão documentado
+  da biblioteca, não medição. A §2-A.6 diz se ele aparece nos workers pesados.
 
-**Ganho estimado: até 50 MiB por worker que já processou imagem**, mais 7
-threads por worker. Na frota, isso é da ordem de **1-2 GB** — mas o cache enche
+**Ganho estimado: até 50 MiB por worker que já processou imagem.** ~~mais 7
+threads por worker~~ — a parte de threads não se sustentou na medição (§2-A.5). Na frota, isso é da ordem de **1-2 GB** — mas o cache enche
 preguiçosamente, então o ganho real depende de quantos workers de fato passaram
 por uma operação de imagem. A medição da §3.0 responde isso sem adivinhação (a
 linha `libvips` em "bibliotecas mais caras" e a contagem de threads).
@@ -482,6 +547,51 @@ propósito e não dispara o aviso de robô caído), nunca por `kill`.
 
 ---
 
+---
+
+### 3.6 — Cortar as threads que criam as arenas (NOVO, e é a alavanca causal)
+
+**Mecanismo.** Arena do glibc nasce de disputa entre threads. Com 29 threads o
+processo chega a ~30 arenas; com 10, tende a muito menos. Esta alavanca age
+**acima** da §3.1: em vez de limitar quantas poças existem, fecha a torneira.
+
+**Onde estão as threads, e o que cada corte vale** (contagem medida; o efeito em
+arena é hipótese a medir):
+
+| Pool | hoje | como cortar | onde |
+|---|---:|---|---|
+| motor do Prisma (tokio) | **16** | `TOKIO_WORKER_THREADS` | env do fork |
+| plataforma do V8 | 7 | `--v8-pool-size=2` | `resolveWorkerExecArgv` |
+| pool do libuv | 4 | `UV_THREADPOOL_SIZE=2` | env do fork |
+| exportador + agendador | 2 | — | — |
+
+⚠️ **`TOKIO_WORKER_THREADS` é a variável padrão do tokio, mas NÃO está
+verificado que o motor do Prisma a honra** — depende de como ele constrói o
+runtime. Isso é medição de um minuto em staging (setar, reiniciar, contar as
+threads com o comando da §2-A.4), e é **o primeiro passo desta alavanca**. Se
+não honrar, a alavanca vale só 9 threads em vez de 23.
+
+**Como medir o ganho.** O mesmo bloco da §3.0, antes e depois, comparando
+`arenas respondem por N% do PSS`.
+
+**Risco: médio, e maior que o das outras.** Cortar thread de pool muda
+concorrência de I/O real:
+
+- **libuv de 4 para 2** é o mais sensível: é ele que serve leitura de arquivo e
+  DNS. O `useMultiFileAuthState` do Baileys lê e escreve arquivo por credencial,
+  e a busca de foto faz DNS. Não descer abaixo de 2 sem medir latência.
+- **tokio do Prisma** serializa consulta ao banco. Com SQLite (banco embutido,
+  escrita serializada pelo WAL de qualquer forma) a folga é grande, mas um valor
+  baixo demais pode aparecer como `SQLITE_BUSY` — que o produto já conta
+  (`ops_sqlite_busy`). **É o sinal a vigiar depois de aplicar.**
+- **V8 de 7 para 2** afeta GC paralelo e compilação em background. Com CPU 98%
+  ociosa, o risco real é pausa de GC mais longa — e pausa de GC longa é
+  literalmente o que derrubava sessão no incidente de junho/2026. **Medir o
+  event loop antes de promover.**
+
+**Sem reinício do supervisor não vale**, e por isso vai na mesma janela das
+outras (§5).
+
 ## 4. O que eu NÃO recomendo atacar, e por quê
 
 | Não atacar | Por quê |
@@ -500,13 +610,15 @@ propósito e não dispara o aviso de robô caído), nunca por `kill`.
 ## 5. Ordem recomendada (revista pela medição)
 
 1. ✅ **§3.0 rodada** — a resposta está na §2-A.
-2. **Ler os nomes das threads** (§2-A.4). Custo zero, e diz qual corte de thread
-   vale mais arena.
+2. ✅ **Nomes das threads lidos** (§2-A.4): 16 de 29 são do motor do Prisma.
+   Falta a correlação da **§2-A.6** (custo zero) e o teste de um minuto do
+   `TOKIO_WORKER_THREADS` em staging (§3.6).
 3. **Rodar a medição da §3.5** (SQL somente leitura). Independe de tudo acima e
    pode entregar 218 MiB por robô que não precisava existir.
 4. **Preparar UMA janela só**, com tudo que exige reinício do supervisor:
    `MALLOC_ARENA_MAX` (§3.1), corte de threads (§3.6), destino do log (§3.2),
-   Sharp (§3.3) e o encerramento da POC (§6). Validar em staging antes, e medir
+   Sharp (§3.3) e o encerramento da POC (§6). **`ops_sqlite_busy` e o event loop
+   são os dois sinais a vigiar depois** (§3.6). Validar em staging antes, e medir
    com o mesmo bloco da §3.0 **antes e depois** — o número a comparar é o PSS
    somado e a linha `arenas respondem por N% do PSS`.
 5. ~~§3.4 (Prisma)~~ — encerrada pela medição.
