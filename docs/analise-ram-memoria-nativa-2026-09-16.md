@@ -16,8 +16,10 @@
 2. **PORQUE:** todas as medições até aqui usaram totais (`smaps_rollup`, RSS,
    heap). Total não diz se a memória é arena do alocador, heap do V8, pilha de
    thread ou biblioteca — e cada uma dessas pede uma ação diferente.
-3. **O QUE DEVE SER FEITO:** rodar a decomposição (30 segundos, leitura pura de
-   `/proc`), e só então escolher entre as quatro alavancas da §3.
+3. **O QUE DEVE SER FEITO:** **a decomposição já foi rodada em produção
+   (§2-A): 58% do PSS da frota é fragmentação do alocador do sistema.** A
+   alavanca passou a ser uma variável de ambiente, e a segunda é reduzir as
+   29-34 threads por robô que criam essas arenas.
 4. **COMO:** a ordem prática está na §5. Nada aqui é aplicado sem o OK da dona
    do produto — REGRA #1 da política de memória.
 
@@ -65,6 +67,109 @@ precisa carregar. É o que a §3 lista.
 E a parte variável (128 MiB por sessão) é justamente a que **não aparece no
 heap**: dos 243,5 MiB que a sessão adicionou ao shard, só 14 MiB estavam em
 `heapUsed` + `external`. Os outros 229,5 MiB são nativos.
+
+## 2-A. A MEDIÇÃO (produção, 41 robôs, 2026-09-16) — ela reordena tudo
+
+Rodada em produção com o bloco da §3.0. **Responde a pergunta que estava aberta
+desde 13/09 e muda a ordem das alavancas.**
+
+| Classe de região | PSS somado | % do total |
+|---|---:|---:|
+| **arena do glibc** | **4,95 GB** | **58%** |
+| anônimo (heap do V8, buffers, pilhas) | 2,70 GB | 32% |
+| heap principal (brk) | 0,69 GB | 8% |
+| biblioteca (`.so`/`.node`) | 0,09 GB | 1% |
+| arquivo | 0,05 GB | <1% |
+| **total** | **8,70 GB** | |
+
+Por worker: **28 a 34 arenas**, **29 a 34 threads**, PSS de 98,8 a 357,1 MiB.
+
+### 2-A.1 Os três achados
+
+**1. A memória invisível tem nome: é fragmentação do alocador.** 58% do PSS da
+frota está em arena secundária do glibc — o balde que, por construção, é
+memória que o processo já liberou e que nunca voltou ao sistema operacional. Não
+é heap do V8 (que é `anonimo`), não é código (`biblioteca` é 1%).
+
+**2. A variação entre workers é quase toda nas arenas — e isso é a prova de que
+é fragmentação, não dado vivo.** Com o MESMO código e a MESMA contagem de
+threads:
+
+| | menor | maior | razão |
+|---|---:|---:|---:|
+| arena do glibc | 35,7 MiB | 228,3 MiB | **6,4×** |
+| anônimo | 50,3 MiB | 98,6 MiB | 2,0× |
+
+Se o peso fosse dado vivo, `anonimo` e `heap_principal` acompanhariam. Eles
+quase não acompanham. **Se todos os 41 se comportassem como o melhor deles, as
+arenas somariam 1,43 GB em vez de 4,95 GB — uma diferença de 3,5 GB.** Isso é o
+TAMANHO DO PRÊMIO, não uma promessa de economia: concentrar arenas reduz a
+folga, não elimina a necessidade de memória viva.
+
+⚠️ **Não é idade.** Os pids mais baixos (processos que subiram primeiro) estão
+entre os MAIS LEVES, e os grupos se misturam ao longo da tabela. O que separa é
+histórico de alocação, ou seja, tráfego — exatamente o que produz fragmentação.
+
+**3. A causa das arenas está à vista: 29-34 threads por worker.** O glibc cria
+arena por disputa entre threads (teto de `8 × núcleos` = 64 aqui; a frota para
+em ~30 porque é isso que as threads pedem). A conta bate com os pools que o
+processo carrega:
+
+| Pool | threads (estimativa pelo padrão de cada um) |
+|---|---:|
+| plataforma do V8 | ~7 (núcleos − 1) |
+| pool do libuv | 4 (`UV_THREADPOOL_SIZE` padrão) |
+| motor do Prisma (tokio) | ~8 |
+| libvips do Sharp | ~8 (`sharp.concurrency()` = núcleos) |
+| principal + transporte do pino | 2 |
+
+**Threads são a torneira; arenas são a poça.** Fechar a torneira (menos threads)
+e limitar o número de poças (`MALLOC_ARENA_MAX`) atacam o mesmo fenômeno por
+pontas diferentes, e nenhuma das duas mexe em lógica de sessão.
+
+### 2-A.2 O que a medição DERRUBOU
+
+- **§3.4 (as 42 cópias do motor do Prisma) morre como custo de código.** A
+  coluna `biblioteca` é **2,2 MiB de PSS por worker**, e no detalhe do maior
+  worker só `libvips-cpp.so` passa de 1 MiB (2,1 MiB). `libquery_engine` sequer
+  aparece. É o esperado: biblioteca compartilhada por 41 processos tem o PSS
+  dividido por 41 — e é exatamente por isso que RSS engana. **Não há conversa de
+  arquitetura a ter aqui.** O que o Prisma custa está dentro das arenas (threads
+  do tokio + alocação), não no mapeamento do código.
+- **Minha sonda local de `MALLOC_ARENA_MAX` (§3.1) subestimou por um fator
+  grande** — 2% contra os 58% reais. O ambiente tinha 4 núcleos e poucas
+  threads; produção tem 8 núcleos e 30 threads. Regime diferente, resultado
+  diferente. **Fica registrado como lição de método:** sonda em ambiente que não
+  reproduz o número de threads não serve para estimar fragmentação de alocador.
+
+### 2-A.3 Ordem nova
+
+1. **`MALLOC_ARENA_MAX`** (era §3.1, 4º lugar) — passa a **primeira**, com
+   58% do PSS medido atrás dela.
+2. **Reduzir threads** (novo, §3.6) — causalmente acima das arenas.
+3. **Thread do transporte do log** (§3.2) — continua valendo, e agora por dois
+   motivos: os 11,7 MiB da isolate **e** uma thread a menos alimentando arena.
+4. **Sharp** (§3.3) — idem: 50 MB de cache nativo **e** ~7 threads a menos.
+5. **Robôs que não precisam estar ligados** (§3.5) — inalterado.
+6. ~~Prisma (§3.4)~~ — **encerrado pela medição**.
+
+⚠️ **O que ainda NÃO está medido:** quanto `MALLOC_ARENA_MAX=2` de fato devolve.
+Os 3,5 GB acima são o teto teórico se a fragmentação fosse a zero, não previsão.
+E limitar arenas aumenta disputa de trava no `malloc` entre as 30 threads — com
+CPU 98% ociosa há folga, mas o event loop precisa ser conferido depois.
+
+### 2-A.4 A leitura seguinte, também de graça
+
+Saber QUAIS threads existem diz qual alavanca corta mais arena. Somente leitura,
+sem reiniciar nada:
+
+```bash
+p=$(pgrep -f "/home/deploy/wabot/src/bot-worker" | head -1)
+cat /proc/$p/task/*/comm | sort | uniq -c | sort -rn
+```
+
+Os nomes são autoexplicativos e vêm de quem criou a thread. É o que separa
+"cortar o Sharp vale 7 threads" de "vale 1".
 
 ## 3. As alavancas ainda não testadas
 
@@ -177,8 +282,9 @@ livre; com várias threads alocando (pool do libuv, plataforma do V8, thread do
 transporte de log, pool do libvips), as arenas ficam fragmentadas e o RSS sobe
 sem o heap subir. É o retrato exato de "PSS cresce, `heapUsed` não".
 
-**Ganho estimado: desconhecido, e provavelmente pequeno.** Tentei reproduzir o
-efeito num teste controlado (8 tarefas concorrentes de AES-GCM + HMAC + buffers
+**Ganho: esta é agora a PRIMEIRA alavanca — 58% do PSS medido em produção está
+aqui (§2-A).** O texto abaixo é o que eu tinha ANTES da medição e fica como
+lição de método. Tentei reproduzir o efeito num teste controlado (8 tarefas concorrentes de AES-GCM + HMAC + buffers
 de tamanho variado, que é o formato do trabalho do Signal por mensagem):
 
 ```text
@@ -186,14 +292,16 @@ MALLOC_ARENA_MAX=(padrão)  PSS 63,1 MiB   blocos reservados: 15
 MALLOC_ARENA_MAX=2         PSS 61,7 MiB   blocos reservados: 11
 ```
 
-**1,4 MiB — cerca de 2%.** O teste roda num ambiente de 4 núcleos e não
-reproduz processo longevo nem o pool do libvips, então ele **não refuta** a
-hipótese para produção; o que ele faz é tirar esta alavanca do topo da lista.
+**1,4 MiB — cerca de 2%.** ⚠️ **Produção mediu 58%.** O ambiente da sonda tem
+4 núcleos e poucas threads; produção tem 8 núcleos e 30 threads por worker, que
+é justamente o que cria arena. **Sonda que não reproduz o número de threads não
+serve para estimar fragmentação de alocador** — eu usei essa sonda para
+rebaixar a alavanca e estava errado.
 Quem decide é o número de `arena_glibc` da §3.0.
 
-**Como medir antes de aplicar.** A coluna `arenas`/`PSS(arenas)` do
-`diag-memoria-nativa.mjs`. Se as arenas responderem por menos de ~15% do PSS,
-**não aplicar** — o ganho não paga nem a mudança de env.
+**Já medido:** 58% do PSS, 28-34 arenas por worker, e a dispersão de 6,4× no
+tamanho delas com `anonimo` quase constante (§2-A.1). O critério de "menos de
+15% não aplicar" foi cumprido com folga.
 
 **Risco: baixo, mas não é de graça.** É variável de ambiente, nenhuma linha do
 caminho de sessão muda, e desligar é apagar a linha. Dois cuidados: (a) limitar
@@ -307,6 +415,15 @@ biblioteca nativa (`libquery_engine-*.node`) dentro do processo — com seu
 próprio alocador, seu próprio pool e a representação do schema (que aqui é
 grande) em memória. **Isso acontece 42 vezes.**
 
+### ✅ ENCERRADA PELA MEDIÇÃO (§2-A.2)
+
+`biblioteca` soma **2,2 MiB de PSS por worker**, e no detalhe do maior só
+`libvips-cpp.so` passa de 1 MiB. `libquery_engine` não aparece. Biblioteca
+compartilhada por 41 processos tem o PSS dividido por 41 — o custo de código é
+desprezível e **não há conversa de arquitetura a ter aqui**. O que o Prisma
+custa está dentro das arenas (threads do tokio + alocação), atacável por §3.1 e
+§3.6. O texto abaixo é o raciocínio de antes da medição.
+
 **Ganho estimado: não estimo — e é exatamente por isso que está nesta lista.**
 Qualquer número que eu desse aqui seria analogia, e foi analogia ("miniatura de
 card costuma ter 3-20KB") que produziu o piso de 3000 bytes que teve de ser
@@ -380,22 +497,29 @@ propósito e não dispara o aviso de robô caído), nunca por `kill`.
 | **Vazamento por idade nos workers** | Inconclusivo por falta de dispersão: 41 dos 42 workers têm 2 h de vida. Só volta à mesa com uma frota de idades variadas — ou acompanhando 3-4 workers por algumas horas com a cadência da §3.0. |
 | **Vazamento no supervisor** | Medido e descartado: RSS 124 MiB contra teto de 400 MB, estável, e todos os restarts do PM2 são padrão de deploy. |
 
-## 5. Ordem recomendada
+## 5. Ordem recomendada (revista pela medição)
 
-1. **Rodar a §3.0** (30 segundos, leitura pura). É o que decide as próximas
-   escolhas; tudo o que vem depois muda conforme o resultado.
-2. **Rodar a medição da §3.5** (SQL somente leitura). Pode entregar o maior
-   ganho da lista sem nenhuma mudança de código.
-3. **Tratar o resíduo da POC reprovada** — ver §6. Não é urgência de RAM (a
-   correção está lá) e deve ir junto do passo 4.
-4. **Preparar §3.2 (log) e §3.3 (Sharp) juntas**, validar em staging com PSS
-   antes/depois, e só então levar a produção **numa reinicialização anunciada
-   só** do `bot-supervisor`.
-5. **§3.1 (arenas)** entra na mesma leva **apenas se** a §3.0 mostrar arena
-   acima de ~15% do PSS.
-6. **§3.4 fica em medição**, sem implementação, até haver número.
+1. ✅ **§3.0 rodada** — a resposta está na §2-A.
+2. **Ler os nomes das threads** (§2-A.4). Custo zero, e diz qual corte de thread
+   vale mais arena.
+3. **Rodar a medição da §3.5** (SQL somente leitura). Independe de tudo acima e
+   pode entregar 218 MiB por robô que não precisava existir.
+4. **Preparar UMA janela só**, com tudo que exige reinício do supervisor:
+   `MALLOC_ARENA_MAX` (§3.1), corte de threads (§3.6), destino do log (§3.2),
+   Sharp (§3.3) e o encerramento da POC (§6). Validar em staging antes, e medir
+   com o mesmo bloco da §3.0 **antes e depois** — o número a comparar é o PSS
+   somado e a linha `arenas respondem por N% do PSS`.
+5. ~~§3.4 (Prisma)~~ — encerrada pela medição.
 
-Nenhum passo de 3 em diante é aplicado sem o OK explícito da dona do produto.
+⚠️ **Por que uma janela só:** cada uma dessas mudanças, sozinha, custa uma
+reconexão de todas as sessões. Aplicadas juntas, custam uma. E a frota já levou
+8 reinícios em 3 dias (§7).
+
+⚠️ **Contra-indicação a respeitar:** aplicar tudo de uma vez impede saber qual
+mudança rendeu o quê. A saída é medir por etapa **em staging**, onde reiniciar
+não custa nada, e levar o pacote fechado para produção.
+
+Nenhum passo de 4 em diante é aplicado sem o OK explícito da dona do produto.
 
 ## 6. Resíduo da POC reprovada — o que ele custa de verdade
 
@@ -456,10 +580,14 @@ pm2 describe bot-supervisor | grep -iE "uptime|restart"
 
 ## 8. Limites desta análise
 
-- **Nada foi medido em produção por esta sessão.** Os números de produção vêm
-  dos documentos de 11, 13 e 16 de setembro. As duas medições novas (worker
-  thread e `MALLOC_ARENA_MAX`) foram feitas num ambiente de 4 núcleos e servem
-  para ordenar a lista, não para estimar o ganho no servidor.
+- **A decomposição da §2-A É medição de produção** (41 robôs, 16/09). Os demais
+  números de produção vêm dos documentos de 11 e 13 de setembro.
+- **A medição do worker thread (11,7 MiB) continua sendo de um ambiente de 4
+  núcleos** e serve para ordenar, não para estimar o ganho no servidor.
+- **Quanto `MALLOC_ARENA_MAX=2` devolve NÃO está medido.** Os 3,5 GB da §2-A.1
+  são o teto teórico se a fragmentação fosse a zero. A distribuição de threads
+  por pool (§2-A.1) é estimada pelos padrões de cada biblioteca — a leitura da
+  §2-A.4 a substitui por medição.
 - **`sharp.cache()` = 50 MB e `sharp.concurrency()` = núcleos** são os padrões
   documentados da biblioteca, não medição minha. A §3.0 confirma em campo.
 - O peso do motor do Prisma (§3.4) está deliberadamente **sem estimativa**.
