@@ -166,6 +166,45 @@ test('fetchProductInfo extrai preço Amazon via a-price-whole/fraction quando a-
   assert.equal(info.newPrice, '35,90')
 })
 
+test('fetchProductInfo (Amazon) usa preço visível do buy box em vez do JSON-LD de outra oferta', async (t) => {
+  const html = `<!doctype html><html><head>
+    <script type="application/ld+json">{
+      "@type":"Product",
+      "name":"Shampoo do JSON-LD",
+      "offers":{"@type":"Offer","price":"34.93","priceCurrency":"BRL"}
+    }</script></head><body>
+    <span id="productTitle">Shampoo Para Bebê Johnson's Baby De Glicerina, 400ml</span>
+    <div id="corePriceDisplay_desktop_feature_div">
+      <span class="a-price"><span class="a-offscreen">R$&nbsp;20,26</span></span>
+    </div>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse(html)
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.amazon.com.br/dp/B0CXGBT3Z9')
+  assert.equal(info.title, "Shampoo Para Bebê Johnson's Baby De Glicerina, 400ml")
+  assert.equal(info.newPrice, '20,26')
+})
+
+test('fetchProductInfo (Amazon) limpa marcação e encurta título de catálogo sem cortar palavra', async (t) => {
+  const html = `<!doctype html><html><body>
+    <span id="productTitle">Mustela Óleo de Massagem <b>Hidrata a pele dos bebês</b>, 99% de ingredientes de origem natural, 100ml, Mustela Bebê e Criança, 100 ml</span>
+    <span class="a-price"><span class="a-offscreen">R$&nbsp;43,24</span></span>
+  </body></html>`
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => mockHtmlResponse(html)
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const info = await fetchProductInfo('https://www.amazon.com.br/dp/B0CXGBT3Z9')
+  assert.ok(Array.from(info.title).length <= 97, info.title)
+  assert.match(info.title, /…$/u)
+  assert.doesNotMatch(info.title, /<\/?b>/)
+  assert.doesNotMatch(info.title, /\s[,;:\-–—]…$/u)
+})
+
 
 test('fetchProductInfo usa fallback da API da Shopee para título e preços', async (t) => {
   const shellHtml = '<!doctype html><html><head><title>Shopee Brasil | Ofertas incríveis</title></head><body>app shell</body></html>'

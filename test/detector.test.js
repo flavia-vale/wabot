@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectLinks, isOfferUrl } from '../src/detector.js'
+import { detectLinks, isOfferUrl, normalizeDetectedUrl } from '../src/detector.js'
 
 test('detecta produto.mercadolivre.com.br (subdomínio, link de recomendação com #fragment)', () => {
   const text = 'olha essa oferta https://produto.mercadolivre.com.br/MLB-4049246221-secadora-roupas-portatil-110v-mini-eletrica-cortina-pendurar-_JM?searchVariation=188766696371#polycard_client=recommendations_home_navigation-recommendations&reco_backend=x&c_id=/home/element fim'
@@ -20,6 +20,23 @@ test('detecta host nu mercadolivre.com (links /sec/ de compartilhamento)', () =>
   assert.equal(links.length, 1)
   assert.equal(links[0].platform, 'mercadolivre')
   assert.equal(links[0].url, 'https://mercadolivre.com/sec/16tPGB4')
+})
+
+test('remove marcadores de formatação do WhatsApp ao redor do link', () => {
+  for (const [text, expected] of [
+    ['*https://meli.la/2azpu9c*', 'https://meli.la/2azpu9c'],
+    ['_https://meli.la/2azpu9c_', 'https://meli.la/2azpu9c'],
+    ['~https://meli.la/2azpu9c~', 'https://meli.la/2azpu9c'],
+    ['`https://meli.la/2azpu9c`', 'https://meli.la/2azpu9c'],
+    ['_*https://meli.la/2azpu9c*_', 'https://meli.la/2azpu9c'],
+  ]) {
+    assert.equal(detectLinks(text)[0]?.url, expected, text)
+  }
+})
+
+test('preserva marcador final quando ele pertence à própria URL', () => {
+  assert.equal(normalizeDetectedUrl('https://meli.la/produto_', 'acesse '), 'https://meli.la/produto_')
+  assert.equal(normalizeDetectedUrl('https://meli.la/produto~', 'acesse '), 'https://meli.la/produto~')
 })
 
 test('detecta s.shopee.com.br e shopee.com.br via subdomínio genérico', () => {
