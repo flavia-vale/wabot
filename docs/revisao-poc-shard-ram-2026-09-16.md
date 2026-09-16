@@ -562,3 +562,34 @@ de 13/09 registrou workers de produção oscilando ±5% e vários **encolhendo**
 20-40 MiB em 30 minutos — comportamento incompatível com crescimento linear.
 As duas observações precisam ser reconciliadas pela medição de §10.2, não por
 argumento.
+
+### 10.4 O confundidor morreu duas vezes
+
+O teste de §10.2 saiu **inconclusivo para vazamento** — a frota não tem
+dispersão de idade para correlacionar:
+
+```text
+  0h de vida |  1 robo  | PSS medio 243 MiB
+  2h de vida | 41 robos | PSS medio 228 MiB
+```
+
+Mas ele fechou de vez a dúvida que restava sobre a POC. A objeção era que
+comparávamos uma sessão recém-conectada (shard) com workers de produção já
+assentados. **Os workers de produção têm 2 horas de vida e estão em 228 MiB.
+O shard chegou a 400 MiB com 20 minutos e uma sessão ociosa.** O shard é pior
+que um worker seis vezes mais velho — a comparação nunca foi injusta com ele.
+
+Detalhe que corta contra a hipótese de vazamento simples e pede cuidado: o
+robô mais NOVO (0h) é o mais pesado dos dois grupos (243 vs 228). Amostra de
+um, não conclui nada, mas desaconselha tratar idade como explicação única.
+
+⚠️ **Achado colateral a investigar:** 41 dos 42 robôs terem exatamente a mesma
+idade significa que o `bot-supervisor` reiniciou há ~2h e **reconectou a frota
+inteira**. Se foi deploy, é o comportamento documentado (`WORKER_CODE_PATHS_RE`
+casa com `src/bot-worker.js`, `src/core/` e `src/supervisor/`, todos tocados
+pelo #1695). Se não foi deploy, é um restart não explicado e vira incidente
+próprio. Conferir:
+
+```bash
+pm2 describe bot-supervisor | grep -iE "uptime|restart"
+```
