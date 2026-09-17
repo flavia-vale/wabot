@@ -753,105 +753,307 @@ pm2 describe bot-supervisor | grep -iE "uptime|restart"
   64 MiB alinhado em 64 MiB, sem arquivo). O kernel não rotula arena; um
   alocador diferente do glibc não seria reconhecido como tal.
 
-## 9. Runbook: o que fazer agora, em ordem
+## 9. Runbook: o que fazer agora, com os comandos
 
-Escrito depois da medição. **Nenhum passo de produção acontece sem o OK da dona
-do produto** (REGRA #1 da política de memória).
+**Nenhum passo de produção acontece sem o OK da dona do produto** (REGRA #1 da
+política de memória). Todos os comandos de medição são somente leitura: escrevem
+só em `/tmp/medidas`, não leem `.env`, não leem banco, não reiniciam nada.
 
-### Passo 0 — duas leituras que não dependem de nada (hoje, 5 minutos)
+### Passo A — instalar o medidor (uma vez, 10 segundos)
 
-Independentes do resto e de graça. Podem ser feitas antes de qualquer decisão.
+Cole este bloco inteiro no VPS. Ele cria `/tmp/medir.sh` e `/tmp/mem.awk`.
 
-**0.a — A frota está crescendo?** Entre as duas leituras de 16/09 o total em
-arena subiu 146 MiB em minutos. **Duas amostras não são tendência.** Rodar o
-bloco da §3.0 três ou quatro vezes ao longo de um dia e comparar só a linha
-`arenas respondem por N% do PSS` e o PSS somado. Se subir de forma sustentada, a
-conversa muda de "recuperar memória" para "conter crescimento" — e são coisas
-diferentes.
+⚠️ **Precisa ser colado, não pode ser `bash ~/wabot/scripts/...`:** em produção
+`~/wabot` está em `main`, e este arquivo só chega lá depois do deploy — mas a
+medição "antes" tem que ser feita ANTES dele. Depois do deploy ele fica
+versionado em `scripts/instalar-medidor-memoria.sh`.
 
-**0.b — Quantos robôs não precisam estar ligados?** A consulta da §3.5, somente
-leitura. **218 MiB por robô que não precisava existir** é o maior ganho por
-unidade de toda esta análise, e não depende de nada aqui.
+```bash
+mkdir -p /tmp/medidas
+cat > /tmp/mem.awk <<'FIMAWK'
+function hex(s,  i,c,v,n) { n=0; for (i=1;i<=length(s);i++) { c=substr(s,i,1); v=index("0123456789abcdef",c)-1; if(v<0)v=index("0123456789ABCDEF",c)-1; n=n*16+v } return n }
+/^[0-9a-fA-F]+-[0-9a-fA-F]+ / { split($1,r,"-"); idx++; st[idx]=hex(r[1]); pa[idx]=(NF>=6)?$6:""; next }
+/^Size:/ { sz[idx]=$2 } /^Rss:/ { rs[idx]=$2 } /^Pss:/ { ps[idx]=$2 }
+END {
+  for (i=1;i<=idx;i++) if (pa[i]=="") { b=int(st[i]/67108864); g[b]+=sz[i] }
+  for (i=1;i<=idx;i++) {
+    if (pa[i]=="[heap]") k="heap"
+    else if (pa[i] ~ /^\[stack/) k="pilha"
+    else if (pa[i]=="") { b=int(st[i]/67108864); if (g[b]==65536) { k="arena"; if(!seen[b]++) ar++ } else k="anon" }
+    else if (pa[i] ~ /\.(so|node)(\.[0-9]+)*$/) k="lib"
+    else if (pa[i] ~ /^\//) k="arq"
+    else k="outro"
+    P[k]+=ps[i]; tot+=ps[i]
+  }
+  printf "%.1f %.1f %.1f %.1f %d %d\n", tot/1024, P["arena"]/1024, P["anon"]/1024, P["heap"]/1024, ar, TH
+}
+FIMAWK
+cat > /tmp/medir.sh <<'FIMSH'
+#!/bin/bash
+# Medicao de memoria nativa dos robos — SOMENTE LEITURA.
+# Uso:  bash /tmp/medir.sh [antes|depois|comparar|historico]
+#       ALVO=staging bash /tmp/medir.sh ...
+set -u
+D=/tmp/medidas
+if [ "${ALVO:-prod}" = "staging" ]; then PAT="/home/deploy/wabot-staging/src/bot-worker"; NOME=staging
+else PAT="/home/deploy/wabot/src/bot-worker"; NOME=prod; fi
 
-### Passo 1 — staging (hoje)
+medir() {
+  local tot=0 arena=0 anon=0 heap=0 arenas=0 thr=0 n=0
+  for p in $(pgrep -f "$PAT"); do
+    local th; th=$(ls /proc/$p/task 2>/dev/null | wc -l)
+    local L; L=$(awk -v TH=$th -f /tmp/mem.awk /proc/$p/smaps 2>/dev/null) || continue
+    [ -z "$L" ] && continue
+    set -- $L
+    tot=$(echo "$tot $1" | awk '{print $1+$2}')
+    arena=$(echo "$arena $2" | awk '{print $1+$2}')
+    anon=$(echo "$anon $3" | awk '{print $1+$2}')
+    heap=$(echo "$heap $4" | awk '{print $1+$2}')
+    arenas=$((arenas + $5)); thr=$((thr + $6)); n=$((n+1))
+  done
+  echo "$(date +%Y-%m-%dT%H:%M:%S) $n $tot $arena $anon $heap $arenas $thr"
+}
 
-1. Mergear a PR em `develop`. O autodeploy sobe staging e **reinicia o
-   supervisor de staging** — lá isso não custa nada.
-2. Medir **antes**, no diretório de staging, com o bloco da §3.0 apontando para
-   `~/wabot-staging/src/bot-worker`.
-3. `WA_WORKER_MALLOC_ARENA_MAX=2` no `~/wabot-staging/.env`.
-4. Aplicar. ⚠️ **Staging é canonicamente `inline`**, então quem forka os robôs é
-   a `api-staging`, não o supervisor:
-   ```bash
-   pm2 delete api-staging
-   cd ~/wabot-staging && pm2 start ecosystem.config.cjs --only api-staging
-   pm2 save
-   ```
-   (`pm2 delete` + `start` do diretório certo — pegadinhas #1 e #9.)
-5. **Conferir que chegou ao robô**, que é o passo que costuma faltar:
-   ```bash
-   w=$(pgrep -f "/home/deploy/wabot-staging/src/bot-worker" | head -1)
-   tr '\0' '\n' < /proc/$w/environ | grep -E "MALLOC|TOKIO|UV_THREAD"
-   ls /proc/$w/task | wc -l
-   ```
-6. Medir **depois** e comparar a contagem de `arenas`.
+mostrar() {
+  awk -v amb="$NOME" '{
+    pct = ($3>0 ? $4*100/$3 : 0)
+    printf "  quando .............. %s (%s)\n", $1, amb
+    printf "  robos ligados ....... %d\n", $2
+    printf "  PSS total ........... %.0f MiB  (%.2f GB)\n", $3, $3/1024
+    printf "  em ARENA ............ %.0f MiB  = %.0f%% do total   <-- o numero que importa\n", $4, pct
+    printf "  em anonimo .......... %.0f MiB\n", $5
+    printf "  em heap ............. %.0f MiB\n", $6
+    printf "  arenas .............. %d   (media %.1f por robo)\n", $7, ($2>0?$7/$2:0)
+    printf "  threads ............. %d   (media %.0f por robo)\n", $8, ($2>0?$8/$2:0)
+  }'
+}
 
-⚠️ **O que staging PODE e o que NÃO PODE provar.** Staging tem uma sessão só e
-tráfego baixo. Ele prova que **nada quebra**, que a env chega ao robô e que a
-contagem de arenas cai de ~30 para ~2. Ele **não** mede a economia — a economia
-vem da dispersão de 6,6×, que só existe com tráfego real. **Não interpretar
-"pouca memória economizada em staging" como reprovação.** O critério de staging
-é: sessão continua conectada, ofertas continuam saindo, `ops_sqlite_busy` não
-aparece, arenas caíram.
+case "${1:-agora}" in
+  antes|depois)
+    L=$(medir); echo "$L" > $D/$NOME-$1.txt; echo "$L" >> $D/$NOME-historico.txt
+    echo "== MEDIDA '$1' ($NOME) gravada em $D/$NOME-$1.txt"; echo "$L" | mostrar ;;
+  comparar)
+    A=$D/$NOME-antes.txt; B=$D/$NOME-depois.txt
+    [ -f "$A" ] && [ -f "$B" ] || { echo "Faltam medidas. Rode: bash /tmp/medir.sh antes   e depois   bash /tmp/medir.sh depois"; exit 1; }
+    echo "== ANTES ($NOME)"; cat $A | mostrar
+    echo; echo "== DEPOIS ($NOME)"; cat $B | mostrar
+    echo; echo "== DIFERENCA"
+    paste $A $B | awk -v amb="$NOME" '{
+      dp=$11-$3; da=$12-$4; dth=$16-$8; dar=$15-$7
+      printf "  PSS total ........... %+.0f MiB  (%+.1f%%)\n", dp, ($3>0?dp*100/$3:0)
+      if ($4 > 0) printf "  em ARENA ............ %+.0f MiB  (%+.1f%%)\n", da, da*100/$4
+      else         printf "  em ARENA ............ %+.0f MiB\n", da
+      printf "  arenas .............. %+d  (de %d para %d)\n", dar, $7, $15
+      printf "  threads ............. %+d  (de %d para %d)\n", dth, $8, $16
+      printf "  %% do PSS em arena ... de %.0f%% para %.0f%%\n", ($3>0?$4*100/$3:0), ($11>0?$12*100/$11:0)
+      print ""
+      if (amb == "staging") {
+        print "  LEITURA (staging): economia NAO se mede aqui — e uma sessao so, com pouco trafego."
+        print "  O que vale em staging e a linha ARENAS: tem que ter caido para ~2 por robo."
+        print "  Se caiu, a env chegou e nada quebrou. Pode levar para producao."
+      } else if (da < -100) print "  LEITURA: a memoria presa em arena caiu de verdade. Deu certo."
+      else if (da > 100)    print "  LEITURA: SUBIU. Nao promover. Conferir se a env chegou ao robo (passo 5)."
+      else                  print "  LEITURA: praticamente igual. Se as arenas tambem nao cairam, a env NAO chegou ao robo."
+    }' ;;
+  historico)
+    echo "== historico ($NOME)"; printf "%-20s %5s %9s %9s %7s\n" "quando" "robos" "PSS_MiB" "arena_MiB" "%arena"
+    awk '{printf "%-20s %5d %9.0f %9.0f %6.0f%%\n", $1,$2,$3,$4,($3>0?$4*100/$3:0)}' $D/$NOME-historico.txt 2>/dev/null || echo "  (vazio — rode 'bash /tmp/medir.sh' algumas vezes)" ;;
+  *)
+    L=$(medir); echo "$L" >> $D/$NOME-historico.txt; echo "== AGORA ($NOME)"; echo "$L" | mostrar ;;
+esac
+FIMSH
+echo "OK — instalado. Agora use:  bash /tmp/medir.sh"
+```
 
-### Passo 2 — produção (janela anunciada, só com OK)
+### Passo B — as duas leituras que não dependem de nada (hoje)
 
-**Só `MALLOC_ARENA_MAX`, sozinho.** Isto muda a recomendação anterior de
-"empacotar tudo numa janela só", e o motivo é a medição: esta alavanca responde
-por 58% do problema, tem o menor risco das quatro e é a única cujo ganho **não
-dá para prever**. Misturá-la com log, Sharp e corte de thread tornaria
-impossível saber o que rendeu o quê — e é justamente o número que decide se vale
-continuar. As outras entram numa segunda janela, depois, se ainda fizerem
-sentido.
+**B.1 — A frota está crescendo?** Entre as duas leituras de 16/09 o total em
+arena subiu 146 MiB em minutos. **Duas amostras não são tendência.** Rode isto
+3 ou 4 vezes ao longo do dia (de manhã, à tarde, à noite):
 
-1. **Anunciar**: o deploy reconecta todas as sessões de uma vez.
-2. Medir **antes** (bloco da §3.0) e guardar a saída.
-3. `WA_WORKER_MALLOC_ARENA_MAX=2` no `~/wabot/.env` **antes** do merge. Nada
-   acontece ainda — nenhum processo relê `.env` sozinho.
-4. Mergear `develop` → `main`. O deploy sobe o código **e** reinicia o
-   supervisor, que na subida lê o `.env` e forka os robôs já com a variável.
-   **Uma reinicialização só, não duas.**
-   ⚠️ A pegadinha #1 (PM2 cacheia env) **não** se aplica aqui: ela vale para
-   variável que o PM2 já tinha cacheado, e esta é um nome novo que nunca existiu
-   — o dotenv a define normalmente no boot. Mesmo assim, conferir pelo passo 5
-   do staging.
-5. Medir **depois**: aos 15 minutos, 1 hora e 24 horas.
+```bash
+bash /tmp/medir.sh
+```
 
-### Passo 3 — o que vigiar depois (produção)
+E no fim do dia, para ver a série:
 
-| Sinal | Onde | O que significa se mudar |
-|---|---|---|
-| PSS somado e `% em arena` | bloco da §3.0 | é o resultado que se está medindo |
-| `ops_sqlite_busy` | `AnalyticsEvent` / `/metrics` | não deveria mudar — `MALLOC_ARENA_MAX` não mexe em banco. Se mudar, foi outra coisa |
-| quedas de sessão | `WaConnectionEvent` | disputa de trava no `malloc` atrasando o event loop apareceria aqui |
-| swap em uso | `free -m` | parado em ~41 MB hoje; é o sinal que decide aumentar RAM |
+```bash
+bash /tmp/medir.sh historico
+```
 
-**Rollback:** apagar a linha do `.env` e reiniciar o supervisor. Volta ao
-comportamento de hoje, sem redeploy.
+Se a coluna `arena_MiB` subir sempre, a conversa muda de "recuperar memória"
+para "conter crescimento" — coisas diferentes, com soluções diferentes.
 
-### Passo 4 — só depois, e só se valer
+**B.2 — Quantos robôs não precisam estar ligados?** 218 MiB por robô que não
+precisava existir. Somente leitura:
 
-`TOKIO_WORKER_THREADS` (⚠️ **não está verificado que o motor do Prisma o honra**
-— o teste é setar, reiniciar e contar as threads com o comando da §2-A.4),
-depois `UV_THREADPOOL_SIZE` e `--v8-pool-size`, um de cada vez, cada um com sua
+```bash
+cd ~/wabot && sqlite3 prisma/prod.db "
+SELECT u.email,
+       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.type = 'monitor') AS origens,
+       s.status, s.lifecycle, u.plan, u.accessExpiresAt
+  FROM WaSession s JOIN User u ON u.id = s.userId
+ WHERE s.status IN ('connected','connecting')
+ ORDER BY origens ASC;"
+```
+
+Linha com `origens = 0` é robô que recebe mensagem, descarta tudo e ocupa uma
+vaga. ⚠️ Desligar é decisão de produto, não de memória — cliente que só ainda
+não terminou de configurar abre o painel, vê desconectado e conclui que o
+produto não funciona. Medir primeiro, decidir depois.
+
+### Passo C — staging
+
+**C.1** Mergear a PR em `develop` (o autodeploy reinicia o supervisor de
+staging, que lá não custa nada) e esperar o deploy terminar.
+
+**C.2** Medir antes:
+
+```bash
+ALVO=staging bash /tmp/medir.sh antes
+```
+
+**C.3** Ligar a variável:
+
+```bash
+echo "WA_WORKER_MALLOC_ARENA_MAX=2" >> ~/wabot-staging/.env
+grep WA_WORKER ~/wabot-staging/.env
+```
+
+**C.4** Aplicar. ⚠️ **Staging é canonicamente `inline`: quem forka os robôs é a
+`api-staging`, não o supervisor.** `pm2 delete` + `start`, do diretório certo
+(pegadinhas #1 e #9):
+
+```bash
+pm2 delete api-staging
+cd ~/wabot-staging && pm2 start ecosystem.config.cjs --only api-staging
+pm2 save
+```
+
+**C.5** Conferir que chegou ao robô — **é o passo que costuma faltar**:
+
+```bash
+sleep 60
+w=$(pgrep -f "/home/deploy/wabot-staging/src/bot-worker" | head -1)
+echo "worker: $w"
+tr '\0' '\n' < /proc/$w/environ | grep -E "MALLOC|TOKIO|UV_THREAD"
+echo "arenas agora:"; awk -v TH=0 -f /tmp/mem.awk /proc/$w/smaps
+```
+
+A linha do `grep` tem que imprimir `MALLOC_ARENA_MAX=2`. Se não imprimir, a
+variável não chegou e o resto da medição não significa nada.
+
+**C.6** Medir depois e comparar:
+
+```bash
+ALVO=staging bash /tmp/medir.sh depois
+ALVO=staging bash /tmp/medir.sh comparar
+```
+
+⚠️ **O que staging PODE e NÃO PODE provar.** Uma sessão só, tráfego baixo. Ele
+prova que **nada quebra**, que a variável chega e que a contagem de arenas cai
+de ~30 para ~2 por robô. Ele **não mede a economia** — ela vem da dispersão de
+6,6×, que só existe com tráfego real. **Não reprovar por "economizou pouco em
+staging".** Critério de aprovação lá, nesta ordem:
+
+1. `MALLOC_ARENA_MAX=2` aparece no `environ` do robô (C.5);
+2. arenas caíram para ~2 por robô;
+3. a sessão continua conectada e as ofertas continuam saindo (olhar o painel);
+4. `ops_sqlite_busy` não apareceu.
+
+### Passo D — produção (janela anunciada, só com OK)
+
+**Só `MALLOC_ARENA_MAX`, sozinho.** Isso muda a recomendação anterior de
+empacotar tudo numa janela só, e o motivo é a medição: esta alavanca responde
+por 58% do problema, tem o menor risco das quatro e é **a única cujo ganho não
+dá para prever**. Misturar com log, Sharp e corte de thread tornaria impossível
+saber o que rendeu o quê — e é esse número que decide se vale continuar.
+
+**D.1** Anunciar: o deploy reconecta todas as sessões de uma vez.
+
+**D.2** Medir antes e guardar:
+
+```bash
+bash /tmp/medir.sh antes
+```
+
+**D.3** Ligar a variável **antes do merge**. Nada acontece ainda — nenhum
+processo relê `.env` sozinho:
+
+```bash
+echo "WA_WORKER_MALLOC_ARENA_MAX=2" >> ~/wabot/.env
+grep WA_WORKER ~/wabot/.env
+```
+
+**D.4** Mergear `develop` → `main`. O deploy sobe o código **e** reinicia o
+supervisor, que na subida lê o `.env` e forka os robôs já com a variável —
+**uma reinicialização, não duas**.
+
+⚠️ A pegadinha #1 (PM2 cacheia env) **não** se aplica: ela vale para variável
+que o PM2 já tinha cacheado, e esta é um nome novo que nunca existiu. Ainda
+assim, conferir pelo D.5.
+
+**D.5** Conferir que chegou:
+
+```bash
+w=$(pgrep -f "/home/deploy/wabot/src/bot-worker" | head -1)
+tr '\0' '\n' < /proc/$w/environ | grep MALLOC
+```
+
+**D.6** Medir depois. Aos 15 minutos, 1 hora e 24 horas:
+
+```bash
+bash /tmp/medir.sh depois && bash /tmp/medir.sh comparar
+```
+
+O número que decide é `em ARENA`. Ele é 4.950 MiB hoje.
+
+### Passo E — o que vigiar nas 24 horas seguintes
+
+```bash
+# memoria (1x por hora nas primeiras horas)
+bash /tmp/medir.sh
+
+# swap: enquanto estiver parado, o servidor esta confortavel
+free -m | awk 'NR==2{print "livre_mb="$7} NR==3{print "swap_usada_mb="$3}'
+
+# banco travando? (nao deveria mudar — arena nao mexe em banco)
+cd ~/wabot && sqlite3 prisma/prod.db "
+SELECT COUNT(*) AS sqlite_busy_24h FROM AnalyticsEvent
+ WHERE event='ops_sqlite_busy' AND createdAt > datetime('now','-1 day');"
+
+# sessoes caindo mais que o normal?
+cd ~/wabot && sqlite3 prisma/prod.db "
+SELECT COUNT(*) AS quedas_24h FROM WaConnectionEvent
+ WHERE type='disconnect' AND occurredAt > datetime('now','-1 day');"
+```
+
+Rode as duas últimas **antes** do passo D também, para ter com o que comparar.
+
+**Rollback, se algo piorar:**
+
+```bash
+sed -i '/^WA_WORKER_MALLOC_ARENA_MAX=/d' ~/wabot/.env
+pm2 restart bot-supervisor --update-env && pm2 save
+```
+
+Volta ao comportamento de hoje, sem redeploy. ⚠️ Isso também reconecta todas as
+sessões.
+
+### Passo F — só depois, e um de cada vez
+
+`WA_WORKER_TOKIO_THREADS=2` (⚠️ **não está verificado que o motor do Prisma
+honra** — o teste é setar, reiniciar e contar as threads:
+`cat /proc/$w/task/*/comm | sort | uniq -c | sort -rn`), depois
+`WA_WORKER_UV_THREADPOOL_SIZE` e `WA_WORKER_V8_POOL_SIZE`. Cada um com sua
 janela e sua medição. E a §3.2 (destino do log, 11,7 MiB medidos por processo),
 que é independente de tudo isto.
 
-### O que NÃO fazer agora
+### O que NÃO fazer
 
 - **Não aplicar os quatro interruptores juntos.** O ganho do principal é
   desconhecido; misturar apaga a atribuição.
-- **Não mexer em `WA_WORKER_UV_THREADPOOL_SIZE` antes do arena.** O libuv serve a
-  leitura de arquivo do auth do Baileys e o DNS: é o de maior chance de aparecer
-  como problema de sessão, e seria confundido com o efeito do arena.
-- **Não reprovar pela medição de staging** (ver o aviso do passo 1).
+- **Não mexer em `WA_WORKER_UV_THREADPOOL_SIZE` antes do arena.** O libuv serve
+  a leitura de arquivo do auth do Baileys e o DNS: é o de maior chance de
+  aparecer como problema de sessão, e seria confundido com o efeito do arena.
+- **Não reprovar pela medição de staging** (ver o aviso do passo C.6).
