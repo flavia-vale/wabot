@@ -2217,6 +2217,21 @@ cafeteira fora/cápsula dentro, mesa fora/cavalete dentro).
   (`reviewDiscoveryService.js`). Forçar fazia sentido enquanto a escolha não
   existia na tela; com ela, virou um jeito silencioso de descartar o que a
   cliente pediu.
+- **"Priorizar comissão extra" (`prioritizeAMS`) passa POR CIMA da ordem
+  escolhida — não é um filtro a mais.** `resolveOffers` faz DUAS buscas e devolve
+  `[...comissãoExtra, ...restantes]`; cada grupo respeita o `sortType`, mas é a
+  concatenação que decide quem sai, e `runAutomation` manda os primeiros
+  `offersPerSend`. Com 1 produto por envio e qualquer oferta de comissão extra
+  disponível, **ela sai sempre** — "mais baratos primeiro" chega a publicar o
+  item de R$500 no lugar do de R$10 (medido no teste). Isso é o que a opção
+  promete pelo nome, então não virar bug a ser "consertado": o conserto é dizer
+  na tela e no card. As duas buscas usam o MESMO `listType`/`sortType` — se a
+  segunda caísse no padrão, marcar a prioridade desfaria em silêncio a escolha
+  de busca ampla para metade dos candidatos.
+- ⚠️ **Prioridade de comissão extra + "só maior comissão" se somam** e empurram
+  a busca para o acessório barato duas vezes — é a combinação que mais reproduz
+  a queixa original. Ao atender um relato de "só vem acessório", conferir as
+  DUAS opções, nunca só a palavra-chave.
 - **Valor inválido cai no padrão**, nunca derruba a tela: automação antiga com
   campo vazio precisa continuar abrindo para edição.
 - Linguagem leiga: nada de `listType`, `sortType`, `productOfferV2` na tela —

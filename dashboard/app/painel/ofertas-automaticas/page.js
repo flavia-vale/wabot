@@ -454,14 +454,17 @@ export default function OfertasAutomaticasPage() {
             <select className="pnl-input" value={form.sortType} onChange={(e) => setForm((f) => ({ ...f, sortType: Number(e.target.value) }))}>
               {SEARCH_ORDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Isso ordena o que a escolha de cima trouxe — não amplia a busca.</p>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>
+              Isso ordena o que a escolha de cima trouxe — não amplia a busca.
+              {form.prioritizeAMS ? ' Atenção: com a opção de comissão extra marcada abaixo, essas ofertas passam na frente desta ordem.' : ''}
+            </p>
           </div>
 
           <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
             <input type="checkbox" checked={form.prioritizeAMS} onChange={(e) => setForm((f) => ({ ...f, prioritizeAMS: e.target.checked }))} style={{ marginTop: 2 }} />
             <span>
               <span style={{ display: 'block', color: 'var(--ink)' }}>Priorizar ofertas com comissão extra do vendedor</span>
-              <span className="pnl-hint">Se ativado, o bot busca as duas e envia primeiro as com comissão extra.</span>
+              <span className="pnl-hint">O robô faz duas buscas e as ofertas com comissão extra saem na frente, antes da ordem escolhida acima. Enviando poucos produtos por vez, pode ser que só elas saiam.</span>
             </span>
           </label>
 
