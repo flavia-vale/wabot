@@ -382,6 +382,18 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/alternativas/divulgador-inteligente', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/divulgador-inteligente', '2026-09-17'), indexable: true },
   { path: '/alternativas/divulgalinks', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/divulgalinks', '2026-09-17'), indexable: true },
   { path: '/alternativas/lumi-ofertas-inteligentes', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/lumi-ofertas-inteligentes', '2026-09-17'), indexable: true },
+  // Segunda leva do mesmo dia. `busqy` tinha ficha de casca; `afilira` e
+  // `ia-divulgadora` não existiam em competitors-data.js.
+  { path: '/alternativas/busqy', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/busqy', '2026-09-17'), indexable: true },
+  { path: '/alternativas/afilira', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/afilira', '2026-09-17'), indexable: true },
+  { path: '/alternativas/ia-divulgadora', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/ia-divulgadora', '2026-09-17'), indexable: true },
+  // Terceira leva do mesmo dia. ⚠️ `afiliado-inteligente` NÃO é
+  // `divulgador-inteligente`: produtos diferentes, empresas diferentes, nomes
+  // parecidos.
+  { path: '/alternativas/divulga-ninja', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/divulga-ninja', '2026-09-17'), indexable: true },
+  { path: '/alternativas/shark', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/shark', '2026-09-17'), indexable: true },
+  { path: '/alternativas/afiliado-inteligente', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/afiliado-inteligente', '2026-09-17'), indexable: true },
+  { path: '/alternativas/afilimais', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/afilimais', '2026-09-17'), indexable: true },
   // Intenção "clonar mensagens de grupo afiliado" (2026-08-26). O site
   // inteiro diz "espelhar"; o mercado busca "clonar" — e a Visão Geral do
   // Google responde essa busca listando concorrentes. title/description ficam
