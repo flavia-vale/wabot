@@ -198,6 +198,35 @@ const CHARGE_ACTION_LABELS = {
   ninguem: '—',
 }
 
+// Mesmos seis períodos da rota GET /finance/overview (src/domain/admin/financePeriod.js)
+// — compartilhado pelos Cards (Visão geral) e pela tabela de Cobranças
+// recorrentes, para as duas telas nunca discordarem sobre "os últimos 30 dias".
+const FINANCE_PERIOD_OPTIONS = [
+  ['7d', '7 dias'],
+  ['30d', '30 dias'],
+  ['current_month', 'Mês atual'],
+  ['last_month', 'Último mês'],
+  ['3m', '3 meses'],
+  ['6m', '6 meses'],
+]
+
+function FinancePeriodSelector({ value, onChange }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1 rounded-xl bg-gray-100 p-1">
+      {FINANCE_PERIOD_OPTIONS.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${value === key ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, onSearch, onOpenDetail }) {
   const summary = data?.summary ?? null
   const rows = asArray(data?.charges)
@@ -205,19 +234,6 @@ function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, o
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end gap-2">
-        <div>
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">Período</label>
-          <select
-            value={filters.days}
-            onChange={(event) => onFilters({ ...filters, days: Number(event.target.value) })}
-            className="mt-1 rounded-xl border border-gray-200 px-3 py-1.5 text-sm"
-          >
-            <option value={30}>Últimos 30 dias</option>
-            <option value={90}>Últimos 90 dias</option>
-            <option value={180}>Últimos 180 dias</option>
-            <option value={365}>Último ano</option>
-          </select>
-        </div>
         <div>
           <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">Resultado</label>
           <select
@@ -1789,7 +1805,11 @@ export default function AdminPage() {
   // assinatura, com o retorno do banco — pergunta de outra natureza que a
   // visão geral, e misturar as duas faz a aba virar parede.
   const [financeTab, setFinanceTab] = useState('visao')
-  const [chargeFilters, setChargeFilters] = useState({ days: 90, outcome: 'all', q: '' })
+  // Filtro de tempo COMPARTILHADO entre os Cards (Visão geral) e a tabela de
+  // Cobranças recorrentes — as duas telas respondem "quanto entrou" e não
+  // podem discordar sobre o que é "os últimos 30 dias".
+  const [financePeriod, setFinancePeriod] = useState('30d')
+  const [chargeFilters, setChargeFilters] = useState({ outcome: 'all', q: '' })
   const [chargeSearch, setChargeSearch] = useState('')
   const [charges, setCharges] = useState(null)
 
@@ -1810,17 +1830,31 @@ export default function AdminPage() {
   // "Carregando" é DERIVADO do filtro que já foi respondido — o resultado
   // carrega a chave do filtro que o gerou. Sem isso, trocar o período mostraria
   // por um instante o número do período anterior como se fosse o novo.
-  const chargeKey = `${chargeFilters.days}|${chargeFilters.outcome}|${chargeFilters.q}`
+  const chargeKey = `${financePeriod}|${chargeFilters.outcome}|${chargeFilters.q}`
   const chargesLoading = tab === 'financeiro' && financeTab === 'cobrancas' && charges?.key !== chargeKey
 
   useEffect(() => {
     if (tab !== 'financeiro' || financeTab !== 'cobrancas') return
     let active = true
-    api.adminSubscriptionCharges({ ...chargeFilters, limit: 100 })
+    api.adminSubscriptionCharges({ ...chargeFilters, period: financePeriod, limit: 100 })
       .then(data => { if (active) setCharges({ ...data, key: chargeKey }) })
       .catch(() => { if (active) setCharges({ charges: [], summary: null, erro: true, key: chargeKey }) })
     return () => { active = false }
-  }, [tab, financeTab, chargeFilters, chargeKey])
+  }, [tab, financeTab, chargeFilters, financePeriod, chargeKey])
+
+  // Cards da Visão geral seguem o MESMO período — mesma lógica de "carregando
+  // deriva da chave" acima, para os dois nunca mostrarem números de janelas
+  // diferentes ao mesmo tempo.
+  const financeLoading = tab === 'financeiro' && financeTab === 'visao' && finance != null && finance?.period !== financePeriod
+
+  useEffect(() => {
+    if (tab !== 'financeiro' || financeTab !== 'visao') return
+    let active = true
+    api.adminFinanceOverview({ period: financePeriod })
+      .then(data => { if (active) setFinance(data) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [tab, financeTab, financePeriod])
   // Drill-down dos cards técnicos ('infra' | 'filas' | null). Não busca nada
   // novo: mostra o detalhe do que a página já carregou.
   const [techDrilldown, setTechDrilldown] = useState(null)
@@ -1832,7 +1866,7 @@ export default function AdminPage() {
 
   async function manualPaymentSaved() {
     const [financeData, paymentsData, subscriptionsData] = await Promise.all([
-      api.adminFinanceOverview(), api.adminPayments({ limit: 10 }), api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }),
+      api.adminFinanceOverview({ period: financePeriod }), api.adminPayments({ limit: 10 }), api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }),
     ])
     setFinance(financeData)
     setPayments(paymentsData)
@@ -2633,17 +2667,22 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="mb-5 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
-              {[['visao', 'Visão geral'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setFinanceTab(id)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-black ${financeTab === id ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+              <div className="flex flex-wrap gap-2">
+                {[['visao', 'Visão geral'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setFinanceTab(id)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-black ${financeTab === id ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {/* Filtro de tempo compartilhado — vale para os Cards E para a
+                  tabela de Cobranças recorrentes, nunca só um dos dois. */}
+              <FinancePeriodSelector value={financePeriod} onChange={setFinancePeriod} />
             </div>
 
             {financeTab === 'cobrancas' && (
@@ -2659,16 +2698,16 @@ export default function AdminPage() {
             )}
 
             {financeTab === 'visao' && (<>
-            <div className="mb-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className={`mb-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 transition-opacity ${financeLoading ? 'opacity-50' : ''}`}>
               <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Receita bruta 30d</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Receita bruta · {finance.periodLabel ?? '30 dias'}</p>
                 <p className="mt-1 text-2xl font-black text-emerald-800">{formatCurrency(finance.revenue30d)}</p>
-                <p className="mt-1 text-[11px] text-emerald-600">{formatNumber(finance.approvedPayments30d)} pagamentos aprovados</p>
+                <p className="mt-1 text-[11px] text-emerald-600">{formatNumber(finance.approvedPayments30d)} pagamentos aprovados (avulso + assinatura)</p>
               </div>
               <div className="rounded-xl bg-orange-50 p-4 ring-1 ring-orange-100">
                 <p className="text-xs font-bold uppercase tracking-wide text-orange-600">(–) Comissões de afiliados</p>
                 <p className="mt-1 text-2xl font-black text-orange-700">− {formatCurrency(finance.affiliateCommissions30d ?? 0)}</p>
-                <p className="mt-1 text-[11px] text-orange-600">{formatNumber(finance.affiliateCommissions30dCount ?? 0)} comissões geradas nos 30d</p>
+                <p className="mt-1 text-[11px] text-orange-600">{formatNumber(finance.affiliateCommissions30dCount ?? 0)} comissões geradas no período</p>
               </div>
               <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-100">
                 <p className="text-xs font-bold uppercase tracking-wide text-rose-600">(–) Taxas Mercado Pago</p>
@@ -2676,7 +2715,7 @@ export default function AdminPage() {
                 <p className="mt-1 text-[11px] text-rose-600">{finance.mpFeePercent ?? 0}% do bruto{finance.mpFeeFixedCents ? ` + ${formatCurrency((finance.mpFeeFixedCents ?? 0) / 100)}/transação` : ''}</p>
               </div>
               <div className="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
-                <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">(=) Receita líquida 30d</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">(=) Receita líquida · {finance.periodLabel ?? '30 dias'}</p>
                 <p className="mt-1 text-2xl font-black text-white">{formatCurrency(finance.netRevenue30d ?? finance.revenue30d)}</p>
                 <p className="mt-1 text-[11px] text-slate-400">Após afiliados e taxas do Mercado Pago</p>
               </div>
