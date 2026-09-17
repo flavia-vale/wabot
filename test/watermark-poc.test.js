@@ -38,6 +38,7 @@ test('POC valida limites e posicao da configuracao', () => {
     text: 'Minha marca',
     position: 'top-left',
     color: 'white',
+    size: 'medium',
     opacity: 0.5,
     maxWidthPercent: 55,
   })
@@ -47,6 +48,35 @@ test('POC valida limites e posicao da configuracao', () => {
   // 2026-08-29); posição inexistente continua sendo recusada.
   assert.equal(normalizeWatermarkConfig({ text: 'ok', position: 'center' }).position, 'center')
   assert.throws(() => normalizeWatermarkConfig({ text: 'ok', position: 'diagonal' }), /Posicao/)
+})
+
+test('POC aceita os três tamanhos e cai em medium para valor desconhecido', () => {
+  assert.equal(normalizeWatermarkConfig({ text: 'ok', size: 'small' }).size, 'small')
+  assert.equal(normalizeWatermarkConfig({ text: 'ok', size: 'medium' }).size, 'medium')
+  assert.equal(normalizeWatermarkConfig({ text: 'ok', size: 'large' }).size, 'large')
+  // Tamanho desconhecido NAO derruba o envio: cai no padrão (mesma regra da cor).
+  assert.equal(normalizeWatermarkConfig({ text: 'ok', size: 'huge' }).size, 'medium')
+  assert.equal(normalizeWatermarkConfig({ text: 'ok' }).size, 'medium')
+})
+
+test('POC: tamanho pequeno/grande escala a fonte sem mudar o tamanho médio (compatibilidade histórica)', async () => {
+  const sample = await createSampleInput()
+  const small = await renderDestinationWatermark(sample, { text: 'Minha Marca', size: 'small' })
+  const medium = await renderDestinationWatermark(sample, { text: 'Minha Marca', size: 'medium' })
+  const semSize = await renderDestinationWatermark(sample, { text: 'Minha Marca' })
+  const large = await renderDestinationWatermark(sample, { text: 'Minha Marca', size: 'large' })
+
+  assert.equal(medium.watermarkApplied, true)
+  assert.equal(small.watermarkApplied, true)
+  assert.equal(large.watermarkApplied, true)
+  // Sem `size`, o resultado é byte a byte o mesmo de 'medium' — não pode haver
+  // mudança de comportamento pra quem já tinha marca configurada.
+  assert.deepEqual(semSize.main, medium.main)
+
+  // Marca pequena e grande resultam em imagens diferentes da média (a fonte
+  // realmente mudou de tamanho).
+  assert.notDeepEqual(small.main, medium.main)
+  assert.notDeepEqual(large.main, medium.main)
 })
 
 test('POC gera JPEG principal e thumbnail marcados por destino', async () => {
