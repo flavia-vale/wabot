@@ -398,7 +398,8 @@ test('a cascata de conciliação FECHA: líquido do histórico menos o mês corr
 
   assert.equal(round(c.grossAllTime - c.affiliateCommissionsAllTime - c.mpFeesAllTime), c.netAllTime)
   assert.equal(round(c.netAllTime - c.currentMonthNet), c.netClosedMonths)
-  assert.equal(c.netClosedMonths, r.summary.totalNetRevenue, 'o fim da cascata É o número do placar')
+  assert.equal(c.netToDate, r.summary.netToDate, 'o fim da cascata É o número do placar')
+  assert.equal(c.netToDate, c.netAllTime, 'o placar cobre todo o histórico, inclusive o mês corrente')
 
   // E o valor cheio é maior que o líquido — é essa diferença que a Visão geral
   // mostra e que fazia os dois números parecerem incompatíveis.
@@ -416,10 +417,92 @@ test('a tela mostra a cascata em linguagem leiga, sem mandar a pessoa perguntar'
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     .replace(/^\s*\/\/.*$/gm, '')
 
-  assert.ok(painel.includes('Por que este número é menor'), 'a dúvida precisa estar respondida na própria tela')
+  assert.ok(painel.includes('Conferindo com a aba Visão geral'), 'a dúvida precisa estar respondida na própria tela')
   assert.ok(painel.includes('valor cheio'), 'dizer "bruto" não explica nada para quem não é contador')
-  assert.ok(painel.includes('reconciliation.netClosedMonths'), 'a cascata precisa terminar no número do placar')
+  assert.ok(painel.includes('reconciliation.netToDate'), 'a cascata precisa terminar no número do placar')
   for (const jargao of ['bruto', 'líquido', 'gateway']) {
     assert.ok(!painel.toLowerCase().includes(jargao), `jargão "${jargao}" chegou à tela`)
   }
+})
+
+
+// ---------------------------------------------------------------------------
+// A régua do placar (RCA 2026-09-17, segunda rodada)
+// ---------------------------------------------------------------------------
+
+/*
+ * O placar contava só mês FECHADO. Com os números reais da conta, isso deixava
+ * R$ 640 de receita JÁ RECEBIDA e R$ 755 de custo JÁ PAGO fora da pergunta "já
+ * se pagou?" — e a dona do produto leu R$ 543,22 no ROI contra R$ 1.183,33 de
+ * líquido na Visão geral. A aritmética estava certa; a régua, errada.
+ */
+
+test('o placar conta o que JÁ ENTROU no mês corrente — é fato, não estimativa', () => {
+  const r = relatorio()
+  const s = r.summary
+
+  // O mês corrente tem receita realizada; ela precisa estar no placar.
+  assert.ok(r.present.net > 0, 'a fixture precisa ter receita no mês corrente')
+  assert.equal(s.netToDate, round(s.totalNetRevenue + r.present.net))
+  assert.ok(s.netToDate > s.totalNetRevenue, 'o placar não pode ignorar o mês corrente')
+
+  // E o custo do mês corrente entra junto, senão o resultado infla.
+  assert.equal(s.investedToDate, round(s.totalInvested + r.present.cost))
+  assert.equal(s.resultToDate, round(s.netToDate - s.investedToDate))
+})
+
+test('o custo do mês corrente entra CHEIO, não proporcional aos dias', () => {
+  const r = relatorio()
+  // 17 de 30 dias corridos, e mesmo assim o custo do mês é o cheio: as faturas
+  // são mensais e já foram cobradas. Inflar o resultado é o erro que custa
+  // decisão errada, então a conta pesa contra — de propósito.
+  assert.equal(r.present.daysElapsed, 17)
+  assert.equal(r.present.cost, 755)
+  assert.equal(r.summary.investedToDate, round(r.summary.totalInvested + 755))
+})
+
+test('previsto continua FORA do placar — só o realizado entra', () => {
+  const r = relatorio()
+  // O fechamento estimado do mês existe, mas vive no bloco Presente.
+  assert.ok(r.present.projectedNet > r.present.net)
+  assert.notEqual(r.summary.netToDate, round(r.summary.totalNetRevenue + r.present.projectedNet))
+  assert.equal(r.summary.netToDate, round(r.summary.totalNetRevenue + r.present.net))
+})
+
+test('os números de mês fechado continuam existindo — a tabela do passado soma neles', () => {
+  const r = relatorio()
+  assert.equal(r.summary.totalNetRevenue, r.past[r.past.length - 1].cumulativeNet)
+  assert.equal(r.summary.totalInvested, r.past[r.past.length - 1].cumulativeCost)
+})
+
+test('a tela usa a régua do placar e mostra a conta ABERTA', () => {
+  const fonte = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  const painel = fonte.slice(fonte.indexOf('function RoiPanel('), fonte.indexOf('function FinancePeriodSelector('))
+
+  for (const campo of ['netToDate', 'investedToDate', 'resultToDate', 'roiPctToDate']) {
+    assert.ok(painel.includes(`summary.${campo}`), `o placar precisa usar ${campo}`)
+  }
+  // Recolhido, quem estava confusa não tinha motivo para clicar.
+  assert.match(painel, /<details open/, 'a conciliação precisa nascer aberta')
+  assert.ok(painel.includes('incluindo o que entrou este mês'), 'a tela precisa dizer que o mês corrente conta')
+})
+
+
+test('o script de conciliação é read-only e usa as MESMAS duas fontes do produto', () => {
+  const script = readFileSync(new URL('../scripts/diag-roi-conciliacao.mjs', import.meta.url), 'utf8')
+
+  // Read-only: diagnóstico que escreve no banco é armadilha.
+  for (const escrita of ['.create(', '.update(', '.delete(', '.upsert(', 'sendTemplateEmail']) {
+    assert.ok(!script.includes(escrita), `script de diagnóstico não pode ${escrita}`)
+  }
+
+  // Precisa ler as duas fontes de receita, senão discorda do produto — que é
+  // exatamente o problema que ele existe para resolver.
+  assert.ok(script.includes('db.payment.findMany'))
+  assert.ok(script.includes('db.subscriptionCharge.findMany'))
+  assert.ok(script.includes("startsWith: 'sub_'"), 'sem o prefixo a assinatura entraria duas vezes')
+  assert.ok(script.includes('loadTestAccountUserIds'), 'a conta de teste sai da soma aqui também')
+
+  // Erro engolido em script de diagnóstico vira conclusão errada.
+  assert.ok(script.includes('FALHA ao montar a conciliação'))
 })
