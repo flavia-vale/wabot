@@ -5291,6 +5291,55 @@ que as duas pontas nunca discordem sobre o que é "link de loja desconhecida"
 segue como está no outro uso (o descarte silencioso de `messageKind === 'other'`)
 — ampliá-lo ali transformaria ruído de protocolo em linha no painel.
 
+## Links da mesma loja disputavam UMA sessão de afiliado (RCA 2026-09-17)
+
+O espelhamento convertia todos os links da mensagem com `Promise.all` puro. O
+comentário original justificava: "conversores fazem 4-5 chamadas HTTP
+sequenciais cada; processar N links em série estoura o teto da fila". Está certo
+entre lojas DIFERENTES — e errado dentro da MESMA loja, porque ali os
+conversores não são independentes: dividem **uma** sessão de afiliado.
+
+Medido, loja por loja:
+
+| Loja | Sessão compartilhada | Tinha serialização? |
+|---|---|---|
+| Mercado Livre | cookie `ssid` **rotacionado** a cada `createLink` | sim — `withMercadoLivreCredentialLock`, timeout de 12s |
+| **Amazon** | cookie do SiteStripe **rotacionado** a cada `getShortUrl` | **nenhuma** |
+| SHEIN | token de sessão por etiqueta | nenhuma |
+| AliExpress | cookie do portal de afiliado | nenhuma |
+
+- **ML**: 4 links disparados juntos, ~4s por chamada → um já estoura a trava
+  (`ML_AFFILIATE_LOCK_TIMEOUT`) e cai no fallback `partner_id`, e o conjunto
+  ainda come 12s dos 25s de preparo (`MSG_QUEUE_TIMEOUT_MS`). O paralelismo não
+  acelerava nada — a trava já serializava — e só trocava espera por falha.
+  Reproduzido e depois confirmado corrigido: 4 conversões boas em 16s, nenhuma
+  falha.
+- **Amazon**: em paralelo, todas as chamadas saem com o cookie VELHO e disputam
+  a persistência do novo — a última escrita vence e as demais rotações se
+  perdem. O sintoma é a parede "Acessar Amazon" no meio de uma sessão viva, e a
+  oferta sai com o link longo `?tag=` em vez do `amzn.to` (some a comissão
+  curta, não o link).
+
+`src/core/conversionScheduler.js` (`convertPerPlatformSerially`) resolve:
+**links da MESMA loja convertem um de cada vez; lojas diferentes seguem em
+paralelo.**
+
+**Não regredir:**
+
+- **Não voltar a `Promise.all(links.map(...))` sobre a lista inteira de links** —
+  guarda estrutural em `test/conversion-scheduler.test.js` falha se voltar.
+- **Não serializar TUDO numa fila só**: aí uma loja lenta atrasaria as outras,
+  que é o problema que o paralelismo original resolvia de verdade.
+- **A ordem de saída é a ordem do TEXTO**, não a de conclusão — a eleição do
+  link primário (`first`/`last`) e os logs dependem disso.
+
+⚠️ **O tempo de parede da mensagem com muitos links da MESMA loja sobe** (4
+links de ML: ~12s antes com uma falha, ~16s agora sem nenhuma), dentro dos 25s
+de `MSG_QUEUE_TIMEOUT_MS`. Não é overhead novo — a trava do ML já serializava;
+o que mudou é o 4º link ser convertido de verdade em vez de falhar. Ao validar,
+vigiar `timeout:incoming` no painel: se aparecer em mensagem com muitos links,
+o teto de 25s é que precisa de conversa, não o agendador.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST
