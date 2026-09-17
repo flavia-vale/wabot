@@ -92,12 +92,13 @@ test('o formulário oferece as duas escolhas e as carrega ao editar', async () =
   assert.match(source, /\{describeSearchChoice\(a\)\}/)
 })
 
-test('priorizar comissão extra passa POR CIMA da ordem escolhida', async () => {
-  // Não é um filtro a mais: resolveOffers faz duas buscas e concatena
-  // [...comissãoExtra, ...restantes]. Cada grupo respeita o sortType, mas a
-  // concatenação decide quem sai — e runAutomation manda os primeiros
-  // `offersPerSend`. Com 1 por envio, havendo qualquer oferta com comissão
-  // extra, ela sai sempre, mesmo com "mais baratos primeiro" escolhido.
+// A opção "Priorizar ofertas com comissão extra do vendedor" foi RETIRADA em
+// 2026-09-17, a pedido da dona do produto, logo depois de a escolha da busca
+// chegar à tela: ela era uma SEGUNDA ordem por cima da escolhida. resolveOffers
+// fazia duas buscas e devolvia [...comissãoExtra, ...restantes], e era a
+// concatenação — não o `sortType` — que decidia quem saía. Não reintroduzir sem
+// pedido explícito.
+test('a ordem escolhida decide quem sai — nada passa na frente dela', async () => {
   const catalogo = {
     ams: [{ itemId: 1, productName: 'Acessório com comissão extra', price: 500, priceDiscountRate: 50 }],
     normal: [{ itemId: 2, productName: 'Produto barato', price: 10, priceDiscountRate: 50 }],
@@ -113,43 +114,40 @@ test('priorizar comissão extra passa POR CIMA da ordem escolhida', async () => 
     sentItemIds: [], creds: {}, fetchOffersFn: buscar,
   })
 
-  const semPrioridade = await rodar(false)
-  assert.equal(semPrioridade.offers[0].productName, 'Produto barato')
-
-  const comPrioridade = await rodar(true)
-  assert.equal(comPrioridade.offers[0].productName, 'Acessório com comissão extra')
+  // A coluna continua no banco (dormente). Mesmo com ela LIGADA numa automação
+  // antiga, o resultado é o da ordem escolhida — nunca o da comissão extra.
+  for (const valorLegado of [false, true, undefined]) {
+    const resultado = await rodar(valorLegado)
+    assert.equal(resultado.offers[0].productName, 'Produto barato')
+  }
 })
 
-test('a prioridade de comissão extra não estreita o conjunto escolhido', async () => {
-  // As DUAS buscas precisam sair com o mesmo listType/sortType da cliente —
-  // se a segunda caísse no padrão, marcar a prioridade desfaria em silêncio a
-  // escolha de "busca ampla" para metade dos candidatos.
+test('a busca é UMA só — não existe mais a segunda passada de comissão extra', async () => {
   const chamadas = []
   await resolveOffers({
     automation: { keyword: 'x', minDiscountPct: 0, offersPerSend: 1, sortType: 5, listType: 0, page: 1, prioritizeAMS: true },
     sentItemIds: [], creds: {},
     fetchOffersFn: async (args) => { chamadas.push(args); return { offers: [], rawCount: 0 } },
   })
-  assert.equal(chamadas.length, 2)
-  assert.deepEqual(chamadas.map(c => c.isAMSOffer), [true, false])
-  for (const chamada of chamadas) {
-    assert.equal(chamada.listType, 0)
-    assert.equal(chamada.sortType, 5)
-  }
+  assert.equal(chamadas.length, 1)
+  assert.equal(chamadas[0].isAMSOffer, false)
+  assert.equal(chamadas[0].listType, 0)
+  assert.equal(chamadas[0].sortType, 5)
 })
 
-test('o card não promete uma ordem que a comissão extra vai furar', () => {
+test('o card diz a ordem escolhida e nada além dela', () => {
   assert.equal(describeSearchChoice({ listType: 0, sortType: 4 }), 'Busca: busca ampla · mais baratos')
+  // Automação antiga com a coluna ligada não pode voltar a anunciar a ressalva.
   assert.equal(
     describeSearchChoice({ listType: 0, sortType: 4, prioritizeAMS: true }),
-    'Busca: busca ampla · comissão extra na frente, depois mais baratos',
+    'Busca: busca ampla · mais baratos',
   )
 })
 
-test('a tela avisa que a comissão extra fura a ordem, nos dois campos', async () => {
+test('a tela não oferece mais a prioridade de comissão extra', async () => {
   const source = await page()
-  assert.match(source, /essas ofertas passam na frente desta ordem/)
-  assert.match(source, /saem na frente, antes da ordem escolhida acima/)
-  // O aviso só aparece quando a opção está de fato marcada.
-  assert.match(source, /form\.prioritizeAMS \?/)
+  assert.doesNotMatch(source, /prioritizeAMS/)
+  assert.doesNotMatch(source, /comiss[ãa]o extra/i)
+  // E a ordem escolhida volta a ser anunciada sem ressalva.
+  assert.match(source, /Isso ordena o que a escolha de cima trouxe/)
 })

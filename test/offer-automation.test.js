@@ -118,21 +118,22 @@ test('searchOffersPreview: roda a busca sem enviar e retorna funil + ofertas', a
   assert.deepEqual(calls[0].excludeItemIds, [])
 })
 
-test('searchOffersPreview: prioritizeAMS concatena AMS + regular sem enviar', async () => {
+// A opção "priorizar comissão extra" foi retirada em 2026-09-17 (ver o RCA em
+// AGENTS.md): a prévia precisa fazer a MESMA busca única do envio real, senão
+// ela mostraria um resultado que a automação não vai produzir.
+test('searchOffersPreview: uma busca só, mesmo com o valor legado ligado', async () => {
   const seen = []
   const fetchOffersFn = async (args) => {
     seen.push(args.isAMSOffer)
-    return args.isAMSOffer
-      ? { rawCount: 5, offers: [{ itemId: '10', productName: 'AMS', priceMin: 50, priceDiscountRate: 40, offerLink: 'a' }] }
-      : { rawCount: 7, offers: [{ itemId: '20', productName: 'Reg', priceMin: 60, priceDiscountRate: 25, offerLink: 'b' }] }
+    return { rawCount: 7, offers: [{ itemId: '20', productName: 'Reg', priceMin: 60, priceDiscountRate: 25, offerLink: 'b' }] }
   }
   const result = await searchOffersPreview({
     params: { keyword: 'x', offersPerSend: 2, minDiscountPct: 0, prioritizeAMS: true },
     creds: { appId: 'a', secretKey: 's' },
     fetchOffersFn,
   })
-  assert.deepEqual(seen, [true, false])
-  assert.equal(result.afterProductDedupe, 2)
+  assert.deepEqual(seen, [false])
+  assert.equal(result.afterProductDedupe, 1)
 })
 
 test('formatOfferMessage: includes product name and price', () => {
@@ -602,7 +603,7 @@ test('runAutomation: falha pontual num item do lote não aborta os demais nem de
   assert.deepEqual(created.map(c => c.itemId), ['1', '3'])
 })
 
-describe('runAutomation — prioritizeAMS', () => {
+describe('runAutomation — a busca é uma só (comissão extra retirada)', () => {
   const baseCreds = { appId: 'a', secretKey: 's' }
 
   function makeDb() {
@@ -614,33 +615,37 @@ describe('runAutomation — prioritizeAMS', () => {
     }
   }
 
-  it('faz uma única busca quando prioritizeAMS=false', async () => {
-    let fetchCount = 0
-    const fakeOffer = { itemId: '1', productName: 'Prod', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/1' }
-    const mockFetch = async () => { fetchCount++; return { offers: [fakeOffer], rawCount: 1 } }
-    const automation = {
-      id: 'a1', userId: 'u1', keyword: 'test', minDiscountPct: 0,
-      offersPerSend: 1, excludeItemIds: [], sortType: 2,
-      isKeySeller: false, prioritizeAMS: false,
-      destGroupJid: 'g1@g.us', sentItemIds: '[]',
-    }
-    await runAutomation(automation, {
-      fetchOffersFn: mockFetch,
-      sendBroadcastFn: async () => {},
-      isRunningFn: () => true,
-      dbOverride: makeDb(),
+  // `prioritizeAMS` continua no banco, dormente. Automação antiga com a coluna
+  // LIGADA não pode voltar a fazer a segunda busca nem a furar a ordem
+  // escolhida — era exatamente isso que a opção fazia (RCA 2026-09-17).
+  for (const valorLegado of [false, true]) {
+    it(`faz uma única busca com prioritizeAMS=${valorLegado}`, async () => {
+      const chamadas = []
+      const fakeOffer = { itemId: '1', productName: 'Prod', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/1' }
+      const mockFetch = async (args) => { chamadas.push(args.isAMSOffer); return { offers: [fakeOffer], rawCount: 1 } }
+      const automation = {
+        id: 'a1', userId: 'u1', keyword: 'test', minDiscountPct: 0,
+        offersPerSend: 1, excludeItemIds: [], sortType: 2,
+        isKeySeller: false, prioritizeAMS: valorLegado,
+        destGroupJid: 'g1@g.us', sentItemIds: '[]',
+      }
+      await runAutomation(automation, {
+        fetchOffersFn: mockFetch,
+        sendBroadcastFn: async () => {},
+        isRunningFn: () => true,
+        dbOverride: makeDb(),
+      })
+      assert.deepEqual(chamadas, [false])
     })
-    assert.equal(fetchCount, 1)
-  })
+  }
 
-  it('faz duas buscas quando prioritizeAMS=true', async () => {
-    let fetchCount = 0
-    const amsOffer = { itemId: '1', productName: 'AMS', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/1' }
+  it('automação antiga com a coluna ligada não publica a oferta de comissão extra', async () => {
+    const amsOffer = { itemId: '1', productName: 'AMS', priceMin: '500', priceDiscountRate: '20', offerLink: 'https://s.pe/1' }
     const regOffer = { itemId: '2', productName: 'Reg', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/2' }
-    const mockFetch = async ({ isAMSOffer }) => { fetchCount++; return { offers: isAMSOffer ? [amsOffer] : [regOffer], rawCount: 1 } }
+    const mockFetch = async ({ isAMSOffer }) => ({ offers: isAMSOffer ? [amsOffer] : [regOffer], rawCount: 1 })
     const automation = {
       id: 'a2', userId: 'u1', keyword: 'test', minDiscountPct: 0,
-      offersPerSend: 2, excludeItemIds: [], sortType: 2,
+      offersPerSend: 1, excludeItemIds: [], sortType: 2,
       isKeySeller: false, prioritizeAMS: true,
       destGroupJid: 'g1@g.us', sentItemIds: '[]',
     }
@@ -651,32 +656,8 @@ describe('runAutomation — prioritizeAMS', () => {
       isRunningFn: () => true,
       dbOverride: makeDb(),
     })
-    assert.equal(fetchCount, 2)
-    assert.equal(sent.length, 2)
-    assert.ok(sent[0].includes('AMS'), 'primeiro enviado deve ser o AMS')
-    assert.ok(sent[1].includes('Reg'), 'segundo enviado deve ser o Regular')
-  })
-
-  it('exclui ids AMS do segundo fetch quando prioritizeAMS=true', async () => {
-    let secondFetchExcludes = []
-    const amsOffer = { itemId: '99', productName: 'AMS', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/99' }
-    const mockFetch = async ({ isAMSOffer, excludeItemIds }) => {
-      if (!isAMSOffer) secondFetchExcludes = excludeItemIds
-      return { offers: isAMSOffer ? [amsOffer] : [], rawCount: isAMSOffer ? 1 : 0 }
-    }
-    const automation = {
-      id: 'a3', userId: 'u1', keyword: 'test', minDiscountPct: 0,
-      offersPerSend: 2, excludeItemIds: [], sortType: 2,
-      isKeySeller: false, prioritizeAMS: true,
-      destGroupJid: 'g1@g.us', sentItemIds: '[]',
-    }
-    await runAutomation(automation, {
-      fetchOffersFn: mockFetch,
-      sendBroadcastFn: async () => {},
-      isRunningFn: () => true,
-      dbOverride: makeDb(),
-    })
-    assert.ok(secondFetchExcludes.includes('99'), 'segundo fetch deve excluir itemId do AMS')
+    assert.equal(sent.length, 1)
+    assert.ok(sent[0].includes('Reg'), 'só a busca normal alimenta o envio')
   })
 })
 
@@ -684,7 +665,7 @@ test('runAutomation: usa templateKey selecionado em mobileTemplatesJson', async 
   const automation = {
     id: 'auto-template', userId: 'user-template', keyword: 'festa', minDiscountPct: 0,
     offersPerSend: 1, destGroupJid: 'grupo@g.us', sentItemIds: '[]', intervalMinutes: 60,
-    sortType: 2, prioritizeAMS: false, isKeySeller: false, templateKey: 'tpl_custom',
+    sortType: 2, isKeySeller: false, templateKey: 'tpl_custom',
   }
   const sent = []
   const dbMock = {

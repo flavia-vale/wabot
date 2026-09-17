@@ -190,22 +190,15 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
     isKeySeller: automation.isKeySeller ?? false,
   }
 
-  if (!automation.prioritizeAMS) {
-    const result = await fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
-    return { ...result, offers: result.offers.filter(offer => resolveOfferPrice(offer) > 0) }
-  }
-
-  const { offers: amsOffers, rawCount: amsRawCount } = await fetchOffersFn({ ...base, isAMSOffer: true, excludeItemIds: sentItemIds })
-  const amsItemIds = amsOffers.map(o => String(o.itemId))
-  const { offers: regularOffers, rawCount: regularRawCount } = await fetchOffersFn({
-    ...base,
-    isAMSOffer: false,
-    excludeItemIds: [...sentItemIds, ...amsItemIds],
-  })
-  return {
-    offers: [...amsOffers, ...regularOffers].filter(offer => resolveOfferPrice(offer) > 0),
-    rawCount: amsRawCount + regularRawCount,
-  }
+  // UMA busca só, sempre. A opção "priorizar comissão extra" (`prioritizeAMS`)
+  // foi retirada em 2026-09-17: ela fazia uma segunda busca e devolvia
+  // [...ofertasComComissãoExtra, ...restantes], e era a CONCATENAÇÃO — não a
+  // ordem escolhida pela cliente — que decidia quem saía. Com 1 produto por
+  // envio e "mais baratos primeiro", publicava o item de R$500 no lugar do de
+  // R$10. A coluna continua no banco, dormente; nada aqui a lê. Não voltar a
+  // ler sem pedido explícito — ver o RCA em AGENTS.md.
+  const result = await fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
+  return { ...result, offers: result.offers.filter(offer => resolveOfferPrice(offer) > 0) }
 }
 
 export async function runAutomation(automation, {

@@ -2217,21 +2217,32 @@ cafeteira fora/cápsula dentro, mesa fora/cavalete dentro).
   (`reviewDiscoveryService.js`). Forçar fazia sentido enquanto a escolha não
   existia na tela; com ela, virou um jeito silencioso de descartar o que a
   cliente pediu.
-- **"Priorizar comissão extra" (`prioritizeAMS`) passa POR CIMA da ordem
-  escolhida — não é um filtro a mais.** `resolveOffers` faz DUAS buscas e devolve
-  `[...comissãoExtra, ...restantes]`; cada grupo respeita o `sortType`, mas é a
-  concatenação que decide quem sai, e `runAutomation` manda os primeiros
-  `offersPerSend`. Com 1 produto por envio e qualquer oferta de comissão extra
-  disponível, **ela sai sempre** — "mais baratos primeiro" chega a publicar o
-  item de R$500 no lugar do de R$10 (medido no teste). Isso é o que a opção
-  promete pelo nome, então não virar bug a ser "consertado": o conserto é dizer
-  na tela e no card. As duas buscas usam o MESMO `listType`/`sortType` — se a
-  segunda caísse no padrão, marcar a prioridade desfaria em silêncio a escolha
-  de busca ampla para metade dos candidatos.
-- ⚠️ **Prioridade de comissão extra + "só maior comissão" se somam** e empurram
-  a busca para o acessório barato duas vezes — é a combinação que mais reproduz
-  a queixa original. Ao atender um relato de "só vem acessório", conferir as
-  DUAS opções, nunca só a palavra-chave.
+- **A opção "Priorizar ofertas com comissão extra do vendedor" foi RETIRADA em
+  2026-09-17 — não reintroduzir sem pedido explícito.** Ela não era um filtro a
+  mais: era uma SEGUNDA ordem por cima da escolhida. `resolveOffers` fazia DUAS
+  buscas e devolvia `[...comissãoExtra, ...restantes]`; cada grupo respeitava o
+  `sortType`, mas era a **concatenação** que decidia quem saía, e
+  `runAutomation` manda os primeiros `offersPerSend`. Com 1 produto por envio e
+  qualquer oferta de comissão extra disponível, **ela saía sempre** — "mais
+  baratos primeiro" publicava o item de R$500 no lugar do de R$10 (medido em
+  teste). A decisão da dona do produto foi direta: já que a escolha da busca
+  chegou à tela, o que a fura sai. Hoje `resolveOffers` faz **uma busca só** e a
+  ordem escolhida sempre decide.
+- **A coluna `OfferAutomation.prioritizeAMS` continua no banco, DORMENTE.** Sem
+  migration (nada a reescrever: o campo deixou de ser lido). As rotas ainda a
+  aceitam e persistem por compatibilidade, mas **nenhum caminho de execução a
+  lê** — nem o cron, nem a prévia (`search-preview`), nem a fila de revisão.
+  Automação antiga com o valor `true` se comporta exatamente como uma com
+  `false`. Guardas em `test/offer-automation.test.js` e
+  `test/ofertas-automaticas-escolha-da-busca.test.js` rodam com o valor legado
+  LIGADO e exigem uma busca só e a ordem escolhida ganhando.
+- ⚠️ Quem for reativar isto um dia: o valor legado ficou gravado em contas que
+  chegaram a marcar a opção, então religar a leitura da coluna faz a prioridade
+  **voltar sozinha** nessas contas, sem ninguém pedir. Tratar como decisão nova,
+  com a coluna zerada antes.
+- ⚠️ **Ao atender um relato de "só vem acessório", a opção a conferir agora é
+  "só maior comissão" (`listType=1`)** — é ela, sozinha, que deixa o produto
+  caro de fora. A combinação com a comissão extra deixou de existir.
 - **Valor inválido cai no padrão**, nunca derruba a tela: automação antiga com
   campo vazio precisa continuar abrindo para edição.
 - Linguagem leiga: nada de `listType`, `sortType`, `productOfferV2` na tela —
