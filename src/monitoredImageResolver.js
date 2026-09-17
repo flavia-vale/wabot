@@ -143,7 +143,11 @@ export async function resolveMonitoredImage({
       onThumbnailDropped?.({ platform: target?.platform, bytes: verdict.bytes, minBytes: verdict.minBytes })
       return null
     }
-    return downloaded
+    // Passou do piso de bytes, mas ainda é a miniatura pequena — a loja não
+    // devolveu foto oficial. O flag avisa o chamador (bot-worker.js) que isto
+    // NÃO é imagem cheia: mandar como corpo de mídia sai ampliada/borrada. Quem
+    // decide o que fazer com o flag é o consumidor — aqui só descrevemos o dado.
+    return { ...downloaded, usedThumbnailFallback: true }
   }
 
   if (mode === 'fetch') {
