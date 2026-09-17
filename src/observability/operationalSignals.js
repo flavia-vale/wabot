@@ -70,6 +70,7 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   wa_reception_self_heal: 'ops_wa_reception_self_heal',
   // Muro anti-robô do ML batendo no IP do servidor (RCA 2026-08-19/20).
   ml_anti_bot_wall: 'ops_ml_anti_bot_wall',
+  magalu_bot_wall: 'ops_magalu_bot_wall',
   // Card de preview salvo pelo plano B: loja sem foto, foto da mensagem de
   // origem no lugar. A oferta SAIU com card clicável e com imagem.
   preview_card_origin_fallback: 'ops_preview_card_origin_fallback',

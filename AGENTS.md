@@ -4219,6 +4219,89 @@ de já ter a foto". Lembre da armadilha do ML: o muro anti-robô vem com **statu
 `bot-supervisor` não for reiniciado, os avisos novos não aparecem no log (ver
 seção "código novo não carregado pelos bots").
 
+## Magalu sem foto: a loja fecha a página e isso era MUDO (RCA 2026-09-17)
+
+Cliente relatou "as ofertas da Magalu estão indo sem imagem".
+
+**Causa raiz: a Magalu era a única loja habilitada sem fonte de foto própria.**
+`fetchProductImage` (`src/converters/imageScrapers.js`) tem ramo dedicado para
+Shopee (API de afiliado), Amazon (`data-a-dynamic-image`) e Mercado Livre
+(vitrine + API); a SHEIN não precisa porque o og:image do oneLink já serve. A
+Magalu caía **só** no leitor genérico de HTML (`resolveByHtmlLayers`) — e é
+exatamente esse caminho que a loja fecha.
+
+**Medido no servidor (2026-09-17, página real de produto), não deduzido:**
+
+| User-Agent | Resposta |
+|---|---|
+| navegador, Googlebot, Twitterbot, Slackbot, TelegramBot, iPhone, curl | **403** com a página de erro de marca (1.075 bytes, "Não é possível acessar a página", CSS em `wx.mlcdn.com.br/akamai-bot/`) |
+| WhatsApp | **200** com ~2,5KB de desafio JavaScript do Akamai (`sec-if-cpt-container`, "Powered and protected by Akamai"), sem `og:image` |
+
+Também foram medidos e descartados: `www.magazinevoce.com.br` (Radware, 200 com
+`az-request-verify`), `busca.magazineluiza.com.br` (captcha do Radware),
+`/api/*` e `/sitemap.xml` (403), `mlz.me` (resolve para landing do Bitly) e
+`api.magalu.com` (portal de desenvolvedor — exige credencial de vendedor, que a
+cliente não tem). **Não existe hoje fonte de foto da Magalu que não passe pela
+página do produto**; o CDN (`a-static.mlcdn.com.br`) responde, mas o caminho da
+foto não é derivável do SKU.
+
+⚠️ **A medição acima é do IP de onde ela foi feita, não uma lei.** Bloqueio por
+reputação de IP vem e vai (o muro do ML entregava foto em staging e não em
+produção). O defeito de código, esse sim, é independente de IP: **o bloqueio
+não tinha nome**.
+
+**Por que ficava escondido — as duas formas do muro eram indistinguíveis de
+"não tem foto":**
+
+- o caso de **200** é a mesma armadilha do muro do Mercado Livre: "a página
+  respondeu" não significa nada, e o resultado chegava ao log como
+  `scrape_sem_imagem`, que quer dizer *a loja não tem foto deste produto* — um
+  diagnóstico com ação OPOSTA à real;
+- o caso de **403** era ainda mais mudo: `fetchHtml` devolvia `{ html: null }`
+  em qualquer `!res.ok`, então bloqueio de borda e link morto (404) viravam a
+  mesma coisa.
+
+**O que foi feito:**
+
+| Peça | Onde |
+|---|---|
+| Reconhecer o muro nas duas formas + candidatas de resolução (PURO, sem rede) | `src/converters/magaluImage.js` |
+| Ramo próprio da Magalu | `resolveMagaluImage` em `src/converters/imageScrapers.js` |
+| Status HTTP devolvido por `fetchHtml` | idem |
+| Sinal durável `ops_magalu_bot_wall` | `src/observability/operationalSignals.js` + `src/analytics.js` |
+
+**Não regredir:**
+
+- **O ramo da Magalu não pode voltar a cair no leitor genérico**, e o genérico
+  não pode reler a MESMA página (dois fetches do mesmo HTML dentro do orçamento
+  de 25s da mensagem — mesma lição do T069 da SHEIN). Guarda estrutural no teste.
+- **403 e 429 são bloqueio; 404 continua sendo link morto.** Acusar bloqueio no
+  404 mandaria procurar defeito na loja quando o link é que não existe mais.
+- **`buildMagaluImageUrlCandidates` nunca reescreve destrutivamente.** O
+  og:image da Magalu traz o tamanho no caminho do CDN (`/450x450/...`), quase
+  sempre abaixo dos 800px do preview; as variantes grandes vêm primeiro e a URL
+  **original fica por último** — mesmo contrato de Amazon/SHEIN. Se o CDN não
+  servir o tamanho pedido, `fetchImageBuffer` cai para a que já funcionava em
+  vez de a oferta sair sem foto. E nunca pede variante MENOR do que a anunciada.
+- **O sinal precisa estar nas DUAS allowlists** (`operationalSignals.js` e
+  `analytics.js`): faltar em uma descarta o evento em silêncio (mesmo modo de
+  falha de `organic_page_view`).
+- **Dar nome ao bloqueio NÃO substitui a foto.** Quando este caminho devolve
+  `null`, quem salva a oferta é o plano B da foto da mensagem de origem
+  (`core/previewImageFallbackPolicy.js`, ligado por default) — e ele só tem o
+  que usar se a mensagem de origem trouxer foto. Oferta de Magalu compartilhada
+  como texto + link, com a loja barrando, **continua saindo sem foto**: não há
+  bytes em lugar nenhum. Isso é limite conhecido, não defeito escondido. **Não**
+  usar o banner de marca (`storeBrandCard`) como tapa-buraco de produto — é
+  exatamente a regressão #1205/#1208.
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers: nada disso
+vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta
+TODAS as sessões — anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/magalu-imagem-oferta.test.js` (muro reproduzido por servidor
+local, sem tocar a loja).
+
 ## "As imagens só aparecem se clicar" (RCA 2026-09-03 — não regredir)
 
 Cliente (`samaraoliveiraasam@gmail.com`) mandou dois prints: um card de Shopee
