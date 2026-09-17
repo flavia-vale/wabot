@@ -1376,3 +1376,35 @@ Aparecem contas de teste da própria casa (`Flavia teste`, `Flavia Teste 1`,
 já anonimizadas** (`deleted_*@anonimizado.invalid`, que por definição não têm a
 quem ligar). Não é defeito de memória nem de dado — é filtro que falta no
 script. Enquanto não existir, é só pular na leitura.
+
+## 14. A lição virou ferramenta: o medidor agora imprime a idade da frota
+
+Errei a interpretação da série **duas vezes no mesmo dia**, pelo mesmo motivo:
+concluí sobre memória sem saber há quanto tempo os robôs estavam no ar. Escrever
+"lembre de conferir o uptime" no documento não resolve — quem está medindo às
+23h não vai lembrar.
+
+Então o `medir.sh` passou a imprimir sozinho:
+
+```text
+  IDADE da frota ...... robo mais velho 214 min | mais novo 3 min
+  ATENCAO: frota com menos de 1h — AINDA NAO SATUROU. Nao comparar com frota assentada.
+```
+
+E o `comparar` **recusa a comparação** quando qualquer uma das duas medidas é de
+frota com menos de uma hora:
+
+```text
+  ATENCAO: uma das medidas e de frota com MENOS DE 1 HORA. A comparacao NAO vale:
+    frota nova e sempre mais leve, e isso e idade de processo, nao a variavel.
+```
+
+⚠️ **Detalhe de implementação que quebrou o script na primeira tentativa:** o
+programa `awk` vive dentro de `awk '...'` no shell, então **apóstrofo dentro de
+qualquer texto do awk encerra a string** e o script morre com
+`runaway string constant`. Escrever "é" como "e'" — natural em português — é
+exatamente o que quebra. Todos os textos do awk são sem apóstrofo de propósito.
+
+Para atualizar no VPS, é recolar o instalador (`scripts/instalar-medidor-memoria.sh`,
+ou o bloco da §3.0). O histórico em `/tmp/medidas` **não se perde**: as medidas
+antigas ficam com dois campos a menos e o `historico` continua lendo.
