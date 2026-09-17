@@ -376,7 +376,7 @@ function RoiPanel({ data, loading, months, onMonths }) {
   const future = data.future ?? {}
   const reconciliation = data.reconciliation ?? null
   const chosen = (future.scenarios ?? []).find(item => item.scenario === scenario) ?? (future.scenarios ?? [])[0] ?? null
-  const seCustear = summary.netResult >= 0
+  const seCustear = (summary.resultToDate ?? summary.netResult) >= 0
 
   return (
     <div className="space-y-8">
@@ -385,7 +385,9 @@ function RoiPanel({ data, loading, months, onMonths }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-black uppercase tracking-wide text-gray-500">O placar até agora</h3>
-            <p className="text-xs text-gray-500">Só meses já fechados ({formatNumber(summary.monthsClosed ?? 0)}). O mês atual fica no bloco de baixo, porque ainda está correndo.</p>
+            <p className="text-xs text-gray-500">
+              Tudo que já entrou contra tudo que já saiu, <span className="font-bold">incluindo o que entrou este mês</span> — é dinheiro no bolso, não estimativa. O que ainda deve entrar até o fim do mês fica no bloco Presente.
+            </p>
           </div>
           {!!data.excludedTestAccounts?.length && (
             <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-800">
@@ -397,27 +399,27 @@ function RoiPanel({ data, loading, months, onMonths }) {
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
             <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Entrou (já descontado)</p>
-            <p className="mt-1 text-2xl font-black text-emerald-800">{formatCurrency(summary.totalNetRevenue)}</p>
+            <p className="mt-1 text-2xl font-black text-emerald-800">{formatCurrency(summary.netToDate ?? summary.totalNetRevenue)}</p>
             <p className="mt-1 text-[11px] text-emerald-600">depois das comissões de afiliada e das taxas do Mercado Pago</p>
           </div>
           <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-100">
             <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Saiu (Claude + servidor)</p>
-            <p className="mt-1 text-2xl font-black text-rose-700">{formatCurrency(summary.totalInvested)}</p>
-            <p className="mt-1 text-[11px] text-rose-600">tudo que você já pagou para o BOTinho existir</p>
+            <p className="mt-1 text-2xl font-black text-rose-700">{formatCurrency(summary.investedToDate ?? summary.totalInvested)}</p>
+            <p className="mt-1 text-[11px] text-rose-600">tudo que você já pagou para o BOTinho existir, com a conta deste mês inteira</p>
           </div>
           <div className={`rounded-xl p-4 ring-1 ${seCustear ? 'bg-emerald-600 ring-emerald-500' : 'bg-slate-900 ring-slate-800'}`}>
             <p className="text-xs font-bold uppercase tracking-wide text-cyan-200">{seCustear ? 'Já sobrou' : 'Ainda falta'}</p>
-            <p className="mt-1 text-2xl font-black text-white">{signedCurrency(summary.netResult)}</p>
+            <p className="mt-1 text-2xl font-black text-white">{signedCurrency(summary.resultToDate ?? summary.netResult)}</p>
             <p className="mt-1 text-[11px] text-slate-300">
               {seCustear ? 'o produto já pagou tudo que custou' : 'para o produto pagar tudo que custou até aqui'}
             </p>
           </div>
           <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
             <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Retorno sobre o gasto</p>
-            <p className={`mt-1 text-2xl font-black ${(summary.roiPct ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-              {summary.roiPct === null || summary.roiPct === undefined ? '—' : `${summary.roiPct > 0 ? '+' : ''}${formatNumber(summary.roiPct)}%`}
+            <p className={`mt-1 text-2xl font-black ${(summary.roiPctToDate ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {summary.roiPctToDate === null || summary.roiPctToDate === undefined ? '—' : `${summary.roiPctToDate > 0 ? '+' : ''}${formatNumber(summary.roiPctToDate)}%`}
             </p>
-            <p className="mt-1 text-[11px] text-gray-500">cada R$ 100 gastos devolveram {summary.totalInvested > 0 ? formatCurrency((summary.totalNetRevenue / summary.totalInvested) * 100) : '—'}</p>
+            <p className="mt-1 text-[11px] text-gray-500">cada R$ 100 gastos devolveram {(summary.investedToDate ?? 0) > 0 ? formatCurrency(((summary.netToDate ?? 0) / summary.investedToDate) * 100) : '—'}</p>
           </div>
         </div>
 
@@ -426,9 +428,12 @@ function RoiPanel({ data, loading, months, onMonths }) {
             bruto e com o mês corrente), então dão números diferentes — sem
             mostrar a conta, a diferença parece defeito. */}
         {reconciliation && (
-          <details className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+          // ABERTO por padrão de propósito: recolhido, quem estava confusa com
+          // a diferença entre as duas abas não tinha motivo para clicar — e
+          // continuou achando que havia defeito. A conta tem que estar à vista.
+          <details open className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
             <summary className="cursor-pointer text-xs font-black text-gray-700">
-              Por que este número é menor que o da aba Visão geral?
+              Conferindo com a aba Visão geral
             </summary>
             <div className="mt-3 space-y-1 text-sm">
               <div className="flex items-center justify-between gap-3">
@@ -443,23 +448,24 @@ function RoiPanel({ data, loading, months, onMonths }) {
                 <span className="text-gray-600">(–) taxas que o Mercado Pago retém</span>
                 <span className="font-bold text-rose-700">− {formatCurrency(reconciliation.mpFeesAllTime)}</span>
               </div>
-              <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-1">
-                <span className="text-gray-700">(=) o que de fato sobrou para você</span>
-                <span className="font-bold text-gray-900">{formatCurrency(reconciliation.netAllTime)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-gray-600">(–) {formatMonthLong(present.month)}, que ainda está correndo</span>
-                <span className="font-bold text-gray-700">− {formatCurrency(reconciliation.currentMonthNet)}</span>
-              </div>
               <div className="flex items-center justify-between gap-3 border-t-2 border-gray-300 pt-1">
                 <span className="font-bold text-gray-900">(=) o número do placar acima</span>
-                <span className="font-black text-emerald-800">{formatCurrency(reconciliation.netClosedMonths)}</span>
+                <span className="font-black text-emerald-800">{formatCurrency(reconciliation.netToDate ?? reconciliation.netAllTime)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 pt-2 text-[11px] text-gray-500">
+                <span>disso, {formatMonthLong(present.month)} (mês em andamento) já trouxe</span>
+                <span className="font-bold">{formatCurrency(reconciliation.currentMonthNet)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-[11px] text-gray-500">
+                <span>e os {formatNumber(summary.monthsClosed ?? 0)} meses já fechados somam</span>
+                <span className="font-bold">{formatCurrency(reconciliation.netClosedMonths)}</span>
               </div>
             </div>
             <p className="mt-3 text-[11px] text-gray-500">
-              A aba Visão geral mostra o <span className="font-bold">valor cheio</span> e inclui o mês em andamento, porque a pergunta lá é
-              &quot;quanto está entrando&quot;. Aqui a pergunta é &quot;o produto já se pagou&quot;, e para isso só vale o que de fato
-              sobrou, em mês já fechado. O mês corrente aparece no bloco Presente, logo abaixo.
+              A diferença com a aba Visão geral é só esta: lá aparece o <span className="font-bold">valor cheio</span>, porque a pergunta é
+              &quot;quanto está entrando&quot;; aqui entra o que de fato <span className="font-bold">sobrou para você</span>, porque a pergunta é
+              &quot;o produto já se pagou&quot;. As duas contam o mesmo período, inclusive este mês. E a conta deste mês entra
+              <span className="font-bold"> inteira</span> do lado do custo — a fatura do Claude e a do servidor são mensais e já foram cobradas.
             </p>
           </details>
         )}

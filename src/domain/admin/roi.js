@@ -305,6 +305,25 @@ export function buildRoiReport({
   const totalInvested = cumulativeCost
   const totalNet = cumulativeNet
 
+  // ---------- ATÉ AGORA: o que responde "já se pagou?" ----------
+  //
+  // RCA 2026-09-17: o placar contava só mês FECHADO, e isso estava errado.
+  // "Realizado e previsto nunca viram um número só" continua valendo — mas o
+  // mês corrente NÃO é previsto por inteiro: o que já entrou nele é dinheiro
+  // no bolso, fato, e a fatura do mês já saiu. Deixar setembro fora escondeu
+  // R$ 640 de receita já recebida e R$ 755 de custo já pago, e a conta do
+  // "já se pagou?" ficou respondendo outra pergunta.
+  //
+  // Previsto (o fechamento do mês) continua SÓ no bloco Presente.
+  //
+  // ⚠️ O custo do mês corrente entra CHEIO, não proporcional aos dias: a
+  // fatura do Claude e a do servidor são mensais e já foram cobradas. Isso
+  // pesa contra o resultado no começo do mês — é conservador de propósito,
+  // porque inflar o resultado é o erro que custa decisão errada.
+  const netToDate = round2(cumulativeNet + currentRevenue.net)
+  const investedToDate = round2(cumulativeCost + currentCost.total)
+  const resultToDate = round2(netToDate - investedToDate)
+
   // ---------- CONCILIAÇÃO com a aba Visão geral ----------
   // O placar acima e os cartões da Visão geral respondem coisas diferentes e
   // por isso dão números diferentes: aqui é LÍQUIDO e só de mês FECHADO, lá é
@@ -335,7 +354,15 @@ export function buildRoiReport({
     },
     past,
     summary: {
-      // Fechado, sem o mês corrente: é o que já é fato.
+      // ---- O QUE O PLACAR USA: tudo que já entrou contra tudo que já saiu,
+      // incluindo a parte JÁ REALIZADA do mês corrente. É a única leitura que
+      // responde "já se pagou?" sem esconder dinheiro que está no bolso.
+      netToDate,
+      investedToDate,
+      resultToDate,
+      roiPctToDate: investedToDate > 0 ? round2((resultToDate / investedToDate) * 100) : null,
+      // ---- Meses FECHADOS, sem o mês corrente: é o que a tabela do passado
+      // soma, e o que serve para comparar mês com mês sem meio mês no meio.
       monthsClosed: past.length,
       totalNetRevenue: totalNet,
       totalInvested,
@@ -351,10 +378,13 @@ export function buildRoiReport({
       affiliateCommissionsAllTime: commissionsAllTime,
       mpFeesAllTime: feesAllTime,
       netAllTime,
-      // O que o mês corrente (ainda correndo) tira do placar de meses fechados.
+      // O mês corrente entra no placar, então a cascata termina nele. A linha
+      // do mês fechado fica como detalhe, para conferir com a tabela.
       currentMonthGross: currentRevenue.gross,
       currentMonthNet: currentRevenue.net,
-      // Confere: netAllTime − currentMonthNet === totalNetRevenue.
+      // Confere: netAllTime === netToDate (o placar cobre todo o histórico).
+      netToDate,
+      // Confere: netToDate − currentMonthNet === totalNetRevenue.
       netClosedMonths: totalNet,
     },
     present,
