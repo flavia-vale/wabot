@@ -44,9 +44,12 @@ export async function discoverReviewItems(automation, deps = {}) {
   // como repetidos e terminar vazia mesmo havendo outros produtos disponíveis.
   const searchSize = Math.min(50, capacity + living.length)
   const searchPage = replacingAwaiting ? Math.max(1, Number(automation.page) || 1) + 1 : Math.max(1, Number(automation.page) || 1)
-  // A fila é uma vitrine de decisão: dentro de cada prioridade (AMS primeiro,
-  // quando ligada), a ordem mais útil e previsível é a de mais vendidos.
-  const { offers, rawCount } = await resolveOffers({ automation: { ...automation, offersPerSend: searchSize, page: searchPage, sortType: 2 }, sentItemIds, creds, fetchOffersFn: deps.fetchOffersFn })
+  // A ordem e o conjunto de produtos são ESCOLHA DA CLIENTE (ver
+  // dashboard/lib/offerAutomationSearch.js). Até 2026-09 a fila forçava
+  // "mais vendidos" aqui — o que fazia sentido enquanto a escolha não existia
+  // na tela, e passou a ser um jeito silencioso de descartá-la: a cliente
+  // trocaria a busca no formulário e a fila continuaria montada de outro jeito.
+  const { offers, rawCount } = await resolveOffers({ automation: { ...automation, offersPerSend: searchSize, page: searchPage }, sentItemIds, creds, fetchOffersFn: deps.fetchOffersFn })
   const botConfig = await db.botConfig.findUnique({ where: { userId: automation.userId } })
   const prepared = dedupeOffersByProduct(offers)
     .map(offer => materializeAutomationOffer(automation, offer, botConfig))

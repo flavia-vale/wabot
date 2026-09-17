@@ -2175,6 +2175,82 @@ Hoje há uma camada **cruzada por grupo de destino**, na tabela
 
 Teste: `test/offer-automation.test.js`.
 
+## A cliente nunca pôde escolher a busca das ofertas automáticas (RCA 2026-09-17)
+
+Cliente reportou que "eletrodoméstico Brastemp" só trazia **capa de máquina de
+lavar**, "cafeteira dolce gusto" só **cápsula reutilizável e produto de
+limpeza**, e "mesa desmontável pegue e monte" só **mesa cavalete** — e pediu uma
+opção de buscar "os itens mais vendidos".
+
+**A ordenação por mais vendidos já estava ligada.** O que limitava era o outro
+eixo. A `productOfferV2` da Shopee tem dois parâmetros independentes: `listType`
+(de qual lista tirar os candidatos) e `sortType` (em que ordem devolvê-los). O
+backend sempre gravou os dois (`OfferAutomation.listType`/`sortType`), a rota
+sempre os validou e a `search-preview` sempre os aceitou — **só a tela nunca os
+ofereceu**. Toda automação nascia com o padrão da rota: `sortType=2` (mais
+vendidos) **dentro de** `listType=1` (maior comissão).
+
+Produto caro paga comissão MENOR, então é justamente ele quem a lista de maior
+comissão deixa de fora; o acessório barato de 15% fica. A ordenação por mais
+vendidos ordenava um conjunto do qual o produto procurado nunca fazia parte —
+os três exemplos dela são o mesmo caso três vezes (máquina fora/capa dentro,
+cafeteira fora/cápsula dentro, mesa fora/cavalete dentro).
+
+| Peça | Onde |
+|---|---|
+| Opções em linguagem leiga (PURO) | `dashboard/lib/offerAutomationSearch.js` |
+| Os dois campos no formulário + linha no card | `dashboard/app/painel/ofertas-automaticas/page.js` |
+
+**Não regredir:**
+
+- **O padrão continua `listType=1` / `sortType=2`.** Mudar o default trocaria a
+  busca de toda automação nova sem ninguém ter pedido, e qual conjunto rende
+  mais só se decide medindo em staging. O conserto é a escolha ficar VISÍVEL,
+  não o produto escolher por ela. Teste falha se o default mudar sem decisão.
+- **A busca escolhida aparece no card SEMPRE, inclusive quando é o padrão**
+  (`describeSearchChoice`). A queixa não foi "a opção está errada", foi "eu não
+  sabia que existia uma opção" — esconder no padrão recria o mesmo ponto cego.
+- **A opção de maior comissão DIZ que é ela quem deixa o produto caro de fora.**
+  Sem esse aviso a cliente troca a palavra-chave para sempre sem nunca chegar no
+  que estava filtrando — foi exatamente o que aconteceu por três buscas.
+- **A fila de revisão não força mais `sortType: 2`**
+  (`reviewDiscoveryService.js`). Forçar fazia sentido enquanto a escolha não
+  existia na tela; com ela, virou um jeito silencioso de descartar o que a
+  cliente pediu.
+- **"Priorizar comissão extra" (`prioritizeAMS`) passa POR CIMA da ordem
+  escolhida — não é um filtro a mais.** `resolveOffers` faz DUAS buscas e devolve
+  `[...comissãoExtra, ...restantes]`; cada grupo respeita o `sortType`, mas é a
+  concatenação que decide quem sai, e `runAutomation` manda os primeiros
+  `offersPerSend`. Com 1 produto por envio e qualquer oferta de comissão extra
+  disponível, **ela sai sempre** — "mais baratos primeiro" chega a publicar o
+  item de R$500 no lugar do de R$10 (medido no teste). Isso é o que a opção
+  promete pelo nome, então não virar bug a ser "consertado": o conserto é dizer
+  na tela e no card. As duas buscas usam o MESMO `listType`/`sortType` — se a
+  segunda caísse no padrão, marcar a prioridade desfaria em silêncio a escolha
+  de busca ampla para metade dos candidatos.
+- ⚠️ **Prioridade de comissão extra + "só maior comissão" se somam** e empurram
+  a busca para o acessório barato duas vezes — é a combinação que mais reproduz
+  a queixa original. Ao atender um relato de "só vem acessório", conferir as
+  DUAS opções, nunca só a palavra-chave.
+- **Valor inválido cai no padrão**, nunca derruba a tela: automação antiga com
+  campo vazio precisa continuar abrindo para edição.
+- Linguagem leiga: nada de `listType`, `sortType`, `productOfferV2` na tela —
+  teste falha se jargão voltar.
+- **Custo: zero.** Nenhuma consulta nova, nenhum processo novo, nenhuma
+  migration (as colunas já existiam), **zero impacto de RAM**.
+
+⚠️ **Ofertas automáticas são 100% Shopee.** Amazon, Mercado Livre, Magalu, SHEIN
+e AliExpress só CONVERTEM link existente — não têm busca por palavra-chave em
+lugar nenhum do repositório. Não prometer à cliente ordenação nas outras lojas.
+
+⚠️ **Só a Shopee sabe o que cada lista devolve.** `POST
+/api/offer-automations/search-preview` roda a MESMA busca sem enviar nada e sem
+gravar — é por ali que se compara as combinações antes de decidir. Ele existe
+desde sempre e **nenhuma tela o chama**; ligar esse botão no painel é o passo
+seguinte natural desta mudança.
+
+Teste: `test/ofertas-automaticas-escolha-da-busca.test.js`.
+
 ## Mensagem do grupo monitorado espelhada N vezes (RCA 2026-07 — não regredir)
 
 **Sintoma:** o grupo monitorado publicou UMA mensagem às 14:13. Em staging ela
