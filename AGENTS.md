@@ -2270,7 +2270,41 @@ gravar — é por ali que se compara as combinações antes de decidir. Ele exis
 desde sempre e **nenhuma tela o chama**; ligar esse botão no painel é o passo
 seguinte natural desta mudança.
 
-Teste: `test/ofertas-automaticas-escolha-da-busca.test.js`.
+⚠️ **O que cada `listType` devolve NÃO está verificado — e o nosso padrão é o
+valor que a Shopee não documenta.** O comentário em
+`src/api/routes/offerAutomation.js` ("0=Recomendados 1=Maior comissão 2=Melhor
+desempenho") não tem fonte. A documentação pública descreve `sortType` 1 a 5
+(relevância, vendas, preço ↑, preço ↓, comissão), que **batem** com o código, e
+descreve `listType` 0, 2, 3, 4 e 5 — **`listType: 1`, que é o nosso padrão em
+produção, não aparece em lugar nenhum**. Ele parece ter sido escolhido na
+prática: o comentário de `shopeeOffers.js` diz que `listType=2` era estreito
+demais e produzia `no_offers_found` falso.
+
+Consequência: os rótulos das listas na tela e a explicação de que "a lista de
+maior comissão deixa o produto caro de fora" são **hipótese**, não fato — não
+repetir para a cliente como se fosse causa provada. Mudar o padrão mexeria na
+busca de TODA automação existente, então a decisão pede medição, e medir é o
+que `scripts/diag-busca-shopee.mjs` faz (read-only, com a chave real da conta,
+no diretório do ambiente):
+
+```bash
+cd ~/wabot && node scripts/diag-busca-shopee.mjs <email> "eletrodoméstico Brastemp"
+cd ~/wabot && node scripts/diag-busca-shopee.mjs <email> "cafeteira dolce gusto" --lista=1
+```
+
+Sem `--lista`, compara as TRÊS listas com a mesma ordem; com `--lista=N`,
+compara as CINCO ordens dentro daquela lista. `--desconto=0` é o padrão de
+propósito (mostra a lista crua, antes do filtro da automação). A comissão sai
+**crua**: a escala que a Shopee usa nesse campo não está verificada em lugar
+nenhum do repositório, e converter por palpite imprimiria "1500%".
+
+⚠️ **`productCatId` (filtro por categoria) existe na API e nunca foi usado** —
+é o parâmetro com mais cara de resolver a queixa original ("só vem acessório"),
+e não foi atacado. Os outros não usados: `shopId`, `itemId`, `matchId`.
+`isKeySeller` existe no banco e nunca apareceu na tela (sempre `false`).
+
+Testes: `test/ofertas-automaticas-escolha-da-busca.test.js`,
+`test/diag-busca-shopee.test.js`.
 
 ## Mensagem do grupo monitorado espelhada N vezes (RCA 2026-07 — não regredir)
 
