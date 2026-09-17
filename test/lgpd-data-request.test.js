@@ -33,6 +33,7 @@ test('Payment e AffiliateCommission NÃO estão na lista de purga (retenção fi
   assert.ok(PURGED_MODELS.includes('messageLog'))
   assert.ok(PURGED_MODELS.includes('credential'))
   assert.ok(PURGED_MODELS.includes('scheduledMessage'))
+  assert.ok(PURGED_MODELS.indexOf('storyPublication') < PURGED_MODELS.indexOf('destination'))
 })
 
 test('collectUserExport reúne user redigido + modelos do titular', async () => {
@@ -40,13 +41,14 @@ test('collectUserExport reúne user redigido + modelos do titular', async () => 
     user: { findUnique: async () => ({ id: 'u1', name: 'Fulano', email: 'f@x.com', passwordHash: 'h' }) },
   }
   for (const model of EXPORTED_MODELS) {
-    db[model] = { findMany: async ({ where }) => [{ id: `${model}-1`, userId: where.userId }] }
+    db[model] = { findMany: async ({ where }) => [{ id: `${model}-1`, userId: where.userId, ...(model === 'instagramConnection' ? { encryptedToken: 'ciphertext' } : {}) }] }
   }
   const data = await collectUserExport(db, 'u1', new Date('2026-06-15T00:00:00Z'))
   assert.equal(data.userId, 'u1')
   assert.equal(data.user.passwordHash, '[redigido]')
   assert.equal(data.group[0].userId, 'u1')
   assert.ok(data.exportedAt.startsWith('2026-06-15'))
+  assert.equal(data.instagramConnection[0].encryptedToken, '[redigido]')
 })
 
 test('collectUserExport lança quando usuário não existe', async () => {

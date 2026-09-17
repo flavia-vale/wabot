@@ -3,6 +3,9 @@ export const PLAN_IDS = Object.freeze({
   TRIAL: 'trial',
   BASIC: 'basic',
   PRO: 'pro',
+  // Identificador técnico reservado para o plano ainda não lançado acima do
+  // Pro. O nome comercial pode mudar antes do lançamento em um único lugar.
+  PREMIUM: 'premium',
 })
 
 export const FEATURE_CODES = Object.freeze({
@@ -10,6 +13,7 @@ export const FEATURE_CODES = Object.freeze({
   ADVANCED_PRESERVATION: 'advanced_preservation',
   OFFER_AUTOMATIONS: 'offer_automations',
   OFFER_QUEUES: 'offer_queues',
+  INSTAGRAM_STORIES: 'instagram_stories',
 })
 
 const KNOWN_PLANS = new Set(Object.values(PLAN_IDS))
@@ -36,7 +40,8 @@ export function getPlanEntitlements(userOrPlan = {}, { now = new Date() } = {}) 
   const plan = typeof userOrPlan === 'string' ? userOrPlan : userOrPlan?.plan
   const normalizedPlan = normalizePlan(plan)
   const trialActive = typeof userOrPlan === 'string' ? false : isTrialActive(userOrPlan, now)
-  const hasProLikeAccess = normalizedPlan === PLAN_IDS.PRO || trialActive
+  const hasProLikeAccess = [PLAN_IDS.PRO, PLAN_IDS.PREMIUM].includes(normalizedPlan) || trialActive
+  const hasPremiumAccess = normalizedPlan === PLAN_IDS.PREMIUM
 
   return {
     plan: normalizedPlan,
@@ -46,6 +51,8 @@ export function getPlanEntitlements(userOrPlan = {}, { now = new Date() } = {}) 
     canUseAdvancedPreservation: hasProLikeAccess,
     canUseOfferAutomations: hasProLikeAccess,
     canUseOfferQueues: hasProLikeAccess,
+    // Instagram nunca é herdado pelo Trial nem pelo Pro. Só o plano superior.
+    canUseInstagramStories: hasPremiumAccess,
   }
 }
 
@@ -63,6 +70,10 @@ export function canUseOfferAutomations(userOrPlan = {}, options = {}) {
 
 export function canUseOfferQueues(userOrPlan = {}, options = {}) {
   return getPlanEntitlements(userOrPlan, options).canUseOfferQueues
+}
+
+export function canUseInstagramStories(userOrPlan = {}, options = {}) {
+  return getPlanEntitlements(userOrPlan, options).canUseInstagramStories
 }
 
 // Cache em memória pra evitar martelar o DB no fan-out do bot-worker e nos
@@ -148,6 +159,14 @@ export function isPreservationActive(planAccess, botConfig) {
 
 export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
   const featureCode = String(feature || FEATURE_CODES.CHANNELS)
+  if (featureCode === FEATURE_CODES.INSTAGRAM_STORIES) {
+    return {
+      error: 'A publicação de Stories no Instagram estará disponível em um novo plano acima do Pro.',
+      code: 'FEATURE_REQUIRES_PREMIUM',
+      feature: FEATURE_CODES.INSTAGRAM_STORIES,
+      requiredPlan: PLAN_IDS.PREMIUM,
+    }
+  }
   if (featureCode === FEATURE_CODES.ADVANCED_PRESERVATION) {
     return {
       error: 'O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.',

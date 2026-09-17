@@ -94,7 +94,8 @@ test('mode=original cai para jpegThumbnail quando upgrade ativo falha (fetchProd
     fetchImageBuffer: async () => null,
     logger: silentLogger(),
   })
-  assert.equal(result, THUMBNAIL_IMAGE, 'fallback: thumbnail é melhor que nenhuma imagem')
+  assert.equal(result.buffer, THUMBNAIL_IMAGE.buffer, 'fallback: thumbnail é melhor que nenhuma imagem')
+  assert.equal(result.usedThumbnailFallback, true, 'sinaliza pro chamador que isto não é imagem cheia')
 })
 
 test('mode=original cai para jpegThumbnail quando fetchImageBuffer falha (CDN bloqueado, etc.)', async () => {
@@ -107,7 +108,8 @@ test('mode=original cai para jpegThumbnail quando fetchImageBuffer falha (CDN bl
     fetchImageBuffer: async () => null,
     logger: silentLogger(),
   })
-  assert.equal(result, THUMBNAIL_IMAGE)
+  assert.equal(result.buffer, THUMBNAIL_IMAGE.buffer)
+  assert.equal(result.usedThumbnailFallback, true)
 })
 
 test('mode=original retorna null quando nem thumbnail nem fetch ativo dão resultado', async () => {
@@ -133,7 +135,8 @@ test('mode=original sem target ainda assim retorna thumbnail quando disponível'
     fetchImageBuffer: async () => { throw new Error('não deveria ser chamado sem target') },
     logger: silentLogger(),
   })
-  assert.equal(result, THUMBNAIL_IMAGE)
+  assert.equal(result.buffer, THUMBNAIL_IMAGE.buffer)
+  assert.equal(result.usedThumbnailFallback, true)
 })
 
 test('mode=original engole exceção do fetchProductImage e cai para thumbnail', async () => {
@@ -147,7 +150,8 @@ test('mode=original engole exceção do fetchProductImage e cai para thumbnail',
     fetchImageBuffer: async () => null,
     logger: { info: () => {}, warn: (m) => warned.push(m) },
   })
-  assert.equal(result, THUMBNAIL_IMAGE)
+  assert.equal(result.buffer, THUMBNAIL_IMAGE.buffer)
+  assert.equal(result.usedThumbnailFallback, true)
   assert.equal(warned.length, 1)
   assert.match(warned[0].err, /timeout/)
 })
@@ -209,7 +213,8 @@ test('skipActiveFetch=true pula fetch ativo e usa original (modo original com th
     skipActiveFetch: true,
     logger: silentLogger(),
   })
-  assert.equal(result, THUMBNAIL_IMAGE, 'cupom: usa thumbnail original, não a imagem do produto')
+  assert.equal(result.buffer, THUMBNAIL_IMAGE.buffer, 'cupom: usa thumbnail original, não a imagem do produto')
+  assert.equal(result.usedThumbnailFallback, true)
   assert.equal(fetchCalls, 0, 'não deve chamar fetch ativo para mensagens de cupom')
 })
 

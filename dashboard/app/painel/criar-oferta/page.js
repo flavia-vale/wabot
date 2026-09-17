@@ -13,7 +13,8 @@ import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
 import { WhatsAppBubble } from '../WhatsAppBubble'
 import { getConversionStatusPresentation } from '@/lib/offerBuilderUi'
-import { hasProLikeAccess } from '@/lib/planEntitlements'
+import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
+import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
 import { buildMobileOfferText } from '@/lib/mobileOfferComposer'
 import { composeTemplates, loadAllTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import {
@@ -88,6 +89,8 @@ export default function CriarOfertaPage() {
   const [pasteFeedback, setPasteFeedback] = useState('')
   const [groups, setGroups] = useState([])
   const [selectedJids, setSelectedJids] = useState([])
+  const [instagramDestinations, setInstagramDestinations] = useState([])
+  const [selectedInstagramIds, setSelectedInstagramIds] = useState([])
   const [queues, setQueues] = useState([])
   const [queueId, setQueueId] = useState('')
   const [scheduleAt, setScheduleAt] = useState('')
@@ -95,12 +98,13 @@ export default function CriarOfertaPage() {
   const [canUseQueues, setCanUseQueues] = useState(true)
   const [dispatching, setDispatching] = useState('')
   const [dispatchFeedback, setDispatchFeedback] = useState('')
+  const [storyIdempotencyKey, setStoryIdempotencyKey] = useState('')
   // Texto da prévia editado à mão. null = segue o template; qualquer edição
   // manual passa a valer até trocar de template ou gerar nova oferta.
   const [customText, setCustomText] = useState(null)
 
   useEffect(() => {
-    Promise.all([api.groups(), api.offerQueues(), api.me().catch(() => null)]).then(([allGroups, allQueues, me]) => {
+    Promise.all([api.groups(), api.offerQueues(), api.me().catch(() => null), api.instagramConnections().catch(() => [])]).then(([allGroups, allQueues, me, connections]) => {
       const destinations = allGroups.filter((group) => group.role === 'post')
       const queuesAllowed = me ? hasProLikeAccess({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null }) : true
       const requestedQueueId = new URLSearchParams(window.location.search).get('fila')
@@ -112,6 +116,7 @@ export default function CriarOfertaPage() {
       setQueues(allQueues)
       setQueueId(initialQueueId)
       setCanUseQueues(queuesAllowed)
+      setInstagramDestinations(hasInstagramStoriesAccess(me || {}) ? instagramDestinationsFromConnections(connections) : [])
       if (queuesAllowed && requestedQueueId === initialQueueId) setSendMode('queue')
     }).catch((err) => setError(err.message))
   }, [])
@@ -195,6 +200,7 @@ export default function CriarOfertaPage() {
         imageUrl: info?.imageUrl || null,
         imageRefererUrl: info?.imageRefererUrl || null,
       })
+      setStoryIdempotencyKey(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
       setConversionStatus(info?.conversion || null)
     } catch (err) {
       setError(err?.message || 'Falha ao gerar a oferta.')
@@ -221,24 +227,60 @@ export default function CriarOfertaPage() {
     setPasteFeedback('')
     setScheduleAt('')
     setCustomText(null)
+    setStoryIdempotencyKey('')
   }
 
   async function dispatch(mode, { createNew = false } = {}) {
-    if (mode !== 'queue' && !selectedJids.length) { setDispatchFeedback('Selecione pelo menos um grupo de destino.'); return }
+    if (mode !== 'queue' && !selectedJids.length && !selectedInstagramIds.length) { setDispatchFeedback('Selecione pelo menos um grupo ou conta do Instagram.'); return }
     if (mode === 'schedule' && (!scheduleAt || new Date(scheduleAt) <= new Date())) { setDispatchFeedback('Escolha uma data e hora futuras.'); return }
     if (mode === 'queue' && !queueId) { setDispatchFeedback('Crie ou selecione uma fila.'); return }
     const actionKey = createNew ? `${mode}-new` : mode
     setDispatching(actionKey)
     setDispatchFeedback('')
     try {
-      const payload = { text: offerMessage, imageUrl: generated?.imageUrl, imageRefererUrl: generated?.imageRefererUrl }
-      if (mode === 'now') await api.broadcastSend({ ...payload, jids: selectedJids })
-      if (mode === 'schedule') await api.scheduledCreate({ ...payload, jids: selectedJids, scheduledAt: new Date(scheduleAt).toISOString() })
+      const priceCents = Math.round(parseNum(generated?.newPrice) * 100) || null
+      const parsedOldPriceCents = Math.round(parseNum(generated?.oldPrice) * 100) || null
+      const oldPriceCents = parsedOldPriceCents && (!priceCents || parsedOldPriceCents >= priceCents) ? parsedOldPriceCents : null
+      const offer = { offerKey: generated?.link || link, title: generated?.title || 'Oferta', priceCents, oldPriceCents, discountLabel: dp == null ? null : `${dp}% OFF`, storeName: store?.name || null, productUrl: generated?.link || link, imageUrl: generated?.imageUrl || null, callToAction: 'Oferta por tempo limitado' }
+      const payload = { text: offerMessage, imageUrl: generated?.imageUrl, imageRefererUrl: generated?.imageRefererUrl, offer }
+      // Cada canal é um resultado próprio. Antes um erro do Instagram virava um
+      // throw único: a usuária lia só a falha, não sabia que o WhatsApp tinha
+      // saído, reclicava e o WhatsApp era enviado DE NOVO (o broadcast não tem
+      // chave de idempotência).
+      const actions = []
+      if (mode === 'now' && selectedJids.length) actions.push({ canal: 'WhatsApp', run: () => api.broadcastSend({ ...payload, jids: selectedJids }) })
+      if (mode === 'schedule' && selectedJids.length) actions.push({ canal: 'WhatsApp', run: () => api.scheduledCreate({ ...payload, jids: selectedJids, scheduledAt: new Date(scheduleAt).toISOString() }) })
+      if ((mode === 'now' || mode === 'schedule') && selectedInstagramIds.length) {
+        if (!generated?.imageUrl) throw new Error('O Instagram precisa de uma foto da oferta. Gere a oferta com imagem antes de publicar.')
+        actions.push({ canal: 'Instagram', run: async () => {
+          const result = await api.instagramStoryCreate({ destinationIds: selectedInstagramIds, offer, imageUrl: generated.imageUrl, imageRefererUrl: generated?.imageRefererUrl, scheduledFor: mode === 'schedule' ? new Date(scheduleAt).toISOString() : undefined, idempotencyKey: storyIdempotencyKey || undefined })
+          if (!result.publications?.length && result.errors?.length) throw new Error(result.errors.map((item) => item.error).join(' · '))
+          return result
+        } })
+      }
+      let parcial = ''
+      if (actions.length) {
+        const results = await Promise.allSettled(actions.map((action) => action.run()))
+        const ok = actions.filter((_, index) => results[index].status === 'fulfilled').map((action) => action.canal)
+        const failures = actions
+          .map((action, index) => ({ canal: action.canal, reason: results[index].reason }))
+          .filter((item, index) => results[index].status === 'rejected')
+        if (failures.length) {
+          const detalhe = failures.map((item) => `${item.canal}: ${item.reason?.message || 'não deu certo'}`).join(' · ')
+          // Dizer o que DEU certo é o que impede o reenvio duplicado.
+          throw new Error(ok.length ? `${detalhe}. O envio para ${ok.join(' e ')} já saiu — não repita esta oferta nesse canal.` : detalhe)
+        }
+        // O Story não é publicado na hora: a rota responde "na fila". Dizer
+        // "enviada" seria mentira, e é justamente aqui que ela pode falhar
+        // depois (foto recusada pela loja, limite diário da Meta).
+        if (ok.includes('Instagram')) parcial = mode === 'schedule' ? ' O Story do Instagram fica agendado.' : ' O Story do Instagram entrou na fila e aparece em Configurações quando publicar.'
+      }
       // Na fila não enviamos jids: o item herda os grupos configurados na fila.
       if (mode === 'queue') await api.offerQueueItemAdd(queueId, payload)
+      const channels = [selectedJids.length ? 'WhatsApp' : null, selectedInstagramIds.length ? 'Instagram' : null].filter(Boolean).join(' e ')
       setDispatchFeedback(createNew
-        ? (mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp. Nova oferta pronta para criação.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Nova oferta pronta para criação.' : 'Oferta inserida na fila com sucesso. Nova oferta pronta para criação.')
-        : (mode === 'now' ? 'Oferta enviada para a fila de envio do WhatsApp.' : mode === 'schedule' ? 'Oferta agendada com sucesso. Veja em Agendados.' : 'Oferta inserida na fila com sucesso.'))
+        ? (mode === 'now' ? `Oferta enviada para ${channels}.${parcial} Nova oferta pronta para criação.` : mode === 'schedule' ? `Oferta agendada para ${channels}.${parcial} Nova oferta pronta para criação.` : 'Oferta inserida na fila com sucesso. Nova oferta pronta para criação.')
+        : (mode === 'now' ? `Oferta enviada para ${channels}.${parcial}` : mode === 'schedule' ? `Oferta agendada para ${channels}.${parcial} Veja em Agendados.` : 'Oferta inserida na fila com sucesso.'))
       if (createNew) resetOfferForm()
     } catch (err) { setDispatchFeedback(err.message) }
     finally { setDispatching('') }
@@ -398,6 +440,10 @@ export default function CriarOfertaPage() {
             </div>
           )}
 
+          {(sendMode === 'now' || sendMode === 'schedule') && (
+            <InstagramDestinationPicker destinations={instagramDestinations} selectedIds={selectedInstagramIds} onToggle={(id) => setSelectedInstagramIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])} title="Contas do Instagram" />
+          )}
+
           {sendMode === 'queue' && (
             <div className="pnl-field" style={{ marginTop: 16, maxWidth: 380 }}>
               <label className="pnl-label" htmlFor="queue-id">Fila automática</label>
@@ -415,7 +461,7 @@ export default function CriarOfertaPage() {
           )}
 
           {sendMode && (() => {
-            const disabled = !!dispatching || (sendMode !== 'queue' && !selectedJids.length) || (sendMode === 'schedule' && !scheduleAt) || (sendMode === 'queue' && !queueId)
+            const disabled = !!dispatching || (sendMode !== 'queue' && !selectedJids.length && !selectedInstagramIds.length) || (sendMode === 'schedule' && !scheduleAt) || (sendMode === 'queue' && !queueId)
             const baseLabel = sendMode === 'now' ? 'Enviar agora' : sendMode === 'schedule' ? 'Agendar' : 'Inserir na fila'
             const loadingLabel = sendMode === 'now' ? 'Enviando…' : sendMode === 'schedule' ? 'Agendando…' : 'Inserindo…'
             return (

@@ -95,6 +95,33 @@ test('a exclusão mora no backend: a rota de visão geral filtra TODAS as somas,
     const janela = trecho.slice(0, 320)
     assert.ok(janela.includes('notTestUser'), `soma de pagamento sem excluir conta de teste: ${janela.slice(0, 80)}`)
   }
+
+  // A conta de teste é uma ASSINATURA, e a receita de assinatura vem de
+  // `SubscriptionCharge` (a reconciliação horária recupera cobrança cujo
+  // webhook se perdeu e nunca grava `Payment`). Filtrar só `Payment` tiraria
+  // a assinatura de teste do avulso e a deixaria inteira na outra metade.
+  const assinaturas = overview.split('db.subscriptionCharge.').slice(1)
+  assert.ok(assinaturas.length >= 3, `esperava as somas de assinatura na rota, achei ${assinaturas.length}`)
+  for (const trecho of assinaturas) {
+    const janela = trecho.slice(0, 320)
+    assert.ok(janela.includes('notTestUser'), `soma de assinatura sem excluir conta de teste: ${janela.slice(0, 80)}`)
+  }
+})
+
+test('o ROI lê as MESMAS duas fontes de receita da visão geral', () => {
+  const fonte = readFileSync(new URL('../src/api/routes/admin.js', import.meta.url), 'utf8')
+  const rota = fonte.slice(fonte.indexOf("app.get('/finance/roi'"), fonte.indexOf("app.get('/payments'"))
+
+  // Avulso (Payment, fora o que já é assinatura pelo prefixo) + assinatura
+  // (SubscriptionCharge). Ler só Payment subestimaria a receita toda vez que
+  // um webhook de renovação se perdeu — e o ROI é a conta em que isso não pode
+  // acontecer.
+  assert.ok(rota.includes('db.payment.findMany'), 'o ROI precisa do avulso')
+  assert.ok(rota.includes('db.subscriptionCharge.findMany'), 'o ROI precisa da assinatura')
+  assert.ok(rota.includes("startsWith: 'sub_'"), 'sem o prefixo a assinatura entraria duas vezes')
+  assert.ok(rota.includes('notTestUser'), 'a conta de teste também sai do ROI')
+  // E as duas leituras são limitadas — nenhuma varredura sem teto.
+  assert.equal((rota.match(/take: 20000/g) ?? []).length, 3)
 })
 
 // ---------------------------------------------------------------------------
