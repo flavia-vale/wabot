@@ -146,12 +146,14 @@ pontas diferentes, e nenhuma das duas mexe em lógica de sessão.
 
 1. **`MALLOC_ARENA_MAX`** (era §3.1, 4º lugar) — passa a **primeira**, com
    58% do PSS medido atrás dela.
-2. **Reduzir threads** (novo, §3.6) — causalmente acima das arenas. **16 das
-   29 são do motor do Prisma** (§2-A.4).
-3. **Thread do transporte do log** (§3.2) — continua valendo, e agora por dois
-   motivos: os 11,7 MiB da isolate **e** uma thread a menos alimentando arena.
-4. **Sharp** (§3.3) — só o cache nativo de 50 MB; a parte de threads caiu na
-   medição (§2-A.5).
+2. **Reduzir threads** (novo, §3.6) — **prevenção, não correção**: a §2-A.6
+   mostrou que threads são constantes na frota e não explicam a dispersão.
+   Ainda assim, 16 das 29 são do motor do Prisma (§2-A.4) e cada thread a menos
+   é uma arena a menos onde memória pode ficar presa.
+3. **Thread do transporte do log** (§3.2) — continua valendo pelos 11,7 MiB da
+   isolate medidos, e de quebra é uma arena a menos.
+4. **Sharp** (§3.3) — só o cache nativo de 50 MB. A parte de threads está
+   **morta**: `vips` deu zero nos 41 robôs (§2-A.6).
 5. **Robôs que não precisam estar ligados** (§3.5) — inalterado.
 6. ~~Prisma (§3.4) como custo de código~~ — encerrado. Mas **reaberto como
    produtor de threads**, dentro de §3.6.
@@ -198,41 +200,82 @@ eu não vi é que o custo dele não estava no código nem nas arenas diretamente
 está nas **16 threads** que produzem as arenas. Reaberta, com alavanca nova
 (§3.6), não com a reescrita de arquitetura que eu havia descartado.
 
-### 2-A.6 A leitura que fecha a conta (somente leitura, custo zero)
+### 2-A.6 A correlação foi medida — e o veredito é limpo
 
-Ela testa a hipótese central — **mais threads ⇒ mais arenas ⇒ mais memória** —
-e diz se os workers pesados são os que têm o pool do vips ligado. Reusa o
-`/tmp/mem.awk` já criado pelo comando da §3.0:
-
-```bash
-# ---------- cole daqui (reusa /tmp/mem.awk do comando anterior) ----------
-ALVO="/home/deploy/wabot/src/bot-worker"
-for p in $(pgrep -f "$ALVO"); do
-  L=$(awk -v PID=$p -v TH=0 -f /tmp/mem.awk /proc/$p/smaps 2>/dev/null) || continue
-  pss=$(echo "$L" | awk '{print $6}'); ar=$(echo "$L" | awk '{print $10}')
-  arena=$(echo "$L" | tr ' ' '\n' | awk -F= '/^arena_glibc=/{print $2}')
-  C=/proc/$p/task
-  th=$(ls $C 2>/dev/null | wc -l)
-  tk=$(cat $C/*/comm 2>/dev/null | grep -c tokio)
-  vp=$(cat $C/*/comm 2>/dev/null | grep -ci vips)
-  [ -n "$pss" ] && printf "%7s %-7s %4s %5s %5s %6s %8s\n" "$pss" "$p" "$th" "$tk" "$vp" "$ar" "$arena"
-done | sort -rn | awk 'BEGIN{printf "%7s %-7s %4s %5s %5s %6s %8s\n","PSS","pid","thr","tokio","vips","arenas","MiB_arena"}
-  {print; n++; t+=$3; k+=$4; v+=$5; a+=$6; m+=$7}
-  END{printf "\n%d robos | %d threads (tokio %d = %.0f%%, vips %d) | %d arenas | %.0f MiB em arena\n", n,t,k,k*100/t,v,a,m}'
-# ---------- ate aqui ----------
+```text
+41 robos | 1189 threads (tokio 656 = 55%, vips 0) | 1219 arenas | 5215 MiB em arena
 ```
 
-Leitura do resultado:
+| | menor | maior | varia |
+|---|---:|---:|---|
+| threads por robô | **29** | **29** | **nada** |
+| threads do Prisma | **16** | **16** | **nada** |
+| threads do vips | **0** | **0** | **nada** |
+| arenas por robô | 28 | 33 | 1,2× |
+| **MiB em arena** | **35,8** | **237,0** | **6,6×** |
 
-- **`thr`/`arenas` crescendo junto com `PSS`** → a hipótese se confirma e a §3.6
-  vira a alavanca principal;
-- **`vips` só nos pesados** → o pool do Sharp é ligado por tráfego, e §3.3 volta
-  a valer pelas threads também;
-- **`vips` zero em todos** → a parte de threads de §3.3 está morta e sobra só o
-  cache de 50 MB;
-- **`arenas` igual em todos, com `MiB_arena` muito diferente** → a poça é a
-  mesma e o que varia é o quanto ficou preso nela: fragmentação pura, e o
-  caminho é §3.1 antes de §3.6.
+**Os 41 robôs têm exatamente a mesma contagem de threads e praticamente a mesma
+contagem de arenas. O que varia 6,6× é só o quanto ficou preso dentro delas.**
+
+Isso responde a pergunta e inverte a ordem que eu tinha proposto:
+
+- **Não é "mais threads ⇒ mais arenas ⇒ mais memória".** Threads e arenas são
+  constantes na frota; a memória não é. Cortar thread **não explica nem corrige
+  a dispersão** — ela vem do histórico de alocação de cada conta, ou seja, de
+  tráfego.
+- **O problema é reaproveitamento, não quantidade.** Bloco liberado dentro da
+  arena nº 17 só pode ser reusado por thread ligada à arena nº 17. Com ~30
+  arenas por processo, memória livre numa não serve para a outra: é assim que
+  se chega a 7,2 MiB presos por arena no robô pesado contra 1,3 MiB no leve.
+  **Concentrar em 2 arenas ataca exatamente isso** — é a alavanca §3.1, e agora
+  ela está sozinha na frente.
+- **Cortar thread continua valendo, mas em segundo lugar e por outro motivo:**
+  menos thread = menos arena = menos pool separado onde memória pode ficar
+  presa. É prevenção, não a correção da dispersão que existe hoje.
+- **`vips` é zero nos 41.** Confirma a §2-A.5: o pool do Sharp não existe em
+  nenhum worker da frota, nem nos pesados. A parte de threads da §3.3 está
+  **morta**; sobra o cache de 50 MB, que vive dentro das arenas.
+
+⚠️ **Detalhe a acompanhar, não a concluir:** entre as duas leituras (minutos de
+intervalo) o total em arena foi de 5.069 para 5.215 MiB, +146 MiB. **Duas
+amostras não são tendência** — pode ser tráfego. Vale repetir o bloco da §3.0
+algumas vezes ao longo de um dia antes de dizer qualquer coisa. Se estiver
+subindo de forma sustentada, a conversa muda de "recuperar memória" para
+"conter crescimento", que são coisas diferentes.
+
+### 2-A.7 O interruptor já está escrito e NASCE DESLIGADO
+
+`resolveWorkerSpawnEnv` (`src/core/workerSpawnOptions.js`, puro/testado) e o
+`WA_WORKER_V8_POOL_SIZE` no `resolveWorkerExecArgv`. Sem env configurada o
+objeto devolvido é vazio e o fork fica **byte a byte** como sempre foi — mesmo
+padrão dos demais interruptores de rollout do projeto.
+
+| env | vira | ataca | risco |
+|---|---|---|---|
+| `WA_WORKER_MALLOC_ARENA_MAX` | `MALLOC_ARENA_MAX` | os 58% em arena | baixo: só disputa de trava no `malloc`, com CPU 98% ociosa |
+| `WA_WORKER_TOKIO_THREADS` | `TOKIO_WORKER_THREADS` | 16 threads do Prisma | médio: serializa consulta ao banco → vigiar `ops_sqlite_busy` |
+| `WA_WORKER_UV_THREADPOOL_SIZE` | `UV_THREADPOOL_SIZE` | 4 threads do libuv | médio: serve leitura de arquivo (o auth do Baileys) e DNS |
+| `WA_WORKER_V8_POOL_SIZE` | `--v8-pool-size` | 7 threads do V8 | médio: GC paralelo — pausa longa derrubava sessão em jun/2026 |
+
+⚠️ **Nomes próprios (`WA_WORKER_*`), não os nomes que as bibliotecas leem**, por
+dois motivos: (1) `MALLOC_ARENA_MAX` direto no `.env` valeria também para a API
+e para o supervisor, que não são o alvo; (2) para o glibc,
+`MALLOC_ARENA_MAX=0` significa **automático**, não desligado — um `0` escrito
+com a intenção de desligar ligaria o padrão. Com nome próprio, ausente e `0`
+significam a mesma coisa segura: não setar nada.
+
+**Roteiro de validação em staging** (reiniciar lá não custa nada):
+
+1. `WA_WORKER_MALLOC_ARENA_MAX=2` no `.env` de staging, `pm2 delete` + `start`
+   (pegadinha #1) e reiniciar o supervisor.
+2. Conferir que pegou: `grep MALLOC /proc/<pid do worker>/environ | tr '\0' '\n'`.
+3. Rodar o bloco da §3.0 antes e depois e comparar a linha
+   `arenas respondem por N% do PSS`.
+4. Só então testar `WA_WORKER_TOKIO_THREADS=2` e **contar as threads** com o
+   comando da §2-A.4 — é isso que diz se o motor do Prisma honra a variável,
+   que não está verificado.
+5. Deixar rodando algumas horas e olhar `ops_sqlite_busy` e o event loop antes
+   de propor produção.
 
 ## 3. As alavancas ainda não testadas
 
@@ -610,18 +653,20 @@ outras (§5).
 ## 5. Ordem recomendada (revista pela medição)
 
 1. ✅ **§3.0 rodada** — a resposta está na §2-A.
-2. ✅ **Nomes das threads lidos** (§2-A.4): 16 de 29 são do motor do Prisma.
-   Falta a correlação da **§2-A.6** (custo zero) e o teste de um minuto do
-   `TOKIO_WORKER_THREADS` em staging (§3.6).
+2. ✅ **Nomes das threads lidos** (§2-A.4) e ✅ **correlação medida** (§2-A.6):
+   threads são constantes, a dispersão é de reaproveitamento dentro das arenas.
+   `MALLOC_ARENA_MAX` fica sozinho na frente.
 3. **Rodar a medição da §3.5** (SQL somente leitura). Independe de tudo acima e
    pode entregar 218 MiB por robô que não precisava existir.
-4. **Preparar UMA janela só**, com tudo que exige reinício do supervisor:
+4. **Validar em staging** pelo roteiro da §2-A.7 — o interruptor já está
+   escrito e nasce desligado, então isso não exige código novo.
+5. **Preparar UMA janela só**, com tudo que exige reinício do supervisor:
    `MALLOC_ARENA_MAX` (§3.1), corte de threads (§3.6), destino do log (§3.2),
    Sharp (§3.3) e o encerramento da POC (§6). **`ops_sqlite_busy` e o event loop
    são os dois sinais a vigiar depois** (§3.6). Validar em staging antes, e medir
    com o mesmo bloco da §3.0 **antes e depois** — o número a comparar é o PSS
    somado e a linha `arenas respondem por N% do PSS`.
-5. ~~§3.4 (Prisma)~~ — encerrada pela medição.
+6. ~~§3.4 (Prisma) como custo de código~~ — encerrada pela medição.
 
 ⚠️ **Por que uma janela só:** cada uma dessas mudanças, sozinha, custa uma
 reconexão de todas as sessões. Aplicadas juntas, custam uma. E a frota já levou
