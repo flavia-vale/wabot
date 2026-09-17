@@ -1174,3 +1174,61 @@ qualquer outra confunde idade de processo com efeito da mudança.
 - **`MALLOC_ARENA_MAX=2` no `environ` prova que o código já está em staging**,
   porque só `resolveWorkerSpawnEnv` produz essa variável. Confirmar com
   `cd ~/wabot-staging && git log --oneline -1`.
+
+## 11. A alavanca dos "robôs que não precisam estar ligados" MORREU com dado (2026-09-17)
+
+A consulta do passo B.2 rodou. **44 sessões conectadas; 5 com zero origem
+monitorada** — e as cinco são a mesma coisa:
+
+| conta | plano | trial vence em |
+|---|---|---|
+| luisotaviomouraodesousa91 | trial | 5,1 dias |
+| bertouzastore | trial | 5,3 dias |
+| leilafuro | trial | 5,2 dias |
+| snapr8 | trial | 4,1 dias |
+| graficacintia | trial | 3,7 dias |
+
+**Todas em teste grátis, com 3,7 a 5,3 dias pela frente.** Ou seja: cadastraram
+há dois ou três dias, conectaram o WhatsApp e ainda não escolheram o grupo de
+origem. **Não são desperdício — são clientes no meio da configuração.**
+
+**Não há nada a desligar aqui, e desligar seria o pior movimento possível.** É
+exatamente o risco de produto que a §3.5 já registrava: ela abre o painel, vê
+"desconectado" e conclui que o produto não funciona. Cinco robôs a ~146 MiB são
+~0,7 GB — e o custo de perder cinco clientes em teste é incomparavelmente maior.
+
+**A alavanca §3.5 fica encerrada** enquanto esta foto valer. Vale reconferir de
+tempos em tempos (é uma consulta), porque a resposta muda com a base.
+
+**O que esses cinco de fato pedem é conversão, não memória**, e o produto já tem
+a ferramenta: `scripts/contato-ativo-semanal.mjs`, grupo *"4. Criou a conta nos
+últimos 7 dias e nunca publicou nada"*. Cinco clientes em teste que conectaram e
+travaram na escolha de origem valem muito mais que 0,7 GB:
+
+```bash
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --so-pedidos
+```
+
+Nada disso é conversa de RAM — é o achado que a medição de memória entregou de
+brinde, e é o de maior valor do dia.
+
+### 11.1 Leitura secundária: 23 contas com exatamente 1 origem
+
+Metade da frota monitora **um** grupo. É configuração normal e funcionando (uma
+origem espelhando para os destinos), não sinal de nada. Registrado só para
+ninguém ler a coluna `origens = 1` como problema.
+
+### 11.2 Placar das alavancas, depois de dois dias de medição
+
+| Alavanca | Situação |
+|---|---|
+| §3.1 `MALLOC_ARENA_MAX` | **única viva.** 49-58% do PSS; encanamento validado; falta a comparação de curvas (§10.4) |
+| §3.6 cortar threads | segundo lugar, como prevenção — threads são constantes na frota (§2-A.6) |
+| §3.2 destino do log | vale os 11,7 MiB medidos por processo; independente |
+| §3.3 Sharp | só o cache de 50 MB; a parte de threads morreu (`vips` = 0 nos 41) |
+| §3.4 Prisma como custo de código | **morta** (2,2 MiB de PSS por robô) |
+| §3.5 robôs ociosos | **morta** — os 5 candidatos são clientes em teste no meio da configuração |
+| POC de shard | **morta** por medição em 16/09 |
+
+Seis alavancas examinadas, três mortas com dado, uma viva. É o resultado
+esperado de medir antes de mexer.
