@@ -572,7 +572,7 @@ memória nativa. Quantas unidades existem, ninguém sabe.
 ```bash
 cd ~/wabot && sqlite3 prisma/prod.db "
 SELECT u.email,
-       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.type = 'monitor') AS origens,
+       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.role = 'monitor') AS origens,
        s.status, s.lifecycle, u.plan, u.accessExpiresAt
   FROM WaSession s JOIN User u ON u.id = s.userId
  WHERE s.status IN ('connected','connecting')
@@ -890,7 +890,7 @@ precisava existir. Somente leitura:
 ```bash
 cd ~/wabot && sqlite3 prisma/prod.db "
 SELECT u.email,
-       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.type = 'monitor') AS origens,
+       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.role = 'monitor') AS origens,
        s.status, s.lifecycle, u.plan, u.accessExpiresAt
   FROM WaSession s JOIN User u ON u.id = s.userId
  WHERE s.status IN ('connected','connecting')
@@ -951,15 +951,21 @@ ALVO=staging bash /tmp/medir.sh comparar
 ```
 
 ⚠️ **O que staging PODE e NÃO PODE provar.** Uma sessão só, tráfego baixo. Ele
-prova que **nada quebra**, que a variável chega e que a contagem de arenas cai
-de ~30 para ~2 por robô. Ele **não mede a economia** — ela vem da dispersão de
+prova que **nada quebra** e que a variável chega ao robô. ⚠️ **A expectativa de
+"arenas caem de ~30 para ~2" estava ERRADA** — staging já tem 1 arena (§10.2).
+Ele **não mede a economia** — ela vem da dispersão de
 6,6×, que só existe com tráfego real. **Não reprovar por "economizou pouco em
 staging".** Critério de aprovação lá, nesta ordem:
 
-1. `MALLOC_ARENA_MAX=2` aparece no `environ` do robô (C.5);
-2. arenas caíram para ~2 por robô;
-3. a sessão continua conectada e as ofertas continuam saindo (olhar o painel);
-4. `ops_sqlite_busy` não apareceu.
+1. `MALLOC_ARENA_MAX=2` aparece no `environ` do robô (C.5) — **é o único
+   critério que staging de fato testa**;
+2. a sessão continua conectada e as ofertas continuam saindo (olhar o painel);
+3. `ops_sqlite_busy` não apareceu.
+
+⚠️ **Não olhar a contagem de arenas em staging**: ela já é 1 (§10.2), porque
+arena nasce de disputa entre threads e staging quase não tem tráfego. E **não
+comparar o PSS antes/depois**: o robô foi reiniciado no meio, e processo novo é
+sempre mais leve.
 
 ### Passo D — produção (janela anunciada, só com OK)
 
@@ -1057,3 +1063,496 @@ que é independente de tudo isto.
   a leitura de arquivo do auth do Baileys e o DNS: é o de maior chance de
   aparecer como problema de sessão, e seria confundido com o efeito do arena.
 - **Não reprovar pela medição de staging** (ver o aviso do passo C.6).
+
+## 10. O que a execução de 2026-09-17 mostrou (e o que ela NÃO prova)
+
+### 10.1 Staging: o encanamento funciona, a validação NÃO
+
+```text
+antes   PSS 179 MiB   arena 42 MiB (23%)   arenas 1   threads 29
+depois  PSS  92 MiB   arena 17 MiB (18%)   arenas 1   threads 29
+```
+
+E no `environ` do robô:
+
+```text
+WA_WORKER_MALLOC_ARENA_MAX=2
+MALLOC_ARENA_MAX=2
+```
+
+**O que isso prova:** o caminho inteiro funciona. `resolveWorkerSpawnEnv` leu a
+variável nossa, traduziu para a do glibc, e ela chegou ao processo do robô. A
+sessão continuou de pé. Isso era o objetivo do teste em staging.
+
+⚠️ **O que NÃO prova, e é importante: os 179 → 92 MiB não são economia.** O
+robô foi **reiniciado** entre as duas medidas. Processo novo é sempre mais leve
+que processo rodando há horas — é exatamente a armadilha em que a POC de shard
+caiu (comparar processo recém-nascido com frota assentada). A queda de heap de
+56 para 14 MiB é a assinatura disso: heap do V8 zerado, não memória recuperada.
+
+### 10.2 A correção mais importante: staging TEM 1 ARENA, não 30
+
+Eu escrevi que em staging "as arenas têm que cair de ~30 para ~2". **Errado:
+staging já estava em 1 arena antes de qualquer mudança.** Com 29 threads, igual
+a produção.
+
+Isso não é defeito — **é a confirmação do mecanismo, e é uma informação nova**:
+o glibc não cria arena por existir thread, cria por **disputa** entre threads.
+O robô de staging tem as mesmas 29 threads, mas quase nenhuma alocação
+simultânea, então nunca disputa e fica na arena principal. Os robôs de produção
+disputam o tempo todo e chegam a 29 arenas cada.
+
+**Consequência prática: staging não pode validar esta alavanca.** Não há o que
+reduzir lá — já está no mínimo. O teste de staging vale como teste de
+encanamento e de "nada quebrou", e só. Fica registrado para ninguém tentar
+extrair dali um número de economia.
+
+### 10.3 A frota de produção foi reiniciada — e isso é um achado
+
+| quando | robôs | PSS | por robô | arena | % |
+|---|---:|---:|---:|---:|---:|
+| 16/09 | 41 | 8.702 MiB | **212 MiB** | 5.069 | 58% |
+| 17/09 17:13 | 46 | 6.815 MiB | **148 MiB** | 3.380 | 50% |
+| 17/09 17:28 | 45 | 6.588 MiB | **146 MiB** | 3.222 | 49% |
+
+**Cinco robôs a MAIS, e 2 GB a MENOS.** A frota foi reiniciada entre as duas
+datas (deploy). Não é melhora: é o contador zerando.
+
+E isso é a melhor evidência que temos até agora de que **o acúmulo é real e
+reversível por reinício**. Fragmentação de alocador se comporta exatamente
+assim: cresce com o tempo de vida do processo e some quando ele renasce. Dado
+vivo não faria isso.
+
+⚠️ **Também significa que o "antes" medido hoje é de frota NOVA.** Comparar
+"frota nova sem a variável" com "frota nova com a variável" não diz nada — as
+duas estarão no fundo da curva.
+
+### 10.4 O experimento que de fato responde: comparar CURVAS, não instantes
+
+⚠️ **SUPERADO pela §12.2** — com o uptime do supervisor MEDIDO (17:20:54), a
+frota satura em ~1 hora. O experimento custa uma hora, não dois dias. O texto
+abaixo fica como registro do raciocínio.
+
+A frota acabou de reiniciar. **Isso é um ponto de partida limpo e raro.** O
+plano que responde a pergunta sem depender de staging:
+
+**Fase 1 — a curva de hoje, sem a variável (custo zero, começa agora).**
+Rodar, e só isso:
+
+```bash
+bash /tmp/medir.sh
+```
+
+Algumas vezes por dia, por 2 dias. No fim:
+
+```bash
+bash /tmp/medir.sh historico
+```
+
+Isso desenha quanto a memória em arena sobe por hora numa frota que acabou de
+nascer. É o mesmo comando do passo B.1 — **serve para as duas coisas**.
+
+**Fase 2 — a mesma curva, com a variável.** Aplicar em produção (passo D),
+que já reinicia a frota, e repetir as mesmas leituras nos mesmos intervalos.
+
+**O que compara:** não o PSS de um instante, mas **a inclinação**. Se a curva
+com `MALLOC_ARENA_MAX=2` subir mais devagar ou estabilizar mais baixo, a
+alavanca funciona. Se subir igual, não funciona — e aí a resposta está em
+`anonimo` (2,6 GB), não no alocador.
+
+Duas medidas no mesmo estado de frota é a única comparação honesta disponível;
+qualquer outra confunde idade de processo com efeito da mudança.
+
+### 10.5 Pendências pequenas desta execução
+
+- **O SQL do passo B.2 estava errado** e foi corrigido: a coluna é
+  `Group.role`, não `Group.type` (`role = 'monitor'`). Erro meu — escrevi a
+  consulta a partir da descrição, sem conferir o schema.
+- **`WA_WORKER_MALLOC_ARENA_MAX` ficou duplicado no `.env` de staging** (o
+  `echo` rodou duas vezes). Inofensivo — as duas linhas têm o mesmo valor —,
+  mas vale limpar:
+  ```bash
+  sed -i '0,/^WA_WORKER_MALLOC_ARENA_MAX=2$/{//d}' ~/wabot-staging/.env
+  grep -c WA_WORKER ~/wabot-staging/.env   # tem que devolver 1
+  ```
+- **`MALLOC_ARENA_MAX=2` no `environ` prova que o código já está em staging**,
+  porque só `resolveWorkerSpawnEnv` produz essa variável. Confirmar com
+  `cd ~/wabot-staging && git log --oneline -1`.
+
+## 11. A alavanca dos "robôs que não precisam estar ligados" MORREU com dado (2026-09-17)
+
+A consulta do passo B.2 rodou. **44 sessões conectadas; 5 com zero origem
+monitorada** — e as cinco são a mesma coisa:
+
+| conta | plano | trial vence em |
+|---|---|---|
+| luisotaviomouraodesousa91 | trial | 5,1 dias |
+| bertouzastore | trial | 5,3 dias |
+| leilafuro | trial | 5,2 dias |
+| snapr8 | trial | 4,1 dias |
+| graficacintia | trial | 3,7 dias |
+
+**Todas em teste grátis, com 3,7 a 5,3 dias pela frente.** Ou seja: cadastraram
+há dois ou três dias, conectaram o WhatsApp e ainda não escolheram o grupo de
+origem. **Não são desperdício — são clientes no meio da configuração.**
+
+**Não há nada a desligar aqui, e desligar seria o pior movimento possível.** É
+exatamente o risco de produto que a §3.5 já registrava: ela abre o painel, vê
+"desconectado" e conclui que o produto não funciona. Cinco robôs a ~146 MiB são
+~0,7 GB — e o custo de perder cinco clientes em teste é incomparavelmente maior.
+
+**A alavanca §3.5 fica encerrada** enquanto esta foto valer. Vale reconferir de
+tempos em tempos (é uma consulta), porque a resposta muda com a base.
+
+**O que esses cinco de fato pedem é conversão, não memória**, e o produto já tem
+a ferramenta: `scripts/contato-ativo-semanal.mjs`, grupo *"4. Criou a conta nos
+últimos 7 dias e nunca publicou nada"*. Cinco clientes em teste que conectaram e
+travaram na escolha de origem valem muito mais que 0,7 GB:
+
+```bash
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --so-pedidos
+```
+
+Nada disso é conversa de RAM — é o achado que a medição de memória entregou de
+brinde, e é o de maior valor do dia.
+
+### 11.1 Leitura secundária: 23 contas com exatamente 1 origem
+
+Metade da frota monitora **um** grupo. É configuração normal e funcionando (uma
+origem espelhando para os destinos), não sinal de nada. Registrado só para
+ninguém ler a coluna `origens = 1` como problema.
+
+### 11.2 Placar das alavancas, depois de dois dias de medição
+
+| Alavanca | Situação |
+|---|---|
+| §3.1 `MALLOC_ARENA_MAX` | **única viva.** 49-58% do PSS; encanamento validado; falta a comparação de curvas (§10.4) |
+| §3.6 cortar threads | segundo lugar, como prevenção — threads são constantes na frota (§2-A.6) |
+| §3.2 destino do log | vale os 11,7 MiB medidos por processo; independente |
+| §3.3 Sharp | só o cache de 50 MB; a parte de threads morreu (`vips` = 0 nos 41) |
+| §3.4 Prisma como custo de código | **morta** (2,2 MiB de PSS por robô) |
+| §3.5 robôs ociosos | **morta** — os 5 candidatos são clientes em teste no meio da configuração |
+| POC de shard | **morta** por medição em 16/09 |
+
+Seis alavancas examinadas, três mortas com dado, uma viva. É o resultado
+esperado de medir antes de mexer.
+
+## 12. O interruptor JÁ ESTÁ em produção, e a frota satura em ~1 hora
+
+### 12.1 Correção 1: não há merge a fazer — o código já está em `main`
+
+`resolveWorkerSpawnEnv` entrou em `develop` na PR #1717 (14:14) e em `main` na
+promoção #1718 (14:18). **Produção já tem o interruptor, desligado**, que é
+exatamente o padrão desenhado: sem env, o fork fica byte a byte como sempre foi.
+
+Isso simplifica o passo D do runbook: **não precisa mergear nada.** Aplicar em
+produção é escrever a variável no `.env` e reiniciar o supervisor. Um reinício.
+
+E explica o reinício da frota que eu atribuí a "um deploy": foi **este** deploy,
+às 14:18 — o diff tocou `src/core/`, que casa com `WORKER_CODE_PATHS_RE`. Os
+dois deploys seguintes (14:51 e 17:43) **não** tocaram código de worker e não
+reiniciaram nada.
+
+### 12.2 Eu errei a leitura DUAS vezes, pelo mesmo motivo
+
+`pm2 describe bot-supervisor` deu o dado que faltava: **criado às 17:20:54,
+uptime 40m**. Medido, não inferido. Com ele a série fica assim:
+
+| leitura | idade da frota | PSS | arena | % | por robô |
+|---|---|---:|---:|---:|---:|
+| 17:13 | frota **antiga** (antes do reinício) | 6.815 | 3.380 | 50% | 148 |
+| 17:28 | **+7 min** | 6.588 | 3.222 | 49% | 146 |
+| 17:52 | **+31 min** | 8.701 | 4.930 | 57% | 193 |
+
+**A frota nova foi de 146 para 193 MiB por robô entre 7 e 31 minutos de vida** —
+~2 MiB por robô por minuto. O nível saturado medido em 16/09 era 212 MiB/robô,
+ou seja, faltavam 19 MiB: **a saturação acontece em cerca de uma hora.**
+
+⚠️ **Registro do erro, porque ele se repetiu:** minha primeira leitura ("satura
+rápido") estava certa. Eu a *corrigi* supondo que o reinício tinha sido às 14:18
+— e essa suposição estava errada. Ou seja: errei uma vez ao deduzir o horário do
+reinício, e errei de novo ao corrigir com outra dedução em vez de medir.
+
+**É o mesmo modo de falha das duas vezes: concluir sobre uma série temporal sem
+saber a que horas o relógio começou.** Regra que fica: antes de interpretar
+qualquer medida de memória da frota, ler o uptime do supervisor. É um comando.
+
+```bash
+pm2 describe bot-supervisor | grep -iE "uptime|restarts|created"
+```
+
+### 12.3 O que isso impõe ao experimento (agora com o dado certo)
+
+**Saturação em ~1 hora torna o experimento barato e decidível no mesmo dia:**
+aplicar, esperar uma hora, medir. Não são dois dias.
+
+Mas duas cautelas continuam valendo:
+
+- **Comparar frota saturada com frota saturada.** Medir aos 7 minutos e
+  comparar com um valor de ontem daria -31%, e seria idade de processo, não a
+  variável. O medidor grava o carimbo de tempo de cada medida justamente para
+  isso.
+- **Tráfego varia por hora**, e a memória parece responder a carga. Com a
+  saturação em ~1h e o platô medido em 8,7 GB em dois dias diferentes, comparar
+  platô com platô é razoavelmente robusto — mas medir no mesmo horário do dia
+  elimina a dúvida de vez, e não custa nada.
+
+### 12.4 Achado colateral: 7 reinícios do supervisor
+
+`restarts: 7`, `unstable restarts: 0`. Somado aos 8 em 3 dias da §7, a frota
+está reiniciando muito — e **o de 17:20 não corresponde a nenhum deploy que
+tocasse código de worker** (os merges de 14:51 e 17:43 não tocaram
+`WORKER_CODE_PATHS_RE`). Ou foi o deploy de 14:18 chegando tarde, ou foi um
+reinício não explicado, que é incidente próprio. Vale conferir:
+
+```bash
+grep -iE "boot|iniciado|shard|STANDBY" "$(ls -t ~/.pm2/logs/bot-supervisor-out-*.log | head -1)" | tail -20
+pm2 logs bot-supervisor --lines 50 --nostream | tail -30
+```
+
+Cada reinício reconecta as 45 sessões de uma vez — é exposição ao padrão que o
+WhatsApp associa a robô, e é o custo que a §5 pede para agrupar numa janela só.
+
+## 13. O achado que vale mais que toda a investigação de RAM (2026-09-17)
+
+`scripts/contato-ativo-semanal.mjs` devolveu **186 clientes para procurar**, e o
+que está dentro dele vale mais que os 5 GB desta análise inteira.
+
+### 13.1 Duas clientes PAGANTES nunca viram o robô funcionar
+
+| cliente | plano | pagou | acesso até | conta | envios | whatsapp |
+|---|---|---|---|---|---:|---|
+| taciane silva | basic | **sim** | 14/10 | 9 dias | **0** | **nunca conectou** |
+| Taiane Ribeiro | basic | **sim** | 14/10 | 15 dias | **0** | **nunca conectou** |
+
+**Pagaram, têm quase um mês de acesso pela frente e nunca conectaram o
+WhatsApp.** Nunca publicaram uma oferta. Último contato: nunca.
+
+É o contato mais urgente da lista inteira — não por receita, por confiança:
+cliente que paga e não consegue usar não pede reembolso, some e conta para
+outras pessoas.
+
+### 13.2 Onze clientes usaram MUITO e o teste acabou sem ninguém falar com elas
+
+No grupo "venceu nos últimos 3 dias" (24 pessoas, **todas** com "último
+contato: nunca"):
+
+| cliente | envios no teste | venceu |
+|---|---:|---|
+| walace Roberto | **3.432** | há 1 dia |
+| Andreza da silva correa | **1.822** | hoje |
+| Vitor | **1.407** | hoje |
+| Isabele Aguiar | **1.103** | há 1 dia |
+
+Essas pessoas **viram o produto funcionar**, publicaram milhares de ofertas, e o
+teste acabou. É a janela de maior conversão que existe — e ninguém ligou.
+
+E nos grupos mais frios, o caso que dói mais:
+
+**GISLAINE RYZIK — plano pro, JÁ PAGOU, 4.903 envios, venceu há 22 dias, último
+contato: nunca.** Uma cliente pagante que foi embora sem uma conversa.
+
+### 13.3 A conta que compara as duas frentes
+
+- **Memória:** o prêmio máximo é da ordem de 3-5 GB num servidor de 15,6 GB.
+  Vale adiar um upgrade — algo entre R$100 e R$200 por mês, e só se a alavanca
+  funcionar, o que ainda não está medido.
+- **Contato:** 24 pessoas na janela quente, 11 delas com uso pesado comprovado,
+  mais 2 pagantes travadas. A R$69 do Pro, **recuperar dez já paga vários meses
+  de servidor** — e não depende de nenhuma hipótese técnica.
+
+**A investigação de RAM continua valendo** (a alavanca está pronta, desligada, e
+o experimento agora custa uma hora). Mas se houver que escolher o que fazer
+primeiro amanhã de manhã, é a lista, não o alocador.
+
+```bash
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --csv > /tmp/contatos.csv
+```
+
+### 13.4 Ruído a limpar na lista (pequeno)
+
+Aparecem contas de teste da própria casa (`Flavia teste`, `Flavia Teste 1`,
+`Flavia Teste 2`, `flaviatesteconversa`, `saasdas`, `mariaexemplo`) e **9 contas
+já anonimizadas** (`deleted_*@anonimizado.invalid`, que por definição não têm a
+quem ligar). Não é defeito de memória nem de dado — é filtro que falta no
+script. Enquanto não existir, é só pular na leitura.
+
+## 14. A lição virou ferramenta: o medidor agora imprime a idade da frota
+
+Errei a interpretação da série **duas vezes no mesmo dia**, pelo mesmo motivo:
+concluí sobre memória sem saber há quanto tempo os robôs estavam no ar. Escrever
+"lembre de conferir o uptime" no documento não resolve — quem está medindo às
+23h não vai lembrar.
+
+Então o `medir.sh` passou a imprimir sozinho:
+
+```text
+  IDADE da frota ...... robo mais velho 214 min | mais novo 3 min
+  ATENCAO: frota com menos de 1h — AINDA NAO SATUROU. Nao comparar com frota assentada.
+```
+
+E o `comparar` **recusa a comparação** quando qualquer uma das duas medidas é de
+frota com menos de uma hora:
+
+```text
+  ATENCAO: uma das medidas e de frota com MENOS DE 1 HORA. A comparacao NAO vale:
+    frota nova e sempre mais leve, e isso e idade de processo, nao a variavel.
+```
+
+⚠️ **Detalhe de implementação que quebrou o script na primeira tentativa:** o
+programa `awk` vive dentro de `awk '...'` no shell, então **apóstrofo dentro de
+qualquer texto do awk encerra a string** e o script morre com
+`runaway string constant`. Escrever "é" como "e'" — natural em português — é
+exatamente o que quebra. Todos os textos do awk são sem apóstrofo de propósito.
+
+Para atualizar no VPS, é recolar o instalador (`scripts/instalar-medidor-memoria.sh`,
+ou o bloco da §3.0). O histórico em `/tmp/medidas` **não se perde**: as medidas
+antigas ficam com dois campos a menos e o `historico` continua lendo.
+
+## 15. O problema virou outro: a frota quase nunca fica de pé por uma hora
+
+A leitura das 22:50 (4.871 MiB, −44%) **não vale**: `uptime 6m`, robô mais velho
+6 minutos. Frota recém-nascida. É só idade de processo.
+
+Mas o dado que veio junto é o achado:
+
+```text
+restarts           8
+uptime             6m
+```
+
+**O contador foi de 7 para 8 em cinco horas.** Hoje houve pelo menos dois
+reinícios (17:20 e ~22:44), e **nenhum dos dois corresponde a um deploy que
+tocasse `WORKER_CODE_PATHS_RE`** — os merges de 14:51 e 17:43 não tocaram.
+
+### 15.1 Três consequências, e a terceira é a pior
+
+1. **Nenhuma medida de memória é confiável enquanto isso continuar.** Três das
+   quatro leituras de hoje foram invalidadas por idade de frota. O experimento
+   do `MALLOC_ARENA_MAX` precisa de uma hora de frota assentada — e hoje a frota
+   não teve uma hora sossegada.
+2. **Cada reinício reconecta as 46 sessões de uma vez.** É o padrão que o
+   WhatsApp associa a robô, e é o risco que o projeto inteiro tenta evitar
+   (é literalmente a razão de o `bot-supervisor` existir).
+3. **O consumo real pode ser MAIOR que o medido.** Se a frota reinicia a cada
+   poucas horas, ela passa boa parte do tempo na parte barata da curva. Os
+   8,7 GB de ontem podem não ser o platô — podem ser um ponto no meio da subida.
+   **Nunca vimos uma frota de verdade assentada.**
+
+### 15.2 Isto passa na frente da memória
+
+Não por ser mais interessante: porque **bloqueia** a memória e porque é risco de
+sessão, que é o ativo do produto. Descobrir a causa é leitura, não mudança:
+
+```bash
+# 1. O supervisor caiu, ou alguem/algo o reiniciou?
+tail -60 "$(ls -t ~/.pm2/logs/bot-supervisor-error-*.log | head -1)"
+
+# 2. O que ele diz no boot (e se entrou em STANDBY, que seria outro problema)
+tail -40 "$(ls -t ~/.pm2/logs/bot-supervisor-out-*.log | head -1)"
+
+# 3. Houve deploy perto do horario?
+cd ~/wabot && git log -3 --format='%h %ad %s' --date=format:'%d/%m %H:%M'
+
+# 4. O sistema matou por memoria? (OOM killer)
+sudo dmesg -T 2>/dev/null | grep -iE "killed process|out of memory" | tail -5
+```
+
+**As quatro respostas levam a ações diferentes:**
+
+| O que aparecer | O que é |
+|---|---|
+| stack de erro no log de erro | o supervisor **crashou** — é bug, e o PM2 só o levantou de volta |
+| boot limpo, sem erro, e deploy no horário | o auto-restart do deploy (`workers_running_stale_code`) disparou — é o comportamento desenhado, mas está disparando demais |
+| boot limpo, sem erro, sem deploy | reinício **não explicado** — incidente próprio, e o mais preocupante |
+| `killed process` no `dmesg` | o sistema matou por falta de memória — aí memória e reinício são o MESMO problema |
+
+⚠️ **A última linha é a que muda tudo.** Se for OOM killer, a investigação de
+memória e a de reinício convergem: a frota cresce, o sistema mata, a frota
+renasce leve, e o ciclo recomeça — o que explicaria por que o consumo "volta ao
+mesmo lugar" e por que nunca vemos o platô.
+
+### 15.3 O que fazer com o experimento do arena até lá
+
+**Segurar.** Aplicar `MALLOC_ARENA_MAX=2` agora custaria mais um reinício e
+produziria um número que não dá para ler — exatamente o que aconteceu três vezes
+hoje. Primeiro a frota precisa ficar de pé por algumas horas seguidas; só então
+a medição significa alguma coisa.
+
+O interruptor está pronto, desligado e não expira.
+
+## 16. Não foi crash. E sobrou uma hipótese só — que une as duas investigações
+
+O log de erro do supervisor tem **só `Bad MAC` do libsignal**, que o AGENTS.md já
+documenta como ruído secundário. **Nenhuma stack de exceção, nenhum sinal de
+processo morto pelo próprio código.** O log de saída mostra operação normal
+(config, "Link detectado", `messages.upsert`) até 23:11.
+
+### 16.1 A cadência de deploy explica DOIS reinícios, não o terceiro
+
+Oito promoções para `main` hoje. Três tocam `WORKER_CODE_PATHS_RE` e reiniciam a
+frota:
+
+| horário | PR | reinicia? |
+|---|---|---|
+| 13:40 | #1711 | — |
+| **14:01** | **#1714** | **sim (6 arquivos)** |
+| **14:18** | **#1718** | **sim (4 arquivos)** |
+| 14:51 | #1719 | — |
+| 15:18 | #1720 | — |
+| 15:32 | #1721 | — |
+| 19:14 | #1722 | — |
+| **19:46** | **#1730** | **sim (3 arquivos)** |
+
+⚠️ **Cuidado com fuso ao comparar:** o `git log` do VPS mostra data de autor no
+fuso local; a mesma commit aparece com 3 horas de diferença aqui. Foi isso que
+fez parecer existir uma commit às 22:44 — ela é a de 19:44.
+
+**Os reinícios de 14:18 e ~19:50 batem com deploy. O de ~22:44 NÃO bate com
+nada.** Não houve promoção depois de 19:46.
+
+### 16.2 A hipótese que sobrou
+
+Com crash descartado e deploy descartado, resta o **OOM killer** — e ela é a
+única que explica as duas investigações de uma vez:
+
+```text
+frota cresce → RSS se aproxima do limite → o sistema mata algo →
+o supervisor renasce → a frota volta leve → o ciclo recomeça
+```
+
+Isso explicaria, sem forçar nada:
+
+- por que o consumo **"volta ao mesmo lugar"** em vez de crescer sem parar;
+- por que **nunca vemos o platô** — a frota é cortada antes de chegar nele;
+- por que há reinício **sem deploy correspondente**.
+
+E a ordem de grandeza fecha: o kernel conta **RSS, não PSS**. Com PSS somado em
+8,7 GB, o RSS somado passa de 11 GB; mais api, dashboard, supervisor e staging
+(~1 GB), o servidor de 15,6 GB fica com pouca folga num pico.
+
+⚠️ **É hipótese, não conclusão** — o `dmesg` pediu senha e não foi rodado.
+**É o único comando que falta**, e ele decide se isto é um problema ou dois:
+
+```bash
+sudo dmesg -T | grep -iE "killed process|out of memory|oom" | tail -10
+# se pedir senha e voce nao quiser, tente sem sudo:
+grep -iE "killed process|out of memory" /var/log/kern.log 2>/dev/null | tail -10
+journalctl -k --since "today" 2>/dev/null | grep -iE "killed process|out of memory" | tail -10
+```
+
+| O que vier | O que significa |
+|---|---|
+| linhas de `Killed process ... (node)` | **é OOM.** Memória e reinício são o MESMO problema. A prioridade vira memória, e com urgência: o sistema está matando robôs de clientes. |
+| nada | são dois problemas. O reinício de 22:44 continua sem explicação (incidente próprio) e a memória segue no ritmo normal. |
+
+### 16.3 O que já dá para decidir sem esse comando
+
+**A cadência de deploy é problema por si só.** Oito promoções para `main` num
+dia, três reconectando as 46 sessões — isso é a §7, agora com nomes e horários.
+Não precisa de código: **agrupar as promoções `develop → main`** numa janela por
+dia. Deploy de dashboard, rota, documentação ou teste continua não reiniciando
+nada; o que custa são os três da tabela.
+
+E **o experimento do arena continua segurado** até a frota ficar de pé por
+algumas horas seguidas — hoje ela não ficou.
