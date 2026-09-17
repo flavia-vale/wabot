@@ -1408,3 +1408,75 @@ exatamente o que quebra. Todos os textos do awk são sem apóstrofo de propósit
 Para atualizar no VPS, é recolar o instalador (`scripts/instalar-medidor-memoria.sh`,
 ou o bloco da §3.0). O histórico em `/tmp/medidas` **não se perde**: as medidas
 antigas ficam com dois campos a menos e o `historico` continua lendo.
+
+## 15. O problema virou outro: a frota quase nunca fica de pé por uma hora
+
+A leitura das 22:50 (4.871 MiB, −44%) **não vale**: `uptime 6m`, robô mais velho
+6 minutos. Frota recém-nascida. É só idade de processo.
+
+Mas o dado que veio junto é o achado:
+
+```text
+restarts           8
+uptime             6m
+```
+
+**O contador foi de 7 para 8 em cinco horas.** Hoje houve pelo menos dois
+reinícios (17:20 e ~22:44), e **nenhum dos dois corresponde a um deploy que
+tocasse `WORKER_CODE_PATHS_RE`** — os merges de 14:51 e 17:43 não tocaram.
+
+### 15.1 Três consequências, e a terceira é a pior
+
+1. **Nenhuma medida de memória é confiável enquanto isso continuar.** Três das
+   quatro leituras de hoje foram invalidadas por idade de frota. O experimento
+   do `MALLOC_ARENA_MAX` precisa de uma hora de frota assentada — e hoje a frota
+   não teve uma hora sossegada.
+2. **Cada reinício reconecta as 46 sessões de uma vez.** É o padrão que o
+   WhatsApp associa a robô, e é o risco que o projeto inteiro tenta evitar
+   (é literalmente a razão de o `bot-supervisor` existir).
+3. **O consumo real pode ser MAIOR que o medido.** Se a frota reinicia a cada
+   poucas horas, ela passa boa parte do tempo na parte barata da curva. Os
+   8,7 GB de ontem podem não ser o platô — podem ser um ponto no meio da subida.
+   **Nunca vimos uma frota de verdade assentada.**
+
+### 15.2 Isto passa na frente da memória
+
+Não por ser mais interessante: porque **bloqueia** a memória e porque é risco de
+sessão, que é o ativo do produto. Descobrir a causa é leitura, não mudança:
+
+```bash
+# 1. O supervisor caiu, ou alguem/algo o reiniciou?
+tail -60 "$(ls -t ~/.pm2/logs/bot-supervisor-error-*.log | head -1)"
+
+# 2. O que ele diz no boot (e se entrou em STANDBY, que seria outro problema)
+tail -40 "$(ls -t ~/.pm2/logs/bot-supervisor-out-*.log | head -1)"
+
+# 3. Houve deploy perto do horario?
+cd ~/wabot && git log -3 --format='%h %ad %s' --date=format:'%d/%m %H:%M'
+
+# 4. O sistema matou por memoria? (OOM killer)
+sudo dmesg -T 2>/dev/null | grep -iE "killed process|out of memory" | tail -5
+```
+
+**As quatro respostas levam a ações diferentes:**
+
+| O que aparecer | O que é |
+|---|---|
+| stack de erro no log de erro | o supervisor **crashou** — é bug, e o PM2 só o levantou de volta |
+| boot limpo, sem erro, e deploy no horário | o auto-restart do deploy (`workers_running_stale_code`) disparou — é o comportamento desenhado, mas está disparando demais |
+| boot limpo, sem erro, sem deploy | reinício **não explicado** — incidente próprio, e o mais preocupante |
+| `killed process` no `dmesg` | o sistema matou por falta de memória — aí memória e reinício são o MESMO problema |
+
+⚠️ **A última linha é a que muda tudo.** Se for OOM killer, a investigação de
+memória e a de reinício convergem: a frota cresce, o sistema mata, a frota
+renasce leve, e o ciclo recomeça — o que explicaria por que o consumo "volta ao
+mesmo lugar" e por que nunca vemos o platô.
+
+### 15.3 O que fazer com o experimento do arena até lá
+
+**Segurar.** Aplicar `MALLOC_ARENA_MAX=2` agora custaria mais um reinício e
+produziria um número que não dá para ler — exatamente o que aconteceu três vezes
+hoje. Primeiro a frota precisa ficar de pé por algumas horas seguidas; só então
+a medição significa alguma coisa.
+
+O interruptor está pronto, desligado e não expira.
