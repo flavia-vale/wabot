@@ -21,7 +21,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Use the same runtime as deploy and backend-lint. Running the full
+          # suite on an older major made CI disagree with the runtime that
+          # actually executes the application (and with local validation).
+          node-version: 24
 
       # sqlite3 CLI é pré-requisito dos testes de migration (aplicam o SQL de
       # verdade) e dos testes de backup. ubuntu-latest normalmente já o traz;
@@ -31,6 +34,13 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y sqlite3
 
       - run: npm ci
+
+      # Não dependa apenas do lifecycle postinstall: o gate precisa provar de
+      # forma explícita que o client usado pelos testes corresponde ao schema
+      # deste checkout. Um client antigo transformava campos novos (como
+      # Group.targetsMode) em 500 e fazia várias suítes parecerem quebradas ao
+      # mesmo tempo.
+      - run: npx prisma generate
 
       # Alguns testes renderizam componentes do painel de verdade
       # (test/helpers/render-jsx-component.js usa o compilador do Next que vive

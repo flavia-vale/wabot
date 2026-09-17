@@ -116,7 +116,9 @@ export default function MensagensPage() {
     writePool({ ...pool, [key]: next.length ? next : [''] })
   }
 
-  async function handleSave() {
+  // storeOverride existe porque setTemplateStore é assíncrono: quem acabou de
+  // aplicar um rascunho precisa gravar o store NOVO, não o que ainda está no state.
+  async function handleSave(storeOverride) {
     setSaving(true)
     setSaved(false)
     setError('')
@@ -126,7 +128,7 @@ export default function MensagensPage() {
         copyVariationEnabled: value.copyVariationEnabled,
         brandingGroupLink: value.brandingGroupLink,
         couponLink: value.couponLink,
-        mobileTemplatesJson: JSON.stringify(templateStore),
+        mobileTemplatesJson: JSON.stringify(storeOverride || templateStore),
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
@@ -184,32 +186,38 @@ export default function MensagensPage() {
     setEditingTemplateKey(null)
   }
 
-  function saveTemplateDraft() {
+  // Aplica o rascunho no store E grava no mesmo clique. Antes eram dois botões
+  // em sequência e o primeiro já parecia ter salvado — quem saía da tela ali
+  // perdia a edição sem nenhum aviso.
+  async function applyAndPersist(nextStore) {
+    setTemplateStore(nextStore)
+    setTemplateMode('list')
+    setEditingTemplateKey(null)
+    await handleSave(nextStore)
+  }
+
+  async function saveTemplate() {
     if (templateMode === 'create') {
       if (!editTemplateName.trim() || !editTemplateBody.trim()) return
       const { store } = withNewCustomTemplate(templateStore, { name: editTemplateName.trim(), body: editTemplateBody })
-      setTemplateStore(store)
-      setTemplateMode('list')
+      await applyAndPersist(store)
       return
     }
     if (!editingTemplate || !editTemplateBody.trim()) return
     const nextStore = editingTemplate.isCustom
       ? withUpdatedCustomTemplate(templateStore, editingTemplateKey, { name: editTemplateName.trim(), body: editTemplateBody })
       : withPresetBody(templateStore, editingTemplateKey, editTemplateBody)
-    setTemplateStore(nextStore)
-    setTemplateMode('list')
+    await applyAndPersist(nextStore)
   }
 
-  function resetPresetTemplate() {
+  async function resetPresetTemplate() {
     if (!editingTemplateKey) return
-    setTemplateStore(withoutPresetBody(templateStore, editingTemplateKey))
-    setTemplateMode('list')
+    await applyAndPersist(withoutPresetBody(templateStore, editingTemplateKey))
   }
 
-  function deleteCustomTemplate() {
+  async function deleteCustomTemplate() {
     if (!editingTemplateKey) return
-    setTemplateStore(withoutCustomTemplate(templateStore, editingTemplateKey))
-    setTemplateMode('list')
+    await applyAndPersist(withoutCustomTemplate(templateStore, editingTemplateKey))
   }
 
   if (loading) {
@@ -220,7 +228,7 @@ export default function MensagensPage() {
 
   const saveButtonLabel = saving ? 'Salvando…' : saved ? '✓ Salvo' : 'Salvar'
   const renderSaveButton = (label = saveButtonLabel) => (
-    <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving}>
+    <button type="button" className="pnl-btn is-primary" onClick={() => handleSave()} disabled={saving}>
       {saving ? 'Salvando…' : label}
     </button>
   )
@@ -273,7 +281,7 @@ export default function MensagensPage() {
         ))}
       </div>
       <div className="pnl-toolbar" style={{ flexWrap: 'wrap' }}>
-        <button type="button" className="pnl-btn is-primary" onClick={saveTemplateDraft} disabled={!editTemplateBody.trim() || (templateMode === 'create' && !editTemplateName.trim())}>Concluir edição</button>
+        <button type="button" className="pnl-btn is-primary" onClick={saveTemplate} disabled={saving || !editTemplateBody.trim() || (templateMode === 'create' && !editTemplateName.trim())}>{saving ? 'Salvando…' : saved ? '✓ Salvo' : 'Salvar template'}</button>
         <button type="button" className="pnl-btn" onClick={cancelEdit}>Cancelar</button>
         {templateMode === 'edit' && editingTemplate?.isCustom && (
           <button type="button" className="pnl-btn is-danger" onClick={deleteCustomTemplate}>Excluir template</button>
@@ -297,7 +305,7 @@ export default function MensagensPage() {
             {templateMode === 'list' && (
               <button type="button" className="pnl-btn" onClick={startCreateTemplate}>Criar template</button>
             )}
-            {renderSaveButton()}
+            {templateMode === 'list' && renderSaveButton()}
           </div>
         </div>
         <p className="pnl-card-note" style={{ marginBottom: 12 }}>Use os mesmos templates no Criar oferta e nas ofertas automáticas.</p>
@@ -365,7 +373,7 @@ export default function MensagensPage() {
                         </div>
                         <div className="pnl-toolbar" style={{ marginTop: 12, gap: 8 }}>
                           <button type="button" className="pnl-btn" onClick={() => startEditTemplate(template)}>Editar template</button>
-                          {renderSaveButton()}
+                          {templateMode === 'list' && renderSaveButton()}
                         </div>
                       </>
                     )}
@@ -528,7 +536,7 @@ export default function MensagensPage() {
 
       {/* Salvar */}
       <div className="pnl-toolbar">
-        <button type="button" className="pnl-btn is-primary" onClick={handleSave} disabled={saving}>
+        <button type="button" className="pnl-btn is-primary" onClick={() => handleSave()} disabled={saving}>
           {saving ? 'Salvando…' : 'Salvar templates, textos e links'}
         </button>
         {saved && <span className="pnl-tag is-success">✓ Salvo!</span>}

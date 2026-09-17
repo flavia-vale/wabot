@@ -211,6 +211,9 @@ export function createSupervisorClient({
   const followChannelImmediate = (userId, jid) => send(COMMAND.CHANNEL_FOLLOW, { userId, jid })
   const listFollowedChannels = userId => send(COMMAND.CHANNEL_LIST_FOLLOWED, { userId })
   const getLastQR = userId => send(COMMAND.GET_LAST_QR, { userId })
+  const moveSessionToShard = (userId, shardId = 'poc-1') => send(COMMAND.SHARD_MOVE_SESSION, { userId, shardId })
+  const rollbackSessionFromShard = (userId, shardId = 'poc-1') => send(COMMAND.SHARD_ROLLBACK_SESSION, { userId, shardId })
+  const getShardMetrics = (shardId = 'poc-1') => send(COMMAND.SHARD_METRICS, { shardId })
 
   // Subscriptions — antes vinham via process IPC do worker filho. Agora
   // chegam via pub/sub. Mantém a mesma assinatura (callback + unsubscribe).
@@ -275,5 +278,6 @@ export function createSupervisorClient({
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,
     // extras
     isSupervisorAlive, getSupervisorBootedAtMs, getLastEvent, close, _events: events,
+    moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
   })
 }

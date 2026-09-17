@@ -198,6 +198,35 @@ const CHARGE_ACTION_LABELS = {
   ninguem: '—',
 }
 
+// Mesmos seis períodos da rota GET /finance/overview (src/domain/admin/financePeriod.js)
+// — compartilhado pelos Cards (Visão geral) e pela tabela de Cobranças
+// recorrentes, para as duas telas nunca discordarem sobre "os últimos 30 dias".
+const FINANCE_PERIOD_OPTIONS = [
+  ['7d', '7 dias'],
+  ['30d', '30 dias'],
+  ['current_month', 'Mês atual'],
+  ['last_month', 'Último mês'],
+  ['3m', '3 meses'],
+  ['6m', '6 meses'],
+]
+
+function FinancePeriodSelector({ value, onChange }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1 rounded-xl bg-gray-100 p-1">
+      {FINANCE_PERIOD_OPTIONS.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${value === key ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, onSearch, onOpenDetail }) {
   const summary = data?.summary ?? null
   const rows = asArray(data?.charges)
@@ -205,19 +234,6 @@ function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, o
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end gap-2">
-        <div>
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">Período</label>
-          <select
-            value={filters.days}
-            onChange={(event) => onFilters({ ...filters, days: Number(event.target.value) })}
-            className="mt-1 rounded-xl border border-gray-200 px-3 py-1.5 text-sm"
-          >
-            <option value={30}>Últimos 30 dias</option>
-            <option value={90}>Últimos 90 dias</option>
-            <option value={180}>Últimos 180 dias</option>
-            <option value={365}>Último ano</option>
-          </select>
-        </div>
         <div>
           <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">Resultado</label>
           <select
@@ -792,6 +808,7 @@ function ManualAccessEditor({ detail, onApply }) {
           <option value="trial">trial</option>
           <option value="basic">basic</option>
           <option value="pro">pro</option>
+          <option value="premium">premium (Instagram Stories)</option>
         </select>
         <input value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} type="number" min="-365" max="365" placeholder="Dias (+/-)" className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" />
         <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Motivo (obrigatório)" className="rounded-lg border border-gray-200 bg-white px-2 py-2 text-xs" required minLength={5} />
@@ -1726,7 +1743,7 @@ function ManualPaymentModal({ onClose, onSaved }) {
             )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-bold text-gray-800">Plano<select value={form.plan} onChange={event => setForm({ ...form, plan: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-normal"><option value="basic">Basic</option><option value="pro">Pro</option></select></label>
+            <label className="text-sm font-bold text-gray-800">Plano<select value={form.plan} onChange={event => setForm({ ...form, plan: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-normal"><option value="basic">Basic</option><option value="pro">Pro</option><option value="premium">Premium</option></select></label>
             <label className="text-sm font-bold text-gray-800">Dias de acesso<input type="number" min="1" max="3650" value={form.days} onChange={event => setForm({ ...form, days: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 font-normal" /></label>
             <label className="text-sm font-bold text-gray-800">Valor recebido (R$)<input inputMode="decimal" value={form.amount} onChange={event => setForm({ ...form, amount: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 font-normal" /></label>
             <label className="text-sm font-bold text-gray-800">Forma de pagamento<select value={form.paymentMethod} onChange={event => setForm({ ...form, paymentMethod: event.target.value })} className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-normal"><option value="pix">Pix</option><option value="transfer">Transferência</option><option value="cash">Dinheiro</option><option value="card">Cartão</option><option value="other">Outro</option></select></label>
@@ -1788,7 +1805,11 @@ export default function AdminPage() {
   // assinatura, com o retorno do banco — pergunta de outra natureza que a
   // visão geral, e misturar as duas faz a aba virar parede.
   const [financeTab, setFinanceTab] = useState('visao')
-  const [chargeFilters, setChargeFilters] = useState({ days: 90, outcome: 'all', q: '' })
+  // Filtro de tempo COMPARTILHADO entre os Cards (Visão geral) e a tabela de
+  // Cobranças recorrentes — as duas telas respondem "quanto entrou" e não
+  // podem discordar sobre o que é "os últimos 30 dias".
+  const [financePeriod, setFinancePeriod] = useState('30d')
+  const [chargeFilters, setChargeFilters] = useState({ outcome: 'all', q: '' })
   const [chargeSearch, setChargeSearch] = useState('')
   const [charges, setCharges] = useState(null)
 
@@ -1809,17 +1830,31 @@ export default function AdminPage() {
   // "Carregando" é DERIVADO do filtro que já foi respondido — o resultado
   // carrega a chave do filtro que o gerou. Sem isso, trocar o período mostraria
   // por um instante o número do período anterior como se fosse o novo.
-  const chargeKey = `${chargeFilters.days}|${chargeFilters.outcome}|${chargeFilters.q}`
+  const chargeKey = `${financePeriod}|${chargeFilters.outcome}|${chargeFilters.q}`
   const chargesLoading = tab === 'financeiro' && financeTab === 'cobrancas' && charges?.key !== chargeKey
 
   useEffect(() => {
     if (tab !== 'financeiro' || financeTab !== 'cobrancas') return
     let active = true
-    api.adminSubscriptionCharges({ ...chargeFilters, limit: 100 })
+    api.adminSubscriptionCharges({ ...chargeFilters, period: financePeriod, limit: 100 })
       .then(data => { if (active) setCharges({ ...data, key: chargeKey }) })
       .catch(() => { if (active) setCharges({ charges: [], summary: null, erro: true, key: chargeKey }) })
     return () => { active = false }
-  }, [tab, financeTab, chargeFilters, chargeKey])
+  }, [tab, financeTab, chargeFilters, financePeriod, chargeKey])
+
+  // Cards da Visão geral seguem o MESMO período — mesma lógica de "carregando
+  // deriva da chave" acima, para os dois nunca mostrarem números de janelas
+  // diferentes ao mesmo tempo.
+  const financeLoading = tab === 'financeiro' && financeTab === 'visao' && finance != null && finance?.period !== financePeriod
+
+  useEffect(() => {
+    if (tab !== 'financeiro' || financeTab !== 'visao') return
+    let active = true
+    api.adminFinanceOverview({ period: financePeriod })
+      .then(data => { if (active) setFinance(data) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [tab, financeTab, financePeriod])
   // Drill-down dos cards técnicos ('infra' | 'filas' | null). Não busca nada
   // novo: mostra o detalhe do que a página já carregou.
   const [techDrilldown, setTechDrilldown] = useState(null)
@@ -1831,7 +1866,7 @@ export default function AdminPage() {
 
   async function manualPaymentSaved() {
     const [financeData, paymentsData, subscriptionsData] = await Promise.all([
-      api.adminFinanceOverview(), api.adminPayments({ limit: 10 }), api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }),
+      api.adminFinanceOverview({ period: financePeriod }), api.adminPayments({ limit: 10 }), api.adminSubscriptions({ limit: 10, status: 'expiring_soon' }),
     ])
     setFinance(financeData)
     setPayments(paymentsData)
@@ -2296,6 +2331,7 @@ export default function AdminPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               {admin?.permissions?.includes('tech:read') && <Link href="/admin/capacidade" className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-100">Capacidade</Link>}
+              {admin?.permissions?.includes('tech:read') && <Link href="/admin/teste-shard" className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-100">Teste shard</Link>}
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-base font-black text-white">B</div>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-lg font-black text-gray-900">BOTinho</span>
@@ -2353,11 +2389,21 @@ export default function AdminPage() {
                 help={CARD_HELP.paradasSemNinguem}
                 onClick={() => openScenario('parado')}
               />
+              {/* "Sem receber" tem DOIS quadros com ações opostas, e contá-los
+                  juntos escondia o grave (RCA 2026-09-14): parar agora costuma
+                  se resolver sozinho; estar cega atravessando reconexões nunca
+                  se resolveu — foi o que deixou uma cliente dois dias sem
+                  espelhar nada, com o painel verde. Uma única conta nesse
+                  segundo quadro já pinta o card de vermelho. */}
               <ScenarioCard
                 label="Sem receber"
                 value={formatNumber(online?.summary?.scenarios?.semReceber ?? 0)}
-                tone={severityTone(online?.summary?.scenarios?.semReceber ?? 0, 1, 3)}
-                helper="conectadas e sem mensagem chegando"
+                tone={(online?.summary?.scenarios?.semReceberHaMuito ?? 0) > 0
+                  ? 'critical'
+                  : severityTone(online?.summary?.scenarios?.semReceber ?? 0, 1, 3)}
+                helper={(online?.summary?.scenarios?.semReceberHaMuito ?? 0) > 0
+                  ? `${formatNumber(online.summary.scenarios.semReceberHaMuito)} cega(s) há ${formatDurationMs(online?.summary?.scenarios?.semReceberPiorSilencioMs)} — não vai se resolver sozinha`
+                  : 'conectadas e sem mensagem chegando'}
                 help={CARD_HELP.semReceber}
                 onClick={() => openScenario('blind')}
               />
@@ -2621,17 +2667,22 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="mb-5 flex flex-wrap gap-2 border-b border-gray-100 pb-3">
-              {[['visao', 'Visão geral'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setFinanceTab(id)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-black ${financeTab === id ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+              <div className="flex flex-wrap gap-2">
+                {[['visao', 'Visão geral'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setFinanceTab(id)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-black ${financeTab === id ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {/* Filtro de tempo compartilhado — vale para os Cards E para a
+                  tabela de Cobranças recorrentes, nunca só um dos dois. */}
+              <FinancePeriodSelector value={financePeriod} onChange={setFinancePeriod} />
             </div>
 
             {financeTab === 'cobrancas' && (
@@ -2647,16 +2698,16 @@ export default function AdminPage() {
             )}
 
             {financeTab === 'visao' && (<>
-            <div className="mb-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className={`mb-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 transition-opacity ${financeLoading ? 'opacity-50' : ''}`}>
               <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Receita bruta 30d</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Receita bruta · {finance.periodLabel ?? '30 dias'}</p>
                 <p className="mt-1 text-2xl font-black text-emerald-800">{formatCurrency(finance.revenue30d)}</p>
-                <p className="mt-1 text-[11px] text-emerald-600">{formatNumber(finance.approvedPayments30d)} pagamentos aprovados</p>
+                <p className="mt-1 text-[11px] text-emerald-600">{formatNumber(finance.approvedPayments30d)} pagamentos aprovados (avulso + assinatura)</p>
               </div>
               <div className="rounded-xl bg-orange-50 p-4 ring-1 ring-orange-100">
                 <p className="text-xs font-bold uppercase tracking-wide text-orange-600">(–) Comissões de afiliados</p>
                 <p className="mt-1 text-2xl font-black text-orange-700">− {formatCurrency(finance.affiliateCommissions30d ?? 0)}</p>
-                <p className="mt-1 text-[11px] text-orange-600">{formatNumber(finance.affiliateCommissions30dCount ?? 0)} comissões geradas nos 30d</p>
+                <p className="mt-1 text-[11px] text-orange-600">{formatNumber(finance.affiliateCommissions30dCount ?? 0)} comissões geradas no período</p>
               </div>
               <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-100">
                 <p className="text-xs font-bold uppercase tracking-wide text-rose-600">(–) Taxas Mercado Pago</p>
@@ -2664,7 +2715,7 @@ export default function AdminPage() {
                 <p className="mt-1 text-[11px] text-rose-600">{finance.mpFeePercent ?? 0}% do bruto{finance.mpFeeFixedCents ? ` + ${formatCurrency((finance.mpFeeFixedCents ?? 0) / 100)}/transação` : ''}</p>
               </div>
               <div className="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
-                <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">(=) Receita líquida 30d</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">(=) Receita líquida · {finance.periodLabel ?? '30 dias'}</p>
                 <p className="mt-1 text-2xl font-black text-white">{formatCurrency(finance.netRevenue30d ?? finance.revenue30d)}</p>
                 <p className="mt-1 text-[11px] text-slate-400">Após afiliados e taxas do Mercado Pago</p>
               </div>
@@ -2849,6 +2900,7 @@ export default function AdminPage() {
                 <option value="trial">Trial</option>
                 <option value="basic">Basic</option>
                 <option value="pro">Pro</option>
+                <option value="premium">Premium</option>
               </select>
               <select value={onlineFilters.activity} onChange={(e) => onOnlineSelect('activity', e.target.value)} className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400">
                 <option value="all">Toda atividade</option>

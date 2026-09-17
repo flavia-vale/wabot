@@ -1,7 +1,7 @@
 import db from '../../db.js'
 import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot } from '../../manager.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics } from '../../manager.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
@@ -28,9 +28,12 @@ import { createCapacityService } from '../../ops/capacity/service.js'
 import { requestCapacityRefresh } from '../../ops/capacity/sweep.js'
 import { calculateManualPaymentExpiry, parseManualPaymentInput } from '../../domain/payments/manualPayment.js'
 import { isSubscriptionActive, describeSubscriptionStatus, describePendingSubscriptionNotice } from '../../domain/payments/subscriptionPolicy.js'
-import { summarizeSubscriptionCharges, presentSubscriptionCharge } from '../../domain/payments/chargeOutcome.js'
+import { summarizeSubscriptionCharges, presentSubscriptionCharge, CHARGE_OUTCOME_STATUSES } from '../../domain/payments/chargeOutcome.js'
 import { assessBillingMachine, checkBillingConfig, describeBillingMachine } from '../../domain/payments/billingHealth.js'
 import { isSandboxTokenInProduction } from '../../domain/payments/accessTokenMode.js'
+import { selectShardPocCandidates, presentShardRuntimeMetrics } from '../../ops/shardPoc.js'
+import { resolveFinancePeriod, FINANCE_PERIODS } from '../../domain/admin/financePeriod.js'
+import { combineRevenueTotals, countDistinctPayingUsers, computeAverageLtv, computeMercadoPagoFees, computeNetRevenue } from '../../domain/admin/financeOverview.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -41,7 +44,11 @@ const ROLE_PERMISSIONS = {
   read_only: ['admin:read', 'support:read'],
 }
 
-const PAID_PLANS = ['basic', 'pro']
+// `premium` é o plano técnico que libera Instagram Stories. Ele ainda NÃO é
+// vendido no checkout (só `basic` e `pro` têm preço); por enquanto o único
+// caminho é a liberação manual daqui. Sem ele nesta lista o recurso ficava
+// inalcançável para 100% das contas — nem por dentro do produto dava para ligar.
+const PAID_PLANS = ['basic', 'pro', 'premium']
 const PLAN_PRICES = { trial: 0, basic: 39, pro: 69 }
 const EXPORT_LIMIT = 100
 const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
@@ -231,7 +238,7 @@ function parseManualAccessInput(body = {}) {
   const partnerCodeRaw = body.partnerCode === undefined || body.partnerCode === '' ? undefined : String(body.partnerCode)
 
   if (plan !== undefined && !['trial', ...PAID_PLANS].includes(plan)) {
-    return { ok: false, error: 'Plano inválido. Use trial, basic ou pro.' }
+    return { ok: false, error: 'Plano inválido. Use trial, basic, pro ou premium.' }
   }
   if (partnerCodeRaw !== undefined && !normalizePartnerCode(partnerCodeRaw)) {
     return { ok: false, error: 'Código do parceiro inválido. Use letras, números, hífen ou underline (até 32 caracteres).' }
@@ -818,6 +825,8 @@ function isSessionOnline(session, now = new Date()) {
 // recepção, RCA 2026-08-26). Cada número responde uma pergunta operacional
 // diferente e leva para a aba online já filtrada:
 //   semReceber     — conectado e sem receber (o "verde mentiroso")
+//   semReceberHaMuito — dessas, as que estão cegas ATRAVESSANDO reconexões:
+//                    não pararam agora, estão sem receber nada há horas/dias
 //   caindoDemais   — quedas acima do normal em 24h
 //   clienteAgiu    — precisou re-parear: é o número que mede a promessa
 //   fonteQuebrada  — auto-refresh não resolveu a dessincronização
@@ -825,7 +834,14 @@ function isSessionOnline(session, now = new Date()) {
 // Custo bounded: três groupBy e uma varredura de 48h dos eventos de conexão
 // (a mesma janela que a listagem já usa).
 const FLEET_DROPS_ALERT_24H = Math.max(1, Number(process.env.ADMIN_DROPS_ALERT_24H || 20))
-const FLEET_RECEPTION_BLIND_WINDOW_MS = Math.max(10 * 60_000, Number(process.env.ADMIN_RECEPTION_BLIND_WINDOW_MS || 60 * 60_000))
+// A janela precisa ser CONFORTAVELMENTE MAIOR que o throttle com que o worker
+// emite o sinal (`WA_RECEPTION_SIGNAL_THROTTLE_MS`, 1h). Os dois eram 60min —
+// exatamente iguais, ou seja, margem zero: um worker cego emite em T, T+1h,
+// T+2h…, e como a emissão sai no tique do heartbeat (a cada 15s) ela cai alguns
+// segundos DEPOIS da hora cheia. Nesse vão o evento anterior já passou de 60min
+// e o novo ainda não saiu — a conta some do card e a frota cega aparece como
+// zero. Card que pisca para zero é card em que ninguém confia.
+const FLEET_RECEPTION_BLIND_WINDOW_MS = Math.max(10 * 60_000, Number(process.env.ADMIN_RECEPTION_BLIND_WINDOW_MS || 3 * 60 * 60_000))
 
 async function buildFleetScenarios(now = new Date()) {
   const since24h = addDays(now, -1)
@@ -843,10 +859,13 @@ async function buildFleetScenarios(now = new Date()) {
       select: { userId: true },
       distinct: ['userId'],
     }).catch(() => []),
+    // Sem `distinct` de propósito: precisamos do `metadata` para separar quem
+    // parou agora de quem está cega há dias, e com `distinct` a linha que
+    // sobrevive é indefinida. Volume limitado por construção — o worker emite no
+    // máximo 1×/hora por conta.
     db.analyticsEvent.findMany({
       where: { event: 'ops_wa_reception_blind', createdAt: { gte: blindSince, lte: now } },
-      select: { userId: true },
-      distinct: ['userId'],
+      select: { userId: true, metadata: true },
     }).catch(() => []),
     db.analyticsEvent.findMany({
       where: { event: 'ops_wa_group_desync_unresolved', createdAt: { gte: since7d, lte: now } },
@@ -907,11 +926,30 @@ async function buildFleetScenarios(now = new Date()) {
     manualOfflineMs24h += Number(metrics.manualOfflineMs || 0)
   }
 
+  // Cegueira que ATRAVESSA reconexões (RCA 2026-09-14): a conta não parou agora,
+  // está sem receber NADA há horas ou dias. As duas pedem ações diferentes —
+  // a primeira costuma se resolver sozinha, a segunda nunca se resolveu e é a
+  // que fez uma cliente passar dois dias sem espelhar nada. Contar as duas no
+  // mesmo número esconde justamente a grave.
+  const blindUserIds = new Set()
+  const blindHaMuitoUserIds = new Set()
+  let blindPiorSilencioMs = 0
+  for (const row of blindRows) {
+    if (!row.userId) continue
+    blindUserIds.add(row.userId)
+    let meta = null
+    try { meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata } catch { meta = null }
+    if (meta?.acrossReconnects) blindHaMuitoUserIds.add(row.userId)
+    const silencio = Number(meta?.silentForMs)
+    if (Number.isFinite(silencio) && silencio > blindPiorSilencioMs) blindPiorSilencioMs = silencio
+  }
+
   const byScenario = {
     parado: paradas,
     qr: precisamDaCliente,
     vencido: acessoVencido,
-    blind: new Set(blindRows.map(row => row.userId).filter(Boolean)),
+    blind: blindUserIds,
+    blindHaMuito: blindHaMuitoUserIds,
     quedas: new Set(dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).map(row => row.userId).filter(Boolean)),
     manual: new Set(manualRows.map(row => row.userId).filter(Boolean)),
     desync: new Set(desyncRows.map(row => row.userId).filter(Boolean)),
@@ -922,7 +960,9 @@ async function buildFleetScenarios(now = new Date()) {
     paradasSemNinguem: paradas.size,
     precisamDeQr: precisamDaCliente.size,
     acessoVencido: acessoVencido.size,
-    semReceber: blindRows.filter(row => row.userId).length,
+    semReceber: blindUserIds.size,
+    semReceberHaMuito: blindHaMuitoUserIds.size,
+    semReceberPiorSilencioMs: blindPiorSilencioMs || null,
     caindoDemais: dropRows.filter(row => Number(row._count?._all ?? 0) >= FLEET_DROPS_ALERT_24H).length,
     clienteAgiu: manualRows.filter(row => row.userId).length,
     fonteQuebrada: desyncRows.filter(row => row.userId).length,
@@ -951,7 +991,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
   const longExpiredWhere = buildLongExpiredWhere({ now, includeLongExpired })
   const where = {
     status: 'active',
-    ...(plan !== 'all' && ['trial', 'basic', 'pro'].includes(plan) ? { plan } : {}),
+    ...(plan !== 'all' && ['trial', 'basic', 'pro', 'premium'].includes(plan) ? { plan } : {}),
     ...(search ? { OR: [{ email: { contains: search } }, { name: { contains: search } }] } : {}),
     ...(longExpiredWhere ? { AND: [longExpiredWhere] } : {}),
   }
@@ -1291,6 +1331,74 @@ export async function adminRoutes(app) {
   app.get('/me', async (req, reply) => {
     if (!(await requireAdmin(req, reply))) return
     return req.admin
+  })
+
+  app.get('/shard-poc/overview', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const users = await db.user.findMany({
+      where: { OR: [{ waSession: { is: { status: 'connected' } } }, { email: 'flavia.vale@usp.br' }] },
+      select: { id: true, name: true, email: true, plan: true, waSession: { select: { status: true, lifecycle: true, ownerInstance: true, lastHeartbeatAt: true } } },
+    })
+    const ids = users.map(user => user.id)
+    const [messageCounts, mediaCounts] = await Promise.all([
+      db.messageLog.groupBy({ by: ['userId', 'status'], where: { userId: { in: ids }, sentAt: { gte: since } }, _count: { _all: true } }),
+      db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids }, sentAt: { gte: since }, originImageBytes: { gt: 0 } }, _count: { _all: true } }),
+    ])
+    const activity = new Map(users.map(({ waSession, ...user }) => [user.id, { ...user, session: waSession, messages24h: 0, failures24h: 0, mediaMessages24h: 0 }]))
+    for (const row of messageCounts) {
+      const target = activity.get(row.userId)
+      if (!target) continue
+      target.messages24h += row._count._all
+      if (!['success', 'sent'].includes(row.status)) target.failures24h += row._count._all
+    }
+    for (const row of mediaCounts) if (activity.has(row.userId)) activity.get(row.userId).mediaMessages24h = row._count._all
+    const candidates = selectShardPocCandidates([...activity.values()])
+    const candidateIds = candidates.map(candidate => candidate.id)
+    const [messageLogs, connectionLogs, runtimeResults, shardMetrics] = await Promise.all([
+      candidateIds.length ? db.messageLog.findMany({ where: { userId: { in: candidateIds }, sentAt: { gte: since } }, orderBy: { sentAt: 'desc' }, take: 200, select: { id: true, userId: true, status: true, platform: true, deliveryKind: true, originImageBytes: true, errorMsg: true, sentAt: true } }) : [],
+      candidateIds.length ? db.waConnectionEvent.findMany({ where: { userId: { in: candidateIds }, occurredAt: { gte: since } }, orderBy: { occurredAt: 'desc' }, take: 200, select: { id: true, userId: true, type: true, code: true, lifecycle: true, ownerInstance: true, occurredAt: true } }) : [],
+      Promise.all(candidates.map(async candidate => {
+        try { return [candidate.id, presentShardRuntimeMetrics(await getBotMetrics(candidate.id)), null] }
+        catch (error) { return [candidate.id, null, error?.message || 'Métricas indisponíveis'] }
+      })),
+      getShardMetrics('poc-1').catch(() => null),
+    ])
+    const runtimeByUser = new Map(runtimeResults.map(result => [result[0], { runtime: result[1], metricsError: result[2] }]))
+    const names = new Map(candidates.map(candidate => [candidate.id, candidate.name || candidate.email]))
+    const events = [
+      ...messageLogs.map(log => ({ id: `message:${log.id}`, kind: 'message', userId: log.userId, account: names.get(log.userId), outcome: ['success', 'sent'].includes(log.status) ? 'success' : 'failure', status: log.status, detail: log.errorMsg ? categorizeErrorMsg(log.errorMsg) : (log.deliveryKind || log.platform), mediaBytes: log.originImageBytes || 0, at: log.sentAt })),
+      ...connectionLogs.map(log => ({ id: `connection:${log.id}`, kind: 'connection', userId: log.userId, account: names.get(log.userId), outcome: ['connected', 'open', 'ready'].includes(log.type) ? 'success' : (log.code ? 'failure' : 'info'), status: log.type, detail: log.code || log.lifecycle || log.ownerInstance, at: log.occurredAt })),
+    ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 250)
+    const members = candidates.map(candidate => ({ ...candidate, ...runtimeByUser.get(candidate.id) }))
+    return {
+      generatedAt: new Date(),
+      environment: process.env.APP_ENV || process.env.NODE_ENV || 'unknown',
+      supervisorMode: SUPERVISOR_MODE,
+      experimentMode: process.env.WA_SESSION_SHARD_POC || 'observe',
+      ready: candidates.length === 4 && candidates.every(candidate => candidate.session?.status === 'connected'),
+      selectionNote: 'Sugestão automática: Flávia + perfis conectado leve, mediano e com maior uso de mídia nas últimas 24h.',
+      members,
+      shard: shardMetrics,
+      events,
+    }
+  })
+
+  app.post('/shard-poc/members/:userId/start', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    if (String(process.env.WA_SESSION_SHARD_POC || 'observe') !== 'enabled') return reply.code(409).send({ code: 'SHARD_POC_DISABLED', error: 'Teste está em modo somente observação.' })
+    const userId = String(req.params.userId || '')
+    const session = await db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true } })
+    if (!session || session.status !== 'connected' || session.lifecycle !== 'ready') return reply.code(409).send({ code: 'SESSION_NOT_READY', error: 'A sessão precisa estar conectada e pronta.' })
+    await writeAdminAuditLog(req, { action: 'admin.shard_poc.member.start', resource: 'waSession', resourceId: userId, targetUserId: userId })
+    return reply.code(202).send(await moveSessionToShard(userId, 'poc-1'))
+  })
+
+  app.post('/shard-poc/members/:userId/rollback', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:write'))) return
+    const userId = String(req.params.userId || '')
+    await writeAdminAuditLog(req, { action: 'admin.shard_poc.member.rollback', resource: 'waSession', resourceId: userId, targetUserId: userId })
+    return reply.code(202).send(await rollbackSessionFromShard(userId, 'poc-1'))
   })
 
   app.get('/capacity/current', async (req, reply) => {
@@ -1853,11 +1961,43 @@ export async function adminRoutes(app) {
     if (!(await requireAdmin(req, reply, 'billing:read'))) return
 
     const now = new Date()
-    const since30d = addDays(now, -30)
+    const range = resolveFinancePeriod(req.query?.period, { now })
+    const { start: periodStart, end: periodEnd } = range
+
+    // Receita de assinatura recorrente tem DOIS caminhos de aprovação, e só um
+    // deles grava em Payment: o webhook `subscription_authorized_payment`
+    // ativa acesso via activatePaymentAccess (grava Payment com
+    // mpPaymentId=`sub_<id>`); a rede de segurança horária
+    // (runSubscriptionReconciliation), quando recupera uma cobrança cujo
+    // webhook se perdeu, estende o acesso direto no User e NUNCA grava Payment
+    // — só SubscriptionCharge. Somar só Payment SUBESTIMA a receita real toda
+    // vez que um webhook falha (o evento subscription_access_extended é
+    // exatamente essa reconciliação acontecendo). SubscriptionCharge é gravada
+    // nos DOIS caminhos (payments.js, ramo subscription_authorized_payment E
+    // runSubscriptionReconciliation), então é a fonte completa para a fatia de
+    // assinatura — somamos Payment (avulso, excluindo o que já é assinatura
+    // pelo prefixo `sub_`) + SubscriptionCharge (assinatura) sem sobrepor.
+    // Pagamento "por fora" (provider=manual, registrado pelo admin) NUNCA tem
+    // mpPaymentId — fica NULL. `NOT (mpPaymentId LIKE 'sub_%')` em SQL dá NULL
+    // (não TRUE) para uma coluna NULL, e o WHERE descartaria a linha inteira:
+    // todo pagamento manual sumiria da receita em silêncio. O OR abaixo cobre
+    // o caso NULL explicitamente antes de aplicar o startsWith.
+    const SUBSCRIPTION_PAYMENT_ID_PREFIX = 'sub_'
+    const oneTimePaymentWhere = {
+      OR: [
+        { mpPaymentId: null },
+        { NOT: { mpPaymentId: { startsWith: SUBSCRIPTION_PAYMENT_ID_PREFIX } } },
+      ],
+    }
+    const subscriptionChargeApprovedWhere = { status: { in: CHARGE_OUTCOME_STATUSES.aprovada } }
+
     const [
-      approved30d,
-      approvedAll,
-      approvedPayingUsers,
+      approvedOneTimePeriod,
+      approvedOneTimeAll,
+      approvedOneTimePayingUsers,
+      subscriptionChargesPeriod,
+      subscriptionChargesAll,
+      subscriptionPayingUsers,
       pendingPayments,
       failedPayments,
       activeBasic,
@@ -1866,13 +2006,16 @@ export async function adminRoutes(app) {
       expiring7d,
       expiring30d,
       overduePaid,
-      commissionsAccrued30d,
+      commissionsAccruedPeriod,
       commissionsPayable,
-      commissionsPaid30d,
+      commissionsPaidPeriod,
     ] = await Promise.all([
-      db.payment.aggregate({ where: { status: 'approved', createdAt: { gte: since30d } }, _sum: { amount: true }, _count: { _all: true } }),
-      db.payment.aggregate({ where: { status: 'approved' }, _sum: { amount: true }, _count: { _all: true } }),
-      db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true } }),
+      db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere, createdAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
+      db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere }, _sum: { amount: true }, _count: { _all: true } }),
+      db.payment.groupBy({ by: ['userId'], where: { status: 'approved', ...oneTimePaymentWhere } }),
+      db.subscriptionCharge.aggregate({ where: { ...subscriptionChargeApprovedWhere, attemptedAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
+      db.subscriptionCharge.aggregate({ where: subscriptionChargeApprovedWhere, _sum: { amount: true }, _count: { _all: true } }),
+      db.subscriptionCharge.groupBy({ by: ['userId'], where: subscriptionChargeApprovedWhere }),
       db.payment.count({ where: { status: 'pending' } }),
       db.payment.count({ where: { status: { notIn: ['approved', 'pending'] } } }),
       db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now } } }),
@@ -1881,48 +2024,85 @@ export async function adminRoutes(app) {
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
       db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { lt: now } } }),
-      // Comissões de afiliados a descontar da receita bruta dos últimos 30d
-      // (casadas com revenue30d: cada pagamento aprovado gera uma comissão).
-      // Exclui rejeitadas/revertidas — essas não custam caixa.
-      db.affiliateCommission.aggregate({ where: { createdAt: { gte: since30d }, status: { notIn: ['rejected', 'reversed'] } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
+      // Comissões de afiliados a descontar da receita bruta do período
+      // (casadas com revenuePeriod: cada pagamento aprovado gera uma comissão,
+      // inclusive renovação de assinatura). Exclui rejeitadas/revertidas —
+      // essas não custam caixa.
+      db.affiliateCommission.aggregate({ where: { createdAt: { gte: periodStart, lte: periodEnd }, status: { notIn: ['rejected', 'reversed'] } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
       // Passivo em aberto (todo o histórico): comissões devidas ainda não pagas.
       db.affiliateCommission.aggregate({ where: { status: { in: ['pending', 'eligible', 'approved', 'held'] } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
-      // Comissões efetivamente pagas nos últimos 30d (saída de caixa real).
-      db.affiliateCommission.aggregate({ where: { status: 'paid', paidAt: { gte: since30d } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
+      // Comissões efetivamente pagas no período (saída de caixa real).
+      db.affiliateCommission.aggregate({ where: { status: 'paid', paidAt: { gte: periodStart, lte: periodEnd } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
     ])
 
     const currentPrices = await getCurrentPlanPrices()
     const activeMrr = activeBasic * currentPrices.basic + activePro * currentPrices.pro
-    const totalLtv = approvedAll._sum.amount ?? 0
-    const payingUsers = approvedPayingUsers.length
 
-    // Payment.amount está em reais (Float); comissões em centavos (Int) → /100.
-    const revenue30d = approved30d._sum.amount ?? 0
-    const affiliateCommissions30d = (commissionsAccrued30d._sum.commissionAmountCents ?? 0) / 100
+    // Payment.amount e SubscriptionCharge.amount estão em reais (Float);
+    // comissões em centavos (Int) → /100. Combinação em módulo puro e testado
+    // (src/domain/admin/financeOverview.js) — é exatamente o ponto que faltava
+    // e escondia a receita de assinatura recuperada pela reconciliação.
+    const { amount: revenuePeriod, count: approvedPaymentsPeriod } = combineRevenueTotals({
+      oneTimeAmount: approvedOneTimePeriod._sum.amount,
+      oneTimeCount: approvedOneTimePeriod._count._all,
+      subscriptionAmount: subscriptionChargesPeriod._sum.amount,
+      subscriptionCount: subscriptionChargesPeriod._count._all,
+    })
+    const { amount: totalLtv, count: approvedPaymentsAll } = combineRevenueTotals({
+      oneTimeAmount: approvedOneTimeAll._sum.amount,
+      oneTimeCount: approvedOneTimeAll._count._all,
+      subscriptionAmount: subscriptionChargesAll._sum.amount,
+      subscriptionCount: subscriptionChargesAll._count._all,
+    })
+    const payingUsers = countDistinctPayingUsers(
+      approvedOneTimePayingUsers.map((row) => row.userId),
+      subscriptionPayingUsers.map((row) => row.userId),
+    )
+
+    const affiliateCommissionsPeriod = (commissionsAccruedPeriod._sum.commissionAmountCents ?? 0) / 100
     const affiliateCommissionsPayable = (commissionsPayable._sum.commissionAmountCents ?? 0) / 100
-    const affiliateCommissionsPaid30d = (commissionsPaid30d._sum.commissionAmountCents ?? 0) / 100
+    const affiliateCommissionsPaidPeriod = (commissionsPaidPeriod._sum.commissionAmountCents ?? 0) / 100
 
     // Taxa do gateway Mercado Pago retida ANTES de cairmos o dinheiro (ex.: R$69
     // → R$65,56 = 4,99%). Percentual configurável (MP_FEE_PERCENT) + taxa fixa
     // opcional por transação aprovada (MP_FEE_FIXED_CENTS). Estimativa: o valor
-    // exato varia por método/prazo, mas 4,99% reproduz o caso observado.
+    // exato varia por método/prazo, mas 4,99% reproduz o caso observado. Toda
+    // cobrança de assinatura passa pelo Mercado Pago (SubscriptionCharge não
+    // tem outro provedor), então entra inteira na base da taxa junto com o
+    // avulso pago via MP.
     const mpFeePercent = Number.parseFloat(process.env.MP_FEE_PERCENT ?? '4.99') || 0
     const mpFeeFixedCents = Number.parseInt(process.env.MP_FEE_FIXED_CENTS ?? '0', 10) || 0
-    const mercadoPago30d = await db.payment.aggregate({
-      where: { status: 'approved', provider: 'mercado_pago', createdAt: { gte: since30d } },
+    const mercadoPagoOneTimePeriod = await db.payment.aggregate({
+      where: { status: 'approved', provider: 'mercado_pago', ...oneTimePaymentWhere, createdAt: { gte: periodStart, lte: periodEnd } },
       _sum: { amount: true },
       _count: { _all: true },
     })
-    const mpFees30d = Math.round((((mercadoPago30d._sum.amount ?? 0) * (mpFeePercent / 100)) + (mercadoPago30d._count._all * mpFeeFixedCents) / 100) * 100) / 100
-    const netRevenue30d = Math.round((revenue30d - affiliateCommissions30d - mpFees30d) * 100) / 100
+    const mpFeesPeriod = computeMercadoPagoFees({
+      baseAmount: (mercadoPagoOneTimePeriod._sum.amount ?? 0) + (subscriptionChargesPeriod._sum.amount ?? 0),
+      baseCount: mercadoPagoOneTimePeriod._count._all + subscriptionChargesPeriod._count._all,
+      feePercent: mpFeePercent,
+      feeFixedCents: mpFeeFixedCents,
+    })
+    const netRevenuePeriod = computeNetRevenue({
+      grossRevenue: revenuePeriod,
+      affiliateCommissions: affiliateCommissionsPeriod,
+      mpFees: mpFeesPeriod,
+    })
 
-    await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance' })
+    await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance', after: { period: range.period } })
 
     return {
-      revenue30d,
-      approvedPayments30d: approved30d._count._all,
+      period: range.period,
+      periodLabel: range.label,
+      periodStart: periodStart.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+      periodOptions: FINANCE_PERIODS,
+      // Nomes de campo preservados por compatibilidade com o painel — o
+      // valor agora reflete o período escolhido (`period`), não sempre 30d.
+      revenue30d: revenuePeriod,
+      approvedPayments30d: approvedPaymentsPeriod,
       totalRevenue: totalLtv,
-      approvedPaymentsAll: approvedAll._count._all,
+      approvedPaymentsAll,
       pendingPayments,
       failedPayments,
       activeMrr,
@@ -1934,19 +2114,19 @@ export async function adminRoutes(app) {
       expiring30d,
       overduePaid,
       payingUsers,
-      avgLtv: payingUsers ? Math.round((totalLtv / payingUsers) * 100) / 100 : 0,
+      avgLtv: computeAverageLtv(totalLtv, payingUsers),
       // Abatimento de afiliados (specs: cascata bruto → comissões → líquido).
-      affiliateCommissions30d,
-      affiliateCommissions30dCount: commissionsAccrued30d._count._all,
+      affiliateCommissions30d: affiliateCommissionsPeriod,
+      affiliateCommissions30dCount: commissionsAccruedPeriod._count._all,
       affiliateCommissionsPayable,
       affiliateCommissionsPayableCount: commissionsPayable._count._all,
-      affiliateCommissionsPaid30d,
-      affiliateCommissionsPaid30dCount: commissionsPaid30d._count._all,
+      affiliateCommissionsPaid30d: affiliateCommissionsPaidPeriod,
+      affiliateCommissionsPaid30dCount: commissionsPaidPeriod._count._all,
       // Taxas do Mercado Pago (gateway) descontadas do líquido.
       mpFeePercent,
       mpFeeFixedCents,
-      mpFees30d,
-      netRevenue30d,
+      mpFees30d: mpFeesPeriod,
+      netRevenue30d: netRevenuePeriod,
     }
   })
 
@@ -1965,18 +2145,37 @@ export async function adminRoutes(app) {
     if (!(await requireAdmin(req, reply, 'billing:read'))) return
 
     const { page, limit, skip } = getPagination(req.query, 50)
-    const days = Math.min(365, Math.max(1, Number(req.query?.days) || 90))
     const outcome = String(req.query?.outcome ?? 'all').trim().toLowerCase()
     const search = String(req.query?.q ?? '').trim()
-    const since = addDays(new Date(), -days)
+
+    // `period` (7d/30d/mês atual/mês passado/3m/6m — os mesmos da Visão geral,
+    // para as duas telas nunca discordarem sobre "os últimos 30 dias") ganha
+    // de `days`, que fica como fallback legado para quem já linkava direto
+    // com esse parâmetro.
+    const now = new Date()
+    let since
+    let until = now
+    let periodMeta = null
+    if (req.query?.period) {
+      const range = resolveFinancePeriod(req.query.period, { now })
+      since = range.start
+      until = range.end
+      periodMeta = { period: range.period, label: range.label }
+    } else {
+      const legacyDays = Math.min(365, Math.max(1, Number(req.query?.days) || 90))
+      since = addDays(now, -legacyDays)
+    }
+    // Campo legado, mantido para quem ainda lê `days` na resposta — aproxima
+    // pelo tamanho real da janela mesmo quando ela veio de `period`.
+    const days = Math.max(1, Math.round((until.getTime() - since.getTime()) / (24 * 60 * 60 * 1000)))
 
     // O filtro é por RESULTADO (o que a pessoa pensa), não pelo status cru do
     // provedor — um balde pode ter mais de um status do MP dentro.
     const statusByOutcome = {
-      aprovada: ['approved', 'accredited', 'processed'],
-      recusada: ['rejected', 'cancelled', 'expired'],
+      aprovada: CHARGE_OUTCOME_STATUSES.aprovada,
+      recusada: CHARGE_OUTCOME_STATUSES.recusada,
       pendente: ['pending', 'in_process', 'authorized', 'scheduled', 'recycling', 'retried'],
-      devolvida: ['refunded', 'charged_back'],
+      devolvida: CHARGE_OUTCOME_STATUSES.devolvida,
     }
 
     let userIdFilter = null
@@ -1992,7 +2191,7 @@ export async function adminRoutes(app) {
     }
 
     const where = {
-      attemptedAt: { gte: since },
+      attemptedAt: { gte: since, lte: until },
       ...(statusByOutcome[outcome] ? { status: { in: statusByOutcome[outcome] } } : {}),
       ...(userIdFilter ? { userId: { in: userIdFilter } } : {}),
     }
@@ -2004,7 +2203,7 @@ export async function adminRoutes(app) {
       // quando a pessoa vira a página, que é o jeito mais rápido de ninguém
       // confiar na tela. Teto para não carregar a base inteira em memória.
       db.subscriptionCharge.findMany({
-        where: { attemptedAt: { gte: since }, ...(userIdFilter ? { userId: { in: userIdFilter } } : {}) },
+        where: { attemptedAt: { gte: since, lte: until }, ...(userIdFilter ? { userId: { in: userIdFilter } } : {}) },
         orderBy: { attemptedAt: 'desc' },
         take: 5000,
         select: { userId: true, mpSubscriptionId: true, subscriptionId: true, status: true, statusDetail: true, amount: true, attemptedAt: true },
@@ -2054,6 +2253,9 @@ export async function adminRoutes(app) {
       page,
       limit,
       days,
+      period: periodMeta?.period ?? null,
+      periodLabel: periodMeta?.label ?? null,
+      periodOptions: FINANCE_PERIODS,
       outcome,
       health: { ...health, headline: describeBillingMachine(health), activeSubscriptions: assinaturasAtivas },
       summary: summarizeSubscriptionCharges(allInWindow),

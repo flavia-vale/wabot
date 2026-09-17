@@ -57,11 +57,19 @@ model User {
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
   followLogs            FollowLog[]
   offerAutomations      OfferAutomation[]
+  offerAutomationReviewItems OfferAutomationReviewItem[]
   offerQueues           OfferQueue[]
   offerQueueItems       OfferQueueItem[]
   affiliateLinks        AffiliateLink[]
   probeEvidences        ProbeEvidence[]
   preservationPresets   PreservationPreset[]
+  destinations          Destination[]
+  instagramConnections InstagramConnection[]
+  storyTemplates        StoryTemplate[]
+  storyPublications     StoryPublication[]
+  renderedAssets        RenderedAsset[]
+  instagramOAuthStates  InstagramOAuthState[]
+  instagramStoryIngresses InstagramStoryIngress[]
 
   affiliateProfileId          String?
   affiliateProfile            AffiliateProfile?           @relation("UserAffiliate")
@@ -165,6 +173,9 @@ model Group {
   forwardMode           String              @default("LINK_ONLY")
   noLinkScope           String?
   templateKey           String?
+  // Texto opcional anexado ao fim do relay desta origem (texto original com
+  // links convertidos). Templates continuam controlando o texto inteiro.
+  relayFooterText       String?
   primaryLinkTarget     String?
   blockedKeywords       String?
   allowedPlatforms      String?
@@ -199,6 +210,8 @@ model Group {
   channelThrottle       ChannelThrottle?
   channelSnapshots      ChannelSnapshot[]
   probeEvidences        ProbeEvidence[]
+
+  instagramMirrorTargets InstagramMirrorDestination[]
 
   @@unique([userId, waJid, role])
   @@index([userId, kind])
@@ -542,10 +555,14 @@ model OfferQueue {
   // JSON array de JIDs de destino da fila. "[]" = fallback para todos os
   // grupos com role 'post' (comportamento legado, pré-seleção por fila).
   targetJids            String           @default("[]")
+  // Distingue fila legada com targetJids=[] (fallback para todos os grupos)
+  // de fila Instagram-only (nenhum envio WhatsApp).
+  whatsappEnabled       Boolean          @default(true)
   lastSentAt            DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
   items                 OfferQueueItem[]
+  instagramDestinations OfferQueueDestination[]
 
   @@index([userId, enabled])
 }
@@ -560,6 +577,7 @@ model OfferQueueItem {
   imageUrl        String?
   imageRefererUrl String?
   targetJids      String
+  offerSnapshot   String?
   status          String     @default("pending")
   position        Int
   sentAt          DateTime?
@@ -574,6 +592,17 @@ model OfferQueueItem {
 
   @@index([queueId, status, position])
   @@index([userId, status])
+}
+
+model OfferQueueDestination {
+  queueId       String
+  queue         OfferQueue  @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@id([queueId, destinationId])
+  @@index([destinationId])
 }
 
 model MessageLog {
@@ -766,8 +795,8 @@ model OfferAutomation {
   id              String    @id @default(cuid())
   userId          String
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  destGroupJid    String
-  destGroupName   String
+  destGroupJid    String?
+  destGroupName   String?
   keyword         String
   templateKey     String    @default("automatico_classico")
   intervalMinutes Int
@@ -779,6 +808,9 @@ model OfferAutomation {
   prioritizeAMS   Boolean   @default(false)
   isKeySeller     Boolean   @default(false)
   enabled         Boolean   @default(true)
+  publicationMode String    @default("direct")
+  lastDiscoveryAt DateTime?
+  reviewTargetSize Int      @default(10)
   lastSentAt      DateTime?
   sentItemIds     String    @default("[]")
   // Página atual da busca Shopee. Rotaciona a cada execução para que cada
@@ -787,9 +819,46 @@ model OfferAutomation {
   page            Int       @default(1)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  instagramDestinations OfferAutomationDestination[]
+  reviewItems OfferAutomationReviewItem[]
 
   @@index([userId, enabled])
   @@index([enabled, lastSentAt])
+}
+
+model OfferAutomationReviewItem {
+  id                String   @id @default(cuid())
+  automationId      String
+  automation        OfferAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            String   @default("awaiting_review")
+  productKey        String
+  itemId            String?
+  priceCents        Int
+  productUrl        String
+  imageUrl          String?
+  imageRefererUrl   String?
+  productSnapshot   String
+  renderedText      String
+  targetSnapshot    String
+  deliverySnapshot  String   @default("{}")
+  position          Int
+  discoveredAt      DateTime @default(now())
+  reviewedAt        DateTime?
+  reviewedAction    String?
+  sentAt            DateTime?
+  claimedAt         DateTime?
+  attemptCount      Int      @default(0)
+  nextAttemptAt     DateTime?
+  lastError         String?
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([automationId, status, position])
+  @@index([userId, status, createdAt])
+  @@index([automationId, productKey, priceCents])
 }
 
 // Dedup cruzada entre automações, por grupo de destino. `sentItemIds` é
@@ -809,6 +878,228 @@ model OfferAutomationSentLog {
   sentAt       DateTime @default(now())
 
   @@index([userId, destGroupJid, sentAt])
+}
+
+// Destinos multicanal coexistem com Group durante a migração progressiva.
+// providerRef nunca contém token; para Instagram aponta à conta profissional.
+model Destination {
+  id                    String               @id @default(cuid())
+  userId                String
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                  String
+  name                  String
+  enabled               Boolean              @default(true)
+  providerRef           String?
+  instagramConnectionId String?
+  instagramConnection   InstagramConnection? @relation(fields: [instagramConnectionId], references: [id], onDelete: Cascade)
+  publications          StoryPublication[]
+  offerAutomations      OfferAutomationDestination[]
+  offerQueues           OfferQueueDestination[]
+  mirrorTargets         InstagramMirrorDestination[]
+  storyIngresses        InstagramStoryIngress[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@unique([userId, type, providerRef])
+  @@index([userId, type, enabled])
+  @@index([instagramConnectionId])
+}
+
+// Vínculo tipado: uma conta Instagram nunca é serializada em destGroupJid.
+model OfferAutomationDestination {
+  automationId  String
+  automation    OfferAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination   Destination     @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime        @default(now())
+
+  @@id([automationId, destinationId])
+  @@index([destinationId])
+}
+
+model InstagramMirrorDestination {
+  sourceGroupId String
+  sourceGroup   Group       @relation(fields: [sourceGroupId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination  Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@id([sourceGroupId, destinationId])
+  @@index([destinationId])
+}
+
+model InstagramStoryIngress {
+  id               String      @id @default(cuid())
+  userId           String
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destinationId    String
+  destination      Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  sourceMessageKey String
+  // Identidade do PRODUTO (host+path do link de origem). Existe para o Story
+  // espelhado não repetir quando a origem reposta a mesma oferta: a captura
+  // roda antes da dedup de link do WhatsApp e (destino, mensagem) não protege,
+  // porque cada repost chega com um key.id novo.
+  productKey       String?
+  offerSnapshotJson String
+  status           String      @default("pending")
+  attemptCount     Int         @default(0)
+  claimedAt        DateTime?
+  nextAttemptAt    DateTime?
+  lastError        String?
+  createdAt        DateTime    @default(now())
+  processedAt      DateTime?
+
+  @@unique([destinationId, sourceMessageKey])
+  @@index([destinationId, productKey, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([status, claimedAt])
+  @@index([userId, createdAt])
+}
+
+model InstagramConnection {
+  id                 String        @id @default(cuid())
+  userId             String
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instagramAccountId String
+  username           String?
+  accountType        String?
+  loginMethod        String
+  encryptedToken     String
+  scopesJson         String        @default("[]")
+  tokenIssuedAt      DateTime?
+  tokenExpiresAt     DateTime?
+  lastValidatedAt    DateTime?
+  lastRefreshedAt    DateTime?
+  status             String        @default("connected")
+  lastErrorCode      String?
+  lastErrorAt        DateTime?
+  destinations       Destination[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@unique([userId, instagramAccountId])
+  @@index([userId, status])
+  @@index([status, tokenExpiresAt])
+}
+
+model InstagramOAuthState {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stateHash   String    @unique
+  loginMethod String
+  redirectUri String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt, consumedAt])
+}
+
+model StoryTemplate {
+  id             String                 @id @default(cuid())
+  userId         String?
+  user           User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // "system" para modelos Wabot; "user:<id>" para modelos do tenant. Evita a
+  // semântica de UNIQUE+NULL do SQLite, que permitiria chaves globais repetidas.
+  scopeKey       String
+  key            String
+  name           String
+  enabled        Boolean                @default(true)
+  currentVersion Int                    @default(1)
+  versions       StoryTemplateVersion[]
+  publications   StoryPublication[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([scopeKey, key])
+  @@index([userId, enabled])
+}
+
+model StoryTemplateVersion {
+  id             String             @id @default(cuid())
+  templateId     String
+  template       StoryTemplate      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version        Int
+  definitionJson String
+  contentHash    String
+  publications   StoryPublication[]
+  createdAt      DateTime           @default(now())
+
+  @@unique([templateId, version])
+  @@index([contentHash])
+}
+
+model RenderedAsset {
+  id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storageKey   String             @unique
+  contentHash  String
+  mimeType     String
+  byteSize     Int
+  width        Int
+  height       Int
+  expiresAt    DateTime
+  deletedAt    DateTime?
+  publications StoryPublication[]
+  createdAt    DateTime           @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt, deletedAt])
+}
+
+model StoryPublication {
+  id                  String                    @id @default(cuid())
+  userId              String
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destinationId       String
+  destination         Destination               @relation(fields: [destinationId], references: [id], onDelete: Restrict)
+  templateId          String
+  template            StoryTemplate             @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersionId   String
+  templateVersion     StoryTemplateVersion      @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  renderedAssetId     String?
+  renderedAsset       RenderedAsset?            @relation(fields: [renderedAssetId], references: [id], onDelete: SetNull)
+  contractVersion     Int                       @default(1)
+  sourceType          String
+  sourceId            String
+  offerSnapshotJson   String
+  idempotencyKey      String                    @unique
+  status              String                    @default("queued")
+  providerContainerId String?
+  providerMediaId     String?
+  scheduledFor        DateTime?
+  publishedAt         DateTime?
+  lastErrorCode       String?
+  lastErrorMessage    String?
+  attempts            StoryPublicationAttempt[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([destinationId, createdAt])
+  @@index([status, scheduledFor])
+}
+
+model StoryPublicationAttempt {
+  id                String           @id @default(cuid())
+  publicationId     String
+  publication       StoryPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  attemptNumber     Int
+  phase             String
+  status            String
+  retryDisposition  String           @default("none")
+  providerRequestId String?
+  providerStatus    String?
+  errorCode         String?
+  errorMessage      String?
+  startedAt         DateTime         @default(now())
+  completedAt       DateTime?
+
+  @@unique([publicationId, attemptNumber])
+  @@index([status, startedAt])
 }
 
 model AffiliateSettings {

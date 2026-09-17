@@ -8,6 +8,7 @@ import {
   canUseChannels,
   canUseOfferAutomations,
   canUseOfferQueues,
+  canUseInstagramStories,
   getPlanEntitlements,
   isPreservationActive,
   normalizePlan,
@@ -16,8 +17,17 @@ import {
 test('normalizePlan keeps known plans and falls back to trial', () => {
   assert.equal(normalizePlan('basic'), 'basic')
   assert.equal(normalizePlan('PRO'), 'pro')
+  assert.equal(normalizePlan('PREMIUM'), 'premium')
   assert.equal(normalizePlan('unknown'), 'trial')
   assert.equal(normalizePlan(null), 'trial')
+})
+
+test('Instagram Stories pertence exclusivamente ao plano futuro acima do Pro', () => {
+  const activeTrial = { plan: 'trial', accessExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) }
+  assert.equal(canUseInstagramStories({ plan: 'basic' }), false)
+  assert.equal(canUseInstagramStories({ plan: 'pro' }), false)
+  assert.equal(canUseInstagramStories(activeTrial), false)
+  assert.equal(canUseInstagramStories({ plan: 'premium' }), true)
 })
 
 test('basic can use groups but cannot use channels or advanced preservation', () => {
@@ -115,6 +125,15 @@ test('buildFeatureGateError returns stable upgrade payload', () => {
     code: 'FEATURE_REQUIRES_PRO',
     feature: 'channels',
     requiredPlan: 'pro',
+  })
+})
+
+test('Instagram Stories retorna gate específico do plano superior', () => {
+  assert.deepEqual(buildFeatureGateError(FEATURE_CODES.INSTAGRAM_STORIES), {
+    error: 'A publicação de Stories no Instagram estará disponível em um novo plano acima do Pro.',
+    code: 'FEATURE_REQUIRES_PREMIUM',
+    feature: 'instagram_stories',
+    requiredPlan: 'premium',
   })
 })
 

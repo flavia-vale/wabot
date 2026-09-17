@@ -22,6 +22,7 @@ function toMonitorGroup(group, targetPostJids = []) {
     forwardMode: group.forwardMode,
     noLinkScope: group.noLinkScope,
     templateKey: group.templateKey ?? null,
+    relayFooterText: group.relayFooterText ?? null,
     primaryLinkTarget: group.primaryLinkTarget ?? null,
     targetPostJids,
     // Intenção da cliente sobre os destinos (core/destinationRouting.js).
