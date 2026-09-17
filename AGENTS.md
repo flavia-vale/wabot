@@ -5518,8 +5518,17 @@ O hub de nichos encolheu porque as 10 páginas-filhas saíram do índice em 20/0
 — custo previsto da decisão, registrado aqui para não ser diagnosticado como
 bug depois.
 
-**Tier 1 continua fechado:** 14 consultas de marketplace/afiliado somando ~30
-impressões. Segue sendo a maior oportunidade intocada do levantamento.
+**Tier 1: as cinco páginas EXISTEM desde 02/09 — o que falta é o Google LER.**
+Conferido no registry e em disco em 16/09: `/shopee-afiliados-whatsapp`,
+`/mercado-livre-afiliados-whatsapp`, `/amazon-afiliados-whatsapp`,
+`/shein-afiliados-whatsapp`, `/magalu-afiliados-whatsapp`. Somadas, 14 consultas
+de marketplace/afiliado e ~30 impressões — isso é **descoberta/indexação**, não
+ausência (ver "Página nova NUNCA nasce órfã": o único link interno delas sai de
+`/conteudos`, a página mais fraca do site). ⚠️ Foi a **quarta** vez que uma
+análise escreveu "falta atacar o Tier 1"; o erro de método é sempre o mesmo e
+está documentado acima — o relatório **Páginas** só lista página COM impressão,
+então página zerada não aparece na exportação, e "ausente do relatório" foi lido
+como "não existe".
 
 **Citação por IA, medido em campo pela 1ª vez em 01/09** (7 consultas
 prioritárias × 4 superfícies, 28/28 linhas em
