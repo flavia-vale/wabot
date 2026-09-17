@@ -1129,9 +1129,9 @@ duas estarão no fundo da curva.
 
 ### 10.4 O experimento que de fato responde: comparar CURVAS, não instantes
 
-⚠️ **REVISADO pela §12.3** — a memória parece responder a TRÁFEGO, não a tempo
-de vida do processo. A comparação que vale é **mesmo horário do dia**, antes e
-depois. O texto abaixo fica como registro do raciocínio.
+⚠️ **SUPERADO pela §12.2** — com o uptime do supervisor MEDIDO (17:20:54), a
+frota satura em ~1 hora. O experimento custa uma hora, não dois dias. O texto
+abaixo fica como registro do raciocínio.
 
 A frota acabou de reiniciar. **Isso é um ponto de partida limpo e raro.** O
 plano que responde a pergunta sem depender de staging:
@@ -1237,7 +1237,7 @@ ninguém ler a coluna `origens = 1` como problema.
 Seis alavancas examinadas, três mortas com dado, uma viva. É o resultado
 esperado de medir antes de mexer.
 
-## 12. O interruptor JÁ ESTÁ em produção, e a leitura de saturação estava errada
+## 12. O interruptor JÁ ESTÁ em produção, e a frota satura em ~1 hora
 
 ### 12.1 Correção 1: não há merge a fazer — o código já está em `main`
 
@@ -1253,53 +1253,65 @@ E explica o reinício da frota que eu atribuí a "um deploy": foi **este** deplo
 dois deploys seguintes (14:51 e 17:43) **não** tocaram código de worker e não
 reiniciaram nada.
 
-### 12.2 Correção 2: eu li a saturação errado
+### 12.2 Eu errei a leitura DUAS vezes, pelo mesmo motivo
 
-Com o horário certo do reinício (14:18, não ~17:00), a série é outra:
+`pm2 describe bot-supervisor` deu o dado que faltava: **criado às 17:20:54,
+uptime 40m**. Medido, não inferido. Com ele a série fica assim:
 
-| quando | idade da frota | PSS | arena | por robô |
-|---|---|---:|---:|---:|
-| 17:13 | 2h55 | 6.815 | 3.380 | 148 |
-| 17:28 | 3h10 | 6.588 | 3.222 | 146 |
-| **17:52** | **3h34** | **8.701** | **4.930** | **193** |
+| leitura | idade da frota | PSS | arena | % | por robô |
+|---|---|---:|---:|---:|---:|
+| 17:13 | frota **antiga** (antes do reinício) | 6.815 | 3.380 | 50% | 148 |
+| 17:28 | **+7 min** | 6.588 | 3.222 | 49% | 146 |
+| 17:52 | **+31 min** | 8.701 | 4.930 | 57% | 193 |
 
-**Não é saturação gradual: é um degrau.** A frota ficou estável em ~146 MiB por
-robô durante três horas e subiu 32% em 24 minutos. Idade de processo não explica
-isso — três horas de estabilidade e um salto num quarto de hora.
+**A frota nova foi de 146 para 193 MiB por robô entre 7 e 31 minutos de vida** —
+~2 MiB por robô por minuto. O nível saturado medido em 16/09 era 212 MiB/robô,
+ou seja, faltavam 19 MiB: **a saturação acontece em cerca de uma hora.**
 
-**A explicação mais provável é tráfego** (17:30-18:00 é horário nobre de grupo
-de ofertas), e ela é coerente com fragmentação: a memória se expande sob carga e
-**não volta** quando a carga passa. Mas com três pontos e um intervalo, isso é
-hipótese, não conclusão.
+⚠️ **Registro do erro, porque ele se repetiu:** minha primeira leitura ("satura
+rápido") estava certa. Eu a *corrigi* supondo que o reinício tinha sido às 14:18
+— e essa suposição estava errada. Ou seja: errei uma vez ao deduzir o horário do
+reinício, e errei de novo ao corrigir com outra dedução em vez de medir.
 
-⚠️ **Retiro o que escrevi de que "satura em menos de uma hora".** Era inferência
-a partir de um horário de reinício que eu deduzi errado. Fica registrado porque
-esse é o modo de erro que mais custou nesta investigação inteira: concluir sobre
-uma série temporal sem saber a que horas o relógio começou.
-
-### 12.3 O que isso impõe ao experimento
-
-Se a memória responde a **tráfego** e não a tempo de vida, então comparar
-"antes" e "depois" só vale **no mesmo horário do dia**. Medir às 15h sem a
-variável e às 18h com ela compararia carga leve com carga pesada, e o resultado
-não significaria nada — em qualquer direção.
-
-**Protocolo que funciona:**
-
-1. Pegar a curva de HOJE/amanhã sem a variável, medindo de hora em hora,
-   marcando o horário. Isso já está em andamento.
-2. Aplicar a variável.
-3. Medir **nos mesmos horários** do dia seguinte.
-4. Comparar hora com hora, não total com total.
-
-O `bash /tmp/medir.sh historico` já guarda o carimbo de tempo de cada medida,
-então isso não custa trabalho extra — só exige medir em horas parecidas.
-
-**Confirmar o horário do reinício** (é o dado que faltava e que me fez errar):
+**É o mesmo modo de falha das duas vezes: concluir sobre uma série temporal sem
+saber a que horas o relógio começou.** Regra que fica: antes de interpretar
+qualquer medida de memória da frota, ler o uptime do supervisor. É um comando.
 
 ```bash
-pm2 describe bot-supervisor | grep -iE "uptime|restart|created"
+pm2 describe bot-supervisor | grep -iE "uptime|restarts|created"
 ```
+
+### 12.3 O que isso impõe ao experimento (agora com o dado certo)
+
+**Saturação em ~1 hora torna o experimento barato e decidível no mesmo dia:**
+aplicar, esperar uma hora, medir. Não são dois dias.
+
+Mas duas cautelas continuam valendo:
+
+- **Comparar frota saturada com frota saturada.** Medir aos 7 minutos e
+  comparar com um valor de ontem daria -31%, e seria idade de processo, não a
+  variável. O medidor grava o carimbo de tempo de cada medida justamente para
+  isso.
+- **Tráfego varia por hora**, e a memória parece responder a carga. Com a
+  saturação em ~1h e o platô medido em 8,7 GB em dois dias diferentes, comparar
+  platô com platô é razoavelmente robusto — mas medir no mesmo horário do dia
+  elimina a dúvida de vez, e não custa nada.
+
+### 12.4 Achado colateral: 7 reinícios do supervisor
+
+`restarts: 7`, `unstable restarts: 0`. Somado aos 8 em 3 dias da §7, a frota
+está reiniciando muito — e **o de 17:20 não corresponde a nenhum deploy que
+tocasse código de worker** (os merges de 14:51 e 17:43 não tocaram
+`WORKER_CODE_PATHS_RE`). Ou foi o deploy de 14:18 chegando tarde, ou foi um
+reinício não explicado, que é incidente próprio. Vale conferir:
+
+```bash
+grep -iE "boot|iniciado|shard|STANDBY" "$(ls -t ~/.pm2/logs/bot-supervisor-out-*.log | head -1)" | tail -20
+pm2 logs bot-supervisor --lines 50 --nostream | tail -30
+```
+
+Cada reinício reconecta as 45 sessões de uma vez — é exposição ao padrão que o
+WhatsApp associa a robô, e é o custo que a §5 pede para agrupar numa janela só.
 
 ## 13. O achado que vale mais que toda a investigação de RAM (2026-09-17)
 
