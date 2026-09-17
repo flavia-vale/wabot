@@ -1480,3 +1480,79 @@ hoje. Primeiro a frota precisa ficar de pé por algumas horas seguidas; só ent�
 a medição significa alguma coisa.
 
 O interruptor está pronto, desligado e não expira.
+
+## 16. Não foi crash. E sobrou uma hipótese só — que une as duas investigações
+
+O log de erro do supervisor tem **só `Bad MAC` do libsignal**, que o AGENTS.md já
+documenta como ruído secundário. **Nenhuma stack de exceção, nenhum sinal de
+processo morto pelo próprio código.** O log de saída mostra operação normal
+(config, "Link detectado", `messages.upsert`) até 23:11.
+
+### 16.1 A cadência de deploy explica DOIS reinícios, não o terceiro
+
+Oito promoções para `main` hoje. Três tocam `WORKER_CODE_PATHS_RE` e reiniciam a
+frota:
+
+| horário | PR | reinicia? |
+|---|---|---|
+| 13:40 | #1711 | — |
+| **14:01** | **#1714** | **sim (6 arquivos)** |
+| **14:18** | **#1718** | **sim (4 arquivos)** |
+| 14:51 | #1719 | — |
+| 15:18 | #1720 | — |
+| 15:32 | #1721 | — |
+| 19:14 | #1722 | — |
+| **19:46** | **#1730** | **sim (3 arquivos)** |
+
+⚠️ **Cuidado com fuso ao comparar:** o `git log` do VPS mostra data de autor no
+fuso local; a mesma commit aparece com 3 horas de diferença aqui. Foi isso que
+fez parecer existir uma commit às 22:44 — ela é a de 19:44.
+
+**Os reinícios de 14:18 e ~19:50 batem com deploy. O de ~22:44 NÃO bate com
+nada.** Não houve promoção depois de 19:46.
+
+### 16.2 A hipótese que sobrou
+
+Com crash descartado e deploy descartado, resta o **OOM killer** — e ela é a
+única que explica as duas investigações de uma vez:
+
+```text
+frota cresce → RSS se aproxima do limite → o sistema mata algo →
+o supervisor renasce → a frota volta leve → o ciclo recomeça
+```
+
+Isso explicaria, sem forçar nada:
+
+- por que o consumo **"volta ao mesmo lugar"** em vez de crescer sem parar;
+- por que **nunca vemos o platô** — a frota é cortada antes de chegar nele;
+- por que há reinício **sem deploy correspondente**.
+
+E a ordem de grandeza fecha: o kernel conta **RSS, não PSS**. Com PSS somado em
+8,7 GB, o RSS somado passa de 11 GB; mais api, dashboard, supervisor e staging
+(~1 GB), o servidor de 15,6 GB fica com pouca folga num pico.
+
+⚠️ **É hipótese, não conclusão** — o `dmesg` pediu senha e não foi rodado.
+**É o único comando que falta**, e ele decide se isto é um problema ou dois:
+
+```bash
+sudo dmesg -T | grep -iE "killed process|out of memory|oom" | tail -10
+# se pedir senha e voce nao quiser, tente sem sudo:
+grep -iE "killed process|out of memory" /var/log/kern.log 2>/dev/null | tail -10
+journalctl -k --since "today" 2>/dev/null | grep -iE "killed process|out of memory" | tail -10
+```
+
+| O que vier | O que significa |
+|---|---|
+| linhas de `Killed process ... (node)` | **é OOM.** Memória e reinício são o MESMO problema. A prioridade vira memória, e com urgência: o sistema está matando robôs de clientes. |
+| nada | são dois problemas. O reinício de 22:44 continua sem explicação (incidente próprio) e a memória segue no ritmo normal. |
+
+### 16.3 O que já dá para decidir sem esse comando
+
+**A cadência de deploy é problema por si só.** Oito promoções para `main` num
+dia, três reconectando as 46 sessões — isso é a §7, agora com nomes e horários.
+Não precisa de código: **agrupar as promoções `develop → main`** numa janela por
+dia. Deploy de dashboard, rota, documentação ou teste continua não reiniciando
+nada; o que custa são os três da tabela.
+
+E **o experimento do arena continua segurado** até a frota ficar de pé por
+algumas horas seguidas — hoje ela não ficou.
