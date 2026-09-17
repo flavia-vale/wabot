@@ -430,6 +430,14 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'Clonar mensagens de um grupo de afiliados', note: 'O que a busca chama de "clonar" e como o link vira o seu.' },
       { href: '/copiaram-minha-oferta-no-whatsapp', label: 'Copiaram a sua oferta?', note: 'Marca d\u2019água, texto próprio e link com o seu código: o que muda quem leva o crédito.' },
+      // Links por loja adicionados em 16/09. Esta é a 2ª página mais forte do
+      // site (2.514 impressões, CTR 5,0%) e não apontava para nenhuma das cinco
+      // páginas por loja — que existem desde 02/09 e seguem com ~30 impressões
+      // por falta de DESCOBERTA, não por falta de página. Ver o comentário de
+      // COMPARISON_STORE_LINKS em `app/_comparisonContent.js`.
+      { href: '/shopee-afiliados-whatsapp', label: 'Divulgar Shopee no WhatsApp', note: 'Como a oferta da Shopee sai já com o seu link, sem copiar e colar.' },
+      { href: '/mercado-livre-afiliados-whatsapp', label: 'Divulgar Mercado Livre no WhatsApp', note: 'Produto, catálogo e vitrine saem convertidos com a sua etiqueta.' },
+      { href: '/amazon-afiliados-whatsapp', label: 'Divulgar Amazon no WhatsApp', note: 'A etiqueta viaja junto com o link curto, e é ela que credita a venda.' },
     ],
     about: ['Achadinhos', 'Afiliados', 'Grupos de WhatsApp'],
     aside: {

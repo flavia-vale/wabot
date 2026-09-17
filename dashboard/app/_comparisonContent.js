@@ -23,6 +23,32 @@ import {
 } from '@/components/marketing/ComparisonSections'
 import { DifferentialGrid, InteractiveComparisonTable, TrustStrip } from '@/components/marketing/ComparisonInteractive'
 
+/*
+ * Links por LOJA, em todas as páginas de comparativo.
+ *
+ * Medição de 16/09: as cinco páginas comerciais por loja existem desde 02/09 e
+ * somavam ~30 impressões. Não é ausência de página — é descoberta. Quem
+ * apontava para elas era `/programa-de-afiliados` (185 impressões, ZERO clique),
+ * o `/conteudos` (que por regra não conta) e elas entre si, todas zeradas. As
+ * páginas mais fortes do site — estas oito de comparativo, juntas com
+ * `/bot-achadinhos-whatsapp`, ~9.000 das 13.362 impressões — não linkavam
+ * nenhuma.
+ *
+ * A guarda `test/marketing-paginas-orfas.test.js` conta LINK, não conta FORÇA, e
+ * por isso passava. Página sem força não transfere força.
+ *
+ * Fica no fim, junto dos outros links de apoio, e NUNCA antes da saída para a
+ * página comercial: a medição do comentário da seção 9 (comparativo converte 0%,
+ * comercial converte 15,4%) continua valendo e não pode ser diluída.
+ */
+export const COMPARISON_STORE_LINKS = [
+  { href: '/shopee-afiliados-whatsapp', label: 'Shopee' },
+  { href: '/mercado-livre-afiliados-whatsapp', label: 'Mercado Livre' },
+  { href: '/amazon-afiliados-whatsapp', label: 'Amazon' },
+  { href: '/shein-afiliados-whatsapp', label: 'SHEIN' },
+  { href: '/magalu-afiliados-whatsapp', label: 'Magalu' },
+]
+
 export const COMPARISON_SOURCE_LINKS = [
   { label: 'Política de Mensagens do WhatsApp Business', href: 'https://whatsappbusiness.com/pt-br/policy/' },
   { label: 'Termos do Programa de Afiliados e Criadores do Mercado Livre', href: 'https://www.mercadolivre.com.br/ajuda/30228' },
@@ -913,6 +939,23 @@ export function ComparisonPage({ slug }) {
               </ul>
             </SectionCard>
           </div>
+
+          {/* 11. Por loja — ver COMPARISON_STORE_LINKS. */}
+          <SectionCard
+            eyebrow="Por loja"
+            title="Você é afiliada de qual loja?"
+            lead="A comissão, o formato do link e o que a loja aceita mudam de uma para outra. Cada página mostra como a oferta daquela loja sai no WhatsApp."
+          >
+            <ul className="comparison-links">
+              {COMPARISON_STORE_LINKS.map((store) => (
+                <li key={store.href}>
+                  <Link href={store.href} data-comparison-cta="store-page">
+                    Divulgar {store.label} no WhatsApp
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
         </div>
       </section>
 
