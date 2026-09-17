@@ -16,7 +16,9 @@ import {
   isRetryableCustomDomainFailure,
   CUSTOM_DOMAIN_FETCH_TIMEOUT_MS,
   CUSTOM_DOMAIN_TOTAL_BUDGET_MS,
+  CUSTOM_DOMAIN_MIXED_BUDGET_MS,
   CUSTOM_DOMAIN_MAX_ATTEMPTS,
+  hasStoreLink,
 } from '../src/core/customDomainLinkResolver.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -38,9 +40,41 @@ test('acha o link de domínio próprio quando a mensagem não tem link de loja',
   assert.deepEqual(findCandidateLinks(texto), [LINK_PROPRIO])
 })
 
-test('NÃO gasta rede quando a mensagem já tem link de loja', () => {
-  const texto = `Oferta https://www.amazon.com.br/dp/B088PNBKTR/ e tambem ${LINK_PROPRIO}`
+test('NÃO gasta rede quando todas as URLs já são de loja', () => {
+  const texto = 'Oferta https://www.amazon.com.br/dp/B088PNBKTR/ e https://amzn.to/4gAbCdE'
   assert.deepEqual(findCandidateLinks(texto), [])
+})
+
+// RCA 2026-09-17: uma oferta com 3-4 produtos chegava ao grupo com só dois
+// links; do terceiro em diante ficava o texto e nenhuma URL. Causa: um único
+// link de loja no texto desligava o desembrulho da mensagem INTEIRA, e o
+// sanitizador apagava em seguida os links de domínio próprio dos demais
+// produtos. Não regredir: a decisão é por LINK.
+test('oferta MISTA: desembrulha os links de domínio próprio mesmo havendo link de loja', () => {
+  const texto = [
+    '1) Air Fryer https://amzn.to/4gAbCdE',
+    '2) Liquidificador https://s.shopee.com.br/BBB222',
+    `3) Cafeteira ${LINK_PROPRIO}`,
+  ].join('\n')
+  assert.deepEqual(findCandidateLinks(texto), [LINK_PROPRIO])
+})
+
+test('link de loja nunca entra como candidato a desembrulho', () => {
+  const texto = `https://amzn.to/4gAbCdE ${LINK_PROPRIO}`
+  assert.equal(findCandidateLinks(texto).includes('https://amzn.to/4gAbCdE'), false)
+})
+
+test('hasStoreLink distingue mensagem mista de mensagem só com domínio próprio', () => {
+  assert.equal(hasStoreLink(`https://amzn.to/4gAbCdE ${LINK_PROPRIO}`), true)
+  assert.equal(hasStoreLink(LINK_PROPRIO), false)
+  assert.equal(hasStoreLink('sem link nenhum'), false)
+})
+
+// O desembrulho de mensagem mista é um GANHO, nunca a diferença entre espelhar
+// e não espelhar — a oferta sai pelos links de loja que já existem. Por isso
+// ele não pode gastar o orçamento cheio dentro dos 25s de preparo da mensagem.
+test('mensagem mista usa orçamento MENOR que o da mensagem sem link de loja', () => {
+  assert.ok(CUSTOM_DOMAIN_MIXED_BUDGET_MS < CUSTOM_DOMAIN_TOTAL_BUDGET_MS)
 })
 
 test('ignora convite de grupo, rede social e arquivo', () => {
@@ -114,6 +148,23 @@ test('troca no texto o link próprio pela URL da loja', async () => {
   // O resto do texto não pode ser tocado — quem espelha é o pipeline de sempre.
   assert.ok(text.startsWith('Skala Cremoso 1Kg\nR$ 11,99\n'))
   assert.ok(text.endsWith('\nCorre!'))
+})
+
+test('oferta MISTA: os links de loja ficam intactos e o embrulhado vira link de loja', async () => {
+  clearCustomDomainCache()
+  const fetchImpl = async () => respostaHtml(PAGINA_REAL)
+  const texto = [
+    '1) Air Fryer https://amzn.to/4gAbCdE',
+    '2) Liquidificador https://s.shopee.com.br/BBB222',
+    `3) Cafeteira ${LINK_PROPRIO}`,
+  ].join('\n')
+  const { text, resolved } = await resolveCustomDomainLinks(texto, { fetchImpl, useCache: false })
+  assert.equal(resolved.length, 1)
+  // Os três produtos continuam com link — era o 3º que sumia.
+  assert.ok(text.includes('https://amzn.to/4gAbCdE'))
+  assert.ok(text.includes('https://s.shopee.com.br/BBB222'))
+  assert.ok(text.includes('https://www.amazon.com.br/dp/B088PNBKTR/'))
+  assert.ok(!text.includes(LINK_PROPRIO))
 })
 
 test('segue redirect HTTP quando o domínio próprio só redireciona', async () => {

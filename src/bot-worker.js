@@ -327,16 +327,19 @@ const MONITORED_DROP_LOG_INTERVAL_MS = Math.max(0, Number(process.env.MONITORED_
 const monitoredDropLogState = new Map()
 
 // Oferta publicada pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13): o
-// texto não traz link de loja nenhum, só `https://<dominio-dele>/p/xxx`. Sem
-// este passo o sanitizador apaga essa URL (ela credita o concorrente),
+// texto traz `https://<dominio-dele>/p/xxx` em vez do link da loja. Sem este
+// passo o sanitizador apaga essa URL (ela credita o concorrente),
 // `detectLinks` não acha nada e a oferta morre como `nolink` — do lado de fora,
 // "o robô não espelha".
 //
 // Desembrulhar ANTES do sanitizador faz o resto do pipeline (sanitizador,
 // detector, conversor, dedup, imagem) seguir sem NENHUMA mudança, e quem
 // converte continua sendo o conversor da loja com a credencial da cliente — a
-// comissão é dela, não de quem publicou. Só gasta rede quando não há link de
-// loja no texto; qualquer falha devolve o texto como veio.
+// comissão é dela, não de quem publicou. A decisão é por LINK: mensagem MISTA
+// (alguns produtos com link direto da loja, outros pelo site do dono do grupo)
+// também é desembrulhada — era o que perdia os links do 3º produto em diante
+// (RCA 2026-09-17). Só gasta rede quando há URL que não é de loja; qualquer
+// falha devolve o texto como veio.
 async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
   if (!text) return text
   try {
