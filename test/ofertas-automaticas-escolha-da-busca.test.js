@@ -92,64 +92,59 @@ test('o formulário oferece as duas escolhas e as carrega ao editar', async () =
   assert.match(source, /\{describeSearchChoice\(a\)\}/)
 })
 
-test('priorizar comissão extra passa POR CIMA da ordem escolhida', async () => {
-  // Não é um filtro a mais: resolveOffers faz duas buscas e concatena
-  // [...comissãoExtra, ...restantes]. Cada grupo respeita o sortType, mas a
-  // concatenação decide quem sai — e runAutomation manda os primeiros
-  // `offersPerSend`. Com 1 por envio, havendo qualquer oferta com comissão
-  // extra, ela sai sempre, mesmo com "mais baratos primeiro" escolhido.
+test('a prioridade de comissão extra ficou dormente e não muda mais a ordem', async () => {
+  // Ela fazia uma SEGUNDA busca e devolvia [...comissãoExtra, ...restantes]:
+  // com 1 produto por envio e "mais baratos primeiro" escolhido, saía o item de
+  // R$500 no lugar do de R$10. O botão saiu da tela a pedido da dona do produto
+  // (a ordem "maior comissão primeiro" cobre a mesma intenção, de um jeito
+  // visível), então o campo precisa parar de agir junto — mantê-lo valendo sem
+  // botão seria o mesmo efeito invisível de antes.
   const catalogo = {
     ams: [{ itemId: 1, productName: 'Acessório com comissão extra', price: 500, priceDiscountRate: 50 }],
     normal: [{ itemId: 2, productName: 'Produto barato', price: 10, priceDiscountRate: 50 }],
   }
+  const chamadas = []
   const buscar = async (args) => {
+    chamadas.push(args.isAMSOffer)
     const pool = args.isAMSOffer ? catalogo.ams : catalogo.normal
-    const excl = new Set((args.excludeItemIds ?? []).map(String))
-    const offers = pool.filter(o => !excl.has(String(o.itemId)))
-    return { offers, rawCount: offers.length }
+    return { offers: pool, rawCount: pool.length }
   }
-  const rodar = (prioritizeAMS) => resolveOffers({
-    automation: { keyword: 'x', minDiscountPct: 0, offersPerSend: 1, sortType: 4, listType: 0, page: 1, prioritizeAMS },
+  const { offers } = await resolveOffers({
+    automation: { keyword: 'x', minDiscountPct: 0, offersPerSend: 1, sortType: 4, listType: 0, page: 1, prioritizeAMS: true },
     sentItemIds: [], creds: {}, fetchOffersFn: buscar,
   })
-
-  const semPrioridade = await rodar(false)
-  assert.equal(semPrioridade.offers[0].productName, 'Produto barato')
-
-  const comPrioridade = await rodar(true)
-  assert.equal(comPrioridade.offers[0].productName, 'Acessório com comissão extra')
+  assert.deepEqual(chamadas, [false])
+  assert.equal(offers[0].productName, 'Produto barato')
 })
 
-test('a prioridade de comissão extra não estreita o conjunto escolhido', async () => {
-  // As DUAS buscas precisam sair com o mesmo listType/sortType da cliente —
-  // se a segunda caísse no padrão, marcar a prioridade desfaria em silêncio a
-  // escolha de "busca ampla" para metade dos candidatos.
+test('a busca continua saindo com a escolha da cliente', async () => {
   const chamadas = []
   await resolveOffers({
     automation: { keyword: 'x', minDiscountPct: 0, offersPerSend: 1, sortType: 5, listType: 0, page: 1, prioritizeAMS: true },
     sentItemIds: [], creds: {},
     fetchOffersFn: async (args) => { chamadas.push(args); return { offers: [], rawCount: 0 } },
   })
-  assert.equal(chamadas.length, 2)
-  assert.deepEqual(chamadas.map(c => c.isAMSOffer), [true, false])
-  for (const chamada of chamadas) {
-    assert.equal(chamada.listType, 0)
-    assert.equal(chamada.sortType, 5)
-  }
+  assert.equal(chamadas.length, 1)
+  assert.equal(chamadas[0].listType, 0)
+  assert.equal(chamadas[0].sortType, 5)
 })
 
-test('o card não promete uma ordem que a comissão extra vai furar', () => {
+test('o card descreve só a busca escolhida, sem citar comissão extra', () => {
   assert.equal(describeSearchChoice({ listType: 0, sortType: 4 }), 'Busca: busca ampla · mais baratos')
-  assert.equal(
-    describeSearchChoice({ listType: 0, sortType: 4, prioritizeAMS: true }),
-    'Busca: busca ampla · comissão extra na frente, depois mais baratos',
-  )
+  // Campo dormente não pode voltar a aparecer na etiqueta: o card mentiria
+  // sobre um efeito que o robô não aplica mais.
+  assert.equal(describeSearchChoice({ listType: 0, sortType: 4, prioritizeAMS: true }), 'Busca: busca ampla · mais baratos')
 })
 
-test('a tela avisa que a comissão extra fura a ordem, nos dois campos', async () => {
+test('o botão de comissão extra saiu da tela', async () => {
   const source = await page()
-  assert.match(source, /essas ofertas passam na frente desta ordem/)
-  assert.match(source, /saem na frente, antes da ordem escolhida acima/)
-  // O aviso só aparece quando a opção está de fato marcada.
-  assert.match(source, /form\.prioritizeAMS \?/)
+  assert.doesNotMatch(source, /prioritizeAMS/)
+  assert.doesNotMatch(source, /comissão extra/i)
+  // A ordem escolhida é agora a única forma de pedir comissão primeiro.
+  assert.ok(SEARCH_ORDER_OPTIONS.some((o) => o.value === 5 && /comissão/i.test(o.label)))
+})
+
+test('nenhum caminho de busca faz a segunda chamada de comissão extra', async () => {
+  const source = await readFile(new URL('../src/offerAutomation/dispatcher.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /isAMSOffer:\s*true/)
 })

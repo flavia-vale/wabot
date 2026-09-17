@@ -2217,21 +2217,28 @@ cafeteira fora/cápsula dentro, mesa fora/cavalete dentro).
   (`reviewDiscoveryService.js`). Forçar fazia sentido enquanto a escolha não
   existia na tela; com ela, virou um jeito silencioso de descartar o que a
   cliente pediu.
-- **"Priorizar comissão extra" (`prioritizeAMS`) passa POR CIMA da ordem
-  escolhida — não é um filtro a mais.** `resolveOffers` faz DUAS buscas e devolve
-  `[...comissãoExtra, ...restantes]`; cada grupo respeita o `sortType`, mas é a
-  concatenação que decide quem sai, e `runAutomation` manda os primeiros
-  `offersPerSend`. Com 1 produto por envio e qualquer oferta de comissão extra
-  disponível, **ela sai sempre** — "mais baratos primeiro" chega a publicar o
-  item de R$500 no lugar do de R$10 (medido no teste). Isso é o que a opção
-  promete pelo nome, então não virar bug a ser "consertado": o conserto é dizer
-  na tela e no card. As duas buscas usam o MESMO `listType`/`sortType` — se a
-  segunda caísse no padrão, marcar a prioridade desfaria em silêncio a escolha
-  de busca ampla para metade dos candidatos.
-- ⚠️ **Prioridade de comissão extra + "só maior comissão" se somam** e empurram
-  a busca para o acessório barato duas vezes — é a combinação que mais reproduz
-  a queixa original. Ao atender um relato de "só vem acessório", conferir as
-  DUAS opções, nunca só a palavra-chave.
+- **O botão "Priorizar ofertas com comissão extra do vendedor" SAIU da tela e o
+  campo `prioritizeAMS` ficou DORMENTE** (decisão da dona do produto,
+  2026-09-17: a ordem "maior comissão primeiro" cobre a mesma intenção de um
+  jeito que a cliente vê e desfaz). Ele não era um filtro a mais — era uma
+  SEGUNDA ordem: `resolveOffers` fazia DUAS buscas e devolvia
+  `[...comissãoExtra, ...restantes]`, e como `runAutomation` manda os primeiros
+  `offersPerSend`, com 1 produto por envio a oferta de comissão extra saía
+  SEMPRE — "mais baratos primeiro" chegava a publicar o item de R$500 no lugar
+  do de R$10 (medido em teste). **Tirar o botão sem parar de aplicar o campo
+  teria recriado o ponto cego que a escolha de busca veio corrigir**, então as
+  duas coisas andaram juntas: a coluna e a rota continuam aceitando o valor, o
+  caminho de envio o IGNORA, e `describeSearchChoice` parou de citá-lo (etiqueta
+  que anuncia efeito inexistente é o mesmo erro ao contrário). Guardas no teste:
+  nenhuma chamada com `isAMSOffer: true` no dispatcher, e `prioritizeAMS` fora
+  da tela. Efeito colateral bem-vindo: **uma chamada à Shopee por execução em
+  vez de duas** para quem tinha a opção ligada.
+- ⚠️ **Conta que estava com a opção marcada muda de comportamento no deploy**,
+  sem ninguém mexer em nada: ela passa a valer a ordem que estiver escolhida
+  (padrão: mais vendidos). **Não foi feita migration** de propósito — converter
+  para "maior comissão primeiro" jogaria essas contas ainda mais fundo na
+  combinação que mais reproduz a queixa original (comissão em cima de comissão).
+  Quem quiser comissão primeiro escolhe na tela.
 - **Valor inválido cai no padrão**, nunca derruba a tela: automação antiga com
   campo vazio precisa continuar abrindo para edição.
 - Linguagem leiga: nada de `listType`, `sortType`, `productOfferV2` na tela —

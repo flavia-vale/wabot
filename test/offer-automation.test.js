@@ -118,21 +118,21 @@ test('searchOffersPreview: roda a busca sem enviar e retorna funil + ofertas', a
   assert.deepEqual(calls[0].excludeItemIds, [])
 })
 
-test('searchOffersPreview: prioritizeAMS concatena AMS + regular sem enviar', async () => {
+test('searchOffersPreview: prioritizeAMS dormente não dispara segunda busca', async () => {
   const seen = []
   const fetchOffersFn = async (args) => {
     seen.push(args.isAMSOffer)
-    return args.isAMSOffer
-      ? { rawCount: 5, offers: [{ itemId: '10', productName: 'AMS', priceMin: 50, priceDiscountRate: 40, offerLink: 'a' }] }
-      : { rawCount: 7, offers: [{ itemId: '20', productName: 'Reg', priceMin: 60, priceDiscountRate: 25, offerLink: 'b' }] }
+    return { rawCount: 7, offers: [{ itemId: '20', productName: 'Reg', priceMin: 60, priceDiscountRate: 25, offerLink: 'b' }] }
   }
   const result = await searchOffersPreview({
     params: { keyword: 'x', offersPerSend: 2, minDiscountPct: 0, prioritizeAMS: true },
     creds: { appId: 'a', secretKey: 's' },
     fetchOffersFn,
   })
-  assert.deepEqual(seen, [true, false])
-  assert.equal(result.afterProductDedupe, 2)
+  // O dry-run tem que mostrar o que o envio real faria — se ele ainda
+  // concatenasse AMS, a tela prometeria um resultado que não sai.
+  assert.deepEqual(seen, [false])
+  assert.equal(result.afterProductDedupe, 1)
 })
 
 test('formatOfferMessage: includes product name and price', () => {
@@ -602,7 +602,7 @@ test('runAutomation: falha pontual num item do lote não aborta os demais nem de
   assert.deepEqual(created.map(c => c.itemId), ['1', '3'])
 })
 
-describe('runAutomation — prioritizeAMS', () => {
+describe('runAutomation — prioritizeAMS ficou dormente', () => {
   const baseCreds = { appId: 'a', secretKey: 's' }
 
   function makeDb() {
@@ -614,70 +614,31 @@ describe('runAutomation — prioritizeAMS', () => {
     }
   }
 
-  it('faz uma única busca quando prioritizeAMS=false', async () => {
-    let fetchCount = 0
-    const fakeOffer = { itemId: '1', productName: 'Prod', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/1' }
-    const mockFetch = async () => { fetchCount++; return { offers: [fakeOffer], rawCount: 1 } }
-    const automation = {
-      id: 'a1', userId: 'u1', keyword: 'test', minDiscountPct: 0,
-      offersPerSend: 1, excludeItemIds: [], sortType: 2,
-      isKeySeller: false, prioritizeAMS: false,
-      destGroupJid: 'g1@g.us', sentItemIds: '[]',
-    }
-    await runAutomation(automation, {
-      fetchOffersFn: mockFetch,
-      sendBroadcastFn: async () => {},
-      isRunningFn: () => true,
-      dbOverride: makeDb(),
+  // O campo continua na coluna e a rota continua aceitando, mas o caminho de
+  // envio IGNORA (mesmo padrão de `Group.imageMode`). Ele fazia uma segunda
+  // busca e devolvia [...comissãoExtra, ...restantes], passando por cima da
+  // ordem escolhida pela cliente; com o botão fora da tela, continuar aplicando
+  // seria um efeito invisível — exatamente o ponto cego que a escolha de busca
+  // veio corrigir.
+  for (const prioritizeAMS of [false, true]) {
+    it(`faz UMA busca só, com prioritizeAMS=${prioritizeAMS}`, async () => {
+      const chamadas = []
+      const oferta = { itemId: '1', productName: 'Prod', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/1' }
+      const mockFetch = async (args) => { chamadas.push(args.isAMSOffer); return { offers: [oferta], rawCount: 1 } }
+      await runAutomation({
+        id: 'a1', userId: 'u1', keyword: 'test', minDiscountPct: 0,
+        offersPerSend: 1, excludeItemIds: [], sortType: 2,
+        isKeySeller: false, prioritizeAMS,
+        destGroupJid: 'g1@g.us', sentItemIds: '[]',
+      }, {
+        fetchOffersFn: mockFetch,
+        sendBroadcastFn: async () => {},
+        isRunningFn: () => true,
+        dbOverride: makeDb(),
+      })
+      assert.deepEqual(chamadas, [false])
     })
-    assert.equal(fetchCount, 1)
-  })
-
-  it('faz duas buscas quando prioritizeAMS=true', async () => {
-    let fetchCount = 0
-    const amsOffer = { itemId: '1', productName: 'AMS', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/1' }
-    const regOffer = { itemId: '2', productName: 'Reg', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/2' }
-    const mockFetch = async ({ isAMSOffer }) => { fetchCount++; return { offers: isAMSOffer ? [amsOffer] : [regOffer], rawCount: 1 } }
-    const automation = {
-      id: 'a2', userId: 'u1', keyword: 'test', minDiscountPct: 0,
-      offersPerSend: 2, excludeItemIds: [], sortType: 2,
-      isKeySeller: false, prioritizeAMS: true,
-      destGroupJid: 'g1@g.us', sentItemIds: '[]',
-    }
-    const sent = []
-    await runAutomation(automation, {
-      fetchOffersFn: mockFetch,
-      sendBroadcastFn: async (uid, text) => { sent.push(text) },
-      isRunningFn: () => true,
-      dbOverride: makeDb(),
-    })
-    assert.equal(fetchCount, 2)
-    assert.equal(sent.length, 2)
-    assert.ok(sent[0].includes('AMS'), 'primeiro enviado deve ser o AMS')
-    assert.ok(sent[1].includes('Reg'), 'segundo enviado deve ser o Regular')
-  })
-
-  it('exclui ids AMS do segundo fetch quando prioritizeAMS=true', async () => {
-    let secondFetchExcludes = []
-    const amsOffer = { itemId: '99', productName: 'AMS', priceMin: '10', priceDiscountRate: '20', offerLink: 'https://s.pe/99' }
-    const mockFetch = async ({ isAMSOffer, excludeItemIds }) => {
-      if (!isAMSOffer) secondFetchExcludes = excludeItemIds
-      return { offers: isAMSOffer ? [amsOffer] : [], rawCount: isAMSOffer ? 1 : 0 }
-    }
-    const automation = {
-      id: 'a3', userId: 'u1', keyword: 'test', minDiscountPct: 0,
-      offersPerSend: 2, excludeItemIds: [], sortType: 2,
-      isKeySeller: false, prioritizeAMS: true,
-      destGroupJid: 'g1@g.us', sentItemIds: '[]',
-    }
-    await runAutomation(automation, {
-      fetchOffersFn: mockFetch,
-      sendBroadcastFn: async () => {},
-      isRunningFn: () => true,
-      dbOverride: makeDb(),
-    })
-    assert.ok(secondFetchExcludes.includes('99'), 'segundo fetch deve excluir itemId do AMS')
-  })
+  }
 })
 
 test('runAutomation: usa templateKey selecionado em mobileTemplatesJson', async () => {
