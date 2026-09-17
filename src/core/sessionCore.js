@@ -5,7 +5,7 @@ import { fork } from 'child_process'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { safeCoreEvent } from './errors.js'
-import { resolveWorkerExecArgv } from './workerSpawnOptions.js'
+import { resolveWorkerExecArgv, resolveWorkerSpawnEnv } from './workerSpawnOptions.js'
 import { shouldResurrectSession, buildResurrectionWhere, resolveIncludeReconnecting } from './sessionResurrectionPolicy.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -78,7 +78,7 @@ export function startBot(userId) {
   // max_memory_restart do PM2; sem isso um worker incha e, num VPS sem folga,
   // a pausa de GC derruba o socket WhatsApp (ver workerSpawnOptions.js).
   const proc = fork(workerPath, [], {
-    env: { ...process.env, BOT_USER_ID: userId },
+    env: { ...process.env, BOT_USER_ID: userId, ...resolveWorkerSpawnEnv(process.env) },
     execArgv: resolveWorkerExecArgv(process.env),
   })
   const entry = { proc, qrListeners: new Set(), statusListeners: new Set(), lastQR: null, lastHeartbeatAt: Date.now() }
