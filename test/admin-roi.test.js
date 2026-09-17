@@ -120,8 +120,8 @@ test('o ROI lê as MESMAS duas fontes de receita da visão geral', () => {
   assert.ok(rota.includes('db.subscriptionCharge.findMany'), 'o ROI precisa da assinatura')
   assert.ok(rota.includes("startsWith: 'sub_'"), 'sem o prefixo a assinatura entraria duas vezes')
   assert.ok(rota.includes('notTestUser'), 'a conta de teste também sai do ROI')
-  // E as duas leituras são limitadas — nenhuma varredura sem teto.
-  assert.equal((rota.match(/take: 20000/g) ?? []).length, 3)
+  // E as três leituras são limitadas — nenhuma varredura sem teto.
+  assert.equal((rota.match(/take: ROI_ROW_LIMIT/g) ?? []).length, 3)
 })
 
 // ---------------------------------------------------------------------------
@@ -220,6 +220,10 @@ const RECEITA = {
   '2026-07': { gross: 220, mpFees: 10.98, payments: 2, payingUsers: 2 },
   '2026-08': { gross: 345, affiliateCommissions: 20, mpFees: 17.2, payments: 4, payingUsers: 4 },
   '2026-09': { gross: 207, mpFees: 10.3, payments: 3, payingUsers: 3 },
+}
+
+function round(value) {
+  return Math.round(value * 100) / 100
 }
 
 function relatorio(extra = {}) {
@@ -344,4 +348,78 @@ test('o gráfico não depende só da cor — verde e vermelho são o par que mai
 test('a sub-aba ROI só busca dados quando é aberta', () => {
   const fonte = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
   assert.match(fonte, /if \(tab !== 'financeiro' \|\| financeTab !== 'roi'\) return/)
+})
+
+
+// ---------------------------------------------------------------------------
+// Conciliação com a Visão geral (RCA 2026-09-17)
+// ---------------------------------------------------------------------------
+
+/*
+ * A dona do produto leu R$ 543,22 no ROI e mais de mil na Visão geral e
+ * perguntou onde estava o erro. Havia DOIS erros meus e uma diferença legítima
+ * que a tela não explicava.
+ */
+
+test('receita ANTERIOR à primeira fatura de custo entra na conta', () => {
+  // Era o erro #1: a rota lia pagamento só a partir do mês da primeira fatura
+  // do Claude (abr/2026), então quem pagou antes disso desaparecia do ROI —
+  // e receita de antes do primeiro custo é receita do produto.
+  const r = buildRoiReport({
+    now: new Date('2026-09-17T15:00:00Z'),
+    env: {},
+    revenueByMonth: {
+      '2026-02': { gross: 69, mpFees: 3.44, payments: 1, payingUsers: 1 },
+      '2026-08': { gross: 345, mpFees: 17.2, payments: 4, payingUsers: 4 },
+    },
+  })
+  assert.equal(r.past[0].month, '2026-02', 'a linha do tempo começa no primeiro mês COM RECEITA OU CUSTO')
+  assert.ok(r.past.some(m => m.month === '2026-02' && m.net > 0), 'fevereiro precisa aparecer com a receita dele')
+})
+
+test('a rota NÃO corta a receita por data — era o que apagava mês e criava mês fantasma', () => {
+  const fonte = readFileSync(new URL('../src/api/routes/admin.js', import.meta.url), 'utf8')
+  const rota = fonte.slice(fonte.indexOf("app.get('/finance/roi'"), fonte.indexOf("app.get('/payments'"))
+
+  // O corte era montado em UTC e o mês é decidido no fuso de Brasília, então
+  // as 3 últimas horas do mês anterior entravam e viravam um mês parcial com
+  // custo zero. Sem corte, os dois defeitos somem juntos.
+  assert.ok(!rota.includes('gte: startDate'), 'a leitura de receita não pode voltar a cortar por data')
+  assert.ok(!rota.includes('Date.UTC('), 'não montar corte de data em UTC nesta rota')
+
+  // O teto de linhas é a única coisa que ainda pode deixar a conta incompleta,
+  // e bater nele não pode virar um total silenciosamente menor.
+  assert.ok(rota.includes('truncated'), 'bater o teto de linhas precisa ser avisado, não escondido')
+})
+
+test('a cascata de conciliação FECHA: líquido do histórico menos o mês corrente é o placar', () => {
+  const r = relatorio()
+  const c = r.reconciliation
+
+  assert.equal(round(c.grossAllTime - c.affiliateCommissionsAllTime - c.mpFeesAllTime), c.netAllTime)
+  assert.equal(round(c.netAllTime - c.currentMonthNet), c.netClosedMonths)
+  assert.equal(c.netClosedMonths, r.summary.totalNetRevenue, 'o fim da cascata É o número do placar')
+
+  // E o valor cheio é maior que o líquido — é essa diferença que a Visão geral
+  // mostra e que fazia os dois números parecerem incompatíveis.
+  assert.ok(c.grossAllTime > c.netAllTime)
+  assert.ok(c.currentMonthGross >= c.currentMonthNet)
+})
+
+test('a tela mostra a cascata em linguagem leiga, sem mandar a pessoa perguntar', () => {
+  const fonte = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  // Comentário de código não é tela — a checagem de jargão olha só o que a
+  // pessoa LÊ, senão explicar o motivo num comentário reprova o teste.
+  const painel = fonte
+    .slice(fonte.indexOf('function RoiPanel('), fonte.indexOf('function FinancePeriodSelector('))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+
+  assert.ok(painel.includes('Por que este número é menor'), 'a dúvida precisa estar respondida na própria tela')
+  assert.ok(painel.includes('valor cheio'), 'dizer "bruto" não explica nada para quem não é contador')
+  assert.ok(painel.includes('reconciliation.netClosedMonths'), 'a cascata precisa terminar no número do placar')
+  for (const jargao of ['bruto', 'líquido', 'gateway']) {
+    assert.ok(!painel.toLowerCase().includes(jargao), `jargão "${jargao}" chegou à tela`)
+  }
 })

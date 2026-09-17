@@ -374,6 +374,7 @@ function RoiPanel({ data, loading, months, onMonths }) {
   const summary = data.summary ?? {}
   const present = data.present ?? {}
   const future = data.future ?? {}
+  const reconciliation = data.reconciliation ?? null
   const chosen = (future.scenarios ?? []).find(item => item.scenario === scenario) ?? (future.scenarios ?? [])[0] ?? null
   const seCustear = summary.netResult >= 0
 
@@ -420,6 +421,55 @@ function RoiPanel({ data, loading, months, onMonths }) {
           </div>
         </div>
 
+        {/* Cascata que liga este placar aos cartões da aba Visão geral. Os dois
+            respondem perguntas diferentes (aqui líquido e só mês fechado, lá
+            bruto e com o mês corrente), então dão números diferentes — sem
+            mostrar a conta, a diferença parece defeito. */}
+        {reconciliation && (
+          <details className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <summary className="cursor-pointer text-xs font-black text-gray-700">
+              Por que este número é menor que o da aba Visão geral?
+            </summary>
+            <div className="mt-3 space-y-1 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600">Tudo que entrou, desde o começo (valor cheio)</span>
+                <span className="font-bold text-gray-900">{formatCurrency(reconciliation.grossAllTime)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600">(–) comissões que você pagou às afiliadas</span>
+                <span className="font-bold text-orange-700">− {formatCurrency(reconciliation.affiliateCommissionsAllTime)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600">(–) taxas que o Mercado Pago retém</span>
+                <span className="font-bold text-rose-700">− {formatCurrency(reconciliation.mpFeesAllTime)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-1">
+                <span className="text-gray-700">(=) o que de fato sobrou para você</span>
+                <span className="font-bold text-gray-900">{formatCurrency(reconciliation.netAllTime)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600">(–) {formatMonthLong(present.month)}, que ainda está correndo</span>
+                <span className="font-bold text-gray-700">− {formatCurrency(reconciliation.currentMonthNet)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t-2 border-gray-300 pt-1">
+                <span className="font-bold text-gray-900">(=) o número do placar acima</span>
+                <span className="font-black text-emerald-800">{formatCurrency(reconciliation.netClosedMonths)}</span>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-gray-500">
+              A aba Visão geral mostra o <span className="font-bold">valor cheio</span> e inclui o mês em andamento, porque a pergunta lá é
+              &quot;quanto está entrando&quot;. Aqui a pergunta é &quot;o produto já se pagou&quot;, e para isso só vale o que de fato
+              sobrou, em mês já fechado. O mês corrente aparece no bloco Presente, logo abaixo.
+            </p>
+          </details>
+        )}
+
+        {data.truncated && (
+          <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200">
+            ⚠️ Passamos de {formatNumber(data.rowLimit)} registros e a conta pode estar incompleta. Avise para aumentarmos o limite.
+          </p>
+        )}
+
         <CumulativeProfitChart
           past={data.past ?? []}
           present={{ month: present.month, cumulativeProfitWithCurrent: summary.cumulativeProfitWithCurrent }}
@@ -436,7 +486,7 @@ function RoiPanel({ data, loading, months, onMonths }) {
             <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-3 py-2">Mês</th>
-                <th className="px-3 py-2">Entrou (líquido)</th>
+                <th className="px-3 py-2">Entrou (já descontado)</th>
                 <th className="px-3 py-2">Claude</th>
                 <th className="px-3 py-2">Servidor</th>
                 <th className="px-3 py-2">Sobrou no mês</th>
@@ -450,7 +500,7 @@ function RoiPanel({ data, loading, months, onMonths }) {
                   <td className="px-3 py-2">
                     {formatCurrency(row.net)}
                     {row.gross > row.net && (
-                      <span className="ml-1 text-[11px] text-gray-400">(bruto {formatCurrency(row.gross)})</span>
+                      <span className="ml-1 text-[11px] text-gray-400">(valor cheio {formatCurrency(row.gross)})</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-rose-700">{row.costClaude ? `− ${formatCurrency(row.costClaude)}` : '—'}</td>

@@ -36,7 +36,7 @@ import { resolveFinancePeriod, FINANCE_PERIODS } from '../../domain/admin/financ
 import { combineRevenueTotals, countDistinctPayingUsers, computeAverageLtv, computeMercadoPagoFees, computeNetRevenue } from '../../domain/admin/financeOverview.js'
 import { loadTestAccountUserIds, excludeUserIdsWhere, resolveTestAccountEmails } from '../../domain/admin/testAccounts.js'
 import { buildRoiReport } from '../../domain/admin/roi.js'
-import { costForMonth, firstCostMonth, monthIndex, monthKeyFromIndex, monthKeyOf, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
+import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -2299,9 +2299,18 @@ export async function adminRoutes(app) {
 
     const now = new Date()
     const config = resolveCostConfig()
-    const startMonth = firstCostMonth(config) ?? monthKeyOf(now)
-    const startIndex = monthIndex(startMonth) ?? monthIndex(monthKeyOf(now))
-    const startDate = new Date(Date.UTC(Math.floor(startIndex / 12), startIndex % 12, 1))
+
+    // ⚠️ A receita é lida SEM corte de data, de propósito. Cortar no primeiro
+    // mês de fatura (era o que esta rota fazia) tinha dois defeitos:
+    //   1. pagamento anterior à primeira fatura do Claude era DESCARTADO em
+    //      silêncio — e receita de antes do primeiro custo é receita do
+    //      produto, tem que entrar na conta de "já se pagou?";
+    //   2. o corte era montado em UTC e o mês é decidido no fuso de Brasília,
+    //      então as três últimas horas do mês anterior entravam e viravam um
+    //      mês FANTASMA, com receita parcial e custo zero.
+    // Quem decide onde a linha do tempo começa é `buildRoiReport`, pelo
+    // primeiro mês que tem receita OU custo — o que vier primeiro.
+    const ROI_ROW_LIMIT = 20000
 
     const projectionMonths = Math.min(24, Math.max(3, Number.parseInt(req.query?.months ?? '12', 10) || 12))
 
@@ -2324,21 +2333,21 @@ export async function adminRoutes(app) {
 
     const [payments, charges, commissions, activeBasic, activePro, prices] = await Promise.all([
       db.payment.findMany({
-        where: { status: 'approved', ...oneTimePaymentWhere, createdAt: { gte: startDate }, ...notTestUser },
+        where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser },
         select: { userId: true, amount: true, provider: true, createdAt: true },
         orderBy: { createdAt: 'asc' },
-        take: 20000,
+        take: ROI_ROW_LIMIT,
       }),
       db.subscriptionCharge.findMany({
-        where: { status: { in: CHARGE_OUTCOME_STATUSES.aprovada }, attemptedAt: { gte: startDate }, ...notTestUser },
+        where: { status: { in: CHARGE_OUTCOME_STATUSES.aprovada }, ...notTestUser },
         select: { userId: true, amount: true, attemptedAt: true },
         orderBy: { attemptedAt: 'asc' },
-        take: 20000,
+        take: ROI_ROW_LIMIT,
       }),
       db.affiliateCommission.findMany({
-        where: { createdAt: { gte: startDate }, status: { notIn: ['rejected', 'reversed'] }, ...excludeUserIdsWhere(testAccounts.ids, 'referredUserId') },
+        where: { status: { notIn: ['rejected', 'reversed'] }, ...excludeUserIdsWhere(testAccounts.ids, 'referredUserId') },
         select: { commissionAmountCents: true, createdAt: true },
-        take: 20000,
+        take: ROI_ROW_LIMIT,
       }),
       db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
       db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
@@ -2391,6 +2400,11 @@ export async function adminRoutes(app) {
     })
 
     // Faturas do passado, uma linha por lançamento — é o que sustenta o número.
+    // Começa onde a linha do tempo do relatório começa (pode ser um mês de
+    // receita anterior à primeira fatura), senão a tabela de custos não cobre
+    // todos os meses que o passado mostra.
+    const ledgerStart = report.past[0]?.month ?? report.currentMonth
+    const startIndex = monthIndex(ledgerStart) ?? monthIndex(report.currentMonth)
     const endIndex = monthIndex(report.currentMonth)
     const costLedger = []
     for (let index = startIndex; index <= endIndex; index += 1) {
@@ -2413,11 +2427,21 @@ export async function adminRoutes(app) {
 
     await writeAdminAuditLog(req, { action: 'admin.finance.roi.read', resource: 'finance' })
 
+    // Sem corte de data, o teto de linhas é a única coisa que poderia deixar a
+    // conta incompleta. Bater o teto não pode virar um total silenciosamente
+    // menor — a tela avisa em vez de afirmar um número em que não se pode
+    // confiar.
+    const truncated = payments.length >= ROI_ROW_LIMIT
+      || charges.length >= ROI_ROW_LIMIT
+      || commissions.length >= ROI_ROW_LIMIT
+
     return {
       ...report,
       costLedger,
       excludedTestAccounts: testAccounts.emails.length ? testAccounts.emails : resolveTestAccountEmails(),
       mpFeePercent,
+      truncated,
+      rowLimit: ROI_ROW_LIMIT,
     }
   })
 
