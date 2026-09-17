@@ -1129,6 +1129,10 @@ duas estarão no fundo da curva.
 
 ### 10.4 O experimento que de fato responde: comparar CURVAS, não instantes
 
+⚠️ **SUPERADO pela §12** — a medição de 17:52 mostrou que a frota satura em
+menos de uma hora, não em dias. O experimento ficou muito mais barato: comparar
+PLATÔ com PLATÔ, no mesmo dia. O texto abaixo fica como registro do raciocínio.
+
 A frota acabou de reiniciar. **Isso é um ponto de partida limpo e raro.** O
 plano que responde a pergunta sem depender de staging:
 
@@ -1232,3 +1236,114 @@ ninguém ler a coluna `origens = 1` como problema.
 
 Seis alavancas examinadas, três mortas com dado, uma viva. É o resultado
 esperado de medir antes de mexer.
+
+## 12. A memória SATURA em minutos, não cresce por dias (2026-09-17)
+
+Quatro leituras, e a terceira muda o experimento inteiro:
+
+| quando | robôs | PSS | arena | % | por robô |
+|---|---:|---:|---:|---:|---:|
+| 16/09 | 41 | 8.702 | 5.069 | 58% | 212 |
+| 17/09 17:13 | 46 | 6.815 | 3.380 | 50% | 148 |
+| 17/09 17:28 | 45 | 6.588 | 3.222 | 49% | 146 |
+| **17/09 17:52** | 45 | **8.701** | **4.930** | **57%** | **193** |
+
+**Em 24 minutos a arena subiu 1.708 MiB — 53%.** E o total voltou a 8.701 MiB
+contra os 8.702 MiB de ontem: **um MiB de diferença.**
+
+### 12.1 O que isso significa
+
+**A frota reiniciou, mergulhou para 6,6 GB e voltou ao MESMO patamar em menos de
+uma hora.** Três consequências, e elas se contradizem com o que eu tinha
+escrito:
+
+1. **Não é vazamento lento.** Vazamento não volta ao valor exato em 40 minutos —
+   ele passaria direto. Isto é **o conjunto de trabalho em regime**: a frota
+   opera em ~8,7 GB, e reiniciar só a tira de lá temporariamente.
+2. **A §10.4 (comparar curvas por 2 dias) está errada, e para melhor.** Se
+   satura em menos de uma hora, o experimento custa **uma hora, não dois dias**:
+   aplicar, esperar saturar, medir. Resposta no mesmo dia.
+3. **"Conter crescimento" não é o quadro.** Não está crescendo sem limite; está
+   num platô. A pergunta é se `MALLOC_ARENA_MAX=2` **baixa o platô**.
+
+⚠️ **São três pontos e um intervalo.** O de 17:52 pode ser um pico de tráfego, e
+não o platô. O que confirma é continuar medindo por algumas horas: se ficar
+oscilando em torno de 8,7 GB, é platô; se passar de 10 GB, era pico e o assunto
+volta a ser crescimento.
+
+### 12.2 O experimento revisado, e é barato
+
+**Fase 1 (hoje, 2-3 horas, sem mudar nada):** `bash /tmp/medir.sh` de meia em
+meia hora. Confirma o platô e onde ele fica. Isso já está em andamento.
+
+**Fase 2 (janela anunciada):** aplicar em produção, esperar a frota saturar
+(~1 h pela evidência de hoje) e medir. **Comparar platô com platô**, que é a
+comparação que não depende de idade de processo. Se o platô com
+`MALLOC_ARENA_MAX=2` ficar abaixo de 8,7 GB, a alavanca funciona — e o quanto
+abaixo é a resposta.
+
+A saturação rápida é o que torna isso decidível no mesmo dia, em vez de dois.
+
+## 13. O achado que vale mais que toda a investigação de RAM (2026-09-17)
+
+`scripts/contato-ativo-semanal.mjs` devolveu **186 clientes para procurar**, e o
+que está dentro dele vale mais que os 5 GB desta análise inteira.
+
+### 13.1 Duas clientes PAGANTES nunca viram o robô funcionar
+
+| cliente | plano | pagou | acesso até | conta | envios | whatsapp |
+|---|---|---|---|---|---:|---|
+| taciane silva | basic | **sim** | 14/10 | 9 dias | **0** | **nunca conectou** |
+| Taiane Ribeiro | basic | **sim** | 14/10 | 15 dias | **0** | **nunca conectou** |
+
+**Pagaram, têm quase um mês de acesso pela frente e nunca conectaram o
+WhatsApp.** Nunca publicaram uma oferta. Último contato: nunca.
+
+É o contato mais urgente da lista inteira — não por receita, por confiança:
+cliente que paga e não consegue usar não pede reembolso, some e conta para
+outras pessoas.
+
+### 13.2 Onze clientes usaram MUITO e o teste acabou sem ninguém falar com elas
+
+No grupo "venceu nos últimos 3 dias" (24 pessoas, **todas** com "último
+contato: nunca"):
+
+| cliente | envios no teste | venceu |
+|---|---:|---|
+| walace Roberto | **3.432** | há 1 dia |
+| Andreza da silva correa | **1.822** | hoje |
+| Vitor | **1.407** | hoje |
+| Isabele Aguiar | **1.103** | há 1 dia |
+
+Essas pessoas **viram o produto funcionar**, publicaram milhares de ofertas, e o
+teste acabou. É a janela de maior conversão que existe — e ninguém ligou.
+
+E nos grupos mais frios, o caso que dói mais:
+
+**GISLAINE RYZIK — plano pro, JÁ PAGOU, 4.903 envios, venceu há 22 dias, último
+contato: nunca.** Uma cliente pagante que foi embora sem uma conversa.
+
+### 13.3 A conta que compara as duas frentes
+
+- **Memória:** o prêmio máximo é da ordem de 3-5 GB num servidor de 15,6 GB.
+  Vale adiar um upgrade — algo entre R$100 e R$200 por mês, e só se a alavanca
+  funcionar, o que ainda não está medido.
+- **Contato:** 24 pessoas na janela quente, 11 delas com uso pesado comprovado,
+  mais 2 pagantes travadas. A R$69 do Pro, **recuperar dez já paga vários meses
+  de servidor** — e não depende de nenhuma hipótese técnica.
+
+**A investigação de RAM continua valendo** (a alavanca está pronta, desligada, e
+o experimento agora custa uma hora). Mas se houver que escolher o que fazer
+primeiro amanhã de manhã, é a lista, não o alocador.
+
+```bash
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --csv > /tmp/contatos.csv
+```
+
+### 13.4 Ruído a limpar na lista (pequeno)
+
+Aparecem contas de teste da própria casa (`Flavia teste`, `Flavia Teste 1`,
+`Flavia Teste 2`, `flaviatesteconversa`, `saasdas`, `mariaexemplo`) e **9 contas
+já anonimizadas** (`deleted_*@anonimizado.invalid`, que por definição não têm a
+quem ligar). Não é defeito de memória nem de dado — é filtro que falta no
+script. Enquanto não existir, é só pular na leitura.
