@@ -2,6 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-09-17
+**Última revisão**: 2026-09-17 (após incorporar as respostas D1, D2 e D3 da dona do produto)
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -13,7 +14,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — **3 perguntas em aberto (Q1, Q2, Q3)**
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,13 +32,23 @@
 
 ## Notes
 
-- **Bloqueia `/speckit-plan`**: as três perguntas da seção "Perguntas de clarificação em aberto" mudam
-  materialmente o trabalho e não têm resposta padrão razoável:
-  - **Q1** — robô do Telegram é da cliente ou é do produto (muda marca, limites de ritmo compartilhados
-    vs por cliente, raio de impacto de um bloqueio e o passo a passo de conexão);
-  - **Q2** — destino de Telegram consome a cota de destinos do plano (decisão comercial);
-  - **Q3** — Telegram é só destino ou também origem monitorada (dobra o escopo se for origem).
-- O restante da spec está completo e verificável. Itens de conteúdo, critérios de sucesso, casos de borda,
-  riscos e gate manual foram revisados e aprovados.
+- **Checklist fechado.** As três perguntas em aberto foram respondidas pela dona do produto em 2026-09-17
+  e estão incorporadas à spec como decisões D1, D2 e D3 (tabela no topo do documento), desdobradas em
+  requisitos, histórias, critérios de sucesso e riscos:
+  - **D1 — robô único do produto**: FR-015 a FR-019 e FR-039 a FR-045; US2 reescrita (a cliente não informa
+    dado de acesso nenhum); US10 nova (visibilidade e contingência do ponto único de falha); riscos R13
+    (ponto único de falha) e R14 (orçamento de ritmo compartilhado, com exigência de justiça entre clientes);
+    SC-013 e SC-018; assumption explícita sobre a marca do produto aparecer nos grupos da cliente.
+  - **D2 — multicanal só em plano superior**: FR-046 a FR-051; US9 nova; risco R15 (bloqueio que vaza);
+    SC-014 e SC-015. Bloqueio exigido nas duas camadas, texto leigo com caminho de upgrade e preservação
+    de dado no rebaixamento.
+  - **D3 — Telegram também como origem**: FR-052 a FR-060; US8 nova; riscos R16 (blindagem de entrada) e
+    R17 (leitura de todas as origens dependendo do mesmo robô); SC-016 e SC-017. Decisão de escopo sobre
+    espelhamento cruzado entre redes resolvida e justificada como **dentro do escopo**.
+- **Uma suposição sinalizada, propositalmente não transformada em fato**: a fronteira exata de plano.
+  Os planos existentes são `trial`, `basic` e `pro`, e o padrão vigente libera recursos restritos para
+  **Pro ou teste grátis ativo**. A spec assume esse mesmo padrão e marca com ⚠️ que a decisão final
+  (em especial se o teste grátis dá direito) é da dona do produto e deve ser confirmada antes do plano.
+  Não bloqueia `/speckit-plan`.
 - A decisão sobre o Instagram (fase 2, com modelo de dados preparado e prova por rede fictícia de teste)
-  está justificada na spec e **não** é uma pergunta em aberto.
+  segue justificada na spec e não é pergunta em aberto.
