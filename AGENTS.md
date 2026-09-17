@@ -5232,11 +5232,49 @@ O módulo devolve o **texto** com a URL de domínio próprio trocada pela da loj
 Por rodar **antes** do sanitizador, o resto do pipeline (sanitizador, detector,
 conversor, dedup, imagem) segue byte a byte como já era — nenhum deles mudou.
 
+### Oferta com 3+ links chegava com só dois (RCA 2026-09-17 — não regredir)
+
+Cliente reportou: oferta com três ou quatro produtos chegava ao grupo com **dois
+links convertidos e, do terceiro em diante, nenhum link — só o texto do
+produto**.
+
+Não era limite de quantidade, nem conversão falhando: era o desembrulho de
+domínio próprio **desligando-se pela mensagem inteira**. `findCandidateLinks`
+abria com `if (cleaned.some(isOfferUrl)) return []` — um único link de loja no
+texto bastava para nenhuma URL ser desembrulhada. Numa oferta **mista** (os
+primeiros produtos com link direto da Amazon/ML e os seguintes pelo site do dono
+do grupo, como `clubedoachadinho.com.br/p/…`, `compre.link/…` ou
+`dicasdeamigas.com.br/p/…` — os três já medidos em produção), os links
+embrulhados nunca viravam link de loja, `removeNonOfferUrls` os apagava na linha
+seguinte (corretamente: eles creditam o concorrente) e a cliente via a linha do
+produto sem URL nenhuma. Os dois primeiros saíam porque já eram link de loja.
+
+⚠️ **Nada disso aparecia no painel**: a mensagem era gravada como `success` (ela
+saiu), e o desembrulho nem chegava a rodar, então também não havia linha de
+falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
+
 **Não regredir:**
 
-- **Só age quando a mensagem NÃO tem link de loja nenhum.** Mensagem que já traz
-  link de loja não gasta rede nem muda de caminho: risco e latência zero para o
-  fluxo que já funciona.
+- Não voltar a desligar a varredura inteira quando existe link de loja no texto
+  — é literalmente o bug. Guardas em `test/custom-domain-link-resolver.test.js`
+  ("oferta MISTA").
+- O teto de candidatos por mensagem (`MAX_CANDIDATES_PER_MESSAGE`, 2) continua
+  valendo: grupo que despeja dez links embrulhados não pode virar dez idas à
+  rede dentro da fila serial.
+
+**Não regredir:**
+
+- **A decisão é POR LINK, nunca pela mensagem inteira** (corrigido em
+  2026-09-17 — não regredir). Candidato é a URL que NÃO é de loja suportada:
+  é ela que o sanitizador vai apagar em seguida. Link que já é de loja fica
+  fora dos candidatos, então mensagem só com link de loja (ou sem link) segue
+  sem gastar rede — o custo continua zero onde já era zero.
+- **Mensagem MISTA gasta um orçamento menor** (`CUSTOM_DOMAIN_MIXED_BUDGET_MS`,
+  6s, contra os 13s de `CUSTOM_DOMAIN_TOTAL_BUDGET_MS`). Ali o desembrulho é um
+  ganho — recupera o link que seria apagado —, nunca a diferença entre espelhar
+  e não espelhar: a oferta sai de qualquer jeito pelos links de loja que já
+  existem. Gastar o orçamento cheio arriscaria estourar os 25s de preparo da
+  mensagem (`MSG_QUEUE_TIMEOUT_MS`) e derrubar uma oferta que hoje funciona.
 - **Roda ANTES de `sanitizeInviteLinks`.** Invertido, a URL de domínio próprio já
   foi apagada e não há o que desembrulhar — é exatamente o estado anterior ao
   fix. Guarda estrutural no teste.
@@ -5349,6 +5387,55 @@ que as duas pontas nunca discordem sobre o que é "link de loja desconhecida"
 (ela ignora convite de grupo e rede social, que não são loja). `hasGenericUrl`
 segue como está no outro uso (o descarte silencioso de `messageKind === 'other'`)
 — ampliá-lo ali transformaria ruído de protocolo em linha no painel.
+
+## Links da mesma loja disputavam UMA sessão de afiliado (RCA 2026-09-17)
+
+O espelhamento convertia todos os links da mensagem com `Promise.all` puro. O
+comentário original justificava: "conversores fazem 4-5 chamadas HTTP
+sequenciais cada; processar N links em série estoura o teto da fila". Está certo
+entre lojas DIFERENTES — e errado dentro da MESMA loja, porque ali os
+conversores não são independentes: dividem **uma** sessão de afiliado.
+
+Medido, loja por loja:
+
+| Loja | Sessão compartilhada | Tinha serialização? |
+|---|---|---|
+| Mercado Livre | cookie `ssid` **rotacionado** a cada `createLink` | sim — `withMercadoLivreCredentialLock`, timeout de 12s |
+| **Amazon** | cookie do SiteStripe **rotacionado** a cada `getShortUrl` | **nenhuma** |
+| SHEIN | token de sessão por etiqueta | nenhuma |
+| AliExpress | cookie do portal de afiliado | nenhuma |
+
+- **ML**: 4 links disparados juntos, ~4s por chamada → um já estoura a trava
+  (`ML_AFFILIATE_LOCK_TIMEOUT`) e cai no fallback `partner_id`, e o conjunto
+  ainda come 12s dos 25s de preparo (`MSG_QUEUE_TIMEOUT_MS`). O paralelismo não
+  acelerava nada — a trava já serializava — e só trocava espera por falha.
+  Reproduzido e depois confirmado corrigido: 4 conversões boas em 16s, nenhuma
+  falha.
+- **Amazon**: em paralelo, todas as chamadas saem com o cookie VELHO e disputam
+  a persistência do novo — a última escrita vence e as demais rotações se
+  perdem. O sintoma é a parede "Acessar Amazon" no meio de uma sessão viva, e a
+  oferta sai com o link longo `?tag=` em vez do `amzn.to` (some a comissão
+  curta, não o link).
+
+`src/core/conversionScheduler.js` (`convertPerPlatformSerially`) resolve:
+**links da MESMA loja convertem um de cada vez; lojas diferentes seguem em
+paralelo.**
+
+**Não regredir:**
+
+- **Não voltar a `Promise.all(links.map(...))` sobre a lista inteira de links** —
+  guarda estrutural em `test/conversion-scheduler.test.js` falha se voltar.
+- **Não serializar TUDO numa fila só**: aí uma loja lenta atrasaria as outras,
+  que é o problema que o paralelismo original resolvia de verdade.
+- **A ordem de saída é a ordem do TEXTO**, não a de conclusão — a eleição do
+  link primário (`first`/`last`) e os logs dependem disso.
+
+⚠️ **O tempo de parede da mensagem com muitos links da MESMA loja sobe** (4
+links de ML: ~12s antes com uma falha, ~16s agora sem nenhuma), dentro dos 25s
+de `MSG_QUEUE_TIMEOUT_MS`. Não é overhead novo — a trava do ML já serializava;
+o que mudou é o 4º link ser convertido de verdade em vez de falhar. Ao validar,
+vigiar `timeout:incoming` no painel: se aparecer em mensagem com muitos links,
+o teto de 25s é que precisa de conversa, não o agendador.
 
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
