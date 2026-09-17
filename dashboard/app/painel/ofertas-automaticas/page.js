@@ -16,6 +16,7 @@ import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
 import { ReviewQueue } from '@/components/offerAutomation/ReviewQueue'
 import { validateOfferAutomationForm } from '@/lib/offerAutomationForm'
+import { SEARCH_POOL_OPTIONS, SEARCH_ORDER_OPTIONS, DEFAULT_SEARCH_POOL, DEFAULT_SEARCH_ORDER, searchPoolOption, describeSearchChoice, normalizeSearchChoice } from '@/lib/offerAutomationSearch'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -108,6 +109,8 @@ const emptyForm = {
   dailyRunTime: DEFAULT_DAILY_RUN_TIME,
   offersPerSend: 1,
   minDiscountPct: 20,
+  listType: DEFAULT_SEARCH_POOL,
+  sortType: DEFAULT_SEARCH_ORDER,
   prioritizeAMS: false,
   publicationMode: 'direct',
   reviewTargetSize: 10,
@@ -195,6 +198,7 @@ export default function OfertasAutomaticasPage() {
       dailyRunTime: a.dailyRunTime || DEFAULT_DAILY_RUN_TIME,
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
+      ...normalizeSearchChoice(a),
       prioritizeAMS: a.prioritizeAMS ?? false,
       publicationMode: a.publicationMode || 'direct',
       reviewTargetSize: a.reviewTargetSize || 10,
@@ -437,6 +441,22 @@ export default function OfertasAutomaticasPage() {
             <p className="pnl-hint" style={{ marginTop: 4 }}>Só produtos com desconto real serão enviados.</p>
           </div>
 
+          <div>
+            <label className="pnl-label">Quais produtos o robô pode trazer?</label>
+            <select className="pnl-input" value={form.listType} onChange={(e) => setForm((f) => ({ ...f, listType: Number(e.target.value) }))}>
+              {SEARCH_POOL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>{searchPoolOption(form.listType).hint}</p>
+          </div>
+
+          <div>
+            <label className="pnl-label">Qual vem primeiro?</label>
+            <select className="pnl-input" value={form.sortType} onChange={(e) => setForm((f) => ({ ...f, sortType: Number(e.target.value) }))}>
+              {SEARCH_ORDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>Isso ordena o que a escolha de cima trouxe — não amplia a busca.</p>
+          </div>
+
           <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
             <input type="checkbox" checked={form.prioritizeAMS} onChange={(e) => setForm((f) => ({ ...f, prioritizeAMS: e.target.checked }))} style={{ marginTop: 2 }} />
             <span>
@@ -566,6 +586,7 @@ export default function OfertasAutomaticasPage() {
                     {' · '}
                     {DISCOUNT_OPTIONS.find((o) => o.value === a.minDiscountPct)?.label ?? `${a.minDiscountPct}% OFF mín.`}
                   </p>
+                  <p className="pnl-hint">{describeSearchChoice(a)}</p>
                   <p className="pnl-hint">Modelo: {templateName(templates, a.templateKey || 'automatico_classico')} · {nextSendLabel(a.lastSentAt, a.intervalMinutes, a.dailyRunTime)}</p>
                   {a.publicationMode === 'review' && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>👀 Revisão antes de publicar</span>}
                   {a.prioritizeAMS && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>⚡ Comissão extra priorizada</span>}
