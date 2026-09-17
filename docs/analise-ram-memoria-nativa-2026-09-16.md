@@ -1612,3 +1612,79 @@ o crescimento, não o teto.
 
 Nada disso é urgente: **nada está quebrado**. A frota está no ar, as sessões
 conectadas, e o servidor tem folga física (4,9 GB livres, swap parado).
+
+## 18. Resolvido: 100% dos reinícios são deploy. O problema é a frequência.
+
+O log do PM2 fecha a questão. **Todas** as linhas têm a mesma forma:
+
+```text
+Stopping app:bot-supervisor id:5
+App [bot-supervisor:5] exited with code [0] via signal [SIGINT]
+App [bot-supervisor:5] starting in -fork mode-
+```
+
+**`code [0]` via `SIGINT`** é encerramento limpo e deliberado — é o que
+`pm2 restart` faz. Não é crash (seria código de saída diferente), não é o teto
+de 400 MB (o PM2 anuncia isso com texto próprio), não é o sistema. E os ~15
+segundos entre `Stopping` e `starting` são o `kill_timeout`: o drain
+acontecendo como desenhado.
+
+### 18.1 A correspondência é exata
+
+| merge em `main` (UTC) | toca worker? | reinício do supervisor |
+|---|---|---|
+| 16:40 #1711 | não | — |
+| **17:01 #1714** | **sim (6 arq)** | **17:03** ✓ |
+| **17:19 #1718** | **sim (4 arq)** | **17:21** ✓ |
+| 17:52 #1719 | não | — |
+| 18:18 #1720 | não | — |
+| 18:32 #1721 | não | — |
+| 22:14 #1722 | não | — |
+| **22:47 #1730** | **sim (3 arq)** | **22:49** ✓ |
+
+Três merges que tocam `WORKER_CODE_PATHS_RE`, três reinícios, **~2 minutos
+depois de cada um**. O staging confirma o par: ele reinicia 6-7 minutos antes de
+cada um (16:54, 17:14, 22:41), que é a promoção `develop → staging` precedendo a
+`develop → main`.
+
+Sobra um reinício não pareado às 17:05, quatro minutos depois do de 17:03 —
+provavelmente a segunda rede do deploy (`workers_running_stale_code`) ou duas
+execuções do workflow em sequência. Detalhe, não mistério.
+
+### 18.2 O erro de método, pela terceira vez no mesmo eixo
+
+Usei `%ad` (data de **autor**) em vez de `%cd` (data de **commit**). Em merge
+commit os dois são muito diferentes: o autor vem do commit original, o commit
+date é quando o merge aconteceu. Foi isso que fez os horários não baterem e me
+levou a inventar hipótese de OOM.
+
+**Três erros hoje, todos de tempo:** deduzir o horário do reinício (2×) e ler
+data de autor como data de merge (1×). Regra que fica, e ela é curta:
+
+> **Data de merge é `%cd`, nunca `%ad`. Horário de reinício vem do PM2, nunca de
+> dedução. E antes de qualquer hipótese, conferir o fuso dos dois lados.**
+
+```bash
+git log --first-parent --format="%cd %s" --date=format-local:"%H:%M" origin/main --since="hoje"
+```
+
+### 18.3 O que fazer, e é só isto
+
+**Nada está quebrado.** O sistema fez exatamente o que foi desenhado para fazer.
+O que existe é **cadência**: oito promoções para `main` num dia, três delas
+reconectando as 46 sessões de clientes.
+
+**A correção não é código — é processo:** agrupar as promoções `develop → main`
+numa janela por dia. As que não tocam código de worker (cinco das oito hoje)
+continuam podendo sair a qualquer hora, porque não reiniciam nada.
+
+Isso é o item da §7, agora com evidência completa em vez de suspeita.
+
+### 18.4 E destrava a memória
+
+Com a causa conhecida, o experimento do `MALLOC_ARENA_MAX` fica simples: **num
+dia sem promoção que toque código de worker, a frota fica de pé por horas** — e
+aí a medição vale. Não precisa esperar nada acontecer; precisa só de um dia sem
+deploy de worker.
+
+O interruptor segue pronto, desligado, em produção desde 17:19 UTC.
