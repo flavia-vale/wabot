@@ -1556,3 +1556,59 @@ nada; o que custa são os três da tabela.
 
 E **o experimento do arena continua segurado** até a frota ficar de pé por
 algumas horas seguidas — hoje ela não ficou.
+
+## 17. OOM descartado. São dois problemas, não um — e sobrou uma hipótese checável
+
+`dmesg`, `/var/log/kern.log` e `journalctl -k` **não devolveram nada**. Nenhum
+`Killed process`, nenhum `out of memory`.
+
+**Então:**
+
+- **não foi crash** (log de erro só tem `Bad MAC`, ruído conhecido);
+- **não foi deploy** (última promoção às 19:46; o reinício foi ~22:44);
+- **não foi o sistema matando por memória.**
+
+E isso **desfaz a hipótese unificadora da §16**: memória e reinício são **dois
+problemas separados**. O consumo "voltar ao mesmo lugar" continua sem explicação
+confirmada — mas não é o kernel cortando a frota.
+
+### 17.1 A hipótese que sobra, e ela é barata de checar
+
+`ecosystem.config.cjs:119` — o `bot-supervisor` tem
+**`max_memory_restart: '400M'`**. O próprio PM2 reinicia o processo quando ele
+passa disso. O supervisor foi medido em 113 MB, mas um pico passageiro acima de
+400 MB dispararia o reinício **sem deixar rastro no log da aplicação** — porque
+quem reinicia é o PM2, não o código.
+
+Isso encaixa com tudo que foi observado: sem stack, sem OOM do kernel, sem
+deploy, e mesmo assim o processo renasce.
+
+**O PM2 registra isso no log DELE**, não no log do app:
+
+```bash
+grep -iE "bot-supervisor" ~/.pm2/pm2.log | tail -40
+grep -iE "memory|restart|stopping|exceed" ~/.pm2/pm2.log | tail -30
+```
+
+| O que vier | O que é |
+|---|---|
+| `exceeded memory limit` / `max memory reached` para `bot-supervisor` | **é o teto de 400 MB.** Tem conserto simples e conhecido, e explica os reinícios sem deploy. |
+| só linhas de `stopping`/`starting` sem motivo | alguém ou algo chamou `pm2 restart`. Vale olhar histórico de comandos. |
+| nada sobre o supervisor | segue sem explicação — e aí vale instrumentar antes de adivinhar de novo. |
+
+⚠️ **Se for o teto de 400 MB, NÃO subir o número antes de medir o supervisor por
+algumas horas.** Subir teto é mudança memory-heavy (REGRA #1) e, se o supervisor
+estiver de fato crescendo, o teto está fazendo o trabalho dele — o problema seria
+o crescimento, não o teto.
+
+### 17.2 Onde a investigação de memória parou
+
+| Item | Estado |
+|---|---|
+| `MALLOC_ARENA_MAX` | interruptor pronto, **desligado**, em produção desde 14:18 |
+| experimento | **segurado** — precisa de frota assentada por algumas horas, e hoje ela reiniciou três vezes |
+| o que falta para destravar | descobrir por que o supervisor reinicia sem deploy (§17.1) |
+| medidor | pronto, versionado, imprime a idade da frota e recusa comparação inválida |
+
+Nada disso é urgente: **nada está quebrado**. A frota está no ar, as sessões
+conectadas, e o servidor tem folga física (4,9 GB livres, swap parado).
