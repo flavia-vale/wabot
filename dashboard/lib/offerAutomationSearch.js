@@ -74,7 +74,11 @@ export function normalizeSearchChoice({ listType, sortType } = {}) {
   }
 }
 
-// "Priorizar comissão extra" não é um filtro a mais: é uma SEGUNDA ordem,
+// "Priorizar comissão extra" é LEGADO: automação nova não nasce com ele, mas
+// nas que já tinham ele continua valendo — e é por esta etiqueta que a cliente
+// descobre que a opção existe e pode ser desligada.
+//
+// Não é um filtro a mais: é uma SEGUNDA ordem,
 // aplicada por cima da que a cliente escolheu. resolveOffers faz duas buscas e
 // devolve [...ofertasComComissãoExtra, ...restantes] — cada grupo ordenado pela
 // escolha dela, mas a concatenação é quem decide quem sai. Com 1 produto por

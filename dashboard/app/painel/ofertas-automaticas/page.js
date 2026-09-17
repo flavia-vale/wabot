@@ -111,7 +111,6 @@ const emptyForm = {
   minDiscountPct: 20,
   listType: DEFAULT_SEARCH_POOL,
   sortType: DEFAULT_SEARCH_ORDER,
-  prioritizeAMS: false,
   publicationMode: 'direct',
   reviewTargetSize: 10,
   instagramDestinationIds: [],
@@ -454,19 +453,23 @@ export default function OfertasAutomaticasPage() {
             <select className="pnl-input" value={form.sortType} onChange={(e) => setForm((f) => ({ ...f, sortType: Number(e.target.value) }))}>
               {SEARCH_ORDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <p className="pnl-hint" style={{ marginTop: 4 }}>
-              Isso ordena o que a escolha de cima trouxe — não amplia a busca.
-              {form.prioritizeAMS ? ' Atenção: com a opção de comissão extra marcada abaixo, essas ofertas passam na frente desta ordem.' : ''}
-            </p>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>Isso ordena o que a escolha de cima trouxe — não amplia a busca.</p>
           </div>
 
-          <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
-            <input type="checkbox" checked={form.prioritizeAMS} onChange={(e) => setForm((f) => ({ ...f, prioritizeAMS: e.target.checked }))} style={{ marginTop: 2 }} />
-            <span>
-              <span style={{ display: 'block', color: 'var(--ink)' }}>Priorizar ofertas com comissão extra do vendedor</span>
-              <span className="pnl-hint">O robô faz duas buscas e as ofertas com comissão extra saem na frente, antes da ordem escolhida acima. Enviando poucos produtos por vez, pode ser que só elas saiam.</span>
-            </span>
-          </label>
+          {/* Opção antiga: aparece SÓ em automação que já está com ela ligada,
+              e só para desligar. Automação nova nunca nasce com isso, então
+              este bloco some da tela assim que a cliente desmarcar e salvar. */}
+          {form.prioritizeAMS && (
+            <div className="pnl-note-box">
+              <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
+                <input type="checkbox" checked onChange={() => setForm((f) => ({ ...f, prioritizeAMS: false }))} style={{ marginTop: 2 }} />
+                <span>
+                  <span style={{ display: 'block', color: 'var(--ink)' }}>Ofertas com comissão extra do vendedor passam na frente</span>
+                  <span className="pnl-hint">Opção antiga, que continua valendo nesta automação. Ela passa na frente da ordem escolhida acima — enviando poucos produtos por vez, pode ser que só essas ofertas saiam. Desmarque e salve para usar só a ordem que você escolheu. Depois de desligar, ela não volta.</span>
+                </span>
+              </label>
+            </div>
+          )}
 
           {saveError && <div className="pnl-note-box is-error" role="alert">{saveError}</div>}
 
@@ -592,7 +595,7 @@ export default function OfertasAutomaticasPage() {
                   <p className="pnl-hint">{describeSearchChoice(a)}</p>
                   <p className="pnl-hint">Modelo: {templateName(templates, a.templateKey || 'automatico_classico')} · {nextSendLabel(a.lastSentAt, a.intervalMinutes, a.dailyRunTime)}</p>
                   {a.publicationMode === 'review' && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>👀 Revisão antes de publicar</span>}
-                  {a.prioritizeAMS && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>⚡ Comissão extra priorizada</span>}
+                  {a.prioritizeAMS && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>⚡ Comissão extra priorizada (opção antiga)</span>}
                 </div>
                 <button
                   type="button"

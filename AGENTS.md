@@ -2217,21 +2217,42 @@ cafeteira fora/cápsula dentro, mesa fora/cavalete dentro).
   (`reviewDiscoveryService.js`). Forçar fazia sentido enquanto a escolha não
   existia na tela; com ela, virou um jeito silencioso de descartar o que a
   cliente pediu.
-- **"Priorizar comissão extra" (`prioritizeAMS`) passa POR CIMA da ordem
-  escolhida — não é um filtro a mais.** `resolveOffers` faz DUAS buscas e devolve
-  `[...comissãoExtra, ...restantes]`; cada grupo respeita o `sortType`, mas é a
-  concatenação que decide quem sai, e `runAutomation` manda os primeiros
-  `offersPerSend`. Com 1 produto por envio e qualquer oferta de comissão extra
-  disponível, **ela sai sempre** — "mais baratos primeiro" chega a publicar o
-  item de R$500 no lugar do de R$10 (medido no teste). Isso é o que a opção
-  promete pelo nome, então não virar bug a ser "consertado": o conserto é dizer
-  na tela e no card. As duas buscas usam o MESMO `listType`/`sortType` — se a
-  segunda caísse no padrão, marcar a prioridade desfaria em silêncio a escolha
-  de busca ampla para metade dos candidatos.
+- **O botão de LIGAR "Priorizar ofertas com comissão extra do vendedor" saiu da
+  tela (2026-09-17), mas o campo NÃO foi desligado.** Ele não é um filtro a
+  mais: `resolveOffers` faz DUAS buscas e devolve `[...comissãoExtra,
+  ...restantes]`, e como `runAutomation` manda os primeiros `offersPerSend`,
+  com 1 produto por envio a oferta de comissão extra sai SEMPRE, por cima da
+  ordem escolhida — "mais baratos primeiro" chega a publicar o item de R$500 no
+  lugar do de R$10 (medido em teste).
+- **A regra é grandfathering, e ela é a invariante desta seção: automação que já
+  existe não pode mudar de comportamento sozinha no deploy.** Os dois grupos:
+  quem **nunca marcou** não muda nada (uma busca, na ordem escolhida); quem
+  **já tinha marcado** continua enviando exatamente igual. Isso sai de graça das
+  rotas — o `POST` grava `Boolean(prioritizeAMS ?? false)`, então automação nova
+  nasce sem a opção, e o `PUT` só escreve o campo quando ele vem no corpo, então
+  a tela deixar de enviá-lo PRESERVA o valor de quem tem.
+- **O controle voltou à tela SÓ como saída**: renderizado apenas quando
+  `form.prioritizeAMS` já é verdadeiro e o clique só escreve `false`. Não existe
+  caminho para ligar — nem na tela nova, nem em automação nova. Teste falha se
+  `prioritizeAMS: e.target.checked` voltar, se o campo entrar no `emptyForm`, ou
+  se `openEdit` parar de carregar o valor salvo (sem ele a cliente ficaria presa
+  na opção, sem conseguir desligar).
+- **Enquanto o campo agir, o card DIZ** (`describeSearchChoice` + etiqueta
+  "⚡ Comissão extra priorizada (opção antiga)"). É por ali que a cliente
+  descobre que a opção existe e pode ser desligada; prometer "mais baratos"
+  enquanto a comissão extra fura a fila seria mentir na etiqueta.
+- ⚠️ **NÃO fazer migration convertendo quem tinha a opção para "maior comissão
+  primeiro" (`sortType=5`).** Além de mudar o envio dessas contas sem ninguém
+  pedir, jogaria justamente elas mais fundo na combinação que mais reproduz a
+  queixa original (comissão em cima de comissão). Quem quiser trocar, desmarca e
+  escolhe a ordem — decisão da cliente, não do deploy.
 - ⚠️ **Prioridade de comissão extra + "só maior comissão" se somam** e empurram
   a busca para o acessório barato duas vezes — é a combinação que mais reproduz
   a queixa original. Ao atender um relato de "só vem acessório", conferir as
-  DUAS opções, nunca só a palavra-chave.
+  DUAS coisas, nunca só a palavra-chave.
+- Quantas contas ainda estão no legado (read-only, no diretório do ambiente):
+  `sqlite3 prisma/prod.db "SELECT COUNT(*) FROM OfferAutomation WHERE prioritizeAMS = 1;"`
+  Zerou? Aí sim o caminho das duas buscas pode ser removido de vez.
 - **Valor inválido cai no padrão**, nunca derruba a tela: automação antiga com
   campo vazio precisa continuar abrindo para edição.
 - Linguagem leiga: nada de `listType`, `sortType`, `productOfferV2` na tela —

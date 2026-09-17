@@ -92,12 +92,10 @@ test('o formulário oferece as duas escolhas e as carrega ao editar', async () =
   assert.match(source, /\{describeSearchChoice\(a\)\}/)
 })
 
-test('priorizar comissão extra passa POR CIMA da ordem escolhida', async () => {
-  // Não é um filtro a mais: resolveOffers faz duas buscas e concatena
-  // [...comissãoExtra, ...restantes]. Cada grupo respeita o sortType, mas a
-  // concatenação decide quem sai — e runAutomation manda os primeiros
-  // `offersPerSend`. Com 1 por envio, havendo qualquer oferta com comissão
-  // extra, ela sai sempre, mesmo com "mais baratos primeiro" escolhido.
+test('quem JÁ tem comissão extra ligada continua enviando igual', async () => {
+  // A opção saiu da tela, mas não pode sair do envio: automação que já estava
+  // com ela precisa entregar exatamente o que entregava antes, senão o robô
+  // dessas contas muda sozinho no deploy.
   const catalogo = {
     ams: [{ itemId: 1, productName: 'Acessório com comissão extra', price: 500, priceDiscountRate: 50 }],
     normal: [{ itemId: 2, productName: 'Produto barato', price: 10, priceDiscountRate: 50 }],
@@ -113,17 +111,15 @@ test('priorizar comissão extra passa POR CIMA da ordem escolhida', async () => 
     sentItemIds: [], creds: {}, fetchOffersFn: buscar,
   })
 
-  const semPrioridade = await rodar(false)
-  assert.equal(semPrioridade.offers[0].productName, 'Produto barato')
+  const comOpcao = await rodar(true)
+  assert.equal(comOpcao.offers[0].productName, 'Acessório com comissão extra')
 
-  const comPrioridade = await rodar(true)
-  assert.equal(comPrioridade.offers[0].productName, 'Acessório com comissão extra')
+  // E quem NUNCA marcou também não muda: uma busca só, na ordem escolhida.
+  const semOpcao = await rodar(false)
+  assert.equal(semOpcao.offers[0].productName, 'Produto barato')
 })
 
-test('a prioridade de comissão extra não estreita o conjunto escolhido', async () => {
-  // As DUAS buscas precisam sair com o mesmo listType/sortType da cliente —
-  // se a segunda caísse no padrão, marcar a prioridade desfaria em silêncio a
-  // escolha de "busca ampla" para metade dos candidatos.
+test('as duas buscas do legado saem com a MESMA escolha da cliente', async () => {
   const chamadas = []
   await resolveOffers({
     automation: { keyword: 'x', minDiscountPct: 0, offersPerSend: 1, sortType: 5, listType: 0, page: 1, prioritizeAMS: true },
@@ -138,7 +134,7 @@ test('a prioridade de comissão extra não estreita o conjunto escolhido', async
   }
 })
 
-test('o card não promete uma ordem que a comissão extra vai furar', () => {
+test('o card continua dizendo quando a comissão extra fura a ordem', () => {
   assert.equal(describeSearchChoice({ listType: 0, sortType: 4 }), 'Busca: busca ampla · mais baratos')
   assert.equal(
     describeSearchChoice({ listType: 0, sortType: 4, prioritizeAMS: true }),
@@ -146,10 +142,22 @@ test('o card não promete uma ordem que a comissão extra vai furar', () => {
   )
 })
 
-test('a tela avisa que a comissão extra fura a ordem, nos dois campos', async () => {
+test('automação NOVA nunca nasce com a comissão extra ligada', async () => {
   const source = await page()
-  assert.match(source, /essas ofertas passam na frente desta ordem/)
-  assert.match(source, /saem na frente, antes da ordem escolhida acima/)
-  // O aviso só aparece quando a opção está de fato marcada.
-  assert.match(source, /form\.prioritizeAMS \?/)
+  // O campo não pode estar no formulário vazio: é isso que faz o POST gravar
+  // false e a opção deixar de existir para quem chega agora.
+  const emptyForm = source.slice(source.indexOf('const emptyForm = {'), source.indexOf('function nextSendLabel'))
+  assert.doesNotMatch(emptyForm, /prioritizeAMS/)
+})
+
+test('o controle só aparece para desligar, nunca para ligar', async () => {
+  const source = await page()
+  // Renderizado sob a condição de já estar ligado, e o clique só escreve false.
+  assert.match(source, /\{form\.prioritizeAMS && \(/)
+  assert.match(source, /onChange=\{\(\) => setForm\(\(f\) => \(\{ \.\.\.f, prioritizeAMS: false \}\)\)\}/)
+  assert.doesNotMatch(source, /prioritizeAMS: e\.target\.checked/)
+  // Ao editar, precisa carregar o valor salvo — sem isso o checkbox nunca
+  // apareceria para quem tem a opção, e ela ficaria presa nela.
+  assert.match(source, /prioritizeAMS: a\.prioritizeAMS \?\? false/)
+  assert.match(source, /opção antiga/i)
 })
