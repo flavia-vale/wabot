@@ -198,6 +198,7 @@ export default function OfertasAutomaticasPage() {
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
       ...normalizeSearchChoice(a),
+      prioritizeAMS: a.prioritizeAMS ?? false,
       publicationMode: a.publicationMode || 'direct',
       reviewTargetSize: a.reviewTargetSize || 10,
       instagramDestinationIds: a.instagramDestinationIds || [],
@@ -455,6 +456,21 @@ export default function OfertasAutomaticasPage() {
             <p className="pnl-hint" style={{ marginTop: 4 }}>Isso ordena o que a escolha de cima trouxe — não amplia a busca.</p>
           </div>
 
+          {/* Opção antiga: aparece SÓ em automação que já está com ela ligada,
+              e só para desligar. Automação nova nunca nasce com isso, então
+              este bloco some da tela assim que a cliente desmarcar e salvar. */}
+          {form.prioritizeAMS && (
+            <div className="pnl-note-box">
+              <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
+                <input type="checkbox" checked onChange={() => setForm((f) => ({ ...f, prioritizeAMS: false }))} style={{ marginTop: 2 }} />
+                <span>
+                  <span style={{ display: 'block', color: 'var(--ink)' }}>Ofertas com comissão extra do vendedor passam na frente</span>
+                  <span className="pnl-hint">Opção antiga, que continua valendo nesta automação. Ela passa na frente da ordem escolhida acima — enviando poucos produtos por vez, pode ser que só essas ofertas saiam. Desmarque e salve para usar só a ordem que você escolheu. Depois de desligar, ela não volta.</span>
+                </span>
+              </label>
+            </div>
+          )}
+
           {saveError && <div className="pnl-note-box is-error" role="alert">{saveError}</div>}
 
           <div className="pnl-toolbar">
@@ -579,6 +595,7 @@ export default function OfertasAutomaticasPage() {
                   <p className="pnl-hint">{describeSearchChoice(a)}</p>
                   <p className="pnl-hint">Modelo: {templateName(templates, a.templateKey || 'automatico_classico')} · {nextSendLabel(a.lastSentAt, a.intervalMinutes, a.dailyRunTime)}</p>
                   {a.publicationMode === 'review' && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>👀 Revisão antes de publicar</span>}
+                  {a.prioritizeAMS && <span className="pnl-tag is-flight" style={{ display: 'inline-block', marginTop: 6 }}>⚡ Comissão extra priorizada (opção antiga)</span>}
                 </div>
                 <button
                   type="button"

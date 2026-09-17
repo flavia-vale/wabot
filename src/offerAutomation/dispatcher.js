@@ -190,18 +190,33 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
     isKeySeller: automation.isKeySeller ?? false,
   }
 
-  // `automation.prioritizeAMS` está DORMENTE desde 2026-09-17 e é ignorado aqui
-  // de propósito — coluna preservada, valor nunca lido no caminho de envio, o
-  // mesmo padrão já usado em outros campos aposentados. Ele fazia uma SEGUNDA
-  // busca e devolvia [...comissãoExtra, ...restantes], o que passava por cima
-  // da ordem escolhida pela cliente — com 1 produto por envio, a oferta de
-  // comissão extra saía sempre. Com a escolha de ordem na tela, "maior comissão primeiro"
-  // (sortType 5) é como ela pede isso, de um jeito que ela vê e desfaz.
-  // Continuar aplicando o campo com o botão fora da tela recriaria exatamente o
-  // ponto cego que a escolha veio corrigir. Efeito colateral: uma chamada à
-  // Shopee por execução em vez de duas.
-  const result = await fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
-  return { ...result, offers: result.offers.filter(offer => resolveOfferPrice(offer) > 0) }
+  // `prioritizeAMS` é LEGADO desde 2026-09-17: o botão de LIGAR saiu da tela e
+  // automação nova nunca nasce com ele. Quem JÁ tinha marcado continua exatamente
+  // como estava — este caminho não pode ser removido enquanto existir automação
+  // com o campo ligado, senão o envio dessas contas mudaria sozinho no deploy.
+  //
+  // Não é um filtro a mais: é uma SEGUNDA ordem. Faz duas buscas e devolve
+  // [...comissãoExtra, ...restantes]; como `runAutomation` manda os primeiros
+  // `offersPerSend`, com 1 produto por envio a oferta de comissão extra sai
+  // sempre, por cima da ordem escolhida. Por isso a tela continua mostrando o
+  // efeito no card e oferecendo o DESLIGAMENTO — o que ela não oferece mais é
+  // ligar.
+  if (!automation.prioritizeAMS) {
+    const result = await fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
+    return { ...result, offers: result.offers.filter(offer => resolveOfferPrice(offer) > 0) }
+  }
+
+  const { offers: amsOffers, rawCount: amsRawCount } = await fetchOffersFn({ ...base, isAMSOffer: true, excludeItemIds: sentItemIds })
+  const amsItemIds = amsOffers.map(o => String(o.itemId))
+  const { offers: regularOffers, rawCount: regularRawCount } = await fetchOffersFn({
+    ...base,
+    isAMSOffer: false,
+    excludeItemIds: [...sentItemIds, ...amsItemIds],
+  })
+  return {
+    offers: [...amsOffers, ...regularOffers].filter(offer => resolveOfferPrice(offer) > 0),
+    rawCount: amsRawCount + regularRawCount,
+  }
 }
 
 export async function runAutomation(automation, {

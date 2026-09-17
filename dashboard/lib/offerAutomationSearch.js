@@ -74,12 +74,23 @@ export function normalizeSearchChoice({ listType, sortType } = {}) {
   }
 }
 
-// A etiqueta descreve a busca inteira, e por isso não cita mais "comissão
-// extra": desde 2026-09-17 esse campo está dormente e não age em busca nenhuma
-// (ver resolveOffers). Anunciar no card um efeito que não acontece mais seria o
-// mesmo erro ao contrário — a etiqueta tem que bater com o que o robô faz.
+// "Priorizar comissão extra" é LEGADO: automação nova não nasce com ele, mas
+// nas que já tinham ele continua valendo — e é por esta etiqueta que a cliente
+// descobre que a opção existe e pode ser desligada.
+//
+// Não é um filtro a mais: é uma SEGUNDA ordem,
+// aplicada por cima da que a cliente escolheu. resolveOffers faz duas buscas e
+// devolve [...ofertasComComissãoExtra, ...restantes] — cada grupo ordenado pela
+// escolha dela, mas a concatenação é quem decide quem sai. Com 1 produto por
+// envio, havendo qualquer oferta com comissão extra, é sempre ela que sai:
+// "mais baratos primeiro" pode publicar o item de R$500 no lugar do de R$10.
+// Por isso o card precisa dizer as duas coisas — dizer só "mais baratos"
+// enquanto a comissão extra passa na frente seria mentir na etiqueta.
 export function describeSearchChoice(automation = {}) {
   const pool = searchPoolOption(automation.listType)
   const order = searchOrderOption(automation.sortType)
-  return `Busca: ${pool.short} · ${order.short}`
+  const ordem = automation.prioritizeAMS
+    ? `comissão extra na frente, depois ${order.short}`
+    : order.short
+  return `Busca: ${pool.short} · ${ordem}`
 }
