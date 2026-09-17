@@ -1129,9 +1129,9 @@ duas estarão no fundo da curva.
 
 ### 10.4 O experimento que de fato responde: comparar CURVAS, não instantes
 
-⚠️ **SUPERADO pela §12** — a medição de 17:52 mostrou que a frota satura em
-menos de uma hora, não em dias. O experimento ficou muito mais barato: comparar
-PLATÔ com PLATÔ, no mesmo dia. O texto abaixo fica como registro do raciocínio.
+⚠️ **REVISADO pela §12.3** — a memória parece responder a TRÁFEGO, não a tempo
+de vida do processo. A comparação que vale é **mesmo horário do dia**, antes e
+depois. O texto abaixo fica como registro do raciocínio.
 
 A frota acabou de reiniciar. **Isso é um ponto de partida limpo e raro.** O
 plano que responde a pergunta sem depender de staging:
@@ -1237,52 +1237,69 @@ ninguém ler a coluna `origens = 1` como problema.
 Seis alavancas examinadas, três mortas com dado, uma viva. É o resultado
 esperado de medir antes de mexer.
 
-## 12. A memória SATURA em minutos, não cresce por dias (2026-09-17)
+## 12. O interruptor JÁ ESTÁ em produção, e a leitura de saturação estava errada
 
-Quatro leituras, e a terceira muda o experimento inteiro:
+### 12.1 Correção 1: não há merge a fazer — o código já está em `main`
 
-| quando | robôs | PSS | arena | % | por robô |
-|---|---:|---:|---:|---:|---:|
-| 16/09 | 41 | 8.702 | 5.069 | 58% | 212 |
-| 17/09 17:13 | 46 | 6.815 | 3.380 | 50% | 148 |
-| 17/09 17:28 | 45 | 6.588 | 3.222 | 49% | 146 |
-| **17/09 17:52** | 45 | **8.701** | **4.930** | **57%** | **193** |
+`resolveWorkerSpawnEnv` entrou em `develop` na PR #1717 (14:14) e em `main` na
+promoção #1718 (14:18). **Produção já tem o interruptor, desligado**, que é
+exatamente o padrão desenhado: sem env, o fork fica byte a byte como sempre foi.
 
-**Em 24 minutos a arena subiu 1.708 MiB — 53%.** E o total voltou a 8.701 MiB
-contra os 8.702 MiB de ontem: **um MiB de diferença.**
+Isso simplifica o passo D do runbook: **não precisa mergear nada.** Aplicar em
+produção é escrever a variável no `.env` e reiniciar o supervisor. Um reinício.
 
-### 12.1 O que isso significa
+E explica o reinício da frota que eu atribuí a "um deploy": foi **este** deploy,
+às 14:18 — o diff tocou `src/core/`, que casa com `WORKER_CODE_PATHS_RE`. Os
+dois deploys seguintes (14:51 e 17:43) **não** tocaram código de worker e não
+reiniciaram nada.
 
-**A frota reiniciou, mergulhou para 6,6 GB e voltou ao MESMO patamar em menos de
-uma hora.** Três consequências, e elas se contradizem com o que eu tinha
-escrito:
+### 12.2 Correção 2: eu li a saturação errado
 
-1. **Não é vazamento lento.** Vazamento não volta ao valor exato em 40 minutos —
-   ele passaria direto. Isto é **o conjunto de trabalho em regime**: a frota
-   opera em ~8,7 GB, e reiniciar só a tira de lá temporariamente.
-2. **A §10.4 (comparar curvas por 2 dias) está errada, e para melhor.** Se
-   satura em menos de uma hora, o experimento custa **uma hora, não dois dias**:
-   aplicar, esperar saturar, medir. Resposta no mesmo dia.
-3. **"Conter crescimento" não é o quadro.** Não está crescendo sem limite; está
-   num platô. A pergunta é se `MALLOC_ARENA_MAX=2` **baixa o platô**.
+Com o horário certo do reinício (14:18, não ~17:00), a série é outra:
 
-⚠️ **São três pontos e um intervalo.** O de 17:52 pode ser um pico de tráfego, e
-não o platô. O que confirma é continuar medindo por algumas horas: se ficar
-oscilando em torno de 8,7 GB, é platô; se passar de 10 GB, era pico e o assunto
-volta a ser crescimento.
+| quando | idade da frota | PSS | arena | por robô |
+|---|---|---:|---:|---:|
+| 17:13 | 2h55 | 6.815 | 3.380 | 148 |
+| 17:28 | 3h10 | 6.588 | 3.222 | 146 |
+| **17:52** | **3h34** | **8.701** | **4.930** | **193** |
 
-### 12.2 O experimento revisado, e é barato
+**Não é saturação gradual: é um degrau.** A frota ficou estável em ~146 MiB por
+robô durante três horas e subiu 32% em 24 minutos. Idade de processo não explica
+isso — três horas de estabilidade e um salto num quarto de hora.
 
-**Fase 1 (hoje, 2-3 horas, sem mudar nada):** `bash /tmp/medir.sh` de meia em
-meia hora. Confirma o platô e onde ele fica. Isso já está em andamento.
+**A explicação mais provável é tráfego** (17:30-18:00 é horário nobre de grupo
+de ofertas), e ela é coerente com fragmentação: a memória se expande sob carga e
+**não volta** quando a carga passa. Mas com três pontos e um intervalo, isso é
+hipótese, não conclusão.
 
-**Fase 2 (janela anunciada):** aplicar em produção, esperar a frota saturar
-(~1 h pela evidência de hoje) e medir. **Comparar platô com platô**, que é a
-comparação que não depende de idade de processo. Se o platô com
-`MALLOC_ARENA_MAX=2` ficar abaixo de 8,7 GB, a alavanca funciona — e o quanto
-abaixo é a resposta.
+⚠️ **Retiro o que escrevi de que "satura em menos de uma hora".** Era inferência
+a partir de um horário de reinício que eu deduzi errado. Fica registrado porque
+esse é o modo de erro que mais custou nesta investigação inteira: concluir sobre
+uma série temporal sem saber a que horas o relógio começou.
 
-A saturação rápida é o que torna isso decidível no mesmo dia, em vez de dois.
+### 12.3 O que isso impõe ao experimento
+
+Se a memória responde a **tráfego** e não a tempo de vida, então comparar
+"antes" e "depois" só vale **no mesmo horário do dia**. Medir às 15h sem a
+variável e às 18h com ela compararia carga leve com carga pesada, e o resultado
+não significaria nada — em qualquer direção.
+
+**Protocolo que funciona:**
+
+1. Pegar a curva de HOJE/amanhã sem a variável, medindo de hora em hora,
+   marcando o horário. Isso já está em andamento.
+2. Aplicar a variável.
+3. Medir **nos mesmos horários** do dia seguinte.
+4. Comparar hora com hora, não total com total.
+
+O `bash /tmp/medir.sh historico` já guarda o carimbo de tempo de cada medida,
+então isso não custa trabalho extra — só exige medir em horas parecidas.
+
+**Confirmar o horário do reinício** (é o dado que faltava e que me fez errar):
+
+```bash
+pm2 describe bot-supervisor | grep -iE "uptime|restart|created"
+```
 
 ## 13. O achado que vale mais que toda a investigação de RAM (2026-09-17)
 
