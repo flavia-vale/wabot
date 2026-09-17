@@ -2190,11 +2190,34 @@ sempre os validou e a `search-preview` sempre os aceitou — **só a tela nunca 
 ofereceu**. Toda automação nascia com o padrão da rota: `sortType=2` (mais
 vendidos) **dentro de** `listType=1` (maior comissão).
 
-Produto caro paga comissão MENOR, então é justamente ele quem a lista de maior
-comissão deixa de fora; o acessório barato de 15% fica. A ordenação por mais
-vendidos ordenava um conjunto do qual o produto procurado nunca fazia parte —
-os três exemplos dela são o mesmo caso três vezes (máquina fora/capa dentro,
-cafeteira fora/cápsula dentro, mesa fora/cavalete dentro).
+⚠️ **A primeira explicação estava ERRADA e foi derrubada por medição
+(2026-09-17).** Escrevemos aqui e na tela que "a lista de maior comissão deixa
+o produto caro de fora". Rodado em produção com a chave real
+(`scripts/diag-busca-shopee.mjs`), para "eletrodoméstico Brastemp", as **TRÊS
+listas devolveram os MESMOS 50 produtos, na MESMA ordem**: `listType` não
+filtrou nada. Não repetir essa causa.
+
+**Quem separa o produto do acessório é a ORDEM.** Medido em
+"maquina de lavar Brastemp", dentro da mesma lista:
+
+| Ordem | O que veio nos 5 primeiros |
+|---|---|
+| mais vendidos (`sortType=2`, nosso padrão) | cinco capas de máquina |
+| maior comissão (`sortType=5`) | cinco capas, todas a 43% de comissão |
+| **mais caros (`sortType=3`)** | **as máquinas de verdade: R$ 3.999, R$ 3.759, R$ 3.599, R$ 3.477** |
+
+A razão está nos números da mesma saída: o acessório vende muito mais **e**
+paga muito mais comissão (capa 43%, cápsula 23%; a máquina 4-7%, a cafeteira
+3%). Então vendas e comissão empurram o acessório para cima — só o preço traz o
+aparelho. **A escala de `commissionRate` é fração** (`0.23` = 23%), medida
+aqui; antes não estava verificada em lugar nenhum do repositório.
+
+⚠️ Segundo achado da medição: **"eletrodoméstico Brastemp" não trouxe máquina de
+lavar em NENHUMA das seis combinações** — só capa e chave de fenda —, enquanto
+"maquina de lavar Brastemp" trouxe. Categoria genérica não acha o produto no
+catálogo de afiliado; nem lista nem ordem resolvem isso. Ao atender "só vem
+acessório", conferir TRÊS coisas: a palavra-chave (nome do produto, não
+categoria), a ordem, e a comissão extra abaixo.
 
 | Peça | Onde |
 |---|---|
@@ -2210,9 +2233,17 @@ cafeteira fora/cápsula dentro, mesa fora/cavalete dentro).
 - **A busca escolhida aparece no card SEMPRE, inclusive quando é o padrão**
   (`describeSearchChoice`). A queixa não foi "a opção está errada", foi "eu não
   sabia que existia uma opção" — esconder no padrão recria o mesmo ponto cego.
-- **A opção de maior comissão DIZ que é ela quem deixa o produto caro de fora.**
-  Sem esse aviso a cliente troca a palavra-chave para sempre sem nunca chegar no
-  que estava filtrando — foi exatamente o que aconteceu por três buscas.
+- **A dica que resolve a queixa mora na ORDEM, não na lista**, e por isso a
+  ordem vem primeiro no formulário e a lista ficou recolhida em "avançado".
+  Cada opção de ordem tem a sua dica: "mais caros primeiro" diz que traz o
+  APARELHO em vez do acessório; "mais vendidos" e "maior comissão" dizem que
+  trazem o acessório. Sem isso a cliente troca a palavra-chave para sempre sem
+  nunca chegar no que estava filtrando — foi o que aconteceu por três buscas.
+- **Os rótulos da lista NÃO podem voltar a prometer filtro** ("só maior
+  comissão", "só os que mais vendem"): a medição mostrou que ele não acontece,
+  e a promessa faz a cliente mexer no campo errado. O campo continua na tela
+  porque a medição cobriu duas palavras-chave, não todas — tirá-lo seria
+  decidir por ela sem dado que sustente. Teste falha se a promessa voltar.
 - **A fila de revisão não força mais `sortType: 2`**
   (`reviewDiscoveryService.js`). Forçar fazia sentido enquanto a escolha não
   existia na tela; com ela, virou um jeito silencioso de descartar o que a
@@ -2270,22 +2301,19 @@ gravar — é por ali que se compara as combinações antes de decidir. Ele exis
 desde sempre e **nenhuma tela o chama**; ligar esse botão no painel é o passo
 seguinte natural desta mudança.
 
-⚠️ **O que cada `listType` devolve NÃO está verificado — e o nosso padrão é o
-valor que a Shopee não documenta.** O comentário em
-`src/api/routes/offerAutomation.js` ("0=Recomendados 1=Maior comissão 2=Melhor
-desempenho") não tem fonte. A documentação pública descreve `sortType` 1 a 5
-(relevância, vendas, preço ↑, preço ↓, comissão), que **batem** com o código, e
-descreve `listType` 0, 2, 3, 4 e 5 — **`listType: 1`, que é o nosso padrão em
-produção, não aparece em lugar nenhum**. Ele parece ter sido escolhido na
-prática: o comentário de `shopeeOffers.js` diz que `listType=2` era estreito
-demais e produzia `no_offers_found` falso.
+⚠️ **`listType` não faz o que o nosso comentário diz — MEDIDO, não suposto.** O
+comentário em `src/api/routes/offerAutomation.js` ("0=Recomendados 1=Maior
+comissão 2=Melhor desempenho") não tem fonte, e a documentação pública da
+Shopee sequer descreve `listType: 1`, que é o nosso padrão em produção (descreve
+0, 2, 3, 4 e 5). A medição de 2026-09-17 fechou o caso: nas duas palavras-chave
+testadas, as três listas devolveram os mesmos 50 produtos na mesma ordem.
+`sortType` 1 a 5 (relevância, vendas, preço ↑, preço ↓, comissão) **bate** com o
+código e é o eixo que muda o resultado.
 
-Consequência: os rótulos das listas na tela e a explicação de que "a lista de
-maior comissão deixa o produto caro de fora" são **hipótese**, não fato — não
-repetir para a cliente como se fosse causa provada. Mudar o padrão mexeria na
-busca de TODA automação existente, então a decisão pede medição, e medir é o
-que `scripts/diag-busca-shopee.mjs` faz (read-only, com a chave real da conta,
-no diretório do ambiente):
+**Não trocar o padrão de `listType` para "consertar" busca**: não é ele que
+filtra, e mexer nele mudaria a busca de toda automação existente sem ganho
+medido. O que a cliente precisa mudar é a ordem. Para medir de novo (read-only,
+com a chave real da conta, no diretório do ambiente):
 
 ```bash
 cd ~/wabot && node scripts/diag-busca-shopee.mjs <email> "eletrodoméstico Brastemp"
@@ -2295,8 +2323,9 @@ cd ~/wabot && node scripts/diag-busca-shopee.mjs <email> "cafeteira dolce gusto"
 Sem `--lista`, compara as TRÊS listas com a mesma ordem; com `--lista=N`,
 compara as CINCO ordens dentro daquela lista. `--desconto=0` é o padrão de
 propósito (mostra a lista crua, antes do filtro da automação). A comissão sai
-**crua**: a escala que a Shopee usa nesse campo não está verificada em lugar
-nenhum do repositório, e converter por palpite imprimiria "1500%".
+**crua** — a escala é **fração** (`0.23` = 23%), confirmada pela medição de
+2026-09-17; ela continua saindo crua de propósito, para a próxima rodada
+conferir em vez de confiar nesta linha.
 
 ⚠️ **`productCatId` (filtro por categoria) existe na API e nunca foi usado** —
 é o parâmetro com mais cara de resolver a queixa original ("só vem acessório"),
