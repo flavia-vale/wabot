@@ -37,9 +37,9 @@ test('valor inválido ou ausente cai no padrão em vez de derrubar a tela', () =
 test('a busca escolhida aparece SEMPRE no card, inclusive quando é o padrão', () => {
   // A queixa que originou isto não foi "a opção está errada", foi "eu não
   // sabia que existia" — esconder no padrão recria o mesmo ponto cego.
-  assert.equal(describeSearchChoice({ listType: 1, sortType: 2 }), 'Busca: só maior comissão · mais vendidos')
-  assert.equal(describeSearchChoice({ listType: 0, sortType: 2 }), 'Busca: busca ampla · mais vendidos')
-  assert.equal(describeSearchChoice({}), 'Busca: só maior comissão · mais vendidos')
+  assert.equal(describeSearchChoice({ listType: 1, sortType: 2 }), 'Busca: lista padrão · mais vendidos')
+  assert.equal(describeSearchChoice({ listType: 0, sortType: 3 }), 'Busca: lista ampla · mais caros')
+  assert.equal(describeSearchChoice({}), 'Busca: lista padrão · mais vendidos')
 })
 
 test('nenhum jargão chega à tela', () => {
@@ -52,13 +52,30 @@ test('nenhum jargão chega à tela', () => {
   }
 })
 
-test('a opção de maior comissão avisa que é ela quem deixa o produto caro de fora', () => {
-  // É a causa da queixa: produto caro paga comissão menor, então some da lista
-  // de maior comissão e sobra o acessório barato. Sem o aviso, a cliente troca
-  // a palavra-chave para sempre sem nunca chegar no que estava filtrando.
-  assert.match(searchPoolOption(1).hint, /comissão menor/i)
-  assert.match(searchPoolOption(0).hint, /ampla/i)
+test('a dica que resolve a queixa mora na ORDEM, não na lista', () => {
+  // MEDIDO em produção (2026-09-17): "maquina de lavar Brastemp" com "mais
+  // caros primeiro" devolve as máquinas de verdade (R$ 3.999 a R$ 3.477);
+  // com "maior comissão" devolve cinco capas de 43%. É esta a escolha que
+  // separa o produto do acessório — e é nela que a cliente precisa esbarrar.
+  assert.match(searchOrderOption(3).hint, /aparelho/i)
+  assert.match(searchOrderOption(2).hint, /acess[óo]rio/i)
+  assert.match(searchOrderOption(5).hint, /acess[óo]rio/i)
   assert.equal(searchOrderOption(2).short, 'mais vendidos')
+  assert.equal(searchOrderOption(3).short, 'mais caros')
+})
+
+test('a lista NÃO pode voltar a prometer o filtro que a medição derrubou', () => {
+  // As três listas devolveram os MESMOS 50 produtos, na mesma ordem, nas duas
+  // palavras-chave medidas. Prometer "só maior comissão" / "só os mais
+  // vendidos" faz a cliente mexer aqui em vez de mexer na ordem, que é o que
+  // de fato muda o resultado.
+  const texto = SEARCH_POOL_OPTIONS.flatMap(o => [o.label, o.short, o.hint ?? '']).join(' ').toLowerCase()
+  for (const promessa of ['só os produtos que pagam mais', 'só maior comissão', 'só os que mais vendem', 'comissão menor']) {
+    assert.ok(!texto.includes(promessa), `promessa derrubada pela medição voltou à tela: ${promessa}`)
+  }
+  // E o campo continua existindo: a medição cobriu duas palavras-chave, não
+  // todas — tirá-lo da tela seria decidir por ela sem dado que sustente.
+  assert.equal(SEARCH_POOL_OPTIONS.length, 3)
 })
 
 test('a escolha da cliente chega à busca da Shopee', async () => {
@@ -81,8 +98,11 @@ test('a fila de revisão não pode mais forçar uma ordem por cima da escolha', 
 
 test('o formulário oferece as duas escolhas e as carrega ao editar', async () => {
   const source = await page()
-  assert.match(source, /Quais produtos o robô pode trazer\?/)
+  assert.match(source, /De qual lista da Shopee tirar os produtos/)
   assert.match(source, /Qual vem primeiro\?/)
+  // A dica da ordem é a da opção ESCOLHIDA, não uma frase fixa: é ela que diz
+  // que "mais caros primeiro" traz o aparelho em vez do acessório.
+  assert.match(source, /searchOrderOption\(form\.sortType\)\.hint/)
   assert.match(source, /SEARCH_POOL_OPTIONS\.map/)
   assert.match(source, /SEARCH_ORDER_OPTIONS\.map/)
   // Sem isto, abrir "Editar" reverteria a escolha salva para o padrão.
@@ -135,10 +155,10 @@ test('as duas buscas do legado saem com a MESMA escolha da cliente', async () =>
 })
 
 test('o card continua dizendo quando a comissão extra fura a ordem', () => {
-  assert.equal(describeSearchChoice({ listType: 0, sortType: 4 }), 'Busca: busca ampla · mais baratos')
+  assert.equal(describeSearchChoice({ listType: 0, sortType: 4 }), 'Busca: lista ampla · mais baratos')
   assert.equal(
     describeSearchChoice({ listType: 0, sortType: 4, prioritizeAMS: true }),
-    'Busca: busca ampla · comissão extra na frente, depois mais baratos',
+    'Busca: lista ampla · comissão extra na frente, depois mais baratos',
   )
 })
 

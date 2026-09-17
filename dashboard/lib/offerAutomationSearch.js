@@ -1,19 +1,24 @@
 // Como a cliente escolhe a busca das ofertas automáticas, em linguagem leiga.
 //
-// A API de afiliado da Shopee (productOfferV2) sempre aceitou DOIS eixos
-// independentes — de qual lista tirar os candidatos e em que ordem devolvê-los
-// — e o backend sempre gravou os dois (`OfferAutomation.listType`/`sortType`).
-// O que faltava era a TELA: até 2026-09 nenhum dos dois aparecia no formulário,
-// então toda automação nascia com o padrão da rota (mais vendidos DENTRO da
-// lista de maior comissão) e não havia como a cliente saber disso nem mudar.
+// A API de afiliado da Shopee (productOfferV2) aceita DOIS eixos — de qual
+// lista tirar os candidatos (`listType`) e em que ordem devolvê-los
+// (`sortType`). O backend sempre gravou os dois; até 2026-09 nenhum aparecia
+// na tela, então toda automação nascia com o padrão da rota e a cliente não
+// tinha como saber que existia escolha.
 //
-// Era essa combinação que produzia a queixa: "eletrodoméstico Brastemp" só
-// trazia capa de máquina de lavar, "cafeteira dolce gusto" só cápsula
-// reutilizável e produto de limpeza, "mesa desmontável" só mesa cavalete.
-// Produto caro paga comissão MENOR, então ele é justamente quem a lista de
-// maior comissão deixa de fora; o acessório barato de 15% fica. A ordenação
-// por mais vendidos já estava ligada — ela só ordenava um conjunto do qual o
-// produto procurado nunca fazia parte.
+// ⚠️ MEDIDO EM PRODUÇÃO (2026-09-17, `scripts/diag-busca-shopee.mjs`, chave
+// real): para "eletrodoméstico Brastemp", as TRÊS listas devolveram os MESMOS
+// 50 produtos, na MESMA ordem. `listType` não filtrou nada. A explicação que
+// este arquivo trazia antes — "a lista de maior comissão deixa o produto caro
+// de fora" — era hipótese e foi DERRUBADA pela medição. Não repetir.
+//
+// O que de fato separa o produto do acessório é a ORDEM, e a razão está nos
+// números da mesma medição ("cafeteira dolce gusto"): cápsula reutilizável
+// paga 23% de comissão e vende muito; a cafeteira paga 3%. Então tanto "mais
+// vendidos" quanto "maior comissão" empurram o acessório para cima — só
+// "mais caros primeiro" fez as cafeteiras de verdade (R$ 995 a R$ 1.422)
+// aparecerem. É essa a dica que a cliente precisa ler, e por isso ela mora na
+// ORDEM, não na lista.
 //
 // Os números são os da API e não podem aparecer na tela (regra de linguagem
 // leiga do AGENTS.md): quem os traduz é este módulo, consumido pelo painel.
@@ -22,34 +27,40 @@ export const DEFAULT_SEARCH_POOL = 1
 export const DEFAULT_SEARCH_ORDER = 2
 
 // listType da API. `short` é o que cabe na etiqueta do card.
+//
+// Os rótulos NÃO prometem filtro, porque a medição mostrou que ele não
+// acontece: prometer "só maior comissão" enquanto a Shopee devolve a mesma
+// lista faz a cliente mexer aqui em vez de mexer na ordem, que é o que
+// resolve. O campo continua na tela porque a medição cobriu duas
+// palavras-chave, não todas — mas ele deixou de ser apresentado como saída.
 export const SEARCH_POOL_OPTIONS = [
   {
     value: 0,
-    short: 'busca ampla',
-    label: 'Tudo que combina com a palavra escrita',
-    hint: 'Busca mais ampla. É a opção que tem mais chance de trazer o produto em si, e não só os acessórios dele.',
+    short: 'lista ampla',
+    label: 'Lista ampla da Shopee',
+    hint: 'Nas buscas que medimos, as três listas devolveram os mesmos produtos. Se a busca não está trazendo o que você quer, mexa primeiro em "Qual vem primeiro" — é ali que a diferença aparece.',
   },
   {
     value: 1,
-    short: 'só maior comissão',
-    label: 'Só os produtos que pagam mais comissão',
-    hint: 'Você ganha mais por venda, mas produto caro costuma pagar comissão menor e acaba ficando de fora — por isso aparece a capa no lugar da máquina.',
+    short: 'lista padrão',
+    label: 'Lista padrão da Shopee',
+    hint: 'É a lista que todas as automações usam desde sempre. Nas buscas que medimos ela devolveu o mesmo que as outras duas.',
   },
   {
     value: 2,
-    short: 'só os que mais vendem na Shopee',
-    label: 'Só os produtos que mais vendem na Shopee inteira',
-    hint: 'Lista bem estreita. Traz campeões de venda, mas pode não achar nada em palavra-chave específica.',
+    short: 'lista de destaques',
+    label: 'Lista de destaques da Shopee',
+    hint: 'A Shopee descreve como lista de destaque. Nas buscas que medimos ela devolveu o mesmo que as outras duas, e em palavra-chave específica pode não achar nada.',
   },
 ]
 
-// sortType da API.
+// sortType da API. É AQUI que a escolha muda o resultado de verdade.
 export const SEARCH_ORDER_OPTIONS = [
-  { value: 1, short: 'mais parecidos', label: 'Mais parecidos com o que você escreveu' },
-  { value: 2, short: 'mais vendidos', label: 'Mais vendidos primeiro' },
-  { value: 5, short: 'maior comissão', label: 'Maior comissão primeiro' },
-  { value: 4, short: 'mais baratos', label: 'Mais baratos primeiro' },
-  { value: 3, short: 'mais caros', label: 'Mais caros primeiro' },
+  { value: 1, short: 'mais parecidos', label: 'Mais parecidos com o que você escreveu', hint: 'Segue o que a Shopee acha mais próximo do texto que você digitou.' },
+  { value: 2, short: 'mais vendidos', label: 'Mais vendidos primeiro', hint: 'Acessório costuma vender muito mais que o aparelho — é por isso que aqui aparece a cápsula no lugar da cafeteira, e a capa no lugar da máquina.' },
+  { value: 5, short: 'maior comissão', label: 'Maior comissão primeiro', hint: 'Você ganha mais por venda, mas o acessório barato é justamente quem paga mais comissão: esta opção traz ainda mais acessório que a de cima.' },
+  { value: 4, short: 'mais baratos', label: 'Mais baratos primeiro', hint: 'Traz o que tem menor preço — quase sempre acessório.' },
+  { value: 3, short: 'mais caros', label: 'Mais caros primeiro', hint: 'É a opção que traz o APARELHO em si em vez do acessório dele. Escolha esta quando estiver aparecendo só capa, cápsula ou peça de reposição.' },
 ]
 
 function pick(options, value, fallback) {
