@@ -1903,7 +1903,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   // — a oferta sai com a foto sem marca, que é muito melhor do que texto pelado.
   if (jpegThumbnail && watermark?.text) {
     try {
-      const rendered = await renderDestinationWatermark(hqSourceBuffer || jpegThumbnail, { text: watermark.text, color: watermark.color })
+      const rendered = await renderDestinationWatermark(hqSourceBuffer || jpegThumbnail, { text: watermark.text, color: watermark.color, size: watermark.size, position: watermark.position })
       hqSourceBuffer = rendered.main
       jpegThumbnail = rendered.thumbnail
       if (!rendered.watermarkApplied) reportWatermarkMissing(`card:${rendered.skipReason || 'nao_aplicada'}`, { destJid, platform: primary?.platform })
@@ -4019,6 +4019,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         const destinationImageMode = effectiveDestinationImageMode(postDetail?.imageMode, { hasChannelButton: !!channelForward })
         const watermarkText = String(postDetail?.watermarkText ?? '').trim()
         const watermarkColor = postDetail?.watermarkColor ?? undefined
+        const watermarkSize = postDetail?.watermarkSize ?? undefined
+        const watermarkPosition = postDetail?.watermarkPosition ?? undefined
         const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
         // Segurança anti-duplicação por destino. Precisamos guardar DUAS chaves:
         // - primary.url: link upstream estável. Bloqueia a mesma mensagem da fonte
@@ -4402,7 +4404,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               fetchOriginPhoto: getOriginalPhotoOnce,
               // Modo "card com marca d'água": a marca é uma camada em cima do
               // modo-base, igual ao par 'original'/'original_watermark'.
-              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null,
+              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
             })
             deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
@@ -4450,7 +4452,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
             if (fetched && useDestinationWatermark && imageMode === 'original') {
               try {
-                const rendered = await renderDestinationWatermark(fetched.buffer, { text: watermarkText, color: watermarkColor })
+                const rendered = await renderDestinationWatermark(fetched.buffer, { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition })
                 // A mutação roda POR CIMA da imagem já marcada (2º encode JPEG,
                 // aceito só nesta combinação rara de marca+mutação ligadas ao
                 // mesmo tempo). Sem isso, o canal perderia a proteção
@@ -4519,7 +4521,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
               // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
               allowSmallOriginPhoto: true,
-              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null,
+              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
             }).catch(err => {
               logger.warn({ err: err?.message, destJid }, 'Card de fallback sem imagem falhou; oferta sai como texto')
               return null

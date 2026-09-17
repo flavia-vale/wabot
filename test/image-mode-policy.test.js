@@ -163,7 +163,7 @@ test('resolveOfferAppearance normaliza os quatro modos e devolve o modo-base', (
   const comMarca = resolveOfferAppearance({ imageMode: 'preview_watermark', watermarkText: 'Ofertas da Ana', watermarkColor: 'black' })
   assert.equal(comMarca.mode, 'preview_watermark')
   assert.equal(comMarca.baseMode, 'preview')
-  assert.deepEqual(comMarca.watermark, { text: 'Ofertas da Ana', color: 'black' })
+  assert.deepEqual(comMarca.watermark, { text: 'Ofertas da Ana', color: 'black', size: undefined, position: undefined })
 })
 
 test('resolveOfferAppearance cai em original para destino ausente, vazio ou com valor legado', () => {
@@ -241,7 +241,7 @@ test('a marca d\'água sobrevive à troca de card para foto', () => {
     { hasChannelButton: true },
   )
   assert.equal(aparencia.baseMode, 'original', 'com botão a oferta sai como foto')
-  assert.deepEqual(aparencia.watermark, { text: 'Ofertas da Ana', color: 'black' }, 'a marca não pode se perder na troca')
+  assert.deepEqual(aparencia.watermark, { text: 'Ofertas da Ana', color: 'black', size: undefined, position: undefined }, 'a marca não pode se perder na troca')
 })
 
 test('o worker resolve o formato já considerando o botão do destino', () => {

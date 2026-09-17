@@ -154,6 +154,12 @@ model Group {
   // 'white' | 'black'. Nulo = padrão ('white'). Valor desconhecido cai no
   // padrão no renderizador — marca é enfeite, não pode derrubar o envio.
   watermarkColor        String?
+  // 'small' | 'medium' | 'large'. Nulo = padrão ('medium', o tamanho
+  // histórico anterior a esta opção). Valor desconhecido cai no padrão.
+  watermarkSize         String?
+  // 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'.
+  // Nulo = padrão ('center'). Valor desconhecido cai no padrão.
+  watermarkPosition     String?
   imageLinkTarget       String              @default("first")
   fallbackToOriginal    Boolean             @default(false)
   forwardMode           String              @default("LINK_ONLY")

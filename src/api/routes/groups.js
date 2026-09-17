@@ -1,5 +1,5 @@
 import db from '../../db.js'
-import { isValidWatermarkColor, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
+import { isValidWatermarkColor, isValidWatermarkSize, isValidWatermarkPosition, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
 import { effectiveDestinationImageMode } from '../../core/imageModePolicy.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { ensureCountQuota } from '../quotas.js'
@@ -199,7 +199,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, watermarkSize, watermarkPosition, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza', 'shein', 'aliexpress'].includes(p))
@@ -218,18 +218,24 @@ export async function groupsRoutes(app, opts = {}) {
     // origem nunca leu este campo (toMonitorGroup em groupEntitlements.js nem
     // repassa `imageMode`), mas bloqueamos a escrita aqui para não deixar uma
     // configuração "fantasma" salva sem nenhum efeito.
-    if ((imageMode !== undefined || watermarkText !== undefined || watermarkColor !== undefined) && group.role !== 'post') {
+    if ((imageMode !== undefined || watermarkText !== undefined || watermarkColor !== undefined || watermarkSize !== undefined || watermarkPosition !== undefined) && group.role !== 'post') {
       return reply.code(400).send({ error: 'Modo de imagem e marca d\'água só podem ser definidos no destino.' })
     }
-    // Limite e cores vêm de core/watermarkInput.js — o lugar único onde a API
-    // repete o formato do renderizador sem carregar `sharp` (política de
-    // memória; ver o cabeçalho daquele módulo).
+    // Limite, cores, tamanhos e posições vêm de core/watermarkInput.js — o
+    // lugar único onde a API repete o formato do renderizador sem carregar
+    // `sharp` (política de memória; ver o cabeçalho daquele módulo).
     const normalizedWatermarkText = normalizeWatermarkInputText(watermarkText)
     if (normalizedWatermarkText !== undefined && isWatermarkTextTooLong(normalizedWatermarkText)) {
       return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 25 caracteres.' })
     }
     if (watermarkColor !== undefined && !isValidWatermarkColor(watermarkColor)) {
       return reply.code(400).send({ error: 'Cor da marca d\'água inválida.' })
+    }
+    if (watermarkSize !== undefined && !isValidWatermarkSize(watermarkSize)) {
+      return reply.code(400).send({ error: 'Tamanho da marca d\'água inválido.' })
+    }
+    if (watermarkPosition !== undefined && !isValidWatermarkPosition(watermarkPosition)) {
+      return reply.code(400).send({ error: 'Posição da marca d\'água inválida.' })
     }
     const requestedImageMode = imageMode ?? group.imageMode ?? 'original'
     const requestedWatermarkText = normalizedWatermarkText ?? group.watermarkText ?? ''
@@ -304,6 +310,8 @@ export async function groupsRoutes(app, opts = {}) {
         ...((imageMode !== undefined || precisaDegradar) ? { imageMode: imageModeFinal } : {}),
         ...(normalizedWatermarkText !== undefined ? { watermarkText: normalizedWatermarkText || null } : {}),
         ...(watermarkColor !== undefined ? { watermarkColor } : {}),
+        ...(watermarkSize !== undefined ? { watermarkSize } : {}),
+        ...(watermarkPosition !== undefined ? { watermarkPosition } : {}),
         ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
         ...(forwardMode !== undefined ? { forwardMode: requestedForwardMode } : {}),

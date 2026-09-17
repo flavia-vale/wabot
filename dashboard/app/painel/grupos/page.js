@@ -18,6 +18,10 @@ import { usePainelHeader, PainelContentActions } from '../PainelShell'
 const WATERMARK_TEXT_MAX_CHARS = 25
 // Quanto tempo a confirmação de "marca salva" fica na tela.
 const WATERMARK_SAVED_FEEDBACK_MS = 4000
+// Espelha WATERMARK_SIZES / as posições aceitas em
+// src/core/destinationWatermark.js (a tela não importa aquele módulo).
+const WATERMARK_SIZES = ['small', 'medium', 'large']
+const WATERMARK_POSITIONS = ['center', 'top-left', 'top-right', 'bottom-left', 'bottom-right']
 
 const roleLabels = {
   monitor: 'Monitorar (origem)',
@@ -957,7 +961,6 @@ export default function GruposPage() {
             <CfgRow
               label="Cor da marca d&apos;água"
               hint="As duas aparecem em qualquer foto (a marca tem contorno). Escolha a que combina melhor com as suas fotos."
-              last
               extra="cfg-fadeup"
             >
               <select
@@ -967,6 +970,43 @@ export default function GruposPage() {
               >
                 <option value="white">Branca</option>
                 <option value="black">Preta</option>
+              </select>
+            </CfgRow>
+          )}
+          {watermarkMode && (
+            <CfgRow
+              label="Tamanho da marca d&apos;água"
+              hint="Média é o tamanho de sempre. Pequena chama menos atenção; grande fica mais fácil de ler na miniatura."
+              extra="cfg-fadeup"
+            >
+              <select
+                className="pnl-input"
+                value={WATERMARK_SIZES.includes(g.watermarkSize) ? g.watermarkSize : 'medium'}
+                onChange={(e) => handleUpdateGroup(g.id, { watermarkSize: e.target.value })}
+              >
+                <option value="small">Pequena</option>
+                <option value="medium">Média</option>
+                <option value="large">Grande</option>
+              </select>
+            </CfgRow>
+          )}
+          {watermarkMode && (
+            <CfgRow
+              label="Posição da marca d&apos;água"
+              hint="Centro é a posição de sempre. Nos cantos, a marca sai menor e não cobre o meio da foto."
+              last
+              extra="cfg-fadeup"
+            >
+              <select
+                className="pnl-input"
+                value={WATERMARK_POSITIONS.includes(g.watermarkPosition) ? g.watermarkPosition : 'center'}
+                onChange={(e) => handleUpdateGroup(g.id, { watermarkPosition: e.target.value })}
+              >
+                <option value="center">Centro</option>
+                <option value="top-right">Canto superior direito</option>
+                <option value="top-left">Canto superior esquerdo</option>
+                <option value="bottom-right">Canto inferior direito</option>
+                <option value="bottom-left">Canto inferior esquerdo</option>
               </select>
             </CfgRow>
           )}
