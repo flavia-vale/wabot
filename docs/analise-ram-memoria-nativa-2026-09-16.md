@@ -572,7 +572,7 @@ memória nativa. Quantas unidades existem, ninguém sabe.
 ```bash
 cd ~/wabot && sqlite3 prisma/prod.db "
 SELECT u.email,
-       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.type = 'monitor') AS origens,
+       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.role = 'monitor') AS origens,
        s.status, s.lifecycle, u.plan, u.accessExpiresAt
   FROM WaSession s JOIN User u ON u.id = s.userId
  WHERE s.status IN ('connected','connecting')
@@ -890,7 +890,7 @@ precisava existir. Somente leitura:
 ```bash
 cd ~/wabot && sqlite3 prisma/prod.db "
 SELECT u.email,
-       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.type = 'monitor') AS origens,
+       (SELECT COUNT(*) FROM \"Group\" g WHERE g.userId = u.id AND g.role = 'monitor') AS origens,
        s.status, s.lifecycle, u.plan, u.accessExpiresAt
   FROM WaSession s JOIN User u ON u.id = s.userId
  WHERE s.status IN ('connected','connecting')
@@ -951,15 +951,21 @@ ALVO=staging bash /tmp/medir.sh comparar
 ```
 
 ⚠️ **O que staging PODE e NÃO PODE provar.** Uma sessão só, tráfego baixo. Ele
-prova que **nada quebra**, que a variável chega e que a contagem de arenas cai
-de ~30 para ~2 por robô. Ele **não mede a economia** — ela vem da dispersão de
+prova que **nada quebra** e que a variável chega ao robô. ⚠️ **A expectativa de
+"arenas caem de ~30 para ~2" estava ERRADA** — staging já tem 1 arena (§10.2).
+Ele **não mede a economia** — ela vem da dispersão de
 6,6×, que só existe com tráfego real. **Não reprovar por "economizou pouco em
 staging".** Critério de aprovação lá, nesta ordem:
 
-1. `MALLOC_ARENA_MAX=2` aparece no `environ` do robô (C.5);
-2. arenas caíram para ~2 por robô;
-3. a sessão continua conectada e as ofertas continuam saindo (olhar o painel);
-4. `ops_sqlite_busy` não apareceu.
+1. `MALLOC_ARENA_MAX=2` aparece no `environ` do robô (C.5) — **é o único
+   critério que staging de fato testa**;
+2. a sessão continua conectada e as ofertas continuam saindo (olhar o painel);
+3. `ops_sqlite_busy` não apareceu.
+
+⚠️ **Não olhar a contagem de arenas em staging**: ela já é 1 (§10.2), porque
+arena nasce de disputa entre threads e staging quase não tem tráfego. E **não
+comparar o PSS antes/depois**: o robô foi reiniciado no meio, e processo novo é
+sempre mais leve.
 
 ### Passo D — produção (janela anunciada, só com OK)
 
@@ -1057,3 +1063,114 @@ que é independente de tudo isto.
   a leitura de arquivo do auth do Baileys e o DNS: é o de maior chance de
   aparecer como problema de sessão, e seria confundido com o efeito do arena.
 - **Não reprovar pela medição de staging** (ver o aviso do passo C.6).
+
+## 10. O que a execução de 2026-09-17 mostrou (e o que ela NÃO prova)
+
+### 10.1 Staging: o encanamento funciona, a validação NÃO
+
+```text
+antes   PSS 179 MiB   arena 42 MiB (23%)   arenas 1   threads 29
+depois  PSS  92 MiB   arena 17 MiB (18%)   arenas 1   threads 29
+```
+
+E no `environ` do robô:
+
+```text
+WA_WORKER_MALLOC_ARENA_MAX=2
+MALLOC_ARENA_MAX=2
+```
+
+**O que isso prova:** o caminho inteiro funciona. `resolveWorkerSpawnEnv` leu a
+variável nossa, traduziu para a do glibc, e ela chegou ao processo do robô. A
+sessão continuou de pé. Isso era o objetivo do teste em staging.
+
+⚠️ **O que NÃO prova, e é importante: os 179 → 92 MiB não são economia.** O
+robô foi **reiniciado** entre as duas medidas. Processo novo é sempre mais leve
+que processo rodando há horas — é exatamente a armadilha em que a POC de shard
+caiu (comparar processo recém-nascido com frota assentada). A queda de heap de
+56 para 14 MiB é a assinatura disso: heap do V8 zerado, não memória recuperada.
+
+### 10.2 A correção mais importante: staging TEM 1 ARENA, não 30
+
+Eu escrevi que em staging "as arenas têm que cair de ~30 para ~2". **Errado:
+staging já estava em 1 arena antes de qualquer mudança.** Com 29 threads, igual
+a produção.
+
+Isso não é defeito — **é a confirmação do mecanismo, e é uma informação nova**:
+o glibc não cria arena por existir thread, cria por **disputa** entre threads.
+O robô de staging tem as mesmas 29 threads, mas quase nenhuma alocação
+simultânea, então nunca disputa e fica na arena principal. Os robôs de produção
+disputam o tempo todo e chegam a 29 arenas cada.
+
+**Consequência prática: staging não pode validar esta alavanca.** Não há o que
+reduzir lá — já está no mínimo. O teste de staging vale como teste de
+encanamento e de "nada quebrou", e só. Fica registrado para ninguém tentar
+extrair dali um número de economia.
+
+### 10.3 A frota de produção foi reiniciada — e isso é um achado
+
+| quando | robôs | PSS | por robô | arena | % |
+|---|---:|---:|---:|---:|---:|
+| 16/09 | 41 | 8.702 MiB | **212 MiB** | 5.069 | 58% |
+| 17/09 17:13 | 46 | 6.815 MiB | **148 MiB** | 3.380 | 50% |
+| 17/09 17:28 | 45 | 6.588 MiB | **146 MiB** | 3.222 | 49% |
+
+**Cinco robôs a MAIS, e 2 GB a MENOS.** A frota foi reiniciada entre as duas
+datas (deploy). Não é melhora: é o contador zerando.
+
+E isso é a melhor evidência que temos até agora de que **o acúmulo é real e
+reversível por reinício**. Fragmentação de alocador se comporta exatamente
+assim: cresce com o tempo de vida do processo e some quando ele renasce. Dado
+vivo não faria isso.
+
+⚠️ **Também significa que o "antes" medido hoje é de frota NOVA.** Comparar
+"frota nova sem a variável" com "frota nova com a variável" não diz nada — as
+duas estarão no fundo da curva.
+
+### 10.4 O experimento que de fato responde: comparar CURVAS, não instantes
+
+A frota acabou de reiniciar. **Isso é um ponto de partida limpo e raro.** O
+plano que responde a pergunta sem depender de staging:
+
+**Fase 1 — a curva de hoje, sem a variável (custo zero, começa agora).**
+Rodar, e só isso:
+
+```bash
+bash /tmp/medir.sh
+```
+
+Algumas vezes por dia, por 2 dias. No fim:
+
+```bash
+bash /tmp/medir.sh historico
+```
+
+Isso desenha quanto a memória em arena sobe por hora numa frota que acabou de
+nascer. É o mesmo comando do passo B.1 — **serve para as duas coisas**.
+
+**Fase 2 — a mesma curva, com a variável.** Aplicar em produção (passo D),
+que já reinicia a frota, e repetir as mesmas leituras nos mesmos intervalos.
+
+**O que compara:** não o PSS de um instante, mas **a inclinação**. Se a curva
+com `MALLOC_ARENA_MAX=2` subir mais devagar ou estabilizar mais baixo, a
+alavanca funciona. Se subir igual, não funciona — e aí a resposta está em
+`anonimo` (2,6 GB), não no alocador.
+
+Duas medidas no mesmo estado de frota é a única comparação honesta disponível;
+qualquer outra confunde idade de processo com efeito da mudança.
+
+### 10.5 Pendências pequenas desta execução
+
+- **O SQL do passo B.2 estava errado** e foi corrigido: a coluna é
+  `Group.role`, não `Group.type` (`role = 'monitor'`). Erro meu — escrevi a
+  consulta a partir da descrição, sem conferir o schema.
+- **`WA_WORKER_MALLOC_ARENA_MAX` ficou duplicado no `.env` de staging** (o
+  `echo` rodou duas vezes). Inofensivo — as duas linhas têm o mesmo valor —,
+  mas vale limpar:
+  ```bash
+  sed -i '0,/^WA_WORKER_MALLOC_ARENA_MAX=2$/{//d}' ~/wabot-staging/.env
+  grep -c WA_WORKER ~/wabot-staging/.env   # tem que devolver 1
+  ```
+- **`MALLOC_ARENA_MAX=2` no `environ` prova que o código já está em staging**,
+  porque só `resolveWorkerSpawnEnv` produz essa variável. Confirmar com
+  `cd ~/wabot-staging && git log --oneline -1`.
