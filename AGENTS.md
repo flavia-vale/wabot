@@ -2301,19 +2301,57 @@ gravar — é por ali que se compara as combinações antes de decidir. Ele exis
 desde sempre e **nenhuma tela o chama**; ligar esse botão no painel é o passo
 seguinte natural desta mudança.
 
-⚠️ **`listType` não faz o que o nosso comentário diz — MEDIDO, não suposto.** O
-comentário em `src/api/routes/offerAutomation.js` ("0=Recomendados 1=Maior
-comissão 2=Melhor desempenho") não tem fonte, e a documentação pública da
-Shopee sequer descreve `listType: 1`, que é o nosso padrão em produção (descreve
-0, 2, 3, 4 e 5). A medição de 2026-09-17 fechou o caso: nas duas palavras-chave
-testadas, as três listas devolveram os mesmos 50 produtos na mesma ordem.
-`sortType` 1 a 5 (relevância, vendas, preço ↑, preço ↓, comissão) **bate** com o
-código e é o eixo que muda o resultado.
+### A lista saiu da tela: uma escolha só (2026-09-17, depois da medição)
 
-**Não trocar o padrão de `listType` para "consertar" busca**: não é ele que
-filtra, e mexer nele mudaria a busca de toda automação existente sem ganho
-medido. O que a cliente precisa mudar é a ordem. Para medir de novo (read-only,
-com a chave real da conta, no diretório do ambiente):
+Cinco palavras-chave, cada uma nas três listas, com a chave real em produção:
+
+| Palavra-chave | listType 0 / 1 / 2 |
+|---|---|
+| eletrodoméstico Brastemp | 45 / 45 / 45 — mesmos produtos, mesma ordem |
+| maquina de lavar Brastemp | 47 / 47 / 47 — idem |
+| fone de ouvido bluetooth | 49 / 49 / 49 — idem |
+| air fryer | 43 / 43 / 43 — idem |
+| perfume importado | 48 / 48 / 48 — idem |
+
+`listType` **não filtrou nada em nenhuma delas**. Campo que não muda o
+resultado não é escolha: ele fazia a cliente decidir à toa e desviava da ordem,
+que é o que resolve. Então a tela ficou com **uma pergunta só** ("O que você
+quer que apareça primeiro?") e a lista virou decisão do produto.
+
+| Peça | Onde |
+|---|---|
+| Decisão da lista (PURA, chokepoint ÚNICO) | `src/offerAutomation/searchListType.js` |
+| Consumo | `resolveOffers` (`dispatcher.js`) — cobre envio, fila de revisão e `search-preview` |
+
+**Não regredir:**
+
+- **O valor gravado em `OfferAutomation.listType` é IGNORADO no envio** — mesmo
+  padrão de `Group.imageMode`: coluna dormente, rota continua aceitando (para
+  não quebrar chamador antigo), sem migration. Teste falha se `automation.listType`
+  voltar ao `dispatcher.js`.
+- **O padrão passou de 1 para 0** porque **0 é o único valor que a Shopee
+  documenta** ("todos"); o 1 não aparece na documentação dela em lugar nenhum e
+  foi escolhido no olho quando `listType=2` se mostrou estreito demais. Com as
+  duas provadas equivalentes em cinco palavras-chave, ficar no documentado é o
+  que dá para defender. **Isso só é seguro por causa da medição** — não trocar
+  de novo sem repetir o `scripts/diag-busca-shopee.mjs`.
+- **`OFFER_SEARCH_LIST_TYPE` é o escape hatch**: `=1` volta ao histórico sem
+  deploy (pegadinha #1 — `pm2 delete` + `start`). Valor inválido cai no padrão;
+  `.env` mal preenchido nunca pode derrubar a busca de todo mundo.
+- **Os rótulos são os nomes da documentação da Shopee, traduzidos, na ORDEM
+  dela** (1 Relevância, 2 Mais vendidos, 3 Maior preço, 4 Menor preço, 5 Maior
+  comissão) — decisão da dona do produto, 2026-09-17: não inventar opção nem
+  renomear "Maior preço" para "o produto em si". O que a API faz é ordenar por
+  preço; que isso traga o aparelho em vez do acessório é **efeito medido**, e
+  efeito medido vai na DICA, nunca no rótulo. Teste falha se os rótulos ou a
+  ordem divergirem da documentação.
+- **O padrão continua "Mais vendidos"** — ninguém tem a busca trocada em
+  silêncio.
+- **O card diz só a ordem** (`Busca: mais vendidos`), e continua dizendo quando
+  a comissão extra legada fura a fila.
+
+Para medir de novo (read-only, com a chave real da conta, no diretório do
+ambiente):
 
 ```bash
 cd ~/wabot && node scripts/diag-busca-shopee.mjs <email> "eletrodoméstico Brastemp"

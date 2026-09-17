@@ -1,4 +1,5 @@
 import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit, resolveShopeeOfferPrice } from './shopeeOffers.js'
+import { resolveSearchListType } from './searchListType.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
@@ -185,7 +186,10 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
     limit: automation.offersPerSend,
     creds,
     sortType: automation.sortType ?? 2,
-    listType: automation.listType ?? 1,
+    // Chokepoint ÚNICO da lista: o valor gravado na automação é ignorado de
+    // propósito (ver searchListType.js — cinco palavras-chave medidas, as três
+    // listas devolveram o mesmo). Não voltar a ler `automation.listType` aqui.
+    listType: resolveSearchListType(),
     page: automation.page ?? 1,
     isKeySeller: automation.isKeySeller ?? false,
   }
@@ -421,7 +425,6 @@ export async function searchOffersPreview({ params = {}, creds, fetchOffersFn = 
     minDiscountPct: Number(params.minDiscountPct) || 0,
     offersPerSend: Number(params.offersPerSend) || 1,
     sortType: Number(params.sortType) || 2,
-    listType: Number.isFinite(Number(params.listType)) ? Number(params.listType) : 1,
     page: Number(params.page) || 1,
     prioritizeAMS: Boolean(params.prioritizeAMS ?? false),
     isKeySeller: Boolean(params.isKeySeller ?? false),
@@ -432,7 +435,7 @@ export async function searchOffersPreview({ params = {}, creds, fetchOffersFn = 
     params: {
       keyword: automation.keyword,
       sortType: automation.sortType,
-      listType: automation.listType,
+      listType: resolveSearchListType(),
       page: automation.page,
       minDiscountPct: automation.minDiscountPct,
       prioritizeAMS: automation.prioritizeAMS,
