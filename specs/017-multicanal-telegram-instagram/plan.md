@@ -407,3 +407,20 @@ Os nove itens do "Gate manual obrigatório" da spec, com grupos reais de Telegra
 | Uma pasta nova (`src/delivery/`) separada de `src/core/delivery/` | É o que permite a rede fictícia provar o contrato **sem importar** nada de WhatsApp ou de Telegram (SC-009), e o que mantém os módulos de decisão puros e testáveis sem rede. | Colocar tudo em `src/core/` misturaria I/O com decisão pura e tornaria SC-009 inverificável. |
 | Ramo de hand-off entrando no worker já na Fatia 1, ainda inalcançável | Cada deploy que toca código de worker **reconecta todas as sessões de WhatsApp**. Concentrar tudo numa fatia troca dois reinícios anunciados por um. | Deixar o ramo para a Fatia 4 custaria um segundo reinício de todas as sessões em produção, que é o custo operacional mais caro que este repositório tem. |
 
+
+---
+
+## Constitution Check — reavaliação depois do desenho (Phase 1)
+
+| Regra canônica | Verificação depois do desenho | Veredito |
+|---|---|---|
+| REGRA #1 — memória | O desenho final não acrescentou nada além das duas passadas in-process já precificadas (< 30 MB, zero processo). As duas tabelas novas são dado em disco, não memória residente. | ✅ inalterado |
+| REGRA #2 — alternativa mais leve | Confirmada: `fetch` nativo em vez de biblioteca de Telegram; oferta neutra só para as redes novas, sem reconstruir o payload do WhatsApp. | ✅ reforçado |
+| `protocol.js` intocado | Confirmado pelo desenho de D-A5 e por `research.md` R0.3: o caminho origem-Telegram → destino-WhatsApp usa `sendBroadcast`, que já existe. | ✅ |
+| Migration aditiva | 3 colunas nuláveis + 2 tabelas novas; índice único de `Group` **não** é recriado (D-A10). | ✅ |
+| Um único reinício de supervisor | Todo código de worker concentrado na Fatia 1; o interruptor é lido fora do worker, então ligar/desligar Telegram nunca reinicia. | ✅ |
+| Vocabulário e linguagem leiga | `deliveryNetwork` interno, "aplicativo" na tela, `multi_network` no plano, com três guardas de teste. | ✅ |
+
+**Nenhuma violação a justificar** além das três já registradas em "Complexity Tracking", todas com a alternativa mais simples nomeada e o motivo da rejeição.
+
+**Pendência que não é violação**: a fronteira de plano (Q1) precisa da dona do produto antes da Fatia 1. É valor de configuração, não desenho — nada mais do plano depende dela.
