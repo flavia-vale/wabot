@@ -16,7 +16,13 @@ const TEMPLATE_KEY_RE = /^[a-zA-Z0-9_-]{1,80}$/
 const DAILY_INTERVAL_MINUTES = 1440
 // Valores aceitos pela API productOfferV2 da Shopee (doc oficial BR):
 // sortType 1=Relevância 2=Mais vendidos 3=Maior preço 4=Menor preço 5=Maior comissão
-// listType 0=Recomendados 1=Maior comissão 2=Melhor desempenho
+//
+// ⚠️ `listType` é DORMENTE desde 2026-09-17: continua aceito e gravado para não
+// quebrar chamador antigo, mas o envio o IGNORA — quem decide a lista é
+// `resolveSearchListType` (src/offerAutomation/searchListType.js). Motivo
+// medido: cinco palavras-chave, as três listas devolveram o mesmo. O comentário
+// que estava aqui ("0=Recomendados 1=Maior comissão 2=Melhor desempenho") não
+// tinha fonte e a documentação da Shopee sequer descreve o valor 1.
 const VALID_SORT_TYPES = [1, 2, 3, 4, 5]
 const VALID_LIST_TYPES = [0, 1, 2]
 

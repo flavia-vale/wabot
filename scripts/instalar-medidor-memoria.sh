@@ -17,6 +17,8 @@
 # Escreve apenas em /tmp/medidas. Nao le .env, nao le banco, nao reinicia nada.
 
 mkdir -p /tmp/medidas
+
+mkdir -p /tmp/medidas
 cat > /tmp/mem.awk <<'FIMAWK'
 function hex(s,  i,c,v,n) { n=0; for (i=1;i<=length(s);i++) { c=substr(s,i,1); v=index("0123456789abcdef",c)-1; if(v<0)v=index("0123456789ABCDEF",c)-1; n=n*16+v } return n }
 /^[0-9a-fA-F]+-[0-9a-fA-F]+ / { split($1,r,"-"); idx++; st[idx]=hex(r[1]); pa[idx]=(NF>=6)?$6:""; next }
@@ -46,8 +48,13 @@ if [ "${ALVO:-prod}" = "staging" ]; then PAT="/home/deploy/wabot-staging/src/bot
 else PAT="/home/deploy/wabot/src/bot-worker"; NOME=prod; fi
 
 medir() {
-  local tot=0 arena=0 anon=0 heap=0 arenas=0 thr=0 n=0
+  local tot=0 arena=0 anon=0 heap=0 arenas=0 thr=0 n=0 velho=0 novo=999999
   for p in $(pgrep -f "$PAT"); do
+    local idade; idade=$(ps -o etimes= -p $p 2>/dev/null | tr -d ' ')
+    if [ -n "$idade" ]; then
+      [ "$idade" -gt "$velho" ] && velho=$idade
+      [ "$idade" -lt "$novo" ] && novo=$idade
+    fi
     local th; th=$(ls /proc/$p/task 2>/dev/null | wc -l)
     local L; L=$(awk -v TH=$th -f /tmp/mem.awk /proc/$p/smaps 2>/dev/null) || continue
     [ -z "$L" ] && continue
@@ -58,7 +65,8 @@ medir() {
     heap=$(echo "$heap $4" | awk '{print $1+$2}')
     arenas=$((arenas + $5)); thr=$((thr + $6)); n=$((n+1))
   done
-  echo "$(date +%Y-%m-%dT%H:%M:%S) $n $tot $arena $anon $heap $arenas $thr"
+  [ "$novo" = "999999" ] && novo=0
+  echo "$(date +%Y-%m-%dT%H:%M:%S) $n $tot $arena $anon $heap $arenas $thr $velho $novo"
 }
 
 mostrar() {
@@ -72,6 +80,8 @@ mostrar() {
     printf "  em heap ............. %.0f MiB\n", $6
     printf "  arenas .............. %d   (media %.1f por robo)\n", $7, ($2>0?$7/$2:0)
     printf "  threads ............. %d   (media %.0f por robo)\n", $8, ($2>0?$8/$2:0)
+    printf "  IDADE da frota ...... robo mais velho %.0f min | mais novo %.0f min\n", $9/60, $10/60
+    if ($9 < 3600) printf "  ATENCAO: frota com menos de 1h — AINDA NAO SATUROU. Nao comparar com frota assentada.\n"
   }'
 }
 
@@ -93,7 +103,14 @@ case "${1:-agora}" in
       printf "  arenas .............. %+d  (de %d para %d)\n", dar, $7, $15
       printf "  threads ............. %+d  (de %d para %d)\n", dth, $8, $16
       printf "  %% do PSS em arena ... de %.0f%% para %.0f%%\n", ($3>0?$4*100/$3:0), ($11>0?$12*100/$11:0)
+      printf "  idade da frota ...... antes %.0f min | depois %.0f min\n", $9/60, $19/60
       print ""
+      if ($9 < 3600 || $19 < 3600) {
+        print "  ATENCAO: uma das medidas e de frota com MENOS DE 1 HORA. A comparacao NAO vale:"
+        print "    frota nova e sempre mais leve, e isso e idade de processo, nao a variavel."
+        print "    Espere a frota saturar (cerca de 1h) e meca de novo."
+        print ""
+      }
       if (amb == "staging") {
         print "  LEITURA (staging): economia NAO se mede aqui — e uma sessao so, com pouco trafego."
         print "  O que vale em staging e a linha ARENAS: tem que ter caido para ~2 por robo."

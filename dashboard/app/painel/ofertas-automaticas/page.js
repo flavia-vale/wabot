@@ -16,7 +16,7 @@ import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import { usePainelHeader, PainelContentActions } from '../PainelShell'
 import { ReviewQueue } from '@/components/offerAutomation/ReviewQueue'
 import { validateOfferAutomationForm } from '@/lib/offerAutomationForm'
-import { SEARCH_POOL_OPTIONS, SEARCH_ORDER_OPTIONS, DEFAULT_SEARCH_POOL, DEFAULT_SEARCH_ORDER, searchPoolOption, describeSearchChoice, normalizeSearchChoice } from '@/lib/offerAutomationSearch'
+import { SEARCH_ORDER_OPTIONS, DEFAULT_SEARCH_ORDER, searchOrderOption, describeSearchChoice, normalizeSearchChoice } from '@/lib/offerAutomationSearch'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -109,7 +109,6 @@ const emptyForm = {
   dailyRunTime: DEFAULT_DAILY_RUN_TIME,
   offersPerSend: 1,
   minDiscountPct: 20,
-  listType: DEFAULT_SEARCH_POOL,
   sortType: DEFAULT_SEARCH_ORDER,
   publicationMode: 'direct',
   reviewTargetSize: 10,
@@ -440,20 +439,15 @@ export default function OfertasAutomaticasPage() {
             <p className="pnl-hint" style={{ marginTop: 4 }}>Só produtos com desconto real serão enviados.</p>
           </div>
 
+          {/* Uma escolha só. A lista da Shopee saiu da tela em 2026-09-17:
+              cinco palavras-chave medidas, as três listas devolveram o mesmo
+              (ver src/offerAutomation/searchListType.js). */}
           <div>
-            <label className="pnl-label">Quais produtos o robô pode trazer?</label>
-            <select className="pnl-input" value={form.listType} onChange={(e) => setForm((f) => ({ ...f, listType: Number(e.target.value) }))}>
-              {SEARCH_POOL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <p className="pnl-hint" style={{ marginTop: 4 }}>{searchPoolOption(form.listType).hint}</p>
-          </div>
-
-          <div>
-            <label className="pnl-label">Qual vem primeiro?</label>
+            <label className="pnl-label">O que você quer que apareça primeiro?</label>
             <select className="pnl-input" value={form.sortType} onChange={(e) => setForm((f) => ({ ...f, sortType: Number(e.target.value) }))}>
               {SEARCH_ORDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Isso ordena o que a escolha de cima trouxe — não amplia a busca.</p>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>{searchOrderOption(form.sortType).hint}</p>
           </div>
 
           {/* Opção antiga: aparece SÓ em automação que já está com ela ligada,
