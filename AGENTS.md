@@ -1273,6 +1273,83 @@ cd ~/wabot && node scripts/sincronizar-assinatura.mjs <email> --aplicar # grava 
 
 Teste: `test/subscription-policy.test.js`.
 
+## ADMIN > Financeiro > ROI e conta de teste fora das somas (2026-09-17)
+
+Duas coisas da mesma conversa. (1) A assinatura de `tacianeaas02@gmail.com`
+existe só para validar a cobrança recorrente — esse dinheiro **não cai no
+caixa** e estava inflando receita, MRR, LTV e pagantes. (2) O Financeiro sabia
+quanto ENTRA e o que sai para afiliados e para o Mercado Pago, mas **nunca
+soube quanto custa manter o produto de pé** — e sem isso "receita" não é lucro
+e não havia como responder "valeu a pena até agora?".
+
+| Peça | Onde |
+|---|---|
+| Contas de teste fora das somas (PURO) | `src/domain/admin/testAccounts.js` |
+| Etiqueta na tela | `dashboard/components/TestAccountTag.js` |
+| Ledger de custos (faturas + patamar fixo, PURO) | `src/domain/admin/operatingCosts.js` |
+| Passado/presente/futuro, payback, cenários (PURO) | `src/domain/admin/roi.js` |
+| Rota | `GET /api/admin/finance/roi?months=12` (`billing:read`, auditada) |
+| Tela | `RoiPanel` em `dashboard/app/admin/page.js` (sub-aba ROI) |
+
+**Não regredir:**
+
+- **REALIZADO e PREVISTO nunca viram um número só.** O "investido até agora" e
+  o acumulado do passado param no último mês FECHADO; o mês corrente é
+  `parcial` e a projeção é `previsto`, cada um rotulado. Somar projeção dentro
+  do que já é fato é decidir dinheiro em cima de número inventado.
+- **A conta de teste some da SOMA, nunca da TELA.** Ela continua nas listas,
+  nas cobranças recorrentes e no ROI com etiqueta 🧪 — é ela que está sendo
+  observada. Linha aparecendo na lista e sumindo do total, sem explicação,
+  pareceria defeito.
+- **A exclusão é decidida no backend**, aplicada em TODAS as agregações de
+  `/finance/overview` e `/finance/roi` (receita, LTV, pagantes, planos ativos,
+  comissões, taxas) — senão duas tabelas do admin discordam sobre o mês. Guarda
+  estrutural no teste varre a rota atrás de soma de pagamento sem o filtro.
+- **Fail-safe é NÃO excluir ninguém**: falha de banco ao resolver as contas de
+  teste devolve lista vazia. Sumir com receita por causa de um blip é pior que
+  contar a assinatura de teste por mais um carregamento de tela.
+- **`FINANCE_TEST_ACCOUNT_EMAILS` SUBSTITUI a lista** (vazio = nenhuma). É como
+  a conta de teste vira cliente de verdade sem deploy.
+- **Fatura em dólar é guardada em dólar** e convertida na leitura
+  (`USD_BRL_RATE`, default 5,80). Guardar convertido trava a conta numa cotação
+  que ninguém lembra de onde saiu.
+- **O ledger histórico PARA onde a recorrência começa** (`2026-09`). Setembro
+  entra com o patamar fixo cheio (R$ 565 Claude + R$ 190 servidor), que é maior
+  que a fatura real de R$ 535,22 daquele mês — o passado nunca fica
+  subestimado, e nenhum mês é contado duas vezes. Mexer em
+  `COST_RECURRING_START_MONTH` exige mexer no ledger junto.
+- **Crescimento observado exige amostra e tem TETO.** Menos de 3 meses fechados
+  com receita → cenário sem crescimento. Acima de 20%/mês → limitado (20%/mês
+  já multiplica a receita por ~9 em um ano). Queda não vira crescimento
+  negativo composto.
+- **A projeção respeita o teto de clientes do servidor**
+  (`MAX_SESSIONS_PER_PROCESS`, hoje 40): cheio, nenhuma cliente nova conecta —
+  receita que a infra não entrega não é receita, e o custo de crescer não está
+  nesta conta.
+- **Sem dado confiável NÃO se afirma nada**: sem cliente pagante,
+  `breakEvenCustomers` e `paybackMonth` são `null`, não zero.
+- **O gráfico não depende só da cor.** Verde e vermelho é o par que quem tem
+  daltonismo mais confunde (ΔE 6,0 em deuteranopia) — só é aceitável com
+  codificação secundária, e aqui ela é a linha do zero, o valor escrito com
+  sinal e o tracejado do previsto. Não remover nenhuma das três. O desenho
+  ainda **corta pouco depois da travessia do zero**: crescimento composto faz a
+  última barra ficar dezenas de vezes maior e achata justamente o vermelho de
+  hoje. Todos os meses continuam na tabela.
+- **Linguagem leiga**: "entrou", "saiu", "sobrou", "se paga em". Teste falha se
+  `payback`, `break-even`, `churn` ou `runway` chegarem à tela.
+- **Custo: só leitura, nenhum processo novo, zero impacto de RAM.** Duas
+  consultas de linhas por carregamento (pagamentos aprovados e comissões desde
+  a primeira fatura, teto de 20.000), e a sub-aba só busca quando é aberta.
+
+Envs (todas opcionais): `FINANCE_TEST_ACCOUNT_EMAILS`, `USD_BRL_RATE`,
+`COST_CLAUDE_MONTHLY_BRL`, `COST_VPS_MONTHLY_BRL`, `COST_RECURRING_START_MONTH`.
+
+⚠️ **Aumentar o teto de clientes muda a projeção** (o teto de receita sai de
+`MAX_SESSIONS_PER_PROCESS`), e continua valendo que subir esse teto é mudança
+memory-heavy — ver "Teto de robôs por processo".
+
+Teste: `test/admin-roi.test.js`.
+
 ## ADMIN > Financeiro > Cobranças recorrentes (2026-09-07)
 
 Sub-aba dentro do Financeiro com **uma linha por TENTATIVA de cobrança** da

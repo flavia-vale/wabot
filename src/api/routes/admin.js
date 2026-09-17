@@ -34,6 +34,9 @@ import { isSandboxTokenInProduction } from '../../domain/payments/accessTokenMod
 import { selectShardPocCandidates, presentShardRuntimeMetrics } from '../../ops/shardPoc.js'
 import { resolveFinancePeriod, FINANCE_PERIODS } from '../../domain/admin/financePeriod.js'
 import { combineRevenueTotals, countDistinctPayingUsers, computeAverageLtv, computeMercadoPagoFees, computeNetRevenue } from '../../domain/admin/financeOverview.js'
+import { loadTestAccountUserIds, excludeUserIdsWhere, resolveTestAccountEmails } from '../../domain/admin/testAccounts.js'
+import { buildRoiReport } from '../../domain/admin/roi.js'
+import { costForMonth, firstCostMonth, monthIndex, monthKeyFromIndex, monthKeyOf, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1991,6 +1994,17 @@ export async function adminRoutes(app) {
     }
     const subscriptionChargeApprovedWhere = { status: { in: CHARGE_OUTCOME_STATUSES.aprovada } }
 
+    // Contas de TESTE (assinatura ligada só para validar a cobrança recorrente)
+    // ficam FORA de toda soma daqui — esse dinheiro não cai no caixa. Elas
+    // continuam aparecendo nas listas e na aba de cobranças, com etiqueta.
+    // Precisa valer nas DUAS fontes de receita (Payment avulso e
+    // SubscriptionCharge), senão a assinatura de teste sai do avulso e
+    // continua inteira na fatia de assinatura.
+    const testAccounts = await loadTestAccountUserIds(db)
+    const notTestUser = excludeUserIdsWhere(testAccounts.ids)
+    const notTestReferred = excludeUserIdsWhere(testAccounts.ids, 'referredUserId')
+    const notTestAccount = excludeUserIdsWhere(testAccounts.ids, 'id')
+
     const [
       approvedOneTimePeriod,
       approvedOneTimeAll,
@@ -2010,16 +2024,16 @@ export async function adminRoutes(app) {
       commissionsPayable,
       commissionsPaidPeriod,
     ] = await Promise.all([
-      db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere, createdAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
-      db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere }, _sum: { amount: true }, _count: { _all: true } }),
-      db.payment.groupBy({ by: ['userId'], where: { status: 'approved', ...oneTimePaymentWhere } }),
-      db.subscriptionCharge.aggregate({ where: { ...subscriptionChargeApprovedWhere, attemptedAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
-      db.subscriptionCharge.aggregate({ where: subscriptionChargeApprovedWhere, _sum: { amount: true }, _count: { _all: true } }),
-      db.subscriptionCharge.groupBy({ by: ['userId'], where: subscriptionChargeApprovedWhere }),
-      db.payment.count({ where: { status: 'pending' } }),
-      db.payment.count({ where: { status: { notIn: ['approved', 'pending'] } } }),
-      db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now } } }),
-      db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now } } }),
+      db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser, createdAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
+      db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser }, _sum: { amount: true }, _count: { _all: true } }),
+      db.payment.groupBy({ by: ['userId'], where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser } }),
+      db.subscriptionCharge.aggregate({ where: { ...subscriptionChargeApprovedWhere, ...notTestUser, attemptedAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
+      db.subscriptionCharge.aggregate({ where: { ...subscriptionChargeApprovedWhere, ...notTestUser }, _sum: { amount: true }, _count: { _all: true } }),
+      db.subscriptionCharge.groupBy({ by: ['userId'], where: { ...subscriptionChargeApprovedWhere, ...notTestUser } }),
+      db.payment.count({ where: { status: 'pending', ...notTestUser } }),
+      db.payment.count({ where: { status: { notIn: ['approved', 'pending'] }, ...notTestUser } }),
+      db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now }, ...notTestAccount } }),
+      db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now }, ...notTestAccount } }),
       db.user.count({ where: { status: 'active', plan: 'trial', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }] } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
@@ -2028,7 +2042,7 @@ export async function adminRoutes(app) {
       // (casadas com revenuePeriod: cada pagamento aprovado gera uma comissão,
       // inclusive renovação de assinatura). Exclui rejeitadas/revertidas —
       // essas não custam caixa.
-      db.affiliateCommission.aggregate({ where: { createdAt: { gte: periodStart, lte: periodEnd }, status: { notIn: ['rejected', 'reversed'] } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
+      db.affiliateCommission.aggregate({ where: { createdAt: { gte: periodStart, lte: periodEnd }, status: { notIn: ['rejected', 'reversed'] }, ...notTestReferred }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
       // Passivo em aberto (todo o histórico): comissões devidas ainda não pagas.
       db.affiliateCommission.aggregate({ where: { status: { in: ['pending', 'eligible', 'approved', 'held'] } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
       // Comissões efetivamente pagas no período (saída de caixa real).
@@ -2073,7 +2087,7 @@ export async function adminRoutes(app) {
     const mpFeePercent = Number.parseFloat(process.env.MP_FEE_PERCENT ?? '4.99') || 0
     const mpFeeFixedCents = Number.parseInt(process.env.MP_FEE_FIXED_CENTS ?? '0', 10) || 0
     const mercadoPagoOneTimePeriod = await db.payment.aggregate({
-      where: { status: 'approved', provider: 'mercado_pago', ...oneTimePaymentWhere, createdAt: { gte: periodStart, lte: periodEnd } },
+      where: { status: 'approved', provider: 'mercado_pago', ...oneTimePaymentWhere, ...notTestUser, createdAt: { gte: periodStart, lte: periodEnd } },
       _sum: { amount: true },
       _count: { _all: true },
     })
@@ -2127,6 +2141,8 @@ export async function adminRoutes(app) {
       mpFeeFixedCents,
       mpFees30d: mpFeesPeriod,
       netRevenue30d: netRevenuePeriod,
+      // Contas de teste tiradas das somas acima (continuam visíveis nas listas).
+      excludedTestAccounts: testAccounts.emails,
     }
   })
 
@@ -2260,6 +2276,148 @@ export async function adminRoutes(app) {
       health: { ...health, headline: describeBillingMachine(health), activeSubscriptions: assinaturasAtivas },
       summary: summarizeSubscriptionCharges(allInWindow),
       charges: rows.map(row => presentSubscriptionCharge(row, { email: emails.get(row.userId) ?? null })),
+    }
+  })
+
+  /**
+   * Sub-aba "ROI" do Financeiro.
+   *
+   * Responde a pergunta que nenhuma tela respondia: o BOTinho já se pagou?
+   * Cruza o que ENTRA (pagamentos aprovados, menos comissões de afiliado e
+   * taxas do Mercado Pago) com o que SAI para manter o produto de pé (Claude +
+   * servidor, ledger em `src/domain/admin/operatingCosts.js`).
+   *
+   * Só leitura e tudo em lote: duas consultas de linhas (pagamentos aprovados e
+   * comissões, desde o primeiro mês com custo) e as contagens de plano ativo.
+   * Nenhum processo novo, nenhum timer, ZERO impacto de RAM — a janela é de
+   * meses, não de mensagens, então o volume é de centenas de linhas.
+   *
+   * A montagem mês a mês, a projeção e o payback ficam em `roi.js` (puro).
+   */
+  app.get('/finance/roi', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:read'))) return
+
+    const now = new Date()
+    const config = resolveCostConfig()
+    const startMonth = firstCostMonth(config) ?? monthKeyOf(now)
+    const startIndex = monthIndex(startMonth) ?? monthIndex(monthKeyOf(now))
+    const startDate = new Date(Date.UTC(Math.floor(startIndex / 12), startIndex % 12, 1))
+
+    const projectionMonths = Math.min(24, Math.max(3, Number.parseInt(req.query?.months ?? '12', 10) || 12))
+
+    const testAccounts = await loadTestAccountUserIds(db)
+    const notTestUser = excludeUserIdsWhere(testAccounts.ids)
+
+    // MESMAS duas fontes de receita da visão geral (ver o comentário longo lá):
+    // pagamento avulso em `Payment` (fora o que já é assinatura, marcado pelo
+    // prefixo `sub_`) MAIS a cobrança de assinatura em `SubscriptionCharge`,
+    // que é a única fonte completa — a renovação recuperada pela reconciliação
+    // horária nunca grava `Payment`. Ler só `Payment` subestimaria a receita
+    // toda vez que um webhook se perdeu, e o ROI é exatamente a conta em que
+    // isso não pode acontecer.
+    const oneTimePaymentWhere = {
+      OR: [
+        { mpPaymentId: null },
+        { NOT: { mpPaymentId: { startsWith: 'sub_' } } },
+      ],
+    }
+
+    const [payments, charges, commissions, activeBasic, activePro, prices] = await Promise.all([
+      db.payment.findMany({
+        where: { status: 'approved', ...oneTimePaymentWhere, createdAt: { gte: startDate }, ...notTestUser },
+        select: { userId: true, amount: true, provider: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 20000,
+      }),
+      db.subscriptionCharge.findMany({
+        where: { status: { in: CHARGE_OUTCOME_STATUSES.aprovada }, attemptedAt: { gte: startDate }, ...notTestUser },
+        select: { userId: true, amount: true, attemptedAt: true },
+        orderBy: { attemptedAt: 'asc' },
+        take: 20000,
+      }),
+      db.affiliateCommission.findMany({
+        where: { createdAt: { gte: startDate }, status: { notIn: ['rejected', 'reversed'] }, ...excludeUserIdsWhere(testAccounts.ids, 'referredUserId') },
+        select: { commissionAmountCents: true, createdAt: true },
+        take: 20000,
+      }),
+      db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
+      db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
+      getCurrentPlanPrices(),
+    ])
+
+    // Mesma estimativa de taxa do gateway da visão geral — uma fonte só.
+    const mpFeePercent = Number.parseFloat(process.env.MP_FEE_PERCENT ?? '4.99') || 0
+    const mpFeeFixedCents = Number.parseInt(process.env.MP_FEE_FIXED_CENTS ?? '0', 10) || 0
+
+    const revenueByMonth = {}
+    const payersByMonth = new Map()
+    for (const payment of payments) {
+      const month = monthKeyOf(payment.createdAt)
+      if (!month) continue
+      const bucket = revenueByMonth[month] ?? (revenueByMonth[month] = { gross: 0, affiliateCommissions: 0, mpFees: 0, payments: 0, payingUsers: 0 })
+      bucket.gross += payment.amount ?? 0
+      bucket.payments += 1
+      if (payment.provider !== 'manual') {
+        bucket.mpFees += ((payment.amount ?? 0) * (mpFeePercent / 100)) + mpFeeFixedCents / 100
+      }
+      if (!payersByMonth.has(month)) payersByMonth.set(month, new Set())
+      payersByMonth.get(month).add(payment.userId)
+    }
+    // Toda cobrança de assinatura passa pelo Mercado Pago — não existe outro
+    // provedor em `SubscriptionCharge` —, então entra inteira na base da taxa.
+    for (const charge of charges) {
+      const month = monthKeyOf(charge.attemptedAt)
+      if (!month) continue
+      const bucket = revenueByMonth[month] ?? (revenueByMonth[month] = { gross: 0, affiliateCommissions: 0, mpFees: 0, payments: 0, payingUsers: 0 })
+      bucket.gross += charge.amount ?? 0
+      bucket.payments += 1
+      bucket.mpFees += ((charge.amount ?? 0) * (mpFeePercent / 100)) + mpFeeFixedCents / 100
+      if (!payersByMonth.has(month)) payersByMonth.set(month, new Set())
+      payersByMonth.get(month).add(charge.userId)
+    }
+    for (const commission of commissions) {
+      const month = monthKeyOf(commission.createdAt)
+      if (!month) continue
+      const bucket = revenueByMonth[month] ?? (revenueByMonth[month] = { gross: 0, affiliateCommissions: 0, mpFees: 0, payments: 0, payingUsers: 0 })
+      bucket.affiliateCommissions += (commission.commissionAmountCents ?? 0) / 100
+    }
+    for (const [month, payers] of payersByMonth) revenueByMonth[month].payingUsers = payers.size
+
+    const report = buildRoiReport({
+      revenueByMonth,
+      now,
+      projectionMonths,
+      activeMrr: activeBasic * prices.basic + activePro * prices.pro,
+    })
+
+    // Faturas do passado, uma linha por lançamento — é o que sustenta o número.
+    const endIndex = monthIndex(report.currentMonth)
+    const costLedger = []
+    for (let index = startIndex; index <= endIndex; index += 1) {
+      const month = costForMonth(monthKeyFromIndex(index), config)
+      costLedger.push({
+        month: month.month,
+        claude: month.claude,
+        vps: month.vps,
+        total: month.total,
+        source: month.source,
+        entries: month.entries.map(entry => ({
+          category: entry.category,
+          categoryLabel: COST_CATEGORY_LABELS[entry.category] ?? entry.category,
+          amountBrl: entry.amountBrl,
+          amountUsd: entry.amountUsd ?? null,
+          note: entry.note ?? null,
+        })),
+      })
+    }
+
+    await writeAdminAuditLog(req, { action: 'admin.finance.roi.read', resource: 'finance' })
+
+    return {
+      ...report,
+      costLedger,
+      excludedTestAccounts: testAccounts.emails.length ? testAccounts.emails : resolveTestAccountEmails(),
+      mpFeePercent,
     }
   })
 

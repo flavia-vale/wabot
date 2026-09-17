@@ -7,6 +7,7 @@ import { LoadingState } from '@/components/States'
 import AdminTutorialAccordion from '@/components/AdminTutorialAccordion'
 import SectionErrorBoundary from '@/components/SectionErrorBoundary'
 import { PayingTag } from '@/components/PayingTag'
+import { TestAccountTag } from '@/components/TestAccountTag'
 import { HelpDot } from '@/components/HelpDot'
 import { CARD_HELP } from '@/lib/admin/cardHelp'
 
@@ -198,6 +199,396 @@ const CHARGE_ACTION_LABELS = {
   ninguem: '—',
 }
 
+// ---------------------------------------------------------------------------
+// Sub-aba "ROI" do Financeiro (2026-09-17).
+//
+// Passado, presente e futuro na mesma tela, cada bloco dizendo de onde veio o
+// número. Regra que sustenta a tela inteira: REALIZADO e PREVISTO nunca se
+// misturam num total só — mês fechado é medição, mês corrente é parcial e
+// projeção é cenário. Somar os três num número só seria decidir dinheiro em
+// cima de estimativa.
+//
+// Linguagem leiga obrigatória: "quanto entrou", "quanto saiu", "sobrou",
+// "quando se paga". Nada de ROI negativo sem explicar, "payback", "burn".
+// ---------------------------------------------------------------------------
+
+const MONTH_LABELS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+
+function formatMonth(monthKey) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(monthKey ?? ''))
+  if (!match) return '—'
+  return `${MONTH_LABELS[Number(match[2]) - 1] ?? '?'}/${match[1].slice(2)}`
+}
+
+function formatMonthLong(monthKey) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(monthKey ?? ''))
+  if (!match) return '—'
+  const full = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+  return `${full[Number(match[2]) - 1] ?? '?'} de ${match[1]}`
+}
+
+function signedCurrency(value) {
+  const numeric = Number(value ?? 0)
+  const formatted = formatCurrency(Math.abs(numeric))
+  if (numeric > 0) return `+ ${formatted}`
+  if (numeric < 0) return `− ${formatted}`
+  return formatted
+}
+
+/**
+ * Gráfico do dinheiro acumulado, mês a mês: o que já foi gasto contra o que já
+ * entrou, e para onde isso vai.
+ *
+ * Forma: barras ancoradas no zero. Uma série só (não precisa de legenda de
+ * cores), com DUAS codificações além da cor — a barra fica abaixo ou acima da
+ * linha do zero, e o valor sai escrito com sinal. Isso não é enfeite: verde e
+ * vermelho sozinhos são o par que quem tem daltonismo mais confunde (ΔE 6,0 em
+ * deuteranopia), e a regra só permite esse par COM codificação secundária.
+ * Não remover a linha do zero nem os rótulos com sinal.
+ *
+ * Realizado é barra cheia; previsto é barra vazada (tracejada) — de novo, nunca
+ * só pela cor.
+ */
+function CumulativeProfitChart({ past, present, projection, paybackMonth }) {
+  // O gráfico existe para responder UMA coisa: quando a linha cruza o zero.
+  // Por isso ele para pouco depois da virada, em vez de desenhar o horizonte
+  // inteiro — crescimento composto num ano faz a última barra ficar dezenas de
+  // vezes maior que as primeiras, e aí o vermelho de hoje (que é justamente a
+  // situação atual) vira um risco fino e ilegível. A tabela logo abaixo mostra
+  // todos os meses; aqui o que importa é enxergar a travessia.
+  const realizedValues = [...past.map(row => row.cumulativeProfit), Number(present.cumulativeProfitWithCurrent ?? 0)]
+  const deepestRed = Math.abs(Math.min(0, ...realizedValues))
+  // Depois que a linha cruza o zero, o crescimento composto dispara: mais duas
+  // barras já bastam para a maior ficar 10x a menor e achatar todo o resto. O
+  // corte é pela ALTURA, não por um número fixo de meses — segue desenhando
+  // enquanto o azul não passar de 1,5x a profundidade do vermelho, e sempre
+  // inclui o mês da virada, que é o ponto que o gráfico existe para mostrar.
+  const visibleProjection = []
+  let crossed = false
+  for (const row of projection) {
+    const isCrossing = row.month === paybackMonth
+    if (crossed && !isCrossing && Math.abs(row.cumulativeProfit) > Math.max(deepestRed * 1.5, 1)) break
+    visibleProjection.push(row)
+    if (isCrossing) crossed = true
+  }
+  const points = [
+    ...past.map(row => ({ month: row.month, value: row.cumulativeProfit, kind: 'realizado' })),
+    { month: present.month, value: Number(present.cumulativeProfitWithCurrent ?? 0), kind: 'parcial' },
+    ...visibleProjection.map(row => ({ month: row.month, value: row.cumulativeProfit, kind: 'previsto' })),
+  ]
+  if (!points.length) return null
+  const truncated = visibleProjection.length < projection.length
+
+  const values = points.map(point => point.value)
+  const max = Math.max(0, ...values)
+  const min = Math.min(0, ...values)
+  const span = max - min || 1
+  const height = 180
+  const zeroY = ((max - 0) / span) * height
+  const slot = 100 / points.length
+  const barWidth = Math.max(slot * 0.62, 0.8)
+
+  return (
+    <figure className="mt-4">
+      <figcaption className="text-sm font-bold text-gray-800">
+        Dinheiro acumulado desde o começo
+        <span className="ml-2 font-normal text-gray-500">o que entrou menos o que custou, somando mês a mês</span>
+      </figcaption>
+
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-gray-500">
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-sm bg-emerald-700" />já aconteceu</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-sm border border-dashed border-gray-400 bg-white" />projeção</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded-sm bg-rose-700" />ainda no vermelho</span>
+      </div>
+
+      <div className="relative mt-2" style={{ height: `${height}px` }}>
+        {/* Linha do zero: é ela que separa "no vermelho" de "no azul" sem depender da cor. */}
+        <div className="absolute inset-x-0 border-t border-gray-400" style={{ top: `${zeroY}px` }} />
+        <div className="absolute -left-1 -translate-y-1/2 text-[10px] font-bold text-gray-400" style={{ top: `${zeroY}px` }}>R$ 0</div>
+        <div className="absolute inset-0 flex items-stretch">
+          {points.map((point, index) => {
+            const magnitude = (Math.abs(point.value) / span) * height
+            const positive = point.value >= 0
+            const previsto = point.kind === 'previsto'
+            const parcial = point.kind === 'parcial'
+            const tone = positive
+              ? (previsto ? 'border-2 border-dashed border-emerald-600 bg-emerald-50' : 'bg-emerald-700')
+              : (previsto ? 'border-2 border-dashed border-rose-500 bg-rose-50' : 'bg-rose-700')
+            return (
+              <div
+                key={`${point.month}-${point.kind}`}
+                className="group relative flex flex-col justify-end"
+                style={{ width: `${slot}%` }}
+                title={`${formatMonthLong(point.month)} · ${signedCurrency(point.value)}${previsto ? ' (projeção)' : parcial ? ' (mês em andamento)' : ''}`}
+              >
+                <div
+                  className={`absolute rounded ${tone} ${parcial ? 'opacity-80 ring-2 ring-slate-900 ring-offset-1' : ''}`}
+                  style={{
+                    left: `${(slot - barWidth) / 2 / slot * 100}%`,
+                    width: `${(barWidth / slot) * 100}%`,
+                    top: positive ? `${zeroY - magnitude}px` : `${zeroY}px`,
+                    height: `${Math.max(magnitude, 2)}px`,
+                  }}
+                />
+                {point.month === paybackMonth && (
+                  // Colado na linha do zero, não no topo do gráfico: é a
+                  // travessia que ele marca.
+                  // A virada costuma cair na última coluna do desenho, e aí
+                  // um rótulo centrado sai pela borda direita. Perto do fim ele
+                  // ancora pela direita.
+                  <span
+                    className={`pointer-events-none absolute whitespace-nowrap rounded bg-emerald-700 px-1.5 py-0.5 text-[10px] font-black text-white ${index > points.length - 3 ? 'right-0' : 'left-1/2 -translate-x-1/2'}`}
+                    style={{ top: `${Math.max(zeroY - 22, 0)}px` }}
+                  >
+                    se paga aqui
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="mt-1 flex text-[10px] text-gray-400">
+        {points.map((point, index) => (
+          <div key={`label-${point.month}-${point.kind}`} className="text-center" style={{ width: `${slot}%` }}>
+            {index % 2 === 0 ? formatMonth(point.month) : ''}
+          </div>
+        ))}
+      </div>
+      {truncated && (
+        <p className="mt-2 text-[11px] text-gray-500">
+          O desenho para em {formatMonth(points[points.length - 1].month)} para o vermelho de hoje continuar legível. Os meses seguintes estão na tabela abaixo.
+        </p>
+      )}
+    </figure>
+  )
+}
+
+function RoiPanel({ data, loading, months, onMonths }) {
+  const [scenario, setScenario] = useState('base')
+
+  if (loading && !data) return <LoadingState message="Montando a conta do ROI…" />
+  if (!data) return <p className="text-sm text-gray-400">Não foi possível carregar o ROI agora.</p>
+
+  const summary = data.summary ?? {}
+  const present = data.present ?? {}
+  const future = data.future ?? {}
+  const chosen = (future.scenarios ?? []).find(item => item.scenario === scenario) ?? (future.scenarios ?? [])[0] ?? null
+  const seCustear = summary.netResult >= 0
+
+  return (
+    <div className="space-y-8">
+      {/* ------------------------------ RESUMO ------------------------------ */}
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wide text-gray-500">O placar até agora</h3>
+            <p className="text-xs text-gray-500">Só meses já fechados ({formatNumber(summary.monthsClosed ?? 0)}). O mês atual fica no bloco de baixo, porque ainda está correndo.</p>
+          </div>
+          {!!data.excludedTestAccounts?.length && (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-800">
+              Fora da conta: {data.excludedTestAccounts.join(', ')} (assinatura de teste)
+            </span>
+          )}
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
+            <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Entrou (já descontado)</p>
+            <p className="mt-1 text-2xl font-black text-emerald-800">{formatCurrency(summary.totalNetRevenue)}</p>
+            <p className="mt-1 text-[11px] text-emerald-600">depois das comissões de afiliada e das taxas do Mercado Pago</p>
+          </div>
+          <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-100">
+            <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Saiu (Claude + servidor)</p>
+            <p className="mt-1 text-2xl font-black text-rose-700">{formatCurrency(summary.totalInvested)}</p>
+            <p className="mt-1 text-[11px] text-rose-600">tudo que você já pagou para o BOTinho existir</p>
+          </div>
+          <div className={`rounded-xl p-4 ring-1 ${seCustear ? 'bg-emerald-600 ring-emerald-500' : 'bg-slate-900 ring-slate-800'}`}>
+            <p className="text-xs font-bold uppercase tracking-wide text-cyan-200">{seCustear ? 'Já sobrou' : 'Ainda falta'}</p>
+            <p className="mt-1 text-2xl font-black text-white">{signedCurrency(summary.netResult)}</p>
+            <p className="mt-1 text-[11px] text-slate-300">
+              {seCustear ? 'o produto já pagou tudo que custou' : 'para o produto pagar tudo que custou até aqui'}
+            </p>
+          </div>
+          <div className="rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Retorno sobre o gasto</p>
+            <p className={`mt-1 text-2xl font-black ${(summary.roiPct ?? 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {summary.roiPct === null || summary.roiPct === undefined ? '—' : `${summary.roiPct > 0 ? '+' : ''}${formatNumber(summary.roiPct)}%`}
+            </p>
+            <p className="mt-1 text-[11px] text-gray-500">cada R$ 100 gastos devolveram {summary.totalInvested > 0 ? formatCurrency((summary.totalNetRevenue / summary.totalInvested) * 100) : '—'}</p>
+          </div>
+        </div>
+
+        <CumulativeProfitChart
+          past={data.past ?? []}
+          present={{ month: present.month, cumulativeProfitWithCurrent: summary.cumulativeProfitWithCurrent }}
+          projection={chosen?.months ?? []}
+          paybackMonth={chosen?.paybackMonth ?? null}
+        />
+      </div>
+
+      {/* ------------------------------ PASSADO ------------------------------ */}
+      <div>
+        <h3 className="text-sm font-black uppercase tracking-wide text-gray-500">Passado · mês a mês, tudo já aconteceu</h3>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-gray-100">
+          <table className="min-w-[760px] w-full text-sm">
+            <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-3 py-2">Mês</th>
+                <th className="px-3 py-2">Entrou (líquido)</th>
+                <th className="px-3 py-2">Claude</th>
+                <th className="px-3 py-2">Servidor</th>
+                <th className="px-3 py-2">Sobrou no mês</th>
+                <th className="px-3 py-2">Acumulado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {(data.past ?? []).map(row => (
+                <tr key={row.month} className="hover:bg-gray-50">
+                  <td className="px-3 py-2 font-bold text-gray-800">{formatMonth(row.month)}</td>
+                  <td className="px-3 py-2">
+                    {formatCurrency(row.net)}
+                    {row.gross > row.net && (
+                      <span className="ml-1 text-[11px] text-gray-400">(bruto {formatCurrency(row.gross)})</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-rose-700">{row.costClaude ? `− ${formatCurrency(row.costClaude)}` : '—'}</td>
+                  <td className="px-3 py-2 text-rose-700">{row.costVps ? `− ${formatCurrency(row.costVps)}` : '—'}</td>
+                  <td className={`px-3 py-2 font-bold ${row.profit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{signedCurrency(row.profit)}</td>
+                  <td className={`px-3 py-2 font-black ${row.cumulativeProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{signedCurrency(row.cumulativeProfit)}</td>
+                </tr>
+              ))}
+              {!(data.past ?? []).length && (
+                <tr><td colSpan={6} className="px-3 py-4 text-center text-sm text-gray-400">Nenhum mês fechado ainda.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-[11px] text-gray-500">
+          Faturas em dólar convertidas a R$ {formatNumber(data.config?.usdBrlRate ?? 0)}. A partir de {formatMonthLong(data.config?.recurringStartMonth)} o custo passa a ser o valor fixo combinado: {formatCurrency(data.config?.claudeMonthly)} de Claude + {formatCurrency(data.config?.vpsMonthly)} de servidor.
+        </p>
+      </div>
+
+      {/* ------------------------------ PRESENTE ------------------------------ */}
+      <div>
+        <h3 className="text-sm font-black uppercase tracking-wide text-gray-500">Presente · {formatMonthLong(present.month)}, dia {formatNumber(present.daysElapsed)} de {formatNumber(present.daysInMonth)}</h3>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl bg-gray-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Já entrou este mês</p>
+            <p className="mt-1 text-xl font-black text-gray-900">{formatCurrency(present.net)}</p>
+            <p className="mt-1 text-[11px] text-gray-500">{formatNumber(present.payments)} pagamentos · {formatNumber(present.payingUsers)} clientes</p>
+          </div>
+          <div className="rounded-xl bg-rose-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Custo fixo do mês</p>
+            <p className="mt-1 text-xl font-black text-rose-700">{formatCurrency(present.cost)}</p>
+            <p className="mt-1 text-[11px] text-rose-600">{formatCurrency(present.costClaude)} Claude + {formatCurrency(present.costVps)} servidor</p>
+          </div>
+          <div className={`rounded-xl p-4 ${present.missingToBreakEven > 0 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+            <p className={`text-xs font-bold uppercase tracking-wide ${present.missingToBreakEven > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+              {present.missingToBreakEven > 0 ? 'Falta este mês' : 'Mês já pago'}
+            </p>
+            <p className={`mt-1 text-xl font-black ${present.missingToBreakEven > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
+              {present.missingToBreakEven > 0 ? formatCurrency(present.missingToBreakEven) : '✓'}
+            </p>
+            <p className="mt-1 text-[11px] text-gray-500">para o mês cobrir o próprio custo</p>
+          </div>
+          <div className="rounded-xl bg-slate-900 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">Quantas clientes pagam a conta</p>
+            <p className="mt-1 text-xl font-black text-white">{present.breakEvenCustomers ? `${formatNumber(present.breakEvenCustomers)} por mês` : '—'}</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              {present.avgTicketNet > 0 ? `com o que cada uma deixa hoje (${formatCurrency(present.avgTicketNet)} já descontado)` : 'sem cliente pagante ainda para calcular'}
+            </p>
+          </div>
+        </div>
+        <p className="mt-2 text-[11px] text-gray-500">
+          No ritmo deste mês, o mês deve fechar com {formatCurrency(present.projectedNet)} de entrada — <span className="font-bold">isso é estimativa</span>, não fato. Assinaturas ativas hoje somam {formatCurrency(present.activeMrr)} por mês.
+        </p>
+      </div>
+
+      {/* ------------------------------ FUTURO ------------------------------ */}
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wide text-gray-500">Futuro · os próximos {formatNumber(future.months)} meses</h3>
+            <p className="text-xs text-gray-500">Três cenários. Nenhum é promessa — o primeiro é literalmente &quot;nada muda a partir de hoje&quot;.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={months} onChange={event => onMonths(Number(event.target.value))} className="rounded-xl border border-gray-200 px-2 py-1.5 text-xs font-bold text-gray-700">
+              {[6, 12, 18, 24].map(value => <option key={value} value={value}>{value} meses</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-3">
+          {(future.scenarios ?? []).map(item => {
+            const active = item.scenario === scenario
+            return (
+              <button
+                key={item.scenario}
+                type="button"
+                onClick={() => setScenario(item.scenario)}
+                className={`rounded-xl p-4 text-left ring-1 transition ${active ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white ring-gray-200 hover:bg-gray-50'}`}
+              >
+                <p className={`text-xs font-bold uppercase tracking-wide ${active ? 'text-cyan-300' : 'text-gray-500'}`}>{item.label}</p>
+                <p className="mt-1 text-lg font-black">
+                  {item.paybackMonth ? `Se paga em ${formatMonthLong(item.paybackMonth)}` : 'Não se paga nesse prazo'}
+                </p>
+                <p className={`mt-1 text-[11px] ${active ? 'text-slate-300' : 'text-gray-500'}`}>
+                  {item.monthlyGrowthPct > 0 ? `crescendo ${formatNumber(item.monthlyGrowthPct)}% ao mês` : 'sem entrar nenhuma cliente nova'}
+                  {item.breakEvenMonth ? ` · mês se paga sozinho a partir de ${formatMonth(item.breakEvenMonth)}` : ' · nenhum mês se paga sozinho'}
+                </p>
+                <p className={`mt-2 text-sm font-black ${item.cumulativeProfitAtEnd >= 0 ? (active ? 'text-emerald-300' : 'text-emerald-700') : (active ? 'text-rose-300' : 'text-rose-700')}`}>
+                  {signedCurrency(item.cumulativeProfitAtEnd)} no fim do período
+                </p>
+                {item.cappedFromMonth && (
+                  <p className={`mt-1 text-[11px] ${active ? 'text-amber-300' : 'text-amber-700'}`}>
+                    a partir de {formatMonth(item.cappedFromMonth)} o servidor de hoje lota ({formatNumber(future.capacityCustomers)} clientes)
+                  </p>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {chosen && (
+          <div className="mt-3 overflow-x-auto rounded-xl border border-gray-100">
+            <table className="min-w-[620px] w-full text-sm">
+              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-3 py-2">Mês</th>
+                  <th className="px-3 py-2">Entrada estimada</th>
+                  <th className="px-3 py-2">Custo</th>
+                  <th className="px-3 py-2">Sobra no mês</th>
+                  <th className="px-3 py-2">Acumulado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {chosen.months.map(row => (
+                  <tr key={row.month} className={row.month === chosen.paybackMonth ? 'bg-emerald-50' : 'hover:bg-gray-50'}>
+                    <td className="px-3 py-2 font-bold text-gray-800">{formatMonth(row.month)}</td>
+                    <td className="px-3 py-2 text-gray-600">{formatCurrency(row.net)}</td>
+                    <td className="px-3 py-2 text-rose-700">− {formatCurrency(row.cost)}</td>
+                    <td className={`px-3 py-2 font-bold ${row.profit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{signedCurrency(row.profit)}</td>
+                    <td className={`px-3 py-2 font-black ${row.cumulativeProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{signedCurrency(row.cumulativeProfit)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="mt-2 text-[11px] text-gray-500">
+          Base da projeção: {formatCurrency(future.baselineNet)} por mês.{' '}
+          {data.growth?.reliable
+            ? `Crescimento medido nos meses fechados${data.growth.reason === 'limitado' ? ' (estava alto demais para esticar por um ano, então foi limitado)' : ''}.`
+            : 'Ainda não há meses fechados suficientes para medir crescimento — por isso o cenário do meio não promete nada além do que já acontece.'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // Mesmos seis períodos da rota GET /finance/overview (src/domain/admin/financePeriod.js)
 // — compartilhado pelos Cards (Visão geral) e pela tabela de Cobranças
 // recorrentes, para as duas telas nunca discordarem sobre "os últimos 30 dias".
@@ -227,7 +618,7 @@ function FinancePeriodSelector({ value, onChange }) {
   )
 }
 
-function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, onSearch, onOpenDetail }) {
+function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, onSearch, onOpenDetail, testAccountEmails }) {
   const summary = data?.summary ?? null
   const rows = asArray(data?.charges)
 
@@ -343,7 +734,10 @@ function SubscriptionChargesPanel({ data, loading, filters, onFilters, search, o
             {rows.map(charge => (
               <tr key={charge.id} className={onOpenDetail ? 'cursor-pointer hover:bg-gray-50' : ''} onClick={() => charge.userId && onOpenDetail?.(charge.userId)}>
                 <td className="whitespace-nowrap px-3 py-2 text-gray-700">{formatDate(charge.attemptedAt)}</td>
-                <td className="px-3 py-2 font-semibold text-gray-900">{charge.email ?? '—'}</td>
+                <td className="px-3 py-2 font-semibold text-gray-900">
+                  {charge.email ?? '—'}
+                  <TestAccountTag email={charge.email} emails={testAccountEmails} compact className="ml-1 align-middle" />
+                </td>
                 <td className="px-3 py-2 text-gray-600">{charge.plan ?? '—'}</td>
                 <td className="px-3 py-2 text-gray-600">{charge.amount == null ? '—' : formatCurrency(charge.amount)}</td>
                 <td className="px-3 py-2">
@@ -1855,6 +2249,23 @@ export default function AdminPage() {
       .catch(() => {})
     return () => { active = false }
   }, [tab, financeTab, financePeriod])
+
+  // Sub-aba "ROI": passado, presente e futuro do dinheiro. Mesmo padrão das
+  // outras duas — só busca quando a aba é aberta, e a resposta carrega a chave
+  // do horizonte que a gerou (trocar o horizonte não pode mostrar o número
+  // antigo como se fosse o novo).
+  const [roi, setRoi] = useState(null)
+  const [roiMonths, setRoiMonths] = useState(12)
+  const roiLoading = tab === 'financeiro' && financeTab === 'roi' && roi?.key !== roiMonths
+
+  useEffect(() => {
+    if (tab !== 'financeiro' || financeTab !== 'roi') return
+    let active = true
+    api.adminFinanceRoi(roiMonths)
+      .then(data => { if (active) setRoi({ ...data, key: roiMonths }) })
+      .catch(() => { if (active) setRoi(null) })
+    return () => { active = false }
+  }, [tab, financeTab, roiMonths])
   // Drill-down dos cards técnicos ('infra' | 'filas' | null). Não busca nada
   // novo: mostra o detalhe do que a página já carregou.
   const [techDrilldown, setTechDrilldown] = useState(null)
@@ -2669,7 +3080,7 @@ export default function AdminPage() {
 
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
               <div className="flex flex-wrap gap-2">
-                {[['visao', 'Visão geral'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
+                {[['visao', 'Visão geral'], ['roi', 'ROI'], ['cobrancas', 'Cobranças recorrentes']].map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
@@ -2685,12 +3096,17 @@ export default function AdminPage() {
               <FinancePeriodSelector value={financePeriod} onChange={setFinancePeriod} />
             </div>
 
+            {financeTab === 'roi' && (
+              <RoiPanel data={roi} loading={roiLoading} months={roiMonths} onMonths={setRoiMonths} />
+            )}
+
             {financeTab === 'cobrancas' && (
               <SubscriptionChargesPanel
                 data={charges}
                 loading={chargesLoading}
                 filters={chargeFilters}
                 onFilters={setChargeFilters}
+                testAccountEmails={finance?.excludedTestAccounts}
                 search={chargeSearch}
                 onSearch={setChargeSearch}
                 onOpenDetail={openUserDetail}
@@ -2698,6 +3114,11 @@ export default function AdminPage() {
             )}
 
             {financeTab === 'visao' && (<>
+            {!!finance.excludedTestAccounts?.length && (
+              <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                🧪 Assinatura de teste fora de todas as somas desta aba ({finance.excludedTestAccounts.join(', ')}). Ela continua aparecendo nas listas e nas cobranças recorrentes, com etiqueta.
+              </p>
+            )}
             <div className={`mb-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 transition-opacity ${financeLoading ? 'opacity-50' : ''}`}>
               <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
                 <p className="text-xs font-bold uppercase tracking-wide text-emerald-600">Receita bruta · {finance.periodLabel ?? '30 dias'}</p>
@@ -2736,7 +3157,10 @@ export default function AdminPage() {
                   {asArray(subscriptions?.subscriptions).map(subscription => (
                     <button key={subscription?.id ?? subscription?.email} onClick={() => openUserDetail(subscription?.id)} className="w-full rounded-xl border border-gray-100 p-3 text-left text-sm hover:bg-gray-50">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="font-bold text-gray-900">{subscription?.email ?? 'Cliente sem e-mail'}</p>
+                        <p className="font-bold text-gray-900">
+                          {subscription?.email ?? 'Cliente sem e-mail'}
+                          <TestAccountTag email={subscription?.email} emails={finance?.excludedTestAccounts} compact className="ml-1 align-middle" />
+                        </p>
                         <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700">{subscription?.daysRemaining ?? '—'} dias</span>
                       </div>
                       <p className="mt-1 text-xs text-gray-500">{subscription?.plan ?? '—'} · LTV {formatCurrency(subscription?.ltv)} · expira {formatDate(subscription?.accessExpiresAt)}</p>
@@ -2752,7 +3176,10 @@ export default function AdminPage() {
                   {asArray(payments?.payments).map(payment => (
                     <div key={payment?.id ?? `${payment?.user?.email}-${payment?.createdAt}`} className="rounded-xl border border-gray-100 p-3 text-sm">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="font-bold text-gray-900">{payment?.user?.email ?? 'Cliente sem e-mail'}</p>
+                        <p className="font-bold text-gray-900">
+                          {payment?.user?.email ?? 'Cliente sem e-mail'}
+                          <TestAccountTag email={payment?.user?.email} emails={finance?.excludedTestAccounts} compact className="ml-1 align-middle" />
+                        </p>
                         <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${payment?.status === 'approved' ? 'bg-green-100 text-green-700' : payment?.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{payment?.status ?? '—'}</span>
                       </div>
                       <p className="mt-1 text-xs text-gray-500">{payment?.plan ?? '—'} · {formatCurrency(payment?.amount)} · {formatDate(payment?.createdAt)}{payment?.provider === 'manual' ? ` · Por fora (${payment.paymentMethod || 'outro'})` : ''}</p>

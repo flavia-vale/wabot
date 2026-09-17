@@ -344,6 +344,10 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/finance/overview${query ? `?${query}` : ''}`)
   },
+  // Sub-aba "ROI" do Financeiro: passado (mês a mês fechado), presente (mês
+  // corrente parcial) e futuro (projeção em cenários). Só busca quando a aba
+  // é aberta — ver `roiLoading` em app/admin/page.js.
+  adminFinanceRoi: (months) => apiFetch(`/api/admin/finance/roi${months ? `?months=${months}` : ''}`),
   adminPayments: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/payments${query ? `?${query}` : ''}`)
