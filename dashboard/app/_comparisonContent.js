@@ -23,6 +23,32 @@ import {
 } from '@/components/marketing/ComparisonSections'
 import { DifferentialGrid, InteractiveComparisonTable, TrustStrip } from '@/components/marketing/ComparisonInteractive'
 
+/*
+ * Links por LOJA, em todas as páginas de comparativo.
+ *
+ * Medição de 16/09: as cinco páginas comerciais por loja existem desde 02/09 e
+ * somavam ~30 impressões. Não é ausência de página — é descoberta. Quem
+ * apontava para elas era `/programa-de-afiliados` (185 impressões, ZERO clique),
+ * o `/conteudos` (que por regra não conta) e elas entre si, todas zeradas. As
+ * páginas mais fortes do site — estas oito de comparativo, juntas com
+ * `/bot-achadinhos-whatsapp`, ~9.000 das 13.362 impressões — não linkavam
+ * nenhuma.
+ *
+ * A guarda `test/marketing-paginas-orfas.test.js` conta LINK, não conta FORÇA, e
+ * por isso passava. Página sem força não transfere força.
+ *
+ * Fica no fim, junto dos outros links de apoio, e NUNCA antes da saída para a
+ * página comercial: a medição do comentário da seção 9 (comparativo converte 0%,
+ * comercial converte 15,4%) continua valendo e não pode ser diluída.
+ */
+export const COMPARISON_STORE_LINKS = [
+  { href: '/shopee-afiliados-whatsapp', label: 'Shopee' },
+  { href: '/mercado-livre-afiliados-whatsapp', label: 'Mercado Livre' },
+  { href: '/amazon-afiliados-whatsapp', label: 'Amazon' },
+  { href: '/shein-afiliados-whatsapp', label: 'SHEIN' },
+  { href: '/magalu-afiliados-whatsapp', label: 'Magalu' },
+]
+
 export const COMPARISON_SOURCE_LINKS = [
   { label: 'Política de Mensagens do WhatsApp Business', href: 'https://whatsappbusiness.com/pt-br/policy/' },
   { label: 'Termos do Programa de Afiliados e Criadores do Mercado Livre', href: 'https://www.mercadolivre.com.br/ajuda/30228' },
@@ -641,6 +667,167 @@ export const COMPARISON_PAGES = {
       { q: 'O que evitar ao escolher um bot?', a: 'Evite promessa de comissão garantida, disparo sem consentimento, ausência de logs e ferramenta que não explica limites de uso.' },
     ],
   },
+  /* Três páginas novas em 17/09/2026, a pedido da dona do produto ("quero ter
+   * de todos os concorrentes"), com a regra de uma por semana explicitamente
+   * cancelada por ela.
+   *
+   * Origem dos dados, e por que cada uma é diferente:
+   *
+   *  - Divulgador Inteligente e DivulgaLinks: prints das páginas de planos
+   *    enviados por ela em 17/09/2026. Até aqui os dois tinham ficha em
+   *    `competitors-data.js` com "Consultar fornecedor" e texto genérico de
+   *    preenchimento — publicar naquele estado quebraria a regra de nunca citar
+   *    preço sem fonte e data, e produziria exatamente a página fina que o
+   *    Google recusa.
+   *  - Lumi: print de 31/07/2026, que já estava na ficha desde então.
+   *
+   * ⚠️ Estes três NÃO vieram do Search Console — DivulgaLinks e Lumi apareceram
+   * em citação de IA (Gemini e AI Overviews, 01/09). Não há evidência de que
+   * alguém procure esses nomes no Google, então o critério de sucesso aqui é
+   * SER CITADA pela IA, não clique orgânico. Lembre do teto medido: em
+   * `fluxopromo` estamos em posição 3 com ZERO clique em 133 impressões.
+   */
+  '/alternativas/divulgador-inteligente': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Divulgador Inteligente',
+    title: 'Alternativa ao Divulgador Inteligente: R$69 com robô',
+    description: 'No Divulgador Inteligente a automação de grupos só começa no plano de R$189. No Espelha Grupos o robô publica sozinho a partir de R$69, com grupos ilimitados.',
+    competitorSlugs: ['divulgador-inteligente'],
+    productPage: {
+      href: '/bot-afiliados-whatsapp',
+      label: 'Como funciona a operação para afiliados, do começo ao fim',
+      note: 'Origens, conversão do link, destinos e histórico — sem comparar com ninguém.',
+    },
+    tldr: 'O Divulgador Inteligente tem três planos (R$ 67, R$ 137 e R$ 189 por mês), mas a automação de grupos no WhatsApp aparece desabilitada nos dois primeiros, com o aviso "Disponível a partir do plano Diamante". Quem quer o robô publicando sozinho paga R$ 189 — e o que vem incluído é 1 número conectado com 1 grupo monitorado. No Espelha Grupos, o robô publica sozinho no plano Pro de R$ 69 por 30 dias, sem limite de grupos.',
+    directAnswer: 'O Divulgador Inteligente é uma plataforma larga para afiliados: gera promoções em até 121 lojas no plano mais caro, monta um site de promoções com domínio próprio e selo de verificado, cria página de link na bio, escreve descrição de produto com I.A e baixa vídeos de achadinhos do Pinterest. A automação de grupos no WhatsApp, porém, é um recurso à parte: os cartões dos planos Essencial (R$ 67/mês) e Ouro (R$ 137/mês) mostram essa linha desabilitada, com o aviso "Disponível a partir do plano Diamante". No Diamante, de R$ 189/mês, a "Automação Base" vem incluída no nível "Até 2 Grupos", que a própria página descreve como 1 número conectado e 1 grupo monitorado. O Espelha Grupos faz o caminho oposto: o robô que acompanha as origens e publica nos destinos é o produto inteiro, está no plano Pro de R$ 69 por 30 dias, não cobra por quantidade de grupos e tem 7 dias grátis com o Pro completo, sem cartão. Em contrapartida, o Divulgador Inteligente cobre muito mais lojas e entrega site próprio, link na bio e recursos de Pinterest e I.A que o Espelha Grupos não tem.',
+    rows: [
+      { key: 'automacao', label: 'A partir de quanto o robô publica sozinho', produto: 'R$ 69 por 30 dias (plano Pro).', concorrente: 'R$ 189/mês. Nos planos de R$ 67 e R$ 137 a linha "Automação de grupos no WhatsApp" aparece desabilitada, com o aviso "Disponível a partir do plano Diamante".', reading: 'É o corte que mais muda a conta: comparar o preço de entrada de R$ 67 com o nosso só faz sentido se você NÃO precisar de automação.' },
+      { key: 'grupos', label: 'Quantos grupos o robô acompanha', produto: 'Sem limite de grupos de origem e de destino.', concorrente: 'A automação incluída no Diamante é o nível "Até 2 Grupos": 1 número conectado e 1 grupo monitorado. O seletor "Nível de automação" oferece níveis maiores, cujos preços não aparecem no material consultado.', reading: 'Se você acompanha mais de uma origem, vale perguntar a eles quanto custa subir o nível antes de fechar.' },
+      { key: 'lojas', label: 'Lojas suportadas', produto: 'Seis: Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress.', concorrente: '10 lojas no Essencial, 16 no Ouro e 121 no Diamante. Amazon só a partir do Ouro.', reading: 'Aqui eles ganham com folga. Se você divulga lojas fora das seis nossas, esse é um motivo real para escolher o Divulgador Inteligente.' },
+      { key: 'alem', label: 'O que existe além do WhatsApp', produto: 'Grupos, Canais e Comunidades do WhatsApp. Não temos site de promoções nem página de link na bio.', concorrente: 'Site de promoções personalizado com selo de verificado e domínio próprio, página de link na bio, template de story, descrição de produto com I.A e download de vídeos do Pinterest.', reading: 'São produtos diferentes: eles montam a vitrine, nós cuidamos da publicação recorrente nos grupos.' },
+      { key: 'teste', label: 'Como testar antes de pagar', produto: '7 dias grátis com o Pro completo, sem cartão.', concorrente: '7 dias de garantia e cancelamento a qualquer momento, em todos os planos.', reading: 'São coisas diferentes: garantia é devolução depois de pagar; teste grátis é usar antes de pagar.' },
+    ],
+    criteria: ['Se você precisa mesmo do robô publicando sozinho ou só de gerar o post', 'Quantas origens quer acompanhar ao mesmo tempo', 'Quantas lojas diferentes você divulga hoje', 'Se precisa de site de promoções e link na bio', 'Se prefere testar antes de pagar ou pagar com garantia de devolução'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o robô somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'Preço e limites de qualquer concorrente mudam sem aviso — confirme na página oficial antes de decidir.'],
+    botinhoDifferentials: ['O robô publicando sozinho já no plano de R$ 69 por 30 dias', 'Sem limite de grupos de origem e de destino', 'Seis lojas: Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress', 'Conversão de links de produto e de cupom', 'Grupos, Canais e Comunidades do WhatsApp', 'Controle do ritmo dos envios por grupo', 'Histórico completo do que saiu, falhou ou foi segurado', '7 dias grátis com o Pro completo, sem cartão'],
+    bestFit: [
+      'Escolha o Espelha Grupos se o que você precisa é o robô acompanhando as origens e publicando nos seus grupos todo dia, sem pagar por quantidade de grupos.',
+      'Escolha o Divulgador Inteligente se divulga lojas fora das seis que cobrimos, ou se o site de promoções com domínio próprio, o link na bio e os recursos de I.A e Pinterest são parte importante da sua operação.',
+      'Se você só monta o post e publica você mesma, o Essencial deles de R$ 67 resolve — e aí a comparação com o nosso robô não se aplica.',
+    ],
+    notIdealFit: [
+      'O Divulgador Inteligente não é ideal para quem quer automação sem gastar R$ 189/mês: os dois planos mais baratos mostram esse item desabilitado na própria página.',
+      'O Espelha Grupos não é ideal para quem precisa de site de promoções com domínio próprio, página de link na bio ou publicação no Instagram — não fazemos nada disso.',
+      'O Espelha Grupos trabalha somente com WhatsApp. Se sua operação depende de Telegram, será necessário usar outra solução para esse canal.',
+    ],
+    migrationPath: [
+      'Liste os grupos de onde vêm as ofertas e os grupos, Canais ou Comunidades onde você quer publicá-las.',
+      'Confira se as lojas que você divulga estão entre as seis que cobrimos — é o ponto onde o Divulgador Inteligente pode ser a escolha certa.',
+      'Comece os 7 dias grátis e confira a conversão dos links, o formato das mensagens e o ritmo dos envios nos seus grupos reais.',
+      'Rode as duas ferramentas em paralelo por alguns dias e compare pelo histórico de envios, não pela impressão.',
+      'Cancele a outra só depois de confirmar que grupos, lojas e links funcionam como você espera.',
+    ],
+    faq: [
+      { q: 'O plano de R$ 67 do Divulgador Inteligente já automatiza meus grupos?', a: 'Não. O cartão do plano Essencial mostra a linha "Automação de grupos no WhatsApp" desabilitada, com o aviso "Disponível a partir do plano Diamante". O mesmo aparece no plano Ouro, de R$ 137/mês. A automação começa no Diamante, de R$ 189/mês.' },
+      { q: 'Quantos grupos a automação do plano Diamante cobre?', a: 'A "Automação Base" que vem incluída é o nível "Até 2 Grupos", descrito na própria página como 1 número conectado e 1 grupo monitorado. Há um seletor com níveis maiores, mas o material que consultamos não informa o preço deles — vale perguntar antes de assinar.' },
+      { q: 'Qual dos dois cobre mais lojas?', a: 'O Divulgador Inteligente, com folga: são 10 lojas no Essencial, 16 no Ouro e 121 no Diamante. O Espelha Grupos cobre seis: Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress.' },
+      { q: 'Dá para testar o Espelha Grupos antes de pagar?', a: 'Dá: 7 dias grátis com o plano Pro completo, sem cartão de crédito. O Divulgador Inteligente oferece 7 dias de garantia, que é diferente — você paga e pode pedir a devolução.' },
+    ],
+  },
+  '/alternativas/divulgalinks': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · DivulgaLinks',
+    title: 'Alternativa ao DivulgaLinks: preço por grupo, não nicho',
+    description: 'No DivulgaLinks o preço sobe por quantidade de nichos, e cada nicho embute Instagram e Telegram. No Espelha Grupos são grupos ilimitados por R$ 69 em 30 dias.',
+    competitorSlugs: ['divulga-links'],
+    productPage: {
+      href: '/bot-afiliados-whatsapp',
+      label: 'Como funciona a operação para afiliados, do começo ao fim',
+      note: 'Origens, conversão do link, destinos e histórico — sem comparar com ninguém.',
+    },
+    tldr: 'O DivulgaLinks cobra por NICHO, não por grupo: R$ 69,90 para 1 nicho, R$ 129,90 para 5, R$ 169,90 para 10 e R$ 229,90 para 15. Cada nicho equivale a 1 Instagram, 1 grupo de Telegram e vários grupos de WhatsApp do mesmo assunto. Se você divulga um nicho só, subir de plano não aumenta grupo nenhum. O Espelha Grupos custa R$ 69 por 30 dias no plano Pro, não limita grupos e não cobra por canais que você talvez não use.',
+    directAnswer: 'O DivulgaLinks organiza a operação por nicho e é forte em Instagram: cria as artes de story sozinho, posta e agenda stories e reels, responde comentários automaticamente e manda link no direct. Ele também publica em grupos de Telegram e de WhatsApp, gera listas de produtos por categoria ou palavra-chave e cobre AliExpress, Amazon, AWIN (algumas lojas), Shopee, Magazine Luiza, Mercado Livre e Natura. A própria página afirma que a única diferença entre os planos é quantos nichos você pode gerenciar. O Espelha Grupos resolve outra parte do trabalho: ele acompanha os grupos de origem que você escolhe, troca o link pelo seu código de afiliada e publica nos seus grupos, Canais e Comunidades do WhatsApp, com controle de ritmo e histórico de tudo que saiu. Se a sua divulgação é toda no WhatsApp e você não usa Instagram nem Telegram, boa parte do que está no preço do DivulgaLinks não vai ser usada.',
+    rows: [
+      { key: 'cobranca', label: 'Pelo que você paga', produto: 'Pelo plano, não pela quantidade de grupos: R$ 69 por 30 dias no Pro, com grupos ilimitados.', concorrente: 'Pela quantidade de NICHOS: R$ 69,90 (1), R$ 129,90 (5), R$ 169,90 (10) e R$ 229,90 (15). A página afirma que essa é a única diferença entre os planos.', reading: 'Quem tem um nicho só e muitos grupos não ganha nada subindo de plano no DivulgaLinks.' },
+      { key: 'canais', label: 'Onde publica', produto: 'Grupos, Canais e Comunidades do WhatsApp. Não publicamos em Instagram nem em Telegram.', concorrente: 'Instagram, Telegram e WhatsApp. Cada nicho embute 1 Instagram e 1 grupo de Telegram.', reading: 'Eles cobrem mais canais; nós cobrimos mais fundo o WhatsApp. Se você não usa Instagram nem Telegram, está pagando por eles do mesmo jeito.' },
+      { key: 'origem', label: 'De onde vem a oferta', produto: 'De grupos de origem que você escolhe: o robô acompanha o que é publicado lá e espelha nos seus destinos.', concorrente: 'Do link do produto que você insere, e de listas geradas por categoria ou palavra-chave. O material consultado não menciona monitorar um grupo de origem.', reading: 'São formas diferentes de achar oferta. Confirme com eles se o monitoramento de grupo existe, caso seja o que você precisa.' },
+      { key: 'instagram', label: 'Instagram', produto: 'Não temos automação de Instagram.', concorrente: 'Artes de story criadas automaticamente, postagem e agendamento de stories e reels, resposta automática a comentários e link enviado no direct.', reading: 'É a maior força deles e nenhum outro concorrente mapeado tem isso. Se o Instagram é o seu canal principal, pesa a favor do DivulgaLinks.' },
+      { key: 'teste', label: 'Como testar antes de pagar', produto: '7 dias grátis com o Pro completo, sem cartão.', concorrente: 'Plano Starter com 7 dias grátis, descrito como "igual ao PRIME (com limitações)". O preço do Starter não aparece na página consultada.', reading: 'Os dois deixam testar. Vale perguntar a eles quais são as limitações do Starter e quanto ele custa depois.' },
+    ],
+    criteria: ['Quantos nichos diferentes você divulga, não quantos grupos', 'Se você usa Instagram e Telegram ou só WhatsApp', 'Se as ofertas vêm de grupos que você acompanha ou de links que você mesma escolhe', 'Quantas lojas diferentes você divulga hoje', 'Se o preço aumenta quando a operação cresce'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o robô somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'A página de planos consultada é de 01/01/2025 — confirme os valores na fonte oficial antes de decidir.'],
+    botinhoDifferentials: ['Grupos ilimitados, sem cobrar por nicho nem por quantidade', 'Espelhamento: o robô acompanha as origens que você escolhe e publica sozinho', 'Seis lojas: Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress', 'Conversão de links de produto e de cupom', 'Grupos, Canais e Comunidades do WhatsApp', 'Controle do ritmo dos envios por grupo', 'Histórico completo do que saiu, falhou ou foi segurado', '7 dias grátis com o Pro completo, sem cartão'],
+    bestFit: [
+      'Escolha o Espelha Grupos se toda a sua divulgação é no WhatsApp, se as ofertas vêm de grupos que você já acompanha e se você não quer que o preço suba conforme a operação cresce.',
+      'Escolha o DivulgaLinks se o Instagram é parte central do seu trabalho, ou se você organiza a operação em vários nichos separados com Telegram junto.',
+      'Se você tem exatamente um nicho e publica em Instagram, Telegram e WhatsApp, o Prime deles de R$ 69,90 fica no mesmo patamar do nosso Pro — aí a decisão é por qual trabalho você precisa que seja feito.',
+    ],
+    notIdealFit: [
+      'O DivulgaLinks não é ideal para quem tem um nicho só e muitos grupos: os planos mais caros só aumentam a quantidade de nichos.',
+      'O DivulgaLinks não é ideal para quem não usa Instagram nem Telegram, já que cada nicho embute os dois no preço.',
+      'O Espelha Grupos não é ideal para quem precisa publicar no Instagram ou no Telegram — não fazemos nenhum dos dois.',
+    ],
+    migrationPath: [
+      'Conte quantos NICHOS diferentes você divulga e quantos grupos existem em cada um: é isso que muda o preço de cada lado.',
+      'Separe o que você realmente publica no Instagram e no Telegram do que publica no WhatsApp.',
+      'Liste os grupos de onde vêm as ofertas e os destinos onde quer publicá-las.',
+      'Comece os 7 dias grátis e compare pelo histórico de envios, não pela impressão.',
+      'Cancele a outra só depois de confirmar que grupos, lojas e links funcionam como você espera.',
+    ],
+    faq: [
+      { q: 'O DivulgaLinks cobra por grupo?', a: 'Não: ele cobra por nicho. A própria página de planos afirma que a única diferença entre Prime, Premium, Pro e Ultimate é quantos nichos você pode gerenciar. Cada nicho equivale a 1 Instagram, 1 grupo de Telegram e vários grupos de WhatsApp do mesmo assunto.' },
+      { q: 'Se eu tenho um nicho só, vale subir de plano no DivulgaLinks?', a: 'Pelo que a página informa, não: os planos mais caros aumentam a quantidade de nichos, não a de grupos. Nesse caso o Prime, de R$ 69,90, já é o teto útil da ferramenta.' },
+      { q: 'O DivulgaLinks espelha um grupo que eu acompanho?', a: 'O material que consultamos descreve criar o post a partir do link do produto e gerar listas por categoria ou palavra-chave, e não menciona monitorar um grupo de origem. Se isso é o que você precisa, confirme diretamente com eles antes de assinar.' },
+      { q: 'O Espelha Grupos publica no Instagram?', a: 'Não. Trabalhamos com grupos, Canais e Comunidades do WhatsApp. Automação de Instagram é a maior força do DivulgaLinks e, se esse for o seu canal principal, pesa a favor deles.' },
+    ],
+  },
+  '/alternativas/lumi-ofertas-inteligentes': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Lumi Ofertas Inteligentes',
+    title: 'Alternativa à Lumi: R$69 contra R$97 de entrada',
+    description: 'O plano de entrada da Lumi custa R$97/mês e limita 20 grupos. No Espelha Grupos são grupos ilimitados por R$69 em 30 dias, com 7 dias grátis e sem cartão.',
+    competitorSlugs: ['lumi-ofertas-inteligentes'],
+    productPage: {
+      href: '/bot-afiliados-whatsapp',
+      label: 'Como funciona a operação para afiliados, do começo ao fim',
+      note: 'Origens, conversão do link, destinos e histórico — sem comparar com ninguém.',
+    },
+    tldr: 'A Lumi Ofertas Inteligentes tem três planos: R$ 97, R$ 187 e R$ 247 por mês. O de entrada já inclui espelhamento, mas limita a 1 número de WhatsApp, 20 grupos e 1 monitoramento, e a página de preços consultada não indica teste grátis. O Espelha Grupos custa R$ 69 por 30 dias no plano Pro, não limita grupos e libera o Pro completo por 7 dias sem cartão.',
+    directAnswer: 'A Lumi Ofertas Inteligentes é uma das poucas ferramentas do mercado que já traz espelhamento de grupos e múltiplos números de WhatsApp no plano de entrada, e cobre Telegram além do WhatsApp. Em compensação, esse plano de entrada é o mais caro entre os concorrentes que mapeamos: R$ 97/mês para 1 número, 20 grupos, 3 filas de ofertas, 1 monitoramento e 1 espelhamento, com Shopee, Mercado Livre e Amazon. O Magalu entra a partir do plano Pro, de R$ 187/mês. O Espelha Grupos cobre seis lojas em qualquer plano pago, não limita grupos, custa R$ 69 por 30 dias no Pro e deixa testar o Pro completo por 7 dias sem cartão de crédito. Se a sua operação depende de Telegram ou de vários números de WhatsApp ao mesmo tempo, a Lumi resolve algo que nós não fazemos.',
+    rows: [
+      { key: 'preco', label: 'Preço de entrada', produto: 'R$ 39 por 30 dias no Basic; R$ 69 no Pro, que é o plano com o robô no piloto automático.', concorrente: 'R$ 97/mês no plano de entrada.', reading: 'O plano de entrada da Lumi é o mais caro entre os concorrentes que mapeamos.' },
+      { key: 'grupos', label: 'Limite de grupos', produto: 'Sem limite de grupos.', concorrente: '20 grupos no plano de R$ 97. Grupos ilimitados só no plano de R$ 247/mês.', reading: 'Na Lumi, crescer em quantidade de grupos custa mudança de plano; aqui não.' },
+      { key: 'lojas', label: 'Lojas suportadas', produto: 'Seis em qualquer plano pago: Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress.', concorrente: 'Shopee, Mercado Livre e Amazon no plano de entrada. Magalu só a partir do Pro, de R$ 187/mês.', reading: 'Quem divulga Magalu precisa do segundo plano da Lumi; aqui ele já vem no Basic de R$ 39.' },
+      { key: 'telegram', label: 'Telegram e múltiplos números', produto: 'Somente WhatsApp, com um número por conta.', concorrente: 'Telegram a partir do Pro e até 6 números de WhatsApp no plano mais caro.', reading: 'É a força real da Lumi. Se sua operação depende de Telegram ou de vários chips ao mesmo tempo, nós não substituímos.' },
+      { key: 'teste', label: 'Como testar antes de pagar', produto: '7 dias grátis com o Pro completo, sem cartão.', concorrente: 'A página de preços consultada não indica teste grátis nem período de avaliação.', reading: 'Sem teste, a primeira validação da Lumi acontece depois de pagar R$ 97.' },
+    ],
+    criteria: ['Quantos grupos você administra e pretende adicionar', 'Se precisa publicar no Telegram além do WhatsApp', 'Se precisa de mais de um número de WhatsApp ao mesmo tempo', 'Quantas lojas diferentes você divulga hoje', 'Se quer testar a ferramenta completa antes de pagar'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o robô somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'Preço e limites de qualquer concorrente mudam sem aviso — confirme na página oficial antes de decidir.'],
+    botinhoDifferentials: ['R$ 69 por 30 dias no plano com piloto automático, contra R$ 97 de entrada', 'Grupos ilimitados em qualquer plano pago', 'Seis lojas em qualquer plano pago, Magalu incluído', 'Espelhamento de grupos, filas de ofertas e garimpo automático da Shopee', 'Grupos, Canais e Comunidades do WhatsApp', 'Controle do ritmo dos envios por grupo', 'Histórico completo do que saiu, falhou ou foi segurado', '7 dias grátis com o Pro completo, sem cartão'],
+    bestFit: [
+      'Escolha o Espelha Grupos se toda a operação é no WhatsApp, se você quer grupos ilimitados desde o primeiro plano e se prefere testar antes de pagar.',
+      'Escolha a Lumi se você precisa publicar no Telegram ou operar vários números de WhatsApp ao mesmo tempo — nesses dois pontos nós não substituímos.',
+      'Se você divulga Magalu, compare com atenção: aqui ele está no plano de R$ 39; na Lumi, a partir do de R$ 187.',
+    ],
+    notIdealFit: [
+      'A Lumi não é ideal para quem quer começar barato: o plano de entrada, de R$ 97/mês, é o mais caro entre os concorrentes mapeados, e a página consultada não indica teste grátis.',
+      'A Lumi não é ideal para quem tem muitos grupos desde o começo: são 20 no plano de entrada, e grupos ilimitados só no de R$ 247/mês.',
+      'O Espelha Grupos trabalha somente com WhatsApp e com um número por conta. Se sua operação depende de Telegram ou de vários chips, será necessário usar outra solução.',
+    ],
+    migrationPath: [
+      'Conte quantos grupos você tem hoje e quantos pretende ter em três meses — é o número que muda de plano na Lumi.',
+      'Separe o que você publica no Telegram do que publica no WhatsApp.',
+      'Confira se as lojas que você divulga estão entre as seis que cobrimos, com atenção especial ao Magalu.',
+      'Comece os 7 dias grátis e compare pelo histórico de envios, não pela impressão.',
+      'Cancele a outra só depois de confirmar que grupos, lojas e links funcionam como você espera.',
+    ],
+    faq: [
+      { q: 'Qual é mais barato: Espelha Grupos ou Lumi Ofertas Inteligentes?', a: 'O Espelha Grupos. O plano com piloto automático custa R$ 69 por 30 dias e o Basic custa R$ 39; o plano de entrada da Lumi custa R$ 97/mês. Além do preço, o Espelha Grupos não limita a quantidade de grupos.' },
+      { q: 'A Lumi tem teste grátis?', a: 'A página de preços que consultamos, verificada em 31/07/2026, não indica teste grátis nem período de avaliação. O Espelha Grupos libera o plano Pro completo por 7 dias, sem cartão de crédito.' },
+      { q: 'Em que a Lumi é melhor que o Espelha Grupos?', a: 'Em dois pontos concretos: ela publica também no Telegram e permite operar vários números de WhatsApp ao mesmo tempo — até 6 no plano mais caro. O Espelha Grupos trabalha só com WhatsApp e com um número por conta.' },
+      { q: 'Preciso de qual plano da Lumi para divulgar Magalu?', a: 'Pelo material consultado, o Magalu entra a partir do plano Pro, de R$ 187/mês. No Espelha Grupos o Magalu já está incluído no plano Basic, de R$ 39 por 30 dias.' },
+    ],
+  },
 }
 
 export function getComparisonMetadata(slug) {
@@ -913,6 +1100,23 @@ export function ComparisonPage({ slug }) {
               </ul>
             </SectionCard>
           </div>
+
+          {/* 11. Por loja — ver COMPARISON_STORE_LINKS. */}
+          <SectionCard
+            eyebrow="Por loja"
+            title="Você é afiliada de qual loja?"
+            lead="A comissão, o formato do link e o que a loja aceita mudam de uma para outra. Cada página mostra como a oferta daquela loja sai no WhatsApp."
+          >
+            <ul className="comparison-links">
+              {COMPARISON_STORE_LINKS.map((store) => (
+                <li key={store.href}>
+                  <Link href={store.href} data-comparison-cta="store-page">
+                    Divulgar {store.label} no WhatsApp
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
         </div>
       </section>
 

@@ -293,7 +293,16 @@ test('FR-030: todo comparativo com concorrente nomeado se apresenta como alterna
   // são leitura honesta de comparação; título que não bate com nenhum dos
   // dois é sinal de posicionamento arriscado (a página se apresentando como
   // se FOSSE a alternativa, sem deixar claro que é comparação).
-  const FRAMES_COMPARATIVOS = [/^alternativas?\s+(a|ao|de)\b/i, /\bou\b.*\b(quando|qual)\b/i]
+  // `à` entrou em 2026-09-17 com o comparativo da Lumi: "Alternativa à Lumi" é
+  // a mesma moldura e a forma gramaticalmente correta em português quando a
+  // marca pede o artigo. Não afrouxa nada — o que a guarda impede é o título se
+  // apresentar como se FOSSE o concorrente, e isso continua barrado.
+  //
+  // ⚠️ O corte usa `(\s|$)`, NUNCA `\b`: `à` não é caractere de palavra em
+  // ASCII, então `\b` depois dele não casa nunca e o título correto era
+  // reprovado em silêncio. Mesma família do RCA da classe de emoji sem a flag
+  // `u`.
+  const FRAMES_COMPARATIVOS = [/^alternativas?\s+(a|à|ao|de)(\s|$)/i, /\bou\b.*\b(quando|qual)\b/i]
 
   for (const { path, bloco } of comparisonPagesComConcorrente()) {
     const title = bloco.match(/title:\s*'([^']+)'/)?.[1]
