@@ -95,6 +95,14 @@ async function main() {
     bucket(m).com += (c.commissionAmountCents ?? 0) / 100
   }
 
+  // Mês que tem CUSTO e nenhuma receita também é linha da conta (abr/2026 é
+  // assim). Precisa entrar ANTES de ordenar, senão ele é impresso no fim, depois
+  // do mês corrente, e a linha do tempo aparece fora de ordem — foi o que
+  // aconteceu na primeira execução em produção.
+  for (const entry of config.historical ?? []) {
+    if (!meses.has(entry.month)) meses.set(entry.month, { gross: 0, com: 0, fees: 0, n: 0, soCusto: true })
+  }
+
   const ordenados = [...meses.keys()].sort()
   console.log('mês      valor cheio    comissões       taxas      sobrou      custo     no mês')
   console.log('------------------------------------------------------------------------------')
@@ -112,22 +120,11 @@ async function main() {
       netFechado += net
       custoFechado += custo
     }
-    const marca = m === currentMonth ? ' ← em andamento' : ''
+    const marca = m === currentMonth ? ' ← em andamento' : (b.soCusto ? '  (só custo)' : '')
     console.log(
       `${m}  ${brl(b.gross).padStart(12)} ${brl(b.com).padStart(12)} ${brl(b.fees).padStart(11)} ` +
       `${brl(net).padStart(11)} ${brl(custo).padStart(10)} ${brl(net - custo).padStart(11)}${marca}`,
     )
-  }
-
-  // Meses com custo e sem receita nenhuma também entram na conta do ROI.
-  for (const entry of config.historical ?? []) {
-    if (!meses.has(entry.month)) {
-      const custo = costForMonth(entry.month, config).total
-      custoTudo += custo
-      if (entry.month < currentMonth) custoFechado += custo
-      meses.set(entry.month, { gross: 0, com: 0, fees: 0, n: 0 })
-      console.log(`${entry.month}  ${brl(0).padStart(12)} ${brl(0).padStart(12)} ${brl(0).padStart(11)} ${brl(0).padStart(11)} ${brl(custo).padStart(10)} ${brl(-custo).padStart(11)}  (só custo)`)
-    }
   }
 
   console.log('\n=== O que o PLACAR do ROI mostra (tudo que já entrou x já saiu) ===')
@@ -140,9 +137,25 @@ async function main() {
 
   const atual = meses.get(currentMonth)
   if (atual) {
-    console.log(`\n=== ${currentMonth} (em andamento) ===`)
-    console.log('  já entrou:', brl(round2(atual.gross - atual.com - atual.fees)), `em ${atual.n} pagamentos`)
-    console.log('  custo do mês (cheio):', brl(costForMonth(currentMonth, config).total))
+    const netAtual = round2(atual.gross - atual.com - atual.fees)
+    const custoAtual = costForMonth(currentMonth, config).total
+    const dia = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', day: '2-digit' }).format(now))
+    const diasNoMes = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate()
+
+    console.log(`\n=== ${currentMonth} (em andamento, dia ${dia} de ${diasNoMes}) ===`)
+    console.log('  já entrou:', brl(netAtual), `em ${atual.n} pagamentos`)
+    console.log('  custo do mês (cheio, já cobrado):', brl(custoAtual))
+    console.log('  no mês, até agora:', brl(round2(netAtual - custoAtual)))
+
+    // O mês corrente aparece negativo porque o custo entra CHEIO e a receita é
+    // parcial. Sem esta linha, "negativo" se lê como piora — e pode ser o
+    // contrário. É ESTIMATIVA, e está marcada como tal.
+    if (dia > 0 && netAtual > 0) {
+      const fechamento = round2((netAtual / dia) * diasNoMes)
+      console.log(`  ⚠️ ESTIMATIVA, no ritmo deste mês: fecharia em ${brl(fechamento)} de entrada`)
+      console.log(`     → o mês fecharia em ${brl(round2(fechamento - custoAtual))}`)
+      console.log(`     → o acumulado iria para ${brl(round2(netTudo - custoTudo + (fechamento - netAtual)))}`)
+    }
   }
 
   console.log('\nA aba Visão geral mostra o VALOR CHEIO do período escolhido; o placar')

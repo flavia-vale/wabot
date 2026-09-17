@@ -190,6 +190,17 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
     isKeySeller: automation.isKeySeller ?? false,
   }
 
+  // `prioritizeAMS` é LEGADO desde 2026-09-17: o botão de LIGAR saiu da tela e
+  // automação nova nunca nasce com ele. Quem JÁ tinha marcado continua exatamente
+  // como estava — este caminho não pode ser removido enquanto existir automação
+  // com o campo ligado, senão o envio dessas contas mudaria sozinho no deploy.
+  //
+  // Não é um filtro a mais: é uma SEGUNDA ordem. Faz duas buscas e devolve
+  // [...comissãoExtra, ...restantes]; como `runAutomation` manda os primeiros
+  // `offersPerSend`, com 1 produto por envio a oferta de comissão extra sai
+  // sempre, por cima da ordem escolhida. Por isso a tela continua mostrando o
+  // efeito no card e oferecendo o DESLIGAMENTO — o que ela não oferece mais é
+  // ligar.
   if (!automation.prioritizeAMS) {
     const result = await fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
     return { ...result, offers: result.offers.filter(offer => resolveOfferPrice(offer) > 0) }
