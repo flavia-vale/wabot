@@ -506,3 +506,22 @@ test('o script de conciliação é read-only e usa as MESMAS duas fontes do prod
   // Erro engolido em script de diagnóstico vira conclusão errada.
   assert.ok(script.includes('FALHA ao montar a conciliação'))
 })
+
+
+test('o script imprime os meses EM ORDEM, inclusive os que só têm custo', () => {
+  const script = readFileSync(new URL('../scripts/diag-roi-conciliacao.mjs', import.meta.url), 'utf8')
+
+  // Na primeira execução em produção, abr/2026 (custo de R$ 110, receita zero)
+  // saiu impresso DEPOIS de setembro: os meses só-custo eram adicionados após o
+  // loop de impressão. Linha do tempo fora de ordem numa conta de dinheiro é
+  // convite a ler errado.
+  const posInsercao = script.indexOf('if (!meses.has(entry.month)) meses.set(entry.month')
+  const posSort = script.indexOf('const ordenados = [...meses.keys()].sort()')
+  assert.ok(posInsercao > 0, 'os meses só-custo precisam ser inseridos no mapa')
+  assert.ok(posInsercao < posSort, 'a inserção tem que vir ANTES do sort, senão a ordem quebra')
+
+  // E o mês corrente não pode aparecer negativo sem dizer que o custo entra
+  // cheio contra receita parcial — "negativo" se leria como piora.
+  assert.ok(script.includes('ESTIMATIVA, no ritmo deste mês'))
+  assert.ok(script.includes('cheio, já cobrado'))
+})
