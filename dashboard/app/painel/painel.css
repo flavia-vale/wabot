@@ -1309,6 +1309,31 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 }
 .pnl-cred-tip svg { flex-shrink: 0; }
 
+.pnl-cred-video-banner {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; padding: 14px 16px; margin-bottom: 16px;
+  text-decoration: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.pnl-cred-video-banner:hover {
+  border-color: color-mix(in oklab, var(--success) 35%, var(--line));
+  background: color-mix(in oklab, var(--success) 5%, var(--surface));
+}
+.pnl-cred-video-play {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--success); color: var(--success);
+}
+.pnl-cred-video-text { min-width: 0; flex: 1; }
+.pnl-cred-video-title { display: block; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.pnl-cred-video-desc { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 3px; line-height: 1.45; }
+.pnl-cred-video-cta {
+  flex-shrink: 0; display: flex; align-items: center; gap: 4px;
+  font-size: 12.5px; font-weight: 700; color: var(--accent-strong);
+}
+.pnl-cred-video-cta svg { width: 14px; height: 14px; }
+
 /* Avisos soltos no topo (falha de carregamento, "comece por aqui"). */
 .pnl-cred-page > .pnl-note-box { margin-bottom: 12px; }
 
