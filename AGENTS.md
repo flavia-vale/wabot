@@ -5325,6 +5325,21 @@ Guarda: `test/marketing-paginas-orfas.test.js` — falha se uma rota de
 `getIndexableSeoRoutes()` tiver menos de 3 referências internas fora de
 `/conteudos`, do sitemap e do próprio arquivo da página.
 
+⚠️ **A guarda conta LINK, não conta FORÇA — e três links fracos não resolvem.**
+Medido em 16/09, quem aponta para as cinco páginas do Tier 1:
+`/programa-de-afiliados` (185 impressões, **zero clique**), `/conteudos` (que
+por regra não conta), e as próprias páginas do Tier 1 entre si — todas zeradas.
+SHEIN e Magalu não têm **nenhum** link vindo de página com impressão. Enquanto
+isso, as oito páginas mais fortes do site (`/alternativas/*` e
+`/bot-achadinhos-whatsapp`, juntas ~9.000 das 13.362 impressões) têm **zero**
+links para o Tier 1. Página sem força não transfere força: o mínimo da regra 1
+("três páginas já indexadas e COM impressão") é o que vale, e a guarda passa
+mesmo quando ele não é cumprido. Conferir na mão com:
+
+```bash
+cd dashboard && grep -rl "/<slug>" app components lib | grep -v conteudos
+```
+
 ### ⚠️ O Tier 1 JÁ FOI EXECUTADO — não dizer de novo que falta fazer
 
 Três análises seguidas (01/09, 10/09, 11/09) afirmaram que "não existe página
