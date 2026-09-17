@@ -304,6 +304,25 @@ export function buildRoiReport({
 
   const totalInvested = cumulativeCost
   const totalNet = cumulativeNet
+
+  // ---------- CONCILIAÇÃO com a aba Visão geral ----------
+  // O placar acima e os cartões da Visão geral respondem coisas diferentes e
+  // por isso dão números diferentes: aqui é LÍQUIDO e só de mês FECHADO, lá é
+  // BRUTO e inclui o mês corrente. Sem essa cascata na tela, a divergência
+  // parece defeito — foi exatamente a pergunta que a dona do produto fez.
+  let grossAllTime = 0
+  let commissionsAllTime = 0
+  let feesAllTime = 0
+  for (const month of revenueMonths) {
+    const revenue = normalizeRevenueMonth(revenueByMonth[month], month)
+    grossAllTime += revenue.gross
+    commissionsAllTime += revenue.affiliateCommissions
+    feesAllTime += revenue.mpFees
+  }
+  grossAllTime = round2(grossAllTime)
+  commissionsAllTime = round2(commissionsAllTime)
+  feesAllTime = round2(feesAllTime)
+  const netAllTime = round2(grossAllTime - commissionsAllTime - feesAllTime)
   return {
     generatedAt: now.toISOString(),
     currentMonth,
@@ -325,6 +344,18 @@ export function buildRoiReport({
       cumulativeProfit,
       // Incluindo o mês corrente projetado — rotulado à parte de propósito.
       cumulativeProfitWithCurrent: cumulativeIncludingPresent,
+    },
+    // Cascata que liga o número daqui ao da Visão geral, linha por linha.
+    reconciliation: {
+      grossAllTime,
+      affiliateCommissionsAllTime: commissionsAllTime,
+      mpFeesAllTime: feesAllTime,
+      netAllTime,
+      // O que o mês corrente (ainda correndo) tira do placar de meses fechados.
+      currentMonthGross: currentRevenue.gross,
+      currentMonthNet: currentRevenue.net,
+      // Confere: netAllTime − currentMonthNet === totalNetRevenue.
+      netClosedMonths: totalNet,
     },
     present,
     growth,
