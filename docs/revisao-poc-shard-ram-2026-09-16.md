@@ -380,3 +380,216 @@ Isso vai acontecer no degrau C e será atribuído erradamente ao multi-tenancy.
 `createBotSessionRuntime`, o guard de `argv[1]`, as envs da POC e a invariante
 "o shard nunca abre credencial sem exit confirmado do dedicado". Hoje nada disso
 está lá, e é o tipo de conhecimento que o projeto perde entre sessões.
+
+---
+
+## 9. Medição executada em 2026-09-16 (substitui as projeções acima)
+
+Rodada no VPS, em staging, com o shard real (`src/session-shard-worker.js`) e a
+única conta conectada de staging. Todos os números em **PSS** (mediana da
+janela), que é a métrica honesta para somar processos — RSS conta a mesma
+página compartilhada uma vez por processo.
+
+### 9.1 Os três números
+
+| Medida | PSS | RSS | amostras |
+|---|---:|---:|---:|
+| Shard **vazio** (custo fixo, `F`) | **89,6 MiB** | 148,4 MiB | 44 |
+| Shard com **1 sessão** | **333,1 MiB** | 398,9 MiB | 120 (20 min) |
+| Worker **dedicado** de produção (`D`, média de 42) | **218 MiB** | 314 MiB | 42 processos |
+
+### 9.2 O que isso significa
+
+| | custo da sessão |
+|---|---:|
+| dentro do worker dedicado (`D − F`) | **128 MiB** |
+| dentro do shard | **244 MiB** |
+
+**A sessão custa 90% a mais dentro do shard.** Com esse número, consolidar
+**gasta mais memória** do que manter um processo por sessão:
+
+| Sessões | Shard | Dedicados | Resultado |
+|---|---:|---:|---|
+| 2 | 577 MiB | 436 MiB | **−32%** |
+| 4 | 1.064 MiB | 872 MiB | **−22%** |
+| 8 | 2.038 MiB | 1.744 MiB | **−17%** |
+
+Para a POC **empatar** com 4 sessões, a sessão no shard precisaria custar menos
+de **196 MiB**; para entregar os 25% do critério, menos de **141 MiB**. Medido:
+**244 MiB**.
+
+A comparação ainda favorece o shard: a sessão medida é de **staging** (tráfego
+baixo), contra a média de 42 sessões de **produção** em uso real.
+
+### 9.3 A hipótese do teto de heap está DESCARTADA
+
+A revisão (§6.5) apontou que o shard é forkado sem `resolveWorkerExecArgv`,
+logo sem `--max-old-space-size=384`, e levantou isso como possível causa do
+excesso. **A medição derruba a hipótese:**
+
+| | vazio | 1 sessão | delta |
+|---|---:|---:|---:|
+| `heapTotal` | 36,9 MiB | 47,6 MiB | +10,7 |
+| `heapUsed` | 34,7 MiB | 44,0 MiB | +9,3 |
+| `external` | 3,7 MiB | 8,4 MiB | +4,7 |
+| **PSS** | 89,6 MiB | 333,1 MiB | **+243,5** |
+
+O heap sequer chega perto de 384 MiB — não há teto nenhum a aplicar. O defeito
+de `execArgv` continua sendo um defeito (§6.5), mas **não explica este número**.
+
+### 9.4 Achado que vale para além da POC: 94% do custo é invisível
+
+Dos 243,5 MiB que a sessão adicionou, apenas **14 MiB** aparecem em
+`process.memoryUsage()` (heap + `external`). Os outros **229,5 MiB — 94% —**
+são memória nativa que a API do Node não enxerga: contextos de OpenSSL/Signal,
+buffers de WebSocket, arenas do alocador do glibc.
+
+Isso invalida uma parte da instrumentação proposta no plano (P1, item 1:
+"publicar `process.memoryUsage()` por worker: `rss`, `heapUsed`, `heapTotal`,
+`external`, `arrayBuffers`"). Só `rss` — e de preferência **PSS**, lido de
+`/proc/<pid>/smaps_rollup` — descreve o custo real. Um painel construído sobre
+heap e `external` mostraria uma frota saudável enquanto a memória acaba.
+
+### 9.5 O que ainda NÃO foi descartado
+
+Um confundidor permanece, e ele é material: a sessão do shard foi medida nos
+**20 minutos seguintes ao start**, que é justamente a janela do sync inicial do
+WhatsApp; os 42 workers de produção estão no ar há horas ou dias, já com o
+pico assentado. O próprio diagnóstico de 13/09 observou workers **encolhendo**
+20-40 MiB ao longo de 30 minutos.
+
+A série temporal já coletada separa os dois casos, sem medir nada novo:
+
+```bash
+awk -F, '$2=="sessoes_1"{n++; if(n<=12) a+=$5; if(n>108) b+=$5} END{printf "primeiros 2min: PSS %.1f MiB | ultimos 2min: PSS %.1f MiB | delta %+.1f\n", a/12, b/12, b/12-a/12}' /tmp/shard-rss-*.csv
+```
+
+- **PSS caindo ao longo da janela** → é pico de sync; exige um soak mais longo
+  (2-4h) antes de concluir.
+- **PSS estável ou subindo** → o custo é estrutural e a POC está reprovada.
+
+### 9.6 Defeito do instrumento (corrigir antes de reusar)
+
+`scripts/diag-shard-rss.mjs` **trava no encerramento**: depois de pedir
+`SHUTDOWN_SHARD` ele espera o `exit` do processo filho **sem prazo**. Numa
+execução real com sessão conectada, o shard não terminou de fechar e o script
+ficou pendurado por horas. Os dados não se perdem (o CSV é escrito a cada
+amostra), mas o script precisa de um `kill` forçado após um prazo.
+
+⚠️ Isso não é só chateação de ferramenta: **o rollback da POC depende de o
+shard conseguir encerrar.** Um shard que não fecha com uma sessão é um achado
+sobre a arquitetura, não sobre o script.
+
+### 9.7 Recomendação atualizada
+
+Com o que está medido, a recomendação muda de "seguir com cuidado" para:
+
+1. Rodar a checagem de §9.5 (custo zero, dados já coletados).
+2. Se o PSS não estiver caindo: **encerrar a POC de shard** e registrar o
+   motivo — não há economia a extrair, e o risco de quatro clientes num
+   processo só deixa de ter contrapartida.
+3. Em qualquer dos casos, executar o **P1** do diagnóstico original, que
+   continua intocado e ataca exatamente a memória nativa que este número
+   revelou: log por mensagem, `pino-pretty` fora de produção, `sharp.cache`/
+   `sharp.concurrency`, cap do `imageCache`, `AbortSignal` na fila e na rede.
+
+---
+
+## 10. O confundidor caiu — e apareceu algo maior (2026-09-16)
+
+A checagem de §9.5 respondeu, e respondeu ao contrário do esperado:
+
+```text
+primeiros 2min: PSS 292,8 MiB | ultimos 2min: PSS 400,3 MiB | delta +107,5
+```
+
+**O PSS não estava assentando: estava subindo.** +36,7% em 20 minutos, ~5,4
+MiB por minuto, com **uma sessão de staging praticamente ociosa**.
+
+Isso mata a hipótese do pico de sync inicial, que era a única defesa restante
+da POC. E fecha o veredito, porque **não existe instante da janela em que o
+shard tenha sido mais barato**:
+
+| Momento | custo da sessão | 1 sessão vs dedicado | 4 sessões vs 4 dedicados |
+|---|---:|---|---|
+| início da janela | 203 MiB | −34% | −3,5% |
+| fim da janela | 311 MiB | −84% | −53% |
+
+**POC de shard: reprovada.** Não há economia a extrair, e o risco de quatro
+clientes num processo só perde qualquer contrapartida.
+
+### 10.1 A pergunta que passou a valer mais que a POC
+
+O `bot-worker` dedicado faz o mesmo? A diferença entre as duas respostas muda
+a investigação inteira de RAM:
+
+- **Se os workers dedicados também crescem assim**, o veredito do diagnóstico
+  de 13/09 ("custo basal da arquitetura, não vazamento demonstrado") está
+  errado, e os 218 MiB de média são apenas onde cada worker está na própria
+  curva. Aí existe vazamento de verdade afetando os 42 robôs, e ele é o
+  problema — não a densidade por processo.
+- **Se só o shard cresce**, o crescimento foi introduzido pela refatoração
+  (todo o `bot-worker.js` virou closure, dois monitores de event loop por
+  processo, estado por sessão que antes era por processo).
+
+Nos dois casos a POC continua reprovada; o que muda é para onde vai o esforço.
+
+### 10.2 Teste de uma foto só, sem esperar nada
+
+A frota de produção tem robôs de idades diferentes rodando agora. Se o PSS
+sobe com o tempo de vida do processo, a assinatura do vazamento aparece numa
+única leitura:
+
+```bash
+for p in $(pgrep -f "/home/deploy/wabot/src/bot-worker"); do
+  age=$(ps -o etimes= -p $p 2>/dev/null | tr -d ' ')
+  pss=$(awk '/^Pss:/{print $2}' /proc/$p/smaps_rollup 2>/dev/null)
+  [ -n "$age" ] && [ -n "$pss" ] && echo "$age $pss"
+done | awk '{h=int($1/3600); s[h]+=$2; n[h]++} END {for(k in s) printf "%3dh de vida | %2d robos | PSS medio %.0f MiB\n", k, n[k], s[k]/n[k]/1024}' | sort -n
+```
+
+⚠️ **Leitura com cuidado:** robô mais velho também pode ser robô de conta mais
+movimentada (as que caem menos são as que ficam de pé), então correlação com
+idade **não prova** vazamento sozinha. O que ela faz é dizer se vale montar a
+medição direta — acompanhar 3 ou 4 workers de produção por algumas horas, com
+a mesma cadência usada aqui.
+
+### 10.3 Não extrapolar os 5,4 MiB/min
+
+Vinte minutos não autorizam projetar horas. O número serve para dizer
+**direção** (cresce, não assenta), não taxa sustentada. O próprio diagnóstico
+de 13/09 registrou workers de produção oscilando ±5% e vários **encolhendo**
+20-40 MiB em 30 minutos — comportamento incompatível com crescimento linear.
+As duas observações precisam ser reconciliadas pela medição de §10.2, não por
+argumento.
+
+### 10.4 O confundidor morreu duas vezes
+
+O teste de §10.2 saiu **inconclusivo para vazamento** — a frota não tem
+dispersão de idade para correlacionar:
+
+```text
+  0h de vida |  1 robo  | PSS medio 243 MiB
+  2h de vida | 41 robos | PSS medio 228 MiB
+```
+
+Mas ele fechou de vez a dúvida que restava sobre a POC. A objeção era que
+comparávamos uma sessão recém-conectada (shard) com workers de produção já
+assentados. **Os workers de produção têm 2 horas de vida e estão em 228 MiB.
+O shard chegou a 400 MiB com 20 minutos e uma sessão ociosa.** O shard é pior
+que um worker seis vezes mais velho — a comparação nunca foi injusta com ele.
+
+Detalhe que corta contra a hipótese de vazamento simples e pede cuidado: o
+robô mais NOVO (0h) é o mais pesado dos dois grupos (243 vs 228). Amostra de
+um, não conclui nada, mas desaconselha tratar idade como explicação única.
+
+⚠️ **Achado colateral a investigar:** 41 dos 42 robôs terem exatamente a mesma
+idade significa que o `bot-supervisor` reiniciou há ~2h e **reconectou a frota
+inteira**. Se foi deploy, é o comportamento documentado (`WORKER_CODE_PATHS_RE`
+casa com `src/bot-worker.js`, `src/core/` e `src/supervisor/`, todos tocados
+pelo #1695). Se não foi deploy, é um restart não explicado e vira incidente
+próprio. Conferir:
+
+```bash
+pm2 describe bot-supervisor | grep -iE "uptime|restart"
+```
