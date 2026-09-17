@@ -4440,7 +4440,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
           let image = null
           if (wantImage || channelForward) {
-            const fetched = await getImage({ forceOriginalForChannelButton: !!channelForward, imageMode })
+            let fetched = await getImage({ forceOriginalForChannelButton: !!channelForward, imageMode })
+            // Loja não devolveu foto oficial e resolveMonitoredImage caiu no
+            // último recurso (jpegThumbnail pequena — ver monitoredImageResolver.js).
+            // No modo 'original' puro, mandar essa miniatura como CORPO DE MÍDIA
+            // sai ampliada/borrada (relato real: Shopee sem ids, card de cadeira
+            // saiu pixelado). Tratamos como se não houvesse imagem: cai no MESMO
+            // card de preview clicável usado abaixo (useLinkPreview), com a
+            // cascata de previewImageFallbackPolicy.js. NÃO se aplica a
+            // channelForward — o botão "Ver canal" exige corpo de mídia.
+            if (imageMode === 'original' && !channelForward && fetched?.usedThumbnailFallback) {
+              fetched = null
+            }
             // Mutação anti-fingerprint SOMENTE para canal-destino (newsletter
             // JID) e quando o opt-in global está ligado. NÃO aplicar a grupos.
             // Quando ligada, o crop + qualidade variada vão DENTRO do mesmo
