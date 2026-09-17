@@ -11,7 +11,7 @@ test('worker resolve modo e texto a partir do detalhe do destino', () => {
 })
 
 test('original com marca renderiza principal e thumbnail e cai para imagem normal em falha', () => {
-  assert.match(worker, /await renderDestinationWatermark\(fetched\.buffer, \{ text: watermarkText, color: watermarkColor \}\)/)
+  assert.match(worker, /await renderDestinationWatermark\(fetched\.buffer, \{ text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition \}\)/)
   assert.match(worker, /jpegThumbnail: rendered\.thumbnail/)
   assert.match(worker, /Marca d\\'água falhou; enviando imagem normal/)
   assert.match(worker, /image = await normalizeImageForWhatsApp\(fetched\.buffer, wantMutation \? \{ mutation: \{ groupId: destJid \} \} : \{\}\)/)
@@ -79,7 +79,7 @@ test('o card de preview compõe a marca antes do upload da miniatura de alta qua
 test('os dois caminhos que montam o card recebem a marca do destino', () => {
   const callSites = worker.split('await buildManualLinkPreview({').length - 1
   assert.equal(callSites, 2, 'esperados exatamente dois call sites de buildManualLinkPreview')
-  const passandoMarca = worker.split('watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null').length - 1
+  const passandoMarca = worker.split('watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null').length - 1
   assert.equal(passandoMarca, callSites, 'todo caminho que monta o card precisa repassar a marca do destino')
 })
 

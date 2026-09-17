@@ -7,6 +7,13 @@ import { buildInlineThumbnail } from './inlineThumbnail.js'
 // continuam suportados pela POC/benchmark, mas a tela da cliente não os oferece.
 const POSITIONS = new Set(['center', 'top-left', 'top-right', 'bottom-left', 'bottom-right'])
 
+// Três tamanhos, a pedido da dona do produto (2026-09-17): 'medium' é o
+// tamanho histórico (o que já existia antes desta opção) — os fatores abaixo
+// multiplicam o cálculo de fonte já existente, então uma marca já salva sem
+// `size` continua saindo com o MESMO pixel de antes (scale 1, sem mudança).
+export const WATERMARK_SIZES = Object.freeze(['small', 'medium', 'large'])
+const WATERMARK_SIZE_SCALE = Object.freeze({ small: 0.72, medium: 1, large: 1.35 })
+
 // Só duas cores, por decisão de produto: a cliente escolhe conforme as fotos
 // dela. Desde o contorno de contraste (WATERMARK_STROKE_COLORS, abaixo) as duas
 // aparecem em qualquer foto — a escolha passou a ser de gosto, não de
@@ -40,6 +47,7 @@ export const WATERMARK_MAX_CHARS = 25
 const DEFAULTS = Object.freeze({
   position: 'center',
   color: 'white',
+  size: 'medium',
   opacity: 0.5,
   maxWidthPercent: 55,
 })
@@ -68,6 +76,10 @@ export function normalizeWatermarkConfig(raw = {}) {
   // perder a oferta inteira por causa de um valor legado no banco seria pior.
   const color = Object.hasOwn(WATERMARK_COLORS, raw.color) ? raw.color : DEFAULTS.color
 
+  // Tamanho desconhecido segue a mesma regra: cai no padrao ('medium', o
+  // tamanho historico) em vez de derrubar o envio.
+  const size = WATERMARK_SIZES.includes(raw.size) ? raw.size : DEFAULTS.size
+
   const opacity = Number(raw.opacity ?? DEFAULTS.opacity)
   if (!Number.isFinite(opacity) || opacity < 0.25 || opacity > 0.9) {
     throw new Error('Opacidade deve estar entre 0.25 e 0.9')
@@ -78,7 +90,7 @@ export function normalizeWatermarkConfig(raw = {}) {
     throw new Error('Largura maxima deve estar entre 20 e 70 por cento')
   }
 
-  return { text, position, color, opacity, maxWidthPercent }
+  return { text, position, color, size, opacity, maxWidthPercent }
 }
 
 export async function createSampleInput() {
@@ -143,7 +155,11 @@ function buildCenteredOverlay({ imageWidth, imageHeight, config }) {
   // valores (55% da largura, 13% do lado menor) foram reduzidos em 2026-08-29
   // a pedido da dona do produto: a marca precisa identificar a oferta sem
   // competir com o produto na foto.
-  const fontSize = Math.max(14, Math.min(fitFontSize, Math.round(shortSide * 0.13)))
+  const baseFontSize = Math.max(14, Math.min(fitFontSize, Math.round(shortSide * 0.13)))
+  // O tamanho escolhido pela cliente multiplica o cálculo acima — 'medium'
+  // (scale 1) preserva pixel a pixel o comportamento histórico.
+  const sizeScale = WATERMARK_SIZE_SCALE[config.size] ?? 1
+  const fontSize = Math.max(10, Math.round(baseFontSize * sizeScale))
   const lineHeight = Math.round(fontSize * 1.15)
   const blockHeight = lineHeight * lines.length
   const firstBaseline = Math.round(imageHeight / 2 - blockHeight / 2 + fontSize * 0.82)
@@ -179,7 +195,9 @@ function buildCenteredOverlay({ imageWidth, imageHeight, config }) {
 // pela POC/benchmark; a tela da cliente não oferece essas posições.
 function buildOverlay({ imageWidth, imageHeight, config }) {
   const shortSide = Math.min(imageWidth, imageHeight)
-  const fontSize = Math.max(14, Math.min(54, Math.round(shortSide * 0.045)))
+  const baseFontSize = Math.max(14, Math.min(54, Math.round(shortSide * 0.045)))
+  const sizeScale = WATERMARK_SIZE_SCALE[config.size] ?? 1
+  const fontSize = Math.max(10, Math.round(baseFontSize * sizeScale))
   const paddingX = Math.max(10, Math.round(fontSize * 0.65))
   const paddingY = Math.max(7, Math.round(fontSize * 0.42))
   const maxOverlayWidth = Math.round(imageWidth * config.maxWidthPercent / 100)

@@ -48,6 +48,11 @@ function toPostDetail(group) {
     watermarkText: group.watermarkText ?? null,
     // 'white' | 'black'; nulo = padrão, resolvido no renderizador.
     watermarkColor: group.watermarkColor ?? null,
+    // 'small' | 'medium' | 'large'; nulo = padrão ('medium'), resolvido no renderizador.
+    watermarkSize: group.watermarkSize ?? null,
+    // 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+    // nulo = padrão ('center'), resolvido no renderizador.
+    watermarkPosition: group.watermarkPosition ?? null,
   }
 }
 
