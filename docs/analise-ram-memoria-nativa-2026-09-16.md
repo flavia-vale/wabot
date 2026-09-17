@@ -358,11 +358,12 @@ mesmo PSS, o mesmo RSS e a mesma contagem de arenas. Depois que este PR chegar a
 produção, o mesmo conteúdo está versionado em `scripts/diag-memoria-nativa.awk`
 e o `.mjs` imprime um pouco mais.
 
-⚠️ Este PR **não reinicia o `bot-supervisor`**: nenhum dos arquivos que ele
-adiciona (`docs/`, `scripts/`, `src/ops/memory/`, `test/`) casa com
-`WORKER_CODE_PATHS_RE`, e a segunda rede (mtime dos arquivos do worker) também
-não é acionada, porque o `git pull` só reescreve arquivo alterado. As sessões
-seguem intactas.
+⚠️ **Correção:** enquanto este PR era só documento e script, ele **não**
+reiniciava o supervisor. Ao ganhar o interruptor da §2-A.7 ele passou a tocar
+`src/core/sessionCore.js` e `src/core/workerSpawnOptions.js`, que **casam com
+`WORKER_CODE_PATHS_RE`** — então o deploy **reinicia o `bot-supervisor` e
+reconecta as sessões**. Em staging isso não custa nada; em produção é a janela
+anunciada da §9, e é justamente a janela em que se quer aplicar a env.
 
 Ele imprime, por worker: PSS/RSS, número de threads, quantas arenas do glibc
 existem e quanto PSS cada classe de região ocupa, mais as bibliotecas nativas
@@ -751,3 +752,106 @@ pm2 describe bot-supervisor | grep -iE "uptime|restart"
 - A decomposição do `smaps` classifica arena do glibc **pela forma** (bloco de
   64 MiB alinhado em 64 MiB, sem arquivo). O kernel não rotula arena; um
   alocador diferente do glibc não seria reconhecido como tal.
+
+## 9. Runbook: o que fazer agora, em ordem
+
+Escrito depois da medição. **Nenhum passo de produção acontece sem o OK da dona
+do produto** (REGRA #1 da política de memória).
+
+### Passo 0 — duas leituras que não dependem de nada (hoje, 5 minutos)
+
+Independentes do resto e de graça. Podem ser feitas antes de qualquer decisão.
+
+**0.a — A frota está crescendo?** Entre as duas leituras de 16/09 o total em
+arena subiu 146 MiB em minutos. **Duas amostras não são tendência.** Rodar o
+bloco da §3.0 três ou quatro vezes ao longo de um dia e comparar só a linha
+`arenas respondem por N% do PSS` e o PSS somado. Se subir de forma sustentada, a
+conversa muda de "recuperar memória" para "conter crescimento" — e são coisas
+diferentes.
+
+**0.b — Quantos robôs não precisam estar ligados?** A consulta da §3.5, somente
+leitura. **218 MiB por robô que não precisava existir** é o maior ganho por
+unidade de toda esta análise, e não depende de nada aqui.
+
+### Passo 1 — staging (hoje)
+
+1. Mergear a PR em `develop`. O autodeploy sobe staging e **reinicia o
+   supervisor de staging** — lá isso não custa nada.
+2. Medir **antes**, no diretório de staging, com o bloco da §3.0 apontando para
+   `~/wabot-staging/src/bot-worker`.
+3. `WA_WORKER_MALLOC_ARENA_MAX=2` no `~/wabot-staging/.env`.
+4. Aplicar. ⚠️ **Staging é canonicamente `inline`**, então quem forka os robôs é
+   a `api-staging`, não o supervisor:
+   ```bash
+   pm2 delete api-staging
+   cd ~/wabot-staging && pm2 start ecosystem.config.cjs --only api-staging
+   pm2 save
+   ```
+   (`pm2 delete` + `start` do diretório certo — pegadinhas #1 e #9.)
+5. **Conferir que chegou ao robô**, que é o passo que costuma faltar:
+   ```bash
+   w=$(pgrep -f "/home/deploy/wabot-staging/src/bot-worker" | head -1)
+   tr '\0' '\n' < /proc/$w/environ | grep -E "MALLOC|TOKIO|UV_THREAD"
+   ls /proc/$w/task | wc -l
+   ```
+6. Medir **depois** e comparar a contagem de `arenas`.
+
+⚠️ **O que staging PODE e o que NÃO PODE provar.** Staging tem uma sessão só e
+tráfego baixo. Ele prova que **nada quebra**, que a env chega ao robô e que a
+contagem de arenas cai de ~30 para ~2. Ele **não** mede a economia — a economia
+vem da dispersão de 6,6×, que só existe com tráfego real. **Não interpretar
+"pouca memória economizada em staging" como reprovação.** O critério de staging
+é: sessão continua conectada, ofertas continuam saindo, `ops_sqlite_busy` não
+aparece, arenas caíram.
+
+### Passo 2 — produção (janela anunciada, só com OK)
+
+**Só `MALLOC_ARENA_MAX`, sozinho.** Isto muda a recomendação anterior de
+"empacotar tudo numa janela só", e o motivo é a medição: esta alavanca responde
+por 58% do problema, tem o menor risco das quatro e é a única cujo ganho **não
+dá para prever**. Misturá-la com log, Sharp e corte de thread tornaria
+impossível saber o que rendeu o quê — e é justamente o número que decide se vale
+continuar. As outras entram numa segunda janela, depois, se ainda fizerem
+sentido.
+
+1. **Anunciar**: o deploy reconecta todas as sessões de uma vez.
+2. Medir **antes** (bloco da §3.0) e guardar a saída.
+3. `WA_WORKER_MALLOC_ARENA_MAX=2` no `~/wabot/.env` **antes** do merge. Nada
+   acontece ainda — nenhum processo relê `.env` sozinho.
+4. Mergear `develop` → `main`. O deploy sobe o código **e** reinicia o
+   supervisor, que na subida lê o `.env` e forka os robôs já com a variável.
+   **Uma reinicialização só, não duas.**
+   ⚠️ A pegadinha #1 (PM2 cacheia env) **não** se aplica aqui: ela vale para
+   variável que o PM2 já tinha cacheado, e esta é um nome novo que nunca existiu
+   — o dotenv a define normalmente no boot. Mesmo assim, conferir pelo passo 5
+   do staging.
+5. Medir **depois**: aos 15 minutos, 1 hora e 24 horas.
+
+### Passo 3 — o que vigiar depois (produção)
+
+| Sinal | Onde | O que significa se mudar |
+|---|---|---|
+| PSS somado e `% em arena` | bloco da §3.0 | é o resultado que se está medindo |
+| `ops_sqlite_busy` | `AnalyticsEvent` / `/metrics` | não deveria mudar — `MALLOC_ARENA_MAX` não mexe em banco. Se mudar, foi outra coisa |
+| quedas de sessão | `WaConnectionEvent` | disputa de trava no `malloc` atrasando o event loop apareceria aqui |
+| swap em uso | `free -m` | parado em ~41 MB hoje; é o sinal que decide aumentar RAM |
+
+**Rollback:** apagar a linha do `.env` e reiniciar o supervisor. Volta ao
+comportamento de hoje, sem redeploy.
+
+### Passo 4 — só depois, e só se valer
+
+`TOKIO_WORKER_THREADS` (⚠️ **não está verificado que o motor do Prisma o honra**
+— o teste é setar, reiniciar e contar as threads com o comando da §2-A.4),
+depois `UV_THREADPOOL_SIZE` e `--v8-pool-size`, um de cada vez, cada um com sua
+janela e sua medição. E a §3.2 (destino do log, 11,7 MiB medidos por processo),
+que é independente de tudo isto.
+
+### O que NÃO fazer agora
+
+- **Não aplicar os quatro interruptores juntos.** O ganho do principal é
+  desconhecido; misturar apaga a atribuição.
+- **Não mexer em `WA_WORKER_UV_THREADPOOL_SIZE` antes do arena.** O libuv serve a
+  leitura de arquivo do auth do Baileys e o DNS: é o de maior chance de aparecer
+  como problema de sessão, e seria confundido com o efeito do arena.
+- **Não reprovar pela medição de staging** (ver o aviso do passo 1).
