@@ -23,9 +23,22 @@
  *
  * Invariantes (não regredir):
  *
- *  - **Só age quando a mensagem NÃO tem link de loja nenhum.** Mensagem que já
- *    traz link de loja não gasta rede nem muda de caminho — risco e latência
- *    zero para o fluxo que já funciona.
+ *  - **A decisão é POR LINK, nunca pela mensagem inteira.** Até 2026-09-17 um
+ *    único link de loja no texto desligava o desembrulho da mensagem toda
+ *    (`if (cleaned.some(isOfferUrl)) return []`). Numa oferta MISTA — os dois
+ *    primeiros produtos com link direto da loja e o terceiro/quarto pelo site
+ *    do dono do grupo — os links embrulhados nunca eram desembrulhados, o
+ *    sanitizador os apagava logo em seguida (eles creditam o concorrente) e a
+ *    cliente via exatamente isto: "converte e envia dois; do terceiro em
+ *    diante não vai link nenhum, só o texto". Link que JÁ é de loja continua
+ *    fora dos candidatos — não há o que desembrulhar nele —, então mensagem
+ *    só com link de loja (ou sem link) segue sem gastar rede, como antes.
+ *  - **Mensagem mista gasta um orçamento MENOR** (`CUSTOM_DOMAIN_MIXED_BUDGET_MS`).
+ *    Ali o desembrulho é um ganho (recupera o link que seria apagado), nunca a
+ *    diferença entre espelhar e não espelhar: a oferta sai de qualquer jeito
+ *    pelos links de loja que já existem. Gastar os 13s cheios arriscaria
+ *    estourar os 25s de preparo da mensagem (`MSG_QUEUE_TIMEOUT_MS`) e derrubar
+ *    uma oferta que hoje funciona — regressão pior que o bug.
  *  - **O link de terceiro NUNCA é publicado.** Ele é substituído pelo da loja
  *    (que ainda passa pela conversão) ou permanece como estava, e nesse caso o
  *    sanitizador o remove como sempre removeu. Falha aqui não vaza comissão.
@@ -67,6 +80,11 @@ export const CUSTOM_DOMAIN_FETCH_TIMEOUT_MS =
 // do preparo da mensagem (`MSG_QUEUE_TIMEOUT_MS`) para conversão e foto.
 export const CUSTOM_DOMAIN_TOTAL_BUDGET_MS =
   Number(process.env.CUSTOM_DOMAIN_TOTAL_BUDGET_MS) || 13_000
+// Orçamento do desembrulho quando a mensagem JÁ traz link de loja (caso misto).
+// Menor que o total de propósito: ver a invariante "mensagem mista gasta um
+// orçamento MENOR" no topo deste arquivo.
+export const CUSTOM_DOMAIN_MIXED_BUDGET_MS =
+  Number(process.env.CUSTOM_DOMAIN_MIXED_BUDGET_MS) || 6_000
 // Retry curto e seletivo: aumentar apenas o timeout prolongaria a tentativa
 // presa. Uma nova chamada permite ao resolvedor DNS usar cache/fallback sem
 // repetir respostas determinísticas (403, página sem loja, anti-SSRF etc.).
@@ -156,26 +174,40 @@ function stripNoise(url) {
   return String(url ?? '').replace(TRAILING_NOISE_RE, '')
 }
 
+/** Todas as URLs http(s) do texto, sem a pontuação final. PURA. */
+function listUrls(text) {
+  const raw = String(text ?? '')
+  ANY_HTTP_URL_RE.lastIndex = 0
+  return (raw.match(ANY_HTTP_URL_RE) || []).map(stripNoise)
+}
+
+/** Verdadeiro quando o texto já traz ao menos um link de loja suportada. PURA. */
+export function hasStoreLink(text) {
+  return listUrls(text).some(isOfferUrl)
+}
+
 /**
  * URLs do texto que valem a pena desembrulhar. PURA.
  *
- * Devolve `[]` quando o texto já tem link de loja — é essa checagem que mantém
- * o custo em zero para a esmagadora maioria das mensagens.
+ * Candidato é a URL que NÃO é de loja suportada: é ela que o sanitizador vai
+ * apagar logo depois, então é ela que precisa ser desembrulhada. Link que já é
+ * de loja fica de fora — não há o que desembrulhar nele —, e é isso que mantém
+ * o custo em zero para mensagem só com link de loja (ou sem link nenhum).
+ *
+ * NÃO voltar a desligar a varredura inteira quando existe link de loja no
+ * texto: era exatamente isso que perdia os links do 3º produto em diante numa
+ * oferta mista (ver a invariante no topo deste arquivo).
  */
 export function findCandidateLinks(text) {
-  const raw = String(text ?? '')
-  ANY_HTTP_URL_RE.lastIndex = 0
-  const matches = raw.match(ANY_HTTP_URL_RE) || []
-  if (!matches.length) return []
-
-  const cleaned = matches.map(stripNoise)
-  if (cleaned.some(isOfferUrl)) return []
+  const cleaned = listUrls(text)
+  if (!cleaned.length) return []
 
   const seen = new Set()
   const candidates = []
   for (const url of cleaned) {
     if (seen.has(url)) continue
     seen.add(url)
+    if (isOfferUrl(url)) continue
     if (!isSafeCandidateUrl(url)) continue
     candidates.push(url)
     if (candidates.length >= MAX_CANDIDATES_PER_MESSAGE) break
@@ -400,9 +432,10 @@ export async function resolveCustomDomainLinks(text, options = {}) {
   if (!candidates.length) return { text: raw, resolved: [], failures: [] }
 
   const comecouEm = Date.now()
+  // Mensagem mista (já tem link de loja) gasta menos: ver invariante no topo.
   const orcamentoTotal = Number.isFinite(options.totalBudgetMs)
     ? options.totalBudgetMs
-    : CUSTOM_DOMAIN_TOTAL_BUDGET_MS
+    : (hasStoreLink(raw) ? CUSTOM_DOMAIN_MIXED_BUDGET_MS : CUSTOM_DOMAIN_TOTAL_BUDGET_MS)
   const tetoPorLink = Number.isFinite(options.timeoutMs)
     ? options.timeoutMs
     : CUSTOM_DOMAIN_FETCH_TIMEOUT_MS

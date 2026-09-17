@@ -84,6 +84,7 @@ import { getAdvancedPreservationAccess, isPreservationActive } from './billing/p
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
+import { convertPerPlatformSerially } from './core/conversionScheduler.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
@@ -327,16 +328,19 @@ const MONITORED_DROP_LOG_INTERVAL_MS = Math.max(0, Number(process.env.MONITORED_
 const monitoredDropLogState = new Map()
 
 // Oferta publicada pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13): o
-// texto não traz link de loja nenhum, só `https://<dominio-dele>/p/xxx`. Sem
-// este passo o sanitizador apaga essa URL (ela credita o concorrente),
+// texto traz `https://<dominio-dele>/p/xxx` em vez do link da loja. Sem este
+// passo o sanitizador apaga essa URL (ela credita o concorrente),
 // `detectLinks` não acha nada e a oferta morre como `nolink` — do lado de fora,
 // "o robô não espelha".
 //
 // Desembrulhar ANTES do sanitizador faz o resto do pipeline (sanitizador,
 // detector, conversor, dedup, imagem) seguir sem NENHUMA mudança, e quem
 // converte continua sendo o conversor da loja com a credencial da cliente — a
-// comissão é dela, não de quem publicou. Só gasta rede quando não há link de
-// loja no texto; qualquer falha devolve o texto como veio.
+// comissão é dela, não de quem publicou. A decisão é por LINK: mensagem MISTA
+// (alguns produtos com link direto da loja, outros pelo site do dono do grupo)
+// também é desembrulhada — era o que perdia os links do 3º produto em diante
+// (RCA 2026-09-17). Só gasta rede quando há URL que não é de loja; qualquer
+// falha devolve o texto como veio.
 async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
   if (!text) return text
   try {
@@ -3889,12 +3893,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform, errorType: 'conversion_diagnostic' } })
       }
 
-      // Converter todos os links habilitados em paralelo. Conversores podem
-      // fazer 4-5 chamadas HTTP sequenciais cada (resolve short → API afiliado
-      // → validate); processar N links em série estoura o teto da fila quando
-      // a mensagem tem múltiplas URLs. Ordem é preservada porque a substituição
-      // no texto casa por URL original, não por índice em conversions[].
-      const linkResults = await Promise.all(links.map(async ({ platform, url }) => {
+      // Converter os links habilitados: LOJAS DIFERENTES em paralelo, links da
+      // MESMA loja um de cada vez. Conversores fazem 4-5 chamadas HTTP
+      // sequenciais cada (resolve short → API afiliado → validate), então
+      // serializar tudo estouraria o teto da fila; mas dentro de uma loja os
+      // conversores dividem UMA sessão de afiliado (cookie do SiteStripe e
+      // `ssid` do ML são ROTACIONADOS a cada chamada), e disparar juntos só
+      // troca espera por falha. Ver o porquê medido em
+      // core/conversionScheduler.js — não voltar a `Promise.all` sobre a lista
+      // inteira. Ordem é preservada porque a substituição no texto casa por URL
+      // original, não por índice em conversions[].
+      const linkResults = await convertPerPlatformSerially(links, async ({ platform, url }) => {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
           // Devolve o MOTIVO em vez de null: sem `converted` o item continua
@@ -3969,7 +3978,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
         }
-      }))
+      })
       const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && r.converted))
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
