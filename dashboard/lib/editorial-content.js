@@ -12,7 +12,7 @@ export const EDITORIAL_DATES = {
   // acusava 9 erros). Sem essa data não há sinal de frescor para o Google nem para
   // os motores de IA, que pesam recência ao escolher o que citar.
   '/bot-canais-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
-  '/bot-afiliados-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
+  '/bot-afiliados-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-18' },
   '/bot-achadinhos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-08-03' },
   '/anti-ban-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-08-03' },
   '/grupo-para-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },

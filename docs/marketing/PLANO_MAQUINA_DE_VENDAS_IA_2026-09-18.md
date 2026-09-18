@@ -12,6 +12,74 @@ evidência. O que não tem evidência não entrou.
 10/09, 11/09) propuseram criar páginas que já existiam — ver AGENTS.md "O Tier
 1 JÁ FOI EXECUTADO".
 
+## Estado de implementação — verificado em 18/09/2026 (noite), site por site
+
+Tudo medido de novo com `curl`/schema/REST pública (o que a ficha do Google,
+o Search Console, o Bing WMT e o Reclame Aqui guardam não dá para ver de fora).
+⚠️ **Correção de método:** a checagem "zero páginas no índice do Bing" feita de
+manhã para o Cuponito e para o site de matemática **não vale** — a consulta
+`site:` sem sessão devolve página genérica até para `superprof.com.br`
+(controle). Indexação só se mede no Search Console / Bing Webmaster Tools.
+
+### Espelha Grupos (produção) — o que era código já está no ar
+
+| Item | Estado | Evidência |
+|---|---|---|
+| `og:image` real (`/og-default.png`) | ✅ no ar | home declara `og-default.png`, arquivo responde 200 |
+| FAQ e planos públicos com 6 lojas | ✅ no ar | `/api/public/faq` e `/plans` trazem "seis lojas", SHEIN, AliExpress (migration aplicada) |
+| `llms.txt` com preço, lojas e páginas comerciais | ✅ no ar | `R$69` presente |
+| Entidade única (`WebSite #website`, `SoftwareApplication #software`) | ✅ no ar | `#website` no HTML da home |
+| Medição de chegada por IA em `/alternativas` e blog | ✅ no ar (PR #1743 mergeada em `main` hoje) | commits 5322852, f287836 em `main` |
+| **GPTBot/ClaudeBot na Cloudflare** (4.1 item 2) | ✅ **liberado em 18/09** (noite) | Antes: navegador 200, GPTBot/ClaudeBot/Amazonbot/CCBot/Bytespider 403 (regra por categoria). Depois de trocar Training para Allow em "Configure AI bot policies" e desligar "Block Crawler" no AI Crawl Control: `diag-acesso-robos-ia` no VPS = **19/19 em 200, veredito ok**. O que o script NÃO mede: o robô real do Claude-User — conferir no painel AI Crawl Control → Crawlers que a coluna "Unsuccessful" dele parou de crescer |
+| **Listicle ofertasbot.com** (4.1 item 1) | ❌ não estamos | as 2 ocorrências de "espelha grupos" na página são a expressão genérica "quem espelha grupos", não a marca |
+| **YouTube renomeado** (4.1 item 4) | ❌ pendente | `@botinhoafiliado` ainda "BOTinho - YouTube"; `@espelhagrupos` não existe |
+| Reclame Aqui (4.1 item 3) | ? | página protegida por challenge; não dá para ver de fora |
+| Bing WMT, fila de indexação, rodada de medição (4.1 itens 5-7) | ? | só dentro das ferramentas |
+| `/bot-afiliados-whatsapp` reescrita (seção 6 item 1) | ✅ no `develop` (aguarda develop→main) | H1 com preço e teste, tabela de preço estática, "Melhor para / Não é ideal para", comparação com Pro Afiliados, Afilira e Achadinho Pro, 6 lojas em todo o texto, `dateModified` 2026-09-18. O `title` ficou: é exceção MEDIDA (8,09% de clique) e só muda com dado de Search Console |
+| Fundadora ligada ao Cuponito e `/quem-somos` citando o Cuponito (link nos dois sentidos) | ✅ no `develop` (aguarda develop→main) | `Organization.founder` → `Person #founder` (Flávia Vale) com `sameAs` para `cuponito.com.br/quem-somos#person` e `aulasdematematicabh.com.br/#flavia` — no `sameAs` da PESSOA, não da Organization (o Cuponito é outra empresa; a entidade comum é a pessoa); `/quem-somos` ganhou "Quem faz" com link normal para o Cuponito |
+
+### Cuponito — a estrutura foi consertada; faltam os dois posts
+
+| Item (doc `POSTS_CUPONITO_…`) | Estado | Evidência |
+|---|---|---|
+| M1 rotas dinâmicas em 200 | ✅ | `/blog/<slug>`, `/desconto/<slug>`, `/categoria/<slug>`, `/quem-somos` = 200 |
+| M2 HTML com conteúdo no servidor | ✅ nas páginas internas | post real com UA OAI-SearchBot: `<h1>`, `<article>`, `BlogPosting` = 3/3; canonical, `og:*`, `dateModified`, 7 links internos no HTML |
+| M2 na **home e no `/blog`** | ⚠️ ainda casca | `/` e `/blog` continuam com 3.488 bytes, 0 `<h1>`, 0 schema — as duas páginas que mais recebem link ainda são invisíveis |
+| M3 301 das URLs antigas | ✅ | `/store/casas-bahia/` → `/desconto/cupom-desconto-casas-bahia` (3 saltos; um 301 direto seria melhor) |
+| M4 sitemap com `lastmod` real | ✅ | 12 datas distintas, de 04/2026 a 09/2026 |
+| M5 robots.txt | ✅ | OAI-SearchBot, Claude-SearchBot, Claude-User, Applebot, DuckAssistBot, meta-externalagent listados |
+| M6 firewall / robôs de treino | ✅ **liberado** (medido do VPS em 18/09: `curl -A "GPTBot/1.0"` = 200) | ⚠️ a leitura anterior ("GPTBot/ClaudeBot/CCBot = 403 na Vercel") estava **errada**: o 403 vinha com `x-vercel-mitigated: deny` e batia também no User-Agent de navegador comum — era o firewall da Vercel barrando o **IP do ambiente de análise** (datacenter, rajada de requisições), não uma regra de robô de treino. Refeito com pausa entre pedidos: GPTBot, ClaudeBot, CCBot e OAI-SearchBot = 200. **Medir robô de fora só vale de um IP limpo** (o VPS serve); um 403 com `x-vercel-mitigated: deny` no navegador de controle invalida a medição inteira |
+| M7 `og:image` | ✅ | `/og-default.png` 200; post usa a `cover_image` |
+| M8 `llms.txt` | ✅ | no ar, cita as 6 lojas e "administradores de grupos de cupons e afiliados" |
+| 4.1 "Quem somos" com o Espelha Grupos | ✅ | H2 "Cuponito e Espelha Grupos", link, `Person` Flávia Vale no schema |
+| **M10 os dois posts** | ✅ (publicados na noite de 18/09) | `/blog/melhores-bots-grupos-de-cupons-whatsapp-2026` e `/blog/como-espelhar-mensagens-grupo-de-cupons-whatsapp` respondem 200 com HTML no servidor |
+| Bing WMT / IndexNow | ? | não mensurável de fora |
+
+### Site de matemática — metade feita; o que falta é o que traz lead
+
+| Item (doc `SITE_MATEMATICA_BH_…`) | Estado | Evidência |
+|---|---|---|
+| 4.1 rodapé "quem mantém este site" + schema | ✅ | texto no rodapé; `Person #flavia` como `creator`/`maintainer` do `WebSite` |
+| M6 301 http→https, www→apex, `/sitemap.xml` → índice | ✅ | os três respondem 301 |
+| sitemap com `lastmod` | ✅ | 33 URLs, 33 `lastmod` |
+| M10 robots.txt | ✅ | `Claude-SearchBot` presente |
+| 4.6 posts locais | ✅ 4 de 7 | Coltec, CEFET-MG, Colégio Militar e Cálculo 1 UFMG/PUC publicados em 18/09, 1.100-1.500 palavras, 10-16 links internos, CTA próprio; linkados da home |
+| **M1 medição** (GA4/Analytics, Search Console, Bing WMT) | ❌ | nenhum script externo no HTML; ferramentas não verificáveis de fora |
+| **M2/M3 ficha do Google + avaliações** | ? | só dentro da ficha |
+| **M4 posicionamento** (BH-primeiro, telefone) | ❌ | H1 igual ("Matemática que finalmente faz sentido — pro 6º ano…"); DDD 32 em 9 lugares da home |
+| **M5 títulos ≤ 60** | ❌ | serviço: 106-121 caracteres; posts novos: 72-83 (o sufixo "\| Aulas de Matemática BH" estoura) |
+| posts novos sem `FAQPage` | ⚠️ | os 4 têm FAQ em texto mas sem schema |
+| M7/M8 "atualizado em" nas páginas de serviço, `sameAs` completo | ❌ / ? | sem data nas 8 páginas de serviço; Instagram/Facebook não confirmados |
+
+### O que fazer agora, em ordem (o que ainda não foi feito e mais pesa)
+
+1. ~~**Cloudflare (Espelha Grupos): liberar GPTBot, ClaudeBot e Claude-User.**~~ **FEITO em 18/09** — 19/19 robôs em 200 no VPS. Estavam barrados em dois lugares (Training = Disallow na política e "Block Crawler" por robô), e o Claude-User (clique na citação) tinha 45 recusas em 7 dias sem o script enxergar. Falta só vigiar por uma semana: AI Crawl Control → Crawlers → "Unsuccessful" de GPTBot, ClaudeBot e Claude-User tem que parar de subir. Na Vercel (Cuponito) já estava liberado (ver M6).
+2. **Cuponito: publicar os dois posts** (seções 2 e 3 do doc) — a estrutura já lê; e renderizar `/` e `/blog` no servidor (hoje são as duas únicas páginas ainda vazias).
+3. **Espelha Grupos: pedir inclusão no listicle do ofertasbot.com** (o e-mail pronto está no item 1 da 4.1) e **renomear o YouTube**.
+4. **Matemática: medir e ficha do Google** (M1-M3) — sem isso os 4 posts novos não têm como virar lead mensurável; depois títulos (M5) e H1/telefone (M4).
+5. **Código no Espelha Grupos:** `sameAs` com Cuponito + `/quem-somos` citando o Cuponito; reescrever `/bot-afiliados-whatsapp` (seção 6 item 1).
+6. Rodada de medição de IA (4.1 item 7) só depois dos itens 1-3, senão mede o estado antigo.
+
 ---
 
 ## 0. A resposta em dez linhas

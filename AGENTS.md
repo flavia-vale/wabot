@@ -1323,7 +1323,8 @@ e não havia como responder "valeu a pena até agora?".
   já multiplica a receita por ~9 em um ano). Queda não vira crescimento
   negativo composto.
 - **A projeção respeita o teto de clientes do servidor**
-  (`MAX_SESSIONS_PER_PROCESS`, hoje 40): cheio, nenhuma cliente nova conecta —
+  (`MAX_SESSIONS_PER_PROCESS`, default 20; **produção está em 80** desde
+2026-09-18): cheio, nenhuma cliente nova conecta —
   receita que a infra não entrega não é receita, e o custo de crescer não está
   nesta conta.
 - **Sem dado confiável NÃO se afirma nada**: sem cliente pagante,
@@ -3707,8 +3708,8 @@ defesa). Teste: `test/core/worker-spawn-options.test.js`.
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
 O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
-(default **20**; **produção está em 40** desde a ampliação do servidor — ver a
-medição de 2026-09-11 abaixo) robôs vivos — `checkSessionCircuitBreaker` em
+(default **20**; **produção está em 80** desde 2026-09-18 — ver a medição
+vigente abaixo) robôs vivos — `checkSessionCircuitBreaker` em
 `src/supervisor/index.js`. **Isso é o teto comercial da operação**: cheio,
 NENHUMA cliente nova consegue conectar, e quem desligar o próprio robô não
 consegue voltar (perde a vaga para outra conta).
@@ -3745,7 +3746,51 @@ teto de 20 não era capricho, era o que cabia. Subir o teto é mudança
 memory-heavy → REGRA #1 da política de memória abaixo (avisar antes, com
 estimativa).
 
-**Medição real (2026-09-11, prod — números vigentes, use ESTES para estimar):**
+**Medição real (2026-09-18, prod — números VIGENTES, use ESTES para estimar):**
+o servidor foi ampliado de novo, para **30,6 GB** (`free -m` diz 31.337 MB
+totais), e as duas janelas de economia de memória entraram em produção no mesmo
+dia (`MALLOC_ARENA_MAX=2` e `LOG_TRANSPORT_MODE=inline` + cache do Sharp — ver
+`docs/analise-ram-memoria-nativa-2026-09-16.md`). Com **47 robôs** ligados:
+
+| medida | 2026-09-11 | **2026-09-18** |
+|---|---:|---:|
+| RAM total | 15.613 MB | **31.337 MB** |
+| RAM disponível | 4.919 MB (31%) | **24.342 MB (78%)** |
+| RSS somado dos robôs | 11.832 MB (36 robôs) | **8.540 MB (47 robôs)** |
+| **média por robô (RSS)** | 329 MB | **182 MB** |
+| swap em uso | 41 MB, sem tráfego | **0** |
+
+**A média por robô CAIU 45%** (329 → 182 MB) — não é ruído: são as janelas de
+memória nativa, medidas em PSS no documento e confirmadas aqui em RSS, que é a
+unidade da política de capacidade.
+
+⚠️ **O teto de vagas em produção é 80, NÃO 40** (confirmado pela dona do
+produto em 2026-09-18). Todo texto deste arquivo que dizia 40 estava
+desatualizado — não repetir 40 como se fosse o valor vigente.
+
+⚠️ **O limite seguro da política saltou de 35 para ~71.**
+`evaluateCapacity` reserva o maior valor entre 20% da RAM e 1.536 MB — aqui
+**6.267 MB** — e divide o resto por 350 MB/robô: `(31.337 − 6.267) / 350 = 71`.
+Com **47 robôs** ligados, a folga pela política é de **24 vagas** (era zero em
+11/09). A leitura anterior ("a folga pela política é zero", "o painel amarela
+pela contagem de vagas") **deixou de valer**.
+
+⚠️ **O teto de 80 continua sendo MAIOR que o limite seguro (71)** — ou seja,
+quem primeiro amarela é a política, não a contagem de vagas, e entre 71 e 80 o
+servidor aceitaria robô que a política já não recomenda. Não é problema hoje
+(47 ligados), mas é o número a vigiar: chegando perto de 71, o sinal que decide
+é o **swap**, não a RAM livre.
+
+⚠️ **A política continua usando 350 MB/robô**, não os 182 medidos: ela usa o
+MAIOR entre 350 e o p95 observado, de propósito — o colchão existe para pico de
+GC e scrape pesado. Pela média medida caberiam ~137 robôs; **não é esse o número
+a usar para decidir.**
+
+⚠️ **Subir o teto de vagas continua sendo REGRA #1 da política de memória** e
+exige reiniciar o `bot-supervisor` (reconecta TODAS as sessões). Ter folga não é
+autorização — a decisão é da dona do produto.
+
+**Medição de 2026-09-11 (HISTÓRICA — servidor e robôs mudaram desde então):**
 o servidor foi ampliado para **15,6 GB** (8 vCPU, disco de 38 GB) e o teto subiu
 para **40**. Com **36 robôs** ligados:
 
@@ -3819,7 +3864,7 @@ Onde roda: `setInterval` + `unref()` dentro da API, mesmo padrão de
 (uma contagem a cada 15min). A contagem vem de `listRunningBots()` do
 `manager.js`, a **mesma fonte** que o circuit breaker usa, então o aviso não
 pode discordar do que recusa a cliente. O teto é lido pela **mesma fórmula** do
-supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20; produção está em 40).
+supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20; **produção está em 80**).
 
 **Não regredir:**
 
@@ -3853,7 +3898,7 @@ real discordarem até a outra subir.
 Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv,
 então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
 ```bash
-grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20 (prod tinha 40 em 2026-09-11)"
+grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20 (prod estava em 80 em 2026-09-18)"
 # o que o supervisor de PRODUCAO leu no boot. Dois cuidados: o pm2 numera o
 # arquivo por instancia (pegue o mais recente por data, nao por nome) e
 # `*supervisor*` casaria tambem os logs de STAGING, que tem outro teto.
@@ -3960,12 +4005,18 @@ liga/desliga staging** (economia de RAM sob demanda) + **vigilância 403**
 
 ### Fatos de capacidade (use para estimar antes de sinalizar)
 
-- **Orçamento por sessão WhatsApp ativa:** ~**0,33 GB** de RSS medidos em
-  2026-09-11 (média 329 MB, maior robô 495 MB; era 272 MB em 2026-09-01). Base
-  fixa (api+dashboard+supervisor+staging+OS) ~**1 GB** medido no mesmo instante.
-- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,33 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
-- **Servidor vigente (2026-09-11):** 15,6 GB de RAM, 8 vCPU, disco de 38 GB,
-  swap de 4 GB. Teto de vagas em 40; limite seguro da política em 35.
+- **Orçamento por sessão WhatsApp ativa:** ~**0,18 GB** de RSS medidos em
+  2026-09-18 (média 182 MB com 47 robôs; era 329 MB em 11/09 e 272 MB em 01/09
+  — a queda é das janelas de memória nativa). Base fixa
+  (api+dashboard+supervisor+staging+OS) ~**1 GB**.
+- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,18 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
+- ⚠️ **Para decidir CAPACIDADE, use 0,35 GB por sessão, não os 0,18 medidos** —
+  é o que `evaluateCapacity` usa (o maior entre 350 MB e o p95 observado), e o
+  colchão existe para pico de GC e scrape pesado.
+- **Servidor vigente (2026-09-18):** **30,6 GB** de RAM, disco de 38 GB, swap de
+  4 GB. Teto de vagas em **80**; limite seguro da política em **~71**. Com 47
+  robôs ligados são **24 vagas de folga pela política**, contra zero em 11/09 —
+  e quem amarela primeiro passa a ser a política (71), não o teto (80).
 - **Custo marginal de infra por cliente:** ~R$1,75/mês (marginal) a ~R$2-3/mês
   (com base amortizada). Não é o gargalo do produto — RAM é barata perto do ticket.
 - **Swap é pré-requisito, não muleta:** num VPS apertado, swap ativo é a 1ª
@@ -6373,6 +6424,19 @@ treino barrado só avisa; sem medição confiável nunca afirma bloqueio) e
 `test/ops-ai-bot-access.test.js` a guarda. Um 200 para nome emprestado não
 prova que o robô real passa (a Cloudflare pode checar o IP); um 403 é prova
 forte.
+
+**O bloqueio mora em DOIS lugares do painel, e o script só enxerga um** (visto
+nos prints de 18/09): (1) Security → Settings → "Configure AI bot policies" →
+categoria **Training = Disallow** — é a regra por User-Agent que devolve o 403
+de 25 bytes "Your request was blocked." ao nome emprestado; (2) AI Crawl
+Control → Crawlers → botão **"Block Crawler"** por robô, que age sobre o robô
+REAL (verificado por IP). No print, **Claude-User** (o clique na citação do
+Claude) estava com "Block Crawler" ligado e **45 recusas em 7 dias** — e o
+script dava 200 para ele, porque o nome emprestado do VPS não é o robô
+verificado. Ou seja: **a coluna "Unsuccessful" do painel é a medição do robô
+real; o script mede só a regra por categoria.** Conferir os dois. "Enable Bot
+Preference Sync" fica DESLIGADO: ele reescreve o `robots.txt` na borda, que é
+exatamente o que o `Managed robots.txt` fazia (RCA 2026-08-04).
 
 ### O site dizia coisas diferentes para a IA e para a pessoa (mesmo RCA, 2026-09-18)
 
