@@ -21,11 +21,14 @@ duas pessoas na mesma bio derrubaria a confiança que a página constrói.
    mesmos 47 KB com H1, texto, FAQ e schema; canonical, `og:image`, `llms.txt`,
    robots.txt liberando as IAs, preço na página, WhatsApp em todo lugar. **Não
    é a estrutura que está segurando os leads.**
-2. **O site não existe nos índices de busca.** Zero páginas no índice do Bing
-   (duas fontes) — logo, zero no ChatGPT também. No Google só o Search Console
-   responde (**verificar**). Nas 10 primeiras posições de "aula particular de
-   matemática belo horizonte" estão Superprof, Suas Aulas Particulares, Preply,
-   Aula Particular em Casa e três professores com site antigo — o seu não está.
+2. **O site não aparece nas buscas que trazem aluno.** Nas 10 primeiras
+   posições de "aula particular de matemática belo horizonte" (índice do Bing,
+   via DuckDuckGo) estão Superprof, Suas Aulas Particulares, Preply, Aula
+   Particular em Casa e três professores com site antigo — o seu não está.
+   **Quantas páginas estão indexadas no Google e no Bing não dá para medir de
+   fora** (os dois servem página genérica a consulta `site:` sem sessão — o
+   teste com um domínio de controle provou isso): é o Search Console e o Bing
+   Webmaster Tools que respondem (**verificar**).
 3. **O site tem ~4 meses** (posts mais antigos de 15/05/2026, dez dos treze
    publicados em 11/09) e **nenhum link externo** apontando para ele. Um site
    assim não ranqueia contra marketplaces de 10-20 anos em semanas; ranqueia
@@ -50,7 +53,7 @@ duas pessoas na mesma bio derrubaria a confiança que a página constrói.
 | D1 | HTML entregue por User-Agent (navegador, bingbot, OAI-SearchBot, GPTBot, PerplexityBot, Googlebot) | 200, **47.172 bytes idênticos**, 1 `<h1>` | site estático (Astro); robô de IA lê tudo sem JavaScript ✅ |
 | D2 | `robots.txt` | `Allow: /` explícito para GPTBot, ChatGPT-User, OAI-SearchBot, PerplexityBot, Perplexity-User, ClaudeBot, Claude-Web, Google-Extended, Applebot, Amazonbot, DuckAssistBot, YouBot, MistralAI-User; `CCBot` bloqueado; `Sitemap:` apontando para `sitemap-index.xml` | ✅ (só falta `Claude-SearchBot`/`Claude-User`, os nomes atuais da Anthropic) |
 | D3 | `sitemap-index.xml` → `sitemap-0.xml` | **29 URLs, todas 200**; **nenhuma `<lastmod>`** | sem data, o robô não sabe o que mudou; `/sitemap.xml` (o caminho que todo mundo digita) dá 404 |
-| D4 | Índice do **Bing** (`site:` direto e via DuckDuckGo) | **0 páginas** | o ChatGPT busca no Bing → o site não pode ser citado nem por sorte |
+| D4 | Índice do **Bing** (`site:` direto e via DuckDuckGo) | **não medido**: a consulta `site:` devolve página genérica sem sessão — o mesmo aconteceu com `site:superprof.com.br` (controle), então a resposta vazia não prova nada | conferir no Bing Webmaster Tools; o ChatGPT busca no Bing, então esse número importa |
 | D5 | Índice do **Google** | não medido de fora (a busca serve página de consentimento) | **verificar** no Search Console: Páginas → indexadas × não indexadas; Desempenho → impressões por consulta |
 | D6 | Ranking no índice do Bing para "aula particular de matemática belo horizonte" | top 10 = Superprof, Suas Aulas Particulares (2×), Aula Particular em Casa, Preply, Eduardo Borges, Saber Particular, Prof. João Maurício, Lista Tudo | zero páginas suas; três professores individuais estão lá — com sites de anos |
 | D7 | Medição (GA/GTM/pixel/Clarity/Plausible) | **nenhuma** | não há como saber visitas nem cliques no WhatsApp |
@@ -64,7 +67,8 @@ duas pessoas na mesma bio derrubaria a confiança que a página constrói.
 
 ## 2. Por que não chega lead — as causas, em ordem de peso
 
-1. **Ninguém acha o site.** Zero no Bing; Google desconhecido; nenhum link
+1. **Ninguém acha o site.** Fora das 10 primeiras posições nas buscas que
+   trazem aluno; indexação no Google e no Bing desconhecida; nenhum link
    externo; 4 meses de vida. Um site novo de serviço local precisa de dois
    empurrões que ainda não aconteceram: **ficha do Google com avaliações**
    (é ela que aparece no mapa quando a mãe busca "aula de matemática perto de
@@ -376,7 +380,7 @@ Não copiar o texto: o Google junta páginas gêmeas e mostra uma só.
 | Métrica | 30 dias | 60 dias | 90 dias |
 |---|---|---|---|
 | páginas indexadas no Google | ≥ 20 de 29 | 29 | 29 + posts novos |
-| páginas indexadas no Bing | > 0 | ≥ 20 | todas |
+| páginas indexadas no Bing (Bing WMT) | medido | ≥ 20 | todas |
 | impressões/mês no Search Console | qualquer número (hoje é desconhecido) | 2× o mês anterior | consulta com "belo horizonte" ou "bh" entre as 10 maiores |
 | avaliações na ficha do Google | 10 | 15 | 20, nota ≥ 4,8 |
 | cliques no WhatsApp (GA4) | medido | ≥ 10/semana | ≥ 20/semana |
