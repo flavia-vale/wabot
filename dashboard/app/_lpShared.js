@@ -9,7 +9,7 @@ import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { IntroCard } from '@/components/landing/IntroCard'
 import { getSiteUrl } from '@/lib/site-url'
-import { BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
+import { BRAND_LEGACY_NAME, BRAND_NAME, BRAND_SHORT_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION } from '@/lib/marketing-content'
 import { getHubSeoRoute, getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoutes, buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { buildOgImageUrl } from '@/lib/seo-og'
@@ -207,15 +207,19 @@ export function LpTemplate({ slug }) {
   const productJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
+    '@id': `${getSiteUrl()}#software`,
     name: BRAND_NAME,
-    alternateName: ['Espelha Grupos'],
+    // Mesma entidade do layout raiz: o nome antigo entra como alternateName
+    // (antes repetia o próprio nome, e a IA lia duas entidades — RCA 2026-09-18).
+    alternateName: [BRAND_LEGACY_NAME],
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     description: `${cfg.description} ${PRODUCT_DEFINITION}`,
     url: `${getSiteUrl()}/${slug}`,
     mainEntityOfPage: `${getSiteUrl()}/${slug}`,
     image: [`${getSiteUrl()}/botinho-logo.svg`],
-    brand: { '@type': 'Brand', name: BRAND_SHORT_NAME },
+    brand: { '@id': `${getSiteUrl()}#organization` },
+    publisher: { '@id': `${getSiteUrl()}#organization` },
     offers: DEFAULT_LANDING_PLANS.map((plan) => ({
       '@type': 'Offer',
       name: plan.name,

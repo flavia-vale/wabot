@@ -3,7 +3,8 @@ import { ToastProvider } from "@/components/ToastProvider";
 import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
 import { GoogleAdsTag } from "@/components/marketing/GoogleAdsTag";
 import { getSiteUrl } from '@/lib/site-url'
-import { BRAND_LEGACY_NAME, BRAND_ORG_NAME, BRAND_PRODUCT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORT_EMAIL } from '@/lib/marketing-content'
+import { buildOgImageDescriptor } from '@/lib/seo-og'
+import { BRAND_LEGACY_NAME, BRAND_ORG_NAME, BRAND_PRODUCT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORTED_STORES, SUPPORT_EMAIL } from '@/lib/marketing-content'
 
 // Não use `next/font/google` aqui. Ele baixa CSS/arquivos do Google em tempo
 // de build; quando o VPS/GitHub Actions fica sem acesso ao Google Fonts, o build
@@ -28,6 +29,15 @@ export const metadata = {
   description: 'O Espelha Grupos automatiza grupos e canais de ofertas no WhatsApp: converte o link para o seu código de afiliado e publica sozinho, com intervalo controlado e histórico de envio.',
   alternates: {
     canonical: '/',
+  },
+  // Imagem de prévia padrão para toda página que não declarar a sua (o Next
+  // substitui o objeto `openGraph` inteiro quando a página define um — quem
+  // define precisa passar `images` também; ver lib/seo-og.js).
+  openGraph: {
+    siteName: 'Espelha Grupos',
+    locale: 'pt_BR',
+    type: 'website',
+    images: [buildOgImageDescriptor()],
   },
 };
 
@@ -57,10 +67,36 @@ function buildGlobalJsonLd() {
       sameAs: BRAND_SAME_AS,
     },
     {
+      // O site como entidade própria, amarrado à organização. Sem isto cada
+      // página declarava um `isPartOf: WebSite` solto (uma delas com o codinome
+      // interno 'WABOT') — RCA 2026-09-18.
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      '@id': `${siteUrl}#website`,
+      name: BRAND_ORG_NAME,
+      alternateName: [BRAND_LEGACY_NAME],
+      url: siteUrl,
+      inLanguage: 'pt-BR',
+      publisher: { '@id': `${siteUrl}#organization` },
+    },
+    {
       '@context': 'https://schema.org',
       '@type': 'SoftwareApplication',
+      '@id': `${siteUrl}#software`,
       name: BRAND_PRODUCT_NAME,
       alternateName: [BRAND_LEGACY_NAME],
+      inLanguage: 'pt-BR',
+      // Lista de recursos em texto simples: é o que Gemini/Perplexity extraem
+      // ao responder "o que o Espelha Grupos faz" (fonte: SUPPORTED_STORES).
+      featureList: [
+        'Espelhamento de ofertas de grupos e canais do WhatsApp para os grupos da afiliada',
+        `Conversão de links de afiliado em ${SUPPORTED_STORES.length} lojas: ${SUPPORTED_STORES.join(', ')}`,
+        'Ofertas automáticas da Shopee por palavra-chave e filtros',
+        'Filas de envio com intervalo e limites por hora e por dia',
+        'Controle do ritmo dos envios por grupo (Módulo de Preservação Avançada)',
+        'Marca d\u2019água na foto da oferta e card de oferta clicável',
+        'Painel de vendas e comissão da Shopee',
+      ],
       // `publisher` e `brand` apontam para a MESMA Organization: é o par que
       // impede a IA de ler o produto e a marca como duas empresas diferentes.
       publisher: { '@id': `${siteUrl}#organization` },

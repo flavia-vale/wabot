@@ -85,6 +85,13 @@ export const BRAND_SAME_AS = [
 
 export const PRODUCT_DEFINITION = 'O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 
+// Lojas com conversão de link suportada. Fonte ÚNICA para texto público,
+// schema e FAQ: em 2026-09-18 a página de preços, a API pública de planos e a
+// FAQ pública ainda diziam 4 lojas enquanto o produto já cobria 6.
+export const SUPPORTED_STORES = ['Shopee', 'Mercado Livre', 'Amazon', 'Magalu', 'SHEIN', 'AliExpress']
+
+export const PRICING_PRODUCT_DESCRIPTION = `Robô que converte links de afiliado de ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}) para o código da afiliada e publica as ofertas em grupos e canais do WhatsApp.`
+
 export const PRODUCT_LIMITATIONS = [
   'Não prometemos ganho financeiro, comissão ou aumento garantido de vendas.',
   'Não deve ser usado para spam, disparos sem consentimento ou burlar regras do WhatsApp e das plataformas de afiliados.',

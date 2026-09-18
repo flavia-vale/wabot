@@ -3,7 +3,7 @@ import { PublicPage } from '@/components/PublicShell'
 
 export const metadata = {
   title: 'Quem Somos',
-  description: 'Conheça o Espelha Grupos, bot conversor para afiliados no WhatsApp.',
+  description: 'Conheça o Espelha Grupos: quem faz, o que o produto faz e o que ele não promete. Bot para afiliadas espelhar ofertas no WhatsApp com o próprio código de afiliada.',
   alternates: { canonical: '/quem-somos' },
 }
 

@@ -66,7 +66,18 @@ export const EDITORIAL_DATES = {
   '/ferramentas/calculadora-risco-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   '/materiais/checklist-operacao-whatsapp': { publishedAt: '2026-05-11', updatedAt: '2026-05-15' },
   '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp': { publishedAt: '2026-05-14', updatedAt: '2026-05-15' },
-  '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  // Parágrafo de identidade de marca entrou em 2026-09-11 (e3f5273); a data
+  // ficava em 05/2026 e a página é o ativo mais citado pelas IAs.
+  '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-11' },
+  // As 5 páginas de loja do Tier 1 (02/09) e /alternativas/promium (02/09)
+  // nunca tiveram data — no promium o Article caía no fallback de 2026-05-15,
+  // antes de a página existir (RCA 2026-09-18).
+  '/shopee-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/mercado-livre-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/amazon-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/shein-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/magalu-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/alternativas/promium': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-08-31' },
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
   // desta rodada, publicada em 2026-08-19.

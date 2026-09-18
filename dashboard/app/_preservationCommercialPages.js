@@ -4,6 +4,7 @@ import Footer from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { getEditorialDates } from '@/lib/editorial-content'
 import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 
 const siteUrl = getSiteUrl()
@@ -617,6 +618,7 @@ export function getPreservationCommercialMetadata(pageKey) {
 
 function buildSchemas(page) {
   const pageUrl = `${siteUrl}${page.path}`
+  const dates = getEditorialDates(page.path)
   return [
     {
       '@context': 'https://schema.org',
@@ -625,6 +627,13 @@ function buildSchemas(page) {
       description: page.description,
       url: pageUrl,
       inLanguage: 'pt-BR',
+      // Data e dono: as 5 páginas de loja do Tier 1 saíam sem nenhum sinal de
+      // frescor nem de quem publica (RCA 2026-09-18). Datas em
+      // lib/editorial-content.js (EDITORIAL_DATES).
+      datePublished: dates.publishedAt,
+      dateModified: dates.updatedAt,
+      publisher: { '@id': `${siteUrl}#organization` },
+      isPartOf: { '@id': `${siteUrl}#website` },
       about: page.about ?? ['Canais do WhatsApp', 'Afiliados', 'Módulo de Preservação Avançada'],
     },
     {

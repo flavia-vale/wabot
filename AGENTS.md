@@ -6210,10 +6210,12 @@ Cuidado ao renomear os campos: `sanitizeAnalyticsMetadata` descarta
 qualquer chave que case com `/(token|secret|…|key|url|…)/i`, então algo como
 `referrer_url` seria descartado em silêncio.
 
-**Conferir todo mês que a Cloudflare não voltou a bloquear as IAs:**
+**Conferir todo mês que a Cloudflare não voltou a bloquear as IAs — nos DOIS
+níveis, robots.txt e WAF:**
 
 ```bash
 curl -s https://espelhagrupos.com.br/robots.txt | grep -c "Disallow: /$"   # 0 = ok
+node scripts/diag-acesso-robos-ia.mjs   # pede a home com o nome de cada robô; exit 1 = robô de busca/clique barrado
 ```
 
 O `Managed robots.txt` da Cloudflare veio **ligado por padrão** e colava
@@ -6222,6 +6224,93 @@ O `Managed robots.txt` da Cloudflare veio **ligado por padrão** e colava
 ligado, os robôs de *resposta* (OAI-SearchBot, Claude-SearchBot) passavam, mas
 os de *indexação/treino* não. Se voltar a ligar, o trabalho de IA para de valer
 em silêncio.
+
+⚠️ **O robots.txt limpo NÃO prova que os robôs passam** (RCA 2026-09-18, abaixo):
+o bloqueio pode estar no WAF, e aí a resposta é 403 com o robots.txt dizendo
+`Allow: /`. Só a segunda linha enxerga isso.
+
+### Robôs de IA barrados no WAF com robots.txt limpo (RCA 2026-09-18 — não regredir)
+
+Medido em produção em 18/09, pedindo a home com o User-Agent de cada robô a
+partir do mesmo IP (`scripts/diag-acesso-robos-ia.mjs`):
+
+| Robô | Papel | Resposta |
+|---|---|---|
+| navegador comum (controle) | — | 200 |
+| OAI-SearchBot (busca do ChatGPT), ChatGPT-User (clique), PerplexityBot, Perplexity-User, Claude-SearchBot, Claude-User, Googlebot, Google-Extended, bingbot, DuckAssistBot, Applebot, meta-externalagent, MistralAI-User | busca / clique / treino | 200 |
+| **GPTBot** (treino da OpenAI), **ClaudeBot** (treino da Anthropic), CCBot, Bytespider, Amazonbot | treino | **403** |
+
+Dois nomes emprestados, mesmo IP, respostas diferentes → a regra é por
+categoria de User-Agent: é o bloqueio de **"AI crawlers de treino"** da
+Cloudflare (Security → Bots → AI Crawl Control / regra gerenciada), ligado por
+padrão em domínio novo desde jul/2025. O `robots.txt` não enxerga nada disso e
+a checagem mensal antiga passava verde.
+
+**O que isso muda, e o que não muda:**
+
+- **Não impede a citação no ChatGPT com busca, na Perplexity, no Gemini nem no
+  AI Overviews** — todos leem pelo robô de *busca*, que passa. O placar de
+  citação de 09/2026 foi medido com este bloqueio ligado.
+- **Impede que o próximo modelo aprenda a marca no treino.** Sem busca, o
+  ChatGPT já devolve zero produtos nomeados em 8 de 8 consultas
+  (`ROTEIRO_MEDICAO_IA.md`); com GPTBot barrado, isso não muda com o tempo.
+  Concorrente que libera o GPTBot entra no modelo; nós não.
+- **É decisão da dona, não defeito.** Liberar GPTBot/ClaudeBot troca
+  privacidade do conteúdo público (que já é público) por presença no treino.
+  Se liberar: Cloudflare → Security → Bots → AI Crawl Control → permitir
+  GPTBot e ClaudeBot (pode manter CCBot/Bytespider barrados). Depois rodar o
+  script de novo: GPTBot tem que sair de 403.
+
+**Não regredir:** a checagem mensal tem as duas linhas; `src/ops/aiBotAccess.js`
+é a regra pura (papel do robô decide a gravidade: busca/clique barrado reprova,
+treino barrado só avisa; sem medição confiável nunca afirma bloqueio) e
+`test/ops-ai-bot-access.test.js` a guarda. Um 200 para nome emprestado não
+prova que o robô real passa (a Cloudflare pode checar o IP); um 403 é prova
+forte.
+
+### O site dizia coisas diferentes para a IA e para a pessoa (mesmo RCA, 2026-09-18)
+
+Achados do inventário de legibilidade por IA, todos corrigidos no mesmo dia:
+
+- **`og:image` apontava para `/api/public/og`, rota que nunca existiu** (404 em
+  produção) em 7 templates, inclusive as 5 páginas de loja do Tier 1; a home
+  não declarava imagem nenhuma. Prévia sem imagem no WhatsApp, no ChatGPT e na
+  Perplexity. Hoje é um arquivo estático (`dashboard/public/og-default.png`,
+  gerado por `node scripts/build-og-image.mjs`); guarda em
+  `test/og-image-existe.test.js`. **Nunca voltar a servir OG por rota.**
+- **`/api/public/faq` e `/api/public/plans`** — abertos no `robots.txt`
+  justamente para as IAs — devolviam o seed de 05-06/2026: "4 lojas" (Shopee,
+  ML, Amazon, Magalu) quando são 6. A home troca o FAQ estático pelo da API ao
+  hidratar e `/precos` prefere as features do banco, então o texto VISÍVEL
+  também dizia 4 enquanto `pricing.md` e o JSON-LD diziam 6. Migration DML
+  guardada (`20260918120000_sync_public_faq_plans_six_stores`: só troca a linha
+  que ainda está com o texto do seed; edição feita no admin não é sobrescrita)
+  + `test/public-faq-plans-sync.test.js`, que falha se `DEFAULT_LANDING_PLANS`
+  / `CORE_FAQ_ITEMS` mudarem sem migration nova de sincronia. Lojas agora vêm
+  de UMA constante (`SUPPORTED_STORES`).
+- **`llms.txt`** não citava preço nem as 6 lojas e omitia as páginas que
+  convertem (Tier 1 por loja, `/precos`, `/espelha-grupos-e-confiavel`,
+  `/alternativas/*`) — e a Perplexity preenchia o nosso preço com o de
+  concorrente. Reescrito (resumo pt-BR + preços + lojas + páginas);
+  `test/llms-txt-sync.test.js` exige preço = `DEFAULT_LANDING_PLANS`, as 6
+  lojas, as páginas de venda e que **toda URL exista no registro SEO**.
+- **A chegada por IA não era medida onde estão 47% das impressões.** Só 15
+  templates emitiam `referral_visit` e gravavam o cookie de primeira página;
+  `/alternativas/*` e os 19 posts do blog não. `PublicReferralTracker`
+  (mesma regra de privacidade: só o host) entrou no `ComparisonPageTracker` e
+  no `ArticleShell`; `signupOrigin.js` passou a reconhecer as páginas do Tier 1
+  e de 11/09 (cadastro vindo delas caía em "Direto / ambíguo") e mais motores
+  (grok, deepseek, meta, mistral). Guarda: `test/referral-tracking-cobertura.test.js`.
+- **Resíduos de entidade no schema:** `/conteudos` declarava `WebSite` com o
+  codinome interno `WABOT`; as LPs programáticas emitiam `alternateName` igual
+  ao próprio nome e `brand` solto; a `Product` de `/precos` descrevia 4 lojas;
+  as 5 páginas Tier 1 e `/alternativas/promium` não tinham data (o promium
+  caía no fallback 2026-05-15, antes de existir). O layout raiz agora emite
+  `WebSite` (`#website`) e `SoftwareApplication` com `@id`, `inLanguage` e
+  `featureList`; páginas apontam para `#organization`/`#website` por `@id`.
+- **O template de PR mandava usar "BOTinho" como marca principal**
+  (`.github/PULL_REQUEST_TEMPLATE.md`) — contrário à decisão de 02/09. Quem
+  seguisse o checklist reintroduzia o nome aposentado.
 
 ## Clareza da falta de cadastro da loja + vídeo tutorial (2026-09-02)
 
