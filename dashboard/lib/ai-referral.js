@@ -29,6 +29,10 @@ const AI_ANSWER_HOSTS = [
   ['x.ai', 'grok'],
   ['mistral.ai', 'mistral'],
   ['poe.com', 'poe'],
+  // Adicionados em 2026-09-18: chegavam como 'other' e sumiam do funil de IA.
+  ['meta.ai', 'meta'],
+  ['chat.deepseek.com', 'deepseek'],
+  ['chat.mistral.ai', 'mistral'],
 ]
 
 // Busca tradicional. Separado da IA de propósito: são funis diferentes e a

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { TRACKING_EVENTS, trackEvent } from '@/lib/analytics'
+import { trackPublicReferral } from './PublicReferralTracker'
 
 export function ComparisonPageTracker({ slug = '', format = '' }) {
   const didTrackScroll50 = useRef(false)
@@ -13,6 +14,9 @@ export function ComparisonPageTracker({ slug = '', format = '' }) {
     }
 
     trackEvent(TRACKING_EVENTS.COMPARISON_PAGE_VIEW, context)
+    // Chegada por IA/busca + first-touch (RCA 2026-09-18: as comparações
+    // carregam 47% das impressões e não mediam origem nenhuma).
+    trackPublicReferral({ template: 'comparison', slug })
 
     function onScroll() {
       if (didTrackScroll50.current) return

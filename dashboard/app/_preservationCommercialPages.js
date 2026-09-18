@@ -4,6 +4,7 @@ import Footer from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { getEditorialDates } from '@/lib/editorial-content'
 import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 
 const siteUrl = getSiteUrl()
@@ -414,8 +415,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     // impressões. O que sobrava na tela era só "Bot para Achadinhos no WhatsApp:
     // automatize seus g…": nenhum motivo para clicar. Agora o diferencial (4
     // lojas) e o teste cabem dentro da janela visível. Manter curto.
-    title: 'Bot para achadinhos no WhatsApp: 4 lojas e 7 dias grátis',
-    description: 'O bot pega a oferta do grupo que você acompanha, troca o link pelo seu código de afiliado e publica nos seus grupos. Shopee, Amazon, Mercado Livre e Magalu.',
+    title: 'Bot para achadinhos no WhatsApp: 6 lojas e 7 dias grátis',
+    description: 'O bot pega a oferta do grupo que você acompanha, troca o link pelo seu código de afiliado e publica nos seus grupos. 6 lojas: de Shopee a AliExpress.',
     eyebrow: 'Bot para achadinhos',
     h1: 'Bot para achadinhos no WhatsApp: as ofertas saem sozinhas',
     lead: 'Um bot de achadinhos acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp. Você deixa de copiar e colar oferta por oferta e passa a revisar o que já foi enviado.',
@@ -617,6 +618,7 @@ export function getPreservationCommercialMetadata(pageKey) {
 
 function buildSchemas(page) {
   const pageUrl = `${siteUrl}${page.path}`
+  const dates = getEditorialDates(page.path)
   return [
     {
       '@context': 'https://schema.org',
@@ -625,6 +627,13 @@ function buildSchemas(page) {
       description: page.description,
       url: pageUrl,
       inLanguage: 'pt-BR',
+      // Data e dono: as 5 páginas de loja do Tier 1 saíam sem nenhum sinal de
+      // frescor nem de quem publica (RCA 2026-09-18). Datas em
+      // lib/editorial-content.js (EDITORIAL_DATES).
+      datePublished: dates.publishedAt,
+      dateModified: dates.updatedAt,
+      publisher: { '@id': `${siteUrl}#organization` },
+      isPartOf: { '@id': `${siteUrl}#website` },
       about: page.about ?? ['Canais do WhatsApp', 'Afiliados', 'Módulo de Preservação Avançada'],
     },
     {

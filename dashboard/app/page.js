@@ -11,6 +11,7 @@ import { BRAND_NAME, BRAND_SHORT_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, 
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 import { getLandingPlans } from '@/lib/plans-server'
+import { buildOgImageDescriptor } from '@/lib/seo-og'
 
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template
@@ -23,6 +24,9 @@ export const metadata = {
     title: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp',
     description: PRODUCT_DEFINITION,
     url: '/',
+    // A home não declarava imagem nenhuma (RCA 2026-09-18) — o card de prévia
+    // do link principal do produto saía sem foto.
+    images: [buildOgImageDescriptor()],
   },
 }
 

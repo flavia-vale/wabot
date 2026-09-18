@@ -7,6 +7,7 @@ import { getLandingPlans } from '@/lib/plans-server'
 import {
   BRAND_ORG_NAME,
   BRAND_PRODUCT_NAME,
+  PRICING_PRODUCT_DESCRIPTION,
   SUPPORT_HOURS,
   SUPPORT_RESPONSE_SLA,
   SUPPORT_WHATSAPP_URL,
@@ -95,8 +96,8 @@ function buildPricingJsonLd(plans) {
       '@type': 'Product',
       name: BRAND_PRODUCT_NAME,
       brand: { '@type': 'Brand', name: BRAND_ORG_NAME },
-      description:
-        'Robô que converte links de afiliado da Shopee, Amazon, Mercado Livre e Magalu e publica as ofertas em grupos e canais do WhatsApp.',
+      // Lojas vêm da mesma constante do FAQ (6, não 4 — RCA 2026-09-18).
+      description: PRICING_PRODUCT_DESCRIPTION,
       offers: paid.map((plan) => ({
         '@type': 'Offer',
         name: plan.name,

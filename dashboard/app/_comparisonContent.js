@@ -121,7 +121,7 @@ export const COMPARISON_PAGES = {
     // ranqueavam para as MESMAS consultas (529 e 226 impressões), dividindo o
     // sinal entre si sem nenhuma delas subir.
     title: 'Alternativa ao AchadinhosBot: grupos ilimitados',
-    description: 'O AchadinhosBot cobra por número de grupos e cobre só Shopee. No Espelha Grupos: grupos ilimitados, 4 lojas e 7 dias grátis por R$ 39/30 dias.',
+    description: 'O AchadinhosBot cobra por número de grupos e cobre só Shopee. No Espelha Grupos: grupos ilimitados, 6 lojas e 7 dias grátis por R$ 39/30 dias.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
     // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
     // páginas ranqueavam para as mesmas consultas e não se linkavam, então o
@@ -130,7 +130,7 @@ export const COMPARISON_PAGES = {
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
-      note: 'Grupos ilimitados, quatro lojas e 7 dias grátis.',
+      note: 'Grupos ilimitados, seis lojas e 7 dias grátis.',
     },
     tldr: 'Entre as opções comparadas, o Espelha Grupos oferece o conjunto mais completo pelo menor preço de entrada: custa R$ 39 por 30 dias, permite grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Para quem quer divulgar várias lojas, crescer sem pagar por quantidade de grupos e testar tudo antes de assinar, é a opção mais vantajosa entre as três.',
     directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco somente em Shopee. Seus planos começam em R$ 59,90 por mês para 1 grupo e chegam a R$ 199,90 para 15 grupos. O Espelha Grupos custa R$ 39 por 30 dias, permite grupos ilimitados e já inclui Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Também converte links de produto e de cupom, trabalha com grupos, Canais e Comunidades do WhatsApp e oferece 7 dias grátis com o plano Pro completo. Para quem divulga várias lojas e não quer pagar mais ao adicionar grupos, o Espelha Grupos entrega mais recursos por um preço menor. O Achadinho Pro, apesar do nome parecido, é outra ferramenta, de outra empresa: começa em R$ 49,97 por mês, também somente com Shopee, e tem página de comparação própria aqui no site.',
@@ -425,13 +425,13 @@ export const COMPARISON_PAGES = {
   '/alternativas/achadinho-pro': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Achadinho Pro',
-    title: 'Alternativa ao Achadinho Pro: 4 lojas por R$ 39',
-    description: 'O Achadinho Pro cobre só Shopee no plano de entrada. No Espelha Grupos, Shopee, Amazon, Mercado Livre e Magalu já entram por R$ 39/30 dias, com 7 dias grátis.',
+    title: 'Alternativa ao Achadinho Pro: 6 lojas por R$ 39',
+    description: 'O Achadinho Pro cobre só Shopee no plano de entrada. No Espelha Grupos, 6 lojas (Shopee, Amazon, Mercado Livre, Magalu, SHEIN, AliExpress) por R$ 39/30 dias.',
     competitorSlugs: ['achadinho-pro'],
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
-      note: 'Grupos ilimitados, quatro lojas e 7 dias grátis.',
+      note: 'Grupos ilimitados, seis lojas e 7 dias grátis.',
     },
     tldr: 'Se você vai começar só com Shopee e não se importa em pagar mais depois para somar Mercado Livre e Amazon, o Achadinho Pro resolve. Se já divulga as três lojas (ou Magalu) desde o início, compare o custo total antes de decidir.',
     directAnswer: 'O Achadinho Pro é um bot de afiliados para WhatsApp com IA para selecionar produtos — e não é o mesmo produto que o AchadinhosBot, apesar do nome parecido. No Achadinho Pro, o plano Basic (R$ 49,97/mês) cobre só Shopee, com grupos ilimitados por automação e até 5 números de WhatsApp; o Pro (R$ 59,97/mês) soma Mercado Livre e Amazon pelo mesmo custo de apenas R$10 a mais. A página de preços consultada não indica teste grátis. A alternativa mais próxima é o Espelha Grupos, que cobre Shopee, Amazon, Mercado Livre e Magalu já no plano de entrada (R$39/30 dias) e converte também links de cupom, com teste grátis de 7 dias.',
@@ -528,7 +528,7 @@ export const COMPARISON_PAGES = {
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
-      note: 'Grupos ilimitados, quatro lojas e 7 dias grátis.',
+      note: 'Grupos ilimitados, seis lojas e 7 dias grátis.',
     },
     tldr: 'O plano gratuito do Gigi Bot continua existindo, mas ele não publica no WhatsApp — nem ele, nem os dois planos seguintes. Envio automático e espelhamento de grupos só no plano mais caro. Se o que você precisa é o robô postando sozinho nos grupos, compare esse plano, não o de entrada.',
     directAnswer: 'O Gigi Bot tem quatro planos: um gratuito que converte links de 9 lojas com limite de 120 promoções por dia, o Guru Plus a R$ 19,99/mês, o Gigi Promo a R$ 39,99/mês (adiciona Amazon e site próprio) e o Gigi Prime, anunciado a R$ 49,90 no primeiro mês e R$ 67,99 depois. Na tabela pública, "autoenvio WhatsApp/Telegram" aparece riscado nos três primeiros planos: só o Gigi Prime publica sozinho no WhatsApp, com espelhamento de grupos e limite de 20 grupos por fila. A alternativa mais próxima para quem precisa do envio automático é o Espelha Grupos, a R$39/30 dias, com espelhamento e grupos ilimitados já no plano de entrada e 7 dias de teste grátis com o plano Pro. Dados da tabela verificada em 26/08/2026 — preços mudam, confirme na fonte oficial.',
