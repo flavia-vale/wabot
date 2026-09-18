@@ -1868,3 +1868,57 @@ maior risco e a de menor ganho esperado.
 **Rollback de qualquer uma**: apagar a linha do `.env` + `pm2 delete`/`start`
 (pegadinha #1) e, para os robôs, `pm2 restart bot-supervisor --update-env`.
 Nenhuma delas exige reverter código.
+
+---
+
+## 21. Veredito da janela 1: **confirmado, ~1 GB** (2026-09-18, 14:49)
+
+Frota de pé desde ~23:50 do dia anterior — **cerca de 15 horas**, muito além da
+hora que a §12.2 mediu como tempo de saturação. Comparação válida.
+
+| por robô (MiB) | PSS | arena | heap | arena+heap | arenas |
+|---|---:|---:|---:|---:|---:|
+| **antes** (47 robôs, saturada) | 194,6 | 111,8 | ~17 | ~129 | 29,4 |
+| **agora** (48 robôs, saturada) | **173,8** | **42,7** | 57,2 | **99,9** | **1,1** |
+| | **−10,7%** | **−62%** | +236% | **−23%** | |
+
+**Economia medida: ~20,8 MiB por robô, ~1,0 GB na frota.** A arena secundária,
+que era 57% de toda a memória, caiu para 25%.
+
+**Melhor que o sinal inicial**, que apontava 8,1% e ~0,7 GB — e a §19.3 tinha
+fixado 179 MiB/robô como o número que confirmaria. Deu 173,8.
+
+⚠️ **Os dois confundidores desta leitura empurram o resultado para BAIXO, não
+para cima**, o que faz dos 10,7% um piso e não um teto:
+
+- a frota agora tem **48 robôs**, não 47 — um robô a mais dividindo a mesma base;
+- a leitura é das **14:49**, e o `antes` era de meia-noite. Tráfego de tarde é
+  maior que o de madrugada, então a frota de agora está trabalhando mais.
+
+**O mecanismo é o esperado e está inteiro nos números:** o que estava espalhado
+em 29 arenas passou a se concentrar na arena principal (o `heap` triplicou) mais
+uma. A soma `arena + heap` caiu 23% — ou seja, não foi contabilidade, foi
+memória que deixou de ser reservada.
+
+### 21.1 O que isso muda na conta de capacidade
+
+Com 48 robôs a 173,8 MiB, a frota ocupa **8,1 GB** de PSS contra os 9,1 GB de
+ontem. Em um servidor de 15,6 GB, é um GB inteiro de volta à folga — a mesma
+folga que a política (`evaluateCapacity`) reserva para pico de GC e scrape
+pesado, e que estava sendo consumida.
+
+⚠️ **Isso NÃO é autorização para subir o teto de vagas.** A política continua
+calculando o limite seguro pela reserva, e quem manda na decisão de aumentar é o
+**swap**: enquanto ele ficar parado, está confortável; subindo de um dia para o
+outro, o assunto é mais RAM, não mais robô.
+
+### 21.2 Conferir daqui em diante
+
+Uma linha por dia, para ver se o ganho se mantém e se o swap continua parado:
+
+```bash
+free -m | awk 'NR==2{print "livre_mb="$7} NR==3{print "swap_usada_mb="$3}'
+bash /tmp/medir.sh
+```
+
+Comparar sempre com **173,8 MiB/robô**, que é o novo piso conhecido.
