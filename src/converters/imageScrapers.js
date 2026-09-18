@@ -5,6 +5,12 @@ import { fetchMercadoLivreApiImageId } from './productInfoScraper.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
 import { buildInlineThumbnail } from '../core/inlineThumbnail.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
+import {
+  isMagaluBotWallHtml,
+  isMagaluBlockedStatus,
+  isMagaluImageUrl,
+  buildMagaluImageUrlCandidates,
+} from './magaluImage.js'
 
 const OG_IMAGE_RE = [
   /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
@@ -161,13 +167,17 @@ async function fetchHtml(url, { ua = 'Mozilla/5.0 (compatible; BotConversorAfili
     signal: AbortSignal.timeout(timeoutMs),
     redirect: 'follow',
   })
-  if (!res.ok) return { html: null, finalUrl: url }
+  // `status` sai junto de propósito: `!res.ok` engolia num `html: null` só
+  // tanto o 404 de link morto quanto o 403 de bloqueio de borda (RCA
+  // 2026-09-17 da Magalu). São causas com ações opostas e precisam ser
+  // distinguíveis por quem chama.
+  if (!res.ok) return { html: null, finalUrl: res.url || url, status: res.status }
   const contentType = res.headers.get('content-type') || ''
   if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
-    return { html: null, finalUrl: res.url || url }
+    return { html: null, finalUrl: res.url || url, status: res.status }
   }
   const html = await readLimitedText(res)
-  return { html, finalUrl: res.url || url }
+  return { html, finalUrl: res.url || url, status: res.status }
 }
 
 // Muro anti-robô do Mercado Livre. É a lição mais cara do incidente de
@@ -522,6 +532,34 @@ export function getImageResolverMetrics() {
   return Object.fromEntries(domainFailureMetrics)
 }
 
+// Magalu: ramo próprio só para dar NOME ao bloqueio da loja.
+//
+// Não existe hoje fonte de foto da Magalu que não passe pela página do produto
+// (a API de marketplace em api.magalu.com exige credencial de vendedor, que a
+// cliente não tem, e o CDN não permite montar o caminho da foto a partir do
+// SKU). Então este ramo não inventa uma fonte nova: ele lê o MESMO HTML que o
+// caminho genérico leria e, quando o que volta é o muro anti-robô, devolve
+// `null` com diagnóstico e sinal durável em vez de deixar o bloqueio se
+// disfarçar de "a loja não tem foto deste produto" (ver magaluImage.js).
+//
+// Isso importa porque as duas leituras pedem ações OPOSTAS: sem foto na loja,
+// a ação é conferir o produto; com a loja barrando o servidor, a ação é a foto
+// vir de outra fonte (o plano B da foto da mensagem de origem,
+// core/previewImageFallbackPolicy.js, que já roda quando este caminho devolve
+// `null`). O muro da Magalu no User-Agent do WhatsApp responde **200**, então
+// sem esta checagem não há como diferenciar.
+async function resolveMagaluImage(productUrl, { onDiagnostic } = {}) {
+  const { html, status } = await fetchHtml(productUrl, { ua: BROWSER_UA }).catch(() => ({ html: null, status: null }))
+
+  if (isMagaluBotWallHtml(html) || isMagaluBlockedStatus(status)) {
+    recordOperationalSignal('magalu_bot_wall', { url: productUrl, status: status ?? null })
+    onDiagnostic?.({ stage: 'loja_bloqueou', detail: { status: status ?? null } })
+    return null
+  }
+
+  return extractImageFromHtmlLayers(html)
+}
+
 // `onDiagnostic({ stage, detail })` (opcional, best-effort): recebe o motivo de
 // a foto não ter vindo, para quem chama logar/emitir sinal. Existe porque o
 // caminho da Shopee era mudo — chave recusada, item fora do catálogo de
@@ -538,6 +576,8 @@ export async function fetchProductImage(platform, productUrl, creds, { onDiagnos
       image = await resolveAmazonImage(productUrl)
     } else if (platform === 'mercadolivre') {
       image = await resolveMercadoLivreImage(productUrl, creds)
+    } else if (platform === 'magazineluiza') {
+      image = await resolveMagaluImage(productUrl, { onDiagnostic })
     }
     // SHEIN não tem ramo dedicado: o caminho genérico abaixo já extrai o
     // og:image do oneLink (miniatura `_thumbnail_<w>x<h>`), e
@@ -546,7 +586,10 @@ export async function fetchProductImage(platform, productUrl, creds, { onDiagnos
     // no momento do download, com fallback para a miniatura original. Um
     // ramo dedicado aqui repetiria o MESMO fetch de HTML que a linha abaixo
     // já faz (T069 — RCA de fetch duplicado dentro do orçamento de 25s).
-    if (!image) image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })
+    // A Magalu fica de fora do leitor genérico: `resolveMagaluImage` já leu o
+    // MESMO HTML acima, e repetir o fetch gastaria o orçamento de 25s da
+    // mensagem duas vezes pela mesma página (mesma lição do T069 da SHEIN).
+    if (!image && platform !== 'magazineluiza') image = await resolveByHtmlLayers(productUrl, { ua: BROWSER_UA })
 
     if (!image) incFailure(productUrl)
     setCached(productUrl, image)
@@ -783,6 +826,13 @@ function buildImageUrlCandidates(rawUrl) {
     // `buildSheinImageUrlCandidates`.
     if (isSheinImageUrl(rawUrl)) {
       return buildSheinImageUrlCandidates(rawUrl)
+    }
+
+    // Magalu: o tamanho vem no caminho do CDN (`/450x450/...`) e a loja
+    // costuma anunciar uma variante abaixo dos 800px do preview. Pede as
+    // maiores primeiro, mantendo a original como último recurso.
+    if (isMagaluImageUrl(rawUrl)) {
+      return buildMagaluImageUrlCandidates(rawUrl)
     }
 
     // Amazon: gere variantes oficiais com sufixos de resize em alta resolução.

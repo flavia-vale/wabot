@@ -29,6 +29,7 @@ import { buildInlineThumbnail } from './core/inlineThumbnail.js'
 import { composePreviewCardImage } from './core/previewCardCanvas.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { shouldUseOriginPhotoFallback } from './core/previewImageFallbackPolicy.js'
+import { upscaleCardPhotoIfTiny } from './core/cardPhoto.js'
 import { resolveLinkKind } from './converters/linkKind.js'
 import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
@@ -101,6 +102,21 @@ import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuaranti
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
+import sharp from 'sharp'
+import { applySharpTuning } from './core/sharpTuning.js'
+
+// Cache e pool de threads do libvips. Roda UMA vez, no load do módulo, porque o
+// ajuste é global do processo (não por operação). Sem env configurada é no-op e
+// o Sharp fica com os padrões dele — ver src/core/sharpTuning.js.
+//
+// ⚠️ Depende só de imports; NÃO referenciar constante de escopo de módulo aqui.
+// Uma linha acima de qualquer `const` deste arquivo estoura ReferenceError (TDZ)
+// no load e mata TODO worker no boot — foi o que quase aconteceu com o log dos
+// filtros de recepção (ver AGENTS.md).
+const sharpTuning = applySharpTuning(sharp, process.env)
+if (!sharpTuning.skipped) {
+  logger.info({ ...sharpTuning.applied, erro: sharpTuning.error }, 'Ajuste de memória do Sharp aplicado')
+}
 
 export async function createBotSessionRuntime({
   userId = process.env.BOT_USER_ID,
@@ -2044,6 +2060,29 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     }
   }
 
+  // FOTO PEQUENA VIRANDO SELO NO CARD (RCA 2026-09-18).
+  //
+  // `prepareWAMessageMedia` grava no proto as dimensões REAIS do buffer que
+  // sobe, e o WhatsApp desenha o card nesse tamanho — foto de poucas centenas
+  // de pixels sai como um quadradinho no centro, cercada por uma ampliação
+  // borrada dela mesma (print da cliente). Acontece sobretudo no plano B da
+  // foto de origem, que costuma ser a miniatura embutida do card da origem
+  // (medido: 5.539 bytes). Ver `core/cardPhotoUpscalePolicy.js`.
+  //
+  // Fica FORA do banner de cupom de propósito: ele já nasce em 720x720, com
+  // tamanho escolhido, e não é foto de produto.
+  if (hqSourceBuffer && !useCouponBrandCard) {
+    const { buffer: ampliada, upscaled } = await upscaleCardPhotoIfTiny(hqSourceBuffer)
+    if (upscaled) {
+      hqSourceBuffer = ampliada
+      logger.info({ platform: primary?.platform, sourceUrl, de: upscaled.from, para: upscaled.to }, 'Card de preview: foto pequena ampliada para o card não sair como selo')
+    }
+  }
+
+  // Roda ANTES da marca d'água de propósito: `renderDestinationWatermark`
+  // DESISTE de marcar foto pequena demais (devolve `watermarkApplied:false`),
+  // então ampliar primeiro faz a marca ser desenhada na resolução final e
+  // recupera casos em que ela simplesmente não saía.
   // MARCA D'ÁGUA NO CARD DE PREVIEW (modo `preview_watermark`).
   //
   // O card não é um caminho separado de imagem: ele carrega os MESMOS bytes que
