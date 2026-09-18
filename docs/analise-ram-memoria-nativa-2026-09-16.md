@@ -1922,3 +1922,90 @@ bash /tmp/medir.sh
 ```
 
 Comparar sempre com **173,8 MiB/robô**, que é o novo piso conhecido.
+
+---
+
+## 22. Janela 2 aplicada e medida: **−47%** sobre a janela 1 (2026-09-18)
+
+Aplicada em produção às 15:42, junto com o reinício do supervisor. As três
+chaves chegaram aos robôs (confirmado no `/proc/<pid>/environ`, não por
+dedução):
+
+```
+LOG_TRANSPORT_MODE=inline
+SHARP_CACHE_MB=8
+SHARP_CONCURRENCY=2
+MALLOC_ARENA_MAX=2      <- a da janela 1
+```
+
+O **corte de threads ficou de fora**: a alavanca dele era "menos arenas", e a
+janela 1 já entregou isso (29,4 → 1,0). Era a de maior risco pelo menor ganho.
+
+### 22.1 Duas leituras, e a curva inverteu
+
+| frota com | idade | por robô | arena | anon | heap |
+|---|---|---:|---:|---:|---:|
+| só janela 1 | 15 h | 173,8 | 42,7 | 70,3 | 57,2 |
+| **+ janela 2** | **1 h 03** | **115,3** | 24,2 | 53,6 | 34,0 |
+| **+ janela 2** | **2 h 31** | **92,8** | **16,5** | **47,8** | **24,9** |
+
+**−46,6% contra a janela 1 sozinha; −52,3% contra o ponto de partida de
+ontem (194,6).** Na frota de 46 robôs, **~3,6 GB** a menos que ontem à tarde e
+**~4,6 GB** a menos que anteontem.
+
+**A objeção da idade da frota MORREU na segunda leitura.** Ela era legítima —
+115,3 saiu de uma frota de uma hora, contra um "antes" de quinze. Mas no regime
+antigo a memória **subia** com a idade (146 → 193 MiB por robô entre 7 e 31
+minutos, §12.2). Aqui ela **desceu**: 115,3 aos 63 min, 92,8 aos 151 min. Uma
+frota que emagrece com o tempo não está "ainda enchendo".
+
+### 22.2 Por que caiu nos TRÊS baldes de uma vez
+
+`pino({ transport })` não sobe uma thread: sobe **uma isolate inteira do V8**
+dentro do processo, com heap, pilhas e arenas próprios — e com o `pino-pretty`
+carregado lá dentro. Removê-la tira os três de uma vez, e é o que explica o
+`heap` cair 56% numa mudança que, no papel, era "só o log". O resto vem do
+cache do libvips (de 50 MB por processo para 8).
+
+⚠️ **A medição local de 18 MiB por processo era o PISO do mecanismo**, num
+processo mínimo de 4 núcleos. O ganho real no robô é ~4× isso. Não usar aquele
+número como estimativa de produção.
+
+### 22.3 O que este número NÃO autoriza
+
+⚠️ **Não converter isto em "cabem mais robôs".** Tudo aqui é **PSS**; o teto de
+vagas e `evaluateCapacity` trabalham com **RSS** (329 MB/robô medidos em
+11/09). São medidas diferentes e misturá-las é exatamente a classe de erro que
+custou três correções nesta investigação. Para rever capacidade, medir RSS de
+novo, pela fórmula da §"Teto de robôs por processo".
+
+**O sinal que manda continua sendo o swap**, não a RAM livre:
+
+```bash
+free -m | awk 'NR==2{print "livre_mb="$7} NR==3{print "swap_usada_mb="$3}'
+bash /tmp/medir.sh
+```
+
+Novo piso de comparação: **92,8 MiB/robô**.
+
+### 22.4 O que custou
+
+A frota reconectou **três vezes** em 18/09 — 06:25, 15:10 (deploy da PR #1739)
+e 15:42 (o `pm2 restart bot-supervisor` que aplicou as chaves). Só a última foi
+por causa desta mudança.
+
+⚠️ E o desligamento do supervisor **não completou sozinho**: 16 segundos de
+`failed to kill` e o PM2 matou a árvore (`process tree killed (49 pids)`) — os
+robôs levaram encerramento abrupto, e mensagem em voo se perde assim. Isso é
+defeito separado, não investigado aqui, e vale uma rodada própria.
+
+### 22.5 Erros meus nesta rodada, para não repetir
+
+- **Acusei `UV_THREADPOOL_SIZE=2`** de causar a falha do Mercado Livre em
+  staging. O log dizia `status: 401, failureType: "expired"` em 130 ms —
+  credencial vencida, não fila. Mecanismo plausível não é evidência.
+- **Li a queda das 15:41 como ganho.** Era frota de 31 minutos (deploy das
+  15:10). A mesma armadilha da §12.2, terceira vez.
+- **Levantei alarme** de que algo reiniciava a frota sem deploy. Era o comando
+  que eu mesmo tinha passado, executado por ela minutos antes — estava no
+  `~/.bash_history`. Antes de acusar o sistema, conferir o histórico.
