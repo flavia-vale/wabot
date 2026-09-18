@@ -5661,6 +5661,19 @@ falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
   converter e buscar a foto. O teto é da mensagem inteira, inclusive com dois
   links — não multiplicar por candidato. O log traz `attempts` e
   `recoveredByRetry`, para medir recuperação sem esconder a primeira falha.
+- **O orçamento da mensagem é DIVIDIDO entre os links, nunca gasto por ordem de
+  chegada** (RCA 2026-09-18). Sem divisão, o PRIMEIRO link embrulhado consumia o
+  orçamento inteiro e o segundo nem chegava a ser tentado
+  (`sem_tempo_no_orcamento`) — a oferta chegava ao grupo com dois **"Compre
+  aqui:" vazios**, que é exatamente o que o desembrulho por link (fix anterior)
+  existia para impedir. Cada link recebe agora "o que sobra dividido pelos links
+  que ainda faltam"; link rápido devolve a sobra ao seguinte (resolveu em 600ms
+  → o próximo volta ao teto cheio de 8s), então o caso comum não fica mais
+  lento. **E o orçamento da mensagem MISTA precisa caber ao menos UMA tentativa
+  cheia**: ele nasceu em 6s com o teto por link em 8s, ou seja, um site lento
+  não tinha como terminar nem a primeira tentativa. Hoje são 10s
+  (`CUSTOM_DOMAIN_MIXED_BUDGET_MS`) — não baixar sem medir. Guarda estrutural e
+  funcional em `test/custom-domain-link-resolver.test.js`.
 - **A falha NUNCA pode ser só `null`.** Foi assim que uma investigação inteira
   precisou de quatro rodadas de comando em staging: código no ar, rede boa (200
   em 568ms), página trazendo o link e cada peça acertando isoladamente — e a

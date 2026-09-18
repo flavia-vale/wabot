@@ -83,8 +83,15 @@ export const CUSTOM_DOMAIN_TOTAL_BUDGET_MS =
 // Orçamento do desembrulho quando a mensagem JÁ traz link de loja (caso misto).
 // Menor que o total de propósito: ver a invariante "mensagem mista gasta um
 // orçamento MENOR" no topo deste arquivo.
+//
+// ⚠️ Nasceu em 6s e teve que subir para 10s (RCA 2026-09-18): 6s não cabia UMA
+// tentativa cheia (o teto por link é 8s), então um site lento consumia o
+// orçamento inteiro e o SEGUNDO link embrulhado da mesma mensagem nem chegava a
+// ser tentado (`sem_tempo_no_orcamento`). A oferta da cliente chegava ao grupo
+// com dois "Compre aqui:" vazios — exatamente a queixa que o desembrulho por
+// link existia para resolver. Não baixar sem medir.
 export const CUSTOM_DOMAIN_MIXED_BUDGET_MS =
-  Number(process.env.CUSTOM_DOMAIN_MIXED_BUDGET_MS) || 6_000
+  Number(process.env.CUSTOM_DOMAIN_MIXED_BUDGET_MS) || 10_000
 // Retry curto e seletivo: aumentar apenas o timeout prolongaria a tentativa
 // presa. Uma nova chamada permite ao resolvedor DNS usar cache/fallback sem
 // repetir respostas determinísticas (403, página sem loja, anti-SSRF etc.).
@@ -446,18 +453,32 @@ export async function resolveCustomDomainLinks(text, options = {}) {
   let output = raw
   const resolved = []
   const failures = []
-  for (const candidate of candidates) {
+  for (const [indice, candidate] of candidates.entries()) {
     const restante = orcamentoTotal - (Date.now() - comecouEm)
     if (restante < MIN_USEFUL_BUDGET_MS) {
       failures.push({ url: candidate, reason: 'sem_tempo_no_orcamento' })
       continue
     }
+    // FATIA POR LINK (RCA 2026-09-18 — não remover). O orçamento é da mensagem
+    // inteira, e sem divisão o PRIMEIRO link embrulhado consumia tudo: um site
+    // lento fazia o segundo nem ser tentado, e a oferta saía com "Compre aqui:"
+    // vazio. Cada link passa a ter um teto próprio = o que sobra dividido pelos
+    // links que ainda faltam. Link rápido devolve a sobra para os seguintes
+    // (resolveu em 600ms → o próximo volta a ter o teto cheio de 8s), então o
+    // caso comum não fica mais lento; o que muda é um link lento não poder mais
+    // zerar a chance dos outros.
+    const faltando = candidates.length - indice
+    const fatiaDoLink = Math.max(MIN_USEFUL_BUDGET_MS, Math.floor(restante / faltando))
+    const prazoDoLink = Date.now() + fatiaDoLink
     let store = null
     let reason = null
     let detail
     const attempts = []
     for (let tentativa = 1; tentativa <= maxTentativas; tentativa += 1) {
-      const restanteDaTentativa = orcamentoTotal - (Date.now() - comecouEm)
+      const restanteDaTentativa = Math.min(
+        orcamentoTotal - (Date.now() - comecouEm),
+        prazoDoLink - Date.now(),
+      )
       if (restanteDaTentativa < MIN_USEFUL_BUDGET_MS) break
 
       const iniciouEm = Date.now()
