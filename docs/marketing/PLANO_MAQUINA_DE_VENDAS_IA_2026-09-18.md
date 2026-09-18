@@ -73,7 +73,7 @@ manhã para o Cuponito e para o site de matemática **não vale** — a consulta
 
 ### O que fazer agora, em ordem (o que ainda não foi feito e mais pesa)
 
-1. **Cloudflare (Espelha Grupos): decidir GPTBot/ClaudeBot.** Confirmado do VPS em 18/09: GPTBot e ClaudeBot = 403 com o navegador de controle em 200 — é regra da Cloudflare, e a decisão é sua. Na Vercel (Cuponito) já está liberado (a medição anterior estava contaminada pelo IP do ambiente de análise, ver M6).
+1. **Cloudflare (Espelha Grupos): liberar GPTBot, ClaudeBot e — urgente — Claude-User.** Prints de 18/09: "Configure AI bot policies" com Training = Disallow, e em AI Crawl Control → Crawlers o "Block Crawler" ligado para GPTBot (57 recusas/7d), ClaudeBot (65) e **Claude-User (45 recusas/7d)**. Claude-User é o clique na citação: barrá-lo derruba citação que já existe, não só treino futuro. O script dava 200 para ele porque mede nome emprestado, não o robô verificado. Na Vercel (Cuponito) já está liberado (ver M6).
 2. **Cuponito: publicar os dois posts** (seções 2 e 3 do doc) — a estrutura já lê; e renderizar `/` e `/blog` no servidor (hoje são as duas únicas páginas ainda vazias).
 3. **Espelha Grupos: pedir inclusão no listicle do ofertasbot.com** (o e-mail pronto está no item 1 da 4.1) e **renomear o YouTube**.
 4. **Matemática: medir e ficha do Google** (M1-M3) — sem isso os 4 posts novos não têm como virar lead mensurável; depois títulos (M5) e H1/telefone (M4).

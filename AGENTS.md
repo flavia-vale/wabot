@@ -6425,6 +6425,19 @@ treino barrado só avisa; sem medição confiável nunca afirma bloqueio) e
 prova que o robô real passa (a Cloudflare pode checar o IP); um 403 é prova
 forte.
 
+**O bloqueio mora em DOIS lugares do painel, e o script só enxerga um** (visto
+nos prints de 18/09): (1) Security → Settings → "Configure AI bot policies" →
+categoria **Training = Disallow** — é a regra por User-Agent que devolve o 403
+de 25 bytes "Your request was blocked." ao nome emprestado; (2) AI Crawl
+Control → Crawlers → botão **"Block Crawler"** por robô, que age sobre o robô
+REAL (verificado por IP). No print, **Claude-User** (o clique na citação do
+Claude) estava com "Block Crawler" ligado e **45 recusas em 7 dias** — e o
+script dava 200 para ele, porque o nome emprestado do VPS não é o robô
+verificado. Ou seja: **a coluna "Unsuccessful" do painel é a medição do robô
+real; o script mede só a regra por categoria.** Conferir os dois. "Enable Bot
+Preference Sync" fica DESLIGADO: ele reescreve o `robots.txt` na borda, que é
+exatamente o que o `Managed robots.txt` fazia (RCA 2026-08-04).
+
 ### O site dizia coisas diferentes para a IA e para a pessoa (mesmo RCA, 2026-09-18)
 
 Achados do inventário de legibilidade por IA, todos corrigidos no mesmo dia:
