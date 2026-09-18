@@ -1556,3 +1556,315 @@ nada; o que custa são os três da tabela.
 
 E **o experimento do arena continua segurado** até a frota ficar de pé por
 algumas horas seguidas — hoje ela não ficou.
+
+## 17. OOM descartado. São dois problemas, não um — e sobrou uma hipótese checável
+
+`dmesg`, `/var/log/kern.log` e `journalctl -k` **não devolveram nada**. Nenhum
+`Killed process`, nenhum `out of memory`.
+
+**Então:**
+
+- **não foi crash** (log de erro só tem `Bad MAC`, ruído conhecido);
+- **não foi deploy** (última promoção às 19:46; o reinício foi ~22:44);
+- **não foi o sistema matando por memória.**
+
+E isso **desfaz a hipótese unificadora da §16**: memória e reinício são **dois
+problemas separados**. O consumo "voltar ao mesmo lugar" continua sem explicação
+confirmada — mas não é o kernel cortando a frota.
+
+### 17.1 A hipótese que sobra, e ela é barata de checar
+
+`ecosystem.config.cjs:119` — o `bot-supervisor` tem
+**`max_memory_restart: '400M'`**. O próprio PM2 reinicia o processo quando ele
+passa disso. O supervisor foi medido em 113 MB, mas um pico passageiro acima de
+400 MB dispararia o reinício **sem deixar rastro no log da aplicação** — porque
+quem reinicia é o PM2, não o código.
+
+Isso encaixa com tudo que foi observado: sem stack, sem OOM do kernel, sem
+deploy, e mesmo assim o processo renasce.
+
+**O PM2 registra isso no log DELE**, não no log do app:
+
+```bash
+grep -iE "bot-supervisor" ~/.pm2/pm2.log | tail -40
+grep -iE "memory|restart|stopping|exceed" ~/.pm2/pm2.log | tail -30
+```
+
+| O que vier | O que é |
+|---|---|
+| `exceeded memory limit` / `max memory reached` para `bot-supervisor` | **é o teto de 400 MB.** Tem conserto simples e conhecido, e explica os reinícios sem deploy. |
+| só linhas de `stopping`/`starting` sem motivo | alguém ou algo chamou `pm2 restart`. Vale olhar histórico de comandos. |
+| nada sobre o supervisor | segue sem explicação — e aí vale instrumentar antes de adivinhar de novo. |
+
+⚠️ **Se for o teto de 400 MB, NÃO subir o número antes de medir o supervisor por
+algumas horas.** Subir teto é mudança memory-heavy (REGRA #1) e, se o supervisor
+estiver de fato crescendo, o teto está fazendo o trabalho dele — o problema seria
+o crescimento, não o teto.
+
+### 17.2 Onde a investigação de memória parou
+
+| Item | Estado |
+|---|---|
+| `MALLOC_ARENA_MAX` | interruptor pronto, **desligado**, em produção desde 14:18 |
+| experimento | **segurado** — precisa de frota assentada por algumas horas, e hoje ela reiniciou três vezes |
+| o que falta para destravar | descobrir por que o supervisor reinicia sem deploy (§17.1) |
+| medidor | pronto, versionado, imprime a idade da frota e recusa comparação inválida |
+
+Nada disso é urgente: **nada está quebrado**. A frota está no ar, as sessões
+conectadas, e o servidor tem folga física (4,9 GB livres, swap parado).
+
+## 18. Resolvido: 100% dos reinícios são deploy. O problema é a frequência.
+
+O log do PM2 fecha a questão. **Todas** as linhas têm a mesma forma:
+
+```text
+Stopping app:bot-supervisor id:5
+App [bot-supervisor:5] exited with code [0] via signal [SIGINT]
+App [bot-supervisor:5] starting in -fork mode-
+```
+
+**`code [0]` via `SIGINT`** é encerramento limpo e deliberado — é o que
+`pm2 restart` faz. Não é crash (seria código de saída diferente), não é o teto
+de 400 MB (o PM2 anuncia isso com texto próprio), não é o sistema. E os ~15
+segundos entre `Stopping` e `starting` são o `kill_timeout`: o drain
+acontecendo como desenhado.
+
+### 18.1 A correspondência é exata
+
+| merge em `main` (UTC) | toca worker? | reinício do supervisor |
+|---|---|---|
+| 16:40 #1711 | não | — |
+| **17:01 #1714** | **sim (6 arq)** | **17:03** ✓ |
+| **17:19 #1718** | **sim (4 arq)** | **17:21** ✓ |
+| 17:52 #1719 | não | — |
+| 18:18 #1720 | não | — |
+| 18:32 #1721 | não | — |
+| 22:14 #1722 | não | — |
+| **22:47 #1730** | **sim (3 arq)** | **22:49** ✓ |
+
+Três merges que tocam `WORKER_CODE_PATHS_RE`, três reinícios, **~2 minutos
+depois de cada um**. O staging confirma o par: ele reinicia 6-7 minutos antes de
+cada um (16:54, 17:14, 22:41), que é a promoção `develop → staging` precedendo a
+`develop → main`.
+
+Sobra um reinício não pareado às 17:05, quatro minutos depois do de 17:03 —
+provavelmente a segunda rede do deploy (`workers_running_stale_code`) ou duas
+execuções do workflow em sequência. Detalhe, não mistério.
+
+### 18.2 O erro de método, pela terceira vez no mesmo eixo
+
+Usei `%ad` (data de **autor**) em vez de `%cd` (data de **commit**). Em merge
+commit os dois são muito diferentes: o autor vem do commit original, o commit
+date é quando o merge aconteceu. Foi isso que fez os horários não baterem e me
+levou a inventar hipótese de OOM.
+
+**Três erros hoje, todos de tempo:** deduzir o horário do reinício (2×) e ler
+data de autor como data de merge (1×). Regra que fica, e ela é curta:
+
+> **Data de merge é `%cd`, nunca `%ad`. Horário de reinício vem do PM2, nunca de
+> dedução. E antes de qualquer hipótese, conferir o fuso dos dois lados.**
+
+```bash
+git log --first-parent --format="%cd %s" --date=format-local:"%H:%M" origin/main --since="hoje"
+```
+
+### 18.3 O que fazer, e é só isto
+
+**Nada está quebrado.** O sistema fez exatamente o que foi desenhado para fazer.
+O que existe é **cadência**: oito promoções para `main` num dia, três delas
+reconectando as 46 sessões de clientes.
+
+**A correção não é código — é processo:** agrupar as promoções `develop → main`
+numa janela por dia. As que não tocam código de worker (cinco das oito hoje)
+continuam podendo sair a qualquer hora, porque não reiniciam nada.
+
+Isso é o item da §7, agora com evidência completa em vez de suspeita.
+
+### 18.4 E destrava a memória
+
+Com a causa conhecida, o experimento do `MALLOC_ARENA_MAX` fica simples: **num
+dia sem promoção que toque código de worker, a frota fica de pé por horas** — e
+aí a medição vale. Não precisa esperar nada acontecer; precisa só de um dia sem
+deploy de worker.
+
+O interruptor segue pronto, desligado, em produção desde 17:19 UTC.
+
+## 19. Janela 1 aplicada: `MALLOC_ARENA_MAX=2` em produção (2026-09-18, 23:50)
+
+**Aplicado sem merge** — o interruptor já estava em `main` desde 17:19 UTC.
+Uma linha no `.env` e `pm2 restart bot-supervisor`.
+
+### 19.1 Aplicou — confirmado por inspeção, não por PSS
+
+```text
+WA_WORKER_MALLOC_ARENA_MAX=2      <- nossa variavel, do .env
+MALLOC_ARENA_MAX=2                <- traduzida por resolveWorkerSpawnEnv
+```
+
+E a prova que não depende de interpretação: **a frota foi de 29,4 para 1,0 arena
+por robô.** Aos 11 minutos de vida — quando um robô sem a variável já estaria em
+~29 (medido hoje às 17:28, com 7 minutos).
+
+| | arenas por robô |
+|---|---:|
+| sem a variável | 29,2 – 29,4 |
+| **com a variável** | **1,0** |
+
+### 19.2 Sinal inicial: modesto, e é preciso dizer isso
+
+⚠️ **A comparação direta `antes` × `agora` NÃO vale**: o "antes" é frota de 60
+minutos e o "agora" de 11. Frota nova é sempre mais leve. Os 9.145 → 6.189 MiB
+**não são economia.**
+
+O que dá para comparar é contra a leitura de hoje às 17:28, que era frota de
+**7 minutos sem a variável** — idade parecida, e ligeiramente a favor dela (o
+"com variável" é 4 minutos mais velho, logo deveria estar mais pesado):
+
+| por robô (MiB) | PSS | arena | anon | heap | arena+heap | arenas |
+|---|---:|---:|---:|---:|---:|---:|
+| 17:28 **sem** variável (+7 min) | 146,4 | 71,6 | 57,0 | 14,1 | 85,7 | 29,2 |
+| 00:00 **com** variável (+11 min) | **134,5** | **32,3** | 57,2 | **41,4** | **73,7** | **1,0** |
+| | **−8,1%** | −55% | ≈ | **+194%** | **−14,0%** | |
+
+**A memória mudou de balde, e é exatamente o mecanismo esperado.** O que estava
+espalhado em 29 arenas passou a se concentrar na arena principal (`heap`, que
+subiu 194%) mais duas. A arena secundária caiu 55%; a soma `arena + heap` caiu
+14%; o PSS total caiu 8,1%.
+
+**Se os 8,1% se sustentarem na frota saturada** (194,6 MiB/robô), isso é ~16 MiB
+por robô, **~0,7 GB na frota**.
+
+⚠️ **0,7 GB não é o prêmio de 3,5 GB que a §2-A.1 estimava como teto teórico.**
+Aquele número era "se a fragmentação fosse a zero", e nunca foi previsão. O
+resultado real, se confirmar, é um décimo disso — útil, mas não transformador.
+
+⚠️ **E ainda não está confirmado.** Restam dois confundidores: as idades não são
+idênticas (7 × 11 min) e o tráfego das 17:28 é maior que o da meia-noite. Os
+dois puxam em direções opostas, o que ajuda, mas não substitui a medição limpa.
+
+### 19.3 O veredito sai às 23:49 de hoje
+
+Frota saturada, mesmo horário do `antes`, mesma variável ligada:
+
+```bash
+bash /tmp/medir.sh
+```
+
+Comparar com `194,6 MiB/robô` e `111,8 MiB/robô em arena`. Se ficar perto de
+179 MiB/robô, os 8,1% se confirmam. Se voltar aos 194, não houve ganho.
+
+Medir também algumas vezes ao longo do dia, para ter a curva.
+
+**Rollback**, se necessário:
+```bash
+sed -i '/^WA_WORKER_MALLOC_ARENA_MAX=/d' ~/wabot/.env
+pm2 restart bot-supervisor --update-env && pm2 save
+```
+
+---
+
+## 20. Janela 2: código pronto (log, Sharp, corte de threads) — 2026-09-18
+
+As três alavancas restantes, no mesmo padrão de interruptor do repo: nome de env
+próprio, **nasce desligado**, decisão em módulo puro com teste, rollback por
+`.env` sem redeploy.
+
+### 20.1 O log: `LOG_TRANSPORT_MODE=inline`
+
+`pino({ transport })` não é um destino — desde o pino 7 ele sobe um
+`thread-stream`, ou seja **uma worker thread**, que no Node é uma isolate
+INTEIRA do V8. Ela não aparece em `heapUsed` e aparece inteira no RSS. Como
+`src/logger.js` é importado por 17 módulos, essa thread existe em todo processo
+do produto.
+
+`src/core/loggerTransport.js` (puro) escolhe o mecanismo; `inline` usa
+`pino.multistream`, que roda **no próprio processo**.
+
+**Medido aqui, 4 repetições, processo mínimo só com o logger:**
+
+| modo | threads | PSS |
+|---|---:|---:|
+| `worker` (histórico) | 12 | 75,3–77,0 MiB |
+| `inline` | 11 | 57,1–58,3 MiB |
+
+**≈ 18 MiB de PSS por processo**, e o número **não muda com
+`MALLOC_ARENA_MAX=2`** (medido nas duas condições) — ou seja, é ganho **somado**
+ao da janela 1, não sobreposto.
+
+⚠️ Este é um processo mínimo, num container de 4 núcleos. Não é a medida do
+robô de produção; é o piso do mecanismo. O que ele prova é que a thread existe e
+custa.
+
+**O que se perde:** a saída do PM2 (`~/.pm2/logs/*-out.log`) deixa de ser
+colorida e passa a ser JSON — o MESMO formato do `bot.log`, que é o arquivo que
+todos os RCAs deste produto leem. **Nenhuma linha de log deixa de ser escrita**
+(guarda estrutural no teste exige os dois destinos no caminho `inline`).
+
+### 20.2 Sharp: `SHARP_CACHE_MB` / `SHARP_CONCURRENCY`
+
+`sharp.cache()` é 50 MB de cache de operação **por processo**, memória nativa,
+invisível no heap. Cinco módulos importam `sharp` no topo e todos são alcançados
+pelo `bot-worker.js`.
+
+⚠️ **O ganho aqui NÃO está medido.** 50 MB é o padrão documentado da
+biblioteca; a medição de 17/09 achou `libvips-cpp.so` com 2,1 MiB de PSS e
+**zero threads de vips** nos 41 robôs (o pool é criado sob demanda). Quanto cada
+robô de fato encheu do cache é desconhecido. **Não prometer 50 MB.**
+
+⚠️ Aqui `0` é valor **válido** e desliga o cache — ao contrário de
+`WA_WORKER_MALLOC_ARENA_MAX`, onde `0` significa "não setar" (para o glibc,
+`MALLOC_ARENA_MAX=0` quer dizer "automático"). Quem diz "não mexa" no Sharp é a
+**ausência** da env. A diferença está documentada nos dois arquivos.
+
+### 20.3 Corte de threads — e por que agora rende pouco
+
+`WA_WORKER_TOKIO_THREADS`, `WA_WORKER_UV_THREADPOOL_SIZE` e
+`WA_WORKER_V8_POOL_SIZE` (já construídos e testados em 17/09) cortam os pools de
+thread do worker: 16 threads do motor Rust do Prisma para um arquivo SQLite, 4
+do libuv, 7 do V8.
+
+⚠️ **Com a janela 1 já aplicada, o mecanismo principal desta alavanca já foi
+capturado.** O valor dela era *menos threads → menos disputa → menos arenas*, e
+as arenas **já caíram de 29,4 para 1,0 por robô** com `MALLOC_ARENA_MAX=2`. O
+que sobra é o custo direto: pilha de cada thread e agendamento. É pequeno, e é
+a alavanca de **maior risco** das três (mexe no motor do Prisma).
+
+Por isso ela é a **primeira a ser revertida** se o total da janela 2 não bater
+com a soma esperada.
+
+### 20.4 Aplicar exige deploy — e o deploy reconecta a frota
+
+Os três arquivos tocados (`src/logger.js`, `src/core/`, `src/bot-worker.js`)
+casam com `WORKER_CODE_PATHS_RE`: o deploy **reinicia o `bot-supervisor`** e
+**todas as ~46 sessões reconectam de uma vez**. Isso é decisão humana, anunciada
+antes — não fazer às cegas.
+
+Ordem, depois do merge em `main` e do autodeploy:
+
+```bash
+# staging primeiro, para conferir que o log continua saindo nos dois lugares
+cd ~/wabot-staging && cat >> .env <<'ENV'
+LOG_TRANSPORT_MODE=inline
+SHARP_CACHE_MB=8
+WA_WORKER_TOKIO_THREADS=2
+WA_WORKER_UV_THREADPOOL_SIZE=2
+ENV
+pm2 delete api-staging && pm2 start ecosystem.config.cjs --only api-staging
+pm2 restart bot-supervisor-staging --update-env && pm2 save
+
+# conferir que NADA deixou de ser logado
+tail -5 ~/wabot-staging-shared/logs/bot.log
+pm2 logs api-staging --lines 20 --nostream
+```
+
+Só depois disso em produção, e com anúncio prévio (a frota reconecta).
+
+**Atribuição:** medir `antes` com a frota saturada, aplicar as três, medir
+`depois` com a frota saturada. Se o ganho ficar abaixo do esperado, tirar
+primeiro as duas envs de thread (`WA_WORKER_TOKIO_THREADS`,
+`WA_WORKER_UV_THREADPOOL_SIZE`), reiniciar o supervisor e medir de novo — é a de
+maior risco e a de menor ganho esperado.
+
+**Rollback de qualquer uma**: apagar a linha do `.env` + `pm2 delete`/`start`
+(pegadinha #1) e, para os robôs, `pm2 restart bot-supervisor --update-env`.
+Nenhuma delas exige reverter código.

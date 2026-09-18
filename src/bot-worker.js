@@ -101,6 +101,21 @@ import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuaranti
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
+import sharp from 'sharp'
+import { applySharpTuning } from './core/sharpTuning.js'
+
+// Cache e pool de threads do libvips. Roda UMA vez, no load do módulo, porque o
+// ajuste é global do processo (não por operação). Sem env configurada é no-op e
+// o Sharp fica com os padrões dele — ver src/core/sharpTuning.js.
+//
+// ⚠️ Depende só de imports; NÃO referenciar constante de escopo de módulo aqui.
+// Uma linha acima de qualquer `const` deste arquivo estoura ReferenceError (TDZ)
+// no load e mata TODO worker no boot — foi o que quase aconteceu com o log dos
+// filtros de recepção (ver AGENTS.md).
+const sharpTuning = applySharpTuning(sharp, process.env)
+if (!sharpTuning.skipped) {
+  logger.info({ ...sharpTuning.applied, erro: sharpTuning.error }, 'Ajuste de memória do Sharp aplicado')
+}
 
 export async function createBotSessionRuntime({
   userId = process.env.BOT_USER_ID,
