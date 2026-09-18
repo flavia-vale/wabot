@@ -4,7 +4,7 @@ import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
 import { GoogleAdsTag } from "@/components/marketing/GoogleAdsTag";
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
-import { BRAND_LEGACY_NAME, BRAND_ORG_NAME, BRAND_PRODUCT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, FOUNDER_SAME_AS, PRODUCT_DEFINITION, SUPPORTED_STORES, SUPPORT_EMAIL } from '@/lib/marketing-content'
+import { BRAND_LEGACY_NAME, BRAND_ORG_NAME, BRAND_PRODUCT_NAME, BRAND_SAME_AS, DEFAULT_LANDING_PLANS, FOUNDER_PERSON_ID_PATH, FOUNDER_SAME_AS, PRODUCT_DEFINITION, SUPPORTED_STORES, SUPPORT_EMAIL } from '@/lib/marketing-content'
 import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 
 // Não use `next/font/google` aqui. Ele baixa CSS/arquivos do Google em tempo
@@ -69,9 +69,17 @@ function buildGlobalJsonLd() {
       // A fundadora é a MESMA pessoa que o Cuponito e o site de matemática já
       // declaram em Person no JSON-LD deles (2026-09-18). Ligar os três pelo
       // `sameAs` da pessoa é o que junta a entidade sem confundir as empresas.
+      //
+      // ⚠️ O `@id` é <site>/quem-somos#person e NÃO <site>#founder (como estava
+      // até 18/09/2026, algumas horas): o JSON-LD do Cuponito aponta a autoria
+      // dos posts e o `founder` de lá para exatamente essa string. Com o `@id`
+      // divergente, o Cuponito afirmava a ligação e este site não confirmava —
+      // os dois nós viravam duas pessoas diferentes para o Google e para a IA,
+      // que é o problema que o `founder` existe para resolver. O caminho mora em
+      // FOUNDER_PERSON_ID_PATH; não trocar sem trocar no Cuponito junto.
       founder: {
         '@type': 'Person',
-        '@id': `${siteUrl}#founder`,
+        '@id': `${siteUrl}${FOUNDER_PERSON_ID_PATH}`,
         name: EDITORIAL_PERSON_AUTHOR,
         description: EDITORIAL_PERSON_AUTHOR_DESCRIPTION,
         url: `${siteUrl}/quem-somos`,
