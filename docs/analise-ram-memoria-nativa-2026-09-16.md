@@ -1760,3 +1760,111 @@ Medir também algumas vezes ao longo do dia, para ter a curva.
 sed -i '/^WA_WORKER_MALLOC_ARENA_MAX=/d' ~/wabot/.env
 pm2 restart bot-supervisor --update-env && pm2 save
 ```
+
+---
+
+## 20. Janela 2: código pronto (log, Sharp, corte de threads) — 2026-09-18
+
+As três alavancas restantes, no mesmo padrão de interruptor do repo: nome de env
+próprio, **nasce desligado**, decisão em módulo puro com teste, rollback por
+`.env` sem redeploy.
+
+### 20.1 O log: `LOG_TRANSPORT_MODE=inline`
+
+`pino({ transport })` não é um destino — desde o pino 7 ele sobe um
+`thread-stream`, ou seja **uma worker thread**, que no Node é uma isolate
+INTEIRA do V8. Ela não aparece em `heapUsed` e aparece inteira no RSS. Como
+`src/logger.js` é importado por 17 módulos, essa thread existe em todo processo
+do produto.
+
+`src/core/loggerTransport.js` (puro) escolhe o mecanismo; `inline` usa
+`pino.multistream`, que roda **no próprio processo**.
+
+**Medido aqui, 4 repetições, processo mínimo só com o logger:**
+
+| modo | threads | PSS |
+|---|---:|---:|
+| `worker` (histórico) | 12 | 75,3–77,0 MiB |
+| `inline` | 11 | 57,1–58,3 MiB |
+
+**≈ 18 MiB de PSS por processo**, e o número **não muda com
+`MALLOC_ARENA_MAX=2`** (medido nas duas condições) — ou seja, é ganho **somado**
+ao da janela 1, não sobreposto.
+
+⚠️ Este é um processo mínimo, num container de 4 núcleos. Não é a medida do
+robô de produção; é o piso do mecanismo. O que ele prova é que a thread existe e
+custa.
+
+**O que se perde:** a saída do PM2 (`~/.pm2/logs/*-out.log`) deixa de ser
+colorida e passa a ser JSON — o MESMO formato do `bot.log`, que é o arquivo que
+todos os RCAs deste produto leem. **Nenhuma linha de log deixa de ser escrita**
+(guarda estrutural no teste exige os dois destinos no caminho `inline`).
+
+### 20.2 Sharp: `SHARP_CACHE_MB` / `SHARP_CONCURRENCY`
+
+`sharp.cache()` é 50 MB de cache de operação **por processo**, memória nativa,
+invisível no heap. Cinco módulos importam `sharp` no topo e todos são alcançados
+pelo `bot-worker.js`.
+
+⚠️ **O ganho aqui NÃO está medido.** 50 MB é o padrão documentado da
+biblioteca; a medição de 17/09 achou `libvips-cpp.so` com 2,1 MiB de PSS e
+**zero threads de vips** nos 41 robôs (o pool é criado sob demanda). Quanto cada
+robô de fato encheu do cache é desconhecido. **Não prometer 50 MB.**
+
+⚠️ Aqui `0` é valor **válido** e desliga o cache — ao contrário de
+`WA_WORKER_MALLOC_ARENA_MAX`, onde `0` significa "não setar" (para o glibc,
+`MALLOC_ARENA_MAX=0` quer dizer "automático"). Quem diz "não mexa" no Sharp é a
+**ausência** da env. A diferença está documentada nos dois arquivos.
+
+### 20.3 Corte de threads — e por que agora rende pouco
+
+`WA_WORKER_TOKIO_THREADS`, `WA_WORKER_UV_THREADPOOL_SIZE` e
+`WA_WORKER_V8_POOL_SIZE` (já construídos e testados em 17/09) cortam os pools de
+thread do worker: 16 threads do motor Rust do Prisma para um arquivo SQLite, 4
+do libuv, 7 do V8.
+
+⚠️ **Com a janela 1 já aplicada, o mecanismo principal desta alavanca já foi
+capturado.** O valor dela era *menos threads → menos disputa → menos arenas*, e
+as arenas **já caíram de 29,4 para 1,0 por robô** com `MALLOC_ARENA_MAX=2`. O
+que sobra é o custo direto: pilha de cada thread e agendamento. É pequeno, e é
+a alavanca de **maior risco** das três (mexe no motor do Prisma).
+
+Por isso ela é a **primeira a ser revertida** se o total da janela 2 não bater
+com a soma esperada.
+
+### 20.4 Aplicar exige deploy — e o deploy reconecta a frota
+
+Os três arquivos tocados (`src/logger.js`, `src/core/`, `src/bot-worker.js`)
+casam com `WORKER_CODE_PATHS_RE`: o deploy **reinicia o `bot-supervisor`** e
+**todas as ~46 sessões reconectam de uma vez**. Isso é decisão humana, anunciada
+antes — não fazer às cegas.
+
+Ordem, depois do merge em `main` e do autodeploy:
+
+```bash
+# staging primeiro, para conferir que o log continua saindo nos dois lugares
+cd ~/wabot-staging && cat >> .env <<'ENV'
+LOG_TRANSPORT_MODE=inline
+SHARP_CACHE_MB=8
+WA_WORKER_TOKIO_THREADS=2
+WA_WORKER_UV_THREADPOOL_SIZE=2
+ENV
+pm2 delete api-staging && pm2 start ecosystem.config.cjs --only api-staging
+pm2 restart bot-supervisor-staging --update-env && pm2 save
+
+# conferir que NADA deixou de ser logado
+tail -5 ~/wabot-staging-shared/logs/bot.log
+pm2 logs api-staging --lines 20 --nostream
+```
+
+Só depois disso em produção, e com anúncio prévio (a frota reconecta).
+
+**Atribuição:** medir `antes` com a frota saturada, aplicar as três, medir
+`depois` com a frota saturada. Se o ganho ficar abaixo do esperado, tirar
+primeiro as duas envs de thread (`WA_WORKER_TOKIO_THREADS`,
+`WA_WORKER_UV_THREADPOOL_SIZE`), reiniciar o supervisor e medir de novo — é a de
+maior risco e a de menor ganho esperado.
+
+**Rollback de qualquer uma**: apagar a linha do `.env` + `pm2 delete`/`start`
+(pegadinha #1) e, para os robôs, `pm2 restart bot-supervisor --update-env`.
+Nenhuma delas exige reverter código.
