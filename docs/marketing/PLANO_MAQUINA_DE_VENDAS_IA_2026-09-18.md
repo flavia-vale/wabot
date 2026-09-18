@@ -48,7 +48,7 @@ manhã para o Cuponito e para o site de matemática **não vale** — a consulta
 | M3 301 das URLs antigas | ✅ | `/store/casas-bahia/` → `/desconto/cupom-desconto-casas-bahia` (3 saltos; um 301 direto seria melhor) |
 | M4 sitemap com `lastmod` real | ✅ | 12 datas distintas, de 04/2026 a 09/2026 |
 | M5 robots.txt | ✅ | OAI-SearchBot, Claude-SearchBot, Claude-User, Applebot, DuckAssistBot, meta-externalagent listados |
-| M6 firewall / robôs de treino | ❌ **não feito** (reverificado na noite de 18/09) | busca e clique = 200; GPTBot, ClaudeBot, CCBot, Amazonbot, Bytespider = 403 na Vercel (Firewall → Bot Protection / regra de "AI crawlers"). Mesma decisão pendente na Cloudflare do Espelha Grupos |
+| M6 firewall / robôs de treino | ✅ **liberado** (medido do VPS em 18/09: `curl -A "GPTBot/1.0"` = 200) | ⚠️ a leitura anterior ("GPTBot/ClaudeBot/CCBot = 403 na Vercel") estava **errada**: o 403 vinha com `x-vercel-mitigated: deny` e batia também no User-Agent de navegador comum — era o firewall da Vercel barrando o **IP do ambiente de análise** (datacenter, rajada de requisições), não uma regra de robô de treino. Refeito com pausa entre pedidos: GPTBot, ClaudeBot, CCBot e OAI-SearchBot = 200. **Medir robô de fora só vale de um IP limpo** (o VPS serve); um 403 com `x-vercel-mitigated: deny` no navegador de controle invalida a medição inteira |
 | M7 `og:image` | ✅ | `/og-default.png` 200; post usa a `cover_image` |
 | M8 `llms.txt` | ✅ | no ar, cita as 6 lojas e "administradores de grupos de cupons e afiliados" |
 | 4.1 "Quem somos" com o Espelha Grupos | ✅ | H2 "Cuponito e Espelha Grupos", link, `Person` Flávia Vale no schema |
@@ -73,7 +73,7 @@ manhã para o Cuponito e para o site de matemática **não vale** — a consulta
 
 ### O que fazer agora, em ordem (o que ainda não foi feito e mais pesa)
 
-1. **Cloudflare (Espelha Grupos) e Vercel (Cuponito): decidir GPTBot/ClaudeBot.** Mesma decisão nos dois painéis; 10 minutos cada.
+1. **Cloudflare (Espelha Grupos): decidir GPTBot/ClaudeBot.** Na Vercel (Cuponito) já está liberado — a medição anterior estava contaminada pelo IP do ambiente de análise (ver M6). Conferir o Espelha Grupos **do VPS**, não de fora: `cd ~/wabot && node scripts/diag-acesso-robos-ia.mjs`.
 2. **Cuponito: publicar os dois posts** (seções 2 e 3 do doc) — a estrutura já lê; e renderizar `/` e `/blog` no servidor (hoje são as duas únicas páginas ainda vazias).
 3. **Espelha Grupos: pedir inclusão no listicle do ofertasbot.com** (o e-mail pronto está no item 1 da 4.1) e **renomear o YouTube**.
 4. **Matemática: medir e ficha do Google** (M1-M3) — sem isso os 4 posts novos não têm como virar lead mensurável; depois títulos (M5) e H1/telefone (M4).
