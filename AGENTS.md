@@ -3745,7 +3745,42 @@ teto de 20 não era capricho, era o que cabia. Subir o teto é mudança
 memory-heavy → REGRA #1 da política de memória abaixo (avisar antes, com
 estimativa).
 
-**Medição real (2026-09-11, prod — números vigentes, use ESTES para estimar):**
+**Medição real (2026-09-18, prod — números VIGENTES, use ESTES para estimar):**
+o servidor foi ampliado de novo, para **30,6 GB** (`free -m` diz 31.337 MB
+totais), e as duas janelas de economia de memória entraram em produção no mesmo
+dia (`MALLOC_ARENA_MAX=2` e `LOG_TRANSPORT_MODE=inline` + cache do Sharp — ver
+`docs/analise-ram-memoria-nativa-2026-09-16.md`). Com **47 robôs** ligados:
+
+| medida | 2026-09-11 | **2026-09-18** |
+|---|---:|---:|
+| RAM total | 15.613 MB | **31.337 MB** |
+| RAM disponível | 4.919 MB (31%) | **24.342 MB (78%)** |
+| RSS somado dos robôs | 11.832 MB (36 robôs) | **8.540 MB (47 robôs)** |
+| **média por robô (RSS)** | 329 MB | **182 MB** |
+| swap em uso | 41 MB, sem tráfego | **0** |
+
+**A média por robô CAIU 45%** (329 → 182 MB) — não é ruído: são as janelas de
+memória nativa, medidas em PSS no documento e confirmadas aqui em RSS, que é a
+unidade da política de capacidade.
+
+⚠️ **O limite seguro da política saltou de 35 para ~71.**
+`evaluateCapacity` reserva o maior valor entre 20% da RAM e 1.536 MB — aqui
+**6.267 MB** — e divide o resto por 350 MB/robô: `(31.337 − 6.267) / 350 = 71`.
+Com o teto de vagas em **40**, a folga pela política passou de **zero** para
+**31 vagas**. Toda a leitura anterior ("o teto de 40 é MAIOR que o limite
+seguro", "a folga pela política é zero", "o painel amarela pela contagem de
+vagas") **deixou de valer**.
+
+⚠️ **A política continua usando 350 MB/robô**, não os 182 medidos: ela usa o
+MAIOR entre 350 e o p95 observado, de propósito — o colchão existe para pico de
+GC e scrape pesado. Pela média medida caberiam ~137 robôs; **não é esse o número
+a usar para decidir.**
+
+⚠️ **Subir o teto de vagas continua sendo REGRA #1 da política de memória** e
+exige reiniciar o `bot-supervisor` (reconecta TODAS as sessões). Ter folga não é
+autorização — a decisão é da dona do produto.
+
+**Medição de 2026-09-11 (HISTÓRICA — servidor e robôs mudaram desde então):**
 o servidor foi ampliado para **15,6 GB** (8 vCPU, disco de 38 GB) e o teto subiu
 para **40**. Com **36 robôs** ligados:
 
@@ -3960,12 +3995,17 @@ liga/desliga staging** (economia de RAM sob demanda) + **vigilância 403**
 
 ### Fatos de capacidade (use para estimar antes de sinalizar)
 
-- **Orçamento por sessão WhatsApp ativa:** ~**0,33 GB** de RSS medidos em
-  2026-09-11 (média 329 MB, maior robô 495 MB; era 272 MB em 2026-09-01). Base
-  fixa (api+dashboard+supervisor+staging+OS) ~**1 GB** medido no mesmo instante.
-- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,33 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
-- **Servidor vigente (2026-09-11):** 15,6 GB de RAM, 8 vCPU, disco de 38 GB,
-  swap de 4 GB. Teto de vagas em 40; limite seguro da política em 35.
+- **Orçamento por sessão WhatsApp ativa:** ~**0,18 GB** de RSS medidos em
+  2026-09-18 (média 182 MB com 47 robôs; era 329 MB em 11/09 e 272 MB em 01/09
+  — a queda é das janelas de memória nativa). Base fixa
+  (api+dashboard+supervisor+staging+OS) ~**1 GB**.
+- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,18 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
+- ⚠️ **Para decidir CAPACIDADE, use 0,35 GB por sessão, não os 0,18 medidos** —
+  é o que `evaluateCapacity` usa (o maior entre 350 MB e o p95 observado), e o
+  colchão existe para pico de GC e scrape pesado.
+- **Servidor vigente (2026-09-18):** **30,6 GB** de RAM, disco de 38 GB, swap de
+  4 GB. Teto de vagas em **40**; limite seguro da política em **~71** — ou seja,
+  **31 vagas de folga**, contra zero em 11/09.
 - **Custo marginal de infra por cliente:** ~R$1,75/mês (marginal) a ~R$2-3/mês
   (com base amortizada). Não é o gargalo do produto — RAM é barata perto do ticket.
 - **Swap é pré-requisito, não muleta:** num VPS apertado, swap ativo é a 1ª
