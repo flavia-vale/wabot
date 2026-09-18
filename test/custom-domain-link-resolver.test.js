@@ -19,6 +19,8 @@ import {
   CUSTOM_DOMAIN_MIXED_BUDGET_MS,
   CUSTOM_DOMAIN_MAX_ATTEMPTS,
   hasStoreLink,
+  countDistinctProducts,
+  isListingPageAfterRedirect,
 } from '../src/core/customDomainLinkResolver.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -545,4 +547,125 @@ test('a lista de bloqueio é ancorada — não pega domínio parecido', () => {
 
 test('site bloqueado nem vira candidato no texto', () => {
   assert.deepEqual(findCandidateLinks('Olha essa https://pechin.co/147544'), [])
+})
+
+// ── RCA 2026-09-18 (segunda rodada): "não fazemos conversão para essa loja"
+// numa oferta que convertia. ────────────────────────────────────────────────
+
+test('marcador de formatação do WhatsApp não vira endereço inexistente', () => {
+  assert.deepEqual(
+    findCandidateLinks('👉 Compre aqui: *https://dicasdeamigas.com.br/p/D4m1TvZilb*'),
+    ['https://dicasdeamigas.com.br/p/D4m1TvZilb'],
+  )
+  assert.deepEqual(
+    findCandidateLinks('👉 _https://dicasdeamigas.com.br/p/abc_'),
+    ['https://dicasdeamigas.com.br/p/abc'],
+  )
+  // O marcador que pertence à própria URL continua intacto (regra do detector).
+  assert.deepEqual(
+    findCandidateLinks('veja https://dicasdeamigas.com.br/p/abc_'),
+    ['https://dicasdeamigas.com.br/p/abc_'],
+  )
+})
+
+test('oferta ENCERRADA: redirect para página de lista não publica produto aleatório', async () => {
+  clearCustomDomainCache()
+  // Medido em produção (18/09/2026): /p/<slug> de oferta encerrada responde 307
+  // para /promocao-encerrada, uma página com 13 produtos DIFERENTES.
+  const listaDeOutrasOfertas = [
+    '<a href="https://www.amazon.com.br/dp/B084353B4V/">a</a>',
+    '<a href="https://www.amazon.com.br/dp/B00H2ZTJY4/">b</a>',
+    '<a href="https://www.amazon.com.br/dp/B07RM7X6M4/">c</a>',
+  ].join('')
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/p/encerrada')) {
+      return {
+        ok: false,
+        status: 307,
+        headers: new Headers({ location: '/promocao-encerrada' }),
+        text: async () => '',
+      }
+    }
+    return respostaHtml(listaDeOutrasOfertas)
+  }
+
+  const { store, reason, detail } = await resolveStoreUrlFromCustomDomainDetailed(
+    'https://dicasdeamigas.com.br/p/encerrada',
+    { fetchImpl, useCache: false },
+  )
+  assert.equal(store, null, 'oferta enviada com o link errado é irreversível — na dúvida, não publica')
+  assert.equal(reason, 'pagina_de_lista_apos_redirect')
+  assert.match(String(detail), /3 produtos diferentes/)
+})
+
+test('página de oferta de verdade tem UM produto em dois endereços — continua resolvendo', async () => {
+  clearCustomDomainCache()
+  const paginaDaOferta = [
+    '<a href="https://link.amazon/B03y5j4wc">curto</a>',
+    '<a href="https://www.amazon.com.br/dp/B0CBDH19YL/">limpo</a>',
+  ].join('')
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/p/viva')) {
+      return { ok: false, status: 307, headers: new Headers({ location: '/p/viva-2' }), text: async () => '' }
+    }
+    return respostaHtml(paginaDaOferta)
+  }
+  const { store, reason } = await resolveStoreUrlFromCustomDomainDetailed(
+    'https://dicasdeamigas.com.br/p/viva',
+    { fetchImpl, useCache: false },
+  )
+  assert.equal(reason, null)
+  assert.equal(store.url, 'https://www.amazon.com.br/dp/B0CBDH19YL/')
+})
+
+test('SEM redirect, página com vários produtos segue escolhendo (não regride os sites que hoje funcionam)', () => {
+  const varios = [
+    { platform: 'amazon', url: 'https://www.amazon.com.br/dp/B084353B4V/' },
+    { platform: 'amazon', url: 'https://www.amazon.com.br/dp/B00H2ZTJY4/' },
+  ]
+  assert.equal(countDistinctProducts(varios), 2)
+  assert.equal(isListingPageAfterRedirect(varios, { redirected: false }), false)
+  assert.equal(isListingPageAfterRedirect(varios, { redirected: true }), true)
+})
+
+test('duas URLs do MESMO produto não contam como lista', () => {
+  assert.equal(countDistinctProducts([
+    { platform: 'amazon', url: 'https://www.amazon.com.br/dp/B0CBDH19YL/' },
+    { platform: 'amazon', url: 'https://www.amazon.com.br/PRODUTO-X/dp/B0CBDH19YL' },
+  ]), 1)
+})
+
+test('com DOIS candidatos o retry continua existindo (a fatia por link não pode matá-lo)', async () => {
+  clearCustomDomainCache()
+  // Falha transitória (DNS IPv6 da Hetzner, medido em 14/09) no PRIMEIRO
+  // candidato. Com a fatia por link virando prazo da tentativa, a segunda
+  // tentativa nascia zerada e os DOIS links caíam — a oferta ficava sem link
+  // de loja nenhum e o painel dizia "não fazemos conversão para essa loja".
+  const chamadasPorUrl = new Map()
+  const fetchImpl = async (url, opts) => {
+    const n = (chamadasPorUrl.get(url) || 0) + 1
+    chamadasPorUrl.set(url, n)
+    if (url.endsWith('/p/um') && n === 1) {
+      // Estoura de verdade: a tentativa CONSOME a fatia inteira do link, como um
+      // DNS travado. É isso que matava o retry — falha instantânea não reproduz.
+      return new Promise((_resolve, reject) => {
+        const seguraOLaco = setTimeout(() => reject(new Error('nunca deveria chegar aqui')), 30_000)
+        opts?.signal?.addEventListener?.('abort', () => {
+          clearTimeout(seguraOLaco)
+          const erro = new Error('DNS piscou')
+          erro.name = 'TimeoutError'
+          reject(erro)
+        })
+      })
+    }
+    return respostaHtml(PAGINA_REAL)
+  }
+
+  const texto = 'a https://dicasdeamigas.com.br/p/um\nb https://dicasdeamigas.com.br/p/dois'
+  const { resolved, failures } = await resolveCustomDomainLinks(texto, { fetchImpl, useCache: false })
+
+  assert.equal(failures.length, 0, 'falha transitória num link não pode derrubar a oferta inteira')
+  assert.equal(resolved.length, 2)
+  assert.equal(chamadasPorUrl.get('https://dicasdeamigas.com.br/p/um'), 2, 'o primeiro link precisa de segunda chance')
+  assert.ok(resolved.find(r => r.from.endsWith('/p/um')).recoveredByRetry)
 })

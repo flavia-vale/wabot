@@ -52,8 +52,8 @@
  *  - **Fail-safe é NÃO MEXER no texto.** Qualquer erro devolve o texto como
  *    veio; o comportamento volta a ser exatamente o de hoje.
  */
-import { detectLinks, isOfferUrl } from '../detector.js'
-import { urlHasProductId } from '../converters/linkKind.js'
+import { detectLinks, isOfferUrl, normalizeDetectedUrl } from '../detector.js'
+import { extractProductId, urlHasProductId } from '../converters/linkKind.js'
 
 // Kill-switch no padrão dos outros interruptores de rollout do projeto
 // (SHEIN_SHORTLINK_ENABLED, COUPON_LINK_CONVERT): default LIGADO, só o valor
@@ -181,11 +181,27 @@ function stripNoise(url) {
   return String(url ?? '').replace(TRAILING_NOISE_RE, '')
 }
 
-/** Todas as URLs http(s) do texto, sem a pontuação final. PURA. */
+/**
+ * Todas as URLs http(s) do texto, sem a pontuação final. PURA.
+ *
+ * Passa por `normalizeDetectedUrl` (a MESMA regra do detector) para tirar o
+ * marcador de formatação do WhatsApp: a origem publica `*https://site/p/abc*`,
+ * e sem isso o candidato virava `.../p/abc*` — um endereço que NÃO existe. Pior
+ * que falhar: medido em 18/09/2026, o site responde 307 para
+ * `/promocao-encerrada` (uma página cheia de OUTRAS ofertas), então o robô
+ * publicava um produto aleatório no lugar do anunciado. O detector já removia
+ * esse marcador desde 15/09; aqui ficou de fora e as duas pontas discordavam
+ * sobre onde a URL termina.
+ */
 function listUrls(text) {
   const raw = String(text ?? '')
   ANY_HTTP_URL_RE.lastIndex = 0
-  return (raw.match(ANY_HTTP_URL_RE) || []).map(stripNoise)
+  const urls = []
+  for (const match of raw.matchAll(ANY_HTTP_URL_RE)) {
+    const url = normalizeDetectedUrl(stripNoise(match[0]), raw.slice(0, match.index))
+    if (url) urls.push(url)
+  }
+  return urls
 }
 
 /** Verdadeiro quando o texto já traz ao menos um link de loja suportada. PURA. */
@@ -280,6 +296,48 @@ export function extractStoreUrlsFromHtml(html) {
  * ele ainda é convertido pelo nosso conversor antes de sair, mas exige uma
  * resolução a mais e nem sempre entrega o ASIN.
  */
+/**
+ * Quantos produtos DIFERENTES a página revela. PURA.
+ *
+ * Duas URLs do mesmo produto (o short link de afiliado e a URL limpa) contam
+ * como um. Plataforma sem ID legível no endereço não entra na conta — só o que
+ * dá para afirmar.
+ */
+export function countDistinctProducts(candidates) {
+  const ids = new Set()
+  for (const c of Array.isArray(candidates) ? candidates : []) {
+    const id = extractProductId(c?.platform, c?.url)
+    if (id) ids.add(`${c.platform}:${id}`)
+  }
+  return ids.size
+}
+
+/**
+ * Página de LISTA alcançada por redirect. PURA.
+ *
+ * Medido em produção (18/09/2026): `https://dicasdeamigas.com.br/p/<slug>` de
+ * oferta ENCERRADA (ou de slug inválido) responde 307 para
+ * `/promocao-encerrada` — uma página com 13 produtos DIFERENTES de outras
+ * ofertas. A página de oferta de verdade traz 1 produto (em 2 endereços: o
+ * short link do concorrente e a URL limpa). Sem esta trava o robô pegava o
+ * PRIMEIRO produto daquela lista e publicava no grupo um item que não tem nada
+ * a ver com o texto da oferta — silenciosamente, gravado como `success`. É a
+ * mesma família da "camiseta branca" (2026-06) e de #1205/#1208.
+ *
+ * Vale a regra canônica do projeto: oferta não enviada é recuperável, oferta
+ * enviada com o link errado não é. Na dúvida sobre QUAL produto é o da oferta,
+ * não publica.
+ *
+ * A trava exige o REDIRECT de propósito: é ele que marca "você não chegou na
+ * página que pediu". Site que entrega a oferta direto em 200 com produtos
+ * relacionados na mesma página continua funcionando como antes — mexer nisso
+ * mudaria o comportamento dos 8 sites que hoje resolvem.
+ */
+export function isListingPageAfterRedirect(candidates, { redirected } = {}) {
+  if (!redirected) return false
+  return countDistinctProducts(candidates) > 1
+}
+
 export function pickBestStoreUrl(candidates) {
   const list = Array.isArray(candidates) ? candidates.filter(Boolean) : []
   if (!list.length) return null
@@ -370,6 +428,9 @@ export async function resolveStoreUrlFromCustomDomainDetailed(candidateUrl, opti
   }
 
   let current = String(candidateUrl)
+  // Marca se algum hop redirecionou: é o sinal de "não chegamos na página que
+  // foi pedida" usado por `isListingPageAfterRedirect`.
+  let redirected = false
   try {
     for (let hop = 0; hop <= CUSTOM_DOMAIN_MAX_REDIRECTS; hop += 1) {
       // Um hop pode já ser a loja (domínio próprio que só redireciona).
@@ -391,7 +452,9 @@ export async function resolveStoreUrlFromCustomDomainDetailed(candidateUrl, opti
 
       const location = res.headers?.get?.('location')
       if (location && res.status >= 300 && res.status < 400) {
-        current = new URL(location, current).toString()
+        const proximo = new URL(location, current).toString()
+        if (proximo !== current) redirected = true
+        current = proximo
         continue
       }
 
@@ -402,7 +465,15 @@ export async function resolveStoreUrlFromCustomDomainDetailed(candidateUrl, opti
       }
 
       const html = await readLimitedText(res)
-      const best = pickBestStoreUrl(extractStoreUrlsFromHtml(html))
+      const achados = extractStoreUrlsFromHtml(html)
+      if (isListingPageAfterRedirect(achados, { redirected })) {
+        return {
+          store: null,
+          reason: 'pagina_de_lista_apos_redirect',
+          detail: `${countDistinctProducts(achados)} produtos diferentes em ${current}`,
+        }
+      }
+      const best = pickBestStoreUrl(achados)
       // Fracasso NÃO é cacheado — de propósito.
       if (best && useCache) setCached(candidateUrl, best)
       if (best) return { store: best, reason: null }
@@ -450,70 +521,87 @@ export async function resolveCustomDomainLinks(text, options = {}) {
     ? Math.max(1, Math.floor(options.maxAttempts))
     : CUSTOM_DOMAIN_MAX_ATTEMPTS
 
+  // DUAS PASSADAS (RCA 2026-09-18, segunda rodada — não voltar a uma só).
+  //
+  // A fatia por link consertou a fome do segundo link, mas matou o RETRY sem
+  // querer: com 2 candidatos a fatia (6,5s) fica igual ao teto da tentativa, e
+  // a segunda tentativa nascia com prazo zerado. O retry existe para uma falha
+  // MEDIDA em produção (14/09: DNS IPv6 da Hetzner intermitente, uma tentativa
+  // estourou 8s e a seguinte resolveu em 2,6s) — e essa é justamente a mensagem
+  // da cliente, que tem dois links. Com o retry morto, um blip de rede derruba
+  // os DOIS links, a oferta fica sem link de loja nenhum e o painel diz
+  // "ainda não fazemos conversão para essa loja".
+  //
+  // Passada 1: todo candidato recebe UMA tentativa dentro da sua fatia, então
+  // link lento continua sem poder zerar a chance dos outros.
+  // Passada 2: o que falhou por motivo transitório tenta de novo com o que
+  // sobrou do orçamento da mensagem — no caso comum sobra muito (os dois links
+  // resolvem em ~1,3s dos 13s).
+  const estados = candidates.map(url => ({ url, store: null, reason: null, detail: undefined, attempts: [] }))
+
+  const restanteDaMensagem = () => orcamentoTotal - (Date.now() - comecouEm)
+
+  async function tentar(estado, tetoDaVez) {
+    const teto = Math.min(tetoPorLink, tetoDaVez)
+    if (teto < MIN_USEFUL_BUDGET_MS) return
+    const iniciouEm = Date.now()
+    const resultado = await resolveStoreUrlFromCustomDomainDetailed(estado.url, {
+      ...options,
+      timeoutMs: teto,
+    })
+    estado.store = resultado.store
+    estado.reason = resultado.reason
+    estado.detail = resultado.detail
+    estado.attempts.push({
+      attempt: estado.attempts.length + 1,
+      durationMs: Date.now() - iniciouEm,
+      reason: resultado.reason,
+      ...(resultado.detail ? { detail: resultado.detail } : {}),
+    })
+  }
+
+  for (const [indice, estado] of estados.entries()) {
+    const restante = restanteDaMensagem()
+    if (restante < MIN_USEFUL_BUDGET_MS) {
+      estado.reason = 'sem_tempo_no_orcamento'
+      continue
+    }
+    const faltando = estados.length - indice
+    await tentar(estado, Math.max(MIN_USEFUL_BUDGET_MS, Math.floor(restante / faltando)))
+    if (!estado.attempts.length) estado.reason = 'sem_tempo_no_orcamento'
+  }
+
+  for (let rodada = 2; rodada <= maxTentativas; rodada += 1) {
+    for (const estado of estados) {
+      if (estado.store) continue
+      if (estado.attempts.length !== rodada - 1) continue
+      if (!isRetryableCustomDomainFailure(estado.reason)) continue
+      const restante = restanteDaMensagem()
+      if (restante < MIN_USEFUL_BUDGET_MS) break
+      await tentar(estado, restante)
+    }
+  }
+
   let output = raw
   const resolved = []
   const failures = []
-  for (const [indice, candidate] of candidates.entries()) {
-    const restante = orcamentoTotal - (Date.now() - comecouEm)
-    if (restante < MIN_USEFUL_BUDGET_MS) {
-      failures.push({ url: candidate, reason: 'sem_tempo_no_orcamento' })
-      continue
-    }
-    // FATIA POR LINK (RCA 2026-09-18 — não remover). O orçamento é da mensagem
-    // inteira, e sem divisão o PRIMEIRO link embrulhado consumia tudo: um site
-    // lento fazia o segundo nem ser tentado, e a oferta saía com "Compre aqui:"
-    // vazio. Cada link passa a ter um teto próprio = o que sobra dividido pelos
-    // links que ainda faltam. Link rápido devolve a sobra para os seguintes
-    // (resolveu em 600ms → o próximo volta a ter o teto cheio de 8s), então o
-    // caso comum não fica mais lento; o que muda é um link lento não poder mais
-    // zerar a chance dos outros.
-    const faltando = candidates.length - indice
-    const fatiaDoLink = Math.max(MIN_USEFUL_BUDGET_MS, Math.floor(restante / faltando))
-    const prazoDoLink = Date.now() + fatiaDoLink
-    let store = null
-    let reason = null
-    let detail
-    const attempts = []
-    for (let tentativa = 1; tentativa <= maxTentativas; tentativa += 1) {
-      const restanteDaTentativa = Math.min(
-        orcamentoTotal - (Date.now() - comecouEm),
-        prazoDoLink - Date.now(),
-      )
-      if (restanteDaTentativa < MIN_USEFUL_BUDGET_MS) break
-
-      const iniciouEm = Date.now()
-      const resultado = await resolveStoreUrlFromCustomDomainDetailed(candidate, {
-        ...options,
-        timeoutMs: Math.min(tetoPorLink, restanteDaTentativa),
-      })
-      store = resultado.store
-      reason = resultado.reason
-      detail = resultado.detail
-      attempts.push({
-        attempt: tentativa,
-        durationMs: Date.now() - iniciouEm,
-        reason,
-        ...(detail ? { detail } : {}),
-      })
-
-      if (store || !isRetryableCustomDomainFailure(reason)) break
-    }
-    if (!store) {
+  for (const estado of estados) {
+    if (!estado.store) {
       failures.push({
-        url: candidate,
-        reason: reason || 'sem_tempo_no_orcamento',
-        detail,
-        attempts,
+        url: estado.url,
+        reason: estado.reason || 'sem_tempo_no_orcamento',
+        detail: estado.detail,
+        attempts: estado.attempts,
       })
       continue
     }
-    output = output.split(candidate).join(store.url)
+    output = output.split(estado.url).join(estado.store.url)
     resolved.push({
-      from: candidate,
-      to: store.url,
-      platform: store.platform,
-      attempts,
-      recoveredByRetry: attempts.length > 1,
+      from: estado.url,
+      to: estado.store.url,
+      platform: estado.store.platform,
+      attempts: estado.attempts,
+      recoveredByRetry: estado.attempts.length > 1,
     })
   }
   return { text: output, resolved, failures }
