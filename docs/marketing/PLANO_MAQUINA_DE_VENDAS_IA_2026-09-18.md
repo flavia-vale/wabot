@@ -30,7 +30,7 @@ manhã para o Cuponito e para o site de matemática **não vale** — a consulta
 | `llms.txt` com preço, lojas e páginas comerciais | ✅ no ar | `R$69` presente |
 | Entidade única (`WebSite #website`, `SoftwareApplication #software`) | ✅ no ar | `#website` no HTML da home |
 | Medição de chegada por IA em `/alternativas` e blog | ✅ no ar (PR #1743 mergeada em `main` hoje) | commits 5322852, f287836 em `main` |
-| **GPTBot/ClaudeBot na Cloudflare** (4.1 item 2) | ❌ pendente | `diag-acesso-robos-ia`: GPTBot, ClaudeBot, Amazonbot, CCBot, Bytespider = 403; busca/clique = 200 |
+| **GPTBot/ClaudeBot na Cloudflare** (4.1 item 2) | ❌ pendente — **confirmado do VPS em 18/09** | `diag-acesso-robos-ia` rodado no próprio servidor: navegador de controle 200; GPTBot, ClaudeBot, Amazonbot, CCBot, Bytespider = 403; toda busca/clique = 200. Regra por categoria de robô (ao contrário do Cuponito, onde o 403 era do IP de análise). Decisão da dona |
 | **Listicle ofertasbot.com** (4.1 item 1) | ❌ não estamos | as 2 ocorrências de "espelha grupos" na página são a expressão genérica "quem espelha grupos", não a marca |
 | **YouTube renomeado** (4.1 item 4) | ❌ pendente | `@botinhoafiliado` ainda "BOTinho - YouTube"; `@espelhagrupos` não existe |
 | Reclame Aqui (4.1 item 3) | ? | página protegida por challenge; não dá para ver de fora |
@@ -73,7 +73,7 @@ manhã para o Cuponito e para o site de matemática **não vale** — a consulta
 
 ### O que fazer agora, em ordem (o que ainda não foi feito e mais pesa)
 
-1. **Cloudflare (Espelha Grupos): decidir GPTBot/ClaudeBot.** Na Vercel (Cuponito) já está liberado — a medição anterior estava contaminada pelo IP do ambiente de análise (ver M6). Conferir o Espelha Grupos **do VPS**, não de fora: `cd ~/wabot && node scripts/diag-acesso-robos-ia.mjs`.
+1. **Cloudflare (Espelha Grupos): decidir GPTBot/ClaudeBot.** Confirmado do VPS em 18/09: GPTBot e ClaudeBot = 403 com o navegador de controle em 200 — é regra da Cloudflare, e a decisão é sua. Na Vercel (Cuponito) já está liberado (a medição anterior estava contaminada pelo IP do ambiente de análise, ver M6).
 2. **Cuponito: publicar os dois posts** (seções 2 e 3 do doc) — a estrutura já lê; e renderizar `/` e `/blog` no servidor (hoje são as duas únicas páginas ainda vazias).
 3. **Espelha Grupos: pedir inclusão no listicle do ofertasbot.com** (o e-mail pronto está no item 1 da 4.1) e **renomear o YouTube**.
 4. **Matemática: medir e ficha do Google** (M1-M3) — sem isso os 4 posts novos não têm como virar lead mensurável; depois títulos (M5) e H1/telefone (M4).
