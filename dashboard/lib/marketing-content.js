@@ -83,6 +83,24 @@ export const BRAND_SAME_AS = [
   BRAND_YOUTUBE_URL,
 ].filter(Boolean)
 
+// Perfis da FUNDADORA em outros sites da mesma dona. Entram no `sameAs` da
+// `Person` (founder da Organization), NUNCA no `sameAs` da Organization:
+// `sameAs` significa "mesma entidade", e o Cuponito é outra empresa. O que é a
+// mesma entidade nos três sites é a pessoa — e é isso que as IAs liam partido
+// (ChatGPT tratou Espelha Grupos e BOTinho como concorrentes; medição de
+// 01/09). Os dois endereços são os `@id` de Person que os outros sites já
+// publicam no próprio JSON-LD (verificado em 18/09/2026).
+export const FOUNDER_SAME_AS = [
+  'https://www.cuponito.com.br/quem-somos#person',
+  'https://aulasdematematicabh.com.br/#flavia',
+]
+
+// Sites-irmãos da mesma fundadora, citados em /quem-somos com link normal
+// (sem nofollow: é relação real, declarada dos dois lados).
+export const SISTER_SITES = [
+  { name: 'Cuponito', url: 'https://www.cuponito.com.br/', description: 'cupons de desconto verificados todos os dias' },
+]
+
 export const PRODUCT_DEFINITION = 'O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 
 // Lojas com conversão de link suportada. Fonte ÚNICA para texto público,

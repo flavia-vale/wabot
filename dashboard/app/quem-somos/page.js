@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
+import { SISTER_SITES } from '@/lib/marketing-content'
+import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 
 export const metadata = {
   title: 'Quem Somos',
@@ -44,6 +46,23 @@ export default function AboutPage() {
           <strong>BOTinho é o nome do robô do Espelha Grupos</strong> — o mesmo produto, da mesma empresa, não duas
           ferramentas diferentes. O nome BOTinho aparece em conteúdo e em conversas anteriores a 2026; a marca
           atual, e o nome que usamos hoje em tudo, é Espelha Grupos.
+        </p>
+        {/*
+          Quem faz, com nome, e os outros sites da mesma pessoa. É o par do
+          `founder`/`sameAs` do schema global (layout.js): o Cuponito e o site
+          de matemática já dizem, em texto e em JSON-LD, que a fundadora é a
+          mesma — o link precisa ir nos DOIS sentidos para valer como entidade.
+        */}
+        <p>
+          <strong>Quem faz:</strong> {EDITORIAL_PERSON_AUTHOR}, {EDITORIAL_PERSON_AUTHOR_DESCRIPTION.replace(/\.$/, '').replace(/^Fundadora do Espelha Grupos, /, 'fundadora do Espelha Grupos, ')}. É a mesma pessoa por trás do{' '}
+          {SISTER_SITES.map((site, index) => (
+            <span key={site.url}>
+              {index > 0 ? ' e do ' : ''}
+              <a href={site.url} className="font-bold text-green-700 underline underline-offset-4">{site.name}</a>
+              {` (${site.description})`}
+            </span>
+          ))}
+          . Os dois sites são independentes: um é para quem procura cupom; este é para quem publica oferta.
         </p>
         <p>
           Se você chegou aqui perguntando se dá para confiar, a resposta detalhada — o que fazemos com os seus
