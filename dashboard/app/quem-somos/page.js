@@ -62,7 +62,7 @@ export default function AboutPage() {
               {` (${site.description})`}
             </span>
           ))}
-          . Os dois sites são independentes: um é para quem procura cupom; este é para quem publica oferta.
+          . {EDITORIAL_PERSON_AUTHOR} é fundadora dos dois. Os sites são independentes: um é para quem procura cupom; este é para quem publica oferta.
         </p>
         <p>
           Se você chegou aqui perguntando se dá para confiar, a resposta detalhada — o que fazemos com os seus
