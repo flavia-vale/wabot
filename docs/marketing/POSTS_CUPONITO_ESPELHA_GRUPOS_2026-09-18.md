@@ -10,13 +10,16 @@ de aula de matemática em BH; devo postar nos blogs deles me citando?"
    mesmo assunto (cupons, lojas, ofertas), público que vira afiliado, robots.txt
    já liberando GPTBot/ClaudeBot/PerplexityBot e domínio antigo com páginas no
    índice do Bing (o que o ChatGPT lê).
-2. **Mas hoje um post lá NÃO seria lido por nenhuma IA**: o site entrega uma
-   casca de **2.560 bytes só com `<title>`** para navegador, bingbot,
-   OAI-SearchBot, ChatGPT-User e PerplexityBot. Sem texto no HTML não existe
-   post para a IA — é exatamente o caso do `oasisdeofertas.com.br` registrado no
-   AGENTS.md ("casca de 1.994 bytes... o link não existe no HTML").
-3. **Primeiro consertar a renderização (seção 1), depois publicar os dois posts
-   (seções 2 e 3).** Publicar antes é trabalho invisível.
+2. **Mas hoje um post lá NÃO seria lido por nenhuma IA — nem pelo Google**:
+   as páginas de post, de loja e de categoria respondem **HTTP 404** (96 das
+   105 URLs do sitemap), e o que vem no corpo é uma casca de **2.560 bytes só
+   com `<title>`**, igual para navegador, bingbot, OAI-SearchBot, ChatGPT-User
+   e PerplexityBot. Sem texto no HTML não existe post para a IA — é o caso do
+   `oasisdeofertas.com.br` registrado no AGENTS.md ("casca de 1.994 bytes... o
+   link não existe no HTML").
+3. **Primeiro consertar a estrutura (seção 1: status 200 + HTML com conteúdo),
+   depois publicar os dois posts (seções 2 e 3).** Publicar antes é trabalho
+   invisível.
 4. **Site de matemática: NÃO fazer post.** Assunto sem relação → a IA não
    recupera essa página para "bot para afiliados", e para o Google é link fora
    de contexto entre sites da mesma dona. O que vale lá é **uma linha na bio da
@@ -26,40 +29,151 @@ de aula de matemática em BH; devo postar nos blogs deles me citando?"
    dizendo isso não tira o valor para a IA (é outro domínio, outro contexto) e
    evita o único risco real, que é parecer rede de sites para inflar link.
 
-## 1. O que medir e consertar no Cuponito ANTES de publicar (medido em 18/09)
+## 1. Estrutura do Cuponito: o que está impedindo Google e IAs de ler o site (medido em 18/09) e o que mudar
 
-| Medição (curl, 18/09/2026) | Resultado | O que significa |
+> Esta seção é a especificação para quem for implementar no repositório do
+> Cuponito. Pilha identificada pelo próprio bundle em produção: **Vite + React
+> (SPA) + TanStack Router (rotas `lazy`) + react-helmet + Supabase (tabelas
+> `blog_posts`, `stores`, `coupons`, `coupon_categories`, `site_settings`) na
+> Vercel.** Tudo abaixo foi medido com `curl` e com a REST pública do Supabase
+> (a mesma chave anônima que o site usa no navegador); nada foi deduzido.
+
+### 1.1 Diagnóstico
+
+| # | Medição | Resultado | Consequência |
+|---|---|---|---|
+| D1 | `GET /blog/cupom-shopee-hoje`, `/desconto/cupom-desconto-kabum-br`, `/categoria/tech` (páginas REAIS, todas no sitemap) | **HTTP 404** com a casca do SPA (2.560 bytes) | **96 das 105 URLs do sitemap respondem 404** (8 posts, 63 lojas, 25 categorias). Google e Bing descartam URL 404 **antes** de renderizar qualquer JavaScript. É por isso que nenhum post do blog aparece em busca alguma. Só as rotas fixas (`/`, `/blog`, `/lojas`, `/cupons`, `/quem-somos`...) dão 200 |
+| D2 | as mesmas URLs com UA de navegador, `bingbot`, `OAI-SearchBot`, `ChatGPT-User`, `PerplexityBot` | corpo idêntico: `<title>`, meta description da home, `<div id="root">` com spinner, `<noscript>` "habilite o JavaScript" | **0 `<h1>`, 0 `<article>`, 0 `ld+json` no HTML.** Os robôs da OpenAI, da Anthropic e da Perplexity **não executam JavaScript** (estudo da própria Vercel, dez/2024). O `BlogPosting` e as metas que o react-helmet monta só existem no navegador |
+| D3 | 8 posts em `blog_posts`, todos `status=published`, `updated_at` 09/09/2026, `views_count` entre 5 e 30 | conteúdo bom, com `meta_title`, `meta_description`, `cover_image`, `cta_config` | o CMS já tem os campos certos; o problema é só entrega |
+| D4 | índice do Bing (`site:cuponito.com.br`) | só URLs do site **antigo** (WordPress: `/store/<loja>/`, `/stores-2/`, título "Os melhores cupons? O Cuponito acha!"), que hoje devolvem 404 | a autoridade que o domínio já tinha está apontando para 404. Nenhuma URL nova (`/desconto/*`, `/blog/*`) indexada |
+| D5 | `sitemap.xml` | 105 URLs; posts com `lastmod` real (09/09); as 9 páginas fixas com `lastmod` = data de hoje | `lastmod` dinâmico nas fixas não informa nada; o resto está certo |
+| D6 | `robots.txt` | `Allow: /` para GPTBot, ChatGPT-User, ClaudeBot, PerplexityBot, Google-Extended, Bingbot; `Disallow: /admin` | certo — inútil enquanto D1 e D2 valerem. Faltam `OAI-SearchBot`, `Claude-SearchBot`, `Claude-User`, `Perplexity-User`, `Applebot`, `DuckAssistBot`, `meta-externalagent`, e faltam `/adminblog`, `/login`, `/access-denied` no `Disallow` |
+| D7 | firewall da Vercel | um `GET /blog` respondeu 403 `x-vercel-mitigated: deny`; UA `Googlebot` de IP que não é do Google → 403 (correto: verificação por IP); ~8 requisições seguidas do mesmo IP → 403 | conferir no painel Firewall que os robôs verificados (OpenAI, Anthropic, Perplexity, Google, Bing) não caem em regra de taxa nem em challenge |
+| D8 | `og:image` | nenhuma | prévia sem imagem no WhatsApp e nas IAs (mesmo defeito que o Espelha Grupos tinha até 18/09) |
+
+**Ordem de importância:** D1 sozinho zera o SEO (até o Google, que renderiza
+JavaScript, descarta 404). D2 zera a leitura por IA mesmo com D1 resolvido. Os
+outros são acabamento.
+
+### 1.2 O que mudar, em ordem (cada item com o teste de aceitação)
+
+**M1 — Toda URL pública responde 200 com HTML (hoje: 404).** Correção
+imediata, de um dia, sem mudar framework: no `vercel.json`, o fallback do SPA
+precisa cobrir as rotas com parâmetro (`/blog/:slug`, `/desconto/:slug`,
+`/categoria/:slug`), devolvendo `index.html` com **status 200**. Rota realmente
+inexistente continua 404 (a TanStack Router já tem a rota de 404; se o
+fallback vira 200 para tudo, aceitar "soft 404" só até o M2 entrar).
+
+```bash
+for p in /blog/cupom-shopee-hoje /desconto/cupom-desconto-kabum-br /categoria/tech; do
+  curl -s -o /dev/null -w "%{http_code} $p\n" "https://www.cuponito.com.br$p"; done
+# aceitação: 200 nas três
+```
+
+**M2 — O HTML já vem com o conteúdo (SSR ou SSG).** É o que faz IA e Bing
+lerem o post. Três caminhos, do mais recomendado ao menos:
+
+| Caminho | O que é | Por que |
 |---|---|---|
-| `https://www.cuponito.com.br/` com UA de navegador | 200, **2.560 bytes**, 0 `<h1>`, 0 `ld+json`, só `<title>Cuponito - Cupons de Desconto Verificados</title>` | app que monta tudo por JavaScript (não é Next com SSR nem WordPress: sem `_next/static`, sem `wp-content`) |
-| mesma home com UA `bingbot`, `OAI-SearchBot`, `ChatGPT-User`, `PerplexityBot` | 200, **os mesmos 2.560 bytes** | não há prerender por robô; a IA recebe página em branco. OpenAI, Anthropic e Perplexity **não executam JavaScript** (estudo da própria Vercel, dez/2024) |
-| `/blog/` | 200, mesma casca | o blog, se tiver posts, é invisível |
-| `/store/aliexpress-latam/` (URL que o Bing ainda lista) | **404** com a mesma casca | o índice do Bing tem o site ANTIGO (WordPress, `/store/<loja>/`, `/stores-2/`, título "Os melhores cupons? O Cuponito acha!"); as URLs novas (`/cupons`, `/lojas`, `/blog`) não aparecem nas buscas |
-| `/blog` sem barra final | **403** `x-vercel-mitigated: deny` | regra do firewall da Vercel derrubando uma variante da URL |
-| UA `Googlebot` de IP que não é do Google; e a partir da ~8ª requisição seguida | **403** | proteção de bot da Vercel (verifica IP; normal para Googlebot falso), mas o limite de taxa também atingiu o navegador — conferir que OAI-SearchBot/PerplexityBot reais não estão sendo barrados |
-| `sitemap.xml` | todas as URLs com `lastmod` = data de hoje | `lastmod` dinâmico não informa nada; a IA usa data REAL como sinal de frescor |
-| `robots.txt` | `Allow: /` para GPTBot, ChatGPT-User, ClaudeBot, PerplexityBot | certo — só não adianta enquanto o HTML é vazio |
+| **A. TanStack Start** (recomendado) | o mesmo TanStack Router, com SSR na Vercel; cada rota ganha um `loader` que lê o Supabase **no servidor** e o HTML sai pronto; o React hidrata por cima | mantém rotas, componentes e admin; a Vercel suporta oficialmente; 404 real para slug inexistente; cache por rota (`Cache-Control: s-maxage`) |
+| B. Astro (ou Next) só para as páginas públicas | app separado gera `/blog/*`, `/desconto/*`, `/categoria/*`, `/lojas`, `/cupons`, `/quem-somos`, `/como-funciona`, `/perguntas-frequentes` como HTML estático/ISR lendo o Supabase; o SPA atual fica só em `/admin*` e `/login` | menor risco no admin; build estático é o que mais rápido sai no índice; exige rewrites por caminho entre os dois projetos |
+| C. Renderização só para robôs (função na Vercel que devolve HTML montado do Supabase quando o UA é de crawler) | duas versões da mesma página | **não recomendado**: o Google deixou de recomendar "dynamic rendering", vira manutenção dupla e qualquer diferença entre as versões é cloaking. Só como remendo temporário |
 
-**Consertos, nesta ordem (o primeiro é o que importa):**
+O que **cada página** precisa trazer **no HTML do servidor** (não vale
+montar por JavaScript):
 
-1. **Texto no HTML das páginas do blog** — SSR ou prerender estático (se for
-   Vite/React: `vite-react-ssg` ou prerender no build; se puder, o blog inteiro
-   em Next/Astro com páginas estáticas). Gate de aceitação, no terminal:
-   ```bash
-   curl -sA "OAI-SearchBot/1.0" https://www.cuponito.com.br/blog/<slug-do-post> | grep -c "<h1"
-   ```
-   Tem que dar `1` ou mais. Enquanto der `0`, não publicar.
-2. **Firewall da Vercel**: em Firewall → conferir que "verified bots" inclui os
-   robôs de IA, e que `/blog` (sem barra) não cai em `deny`. Depois:
-   `node scripts/diag-acesso-robos-ia.mjs --url https://www.cuponito.com.br/`
-   (o script do repo aceita `--url`; GPTBot, OAI-SearchBot e PerplexityBot
-   precisam sair 200).
-3. **301 das URLs antigas** (`/store/<loja>/` → `/lojas/<loja>`, `/stores-2/` →
-   `/lojas`): é a autoridade que o Bing já deu ao domínio, hoje devolvendo 404.
-4. **404 de verdade** (status 404, não 200 com casca) e **`lastmod` real** no
-   sitemap.
-5. **Bing Webmaster Tools + IndexNow** no Cuponito, igual ao que está pendente
-   no Espelha Grupos (item 5 da seção 4.1 do plano). Sem isso o post pode
-   levar semanas para entrar no índice que o ChatGPT consulta.
+- `<title>` = `meta_title`; `<meta name="description">` = `meta_description`;
+  `<link rel="canonical">` com a URL final (decidir barra final: sem barra, e
+  redirecionar 301 a variante com barra);
+- `<h1>` = título do post; corpo do post em `<article>`; data de publicação e
+  "Atualizado em" visíveis (`published_at`, `updated_at`);
+- links internos reais (`<a href>`): do post para 3 páginas de loja, e da home
+  e das páginas de loja para os posts — link que só existe depois do
+  JavaScript não conta como link;
+- `og:title`, `og:description`, `og:image` (arquivo estático 1200×630 em
+  `/og-default.png`, ou a `cover_image` do post), `og:type=article`,
+  `og:locale=pt_BR`;
+- JSON-LD **no HTML**: `BlogPosting` com `author` → `Person` "Flávia Vale"
+  (`url` `https://espelhagrupos.com.br/quem-somos`), `publisher` →
+  `Organization` "Cuponito", `datePublished`, `dateModified`, `mainEntityOfPage`;
+  nos dois posts novos, também `ItemList`/`HowTo` + `FAQPage` (seção 2 e 3);
+  em `/quem-somos`, `Organization` com `founder` → a mesma `Person` e `sameAs`
+  → `https://espelhagrupos.com.br/quem-somos`;
+- páginas de loja (`/desconto/:slug`): `<h1>` com o nome da loja, lista de
+  cupons em HTML, `dateModified` = cupom mais recente.
+
+```bash
+curl -sA "Mozilla/5.0 (compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot)" \
+  https://www.cuponito.com.br/blog/cupom-shopee-hoje | grep -cE "<h1|<article|BlogPosting"
+# aceitação: 3 (um de cada), sem executar JavaScript
+```
+
+**M3 — 301 das URLs do site antigo.** `/store/<loja>/` → `/desconto/cupom-desconto-<loja>`
+quando existir loja correspondente (conferir slug a slug: o novo padrão é
+`cupom-desconto-kabum-br`, `cupom-desconto-casas-bahia`), senão → `/lojas`;
+`/stores-2/` → `/lojas`. É o único jeito de aproveitar o que o Bing já indexou.
+
+```bash
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://cuponito.com.br/store/casas-bahia/
+# aceitação: 301 para a página nova (não 404)
+```
+
+**M4 — Sitemap honesto.** `lastmod` das páginas fixas = data real da última
+mudança (ou omitir), nunca "hoje"; incluir os 2 posts novos; nenhuma URL do
+sitemap pode responder 404 (teste: varrer o sitemap e exigir 200 em todas).
+
+**M5 — robots.txt.** Acrescentar `Allow: /` explícito para `OAI-SearchBot`,
+`Claude-SearchBot`, `Claude-User`, `Perplexity-User`, `Applebot`,
+`DuckAssistBot`, `meta-externalagent`; `Disallow` para `/adminblog`, `/login`,
+`/access-denied`. `Disallow: /404` pode sair (não é rota).
+
+**M6 — Firewall da Vercel.** Em Firewall → Bot Protection, garantir que a
+lista de "verified bots" (OpenAI, Anthropic, Perplexity, Google, Bing) está
+permitida e fora de qualquer regra de taxa/challenge; olhar o log de `deny`
+das últimas 24h por UA. Teste com o script do repositório do Espelha Grupos:
+
+```bash
+node scripts/diag-acesso-robos-ia.mjs --url https://www.cuponito.com.br/
+# aceitação: nenhum robô de busca/clique em 403 (um 403 para "Googlebot" falso é esperado)
+```
+
+**M7 — `og:image` estática** (`/og-default.png`, 1200×630) declarada em
+todas as páginas; posts usam a `cover_image` quando houver.
+
+**M8 — `/llms.txt`** curto (o que o Cuponito é, 63 lojas, categorias, lista
+dos posts com URL, e a relação com o Espelha Grupos, com o texto-padrão da
+seção 4.1). Efeito pequeno, custo zero.
+
+**M9 — Descoberta.** Cadastrar o domínio no **Bing Webmaster Tools** (é o
+índice que o ChatGPT consulta) e no Search Console; enviar o sitemap;
+implementar **IndexNow** (um `POST` na publicação de post — a Vercel tem
+exemplo pronto) e pedir a inspeção de URL das páginas novas e das que ganharem
+link. Sem M1+M2 antes, isso só acelera a indexação de um 404.
+
+**M10 — Os dois posts novos** entram pelo CMS (`blog_posts`) com
+`meta_title`/`meta_description` das seções 2 e 3, `cover_image` própria,
+`cta_config` apontando para `https://espelhagrupos.com.br/precos` (Post 1) e
+`https://espelhagrupos.com.br/` (Post 2), e o JSON-LD extra (ItemList/HowTo +
+FAQ) — se o CMS não tiver campo para schema extra, criar um (`schema_json`) e
+imprimi-lo no HTML do servidor.
+
+### 1.3 Aceitação final (rodar depois de tudo, na ordem)
+
+```bash
+H="https://www.cuponito.com.br"
+# 1. nenhuma URL do sitemap em 404
+curl -s $H/sitemap.xml | grep -o '<loc>[^<]*' | sed 's/<loc>//' | while read u; do
+  c=$(curl -s -o /dev/null -w "%{http_code}" "$u"); [ "$c" != "200" ] && echo "$c $u"; done
+# 2. conteúdo no HTML sem JavaScript, para o robô do ChatGPT
+curl -sA "Mozilla/5.0 (compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot)" \
+  $H/blog/melhores-bots-grupos-de-cupons-whatsapp-2026 | grep -cE "<h1|<article|application/ld\+json"
+# 3. URL antiga redireciona
+curl -s -o /dev/null -w "%{http_code}\n" https://cuponito.com.br/store/casas-bahia/
+# 4. robôs de IA passam pelo firewall
+node scripts/diag-acesso-robos-ia.mjs --url $H/
+```
+
+Esperado: (1) nenhuma linha; (2) 3; (3) 301; (4) sem `busca_bloqueada`.
 
 **Regras de publicação (valem para os dois posts):**
 
@@ -557,9 +671,11 @@ o Google, é link fora de contexto entre sites da mesma dona — o padrão de
 
 ## 5. Checklist de publicação (marcar na ordem)
 
-- [ ] `curl -sA "OAI-SearchBot/1.0" <url do post> | grep -c "<h1"` ≥ 1 (SSR/prerender no ar)
+- [ ] M1: as três URLs de exemplo da seção 1.2 respondem 200 (hoje 404)
+- [ ] M2: `curl -sA "OAI-SearchBot/1.0" <url do post> | grep -cE "<h1|<article|BlogPosting"` = 3 (SSR/SSG no ar)
 - [ ] `node scripts/diag-acesso-robos-ia.mjs --url https://www.cuponito.com.br/` sem `busca_bloqueada`
-- [ ] 301 de `/store/<loja>/` e `/stores-2/` para as URLs novas
+- [ ] M3: 301 de `/store/<loja>/` e `/stores-2/` para `/desconto/<slug>` ou `/lojas`
+- [ ] M4-M8: sitemap sem 404 e com `lastmod` real, robots.txt com os robôs de busca das IAs, firewall conferido, `og:image` estática, `/llms.txt`
 - [ ] Post 1 publicado com data visível, autor Flávia Vale, tabela, FAQ, schema (Article + ItemList + FAQPage), linha de transparência
 - [ ] Post 2 publicado com data, HowTo + FAQ, link para o Post 1 e para `/metodologia-uso-responsavel-whatsapp`
 - [ ] Cada post linkado de 3 páginas do Cuponito (Shopee, Amazon, Mercado Livre em `/lojas` + o post de cupom mais lido)
