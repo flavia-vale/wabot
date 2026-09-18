@@ -35,8 +35,8 @@ manhã para o Cuponito e para o site de matemática **não vale** — a consulta
 | **YouTube renomeado** (4.1 item 4) | ❌ pendente | `@botinhoafiliado` ainda "BOTinho - YouTube"; `@espelhagrupos` não existe |
 | Reclame Aqui (4.1 item 3) | ? | página protegida por challenge; não dá para ver de fora |
 | Bing WMT, fila de indexação, rodada de medição (4.1 itens 5-7) | ? | só dentro das ferramentas |
-| `/bot-afiliados-whatsapp` reescrita (seção 6 item 1) | ❌ pendente | título ainda "Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre"; 0 ocorrências de "melhor para" |
-| `sameAs` com Cuponito e `/quem-somos` citando o Cuponito (link nos dois sentidos) | ❌ pendente | `sameAs` = só WhatsApp + YouTube antigo; `/quem-somos` sem "Cuponito" |
+| `/bot-afiliados-whatsapp` reescrita (seção 6 item 1) | ✅ no `develop` (aguarda develop→main) | H1 com preço e teste, tabela de preço estática, "Melhor para / Não é ideal para", comparação com Pro Afiliados, Afilira e Achadinho Pro, 6 lojas em todo o texto, `dateModified` 2026-09-18. O `title` ficou: é exceção MEDIDA (8,09% de clique) e só muda com dado de Search Console |
+| Fundadora ligada ao Cuponito e `/quem-somos` citando o Cuponito (link nos dois sentidos) | ✅ no `develop` (aguarda develop→main) | `Organization.founder` → `Person #founder` (Flávia Vale) com `sameAs` para `cuponito.com.br/quem-somos#person` e `aulasdematematicabh.com.br/#flavia` — no `sameAs` da PESSOA, não da Organization (o Cuponito é outra empresa; a entidade comum é a pessoa); `/quem-somos` ganhou "Quem faz" com link normal para o Cuponito |
 
 ### Cuponito — a estrutura foi consertada; faltam os dois posts
 
@@ -48,11 +48,11 @@ manhã para o Cuponito e para o site de matemática **não vale** — a consulta
 | M3 301 das URLs antigas | ✅ | `/store/casas-bahia/` → `/desconto/cupom-desconto-casas-bahia` (3 saltos; um 301 direto seria melhor) |
 | M4 sitemap com `lastmod` real | ✅ | 12 datas distintas, de 04/2026 a 09/2026 |
 | M5 robots.txt | ✅ | OAI-SearchBot, Claude-SearchBot, Claude-User, Applebot, DuckAssistBot, meta-externalagent listados |
-| M6 firewall / robôs de treino | ⚠️ | busca e clique = 200; GPTBot/ClaudeBot = 403 (mesma decisão da Cloudflare do Espelha Grupos, agora na Vercel) |
+| M6 firewall / robôs de treino | ❌ **não feito** (reverificado na noite de 18/09) | busca e clique = 200; GPTBot, ClaudeBot, CCBot, Amazonbot, Bytespider = 403 na Vercel (Firewall → Bot Protection / regra de "AI crawlers"). Mesma decisão pendente na Cloudflare do Espelha Grupos |
 | M7 `og:image` | ✅ | `/og-default.png` 200; post usa a `cover_image` |
 | M8 `llms.txt` | ✅ | no ar, cita as 6 lojas e "administradores de grupos de cupons e afiliados" |
 | 4.1 "Quem somos" com o Espelha Grupos | ✅ | H2 "Cuponito e Espelha Grupos", link, `Person` Flávia Vale no schema |
-| **M10 os dois posts** | ❌ | `blog_posts` continua com os 8 posts de maio; os dois slugs dão 404 |
+| **M10 os dois posts** | ✅ (publicados na noite de 18/09) | `/blog/melhores-bots-grupos-de-cupons-whatsapp-2026` e `/blog/como-espelhar-mensagens-grupo-de-cupons-whatsapp` respondem 200 com HTML no servidor |
 | Bing WMT / IndexNow | ? | não mensurável de fora |
 
 ### Site de matemática — metade feita; o que falta é o que traz lead
