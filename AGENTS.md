@@ -5466,6 +5466,99 @@ normalmente no fallback. Testes: `test/mercadolivre-resolve.test.js` (bloco
 — read-only, classifica o formato de cada link de ML publicado e marca com ⚠ os
 suspeitos (`listing_fabricado`, `vitrine_social`, `cupom_generico`).
 
+## Oferta de PRODUTO publicada como VITRINE (+ banner de cupom) (RCA 2026-09-18)
+
+Cliente mandou print de duas ofertas de perfume, com nome e preço, saindo com o
+banner amarelo "CUPOM Mercado Livre" no lugar da foto. As duas publicaram **o
+mesmo link** — que não era de produto nenhum: era a vitrine cadastrada da
+própria cliente.
+
+**O banner era a ponta; a raiz é a troca do link.** Em 45 minutos, 30 ofertas
+saíram assim (~25 delas de produto: fone, perfume, panela, notebook, pneu,
+whey), em 5 contas. Quem clicava no perfume caía numa lista genérica.
+
+### A medição que fechou a causa (não repetir as hipóteses derrubadas)
+
+| Hipótese | Veredito |
+|---|---|
+| Muro anti-robô do ML no IP do servidor | **FALSA** — 4 links testados, 200, página completa, sem marcador |
+| O ML mudou o HTML e o extrator quebrou | **FALSA** — o extrator lê o card e monta a URL certa |
+| A etiqueta `?ref=` se perde no caminho reserva da resolução | **FALSA** — **0** casos em 773 |
+
+O placar real das 773 falhas de leitura: **242** eram `/lists` (sem produto,
+comportamento correto) e **531** eram páginas que **responderam 200 e vieram sem
+o card destacado**. Reprocessando 20 dos links que falharam em produção,
+**17 resolveram na primeira tentativa, em ~1s cada**.
+
+Ou seja: **o ML às vezes entrega a página sem o produto em destaque, e o robô
+tratava esse engasgo como resposta definitiva.**
+
+### A cadeia inteira, e os três consertos
+
+1. Leitura do card destacado falha por um instante
+   (`tryExtractFeaturedProductFromSocialShare`).
+2. `resolveToCleanProductUrl` devolve `null` — e `null` significava DUAS coisas
+   opostas: "a página não tem produto" e "não consegui ler a página".
+3. `convert()` cai no caminho de cupom; o ML recusa (`unsupported_url`, erro 111).
+4. `decideVitrineFallback` publica a **vitrine da cliente** no lugar do produto,
+   com `linkKind:'coupon'` + `warning:'ml_vitrine_fallback_used'`.
+5. Esse aviso de FALHA era lido como sinal de que a mensagem era de cupom, e
+   ligava o banner.
+
+**Não regredir:**
+
+- **Ler de novo antes de desistir.** `ML_SOCIAL_CARD_ATTEMPTS` (2) com
+  `ML_SOCIAL_CARD_RETRY_DELAY_MS` (600ms). A releitura só acontece quando a
+  página **respondeu** e respondeu rápido (`ML_SOCIAL_CARD_RETRY_MAX_ELAPSED_MS`,
+  3s): leitura que estourou já consumiu o orçamento da mensagem
+  (`MSG_QUEUE_TIMEOUT_MS`, 25s), e insistir ali derrubaria por timeout uma oferta
+  que hoje sai — pior que o defeito sendo consertado.
+- **"Não consegui ler" NUNCA vira "é vitrine".** `ML_SOCIAL_CARD_OUTCOME`
+  separa `PRODUTO` / `SEM_PRODUTO` / `LEITURA_FALHOU`, e `decideVitrineFallback`
+  descarta quando a leitura falhou. **Oferta não enviada é recuperável; oferta
+  enviada com o link errado não é** — já foi para o grupo. Escape hatch:
+  `ML_VITRINE_ON_READ_FAILURE=true` volta ao comportamento histórico.
+- **Vitrine LIDA e confirmada sem produto continua caindo na vitrine
+  cadastrada** — as features 004/007 não foram tocadas.
+- **O banner de cupom exige vitrine CONFIRMADA**
+  (`resolveCouponTextSignal`, em `converters/couponBrandCardPolicy.js`). A
+  blindagem tripla tem duas condições que caem sozinhas com link curto (a URL não
+  expõe MLB/ASIN → `linkKind:'coupon'` e `urlHasProductId:false`), então o sinal
+  de texto era a **única** trava real — e aceitar `ml_vitrine_fallback_used` nela
+  fazia **um fato só** (a conversão falhou) derrubar as três. Hoje o aviso de
+  vitrine só vale quando `isDirectVitrineShare(primary.url)` é true, isto é,
+  quando o link COMPARTILHADO já era uma página `/social/`. Atrás de um
+  encurtador pode haver produto de verdade — e havia.
+- **`COUPON_BRAND_CARD_ENABLED` estava ligado em produção** contra o que esta
+  documentação já mandava. Continua devendo ficar ausente até validação
+  explícita em staging.
+
+⚠️ **Armadilha de diagnóstico:** `sentAt` é gravado pelo Prisma no SQLite como
+**número** (ms). Consulta com `sentAt > datetime('now','-2 days')` compara número
+com texto e **nunca dá verdadeiro** — devolve zero linhas e parece ausência de
+dado. Use `sentAt > (strftime('%s','now','-2 days') * 1000)` e
+`datetime(sentAt/1000,'unixepoch','localtime')`.
+
+Comandos de diagnóstico (read-only, no diretório do ambiente):
+
+```bash
+LOG=/home/deploy/BOTinho-shared/logs/bot.log
+# placar da leitura do card destacado
+for m in "produto destacado extraído" "sem card destacado" "erro ao buscar HTML" "usando vitrine cadastrada"; do
+  printf "%-34s %s\n" "$m" "$(grep -c "$m" $LOG)"
+done
+# separa o defeito (com ref=) do comportamento correto (/lists)
+grep "sem card destacado" $LOG | sed -n 's/.*"landingUrl":"\([^"]*\)".*/\1/p' | awk '
+/\/lists/ {l++; next} /[?&]ref=/ {r++; next} {s++}
+END {print "  /lists:", l+0; print "  com ref= (defeito):", r+0; print "  sem ref=:", s+0}'
+```
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada disso
+vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
+as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/ml-oferta-de-produto-virou-vitrine.test.js`.
+
 ## Oferta que chega pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13)
 
 Cliente (`raelysouza98@gmail.com`) reportou "o robô não espelha". Não havia
@@ -5568,6 +5661,19 @@ falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
   converter e buscar a foto. O teto é da mensagem inteira, inclusive com dois
   links — não multiplicar por candidato. O log traz `attempts` e
   `recoveredByRetry`, para medir recuperação sem esconder a primeira falha.
+- **O orçamento da mensagem é DIVIDIDO entre os links, nunca gasto por ordem de
+  chegada** (RCA 2026-09-18). Sem divisão, o PRIMEIRO link embrulhado consumia o
+  orçamento inteiro e o segundo nem chegava a ser tentado
+  (`sem_tempo_no_orcamento`) — a oferta chegava ao grupo com dois **"Compre
+  aqui:" vazios**, que é exatamente o que o desembrulho por link (fix anterior)
+  existia para impedir. Cada link recebe agora "o que sobra dividido pelos links
+  que ainda faltam"; link rápido devolve a sobra ao seguinte (resolveu em 600ms
+  → o próximo volta ao teto cheio de 8s), então o caso comum não fica mais
+  lento. **E o orçamento da mensagem MISTA precisa caber ao menos UMA tentativa
+  cheia**: ele nasceu em 6s com o teto por link em 8s, ou seja, um site lento
+  não tinha como terminar nem a primeira tentativa. Hoje são 10s
+  (`CUSTOM_DOMAIN_MIXED_BUDGET_MS`) — não baixar sem medir. Guarda estrutural e
+  funcional em `test/custom-domain-link-resolver.test.js`.
 - **A falha NUNCA pode ser só `null`.** Foi assim que uma investigação inteira
   precisou de quatro rodadas de comando em staging: código no ar, rede boa (200
   em 568ms), página trazendo o link e cada peça acertando isoladamente — e a

@@ -77,6 +77,49 @@ test('mensagem mista usa orçamento MENOR que o da mensagem sem link de loja', (
   assert.ok(CUSTOM_DOMAIN_MIXED_BUDGET_MS < CUSTOM_DOMAIN_TOTAL_BUDGET_MS)
 })
 
+// RCA 2026-09-18: o orçamento misto nasceu em 6s, MENOR que o teto de uma
+// tentativa (8s). Um site lento consumia tudo e o segundo link embrulhado nem
+// era tentado — a oferta chegava ao grupo com "Compre aqui:" vazio.
+test('orçamento misto cabe ao menos UMA tentativa cheia', () => {
+  assert.ok(CUSTOM_DOMAIN_MIXED_BUDGET_MS >= CUSTOM_DOMAIN_FETCH_TIMEOUT_MS)
+})
+
+test('link lento NÃO pode zerar a chance do link seguinte', async () => {
+  const texto = [
+    '👉 Compre aqui: https://www.amazon.com.br/dp/B0AAA11111',
+    '👉 Compre aqui: https://dicasdeamigas.com.br/p/lento',
+    '🔗 https://dicasdeamigas.com.br/p/rapido',
+  ].join('\n')
+  const tentados = []
+  const fetchImpl = async (url, opts) => {
+    tentados.push(url)
+    if (!url.includes('/p/lento')) return respostaHtml(PAGINA_REAL)
+    // Só termina quando o próprio teto aborta. O timer existe para segurar o
+    // laço de eventos: o relógio de `AbortSignal.timeout` não o segura sozinho.
+    return new Promise((_resolve, reject) => {
+      const seguraOLaco = setTimeout(() => reject(new Error('nunca deveria chegar aqui')), 30_000)
+      opts?.signal?.addEventListener?.('abort', () => {
+        clearTimeout(seguraOLaco)
+        reject(new Error('TimeoutError'))
+      })
+    })
+  }
+
+  const { text, resolved, failures } = await resolveCustomDomainLinks(texto, {
+    fetchImpl,
+    useCache: false,
+    totalBudgetMs: 4000,
+  })
+
+  assert.equal(tentados.filter(u => u.includes('/p/rapido')).length, 1, 'o segundo link precisa ser tentado')
+  assert.equal(resolved.length, 1)
+  assert.equal(resolved[0].from, 'https://dicasdeamigas.com.br/p/rapido')
+  assert.ok(text.includes('https://www.amazon.com.br/dp/B088PNBKTR/'), 'o segundo link vira link de loja')
+  assert.ok(text.includes('https://www.amazon.com.br/dp/B0AAA11111'), 'o link de loja original fica intacto')
+  assert.equal(failures.length, 1)
+  assert.notEqual(failures[0].reason, 'sem_tempo_no_orcamento')
+})
+
 test('ignora convite de grupo, rede social e arquivo', () => {
   const texto = [
     'https://chat.whatsapp.com/ABC123',

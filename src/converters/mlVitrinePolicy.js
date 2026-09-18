@@ -16,7 +16,21 @@
 // centraliza a decisão para os dois motivos tratarem vitrine direta do mesmo
 // jeito, sem duplicar a lógica em cada call site.
 
-export function decideVitrineFallback({ failureType, isDirectVitrine, hasVitrine }) {
+export function decideVitrineFallback({ failureType, isDirectVitrine, hasVitrine, socialReadFailed = false }) {
+  // RCA 2026-09-18 (não regredir): trocar a oferta pela vitrine só é honesto
+  // quando SABEMOS que não há produto. Até aqui, `resolveToCleanProductUrl`
+  // devolvia o MESMO `null` para "a página não tem produto" (vitrine/lista) e
+  // para "não consegui ler a página" (rede/timeout) — e o segundo caso publicava
+  // a vitrine da cliente por cima de um produto que ninguém chegou a ver.
+  // Oferta não enviada é recuperável; oferta enviada com o link errado não é
+  // (já foi para o grupo, e o link some do produto que a pessoa quer).
+  //
+  // Escopo: isto cobre a falha de LEITURA. A página que responde sem o card
+  // destacado é tratada antes, relendo (ML_SOCIAL_CARD_ATTEMPTS) — foi lá que
+  // estavam as 531 falhas medidas em produção, 85% delas recuperáveis.
+  // Escape hatch no call site: ML_VITRINE_ON_READ_FAILURE=true.
+  if (socialReadFailed === true) return 'discard'
+
   // Atualização 2026-07-23 (pedido da cliente): quando o SSID venceu
   // (`expired`) e a afiliada TEM vitrine própria cadastrada, usar a vitrine
   // dela mesmo que o link original seja um ENCURTADOR (não `/social/` direto).

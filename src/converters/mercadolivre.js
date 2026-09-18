@@ -16,6 +16,39 @@ const resolveCache = new Map()
 const ML_AFFILIATE_FORBIDDEN_COOLDOWN_MS = Math.max(60_000, Number(process.env.ML_AFFILIATE_FORBIDDEN_COOLDOWN_MS) || 15 * 60_000)
 const ML_AFFILIATE_RATE_LIMIT_COOLDOWN_MS = Math.max(60_000, Number(process.env.ML_AFFILIATE_RATE_LIMIT_COOLDOWN_MS) || 5 * 60_000)
 const ML_CREATE_LINK_MAX_CANDIDATES = Math.max(1, Number(process.env.ML_CREATE_LINK_MAX_CANDIDATES) || 1)
+
+// Leitura do card destacado da share /social/<handle>?ref=<blob> (RCA 2026-09-18).
+//
+// Medição de produção: das 773 falhas de leitura, 531 eram páginas que
+// RESPONDERAM 200 e vieram SEM o card destacado — e 17 de 20 desses MESMOS
+// links resolveram na primeira tentativa poucos minutos depois, em ~1s cada.
+// Ou seja, o ML às vezes entrega a página sem o produto em destaque. Tratar
+// isso como resposta definitiva trocava a oferta de PRODUTO pela vitrine da
+// própria cliente (e, com o banner ligado, ainda punha "CUPOM" no lugar da
+// foto). Uma segunda leitura recupera a maioria.
+const ML_SOCIAL_CARD_ATTEMPTS = Math.max(1, Number(process.env.ML_SOCIAL_CARD_ATTEMPTS) || 2)
+const ML_SOCIAL_CARD_RETRY_DELAY_MS = Math.max(0, Number(process.env.ML_SOCIAL_CARD_RETRY_DELAY_MS) || 600)
+// Só repetimos quando a PRIMEIRA leitura foi rápida. A mensagem inteira tem
+// MSG_QUEUE_TIMEOUT_MS (25s) para ser preparada e a conversão é só uma etapa;
+// insistir em cima de uma leitura que já demorou arrisca derrubar a oferta por
+// timeout — pior do que o defeito que estamos consertando.
+const ML_SOCIAL_CARD_RETRY_MAX_ELAPSED_MS = Math.max(0, Number(process.env.ML_SOCIAL_CARD_RETRY_MAX_ELAPSED_MS) || 3_000)
+// Escape hatch do RCA 2026-09-18: volta ao comportamento histórico de usar a
+// vitrine cadastrada mesmo quando NÃO conseguimos ler a página (ver
+// decideVitrineFallback). Só o valor exatamente 'true' religa.
+const ML_VITRINE_ON_READ_FAILURE = process.env.ML_VITRINE_ON_READ_FAILURE === 'true'
+
+// Resultado da leitura do card destacado. Existe para separar duas coisas que
+// pedem ações OPOSTAS e que antes viravam o mesmo `null`:
+//   SEM_PRODUTO    -> a página foi lida e de fato não tem produto (vitrine/lista).
+//   LEITURA_FALHOU -> não conseguimos ler (rede/timeout). Não se sabe se havia
+//                     produto, então trocar pela vitrine é decidir no escuro.
+export const ML_SOCIAL_CARD_OUTCOME = {
+  PRODUTO: 'produto',
+  SEM_PRODUTO: 'sem_produto',
+  LEITURA_FALHOU: 'leitura_falhou',
+}
+
 const affiliateCooldowns = new Map()
 
 function getCachedResolve(url) {
@@ -584,27 +617,62 @@ const ML_BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537
 // canônica do produto ou null (vitrine/lista sem produto específico). É a
 // ÚNICA fonte usada para essas shares — NÃO cai na heurística frágil de
 // recommended_items[0] de tryExtractProductFromLanding.
-async function tryExtractFeaturedProductFromSocialShare(url) {
-  try {
-    const res = await axios.get(url, {
-      timeout: 8000,
-      headers: {
-        'User-Agent': ML_BROWSER_UA,
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-      },
-    })
-    const html = typeof res?.data === 'string' ? res.data : ''
-    const featured = extractFeaturedSocialProduct(html)
-    if (featured) {
-      logger.info({ landingUrl: url, featured }, 'ML social share: produto destacado extraído do ref resolvido pelo ML')
-      return featured
+async function tryExtractFeaturedProductFromSocialShare(url, { onOutcome = null } = {}) {
+  // `onOutcome` (opcional, best-effort): diz ao chamador QUAL dos três
+  // desfechos aconteceu (ML_SOCIAL_CARD_OUTCOME). Vai por callback para não
+  // mudar o contrato de retorno desta função, consumida em dois call sites.
+  const marcarDesfecho = desfecho => { try { onOutcome?.(desfecho) } catch { /* best-effort */ } }
+  let ultimaFalha = null
+
+  for (let tentativa = 1; tentativa <= ML_SOCIAL_CARD_ATTEMPTS; tentativa++) {
+    const iniciadaEm = Date.now()
+    let respondeu = false
+    try {
+      const res = await axios.get(url, {
+        timeout: 8000,
+        headers: {
+          'User-Agent': ML_BROWSER_UA,
+          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+      })
+      const html = typeof res?.data === 'string' ? res.data : ''
+      respondeu = !!html
+      const featured = respondeu ? extractFeaturedSocialProduct(html) : null
+      if (featured) {
+        logger.info({ landingUrl: url, featured, tentativa }, 'ML social share: produto destacado extraído do ref resolvido pelo ML')
+        marcarDesfecho(ML_SOCIAL_CARD_OUTCOME.PRODUTO)
+        return featured
+      }
+    } catch (err) {
+      ultimaFalha = err?.message || String(err)
     }
-    logger.info({ landingUrl: url }, 'ML social share: sem card destacado (vitrine/lista) — não fabrica produto')
-    return null
-  } catch (err) {
-    logger.warn({ landingUrl: url, err: err.message }, 'ML social share: erro ao buscar HTML')
-    return null
+
+    const decorridoMs = Date.now() - iniciadaEm
+    // Só relemos quando a página RESPONDEU e respondeu rápido — é exatamente o
+    // caso medido (200 sem card, ~1s). Leitura que estourou/demorou não repete:
+    // insistir ali gasta o orçamento da mensagem inteira.
+    const podeReler = tentativa < ML_SOCIAL_CARD_ATTEMPTS
+      && respondeu
+      && decorridoMs <= ML_SOCIAL_CARD_RETRY_MAX_ELAPSED_MS
+    if (!podeReler) {
+      if (respondeu) {
+        logger.info({ landingUrl: url, tentativas: tentativa }, 'ML social share: sem card destacado (vitrine/lista) — não fabrica produto')
+        marcarDesfecho(ML_SOCIAL_CARD_OUTCOME.SEM_PRODUTO)
+      } else {
+        logger.warn({ landingUrl: url, tentativas: tentativa, err: ultimaFalha }, 'ML social share: erro ao buscar HTML')
+        marcarDesfecho(ML_SOCIAL_CARD_OUTCOME.LEITURA_FALHOU)
+      }
+      return null
+    }
+
+    logger.info({ landingUrl: url, tentativa, decorridoMs }, 'ML social share: página veio sem card destacado — lendo de novo antes de desistir')
+    if (ML_SOCIAL_CARD_RETRY_DELAY_MS > 0) {
+      await new Promise(resolve => setTimeout(resolve, ML_SOCIAL_CARD_RETRY_DELAY_MS))
+    }
   }
+
+  marcarDesfecho(ML_SOCIAL_CARD_OUTCOME.SEM_PRODUTO)
+  return null
 }
 
 // Chama a API real de afiliados do ML para gerar um meli.la com a tag do usuário
@@ -1020,7 +1088,7 @@ function isMlAffiliateShortLink(rawUrl) {
   }
 }
 
-export async function resolveToCleanProductUrl(url) {
+export async function resolveToCleanProductUrl(url, { onOutcome = null } = {}) {
   try {
     if (!ML_HOST.test(new URL(url).hostname)) return null
 
@@ -1063,7 +1131,7 @@ export async function resolveToCleanProductUrl(url) {
           !/\/lists(?:\/|$)/i.test(u.pathname) &&
           /[?&]ref=/i.test(String(preCanonical))
         ) {
-          const featured = await tryExtractFeaturedProductFromSocialShare(preCanonical)
+          const featured = await tryExtractFeaturedProductFromSocialShare(preCanonical, { onOutcome })
           if (featured) return featured
         }
         // Sem card destacado extraível, landing de TERCEIRO (código /sec/ não
@@ -1142,7 +1210,7 @@ export function isDirectVitrineShare(originalUrl) {
 // Invariante de segurança preservada: o link de terceiro NUNCA é encaminhado —
 // ou sai NOSSO short link, ou retorna null (descarta). Nada de passthrough do
 // código alheio.
-async function convertMlCouponWithoutProduct(url, creds) {
+async function convertMlCouponWithoutProduct(url, creds, { socialReadFailed = false } = {}) {
   const { tag, ssid } = creds
   if (!shouldConvertCouponLinks() || !tag || !ssid) return null
 
@@ -1191,6 +1259,7 @@ async function convertMlCouponWithoutProduct(url, creds) {
       failureType: err.mlFailureType,
       isDirectVitrine,
       hasVitrine,
+      socialReadFailed,
     })
 
     if (outcome === 'use_vitrine') {
@@ -1242,7 +1311,13 @@ export async function convert(url, creds) {
     // Checar domínio ML antes de qualquer coisa
     if (!ML_HOST.test(new URL(url).hostname)) return null
 
-    const cleanTarget = await resolveToCleanProductUrl(url)
+    // RCA 2026-09-18: guardamos POR QUE não houve produto. "a página não tem
+    // produto" e "não consegui ler a página" pedem ações opostas lá embaixo
+    // (ver decideVitrineFallback) e antes viravam o mesmo `null`.
+    let socialCardOutcome = null
+    const cleanTarget = await resolveToCleanProductUrl(url, {
+      onOutcome: desfecho => { socialCardOutcome = desfecho },
+    })
     if (!cleanTarget) {
       // Sem produto: cupom/vitrine de terceiro. resolveOnly quer a URL do produto
       // (não faz sentido converter cupom aqui). Caso normal: tenta converter o
@@ -1255,7 +1330,9 @@ export async function convert(url, creds) {
       // substitui um link de produto. Não mover esta chamada para fora deste
       // `if`, nem tratar `cleanTarget` como opcional aqui.
       if (resolveOnly) return null
-      return await convertMlCouponWithoutProduct(url, creds)
+      return await convertMlCouponWithoutProduct(url, creds, {
+        socialReadFailed: socialCardOutcome === ML_SOCIAL_CARD_OUTCOME.LEITURA_FALHOU && !ML_VITRINE_ON_READ_FAILURE,
+      })
     }
     if (resolveOnly) return cleanTarget
     const target = cleanTarget

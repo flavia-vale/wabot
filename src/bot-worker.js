@@ -31,7 +31,8 @@ import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { shouldUseOriginPhotoFallback } from './core/previewImageFallbackPolicy.js'
 import { upscaleCardPhotoIfTiny } from './core/cardPhoto.js'
 import { resolveLinkKind } from './converters/linkKind.js'
-import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
+import { shouldUseCouponBrandCard, resolveCouponTextSignal } from './converters/couponBrandCardPolicy.js'
+import { isDirectVitrineShare } from './converters/mercadolivre.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { appendRelayFooter } from './core/relayFooter.js'
@@ -4645,9 +4646,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // distingue "cupom genérico → link resolve p/ produto aleatório"
             // (skip=true → banner é o certo) de "produto + cupom" (titleOverlap
             // 'match' → skip=false → foto do produto). Assim os dois caminhos de
-            // imagem (preview e não-preview) concordam sobre produto-vs-cupom. O
-            // sinal de vitrine ML (warning) segue como gatilho independente.
-            const couponTextSignal = couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used'
+            // imagem (preview e não-preview) concordam sobre produto-vs-cupom.
+            //
+            // O sinal de vitrine ML (warning) NÃO é mais gatilho independente
+            // (RCA 2026-09-18): ele indica FALHA DE CONVERSÃO, não cupom, e
+            // sozinho derrubava as três blindagens de uma vez. Hoje só vale com
+            // vitrine confirmada — ver resolveCouponTextSignal.
+            const couponTextSignal = resolveCouponTextSignal({
+              couponSkipActiveFetch,
+              warning: primary?.warning,
+              // `primary.url` é o link ORIGINAL da mensagem (o convertido é
+              // `primary.converted`) — a mesma entrada de isDirectVitrineShare
+              // dentro do converter, para as duas pontas não discordarem.
+              vitrineConfirmed: isDirectVitrineShare(primary?.url),
+            })
             let fonteDaFoto = null
             const linkPreview = await buildManualLinkPreview({
               onFonteDaFoto: fonte => { fonteDaFoto = fonte },
@@ -4788,7 +4800,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
               destJid,
-              couponTextSignal: couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used',
+              couponTextSignal: resolveCouponTextSignal({
+                couponSkipActiveFetch,
+                warning: primary?.warning,
+                vitrineConfirmed: isDirectVitrineShare(primary?.url),
+              }),
               fetchOriginPhoto: getOriginalPhotoOnce,
               // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
               // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
