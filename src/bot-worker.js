@@ -29,6 +29,7 @@ import { buildInlineThumbnail } from './core/inlineThumbnail.js'
 import { composePreviewCardImage } from './core/previewCardCanvas.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { shouldUseOriginPhotoFallback } from './core/previewImageFallbackPolicy.js'
+import { upscaleCardPhotoIfTiny } from './core/cardPhoto.js'
 import { resolveLinkKind } from './converters/linkKind.js'
 import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
@@ -2059,6 +2060,29 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     }
   }
 
+  // FOTO PEQUENA VIRANDO SELO NO CARD (RCA 2026-09-18).
+  //
+  // `prepareWAMessageMedia` grava no proto as dimensões REAIS do buffer que
+  // sobe, e o WhatsApp desenha o card nesse tamanho — foto de poucas centenas
+  // de pixels sai como um quadradinho no centro, cercada por uma ampliação
+  // borrada dela mesma (print da cliente). Acontece sobretudo no plano B da
+  // foto de origem, que costuma ser a miniatura embutida do card da origem
+  // (medido: 5.539 bytes). Ver `core/cardPhotoUpscalePolicy.js`.
+  //
+  // Fica FORA do banner de cupom de propósito: ele já nasce em 720x720, com
+  // tamanho escolhido, e não é foto de produto.
+  if (hqSourceBuffer && !useCouponBrandCard) {
+    const { buffer: ampliada, upscaled } = await upscaleCardPhotoIfTiny(hqSourceBuffer)
+    if (upscaled) {
+      hqSourceBuffer = ampliada
+      logger.info({ platform: primary?.platform, sourceUrl, de: upscaled.from, para: upscaled.to }, 'Card de preview: foto pequena ampliada para o card não sair como selo')
+    }
+  }
+
+  // Roda ANTES da marca d'água de propósito: `renderDestinationWatermark`
+  // DESISTE de marcar foto pequena demais (devolve `watermarkApplied:false`),
+  // então ampliar primeiro faz a marca ser desenhada na resolução final e
+  // recupera casos em que ela simplesmente não saía.
   // MARCA D'ÁGUA NO CARD DE PREVIEW (modo `preview_watermark`).
   //
   // O card não é um caminho separado de imagem: ele carrega os MESMOS bytes que
