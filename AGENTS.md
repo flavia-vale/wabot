@@ -4740,6 +4740,81 @@ TODAS as sessões — anunciar antes). Ver "código novo não carregado pelos bo
 Teste: `test/magalu-imagem-oferta.test.js` (muro reproduzido por servidor
 local, sem tocar a loja).
 
+## Foto do card saindo como SELO no meio de um fundo borrado (RCA 2026-09-18)
+
+Cliente mandou print: card de tênis (Magalu, `magazinevoce.com.br`) com a foto
+num quadradinho no centro, cercada por uma ampliação borrada dela mesma.
+
+**Medido no banco da conta, não deduzido:**
+
+| quando | deliveryKind | originImageBytes |
+|---|---|---:|
+| 21:13 | `card_origem` | **5.539** |
+| 20:56 | `texto` | 0 |
+
+Ou seja: a foto veio do **plano B da mensagem de origem** (a loja devolveu 403,
+`ops_magalu_bot_wall`), e essa foto é a **miniatura embutida do card da
+origem** — poucas centenas de pixels.
+
+**Causa:** `prepareWAMessageMedia` lê as dimensões REAIS do buffer que sobe e
+grava `thumbnailWidth`/`thumbnailHeight` no proto (Utils/messages.js). O
+WhatsApp desenha o card no tamanho declarado e preenche o resto com borrão.
+`normalizeImageForWhatsApp` redimensiona com `withoutEnlargement: true` — **de
+propósito** —, então a foto pequena chega pequena ao upload.
+
+⚠️ **Não é problema de Magalu.** O mesmo `bot.log` mostra o plano B agindo em
+Mercado Livre e Shopee (`Card de preview: foto da loja falhou, usando a foto da
+mensagem de origem`). **Toda** oferta que cai no plano B saía assim.
+
+| Peça | Onde |
+|---|---|
+| Quando ampliar (PURO, sem imagem) | `src/core/cardPhotoUpscalePolicy.js` |
+| A ampliação (ponto ÚNICO) | `src/core/cardPhoto.js` (`upscaleCardPhotoIfTiny`) |
+| Gancho | `buildManualLinkPreview` em `src/bot-worker.js` |
+
+**Por que ampliar é certo AQUI e errado no envio de foto:** a decisão de
+2026-08-26 é que miniatura minúscula ampliada **em tela cheia** vira borrão
+ilegível — e ela continua valendo (`withoutEnlargement: true` fica onde está).
+Mas o mesmo RCA registra que **"miniatura pequena DENTRO de um card é
+legível"**. É este caso: a alternativa não é uma foto melhor, é o selo do
+print. Teste falha se a ampliação vazar para fora do card.
+
+**Não regredir:**
+
+- **A ampliação roda ANTES da marca d'água.** `renderDestinationWatermark`
+  DESISTE de marcar foto pequena demais (`watermarkApplied:false` em silêncio),
+  então ampliar antes faz a marca ser desenhada na resolução final e recupera
+  casos em que ela simplesmente não saía. Teste trava a ordem.
+- **E antes do upload**, que é quem grava as dimensões no proto. Depois dele
+  não serve para nada.
+- **Fora do banner de cupom**: ele já nasce em 720x720, com tamanho escolhido,
+  e não é foto de produto.
+- **Fail-safe é NÃO ampliar.** Sem dimensão confiável, bytes ilegíveis ou
+  qualquer falha → devolve o buffer ORIGINAL. Card com selo é ruim; card sem
+  foto é pior.
+- **Foto que já preenche o card volta byte a byte igual** — nenhum reencode à
+  toa.
+- **A proporção é preservada** (`fit: 'inside'`): a foto nunca sai esticada.
+- **O piso é `IMAGE_HIRES_MIN_DIMENSION_PX` (800)**, que já era a definição da
+  casa de "resolução suficiente para o card grande do WhatsApp" — não é número
+  por analogia. Foi exatamente por analogia que o piso de bytes de 2026-08-26
+  nasceu em 3000 e teve de cair para 800 no mesmo dia.
+- `PREVIEW_CARD_MIN_PX=0` desliga e volta ao comportamento do print; valor
+  inválido cai no padrão (`.env` mal preenchido nunca muda o formato da oferta
+  em silêncio); fora da faixa é grampeado em [200, 1600].
+
+**Ampliar não inventa detalhe** — a foto fica borrada. O ganho é o card ocupar
+a largura toda em vez de virar selo, e num card a perda de nitidez é muito
+menor que em tela cheia. Se a dona do produto preferir o selo nítido,
+`PREVIEW_CARD_MIN_PX=0` reverte sem redeploy.
+
+**Custo:** um `sharp` a mais **só** quando a foto está abaixo do piso, uma vez
+por destino. Nenhum processo novo, nenhuma env obrigatória, **zero impacto de
+RAM**.
+
+Teste: `test/card-foto-pequena-selo.test.js` (renderiza imagem de verdade e
+mede os pixels, em vez de confiar em leitura de código).
+
 ## "As imagens só aparecem se clicar" (RCA 2026-09-03 — não regredir)
 
 Cliente (`samaraoliveiraasam@gmail.com`) mandou dois prints: um card de Shopee
