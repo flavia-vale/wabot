@@ -1688,3 +1688,75 @@ aí a medição vale. Não precisa esperar nada acontecer; precisa só de um dia
 deploy de worker.
 
 O interruptor segue pronto, desligado, em produção desde 17:19 UTC.
+
+## 19. Janela 1 aplicada: `MALLOC_ARENA_MAX=2` em produção (2026-09-18, 23:50)
+
+**Aplicado sem merge** — o interruptor já estava em `main` desde 17:19 UTC.
+Uma linha no `.env` e `pm2 restart bot-supervisor`.
+
+### 19.1 Aplicou — confirmado por inspeção, não por PSS
+
+```text
+WA_WORKER_MALLOC_ARENA_MAX=2      <- nossa variavel, do .env
+MALLOC_ARENA_MAX=2                <- traduzida por resolveWorkerSpawnEnv
+```
+
+E a prova que não depende de interpretação: **a frota foi de 29,4 para 1,0 arena
+por robô.** Aos 11 minutos de vida — quando um robô sem a variável já estaria em
+~29 (medido hoje às 17:28, com 7 minutos).
+
+| | arenas por robô |
+|---|---:|
+| sem a variável | 29,2 – 29,4 |
+| **com a variável** | **1,0** |
+
+### 19.2 Sinal inicial: modesto, e é preciso dizer isso
+
+⚠️ **A comparação direta `antes` × `agora` NÃO vale**: o "antes" é frota de 60
+minutos e o "agora" de 11. Frota nova é sempre mais leve. Os 9.145 → 6.189 MiB
+**não são economia.**
+
+O que dá para comparar é contra a leitura de hoje às 17:28, que era frota de
+**7 minutos sem a variável** — idade parecida, e ligeiramente a favor dela (o
+"com variável" é 4 minutos mais velho, logo deveria estar mais pesado):
+
+| por robô (MiB) | PSS | arena | anon | heap | arena+heap | arenas |
+|---|---:|---:|---:|---:|---:|---:|
+| 17:28 **sem** variável (+7 min) | 146,4 | 71,6 | 57,0 | 14,1 | 85,7 | 29,2 |
+| 00:00 **com** variável (+11 min) | **134,5** | **32,3** | 57,2 | **41,4** | **73,7** | **1,0** |
+| | **−8,1%** | −55% | ≈ | **+194%** | **−14,0%** | |
+
+**A memória mudou de balde, e é exatamente o mecanismo esperado.** O que estava
+espalhado em 29 arenas passou a se concentrar na arena principal (`heap`, que
+subiu 194%) mais duas. A arena secundária caiu 55%; a soma `arena + heap` caiu
+14%; o PSS total caiu 8,1%.
+
+**Se os 8,1% se sustentarem na frota saturada** (194,6 MiB/robô), isso é ~16 MiB
+por robô, **~0,7 GB na frota**.
+
+⚠️ **0,7 GB não é o prêmio de 3,5 GB que a §2-A.1 estimava como teto teórico.**
+Aquele número era "se a fragmentação fosse a zero", e nunca foi previsão. O
+resultado real, se confirmar, é um décimo disso — útil, mas não transformador.
+
+⚠️ **E ainda não está confirmado.** Restam dois confundidores: as idades não são
+idênticas (7 × 11 min) e o tráfego das 17:28 é maior que o da meia-noite. Os
+dois puxam em direções opostas, o que ajuda, mas não substitui a medição limpa.
+
+### 19.3 O veredito sai às 23:49 de hoje
+
+Frota saturada, mesmo horário do `antes`, mesma variável ligada:
+
+```bash
+bash /tmp/medir.sh
+```
+
+Comparar com `194,6 MiB/robô` e `111,8 MiB/robô em arena`. Se ficar perto de
+179 MiB/robô, os 8,1% se confirmam. Se voltar aos 194, não houve ganho.
+
+Medir também algumas vezes ao longo do dia, para ter a curva.
+
+**Rollback**, se necessário:
+```bash
+sed -i '/^WA_WORKER_MALLOC_ARENA_MAX=/d' ~/wabot/.env
+pm2 restart bot-supervisor --update-env && pm2 save
+```
