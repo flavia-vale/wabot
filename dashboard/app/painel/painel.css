@@ -1604,3 +1604,135 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   .pv-actions { gap: 10px; }
   .pv-action { padding: 18px 10px; font-size: 13.5px; }
 }
+
+/* ── Testar conversão (2026-09-19) ───────────────────────────────────────
+ * Duas colunas: o link a testar e o veredito. Prefixo `tc-`; reusa os tokens
+ * de `.pv-page` (inclusive o roxo do PRO, que não é usado aqui) e as cores de
+ * globals.css. O âmbar do veredito "ressalva" é o único tom novo: verde e
+ * vermelho já existem, e a ressalva não é nenhum dos dois — o link SAIU, então
+ * vermelho seria alarme falso, e tem o que observar, então verde esconderia.
+ */
+.tc-page { --tc-warn: #B7791F; --tc-warn-soft: #FDF1DC; max-width: 1100px; }
+.tc-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+
+.tc-form { display: flex; flex-direction: column; gap: 12px; }
+.tc-textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--pnl-radius-sm);
+  outline: none;
+  resize: vertical;
+  overflow-wrap: anywhere;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tc-textarea:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 35%, transparent);
+}
+.tc-textarea::placeholder { color: var(--ink-faint); }
+
+.tc-form-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.tc-detect { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+.tc-detect.is-vazio { font-weight: 500; color: var(--ink-faint); }
+.tc-count { font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+.tc-store { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: -0.01em; flex-shrink: 0; }
+
+.tc-aviso {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 10%, var(--surface));
+  border-radius: var(--pnl-radius-sm);
+}
+
+.tc-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tc-acoes .pnl-btn { gap: 7px; }
+
+.tc-resultado { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.tc-vazio { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 40px 24px; }
+.tc-vazio .pv-stat-ico { margin-bottom: 12px; }
+
+/* Tarja do veredito */
+.tc-banner { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; border-radius: var(--pnl-radius); border: 1px solid transparent; }
+.tc-banner.is-ok { background: color-mix(in oklab, var(--accent) 22%, var(--surface)); }
+.tc-banner.is-ressalva { background: var(--tc-warn-soft); }
+.tc-banner.is-erro { background: color-mix(in oklab, var(--danger) 12%, var(--surface)); }
+.tc-banner.is-neutro { background: var(--bg-soft); }
+.tc-banner-ico {
+  width: 38px; height: 38px; flex-shrink: 0;
+  border-radius: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface);
+}
+.tc-banner.is-ok .tc-banner-ico { color: var(--accent-strong); }
+.tc-banner.is-ressalva .tc-banner-ico { color: var(--tc-warn); }
+.tc-banner.is-erro .tc-banner-ico { color: var(--danger); }
+.tc-banner.is-neutro .tc-banner-ico { color: var(--ink-soft); }
+.tc-banner-corpo { min-width: 0; flex: 1; }
+.tc-banner-titulo { font-size: 14.5px; font-weight: 700; line-height: 1.35; color: var(--ink); }
+.tc-banner-texto { margin: 5px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-soft); }
+.tc-banner-btn { margin-top: 12px; gap: 7px; background: var(--surface); }
+
+/* Cartão de comparação dos endereços */
+.tc-detalhe { padding: 0; overflow: hidden; }
+.tc-detalhe.is-ok { border-color: color-mix(in oklab, var(--accent-strong) 45%, var(--line)); }
+.tc-detalhe.is-erro { border-color: color-mix(in oklab, var(--danger) 35%, var(--line)); }
+.tc-detalhe-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+/* `.pnl-card` tem `overflow-wrap: anywhere` (necessário para os endereços
+ * longos), e isso partia o nome da loja no meio da palavra no celular
+ * ("Mercad o Livre"). O nome volta a quebrar só entre palavras. */
+.tc-detalhe-loja { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; min-width: 0; overflow-wrap: normal; }
+.tc-detalhe-corpo { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+
+.tc-pill {
+  font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  white-space: nowrap; flex-shrink: 0;
+  background: var(--bg-soft); color: var(--ink-soft);
+}
+.tc-pill.is-ok { background: color-mix(in oklab, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }
+.tc-pill.is-ressalva { background: var(--tc-warn-soft); color: var(--tc-warn); }
+.tc-pill.is-erro { background: color-mix(in oklab, var(--danger) 15%, var(--surface)); color: var(--danger); }
+
+.tc-rotulo { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px; }
+/* O rótulo do link de afiliado acompanha o veredito: verde só quando o
+ * veredito é verde. Verde dentro de uma tarja âmbar diria "tudo certo" no meio
+ * do aviso de que tem algo a conferir. */
+.tc-rotulo.is-destaque { color: var(--accent-strong); }
+.tc-detalhe.is-ressalva .tc-rotulo.is-destaque { color: var(--tc-warn); }
+.tc-detalhe.is-neutro .tc-rotulo.is-destaque,
+.tc-detalhe.is-erro .tc-rotulo.is-destaque { color: var(--ink-soft); }
+.tc-detalhe.is-ressalva .tc-url.is-destaque { color: var(--ink); }
+.tc-detalhe.is-neutro .tc-url.is-destaque,
+.tc-detalhe.is-erro .tc-url.is-destaque { color: var(--ink-soft); }
+.tc-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.tc-url.is-destaque { color: var(--accent-strong); font-weight: 500; }
+.tc-url.is-vazio { font-family: inherit; font-style: italic; color: var(--ink-faint); }
+
+@media (max-width: 900px) {
+  .tc-cols { grid-template-columns: 1fr; gap: 16px; }
+}
+@media (max-width: 480px) {
+  .tc-form-foot { align-items: flex-start; }
+  .tc-acoes .pnl-btn { flex: 1 1 auto; justify-content: center; }
+  .tc-banner { padding: 14px; gap: 12px; }
+}

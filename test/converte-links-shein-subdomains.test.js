@@ -2,35 +2,27 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-// T071 (review, 3ª rodada): SUPPORTED_LINK_RE do painel "Converte links"
-// ganhou shein.com|onelink.shein.com|shein.top, mas o prefixo do padrão era
-// fixo (`(?:www\.)?`) — br.shein.com e m.shein.com (hosts que o próprio
-// conversor emite, ver data-model.md §3) não batiam, e o painel mostrava
-// "0 links detectados" para um link que o espelhamento converte normalmente.
-//
-// A página é um componente 'use client' com JSX, então não dá para importar
-// direto no runner db-free do Node — extraímos o literal do regex do código
-// fonte (mesmo padrão de outros testes estruturais do repo) e avaliamos.
+import { detectLinks } from '../src/detector.js'
 
-const source = readFileSync(
+// T071 (review, 3ª rodada): o painel de teste de conversão mostrava
+// "0 links detectados" para `br.shein.com`/`m.shein.com` — hosts que o próprio
+// conversor emite (data-model.md §3) — porque a tela tinha uma CÓPIA da lista
+// de endereços, com prefixo fixo `(?:www\.)?`, e essa cópia divergiu do robô.
+//
+// Desde 2026-09-19 a tela não tem cópia nenhuma: ela usa `detectLinks`, o mesmo
+// detector do espelhamento. A regra deste teste é a mesma de antes — o painel
+// reconhece os subdomínios da SHEIN, as outras lojas, e recusa domínio sósia —
+// só que agora exercitando o código que de fato roda na tela, em vez de um
+// literal de regex extraído do arquivo.
+
+const page = readFileSync(
   new URL('../dashboard/app/painel/converte-links/page.js', import.meta.url),
   'utf8',
 )
 
-function extractSupportedLinkRe() {
-  const match = source.match(/const SUPPORTED_LINK_RE = (\/.*\/[a-z]*)/)
-  assert.ok(match, 'SUPPORTED_LINK_RE não encontrado em converte-links/page.js')
-  // eslint-disable-next-line no-new-func
-  return new Function(`return ${match[1]}`)()
-}
+const contar = (texto) => detectLinks(texto).length
 
-function countSupportedLinks(text) {
-  const re = extractSupportedLinkRe()
-  const matches = text.match(re)
-  return matches?.length ?? 0
-}
-
-test('T071: painel "Converte links" conta subdomínios da SHEIN como 1 link detectado', () => {
+test('T071: painel de teste de conversão conta subdomínios da SHEIN como 1 link detectado', () => {
   for (const url of [
     'https://br.shein.com/vestido-floral-p-485735309.html',
     'https://m.shein.com/br/ark/default?goods_id=485735309',
@@ -38,21 +30,29 @@ test('T071: painel "Converte links" conta subdomínios da SHEIN como 1 link dete
     'https://shein.top/14/abc',
     'https://shein.com/algo',
   ]) {
-    assert.equal(countSupportedLinks(url), 1, `esperava 1 link detectado para ${url}`)
+    assert.equal(contar(url), 1, `esperava 1 link detectado para ${url}`)
   }
 })
 
-test('T071: painel "Converte links" continua detectando as outras quatro lojas', () => {
+test('T071: painel de teste de conversão continua detectando as outras quatro lojas', () => {
   for (const url of [
     'https://www.mercadolivre.com.br/p/MLB123',
     'https://amzn.to/abc123',
     'https://shope.ee/abc',
     'https://www.magazineluiza.com.br/produto/p/123',
   ]) {
-    assert.equal(countSupportedLinks(url), 1, `esperava 1 link detectado para ${url}`)
+    assert.equal(contar(url), 1, `esperava 1 link detectado para ${url}`)
   }
 })
 
-test('T071: painel "Converte links" não reconhece domínio sósia da SHEIN', () => {
-  assert.equal(countSupportedLinks('https://shein.com.evil.net/a'), 0)
+test('T071: painel de teste de conversão não reconhece domínio sósia da SHEIN', () => {
+  assert.equal(contar('https://shein.com.evil.net/a'), 0)
+})
+
+test('T071: a tela usa o detector do robô, sem manter cópia da lista de endereços', () => {
+  // É a cópia que causou o defeito original. Guarda estrutural para ela não
+  // voltar por conveniência.
+  assert.ok(page.includes('detectLinks'), 'a tela precisa usar detectLinks')
+  assert.doesNotMatch(page, /SUPPORTED_LINK_RE/, 'cópia da lista de endereços voltou para a tela')
+  assert.doesNotMatch(page, /shein\\.com\|/, 'regex de lojas duplicada voltou para a tela')
 })
