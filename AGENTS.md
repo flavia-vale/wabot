@@ -6783,6 +6783,51 @@ Destinos do painel, ANTES de salvar: quem deixa de receber ao sair do padrão
 - Nenhuma rota ou contrato de API novo: a tela usa exatamente as chamadas que as
   duas telas já faziam.
 
+### O celular: o que foi MEDIDO em 375px (2026-09-19 — não regredir)
+
+A tela subiu com "frases quebradas" e toque ruim no celular. Os números são de
+renderização real em 375px, não de leitura de código:
+
+| Onde | Antes | Depois |
+|---|---:|---:|
+| largura de texto do card (nome, "envia para", lojas) | **108px** | **215px** |
+| altura da seção de destinos na gaveta | 257px para 398px de conteúdo (**cortava no meio de um nome**) | 476px, nada cortado |
+| rótulo do "+ Adicionar" da coluna | quebrava ("Adicio/nar") | uma linha |
+| papéis do modal "Adicionar" | 429px de conteúdo em 315px — **"Destino" nascia fora da tela** | duas linhas inteiras |
+
+Os 108px saíam da soma: avatar 38 + pílula de contagem + engrenagem 36 + três
+paddings comiam quase tudo que havia. **Não regredir:**
+
+- **No celular a ENGRENAGEM e a PÍLULA saem, o card não.** O card inteiro já é
+  o alvo de toque (`aria-label="Configurar <nome>"`); dois alvos lado a lado em
+  36px só produziam toque errado, e a pílula "3→" repete o que a linha de fluxo
+  logo abaixo diz por extenso. A seta que entra no lugar vive **dentro** do
+  botão do card, `aria-hidden`, para não virar um segundo alvo.
+- **`overflow-wrap: break-word`, nunca `anywhere`, no nome do grupo.**
+  `anywhere` parte a palavra assim que ela não cabe na SOBRA da linha — era o
+  que produzia "Cabeleireir/a Profissional". E o nome precisa de `font-size`
+  próprio: sem ele herdava 16px, maior que o card antigo (14.5px), gastando a
+  largura que já era pouca.
+- **O corpo da gaveta é FLEX em coluna, nunca grid.** `.cfg-section` tem
+  `overflow: hidden`, então o tamanho mínimo automático dela vira zero e num
+  grid de altura definida a linha encolhe — foi assim que a lista de destinos
+  saiu cortada. Cada filho leva `flex: 0 0 auto`: o que não cabe rola.
+- **"Excluir grupo" não fica ao lado de "Salvar" no celular.** O rodapé empilha
+  com `column-reverse`, que inverte só a pintura — a ordem do DOM (e do leitor
+  de tela) continua Excluir → Salvar.
+- **Uma rolagem só.** A lista do modal "Adicionar" perde o teto de 240px no
+  celular: duas rolagens encaixadas fazem a de dentro roubar o gesto da de fora.
+  No computador o teto continua valendo.
+- **`<div>` não vale dentro de `<button>`.** A linha de fluxo do card é `<span>`
+  com `display:block` pelo CSS.
+
+⚠️ **Medir, não deduzir.** A tela toda cabe num arquivo HTML com o `painel.css`
+de verdade, e o Chromium do ambiente tira a foto em 375px
+(`headless_shell --window-size=375,1500 --force-device-scale-factor=2
+--screenshot`). Foi isso que separou defeito real de artefato do teste — o
+recuo de 40px do `<ul>` parecia bug e era só o reset do Tailwind faltando no
+harness.
+
 Testes: `test/painel-espelhamento-cartoes.test.js`,
 `test/painel-espelhamento-assistente.test.js`,
 `test/painel-destinos-editor.test.js`, `test/painel-marca-dagua-salvar.test.js`,
