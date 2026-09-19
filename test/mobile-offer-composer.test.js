@@ -286,9 +286,12 @@ test('variáveis de template incluem dados da oferta e automação', () => {
   const tokens = OFFER_TEMPLATE_VARIABLES.map((variable) => variable.token)
   assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'offer'))
   assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'automation'))
-  for (const token of ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}', '{linhaDeCupom}', '{preçoDoTexto}', '{cupom}', '{{gancho}}', '{{cta}}', '{{convitegrupo}}', '{{grupoLink}}', '{{cupomLink}}']) {
+  for (const token of ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}', '{preçoDoTexto}', '{cupom}', '{{gancho}}', '{{cta}}', '{{convitegrupo}}', '{{grupoLink}}', '{{cupomLink}}']) {
     assert.ok(tokens.includes(token), `variável ausente: ${token}`)
   }
+  // specs/017-client-coupon-catalog (US4, FR-019): {linhaDeCupom} saiu do
+  // produto de vez — não pode voltar à lista de variáveis disponíveis.
+  assert.ok(!tokens.includes('{linhaDeCupom}'), '{linhaDeCupom} precisa ter sido removida de OFFER_TEMPLATE_VARIABLE_GROUPS')
 })
 
 // specs/017-client-coupon-catalog (T022, FR-016): {cupom} aparece na lista com
