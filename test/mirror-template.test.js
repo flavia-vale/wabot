@@ -126,7 +126,12 @@ test('applyMirrorTemplate renderiza com título/preço vindos do scraper, não d
   assert.doesNotMatch(text, /Caption upstream errado|R\$ 1,00/)
 })
 
-test('applyMirrorTemplate injeta a linha de cupom da mensagem de origem quando o template pede', async () => {
+// specs/017-client-coupon-catalog (US4): {linhaDeCupom} foi RETIRADA como
+// variável (canonicalizeTemplateBody a remove antes mesmo de
+// resolveMirrorTemplateBody devolver o body) — um template salvo com ela
+// (de antes da mudança) renderiza como se o token nunca tivesse existido,
+// sem lacuna nem placeholder sobrando.
+test('applyMirrorTemplate: template salvo com {linhaDeCupom} (retirada) renderiza sem o token e sem lacuna', async () => {
   const { text } = await applyMirrorTemplate([
     'Oferta upstream',
     '🎟️ CUPOM: GARIMPEI ou ECONOMIAML',
@@ -140,10 +145,15 @@ test('applyMirrorTemplate injeta a linha de cupom da mensagem de origem quando o
     fetchInfo: async () => ({ title: 'Produto real', oldPrice: '', newPrice: 'R$ 55,23' }),
   })
 
-  assert.equal(text, 'Produto real\n🎟️ CUPOM: GARIMPEI ou ECONOMIAML\nhttps://loja.test/produto?tag=afiliado')
+  assert.equal(text, 'Produto real\nhttps://loja.test/produto?tag=afiliado')
+  assert.doesNotMatch(text, /GARIMPEI|linhaDeCupom/)
 })
 
-test('applyMirrorTemplate injeta preçoDoTexto junto da linha de cupom quando o template pede', async () => {
+// specs/017-client-coupon-catalog (US4, Trava #1): {linhaDeCupom} some do
+// template (canonicalizeTemplateBody), mas {preçoDoTexto} continua achando o
+// bloco De/Por certo — extractCouponLine segue funcionando por dentro como
+// delimitador, mesmo que a linha de cupom em si nunca chegue à mensagem final.
+test('applyMirrorTemplate: {preçoDoTexto} continua certo mesmo com {linhaDeCupom} (retirada) no template salvo', async () => {
   const { text } = await applyMirrorTemplate([
     'Oferta upstream',
     '❌De:223,00',
@@ -164,13 +174,16 @@ test('applyMirrorTemplate injeta preçoDoTexto junto da linha de cupom quando o 
     'Produto real',
     '❌De:223,00',
     '✅Por: 180,70 c/cupom 🆘',
-    '🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:',
     'https://loja.test/produto?tag=afiliado',
   ].join('\n'))
   assert.doesNotMatch(text, /R\$ 199,00/)
+  assert.doesNotMatch(text, /CLUBE DO BEBÊ|linhaDeCupom/)
 })
 
-test('applyMirrorTemplate usa preço da loja em preçoDoTexto quando a copy não traz preço editorial', async () => {
+// specs/017-client-coupon-catalog (US4): {linhaDeCupom} foi RETIRADA — um
+// template salvo com ela (de antes da mudança) renderiza sem a linha de cupom
+// e sem lacuna; {preçoDoTexto} continua funcionando normalmente.
+test('applyMirrorTemplate usa preço da loja em preçoDoTexto quando a copy não traz preço editorial (template salvo ainda tem {linhaDeCupom}, retirada)', async () => {
   const { text } = await applyMirrorTemplate('Oferta sem linha de preço\n🎟️ CUPOM: LOJA10\nhttps://loja.test/produto', {
     templateKey: 'tpl_preco_fallback',
     originalUrl: 'https://loja.test/produto',
@@ -180,7 +193,8 @@ test('applyMirrorTemplate usa preço da loja em preçoDoTexto quando a copy não
     fetchInfo: async () => ({ title: 'Produto real', oldPrice: 'R$ 129,90', newPrice: 'R$ 89,90' }),
   })
 
-  assert.equal(text, 'Produto real\nR$ 89,90\n🎟️ CUPOM: LOJA10\nhttps://loja.test/produto?tag=afiliado')
+  assert.equal(text, 'Produto real\nR$ 89,90\nhttps://loja.test/produto?tag=afiliado')
+  assert.doesNotMatch(text, /LOJA10|linhaDeCupom/)
 })
 
 test('applyMirrorTemplate usa preço da loja em preçoDoTexto mesmo quando a mensagem não tem cupom', async () => {
@@ -196,7 +210,11 @@ test('applyMirrorTemplate usa preço da loja em preçoDoTexto mesmo quando a men
   assert.equal(text, 'Produto real\nR$ 79,90\nhttps://loja.test/produto?tag=afiliado')
 })
 
-test('applyMirrorTemplate preserva preço e instrução de adicionar cupom percentual', async () => {
+// specs/017-client-coupon-catalog (US4, Trava #1): o template salvo usava
+// {linhaDeCupom} colada em formatação (*{linhaDeCupom}*) — a retirada da
+// variável não pode deixar asterisco órfão nem lacuna; {preçoDoTexto}
+// continua achando o bloco De/Por usando extractCouponLine como delimitador.
+test('applyMirrorTemplate preserva preço com {preçoDoTexto} mesmo quando o template salvo tinha *{linhaDeCupom}* (retirada, sem asterisco órfão)', async () => {
   const { text } = await applyMirrorTemplate([
     'CORRE QUE CAIU O PREÇO',
     '',
@@ -227,11 +245,10 @@ test('applyMirrorTemplate preserva preço e instrução de adicionar cupom perce
     '',
     '💰 💵 De R$169,90 por R$113,36 no pix',
     '',
-    '*- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio*',
-    '',
     '🔗 Link: https://meli.la/21xyU8m',
   ].join('\n'))
   assert.doesNotMatch(text, /131,36/)
+  assert.doesNotMatch(text, /Itens para Casa|linhaDeCupom|\*\*/)
 })
 
 test('applyMirrorTemplate preserva linha De/Por completa mesmo sem cupom', async () => {
@@ -485,4 +502,64 @@ test('applyMirrorTemplate: orçamento de scrape (MIRROR_TEMPLATE_SCRAPE_BUDGET_M
   })
   assert.match(text, /\{cupom\}/)
   assert.deepEqual(couponContext, { platform: 'shopee', priceCents: 5000 })
+})
+
+// ---- specs/017-client-coupon-catalog (T027 — Trava #1, verificação) ----
+// A remoção da VARIÁVEL {linhaDeCupom} (US4, T029/T030) NUNCA pode levar
+// embora a FUNÇÃO extractCouponLine: ela é o delimitador de extractTextPrice,
+// que alimenta {preçoDoTexto} (FR-021).
+
+test('Trava #1: extractCouponLine continua exportada e funcionando (delimitador de extractTextPrice)', () => {
+  assert.equal(typeof extractCouponLine, 'function', 'extractCouponLine precisa continuar exportada de src/core/mirrorTemplate.js')
+  const texto = [
+    '💵 De R$169,90 por R$113,36 no pix',
+    '- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio',
+    'https://loja.test/produto',
+  ].join('\n')
+  const linha = extractCouponLine(texto)
+  assert.equal(linha, '- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio')
+})
+
+test('Trava #1: {preçoDoTexto} continua sendo capturado corretamente com bloco De/Por + linha de cupom real', () => {
+  const texto = [
+    'CORRE QUE CAIU O PREÇO',
+    '',
+    '📹 TP-Link Tapo C100 Câmera de Segurança Wifi 1080P Full HD',
+    '💵 De R$169,90 por R$113,36 no pix',
+    '- Adicione o cupom de 25% OFF em "Itens para Casa" no anúncio',
+    '',
+    'https://loja.test/produto',
+  ].join('\n')
+  const preco = extractTextPrice(texto)
+  assert.equal(preco, '💵 De R$169,90 por R$113,36 no pix')
+})
+
+test('Trava #1: applyMirrorTemplate com {preçoDoTexto} continua funcionando mesmo com {linhaDeCupom} fora da composição', async () => {
+  // Simula o estado pós-US4: o template NÃO usa mais {linhaDeCupom} (a
+  // variável saiu da oferta), só {preçoDoTexto} — extractTextPrice ainda
+  // precisa achar o bloco De/Por usando extractCouponLine como delimitador
+  // internamente, mesmo que a linha de cupom nunca apareça no texto final.
+  const { text } = await applyMirrorTemplate([
+    'Oferta upstream',
+    '❌De:223,00',
+    '✅Por: 180,70 c/cupom 🆘',
+    '',
+    '🎟️Use o cupom R$20,00 OFF CLUBE DO BEBÊ cadastre e resgate aqui:',
+    'https://loja.test/produto',
+  ].join('\n'), {
+    templateKey: 'tpl_sem_linha_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'amazon',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_sem_linha_cupom', name: 'Sem linha de cupom', body: '{produto}\n{preçoDoTexto}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: 'R$ 223,00', newPrice: 'R$ 199,00' }),
+  })
+
+  assert.equal(text, [
+    'Produto real',
+    '❌De:223,00',
+    '✅Por: 180,70 c/cupom 🆘',
+    'https://loja.test/produto?tag=afiliado',
+  ].join('\n'))
+  assert.doesNotMatch(text, /R\$ 199,00/)
 })
