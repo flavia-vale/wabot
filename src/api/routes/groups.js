@@ -1,5 +1,5 @@
 import db from '../../db.js'
-import { isValidWatermarkColor, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
+import { isValidWatermarkColor, isValidWatermarkSize, isValidWatermarkPosition, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
 import { effectiveDestinationImageMode } from '../../core/imageModePolicy.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { ensureCountQuota } from '../quotas.js'
@@ -20,6 +20,7 @@ import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRis
 import { registerProbeEvidence, resolveLatestSentForGroup } from '../../core/probeEvidence.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
+import { normalizeRelayFooter, RELAY_FOOTER_MAX_CHARS } from '../../core/relayFooter.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -178,12 +179,14 @@ export async function groupsRoutes(app, opts = {}) {
     const usesChannel = monitor.kind === JID_KIND.CHANNEL || validPosts.some(post => post.kind === JID_KIND.CHANNEL)
     if (usesChannel && !(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
 
-    // `targetsMode` grava a INTENÇÃO da cliente. Escolheu destinos → 'explicit':
-    // daí em diante, se esses vínculos sumirem (ex.: ela apagar os grupos de
-    // destino, o que apaga GroupTarget por cascata), a origem NÃO volta a
-    // espelhar para todos os destinos da conta. Lista vazia mantém 'all' porque
-    // é assim que a tela sempre se comportou (desmarcar tudo = padrão histórico).
-    const targetsMode = postIds.length ? 'explicit' : 'all'
+    // `targetsMode` grava a INTENÇÃO da cliente. Salvar a escolha é SEMPRE
+    // 'explicit' — inclusive com a lista vazia. Desmarcar tudo e salvar é a
+    // cliente dizendo "não mande para ninguém"; gravar 'all' aqui fazia o GET
+    // devolver TODOS os destinos de volta (o fallback histórico), então ao
+    // reabrir a tela tudo aparecia marcado de novo e a origem seguia espelhando
+    // para grupos que ela acabara de desmarcar. 'all' continua existindo apenas
+    // para quem NUNCA escolheu destino (nenhum salvamento nesta origem).
+    const targetsMode = 'explicit'
     await db.$transaction([
       db.groupTarget.deleteMany({ where: { userId: req.user.sub, monitorId: monitor.id } }),
       ...postIds.map(postId => db.groupTarget.create({ data: { userId: req.user.sub, monitorId: monitor.id, postId } })),
@@ -199,7 +202,7 @@ export async function groupsRoutes(app, opts = {}) {
     const group = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!group) return reply.code(404).send({ error: 'Grupo não encontrado' })
 
-    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
+    const { blockedKeywords, allowedPlatforms, welcomeMsg, imageMode, watermarkText, watermarkColor, watermarkSize, watermarkPosition, imageLinkTarget, fallbackToOriginal, forwardMode, noLinkScope, templateKey, relayFooterText, primaryLinkTarget, channelButtonJid, channelButtonName } = req.body ?? {}
     if (allowedPlatforms !== undefined) {
       const platforms = String(allowedPlatforms).split(',').filter(Boolean)
       const invalid = platforms.find(p => !['shopee', 'amazon', 'mercadolivre', 'magazineluiza', 'shein', 'aliexpress'].includes(p))
@@ -218,18 +221,24 @@ export async function groupsRoutes(app, opts = {}) {
     // origem nunca leu este campo (toMonitorGroup em groupEntitlements.js nem
     // repassa `imageMode`), mas bloqueamos a escrita aqui para não deixar uma
     // configuração "fantasma" salva sem nenhum efeito.
-    if ((imageMode !== undefined || watermarkText !== undefined || watermarkColor !== undefined) && group.role !== 'post') {
+    if ((imageMode !== undefined || watermarkText !== undefined || watermarkColor !== undefined || watermarkSize !== undefined || watermarkPosition !== undefined) && group.role !== 'post') {
       return reply.code(400).send({ error: 'Modo de imagem e marca d\'água só podem ser definidos no destino.' })
     }
-    // Limite e cores vêm de core/watermarkInput.js — o lugar único onde a API
-    // repete o formato do renderizador sem carregar `sharp` (política de
-    // memória; ver o cabeçalho daquele módulo).
+    // Limite, cores, tamanhos e posições vêm de core/watermarkInput.js — o
+    // lugar único onde a API repete o formato do renderizador sem carregar
+    // `sharp` (política de memória; ver o cabeçalho daquele módulo).
     const normalizedWatermarkText = normalizeWatermarkInputText(watermarkText)
     if (normalizedWatermarkText !== undefined && isWatermarkTextTooLong(normalizedWatermarkText)) {
       return reply.code(400).send({ error: 'A marca d\'água deve ter no máximo 25 caracteres.' })
     }
     if (watermarkColor !== undefined && !isValidWatermarkColor(watermarkColor)) {
       return reply.code(400).send({ error: 'Cor da marca d\'água inválida.' })
+    }
+    if (watermarkSize !== undefined && !isValidWatermarkSize(watermarkSize)) {
+      return reply.code(400).send({ error: 'Tamanho da marca d\'água inválido.' })
+    }
+    if (watermarkPosition !== undefined && !isValidWatermarkPosition(watermarkPosition)) {
+      return reply.code(400).send({ error: 'Posição da marca d\'água inválida.' })
     }
     const requestedImageMode = imageMode ?? group.imageMode ?? 'original'
     const requestedWatermarkText = normalizedWatermarkText ?? group.watermarkText ?? ''
@@ -251,6 +260,13 @@ export async function groupsRoutes(app, opts = {}) {
     }
     if (templateKey !== undefined && templateKey !== null && String(templateKey).trim() && !/^[A-Za-z0-9_-]{1,80}$/.test(String(templateKey).trim())) {
       return reply.code(400).send({ error: 'templateKey inválido' })
+    }
+    const normalizedRelayFooter = normalizeRelayFooter(relayFooterText)
+    if (normalizedRelayFooter !== undefined && normalizedRelayFooter.length > RELAY_FOOTER_MAX_CHARS) {
+      return reply.code(400).send({ error: `O texto adicional deve ter no máximo ${RELAY_FOOTER_MAX_CHARS} caracteres.` })
+    }
+    if (relayFooterText !== undefined && group.role !== 'monitor') {
+      return reply.code(400).send({ error: 'Texto adicional só pode ser definido em grupos monitorados.' })
     }
 
     if (forwardMode === FORWARD_MODE.LINK_ONLY && noLinkScope !== undefined && noLinkScope !== null) {
@@ -304,12 +320,15 @@ export async function groupsRoutes(app, opts = {}) {
         ...((imageMode !== undefined || precisaDegradar) ? { imageMode: imageModeFinal } : {}),
         ...(normalizedWatermarkText !== undefined ? { watermarkText: normalizedWatermarkText || null } : {}),
         ...(watermarkColor !== undefined ? { watermarkColor } : {}),
+        ...(watermarkSize !== undefined ? { watermarkSize } : {}),
+        ...(watermarkPosition !== undefined ? { watermarkPosition } : {}),
         ...(imageLinkTarget !== undefined ? { imageLinkTarget } : {}),
         ...(fallbackToOriginal !== undefined ? { fallbackToOriginal: parseBoolean(fallbackToOriginal) } : {}),
         ...(forwardMode !== undefined ? { forwardMode: requestedForwardMode } : {}),
         // Três estados: null = herda o template padrão global; '' = relay explícito
         // (não aplica template mesmo havendo padrão global); 'chave' = template fixo.
         ...(templateKey !== undefined ? { templateKey: templateKey === null ? null : String(templateKey).trim() } : {}),
+        ...(normalizedRelayFooter !== undefined ? { relayFooterText: normalizedRelayFooter || null } : {}),
         ...(primaryLinkTarget !== undefined ? { primaryLinkTarget: primaryLinkTarget || null } : {}),
         ...((noLinkScope !== undefined || forwardMode !== undefined) ? { noLinkScope: requestedNoLinkScope } : {}),
         ...(normalizedChannelButtonJid !== undefined ? { channelButtonJid: normalizedChannelButtonJid || null } : {}),

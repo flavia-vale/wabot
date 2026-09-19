@@ -1,11 +1,13 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { LeadMagnetCard } from './LeadMagnetCard'
+import { PublicReferralTracker } from './PublicReferralTracker'
 import { EDITORIAL_AUTHOR, formatDatePtBr } from '@/lib/editorial-content'
 
 export function ArticleShell({ eyebrow, title, description, children, origin, publishedAt, updatedAt, author = EDITORIAL_AUTHOR, leadMagnetVariant = 'default' }) {
   return (
     <PublicShell>
+      <PublicReferralTracker template="article" />
       <main className="mx-auto grid w-full max-w-6xl gap-8 px-5 py-10 md:grid-cols-[minmax(0,1fr)_360px] md:px-8 md:py-16">
         <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-10">
           <Link href="/" className="text-sm font-bold text-emerald-700 hover:text-emerald-800">← Voltar para o Espelha Grupos</Link>

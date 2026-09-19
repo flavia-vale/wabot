@@ -164,10 +164,26 @@ test('T011: couponTextSignal é calculado no call site a partir de couponSkipAct
   // produto-vs-cupom já computada para a estratégia de imagem), NÃO de
   // isCouponMsg cru — que dava banner em produto que só carrega código de
   // cupom (regressão do Ryzen por short link ML). Continua sem detector novo.
+  //
+  // RCA 2026-09-18: a decisão saiu do call site para o módulo puro
+  // (resolveCouponTextSignal). O aviso de vitrine ML deixou de ser gatilho
+  // independente — ele indica FALHA DE CONVERSÃO, não cupom, e sozinho derrubava
+  // as três blindagens de uma vez, pondo banner em oferta de produto. Agora só
+  // vale com vitrine CONFIRMADA (isDirectVitrineShare do link compartilhado).
   assert.match(
     preamble,
-    /const couponTextSignal = couponSkipActiveFetch \|\| primary\?\.warning === 'ml_vitrine_fallback_used'/,
-    'couponTextSignal precisa reusar couponSkipActiveFetch e o warning ml_vitrine_fallback_used, sem criar detector novo',
+    /const couponTextSignal = resolveCouponTextSignal\(\{/,
+    'couponTextSignal precisa vir de resolveCouponTextSignal (módulo puro), sem detector novo no call site',
+  )
+  assert.match(preamble, /couponSkipActiveFetch,/, 'precisa continuar reusando couponSkipActiveFetch')
+  assert.match(
+    preamble,
+    /vitrineConfirmed: isDirectVitrineShare\(primary\?\.url\)/,
+    'o aviso de vitrine ML só pode contar com vitrine confirmada pelo link ORIGINAL compartilhado',
+  )
+  assert.ok(
+    !/couponSkipActiveFetch \|\| primary\?\.warning === 'ml_vitrine_fallback_used'/.test(preamble),
+    'o OR cru com ml_vitrine_fallback_used não pode voltar — é o que punha banner de cupom em oferta de produto',
   )
 
   const callEnd = botWorkerSource.indexOf('})', callStart)

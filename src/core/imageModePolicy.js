@@ -187,10 +187,12 @@ export function resolveOfferAppearance(row = {}, opts = {}) {
   const mode = effectiveDestinationImageMode(row?.imageMode ?? row?.mode, opts)
   const text = String(row?.watermarkText ?? row?.watermark?.text ?? '').replace(/\s+/g, ' ').trim()
   const color = row?.watermarkColor ?? row?.watermark?.color ?? undefined
+  const size = row?.watermarkSize ?? row?.watermark?.size ?? undefined
+  const position = row?.watermarkPosition ?? row?.watermark?.position ?? undefined
   const usaMarca = destinationImageUsesWatermark(mode) && Boolean(text)
   return {
     mode,
     baseMode: destinationImageBaseMode(mode),
-    watermark: usaMarca ? { text, color } : null,
+    watermark: usaMarca ? { text, color, size, position } : null,
   }
 }

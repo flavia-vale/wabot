@@ -24,7 +24,20 @@ test('waitUntilDrained retorna drained=true após polling quando isDrained vira 
   })
   assert.equal(result.drained, true)
   assert.ok(!result.timedOut)
-  assert.ok(result.elapsedMs >= 60, `deveria ter esperado ≥ 3 polls de 20ms; elapsed=${result.elapsedMs}ms`)
+  // O que importa aqui é que ELE TENHA FEITO OS POLLS: 1 checagem inicial + 3
+  // esperas. Isso é determinístico e é a própria coisa sob teste.
+  //
+  // A afirmação antiga era `elapsedMs >= 60` — relógio de parede comparado com
+  // a soma NOMINAL dos setTimeout (3 × 20ms). O `setTimeout` do Node pode
+  // disparar um tick mais cedo que o nominal, e `Date.now()` trunca para
+  // milissegundo inteiro: o CI mediu **59ms** e reprovou uma implementação
+  // correta (run 34852342683). Localmente o mínimo em 400 repetições é
+  // exatamente 60ms, então o teste passava na máquina de quem escreveu e só
+  // quebrava sob carga — o pior tipo de teste frágil.
+  assert.equal(calls, 4, `deveria ter feito 3 polls além da checagem inicial; fez ${calls} checagens`)
+  // Sanidade de tempo com folga para a imprecisão do timer: continua provando
+  // que houve espera real (não retornou na hora), sem depender do último ms.
+  assert.ok(result.elapsedMs >= 50, `deveria ter esperado de fato; elapsed=${result.elapsedMs}ms`)
 })
 
 test('waitUntilDrained retorna timedOut=true quando isDrained nunca vira true', async () => {

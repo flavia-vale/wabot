@@ -1273,6 +1273,84 @@ cd ~/wabot && node scripts/sincronizar-assinatura.mjs <email> --aplicar # grava 
 
 Teste: `test/subscription-policy.test.js`.
 
+## ADMIN > Financeiro > ROI e conta de teste fora das somas (2026-09-17)
+
+Duas coisas da mesma conversa. (1) A assinatura de `tacianeaas02@gmail.com`
+existe só para validar a cobrança recorrente — esse dinheiro **não cai no
+caixa** e estava inflando receita, MRR, LTV e pagantes. (2) O Financeiro sabia
+quanto ENTRA e o que sai para afiliados e para o Mercado Pago, mas **nunca
+soube quanto custa manter o produto de pé** — e sem isso "receita" não é lucro
+e não havia como responder "valeu a pena até agora?".
+
+| Peça | Onde |
+|---|---|
+| Contas de teste fora das somas (PURO) | `src/domain/admin/testAccounts.js` |
+| Etiqueta na tela | `dashboard/components/TestAccountTag.js` |
+| Ledger de custos (faturas + patamar fixo, PURO) | `src/domain/admin/operatingCosts.js` |
+| Passado/presente/futuro, payback, cenários (PURO) | `src/domain/admin/roi.js` |
+| Rota | `GET /api/admin/finance/roi?months=12` (`billing:read`, auditada) |
+| Tela | `RoiPanel` em `dashboard/app/admin/page.js` (sub-aba ROI) |
+
+**Não regredir:**
+
+- **REALIZADO e PREVISTO nunca viram um número só.** O "investido até agora" e
+  o acumulado do passado param no último mês FECHADO; o mês corrente é
+  `parcial` e a projeção é `previsto`, cada um rotulado. Somar projeção dentro
+  do que já é fato é decidir dinheiro em cima de número inventado.
+- **A conta de teste some da SOMA, nunca da TELA.** Ela continua nas listas,
+  nas cobranças recorrentes e no ROI com etiqueta 🧪 — é ela que está sendo
+  observada. Linha aparecendo na lista e sumindo do total, sem explicação,
+  pareceria defeito.
+- **A exclusão é decidida no backend**, aplicada em TODAS as agregações de
+  `/finance/overview` e `/finance/roi` (receita, LTV, pagantes, planos ativos,
+  comissões, taxas) — senão duas tabelas do admin discordam sobre o mês. Guarda
+  estrutural no teste varre a rota atrás de soma de pagamento sem o filtro.
+- **Fail-safe é NÃO excluir ninguém**: falha de banco ao resolver as contas de
+  teste devolve lista vazia. Sumir com receita por causa de um blip é pior que
+  contar a assinatura de teste por mais um carregamento de tela.
+- **`FINANCE_TEST_ACCOUNT_EMAILS` SUBSTITUI a lista** (vazio = nenhuma). É como
+  a conta de teste vira cliente de verdade sem deploy.
+- **Fatura em dólar é guardada em dólar** e convertida na leitura
+  (`USD_BRL_RATE`, default 5,80). Guardar convertido trava a conta numa cotação
+  que ninguém lembra de onde saiu.
+- **O ledger histórico PARA onde a recorrência começa** (`2026-09`). Setembro
+  entra com o patamar fixo cheio (R$ 565 Claude + R$ 190 servidor), que é maior
+  que a fatura real de R$ 535,22 daquele mês — o passado nunca fica
+  subestimado, e nenhum mês é contado duas vezes. Mexer em
+  `COST_RECURRING_START_MONTH` exige mexer no ledger junto.
+- **Crescimento observado exige amostra e tem TETO.** Menos de 3 meses fechados
+  com receita → cenário sem crescimento. Acima de 20%/mês → limitado (20%/mês
+  já multiplica a receita por ~9 em um ano). Queda não vira crescimento
+  negativo composto.
+- **A projeção respeita o teto de clientes do servidor**
+  (`MAX_SESSIONS_PER_PROCESS`, default 20; **produção está em 80** desde
+2026-09-18): cheio, nenhuma cliente nova conecta —
+  receita que a infra não entrega não é receita, e o custo de crescer não está
+  nesta conta.
+- **Sem dado confiável NÃO se afirma nada**: sem cliente pagante,
+  `breakEvenCustomers` e `paybackMonth` são `null`, não zero.
+- **O gráfico não depende só da cor.** Verde e vermelho é o par que quem tem
+  daltonismo mais confunde (ΔE 6,0 em deuteranopia) — só é aceitável com
+  codificação secundária, e aqui ela é a linha do zero, o valor escrito com
+  sinal e o tracejado do previsto. Não remover nenhuma das três. O desenho
+  ainda **corta pouco depois da travessia do zero**: crescimento composto faz a
+  última barra ficar dezenas de vezes maior e achata justamente o vermelho de
+  hoje. Todos os meses continuam na tabela.
+- **Linguagem leiga**: "entrou", "saiu", "sobrou", "se paga em". Teste falha se
+  `payback`, `break-even`, `churn` ou `runway` chegarem à tela.
+- **Custo: só leitura, nenhum processo novo, zero impacto de RAM.** Duas
+  consultas de linhas por carregamento (pagamentos aprovados e comissões desde
+  a primeira fatura, teto de 20.000), e a sub-aba só busca quando é aberta.
+
+Envs (todas opcionais): `FINANCE_TEST_ACCOUNT_EMAILS`, `USD_BRL_RATE`,
+`COST_CLAUDE_MONTHLY_BRL`, `COST_VPS_MONTHLY_BRL`, `COST_RECURRING_START_MONTH`.
+
+⚠️ **Aumentar o teto de clientes muda a projeção** (o teto de receita sai de
+`MAX_SESSIONS_PER_PROCESS`), e continua valendo que subir esse teto é mudança
+memory-heavy — ver "Teto de robôs por processo".
+
+Teste: `test/admin-roi.test.js`.
+
 ## ADMIN > Financeiro > Cobranças recorrentes (2026-09-07)
 
 Sub-aba dentro do Financeiro com **uma linha por TENTATIVA de cobrança** da
@@ -2098,6 +2176,204 @@ Hoje há uma camada **cruzada por grupo de destino**, na tabela
 
 Teste: `test/offer-automation.test.js`.
 
+## A cliente nunca pôde escolher a busca das ofertas automáticas (RCA 2026-09-17)
+
+Cliente reportou que "eletrodoméstico Brastemp" só trazia **capa de máquina de
+lavar**, "cafeteira dolce gusto" só **cápsula reutilizável e produto de
+limpeza**, e "mesa desmontável pegue e monte" só **mesa cavalete** — e pediu uma
+opção de buscar "os itens mais vendidos".
+
+**A ordenação por mais vendidos já estava ligada.** O que limitava era o outro
+eixo. A `productOfferV2` da Shopee tem dois parâmetros independentes: `listType`
+(de qual lista tirar os candidatos) e `sortType` (em que ordem devolvê-los). O
+backend sempre gravou os dois (`OfferAutomation.listType`/`sortType`), a rota
+sempre os validou e a `search-preview` sempre os aceitou — **só a tela nunca os
+ofereceu**. Toda automação nascia com o padrão da rota: `sortType=2` (mais
+vendidos) **dentro de** `listType=1` (maior comissão).
+
+⚠️ **A primeira explicação estava ERRADA e foi derrubada por medição
+(2026-09-17).** Escrevemos aqui e na tela que "a lista de maior comissão deixa
+o produto caro de fora". Rodado em produção com a chave real
+(`scripts/diag-busca-shopee.mjs`), para "eletrodoméstico Brastemp", as **TRÊS
+listas devolveram os MESMOS 50 produtos, na MESMA ordem**: `listType` não
+filtrou nada. Não repetir essa causa.
+
+**Quem separa o produto do acessório é a ORDEM.** Medido em
+"maquina de lavar Brastemp", dentro da mesma lista:
+
+| Ordem | O que veio nos 5 primeiros |
+|---|---|
+| mais vendidos (`sortType=2`, nosso padrão) | cinco capas de máquina |
+| maior comissão (`sortType=5`) | cinco capas, todas a 43% de comissão |
+| **mais caros (`sortType=3`)** | **as máquinas de verdade: R$ 3.999, R$ 3.759, R$ 3.599, R$ 3.477** |
+
+A razão está nos números da mesma saída: o acessório vende muito mais **e**
+paga muito mais comissão (capa 43%, cápsula 23%; a máquina 4-7%, a cafeteira
+3%). Então vendas e comissão empurram o acessório para cima — só o preço traz o
+aparelho. **A escala de `commissionRate` é fração** (`0.23` = 23%), medida
+aqui; antes não estava verificada em lugar nenhum do repositório.
+
+⚠️ Segundo achado da medição: **"eletrodoméstico Brastemp" não trouxe máquina de
+lavar em NENHUMA das seis combinações** — só capa e chave de fenda —, enquanto
+"maquina de lavar Brastemp" trouxe. Categoria genérica não acha o produto no
+catálogo de afiliado; nem lista nem ordem resolvem isso. Ao atender "só vem
+acessório", conferir TRÊS coisas: a palavra-chave (nome do produto, não
+categoria), a ordem, e a comissão extra abaixo.
+
+| Peça | Onde |
+|---|---|
+| Opções em linguagem leiga (PURO) | `dashboard/lib/offerAutomationSearch.js` |
+| Os dois campos no formulário + linha no card | `dashboard/app/painel/ofertas-automaticas/page.js` |
+
+**Não regredir:**
+
+- **O padrão continua `listType=1` / `sortType=2`.** Mudar o default trocaria a
+  busca de toda automação nova sem ninguém ter pedido, e qual conjunto rende
+  mais só se decide medindo em staging. O conserto é a escolha ficar VISÍVEL,
+  não o produto escolher por ela. Teste falha se o default mudar sem decisão.
+- **A busca escolhida aparece no card SEMPRE, inclusive quando é o padrão**
+  (`describeSearchChoice`). A queixa não foi "a opção está errada", foi "eu não
+  sabia que existia uma opção" — esconder no padrão recria o mesmo ponto cego.
+- **A dica que resolve a queixa mora na ORDEM, não na lista**, e por isso a
+  ordem vem primeiro no formulário e a lista ficou recolhida em "avançado".
+  Cada opção de ordem tem a sua dica: "mais caros primeiro" diz que traz o
+  APARELHO em vez do acessório; "mais vendidos" e "maior comissão" dizem que
+  trazem o acessório. Sem isso a cliente troca a palavra-chave para sempre sem
+  nunca chegar no que estava filtrando — foi o que aconteceu por três buscas.
+- **Os rótulos da lista NÃO podem voltar a prometer filtro** ("só maior
+  comissão", "só os que mais vendem"): a medição mostrou que ele não acontece,
+  e a promessa faz a cliente mexer no campo errado. O campo continua na tela
+  porque a medição cobriu duas palavras-chave, não todas — tirá-lo seria
+  decidir por ela sem dado que sustente. Teste falha se a promessa voltar.
+- **A fila de revisão não força mais `sortType: 2`**
+  (`reviewDiscoveryService.js`). Forçar fazia sentido enquanto a escolha não
+  existia na tela; com ela, virou um jeito silencioso de descartar o que a
+  cliente pediu.
+- **O botão de LIGAR "Priorizar ofertas com comissão extra do vendedor" saiu da
+  tela (2026-09-17), mas o campo NÃO foi desligado.** Ele não é um filtro a
+  mais: `resolveOffers` faz DUAS buscas e devolve `[...comissãoExtra,
+  ...restantes]`, e como `runAutomation` manda os primeiros `offersPerSend`,
+  com 1 produto por envio a oferta de comissão extra sai SEMPRE, por cima da
+  ordem escolhida — "mais baratos primeiro" chega a publicar o item de R$500 no
+  lugar do de R$10 (medido em teste).
+- **A regra é grandfathering, e ela é a invariante desta seção: automação que já
+  existe não pode mudar de comportamento sozinha no deploy.** Os dois grupos:
+  quem **nunca marcou** não muda nada (uma busca, na ordem escolhida); quem
+  **já tinha marcado** continua enviando exatamente igual. Isso sai de graça das
+  rotas — o `POST` grava `Boolean(prioritizeAMS ?? false)`, então automação nova
+  nasce sem a opção, e o `PUT` só escreve o campo quando ele vem no corpo, então
+  a tela deixar de enviá-lo PRESERVA o valor de quem tem.
+- **O controle voltou à tela SÓ como saída**: renderizado apenas quando
+  `form.prioritizeAMS` já é verdadeiro e o clique só escreve `false`. Não existe
+  caminho para ligar — nem na tela nova, nem em automação nova. Teste falha se
+  `prioritizeAMS: e.target.checked` voltar, se o campo entrar no `emptyForm`, ou
+  se `openEdit` parar de carregar o valor salvo (sem ele a cliente ficaria presa
+  na opção, sem conseguir desligar).
+- **Enquanto o campo agir, o card DIZ** (`describeSearchChoice` + etiqueta
+  "⚡ Comissão extra priorizada (opção antiga)"). É por ali que a cliente
+  descobre que a opção existe e pode ser desligada; prometer "mais baratos"
+  enquanto a comissão extra fura a fila seria mentir na etiqueta.
+- ⚠️ **NÃO fazer migration convertendo quem tinha a opção para "maior comissão
+  primeiro" (`sortType=5`).** Além de mudar o envio dessas contas sem ninguém
+  pedir, jogaria justamente elas mais fundo na combinação que mais reproduz a
+  queixa original (comissão em cima de comissão). Quem quiser trocar, desmarca e
+  escolhe a ordem — decisão da cliente, não do deploy.
+- ⚠️ **Prioridade de comissão extra + "só maior comissão" se somam** e empurram
+  a busca para o acessório barato duas vezes — é a combinação que mais reproduz
+  a queixa original. Ao atender um relato de "só vem acessório", conferir as
+  DUAS coisas, nunca só a palavra-chave.
+- Quantas contas ainda estão no legado (read-only, no diretório do ambiente):
+  `sqlite3 prisma/prod.db "SELECT COUNT(*) FROM OfferAutomation WHERE prioritizeAMS = 1;"`
+  Zerou? Aí sim o caminho das duas buscas pode ser removido de vez.
+- **Valor inválido cai no padrão**, nunca derruba a tela: automação antiga com
+  campo vazio precisa continuar abrindo para edição.
+- Linguagem leiga: nada de `listType`, `sortType`, `productOfferV2` na tela —
+  teste falha se jargão voltar.
+- **Custo: zero.** Nenhuma consulta nova, nenhum processo novo, nenhuma
+  migration (as colunas já existiam), **zero impacto de RAM**.
+
+⚠️ **Ofertas automáticas são 100% Shopee.** Amazon, Mercado Livre, Magalu, SHEIN
+e AliExpress só CONVERTEM link existente — não têm busca por palavra-chave em
+lugar nenhum do repositório. Não prometer à cliente ordenação nas outras lojas.
+
+⚠️ **Só a Shopee sabe o que cada lista devolve.** `POST
+/api/offer-automations/search-preview` roda a MESMA busca sem enviar nada e sem
+gravar — é por ali que se compara as combinações antes de decidir. Ele existe
+desde sempre e **nenhuma tela o chama**; ligar esse botão no painel é o passo
+seguinte natural desta mudança.
+
+### A lista saiu da tela: uma escolha só (2026-09-17, depois da medição)
+
+Cinco palavras-chave, cada uma nas três listas, com a chave real em produção:
+
+| Palavra-chave | listType 0 / 1 / 2 |
+|---|---|
+| eletrodoméstico Brastemp | 45 / 45 / 45 — mesmos produtos, mesma ordem |
+| maquina de lavar Brastemp | 47 / 47 / 47 — idem |
+| fone de ouvido bluetooth | 49 / 49 / 49 — idem |
+| air fryer | 43 / 43 / 43 — idem |
+| perfume importado | 48 / 48 / 48 — idem |
+
+`listType` **não filtrou nada em nenhuma delas**. Campo que não muda o
+resultado não é escolha: ele fazia a cliente decidir à toa e desviava da ordem,
+que é o que resolve. Então a tela ficou com **uma pergunta só** ("O que você
+quer que apareça primeiro?") e a lista virou decisão do produto.
+
+| Peça | Onde |
+|---|---|
+| Decisão da lista (PURA, chokepoint ÚNICO) | `src/offerAutomation/searchListType.js` |
+| Consumo | `resolveOffers` (`dispatcher.js`) — cobre envio, fila de revisão e `search-preview` |
+
+**Não regredir:**
+
+- **O valor gravado em `OfferAutomation.listType` é IGNORADO no envio** — mesmo
+  padrão de `Group.imageMode`: coluna dormente, rota continua aceitando (para
+  não quebrar chamador antigo), sem migration. Teste falha se `automation.listType`
+  voltar ao `dispatcher.js`.
+- **O padrão passou de 1 para 0** porque **0 é o único valor que a Shopee
+  documenta** ("todos"); o 1 não aparece na documentação dela em lugar nenhum e
+  foi escolhido no olho quando `listType=2` se mostrou estreito demais. Com as
+  duas provadas equivalentes em cinco palavras-chave, ficar no documentado é o
+  que dá para defender. **Isso só é seguro por causa da medição** — não trocar
+  de novo sem repetir o `scripts/diag-busca-shopee.mjs`.
+- **`OFFER_SEARCH_LIST_TYPE` é o escape hatch**: `=1` volta ao histórico sem
+  deploy (pegadinha #1 — `pm2 delete` + `start`). Valor inválido cai no padrão;
+  `.env` mal preenchido nunca pode derrubar a busca de todo mundo.
+- **Os rótulos são os nomes da documentação da Shopee, traduzidos, na ORDEM
+  dela** (1 Relevância, 2 Mais vendidos, 3 Maior preço, 4 Menor preço, 5 Maior
+  comissão) — decisão da dona do produto, 2026-09-17: não inventar opção nem
+  renomear "Maior preço" para "o produto em si". O que a API faz é ordenar por
+  preço; que isso traga o aparelho em vez do acessório é **efeito medido**, e
+  efeito medido vai na DICA, nunca no rótulo. Teste falha se os rótulos ou a
+  ordem divergirem da documentação.
+- **O padrão continua "Mais vendidos"** — ninguém tem a busca trocada em
+  silêncio.
+- **O card diz só a ordem** (`Busca: mais vendidos`), e continua dizendo quando
+  a comissão extra legada fura a fila.
+
+Para medir de novo (read-only, com a chave real da conta, no diretório do
+ambiente):
+
+```bash
+cd ~/wabot && node scripts/diag-busca-shopee.mjs <email> "eletrodoméstico Brastemp"
+cd ~/wabot && node scripts/diag-busca-shopee.mjs <email> "cafeteira dolce gusto" --lista=1
+```
+
+Sem `--lista`, compara as TRÊS listas com a mesma ordem; com `--lista=N`,
+compara as CINCO ordens dentro daquela lista. `--desconto=0` é o padrão de
+propósito (mostra a lista crua, antes do filtro da automação). A comissão sai
+**crua** — a escala é **fração** (`0.23` = 23%), confirmada pela medição de
+2026-09-17; ela continua saindo crua de propósito, para a próxima rodada
+conferir em vez de confiar nesta linha.
+
+⚠️ **`productCatId` (filtro por categoria) existe na API e nunca foi usado** —
+é o parâmetro com mais cara de resolver a queixa original ("só vem acessório"),
+e não foi atacado. Os outros não usados: `shopId`, `itemId`, `matchId`.
+`isKeySeller` existe no banco e nunca apareceu na tela (sempre `false`).
+
+Testes: `test/ofertas-automaticas-escolha-da-busca.test.js`,
+`test/diag-busca-shopee.test.js`.
+
 ## Mensagem do grupo monitorado espelhada N vezes (RCA 2026-07 — não regredir)
 
 **Sintoma:** o grupo monitorado publicou UMA mensagem às 14:13. Em staging ela
@@ -2306,9 +2582,22 @@ inteira em `core/destinationRouting.js` (`resolveMonitorDestinations`):
 - `all` (quem nunca escolheu) → comportamento histórico preservado, agora com
   aviso no log e sinal `ops_mirror_fallback_all_destinations`.
 
-Salvar destinos no painel grava `explicit`; desmarcar tudo volta a `all` (é como
-a tela sempre se comportou). A migration marca como `explicit` toda origem que
-já tem vínculo hoje.
+Salvar destinos no painel grava **sempre `explicit`, inclusive com a lista
+vazia**. A migration marca como `explicit` toda origem que já tem vínculo hoje.
+
+⚠️ **Corrigido em 2026-09-13 — não regredir.** Até aqui, salvar sem nenhum
+marcado gravava `all`, "porque é como a tela sempre se comportou". O efeito era
+o relato da cliente: ela desmarcava todos, salvava, voltava e **encontrava tudo
+marcado de novo** — `all` faz o `GET /:id/targets` devolver TODOS os destinos da
+conta, e a tela obedientemente marcava todos. Pior que o incômodo visual: a
+origem continuava espelhando para grupos que ela acabara de desmarcar, que é
+exatamente o que o RCA acima existe para impedir. Desmarcar tudo e salvar é a
+cliente dizendo "não mande para ninguém" — a origem para de enviar até ela
+escolher de novo, e a tela avisa isso antes do salvamento. `all` ficou valendo
+só para quem **nunca** salvou destino nenhum naquela origem. Guardas:
+`test/groups-route-targets-mode.test.js` (reabrir a tela depois de salvar
+vazio), `test/painel-destinos-editor.test.js` (texto do aviso e `mode` gravado
+pela tela).
 
 ### 3) Job já enfileirado não era cancelado
 
@@ -2910,6 +3199,112 @@ aqui, mas não mover `allowedChatJids`/`groupSubjectByJid` pra dentro de
 newsletter/DM sem revalidar Canais/pareamento; manter o default OFF até validação
 explícita em staging.
 
+## Cega e caindo: a conta pior é a que nenhum alarme enxergava (RCA 2026-09-14)
+
+Cliente (`viviloppes@gmail.com`) reportou que o espelhamento parou. Medido em
+produção: o espelhamento dela caiu de **1.099 envios no dia 10/09 para zero a
+partir de 12/09**, e o worker dela tinha **ZERO** linhas `mensagem recebida` em
+11h de vida — enquanto os outros 37 workers do host somavam 13.505. Não era um
+grupo: ela estava **100% cega**, sem receber nada de chat nenhum.
+
+O painel mostrou **"conectado"** o tempo todo, e **nenhuma** das redes de
+segurança acusou: `ops_wa_reception_blind` nunca saiu, a auto-cura de recepção
+nunca rodou, o vigia de silêncio nunca rodou.
+
+**A causa da invisibilidade é aritmética, e vale para qualquer conta assim.**
+Tudo era medido a partir da **conexão atual**, e a conexão dela reiniciava a
+cada ~50min (queda 500 com `stuckMsg:true`, **29 vezes em 24h**, todas com
+`hadStableOpen`). Com os defaults:
+
+| Rede de segurança | Por que nunca rodou |
+|---|---|
+| `computeReceptionState` → `blind` | carência de 20min devolve `ok` aconteça o que acontecer; a rajada de decrypt acontece no **dreno da fila offline** (`offline:"1"`) nos minutos 0-2, e a janela do contador é de **10min** — no minuto 20 já foi podada |
+| `computeReceptionState` → `starved` | exige **120min** de conexão; a dela morria aos ~50 |
+| `shouldSelfHealReception` | `lastAcceptedAtMs == null` → "nunca recebeu nada nesta sessão"; a conta totalmente cega é a única que a auto-cura não cobre |
+| `monitorSilenceWatchdog` | `!hasActive` → com **todos** os monitores calados ele desiste; a falha total era o único estado invisível |
+
+Ou seja: **quanto pior o estado, mais invisível ele ficava.** Reconexão
+frequente não é só sintoma — era o que impedia qualquer diagnóstico.
+
+**A correção é medir a cegueira num relógio que NÃO reseta na reconexão**
+(`evaluateBlindAcrossReconnects`, em `src/core/receptionHealth.js`):
+`observedSinceMs` (última aceitação, ou o boot do worker) + contadores
+**cumulativos** `failuresSinceLastAccepted` / `stableDropsSinceLastAccepted`,
+zerados **só** em `markMessageAccepted`. A regra roda **antes da carência** de
+propósito — é a carência que escondia o caso.
+
+**Não regredir:**
+
+- **Os contadores vivem em escopo de módulo e só zeram quando uma mensagem é
+  ACEITA.** Dentro de `startBotInner` eles zerariam a cada reconexão e a
+  cegueira volta a ser invisível (mesma lição do `msgRetryCounterCache`).
+- **`observedSinceMs` nunca pode vir de `connectionOpenedAt`** — é literalmente
+  a troca de relógio que causava o bug.
+- **Silêncio sozinho NUNCA vira alarme.** Exige evidência de que a sessão está
+  ocupada e mesmo assim não aceita nada (falhas de decrypt **ou** quedas de
+  sessão estável). Sem evidência, madrugada continua sendo madrugada.
+- **Fail-safe em todo caminho**: sem `observedSinceMs` confiável, cegueira curta
+  demais, ou sessão desconectada → **não acusa**.
+- **Só avisa — não reconecta.** A auto-cura existente fecha o socket, e isso
+  seria inútil aqui (ela já reconecta 29×/dia) e **prejudicial**: reconexão
+  repetida é o padrão que o WhatsApp associa a robô. Quem decide o próximo passo
+  é gente.
+- O vigia de silêncio passou a cobrir a falha total, **exigindo a mesma
+  evidência** quando todos os monitores estão calados.
+
+O painel já sabia falar disso: `clientVisibleSessionState` traduz
+`receptionState === 'blind'` em `NOT_RECEIVING`. **Faltava só o classificador
+chegar a essa conclusão** — agora que chega, a tela para de dizer "conectado"
+para quem não está recebendo nada.
+
+Rollback sem redeploy: `WA_BLIND_ACROSS_RECONNECTS_MS=0` desliga só a regra
+nova. Testes: `test/reception-health.test.js` (com os números reais da conta),
+`test/bot-worker-reception-blindness-wiring.test.js` (guarda estrutural).
+
+**Todo worker agora diz no boot quais filtros de recepção está aplicando**
+(`'Filtros de recepção deste robô'`). `WA_IGNORE_UNMONITORED_GROUPS` descarta
+mensagem antes do decrypt e **não escrevia nada em lugar nenhum** — nem no boot,
+nem ao ignorar (`ignoredJidPolicy.js` não tem logger). Ligada em produção em
+14/09, não havia como responder "pegou nos robôs?": qualquer grep dava zero com
+a flag ligada ou desligada. Em modo `remote` o worker só relê a env quando o
+supervisor reinicia, que é exatamente quando a pergunta aparece — e de fato os
+38 workers estavam rodando desde antes da mudança, sem terem lido a flag.
+⚠️ **A ordem importa:** o log cita constantes de escopo de módulo e, se subir
+acima de qualquer uma delas, o módulo estoura ReferenceError (TDZ) no load e
+**todo worker morre no boot**. Guarda em
+`test/bot-worker-reception-blindness-wiring.test.js`.
+
+**Varrer a frota inteira procurando o mesmo quadro** (read-only, roda no
+diretório do ambiente e **não depende deste conserto estar no ar**):
+
+```bash
+cd ~/wabot && node scripts/diag-frota-cega.mjs
+```
+
+Ele mapeia cada processo de robô para a conta (`BOT_USER_ID` em
+`/proc/<pid>/environ`), conta as linhas `mensagem recebida` **daquele pid** no
+`bot.log` (que é compartilhado por todas as contas — o pid é o que separa) e
+cruza com o banco. **"Cega" exige as duas evidências**: a conta espelhava antes
+E não recebe nada agora. Sem isso, conta parada e madrugada acusariam igual.
+Envio com `destGroup='broadcast'` (fila/garimpo) **não** conta como
+espelhamento: ele continua saindo com a recepção morta e esconderia o caso.
+
+⚠️ **O que este conserto NÃO faz: curar a causa da cegueira dela.** A poluição
+vinha de chats que o robô **nem monitora** — os retry receipts dela saíam com
+`retryCount: 5` para mensagens de DM na fila offline. O remédio de causa raiz
+para esse quadro já existe e está **DESLIGADO**: `WA_IGNORE_UNMONITORED_GROUPS`
+(ver "Ignorar grupos NÃO-monitorados no socket"). Ligar isso reconecta todas as
+sessões e é decisão humana, anunciada antes.
+
+⚠️ **Armadilha de diagnóstico desta investigação:** `42172350988530@lid` aparecia
+em `ops_wa_group_desync_autoheal`/`unresolved` como "o grupo culpado", e a
+escalação recomendava "a cliente sair e reentrar no grupo". No log bruto esse
+jid é o **`recipient`** dos retry receipts, com `notify:"Viviane"` e
+`peer_recipient_pn` de um telefone — ou seja, **o endereço da própria conta
+dela**, não um grupo do qual ela possa sair. O auto-refresh disparou ~10×/dia
+contra isso, devolvendo 91 grupos, sem nunca curar nada. Investigar
+separadamente antes de agir sobre esse sinal.
+
 ## Conectado e sem receber: o robô refaz a conexão sozinho (RCA 2026-08-28)
 
 Terceira parada da mesma cliente (`cynthiatceles@gmail.com`) em quatro dias.
@@ -3313,8 +3708,8 @@ defesa). Teste: `test/core/worker-spawn-options.test.js`.
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
 O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
-(default **20**; **produção está em 40** desde a ampliação do servidor — ver a
-medição de 2026-09-11 abaixo) robôs vivos — `checkSessionCircuitBreaker` em
+(default **20**; **produção está em 80** desde 2026-09-18 — ver a medição
+vigente abaixo) robôs vivos — `checkSessionCircuitBreaker` em
 `src/supervisor/index.js`. **Isso é o teto comercial da operação**: cheio,
 NENHUMA cliente nova consegue conectar, e quem desligar o próprio robô não
 consegue voltar (perde a vaga para outra conta).
@@ -3351,7 +3746,51 @@ teto de 20 não era capricho, era o que cabia. Subir o teto é mudança
 memory-heavy → REGRA #1 da política de memória abaixo (avisar antes, com
 estimativa).
 
-**Medição real (2026-09-11, prod — números vigentes, use ESTES para estimar):**
+**Medição real (2026-09-18, prod — números VIGENTES, use ESTES para estimar):**
+o servidor foi ampliado de novo, para **30,6 GB** (`free -m` diz 31.337 MB
+totais), e as duas janelas de economia de memória entraram em produção no mesmo
+dia (`MALLOC_ARENA_MAX=2` e `LOG_TRANSPORT_MODE=inline` + cache do Sharp — ver
+`docs/analise-ram-memoria-nativa-2026-09-16.md`). Com **47 robôs** ligados:
+
+| medida | 2026-09-11 | **2026-09-18** |
+|---|---:|---:|
+| RAM total | 15.613 MB | **31.337 MB** |
+| RAM disponível | 4.919 MB (31%) | **24.342 MB (78%)** |
+| RSS somado dos robôs | 11.832 MB (36 robôs) | **8.540 MB (47 robôs)** |
+| **média por robô (RSS)** | 329 MB | **182 MB** |
+| swap em uso | 41 MB, sem tráfego | **0** |
+
+**A média por robô CAIU 45%** (329 → 182 MB) — não é ruído: são as janelas de
+memória nativa, medidas em PSS no documento e confirmadas aqui em RSS, que é a
+unidade da política de capacidade.
+
+⚠️ **O teto de vagas em produção é 80, NÃO 40** (confirmado pela dona do
+produto em 2026-09-18). Todo texto deste arquivo que dizia 40 estava
+desatualizado — não repetir 40 como se fosse o valor vigente.
+
+⚠️ **O limite seguro da política saltou de 35 para ~71.**
+`evaluateCapacity` reserva o maior valor entre 20% da RAM e 1.536 MB — aqui
+**6.267 MB** — e divide o resto por 350 MB/robô: `(31.337 − 6.267) / 350 = 71`.
+Com **47 robôs** ligados, a folga pela política é de **24 vagas** (era zero em
+11/09). A leitura anterior ("a folga pela política é zero", "o painel amarela
+pela contagem de vagas") **deixou de valer**.
+
+⚠️ **O teto de 80 continua sendo MAIOR que o limite seguro (71)** — ou seja,
+quem primeiro amarela é a política, não a contagem de vagas, e entre 71 e 80 o
+servidor aceitaria robô que a política já não recomenda. Não é problema hoje
+(47 ligados), mas é o número a vigiar: chegando perto de 71, o sinal que decide
+é o **swap**, não a RAM livre.
+
+⚠️ **A política continua usando 350 MB/robô**, não os 182 medidos: ela usa o
+MAIOR entre 350 e o p95 observado, de propósito — o colchão existe para pico de
+GC e scrape pesado. Pela média medida caberiam ~137 robôs; **não é esse o número
+a usar para decidir.**
+
+⚠️ **Subir o teto de vagas continua sendo REGRA #1 da política de memória** e
+exige reiniciar o `bot-supervisor` (reconecta TODAS as sessões). Ter folga não é
+autorização — a decisão é da dona do produto.
+
+**Medição de 2026-09-11 (HISTÓRICA — servidor e robôs mudaram desde então):**
 o servidor foi ampliado para **15,6 GB** (8 vCPU, disco de 38 GB) e o teto subiu
 para **40**. Com **36 robôs** ligados:
 
@@ -3425,7 +3864,7 @@ Onde roda: `setInterval` + `unref()` dentro da API, mesmo padrão de
 (uma contagem a cada 15min). A contagem vem de `listRunningBots()` do
 `manager.js`, a **mesma fonte** que o circuit breaker usa, então o aviso não
 pode discordar do que recusa a cliente. O teto é lido pela **mesma fórmula** do
-supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20; produção está em 40).
+supervisor (`MAX_SESSIONS_PER_PROCESS`, default 20; **produção está em 80**).
 
 **Não regredir:**
 
@@ -3459,7 +3898,7 @@ real discordarem até a outra subir.
 Conferir o teto que está VALENDO em produção (o teto vem do `.env` via dotenv,
 então `/proc/<pid>/environ` **não** serve — ele mostra só o ambiente do exec):
 ```bash
-grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20 (prod tinha 40 em 2026-09-11)"
+grep -n "MAX_SESSIONS_PER_PROCESS" ~/wabot/.env || echo "ausente no .env -> vale o padrao 20 (prod estava em 80 em 2026-09-18)"
 # o que o supervisor de PRODUCAO leu no boot. Dois cuidados: o pm2 numera o
 # arquivo por instancia (pegue o mais recente por data, nao por nome) e
 # `*supervisor*` casaria tambem os logs de STAGING, que tem outro teto.
@@ -3566,12 +4005,18 @@ liga/desliga staging** (economia de RAM sob demanda) + **vigilância 403**
 
 ### Fatos de capacidade (use para estimar antes de sinalizar)
 
-- **Orçamento por sessão WhatsApp ativa:** ~**0,33 GB** de RSS medidos em
-  2026-09-11 (média 329 MB, maior robô 495 MB; era 272 MB em 2026-09-01). Base
-  fixa (api+dashboard+supervisor+staging+OS) ~**1 GB** medido no mesmo instante.
-- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,33 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
-- **Servidor vigente (2026-09-11):** 15,6 GB de RAM, 8 vCPU, disco de 38 GB,
-  swap de 4 GB. Teto de vagas em 40; limite seguro da política em 35.
+- **Orçamento por sessão WhatsApp ativa:** ~**0,18 GB** de RSS medidos em
+  2026-09-18 (média 182 MB com 47 robôs; era 329 MB em 11/09 e 272 MB em 01/09
+  — a queda é das janelas de memória nativa). Base fixa
+  (api+dashboard+supervisor+staging+OS) ~**1 GB**.
+- **Fórmula:** `RAM ≈ 1 GB + N_sessões × 0,18 GB + (staging co-locado? +0,4 GB) + ~20% folga`.
+- ⚠️ **Para decidir CAPACIDADE, use 0,35 GB por sessão, não os 0,18 medidos** —
+  é o que `evaluateCapacity` usa (o maior entre 350 MB e o p95 observado), e o
+  colchão existe para pico de GC e scrape pesado.
+- **Servidor vigente (2026-09-18):** **30,6 GB** de RAM, disco de 38 GB, swap de
+  4 GB. Teto de vagas em **80**; limite seguro da política em **~71**. Com 47
+  robôs ligados são **24 vagas de folga pela política**, contra zero em 11/09 —
+  e quem amarela primeiro passa a ser a política (71), não o teto (80).
 - **Custo marginal de infra por cliente:** ~R$1,75/mês (marginal) a ~R$2-3/mês
   (com base amortizada). Não é o gargalo do produto — RAM é barata perto do ticket.
 - **Swap é pré-requisito, não muleta:** num VPS apertado, swap ativo é a 1ª
@@ -3939,6 +4384,50 @@ que será mergeado antes ou depois dele.
 
 Teste: `test/migrations-no-duplicate-column.test.js`.
 
+#### Aconteceu de novo, agora numa TELA (RCA 2026-09-13 — produção fora do ar)
+
+`/painel/filas` foi para produção abrindo **em branco**, com
+`Uncaught ReferenceError: findDestinationsWithoutQueue is not defined` no
+console. Servidor 200, todos os chunks 200 — a quebra era no navegador.
+
+Mesmo mecanismo da pegadinha #10, com um detalhe novo: **o conflito estava
+entre o USO e o IMPORT, em regiões distantes do mesmo arquivo.**
+
+| commit | import | uso |
+|---|---|---|
+| `08e8695` (PR #1641, aviso de grupo fora das filas) | ✅ | ✅ |
+| `40f6764` (PR #1644, Instagram — branch tirada ANTES da #1641) | ❌ | ❌ |
+| `2b47f6f` (merge de `develop` na branch do Instagram) | ❌ | **✅** |
+
+O merge pegou o uso de um lado e o bloco de imports do outro. Zero conflito
+textual, build passou (bundler não resolve identificador livre em tempo de
+build), e nenhum teste renderiza essa página.
+
+**Por que nada pegou:**
+- `eslint.config.js` **ignorava `dashboard/**` de propósito** — o comentário
+  dizia que "a CI só lintava o dashboard". Só que o lint do Next **não roda
+  `no-undef`**.
+- O gate do dashboard em `deploy.yml` roda só em `pull_request`, e a PR foi
+  mergeada com esse check ainda em andamento.
+
+**Correção:** o `no-undef` passou a cobrir `dashboard/app`, `dashboard/components`
+e `dashboard/lib` (bloco próprio no `eslint.config.js`, com globais de
+navegador), e o job da CI virou
+`eslint@9 --no-inline-config src test dashboard/app dashboard/components dashboard/lib`.
+
+⚠️ **`--no-inline-config` é obrigatório** nesse comando: as telas têm
+`eslint-disable` de regras de plugin (`react-hooks/*`, `@next/next/*`) que não
+existem nesta config pura (ela não importa nada, de propósito, para rodar com
+`npx` sem `npm ci`) e virariam erro de "rule not found".
+
+**Não regredir:** não voltar a pôr `dashboard/**` no `ignores`. A varredura do
+dashboard inteiro no dia da correção achou **só** esse caso — o custo de manter
+a rede ligada é um lint a mais por PR.
+
+⚠️ E a lição de processo continua a MESMA e continua sem estar aplicada:
+branch protection exigindo `quality` e `no-undef` verdes antes do merge. As
+duas PRs desta história foram mergeadas com check em andamento.
+
 ## "Imagem que veio na mensagem" tem UM caminho só: subir de novo (RCA 2026-08-21)
 
 Existiam **dois** caminhos para a mesma promessa de produto, e eles não eram
@@ -4219,6 +4708,164 @@ de já ter a foto". Lembre da armadilha do ML: o muro anti-robô vem com **statu
 `bot-supervisor` não for reiniciado, os avisos novos não aparecem no log (ver
 seção "código novo não carregado pelos bots").
 
+## Magalu sem foto: a loja fecha a página e isso era MUDO (RCA 2026-09-17)
+
+Cliente relatou "as ofertas da Magalu estão indo sem imagem".
+
+**Causa raiz: a Magalu era a única loja habilitada sem fonte de foto própria.**
+`fetchProductImage` (`src/converters/imageScrapers.js`) tem ramo dedicado para
+Shopee (API de afiliado), Amazon (`data-a-dynamic-image`) e Mercado Livre
+(vitrine + API); a SHEIN não precisa porque o og:image do oneLink já serve. A
+Magalu caía **só** no leitor genérico de HTML (`resolveByHtmlLayers`) — e é
+exatamente esse caminho que a loja fecha.
+
+**Medido no servidor (2026-09-17, página real de produto), não deduzido:**
+
+| User-Agent | Resposta |
+|---|---|
+| navegador, Googlebot, Twitterbot, Slackbot, TelegramBot, iPhone, curl | **403** com a página de erro de marca (1.075 bytes, "Não é possível acessar a página", CSS em `wx.mlcdn.com.br/akamai-bot/`) |
+| WhatsApp | **200** com ~2,5KB de desafio JavaScript do Akamai (`sec-if-cpt-container`, "Powered and protected by Akamai"), sem `og:image` |
+
+Também foram medidos e descartados: `www.magazinevoce.com.br` (Radware, 200 com
+`az-request-verify`), `busca.magazineluiza.com.br` (captcha do Radware),
+`/api/*` e `/sitemap.xml` (403), `mlz.me` (resolve para landing do Bitly) e
+`api.magalu.com` (portal de desenvolvedor — exige credencial de vendedor, que a
+cliente não tem). **Não existe hoje fonte de foto da Magalu que não passe pela
+página do produto**; o CDN (`a-static.mlcdn.com.br`) responde, mas o caminho da
+foto não é derivável do SKU.
+
+⚠️ **A medição acima é do IP de onde ela foi feita, não uma lei.** Bloqueio por
+reputação de IP vem e vai (o muro do ML entregava foto em staging e não em
+produção). O defeito de código, esse sim, é independente de IP: **o bloqueio
+não tinha nome**.
+
+**Por que ficava escondido — as duas formas do muro eram indistinguíveis de
+"não tem foto":**
+
+- o caso de **200** é a mesma armadilha do muro do Mercado Livre: "a página
+  respondeu" não significa nada, e o resultado chegava ao log como
+  `scrape_sem_imagem`, que quer dizer *a loja não tem foto deste produto* — um
+  diagnóstico com ação OPOSTA à real;
+- o caso de **403** era ainda mais mudo: `fetchHtml` devolvia `{ html: null }`
+  em qualquer `!res.ok`, então bloqueio de borda e link morto (404) viravam a
+  mesma coisa.
+
+**O que foi feito:**
+
+| Peça | Onde |
+|---|---|
+| Reconhecer o muro nas duas formas + candidatas de resolução (PURO, sem rede) | `src/converters/magaluImage.js` |
+| Ramo próprio da Magalu | `resolveMagaluImage` em `src/converters/imageScrapers.js` |
+| Status HTTP devolvido por `fetchHtml` | idem |
+| Sinal durável `ops_magalu_bot_wall` | `src/observability/operationalSignals.js` + `src/analytics.js` |
+
+**Não regredir:**
+
+- **O ramo da Magalu não pode voltar a cair no leitor genérico**, e o genérico
+  não pode reler a MESMA página (dois fetches do mesmo HTML dentro do orçamento
+  de 25s da mensagem — mesma lição do T069 da SHEIN). Guarda estrutural no teste.
+- **403 e 429 são bloqueio; 404 continua sendo link morto.** Acusar bloqueio no
+  404 mandaria procurar defeito na loja quando o link é que não existe mais.
+- **`buildMagaluImageUrlCandidates` nunca reescreve destrutivamente.** O
+  og:image da Magalu traz o tamanho no caminho do CDN (`/450x450/...`), quase
+  sempre abaixo dos 800px do preview; as variantes grandes vêm primeiro e a URL
+  **original fica por último** — mesmo contrato de Amazon/SHEIN. Se o CDN não
+  servir o tamanho pedido, `fetchImageBuffer` cai para a que já funcionava em
+  vez de a oferta sair sem foto. E nunca pede variante MENOR do que a anunciada.
+- **O sinal precisa estar nas DUAS allowlists** (`operationalSignals.js` e
+  `analytics.js`): faltar em uma descarta o evento em silêncio (mesmo modo de
+  falha de `organic_page_view`).
+- **Dar nome ao bloqueio NÃO substitui a foto.** Quando este caminho devolve
+  `null`, quem salva a oferta é o plano B da foto da mensagem de origem
+  (`core/previewImageFallbackPolicy.js`, ligado por default) — e ele só tem o
+  que usar se a mensagem de origem trouxer foto. Oferta de Magalu compartilhada
+  como texto + link, com a loja barrando, **continua saindo sem foto**: não há
+  bytes em lugar nenhum. Isso é limite conhecido, não defeito escondido. **Não**
+  usar o banner de marca (`storeBrandCard`) como tapa-buraco de produto — é
+  exatamente a regressão #1205/#1208.
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers: nada disso
+vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta
+TODAS as sessões — anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/magalu-imagem-oferta.test.js` (muro reproduzido por servidor
+local, sem tocar a loja).
+
+## Foto do card saindo como SELO no meio de um fundo borrado (RCA 2026-09-18)
+
+Cliente mandou print: card de tênis (Magalu, `magazinevoce.com.br`) com a foto
+num quadradinho no centro, cercada por uma ampliação borrada dela mesma.
+
+**Medido no banco da conta, não deduzido:**
+
+| quando | deliveryKind | originImageBytes |
+|---|---|---:|
+| 21:13 | `card_origem` | **5.539** |
+| 20:56 | `texto` | 0 |
+
+Ou seja: a foto veio do **plano B da mensagem de origem** (a loja devolveu 403,
+`ops_magalu_bot_wall`), e essa foto é a **miniatura embutida do card da
+origem** — poucas centenas de pixels.
+
+**Causa:** `prepareWAMessageMedia` lê as dimensões REAIS do buffer que sobe e
+grava `thumbnailWidth`/`thumbnailHeight` no proto (Utils/messages.js). O
+WhatsApp desenha o card no tamanho declarado e preenche o resto com borrão.
+`normalizeImageForWhatsApp` redimensiona com `withoutEnlargement: true` — **de
+propósito** —, então a foto pequena chega pequena ao upload.
+
+⚠️ **Não é problema de Magalu.** O mesmo `bot.log` mostra o plano B agindo em
+Mercado Livre e Shopee (`Card de preview: foto da loja falhou, usando a foto da
+mensagem de origem`). **Toda** oferta que cai no plano B saía assim.
+
+| Peça | Onde |
+|---|---|
+| Quando ampliar (PURO, sem imagem) | `src/core/cardPhotoUpscalePolicy.js` |
+| A ampliação (ponto ÚNICO) | `src/core/cardPhoto.js` (`upscaleCardPhotoIfTiny`) |
+| Gancho | `buildManualLinkPreview` em `src/bot-worker.js` |
+
+**Por que ampliar é certo AQUI e errado no envio de foto:** a decisão de
+2026-08-26 é que miniatura minúscula ampliada **em tela cheia** vira borrão
+ilegível — e ela continua valendo (`withoutEnlargement: true` fica onde está).
+Mas o mesmo RCA registra que **"miniatura pequena DENTRO de um card é
+legível"**. É este caso: a alternativa não é uma foto melhor, é o selo do
+print. Teste falha se a ampliação vazar para fora do card.
+
+**Não regredir:**
+
+- **A ampliação roda ANTES da marca d'água.** `renderDestinationWatermark`
+  DESISTE de marcar foto pequena demais (`watermarkApplied:false` em silêncio),
+  então ampliar antes faz a marca ser desenhada na resolução final e recupera
+  casos em que ela simplesmente não saía. Teste trava a ordem.
+- **E antes do upload**, que é quem grava as dimensões no proto. Depois dele
+  não serve para nada.
+- **Fora do banner de cupom**: ele já nasce em 720x720, com tamanho escolhido,
+  e não é foto de produto.
+- **Fail-safe é NÃO ampliar.** Sem dimensão confiável, bytes ilegíveis ou
+  qualquer falha → devolve o buffer ORIGINAL. Card com selo é ruim; card sem
+  foto é pior.
+- **Foto que já preenche o card volta byte a byte igual** — nenhum reencode à
+  toa.
+- **A proporção é preservada** (`fit: 'inside'`): a foto nunca sai esticada.
+- **O piso é `IMAGE_HIRES_MIN_DIMENSION_PX` (800)**, que já era a definição da
+  casa de "resolução suficiente para o card grande do WhatsApp" — não é número
+  por analogia. Foi exatamente por analogia que o piso de bytes de 2026-08-26
+  nasceu em 3000 e teve de cair para 800 no mesmo dia.
+- `PREVIEW_CARD_MIN_PX=0` desliga e volta ao comportamento do print; valor
+  inválido cai no padrão (`.env` mal preenchido nunca muda o formato da oferta
+  em silêncio); fora da faixa é grampeado em [200, 1600].
+
+**Ampliar não inventa detalhe** — a foto fica borrada. O ganho é o card ocupar
+a largura toda em vez de virar selo, e num card a perda de nitidez é muito
+menor que em tela cheia. Se a dona do produto preferir o selo nítido,
+`PREVIEW_CARD_MIN_PX=0` reverte sem redeploy.
+
+**Custo:** um `sharp` a mais **só** quando a foto está abaixo do piso, uma vez
+por destino. Nenhum processo novo, nenhuma env obrigatória, **zero impacto de
+RAM**.
+
+Teste: `test/card-foto-pequena-selo.test.js` (renderiza imagem de verdade e
+mede os pixels, em vez de confiar em leitura de código).
+
 ## "As imagens só aparecem se clicar" (RCA 2026-09-03 — não regredir)
 
 Cliente (`samaraoliveiraasam@gmail.com`) mandou dois prints: um card de Shopee
@@ -4286,6 +4933,76 @@ modo `remote`, `pm2 restart bot-supervisor` para os workers carregarem o código
 `buildInlineThumbnail` (teste estrutural falha); não mandar o banner de cupom
 cheio para o campo embutido. Teste:
 `test/inline-thumbnail-policy.test.js`.
+
+## Card de cada oferta saindo de um tamanho (RCA 2026-09-16 — não regredir)
+
+Três relatos da mesma cliente na mesma conversa: "imagens quebradas", "preview
+com imagem pequena" e "cada oferta vindo com a imagem de um tamanho". Ela
+comparou com grupos profissionais, onde o preview sai **sempre do mesmo
+tamanho**.
+
+**Os três são o MESMO defeito visto de ângulos diferentes.** O card de preview
+não tem tamanho próprio: quem decide como o WhatsApp o desenha é a miniatura
+que sobe em `highQualityThumbnail` — `prepareWAMessageMedia` lê width/height do
+buffer e grava em `thumbnailWidth`/`thumbnailHeight` do proto. Até aqui esse
+buffer era **a foto como ela veio da loja**:
+
+| fonte da foto | o que chegava ao proto |
+|---|---|
+| Mercado Livre (`D_NQ_NP_2X_`) | 1080x1080 |
+| Amazon (`_AC_SL1500_`) | 1500x1500 |
+| banner de cupom (`storeBrandCard`) | 720x720 |
+| plano B da foto de origem | o que a mensagem de origem tivesse (às vezes ~300px) |
+| foto larga/alta de vitrine | proporção qualquer |
+
+Como `normalizeImageForWhatsApp` usa `withoutEnlargement: true`, foto pequena
+continuava pequena. Daí: proporção diferente por loja → **card de tamanho
+diferente por oferta**; foto pequena → **card compacto** (o Desktop/Web respeita
+as dimensões gravadas — é o mesmo mecanismo já descrito no comentário de
+`buildManualLinkPreview`); foto muito larga ou muito alta → o cliente **corta no
+centro** para caber no card e o produto sai fatiado ("quebrada").
+
+Hoje toda foto de card passa por uma **tela fixa** antes do upload:
+`composePreviewCardImage` (`src/core/previewCardCanvas.js`), com a decisão pura
+em `previewCardCanvasPolicy.js`. Quadrada de 1080px por padrão — proporção
+nativa da foto de catálogo de Amazon/ML/Shopee, então na maioria das ofertas não
+sobra moldura nenhuma. A foto entra **inteira** (`fit: inside`, nunca cortada) e
+o que sobra vira um desfoque da própria foto (barra branca ficaria estranha em
+foto colorida).
+
+**Não regredir:**
+
+- **Os DOIS montadores de card passam pela tela fixa**: `buildManualLinkPreview`
+  (espelhamento, via `prepararFotoDoCard`, nas TRÊS fontes — loja, plano B da
+  origem e banner de cupom) e `buildBroadcastLinkPreview` (fila e ofertas
+  automáticas). Um caminho de fora e os cards voltam a divergir entre si, que é
+  exatamente o relato. Guarda estrutural no teste.
+- **A miniatura embutida nasce da imagem JÁ composta.** Ela é o que o WhatsApp
+  desenha antes de baixar; derivá-la da foto original faria o card mudar de
+  proporção ao terminar o download.
+- **Nunca cortar a foto para preencher a tela** (`fit: cover`): cortar é o que
+  fatiava o produto. O vazio é moldura, não corte.
+- **Não soma custo no caminho do card**: a tela fixa SUBSTITUI o
+  `normalizeImageForWhatsApp` ali (entrega os mesmos dois campos), não roda
+  depois dele. O **envio em modo foto continua sem tela fixa** — lá a imagem é o
+  corpo da mensagem e recortar/emoldurar mudaria o que a pessoa vê em tela cheia.
+- **Fail-safe é deixar a oferta sair**: composição que falha, entrada ilegível ou
+  tela desligada devolvem `null` e o caminho histórico assume. Card de tamanho
+  irregular é muito melhor que oferta sem foto.
+- A marca d'água continua sendo composta **depois** da tela fixa, então ela
+  preserva as dimensões do card (`renderDestinationWatermark` só reduz para
+  dentro de 1600px, `withoutEnlargement`).
+
+Envs (opcionais): `PREVIEW_CARD_CANVAS=off` volta ao comportamento histórico sem
+redeploy (aceita `off`/`false`/`0`) e `PREVIEW_CARD_CANVAS_PX` muda o tamanho
+(padrão 1080, grampeado em [480, 1600]). Aplicar exige `pm2 delete` + `start`
+(pegadinha #1) **e**, em modo `remote`, `pm2 restart bot-supervisor` para os
+workers carregarem o código — o que reconecta TODAS as sessões (anunciar antes).
+
+⚠️ **Validar em staging olhando o grupo, não só o teste**: mandar ofertas de
+lojas diferentes (ML, Amazon, Shopee) e uma de cupom no MESMO grupo e conferir no
+celular que os cards saem do mesmo tamanho, com a foto inteira. Teste:
+`test/preview-card-canvas.test.js`.
 
 ## Voltar ao CARD DE PREVIEW CLICÁVEL: as duas travas e como caíram (2026-08-21)
 
@@ -4669,6 +5386,63 @@ credencial + formato do link enviado por dia + probe ao vivo) e
 `scripts/diag-amazon-shortlink-tag.mjs` (segue os `amzn.to` já enviados e lê a
 tag final). Os dois são read-only e não imprimem segredo.
 
+## Amazon: o preço publicado é o do BUY BOX (RCA 2026-09-16 — não regredir)
+
+Clientes reclamaram que a oferta de Amazon chegava ao grupo com um preço e a
+loja mostrava outro. Medido contra marcação real da Amazon, **cinco** caminhos
+do scraper produziam número errado — três para MAIS, dois para MENOS:
+
+| O que acontecia | Efeito no preço |
+|---|---|
+| O preço de TABELA riscado ("De: R$ 299,00") vem antes do preço a pagar; o regex antigo pegava o primeiro `a-offscreen` depois da âncora | mais caro |
+| `AggregateOffer.lowPrice` do JSON-LD ganhava do buy box — é o MENOR preço entre todos os vendedores e condições, inclusive usado | mais barato |
+| Preço de usado/outro vendedor (`usedbuyBox`) publicado quando o buy box está indisponível | mais barato |
+| `extractShopeePriceRangeFromHtml` e `extractShopeePriceFromHtml` varriam o HTML INTEIRO atrás de qualquer `R$ x,yy` — numa página da Amazon colhem acessório, "compre junto" e recomendação | qualquer coisa |
+| `a-price-whole` hoje carrega um `<span class="a-price-decimal">` aninhado; o regex exigia só dígitos e ponto, não casava, e a oferta caía nos fallbacks genéricos acima | — |
+
+A regra agora mora em **`src/converters/amazonPrice.js`** (`extractAmazonBuyBoxPrice`,
+puro e testável, sem rede): publicar o preço A PAGAR do buy box.
+
+**Não regredir:**
+
+- **Na Amazon o buy box ganha do JSON-LD.** `extractFromJsonLd` marca
+  `aggregate: true` quando o preço veio de `lowPrice`, e preço agregado passa a
+  valer só como ÚLTIMO recurso, nunca como primeira escolha. `highPrice` deixou
+  de virar "de": é o maior preço entre vendedores, não o preço cheio do anúncio
+  — como "de" ele inventa um desconto que não existe.
+- **Os extratores de faixa da Shopee só rodam em URL da Shopee.** Eles são
+  varredura cega de `R$` e não têm como saber de qual produto é o número.
+- **`a-price` precisa ser a classe INTEIRA.** `a-price-whole`, `a-price-symbol`
+  e `a-price-fraction` são pedaços do MESMO preço, não preços separados — um
+  `\ba-price\b` os trata como três ofertas e o valor sai picado.
+- **`priceToPay`/`apexPriceToPay` ganha de `a-text-price`.** A Amazon combina
+  as duas classes em alguns layouts; tratar `a-text-price` como riscado sempre
+  fazia a oferta sair SEM preço nenhum.
+- **Na dúvida, vazio.** Buy box indisponível não autoriza publicar o preço de
+  usado: oferta sem preço é recuperável, oferta com preço que não existe vira
+  reclamação e queima a confiança no resto das ofertas.
+- **"De" só sai quando é MAIOR que o "por"** — "de R$ 249,90 por R$ 249,90" faz
+  a cliente desconfiar do preço todo.
+
+⚠️ **Preço diferente nem sempre é defeito nosso:** oferta relâmpago muda de
+preço depois do envio. O que separa os dois casos é O QUANDO. Diagnóstico
+read-only, no diretório do ambiente:
+
+```bash
+cd ~/wabot && node scripts/diag-amazon-preco.mjs <email> --days=3
+```
+
+Ele põe lado a lado o preço que saiu no texto da mensagem e o preço que está na
+Amazon agora. `MUDOU` concentrado em envios de minutos atrás é defeito nosso;
+espalhado em envios antigos é a loja que mudou o preço depois.
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada
+disso vale nos bots antes de `pm2 restart bot-supervisor --update-env`
+(reconecta TODAS as sessões: avisar antes). Ver "código novo não carregado
+pelos bots".
+
+Testes: `test/amazon-preco-buy-box.test.js`, `test/product-info-scraper.test.js`.
+
 ## Vitrine `/social/?ref=`: usar o endereço do card, nunca fabricar (RCA 2026-07-28)
 
 Todo `meli.la` de canal resolve para `/social/<handle>?ref=<blob>`, e
@@ -4794,6 +5568,382 @@ Melhorar essa leitura é outra frente; nada disso justifica publicar `{preço}`.
 Testes: `test/criar-oferta-sem-preco.test.js`,
 `test/mobile-offer-composer.test.js`.
 
+## Oferta de PRODUTO publicada como VITRINE (+ banner de cupom) (RCA 2026-09-18)
+
+Cliente mandou print de duas ofertas de perfume, com nome e preço, saindo com o
+banner amarelo "CUPOM Mercado Livre" no lugar da foto. As duas publicaram **o
+mesmo link** — que não era de produto nenhum: era a vitrine cadastrada da
+própria cliente.
+
+**O banner era a ponta; a raiz é a troca do link.** Em 45 minutos, 30 ofertas
+saíram assim (~25 delas de produto: fone, perfume, panela, notebook, pneu,
+whey), em 5 contas. Quem clicava no perfume caía numa lista genérica.
+
+### A medição que fechou a causa (não repetir as hipóteses derrubadas)
+
+| Hipótese | Veredito |
+|---|---|
+| Muro anti-robô do ML no IP do servidor | **FALSA** — 4 links testados, 200, página completa, sem marcador |
+| O ML mudou o HTML e o extrator quebrou | **FALSA** — o extrator lê o card e monta a URL certa |
+| A etiqueta `?ref=` se perde no caminho reserva da resolução | **FALSA** — **0** casos em 773 |
+
+O placar real das 773 falhas de leitura: **242** eram `/lists` (sem produto,
+comportamento correto) e **531** eram páginas que **responderam 200 e vieram sem
+o card destacado**. Reprocessando 20 dos links que falharam em produção,
+**17 resolveram na primeira tentativa, em ~1s cada**.
+
+Ou seja: **o ML às vezes entrega a página sem o produto em destaque, e o robô
+tratava esse engasgo como resposta definitiva.**
+
+### A cadeia inteira, e os três consertos
+
+1. Leitura do card destacado falha por um instante
+   (`tryExtractFeaturedProductFromSocialShare`).
+2. `resolveToCleanProductUrl` devolve `null` — e `null` significava DUAS coisas
+   opostas: "a página não tem produto" e "não consegui ler a página".
+3. `convert()` cai no caminho de cupom; o ML recusa (`unsupported_url`, erro 111).
+4. `decideVitrineFallback` publica a **vitrine da cliente** no lugar do produto,
+   com `linkKind:'coupon'` + `warning:'ml_vitrine_fallback_used'`.
+5. Esse aviso de FALHA era lido como sinal de que a mensagem era de cupom, e
+   ligava o banner.
+
+**Não regredir:**
+
+- **Ler de novo antes de desistir.** `ML_SOCIAL_CARD_ATTEMPTS` (2) com
+  `ML_SOCIAL_CARD_RETRY_DELAY_MS` (600ms). A releitura só acontece quando a
+  página **respondeu** e respondeu rápido (`ML_SOCIAL_CARD_RETRY_MAX_ELAPSED_MS`,
+  3s): leitura que estourou já consumiu o orçamento da mensagem
+  (`MSG_QUEUE_TIMEOUT_MS`, 25s), e insistir ali derrubaria por timeout uma oferta
+  que hoje sai — pior que o defeito sendo consertado.
+- **"Não consegui ler" NUNCA vira "é vitrine".** `ML_SOCIAL_CARD_OUTCOME`
+  separa `PRODUTO` / `SEM_PRODUTO` / `LEITURA_FALHOU`, e `decideVitrineFallback`
+  descarta quando a leitura falhou. **Oferta não enviada é recuperável; oferta
+  enviada com o link errado não é** — já foi para o grupo. Escape hatch:
+  `ML_VITRINE_ON_READ_FAILURE=true` volta ao comportamento histórico.
+- **Vitrine LIDA e confirmada sem produto continua caindo na vitrine
+  cadastrada** — as features 004/007 não foram tocadas.
+- **O banner de cupom exige vitrine CONFIRMADA**
+  (`resolveCouponTextSignal`, em `converters/couponBrandCardPolicy.js`). A
+  blindagem tripla tem duas condições que caem sozinhas com link curto (a URL não
+  expõe MLB/ASIN → `linkKind:'coupon'` e `urlHasProductId:false`), então o sinal
+  de texto era a **única** trava real — e aceitar `ml_vitrine_fallback_used` nela
+  fazia **um fato só** (a conversão falhou) derrubar as três. Hoje o aviso de
+  vitrine só vale quando `isDirectVitrineShare(primary.url)` é true, isto é,
+  quando o link COMPARTILHADO já era uma página `/social/`. Atrás de um
+  encurtador pode haver produto de verdade — e havia.
+- **`COUPON_BRAND_CARD_ENABLED` estava ligado em produção** contra o que esta
+  documentação já mandava. Continua devendo ficar ausente até validação
+  explícita em staging.
+
+⚠️ **Armadilha de diagnóstico:** `sentAt` é gravado pelo Prisma no SQLite como
+**número** (ms). Consulta com `sentAt > datetime('now','-2 days')` compara número
+com texto e **nunca dá verdadeiro** — devolve zero linhas e parece ausência de
+dado. Use `sentAt > (strftime('%s','now','-2 days') * 1000)` e
+`datetime(sentAt/1000,'unixepoch','localtime')`.
+
+Comandos de diagnóstico (read-only, no diretório do ambiente):
+
+```bash
+LOG=/home/deploy/BOTinho-shared/logs/bot.log
+# placar da leitura do card destacado
+for m in "produto destacado extraído" "sem card destacado" "erro ao buscar HTML" "usando vitrine cadastrada"; do
+  printf "%-34s %s\n" "$m" "$(grep -c "$m" $LOG)"
+done
+# separa o defeito (com ref=) do comportamento correto (/lists)
+grep "sem card destacado" $LOG | sed -n 's/.*"landingUrl":"\([^"]*\)".*/\1/p' | awk '
+/\/lists/ {l++; next} /[?&]ref=/ {r++; next} {s++}
+END {print "  /lists:", l+0; print "  com ref= (defeito):", r+0; print "  sem ref=:", s+0}'
+```
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada disso
+vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
+as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/ml-oferta-de-produto-virou-vitrine.test.js`.
+
+## Oferta que chega pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13)
+
+Cliente (`raelysouza98@gmail.com`) reportou "o robô não espelha". Não havia
+defeito: o grupo monitorado publica a oferta pelo **domínio próprio do dono
+dele** (`https://dicasdeamigas.com.br/p/yaQ4mlRhfU`), nunca pelo link da loja.
+`detectLinks` só conhece os domínios das lojas suportadas, então a mensagem
+chegava "sem link", o sanitizador apagava a URL de terceiro (corretamente — ela
+credita o concorrente) e a oferta morria em `skip:policy:...:nolink` /
+`skip:no_valid_conversions`.
+
+**Medido no link real antes de escrever o código** (não é suposição): NÃO é
+redirect HTTP — responde **200 com HTML** (Next.js), e o corpo traz **as duas**
+URLs: o short link de afiliado do concorrente (`https://link.amazon/...`) e a
+**URL limpa do produto** (`https://www.amazon.com.br/dp/B088PNBKTR/`).
+
+| Peça | Onde |
+|---|---|
+| Decisão + resolução (puro + I/O injetado) | `src/core/customDomainLinkResolver.js` |
+| Gancho no robô | `unwrapCustomDomainOfferLinks` em `src/bot-worker.js` |
+| Sinal durável | `ops_custom_domain_link_resolved` |
+
+O módulo devolve o **texto** com a URL de domínio próprio trocada pela da loja.
+Por rodar **antes** do sanitizador, o resto do pipeline (sanitizador, detector,
+conversor, dedup, imagem) segue byte a byte como já era — nenhum deles mudou.
+
+### Oferta com 3+ links chegava com só dois (RCA 2026-09-17 — não regredir)
+
+Cliente reportou: oferta com três ou quatro produtos chegava ao grupo com **dois
+links convertidos e, do terceiro em diante, nenhum link — só o texto do
+produto**.
+
+Não era limite de quantidade, nem conversão falhando: era o desembrulho de
+domínio próprio **desligando-se pela mensagem inteira**. `findCandidateLinks`
+abria com `if (cleaned.some(isOfferUrl)) return []` — um único link de loja no
+texto bastava para nenhuma URL ser desembrulhada. Numa oferta **mista** (os
+primeiros produtos com link direto da Amazon/ML e os seguintes pelo site do dono
+do grupo, como `clubedoachadinho.com.br/p/…`, `compre.link/…` ou
+`dicasdeamigas.com.br/p/…` — os três já medidos em produção), os links
+embrulhados nunca viravam link de loja, `removeNonOfferUrls` os apagava na linha
+seguinte (corretamente: eles creditam o concorrente) e a cliente via a linha do
+produto sem URL nenhuma. Os dois primeiros saíam porque já eram link de loja.
+
+⚠️ **Nada disso aparecia no painel**: a mensagem era gravada como `success` (ela
+saiu), e o desembrulho nem chegava a rodar, então também não havia linha de
+falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
+
+**Não regredir:**
+
+- Não voltar a desligar a varredura inteira quando existe link de loja no texto
+  — é literalmente o bug. Guardas em `test/custom-domain-link-resolver.test.js`
+  ("oferta MISTA").
+- O teto de candidatos por mensagem (`MAX_CANDIDATES_PER_MESSAGE`, 2) continua
+  valendo: grupo que despeja dez links embrulhados não pode virar dez idas à
+  rede dentro da fila serial.
+
+**Não regredir:**
+
+- **A decisão é POR LINK, nunca pela mensagem inteira** (corrigido em
+  2026-09-17 — não regredir). Candidato é a URL que NÃO é de loja suportada:
+  é ela que o sanitizador vai apagar em seguida. Link que já é de loja fica
+  fora dos candidatos, então mensagem só com link de loja (ou sem link) segue
+  sem gastar rede — o custo continua zero onde já era zero.
+- **Mensagem MISTA gasta um orçamento menor** (`CUSTOM_DOMAIN_MIXED_BUDGET_MS`,
+  6s, contra os 13s de `CUSTOM_DOMAIN_TOTAL_BUDGET_MS`). Ali o desembrulho é um
+  ganho — recupera o link que seria apagado —, nunca a diferença entre espelhar
+  e não espelhar: a oferta sai de qualquer jeito pelos links de loja que já
+  existem. Gastar o orçamento cheio arriscaria estourar os 25s de preparo da
+  mensagem (`MSG_QUEUE_TIMEOUT_MS`) e derrubar uma oferta que hoje funciona.
+- **Roda ANTES de `sanitizeInviteLinks`.** Invertido, a URL de domínio próprio já
+  foi apagada e não há o que desembrulhar — é exatamente o estado anterior ao
+  fix. Guarda estrutural no teste.
+- **O link de terceiro NUNCA é publicado.** Ele é substituído pelo da loja (que
+  ainda passa pela conversão com a credencial da cliente) ou fica como estava, e
+  aí o sanitizador o remove como sempre removeu. Falha aqui não vaza comissão.
+- **Preferir a URL com ID de produto** (`urlHasProductId`), não a primeira do
+  HTML. A limpa converte melhor (o conversor lê o ASIN direto) e não carrega a
+  etiqueta do concorrente.
+- ⚠️ **Não extrair do HTML com `PATTERNS` do detector.** O `[^\s]*` de lá foi
+  feito para TEXTO CORRIDO; em JSON minificado não há espaço, e — medido — o
+  primeiro link engolia milhares de caracteres e **escondia** a URL limpa do
+  produto, fazendo a preferência acima nunca ver a melhor opção. A URL é
+  recortada nos delimitadores de HTML/JSON **antes** de ser classificada.
+- **Anti-SSRF obrigatório** (`isSafeCandidateUrl`): o link vem de grupo de
+  TERCEIROS, é entrada hostil. Sem isso o robô viraria buscador de rede interna
+  para quem publicasse `http://169.254.169.254/...` no grupo monitorado. Recusa
+  IP literal (v4/v6), host sem ponto, sufixo de rede local, credencial embutida
+  e porta fora de 80/443.
+- **Fracasso não é cacheado** (mesma lição do short link da Shopee); sucesso vale
+  6h. **Fail-safe é não mexer no texto**: qualquer erro devolve o original.
+- **Teto de 2 links por mensagem, com tempo generoso por link E teto na mensagem
+  inteira.** Medido em staging (2026-09-13): o MESMO endereço respondeu em
+  **568ms** numa chamada e **estourou 4s** na seguinte — o site oscila muito a
+  partir do servidor. Confirmado em produção (2026-09-14): os DNS IPv6 da
+  Hetzner falharam de forma intermitente, uma tentativa estourou os 8s e a
+  seguinte resolveu em 2,6s. Por isso há no máximo 2 tentativas, mas a segunda
+  só ocorre para `tempo_esgotado`/`erro_de_rede:*`; 403, HTML sem loja e recusas
+  de segurança nunca repetem. Por tentativa o teto segue 8s
+  (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira são 13s
+  (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), preservando ~12s dos 25s de preparo para
+  converter e buscar a foto. O teto é da mensagem inteira, inclusive com dois
+  links — não multiplicar por candidato. O log traz `attempts` e
+  `recoveredByRetry`, para medir recuperação sem esconder a primeira falha.
+- **O orçamento da mensagem é DIVIDIDO entre os links, nunca gasto por ordem de
+  chegada** (RCA 2026-09-18). Sem divisão, o PRIMEIRO link embrulhado consumia o
+  orçamento inteiro e o segundo nem chegava a ser tentado
+  (`sem_tempo_no_orcamento`) — a oferta chegava ao grupo com dois **"Compre
+  aqui:" vazios**, que é exatamente o que o desembrulho por link (fix anterior)
+  existia para impedir. Cada link recebe agora "o que sobra dividido pelos links
+  que ainda faltam"; link rápido devolve a sobra ao seguinte (resolveu em 600ms
+  → o próximo volta ao teto cheio de 8s), então o caso comum não fica mais
+  lento. **E o orçamento da mensagem MISTA precisa caber ao menos UMA tentativa
+  cheia**: ele nasceu em 6s com o teto por link em 8s, ou seja, um site lento
+  não tinha como terminar nem a primeira tentativa. Hoje são 10s
+  (`CUSTOM_DOMAIN_MIXED_BUDGET_MS`) — não baixar sem medir. Guarda estrutural e
+  funcional em `test/custom-domain-link-resolver.test.js`.
+- **A falha NUNCA pode ser só `null`.** Foi assim que uma investigação inteira
+  precisou de quatro rodadas de comando em staging: código no ar, rede boa (200
+  em 568ms), página trazendo o link e cada peça acertando isoladamente — e a
+  única informação disponível era `null`.
+  `resolveStoreUrlFromCustomDomainDetailed` devolve `{ store, reason, detail }`
+  (`tempo_esgotado`, `recusado_http_<status>`, `pagina_sem_link_de_loja`,
+  `endereco_recusado`, `sem_tempo_no_orcamento`, `erro_de_rede:<nome>`…) e o
+  robô loga `Link de domínio próprio NÃO resolveu até a loja`. Mesma lição de
+  "o caminho do card de preview era MUDO".
+
+Envs (todas opcionais): `CUSTOM_DOMAIN_LINK_RESOLVE` (default LIGADO; só o valor
+exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (8000),
+`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (13000), `CUSTOM_DOMAIN_MAX_ATTEMPTS` (2),
+`CUSTOM_DOMAIN_MAX_BYTES` (512KB),
+`CUSTOM_DOMAIN_CACHE_TTL_MS` (6h). Ajustar o tempo **não exige deploy** — é
+`.env` + `pm2 delete`/`start` (pegadinha #1).
+**Custo: nenhum processo novo, zero impacto de RAM** (cache em memória podado em
+500 entradas).
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — isto só
+passa a valer nos bots depois de `pm2 restart bot-supervisor` (reconecta TODAS
+as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/custom-domain-link-resolver.test.js` (com fixture do HTML real em
+`test/fixtures/custom-domain-offer-page.html`).
+
+### Oferta ENCERRADA virava produto aleatório; formatação e retry (RCA 2026-09-18, 2ª rodada)
+
+Cliente reportou que uma oferta que **convertia** passou a aparecer na aba
+Envios como "ainda não fazemos conversão para essa loja"
+(`skip:policy:...:unsupported_store` — ou seja, **nenhum** link virou link de
+loja). Três defeitos no mesmo caminho, os três medidos ao vivo contra o site
+real (`dicasdeamigas.com.br`), não deduzidos:
+
+| Defeito | Medição |
+|---|---|
+| **Oferta encerrada vira produto aleatório** | `/p/<slug>` de oferta encerrada (ou slug inválido) responde **307 → `/promocao-encerrada`**, página com **13 produtos DIFERENTES**. O robô pegava o primeiro e publicava no grupo um item sem relação com o texto — gravado como `success` |
+| **Marcador do WhatsApp entrava na URL** | `*https://site/p/abc*` virava candidato `.../p/abc*`, endereço que não existe → cai no 307 acima → produto errado. O detector removia esse marcador desde 15/09 (`normalizeDetectedUrl`); o desembrulho não, e as duas pontas discordavam sobre onde a URL termina |
+| **A fatia por link matou o retry** | com 2 candidatos a fatia (6,5s) fica igual ao teto da tentativa, então a 2ª tentativa nascia com prazo zero. Reproduzido: link 1 estoura → 1 resolvido de 2 no código antigo, 2 de 2 no novo, **no mesmo tempo de parede** |
+
+**Não regredir:**
+
+- **Na dúvida sobre QUAL produto é o da oferta, não publica.**
+  `isListingPageAfterRedirect` recusa quando um **redirect** levou a uma página
+  com **mais de um produto diferente** (`countDistinctProducts`, que conta
+  produto e não URL — short link e URL limpa do mesmo item contam como um). A
+  página de oferta de verdade traz 1 produto em 2 endereços; a de lista trazia
+  13. Vale a regra canônica: oferta não enviada é recuperável, oferta enviada
+  com o link errado não é (mesma família da "camiseta branca" e de #1205/#1208).
+- **A trava exige o REDIRECT de propósito.** Sem ele, página que entrega a
+  oferta em 200 com produtos relacionados continua resolvendo como antes —
+  apertar isso mudaria o comportamento dos 8 sites que hoje funcionam.
+- **O desembrulho usa `normalizeDetectedUrl`, a MESMA regra do detector.** Duas
+  regras para "onde a URL termina" é como um link formatado vira endereço
+  inexistente em silêncio.
+- **O retry roda em DUAS PASSADAS.** Passada 1: cada candidato ganha uma
+  tentativa dentro da sua fatia (link lento continua sem poder zerar a chance
+  dos outros). Passada 2: quem falhou por motivo **transitório** tenta de novo
+  com o que sobrou do orçamento da mensagem. Uma passada só era o que fazia um
+  blip de DNS (medido em 14/09) derrubar os dois links da mesma oferta.
+- Motivo próprio no log: `pagina_de_lista_apos_redirect`, com quantos produtos
+  e em qual endereço — "não resolveu" e "resolveu no produto errado" pedem
+  ações opostas.
+
+Teste: `test/custom-domain-link-resolver.test.js`.
+
+### Nem todo site de domínio próprio entrega o link (medição antes de investir)
+
+Em produção o desembrulho passou a atender **oito sites diferentes** nas quatro
+lojas (clubedoachadinho, meli.ofertasluan, temdetudotchelo, centraldapromoo,
+compre.link, magazineluiza.onelink, dicasdeamigas, achadosdetenis). Os que
+falham caem em três motivos, e **cada um pede uma ação diferente** — por isso o
+motivo é registrado em vez de virar um "não deu" genérico:
+
+| Motivo | Exemplo medido | O que é |
+|---|---|---|
+| `pagina_sem_link_de_loja` | `oasisdeofertas.com.br` | **casca de 1.994 bytes**, idêntica em páginas diferentes: app React (Lovable) que monta tudo por JavaScript e busca de um backend próprio. O link não existe no HTML |
+| `recusado_http_403` | `pechin.co` | o site **barra o nosso servidor** (mesma família do muro do Mercado Livre) |
+| `tempo_esgotado` | `centraldapromoo.com.br` | lentidão pontual — o mesmo endereço resolveu depois |
+
+⚠️ **Renderizar a página num navegador de verdade (Playwright) está DESCARTADO**
+por memória: cada instância custa ~300 MB e o servidor já opera com folga zero
+pela política (`evaluateCapacity` dá limite seguro de 35 robôs com 36 ligados).
+É a REGRA #1 da política de memória — se alguém reabrir isso, precisa vir com
+estimativa e OK explícito.
+
+**Antes de investir em qualquer um desses caminhos, MEDIR** — a resposta muda
+conforme quantos sites e quantas clientes cada motivo afeta:
+
+```bash
+cd ~/wabot && node scripts/diag-dominio-proprio.mjs --horas=72
+```
+
+Read-only, lê o `bot.log` em stream (nunca carrega o arquivo na memória) e
+agrega por site, por motivo e por **quantas contas** cada site afeta — "3 sites
+falhando" pode ser uma cliente ou trinta, e as duas situações pedem decisões
+opostas. Falha ao cruzar com o banco é **impressa**, nunca engolida (lição do
+`diag-assinatura-recusada.mjs`, onde `.catch(() => [])` virou "nenhuma conta
+encontrada"). Teste: `test/diag-dominio-proprio.test.js`.
+
+### O motivo no painel culpava a configuração da cliente (mesma investigação)
+
+"Mensagem fora das regras de encaminhamento que **você** configurou para este
+grupo" era o que a cliente lia — e a causa não tinha nada a ver com a
+configuração dela. `skip:policy:...` só ganha o sufixo `:unsupported_store`
+(que vira "ainda não fazemos conversão para essa loja") quando sobrou URL no
+texto, e o teste era feito no texto **já sanitizado** — de onde o sanitizador
+acabara de REMOVER toda URL que não é de loja suportada. Ou seja: exatamente a
+mensagem que deveria ganhar o sufixo chegava sem URL nenhuma e caía na frase
+genérica, mandando a cliente mexer em "Lojas aceitas" e no modo de
+encaminhamento, que estavam certos.
+
+**Não regredir:** o sufixo é decidido sobre o texto de ANTES do sanitizador
+(`findCandidateLinks(textoParaEspelhar)`) — a MESMA regra do desembrulho, para
+que as duas pontas nunca discordem sobre o que é "link de loja desconhecida"
+(ela ignora convite de grupo e rede social, que não são loja). `hasGenericUrl`
+segue como está no outro uso (o descarte silencioso de `messageKind === 'other'`)
+— ampliá-lo ali transformaria ruído de protocolo em linha no painel.
+
+## Links da mesma loja disputavam UMA sessão de afiliado (RCA 2026-09-17)
+
+O espelhamento convertia todos os links da mensagem com `Promise.all` puro. O
+comentário original justificava: "conversores fazem 4-5 chamadas HTTP
+sequenciais cada; processar N links em série estoura o teto da fila". Está certo
+entre lojas DIFERENTES — e errado dentro da MESMA loja, porque ali os
+conversores não são independentes: dividem **uma** sessão de afiliado.
+
+Medido, loja por loja:
+
+| Loja | Sessão compartilhada | Tinha serialização? |
+|---|---|---|
+| Mercado Livre | cookie `ssid` **rotacionado** a cada `createLink` | sim — `withMercadoLivreCredentialLock`, timeout de 12s |
+| **Amazon** | cookie do SiteStripe **rotacionado** a cada `getShortUrl` | **nenhuma** |
+| SHEIN | token de sessão por etiqueta | nenhuma |
+| AliExpress | cookie do portal de afiliado | nenhuma |
+
+- **ML**: 4 links disparados juntos, ~4s por chamada → um já estoura a trava
+  (`ML_AFFILIATE_LOCK_TIMEOUT`) e cai no fallback `partner_id`, e o conjunto
+  ainda come 12s dos 25s de preparo (`MSG_QUEUE_TIMEOUT_MS`). O paralelismo não
+  acelerava nada — a trava já serializava — e só trocava espera por falha.
+  Reproduzido e depois confirmado corrigido: 4 conversões boas em 16s, nenhuma
+  falha.
+- **Amazon**: em paralelo, todas as chamadas saem com o cookie VELHO e disputam
+  a persistência do novo — a última escrita vence e as demais rotações se
+  perdem. O sintoma é a parede "Acessar Amazon" no meio de uma sessão viva, e a
+  oferta sai com o link longo `?tag=` em vez do `amzn.to` (some a comissão
+  curta, não o link).
+
+`src/core/conversionScheduler.js` (`convertPerPlatformSerially`) resolve:
+**links da MESMA loja convertem um de cada vez; lojas diferentes seguem em
+paralelo.**
+
+**Não regredir:**
+
+- **Não voltar a `Promise.all(links.map(...))` sobre a lista inteira de links** —
+  guarda estrutural em `test/conversion-scheduler.test.js` falha se voltar.
+- **Não serializar TUDO numa fila só**: aí uma loja lenta atrasaria as outras,
+  que é o problema que o paralelismo original resolvia de verdade.
+- **A ordem de saída é a ordem do TEXTO**, não a de conclusão — a eleição do
+  link primário (`first`/`last`) e os logs dependem disso.
+
+⚠️ **O tempo de parede da mensagem com muitos links da MESMA loja sobe** (4
+links de ML: ~12s antes com uma falha, ~16s agora sem nenhuma), dentro dos 25s
+de `MSG_QUEUE_TIMEOUT_MS`. Não é overhead novo — a trava do ML já serializava;
+o que mudou é o 4º link ser convertido de verdade em vez de falhar. Ao validar,
+vigiar `timeout:incoming` no painel: se aparecer em mensagem com muitos links,
+o teto de 25s é que precisa de conversa, não o agendador.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST
@@ -4832,6 +5982,67 @@ convertido na oferta) + metadados de conversão na resposta.
 
 Testes: `test/offer-engine.test.js` (motor),
 `test/link-conversion-route.test.js`.
+
+### "Criar oferta" com link da Shopee saía SEM IMAGEM (RCA 2026-09-16 — não regredir)
+
+A oferta chegava com **título e preço certos e sem foto**. A assimetria tem
+nome e lugar: a rota `POST /api/link-conversion/scrape-offer` buscava a foto
+por `offer.finalUrl` **cru**, e `finalUrl` é onde o fetch de HTML TERMINOU —
+na Shopee ele termina com frequência numa parede anti-bot
+(`/unsupported.html`, `verify/traffic`) que **perde (shopId, itemId)**. Sem os
+ids não existe foto: a Shopee tem uma fonte só que funciona, e ela precisa dos
+ids.
+
+O caminho de **título/preço já se protegia disso desde sempre** —
+`shopeeApiSourceUrl` (`productInfoScraper.js`) escolhe
+`[finalUrl, resolvedUrl, url].find(tem ids)` justamente porque "o fetch de HTML
+pode ter redirecionado para uma página anti-bot". O caminho da **foto** não
+escolhia nada. Era só isso.
+
+Medido ao vivo, com o resolver real e **sem credencial de Shopee**:
+
+| endereço passado ao resolver | resultado |
+|---|---|
+| `shopee.com.br/product/<shopId>/<itemId>` | **foto OK** |
+| `shopee.com.br/unsupported.html?...` | **sem foto** (todas as fontes) |
+
+Ou seja: **o endereço escolhido é o que decide se a foto vem**, não a
+credencial.
+
+| Peça | Onde |
+|---|---|
+| Escolha do endereço (PURA, sem rede) | `src/core/offerImageSource.js` |
+| `resolvedUrl` exposto pelo scraper | `fetchProductInfo` (`productInfoScraper.js`) |
+| Repassado pelo motor | `buildScrapedOffer` (`offerEngine.js`) |
+
+**Não regredir:**
+
+- **A ordem dos candidatos é `[finalUrl, resolvedUrl, offerUrl, url]`**, a
+  MESMA de `shopeeApiSourceUrl`. `finalUrl` primeiro preserva byte a byte o
+  comportamento de Amazon/ML/SHEIN; quem resgata a Shopee é a **preferência
+  por candidato com ids**, não a troca de ordem. Inverter a ordem muda loja
+  que hoje funciona.
+- **Parede anti-bot nunca é candidato** (`isDeadEndImageSourceUrl`:
+  `unsupported.html`, `/gz/account-verification`, `suspicious-traffic`).
+  `verify/traffic?next=...` **continua valendo** — `extractShopeeIds` decodifica
+  a URL embutida e os ids estão lá.
+- **Fail-safe é TENTAR**: sem candidato utilizável, usa o primeiro mesmo assim.
+  Desistir por dúvida é oferta sem foto garantida.
+- **A escolha é PURA e acontece antes de qualquer fetch** — zero ida à rede a
+  mais.
+- **O caminho da foto deixou de ser MUDO.** `fetchProductImage` trata o próprio
+  erro e devolve `null`, então "saiu sem imagem" chegava ao log sem motivo
+  nenhum (mesma família do RCA do card de preview). A rota agora passa
+  `onDiagnostic` e loga `Criar oferta: loja não devolveu foto do produto` com
+  o endereço usado e as etapas (`shopee_sem_credencial`, `shopee_sem_ids`,
+  `shopee_api_erro`, `shopee_item_fora_do_catalogo`…). É por aí que se separa
+  "chave recusada" de "item fora do catálogo de afiliado" sem adivinhar.
+
+⚠️ Isto **não conserta chave da Shopee recusada** (`10020`) nem item fora do
+catálogo de afiliado — nesses casos a foto segue impossível pela API, e agora
+o log diz qual dos dois é.
+
+Teste: `test/criar-oferta-imagem-shopee.test.js`.
 
 ## Página nova NUNCA nasce órfã (RCA 2026-09-11 — não regredir)
 
@@ -4881,6 +6092,21 @@ que UM link de UMA página fraca cumpria a regra.
 Guarda: `test/marketing-paginas-orfas.test.js` — falha se uma rota de
 `getIndexableSeoRoutes()` tiver menos de 3 referências internas fora de
 `/conteudos`, do sitemap e do próprio arquivo da página.
+
+⚠️ **A guarda conta LINK, não conta FORÇA — e três links fracos não resolvem.**
+Medido em 16/09, quem aponta para as cinco páginas do Tier 1:
+`/programa-de-afiliados` (185 impressões, **zero clique**), `/conteudos` (que
+por regra não conta), e as próprias páginas do Tier 1 entre si — todas zeradas.
+SHEIN e Magalu não têm **nenhum** link vindo de página com impressão. Enquanto
+isso, as oito páginas mais fortes do site (`/alternativas/*` e
+`/bot-achadinhos-whatsapp`, juntas ~9.000 das 13.362 impressões) têm **zero**
+links para o Tier 1. Página sem força não transfere força: o mínimo da regra 1
+("três páginas já indexadas e COM impressão") é o que vale, e a guarda passa
+mesmo quando ele não é cumprido. Conferir na mão com:
+
+```bash
+cd dashboard && grep -rl "/<slug>" app components lib | grep -v conteudos
+```
 
 ### ⚠️ O Tier 1 JÁ FOI EXECUTADO — não dizer de novo que falta fazer
 
@@ -4933,6 +6159,31 @@ termos + Trends). Análise completa em
 | Cluster **"robô"** como termo próprio | Trends: "robô whatsapp" é 12× menor que "bot whatsapp" |
 | ~~**Magalu** como frente nova~~ **(reaberto em 02/09 — ver nota abaixo)** | único marketplace em queda no Trends |
 | `automação whatsapp` / `disparo em massa` | 5.000/mês mas concorrência **alta**, e é mercado de atendimento corporativo (Blip/Wati), não afiliado |
+| **`espelhamento de grupos`** e variações (congelado em 16/09) | abaixo do piso de reporte do Planejador; ver nota abaixo |
+
+**"Espelhamento" NÃO é porta de entrada — testado por três caminhos em 16/09.**
+A suspeita era razoável: usamos a palavra 79 vezes no corpo do site, os
+concorrentes usam, e ela nunca virou título nem H1. Os três métodos deram o
+mesmo veredito:
+
+| Método | Resultado |
+|---|---|
+| Autocomplete do Google | `espelhamento de` completa para **tela, tela iPhone, tela do celular no pc, Samsung, Roku TV, pintura, carro** — nada sobre grupos |
+| Search Console, 3 meses, filtro `espelh` | só `espelha grupos` (19 impressões, CTR 89%, posição 1,1 — **é a nossa marca**) e `quero espelhar` (1). Zero por "espelhamento" |
+| Planejador | `espelhamento de grupos`, `espelhamento de grupos whatsapp`, `espelhar grupos whatsapp`, `copiar mensagens de um grupo para outro`, `replicar mensagens whatsapp` → **todos abaixo do piso de reporte** (< 10/mês) |
+
+**A armadilha:** `espelhamento whatsapp` tem **5.000/mês com concorrência
+baixa** e, olhado isolado, parece a maior oportunidade do site. Não é. A
+vizinhança denuncia a intenção: `aplicativo para espelhar whatsapp em outro
+celular` (5.000), `espelhar whatsapp em outro celular` (500), `espelhamento
+whatsapp no pc` (500), `espelhar whatsapp na tv` (50). **Quem busca quer usar o
+WhatsApp em dois aparelhos** — é público de suporte técnico, não afiliado, e
+atraí-lo é abandono garantido.
+
+Há um motivo a mais para não ir: "espelhar whatsapp em outro celular" é o
+território dos aplicativos de espionagem de conversa alheia (o `-90% ano a ano`
+nesse termo tem cara de o Google ter derrubado o nicho). Não é vizinhança onde
+esta marca deve aparecer.
 
 **Magalu foi reaberto em 2026-09-02, por decisão explícita da dona do produto.**
 O congelamento vinha do Trends (único marketplace da lista em queda), e isso é
@@ -4956,7 +6207,9 @@ Livre > Amazon ≫ Magalu.
 **Regra de vocabulário:** título e H1 entram pela palavra que o cliente busca
 ("whatsapp banido", "achadinhos", "afiliado shopee"); o termo próprio da casa
 ("Módulo de Preservação Avançada", "cadência", "espelhamento") é explicado
-**dentro** da página, não usado como porta de entrada.
+**dentro** da página, não usado como porta de entrada. No caso de
+"espelhamento" isso deixou de ser convenção e virou dado medido — ver a linha
+congelada acima.
 
 ⚠️ **Limite que não se cruza:** entrar pela palavra "banido"/"anti-ban" **não**
 pode virar promessa de que não banem. Corrigir a expectativa dentro da página é
@@ -4987,50 +6240,78 @@ re-estimar por sinal de SERP quando este dado real já existe.**
 Ordem de prioridade dos marketplaces (Trends, estável salvo Magalu):
 **Shopee ≫ Mercado Livre > Amazon ≫ Magalu (em queda)**.
 
-### Baseline do site (Search Console — atualizado 2026-09-01)
+### Baseline do site (Search Console — atualizado 2026-09-16)
 
-| Métrica | 30/07 | 16/08 | **01/09** |
-|---|---:|---:|---:|
-| Cliques (soma da aba "Países") | 40 | 93 | **177** |
-| Impressões | 1.102 | 2.902 | **5.773** |
-| CTR | 3,63% | 3,20% | 3,07% |
-| Posição média (Brasil) | 7,85 | 7,60 | 7,68 |
-| Consultas distintas | 13 | 29 | **115** ← métrica mais honesta de progresso |
-| Páginas com impressão | 60 | 77 | 79 |
+| Métrica | 30/07 | 16/08 | 01/09 | **16/09** |
+|---|---:|---:|---:|---:|
+| Cliques (soma da aba "Países") | 40 | 93 | 177 | **490** |
+| Impressões | 1.102 | 2.902 | 5.773 | **13.362** |
+| CTR | 3,63% | 3,20% | 3,07% | **3,67%** |
+| Consultas distintas | 13 | 29 | 115 | **180** ← métrica mais honesta de progresso |
 
 Compare sempre pela soma da aba "Países" (o painel-resumo dá 41/1.154 em 30/07
 porque inclui linhas sem país atribuído — as duas metodologias não se misturam).
 
-Por mês fechado: junho 8 cliques/365 impressões, julho 33/656, **agosto
-136/4.739**. O salto que começou em 04/08 (desbloqueio do robots.txt da
-Cloudflare, IndexNow no deploy, unificação da marca, indexações pedidas à mão)
-sustentou-se o mês inteiro — não foi pico.
+**A entrega de 20/08 (títulos reescritos, marca duplicada removida, 25 rotas
+mortas fora do índice) funcionou, e dá para medir sem depender do acumulado.**
+Janelas de 25 dias, antes × depois, da série diária do `Gráfico.csv`:
 
-**Consultas distintas quadruplicaram (29 → 115) enquanto as páginas com
-impressão quase não mudaram (77 → 79).** O crescimento veio das MESMAS páginas
-aparecendo em mais buscas, não de páginas novas entrando no índice.
+| Janela | Impressões | Cliques | CTR |
+|---|---:|---:|---:|
+| 26/07 a 19/08 | 2.370 | 83 | 3,50% |
+| **21/08 a 14/09** | **10.129** | **375** | **3,70%** |
 
-**As buscas por nome de CONCORRENTE são 92% das impressões de consulta**
-(1.933 de 2.094, contra 15% em 16/08) e rendem 19 cliques — CTR de ~1% em
-posição 5–7. Maior: `achadinho pro` (742 impressões). As páginas que atendem são
-`/alternativas/achadinhos-bot` (1.281 impressões, a maior do site),
-`/bot-achadinhos-whatsapp` (1.234) e as demais `/alternativas/*`. **A linha de
-comparação com concorrente é o motor de crescimento** — é nela que vale
-produzir, não em cidade nem em nicho. O gargalo é o **clique**, não a
-impressão: título e descrição precisam dizer que aqui há uma alternativa (nunca
-se passar pelo concorrente, nunca prometer o que ele não entrega sem fonte).
+E o CTR ainda subia semana a semana conforme o Google recrawleava os títulos
+novos: **2,52% (25–31/08) → 3,53% (01–07/09) → 4,77% (08–14/09)**. Ao avaliar
+efeito de mudança de título, use a série diária — o acumulado de 3 meses
+dilui o depois com o antes e esconde exatamente o que se quer medir.
 
-Dez páginas somam **879 impressões e ZERO clique** — pior caso
-`/blog/quanto-custa-bot-para-whatsapp-afiliados` em **posição 4,35**. As sete
-apontadas em 16/08 não foram consertadas e hoje desperdiçam o dobro. Celular
-traz 57% das impressões, ranqueia MELHOR que o computador (7,07 vs 11,32) e
-converte metade (2,15% vs 4,33%) — isso aponta para título cortado na tela
-pequena, não para público diferente.
+**A hipótese do celular estava certa e o conserto pegou.** Em 16/08 o celular
+trazia 62% das impressões com CTR menos da metade do computador, e a leitura
+registrada foi "título cortado na tela pequena, não público diferente". Depois
+de encurtar os títulos para 55 caracteres e tirar o sufixo de marca duplicado:
 
-**Indexação (novo nesta rodada):** 77 páginas indexadas contra **51 não
-indexadas** — 26 "rastreada, mas não indexada", 11 "detectada, mas não
-indexada", 1 bloqueada pelo robots.txt. Tratar isso antes de produzir mais
-páginas parecidas.
+| | 16/08 | **16/09** |
+|---|---:|---:|
+| Celular | 2,07% | **3,20%** |
+| Computador | 5,10% | 4,31% |
+
+A distância caiu de 2,5× para 1,35×.
+
+**Buscas por nome de CONCORRENTE são ~47% de TODAS as impressões do site**
+(6.309 de 13.362) e 96% das impressões das consultas nomeadas. Maior consulta
+do site inteiro: **`achadinho pro`, 3.217 impressões**. As páginas que atendem:
+`/alternativas/achadinhos-bot` (4.930), `/bot-achadinhos-whatsapp` (2.514, com
+CTR de **5,0%** contra 2,08% em 16/08) e `/alternativas/achadinho-pro` (859,
+publicada em 20/08 — **uma** página, não seis, e pegou o maior termo do site).
+**A linha de comparação com concorrente é o motor de crescimento**, confirmado
+em escala. Nunca se passar pelo concorrente, nunca prometer o que ele não
+entrega sem fonte e data.
+
+**Três páginas continuam sem clique mesmo depois da reescrita de 20/08** — não
+insistir no mesmo ajuste, elas precisam de outra abordagem:
+
+| Página | Impressões | Cliques |
+|---|---:|---:|
+| `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp` | 477 | **1** |
+| `/programa-de-afiliados` | 185 | **0** |
+| `/bot-ofertas-whatsapp` (hub de nichos) | **8** (era 37) | 0 |
+
+O hub de nichos encolheu porque as 10 páginas-filhas saíram do índice em 20/08
+— custo previsto da decisão, registrado aqui para não ser diagnosticado como
+bug depois.
+
+**Tier 1: as cinco páginas EXISTEM desde 02/09 — o que falta é o Google LER.**
+Conferido no registry e em disco em 16/09: `/shopee-afiliados-whatsapp`,
+`/mercado-livre-afiliados-whatsapp`, `/amazon-afiliados-whatsapp`,
+`/shein-afiliados-whatsapp`, `/magalu-afiliados-whatsapp`. Somadas, 14 consultas
+de marketplace/afiliado e ~30 impressões — isso é **descoberta/indexação**, não
+ausência (ver "Página nova NUNCA nasce órfã": o único link interno delas sai de
+`/conteudos`, a página mais fraca do site). ⚠️ Foi a **quarta** vez que uma
+análise escreveu "falta atacar o Tier 1"; o erro de método é sempre o mesmo e
+está documentado acima — o relatório **Páginas** só lista página COM impressão,
+então página zerada não aparece na exportação, e "ausente do relatório" foi lido
+como "não existe".
 
 **Citação por IA, medido em campo pela 1ª vez em 01/09** (7 consultas
 prioritárias × 4 superfícies, 28/28 linhas em
@@ -5142,6 +6423,12 @@ os dois diagnósticos próprios (`scripts/diag-origem-cadastros.mjs` e
 `scripts/diag-paginas-seo.mjs`, 30 dias). Atualizar esta seção e a data do
 cabeçalho.
 
+**Para medir efeito de mudança de título, use a série diária (`Gráfico.csv`),
+não o acumulado.** O export de "Últimos 3 meses" mistura o antes com o depois e
+dilui justamente o que se quer medir — em 16/09, o acumulado dava CTR de 3,67%
+enquanto a semana corrente já estava em 4,77%. Recorte duas janelas do mesmo
+tamanho em volta da data da mudança e compare.
+
 **Não refazer Planejador e Trends todo mês.** Os dois medem volume de mercado,
 que não muda em semanas, e as decisões que dependem deles já estão congeladas
 (seção "SEO orgânico — linhas CONGELADAS"). Rodada completa dos quatro
@@ -5171,10 +6458,12 @@ Cuidado ao renomear os campos: `sanitizeAnalyticsMetadata` descarta
 qualquer chave que case com `/(token|secret|…|key|url|…)/i`, então algo como
 `referrer_url` seria descartado em silêncio.
 
-**Conferir todo mês que a Cloudflare não voltou a bloquear as IAs:**
+**Conferir todo mês que a Cloudflare não voltou a bloquear as IAs — nos DOIS
+níveis, robots.txt e WAF:**
 
 ```bash
 curl -s https://espelhagrupos.com.br/robots.txt | grep -c "Disallow: /$"   # 0 = ok
+node scripts/diag-acesso-robos-ia.mjs   # pede a home com o nome de cada robô; exit 1 = robô de busca/clique barrado
 ```
 
 O `Managed robots.txt` da Cloudflare veio **ligado por padrão** e colava
@@ -5183,6 +6472,106 @@ O `Managed robots.txt` da Cloudflare veio **ligado por padrão** e colava
 ligado, os robôs de *resposta* (OAI-SearchBot, Claude-SearchBot) passavam, mas
 os de *indexação/treino* não. Se voltar a ligar, o trabalho de IA para de valer
 em silêncio.
+
+⚠️ **O robots.txt limpo NÃO prova que os robôs passam** (RCA 2026-09-18, abaixo):
+o bloqueio pode estar no WAF, e aí a resposta é 403 com o robots.txt dizendo
+`Allow: /`. Só a segunda linha enxerga isso.
+
+### Robôs de IA barrados no WAF com robots.txt limpo (RCA 2026-09-18 — não regredir)
+
+Medido em produção em 18/09, pedindo a home com o User-Agent de cada robô a
+partir do mesmo IP (`scripts/diag-acesso-robos-ia.mjs`):
+
+| Robô | Papel | Resposta |
+|---|---|---|
+| navegador comum (controle) | — | 200 |
+| OAI-SearchBot (busca do ChatGPT), ChatGPT-User (clique), PerplexityBot, Perplexity-User, Claude-SearchBot, Claude-User, Googlebot, Google-Extended, bingbot, DuckAssistBot, Applebot, meta-externalagent, MistralAI-User | busca / clique / treino | 200 |
+| **GPTBot** (treino da OpenAI), **ClaudeBot** (treino da Anthropic), CCBot, Bytespider, Amazonbot | treino | **403** |
+
+Dois nomes emprestados, mesmo IP, respostas diferentes → a regra é por
+categoria de User-Agent: é o bloqueio de **"AI crawlers de treino"** da
+Cloudflare (Security → Bots → AI Crawl Control / regra gerenciada), ligado por
+padrão em domínio novo desde jul/2025. O `robots.txt` não enxerga nada disso e
+a checagem mensal antiga passava verde.
+
+**O que isso muda, e o que não muda:**
+
+- **Não impede a citação no ChatGPT com busca, na Perplexity, no Gemini nem no
+  AI Overviews** — todos leem pelo robô de *busca*, que passa. O placar de
+  citação de 09/2026 foi medido com este bloqueio ligado.
+- **Impede que o próximo modelo aprenda a marca no treino.** Sem busca, o
+  ChatGPT já devolve zero produtos nomeados em 8 de 8 consultas
+  (`ROTEIRO_MEDICAO_IA.md`); com GPTBot barrado, isso não muda com o tempo.
+  Concorrente que libera o GPTBot entra no modelo; nós não.
+- **É decisão da dona, não defeito.** Liberar GPTBot/ClaudeBot troca
+  privacidade do conteúdo público (que já é público) por presença no treino.
+  Se liberar: Cloudflare → Security → Bots → AI Crawl Control → permitir
+  GPTBot e ClaudeBot (pode manter CCBot/Bytespider barrados). Depois rodar o
+  script de novo: GPTBot tem que sair de 403.
+
+**Não regredir:** a checagem mensal tem as duas linhas; `src/ops/aiBotAccess.js`
+é a regra pura (papel do robô decide a gravidade: busca/clique barrado reprova,
+treino barrado só avisa; sem medição confiável nunca afirma bloqueio) e
+`test/ops-ai-bot-access.test.js` a guarda. Um 200 para nome emprestado não
+prova que o robô real passa (a Cloudflare pode checar o IP); um 403 é prova
+forte.
+
+**O bloqueio mora em DOIS lugares do painel, e o script só enxerga um** (visto
+nos prints de 18/09): (1) Security → Settings → "Configure AI bot policies" →
+categoria **Training = Disallow** — é a regra por User-Agent que devolve o 403
+de 25 bytes "Your request was blocked." ao nome emprestado; (2) AI Crawl
+Control → Crawlers → botão **"Block Crawler"** por robô, que age sobre o robô
+REAL (verificado por IP). No print, **Claude-User** (o clique na citação do
+Claude) estava com "Block Crawler" ligado e **45 recusas em 7 dias** — e o
+script dava 200 para ele, porque o nome emprestado do VPS não é o robô
+verificado. Ou seja: **a coluna "Unsuccessful" do painel é a medição do robô
+real; o script mede só a regra por categoria.** Conferir os dois. "Enable Bot
+Preference Sync" fica DESLIGADO: ele reescreve o `robots.txt` na borda, que é
+exatamente o que o `Managed robots.txt` fazia (RCA 2026-08-04).
+
+### O site dizia coisas diferentes para a IA e para a pessoa (mesmo RCA, 2026-09-18)
+
+Achados do inventário de legibilidade por IA, todos corrigidos no mesmo dia:
+
+- **`og:image` apontava para `/api/public/og`, rota que nunca existiu** (404 em
+  produção) em 7 templates, inclusive as 5 páginas de loja do Tier 1; a home
+  não declarava imagem nenhuma. Prévia sem imagem no WhatsApp, no ChatGPT e na
+  Perplexity. Hoje é um arquivo estático (`dashboard/public/og-default.png`,
+  gerado por `node scripts/build-og-image.mjs`); guarda em
+  `test/og-image-existe.test.js`. **Nunca voltar a servir OG por rota.**
+- **`/api/public/faq` e `/api/public/plans`** — abertos no `robots.txt`
+  justamente para as IAs — devolviam o seed de 05-06/2026: "4 lojas" (Shopee,
+  ML, Amazon, Magalu) quando são 6. A home troca o FAQ estático pelo da API ao
+  hidratar e `/precos` prefere as features do banco, então o texto VISÍVEL
+  também dizia 4 enquanto `pricing.md` e o JSON-LD diziam 6. Migration DML
+  guardada (`20260918120000_sync_public_faq_plans_six_stores`: só troca a linha
+  que ainda está com o texto do seed; edição feita no admin não é sobrescrita)
+  + `test/public-faq-plans-sync.test.js`, que falha se `DEFAULT_LANDING_PLANS`
+  / `CORE_FAQ_ITEMS` mudarem sem migration nova de sincronia. Lojas agora vêm
+  de UMA constante (`SUPPORTED_STORES`).
+- **`llms.txt`** não citava preço nem as 6 lojas e omitia as páginas que
+  convertem (Tier 1 por loja, `/precos`, `/espelha-grupos-e-confiavel`,
+  `/alternativas/*`) — e a Perplexity preenchia o nosso preço com o de
+  concorrente. Reescrito (resumo pt-BR + preços + lojas + páginas);
+  `test/llms-txt-sync.test.js` exige preço = `DEFAULT_LANDING_PLANS`, as 6
+  lojas, as páginas de venda e que **toda URL exista no registro SEO**.
+- **A chegada por IA não era medida onde estão 47% das impressões.** Só 15
+  templates emitiam `referral_visit` e gravavam o cookie de primeira página;
+  `/alternativas/*` e os 19 posts do blog não. `PublicReferralTracker`
+  (mesma regra de privacidade: só o host) entrou no `ComparisonPageTracker` e
+  no `ArticleShell`; `signupOrigin.js` passou a reconhecer as páginas do Tier 1
+  e de 11/09 (cadastro vindo delas caía em "Direto / ambíguo") e mais motores
+  (grok, deepseek, meta, mistral). Guarda: `test/referral-tracking-cobertura.test.js`.
+- **Resíduos de entidade no schema:** `/conteudos` declarava `WebSite` com o
+  codinome interno `WABOT`; as LPs programáticas emitiam `alternateName` igual
+  ao próprio nome e `brand` solto; a `Product` de `/precos` descrevia 4 lojas;
+  as 5 páginas Tier 1 e `/alternativas/promium` não tinham data (o promium
+  caía no fallback 2026-05-15, antes de existir). O layout raiz agora emite
+  `WebSite` (`#website`) e `SoftwareApplication` com `@id`, `inLanguage` e
+  `featureList`; páginas apontam para `#organization`/`#website` por `@id`.
+- **O template de PR mandava usar "BOTinho" como marca principal**
+  (`.github/PULL_REQUEST_TEMPLATE.md`) — contrário à decisão de 02/09. Quem
+  seguisse o checklist reintroduzia o nome aposentado.
 
 ## Clareza da falta de cadastro da loja + vídeo tutorial (2026-09-02)
 
@@ -5240,6 +6629,178 @@ lugares.
 Testes: `test/painel-credencial-clareza.test.js`,
 `test/painel-whatsapp-seguranca.test.js`.
 
+## Contato ativo semanal (lista de quem procurar, 2026-09-13)
+
+Pedido da dona do produto: rodar um comando por semana e receber **nome, e-mail
+e telefone** de quem precisa de contato — sem abrir o admin cliente a cliente.
+
+| Peça | Onde |
+|---|---|
+| Regra dos grupos (PURA, sem banco/rede) | `src/domain/admin/outreachSegments.js` |
+| Script read-only | `scripts/contato-ativo-semanal.mjs` |
+
+```bash
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs            # lista na tela
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --csv > /tmp/contatos.csv
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --so-pedidos
+cd ~/wabot && node scripts/contato-ativo-semanal.mjs --nao-falei-em=14
+```
+
+Dez grupos, em ordem de prioridade: cobrança recusada, vence em 5 dias, venceu
+até 3d / 4-20d / +20d, nunca publicou (conta ≤7d e 8-20d), robô caído, parou de
+publicar, sem loja cadastrada.
+
+**Não regredir:**
+
+- **Cada cliente entra em UM grupo só**, o de maior prioridade. Três mensagens
+  diferentes para a mesma pessoa na mesma semana é o jeito mais rápido de ela
+  parar de ler o que mandamos (mesma razão do teto semanal de e-mail automático
+  em `src/email/accountActivity.js`).
+- **Fail-safe é NÃO procurar.** Sem validade de acesso confiável, sem data de
+  cadastro ou com consulta que falhou, a cliente fica de fora — e a consulta que
+  falhou é impressa, nunca engolida (lição do `diag-assinatura-recusada.mjs`,
+  onde `.catch(() => [])` virou "nenhuma conta encontrada").
+- **Quem tem renovação automática ligada não entra em lista de cobrança**, e
+  **"ela desligou o robô" nunca vira aviso de robô caído** (`wasStoppedByUser`).
+- **"Publicou" é `MessageLog.status='success'`**, nunca qualquer linha: a linha
+  mais comum de quem não cadastrou a etiqueta é `skip:no_valid_conversions`, e
+  contá-la poria no balde de "já viu o produto funcionar" justamente quem nunca
+  viu (mesma regra do `/admin/funil`).
+- **Read-only**: nenhuma escrita, nenhum e-mail. Teste estrutural falha se
+  `.create(`/`.update(`/`sendTemplateEmail` aparecerem no script.
+- **Custo:** seis agregações em lote por execução (`groupBy`), nunca uma
+  consulta por cliente. Nenhum processo novo, **zero impacto de RAM**.
+
+⚠️ A saída tem **telefone e e-mail de cliente**. O painel mascara telefone por
+papel (`sanitizeUser`); aqui não mascara de propósito — é a dona do produto
+rodando no próprio servidor para conseguir ligar. Não repassar o CSV.
+
+Teste: `test/admin-contato-ativo.test.js` (puro, sem banco).
+
+## Fila de revisão das ofertas automáticas (2026-09-13, DESLIGADA por padrão)
+
+`OfferAutomation.publicationMode` aceita `direct` (histórico) e `review`: em
+`review` o cron não publica — ele DESCOBRE ofertas e enfileira em
+`OfferAutomationReviewItem` para a cliente aprovar antes de sair.
+
+| Peça | Onde |
+|---|---|
+| Interruptores | `src/offerAutomation/reviewFlags.js` |
+| Descoberta | `src/offerAutomation/reviewDiscoveryService.js` |
+| Entrega do que foi aprovado | `src/offerAutomation/reviewDeliveryService.js` |
+| Rotas | `src/api/routes/offerAutomationReview.js` |
+| Tela | `dashboard/app/painel/ofertas-automaticas/page.js` |
+
+**Não regredir:**
+
+- **Nasce DESLIGADA e em duas chaves.** `OFFER_AUTOMATION_REVIEW_ENABLED` liga
+  a fila; `OFFER_AUTOMATION_REVIEW_DELIVERY_ENABLED` libera a ENTREGA do que
+  foi aprovado. Separadas de propósito: dá para acumular fila e conferir o que
+  ela escolheria antes de deixar qualquer coisa sair.
+  `OFFER_AUTOMATION_REVIEW_USER_IDS` limita a contas nomeadas (vazio = todas).
+- **`destGroupJid` virou anulável** por causa deste modo. Todo caminho que o lê
+  precisa tolerar `null` — inclusive a dedup cruzada por grupo
+  (`OfferAutomationSentLog`), que é PULADA quando não há destino WhatsApp.
+- **`publicationMode` desconhecido PULA a automação**, nunca cai em `direct`:
+  publicar por engano é irreversível.
+- Sem processo PM2 novo — roda no cron de automação que já existia.
+
+## Texto adicional no fim da mensagem espelhada (`relayFooterText`, 2026-09-13)
+
+Campo por grupo monitorado ("Adicionar texto ao final da mensagem"), anexado
+depois do texto convertido, com dois saltos de linha. `src/core/relayFooter.js`
+(puro), aplicado em `src/bot-worker.js`.
+
+**Não regredir:**
+
+- **Pertence EXCLUSIVAMENTE ao formato "Manter texto original convertido".**
+  Com modelo ativo, o modelo controla o texto inteiro e o complemento é
+  descartado.
+- **Por isso a tela precisa saber qual é o modelo EFETIVO** (RCA 2026-09-16,
+  abaixo) — oferecer o campo onde ele não vale é prometer algo que o robô joga
+  fora, em silêncio.
+- É texto da cliente: não passa por conversão de link nem por palavra
+  bloqueada. Teto de 1.000 caracteres (`RELAY_FOOTER_MAX_CHARS`) — com foto, ele
+  entra na legenda e soma com o texto da origem.
+
+### "Escrevi o texto adicional e não sai nada" (RCA 2026-09-16 — não regredir)
+
+`Group.templateKey` tem TRÊS estados e a tela só enxergava dois:
+
+| Valor | O que o robô faz |
+|---|---|
+| `null` | **herda** `BotConfig.mirrorTemplateKeyDefault` (modelo padrão global) |
+| `''` | manter texto original, explícito |
+| chave | modelo fixo do grupo |
+
+A tela lia `null` e `''` como a mesma coisa. Quem tinha modelo padrão global e
+um grupo nunca tocado via "Manter texto original convertido" selecionado E o
+campo de texto adicional oferecido — enquanto o robô aplicava o modelo e
+ignorava o complemento. Ela escrevia, salvava, lia "Texto salvo", e a oferta
+saía sem nada. Hoje a tela carrega o padrão global e mostra o modelo que de
+fato vale. Teste: `test/painel-modelo-herdado-e-texto-adicional.test.js`.
+
+## Sites que recusam a leitura do nosso servidor (2026-09-16 — não regredir)
+
+O desembrulho de link de domínio próprio tem, além da lista de hosts que nunca
+são oferta (rede social, convite de grupo), uma lista de **sites de oferta que
+bloqueiam o nosso IP**: `BLOCKS_OUR_SERVER_HOST_RE` em
+`src/core/customDomainLinkResolver.js`.
+
+Medido em 72h de produção: `pechin.co` respondeu por **98 das 105** recusas
+`recusado_http_403`. Ele redireciona 301 para `pechinchou.com.br/oferta/<id>`,
+que está atrás de Cloudflare e devolve 403 para o nosso servidor em TODOS os
+cabeçalhos testados (navegador, celular, WhatsApp, `facebookexternalhit`) — a
+recusa é por endereço de servidor, e nenhum cabeçalho a contorna.
+
+**Não perde oferta nenhuma**: essas mensagens já não eram espelhadas (sem o
+desembrulho não existe link de loja para converter). O que muda é parar de
+bater num "não" garantido — economia de rede e, principalmente, de reputação do
+nosso IP, que é compartilhada com a busca de foto nas lojas.
+
+⚠️ **Critério para entrar na lista: bloqueio MEDIDO e reprodutível, nunca
+suspeita.** O teste é bater direto na página final com quatro cabeçalhos
+diferentes; só entra se os quatro derem 403. Se o bloqueio cair, remover a
+linha. Anti-teste junto: a lista é ancorada, `pechinchou.net` e `pechin.com.br`
+continuam passando.
+
+⚠️ **Não confundir com `pagina_sem_link_de_loja`** (~45 casos, em
+`go.promozone.ai`, `clubedoachadinho.com.br`, `grupos.garimpeiros.com.br`):
+ali a página abre normalmente e o link da loja só aparece depois que o
+JavaScript roda. Ler isso exigiria navegador de verdade (Playwright) — processo
+novo e memória, regra #1 da política de memória. **Não atacado de propósito.**
+
+E não repetir tentativa de erro definitivo: `isRetryableCustomDomainFailure` só
+repete `tempo_esgotado` e `erro_de_rede:` — 403, 404 e `pagina_sem_link_de_loja`
+saem na primeira. Ao ler o log, lembre que o motivo aparece DUAS vezes por
+falha (uma no resumo, uma dentro da tentativa): contar `"reason"` cru dá o dobro
+do número de falhas reais.
+
+## O deploy só recarrega os bots para os caminhos da lista (RCA 2026-09-16)
+
+`WORKER_CODE_PATHS_RE` (nos dois scripts de deploy) decide se o
+`bot-supervisor` é reiniciado — ou seja, se uma correção passa a valer nos
+bots. Ela é escrita à mão, e medindo o que o worker DE FATO importa apareceram
+**33 arquivos de fora**, entre eles `src/detector.js` (o fix dos links com
+formatação do WhatsApp), `src/messageDedup.js`, `src/messageQueue.js` e
+`src/messageLogSanitizer.js` (a correção do emoji cortado na chave de dedup).
+Correção neles chegava ao disco do VPS e **não valia nos bots** — mesma família
+do RCA 2026-08-31 ("a marca d'água não saía porque os bots estavam com código
+velho"), só que pela lista em vez da medição do commit.
+
+**Não regredir:** `test/deploy-worker-code-paths.test.js` calcula o que
+`src/bot-worker.js` e `src/supervisor/index.js` importam (transitivo) e falha se
+um arquivo novo não estiver nem na regex nem em `DELIBERADAMENTE_FORA`. Ele
+também exige que os DOIS scripts usem a mesma lista — produção e staging
+decidindo diferente faria staging validar um comportamento que produção não tem.
+
+**A lista não é "tudo que o worker importa"**, é "o que, se ficar velho, muda o
+comportamento do robô": cada caminho ali custa uma reconexão da frota inteira.
+`src/email/` e os módulos que ele arrasta ficam DE FORA de propósito (o worker
+só os carrega para o aviso interno de número repetido; texto velho ali não muda
+nada para a cliente, e incluí-los faria toda edição de e-mail reconectar todo
+mundo).
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos
@@ -5271,3 +6832,232 @@ Testes: `test/painel-credencial-clareza.test.js`,
   atual (`sqlite3 <db> "SELECT COUNT(*) FROM User"`).
 - Backups de prod são responsabilidade do `scripts/backup_prod.sh`
   (cron diário). Não tocar nele sem testar restauração.
+## Instagram Stories — fundações das fases 1–4 (2026-09-08)
+
+Instagram é um destino tipado (`instagram_story`), nunca um JID falso. Os
+contratos puros ficam em `src/domain/delivery/`; persistência e serviços ficam
+em `src/instagram/`. Basic, Pro e Trial (inclusive ativo) **não** têm acesso:
+todo futuro endpoint, cron, worker, retry ou ação admin deve conferir
+`entitlements.canUseInstagramStories`, exclusivo do plano técnico `premium`.
+
+O renderer produz somente JPEG sRGB 1080×1920, máximo 8 MB, a partir de Buffer;
+download/SSRF não pertence a essa fronteira. Template é versionado e versão
+existente nunca é sobrescrita. Assets usam URL HTTPS assinada com HMAC, TTL e
+limpeza que apaga o arquivo antes de marcar `deletedAt`. Variáveis obrigatórias
+para servir assets: `STORY_ASSET_PUBLIC_BASE_URL` e
+`STORY_ASSET_SIGNING_SECRET` (≥32 caracteres); `STORY_ASSET_DIR` é opcional.
+
+Migração: `prisma/migrations/20260908010000_instagram_stories_phase_2`.
+Testes: `test/instagram-story-schema.test.js`,
+`test/instagram-story-repository.test.js`,
+`test/instagram-story-renderer.test.js`, `test/instagram-story-storage.test.js`.
+
+### POC Meta (Fase 0)
+
+`npm run poc:instagram-story` executa a validação progressiva da Graph API em
+três modos: `inspect` (somente leitura), `container` (não publica) e `publish`
+(publica de verdade). A versão da API é obrigatoriamente pinada em
+`IG_GRAPH_API_VERSION`; nunca adicionar default `latest`. Tokens só entram por
+`IG_ACCESS_TOKEN` no ambiente e nunca em commit/log/PR. Runbook:
+`docs/instagram/phase-0-meta-poc-runbook.md`. Teste puro, sem Meta:
+`test/instagram-meta-poc.test.js`.
+
+### Publicação de Stories (Fase 6)
+
+A fila durável é `instagram-stories` e a DLQ é `instagram-stories-dlq`. Payload
+BullMQ contém **somente** `publicationId`: nunca Buffer, token ou snapshot.
+`processInstagramPublication` revalida Premium/conexão/asset no dequeue.
+Falha ambígua de `media_publish` vira `reconciliation_required`; não criar novo
+container nesse caso. O runtime roda na API e só inicia com Redis + OAuth +
+storage configurados. Teste: `test/instagram-publishing.test.js`; detalhes em
+`docs/instagram/phase-6-publishing-queue.md`.
+
+### Stories manuais/agendados (Fase 7)
+
+Endpoint canônico: `POST /api/instagram/stories`; não acrescentar Instagram em
+`broadcast.targetJids`. O download da imagem revalida anti-SSRF a cada redirect
+e tem teto de 15 MB. Fan-out é isolado por destino e responde sucessos/erros
+separadamente. Agendado é `StoryPublication` + delay BullMQ, não
+`ScheduledMessage` (que continua WhatsApp/JID). Cancelar só quando `queued` e
+no futuro. Teste: `test/instagram-manual-scheduled.test.js`.
+
+### Stories em ofertas automáticas (Fase 8)
+
+`OfferAutomationDestination` é o único vínculo entre automação e destino
+Instagram. Nunca grave conta Meta em `destGroupJid`. Automações Instagram-only
+não dependem de WhatsApp online; cron e trigger devem carregar a relação
+`instagramDestinations.destination` e revalidar `canUseInstagramStories`. A
+idempotência inclui automação, destino, produto e preço. Teste:
+`test/instagram-automation.test.js`.
+
+### Stories em filas e espelhamento (Fases 9–12)
+
+Filas usam `OfferQueueDestination` e snapshot imutável no item. Espelhamento
+usa `InstagramMirrorDestination` + outbox `InstagramStoryIngress`: o bot-worker
+só captura dados públicos e nunca carrega token Meta; a API é a única
+consumidora/renderizadora. Configuração, cron, dequeue e retry sempre revalidam
+`canUseInstagramStories`. Chaves: `offer-queue:<queue>:<item>:<destino>` e
+`mirror:<destino>:<mensagem-origem>`. Testes: `test/instagram-offer-queue.test.js`
+e `test/instagram-mirroring.test.js`.
+
+### Segunda revisão: o recurso não existia para ninguém (2026-09-13 — não regredir)
+
+Revisão independente da implementação de Stories. A suíte estava verde e nada
+disto era pego por teste. Correções, na ordem em que doíam:
+
+**1. O plano que libera o recurso não era alcançável.** `canUseInstagramStories`
+exige `plan === 'premium'`, e `premium` não existia em canto nenhum do produto:
+o checkout vende só `basic`/`pro`, e a liberação manual, o pagamento por fora e
+a listagem do admin recusavam o valor. Ou seja, **zero contas** podiam usar
+Stories, e nem por dentro do produto dava para ligar. `premium` entrou em
+`PAID_PLANS` nos três lugares (`src/api/routes/admin.js`,
+`src/domain/payments/manualPayment.js`, `src/emailTriggers/lifecyclePolicy.js`)
+e nos seletores do admin. **Não tirar de `lifecyclePolicy`:** sem ele a cliente
+pagante caía na jornada de fim de TESTE GRÁTIS. O catálogo comercial
+(`/precos`) segue sem `premium` de propósito — preço é decisão da dona do
+produto, e enquanto não houver, liberação manual é o único caminho.
+
+**2. A foto ia ser recusada pela loja.** `downloadStoryImage` foi reescrito do
+zero **sem User-Agent e sem Referer** — exatamente o que `fetchImageBufferRaw`
+manda de propósito porque Shopee/Amazon bloqueiam requisição sem cara de
+navegador (comentário em `converters/imageScrapers.js`). A mesma foto que sai
+normal no grupo devolveria 403 no Story. Hoje o download manda os dois
+cabeçalhos e `imageRefererUrl` é passado por todas as superfícies. **Não dá
+para reusar `fetchImageBuffer` direto:** ele segue redirect sozinho, e aqui a
+URL vem da cliente — cada hop precisa passar pela guarda anti-SSRF.
+
+**3. O Story não dizia de onde era a oferta.** A Content Publishing API publica
+**imagem pura** — não existe sticker de link. O card não trazia loja, não
+trazia link e a CTA prometia nada. Agora o overlay leva **nome da loja +
+desconto**, e a CTA padrão (`DEFAULT_STORY_CALL_TO_ACTION`) é honesta ("Link na
+bio"). Teste falha se ela voltar a prometer clique/arrasta. Preço ausente vira
+"Confira o preço" em vez de um vão branco.
+
+**4. "Conferência necessária" era beco sem saída.** `reconciliation_required`
+nasce quando `media_publish` pode ter publicado sem confirmar — repetir às
+cegas duplicaria o Story, então o processor para ali **de propósito**. O que
+faltava era alguém retomar: o retry recusava o status, não havia varredura nem
+botão. `src/instagram/publishing/reconcile.js` reenfileira a cada 15min (só com
+container e após 10min) e o processor relê o container antes de publicar de
+novo. Passada in-process, **nenhum processo PM2 novo**.
+
+**5. Limite diário da Meta virava falha permanente em ~8 minutos.** 5 tentativas
+com backoff de 30s para uma janela de **24h** — numa conta com automação, a
+maior parte do dia caía em `failed`. E o default de cota era 100; **a Meta
+libera 25/24h**, então o pré-check passava e a recusa vinha depois do container
+criado. Hoje `InstagramPublishingError.retryAfterMs` reagenda o job
+(`moveToDelayed`) **sem gastar tentativa**. ⚠️ Os fallbacks de
+`UnrecoverableError`/`DelayedError` na fila são classes nomeadas próprias:
+`= Error` faria `instanceof` casar com tudo e a DLQ nunca mais receberia nada.
+
+**6. O Instagram não tinha nenhuma cadência.** O WhatsApp tem um módulo de
+preservação inteiro contra rajada; o canal novo disparava tantos containers
+quanto a concorrência permitisse — o padrão que a Meta associa a automação
+abusiva. `storyPacingDelayMs` (puro) garante `INSTAGRAM_MIN_INTERVAL_MS` (90s)
+entre Stories da mesma conta, adiando o job em vez de ocupar o slot da fila.
+
+**7. O espelhamento furava a dedup de link.** A captura roda **antes** do bloco
+de dedup no `bot-worker.js`, e `@@unique([destinationId, sourceMessageKey])`
+não segura repost (cada repost chega com `key.id` novo). Coluna `productKey`
+(migration `20260913120000_instagram_mirror_product_key`) + janela
+`INSTAGRAM_MIRROR_DEDUP_WINDOW_MS` (12h).
+
+**8. O Story espelhado saía sem preço e com o banner do grupo no título.**
+`titleFromText` pegava a primeira linha ("🔥 OFERTA RELÂMPAGO") e o snapshot
+não tinha preço nenhum. Agora o consumidor da API (nunca o worker) completa
+título/preço/loja por `enrichMirrorOffer`, que reusa
+`resolveMirrorOfferFromLink` — **o mesmo caminho do template do WhatsApp**,
+para o Story e a mensagem do grupo contarem a mesma história; sem loja, cai
+para o "De/Por" da copy da origem. **A rede continua fora do hot path.**
+
+⚠️ **A classe de emoji de `titleFromText` precisa da flag `u`.** Sem ela a
+classe é lida em code units e o alto surrogate compartilhado (`\uD83D`) sumia de
+QUALQUER emoji do bloco: "🎁 Brinde" virava "\udf81 Brinde". Mesma família do
+RCA 2026-09-11. E o corte é `truncateByCodePoints`, **nunca `.slice`**.
+
+**9. Dez destinos = dez downloads e dez renders no mesmo request.** A imagem é
+idêntica para todos (mesma oferta, mesmo modelo). `prepareStoryAsset` renderiza
+uma vez e `createAndEnqueueStory` aceita `preparedAsset`. Best-effort: falha no
+preparo compartilhado faz cada destino tentar sozinho.
+
+**10. Regressões nos canais que já existiam:**
+- **Fila híbrida perdeu o gate `bot_offline`.** O gate passou a olhar "tem
+  destino Instagram?" em vez de "a fila ainda manda no WhatsApp?" — com o bot
+  fora do ar os itens queimavam tentativa e viravam `failed` terminal, quando
+  antes só ficavam `pending` com o motivo na tela. **Quem decide é
+  `whatsappEnabled`**, que é o campo que distingue fila Instagram-only do
+  legado `targetJids='[]'`.
+- **Automação usava um booleano de aceite só para os dois canais.** Falha de um
+  destino Instagram impedia o item de entrar em `sentItemIds` **com o WhatsApp
+  já entregue**, e ele voltava candidato a cada tick. Hoje o aceite é por canal.
+
+**11. LGPD deixava o JPEG no disco.** A anonimização apagava a linha de
+`RenderedAsset`, e a varredura de expirados é guiada pelo banco — sem a linha
+ela nunca mais olhava o arquivo, que ficava para sempre e servível pela URL
+assinada. Agora os arquivos saem **antes** do `deleteMany` (`anonymizeUser(...,
+{ storage })`) e `cleanupExpiredStoryAssets` chama `storage.cleanup()` como
+rede contra órfão.
+
+**12. Falha transitória desligava os destinos da cliente.** O `catch` do refresh
+usava `error.retryable`, então **qualquer** exceção sem a flag — um `TypeError`
+nosso incluso — marcava `needs_reconnect` e desabilitava os destinos, que é o
+oposto da correção #13 de 2026-09-11. Hoje `isPermanentOAuthFailure` exige
+recusa comprovada da Meta (4xx que não seja 429, ou credencial inválida). E o
+sweep **não filtra mais por `loginMethod`**: conexão de outro método
+simplesmente deixava de ser renovada e vencia em silêncio.
+
+**13. Desconectar deixava um rastro de "Falhou".** Publicações e ingressos já
+enfileirados seguiam vivos e viravam falha na tela. `disconnectInstagram` agora
+cancela os dois e remove os jobs da fila.
+
+**14. Interface e linguagem:**
+- O painel de Instagram aparecia para **todas** as clientes, com um botão
+  "Conectar" que sempre devolvia 403 e três chamadas de API por abertura de
+  Configurações — só o `/health` são nove contagens no SQLite. Hoje a tela é
+  gated por `hasInstagramStoriesAccess` e as rotas `/connections` e `/health`
+  exigem o plano.
+- **A mensagem crua do backend ia para a tela** ("Meta HTTP 400", "Container
+  ERROR", "Chave de idempotência pertence a outra publicação").
+  `src/instagram/errorMessages.js` é o ponto único de tradução; teste falha se
+  jargão voltar.
+- **"Oferta enviada para WhatsApp e Instagram" era mentira**: o Story só entra
+  na fila (202). E, quando um canal falhava, a usuária lia só o erro e não
+  sabia que o WhatsApp tinha saído — reclicar reenviava o WhatsApp (o broadcast
+  não tem chave de idempotência). O resultado agora é por canal e diz o que já
+  saiu.
+
+Correção de método da própria revisão: a chave de idempotência do "Criar
+oferta" **é** gerada (`setStoryIdempotencyKey` no gerar/limpar) — a primeira
+leitura disse o contrário e estava errada.
+
+Testes: `test/instagram-revisao-correcoes.test.js`, mais os casos novos em
+`test/instagram-mirroring.test.js`, `test/instagram-offer-queue.test.js` e
+`test/instagram-publishing.test.js`.
+
+⚠️ **Continua valendo o que a revisão de 2026-09-11 listou como bloqueador e
+não é código:** HTTPS público para a Meta buscar o asset, validação real do app
+na Meta e a decisão de produto sobre como a pessoa chega à loja (link na bio,
+direct). Nada disso é resolvido aqui.
+
+### Revisão crítica de confiabilidade (2026-09-11)
+
+- `StoryPublication.idempotencyKey` é sempre escopada por usuário; nunca volte
+  a persistir diretamente uma chave recebida pela API.
+- Falha final da BullMQ precisa atualizar também o estado durável no Prisma.
+- Ingressos de espelhamento usam lease por `claimedAt`; busca de imagem externa
+  nunca pode voltar ao hot path do `bot-worker`.
+- Assets agendados precisam permanecer válidos depois de `scheduledFor`.
+- Exportação/anonimização LGPD deve incluir toda nova tabela Instagram sem
+  jamais exportar `InstagramConnection.encryptedToken`.
+- A lista completa de bloqueadores e riscos residuais está em
+  `docs/instagram/critical-review-2026-09-11.md`.
+- As quatro superfícies de destino Instagram são: Criar oferta, Filas, Ofertas
+  automáticas e Espelhamento. Não adicionar suporte só no backend: todas devem
+  continuar selecionáveis na UI, sempre atrás de `plan === 'premium'`.
+- Renovação OAuth transitória (rede, 429, 5xx) nunca desativa destino nem exige
+  login novamente; somente erro permanente muda para `needs_reconnect`.
+- Item de fila que também vai ao Instagram precisa carregar `offerSnapshot`;
+  texto/imagem de WhatsApp sozinhos não bastam para o renderer vertical.
+- Em `OfferQueue`, `targetJids='[]'` é o fallback legado para todos os grupos.
+  Fila Instagram-only deve gravar `whatsappEnabled=false`; sem isso ela envia
+  acidentalmente também para todos os destinos WhatsApp.

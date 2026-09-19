@@ -274,7 +274,7 @@ const MODULOS_VARREDURA = [
 // Entrar aqui exige DADO de Search Console, nunca conveniência de escrita.
 const TITULOS_LONGOS_DELIBERADOS = new Set([
   'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',
-  'Bot para achadinhos no WhatsApp: 4 lojas e 7 dias grátis',
+  'Bot para achadinhos no WhatsApp: 6 lojas e 7 dias grátis',
 ])
 
 test('todo título de página nos módulos de conteúdo cabe em 55 chars, salvo exceção nominal medida', () => {

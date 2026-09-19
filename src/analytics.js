@@ -178,6 +178,7 @@ export const ANALYTICS_EVENTS = new Set([
   // `ops_preview_card_no_image` porque a ação é outra — não é defeito nosso,
   // é bloqueio da loja, e a foto tem que vir por outra fonte (a vitrine).
   'ops_ml_anti_bot_wall',
+  'ops_magalu_bot_wall',
   // A foto da loja falhou, mas o card de preview SAIU MESMO ASSIM — com a foto
   // da mensagem de origem (plano B em cascata, core/previewImageFallbackPolicy.js).
   // Sinal separado de propósito: aqui a oferta saiu completa (foto + clique que
@@ -188,6 +189,12 @@ export const ANALYTICS_EVENTS = new Set([
   // (borrão). A oferta saiu sem imagem, com o card de link do WhatsApp — ver
   // core/thumbnailQualityPolicy.js e o RCA 2026-08-26.
   'ops_monitored_thumbnail_dropped',
+  // A oferta veio pelo site de DOMÍNIO PRÓPRIO do grupo de origem (sem link de
+  // loja nenhum no texto) e o robô conseguiu desembrulhar o link da loja por
+  // trás — ver core/customDomainLinkResolver.js. Cada evento é uma oferta que
+  // antes virava `skip:policy:...:nolink`/`no_valid_conversions` e a cliente
+  // lia como "o robô não espelha". `platform` diz para qual loja resolveu.
+  'ops_custom_domain_link_resolved',
   // Origem monitorada SEM destino explícito espelhando para TODOS os destinos
   // da conta (comportamento histórico de quem nunca escolheu destinos). Sinal
   // para achar quem está nesse estado sem querer — ver core/destinationRouting.js.

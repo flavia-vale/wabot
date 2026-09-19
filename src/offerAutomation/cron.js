@@ -3,6 +3,9 @@ import { runAutomation } from './dispatcher.js'
 import { isOfferAutomationDue } from './schedule.js'
 import { getPlanAccess as getPlanAccessDefault } from '../billing/plans.js'
 import { listRunningBots } from '../manager.js'
+import { canUseReview, canDeliverReview, reviewFeatureEnabled } from './reviewFlags.js'
+import { discoverReviewItems } from './reviewDiscoveryService.js'
+import { deliverApprovedReviewItems, recoverReviewItems } from './reviewDeliveryService.js'
 
 const TICK_MS = 60_000
 
@@ -17,8 +20,12 @@ export async function tickOfferAutomations(deps = {}) {
   const listRunningBotsFn = deps.listRunningBotsFn ?? listRunningBots
   try {
     const now = deps.now ? deps.now() : new Date()
+    if (reviewFeatureEnabled(deps.env ?? process.env)) {
+      try { await recoverReviewItems({ db: database, now: () => now }) } catch (error) { console.error('[offer-cron] review recovery failed:', error.message) }
+    }
     const automations = await database.offerAutomation.findMany({
       where: { enabled: true },
+      include: { instagramDestinations: { include: { destination: true } } },
     })
 
     // Curto-circuito: buscamos os bots rodando UMA vez por tick e pulamos
@@ -35,8 +42,26 @@ export async function tickOfferAutomations(deps = {}) {
     }
 
     for (const automation of automations) {
+      const mode = automation.publicationMode || 'direct'
+      if (mode !== 'direct' && mode !== 'review') {
+        console.error(`[offer-cron] automation ${automation.id} skipped: publicationMode inválido`)
+        continue
+      }
+      if (mode === 'review') {
+        if (!canUseReview(automation.userId, deps.env ?? process.env)) continue
+        const { entitlements } = await getPlanAccess(automation.userId, { db: database })
+        if (!entitlements.canUseOfferAutomations) {
+          console.warn(`[offer-cron] review automation ${automation.id} skipped: plano sem acesso`)
+          continue
+        }
+        if (automation.instagramDestinations?.length && !entitlements.canUseInstagramStories) automation.instagramDestinations = []
+        const discoveryDue = isOfferAutomationDue({ ...automation, lastSentAt: automation.lastDiscoveryAt }, now)
+        if (discoveryDue) try { await (deps.discoverReviewItemsFn ?? discoverReviewItems)(automation, { db: database, now: () => now, fetchOffersFn: deps.fetchOffersFn }) } catch (error) { console.error(`[offer-cron] review discovery ${automation.id} failed:`, error.message) }
+        if (canDeliverReview(automation.userId, deps.env ?? process.env) && isOfferAutomationDue(automation, now)) try { await (deps.deliverApprovedReviewItemsFn ?? deliverApprovedReviewItems)(automation, { ...deps, db: database, now: () => now }) } catch (error) { console.error(`[offer-cron] review delivery ${automation.id} failed:`, error.message) }
+        continue
+      }
       if (!isOfferAutomationDue(automation, now)) continue
-      if (runningSet && !runningSet.has(automation.userId)) continue
+      if (runningSet && !runningSet.has(automation.userId) && !automation.instagramDestinations?.length) continue
 
       // Ofertas automáticas são feature Pro/Trial ativo. Automações criadas
       // antes de um downgrade (ou com acesso expirado) ficam no banco, mas
@@ -46,9 +71,13 @@ export async function tickOfferAutomations(deps = {}) {
         console.warn(`[offer-cron] automation ${automation.id} skipped: plano do usuário ${automation.userId} não permite ofertas automáticas`)
         continue
       }
+      if (automation.instagramDestinations?.length && !entitlements.canUseInstagramStories) {
+        console.warn(`[offer-cron] automation ${automation.id}: destinos Instagram ignorados porque o plano não permite Stories`)
+        automation.instagramDestinations = []
+      }
 
       try {
-        await run(automation)
+        await run(automation, { dbOverride: database })
       } catch (err) {
         console.error(`[offer-cron] automation ${automation.id} failed:`, err.message)
       }
