@@ -90,6 +90,20 @@ test('a aba Conexões nasce com uma origem destacada', () => {
   assert.equal(resolveInitialOrigin({ origens: [] }), null)
 })
 
+test('a origem destacada é DERIVADA no render, nunca gravada por efeito', () => {
+  // Gravá-la num `useEffect` dispara renderização em cascata (a regra
+  // `react-hooks/set-state-in-effect` reprovou exatamente isso no gate da PR) e
+  // ainda deixa um quadro com nada destacado antes do efeito rodar.
+  assert.match(page, /const origemDestacada = /, 'a origem destacada precisa ser derivada no render')
+  const efeitos = page.split('useEffect(').slice(1)
+  for (const corpo of efeitos) {
+    assert.ok(
+      !corpo.slice(0, corpo.indexOf('}, [')).includes('setSelectedOriginId'),
+      'setSelectedOriginId voltou para dentro de um useEffect',
+    )
+  }
+})
+
 test('a tela usa a regra pura, não decide a união sozinha', () => {
   assert.ok(page.includes('planMirrorCreation'), 'a tela precisa usar planMirrorCreation')
   assert.ok(page.includes('resolveInitialOrigin'), 'a origem inicial precisa vir da regra')

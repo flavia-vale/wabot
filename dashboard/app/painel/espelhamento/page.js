@@ -251,7 +251,9 @@ export default function EspelhamentoPage() {
   const [loadError, setLoadError] = useState('')
   const [switchingMirror, setSwitchingMirror] = useState(false)
   const [tab, setTab] = useState('grupos')
-  const [selectedOriginId, setSelectedOriginId] = useState(null)
+  // `undefined` = a cliente nunca escolheu (a regra destaca a primeira);
+  // `null` = ela desmarcou de propósito. Ver `origemDestacada` abaixo.
+  const [selectedOriginId, setSelectedOriginId] = useState(undefined)
   const [instagramDestinations, setInstagramDestinations] = useState([])
   const [instagramMirrorTargets, setInstagramMirrorTargets] = useState({})
   const [savingInstagramOrigin, setSavingInstagramOrigin] = useState('')
@@ -317,6 +319,17 @@ export default function EspelhamentoPage() {
   const destinos = groups.filter((g) => g.role === 'post')
   const linksLoading = links === null
 
+  /* A origem destacada na aba Conexões é DERIVADA no render, nunca gravada por
+   * efeito: `setState` dentro de `useEffect` dispara renderização em cascata
+   * (regra `react-hooks/set-state-in-effect`) e ainda deixaria um quadro com
+   * nada destacado. A aba nascia sem destaque nenhum, e o desenho com todas as
+   * linhas ao mesmo tempo não se lê — destacar a primeira entrega a leitura
+   * pronta. `null` (ela desmarcou) é respeitado; id que não existe mais cai na
+   * primeira em vez de sumir com o desenho. */
+  const origemDestacada = selectedOriginId === undefined
+    ? resolveInitialOrigin({ origens })
+    : selectedOriginId && resolveInitialOrigin({ origens, selecionada: selectedOriginId })
+
   // Vínculos reais → só destinos que ainda existem entram no desenho (o
   // endpoint pode devolver id de grupo apagado enquanto a lista não recarrega).
   const destById = new Map(destinos.map((d) => [d.id, d]))
@@ -366,16 +379,9 @@ export default function EspelhamentoPage() {
   }
 
   function toggleOrigin(id) {
-    setSelectedOriginId((prev) => (prev === id ? null : id))
+    setSelectedOriginId(() => (origemDestacada === id ? null : id))
   }
 
-  // A aba Conexões nascia sem nenhuma origem destacada, e o desenho com todas
-  // as linhas ao mesmo tempo não se lê. Destacar a primeira já entrega a
-  // leitura pronta; a escolha da cliente, quando existe, é preservada.
-  useEffect(() => {
-    if (origens.length === 0) return
-    setSelectedOriginId((prev) => resolveInitialOrigin({ origens, selecionada: prev }))
-  }, [origens.map((o) => o.id).join(',')])
 
   function abrirAssistente() {
     setWizardOk('')
@@ -679,15 +685,15 @@ export default function EspelhamentoPage() {
               ? 'Carregando as ligações entre os seus grupos…'
               : origens.length === 0 || destinos.length === 0
                 ? 'Cadastre pelo menos um grupo de origem e um de destino para o espelhamento entrar em ação.'
-                : selectedOriginId
-                  ? `Mostrando para onde "${origens.find((o) => o.id === selectedOriginId)?.name}" envia. Clique de novo para limpar.`
+                : origemDestacada
+                  ? `Mostrando para onde "${origens.find((o) => o.id === origemDestacada)?.name}" envia. Clique de novo para limpar.`
                   : 'Clique em um grupo de origem para destacar a ligação com os destinos. Para mudar quem envia para quem, use os destinos de cada origem em Grupos.'}
           </div>
           <ConnectionsDiagram
             origens={origens}
             destinos={destinos}
             destIdsOf={destIdsOf}
-            selectedOriginId={selectedOriginId}
+            selectedOriginId={origemDestacada}
             onToggleOrigin={toggleOrigin}
           />
         </section>
