@@ -1468,3 +1468,124 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 @media (max-width: 480px) {
   .pnl-slim-banner { border-radius: var(--pnl-radius-sm); }
 }
+
+/* ── Painel v2 (2026-09-19) ──────────────────────────────────────────────
+ * Camada visual da tela inicial do painel: checklist -> cards de números ->
+ * funções mais usadas. Segue o desenho do mock "Painel v2": card branco,
+ * canto arredondado, número grande e ícone em caixa colorida.
+ *
+ * Prefixo `pv-` para não colidir com as classes `pnl-` das outras telas —
+ * esta é a primeira tela do front novo e as duas convivem enquanto o resto
+ * não migra. Todas as cores saem dos tokens de globals.css; a única adição é
+ * o roxo do PRO, que não existia como token.
+ */
+.pv-page { display: grid; gap: 18px; max-width: 1080px; margin: 0 auto; }
+
+/* Roxo do PRO — usado no tile de Ofertas automáticas e na etiqueta. */
+.pv-page { --pv-pro: #6F4FE8; --pv-pro-soft: #ECE7FA; --pv-pro-ink: #4B34A8; }
+
+.pv-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+.pv-section-note { font-size: 12.5px; color: var(--ink-soft); margin: 3px 0 0; }
+
+/* ── Cards de números ─────────────────────────────────────────────────── */
+.pv-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.pv-stat {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px 18px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--pnl-radius);
+  box-shadow: var(--pnl-shadow-soft);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.pv-stat-label { display: block; font-size: 12.5px; color: var(--ink-soft); line-height: 1.35; }
+.pv-stat-num {
+  display: block;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.pv-stat-foot { display: block; font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; }
+.pv-stat-ico {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--accent) 26%, var(--surface));
+  color: var(--accent-strong);
+}
+
+/* ── Funções mais usadas ──────────────────────────────────────────────── */
+.pv-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.pv-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 22px 14px 20px;
+  border-radius: var(--pnl-radius-sm);
+  border: 1px solid transparent;
+  background: color-mix(in oklab, var(--accent) 16%, var(--surface));
+  color: var(--accent-strong);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  line-height: 1.3;
+  transition: background 0.15s, transform 0.12s;
+}
+.pv-action:hover { background: color-mix(in oklab, var(--accent) 30%, var(--surface)); transform: translateY(-1px); }
+.pv-action-ico { display: flex; }
+.pv-action.is-pro { background: var(--pv-pro-soft); color: var(--pv-pro-ink); }
+.pv-action.is-pro:hover { background: color-mix(in oklab, var(--pv-pro) 22%, var(--surface)); }
+.pv-action-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--pv-pro);
+  color: #fff;
+}
+
+/* Esqueleto de carregamento dos números. */
+.pv-skel {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--bg-soft) 25%, var(--surface) 50%, var(--bg-soft) 75%);
+  background-size: 200% 100%;
+  animation: pv-shimmer 1.2s linear infinite;
+}
+@keyframes pv-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (max-width: 900px) {
+  .pv-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pv-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .pv-stats { grid-template-columns: 1fr; }
+  .pv-stat { padding: 16px; }
+  .pv-stat-num { font-size: 26px; }
+  .pv-action { padding: 18px 12px; font-size: 13.5px; }
+}
