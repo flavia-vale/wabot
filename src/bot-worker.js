@@ -20,7 +20,7 @@ import { pathToFileURL } from 'node:url'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
-import { resolveCustomDomainLinks, findCandidateLinks } from './core/customDomainLinkResolver.js'
+import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecauseOfferEnded } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
@@ -358,8 +358,12 @@ const monitoredDropLogState = new Map()
 // também é desembrulhada — era o que perdia os links do 3º produto em diante
 // (RCA 2026-09-17). Só gasta rede quando há URL que não é de loja; qualquer
 // falha devolve o texto como veio.
+// Devolve `{ text, failures }`: o motivo da falha precisa chegar ao painel, e
+// não só ao log. Sem ele, oferta ENCERRADA no site de origem era mostrada à
+// cliente como "ainda não fazemos conversão para essa loja" — falso, e com ação
+// oposta (RCA 2026-09-19).
 async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
-  if (!text) return text
+  if (!text) return { text, failures: [] }
   try {
     const desembrulhado = await resolveCustomDomainLinks(text)
     // Candidato que NÃO resolveu precisa deixar rastro com o motivo: em
@@ -368,15 +372,15 @@ async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
     if (desembrulhado.failures?.length) {
       logger.warn({ msgId, jid, falhas: desembrulhado.failures }, 'Link de domínio próprio NÃO resolveu até a loja')
     }
-    if (!desembrulhado.resolved.length) return text
+    if (!desembrulhado.resolved.length) return { text, failures: desembrulhado.failures || [] }
     logger.info({ msgId, jid, resolvidos: desembrulhado.resolved }, 'Link de domínio próprio desembrulhado até a loja')
     for (const item of desembrulhado.resolved) {
       try { recordOperationalSignal('custom_domain_link_resolved', { userId, platform: item.platform }) } catch {}
     }
-    return desembrulhado.text
+    return { text: desembrulhado.text, failures: desembrulhado.failures || [] }
   } catch (err) {
     logger.warn({ msgId, jid, err: err?.message }, 'Falha ao desembrulhar link de domínio próprio — seguindo com o texto original')
-    return text
+    return { text, failures: [] }
   }
 }
 
@@ -3643,7 +3647,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
       }
 
-      const textoParaEspelhar = await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
+      const { text: textoParaEspelhar, failures: falhasDeDominioProprio } =
+        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
       const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar) : ''
       if (text && !sanitizedText) {
         logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
@@ -3701,8 +3706,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // domínio próprio (ignora convite de grupo e rede social), então as duas
         // pontas nunca discordam sobre o que é "link de loja desconhecida".
         const hadUnsupportedStoreUrl = findCandidateLinks(textoParaEspelhar).length > 0
+        // "A oferta acabou" e "não apoiamos essa loja" são causas DIFERENTES com
+        // ações opostas, e até 19/09/2026 as duas saíam com a mesma frase — a
+        // cliente lia que a Amazon não é convertida, o que é falso. Quando TODOS
+        // os links do site de origem caíram na página de promoção encerrada, o
+        // painel passa a dizer isso.
+        const ofertaEncerradaNaOrigem = allCandidatesFailedBecauseOfferEnded(falhasDeDominioProprio)
         const unsupportedStoreSuffix =
-          links.length === 0 && (hasGenericUrl || hadUnsupportedStoreUrl) ? ':unsupported_store' : ''
+          links.length === 0 && ofertaEncerradaNaOrigem
+            ? ':offer_ended_at_source'
+            : links.length === 0 && (hasGenericUrl || hadUnsupportedStoreUrl)
+              ? ':unsupported_store'
+              : ''
         await db.messageLog.create({
           data: {
             userId,

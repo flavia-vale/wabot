@@ -386,6 +386,33 @@ export function clearCustomDomainCache() {
   resolvedCache.clear()
 }
 
+/**
+ * Motivo de falha que significa "a oferta foi ENCERRADA no site de origem".
+ * Exportado porque o painel precisa dizer isso para a cliente em vez de culpar
+ * a loja — ver `allCandidatesFailedBecauseOfferEnded`.
+ */
+export const OFFER_ENDED_REASON = 'pagina_de_lista_apos_redirect'
+
+/**
+ * Todos os links da oferta caíram na página de "promoção encerrada". PURA.
+ *
+ * Existe porque o painel dizia "ainda não fazemos conversão automática de
+ * afiliado para essa loja" — e isso é FALSO aqui: a loja é a Amazon, que
+ * convertemos desde sempre. O que aconteceu é que a oferta saiu do ar no site
+ * do dono do grupo antes de o robô ler. Os dois casos pedem ações opostas: um
+ * é "espere a gente apoiar a loja" (que nunca vai acontecer) e o outro é "essa
+ * oferta acabou, não há nada a fazer". Mesma lição do RCA de 13/09, em que o
+ * motivo genérico mandava a cliente mexer na configuração que estava certa.
+ *
+ * Exige que TODOS tenham falhado assim: um único link ainda válido significa
+ * que a oferta não acabou, e aí o motivo é outro.
+ */
+export function allCandidatesFailedBecauseOfferEnded(failures) {
+  const list = Array.isArray(failures) ? failures : []
+  if (!list.length) return false
+  return list.every(f => f?.reason === OFFER_ENDED_REASON)
+}
+
 export function isRetryableCustomDomainFailure(reason) {
   return reason === 'tempo_esgotado' || String(reason ?? '').startsWith('erro_de_rede:')
 }
