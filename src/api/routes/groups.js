@@ -3,8 +3,8 @@ import { isValidWatermarkColor, isWatermarkTextTooLong, normalizeWatermarkInputT
 import { effectiveDestinationImageMode } from '../../core/imageModePolicy.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { ensureCountQuota } from '../quotas.js'
+import { reloadWorkerConfig as _reloadWorkerConfig } from '../workerConfigReload.js'
 import {
-  reloadConfig as _reloadConfig,
   channelMetadata as _channelMetadata,
   followChannelImmediate as _followChannelImmediate,
   listFollowedChannels as _listFollowedChannels,
@@ -55,7 +55,7 @@ async function ensureAdvancedPreservationAllowed(userId, reply) {
 }
 
 export async function groupsRoutes(app, opts = {}) {
-  const reloadConfig = opts.reloadConfig ?? _reloadConfig
+  const reloadWorkerConfig = (userId) => _reloadWorkerConfig(userId, { reloadConfig: opts.reloadConfig })
   const channelMetadata = opts.channelMetadata ?? _channelMetadata
   const followChannelImmediate = opts.followChannelImmediate ?? _followChannelImmediate
   const listFollowedChannelsFn = opts.listFollowedChannels ?? _listFollowedChannels
@@ -124,20 +124,6 @@ export async function groupsRoutes(app, opts = {}) {
       throw err
     }
   })
-
-  // `reloadConfig` é assíncrono no modo remote (comando via Redis até o
-  // supervisor) e devolve uma Promise. Sem `await`, a Promise ia crua para o
-  // logger e virava `configReloaded: {}` — parecia confirmação e não era: não
-  // dizia se o supervisor recebeu o comando nem se o worker invalidou o cache.
-  // Foi o que impediu de distinguir "job antigo ainda saindo" de "worker nem
-  // recarregou" no RCA 2026-08-26.
-  async function reloadWorkerConfig(userId) {
-    try {
-      return { ok: Boolean(await reloadConfig(userId)), error: null }
-    } catch (err) {
-      return { ok: false, error: err?.message || String(err) }
-    }
-  }
 
   app.get('/:id/targets', { onRequest: [app.authenticate] }, async (req, reply) => {
     const monitor = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub, role: 'monitor' } })

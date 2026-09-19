@@ -57,6 +57,7 @@ model User {
   customerContactActors CustomerContactLog[] @relation("CustomerContactActor")
   followLogs            FollowLog[]
   offerAutomations      OfferAutomation[]
+  clientCoupons         ClientCoupon[]
   offerQueues           OfferQueue[]
   offerQueueItems       OfferQueueItem[]
   affiliateLinks        AffiliateLink[]
@@ -781,9 +782,35 @@ model OfferAutomation {
   page            Int       @default(1)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  // Opt-in explícito para usar os cupons da cliente (specs/017-client-coupon-catalog).
+  // DEFAULT false garante que automação já existente não muda de comportamento
+  // sozinha (FR-023/SC-005).
+  useCoupons      Boolean   @default(false)
 
   @@index([userId, enabled])
   @@index([enabled, lastSentAt])
+}
+
+// Cupom de desconto cadastrado pela própria cliente, para uso nas ofertas
+// (specs/017-client-coupon-catalog). Escopado por cliente (onDelete: Cascade).
+// Código repetido é PERMITIDO de propósito — não há índice único em
+// (userId, platform, code); a tela apenas avisa.
+model ClientCoupon {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code          String
+  label         String?
+  platform      String
+  discountType  String
+  discountValue Int
+  validUntil    DateTime?
+  enabled       Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId, enabled])
+  @@index([userId, platform])
 }
 
 // Dedup cruzada entre automações, por grupo de destino. `sentItemIds` é
