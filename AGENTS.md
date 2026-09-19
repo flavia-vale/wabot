@@ -5751,6 +5751,46 @@ as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
 Teste: `test/custom-domain-link-resolver.test.js` (com fixture do HTML real em
 `test/fixtures/custom-domain-offer-page.html`).
 
+### Oferta ENCERRADA virava produto aleatório; formatação e retry (RCA 2026-09-18, 2ª rodada)
+
+Cliente reportou que uma oferta que **convertia** passou a aparecer na aba
+Envios como "ainda não fazemos conversão para essa loja"
+(`skip:policy:...:unsupported_store` — ou seja, **nenhum** link virou link de
+loja). Três defeitos no mesmo caminho, os três medidos ao vivo contra o site
+real (`dicasdeamigas.com.br`), não deduzidos:
+
+| Defeito | Medição |
+|---|---|
+| **Oferta encerrada vira produto aleatório** | `/p/<slug>` de oferta encerrada (ou slug inválido) responde **307 → `/promocao-encerrada`**, página com **13 produtos DIFERENTES**. O robô pegava o primeiro e publicava no grupo um item sem relação com o texto — gravado como `success` |
+| **Marcador do WhatsApp entrava na URL** | `*https://site/p/abc*` virava candidato `.../p/abc*`, endereço que não existe → cai no 307 acima → produto errado. O detector removia esse marcador desde 15/09 (`normalizeDetectedUrl`); o desembrulho não, e as duas pontas discordavam sobre onde a URL termina |
+| **A fatia por link matou o retry** | com 2 candidatos a fatia (6,5s) fica igual ao teto da tentativa, então a 2ª tentativa nascia com prazo zero. Reproduzido: link 1 estoura → 1 resolvido de 2 no código antigo, 2 de 2 no novo, **no mesmo tempo de parede** |
+
+**Não regredir:**
+
+- **Na dúvida sobre QUAL produto é o da oferta, não publica.**
+  `isListingPageAfterRedirect` recusa quando um **redirect** levou a uma página
+  com **mais de um produto diferente** (`countDistinctProducts`, que conta
+  produto e não URL — short link e URL limpa do mesmo item contam como um). A
+  página de oferta de verdade traz 1 produto em 2 endereços; a de lista trazia
+  13. Vale a regra canônica: oferta não enviada é recuperável, oferta enviada
+  com o link errado não é (mesma família da "camiseta branca" e de #1205/#1208).
+- **A trava exige o REDIRECT de propósito.** Sem ele, página que entrega a
+  oferta em 200 com produtos relacionados continua resolvendo como antes —
+  apertar isso mudaria o comportamento dos 8 sites que hoje funcionam.
+- **O desembrulho usa `normalizeDetectedUrl`, a MESMA regra do detector.** Duas
+  regras para "onde a URL termina" é como um link formatado vira endereço
+  inexistente em silêncio.
+- **O retry roda em DUAS PASSADAS.** Passada 1: cada candidato ganha uma
+  tentativa dentro da sua fatia (link lento continua sem poder zerar a chance
+  dos outros). Passada 2: quem falhou por motivo **transitório** tenta de novo
+  com o que sobrou do orçamento da mensagem. Uma passada só era o que fazia um
+  blip de DNS (medido em 14/09) derrubar os dois links da mesma oferta.
+- Motivo próprio no log: `pagina_de_lista_apos_redirect`, com quantos produtos
+  e em qual endereço — "não resolveu" e "resolveu no produto errado" pedem
+  ações opostas.
+
+Teste: `test/custom-domain-link-resolver.test.js`.
+
 ### Nem todo site de domínio próprio entrega o link (medição antes de investir)
 
 Em produção o desembrulho passou a atender **oito sites diferentes** nas quatro
