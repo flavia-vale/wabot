@@ -74,7 +74,7 @@ test('o lugar único de validação da API não carrega o renderizador', () => {
 })
 
 test('a tela usa o MESMO limite do renderizador', () => {
-  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
   // A tela declara o limite UMA vez, numa constante, e o campo o consome por
   // prop. Conferir a constante (em vez de caçar o número literal espalhado)
   // continua pegando a divergência e não quebra quando o campo é refatorado.
@@ -110,7 +110,7 @@ test('cor desconhecida cai no padrão em vez de derrubar a oferta', () => {
 })
 
 test('a tela oferece a escolha de cor apenas no modo com marca', () => {
-  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
   const start = page.indexOf('Cor da marca d&apos;água')
   assert.notEqual(start, -1, 'seletor de cor não encontrado na tela')
   const bloco = page.slice(Math.max(0, start - 400), start + 700)
@@ -119,7 +119,7 @@ test('a tela oferece a escolha de cor apenas no modo com marca', () => {
 })
 
 test('a tela oferece a escolha de tamanho apenas no modo com marca', () => {
-  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
   const start = page.indexOf('Tamanho da marca d&apos;água')
   assert.notEqual(start, -1, 'seletor de tamanho não encontrado na tela')
   const bloco = page.slice(Math.max(0, start - 400), start + 700)
@@ -128,7 +128,7 @@ test('a tela oferece a escolha de tamanho apenas no modo com marca', () => {
 })
 
 test('a tela oferece a escolha de posição apenas no modo com marca, com as 5 posições do renderizador', () => {
-  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
   const start = page.indexOf('Posição da marca d&apos;água')
   assert.notEqual(start, -1, 'seletor de posição não encontrado na tela')
   const bloco = page.slice(Math.max(0, start - 400), start + 900)

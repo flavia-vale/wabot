@@ -1877,3 +1877,168 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   .esp-card-corpo { grid-template-columns: 1fr; gap: 10px; }
   .esp-seta { transform: rotate(90deg); justify-self: center; }
 }
+
+/* ═══ Espelhamento unificado (nível 1 lista/mapa, nível 2 painel lateral) ═══
+ *
+ * Regra da tela: ver no nível 1, configurar no nível 2. Por isso o card é um
+ * alvo de toque inteiro e não abre nada embaixo dele — quem abre é a gaveta.
+ * No celular a gaveta vira folha de tela cheia (nada de largura fixa, que é
+ * como balão e diálogo já saíram da tela antes — RCA 2026-09-05). */
+
+.pnl-esp-cols { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
+
+.pnl-esp-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pnl-esp-col-head .pnl-card-note { margin-top: 2px; }
+
+.pnl-esp-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--pnl-radius-sm);
+  background: color-mix(in oklab, var(--bg-soft) 35%, var(--surface));
+  padding: 6px 10px 6px 6px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.pnl-esp-card:hover { border-color: var(--line-strong); }
+.pnl-esp-card.is-selected {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.pnl-esp-card-hit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  border-radius: 10px;
+}
+.pnl-esp-card-hit:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+.pnl-esp-card-main { min-width: 0; flex: 1; display: block; }
+.pnl-esp-card-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pnl-esp-card-name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.pnl-esp-gear {
+  width: 36px; height: 36px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--ink-soft); cursor: pointer;
+}
+.pnl-esp-gear:hover { border-color: var(--line-strong); color: var(--ink); }
+
+.pnl-esp-map-action {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+/* O seletor Origens|Destinos só existe no celular, onde as duas colunas viram
+ * uma lista só. No computador as duas aparecem lado a lado. */
+.pnl-esp-mobile-switch { display: none; }
+
+/* ── Painel lateral ── */
+.pnl-drawer-overlay {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(31, 45, 42, 0.38);
+  display: flex; justify-content: flex-end;
+}
+.pnl-drawer {
+  width: 480px; max-width: 100%;
+  background: var(--surface);
+  display: flex; flex-direction: column;
+  box-shadow: var(--pnl-shadow);
+  animation: pnl-drawer-in .18s ease both;
+}
+@keyframes pnl-drawer-in { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+.pnl-drawer-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 14px; }
+.pnl-drawer-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pnl-drawer-name { font-size: 16.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.pnl-drawer-flow { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.pnl-drawer-close {
+  width: 34px; height: 34px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--ink-soft); cursor: pointer;
+}
+.pnl-drawer-close:hover { border-color: var(--line-strong); color: var(--ink); }
+.pnl-drawer-tabs {
+  display: flex; gap: 4px; padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.pnl-drawer-tabs button {
+  flex-shrink: 0;
+  height: 42px; padding: 0 12px;
+  border: 0; background: none; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; color: var(--ink-soft);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.pnl-drawer-tabs button.is-active { color: var(--accent-strong); border-bottom-color: var(--accent-strong); }
+.pnl-drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: grid; gap: 16px; align-content: start; }
+.pnl-drawer-body .cfg-section { margin: 0; }
+.pnl-drawer-error {
+  margin: 0 20px 10px; padding: 10px 12px;
+  border-radius: var(--pnl-radius-sm);
+  background: color-mix(in oklab, var(--danger) 12%, var(--surface));
+  color: var(--danger); font-size: 12.5px; line-height: 1.5;
+}
+.pnl-drawer-foot {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 20px; border-top: 1px solid var(--line); background: var(--surface);
+}
+
+/* ── Modal "Adicionar" ── */
+.pnl-esp-add { max-width: 620px; max-height: calc(100vh - 40px); overflow-y: auto; }
+.pnl-esp-add-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.pnl-esp-add-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  text-align: left; padding: 16px;
+  border: 1px solid var(--line); border-radius: var(--pnl-radius-sm);
+  background: var(--surface); cursor: pointer; font: inherit; color: inherit;
+}
+.pnl-esp-add-card:hover { border-color: var(--line-strong); }
+.pnl-esp-add-card.is-on {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent);
+}
+.pnl-esp-add-card .pnl-hint { margin: 0; }
+.pnl-esp-add-list {
+  margin-top: 10px; max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: var(--pnl-radius-sm);
+}
+.pnl-esp-add-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border-bottom: 1px solid var(--line);
+}
+.pnl-esp-add-row:last-child { border-bottom: none; }
+.pnl-esp-add-name { flex: 1; min-width: 140px; font-size: 13.5px; font-weight: 500; overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  .pnl-esp-cols { grid-template-columns: 1fr; }
+  .pnl-esp-mobile-switch { display: inline-flex; justify-self: start; }
+  .pnl-esp-col.is-hidden-mobile { display: none; }
+}
+
+@media (max-width: 560px) {
+  /* Gaveta vira folha de tela cheia, presa às duas laterais: nada de largura
+   * fixa, que é como um painel some para fora da tela em 375px. */
+  .pnl-drawer-overlay { align-items: flex-end; }
+  .pnl-drawer {
+    width: 100%; max-height: 100%; height: 100%;
+    border-radius: 0;
+    animation: pnl-drawer-up .2s ease both;
+  }
+  @keyframes pnl-drawer-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+  .pnl-drawer-head { position: sticky; top: 0; background: var(--surface); z-index: 2; }
+  .pnl-drawer-body { padding: 14px; }
+  .pnl-drawer-foot { padding: 12px 14px; }
+  .pnl-drawer-foot .pnl-btn { flex: 1; justify-content: center; }
+  .pnl-esp-add-cards { grid-template-columns: 1fr; }
+  .pnl-esp-add { max-height: calc(100vh - 24px); }
+}

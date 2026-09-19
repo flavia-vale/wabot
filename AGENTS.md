@@ -6690,6 +6690,73 @@ lugares.
 Testes: `test/painel-credencial-clareza.test.js`,
 `test/painel-whatsapp-seguranca.test.js`.
 
+## Espelhamento absorveu a tela de Grupos (2026-09-19 — não regredir)
+
+`/painel/grupos` **deixou de existir** e virou redirecionamento para
+`/painel/espelhamento`. O endereço antigo continua respondendo porque está em
+e-mail já enviado, no tutorial, no checklist de ativação e em link que a
+cliente guardou — caçar cada um é mais caro que redirecionar.
+
+**Princípio da tela: ver no nível 1, configurar no nível 2.** A lista e o mapa
+mostram o FLUXO; toda configuração vive num painel lateral que abre ao clicar
+no card do grupo. **Nada de formulário aberto dentro da lista** — era isso que
+fazia a tela de Grupos crescer sem fim e sumir para baixo no celular.
+
+| Onde ficava (tela de Grupos) | Onde fica agora |
+|---|---|
+| Abas Monitorar / Publicar | as duas colunas da aba "Grupos" |
+| Carregar do WhatsApp / Adicionar canal | modal "+ Adicionar" de cada coluna |
+| Para onde esse grupo envia | painel da ORIGEM, aba **Destinos** (e pelo mapa de Conexões) |
+| Lojas, palavras bloqueadas, sem link | painel da ORIGEM, aba **Captura** |
+| Formato da mensagem, link principal, texto adicional | painel da ORIGEM, aba **Publicação** |
+| Imagem, marca d'água, boas-vindas, botão "Ver canal", anti-ban | painel do DESTINO |
+| Excluir grupo | rodapé do painel, com confirmação |
+
+⚠️ **As duas colunas VOLTARAM e isso é decisão de produto, não regressão.** Em
+2026-09-19, de manhã, as colunas tinham virado um cartão por ORIGEM
+("LÊ DE → PUBLICA EM") com um assistente de dois passos. O desenho de cartões
+não tem porta de entrada para o DESTINO — e é no destino que moram imagem,
+marca d'água, boas-vindas, botão "Ver canal" e anti-ban. Sem a coluna de
+destinos, metade da tela de Grupos não teria onde ser absorvida. O que o cartão
+entregava de bom **não se perdeu**: quantas ofertas saíram hoje, as lojas
+aceitas e "envia para" vivem dentro do card da coluna de origem, montados pela
+MESMA regra pura (`buildMirrorCards`).
+
+**O assistente "Criar novo espelhamento" saiu** — dois caminhos para a mesma
+coisa confundem. Os avisos dele, porém, continuam valendo e foram para a aba
+Destinos do painel, ANTES de salvar: quem deixa de receber ao sair do padrão
+`all` (RCA 2026-08-26), origem que fica sem destino nenhum e destino removido.
+
+**Não regredir:**
+
+- **A lista salva NUNCA vai crua ao endpoint.** `saveTargets` passa por
+  `planMirrorCreation({ modo: 'editar' })` — o `PUT /groups/:id/targets`
+  SUBSTITUI a lista da origem, e gravar o rascunho da tela sem a regra apaga
+  vínculo em silêncio.
+- **A origem destacada da aba Conexões é DERIVADA no render**
+  (`resolveInitialOrigin`), nunca gravada por efeito.
+- **`targetsState` é a fonte ÚNICA dos vínculos** — cards, mapa e o seletor de
+  destinos leem o mesmo registro. Por isso salvar no painel atualiza a lista e o
+  mapa atrás dele na hora, sem recarregar, e sem um GET por abertura de gaveta.
+- **Fechar o painel com mudança não salva pede confirmação**, e o card mostra
+  "destinos não salvos" enquanto isso.
+- **A escolha de contas do Instagram mora na aba Destinos da origem** — é
+  destino como os outros (`instagramMirrorTargetsUpdate`, atrás de
+  `hasInstagramStoriesAccess`).
+- **Linguagem:** a tela diz "origem" e "destino". Onde o código usa
+  `role: 'monitor'` a tela diz origem; `role: 'post'`, destino. Nunca monitor,
+  post, jid, imageMode, template key, relay ou preview na tela.
+- **No celular** as colunas viram uma lista só com seletor Origens|Destinos, e
+  a gaveta vira folha de tela cheia **sem largura fixa** (RCA 2026-09-05).
+- Nenhuma rota ou contrato de API novo: a tela usa exatamente as chamadas que as
+  duas telas já faziam.
+
+Testes: `test/painel-espelhamento-cartoes.test.js`,
+`test/painel-espelhamento-assistente.test.js`,
+`test/painel-destinos-editor.test.js`, `test/painel-marca-dagua-salvar.test.js`,
+`test/image-mode-policy.test.js`,
+`test/painel-modelo-herdado-e-texto-adicional.test.js`.
+
 ## Contato ativo semanal (lista de quem procurar, 2026-09-13)
 
 Pedido da dona do produto: rodar um comando por semana e receber **nome, e-mail

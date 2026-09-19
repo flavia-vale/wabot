@@ -39,7 +39,7 @@ export function getMobileGroupPickerItem(group = {}, role, existingJidRoles = ne
 }
 
 // Plataformas que podem ser filtradas por grupo de origem. Mesma lista do
-// painel responsivo (app/painel/grupos/page.js → ALL_PLATFORMS); manter
+// painel responsivo (app/painel/espelhamento/page.js → ALL_PLATFORMS); manter
 // sincronizado para não divergir o comportamento entre as duas UIs.
 export const MOBILE_GROUP_PLATFORMS = [
   { id: 'shopee', label: 'Shopee' },
