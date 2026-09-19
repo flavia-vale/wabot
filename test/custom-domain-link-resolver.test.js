@@ -18,6 +18,7 @@ import {
   CUSTOM_DOMAIN_TOTAL_BUDGET_MS,
   CUSTOM_DOMAIN_MIXED_BUDGET_MS,
   CUSTOM_DOMAIN_MAX_ATTEMPTS,
+  MAX_CANDIDATES_PER_MESSAGE,
   hasStoreLink,
   countDistinctProducts,
   isListingPageAfterRedirect,
@@ -132,12 +133,61 @@ test('ignora convite de grupo, rede social e arquivo', () => {
 })
 
 test('teto de candidatos por mensagem é respeitado', () => {
+  const texto = Array.from({ length: MAX_CANDIDATES_PER_MESSAGE + 2 }, (_, i) =>
+    `https://dicasdeamigas.com.br/p/${i}`).join('\n')
+  assert.equal(findCandidateLinks(texto).length, MAX_CANDIDATES_PER_MESSAGE)
+})
+
+// RCA 2026-09-19: era ESTE teto a queixa "não converte mais de 2 links". O
+// grupo de origem publica todos os produtos pelo site próprio, então a oferta
+// de 3-4 produtos saía com os dois primeiros e o resto sem link nenhum.
+test('oferta de 4 produtos pelo site próprio: NENHUM produto fica sem link', async () => {
+  clearCustomDomainCache()
   const texto = [
-    'https://dicasdeamigas.com.br/p/1',
-    'https://ofertasdaju.com.br/p/2',
-    'https://achadinhosdapri.com.br/p/3',
+    '👉Link do Sabonete : https://dicasdeamigas.com.br/p/aaa',
+    '👉Link do Papel: https://dicasdeamigas.com.br/p/bbb',
+    '👉Link do Livrinho : https://dicasdeamigas.com.br/p/ccc',
+    '👉Link do Shampoo : https://dicasdeamigas.com.br/p/ddd',
   ].join('\n')
-  assert.equal(findCandidateLinks(texto).length, 2)
+  const fetchImpl = async () => respostaHtml(PAGINA_REAL)
+
+  const { text, resolved } = await resolveCustomDomainLinks(texto, { fetchImpl, useCache: false })
+
+  assert.equal(resolved.length, 4)
+  for (const trecho of ['/p/aaa', '/p/bbb', '/p/ccc', '/p/ddd']) {
+    assert.ok(!text.includes(trecho), `${trecho} continuou embrulhado — o sanitizador vai apagá-lo`)
+  }
+  for (const rotulo of ['Sabonete', 'Papel', 'Livrinho', 'Shampoo']) {
+    assert.ok(text.includes(rotulo), `perdeu a linha do ${rotulo}`)
+  }
+})
+
+test('o teto não é mais o guarda de TEMPO: quem limita é o orçamento da mensagem', async () => {
+  clearCustomDomainCache()
+  const texto = Array.from({ length: MAX_CANDIDATES_PER_MESSAGE }, (_, i) =>
+    `Produto ${i} https://dicasdeamigas.com.br/p/${i}`).join('\n')
+  const tentados = []
+  const fetchImpl = async (url, opts) => {
+    tentados.push(url)
+    return new Promise((_resolve, reject) => {
+      const seguraOLaco = setTimeout(() => reject(new Error('nunca deveria chegar aqui')), 30_000)
+      opts?.signal?.addEventListener?.('abort', () => {
+        clearTimeout(seguraOLaco)
+        reject(new Error('TimeoutError'))
+      })
+    })
+  }
+
+  const comecou = Date.now()
+  const { text, failures } = await resolveCustomDomainLinks(texto, {
+    fetchImpl,
+    useCache: false,
+    totalBudgetMs: 4000,
+  })
+
+  assert.ok(Date.now() - comecou < 6000, 'o orçamento da mensagem precisa limitar o tempo total')
+  assert.equal(failures.length, MAX_CANDIDATES_PER_MESSAGE)
+  assert.equal(text, texto, 'fail-safe: texto devolvido exatamente como veio')
 })
 
 test('anti-SSRF: recusa rede interna, IP literal, credencial embutida e porta estranha', () => {
