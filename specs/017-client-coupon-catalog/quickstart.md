@@ -101,11 +101,21 @@ perdido nem fila parada depois dos cenários acima.
 ## 3. Antes de promover para produção
 
 - [ ] Todos os cenários acima validados em staging.
-- [ ] `npm test` + `npm run arch:check` verdes na PR (PR contra `develop`,
-      **nunca** direto para `main`).
-- [ ] Nenhum processo PM2 novo; `free -m` sem mudança relevante (SC-008).
-- [ ] Conferido que a chave de repetição continua saindo dos **links** e não do
-      texto com cupom (nota de verificação da spec).
+- [x] `npm test` + `npm run arch:check` verdes localmente (T033, 2026-09-19):
+      3341 passando/0 falha (22 skips pré-existentes, sem relação com a
+      feature), `arch:check` sem violação (341 módulos/689 dependências
+      cruzadas), `src/core/clientCouponPolicy.js` fora da allowlist
+      `no-src-to-dashboard`. Falta confirmar de novo no CI da PR (PR contra
+      `develop`, **nunca** direto para `main`).
+- [x] Nenhum processo PM2 novo, `setInterval` novo ou dependência nova em
+      `package.json`/`ecosystem.config.cjs` (T035, 2026-09-19 — `git diff` do
+      range inteiro de commits desta feature confirma zero mudança nesses
+      arquivos). Falta medir `free -m` de fato em staging (só possível lá).
+- [x] Conferido que a chave de repetição continua saindo dos **links** e não do
+      texto com cupom (T034, 2026-09-19 — `buildMirrorDedupKeys` é função pura
+      sem acesso a `couponContext`/`{cupom}`, e roda no lado do enfileiramento,
+      antes da substituição no dequeue; teste:
+      `test/mirror-dedup-key-surrogate.test.js`).
 
 ---
 
