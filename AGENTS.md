@@ -5795,7 +5795,22 @@ falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
   e porta fora de 80/443.
 - **Fracasso não é cacheado** (mesma lição do short link da Shopee); sucesso vale
   6h. **Fail-safe é não mexer no texto**: qualquer erro devolve o original.
-- **Teto de 2 links por mensagem, com tempo generoso por link E teto na mensagem
+- **O teto de links por mensagem NÃO é mais 2 — ele ERA a queixa** (RCA
+  2026-09-19). A cliente dizia, com estas palavras, "não está convertendo mais
+  de 2 links": o grupo de origem publica **todos** os produtos pelo site próprio
+  do dono, então numa oferta de 3-4 produtos os dois primeiros eram
+  desembrulhados e o terceiro em diante **nem chegava a ser tentado** — o
+  sanitizador apagava o link embrulhado e sobrava a linha do produto sem URL
+  ("Link do Livrinho :"). O número 2 nunca foi medição: veio de "2 candidatos de
+  4s cabem com folga". Hoje são **6** (`CUSTOM_DOMAIN_MAX_LINKS`), porque o
+  guarda de tempo passou a ser o orçamento da mensagem dividido entre os links
+  (item acima) — o teto virou "quantos produtos uma oferta real tem", não um
+  número escolhido pelo relógio. ⚠️ **O que vigiar depois de subir:**
+  `timeout:incoming` em mensagem com muitos links. O desembrulho e a conversão
+  dividem os mesmos 25s de `MSG_QUEUE_TIMEOUT_MS`, e a conversão é serializada
+  por loja — 6 links da MESMA loja podem chegar perto do teto. Se aparecer, o
+  assunto é o teto de 25s, não o número de links.
+- **Tempo generoso por link E teto na mensagem
   inteira.** Medido em staging (2026-09-13): o MESMO endereço respondeu em
   **568ms** numa chamada e **estourou 4s** na seguinte — o site oscila muito a
   partir do servidor. Confirmado em produção (2026-09-14): os DNS IPv6 da
@@ -5805,8 +5820,8 @@ falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
   de segurança nunca repetem. Por tentativa o teto segue 8s
   (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira são 13s
   (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), preservando ~12s dos 25s de preparo para
-  converter e buscar a foto. O teto é da mensagem inteira, inclusive com dois
-  links — não multiplicar por candidato. O log traz `attempts` e
+  converter e buscar a foto. O teto é da mensagem inteira, qualquer que seja o
+  número de links — não multiplicar por candidato. O log traz `attempts` e
   `recoveredByRetry`, para medir recuperação sem esconder a primeira falha.
 - **O orçamento da mensagem é DIVIDIDO entre os links, nunca gasto por ordem de
   chegada** (RCA 2026-09-18). Sem divisão, o PRIMEIRO link embrulhado consumia o
@@ -5833,7 +5848,8 @@ falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
 
 Envs (todas opcionais): `CUSTOM_DOMAIN_LINK_RESOLVE` (default LIGADO; só o valor
 exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (8000),
-`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (13000), `CUSTOM_DOMAIN_MAX_ATTEMPTS` (2),
+`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (13000), `CUSTOM_DOMAIN_MAX_LINKS` (6),
+`CUSTOM_DOMAIN_MAX_ATTEMPTS` (2),
 `CUSTOM_DOMAIN_MAX_BYTES` (512KB),
 `CUSTOM_DOMAIN_CACHE_TTL_MS` (6h). Ajustar o tempo **não exige deploy** — é
 `.env` + `pm2 delete`/`start` (pegadinha #1).

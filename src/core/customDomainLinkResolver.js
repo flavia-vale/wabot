@@ -64,10 +64,26 @@ export const isCustomDomainResolveEnabled = () =>
   String(process.env.CUSTOM_DOMAIN_LINK_RESOLVE ?? 'true') !== 'false'
 
 // Teto por mensagem. Cada candidato custa uma ida à rede, e o preparo da
-// mensagem inteira tem orçamento de MSG_QUEUE_TIMEOUT_MS (25s) — 2 candidatos
-// de 4s cabem com folga larga. Grupo que despeja 10 links por mensagem não
-// pode transformar isso em 40s de espera na fila serial.
-export const MAX_CANDIDATES_PER_MESSAGE = 2
+// mensagem inteira tem orçamento de MSG_QUEUE_TIMEOUT_MS (25s).
+//
+// ⚠️ NASCEU EM 2 E ERA ELE A QUEIXA (RCA 2026-09-19). A cliente dizia, com
+// estas palavras, "não está convertendo mais de 2 links": o grupo de origem
+// publica TODOS os produtos pelo site próprio do dono, então numa oferta de
+// 3-4 produtos os dois primeiros eram desembrulhados e **o terceiro em diante
+// nem chegava a ser tentado** — o sanitizador apagava o link embrulhado (ele
+// credita o concorrente) e sobrava a linha do produto sem URL nenhuma
+// ("Link do Livrinho :"). O número 2 não era medição: veio de "2 candidatos de
+// 4s cabem com folga".
+//
+// O teto deixou de ser o guarda de tempo: quem limita hoje é o orçamento da
+// mensagem, DIVIDIDO entre os links (RCA 2026-09-18). Com 6 candidatos cada um
+// recebe ~2s da primeira tentativa, e link rápido (medido: ~600ms) devolve a
+// sobra aos seguintes. Por isso o teto pode ser o número de produtos que uma
+// oferta real tem, e não um número escolhido por causa do relógio.
+export const MAX_CANDIDATES_PER_MESSAGE = Math.max(
+  1,
+  Math.floor(Number(process.env.CUSTOM_DOMAIN_MAX_LINKS) || 6),
+)
 // 4s eram apertados: medido em staging (2026-09-13), o MESMO endereço respondeu
 // em 568ms numa chamada e estourou 4s na seguinte. O site oscila muito a partir
 // do servidor, e cada estouro custava a oferta inteira — a cliente via "loja não
