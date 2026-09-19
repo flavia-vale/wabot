@@ -4743,6 +4743,57 @@ normalmente no fallback. Testes: `test/mercadolivre-resolve.test.js` (bloco
 — read-only, classifica o formato de cada link de ML publicado e marca com ⚠ os
 suspeitos (`listing_fabricado`, `vitrine_social`, `cupom_generico`).
 
+## Oferta do "Criar oferta" saindo com `{preço}` cru (RCA 2026-09-19 — não regredir)
+
+Cliente (`julianepumuceno16@gmail.com`) mandou dois prints de ofertas publicadas
+no grupo pelo **Criar oferta** (não é espelhamento): uma com
+`~De: ~ | 🛒 Por R$ 502,55` e outra com `~De: ~ | 🛒 Por {preço}` — o nome da
+variável, cru, dentro da mensagem que foi para o grupo.
+
+Três defeitos encadeados, todos nossos:
+
+1. **`applyTemplateVariables` devolvia o PRÓPRIO token quando o valor faltava**
+   (`price || '{preço}'`, `title || '{produto}'`). Isso faz sentido na prévia do
+   editor de templates e nunca pode chegar ao WhatsApp.
+2. **A limpeza de preço antigo vazio era escrita à mão para os DOIS templates de
+   fábrica.** Template personalizado (o caso dela, com os dois preços na mesma
+   linha separados por `|`) ficava com a decoração órfã `~De: ~ |`.
+3. **O painel só avisava quando título E preço faltavam**
+   (`if (!title && !newPrice)`). Com o título lido e o preço não — que é
+   exatamente o caso dos dois prints — **nenhum aviso aparecia**, e a cliente
+   enviava achando que estava tudo certo.
+
+Hoje todo valor vazio vira uma marca invisível e a limpeza é **genérica**: o
+trecho da linha (entre `|`) que só tinha aquele valor some inteiro; se a linha
+era só isso, a linha some. Os preços entram marcados, então título de produto
+com `|` no meio não é partido ao meio pela limpeza. O painel ganhou faixa fixa
+acima da prévia quando o preço não foi lido.
+
+**Não regredir:**
+
+- **Nenhum valor vazio pode voltar a virar o próprio token.** Publicar o nome da
+  variável no grupo é o pior desfecho possível — é a cliente aparecendo amadora
+  para o público dela.
+- **Não inventar texto no lugar do preço** ("consulte na loja", preço antigo
+  como atual): preço errado publicado é pior que oferta sem preço. A linha some
+  e o painel avisa.
+- **A limpeza é genérica, não por template.** Regra nova escrita para a forma de
+  um template específico volta a deixar template personalizado quebrado, que é a
+  causa #2.
+- **O aviso do painel separa "faltou o título" de "faltou o preço".** Juntar os
+  dois num `&&` é literalmente a causa #3.
+- A correção vale para as **três** superfícies que usam o mesmo compositor:
+  Criar oferta, ofertas automáticas (`offerAutomation/dispatcher.js`) e o
+  template de espelhamento (`core/mirrorTemplate.js`).
+
+⚠️ **Por que o preço não foi lido continua sendo assunto à parte:** os dois
+casos eram Amazon, que serve página de CAPTCHA para IP de datacenter em parte
+dos requests (`isAmazonBlockedHtml` + retries em `productInfoScraper.js`).
+Melhorar essa leitura é outra frente; nada disso justifica publicar `{preço}`.
+
+Testes: `test/criar-oferta-sem-preco.test.js`,
+`test/mobile-offer-composer.test.js`.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST
@@ -5200,6 +5251,10 @@ Testes: `test/painel-credencial-clareza.test.js`,
 
 ## Regras para qualquer agente de IA neste repo
 
+- **Não faça push direto em `develop`. Sempre abra branch e PR contra `develop`.**
+- **Sempre tente encontrar a causa raiz de algo, quando estivermos falando de
+  erros e bugs.** Para ser assertivo pode me dar comandos para rodar na VPS. Mas
+  só me peça realmente o necessário para não gastar tokens desnecessários.
 - **MEMÓRIA — SUPER SINALIZAR** antes de qualquer mudança que aumente RAM
   (regras completas em "Política de memória" acima — não repetir aqui).
 - **Não trocar portas** sem atualizar os 3 lugares em "Ambientes e portas".

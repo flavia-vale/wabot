@@ -185,7 +185,12 @@ export default function CriarOfertaPage() {
       const info = await api.scrapeOffer(trimmed)
       const title = normalizeText(info?.title)
       const newPrice = normalizeText(info?.newPrice)
+      // RCA 2026-09-19: o aviso só saía quando título E preço faltavam. Com o
+      // título vindo e o preço não, a cliente não via aviso nenhum e enviava a
+      // oferta sem preço. Agora cada caso tem o seu — e o preço, por ser o que
+      // some com mais frequência, também ganha faixa fixa acima da prévia.
       if (!title && !newPrice) setError('Não conseguimos ler título e preço desse link. Edite a mensagem direto na prévia abaixo.')
+      else if (!title) setError('Não conseguimos ler o nome do produto desse link. Escreva o nome na mensagem antes de enviar.')
       setCustomText(null)
       setGenerated({
         title,
@@ -300,6 +305,13 @@ export default function CriarOfertaPage() {
       {conv && <div className={`pnl-note-box ${conv.tone === 'success' ? 'is-success' : 'is-error'}`} role="status"><strong style={{ fontWeight: 600 }}>{conv.title}</strong>{conv.hint && <p style={{ marginTop: 4 }}>{conv.hint}</p>}</div>}
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
       {pasteFeedback && <div className="pnl-note-box is-success" role="status">{pasteFeedback}</div>}
+
+      {generated && !generated.newPrice && (
+        <div className="pnl-note-box is-warn" role="alert">
+          <strong style={{ fontWeight: 600 }}>Não conseguimos ler o preço na loja.</strong>
+          <p style={{ marginTop: 4 }}>A oferta vai sair <strong style={{ fontWeight: 600 }}>sem preço</strong>. Confira o preço na loja e escreva ele na mensagem abaixo antes de enviar.</p>
+        </div>
+      )}
 
       {/* Prévia editável: substitui o antigo card "Produto encontrado" — o
           usuário ajusta título/preços direto no texto da mensagem. */}
