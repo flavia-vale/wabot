@@ -35,13 +35,49 @@ export function buildOffersQuery({ keyword, page, limit, sortType = 2, listType 
   }`
 }
 
-export function filterOffers(offers, { minDiscountPct, excludeItemIds }) {
+// Por que cada oferta da Shopee foi descartada. O descarte por preço ausente
+// nasceu MUDO: uma automação podia parar de enviar porque a Shopee devolveu
+// preço vazio em tudo, e do lado de fora isso é idêntico a "não achei oferta
+// com desconto" — que pede outra ação (baixar o desconto mínimo). Contar por
+// motivo é o que separa os dois sem ninguém precisar abrir o log da Shopee.
+export const OFFER_DROP_REASON = Object.freeze({
+  ALREADY_SENT: 'ja_enviada',
+  NO_PRICE: 'sem_preco',
+  BELOW_DISCOUNT: 'desconto_abaixo_do_minimo',
+})
+
+/**
+ * @param {object} [counters] mapa opcional motivo → quantidade, preenchido aqui.
+ *   Função continua PURA quanto ao resultado: o mapa é só instrumentação.
+ */
+export function filterOffers(offers, { minDiscountPct, excludeItemIds }, counters = null) {
   const excludeSet = new Set(excludeItemIds.map(String))
+  const drop = (reason) => {
+    if (counters) counters[reason] = (counters[reason] ?? 0) + 1
+    return false
+  }
   return offers.filter(o => {
-    if (excludeSet.has(String(o.itemId))) return false
+    if (excludeSet.has(String(o.itemId))) return drop(OFFER_DROP_REASON.ALREADY_SENT)
+    // productOfferV2 occasionally returns an offer with a discount but with
+    // every price field empty/null. Such an item cannot produce a truthful
+    // preview or publication, so discard it at the API boundary instead of
+    // allowing the formatter to silently omit the price line.
+    if (resolveShopeeOfferPrice(o) === null) return drop(OFFER_DROP_REASON.NO_PRICE)
     const rate = Number(o.priceDiscountRate) || 0
-    return rate > 0 && rate >= minDiscountPct
+    if (!(rate > 0 && rate >= minDiscountPct)) return drop(OFFER_DROP_REASON.BELOW_DISCOUNT)
+    return true
   })
+}
+
+// Affiliate responses are not consistent about which of the three price
+// fields is populated. Empty strings must not win over a valid fallback, and
+// zero/negative/non-numeric values are not usable product prices.
+export function resolveShopeeOfferPrice(offer = {}) {
+  for (const value of [offer.priceMin, offer.price, offer.priceMax]) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return null
 }
 
 // A API de afiliado da Shopee frequentemente retorna o MESMO produto sob
@@ -72,7 +108,9 @@ export function dedupeOffersByProduct(offers, seenKeys = new Set()) {
 export function buildOfferCandidateLimit(limit) {
   // Fetch more than offersPerSend because filters remove already-sent items
   // and products that do not meet the user's minimum discount threshold.
-  return Math.min(Math.max(limit * 10, 20), 100)
+  // A API de afiliados rejeita qualquer `limit` acima de 50 (erro 11001),
+  // portanto este teto precisa valer para preview, envio direto e revisão.
+  return Math.min(Math.max(limit * 10, 20), 50)
 }
 
 export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType = 2, listType = 1, page = 1, isAMSOffer = false, isKeySeller = false }) {
@@ -101,5 +139,12 @@ export async function fetchOffers({ keyword, minDiscountPct, limit, excludeItemI
   }
 
   const nodes = data?.data?.productOfferV2?.nodes ?? []
-  return { offers: filterOffers(nodes, { minDiscountPct, excludeItemIds }), rawCount: nodes.length }
+  const dropped = {}
+  const offers = filterOffers(nodes, { minDiscountPct, excludeItemIds }, dropped)
+  // Lote inteiro descartado por preço ausente é defeito do lado da Shopee, não
+  // configuração da cliente — e sem esta linha a automação só "emudece".
+  if (dropped[OFFER_DROP_REASON.NO_PRICE] > 0) {
+    console.warn(`[shopee-offers] ${dropped[OFFER_DROP_REASON.NO_PRICE]} de ${nodes.length} ofertas descartadas por virem sem preço`)
+  }
+  return { offers, rawCount: nodes.length, dropped }
 }

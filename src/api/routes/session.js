@@ -6,6 +6,7 @@ import { mapInfraError } from '../../errors.js'
 import { appContainer } from '../../app/container.js'
 import { classifyBotStartOutcome, normalizePairingPhone } from '../../domain/session/service.js'
 import { classifyStartRefusal } from '../../domain/session/startRefusal.js'
+import { pairingBackupDirFor } from '../../core/pairingAuthBackup.js'
 import { recordWaConnectionEventSafe } from '../../waConnectionTelemetry.js'
 import { MANUAL_STOP_EVENT } from '../../email/accountActivity.js'
 import { resolveClientVisibleState, DEFAULT_CLIENT_GRACE_MS } from '../../core/clientVisibleSessionState.js'
@@ -414,6 +415,10 @@ function parseBlockNoticeForClient(raw) {
     })
     const authDir = getAuthInfoDir(userId)
     await rm(authDir, { recursive: true, force: true })
+    // "Esquecer" tem que esquecer de verdade: sem apagar o backup de um
+    // pareamento interrompido, `recoverOrphan` devolveria no próximo boot
+    // justamente a credencial que ela pediu para remover (RCA 2026-09-14).
+    await rm(pairingBackupDirFor(authDir), { recursive: true, force: true }).catch(() => {})
     return { ok: true }
   })
 

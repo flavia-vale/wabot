@@ -9,7 +9,7 @@ const description = 'Central de conteúdos do Espelha Grupos com artigos e mater
 const slug = '/conteudos'
 
 const lastUpdated = '2026-05-15'
-const editorialOwner = 'Time editorial WABOT'
+const editorialOwner = 'Time editorial do Espelha Grupos'
 const siteUrl = getSiteUrl()
 const formattedLastUpdated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${lastUpdated}T00:00:00Z`))
 
@@ -453,7 +453,7 @@ export default function Page() {
         inLanguage: 'pt-BR',
         dateModified: lastUpdated,
         mainEntityOfPage: `${siteUrl}${slug}`,
-        isPartOf: { '@type': 'WebSite', name: 'WABOT', url: siteUrl },
+        isPartOf: { '@type': 'WebSite', '@id': `${siteUrl}#website`, name: 'Espelha Grupos', url: siteUrl },
         about: { '@type': 'Thing', name: 'Operação de divulgação em grupos de WhatsApp' },
       },
       {

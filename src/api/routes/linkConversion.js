@@ -5,6 +5,7 @@ import { fetchProductInfo as defaultFetchProductInfo } from '../../converters/pr
 import { validateCredentialData } from '../../credentialHealth.js'
 import { persistCredentialPatch } from '../../credentialPatch.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
+import { pickOfferImageSourceUrl } from '../../core/offerImageSource.js'
 import {
   buildScrapedOffer,
   buildCredentialsMap,
@@ -158,14 +159,43 @@ export async function linkConversionRoutes(app, opts = {}) {
       logger: app.log,
     })
 
+    // A foto NÃO pode sair de `offer.finalUrl` cru. `finalUrl` é onde o fetch
+    // de HTML terminou e, na Shopee, ele termina com frequência numa parede
+    // anti-bot (`/unsupported.html`, `verify/traffic`) que perde
+    // (shopId, itemId) — e sem os ids a API de afiliado, ÚNICA fonte de foto
+    // da Shopee, devolve `null`. O caminho de título/preço já se protegia
+    // disso (`shopeeApiSourceUrl` em productInfoScraper.js); o da foto não,
+    // e era exatamente essa assimetria que fazia a oferta chegar com título e
+    // preço e SEM imagem (RCA 2026-09-16).
+    const platform = detectLinks(offer.finalUrl || url)[0]?.platform || detectLinks(url)[0]?.platform
+    const imageSourceUrl = pickOfferImageSourceUrl({
+      platform,
+      // Ordem IGUAL à de `shopeeApiSourceUrl` (título/preço): `finalUrl`
+      // primeiro preserva byte a byte o comportamento das demais lojas; a
+      // preferência por URL com (shopId, itemId) é que resgata a Shopee.
+      candidates: [offer.finalUrl, offer.resolvedUrl, offer.offerUrl, url],
+    }) || offer.finalUrl || url
+
     let imageUrl = null
-    const imageSourceUrl = offer.finalUrl || url
-    const platform = detectLinks(imageSourceUrl)[0]?.platform || detectLinks(url)[0]?.platform
     if (platform) {
-      imageUrl = await fetchProductImage(platform, imageSourceUrl, credentialsMap).catch((err) => {
+      // O caminho da foto era MUDO: `fetchProductImage` trata o próprio erro e
+      // devolve `null`, então "a oferta saiu sem imagem" chegava sem motivo
+      // nenhum ao log. `onDiagnostic` existe para isso — usar.
+      const diagnostics = []
+      imageUrl = await fetchProductImage(platform, imageSourceUrl, credentialsMap, {
+        onDiagnostic: (event) => { if (event?.stage) diagnostics.push(event) },
+      }).catch((err) => {
         app.log.warn({ err: err?.message, platform }, 'Falha ao resolver imagem da oferta')
         return null
       })
+      if (!imageUrl) {
+        app.log.warn({
+          platform,
+          imageSourceUrl,
+          stages: diagnostics.map(item => item.stage),
+          detail: diagnostics[diagnostics.length - 1]?.detail || null,
+        }, 'Criar oferta: loja não devolveu foto do produto')
+      }
     }
 
     return {

@@ -4,7 +4,9 @@ import Footer from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { getEditorialDates } from '@/lib/editorial-content'
 import { buildSeoRobots } from '@/lib/seo-registry.mjs'
+import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '@/lib/marketing-content'
 
 const siteUrl = getSiteUrl()
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
@@ -337,10 +339,17 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
   'bot-afiliados-whatsapp': {
     path: '/bot-afiliados-whatsapp',
     title: 'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',
-    description: 'Converta links da Shopee, Amazon, Mercado Livre e Magalu e publique as ofertas nos seus grupos e Canais do WhatsApp automaticamente. Teste grátis por 7 dias.',
+    // Reescrita de 2026-09-18 (PLANO_MAQUINA_DE_VENDAS_IA, seção 6 item 1): a
+    // página tem CTR de 10% quando aparece e não apareceu em NENHUMA das 4
+    // buscas reais de "bot para afiliados no whatsapp" — quem vence traz a
+    // consulta literal + preço + teste no topo, tabela de preço estática, FAQ
+    // com schema e um bloco "melhor para". O `title` fica como está: é exceção
+    // MEDIDA em test/inbound-titulos-clique.test.js (8,09% de clique) e só sai
+    // de lá com dado de Search Console. O H1 é que carrega preço e teste.
+    description: 'Espelha os grupos que você segue e troca cada link pelo seu código de afiliada em 6 lojas. Basic R$ 39, Pro R$ 69 por 30 dias, 7 dias grátis sem cartão.',
     eyebrow: 'Bot para afiliados',
-    h1: 'Bot para afiliados no WhatsApp que converte seus links automaticamente',
-    lead: 'Um bot para afiliados no WhatsApp monitora grupos de origem, converte cada link de produto ou cupom para o seu código de afiliado e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso com Shopee, Amazon, Mercado Livre e Magalu, com intervalos controlados e histórico de envio.',
+    h1: 'Bot para afiliados no WhatsApp: R$ 39 por 30 dias, 7 dias grátis',
+    lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
     intent: 'bot para afiliados whatsapp',
     related: [
       { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?', note: 'Resposta direta, incluindo por que isto não tem relação com golpe de espelhamento de tela.' },
@@ -370,7 +379,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     decisionQA: [
       {
         q: 'O que é um bot para afiliados no WhatsApp?',
-        a: 'É um robô que acompanha os grupos que você já segue, troca o link de cada oferta pelo seu código de afiliado (Shopee, Amazon, Mercado Livre e Magalu) e publica a oferta convertida nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.',
+        a: `É um robô que acompanha os grupos que você já segue, troca o link de cada oferta pelo seu código de afiliado (${SUPPORTED_STORES.join(', ')}) e publica a oferta convertida nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.`,
       },
       {
         q: 'Como funciona na prática?',
@@ -394,12 +403,40 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     secondaryCta: 'Conhecer preservação avançada',
     problemTitle: 'O gargalo do afiliado não é achar oferta — é publicar sem errar.',
     problem: 'Quem divulga ofertas em grupo passa o dia copiando link, gerando a versão de afiliado, colando o texto e repetindo isso em cada destino. Nesse caminho manual acontecem três coisas: link que sai sem o código de afiliado e não paga comissão, a mesma oferta publicada duas vezes no mesmo grupo, e tudo saindo de uma vez porque só sobrou aquela janela do dia. As três custam dinheiro, e nenhuma delas é falta de esforço.',
-    bullets: ['Cada link de produto ou cupom convertido para o seu código antes de sair — Shopee, Amazon, Mercado Livre e Magalu.', 'A mesma oferta não sai duas vezes no mesmo grupo: repetição dentro da janela é bloqueada e fica registrada.', 'Publicação espaçada em vez de tudo de uma vez, com limite por destino.', 'Histórico do que saiu, para onde, quando — e do que foi bloqueado e por quê.'],
+    // "Melhor para" / "não é ideal para" em texto próprio: a IA recomenda por
+    // adequação, e até 18/09 não havia UMA ocorrência de "melhor para" nas
+    // páginas comerciais. Honesto nos dois lados — o "não é ideal" é o que dá
+    // crédito ao "melhor para".
+    bestFor: {
+      yes: [
+        'Afiliada que já acompanha grupos de ofertas e quer republicar nos seus com o próprio código, sem copiar e colar.',
+        'Quem divulga mais de uma loja: as 6 lojas entram no plano de entrada, sem cobrar por grupo.',
+        'Quem quer ver no histórico o que saiu, o que foi bloqueado por repetição e por quê.',
+      ],
+      no: [
+        'Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.',
+        'Quem quer o robô achando oferta sozinho em Amazon ou Mercado Livre: a busca automática por palavra-chave hoje é só na Shopee.',
+        'Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp; o que existe aqui é ritmo, limite e histórico.',
+      ],
+    },
+    // Tabela de preço estática, na própria página (os mesmos valores de
+    // DEFAULT_LANDING_PLANS — nenhum número novo).
+    priceTable: true,
+    // Comparação com quem as IAs mais citam nesta consulta. Sem preço aqui de
+    // propósito: preço de concorrente só sai com ficha datada, e ela mora nas
+    // páginas de alternativa linkadas.
+    versus: [
+      { name: 'Pro Afiliados', href: '/alternativas/proafiliados', verdict: 'Tem plano grátis permanente, com a marca do sistema nas mensagens e anúncios do sistema no plano de entrada pago. Escolha o Pro Afiliados para testar sem custo; escolha o Espelha Grupos quando quiser a mensagem só com o seu nome e as 6 lojas desde o primeiro plano.' },
+      { name: 'Afilira', href: '/alternativas/afilira', verdict: 'Busca a oferta por você, em grupos e nas lojas, e cobre Awin, Terabyte e SHEIN nos planos maiores. Escolha a Afilira se quer a ferramenta achando oferta fora dos marketplaces; escolha o Espelha Grupos para espelhar os grupos que você já acompanha, com o preço igual para poucos ou muitos grupos.' },
+      { name: 'Achadinho Pro', href: '/alternativas/achadinho-pro', verdict: 'Forte em Shopee, com IA escolhendo produto; o plano de entrada é só Shopee. Escolha o Achadinho Pro se você divulga só Shopee; escolha o Espelha Grupos se divulga Mercado Livre, Amazon, Magalu, SHEIN ou AliExpress também.' },
+    ],
+    bullets: [`Cada link de produto ou cupom convertido para o seu código antes de sair — ${SUPPORTED_STORES.join(', ')}.`, 'A mesma oferta não sai duas vezes no mesmo grupo: repetição dentro da janela é bloqueada e fica registrada.', 'Publicação espaçada em vez de tudo de uma vez, com limite por destino.', 'Histórico do que saiu, para onde, quando — e do que foi bloqueado e por quê.'],
     process: ['Cadastre suas credenciais de afiliada de cada loja que você divulga.', 'Escolha os grupos e canais de origem que você acompanha e os destinos onde publica.', 'Defina o intervalo entre envios e o limite por destino de acordo com o tamanho da sua operação.', 'Acompanhe pelo histórico o que saiu, o que foi bloqueado por repetição e o que falhou na conversão.'],
     faqs: [
       ['Como o bot converte o link para o meu código de afiliado?', 'Você cadastra suas credenciais de afiliada de cada loja uma vez. A partir daí, quando uma oferta é capturada, o link é convertido para a sua versão antes do envio. Se a conversão não for possível com segurança, o link original de outra pessoa não é encaminhado — é melhor não publicar do que publicar dando comissão para o concorrente.'],
       ['Funciona com cupom, ou só com link de produto?', 'Também com cupom e voucher. Isso importa porque muitas vezes o preço anunciado só fecha com o cupom, e remover o cupom da mensagem quebra a oferta. O link de campanha também é convertido para o seu código.'],
-      ['Quais lojas são suportadas?', 'Shopee, Amazon, Mercado Livre e Magalu. Cada uma credita comissão por um mecanismo diferente, e a conversão respeita o mecanismo de cada uma.'],
+      ['Quais lojas são suportadas?', `${SUPPORTED_STORES.join(', ')}. Cada uma credita comissão por um mecanismo diferente, e a conversão respeita o mecanismo de cada uma.`],
+      ['Qual a diferença para Pro Afiliados, Afilira e Achadinho Pro?', 'A comparação de cada um, com preço e data de consulta, está nas páginas de alternativa linkadas nesta página. Em resumo: o Pro Afiliados tem plano grátis com a marca dele nas mensagens; a Afilira busca a oferta por você e cobre lojas fora dos marketplaces; o Achadinho Pro é forte em Shopee. O Espelha Grupos é o espelhamento com conversão em 6 lojas desde o plano de entrada, sem fidelidade.'],
       ['Preciso migrar tudo para canais?', 'Não. Dá para operar grupos e canais juntos, escolhendo o papel de cada ambiente — grupo como comunidade ou origem, canal como vitrine.'],
       ['E se a mesma oferta chegar de duas fontes diferentes?', 'Ela sai uma vez só. A repetição no mesmo destino dentro da janela é bloqueada e aparece no histórico como bloqueio, não como envio — assim você vê quantas vezes a mesma promoção tentou entrar.'],
       ['Isso é o mesmo que “anti-ban”?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp, e quem garante banimento zero está vendendo o que não pode entregar. O que existe aqui é controle do que está sob controle: intervalo entre envios, limite por destino e variação.'],
@@ -414,8 +451,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     // impressões. O que sobrava na tela era só "Bot para Achadinhos no WhatsApp:
     // automatize seus g…": nenhum motivo para clicar. Agora o diferencial (4
     // lojas) e o teste cabem dentro da janela visível. Manter curto.
-    title: 'Bot para achadinhos no WhatsApp: 4 lojas e 7 dias grátis',
-    description: 'O bot pega a oferta do grupo que você acompanha, troca o link pelo seu código de afiliado e publica nos seus grupos. Shopee, Amazon, Mercado Livre e Magalu.',
+    title: 'Bot para achadinhos no WhatsApp: 6 lojas e 7 dias grátis',
+    description: 'O bot pega a oferta do grupo que você acompanha, troca o link pelo seu código de afiliado e publica nos seus grupos. 6 lojas: de Shopee a AliExpress.',
     eyebrow: 'Bot para achadinhos',
     h1: 'Bot para achadinhos no WhatsApp: as ofertas saem sozinhas',
     lead: 'Um bot de achadinhos acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp. Você deixa de copiar e colar oferta por oferta e passa a revisar o que já foi enviado.',
@@ -430,6 +467,14 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'Clonar mensagens de um grupo de afiliados', note: 'O que a busca chama de "clonar" e como o link vira o seu.' },
       { href: '/copiaram-minha-oferta-no-whatsapp', label: 'Copiaram a sua oferta?', note: 'Marca d\u2019água, texto próprio e link com o seu código: o que muda quem leva o crédito.' },
+      // Links por loja adicionados em 16/09. Esta é a 2ª página mais forte do
+      // site (2.514 impressões, CTR 5,0%) e não apontava para nenhuma das cinco
+      // páginas por loja — que existem desde 02/09 e seguem com ~30 impressões
+      // por falta de DESCOBERTA, não por falta de página. Ver o comentário de
+      // COMPARISON_STORE_LINKS em `app/_comparisonContent.js`.
+      { href: '/shopee-afiliados-whatsapp', label: 'Divulgar Shopee no WhatsApp', note: 'Como a oferta da Shopee sai já com o seu link, sem copiar e colar.' },
+      { href: '/mercado-livre-afiliados-whatsapp', label: 'Divulgar Mercado Livre no WhatsApp', note: 'Produto, catálogo e vitrine saem convertidos com a sua etiqueta.' },
+      { href: '/amazon-afiliados-whatsapp', label: 'Divulgar Amazon no WhatsApp', note: 'A etiqueta viaja junto com o link curto, e é ela que credita a venda.' },
     ],
     about: ['Achadinhos', 'Afiliados', 'Grupos de WhatsApp'],
     aside: {
@@ -609,6 +654,7 @@ export function getPreservationCommercialMetadata(pageKey) {
 
 function buildSchemas(page) {
   const pageUrl = `${siteUrl}${page.path}`
+  const dates = getEditorialDates(page.path)
   return [
     {
       '@context': 'https://schema.org',
@@ -617,6 +663,13 @@ function buildSchemas(page) {
       description: page.description,
       url: pageUrl,
       inLanguage: 'pt-BR',
+      // Data e dono: as 5 páginas de loja do Tier 1 saíam sem nenhum sinal de
+      // frescor nem de quem publica (RCA 2026-09-18). Datas em
+      // lib/editorial-content.js (EDITORIAL_DATES).
+      datePublished: dates.publishedAt,
+      dateModified: dates.updatedAt,
+      publisher: { '@id': `${siteUrl}#organization` },
+      isPartOf: { '@id': `${siteUrl}#website` },
       about: page.about ?? ['Canais do WhatsApp', 'Afiliados', 'Módulo de Preservação Avançada'],
     },
     {
@@ -662,6 +715,10 @@ const s = {
   ctas: { display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 26 },
   nudge: { fontSize: 15.5, lineHeight: 1.6, color: 'var(--ink-soft)', marginTop: 18 },
   nudgeLink: { color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 },
+  list: { margin: 0, paddingLeft: 20, display: 'grid', gap: 8 },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: 15, minWidth: 520 },
+  th: { textAlign: 'left', padding: '12px 10px', borderBottom: '2px solid var(--line)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--ink-soft)' },
+  td: { padding: '12px 10px', borderTop: '1px solid var(--line)', verticalAlign: 'top', lineHeight: 1.55 },
 }
 
 function SectionHeader({ eyebrow, title, body }) {
@@ -753,6 +810,61 @@ export function PreservationCommercialPage({ pageKey }) {
           </section>
         )}
 
+        {page.bestFor ? (
+          <section style={s.section} aria-labelledby="best-for-title">
+            <div className="wrap">
+              <SectionHeader eyebrow="Para quem é" title="Melhor para — e para quem não é" />
+              <div style={s.grid}>
+                <div style={s.card}>
+                  <strong style={{ display: 'block', fontSize: 18, marginBottom: 10 }}>Melhor para</strong>
+                  <ul style={s.list}>
+                    {page.bestFor.yes.map((item) => (
+                      <li key={item} style={s.small}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div style={s.card}>
+                  <strong style={{ display: 'block', fontSize: 18, marginBottom: 10 }}>Não é ideal para</strong>
+                  <ul style={s.list}>
+                    {page.bestFor.no.map((item) => (
+                      <li key={item} style={s.small}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {page.priceTable ? (
+          <section style={s.section} aria-labelledby="price-table-title">
+            <div className="wrap">
+              <SectionHeader eyebrow="Quanto custa" title="Preço em uma tabela, sem surpresa" body="Os mesmos valores da página de preços: 7 dias grátis sem cartão, depois Basic ou Pro por 30 dias, sem fidelidade — cancela pelo painel." />
+              <div style={{ overflowX: 'auto' }}>
+                <table style={s.table}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>Plano</th>
+                      <th style={s.th}>Preço</th>
+                      <th style={s.th}>O que inclui</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {DEFAULT_LANDING_PLANS.map((plan) => (
+                      <tr key={plan.id}>
+                        <td style={s.td}><strong>{plan.name}</strong></td>
+                        <td style={s.td}>{plan.price} <span style={{ color: 'var(--ink-soft)' }}>/ {plan.period}</span></td>
+                        <td style={s.td}>{plan.features.slice(0, 4).join(' · ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Link className="btn btn-ghost" style={{ marginTop: 18 }} href="/precos" data-seo-cta="commercial_pricing" data-cta-position="price_table" data-cta-stage="consideration" data-cta-destination="pricing">Ver a página de preços</Link>
+            </div>
+          </section>
+        ) : null}
+
         <section style={s.section}>
           <div className="wrap">
             <SectionHeader eyebrow="Por que importa" title={page.problemTitle} body={page.problem} />
@@ -780,6 +892,23 @@ export function PreservationCommercialPage({ pageKey }) {
             </ol>
           </div>
         </section>
+
+        {Array.isArray(page.versus) && page.versus.length > 0 ? (
+          <section style={s.section} aria-labelledby="versus-title">
+            <div className="wrap">
+              <SectionHeader eyebrow="Comparação honesta" title="Espelha Grupos ou outro bot? Depende do que você divulga." body="Nenhum é melhor em tudo. Cada comparação abaixo traz o preço do concorrente com a data em que foi conferido." />
+              <div style={s.grid}>
+                {page.versus.map((item) => (
+                  <article key={item.href} style={s.card}>
+                    <h3 style={{ fontSize: 20, marginBottom: 10 }}>Espelha Grupos × {item.name}</h3>
+                    <p style={s.small}>{item.verdict}</p>
+                    <Link className="btn btn-ghost" style={{ marginTop: 18 }} href={item.href} data-seo-cta="commercial_versus" data-cta-position="versus" data-cta-stage="comparison" data-cta-destination="comparison">Ver comparação com {item.name}</Link>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section style={s.section}>
           <div className="wrap">

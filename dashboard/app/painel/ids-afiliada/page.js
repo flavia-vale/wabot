@@ -12,6 +12,7 @@ import {
   isQuickSetupPlatform,
   quickSetupPlatforms,
 } from '@/lib/painel/affiliatePlatforms'
+import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../../src/tutorialVideo.js'
 
 const IconChevron = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -32,6 +33,39 @@ const IconSpark = () => (
     <path d="m6 6 2 2M16 16l2 2M18 6l-2 2M8 16l-2 2" />
   </svg>
 )
+
+const IconPlay = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M8 5v14l11-7z" />
+  </svg>
+)
+
+// Banner de volta à tela de credenciais — tinha sumido no redesenho em
+// acordeão (19fcf93) e a usuária pediu de volta, apontando para o mesmo vídeo
+// de cadastro de etiquetas que o resto do painel já usa (fonte única em
+// src/tutorialVideo.js). Sem duração no rótulo: não temos a medição real do
+// vídeo e inventar um "X min" seria informação falsa na tela.
+function CredentialsVideoBanner() {
+  return (
+    <a
+      href={VIDEO_CADASTRO_ETIQUETAS_URL}
+      target="_blank"
+      rel="noreferrer"
+      className="pnl-cred-video-banner"
+    >
+      <span className="pnl-cred-video-play">
+        <IconPlay />
+      </span>
+      <span className="pnl-cred-video-text">
+        <span className="pnl-cred-video-title">Veja na prática: como cadastrar suas credenciais</span>
+        <span className="pnl-cred-video-desc">Shopee, Mercado Livre, Amazon e Magalu, passo a passo em vídeo.</span>
+      </span>
+      <span className="pnl-cred-video-cta">
+        Assistir <IconChevron />
+      </span>
+    </a>
+  )
+}
 
 // Uma frase por aviso. O texto inteiro continua a um clique de distância, no
 // "Saiba mais" do mesmo cartão — a tela poluída vinha de empilhar três
@@ -505,6 +539,8 @@ export default function IdsAfiliadaPage() {
 
   return (
     <div className="pnl-cred-page">
+      <CredentialsVideoBanner />
+
       <p className="pnl-cred-lede">Cadastre os dados de afiliada de cada loja — o robô usa para montar seus links já com a sua comissão.</p>
 
       <div className="pnl-cred-note">

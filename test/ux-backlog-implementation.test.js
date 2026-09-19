@@ -65,7 +65,13 @@ test('message templates page prioritizes templates and progressively discloses s
   assert.ok(dynamicTextsSection < linksSection)
   assert.ok(linksSection < referenceSection)
   assert.match(page, /templateMode === 'list'[\s\S]*Criar template/)
-  assert.match(page, />Concluir edição</)
+  // Um clique só: o botão do editor aplica E grava (nunca voltar ao par
+  // "Concluir edição" + "Salvar", que fazia o primeiro clique parecer o salvamento).
+  assert.doesNotMatch(page, /Concluir edição/)
+  assert.match(page, /onClick=\{saveTemplate\}/)
+  assert.match(page, /Salvar template/)
+  assert.match(page, /async function saveTemplate\(\)[\s\S]*applyAndPersist/)
+  assert.match(page, /async function applyAndPersist\(nextStore\)[\s\S]*handleSave\(nextStore\)/)
   assert.match(page, /Salvar templates, textos e links/)
   assert.doesNotMatch(page, /<details[^>]*\sopen(?:=|\s|>)/)
   assert.doesNotMatch(page, /pra nunca repetir|>Fechamento</)

@@ -18,7 +18,9 @@ export const CARD_HELP = {
     title: 'Sem receber',
     oQueE: 'O WhatsApp está conectado (painel verde) mas nenhuma mensagem dos grupos de origem está chegando ao robô.',
     impacto: 'É o pior caso para a cliente: parece que está tudo certo e nada é publicado. Ela conclui que o produto não funciona.',
-    comoResolver: 'Abra a lista e confira se o robô se recuperou sozinho. Se persistir por mais de meia hora, refaça a conexão dela.',
+    // HelpDot só renderiza title/oQueE/impacto/comoResolver — texto em campo
+    // novo não apareceria na tela.
+    comoResolver: 'Abra a lista e confira se o robô se recuperou sozinho. Se persistir por mais de meia hora, refaça a conexão dela. Quando o card estiver VERMELHO dizendo "cega há X", é o caso grave: a conta não parou agora, está sem receber nada há horas ou dias, atravessando várias reconexões. Esse não se resolve sozinho e refazer a conexão não basta — ela já está reconectando. Abra a conta e ache a origem da falha antes de responder à cliente.',
   },
   caindoDemais: {
     title: 'Caindo demais',

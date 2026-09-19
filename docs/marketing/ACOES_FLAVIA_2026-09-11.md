@@ -30,14 +30,17 @@ http://178.105.54.0:3006/precos
 
 ## 1. Indexação — a fila, em ordem de prioridade
 
-### 📌 Estado em 11/09 — 11 pedidos feitos, 3 pendentes no Dia 3
+### 📌 Estado em 12/09 — 17 pedidos feitos; falta o fim do Dia 4
 
 | Leva | Pedidas | Pendentes |
 |---|---|---|
 | Dia 1 — páginas novas | 4 de 4 ✅ | — |
 | Dia 2 — as cinco lojas | 5 de 5 ✅ | — |
-| Dia 3 — quem ganhou os links | 2 de 5 | 3 |
-| Dia 4 em diante | — | tudo |
+| Dia 3 — quem ganhou os links | 5 de 5 ✅ | — |
+| Dia 4 — blog que ganhou link | 3 de 5 | 2 |
+| Dia 5 em diante | — | tudo |
+
+**Próxima leva:** os 2 que faltam do Dia 4 e, na sequência, o Dia 5.
 
 As onze já pedidas foram conferidas ao vivo: **todas respondem 200 em produção
 com o conteúdo novo**, incluindo os links de entrada e a página de confiança.
@@ -99,24 +102,34 @@ Dia 1. Sem isso o link novo demora a valer.
 ```
 https://espelhagrupos.com.br/bot-afiliados-whatsapp                       ✅ pedida 2026-09-11
 https://espelhagrupos.com.br/bot-achadinhos-whatsapp                      ✅ pedida 2026-09-11
-https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados       ⏳ pendente
-https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp       ⏳ pendente
-https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados ⏳ pendente
+https://espelhagrupos.com.br/clonar-mensagens-de-grupo-de-afiliados       ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp       ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados ✅ pedida 2026-09-12
 ```
 
-**Dia 3 pela metade.** As duas comerciais são as que mais carregam link novo
-(elas apontam para a página de confiança, para o espelhamento e para os posts
-que estavam órfãos), então foram bem escolhidas para ir primeiro. Faltam três.
+**Dia 3 concluído** (2 em 11/09, 3 em 12/09). As duas comerciais são as que
+mais carregam link novo — elas apontam para a página de confiança, para o
+espelhamento e para os posts que estavam órfãos.
+
+⚠️ `/blog/quanto-custa-bot-para-whatsapp-afiliados` é o pior caso do site:
+posição 4,35 e **zero clique** em centenas de impressões. Relê-la serve para o
+link novo valer, mas o problema dela é o TÍTULO, não a indexação — está na
+lista de ajustes do plano de melhoria.
 
 ### Dia 4 — o resto que ganhou link ou título novo
 
 ```
-https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero
-https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp
-https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp
+https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero          ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp  ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp    ✅ pedida 2026-09-12
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp                     ⏳ pendente
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp              ⏳ pendente
 ```
+
+**Dia 4 pela metade.** Os dois que faltam são os que mais aparecem hoje:
+`como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
+`como-divulgar-ofertas-mercado-livre-whatsapp` — já pegam a periferia do Tier 1,
+então relê-las é o que faz o link para as páginas de loja valer mais rápido.
 
 ### Dia 5 — títulos que mudaram e a entidade de marca
 

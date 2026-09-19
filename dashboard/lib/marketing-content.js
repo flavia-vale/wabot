@@ -78,12 +78,60 @@ export const BRAND_YOUTUBE_TUTORIAL_ID =
 export const BRAND_YOUTUBE_TUTORIAL_URL = `https://www.youtube.com/watch?v=${BRAND_YOUTUBE_TUTORIAL_ID}`
 export const BRAND_YOUTUBE_TUTORIAL_EMBED_URL = `https://www.youtube-nocookie.com/embed/${BRAND_YOUTUBE_TUTORIAL_ID}?rel=0`
 
+// Endereço público do Cuponito, usado no `sameAs` da Organization, no `sameAs`
+// da Person e no link visível de /quem-somos — um lugar só, para as três pontas
+// nunca discordarem.
+export const CUPONITO_URL = 'https://www.cuponito.com.br'
+export const CUPONITO_ABOUT_URL = `${CUPONITO_URL}/quem-somos`
+
+// ⚠️ Decisão da dona do produto (18/09/2026): o Cuponito entra TAMBÉM aqui, no
+// `sameAs` da Organization, e não só no `sameAs` da Person.
+// A leitura estrita de schema.org é a contrária — `sameAs` quer dizer "mesma
+// entidade", e Cuponito e Espelha Grupos são duas empresas; o que é a mesma
+// entidade nos dois sites é a PESSOA (por isso `founder` → Person → `sameAs`
+// continua existindo e continua sendo a ligação principal). Registrado aqui para
+// a escolha ficar explícita: se a Search Console acusar entidade confusa, o
+// primeiro item a tirar é esta linha, não o `founder`.
 export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
   BRAND_YOUTUBE_URL,
+  CUPONITO_ABOUT_URL,
 ].filter(Boolean)
 
+// Perfis da FUNDADORA em outros sites da mesma dona. Esta é a ligação
+// PRINCIPAL: `sameAs` significa "mesma entidade", e o que é a mesma entidade
+// nos três sites é a PESSOA, não a empresa (o Cuponito também entra no `sameAs`
+// da Organization desde 18/09/2026, por decisão da dona do produto — ver o
+// comentário em BRAND_SAME_AS —, mas é este aqui que carrega o sentido) — e é isso que as IAs liam partido
+// (ChatGPT tratou Espelha Grupos e BOTinho como concorrentes; medição de
+// 01/09). Os dois endereços são os `@id` de Person que os outros sites já
+// publicam no próprio JSON-LD (verificado em 18/09/2026).
+export const FOUNDER_SAME_AS = [
+  `${CUPONITO_ABOUT_URL}#person`,
+  CUPONITO_ABOUT_URL,
+  'https://aulasdematematicabh.com.br/#flavia',
+]
+
+// Caminho do `@id` da Person. É CITADO DE FORA: o JSON-LD do Cuponito aponta a
+// autoria dos posts e o `founder` de lá para <site>/quem-somos#person. Trocar
+// este caminho (ou voltar para '#founder', como estava até 18/09/2026) quebra a
+// ligação em silêncio — o Cuponito afirma e o Espelha Grupos não confirma.
+export const FOUNDER_PERSON_ID_PATH = '/quem-somos#person'
+
 export const PRODUCT_DEFINITION = 'O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
+
+// Lojas com conversão de link suportada. Fonte ÚNICA para texto público,
+// schema e FAQ: em 2026-09-18 a página de preços, a API pública de planos e a
+// FAQ pública ainda diziam 4 lojas enquanto o produto já cobria 6.
+export const SUPPORTED_STORES = ['Shopee', 'Mercado Livre', 'Amazon', 'Magalu', 'SHEIN', 'AliExpress']
+
+// Sites-irmãos da mesma fundadora, citados em /quem-somos com link normal
+// (sem nofollow: é relação real, declarada dos dois lados).
+export const SISTER_SITES = [
+  { name: 'Cuponito', url: `${CUPONITO_URL}/`, description: `site brasileiro de cupons de desconto verificados para ${SUPPORTED_STORES.join(', ')}` },
+]
+
+export const PRICING_PRODUCT_DESCRIPTION = `Robô que converte links de afiliado de ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}) para o código da afiliada e publica as ofertas em grupos e canais do WhatsApp.`
 
 export const PRODUCT_LIMITATIONS = [
   'Não prometemos ganho financeiro, comissão ou aumento garantido de vendas.',
