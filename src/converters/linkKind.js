@@ -50,3 +50,22 @@ export function urlHasProductId(platform, url) {
   if (!detector) return false
   return detector(String(url || ''))
 }
+
+// Mesmos detectores acima, mas devolvendo o ID em vez de um booleano.
+// Existe para quem precisa saber se duas URLs apontam para o MESMO produto —
+// hoje o desembrulho de link de domínio próprio, que usa isso para reconhecer
+// página de LISTA (vários produtos diferentes) e recusar em vez de publicar um
+// produto aleatório. Não altera `resolveLinkKind` nem `urlHasProductId`.
+const PRODUCT_ID_EXTRACTORS = {
+  amazon: (url) => url.match(AMAZON_ASIN_RE)?.[1]?.toUpperCase() || null,
+  mercadolivre: (url) => url.match(MLB_ID_RE)?.[1] || null,
+  shein: (url) => url.match(/-p-(\d+)|[?&]goods_id=(\d+)/i)?.slice(1).find(Boolean) || null,
+  aliexpress: (url) =>
+    url.match(/\/item\/(\d{6,})|[?&](?:productIds?|itemId)=(\d{6,})/i)?.slice(1).find(Boolean) || null,
+}
+
+export function extractProductId(platform, url) {
+  const extractor = PRODUCT_ID_EXTRACTORS[platform]
+  if (!extractor) return null
+  return extractor(String(url || '')) || null
+}
