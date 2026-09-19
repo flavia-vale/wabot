@@ -52,6 +52,27 @@ pendências): comparação simplificada por ausência de valor mínimo/teto/limi
 usos; painel "Criar oferta" fora de escopo; sem verificação do cupom junto à
 loja.
 
-**Ponto de atenção para `/speckit-plan`**: a nota de operação no fim da spec
-(efeito no espelhamento e na fila só vale após reinício do supervisor, que
-reconecta todas as sessões) precisa virar passo explícito no plano de entrega.
+**Revalidado em 2026-09-19 após duas decisões novas da dona do produto** —
+checklist segue 16/16, zero [NEEDS CLARIFICATION]:
+
+4. **Preço com o cupom aplicado** (FR-018a a FR-018g): formato "de R$ 300 por
+   R$ 270 com o cupom", calculado por nós, nunca lido da loja; sem preço
+   confiável não existe "de X por Y"; preço final nunca zero ou negativo; a
+   regra pura passa a devolver também o preço calculado.
+5. **Segurança operacional** (FR-028a a FR-028d): cache em memória para não
+   consultar banco por envio na fila serial, best-effort absoluto, nenhuma
+   leitura nova da loja, uma leitura por lote nas automáticas.
+6. **Nota de verificação da trava de repetição**: registrada como achado já
+   verificado no código, com a propriedade que o plano precisa preservar.
+
+**Pontos de atenção para `/speckit-plan`**:
+
+- A nota de operação no fim da spec (efeito no espelhamento e na fila só vale
+  após reinício do supervisor, que reconecta todas as sessões) precisa virar
+  passo explícito no plano de entrega.
+- FR-028a (cache) e FR-014 (decisão no momento do envio) puxam em direções
+  opostas se mal implementados: a validade do cache precisa ser curta e a
+  invalidação precisa disparar no salvar/editar/ligar/desligar/apagar, senão um
+  cupom desligado continua saindo.
+- A palavra "com o cupom" no texto é requisito (FR-018e) e mitigação de risco
+  declarada nas Assumptions — não é detalhe de copy livre para edição futura.

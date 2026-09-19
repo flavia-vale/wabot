@@ -91,6 +91,17 @@ R$ 20) e uma oferta de R$ 300, a mensagem publicada precisa trazer o de 10%
    **When** existem cupons ativos e válidos daquela loja, **Then** o sistema
    ainda publica um cupom, escolhido por uma ordem fixa e previsível, em vez de
    publicar nenhum.
+7. **Given** uma oferta de R$ 300 e um cupom ativo de 10%, **When** ela é
+   publicada, **Then** a mensagem traz "de R$ 300,00 por R$ 270,00 com o cupom",
+   deixando explícito que o valor menor depende do cupom.
+8. **Given** que o preço da oferta não pôde ser lido, **When** existe cupom
+   aplicável, **Then** sai só a linha do cupom, sem "de X por Y" e sem nenhum
+   valor inventado.
+9. **Given** uma oferta de R$ 40 e um cupom de R$ 50, **When** ela é publicada,
+   **Then** sai só a linha do cupom, sem preço final (ele seria negativo).
+10. **Given** uma falha qualquer ao buscar ou escolher o cupom, **When** a oferta
+    é publicada, **Then** ela sai normalmente sem cupom, e nenhum envio é perdido
+    nem a fila para.
 
 ---
 
@@ -164,7 +175,15 @@ tela nem a mensagem podem conter `{linhaDeCupom}` ou uma lacuna estranha.
   oferta sai normalmente (não adivinhar loja).
 - **Cupom com desconto em reais maior que o preço da oferta**: a economia
   considerada na comparação é limitada ao preço da oferta, para não eleger um
-  cupom de R$ 500 numa oferta de R$ 50 só por causa do número.
+  cupom de R$ 500 numa oferta de R$ 50 só por causa do número. Nesse caso a
+  mensagem também não traz "por R$ Y" — sai só a linha do cupom, porque o preço
+  final seria zero ou negativo.
+- **Preço da oferta não foi lido**: sai a linha do cupom sem "de X por Y". Nunca
+  se inventa um valor para completar a frase.
+- **Falha ao buscar ou escolher o cupom**: a oferta sai sem cupom, normalmente.
+  Nenhum envio é perdido e a fila não para por causa disso.
+- **Cliente edita ou desliga um cupom com envios esperando na fila**: vale o que
+  estiver valendo na hora de cada envio; o que já saiu não muda.
 - **Porcentagem fora da faixa possível** (0 ou acima de 100) e **valor em reais
   igual ou menor que zero**: recusados no cadastro, com explicação simples.
 - **Template contém a variável de cupom mais de uma vez**: o mesmo cupom aparece
@@ -238,6 +257,31 @@ tela nem a mensagem podem conter `{linhaDeCupom}` ou uma lacuna estranha.
 - **FR-018**: O texto publicado do cupom MUST ser compreensível sozinho, indicando
   o código e o desconto de forma leiga.
 
+**Preço com o cupom aplicado**
+
+- **FR-018a**: Quando o preço da oferta for conhecido e confiável, a mensagem MUST
+  trazer, na mesma linha, o preço cheio e o preço já com o cupom aplicado, no
+  formato "de R$ 300 por R$ 270 com o cupom".
+- **FR-018b**: O preço com desconto MUST ser **calculado por nós** a partir do
+  preço da oferta e do cupom escolhido (porcentagem × preço, ou preço menos o
+  valor fixo). MUST NOT ser lido da loja em nenhuma hipótese.
+- **FR-018c**: O preço com desconto MUST NOT ser zero nem negativo. Cupom em reais
+  maior ou igual ao preço da oferta MUST fazer o trecho "por R$ Y" desaparecer,
+  saindo só a linha do cupom. (Coerente com o teto do FR-009.)
+- **FR-018d**: Sem preço confiável NÃO existe "de X por Y": quando o preço da
+  oferta não foi lido, a mensagem MUST sair só com a linha do cupom, sem inventar
+  valor nenhum. Isto é regra de segurança, não degradação estética — anunciar
+  preço errado no grupo é pior que não anunciar preço.
+- **FR-018e**: O texto MUST deixar explícito que o valor menor **depende do
+  cupom**. O preço com desconto MUST NOT ser anunciado como se fosse o preço da
+  loja.
+- **FR-018f**: O arredondamento e a formatação em reais MUST ser determinísticos e
+  cobertos por teste: duas casas decimais, vírgula como separador decimal, no
+  mesmo padrão que o resto do produto já usa.
+- **FR-018g**: A regra isolada de escolha do cupom (FR-013) MUST devolver **também
+  o preço final calculado**, para que o cálculo tenha teste próprio e não fique
+  espalhado pela montagem do texto.
+
 **Remoção do `{linhaDeCupom}`**
 
 - **FR-019**: A variável `{linhaDeCupom}` MUST ser removida do produto: sai da
@@ -264,6 +308,38 @@ tela nem a mensagem podem conter `{linhaDeCupom}` ou uma lacuna estranha.
 - **FR-025**: O painel "Criar oferta" MUST ficar fora desta versão: ele não ganha
   escolha de cupom nem pré-visualização de cupom.
 
+**Segurança operacional — a fila não pode entupir por causa do cupom**
+
+Cada item abaixo nasceu de leitura do código atual, não de suposição. O cupom é
+decidido no momento do envio (FR-014), e o envio roda numa **fila única e
+serial** — qualquer custo ou falha ali é pago por todos os destinos da conta.
+
+- **FR-028a** (cache de cupons): os cupons da cliente MUST ser servidos de
+  memória, com validade curta e invalidação quando ela salva, edita, liga,
+  desliga ou apaga um cupom. A decisão do cupom MUST NOT fazer consulta ao banco
+  por envio. Motivo: a decisão acontece dentro da fila serial de envio
+  (`processSendJob`, `src/bot-worker.js`, concorrência 1) — é exatamente o ponto
+  do RCA "Fila entupida por UM destino derrubando a vazão de todos" do
+  `AGENTS.md`. O custo de memória é desprezível (dezenas de linhas por cliente),
+  e isso fica registrado aqui de propósito para não colidir com a política de
+  memória do `AGENTS.md`.
+- **FR-028b** (best-effort absoluto): qualquer falha ao obter, escolher ou
+  formatar o cupom MUST resultar em **oferta publicada sem cupom**, nunca em
+  exceção que escape. Motivo: os dois RCAs já documentados em que um item sem
+  try/catch abortava o laço inteiro e travava a fila até restart —
+  `runAutomation` (`src/offerAutomation/dispatcher.js`) e
+  `checkScheduledMessages` (`src/bot-worker.js`). MUST existir teste cobrindo
+  "falha ao obter cupom não impede o envio".
+- **FR-028c** (sem leitura nova da loja): o cupom MUST NOT disparar nenhuma
+  consulta de rede nem leitura da página da loja. O preço usado é o que **já foi
+  obtido** pelo caminho existente. Motivo: o caminho de template roda dentro do
+  orçamento de tempo por mensagem (`MSG_QUEUE_TIMEOUT_MS`, 25s) com teto próprio
+  de scrape (`MIRROR_TEMPLATE_SCRAPE_BUDGET_MS`, 6s); gastar esse orçamento por
+  causa do cupom travaria a fila serial daquela origem.
+- **FR-028d** (uma leitura por lote): nas ofertas automáticas os cupons MUST ser
+  carregados **uma vez por execução da automação**, nunca uma consulta por oferta
+  do lote.
+
 **Linguagem e qualidade**
 
 - **FR-026**: Toda a superfície visível (tela de cupons, opção da automação,
@@ -275,6 +351,20 @@ tela nem a mensagem podem conter `{linhaDeCupom}` ou uma lacuna estranha.
   nova.
 - **FR-028**: A mudança de banco MUST ser apenas aditiva (nada é removido nem
   renomeado no que já existe).
+
+### Nota de verificação: o cupom NÃO mexe na trava de repetição
+
+Não é requisito novo — é achado já verificado no código, registrado aqui para o
+plano não precisar re-investigar.
+
+A chave que impede a mesma oferta de sair duas vezes é montada a partir dos
+**links** (`primaryUrl` e `primaryConverted`, em `buildMirrorDedupKeys`,
+`src/core/mirrorDedupKey.js`), e só cai para "id da mensagem + texto" quando a
+mensagem **não tem link** — caso em que cupom não entra. Ou seja: trocar o cupom
+**não** faz o mesmo produto passar como oferta nova.
+
+O plano MUST preservar essa propriedade: a chave de repetição NUNCA pode passar
+a ser calculada sobre o texto já com o cupom aplicado.
 
 ### Key Entities
 
@@ -309,6 +399,17 @@ tela nem a mensagem podem conter `{linhaDeCupom}` ou uma lacuna estranha.
   cupom, verificável por teste automatizado.
 - **SC-008**: Nenhum processo novo em execução contínua e nenhum aumento relevante
   de memória medido após a entrega.
+- **SC-009**: Zero consultas ao banco por envio na decisão do cupom, verificável
+  por teste automatizado.
+- **SC-010**: Zero envios perdidos e zero filas paradas por causa de falha no
+  cupom, verificável por teste que força a falha e exige a oferta publicada sem
+  cupom.
+- **SC-011**: Zero consultas de rede ou leituras de página de loja atribuíveis ao
+  cupom.
+- **SC-012**: Em 100% das ofertas com preço confiável e cupom aplicável, o preço
+  com desconto publicado confere com o cálculo esperado, verificável por teste.
+- **SC-013**: Zero ofertas publicadas com preço com desconto igual ou menor que
+  zero, e zero ofertas publicadas com "de X por Y" sem preço confiável de origem.
 
 ## Assumptions
 
@@ -325,6 +426,14 @@ tela nem a mensagem podem conter `{linhaDeCupom}` ou uma lacuna estranha.
 - **Sem verificação junto à loja**: o produto não tem como saber se o cupom
   realmente funciona no site da loja; a responsabilidade pelo código cadastrado é
   da cliente. A tela deve deixar isso claro sem assustar.
+- **Risco de negócio aceito no "de X por Y com o cupom"**: se o cupom não pegar
+  naquele produto específico (esgotou, vale só para a primeira compra, aquele
+  produto está fora da promoção), a pessoa chega no carrinho e vê outro preço.
+  A dona do produto aceitou esse risco **porque o formato escolhido torna a
+  condição explícita**: o valor menor é anunciado como dependente do cupom, não
+  como preço da loja. Por isso **a palavra "com o cupom" é obrigatória no texto e
+  não pode ser removida numa futura edição de copy** — tirá-la transforma uma
+  condição declarada em promessa de preço.
 - **Loja da oferta**: é identificada pelo mesmo mecanismo que o produto já usa
   para saber de que loja é um link. Quando esse mecanismo não conclui, nenhum
   cupom é inserido.
