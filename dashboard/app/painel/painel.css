@@ -822,7 +822,6 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
  * não por escolha da cliente (ver src/core/destinationRouting.js). */
 .pnl-esp-tag {
   display: inline-block;
-  margin-left: 6px;
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--bg-soft);
@@ -1923,7 +1922,19 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .pnl-esp-card-hit:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
 .pnl-esp-card-main { min-width: 0; flex: 1; display: block; }
 .pnl-esp-card-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.pnl-esp-card-name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+/* `break-word` e NÃO `anywhere`: com `anywhere` o navegador parte a palavra
+ * assim que ela não cabe na SOBRA da linha, e no celular saía
+ * "Cabeleireir/a Profissional". `break-word` só parte a palavra que sozinha
+ * não cabe na linha inteira. O tamanho fixo também importa: sem ele o nome
+ * herdava 16px e ficava maior que o do card antigo (14.5px), gastando a
+ * largura que já era pouca. */
+.pnl-esp-card-name { font-size: 14.5px; font-weight: 650; color: var(--ink); overflow-wrap: break-word; }
+.pnl-esp-card-meta { display: block; margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
+.pnl-esp-card-meta .esp-lojas { margin-top: 6px; }
+/* Seta de "abre configuração": só no celular, onde a engrenagem sai para
+ * devolver largura ao texto. Não é botão — quem recebe o toque é o card
+ * inteiro, então não há dois alvos disputando o mesmo dedo. */
+.pnl-esp-card-chevron { display: none; }
 .pnl-esp-gear {
   width: 36px; height: 36px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -1980,7 +1991,13 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .pnl-drawer-tabs button.is-active { color: var(--accent-strong); border-bottom-color: var(--accent-strong); }
-.pnl-drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: grid; gap: 16px; align-content: start; }
+/* Coluna FLEX e não grid: como `.cfg-section` tem `overflow: hidden`, o
+ * tamanho mínimo automático dela vira zero, e num grid de altura definida as
+ * linhas encolhem — medido em 375px, a seção de destinos ficava com 257px
+ * para 398px de conteúdo e a lista saía cortada no meio de um nome. Com
+ * `flex-shrink: 0` em cada filho nada encolhe: o que não cabe rola. */
+.pnl-drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+.pnl-drawer-body > * { flex: 0 0 auto; }
 .pnl-drawer-body .cfg-section { margin: 0; }
 .pnl-drawer-error {
   margin: 0 20px 10px; padding: 10px 12px;
@@ -2023,9 +2040,34 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   .pnl-esp-cols { grid-template-columns: 1fr; }
   .pnl-esp-mobile-switch { display: inline-flex; justify-self: start; }
   .pnl-esp-col.is-hidden-mobile { display: none; }
+  /* O cabeçalho da coluna é irmão do `.pnl-card-head`, que já empilha aqui —
+   * sem esta regra o "+ Adicionar" ficava espremido em ~90px e o rótulo
+   * quebrava no meio ("Adicio/nar"). */
+  .pnl-esp-col-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .pnl-esp-col-head .pnl-btn { justify-content: center; white-space: nowrap; }
 }
 
 @media (max-width: 560px) {
+  /* ── Card do nível 1 no celular ──────────────────────────────────────
+   * Medido em 375px antes desta regra: sobravam 108px para o nome, o
+   * "envia para" e as lojas — o avatar, a pílula de contagem, a engrenagem
+   * e três paddings comiam o resto, e toda frase saía picada em 5 ou 6
+   * linhas. Aqui a pílula e a engrenagem saem e o texto volta a ~230px.
+   *
+   * Some a ENGRENAGEM, não o card: o card inteiro já é o alvo de toque
+   * (`aria-label="Configurar <nome>"`), então dois alvos lado a lado num
+   * espaço de 36px só produziam toque errado. A seta entra como sinal
+   * visual de que ali abre alguma coisa — ela não recebe clique.
+   *
+   * Some a PÍLULA "3→" porque ela repete o que a linha de fluxo logo abaixo
+   * já diz por extenso ("envia para Fulano, Beltrano"). No computador as
+   * duas cabem; aqui a contagem custaria ~45px do texto. */
+  .pnl-esp-card { padding: 4px; gap: 0; }
+  .pnl-esp-card-hit { padding: 10px; gap: 10px; min-height: 56px; }
+  .pnl-esp-gear,
+  .pnl-esp-pill { display: none; }
+  .pnl-esp-card-chevron { display: inline-flex; flex-shrink: 0; align-self: center; color: var(--ink-faint); }
+
   /* Gaveta vira folha de tela cheia, presa às duas laterais: nada de largura
    * fixa, que é como um painel some para fora da tela em 375px. */
   .pnl-drawer-overlay { align-items: flex-end; }
@@ -2036,9 +2078,29 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   }
   @keyframes pnl-drawer-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
   .pnl-drawer-head { position: sticky; top: 0; background: var(--surface); z-index: 2; }
+  .pnl-drawer-close { width: 40px; height: 40px; }
   .pnl-drawer-body { padding: 14px; }
-  .pnl-drawer-foot { padding: 12px 14px; }
-  .pnl-drawer-foot .pnl-btn { flex: 1; justify-content: center; }
+
+  /* O rodapé empilha e "Salvar" sobe para cima de "Excluir grupo": em linha,
+   * a ação que apaga o grupo ficava encostada na que salva, bem na faixa do
+   * polegar. `column-reverse` mantém a ordem do DOM (Salvar é o último) e
+   * inverte só a pintura, então a leitura por teclado/leitor não muda. */
+  .pnl-drawer-foot { padding: 12px 14px; flex-direction: column-reverse; align-items: stretch; gap: 10px; }
+  .pnl-drawer-foot .pnl-btn { flex: 0 0 auto; justify-content: center; }
+  .pnl-drawer-foot .pnl-link-btn { padding: 6px 0; text-align: center; }
+  .pnl-drawer-foot .pnl-hint { text-align: center; }
+  /* O espaçador do rodapé é um <span> sem classe com `flex:1` inline: em
+   * coluna ele viraria um vão vertical no meio dos botões. */
+  .pnl-drawer-foot > span:not([class]) { display: none; }
+
   .pnl-esp-add-cards { grid-template-columns: 1fr; }
   .pnl-esp-add { max-height: calc(100vh - 24px); }
+  /* Os dois papéis viram duas linhas inteiras: na régua rolável de `.pnl-seg`
+   * o "Destino · o robô publica" nascia fora da tela em 375px (medido:
+   * 429px de conteúdo para 315px de espaço) e parecia não existir. */
+  .pnl-esp-add-role { display: grid; grid-template-columns: 1fr; overflow-x: visible; }
+  .pnl-esp-add-role button { white-space: normal; text-align: center; }
+  /* Sem teto na lista: com ele há uma rolagem dentro da outra, e no toque a
+   * de dentro rouba o gesto da de fora. O próprio modal já rola. */
+  .pnl-esp-add-list { max-height: none; }
 }

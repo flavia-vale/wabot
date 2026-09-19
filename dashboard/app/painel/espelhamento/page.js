@@ -149,6 +149,7 @@ function CfgIcon({ name, size = 17 }) {
   if (name === 'x')      return <svg {...p} strokeWidth={2}><path d="M6 6l12 12M18 6 6 18"/></svg>
   if (name === 'plus')   return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>
   if (name === 'arrow')  return <svg {...p}><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+  if (name === 'chevron') return <svg {...p}><path d="m9 6 6 6-6 6"/></svg>
   return null
 }
 
@@ -775,25 +776,27 @@ function MonitorGroupConfig({ g, tab, onUpdate, canUseChannels, post, targetsSta
  * "padrão: todos" marca a origem em modo 'all', que hoje alcança todos os
  * destinos por fallback, e não por escolha. */
 function FlowLine({ direction, card, loading }) {
-  if (loading) return <div className="pnl-esp-flow">carregando ligações…</div>
+  // <span> e não <div>: esta linha vive DENTRO do <button> do card, e botão
+  // não aceita conteúdo de bloco. O `display:block` vem do CSS.
+  if (loading) return <span className="pnl-esp-flow">carregando ligações…</span>
 
   if (card.counterpartCount === 0) {
     return (
-      <div className="pnl-esp-flow">
+      <span className="pnl-esp-flow">
         <strong>
           {direction === 'origin'
             ? 'nenhum destino escolhido — esta origem não está espelhando'
             : 'nenhuma origem envia para este grupo'}
         </strong>
-      </div>
+      </span>
     )
   }
 
   return (
-    <div className="pnl-esp-flow">
+    <span className="pnl-esp-flow">
       {direction === 'origin' ? 'envia para ' : 'recebe de '}
       <strong>{card.counterpartNames}</strong>
-    </div>
+    </span>
   )
 }
 
@@ -842,6 +845,12 @@ function GroupCard({ card, index, direction, loading, selected, dirty, saving, s
               </span>
             </span>
           )}
+        </span>
+        {/* Sinal de "aqui abre configuração" para o celular, onde a engrenagem
+          * some (ver painel.css). Fica DENTRO do botão de propósito: assim não
+          * vira um segundo alvo de toque disputando os mesmos pixels. */}
+        <span className="pnl-esp-card-chevron" aria-hidden="true">
+          <CfgIcon name="chevron" size={18} />
         </span>
       </button>
       <span className={`pnl-esp-pill ${direction === 'origin' ? 'is-origin' : 'is-dest'}`} aria-hidden="true">
@@ -1121,7 +1130,11 @@ function AddGroupModal({
 
         <div style={{ marginTop: 16 }}>
           <p className="pnl-label" style={{ marginBottom: 6 }}>Papel</p>
-          <div className="pnl-seg" role="tablist" aria-label="Papel do grupo">
+          {/* Classe própria: estes dois rótulos são longos e, na régua de
+            * `.pnl-seg`, em 375px o "Destino" nascia fora da tela — a pessoa
+            * não via que havia uma segunda opção. No celular eles viram duas
+            * linhas inteiras (ver painel.css). */}
+          <div className="pnl-seg pnl-esp-add-role" role="tablist" aria-label="Papel do grupo">
             <button type="button" role="tab" aria-selected={role === 'monitor'} className={role === 'monitor' ? 'is-active' : ''} onClick={() => onRole('monitor')}>
               Origem · o robô pega ofertas
             </button>
