@@ -42,3 +42,22 @@ test('explainErrorMsg: skip:ml_vitrine_missing cita cadastrar a vitrine e não m
   assert.doesNotMatch(result, /renove/i)
   assert.doesNotMatch(result, /cookie/i)
 })
+
+// RCA 2026-09-19: a cliente lia "ainda não fazemos conversão automática de
+// afiliado para essa loja" numa oferta da AMAZON, que convertemos desde sempre.
+// O que tinha acontecido é que a promoção saiu do ar no site de quem publicou,
+// antes de o robô abrir o link. As duas causas pedem ações opostas: uma é
+// esperar por um suporte que já existe, a outra é "acabou, não há o que fazer".
+test('oferta encerrada na origem tem motivo próprio, e não fala em loja sem suporte', () => {
+  const encerrada = explainErrorMsg('skip:policy:all:any:text:offer_ended_at_source')
+  assert.match(encerrada, /encerrada/i)
+  assert.doesNotMatch(encerrada, /não fazemos convers/i)
+  assert.doesNotMatch(encerrada, /fora das regras/i)
+
+  // A frase antiga continua valendo para o caso que ela de fato descreve.
+  const semSuporte = explainErrorMsg('skip:policy:all:any:text:unsupported_store')
+  assert.match(semSuporte, /não fazemos convers/i)
+
+  // E o genérico não pode ser engolido por nenhum dos dois.
+  assert.match(explainErrorMsg('skip:policy:all:any:text'), /fora das regras/i)
+})
