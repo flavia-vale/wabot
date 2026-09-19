@@ -45,6 +45,26 @@ export default function AboutPage() {
           ferramentas diferentes. O nome BOTinho aparece em conteúdo e em conversas anteriores a 2026; a marca
           atual, e o nome que usamos hoje em tudo, é Espelha Grupos.
         </p>
+        {/*
+          Link real, no HTML entregue pelo servidor, sem `nofollow` e sem
+          depender de JavaScript. O schema já afirma a ligação (`founder` +
+          o nó `Person` em app/layout.js), mas schema não é frase: a IA e o
+          Google precisam de uma sentença em texto corrido, com link, para
+          confirmar que os dois domínios são da mesma fundadora. Um lado só
+          afirmando deixa a entidade meio construída — o Cuponito já aponta
+          para cá desde antes disto existir.
+        */}
+        <p>
+          O Espelha Grupos é feito pela mesma equipe do{' '}
+          <a
+            href="https://www.cuponito.com.br"
+            className="font-bold text-green-700 underline underline-offset-4"
+          >
+            Cuponito
+          </a>
+          , site brasileiro de cupons de desconto verificados para Amazon, Shopee, Mercado Livre, Magalu, SHEIN e
+          AliExpress. Flávia Vale é fundadora dos dois.
+        </p>
         <p>
           Se você chegou aqui perguntando se dá para confiar, a resposta detalhada — o que fazemos com os seus
           dados, o que não prometemos e por que isto não tem relação com o golpe de espelhamento de tela — está em{' '}

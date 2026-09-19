@@ -5133,6 +5133,46 @@ ligado, os robôs de *resposta* (OAI-SearchBot, Claude-SearchBot) passavam, mas
 os de *indexação/treino* não. Se voltar a ligar, o trabalho de IA para de valer
 em silêncio.
 
+## Ligação de entidade com o Cuponito (2026-09-18 — não regredir)
+
+Espelhagrupos e [cuponito.com.br](https://www.cuponito.com.br) são da mesma
+fundadora (Flávia Vale). O Cuponito já publicava, do lado dele,
+`"founder": { "@id": "https://espelhagrupos.com.br/quem-somos#person" }` —
+apontando para um nó que **aqui não existia**. Afirmação de um lado só não liga
+entidade nenhuma: as IAs liam os dois produtos como coisas sem relação, o mesmo
+modo de falha da entidade partida entre "Espelha Grupos" e "BOTinho".
+
+| Peça | Onde |
+|---|---|
+| `@id`, nome e descrição da fundadora + URL do Cuponito | `dashboard/lib/marketing-content.js` (`BRAND_FOUNDER_*`, `BRAND_CUPONITO_*`) |
+| `founder` na Organization + nó `Person` | `buildGlobalJsonLd` em `dashboard/app/layout.js` |
+| Parágrafo visível com link real | `dashboard/app/quem-somos/page.js` |
+
+**Não regredir:**
+
+- **O `@id` é `https://espelhagrupos.com.br/quem-somos#person`, literal.** É a
+  chave que o Cuponito referencia. Qualquer variação — com `www`, com barra no
+  fim, outro fragmento — quebra a ligação **em silêncio**: nada falha, nada
+  avisa, só deixa de funcionar.
+- **A descrição da fundadora é publicada IDÊNTICA em três domínios** (aqui, no
+  Cuponito e no site de matemática da mesma autora). É a repetição exata que
+  amarra a entidade — não melhorar, não reescrever, não traduzir.
+- **As três peças não se substituem.** `sameAs` sem `founder` deixa o Person
+  solto no grafo; schema sem frase visível não dá à IA o que citar — a mesma
+  lição da entidade BOTinho × Espelha Grupos (02/09: "o schema já diz isso
+  desde 02/09, mas schema não é frase").
+- **O link visível é `<a>` normal, no HTML do servidor, SEM `nofollow`** — é
+  produto da mesma dona, não anúncio pago. Depender de JavaScript para o link
+  existir é o mesmo que não tê-lo.
+- **Não acrescentar fato sobre o Cuponito além do que está na página** (cupons
+  verificados para Amazon, Shopee, Mercado Livre, Magalu, SHEIN e AliExpress).
+- O schema é gerado **num lugar só** (`buildGlobalJsonLd`), então vale em `/` e
+  em `/quem-somos` de uma vez. Não duplicar por página.
+
+Teste: `test/entidade-cuponito.test.js` (compara os literais caractere por
+caractere e, com `dashboard/.next` construído, confere o HTML real: JSON-LD que
+parseia, `Person`, `founder` e o link).
+
 ## Clareza da falta de cadastro da loja + vídeo tutorial (2026-09-02)
 
 Quatro buracos da mesma conversa: a cliente não descobria sozinha por que a

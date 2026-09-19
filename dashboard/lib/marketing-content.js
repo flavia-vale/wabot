@@ -78,9 +78,31 @@ export const BRAND_YOUTUBE_TUTORIAL_ID =
 export const BRAND_YOUTUBE_TUTORIAL_URL = `https://www.youtube.com/watch?v=${BRAND_YOUTUBE_TUTORIAL_ID}`
 export const BRAND_YOUTUBE_TUTORIAL_EMBED_URL = `https://www.youtube-nocookie.com/embed/${BRAND_YOUTUBE_TUTORIAL_ID}?rel=0`
 
+// Cuponito: site de cupons da MESMA fundadora (Flávia Vale). A ligação entre
+// os dois domínios só existe para o Google/IA quando ela é afirmada NOS DOIS
+// SENTIDOS: o Cuponito já publica `founder` apontando para o `@id`
+// `https://espelhagrupos.com.br/quem-somos#person`, que até 09/2026 não existia
+// aqui — a entidade ficava meio construída e as IAs liam os dois produtos como
+// coisas sem relação. Ver o nó `Person` em `app/layout.js` e o parágrafo com
+// link real em `app/quem-somos/page.js`: schema sem frase visível não basta.
+export const BRAND_CUPONITO_URL = 'https://www.cuponito.com.br'
+export const BRAND_CUPONITO_ABOUT_URL = `${BRAND_CUPONITO_URL}/quem-somos`
+
+// `@id` canônico da fundadora. É a CHAVE que o Cuponito referencia: qualquer
+// variação (com www, com barra no fim, outro fragmento) quebra a ligação em
+// silêncio, sem erro em lugar nenhum. Não reescrever.
+export const BRAND_FOUNDER_ID = 'https://espelhagrupos.com.br/quem-somos#person'
+export const BRAND_FOUNDER_NAME = 'Flávia Vale'
+// ⚠️ Esta frase é publicada IDÊNTICA no Cuponito e no site de matemática da
+// mesma autora. É a repetição exata dela nos três domínios que amarra a
+// entidade — não melhorar, não reescrever, não traduzir.
+export const BRAND_FOUNDER_DESCRIPTION =
+  'Fundadora do Espelha Grupos, trabalha com tecnologia e opera grupos de ofertas desde 2023.'
+
 export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
   BRAND_YOUTUBE_URL,
+  BRAND_CUPONITO_ABOUT_URL,
 ].filter(Boolean)
 
 export const PRODUCT_DEFINITION = 'O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
