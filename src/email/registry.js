@@ -63,6 +63,13 @@ export const STANDARD_VARIABLES = Object.freeze([
 const VAR_FIM_TESTE = { name: 'fim_do_teste', description: 'Data em que o teste grátis acaba', example: '23/08/2026' }
 const VAR_DIAS = { name: 'dias_restantes', description: 'Quantos dias faltam', example: '3' }
 const VAR_VENCIMENTO = { name: 'data_vencimento', description: 'Data em que o plano vence', example: '19/08/2026' }
+// Voucher de desconto para voltar depois do acesso vencido. O código é gerado
+// em `src/domain/payments/recoveryVoucher.js` e é o MESMO nos dois e-mails da
+// etapa — o segundo só acrescenta quanto prazo sobrou.
+const VAR_VOUCHER = { name: 'codigo_voucher', description: 'Código de desconto para voltar', example: 'VOLTA20-3J9ETN' }
+const VAR_VOUCHER_DESCONTO = { name: 'desconto_voucher', description: 'Desconto do código', example: '20%' }
+const VAR_VOUCHER_ATE = { name: 'voucher_vale_ate', description: 'Último dia em que o código vale', example: '22/09/2026' }
+const VAR_VOUCHER_DIAS = { name: 'dias_do_voucher', description: 'Quantos dias o código ainda vale', example: '3' }
 const VAR_VALOR = { name: 'valor', description: 'Valor em reais', example: 'R$ 69,00' }
 const VAR_LOJA = { name: 'loja', description: 'Nome da loja', example: 'Mercado Livre' }
 const VAR_OFERTAS = { name: 'ofertas_publicadas', description: 'Quantas ofertas o robô já publicou no teste', example: '47' }
@@ -247,6 +254,88 @@ Nada foi apagado: seus grupos, suas etiquetas de afiliada e suas configurações
 
 Se o robô não te atendeu como você esperava, responde este e-mail contando o que faltou — a gente quer saber de verdade.`,
   },
+  // Jornada de quem testou e não assinou: dias 3, 5 e 7 depois do fim do teste.
+  // Até 2026-09-19 a conta recebia SÓ o aviso acima e nunca mais nada, com tudo
+  // dela ainda guardado no sistema. Os dias, o espaçamento e o fim da jornada
+  // moram em src/emailTriggers/expiredTrialJourney.js — aqui só o texto.
+  //
+  // Todos são de divulgação (quem não assinou não tem obrigação de serviço com
+  // a gente): respeitam descadastro e levam o link de saída no rodapé.
+  {
+    slug: 'teste_acabou_lembrete',
+    name: 'Teste acabou (lembrete)',
+    description: 'Sai poucos dias depois do fim do teste grátis, para quem ainda não assinou.',
+    group: 'conta',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 30,
+    variables: [],
+    title: 'Seus grupos estão parados',
+    subject: 'Seus grupos estão sem oferta desde o fim do teste',
+    body: `{{saudacao}} Faz alguns dias que seu teste acabou e o robô parou de publicar nos seus grupos.
+
+Nesse tempo as promoções continuaram saindo nas lojas e nos grupos de onde você copia — só não chegaram nos seus. Cada uma era uma chance de comissão.
+
+Assinando um plano, ele volta a trabalhar no mesmo minuto: seus grupos, suas etiquetas de afiliada e tudo que você configurou continuam salvos.
+
+[[botao:Escolher meu plano|{{link_planos}}]]
+
+E se alguma coisa não funcionou como você esperava no teste, responde este e-mail contando o que foi. A gente lê tudo — e conserta.`,
+  },
+  // O voucher chega no primeiro e é REPETIDO no segundo, com o prazo que sobrou.
+  // O resgate é por conversa (responder o e-mail ou chamar no WhatsApp) de
+  // propósito: é assim que a gente descobre o que travou a assinatura, que é a
+  // informação que nenhum relatório dá. Por isso os dois levam o WhatsApp.
+  {
+    slug: 'teste_voucher',
+    name: 'Voucher de desconto depois do teste',
+    description: 'Sai cerca de cinco dias depois do fim do teste, com um código de desconto para assinar.',
+    group: 'conta',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 60,
+    variables: [VAR_VOUCHER, VAR_VOUCHER_DESCONTO, VAR_VOUCHER_ATE],
+    title: 'Um desconto para o robô voltar',
+    subject: 'Separei {{desconto_voucher}} de desconto para você voltar',
+    body: `{{saudacao}} Seu teste acabou e o robô continua parado por aqui.
+
+Para facilitar a sua volta, separei um desconto de **{{desconto_voucher}}** no seu plano:
+
+**{{codigo_voucher}}**
+
+O código vale até **{{voucher_vale_ate}}** e serve para qualquer plano. Para usar, é só responder este e-mail com ele ou chamar a gente no WhatsApp — a gente aplica o desconto e o robô volta a publicar no mesmo dia, com seus grupos e suas etiquetas do jeito que você deixou.
+
+[[botao:Falar no WhatsApp|{{whatsapp_suporte}}]]
+
+Se preferir ver os planos antes de decidir, estão todos aqui:
+
+[[botao:Ver os planos|{{link_planos}}]]`,
+  },
+  {
+    slug: 'teste_voucher_ultimos_dias',
+    name: 'Voucher de desconto depois do teste (últimos dias)',
+    description: 'Sai cerca de sete dias depois do fim do teste, repetindo o mesmo código e dizendo quanto prazo sobrou. É o último e-mail automático da jornada.',
+    group: 'conta',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 60,
+    variables: [VAR_VOUCHER, VAR_VOUCHER_DESCONTO, VAR_VOUCHER_ATE, VAR_VOUCHER_DIAS],
+    title: 'Seu desconto está acabando',
+    subject: 'Faltam {{dias_do_voucher}} dias para o seu desconto de {{desconto_voucher}}',
+    body: `{{saudacao}} Passando só para lembrar do desconto que separei para você:
+
+**{{codigo_voucher}}** — **{{desconto_voucher}}** de desconto no seu plano.
+
+Faltam **{{dias_do_voucher}} dias** para ele expirar: vale até **{{voucher_vale_ate}}**.
+
+Para usar, responde este e-mail com o código ou chama a gente no WhatsApp. A gente aplica o desconto e o robô volta a publicar as ofertas nos seus grupos no mesmo dia.
+
+[[botao:Falar no WhatsApp|{{whatsapp_suporte}}]]
+
+[[botao:Ver os planos|{{link_planos}}]]
+
+Este é o último e-mail automático que eu te mando sobre isso — não quero virar mais um e-mail chato na sua caixa. Sua conta e tudo que você configurou continuam guardados, e a porta fica aberta quando você quiser voltar.`,
+  },
   {
     slug: 'recuperar_senha',
     name: 'Recuperar senha',
@@ -411,6 +500,63 @@ Renovando, ele volta a trabalhar no mesmo minuto: seus grupos, suas etiquetas de
 [[botao:Ligar o robô de novo|{{link_planos}}]]
 
 Se o que travou foi o pagamento (cartão recusado, boleto que não fechou), me conta que a gente resolve junto — é só responder este e-mail.`,
+  },
+  // Os dois do voucher (dias 5 e 7 do vencimento). O código chega no primeiro e
+  // é REPETIDO no segundo, com o prazo que sobrou — quem decidiu no fim da
+  // semana não precisa procurar o e-mail antigo.
+  //
+  // O resgate é por conversa (responder o e-mail ou chamar no WhatsApp) de
+  // propósito: é assim que a gente descobre o que travou a renovação, que é a
+  // informação que nenhum relatório dá. Por isso os dois levam o WhatsApp.
+  {
+    slug: 'plano_vencido_voucher',
+    name: 'Voucher de desconto para voltar',
+    description: 'Sai cerca de cinco dias depois do vencimento, com um código de desconto para renovar.',
+    group: 'plano',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 60,
+    variables: [VAR_VENCIMENTO, VAR_VOUCHER, VAR_VOUCHER_DESCONTO, VAR_VOUCHER_ATE],
+    title: 'Um desconto para o robô voltar',
+    subject: 'Separei {{desconto_voucher}} de desconto para você voltar',
+    body: `{{saudacao}} Seu plano venceu em **{{data_vencimento}}** e o robô continua parado por aqui.
+
+Para facilitar a sua volta, separei um desconto de **{{desconto_voucher}}** no seu plano:
+
+**{{codigo_voucher}}**
+
+O código vale até **{{voucher_vale_ate}}** e serve para qualquer plano. Para usar, é só responder este e-mail com ele ou chamar a gente no WhatsApp — a gente aplica o desconto e o robô volta a publicar no mesmo dia, com seus grupos e suas etiquetas do jeito que você deixou.
+
+[[botao:Falar no WhatsApp|{{whatsapp_suporte}}]]
+
+Se preferir ver os planos antes de decidir, estão todos aqui:
+
+[[botao:Ver os planos|{{link_planos}}]]`,
+  },
+  {
+    slug: 'plano_vencido_voucher_ultimos_dias',
+    name: 'Voucher de desconto (últimos dias)',
+    description: 'Sai cerca de sete dias depois do vencimento, repetindo o mesmo código e dizendo quanto prazo sobrou.',
+    group: 'plano',
+    category: 'marketing',
+    trigger: 'auto',
+    dedupDays: 60,
+    variables: [VAR_VENCIMENTO, VAR_VOUCHER, VAR_VOUCHER_DESCONTO, VAR_VOUCHER_ATE, VAR_VOUCHER_DIAS],
+    title: 'Seu desconto está acabando',
+    subject: 'Faltam {{dias_do_voucher}} dias para o seu desconto de {{desconto_voucher}}',
+    body: `{{saudacao}} Passando só para lembrar do desconto que separei para você voltar:
+
+**{{codigo_voucher}}** — **{{desconto_voucher}}** de desconto no seu plano.
+
+Faltam **{{dias_do_voucher}} dias** para ele expirar: vale até **{{voucher_vale_ate}}**.
+
+Para usar, responde este e-mail com o código ou chama a gente no WhatsApp. A gente aplica o desconto e o robô volta a publicar as ofertas nos seus grupos no mesmo dia.
+
+[[botao:Falar no WhatsApp|{{whatsapp_suporte}}]]
+
+[[botao:Ver os planos|{{link_planos}}]]
+
+Se agora não for o momento, sem problema — seus grupos e suas configurações continuam guardados de qualquer forma.`,
   },
   {
     slug: 'plano_vencido_2_semanas',
