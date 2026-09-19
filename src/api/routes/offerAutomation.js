@@ -54,7 +54,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
-    const { destGroupJid, destGroupName, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey } = req.body ?? {}
+    const { destGroupJid, destGroupName, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey, useCoupons } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     if (!destGroupJid) return reply.code(400).send({ error: 'Grupo de destino obrigatório' })
@@ -105,6 +105,9 @@ export async function offerAutomationRoutes(app, opts = {}) {
         listType: parsedListType,
         prioritizeAMS: Boolean(prioritizeAMS ?? false),
         isKeySeller: Boolean(isKeySeller ?? false),
+        // specs/017-client-coupon-catalog (FR-022/FR-023): ausente = false,
+        // igual ao default da coluna — opt-in explícito, nunca automático.
+        useCoupons: Boolean(useCoupons ?? false),
       },
     })
   })
@@ -116,7 +119,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS, isKeySeller, sortType, listType, templateKey } = req.body ?? {}
+    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, prioritizeAMS, isKeySeller, sortType, listType, templateKey, useCoupons } = req.body ?? {}
     const updates = {}
 
     if (keyword !== undefined) {
@@ -176,6 +179,9 @@ export async function offerAutomationRoutes(app, opts = {}) {
       if (!parsedTemplateKey) return reply.code(400).send({ error: 'templateKey inválido' })
       updates.templateKey = parsedTemplateKey
     }
+    // specs/017-client-coupon-catalog (FR-023): ausente = não muda o valor
+    // atual (diferente do POST, onde ausente = false).
+    if (useCoupons !== undefined) updates.useCoupons = Boolean(useCoupons)
 
     return db.offerAutomation.update({ where: { id: req.params.id }, data: updates })
   })

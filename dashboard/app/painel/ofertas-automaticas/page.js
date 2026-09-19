@@ -76,6 +76,9 @@ const emptyForm = {
   offersPerSend: 1,
   minDiscountPct: 20,
   prioritizeAMS: false,
+  // specs/017-client-coupon-catalog: desmarcada por padrão — automação
+  // existente nunca muda de comportamento sozinha (FR-023/SC-005).
+  useCoupons: false,
 }
 
 function nextSendLabel(lastSentAt, intervalMinutes, dailyRunTime) {
@@ -153,6 +156,7 @@ export default function OfertasAutomaticasPage() {
       offersPerSend: a.offersPerSend,
       minDiscountPct: a.minDiscountPct,
       prioritizeAMS: a.prioritizeAMS ?? false,
+      useCoupons: a.useCoupons ?? false,
     })
     setSaveError('')
     setShowForm(true)
@@ -453,6 +457,14 @@ export default function OfertasAutomaticasPage() {
             <span>
               <span style={{ display: 'block', color: 'var(--ink)' }}>Priorizar ofertas com comissão extra do vendedor</span>
               <span className="pnl-hint">Se ativado, o bot busca as duas e envia primeiro as com comissão extra.</span>
+            </span>
+          </label>
+
+          <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
+            <input type="checkbox" checked={form.useCoupons} onChange={(e) => setForm((f) => ({ ...f, useCoupons: e.target.checked }))} style={{ marginTop: 2 }} />
+            <span>
+              <span style={{ display: 'block', color: 'var(--ink)' }}>Usar meus cupons cadastrados nesta automação</span>
+              <span className="pnl-hint">Quando o modelo da mensagem tiver a variável {'{cupom}'}, o bot escolhe sozinho o melhor cupom da loja cadastrado em Cupons.</span>
             </span>
           </label>
 
