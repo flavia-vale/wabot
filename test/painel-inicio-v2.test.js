@@ -51,7 +51,7 @@ test('todo número da tela vem do back end, nenhum é escrito à mão', () => {
 test('as quatro funções mais usadas, com "Ofertas automáticas" em roxo', () => {
   const bloco = page.slice(page.indexOf('const ACTIONS = ['), page.indexOf('export default'))
   const rotulos = [...bloco.matchAll(/label: '([^']+)'/g)].map((m) => m[1])
-  assert.deepEqual(rotulos, ['Criar oferta', 'Espelhar grupos', 'Ofertas automáticas', 'Grupos e Canais'])
+  assert.deepEqual(rotulos, ['Criar oferta', 'Espelhamento', 'Ofertas automáticas', 'Grupos e Canais'])
   // Só "Ofertas automáticas" é PRO.
   const pro = [...bloco.matchAll(/label: '([^']+)'[^\n]*pro: true/g)].map((m) => m[1])
   assert.deepEqual(pro, ['Ofertas automáticas'])
