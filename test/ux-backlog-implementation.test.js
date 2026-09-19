@@ -10,7 +10,11 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 
 test('painel converter stays 1:1 and does not expose the advanced offer builder', () => {
   const page = read('dashboard/app/painel/converte-links/page.js')
-  assert.match(page, /Formato[\s\S]*1:1/)
+  // O rótulo "Formato 1:1" saiu no redesenho de 2026-09-19; a REGRA continua e
+  // hoje é aplicada pela trava de um link por teste (`linksDemais`), que
+  // desabilita o botão e explica o porquê.
+  assert.match(page, /Cole um link por vez/)
+  assert.match(page, /linksDemais/)
   assert.doesNotMatch(page, /1:1 ou n:n/)
   assert.doesNotMatch(page, /OfferBuilder/)
   assert.doesNotMatch(page, /Montador de oferta/)

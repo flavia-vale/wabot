@@ -1,327 +1,301 @@
 'use client'
 
-/* Conversor de links avulso — versão Menta do painel. A lógica (validação,
- * detecção de links, chamada api.convertLinks, montador inline) é idêntica à
- * do conversor canônico; aqui o título da tela vai para a topbar do
- * PainelShell via usePainelHeader e o restante reusa os mesmos componentes. */
+/* Testar conversão — desenho "Painel v2".
+ *
+ * A tela responde UMA pergunta, antes de a cliente ligar o espelhamento: "o
+ * link está saindo com a minha identificação de afiliada?". Duas colunas: à
+ * esquerda o link a testar, à direita o veredito e a comparação do endereço
+ * original com o de afiliado.
+ *
+ * O veredito NÃO é decidido aqui — ele vem de `describeConversionTest`
+ * (src/domain/painel/conversionTest.js), porque a leitura honesta desse
+ * resultado é regra de produto, não de tela: conversão que falhou nem sempre
+ * é credencial, e conversão que deu certo nem sempre é "tudo certo" (ML e
+ * Amazon publicam pelo plano B com o código vencido).
+ *
+ * A detecção da loja usa `detectLinks` do próprio robô, e não uma cópia da
+ * lista de endereços: a cópia que vivia aqui já tinha divergido uma vez e
+ * fazia a tela dizer "link não suportado" para link que o espelhamento
+ * convertia normalmente (T071).
+ */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
-import { Alert } from '@/components/Alert'
 import { usePainelHeader } from '../PainelShell'
+import { AFFILIATE_PLATFORMS } from '@/lib/painel/affiliatePlatforms'
+import { detectLinks } from '../../../../src/detector.js'
+import {
+  VEREDITO,
+  describeConversionRequestFailure,
+  describeConversionTest,
+} from '../../../../src/domain/painel/conversionTest.js'
 
-const MAX_LINKS = 1
-const MAX_TEXT_LENGTH = 12_000
-// SHEIN fica num ramo à parte, com prefixo de subdomínio `(?:[a-z0-9-]+\.)*`
-// e um delimitador ancorado logo após o domínio (`/?#:` ou fim) — sem isso
-// `br.shein.com`/`m.shein.com` (hosts que o próprio conversor emite, ver
-// data-model.md §3) não batiam contra o prefixo fixo `(?:www\.)?` usado pelas
-// outras lojas, e o painel mostrava "0 links detectados"/"link não suportado"
-// para um link que o espelhamento converte normalmente (T071). As outras
-// entradas não mudam.
-const SUPPORTED_LINK_RE = /https?:\/\/(?:(?:www\.)?(?:mercadolivre\.com\.br|mercadolibre\.com|meli\.la|mluvem\.com|amazon\.com\.br|amzn\.to|a\.co|amzn\.divulgador\.link|shope\.ee|shopee\.com\.br|s\.shopee\.com\.br|magazineluiza\.com\.br|magazinevoce\.com\.br|mlz\.me)|(?:[a-z0-9-]+\.)*(?:shein\.com|onelink\.shein\.com|shein\.top|aliexpress\.com|aliexpress\.us)(?=[\/?#:]|\s|$))\S*/gi
+const MAX_CHARS = 1000
 
-function countSupportedLinks(text) {
-  const matches = text.match(SUPPORTED_LINK_RE)
-  return matches?.length ?? 0
+const PLATFORM_BY_ID = new Map(AFFILIATE_PLATFORMS.map((p) => [p.id, p]))
+
+/* Cor da tarja por veredito. `ok` é verde; `ressalva` é âmbar (o link saiu —
+ * vermelho aqui seria alarme falso); `credencial` é vermelho (há o que fazer);
+ * `link` e `temporario` são neutros: não é defeito da conta dela. */
+const TOM = {
+  [VEREDITO.OK]: 'is-ok',
+  [VEREDITO.RESSALVA]: 'is-ressalva',
+  [VEREDITO.CREDENCIAL]: 'is-erro',
+  [VEREDITO.LINK]: 'is-neutro',
+  [VEREDITO.TEMPORARIO]: 'is-neutro',
 }
 
-function getLimitMessage(count) {
-  return `Cole apenas 1 link por vez. Encontramos ${count} links no texto; converta um produto por vez para manter o fluxo simples.`
+const SELO = {
+  [VEREDITO.OK]: 'saiu com a sua identificação',
+  [VEREDITO.RESSALVA]: 'saiu com ressalva',
+  [VEREDITO.CREDENCIAL]: 'falta cadastro',
+  [VEREDITO.LINK]: 'link fora do teste',
+  [VEREDITO.TEMPORARIO]: 'não deu para testar',
 }
 
-function hasAmbiguousSeparators(text) {
-  return /;\s*https?:\/\//i.test(text)
+function Icon({ name, size = 20, stroke = 1.8 }) {
+  const p = {
+    width: size, height: size, viewBox: '0 0 24 24',
+    fill: 'none', stroke: 'currentColor', strokeWidth: stroke,
+    strokeLinecap: 'round', strokeLinejoin: 'round',
+  }
+  switch (name) {
+    case 'check': return <svg {...p}><path d="M5 12.5 10 17 19 7" /></svg>
+    case 'alert': return <svg {...p}><path d="M12 8v5" /><path d="M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
+    case 'x': return <svg {...p}><path d="M6 6l12 12M18 6L6 18" /></svg>
+    case 'link': return <svg {...p}><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 1 0-7.07-7.07L11 5" /><path d="M14 11a5 5 0 0 0-7.07 0l-3 3A5 5 0 1 0 11 21l1.5-1.5" /></svg>
+    case 'copy': return <svg {...p}><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+    case 'arrow': return <svg {...p}><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+    default: return null
+  }
 }
 
-function classifyConversionError(errorMessage) {
-  const message = String(errorMessage || '').toLowerCase()
-
-  if (!message.trim()) {
-    return { badge: 'Falha temporária', hint: 'Tente novamente em instantes.' }
-  }
-
-  if (message.includes('credencial') || message.includes('credential') || message.includes('token') || message.includes('chave')) {
-    return { badge: 'Sem credencial', hint: 'Revise as credenciais da loja em IDs de afiliada.' }
-  }
-
-  if (message.includes('não suport') || message.includes('not support') || message.includes('unsupported')) {
-    return { badge: 'Link não suportado', hint: 'Use um link de Amazon, Mercado Livre, Shopee, Magazine Luiza, SHEIN ou AliExpress.' }
-  }
-
-  if (message.includes('inválid') || message.includes('invalid') || message.includes('malform') || message.includes('url')) {
-    return { badge: 'URL inválida', hint: 'Confira se o link foi copiado por completo.' }
-  }
-
-  return { badge: 'Falha temporária', hint: 'Não foi possível converter agora. Tente novamente.' }
+function ICONE_DO_VEREDITO(veredito) {
+  if (veredito === VEREDITO.OK) return 'check'
+  if (veredito === VEREDITO.CREDENCIAL) return 'x'
+  return 'alert'
 }
 
-
-function MetricPill({ label, value, tone = 'neutral' }) {
-  const tones = {
-    neutral: 'border-gray-200 bg-gray-50 text-gray-700',
-    success: 'border-green-200 bg-green-50 text-green-800',
-    warning: 'border-amber-200 bg-amber-50 text-amber-800',
-    danger: 'border-red-200 bg-red-50 text-red-800',
-  }
+/** Selo da loja, com as cores que a tela de credenciais já usa. */
+function StoreMark({ platform, size = 26 }) {
+  const loja = PLATFORM_BY_ID.get(platform)
+  if (!loja) return null
   return (
-    <div className={`rounded-2xl border px-3 py-2 ${tones[tone] ?? tones.neutral}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-0.5 text-base font-black leading-none">{value}</p>
-    </div>
+    <span
+      className="tc-store"
+      style={{
+        width: size, height: size, borderRadius: Math.round(size * 0.32),
+        background: loja.color,
+        color: loja.badgeInk ? 'var(--ink)' : '#fff',
+        fontSize: Math.round(size * 0.42),
+      }}
+      aria-hidden="true"
+    >
+      {loja.initials}
+    </span>
   )
 }
 
-function ResultCard({ result, onCopy, copied }) {
-  const converted = result.status === 'converted'
-  const errorMeta = converted ? null : classifyConversionError(result.error)
-  return (
-    <article className={`rounded-2xl border p-3 shadow-sm sm:p-4 ${converted ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Link {result.index + 1}</p>
-          <h2 className="mt-0.5 truncate text-base font-bold text-gray-900">{result.label || result.platform}</h2>
-        </div>
-        <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${converted ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-          {converted ? 'OK' : errorMeta.badge}
-        </span>
-      </div>
+export default function TestarConversaoPage() {
+  usePainelHeader({
+    title: 'Testar conversão',
+    subtitle: 'Antes de espelhar, confira se os links estão saindo com a sua identificação de afiliada',
+  })
 
-      <div className="mt-3 space-y-3 text-sm">
-        <div>
-          <p className="font-semibold text-gray-600">Original</p>
-          <p className="mt-1 max-h-24 overflow-y-auto break-all rounded-xl bg-white/80 px-3 py-2 text-xs leading-5 text-gray-800 sm:text-sm">{result.originalUrl}</p>
-        </div>
+  const [texto, setTexto] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState(null)
+  const [falha, setFalha] = useState(null)
+  const [copiado, setCopiado] = useState(false)
+  const copiaTimer = useRef(null)
 
-        {converted ? (
-          <div>
-            <p className="font-semibold text-gray-600">Link de afiliado</p>
-            <div className="mt-1 rounded-xl bg-white px-3 py-2">
-              <p className="max-h-28 overflow-y-auto break-all text-xs font-medium leading-5 text-green-800 sm:text-sm">{result.convertedUrl}</p>
-              <button
-                type="button"
-                onClick={() => onCopy(result.convertedUrl)}
-                className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-green-200 px-3 py-2 text-sm font-bold text-green-700 transition hover:bg-green-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 sm:w-auto"
-              >
-                {copied ? 'Copiado ✅' : 'Copiar link'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <Alert type="warning" title="Não foi possível converter" message={`${errorMeta.hint}${result.error ? ` (${result.error})` : ''}`} />
-        )}
-      </div>
-    </article>
-  )
-}
+  useEffect(() => () => { if (copiaTimer.current) window.clearTimeout(copiaTimer.current) }, [])
 
+  const links = useMemo(() => {
+    try { return detectLinks(texto) } catch { return [] }
+  }, [texto])
+  const lojaDetectada = links[0]?.platform ?? null
+  const rotuloLoja = PLATFORM_BY_ID.get(lojaDetectada)?.label ?? null
+  const linksDemais = links.length > 1
+  const passouDoLimite = texto.length > MAX_CHARS
 
-export default function ConverteLinksPage() {
-  usePainelHeader({ title: 'Conversor de links', subtitle: 'Cole 1 link de produto e receba o link de afiliado pronto para copiar' })
+  const veredito = useMemo(() => {
+    if (falha) return describeConversionRequestFailure(falha)
+    if (resultado) return describeConversionTest(resultado)
+    return null
+  }, [falha, resultado])
 
-  const [text, setText] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [copyFeedback, setCopyFeedback] = useState('')
-  const [response, setResponse] = useState(null)
-  const [requestPhase, setRequestPhase] = useState('idle')
-  const [copiedItemKey, setCopiedItemKey] = useState('')
+  const podeTestar = texto.trim().length > 0 && !linksDemais && !passouDoLimite && !enviando
 
-  const detectedCount = useMemo(() => countSupportedLinks(text), [text])
-  const successfulLinks = useMemo(
-    () => response?.results?.filter(result => result.status === 'converted' && result.convertedUrl) ?? [],
-    [response],
-  )
-  const charsOverLimit = text.length > MAX_TEXT_LENGTH
-  const linksOverLimit = detectedCount > MAX_LINKS
-  const noisyTextWithoutLinks = text.trim().length >= 240 && detectedCount === 0
-  const ambiguousSeparators = hasAmbiguousSeparators(text)
-
-  async function copyText(value, feedback = 'Link copiado.', itemKey = '') {
-    if (!value) return
-    try {
-      await navigator.clipboard.writeText(value)
-      if (itemKey) {
-        setCopiedItemKey(itemKey)
-      }
-      setCopyFeedback(feedback)
-      window.setTimeout(() => {
-        setCopyFeedback('')
-        if (itemKey) setCopiedItemKey('')
-      }, 2500)
-    } catch {
-      setError('Não foi possível copiar automaticamente. Selecione o link e copie manualmente.')
-    }
-  }
-
-  async function handleSubmit(event) {
+  async function testar(event) {
     event.preventDefault()
-    setError('')
-    setCopyFeedback('')
-    setCopiedItemKey('')
-    setResponse(null)
-    setRequestPhase('validating')
-
-    if (!text.trim()) {
-      setError('Cole pelo menos um link de produto para converter.')
-      setRequestPhase('idle')
-      return
-    }
-
-    if (linksOverLimit) {
-      setError(getLimitMessage(detectedCount))
-      setRequestPhase('idle')
-      return
-    }
-
-    if (charsOverLimit) {
-      setError(`Texto muito grande para conversão manual. Cole até ${MAX_TEXT_LENGTH.toLocaleString('pt-BR')} caracteres por vez para evitar sobrecarga.`)
-      setRequestPhase('idle')
-      return
-    }
-
-    if (ambiguousSeparators) {
-      setError('Separe múltiplos links com quebra de linha (Enter). Não use ponto e vírgula entre links.')
-      setRequestPhase('idle')
-      return
-    }
-
-    setRequestPhase('submitting')
-    setSubmitting(true)
+    setResultado(null)
+    setFalha(null)
+    setCopiado(false)
+    if (!podeTestar) return
+    setEnviando(true)
     try {
-      const data = await api.convertLinks(text)
-      setRequestPhase('renderingResult')
-      setResponse(data)
+      const data = await api.convertLinks(texto)
+      const primeiro = Array.isArray(data?.results) ? data.results[0] : null
+      if (primeiro) setResultado(primeiro)
+      else setFalha({ code: 'LINK_CONVERSION_NO_LINKS', message: '' })
     } catch (err) {
-      setError(err.message || 'Falha ao converter links. Tente novamente em instantes.')
+      setFalha({ code: err?.code ?? null, message: err?.message ?? '' })
     } finally {
-      setSubmitting(false)
-      setRequestPhase('idle')
+      setEnviando(false)
     }
   }
 
-  async function copyAllConverted() {
-    const value = successfulLinks.map(result => result.convertedUrl).join('\n')
-    await copyText(value, `${successfulLinks.length} link(s) convertido(s) copiado(s).`, 'all')
+  async function copiar(valor) {
+    if (!valor) return
+    try {
+      await navigator.clipboard.writeText(valor)
+      setCopiado(true)
+      copiaTimer.current = window.setTimeout(() => setCopiado(false), 2500)
+    } catch {
+      setCopiado(false)
+    }
+  }
+
+  function limpar() {
+    setTexto('')
+    setResultado(null)
+    setFalha(null)
+    setCopiado(false)
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 pb-24 sm:space-y-6 sm:pb-0">
-      <form onSubmit={handleSubmit} className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
-        <div className="grid grid-cols-2 gap-2 sm:max-w-xl sm:grid-cols-3">
-          <MetricPill label="Por envio" value="1 link" />
-          <MetricPill label="Texto" value={`${Math.round(MAX_TEXT_LENGTH / 1000)} mil`} />
-          <MetricPill label="Formato" value="1:1" tone="success" />
-        </div>
-
-        <div className="mt-4 flex flex-col gap-3">
+    <div className="pv-page tc-page">
+      <div className="tc-cols">
+        {/* Esquerda — o link a testar */}
+        <form className="pnl-card tc-form" onSubmit={testar}>
           <div>
-            <label htmlFor="links" className="text-sm font-bold text-gray-900">Links para converter</label>
-            <p className="mt-1 text-xs leading-5 text-gray-500">Cole o link original do produto. O resultado aparece logo abaixo para copiar.</p>
-            <div className="mt-2 grid grid-cols-1 gap-1.5 text-[11px] sm:flex sm:flex-wrap sm:gap-2" aria-label="Dicas rápidas de uso">
-              <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 font-semibold text-green-800">✅ 1 produto por conversão</span>
+            <h2 className="pv-section-title">Link para testar</h2>
+            <p className="pv-section-note">Cole o endereço de um produto. O resultado aparece ao lado.</p>
+          </div>
+
+          <textarea
+            className="tc-textarea"
+            value={texto}
+            maxLength={MAX_CHARS}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder="https://www.mercadolivre.com.br/..."
+            aria-label="Link do produto para testar"
+          />
+
+          <div className="tc-form-foot">
+            {lojaDetectada ? (
+              <span className="tc-detect">
+                <StoreMark platform={lojaDetectada} size={22} />
+                {rotuloLoja} detectado
+              </span>
+            ) : (
+              <span className="tc-detect is-vazio">
+                {texto.trim() ? 'nenhuma loja reconhecida neste link' : 'Shopee, Amazon, Mercado Livre, Magalu, SHEIN ou AliExpress'}
+              </span>
+            )}
+            <span className="tc-count">{texto.length}/{MAX_CHARS}</span>
+          </div>
+
+          {linksDemais && (
+            <p className="tc-aviso" role="alert">
+              Cole um link por vez. Encontramos {links.length} — o teste é de um produto por vez para a resposta ficar clara.
+            </p>
+          )}
+
+          <div className="tc-acoes">
+            <button type="submit" className="pnl-btn is-primary" disabled={!podeTestar}>
+              {enviando ? 'Testando…' : 'Converter'}
+            </button>
+            {(texto || resultado || falha) && (
+              <button type="button" className="pnl-btn" onClick={limpar}>Limpar</button>
+            )}
+          </div>
+        </form>
+
+        {/* Direita — o veredito */}
+        <div className="tc-resultado" aria-live="polite">
+          {!veredito && !enviando && (
+            <div className="pnl-card tc-vazio">
+              <span className="pv-stat-ico"><Icon name="link" size={22} /></span>
+              <h2 className="pv-section-title">Resultado</h2>
+              <p className="pv-section-note">Cole um link e clique em Converter.</p>
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => { setText(''); setResponse(null); setError(''); setCopyFeedback(''); setCopiedItemKey(''); setRequestPhase('idle') }}
-            className="inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 sm:hidden"
-          >
-            Limpar
-          </button>
-        </div>
+          )}
 
-        <textarea
-          id="links"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          rows={4}
-          placeholder="Exemplo:\nhttps://www.amazon.com.br/dp/..."
-          className="mt-3 w-full rounded-2xl border border-gray-300 px-3 py-3 text-base text-gray-900 shadow-sm outline-none transition placeholder:text-sm placeholder:text-gray-400 focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:px-4 sm:text-sm"
-        />
-
-        <p className="mt-2 text-xs font-medium text-gray-600">Precisa converter outro produto? Limpe o campo e cole o próximo link.</p>
-
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
-          <MetricPill label="Detectados" value={detectedCount || '0'} tone={linksOverLimit ? 'danger' : detectedCount ? 'success' : 'neutral'} />
-          <MetricPill label="Caracteres" value={`${text.length.toLocaleString('pt-BR')}/${MAX_TEXT_LENGTH.toLocaleString('pt-BR')}`} tone={charsOverLimit ? 'danger' : 'neutral'} />
-        </div>
-
-        {(linksOverLimit || charsOverLimit) && (
-          <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-700" role="alert">
-            {linksOverLimit ? getLimitMessage(detectedCount) : `Reduza o texto para até ${MAX_TEXT_LENGTH.toLocaleString('pt-BR')} caracteres.`}
-          </p>
-        )}
-
-        {noisyTextWithoutLinks && !linksOverLimit && !charsOverLimit && (
-          <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900" role="status" aria-live="polite">
-            Ainda não detectamos links suportados neste texto. Cole URLs completas de produto para converter com mais precisão.
-          </p>
-        )}
-
-        {requestPhase !== 'idle' && (
-          <p className="mt-3 text-xs font-semibold text-gray-600" aria-live="polite">
-            {requestPhase === 'validating' && 'Validando links...'}
-            {requestPhase === 'submitting' && 'Enviando para conversão...'}
-            {requestPhase === 'renderingResult' && 'Processando resultado...'}
-          </p>
-        )}
-
-        <div className="mt-4 space-y-3" aria-live="polite">
-          {error && <Alert type="error" title="Não foi possível converter" message={error} />}
-          {copyFeedback && <Alert type="success" title="Copiado" message={copyFeedback} />}
-        </div>
-
-        <div className="sticky bottom-3 z-10 mt-5 rounded-2xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
-          <div className="grid grid-cols-[1fr_auto] gap-2 sm:flex sm:items-center">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-green-700 disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 sm:px-5"
-            >
-              {submitting ? 'Convertendo...' : 'Converter'}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setText(''); setResponse(null); setError(''); setCopyFeedback(''); setCopiedItemKey(''); setRequestPhase('idle') }}
-              className="hidden min-h-12 items-center justify-center rounded-xl border border-gray-300 px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
-            >
-              Limpar
-            </button>
-          </div>
-        </div>
-      </form>
-
-      {response && (
-        <section className="space-y-3 sm:space-y-4">
-          <div className="rounded-2xl bg-white p-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4 sm:p-5">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">Resultado</h2>
-              <div className="mt-3 grid grid-cols-3 gap-2 sm:max-w-md">
-                <MetricPill label="Total" value={response.count} />
-                <MetricPill label="OK" value={response.convertedCount} tone="success" />
-                <MetricPill label="Atenção" value={response.failedCount} tone={response.failedCount ? 'warning' : 'neutral'} />
-              </div>
+          {enviando && (
+            <div className="pnl-card tc-vazio">
+              <span className="pv-skel" style={{ width: 42, height: 42, borderRadius: 13 }} />
+              <span className="pv-skel" style={{ width: 200, height: 16, marginTop: 12 }} />
+              <span className="pv-skel" style={{ width: 260, height: 13, marginTop: 8 }} />
             </div>
-            <button
-              type="button"
-              onClick={copyAllConverted}
-              disabled={!successfulLinks.length}
-              className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 sm:mt-0 sm:w-auto"
-            >
-              Copiar todos
-            </button>
-          </div>
+          )}
 
-          <div className="grid gap-3 sm:gap-4">
-            {response.results.map(result => (
-              <div key={`${result.index}-${result.originalUrl}`} className="space-y-3">
-                <ResultCard result={result} onCopy={(value) => copyText(value, 'Link copiado.', `${result.index}-${result.originalUrl}`)} copied={copiedItemKey === `${result.index}-${result.originalUrl}`} />
+          {veredito && !enviando && (
+            <>
+              <div className={`tc-banner ${TOM[veredito.veredito] || 'is-neutro'}`}>
+                <span className="tc-banner-ico"><Icon name={ICONE_DO_VEREDITO(veredito.veredito)} size={20} stroke={2.6} /></span>
+                <div className="tc-banner-corpo">
+                  <div className="tc-banner-titulo">{veredito.titulo}</div>
+                  <p className="tc-banner-texto">{veredito.texto}</p>
+                  {veredito.mostrarCredenciais && (
+                    <Link href="/painel/ids-afiliada" className="pnl-btn tc-banner-btn">
+                      Cadastrar minhas lojas <Icon name="arrow" size={14} />
+                    </Link>
+                  )}
+                </div>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+
+              {resultado && (
+                <div className={`pnl-card tc-detalhe ${TOM[veredito.veredito] || 'is-neutro'}`}>
+                  <div className="tc-detalhe-head">
+                    <span className="tc-detalhe-loja">
+                      <StoreMark platform={resultado.platform} size={26} />
+                      {resultado.label || rotuloLoja || 'Loja'}
+                    </span>
+                    <span className={`tc-pill ${TOM[veredito.veredito] || 'is-neutro'}`}>
+                      {SELO[veredito.veredito] || '—'}
+                    </span>
+                  </div>
+
+                  <div className="tc-detalhe-corpo">
+                    <div>
+                      <div className="tc-rotulo">Endereço original</div>
+                      <div className="tc-url">{resultado.originalUrl}</div>
+                    </div>
+
+                    {resultado.convertedUrl ? (
+                      <div>
+                        <div className="tc-rotulo is-destaque">Link de afiliado</div>
+                        <div className="tc-url is-destaque">{resultado.convertedUrl}</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="tc-rotulo">Link de afiliado</div>
+                        <div className="tc-url is-vazio">não foi gerado neste teste</div>
+                      </div>
+                    )}
+
+                    <div className="tc-acoes">
+                      {resultado.convertedUrl && (
+                        <button type="button" className="pnl-btn" onClick={() => copiar(resultado.convertedUrl)}>
+                          <Icon name="copy" size={14} /> {copiado ? 'Copiado' : 'Copiar link'}
+                        </button>
+                      )}
+                      {veredito.veredito === VEREDITO.OK && (
+                        <Link href="/painel/espelhamento" className="pnl-btn">
+                          Ir para Espelhamento <Icon name="arrow" size={14} />
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
