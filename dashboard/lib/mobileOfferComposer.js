@@ -37,6 +37,7 @@ export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
       { token: '{loja}', label: 'Loja/plataforma', example: 'Shopee' },
       { token: '{linhaDeCupom}', label: 'Linha de cupom', example: '🎟️ Use o cupom: OFERTA10' },
       { token: '{preçoDoTexto}', label: 'Preço escrito na oferta', example: 'De R$ 129,90 por R$ 89,90' },
+      { token: '{cupom}', label: 'Cupom de desconto', example: '🎟️ Use o cupom BEMVINDO10 — de R$ 300,00 por R$ 270,00 com o cupom' },
     ],
   },
   {

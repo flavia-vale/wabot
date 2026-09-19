@@ -10,6 +10,7 @@ import {
   getMobileOfferSingleLinkWarning,
   normalizeMobileOfferProduct,
   COUPON_STORES,
+  applyTemplateVariables,
 } from '../dashboard/lib/mobileOfferComposer.js'
 import {
   PRESET_TEMPLATE_BODIES,
@@ -285,7 +286,41 @@ test('variáveis de template incluem dados da oferta e automação', () => {
   const tokens = OFFER_TEMPLATE_VARIABLES.map((variable) => variable.token)
   assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'offer'))
   assert.ok(OFFER_TEMPLATE_VARIABLE_GROUPS.some((group) => group.key === 'automation'))
-  for (const token of ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}', '{linhaDeCupom}', '{preçoDoTexto}', '{{gancho}}', '{{cta}}', '{{convitegrupo}}', '{{grupoLink}}', '{{cupomLink}}']) {
+  for (const token of ['{produto}', '{preço}', '{preço_de}', '{desconto}', '{rating}', '{vendas}', '{link}', '{loja}', '{linhaDeCupom}', '{preçoDoTexto}', '{cupom}', '{{gancho}}', '{{cta}}', '{{convitegrupo}}', '{{grupoLink}}', '{{cupomLink}}']) {
     assert.ok(tokens.includes(token), `variável ausente: ${token}`)
   }
+})
+
+// specs/017-client-coupon-catalog (T022, FR-016): {cupom} aparece na lista com
+// rótulo e exemplo em português — a resolução em si acontece só no envio
+// (bot-worker.js), então applyTemplateVariables/buildMobileOfferText devem
+// preservar o token intacto (nunca substituí-lo aqui).
+test('{cupom} tem rótulo e exemplo em português na lista de variáveis (FR-016)', () => {
+  const variable = OFFER_TEMPLATE_VARIABLES.find((v) => v.token === '{cupom}')
+  assert.ok(variable, '{cupom} precisa estar na lista de variáveis')
+  assert.equal(typeof variable.label, 'string')
+  assert.ok(variable.label.length > 0)
+  assert.doesNotMatch(variable.label, /\{|\}/, 'rótulo não pode conter chaves de template')
+  assert.equal(typeof variable.example, 'string')
+  assert.match(variable.example, /cupom/i)
+})
+
+test('{cupom} sobrevive intacto a applyTemplateVariables (resolvido só no envio)', () => {
+  const result = applyTemplateVariables('Oferta: {produto}\n{cupom}\n{link}', {
+    title: 'Produto X',
+    link: 'https://loja.test/produto',
+  })
+  assert.match(result, /\{cupom\}/, 'applyTemplateVariables não deve resolver {cupom} — isso acontece só no envio')
+})
+
+test('{cupom} sobrevive a buildMobileOfferText sem virar linha vazia/emoji solto/asterisco órfão', () => {
+  const text = buildMobileOfferText({
+    product: { title: 'Produto X' },
+    link: 'https://loja.test/produto',
+    templateBody: '🏷️ {produto}\n{cupom}\n👉 {link}',
+  })
+  assert.match(text, /\{cupom\}/)
+  assert.doesNotMatch(text, /\(\s*\)/)
+  assert.doesNotMatch(text, /\*\s*\*/)
+  assert.doesNotMatch(text, /\n{3,}/)
 })

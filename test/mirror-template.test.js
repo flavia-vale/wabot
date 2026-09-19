@@ -113,7 +113,7 @@ test('resolveMirrorOfferFromLink NUNCA emite o link do terceiro: sem convertido,
 })
 
 test('applyMirrorTemplate renderiza com título/preço vindos do scraper, não do texto espelhado', async () => {
-  const text = await applyMirrorTemplate('🔥 Oferta imperdível\nCaption upstream errado\nR$ 1,00\nhttps://loja.test/produto', {
+  const { text } = await applyMirrorTemplate('🔥 Oferta imperdível\nCaption upstream errado\nR$ 1,00\nhttps://loja.test/produto', {
     templateKey: 'tpl_mirror',
     originalUrl: 'https://loja.test/produto',
     convertedUrl: 'https://loja.test/produto?tag=afiliado',
@@ -127,7 +127,7 @@ test('applyMirrorTemplate renderiza com título/preço vindos do scraper, não d
 })
 
 test('applyMirrorTemplate injeta a linha de cupom da mensagem de origem quando o template pede', async () => {
-  const text = await applyMirrorTemplate([
+  const { text } = await applyMirrorTemplate([
     'Oferta upstream',
     '🎟️ CUPOM: GARIMPEI ou ECONOMIAML',
     'https://loja.test/produto',
@@ -144,7 +144,7 @@ test('applyMirrorTemplate injeta a linha de cupom da mensagem de origem quando o
 })
 
 test('applyMirrorTemplate injeta preçoDoTexto junto da linha de cupom quando o template pede', async () => {
-  const text = await applyMirrorTemplate([
+  const { text } = await applyMirrorTemplate([
     'Oferta upstream',
     '❌De:223,00',
     '✅Por: 180,70 c/cupom 🆘',
@@ -171,7 +171,7 @@ test('applyMirrorTemplate injeta preçoDoTexto junto da linha de cupom quando o 
 })
 
 test('applyMirrorTemplate usa preço da loja em preçoDoTexto quando a copy não traz preço editorial', async () => {
-  const text = await applyMirrorTemplate('Oferta sem linha de preço\n🎟️ CUPOM: LOJA10\nhttps://loja.test/produto', {
+  const { text } = await applyMirrorTemplate('Oferta sem linha de preço\n🎟️ CUPOM: LOJA10\nhttps://loja.test/produto', {
     templateKey: 'tpl_preco_fallback',
     originalUrl: 'https://loja.test/produto',
     convertedUrl: 'https://loja.test/produto?tag=afiliado',
@@ -184,7 +184,7 @@ test('applyMirrorTemplate usa preço da loja em preçoDoTexto quando a copy não
 })
 
 test('applyMirrorTemplate usa preço da loja em preçoDoTexto mesmo quando a mensagem não tem cupom', async () => {
-  const text = await applyMirrorTemplate('Oferta sem cupom nem preço\nhttps://loja.test/produto', {
+  const { text } = await applyMirrorTemplate('Oferta sem cupom nem preço\nhttps://loja.test/produto', {
     templateKey: 'tpl_preco_fallback_sem_cupom',
     originalUrl: 'https://loja.test/produto',
     convertedUrl: 'https://loja.test/produto?tag=afiliado',
@@ -197,7 +197,7 @@ test('applyMirrorTemplate usa preço da loja em preçoDoTexto mesmo quando a men
 })
 
 test('applyMirrorTemplate preserva preço e instrução de adicionar cupom percentual', async () => {
-  const text = await applyMirrorTemplate([
+  const { text } = await applyMirrorTemplate([
     'CORRE QUE CAIU O PREÇO',
     '',
     '📹 TP-Link Tapo C100 Câmera de Segurança Wifi 1080P Full HD',
@@ -235,7 +235,7 @@ test('applyMirrorTemplate preserva preço e instrução de adicionar cupom perce
 })
 
 test('applyMirrorTemplate preserva linha De/Por completa mesmo sem cupom', async () => {
-  const text = await applyMirrorTemplate([
+  const { text } = await applyMirrorTemplate([
     '> 🧡 Impressora 3d Bambu Lab A1 Prateado',
     '',
     '📴 Com desconto de até 14%',
@@ -273,7 +273,7 @@ test('applyMirrorTemplate preserva linha De/Por completa mesmo sem cupom', async
 })
 
 test('applyMirrorTemplate remove linhaDeCupom sem deixar placeholder quando a origem não tem cupom', async () => {
-  const text = await applyMirrorTemplate('Oferta sem cupom informado\nhttps://loja.test/produto', {
+  const { text } = await applyMirrorTemplate('Oferta sem cupom informado\nhttps://loja.test/produto', {
     templateKey: 'tpl_cupom',
     originalUrl: 'https://loja.test/produto',
     convertedUrl: 'https://loja.test/produto?tag=afiliado',
@@ -286,7 +286,7 @@ test('applyMirrorTemplate remove linhaDeCupom sem deixar placeholder quando a or
 })
 
 test('applyMirrorTemplate não leva a copy de cupom para template que não pediu a variável', async () => {
-  const text = await applyMirrorTemplate('🎟️ CUPOM: NAODEVEENTRAR\nhttps://loja.test/produto', {
+  const { text } = await applyMirrorTemplate('🎟️ CUPOM: NAODEVEENTRAR\nhttps://loja.test/produto', {
     templateKey: 'tpl_sem_cupom',
     originalUrl: 'https://loja.test/produto',
     convertedUrl: 'https://loja.test/produto?tag=afiliado',
@@ -300,7 +300,7 @@ test('applyMirrorTemplate não leva a copy de cupom para template que não pediu
 })
 
 test('applyMirrorTemplate substitui grupoLink e cupomLink apenas quando o template contém as variáveis', async () => {
-  const text = await applyMirrorTemplate('Texto original https://ex.com/a', {
+  const { text } = await applyMirrorTemplate('Texto original https://ex.com/a', {
     templateKey: 'tpl_links',
     originalUrl: 'https://ex.com/a',
     convertedUrl: 'https://ex.com/a?tag=ok',
@@ -328,7 +328,7 @@ test('applyMirrorTemplate substitui grupoLink e cupomLink apenas quando o templa
 })
 
 test('applyMirrorTemplate não injeta grupoLink nem cupomLink quando o template não contém as variáveis', async () => {
-  const text = await applyMirrorTemplate('Texto original https://ex.com/a', {
+  const { text } = await applyMirrorTemplate('Texto original https://ex.com/a', {
     templateKey: 'tpl_sem_links_globais',
     originalUrl: 'https://ex.com/a',
     convertedUrl: 'https://ex.com/a?tag=ok',
@@ -353,15 +353,15 @@ test('applyMirrorTemplate não injeta grupoLink nem cupomLink quando o template 
 })
 
 test('applyMirrorTemplate preserva texto original quando não há template válido ou link', async () => {
-  assert.equal(await applyMirrorTemplate('original', { templateKey: 'missing', botConfig: {} }), 'original')
-  assert.equal(await applyMirrorTemplate('Só um aviso sem link', {
+  assert.equal((await applyMirrorTemplate('original', { templateKey: 'missing', botConfig: {} })).text, 'original')
+  assert.equal((await applyMirrorTemplate('Só um aviso sem link', {
     templateKey: 'tpl_mirror',
     botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_mirror', name: 'Mirror', body: '🔥 {produto}\n👉 {link}' }] }) },
-  }), 'Só um aviso sem link')
+  })).text, 'Só um aviso sem link')
 })
 
 test('applyMirrorTemplate não vaza placeholders vazios nem injeta branding quando variável não existe no template', async () => {
-  const text = await applyMirrorTemplate('Texto upstream sem preço\nhttps://ex.com/a', {
+  const { text } = await applyMirrorTemplate('Texto upstream sem preço\nhttps://ex.com/a', {
     templateKey: 'simples',
     originalUrl: 'https://ex.com/a',
     convertedUrl: 'https://ex.com/a?tag=ok',
@@ -383,7 +383,7 @@ test('applyMirrorTemplate não vaza placeholders vazios nem injeta branding quan
 test('applyMirrorTemplate preserva texto original quando o scraper lança erro inesperado', async () => {
   const warnings = []
   const original = 'Oferta original https://ex.com/a?tag=ok'
-  const text = await applyMirrorTemplate(original, {
+  const { text } = await applyMirrorTemplate(original, {
     templateKey: 'tpl_mirror',
     originalUrl: 'https://ex.com/a',
     convertedUrl: 'https://ex.com/a?tag=ok',
@@ -399,7 +399,7 @@ test('applyMirrorTemplate preserva texto original quando o scraper lança erro i
 
 test('applyMirrorTemplate cai no relay quando o scrape não traz título nem preço', async () => {
   const original = 'Promo boa demais\nhttps://ex.com/a'
-  const text = await applyMirrorTemplate(original, {
+  const { text } = await applyMirrorTemplate(original, {
     templateKey: 'tpl_mirror',
     originalUrl: 'https://ex.com/a',
     convertedUrl: 'https://ex.com/a?tag=ok',
@@ -413,7 +413,7 @@ test('applyMirrorTemplate cai no relay quando o scrape não traz título nem pre
 test('applyMirrorTemplate cai no relay quando o scrape estoura o orçamento de tempo', async () => {
   const warnings = []
   const original = 'Oferta original https://ex.com/a?tag=ok'
-  const text = await applyMirrorTemplate(original, {
+  const { text } = await applyMirrorTemplate(original, {
     templateKey: 'tpl_mirror',
     originalUrl: 'https://ex.com/a',
     convertedUrl: 'https://ex.com/a?tag=ok',
@@ -425,4 +425,64 @@ test('applyMirrorTemplate cai no relay quando o scrape estoura o orçamento de t
   })
   assert.equal(text, original)
   assert.equal(warnings.length, 1)
+})
+
+// ---- specs/017-client-coupon-catalog (T015): {cupom} sobrevive ao template,
+// couponContext sai calculado a partir de dados JÁ resolvidos (sem scrape extra) ----
+
+test('applyMirrorTemplate preserva {cupom} intacto no texto e devolve couponContext com platform/priceCents', async () => {
+  let fetchCalls = 0
+  const { text, couponContext } = await applyMirrorTemplate('Oferta upstream qualquer\nhttps://loja.test/produto', {
+    templateKey: 'tpl_com_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'shopee',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_com_cupom', name: 'Com cupom', body: '{produto}\n💰 {preço}\n{cupom}\n{link}' }] }) },
+    fetchInfo: async () => { fetchCalls += 1; return { title: 'Produto real', oldPrice: '', newPrice: 'R$ 89,90' } },
+  })
+
+  assert.match(text, /\{cupom\}/, 'o token {cupom} precisa sobreviver ao template, para ser resolvido só no envio')
+  assert.deepEqual(couponContext, { platform: 'shopee', priceCents: 8990 })
+  // Nenhuma leitura extra de rede por causa do cupom (FR-028c): um único scrape,
+  // o mesmo que já buscava título/preço.
+  assert.equal(fetchCalls, 1)
+})
+
+test('applyMirrorTemplate: couponContext é null quando o template cai no relay (sem link/scrape útil)', async () => {
+  const original = 'Sem link nenhum aqui'
+  const { text, couponContext } = await applyMirrorTemplate(original, {
+    templateKey: 'tpl_com_cupom',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_com_cupom', name: 'Com cupom', body: '{produto}\n{cupom}\n{link}' }] }) },
+  })
+  assert.equal(text, original)
+  assert.equal(couponContext, null)
+})
+
+test('applyMirrorTemplate: couponContext.priceCents é null quando o preço raspado não é confiável', async () => {
+  const { couponContext } = await applyMirrorTemplate('Oferta\nhttps://loja.test/produto', {
+    templateKey: 'tpl_com_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'shopee',
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_com_cupom', name: 'Com cupom', body: '{produto}\n{cupom}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: '', newPrice: '' }),
+  })
+  assert.equal(couponContext.platform, 'shopee')
+  assert.equal(couponContext.priceCents, null)
+})
+
+test('applyMirrorTemplate: orçamento de scrape (MIRROR_TEMPLATE_SCRAPE_BUDGET_MS) não é tocado pelo cupom', async () => {
+  // Se a resolução do cupom acrescentasse QUALQUER leitura de rede, um
+  // scrapeBudgetMs minúsculo estouraria mesmo com fetchInfo instantâneo.
+  const { text, couponContext } = await applyMirrorTemplate('Oferta\nhttps://loja.test/produto', {
+    templateKey: 'tpl_com_cupom',
+    originalUrl: 'https://loja.test/produto',
+    convertedUrl: 'https://loja.test/produto?tag=afiliado',
+    platform: 'shopee',
+    scrapeBudgetMs: 5000,
+    botConfig: { mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_com_cupom', name: 'Com cupom', body: '{produto}\n{cupom}\n{link}' }] }) },
+    fetchInfo: async () => ({ title: 'Produto real', oldPrice: '', newPrice: 'R$ 50,00' }),
+  })
+  assert.match(text, /\{cupom\}/)
+  assert.deepEqual(couponContext, { platform: 'shopee', priceCents: 5000 })
 })
