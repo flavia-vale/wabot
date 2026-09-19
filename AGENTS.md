@@ -5568,6 +5568,382 @@ Melhorar essa leitura é outra frente; nada disso justifica publicar `{preço}`.
 Testes: `test/criar-oferta-sem-preco.test.js`,
 `test/mobile-offer-composer.test.js`.
 
+## Oferta de PRODUTO publicada como VITRINE (+ banner de cupom) (RCA 2026-09-18)
+
+Cliente mandou print de duas ofertas de perfume, com nome e preço, saindo com o
+banner amarelo "CUPOM Mercado Livre" no lugar da foto. As duas publicaram **o
+mesmo link** — que não era de produto nenhum: era a vitrine cadastrada da
+própria cliente.
+
+**O banner era a ponta; a raiz é a troca do link.** Em 45 minutos, 30 ofertas
+saíram assim (~25 delas de produto: fone, perfume, panela, notebook, pneu,
+whey), em 5 contas. Quem clicava no perfume caía numa lista genérica.
+
+### A medição que fechou a causa (não repetir as hipóteses derrubadas)
+
+| Hipótese | Veredito |
+|---|---|
+| Muro anti-robô do ML no IP do servidor | **FALSA** — 4 links testados, 200, página completa, sem marcador |
+| O ML mudou o HTML e o extrator quebrou | **FALSA** — o extrator lê o card e monta a URL certa |
+| A etiqueta `?ref=` se perde no caminho reserva da resolução | **FALSA** — **0** casos em 773 |
+
+O placar real das 773 falhas de leitura: **242** eram `/lists` (sem produto,
+comportamento correto) e **531** eram páginas que **responderam 200 e vieram sem
+o card destacado**. Reprocessando 20 dos links que falharam em produção,
+**17 resolveram na primeira tentativa, em ~1s cada**.
+
+Ou seja: **o ML às vezes entrega a página sem o produto em destaque, e o robô
+tratava esse engasgo como resposta definitiva.**
+
+### A cadeia inteira, e os três consertos
+
+1. Leitura do card destacado falha por um instante
+   (`tryExtractFeaturedProductFromSocialShare`).
+2. `resolveToCleanProductUrl` devolve `null` — e `null` significava DUAS coisas
+   opostas: "a página não tem produto" e "não consegui ler a página".
+3. `convert()` cai no caminho de cupom; o ML recusa (`unsupported_url`, erro 111).
+4. `decideVitrineFallback` publica a **vitrine da cliente** no lugar do produto,
+   com `linkKind:'coupon'` + `warning:'ml_vitrine_fallback_used'`.
+5. Esse aviso de FALHA era lido como sinal de que a mensagem era de cupom, e
+   ligava o banner.
+
+**Não regredir:**
+
+- **Ler de novo antes de desistir.** `ML_SOCIAL_CARD_ATTEMPTS` (2) com
+  `ML_SOCIAL_CARD_RETRY_DELAY_MS` (600ms). A releitura só acontece quando a
+  página **respondeu** e respondeu rápido (`ML_SOCIAL_CARD_RETRY_MAX_ELAPSED_MS`,
+  3s): leitura que estourou já consumiu o orçamento da mensagem
+  (`MSG_QUEUE_TIMEOUT_MS`, 25s), e insistir ali derrubaria por timeout uma oferta
+  que hoje sai — pior que o defeito sendo consertado.
+- **"Não consegui ler" NUNCA vira "é vitrine".** `ML_SOCIAL_CARD_OUTCOME`
+  separa `PRODUTO` / `SEM_PRODUTO` / `LEITURA_FALHOU`, e `decideVitrineFallback`
+  descarta quando a leitura falhou. **Oferta não enviada é recuperável; oferta
+  enviada com o link errado não é** — já foi para o grupo. Escape hatch:
+  `ML_VITRINE_ON_READ_FAILURE=true` volta ao comportamento histórico.
+- **Vitrine LIDA e confirmada sem produto continua caindo na vitrine
+  cadastrada** — as features 004/007 não foram tocadas.
+- **O banner de cupom exige vitrine CONFIRMADA**
+  (`resolveCouponTextSignal`, em `converters/couponBrandCardPolicy.js`). A
+  blindagem tripla tem duas condições que caem sozinhas com link curto (a URL não
+  expõe MLB/ASIN → `linkKind:'coupon'` e `urlHasProductId:false`), então o sinal
+  de texto era a **única** trava real — e aceitar `ml_vitrine_fallback_used` nela
+  fazia **um fato só** (a conversão falhou) derrubar as três. Hoje o aviso de
+  vitrine só vale quando `isDirectVitrineShare(primary.url)` é true, isto é,
+  quando o link COMPARTILHADO já era uma página `/social/`. Atrás de um
+  encurtador pode haver produto de verdade — e havia.
+- **`COUPON_BRAND_CARD_ENABLED` estava ligado em produção** contra o que esta
+  documentação já mandava. Continua devendo ficar ausente até validação
+  explícita em staging.
+
+⚠️ **Armadilha de diagnóstico:** `sentAt` é gravado pelo Prisma no SQLite como
+**número** (ms). Consulta com `sentAt > datetime('now','-2 days')` compara número
+com texto e **nunca dá verdadeiro** — devolve zero linhas e parece ausência de
+dado. Use `sentAt > (strftime('%s','now','-2 days') * 1000)` e
+`datetime(sentAt/1000,'unixepoch','localtime')`.
+
+Comandos de diagnóstico (read-only, no diretório do ambiente):
+
+```bash
+LOG=/home/deploy/BOTinho-shared/logs/bot.log
+# placar da leitura do card destacado
+for m in "produto destacado extraído" "sem card destacado" "erro ao buscar HTML" "usando vitrine cadastrada"; do
+  printf "%-34s %s\n" "$m" "$(grep -c "$m" $LOG)"
+done
+# separa o defeito (com ref=) do comportamento correto (/lists)
+grep "sem card destacado" $LOG | sed -n 's/.*"landingUrl":"\([^"]*\)".*/\1/p' | awk '
+/\/lists/ {l++; next} /[?&]ref=/ {r++; next} {s++}
+END {print "  /lists:", l+0; print "  com ref= (defeito):", r+0; print "  sem ref=:", s+0}'
+```
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — nada disso
+vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODAS
+as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/ml-oferta-de-produto-virou-vitrine.test.js`.
+
+## Oferta que chega pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13)
+
+Cliente (`raelysouza98@gmail.com`) reportou "o robô não espelha". Não havia
+defeito: o grupo monitorado publica a oferta pelo **domínio próprio do dono
+dele** (`https://dicasdeamigas.com.br/p/yaQ4mlRhfU`), nunca pelo link da loja.
+`detectLinks` só conhece os domínios das lojas suportadas, então a mensagem
+chegava "sem link", o sanitizador apagava a URL de terceiro (corretamente — ela
+credita o concorrente) e a oferta morria em `skip:policy:...:nolink` /
+`skip:no_valid_conversions`.
+
+**Medido no link real antes de escrever o código** (não é suposição): NÃO é
+redirect HTTP — responde **200 com HTML** (Next.js), e o corpo traz **as duas**
+URLs: o short link de afiliado do concorrente (`https://link.amazon/...`) e a
+**URL limpa do produto** (`https://www.amazon.com.br/dp/B088PNBKTR/`).
+
+| Peça | Onde |
+|---|---|
+| Decisão + resolução (puro + I/O injetado) | `src/core/customDomainLinkResolver.js` |
+| Gancho no robô | `unwrapCustomDomainOfferLinks` em `src/bot-worker.js` |
+| Sinal durável | `ops_custom_domain_link_resolved` |
+
+O módulo devolve o **texto** com a URL de domínio próprio trocada pela da loja.
+Por rodar **antes** do sanitizador, o resto do pipeline (sanitizador, detector,
+conversor, dedup, imagem) segue byte a byte como já era — nenhum deles mudou.
+
+### Oferta com 3+ links chegava com só dois (RCA 2026-09-17 — não regredir)
+
+Cliente reportou: oferta com três ou quatro produtos chegava ao grupo com **dois
+links convertidos e, do terceiro em diante, nenhum link — só o texto do
+produto**.
+
+Não era limite de quantidade, nem conversão falhando: era o desembrulho de
+domínio próprio **desligando-se pela mensagem inteira**. `findCandidateLinks`
+abria com `if (cleaned.some(isOfferUrl)) return []` — um único link de loja no
+texto bastava para nenhuma URL ser desembrulhada. Numa oferta **mista** (os
+primeiros produtos com link direto da Amazon/ML e os seguintes pelo site do dono
+do grupo, como `clubedoachadinho.com.br/p/…`, `compre.link/…` ou
+`dicasdeamigas.com.br/p/…` — os três já medidos em produção), os links
+embrulhados nunca viravam link de loja, `removeNonOfferUrls` os apagava na linha
+seguinte (corretamente: eles creditam o concorrente) e a cliente via a linha do
+produto sem URL nenhuma. Os dois primeiros saíam porque já eram link de loja.
+
+⚠️ **Nada disso aparecia no painel**: a mensagem era gravada como `success` (ela
+saiu), e o desembrulho nem chegava a rodar, então também não havia linha de
+falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
+
+**Não regredir:**
+
+- Não voltar a desligar a varredura inteira quando existe link de loja no texto
+  — é literalmente o bug. Guardas em `test/custom-domain-link-resolver.test.js`
+  ("oferta MISTA").
+- O teto de candidatos por mensagem (`MAX_CANDIDATES_PER_MESSAGE`, 2) continua
+  valendo: grupo que despeja dez links embrulhados não pode virar dez idas à
+  rede dentro da fila serial.
+
+**Não regredir:**
+
+- **A decisão é POR LINK, nunca pela mensagem inteira** (corrigido em
+  2026-09-17 — não regredir). Candidato é a URL que NÃO é de loja suportada:
+  é ela que o sanitizador vai apagar em seguida. Link que já é de loja fica
+  fora dos candidatos, então mensagem só com link de loja (ou sem link) segue
+  sem gastar rede — o custo continua zero onde já era zero.
+- **Mensagem MISTA gasta um orçamento menor** (`CUSTOM_DOMAIN_MIXED_BUDGET_MS`,
+  6s, contra os 13s de `CUSTOM_DOMAIN_TOTAL_BUDGET_MS`). Ali o desembrulho é um
+  ganho — recupera o link que seria apagado —, nunca a diferença entre espelhar
+  e não espelhar: a oferta sai de qualquer jeito pelos links de loja que já
+  existem. Gastar o orçamento cheio arriscaria estourar os 25s de preparo da
+  mensagem (`MSG_QUEUE_TIMEOUT_MS`) e derrubar uma oferta que hoje funciona.
+- **Roda ANTES de `sanitizeInviteLinks`.** Invertido, a URL de domínio próprio já
+  foi apagada e não há o que desembrulhar — é exatamente o estado anterior ao
+  fix. Guarda estrutural no teste.
+- **O link de terceiro NUNCA é publicado.** Ele é substituído pelo da loja (que
+  ainda passa pela conversão com a credencial da cliente) ou fica como estava, e
+  aí o sanitizador o remove como sempre removeu. Falha aqui não vaza comissão.
+- **Preferir a URL com ID de produto** (`urlHasProductId`), não a primeira do
+  HTML. A limpa converte melhor (o conversor lê o ASIN direto) e não carrega a
+  etiqueta do concorrente.
+- ⚠️ **Não extrair do HTML com `PATTERNS` do detector.** O `[^\s]*` de lá foi
+  feito para TEXTO CORRIDO; em JSON minificado não há espaço, e — medido — o
+  primeiro link engolia milhares de caracteres e **escondia** a URL limpa do
+  produto, fazendo a preferência acima nunca ver a melhor opção. A URL é
+  recortada nos delimitadores de HTML/JSON **antes** de ser classificada.
+- **Anti-SSRF obrigatório** (`isSafeCandidateUrl`): o link vem de grupo de
+  TERCEIROS, é entrada hostil. Sem isso o robô viraria buscador de rede interna
+  para quem publicasse `http://169.254.169.254/...` no grupo monitorado. Recusa
+  IP literal (v4/v6), host sem ponto, sufixo de rede local, credencial embutida
+  e porta fora de 80/443.
+- **Fracasso não é cacheado** (mesma lição do short link da Shopee); sucesso vale
+  6h. **Fail-safe é não mexer no texto**: qualquer erro devolve o original.
+- **Teto de 2 links por mensagem, com tempo generoso por link E teto na mensagem
+  inteira.** Medido em staging (2026-09-13): o MESMO endereço respondeu em
+  **568ms** numa chamada e **estourou 4s** na seguinte — o site oscila muito a
+  partir do servidor. Confirmado em produção (2026-09-14): os DNS IPv6 da
+  Hetzner falharam de forma intermitente, uma tentativa estourou os 8s e a
+  seguinte resolveu em 2,6s. Por isso há no máximo 2 tentativas, mas a segunda
+  só ocorre para `tempo_esgotado`/`erro_de_rede:*`; 403, HTML sem loja e recusas
+  de segurança nunca repetem. Por tentativa o teto segue 8s
+  (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira são 13s
+  (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), preservando ~12s dos 25s de preparo para
+  converter e buscar a foto. O teto é da mensagem inteira, inclusive com dois
+  links — não multiplicar por candidato. O log traz `attempts` e
+  `recoveredByRetry`, para medir recuperação sem esconder a primeira falha.
+- **O orçamento da mensagem é DIVIDIDO entre os links, nunca gasto por ordem de
+  chegada** (RCA 2026-09-18). Sem divisão, o PRIMEIRO link embrulhado consumia o
+  orçamento inteiro e o segundo nem chegava a ser tentado
+  (`sem_tempo_no_orcamento`) — a oferta chegava ao grupo com dois **"Compre
+  aqui:" vazios**, que é exatamente o que o desembrulho por link (fix anterior)
+  existia para impedir. Cada link recebe agora "o que sobra dividido pelos links
+  que ainda faltam"; link rápido devolve a sobra ao seguinte (resolveu em 600ms
+  → o próximo volta ao teto cheio de 8s), então o caso comum não fica mais
+  lento. **E o orçamento da mensagem MISTA precisa caber ao menos UMA tentativa
+  cheia**: ele nasceu em 6s com o teto por link em 8s, ou seja, um site lento
+  não tinha como terminar nem a primeira tentativa. Hoje são 10s
+  (`CUSTOM_DOMAIN_MIXED_BUDGET_MS`) — não baixar sem medir. Guarda estrutural e
+  funcional em `test/custom-domain-link-resolver.test.js`.
+- **A falha NUNCA pode ser só `null`.** Foi assim que uma investigação inteira
+  precisou de quatro rodadas de comando em staging: código no ar, rede boa (200
+  em 568ms), página trazendo o link e cada peça acertando isoladamente — e a
+  única informação disponível era `null`.
+  `resolveStoreUrlFromCustomDomainDetailed` devolve `{ store, reason, detail }`
+  (`tempo_esgotado`, `recusado_http_<status>`, `pagina_sem_link_de_loja`,
+  `endereco_recusado`, `sem_tempo_no_orcamento`, `erro_de_rede:<nome>`…) e o
+  robô loga `Link de domínio próprio NÃO resolveu até a loja`. Mesma lição de
+  "o caminho do card de preview era MUDO".
+
+Envs (todas opcionais): `CUSTOM_DOMAIN_LINK_RESOLVE` (default LIGADO; só o valor
+exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (8000),
+`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (13000), `CUSTOM_DOMAIN_MAX_ATTEMPTS` (2),
+`CUSTOM_DOMAIN_MAX_BYTES` (512KB),
+`CUSTOM_DOMAIN_CACHE_TTL_MS` (6h). Ajustar o tempo **não exige deploy** — é
+`.env` + `pm2 delete`/`start` (pegadinha #1).
+**Custo: nenhum processo novo, zero impacto de RAM** (cache em memória podado em
+500 entradas).
+
+⚠️ Em modo `remote` o deploy da API **não** recarrega os bot-workers — isto só
+passa a valer nos bots depois de `pm2 restart bot-supervisor` (reconecta TODAS
+as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
+
+Teste: `test/custom-domain-link-resolver.test.js` (com fixture do HTML real em
+`test/fixtures/custom-domain-offer-page.html`).
+
+### Oferta ENCERRADA virava produto aleatório; formatação e retry (RCA 2026-09-18, 2ª rodada)
+
+Cliente reportou que uma oferta que **convertia** passou a aparecer na aba
+Envios como "ainda não fazemos conversão para essa loja"
+(`skip:policy:...:unsupported_store` — ou seja, **nenhum** link virou link de
+loja). Três defeitos no mesmo caminho, os três medidos ao vivo contra o site
+real (`dicasdeamigas.com.br`), não deduzidos:
+
+| Defeito | Medição |
+|---|---|
+| **Oferta encerrada vira produto aleatório** | `/p/<slug>` de oferta encerrada (ou slug inválido) responde **307 → `/promocao-encerrada`**, página com **13 produtos DIFERENTES**. O robô pegava o primeiro e publicava no grupo um item sem relação com o texto — gravado como `success` |
+| **Marcador do WhatsApp entrava na URL** | `*https://site/p/abc*` virava candidato `.../p/abc*`, endereço que não existe → cai no 307 acima → produto errado. O detector removia esse marcador desde 15/09 (`normalizeDetectedUrl`); o desembrulho não, e as duas pontas discordavam sobre onde a URL termina |
+| **A fatia por link matou o retry** | com 2 candidatos a fatia (6,5s) fica igual ao teto da tentativa, então a 2ª tentativa nascia com prazo zero. Reproduzido: link 1 estoura → 1 resolvido de 2 no código antigo, 2 de 2 no novo, **no mesmo tempo de parede** |
+
+**Não regredir:**
+
+- **Na dúvida sobre QUAL produto é o da oferta, não publica.**
+  `isListingPageAfterRedirect` recusa quando um **redirect** levou a uma página
+  com **mais de um produto diferente** (`countDistinctProducts`, que conta
+  produto e não URL — short link e URL limpa do mesmo item contam como um). A
+  página de oferta de verdade traz 1 produto em 2 endereços; a de lista trazia
+  13. Vale a regra canônica: oferta não enviada é recuperável, oferta enviada
+  com o link errado não é (mesma família da "camiseta branca" e de #1205/#1208).
+- **A trava exige o REDIRECT de propósito.** Sem ele, página que entrega a
+  oferta em 200 com produtos relacionados continua resolvendo como antes —
+  apertar isso mudaria o comportamento dos 8 sites que hoje funcionam.
+- **O desembrulho usa `normalizeDetectedUrl`, a MESMA regra do detector.** Duas
+  regras para "onde a URL termina" é como um link formatado vira endereço
+  inexistente em silêncio.
+- **O retry roda em DUAS PASSADAS.** Passada 1: cada candidato ganha uma
+  tentativa dentro da sua fatia (link lento continua sem poder zerar a chance
+  dos outros). Passada 2: quem falhou por motivo **transitório** tenta de novo
+  com o que sobrou do orçamento da mensagem. Uma passada só era o que fazia um
+  blip de DNS (medido em 14/09) derrubar os dois links da mesma oferta.
+- Motivo próprio no log: `pagina_de_lista_apos_redirect`, com quantos produtos
+  e em qual endereço — "não resolveu" e "resolveu no produto errado" pedem
+  ações opostas.
+
+Teste: `test/custom-domain-link-resolver.test.js`.
+
+### Nem todo site de domínio próprio entrega o link (medição antes de investir)
+
+Em produção o desembrulho passou a atender **oito sites diferentes** nas quatro
+lojas (clubedoachadinho, meli.ofertasluan, temdetudotchelo, centraldapromoo,
+compre.link, magazineluiza.onelink, dicasdeamigas, achadosdetenis). Os que
+falham caem em três motivos, e **cada um pede uma ação diferente** — por isso o
+motivo é registrado em vez de virar um "não deu" genérico:
+
+| Motivo | Exemplo medido | O que é |
+|---|---|---|
+| `pagina_sem_link_de_loja` | `oasisdeofertas.com.br` | **casca de 1.994 bytes**, idêntica em páginas diferentes: app React (Lovable) que monta tudo por JavaScript e busca de um backend próprio. O link não existe no HTML |
+| `recusado_http_403` | `pechin.co` | o site **barra o nosso servidor** (mesma família do muro do Mercado Livre) |
+| `tempo_esgotado` | `centraldapromoo.com.br` | lentidão pontual — o mesmo endereço resolveu depois |
+
+⚠️ **Renderizar a página num navegador de verdade (Playwright) está DESCARTADO**
+por memória: cada instância custa ~300 MB e o servidor já opera com folga zero
+pela política (`evaluateCapacity` dá limite seguro de 35 robôs com 36 ligados).
+É a REGRA #1 da política de memória — se alguém reabrir isso, precisa vir com
+estimativa e OK explícito.
+
+**Antes de investir em qualquer um desses caminhos, MEDIR** — a resposta muda
+conforme quantos sites e quantas clientes cada motivo afeta:
+
+```bash
+cd ~/wabot && node scripts/diag-dominio-proprio.mjs --horas=72
+```
+
+Read-only, lê o `bot.log` em stream (nunca carrega o arquivo na memória) e
+agrega por site, por motivo e por **quantas contas** cada site afeta — "3 sites
+falhando" pode ser uma cliente ou trinta, e as duas situações pedem decisões
+opostas. Falha ao cruzar com o banco é **impressa**, nunca engolida (lição do
+`diag-assinatura-recusada.mjs`, onde `.catch(() => [])` virou "nenhuma conta
+encontrada"). Teste: `test/diag-dominio-proprio.test.js`.
+
+### O motivo no painel culpava a configuração da cliente (mesma investigação)
+
+"Mensagem fora das regras de encaminhamento que **você** configurou para este
+grupo" era o que a cliente lia — e a causa não tinha nada a ver com a
+configuração dela. `skip:policy:...` só ganha o sufixo `:unsupported_store`
+(que vira "ainda não fazemos conversão para essa loja") quando sobrou URL no
+texto, e o teste era feito no texto **já sanitizado** — de onde o sanitizador
+acabara de REMOVER toda URL que não é de loja suportada. Ou seja: exatamente a
+mensagem que deveria ganhar o sufixo chegava sem URL nenhuma e caía na frase
+genérica, mandando a cliente mexer em "Lojas aceitas" e no modo de
+encaminhamento, que estavam certos.
+
+**Não regredir:** o sufixo é decidido sobre o texto de ANTES do sanitizador
+(`findCandidateLinks(textoParaEspelhar)`) — a MESMA regra do desembrulho, para
+que as duas pontas nunca discordem sobre o que é "link de loja desconhecida"
+(ela ignora convite de grupo e rede social, que não são loja). `hasGenericUrl`
+segue como está no outro uso (o descarte silencioso de `messageKind === 'other'`)
+— ampliá-lo ali transformaria ruído de protocolo em linha no painel.
+
+## Links da mesma loja disputavam UMA sessão de afiliado (RCA 2026-09-17)
+
+O espelhamento convertia todos os links da mensagem com `Promise.all` puro. O
+comentário original justificava: "conversores fazem 4-5 chamadas HTTP
+sequenciais cada; processar N links em série estoura o teto da fila". Está certo
+entre lojas DIFERENTES — e errado dentro da MESMA loja, porque ali os
+conversores não são independentes: dividem **uma** sessão de afiliado.
+
+Medido, loja por loja:
+
+| Loja | Sessão compartilhada | Tinha serialização? |
+|---|---|---|
+| Mercado Livre | cookie `ssid` **rotacionado** a cada `createLink` | sim — `withMercadoLivreCredentialLock`, timeout de 12s |
+| **Amazon** | cookie do SiteStripe **rotacionado** a cada `getShortUrl` | **nenhuma** |
+| SHEIN | token de sessão por etiqueta | nenhuma |
+| AliExpress | cookie do portal de afiliado | nenhuma |
+
+- **ML**: 4 links disparados juntos, ~4s por chamada → um já estoura a trava
+  (`ML_AFFILIATE_LOCK_TIMEOUT`) e cai no fallback `partner_id`, e o conjunto
+  ainda come 12s dos 25s de preparo (`MSG_QUEUE_TIMEOUT_MS`). O paralelismo não
+  acelerava nada — a trava já serializava — e só trocava espera por falha.
+  Reproduzido e depois confirmado corrigido: 4 conversões boas em 16s, nenhuma
+  falha.
+- **Amazon**: em paralelo, todas as chamadas saem com o cookie VELHO e disputam
+  a persistência do novo — a última escrita vence e as demais rotações se
+  perdem. O sintoma é a parede "Acessar Amazon" no meio de uma sessão viva, e a
+  oferta sai com o link longo `?tag=` em vez do `amzn.to` (some a comissão
+  curta, não o link).
+
+`src/core/conversionScheduler.js` (`convertPerPlatformSerially`) resolve:
+**links da MESMA loja convertem um de cada vez; lojas diferentes seguem em
+paralelo.**
+
+**Não regredir:**
+
+- **Não voltar a `Promise.all(links.map(...))` sobre a lista inteira de links** —
+  guarda estrutural em `test/conversion-scheduler.test.js` falha se voltar.
+- **Não serializar TUDO numa fila só**: aí uma loja lenta atrasaria as outras,
+  que é o problema que o paralelismo original resolvia de verdade.
+- **A ordem de saída é a ordem do TEXTO**, não a de conclusão — a eleição do
+  link primário (`first`/`last`) e os logs dependem disso.
+
+⚠️ **O tempo de parede da mensagem com muitos links da MESMA loja sobe** (4
+links de ML: ~12s antes com uma falha, ~16s agora sem nenhuma), dentro dos 25s
+de `MSG_QUEUE_TIMEOUT_MS`. Não é overhead novo — a trava do ML já serializava;
+o que mudou é o 4º link ser convertido de verdade em vez de falhar. Ao validar,
+vigiar `timeout:incoming` no painel: se aparecer em mensagem com muitos links,
+o teto de 25s é que precisa de conversa, não o agendador.
+
 ## Motor único de oferta (`src/converters/offerEngine.js`) — não duplicar lógica
 
 O **Painel "Criar oferta"** (`/m/op/offer` → `POST
