@@ -93,7 +93,7 @@ const STATS = [
  * lido como enfeite, não como nome de plano. */
 const ACTIONS = [
   { label: 'Criar oferta', href: '/painel/criar-oferta', icon: 'plus', tag: 'Plano Basic' },
-  { label: 'Espelhar grupos', href: '/painel/espelhamento', icon: 'mirror', tag: 'Plano Basic' },
+  { label: 'Espelhamento', href: '/painel/espelhamento', icon: 'mirror', tag: 'Plano Basic' },
   { label: 'Ofertas automáticas', href: '/painel/ofertas-automaticas', icon: 'spark', pro: true, tag: 'Plano PRO' },
   { label: 'Grupos e Canais', href: '/painel/grupos', icon: 'users', tag: 'Plano Basic' },
 ]

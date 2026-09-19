@@ -18,9 +18,12 @@ import {
   CUSTOM_DOMAIN_TOTAL_BUDGET_MS,
   CUSTOM_DOMAIN_MIXED_BUDGET_MS,
   CUSTOM_DOMAIN_MAX_ATTEMPTS,
+  MAX_CANDIDATES_PER_MESSAGE,
   hasStoreLink,
   countDistinctProducts,
   isListingPageAfterRedirect,
+  allCandidatesFailedBecauseOfferEnded,
+  OFFER_ENDED_REASON,
 } from '../src/core/customDomainLinkResolver.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -132,12 +135,61 @@ test('ignora convite de grupo, rede social e arquivo', () => {
 })
 
 test('teto de candidatos por mensagem é respeitado', () => {
+  const texto = Array.from({ length: MAX_CANDIDATES_PER_MESSAGE + 2 }, (_, i) =>
+    `https://dicasdeamigas.com.br/p/${i}`).join('\n')
+  assert.equal(findCandidateLinks(texto).length, MAX_CANDIDATES_PER_MESSAGE)
+})
+
+// RCA 2026-09-19: era ESTE teto a queixa "não converte mais de 2 links". O
+// grupo de origem publica todos os produtos pelo site próprio, então a oferta
+// de 3-4 produtos saía com os dois primeiros e o resto sem link nenhum.
+test('oferta de 4 produtos pelo site próprio: NENHUM produto fica sem link', async () => {
+  clearCustomDomainCache()
   const texto = [
-    'https://dicasdeamigas.com.br/p/1',
-    'https://ofertasdaju.com.br/p/2',
-    'https://achadinhosdapri.com.br/p/3',
+    '👉Link do Sabonete : https://dicasdeamigas.com.br/p/aaa',
+    '👉Link do Papel: https://dicasdeamigas.com.br/p/bbb',
+    '👉Link do Livrinho : https://dicasdeamigas.com.br/p/ccc',
+    '👉Link do Shampoo : https://dicasdeamigas.com.br/p/ddd',
   ].join('\n')
-  assert.equal(findCandidateLinks(texto).length, 2)
+  const fetchImpl = async () => respostaHtml(PAGINA_REAL)
+
+  const { text, resolved } = await resolveCustomDomainLinks(texto, { fetchImpl, useCache: false })
+
+  assert.equal(resolved.length, 4)
+  for (const trecho of ['/p/aaa', '/p/bbb', '/p/ccc', '/p/ddd']) {
+    assert.ok(!text.includes(trecho), `${trecho} continuou embrulhado — o sanitizador vai apagá-lo`)
+  }
+  for (const rotulo of ['Sabonete', 'Papel', 'Livrinho', 'Shampoo']) {
+    assert.ok(text.includes(rotulo), `perdeu a linha do ${rotulo}`)
+  }
+})
+
+test('o teto não é mais o guarda de TEMPO: quem limita é o orçamento da mensagem', async () => {
+  clearCustomDomainCache()
+  const texto = Array.from({ length: MAX_CANDIDATES_PER_MESSAGE }, (_, i) =>
+    `Produto ${i} https://dicasdeamigas.com.br/p/${i}`).join('\n')
+  const tentados = []
+  const fetchImpl = async (url, opts) => {
+    tentados.push(url)
+    return new Promise((_resolve, reject) => {
+      const seguraOLaco = setTimeout(() => reject(new Error('nunca deveria chegar aqui')), 30_000)
+      opts?.signal?.addEventListener?.('abort', () => {
+        clearTimeout(seguraOLaco)
+        reject(new Error('TimeoutError'))
+      })
+    })
+  }
+
+  const comecou = Date.now()
+  const { text, failures } = await resolveCustomDomainLinks(texto, {
+    fetchImpl,
+    useCache: false,
+    totalBudgetMs: 4000,
+  })
+
+  assert.ok(Date.now() - comecou < 6000, 'o orçamento da mensagem precisa limitar o tempo total')
+  assert.equal(failures.length, MAX_CANDIDATES_PER_MESSAGE)
+  assert.equal(text, texto, 'fail-safe: texto devolvido exatamente como veio')
 })
 
 test('anti-SSRF: recusa rede interna, IP literal, credencial embutida e porta estranha', () => {
@@ -309,9 +361,18 @@ test('guarda: o motivo "loja não suportada" é decidido ANTES do sanitizador', 
   )
   assert.match(
     fonte,
-    /links\.length === 0 && \(hasGenericUrl \|\| hadUnsupportedStoreUrl\) \? ':unsupported_store'/,
+    /links\.length === 0 && \(hasGenericUrl \|\| hadUnsupportedStoreUrl\)\s*\n?\s*\? ':unsupported_store'/,
     'link de loja desconhecida não pode voltar a ser lido como regra de encaminhamento',
   )
+  // RCA 19/09/2026: oferta ENCERRADA no site de origem precisa de motivo
+  // próprio — sair como "não apoiamos essa loja" é falso (a loja é a Amazon) e
+  // manda a cliente esperar por algo que já existe.
+  assert.match(
+    fonte,
+    /allCandidatesFailedBecauseOfferEnded\(falhasDeDominioProprio\)/,
+    'o motivo real da falha precisa chegar ao painel, não só ao log',
+  )
+  assert.match(fonte, /':offer_ended_at_source'/)
 })
 
 test('findCandidateLinks reconhece loja não suportada, mas não convite de grupo', () => {
@@ -668,4 +729,20 @@ test('com DOIS candidatos o retry continua existindo (a fatia por link não pode
   assert.equal(resolved.length, 2)
   assert.equal(chamadasPorUrl.get('https://dicasdeamigas.com.br/p/um'), 2, 'o primeiro link precisa de segunda chance')
   assert.ok(resolved.find(r => r.from.endsWith('/p/um')).recoveredByRetry)
+})
+
+// ── RCA 2026-09-19: oferta ENCERRADA no site de origem. ─────────────────────
+
+
+
+test('oferta encerrada na origem NÃO pode sair como "loja sem suporte"', () => {
+  const encerrada = [{ reason: OFFER_ENDED_REASON }, { reason: OFFER_ENDED_REASON }]
+  assert.equal(allCandidatesFailedBecauseOfferEnded(encerrada), true)
+  // Um link que falhou por outro motivo significa que a oferta não acabou.
+  assert.equal(
+    allCandidatesFailedBecauseOfferEnded([{ reason: OFFER_ENDED_REASON }, { reason: 'tempo_esgotado' }]),
+    false,
+  )
+  assert.equal(allCandidatesFailedBecauseOfferEnded([]), false)
+  assert.equal(allCandidatesFailedBecauseOfferEnded(null), false)
 })

@@ -1638,7 +1638,7 @@ caminho só, e a cliente edita os textos pelo painel.
 
 | Peça | Onde |
 |---|---|
-| Catálogo (texto padrão de 34 e-mails) | `src/email/registry.js` |
+| Catálogo (texto padrão de todos os e-mails) | `src/email/registry.js` |
 | Formato do texto (parágrafo, lista, botão, `{{variavel}}`) | `src/email/markup.js` |
 | Moldura visual + rodapé de descadastro | `src/email/layout.js` |
 | Despachante (ÚNICO caminho de envio, com todas as travas) | `src/email/dispatcher.js` |
@@ -1770,52 +1770,96 @@ Contrato garantido por `test/email-contato-escuta.test.js`:
 - Sem cobrança, sem culpa, sem promessa de resultado (o teste falha em
   "culpa sua", "garantimos", "última chance" e afins).
 
-### Jornada de quem deixou o plano vencer (2026-09-07 — não regredir)
+### Jornada de acesso vencido: plano pago E teste grátis (2026-09-19 — não regredir)
 
-Depois do vencimento existiam **dois** e-mails (o aviso no dia e um "volta" na
-semana seguinte) e o assunto morria ali: passados ~9 dias a conta nunca mais
-recebia nada, com tudo dela ainda guardado no sistema. Quem não renovava no
-primeiro susto simplesmente sumia. Hoje são o aviso **mais cinco** e-mails
-espaçados.
+Duas histórias no mesmo lugar. **Plano pago:** desde 2026-09-07 havia o aviso do
+vencimento mais cinco e-mails espaçados (antes disso eram dois e o assunto
+morria em ~9 dias). **Teste grátis:** havia UM e-mail só (`teste_acabou`) e
+depois dele a conta nunca mais recebia nada, com tudo dela guardado no sistema —
+o buraco que este próprio arquivo declarava como conhecido.
+
+Em 2026-09-19 a dona do produto pediu a mesma cadência nos dois casos: e-mail
+nos dias **1, 3, 5 e 7** do vencimento, com um **voucher de 20% de desconto** no
+5º e a repetição dele no 7º, dizendo quanto prazo sobrou.
 
 | Peça | Onde |
 |---|---|
-| Os dias de cada etapa (PURO, sem banco) | `src/emailTriggers/expiredPlanJourney.js` |
+| Os dias de cada etapa do plano pago (PURO, sem banco) | `src/emailTriggers/expiredPlanJourney.js` |
+| Os dias de cada etapa do teste grátis (PURO) | `src/emailTriggers/expiredTrialJourney.js` |
+| Código, desconto e prazo do voucher (PURO, sem tabela) | `src/domain/payments/recoveryVoucher.js` |
 | Quem decide o e-mail do dia | `decideLifecycleEmail` em `lifecyclePolicy.js` |
-| Os textos | `src/email/registry.js` (grupo `plano`) |
+| Os textos | `src/email/registry.js` (grupos `plano` e `conta`) |
+| Conferir um código que a cliente mandou | `scripts/conferir-voucher.mjs` |
 | Diagnóstico "saiu ou não, e por quê" | `scripts/diag-email-vencimento.mjs` |
 
-Etapas, em dias desde o vencimento: `plano_venceu` **0-2** →
-`plano_vencido_primeiros_dias` **4-6** → `plano_vencido_volta` **8-10** →
-`plano_vencido_2_semanas` **12-14** → `plano_vencido_conta_guardada` **16-18** →
-`plano_vencido_ultimo_aviso` **20-22**. Depois disso, **nada**.
+Dias desde o vencimento do acesso:
+
+| Dia | Plano pago | Teste grátis |
+|---|---|---|
+| 0-2 | `plano_venceu` | `teste_acabou` |
+| 3-4 | `plano_vencido_primeiros_dias` | `teste_acabou_lembrete` |
+| 5-6 | `plano_vencido_voucher` 🎟 | `teste_voucher` 🎟 |
+| 7-8 | `plano_vencido_voucher_ultimos_dias` 🎟 | `teste_voucher_ultimos_dias` 🎟 |
+| 11-12 | `plano_vencido_volta` | — (a jornada do teste acaba no 8) |
+| 14-15 | `plano_vencido_2_semanas` | — |
+| 17-18 | `plano_vencido_conta_guardada` | — |
+| 21-22 | `plano_vencido_ultimo_aviso` | — |
+
+**O voucher não tem tabela, e é de propósito.** O código é derivado da conta +
+do dia em que o acesso venceu (HMAC), então o e-mail do 7º dia repete sozinho o
+código do 5º e a conferência é regerar. Guardar linha custaria migration e não
+responderia nada a mais — o resgate é **humano**: a cliente responde o e-mail ou
+chama no WhatsApp e a administradora aplica o desconto (Financeiro → "Registrar
+pagamento por fora", ou combinando o valor). Para conferir um código que chegou:
+
+```bash
+cd ~/wabot && node scripts/conferir-voucher.mjs <email> [CODIGO]
+cd ~/wabot && node scripts/conferir-voucher.mjs --codigo VOLTA20-XXXXXX
+```
 
 **Não regredir:**
 
-- **A jornada inteira cabe em ~3 semanas** (decisão da dona do produto,
-  2026-09-07 — a primeira versão terminava em 44 dias e ficou longe demais).
-  Quem não voltou nesse prazo não volta por insistência, e cada e-mail a mais
-  depois daqui custa mais reputação de domínio do que traz cliente. Teste falha
-  se alguém esticar de novo.
-- **As janelas são largas (3 dias), nunca um dia só.** A passada roda 1×/dia
-  ancorada na hora em que a API subiu — um deploy no horário errado, uma passada
-  que falhou ou um dia de API fora do ar pulariam a data exata e o e-mail **nunca
-  sairia**. Com a janela larga o envio atrasa, mas acontece.
-- **As janelas não se encostam.** O espaçamento É o vão entre elas; duas janelas
-  coladas mandam dois assuntos diferentes em dias seguidos, que é o jeito mais
-  rápido de virar spam ignorado. Teste falha se encostarem ou se sobrepuserem.
+- **O prazo do voucher é CALCULADO, nunca escrito no texto.** A janela de cada
+  etapa tem dois dias: "faltam 3 dias" fixo no corpo vira mentira no dia
+  seguinte. O texto usa `{{dias_do_voucher}}` e `{{voucher_vale_ate}}`, e a
+  validade conta do **vencimento** (não do envio) — senão um atraso da passada
+  diária mudaria o prazo no meio da conversa.
+- **Os dois e-mails do voucher levam o MESMO código.** Se a derivação deixar de
+  ser determinística, a cliente fica com dois códigos e nenhum bate com o que a
+  administradora regenera — o desconto vira discussão. Teste trava isso.
+- **Sem voucher confiável (conta sem id, data ilegível) o e-mail NÃO sai.**
+  Mandar código ou prazo inventado é pior que não mandar nada.
+- **Os dois e-mails do voucher levam o WhatsApp**, porque o resgate é por
+  conversa — e é nessa conversa que a gente descobre o que travou a renovação,
+  que é a informação que nenhum relatório dá.
+- **A jornada do plano pago cabe em ~3 semanas** (decisão da dona do produto,
+  2026-09-07). A do teste acaba no 8º dia. Quem não voltou nesse prazo não volta
+  por insistência, e cada e-mail a mais custa mais reputação de domínio do que
+  traz cliente. Teste falha se alguém esticar.
+- **Nenhuma janela é de um dia só.** A passada roda 1×/dia ancorada na hora em
+  que a API subiu — um deploy no horário errado, uma passada que falhou ou um
+  dia de API fora do ar pulariam a data exata e o e-mail **nunca sairia**.
+- **As janelas nunca se SOBREPÕEM** (cada dia devolve no máximo um e-mail). Até
+  2026-09-19 elas também não podiam se **encostar**, mas cadência de dois em
+  dois dias não cabe em janela com folga: hoje o **bloco inicial** (dias 1, 3, 5
+  e 7) encosta de propósito, e o **rabo** da jornada de plano pago mantém a
+  folga — ali dois assuntos em dias seguidos continuam sendo só spam. Teste
+  falha se alguém colar o rabo.
 - **A jornada TERMINA.** Insistir para sempre faz a pessoa marcar como spam — e
-  aí perdemos também os avisos que ela precisa receber. O último e-mail **diz**
-  que é o último.
+  aí perdemos também os avisos que ela precisa receber. O último e-mail de cada
+  jornada **diz** que é o último.
 - **Só o aviso do vencimento é `transactional`** (o robô parou, é obrigação de
-  serviço). Os cinco de recuperação são `marketing`: respeitam descadastro e
-  levam o link no rodapé. Sem isso, quem não quer mais ser chamada de volta só
+  serviço) — nos dois casos. Todo o resto é `marketing`: respeita descadastro e
+  leva o link no rodapé. Sem isso, quem não quer mais ser chamada de volta só
   teria a opção de marcar como spam.
-- **É jornada de plano PAGO.** Teste grátis tem trilha própria (`teste_acabou`)
-  e continua sem jornada depois — buraco conhecido, não corrigido aqui.
 - **Nenhum texto usa pressão falsa** ("última chance", "vamos apagar seus
   dados") — e é mentira: nada é apagado. Teste falha se voltar.
 - Custo: zero. Mesma passada diária, nenhum processo novo, **zero impacto de RAM**.
+
+Env opcional: `VOUCHER_CODE_SECRET` (cai em `JWT_SECRET` e, sem ele, numa
+constante — mantém teste e desenvolvimento sem env). Trocar a chave muda os
+códigos: um voucher já enviado deixa de conferir, então só trocar entre
+jornadas, não no meio de uma.
 
 ⚠️ **"O e-mail não está sendo enviado" tem SEIS causas com ações opostas** — SMTP
 desligado (aí nenhum e-mail sai, nem este), passada desligada, texto desligado na
@@ -1827,7 +1871,8 @@ cd ~/wabot && node scripts/diag-email-vencimento.mjs [<email>] [--dias=60]
 ```
 
 Ele separa os seis casos e ainda distingue "não saiu" de "não havia a quem
-mandar". Testes: `test/email-plano-vencido-jornada.test.js`.
+mandar". Testes: `test/email-plano-vencido-jornada.test.js`,
+`test/email-teste-vencido-jornada.test.js`, `test/voucher-recuperacao.test.js`.
 
 ### Recuperação de senha (não existia até 2026-08)
 
@@ -5750,7 +5795,22 @@ falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
   e porta fora de 80/443.
 - **Fracasso não é cacheado** (mesma lição do short link da Shopee); sucesso vale
   6h. **Fail-safe é não mexer no texto**: qualquer erro devolve o original.
-- **Teto de 2 links por mensagem, com tempo generoso por link E teto na mensagem
+- **O teto de links por mensagem NÃO é mais 2 — ele ERA a queixa** (RCA
+  2026-09-19). A cliente dizia, com estas palavras, "não está convertendo mais
+  de 2 links": o grupo de origem publica **todos** os produtos pelo site próprio
+  do dono, então numa oferta de 3-4 produtos os dois primeiros eram
+  desembrulhados e o terceiro em diante **nem chegava a ser tentado** — o
+  sanitizador apagava o link embrulhado e sobrava a linha do produto sem URL
+  ("Link do Livrinho :"). O número 2 nunca foi medição: veio de "2 candidatos de
+  4s cabem com folga". Hoje são **6** (`CUSTOM_DOMAIN_MAX_LINKS`), porque o
+  guarda de tempo passou a ser o orçamento da mensagem dividido entre os links
+  (item acima) — o teto virou "quantos produtos uma oferta real tem", não um
+  número escolhido pelo relógio. ⚠️ **O que vigiar depois de subir:**
+  `timeout:incoming` em mensagem com muitos links. O desembrulho e a conversão
+  dividem os mesmos 25s de `MSG_QUEUE_TIMEOUT_MS`, e a conversão é serializada
+  por loja — 6 links da MESMA loja podem chegar perto do teto. Se aparecer, o
+  assunto é o teto de 25s, não o número de links.
+- **Tempo generoso por link E teto na mensagem
   inteira.** Medido em staging (2026-09-13): o MESMO endereço respondeu em
   **568ms** numa chamada e **estourou 4s** na seguinte — o site oscila muito a
   partir do servidor. Confirmado em produção (2026-09-14): os DNS IPv6 da
@@ -5760,8 +5820,8 @@ falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
   de segurança nunca repetem. Por tentativa o teto segue 8s
   (`CUSTOM_DOMAIN_FETCH_TIMEOUT_MS`); na mensagem inteira são 13s
   (`CUSTOM_DOMAIN_TOTAL_BUDGET_MS`), preservando ~12s dos 25s de preparo para
-  converter e buscar a foto. O teto é da mensagem inteira, inclusive com dois
-  links — não multiplicar por candidato. O log traz `attempts` e
+  converter e buscar a foto. O teto é da mensagem inteira, qualquer que seja o
+  número de links — não multiplicar por candidato. O log traz `attempts` e
   `recoveredByRetry`, para medir recuperação sem esconder a primeira falha.
 - **O orçamento da mensagem é DIVIDIDO entre os links, nunca gasto por ordem de
   chegada** (RCA 2026-09-18). Sem divisão, o PRIMEIRO link embrulhado consumia o
@@ -5788,7 +5848,8 @@ falha no `bot.log`. "Some o link e fica só o texto" era o único sinal.
 
 Envs (todas opcionais): `CUSTOM_DOMAIN_LINK_RESOLVE` (default LIGADO; só o valor
 exatamente `false` desliga), `CUSTOM_DOMAIN_FETCH_TIMEOUT_MS` (8000),
-`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (13000), `CUSTOM_DOMAIN_MAX_ATTEMPTS` (2),
+`CUSTOM_DOMAIN_TOTAL_BUDGET_MS` (13000), `CUSTOM_DOMAIN_MAX_LINKS` (6),
+`CUSTOM_DOMAIN_MAX_ATTEMPTS` (2),
 `CUSTOM_DOMAIN_MAX_BYTES` (512KB),
 `CUSTOM_DOMAIN_CACHE_TTL_MS` (6h). Ajustar o tempo **não exige deploy** — é
 `.env` + `pm2 delete`/`start` (pegadinha #1).
@@ -5841,6 +5902,38 @@ real (`dicasdeamigas.com.br`), não deduzidos:
   ações opostas.
 
 Teste: `test/custom-domain-link-resolver.test.js`.
+
+### "Não fazemos conversão para essa loja" numa oferta da AMAZON (RCA 2026-09-19)
+
+Cliente mandou print da aba Envios: oferta de Palmolive, cinco links do site do
+dono do grupo, marcada como **ignorada** com o texto *"ainda não fazemos
+conversão automática de afiliado para essa loja"*. A loja era a **Amazon**, que
+convertemos desde sempre.
+
+**Medido nos cinco links reais, um a um:** todos respondem **307 →
+`/promocao-encerrada`**. A promoção tinha saído do ar no site de quem publicou
+antes de o robô abrir o link. Ou seja: o robô agiu **certo** ao não publicar
+(a guarda de página de lista impediu que saísse um produto aleatório). O que
+estava errado era o que a cliente LIA.
+
+**Não regredir:**
+
+- **"A oferta acabou" tem motivo próprio** (`:offer_ended_at_source`), decidido
+  por `allCandidatesFailedBecauseOfferEnded` — exige que **TODOS** os links
+  tenham caído na página de encerrada; um único link com outra falha significa
+  que a oferta não acabou. As duas frases pedem ações opostas: uma manda
+  esperar por um suporte de loja que **já existe**, a outra diz que não há nada
+  a fazer. Mesma família do RCA de 13/09, em que o motivo genérico mandava a
+  cliente mexer na configuração que estava certa.
+- **O motivo precisa CHEGAR ao painel, não só ao log.**
+  `unwrapCustomDomainOfferLinks` devolve `{ text, failures }` por isso. Guarda
+  estrutural no teste.
+- ⚠️ **Esta sessão e outra corrigiram o MESMO teto de candidatos em paralelo**
+  (pegadinha #10). O teto vencedor é o de `CUSTOM_DOMAIN_MAX_LINKS` (6), da
+  outra sessão — não reintroduzir uma segunda env para a mesma coisa.
+
+Testes: `test/custom-domain-link-resolver.test.js`, `test/painel-logs-copy.test.js`,
+`test/mobile-logs.test.js`.
 
 ### Nem todo site de domínio próprio entrega o link (medição antes de investir)
 

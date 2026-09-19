@@ -1736,3 +1736,144 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   .tc-acoes .pnl-btn { flex: 1 1 auto; justify-content: center; }
   .tc-banner { padding: 14px; gap: 12px; }
 }
+
+/* ── Espelhamento: assistente e "como funciona" (2026-09-19) ─────────────
+ * O assistente liga uma origem já cadastrada a um ou mais destinos. Ele NÃO
+ * cadastra grupo nem edita regra de envio — as duas coisas moram em
+ * /painel/grupos, e a ajuda do rodapé do card leva para lá.
+ */
+.esp-wizard { display: flex; flex-direction: column; gap: 14px; }
+.esp-wizard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.esp-wizard-head > div { min-width: 0; flex: 1 1 260px; }
+
+.esp-wizard-opcoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.esp-opcao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--pnl-radius-sm);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.esp-opcao:hover { border-color: var(--accent-strong); background: color-mix(in oklab, var(--accent) 10%, var(--surface)); }
+.esp-opcao.is-on { border-color: var(--accent-strong); background: color-mix(in oklab, var(--accent) 20%, var(--surface)); }
+.esp-opcao-nome { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.esp-opcao-tag {
+  flex-shrink: 0;
+  font-size: 10.5px; font-weight: 700;
+  padding: 3px 8px; border-radius: 999px;
+  background: var(--bg-soft); color: var(--ink-soft);
+}
+
+.esp-wizard-acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.esp-wizard-ajuda {
+  display: grid; gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px; line-height: 1.55; color: var(--ink-soft);
+}
+.esp-wizard-ajuda p { margin: 0; }
+.esp-wizard-ajuda a { color: var(--accent-strong); font-weight: 600; }
+
+.esp-passos > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink); }
+.esp-passos-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 16px; }
+.esp-passo { padding: 14px; border: 1px solid var(--line); border-radius: var(--pnl-radius-sm); background: var(--surface); }
+.esp-passo strong { display: block; font-size: 13.5px; margin-top: 10px; }
+.esp-passo p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); }
+.esp-passo-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  font-size: 12px; font-weight: 700;
+  background: color-mix(in oklab, var(--accent) 28%, var(--surface));
+  color: var(--accent-strong);
+}
+
+@media (max-width: 480px) {
+  .esp-wizard-acoes .pnl-btn { flex: 1 1 auto; justify-content: center; }
+}
+
+/* --- Cartão de UM espelhamento (mockup 06) -------------------------------
+ * Um cartão por origem, na horizontal: cabeçalho (quem é, o que saiu hoje,
+ * Editar) e corpo "LÊ DE → PUBLICA EM". No celular a seta deita e as duas
+ * metades viram linhas — girar a seta é o que mantém a leitura de fluxo sem
+ * rolagem lateral. */
+.esp-cards { display: grid; gap: 14px; }
+
+.esp-card {
+  border: 1px solid var(--line);
+  border-radius: var(--pnl-radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.esp-card-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in oklab, var(--surface-2, var(--surface)) 60%, var(--surface));
+}
+.esp-card-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; flex: none;
+  border-radius: var(--pnl-radius-sm);
+  background: color-mix(in oklab, var(--accent) 22%, var(--surface));
+  color: var(--accent-strong);
+}
+.esp-card-id { min-width: 0; flex: 1; }
+.esp-card-nome {
+  display: block;
+  font-weight: 650; font-size: 14.5px; color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.esp-card-sub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--ink-soft); }
+
+.esp-card-corpo {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+}
+.esp-lado { min-width: 0; }
+.esp-rotulo {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+  color: var(--ink-soft);
+}
+.esp-rotulo.is-dest { color: var(--accent-strong); }
+
+.esp-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.esp-pill {
+  display: inline-block;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12.5px; font-weight: 600; color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.esp-pill.is-dest {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  background: color-mix(in oklab, var(--accent) 16%, var(--surface));
+  color: var(--accent-strong);
+}
+
+.esp-lojas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.esp-loja {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+}
+
+.esp-seta { display: inline-flex; color: var(--ink-soft); }
+.esp-nota { margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
+.esp-vazio { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+  .esp-card-corpo { grid-template-columns: 1fr; gap: 10px; }
+  .esp-seta { transform: rotate(90deg); justify-self: center; }
+}
