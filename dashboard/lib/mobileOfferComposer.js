@@ -142,30 +142,99 @@ export function stripAutomationTemplatePlaceholders(text = '') {
     .trim()
 }
 
+// RCA 2026-09-19 (cliente julianepumuceno16@gmail.com): oferta do "Criar oferta"
+// saiu no grupo com o texto cru "Por {preço}" e com a decoração vazia "~De: ~ |".
+// Duas causas, as duas aqui:
+//   1. valor vazio caía no PRÓPRIO token ("price || '{preço}'"), o que faz
+//      sentido na prévia do editor e nunca pode chegar ao grupo;
+//   2. a limpeza de preço antigo vazio era escrita à mão para os DOIS templates
+//      de fábrica — qualquer template customizado ficava com a decoração órfã.
+// Hoje todo valor vazio vira uma marca invisível e a limpeza é genérica: o
+// trecho (entre "|") que só tinha aquele valor some inteiro; se a linha inteira
+// era só isso, a linha some. Nunca inventamos texto no lugar do preço —
+// publicar preço errado é pior que publicar oferta sem preço, e o painel avisa.
+const EMPTY_MARK = '\u0000'
+const VALUE_OPEN = '\u0001'
+const VALUE_CLOSE = '\u0002'
+const SENTINELS_RE = /[\u0000\u0001\u0002]/g
+
+function markValue(value) {
+  const text = String(value ?? '').replace(SENTINELS_RE, '').trim()
+  return text ? `${VALUE_OPEN}${text}${VALUE_CLOSE}` : EMPTY_MARK
+}
+
+// Quebra a linha nos "|" de fora dos valores substituídos — título de produto
+// com "|" no meio não pode ser partido ao meio pela limpeza.
+function splitTemplateSegments(line) {
+  const segments = []
+  let current = ''
+  let insideValue = false
+  for (const char of line) {
+    if (char === VALUE_OPEN) insideValue = true
+    else if (char === VALUE_CLOSE) insideValue = false
+    if (char === '|' && !insideValue) {
+      segments.push(current)
+      current = ''
+      continue
+    }
+    current += char
+  }
+  segments.push(current)
+  return segments
+}
+
+// Dentro de um trecho que SOBROU (tem valor de verdade), tira só a decoração
+// que ficou envolvendo o valor vazio: ~tachado~, (parênteses) e *negrito*.
+function stripEmptyDecoration(segment) {
+  const dropWhenOnlyEmpty = (match) => (match.includes(VALUE_OPEN) ? match : '')
+  return segment
+    .replace(/~[^~\n]*\u0000[^~\n]*~/g, dropWhenOnlyEmpty)
+    .replace(/\([^()\n]*\u0000[^()\n]*\)/g, dropWhenOnlyEmpty)
+    .replace(/\*[^*\n]*\u0000[^*\n]*\*/g, dropWhenOnlyEmpty)
+    .replace(/\u0000/g, '')
+}
+
+function cleanupEmptyValues(text) {
+  return String(text)
+    .split('\n')
+    .map((line) => {
+      if (!line.includes(EMPTY_MARK)) return line
+      const segments = splitTemplateSegments(line)
+      const kept = segments.filter((segment) => !(segment.includes(EMPTY_MARK) && !segment.includes(VALUE_OPEN)))
+      if (!kept.length) return ''
+      const rebuilt = kept.map(stripEmptyDecoration).join('|')
+      return kept.length === segments.length ? rebuilt : rebuilt.trim()
+    })
+    .join('\n')
+}
+
 export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '', couponLine = '', textPrice = '' } = {}) {
-  let preparedBody = body
+  let preparedBody = String(body ?? '').replace(SENTINELS_RE, '')
   if (!couponLine) preparedBody = preparedBody.replace(/^[ \t]*\{linhaDeCupom\}[ \t]*(?:\r?\n|$)/gm, '')
   if (!textPrice) preparedBody = preparedBody.replace(/^[ \t]*\{preçoDoTexto\}[ \t]*(?:\r?\n|$)/gm, '')
   let result = preparedBody
-    .replace(/\{produto\}/g, title || '{produto}')
-    .replace(/\{preço\}/g, price || '{preço}')
-    .replace(/\{link\}/g, link || '{link}')
-    .replace(/\{desconto\}/g, discount || '')
-    .replace(/\{rating\}/g, rating || '')
-    .replace(/\{vendas\}/g, sales || '')
-    .replace(/\{loja\}/g, storeName || '')
-    .replace(/\{linhaDeCupom\}/g, couponLine || '')
-    .replace(/\{preçoDoTexto\}/g, textPrice || '')
+    .replace(/\{produto\}/g, markValue(title))
+    .replace(/\{preço\}/g, markValue(price))
+    .replace(/\{link\}/g, markValue(link))
+    .replace(/\{desconto\}/g, markValue(discount))
+    .replace(/\{rating\}/g, markValue(rating))
+    .replace(/\{vendas\}/g, markValue(sales))
+    .replace(/\{loja\}/g, markValue(storeName))
+    .replace(/\{linhaDeCupom\}/g, markValue(couponLine))
+    .replace(/\{preçoDoTexto\}/g, markValue(textPrice))
   if (oldPrice) {
-    result = result.replace(/\{preço_de\}/g, oldPrice)
+    result = result.replace(/\{preço_de\}/g, markValue(oldPrice))
   } else {
+    // Formas dos dois templates de fábrica: preservadas para a saída deles não
+    // mudar. Template customizado cai na limpeza genérica logo abaixo.
     result = result
-      .replace(/💰\s*~\{preço_de\}~\s*→\s*\*([^*]+)\*\s*\(\*?\s*\*?\)/g, '💰 *$1*')
+      .replace(/💰\s*~\{preço_de\}~\s*→\s*\*([^*\u0000]+)\*\s*\(\*?[\s\u0000]*\*?\)/g, '💰 *$1*')
       .replace(/De \{preço_de\} por \*([^*]+)\*/g, '*$1*')
       .replace(/^\s*~?De \{preço_de\}~?\s*$/gm, '')
-      .replace(/\{preço_de\}/g, '')
+      .replace(/\{preço_de\}/g, EMPTY_MARK)
   }
-  return result
+  return cleanupEmptyValues(result)
+    .replace(SENTINELS_RE, '')
     .replace(/\(\*?\s*\*?\)/g, '')
     .replace(/^\s*\|\s*$/gm, '')
     .replace(/^\s*\|\s*/gm, '')
