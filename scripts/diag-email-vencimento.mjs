@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// "O e-mail de plano vencido está saindo?" — read-only, roda no diretório do
-// ambiente.
+// "O e-mail de acesso vencido está saindo?" — read-only, roda no diretório do
+// ambiente. Cobre as DUAS jornadas: plano pago vencido e teste grátis que
+// acabou (esta última existe desde 2026-09-19; antes a conta em teste recebia
+// um e-mail só e nunca mais nada).
 //
 //   cd ~/wabot && node scripts/diag-email-vencimento.mjs
 //   cd ~/wabot && node scripts/diag-email-vencimento.mjs <email> --dias=60
@@ -19,6 +21,7 @@ import db from '../src/db.js'
 import { isEmailConfigured } from '../src/email/mailer.js'
 import { getTemplateDefinition } from '../src/email/registry.js'
 import { EXPIRED_PLAN_JOURNEY, resolveExpiredPlanEmail } from '../src/emailTriggers/expiredPlanJourney.js'
+import { EXPIRED_TRIAL_JOURNEY, resolveExpiredTrialEmail } from '../src/emailTriggers/expiredTrialJourney.js'
 import { daysUntil } from '../src/emailTriggers/lifecyclePolicy.js'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -30,7 +33,13 @@ const dias = Number((args.find((a) => a.startsWith('--dias=')) ?? '').split('=')
 
 const now = new Date()
 const desde = new Date(now.getTime() - dias * MS_PER_DAY)
-const SLUGS = EXPIRED_PLAN_JOURNEY.map((etapa) => etapa.slug)
+// As duas jornadas juntas: a pergunta "não chegou e-mail nenhum" é a mesma para
+// quem pagou e para quem só testou, e as duas têm as mesmas seis causas.
+const JORNADAS = [
+  { nome: 'plano pago vencido', etapas: EXPIRED_PLAN_JOURNEY },
+  { nome: 'teste grátis acabou', etapas: EXPIRED_TRIAL_JOURNEY },
+]
+const SLUGS = JORNADAS.flatMap((j) => j.etapas.map((etapa) => etapa.slug))
 
 function titulo(texto) {
   console.log(`\n${texto}\n${'-'.repeat(texto.length)}`)
@@ -57,13 +66,16 @@ async function main() {
 
   // [2] Alguém desligou o texto pelo painel? Override é a causa mais fácil de
   //     esquecer, porque não aparece em lugar nenhum do log.
-  titulo('[2] Os textos da jornada estão ligados?')
-  for (const etapa of EXPIRED_PLAN_JOURNEY) {
-    const definition = getTemplateDefinition(etapa.slug)
-    const override = await db.emailTemplate.findUnique({ where: { slug: etapa.slug } }).catch(() => null)
-    const estado = override && override.enabled === false ? 'DESLIGADO no painel' : 'ligado'
-    const editado = override ? ' (texto editado no painel)' : ''
-    linha(`dia ${etapa.de}-${etapa.ate} · ${etapa.slug}`, `${estado}${editado} · ${definition ? definition.category : 'SEM TEXTO NO CATÁLOGO'}`)
+  titulo('[2] Os textos das jornadas estão ligados?')
+  for (const jornada of JORNADAS) {
+    console.log(`  · ${jornada.nome}`)
+    for (const etapa of jornada.etapas) {
+      const definition = getTemplateDefinition(etapa.slug)
+      const override = await db.emailTemplate.findUnique({ where: { slug: etapa.slug } }).catch(() => null)
+      const estado = override && override.enabled === false ? 'DESLIGADO no painel' : 'ligado'
+      const editado = override ? ' (texto editado no painel)' : ''
+      linha(`dia ${etapa.de}-${etapa.ate} · ${etapa.slug}`, `${estado}${editado} · ${definition ? definition.category : 'SEM TEXTO NO CATÁLOGO'}`)
+    }
   }
 
   // [3] O que de fato saiu (ou foi barrado, e por quê).
@@ -91,7 +103,8 @@ async function main() {
   const vencidos = await db.user.findMany({
     where: {
       status: { notIn: ['banned', 'suspended'] },
-      plan: { in: [...PAID_PLANS] },
+      // Sem filtrar por plano: quem só testou também tem jornada desde
+      // 2026-09-19, e filtrar aqui era o que escondia essas contas.
       accessExpiresAt: { lt: now, gte: new Date(now.getTime() - 90 * MS_PER_DAY) },
     },
     select: { id: true, email: true, plan: true, accessExpiresAt: true },
@@ -100,15 +113,16 @@ async function main() {
 
   const foco = alvo ? vencidos.filter((u) => u.email?.toLowerCase() === alvo.toLowerCase()) : vencidos
   if (alvo && !foco.length) {
-    console.log(`  Nenhuma conta PAGA vencida nos últimos 90 dias com o e-mail ${alvo}.`)
-    console.log('  (conta em teste grátis tem trilha própria e não entra nesta jornada)')
+    console.log(`  Nenhuma conta com acesso vencido nos últimos 90 dias com o e-mail ${alvo}.`)
   }
-  linha('Contas pagas vencidas (90d):', vencidos.length)
+  linha('Contas com acesso vencido (90d):', vencidos.length)
   console.log('')
   for (const user of foco.slice(0, alvo ? 5 : 20)) {
     const vencidoHa = -daysUntil(user.accessExpiresAt, now)
-    const hoje = resolveExpiredPlanEmail(vencidoHa)
-    console.log(`  ${user.email} · ${user.plan} · venceu há ${vencidoHa}d · hoje: ${hoje ?? '(fora de janela)'}`)
+    const pago = PAID_PLANS.has(String(user.plan ?? '').toLowerCase())
+    const hoje = pago ? resolveExpiredPlanEmail(vencidoHa) : resolveExpiredTrialEmail(vencidoHa)
+    const jornada = pago ? 'plano pago' : 'teste grátis'
+    console.log(`  ${user.email} · ${user.plan} (${jornada}) · venceu há ${vencidoHa}d · hoje: ${hoje ?? '(fora de janela)'}`)
     const enviados = await db.emailSendLog.findMany({
       where: { userId: user.id, slug: { in: SLUGS } },
       orderBy: { createdAt: 'desc' },

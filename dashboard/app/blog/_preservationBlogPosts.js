@@ -400,8 +400,8 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-converter-link-de-afiliado-automaticamente-whatsapp': {
     slug: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp',
-    title: 'Converter link de afiliado sozinho: 4 lojas',
-    description: 'Como o link de produto ou cupom vira o seu link de afiliado na hora do envio, em Shopee, Amazon, Mercado Livre e Magalu — sem copiar e colar oferta por oferta.',
+    title: 'Converter link de afiliado sozinho: 6 lojas',
+    description: 'Como o link de produto ou cupom vira o seu link de afiliado na hora do envio, em 6 lojas, de Shopee e Mercado Livre a SHEIN e AliExpress.',
     eyebrow: 'Conversão de link · Automação',
     origin: 'blog_como_converter_link_de_afiliado_automaticamente_whatsapp',
     usePersonAuthor: true,

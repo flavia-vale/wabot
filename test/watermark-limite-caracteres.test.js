@@ -2,8 +2,16 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { WATERMARK_MAX_CHARS, WATERMARK_COLORS, normalizeWatermarkConfig } from '../src/core/destinationWatermark.js'
-import { WATERMARK_INPUT_MAX_CHARS, WATERMARK_INPUT_COLORS, isWatermarkTextTooLong } from '../src/core/watermarkInput.js'
+import { WATERMARK_MAX_CHARS, WATERMARK_COLORS, WATERMARK_SIZES, normalizeWatermarkConfig } from '../src/core/destinationWatermark.js'
+import {
+  WATERMARK_INPUT_MAX_CHARS,
+  WATERMARK_INPUT_COLORS,
+  WATERMARK_INPUT_SIZES,
+  WATERMARK_INPUT_POSITIONS,
+  isWatermarkTextTooLong,
+  isValidWatermarkSize,
+  isValidWatermarkPosition,
+} from '../src/core/watermarkInput.js'
 
 // O limite de caracteres da marca vive em TRÊS lugares que não podem divergir:
 // o renderizador (fonte da verdade), a validação da API (core/watermarkInput.js)
@@ -28,6 +36,22 @@ test('a API valida com o MESMO limite e as MESMAS cores do renderizador', () => 
   assert.deepEqual([...WATERMARK_INPUT_COLORS].sort(), Object.keys(WATERMARK_COLORS).sort())
   assert.equal(isWatermarkTextTooLong('a'.repeat(WATERMARK_MAX_CHARS)), false)
   assert.equal(isWatermarkTextTooLong('a'.repeat(WATERMARK_MAX_CHARS + 1)), true)
+})
+
+// Tamanho e posição: mesma regra do limite/cor acima — a lista da API espelha
+// a do renderizador e não pode divergir.
+test('a API valida com os MESMOS tamanhos do renderizador', () => {
+  assert.deepEqual([...WATERMARK_INPUT_SIZES].sort(), [...WATERMARK_SIZES].sort())
+  for (const size of WATERMARK_INPUT_SIZES) assert.equal(isValidWatermarkSize(size), true)
+  assert.equal(isValidWatermarkSize('huge'), false)
+  assert.equal(isValidWatermarkSize(undefined), false)
+})
+
+test('a API valida as MESMAS posições aceitas pelo renderizador', () => {
+  const posicoesDoRenderizador = ['center', 'top-left', 'top-right', 'bottom-left', 'bottom-right']
+  assert.deepEqual([...WATERMARK_INPUT_POSITIONS].sort(), posicoesDoRenderizador.sort())
+  for (const position of WATERMARK_INPUT_POSITIONS) assert.equal(isValidWatermarkPosition(position), true)
+  assert.equal(isValidWatermarkPosition('diagonal'), false)
 })
 
 test('a rota com marca valida pelo lugar único e não carrega o renderizador', () => {
@@ -92,4 +116,24 @@ test('a tela oferece a escolha de cor apenas no modo com marca', () => {
   const bloco = page.slice(Math.max(0, start - 400), start + 700)
   assert.match(bloco, /watermarkMode &&/, 'o seletor de cor só aparece quando a marca está ligada')
   assert.match(bloco, /value="white"[\s\S]*?value="black"/)
+})
+
+test('a tela oferece a escolha de tamanho apenas no modo com marca', () => {
+  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const start = page.indexOf('Tamanho da marca d&apos;água')
+  assert.notEqual(start, -1, 'seletor de tamanho não encontrado na tela')
+  const bloco = page.slice(Math.max(0, start - 400), start + 700)
+  assert.match(bloco, /watermarkMode &&/, 'o seletor de tamanho só aparece quando a marca está ligada')
+  assert.match(bloco, /value="small"[\s\S]*?value="medium"[\s\S]*?value="large"/)
+})
+
+test('a tela oferece a escolha de posição apenas no modo com marca, com as 5 posições do renderizador', () => {
+  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const start = page.indexOf('Posição da marca d&apos;água')
+  assert.notEqual(start, -1, 'seletor de posição não encontrado na tela')
+  const bloco = page.slice(Math.max(0, start - 400), start + 900)
+  assert.match(bloco, /watermarkMode &&/, 'o seletor de posição só aparece quando a marca está ligada')
+  for (const position of WATERMARK_INPUT_POSITIONS) {
+    assert.match(bloco, new RegExp(`value="${position}"`), `posição ${position} precisa estar na tela`)
+  }
 })

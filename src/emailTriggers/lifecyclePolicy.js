@@ -10,13 +10,17 @@
 // `dedupDays` de cada e-mail no catálogo, aplicado pelo despachante.
 
 import { wasStoppedByUser } from '../email/accountActivity.js'
-import { resolveExpiredPlanEmail } from './expiredPlanJourney.js'
+import { resolveExpiredPlanStep } from './expiredPlanJourney.js'
+import { resolveExpiredTrialStep } from './expiredTrialJourney.js'
+import { buildRecoveryVoucher } from '../domain/payments/recoveryVoucher.js'
 import { buildTrialProofVars, shouldSendTrialProof } from './trialProof.js'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const MS_PER_HOUR = 60 * 60 * 1000
 
-const PAID_PLANS = new Set(['basic', 'pro'])
+// `premium` é plano pago: sem ele aqui a cliente do Instagram Stories caía
+// na jornada de fim de TESTE GRÁTIS e na de plano vencido errada.
+const PAID_PLANS = new Set(['basic', 'pro', 'premium'])
 
 export function formatDateBR(value, timeZone = 'America/Sao_Paulo') {
   if (!value) return ''
@@ -93,6 +97,41 @@ export const WHATSAPP_DESCONECTADO_MAX_HORAS = Math.max(
   Number(process.env.EMAIL_WHATSAPP_DESCONECTADO_MAX_HORAS || 30 * 24)
 )
 
+/**
+ * Monta a decisão de uma etapa de jornada de acesso vencido (plano pago ou
+ * teste grátis). A etapa marcada com `voucher` recebe junto o código, o
+ * desconto e o prazo.
+ *
+ * O prazo é CALCULADO aqui, não escrito no texto: a janela de cada etapa tem
+ * dois dias, então "faltam 3 dias" sairia errado no segundo deles.
+ *
+ * Sem voucher confiável (conta sem id, data de vencimento ilegível) devolve
+ * null: melhor não mandar e-mail de desconto nenhum do que mandar um com código
+ * ou prazo inventado. Quem chama trata isso como "esta etapa não tem e-mail
+ * hoje" e segue para os gatilhos de menor prioridade.
+ */
+function buildJourneyDecision(passo, snapshot, now) {
+  const vars = { data_vencimento: formatDateBR(snapshot.accessExpiresAt) }
+  if (!passo.voucher) return { slug: passo.slug, vars }
+
+  const voucher = buildRecoveryVoucher({
+    userId: snapshot.id,
+    expiredAt: snapshot.accessExpiresAt,
+    now,
+  })
+  if (!voucher || voucher.diasRestantes <= 0) return null
+  return {
+    slug: passo.slug,
+    vars: {
+      ...vars,
+      codigo_voucher: voucher.code,
+      desconto_voucher: `${voucher.percent}%`,
+      voucher_vale_ate: formatDateBR(voucher.validUntil),
+      dias_do_voucher: String(voucher.diasRestantes),
+    },
+  }
+}
+
 export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStartAt = null } = {}) {
   if (!snapshot) return null
   if (snapshot.status === 'banned' || snapshot.status === 'suspended') return null
@@ -120,15 +159,21 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
         }
       }
       // Já venceu: a jornada de recuperação decide o e-mail do dia (aviso no
-      // vencimento e os cinco espaçados depois dele).
+      // vencimento, os dois voucher e os espaçados depois deles).
       if (restam <= 0) {
-        const passo = resolveExpiredPlanEmail(-restam)
-        if (passo) {
-          return { slug: passo, vars: { data_vencimento: formatDateBR(snapshot.accessExpiresAt) } }
-        }
+        const passo = resolveExpiredPlanStep(-restam)
+        const decision = passo ? buildJourneyDecision(passo, snapshot, now) : null
+        if (decision) return decision
       }
     } else {
-      if (restam <= 0 && restam >= -2) return { slug: 'teste_acabou', vars: {} }
+      // Acabou: mesma ideia da jornada do plano pago, com textos de quem ainda
+      // não assinou nenhuma vez. Antes daqui só existia o aviso do primeiro
+      // dia, e depois dele a conta nunca mais recebia nada.
+      if (restam <= 0) {
+        const passo = resolveExpiredTrialStep(-restam)
+        const decision = passo ? buildJourneyDecision(passo, snapshot, now) : null
+        if (decision) return decision
+      }
       // D1/D2 do plano de ativação de 2026-09-08: a prova do que o robô já fez,
       // no 3º dia do teste. Fica ANTES da contagem regressiva na ordem porque
       // `restam === 4` não colide com nenhum dos avisos dela (3, 2 e 1) — e

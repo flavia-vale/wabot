@@ -13,24 +13,32 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
 import { readFileSync, mkdirSync } from 'fs'
-import { rm, rename, writeFile, readdir } from 'fs/promises'
+import { rm, rename, writeFile, readdir, access } from 'fs/promises'
 import { dirname } from 'path'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
+import { pathToFileURL } from 'node:url'
 
 import logger from './logger.js'
 import { detectLinks } from './detector.js'
+import { resolveCustomDomainLinks, findCandidateLinks } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
-import { fetchProductImage, fetchImageBuffer, normalizeImageForWhatsApp } from './converters/imageScrapers.js'
+import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
 import { buildInlineThumbnail } from './core/inlineThumbnail.js'
+import { composePreviewCardImage } from './core/previewCardCanvas.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
 import { shouldUseOriginPhotoFallback } from './core/previewImageFallbackPolicy.js'
+import { upscaleCardPhotoIfTiny } from './core/cardPhoto.js'
 import { resolveLinkKind } from './converters/linkKind.js'
-import { shouldUseCouponBrandCard } from './converters/couponBrandCardPolicy.js'
+import { shouldUseCouponBrandCard, resolveCouponTextSignal } from './converters/couponBrandCardPolicy.js'
+import { isDirectVitrineShare } from './converters/mercadolivre.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { appendRelayFooter } from './core/relayFooter.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
+import { captureInstagramMirror } from './instagram/mirroring/capture.js'
 import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from './core/storePhotoPreference.js'
 import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, effectiveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
@@ -93,21 +101,70 @@ import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
-import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES } from './core/receptionHealth.js'
+import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
+import sharp from 'sharp'
+import { applySharpTuning } from './core/sharpTuning.js'
 
-const userId = process.env.BOT_USER_ID
+// Cache e pool de threads do libvips. Roda UMA vez, no load do módulo, porque o
+// ajuste é global do processo (não por operação). Sem env configurada é no-op e
+// o Sharp fica com os padrões dele — ver src/core/sharpTuning.js.
+//
+// ⚠️ Depende só de imports; NÃO referenciar constante de escopo de módulo aqui.
+// Uma linha acima de qualquer `const` deste arquivo estoura ReferenceError (TDZ)
+// no load e mata TODO worker no boot — foi o que quase aconteceu com o log dos
+// filtros de recepção (ver AGENTS.md).
+const sharpTuning = applySharpTuning(sharp, process.env)
+if (!sharpTuning.skipped) {
+  logger.info({ ...sharpTuning.applied, erro: sharpTuning.error }, 'Ajuste de memória do Sharp aplicado')
+}
+
+export async function createBotSessionRuntime({
+  userId = process.env.BOT_USER_ID,
+  sendIpc = message => process.send?.(message),
+  exitRuntime = code => process.exit(code),
+  registerProcessHandlers = false,
+  autoStart = false,
+  sharedLimits = {},
+  ownerInstance = process.env.NODE_APP_INSTANCE ?? '0',
+} = {}) {
+const withLimit = (semaphore, task) => semaphore?.run ? semaphore.run(task) : task()
+const fetchProductImage = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchProductImageBase(...args))
+const fetchImageBuffer = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchImageBufferBase(...args))
+const normalizeImageForWhatsApp = (...args) => withLimit(sharedLimits.sharpSemaphore, () => normalizeImageForWhatsAppBase(...args))
 const WORKER_STARTED_AT = Date.now()
 const workerMetadata = buildWorkerMetadata({ userId, startedAt: WORKER_STARTED_AT })
+const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 })
+eventLoopDelay.enable()
+
+function getRuntimeMemoryMetrics() {
+  const memory = process.memoryUsage()
+  const nsToMs = value => Number.isFinite(value) ? Math.round((value / 1e6) * 100) / 100 : null
+  return {
+    pid: process.pid,
+    uptimeSeconds: Math.round(process.uptime()),
+    rssBytes: memory.rss,
+    heapUsedBytes: memory.heapUsed,
+    heapTotalBytes: memory.heapTotal,
+    externalBytes: memory.external,
+    arrayBuffersBytes: memory.arrayBuffers,
+    eventLoopDelayMs: {
+      p50: nsToMs(eventLoopDelay.percentile(50)),
+      p95: nsToMs(eventLoopDelay.percentile(95)),
+      p99: nsToMs(eventLoopDelay.percentile(99)),
+      max: nsToMs(eventLoopDelay.max),
+    },
+  }
+}
 
 // Guardas de processo: um throw assíncrono benigno do Baileys num socket já
 // fechado (ex.: 428 "Connection Closed" disparado por sendRetryRequest após um
 // conflito/replaced 440) não pode matar o worker — senão a reconexão automática
 // agendada no connection.update nunca roda e a sessão fica offline até religar
 // manual. Ver src/core/workerCrashGuard.js.
-installWorkerCrashGuards({
+if (registerProcessHandlers) installWorkerCrashGuards({
   logger,
-  onFatal: () => { setTimeout(() => process.exit(1), 50).unref?.() },
+  onFatal: () => { setTimeout(() => exitRuntime(1), 50).unref?.() },
 })
 
 
@@ -226,8 +283,8 @@ async function globalDedupCheckAndSet(key, ttlMs) {
     return { duplicate: false }
   }
 }
-if (!userId) { logger.error('BOT_USER_ID não definido'); process.exit(1) }
-const OWNER_INSTANCE = process.env.NODE_APP_INSTANCE ?? '0'
+if (!userId) throw new Error('BOT_USER_ID não definido')
+const OWNER_INSTANCE = ownerInstance
 const SESSION_ERROR_WINDOW_MS = Math.max(30_000, Number(process.env.WA_SESSION_ERROR_WINDOW_MS || 120_000))
 const SESSION_ERROR_THRESHOLD = Math.max(5, Number(process.env.WA_SESSION_ERROR_THRESHOLD || 30))
 const SESSION_RECOVERY_COOLDOWN_MS = Math.max(60_000, Number(process.env.WA_SESSION_RECOVERY_COOLDOWN_MS || 300_000))
@@ -286,6 +343,42 @@ let allowedChatJidsReady = false
 // para sobreviver às reconexões do MESMO worker.
 const MONITORED_DROP_LOG_INTERVAL_MS = Math.max(0, Number(process.env.MONITORED_DROP_LOG_INTERVAL_MS ?? 60_000))
 const monitoredDropLogState = new Map()
+
+// Oferta publicada pelo SITE PRÓPRIO do grupo de origem (RCA 2026-09-13): o
+// texto traz `https://<dominio-dele>/p/xxx` em vez do link da loja. Sem este
+// passo o sanitizador apaga essa URL (ela credita o concorrente),
+// `detectLinks` não acha nada e a oferta morre como `nolink` — do lado de fora,
+// "o robô não espelha".
+//
+// Desembrulhar ANTES do sanitizador faz o resto do pipeline (sanitizador,
+// detector, conversor, dedup, imagem) seguir sem NENHUMA mudança, e quem
+// converte continua sendo o conversor da loja com a credencial da cliente — a
+// comissão é dela, não de quem publicou. A decisão é por LINK: mensagem MISTA
+// (alguns produtos com link direto da loja, outros pelo site do dono do grupo)
+// também é desembrulhada — era o que perdia os links do 3º produto em diante
+// (RCA 2026-09-17). Só gasta rede quando há URL que não é de loja; qualquer
+// falha devolve o texto como veio.
+async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
+  if (!text) return text
+  try {
+    const desembrulhado = await resolveCustomDomainLinks(text)
+    // Candidato que NÃO resolveu precisa deixar rastro com o motivo: em
+    // 2026-09-13 este caminho devolveu só `null` em staging, com código no ar,
+    // rede boa e a página trazendo o link — e não havia por onde começar.
+    if (desembrulhado.failures?.length) {
+      logger.warn({ msgId, jid, falhas: desembrulhado.failures }, 'Link de domínio próprio NÃO resolveu até a loja')
+    }
+    if (!desembrulhado.resolved.length) return text
+    logger.info({ msgId, jid, resolvidos: desembrulhado.resolved }, 'Link de domínio próprio desembrulhado até a loja')
+    for (const item of desembrulhado.resolved) {
+      try { recordOperationalSignal('custom_domain_link_resolved', { userId, platform: item.platform }) } catch {}
+    }
+    return desembrulhado.text
+  } catch (err) {
+    logger.warn({ msgId, jid, err: err?.message }, 'Falha ao desembrulhar link de domínio próprio — seguindo com o texto original')
+    return text
+  }
+}
 
 function logMonitoredSourceDrop(jid, reason, details = {}) {
   const now = Date.now()
@@ -540,7 +633,7 @@ function startHeartbeatIpc() {
       disconnectedForMs: disconnectedSinceMs == null ? 0 : Date.now() - disconnectedSinceMs,
       maxReconnectingMs: MAX_RECONNECTING_MS,
     })
-    if (process.send) process.send({ type: 'heartbeat', ts: Date.now(), state })
+    if (sendIpc) sendIpc({ type: 'heartbeat', ts: Date.now(), state })
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
@@ -559,7 +652,7 @@ const AUTH_DIR = getAuthInfoDir(userId)
 // backup e volta se o pareamento falhar antes de o código chegar ao usuário.
 // Sem isso, um clique em "conectar" durante uma recusa do WhatsApp (405)
 // destruía a credencial boa e travava a sessão de vez (RCA 2026-07-28).
-const pairingAuthBackup = createPairingAuthBackup({ authDir: AUTH_DIR, fs: { rename, rm }, logger })
+const pairingAuthBackup = createPairingAuthBackup({ authDir: AUTH_DIR, fs: { rename, rm, access }, logger })
 const DEDUP_FILE = getDedupFile(userId)
 const KNOWN_CHANNELS_FILE = getKnownChannelsFile(userId)
 const DEDUP_FLUSH_DEBOUNCE_MS = 1_000
@@ -764,7 +857,7 @@ async function loadConfig() {
   if (!user) throw new Error(`Usuário ${userId} não encontrado`)
 
   if (user.accessExpiresAt && user.accessExpiresAt < new Date()) {
-    if (process.send) process.send({ type: 'status', data: 'blocked' })
+    if (sendIpc) sendIpc({ type: 'status', data: 'blocked' })
     // Sem isso, o WaSession.status fica preso no último valor antes do
     // vencimento (normalmente 'connected') — o health monitor do supervisor só
     // busca sessões com status IN ('connected','connecting') pra ressuscitar, e
@@ -776,7 +869,7 @@ async function loadConfig() {
       logger.warn({ err: String(err?.message ?? err) }, 'Falha ao persistir status de acesso expirado')
     })
     logger.error('Acesso expirado — bot bloqueado')
-    process.exit(0)
+    exitRuntime(0)
   }
 
   const credentials = {}
@@ -976,13 +1069,13 @@ async function checkScheduledMessages() {
   }
 }
 
-setInterval(checkScheduledMessages, 30_000)
+const scheduledMessagesTimer = setInterval(checkScheduledMessages, 30_000)
 
 // Watchdog de MessageLog preso em 'sending' (safety net): roda a cada 5min e
 // reclassifica como erro recuperável as linhas paradas em 'sending' há mais que
 // o cutoff. unref() para não segurar o processo. Ver src/jobs/stuckSendLogs.js.
 const STUCK_SEND_LOG_SWEEP_MS = Math.max(60_000, Number(process.env.STUCK_SEND_LOG_SWEEP_MS || 5 * 60_000))
-setInterval(() => {
+const stuckSendLogsTimer = setInterval(() => {
   recoverStuckSendLogs({ userId })
     .then(({ recovered }) => {
       if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
@@ -1038,10 +1131,28 @@ async function monitorSilenceWatchdog() {
     else if (lastIncomingByMonitorJid.has(jid)) hasActive = true
   }
 
-  if (!silent.length || !hasActive) return
+  if (!silent.length) return
+  // `hasActive` existe para não alarmar conta naturalmente parada: se NENHUM
+  // monitor tem tráfego, o silêncio pode ser a madrugada. Só que exigir isso
+  // deixava a FALHA TOTAL — todos os monitores calados — como o único estado que
+  // este vigia não enxerga, e é justamente o pior (RCA 2026-09-14: a conta ficou
+  // dois dias com 0 de 2 monitores recebendo e ele nunca rodou).
+  // Com todos calados, a evidência que substitui `hasActive` é a mesma da
+  // cegueira entre reconexões: a sessão está OCUPADA (falhando decrypt ou caindo
+  // repetidamente) e ainda assim não aceita nada. Sem essa evidência, silêncio
+  // segue sendo só silêncio.
+  const todosCalados = !hasActive
+  const ocupadaESemAceitar = failuresSinceLastAccepted > 0 || stableDropsSinceLastAccepted > 0
+  if (todosCalados && !ocupadaESemAceitar) return
 
   logger.warn(
-    { silent, thresholdMs: MONITOR_SILENCE_THRESHOLD_MS },
+    {
+      silent,
+      thresholdMs: MONITOR_SILENCE_THRESHOLD_MS,
+      todosCalados,
+      failuresSinceLastAccepted,
+      stableDropsSinceLastAccepted,
+    },
     'Monitor(es) silenciado(s) detectado(s); forçando refresh de sender_keys'
   )
   await triggerWaGroupsRefresh('silence_watchdog')
@@ -1237,7 +1348,7 @@ function setLifecycleState(next, meta = {}) {
   const prev = lifecycleState
   lifecycleState = next
   logger.info({ prev, next, ...meta }, 'WA lifecycle transition')
-  if (process.send) process.send({ type: 'lifecycle', data: next, prev, meta })
+  if (sendIpc) sendIpc({ type: 'lifecycle', data: next, prev, meta })
 }
 
 const incomingQueue = createMessageQueue({
@@ -1343,11 +1454,40 @@ const INIT_QUERIES_LOG_RE = /unexpected error in 'init queries'/i
 // justamente a sessão que reconecta o tempo todo e não recebe nada.
 const RECEPTION_WINDOW_MS = Math.max(60_000, Number(process.env.WA_RECEPTION_WINDOW_MS || DEFAULT_RECEPTION_WINDOW_MS))
 const RECEPTION_MIN_FAILURES = Math.max(1, Number(process.env.WA_RECEPTION_MIN_FAILURES || DEFAULT_RECEPTION_MIN_FAILURES))
+// `WA_BLIND_ACROSS_RECONNECTS_MS=0` desliga só a regra nova (rollback sem
+// redeploy), preservando a classificação histórica.
+const BLIND_ACROSS_RECONNECTS_MS = Math.max(0, Number(process.env.WA_BLIND_ACROSS_RECONNECTS_MS ?? DEFAULT_BLIND_ACROSS_RECONNECTS_MS))
+
+// Quais filtros de recepção este worker está aplicando — UMA linha por boot.
+//
+// Não é enfeite. `WA_IGNORE_UNMONITORED_GROUPS` descarta mensagem antes do
+// decrypt e NÃO escrevia nada em lugar nenhum: nem no boot, nem ao ignorar
+// (ignoredJidPolicy.js não tem logger). Ligá-la em produção e perguntar "pegou
+// nos robôs?" não tinha resposta — e em modo `remote` o worker só relê a env
+// quando o supervisor reinicia, que é exatamente o caso em que a pergunta
+// aparece (RCA 2026-09-14: a flag ficou no .env e nenhum dos 38 workers a
+// tinha lido, sem nenhum jeito de constatar isso pelo log).
+//
+// Volume: uma linha por processo de worker. Zero impacto de RAM.
+logger.info({
+  ignoreUnmonitoredGroups: IGNORE_UNMONITORED_GROUPS,
+  chatScopeMode: CHAT_SCOPE_MODE,
+  blindAcrossReconnectsMs: BLIND_ACROSS_RECONNECTS_MS,
+}, 'Filtros de recepção deste robô')
 const RECEPTION_SIGNAL_THROTTLE_MS = Math.max(5 * 60_000, Number(process.env.WA_RECEPTION_SIGNAL_THROTTLE_MS || 60 * 60_000))
 let lastUpsertAtMs = null
 let lastAcceptedAtMs = null
 let monitoredSourceCount = 0
 let lastReceptionSignalAt = 0
+
+// Cegueira que ATRAVESSA reconexões (RCA 2026-09-14, viviloppes@gmail.com).
+// Escopo de módulo e zerados SÓ em `markMessageAccepted` — nunca por reconexão
+// e nunca por janela de tempo. Era exatamente isso que faltava: todo contador
+// de recepção era medido a partir da conexão atual, e a conta do RCA reconecta
+// a cada ~50min, então nenhum deles chegava a concluir nada (ver o cabeçalho de
+// core/receptionHealth.js). Mesmo idioma de `chatScopeIgnoredSinceLastAccepted`.
+let failuresSinceLastAccepted = 0
+let stableDropsSinceLastAccepted = 0
 
 function markUpsertReceived() { lastUpsertAtMs = Date.now() }
 
@@ -1416,6 +1556,10 @@ function markMessageAccepted() {
   lastAcceptedAtMs = Date.now()
   acceptedTimestamps.push(lastAcceptedAtMs)
   chatScopeIgnoredSinceLastAccepted = 0
+  // Uma mensagem aceita é a única prova de que a recepção voltou a funcionar —
+  // e o único evento que zera a cegueira acumulada.
+  failuresSinceLastAccepted = 0
+  stableDropsSinceLastAccepted = 0
 }
 
 // `WA_RECEPTION_WINDOW_MS=0` desliga a classificação (rollback sem redeploy).
@@ -1428,6 +1572,12 @@ function getReceptionHealth() {
     lastUpsertAtMs,
     lastAcceptedAtMs,
     failuresInWindow: getSessionHealth().cryptoErrors,
+    // Relógio que não reseta na reconexão: a última aceitação ou, se a conta
+    // nunca aceitou nada neste worker, o boot dele.
+    observedSinceMs: lastAcceptedAtMs ?? workerStartedAt,
+    failuresSinceLastAccepted,
+    stableDropsSinceLastAccepted,
+    blindAcrossReconnectsMs: BLIND_ACROSS_RECONNECTS_MS,
     hasMonitoredSources: monitoredSourceCount > 0,
     incomingPending: incomingQueue.getStats().pending,
     lastProcessedAtMs: incomingQueue.getStats().lastCompletedAt,
@@ -1447,12 +1597,17 @@ function reportReceptionHealth(reception) {
     silentForMs: reception.silentForMs,
     failuresInWindow: reception.failuresInWindow,
     windowMs: reception.windowMs,
-  }, 'Sessão conectada e SEM receber mensagens: está chegando e falhando, nada foi aceito na janela')
+    motivo: reception.reason,
+    entreReconexoes: Boolean(reception.blindAcrossReconnects),
+  }, 'Sessão conectada e SEM receber mensagens')
   try {
     recordOperationalSignal('wa_reception_blind', {
       userId,
       silentForMs: reception.silentForMs,
       failuresInWindow: reception.failuresInWindow,
+      // Separa "parou agora" de "está cega há horas, atravessando reconexões" —
+      // a segunda é a que ninguém enxergava e a que pede ação humana.
+      acrossReconnects: Boolean(reception.blindAcrossReconnects),
     })
   } catch {}
 }
@@ -1461,6 +1616,10 @@ function recordCryptoError() {
   const now = Date.now()
   lastCryptoErrorAt = now
   cryptoErrorTimestamps.push(now)
+  // Cumulativo (não podado): a rajada de falhas acontece no dreno da fila
+  // offline logo após reconectar, e a janela curta a apagava antes de alguém
+  // conseguir julgar. Ver core/receptionHealth.js.
+  failuresSinceLastAccepted += 1
   const cutoff = now - WA_SESSION_DEGRADED_WINDOW_MS
   // Poda barata: só varre quando o array cresce ou a cabeça já saiu da janela.
   if (cryptoErrorTimestamps.length > 1_000 || cryptoErrorTimestamps[0] < cutoff) {
@@ -1757,6 +1916,23 @@ function reportWatermarkMissing(stage, ctx = {}) {
   try { recordOperationalSignal('watermark_missing', { userId, stage, destJid: ctx.destJid || null }) } catch {}
 }
 
+// Foto do card SEMPRE na mesma tela (src/core/previewCardCanvas.js).
+//
+// Substitui o `normalizeImageForWhatsApp` no caminho do card — não soma custo:
+// entrega os MESMOS dois campos (buffer que alimenta o upload da miniatura
+// grande + miniatura embutida), só que com dimensões fixas, para o card não
+// mudar de tamanho conforme a loja/foto que originou a oferta. Tela desligada
+// (`PREVIEW_CARD_CANVAS=off`) ou composição que falha caem no caminho
+// histórico: melhor card de tamanho irregular do que oferta sem foto.
+async function prepararFotoDoCard(buf) {
+  if (!buf?.length) return null
+  const tela = await composePreviewCardImage(buf).catch(() => null)
+  if (tela?.main && tela?.thumbnail) return { buffer: tela.main, jpegThumbnail: tela.thumbnail }
+  const normalized = await normalizeImageForWhatsApp(buf)
+  if (!normalized?.jpegThumbnail) return null
+  return { buffer: normalized.buffer || normalized.jpegThumbnail, jpegThumbnail: normalized.jpegThumbnail }
+}
+
 function kindDoCard(fonte) {
   if (fonte === 'origem') return DELIVERY_KIND.CARD_ORIGEM
   if (fonte === 'banner') return DELIVERY_KIND.CARD_BANNER
@@ -1820,15 +1996,14 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // Link de cupom/campanha não tem produto: raspar a landing pegava a
     // imagem de um produto promovido aleatório no card. Usa o banner da
     // marca da loja (storeBrandCard), como os canais concorrentes fazem.
-    // O banner já nasce em 720x720 (bem acima de 500px) — mesma fonte para
-    // os dois campos.
     const banner = (await buildStoreBrandCardImage(primary?.platform)) || undefined
     // O banner nasce em 720x720: grande demais para o campo embutido, que e' o
-    // que o WhatsApp desenha ANTES de baixar. A versao cheia continua sendo a
-    // fonte do upload em alta; so a miniatura embutida passa pelo gerador
-    // comum (core/inlineThumbnail.js).
-    jpegThumbnail = banner ? await buildInlineThumbnail(banner).catch(() => banner) : undefined
-    hqSourceBuffer = banner
+    // que o WhatsApp desenha ANTES de baixar, e de tamanho diferente do card de
+    // produto. Passa pela MESMA tela fixa das fotos, para o card de cupom não
+    // sair maior/menor que o card da oferta ao lado dele no grupo.
+    const telaBanner = banner ? await prepararFotoDoCard(banner) : null
+    jpegThumbnail = telaBanner?.jpegThumbnail || (banner ? await buildInlineThumbnail(banner).catch(() => banner) : undefined)
+    hqSourceBuffer = telaBanner?.buffer || banner
     if (banner) marcarFonte('banner')
   } else if (primary?.platform) {
     const imageUrl = await fetchProductImage(primary.platform, sourceUrl, credentialsMap || {}, {
@@ -1850,12 +2025,12 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         if (!fetched?.buffer) {
           reportPreviewCardNoImage('download_sem_bytes', { platform: primary.platform, imageUrl, sourceUrl })
         }
-        const normalized = fetched?.buffer ? await normalizeImageForWhatsApp(fetched.buffer) : null
-        if (fetched?.buffer && !normalized?.jpegThumbnail) {
+        const preparada = fetched?.buffer ? await prepararFotoDoCard(fetched.buffer) : null
+        if (fetched?.buffer && !preparada?.jpegThumbnail) {
           reportPreviewCardNoImage('normalize_falhou', { platform: primary.platform, imageUrl, sourceUrl, bytes: fetched.buffer.length })
         }
-        jpegThumbnail = normalized?.jpegThumbnail || undefined
-        hqSourceBuffer = normalized?.buffer || jpegThumbnail
+        jpegThumbnail = preparada?.jpegThumbnail || undefined
+        hqSourceBuffer = preparada?.buffer || jpegThumbnail
         if (jpegThumbnail) marcarFonte('loja')
       } catch (err) {
         reportPreviewCardNoImage('download_falhou', { platform: primary.platform, imageUrl, sourceUrl, err: err?.message })
@@ -1883,10 +2058,10 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   if (!jpegThumbnail && !useCouponBrandCard && typeof fetchOriginPhoto === 'function' && (allowSmallOriginPhoto || shouldUseOriginPhotoFallback())) {
     try {
       const origin = await fetchOriginPhoto()
-      const normalized = origin?.buffer ? await normalizeImageForWhatsApp(origin.buffer) : null
-      if (normalized?.jpegThumbnail) {
-        jpegThumbnail = normalized.jpegThumbnail
-        hqSourceBuffer = normalized.buffer || normalized.jpegThumbnail
+      const preparada = origin?.buffer ? await prepararFotoDoCard(origin.buffer) : null
+      if (preparada?.jpegThumbnail) {
+        jpegThumbnail = preparada.jpegThumbnail
+        hqSourceBuffer = preparada.buffer
         marcarFonte('origem')
         // Sinal PRÓPRIO (não é `ops_preview_card_no_image`): aqui a oferta SAIU
         // com card e com foto. Misturar os dois esconderia justamente o número
@@ -1901,6 +2076,29 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     }
   }
 
+  // FOTO PEQUENA VIRANDO SELO NO CARD (RCA 2026-09-18).
+  //
+  // `prepareWAMessageMedia` grava no proto as dimensões REAIS do buffer que
+  // sobe, e o WhatsApp desenha o card nesse tamanho — foto de poucas centenas
+  // de pixels sai como um quadradinho no centro, cercada por uma ampliação
+  // borrada dela mesma (print da cliente). Acontece sobretudo no plano B da
+  // foto de origem, que costuma ser a miniatura embutida do card da origem
+  // (medido: 5.539 bytes). Ver `core/cardPhotoUpscalePolicy.js`.
+  //
+  // Fica FORA do banner de cupom de propósito: ele já nasce em 720x720, com
+  // tamanho escolhido, e não é foto de produto.
+  if (hqSourceBuffer && !useCouponBrandCard) {
+    const { buffer: ampliada, upscaled } = await upscaleCardPhotoIfTiny(hqSourceBuffer)
+    if (upscaled) {
+      hqSourceBuffer = ampliada
+      logger.info({ platform: primary?.platform, sourceUrl, de: upscaled.from, para: upscaled.to }, 'Card de preview: foto pequena ampliada para o card não sair como selo')
+    }
+  }
+
+  // Roda ANTES da marca d'água de propósito: `renderDestinationWatermark`
+  // DESISTE de marcar foto pequena demais (devolve `watermarkApplied:false`),
+  // então ampliar primeiro faz a marca ser desenhada na resolução final e
+  // recupera casos em que ela simplesmente não saía.
   // MARCA D'ÁGUA NO CARD DE PREVIEW (modo `preview_watermark`).
   //
   // O card não é um caminho separado de imagem: ele carrega os MESMOS bytes que
@@ -1919,7 +2117,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
   // — a oferta sai com a foto sem marca, que é muito melhor do que texto pelado.
   if (jpegThumbnail && watermark?.text) {
     try {
-      const rendered = await renderDestinationWatermark(hqSourceBuffer || jpegThumbnail, { text: watermark.text, color: watermark.color })
+      const rendered = await renderDestinationWatermark(hqSourceBuffer || jpegThumbnail, { text: watermark.text, color: watermark.color, size: watermark.size, position: watermark.position })
       hqSourceBuffer = rendered.main
       jpegThumbnail = rendered.thumbnail
       if (!rendered.watermarkApplied) reportWatermarkMissing(`card:${rendered.skipReason || 'nao_aplicada'}`, { destJid, platform: primary?.platform })
@@ -2014,7 +2212,15 @@ async function buildBroadcastLinkPreview({ text, destJid, jpegThumbnail, hqBuffe
 
   let thumb = jpegThumbnail
   let hq = hqBuffer
-  if (!thumb && hqBuffer) {
+  // Mesma tela fixa do card do espelhamento: a foto da receita vem da loja com
+  // a proporção que a loja usa, e sem isto cada oferta da fila sai com um card
+  // de tamanho diferente. A miniatura embutida é refeita a partir da imagem
+  // composta — divergir dela traria de volta o "muda de tamanho ao carregar".
+  const tela = hqBuffer ? await composePreviewCardImage(hqBuffer).catch(() => null) : null
+  if (tela?.main && tela?.thumbnail) {
+    thumb = tela.thumbnail
+    hq = tela.main
+  } else if (!thumb && hqBuffer) {
     const normalized = await normalizeImageForWhatsApp(hqBuffer)
     thumb = normalized?.jpegThumbnail
     hq = normalized?.buffer || normalized?.jpegThumbnail
@@ -2834,6 +3040,14 @@ async function startBotInner() {
   scheduleDedupSave(dedup)
 
   setLifecycleState(WA_LIFECYCLE.INITIALIZING, { reason: 'start_bot' })
+  // Pareamento que derrubou o processo deixa a credencial boa num backup que
+  // ninguém mais olha — e o próximo pareamento a apagaria. `recoverOrphan` só
+  // age quando NÃO há credencial no lugar e HÁ uma no backup; qualquer dúvida
+  // não mexe em nada (RCA 2026-09-14). Durante um pareamento em andamento
+  // NESTE processo o backup é legítimo e quem manda nele é o próprio fluxo.
+  if (!pairingAuthBackup.hasBackup()) {
+    await pairingAuthBackup.recoverOrphan().catch(() => false)
+  }
   mkdirSync(AUTH_DIR, { recursive: true })
   await clearAppStateSyncKeys()
   startHeartbeatIpc()
@@ -2953,7 +3167,7 @@ async function startBotInner() {
         if (!pairingState.ownsRequest(requestId)) return
         pairingState.markCode(code)
         logger.info({ requestId, codeLen: code?.length }, 'Pairing code recebido do WhatsApp')
-        if (process.send) process.send({ type: 'pairingCode', requestId, code })
+        if (sendIpc) sendIpc({ type: 'pairingCode', requestId, code })
       } catch (err) {
         if (!pairingState.ownsRequest(requestId)) return
         logger.error({ err: err.message, stack: err.stack, requestId }, 'Falha ao solicitar pairing code no socket WA')
@@ -2961,7 +3175,7 @@ async function startBotInner() {
         // O código nunca chegou ao usuário: nada foi trocado no WhatsApp, então
         // a credencial antiga continua válida e volta ao lugar.
         await pairingAuthBackup.restore()
-        if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
+        if (sendIpc) sendIpc({ type: 'pairingCode', requestId, error: err.message })
       }
     })()
   }
@@ -2998,7 +3212,7 @@ async function startBotInner() {
       setLifecycleState(WA_LIFECYCLE.AUTHENTICATING, { reason: 'qr_generated' })
       // Em pairing mode, NÃO vazar o QR pra UI — o usuário pediu código,
       // não scan. Baileys ainda gera QR internamente como fallback, ignoramos.
-      if (!pairingState.suppressQrEmission() && process.send) process.send({ type: 'qr', data: qr })
+      if (!pairingState.suppressQrEmission() && sendIpc) sendIpc({ type: 'qr', data: qr })
 await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date() })
     }
 
@@ -3023,7 +3237,7 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // nunca ignorar o que chega pela própria conta — é por aí que vêm o
       // histórico e as notificações que alimentam "Canais que sigo".
       selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
-      if (process.send) process.send({ type: 'status', data: 'connected', phone })
+      if (sendIpc) sendIpc({ type: 'status', data: 'connected', phone })
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
       // Este número já fez o teste em outra conta? O número só é conhecido
       // DEPOIS do open — é por isso que a checagem mora aqui e não na rota de
@@ -3063,7 +3277,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // Uma vez estável, sempre "já estável": marca que esta credencial produziu
       // ao menos uma conexão saudável na vida deste worker (persiste entre
       // reconexões). Base da política keepEstablishedAuth em badSession.
-      if (wasStable) everHadStableOpen = true
+      if (wasStable) {
+        everHadStableOpen = true
+        // Queda de sessão ESTÁVEL sem nada ter sido aceito desde a última vez é
+        // a segunda evidência de cegueira (a conta do RCA caiu 29× em 24h, todas
+        // com `hadStableOpen`, sem aceitar uma única mensagem no meio).
+        stableDropsSinceLastAccepted += 1
+      }
       // Node bruto do stream:error (quando existir) — só ele revela se o close
       // foi causado por uma mensagem específica travada em loop de reentrega
       // (ver AGENTS.md "Loop de retry-receipt travado"). `code` sozinho não
@@ -3091,7 +3311,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // retry) — é o que dá ao heartbeat a duração REAL do loop de reconexão,
       // mesmo que cada tentativa individual pareça "nova".
       if (disconnectedSinceMs == null) disconnectedSinceMs = now
-      if (process.send) process.send({ type: 'status', data: 'disconnected' })
+      if (sendIpc) sendIpc({ type: 'status', data: 'disconnected' })
       await persistSessionPatch(buildCloseSessionPatch({
         code,
         terminal: isLoggedOut,
@@ -3147,8 +3367,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         try { recordOperationalSignal('wa_forbidden', { userId, code }) } catch {}
       }
       if (isLoggedOut) {
-        // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo
+        // Sessão revogada/expirada — limpar auth para que próximo start gere QR limpo.
+        // O backup de pareamento vai junto: credencial revogada não pode ser
+        // devolvida ao lugar por `recoverOrphan` no próximo boot.
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+        await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
         logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
       } else if (wasPairing && isRestartRequired) {
         // Pairing aceito pelo WA: o servidor manda close com code 515 esperando
@@ -3265,6 +3488,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             try { recordOperationalSignal('wa_bad_session_reset', { userId, count: b.count }) } catch {}
             recordWaConnectionEventSafe({ userId, type: 'auth_reset', code, lifecycle: 'auth_reset_required', ownerInstance: OWNER_INSTANCE, metadata: { badSessionCount: b.count } })
             await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
+            // Backup junto: a credencial guardada é da MESMA sessão corrompida.
+            await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
             await persistSessionPatch(buildAuthResetSessionPatch({ code, ownerInstance: OWNER_INSTANCE, now: new Date() })).catch(() => {})
             badSessionTimestamps = []
             reconnectAttempts = 0
@@ -3500,7 +3725,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
       }
 
-      const sanitizedText = text ? sanitizeInviteLinks(text) : ''
+      const textoParaEspelhar = await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
+      const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar) : ''
       if (text && !sanitizedText) {
         logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
         return
@@ -3545,7 +3771,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           })
           return
         }
-        const unsupportedStoreSuffix = links.length === 0 && hasGenericUrl ? ':unsupported_store' : ''
+        // `hasGenericUrl` lê o texto JÁ SANITIZADO, e o sanitizador REMOVE toda
+        // URL que não é de loja suportada. Ou seja: exatamente a mensagem que
+        // deveria ganhar o sufixo — a que só trazia link de loja desconhecida ou
+        // do site próprio do grupo de origem — chegava aqui sem URL nenhuma,
+        // ficava sem sufixo e a cliente lia "fora das regras de encaminhamento
+        // que VOCÊ configurou". Isso culpa a configuração dela por um problema
+        // que é de cobertura de loja, e manda mexer no lugar errado (foi o que
+        // aconteceu em 13/09/2026). O texto de ANTES do sanitizador é quem sabe
+        // a verdade; `findCandidateLinks` é a mesma regra do desembrulho de
+        // domínio próprio (ignora convite de grupo e rede social), então as duas
+        // pontas nunca discordam sobre o que é "link de loja desconhecida".
+        const hadUnsupportedStoreUrl = findCandidateLinks(textoParaEspelhar).length > 0
+        const unsupportedStoreSuffix =
+          links.length === 0 && (hasGenericUrl || hadUnsupportedStoreUrl) ? ':unsupported_store' : ''
         await db.messageLog.create({
           data: {
             userId,
@@ -3776,12 +4015,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform, errorType: 'conversion_diagnostic' } })
       }
 
-      // Converter todos os links habilitados em paralelo. Conversores podem
-      // fazer 4-5 chamadas HTTP sequenciais cada (resolve short → API afiliado
-      // → validate); processar N links em série estoura o teto da fila quando
-      // a mensagem tem múltiplas URLs. Ordem é preservada porque a substituição
-      // no texto casa por URL original, não por índice em conversions[].
-      const linkResults = await Promise.all(links.map(async ({ platform, url }) => {
+      // Converter os links habilitados: LOJAS DIFERENTES em paralelo, links da
+      // MESMA loja um de cada vez. Conversores fazem 4-5 chamadas HTTP
+      // sequenciais cada (resolve short → API afiliado → validate), então
+      // serializar tudo estouraria o teto da fila; mas dentro de uma loja os
+      // conversores dividem UMA sessão de afiliado (cookie do SiteStripe e
+      // `ssid` do ML são ROTACIONADOS a cada chamada), e disparar juntos só
+      // troca espera por falha. Ver o porquê medido em
+      // core/conversionScheduler.js — não voltar a `Promise.all` sobre a lista
+      // inteira. Ordem é preservada porque a substituição no texto casa por URL
+      // original, não por índice em conversions[].
+      const linkResults = await convertPerPlatformSerially(links, async ({ platform, url }) => {
         if (!enabledPlatforms.has(platform)) {
           logger.info({ platform }, 'Plataforma desabilitada — pulando')
           // Devolve o MOTIVO em vez de null: sem `converted` o item continua
@@ -3856,7 +4100,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           await recordConversionIssue({ platform, url, jid, text, reason: `Falha na conversão de ${credentialValidation.label}: ${err.message}` })
           return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
         }
-      }))
+      })
       const conversions = uniqueConversionsByUrl(linkResults.filter(r => r && r.converted))
 
       const warningKinds = new Set(conversions.map(c => c.warning).filter(Boolean))
@@ -3972,6 +4216,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           couponContext = templateResult.couponContext
         }
       }
+      // O complemento pertence exclusivamente ao formato "Manter texto
+      // original convertido". Dois saltos separam claramente o texto vindo da
+      // origem da assinatura opcional escrita pela cliente.
+      if (!effectiveTemplateKey) {
+        finalText = appendRelayFooter(finalText, monitorGroup?.relayFooterText)
+      }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {
         logger.warn({ msgId: msg.key.id }, 'Mensagem vazia após processamento — envio ignorado')
@@ -4079,6 +4329,17 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       if (routing.reason === DESTINATION_REASON.EXPLICIT_EMPTY) {
         logger.warn({ sourceJid: jid }, 'Origem com destinos escolhidos, porém nenhum destino válido restou — nada será enviado')
       }
+      // Outbox multicanal: captura uma vez por mensagem de origem, antes do
+      // fan-out WhatsApp. O consumidor da API renderiza/publica depois; o
+      // bot-worker nunca recebe token Meta nem transforma Instagram em JID.
+      await captureInstagramMirror({
+        user: { id: userId, plan: cfg.plan, accessExpiresAt: cfg.accessExpiresAt },
+        sourceGroupId: monitorGroup?.id,
+        sourceMessageKey: `${jid}:${msg.key.id}`,
+        text: finalText,
+        primary,
+      }, { db }).catch(err => logger.warn({ err: err?.message, msgId: msg.key.id }, 'Falha ao capturar Story espelhado'))
+
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
       // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
       // Primeiro destino sem atraso; demais com jitter aleatório limitado.
@@ -4109,6 +4370,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         const destinationImageMode = effectiveDestinationImageMode(postDetail?.imageMode, { hasChannelButton: !!channelForward })
         const watermarkText = String(postDetail?.watermarkText ?? '').trim()
         const watermarkColor = postDetail?.watermarkColor ?? undefined
+        const watermarkSize = postDetail?.watermarkSize ?? undefined
+        const watermarkPosition = postDetail?.watermarkPosition ?? undefined
         const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
         // Segurança anti-duplicação por destino. Precisamos guardar DUAS chaves:
         // - primary.url: link upstream estável. Bloqueia a mesma mensagem da fonte
@@ -4472,9 +4735,20 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // distingue "cupom genérico → link resolve p/ produto aleatório"
             // (skip=true → banner é o certo) de "produto + cupom" (titleOverlap
             // 'match' → skip=false → foto do produto). Assim os dois caminhos de
-            // imagem (preview e não-preview) concordam sobre produto-vs-cupom. O
-            // sinal de vitrine ML (warning) segue como gatilho independente.
-            const couponTextSignal = couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used'
+            // imagem (preview e não-preview) concordam sobre produto-vs-cupom.
+            //
+            // O sinal de vitrine ML (warning) NÃO é mais gatilho independente
+            // (RCA 2026-09-18): ele indica FALHA DE CONVERSÃO, não cupom, e
+            // sozinho derrubava as três blindagens de uma vez. Hoje só vale com
+            // vitrine confirmada — ver resolveCouponTextSignal.
+            const couponTextSignal = resolveCouponTextSignal({
+              couponSkipActiveFetch,
+              warning: primary?.warning,
+              // `primary.url` é o link ORIGINAL da mensagem (o convertido é
+              // `primary.converted`) — a mesma entrada de isDirectVitrineShare
+              // dentro do converter, para as duas pontas não discordarem.
+              vitrineConfirmed: isDirectVitrineShare(primary?.url),
+            })
             let fonteDaFoto = null
             const linkPreview = await buildManualLinkPreview({
               onFonteDaFoto: fonte => { fonteDaFoto = fonte },
@@ -4492,7 +4766,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               fetchOriginPhoto: getOriginalPhotoOnce,
               // Modo "card com marca d'água": a marca é uma camada em cima do
               // modo-base, igual ao par 'original'/'original_watermark'.
-              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null,
+              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
             })
             deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
@@ -4530,7 +4804,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
           let image = null
           if (wantImage || channelForward) {
-            const fetched = await getImage({ forceOriginalForChannelButton: !!channelForward, imageMode })
+            let fetched = await getImage({ forceOriginalForChannelButton: !!channelForward, imageMode })
+            // Loja não devolveu foto oficial e resolveMonitoredImage caiu no
+            // último recurso (jpegThumbnail pequena — ver monitoredImageResolver.js).
+            // No modo 'original' puro, mandar essa miniatura como CORPO DE MÍDIA
+            // sai ampliada/borrada (relato real: Shopee sem ids, card de cadeira
+            // saiu pixelado). Tratamos como se não houvesse imagem: cai no MESMO
+            // card de preview clicável usado abaixo (useLinkPreview), com a
+            // cascata de previewImageFallbackPolicy.js. NÃO se aplica a
+            // channelForward — o botão "Ver canal" exige corpo de mídia.
+            if (imageMode === 'original' && !channelForward && fetched?.usedThumbnailFallback) {
+              fetched = null
+            }
             // Mutação anti-fingerprint SOMENTE para canal-destino (newsletter
             // JID) e quando o opt-in global está ligado. NÃO aplicar a grupos.
             // Quando ligada, o crop + qualidade variada vão DENTRO do mesmo
@@ -4540,7 +4825,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             const wantMutation = isChannelDest && isPreservationFeatureEnabled(cfg.preservationActive, cfg.botConfig, PRESERVATION_FEATURE.IMAGE_MUTATION)
             if (fetched && useDestinationWatermark && imageMode === 'original') {
               try {
-                const rendered = await renderDestinationWatermark(fetched.buffer, { text: watermarkText, color: watermarkColor })
+                const rendered = await renderDestinationWatermark(fetched.buffer, { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition })
                 // A mutação roda POR CIMA da imagem já marcada (2º encode JPEG,
                 // aceito só nesta combinação rara de marca+mutação ligadas ao
                 // mesmo tempo). Sem isso, o canal perderia a proteção
@@ -4604,12 +4889,16 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
               destJid,
-              couponTextSignal: couponSkipActiveFetch || primary?.warning === 'ml_vitrine_fallback_used',
+              couponTextSignal: resolveCouponTextSignal({
+                couponSkipActiveFetch,
+                warning: primary?.warning,
+                vitrineConfirmed: isDirectVitrineShare(primary?.url),
+              }),
               fetchOriginPhoto: getOriginalPhotoOnce,
               // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
               // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
               allowSmallOriginPhoto: true,
-              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor } : null,
+              watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
             }).catch(err => {
               logger.warn({ err: err?.message, destJid }, 'Card de fallback sem imagem falhou; oferta sai como texto')
               return null
@@ -4885,10 +5174,16 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 }
 
 
-async function shutdown(code = 0) {
+async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
   if (shuttingDown) return
   shuttingDown = true
+  eventLoopDelay.disable()
   stopHeartbeatIpc()
+  clearInterval(scheduledMessagesTimer)
+  clearInterval(stuckSendLogsTimer)
+  clearInterval(monitorSilenceTimer)
+  if (dedupFlushTimer) clearTimeout(dedupFlushTimer)
+  if (knownChannelsFlushTimer) clearTimeout(knownChannelsFlushTimer)
 
   // Drena jobs em vôo antes de marcar pendentes como interrompidos.
   // shuttingDown=true acima já desativa retries em processSendJob (linha 581),
@@ -4915,13 +5210,18 @@ async function shutdown(code = 0) {
       logger.error({ err: err.message }, 'Erro ao encerrar backend da fila de envios')
     }),
   ])
-  process.exit(code)
+  try { activeSock?.end?.(new Error('session shutdown')) } catch {}
+  try { pendingSock?.end?.(new Error('session shutdown')) } catch {}
+  activeSock = null
+  pendingSock = null
+  try { await runtimeRedis?.quit?.() } catch {}
+  if (exit) exitRuntime(code)
 }
 
-process.once('SIGTERM', () => { void shutdown(0) })
-process.once('SIGINT', () => { void shutdown(0) })
+if (registerProcessHandlers) process.once('SIGTERM', () => { void shutdown(0) })
+if (registerProcessHandlers) process.once('SIGINT', () => { void shutdown(0) })
 
-process.on('message', async msg => {
+const handleMessage = async msg => {
   if (msg?.type === 'stop') {
     logger.info('Bot parando por solicitação do manager')
     await shutdown(0)
@@ -4932,16 +5232,17 @@ process.on('message', async msg => {
     configCachePromise = null
     logger.info('Config recarregada')
     ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever após reload'))
+    if (msg.requestId) sendIpc({ type: 'reloadConfigResult', requestId: msg.requestId, data: true })
   }
 
   if (msg?.type === 'refreshWaGroups') {
     const result = await triggerWaGroupsRefresh('ipc_manual')
-    process.send({ type: 'refreshWaGroups', requestId: msg.requestId, data: result })
+    sendIpc({ type: 'refreshWaGroups', requestId: msg.requestId, data: result })
   }
 
   if (msg?.type === 'listGroups') {
     if (!activeSock) {
-      process.send({ type: 'groups', requestId: msg.requestId, data: [], error: 'Bot não conectado' })
+      sendIpc({ type: 'groups', requestId: msg.requestId, data: [], error: 'Bot não conectado' })
       return
     }
     activeSock.groupFetchAllParticipating()
@@ -4954,10 +5255,10 @@ process.on('message', async msg => {
             : g.subject
           return { waJid: id, name }
         })
-        process.send({ type: 'groups', requestId: msg.requestId, data: list })
+        sendIpc({ type: 'groups', requestId: msg.requestId, data: list })
       })
       .catch(err => {
-        process.send({ type: 'groups', requestId: msg.requestId, data: [], error: err.message })
+        sendIpc({ type: 'groups', requestId: msg.requestId, data: [], error: err.message })
       })
   }
 
@@ -4965,7 +5266,7 @@ process.on('message', async msg => {
     const requestId = msg.requestId
     const phone = msg.phone
     if (!phone) {
-      process.send({ type: 'pairingCode', requestId, error: 'Telefone obrigatório' })
+      sendIpc({ type: 'pairingCode', requestId, error: 'Telefone obrigatório' })
       return
     }
     // Fluxo atômico de pairing:
@@ -4999,7 +5300,7 @@ process.on('message', async msg => {
           // Janela venceu sem código: o pareamento não aconteceu, devolve a
           // credencial antiga para a sessão poder voltar sozinha.
           void pairingAuthBackup.restore()
-          if (process.send) process.send({ type: 'pairingCode', requestId: expired.requestId, error: 'Tempo esgotado aguardando código de pareamento' })
+          if (sendIpc) sendIpc({ type: 'pairingCode', requestId: expired.requestId, error: 'Tempo esgotado aguardando código de pareamento' })
         },
       })
 
@@ -5025,23 +5326,23 @@ process.on('message', async msg => {
         logger.error({ err: err.message, requestId }, 'startBot falhou durante pairing')
         pairingState.clear()
         await pairingAuthBackup.restore()
-        if (process.send) process.send({ type: 'pairingCode', requestId, error: `Falha ao iniciar sessão: ${err.message}` })
+        if (sendIpc) sendIpc({ type: 'pairingCode', requestId, error: `Falha ao iniciar sessão: ${err.message}` })
       })
     } catch (err) {
       logger.error({ err: err.message, requestId }, 'Erro inesperado no handler de pairing')
       pairingState.clear()
       await pairingAuthBackup.restore()
-      if (process.send) process.send({ type: 'pairingCode', requestId, error: err.message })
+      if (sendIpc) sendIpc({ type: 'pairingCode', requestId, error: err.message })
     }
   }
 
   if (msg?.type === 'metrics') {
-    process.send({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata } })
+    sendIpc({ type: 'metricsResult', requestId: msg.requestId, data: { ...getSendQueueMetrics(), incomingQueue: incomingQueue.getStats(), sessionHealth: getSessionHealth(), reception: getReceptionHealth(), chatScope: getChatScopeSnapshot(), disconnectedForMs: disconnectedSinceMs == null ? null : Date.now() - disconnectedSinceMs, worker: workerMetadata, runtime: getRuntimeMemoryMetrics() } })
   }
 
   if (msg?.type === 'broadcast') {
     if (!activeSock) {
-      process.send({ type: 'broadcastResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      sendIpc({ type: 'broadcastResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
     // specs/017-client-coupon-catalog (T020): loja identificada pelo link do
@@ -5112,12 +5413,12 @@ process.on('message', async msg => {
         }).catch(() => {})
       }
     }
-    process.send({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
+    sendIpc({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
   }
 
   if (msg?.type === 'channel:metadata') {
     if (!activeSock) {
-      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      sendIpc({ type: 'channel:metadataResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
     try {
@@ -5126,17 +5427,17 @@ process.on('message', async msg => {
         jid: msg.jid,
         inviteCode: msg.inviteCode,
       })
-      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, data })
+      sendIpc({ type: 'channel:metadataResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message, jid: msg.jid, inviteCode: msg.inviteCode }, 'channel:metadata falhou')
-      process.send({ type: 'channel:metadataResult', requestId: msg.requestId, error: err.message })
+      sendIpc({ type: 'channel:metadataResult', requestId: msg.requestId, error: err.message })
     }
     return
   }
 
   if (msg?.type === 'channel:follow') {
     if (!activeSock) {
-      process.send({ type: 'channel:followResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      sendIpc({ type: 'channel:followResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
     try {
@@ -5148,17 +5449,17 @@ process.on('message', async msg => {
         logger,
       })
       rememberChannelJid(msg.jid)
-      process.send({ type: 'channel:followResult', requestId: msg.requestId, data })
+      sendIpc({ type: 'channel:followResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message, jid: msg.jid }, 'channel:follow falhou')
-      process.send({ type: 'channel:followResult', requestId: msg.requestId, error: err.message })
+      sendIpc({ type: 'channel:followResult', requestId: msg.requestId, error: err.message })
     }
     return
   }
 
   if (msg?.type === 'channel:listFollowed') {
     if (!activeSock) {
-      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      sendIpc({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
     try {
@@ -5168,16 +5469,30 @@ process.on('message', async msg => {
         sock: activeSock,
         followedSet: new Set([...followedChannelJids, ...knownChannelJids]),
       })
-      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, data })
+      sendIpc({ type: 'channel:listFollowedResult', requestId: msg.requestId, data })
     } catch (err) {
       logger.warn({ err: err?.message }, 'channel:listFollowed falhou')
-      process.send({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: err.message })
+      sendIpc({ type: 'channel:listFollowedResult', requestId: msg.requestId, error: err.message })
     }
     return
   }
-})
+}
 
-startBot().catch(err => {
-  logger.error(err, 'Erro fatal no worker')
-  process.exit(1)
-})
+if (registerProcessHandlers) process.on('message', handleMessage)
+if (autoStart) await startBot()
+return {
+  userId,
+  start: startBot,
+  stop: () => shutdown(0, { exit: false }),
+  drain: async () => waitUntilDrained({ isDrained: sendJobTracker.isDrained, timeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS, pollIntervalMs: 100 }),
+  command: handleMessage,
+  metrics: async () => ({ ...getRuntimeMemoryMetrics(), queue: { ...getSendQueueMetrics(), incoming: incomingQueue.getStats() }, sessionHealth: getSessionHealth() }),
+}
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  createBotSessionRuntime({ registerProcessHandlers: true, autoStart: true }).catch(err => {
+    logger.error(err, 'Erro fatal no worker')
+    process.exit(1)
+  })
+}

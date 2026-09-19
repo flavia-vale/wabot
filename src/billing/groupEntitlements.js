@@ -22,6 +22,7 @@ function toMonitorGroup(group, targetPostJids = []) {
     forwardMode: group.forwardMode,
     noLinkScope: group.noLinkScope,
     templateKey: group.templateKey ?? null,
+    relayFooterText: group.relayFooterText ?? null,
     primaryLinkTarget: group.primaryLinkTarget ?? null,
     targetPostJids,
     // Intenção da cliente sobre os destinos (core/destinationRouting.js).
@@ -47,6 +48,11 @@ function toPostDetail(group) {
     watermarkText: group.watermarkText ?? null,
     // 'white' | 'black'; nulo = padrão, resolvido no renderizador.
     watermarkColor: group.watermarkColor ?? null,
+    // 'small' | 'medium' | 'large'; nulo = padrão ('medium'), resolvido no renderizador.
+    watermarkSize: group.watermarkSize ?? null,
+    // 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+    // nulo = padrão ('center'), resolvido no renderizador.
+    watermarkPosition: group.watermarkPosition ?? null,
   }
 }
 

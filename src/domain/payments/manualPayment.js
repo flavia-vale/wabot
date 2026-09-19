@@ -1,4 +1,6 @@
-const PAID_PLANS = new Set(['basic', 'pro'])
+// Inclui `premium` (plano do Instagram Stories), que hoje só existe por
+// liberação/pagamento conferido na mão — não há preço dele no checkout.
+const PAID_PLANS = new Set(['basic', 'pro', 'premium'])
 const PAYMENT_METHODS = new Set(['pix', 'transfer', 'cash', 'card', 'other'])
 
 export function parseManualPaymentInput(body = {}) {
@@ -12,7 +14,7 @@ export function parseManualPaymentInput(body = {}) {
   const note = String(body.note ?? '').trim()
 
   if (!userId) return { ok: false, error: 'Selecione o cliente que fez o pagamento.' }
-  if (!PAID_PLANS.has(plan)) return { ok: false, error: 'Selecione o plano Basic ou Pro.' }
+  if (!PAID_PLANS.has(plan)) return { ok: false, error: 'Selecione o plano Basic, Pro ou Premium.' }
   if (!Number.isInteger(days) || days < 1 || days > 3650) return { ok: false, error: 'Informe uma quantidade de dias entre 1 e 3650.' }
   if (!Number.isFinite(amount) || amount < 0 || amount > 100000) return { ok: false, error: 'Informe o valor recebido corretamente.' }
   if (!PAYMENT_METHODS.has(paymentMethod)) return { ok: false, error: 'Selecione como o pagamento foi recebido.' }

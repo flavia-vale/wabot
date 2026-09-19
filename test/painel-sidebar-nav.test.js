@@ -21,20 +21,20 @@ function acompanharBlock() {
   return navSource.slice(start, end)
 }
 
-test('sidebar keeps Criar oferta after Painel and before Espelhar grupos', () => {
+test('sidebar keeps Criar oferta after Painel and before Espelhamento', () => {
   const block = journeyBlock()
   const painel = block.indexOf("label: 'Painel'")
   const criarOferta = block.indexOf("label: 'Criar oferta'")
-  const espelhamento = block.indexOf("label: 'Espelhar grupos'")
+  const espelhamento = block.indexOf("label: 'Espelhamento'")
 
   assert.notEqual(criarOferta, -1, 'Criar oferta deve permanecer na jornada principal')
   assert.ok(painel < criarOferta, 'Criar oferta deve vir depois de Painel')
-  assert.ok(criarOferta < espelhamento, 'Criar oferta deve vir antes de Espelhar grupos')
+  assert.ok(criarOferta < espelhamento, 'Criar oferta deve vir antes de Espelhamento')
 })
 
 test('sidebar keeps Criar oferta on its current route instead of a top CTA', () => {
   const block = journeyBlock()
-  const criarOfertaItem = block.slice(block.indexOf("label: 'Criar oferta'"), block.indexOf("label: 'Espelhar grupos'"))
+  const criarOfertaItem = block.slice(block.indexOf("label: 'Criar oferta'"), block.indexOf("label: 'Espelhamento'"))
 
   assert.match(criarOfertaItem, /href:\s*'\/painel\/criar-oferta'/, 'Criar oferta deve apontar para a rota atual')
   assert.doesNotMatch(shellSource, /<Link href=\{TOP_CTA\.href\}/, 'Criar oferta não deve aparecer como CTA destacado no topo')

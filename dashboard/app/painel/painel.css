@@ -1309,6 +1309,31 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 }
 .pnl-cred-tip svg { flex-shrink: 0; }
 
+.pnl-cred-video-banner {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; padding: 14px 16px; margin-bottom: 16px;
+  text-decoration: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.pnl-cred-video-banner:hover {
+  border-color: color-mix(in oklab, var(--success) 35%, var(--line));
+  background: color-mix(in oklab, var(--success) 5%, var(--surface));
+}
+.pnl-cred-video-play {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--success); color: var(--success);
+}
+.pnl-cred-video-text { min-width: 0; flex: 1; }
+.pnl-cred-video-title { display: block; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.pnl-cred-video-desc { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 3px; line-height: 1.45; }
+.pnl-cred-video-cta {
+  flex-shrink: 0; display: flex; align-items: center; gap: 4px;
+  font-size: 12.5px; font-weight: 700; color: var(--accent-strong);
+}
+.pnl-cred-video-cta svg { width: 14px; height: 14px; }
+
 /* Avisos soltos no topo (falha de carregamento, "comece por aqui"). */
 .pnl-cred-page > .pnl-note-box { margin-bottom: 12px; }
 
@@ -1442,4 +1467,413 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 
 @media (max-width: 480px) {
   .pnl-slim-banner { border-radius: var(--pnl-radius-sm); }
+}
+
+/* ── Painel v2 (2026-09-19) ──────────────────────────────────────────────
+ * Camada visual da tela inicial do painel: checklist -> cards de números ->
+ * funções mais usadas. Segue o desenho do mock "Painel v2": card branco,
+ * canto arredondado, número grande e ícone em caixa colorida.
+ *
+ * Prefixo `pv-` para não colidir com as classes `pnl-` das outras telas —
+ * esta é a primeira tela do front novo e as duas convivem enquanto o resto
+ * não migra. Todas as cores saem dos tokens de globals.css; a única adição é
+ * o roxo do PRO, que não existia como token.
+ */
+.pv-page { display: grid; gap: 18px; max-width: 1080px; margin: 0 auto; }
+
+/* Roxo do PRO — usado no tile de Ofertas automáticas e na etiqueta. */
+.pv-page { --pv-pro: #6F4FE8; --pv-pro-soft: #ECE7FA; --pv-pro-ink: #4B34A8; }
+
+.pv-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+.pv-section-note { font-size: 12.5px; color: var(--ink-soft); margin: 3px 0 0; }
+
+/* ── Cards de números ─────────────────────────────────────────────────── */
+.pv-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.pv-stat {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px 18px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--pnl-radius);
+  box-shadow: var(--pnl-shadow-soft);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.pv-stat-label { display: block; font-size: 12.5px; color: var(--ink-soft); line-height: 1.35; }
+.pv-stat-num {
+  display: block;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.pv-stat-foot { display: block; font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; }
+.pv-stat-ico {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--accent) 26%, var(--surface));
+  color: var(--accent-strong);
+}
+
+/* ── Funções mais usadas ──────────────────────────────────────────────── */
+.pv-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.pv-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 22px 14px 20px;
+  border-radius: var(--pnl-radius-sm);
+  border: 1px solid transparent;
+  background: color-mix(in oklab, var(--accent) 16%, var(--surface));
+  color: var(--accent-strong);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  line-height: 1.3;
+  transition: background 0.15s, transform 0.12s;
+}
+.pv-action:hover { background: color-mix(in oklab, var(--accent) 30%, var(--surface)); transform: translateY(-1px); }
+.pv-action-ico { display: flex; }
+.pv-action.is-pro { background: var(--pv-pro-soft); color: var(--pv-pro-ink); }
+.pv-action.is-pro:hover { background: color-mix(in oklab, var(--pv-pro) 22%, var(--surface)); }
+/* Etiqueta de plano. Verde (Basic) por padrão; o roxo é só dentro do tile
+ * PRO, para o upgrade se distinguir à primeira vista do que ela já tem. */
+.pv-action-tag {
+  /* Sem `text-transform`: o nome do plano sai exatamente como escrito
+   * ("Plano PRO", "Plano Basic"). Caixa alta transformaria "Basic" em
+   * "BASIC" e as duas etiquetas passariam a gritar igual. */
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-strong);
+  color: #fff;
+  white-space: nowrap;
+}
+.pv-action.is-pro .pv-action-tag { background: var(--pv-pro); }
+
+/* Esqueleto de carregamento dos números. */
+.pv-skel {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--bg-soft) 25%, var(--surface) 50%, var(--bg-soft) 75%);
+  background-size: 200% 100%;
+  animation: pv-shimmer 1.2s linear infinite;
+}
+@keyframes pv-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (max-width: 900px) {
+  .pv-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pv-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* No celular os cards ficam DOIS por linha, nunca um só: quatro cards de
+ * largura inteira empurram as funções mais usadas para fora da primeira tela,
+ * e é justamente por elas que a cliente abre o painel. Para caber em dois, o
+ * ícone sai (o rótulo já diz o que é) e o número encolhe. */
+@media (max-width: 480px) {
+  .pv-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pv-stat { padding: 14px 13px; }
+  .pv-stat-ico { display: none; }
+  .pv-stat-label { font-size: 12px; }
+  .pv-stat-num { font-size: 25px; margin-top: 6px; }
+  .pv-stat-foot { font-size: 11px; margin-top: 4px; }
+  .pv-actions { gap: 10px; }
+  .pv-action { padding: 18px 10px; font-size: 13.5px; }
+}
+
+/* ── Testar conversão (2026-09-19) ───────────────────────────────────────
+ * Duas colunas: o link a testar e o veredito. Prefixo `tc-`; reusa os tokens
+ * de `.pv-page` (inclusive o roxo do PRO, que não é usado aqui) e as cores de
+ * globals.css. O âmbar do veredito "ressalva" é o único tom novo: verde e
+ * vermelho já existem, e a ressalva não é nenhum dos dois — o link SAIU, então
+ * vermelho seria alarme falso, e tem o que observar, então verde esconderia.
+ */
+.tc-page { --tc-warn: #B7791F; --tc-warn-soft: #FDF1DC; max-width: 1100px; }
+.tc-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+
+.tc-form { display: flex; flex-direction: column; gap: 12px; }
+.tc-textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--pnl-radius-sm);
+  outline: none;
+  resize: vertical;
+  overflow-wrap: anywhere;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tc-textarea:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 35%, transparent);
+}
+.tc-textarea::placeholder { color: var(--ink-faint); }
+
+.tc-form-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.tc-detect { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+.tc-detect.is-vazio { font-weight: 500; color: var(--ink-faint); }
+.tc-count { font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+.tc-store { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: -0.01em; flex-shrink: 0; }
+
+.tc-aviso {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 10%, var(--surface));
+  border-radius: var(--pnl-radius-sm);
+}
+
+.tc-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tc-acoes .pnl-btn { gap: 7px; }
+
+.tc-resultado { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.tc-vazio { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 40px 24px; }
+.tc-vazio .pv-stat-ico { margin-bottom: 12px; }
+
+/* Tarja do veredito */
+.tc-banner { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; border-radius: var(--pnl-radius); border: 1px solid transparent; }
+.tc-banner.is-ok { background: color-mix(in oklab, var(--accent) 22%, var(--surface)); }
+.tc-banner.is-ressalva { background: var(--tc-warn-soft); }
+.tc-banner.is-erro { background: color-mix(in oklab, var(--danger) 12%, var(--surface)); }
+.tc-banner.is-neutro { background: var(--bg-soft); }
+.tc-banner-ico {
+  width: 38px; height: 38px; flex-shrink: 0;
+  border-radius: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface);
+}
+.tc-banner.is-ok .tc-banner-ico { color: var(--accent-strong); }
+.tc-banner.is-ressalva .tc-banner-ico { color: var(--tc-warn); }
+.tc-banner.is-erro .tc-banner-ico { color: var(--danger); }
+.tc-banner.is-neutro .tc-banner-ico { color: var(--ink-soft); }
+.tc-banner-corpo { min-width: 0; flex: 1; }
+.tc-banner-titulo { font-size: 14.5px; font-weight: 700; line-height: 1.35; color: var(--ink); }
+.tc-banner-texto { margin: 5px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-soft); }
+.tc-banner-btn { margin-top: 12px; gap: 7px; background: var(--surface); }
+
+/* Cartão de comparação dos endereços */
+.tc-detalhe { padding: 0; overflow: hidden; }
+.tc-detalhe.is-ok { border-color: color-mix(in oklab, var(--accent-strong) 45%, var(--line)); }
+.tc-detalhe.is-erro { border-color: color-mix(in oklab, var(--danger) 35%, var(--line)); }
+.tc-detalhe-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+/* `.pnl-card` tem `overflow-wrap: anywhere` (necessário para os endereços
+ * longos), e isso partia o nome da loja no meio da palavra no celular
+ * ("Mercad o Livre"). O nome volta a quebrar só entre palavras. */
+.tc-detalhe-loja { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; min-width: 0; overflow-wrap: normal; }
+.tc-detalhe-corpo { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+
+.tc-pill {
+  font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  white-space: nowrap; flex-shrink: 0;
+  background: var(--bg-soft); color: var(--ink-soft);
+}
+.tc-pill.is-ok { background: color-mix(in oklab, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }
+.tc-pill.is-ressalva { background: var(--tc-warn-soft); color: var(--tc-warn); }
+.tc-pill.is-erro { background: color-mix(in oklab, var(--danger) 15%, var(--surface)); color: var(--danger); }
+
+.tc-rotulo { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px; }
+/* O rótulo do link de afiliado acompanha o veredito: verde só quando o
+ * veredito é verde. Verde dentro de uma tarja âmbar diria "tudo certo" no meio
+ * do aviso de que tem algo a conferir. */
+.tc-rotulo.is-destaque { color: var(--accent-strong); }
+.tc-detalhe.is-ressalva .tc-rotulo.is-destaque { color: var(--tc-warn); }
+.tc-detalhe.is-neutro .tc-rotulo.is-destaque,
+.tc-detalhe.is-erro .tc-rotulo.is-destaque { color: var(--ink-soft); }
+.tc-detalhe.is-ressalva .tc-url.is-destaque { color: var(--ink); }
+.tc-detalhe.is-neutro .tc-url.is-destaque,
+.tc-detalhe.is-erro .tc-url.is-destaque { color: var(--ink-soft); }
+.tc-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.tc-url.is-destaque { color: var(--accent-strong); font-weight: 500; }
+.tc-url.is-vazio { font-family: inherit; font-style: italic; color: var(--ink-faint); }
+
+@media (max-width: 900px) {
+  .tc-cols { grid-template-columns: 1fr; gap: 16px; }
+}
+@media (max-width: 480px) {
+  .tc-form-foot { align-items: flex-start; }
+  .tc-acoes .pnl-btn { flex: 1 1 auto; justify-content: center; }
+  .tc-banner { padding: 14px; gap: 12px; }
+}
+
+/* ── Espelhamento: assistente e "como funciona" (2026-09-19) ─────────────
+ * O assistente liga uma origem já cadastrada a um ou mais destinos. Ele NÃO
+ * cadastra grupo nem edita regra de envio — as duas coisas moram em
+ * /painel/grupos, e a ajuda do rodapé do card leva para lá.
+ */
+.esp-wizard { display: flex; flex-direction: column; gap: 14px; }
+.esp-wizard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.esp-wizard-head > div { min-width: 0; flex: 1 1 260px; }
+
+.esp-wizard-opcoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.esp-opcao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--pnl-radius-sm);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.esp-opcao:hover { border-color: var(--accent-strong); background: color-mix(in oklab, var(--accent) 10%, var(--surface)); }
+.esp-opcao.is-on { border-color: var(--accent-strong); background: color-mix(in oklab, var(--accent) 20%, var(--surface)); }
+.esp-opcao-nome { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.esp-opcao-tag {
+  flex-shrink: 0;
+  font-size: 10.5px; font-weight: 700;
+  padding: 3px 8px; border-radius: 999px;
+  background: var(--bg-soft); color: var(--ink-soft);
+}
+
+.esp-wizard-acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.esp-wizard-ajuda {
+  display: grid; gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px; line-height: 1.55; color: var(--ink-soft);
+}
+.esp-wizard-ajuda p { margin: 0; }
+.esp-wizard-ajuda a { color: var(--accent-strong); font-weight: 600; }
+
+.esp-passos > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink); }
+.esp-passos-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 16px; }
+.esp-passo { padding: 14px; border: 1px solid var(--line); border-radius: var(--pnl-radius-sm); background: var(--surface); }
+.esp-passo strong { display: block; font-size: 13.5px; margin-top: 10px; }
+.esp-passo p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); }
+.esp-passo-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  font-size: 12px; font-weight: 700;
+  background: color-mix(in oklab, var(--accent) 28%, var(--surface));
+  color: var(--accent-strong);
+}
+
+@media (max-width: 480px) {
+  .esp-wizard-acoes .pnl-btn { flex: 1 1 auto; justify-content: center; }
+}
+
+/* --- Cartão de UM espelhamento (mockup 06) -------------------------------
+ * Um cartão por origem, na horizontal: cabeçalho (quem é, o que saiu hoje,
+ * Editar) e corpo "LÊ DE → PUBLICA EM". No celular a seta deita e as duas
+ * metades viram linhas — girar a seta é o que mantém a leitura de fluxo sem
+ * rolagem lateral. */
+.esp-cards { display: grid; gap: 14px; }
+
+.esp-card {
+  border: 1px solid var(--line);
+  border-radius: var(--pnl-radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.esp-card-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in oklab, var(--surface-2, var(--surface)) 60%, var(--surface));
+}
+.esp-card-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; flex: none;
+  border-radius: var(--pnl-radius-sm);
+  background: color-mix(in oklab, var(--accent) 22%, var(--surface));
+  color: var(--accent-strong);
+}
+.esp-card-id { min-width: 0; flex: 1; }
+.esp-card-nome {
+  display: block;
+  font-weight: 650; font-size: 14.5px; color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.esp-card-sub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--ink-soft); }
+
+.esp-card-corpo {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+}
+.esp-lado { min-width: 0; }
+.esp-rotulo {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+  color: var(--ink-soft);
+}
+.esp-rotulo.is-dest { color: var(--accent-strong); }
+
+.esp-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.esp-pill {
+  display: inline-block;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12.5px; font-weight: 600; color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.esp-pill.is-dest {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  background: color-mix(in oklab, var(--accent) 16%, var(--surface));
+  color: var(--accent-strong);
+}
+
+.esp-lojas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.esp-loja {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+}
+
+.esp-seta { display: inline-flex; color: var(--ink-soft); }
+.esp-nota { margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
+.esp-vazio { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+  .esp-card-corpo { grid-template-columns: 1fr; gap: 10px; }
+  .esp-seta { transform: rotate(90deg); justify-self: center; }
 }

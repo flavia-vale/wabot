@@ -333,6 +333,9 @@ export const api = {
   adminCapacityScenario: (input) => apiFetch('/api/admin/capacity/scenario', { method: 'POST', body: JSON.stringify(input) }),
   adminCapacityAlerts: (status = '', limit = 100) => apiFetch(`/api/admin/capacity/alerts?${new URLSearchParams({ ...(status ? { status } : {}), limit: String(limit) })}`),
   adminCapacityRefresh: () => apiFetch('/api/admin/capacity/refresh', { method: 'POST', body: '{}' }),
+  adminShardPocOverview: () => apiFetch('/api/admin/shard-poc/overview'),
+  adminShardPocStart: (userId) => apiFetch(`/api/admin/shard-poc/members/${encodeURIComponent(userId)}/start`, { method: 'POST', body: '{}' }),
+  adminShardPocRollback: (userId) => apiFetch(`/api/admin/shard-poc/members/${encodeURIComponent(userId)}/rollback`, { method: 'POST', body: '{}' }),
   adminSuccessOverview: () => apiFetch('/api/admin/success/overview'),
   adminSuccessQueue: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
@@ -344,7 +347,14 @@ export const api = {
   },
   adminCreateContactLog: (id, data) =>
     apiFetch(`/api/admin/users/${id}/contact-log`, { method: 'POST', body: JSON.stringify(data) }),
-  adminFinanceOverview: () => apiFetch('/api/admin/finance/overview'),
+  adminFinanceOverview: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/finance/overview${query ? `?${query}` : ''}`)
+  },
+  // Sub-aba "ROI" do Financeiro: passado (mês a mês fechado), presente (mês
+  // corrente parcial) e futuro (projeção em cenários). Só busca quando a aba
+  // é aberta — ver `roiLoading` em app/admin/page.js.
+  adminFinanceRoi: (months) => apiFetch(`/api/admin/finance/roi${months ? `?months=${months}` : ''}`),
   adminPayments: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/payments${query ? `?${query}` : ''}`)
@@ -501,6 +511,24 @@ export const api = {
     apiFetch(`/api/offer-automations/${id}/trigger`, { method: 'POST' }),
   offerAutomationSearchPreview: (params) =>
     apiFetch('/api/offer-automations/search-preview', { method: 'POST', body: JSON.stringify(params) }),
+  offerAutomationReviewItems: (id, status = 'awaiting_review,approved,failed') =>
+    apiFetch(`/api/offer-automations/${id}/review-items?status=${encodeURIComponent(status)}`),
+  offerAutomationReviewDiscover: (id, options = {}) => apiFetch(`/api/offer-automations/${id}/review-items/discover`, { method: 'POST', body: JSON.stringify(options) }),
+  offerAutomationReviewApprove: (id, itemId) => apiFetch(`/api/offer-automations/${id}/review-items/${itemId}/approve`, { method: 'POST' }),
+  offerAutomationReviewRemove: (id, itemId) => apiFetch(`/api/offer-automations/${id}/review-items/${itemId}/remove`, { method: 'POST' }),
+  offerAutomationReviewRetry: (id, itemId) => apiFetch(`/api/offer-automations/${id}/review-items/${itemId}/retry`, { method: 'POST' }),
+  offerAutomationReviewCapability: () => apiFetch('/api/offer-automations/review-capability'),
+  instagramConnections: () => apiFetch('/api/instagram/connections'),
+  instagramHealth: () => apiFetch('/api/instagram/health'),
+  instagramOAuthStart: () => apiFetch('/api/instagram/oauth/start'),
+  instagramDisconnect: (id) => apiFetch(`/api/instagram/connections/${id}`, { method: 'DELETE' }),
+  instagramRefresh: (id) => apiFetch(`/api/instagram/connections/${id}/refresh`, { method: 'POST' }),
+  instagramStories: () => apiFetch('/api/instagram/stories'),
+  instagramStoryCreate: (data) => apiFetch('/api/instagram/stories', { method: 'POST', body: JSON.stringify(data) }),
+  instagramStoryCancel: (id) => apiFetch(`/api/instagram/stories/${id}`, { method: 'DELETE' }),
+  instagramStoryRetry: (id) => apiFetch(`/api/instagram/stories/${id}/retry`, { method: 'POST' }),
+  instagramMirrorTargets: () => apiFetch('/api/instagram/mirror-targets'),
+  instagramMirrorTargetsUpdate: (sourceGroupId, destinationIds) => apiFetch(`/api/instagram/mirror-targets/${sourceGroupId}`, { method: 'PUT', body: JSON.stringify({ destinationIds }) }),
   variationsGet: () => apiFetch('/api/config'),
   variationsUpdate: (data) =>
     apiFetch('/api/config', {

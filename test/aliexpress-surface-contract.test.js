@@ -11,7 +11,11 @@ test('AliExpress está ligada em todas as superfícies estáticas da plataforma'
     ['src/bot-worker.js', /aliexpress: 'AliExpress'/],
     ['src/core/mirrorTemplate.js', /aliexpress: 'AliExpress'/],
     ['dashboard/app/painel/grupos/page.js', /id: 'aliexpress'/],
-    ['dashboard/app/painel/converte-links/page.js', /aliexpress\\\.com/],
+    // A tela de teste de conversão não guarda mais a lista de endereços (ela
+    // usa `detectLinks`), então a cobertura dela passou a ser dupla: o texto
+    // que a cliente lê + o detector que de fato reconhece a loja.
+    ['dashboard/app/painel/converte-links/page.js', /AliExpress/],
+    ['src/detector.js', /aliexpress/],
     ['dashboard/lib/mobileCouponStore.js', /aliexpress: ''/],
     ['dashboard/lib/mobileLogs.js', /aliexpress: 'AliExpress'/],
     ['prisma/schema.prisma', /platforms\s+String\s+@default\("[^"]*aliexpress/],

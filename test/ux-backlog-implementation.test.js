@@ -10,7 +10,11 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 
 test('painel converter stays 1:1 and does not expose the advanced offer builder', () => {
   const page = read('dashboard/app/painel/converte-links/page.js')
-  assert.match(page, /Formato[\s\S]*1:1/)
+  // O rótulo "Formato 1:1" saiu no redesenho de 2026-09-19; a REGRA continua e
+  // hoje é aplicada pela trava de um link por teste (`linksDemais`), que
+  // desabilita o botão e explica o porquê.
+  assert.match(page, /Cole um link por vez/)
+  assert.match(page, /linksDemais/)
   assert.doesNotMatch(page, /1:1 ou n:n/)
   assert.doesNotMatch(page, /OfferBuilder/)
   assert.doesNotMatch(page, /Montador de oferta/)
@@ -65,7 +69,13 @@ test('message templates page prioritizes templates and progressively discloses s
   assert.ok(dynamicTextsSection < linksSection)
   assert.ok(linksSection < referenceSection)
   assert.match(page, /templateMode === 'list'[\s\S]*Criar template/)
-  assert.match(page, />Concluir edição</)
+  // Um clique só: o botão do editor aplica E grava (nunca voltar ao par
+  // "Concluir edição" + "Salvar", que fazia o primeiro clique parecer o salvamento).
+  assert.doesNotMatch(page, /Concluir edição/)
+  assert.match(page, /onClick=\{saveTemplate\}/)
+  assert.match(page, /Salvar template/)
+  assert.match(page, /async function saveTemplate\(\)[\s\S]*applyAndPersist/)
+  assert.match(page, /async function applyAndPersist\(nextStore\)[\s\S]*handleSave\(nextStore\)/)
   assert.match(page, /Salvar templates, textos e links/)
   assert.doesNotMatch(page, /<details[^>]*\sopen(?:=|\s|>)/)
   assert.doesNotMatch(page, /pra nunca repetir|>Fechamento</)

@@ -103,6 +103,13 @@ test('origem: página de conteúdo é sinal forte de busca; home é ambíguo', (
   assert.equal(classifyLandingPage('/blog/como-ser-afiliado'), 'CONTEÚDO (blog)')
   assert.equal(classifyLandingPage('/alternativas/achadinhos-bot'), 'CONTEÚDO (comparativo)')
   assert.equal(classifyLandingPage('/bot-achadinhos-whatsapp'), 'CONTEÚDO (página de busca)')
+  // RCA 2026-09-18: as páginas de loja do Tier 1 e as de 11/09 caíam em
+  // "outro:" e o cadastro virava "Direto / ambíguo".
+  for (const tier1 of ['/shopee-afiliados-whatsapp', '/mercado-livre-afiliados-whatsapp', '/amazon-afiliados-whatsapp', '/shein-afiliados-whatsapp', '/magalu-afiliados-whatsapp', '/quanto-ganha-afiliado-shopee', '/vendas-e-comissao-afiliado-whatsapp', '/copiaram-minha-oferta-no-whatsapp', '/espelha-grupos-e-confiavel', '/metodologia-uso-responsavel-whatsapp']) {
+    assert.equal(classifyLandingPage(tier1), 'CONTEÚDO (página de busca)', tier1)
+    assert.equal(resolveSignupOrigin({ landing_page: tier1 }).bucket, 'Conteúdo (busca)', tier1)
+  }
+  assert.equal(resolveSignupOrigin({ landing_page: '/?utm_source=grok.com' }).bucket, 'IA (grok)')
   assert.equal(resolveSignupOrigin({ landing_page: '/alternativas/x' }).bucket, 'Conteúdo (busca)')
   assert.equal(resolveSignupOrigin({ landing_page: '/' }).bucket, 'Direto / ambíguo')
   assert.equal(resolveSignupOrigin({ landing_page: '/r/abc123' }).bucket, 'Indicação')

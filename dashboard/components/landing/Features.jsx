@@ -133,14 +133,15 @@ export function Features() {
 
           <div style={s.card(5)} className="landing-feature-card landing-feature-card-secondary">
             <div style={s.iconBox}><Icon name="link" size={22} /></div>
-            <div style={s.cardTitle}>4 lojas, mais chegando</div>
+            <div style={s.cardTitle}>6 lojas com conversão de link</div>
             <p style={s.cardBody}>Suporta as principais plataformas que mais convertem no público brasileiro.</p>
             <div style={s.storeRow}>
               <span style={s.store}>Shopee</span>
               <span style={s.store}>Mercado Livre</span>
               <span style={s.store}>Amazon</span>
               <span style={s.store}>Magalu</span>
-              <span style={{ ...s.store, color: 'var(--ink-soft)', borderStyle: 'dashed' }}>+ novas integrações em breve</span>
+              <span style={s.store}>SHEIN</span>
+              <span style={s.store}>AliExpress</span>
             </div>
           </div>
 

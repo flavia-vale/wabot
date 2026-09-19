@@ -17,6 +17,20 @@ export const WATERMARK_INPUT_MAX_CHARS = 25
 // Espelha as chaves de WATERMARK_COLORS de core/destinationWatermark.js.
 export const WATERMARK_INPUT_COLORS = Object.freeze(['white', 'black'])
 
+// Espelha WATERMARK_SIZES de core/destinationWatermark.js.
+export const WATERMARK_INPUT_SIZES = Object.freeze(['small', 'medium', 'large'])
+
+// Espelha as posições aceitas por core/destinationWatermark.js (a validação
+// de posição sempre existiu lá; a API nunca repetiu essa lista antes de a
+// tela passar a oferecer os cantos).
+export const WATERMARK_INPUT_POSITIONS = Object.freeze([
+  'center',
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+])
+
 /**
  * Normaliza o texto como o renderizador normaliza (espaços colapsados, aparado).
  * Devolve `undefined` quando o campo nem veio no corpo — a diferença entre
@@ -38,4 +52,12 @@ export function isWatermarkTextTooLong(text) {
 
 export function isValidWatermarkColor(value) {
   return WATERMARK_INPUT_COLORS.includes(value)
+}
+
+export function isValidWatermarkSize(value) {
+  return WATERMARK_INPUT_SIZES.includes(value)
+}
+
+export function isValidWatermarkPosition(value) {
+  return WATERMARK_INPUT_POSITIONS.includes(value)
 }

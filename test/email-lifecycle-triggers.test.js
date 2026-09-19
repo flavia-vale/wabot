@@ -76,7 +76,7 @@ test('plano pago tem contagem regressiva própria e aviso de vencido', () => {
   assert.equal(decideLifecycleEmail(base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - DAY) }), NOW)?.slug, 'plano_venceu')
   // Os dias de cada etapa depois do vencimento moram em expiredPlanJourney.js —
   // a jornada completa é coberta em test/email-plano-vencido-jornada.test.js.
-  assert.equal(decideLifecycleEmail(base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 9 * DAY) }), NOW)?.slug, 'plano_vencido_volta')
+  assert.equal(decideLifecycleEmail(base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 11 * DAY) }), NOW)?.slug, 'plano_vencido_volta')
 })
 
 test('conta banida ou suspensa não recebe nada', () => {
@@ -237,7 +237,12 @@ test('todo e-mail que a política pede existe no catálogo', () => {
     base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() + 2 * DAY) }),
     base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() + DAY) }),
     base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - DAY) }),
-    base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 9 * DAY) }),
+    base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 11 * DAY) }),
+    // Etapas do voucher: a política precisa entregar o código e o prazo junto.
+    base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 5 * DAY) }),
+    base({ plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 7 * DAY) }),
+    base({ accessExpiresAt: new Date(NOW.getTime() - 5 * DAY) }),
+    base({ accessExpiresAt: new Date(NOW.getTime() - 7 * DAY) }),
     base({ waConnected: false, waDisconnectedSince: new Date(NOW.getTime() - 30 * HOUR) }),
     base({ waEverConnected: false, waConnected: false, createdAt: new Date(NOW.getTime() - 3 * DAY) }),
     base({ hasPostGroup: false }),

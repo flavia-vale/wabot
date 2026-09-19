@@ -49,6 +49,8 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Oferta espelhada saiu sem foto porque o card de preview não conseguiu
   // imagem. Durável para comparar por loja e por etapa ao longo dos dias.
   preview_card_no_image: 'ops_preview_card_no_image',
+  // Link de domínio próprio do grupo de origem desembrulhado até a loja.
+  custom_domain_link_resolved: 'ops_custom_domain_link_resolved',
   // Sessão conectada e SEM receber mensagem útil, com evidência de tráfego
   // chegando e falhando (RCA 2026-08-26: painel verde e espelhamento parado).
   wa_reception_blind: 'ops_wa_reception_blind',
@@ -70,6 +72,7 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   wa_reception_self_heal: 'ops_wa_reception_self_heal',
   // Muro anti-robô do ML batendo no IP do servidor (RCA 2026-08-19/20).
   ml_anti_bot_wall: 'ops_ml_anti_bot_wall',
+  magalu_bot_wall: 'ops_magalu_bot_wall',
   // Card de preview salvo pelo plano B: loja sem foto, foto da mensagem de
   // origem no lugar. A oferta SAIU com card clicável e com imagem.
   preview_card_origin_fallback: 'ops_preview_card_origin_fallback',

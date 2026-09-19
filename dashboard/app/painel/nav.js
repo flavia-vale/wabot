@@ -41,7 +41,7 @@ export const NAV_GROUPS = [
         icon: i(<><path d="M12 5v14" /><path d="M5 12h14" /><path d="M4 4h16v16H4z" /></>),
       },
       {
-        label: 'Espelhar grupos',
+        label: 'Espelhamento',
         href: '/painel/espelhamento',
         icon: i(<><path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>),
       },
@@ -101,6 +101,11 @@ export const NAV_GROUPS = [
         label: 'Minhas credenciais',
         href: '/painel/ids-afiliada',
         icon: i(<><circle cx="7.5" cy="15.5" r="5.5" /><path d="M21 2l-9.6 9.6" /><path d="M15.5 7.5 18 10l3-3-2.5-2.5z" /></>),
+      },
+      {
+        label: 'Testar conversão',
+        href: '/painel/converte-links',
+        icon: i(<><path d="M5 12.5 10 17 19 7" /><path d="M20 12a8 8 0 1 1-3.2-6.4" /></>),
       },
       {
         label: 'Tutorial',

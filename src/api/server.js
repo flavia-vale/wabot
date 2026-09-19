@@ -24,6 +24,7 @@ import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { offerAutomationRoutes } from './routes/offerAutomation.js'
+import { offerAutomationReviewRoutes } from './routes/offerAutomationReview.js'
 import { offerQueueRoutes } from './routes/offerQueue.js'
 import { affiliateRoutes } from './routes/affiliate.js'
 import { startOfferAutomationCron } from '../offerAutomation/cron.js'
@@ -58,8 +59,18 @@ import { createHetznerClient, manualCapacityContractFromEnv } from '../ops/capac
 import { evaluateCapacityAlerts } from '../ops/capacity/alerts.js'
 import { resolveDeploymentRevision } from '../ops/capacity/deploymentMarker.js'
 import { resolveProcessRoots } from '../ops/capacity/processMetrics.js'
+import { storyAssetRoutes } from './routes/storyAssets.js'
+import { createStoryAssetStorageFromEnv } from '../instagram/storage/localStoryAssetStorage.js'
+import { startStoryAssetCleanup } from '../instagram/storage/storyAssetService.js'
+import { instagramRoutes } from './routes/instagram.js'
+import { instagramOAuthConfig } from '../instagram/oauth/config.js'
+import { startInstagramTokenSweep } from '../instagram/oauth/sweep.js'
+import { startInstagramPublishingRuntime } from '../instagram/publishing/runtime.js'
+import { startInstagramMirrorIngressCron } from '../instagram/mirroring/service.js'
+import { startInstagramReconciliation } from '../instagram/publishing/reconcile.js'
 
 const app = Fastify({ logger: true, trustProxy: true })
+const storyAssetStorage = createStoryAssetStorageFromEnv()
 registerApiMetricsHooks(app)
 const activityWriteThrottleMs = Math.max(0, Number(process.env.ACTIVITY_WRITE_THROTTLE_MS || 60_000))
 const lastActivityWriteByUser = new Map()
@@ -521,8 +532,11 @@ app.register(linkConversionRoutes, { prefix: '/api/link-conversion' })
 app.register(adminRoutes, { prefix: '/api/admin' })
 app.register(adminEmailsRoutes, { prefix: '/api/admin/emails' })
 app.register(publicRoutes, { prefix: '/api/public' })
+app.register(storyAssetRoutes, { prefix: '/api/public', storage: storyAssetStorage })
+app.register(instagramRoutes, { prefix: '/api/instagram', storage: storyAssetStorage })
 app.register(preservationRoutes, { prefix: '/api/preservation' })
 app.register(offerAutomationRoutes, { prefix: '/api/offer-automations' })
+app.register(offerAutomationReviewRoutes, { prefix: '/api/offer-automations' })
 app.register(offerQueueRoutes, { prefix: '/api/offer-queues' })
 app.register(clickTrackerRoutes) // sem prefix — /r/:hash precisa estar na raiz
 app.register(affiliateRoutes, { prefix: '/api' })
@@ -588,6 +602,19 @@ if (!databaseReadyAtBoot) {
 // registrar aqui em vez de descobrir pelo spam de "A sincronização foi
 // concluída" no celular da cliente.
 if (databaseReadyAtBoot) {
+  if (storyAssetStorage) startStoryAssetCleanup({ db, storage: storyAssetStorage, logger: app.log })
+  try {
+    const instagramConfig = instagramOAuthConfig()
+    startInstagramTokenSweep({ db, config: instagramConfig, logger: app.log })
+    if (storyAssetStorage && process.env.REDIS_URL) {
+      await startInstagramPublishingRuntime({ db, storage: storyAssetStorage, config: instagramConfig, redisUrl: process.env.REDIS_URL, logger: app.log })
+      startInstagramMirrorIngressCron({ db })
+      // Publicação presa em "aguardando conferência" era um beco sem saída:
+      // o processor sabe reconciliar (relê o container na Meta) e ninguém o
+      // chamava. Mesma passada in-process das demais — nenhum processo PM2 novo.
+      startInstagramReconciliation({ db, logger: app.log })
+    }
+  } catch (error) { app.log.info({ err: error.message }, 'Runtime Instagram desativado por configuração incompleta') }
   const capacityRepository = createCapacityRepository(db)
   const deploymentRevision = await resolveDeploymentRevision()
   const capacityProcessRoots = resolveProcessRoots(process.env)

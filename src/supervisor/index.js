@@ -27,6 +27,8 @@ import { shouldResurrectSession, buildResurrectionWhere, resolveIncludeReconnect
 import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
+import { createShardProcessController } from './shardProcessController.js'
+import { createShardOwnershipCoordinator } from '../core/shardOwnershipCoordinator.js'
 import {
   COMMAND,
   COMMAND_QUEUE,
@@ -133,6 +135,40 @@ const MAX_SESSIONS_PER_PROCESS = Math.max(1, Number(process.env.MAX_SESSIONS_PER
 const SESSION_CIRCUIT_BREAKER_MODE = parseEnumEnv('SESSION_CIRCUIT_BREAKER_MODE', process.env.SESSION_CIRCUIT_BREAKER_MODE || 'closed', ['closed', 'open'], 'closed')
 const SESSION_CIRCUIT_BREAKER_ALERT_KEY = `supervisor:session_circuit_breaker_alert:${SHARD_TAG}`
 const SESSION_QUARANTINE_KEY = `supervisor:session_quarantine_total:${SHARD_TAG}`
+const SHARD_POC_MODE = parseEnumEnv('WA_SESSION_SHARD_POC', process.env.WA_SESSION_SHARD_POC || 'observe', ['off', 'observe', 'enabled'], 'observe')
+const shardOwnedUsers = new Set()
+const pocShard = createShardProcessController({
+  shardId: 'poc-1',
+  onEvent: ({ userId, event }) => {
+    if (event?.type === 'qr') publishEvent(userId, EVENT.QR, event.data)
+    if (event?.type === 'status') publishEvent(userId, EVENT.STATUS, { status: event.data, phone: event.phone ?? null })
+    if (event?.type === 'lifecycle') publishEvent(userId, EVENT.LIFECYCLE, event.data)
+  },
+})
+const shardOwnership = createShardOwnershipCoordinator({
+  db,
+  logger,
+  dedicated: {
+    block: userId => sessionCore.blockSessionCommands(userId),
+    unblock: userId => sessionCore.unblockSessionCommands(userId),
+    drain: async () => true,
+    stop: async userId => sessionCore.stopBot(userId),
+    waitForExit: (userId, timeoutMs) => sessionCore.waitForBotExit(userId, timeoutMs),
+    isRunning: async userId => sessionCore.isRunning(userId),
+    start: async userId => startBotWithBridge(userId),
+    waitForHeartbeat: async (userId, timeoutMs) => {
+      const deadline = Date.now() + timeoutMs
+      while (Date.now() < deadline) {
+        const processInfo = sessionCore.getSessionProcessInfo(userId)
+        const row = await db.waSession.findUnique({ where: { userId }, select: { status: true, lifecycle: true } })
+        if (processInfo?.lastHeartbeatAt && row?.status === 'connected' && row?.lifecycle === 'ready') return true
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      return false
+    },
+  },
+  shard: pocShard,
+})
 
 // Orçamento de restarts automáticos por sessão (health monitor). Start manual
 // via comando START_BOT limpa a quarentena.
@@ -272,69 +308,92 @@ const COMMAND_HANDLERS = {
   // intervenção manual é o caminho documentado para religar antes do prazo.
   [COMMAND.START_BOT]: ({ userId }) => {
     restartBudget.clear(userId)
+    if (shardOwnedUsers.has(userId)) return pocShard.start(userId)
     return startBotWithBridge(userId)
   },
-  [COMMAND.STOP_BOT]: ({ userId }) => stopBotWithBridge(userId),
-  [COMMAND.IS_RUNNING]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.isRunning(userId) : false,
-  [COMMAND.LIST_RUNNING_BOTS]: () => sessionCore.listRunningBots(),
+  [COMMAND.STOP_BOT]: ({ userId }) => shardOwnedUsers.has(userId) ? pocShard.stop(userId) : stopBotWithBridge(userId),
+  [COMMAND.IS_RUNNING]: ({ userId }) => belongsToThisShard(userId) ? (shardOwnedUsers.has(userId) ? pocShard.isRunning(userId) : sessionCore.isRunning(userId)) : false,
+  [COMMAND.LIST_RUNNING_BOTS]: async () => {
+    const dedicatedUsers = sessionCore.listRunningBots()
+    const shardUsers = []
+    for (const userId of shardOwnedUsers) if (await pocShard.isRunning(userId)) shardUsers.push(userId)
+    return [...new Set([...dedicatedUsers, ...shardUsers])]
+  },
   [COMMAND.LIST_GROUPS]: ({ userId }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'listGroups')
       throw new Error('Session owner mismatch')
     }
-    return sessionCore.listGroups(userId)
+    return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'listGroups') : sessionCore.listGroups(userId)
   },
   [COMMAND.SEND_BROADCAST]: ({ userId, text, jids, options }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'sendBroadcast')
       throw new Error('Session owner mismatch')
     }
-    return sessionCore.sendBroadcast(userId, text, jids, options)
+    return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'broadcast', { text, jids, options }) : sessionCore.sendBroadcast(userId, text, jids, options)
   },
   [COMMAND.REQUEST_PAIRING_CODE]: ({ userId, phone }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'requestPairingCode')
       throw new Error('Session owner mismatch')
     }
-    return sessionCore.requestPairingCode(userId, phone)
+    return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'requestPairingCode', { phone }) : sessionCore.requestPairingCode(userId, phone)
   },
   [COMMAND.GET_BOT_METRICS]: ({ userId }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'getBotMetrics')
       return { session_owner_mismatch_total: sessionOwnerMismatchTotal }
     }
-    return sessionCore.getBotMetrics(userId)
+    return shardOwnedUsers.has(userId) ? pocShard.sessionMetrics(userId) : sessionCore.getBotMetrics(userId)
   },
-  [COMMAND.RELOAD_CONFIG]: createReloadConfigHandler({ belongsToThisShard, sessionCore, logger }),
+  [COMMAND.RELOAD_CONFIG]: ({ userId }) => shardOwnedUsers.has(userId)
+    ? pocShard.command(userId, 'reloadConfig')
+    : createReloadConfigHandler({ belongsToThisShard, sessionCore, logger })({ userId }),
   [COMMAND.REFRESH_WA_GROUPS]: ({ userId }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'refreshWaGroups')
       throw new Error('Session owner mismatch')
     }
-    return sessionCore.refreshWaGroups(userId)
+    return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'refreshWaGroups') : sessionCore.refreshWaGroups(userId)
   },
   [COMMAND.CHANNEL_METADATA]: ({ userId, jid, inviteCode }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'channelMetadata')
       throw new Error('Session owner mismatch')
     }
-    return sessionCore.channelMetadata(userId, { jid, inviteCode })
+    return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'channel:metadata', { jid, inviteCode }) : sessionCore.channelMetadata(userId, { jid, inviteCode })
   },
   [COMMAND.CHANNEL_FOLLOW]: ({ userId, jid }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'channelFollow')
       throw new Error('Session owner mismatch')
     }
-    return sessionCore.followChannelImmediate(userId, jid)
+    return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'channel:follow', { jid }) : sessionCore.followChannelImmediate(userId, jid)
   },
   [COMMAND.CHANNEL_LIST_FOLLOWED]: ({ userId }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'channelListFollowed')
       throw new Error('Session owner mismatch')
     }
-    return sessionCore.listFollowedChannels(userId)
+    return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'channel:listFollowed') : sessionCore.listFollowedChannels(userId)
   },
-  [COMMAND.GET_LAST_QR]: ({ userId }) => belongsToThisShard(userId) ? sessionCore.getLastQR(userId) : null,
+  [COMMAND.GET_LAST_QR]: ({ userId }) => belongsToThisShard(userId) ? (shardOwnedUsers.has(userId) ? pocShard.getLastQR(userId) : sessionCore.getLastQR(userId)) : null,
+  [COMMAND.SHARD_MOVE_SESSION]: async ({ userId, shardId = 'poc-1' }) => {
+    if (SHARD_POC_MODE !== 'enabled') throw new Error(`Shard POC não habilitado (modo ${SHARD_POC_MODE})`)
+    if (shardId !== 'poc-1') throw new Error('Shard POC desconhecido')
+    if (!belongsToThisShard(userId)) throw new Error('Session owner mismatch')
+    const result = await shardOwnership.moveToShard({ userId, shardId })
+    shardOwnedUsers.add(userId)
+    return result
+  },
+  [COMMAND.SHARD_ROLLBACK_SESSION]: async ({ userId, shardId = 'poc-1' }) => {
+    if (shardId !== 'poc-1') throw new Error('Shard POC desconhecido')
+    const result = await shardOwnership.rollback({ userId, shardId, dedicatedOwner: SHARD_TAG })
+    shardOwnedUsers.delete(userId)
+    return result
+  },
+  [COMMAND.SHARD_METRICS]: ({ shardId = 'poc-1' }) => shardId === 'poc-1' ? pocShard.metrics() : null,
 }
 
 // lockDuration > maior timeout de comando (+ folga) para que handlers
@@ -424,6 +483,19 @@ async function healthMonitorTick() {
     }
   }
 
+  // Falha de uma sessão dentro do shard reduz blast radius: restaura somente
+  // aquele tenant ao worker dedicado, sem reiniciar as outras três.
+  for (const userId of [...shardOwnedUsers]) {
+    try {
+      if (await pocShard.isRunning(userId)) continue
+      logger.error({ userId }, 'Sessão saiu do shard — rollback automático individual')
+      await shardOwnership.rollback({ userId, shardId: 'poc-1', dedicatedOwner: SHARD_TAG })
+      shardOwnedUsers.delete(userId)
+    } catch (err) {
+      logger.error({ userId, err: err?.message }, 'Rollback automático da sessão do shard falhou')
+    }
+  }
+
   // (2) Ressuscita sessões persistidas que pertencem ao shard mas não estão
   // rodando localmente — cobre tanto o exit de worker (OOM/exceção) quanto
   // o restart pós-stopBot acima no próximo tick. Pulado quando o auto-resume
@@ -432,10 +504,11 @@ async function healthMonitorTick() {
   try {
     const persisted = (await db.waSession.findMany({
       where: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }),
-      select: { userId: true, status: true, lifecycle: true },
+      select: { userId: true, status: true, lifecycle: true, ownerInstance: true },
     })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
     for (const s of persisted) {
       if (!belongsToThisShard(s.userId)) continue
+      if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       if (sessionCore.isRunning(s.userId)) continue
       // Restart budget: sessão que morre repetidamente (auth_info corrompido,
       // falha permanente) entra em quarentena em vez de churn infinito de
@@ -493,6 +566,19 @@ async function boot() {
   logger.info({ redisUrl: REDIS_URL.replace(/:[^:@/]+@/, ':***@'), shard: SHARD_TAG, shardCount: SHARD_COUNT, shardIndex: SHARD_INDEX }, 'bot-supervisor iniciando')
   startHeartbeat()
 
+  // O shard é filho do supervisor. Se o supervisor reiniciou, qualquer owner
+  // `shard:*` persistido é órfão por definição. Reverte a posse antes do
+  // auto-resume; nunca abre um segundo shard às cegas sobre auth existente.
+  try {
+    const orphaned = await db.waSession.findMany({ where: { ownerInstance: { startsWith: 'shard:' } }, select: { userId: true } })
+    for (const { userId } of orphaned) {
+      await db.waSession.update({ where: { userId }, data: { ownerInstance: SHARD_TAG, lifecycle: 'reconnecting', status: 'connected' } })
+      logger.warn({ userId }, 'Ownership de shard órfão restaurado para worker dedicado após restart do supervisor')
+    }
+  } catch (err) {
+    logger.error({ err: err?.message }, 'Falha ao reconciliar ownership de shard no boot')
+  }
+
   // Resume de sessões persistidas — guardado por try/catch por sessão. Antes
   // o loop era unguarded: uma única sessão com auth_info corrompido derrubava
   // o boot inteiro, PM2 reiniciava, mesma falha → loop de DoS auto-infligido.
@@ -503,13 +589,14 @@ async function boot() {
     const persisted = AUTO_RESUME
       ? (await db.waSession.findMany({
           where: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }),
-          select: { userId: true, status: true, lifecycle: true },
+          select: { userId: true, status: true, lifecycle: true, ownerInstance: true },
         })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
       : []
     if (!AUTO_RESUME) logger.info({ shard: SHARD_TAG }, 'AUTO_START_WHATSAPP_SESSIONS=false — supervisor não faz auto-resume (só comandos manuais)')
     attempted = persisted.length
     for (const s of persisted) {
       if (!belongsToThisShard(s.userId)) continue
+      if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       try {
         if (await startBotWithBridge(s.userId)) started++
       } catch (err) {
@@ -556,6 +643,7 @@ async function shutdown(signal) {
   try { await publisher.del(SUPERVISOR_HEARTBEAT_KEY) } catch {}
   try { await publisher.del(SUPERVISOR_BOOTED_AT_KEY) } catch {}
   try { await worker.close() } catch {}
+  try { await pocShard.shutdown() } catch {}
   try { await publisher.quit() } catch {}
   try { sessionCore.stopAllBots() } catch {}
   try { await db.$disconnect() } catch {}
