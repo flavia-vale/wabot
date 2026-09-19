@@ -1559,15 +1559,22 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .pv-action-ico { display: flex; }
 .pv-action.is-pro { background: var(--pv-pro-soft); color: var(--pv-pro-ink); }
 .pv-action.is-pro:hover { background: color-mix(in oklab, var(--pv-pro) 22%, var(--surface)); }
+/* Etiqueta de plano. Verde (Basic) por padrão; o roxo é só dentro do tile
+ * PRO, para o upgrade se distinguir à primeira vista do que ela já tem. */
 .pv-action-tag {
-  font-size: 9.5px;
+  /* Sem `text-transform`: o nome do plano sai exatamente como escrito
+   * ("Plano PRO", "Plano Basic"). Caixa alta transformaria "Basic" em
+   * "BASIC" e as duas etiquetas passariam a gritar igual. */
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 2px 7px;
+  letter-spacing: 0.02em;
+  padding: 3px 9px;
   border-radius: 999px;
-  background: var(--pv-pro);
+  background: var(--accent-strong);
   color: #fff;
+  white-space: nowrap;
 }
+.pv-action.is-pro .pv-action-tag { background: var(--pv-pro); }
 
 /* Esqueleto de carregamento dos números. */
 .pv-skel {
@@ -1583,9 +1590,17 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   .pv-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pv-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* No celular os cards ficam DOIS por linha, nunca um só: quatro cards de
+ * largura inteira empurram as funções mais usadas para fora da primeira tela,
+ * e é justamente por elas que a cliente abre o painel. Para caber em dois, o
+ * ícone sai (o rótulo já diz o que é) e o número encolhe. */
 @media (max-width: 480px) {
-  .pv-stats { grid-template-columns: 1fr; }
-  .pv-stat { padding: 16px; }
-  .pv-stat-num { font-size: 26px; }
-  .pv-action { padding: 18px 12px; font-size: 13.5px; }
+  .pv-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .pv-stat { padding: 14px 13px; }
+  .pv-stat-ico { display: none; }
+  .pv-stat-label { font-size: 12px; }
+  .pv-stat-num { font-size: 25px; margin-top: 6px; }
+  .pv-stat-foot { font-size: 11px; margin-top: 4px; }
+  .pv-actions { gap: 10px; }
+  .pv-action { padding: 18px 10px; font-size: 13.5px; }
 }

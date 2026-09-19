@@ -29,14 +29,30 @@ test('AliExpress pertence ao contrato de credenciais com um código de acesso ob
   )
 })
 
-test('falta de dados AliExpress gera aviso fail-closed em linguagem leiga', () => {
-  const [alert] = buildCredentialBlockAlerts({
+// Decisão da dona do produto (2026-09-19): o banner do topo do painel para a
+// AliExpress foi RETIRADO. A conversão dela segue fail-closed (nada é
+// publicado sem cadastro) e a oferta perdida continua visível no histórico de
+// envios com a etiqueta "faltou cadastrar a loja" — o que saiu foi o banner,
+// não o sinal. As outras lojas não podem ser arrastadas junto.
+test('AliExpress sem cadastro NÃO gera aviso no topo do painel', () => {
+  const stores = buildCredentialBlockAlerts({
     blockedByPlatform: [{ platform: 'aliexpress', blockedCount: 2, lastBlockedAt: new Date().toISOString() }],
     configuredPlatforms: [],
   })
-  assert.equal(alert.storeLabel, 'AliExpress')
-  assert.match(alert.body, /nunca é publicado/)
-  assert.doesNotMatch(alert.body, /appKey|appSecret|trackingId|API/)
+  assert.deepEqual(stores, [])
+})
+
+test('retirar o aviso da AliExpress não calou o das outras lojas', () => {
+  const stores = buildCredentialBlockAlerts({
+    blockedByPlatform: [
+      { platform: 'aliexpress', blockedCount: 2, lastBlockedAt: new Date().toISOString() },
+      { platform: 'shopee', blockedCount: 3, lastBlockedAt: new Date().toISOString() },
+      { platform: 'shein', blockedCount: 1, lastBlockedAt: new Date().toISOString() },
+      { platform: 'mercadolivre', blockedCount: 1, lastBlockedAt: new Date().toISOString() },
+    ],
+    configuredPlatforms: [],
+  })
+  assert.deepEqual(stores.map(s => s.platform), ['shopee', 'shein', 'mercadolivre'])
 })
 
 test('save não promete credencial AliExpress aceita sem ter consultado a loja', () => {
