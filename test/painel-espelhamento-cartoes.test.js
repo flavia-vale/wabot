@@ -1,9 +1,20 @@
-/* Guarda do cartão de UM espelhamento (2026-09-19).
+/* Guarda do cartão de grupo do nível 1 (2026-09-19).
  *
- * A aba Grupos mostrava duas COLUNAS — "grupos que monitoro" e "meus grupos de
- * promoção" — e quem lia precisava cruzar as duas na cabeça para responder a
- * única pergunta que importa ali: "esta origem publica onde?". Agora é um
- * cartão por ORIGEM, na horizontal: LÊ DE → PUBLICA EM.
+ * Duas mudanças de desenho no mesmo dia, nesta ordem:
+ *
+ * 1. as duas colunas viraram um cartão por ORIGEM ("LÊ DE → PUBLICA EM"),
+ *    porque cruzar as listas na cabeça para responder "esta origem publica
+ *    onde?" era trabalhoso;
+ * 2. as DUAS COLUNAS VOLTARAM, por decisão da dona do produto, quando a tela
+ *    absorveu a de Grupos. O motivo é o que faltava no desenho de cartões: ele
+ *    não tem porta de entrada para o DESTINO, e é no destino que moram imagem,
+ *    marca d'água, boas-vindas, botão "Ver canal" e anti-ban. Sem a coluna de
+ *    destinos, metade da tela de Grupos não teria onde ser absorvida.
+ *
+ * O que o cartão por origem entregava de bom **não** se perdeu e continua
+ * verificado aqui: ele vive dentro do cartão da coluna de origem (quantas
+ * ofertas saíram hoje, as lojas aceitas, "para onde envia"), montado pela MESMA
+ * regra pura.
  *
  * As três formas de o cartão mentir, todas cobertas aqui:
  *
@@ -11,8 +22,7 @@
  *    (`GET /logs/summary` devolve só as 5 origens com mais movimento);
  * 2. mostrar origem sem loja nenhuma — `allowedPlatforms` vazio significa
  *    TODAS, é como a tela de grupos já lê o campo;
- * 3. o botão "Editar" não conseguir REMOVER um destino, porque o assistente
- *    soma (correto ao criar, errado ao editar).
+ * 3. gravar a escolha de destinos sem passar pela regra, apagando vínculo.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -157,23 +167,62 @@ test('criar continua exigindo pelo menos um destino marcado', () => {
   assert.equal(r.ficaSemDestino, false)
 })
 
-test('a aba Grupos renderiza os cartões, não as duas colunas antigas', () => {
-  assert.match(page, /espelhos\.map\(/, 'a lista de cartões sumiu do render')
-  assert.match(page, /<EspelhoCard/)
-  assert.doesNotMatch(page, /<GroupList/, 'as duas colunas verticais voltaram')
-  assert.match(page, /onEditar=\{editarEspelho\}/, '"Editar" precisa reabrir o assistente')
+test('a aba Grupos tem as duas colunas, e cada card abre o painel lateral', () => {
+  // Ver no nível 1, configurar no nível 2. A coluna de DESTINOS é o que torna
+  // possível absorver a tela de Grupos: sem ela, imagem, marca d'água,
+  // boas-vindas, botão "Ver canal" e anti-ban ficam sem porta de entrada.
+  assert.match(page, /<GroupColumn/)
+  assert.match(page, /title="Grupos que monitoro"/)
+  assert.match(page, /title="Meus grupos de promoção"/)
+  assert.match(page, /onOpen=\{\(id\) => openDrawerFor\(id, 'monitor'\)\}/)
+  assert.match(page, /onOpen=\{\(id\) => openDrawerFor\(id, 'post'\)\}/)
+  // Nada de formulário aberto dentro da lista: quem configura é a gaveta.
+  assert.match(page, /<GroupDrawer/)
+  assert.doesNotMatch(page, /expandedConfigId/, 'a configuração voltou a abrir dentro da lista')
+})
+
+test('o cartão da origem continua sendo montado pela regra pura', () => {
+  // O cálculo de destinos/lojas/ofertas do dia é o MESMO do cartão de 2026-09-19;
+  // reescrevê-lo na tela faria cartão e mapa discordarem sobre a mesma origem.
+  assert.match(page, /buildMirrorCards\(\{/)
+  assert.match(page, /const originCards = espelhos\.map\(/)
 })
 
 test('o cartão NÃO tem interruptor por espelhamento', () => {
   // O backend não tem liga/desliga por vínculo — o que existe é a conexão do
   // WhatsApp (controle mestre no topo). Um interruptor que não desliga nada é
   // pior que nenhum.
-  const cartao = page.slice(page.indexOf('function EspelhoCard'), page.indexOf('const ROW_H'))
+  const cartao = page.slice(page.indexOf('function GroupCard('), page.indexOf('function GroupColumn('))
   assert.doesNotMatch(cartao, /type="checkbox"|pnl-switch|role="switch"/, 'interruptor falso no cartão')
 })
 
-test('o cartão vira uma coluna no celular, com a seta deitada', () => {
-  const mobile = css.slice(css.indexOf('@media (max-width: 640px)'))
-  assert.match(mobile, /\.esp-card-corpo \{ grid-template-columns: 1fr/)
-  assert.match(mobile, /\.esp-seta \{ transform: rotate\(90deg\)/)
+test('o card inteiro é clicável E tem a engrenagem, com nome acessível', () => {
+  // A engrenagem é a MESMA ação do card: ela existe para deixar óbvio que dá
+  // para configurar, não como segundo caminho.
+  const cartao = page.slice(page.indexOf('function GroupCard('), page.indexOf('function GroupColumn('))
+  assert.match(cartao, /className="pnl-esp-card-hit"/)
+  assert.match(cartao, /className="pnl-esp-gear"/)
+  assert.ok((cartao.match(/aria-label=\{`Configurar \$\{g\.name\}`\}/g) || []).length >= 2)
+})
+
+test('no celular as duas colunas viram uma lista só, com seletor', () => {
+  // Lado a lado em 375px não cabe: cada coluna ficaria com ~150px e o nome do
+  // grupo quebraria letra a letra.
+  assert.match(page, /pnl-esp-mobile-switch/)
+  assert.match(page, /Origens \(\{monitor\.length\}\)/)
+  assert.match(page, /Destinos \(\{post\.length\}\)/)
+  const mobile = css.slice(css.indexOf('@media (max-width: 760px)'))
+  assert.match(mobile, /\.pnl-esp-cols \{ grid-template-columns: 1fr/)
+  assert.match(mobile, /\.pnl-esp-mobile-switch \{ display: inline-flex/)
+  assert.match(mobile, /\.pnl-esp-col\.is-hidden-mobile \{ display: none/)
+})
+
+test('a gaveta vira folha de tela cheia no celular, sem largura fixa', () => {
+  // Largura fixa é como um painel nasce fora da área visível em 375px
+  // (RCA 2026-09-05, test/dialogos-no-celular.test.js).
+  const mobile = css.slice(css.indexOf('@media (max-width: 560px)', css.indexOf('.pnl-drawer {')))
+  assert.match(mobile, /\.pnl-drawer \{[^}]*width: 100%/s)
+  assert.match(mobile, /\.pnl-drawer-head \{[^}]*position: sticky/s)
+  // As abas do painel precisam rolar de lado em vez de espremer.
+  assert.match(css, /\.pnl-drawer-tabs \{[^}]*overflow-x: auto/s)
 })

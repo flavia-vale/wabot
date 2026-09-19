@@ -99,11 +99,11 @@ test('o envio só usa relay quando o escape hatch pede (guarda estrutural)', asy
 })
 
 // 2026-08-28: a escolha de imagem volta à tela do DESTINO (nunca do grupo
-// monitorado/origem) — ver renderPostConfig em dashboard/app/painel/grupos/page.js.
+// monitorado/origem) — ver renderPostConfig em dashboard/app/painel/espelhamento/page.js.
 test('a escolha de imagem só aparece na configuração do destino (post), nunca na origem (monitor)', () => {
-  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
   const monitorFnStart = page.indexOf('function MonitorGroupConfig(')
-  const monitorFnEnd = page.indexOf('export default function GruposPage(', monitorFnStart + 1)
+  const monitorFnEnd = page.indexOf('export default function EspelhamentoPage(', monitorFnStart + 1)
   assert.notEqual(monitorFnEnd, -1, 'limite de MonitorGroupConfig não encontrado')
   const monitorFn = page.slice(monitorFnStart, monitorFnEnd)
   assert.equal(/imageMode/.test(monitorFn), false, 'a config do grupo monitorado (origem) não pode oferecer escolha de imagem')
@@ -255,7 +255,7 @@ test('o worker resolve o formato já considerando o botão do destino', () => {
 
 // A tela não pode oferecer um formato que o WhatsApp derruba.
 test('a tela esconde o card quando o botão "Ver canal" está ligado', () => {
-  const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+  const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
   assert.match(page, /const temBotaoCanal = Boolean\(g\.channelButtonJid\)/)
   assert.match(page, /\{!temBotaoCanal && <option value="preview">/)
   assert.match(page, /\{!temBotaoCanal && <option value="preview_watermark">/)

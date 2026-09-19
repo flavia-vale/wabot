@@ -20,7 +20,7 @@ import { test } from 'node:test'
 // Teste estrutural pelo mesmo motivo do teste irmão: o helper de render só
 // monta o export default (a página inteira), que exigiria dezenas de mocks.
 
-const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
 
 function watermarkField() {
   const start = page.indexOf('function WatermarkTextField')

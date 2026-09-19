@@ -1,11 +1,15 @@
-/* Guarda do assistente "Criar novo espelhamento" (2026-09-19).
+/* Guarda do que o antigo assistente "Criar novo espelhamento" protegia.
  *
- * O assistente grava pelo MESMO endpoint da tela de grupos
- * (`PUT /api/groups/:id/targets`), que SUBSTITUI a lista de destinos da
- * origem. As duas formas de estragar o espelhamento de alguém por aqui:
+ * O assistente existiu por um dia (2026-09-19) e saiu no mesmo dia, quando a
+ * tela de Grupos foi absorvida pelo Espelhamento: a escolha de destinos virou
+ * a PRIMEIRA ABA do painel lateral da origem, e dois caminhos para a mesma
+ * coisa confundiriam mais do que ajudariam. O que ele protegia, porém, não
+ * mudou de natureza — só de lugar, e é aqui que continua verificado.
  *
- * 1. mandar só o que ela acabou de marcar — apaga em silêncio os
- *    espelhamentos que a origem já tinha;
+ * As duas formas de estragar o espelhamento de alguém por este caminho:
+ *
+ * 1. mandar ao `PUT /api/groups/:id/targets` a lista crua do que está na tela
+ *    sem passar pela regra — o endpoint SUBSTITUI a lista da origem;
  * 2. tirar uma origem do modo 'all' sem avisar — ela envia hoje para TODOS os
  *    destinos, e a escolha explícita corta os não marcados (RCA 2026-08-26).
  */
@@ -20,7 +24,7 @@ const page = read('../dashboard/app/painel/espelhamento/page.js')
 const nav = read('../dashboard/app/painel/nav.js')
 const painel = read('../dashboard/app/painel/page.js')
 
-test('o assistente SOMA aos destinos que a origem já tinha, nunca substitui', () => {
+test('criar SOMA aos destinos que a origem já tinha, nunca substitui', () => {
   const r = planMirrorCreation({
     currentPostIds: ['d1', 'd2'],
     currentMode: 'explicit',
@@ -104,30 +108,45 @@ test('a origem destacada é DERIVADA no render, nunca gravada por efeito', () =>
   }
 })
 
-test('a tela usa a regra pura, não decide a união sozinha', () => {
+test('a tela usa a regra pura, não decide a lista sozinha', () => {
   assert.ok(page.includes('planMirrorCreation'), 'a tela precisa usar planMirrorCreation')
   assert.ok(page.includes('resolveInitialOrigin'), 'a origem inicial precisa vir da regra')
-  // O que vai para o endpoint é o plano, nunca a lista crua do que ela marcou.
-  assert.match(page, /updateGroupTargets\(\s*wizardOrigem\.id\s*,\s*wizardPlano\.postIds\s*\)/)
-  assert.doesNotMatch(page, /updateGroupTargets\([^)]*wizardDestinos\s*\)/, 'gravou a escolha crua — apaga os vínculos existentes')
+  // O que vai para o endpoint sai do plano, nunca do rascunho cru da tela.
+  const save = page.slice(page.indexOf('const saveTargets = useCallback'), page.indexOf('const targetsHandlers'))
+  assert.match(save, /const idsToSave = planMirrorCreation\(/, 'a lista salva precisa vir do plano')
+  assert.match(save, /modo: 'editar'/, 'o painel EDITA: desmarcar é remoção deliberada, não união')
+  assert.match(save, /api\.updateGroupTargets\(groupId, idsToSave\)/)
+  assert.doesNotMatch(save, /updateGroupTargets\([^)]*draftIds\s*\)/, 'gravou a escolha crua, sem passar pela regra')
 })
 
-test('o assistente tem os dois passos, nessa ordem', () => {
-  const jsx = page.slice(page.indexOf('return ('))
-  assert.match(jsx, /Qual grupo ou canal você quer monitorar\?/)
-  assert.match(jsx, /Para qual grupo ou canal você quer que seja enviado\?/)
-  assert.ok(
-    jsx.indexOf('quer monitorar?') < jsx.indexOf('quer que seja enviado?'),
-    'a origem precisa ser perguntada antes do destino',
-  )
+test('o painel da origem abre pela pergunta que a cliente faz primeiro', () => {
+  // "Para onde esse grupo envia" é a primeira aba; captura e publicação vêm
+  // depois. Invertida, a tela abre num ajuste fino antes de responder o
+  // essencial — que é o que o assistente perguntava no passo 1.
+  const abas = page.slice(page.indexOf('const ORIGIN_TABS'), page.indexOf('const DEST_TABS'))
+  const ordem = [...abas.matchAll(/key: '([a-z]+)'/g)].map((m) => m[1])
+  assert.deepEqual(ordem, ['destinos', 'captura', 'publicacao'])
+  assert.match(page, /Para onde esse grupo envia/)
 })
 
-test('o assistente aponta para onde cadastrar e onde editar as regras', () => {
-  // Ele não faz nenhuma das duas coisas — sem os links, a cliente fica presa.
-  assert.match(page, /cadastre ele em Grupos e Canais/i)
-  assert.match(page, /edite os filtros do grupo/i)
-  const ajuda = page.slice(page.indexOf('esp-wizard-ajuda'))
-  assert.ok((ajuda.match(/href="\/painel\/grupos"/g) || []).length >= 2, 'faltam os links para /painel/grupos')
+test('cadastrar grupo e editar as regras acontecem NA PRÓPRIA tela', () => {
+  // O assistente precisava apontar para /painel/grupos porque não fazia
+  // nenhuma das duas coisas. Agora as duas moram aqui, e mandar a cliente para
+  // fora seria mandá-la para uma rota que só redireciona de volta.
+  assert.match(page, /AddGroupModal/, 'faltou o modal de adicionar grupo/canal')
+  assert.match(page, /api\.addGroup\(/, 'a tela precisa cadastrar o grupo escolhido')
+  assert.match(page, /<MonitorGroupConfig/, 'as regras do grupo precisam abrir aqui')
+  assert.doesNotMatch(page, /href="\/painel\/grupos"/, 'link para a tela que deixou de existir')
+})
+
+test('os avisos do assistente sobreviveram à mudança de lugar', () => {
+  // Cada um destes existia para a cliente VER antes de salvar, nunca descobrir
+  // depois com um destino que parou de receber.
+  assert.match(page, /plano\?\.perdeOEnvioParaTodos\?\.length > 0/, 'sumiu o aviso de quem deixa de receber ao sair do padrão')
+  assert.match(page, /plano\?\.ficaSemDestino/, 'sumiu o aviso de origem que fica sem destino')
+  assert.match(page, /plano\?\.removidos\?\.length > 0/, 'sumiu o aviso de destino removido')
+  assert.match(page, /Ao salvar esta escolha, ela passa a enviar/)
+  assert.match(page, /para de publicar em qualquer lugar/)
 })
 
 test('a tela NÃO tem aviso de recurso PRO', () => {
@@ -160,9 +179,18 @@ test('a aba Conexões continua existindo, com o alternador Grupos/Conexões', ()
   assert.match(page, /setTab\('conexoes'\)/)
 })
 
-test('linguagem leiga no assistente', () => {
-  const bloco = page.slice(page.indexOf('esp-wizard'), page.indexOf('Controle mestre'))
-  for (const jargao of ['payload', 'endpoint', 'targetsMode', 'postIds', 'jid', 'API']) {
-    assert.ok(!bloco.includes(jargao), `jargão "${jargao}" no texto do assistente`)
+test('o mapa leva para a edição dos destinos daquela origem', () => {
+  // Sem isto, a aba Conexões só mostra o problema e não deixa consertar — era
+  // o buraco que o botão "Editar" do assistente tapava.
+  assert.match(page, /Editar para onde/)
+  assert.match(page, /openDrawerFor\(origemDestacada, 'monitor', 'destinos'\)/)
+})
+
+test('linguagem leiga no painel do grupo', () => {
+  // Só o JSX: comentário e nome de variável podem (e devem) ser técnicos.
+  const bloco = page.slice(page.indexOf('function MonitorGroupConfig('), page.indexOf('/* ── Nível 1'))
+  const textoVisivel = (bloco.match(/>[^<>{}]{4,}</g) || []).join(' ')
+  for (const jargao of ['payload', 'endpoint', 'targetsMode', 'postIds', 'jid', 'imageMode']) {
+    assert.ok(!textoVisivel.includes(jargao), `jargão "${jargao}" no texto da tela`)
   }
 })
