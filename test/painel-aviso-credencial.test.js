@@ -135,6 +135,23 @@ test('(g) SHEIN: o body diz que as ofertas PARAM de sair, família Shopee (FR-01
   assert.doesNotMatch(store.body, /continuam saindo/i, 'SHEIN não pode herdar a frase de ML/Amazon — não existe plano B para ela')
 })
 
+/**
+ * Lojas que, POR DECISÃO EXPLÍCITA, não têm banner no topo do painel.
+ *
+ * Esta lista é curta de propósito e cada entrada carrega o porquê. Ela não
+ * afrouxa a guarda: uma loja nova que apareça sem texto continua reprovando,
+ * porque só sai da cobertura quem estiver nomeado aqui. Tirar uma loja do
+ * banner é decisão de produto; ESQUECER de escrever o texto dela é o buraco
+ * de T045, e é isso que a guarda existe para pegar.
+ */
+const SEM_BANNER_POR_DECISAO = {
+  // 2026-09-19, decisão da dona do produto. A conversão da AliExpress segue
+  // fail-closed (sem cadastro, nada é publicado) e a oferta perdida continua
+  // visível no histórico de envios com a etiqueta "faltou cadastrar a loja" —
+  // saiu o banner, não o sinal.
+  aliexpress: 'banner retirado a pedido da dona do produto',
+}
+
 test('(h) guarda de cobertura: toda plataforma de credentialHealth#PLATFORMS gera aviso (não pode faltar texto em silêncio)', () => {
   const blockedByPlatform = PLATFORMS.map((platform) => ({
     platform,
@@ -144,7 +161,8 @@ test('(h) guarda de cobertura: toda plataforma de credentialHealth#PLATFORMS ger
   const stores = buildCredentialBlockAlerts({ blockedByPlatform, configuredPlatforms: [] })
 
   const covered = new Set(stores.map((s) => s.platform))
-  const faltando = PLATFORMS.filter((platform) => !covered.has(platform))
+  const esperadas = PLATFORMS.filter((platform) => !(platform in SEM_BANNER_POR_DECISAO))
+  const faltando = esperadas.filter((platform) => !covered.has(platform))
 
   assert.deepEqual(
     faltando,
@@ -153,5 +171,18 @@ test('(h) guarda de cobertura: toda plataforma de credentialHealth#PLATFORMS ger
   )
   for (const store of stores) {
     assert.ok(store.headline && store.body && store.nextStep, `${store.platform}: aviso incompleto`)
+  }
+
+  // A exceção é de mão dupla: quem está na lista NÃO pode voltar a gerar
+  // banner sem alguém retirá-la daqui de propósito.
+  for (const platform of Object.keys(SEM_BANNER_POR_DECISAO)) {
+    assert.ok(
+      PLATFORMS.includes(platform),
+      `${platform} saiu de PLATFORMS — remova-a de SEM_BANNER_POR_DECISAO em vez de deixar entrada morta`,
+    )
+    assert.ok(
+      !covered.has(platform),
+      `${platform} voltou a gerar banner (${SEM_BANNER_POR_DECISAO[platform]}) — se a decisão mudou, tire-a da lista`,
+    )
   }
 })

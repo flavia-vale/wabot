@@ -72,8 +72,21 @@ test('a tabela do comparativo vira cartão no celular', () => {
 test('a página não volta a nomear concorrente que não é o da página no título dos diferenciais', () => {
   // O cabeçalho era fixo e citava cinco ferramentas que nada tinham a ver com
   // a página aberta, em toda página de comparativo.
-  assert.doesNotMatch(conteudo(), /Veja como nos comparamos com/)
-  assert.doesNotMatch(conteudo(), /Divulgador Inteligente|Divulga Ninja|Busqy|DivulgaLinks/)
+  //
+  // ⚠️ A varredura é só do CÓDIGO DE RENDERIZAÇÃO, nunca do arquivo inteiro.
+  // Até 2026-09-17 ela olhava o arquivo todo, e isso funcionava só porque
+  // nenhum desses concorrentes tinha página própria. Quando o Divulgador
+  // Inteligente e o DivulgaLinks ganharam a sua, o nome deles passou a aparecer
+  // legitimamente DENTRO do próprio bloco — que é exatamente o lugar certo — e
+  // a guarda reprovou o acerto. O que ela protege é o texto COMPARTILHADO entre
+  // todas as páginas; é ele que não pode nomear ninguém.
+  const fonte = conteudo()
+  const corte = fonte.indexOf('export function getComparisonMetadata')
+  assert.ok(corte > 0, 'não achei o fim do bloco de dados por página em _comparisonContent.js')
+  const renderizacao = fonte.slice(corte)
+
+  assert.doesNotMatch(fonte, /Veja como nos comparamos com/)
+  assert.doesNotMatch(renderizacao, /Divulgador Inteligente|Divulga Ninja|Busqy|DivulgaLinks/)
 })
 
 test('o comparativo aparece antes dos links de saída', () => {

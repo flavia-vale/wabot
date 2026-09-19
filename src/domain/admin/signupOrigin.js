@@ -28,7 +28,7 @@ function cleanLanding(landing) {
  * ferramenta carimba `utm_source`. É o rastro de origem mais confiável que
  * existe hoje — vale mais que o referenciador.
  */
-const AI_MARKS = /utm[-_]source[-_=](chatgpt|openai|perplexity|copilot|claude|gemini)/i
+const AI_MARKS = /utm[-_]source[-_=](chatgpt|openai|perplexity|copilot|claude|gemini|grok|deepseek|meta|mistral|you)/i
 
 export function detectAiSource(landing) {
   const match = String(landing || '').match(AI_MARKS)
@@ -43,7 +43,10 @@ export function classifyLandingPage(landing) {
   if (path.startsWith('/materiais/') || path.startsWith('/ferramentas/')) return 'CONTEÚDO (ferramenta/material)'
   // Ao adicionar prefixo aqui, conferir contra a lista real de rotas
   // (`dashboard/lib/seo-registry.mjs`), nunca de memória.
-  if (/^\/(bot-|anti-ban|faq-antiban|protecao-|programa-de-afiliados|espelhar-|automacao-|automatizar-|padronizar-|postar-|reduzir-|rastrear-|grupo-para-canal|como-funciona|comparativos|melhores-bots|botinho-vs|glossario|conteudos|diagnostico-|benchmarks|estudos-de-caso)/.test(path)) {
+  // RCA 2026-09-18: as 5 páginas de loja do Tier 1 (02/09) e as páginas de
+  // 11/09 não estavam aqui — cadastro vindo delas caía em "Direto / ambíguo",
+  // e justamente essas são as páginas em que a estratégia de IA aposta.
+  if (/^\/(bot-|anti-ban|faq-antiban|protecao-|programa-de-afiliados|espelhar-|automacao-|automatizar-|padronizar-|postar-|reduzir-|rastrear-|grupo-para-canal|como-funciona|comparativos|melhores-bots|botinho-vs|glossario|conteudos|diagnostico-|benchmarks|estudos-de-caso|shopee-afiliados|mercado-livre-afiliados|amazon-afiliados|shein-afiliados|magalu-afiliados|quanto-ganha-|vendas-e-comissao-|copiaram-|espelha-grupos-e-confiavel|clonar-mensagens|metodologia-|confiabilidade-|seguranca-credenciais|quem-somos|calculadora-|checklist-)/.test(path)) {
     return 'CONTEÚDO (página de busca)'
   }
   if (path === '/') return 'home (ambíguo)'
@@ -67,7 +70,7 @@ export function resolveSignupOrigin(metadata = {}) {
 
   let bucket
   if (aiSource) bucket = `IA (${aiSource})`
-  else if (/^(chatgpt|openai|perplexity|copilot|claude|gemini)/i.test(declared)) bucket = `IA (${declared.split('.')[0].toLowerCase()})`
+  else if (/^(chatgpt|openai|perplexity|copilot|claude|gemini|grok|deepseek|meta|mistral|you)/i.test(declared)) bucket = `IA (${declared.split('.')[0].toLowerCase()})`
   else if (landingClass.startsWith('CONTEÚDO')) bucket = 'Conteúdo (busca)'
   else if (landingClass === 'link de indicação' || metadata?.ref) bucket = 'Indicação'
   else if (landingClass === 'sem registro') bucket = 'Sem registro'

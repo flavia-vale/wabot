@@ -13,12 +13,12 @@
 - [ ] Não introduzi breaking change não documentado.
 - [ ] Não alterei `.env`, portas ou fluxo de deploy sem necessidade explícita.
 
-## Checklist de Naming (Fase 1)
-- [ ] Superfícies públicas usam **BOTinho** como marca principal.
-- [ ] **Espelha Grupos** foi usado como território semântico/SEO (quando aplicável), não como marca concorrente.
+## Checklist de Naming (nome único desde 2026-09-02)
+- [ ] Superfícies públicas usam **Espelha Grupos** como nome único de marca e produto.
+- [ ] **BOTinho** não aparece sozinho em texto público novo (só como `alternateName`/"nome anterior" onde já está previsto).
 - [ ] **wabot** ficou restrito a contexto técnico/infra (repo, scripts, CI/CD, paths internos).
-- [ ] Evitei variações inconsistentes (`Botinho`, `botinho`) quando a referência é a marca.
-- [ ] Revisei este PR com base em `docs/marketing/NAMING_GUIDE.md`.
+- [ ] Nenhuma promessa de "não bane"/"anti-ban garantido" entrou em texto público.
+- [ ] Revisei este PR com base em `docs/marketing/NAMING_GUIDE.md` e na seção "Nome único" de `dashboard/lib/marketing-content.js`.
 
 ## Validação em staging (3006)
 - Cenários testados:

@@ -29,3 +29,30 @@ export function shouldUseCouponBrandCard({
   if (urlHasProductId(platform, resolvedUrl)) return false
   return true
 }
+
+// Sinal de TEXTO da blindagem tripla, decidido num lugar só (RCA 2026-09-18).
+//
+// O banner de cupom depende de três condições, e duas delas caem sozinhas
+// quando o link é curto (`meli.la`, `/sec/`): a URL não expõe MLB/ASIN, então
+// `linkKind` vira 'coupon' e `urlHasProductId` é false. Sobra o sinal de texto
+// como ÚNICA trava real — e ele aceitava `ml_vitrine_fallback_used` direto.
+//
+// Esse aviso NÃO é sinal de texto: ele diz que a CONVERSÃO FALHOU e que a
+// vitrine da cliente foi publicada no lugar do produto. Com ele, o mesmo fato
+// (a conversão falhou) ligava as três blindagens de uma vez — blindagem tripla
+// com causa única não blinda nada. Em produção isso pôs o banner "CUPOM" em
+// ofertas de perfume, fone, panela e notebook.
+//
+// A vitrine só é sinal legítimo quando temos CERTEZA de que a origem era mesmo
+// uma vitrine/perfil — isto é, quando o link COMPARTILHADO já era uma página
+// `/social/` (isDirectVitrineShare, em converters/mercadolivre.js). Atrás de um
+// encurtador pode haver produto de verdade, e foi exatamente esse o caso.
+export function resolveCouponTextSignal({
+  couponSkipActiveFetch,
+  warning,
+  vitrineConfirmed,
+} = {}) {
+  if (couponSkipActiveFetch === true) return true
+  if (warning !== 'ml_vitrine_fallback_used') return false
+  return vitrineConfirmed === true
+}

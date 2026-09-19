@@ -247,3 +247,53 @@ test('PUT /:id volta a aceitar o card depois de remover o botão', async () => {
   assert.equal(JSON.parse(res.body).imageMode, 'preview')
   await app.close()
 })
+
+// Tamanho e posição da marca: mesmo destino de watermarkColor — só aceito em
+// role=post e com valores conhecidos, mas sem exigir modo de marca ligado
+// (a cliente pode preparar tamanho/posição antes de ligar a marca).
+test('PUT /:id aceita watermarkSize e watermarkPosition em grupo role=post', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-size-position@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  const putRes = await app.inject({
+    method: 'PUT',
+    url: `/api/groups/${id}`,
+    payload: { imageMode: 'original_watermark', watermarkText: 'Ofertas da Ana', watermarkSize: 'large', watermarkPosition: 'top-right' },
+  })
+  assert.equal(putRes.statusCode, 200)
+  const body = JSON.parse(putRes.body)
+  assert.equal(body.watermarkSize, 'large')
+  assert.equal(body.watermarkPosition, 'top-right')
+
+  const saved = await db.group.findUnique({ where: { id } })
+  assert.equal(saved.watermarkSize, 'large')
+  assert.equal(saved.watermarkPosition, 'top-right')
+  await app.close()
+})
+
+test('PUT /:id recusa watermarkSize/watermarkPosition inválidos', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'post-size-invalido@g.us', name: 'Grupo Destino', role: 'post', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  const badSize = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { watermarkSize: 'gigante' } })
+  assert.equal(badSize.statusCode, 400)
+
+  const badPosition = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { watermarkPosition: 'diagonal' } })
+  assert.equal(badPosition.statusCode, 400)
+  await app.close()
+})
+
+test('PUT /:id recusa watermarkSize/watermarkPosition em grupo role=monitor (origem)', async () => {
+  const { app } = await buildApp()
+  const createRes = await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'monitor-size-position@g.us', name: 'Grupo Origem', role: 'monitor', kind: 'group' } })
+  const { id } = JSON.parse(createRes.body)
+
+  const putSize = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { watermarkSize: 'large' } })
+  assert.equal(putSize.statusCode, 400)
+
+  const putPosition = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { watermarkPosition: 'top-right' } })
+  assert.equal(putPosition.statusCode, 400)
+  await app.close()
+})

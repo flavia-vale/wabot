@@ -75,12 +75,22 @@ export function describeChargeStatusDetail(statusDetail) {
   return { code, label: found.texto, owner: found.dono, known: true }
 }
 
+// Status cru do Mercado Pago em baldes de RESULTADO. Fonte única — consumida
+// pelo classificador abaixo, pela sub-aba "Cobranças recorrentes" e pela soma
+// de receita do Financeiro (Cards). Duplicar esta lista é como os Cards e a
+// tabela de cobranças passam a discordar sobre o que é "cobrança aprovada".
+export const CHARGE_OUTCOME_STATUSES = Object.freeze({
+  aprovada: ['approved', 'accredited', 'processed'],
+  recusada: ['rejected', 'cancelled', 'expired'],
+  devolvida: ['refunded', 'charged_back'],
+})
+
 /** Status da tentativa em três baldes, que são as três ações possíveis. */
 export function classifyChargeOutcome(status) {
   const value = normalize(status)
-  if (['approved', 'accredited', 'processed'].includes(value)) return 'aprovada'
-  if (['rejected', 'cancelled', 'expired'].includes(value)) return 'recusada'
-  if (['refunded', 'charged_back'].includes(value)) return 'devolvida'
+  if (CHARGE_OUTCOME_STATUSES.aprovada.includes(value)) return 'aprovada'
+  if (CHARGE_OUTCOME_STATUSES.recusada.includes(value)) return 'recusada'
+  if (CHARGE_OUTCOME_STATUSES.devolvida.includes(value)) return 'devolvida'
   if (!value) return 'desconhecida'
   return 'pendente'
 }

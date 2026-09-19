@@ -18,7 +18,9 @@ import { buildTrialProofVars, shouldSendTrialProof } from './trialProof.js'
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const MS_PER_HOUR = 60 * 60 * 1000
 
-const PAID_PLANS = new Set(['basic', 'pro'])
+// `premium` é plano pago: sem ele aqui a cliente do Instagram Stories caía
+// na jornada de fim de TESTE GRÁTIS e na de plano vencido errada.
+const PAID_PLANS = new Set(['basic', 'pro', 'premium'])
 
 export function formatDateBR(value, timeZone = 'America/Sao_Paulo') {
   if (!value) return ''

@@ -1,10 +1,14 @@
-import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit } from './shopeeOffers.js'
+import { fetchOffers as defaultFetchOffers, dedupeOffersByProduct, productDedupKey, buildOfferCandidateLimit, resolveShopeeOfferPrice } from './shopeeOffers.js'
+import { resolveSearchListType } from './searchListType.js'
 import { sendBroadcast, isRunning } from '../manager.js'
 import db from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
 import { applyVariation, resolveCopyVariationPoolJson } from '../core/copyVariation.js'
 import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js'
 import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
+import { createAndEnqueueStory } from '../instagram/storyDeliveryService.js'
+import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
+import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
@@ -30,8 +34,15 @@ function nextOfferPage(currentPage, rawCount) {
   return 1
 }
 
-function offerPriceCents(offer) {
-  return Math.round((Number(offer?.priceMin ?? offer?.price) || 0) * 100)
+export function offerPriceCents(offer) {
+  return Math.round(resolveOfferPrice(offer) * 100)
+}
+
+// A Shopee pode devolver `priceMin: ""` junto de `price` preenchido. O
+// nullish coalescing não pula string vazia e fazia a mensagem perder o preço.
+// Centralizar o fallback mantém snapshot, texto e deduplicação consistentes.
+export function resolveOfferPrice(offer = {}) {
+  return resolveShopeeOfferPrice(offer) ?? 0
 }
 
 function priceStr(raw) {
@@ -57,14 +68,20 @@ function discountStr(raw) {
   return pct > 0 ? `-${pct}% OFF` : ''
 }
 
-function automationOfferProduct(offer) {
-  const currentRaw = Number(offer.priceMin ?? offer.price) || 0
+export function automationOfferProduct(offer) {
+  const currentRaw = resolveOfferPrice(offer)
   const pct = Number(offer.priceDiscountRate) || 0
   const originalRaw = pct > 0 && currentRaw > 0 ? Math.round(currentRaw * 100 / (100 - pct)) : 0
+  const price = priceStr(currentRaw)
+  const oldPrice = priceStr(originalRaw)
   return {
     title: offer.productName ?? 'Produto Shopee',
-    price: priceStr(currentRaw),
-    oldPrice: priceStr(originalRaw),
+    price,
+    oldPrice,
+    // Alguns modelos salvos usam a variável editorial `{preçoDoTexto}` em
+    // vez de `{preço}`. A fila tinha preço no snapshot, mas não preenchia esse
+    // campo, então o compositor removia a variável e deixava apenas "💰".
+    textPrice: oldPrice ? `De ${oldPrice} por ${price}` : price,
     discount: discountStr(pct),
     rating: ratingStr(offer.ratingStar),
     sales: salesStr(offer.sales),
@@ -72,16 +89,51 @@ function automationOfferProduct(offer) {
   }
 }
 
+export function ensureRenderedAutomationPrice(renderedText, product = {}) {
+  const text = String(renderedText || '')
+  const price = String(product.price || '').trim()
+  if (!price || text.includes(price)) return text
+  const oldPrice = String(product.oldPrice || '').trim()
+  const priceLine = oldPrice ? `💰 ~${oldPrice}~ → *${price}*` : `💰 *${price}*`
+  if (/^\s*💰\s*$/m.test(text)) return text.replace(/^\s*💰\s*$/m, priceLine)
+  const linkIndex = text.search(/^\s*(?:👉|🛒).*https?:\/\//m)
+  if (linkIndex >= 0) return `${text.slice(0, linkIndex).trimEnd()}\n\n${priceLine}\n\n${text.slice(linkIndex)}`
+  return `${text.trimEnd()}\n\n${priceLine}`
+}
+
 function parseTemplateStore(mobileTemplatesJson) {
   try { return JSON.parse(mobileTemplatesJson || '{}') } catch { return {} }
 }
 
-function resolveAutomationTemplateBody(botConfig, templateKey) {
+export function resolveAutomationTemplateBody(botConfig, templateKey) {
   const templates = composeTemplates(parseTemplateStore(botConfig?.mobileTemplatesJson))
   const key = templateKey || DEFAULT_AUTOMATION_TEMPLATE_KEY
   return templates.find((template) => template.key === key)?.body
     || templates.find((template) => template.key === DEFAULT_AUTOMATION_TEMPLATE_KEY)?.body
     || null
+}
+
+export function materializeAutomationOffer(automation, offer, botConfig) {
+  const templateBody = resolveAutomationTemplateBody(botConfig, automation.templateKey)
+  const base = formatOfferMessage(offer, automation.keyword, templateBody)
+  const renderedText = applyVariation(base, {
+    groupId: automation.destGroupJid,
+    poolJson: resolveCopyVariationPoolJson(botConfig?.copyVariationPoolJson),
+    groupInviteLink: botConfig?.brandingGroupLink ?? '',
+    couponLink: botConfig?.couponLink ?? '',
+    random: true,
+    autoInjectWhenMissing: false,
+  })
+  return {
+    productKey: productDedupKey(offer),
+    itemId: offer.itemId == null ? null : String(offer.itemId),
+    priceCents: offerPriceCents(offer),
+    productUrl: offer.offerLink,
+    imageUrl: offer.imageUrl || null,
+    imageRefererUrl: offer.offerLink || null,
+    productSnapshot: automationOfferProduct(offer),
+    renderedText,
+  }
 }
 
 
@@ -97,7 +149,7 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
   }
 
   const name = offer.productName ?? 'Produto Shopee'
-  const currentRaw = Number(offer.priceMin ?? offer.price) || 0
+  const currentRaw = resolveOfferPrice(offer)
   const pct = Number(offer.priceDiscountRate) || 0
   const current = priceStr(currentRaw)
 
@@ -134,13 +186,28 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
     limit: automation.offersPerSend,
     creds,
     sortType: automation.sortType ?? 2,
-    listType: automation.listType ?? 1,
+    // Chokepoint ÚNICO da lista: o valor gravado na automação é ignorado de
+    // propósito (ver searchListType.js — cinco palavras-chave medidas, as três
+    // listas devolveram o mesmo). Não voltar a ler `automation.listType` aqui.
+    listType: resolveSearchListType(),
     page: automation.page ?? 1,
     isKeySeller: automation.isKeySeller ?? false,
   }
 
+  // `prioritizeAMS` é LEGADO desde 2026-09-17: o botão de LIGAR saiu da tela e
+  // automação nova nunca nasce com ele. Quem JÁ tinha marcado continua exatamente
+  // como estava — este caminho não pode ser removido enquanto existir automação
+  // com o campo ligado, senão o envio dessas contas mudaria sozinho no deploy.
+  //
+  // Não é um filtro a mais: é uma SEGUNDA ordem. Faz duas buscas e devolve
+  // [...comissãoExtra, ...restantes]; como `runAutomation` manda os primeiros
+  // `offersPerSend`, com 1 produto por envio a oferta de comissão extra sai
+  // sempre, por cima da ordem escolhida. Por isso a tela continua mostrando o
+  // efeito no card e oferecendo o DESLIGAMENTO — o que ela não oferece mais é
+  // ligar.
   if (!automation.prioritizeAMS) {
-    return fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
+    const result = await fetchOffersFn({ ...base, isAMSOffer: false, excludeItemIds: sentItemIds })
+    return { ...result, offers: result.offers.filter(offer => resolveOfferPrice(offer) > 0) }
   }
 
   const { offers: amsOffers, rawCount: amsRawCount } = await fetchOffersFn({ ...base, isAMSOffer: true, excludeItemIds: sentItemIds })
@@ -150,7 +217,10 @@ export async function resolveOffers({ automation, sentItemIds, creds, fetchOffer
     isAMSOffer: false,
     excludeItemIds: [...sentItemIds, ...amsItemIds],
   })
-  return { offers: [...amsOffers, ...regularOffers], rawCount: amsRawCount + regularRawCount }
+  return {
+    offers: [...amsOffers, ...regularOffers].filter(offer => resolveOfferPrice(offer) > 0),
+    rawCount: amsRawCount + regularRawCount,
+  }
 }
 
 export async function runAutomation(automation, {
@@ -158,6 +228,8 @@ export async function runAutomation(automation, {
   isRunningFn = isRunning,
   fetchOffersFn = defaultFetchOffers,
   dbOverride,
+  sendStoryFn = createAndEnqueueStory,
+  instagramRuntimeFn = getInstagramDeliveryRuntime,
 } = {}) {
   const dbInstance = dbOverride ?? db
 
@@ -165,7 +237,9 @@ export async function runAutomation(automation, {
   // Promise. Sem await, `!Promise` é sempre false e o guard era ignorado em
   // remote — o dispatcher seguia pro sendBroadcast e falhava com "Bot não está
   // rodando" a cada tick do cron, floodando log e gastando CPU/IO à toa.
-  if (!(await isRunningFn(automation.userId))) return { skipped: 'bot_not_running' }
+  const instagramDestinations = (automation.instagramDestinations ?? []).map(link => link.destination ?? link).filter(destination => destination?.id && destination.enabled !== false)
+  const whatsappAvailable = automation.destGroupJid ? await isRunningFn(automation.userId) : false
+  if (!whatsappAvailable && !instagramDestinations.length) return { skipped: 'bot_not_running' }
 
   const credRow = await dbInstance.credential.findUnique({
     where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },
@@ -211,21 +285,21 @@ export async function runAutomation(automation, {
   // (independe de qual automação enviou). Liberamos se o PREÇO mudou — é uma
   // oferta nova de fato.
   const dedupSince = new Date(Date.now() - CROSS_GROUP_DEDUP_WINDOW_MS)
-  const recentSends = await dbInstance.offerAutomationSentLog.findMany({
+  const recentSends = automation.destGroupJid ? await dbInstance.offerAutomationSentLog.findMany({
     where: { userId: automation.userId, destGroupJid: automation.destGroupJid, sentAt: { gte: dedupSince } },
     select: { productKey: true, priceCents: true },
-  })
+  }) : []
   const recentPricesByKey = new Map()
   for (const row of recentSends) {
     if (!recentPricesByKey.has(row.productKey)) recentPricesByKey.set(row.productKey, new Set())
     recentPricesByKey.get(row.productKey).add(row.priceCents)
   }
-  offers = offers.filter((offer) => {
+  const whatsappEligible = new Set(offers.filter((offer) => {
     const prices = recentPricesByKey.get(productDedupKey(offer))
     return !prices || !prices.has(offerPriceCents(offer))
-  })
+  }).map(offer => String(offer.itemId)))
 
-  if (!offers.length) {
+  if (!offers.length || (!instagramDestinations.length && whatsappEligible.size === 0)) {
     // rawCount > 0 significa que a Shopee retornou produtos, mas o filtro de
     // desconto mínimo / a dedup (itens já enviados ou já enviados ao grupo no
     // dia) removeu todos — diferente de a busca não ter trazido nada.
@@ -252,6 +326,8 @@ export async function runAutomation(automation, {
   // N writes serializados no SQLite.
   const sentLogRows = []
   const failures = []
+  let storiesQueued = 0
+  const instagramRuntime = instagramDestinations.length ? instagramRuntimeFn() : null
   for (const offer of toSend) {
     const base = formatOfferMessage(offer, automation.keyword, templateBody)
     const text = applyVariation(base, {
@@ -262,7 +338,18 @@ export async function runAutomation(automation, {
       random: true,
       autoInjectWhenMissing: false,
     })
-    try {
+    // Aceite por CANAL, não um booleano só. Com um booleano compartilhado,
+    // falha de um destino Instagram (Meta fora do ar) impedia o item de entrar
+    // em sentItemIds mesmo com o WhatsApp JÁ entregue — e o item voltava
+    // candidato a cada tick, indefinidamente, arriscando reenvio ao grupo.
+    let whatsappAccepted = true
+    let instagramAccepted = true
+    // Se existe destino WhatsApp mas a sessão está offline, o Story ainda
+    // pode sair; porém o item não entra em sentItemIds até o WhatsApp voltar.
+    // Isso evita perder silenciosamente a entrega WhatsApp por causa do
+    // sucesso do canal irmão.
+    if (automation.destGroupJid && !whatsappAvailable && whatsappEligible.has(String(offer.itemId))) whatsappAccepted = false
+    if (whatsappAvailable && whatsappEligible.has(String(offer.itemId))) try {
       await sendBroadcastFn(automation.userId, text, [automation.destGroupJid], {
         imageUrl: offer.imageUrl,
         imageRefererUrl: offer.offerLink,
@@ -279,25 +366,42 @@ export async function runAutomation(automation, {
       // enviar"). Loga e segue para o próximo item; o item que falhou fica de
       // fora de `sentItemIds`, então entra candidato de novo no próximo tick.
       failures.push({ itemId: offer.itemId, error: err?.message })
-      continue
+      whatsappAccepted = false
     }
-    sentIds.push(offer.itemId)
-    // Registra no log cruzado por grupo (com preço) pra próxima automação que
-    // mire o mesmo grupo não reenviar este produto no mesmo dia.
-    sentLogRows.push({
-      userId: automation.userId,
-      destGroupJid: automation.destGroupJid,
-      productKey: productDedupKey(offer),
-      priceCents: offerPriceCents(offer),
-      itemId: offer.itemId != null ? String(offer.itemId) : null,
-    })
+    if (whatsappAvailable && whatsappEligible.has(String(offer.itemId)) && whatsappAccepted) {
+      sentLogRows.push({ userId: automation.userId, destGroupJid: automation.destGroupJid, productKey: productDedupKey(offer), priceCents: offerPriceCents(offer), itemId: offer.itemId != null ? String(offer.itemId) : null })
+    }
+    for (const destination of instagramDestinations) {
+      try {
+        if (!instagramRuntime) throw Object.assign(new Error('Fila de Instagram indisponível'), { code: 'INSTAGRAM_RUNTIME_UNAVAILABLE' })
+        const current = offerPriceCents(offer)
+        const discount = Number(offer.priceDiscountRate) || 0
+        const oldPriceCents = discount > 0 ? Math.round(current * 100 / (100 - discount)) : null
+        await sendStoryFn({
+          userId: automation.userId,
+          destinationId: destination.id,
+          sourceType: DELIVERY_SOURCE_TYPE.OFFER_AUTOMATION,
+          sourceId: automation.id,
+          idempotencyKey: `offer-automation:${automation.id}:${destination.id}:${productDedupKey(offer)}:${current}`,
+          offer: { offerKey: String(offer.itemId), title: offer.productName || 'Produto Shopee', priceCents: current, oldPriceCents, discountLabel: discount ? `${discount}% OFF` : null, storeName: 'Shopee', productUrl: offer.offerLink, imageUrl: offer.imageUrl, callToAction: 'Oferta por tempo limitado' },
+        }, instagramRuntime)
+        storiesQueued++
+      } catch (err) {
+        failures.push({ itemId: offer.itemId, destinationId: destination.id, error: err?.message })
+        instagramAccepted = false
+      }
+    }
+    // O item só reentra como candidato enquanto o canal que FALHOU ainda tem o
+    // que entregar. O Story é idempotente pela chave (automação, destino,
+    // produto, preço), então reprocessar o item não republica o que já saiu.
+    if (whatsappAccepted && instagramAccepted) sentIds.push(offer.itemId)
   }
   if (sentLogRows.length) {
     await dbInstance.offerAutomationSentLog.createMany({ data: sentLogRows }).catch(() => {})
   }
 
   // Poda registros fora da janela pra tabela não crescer indefinidamente.
-  await dbInstance.offerAutomationSentLog.deleteMany({
+  if (automation.destGroupJid) await dbInstance.offerAutomationSentLog.deleteMany({
     where: { userId: automation.userId, destGroupJid: automation.destGroupJid, sentAt: { lt: dedupSince } },
   }).catch(() => {})
 
@@ -307,7 +411,7 @@ export async function runAutomation(automation, {
     data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds), page: advancedPage },
   })
 
-  return { sent: sentIds.length, ...(failures.length ? { failed: failures.length, failures } : {}) }
+  return { sent: sentIds.length, ...(storiesQueued ? { storiesQueued } : {}), ...(failures.length ? { failed: failures.length, failures } : {}) }
 }
 
 // Dry-run da busca: roda a MESMA pipeline de fetch (resolveOffers + dedupe por
@@ -321,7 +425,6 @@ export async function searchOffersPreview({ params = {}, creds, fetchOffersFn = 
     minDiscountPct: Number(params.minDiscountPct) || 0,
     offersPerSend: Number(params.offersPerSend) || 1,
     sortType: Number(params.sortType) || 2,
-    listType: Number.isFinite(Number(params.listType)) ? Number(params.listType) : 1,
     page: Number(params.page) || 1,
     prioritizeAMS: Boolean(params.prioritizeAMS ?? false),
     isKeySeller: Boolean(params.isKeySeller ?? false),
@@ -332,7 +435,7 @@ export async function searchOffersPreview({ params = {}, creds, fetchOffersFn = 
     params: {
       keyword: automation.keyword,
       sortType: automation.sortType,
-      listType: automation.listType,
+      listType: resolveSearchListType(),
       page: automation.page,
       minDiscountPct: automation.minDiscountPct,
       prioritizeAMS: automation.prioritizeAMS,

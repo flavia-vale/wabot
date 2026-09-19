@@ -59,6 +59,26 @@ test('o atalho NÃO virou um passo da checklist', () => {
   assert.ok(!bloco.includes('converte-links'), 'o atalho entrou no contador da checklist')
 })
 
+test('o atalho é CURTO — quem ainda não conectou lê na diagonal', () => {
+  // Pedido da dona do produto (2026-09-19): o texto era um parágrafo de cinco
+  // frases e ninguém lia. O teto existe para ele não voltar a crescer aos
+  // poucos — não é número mágico, é a medida do texto enxuto aprovado.
+  assert.ok(
+    VALUE_FIRST_HEADLINE.length + VALUE_FIRST_BODY.length <= 220,
+    `chamada + corpo em ${VALUE_FIRST_HEADLINE.length + VALUE_FIRST_BODY.length} caracteres — enxugue`,
+  )
+  for (const passo of VALUE_FIRST_STEPS) {
+    assert.ok(passo.texto.length <= 70, `passo "${passo.chave}" com ${passo.texto.length} caracteres — enxugue`)
+  }
+})
+
+test('o convite leva o nome que a tela tem na sidebar', () => {
+  // A tela virou "Testar conversão"; "Abrir o conversor" mandaria a cliente
+  // procurar um item que não existe mais com esse nome.
+  const passo = VALUE_FIRST_STEPS.find((p) => p.chave === 'converter')
+  assert.match(passo.cta, /test/i)
+})
+
 test('o texto do atalho é leigo', () => {
   const texto = `${VALUE_FIRST_HEADLINE} ${VALUE_FIRST_BODY} ${VALUE_FIRST_STEPS.map((p) => p.texto).join(' ')}`.toLowerCase()
   for (const jargao of ['api', 'credential', 'tag', 'cookie', 'endpoint']) {

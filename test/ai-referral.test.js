@@ -13,6 +13,8 @@ test('reconhece os motores de resposta por IA', () => {
     ['https://claude.ai/chat/xyz', 'claude'],
     ['https://gemini.google.com/app', 'gemini'],
     ['https://copilot.microsoft.com/', 'copilot'],
+    ['https://www.meta.ai/', 'meta'],
+    ['https://chat.deepseek.com/a/chat/s/x', 'deepseek'],
   ]
   for (const [referrer, source] of cases) {
     const got = classifyReferrer(referrer, SELF)

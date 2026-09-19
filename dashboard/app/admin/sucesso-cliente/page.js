@@ -322,6 +322,7 @@ export default function CustomerSuccessPage() {
                     <option value="trial">Trial</option>
                     <option value="basic">Basic</option>
                     <option value="pro">Pro</option>
+                    <option value="premium">Premium</option>
                   </select>
                 </label>
                 <label className="text-xs font-semibold text-gray-600">Data de expiração
