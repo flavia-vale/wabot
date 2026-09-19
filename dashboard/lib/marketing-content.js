@@ -67,7 +67,7 @@ export const SUPPORT_RESPONSE_SLA = 'Respondemos em até 1 dia útil'
 // pm2 (pegadinha #1 do AGENTS.md) — é URL pública, não é segredo. A env segue
 // existindo como override caso o canal mude de endereço.
 export const BRAND_YOUTUBE_URL =
-  process.env.NEXT_PUBLIC_BRAND_YOUTUBE_URL || 'https://www.youtube.com/@botinhoafiliado'
+  process.env.NEXT_PUBLIC_BRAND_YOUTUBE_URL || 'https://www.youtube.com/@espelhagrupos'
 
 // Tutorial oficial de criação de conta. É a prova social VERIFICÁVEL que
 // substituiu os números inventados do bloco `Social` (auditoria de funil

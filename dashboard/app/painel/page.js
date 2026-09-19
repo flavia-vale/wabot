@@ -85,12 +85,17 @@ const STATS = [
   },
 ]
 
-/* Funções mais usadas — as quatro ações do dia a dia, nesta ordem. */
+/* Funções mais usadas — as quatro ações do dia a dia, nesta ordem.
+ *
+ * Cada uma diz em que plano está, para a cliente saber o que já tem e o que
+ * é upgrade sem precisar abrir a tela e levar o "não". O nome do plano vem
+ * escrito por extenso ("Plano PRO", "Plano Basic") porque "PRO" sozinho é
+ * lido como enfeite, não como nome de plano. */
 const ACTIONS = [
-  { label: 'Criar oferta', href: '/painel/criar-oferta', icon: 'plus' },
-  { label: 'Espelhar grupos', href: '/painel/espelhamento', icon: 'mirror' },
-  { label: 'Ofertas automáticas', href: '/painel/ofertas-automaticas', icon: 'spark', pro: true },
-  { label: 'Grupos e Canais', href: '/painel/grupos', icon: 'users' },
+  { label: 'Criar oferta', href: '/painel/criar-oferta', icon: 'plus', tag: 'Plano Basic' },
+  { label: 'Espelhar grupos', href: '/painel/espelhamento', icon: 'mirror', tag: 'Plano Basic' },
+  { label: 'Ofertas automáticas', href: '/painel/ofertas-automaticas', icon: 'spark', pro: true, tag: 'Plano PRO' },
+  { label: 'Grupos e Canais', href: '/painel/grupos', icon: 'users', tag: 'Plano Basic' },
 ]
 
 export default function PainelPage() {
@@ -162,7 +167,7 @@ export default function PainelPage() {
             <Link key={a.label} href={a.href} className={`pv-action${a.pro ? ' is-pro' : ''}`}>
               <span className="pv-action-ico" aria-hidden="true"><Icon name={a.icon} size={24} stroke={1.8} /></span>
               {a.label}
-              {a.pro && <span className="pv-action-tag">PRO</span>}
+              {a.tag && <span className="pv-action-tag">{a.tag}</span>}
             </Link>
           ))}
         </div>

@@ -48,18 +48,50 @@ test('todo número da tela vem do back end, nenhum é escrito à mão', () => {
   assert.ok(!/:\s*\d/.test(bloco), 'card com número fixo na tela — precisa vir da API')
 })
 
-test('as quatro funções mais usadas, com "Ofertas automáticas" em roxo e etiqueta PRO', () => {
+test('as quatro funções mais usadas, com "Ofertas automáticas" em roxo', () => {
   const bloco = page.slice(page.indexOf('const ACTIONS = ['), page.indexOf('export default'))
   const rotulos = [...bloco.matchAll(/label: '([^']+)'/g)].map((m) => m[1])
   assert.deepEqual(rotulos, ['Criar oferta', 'Espelhar grupos', 'Ofertas automáticas', 'Grupos e Canais'])
   // Só "Ofertas automáticas" é PRO.
   const pro = [...bloco.matchAll(/label: '([^']+)'[^\n]*pro: true/g)].map((m) => m[1])
   assert.deepEqual(pro, ['Ofertas automáticas'])
-  assert.ok(page.includes('pv-action-tag'), 'a etiqueta PRO sumiu')
   // O roxo do PRO precisa existir de fato no CSS — classe sem regra é tile
   // verde com etiqueta roxa, que não é o que foi combinado.
   assert.ok(/\.pv-action\.is-pro\s*\{/.test(css), 'falta a regra .pv-action.is-pro')
   assert.ok(/--pv-pro:\s*#6F4FE8/i.test(css), 'falta o token roxo do PRO')
+})
+
+test('toda função traz o nome do plano por extenso, e só a PRO é roxa', () => {
+  // "PRO" sozinho era lido como enfeite. O nome do plano por extenso é o que
+  // deixa a cliente saber o que já tem e o que é upgrade sem abrir a tela.
+  const bloco = page.slice(page.indexOf('const ACTIONS = ['), page.indexOf('export default'))
+  const tags = [...bloco.matchAll(/tag: '([^']+)'/g)].map((m) => m[1])
+  assert.deepEqual(tags, ['Plano Basic', 'Plano Basic', 'Plano PRO', 'Plano Basic'])
+  assert.ok(page.includes('pv-action-tag'), 'a etiqueta de plano sumiu da tela')
+  // A etiqueta é verde por padrão e só fica roxa dentro do tile PRO — senão
+  // as quatro ficam roxas e o upgrade deixa de se distinguir.
+  assert.ok(
+    /\.pv-action\.is-pro \.pv-action-tag\s*\{[^}]*--pv-pro/.test(css),
+    'a etiqueta do tile PRO precisa de regra própria com o roxo',
+  )
+})
+
+test('no celular os cards ficam DOIS por linha, nunca um só', () => {
+  // Quatro cards de largura inteira empurram as funções mais usadas para fora
+  // da primeira tela — e é por elas que a cliente abre o painel.
+  // painel.css tem varios blocos de 480px; o que importa e o que governa
+  // .pv-stats. Localiza pela propria regra, nunca pelo primeiro @media.
+  const i = css.indexOf('.pv-stats', css.lastIndexOf('@media (max-width: 480px)', css.indexOf('.pv-stat-ico { display: none')))
+  assert.ok(i > -1, 'a regra de celular de .pv-stats sumiu')
+  const regra = css.slice(i, css.indexOf('}', i) + 1)
+  assert.ok(
+    /\.pv-stats\s*\{[^}]*grid-template-columns:\s*repeat\(2/.test(regra),
+    'no celular .pv-stats precisa ficar em 2 colunas',
+  )
+  assert.ok(
+    !/\.pv-stats\s*\{[^}]*grid-template-columns:\s*1fr\s*;/.test(regra),
+    'voltou a uma coluna no celular',
+  )
 })
 
 test('cada card abre a tela que muda aquele número', () => {

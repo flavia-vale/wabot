@@ -55,14 +55,6 @@ function buildSheinAlert(storeLabel) {
   }
 }
 
-function buildAliExpressAlert(storeLabel) {
-  return {
-    headline: `As ofertas da ${storeLabel} não estão saindo`,
-    body: `Sem os dados de afiliada da ${storeLabel}, não é seguro trocar a comissão: a oferta para e o link de outra pessoa nunca é publicado.`,
-    nextStep: `Cadastre o código de acesso da ${storeLabel} em "Minhas credenciais" para as ofertas voltarem a sair.`,
-  }
-}
-
 // --- Mercado Livre / Amazon / Magalu: SEM o código de acesso, o plano B
 // continua publicando — só com o link mais comprido, sem a sua etiqueta de
 // afiliada curta. Magalu entra nesta família (e não na da Shopee) porque o
@@ -77,13 +69,20 @@ function buildSessionAlert(storeLabel) {
   }
 }
 
+// AliExpress NÃO entra aqui de propósito (decisão da dona do produto,
+// 2026-09-19): o aviso do topo do painel foi retirado. A loja sem cadastro
+// continua não publicando (a conversão dela é fail-closed — ver
+// src/converters/aliexpress.js), e a perda continua VISÍVEL no histórico de
+// envios, onde a linha sai com a etiqueta "faltou cadastrar a loja" e o
+// diálogo de ajuda. O que saiu foi só o banner; a oferta perdida não virou
+// silêncio. Loja fora deste mapa cai no `continue` de fail-safe abaixo, que
+// é o mesmo caminho de loja desconhecida — nenhum aviso genérico é inventado.
 const ALERT_BUILDERS = {
   shopee: buildShopeeAlert,
   mercadolivre: buildSessionAlert,
   amazon: buildSessionAlert,
   magazineluiza: buildSessionAlert,
   shein: buildSheinAlert,
-  aliexpress: buildAliExpressAlert,
 }
 
 /**
