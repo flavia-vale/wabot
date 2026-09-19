@@ -5903,6 +5903,38 @@ real (`dicasdeamigas.com.br`), não deduzidos:
 
 Teste: `test/custom-domain-link-resolver.test.js`.
 
+### "Não fazemos conversão para essa loja" numa oferta da AMAZON (RCA 2026-09-19)
+
+Cliente mandou print da aba Envios: oferta de Palmolive, cinco links do site do
+dono do grupo, marcada como **ignorada** com o texto *"ainda não fazemos
+conversão automática de afiliado para essa loja"*. A loja era a **Amazon**, que
+convertemos desde sempre.
+
+**Medido nos cinco links reais, um a um:** todos respondem **307 →
+`/promocao-encerrada`**. A promoção tinha saído do ar no site de quem publicou
+antes de o robô abrir o link. Ou seja: o robô agiu **certo** ao não publicar
+(a guarda de página de lista impediu que saísse um produto aleatório). O que
+estava errado era o que a cliente LIA.
+
+**Não regredir:**
+
+- **"A oferta acabou" tem motivo próprio** (`:offer_ended_at_source`), decidido
+  por `allCandidatesFailedBecauseOfferEnded` — exige que **TODOS** os links
+  tenham caído na página de encerrada; um único link com outra falha significa
+  que a oferta não acabou. As duas frases pedem ações opostas: uma manda
+  esperar por um suporte de loja que **já existe**, a outra diz que não há nada
+  a fazer. Mesma família do RCA de 13/09, em que o motivo genérico mandava a
+  cliente mexer na configuração que estava certa.
+- **O motivo precisa CHEGAR ao painel, não só ao log.**
+  `unwrapCustomDomainOfferLinks` devolve `{ text, failures }` por isso. Guarda
+  estrutural no teste.
+- ⚠️ **Esta sessão e outra corrigiram o MESMO teto de candidatos em paralelo**
+  (pegadinha #10). O teto vencedor é o de `CUSTOM_DOMAIN_MAX_LINKS` (6), da
+  outra sessão — não reintroduzir uma segunda env para a mesma coisa.
+
+Testes: `test/custom-domain-link-resolver.test.js`, `test/painel-logs-copy.test.js`,
+`test/mobile-logs.test.js`.
+
 ### Nem todo site de domínio próprio entrega o link (medição antes de investir)
 
 Em produção o desembrulho passou a atender **oito sites diferentes** nas quatro

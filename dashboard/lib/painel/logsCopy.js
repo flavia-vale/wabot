@@ -95,6 +95,10 @@ export function explainErrorMsg(errorMsg, platform) {
     return `${help.paragraphs[0]} ${help.nextStep}`
   }
   if (errorMsg.startsWith('skip:policy')) {
+    // "A oferta acabou" NUNCA pode sair como "não apoiamos essa loja": a loja
+    // costuma ser a Amazon, que convertemos desde sempre, e a cliente era
+    // mandada esperar por um suporte que já existe (RCA 2026-09-19).
+    if (errorMsg.endsWith(':offer_ended_at_source')) return 'Quando o robô foi abrir essa promoção, ela já tinha sido encerrada no site de quem publicou. Não é problema da sua configuração nem da loja — essa oferta simplesmente saiu do ar.'
     if (errorMsg.endsWith(':unsupported_store')) return 'Essa promoção foi ignorada porque ainda não fazemos conversão automática de afiliado para essa loja.'
     return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
   }

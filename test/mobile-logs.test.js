@@ -118,3 +118,11 @@ test('ações seguras incluem cópia sempre que há link e abertura só para URL
   assert.equal(actions.find((action) => action.key === 'open-original')?.href, 'https://loja.test/produto')
   assert.equal(actions.find((action) => action.key === 'copy-converted')?.value, 'texto convertido sem url')
 })
+
+test('celular também separa oferta encerrada de loja sem suporte', () => {
+  const encerrada = friendlyMobileLogError('skip:policy:all:any:text:offer_ended_at_source')
+  assert.match(encerrada, /encerrada/i)
+  assert.doesNotMatch(encerrada, /convers/i)
+  assert.match(friendlyMobileLogError('skip:policy:all:any:text:unsupported_store'), /convers/i)
+  assert.match(friendlyMobileLogError('skip:policy:all:any:text'), /fora das regras/i)
+})
