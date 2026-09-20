@@ -13,10 +13,10 @@ const diagnosticHref = '/diagnostico-antiban-whatsapp'
 const checklistHref = '/materiais/checklist-antiban-whatsapp'
 const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp'
 const decisionPages = [
-  { href: '/bot-comum-vs-botinho', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada.' },
+  { href: '/bot-comum-vs-espelha-grupos', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada.' },
   { href: '/faq-antiban-whatsapp', title: 'FAQ “anti-ban” honesto', description: 'Respostas diretas sem promessa de banimento zero.' },
-  { href: '/como-funciona-botinho-canais', title: 'Como funciona em canais', description: 'Fluxo de fontes, destinos, cadência e monitoramento.' },
-  { href: '/protecao-antiban-botinho', title: 'Proteção avançada', description: 'Limites, variações, pausa preventiva e recuperação.' },
+  { href: '/como-funciona-espelha-grupos-canais', title: 'Como funciona em canais', description: 'Fluxo de fontes, destinos, cadência e monitoramento.' },
+  { href: '/protecao-antiban-espelha-grupos', title: 'Proteção avançada', description: 'Limites, variações, pausa preventiva e recuperação.' },
 ]
 
 const title = 'Bot para Canais do WhatsApp com Módulo de Preservação Avançada'

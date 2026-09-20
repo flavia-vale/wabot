@@ -76,7 +76,7 @@ function PhoneReuseBlockedCard({ notice, onRecover, recovering, recoverMessage }
 }
 
 export default function WhatsAppPage() {
-  usePainelHeader({ title: 'WhatsApp', subtitle: 'Conecte o seu WhatsApp para o bot publicar por você.' })
+  usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
   const { user, refreshSession, hasAnyCredential } = usePainel()
   const reconnectHandledRef = useRef(false)
 

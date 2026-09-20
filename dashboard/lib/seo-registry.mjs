@@ -338,20 +338,24 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp'), indexable: true },
   // title/description ficam só em blog/_preservationBlogPosts.js (fonte única, FR-001).
   { path: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero'), indexable: true },
+  // Páginas de RESPOSTA (19/09/2026): título = a pergunta que as IAs recebem.
+  { path: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', template: 'article', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-espelhar-mensagens-entre-grupos-whatsapp', '2026-09-19'), indexable: true },
+  { path: '/blog/melhores-automacoes-para-afiliado-shopee-2026', template: 'article', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/melhores-automacoes-para-afiliado-shopee-2026', '2026-09-19'), indexable: true },
+  { path: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', template: 'article', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', '2026-09-19'), indexable: true },
   { path: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp', template: 'lead-magnet', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/materiais/checklist-divulgacao-ofertas-grupos-whatsapp'), indexable: true },
   // title/description ficam só em _preservationDecisionPages.js (fonte única, FR-001).
-  { path: '/bot-comum-vs-botinho', template: 'comparison', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-comum-vs-botinho'), indexable: true },
+  { path: '/bot-comum-vs-espelha-grupos', template: 'comparison', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-comum-vs-espelha-grupos'), indexable: true },
   // title/description ficam só em _preservationDecisionPages.js (fonte única, FR-001).
   { path: '/faq-antiban-whatsapp', template: 'faq', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/faq-antiban-whatsapp'), indexable: true },
   // title/description ficam só em _preservationDecisionPages.js (fonte única, FR-001).
-  { path: '/como-funciona-botinho-canais', template: 'howto', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/como-funciona-botinho-canais'), indexable: true },
+  { path: '/como-funciona-espelha-grupos-canais', template: 'howto', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/como-funciona-espelha-grupos-canais'), indexable: true },
   // title/description ficam só em _preservationDecisionPages.js (fonte única, FR-001).
-  { path: '/protecao-antiban-botinho', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/protecao-antiban-botinho'), indexable: true },
+  { path: '/protecao-antiban-espelha-grupos', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'weekly', lastModified: resolveLastModified('/protecao-antiban-espelha-grupos'), indexable: true },
   // title/description ficam só em app/materiais/checklist-antiban-whatsapp/page.js (fonte única, FR-001).
   { path: '/materiais/checklist-antiban-whatsapp', template: 'lead-magnet', priority: 0.82, changeFrequency: 'weekly', lastModified: resolveLastModified('/materiais/checklist-antiban-whatsapp'), indexable: true },
   { path: '/metodologia-uso-responsavel-whatsapp', template: 'methodology', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/metodologia-uso-responsavel-whatsapp'), indexable: true },
-  { path: '/botinho-vs-planilha-manual', template: 'comparison', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/botinho-vs-planilha-manual'), indexable: true },
-  { path: '/botinho-vs-ferramentas-genericas-automacao', template: 'comparison', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/botinho-vs-ferramentas-genericas-automacao'), indexable: true },
+  { path: '/espelha-grupos-vs-planilha-manual', template: 'comparison', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/espelha-grupos-vs-planilha-manual'), indexable: true },
+  { path: '/espelha-grupos-vs-ferramentas-genericas-automacao', template: 'comparison', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/espelha-grupos-vs-ferramentas-genericas-automacao'), indexable: true },
   { path: '/melhores-bots-para-afiliados-whatsapp', template: 'listicle', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/melhores-bots-para-afiliados-whatsapp'), indexable: true },
   { path: '/glossario', template: 'glossary', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/glossario'), indexable: true },
   { path: '/estudos-de-caso', template: 'case-studies', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/estudos-de-caso'), indexable: true },

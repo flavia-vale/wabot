@@ -71,11 +71,28 @@ function buildSecurityHeaders() {
   return headers
 }
 
+// Rotas renomeadas em 19/09/2026 (decisão da dona do produto): o nome antigo
+// saiu do ENDEREÇO das cinco páginas que ainda o carregavam. Redirect
+// permanente para o Google e as IAs transferirem o histórico (27 impressões,
+// 1 clique em 3 meses — pouco a perder, e o redirect preserva o que há). Fonte
+// única: test/nome-antigo-fora-do-texto-publico.test.js exige que cada rota
+// antiga tenha a sua linha aqui e que o destino exista no registro SEO.
+export const LEGACY_ROUTE_REDIRECTS = [
+  { source: '/bot-comum-vs-botinho', destination: '/bot-comum-vs-espelha-grupos' },
+  { source: '/como-funciona-botinho-canais', destination: '/como-funciona-espelha-grupos-canais' },
+  { source: '/protecao-antiban-botinho', destination: '/protecao-antiban-espelha-grupos' },
+  { source: '/botinho-vs-planilha-manual', destination: '/espelha-grupos-vs-planilha-manual' },
+  { source: '/botinho-vs-ferramentas-genericas-automacao', destination: '/espelha-grupos-vs-ferramentas-genericas-automacao' },
+]
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   outputFileTracingRoot: __dirname,
   turbopack: {
     root: __dirname,
+  },
+  async redirects() {
+    return LEGACY_ROUTE_REDIRECTS.map(({ source, destination }) => ({ source, destination, permanent: true }))
   },
   async headers() {
     const noIndexHeaders = [

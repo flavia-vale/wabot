@@ -39,10 +39,10 @@ function ProductDefinition() {
   )
 
   return (
-    <section id="sobre" aria-labelledby="definicao-botinho">
+    <section id="sobre" aria-labelledby="definicao-espelha-grupos">
       <div className="wrap">
         <IntroCard
-          id="definicao-botinho"
+          id="definicao-espelha-grupos"
           eyebrow={BRAND_SHORT_NAME}
           title={<>O que é o <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{BRAND_NAME}?</span></>}
           body={PRODUCT_DEFINITION}

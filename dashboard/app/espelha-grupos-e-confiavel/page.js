@@ -79,10 +79,6 @@ const faq = [
     a: `O endereço oficial é espelhagrupos.com.br. O contato oficial de suporte é ${SUPPORT_EMAIL}. Não temos outro domínio, e não pedimos pagamento por outro canal que não o checkout dentro do site.`,
   },
   {
-    q: 'Vi o nome BOTinho. É a mesma coisa?',
-    a: `Sim. BOTinho é o nome do robô do ${BRAND_NAME} — o mesmo produto, da mesma empresa. O nome BOTinho aparece em conteúdo anterior a 2026; a marca atual é ${BRAND_NAME}.`,
-  },
-  {
     q: 'Preciso pagar antes de testar?',
     a: 'Não. O teste é de 7 dias e não pede cartão. Depois dele, os planos e valores estão publicados na página de preços.',
   },
