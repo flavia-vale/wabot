@@ -127,6 +127,13 @@ export const COMPARISON_PAGES = {
     // páginas ranqueavam para as mesmas consultas e não se linkavam, então o
     // Google não tinha como saber qual responde o quê. Aqui fica a busca por
     // NOME do concorrente; lá, a busca genérica por "bot para achadinhos".
+    // Páginas de resposta (19/09/2026): quem chega comparando ferramenta ainda
+    // está decidindo COMO divulgar — os três guias respondem isso de frente.
+    guides: [
+      { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', title: 'Como espelhar mensagens entre grupos de WhatsApp' },
+      { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', title: 'Melhores automações para afiliado Shopee em 2026' },
+      { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp' },
+    ],
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
@@ -428,6 +435,13 @@ export const COMPARISON_PAGES = {
     title: 'Alternativa ao Achadinho Pro: 6 lojas por R$ 39',
     description: 'O Achadinho Pro cobre só Shopee no plano de entrada. No Espelha Grupos, 6 lojas (Shopee, Amazon, Mercado Livre, Magalu, SHEIN, AliExpress) por R$ 39/30 dias.',
     competitorSlugs: ['achadinho-pro'],
+    // Páginas de resposta (19/09/2026): quem chega comparando ferramenta ainda
+    // está decidindo COMO divulgar — os três guias respondem isso de frente.
+    guides: [
+      { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', title: 'Como espelhar mensagens entre grupos de WhatsApp' },
+      { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', title: 'Melhores automações para afiliado Shopee em 2026' },
+      { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp' },
+    ],
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
@@ -572,7 +586,7 @@ export const COMPARISON_PAGES = {
       { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles, então dá para rodar as duas em paralelo por uma semana antes de cancelar a atual.' },
     ],
   },
-  '/botinho-vs-planilha-manual': {
+  '/espelha-grupos-vs-planilha-manual': {
     format: 'vs',
     eyebrow: 'Comparativo · Operação manual',
     title: 'Planilha ou bot para divulgar ofertas: quando vale',
@@ -606,7 +620,7 @@ export const COMPARISON_PAGES = {
       { q: 'A planilha deixa de ser útil?', a: 'Não. Ela pode continuar como planejamento editorial, enquanto o Espelha Grupos organiza a execução recorrente.' },
     ],
   },
-  '/botinho-vs-ferramentas-genericas-automacao': {
+  '/espelha-grupos-vs-ferramentas-genericas-automacao': {
     format: 'vs',
     eyebrow: 'Comparativo · Automação genérica',
     title: 'Bot de afiliados ou automação genérica: qual usar',
@@ -1456,6 +1470,11 @@ export function ComparisonPage({ slug }) {
                 {relatedPages.map((related) => (
                   <li key={related.href}>
                     <Link href={related.href} data-comparison-cta="related-page">{related.title}</Link>
+                  </li>
+                ))}
+                {(page.guides ?? []).map((guide) => (
+                  <li key={guide.href}>
+                    <Link href={guide.href} data-comparison-cta="related-guide">{guide.title}</Link>
                   </li>
                 ))}
               </ul>

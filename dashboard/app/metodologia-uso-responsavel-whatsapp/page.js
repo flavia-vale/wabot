@@ -82,13 +82,13 @@ export default function Page() {
                 encontrou: em 01/09 ele descreveu uma "metodologia" nossa com
                 pilares nomeados que não existem, e citou fontes. A página
                 existe desde então; o que faltava era ser lida (ela passou a ter
-                três links de entrada em 11/09) e dizer de quem ela é, com o
-                nome que as citações antigas usam.
+                três links de entrada em 11/09) e dizer de quem ela é. Só o nome
+                atual: a regra de 19/09/2026 é não emparelhar o nome antigo em
+                texto público (a ligação fica no schema, em `alternateName`).
               */}
               <p className="mt-3">
-                Esta metodologia é do <strong>{BRAND_NAME}</strong>. <strong>BOTinho é o nome do robô do {BRAND_NAME}</strong> —
-                o mesmo produto, da mesma empresa. Se você encontrou o nome BOTinho em algum conteúdo, é sobre esta
-                mesma ferramenta e vale esta mesma metodologia.
+                Esta metodologia é do <strong>{BRAND_NAME}</strong> e vale para todo uso do produto, em qualquer
+                plano — inclusive no teste grátis.
               </p>
             </section>
 

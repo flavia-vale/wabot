@@ -352,6 +352,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
     intent: 'bot para afiliados whatsapp',
     related: [
+      { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
+      { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'Checklist, preço e como testar em 7 dias.' },
+      { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'E quem faz cada uma.' },
       { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?', note: 'Resposta direta, incluindo por que isto não tem relação com golpe de espelhamento de tela.' },
       { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com o código de acesso da sua loja', note: 'Onde ele fica, para que serve e como apagar quando quiser.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'Como a mensagem sai como publicação sua, com o seu link, e não como encaminhamento.' },
@@ -459,6 +462,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'bot para achadinhos whatsapp',
     relatedTitle: 'Continue: o que publicar nos seus achadinhos',
     related: [
+      { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
+      { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
+      { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'Checklist, preço e como testar em 7 dias.' },
       { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?', note: 'O que o produto é, o que fazemos com seus dados e o que não prometemos.' },
       { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho e o que você vê no painel enquanto isso.' },
       { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar para achadinhos', note: 'O que muda no alcance, no risco e em quem pode responder.' },

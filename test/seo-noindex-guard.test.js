@@ -190,10 +190,10 @@ function contentModulePaths() {
 }
 
 const REQUIRED_DECISION_MODULE_PATHS = [
-  '/bot-comum-vs-botinho',
+  '/bot-comum-vs-espelha-grupos',
   '/faq-antiban-whatsapp',
-  '/como-funciona-botinho-canais',
-  '/protecao-antiban-botinho',
+  '/como-funciona-espelha-grupos-canais',
+  '/protecao-antiban-espelha-grupos',
 ]
 
 const REQUIRED_ORGANIC_NICHE_PATHS = [

@@ -28,10 +28,17 @@
  *    citações antigas a esta mesma entidade;
  *  - continua no PAINEL (área logada), onde a pessoa já sabe onde está e não
  *    existe ambiguidade nenhuma;
- *  - as ROTAS com "botinho" no endereço (/protecao-antiban-botinho,
- *    /botinho-vs-planilha-manual etc.) ficam como estão. Trocar URL descarta o
- *    histórico que o Google acumulou nelas, que é o ativo que estamos tentando
- *    crescer.
+ *  - as ROTAS que carregavam o nome antigo no endereço foram RENOMEADAS em
+ *    19/09/2026 (decisão da dona do produto), com redirect permanente em
+ *    `next.config.mjs` (LEGACY_ROUTE_REDIRECTS). Somavam 27 impressões e 1
+ *    clique em 3 meses; o redirect preserva o pouco histórico que havia.
+ *
+ * Regra de escrita em superfície PÚBLICA (decisão de 19/09/2026): só
+ * "Espelha Grupos". Nem o nome antigo sozinho, nem emparelhado ("X é o nome do
+ * robô do Espelha Grupos") — a versão emparelhada existiu de 11/09 a 19/09 em
+ * seis páginas e foi retirada. A ligação com as citações antigas fica SÓ no
+ * schema (`alternateName`) e na linha de "nome anterior" do llms.txt.
+ * Guarda: test/nome-antigo-fora-do-texto-publico.test.js.
  */
 export const BRAND_ORG_NAME = 'Espelha Grupos'
 export const BRAND_PRODUCT_NAME = 'Espelha Grupos'
@@ -69,6 +76,25 @@ export const SUPPORT_RESPONSE_SLA = 'Respondemos em até 1 dia útil'
 export const BRAND_YOUTUBE_URL =
   process.env.NEXT_PUBLIC_BRAND_YOUTUBE_URL || 'https://www.youtube.com/@espelhagrupos'
 
+// Perfil oficial no Instagram (confirmado pela dona do produto em 19/09/2026:
+// @espelhagrupos). Mesma regra do YouTube: URL pública, default no código, env
+// só como override.
+export const BRAND_INSTAGRAM_URL =
+  process.env.NEXT_PUBLIC_BRAND_INSTAGRAM_URL || 'https://www.instagram.com/espelhagrupos'
+
+// Perfil oficial no TikTok (confirmado pela dona do produto em 20/09/2026:
+// @espelhagrupos). Mesma regra do YouTube/Instagram: URL pública, default no
+// código, env só como override.
+export const BRAND_TIKTOK_URL =
+  process.env.NEXT_PUBLIC_BRAND_TIKTOK_URL || 'https://www.tiktok.com/@espelhagrupos'
+
+// Página da EMPRESA no LinkedIn (confirmada pela dona do produto em
+// 20/09/2026). Vai no `sameAs` da Organization — é distinta do perfil PESSOAL
+// dela, que vai em FOUNDER_SAME_AS (a mesma separação Organization/Person já
+// documentada no comentário de BRAND_SAME_AS).
+export const BRAND_LINKEDIN_URL =
+  process.env.NEXT_PUBLIC_BRAND_LINKEDIN_URL || 'https://www.linkedin.com/company/145208936/'
+
 // Tutorial oficial de criação de conta. É a prova social VERIFICÁVEL que
 // substituiu os números inventados do bloco `Social` (auditoria de funil
 // 2026-08-05, §1.1) — qualquer visitante confere no canal. `-nocookie` evita
@@ -95,6 +121,9 @@ export const CUPONITO_ABOUT_URL = `${CUPONITO_URL}/quem-somos`
 export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
   BRAND_YOUTUBE_URL,
+  BRAND_INSTAGRAM_URL,
+  BRAND_TIKTOK_URL,
+  BRAND_LINKEDIN_URL,
   CUPONITO_ABOUT_URL,
 ].filter(Boolean)
 
@@ -106,10 +135,17 @@ export const BRAND_SAME_AS = [
 // (ChatGPT tratou Espelha Grupos e BOTinho como concorrentes; medição de
 // 01/09). Os dois endereços são os `@id` de Person que os outros sites já
 // publicam no próprio JSON-LD (verificado em 18/09/2026).
+// Perfil PESSOAL dela no LinkedIn (confirmado 20/09/2026) — distinto da
+// página da empresa (BRAND_LINKEDIN_URL, acima). Vai aqui porque `sameAs`
+// da Person é a ligação principal da entidade única.
+export const FOUNDER_LINKEDIN_URL =
+  process.env.NEXT_PUBLIC_FOUNDER_LINKEDIN_URL || 'https://www.linkedin.com/in/flaviavale/'
+
 export const FOUNDER_SAME_AS = [
   `${CUPONITO_ABOUT_URL}#person`,
   CUPONITO_ABOUT_URL,
   'https://aulasdematematicabh.com.br/#flavia',
+  FOUNDER_LINKEDIN_URL,
 ]
 
 // Caminho do `@id` da Person. É CITADO DE FORA: o JSON-LD do Cuponito aponta a

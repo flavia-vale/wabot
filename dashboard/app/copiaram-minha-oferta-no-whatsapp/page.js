@@ -131,7 +131,6 @@ export default function Page() {
 
             <section>
               <h2>Como o Espelha Grupos trata isso</h2>
-              <p><strong>BOTinho é o nome do robô do Espelha Grupos</strong> — mesmo produto, não são dois.</p>
               <p>As três defesas acima estão no produto e nenhuma delas é vendida à parte: a marca d&apos;água é configurada por grupo de destino com o texto que você escrever, o modelo de mensagem é seu e pode ser completamente diferente do texto de origem, e todo link é convertido para o seu código de afiliada antes de publicar — em seis lojas.</p>
               <p>O que ele não faz é prometer que ninguém vai copiar você. Isso não está sob o controle de nenhuma ferramenta, e a nossa <Link href="/metodologia-uso-responsavel-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">política de uso responsável</Link> é explícita sobre o que não prometemos.</p>
             </section>

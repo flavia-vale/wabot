@@ -47,7 +47,7 @@ function Nav({ registerHref }) {
   return (
     <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
       {/* Marca única na superfície pública. O visitante chegava de um resultado
-        * do Google que dizia "Espelha Grupos" e lia "BOTinho" no topo — duas
+        * do Google que dizia "Espelha Grupos" e lia o nome antigo no topo — duas
         * entidades diferentes no segundo mais caro do funil (auditoria de funil
         * 2026-08-05, §1.2). Desde 2026-09-02 existe UM nome só: marca e produto
         * são "Espelha Grupos", e o nome antigo sobrevive apenas como

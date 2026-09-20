@@ -12,25 +12,64 @@ evidência. O que não tem evidência não entrou.
 10/09, 11/09) propuseram criar páginas que já existiam — ver AGENTS.md "O Tier
 1 JÁ FOI EXECUTADO".
 
-## O que ainda falta — verificado em 19/09/2026 (o que já foi feito saiu desta lista)
+## O que ainda falta — verificado em 20/09/2026 (o que já foi feito saiu desta lista)
 
-Tudo abaixo foi medido de novo em 19/09 com `curl`, schema e o próprio
-repositório. O que está feito aparece numa linha por site, para ninguém
-refazer. O que a ferramenta guarda (Search Console, Bing WMT, ficha do Google,
-Reclame Aqui, perfis em terceiros) não dá para ver de fora e está marcado
-"só você sabe".
+Tudo abaixo foi medido de novo em 19-20/09 com `curl`, schema e o próprio
+repositório, mais o que você confirmou por mensagem (TikTok, LinkedIn). O que
+está feito aparece numa linha por site, para ninguém refazer. O que a
+ferramenta guarda (Search Console, Bing WMT, ficha do Google, Reclame Aqui,
+perfis em terceiros) não dá para ver de fora e está marcado "só você sabe".
+
+### Decidido em 20/09/2026 (não reabrir)
+
+- **TikTok `@espelhagrupos` existe** e entrou no `sameAs` da Organization.
+- **Página da empresa no LinkedIn existe**
+  (`linkedin.com/company/145208936`) e entrou no `sameAs` da Organization —
+  não era mais 404, era só o endereço com o handle que eu tinha testado antes.
+- **Seu LinkedIn pessoal** (`linkedin.com/in/flaviavale`) entrou no `sameAs`
+  da Person — é a mesma ligação de entidade única que já existia com o
+  Cuponito e o site de matemática (ver comentário em `FOUNDER_SAME_AS`).
+
+### Decidido em 19/09/2026 (não reabrir)
+
+- **Listicle do ofertasbot.com: DESCARTADO.** O site é do PromoBot, um
+  concorrente — não vai listar o Espelha Grupos. Saiu da lista e da seção 4.1.
+- **GPTBot/ClaudeBot: liberados** (falta só vigiar o robô real, item 4 da
+  tabela abaixo).
+- **Páginas de resposta: feitas** — as três da seção 6.2 (ver "Já feito").
+- **Nome antigo: só "Espelha Grupos" em texto público** — nem sozinho, nem
+  emparelhado. O que liga as citações antigas fica no schema
+  (`alternateName`) e na linha de "nome anterior" do `llms.txt`.
+- **As 5 rotas com o nome antigo no endereço: renomeadas**, com redirect
+  permanente.
+- **Instagram: `@espelhagrupos` existe** e entrou no `sameAs`.
 
 ### Já feito e conferido (não repetir)
 
-- **Espelha Grupos (produção):** o código de 18/09 está no ar (PR #1752 →
-  `main`): `/quem-somos` cita o Cuponito ("Quem faz"), `/bot-afiliados-whatsapp`
-  reescrita (H1 com preço e teste, "Melhor para / Não é ideal para", tabela de
-  planos, comparação com Pro Afiliados, Afilira e Achadinho Pro), fundadora com
-  `sameAs` para o Cuponito e o site de matemática, Cuponito também no `sameAs`
-  da Organization. Cloudflare: 19/19 robôs de IA em 200 medidos do VPS. YouTube
-  renomeado: `@espelhagrupos` é o handle canônico (`@botinhoafiliado`
-  redireciona). `og:image`, FAQ e planos com 6 lojas, `llms.txt`, medição de
-  chegada por IA em `/alternativas` e no blog: tudo no ar.
+- **Espelha Grupos (produção, no ar desde 18-20/09):** `/quem-somos` cita o
+  Cuponito ("Quem faz"), `/bot-afiliados-whatsapp` reescrita (H1 com preço e
+  teste, "Melhor para / Não é ideal para", tabela de planos, comparação com
+  Pro Afiliados, Afilira e Achadinho Pro), fundadora com `sameAs` para o
+  Cuponito, o site de matemática e agora o LinkedIn pessoal; Cuponito, YouTube
+  (`@espelhagrupos`), Instagram (`@espelhagrupos`), TikTok (`@espelhagrupos`)
+  e a página do LinkedIn no `sameAs` da Organization. Cloudflare: 19/19 robôs
+  de IA em 200 medidos do VPS. `og:image`, FAQ e planos com 6 lojas,
+  `llms.txt`, medição de chegada por IA em `/alternativas` e no blog: tudo no
+  ar. As 5 rotas com o nome antigo renomeadas com redirect permanente
+  (`/bot-comum-vs-espelha-grupos`, `/como-funciona-espelha-grupos-canais`,
+  `/protecao-antiban-espelha-grupos`, `/espelha-grupos-vs-planilha-manual`,
+  `/espelha-grupos-vs-ferramentas-genericas-automacao`); o nome antigo fora de
+  todo texto público (guarda em `test/nome-antigo-fora-do-texto-publico.test.js`);
+  as 3 páginas de resposta (`/blog/como-espelhar-mensagens-entre-grupos-whatsapp`,
+  `/blog/melhores-automacoes-para-afiliado-shopee-2026`,
+  `/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp`), com HowTo /
+  ItemList, bloco de conversão e links de entrada de `/bot-achadinhos-whatsapp`,
+  `/bot-afiliados-whatsapp`, `/alternativas/achadinhos-bot`,
+  `/alternativas/achadinho-pro` e dos guias Amazon e Shopee; e o diagnóstico de
+  LTV/retenção (`scripts/diag-ltv-retencao.mjs`, read-only) — falta só você
+  rodar (item 6 da tabela abaixo).
+- **Espelha Grupos (código de 20/09, PR aberta — chega à produção na próxima
+  `develop → main`):** TikTok e LinkedIn (empresa + pessoal) no `sameAs`.
 - **Cuponito:** a lista estrutural inteira (M1-M8) está feita, inclusive a
   home e o `/blog`, que em 18/09 ainda eram casca e hoje vêm renderizados no
   servidor (21,7 KB, `<h1>`, schema, 30 links internos). Os 2 posts estão
@@ -43,50 +82,51 @@ Reclame Aqui, perfis em terceiros) não dá para ver de fora e está marcado
   páginas de serviço (16/09)**; `FAQPage` nas páginas de serviço; a ficha do
   Google existe (o `cid` está no schema).
 
-### 1. Só você pode fazer — em ordem de peso
+## Próximos passos — só você pode fazer (em ordem de peso)
 
-| # | O que | Estado medido em 19/09 | Como | Tempo |
+Nada aqui depende de código. É tudo cadastro, medição ou decisão sua.
+
+| # | O que | Estado | Como | Tempo |
 |---|---|---|---|---|
-| 1 | **Listicle do ofertasbot.com** | ❌ "melhores bots de ofertas para afiliados" segue com 14 bots e nenhum é o Espelha Grupos (as 2 ocorrências de "espelha grupos" são a expressão genérica) | e-mail para `shodirodrigo@gmail.com` + Telegram `@ofertasbotalert`, no formato da tabela dele (nome, 6 lojas, R$39/R$69, 7 dias grátis sem cartão, grupos ilimitados, "espelhador + ofertas automáticas"); oferecer ficha datada do PromoBot em troca | 1 h |
-| 2 | **Rodada completa de medição de IA** | ❌ o CSV para em 11/09 (87 linhas: 01/09, 10/09 e 11/09). Agora faz sentido medir: Cloudflare, Cuponito, `/quem-somos` e `/bot-afiliados-whatsapp` mudaram depois disso | `ROTEIRO_MEDICAO_IA.md`: 10 consultas × 4 superfícies, conta neutra, ChatGPT com busca; anotar QUEM foi citado e a URL | 2 h |
-| 3 | **Fila de indexação no Search Console** | ❌ o registro para no Dia 4 (12/09, 3 de 5). Os vereditos das 4 páginas do Dia 1 venceram em 18/09 e não estão anotados; os lotes B e D (`/padronizar-divulgacao-afiliado-whatsapp` e mais 4) nunca foram pedidos | Inspeção de URL, 10 por dia; anotar em `ACOES_FLAVIA_2026-09-11.md` | 3 × 15 min |
-| 4 | **Reclame Aqui: reivindicar o perfil (CNPJ)** | só você sabe (a página responde 403 de fora) | `solucoes.reclameaqui.com.br/cadastro-empresa`, com o texto-padrão da 4.2 | 1 h |
-| 5 | **Bing Webmaster Tools** (Espelha Grupos e Cuponito) | só você sabe | importar do Search Console → enviar o sitemap → anotar quantas páginas estão no índice | 30 min |
-| 6 | **Vigiar o Claude-User na Cloudflare** | ⏳ liberado em 18/09; falta ver se o robô REAL parou de ser recusado (o script não enxerga isso) | AI Crawl Control → Crawlers → "Unsuccessful" de Claude-User, ClaudeBot e GPTBot tem que parar de subir (estavam em 45, 65 e 57 em 7 dias) | 5 min, daqui a 1 semana |
-| 7 | **Matemática: mandar o prompt ao implementador e decidir o telefone** | ❌ medição: 0 scripts no HTML. ❌ títulos: 30 das 33 páginas acima de 60 caracteres (home com 110; os 4 posts novos entre 74 e 87 por causa do sufixo). ❌ H1 da home ainda "Matemática que finalmente faz sentido…", DDD 32 em 12 lugares, sem a frase "atendo Belo Horizonte". ❌ `FAQPage` nos 4 posts novos (têm a FAQ em texto, sem schema). ❌ posts que faltam: recuperação em BH (até 10/10), preço por região, escola. ? Instagram e Facebook no `sameAs`: só com a sua confirmação de que são dela | `PROMPT_MATEMATICA_BH_PENDENTES_2026-09-18.md` (colar o bloco `text` inteiro). Telefone: (a) trocar para um (31) ou (b) manter o (32) com "atendo Belo Horizonte presencialmente e todo o Brasil online" em todas as páginas | 10 min + implementador |
-| 8 | **Ficha do Google + 10 avaliações** (matemática) | só você sabe (a ficha existe) | categoria "Professor(a) particular", área BH + 6 cidades, telefone igual ao do site, horário, 5+ fotos, Perguntas e respostas, pedir avaliação com o link direto (texto na seção 4.5 do diagnóstico) | 1 h + 30 dias |
-| 9 | **Decisões em aberto (4.3)** | ❌ nenhuma decidida: (a) 3 páginas de resposta (seção 6, item 2) × a regra de 11/09; (b) regra do nome antigo; (c) as 5 rotas com "botinho" no endereço (`/bot-comum-vs-botinho`, `/como-funciona-botinho-canais`, `/protecao-antiban-botinho`, `/botinho-vs-planilha-manual`, `/botinho-vs-ferramentas-genericas-automacao`): renomear com redirect ou manter | uma frase para cada; o código faz o resto | 15 min |
+| 1 | **Rodada completa de medição de IA** | ❌ o CSV para em 11/09. Agora vale a pena medir de novo: Cloudflare, Cuponito, `/quem-somos`, `/bot-afiliados-whatsapp` e os perfis novos (Instagram/TikTok/LinkedIn) mudaram depois disso | `ROTEIRO_MEDICAO_IA.md`: 10 consultas × 4 superfícies, conta neutra, ChatGPT com busca; anotar QUEM foi citado e a URL | 2 h |
+| 2 | **Fila de indexação no Search Console** | ❌ parada desde 12/09. Os vereditos das 4 páginas do Dia 1 venceram em 18/09 e não estão anotados; faltam pedir os lotes B/D antigos **e** as 3 páginas de resposta novas + as 6 que ganharam link para elas | Inspeção de URL, 10 por dia; anotar em `ACOES_FLAVIA_2026-09-11.md` | 3 × 15 min |
+| 3 | **Reclame Aqui: reivindicar o perfil (CNPJ)** | só você sabe (a página responde 403 de fora) | `solucoes.reclameaqui.com.br/cadastro-empresa`, com o texto-padrão da seção 4.2 | 1 h |
+| 4 | **Bing Webmaster Tools** (Espelha Grupos e Cuponito) | só você sabe | importar do Search Console → enviar o sitemap → anotar quantas páginas estão no índice | 30 min |
+| 5 | **Vigiar o Claude-User na Cloudflare** | ⏳ liberado em 18/09; falta ver se o robô REAL parou de ser recusado (o script não enxerga isso) | AI Crawl Control → Crawlers → "Unsuccessful" de Claude-User, ClaudeBot e GPTBot tem que parar de subir (estavam em 45, 65 e 57 em 7 dias) | 5 min |
+| 6 | **Rodar o LTV no VPS e decidir o anúncio** | ✅ script pronto; ❌ número ainda não medido | `cd ~/wabot && node scripts/diag-ltv-retencao.mjs` (read-only; `--csv` lista por cliente). A regra do plano continua: anúncio só depois do número | 5 min |
+| 7 | **Publicar nos perfis que já existem** | ❌ Instagram, TikTok e a página do LinkedIn existem e estão linkados no site, mas nenhum tem conteúdo ainda — perfil vazio não convence ninguém, nem a IA nem a pessoa que clica | 1 post/vídeo por perfil só para tirar do zero; depois cadência semanal (itens 8-10 abaixo) | 1-2 h |
+| 8 | **Matemática: mandar o prompt ao implementador e decidir o telefone** | ❌ medição: 0 scripts no HTML. ❌ títulos: 30 das 33 páginas acima de 60 caracteres. ❌ H1 da home ainda genérico, DDD 32 em 12 lugares sem a frase "atendo Belo Horizonte". ❌ `FAQPage` nos 4 posts novos. ❌ posts que faltam: recuperação em BH (até 10/10), preço por região, escola | `PROMPT_MATEMATICA_BH_PENDENTES_2026-09-18.md` (colar o bloco `text` inteiro). Telefone: (a) trocar para um (31) ou (b) manter o (32) com "atendo Belo Horizonte presencialmente e todo o Brasil online" | 10 min + implementador |
+| 9 | **Ficha do Google + 10 avaliações** (matemática) | só você sabe (a ficha existe) | categoria "Professor(a) particular", área BH + 6 cidades, telefone igual ao do site, horário, 5+ fotos, Perguntas e respostas, pedir avaliação com o link direto (texto na seção 4.5 do diagnóstico) | 1 h + 30 dias |
 
-### 2. Presença em terceiros (4.2) — não dá para conferir de fora; risque o que já fez
+## Próximos passos — cadência de conteúdo nos perfis (depois do item 7 acima)
 
-Conferido em 19/09: superfrete e remessaonline (item 12) continuam sem citar
-o Espelha Grupos; `linkedin.com/company/espelhagrupos` responde 404 (item 14);
-GitHub, TikTok, Medium, Instagram e Quora respondem bloqueio ou página genérica
-para quem não está logado, então não provam nem que o perfil existe nem que
-não existe.
+- [ ] 1 vídeo curto por semana no canal `@espelhagrupos` (YouTube), título = a
+      pergunta que a IA recebe
+- [ ] 3 a 5 TikToks de tela do painel por semana (mesmo `@espelhagrupos`)
+- [ ] 1 artigo Pulse por semana na página do LinkedIn
+- [ ] posts no Instagram (`@espelhagrupos`) — mesma linha editorial dos
+      TikToks funciona em Reels
+- [ ] criadores pequenos do YouTube (teste estendido + 30% de comissão; o
+      nome "Espelha Grupos" no TÍTULO do vídeo deles)
+- [ ] repositório público `espelhagrupos/docs` no GitHub
+- [ ] guest-parágrafo no superfrete e no remessaonline (❌ ainda não citam)
+- [ ] Medium com canonical
+- [ ] Quora em português
+- [ ] comunidades oficiais no Telegram (checklist de link, com autorização do admin)
 
-- [ ] 8 — criadores pequenos do YouTube (teste estendido + 30% de comissão; o nome "Espelha Grupos" no TÍTULO)
-- [ ] 9 — 1 vídeo curto por semana no canal `@espelhagrupos` (título = a pergunta que a IA recebe)
-- [ ] 10 — 3 a 5 TikToks de tela do painel
-- [ ] 11 — repositório público `espelhagrupos/docs` no GitHub
-- [ ] 12 — guest-parágrafo no superfrete e no remessaonline (❌ ainda não citam)
-- [ ] 14 — página da empresa no LinkedIn (❌ 404 hoje) + 1 artigo Pulse por semana
-- [ ] 15 — Medium com canonical
-- [ ] 16 — Quora em português
-- [ ] 17 — comunidades oficiais no Telegram (checklist de link, com autorização do admin)
+## O que fica com o código (eu faço — é só pedir)
 
-### 3. Fica com o código (eu faço — é só pedir)
-
-| # (seção 6) | O que | Estado em 19/09 |
+| # (seção 6) | O que | Estado |
 |---|---|---|
-| 10 | `sameAs` com o YouTube renomeado | ✅ feito em 19/09: `BRAND_YOUTUBE_URL` passou de `@botinhoafiliado` para `@espelhagrupos` (chega à produção na próxima `develop → main`) |
-| 2 | 3 páginas de resposta | ❌ nenhuma existe; depende da decisão 4.3 (a) |
+| 10 | `sameAs` com YouTube, Instagram, TikTok e LinkedIn (empresa + pessoal) | ✅ feito — TikTok/LinkedIn em PR aberta, chega na próxima `develop → main` |
+| 2 | 3 páginas de resposta | ✅ feito — falta só pedir indexação (item 2 da tabela acima) |
 | 3 | "Melhor para" em cada página comercial e Tier 1 | ❌ só `/bot-afiliados-whatsapp` tem (1 de 12) |
 | 5 | "Atualizado em" + `dateModified` em todas as rotas | ❌ 33 das 103 rotas sem data em `editorial-content.js` (home, `/quem-somos`, as LPs de dor, 10 `/alternativas/*`) |
 | 6 e 4.2 #13 | fichas datadas dos concorrentes que as IAs citam | ❌ zero fichas para Ofertiva, GoGoBot, Afiliado Analytics, Afiliados Pro Bot, Whats.Ly, PromoBot, Pai das Ofertas, DisparaPromo, Growify, OfertaFlux ("fora do ar") e nexoafiliados (= ProAfiliados). Preciso dos prints (preço + data) — sem print não entra |
 | 7 | validadores `validate:seo-consistency` e `validate:editorial-freshness` no gate | ❌ não existem |
 | 8 | validador do CSV de medição | ❌ não existe |
-| 9 | LTV e retenção, read-only | ❌ não existe |
+| 9 | LTV e retenção, read-only | ✅ feito — falta só rodar (item 6 da tabela acima) |
+| 4.3 (b)(c) | nome antigo fora do texto público; 5 rotas renomeadas com redirect | ✅ feito |
 | 4 | topo das 20 páginas no padrão citado | ❌ não iniciado |
 
 Cuponito e matemática não têm item de código aqui: são do implementador de
@@ -250,7 +290,7 @@ do dashboard verde. Detalhe no AGENTS.md, seção "Robôs de IA barrados no WAF"
 
 | # | Ação | Por quê (evidência) | Como | Tempo |
 |---|---|---|---|---|
-| 1 | **Pedir inclusão no listicle do ofertasbot.com** ("os 14 melhores bots de ofertas para afiliados") | é a ÚNICA página de terceiro na SERP de "bot para afiliados no WhatsApp" (nas 4 buscas), apareceu em ~metade das 40 buscas da varredura, foi atualizada em 01/08/2026 (ele atualiza), 10 dos 14 listados foram citados pelas IAs; ação 12 do plano de 01/09, nunca executada | e-mail para `shodirodrigo@gmail.com` (autor: Rodrigo Sumioshi, fundador do PromoBot) com cópia no Telegram `@ofertasbotalert` e LinkedIn `/in/rodrigosumioshi`, no formato da tabela dele: nome, 6 lojas, R$39/R$69, 7 dias grátis sem cartão, grupos ilimitados, tipo "espelhador + ofertas automáticas". Oferecer em troca ficha datada do PromoBot na nossa página | 1 h |
+| 1 | ~~**Pedir inclusão no listicle do ofertasbot.com**~~ **DESCARTADO em 19/09: o ofertasbot.com é do PromoBot, um concorrente — não vai listar o Espelha Grupos** ("os 14 melhores bots de ofertas para afiliados") | é a ÚNICA página de terceiro na SERP de "bot para afiliados no WhatsApp" (nas 4 buscas), apareceu em ~metade das 40 buscas da varredura, foi atualizada em 01/08/2026 (ele atualiza), 10 dos 14 listados foram citados pelas IAs; ação 12 do plano de 01/09, nunca executada | e-mail para `shodirodrigo@gmail.com` (autor: Rodrigo Sumioshi, fundador do PromoBot) com cópia no Telegram `@ofertasbotalert` e LinkedIn `/in/rodrigosumioshi`, no formato da tabela dele: nome, 6 lojas, R$39/R$69, 7 dias grátis sem cartão, grupos ilimitados, tipo "espelhador + ofertas automáticas". Oferecer em troca ficha datada do PromoBot na nossa página | 1 h |
 | 2 | **Decidir o GPTBot/ClaudeBot na Cloudflare** | 403 medido ao vivo em 24 nomes de robô; robô de treino barrado = a marca não entra no próximo modelo; concorrente que libera, entra | Cloudflare → espelhagrupos.com.br → **AI Crawl Control → Crawlers** → GPTBot: Allow; ClaudeBot: Allow (pode manter CCBot/Bytespider em Block). Se o painel mostrar "Block AI bots" legado, desligar. Depois: `node scripts/diag-acesso-robos-ia.mjs` — GPTBot tem que sair de 403 | 10 min |
 | 3 | **Reclame Aqui: reivindicar o perfil da empresa (CNPJ)** e responder tudo em ≤24h | grátis; responde direto à consulta "espelha grupos é confiável" (Trilha B); nenhum dos 8 concorrentes mais citados tem perfil — primeiro a chegar; já aparece na SERP da maior consulta do site ("achadinho pro"); sem perfil, a primeira reclamação de terceiro cria a página sem a nossa descrição | `solucoes.reclameaqui.com.br/cadastro-empresa` com o texto-padrão da seção 4.2 | 1 h |
 | 4 | **Renomear o canal do YouTube** de `@botinhoafiliado` para Espelha Grupos e pôr nome + preço + site na descrição de cada vídeo | menção em YouTube é o sinal mais forte (0,737) e lidera Perplexity (31%) e AI Overviews (21%) — as duas em que estamos em 0; o canal hoje carrega o nome aposentado | YouTube Studio → Personalização; descrição padrão = texto-padrão da 4.2 | 20 min |
@@ -311,6 +351,9 @@ entidade; nome, domínio e números nunca mudam; nunca "BOTinho" sozinho; nunca
   concorrentes citados está lá, e as IAs não os acharam lá.
 
 ### 4.3 Decisões em aberto (trade-off explícito)
+
+**Todas decididas em 19/09/2026 — ver "Decidido em 19/09/2026" no topo.**
+O texto abaixo fica como registro do trade-off.
 
 - **Liberar GPTBot/ClaudeBot** — ganha: a marca pode entrar no corpus do
   próximo modelo. Perde: o conteúdo público (que já é público) alimenta
@@ -431,7 +474,9 @@ Grupos, espelhagrupos.com.br ou BOTinho (20 páginas abertas e conferidas).
   golpe": isso é o ativo.
 - **Diretórios em massa e diretórios pagos** — nenhum dos 8 concorrentes
   citados está em diretório; G2 só quando houver avaliações reais.
-- **Anúncio antes de medir LTV.**
+- **Anúncio antes de medir LTV** (o script existe desde 19/09; falta rodar).
+- **Pedir inclusão em listicle de concorrente** (ofertasbot.com é do
+  PromoBot) — descartado em 19/09.
 - **Mais `llms.txt` e schema como alavanca** — manter o que existe.
 - **Citar preço de concorrente sem ficha datada** (FR-031) — Shozap nem tem
   preço visível.
