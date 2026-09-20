@@ -217,73 +217,103 @@ function LoginContent() {
     }
   }
 
+  const switchMode = () => {
+    const nextMode = !isRegister
+    trackEvent(TRACKING_EVENTS.AUTH_MODE_SWITCH, {
+      origin: 'login_page',
+      mode: nextMode ? 'register' : 'login',
+    })
+    setIsRegister(nextMode)
+    setError('')
+    setSuccess('')
+    setContactPhone('')
+    setTermsAccepted(false)
+    setFormStarted(false)
+  }
+
+  const inputClassName = 'h-12 w-full rounded-xl border border-[#cbd9d3] bg-white px-4 text-[15px] text-[#20302b] shadow-[0_1px_0_rgba(20,65,48,0.02)] outline-none transition placeholder:text-[#91a19b] hover:border-[#9cb8ad] focus:border-[#20845f] focus:ring-4 focus:ring-[#20845f]/10'
+
   return (
-    <div className={`min-h-screen flex items-center justify-center px-4 transition-colors duration-500 ${
-      isRegister
-        ? 'bg-gradient-to-br from-emerald-100 via-teal-50 to-cyan-100'
-        : 'bg-green-50'
-    }`}>
-      <div className={`rounded-2xl shadow-lg p-8 w-full max-w-md transition-all duration-500 ${
-        isRegister
-          ? 'bg-emerald-950/95 text-emerald-50 border border-emerald-700 shadow-emerald-900/20'
-          : 'bg-white text-gray-900 border border-transparent'
-      }`}>
-        <div className="mb-5 flex justify-center">
-          <div className={`rounded-2xl p-3 shadow-sm ${isRegister ? 'bg-emerald-900' : 'bg-green-50'}`}>
-            <Image
-              src="/botinho-logo.svg"
-              alt="Logo do Espelha Grupos, ferramenta para espelhar grupos e espalhar ofertas no WhatsApp"
-              width={64}
-              height={64}
-              priority
-            />
-          </div>
-        </div>
+    <main className="min-h-screen bg-[#f4f4ef] p-0 text-[#20302b] lg:p-7 xl:p-10">
+      <div className="pointer-events-none fixed inset-0 hidden bg-[linear-gradient(rgba(32,48,43,.055)_1px,transparent_1px),linear-gradient(90deg,rgba(32,48,43,.055)_1px,transparent_1px)] bg-[size:132px_132px] lg:block" aria-hidden="true" />
 
-        <div className="mb-5 flex justify-center">
-          <Link
-            href="/"
-            aria-label="Voltar para a página principal do Espelha Grupos"
-            className={`group inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold shadow-sm transition focus-visible:outline-none focus-visible:ring-2 ${
-              isRegister
-                ? 'border-emerald-400/40 bg-emerald-900/70 text-emerald-100 hover:border-emerald-300 hover:bg-emerald-800 focus-visible:ring-emerald-300'
-                : 'border-green-100 bg-green-50 text-green-700 hover:border-green-200 hover:bg-green-100 focus-visible:ring-green-500'
-            }`}
-          >
-            <span aria-hidden="true" className="transition-transform group-hover:-translate-x-0.5">←</span>
-            Voltar para a página principal
+      <section className="relative mx-auto grid min-h-screen w-full max-w-[1456px] overflow-hidden bg-[#f6faf8] shadow-[0_20px_60px_rgba(30,58,48,0.12)] lg:min-h-[calc(100vh-3.5rem)] lg:grid-cols-2 lg:rounded-[4px] xl:min-h-[calc(100vh-5rem)]">
+        <aside className="relative hidden overflow-hidden bg-[#238561] px-14 py-12 text-white lg:flex lg:flex-col xl:px-16 xl:py-14">
+          <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/10" aria-hidden="true" />
+          <div className="absolute -right-6 -top-6 h-52 w-52 rounded-full border border-white/10" aria-hidden="true" />
+
+          <Link href="/" className="relative z-10 inline-flex w-fit items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80" aria-label="Voltar para a página principal do Espelha Grupos">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white shadow-sm">
+              <Image src="/botinho-logo.svg" alt="" width={31} height={31} priority />
+            </span>
+            <span className="text-xl font-extrabold tracking-[-0.02em]">Espelha Grupos</span>
           </Link>
-        </div>
 
-        <div className="mb-2 text-center">
-          <p className={`text-sm font-semibold ${isRegister ? 'text-emerald-200' : 'text-green-700'}`}><span aria-hidden="true">🤖</span> O Espelha Grupos que espelha grupos</p>
-          <h1 className={`mt-2 text-xl sm:text-2xl font-bold leading-tight ${isRegister ? 'text-emerald-100' : 'text-gray-900'}`}>{isRegister ? 'Criar sua conta' : 'Entrar na sua conta'}</h1>
-        </div>
-        <p className={`text-center text-sm mb-4 ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
-          {isRegister ? 'Teste por 7 dias sem cartão e valide o primeiro envio guiado.' : 'Acesse seu painel para conectar o WhatsApp e gerenciar seus grupos.'}
-        </p>
+          <div className="relative z-10 my-auto max-w-[520px] py-12">
+            <p className="mb-5 text-xs font-bold uppercase tracking-[0.2em] text-emerald-100/80">Sua operação, no ritmo certo</p>
+            <h2 className="max-w-[500px] text-[clamp(2.7rem,4vw,4.5rem)] font-extrabold leading-[0.98] tracking-[-0.055em]">
+              Suas ofertas no WhatsApp, no automático.
+            </h2>
+            <p className="mt-7 max-w-[490px] text-lg leading-8 text-emerald-50/85">
+              Cole um link, receba a mensagem pronta com o seu código ou deixe o robô publicar sozinho nos seus grupos.
+            </p>
+
+            <div className="mt-10 max-w-[420px] rotate-[-1deg] rounded-2xl bg-white p-5 text-[#26352f] shadow-[0_18px_45px_rgba(8,53,38,0.2)] transition hover:rotate-0">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm font-extrabold"><span aria-hidden="true">✨</span> Achadinho do dia</p>
+                <span className="rounded-full bg-[#e8f5ef] px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[#217656]">Pronto para enviar</span>
+              </div>
+              <p className="mt-5 text-[15px] leading-6">Sandália bege verão — só hoje por <strong>R$ 39,90</strong> com frete grátis!</p>
+              <div className="mt-5 flex items-end justify-between gap-4 text-sm">
+                <span className="font-medium">s.shopee.com.br/3As9XkLp2</span>
+                <span className="shrink-0 text-xs text-[#8b9b95]">agora ✓✓</span>
+              </div>
+            </div>
+          </div>
+
+          <ul className="relative z-10 flex flex-wrap gap-x-7 gap-y-2 text-sm text-emerald-50/85">
+            <li>✓ Grátis para testar</li>
+            <li>✓ Sem cartão</li>
+            <li>✓ Cancele quando quiser</li>
+          </ul>
+        </aside>
+
+        <div className="flex min-h-screen items-center justify-center px-5 py-8 sm:px-10 lg:min-h-0 lg:px-12 lg:py-12">
+          <div className="w-full max-w-[462px]">
+            <div className="mb-8 flex items-center justify-between lg:hidden">
+              <Link href="/" className="inline-flex items-center gap-2.5 font-extrabold tracking-tight" aria-label="Voltar para a página principal do Espelha Grupos">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#e5f4ed]"><Image src="/botinho-logo.svg" alt="" width={27} height={27} priority /></span>
+                Espelha Grupos
+              </Link>
+              <Link href="/" className="text-sm font-semibold text-[#26785b] hover:underline">Início</Link>
+            </div>
+
+            <div className="rounded-[22px] border border-[#d8e2de] bg-white px-6 py-8 shadow-[0_12px_40px_rgba(35,72,58,0.06)] sm:px-10 sm:py-10">
+              <header className="mb-7">
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#258662]">{isRegister ? 'Comece seu teste grátis' : 'Área da cliente'}</p>
+                <h1 className="text-3xl font-extrabold tracking-[-0.035em] text-[#1d2b27]">{isRegister ? 'Criar sua conta' : 'Bem-vinda de volta'}</h1>
+                <p className="mt-2 text-[15px] text-[#667871]">{isRegister ? 'Configure seu primeiro envio em poucos minutos.' : 'Entre para continuar de onde parou.'}</p>
+              </header>
 
         {ref && (
-          <p className={`mb-4 rounded-lg px-3 py-2 text-xs font-medium ${
-            isRegister ? 'bg-emerald-800 text-emerald-100' : 'bg-green-50 text-green-700'
-          }`}>
+          <p className="mb-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
             Você chegou por um convite. Crie sua conta para receber o benefício de indicação disponível.
           </p>
         )}
 
-        <ul className={`mb-5 space-y-2 text-xs ${isRegister ? 'text-emerald-100' : 'text-gray-600'}`}>
+        {isRegister && <ul className="mb-6 grid gap-2 text-xs text-[#52665f] sm:grid-cols-2">
           {LOGIN_BENEFITS.map(benefit => (
             <li key={benefit} className="flex gap-2">
               <span aria-hidden="true">✅</span>
               <span>{benefit}</span>
             </li>
           ))}
-        </ul>
+        </ul>}
 
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
           {isRegister && (
             <div>
-              <label htmlFor="name" className="block text-sm font-medium mb-1 text-emerald-100">Nome completo</label>
+              <label htmlFor="name" className="mb-2 block text-sm font-semibold">Nome completo</label>
               <input
                 id="name"
                 type="text"
@@ -293,12 +323,12 @@ function LoginContent() {
                 onChange={e => setName(e.target.value)}
                 required={isRegister}
                 autoComplete="name"
-                className="border rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full"
+                className={inputClassName}
               />
             </div>
           )}
           <div>
-            <label htmlFor="email" className={`block text-sm font-medium mb-1 ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Email</label>
+            <label htmlFor="email" className="mb-2 block text-sm font-semibold">E-mail</label>
             <input
               id="email"
               type="email"
@@ -308,13 +338,13 @@ function LoginContent() {
               onChange={e => setEmail(e.target.value)}
               required
               autoComplete="email"
-              className="border bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full rounded-lg"
+              className={inputClassName}
             />
           </div>
           {isRegister && (
             <>
               <div>
-                <label htmlFor="contactPhone" className="block text-sm font-medium mb-1 text-emerald-100">Seu WhatsApp</label>
+                <label htmlFor="contactPhone" className="mb-2 block text-sm font-semibold">Seu WhatsApp</label>
                 <input
                   id="contactPhone"
                   type="tel"
@@ -327,14 +357,14 @@ function LoginContent() {
                   minLength={10}
                   maxLength={15}
                   autoComplete="tel"
-                  className="border rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full"
+                  className={inputClassName}
                 />
-                <p className="mt-1 text-[11px] leading-4 text-emerald-200">
+                <p className="mt-1.5 text-[11px] leading-4 text-[#72847d]">
                   É por aqui que a gente te avisa se o robô parar ou se a configuração travar. Não usamos para divulgação.
                 </p>
               </div>
               <div>
-                <label htmlFor="affCode" className="block text-sm font-medium mb-1 text-emerald-100">Código de indicação <span className="text-emerald-300 font-normal">(opcional)</span></label>
+                <label htmlFor="affCode" className="mb-2 block text-sm font-semibold">Código de indicação <span className="font-normal text-[#71827c]">(opcional)</span></label>
                 <input
                   id="affCode"
                   type="text"
@@ -342,7 +372,7 @@ function LoginContent() {
                   value={affCode}
                   onChange={e => setAffCode(e.target.value.trim().toUpperCase())}
                   autoComplete="off"
-                  className="border rounded-lg bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400 w-full uppercase"
+                  className={`${inputClassName} uppercase`}
                 />
               </div>
             </>
@@ -350,11 +380,11 @@ function LoginContent() {
 
           <div>
             <div className="mb-1 flex items-center justify-between gap-3">
-              <label htmlFor="password" className={`block text-sm font-medium ${isRegister ? 'text-emerald-100' : 'text-gray-700'}`}>Senha</label>
+              <label htmlFor="password" className="block text-sm font-semibold">Senha</label>
               {!isRegister && (
                 <Link
                   href="/esqueci-senha"
-                  className="text-xs font-medium text-green-600 hover:underline"
+                  className="text-xs font-semibold text-[#26785b] hover:underline"
                 >
                   Esqueci minha senha
                 </Link>
@@ -371,18 +401,19 @@ function LoginContent() {
                 required
                 minLength={isRegister ? 8 : undefined}
                 autoComplete={isRegister ? 'new-password' : 'current-password'}
-                className="w-full rounded-lg border bg-white px-3 py-2 pr-24 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-400"
+                className={`${inputClassName} pr-16`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((value) => !value)}
                 aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                className="absolute inset-y-1 right-1 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                className="absolute inset-y-1 right-1 grid w-11 place-items-center rounded-lg text-[#62736d] hover:bg-[#edf5f1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#20845f]"
               >
-                {showPassword ? 'Ocultar' : 'Mostrar'}
+                <span className="sr-only">{showPassword ? 'Ocultar' : 'Mostrar'}</span>
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.7"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/>{showPassword && <path d="m4 4 16 16"/>}</svg>
               </button>
             </div>
-            {isRegister && <p className="mt-1 text-[11px] leading-4 text-emerald-200">Use pelo menos 8 caracteres para reduzir erros no cadastro.</p>}
+            {isRegister && <p className="mt-1.5 text-[11px] leading-4 text-[#72847d]">Use pelo menos 8 caracteres para reduzir erros no cadastro.</p>}
           </div>
 
           {error && error === PHONE_ALREADY_REGISTERED_ERROR && (
@@ -403,7 +434,7 @@ function LoginContent() {
           {success && <Alert type="success" title="Sucesso" message={success} />}
 
           {isRegister && (
-            <label htmlFor="termsAccepted" className="flex cursor-pointer gap-3 text-sm leading-5 text-emerald-100">
+            <label htmlFor="termsAccepted" className="flex cursor-pointer gap-3 text-xs leading-5 text-[#52665f]">
               <input
                 id="termsAccepted"
                 type="checkbox"
@@ -411,7 +442,7 @@ function LoginContent() {
                 onChange={e => setTermsAccepted(e.target.checked)}
                 onFocus={() => markFormStarted('termsAccepted')}
                 required
-                className="mt-1 h-4 w-4 shrink-0 rounded border-white/60 text-emerald-600 focus:ring-emerald-400"
+                className="mt-1 h-4 w-4 shrink-0 rounded border-[#9db1a9] text-emerald-600 focus:ring-emerald-400"
               />
               <span>
                 Li e aceito os <Link href="/termos" className="font-bold underline" target="_blank" rel="noreferrer">Termos de Uso</Link>, incluindo a ciência de risco de bloqueio/banimento do WhatsApp e dos grupos, e a <Link href="/privacidade" className="font-bold underline" target="_blank" rel="noreferrer">Política de Privacidade</Link>.
@@ -420,7 +451,7 @@ function LoginContent() {
           )}
 
           {!isRegister && (
-            <p className="text-xs leading-5 text-gray-500">
+            <p className="text-xs leading-5 text-[#71827c]">
               Ao entrar, você continua sujeito aos <Link href="/termos" className="font-semibold underline">Termos de Uso</Link> e à <Link href="/privacidade" className="font-semibold underline">Política de Privacidade</Link>.
             </p>
           )}
@@ -428,42 +459,30 @@ function LoginContent() {
           <button
             type="submit"
             disabled={loading}
-            className={`text-white rounded-lg py-2 font-semibold disabled:opacity-50 transition ${
-              isRegister
-                ? 'bg-emerald-500 hover:bg-emerald-400'
-                : 'bg-green-600 hover:bg-green-700'
-            }`}
+            className="h-12 rounded-xl bg-[#258662] font-bold text-white shadow-[0_8px_20px_rgba(37,134,98,0.18)] transition hover:-translate-y-0.5 hover:bg-[#1f7657] hover:shadow-[0_10px_24px_rgba(37,134,98,0.24)] disabled:translate-y-0 disabled:opacity-50"
           >
             {loading ? (isRegister ? 'Criando conta...' : 'Entrando...') : isRegister ? 'Criar conta e acessar painel' : 'Entrar no painel'}
           </button>
         </form>
 
         <button
-          onClick={() => {
-            const nextMode = !isRegister
-            trackEvent(TRACKING_EVENTS.AUTH_MODE_SWITCH, {
-              origin: 'login_page',
-              mode: nextMode ? 'register' : 'login',
-            })
-            setIsRegister(nextMode)
-            setError('')
-            setSuccess('')
-            setContactPhone('')
-            setTermsAccepted(false)
-            setFormStarted(false)
-          }}
-          className={`mt-4 text-sm hover:underline w-full text-center ${isRegister ? 'text-emerald-200' : 'text-green-600'}`}
+          onClick={switchMode}
+          className="mt-5 w-full text-center text-sm text-[#61736c] hover:underline"
         >
-          {isRegister ? 'Já tenho conta — Entrar' : 'Ainda não tenho conta — começar agora'}
+          {isRegister ? <>Já tem uma conta? <strong className="text-[#23795a]">Entrar</strong></> : <>Ainda não tem conta? <strong className="text-[#23795a]">Criar conta grátis</strong></>}
         </button>
 
-        <nav className={`mt-6 flex flex-wrap justify-center gap-3 text-xs ${isRegister ? 'text-emerald-200' : 'text-gray-500'}`}>
+        <nav className="mt-7 flex flex-wrap justify-center gap-4 border-t border-[#e5ece9] pt-5 text-xs text-[#71827c]">
           <Link href="/suporte" className="hover:underline">Suporte</Link>
           <Link href="/termos" className="hover:underline">Termos</Link>
           <Link href="/privacidade" className="hover:underline">Privacidade</Link>
         </nav>
-      </div>
-    </div>
+            </div>
+            <p className="mt-5 text-center text-xs text-[#7a8984]">Automação simples, suporte humano.</p>
+          </div>
+        </div>
+      </section>
+    </main>
   )
 }
 
