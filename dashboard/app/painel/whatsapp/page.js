@@ -76,7 +76,7 @@ function PhoneReuseBlockedCard({ notice, onRecover, recovering, recoverMessage }
 
 export default function WhatsAppPage() {
   usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
-  const { refreshSession, hasAnyCredential } = usePainel()
+  const { user, refreshSession, hasAnyCredential } = usePainel()
   const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
