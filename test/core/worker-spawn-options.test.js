@@ -96,3 +96,70 @@ test('o fork do sessionCore aplica os dois — guarda estrutural', () => {
   assert.match(fonte, /resolveWorkerSpawnEnv\(process\.env\)/, 'fork precisa espalhar resolveWorkerSpawnEnv')
   assert.match(fonte, /execArgv: resolveWorkerExecArgv\(process\.env\)/, 'fork precisa manter resolveWorkerExecArgv')
 })
+
+// --- Rodada 3 de RAM (2026-09-19): alocador, limiares do glibc e geração jovem
+// Ver docs/analise-ram-rodada-3-2026-09-19.md. Tudo nasce desligado.
+
+test('rodada 3: sem env, NADA muda (execArgv e ambiente iguais ao histórico)', () => {
+  assert.deepEqual(resolveWorkerExecArgv({}), ['--max-old-space-size=384'])
+  assert.deepEqual(resolveWorkerSpawnEnv({}), {})
+})
+
+test('WA_WORKER_LD_PRELOAD só aceita caminho absoluto de UM objeto — e nunca lê LD_PRELOAD cru', () => {
+  const so = '/usr/lib/x86_64-linux-gnu/libjemalloc.so.2'
+  assert.deepEqual(resolveWorkerSpawnEnv({ WA_WORKER_LD_PRELOAD: so }), { LD_PRELOAD: so })
+  assert.deepEqual(resolveWorkerSpawnEnv({ WA_WORKER_LD_PRELOAD: ` ${so} ` }), { LD_PRELOAD: so })
+  for (const ruim of ['libjemalloc.so.2', 'relativo/lib.so', `${so}:/outra.so`, '/com espaco/lib.so', '', '0']) {
+    assert.deepEqual(resolveWorkerSpawnEnv({ WA_WORKER_LD_PRELOAD: ruim }), {}, JSON.stringify(ruim))
+  }
+  assert.deepEqual(resolveWorkerSpawnEnv({ LD_PRELOAD: so }), {}, 'a entrada é sempre WA_WORKER_*')
+})
+
+test('WA_WORKER_MALLOC_CONF aceita o formato chave:valor do jemalloc e recusa lixo', () => {
+  const conf = 'background_thread:true,dirty_decay_ms:5000,muzzy_decay_ms:5000,narenas:2'
+  assert.deepEqual(resolveWorkerSpawnEnv({ WA_WORKER_MALLOC_CONF: conf }), { MALLOC_CONF: conf })
+  for (const ruim of ['', ' ', 'a b', 'x;rm -rf', 'chave="v"']) {
+    assert.deepEqual(resolveWorkerSpawnEnv({ WA_WORKER_MALLOC_CONF: ruim }), {}, JSON.stringify(ruim))
+  }
+})
+
+test('limiares do glibc viram as envs COM underscore final (é assim que o glibc as lê)', () => {
+  assert.deepEqual(
+    resolveWorkerSpawnEnv({ WA_WORKER_MALLOC_MMAP_THRESHOLD: '65536', WA_WORKER_MALLOC_TRIM_THRESHOLD: '262144' }),
+    { MALLOC_MMAP_THRESHOLD_: '65536', MALLOC_TRIM_THRESHOLD_: '262144' }
+  )
+  for (const ruim of ['0', '-1', 'abc', '']) {
+    assert.deepEqual(resolveWorkerSpawnEnv({ WA_WORKER_MALLOC_MMAP_THRESHOLD: ruim }), {}, JSON.stringify(ruim))
+  }
+})
+
+test('WA_WORKER_MAX_SEMI_SPACE_MB entra no execArgv; 0/lixo não passa flag', () => {
+  assert.deepEqual(resolveWorkerExecArgv({ WA_WORKER_MAX_SEMI_SPACE_MB: '8' }), ['--max-old-space-size=384', '--max-semi-space-size=8'])
+  for (const ruim of ['0', '-4', 'oito', '']) {
+    assert.deepEqual(resolveWorkerExecArgv({ WA_WORKER_MAX_SEMI_SPACE_MB: ruim }), ['--max-old-space-size=384'], JSON.stringify(ruim))
+  }
+})
+
+test('WA_WORKER_V8_OPTIMIZE_FOR_SIZE só liga com 1/true (não é aceita em NODE_OPTIONS, por isso mora aqui)', () => {
+  assert.deepEqual(resolveWorkerExecArgv({ WA_WORKER_V8_OPTIMIZE_FOR_SIZE: '1' }), ['--max-old-space-size=384', '--optimize-for-size'])
+  assert.deepEqual(resolveWorkerExecArgv({ WA_WORKER_V8_OPTIMIZE_FOR_SIZE: 'true' }), ['--max-old-space-size=384', '--optimize-for-size'])
+  for (const off of ['0', 'false', '', 'sim', 'on']) {
+    assert.deepEqual(resolveWorkerExecArgv({ WA_WORKER_V8_OPTIMIZE_FOR_SIZE: off }), ['--max-old-space-size=384'], JSON.stringify(off))
+  }
+})
+
+test('as chaves da rodada 3 convivem com as da rodada 1 sem se sobrescrever', () => {
+  const env = {
+    WA_WORKER_MALLOC_ARENA_MAX: '2',
+    WA_WORKER_LD_PRELOAD: '/usr/lib/x86_64-linux-gnu/libjemalloc.so.2',
+    WA_WORKER_MALLOC_CONF: 'background_thread:true,narenas:2',
+    WA_WORKER_MAX_SEMI_SPACE_MB: '8',
+    WA_WORKER_V8_OPTIMIZE_FOR_SIZE: '1',
+  }
+  assert.deepEqual(resolveWorkerSpawnEnv(env), {
+    MALLOC_ARENA_MAX: '2',
+    LD_PRELOAD: '/usr/lib/x86_64-linux-gnu/libjemalloc.so.2',
+    MALLOC_CONF: 'background_thread:true,narenas:2',
+  })
+  assert.deepEqual(resolveWorkerExecArgv(env), ['--max-old-space-size=384', '--max-semi-space-size=8', '--optimize-for-size'])
+})

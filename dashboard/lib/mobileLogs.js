@@ -53,7 +53,11 @@ export function friendlyMobileLogError(errorMsg) {
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
   if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'
   if (errorMsg.startsWith('skip:no_valid_conversions')) return 'Nenhum link da mensagem pôde ser convertido em link de afiliado.'
-  if (errorMsg.startsWith('skip:policy')) return errorMsg.endsWith(':unsupported_store') ? 'Ignorada: ainda não fazemos conversão de afiliado para essa loja.' : 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
+  if (errorMsg.startsWith('skip:policy')) {
+    if (errorMsg.endsWith(':offer_ended_at_source')) return 'Ignorada: a promoção já tinha sido encerrada no site de quem publicou.'
+    if (errorMsg.endsWith(':unsupported_store')) return 'Ignorada: ainda não fazemos conversão de afiliado para essa loja.'
+    return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
+  }
   if (errorMsg.startsWith('skip:decrypt_failed')) return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
   if (errorMsg.startsWith('skip:incoming_error')) {
     const detail = errorMsg.slice('skip:incoming_error'.length).replace(/^:/, '').trim()

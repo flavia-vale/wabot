@@ -22,6 +22,8 @@ import {
   hasStoreLink,
   countDistinctProducts,
   isListingPageAfterRedirect,
+  allCandidatesFailedBecauseOfferEnded,
+  OFFER_ENDED_REASON,
 } from '../src/core/customDomainLinkResolver.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -359,9 +361,18 @@ test('guarda: o motivo "loja não suportada" é decidido ANTES do sanitizador', 
   )
   assert.match(
     fonte,
-    /links\.length === 0 && \(hasGenericUrl \|\| hadUnsupportedStoreUrl\) \? ':unsupported_store'/,
+    /links\.length === 0 && \(hasGenericUrl \|\| hadUnsupportedStoreUrl\)\s*\n?\s*\? ':unsupported_store'/,
     'link de loja desconhecida não pode voltar a ser lido como regra de encaminhamento',
   )
+  // RCA 19/09/2026: oferta ENCERRADA no site de origem precisa de motivo
+  // próprio — sair como "não apoiamos essa loja" é falso (a loja é a Amazon) e
+  // manda a cliente esperar por algo que já existe.
+  assert.match(
+    fonte,
+    /allCandidatesFailedBecauseOfferEnded\(falhasDeDominioProprio\)/,
+    'o motivo real da falha precisa chegar ao painel, não só ao log',
+  )
+  assert.match(fonte, /':offer_ended_at_source'/)
 })
 
 test('findCandidateLinks reconhece loja não suportada, mas não convite de grupo', () => {
@@ -718,4 +729,20 @@ test('com DOIS candidatos o retry continua existindo (a fatia por link não pode
   assert.equal(resolved.length, 2)
   assert.equal(chamadasPorUrl.get('https://dicasdeamigas.com.br/p/um'), 2, 'o primeiro link precisa de segunda chance')
   assert.ok(resolved.find(r => r.from.endsWith('/p/um')).recoveredByRetry)
+})
+
+// ── RCA 2026-09-19: oferta ENCERRADA no site de origem. ─────────────────────
+
+
+
+test('oferta encerrada na origem NÃO pode sair como "loja sem suporte"', () => {
+  const encerrada = [{ reason: OFFER_ENDED_REASON }, { reason: OFFER_ENDED_REASON }]
+  assert.equal(allCandidatesFailedBecauseOfferEnded(encerrada), true)
+  // Um link que falhou por outro motivo significa que a oferta não acabou.
+  assert.equal(
+    allCandidatesFailedBecauseOfferEnded([{ reason: OFFER_ENDED_REASON }, { reason: 'tempo_esgotado' }]),
+    false,
+  )
+  assert.equal(allCandidatesFailedBecauseOfferEnded([]), false)
+  assert.equal(allCandidatesFailedBecauseOfferEnded(null), false)
 })

@@ -123,7 +123,7 @@ test('painel configuracoes only exposes account email and password settings', ()
 })
 
 test('painel grupos mantém seletor de link primário independente de template', () => {
-  const source = readFileSync('dashboard/app/painel/grupos/page.js', 'utf8')
+  const source = readFileSync('dashboard/app/painel/espelhamento/page.js', 'utf8')
 
   assert.match(source, /label="Link principal quando há vários"/)
   assert.match(source, /onUpdate\(g\.id, \{ primaryLinkTarget: e\.target\.value \}\)/)

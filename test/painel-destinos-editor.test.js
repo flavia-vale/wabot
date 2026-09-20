@@ -15,7 +15,7 @@ import { test } from 'node:test'
 // com o salvar ao lado da lista. As travas abaixo são o que impede a volta do
 // bug e da usabilidade antiga.
 
-const page = readFileSync(new URL('../dashboard/app/painel/grupos/page.js', import.meta.url), 'utf8')
+const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
 const css = readFileSync(new URL('../dashboard/app/painel/painel.css', import.meta.url), 'utf8')
 
 test('a escolha de destinos acontece na própria tela, sem janelinha', () => {
