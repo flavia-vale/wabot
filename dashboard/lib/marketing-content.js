@@ -82,6 +82,19 @@ export const BRAND_YOUTUBE_URL =
 export const BRAND_INSTAGRAM_URL =
   process.env.NEXT_PUBLIC_BRAND_INSTAGRAM_URL || 'https://www.instagram.com/espelhagrupos'
 
+// Perfil oficial no TikTok (confirmado pela dona do produto em 20/09/2026:
+// @espelhagrupos). Mesma regra do YouTube/Instagram: URL pública, default no
+// código, env só como override.
+export const BRAND_TIKTOK_URL =
+  process.env.NEXT_PUBLIC_BRAND_TIKTOK_URL || 'https://www.tiktok.com/@espelhagrupos'
+
+// Página da EMPRESA no LinkedIn (confirmada pela dona do produto em
+// 20/09/2026). Vai no `sameAs` da Organization — é distinta do perfil PESSOAL
+// dela, que vai em FOUNDER_SAME_AS (a mesma separação Organization/Person já
+// documentada no comentário de BRAND_SAME_AS).
+export const BRAND_LINKEDIN_URL =
+  process.env.NEXT_PUBLIC_BRAND_LINKEDIN_URL || 'https://www.linkedin.com/company/145208936/'
+
 // Tutorial oficial de criação de conta. É a prova social VERIFICÁVEL que
 // substituiu os números inventados do bloco `Social` (auditoria de funil
 // 2026-08-05, §1.1) — qualquer visitante confere no canal. `-nocookie` evita
@@ -109,6 +122,8 @@ export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
   BRAND_YOUTUBE_URL,
   BRAND_INSTAGRAM_URL,
+  BRAND_TIKTOK_URL,
+  BRAND_LINKEDIN_URL,
   CUPONITO_ABOUT_URL,
 ].filter(Boolean)
 
@@ -120,10 +135,17 @@ export const BRAND_SAME_AS = [
 // (ChatGPT tratou Espelha Grupos e BOTinho como concorrentes; medição de
 // 01/09). Os dois endereços são os `@id` de Person que os outros sites já
 // publicam no próprio JSON-LD (verificado em 18/09/2026).
+// Perfil PESSOAL dela no LinkedIn (confirmado 20/09/2026) — distinto da
+// página da empresa (BRAND_LINKEDIN_URL, acima). Vai aqui porque `sameAs`
+// da Person é a ligação principal da entidade única.
+export const FOUNDER_LINKEDIN_URL =
+  process.env.NEXT_PUBLIC_FOUNDER_LINKEDIN_URL || 'https://www.linkedin.com/in/flaviavale/'
+
 export const FOUNDER_SAME_AS = [
   `${CUPONITO_ABOUT_URL}#person`,
   CUPONITO_ABOUT_URL,
   'https://aulasdematematicabh.com.br/#flavia',
+  FOUNDER_LINKEDIN_URL,
 ]
 
 // Caminho do `@id` da Person. É CITADO DE FORA: o JSON-LD do Cuponito aponta a
