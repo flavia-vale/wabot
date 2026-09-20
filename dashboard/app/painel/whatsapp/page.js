@@ -76,8 +76,11 @@ function PhoneReuseBlockedCard({ notice, onRecover, recovering, recoverMessage }
 }
 
 export default function WhatsAppPage() {
-  usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
-  const { user, refreshSession, hasAnyCredential } = usePainel()
+  usePainelHeader({ title: 'WhatsApp', subtitle: 'O número conectado ao bot e os limites de envio.' })
+  // Mantenha o usuário no escopo desta página: a visão conectada usa o plano
+  // para montar a orientação pós-conexão. Desestruturar com um nome explícito
+  // também evita que o JSX dependa de uma variável global inexistente.
+  const { refreshSession, hasAnyCredential, user: painelUser } = usePainel()
   const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
@@ -674,7 +677,7 @@ export default function WhatsAppPage() {
     return (
       <WhatsAppConnectedOverview
         phone={status?.phone}
-        plan={user?.plan}
+        plan={painelUser?.plan}
         onDisconnect={handleStop}
         disconnecting={actionLoading === 'stop'}
       />
