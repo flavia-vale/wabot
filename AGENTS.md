@@ -6885,6 +6885,48 @@ de verdade, e o Chromium do ambiente tira a foto em 375px
 recuo de 40px do `<ul>` parecia bug e era só o reset do Tailwind faltando no
 harness.
 
+### Segunda rodada de celular: sobreposição, "Salvar" mudo, uma aba a menos
+
+Quatro relatos da cliente no mesmo print (2026-09-19, noite). **Não regredir:**
+
+- **A gaveta é coluna flex com as pontas travadas e o meio rolando.** O corpo é
+  `flex: 1` e, com `min-height: auto`, ele se recusa a ficar menor que o
+  conteúdo, empurra os irmãos — que encolhem, porque `flex-shrink` nasce 1 — e
+  o cabeçalho acaba escrito por cima do texto da primeira seção. A cura são
+  `flex-shrink: 0` em cabeçalho/abas/rodapé **e** `min-height: 0` no corpo.
+  Reproduzido em 375×667 impedindo o corpo de rolar: sem as duas regras o texto
+  sobe de y132 para y91, dentro das abas.
+- **`position: sticky` saiu do cabeçalho.** Ele vive FORA do que rola (o corpo é
+  que tem `overflow-y: auto`), então nunca grudou em nada — e era o único
+  elemento posicionado ali, o que deixava o empilhamento com surpresa.
+- **Botão desligado precisa ter cara de desligado.** `.pnl-btn` não tinha
+  `:disabled`, então o "Salvar" da gaveta ficava idêntico a um botão ativo: a
+  cliente clicava e não acontecia nada, sem nenhum sinal do porquê.
+- **O "Salvar" do rodapé é o "pronto" da gaveta: salva o que está pendente e
+  FECHA.** Os outros campos do painel já gravam sozinhos (modo da imagem,
+  boas-vindas ao sair do campo, botão do canal), então com nada pendente ele era
+  um botão desligado no lugar mais óbvio da tela. Só continua aberto quando o
+  salvamento **falha** — fechar por cima do erro esconderia que nada foi
+  gravado; por isso `saveTargets` e `saveWatermarkText` devolvem `true`/`false`.
+- **A aba "Anti-ban" do destino saiu** (pedido da dona do produto). Para um
+  GRUPO ela era uma frase e um link para outra tela — aba que não configura nada
+  é só mais um lugar para procurar. A **saúde do CANAL**, que é configuração de
+  verdade, foi para a aba "Mensagens", junto do resto que só existe em canal.
+  `drawerTabSafe` cai na primeira aba quando a guardada não existe mais, senão o
+  painel abriria em branco.
+- **No celular o seletor Origens|Destinos ocupa a largura toda**, metade para
+  cada lado, com alvo de toque de 44px. Como régua `inline-flex` encostada à
+  esquerda ele parecia enfeite, e é a navegação entre as duas listas.
+- **Janela alta no celular usa `dvh`, nunca só `vh`.** `100vh` e o `inset: 0`
+  de um elemento fixo **não** descontam a barra de endereço nem a barra de
+  baixo do navegador: a janela nasce por baixo delas e o topo fica ilegível
+  (relato com a lista de grupos do WhatsApp). A linha em `vh` fica antes, como
+  plano B para navegador sem suporte.
+- **A janela "Adicionar" é folha com cabeçalho preso e corpo rolando**, mesma
+  receita da gaveta. Com a lista de grupos inteira ali dentro era o modal todo
+  que rolava, e o título e o "fechar" saíam da tela. Medido em 375px com 10
+  grupos: depois de rolar 662px o cabeçalho continua em y12.
+
 Testes: `test/painel-espelhamento-cartoes.test.js`,
 `test/painel-espelhamento-assistente.test.js`,
 `test/painel-destinos-editor.test.js`, `test/painel-marca-dagua-salvar.test.js`,

@@ -213,7 +213,10 @@ test('no celular as duas colunas viram uma lista só, com seletor', () => {
   assert.match(page, /Destinos \(\{post\.length\}\)/)
   const mobile = css.slice(css.indexOf('@media (max-width: 760px)'))
   assert.match(mobile, /\.pnl-esp-cols \{ grid-template-columns: 1fr/)
-  assert.match(mobile, /\.pnl-esp-mobile-switch \{ display: inline-flex/)
+  // O seletor precisa APARECER aqui (fora do celular ele é `display: none`).
+  // Qual display ele usa é decisão de desenho — em 2026-09-19 virou `flex` de
+  // largura total; o teste abaixo, "ocupa a tela toda", é quem trava isso.
+  assert.match(mobile, /\.pnl-esp-mobile-switch \{\s*\n?\s*display: (?!none)/)
   assert.match(mobile, /\.pnl-esp-col\.is-hidden-mobile \{ display: none/)
 })
 
@@ -222,7 +225,11 @@ test('a gaveta vira folha de tela cheia no celular, sem largura fixa', () => {
   // (RCA 2026-09-05, test/dialogos-no-celular.test.js).
   const mobile = css.slice(css.indexOf('@media (max-width: 560px)', css.indexOf('.pnl-drawer {')))
   assert.match(mobile, /\.pnl-drawer \{[^}]*width: 100%/s)
-  assert.match(mobile, /\.pnl-drawer-head \{[^}]*position: sticky/s)
+  // `position: sticky` no cabeçalho SAIU (2026-09-19): ele vive fora do que
+  // rola, então nunca grudava em nada — e era o único elemento posicionado
+  // ali, o que deixava o empilhamento com surpresa. Quem segura a gaveta hoje
+  // é o contrato flex do teste abaixo.
+  assert.doesNotMatch(css, /\.pnl-drawer-head \{[^}]*position: sticky/s)
   // As abas do painel precisam rolar de lado em vez de espremer.
   assert.match(css, /\.pnl-drawer-tabs \{[^}]*overflow-x: auto/s)
 })
@@ -303,4 +310,79 @@ test('no celular a lista do modal não rola dentro da rolagem do modal', () => {
   assert.match(css, /\.pnl-esp-add-list \{[^}]*max-height: 240px/s, 'o teto continua valendo no computador')
   const mobile = css.slice(css.indexOf('@media (max-width: 560px)', css.indexOf('.pnl-drawer {')))
   assert.match(mobile, /\.pnl-esp-add-list \{ max-height: none/)
+})
+
+/* ── Segunda rodada de celular (2026-09-19) ────────────────────────────
+ * A cliente fotografou o cabeçalho da gaveta escrito por cima do texto da
+ * primeira seção, o "Salvar" do rodapé sem efeito nenhum e o seletor
+ * Origens|Destinos pequeno no meio da tela. */
+
+test('a gaveta é coluna flex com as pontas travadas e o meio rolando', () => {
+  // Reproduzido em 375x667 impedindo o corpo de rolar: sem estas duas regras
+  // o corpo (flex: 1, `min-height: auto`) se recusa a ficar menor que o
+  // conteúdo, empurra os irmãos — que encolhem, porque `flex-shrink` nasce 1 —
+  // e o texto da primeira seção sobe para dentro das abas e do cabeçalho.
+  assert.match(css, /\.pnl-drawer-head,\s*\n\s*\.pnl-drawer-tabs,\s*\n\s*\.pnl-drawer-foot \{ flex-shrink: 0; \}/)
+  assert.match(css, /\.pnl-drawer-body \{[^}]*min-height: 0/s)
+})
+
+test('botão desligado tem cara de desligado', () => {
+  // Sem isto o "Salvar" desligado ficava idêntico ao ligado: a cliente
+  // clicava e nada acontecia, sem nenhum sinal do porquê.
+  assert.match(css, /\.pnl-btn:disabled[^{]*\{[^}]*opacity/s)
+})
+
+test('o "Salvar" da gaveta só desliga enquanto salva, e ao salvar FECHA', () => {
+  const gaveta = page.slice(page.indexOf('function GroupDrawer('), page.indexOf('function AddGroupModal('))
+  assert.match(gaveta, /onClick=\{onSave\} disabled=\{saving\}/, 'o botão não pode voltar a desligar por "nada mudou"')
+  assert.doesNotMatch(gaveta, /disabled=\{!dirty/)
+
+  const salvar = page.slice(page.indexOf('async function handleDrawerSave()'), page.indexOf('async function handleLoadWA()'))
+  assert.match(salvar, /setDrawerId\(null\)/, 'salvar precisa fechar a gaveta')
+  // Fechar por cima de um erro esconderia que nada foi para o servidor.
+  assert.match(salvar, /if \(ok === false\) return/)
+})
+
+test('a aba "Anti-ban" saiu do destino e a saúde do canal ficou', () => {
+  const abas = page.slice(page.indexOf('const DEST_TABS'), page.indexOf('const GRADIENTS'))
+  assert.doesNotMatch(abas, /antiban|Anti-ban/)
+  assert.match(abas, /key: 'imagem'/)
+  assert.match(abas, /key: 'mensagens'/)
+  // O painel de saúde do canal é configuração de verdade — não pode sumir junto.
+  assert.match(page, /<ChannelHealthPanel/)
+  // Aba desconhecida (a antiga, guardada no estado) não pode abrir em branco.
+  assert.match(page, /const drawerTabSafe = drawerTabs\.some/)
+})
+
+test('no celular o seletor Origens|Destinos ocupa a tela toda', () => {
+  const mobile = css.slice(css.indexOf('@media (max-width: 760px)'))
+  const bloco = mobile.slice(mobile.indexOf('.pnl-esp-mobile-switch {'))
+  assert.match(bloco, /width: 100%/)
+  assert.doesNotMatch(bloco.slice(0, bloco.indexOf('}')), /display: inline-flex/)
+  // Alvo de toque: como régua de 26px ele era enfeite, não navegação.
+  assert.match(mobile, /\.pnl-esp-mobile-switch button \{[^}]*min-height: 44px/s)
+})
+
+test('a janela "Adicionar" tem cabeçalho preso e corpo rolando', () => {
+  // Com a lista de grupos do WhatsApp inteira dentro dela, era o modal todo
+  // que rolava: o título e o "fechar" saíam da tela. Medido em 375px com 10
+  // grupos — depois de rolar 662px o cabeçalho continua em y12.
+  assert.match(page, /className="pnl-esp-add-head"/)
+  assert.match(page, /className="pnl-esp-add-body"/)
+  assert.match(css, /\.pnl-esp-add \{[^}]*flex-direction: column/s)
+  assert.match(css, /\.pnl-esp-add \{[^}]*overflow: hidden/s)
+  // Mesma receita da gaveta: ponta travada, meio podendo encolher até zero.
+  assert.match(css, /\.pnl-esp-add-head \{[^}]*flex-shrink: 0/s)
+  assert.match(css, /\.pnl-esp-add-body \{[^}]*min-height: 0/s)
+  assert.match(css, /\.pnl-esp-add-body \{[^}]*overflow-y: auto/s)
+})
+
+test('janela alta no celular respeita a barra do navegador', () => {
+  // `100vh` e o `inset: 0` de um elemento fixo NÃO descontam a barra de
+  // endereço nem a barra de baixo: a janela nasce por baixo delas e o título
+  // fica ilegível. `dvh` desconta. Navegador sem suporte ignora a linha, por
+  // isso a versão em `vh` fica antes, como plano B.
+  assert.match(css, /\.pnl-modal-overlay \{ height: 100dvh; \}/)
+  assert.match(css, /\.pnl-drawer-overlay \{ height: 100dvh; \}/)
+  assert.match(css, /\.pnl-esp-add \{[^}]*max-height: calc\(100vh - 40px\);[^}]*max-height: calc\(100dvh - 40px\)/s)
 })
