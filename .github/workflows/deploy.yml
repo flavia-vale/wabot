@@ -274,6 +274,12 @@ jobs:
       # fonte da verdade. Por isso ela roda mesmo com o passo anterior vermelho.
       - name: Purgar cache da Cloudflare (produção)
         if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        # O aplicativo já foi publicado e validado pelo smoke dentro do SSH.
+        # Cloudflare é uma integração posterior: token expirado, rate limit ou
+        # indisponibilidade da API não podem transformar TODO redeploy concluído
+        # em "falhou". O step continua visivelmente amarelo e imprime a ação
+        # manual, mas o status do deploy passa a refletir o deploy de verdade.
+        continue-on-error: true
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
@@ -284,11 +290,17 @@ jobs:
           fi
           echo "🧹 Limpando cache da Cloudflare (purge_everything)..."
           for attempt in 1 2 3; do
-            resp="$(curl -sS -X POST \
+            # O shell do Actions roda com `-e`: uma falha de rede dentro do
+            # command substitution encerrava o step na PRIMEIRA tentativa e
+            # tornava o loop de retry decorativo. Colocar o curl na condição
+            # preserva as três tentativas também para erros de transporte.
+            if ! resp="$(curl -sS -X POST \
               "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
               -H "Authorization: Bearer ${CF_API_TOKEN}" \
               -H "Content-Type: application/json" \
-              --data '{"purge_everything":true}')"
+              --data '{"purge_everything":true}')"; then
+              resp='{"success":false,"error":"falha de rede ao chamar a Cloudflare"}'
+            fi
             if printf '%s' "$resp" | grep -q '"success":true'; then
               echo "✅ Cache da Cloudflare limpo."
               exit 0
@@ -317,4 +329,3 @@ jobs:
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         continue-on-error: true
         run: node scripts/notify-indexnow.mjs
-
