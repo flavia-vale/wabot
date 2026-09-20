@@ -17,6 +17,7 @@ import { WHATSAPP_SAFETY_HEADLINE, WHATSAPP_SAFETY_POINTS } from '../../../../sr
 import { buildJustConnectedNextStep } from '../../../../src/credentialBlockAlert/message.js'
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
+import { WhatsAppConnectedOverview } from '@/components/WhatsAppConnectedOverview'
 import {
   QR_POLL_INTERVAL_MS,
   INACTIVITY_RESET_SECONDS,
@@ -75,8 +76,8 @@ function PhoneReuseBlockedCard({ notice, onRecover, recovering, recoverMessage }
 }
 
 export default function WhatsAppPage() {
-  usePainelHeader({ title: 'Conexão WhatsApp', subtitle: 'Status da sessão e conexão pelo número ou QR Code' })
-  const { refreshSession, hasAnyCredential } = usePainel()
+  usePainelHeader({ title: 'WhatsApp', subtitle: 'O número conectado ao bot e os limites de envio.' })
+  const { refreshSession, hasAnyCredential, user } = usePainel()
   const reconnectHandledRef = useRef(false)
 
   const [status, setStatus] = useState(null)
@@ -666,6 +667,17 @@ export default function WhatsAppPage() {
   // reconexão automática é exatamente o susto que queremos evitar.
   const nextStep = buildJustConnectedNextStep()
   const statusDotColor = (isConnected || status?.clientState?.hiddenByGrace) ? 'var(--success)' : (isConnecting || clientState === 'recovering') ? 'var(--warn)' : 'var(--line)'
+
+  if (isConnected && !statusLoading && !statusError) {
+    return (
+      <WhatsAppConnectedOverview
+        phone={status?.phone}
+        plan={user?.plan}
+        onDisconnect={handleStop}
+        disconnecting={actionLoading === 'stop'}
+      />
+    )
+  }
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 560, margin: '0 auto' }}>
