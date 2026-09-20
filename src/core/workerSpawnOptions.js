@@ -39,6 +39,25 @@ export function resolveWorkerExecArgv(env = process.env) {
   // event loop antes de promover.
   const pool = Number.parseInt(String(env.WA_WORKER_V8_POOL_SIZE ?? '').trim(), 10)
   if (Number.isFinite(pool) && pool > 0) argv.push(`--v8-pool-size=${pool}`)
+
+  // --- Geração jovem do V8 (rodada 3 de RAM, 2026-09-19) ------------------
+  // MEDIDO (docs/analise-ram-rodada-3-2026-09-19.md, §2): sob tráfego o
+  // `new_space` físico chega a 32 MiB por processo (2 semi-spaces de 16 MiB,
+  // padrão do Node 22). Com 8 MiB cai para 16 MiB sem promover mais objeto para
+  // o old-space e sem perder vazão; com 4 MiB o old-space cresce (promoção
+  // precoce) e come parte do ganho. Ausente = padrão do Node.
+  // ⚠️ Semi-space menor = scavenges MAIS frequentes e MAIS CURTOS (medido:
+  // p99 de 1,23 ms para 0,68 ms). Não é o caso do incidente de junho — aquilo
+  // era heap sem teto num VPS sem swap.
+  const semi = positiveIntOrNull(env.WA_WORKER_MAX_SEMI_SPACE_MB)
+  if (semi !== null) argv.push(`--max-semi-space-size=${semi}`)
+
+  // `--optimize-for-size`: o V8 troca velocidade por memória (semi-space de
+  // 1 MiB, heap crescendo devagar, menos código otimizado guardado). MEDIDO
+  // localmente: −13 MiB no custo fixo do grafo de imports e −37 MiB sob
+  // tráfego, com ~10% de CPU a mais em GC e pausas MAIS CURTAS (p99 0,45 ms).
+  // Não é aceita em NODE_OPTIONS — por isso mora aqui. Só '1'/'true' ligam.
+  if (isOn(env.WA_WORKER_V8_OPTIMIZE_FOR_SIZE)) argv.push('--optimize-for-size')
   return argv
 }
 
@@ -82,20 +101,48 @@ function positiveIntOrNull(raw) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
+function isOn(raw) {
+  const v = String(raw ?? '').trim().toLowerCase()
+  return v === '1' || v === 'true'
+}
+
+// Caminho absoluto, sem espaço nem ':' (LD_PRELOAD aceita lista separada por
+// ':' — aqui é UM objeto de propósito, para o rollback ser apagar uma linha).
+const LD_PRELOAD_RE = /^\/[^\s:]+$/
+// Formato do jemalloc: `chave:valor,chave:valor` (ex.:
+// `background_thread:true,dirty_decay_ms:5000,narenas:2`).
+const MALLOC_CONF_RE = /^[A-Za-z0-9_:.,-]+$/
+
 /**
  * Variáveis de ambiente EXTRA para o fork do worker. Devolve `{}` quando nada
  * está configurado — o chamador espalha o resultado por cima do `process.env`,
  * então objeto vazio é no-op garantido.
  *
- * | env de entrada                  | vira                   | ataca                          |
- * |---------------------------------|------------------------|--------------------------------|
- * | `WA_WORKER_MALLOC_ARENA_MAX`    | `MALLOC_ARENA_MAX`     | as arenas (58% do PSS medido)  |
- * | `WA_WORKER_TOKIO_THREADS`       | `TOKIO_WORKER_THREADS` | 16 threads do motor do Prisma  |
- * | `WA_WORKER_UV_THREADPOOL_SIZE`  | `UV_THREADPOOL_SIZE`   | 4 threads do pool do libuv     |
+ * | env de entrada                     | vira                     | ataca                                   |
+ * |------------------------------------|--------------------------|-----------------------------------------|
+ * | `WA_WORKER_MALLOC_ARENA_MAX`       | `MALLOC_ARENA_MAX`       | as arenas (58% do PSS medido)           |
+ * | `WA_WORKER_TOKIO_THREADS`          | `TOKIO_WORKER_THREADS`   | 16 threads do motor do Prisma           |
+ * | `WA_WORKER_UV_THREADPOOL_SIZE`     | `UV_THREADPOOL_SIZE`     | 4 threads do pool do libuv              |
+ * | `WA_WORKER_MALLOC_MMAP_THRESHOLD`  | `MALLOC_MMAP_THRESHOLD_` | retenção de buffer grande (glibc)       |
+ * | `WA_WORKER_MALLOC_TRIM_THRESHOLD`  | `MALLOC_TRIM_THRESHOLD_` | idem (devolve o topo do heap mais cedo) |
+ * | `WA_WORKER_LD_PRELOAD`             | `LD_PRELOAD`             | troca o alocador (jemalloc) só no robô  |
+ * | `WA_WORKER_MALLOC_CONF`            | `MALLOC_CONF`            | purga em segundo plano do jemalloc      |
  *
- * ⚠️ Não está verificado que o motor do Prisma honra `TOKIO_WORKER_THREADS` —
- * é a variável padrão do tokio, mas depende de como ele constrói o runtime.
- * Conferir contando as threads depois de aplicar, antes de acreditar no valor.
+ * ✅ Verificado em 2026-09-19 (local, Prisma 5.22): o motor do Prisma HONRA
+ * `TOKIO_WORKER_THREADS` — com `2`, as threads `tokio-runtime-w` caem de
+ * núcleos+1 para 3.
+ *
+ * Rodada 3 (2026-09-19, docs/analise-ram-rodada-3-2026-09-19.md):
+ *   - Os limiares do glibc existem porque o padrão é DINÂMICO: ao liberar um
+ *     bloco grande (o HTML de 2 MB de uma loja), o glibc sobe o limiar de mmap
+ *     até esse tamanho e todo buffer seguinte passa a vir do [heap] — e, uma
+ *     vez liberado, fica lá. Fixar o limiar desliga o ajuste dinâmico. Medido
+ *     no churn sintético: retenção de 69 → 40 MiB.
+ *   - `LD_PRELOAD` de um objeto inexistente NÃO derruba o processo: o loader
+ *     avisa (`cannot be preloaded ... ignored`) e segue com o glibc. Fail-safe.
+ *   - jemalloc SEM `background_thread:true` não devolve memória de processo
+ *     ocioso (a purga só roda em atividade do alocador). Medido: 77 MiB presos
+ *     contra 10 MiB com a thread de fundo. Não ligar um sem o outro.
  */
 export function resolveWorkerSpawnEnv(env = process.env) {
   const extra = {}
@@ -105,5 +152,15 @@ export function resolveWorkerSpawnEnv(env = process.env) {
   if (tokio !== null) extra.TOKIO_WORKER_THREADS = String(tokio)
   const uv = positiveIntOrNull(env.WA_WORKER_UV_THREADPOOL_SIZE)
   if (uv !== null) extra.UV_THREADPOOL_SIZE = String(uv)
+
+  const mmap = positiveIntOrNull(env.WA_WORKER_MALLOC_MMAP_THRESHOLD)
+  if (mmap !== null) extra.MALLOC_MMAP_THRESHOLD_ = String(mmap)
+  const trim = positiveIntOrNull(env.WA_WORKER_MALLOC_TRIM_THRESHOLD)
+  if (trim !== null) extra.MALLOC_TRIM_THRESHOLD_ = String(trim)
+
+  const preload = String(env.WA_WORKER_LD_PRELOAD ?? '').trim()
+  if (LD_PRELOAD_RE.test(preload)) extra.LD_PRELOAD = preload
+  const mallocConf = String(env.WA_WORKER_MALLOC_CONF ?? '').trim()
+  if (MALLOC_CONF_RE.test(mallocConf)) extra.MALLOC_CONF = mallocConf
   return extra
 }

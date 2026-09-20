@@ -3750,6 +3750,63 @@ mídia). É mitigação de pico de GC, **não** teto rígido de RSS — em VPS
 subdimensionado, **swap continua sendo pré-requisito** (a primeira linha de
 defesa). Teste: `test/core/worker-spawn-options.test.js`.
 
+## RAM dos robôs — rodada 3: alocador, geração jovem e o medidor de crescimento (2026-09-19)
+
+Depois das janelas 1 e 2 (`MALLOC_ARENA_MAX=2`, log inline, cache do Sharp), o
+robô ficou em 92,8 MiB (PSS) com 2,5 h e **voltou a 122,6 MiB com 11,6 h**.
+`docs/analise-ram-rodada-3-2026-09-19.md` mediu, em ambiente controlado com as
+mesmas versões do lock, de que é feito o custo e de onde vem o crescimento.
+
+| Peça | Onde |
+|---|---|
+| Interruptores novos (nascem DESLIGADOS) | `resolveWorkerSpawnEnv` / `resolveWorkerExecArgv` em `src/core/workerSpawnOptions.js` |
+| Regra pura do veredito de crescimento | `src/ops/memory/growthDiagnosis.js` |
+| Medidor só-leitura por robô, com série | `scripts/diag-memoria-crescimento.mjs` (`--ipc`, `--serie`) |
+
+**O que a medição fechou (não re-medir sem motivo):**
+
+- **O custo fixo é o grafo de imports (~71 MiB privados), e 45 deles são o
+  Baileys** (WAProto de 11 MB + libsignal). Sharp ~10, motor do Prisma ~7,
+  ioredis ~7, nodemailer ~3, axios <1. Não há mais gordura nativa relevante no
+  custo fixo — **a memória a recuperar está no crescimento com a idade.**
+- **O crescimento tem cara de retenção do alocador**: dois terços dele estão em
+  `[heap]`+arena do glibc. Num churn de buffers de HTML/imagem, depois de
+  liberar tudo, o glibc segura **69 MiB**; com limiares fixos de mmap/trim,
+  **40**; jemalloc com `background_thread:true`, **10**. ⚠️ jemalloc SEM a
+  thread de fundo segura 77 — a purga só roda em atividade. Não ligar um sem o
+  outro. jemalloc custa +5-9 MiB fixos por processo.
+- **`--max-semi-space-size=8`**: −14 MiB sob tráfego, pausas de GC MAIS curtas,
+  vazão igual. Abaixo de 8 promove objeto cedo e come o ganho.
+  **`--optimize-for-size`**: −13 MiB fixos e −37 sob carga, com ~10% de CPU em
+  GC e pausas mais curtas; não é aceita em `NODE_OPTIONS`, por isso mora no
+  `execArgv`.
+- Derrubados: `--jitless` (não economiza e quebra o grafo), trocar `axios`,
+  `sharp.cache(0)`, COW entre forks (`fork()` do Node é spawn+exec — nada a
+  compartilhar). **O motor do Prisma HONRA `TOKIO_WORKER_THREADS`** (verificado).
+
+**Não regredir:**
+
+- **Tudo nasce desligado.** `resolveWorkerSpawnEnv({})` continua `{}` e
+  `resolveWorkerExecArgv({})` continua só o teto de heap — teste trava.
+- **`WA_WORKER_LD_PRELOAD` aceita UM caminho absoluto**, sem `:` nem espaço;
+  `WA_WORKER_MALLOC_CONF` só `chave:valor,...`. Nunca ler `LD_PRELOAD` cru do
+  `.env`: valeria para API e supervisor, que não são o alvo.
+- **`LD_PRELOAD` de arquivo inexistente NÃO derruba o robô** (medido: o loader
+  avisa e segue com glibc). Fail-safe por construção.
+- **Sem medir a série (24 h, 1x/hora) não se conclui nada sobre crescimento** —
+  o `--serie` recusa com menos de 3 medidas ou 2 h e avisa reinício da frota no
+  meio. Nem heap snapshot nem inspector em produção: pausa de segundos derruba
+  o keepalive.
+- **Aplicar exige reiniciar o supervisor** (env lida no fork) e o código dos
+  interruptores está em `src/core/` (`WORKER_CODE_PATHS_RE`): mergear na MESMA
+  janela em que as envs entram no `.env` — uma reconexão, não duas. jemalloc
+  ainda exige `apt install libjemalloc2` no VPS: anunciar.
+
+Ordem recomendada: medir 24 h → staging com jemalloc + semi-space 8 por 24 h →
+produção (as duas na mesma janela) → medir 24 h → só então
+`--optimize-for-size`. Testes: `test/core/worker-spawn-options.test.js`,
+`test/ops-memory-growth-diagnosis.test.js`.
+
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
 O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
@@ -6721,6 +6778,213 @@ lugares.
 `/logs/summary` só em trial), nenhum processo novo, zero impacto de RAM.
 Testes: `test/painel-credencial-clareza.test.js`,
 `test/painel-whatsapp-seguranca.test.js`.
+
+## Espelhamento absorveu a tela de Grupos (2026-09-19 — não regredir)
+
+`/painel/grupos` **deixou de existir** e virou redirecionamento para
+`/painel/espelhamento`. O endereço antigo continua respondendo porque está em
+e-mail já enviado, no tutorial, no checklist de ativação e em link que a
+cliente guardou — caçar cada um é mais caro que redirecionar.
+
+**Princípio da tela: ver no nível 1, configurar no nível 2.** A lista e o mapa
+mostram o FLUXO; toda configuração vive num painel lateral que abre ao clicar
+no card do grupo. **Nada de formulário aberto dentro da lista** — era isso que
+fazia a tela de Grupos crescer sem fim e sumir para baixo no celular.
+
+| Onde ficava (tela de Grupos) | Onde fica agora |
+|---|---|
+| Abas Monitorar / Publicar | as duas colunas da aba "Grupos" |
+| Carregar do WhatsApp / Adicionar canal | modal "+ Adicionar" de cada coluna |
+| Para onde esse grupo envia | painel da ORIGEM, aba **Destinos** (e pelo mapa de Conexões) |
+| Lojas, palavras bloqueadas, sem link | painel da ORIGEM, aba **Captura** |
+| Formato da mensagem, link principal, texto adicional | painel da ORIGEM, aba **Publicação** |
+| Imagem, marca d'água, boas-vindas, botão "Ver canal", anti-ban | painel do DESTINO |
+| Excluir grupo | rodapé do painel, com confirmação |
+
+⚠️ **As duas colunas VOLTARAM e isso é decisão de produto, não regressão.** Em
+2026-09-19, de manhã, as colunas tinham virado um cartão por ORIGEM
+("LÊ DE → PUBLICA EM") com um assistente de dois passos. O desenho de cartões
+não tem porta de entrada para o DESTINO — e é no destino que moram imagem,
+marca d'água, boas-vindas, botão "Ver canal" e anti-ban. Sem a coluna de
+destinos, metade da tela de Grupos não teria onde ser absorvida. O que o cartão
+entregava de bom **não se perdeu**: quantas ofertas saíram hoje, as lojas
+aceitas e "envia para" vivem dentro do card da coluna de origem, montados pela
+MESMA regra pura (`buildMirrorCards`).
+
+**O assistente "Criar novo espelhamento" saiu** — dois caminhos para a mesma
+coisa confundem. Os avisos dele, porém, continuam valendo e foram para a aba
+Destinos do painel, ANTES de salvar: quem deixa de receber ao sair do padrão
+`all` (RCA 2026-08-26), origem que fica sem destino nenhum e destino removido.
+
+**Não regredir:**
+
+- **A lista salva NUNCA vai crua ao endpoint.** `saveTargets` passa por
+  `planMirrorCreation({ modo: 'editar' })` — o `PUT /groups/:id/targets`
+  SUBSTITUI a lista da origem, e gravar o rascunho da tela sem a regra apaga
+  vínculo em silêncio.
+- **A origem destacada da aba Conexões é DERIVADA no render**
+  (`resolveInitialOrigin`), nunca gravada por efeito.
+- **`targetsState` é a fonte ÚNICA dos vínculos** — cards, mapa e o seletor de
+  destinos leem o mesmo registro. Por isso salvar no painel atualiza a lista e o
+  mapa atrás dele na hora, sem recarregar, e sem um GET por abertura de gaveta.
+- **Fechar o painel com mudança não salva pede confirmação**, e o card mostra
+  "destinos não salvos" enquanto isso.
+- **A escolha de contas do Instagram mora na aba Destinos da origem** — é
+  destino como os outros (`instagramMirrorTargetsUpdate`, atrás de
+  `hasInstagramStoriesAccess`).
+- **Linguagem:** a tela diz "origem" e "destino". Onde o código usa
+  `role: 'monitor'` a tela diz origem; `role: 'post'`, destino. Nunca monitor,
+  post, jid, imageMode, template key, relay ou preview na tela.
+- **No celular** as colunas viram uma lista só com seletor Origens|Destinos, e
+  a gaveta vira folha de tela cheia **sem largura fixa** (RCA 2026-09-05).
+- Nenhuma rota ou contrato de API novo: a tela usa exatamente as chamadas que as
+  duas telas já faziam.
+
+### O celular: o que foi MEDIDO em 375px (2026-09-19 — não regredir)
+
+A tela subiu com "frases quebradas" e toque ruim no celular. Os números são de
+renderização real em 375px, não de leitura de código:
+
+| Onde | Antes | Depois |
+|---|---:|---:|
+| largura de texto do card (nome, "envia para", lojas) | **108px** | **215px** |
+| altura da seção de destinos na gaveta | 257px para 398px de conteúdo (**cortava no meio de um nome**) | 476px, nada cortado |
+| rótulo do "+ Adicionar" da coluna | quebrava ("Adicio/nar") | uma linha |
+| papéis do modal "Adicionar" | 429px de conteúdo em 315px — **"Destino" nascia fora da tela** | duas linhas inteiras |
+
+Os 108px saíam da soma: avatar 38 + pílula de contagem + engrenagem 36 + três
+paddings comiam quase tudo que havia. **Não regredir:**
+
+- **No celular a ENGRENAGEM e a PÍLULA saem, o card não.** O card inteiro já é
+  o alvo de toque (`aria-label="Configurar <nome>"`); dois alvos lado a lado em
+  36px só produziam toque errado, e a pílula "3→" repete o que a linha de fluxo
+  logo abaixo diz por extenso. A seta que entra no lugar vive **dentro** do
+  botão do card, `aria-hidden`, para não virar um segundo alvo.
+- **`overflow-wrap: break-word`, nunca `anywhere`, no nome do grupo.**
+  `anywhere` parte a palavra assim que ela não cabe na SOBRA da linha — era o
+  que produzia "Cabeleireir/a Profissional". E o nome precisa de `font-size`
+  próprio: sem ele herdava 16px, maior que o card antigo (14.5px), gastando a
+  largura que já era pouca.
+- **O corpo da gaveta é FLEX em coluna, nunca grid.** `.cfg-section` tem
+  `overflow: hidden`, então o tamanho mínimo automático dela vira zero e num
+  grid de altura definida a linha encolhe — foi assim que a lista de destinos
+  saiu cortada. Cada filho leva `flex: 0 0 auto`: o que não cabe rola.
+- **"Excluir grupo" não fica ao lado de "Salvar" no celular.** O rodapé empilha
+  com `column-reverse`, que inverte só a pintura — a ordem do DOM (e do leitor
+  de tela) continua Excluir → Salvar.
+- **Uma rolagem só.** A lista do modal "Adicionar" perde o teto de 240px no
+  celular: duas rolagens encaixadas fazem a de dentro roubar o gesto da de fora.
+  No computador o teto continua valendo.
+- **`<div>` não vale dentro de `<button>`.** A linha de fluxo do card é `<span>`
+  com `display:block` pelo CSS.
+
+⚠️ **Medir, não deduzir.** A tela toda cabe num arquivo HTML com o `painel.css`
+de verdade, e o Chromium do ambiente tira a foto em 375px
+(`headless_shell --window-size=375,1500 --force-device-scale-factor=2
+--screenshot`). Foi isso que separou defeito real de artefato do teste — o
+recuo de 40px do `<ul>` parecia bug e era só o reset do Tailwind faltando no
+harness.
+
+### Segunda rodada de celular: sobreposição, "Salvar" mudo, uma aba a menos
+
+Quatro relatos da cliente no mesmo print (2026-09-19, noite). **Não regredir:**
+
+- **A gaveta é coluna flex com as pontas travadas e o meio rolando.** O corpo é
+  `flex: 1` e, com `min-height: auto`, ele se recusa a ficar menor que o
+  conteúdo, empurra os irmãos — que encolhem, porque `flex-shrink` nasce 1 — e
+  o cabeçalho acaba escrito por cima do texto da primeira seção. A cura são
+  `flex-shrink: 0` em cabeçalho/abas/rodapé **e** `min-height: 0` no corpo.
+  Reproduzido em 375×667 impedindo o corpo de rolar: sem as duas regras o texto
+  sobe de y132 para y91, dentro das abas.
+- **`position: sticky` saiu do cabeçalho.** Ele vive FORA do que rola (o corpo é
+  que tem `overflow-y: auto`), então nunca grudou em nada — e era o único
+  elemento posicionado ali, o que deixava o empilhamento com surpresa.
+- **Botão desligado precisa ter cara de desligado.** `.pnl-btn` não tinha
+  `:disabled`, então o "Salvar" da gaveta ficava idêntico a um botão ativo: a
+  cliente clicava e não acontecia nada, sem nenhum sinal do porquê.
+- **O "Salvar" do rodapé é o "pronto" da gaveta: salva o que está pendente e
+  FECHA.** Os outros campos do painel já gravam sozinhos (modo da imagem,
+  boas-vindas ao sair do campo, botão do canal), então com nada pendente ele era
+  um botão desligado no lugar mais óbvio da tela. Só continua aberto quando o
+  salvamento **falha** — fechar por cima do erro esconderia que nada foi
+  gravado; por isso `saveTargets` e `saveWatermarkText` devolvem `true`/`false`.
+- **A aba "Anti-ban" do destino saiu** (pedido da dona do produto). Para um
+  GRUPO ela era uma frase e um link para outra tela — aba que não configura nada
+  é só mais um lugar para procurar. A **saúde do CANAL**, que é configuração de
+  verdade, foi para a aba "Mensagens", junto do resto que só existe em canal.
+  `drawerTabSafe` cai na primeira aba quando a guardada não existe mais, senão o
+  painel abriria em branco.
+- **No celular o seletor Origens|Destinos ocupa a largura toda**, metade para
+  cada lado, com alvo de toque de 44px. Como régua `inline-flex` encostada à
+  esquerda ele parecia enfeite, e é a navegação entre as duas listas.
+- **Janela alta no celular usa `dvh`, nunca só `vh`.** `100vh` e o `inset: 0`
+  de um elemento fixo **não** descontam a barra de endereço nem a barra de
+  baixo do navegador: a janela nasce por baixo delas e o topo fica ilegível
+  (relato com a lista de grupos do WhatsApp). A linha em `vh` fica antes, como
+  plano B — ⚠️ **corrigido em 2026-09-20:** medido no CSS gerado pelo build, o
+  minificador DESCARTA a linha em `vh` quando todos os navegadores-alvo
+  entendem `dvh`. O plano B é intenção de código, não proteção em produção:
+  quem sustenta a altura no celular é o `dvh` sozinho.
+- **A janela "Adicionar" é folha com cabeçalho preso e corpo rolando**, mesma
+  receita da gaveta. Com a lista de grupos inteira ali dentro era o modal todo
+  que rolava, e o título e o "fechar" saíam da tela. Medido em 375px com 10
+  grupos: depois de rolar 662px o cabeçalho continua em y12.
+
+### Janela abrindo ATRÁS de outra janela (RCA 2026-09-20 — não regredir)
+
+Relato da cliente: *"quando clico em adicionar canal a janela de canal abre
+atrás da outra e não consigo vê-la."*
+
+**Causa: duas escalas de sobreposição que não se conheciam.** O painel tem a
+sua em `painel.css` (gaveta **90**, janela "Adicionar" **80**), e os diálogos
+compartilhados (`ConfirmDialog`, `AddChannelModal`, `SelectChannelModal`)
+nasciam com o `z-50` do Tailwind — ou seja, **abaixo das duas camadas que os
+abrem**. Reproduzido em navegador a 375×667 com o CSS real: o elemento no
+centro da tela era o véu da janela "Adicionar grupo", não a janela do canal.
+Pior que ficar atrás: o véu escurece o que está embaixo **e** recebe o toque,
+então tocar na janela do canal fechava a outra.
+
+⚠️ **Eram TRÊS portas, não uma.** Além de "Adicionar canal", saem de dentro de
+camadas do painel: **"Escolher canal do botão"** (`SelectChannelModal`, aberto
+de dentro da gaveta, z 90) e os avisos **"Descartar alterações?"** e **"Remover
+grupo?"** (`ConfirmDialog`, idem) — os três abriam atrás.
+
+| Peça | Onde |
+|---|---|
+| Camada canônica dos diálogos | `.ui-dialog-layer` em `dashboard/app/globals.css` |
+| Folha com cabeçalho preso | `.ui-dialog-sheet`, idem |
+
+**Não regredir:**
+
+- **Um diálogo que NASCE de dentro de outra camada precisa ficar ACIMA dela.**
+  Os três são diálogos-folha (nada abre por cima deles), então moram no topo da
+  pilha: **95**, acima da gaveta (90) e da janela (80).
+- **O aviso passageiro (`ToastProvider`, 100) continua acima do diálogo**, de
+  propósito — confirmação que o diálogo esconde é confirmação que ninguém vê.
+- **A camada mora em UM lugar**, nunca em utility por componente. Número
+  espalhado por arquivo é exatamente como as duas escalas passaram a discordar.
+  Teste falha se um `z-\d` voltar ao véu de qualquer um dos três.
+- **A regra fica FORA de `@layer`**, então vence qualquer utility do Tailwind de
+  mesma especificidade independente da ordem do arquivo.
+- **Altura da folha não pode ser utility do Tailwind.** Duas utilities para a
+  MESMA propriedade não garantem qual vence (quem decide é a ordem do CSS
+  gerado, não a do `className`) — então o par `vh`/`dvh` mora no CSS.
+- **A janela do canal virou folha** (cabeçalho preso, corpo rolando), como a de
+  "Adicionar grupo". Medido a 375px com a lista cheia: na forma antiga, depois
+  de rolar 928px o título e o **×** ficavam **857px acima do topo da tela**; na
+  forma nova o título fica em y28, visível.
+- **Uma rolagem só no celular** na lista de "Canais que sigo": o teto de 256px
+  fazia a rolagem de dentro roubar o gesto da de fora. No computador o teto
+  continua valendo.
+
+Teste: `test/janela-atras-de-janela.test.js` (lê os z-index do CSS de verdade,
+então bumpar a gaveta acima de 95 no futuro reprova).
+
+Testes: `test/painel-espelhamento-cartoes.test.js`,
+`test/painel-espelhamento-assistente.test.js`,
+`test/painel-destinos-editor.test.js`, `test/painel-marca-dagua-salvar.test.js`,
+`test/image-mode-policy.test.js`,
+`test/painel-modelo-herdado-e-texto-adicional.test.js`.
 
 ## Contato ativo semanal (lista de quem procurar, 2026-09-13)
 

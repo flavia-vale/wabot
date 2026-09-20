@@ -11,7 +11,7 @@ import path from 'node:path'
 //   ''    → "manter texto original" explícito
 //   chave → modelo fixo do grupo
 //
-// A tela de Grupos tratava `null` e `''` como a mesma coisa. Para quem tem um
+// A tela de Espelhamento (antiga "Grupos") tratava `null` e `''` como a mesma coisa. Para quem tem um
 // modelo padrão global, um grupo nunca tocado (`null`) aparecia como "Manter
 // texto original convertido" E oferecia o campo "Adicionar texto ao final da
 // mensagem" — enquanto o robô, na verdade, aplicava o modelo e ignorava o
@@ -22,7 +22,7 @@ import path from 'node:path'
 // MESMA regra de três estados.
 
 const ROOT = path.resolve(import.meta.dirname, '..')
-const PAGINA = readFileSync(path.join(ROOT, 'dashboard/app/painel/grupos/page.js'), 'utf8')
+const PAGINA = readFileSync(path.join(ROOT, 'dashboard/app/painel/espelhamento/page.js'), 'utf8')
 const WORKER = readFileSync(path.join(ROOT, 'src/bot-worker.js'), 'utf8')
 
 test('a tela carrega o modelo padrão global', () => {
