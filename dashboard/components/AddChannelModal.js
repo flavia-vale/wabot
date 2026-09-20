@@ -90,12 +90,22 @@ function AddChannelModalContent({ onClose, onCreated }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-start mb-4">
+    /* `ui-dialog-layer`: esta janela nasce de dentro da janela "Adicionar
+     * grupo", que no painel vive em z-index 80 — com o `z-50` do Tailwind ela
+     * abria ATRÁS, escurecida pelo véu da outra. Ver globals.css. */
+    <div className="ui-dialog-layer fixed inset-0 flex items-end justify-center bg-black/50 p-3 sm:items-center sm:p-4">
+      {/* `ui-dialog-sheet`: cabeçalho preso e corpo rolando, como a janela
+        * "Adicionar grupo". A altura sai de `dvh` (com `vh` como plano B) —
+        * `100vh` não desconta a barra de endereço do celular. O fallback mora
+        * no CSS porque duas utilities do Tailwind para a mesma propriedade não
+        * garantem ordem de declaração. */}
+      <div className="ui-dialog-sheet w-full max-w-lg rounded-t-2xl bg-white shadow-xl sm:rounded-lg">
+        <div className="flex shrink-0 items-start justify-between gap-3 p-4 pb-3 sm:p-6 sm:pb-3">
           <h2 className="text-lg font-semibold">Adicionar canal</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
+          <button onClick={onClose} aria-label="Fechar" className="min-h-11 min-w-11 shrink-0 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700">✕</button>
         </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-0 sm:p-6 sm:pt-0">
 
         <Alert
           type="info"
@@ -148,7 +158,9 @@ function AddChannelModalContent({ onClose, onCreated }) {
             {followedList !== null && followedList.length === 0 && !loadingFollowed && (
               <p className="text-sm text-slate-500">Nenhum canal encontrado na sua conta. Tente &ldquo;Colar link&rdquo;.</p>
             )}
-            <ul className="space-y-1 max-h-64 overflow-y-auto">
+            {/* Uma rolagem só no celular: duas rolagens encaixadas fazem a de
+              * dentro roubar o gesto da de fora. No computador o teto vale. */}
+            <ul className="space-y-1 overflow-y-auto max-h-none sm:max-h-64">
               {followedList?.map(c => (
                 <li key={c.jid}>
                   <button
@@ -223,6 +235,7 @@ function AddChannelModalContent({ onClose, onCreated }) {
             </p>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
