@@ -160,7 +160,6 @@ export default function Page() {
 
             <section>
               <h2>Onde o Espelha Grupos entra nessa conta</h2>
-              <p>O Espelha Grupos é o produto; <strong>BOTinho é o nome do robô do Espelha Grupos</strong> — mesmo produto, não são dois.</p>
               <p>Ele age nos três pontos acima: converte todo link para o seu código de afiliada antes de publicar, mostra num <Link href="/vendas-e-comissao-afiliado-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">painel de vendas e comissão</Link> quanto cada oferta gerou, e espaça os envios por grupo com intervalo, horário de descanso e limite diário.</p>
               <p>O que ele não faz: prometer que você vai vender mais. Isso depende do seu público, e a nossa <Link href="/metodologia-uso-responsavel-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">política de uso responsável</Link> diz isso com todas as letras.</p>
             </section>

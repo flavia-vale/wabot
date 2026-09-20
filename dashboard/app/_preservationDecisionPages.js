@@ -16,13 +16,13 @@ const sharedCtas = {
 }
 
 export const PRESERVATION_DECISION_PAGES = {
-  '/bot-comum-vs-botinho': {
-    slug: '/bot-comum-vs-botinho',
+  '/bot-comum-vs-espelha-grupos': {
+    slug: '/bot-comum-vs-espelha-grupos',
     template: 'comparison',
     eyebrow: 'Comparativo · Bot comum vs Espelha Grupos',
     title: 'Bot comum vs Espelha Grupos: qual preserva o chip',
     description: 'Compare bot comum e Espelha Grupos para afiliados no WhatsApp: repostagem simples, cadência, variações, monitoramento, canais e preservação avançada.',
-    intent: 'bot comum vs botinho',
+    intent: 'bot comum vs espelha grupos',
     h1: 'Bot comum só espalha. Espelha Grupos organiza uma operação com preservação.',
     intro: 'A diferença principal não é “postar mais”. É controlar fonte, destino, ritmo, variação, sinais de risco e recuperação para que grupos, canais e chip sejam tratados como ativos do negócio.',
     sections: [
@@ -82,13 +82,13 @@ export const PRESERVATION_DECISION_PAGES = {
       { q: 'Meu número está em risco. O que faço agora?', a: 'Reduza o volume imediatamente, pare de mandar mensagem idêntica para vários grupos, saia dos grupos onde você não foi convidado a divulgar e prepare o plano B: segundo chip, backup da lista de grupos e das configurações. Depois retome devagar.' },
     ],
   },
-  '/como-funciona-botinho-canais': {
-    slug: '/como-funciona-botinho-canais',
+  '/como-funciona-espelha-grupos-canais': {
+    slug: '/como-funciona-espelha-grupos-canais',
     template: 'howto',
     eyebrow: 'Como funciona · Canais',
     title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
     description: 'Veja o fluxo operacional do Espelha Grupos para Canais do WhatsApp: fontes, destinos, cadência, variações, monitoramento e preservação avançada.',
-    intent: 'como funciona botinho canais',
+    intent: 'como funciona espelha grupos canais',
     h1: 'Como o Espelha Grupos transforma grupos e canais em uma operação controlada.',
     intro: 'O Espelha Grupos conecta fontes e destinos para que ofertas possam circular entre grupos e Canais do WhatsApp com regras. O objetivo é tirar a operação do improviso antes de aumentar volume.',
     steps: [
@@ -109,8 +109,8 @@ export const PRESERVATION_DECISION_PAGES = {
       { q: 'Onde entra a preservação avançada?', a: 'Ela entra nas regras de cadência, variação, monitoramento, pausa preventiva e recuperação.' },
     ],
   },
-  '/protecao-antiban-botinho': {
-    slug: '/protecao-antiban-botinho',
+  '/protecao-antiban-espelha-grupos': {
+    slug: '/protecao-antiban-espelha-grupos',
     template: 'module-deep-dive',
     eyebrow: 'Como não tomar ban · o que dá para controlar',
     title: 'Como evitar banimento do WhatsApp em 5 camadas',

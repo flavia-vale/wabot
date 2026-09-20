@@ -134,7 +134,7 @@ function extrairBlocoPreservationCommercial(pageKey) {
 // módulos entra na varredura automaticamente pelo `listarChaves()`, sem
 // editar este arquivo.
 // (T051) Faltavam as DUAS páginas mais expostas à promessa — `/faq-antiban-whatsapp`
-// e `/protecao-antiban-botinho`, ambas em `_preservationDecisionPages.js`, cujo
+// e `/protecao-antiban-espelha-grupos`, ambas em `_preservationDecisionPages.js`, cujo
 // assunto INTEIRO é banimento — e as três páginas de risco que esta rodada
 // reescreveu (diagnóstico, checklist, calculadora), que têm `page.js` próprio e
 // por isso não aparecem em módulo de conteúdo nenhum.
@@ -346,7 +346,9 @@ test('FR-032: todo comparativo com concorrente nomeado tem bestFit dizendo quand
   // precisa de pelo menos um item assim — um bestFit onde toda entrada só
   // fala do BOTinho não responde "quando o concorrente é a melhor escolha"
   // (FR-032), mesmo tendo o campo preenchido.
-  const SUJEITO_BOTINHO_RE = /^(escolha\s+(o\s+|a\s+)?botinho\b|botinho\s+(é|s[ãa]o)\b)/i
+  // 19/09/2026: o nome antigo saiu do texto público; o sujeito é "Espelha
+  // Grupos". A regex reconhece os dois para a guarda não virar letra morta.
+  const SUJEITO_BOTINHO_RE = /^(escolha\s+(o\s+|a\s+)?(botinho|espelha grupos)\b|(botinho|espelha grupos)\s+(é|s[ãa]o)\b)/i
 
   for (const { path, bloco } of comparisonPagesComConcorrente()) {
     assert.match(bloco, /bestFit:\s*\[/, `${path}: faltou o campo bestFit`)

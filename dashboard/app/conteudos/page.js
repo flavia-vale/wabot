@@ -15,6 +15,21 @@ const formattedLastUpdated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long
 
 const blogPosts = [
   {
+    href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp',
+    title: 'Como espelhar mensagens entre grupos de WhatsApp',
+    description: 'Os 4 caminhos — na mão, agendador, automação genérica ou robô de afiliada — e o passo a passo com o robô.',
+  },
+  {
+    href: '/blog/melhores-automacoes-para-afiliado-shopee-2026',
+    title: 'Melhores automações para afiliado Shopee em 2026',
+    description: 'As seis automações que economizam tempo e medem resultado, e quem faz cada uma.',
+  },
+  {
+    href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp',
+    title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp',
+    description: 'O que ela precisa ter, quanto custa, para quem serve e como testar em 7 dias.',
+  },
+  {
     href: '/clonar-mensagens-de-grupo-de-afiliados',
     title: 'Como clonar mensagens de grupo de afiliados no WhatsApp',
     description: 'O que significa clonar um grupo de ofertas, como o link vira o seu e quais ferramentas fazem isso.',
@@ -193,12 +208,12 @@ const methodologyPages = [
     description: 'Respostas sobre preservação avançada, chip dedicado, cadência, variações e recuperação.',
   },
   {
-    href: '/como-funciona-botinho-canais',
+    href: '/como-funciona-espelha-grupos-canais',
     title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
     description: 'Fluxo operacional de fontes, destinos, cadência, monitoramento e recuperação.',
   },
   {
-    href: '/protecao-antiban-botinho',
+    href: '/protecao-antiban-espelha-grupos',
     title: 'Proteção anti-ban no Espelha Grupos',
     description: 'Camadas do Módulo de Preservação Avançada: limites, variações, monitoramento e plano B.',
   },
@@ -217,7 +232,7 @@ const comparisonPages = [
     description: 'O que o Promium cobre a mais, o que custa a mais, e quando cada um faz sentido.',
   },
   {
-    href: '/bot-comum-vs-botinho',
+    href: '/bot-comum-vs-espelha-grupos',
     title: 'Bot comum vs Espelha Grupos',
     description: 'Compare repostagem simples com operação preservada para grupos e Canais do WhatsApp.',
   },
@@ -232,12 +247,12 @@ const comparisonPages = [
     description: 'Comparativo equilibrado entre planilha, automação genérica, ferramentas oficiais e Espelha Grupos.',
   },
   {
-    href: '/botinho-vs-planilha-manual',
+    href: '/espelha-grupos-vs-planilha-manual',
     title: 'Espelha Grupos vs planilha manual',
     description: 'Quando a planilha basta e quando logs, cadência e origem/destino viram prioridade.',
   },
   {
-    href: '/botinho-vs-ferramentas-genericas-automacao',
+    href: '/espelha-grupos-vs-ferramentas-genericas-automacao',
     title: 'Espelha Grupos vs ferramentas genéricas de automação',
     description: 'Comparação para times que avaliam construir fluxos próprios ou usar ferramenta focada em grupos.',
   },

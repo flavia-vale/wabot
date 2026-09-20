@@ -6634,6 +6634,52 @@ Achados do inventário de legibilidade por IA, todos corrigidos no mesmo dia:
   (`.github/PULL_REQUEST_TEMPLATE.md`) — contrário à decisão de 02/09. Quem
   seguisse o checklist reintroduzia o nome aposentado.
 
+## Nome antigo fora do texto público e rotas renomeadas (decisão 2026-09-19 — não regredir)
+
+Decisão da dona do produto em 19/09/2026, depois da medição de 11/09 (o
+ChatGPT tratava o nome antigo e "Espelha Grupos" como produtos concorrentes;
+três das quatro IAs leem o nome antigo solto como calçado infantil):
+
+- **Em superfície pública escreve-se SÓ "Espelha Grupos"** — nem o nome antigo
+  sozinho, nem emparelhado ("X é o nome do robô do Espelha Grupos"). A versão
+  emparelhada existiu de 11/09 a 19/09 em seis páginas e foi retirada. A
+  ligação com as citações antigas fica **só** no schema (`alternateName`, via
+  `BRAND_LEGACY_NAME`) e na linha de "nome anterior" do `llms.txt`/`pricing.md`.
+  Área logada (painel, admin, login) não é superfície pública e pode manter.
+- **As 5 rotas que carregavam o nome antigo no endereço foram renomeadas** com
+  redirect permanente (`LEGACY_ROUTE_REDIRECTS` em `dashboard/next.config.mjs`):
+  `/bot-comum-vs-espelha-grupos`, `/como-funciona-espelha-grupos-canais`,
+  `/protecao-antiban-espelha-grupos`, `/espelha-grupos-vs-planilha-manual`,
+  `/espelha-grupos-vs-ferramentas-genericas-automacao`. Somavam 27 impressões
+  e 1 clique em 3 meses; o redirect preserva o que havia. Não remover os
+  redirects: sem eles o Google devolve 404 para quem já indexou o endereço
+  antigo.
+- `sameAs` da Organization leva também o Instagram oficial (`@espelhagrupos`,
+  `BRAND_INSTAGRAM_URL`).
+
+Guarda: `test/nome-antigo-fora-do-texto-publico.test.js` (varre `dashboard/app`
+fora da área logada, `dashboard/components` e `lp-config.mjs`; exige o redirect
+de cada rota antiga e que o destino exista no registro SEO).
+
+**Páginas de resposta (mesma data):** três posts com título igual à pergunta
+que as IAs recebem — `/blog/como-espelhar-mensagens-entre-grupos-whatsapp`
+(HowTo + tabela dos 4 caminhos), `/blog/melhores-automacoes-para-afiliado-shopee-2026`
+(ItemList) e `/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp` —
+cada um com bloco de conversão (preço, "melhor para", CTA), sem preço de
+concorrente (só nome + link para a ficha datada em `/alternativas`) e linkados
+de páginas com impressão. O schema HowTo/ItemList é **derivado das seções**
+(`schema: 'HowTo'` + `steps`, `schema: 'ItemList'` + `items` em
+`_preservationBlogPosts.js`): o que a pessoa lê é o que a IA lê. Lista comum
+sem a flag não vira ItemList.
+
+**LTV e retenção:** `scripts/diag-ltv-retencao.mjs` (read-only, contas de
+teste fora) sobre `src/domain/admin/ltvRetention.js` (puro). Realizado e
+projetado nunca viram um número só; retenção sai da COBERTURA paga (plano de
+90 dias não "cancela" no mês seguinte); coorte nova devolve `null`, não zero;
+menos de 5 pagantes ou zero cancelamento observado → sem projeção. O plano de
+marketing bloqueia anúncio pago até esse número existir. Teste:
+`test/admin-ltv-retencao.test.js`.
+
 ## Clareza da falta de cadastro da loja + vídeo tutorial (2026-09-02)
 
 Quatro buracos da mesma conversa: a cliente não descobria sozinha por que a

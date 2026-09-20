@@ -1,4 +1,4 @@
-# Prompt para o implementador — aulasdematematicabh.com.br, o que AINDA falta (2026-09-18, noite)
+# Prompt para o implementador — aulasdematematicabh.com.br, o que AINDA falta (revisado em 2026-09-19)
 
 Cole o bloco abaixo, inteiro, para quem for implementar no repositório do site
 (Astro). Ele parte do que já foi verificado no ar hoje à noite e só pede o que
@@ -12,8 +12,9 @@ Contexto: o site aulasdematematicabh.com.br (Astro, Cloudflare) já recebeu hoje
 rodapé "Site mantido por Flávia Vale" com Person #flavia como creator/maintainer
 no schema; 301 de http→https e www→apex; /sitemap.xml redirecionando para
 sitemap-index.xml; lastmod em todas as 33 URLs; Claude-SearchBot no robots.txt;
-e quatro posts locais novos (Coltec, CEFET-MG, Colégio Militar, Cálculo 1
-UFMG/PUC), linkados da home. NÃO refazer nada disso.
+quatro posts locais novos (Coltec, CEFET-MG, Colégio Militar, Cálculo 1
+UFMG/PUC), linkados da home; e "atualizado em" visível + dateModified nas 8
+páginas de serviço (conferido no ar em 19/09). NÃO refazer nada disso.
 
 O que falta, em ordem. Cada item tem o teste de aceitação; só marque como feito
 quando o teste passar.
@@ -79,20 +80,14 @@ quando o teste passar.
    `author` → Person Taciane (#taciane), `publisher` → #business.
    Teste: `curl -s <url do post> | grep -c FAQPage` = 1 nos quatro.
 
-5) "ATUALIZADO EM" nas 8 páginas de serviço (hoje só os posts têm data):
-   data visível no fim da página + `dateModified` no WebPage do schema, lida
-   do frontmatter. Não inventar data: usar a do último commit que tocou a
-   página.
-   Teste: `curl -s https://aulasdematematicabh.com.br/enem-matematica | grep -c dateModified` ≥ 1.
-
-6) sameAs COMPLETO na Person #taciane e no LocalBusiness: acrescentar o
+5) sameAs COMPLETO na Person #taciane e no LocalBusiness: acrescentar o
    Instagram e o Facebook SÓ depois que a dona confirmar que
    `instagram.com/tacianeandrade8` e a página "Aulas de Matemática | Belo
    Horizonte MG" são dela. Se a página do Facebook NÃO for dela, avisar: é
    colisão de nome e a marca precisa virar "Taciane Andrade — Matemática BH"
    em título, ficha e redes.
 
-7) POSTS QUE FALTAM (mesmo esqueleto dos 4 publicados: resposta direta em 3
+6) POSTS QUE FALTAM (mesmo esqueleto dos 4 publicados: resposta direta em 3
    linhas → o que a prova/escola cobra → aula diagnóstica → plano por semanas
    → o que os pais fazem → FAQ; 1.000-1.500 palavras; CTA do WhatsApp com
    mensagem pré-preenchida própria; 3 links internos; FAQPage no schema):
@@ -108,7 +103,7 @@ quando o teste passar.
    Cada post novo entra linkado de 3 páginas existentes (home, a página de
    serviço do tema e o post relacionado) e é pedido no Search Console.
 
-8) O que NÃO fazer: comprar avaliação; `aggregateRating`/`review` com os
+7) O que NÃO fazer: comprar avaliação; `aggregateRating`/`review` com os
    depoimentos do próprio site (o Google trata como self-serving e ignora);
    página por bairro sem atender o bairro; mais posts nacionais genéricos;
    prometer "aprovação garantida" em qualquer texto.
