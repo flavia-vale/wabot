@@ -6917,6 +6917,15 @@ Quatro relatos da cliente no mesmo print (2026-09-19, noite). **Não regredir:**
 - **No celular o seletor Origens|Destinos ocupa a largura toda**, metade para
   cada lado, com alvo de toque de 44px. Como régua `inline-flex` encostada à
   esquerda ele parecia enfeite, e é a navegação entre as duas listas.
+- **Janela alta no celular usa `dvh`, nunca só `vh`.** `100vh` e o `inset: 0`
+  de um elemento fixo **não** descontam a barra de endereço nem a barra de
+  baixo do navegador: a janela nasce por baixo delas e o topo fica ilegível
+  (relato com a lista de grupos do WhatsApp). A linha em `vh` fica antes, como
+  plano B para navegador sem suporte.
+- **A janela "Adicionar" é folha com cabeçalho preso e corpo rolando**, mesma
+  receita da gaveta. Com a lista de grupos inteira ali dentro era o modal todo
+  que rolava, e o título e o "fechar" saíam da tela. Medido em 375px com 10
+  grupos: depois de rolar 662px o cabeçalho continua em y12.
 
 Testes: `test/painel-espelhamento-cartoes.test.js`,
 `test/painel-espelhamento-assistente.test.js`,

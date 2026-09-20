@@ -1117,7 +1117,10 @@ function AddGroupModal({
         aria-label="Adicionar grupo"
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        {/* Cabeçalho preso e corpo rolando: com a lista de grupos do WhatsApp
+          * inteira aqui dentro, o título e o "fechar" saíam da tela e no
+          * celular ficavam atrás da barra de endereço do navegador. */}
+        <div className="pnl-esp-add-head">
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3>Adicionar grupo</h3>
             <p>Escolha de onde ele vem e qual o papel dele.</p>
@@ -1127,7 +1130,8 @@ function AddGroupModal({
           </button>
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div className="pnl-esp-add-body">
+        <div style={{ marginTop: 0 }}>
           <p className="pnl-label" style={{ marginBottom: 6 }}>Papel</p>
           {/* Classe própria: estes dois rótulos são longos e, na régua de
             * `.pnl-seg`, em 375px o "Destino" nascia fora da tela — a pessoa
@@ -1212,6 +1216,7 @@ function AddGroupModal({
             Depois de adicionar, escolha para onde ele envia. Sem escolha, ele envia para todos os seus destinos.
           </p>
         )}
+        </div>
       </div>
     </div>
   )

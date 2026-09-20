@@ -362,3 +362,27 @@ test('no celular o seletor Origens|Destinos ocupa a tela toda', () => {
   // Alvo de toque: como régua de 26px ele era enfeite, não navegação.
   assert.match(mobile, /\.pnl-esp-mobile-switch button \{[^}]*min-height: 44px/s)
 })
+
+test('a janela "Adicionar" tem cabeçalho preso e corpo rolando', () => {
+  // Com a lista de grupos do WhatsApp inteira dentro dela, era o modal todo
+  // que rolava: o título e o "fechar" saíam da tela. Medido em 375px com 10
+  // grupos — depois de rolar 662px o cabeçalho continua em y12.
+  assert.match(page, /className="pnl-esp-add-head"/)
+  assert.match(page, /className="pnl-esp-add-body"/)
+  assert.match(css, /\.pnl-esp-add \{[^}]*flex-direction: column/s)
+  assert.match(css, /\.pnl-esp-add \{[^}]*overflow: hidden/s)
+  // Mesma receita da gaveta: ponta travada, meio podendo encolher até zero.
+  assert.match(css, /\.pnl-esp-add-head \{[^}]*flex-shrink: 0/s)
+  assert.match(css, /\.pnl-esp-add-body \{[^}]*min-height: 0/s)
+  assert.match(css, /\.pnl-esp-add-body \{[^}]*overflow-y: auto/s)
+})
+
+test('janela alta no celular respeita a barra do navegador', () => {
+  // `100vh` e o `inset: 0` de um elemento fixo NÃO descontam a barra de
+  // endereço nem a barra de baixo: a janela nasce por baixo delas e o título
+  // fica ilegível. `dvh` desconta. Navegador sem suporte ignora a linha, por
+  // isso a versão em `vh` fica antes, como plano B.
+  assert.match(css, /\.pnl-modal-overlay \{ height: 100dvh; \}/)
+  assert.match(css, /\.pnl-drawer-overlay \{ height: 100dvh; \}/)
+  assert.match(css, /\.pnl-esp-add \{[^}]*max-height: calc\(100vh - 40px\);[^}]*max-height: calc\(100dvh - 40px\)/s)
+})
