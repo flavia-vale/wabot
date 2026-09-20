@@ -20,7 +20,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { getAllSeoRoutes } from '../dashboard/lib/seo-registry.mjs'
 import { LEGACY_ROUTE_REDIRECTS } from '../dashboard/next.config.mjs'
-import { BRAND_LEGACY_NAME, BRAND_SAME_AS } from '../dashboard/lib/marketing-content.js'
+import { BRAND_LEGACY_NAME, BRAND_SAME_AS, FOUNDER_SAME_AS } from '../dashboard/lib/marketing-content.js'
 
 const raiz = new URL('..', import.meta.url).pathname
 const NOME_ANTIGO = BRAND_LEGACY_NAME
@@ -100,4 +100,19 @@ test('o nome antigo continua no schema como alternateName (é o que liga as cita
 
 test('o Instagram @espelhagrupos está no sameAs da Organization', () => {
   assert.ok(BRAND_SAME_AS.includes('https://www.instagram.com/espelhagrupos'), `sameAs: ${BRAND_SAME_AS.join(', ')}`)
+})
+
+test('TikTok @espelhagrupos e a página da empresa no LinkedIn estão no sameAs da Organization', () => {
+  assert.ok(BRAND_SAME_AS.includes('https://www.tiktok.com/@espelhagrupos'), `sameAs: ${BRAND_SAME_AS.join(', ')}`)
+  assert.ok(
+    BRAND_SAME_AS.includes('https://www.linkedin.com/company/145208936/'),
+    `sameAs: ${BRAND_SAME_AS.join(', ')}`,
+  )
+})
+
+test('o LinkedIn pessoal da fundadora está no sameAs da Person', () => {
+  assert.ok(
+    FOUNDER_SAME_AS.includes('https://www.linkedin.com/in/flaviavale/'),
+    `sameAs: ${FOUNDER_SAME_AS.join(', ')}`,
+  )
 })
