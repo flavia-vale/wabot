@@ -18,6 +18,33 @@ const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURICompon
 const PAID_PLAN_IDS = ['basic', 'pro']
 const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
 
+const PLAN_PRESENTATION = {
+  basic: {
+    eyebrow: 'Para começar',
+    features: [
+      'Espelhamento de grupos',
+      'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)',
+      'Card de oferta clicável',
+      'Mensagem reescrita do seu jeito',
+      'Envio imediato ou agendado',
+      'Relatórios com histórico completo',
+    ],
+  },
+  pro: {
+    eyebrow: 'Mais completo',
+    featured: true,
+    features: [
+      'Tudo do plano BASIC',
+      'Espelhamento de grupos e CANAIS do WhatsApp',
+      'Garimpo automático de ofertas',
+      'Filas de ofertas',
+      'Sua marca d’água nas ofertas',
+      'Horário de descanso, máximo de ofertas por dia, intervalo entre mensagens e variação do texto',
+      'Painel de vendas e comissão da Shopee',
+    ],
+  },
+}
+
 const FALLBACK_PLAN_CARDS = DEFAULT_LANDING_PLANS
   .filter((plan) => PAID_PLAN_IDS.includes(plan.id))
   .map((plan) => ({ id: plan.id, name: `Plano ${plan.name}`, price: plan.price, period: plan.period, description: plan.desc, features: plan.features }))
@@ -50,16 +77,12 @@ function mergePlanCards(dynamicPlans = []) {
 }
 
 export default function PlanoPage() {
-  usePainelHeader({ title: 'Plano e cobrança', subtitle: 'Sua assinatura, uso e forma de pagamento' })
+  usePainelHeader({ title: 'Planos', subtitle: 'Escolha o plano que combina com a sua rotina' })
 
   const [plans, setPlans] = useState(FALLBACK_PLAN_CARDS)
   const [overview, setOverview] = useState(null)
-  const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
-  // 'auto' = renovação automática (assinatura no Mercado Pago);
-  // 'once' = pagamento único de 30 dias (comportamento histórico).
-  const [billingMode, setBillingMode] = useState('auto')
   const [emailPrompt, setEmailPrompt] = useState(null)
   const [newEmail, setNewEmail] = useState('')
   const [savingEmail, setSavingEmail] = useState(false)
@@ -85,19 +108,14 @@ export default function PlanoPage() {
     return () => { active = false }
   }, [])
 
-  const selectedPlan = useMemo(() => plans.find((p) => p.id === selectedPlanId) ?? plans[0], [plans, selectedPlanId])
-
   // D5 do plano de ativação de 2026-09-08: o mesmo preço, medido no uso REAL
   // dela. "R$ 69" é um número solto; "R$ 1,47 por oferta publicada" é a conta
   // que ela consegue refazer sozinha, com o número que é dela.
   const { offersPublished } = usePainel()
-  const precoPorOferta = useMemo(
-    () => buildPricePerOffer({
-      priceCents: parsePriceToCents(selectedPlan?.price),
-      offersPublished,
-    }),
-    [selectedPlan?.price, offersPublished],
-  )
+  const precosPorOferta = useMemo(() => Object.fromEntries(plans.map((plan) => [
+    plan.id,
+    buildPricePerOffer({ priceCents: parsePriceToCents(plan.price), offersPublished }),
+  ])), [plans, offersPublished])
 
   async function handleCheckout(planId) {
     if (checkoutPlan) return
@@ -142,7 +160,7 @@ export default function PlanoPage() {
     setCheckoutError('')
     try {
       await api.updateAccountEmail(email)
-      const plan = emailPrompt?.plan ?? selectedPlanId
+      const plan = emailPrompt?.plan ?? 'pro'
       setEmailPrompt(null)
       setNewEmail('')
       await handleSubscribe(plan)
@@ -179,7 +197,7 @@ export default function PlanoPage() {
   const lastDate = formatDate(overview?.lastApprovedPayment?.createdAt)
 
   return (
-    <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
+    <div className="pnl-grid" style={{ maxWidth: 940, margin: '0 auto' }}>
       {/* Assinatura atual */}
       {overview?.isActive && currentPlanLabel && (
         <section className="pnl-card" style={{ background: 'var(--ink)', color: 'var(--surface)', borderColor: 'var(--ink)' }}>
@@ -251,28 +269,70 @@ export default function PlanoPage() {
       )}
 
       {/* Planos */}
-      <section className="pnl-card">
-        <div className="pnl-card-title" style={{ marginBottom: 4 }}>{overview?.isActive ? 'Renovar ou trocar de plano' : 'Escolha seu plano'}</div>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Cobrança a cada 30 dias, sem fidelidade.</p>
-        <div className="pnl-presets" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+      <section>
+        <div style={{ marginBottom: 22 }}>
+          <div className="pnl-card-title" style={{ marginBottom: 6 }}>{overview?.isActive ? 'Renove ou troque seu plano' : 'Escolha seu plano'}</div>
+          <p className="pnl-card-note">Dois planos simples, sem fidelidade. Cancele a cobrança automática quando quiser.</p>
+        </div>
+        <div className="grid items-stretch gap-5 md:grid-cols-2">
           {plans.map((plan) => {
-            const selected = plan.id === selectedPlanId
+            const presentation = PLAN_PRESENTATION[plan.id] ?? PLAN_PRESENTATION.basic
+            const precoPorOferta = precosPorOferta[plan.id]
             return (
-              <button key={plan.id} type="button" className={`pnl-preset${selected ? ' is-active' : ''}`} onClick={() => setSelectedPlanId(plan.id)} aria-pressed={selected}>
-                <div className="pnl-toolbar" style={{ justifyContent: 'space-between' }}>
-                  <b>{plan.name}</b>
-                  <span className={`pnl-tag ${selected ? 'is-success' : 'is-skip'}`}>{selected ? 'Selecionado' : 'Escolher'}</span>
+              <article
+                key={plan.id}
+                className={`flex h-full flex-col rounded-[24px] border bg-white p-6 shadow-[0_12px_36px_rgba(26,64,52,0.07)] sm:p-7 ${presentation.featured ? 'border-emerald-500 ring-2 ring-emerald-100' : 'border-slate-200'}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">{presentation.eyebrow}</p>
+                  {presentation.featured && <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">Mais escolhido</span>}
                 </div>
-                <span className="pnl-serif" style={{ fontSize: 26, color: 'var(--accent-strong)', display: 'block', margin: '6px 0 2px' }}>{plan.price}<small style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 500 }}> / 30 dias</small></span>
-                <small>{plan.description}</small>
-                {Array.isArray(plan.features) && plan.features.length > 0 && (
-                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, display: 'grid', gap: 5 }}>
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="pnl-hint" style={{ listStyle: 'disc' }}>{feature}</li>
-                    ))}
-                  </ul>
+                <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{plan.id.toUpperCase()}</h2>
+                <div className="mt-2 flex items-end gap-1">
+                  <span className="text-4xl font-black tracking-tight text-slate-950">{plan.price}</span>
+                  <span className="pb-1 text-sm text-slate-500">/ 30 dias</span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-500">{plan.description}</p>
+
+                <ul className="mt-6 flex-1 space-y-3.5">
+                  {presentation.features.map((feature) => (
+                    <li key={feature} className="flex gap-3 text-sm leading-5 text-slate-700">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-black text-emerald-700" aria-hidden="true">✓</span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {precoPorOferta && (
+                  <p className="mt-5 rounded-xl bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">
+                    {precoPorOferta.texto}
+                  </p>
                 )}
-              </button>
+
+                <div className="mt-6 grid gap-2.5">
+                  <button
+                    type="button"
+                    className="pnl-btn is-primary"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={() => handleSubscribe(plan.id)}
+                    disabled={!!checkoutPlan}
+                  >
+                    {checkoutPlan === plan.id ? 'Aguarde…' : 'Cobrança automática'}
+                  </button>
+                  <button
+                    type="button"
+                    className="pnl-btn is-primary"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={() => handleCheckout(plan.id)}
+                    disabled={!!checkoutPlan}
+                  >
+                    {checkoutPlan === plan.id ? 'Aguarde…' : 'Pagar uma vez'}
+                  </button>
+                </div>
+                <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+                  PIX ou cartão · acesso por 30 dias
+                </p>
+              </article>
             )
           })}
         </div>
@@ -300,49 +360,13 @@ export default function PlanoPage() {
               <button type="button" className="pnl-btn is-primary" onClick={handleSaveEmailAndRetry} disabled={savingEmail || !newEmail.trim()}>
                 {savingEmail ? 'Salvando…' : 'Salvar e continuar'}
               </button>
-              <button type="button" className="pnl-btn is-ghost" onClick={() => { setEmailPrompt(null); setBillingMode('once') }}>
+              <button type="button" className="pnl-btn is-ghost" onClick={() => { const plan = emailPrompt.plan; setEmailPrompt(null); handleCheckout(plan) }}>
                 Pagar uma vez, sem cobrança automática
               </button>
             </div>
           </div>
         )}
 
-        <div className="pnl-presets" style={{ gridTemplateColumns: 'repeat(2, 1fr)', marginTop: 16 }}>
-          {[
-            { id: 'auto', title: 'Cobrança automática', desc: 'Renova sozinho todo mês no cartão. Você desliga quando quiser.' },
-            { id: 'once', title: 'Pagar uma vez', desc: '30 dias de acesso via PIX ou cartão. Você renova na mão ao acabar.' },
-          ].map((option) => {
-            const selected = billingMode === option.id
-            return (
-              <button key={option.id} type="button" className={`pnl-preset${selected ? ' is-active' : ''}`} onClick={() => setBillingMode(option.id)} aria-pressed={selected}>
-                <div className="pnl-toolbar" style={{ justifyContent: 'space-between' }}>
-                  <b>{option.title}</b>
-                  <span className={`pnl-tag ${selected ? 'is-success' : 'is-skip'}`}>{selected ? 'Selecionado' : 'Escolher'}</span>
-                </div>
-                <small>{option.desc}</small>
-              </button>
-            )
-          })}
-        </div>
-
-        <button
-          type="button"
-          className="pnl-btn is-primary"
-          style={{ marginTop: 16, width: '100%', justifyContent: 'center' }}
-          onClick={() => (billingMode === 'auto' ? handleSubscribe(selectedPlanId) : handleCheckout(selectedPlanId))}
-          disabled={!!checkoutPlan}
-        >
-          {checkoutPlan === selectedPlanId
-            ? 'Aguarde…'
-            : billingMode === 'auto'
-              ? `Ligar cobrança automática — ${selectedPlan.name}`
-              : `Pagar 30 dias — ${selectedPlan.name}`}
-        </button>
-        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>
-          {billingMode === 'auto'
-            ? 'Cobrança automática no cartão, todo mês, sem fidelidade. Desligue quando quiser aqui mesmo.'
-            : 'Pagamento único de 30 dias via PIX ou cartão. Você renova manualmente ao expirar.'}
-        </p>
         {/* D4 do plano de ativação: o medo de quem para aqui é perder a
             configuração, não o preço. A frase é a MESMA do aviso de fim de
             teste (fonte única em trialNotice.js) — duas redações da mesma
@@ -350,13 +374,6 @@ export default function PlanoPage() {
         <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4 }}>
           {CONFIG_PRESERVED_NOTE}
         </p>
-        {/* Só aparece para quem JÁ tem ofertas publicadas: sem uso, essa conta
-            viraria promessa de volume que a gente não fez. */}
-        {precoPorOferta && (
-          <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4, fontWeight: 600 }}>
-            {precoPorOferta.texto}
-          </p>
-        )}
       </section>
 
       {/* Dificuldades no pagamento */}

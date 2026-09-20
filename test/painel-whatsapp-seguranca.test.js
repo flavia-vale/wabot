@@ -84,6 +84,13 @@ const paginaConexao = readFileSync(
   'utf8',
 )
 
+test('a tela de conexão não depende de uma variável de usuário inexistente', () => {
+  // RCA 2026-09-20: o gate `no-undef` bloqueou o deploy porque uma condição
+  // renderizava a ajuda a partir de `user`, que não existe neste componente.
+  // A própria sessão (`status`) é a fonte de verdade desta tela.
+  assert.doesNotMatch(paginaConexao, /\buser\b/)
+})
+
 test('A3: as garantias aparecem ANTES do formulário de conexão', () => {
   // É onde a dúvida existe. Depois do formulário elas não respondem nada —
   // quem hesitou já fechou a tela.
