@@ -3750,6 +3750,63 @@ mídia). É mitigação de pico de GC, **não** teto rígido de RSS — em VPS
 subdimensionado, **swap continua sendo pré-requisito** (a primeira linha de
 defesa). Teste: `test/core/worker-spawn-options.test.js`.
 
+## RAM dos robôs — rodada 3: alocador, geração jovem e o medidor de crescimento (2026-09-19)
+
+Depois das janelas 1 e 2 (`MALLOC_ARENA_MAX=2`, log inline, cache do Sharp), o
+robô ficou em 92,8 MiB (PSS) com 2,5 h e **voltou a 122,6 MiB com 11,6 h**.
+`docs/analise-ram-rodada-3-2026-09-19.md` mediu, em ambiente controlado com as
+mesmas versões do lock, de que é feito o custo e de onde vem o crescimento.
+
+| Peça | Onde |
+|---|---|
+| Interruptores novos (nascem DESLIGADOS) | `resolveWorkerSpawnEnv` / `resolveWorkerExecArgv` em `src/core/workerSpawnOptions.js` |
+| Regra pura do veredito de crescimento | `src/ops/memory/growthDiagnosis.js` |
+| Medidor só-leitura por robô, com série | `scripts/diag-memoria-crescimento.mjs` (`--ipc`, `--serie`) |
+
+**O que a medição fechou (não re-medir sem motivo):**
+
+- **O custo fixo é o grafo de imports (~71 MiB privados), e 45 deles são o
+  Baileys** (WAProto de 11 MB + libsignal). Sharp ~10, motor do Prisma ~7,
+  ioredis ~7, nodemailer ~3, axios <1. Não há mais gordura nativa relevante no
+  custo fixo — **a memória a recuperar está no crescimento com a idade.**
+- **O crescimento tem cara de retenção do alocador**: dois terços dele estão em
+  `[heap]`+arena do glibc. Num churn de buffers de HTML/imagem, depois de
+  liberar tudo, o glibc segura **69 MiB**; com limiares fixos de mmap/trim,
+  **40**; jemalloc com `background_thread:true`, **10**. ⚠️ jemalloc SEM a
+  thread de fundo segura 77 — a purga só roda em atividade. Não ligar um sem o
+  outro. jemalloc custa +5-9 MiB fixos por processo.
+- **`--max-semi-space-size=8`**: −14 MiB sob tráfego, pausas de GC MAIS curtas,
+  vazão igual. Abaixo de 8 promove objeto cedo e come o ganho.
+  **`--optimize-for-size`**: −13 MiB fixos e −37 sob carga, com ~10% de CPU em
+  GC e pausas mais curtas; não é aceita em `NODE_OPTIONS`, por isso mora no
+  `execArgv`.
+- Derrubados: `--jitless` (não economiza e quebra o grafo), trocar `axios`,
+  `sharp.cache(0)`, COW entre forks (`fork()` do Node é spawn+exec — nada a
+  compartilhar). **O motor do Prisma HONRA `TOKIO_WORKER_THREADS`** (verificado).
+
+**Não regredir:**
+
+- **Tudo nasce desligado.** `resolveWorkerSpawnEnv({})` continua `{}` e
+  `resolveWorkerExecArgv({})` continua só o teto de heap — teste trava.
+- **`WA_WORKER_LD_PRELOAD` aceita UM caminho absoluto**, sem `:` nem espaço;
+  `WA_WORKER_MALLOC_CONF` só `chave:valor,...`. Nunca ler `LD_PRELOAD` cru do
+  `.env`: valeria para API e supervisor, que não são o alvo.
+- **`LD_PRELOAD` de arquivo inexistente NÃO derruba o robô** (medido: o loader
+  avisa e segue com glibc). Fail-safe por construção.
+- **Sem medir a série (24 h, 1x/hora) não se conclui nada sobre crescimento** —
+  o `--serie` recusa com menos de 3 medidas ou 2 h e avisa reinício da frota no
+  meio. Nem heap snapshot nem inspector em produção: pausa de segundos derruba
+  o keepalive.
+- **Aplicar exige reiniciar o supervisor** (env lida no fork) e o código dos
+  interruptores está em `src/core/` (`WORKER_CODE_PATHS_RE`): mergear na MESMA
+  janela em que as envs entram no `.env` — uma reconexão, não duas. jemalloc
+  ainda exige `apt install libjemalloc2` no VPS: anunciar.
+
+Ordem recomendada: medir 24 h → staging com jemalloc + semi-space 8 por 24 h →
+produção (as duas na mesma janela) → medir 24 h → só então
+`--optimize-for-size`. Testes: `test/core/worker-spawn-options.test.js`,
+`test/ops-memory-growth-diagnosis.test.js`.
+
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
 O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
