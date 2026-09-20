@@ -26,6 +26,7 @@ import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } f
 import { usePainelHeader } from '../PainelShell'
 import { WhatsAppBubble, TokenText } from '../WhatsAppBubble'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import styles from './mensagens.module.css'
 
 const MAX_VARIATIONS = 20
 
@@ -224,323 +225,161 @@ export default function MensagensPage() {
     return <div className="pnl-card" style={{ maxWidth: 860, margin: '0 auto', textAlign: 'center', color: 'var(--ink-soft)' }}>Carregando…</div>
   }
 
-  const [dadosGroup, blocosGroup] = OFFER_TEMPLATE_VARIABLE_GROUPS
 
-  const saveButtonLabel = saving ? 'Salvando…' : saved ? '✓ Salvo' : 'Salvar'
-  const renderSaveButton = (label = saveButtonLabel) => (
-    <button type="button" className="pnl-btn is-primary" onClick={() => handleSave()} disabled={saving}>
-      {saving ? 'Salvando…' : label}
-    </button>
-  )
-
-  // Editor de template reutilizado (create + edit dentro do acordeão)
   const renderEditor = () => (
-    <div className="pnl-grid">
-      <div>
-        <label className="pnl-label">Nome do template</label>
-        <input
-          className="pnl-input"
-          value={editTemplateName}
-          onChange={(e) => setEditTemplateName(e.target.value)}
-          disabled={templateMode === 'edit' && editingTemplate && !editingTemplate.isCustom}
-          placeholder="Ex: Oferta especial"
-        />
-      </div>
-      <div>
-        <label className="pnl-label">Corpo da mensagem</label>
-        <p className="pnl-card-note" style={{ marginBottom: 6 }}>
-          Posicione <code className="pnl-token" style={{ cursor: 'default' }}>{'{{gancho}}'}</code>, <code className="pnl-token" style={{ cursor: 'default' }}>{'{{cta}}'}</code> e <code className="pnl-token" style={{ cursor: 'default' }}>{'{{convitegrupo}}'}</code> onde quiser. Se apagar um deles, o bot não envia aquele bloco.
-        </p>
-        <textarea
-          ref={templateBodyRef}
-          className="pnl-input"
-          style={{ fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", fontSize: 12, lineHeight: 1.5 }}
-          value={editTemplateBody}
-          onChange={(e) => setEditTemplateBody(e.target.value)}
-          rows={9}
-        />
-      </div>
-      {editTemplateBody.trim() && (
+    <div className={styles.editor}>
+      <div className={styles.editorFields}>
+        <label className={styles.field}>
+          <span>Nome do modelo</span>
+          <input className="pnl-input" value={editTemplateName} onChange={(e) => setEditTemplateName(e.target.value)} disabled={templateMode === 'edit' && editingTemplate && !editingTemplate.isCustom} placeholder="Ex: Achadinho do dia" />
+        </label>
+        <label className={styles.field}>
+          <span>Mensagem</span>
+          <textarea ref={templateBodyRef} className={`pnl-input ${styles.templateTextarea}`} value={editTemplateBody} onChange={(e) => setEditTemplateBody(e.target.value)} rows={10} />
+        </label>
         <div>
-          <p className="pnl-eyebrow" style={{ color: 'var(--accent-strong)', marginBottom: 6 }}>Prévia ao vivo</p>
-          <WhatsAppBubble text={editTemplateBody} highlight />
-        </div>
-      )}
-      <div className="pnl-subcard">
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>Inserir variáveis no ponto do cursor</div>
-        <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>Para remover gancho, CTA ou convite do grupo, apague o token do corpo.</p>
-        {OFFER_TEMPLATE_VARIABLE_GROUPS.map((group) => (
-          <div key={group.key} style={{ marginBottom: 8 }}>
-            <div className="pnl-eyebrow" style={{ marginBottom: 4 }}>{group.title}</div>
-            <div className="pnl-tokens">
-              {group.variables.map((variable) => (
-                <button key={variable.token} type="button" className="pnl-token" onClick={() => insertTemplateToken(variable.token)}>+ {variable.token}</button>
-              ))}
-            </div>
+          <span className={styles.fieldLabel}>Inserir campo automático</span>
+          <div className={styles.tokenRow}>
+            {OFFER_TEMPLATE_VARIABLE_GROUPS.flatMap((group) => group.variables).map((variable) => (
+              <button key={variable.token} type="button" className={styles.token} onClick={() => insertTemplateToken(variable.token)}>+ {variable.token}</button>
+            ))}
           </div>
-        ))}
+          <p className={styles.microcopy}>O campo entra onde estiver o cursor e é preenchido pelo robô na hora do envio.</p>
+        </div>
       </div>
-      <div className="pnl-toolbar" style={{ flexWrap: 'wrap' }}>
-        <button type="button" className="pnl-btn is-primary" onClick={saveTemplate} disabled={saving || !editTemplateBody.trim() || (templateMode === 'create' && !editTemplateName.trim())}>{saving ? 'Salvando…' : saved ? '✓ Salvo' : 'Salvar template'}</button>
+      <div className={styles.livePreview}>
+        <span className={styles.eyebrow}>Prévia no WhatsApp</span>
+        {editTemplateBody.trim() ? <WhatsAppBubble text={editTemplateBody} highlight /> : <p>Comece a escrever para ver sua mensagem.</p>}
+      </div>
+      <div className={styles.editorActions}>
+        <button type="button" className="pnl-btn is-primary" onClick={saveTemplate} disabled={saving || !editTemplateBody.trim() || (templateMode === 'create' && !editTemplateName.trim())}>{saving ? 'Salvando…' : 'Salvar modelo'}</button>
         <button type="button" className="pnl-btn" onClick={cancelEdit}>Cancelar</button>
-        {templateMode === 'edit' && editingTemplate?.isCustom && (
-          <button type="button" className="pnl-btn is-danger" onClick={deleteCustomTemplate}>Excluir template</button>
-        )}
-        {templateMode === 'edit' && !editingTemplate?.isCustom && editingTemplate?.isOverridden && (
-          <button type="button" className="pnl-btn" onClick={resetPresetTemplate}>Restaurar padrão</button>
-        )}
+        {templateMode === 'edit' && editingTemplate?.isCustom && <button type="button" className="pnl-btn is-danger" onClick={deleteCustomTemplate}>Excluir</button>}
+        {templateMode === 'edit' && !editingTemplate?.isCustom && editingTemplate?.isOverridden && <button type="button" className="pnl-btn" onClick={resetPresetTemplate}>Restaurar padrão</button>}
       </div>
     </div>
   )
 
   return (
-    <div className="pnl-grid" style={{ maxWidth: 860, margin: '0 auto' }}>
+    <main className={styles.page}>
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
 
-      {/* 4 · Templates de mensagens */}
-      <section>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
-          <div className="pnl-card-title" style={{ fontSize: 15 }}>Templates de mensagens</div>
-          <div className="pnl-toolbar" style={{ gap: 8 }}>
-            {templateMode === 'list' && (
-              <button type="button" className="pnl-btn" onClick={startCreateTemplate}>Criar template</button>
-            )}
-            {templateMode === 'list' && renderSaveButton()}
-          </div>
+      <header className={styles.intro}>
+        <div>
+          <span className={styles.kicker}>Configuração de mensagens</span>
+          <h1>Seus modelos, sem complicação.</h1>
+          <p>Escolha como suas ofertas chegam no WhatsApp. O robô preenche produto, preço e link para você.</p>
         </div>
-        <p className="pnl-card-note" style={{ marginBottom: 12 }}>Use os mesmos templates no Criar oferta e nas ofertas automáticas.</p>
+        {templateMode === 'list' && <button type="button" className={`pnl-btn is-primary ${styles.newButton}`} onClick={startCreateTemplate}>+ Novo modelo</button>}
+      </header>
 
-        {templateMode === 'create' && (
-          <div className="pnl-card" style={{ borderColor: 'var(--accent-strong)', marginBottom: 14 }}>
-            <div className="pnl-card-title" style={{ marginBottom: 12 }}>Novo template</div>
-            {renderEditor()}
-          </div>
-        )}
+      {templateMode === 'create' && (
+        <section className={styles.editorCard}>
+          <div className={styles.sectionHeading}><div><span className={styles.eyebrow}>Novo modelo</span><h2>Monte sua mensagem</h2></div></div>
+          {renderEditor()}
+        </section>
+      )}
 
-        <div className="pnl-grid">
+      <section aria-labelledby="modelos-title">
+        <div className={styles.sectionHeading}>
+          <div><h2 id="modelos-title">Modelos de mensagem</h2><p>Abra um modelo para conferir a mensagem completa ou editar.</p></div>
+          <span className={styles.count}>{templates.length} {templates.length === 1 ? 'modelo' : 'modelos'}</span>
+        </div>
+        <div className={styles.templateGrid}>
           {templates.map((template) => {
             const usage = templateUsage.get(template.key)
             const isInUse = !!usage?.enabled
             const isPausedOnly = !isInUse && !!usage?.paused
             const open = openModelo === template.key
             const isEditing = templateMode === 'edit' && editingTemplateKey === template.key
-            const renderedPreview = buildRenderedOfferTemplatePreview({
-              template,
-              copyVariationPoolJson: value.copyVariationPoolJson,
-              groupInviteLink: value.brandingGroupLink,
-              couponLink: value.couponLink,
-            })
+            const renderedPreview = buildRenderedOfferTemplatePreview({ template, copyVariationPoolJson: value.copyVariationPoolJson, groupInviteLink: value.brandingGroupLink, couponLink: value.couponLink })
             return (
-              <div key={template.key} className="pnl-card" style={{ padding: 0, overflow: 'hidden', borderColor: open ? 'var(--accent-strong)' : 'var(--line)' }}>
-                <button type="button" onClick={() => { if (isEditing) return; setOpenModelo((o) => (o === template.key ? null : template.key)) }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', width: '100%', background: 'none', border: 0, cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ width: 38, height: 38, borderRadius: 11, background: isInUse ? 'color-mix(in oklab, var(--accent) 20%, var(--surface))' : 'var(--bg-soft)', color: 'var(--accent-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} aria-hidden="true">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>{template.name}</span>
-                      {isInUse && <span className="pnl-tag is-success">● ativo</span>}
-                      {isPausedOnly && <span className="pnl-tag is-flight">automação pausada</span>}
-                      {template.key === 'automatico_classico' && <span className="pnl-tag is-skip">padrão</span>}
-                      {template.isOverridden && <span className="pnl-tag is-skip">editado</span>}
-                      {template.isCustom && <span className="pnl-tag is-skip">personalizado</span>}
-                    </span>
-                    <span className="pnl-card-note" style={{ display: 'block', marginTop: 3 }}>
-                      {usage?.enabled ? `Em uso em ${usage.enabled} automação${usage.enabled === 1 ? '' : 'ões'} ativa${usage.enabled === 1 ? '' : 's'}` : 'Nenhuma automação ativa usando este template'}
-                      {usage?.paused ? ` · ${usage.paused} pausada${usage.paused === 1 ? '' : 's'}` : ''}
+              <article key={template.key} className={`${styles.templateCard} ${open ? styles.openCard : ''}`}>
+                <button type="button" className={styles.templateSummary} aria-expanded={open} onClick={() => { if (!isEditing) setOpenModelo((current) => current === template.key ? null : template.key) }}>
+                  <span className={styles.templateIcon} aria-hidden="true">✦</span>
+                  <span className={styles.templateMeta}>
+                    <span className={styles.templateTitle}>{template.name}</span>
+                    <span className={styles.badges}>
+                      {isInUse && <span className={styles.activeBadge}>Em uso</span>}
+                      {isPausedOnly && <span className={styles.neutralBadge}>Pausado</span>}
+                      {template.key === 'automatico_classico' && <span className={styles.neutralBadge}>Padrão</span>}
+                      {template.isCustom && <span className={styles.neutralBadge}>Seu modelo</span>}
+                      {template.isOverridden && <span className={styles.neutralBadge}>Editado</span>}
                     </span>
                   </span>
-                  {!isEditing && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-strong)' }}>{open ? 'Fechar' : 'Abrir'}</span>}
-                  {!isEditing && <Chevron open={open} />}
-                </button>
-
-                {open && (
-                  <div style={{ padding: '0 18px 18px' }}>
-                    {isEditing ? (
-                      renderEditor()
-                    ) : (
-                      <>
-                        <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-                          <div className="pnl-subcard">
-                            <p className="pnl-eyebrow">Corpo salvo do template</p>
-                            <pre className="pnl-pre"><TokenText text={template.body || ''} /></pre>
-                          </div>
-                          <div className="pnl-subcard" style={{ borderColor: 'var(--accent-strong)' }}>
-                            <p className="pnl-eyebrow" style={{ color: 'var(--accent-strong)' }}>Prévia real enviada pelo bot</p>
-                            <p className="pnl-card-note" style={{ marginTop: 2, marginBottom: 8 }}>com gancho, CTA e convite do grupo já sorteados</p>
-                            <WhatsAppBubble text={renderedPreview} format />
-                          </div>
-                        </div>
-                        <div className="pnl-toolbar" style={{ marginTop: 12, gap: 8 }}>
-                          <button type="button" className="pnl-btn" onClick={() => startEditTemplate(template)}>Editar template</button>
-                          {templateMode === 'list' && renderSaveButton()}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* Ajuda — como o bot monta a mensagem */}
-      {/* Anatomia — como o bot monta a mensagem */}
-      <details className="pnl-card" style={{ background: 'color-mix(in oklab, var(--accent) 11%, var(--surface))' }}>
-        <summary>Como funcionam os templates</summary>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)', marginRight: 4 }}>Como o bot monta cada envio:</span>
-        {['Gancho', 'Corpo do template', 'CTA', 'Convite do grupo'].map((t, i, a) => (
-          <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, padding: '5px 11px', borderRadius: 999, background: 'var(--surface)', border: '1px solid var(--line)', color: i === 1 ? 'var(--ink)' : 'var(--accent-strong)' }}>{t}</span>
-            {i < a.length - 1 && <span style={{ color: 'var(--ink-faint)' }}>→</span>}
-          </span>
-        ))}
-        <span style={{ fontSize: 12, color: 'var(--ink-soft)', flexBasis: '100%', marginTop: 2 }}>
-          O template é o esqueleto; as variações entram nos blocos <b style={{ fontWeight: 600 }}>{'{{gancho}}'}</b>, <b style={{ fontWeight: 600 }}>{'{{cta}}'}</b> e <b style={{ fontWeight: 600 }}>{'{{convitegrupo}}'}</b> — escolhidas a cada envio para diversificar as mensagens.
-        </span>
-              </div>
-      </details>
-
-      {/* Textos dinâmicos */}
-      <section>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div className="pnl-card-title" style={{ fontSize: 15 }}>Textos dinâmicos</div>
-          {renderSaveButton()}
-        </div>
-        <p className="pnl-card-note" style={{ marginBottom: 12 }}>Pedacinhos que o bot intercala em cada envio, pra nenhuma mensagem sair 100% igual. Quanto mais variações, mais natural.</p>
-        <label className="pnl-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 16px', marginBottom: 12, cursor: 'pointer' }}>
-          <span>
-            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>Variar texto nos canais monitorados</span>
-            <span className="pnl-card-note" style={{ display: 'block', marginTop: 2 }}>Liga a intercalação de variações no encaminhamento de canais monitorados (anti-repetição). As ofertas automáticas já usam as variações sempre.</span>
-          </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={!!value.copyVariationEnabled}
-            aria-label="Variar texto nos canais monitorados"
-            disabled={saving}
-            onClick={() => setValue((v) => ({ ...v, copyVariationEnabled: !v.copyVariationEnabled }))}
-            style={{
-              position: 'relative', flexShrink: 0, width: 46, height: 26, borderRadius: 999,
-              border: '1px solid ' + (value.copyVariationEnabled ? 'var(--accent-strong)' : 'var(--line)'),
-              background: value.copyVariationEnabled ? 'var(--accent-strong)' : 'var(--bg-soft)',
-              transition: 'background .15s', cursor: saving ? 'not-allowed' : 'pointer',
-            }}
-          >
-            <span aria-hidden="true" style={{ position: 'absolute', top: 2, left: value.copyVariationEnabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.2)', transition: 'left .15s' }} />
-          </button>
-        </label>
-        <div className="pnl-grid">
-          {VARIATION_GROUPS.map((g) => {
-            const items = pool[g.key]
-            const open = openGrupo === g.key
-            return (
-              <div key={g.key} className="pnl-card" style={{ padding: 0, overflow: 'hidden' }}>
-                <button type="button" onClick={() => setOpenGrupo((o) => (o === g.key ? null : g.key))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', width: '100%', background: 'none', border: 0, cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--bg-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{g.emoji}</span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{g.nome}</span>
-                      <span className="pnl-hint">{g.pos}</span>
-                    </span>
-                    {!open && (
-                      <span className="pnl-card-note" style={{ display: 'block', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 520 }}>
-                        {items.filter(Boolean).slice(0, 3).join('  ·  ') || 'sem variações ainda'}{items.filter(Boolean).length > 3 ? ' …' : ''}
-                      </span>
-                    )}
-                  </span>
-                  <span className="pnl-tag is-skip" style={{ fontVariantNumeric: 'tabular-nums' }}>{items.length} / {MAX_VARIATIONS}</span>
                   <Chevron open={open} />
                 </button>
-                {open && (
-                  <div style={{ padding: '4px 18px 18px' }}>
-                    <p className="pnl-card-note" style={{ marginBottom: 12 }}>{g.desc} Deixar uma em branco é proposital — às vezes sai sem complemento.</p>
-                    <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-                      {items.map((text, idx) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <input className="pnl-input" value={text} onChange={(e) => setItem(g.key, idx, e.target.value)} placeholder={g.placeholder} disabled={saving} style={{ fontSize: 13 }} />
-                          <button type="button" className="pnl-link-btn" style={{ color: 'var(--danger)', flexShrink: 0 }} onClick={() => removeItem(g.key, idx)} aria-label="Remover variação" title="Remover">✕</button>
-                        </div>
-                      ))}
+                {!open && <div className={styles.messageExcerpt}><TokenText text={template.body || ''} /></div>}
+                {open && <div className={styles.templateDetails}>
+                  {isEditing ? renderEditor() : <>
+                    <div className={styles.previewGrid}>
+                      <div><span className={styles.eyebrow}>Estrutura do modelo</span><pre className={styles.savedBody}><TokenText text={template.body || ''} /></pre></div>
+                      <div className={styles.realPreview}><span className={styles.eyebrow}>Como chega para o cliente</span><WhatsAppBubble text={renderedPreview} format /></div>
                     </div>
-                    <div className="pnl-toolbar" style={{ marginTop: 12, gap: 8 }}>
-                      <button type="button" className="pnl-btn" style={{ borderStyle: 'dashed', color: 'var(--accent-strong)' }} onClick={() => addItem(g.key)} disabled={items.length >= MAX_VARIATIONS}>
-                        + Adicionar variação
-                      </button>
-                      {renderSaveButton()}
+                    <div className={styles.cardActions}>
+                      <button type="button" className="pnl-btn" onClick={() => startEditTemplate(template)}>Editar modelo</button>
+                      <span>{usage?.enabled ? `Usado em ${usage.enabled} automação${usage.enabled === 1 ? '' : 'ões'}` : 'Ainda não está em uma automação ativa'}</span>
                     </div>
-                  </div>
-                )}
-              </div>
+                  </>}
+                </div>}
+              </article>
             )
           })}
         </div>
       </section>
 
-      {/* 2 · Links */}
-      <section className="pnl-card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div className="pnl-card-title">Links</div>
-          {renderSaveButton()}
+      <section className={styles.automaticSection} aria-labelledby="campos-title">
+        <div className={styles.sectionHeading}>
+          <div><h2 id="campos-title">Campos automáticos</h2><p>O robô troca estes atalhos pelos dados certos em cada oferta.</p></div>
         </div>
-        <p className="pnl-card-note" style={{ marginBottom: 12 }}>
-          Use <code className="pnl-token" style={{ cursor: 'default' }}>{'{{grupoLink}}'}</code> e{' '}
-          <code className="pnl-token" style={{ cursor: 'default' }}>{'{{cupomLink}}'}</code> nos seus ganchos e CTAs.
-        </p>
-        <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-          <div>
-            <label className="pnl-label">Link de convite do grupo</label>
-            <input type="url" className="pnl-input" value={value.brandingGroupLink} onChange={(e) => setValue((v) => ({ ...v, brandingGroupLink: e.target.value }))} placeholder="https://chat.whatsapp.com/..." disabled={saving} />
-          </div>
-          <div>
-            <label className="pnl-label">Link de cupom</label>
-            <input type="url" className="pnl-input" value={value.couponLink} onChange={(e) => setValue((v) => ({ ...v, couponLink: e.target.value }))} placeholder="https://..." disabled={saving} />
-          </div>
+        <div className={styles.tokenRow}>
+          {OFFER_TEMPLATE_VARIABLE_GROUPS.flatMap((group) => group.variables).map((variable) => (
+            <button key={variable.token} type="button" className={styles.token} onClick={() => copyVar(variable.token)}><strong>{variable.token}</strong><span>{copied === variable.token ? 'copiado!' : variable.label}</span></button>
+          ))}
         </div>
       </section>
 
-      {/* Referência de variáveis */}
-      {/* 3 · Variáveis */}
-      <details className="pnl-card">
-        <summary>Referência de variáveis</summary>
-        <div style={{ marginTop: 14 }}>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Clique para copiar e cole no corpo do template. O bot substitui no envio automático e no Criar oferta.</p>
-        <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-          {[
-            { group: dadosGroup, dot: 'var(--accent-strong)', note: 'preenchidas com o produto' },
-            { group: blocosGroup, dot: 'var(--success)', note: 'sorteadas das variações' },
-          ].filter((c) => c.group).map(({ group, dot, note }) => (
-            <div key={group.key}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: dot, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                <span style={{ width: 9, height: 9, borderRadius: 3, background: dot }} /> {group.title}
-                <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--ink-faint)' }}>— {note}</span>
-              </div>
-              <div className="pnl-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
-                {group.variables.map((variable) => {
-                  const isCopied = copied === variable.token
-                  return (
-                    <button key={variable.token} type="button" className="pnl-token-card" onClick={() => copyVar(variable.token)} style={isCopied ? { borderColor: 'var(--accent-strong)', background: 'color-mix(in oklab, var(--success) 12%, var(--surface))' } : undefined}>
-                      <code>{variable.token}</code>
-                      <div>{isCopied ? '✓ copiado' : variable.label}</div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+      <section aria-labelledby="variacoes-title">
+        <div className={styles.sectionHeading}>
+          <div><h2 id="variacoes-title">Frases que variam sozinhas</h2><p>O robô alterna entre elas para as mensagens não ficarem repetidas.</p></div>
+          <label className={styles.switchLabel}>
+            <span>Variar nos canais monitorados</span>
+            <button type="button" role="switch" aria-checked={!!value.copyVariationEnabled} aria-label="Variar texto nos canais monitorados" disabled={saving} onClick={() => setValue((v) => ({ ...v, copyVariationEnabled: !v.copyVariationEnabled }))} className={`${styles.switch} ${value.copyVariationEnabled ? styles.switchOn : ''}`}><span /></button>
+          </label>
         </div>
-              </div>
+        <div className={styles.accordions}>
+          {VARIATION_GROUPS.map((group) => {
+            const items = pool[group.key]
+            const open = openGrupo === group.key
+            return <article key={group.key} className={styles.accordion}>
+              <button type="button" className={styles.accordionSummary} aria-expanded={open} onClick={() => setOpenGrupo((current) => current === group.key ? null : group.key)}>
+                <span className={styles.variationIcon}>{group.emoji}</span>
+                <span><strong>{group.nome}</strong><small>{group.pos}</small></span>
+                <span className={styles.count}>{items.filter(Boolean).length}</span><Chevron open={open} />
+              </button>
+              {open && <div className={styles.phraseEditor}>
+                <p>{group.desc}</p>
+                <div className={styles.phraseList}>{items.map((text, index) => <div key={index} className={styles.phraseRow}><input className="pnl-input" value={text} onChange={(e) => setItem(group.key, index, e.target.value)} placeholder={group.placeholder} disabled={saving} /><button type="button" onClick={() => removeItem(group.key, index)} aria-label="Remover frase">×</button></div>)}</div>
+                <button type="button" className="pnl-btn" onClick={() => addItem(group.key)} disabled={items.length >= MAX_VARIATIONS}>+ Adicionar frase</button>
+              </div>}
+            </article>
+          })}
+        </div>
+      </section>
+
+      <details className={styles.linksCard}>
+        <summary><span><strong>Links opcionais</strong><small>Convite do grupo e página de cupom</small></span><Chevron /></summary>
+        <div className={styles.linksGrid}>
+          <label className={styles.field}><span>Link de convite do grupo</span><input type="url" className="pnl-input" value={value.brandingGroupLink} onChange={(e) => setValue((v) => ({ ...v, brandingGroupLink: e.target.value }))} placeholder="https://chat.whatsapp.com/..." disabled={saving} /></label>
+          <label className={styles.field}><span>Link de cupom</span><input type="url" className="pnl-input" value={value.couponLink} onChange={(e) => setValue((v) => ({ ...v, couponLink: e.target.value }))} placeholder="https://..." disabled={saving} /></label>
+        </div>
       </details>
 
-      {/* Salvar */}
-      <div className="pnl-toolbar">
-        <button type="button" className="pnl-btn is-primary" onClick={() => handleSave()} disabled={saving}>
-          {saving ? 'Salvando…' : 'Salvar templates, textos e links'}
-        </button>
-        {saved && <span className="pnl-tag is-success">✓ Salvo!</span>}
+      <div className={styles.saveBar}>
+        <div><strong>Terminou de configurar?</strong><span>Salve para aplicar nas próximas ofertas.</span></div>
+        {saved && <span className={styles.saved}>✓ Tudo salvo</span>}
+        <button type="button" className="pnl-btn is-primary" onClick={() => handleSave()} disabled={saving}>{saving ? 'Salvando…' : 'Salvar alterações'}</button>
       </div>
-    </div>
+    </main>
   )
 }
