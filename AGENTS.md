@@ -6921,11 +6921,64 @@ Quatro relatos da cliente no mesmo print (2026-09-19, noite). **Não regredir:**
   de um elemento fixo **não** descontam a barra de endereço nem a barra de
   baixo do navegador: a janela nasce por baixo delas e o topo fica ilegível
   (relato com a lista de grupos do WhatsApp). A linha em `vh` fica antes, como
-  plano B para navegador sem suporte.
+  plano B — ⚠️ **corrigido em 2026-09-20:** medido no CSS gerado pelo build, o
+  minificador DESCARTA a linha em `vh` quando todos os navegadores-alvo
+  entendem `dvh`. O plano B é intenção de código, não proteção em produção:
+  quem sustenta a altura no celular é o `dvh` sozinho.
 - **A janela "Adicionar" é folha com cabeçalho preso e corpo rolando**, mesma
   receita da gaveta. Com a lista de grupos inteira ali dentro era o modal todo
   que rolava, e o título e o "fechar" saíam da tela. Medido em 375px com 10
   grupos: depois de rolar 662px o cabeçalho continua em y12.
+
+### Janela abrindo ATRÁS de outra janela (RCA 2026-09-20 — não regredir)
+
+Relato da cliente: *"quando clico em adicionar canal a janela de canal abre
+atrás da outra e não consigo vê-la."*
+
+**Causa: duas escalas de sobreposição que não se conheciam.** O painel tem a
+sua em `painel.css` (gaveta **90**, janela "Adicionar" **80**), e os diálogos
+compartilhados (`ConfirmDialog`, `AddChannelModal`, `SelectChannelModal`)
+nasciam com o `z-50` do Tailwind — ou seja, **abaixo das duas camadas que os
+abrem**. Reproduzido em navegador a 375×667 com o CSS real: o elemento no
+centro da tela era o véu da janela "Adicionar grupo", não a janela do canal.
+Pior que ficar atrás: o véu escurece o que está embaixo **e** recebe o toque,
+então tocar na janela do canal fechava a outra.
+
+⚠️ **Eram TRÊS portas, não uma.** Além de "Adicionar canal", saem de dentro de
+camadas do painel: **"Escolher canal do botão"** (`SelectChannelModal`, aberto
+de dentro da gaveta, z 90) e os avisos **"Descartar alterações?"** e **"Remover
+grupo?"** (`ConfirmDialog`, idem) — os três abriam atrás.
+
+| Peça | Onde |
+|---|---|
+| Camada canônica dos diálogos | `.ui-dialog-layer` em `dashboard/app/globals.css` |
+| Folha com cabeçalho preso | `.ui-dialog-sheet`, idem |
+
+**Não regredir:**
+
+- **Um diálogo que NASCE de dentro de outra camada precisa ficar ACIMA dela.**
+  Os três são diálogos-folha (nada abre por cima deles), então moram no topo da
+  pilha: **95**, acima da gaveta (90) e da janela (80).
+- **O aviso passageiro (`ToastProvider`, 100) continua acima do diálogo**, de
+  propósito — confirmação que o diálogo esconde é confirmação que ninguém vê.
+- **A camada mora em UM lugar**, nunca em utility por componente. Número
+  espalhado por arquivo é exatamente como as duas escalas passaram a discordar.
+  Teste falha se um `z-\d` voltar ao véu de qualquer um dos três.
+- **A regra fica FORA de `@layer`**, então vence qualquer utility do Tailwind de
+  mesma especificidade independente da ordem do arquivo.
+- **Altura da folha não pode ser utility do Tailwind.** Duas utilities para a
+  MESMA propriedade não garantem qual vence (quem decide é a ordem do CSS
+  gerado, não a do `className`) — então o par `vh`/`dvh` mora no CSS.
+- **A janela do canal virou folha** (cabeçalho preso, corpo rolando), como a de
+  "Adicionar grupo". Medido a 375px com a lista cheia: na forma antiga, depois
+  de rolar 928px o título e o **×** ficavam **857px acima do topo da tela**; na
+  forma nova o título fica em y28, visível.
+- **Uma rolagem só no celular** na lista de "Canais que sigo": o teto de 256px
+  fazia a rolagem de dentro roubar o gesto da de fora. No computador o teto
+  continua valendo.
+
+Teste: `test/janela-atras-de-janela.test.js` (lê os z-index do CSS de verdade,
+então bumpar a gaveta acima de 95 no futuro reprova).
 
 Testes: `test/painel-espelhamento-cartoes.test.js`,
 `test/painel-espelhamento-assistente.test.js`,

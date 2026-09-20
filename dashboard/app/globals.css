@@ -160,3 +160,47 @@ table {
   30%  { opacity: 1 }
   100% { opacity: 0; transform: translateY(-14px) scale(1) }
 }
+
+/* ── Camada dos diálogos (canônico — não regredir) ──────────────────────
+ * O painel tem escala PRÓPRIA de sobreposição em `app/painel/painel.css`:
+ * gaveta de configuração em 90 e janela "Adicionar" em 80. Os diálogos
+ * compartilhados (`ConfirmDialog`, `AddChannelModal`, `SelectChannelModal`)
+ * nasciam com o `z-50` do Tailwind — ou seja, ABAIXO das duas camadas que os
+ * abrem. Resultado: a janela aparecia atrás, escurecida pelo véu da janela de
+ * cima, e o toque caía no véu em vez de nela.
+ *
+ * Regra: um diálogo que NASCE de dentro de outra camada precisa ficar ACIMA
+ * dela. Estes três são diálogos-folha (nada abre por cima deles), então moram
+ * no topo da pilha — só o aviso passageiro (`ToastProvider`, 100) fica acima,
+ * de propósito, para confirmar a ação sem o diálogo o esconder.
+ *
+ * A regra fica FORA de `@layer`, então vence qualquer utility do Tailwind com
+ * a mesma especificidade, independente da ordem do arquivo.
+ */
+.ui-dialog-layer { z-index: 95; }
+
+/* Folha de diálogo: cabeçalho preso e corpo rolando, para o título e o
+ * "fechar" não saírem da tela num formulário longo no celular. A altura sai de
+ * `dvh` porque `100vh` (e o `inset: 0` de um elemento fixo) NÃO desconta a
+ * barra de endereço nem a barra de baixo do navegador; a linha em `vh` fica
+ * antes como plano B. O fallback mora aqui, e não em utility do Tailwind,
+ * porque duas utilities para a mesma propriedade não garantem qual vence — a
+ * ordem que conta é a do CSS gerado, não a do `className`.
+ * ⚠️ Medido no build: o minificador DESCARTA a linha em `vh` quando todos os
+ * navegadores-alvo entendem `dvh` — ou seja, o plano B é intenção de código,
+ * não proteção em produção. Quem sustenta a altura no celular é o `dvh`.
+ * Quem usa: o filho direto com `shrink-0` é o cabeçalho e o com
+ * `min-h-0 flex-1 overflow-y-auto` é o corpo. */
+.ui-dialog-sheet {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: calc(100vh - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+}
+@media (min-width: 640px) {
+  .ui-dialog-sheet {
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
+  }
+}

@@ -58,7 +58,7 @@ function SelectChannelModalContent({ onClose, onSelect }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
+    <div className="ui-dialog-layer fixed inset-0 flex items-end justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
       <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-h-[90vh] sm:rounded-lg sm:p-6">
         <div className="mb-4 flex min-w-0 items-start justify-between gap-3">
           <h2 className="min-w-0 text-lg font-semibold leading-snug">Escolher seu canal</h2>
