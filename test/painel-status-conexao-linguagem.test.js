@@ -52,3 +52,9 @@ test('estado da cliente vem do servidor, não é recalculado na tela', () => {
   // src/core/clientVisibleSessionState.js, que tem teste próprio.
   assert.match(pageSource, /status\?\.clientState\?\.state/)
 })
+
+test('visão conectada recebe o plano do usuário que está no escopo da página', () => {
+  assert.match(pageSource, /user:\s*painelUser\s*}\s*=\s*usePainel\(\)/)
+  assert.match(pageSource, /plan=\{painelUser\?\.plan\}/)
+  assert.doesNotMatch(pageSource, /plan=\{user\?\.plan\}/)
+})
