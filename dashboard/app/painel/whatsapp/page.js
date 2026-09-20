@@ -113,7 +113,7 @@ export default function WhatsAppPage() {
 
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
-  const [connectMethod, setConnectMethod] = useState('pairing')
+  const [connectMethod, setConnectMethod] = useState('qr')
   const [showForgetConfirm, setShowForgetConfirm] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
 
@@ -651,6 +651,8 @@ export default function WhatsAppPage() {
   const isNotReceiving = clientState === 'not_receiving'
   const silentMinutes = Math.max(1, Math.round(Number(status?.reception?.silentForMs || 0) / 60000))
   const isQrScanned = isValidatingSession
+  const isInitialDisconnected = !statusLoading && !isRunning && !isConnected && !isAwaitingConnectStart && !pairingCode
+  const showConnectionCanvas = isInitialDisconnected || Boolean(qr)
 
   const connectionSteps = [
     { key: 'service', label: 'Iniciando serviço', done: isRunning, active: !isRunning && (loading || isAwaitingConnectStart) },
@@ -683,15 +685,29 @@ export default function WhatsAppPage() {
   }
 
   return (
-    <div className="pnl-grid" style={{ maxWidth: 560, margin: '0 auto' }}>
+    <div className={`pnl-grid whatsapp-page${showConnectionCanvas ? ' is-disconnected' : ''}`}>
       {/* Banner de "conexão instável" (sessionHealth.degraded) removido (2026-06):
           a ação que ele sugeria — reconectar gerando QR novo — PIORA o estado,
           porque logo após reconectar há uma rajada esperada de Bad MAC enquanto
           as sender keys dos grupos re-sincronizam, e re-escanear reinicia esse
           ciclo. Decrypt dessincronizado costuma normalizar sozinho. */}
-      <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
+      <div className="pnl-toolbar whatsapp-help" style={{ justifyContent: 'flex-end' }}>
         <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
       </div>
+
+      {showConnectionCanvas && (
+        <section className="whatsapp-steps" aria-labelledby="whatsapp-steps-title">
+          <header>
+            <h2 id="whatsapp-steps-title">Conectar em 3 passos</h2>
+            <span aria-hidden="true">⌃</span>
+          </header>
+          <ol>
+            <li><span>1</span><strong>Abra o WhatsApp<br />no celular</strong><small>Toque nos três pontinhos e em “Dispositivos conectados”.</small></li>
+            <li><span>2</span><strong>Toque em “Conectar<br />dispositivo”</strong><small>A câmera do WhatsApp vai abrir.</small></li>
+            <li><span>3</span><strong>Aponte para o código<br />ao lado</strong><small>Pronto. O bot já pode publicar por você.</small></li>
+          </ol>
+        </section>
+      )}
 
       <PhoneReuseBlockedCard
         notice={status?.blockNotice}
@@ -735,7 +751,7 @@ export default function WhatsAppPage() {
       )}
 
       {/* Progresso da conexão */}
-      <section className="pnl-card">
+      {!showConnectionCanvas && <section className="pnl-card">
         <p className="pnl-eyebrow">Progresso da conexão</p>
         <ol style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', marginTop: 12, listStyle: 'none', padding: 0 }}>
           {connectionSteps.map((step) => {
@@ -749,7 +765,7 @@ export default function WhatsAppPage() {
             )
           })}
         </ol>
-      </section>
+      </section>}
 
       {/* Alertas */}
       {(statusLoadingTimedOut || statusError || (socketState === 'error') || (socketState === 'closed' && isConnecting && !qr && !pairingCode) || wsErrorMessage || feedback || error) && (
@@ -770,7 +786,7 @@ export default function WhatsAppPage() {
       )}
 
       {/* Status */}
-      <section className="pnl-card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      {!showConnectionCanvas && <section className="pnl-card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <span style={{ width: 12, height: 12, borderRadius: 999, flexShrink: 0, background: statusDotColor }} className={isConnecting ? 'pnl-pulse' : undefined} />
         <div>
           {statusLoading ? (
@@ -797,7 +813,7 @@ export default function WhatsAppPage() {
           )}
           {status?.phone && <p className="pnl-hint">+{status.phone}</p>}
         </div>
-      </section>
+      </section>}
 
       {/* Gerando QR (spinner) */}
       {((isRunning && !isConnected && !isSelfHealing && !qr && !pairingCode) || isAwaitingConnectStart) ? (
@@ -829,21 +845,20 @@ export default function WhatsAppPage() {
 
       {/* QR Code */}
       {qr && (
-        <section className="pnl-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <p className="pnl-card-note">Escaneie o QR Code com o WhatsApp</p>
-          {isQrScanned && <span className="pnl-tag is-success">QR lido ✅</span>}
-          <QRCode value={qr} size={240} />
-          <p style={{ fontSize: 12, fontWeight: 500, color: showQrExpired ? 'var(--danger)' : 'var(--ink-soft)' }}>
-            {showQrExpired ? 'QR expirado. Gere um novo QR para continuar.' : `QR expira em ${qrExpiresIn}s`}
-          </p>
-          <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)' }}>
-            <p>No WhatsApp: <strong>Configurações → Dispositivos conectados → Conectar um dispositivo.</strong></p>
-            <p>Mantenha esta tela aberta até a conexão ser concluída. O QR atualiza automaticamente.</p>
-            {isValidatingSession && <p style={{ fontWeight: 500, color: '#8a5a1e' }}>Validando sessão no servidor… (até 10s)</p>}
+        <section className="whatsapp-live-qr">
+          <div className="whatsapp-live-qr-code">
+            <QRCode value={qr} size={240} />
+            {isQrScanned && <span className="pnl-tag is-success">QR lido ✓</span>}
           </div>
-          {showQrExpired && (
-            <button type="button" className="pnl-link-btn" onClick={handleQRConnect} disabled={loading}>Gerar novo QR</button>
-          )}
+          <div className="whatsapp-qr-copy">
+            <h2>Leia o código</h2>
+            <p>Igual ao WhatsApp Web. O código renova sozinho a cada minuto.</p>
+            <span className={`whatsapp-awaiting${showQrExpired ? ' is-expired' : ''}`}><i /> {showQrExpired ? 'código expirado' : `aguardando leitura · ${qrExpiresIn}s`}</span>
+            <small>No WhatsApp, abra <strong>Dispositivos conectados</strong> e toque em <strong>Conectar um dispositivo</strong>.</small>
+            {isValidatingSession && <small className="is-validating">Validando conexão… isso pode levar até 10 segundos.</small>}
+            <button type="button" className="pnl-btn" onClick={async () => { await handleStop(); setConnectMethod('pairing'); setError('') }} disabled={loading}>Estou no celular — conectar por número</button>
+            {showQrExpired && <button type="button" className="pnl-link-btn" onClick={handleQRConnect} disabled={loading}>Gerar novo QR</button>}
+          </div>
         </section>
       )}
 
@@ -876,73 +891,64 @@ export default function WhatsAppPage() {
           src/domain/painel/whatsappSafety.js — inclusive a regra de nunca
           prometer que não recebemos as mensagens. */}
       {!isRunning && !statusLoading && !isAwaitingConnectStart && !pairingCode && (
-        <section className="pnl-card" style={{ marginBottom: 16 }}>
-          <div className="pnl-card-title">🔒 {WHATSAPP_SAFETY_HEADLINE}</div>
-          <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'grid', gap: 10 }}>
+        <section className="whatsapp-safety">
+          <details>
+          <summary>🔒 {WHATSAPP_SAFETY_HEADLINE}</summary>
+          <ul>
             {WHATSAPP_SAFETY_POINTS.map((p) => (
-              <li key={p.chave} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span aria-hidden="true" style={{ color: 'var(--accent-strong)', fontWeight: 700, lineHeight: 1.5 }}>✓</span>
-                <span style={{ fontSize: 13.5, lineHeight: 1.5 }}>
-                  <strong style={{ fontWeight: 600 }}>{p.titulo}.</strong> {p.texto}
+              <li key={p.chave}>
+                <span aria-hidden="true">✓</span>
+                <span>
+                  <strong>{p.titulo}.</strong> {p.texto}
                 </span>
               </li>
             ))}
           </ul>
-          <p className="pnl-card-note" style={{ marginTop: 12 }}>
+          <p>
             <a href={VIDEO_ATIVACAO_ROBO_URL} target="_blank" rel="noreferrer" style={{ fontWeight: 600, textDecoration: 'underline' }}>
               🎥 Ver no vídeo como conectar, do começo ao fim
             </a>
           </p>
+          </details>
         </section>
       )}
 
       {/* Formulário de conexão (QR / pareamento) */}
       {!isRunning && !statusLoading && !isAwaitingConnectStart && !pairingCode && (
-        <div className="pnl-grid">
-          <section className="pnl-card">
+        <div className="whatsapp-connect-card">
+          <section>
             {/* A4: "Gerar QR Code" e "Obter código" descrevem o que o BOTÃO faz,
                 não o que ela ganha — e nada dizia como sair depois. O verbo do
                 botão continua exato (clicar gera um código, não conecta na
                 hora); o resultado e a saída passam a estar acima dele. */}
-            <div className="pnl-card-title">Ligue o robô no seu WhatsApp</div>
-            <p className="pnl-card-note" style={{ marginTop: 4, marginBottom: 16 }}>
+            <div className="whatsapp-connect-heading">Ligue o robô no seu WhatsApp</div>
+            <p className="whatsapp-connect-note">
               Leva menos de um minuto. Você desliga quando quiser, aqui mesmo — é a mesma conexão do WhatsApp Web.
             </p>
-            <div role="tablist" aria-label="Método de conexão" style={{ display: 'flex', gap: 4, background: 'var(--bg-soft)', borderRadius: 'var(--pnl-radius-sm)', padding: 4, marginBottom: 16 }}>
-              <button
-                role="tab"
-                aria-selected={connectMethod === 'pairing'}
-                onClick={() => { setConnectMethod('pairing'); setError('') }}
-                disabled={loading}
-                className="pnl-btn"
-                style={{ flex: 1, justifyContent: 'center', background: connectMethod === 'pairing' ? 'var(--surface)' : 'transparent', border: 0, color: connectMethod === 'pairing' ? 'var(--accent-strong)' : 'var(--ink-soft)', boxShadow: connectMethod === 'pairing' ? 'var(--pnl-shadow)' : 'none' }}
-              >
-                📱 Número de celular
-              </button>
-              <button
-                role="tab"
-                aria-selected={connectMethod === 'qr'}
-                onClick={() => { setConnectMethod('qr'); setError('') }}
-                disabled={loading}
-                className="pnl-btn"
-                style={{ flex: 1, justifyContent: 'center', background: connectMethod === 'qr' ? 'var(--surface)' : 'transparent', border: 0, color: connectMethod === 'qr' ? 'var(--ink)' : 'var(--ink-soft)', boxShadow: connectMethod === 'qr' ? 'var(--pnl-shadow)' : 'none' }}
-              >
-                📷 QR Code
-              </button>
+            <div role="tablist" aria-label="Método de conexão" className="whatsapp-method-tabs">
+              <button role="tab" aria-selected={connectMethod === 'qr'} onClick={() => { setConnectMethod('qr'); setError('') }} disabled={loading}>QR Code</button>
+              <button role="tab" aria-selected={connectMethod === 'pairing'} onClick={() => { setConnectMethod('pairing'); setError('') }} disabled={loading}>Número de celular</button>
             </div>
 
             {connectMethod === 'qr' ? (
-              <div style={{ textAlign: 'center' }}>
-                <div className="pnl-card-title">Escaneie o QR Code para conectar seu WhatsApp</div>
-                <p className="pnl-card-note" style={{ marginTop: 4 }}>Abra o WhatsApp no celular e mantenha esta tela aberta até finalizar.</p>
-                <button type="button" className="pnl-btn is-primary" style={{ marginTop: 16, width: '100%', justifyContent: 'center' }} onClick={() => handleQRConnect('connect')} disabled={loading}>
-                  📷 {actionLoading === 'connect' ? 'Conectando…' : 'Gerar QR Code'}
-                </button>
+              <div className="whatsapp-qr-layout">
+                <div className="whatsapp-qr-placeholder">
+                  <span aria-hidden="true">▦</span>
+                  <button type="button" className="pnl-btn is-primary" onClick={() => handleQRConnect('connect')} disabled={loading}>
+                    {actionLoading === 'connect' ? 'Gerando código…' : 'Gerar QR Code'}
+                  </button>
+                </div>
+                <div className="whatsapp-qr-copy">
+                  <h2>Leia o código</h2>
+                  <p>Igual ao WhatsApp Web. O código renova sozinho a cada minuto.</p>
+                  <span className="whatsapp-awaiting"><i /> aguardando leitura…</span>
+                  <button type="button" className="pnl-btn" onClick={() => { setConnectMethod('pairing'); setError('') }}>Estou no celular — conectar por número</button>
+                </div>
               </div>
             ) : (
-              <form onSubmit={handlePairingSubmit} className="pnl-grid">
-                <div className="pnl-card-title">Conectar pelo número do WhatsApp</div>
-                <p className="pnl-card-note">Informaremos um código de 8 caracteres para você digitar no app — sem precisar escanear.</p>
+              <form onSubmit={handlePairingSubmit} className="whatsapp-pairing-form">
+                <h2>Conectar pelo número do WhatsApp</h2>
+                <p>Você receberá um código de 8 caracteres para digitar no app — sem precisar escanear.</p>
                 <div>
                   <label htmlFor="pairing-phone" className="pnl-label">Número (com DDI + DDD)</label>
                   <input
@@ -965,10 +971,9 @@ export default function WhatsAppPage() {
             )}
           </section>
 
-          <div className="pnl-note-box is-warn">
-            <strong style={{ fontWeight: 600, display: 'block' }}>Ações avançadas</strong>
-            <p style={{ marginTop: 4 }}>Use “Esquecer número salvo” apenas se quiser remover a sessão deste painel e conectar novamente por QR Code ou código.</p>
-            <button type="button" className="pnl-btn" style={{ marginTop: 12 }} onClick={() => setShowForgetConfirm(true)} disabled={loading}>Esquecer número salvo</button>
+          <div className="whatsapp-advanced">
+            <span>Ações avançadas</span>
+            <button type="button" className="pnl-link-btn" onClick={() => setShowForgetConfirm(true)} disabled={loading}>Esquecer número salvo</button>
           </div>
         </div>
       )}

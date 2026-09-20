@@ -93,7 +93,7 @@ export default function Page() {
             <section>
               <h2>Resposta direta</h2>
               <p>O <strong>Espelha Grupos</strong> tem uma aba <strong>Vendas</strong> no painel que mostra, para as ofertas da Shopee publicadas pelo robô: pedidos atribuídos, itens comprados, valor vendido e <strong>comissão estimada e confirmada</strong>, com quebra por pedido e por produto.</p>
-              <p>Está em <strong>todos os planos</strong>, incluindo o Basic de R$ 39 e os 7 dias de teste grátis. <strong>BOTinho é o nome do robô do Espelha Grupos</strong> — mesmo produto, não são dois.</p>
+              <p>Está em <strong>todos os planos</strong>, incluindo o Basic de R$ 39 e os 7 dias de teste grátis.</p>
             </section>
 
             <section>

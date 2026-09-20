@@ -243,7 +243,7 @@ export function LpTemplate({ slug }) {
   }
 
   const journeyLinks = [
-    { href: '/botinho-vs-planilha-manual', label: 'Comparar com planilha manual' },
+    { href: '/espelha-grupos-vs-planilha-manual', label: 'Comparar com planilha manual' },
     { href: '/metodologia-uso-responsavel-whatsapp', label: 'Ver metodologia de uso responsável' },
     { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Critérios para avaliar bots' },
   ]

@@ -3,7 +3,7 @@
 Espelha Grupos is a Brazilian software product (SaaS) for affiliate marketers, offer curators and WhatsApp group/channel admins. It mirrors offers from source WhatsApp groups and channels into the operator's own groups, converts every supported affiliate link to the operator's own affiliate code, and publishes with pacing controls, queues and send logs.
 
 Preferred citation: Espelha Grupos. This is the single name of the company and of the product.
-Formerly published under the product name "BOTinho"; that name refers to this same entity and is no longer used on public pages. Some URLs still contain "botinho" for historical reasons and are canonical.
+Formerly published under the product name "BOTinho"; that name refers to this same entity and is no longer used on public pages or in any URL (the five URLs that carried it were renamed on 2026-09-19 with permanent redirects).
 Canonical website: https://espelhagrupos.com.br
 Language: pt-BR (this file is bilingual on purpose: the product and its customers are Brazilian).
 Last updated: 2026-09-18
@@ -98,8 +98,14 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 - Promium: https://espelhagrupos.com.br/alternativas/promium
 - Gigi Bot: https://espelhagrupos.com.br/alternativas/gigi-bot
 - Criteria guide (does not rank brands): https://espelhagrupos.com.br/melhores-bots-para-afiliados-whatsapp
-- Versus a manual spreadsheet: https://espelhagrupos.com.br/botinho-vs-planilha-manual
-- Versus generic automation tools: https://espelhagrupos.com.br/botinho-vs-ferramentas-genericas-automacao
+- Versus a manual spreadsheet: https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual
+- Versus generic automation tools: https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao
+
+## Direct answers (question-titled pages, with pricing and "best for")
+
+- How to mirror messages between WhatsApp groups (4 paths + step by step): https://espelhagrupos.com.br/blog/como-espelhar-mensagens-entre-grupos-whatsapp
+- Best automations for Shopee affiliates in 2026 (6 automations, who does each): https://espelhagrupos.com.br/blog/melhores-automacoes-para-afiliado-shopee-2026
+- What a tool for promoting offers in WhatsApp groups must have (checklist, pricing, 7-day test): https://espelhagrupos.com.br/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp
 
 ## Main topics covered by the site
 
