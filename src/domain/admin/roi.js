@@ -86,19 +86,21 @@ export const SCENARIO_LABELS = Object.freeze({
 })
 
 function emptyMonth(month) {
-  return { month, gross: 0, affiliateCommissions: 0, mpFees: 0, net: 0, payments: 0, payingUsers: 0 }
+  return { month, gross: 0, affiliateCommissions: 0, mpFees: 0, refunds: 0, net: 0, payments: 0, payingUsers: 0 }
 }
 
 function normalizeRevenueMonth(raw, month) {
   const gross = round2(raw?.gross ?? 0)
   const affiliateCommissions = round2(raw?.affiliateCommissions ?? 0)
   const mpFees = round2(raw?.mpFees ?? 0)
+  const refunds = round2(raw?.refunds ?? 0)
   return {
     month,
     gross,
     affiliateCommissions,
     mpFees,
-    net: round2(gross - affiliateCommissions - mpFees),
+    refunds,
+    net: round2(gross - affiliateCommissions - mpFees - refunds),
     payments: Number(raw?.payments ?? 0) || 0,
     payingUsers: Number(raw?.payingUsers ?? 0) || 0,
   }
@@ -332,16 +334,19 @@ export function buildRoiReport({
   let grossAllTime = 0
   let commissionsAllTime = 0
   let feesAllTime = 0
+  let refundsAllTime = 0
   for (const month of revenueMonths) {
     const revenue = normalizeRevenueMonth(revenueByMonth[month], month)
     grossAllTime += revenue.gross
     commissionsAllTime += revenue.affiliateCommissions
     feesAllTime += revenue.mpFees
+    refundsAllTime += revenue.refunds
   }
   grossAllTime = round2(grossAllTime)
   commissionsAllTime = round2(commissionsAllTime)
   feesAllTime = round2(feesAllTime)
-  const netAllTime = round2(grossAllTime - commissionsAllTime - feesAllTime)
+  refundsAllTime = round2(refundsAllTime)
+  const netAllTime = round2(grossAllTime - commissionsAllTime - feesAllTime - refundsAllTime)
   return {
     generatedAt: now.toISOString(),
     currentMonth,
@@ -377,6 +382,7 @@ export function buildRoiReport({
       grossAllTime,
       affiliateCommissionsAllTime: commissionsAllTime,
       mpFeesAllTime: feesAllTime,
+      refundsAllTime,
       netAllTime,
       // O mês corrente entra no placar, então a cascata termina nele. A linha
       // do mês fechado fica como detalhe, para conferir com a tabela.
