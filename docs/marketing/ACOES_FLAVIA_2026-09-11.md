@@ -147,7 +147,6 @@ https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
 https://espelhagrupos.com.br/parcerias
 https://espelhagrupos.com.br/parceiro-influenciador
 https://espelhagrupos.com.br/estudos-de-caso
-https://espelhagrupos.com.br/protecao-antiban-botinho
 https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp
 https://espelhagrupos.com.br/ferramentas/calculadora-tempo-grupos-whatsapp
 https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe
@@ -155,6 +154,86 @@ https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons
 https://espelhagrupos.com.br/consistencia-postagens-em-grupos
 https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp
 ```
+
+(`/protecao-antiban-botinho` saiu daqui — a rota foi renomeada em 19/09 e o
+endereço novo está no Dia 7, item 8. Pedir indexação do endereço antigo pediria
+a versão que hoje só redireciona.)
+
+### Dia 7 (2026-09-21) — o resto do Dia 4 + páginas de resposta + rotas renomeadas
+
+Três coisas novas desde 12/09, nenhuma pedida ainda:
+
+```
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp                    ⏳ pendente desde 12/09 — agora com imagem própria
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp             ⏳ pendente desde 12/09 — agora com imagem própria
+https://espelhagrupos.com.br/blog/como-espelhar-mensagens-entre-grupos-whatsapp            página de resposta (19/09), nunca pedida
+https://espelhagrupos.com.br/blog/melhores-automacoes-para-afiliado-shopee-2026            página de resposta (19/09), nunca pedida
+https://espelhagrupos.com.br/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp      página de resposta (19/09), nunca pedida
+https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                                   endereço novo (era /bot-comum-vs-botinho)
+https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais                           endereço novo (era /como-funciona-botinho-canais)
+https://espelhagrupos.com.br/protecao-antiban-espelha-grupos                               endereço novo (era /protecao-antiban-botinho)
+https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual                             endereço novo (era /botinho-vs-planilha-manual)
+https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao             endereço novo (era /botinho-vs-ferramentas-genericas-automacao)
+```
+
+Os dois primeiros são os que mais importam: já tinham 450+ impressões antes de
+qualquer coisa, estavam pendentes desde 12/09, e agora (PR de imagem nos posts
+do blog, 21/09) ganharam uma imagem própria de destaque — o Google só vê essa
+imagem se relê a página.
+
+As cinco rotas renomeadas continuam respondendo pelo endereço ANTIGO com
+redirect 301 — o Google costuma seguir redirect sozinho, mas pedir o endereço
+novo direto acelera a troca no índice.
+
+### Dia 8 — retomar o Dia 5 (nunca foi marcado como feito)
+
+```
+https://espelhagrupos.com.br/programa-de-afiliados
+https://espelhagrupos.com.br/alternativas/proafiliados
+https://espelhagrupos.com.br/alternativas/promium
+https://espelhagrupos.com.br/quem-somos
+https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
+```
+
+### Dia 9 — a cauda do Dia 6 (só se sobrar cota)
+
+```
+https://espelhagrupos.com.br/parcerias
+https://espelhagrupos.com.br/parceiro-influenciador
+https://espelhagrupos.com.br/estudos-de-caso
+https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp
+https://espelhagrupos.com.br/ferramentas/calculadora-tempo-grupos-whatsapp
+https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe
+https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons
+https://espelhagrupos.com.br/consistencia-postagens-em-grupos
+https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp
+```
+
+### Dia 10 — opcional: os outros 14 posts do blog que ganharam imagem em 21/09
+
+Baixa prioridade de propósito: estes 14 já estavam indexados antes desta PR
+(publicados entre 05/2026 e 08/2026) — o Google tende a pegar a imagem nova
+sozinho no próximo rastreamento natural. Só peça se sobrar cota depois dos
+dias 7-9.
+
+```
+https://espelhagrupos.com.br/blog/grupo-ou-canal-whatsapp-achadinhos
+https://espelhagrupos.com.br/blog/como-evitar-banimento-whatsapp-afiliados
+https://espelhagrupos.com.br/blog/shadowban-whatsapp-canais
+https://espelhagrupos.com.br/blog/migrar-grupo-achadinhos-para-canal
+https://espelhagrupos.com.br/blog/chip-dedicado-bot-whatsapp
+https://espelhagrupos.com.br/blog/bot-whatsapp-antiban-existe
+https://espelhagrupos.com.br/blog/comecar-afiliado-whatsapp-sem-grupo-grande
+https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp
+https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados
+https://espelhagrupos.com.br/blog/melhores-horarios-para-postar-ofertas-no-whatsapp
+https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp
+https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero
+```
+
+(`amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp` fica de fora desta
+lista — é o único post que NÃO ganhou imagem nesta PR, nenhuma do pacote
+representa as 3 lojas lado a lado.)
 
 ### Como conferir que funcionou
 
