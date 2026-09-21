@@ -127,7 +127,7 @@ export function getEditorialDates(slug) {
   return EDITORIAL_DATES[slug] ?? { publishedAt: '2026-05-15', updatedAt: '2026-05-15' }
 }
 
-export function buildArticleJsonLd({ title, description, slug, siteUrl, faq = [], type = 'Article', author }) {
+export function buildArticleJsonLd({ title, description, slug, siteUrl, faq = [], type = 'Article', author, image }) {
   const dates = getEditorialDates(slug)
   const resolvedAuthor = author
     ? {
@@ -149,6 +149,11 @@ export function buildArticleJsonLd({ title, description, slug, siteUrl, faq = []
     description,
     author: resolvedAuthor,
     publisher: { '@type': 'Organization', name: 'Espelha Grupos', logo: { '@type': 'ImageObject', url: `${siteUrl}/botinho-logo.svg` } },
+    // Imagem de destaque do post (2026-09-21) — Google recomenda `image` em
+    // Article/BlogPosting para elegibilidade a rich results; sem ela o card
+    // de busca e a citação por IA saem sem nenhuma imagem do artigo em si
+    // (só o og:image genérico da home, quando presente).
+    ...(image?.path ? { image: `${siteUrl}${image.path}` } : {}),
     datePublished: dates.publishedAt,
     dateModified: dates.updatedAt,
     mainEntityOfPage: `${siteUrl}${slug}`,

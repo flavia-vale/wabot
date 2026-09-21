@@ -13,17 +13,24 @@ import { getSiteUrl } from './site-url'
 // se o caminho voltar a apontar para algo que não existe em `public/`.
 //
 // A assinatura com `{ slug, cluster, template }` foi mantida para não mexer
-// nos 7 chamadores; hoje todos recebem a mesma imagem. Arte por template só
-// quando existir um arquivo por template em `public/` — nunca uma rota.
+// nos 7 chamadores antigos; eles continuam recebendo a mesma imagem padrão.
+// Arte por template só quando existir um arquivo por template em `public/` —
+// nunca uma rota. Os posts do blog (2026-09-21) são o primeiro caso real: cada
+// um tem uma imagem própria em `dashboard/public/blog/hero/`, passada via
+// `imagePath` — chamador que não passa `imagePath` recebe exatamente o
+// comportamento de sempre.
 export const OG_DEFAULT_IMAGE_PATH = '/og-default.png'
 export const OG_IMAGE_WIDTH = 1200
 export const OG_IMAGE_HEIGHT = 630
 export const OG_IMAGE_ALT = 'Espelha Grupos — bot para afiliadas espelhar ofertas no WhatsApp'
 
-export function buildOgImageUrl(_options = {}) {
-  return `${getSiteUrl()}${OG_DEFAULT_IMAGE_PATH}`
+export function buildOgImageUrl(options = {}) {
+  return `${getSiteUrl()}${options.imagePath ?? OG_DEFAULT_IMAGE_PATH}`
 }
 
-export function buildOgImageDescriptor() {
-  return { url: OG_DEFAULT_IMAGE_PATH, width: OG_IMAGE_WIDTH, height: OG_IMAGE_HEIGHT, alt: OG_IMAGE_ALT }
+export function buildOgImageDescriptor(options = {}) {
+  if (!options.imagePath) {
+    return { url: OG_DEFAULT_IMAGE_PATH, width: OG_IMAGE_WIDTH, height: OG_IMAGE_HEIGHT, alt: OG_IMAGE_ALT }
+  }
+  return { url: options.imagePath, width: options.width ?? OG_IMAGE_WIDTH, height: options.height ?? OG_IMAGE_HEIGHT, alt: options.alt ?? OG_IMAGE_ALT }
 }
