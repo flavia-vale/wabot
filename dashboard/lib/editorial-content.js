@@ -1,3 +1,5 @@
+import { FOUNDER_LINKEDIN_URL, FOUNDER_PERSON_ID_PATH, FOUNDER_SAME_AS } from './marketing-content.js'
+
 export const EDITORIAL_AUTHOR = 'Equipe editorial do Espelha Grupos'
 export const EDITORIAL_AUTHOR_DESCRIPTION = 'Equipe responsável por guias de operação responsável, afiliados, grupos de WhatsApp e rotinas de divulgação com revisão humana.'
 
@@ -6,6 +8,18 @@ export const EDITORIAL_AUTHOR_DESCRIPTION = 'Equipe responsável por guias de op
 // padrão do site inteiro sem decisão explícita — ver AGENTS.md > SEO orgânico.
 export const EDITORIAL_PERSON_AUTHOR = 'Flávia Vale'
 export const EDITORIAL_PERSON_AUTHOR_DESCRIPTION = 'Fundadora do Espelha Grupos, trabalha com tecnologia e opera grupos de ofertas desde 2023.'
+// Foto real (não placeholder) + link para o LinkedIn PESSOAL dela (confirmado
+// 20/09/2026). Autoria assinada por pessoa real e verificável, com foto e
+// perfil externo linkável, é sinal de E-E-A-T (Google) e é o que separa uma
+// "Equipe editorial" genérica de uma entidade que o ChatGPT/Perplexity/AI
+// Overviews conseguem checar — mesma lógica do `sameAs`/`founder` já aplicado
+// no layout raiz (ver comentário ali). O `@id` aponta para o MESMO nó Person
+// de `/quem-somos#person`: é o que faz o Google/IA tratarem a autora do post e
+// a fundadora do site como a MESMA entidade, em vez de duas pessoas soltas.
+export const EDITORIAL_PERSON_AUTHOR_PHOTO_PATH = '/authors/flavia-vale.jpg'
+export const EDITORIAL_PERSON_AUTHOR_LINKEDIN_URL = FOUNDER_LINKEDIN_URL
+export const EDITORIAL_PERSON_AUTHOR_ID_PATH = FOUNDER_PERSON_ID_PATH
+export const EDITORIAL_PERSON_AUTHOR_SAME_AS = FOUNDER_SAME_AS
 
 export const EDITORIAL_DATES = {
   // Rotas comerciais/ferramentas que estavam sem updatedAt (validate:seo-consistency
@@ -116,7 +130,17 @@ export function getEditorialDates(slug) {
 export function buildArticleJsonLd({ title, description, slug, siteUrl, faq = [], type = 'Article', author }) {
   const dates = getEditorialDates(slug)
   const resolvedAuthor = author
-    ? { '@type': author.type ?? 'Person', name: author.name, description: author.description }
+    ? {
+        '@type': author.type ?? 'Person',
+        // Mesmo `@id` do Person em layout.js (`founder`): liga a autoria do
+        // post à MESMA entidade fundadora, não a um nó solto por artigo.
+        ...(author.idPath ? { '@id': `${siteUrl}${author.idPath}` } : {}),
+        name: author.name,
+        description: author.description,
+        ...(author.idPath ? { url: `${siteUrl}${author.idPath}` } : {}),
+        ...(author.photoPath ? { image: `${siteUrl}${author.photoPath}` } : {}),
+        ...(author.sameAs ? { sameAs: author.sameAs } : {}),
+      }
     : { '@type': 'Organization', name: EDITORIAL_AUTHOR, description: EDITORIAL_AUTHOR_DESCRIPTION }
   const article = {
     '@context': 'https://schema.org',

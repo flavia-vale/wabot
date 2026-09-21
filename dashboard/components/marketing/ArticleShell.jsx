@@ -4,7 +4,7 @@ import { LeadMagnetCard } from './LeadMagnetCard'
 import { PublicReferralTracker } from './PublicReferralTracker'
 import { EDITORIAL_AUTHOR, formatDatePtBr } from '@/lib/editorial-content'
 
-export function ArticleShell({ eyebrow, title, description, children, origin, publishedAt, updatedAt, author = EDITORIAL_AUTHOR, leadMagnetVariant = 'default' }) {
+export function ArticleShell({ eyebrow, title, description, children, origin, publishedAt, updatedAt, author = EDITORIAL_AUTHOR, authorPhotoPath, authorHref, leadMagnetVariant = 'default' }) {
   return (
     <PublicShell>
       <PublicReferralTracker template="article" />
@@ -15,8 +15,25 @@ export function ArticleShell({ eyebrow, title, description, children, origin, pu
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{title}</h1>
           <p className="mt-5 text-lg leading-8 text-gray-600">{description}</p>
           {(publishedAt || updatedAt) && (
-            <p className="mt-4 text-sm font-semibold text-gray-500">
-              Por {author} · Publicado em {formatDatePtBr(publishedAt || updatedAt)} · Atualizado em {formatDatePtBr(updatedAt || publishedAt)}
+            <p className="mt-4 flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-500">
+              {authorPhotoPath && (
+                <img
+                  src={authorPhotoPath}
+                  alt={author}
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 rounded-full object-cover ring-1 ring-emerald-100"
+                />
+              )}
+              Por{' '}
+              {authorHref ? (
+                <a href={authorHref} target="_blank" rel="noreferrer noopener" className="text-emerald-700 hover:text-emerald-800">
+                  {author}
+                </a>
+              ) : (
+                author
+              )}{' '}
+              · Publicado em {formatDatePtBr(publishedAt || updatedAt)} · Atualizado em {formatDatePtBr(updatedAt || publishedAt)}
             </p>
           )}
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-black [&_h3]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-6 [&_strong]:text-gray-950">

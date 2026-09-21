@@ -2,7 +2,16 @@ import { Fragment } from 'react'
 import Link from 'next/link'
 import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
-import { buildArticleJsonLd, getEditorialDates, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
+import {
+  buildArticleJsonLd,
+  getEditorialDates,
+  EDITORIAL_PERSON_AUTHOR,
+  EDITORIAL_PERSON_AUTHOR_DESCRIPTION,
+  EDITORIAL_PERSON_AUTHOR_PHOTO_PATH,
+  EDITORIAL_PERSON_AUTHOR_LINKEDIN_URL,
+  EDITORIAL_PERSON_AUTHOR_ID_PATH,
+  EDITORIAL_PERSON_AUTHOR_SAME_AS,
+} from '@/lib/editorial-content'
 import { internalContentHref } from '@/lib/marketing-attribution'
 
 const siteUrl = getSiteUrl()
@@ -785,7 +794,16 @@ export function buildSectionSchemas(post, baseUrl) {
 export function PreservationBlogPost({ postKey }) {
   const post = PRESERVATION_BLOG_POSTS[postKey]
   const dates = getEditorialDates(post.slug)
-  const personAuthor = post.usePersonAuthor ? { type: 'Person', name: EDITORIAL_PERSON_AUTHOR, description: EDITORIAL_PERSON_AUTHOR_DESCRIPTION } : undefined
+  const personAuthor = post.usePersonAuthor
+    ? {
+        type: 'Person',
+        name: EDITORIAL_PERSON_AUTHOR,
+        description: EDITORIAL_PERSON_AUTHOR_DESCRIPTION,
+        idPath: EDITORIAL_PERSON_AUTHOR_ID_PATH,
+        photoPath: EDITORIAL_PERSON_AUTHOR_PHOTO_PATH,
+        sameAs: EDITORIAL_PERSON_AUTHOR_SAME_AS,
+      }
+    : undefined
   const schemas = [
     ...buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq, author: personAuthor }),
     ...buildSectionSchemas(post, siteUrl),
@@ -796,7 +814,18 @@ export function PreservationBlogPost({ postKey }) {
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <ArticleShell eyebrow={post.eyebrow} title={post.title} description={post.description} origin={post.origin} publishedAt={dates.publishedAt} updatedAt={dates.updatedAt} author={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR : undefined} leadMagnetVariant={post.leadMagnetVariant ?? 'default'}>
+      <ArticleShell
+        eyebrow={post.eyebrow}
+        title={post.title}
+        description={post.description}
+        origin={post.origin}
+        publishedAt={dates.publishedAt}
+        updatedAt={dates.updatedAt}
+        author={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR : undefined}
+        authorPhotoPath={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR_PHOTO_PATH : undefined}
+        authorHref={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR_LINKEDIN_URL : undefined}
+        leadMagnetVariant={post.leadMagnetVariant ?? 'default'}
+      >
         <section>
           <h2>Resumo prático</h2>
           <p>{post.intro}</p>
