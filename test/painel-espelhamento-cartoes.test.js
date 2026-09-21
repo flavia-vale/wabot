@@ -181,6 +181,21 @@ test('a aba Grupos tem as duas colunas, e cada card abre o painel lateral', () =
   assert.doesNotMatch(page, /expandedConfigId/, 'a configuração voltou a abrir dentro da lista')
 })
 
+test('grupos e conexões vivem na mesma página, sem seletor entre as duas visões', () => {
+  const cols = page.indexOf('className="pnl-grid pnl-esp-cols"')
+  const connections = page.indexOf('className="pnl-card pnl-esp-connections"')
+  assert.ok(cols > -1 && connections > cols, 'o mapa de conexões precisa aparecer abaixo das listas')
+  assert.doesNotMatch(page, /setTab\('conexoes'\)|aria-label="Ver como listas ou como mapa de conexões"/)
+  assert.match(page, /ADICIONAR NOVO ESPELHAMENTO/)
+})
+
+test('cards resumem a configuração que muda a publicação', () => {
+  const cartao = page.slice(page.indexOf('function GroupCard('), page.indexOf('function GroupColumn('))
+  assert.match(cartao, /card\.messageModeLabel/, 'origem precisa dizer mensagem original ou template')
+  assert.match(cartao, /Imagem: \{card\.imageModeLabel\}/, 'destino precisa dizer o modo da imagem')
+  assert.doesNotMatch(cartao, /esp-loja/, 'ícones de lojas não devem voltar ao card de origem')
+})
+
 test('o cartão da origem continua sendo montado pela regra pura', () => {
   // O cálculo de destinos/lojas/ofertas do dia é o MESMO do cartão de 2026-09-19;
   // reescrevê-lo na tela faria cartão e mapa discordarem sobre a mesma origem.

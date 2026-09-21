@@ -13,7 +13,7 @@ import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
-import { usePainelHeader, PainelContentActions } from '../PainelShell'
+import { usePainelHeader } from '../PainelShell'
 import { ReviewQueue } from '@/components/offerAutomation/ReviewQueue'
 import { validateOfferAutomationForm } from '@/lib/offerAutomationForm'
 import { SEARCH_ORDER_OPTIONS, DEFAULT_SEARCH_ORDER, searchOrderOption, describeSearchChoice, normalizeSearchChoice } from '@/lib/offerAutomationSearch'
@@ -486,10 +486,6 @@ export default function OfertasAutomaticasPage() {
 
   return (
     <div className="pnl-grid offer-auto-page">
-      <PainelContentActions>
-        <button type="button" className="pnl-btn is-primary offer-auto-new" onClick={openCreate}>+ Novo tema</button>
-      </PainelContentActions>
-
       <a className="offer-auto-guide" href={VIDEO_ATIVACAO_ROBO_URL} target="_blank" rel="noreferrer">
         <span className="offer-auto-guide-play" aria-hidden="true">▶</span>
         <span className="offer-auto-guide-copy">
@@ -514,6 +510,10 @@ export default function OfertasAutomaticasPage() {
           <button type="button" className={`pnl-switch${allAutomationsEnabled ? ' is-on' : ''}`} onClick={() => handleToggleAll(!allAutomationsEnabled)} disabled={bulkToggling !== null} aria-label={`${bulkToggleLabel} automações de ofertas`} aria-pressed={allAutomationsEnabled}><span /></button>
         </section>
       )}
+
+      <div className="offer-auto-new-row">
+        <button type="button" className="pnl-btn is-primary offer-auto-new" onClick={openCreate}>+ Novo tema</button>
+      </div>
 
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
 
@@ -550,7 +550,11 @@ export default function OfertasAutomaticasPage() {
                 <small>{describeSearchChoice(a)} · {OFFERS_PER_SEND_OPTIONS.find((o) => o.value === a.offersPerSend)?.label ?? `${a.offersPerSend} produto(s)`}</small>
                 <AutomationActions automation={a} triggering={triggering === a.id} reviewQueueOpen={reviewQueueOpen} onTrigger={() => handleTrigger(a)} onToggleQueue={() => setOpenReviewQueues((current) => { const next = new Set(current); if (next.has(a.id)) next.delete(a.id); else next.add(a.id); return next })} onEdit={() => openEdit(a)} onRemove={() => setDeleteTarget(a)} />
               </div>
-              <div className="offer-auto-topic-destination"><span className="offer-auto-store-badge" title="Shopee">S</span><span>{automationDestinationLabel(a, instagramDestinations)}</span></div>
+              <div className={`offer-auto-topic-destination offer-auto-publication ${a.publicationMode === 'review' ? 'is-review' : 'is-direct'}`}>
+                <strong>{a.publicationMode === 'review' ? 'Revisar antes' : 'Enviar direto'}</strong>
+                {a.publicationMode === 'review' && <small>{a.approvedReviewCount || 0} {a.approvedReviewCount === 1 ? 'oferta aprovada' : 'ofertas aprovadas'} na fila</small>}
+                <span>{automationDestinationLabel(a, instagramDestinations)}</span>
+              </div>
               <div><span className="offer-auto-discount">{a.minDiscountPct > 0 ? `${a.minDiscountPct}% ou mais` : 'Qualquer oferta'}</span></div>
               <div className="offer-auto-rhythm">{intervalShortLabel(a)}<small>{nextSendLabel(a.lastSentAt, a.intervalMinutes, a.dailyRunTime)}</small></div>
               <div className="offer-auto-topic-toggle">
