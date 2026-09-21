@@ -82,9 +82,10 @@ test('a foto pequena do plano B passa a preencher o card (mede os pixels)', asyn
 
 test('regressão magazinevoce: amplia a foto ANTES de montar a tela fixa', async () => {
   const pequena = await foto({ width: 220, height: 220 })
-  const card = await composePreviewCardImage(pequena)
+  const { buffer: ampliada, upscaled } = await upscaleCardPhotoIfTiny(pequena)
+  const card = await composePreviewCardImage(ampliada)
 
-  assert.deepEqual(card.upscaled, { from: 220, to: 800 })
+  assert.deepEqual(upscaled, { from: 220, to: 800 })
   assert.equal(card.width, 1080)
   assert.equal(card.height, 1080)
 })
@@ -119,19 +120,16 @@ test('bytes ilegíveis devolvem o original em vez de derrubar o card', async () 
 
 test('a ampliação acontece DENTRO da composição, antes da marca e do upload', () => {
   const src = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
-  const canvas = readFileSync(new URL('../src/core/previewCardCanvas.js', import.meta.url), 'utf8')
 
-  const iComposicao = src.indexOf('await composePreviewCardImage(buf, { upscale })')
+  const iAmpliacao = src.indexOf('await upscaleCardPhotoIfTiny(buf)')
+  const iComposicao = src.indexOf('await composePreviewCardImage(preparada.buffer)')
   const iMarca = src.indexOf("MARCA D'ÁGUA NO CARD DE PREVIEW")
   const iUpload = src.indexOf("mediaTypeOverride: 'thumbnail-link'")
-  assert.ok(iComposicao > 0 && iMarca > 0 && iUpload > 0)
+  assert.ok(iAmpliacao > 0 && iComposicao > 0 && iMarca > 0 && iUpload > 0)
 
+  assert.ok(iAmpliacao < iComposicao, 'ampliação precisa acontecer antes de o canvas esconder a dimensão da foto')
   assert.ok(iComposicao < iMarca, 'composição precisa vir antes da marca d\'água')
   assert.ok(iComposicao < iUpload, 'composição precisa vir antes do upload da thumbnail HQ')
-  assert.ok(
-    canvas.indexOf('await upscaleCardPhotoIfTiny(input)') < canvas.indexOf('sharp(source'),
-    'a foto precisa ser ampliada antes de o canvas esconder suas dimensões reais',
-  )
 
   // O banner de cupom já nasce com tamanho escolhido e não é foto de produto.
   assert.match(src, /prepararFotoDoCard\(banner, \{ upscale: false \}\)/)
@@ -145,5 +143,5 @@ test('a ampliação NÃO vazou para o envio de foto de corpo inteiro', () => {
   assert.ok(!scrapers.includes('upscaleCardPhotoIfTiny'))
 
   const src = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
-  assert.equal(src.split('upscaleCardPhotoIfTiny(').length - 1, 1, 'fallback sem canvas também precisa ampliar')
+  assert.equal(src.split('upscaleCardPhotoIfTiny(').length - 1, 1, 'todo card precisa passar pelo helper único')
 })

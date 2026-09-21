@@ -1915,11 +1915,14 @@ function reportWatermarkMissing(stage, ctx = {}) {
 // histórico: melhor card de tamanho irregular do que oferta sem foto.
 async function prepararFotoDoCard(buf, { upscale = true } = {}) {
   if (!buf?.length) return null
-  const tela = await composePreviewCardImage(buf, { upscale }).catch(() => null)
-  if (tela?.main && tela?.thumbnail) return { buffer: tela.main, jpegThumbnail: tela.thumbnail, upscaled: tela.upscaled }
-  // Com a tela desligada/falhando, a ampliação ainda precisa acontecer antes
-  // do normalize (que nunca amplia de propósito).
+  // A ordem é a correção: medir/ampliar a FOTO enquanto ela ainda tem suas
+  // dimensões reais; só depois montar o canvas 1080px. Se inverter, o guard vê
+  // o canvas grande e mantém o produto como selo pequeno no centro.
   const preparada = upscale ? await upscaleCardPhotoIfTiny(buf) : { buffer: buf, upscaled: null }
+  const tela = await composePreviewCardImage(preparada.buffer).catch(() => null)
+  if (tela?.main && tela?.thumbnail) return { buffer: tela.main, jpegThumbnail: tela.thumbnail, upscaled: preparada.upscaled }
+  // Com a tela desligada/falhando, normalize recebe a mesma fonte já preparada
+  // (ele nunca amplia de propósito).
   const normalized = await normalizeImageForWhatsApp(preparada.buffer)
   if (!normalized?.jpegThumbnail) return null
   return { buffer: normalized.buffer || normalized.jpegThumbnail, jpegThumbnail: normalized.jpegThumbnail, upscaled: preparada.upscaled }
@@ -2193,10 +2196,10 @@ async function buildBroadcastLinkPreview({ text, destJid, jpegThumbnail, hqBuffe
   // a proporção que a loja usa, e sem isto cada oferta da fila sai com um card
   // de tamanho diferente. A miniatura embutida é refeita a partir da imagem
   // composta — divergir dela traria de volta o "muda de tamanho ao carregar".
-  const tela = hqBuffer ? await composePreviewCardImage(hqBuffer).catch(() => null) : null
-  if (tela?.main && tela?.thumbnail) {
-    thumb = tela.thumbnail
-    hq = tela.main
+  const preparada = hqBuffer ? await prepararFotoDoCard(hqBuffer) : null
+  if (preparada?.buffer && preparada?.jpegThumbnail) {
+    thumb = preparada.jpegThumbnail
+    hq = preparada.buffer
   } else if (!thumb && hqBuffer) {
     const normalized = await normalizeImageForWhatsApp(hqBuffer)
     thumb = normalized?.jpegThumbnail
