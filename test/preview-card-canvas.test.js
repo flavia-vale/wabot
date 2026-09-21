@@ -146,5 +146,5 @@ test('os dois montadores de card do bot-worker passam pela tela fixa', () => {
   assert.ok((manual.match(/prepararFotoDoCard\(/g) || []).length >= 3, 'as três fontes de foto do card precisam passar pela tela fixa')
 
   const broadcast = src.slice(src.indexOf('async function buildBroadcastLinkPreview'), src.indexOf('async function buildPayloadFromRecipe'))
-  assert.match(broadcast, /composePreviewCardImage\(/, 'o card da fila/automáticas também precisa da tela fixa')
+  assert.match(broadcast, /prepararFotoDoCard\(hqBuffer\)/, 'o card da fila/automáticas também precisa da preparação e da tela fixa')
 })
