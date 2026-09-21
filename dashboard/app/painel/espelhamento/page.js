@@ -1850,7 +1850,6 @@ export default function EspelhamentoPage() {
     counterpartNames: card.destinos.map((d) => d.name).join(', '),
     mode: card.modo,
     enviadasHoje: card.enviadasHoje,
-    lojas: card.lojas,
     usesTemplate: (card.origem.templateKey == null ? defaultTemplateKey : card.origem.templateKey) !== '',
     messageModeLabel: (() => {
       const key = card.origem.templateKey == null ? defaultTemplateKey : card.origem.templateKey

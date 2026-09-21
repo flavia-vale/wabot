@@ -103,7 +103,11 @@ test('o envio só usa relay quando o escape hatch pede (guarda estrutural)', asy
 test('a escolha de imagem só aparece na configuração do destino (post), nunca na origem (monitor)', () => {
   const page = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
   const monitorFnStart = page.indexOf('function MonitorGroupConfig(')
-  const monitorFnEnd = page.indexOf('export default function EspelhamentoPage(', monitorFnStart + 1)
+  // Limita a asserção ao componente da CONFIGURAÇÃO da origem. A página agora
+  // resume o modo de imagem nos cards de destino, antes do componente principal;
+  // fatiar até `EspelhamentoPage` confundiria esse resumo do destino com um
+  // controle oferecido por MonitorGroupConfig.
+  const monitorFnEnd = page.indexOf('/* ── Nível 1:', monitorFnStart + 1)
   assert.notEqual(monitorFnEnd, -1, 'limite de MonitorGroupConfig não encontrado')
   const monitorFn = page.slice(monitorFnStart, monitorFnEnd)
   assert.equal(/imageMode/.test(monitorFn), false, 'a config do grupo monitorado (origem) não pode oferecer escolha de imagem')
