@@ -447,6 +447,7 @@ export const api = {
     apiFetch('/api/groups/resolve-channel-jid', { method: 'POST', body: JSON.stringify({ jid }) }),
   followChannelNow: (id) => apiFetch(`/api/groups/${id}/follow-now`, { method: 'POST' }),
   refreshChannelAdmin: (id) => apiFetch(`/api/groups/${id}/refresh-admin`, { method: 'POST' }),
+  postChannelAdminStatus: () => apiFetch('/api/groups/post-channel-admin-status'),
   waChannels: () => apiFetch('/api/groups/wa/channels'),
 
   // PR-5 follow-up: anti-ban

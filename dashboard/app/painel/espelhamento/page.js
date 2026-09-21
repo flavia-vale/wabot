@@ -1359,11 +1359,27 @@ export default function EspelhamentoPage() {
     return () => { active = false }
   }, [groups])
 
+  // Confere a permissão real no WhatsApp ao abrir a tela. O status gravado no
+  // cadastro envelhece quando a cliente troca o número ou perde a administração.
+  useEffect(() => {
+    let active = true
+    const postChannels = groups.filter((g) => g.kind === 'channel' && g.role === 'post')
+    if (postChannels.length === 0) return undefined
+    api.postChannelAdminStatus().then((result) => {
+      if (!active) return
+      setAdminStatus(Object.fromEntries((result.channels || []).map((channel) => [
+        channel.id,
+        channel.status === 'owner' ? 'owner' : channel.status === 'not-owner' ? 'not-owner' : 'error',
+      ])))
+    }).catch(() => {})
+    return () => { active = false }
+  }, [groups])
+
   async function refreshAdmin(group) {
     setRefreshingAdminId(group.id)
     try {
       const data = await api.refreshChannelAdmin(group.id)
-      setAdminStatus((prev) => ({ ...prev, [group.id]: data.isViewerOwner ? 'owner' : 'not-owner' }))
+      setAdminStatus((prev) => ({ ...prev, [group.id]: (data.isViewerAdmin ?? data.isViewerOwner) ? 'owner' : 'not-owner' }))
     } catch {
       setAdminStatus((prev) => ({ ...prev, [group.id]: 'error' }))
     } finally {
@@ -2048,6 +2064,7 @@ export default function EspelhamentoPage() {
     : null
 
   const nothingYet = !loadingGroups && monitor.length === 0 && post.length === 0
+  const channelsWithoutAdmin = post.filter((group) => group.kind === 'channel' && adminStatus[group.id] === 'not-owner')
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1120, margin: '0 auto' }}>
@@ -2057,6 +2074,13 @@ export default function EspelhamentoPage() {
         <div className="pnl-note-box is-error" role="alert">
           <strong style={{ fontWeight: 600 }}>Algo não deu certo</strong>
           <p style={{ marginTop: 4 }}>{actionError}</p>
+        </div>
+      )}
+
+      {channelsWithoutAdmin.length > 0 && (
+        <div className="pnl-note-box is-error" role="alert">
+          <strong style={{ fontWeight: 600 }}>{channelsWithoutAdmin.length === 1 ? 'Este canal não pode receber publicações.' : 'Estes canais não podem receber publicações.'}</strong>
+          <p style={{ marginTop: 4 }}>{channelsWithoutAdmin.map((group) => group.name).join(' · ')} — o número conectado não é administrador. Dê a ele permissão de administrador no WhatsApp e clique no canal para verificar novamente.</p>
         </div>
       )}
 

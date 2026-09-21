@@ -22,6 +22,8 @@ test('getChannelMetadata por jid retorna formato normalizado', async () => {
     name: 'Canal X',
     owner: '5511999999999@s.whatsapp.net',
     isViewerOwner: true,
+    isViewerAdmin: true,
+    viewerRole: null,
     picture: null,
   })
 })
@@ -46,6 +48,16 @@ test('getChannelMetadata normaliza owner com :device suffix do user atual', asyn
   })
   const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
   assert.equal(result.isViewerOwner, true)
+})
+
+test('getChannelMetadata reconhece outro administrador pelo viewer_metadata', async () => {
+  const sock = makeSock({
+    newsletterMetadata: async () => ({ id: 'a@newsletter', owner: '5511888888888@s.whatsapp.net', viewer_metadata: { role: 'ADMIN' } }),
+  })
+  const result = await getChannelMetadata({ sock, jid: 'a@newsletter' })
+  assert.equal(result.isViewerOwner, false)
+  assert.equal(result.isViewerAdmin, true)
+  assert.equal(result.viewerRole, 'ADMIN')
 })
 
 test('getChannelMetadata extrai nome quando name é objeto { text }', async () => {

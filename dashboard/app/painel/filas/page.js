@@ -57,6 +57,7 @@ export default function FilasPage() {
   const [bulkToggling, setBulkToggling] = useState(null)
   const [loading, setLoading] = useState(true)
   const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
+  const [channelAdminStatus, setChannelAdminStatus] = useState({})
 
   async function load() {
     setLoading(true)
@@ -69,8 +70,16 @@ export default function FilasPage() {
     catch (error) { setMessage(error.message) }
     finally { setLoading(false) }
   }
-  function loadGroups() {
-    api.groups().then((all) => setGroups(all.filter((group) => group.role === 'post'))).catch((error) => setMessage(error.message))
+  async function loadGroups() {
+    try {
+      const all = await api.groups()
+      const posts = all.filter((group) => group.role === 'post')
+      setGroups(posts)
+      if (posts.some((group) => group.kind === 'channel')) {
+        const result = await api.postChannelAdminStatus()
+        setChannelAdminStatus(Object.fromEntries((result.channels || []).map((channel) => [channel.id, channel])))
+      }
+    } catch (error) { setMessage(error.message) }
   }
   // Initial remote data synchronization.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -81,6 +90,8 @@ export default function FilasPage() {
   async function save(event) {
     event.preventDefault(); setMessage('')
     if (!form.targetJids.length && !form.instagramDestinationIds.length) { setMessage('Selecione pelo menos um grupo ou conta do Instagram.'); return }
+    const invalidChannel = groups.find((group) => form.targetJids.includes(group.waJid) && group.kind === 'channel' && channelAdminStatus[group.id]?.status !== 'owner')
+    if (invalidChannel) { setMessage(`O canal “${invalidChannel.name}” não pode receber publicações: o número conectado precisa ser administrador dele.`); return }
     try { if (editing) await api.offerQueueUpdate(editing, form); else await api.offerQueueCreate(form); setShowForm(false); await load() }
     catch (error) { setMessage(error.message) }
   }
@@ -157,6 +168,7 @@ export default function FilasPage() {
   // Grupos de destino que nenhuma fila alcança. Cálculo puro sobre o que a
   // página já carregou — sem chamada nova à API. Ver lib/painel/queueCoverage.
   const destinationsWithoutQueue = findDestinationsWithoutQueue(groups, queues)
+  const invalidChannels = groups.filter((group) => group.kind === 'channel' && channelAdminStatus[group.id] && channelAdminStatus[group.id].status !== 'owner')
   const activeQueueCount = queues.filter((queue) => queue.enabled).length
   const allQueuesEnabled = queues.length > 0 && activeQueueCount === queues.length
   const bulkQueueLabel = allQueuesEnabled ? 'Desativar todas' : 'Ativar todas'
@@ -211,6 +223,10 @@ export default function FilasPage() {
     </section>}
     {message && <div className="pnl-note-box is-error" role="alert">{message}</div>}
     {notice && <div className="pnl-note-box" role="status">{notice}</div>}
+    {invalidChannels.length > 0 && <div className="pnl-note-box is-error" role="alert">
+      <strong>{invalidChannels.length === 1 ? 'Um canal está sem permissão para publicar.' : `${invalidChannels.length} canais estão sem permissão para publicar.`}</strong>{' '}
+      {invalidChannels.map((group) => group.name).join(' · ')}. No WhatsApp, torne o número conectado administrador {invalidChannels.length === 1 ? 'desse canal' : 'desses canais'} e volte a esta página.
+    </div>}
     {destinationsWithoutQueue.length > 0 && <div className="pnl-note-box is-warn" role="status">
       <strong>{destinationsWithoutQueue.length === 1 ? 'Um grupo não está em nenhuma fila.' : `${destinationsWithoutQueue.length} grupos não estão em nenhuma fila.`}</strong>{' '}
       {destinationsWithoutQueue.map((group) => group.name).join(' · ')} — as ofertas que você adiciona às filas não chegam {destinationsWithoutQueue.length === 1 ? 'nele' : 'neles'}. Para incluir, edite uma fila e marque o grupo na lista de destinos.
@@ -224,7 +240,11 @@ export default function FilasPage() {
         <span className="pnl-label">Grupos de destino da fila</span>
         <p className="pnl-hint" style={{ marginTop: 4 }}>As ofertas inseridas nesta fila serão enviadas para estes grupos.</p>
         <div className="pnl-grid" style={{ marginTop: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
-          {groups.map((group) => <label className="pnl-check" key={group.id}><input type="checkbox" checked={form.targetJids.includes(group.waJid)} onChange={() => toggleFormJid(group.waJid)} />{group.name}</label>)}
+          {groups.map((group) => {
+            const invalid = group.kind === 'channel' && channelAdminStatus[group.id]?.status !== 'owner'
+            const selected = form.targetJids.includes(group.waJid)
+            return <label className="pnl-check" key={group.id} style={invalid ? { opacity: 0.7 } : undefined} title={invalid ? 'O número conectado precisa ser administrador deste canal.' : undefined}><input type="checkbox" checked={selected} onChange={() => toggleFormJid(group.waJid)} disabled={invalid && !selected} />{group.name}{invalid ? (channelAdminStatus[group.id] ? ' — sem permissão' : ' — verificando permissão') : ''}</label>
+          })}
         </div>
         {!groups.length && <p className="pnl-note-box is-error" style={{ marginTop: 8 }}>Nenhum grupo de postagem configurado. <Link href="/painel/grupos">Adicionar grupos</Link></p>}
       </div>
