@@ -4934,6 +4934,28 @@ print. Teste falha se a ampliação vazar para fora do card.
 
 **Não regredir:**
 
+- **Magalu precisa chegar como `linkKind='product'`.** Os links reais
+  `/p/<sku>/` e `/divulgador/oferta/<token>/` antes ficavam `undefined` porque
+  eram a única loja sem detector em `converters/linkKind.js`. No modo
+  `original`, isso desligava `preferStorePhoto`: o pipeline nem tentava a foto
+  oficial e republicava diretamente a imagem pequena da origem. Home,
+  categoria e campanha não podem casar com o detector, para não trazer produto
+  aleatório.
+- **Link preview tem duas imagens; baixar a HQ antes do inline.** Em produção,
+  as ofertas Magalu chegaram como `card_origem` com apenas 545–1999 bytes. O
+  `extendedTextMessage` pode carregar `thumbnailDirectPath` + `mediaKey` para a
+  thumbnail remota e, ao mesmo tempo, `jpegThumbnail` como placeholder inline.
+  `downloadOriginalImage` precisa tentar a remota primeiro; só usa o inline se
+  o ponteiro não existir ou o download falhar. Não usar bytes como substituto
+  dessa decisão: aqui o proto já diz exatamente qual fonte é qual.
+- **A ampliação roda ANTES da tela fixa.** A tela transforma qualquer entrada
+  em 1080x1080; tentar decidir a ampliação depois dela enxerga o canvas grande,
+  não os 220px da foto, e mantém o produto como selo no centro. Esse foi o RCA
+  específico dos links `magazinevoce/...`: o guard anterior verificava apenas
+  "antes da marca/upload" e deixou passar a ordem errada. Agora
+  `prepararFotoDoCard` amplia a fonte antes de chamar
+  `composePreviewCardImage`; o compositor continua responsável só pela tela. O
+  teste funcional exige a sequência `220 -> 800 -> canvas 1080`.
 - **A ampliação roda ANTES da marca d'água.** `renderDestinationWatermark`
   DESISTE de marcar foto pequena demais (`watermarkApplied:false` em silêncio),
   então ampliar antes faz a marca ser desenhada na resolução final e recupera

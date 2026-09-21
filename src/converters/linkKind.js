@@ -19,10 +19,17 @@
 // sempre, e `resolveLinkKind` prioriza esse valor explícito.
 const AMAZON_ASIN_RE = /(?:\/dp\/|\/gp\/product\/|\/product-reviews\/|\/exec\/obidos\/ASIN\/)([A-Z0-9]{10})/i
 const MLB_ID_RE = /\bMLB[-_]?([0-9]{6,})\b/i
+// URLs reais vistas em produção. `magazinevoce`/domínio próprio é desembrulhado
+// para uma destas duas formas antes da conversão:
+//   /<slug>/p/<sku>/
+//   /<slug>/divulgador/oferta/<token>/
+// Ambas identificam UM produto; home, busca, categoria e cupom não casam.
+const MAGALU_PRODUCT_RE = /\/(?:p|divulgador\/oferta)\/([a-z0-9-]+)(?:[/?#]|$)/i
 
 const PRODUCT_ID_DETECTORS = {
   amazon: (url) => AMAZON_ASIN_RE.test(url),
   mercadolivre: (url) => MLB_ID_RE.test(url),
+  magazineluiza: (url) => MAGALU_PRODUCT_RE.test(url),
   // Defesa em profundidade: o conversor da SHEIN já devolve `linkKind`
   // explícito (que tem precedência via resolveLinkKind), então este detector
   // só entra em ação se a chamada vier fora do fluxo normal de conversão.
@@ -59,6 +66,7 @@ export function urlHasProductId(platform, url) {
 const PRODUCT_ID_EXTRACTORS = {
   amazon: (url) => url.match(AMAZON_ASIN_RE)?.[1]?.toUpperCase() || null,
   mercadolivre: (url) => url.match(MLB_ID_RE)?.[1] || null,
+  magazineluiza: (url) => url.match(MAGALU_PRODUCT_RE)?.[1] || null,
   shein: (url) => url.match(/-p-(\d+)|[?&]goods_id=(\d+)/i)?.slice(1).find(Boolean) || null,
   aliexpress: (url) =>
     url.match(/\/item\/(\d{6,})|[?&](?:productIds?|itemId)=(\d{6,})/i)?.slice(1).find(Boolean) || null,
