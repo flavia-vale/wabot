@@ -35,12 +35,16 @@ export async function getChannelMetadata({ sock, jid, inviteCode }) {
   const viewerId = normalizeJid(sock?.user?.id)
   const ownerNorm = normalizeJid(owner)
   const isViewerOwner = Boolean(owner && viewerId && ownerNorm === viewerId)
+  const viewerRole = String(meta?.viewer_metadata?.role ?? meta?.viewerMetadata?.role ?? '').toUpperCase() || null
+  const isViewerAdmin = isViewerOwner || viewerRole === 'OWNER' || viewerRole === 'ADMIN'
 
   return {
     jid: meta.id,
     name: pickChannelName(meta),
     owner,
     isViewerOwner,
+    isViewerAdmin,
+    viewerRole,
     picture: meta.picture?.url ?? null,
   }
 }

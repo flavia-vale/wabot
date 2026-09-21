@@ -61,8 +61,38 @@ export async function groupsRoutes(app, opts = {}) {
   const followChannelImmediate = opts.followChannelImmediate ?? _followChannelImmediate
   const listFollowedChannelsFn = opts.listFollowedChannels ?? _listFollowedChannels
   const isRunning = opts.isRunning ?? _isRunning
+
+  async function verifyPostChannelAdmin(userId, jid) {
+    if (!isRunning(userId)) {
+      return { ok: false, status: 'offline', message: 'Conecte o WhatsApp para confirmar que este número administra o canal.' }
+    }
+    try {
+      const metadata = await channelMetadata(userId, { jid })
+      if (!(metadata?.isViewerAdmin ?? metadata?.isViewerOwner)) {
+        return { ok: false, status: 'not-owner', message: 'O número conectado não é administrador deste canal. Torne-o administrador no WhatsApp antes de usar o canal como destino.' }
+      }
+      return { ok: true, status: 'owner', metadata }
+    } catch (error) {
+      return { ok: false, status: 'error', message: 'Não foi possível confirmar a permissão deste canal agora. Tente novamente antes de cadastrá-lo como destino.', detail: error?.message }
+    }
+  }
+
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     return db.group.findMany({ where: { userId: req.user.sub } })
+  })
+
+  // Consulta live para detectar canais antigos cuja administração mudou após
+  // o cadastro (inclusive quando a cliente troca o número conectado).
+  app.get('/post-channel-admin-status', { onRequest: [app.authenticate] }, async (req) => {
+    const channels = await db.group.findMany({
+      where: { userId: req.user.sub, role: 'post', kind: JID_KIND.CHANNEL },
+      select: { id: true, waJid: true, name: true },
+    })
+    const results = await Promise.all(channels.map(async (channel) => {
+      const check = await verifyPostChannelAdmin(req.user.sub, channel.waJid)
+      return { ...channel, status: check.status, isViewerAdmin: check.ok, message: check.ok ? null : check.message }
+    }))
+    return { connected: isRunning(req.user.sub), channels: results }
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -94,6 +124,16 @@ export async function groupsRoutes(app, opts = {}) {
     }
 
     if (kind === JID_KIND.CHANNEL && !(await ensureChannelFeatureAllowed(req.user.sub, reply))) return
+    if (kind === JID_KIND.CHANNEL && role === 'post') {
+      const adminCheck = await verifyPostChannelAdmin(req.user.sub, waJid)
+      if (!adminCheck.ok) {
+        return reply.code(adminCheck.status === 'offline' ? 503 : 409).send({
+          error: adminCheck.message,
+          code: 'CHANNEL_ADMIN_REQUIRED',
+          channelAdminStatus: adminCheck.status,
+        })
+      }
+    }
     if (!(await ensureCountQuota(reply, {
       userId: req.user.sub,
       quota: 'groupsPerUser',
@@ -536,7 +576,7 @@ export async function groupsRoutes(app, opts = {}) {
     try {
       const data = await channelMetadata(req.user.sub, { jid: group.waJid })
       if (!data) return reply.code(404).send({ error: 'Canal não encontrado no WhatsApp' })
-      return { isViewerOwner: data.isViewerOwner, owner: data.owner, name: data.name }
+      return { isViewerAdmin: data.isViewerAdmin ?? data.isViewerOwner, isViewerOwner: data.isViewerOwner, owner: data.owner, name: data.name }
     } catch (err) {
       req.log.warn({ err: err.message, groupId: group.id }, 'refresh-admin falhou')
       return reply.code(502).send({ error: err.message || 'Falha ao verificar canal' })

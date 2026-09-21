@@ -30,7 +30,7 @@ function AddChannelModalContent({ onClose, onCreated }) {
   // array = resultado da chamada (possivelmente vazio)
   const [followedList, setFollowedList] = useState(null)
   const [loadingFollowed, setLoadingFollowed] = useState(false)
-  const [confirmNonAdmin, setConfirmNonAdmin] = useState(false)
+  const canPublishPreview = preview?.isViewerAdmin ?? preview?.isViewerOwner
 
   async function loadFollowed() {
     setLoadingFollowed(true)
@@ -66,8 +66,8 @@ function AddChannelModalContent({ onClose, onCreated }) {
       setError('Dê um nome para este canal antes de cadastrar.')
       return
     }
-    if (role === 'post' && preview.isViewerOwner === false && !confirmNonAdmin) {
-      setError('Confirme que você é admin desse canal antes de cadastrar como destino.')
+    if (role === 'post' && canPublishPreview !== true) {
+      setError('Este número não administra o canal. Torne-o administrador no WhatsApp antes de cadastrá-lo como destino.')
       return
     }
     setBusy(true); setError('')
@@ -169,7 +169,7 @@ function AddChannelModalContent({ onClose, onCreated }) {
                     className={`w-full text-left px-3 py-2 rounded border ${preview?.jid === c.jid ? 'border-sky-500 bg-sky-50' : 'border-slate-200 hover:bg-slate-50'}`}
                   >
                     <div className="font-medium text-sm">{c.name || 'Canal sem nome'}</div>
-                    {c.isViewerOwner && <span className="text-xs text-emerald-700">Você é dono</span>}
+                    {(c.isViewerAdmin ?? c.isViewerOwner) && <span className="text-xs text-emerald-700">Você administra</span>}
                   </button>
                 </li>
               ))}
@@ -192,9 +192,9 @@ function AddChannelModalContent({ onClose, onCreated }) {
             )}
             <div className="text-xs text-slate-500 font-mono mt-2">{preview.jid}</div>
             <div className="mt-2 text-sm">
-              {preview.isViewerOwner
-                ? <span className="text-emerald-700">✓ Você é dono deste canal</span>
-                : <span className="text-amber-700">⚠ Você não consta como dono. Só prossiga se for admin.</span>}
+              {canPublishPreview
+                ? <span className="text-emerald-700">✓ Você administra este canal</span>
+                : <span className="text-rose-700">⚠ Este número não administra o canal.</span>}
             </div>
 
             <div className="mt-3">
@@ -205,11 +205,8 @@ function AddChannelModalContent({ onClose, onCreated }) {
               </select>
             </div>
 
-            {role === 'post' && preview.isViewerOwner === false && (
-              <label className="mt-3 flex gap-2 items-start text-sm text-amber-800">
-                <input type="checkbox" checked={confirmNonAdmin} onChange={(e) => setConfirmNonAdmin(e.target.checked)} />
-                <span>Confirmo que sou admin deste canal e quero prosseguir.</span>
-              </label>
+            {role === 'post' && canPublishPreview !== true && (
+              <Alert type="error" className="mt-3" message="Não é possível usar este canal como destino. No WhatsApp, adicione o número conectado como administrador do canal e depois tente novamente." />
             )}
           </div>
         )}
@@ -218,7 +215,7 @@ function AddChannelModalContent({ onClose, onCreated }) {
 
         <div className="flex gap-2 justify-end mt-4">
           <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm">Cancelar</button>
-          <button type="button" onClick={submit} disabled={busy || !preview}
+          <button type="button" onClick={submit} disabled={busy || !preview || (role === 'post' && canPublishPreview !== true)}
             className="px-3 py-1.5 bg-emerald-600 text-white rounded text-sm disabled:opacity-50">
             {busy ? 'Salvando…' : 'Cadastrar canal'}
           </button>
