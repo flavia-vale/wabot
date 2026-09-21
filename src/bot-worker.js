@@ -35,6 +35,7 @@ import { shouldUseCouponBrandCard, resolveCouponTextSignal } from './converters/
 import { isDirectVitrineShare } from './converters/mercadolivre.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { downloadHighQualityLinkPreview } from './core/linkPreviewThumbnail.js'
 import { appendRelayFooter } from './core/relayFooter.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
@@ -3795,8 +3796,24 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           }
         }
 
-        // 3) jpegThumbnail embutido em link preview (extendedTextMessage). Baixa qualidade
-        // mas sempre presente quando há preview, e não exige rede — bytes já vêm decifrados.
+        // 3) Link preview HQ hospedado pelo próprio WhatsApp. O proto traz um
+        // placeholder inline minúsculo E, quando o remetente gerou preview HQ,
+        // thumbnailDirectPath/mediaKey. Baixar a segunda evita publicar os
+        // 545–1999 bytes medidos nas ofertas Magalu como se fossem a foto.
+        const hqLinkPreview = await downloadHighQualityLinkPreview({
+          message: msg,
+          extendedTextMessage: ext,
+          downloadMediaMessage,
+          logger,
+          reuploadRequest: sock.updateMediaMessage,
+        })
+        if (hqLinkPreview) {
+          logger.info({ msgId: msg.key.id, size: hqLinkPreview.length, source: 'linkPreviewHq' }, 'Imagem original baixada')
+          return { buffer: hqLinkPreview, mimetype: 'image/jpeg' }
+        }
+
+        // 4) Último recurso: jpegThumbnail embutido. Baixa qualidade, mas não
+        // exige rede — os bytes já vêm decifrados.
         const thumb = ext?.jpegThumbnail
         if (thumb && thumb.length) {
           const buf = Buffer.isBuffer(thumb) ? thumb : Buffer.from(thumb)
