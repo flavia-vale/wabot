@@ -42,6 +42,12 @@ http://178.105.54.0:3006/precos
 
 **Próxima leva:** os 2 que faltam do Dia 4 e, na sequência, o Dia 5.
 
+⚠️ **Desatualizado — pule para "Dia 7 (2026-09-21)" abaixo.** Esta tabela é o
+retrato de 12/09; nada abaixo dela foi conferido contra o Search Console de
+verdade. Em 21/09 um export real do Search Console mostrou que Dia 4/5/6
+tinham ficado incompletos e que apareceram páginas novas (`/alternativas/*`)
+nunca antes rastreadas — a fila real, hoje, é só o Dia 7.
+
 As onze já pedidas foram conferidas ao vivo: **todas respondem 200 em produção
 com o conteúdo novo**, incluindo os links de entrada e a página de confiança.
 Pedido de indexação de página que ainda não subiu não vale — essa conferência é
@@ -144,96 +150,91 @@ https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
 ### Dia 6 — a cauda (menor prioridade, faça se sobrar cota)
 
 ```
-https://espelhagrupos.com.br/parcerias
-https://espelhagrupos.com.br/parceiro-influenciador
 https://espelhagrupos.com.br/estudos-de-caso
 https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp
-https://espelhagrupos.com.br/ferramentas/calculadora-tempo-grupos-whatsapp
 https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe
 https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons
 https://espelhagrupos.com.br/consistencia-postagens-em-grupos
 https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp
 ```
 
-(`/protecao-antiban-botinho` saiu daqui — a rota foi renomeada em 19/09 e o
-endereço novo está no Dia 7, item 8. Pedir indexação do endereço antigo pediria
-a versão que hoje só redireciona.)
+`/parcerias`, `/parceiro-influenciador` e `/ferramentas/calculadora-tempo-grupos-whatsapp`
+saíram daqui — o export do Search Console de 21/09 (abaixo) confirma que
+continuam sem indexar, então foram promovidas para o Dia 7.
+`/protecao-antiban-botinho` também saiu — a rota foi renomeada em 19/09 e não
+apareceu como pendente no export; pedir o endereço antigo pediria a versão que
+hoje só redireciona.
 
-### Dia 7 (2026-09-21) — o resto do Dia 4 + páginas de resposta + rotas renomeadas
+### ⚠️ Dias 7-10 antigos foram SUBSTITUÍDOS (21/09) — eram estimativa, isto é dado real
 
-Três coisas novas desde 12/09, nenhuma pedida ainda:
+Você mandou o export do Search Console (relatório de Indexação de Páginas,
+duas abas: "Rastreada, mas não indexada" e "Detectada, mas não indexada") e o
+CSV do gráfico. As listas de "Dia 7" a "Dia 10" que estavam aqui antes eram
+inferidas do histórico do projeto — nunca confirmadas contra o Search Console
+de verdade. Jogue-as fora; o que segue é o que o relatório de hoje mostra.
 
-```
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp                    ⏳ pendente desde 12/09 — agora com imagem própria
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp             ⏳ pendente desde 12/09 — agora com imagem própria
-https://espelhagrupos.com.br/blog/como-espelhar-mensagens-entre-grupos-whatsapp            página de resposta (19/09), nunca pedida
-https://espelhagrupos.com.br/blog/melhores-automacoes-para-afiliado-shopee-2026            página de resposta (19/09), nunca pedida
-https://espelhagrupos.com.br/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp      página de resposta (19/09), nunca pedida
-https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                                   endereço novo (era /bot-comum-vs-botinho)
-https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais                           endereço novo (era /como-funciona-botinho-canais)
-https://espelhagrupos.com.br/protecao-antiban-espelha-grupos                               endereço novo (era /protecao-antiban-botinho)
-https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual                             endereço novo (era /botinho-vs-planilha-manual)
-https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao             endereço novo (era /botinho-vs-ferramentas-genericas-automacao)
-```
+**Não dá pra saber, olhando só o Search Console, o que você já PEDIU antes** —
+o relatório mostra só o que está indexado ou não, não um histórico de pedidos.
+Mas isso não importa: se a página ainda aparece como não indexada, pedir de
+novo é a ação certa, independente de já ter pedido antes ou não.
 
-Os dois primeiros são os que mais importam: já tinham 450+ impressões antes de
-qualquer coisa, estavam pendentes desde 12/09, e agora (PR de imagem nos posts
-do blog, 21/09) ganharam uma imagem própria de destaque — o Google só vê essa
-imagem se relê a página.
+### Dia 7 (2026-09-21) — o que o Search Console confirma HOJE como não indexado
 
-As cinco rotas renomeadas continuam respondendo pelo endereço ANTIGO com
-redirect 301 — o Google costuma seguir redirect sozinho, mas pedir o endereço
-novo direto acelera a troca no índice.
-
-### Dia 8 — retomar o Dia 5 (nunca foi marcado como feito)
+Exatamente 10 páginas reais (cabe num dia só de cota). Tirado direto das duas
+abas "Rastreada, mas não indexada" e "Detectada, mas não indexada" do seu
+export — retirando o que não é página (fontes `.woff2`, `favicon.ico`,
+`llms.txt`, `pricing.md` — esses três últimos são de propósito, não devem ser
+indexados como página de busca) e o que é linha CONGELADA de propósito (ver
+aviso abaixo).
 
 ```
-https://espelhagrupos.com.br/programa-de-afiliados
-https://espelhagrupos.com.br/alternativas/proafiliados
-https://espelhagrupos.com.br/alternativas/promium
-https://espelhagrupos.com.br/quem-somos
-https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
-```
-
-### Dia 9 — a cauda do Dia 6 (só se sobrar cota)
-
-```
-https://espelhagrupos.com.br/parcerias
+https://espelhagrupos.com.br/alternativas/afiliado-inteligente
+https://espelhagrupos.com.br/alternativas/afilimais
+https://espelhagrupos.com.br/alternativas/afilira
+https://espelhagrupos.com.br/alternativas/busqy
+https://espelhagrupos.com.br/alternativas/divulga-ninja
+https://espelhagrupos.com.br/alternativas/ia-divulgadora
+https://espelhagrupos.com.br/alternativas/shark
 https://espelhagrupos.com.br/parceiro-influenciador
-https://espelhagrupos.com.br/estudos-de-caso
-https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp
+https://espelhagrupos.com.br/parcerias
 https://espelhagrupos.com.br/ferramentas/calculadora-tempo-grupos-whatsapp
-https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe
-https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons
-https://espelhagrupos.com.br/consistencia-postagens-em-grupos
-https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp
 ```
 
-### Dia 10 — opcional: os outros 14 posts do blog que ganharam imagem em 21/09
+As 7 páginas `/alternativas/*` são novidade: existem no site (conferido no
+código), têm pelo menos 3 links internos cada uma — cumprem a regra de "página
+nova não nasce órfã" — e o Google já as DETECTOU (achou por link/sitemap), só
+falta indexar. É a categoria "Detectada, mas não indexada" inteira, sem sobrar
+nenhuma.
 
-Baixa prioridade de propósito: estes 14 já estavam indexados antes desta PR
-(publicados entre 05/2026 e 08/2026) — o Google tende a pegar a imagem nova
-sozinho no próximo rastreamento natural. Só peça se sobrar cota depois dos
-dias 7-9.
+⚠️ **Nove páginas apareceram como "Rastreada, mas não indexada" e NÃO estão na
+lista acima — de propósito.** São as LPs de cidade
+(`espelhar-grupos-whatsapp-brasilia/belem/goiania/campinas/belo-horizonte`) e
+de nicho (`bot-ofertas-pet-shop/supermercado/moda/beleza-whatsapp`) — exatamente
+as linhas que o AGENTS.md marca como **CONGELADAS** desde 30/07 (seção "SEO
+orgânico — linhas CONGELADAS"): tiveram quase zero impressão quando testadas e
+a decisão foi parar de investir nelas. O Google rastreou essas páginas e
+decidiu, sozinho, não indexar — isso é o esperado, não um problema, e pedir
+indexação nelas gastaria cota sem mudar nada (o Google já viu e escolheu não
+indexar; pedir de novo não muda a decisão dele). **Não peça indexação para
+essas 9.**
 
-```
-https://espelhagrupos.com.br/blog/grupo-ou-canal-whatsapp-achadinhos
-https://espelhagrupos.com.br/blog/como-evitar-banimento-whatsapp-afiliados
-https://espelhagrupos.com.br/blog/shadowban-whatsapp-canais
-https://espelhagrupos.com.br/blog/migrar-grupo-achadinhos-para-canal
-https://espelhagrupos.com.br/blog/chip-dedicado-bot-whatsapp
-https://espelhagrupos.com.br/blog/bot-whatsapp-antiban-existe
-https://espelhagrupos.com.br/blog/comecar-afiliado-whatsapp-sem-grupo-grande
-https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp
-https://espelhagrupos.com.br/blog/quanto-custa-bot-para-whatsapp-afiliados
-https://espelhagrupos.com.br/blog/melhores-horarios-para-postar-ofertas-no-whatsapp
-https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp
-https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero
-```
+⚠️ **Duas outras páginas apareceram no relatório de VÍDEO (não no de
+indexação), com data de rastreamento recente (16-21/09)**: isso é sinal
+BOM — confirma que o Google está visitando o site ativamente agora — mas é um
+relatório diferente ("por que o vídeo incorporado não virou resultado de
+vídeo", não "a página está indexada"). Não precisa de ação: não afeta se a
+página em si é indexada.
 
-(`amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp` fica de fora desta
-lista — é o único post que NÃO ganhou imagem nesta PR, nenhuma do pacote
-representa as 3 lojas lado a lado.)
+### Como conferir o Dia 7, daqui a 7 dias
+
+Inspeção de URL nas 10 do Dia 7. O veredito precisa sair de "Detectada" ou
+"Rastreada, mas não indexada" para **"URL está no Google"**. Se
+`/alternativas/*` continuar "Detectada" com "Último rastreamento: N/D" depois
+de 7 dias, o problema deixa de ser indexação e passa a ser: link interno
+insuficiente (a regra conta QUANTIDADE de link, não FORÇA — ver aviso em
+"Página nova NUNCA nasce órfã" no AGENTS.md) ou conteúdo repetitivo demais
+entre as `/alternativas/*` (mesmo risco que a rodada de 11/09 já flagou para as
+páginas de loja).
 
 ### Como conferir que funcionou
 
