@@ -4941,6 +4941,19 @@ print. Teste falha se a ampliação vazar para fora do card.
   oficial e republicava diretamente a imagem pequena da origem. Home,
   categoria e campanha não podem casar com o detector, para não trazer produto
   aleatório.
+- **Link preview tem duas imagens; baixar a HQ antes do inline.** Em produção,
+  as ofertas Magalu chegaram como `card_origem` com apenas 545–1999 bytes. O
+  `extendedTextMessage` pode carregar `thumbnailDirectPath` + `mediaKey` para a
+  thumbnail remota e, ao mesmo tempo, `jpegThumbnail` como placeholder inline.
+  `downloadOriginalImage` precisa tentar a remota primeiro; só usa o inline se
+  o ponteiro não existir ou o download falhar. Não usar bytes como substituto
+  dessa decisão: aqui o proto já diz exatamente qual fonte é qual.
+- **Recuperação em massa de origens sem destino:** se uma regressão de painel
+  deixar várias origens com `targetsMode='explicit'` e zero `GroupTarget`, use
+  `scripts/restore-empty-monitor-targets.mjs`. Ele é read-only por padrão e só
+  volta essas origens ao fallback canônico `all`; não cria vínculos por palpite.
+  Gravar em toda a base exige `--aplicar --todos`. A configuração dos workers
+  expira em até 60s, então não reiniciar supervisor para aplicar isso.
 - **A ampliação roda ANTES da tela fixa.** A tela transforma qualquer entrada
   em 1080x1080; tentar decidir a ampliação depois dela enxerga o canvas grande,
   não os 220px da foto, e mantém o produto como selo no centro. Esse foi o RCA
