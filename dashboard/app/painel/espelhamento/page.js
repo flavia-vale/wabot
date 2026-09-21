@@ -831,20 +831,14 @@ function GroupCard({ card, index, direction, loading, selected, dirty, saving, s
               {card.enviadasHoje !== null && (
                 <span>{card.enviadasHoje} {card.enviadasHoje === 1 ? 'oferta repostada' : 'ofertas repostadas'} hoje</span>
               )}
-              <span className="esp-lojas">
-                {(card.lojas ?? []).map((id) => {
-                  const loja = AFFILIATE_PLATFORMS.find((x) => x.id === id)
-                  if (!loja) return null
-                  return (
-                    <span
-                      key={id}
-                      className="esp-loja"
-                      title={loja.label}
-                      style={{ background: loja.color, color: loja.badgeInk ? 'var(--ink)' : '#fff' }}
-                    >{loja.initials}</span>
-                  )
-                })}
+              <span className={`pnl-esp-choice${card.usesTemplate ? ' is-template' : ''}`}>
+                {card.messageModeLabel}
               </span>
+            </span>
+          )}
+          {direction === 'dest' && (
+            <span className="pnl-esp-card-meta">
+              <span className="pnl-esp-choice">Imagem: {card.imageModeLabel}</span>
             </span>
           )}
         </span>
@@ -1242,7 +1236,6 @@ export default function EspelhamentoPage() {
   const [summary, setSummary] = useState(null)
   const [switchingMirror, setSwitchingMirror] = useState(false)
 
-  const [tab, setTab] = useState('grupos')
   const [mobileCol, setMobileCol] = useState('origem')
   // `undefined` = a cliente nunca escolheu (a regra destaca a primeira);
   // `null` = ela desmarcou de propósito. Ver `origemDestacada` abaixo.
@@ -1857,10 +1850,16 @@ export default function EspelhamentoPage() {
     counterpartNames: card.destinos.map((d) => d.name).join(', '),
     mode: card.modo,
     enviadasHoje: card.enviadasHoje,
-    lojas: card.lojas,
+    usesTemplate: (card.origem.templateKey == null ? defaultTemplateKey : card.origem.templateKey) !== '',
+    messageModeLabel: (() => {
+      const key = card.origem.templateKey == null ? defaultTemplateKey : card.origem.templateKey
+      if (!key) return 'Mensagem original'
+      const name = templates.find((template) => template.key === key)?.name
+      return name ? `Template: ${name}` : 'Com template'
+    })(),
   }))
 
-  /* A origem destacada na aba Conexões é DERIVADA no render, nunca gravada por
+  /* A origem destacada no mapa de conexões é DERIVADA no render, nunca gravada por
    * efeito: `setState` dentro de `useEffect` dispara renderização em cascata
    * (regra `react-hooks/set-state-in-effect`) e ainda deixaria um quadro com
    * nada destacado. A aba nascia sem destaque nenhum, e o desenho com todas as
@@ -1876,6 +1875,12 @@ export default function EspelhamentoPage() {
       group: d,
       counterpartCount: os.length,
       counterpartNames: os.map((o) => o.name).join(', '),
+      imageModeLabel: ({
+        original: 'original',
+        original_watermark: 'original com marca d’água',
+        preview: 'card da oferta',
+        preview_watermark: 'card com marca d’água',
+      })[d.imageMode] || 'original',
     }
   })
 
@@ -2046,12 +2051,7 @@ export default function EspelhamentoPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1120, margin: '0 auto' }}>
-      <PainelContentActions>
-        <div className="pnl-toolbar">
-          <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
-          <button type="button" className="pnl-btn is-primary" onClick={() => setAddModal({ role: 'monitor' })}>+ Adicionar</button>
-        </div>
-      </PainelContentActions>
+      <PainelContentActions><HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink></PainelContentActions>
 
       {actionError && (
         <div className="pnl-note-box is-error" role="alert">
@@ -2075,7 +2075,7 @@ export default function EspelhamentoPage() {
       )}
 
       {/* Controle mestre — reflete a conexão WhatsApp (não há flag própria) */}
-      <section className="pnl-master">
+      <section className="pnl-master pnl-master-compact">
         <div className="pnl-master-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M3 7a5 5 0 0 1 5-5h4" /><path d="M7 12l-4-5 5-2" />
@@ -2143,18 +2143,10 @@ export default function EspelhamentoPage() {
             </div>
           </details>
 
-          {/* Visualizações Grupos / Conexões */}
-          <div className="pnl-seg" role="tablist" aria-label="Ver como listas ou como mapa de conexões" style={{ justifySelf: 'start' }}>
-            <button type="button" role="tab" aria-selected={tab === 'grupos'} className={tab === 'grupos' ? 'is-active' : ''} onClick={() => setTab('grupos')}>
-              Grupos
-            </button>
-            <button type="button" role="tab" aria-selected={tab === 'conexoes'} className={tab === 'conexoes' ? 'is-active' : ''} onClick={() => setTab('conexoes')}>
-              Conexões
-            </button>
+          <div className="pnl-esp-add-primary">
+            <button type="button" className="pnl-btn is-primary" onClick={() => setAddModal({ role: 'monitor' })}>+ ADICIONAR NOVO ESPELHAMENTO</button>
           </div>
 
-          {tab === 'grupos' ? (
-            <>
               {/* No celular as duas colunas viram uma lista só */}
               <div className="pnl-seg pnl-esp-mobile-switch" role="tablist" aria-label="Ver origens ou destinos">
                 <button type="button" role="tab" aria-selected={mobileCol === 'origem'} className={mobileCol === 'origem' ? 'is-active' : ''} onClick={() => setMobileCol('origem')}>
@@ -2205,9 +2197,8 @@ export default function EspelhamentoPage() {
                   />
                 </div>
               )}
-            </>
-          ) : (
-            <section className="pnl-card">
+          <section className="pnl-card pnl-esp-connections">
+              <div className="pnl-card-title" style={{ marginBottom: 12 }}>Conexões do espelhamento</div>
               <div className="pnl-note-box is-info" style={{ marginBottom: 18 }}>
                 {monitor.length === 0 || post.length === 0
                   ? 'Cadastre pelo menos um grupo de origem e um de destino para o espelhamento entrar em ação.'
@@ -2232,8 +2223,7 @@ export default function EspelhamentoPage() {
                   </button>
                 </div>
               )}
-            </section>
-          )}
+          </section>
         </>
       )}
 

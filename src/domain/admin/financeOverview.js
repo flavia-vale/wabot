@@ -38,6 +38,6 @@ export function computeMercadoPagoFees({ baseAmount = 0, baseCount = 0, feePerce
   return round2((baseAmount || 0) * (feePercent / 100) + ((baseCount || 0) * (feeFixedCents || 0)) / 100)
 }
 
-export function computeNetRevenue({ grossRevenue = 0, affiliateCommissions = 0, mpFees = 0 } = {}) {
-  return round2((grossRevenue || 0) - (affiliateCommissions || 0) - (mpFees || 0))
+export function computeNetRevenue({ grossRevenue = 0, affiliateCommissions = 0, mpFees = 0, refunds = 0 } = {}) {
+  return round2((grossRevenue || 0) - (affiliateCommissions || 0) - (mpFees || 0) - (refunds || 0))
 }

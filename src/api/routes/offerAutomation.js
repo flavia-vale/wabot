@@ -57,8 +57,9 @@ async function resolveInstagramDestinations(db, userId, ids, subject) {
 
 function presentAutomation(row) {
   const instagramDestinationIds = row.instagramDestinations?.map(item => item.destinationId) ?? []
-  const { instagramDestinations, ...automation } = row
-  return { ...automation, instagramDestinationIds }
+  const approvedReviewCount = row._count?.reviewItems ?? 0
+  const { instagramDestinations, _count, ...automation } = row
+  return { ...automation, instagramDestinationIds, approvedReviewCount }
 }
 
 export async function offerAutomationRoutes(app, opts = {}) {
@@ -78,7 +79,10 @@ export async function offerAutomationRoutes(app, opts = {}) {
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
     const rows = await db.offerAutomation.findMany({
       where: { userId: req.user.sub },
-      include: { instagramDestinations: { select: { destinationId: true } } },
+      include: {
+        instagramDestinations: { select: { destinationId: true } },
+        _count: { select: { reviewItems: { where: { status: REVIEW_STATUS.APPROVED } } } },
+      },
       orderBy: { createdAt: 'desc' },
     })
     return rows.map(presentAutomation)

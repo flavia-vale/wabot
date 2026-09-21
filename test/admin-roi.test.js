@@ -120,8 +120,8 @@ test('o ROI lê as MESMAS duas fontes de receita da visão geral', () => {
   assert.ok(rota.includes('db.subscriptionCharge.findMany'), 'o ROI precisa da assinatura')
   assert.ok(rota.includes("startsWith: 'sub_'"), 'sem o prefixo a assinatura entraria duas vezes')
   assert.ok(rota.includes('notTestUser'), 'a conta de teste também sai do ROI')
-  // E as três leituras são limitadas — nenhuma varredura sem teto.
-  assert.equal((rota.match(/take: ROI_ROW_LIMIT/g) ?? []).length, 3)
+  // E as quatro leituras (incluindo reembolsos) são limitadas — nenhuma varredura sem teto.
+  assert.equal((rota.match(/take: ROI_ROW_LIMIT/g) ?? []).length, 4)
 })
 
 // ---------------------------------------------------------------------------

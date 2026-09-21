@@ -46,6 +46,7 @@ model User {
   groupTargets          GroupTarget[]
   credentials           Credential[]
   payments              Payment[]
+  refunds               Refund[]
   botConfig             BotConfig?
   scheduled             ScheduledMessage[]
   messageLogs           MessageLog[]
@@ -302,11 +303,32 @@ model Payment {
   createdAt                    DateTime  @default(now())
 
   affiliateCommission AffiliateCommission?
+  refund               Refund?
 
   @@index([status, createdAt])
   @@index([provider, createdAt])
   @@index([gatewayEventId])
   @@index([affiliateProfileIdAtCheckout, createdAt])
+}
+
+// Reembolso feito fora do gateway (PIX). Mantemos o recebimento original e
+// lançamos a devolução separadamente: assim a taxa do Mercado Pago continua
+// sendo custo e o resultado real da operação fica negativo no valor da taxa.
+model Refund {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentId      String   @unique
+  payment        Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  amount         Float
+  gatewayFeeLoss Float    @default(0)
+  method         String   @default("pix")
+  reason         String?
+  refundedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@index([refundedAt])
+  @@index([userId, refundedAt])
 }
 
 model Subscription {

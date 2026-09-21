@@ -48,6 +48,7 @@ function Icon({ name, size = 20, stroke = 1.7 }) {
     case 'send': return <svg {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" /></svg>
     case 'plus': return <svg {...p}><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M12 8v8M8 12h8" /></svg>
     case 'spark': return <svg {...p}><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4" /><circle cx="12" cy="12" r="3.5" /></svg>
+    case 'tutorial': return <svg {...p}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" /><path d="M4 5.5v16M9 8h6M9 12h7" /></svg>
     default: return null
   }
 }
@@ -95,7 +96,7 @@ const ACTIONS = [
   { label: 'Criar oferta', href: '/painel/criar-oferta', icon: 'plus', tag: 'Plano Basic' },
   { label: 'Espelhamento', href: '/painel/espelhamento', icon: 'mirror', tag: 'Plano Basic' },
   { label: 'Ofertas automáticas', href: '/painel/ofertas-automaticas', icon: 'spark', pro: true, tag: 'Plano PRO' },
-  { label: 'Grupos e Canais', href: '/painel/grupos', icon: 'users', tag: 'Plano Basic' },
+  { label: 'Tutorial', href: '/painel/tutorial', icon: 'tutorial', tag: 'Plano Basic' },
 ]
 
 export default function PainelPage() {

@@ -352,7 +352,7 @@ test('GET /api/offer-automations: returns user automations', async () => {
     { id: 'a1', userId: 'user-1', keyword: 'festa', intervalMinutes: 120,
       offersPerSend: 2, minDiscountPct: 20, enabled: true, destGroupJid: '123@g.us',
       destGroupName: 'Grupo Festas', lastSentAt: null, sentItemIds: '[]',
-      createdAt: new Date(), updatedAt: new Date() },
+      createdAt: new Date(), updatedAt: new Date(), _count: { reviewItems: 3 } },
   ]
   const dbMock = {
     offerAutomation: {
@@ -365,6 +365,8 @@ test('GET /api/offer-automations: returns user automations', async () => {
   const body = JSON.parse(res.body)
   assert.equal(body.length, 1)
   assert.equal(body[0].keyword, 'festa')
+  assert.equal(body[0].approvedReviewCount, 3)
+  assert.equal(body[0]._count, undefined, 'detalhe interno do Prisma não deve vazar')
 })
 
 test('POST /api/offer-automations: creates automation', async () => {

@@ -365,7 +365,7 @@ function CumulativeProfitChart({ past, present, projection, paybackMonth }) {
   )
 }
 
-function RoiPanel({ data, loading, months, onMonths }) {
+function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling }) {
   const [scenario, setScenario] = useState('base')
 
   if (loading && !data) return <LoadingState message="Montando a conta do ROI…" />
@@ -394,6 +394,9 @@ function RoiPanel({ data, loading, months, onMonths }) {
               Fora da conta: {data.excludedTestAccounts.join(', ')} (assinatura de teste)
             </span>
           )}
+          <button type="button" onClick={onReconcile} disabled={reconciling} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">
+            {reconciling ? 'Conciliando…' : '↻ Conciliar com o Financeiro'}
+          </button>
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -447,6 +450,10 @@ function RoiPanel({ data, loading, months, onMonths }) {
               <div className="flex items-center justify-between gap-3">
                 <span className="text-gray-600">(–) taxas que o Mercado Pago retém</span>
                 <span className="font-bold text-rose-700">− {formatCurrency(reconciliation.mpFeesAllTime)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600">(–) reembolsos devolvidos por PIX</span>
+                <span className="font-bold text-rose-700">− {formatCurrency(reconciliation.refundsAllTime ?? 0)}</span>
               </div>
               <div className="flex items-center justify-between gap-3 border-t-2 border-gray-300 pt-1">
                 <span className="font-bold text-gray-900">(=) o número do placar acima</span>
@@ -2312,6 +2319,7 @@ export default function AdminPage() {
   // antigo como se fosse o novo).
   const [roi, setRoi] = useState(null)
   const [roiMonths, setRoiMonths] = useState(12)
+  const [reconcilingRoi, setReconcilingRoi] = useState(false)
   const roiLoading = tab === 'financeiro' && financeTab === 'roi' && roi?.key !== roiMonths
 
   useEffect(() => {
@@ -2322,6 +2330,36 @@ export default function AdminPage() {
       .catch(() => { if (active) setRoi(null) })
     return () => { active = false }
   }, [tab, financeTab, roiMonths])
+
+  async function reconcileRoi() {
+    setReconcilingRoi(true)
+    try {
+      const [financeData, roiData] = await Promise.all([
+        api.adminFinanceOverview({ period: financePeriod }),
+        api.adminFinanceRoi(roiMonths),
+      ])
+      setFinance(financeData)
+      setRoi({ ...roiData, key: roiMonths })
+    } finally {
+      setReconcilingRoi(false)
+    }
+  }
+
+  async function refundPayment(customer) {
+    const payment = customer?.lastPayment
+    if (!payment?.id || payment?.refund) return
+    const reason = window.prompt(`Motivo do reembolso integral de ${formatCurrency(payment.amount)} para ${customer.email}:`)
+    if (!reason?.trim()) return
+    if (!window.confirm(`Confirmar devolução integral por PIX? A taxa do Mercado Pago continuará como prejuízo.`)) return
+    await api.adminRefundPayment(payment.id, reason.trim())
+    setPaidCustomersList(null)
+    const [financeData, roiData] = await Promise.all([
+      api.adminFinanceOverview({ period: financePeriod }),
+      api.adminFinanceRoi(roiMonths),
+    ])
+    setFinance(financeData)
+    setRoi({ ...roiData, key: roiMonths })
+  }
   // Drill-down dos cards técnicos ('infra' | 'filas' | null). Não busca nada
   // novo: mostra o detalhe do que a página já carregou.
   const [techDrilldown, setTechDrilldown] = useState(null)
@@ -2909,6 +2947,22 @@ export default function AdminPage() {
                 onClick={() => openWaStatus('connected')}
               />
               <CommandCard
+                label="Pagantes atuais"
+                value={online?.summary?.currentPayingUsers ?? '—'}
+                tone="ok"
+                helper="com acesso pago ainda válido"
+                help="Clientes dos planos pagos cujo acesso ainda não venceu."
+                onClick={() => { setOnlineFilters({ ...onlineFilters, plan: 'all' }); setTab('online') }}
+              />
+              <CommandCard
+                label="Pagantes online"
+                value={online?.summary?.payingUsersOnline ?? '—'}
+                tone="ok"
+                helper="pagando e conectados agora"
+                help="Pagantes atuais com o WhatsApp conectado neste momento."
+                onClick={() => openWaStatus('connected')}
+              />
+              <CommandCard
                 label="Erros 24h"
                 value={overview?.errors24h ?? 0}
                 tone={severityTone(overview?.errors24h, 1, 10)}
@@ -3153,7 +3207,7 @@ export default function AdminPage() {
             </div>
 
             {financeTab === 'roi' && (
-              <RoiPanel data={roi} loading={roiLoading} months={roiMonths} onMonths={setRoiMonths} />
+              <RoiPanel data={roi} loading={roiLoading} months={roiMonths} onMonths={setRoiMonths} onReconcile={reconcileRoi} reconciling={reconcilingRoi} />
             )}
 
             {financeTab === 'cobrancas' && (
@@ -3190,6 +3244,11 @@ export default function AdminPage() {
                 <p className="text-xs font-bold uppercase tracking-wide text-rose-600">(–) Taxas Mercado Pago</p>
                 <p className="mt-1 text-2xl font-black text-rose-700">− {formatCurrency(finance.mpFees30d ?? 0)}</p>
                 <p className="mt-1 text-[11px] text-rose-600">{finance.mpFeePercent ?? 0}% do bruto{finance.mpFeeFixedCents ? ` + ${formatCurrency((finance.mpFeeFixedCents ?? 0) / 100)}/transação` : ''}</p>
+              </div>
+              <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-200">
+                <p className="text-xs font-bold uppercase tracking-wide text-rose-600">(–) Reembolsos por PIX</p>
+                <p className="mt-1 text-2xl font-black text-rose-700">− {formatCurrency(finance.refunds30d ?? 0)}</p>
+                <p className="mt-1 text-[11px] text-rose-600">{formatNumber(finance.refunds30dCount ?? 0)} devolução(ões) · taxa perdida {formatCurrency(finance.refundFeeLoss30d ?? 0)}</p>
               </div>
               <div className="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
                 <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">(=) Receita líquida · {finance.periodLabel ?? '30 dias'}</p>
@@ -3296,6 +3355,7 @@ export default function AdminPage() {
                       <th className="px-3 py-2 font-bold">Próxima cobrança / cancelou</th>
                       <th className="px-3 py-2 font-bold">Pagamentos</th>
                       <th className="px-3 py-2 font-bold">Total pago</th>
+                      <th className="px-3 py-2 font-bold">Reembolso</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -3318,14 +3378,21 @@ export default function AdminPage() {
                           </td>
                           <td className="px-3 py-2 text-gray-600">{formatNumber(customer.paidCount)}</td>
                           <td className="px-3 py-2 text-gray-600">{formatCurrency(customer.ltv)}</td>
+                          <td className="px-3 py-2" onClick={event => event.stopPropagation()}>
+                            {customer.lastPayment?.refund
+                              ? <span className="rounded-full bg-rose-100 px-2 py-1 text-[11px] font-black text-rose-700">Reembolsado por PIX</span>
+                              : admin?.permissions?.includes('billing:write') && customer.lastPayment?.id
+                                ? <button type="button" onClick={() => refundPayment(customer)} className="rounded-lg border border-rose-200 px-2 py-1 text-[11px] font-black text-rose-700 hover:bg-rose-50">Marcar reembolso</button>
+                                : '—'}
+                          </td>
                         </tr>
                       )
                     })}
                     {paidCustomersList && !asArray(paidCustomersList?.subscriptions).length && (
-                      <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Ninguém pagou ainda.</td></tr>
+                      <tr><td colSpan={9} className="px-3 py-6 text-center text-gray-400">Ninguém pagou ainda.</td></tr>
                     )}
                     {!paidCustomersList && (
-                      <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Carregando…</td></tr>
+                      <tr><td colSpan={9} className="px-3 py-6 text-center text-gray-400">Carregando…</td></tr>
                     )}
                   </tbody>
                 </table>
