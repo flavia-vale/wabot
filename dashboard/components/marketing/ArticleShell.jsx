@@ -4,7 +4,7 @@ import { LeadMagnetCard } from './LeadMagnetCard'
 import { PublicReferralTracker } from './PublicReferralTracker'
 import { EDITORIAL_AUTHOR, formatDatePtBr } from '@/lib/editorial-content'
 
-export function ArticleShell({ eyebrow, title, description, children, origin, publishedAt, updatedAt, author = EDITORIAL_AUTHOR, authorPhotoPath, authorHref, leadMagnetVariant = 'default' }) {
+export function ArticleShell({ eyebrow, title, description, children, origin, publishedAt, updatedAt, author = EDITORIAL_AUTHOR, authorPhotoPath, authorHref, leadMagnetVariant = 'default', heroImage }) {
   return (
     <PublicShell>
       <PublicReferralTracker template="article" />
@@ -36,6 +36,15 @@ export function ArticleShell({ eyebrow, title, description, children, origin, pu
               · Publicado em {formatDatePtBr(publishedAt || updatedAt)} · Atualizado em {formatDatePtBr(updatedAt || publishedAt)}
             </p>
           )}
+          {heroImage ? (
+            <img
+              src={heroImage.path}
+              alt={heroImage.alt}
+              width={heroImage.width}
+              height={heroImage.height}
+              className="mt-8 w-full rounded-2xl object-cover ring-1 ring-emerald-100"
+            />
+          ) : null}
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-black [&_h3]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-6 [&_strong]:text-gray-950">
             {children}
           </div>

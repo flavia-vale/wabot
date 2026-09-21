@@ -13,6 +13,7 @@ import {
   EDITORIAL_PERSON_AUTHOR_SAME_AS,
 } from '@/lib/editorial-content'
 import { internalContentHref } from '@/lib/marketing-attribution'
+import { buildOgImageDescriptor } from '@/lib/seo-og'
 
 const siteUrl = getSiteUrl()
 
@@ -23,6 +24,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda quando usar grupo, quando usar Canal do WhatsApp e como combinar os dois para divulgar achadinhos com mais organização e preservação operacional.',
     eyebrow: 'Canais · Estratégia de migração',
     origin: 'blog_grupo_ou_canal_whatsapp_achadinhos',
+    heroImage: { path: '/blog/hero/21-grupo-canal.png', alt: 'Ilustração comparando grupo (comunidade) e Canal do WhatsApp (vitrine) lado a lado, com o símbolo de mais entre os dois', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'A resposta curta: grupo é melhor para conversa e comunidade; canal é melhor para vitrine organizada. Para afiliados de achadinhos, a operação mais madura costuma combinar os dois com papéis diferentes.',
     sections: [
@@ -53,6 +55,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia honesto para afiliados reduzirem risco no WhatsApp com chip dedicado, cadência, variações, canais e Módulo de Preservação Avançada.',
     eyebrow: 'Preservação avançada · Risco operacional',
     origin: 'blog_como_evitar_banimento_whatsapp_afiliados',
+    heroImage: { path: '/blog/hero/22-protecao-camadas.png', alt: 'Preservação avançada em quatro camadas: cadência, variações, monitoramento e recuperação', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'Não existe garantia contra banimento. O que existe é uma operação menos robótica, com chip dedicado, volume controlado, variações, monitoramento e plano de recuperação.',
     sections: [
@@ -79,6 +82,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Veja sinais de queda silenciosa em Canais do WhatsApp e como afiliados podem monitorar entrega, cliques e saúde antes do prejuízo.',
     eyebrow: 'Monitoramento · Canais do WhatsApp',
     origin: 'blog_shadowban_whatsapp_canais',
+    heroImage: { path: '/blog/hero/28-sinais.png', alt: 'Cinco sinais silenciosos de shadowban: cliques caindo, respostas caindo, mensagens idênticas em canais diferentes, destino falhando sem aviso', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'O problema do shadowban é que ele raramente aparece como um aviso claro. O afiliado percebe quando os cliques somem, as ofertas param de performar e o canal já perdeu força.',
     sections: [
@@ -106,6 +110,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Passo a passo para migrar grupos de achadinhos para Canais do WhatsApp sem interromper a operação e preservando audiência.',
     eyebrow: 'Migração · Grupo para canal',
     origin: 'blog_migrar_grupo_achadinhos_para_canal',
+    heroImage: { path: '/blog/hero/11-fluxo.png', alt: 'Fluxo de migração: monitora, encaminha e converte, ponta a ponta', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'A migração não deve ser um corte brusco. O caminho mais seguro é transformar o canal em vitrine, manter o grupo como apoio e usar espelhamento com cadência controlada.',
     sections: [
@@ -134,6 +139,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda por que chip dedicado protege sua operação de afiliados no WhatsApp e evita misturar número pessoal com canais e grupos de ofertas.',
     eyebrow: 'Operação responsável · Chip dedicado',
     origin: 'blog_chip_dedicado_bot_whatsapp',
+    heroImage: { path: '/blog/hero/25-antiban-honesto.png', alt: 'Checklist de preservação avançada começando por chip dedicado, cadência por destino e limite de horário', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'Se o WhatsApp gera receita, o chip virou ativo operacional. Usar o número pessoal para rodar bot, grupos e canais mistura risco comercial com vida pessoal.',
     sections: [
@@ -161,6 +167,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Entenda por que “anti-ban” absoluto não existe e como o Módulo de Preservação Avançada do Espelha Grupos reduz risco com camadas operacionais.',
     eyebrow: 'Busca “anti-ban” · Resposta honesta',
     origin: 'blog_bot_whatsapp_antiban_existe',
+    heroImage: { path: '/blog/hero/23-sem-promessa.png', alt: 'Comparação entre a promessa vazia de "anti-ban 100%" e o processo real de preservação em camadas', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'A resposta honesta é: bot “anti-ban” absoluto não existe. O que existe é preservação avançada, uma combinação de decisões operacionais para reduzir risco e recuperar mais rápido.',
     sections: [
@@ -188,6 +195,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Como um afiliado iniciante começa a divulgar ofertas no WhatsApp sem audiência: chip dedicado, primeiros grupos, conversão de link e ritmo responsável.',
     eyebrow: 'Para quem está começando · Passo a passo',
     origin: 'blog_comecar_afiliado_whatsapp_sem_grupo_grande',
+    heroImage: { path: '/blog/hero/04-proteja-comissao.png', alt: 'Comissão vazando para outro afiliado sem proteção, contra 100% da comissão protegida com o bot ativado', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'Você não precisa de um grupo gigante para começar a ganhar comissão no WhatsApp. Precisa de um chip dedicado, links de afiliado convertidos certo e uma rotina de envio que não pareça spam. O resto cresce com consistência.',
     sections: [
@@ -216,6 +224,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Como entrar no Shopee Afiliados, quanto a Shopee paga por tipo de venda, o prazo para a comissão contar e como divulgar no WhatsApp sem perder venda.',
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
+    heroImage: { path: '/blog/hero/shopee-afiliada-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas da Shopee no Espelha Grupos', width: 1024, height: 1024 },
     leadMagnetVariant: 'afiliados',
     // FR-027 (US6, specs/013-inbound-leads-strategy): a chamada de produto
     // fica no FIM do artigo, depois de cadastro/comissão/regras/divulgação —
@@ -278,6 +287,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia de afiliado Amazon: quanto paga de comissão por categoria, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
+    heroImage: { path: '/blog/hero/amazon-associado-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas da Amazon no Espelha Grupos', width: 1024, height: 1024 },
     leadMagnetVariant: 'afiliados',
     midBridge: {
       question: 'Cansou de conferir a tag oferta por oferta?',
@@ -320,6 +330,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Afiliado Mercado Livre · Guia completo',
     usePersonAuthor: true,
     origin: 'blog_como_divulgar_ofertas_mercado_livre_whatsapp',
+    heroImage: { path: '/blog/hero/mercado-livre-afiliado-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas do Mercado Livre no Espelha Grupos', width: 1024, height: 1024 },
     leadMagnetVariant: 'afiliados',
     intro: 'O Mercado Livre Afiliados paga de 0% a 16% de comissão, dependendo da categoria do produto e de a venda ser direta ou indireta. A entrada é gratuita. Para divulgar no WhatsApp você precisa do link com o seu identificador, um preview com imagem e cadência que não pareça disparo — encaminhar o link do grupo de origem credita a comissão para o concorrente.',
     sections: [
@@ -356,6 +367,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Quanto custa um bot para WhatsApp de afiliados: preço de cada plano, o que muda entre eles e o custo que não aparece na mensalidade. 7 dias grátis para testar.',
     eyebrow: 'Custo · Decisão de compra',
     origin: 'blog_quanto_custa_bot_para_whatsapp_afiliados',
+    heroImage: { path: '/blog/hero/12-quanto-perde.png', alt: 'Simulação mensal de comissão perdida sem conversão automática, comparada ao valor recuperado com o bot', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'Um bot para WhatsApp de afiliados custa, na prática, entre R$39 e R$69 por mês nos planos do Espelha Grupos, com 7 dias grátis para testar. Mas o preço da mensalidade é só parte da conta: o custo real inclui o tempo que você economiza no copia-e-cola e o risco que você reduz na operação.',
     sections: [
@@ -389,6 +401,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Os três horários em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
+    heroImage: { path: '/blog/hero/02-radar.png', alt: 'Radar monitorando ofertas de vários grupos de origem ao mesmo tempo, para não perder o timing', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'Os melhores horários para postar ofertas no WhatsApp costumam ser início da manhã (7h–9h), horário de almoço (11h30–13h30) e início da noite (18h–21h), quando as pessoas checam o celular. Mas o horário exato importa menos do que a consistência e a distribuição: postar tudo de uma vez, mesmo no melhor horário, converte pior e expõe o número.',
     sections: [
@@ -417,6 +430,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Como o link de produto ou cupom vira o seu link de afiliado na hora do envio, em 6 lojas, de Shopee e Mercado Livre a SHEIN e AliExpress.',
     eyebrow: 'Conversão de link · Automação',
     origin: 'blog_como_converter_link_de_afiliado_automaticamente_whatsapp',
+    heroImage: { path: '/blog/hero/01-manual-x-auto.png', alt: 'Comparação entre converter link de afiliado manualmente e converter automaticamente', width: 1080, height: 1080 },
     usePersonAuthor: true,
     intro: 'Converter link de afiliado automaticamente significa trocar, na hora do envio, qualquer link de produto ou cupom pelo seu próprio link de afiliado — sem copiar, colar e gerar link manualmente para cada oferta. É isso que impede que a comissão do concorrente vaze quando você espelha ofertas de outros grupos.',
     sections: [
@@ -480,6 +494,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Guia para montar um grupo de ofertas no WhatsApp do zero: chip dedicado, primeiras fontes de oferta, conversão de link, cadência e quando migrar para canal.',
     eyebrow: 'Começando · Grupo de ofertas',
     origin: 'blog_como_montar_grupo_de_ofertas_no_whatsapp_do_zero',
+    heroImage: { path: '/blog/hero/05-copia-cola.png', alt: 'Checklist da rotina manual de copiar, colar e reenviar oferta grupo por grupo, substituída pelo bot', width: 1080, height: 1080 },
     intro: 'Montar um grupo de ofertas no WhatsApp do zero é menos sobre audiência grande e mais sobre processo: chip dedicado, boas fontes de oferta, link com a sua comissão e uma rotina de postagem consistente. Quem começa com processo cresce com estabilidade; quem começa no improviso perde o número.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Use um chip dedicado (nunca o número pessoal), defina o nicho do grupo, encontre boas fontes de oferta, converta cada link para o seu código de afiliado e poste com cadência consistente. Só depois pense em escalar para mais grupos ou canais.', 'Não precisa de audiência grande para começar — precisa de constância e de ofertas realmente boas para o seu público.'] },
@@ -524,6 +539,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Os 4 jeitos de espelhar mensagens entre grupos de WhatsApp — na mão, com agendador, com automação genérica ou com robô de afiliada — e o que cada um custa.',
     eyebrow: 'Espelhamento · Passo a passo',
     origin: 'blog_como_espelhar_mensagens_entre_grupos_whatsapp',
+    heroImage: { path: '/blog/hero/06-escalar.png', alt: 'Um robô central distribuindo ofertas para vários grupos e canais de destino ao mesmo tempo', width: 1080, height: 1080 },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Espelhar mensagens entre grupos de WhatsApp é fazer a oferta que aparece num grupo de origem sair, sozinha, nos seus grupos e canais — com o link trocado pelo seu código de afiliada. Serve para quem divulga ofertas de Shopee, Mercado Livre, Amazon, Magalu, SHEIN ou AliExpress e hoje copia e cola oferta por oferta. Dá para fazer de quatro jeitos; com robô especializado custa a partir de R$ 39 por 30 dias e tem 7 dias de teste sem cartão.',
@@ -587,6 +603,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'As 6 automações que um afiliado Shopee usa no WhatsApp em 2026 — espelhar grupos, garimpar ofertas, converter link, filas, canal e vendas — e quem faz cada uma.',
     eyebrow: 'Shopee Afiliados · Automação',
     origin: 'blog_melhores_automacoes_para_afiliado_shopee_2026',
+    heroImage: { path: '/blog/hero/31-camadas-variacao.png', alt: 'Camadas de automação que o bot mantém sozinho: variação de texto, mutação de imagem, monitoramento e rastreio de cliques', width: 1080, height: 1080 },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'As melhores automações para afiliado Shopee em 2026 são as que tiram da sua mão o que se repete todo dia: acompanhar grupos de origem, trocar o link pelo seu código, achar oferta com desconto e publicar com intervalo. Nenhuma delas vende por você — o que elas fazem é a oferta chegar certa, com o seu link, no seu grupo, sem você estar no celular. Abaixo, as seis, o que cada uma resolve e quem faz cada uma; no Espelha Grupos as seis estão em um plano só, a partir de R$ 39 por 30 dias.',
@@ -653,6 +670,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'O que uma ferramenta para divulgar ofertas em grupos do WhatsApp precisa ter em 2026, quanto custa, para quem serve e como testar antes de assinar.',
     eyebrow: 'Divulgação em grupos · Como escolher',
     origin: 'blog_ferramenta_para_divulgar_ofertas_em_grupos_whatsapp',
+    heroImage: { path: '/blog/hero/00-mascote.png', alt: 'Bit, o assistente do Espelha Grupos, que monitora, encaminha e converte links de afiliado', width: 1080, height: 1080 },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Uma ferramenta para divulgar ofertas em grupos do WhatsApp é um robô que publica as ofertas nos seus grupos e canais por você: pega a oferta de um grupo de origem ou de uma busca, troca o link pelo seu código de afiliada e envia com intervalo. Serve para afiliadas e admins de grupo de promoções que hoje fazem isso na mão. O Espelha Grupos faz isso a partir de R$ 39 por 30 dias, com grupos ilimitados e 7 dias de teste sem cartão.',
@@ -704,11 +722,19 @@ export const PRESERVATION_BLOG_POSTS = {
 export function getPreservationBlogMetadata(postKey) {
   const post = PRESERVATION_BLOG_POSTS[postKey]
   if (!post) return {}
+  // Imagem de destaque do post (2026-09-21) — quando existe, ela vira o
+  // og:image deste post específico em vez do og-default.png genérico do
+  // site: prévia de link no WhatsApp/redes/IA fica reconhecível pelo tema do
+  // artigo, não só pela marca. Post sem heroImage cai no comportamento
+  // histórico via buildOgImageDescriptor() sem argumento.
+  const ogImage = post.heroImage
+    ? buildOgImageDescriptor({ imagePath: post.heroImage.path, width: post.heroImage.width, height: post.heroImage.height, alt: post.heroImage.alt })
+    : buildOgImageDescriptor()
   return {
     title: post.title,
     description: post.description,
     alternates: { canonical: post.slug },
-    openGraph: { title: post.title, description: post.description, url: `${siteUrl}${post.slug}`, type: 'article', locale: 'pt_BR' },
+    openGraph: { title: post.title, description: post.description, url: `${siteUrl}${post.slug}`, type: 'article', locale: 'pt_BR', images: [ogImage] },
   }
 }
 
@@ -805,7 +831,7 @@ export function PreservationBlogPost({ postKey }) {
       }
     : undefined
   const schemas = [
-    ...buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq, author: personAuthor }),
+    ...buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq, author: personAuthor, image: post.heroImage }),
     ...buildSectionSchemas(post, siteUrl),
   ]
 
@@ -825,6 +851,7 @@ export function PreservationBlogPost({ postKey }) {
         authorPhotoPath={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR_PHOTO_PATH : undefined}
         authorHref={post.usePersonAuthor ? EDITORIAL_PERSON_AUTHOR_LINKEDIN_URL : undefined}
         leadMagnetVariant={post.leadMagnetVariant ?? 'default'}
+        heroImage={post.heroImage}
       >
         <section>
           <h2>Resumo prático</h2>
