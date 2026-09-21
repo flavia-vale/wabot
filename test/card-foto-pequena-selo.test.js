@@ -24,6 +24,7 @@ import {
   resolveCardPhotoUpscaleTarget,
 } from '../src/core/cardPhotoUpscalePolicy.js'
 import { upscaleCardPhotoIfTiny } from '../src/core/cardPhoto.js'
+import { composePreviewCardImage } from '../src/core/previewCardCanvas.js'
 
 const foto = ({ width, height }) => sharp({
   create: { width, height, channels: 3, background: '#2f6fb0' },
@@ -79,6 +80,15 @@ test('a foto pequena do plano B passa a preencher o card (mede os pixels)', asyn
   assert.equal(Math.max(meta.width, meta.height), 800)
 })
 
+test('regressão magazinevoce: amplia a foto ANTES de montar a tela fixa', async () => {
+  const pequena = await foto({ width: 220, height: 220 })
+  const card = await composePreviewCardImage(pequena)
+
+  assert.deepEqual(card.upscaled, { from: 220, to: 800 })
+  assert.equal(card.width, 1080)
+  assert.equal(card.height, 1080)
+})
+
 test('a proporção é preservada — a foto nunca sai esticada', async () => {
   const retrato = await foto({ width: 200, height: 400 })
   const { buffer, upscaled } = await upscaleCardPhotoIfTiny(retrato)
@@ -107,22 +117,24 @@ test('bytes ilegíveis devolvem o original em vez de derrubar o card', async () 
   assert.equal(vazio.upscaled, null)
 })
 
-test('a ampliação acontece ANTES da marca d\'água e FORA do banner de cupom', () => {
+test('a ampliação acontece DENTRO da composição, antes da marca e do upload', () => {
   const src = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  const canvas = readFileSync(new URL('../src/core/previewCardCanvas.js', import.meta.url), 'utf8')
 
-  const iAmpliacao = src.indexOf('upscaleCardPhotoIfTiny(hqSourceBuffer)')
+  const iComposicao = src.indexOf('await composePreviewCardImage(buf, { upscale })')
   const iMarca = src.indexOf("MARCA D'ÁGUA NO CARD DE PREVIEW")
   const iUpload = src.indexOf("mediaTypeOverride: 'thumbnail-link'")
-  assert.ok(iAmpliacao > 0 && iMarca > 0 && iUpload > 0)
+  assert.ok(iComposicao > 0 && iMarca > 0 && iUpload > 0)
 
-  // `renderDestinationWatermark` desiste de marcar foto pequena demais; se a
-  // ampliação for para depois dela, a marca volta a não sair nesses casos.
-  assert.ok(iAmpliacao < iMarca, 'ampliação precisa vir antes da marca d\'água')
-  // E precisa vir antes do upload, que é quem grava as dimensões no proto.
-  assert.ok(iAmpliacao < iUpload, 'ampliação precisa vir antes do upload da thumbnail HQ')
+  assert.ok(iComposicao < iMarca, 'composição precisa vir antes da marca d\'água')
+  assert.ok(iComposicao < iUpload, 'composição precisa vir antes do upload da thumbnail HQ')
+  assert.ok(
+    canvas.indexOf('await upscaleCardPhotoIfTiny(input)') < canvas.indexOf('sharp(source'),
+    'a foto precisa ser ampliada antes de o canvas esconder suas dimensões reais',
+  )
 
   // O banner de cupom já nasce com tamanho escolhido e não é foto de produto.
-  assert.match(src, /if \(hqSourceBuffer && !useCouponBrandCard\) \{/)
+  assert.match(src, /prepararFotoDoCard\(banner, \{ upscale: false \}\)/)
 })
 
 test('a ampliação NÃO vazou para o envio de foto de corpo inteiro', () => {
@@ -133,5 +145,5 @@ test('a ampliação NÃO vazou para o envio de foto de corpo inteiro', () => {
   assert.ok(!scrapers.includes('upscaleCardPhotoIfTiny'))
 
   const src = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
-  assert.equal(src.split('upscaleCardPhotoIfTiny(').length - 1, 1)
+  assert.equal(src.split('upscaleCardPhotoIfTiny(').length - 1, 1, 'fallback sem canvas também precisa ampliar')
 })

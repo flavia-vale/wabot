@@ -1,16 +1,17 @@
 import sharp from 'sharp'
 import { resolvePreviewCardCanvas } from './previewCardCanvasPolicy.js'
 import { buildInlineThumbnail } from './inlineThumbnail.js'
+import { upscaleCardPhotoIfTiny } from './cardPhoto.js'
 
 // Compõe a foto do card na TELA FIXA (ver o RCA em previewCardCanvasPolicy.js).
 // Ponto ÚNICO: os dois montadores de card (buildManualLinkPreview, do
 // espelhamento, e buildBroadcastLinkPreview, da fila/automáticas) passam por
 // aqui, para o tamanho não voltar a divergir entre eles.
 //
-// A foto entra INTEIRA (`fit: inside`) e nunca é ampliada: foto pequena
-// continua com os pixels que tem, só deixa de encolher o card. O vazio é
-// preenchido por um desfoque da própria foto — barra branca ficaria estranha em
-// foto colorida, e é o que os canais profissionais fazem.
+// A foto entra INTEIRA (`fit: inside`) e nunca é cortada. Antes de montar a
+// tela, miniaturas são ampliadas pelo ponto único de política de card. Essa
+// ordem é essencial: ampliar DEPOIS da composição só enxerga o canvas 1080px e
+// deixa a foto original pequena como um selo no centro.
 
 // Fundo desfocado a partir de uma redução agressiva: desfocar 1080px custa caro
 // e o resultado visual é o mesmo de ampliar uma versão minúscula.
@@ -19,8 +20,8 @@ const BACKDROP_BLUR_SIGMA = 12
 
 /**
  * @param {Buffer} input foto já resolvida (loja, origem ou banner)
- * @param {{env?: NodeJS.ProcessEnv}} [opts]
- * @returns {Promise<{main: Buffer, thumbnail: Buffer, width: number, height: number}|null>}
+ * @param {{env?: NodeJS.ProcessEnv, upscale?: boolean}} [opts]
+ * @returns {Promise<{main: Buffer, thumbnail: Buffer, width: number, height: number, upscaled: null|{from:number,to:number}}|null>}
  *   `null` quando a tela fixa está desligada ou a composição falha — quem chama
  *   segue com a foto como ela veio (nunca perde a oferta por causa disto).
  */
@@ -30,7 +31,14 @@ export async function composePreviewCardImage(input, opts = {}) {
   if (!Buffer.isBuffer(input) || input.length === 0) return null
 
   try {
-    const { data: foto, info: fotoInfo } = await sharp(input, { failOn: 'none' })
+    // Banner de cupom pode optar por não ampliar: ele já nasce no tamanho
+    // deliberado pelo design. Fotos de produto usam o default seguro.
+    const preparada = opts.upscale === false
+      ? { buffer: input, upscaled: null }
+      : await upscaleCardPhotoIfTiny(input)
+    const source = preparada.buffer
+
+    const { data: foto, info: fotoInfo } = await sharp(source, { failOn: 'none' })
       .rotate()
       .resize({ width: size, height: size, fit: 'inside', withoutEnlargement: true })
       .sharpen({ sigma: 0.5 })
@@ -44,7 +52,7 @@ export async function composePreviewCardImage(input, opts = {}) {
 
     let pipeline
     if (precisaMoldura) {
-      const miniatura = await sharp(input, { failOn: 'none' })
+      const miniatura = await sharp(source, { failOn: 'none' })
         .rotate()
         .resize({ width: BACKDROP_SRC_PX, height: BACKDROP_SRC_PX, fit: 'cover', position: 'centre' })
         .png()
@@ -74,7 +82,7 @@ export async function composePreviewCardImage(input, opts = {}) {
     // desenha antes de baixar, e divergir aqui traria de volta o "muda de
     // tamanho ao carregar".
     const thumbnail = await buildInlineThumbnail(main)
-    return { main, thumbnail, width: info.width, height: info.height }
+    return { main, thumbnail, width: info.width, height: info.height, upscaled: preparada.upscaled }
   } catch {
     return null
   }

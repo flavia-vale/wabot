@@ -4934,6 +4934,13 @@ print. Teste falha se a ampliação vazar para fora do card.
 
 **Não regredir:**
 
+- **A ampliação roda ANTES da tela fixa.** A tela transforma qualquer entrada
+  em 1080x1080; tentar decidir a ampliação depois dela enxerga o canvas grande,
+  não os 220px da foto, e mantém o produto como selo no centro. Esse foi o RCA
+  específico dos links `magazinevoce/...`: o guard anterior verificava apenas
+  "antes da marca/upload" e deixou passar a ordem errada. Agora
+  `composePreviewCardImage` amplia a fonte antes de compor e o teste funcional
+  exige o metadado `220 -> 800`.
 - **A ampliação roda ANTES da marca d'água.** `renderDestinationWatermark`
   DESISTE de marcar foto pequena demais (`watermarkApplied:false` em silêncio),
   então ampliar antes faz a marca ser desenhada na resolução final e recupera
