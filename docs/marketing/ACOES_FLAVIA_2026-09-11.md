@@ -178,7 +178,7 @@ o relatório mostra só o que está indexado ou não, não um histórico de pedi
 Mas isso não importa: se a página ainda aparece como não indexada, pedir de
 novo é a ação certa, independente de já ter pedido antes ou não.
 
-### Dia 7 (2026-09-21) — o que o Search Console confirma HOJE como não indexado
+### Dia 7 (2026-09-21) — ✅ CONCLUÍDO, as 10 pedidas em 2026-09-21
 
 Exatamente 10 páginas reais (cabe num dia só de cota). Tirado direto das duas
 abas "Rastreada, mas não indexada" e "Detectada, mas não indexada" do seu
@@ -188,17 +188,21 @@ indexados como página de busca) e o que é linha CONGELADA de propósito (ver
 aviso abaixo).
 
 ```
-https://espelhagrupos.com.br/alternativas/afiliado-inteligente
-https://espelhagrupos.com.br/alternativas/afilimais
-https://espelhagrupos.com.br/alternativas/afilira
-https://espelhagrupos.com.br/alternativas/busqy
-https://espelhagrupos.com.br/alternativas/divulga-ninja
-https://espelhagrupos.com.br/alternativas/ia-divulgadora
-https://espelhagrupos.com.br/alternativas/shark
-https://espelhagrupos.com.br/parceiro-influenciador
-https://espelhagrupos.com.br/parcerias
-https://espelhagrupos.com.br/ferramentas/calculadora-tempo-grupos-whatsapp
+https://espelhagrupos.com.br/alternativas/afiliado-inteligente        ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/afilimais                   ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/afilira                     ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/busqy                       ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/divulga-ninja               ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/ia-divulgadora              ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/shark                       ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/parceiro-influenciador                   ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/parcerias                                ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/ferramentas/calculadora-tempo-grupos-whatsapp ✅ pedida 2026-09-21
 ```
+
+**Dia 7 concluído.** Próxima ação é só conferência — ver "Como conferir o Dia
+7" logo abaixo. A partir de **28/09** (7 dias depois), rode a Inspeção de URL
+nas 10 acima; antes disso o veredito ainda não teve tempo de mudar.
 
 As 7 páginas `/alternativas/*` são novidade: existem no site (conferido no
 código), têm pelo menos 3 links internos cada uma — cumprem a regra de "página
@@ -225,7 +229,7 @@ relatório diferente ("por que o vídeo incorporado não virou resultado de
 vídeo", não "a página está indexada"). Não precisa de ação: não afeta se a
 página em si é indexada.
 
-### Como conferir o Dia 7, daqui a 7 dias
+### Como conferir o Dia 7, a partir de 28/09
 
 Inspeção de URL nas 10 do Dia 7. O veredito precisa sair de "Detectada" ou
 "Rastreada, mas não indexada" para **"URL está no Google"**. Se
