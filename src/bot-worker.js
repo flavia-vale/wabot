@@ -1913,13 +1913,19 @@ function reportWatermarkMissing(stage, ctx = {}) {
 // mudar de tamanho conforme a loja/foto que originou a oferta. Tela desligada
 // (`PREVIEW_CARD_CANVAS=off`) ou composição que falha caem no caminho
 // histórico: melhor card de tamanho irregular do que oferta sem foto.
-async function prepararFotoDoCard(buf) {
+async function prepararFotoDoCard(buf, { upscale = true } = {}) {
   if (!buf?.length) return null
-  const tela = await composePreviewCardImage(buf).catch(() => null)
-  if (tela?.main && tela?.thumbnail) return { buffer: tela.main, jpegThumbnail: tela.thumbnail }
-  const normalized = await normalizeImageForWhatsApp(buf)
+  // A ordem é a correção: medir/ampliar a FOTO enquanto ela ainda tem suas
+  // dimensões reais; só depois montar o canvas 1080px. Se inverter, o guard vê
+  // o canvas grande e mantém o produto como selo pequeno no centro.
+  const preparada = upscale ? await upscaleCardPhotoIfTiny(buf) : { buffer: buf, upscaled: null }
+  const tela = await composePreviewCardImage(preparada.buffer).catch(() => null)
+  if (tela?.main && tela?.thumbnail) return { buffer: tela.main, jpegThumbnail: tela.thumbnail, upscaled: preparada.upscaled }
+  // Com a tela desligada/falhando, normalize recebe a mesma fonte já preparada
+  // (ele nunca amplia de propósito).
+  const normalized = await normalizeImageForWhatsApp(preparada.buffer)
   if (!normalized?.jpegThumbnail) return null
-  return { buffer: normalized.buffer || normalized.jpegThumbnail, jpegThumbnail: normalized.jpegThumbnail }
+  return { buffer: normalized.buffer || normalized.jpegThumbnail, jpegThumbnail: normalized.jpegThumbnail, upscaled: preparada.upscaled }
 }
 
 function kindDoCard(fonte) {
@@ -1990,7 +1996,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // que o WhatsApp desenha ANTES de baixar, e de tamanho diferente do card de
     // produto. Passa pela MESMA tela fixa das fotos, para o card de cupom não
     // sair maior/menor que o card da oferta ao lado dele no grupo.
-    const telaBanner = banner ? await prepararFotoDoCard(banner) : null
+    const telaBanner = banner ? await prepararFotoDoCard(banner, { upscale: false }) : null
     jpegThumbnail = telaBanner?.jpegThumbnail || (banner ? await buildInlineThumbnail(banner).catch(() => banner) : undefined)
     hqSourceBuffer = telaBanner?.buffer || banner
     if (banner) marcarFonte('banner')
@@ -2020,7 +2026,10 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         }
         jpegThumbnail = preparada?.jpegThumbnail || undefined
         hqSourceBuffer = preparada?.buffer || jpegThumbnail
-        if (jpegThumbnail) marcarFonte('loja')
+        if (jpegThumbnail) {
+          marcarFonte('loja')
+          if (preparada?.upscaled) logger.info({ platform: primary?.platform, sourceUrl, de: preparada.upscaled.from, para: preparada.upscaled.to }, 'Card de preview: foto pequena ampliada antes de montar a tela')
+        }
       } catch (err) {
         reportPreviewCardNoImage('download_falhou', { platform: primary.platform, imageUrl, sourceUrl, err: err?.message })
       }
@@ -2052,6 +2061,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         jpegThumbnail = preparada.jpegThumbnail
         hqSourceBuffer = preparada.buffer
         marcarFonte('origem')
+        if (preparada.upscaled) logger.info({ platform: primary?.platform, sourceUrl, de: preparada.upscaled.from, para: preparada.upscaled.to }, 'Card de preview: foto pequena ampliada antes de montar a tela')
         // Sinal PRÓPRIO (não é `ops_preview_card_no_image`): aqui a oferta SAIU
         // com card e com foto. Misturar os dois esconderia justamente o número
         // que interessa — quantas ofertas o plano B salvou, e de qual loja.
@@ -2062,25 +2072,6 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
       // Best-effort: o plano B falhando devolve o caso ao estado que já era o
       // atual (card descartado, texto puro). Nunca derruba o envio.
       logger.warn({ err: err?.message, sourceUrl }, 'Card de preview: plano B da foto de origem falhou')
-    }
-  }
-
-  // FOTO PEQUENA VIRANDO SELO NO CARD (RCA 2026-09-18).
-  //
-  // `prepareWAMessageMedia` grava no proto as dimensões REAIS do buffer que
-  // sobe, e o WhatsApp desenha o card nesse tamanho — foto de poucas centenas
-  // de pixels sai como um quadradinho no centro, cercada por uma ampliação
-  // borrada dela mesma (print da cliente). Acontece sobretudo no plano B da
-  // foto de origem, que costuma ser a miniatura embutida do card da origem
-  // (medido: 5.539 bytes). Ver `core/cardPhotoUpscalePolicy.js`.
-  //
-  // Fica FORA do banner de cupom de propósito: ele já nasce em 720x720, com
-  // tamanho escolhido, e não é foto de produto.
-  if (hqSourceBuffer && !useCouponBrandCard) {
-    const { buffer: ampliada, upscaled } = await upscaleCardPhotoIfTiny(hqSourceBuffer)
-    if (upscaled) {
-      hqSourceBuffer = ampliada
-      logger.info({ platform: primary?.platform, sourceUrl, de: upscaled.from, para: upscaled.to }, 'Card de preview: foto pequena ampliada para o card não sair como selo')
     }
   }
 
@@ -2205,10 +2196,10 @@ async function buildBroadcastLinkPreview({ text, destJid, jpegThumbnail, hqBuffe
   // a proporção que a loja usa, e sem isto cada oferta da fila sai com um card
   // de tamanho diferente. A miniatura embutida é refeita a partir da imagem
   // composta — divergir dela traria de volta o "muda de tamanho ao carregar".
-  const tela = hqBuffer ? await composePreviewCardImage(hqBuffer).catch(() => null) : null
-  if (tela?.main && tela?.thumbnail) {
-    thumb = tela.thumbnail
-    hq = tela.main
+  const preparada = hqBuffer ? await prepararFotoDoCard(hqBuffer) : null
+  if (preparada?.buffer && preparada?.jpegThumbnail) {
+    thumb = preparada.jpegThumbnail
+    hq = preparada.buffer
   } else if (!thumb && hqBuffer) {
     const normalized = await normalizeImageForWhatsApp(hqBuffer)
     thumb = normalized?.jpegThumbnail
