@@ -742,9 +742,14 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-master-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--accent-2); }
 .pnl-master-status .pnl-dot { box-shadow: 0 0 0 3px rgba(62, 156, 122, 0.3); }
 .pnl-master-sub { font-size: 13px; color: rgba(255, 255, 255, 0.65); margin-top: 4px; }
+.pnl-master.pnl-master-compact { padding: 14px 16px; gap: 12px; }
+.pnl-master-compact .pnl-master-ico { width: 38px; height: 38px; }
+.pnl-master-compact .pnl-master-title { font-size: 15px; }
+.pnl-master-compact .pnl-master-sub { font-size: 11.5px; margin-top: 2px; }
 
 /* ── Ofertas automáticas — painel editorial e operacional ───────────── */
 .offer-auto-page { width: 100%; max-width: 1040px; margin: 0 auto; gap: 20px; }
+.offer-auto-new-row { display: flex; justify-content: flex-end; margin-top: -6px; }
 .offer-auto-new { padding: 11px 20px; border-radius: 12px; background: var(--accent-strong) !important; border-color: var(--accent-strong) !important; }
 .offer-auto-guide,
 .offer-auto-status {
@@ -780,8 +785,8 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .offer-auto-table-head,
 .offer-auto-topic { display: grid; grid-template-columns: minmax(230px, 1.65fr) minmax(170px, 1fr) 130px 150px 54px; gap: 16px; align-items: center; }
 .offer-auto-table-head { padding: 12px 24px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: color-mix(in oklab, var(--bg-soft) 45%, var(--surface)); color: var(--ink-faint); font-size: 10px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
-.offer-auto-topic { position: relative; padding: 17px 24px; border-bottom: 1px solid var(--line); transition: background .18s; }
-.offer-auto-topic:last-child { border-bottom: 0; }
+.offer-auto-topic-list { display: grid; gap: 8px; padding: 8px; background: color-mix(in oklab, var(--bg-soft) 48%, var(--surface)); }
+.offer-auto-topic { position: relative; padding: 17px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: background .18s, border-color .18s; }
 .offer-auto-topic:hover { background: color-mix(in oklab, var(--bg-soft) 34%, transparent); }
 .offer-auto-topic.is-paused { color: var(--ink-soft); background: color-mix(in oklab, var(--bg-soft) 38%, transparent); }
 .offer-auto-topic.is-paused > *:not(.offer-auto-topic-toggle) { opacity: .68; }
@@ -795,7 +800,10 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .offer-auto-topic-main .pnl-link-btn { padding: 0; font-size: 10.5px; }
 .offer-auto-topic-destination { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink-soft); font-size: 11.5px; }
 .offer-auto-topic-destination > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.offer-auto-store-badge { width: 22px; height: 22px; flex: 0 0 22px; display: grid; place-items: center; border-radius: 7px; background: #ee4d2d; color: #fff; font-size: 9px; font-weight: 800; }
+.offer-auto-publication { display: grid; gap: 3px; justify-items: start; font-size: 11px; }
+.offer-auto-publication strong { padding: 5px 9px; border-radius: 999px; background: #eaf3ef; color: #386154; white-space: nowrap; }
+.offer-auto-publication.is-review strong { background: #fff3d6; color: #8a5a12; }
+.offer-auto-publication small { color: var(--ink-soft); }
 .offer-auto-discount { display: inline-flex; padding: 5px 10px; border-radius: 999px; background: #eaf3ef; color: #516d64; font-size: 11px; white-space: nowrap; }
 .offer-auto-rhythm { color: var(--ink); font-size: 11.5px; }
 .offer-auto-topic-toggle { display: flex; justify-content: flex-end; }
@@ -2062,13 +2070,6 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   color: var(--accent-strong);
 }
 
-.esp-lojas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-.esp-loja {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: 6px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
-}
-
 .esp-seta { display: inline-flex; color: var(--ink-soft); }
 .esp-nota { margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
 .esp-vazio { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
@@ -2131,7 +2132,10 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
  * largura que já era pouca. */
 .pnl-esp-card-name { font-size: 14.5px; font-weight: 650; color: var(--ink); overflow-wrap: break-word; }
 .pnl-esp-card-meta { display: block; margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
-.pnl-esp-card-meta .esp-lojas { margin-top: 6px; }
+.pnl-esp-choice { display: inline-flex; margin-top: 6px; padding: 4px 8px; border-radius: 999px; background: var(--bg-soft); color: var(--ink-soft); font-size: 11px; font-weight: 650; }
+.pnl-esp-choice.is-template { background: color-mix(in oklab, var(--accent) 18%, var(--surface)); color: var(--accent-strong); }
+.pnl-esp-add-primary { display: flex; justify-content: flex-start; }
+.pnl-esp-connections { margin-top: 4px; }
 /* Seta de "abre configuração": só no celular, onde a engrenagem sai para
  * devolver largura ao texto. Não é botão — quem recebe o toque é o card
  * inteiro, então não há dois alvos disputando o mesmo dedo. */
