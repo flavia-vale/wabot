@@ -4934,6 +4934,13 @@ print. Teste falha se a ampliação vazar para fora do card.
 
 **Não regredir:**
 
+- **Magalu precisa chegar como `linkKind='product'`.** Os links reais
+  `/p/<sku>/` e `/divulgador/oferta/<token>/` antes ficavam `undefined` porque
+  eram a única loja sem detector em `converters/linkKind.js`. No modo
+  `original`, isso desligava `preferStorePhoto`: o pipeline nem tentava a foto
+  oficial e republicava diretamente a imagem pequena da origem. Home,
+  categoria e campanha não podem casar com o detector, para não trazer produto
+  aleatório.
 - **A ampliação roda ANTES da tela fixa.** A tela transforma qualquer entrada
   em 1080x1080; tentar decidir a ampliação depois dela enxerga o canvas grande,
   não os 220px da foto, e mantém o produto como selo no centro. Esse foi o RCA

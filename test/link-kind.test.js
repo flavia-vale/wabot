@@ -65,8 +65,23 @@ test('shein: sem goods_id/-p- classifica como coupon', () => {
   assert.equal(resolveLinkKind('shein', { url: 'https://m.shein.com/br/ark/default?scene=1&campaign=summer' }), 'coupon')
 })
 
-test('plataforma sem detector (magazineluiza) devolve undefined sem lançar', () => {
-  assert.equal(resolveLinkKind('magazineluiza', { url: 'https://www.magazineluiza.com.br/produto/p/123' }), undefined)
+test('Magalu: páginas de produto reais classificam como product', () => {
+  assert.equal(resolveLinkKind('magazineluiza', {
+    url: 'https://www.magazineluiza.com.br/relogio-gps-garmin-forerunner-55-preto-corrida/divulgador/oferta/ef43k19de1/te/smtw/',
+  }), 'product')
+  assert.equal(resolveLinkKind('magazineluiza', {
+    url: 'https://www.magazinevoce.com.br/magazinealguem/produto/p/123/',
+  }), 'product')
+})
+
+test('Magalu: home/categoria/cupom não fingem ser produto', () => {
+  for (const url of [
+    'https://www.magazineluiza.com.br/',
+    'https://www.magazineluiza.com.br/selecao/ofertas/',
+    'https://www.magazinevoce.com.br/magazinealguem/',
+  ]) {
+    assert.equal(resolveLinkKind('magazineluiza', { url }), 'coupon')
+  }
 })
 
 test('plataforma desconhecida devolve undefined', () => {
@@ -83,6 +98,12 @@ test('urlHasProductId: amazon com ASIN em /dp/ e /gp/product/ retorna true', () 
 
 test('urlHasProductId: mercadolivre com MLB retorna true', () => {
   assert.equal(urlHasProductId('mercadolivre', 'https://produto.mercadolivre.com.br/MLB4060932335-x'), true)
+})
+
+test('urlHasProductId: Magalu reconhece produto sem confundir página de campanha', () => {
+  assert.equal(urlHasProductId('magazineluiza', 'https://www.magazineluiza.com.br/x/divulgador/oferta/fa9af4d091/pb/ofer/'), true)
+  assert.equal(urlHasProductId('magazineluiza', 'https://www.magazinevoce.com.br/loja/produto/p/123/'), true)
+  assert.equal(urlHasProductId('magazineluiza', 'https://www.magazineluiza.com.br/selecao/ofertas/'), false)
 })
 
 test('urlHasProductId: short link sem ID (amzn.to, meli.la) retorna false', () => {
