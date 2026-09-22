@@ -208,6 +208,45 @@ export function isCreditSignatureLine(line) {
   return CREDIT_PREFIX_RE.test(core) || CREDIT_BYLINE_RE.test(core)
 }
 
+// Assinatura "rótulo + perfil": `Curadoria@casabemmimada`, `Curadoria
+// @casabemmimada`, `Créditos: @perfil`. Quarta forma encontrada em produção
+// (2026-09). Escapava das regras acima quando NÃO vinha colada logo abaixo do
+// link (topo da mensagem, ou depois de "Frete grátis"), porque a regra de
+// "palavra solta" exige a linha do link imediatamente antes.
+//
+// O que a torna segura para remover em QUALQUER posição é o formato, não a
+// posição: um rótulo curto GRUDADO no `@` (sem espaço) ou um rótulo de crédito
+// conhecido seguido de perfil. "Siga @fulano para mais ofertas" continua
+// intacto: tem espaço antes do `@`, "siga" não é rótulo de crédito e sobra
+// texto depois do perfil.
+const CREDIT_LABEL_SRC = '(?:curadoria|cr[ée]ditos?|fonte|sele[çc][ãa]o|achados|by|via|por)'
+const GLUED_LABEL_HANDLE_RE = new RegExp(`^[\\p{L}][\\p{L}.'-]{0,29}${HANDLE_SRC}$`, 'u')
+const CREDIT_LABEL_HANDLE_RE = new RegExp(`^${CREDIT_LABEL_SRC}\\s*[:：\\-–—]?\\s*${HANDLE_SRC}$`, 'iu')
+// `nome@dominio.com` é e-mail, não perfil — nunca remover.
+const EMAIL_LIKE_RE = /@[\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)*\.[a-z]{2,}$/iu
+const MAX_LABELED_HANDLE_LINES = 3
+
+export function isLabeledHandleSignatureLine(line) {
+  const raw = String(line ?? '')
+  if (!raw.trim() || hasHttpUrl(raw)) return false
+  const core = signatureCore(raw)
+  if (!core || core.length > MAX_CREDIT_CHARS) return false
+  if (EMAIL_LIKE_RE.test(core)) return false
+  const label = core.split('@')[0]
+  if (/\d/.test(label) || OFFER_CONTENT_WORD_RE.test(label)) return false
+  return GLUED_LABEL_HANDLE_RE.test(core) || CREDIT_LABEL_HANDLE_RE.test(core)
+}
+
+function removeLabeledHandleLines(lines) {
+  let removed = 0
+  const kept = lines.filter(line => {
+    if (removed >= MAX_LABELED_HANDLE_LINES || !isLabeledHandleSignatureLine(line)) return true
+    removed++
+    return false
+  })
+  return { lines: kept, changed: removed > 0 }
+}
+
 function lastNonEmptyIndex(lines, before = lines.length) {
   for (let i = Math.min(before, lines.length) - 1; i >= 0; i--) {
     if (String(lines[i] ?? '').trim()) return i
@@ -229,9 +268,10 @@ export function stripTrailingSourceSignature(text) {
   const raw = String(text ?? '')
   if (!raw.trim() || !hasOfferUrl(raw)) return raw
 
-  const lines = raw.split('\n')
+  const labeled = removeLabeledHandleLines(raw.split('\n'))
+  const lines = labeled.lines
   let removed = 0
-  let changed = false
+  let changed = labeled.changed
   let cursor = lines.length
 
   while (removed < MAX_SIGNATURE_LINES) {
