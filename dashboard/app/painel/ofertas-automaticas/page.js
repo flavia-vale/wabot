@@ -292,6 +292,9 @@ export default function OfertasAutomaticasPage() {
   if (!hasProLikeAccess(planSubject)) {
     return (
       <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
+        <div className="pnl-note-box is-info">
+          🛍️ Por enquanto, o garimpo automático busca produtos só na <strong>Shopee</strong>. Mercado Livre, Amazon, SHEIN, Magalu e AliExpress ainda não têm busca automática por palavra-chave.
+        </div>
         <ProFeaturePaywall
           title="Ofertas automáticas"
           bullets={[
@@ -495,6 +498,10 @@ export default function OfertasAutomaticasPage() {
         <span className="offer-auto-guide-time">4 min</span>
         <span className="offer-auto-guide-cta">Assistir <span aria-hidden="true">↗</span></span>
       </a>
+
+      <div className="pnl-note-box is-info">
+        🛍️ Por enquanto, o garimpo automático busca produtos só na <strong>Shopee</strong>. Mercado Livre, Amazon, SHEIN, Magalu e AliExpress ainda não têm busca automática por palavra-chave.
+      </div>
 
       {automations.length > 0 && (
         <section className="offer-auto-status">
