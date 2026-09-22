@@ -268,4 +268,13 @@ function serie() {
 
 if (modoSerie) serie()
 else await medirAgora()
+
+// O import do manager (--ipc) carrega src/logger.js de tabela, que abre o
+// destino do pino em modo assíncrono (sonic-boom, sync:false). Sair na
+// sequência sem dar tempo do stream ficar pronto faz o hook de saída do
+// próprio pino (`autoEnd` -> `flushSync`) lançar "sonic boom is not ready
+// yet" -- o dado já tinha sido gravado no .jsonl antes disso, então não é
+// perda de medição, só um crash cosmético no fim do comando. A pausa curta
+// dá tempo do stream abrir antes do exit forçado.
+await new Promise(resolve => setTimeout(resolve, 200))
 process.exit(0)
