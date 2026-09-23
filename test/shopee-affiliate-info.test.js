@@ -69,12 +69,10 @@ test('fetchShopeeProductInfo retorna null sem credenciais', async () => {
   assert.equal(await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', {}), null)
 })
 
-// Achado em produção 2026-09-23 (nandavieiraf@gmail.com): a Shopee nega
-// acesso a `productOfferV2` (título/preço/foto/busca) com este código, sem
-// afetar `generateShortLink` (usado pelo espelhamento) — não é chave morta.
-// O estágio de diagnóstico é DISTINTO de `shopee_api_erro` de propósito, para
-// quem ler o log já saber que não é caso de recadastrar a chave.
-test('fetchShopeeProductInfo reporta estágio PRÓPRIO quando a API nega acesso ao catálogo de ofertas (10035)', async (t) => {
+// RCA 2026-09-23 (nandavieiraf@gmail.com): 10035 é a Shopee recusando o App
+// ID inteiro. O estágio próprio diz a quem lê o log que a ação é recadastrar a
+// chave, não investigar o produto.
+test('fetchShopeeProductInfo reporta estágio de chave recusada no erro 10035', async (t) => {
   t.after(stubAxiosPost(async () => ({
     data: {
       errors: [{
@@ -89,13 +87,13 @@ test('fetchShopeeProductInfo reporta estágio PRÓPRIO quando a API nega acesso 
     onDiagnostic: (event) => diagnostics.push(event),
   })
   assert.equal(info, null)
-  assert.equal(diagnostics[0]?.stage, 'shopee_sem_acesso_catalogo_ofertas')
+  assert.equal(diagnostics[0]?.stage, 'shopee_chave_recusada')
   assert.match(diagnostics[0]?.detail, /10035/)
 })
 
-test('fetchShopeeProductInfo reporta estágio GENÉRICO para outros erros da API', async (t) => {
+test('fetchShopeeProductInfo reporta estágio GENÉRICO para erros que não são chave recusada', async (t) => {
   t.after(stubAxiosPost(async () => ({
-    data: { errors: [{ message: 'error [10020]: Invalid Signature', extensions: { code: 10020 } }] },
+    data: { errors: [{ message: 'error [10010]: query error', extensions: { code: 10010 } }] },
   })))
 
   const diagnostics = []
