@@ -122,6 +122,14 @@ export function chooseCoupon({ coupons, platform, priceCents, now } = {}) {
   return { coupon, savingsCents: priceReliable ? savingsCents : null, finalPriceCents }
 }
 
+// Preço vindo de fora (tela, fila, agendado) em centavos. Qualquer coisa que
+// não seja inteiro positivo vira null = "preço desconhecido", e aí vale a ordem
+// fixa do FR-011 e não sai o "de X por Y" (nunca inventar preço).
+export function sanitizePriceCents(value) {
+  const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
 export function formatBrl(cents) {
   const value = isFiniteNumber(cents) ? cents / 100 : 0
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })

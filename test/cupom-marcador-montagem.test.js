@@ -53,8 +53,10 @@ test('os três caminhos que passam pelo robô pedem para manter o marcador', () 
 
 test('copiar no Criar oferta nunca leva o marcador cru', () => {
   const page = read('dashboard/app/painel/criar-oferta/page.js')
-  assert.match(page, /clipboard\.writeText\(stripCouponToken\(/)
-  assert.match(page, /WhatsAppBubble text=\{showCouponStandIn\(/)
+  // Copiar e a prévia não passam pelo robô: o marcador vira o cupom de agora
+  // ou some (resolveCouponForDisplay → applyCouponToken).
+  assert.match(page, /clipboard\.writeText\(resolveCouponForDisplay\(/)
+  assert.match(page, /WhatsAppBubble text=\{resolveCouponForDisplay\(/)
 })
 
 // Decisão da dona do produto (2026-09-23): "Agendar" sai com cupom igual ao
@@ -64,9 +66,9 @@ test('agendado e envio imediato levam a loja da oferta pela MESMA regra', () => 
   const worker = read('src/bot-worker.js')
   assert.match(worker, /function couponContextFromText\(/)
   const agendado = worker.slice(worker.indexOf("type: 'scheduled'"))
-  assert.match(agendado.slice(0, 2500), /couponContext:\s*couponContextFromText\(msg\.text\)/,
+  assert.match(agendado.slice(0, 2500), /couponContext:\s*couponContextFromText\(msg\.text, msg\.couponPriceCents\)/,
     'o envio agendado deixou de levar a loja da oferta — sairia sem cupom')
-  assert.match(worker, /const broadcastCouponContext = couponContextFromText\(msg\.text\)/)
+  assert.match(worker, /const broadcastCouponContext = couponContextFromText\(msg\.text, msg\.options\?\.couponPriceCents\)/)
   // Uma regra só: nenhum dos dois caminhos pode voltar a detectar a loja por conta própria.
   assert.equal((worker.match(/detectLinks\(text \|\| ''\)\[0\]\?\.platform/g) || []).length, 1)
 })
