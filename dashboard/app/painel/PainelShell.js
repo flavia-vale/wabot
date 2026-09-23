@@ -398,16 +398,18 @@ export default function PainelShell({ children }) {
 
   // Só canais aqui: é o que já vem na lista de grupos, sem chamada nova. A tela
   // de planos mostra o quadro completo (automáticas e filas também).
+  const userPlan = user?.plan
+  const userAccessExpiresAt = user?.accessExpiresAt
   const proFeaturesNotice = useMemo(() => {
-    if (channelCount === null || user?.plan !== 'basic') return null
-    const exp = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
+    if (channelCount === null || userPlan !== 'basic') return null
+    const exp = userAccessExpiresAt ? new Date(userAccessExpiresAt) : null
     const accessActive = !exp || Number.isNaN(exp.getTime()) ? true : exp > new Date()
     return buildProFeaturesNotice({
-      plan: user.plan,
+      plan: userPlan,
       accessActive,
       items: listProFeaturesInUse({ channelCount }),
     })
-  }, [channelCount, user?.plan, user?.accessExpiresAt])
+  }, [channelCount, userPlan, userAccessExpiresAt])
 
   const ctxValue = useMemo(
     () => ({ user, online, phone, groupCount, sessionHealth, hasAnyCredential, offersPublished, refreshSession, setHeader }),
