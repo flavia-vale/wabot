@@ -125,15 +125,32 @@ distância está parada em ~1,35-1,4× desde que os títulos foram encurtados.
 | 01/09 | 28 | **3** (todas ChatGPT Search) | 7 consultas × 4 superfícies |
 | 10/09 | 43 | **10** (+1 parcial) | conjunto ainda media o nome aposentado |
 | 11/09 | 16 | **9** (+1 parcial) | primeira rodada da Trilha B (marca atual) |
+| 23/09 | 10 (só ChatGPT até agora) | **5** | Trilha A 2/5 · Trilha B 3/4 · Trilha C sem contaminação |
 
 ### Por superfície
 
-| Superfície | 01/09 | 10/09 | 11/09 |
-|---|---|---|---|
-| ChatGPT Search | 3/7 | 3/7 (conta neutra) · 6/8 (conta logada, inflada) | 2/4 |
-| Google AI Overviews | 0/7 | 1/8 | 2/4 |
-| Google Gemini | 0/7 | 0/6 (+1 parcial) | **3/4** |
-| Perplexity | 0/7 | 0/6 | 2/4 (+1 parcial) |
+| Superfície | 01/09 | 10/09 | 11/09 | 23/09 |
+|---|---|---|---|---|
+| ChatGPT Search | 3/7 | 3/7 (conta neutra) · 6/8 (conta logada, inflada) | 2/4 | **5/9** (A 2/5 · B 3/4) |
+| Google AI Overviews | 0/7 | 1/8 | 2/4 | ⏳ |
+| Google Gemini | 0/7 | 0/6 (+1 parcial) | **3/4** | ⏳ |
+| Perplexity | 0/7 | 0/6 | 2/4 (+1 parcial) | ⏳ |
+
+**ChatGPT em 23/09 (busca ligada, conta não informada, sem sinal de
+personalização):** cita e recomenda em "ferramenta para divulgar ofertas" e em
+"como espelhar mensagens"; **não** cita em "bot para afiliados", que ele lê como
+bot de catálogo (Afilira, Easyfy, Shozap, LucreShop). Trilha B: preço certo,
+metodologia virou (0 em 11/09 → citado com o nosso vocabulário), e
+**"o que é" segue 0** — terceira rodada seguida em que "espelha grupos" é lido
+como expressão, não como marca. Marca partida de novo ("Espelha Grupos, BOTinho
+e alternativas").
+
+⚠️ **Objeção nova, a mais séria da rodada:** perguntado se é confiável, o
+ChatGPT pesquisou e concluiu "não diria ainda que é confiável no sentido
+empresarial" — **não há CNPJ nem razão social em nenhuma página do site**
+(conferido no código em 23/09), não há página no Reclame Aqui e há poucas
+avaliações independentes. É a objeção que a IA entrega a quem vai conectar o
+WhatsApp. Publicar a identificação jurídica é decisão da dona do produto.
 
 ### As três viradas de 11/09, na mesma superfície e mesma pergunta
 
@@ -155,6 +172,9 @@ rodadas mediram o mesmo site.
 | espelha grupos metodologia WhatsApp | 3/4 |
 | espelha grupos é confiável | 3/4 |
 | espelha grupos whatsapp o que é | **0/4** |
+
+ChatGPT em 23/09: preço ✅, metodologia ✅ (virou), é confiável ✅ com objeção
+de CNPJ, o que é ❌.
 
 ---
 
