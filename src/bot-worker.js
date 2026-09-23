@@ -89,7 +89,7 @@ import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypin
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { convertPerPlatformSerially } from './core/conversionScheduler.js'
-import { chooseCoupon, renderCouponText, applyCouponToken } from './core/clientCouponPolicy.js'
+import { chooseCoupon, renderCouponText, applyCouponToken, sanitizePriceCents } from './core/clientCouponPolicy.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
@@ -1042,7 +1042,7 @@ async function checkScheduledMessages() {
           // Agendado sai com cupom igual ao "Enviar agora" (decisão da dona do
           // produto, 2026-09-23). O cupom é escolhido quando a mensagem SAI,
           // não quando foi agendada: vencido ou desligado até lá, não sai.
-          couponContext: couponContextFromText(msg.text),
+          couponContext: couponContextFromText(msg.text, msg.couponPriceCents),
           ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
           onDone: async (result) => {
             state.remaining--
@@ -2557,9 +2557,11 @@ function applyCouponTokenToPayload(payload, couponText) {
 // primeiro link do texto — mesmo detector do espelhamento (src/detector.js).
 // Preço desconhecido: cai na ordem fixa e previsível do FR-011 em chooseCoupon.
 // Fonte ÚNICA para os dois caminhos, para agendado e imediato nunca divergirem.
-function couponContextFromText(text) {
+// `priceCents` é o preço que a tela do Criar oferta leu da loja: com ele sai o
+// "de X por Y com o cupom" também no envio. Sem ele, preço desconhecido.
+function couponContextFromText(text, priceCents = null) {
   const platform = detectLinks(text || '')[0]?.platform ?? null
-  return platform ? { platform, priceCents: null } : null
+  return platform ? { platform, priceCents: sanitizePriceCents(priceCents) } : null
 }
 
 async function resolveCouponTextForJob(job) {
@@ -5482,7 +5484,7 @@ const handleMessage = async msg => {
     // o de dashboard/lib, proibido aqui). Preço tratado como desconhecido
     // (cai na ordem fixa e previsível do FR-011 dentro de chooseCoupon); a
     // substituição em si acontece no MESMO ponto de processSendJob (T019).
-    const broadcastCouponContext = couponContextFromText(msg.text)
+    const broadcastCouponContext = couponContextFromText(msg.text, msg.options?.couponPriceCents)
 
     let queued = 0
     const errors = []
