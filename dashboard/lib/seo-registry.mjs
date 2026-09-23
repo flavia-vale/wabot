@@ -431,13 +431,20 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/seguranca-credenciais-afiliado', template: 'module-deep-dive', priority: 0.78, changeFrequency: 'monthly', lastModified: resolveLastModified('/seguranca-credenciais-afiliado'), indexable: true },
 ]
 
+// EDITORIAL_DATES é a FONTE ÚNICA da data de atualização (23/09/2026). Antes
+// cada linha acima escolhia entre `DEFAULT_LAST_MODIFIED` e
+// `resolveLastModified`, e 33 rotas mandavam 2026-05-15 no sitemap mesmo depois
+// de editadas — o mesmo dado do "Atualizado em" visível e do `dateModified`.
 export const SEO_ROUTES = [
   ...CORE_SEO_ROUTES,
   ...HUB_SEO_ROUTES,
   ...PROGRAMMATIC_SEO_ROUTES,
   ...organicNicheRoutes,
   ...CONTENT_SEO_ROUTES,
-]
+].map((route) => {
+  const updatedAt = EDITORIAL_DATES[route.path]?.updatedAt
+  return updatedAt ? { ...route, lastModified: updatedAt } : route
+})
 
 export function getProgrammaticSeoSlugs() {
   return PROGRAMMATIC_SEO_ROUTES.map((route) => route.slug)

@@ -19,6 +19,7 @@ Last updated: 2026-09-23
 - Segurança: credenciais de afiliada e chave PIX criptografadas em repouso (AES-256-GCM); login com proteção contra força bruta; cancelamento pelo painel.
 - Quem faz: Flávia Vale, fundadora, opera grupos de ofertas desde 2023 (https://espelhagrupos.com.br/quem-somos).
 - Suporte: contato@espelhagrupos.com.br e https://espelhagrupos.com.br/suporte
+- Perfis oficiais: YouTube https://www.youtube.com/@espelhagrupos e LinkedIn https://www.linkedin.com/company/espelha-grupos/
 
 ## What the product does
 
