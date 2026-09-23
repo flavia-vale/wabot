@@ -243,12 +243,58 @@ insuficiente (a regra conta QUANTIDADE de link, não FORÇA — ver aviso em
 entre as `/alternativas/*` (mesmo risco que a rodada de 11/09 já flagou para as
 páginas de loja).
 
+**Adiantado em 23/09:** no export de 23/09, **nenhuma** `/alternativas/*` está
+mais em "Detectada, mas não indexada", e três das sete do Dia 7 já têm
+impressão (`afilimais` 3, `ia-divulgadora` 2, `shark` 1) — ou seja, estão
+indexadas. Em 28/09 só falta conferir as quatro ainda sem impressão:
+`busqy`, `afilira`, `divulga-ninja`, `afiliado-inteligente`.
+
 ### Como conferir que funcionou
 
 Em **7 dias**, Inspeção de URL nas quatro do Dia 1. O veredito precisa sair de
 "Detectada, mas não indexada" para **"URL está no Google"**. Se continuar
 "Detectada" com "Último rastreamento: N/D", o problema é descoberta e o link
 interno não bastou — aí a conversa é outra.
+
+**✅ Conferido em 23/09 — Dia 1 e Dia 2 estão TODOS no Google.** Três por
+Inspeção de URL (`/quanto-ganha-afiliado-shopee`, `/vendas-e-comissao-afiliado-whatsapp`,
+`/copiaram-minha-oferta-no-whatsapp`: "O URL está no Google", último
+rastreamento 11/09). As outras seis dispensam inspeção porque já recebem
+impressão, e página com impressão está indexada: `/espelha-grupos-e-confiavel`
+(36) e as cinco lojas (Shopee 61, Mercado Livre 55, Amazon 71, SHEIN 160,
+Magalu 6).
+
+### Dia 8 (2026-09-23) — ⏳ a pedir
+
+Tirado do export de indexação de 23/09. As quatro primeiras são as rotas
+renomeadas em 19/09 que o Google **nunca rastreou** (os nomes antigos
+`/…-botinho…` respondem 308 para elas) — são as de maior valor, porque carregam
+a entidade da marca. As quatro seguintes ganharam links em 17/09 e nunca foram
+pedidas. As duas últimas são sobra do Dia 6.
+
+```
+https://espelhagrupos.com.br/protecao-antiban-espelha-grupos           ⏳
+https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                ⏳
+https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual          ⏳
+https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais        ⏳
+https://espelhagrupos.com.br/alternativas/fluxopromo                    ⏳
+https://espelhagrupos.com.br/alternativas/shozap                        ⏳
+https://espelhagrupos.com.br/alternativas/gigi-bot                      ⏳
+https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados   ⏳
+https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons     ⏳
+https://espelhagrupos.com.br/consistencia-postagens-em-grupos           ⏳
+```
+
+### Dia 9 — ⏳ depois do Dia 8
+
+```
+https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp          ⏳
+https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao    ⏳
+```
+
+A segunda foi **rastreada em 21/09 e não indexada**. Diferente das LPs
+congeladas, é uma rota renomeada em 19/09 — vale um pedido. Se continuar fora
+depois disso, o motivo é conteúdo, não descoberta.
 
 ---
 

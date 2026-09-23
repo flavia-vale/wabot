@@ -200,17 +200,27 @@ re-estimar por sinal de SERP quando este dado real já existe.**
 Ordem de prioridade dos marketplaces (Trends, estável salvo Magalu):
 **Shopee ≫ Mercado Livre > Amazon ≫ Magalu (em queda)**.
 
-### Baseline do site (Search Console — atualizado 2026-09-16)
+### Baseline do site (Search Console — atualizado 2026-09-23)
 
-| Métrica | 30/07 | 16/08 | 01/09 | **16/09** |
-|---|---:|---:|---:|---:|
-| Cliques (soma da aba "Países") | 40 | 93 | 177 | **490** |
-| Impressões | 1.102 | 2.902 | 5.773 | **13.362** |
-| CTR | 3,63% | 3,20% | 3,07% | **3,67%** |
-| Consultas distintas | 13 | 29 | 115 | **180** ← métrica mais honesta de progresso |
+| Métrica | 30/07 | 16/08 | 01/09 | 16/09 | **23/09** |
+|---|---:|---:|---:|---:|---:|
+| Cliques (soma da aba "Países") | 40 | 93 | 177 | 490 | **680** |
+| Impressões | 1.102 | 2.902 | 5.773 | 13.362 | **16.581** |
+| CTR | 3,63% | 3,20% | 3,07% | 3,67% | **4,10%** |
+| Consultas distintas | 13 | 29 | 115 | 180 | **225** ← métrica mais honesta de progresso |
+| Páginas com impressão | 60 | 77 | 79 | 101 | **113** |
 
 Compare sempre pela soma da aba "Países" (o painel-resumo dá 41/1.154 em 30/07
 porque inclui linhas sem país atribuído — as duas metodologias não se misturam).
+16/09 e 23/09 usam janela de **3 meses**; a série completa, semana a semana,
+mora em `docs/marketing/SERIE_HISTORICA_SEO.md`.
+
+**Leitura de 23/09, pela série semanal (não pelo acumulado):** o CTR subiu pela
+quarta semana seguida — **2,52% → 3,53% → 4,77% → 5,75%** (25/08 a 21/09) — e a
+última semana teve **mais clique com menos impressão** (192 cliques contra 173;
+3.342 impressões contra 3.630). Setembro, até o dia 21, já tem **489 cliques,
+3,2× agosto inteiro**. A busca pelo nome da marca, `espelha grupos`, foi de
+19 para **51 impressões e de 17 para 39 cliques** em uma semana.
 
 **A entrega de 20/08 (títulos reescritos, marca duplicada removida, 25 rotas
 mortas fora do índice) funcionou, e dá para medir sem depender do acumulado.**
@@ -251,11 +261,11 @@ entrega sem fonte e data.
 **Três páginas continuam sem clique mesmo depois da reescrita de 20/08** — não
 insistir no mesmo ajuste, elas precisam de outra abordagem:
 
-| Página | Impressões | Cliques |
-|---|---:|---:|
-| `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp` | 477 | **1** |
-| `/programa-de-afiliados` | 185 | **0** |
-| `/bot-ofertas-whatsapp` (hub de nichos) | **8** (era 37) | 0 |
+| Página | Impressões 16/09 | Cliques 16/09 | Impressões 23/09 | Cliques 23/09 |
+|---|---:|---:|---:|---:|
+| `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp` | 477 | **1** | 518 | **3** |
+| `/programa-de-afiliados` | 185 | **0** | 217 | **0** |
+| `/bot-ofertas-whatsapp` (hub de nichos) | **8** (era 37) | 0 | 3 | 0 |
 
 O hub de nichos encolheu porque as 10 páginas-filhas saíram do índice em 20/08
 — custo previsto da decisão, registrado aqui para não ser diagnosticado como
@@ -272,6 +282,17 @@ análise escreveu "falta atacar o Tier 1"; o erro de método é sempre o mesmo e
 está documentado acima — o relatório **Páginas** só lista página COM impressão,
 então página zerada não aparece na exportação, e "ausente do relatório" foi lido
 como "não existe".
+
+**23/09 — o link resolveu a descoberta, não a disputa.** Em 17/09 as oito
+`/alternativas/*` e a `/bot-achadinhos-whatsapp` passaram a linkar as cinco
+lojas. Uma semana depois, as cinco páginas somam **353 impressões e 7 cliques
+(eram 123 e 1)**: Shopee 61, Mercado Livre 55, Amazon 71, SHEIN 160, Magalu 6.
+Mas as **consultas** de marketplace mal andaram (33 → 49 impressões) e os
+termos-cabeça de 50.000/mês (`shopee afiliados`, `mercado livre afiliados`,
+`afiliado amazon`) **continuam fora**: as páginas aparecem para cauda longa
+(`grupo de afiliados shein whatsapp`, `bot para afiliados mercado livre`). O
+problema deixou de ser "o Google não lê" e passou a ser "o Google lê e não
+coloca no termo principal".
 
 **Citação por IA, medido em campo pela 1ª vez em 01/09** (7 consultas
 prioritárias × 4 superfícies, 28/28 linhas em
@@ -301,6 +322,14 @@ o preço; Gemini, Perplexity e Google AI Overviews citam em 0 de 7.**
 `utm_source=chatgpt.com`), com apenas 18% das visitas — enquanto o Google traz
 70% das visitas. Citação por IA deixou de ser aposta de futuro: é hoje o canal
 que mais traz cliente. 86% dos pagantes entraram por página de conteúdo.
+
+**23/09 (30 dias):** o número absoluto do ChatGPT subiu e a fatia caiu, porque o
+resto cresceu mais rápido — **54 de 205 cadastros (26%)** vieram com o carimbo
+do ChatGPT; eram 31 de 72. Pagantes no período: **18 (9%)**, 8 deles entrando
+por página de conteúdo. ⚠️ A fatia de VISITAS do ChatGPT (8% das visitas com
+referenciador) **não é comparável** com a de cadastros: o app e o navegador
+embutido do ChatGPT tiram o referenciador, então a visita some da conta e o
+cadastro não (ele é contado pelo `utm_source`). Não dividir um pelo outro.
 
 **A entidade está partida em duas (achado de 01/09, corrigir).** Perguntado o
 que o faria recomendar cada nome, o ChatGPT tratou **Espelha Grupos e BOTinho
