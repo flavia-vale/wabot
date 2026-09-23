@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
-import { BRAND_DEFINITION_PT, SISTER_SITES, SUPPORTED_STORES } from '@/lib/marketing-content'
+import { BRAND_DEFINITION_PT, BRAND_LINKEDIN_URL, BRAND_YOUTUBE_URL, SISTER_SITES, SUPPORTED_STORES } from '@/lib/marketing-content'
 import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 
 export const metadata = {
@@ -56,6 +56,12 @@ export default function AboutPage() {
         <p>
           <strong>Espelha Grupos</strong> é o nome do produto e da empresa — um produto só, e é assim que ele aparece
           em tudo o que publicamos hoje: site, painel, canal do YouTube e Instagram.
+        </p>
+        <p>
+          Perfis oficiais:{' '}
+          <a href={BRAND_YOUTUBE_URL} className="font-bold text-green-700 underline underline-offset-4">YouTube</a>
+          {' e '}
+          <a href={BRAND_LINKEDIN_URL} className="font-bold text-green-700 underline underline-offset-4">LinkedIn</a>.
         </p>
         {/*
           Quem faz, com nome, e os outros sites da mesma pessoa. É o par do

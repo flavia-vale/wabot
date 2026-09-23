@@ -89,11 +89,12 @@ export const BRAND_TIKTOK_URL =
   process.env.NEXT_PUBLIC_BRAND_TIKTOK_URL || 'https://www.tiktok.com/@espelhagrupos'
 
 // Página da EMPRESA no LinkedIn (confirmada pela dona do produto em
-// 20/09/2026). Vai no `sameAs` da Organization — é distinta do perfil PESSOAL
+// 20/09/2026; endereço trocado do id numérico para o nome da marca,
+// /company/espelha-grupos/, por decisão dela em 23/09/2026). Vai no `sameAs` da Organization — é distinta do perfil PESSOAL
 // dela, que vai em FOUNDER_SAME_AS (a mesma separação Organization/Person já
 // documentada no comentário de BRAND_SAME_AS).
 export const BRAND_LINKEDIN_URL =
-  process.env.NEXT_PUBLIC_BRAND_LINKEDIN_URL || 'https://www.linkedin.com/company/145208936/'
+  process.env.NEXT_PUBLIC_BRAND_LINKEDIN_URL || 'https://www.linkedin.com/company/espelha-grupos/'
 
 // Tutorial oficial de criação de conta. É a prova social VERIFICÁVEL que
 // substituiu os números inventados do bloco `Social` (auditoria de funil

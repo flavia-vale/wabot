@@ -105,7 +105,7 @@ test('o Instagram @espelhagrupos está no sameAs da Organization', () => {
 test('TikTok @espelhagrupos e a página da empresa no LinkedIn estão no sameAs da Organization', () => {
   assert.ok(BRAND_SAME_AS.includes('https://www.tiktok.com/@espelhagrupos'), `sameAs: ${BRAND_SAME_AS.join(', ')}`)
   assert.ok(
-    BRAND_SAME_AS.includes('https://www.linkedin.com/company/145208936/'),
+    BRAND_SAME_AS.includes('https://www.linkedin.com/company/espelha-grupos/'),
     `sameAs: ${BRAND_SAME_AS.join(', ')}`,
   )
 })

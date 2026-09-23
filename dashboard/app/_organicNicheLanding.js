@@ -6,6 +6,7 @@ import { IntroCard } from '@/components/landing/IntroCard'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { getEditorialDates } from '@/lib/editorial-content'
 
 const pages = {
   'bot-ofertas-restaurantes-whatsapp': {
@@ -189,6 +190,7 @@ export function OrganicNicheLanding({ pageKey }) {
             title={page.h1}
             body={page.directAnswer}
             pills={page.bullets}
+            updatedAt={getEditorialDates(page.slug).updatedAt}
           />
         </div>
       </section>

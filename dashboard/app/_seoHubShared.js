@@ -7,6 +7,7 @@ import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getHubSeoRoute, getSeoRoutesByCluster, buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { getEditorialDates } from '@/lib/editorial-content'
 
 const HUB_CONTENT = {
   /* ESPELHAMENTO — a categoria principal do produto, reescrita em 2026-09-02.
@@ -240,6 +241,7 @@ export function SeoHubPage({ hubSlug }) {
             title={title}
             body={content.intro}
             pills={content.checklist}
+            updatedAt={getEditorialDates(`/${hubSlug}`).updatedAt}
           />
         </div>
       </section>

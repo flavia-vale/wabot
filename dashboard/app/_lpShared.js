@@ -14,6 +14,7 @@ import { getHubSeoRoute, getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoute
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { buildOgImageUrl } from '@/lib/seo-og'
 import { getProofAssetsForCluster } from '@/lib/proof-assets'
+import { getEditorialDates } from '@/lib/editorial-content'
 
 export const LP_CONFIG = {
   'espelhar-grupos-whatsapp-sao-paulo': { title: 'Espelhar grupos e canais WhatsApp em São Paulo', description: 'Automatize sua rotina de ofertas em grupos e canais de São Paulo com o Espelha Grupos e reduza trabalho manual.', uniqueHeadline: 'Operação em São Paulo: volume alto, rotina estável.', uniqueBody: 'Em SP, a disputa por atenção é maior e os grupos e canais giram rápido. O Espelha Grupos ajuda você a manter constância sem perder tempo no copia-e-cola.', uniqueBullets: ['Padronize campanhas em múltiplos bairros e públicos.', 'Evite atrasos nas postagens de ofertas relâmpago.', 'Mantenha frequência diária mesmo em horários de pico.'], faq: [{ q: 'Quanto tempo para ativar em São Paulo?', a: 'Normalmente no mesmo dia: conexão por QR Code, escolha dos grupos e/ou canais e regras básicas.' }, { q: 'Posso separar grupos e/ou canais por bairro?', a: 'Sim. Você pode organizar fontes e destinos por região e tipo de público.' }], howTo: ['Conecte seu WhatsApp de operação e valide os grupos e/ou canais de origem.', 'Defina os grupos e/ou canais de destino e o intervalo ideal para o público paulista.', 'Ative regras por horário para manter consistência nos picos de tráfego.'] },
@@ -281,6 +282,7 @@ export function LpTemplate({ slug }) {
             body={cfg.uniqueBody}
             pills={cfg.uniqueBullets}
             accent={lpType !== 'default'}
+            updatedAt={getEditorialDates(`/${slug}`).updatedAt}
           />
         </div>
       </section>

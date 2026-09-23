@@ -408,7 +408,7 @@ function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling })
           <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-100">
             <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Saiu (Claude + servidor)</p>
             <p className="mt-1 text-2xl font-black text-rose-700">{formatCurrency(summary.investedToDate ?? summary.totalInvested)}</p>
-            <p className="mt-1 text-[11px] text-rose-600">tudo que você já pagou para o BOTinho existir, com a conta deste mês inteira</p>
+            <p className="mt-1 text-[11px] text-rose-600">tudo que você já pagou para o Espelha Grupos existir, com a conta deste mês inteira</p>
           </div>
           <div className={`rounded-xl p-4 ring-1 ${seCustear ? 'bg-emerald-600 ring-emerald-500' : 'bg-slate-900 ring-slate-800'}`}>
             <p className="text-xs font-bold uppercase tracking-wide text-cyan-200">{seCustear ? 'Já sobrou' : 'Ainda falta'}</p>
@@ -1525,8 +1525,8 @@ function FaqEditor({ faq, onSave, onDelete }) {
 
 function TutorialEditor({ tutorial, onSave }) {
   const defaultTemplate = {
-    title: 'Guia de Configuração: Pegando suas Credenciais (BOTinho)',
-    body: `Para que o BOTinho trabalhe para você, precisamos conectar suas contas de afiliado.\n\n🛠️ Passo 0 — Ferramenta Essencial\n1. Instale a extensão Cookie-Editor no Google Chrome (computador).\n2. Abra a Chrome Web Store e clique em “Usar no Chrome”.\n\n🔵 Mercado Livre — Como conseguir credenciais\n1. Faça login na sua conta de afiliado.\n2. Acesse o Gerador de Links: https://www.mercadolivre.com.br/afiliados/linkbuilder#hub\n3. Copie a Etiqueta em uso exibida no Gerador de Links.\n4. Clique na extensão Cookie-Editor e localize o cookie “ssid”.\n5. Copie o valor do “ssid” e salve no BOTinho.\n\n🟡 Amazon — Como conseguir credenciais\n1. Acesse https://associados.amazon.com.br/\n2. Com a página aberta, clique no Cookie-Editor.\n3. Copie os cookies solicitados pelo BOTinho.\n\n🟠 Shopee — Solicitação de API\n1. Acesse o formulário: https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=\n2. Respostas: AFILIADO > Dúvidas sobre o Programa de Afiliados > Próximo > SIM > Não, estou com outras dificuldades/dúvidas.\n3. Informe seu ID de afiliado e selecione tema/cenário para ativar API.\n4. Envie e acompanhe diariamente: https://affiliate.shopee.com.br/open_api\n\n⏳ E agora?\nApós a liberação da Shopee, clique em “Redefinir” para visualizar Key/Secret e colar no BOTinho.`,
+    title: 'Guia de Configuração: Pegando suas Credenciais (Espelha Grupos)',
+    body: `Para que o Espelha Grupos trabalhe para você, precisamos conectar suas contas de afiliado.\n\n🛠️ Passo 0 — Ferramenta Essencial\n1. Instale a extensão Cookie-Editor no Google Chrome (computador).\n2. Abra a Chrome Web Store e clique em “Usar no Chrome”.\n\n🔵 Mercado Livre — Como conseguir credenciais\n1. Faça login na sua conta de afiliado.\n2. Acesse o Gerador de Links: https://www.mercadolivre.com.br/afiliados/linkbuilder#hub\n3. Copie a Etiqueta em uso exibida no Gerador de Links.\n4. Clique na extensão Cookie-Editor e localize o cookie “ssid”.\n5. Copie o valor do “ssid” e salve no Espelha Grupos.\n\n🟡 Amazon — Como conseguir credenciais\n1. Acesse https://associados.amazon.com.br/\n2. Com a página aberta, clique no Cookie-Editor.\n3. Copie os cookies solicitados pelo Espelha Grupos.\n\n🟠 Shopee — Solicitação de API\n1. Acesse o formulário: https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=\n2. Respostas: AFILIADO > Dúvidas sobre o Programa de Afiliados > Próximo > SIM > Não, estou com outras dificuldades/dúvidas.\n3. Informe seu ID de afiliado e selecione tema/cenário para ativar API.\n4. Envie e acompanhe diariamente: https://affiliate.shopee.com.br/open_api\n\n⏳ E agora?\nApós a liberação da Shopee, clique em “Redefinir” para visualizar Key/Secret e colar no Espelha Grupos.`,
     images: [
       { id: 'print-1', label: 'PRINT 1 — Cookie-Editor', url: '', note: 'Destaque o botão “Usar no Chrome”.' },
       { id: 'print-2', label: 'PRINT 2 — Mercado Livre Etiqueta em uso', url: '', note: 'Destaque a Etiqueta em uso.' },
@@ -2839,7 +2839,7 @@ export default function AdminPage() {
               {admin?.permissions?.includes('tech:read') && <Link href="/admin/teste-shard" className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-100">Teste shard</Link>}
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-base font-black text-white">B</div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-lg font-black text-gray-900">BOTinho</span>
+                <span className="text-lg font-black text-gray-900">Espelha Grupos</span>
                 <span className="text-xs font-semibold text-gray-400">admin</span>
               </div>
             </div>

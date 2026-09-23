@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Admin BOTinho',
-  description: 'Área administrativa restrita do BOTinho.',
+  title: 'Admin Espelha Grupos',
+  description: 'Área administrativa restrita do Espelha Grupos.',
   alternates: { canonical: '/admin' },
   robots: {
     index: false,
