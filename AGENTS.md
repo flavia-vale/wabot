@@ -6961,6 +6961,32 @@ só os carrega para o aviso interno de número repetido; texto velho ali não mu
 nada para a cliente, e incluí-los faria toda edição de e-mail reconectar todo
 mundo).
 
+## Design system (canônico — toda alteração visual segue ele)
+
+A fonte única de verdade visual é **`docs/design-system/design-system-v2.html`**
+(Espelha Grupos · Design System v2, arquivo autocontido — abrir no navegador).
+**Qualquer mudança visual no dashboard/painel/admin/site deve seguir esse
+documento**: cores, tipografia (Figtree), forma e sombra, botões, campos, cards/
+KPIs/tags, menu lateral, padrão de página, padrão PRO, planos e acesso, voz e
+texto e o checklist de página nova.
+
+Tokens principais (usar os tokens, nunca hex solto):
+
+| Token | Valor | Token | Valor |
+|---|---|---|---|
+| `--bg` | `#EEF6F2` | `--accent` | `#7CC9A9` |
+| `--bg-soft` | `#DDEDE5` | `--accent-strong` | `#3E9C7A` |
+| `--surface` | `#FCFEFD` | `--accent-2` | `#D9CFEA` |
+| `--ink` | `#1F2D2A` | `--accent-3` | `#F6E8D8` |
+| `--ink-soft` | `#5A6E68` | `--pro` | `#6F4FE8` |
+| `--ink-faint` | `#8FA09A` | `--pro-ink` / `--pro-soft` | `#4B34A8` / `#ECE7FA` |
+| `--warn` | `#E8A45A` | `--danger` | `#D97757` |
+
+**Não regredir:** padrão visual novo que não está no design system é decidido
+com a dona do produto e entra no documento ANTES de ir para a tela — senão cada
+tela volta a inventar o próprio estilo. Atualizar o design system = substituir o
+arquivo (nova versão), não editar tela a tela.
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos
