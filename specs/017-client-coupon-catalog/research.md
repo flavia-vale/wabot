@@ -104,9 +104,20 @@ motivo errado. Duplicação aceita e registrada, cada uma com teste próprio.
 
 ## D3 — Onde o cupom é resolvido nos três caminhos
 
-A regra que organiza tudo: **o token de cupom sobrevive à montagem do texto e é
-substituído no último momento possível**. É isso que faz FR-014 valer para item
-que fica horas esperando na fila (`deferSendJob`).
+A regra que organiza tudo: **o marcador de cupom é substituído no último momento
+possível — na hora do envio**. É isso que faz FR-014 valer para item que fica
+horas esperando na fila (`deferSendJob`).
+
+**Revisado em 2026-09-23 (merge com o develop):** a montagem
+(`applyTemplateVariables`/`buildMobileOfferText`) passou a **apagar** o marcador
+por padrão; só quem passa pelo robô pede `keepCouponToken: true`
+(`src/core/mirrorTemplate.js`, `src/offerAutomation/dispatcher.js`,
+`dashboard/app/painel/criar-oferta/page.js`, `dashboard/lib/offerTemplatePreview.js`).
+Motivo: o guarda `test/criar-oferta-sem-preco.test.js` (RCA de 19/09, "nenhuma
+variável vaza crua") mostrou que o botão **copiar** do Criar oferta levaria
+`{cupom}` cru ao grupo — copiar é o único caminho que não passa pelo robô, e usa
+`stripCouponToken`. Padrão seguro protege qualquer tela futura que monte oferta.
+Guardas: `test/cupom-marcador-montagem.test.js`.
 
 ### Invariante única (vale para os três caminhos)
 
@@ -142,9 +153,12 @@ que fica horas esperando na fila (`deferSendJob`).
   link (mesmo detector que o composer já usa), **preço desconhecido** — cai na
   ordem fixa e previsível do FR-011. Substituição acontece no mesmo ponto de
   `processSendJob`.
-- FR-025 respeitado: o painel "Criar oferta" não ganha seletor nem
-  pré-visualização de cupom. A presença do token no texto **é** o sinal de
-  FR-024 ("usando template e o template contém a variável").
+- FR-025 (revisado em 2026-09-23): o painel "Criar oferta" não ganha seletor
+  nem prévia do cupom escolhido, mas Enviar agora, Agendar e Inserir na fila
+  publicam com cupom (todos passam pelo robô; a loja sai de
+  `couponContextFromText`, fonte única dos envios do painel). Copiar sai sem o
+  marcador. A presença do marcador no texto **é** o sinal de FR-024 ("usando
+  template e o template contém a variável").
 
 ### (c) Ofertas automáticas
 

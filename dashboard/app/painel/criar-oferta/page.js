@@ -15,7 +15,8 @@ import { WhatsAppBubble } from '../WhatsAppBubble'
 import { getConversionStatusPresentation } from '@/lib/offerBuilderUi'
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
-import { buildMobileOfferText, showCouponStandIn, stripCouponToken } from '@/lib/mobileOfferComposer'
+import { buildMobileOfferText } from '@/lib/mobileOfferComposer'
+import { currentCouponText, ensureCouponSlot, hasCouponToken, resolveCouponForDisplay } from '@/lib/criarOfertaCupom'
 import { composeTemplates, loadAllTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import {
   readSavedTemplateKey,
@@ -24,11 +25,11 @@ import {
 } from '@/lib/offerTemplateSelection'
 
 const STORES = [
-  { test: /shopee/i, name: 'Shopee', bg: '#EE4D2D', fg: '#fff', mark: 'S' },
-  { test: /amazon|amzn/i, name: 'Amazon', bg: '#FF9900', fg: '#fff', mark: 'a' },
-  { test: /mercadoliv|mercadolib|mlstatic/i, name: 'Mercado Livre', bg: '#FFE600', fg: '#1F2D2A', mark: 'ML' },
-  { test: /magazineluiza|magazinevoce|magalu/i, name: 'Magalu', bg: '#0086FF', fg: '#fff', mark: 'M' },
-  { test: /shein/i, name: 'SHEIN', bg: '#000000', fg: '#fff', mark: 'S' },
+  { test: /shopee/i, platform: 'shopee', name: 'Shopee', bg: '#EE4D2D', fg: '#fff', mark: 'S' },
+  { test: /amazon|amzn/i, platform: 'amazon', name: 'Amazon', bg: '#FF9900', fg: '#fff', mark: 'a' },
+  { test: /mercadoliv|mercadolib|mlstatic/i, platform: 'mercadolivre', name: 'Mercado Livre', bg: '#FFE600', fg: '#1F2D2A', mark: 'ML' },
+  { test: /magazineluiza|magazinevoce|magalu/i, platform: 'magazineluiza', name: 'Magalu', bg: '#0086FF', fg: '#fff', mark: 'M' },
+  { test: /shein/i, platform: 'shein', name: 'SHEIN', bg: '#000000', fg: '#fff', mark: 'S' },
 ]
 function detectStore(url) {
   const u = String(url || '')
@@ -102,8 +103,14 @@ export default function CriarOfertaPage() {
   // Texto da prévia editado à mão. null = segue o template; qualquer edição
   // manual passa a valer até trocar de template ou gerar nova oferta.
   const [customText, setCustomText] = useState(null)
+  // Checkbox "Inserir cupons cadastrados" — marcado por padrão (decisão da dona
+  // do produto, 2026-09-23). `coupons` null = ainda carregando.
+  const [useCoupons, setUseCoupons] = useState(true)
+  const [coupons, setCoupons] = useState(null)
 
   useEffect(() => {
+    // Cupons: falha ao carregar nunca trava a tela — a oferta só sai sem prévia de cupom.
+    api.coupons().then((res) => setCoupons(res?.coupons || [])).catch(() => setCoupons([]))
     Promise.all([api.groups(), api.offerQueues(), api.me().catch(() => null), api.instagramConnections().catch(() => [])]).then(([allGroups, allQueues, me, connections]) => {
       const destinations = allGroups.filter((group) => group.role === 'post')
       const queuesAllowed = me ? hasProLikeAccess({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null }) : true
@@ -137,12 +144,20 @@ export default function CriarOfertaPage() {
     },
     link: generated?.link || link,
     template: selectedTemplate?.key,
-    templateBody: selectedTemplate?.body,
+    // Marcado: garante um lugar para o cupom mesmo se o template não tiver
+    // {cupom} (abaixo do preço; nunca duplica). Desmarcado: vale o template.
+    templateBody: useCoupons ? ensureCouponSlot(selectedTemplate?.body) : selectedTemplate?.body,
     // {cupom} fica para o robô trocar na hora do envio (Enviar agora, Agendar
     // e Inserir na fila passam todos por ele).
     keepCouponToken: true,
   })
   const offerMessage = customText ?? templateMessage
+  // O melhor cupom de AGORA, só para a prévia e o "Copiar" (que não passam pelo
+  // robô). No envio o robô escolhe de novo, com o mesmo preço lido da loja.
+  const offerPriceCents = Math.round(parseNum(generated?.newPrice) * 100) || null
+  const couponText = currentCouponText({ coupons: coupons || [], platform: store?.platform, priceCents: offerPriceCents })
+  const templateHasCoupon = hasCouponToken(selectedTemplate?.body)
+  const noActiveCoupon = useCoupons && coupons !== null && !!store?.platform && !couponText
 
   function selectTemplate(key) {
     setTemplateKey(key)
@@ -219,9 +234,9 @@ export default function CriarOfertaPage() {
 
   async function copyMessage() {
     try {
-      // Copiar é o único caminho que NÃO passa pelo robô: sem isto o marcador
-      // de cupom chegaria cru ao grupo, colado à mão.
-      await navigator.clipboard.writeText(stripCouponToken(offerMessage))
+      // Copiar é o único caminho que NÃO passa pelo robô: o marcador vira o
+      // cupom de agora, ou some — nunca chega cru ao grupo, colado à mão.
+      await navigator.clipboard.writeText(resolveCouponForDisplay(offerMessage, couponText))
       setCopyFeedback('Oferta copiada com sucesso.')
       setTimeout(() => setCopyFeedback(''), 2500)
     } catch {
@@ -316,7 +331,7 @@ export default function CriarOfertaPage() {
           </span>
           <input
             className="pnl-input"
-            style={{ flex: 1, minWidth: 180, fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", fontSize: 13 }}
+            style={{ flex: 1, minWidth: 180, fontSize: 13 }}
             value={link}
             onChange={(e) => { setLink(e.target.value); setPasteFeedback('') }}
             placeholder="https://..."
@@ -346,6 +361,15 @@ export default function CriarOfertaPage() {
               </span>
             </>
           )}
+        </div>
+        <div style={{ padding: '0 20px 12px', display: 'flex', alignItems: 'center', gap: 12, fontSize: 12.5, color: 'var(--ink-soft)', flexWrap: 'wrap' }}>
+          <label className="pnl-check" style={{ margin: 0 }}>
+            <input type="checkbox" checked={useCoupons} onChange={(e) => setUseCoupons(e.target.checked)} />
+            Inserir cupons cadastrados
+          </label>
+          <Link href="/painel/cupons" style={{ fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'underline' }}>Cadastre seus cupons</Link>
+          {noActiveCoupon && <span>Nenhum cupom ativo da {store.name} — a oferta sai sem cupom.</span>}
+          {!useCoupons && templateHasCoupon && <span>Este modelo já inclui o cupom.</span>}
         </div>
       </section>
 
@@ -403,7 +427,7 @@ export default function CriarOfertaPage() {
               )}
             </div>
             <div>
-              <WhatsAppBubble text={showCouponStandIn(offerMessage)} time={now} imageUrl={productImageUrl} format />
+              <WhatsAppBubble text={resolveCouponForDisplay(offerMessage, couponText)} time={now} imageUrl={productImageUrl} format />
               {productImageUrl && (
                 <p className="pnl-hint" style={{ marginTop: 8 }}>A imagem é ilustrativa — copie o texto e anexe a foto no WhatsApp.</p>
               )}

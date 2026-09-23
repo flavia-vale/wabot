@@ -56,7 +56,7 @@ export function RiskScoreSummary() {
               {data.items.map(it => (
                 <li key={it.groupId} className="flex justify-between border-t border-gray-100 py-1">
                   <span className="text-gray-700">{it.name || it.waJid}</span>
-                  <span className="font-mono text-gray-600">{it.score ?? '—'}</span>
+                  <span className="text-gray-600">{it.score ?? '—'}</span>
                 </li>
               ))}
             </ul>

@@ -9,7 +9,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
+import { LockedPage } from '@/components/pro/ProGate'
+import { OfertasAutomaticasPreview } from '@/components/pro/previews'
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
 import { composeTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
@@ -295,18 +296,21 @@ export default function OfertasAutomaticasPage() {
   // CTA), mantendo só a listagem/remoção do que já existe.
   if (!hasProLikeAccess(planSubject)) {
     return (
-      <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
+      <div className="pnl-grid" style={{ maxWidth: 1000, margin: '0 auto' }}>
         <div className="pnl-note-box is-info">
           🛍️ Por enquanto, o garimpo automático busca produtos só na <strong>Shopee</strong>. Mercado Livre, Amazon, SHEIN, Magalu e AliExpress ainda não têm busca automática por palavra-chave.
         </div>
-        <ProFeaturePaywall
-          title="Ofertas automáticas"
-          bullets={[
-            'O bot garimpa promoções na Shopee pela sua palavra-chave e posta sozinho nos seus grupos.',
-            'Filtros de desconto mínimo, ordenação por vendas/comissão e até 5 produtos por envio.',
-            'Dedup inteligente: o mesmo produto não repete no mesmo grupo em 24h.',
+        <LockedPage
+          feature="garimpo"
+          featureLabel="as ofertas automáticas"
+          steps={[
+            { title: 'Escolha um tema', desc: 'Ex.: air fryer, tênis, perfume.' },
+            { title: 'Escolha o desconto', desc: 'O robô procura na Shopee a partir do desconto que você definir.' },
+            { title: 'Escolha o grupo e o horário', desc: 'Ex.: das 8h às 22h. Salvou, começou.' },
           ]}
-        />
+        >
+          <OfertasAutomaticasPreview />
+        </LockedPage>
         {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
         {automations.length > 0 && (
           <section className="pnl-card">
@@ -501,6 +505,13 @@ export default function OfertasAutomaticasPage() {
 
   return (
     <div className="pnl-grid offer-auto-page">
+      <header className="pnl-pro-head">
+        <div>
+          <h2>Ofertas automáticas</h2>
+          <p>Diga o que quer divulgar. O robô procura na Shopee, filtra pelo desconto e publica sozinho.</p>
+        </div>
+        <button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Novo tema</button>
+      </header>
       <a className="offer-auto-guide" href={VIDEO_ATIVACAO_ROBO_URL} target="_blank" rel="noreferrer">
         <span className="offer-auto-guide-play" aria-hidden="true">▶</span>
         <span className="offer-auto-guide-copy">
@@ -529,10 +540,6 @@ export default function OfertasAutomaticasPage() {
           <button type="button" className={`pnl-switch${allAutomationsEnabled ? ' is-on' : ''}`} onClick={() => handleToggleAll(!allAutomationsEnabled)} disabled={bulkToggling !== null} aria-label={`${bulkToggleLabel} automações de ofertas`} aria-pressed={allAutomationsEnabled}><span /></button>
         </section>
       )}
-
-      <div className="offer-auto-new-row">
-        <button type="button" className="pnl-btn is-primary offer-auto-new" onClick={openCreate}>+ Novo tema</button>
-      </div>
 
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
 

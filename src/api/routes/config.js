@@ -1,7 +1,7 @@
 import dbDefault from '../../db.js'
 import { reloadConfig } from '../../manager.js'
 import { DEFAULT_BRANDING_CTA_TEXT, MAX_BRANDING_CTA_CHARS, normalizeBrandingCtaText, normalizeBrandingLink } from '../../messageProcessor.js'
-import { buildFeatureGateError, canUseAdvancedPreservation, FEATURE_CODES } from '../../billing/plans.js'
+import { buildFeatureGateError, canUseAdvancedPreservation, canUseCopyVariation, FEATURE_CODES } from '../../billing/plans.js'
 import { DEFAULT_COPY_VARIATION_POOL_JSON, resolveCopyVariationPoolJson } from '../../core/copyVariation.js'
 import { canonicalizeTemplateStoreJson } from '../../core/templateVariables.js'
 export { DEFAULT_COPY_VARIATION_POOL_JSON } from '../../core/copyVariation.js'
@@ -102,6 +102,15 @@ export async function configRoutes(app, opts = {}) {
     const normalizedMirrorTemplateKeyDefault = mirrorTemplateKeyDefault === undefined
       ? undefined
       : (String(mirrorTemplateKeyDefault ?? '').trim() || null)
+
+    // Divisão Basic/PRO (2026-09-23): variação do texto é do PRO. Desligar e
+    // editar as frases seguem liberados — só LIGAR exige o plano.
+    if (copyVariationEnabled === true) {
+      const subject = await getPlanSubject(db, userId)
+      if (!canUseCopyVariation(subject ?? { plan: 'basic' })) {
+        return reply.code(403).send(buildFeatureGateError(FEATURE_CODES.COPY_VARIATION))
+      }
+    }
 
     const requestsAdvancedPreservation = postToStatus === true
     if (requestsAdvancedPreservation && !(await ensureAdvancedPreservationAllowed(db, userId, reply))) return

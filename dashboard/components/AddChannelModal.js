@@ -190,7 +190,7 @@ function AddChannelModalContent({ onClose, onCreated }) {
             {!preview.name && (
               <p className="mt-1 text-xs text-amber-700">O WhatsApp não devolveu nome para esse canal — defina um para identificar na sua lista.</p>
             )}
-            <div className="text-xs text-slate-500 font-mono mt-2">{preview.jid}</div>
+            <div className="text-xs text-slate-500 mt-2">{preview.jid}</div>
             <div className="mt-2 text-sm">
               {preview.isViewerOwner
                 ? <span className="text-emerald-700">✓ Você é dono deste canal</span>

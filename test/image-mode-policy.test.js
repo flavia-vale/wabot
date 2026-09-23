@@ -62,7 +62,8 @@ test('o destino (toPostDetail) resolve o modo com resolveDestinationImageMode e 
   const fnStart = source.indexOf('function toPostDetail(')
   const fnEnd = source.indexOf('export function buildEntitledGroupConfig(')
   const fn = source.slice(fnStart, fnEnd)
-  assert.match(fn, /imageMode: resolveDestinationImageMode\(group\.imageMode\)/)
+  assert.match(fn, /const imageMode = resolveDestinationImageMode\(group\.imageMode\)/)
+  assert.match(fn, /imageMode: allowWatermark \? imageMode : destinationImageModeWithoutWatermark\(imageMode\)/)
   assert.match(fn, /watermarkText: group\.watermarkText/)
 })
 

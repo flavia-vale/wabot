@@ -78,7 +78,7 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
       <div className="grid gap-2 mb-3 rounded-lg border border-slate-200 p-3 bg-slate-50">
         <div className="text-xs text-slate-700">
           Sessão atual: <strong>{STATE_LABEL[session?.state] || 'Desconhecido'}</strong>
-          {session?.sessionId ? <span className="ml-1 font-mono">({session.sessionId})</span> : null}
+          {session?.sessionId ? <span className="ml-1">({session.sessionId})</span> : null}
         </div>
         {session?.qrExpiresAt ? (
           <div className="text-[11px] text-slate-500">
@@ -100,7 +100,7 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
             onChange={(e) => setSessionInput(e.target.value)}
             placeholder="probe_<userId>"
             disabled={disabled || loading}
-            className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-mono"
+            className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs"
           />
           <button type="button" disabled={disabled || loading || !sessionInput.trim()} onClick={() => run('select')} className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs text-blue-700 disabled:opacity-60">Selecionar</button>
         </div>
@@ -117,7 +117,7 @@ export function ProbeToggle({ value, onChange, disabled, probeAccountSessionId }
         <span className="text-sm text-gray-700">Ativar observador externo</span>
       </label>
       <p className="text-[11px] text-gray-500 mt-2">
-        Conta probe vinculada no config: <span className="font-mono">{probeAccountSessionId ?? 'nenhuma'}</span>.
+        Conta probe vinculada no config: <span>{probeAccountSessionId ?? 'nenhuma'}</span>.
       </p>
       <p className="mt-2 text-[11px] text-amber-700">Modo atual: <strong>manual_fallback</strong> (beta). Use os dados como sinal preventivo, não como prova absoluta de entrega.</p>
       {msg ? <p className="mt-2 text-xs text-slate-600">{msg}</p> : null}

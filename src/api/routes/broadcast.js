@@ -1,4 +1,5 @@
 import dbDefault from '../../db.js'
+import { sanitizePriceCents } from '../../core/clientCouponPolicy.js'
 import { sendBroadcast, isRunning } from '../../manager.js'
 import { enforceChannelPlanGate, loadUserPlanSubject, resolveTargetJids, validateBroadcastText } from './broadcastTargets.js'
 import { ensureBroadcastRate, ensureCountQuota } from '../quotas.js'
@@ -154,6 +155,8 @@ export async function broadcastRoutes(app, deps = {}) {
       const result = await sendBroadcastImpl(userId, text.trim(), targetJids, {
         imageUrl: optionalUrl(imageUrl) ?? undefined,
         imageRefererUrl: optionalUrl(imageRefererUrl) ?? undefined,
+        // Preço lido pelo Criar oferta: o robô usa para o "de X por Y" do cupom.
+        couponPriceCents: sanitizePriceCents(req.body?.offer?.priceCents) ?? undefined,
       })
       idem.commit(result)
       return result
@@ -208,6 +211,7 @@ export async function broadcastRoutes(app, deps = {}) {
         scheduledAt: schedDate,
         imageUrl: optionalUrl(imageUrl),
         imageRefererUrl: optionalUrl(imageRefererUrl),
+        couponPriceCents: sanitizePriceCents(req.body?.offer?.priceCents),
       },
     })
   })

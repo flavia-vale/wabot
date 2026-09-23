@@ -108,6 +108,32 @@ O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
   capacidade use **0,35 GB/sessão**. Servidor (2026-09-18): 30,6 GB, teto 80
   vagas, limite seguro da política ~71. Sinal que decide é o **swap**.
 
+## Design system (canônico — toda alteração visual segue ele)
+
+A fonte única de verdade visual é **`docs/design-system/design-system-v2.html`**
+(Espelha Grupos · Design System v2, arquivo autocontido — abrir no navegador).
+**Qualquer mudança visual no dashboard/painel/admin/site deve seguir esse
+documento**: cores, tipografia (Figtree), forma e sombra, botões, campos, cards/
+KPIs/tags, menu lateral, padrão de página, padrão PRO, planos e acesso, voz e
+texto e o checklist de página nova.
+
+Tokens principais (usar os tokens, nunca hex solto):
+
+| Token | Valor | Token | Valor |
+|---|---|---|---|
+| `--bg` | `#EEF6F2` | `--accent` | `#7CC9A9` |
+| `--bg-soft` | `#DDEDE5` | `--accent-strong` | `#3E9C7A` |
+| `--surface` | `#FCFEFD` | `--accent-2` | `#D9CFEA` |
+| `--ink` | `#1F2D2A` | `--accent-3` | `#F6E8D8` |
+| `--ink-soft` | `#5A6E68` | `--pro` | `#6F4FE8` |
+| `--ink-faint` | `#8FA09A` | `--pro-ink` / `--pro-soft` | `#4B34A8` / `#ECE7FA` |
+| `--warn` | `#E8A45A` | `--danger` | `#D97757` |
+
+**Não regredir:** padrão visual novo que não está no design system é decidido
+com a dona do produto e entra no documento ANTES de ir para a tela — senão cada
+tela volta a inventar o próprio estilo. Atualizar o design system = substituir o
+arquivo (nova versão), não editar tela a tela.
+
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
 - **Sempre que surgir uma nova demanda**, pergunte à usuária se vamos
@@ -158,6 +184,7 @@ O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
 | painel admin (clientes, tags, funil, capacidade na tela, contato ativo) | `docs/rca/admin.md` |
 | SEO, marketing, páginas públicas, dados de mercado, marca | `docs/rca/seo-marketing.md` |
 | Instagram Stories | `docs/rca/instagram.md` |
+| plano Basic × PRO, cadeados do painel, menu, Minha conta | `docs/rca/planos-basic-pro.md` |
 
 ## Mapa de sintomas → onde olhar (atalhos mais usados)
 
@@ -185,6 +212,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | E-mail não chegou | `src/email/dispatcher.js`, `src/emailTriggers/lifecyclePolicy.js` | `diag-email-vencimento.mjs` (antes: conferir `SMTP_*`) | emails |
 | Tag Pagante/número repetido não aparece | `src/domain/admin/payingStatus.js`, `src/domain/admin/sharedPhoneStatus.js` | `diag-tag-pagante.mjs`, `backfill-numeros-whatsapp.mjs` | admin |
 | Página/SEO sem impressão, cadastro sem origem | `dashboard/lib/seo-registry.mjs`, `src/domain/admin/signupOrigin.js` | `diag-paginas-seo.mjs`, `diag-origem-cadastros.mjs` | seo-marketing |
+| Recurso aparece com cadeado / "só no PRO" / 403 `FEATURE_REQUIRES_PRO` | `src/billing/plans.js`, `dashboard/components/pro/ProGate.js` | `scripts/basic-sem-recursos-pro.mjs` (quem ainda guarda marca/botão/variação sem o PRO) | planos-basic-pro |
 | Deploy vermelho | `.github/workflows/deploy.yml`, `scripts/deploy_safe_*.sh` | ver "Pegadinhas" | deploy-e-infra |
 
 Se o sintoma não está no mapa: ler o tema no índice, depois `Grep` pelo texto

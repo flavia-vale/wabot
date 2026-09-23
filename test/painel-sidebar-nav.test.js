@@ -61,3 +61,34 @@ test('sidebar mantém Filas dentro de Criar & enviar', () => {
   assert.ok(enviarAgora < filas, 'Filas deve aparecer depois de Enviar agora')
   assert.doesNotMatch(configBlock, /label:\s*'Filas'/, 'Filas não deve permanecer em Configuração')
 })
+
+// Divisão Basic/PRO (2026-09-23): a dona do produto manteve os nomes e a ordem
+// de sempre no menu. Só mudou: Vendas virou PRO (cadeado) e Minha conta entrou
+// no fim do grupo Conta.
+test('rótulos do protótipo não voltam ao menu', () => {
+  for (const label of ['Vendas Shopee', 'Filas de ofertas', 'IDs de afiliado', "label: 'Mensagens'", "label: 'WhatsApp'"]) {
+    assert.ok(!navSource.includes(label.startsWith('label') ? label : `label: '${label}'`), `rótulo "${label}" voltou ao menu`)
+  }
+  for (const title of ['Divulgar', 'Automatizar', 'Configurar']) {
+    assert.ok(!navSource.includes(`title: '${title}'`), `grupo "${title}" voltou ao menu`)
+  }
+})
+
+test('Vendas é item PRO e Minha conta fecha o grupo Conta', () => {
+  const vendas = navSource.indexOf("label: 'Vendas'")
+  assert.match(navSource.slice(vendas, vendas + 120), /pro: true/)
+  const conta = navSource.slice(navSource.indexOf("title: 'Conta'"))
+  const labels = [...conta.matchAll(/label: '([^']+)'/g)].map(m => m[1])
+  assert.deepEqual(labels, ['Plano', 'Afiliados', 'Minha conta'])
+})
+
+// A tela de cupons (specs/017-client-coupon-catalog) nasceu sem item no menu:
+// só se chegava nela pelo endereço. Ela fica logo abaixo dos templates porque
+// o cupom só aparece na oferta quando o template tem {cupom}.
+test('menu: Cupons fica logo abaixo de Templates de mensagens', () => {
+  const templates = navSource.indexOf("href: '/painel/mensagens'")
+  const cupons = navSource.indexOf("href: '/painel/cupons'")
+  const proximo = navSource.indexOf('href:', templates + 1)
+  assert.ok(cupons > 0, 'Cupons sumiu do menu')
+  assert.equal(cupons, proximo, 'Cupons deixou de ser o item logo abaixo de Templates de mensagens')
+})

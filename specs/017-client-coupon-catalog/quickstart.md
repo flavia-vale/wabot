@@ -121,17 +121,14 @@ perdido nem fila parada depois dos cenários acima.
 
 ## 4. Nota de operação na entrega (obrigatória)
 
-Em produção no modo `remote`, **o deploy da API não recarrega os bot-workers**.
-Portanto, logo após o deploy:
+Esta feature toca `WORKER_CODE_PATHS_RE` (`src/bot-worker.js`, `src/core/`,
+`prisma/schema.prisma`), então **o próprio deploy reinicia o `bot-supervisor`
+e reconecta todas as sessões de WhatsApp de uma vez** (`RESTART_SUPERVISOR=auto`,
+padrão desde 2026-08-26). **Anunciar às clientes antes do merge em `main`.**
 
-- a tela de cupons, o cadastro e a opção da automação **já valem**;
-- o cupom no **espelhamento** e na **fila de ofertas** só passa a valer depois de
-  `pm2 restart bot-supervisor --update-env`, **que reconecta todas as sessões de
-  WhatsApp de uma vez**.
-
-Esse reinício é decisão humana, anunciada antes, nunca às cegas. Até lá, o
-comportamento esperado é: cupons cadastrados normalmente e ofertas espelhadas
-ainda saindo sem cupom. **Isso é o esperado, não defeito.**
+Só com `RESTART_SUPERVISOR=0` (ou deploy fora dos scripts) é preciso
+`pm2 restart bot-supervisor --update-env` à mão; até lá, cupons cadastrados
+normalmente e ofertas espelhadas ainda sem cupom é o esperado, não defeito.
 
 Conferir se os robôs já pegaram o código novo:
 

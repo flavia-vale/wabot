@@ -12,6 +12,10 @@
  * expõe o item Plano na própria lista de nav (o card de plano no rodapé é
  * status/upsell, não substitui a navegação); configurações e sair seguem no
  * menu do avatar no rodapé.
+ *
+ * Divisão Basic/PRO (2026-09-23): nomes e ordem ficaram os de sempre (a dona
+ * do produto não quis os rótulos do protótipo). Itens `pro: true` ganham
+ * cadeado para quem não tem o PRO (PainelShell) e continuam clicáveis.
  */
 
 const i = (paths) => paths // SVG children prontos para <svg>
@@ -28,6 +32,7 @@ export const NAV_GROUPS = [
       {
         label: 'Vendas',
         href: '/painel/vendas',
+        pro: true,
         icon: i(<><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19H2" /></>),
       },
     ],
@@ -62,11 +67,6 @@ export const NAV_GROUPS = [
         pro: true,
         icon: i(<><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /><circle cx="2" cy="6" r=".5" /><circle cx="2" cy="12" r=".5" /><circle cx="2" cy="18" r=".5" /></>),
       },
-      {
-        label: 'Cupons',
-        href: '/painel/cupons',
-        icon: i(<><path d="M2 9a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z" /><path d="M9 9v6" strokeDasharray="1.5 1.5" /></>),
-      },
     ],
   },
   {
@@ -91,6 +91,13 @@ export const NAV_GROUPS = [
         label: 'Templates de mensagens',
         href: '/painel/mensagens',
         icon: i(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />),
+      },
+      {
+        // Logo abaixo dos templates: o cupom só aparece na oferta quando o
+        // template tem {cupom}, então os dois são configurados juntos.
+        label: 'Cupons',
+        href: '/painel/cupons',
+        icon: i(<><path d="M3 9a3 3 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a3 3 0 0 0 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" /><line x1="13" y1="5" x2="13" y2="19" strokeDasharray="2 2" /></>),
       },
       {
         label: 'Minhas credenciais',
@@ -146,6 +153,11 @@ export const NAV_GROUPS = [
         label: 'Afiliados',
         href: '/painel/afiliados',
         icon: i(<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 1-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>),
+      },
+      {
+        label: 'Minha conta',
+        href: '/painel/conta',
+        icon: i(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>),
       },
     ],
   },

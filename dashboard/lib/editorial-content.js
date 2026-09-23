@@ -114,7 +114,7 @@ export const EDITORIAL_DATES = {
   '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
   '/seguranca-credenciais-afiliado': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
   '/quanto-ganha-afiliado-shopee': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
-  '/vendas-e-comissao-afiliado-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
+  '/vendas-e-comissao-afiliado-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-23' },
   '/copiaram-minha-oferta-no-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
 }
 

@@ -649,7 +649,7 @@ export default function MarketingGrowthAdminPage() {
           })}</div>
           <div className="mt-4 rounded-xl bg-gray-50 p-3 text-xs text-gray-700">
             <p className="font-semibold">Comando recomendado de atualização em staging</p>
-            <p className="mt-1 font-mono">cd ~/wabot-staging && git pull origin develop && npm install && cd dashboard && npm install && cd .. && npx prisma migrate deploy && pm2 restart api-staging visual-staging</p>
+            <p className="mt-1">cd ~/wabot-staging && git pull origin develop && npm install && cd dashboard && npm install && cd .. && npx prisma migrate deploy && pm2 restart api-staging visual-staging</p>
           </div>
         </section>
 
@@ -688,7 +688,7 @@ export default function MarketingGrowthAdminPage() {
                         <div className="flex min-w-44 flex-col gap-1">
                           <span className="w-fit rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-700">Indicação de afiliado</span>
                           <span className="text-xs font-semibold text-gray-700">{row.acquisition.affiliateName}</span>
-                          <span className="font-mono text-[11px] text-gray-500">Código {row.acquisition.code}</span>
+                          <span className="text-[11px] text-gray-500">Código {row.acquisition.code}</span>
                         </div>
                       ) : <span className="text-xs text-gray-400">Sem indicação</span>}
                     </td>

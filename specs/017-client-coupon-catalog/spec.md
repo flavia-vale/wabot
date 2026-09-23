@@ -305,8 +305,19 @@ tela nem a mensagem podem conter `{linhaDeCupom}` ou uma lacuna estranha.
 - **FR-024**: Na fila de ofertas e no espelhamento de grupos monitorados, o cupom
   MUST entrar **somente** quando o envio estiver usando template **e** o template
   contiver a variável de cupom. Sem template ou sem a variável, nada muda.
-- **FR-025**: O painel "Criar oferta" MUST ficar fora desta versão: ele não ganha
-  escolha de cupom nem pré-visualização de cupom.
+- **FR-025**: O painel "Criar oferta" NÃO ganha seletor de cupom nem prévia do
+  cupom escolhido. Mas o texto que ele monta preserva `{cupom}`, e todo envio do
+  painel passa pelo robô, que escolhe o cupom na hora do envio. Portanto
+  (decisão explícita da dona do produto — a fila de ofertas nasce nesta tela):
+  - **Enviar agora**, **Agendar** e **Inserir na fila** publicam com o melhor
+    cupom da loja. O painel não conhece o preço numérico, então vale a ordem
+    fixa do FR-011 e não sai o "de X por Y" (FR-018c). No Agendar, o cupom é
+    escolhido quando a mensagem SAI: vencido ou desligado até lá, não sai
+    (decisão de 2026-09-23 — antes o agendado saía sem cupom).
+  - **Copiar oferta** sai SEM o marcador: é o único caminho que não passa pelo
+    robô, e o marcador chegaria cru ao grupo colado à mão.
+  - A prévia da tela mostra uma frase explicando onde o cupom entra, nunca um
+    código de exemplo.
 
 **Segurança operacional — a fila não pode entupir por causa do cupom**
 
@@ -419,8 +430,8 @@ a ser calculada sobre o texto já com o cupom aplicado.
   numa versão futura, a regra de escolha precisará ser revista — esta premissa
   fica registrada de propósito.
 - **Fora de escopo nesta versão**: valor mínimo de compra, teto de desconto,
-  limite de quantidade de usos, painel "Criar oferta", cupom por grupo de
-  destino, cupom por produto específico, validação do cupom junto à loja
+  limite de quantidade de usos, seletor/prévia de cupom no "Criar oferta"
+  (ver FR-025 — o envio dele publica com cupom), cupom por grupo de destino, cupom por produto específico, validação do cupom junto à loja
   (o produto confia no que a cliente cadastrou) e qualquer relatório de uso ou
   desempenho de cupom.
 - **Sem verificação junto à loja**: o produto não tem como saber se o cupom
@@ -452,16 +463,18 @@ a ser calculada sobre o texto já com o cupom aplicado.
 
 ## Nota de operação (obrigatória na entrega)
 
-Em produção no modo em que a API delega o ciclo de vida dos robôs ao supervisor,
-**o deploy da API não recarrega os robôs**. Portanto:
+Esta feature mexe em código que os robôs carregam (`src/bot-worker.js`,
+`src/core/`, `prisma/schema.prisma`). Desde 2026-08-26 os scripts de deploy
+(`deploy_safe_dashboard.sh` e `deploy_safe_staging.sh`) reiniciam o supervisor
+dos robôs **sozinhos** quando o diff toca esses caminhos (`WORKER_CODE_PATHS_RE`,
+`RESTART_SUPERVISOR=auto`). Portanto:
 
-- a tela de cupons, o cadastro e a opção da automação passam a valer assim que a
-  API sobe;
-- o efeito no **espelhamento de grupos monitorados** e na **fila de ofertas** só
-  passa a valer depois de reiniciar o supervisor dos robôs — o que **reconecta
-  todas as sessões de WhatsApp de uma vez**.
+- **o próprio deploy reconecta todas as sessões de WhatsApp de uma vez** —
+  anunciar às clientes ANTES do merge em `main`, nunca depois;
+- a tela de cupons, o espelhamento, a fila e as automáticas passam a valer juntos
+  ao fim do deploy.
 
-Esse reinício é decisão humana, anunciada antes, nunca feito às cegas. Enquanto
-ele não acontecer, o comportamento esperado é: cupons cadastrados normalmente,
-mas ofertas espelhadas e da fila ainda saindo sem cupom. Isso é o esperado, não
-defeito.
+O `pm2 restart bot-supervisor --update-env` manual só é necessário com
+`RESTART_SUPERVISOR=0` ou em deploy feito fora dos scripts. Nesse caso, até o
+reinício, cupons cadastrados normalmente e ofertas espelhadas/da fila ainda sem
+cupom é o esperado, não defeito.

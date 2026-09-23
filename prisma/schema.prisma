@@ -551,6 +551,9 @@ model ScheduledMessage {
   status          String    @default("pending")
   imageUrl        String?
   imageRefererUrl String?
+  // Preço que o Criar oferta leu da loja, em centavos (specs/017). Com ele o
+  // robô publica "de X por Y com o cupom" na hora do envio. Null = desconhecido.
+  couponPriceCents Int?
   createdAt       DateTime  @default(now())
 
   @@index([userId, status, scheduledAt])

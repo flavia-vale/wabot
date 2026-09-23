@@ -5,10 +5,13 @@ import { readFileSync } from 'node:fs'
 const page = readFileSync(new URL('../dashboard/app/painel/ofertas-automaticas/page.js', import.meta.url), 'utf8')
 const css = readFileSync(new URL('../dashboard/app/painel/painel.css', import.meta.url), 'utf8')
 
-test('Novo tema fica depois do card de status da busca automática', () => {
+// Protótipo Basic/PRO (2026-09-23): "Novo tema" é a ação do cabeçalho da tela,
+// antes do card de status — como em Filas.
+test('Novo tema fica no cabeçalho da tela, antes do card de status', () => {
+  const head = page.indexOf('className="pnl-pro-head"')
+  const button = page.indexOf('+ Novo tema')
   const status = page.indexOf('className="offer-auto-status"')
-  const button = page.indexOf('className="offer-auto-new-row"')
-  assert.ok(status > -1 && button > status)
+  assert.ok(head > -1 && button > head && status > button)
 })
 
 test('card de tema mostra forma de publicação e aprovadas sem ícone fixo da Shopee', () => {

@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { ProFeaturePaywall } from '@/components/ProFeaturePaywall'
+import { LockedPage } from '@/components/pro/ProGate'
+import { FilasPreview } from '@/components/pro/previews'
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
 import { findDestinationsWithoutQueue } from '@/lib/painel/queueCoverage'
-import { PainelContentActions, usePainelHeader } from '../PainelShell'
+import { usePainelHeader } from '../PainelShell'
 
 const EMPTY = { name: '', enabled: true, intervalEnabled: false, intervalMinutes: 30, hourlyCapEnabled: false, hourlyCap: 10, dailyCapEnabled: false, dailyCap: 50, operatingHoursEnabled: false, operatingHoursStart: '08:00', operatingHoursEnd: '22:00', targetJids: [], instagramDestinationIds: [] }
 const LIMITS = [
@@ -171,14 +172,17 @@ export default function FilasPage() {
   // listagem/exclusão do que já existe.
   if (!loading && !hasProLikeAccess(planSubject)) {
     return <div className="pnl-grid" style={{ maxWidth: 980, margin: '0 auto' }}>
-      <ProFeaturePaywall
-        title="Filas de ofertas"
-        bullets={[
-          'Cadastre as ofertas de uma vez e o bot distribui ao longo do dia, sem rajadas.',
-          'Limites por intervalo, por hora e por dia — você controla o ritmo de cada fila.',
-          'Pause e retome quando quiser; os itens pendentes ficam guardados.',
+      <LockedPage
+        feature="filas"
+        featureLabel="as filas de ofertas"
+        steps={[
+          { title: 'Crie uma fila', desc: 'Dê um nome e escolha o grupo de destino.' },
+          { title: 'Adicione ofertas', desc: 'Mande ofertas do Criar oferta para a fila.' },
+          { title: 'Defina o ritmo', desc: 'Ex.: 1 oferta a cada 20 min, das 8h às 12h.' },
         ]}
-      />
+      >
+        <FilasPreview />
+      </LockedPage>
       {message && <div className="pnl-note-box is-error" role="alert">{message}</div>}
       {queues.length > 0 && <section className="pnl-card">
         <div className="pnl-card-title">Suas filas (pausadas)</div>
@@ -195,7 +199,13 @@ export default function FilasPage() {
   }
 
   return <div className="pnl-grid" style={{ maxWidth: 980, margin: '0 auto' }}>
-    <PainelContentActions><button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova fila</button></PainelContentActions>
+    <header className="pnl-pro-head">
+      <div>
+        <h2>Filas</h2>
+        <p>Junte ofertas numa fila e o robô publica uma de cada vez, no ritmo que você escolher.</p>
+      </div>
+      <button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova fila</button>
+    </header>
     {queues.length > 0 && <section className="pnl-master">
       <div className="pnl-master-ico" aria-hidden="true">⏱</div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -250,6 +260,7 @@ export default function FilasPage() {
     {loading ? <div className="pnl-card">Carregando filas…</div> : !queues.length ? <div className="pnl-card"><div className="pnl-card-title">Nenhuma fila criada</div><p className="pnl-hint" style={{ marginTop: 6 }}>Crie uma fila para distribuir ofertas automaticamente ao longo do dia.</p><button className="pnl-btn is-primary" style={{ marginTop: 14 }} onClick={openCreate}>Criar primeira fila</button></div> : queues.map((queue) => <section className="pnl-card" key={queue.id} style={{ opacity: queue.enabled ? 1 : 0.76 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
+          <span className="pnl-pro-iconbox" aria-hidden="true">⏱</span>
           <button
             type="button"
             role="switch"
@@ -261,15 +272,14 @@ export default function FilasPage() {
             title={queue.enabled ? 'Pausar fila' : 'Ativar fila e enviar a primeira oferta agora'}
             style={{ marginTop: 1, opacity: toggling === queue.id ? 0.55 : 1 }}
           ><span /></button>
-          <div style={{ minWidth: 0 }}><div className="pnl-card-title">{queue.name}</div><p className="pnl-hint" style={{ marginTop: 4 }}>{queue.enabled ? summary(queue) : 'Envios pausados — os itens permanecem na fila'}</p></div>
+          <div style={{ minWidth: 0 }}><div className="pnl-card-title">{queue.name}</div><p className="pnl-hint" style={{ marginTop: 4 }}>publica em {destinationsLabel(queue)} · {queue.enabled ? summary(queue) : 'envios pausados — os itens permanecem na fila'}</p></div>
         </div>
         <span className={`pnl-tag ${queue.enabled ? 'is-success' : 'is-skip'}`}>{toggling === queue.id ? 'Atualizando…' : queue.enabled ? 'Ativa' : 'Pausada'}</span>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}><span className="pnl-tag">{queue.pendingCount} pendente(s)</span><span className="pnl-tag">{queue.sentTodayCount} enviada(s) hoje</span></div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}><span className="pnl-tag">{queue.pendingCount} na fila</span><span className="pnl-tag is-success">{queue.sentTodayCount} enviada(s) hoje</span></div>
       {queue.enabled && queue.pendingCount > 0 && queue.blockReason && BLOCK_REASON_COPY[queue.blockReason] && <div className="pnl-note-box is-warn" role="status" style={{ marginTop: 12 }}>
         <strong>Itens pendentes não estão saindo.</strong> {BLOCK_REASON_COPY[queue.blockReason]}
       </div>}
-      <p className="pnl-hint" style={{ marginTop: 10 }}>Destinos: {destinationsLabel(queue)}</p>
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
         <Link
           className="pnl-btn is-primary"

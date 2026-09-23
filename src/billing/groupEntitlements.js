@@ -1,6 +1,6 @@
 import { JID_KIND } from '../core/jid.js'
-import { canUseChannels } from './plans.js'
-import { resolveDestinationImageMode } from '../core/imageModePolicy.js'
+import { canUseChannelButton, canUseChannels, canUseWatermark } from './plans.js'
+import { destinationImageModeWithoutWatermark, resolveDestinationImageMode } from '../core/imageModePolicy.js'
 
 function isChannelGroup(group) {
   return group?.kind === JID_KIND.CHANNEL
@@ -32,19 +32,25 @@ function toMonitorGroup(group, targetPostJids = []) {
   }
 }
 
-function toPostDetail(group) {
+// Divisão Basic/PRO (2026-09-23): este é o chokepoint que o robô lê. Sem o
+// plano, a marca d'água e o botão "Ver canal" saem daqui — mesmo que a coluna
+// ainda guarde a escolha antiga (trial que venceu, conta que desceu para o
+// Basic antes de `scripts/basic-sem-recursos-pro.mjs` rodar). Vale para todo
+// caminho que parte do destino: espelhamento, fila, automáticas e agendadas.
+function toPostDetail(group, { allowWatermark = true, allowChannelButton = true } = {}) {
+  const imageMode = resolveDestinationImageMode(group.imageMode)
   return {
     waJid: group.waJid,
     kind: group.kind,
     welcomeMsg: group.welcomeMsg,
-    channelButtonJid: group.channelButtonJid ?? null,
-    channelButtonName: group.channelButtonName ?? null,
+    channelButtonJid: allowChannelButton ? (group.channelButtonJid ?? null) : null,
+    channelButtonName: allowChannelButton ? (group.channelButtonName ?? null) : null,
     // Modo de imagem e texto da marca são escolhidos POR DESTINO — cada grupo/
     // canal de postagem pode mostrar a mesma oferta de um jeito diferente. Ver
     // src/core/imageModePolicy.js (resolveDestinationImageMode cai em
     // 'original' para valor ausente/desconhecido, nunca deixa o worker sem
     // modo) e src/bot-worker.js (resolução por destino no loop de envio).
-    imageMode: resolveDestinationImageMode(group.imageMode),
+    imageMode: allowWatermark ? imageMode : destinationImageModeWithoutWatermark(imageMode),
     watermarkText: group.watermarkText ?? null,
     // 'white' | 'black'; nulo = padrão, resolvido no renderizador.
     watermarkColor: group.watermarkColor ?? null,
@@ -58,6 +64,10 @@ function toPostDetail(group) {
 
 export function buildEntitledGroupConfig({ groups = [], groupTargets = [], planSubject = {}, logger = null } = {}) {
   const allowChannels = canUseChannels(planSubject)
+  const postOptions = {
+    allowWatermark: canUseWatermark(planSubject),
+    allowChannelButton: canUseChannelButton(planSubject),
+  }
   const visibleGroups = allowChannels ? groups : groups.filter(group => !isChannelGroup(group))
   const visiblePostJids = new Set(visibleGroups.filter(group => group.role === 'post').map(group => group.waJid))
 
@@ -83,7 +93,7 @@ export function buildEntitledGroupConfig({ groups = [], groupTargets = [], planS
       monitor: monitorGroups.map(group => toMonitorGroup(group, targetsByMonitor.get(group.id) ?? [])),
       monitorJids: monitorGroups.map(group => group.waJid),
       post: postGroups.map(group => group.waJid),
-      postDetails: postGroups.map(toPostDetail),
+      postDetails: postGroups.map(group => toPostDetail(group, postOptions)),
     },
   }
 }

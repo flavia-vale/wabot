@@ -136,7 +136,7 @@ function SelectChannelModalContent({ onClose, onSelect }) {
         {preview && (
           <div className="mt-4 rounded border bg-slate-50 p-3">
             <div className="break-words text-sm font-medium">{preview.name || 'Canal sem nome'}</div>
-            <div className="mt-1 break-all font-mono text-xs text-slate-500">{preview.jid}</div>
+            <div className="mt-1 break-all text-xs text-slate-500">{preview.jid}</div>
             {preview.isViewerOwner
               ? <div className="mt-1 text-sm text-emerald-700">✓ Você é dono deste canal</div>
               : <div className="mt-1 text-sm text-amber-700">⚠ Você não consta como dono.</div>}

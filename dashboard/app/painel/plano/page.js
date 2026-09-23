@@ -10,39 +10,20 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { DEFAULT_LANDING_PLANS, SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { usePainel, usePainelHeader } from '../PainelShell'
+import { BASIC_FEATURE_LIST, PRO_FEATURE_LIST } from '@/lib/planFeatures'
 import { CONFIG_PRESERVED_NOTE } from '../../../../src/domain/painel/trialNotice.js'
 import { buildPricePerOffer, parsePriceToCents } from '../../../../src/domain/painel/pricePerOffer.js'
 
-const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do BOTinho, pode me ajudar?')}`
+const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do Espelha Grupos, pode me ajudar?')}`
 
 const PAID_PLAN_IDS = ['basic', 'pro']
 const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
 
+// Listas de recursos: fonte única em lib/planFeatures.js (a mesma da página de
+// preços). Divisão Basic/PRO de 2026-09-23 — o PRO é verde + roxo.
 const PLAN_PRESENTATION = {
-  basic: {
-    eyebrow: 'Para começar',
-    features: [
-      'Espelhamento de grupos',
-      'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)',
-      'Card de oferta clicável',
-      'Mensagem reescrita do seu jeito',
-      'Envio imediato ou agendado',
-      'Relatórios com histórico completo',
-    ],
-  },
-  pro: {
-    eyebrow: 'Mais completo',
-    featured: true,
-    features: [
-      'Tudo do plano BASIC',
-      'Espelhamento de grupos e CANAIS do WhatsApp',
-      'Garimpo automático de ofertas',
-      'Filas de ofertas',
-      'Sua marca d’água nas ofertas',
-      'Horário de descanso, máximo de ofertas por dia, intervalo entre mensagens e variação do texto',
-      'Painel de vendas e comissão da Shopee',
-    ],
-  },
+  basic: { eyebrow: 'Para começar', features: BASIC_FEATURE_LIST },
+  pro: { eyebrow: 'Mais completo', featured: true, features: PRO_FEATURE_LIST },
 }
 
 const FALLBACK_PLAN_CARDS = DEFAULT_LANDING_PLANS
@@ -292,11 +273,11 @@ export default function PlanoPage() {
             return (
               <article
                 key={plan.id}
-                className={`flex h-full flex-col rounded-[24px] border bg-white p-6 shadow-[0_12px_36px_rgba(26,64,52,0.07)] sm:p-7 ${presentation.featured ? 'border-emerald-500 ring-2 ring-emerald-100' : 'border-slate-200'}`}
+                className={`flex h-full flex-col rounded-[24px] border bg-white p-6 shadow-[0_12px_36px_rgba(26,64,52,0.07)] sm:p-7 ${presentation.featured ? 'border-[#6F4FE8] ring-2 ring-[#ECE7FA]' : 'border-slate-200'}`}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">{presentation.eyebrow}</p>
-                  {presentation.featured && <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">Mais escolhido</span>}
+                  <p className={`text-xs font-black uppercase tracking-[0.18em] ${presentation.featured ? 'text-[#4B34A8]' : 'text-emerald-700'}`}>{presentation.eyebrow}</p>
+                  {presentation.featured && <span className="rounded-full bg-[#ECE7FA] px-3 py-1 text-xs font-bold text-[#4B34A8]">Mais escolhido</span>}
                 </div>
                 <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{plan.id.toUpperCase()}</h2>
                 <div className="mt-2 flex items-end gap-1">
@@ -308,7 +289,7 @@ export default function PlanoPage() {
                 <ul className="mt-6 flex-1 space-y-3.5">
                   {presentation.features.map((feature) => (
                     <li key={feature} className="flex gap-3 text-sm leading-5 text-slate-700">
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-black text-emerald-700" aria-hidden="true">✓</span>
+                      <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-black ${presentation.featured ? 'bg-[#ECE7FA] text-[#6F4FE8]' : 'bg-emerald-100 text-emerald-700'}`} aria-hidden="true">✓</span>
                       <span>{feature}</span>
                     </li>
                   ))}
@@ -335,7 +316,7 @@ export default function PlanoPage() {
                 <div className="mt-6 grid gap-2.5">
                   <button
                     type="button"
-                    className="pnl-btn is-primary"
+                    className={`pnl-btn ${presentation.featured ? 'is-pro' : 'is-primary'}`}
                     style={{ width: '100%', justifyContent: 'center' }}
                     onClick={() => handleSubscribe(plan.id)}
                     disabled={!!checkoutPlan}
@@ -344,7 +325,7 @@ export default function PlanoPage() {
                   </button>
                   <button
                     type="button"
-                    className="pnl-btn is-primary"
+                    className={`pnl-btn ${presentation.featured ? 'is-pro' : 'is-primary'}`}
                     style={{ width: '100%', justifyContent: 'center' }}
                     onClick={() => handleCheckout(plan.id)}
                     disabled={!!checkoutPlan}

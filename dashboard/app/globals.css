@@ -1,6 +1,27 @@
 /* dashboard/app/globals.css */
 @import 'tailwindcss';
 
+/* Figtree (variável, 300–900), hospedada no próprio dashboard — sem Google
+ * Fonts no build. Ver comentário em app/layout.js. */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('/fonts/figtree-latin.woff2') format('woff2');
+}
+
+/* Uma fonte só em todo o site — inclusive `font-mono` do Tailwind e
+ * code/pre/kbd, que o navegador trocaria por fonte de código. */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-sans);
+}
+
+code, kbd, samp, pre {
+  font-family: inherit;
+}
+
 :root {
   --bg: #EEF6F2;
   --bg-soft: #DDEDE5;
