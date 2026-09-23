@@ -1,0 +1,273 @@
+# Tasks: Anti-banimento — unificar a proteção do número num lugar só (recurso PRO)
+
+**Input**: Design documents from `/specs/018-unificar-protecao-anti-ban/`
+
+**Prerequisites**: `plan.md`, `spec.md`, `research.md` (R1–R11), `data-model.md`, `contracts/` (`anti-ban-floor.md`, `destination-spacing.md`, `api-preservation.md`, `ui-anti-banimento.md`), `quickstart.md`
+
+**Tests**: a spec exige verificação automatizada explícita para linguagem leiga (FR-021), fonte única de gate (FR-015a) e não-regressão de ritmo (SC-004/SC-005); o `plan.md` já lista os 8 arquivos de teste (`quickstart.md` §1). Cada um vira tarefa própria, escrita **antes** da implementação que cobre (TDD nos dois módulos puros novos).
+
+**Organization**: tarefas organizadas por história de usuário do `spec.md` (US1–US4, ambas P1 e ambas P2), precedidas por Setup e Foundational. Os dois módulos puros novos e a mudança de comportamento do robô (piso + intervalo entre destinos) ficam em **Foundational**, porque SC-004, SC-005, SC-005b e SC-005c dependem deles independentemente de qual tela os expõe, e a UI de US2/US3/US4 só lê o que a Foundational já resolve e valida. **Nenhuma fase depois da Foundational toca `src/bot-worker.js`, `src/core/channelThrottle.js`, `src/core/preservationConfig.js` ou os dois módulos novos** — só telas, textos, rotas (campos aditivos) e o script de diagnóstico.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: pode rodar em paralelo (arquivos diferentes, sem dependência de tarefa incompleta)
+- **[Story]**: rótulo de história de usuário (US1–US4); ausente em Setup, Foundational, no Gate Humano e na Finalização
+- Cada tarefa cita o(s) caminho(s) de arquivo exatos
+
+---
+
+## ⚠️ Achado que precisa de confirmação explícita antes da tela nascer
+
+- [ ] T001 **Confirmar FR-006a (não pular silenciosamente)**: rodar `grep -riE "preserv|anti-ban|antiban|limite|hor[aá]rio|rajada|stagger|jitter|atraso.*canal|intervalo" dashboard/app/painel/whatsapp/page.js` e ler o resultado à mão (comentário JSX não conta como controle visível). O levantamento de `research.md` R1 (2026-09-23) não achou nenhum controle de proteção na tela de Conexão WhatsApp — só um comentário JSX com a palavra "rajada" (~linha 674). **Se a nova checagem confirmar o mesmo resultado**: registrar em `specs/018-unificar-protecao-anti-ban/plan.md`, seção "Decisões técnicas", um adendo com a data desta nova checagem confirmando R1 (não sobrescrever o achado original — acrescentar). **Se a checagem encontrar algo diferente** (controle novo introduzido depois de 2026-09-23, ou o comentário virou texto visível): parar aqui, listar o achado nesta mesma tarefa e abrir tasks T001a/T001b para remover o controle da tela de Conexão WhatsApp e adicionar, no lugar, no máximo um atalho para `/painel/anti-banimento` — só então prosseguir para T002.
+- [ ] T002 Corrigir a redação do Edge Case "Destino com os limites desligados que passa ao fixo 'ligado'" em `specs/018-unificar-protecao-anti-ban/spec.md` (linha ~130): a frase atual diz que o destino passa a valer com "o intervalo mínimo e o limite diário que esse destino já tinha gravado" — o `plan.md` (seção "Ajuste de redação pendente na spec") e `research.md` R3/Achado C′ documentam que a decisão real da dona do produto é o **oposto** (recomeça do **padrão do sistema**, `HARD_DEFAULT_PRESERVATION`, ignorando o valor antigo gravado). Substituir a frase pelo texto correto, mantendo o resto do parágrafo (a fase de plano mede quantos destinos estão nesse caso).
+
+---
+
+## Phase 1: Setup
+
+**Purpose**: preparar o terreno documental (envs, guarda de deploy) sem nenhum código funcional ainda.
+
+- [ ] T003 [P] Documentar em `.env.example` (ou criar a seção, se não existir) as duas envs de rollback desta feature: `ANTI_BAN_FLOOR` (ausente/qualquer valor ≠ `off` = piso ligado; só `off` desliga) e `DESTINATION_SPACING` (ausente/qualquer valor ≠ `off` = espaçamento ligado; só `off` desliga, nunca volta ao `sleep` antigo) — com comentário de que aplicar exige `pm2 delete`/`start` (pegadinha #1) **e** reinício do `bot-supervisor` em modo `remote`.
+- [ ] T004 Rodar `node --test test/deploy-worker-code-paths.test.js` no estado atual do repositório (antes de qualquer arquivo novo) e confirmar que passa — ele calcula o fechamento de imports do worker/supervisor dinamicamente, então `src/core/antiBanFloor.js` e `src/core/destinationSpacing.js` (ainda a nascer nas tarefas T007–T010) **já caem sob a regex `src/core/` de `WORKER_CODE_PATHS_RE`** em `scripts/deploy_safe_dashboard.sh` e `scripts/deploy_safe_staging.sh` (conferido em 2026-09-23: `grep -n "WORKER_CODE_PATHS_RE=" scripts/deploy_safe_dashboard.sh scripts/deploy_safe_staging.sh` mostra `src/core/` no padrão). Deixar anotado nesta tarefa que **nenhuma edição na regex é necessária** — é o teste genérico (RCA 2026-09-16) que garante isso automaticamente; ele deve ser executado de novo em T037 (guarda final) depois que os módulos novos existirem, para provar que continuam cobertos.
+
+**Checkpoint**: nenhuma env nova é lida em produção ainda; a guarda de deploy está confirmada como genérica e não precisa de edição manual.
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: os dois módulos puros (piso de 3 campos + intervalo entre destinos), a mudança de comportamento do robô que eles implicam, os campos aditivos das rotas e a fonte única do gate de plano — tudo que as quatro histórias de usuário e o script de diagnóstico dependem. **Nenhuma história de usuário pode ser fechada antes desta fase.**
+
+### Piso anti-banimento (3 campos fixos, FR-010/FR-011/FR-013)
+
+- [ ] T005 [P] Escrever `test/anti-ban-floor.test.js` cobrindo a tabela de verdade completa de `contracts/anti-ban-floor.md`: (a) os **três** campos — `burstCap` (piso 6, menor é mais conservador), `burstWindowSec` (piso 600, maior é mais conservador) e `throttleEnabled` (piso ligado) —, cada um testado **separadamente** (nunca pela taxa combinada); (b) regra campo a campo "vale o mais conservador entre gravado e fixo" nos dois sentidos (conta mantém valor mais conservador; conta passa ao fixo quando é menos conservador); (c) valor igual ao fixo não muda nada; (d) `null`/não numérico cai no valor do piso (fail-safe); (e) `isAntiBanFloorEnabled` só desliga com `env.ANTI_BAN_FLOOR === 'off'` exato, qualquer outro valor (incluindo ausente, `'0'`, `'false'`) mantém ligado; (f) `applyDestinationFloor` não muta a entrada (devolve cópia); (g) preset "Leve" (`burstCap:10, burstWindowSec:3600`) vira `6/3600` (Achado B). O teste ainda não pode passar (`src/core/antiBanFloor.js` não existe).
+- [ ] T006 [P] Adicionar a `test/anti-ban-floor.test.js` os casos **dedicados à exceção "limites desligados → recomeça do padrão do sistema"** (Achado C′, decisão da dona do produto de 2026-09-23 — distinta da regra geral do campo a campo): entrada com `throttleEnabled: false`, `minIntervalSec: 300`, `dailyCap: 3`, `burstCap: 2`, `burstWindowSec: 3600` → saída **`throttleEnabled: true`, `minIntervalSec: 30`, `dailyCap: null`, `burstCap: 6`, `burstWindowSec: 600`** (os valores de `HARD_DEFAULT_PRESERVATION`, nunca os 300/3/2/3600 que estavam gravados); `operatingHoursEnabled`/`operatingHoursJson`/`queueMaxAgeMin` continuam **inalterados** (não são governados pelo liga/desliga); `describeDestinationFloor` devolve `recomecouDoPadrao: true` e `ritmoMaisCuidadoso: false` (nunca as duas juntas — destino que recomeça do padrão nunca ganha a etiqueta de "mais cuidadoso"); e o contraste explícito com a regra geral: destino com `throttleEnabled: true` e `burstCap: 3` (mais conservador) mantém o próprio valor e ganha `ritmoMaisCuidadoso: true`, `recomecouDoPadrao: false`.
+- [ ] T007 Implementar `src/core/antiBanFloor.js` conforme `contracts/anti-ban-floor.md`: exportar `ANTI_BAN_FLOOR` (congelado, `{ burstCap: 6, burstWindowSec: 600, throttleEnabled: true }`), `isAntiBanFloorEnabled(env = process.env)`, `applyDestinationFloor(effective, { enabled, systemDefault = HARD_DEFAULT_PRESERVATION } = {})` e `describeDestinationFloor(stored, { resolvedThrottleEnabled })` — fazendo T005 e T006 passarem. Sem banco, sem rede, sem leitura de env fora do parâmetro (env sempre por argumento, nunca `process.env` direto no corpo da função, para o módulo continuar puro e testável sem mocks de ambiente).
+- [ ] T008 [P] Escrever, ainda em `test/anti-ban-floor.test.js` ou em arquivo próprio `test/anti-ban-floor-chokepoint.test.js` (guarda estrutural, no padrão de `test/bot-worker-retry-cache-wiring.test.js`): nenhum arquivo fora de `src/core/preservationConfig.js`, `src/api/routes/preservation.js` e `scripts/diag-antiban-valores.mjs` importa `antiBanFloor.js` ou reimplementa a comparação `burstCap`/`burstWindowSec`/`throttleEnabled` contra os valores 6/600/true — varrer `src/` e `dashboard/` atrás de literais `600` ou `6` próximos a essas três chaves fora dos três arquivos permitidos seria falso-positivo demais; em vez disso, o teste garante que **só** os três consumidores citados importam o módulo (`import.*antiBanFloor` em qualquer outro arquivo falha o teste).
+- [ ] T009 Em `src/core/preservationConfig.js`: aplicar `applyDestinationFloor` dentro de `resolveDestinationPreservation`, sobre a config efetiva já resolvida pela precedência atual (destino → modelo atribuído → modelo padrão da conta → `HARD_DEFAULT_PRESERVATION`) — o piso entra **depois** da herança, nunca antes. Nenhuma outra função do arquivo muda; a assinatura pública de `resolveDestinationPreservation` continua igual (aditiva, se precisar de opção nova para desligar via env em teste). Faz T005/T006/T008 continuarem verdes e prova SC-004/SC-005 na origem.
+- [ ] T010 [P] Escrever `test/preservation-config-floor-integration.test.js` (ou seção dedicada em `anti-ban-floor.test.js`): chamando `resolveDestinationPreservation` de ponta a ponta com um `Group` que tem `burstCap: 20` gravado (menos conservador) e confirmando que o efetivo devolvido é `6`; com um `Group` que tem `burstWindowSec: 1200` (mais conservador) confirmando que o efetivo continua `1200`; com um destino **sem valor próprio** (herdando do modelo padrão da conta) confirmando que o piso se aplica ao valor herdado, não ao valor "cru" antes da herança.
+
+### Intervalo entre destinos — correção de causa raiz (FR-022 a FR-026, RCA 2026-07-28)
+
+- [ ] T011 [P] Escrever `test/destination-spacing.test.js` cobrindo a tabela de verdade completa de `contracts/destination-spacing.md`: primeiro envio do worker (`lastSendAt` null) libera; grupo A em t0 seguido de canal B em t0+5s → `deferUntil` = t0+intervalo (prova FR-023: **grupo também espaça, não só canal**); grupo A em t0 seguido do **mesmo** grupo A em t0+5s → espaçamento isento (quem decide é `minIntervalSec` do próprio destino); intervalo `0` sempre libera; `DESTINATION_SPACING=off` sempre libera; `combineGateDecisions` devolve a decisão de **maior** `deferUntil` entre destino e espaçamento (espaçamento pede 20s / destino pede 90s → defer 90s; espaçamento pede 20s / destino pede 3s → defer 20s, nunca soma os dois — prova FR-025); `allow` só quando as **duas** decisões liberam; `reserveSpacingSlot` devolve um objeto **novo** (não muta o estado recebido); "cursor de próxima vaga": 3 jobs chegando juntos depois de A recebem vagas `t0+20s`, `t0+40s`, `t0+60s` (sem cascata de re-adiamento N²); `toDestinationIntervalMs` lê `channelStaggerJitterMs`, trata negativo/não numérico como `0` e nunca aplica sozinho o "padrão de 20s" (o padrão vem do banco, o módulo só lê o que recebe).
+- [ ] T012 Implementar `src/core/destinationSpacing.js` conforme `contracts/destination-spacing.md`: `DESTINATION_SPACING_REASON = 'destination_spacing'`, `isDestinationSpacingEnabled(env = process.env)`, `toDestinationIntervalMs(botConfig)`, `decideDestinationSpacing({ now, destJid, intervalMs, state, enabled })`, `combineGateDecisions(destDecision, spacingDecision)`, `reserveSpacingSlot(state, { now, destJid, intervalMs, deferredUntil })` — fazendo T011 passar. Sem banco, sem rede, sem relógio próprio (`now` sempre por parâmetro).
+- [ ] T013 [P] Escrever `test/destination-spacing-chokepoint.test.js` (guarda estrutural): nenhum arquivo fora de `src/bot-worker.js`, `src/core/channelThrottle.js` e `scripts/diag-antiban-valores.mjs` importa `destinationSpacing.js`; e nenhum arquivo calcula espera entre destinos comparando `channelStaggerJitterMs` fora deste módulo (varrer por `channelStaggerJitterMs` em `src/` e confirmar que só aparece em `bot-worker.js` — leitura de `cfg.botConfig` — e, opcionalmente, em `destinationSpacing.js`/rotas de config).
+- [ ] T014 [P] Escrever `test/bot-worker-destination-spacing-wiring.test.js` (estrutural, lê o código-fonte, no padrão de `test/bot-worker-retry-cache-wiring.test.js`): (a) o sorteio antigo `staggerMs = (destIndex > 0 && isChannelDest && staggerJitterMs > 0) ? random(...) : 0` **não existe mais** em `src/bot-worker.js` (o job de enqueue não grava mais `delayMs` vindo do stagger); (b) `processSendJob` **não** faz `await sleep(job.delayMs)` nem soma `delayMs` ao "smart delay"/freio de pressão; (c) toda espera decidida pelo espaçamento **sempre** termina em `deferSendJob(job, gate)`, nunca em espera inline, mesmo quando a espera é curta (prova FR-024, mesmo caso do `THROTTLE_INLINE_WAIT_MAX_MS` que continua existindo só para o gate do próprio destino); (d) a ordem canônica de `processSendJob` é preservada: preservação do destino → revalidação de vínculo → descarte por idade (`queueMaxAgeMin`) → freio de pressão/descanso → **gate combinado (destino + espaçamento)** → tentativas de envio (grep pela ordem das chamadas, não só a presença delas).
+- [ ] T015 Em `src/core/channelThrottle.js`: expor uma forma de obter a decisão de `decideDestination` **sem reservar** (peek), e ajustar `checkAndReserve` para só reservar o slot do destino (rajada/limite diário) quando a decisão **combinada** (destino + espaçamento) liberar — sem isso, o destino reservaria a vaga mesmo quando o espaçamento adia o job, queimando rajada/limite diário à toa (R11, item 2). Preservar a assinatura pública que os chamadores atuais usam (aditiva).
+- [ ] T016 Em `src/bot-worker.js`: (a) remover o sorteio `staggerMs`/`job.delayMs` do enqueue (linha ~4611–4861 antes desta feature); (b) em `processSendJob`, calcular `spacing = decideDestinationSpacing(...)` com o estado em memória do worker (`lastSendAt`, `lastDestJid`, `nextFreeSlotAt` — três valores por worker, zerados no restart, **sem persistência**, conforme R11 item 4), obter a decisão do destino via peek (T015), combinar com `combineGateDecisions`, e **sempre** chamar `deferSendJob` quando a decisão combinada não libera por espaçamento (mesmo espera curta); atualizar o estado via `reserveSpacingSlot` no mesmo instante em que a decisão combinada libera ou adia — fazendo T014 passar. Cobre `status@broadcast` e destino sem `Group` (só o espaçamento decide ali).
+- [ ] T017 Em `src/bot-worker.js`, função `deferReasonMessage`: adicionar o ramo `'destination_spacing'` com o texto leigo "Esperando o intervalo entre destinos que você definiu no Anti-banimento" (R11 item 7) — sem os termos "jitter"/"stagger". Adicionar um log `info` com nome próprio (`Adiado pelo intervalo entre destinos`) citando `destJid` e `deferUntil`, para medir em produção sem depender do `AGENTS.md` mudar de novo.
+- [ ] T018 [P] Escrever `test/defer-reason-destination-spacing.test.js` (ou estender teste de `deferReasonMessage` já existente, se houver): motivo `'destination_spacing'` devolve o texto leigo esperado; nenhum termo técnico presente na string.
+
+### Gate de plano — fonte única (FR-015/FR-015a)
+
+- [ ] T019 [P] Escrever `test/anti-banimento-gate-fonte-unica.test.js`: para os **cinco perfis** (Basic, Trial ativo, Trial vencido, PRO, Premium), `canUseAdvancedPreservation` de `src/billing/plans.js` e a função que a tela do painel usa devolvem **exatamente o mesmo booleano** — e o teste falha se a tela voltar a ter uma função própria de checagem de plano (grep por `canAccessAdvancedPreservation` em `dashboard/` deve dar zero resultados; grep por qualquer nova função `function canAccess.*Preservation` ou `function can.*AntiBan` fora de `src/billing/plans.js` também falha).
+- [ ] T020 Remover `canAccessAdvancedPreservation` de `dashboard/lib/plan.js` (junto com `isTrialActive`, se não for usada em mais nenhum lugar depois da remoção — confirmar com grep antes de apagar). Em `dashboard/lib/planEntitlements.js`, `hasProLikeAccess` passa a delegar/re-exportar a mesma fonte que `canUseAdvancedPreservation` usa no backend (`getPlanEntitlements`), sem duplicar a regra de Trial ativo. A tela nova (Fase 4, US3) importa `canUseAdvancedPreservation` de `../../../src/billing/plans.js` diretamente (padrão já usado por `dashboard/components/ActivationChecklist.js` e `dashboard/lib/mobileTemplateStore.js` ao importar de `src/`), não `hasProLikeAccess` — fazendo T019 passar.
+- [ ] T021 Em `src/billing/plans.js`, `buildFeatureGateError(FEATURE_CODES.ADVANCED_PRESERVATION)` (ou equivalente): trocar a mensagem de erro para **"O Anti-banimento é um recurso do plano PRO."**, mantendo `code`, `feature`, `requiredPlan` e os status HTTP inalterados (`preservation.js` continua 402, `config.js`/`groups.js` continuam 403 — não unificar o código HTTP, só a frase).
+- [ ] T022 [P] Escrever `test/gate-mensagem-anti-banimento.test.js` (ou estender `anti-banimento-gate-fonte-unica.test.js`): a mensagem de recusa por plano contém "Anti-banimento" e não contém "Preservação Avançada"/"Módulo de Preservação"/nenhum jargão técnico; os três pontos de recusa (`src/api/routes/preservation.js`, `config.js`, `groups.js`) continuam com os mesmos códigos HTTP de hoje.
+
+### Rotas — compatibilidade retroativa e campos aditivos (FR-013, contracts/api-preservation.md)
+
+- [ ] T023 [P] Escrever `test/anti-banimento-rotas-compat.test.js`: `PUT /api/preservation/config` continua aceitando `channelStaggerJitterMs` (0..600000) pelo **mesmo nome**, sem nenhum alias novo aceito na escrita; `POST /presets` e `PUT /presets/:id`/`PUT /destinations/:id` continuam aceitando `burstCap`, `burstWindowSec` e `throttleEnabled` sem erro e sem descartar o resto do corpo da requisição, mesmo esses três campos não sendo mais mostrados pela tela nova (o valor recebido é gravado como hoje; o efeito no envio passa pela regra do piso na leitura — T009); requisição com `burstCap: 999` (menos conservador) grava o valor, mas o efetivo lido depois via `resolveDestinationPreservation` continua `6`.
+- [ ] T024 [P] Escrever `test/anti-banimento-rotas-compat.test.js` (mesma suíte de T023, seção GET aditiva): `GET /api/preservation/config` soma `effective.destinationIntervalSec` (segundos, derivado de `channelStaggerJitterMs`) sem remover nenhum campo existente do payload; `GET /presets` soma `ritmoMaisCuidadoso` e `recomecouDoPadrao` por preset; `GET /destinations` soma `ritmoMaisCuidadoso`, `recomecouDoPadrao` e `effective` (config resolvida com piso) por destino — todos os campos antigos do payload continuam presentes byte a byte (cliente/integração antiga não quebra).
+- [ ] T025 Em `src/api/routes/preservation.js`: implementar os campos aditivos de T024 usando `describeDestinationFloor` (T007) e `resolveDestinationPreservation` (T009) — sem alterar nenhum campo de escrita existente, fazendo T023/T024 passarem.
+
+**Checkpoint**: o robô já envia com o piso de 3 campos e o intervalo entre destinos corrigido (SC-004, SC-005, SC-005b, SC-005c comprovados por teste); o gate de plano tem fonte única; as rotas são retrocompatíveis e devolvem os campos que a tela vai consumir. Nenhuma tela nova existe ainda — é seguro fazer deploy até aqui sem mudar nada visível para a cliente (o piso e o espaçamento só têm efeito quando o valor gravado diverge do fixo, e isso é medido pelo diagnóstico antes do deploy real).
+
+---
+
+## Phase 3: User Story 1 - Encontrar e ajustar toda a proteção do número num lugar só (Priority: P1) 🎯 MVP
+
+**Goal**: existe uma tela só, "Anti-banimento", no menu, com as três partes (Situação, Ritmo por grupo, Ajustes da conta); os quatro endereços antigos redirecionam; há um atalho a partir do painel de destino em Espelhamento.
+
+**Independent Test**: com uma conta PRO, abrir o painel, achar "Anti-banimento" pelo menu em até 2 cliques, ver a Situação, mudar o ritmo de um grupo e um ajuste da conta, salvar — sem passar por outra tela.
+
+- [ ] T026 [P] [US1] Escrever `test/anti-banimento-rotas-antigas.test.js`: os 4 endereços antigos (`/painel/preservacao`, `/painel/preservacao/monitoramento`, `/painel/preservacao/destinos`, `/painel/preservacao/configuracoes`) redirecionam para `/painel/anti-banimento` com a query certa (`?parte=situacao`, `?parte=ritmo` preservando `?destino=`, `?parte=conta`); o menu (`dashboard/app/painel/nav.js`) tem **exatamente 1** item "Anti-banimento" (não 3) no grupo "Configuração", logo após "Conexão WhatsApp", com `pro: true`; o grupo "Preservação avançada" não existe mais no array de navegação.
+- [ ] T027 [US1] Criar `dashboard/app/painel/anti-banimento/layout.js`: gate de plano usando `canUseAdvancedPreservation` (T020) — sem acesso, renderiza a tela **visível e bloqueada** (não oculta o item de menu nem redireciona para upsell cego — isso é aprofundado em US3; aqui só a estrutura mínima para não quebrar quem não tem plano).
+- [ ] T028 [US1] Criar `dashboard/app/painel/anti-banimento/page.js` com as três partes por `?parte=situacao|ritmo|conta` (padrão `situacao`) e suporte a `?destino=<groupId>` abrindo o destino já selecionado dentro de "Ritmo por grupo" — reaproveitando os componentes existentes de `dashboard/components/preservacao/*` (ex.: `PreservationLimitsForm.js`) com a montagem de dados vinda das rotas de `preservation.js`.
+- [ ] T029 [US1] Atualizar `dashboard/app/painel/nav.js`: remover o grupo "Preservação avançada" (3 itens) e adicionar 1 item `{ label: 'Anti-banimento', href: '/painel/anti-banimento', pro: true }` no grupo "Configuração", logo após "Conexão WhatsApp" — fazendo a parte de menu de T026 passar.
+- [ ] T030 [US1] Criar os 4 redirects: `dashboard/app/painel/preservacao/page.js`, `.../monitoramento/page.js`, `.../destinos/page.js`, `.../configuracoes/page.js` viram `redirect()` para a parte correspondente de `/painel/anti-banimento` (mesma estratégia de quando `/painel/grupos` virou `/painel/espelhamento`) — fazendo a parte de redirects de T026 passar. Os `layout.js`/`page.js` antigos com o conteúdo real são removidos ou esvaziados (conteúdo migrou para T028).
+- [ ] T031 [US1] Em `dashboard/app/painel/espelhamento/page.js` (aba "Anti-ban" do painel de destino, ~linha 1792): manter o bloco "Saúde deste destino" e trocar os dois links `/painel/preservacao/destinos` por um atalho para `/painel/anti-banimento?parte=ritmo&destino=<id>` com o texto "Ajustar no Anti-banimento PRO →" (contrato: `ui-anti-banimento.md` § Espelhamento) — sem duplicar nenhum controle de edição na aba do Espelhamento.
+- [ ] T032 [P] [US1] Escrever `test/painel-espelhamento-atalho-antibanimento.test.js` (ou estender teste existente de `espelhamento/page.js`, se houver): o atalho da aba "Anti-ban" aponta para `/painel/anti-banimento?parte=ritmo&destino=<id>` com o texto certo, e o texto "Preservação por grupo e canal" não aparece mais ali.
+- [ ] T033 [US1] Atualizar todo texto que hoje aponta para as telas antigas (FR-006): upsell (`UpsellShell.js`), mensagens de erro de plano já cobertas em T021/T022, tutorial (`dashboard/app/painel/tutorial/`), e-mails que citam a funcionalidade (buscar por "Preservação" em `src/email/registry.js`), página pública de preços (`dashboard/app/precos/` ou `landing/Pricing.jsx`) — todos passam a citar "Anti-banimento", sem mudar título/H1/URL de página pública indexada (regra de SEO do AGENTS.md) e sem prometer que o número não será banido (FR-008a).
+- [ ] T034 [P] [US1] Escrever `test/anti-banimento-textos-atualizados.test.js`: nenhuma das superfícies de T033 contém mais "Módulo de Preservação Avançada", "Preservação avançada", "Preservação Pro" ou "Preservação por grupo e canal"; todas citam "Anti-banimento".
+- [ ] T035 [US1] Confirmar independent test de US1 em ambiente local/dev: com uma conta PRO de teste, navegar pelo menu até "Anti-banimento" em no máximo 2 cliques, alterar o ritmo de um grupo e um ajuste da conta e salvar sem sair da tela — registrar o resultado (passo a passo `quickstart.md` §2) num comentário da PR.
+
+**Checkpoint**: a tela única existe, o menu tem 1 item, os redirects funcionam, o atalho de Espelhamento existe. SC-001, SC-002, SC-007 comprovados.
+
+---
+
+## Phase 4: User Story 2 - Só ver o que dá para entender, com o resto fixo e seguro (Priority: P1)
+
+**Goal**: nenhum termo técnico aparece na tela; os três campos fixos (T005–T010) não são exibidos nem editáveis; os campos que continuam editáveis aparecem em frase do dia a dia; a etiqueta "Ritmo mais cuidadoso" e o estado "recomeçou do padrão" são mostrados corretamente.
+
+**Independent Test**: percorrer a tela e confirmar (a) ausência de termos proibidos, (b) que uma conta com valores padrão mantém o mesmo ritmo efetivo antes/depois.
+
+- [ ] T036 [P] [US2] Escrever `test/anti-banimento-linguagem.test.js`: varre `dashboard/app/painel/anti-banimento/**`, os componentes que ela usa (`dashboard/components/preservacao/*`), a mensagem do gate (T021) e os motivos de adiamento que chegam ao painel (`deferReasonMessage`, `dashboard/lib/painel/logsCopy.js`) atrás da lista proibida completa do contrato (`ui-anti-banimento.md` § Linguagem): burst, rajada, janela de rajada, throttle, jitter, preset, cap, anti-flood, shadowban, hash, snapshot, score, mutação, stagger, "atraso entre canais", "Preservação avançada", "Módulo de Preservação", "Preservação Pro", "Preservação por grupo", "Preservação por destino" — e confirma que nenhuma frase promete que o número não será banido (procura por "não será banid_", "nunca banid_", "garantimos" perto de "banimento"/"banido"). No padrão de `test/painel-linguagem-leiga.test.js`.
+- [ ] T037 [US2] Nos componentes reaproveitados de `dashboard/components/preservacao/*` (ex.: `PreservationLimitsForm.js`) e na página nova (T028): remover os campos "Máximo de envios na janela" e "Janela de rajada" da UI (viram fixos e dormentes — não renderizar, não enviar no payload); manter editáveis, em frase do dia a dia com exemplo: intervalo mínimo entre envios ("Esperar pelo menos X minutos entre uma oferta e outra neste grupo"), limite diário ("No máximo X ofertas por dia neste grupo (vazio = sem limite)"), horário de funcionamento ("Enviar só entre Xh e Yh"), descarte por idade recolhido ("Se a oferta ficar esperando mais de X horas, não enviar"). Ao salvar um destino/modelo, o formulário envia `throttleEnabled: true` junto dos campos editáveis (contrato `api-preservation.md`), fazendo o destino sair do estado de "limites desligados" pelo caminho normal de escrita — fazendo T036 passar para esta parte.
+- [ ] T038 [US2] Renomear/redescrever o botão pronto "Leve" para não prometer o ritmo antigo (10 envios/hora): novo rótulo e descrição em linguagem leiga condizentes com o resultado real após o piso (6 envios/hora — Achado B, aprovado pela dona do produto), ex.: renomear para "Mais rápido" com a frase honesta do ritmo que ele de fato entrega, mantendo "Bem devagar"/"Equilibrado" para os outros dois modelos prontos.
+- [ ] T039 [US2] Implementar a etiqueta "🐢 Ritmo mais cuidadoso" (só leitura) quando `ritmoMaisCuidadoso: true` vier da API (T024/T025), e o estado "recomeçou do padrão" (sem etiqueta técnica — mostra só os valores efetivos do padrão nos campos editáveis, sem aviso jargão) quando `recomecouDoPadrao: true`; botão "Voltar ao ritmo padrão" grava `null` nos campos de override do destino, usando a rota `PUT /destinations/:id` já existente.
+- [ ] T040 [P] [US2] Escrever `test/painel-ritmo-mais-cuidadoso.test.js`: renderiza o formulário do destino com `ritmoMaisCuidadoso: true` e confirma a etiqueta; com `recomecouDoPadrao: true` confirma a ausência de etiqueta e a exibição dos valores efetivos (30 min inexistente — na verdade 30s/sem limite/6/600, conforme R3); nunca as duas juntas.
+- [ ] T041 [US2] Adicionar à parte "Ritmo por grupo" a frase para conta sem nenhum destino cadastrado ("o ritmo por grupo aparece quando você tiver grupos de envio", com atalho para `/painel/espelhamento`) e o suporte a lista buscável/agrupada para contas com muitos destinos, **sem largura fixa** no celular (regra do RCA 2026-09-05 — usar `fixed inset-x-3 bottom-3` ou padrão equivalente já usado em `HelpDot.js`/`Tooltip.js` para qualquer gaveta/diálogo).
+- [ ] T042 [P] [US2] Escrever `test/dialogos-no-celular.test.js` (ou estender o já existente): a lista/gaveta de destinos da tela "Anti-banimento" não usa largura fixa abaixo de `sm:` e qualquer tabela larga tem `overflow-x-auto` por perto.
+- [ ] T043 [US2] Confirmar independent test de US2 localmente: (a) Ctrl+F na tela renderizada não acha nenhum termo da lista proibida; (b) rodar `resolveDestinationPreservation` para uma conta com valores 100% padrão antes e depois desta feature (comparação de snapshot) e confirmar ritmo efetivo idêntico (exceto o intervalo entre destinos, que já é mudança deliberada de FR-023/FR-024) — registrar na PR.
+
+**Checkpoint**: tela sem jargão, campos fixos escondidos, campos editáveis em linguagem leiga, etiquetas corretas. SC-003 comprovado.
+
+---
+
+## Phase 5: User Story 3 - Saber que é recurso PRO e o que acontece se não for PRO (Priority: P2)
+
+**Goal**: selo "PRO" visível no menu/título/atalho; conta sem acesso vê a tela bloqueada com explicação e botão de upgrade, sem conseguir editar nem pela tela nem pela API; perder o plano não reseta nada.
+
+**Independent Test**: entrar com uma conta de cada plano (Basic, Trial ativo, Trial vencido, PRO, Premium) e verificar selo, bloqueio e resposta da API.
+
+- [ ] T044 [P] [US3] Estender `test/anti-banimento-gate-fonte-unica.test.js` (ou criar `test/anti-banimento-tela-bloqueada.test.js`) cobrindo os cenários de aceitação de US3: conta com acesso vê e edita normalmente; conta sem acesso (Basic/Trial vencido) vê a tela **visível e bloqueada** (nunca oculta) com resumo leigo, aviso de que o robô continua protegendo o número, e botão "Conhecer o plano PRO"; conta Premium tem o mesmo acesso de PRO (sem upsell — SC-005a); conta Trial ativo tem acesso completo; tentativa de `PUT` sem acesso devolve a mensagem de T021 e **nada é gravado** (mock/spy confirmando que a função de escrita não foi chamada).
+- [ ] T045 [US3] Implementar em `dashboard/app/painel/anti-banimento/layout.js` (estendendo T027) o estado bloqueado completo: resumo em linguagem simples do que o Anti-banimento faz, frase "o robô continua protegendo seu número (com o ritmo padrão seguro, ou com os ajustes que você já tinha deixado)" e botão para `/painel/plano` — usando o mesmo padrão visual de outros bloqueios PRO do painel (`UpsellShell.js` ou equivalente), mas sem esconder o item de menu nem redirecionar para fora da tela.
+- [ ] T046 [US3] Adicionar o selo "PRO" com **texto visível** (não só cor) em três lugares: item de menu "Anti-banimento" (`nav.js`, já com `pro: true` de T029 — confirmar que o componente de menu renderiza o texto "PRO", não só um ícone/cor), título da tela (`anti-banimento/page.js`) e atalho do painel de destino em Espelhamento (T031, "Ajustar no Anti-banimento PRO →" já inclui o texto).
+- [ ] T047 [P] [US3] Escrever `test/anti-banimento-selo-pro.test.js`: renderiza o item de menu, o título da tela e o atalho de Espelhamento e confirma que o texto "PRO" está presente no DOM/markup (não só uma classe CSS de cor).
+- [ ] T048 [US3] Confirmar que a API (`src/api/routes/preservation.js`, `config.js`, `groups.js`) já recusa gravação sem acesso com a mensagem de T021 e **sem gravar nada** (revisar os handlers existentes; se algum caminho gravar parcialmente antes de checar o gate, corrigir a ordem: checagem de plano sempre antes de qualquer `update`/`create`) — registrando a recusa como já é feito para os demais recursos por plano (mesmo padrão de auditoria/analytics existente).
+- [ ] T049 [P] [US3] Escrever `test/anti-banimento-api-recusa-sem-gravar.test.js`: `PUT /api/preservation/config`, `POST /presets`, `PUT /presets/:id`, `PUT /destinations/:id` chamados sem acesso devolvem a mensagem de plano e não alteram nenhuma linha do banco de teste (comparar estado antes/depois).
+- [ ] T050 [US3] Confirmar (revisão de código, sem mudança funcional esperada — R8) que o robô **não** checa plano para ler ritmo por destino nem intervalo entre destinos: `resolveDestinationPreservation` e `decideDestinationSpacing`/`toDestinationIntervalMs` nunca recebem nem consultam `user.plan`/`accessExpiresAt`. Se algum caminho checar, remover — essa checagem violaria FR-019 (perder o plano nunca desliga a proteção).
+- [ ] T051 [P] [US3] Escrever `test/anti-banimento-plano-nao-reseta.test.js`: simula uma conta com valores gravados (destino com `burstCap: 3`, `BotConfig.channelStaggerJitterMs: 45000`) perdendo o acesso (`plan` muda para `basic`) e confirma que `resolveDestinationPreservation`/`toDestinationIntervalMs` continuam devolvendo os mesmos valores efetivos de antes (com o piso, como sempre) — nada é resetado, zerado ou trocado pelo padrão só por causa da mudança de plano.
+
+**Checkpoint**: gate de plano coerente entre tela e API nos 5 perfis; bloqueio visível e informativo; perda de plano não afeta o robô. SC-005a, SC-005d, SC-006 comprovados.
+
+---
+
+## Phase 6: User Story 4 - Um intervalo entre destinos que não trava os outros envios (Priority: P2)
+
+**Goal**: o campo "Intervalo entre destinos" aparece em "Ajustes da conta", editável, com a frase certa; a correção de causa raiz (T011–T018, já na Foundational) já garante o comportamento no robô — esta fase fecha a ponta de **interface** que faltava.
+
+**Independent Test**: configurar o intervalo em X segundos e publicar uma oferta para vários grupos/canais — cada envio sai com pelo menos X segundos de distância, grupos incluídos, sem "espera dentro da fila" no log.
+
+- [ ] T052 [P] [US4] Escrever `test/painel-intervalo-entre-destinos.test.js`: o campo "Intervalo entre destinos" aparece em "Ajustes da conta" (não em "Ritmo por grupo") com a frase "Esperar X segundos entre enviar para um grupo ou canal e enviar para o próximo" e a dica "Vale para grupos e canais. É diferente do tempo entre uma oferta e outra no mesmo grupo. Com muitos grupos, a oferta leva mais tempo para chegar ao último."; faixa 0–600 segundos aceita (0 grava e mostra "sem espera extra"); valor fora da faixa mostra a frase com a faixa permitida e não grava nada (parcial ou totalmente); nenhum dos termos "jitter", "stagger" ou "atraso entre canais" aparece.
+- [ ] T053 [US4] Implementar o campo "Intervalo entre destinos" na parte "Ajustes da conta" de `anti-banimento/page.js` (T028): input em segundos (convertendo de/para `channelStaggerJitterMs` em ms na chamada a `PUT /api/preservation/config`), com a frase e a dica de T052 — fazendo T052 passar.
+- [ ] T054 [US4] Confirmar que a variação de imagem continua exatamente como está (decisão A — fora de escopo de mudança): mesmo campo (`imageMutationEnabled`), mesmo padrão (`false`), mesmo gate, só o rótulo muda para "Mudar levemente a foto em cada envio para os canais" (sem "mutação"). Não alterar `src/converters/imageScrapers.js`, `Group.imageMode` nem nenhum comportamento de imagem além do texto do rótulo.
+- [ ] T055 [P] [US4] Escrever `test/anti-banimento-variacao-imagem-inalterada.test.js`: o valor padrão de `imageMutationActive`/`imageMutationEnabled` continua `false`; nenhuma rota nem componente desta feature grava um valor diferente do que a cliente escolheu; o rótulo na tela não contém "mutação".
+- [ ] T056 [US4] Confirmar independent test de US4 em staging (depois que o `bot-supervisor-staging` reiniciar — ver Fase 8): configurar o intervalo em 20s, publicar uma oferta de teste para 2 grupos e 2 canais, e conferir no `bot.log` (comandos de `quickstart.md` §3) que as saídas ficam espaçadas ≥ 20s entre destinos diferentes (grupos incluídos), com log de `destination_spacing` e sem nenhum "Smart delay" vindo do sorteio antigo.
+
+**Checkpoint**: campo editável na tela nova, com o comportamento corrigido já provado pela Foundational. SC-005b, SC-005c fecham na ponta de UI.
+
+---
+
+## Phase 7: Script de diagnóstico e Gate Humano (bloqueante do merge `develop → main`)
+
+**Purpose**: entregar a ferramenta read-only que a dona do produto precisa rodar em staging e produção antes de aprovar o valor final do intervalo entre destinos — e deixar explícito que **essa aprovação é ação humana**, não uma conclusão que a implementação possa tirar sozinha.
+
+- [ ] T057 [P] Escrever `test/diag-antiban-valores.test.js`: o script **importa** as regras do produto (`antiBanFloor.js`, `resolveDestinationPreservation`, `destinationSpacing.js`, `shouldDropExpiredQueueJob`) em vez de reimplementá-las (grep estrutural, mesmo padrão de `test/diag-busca-shopee.test.js`/`test/diag-dominio-proprio.test.js`); toda consulta que falhar é **impressa** (nunca vira "zero"/"nenhuma conta encontrada" — lição do `diag-assinatura-recusada.mjs`); `--detalhes` lista contas por **e-mail**, nunca telefone; datas são lidas via Prisma, nunca comparadas como string contra `sentAt` cru (armadilha do AGENTS.md); a Parte B (vazão) está presente e não pode ser pulada silenciosamente mesmo sem `--detalhes`.
+- [ ] T058 Implementar `scripts/diag-antiban-valores.mjs`, **Parte A** (quem muda com o piso), conforme `research.md` R4: por campo fixo (3), contagem de linhas/contas menos conservadoras (mudam) / mais conservadoras (mantêm) / iguais / herdando, separado por "tem acesso ao plano" × "não tem"; por destino, efetivo antes (sem piso) × depois (com piso) — nenhuma linha em que o depois seja menos conservador (prova SC-005 em produção real); destinos com limites desligados e os valores gravados que serão ignorados (Achado C′); destinos em "Leve"/rajada mais lenta que o fixo (Achado B).
+- [ ] T059 Implementar `scripts/diag-antiban-valores.mjs`, **Parte B** (vazão do intervalo entre destinos), conforme `research.md` R4: (1) destinos por conta (grupos + canais + `status@broadcast` quando `postToStatus`), p50/p90/máximo, top 10 contas; (2) atraso projetado da última saída `(N−1) × intervalo` com o valor gravado da conta **e** com o padrão provisório de 20s, e também com o N **observado** por oferta nos últimos 7 dias (destinos distintos por mensagem de origem no `MessageLog`); (3) vazão teórica (`3600/intervalo` envios/hora) × pico observado de envios `success`/hora nos últimos 7 dias, listando contas em que o observado supera o teórico; (4) proximidade com o descarte por idade: comparar (2) e o acúmulo de (3) com o menor `queueMaxAgeMin` efetivo de cada conta, classificando `ok` (< 50%), `atenção` (≥ 50%), `descartaria` (≥ 100%); (5) resumo final em linguagem simples. Fazendo T057 passar.
+- [ ] T060 Rodar `scripts/diag-antiban-valores.mjs` localmente (ou contra um banco de desenvolvimento com dados de teste) para confirmar que ele executa sem erro e produz as duas partes — **não** é a validação em staging/produção (essa é T061, ação humana), é só a confirmação de que o script funciona antes de pedir para a dona do produto rodá-lo de verdade.
+- [ ] T061 ⛔ **GATE HUMANO — ação exclusiva da dona do produto, NÃO delegável a este pipeline**: rodar `node scripts/diag-antiban-valores.mjs` (Partes A e B) em `~/wabot-staging` e em `~/wabot` (produção), colar a saída na PR `develop → main`, e **decidir e confirmar** o valor final do intervalo entre destinos (hoje provisório em 20s — `BotConfig.channelStaggerJitterMs` default 20000, herdado da migration `20260728120000_channel_stagger_default_20s`). Critério de decisão (dela, não automático): se houver contas em "atenção"/"descartaria" na Parte B, escolher entre (a) padrão menor, (b) rever o teto de descarte (`queueMaxAgeMin`) dessas contas/padrão, ou (c) aceitar como está. **Esta tarefa não pode ser marcada como concluída por nenhum agente de implementação** — só pela dona do produto, com a saída do script em mãos. Se ela escolher um valor diferente de 20s, abrir uma tarefa/PR própria de migration DML guardada (mesmo padrão de `20260728120000_channel_stagger_default_20s`: troca só as linhas ainda no padrão) — **essa migration não faz parte desta feature**.
+- [ ] T062 Documentar em `specs/018-unificar-protecao-anti-ban/plan.md` (seção "⚠️ Gate humano pendente") o resultado de T061: data em que a dona do produto rodou o script, o valor final confirmado (20s ou outro) e se alguma conta ficou em "atenção"/"descartaria" — só depois de T062 preenchida a fase seguinte (comunicação/merge) pode prosseguir.
+
+**Checkpoint**: o valor do intervalo entre destinos está confirmado por medição real, não por suposição. T061 é o único ponto de bloqueio verdadeiramente humano de toda a feature.
+
+---
+
+## Phase 8: Aviso às clientes e cutover em produção (bloqueante do merge `develop → main`)
+
+**Purpose**: o deploy de `main` reinicia o `bot-supervisor` (reconecta TODAS as sessões WhatsApp de uma vez) porque a feature toca `src/core/preservationConfig.js`, `src/core/channelThrottle.js`, os dois módulos novos e `src/bot-worker.js` — todos em `WORKER_CODE_PATHS_RE`. Decisão E da spec: "anunciar e deixar reiniciar". Esta fase transforma essa decisão numa tarefa explícita, não implícita.
+
+- [ ] T063 Validar em staging (`http://178.105.54.0:3006`) o roteiro completo de `quickstart.md` §2 e §3: as 5 contas de teste (Basic, Trial ativo, Trial vencido, PRO, Premium), os 4 endereços antigos, o atalho de Espelhamento, os dois estados de destino (`ritmoMaisCuidadoso`/`recomecouDoPadrao`), o campo "Intervalo entre destinos", e — **depois** que o `bot-supervisor-staging` reiniciar sozinho (o deploy de staging já toca `src/core/`/`src/bot-worker.js`) — o comportamento real do robô com uma oferta para 2 grupos e 2 canais.
+- [ ] T064 Redigir e agendar o aviso às clientes sobre a reconexão de todas as sessões WhatsApp no deploy de `main` (decisão E da spec, R7): comunicação no painel e/ou e-mail, com pelo menos 24h de antecedência, informando que o WhatsApp vai reconectar sozinho (sem precisar escanear QR de novo) num horário de menor movimento (madrugada de dia útil), e definir junto com a dona do produto **o horário exato do deploy de `main`** — só depois desta tarefa concluída (aviso enviado ou agendado com confirmação) é que o merge pode ser aberto.
+- [ ] T065 Registrar em `specs/018-unificar-protecao-anti-ban/plan.md` (Notas de implantação) a confirmação de que T064 foi cumprida: quando o aviso foi enviado/agendado, e o horário combinado para o deploy de `main`.
+
+**Checkpoint**: staging validado de ponta a ponta; clientes avisadas; horário do deploy combinado.
+
+---
+
+## Phase 9: Polish & Cross-Cutting Concerns
+
+**Purpose**: varredura final, guardas de regressão e documentação — depois que todas as histórias e os dois gates (humano e de comunicação) estiverem prontos.
+
+- [ ] T066 [P] Rodar `test/deploy-worker-code-paths.test.js` de novo (repetição de T004, agora com `src/core/antiBanFloor.js` e `src/core/destinationSpacing.js` existindo) e confirmar que continua verde sem precisar editar `WORKER_CODE_PATHS_RE` em `scripts/deploy_safe_dashboard.sh`/`scripts/deploy_safe_staging.sh` — se falhar, é sinal de que um dos dois módulos ficou fora de `src/core/` ou que o worker importa algo inesperado; corrigir o caminho do arquivo, nunca a regex (a regex já é genérica o bastante).
+- [ ] T067 [P] Varredura final de linguagem leiga em **todas** as superfícies novas ou tocadas por esta feature de uma vez (tela, componentes, upsell, e-mails, tutorial, página de preços, motivos de adiamento) — rodar `test/anti-banimento-linguagem.test.js` (T036) e `test/anti-banimento-textos-atualizados.test.js` (T034) juntos como gate final; se algum termo escapar por um caminho não coberto pelos dois testes (ex.: um novo componente adicionado numa correção de última hora), estender a lista de arquivos varridos em `anti-banimento-linguagem.test.js` em vez de aceitar a exceção.
+- [ ] T068 [P] Atualizar `AGENTS.md` com uma seção nova "Anti-banimento — unificação da proteção do número (2026-09-23)" resumindo: o nome final, os três campos fixos e a regra campo a campo, a exceção de recomeço do padrão, o novo "Intervalo entre destinos" e a correção do RCA 2026-07-28, a fonte única de gate, e o lembrete de que perder o plano nunca reseta nada — seguindo o mesmo formato de outras seções do arquivo (tabela de peças, "Não regredir", testes). Não remover nem contradizer a seção existente "'Atraso entre canais' (`channelStaggerJitterMs`) — default 90s → 20s" nem "Pendências conhecidas" — a nova seção substitui/atualiza a informação de que o defeito foi corrigido, referenciando a antiga.
+- [ ] T069 [P] Escrever `test/anti-banimento-agents-md-atualizado.test.js` (opcional, se o repositório tiver o padrão de testar consistência de `AGENTS.md` — verificar `test/` por precedente antes de criar; se não houver precedente, pular esta tarefa e apenas confirmar a atualização manual em T068).
+- [ ] T070 Rodar a suíte completa: `npm test`, `npx eslint@9 --no-inline-config src test dashboard/app dashboard/components dashboard/lib`, `npm ci --prefix dashboard && npm test` (componentes React pulam sem o `npm ci`, conforme `quickstart.md` §1) — confirmar zero regressão em toda a suíte, não só nos testes novos desta feature.
+- [ ] T071 Abrir PR **`018-unificar-protecao-anti-ban` → `develop`** com a lista de testes novos, o resultado de T063 (staging) e a confirmação de que T062/T065 (gate humano e aviso às clientes) ainda estão pendentes para a etapa seguinte (`develop → main`) — esta PR não depende do gate humano nem do aviso, só da Fase 8 de staging.
+- [ ] T072 ⛔ Abrir PR **`develop` → `main`**: **bloqueada até T061 (gate humano) e T064 (aviso às clientes) estarem concluídos e documentados (T062/T065)**. A descrição da PR deve citar explicitamente: o valor final do intervalo entre destinos confirmado pela dona do produto, a saída do diagnóstico colada, e a confirmação de que o aviso de reconexão foi enviado/agendado com o horário do deploy.
+
+---
+
+## Dependencies & Execution Order
+
+### Ordem de fases
+
+1. **⚠️ Achados de abertura (T001–T002)**: sem dependências; T002 (correção da spec) deve terminar antes de T006 (o teste da exceção precisa da redação certa como referência).
+2. **Setup (T003–T004)**: sem dependências além do estado atual do repositório.
+3. **Foundational (T005–T025)**: bloqueia TODAS as fases de história de usuário. Dentro dela: T005/T006 (testes do piso) → T007 (implementação) → T008 (guarda) → T009 (wiring) → T010 (integração); em paralelo, T011 (testes do espaçamento) → T012 (implementação) → T013 (guarda) → T014 (teste de wiring do bot-worker) → T015 (peek no throttle) → T016 (wiring no bot-worker) → T017 (motivo leigo) → T018 (teste do motivo); em paralelo aos dois blocos acima, T019 (teste do gate) → T020 (remoção da função duplicada) → T021 (mensagem) → T022 (teste da mensagem); por fim T023/T024 (testes das rotas) → T025 (implementação aditiva), que depende de T007 e T009 já existirem.
+4. **US1 (T026–T035)**: depende da Foundational completa (a tela lê os campos aditivos de T025). Prioridade P1 — pode ser o MVP sozinho.
+5. **US2 (T036–T043)**: depende da Foundational (piso) e de US1 (a tela já existir) para ter onde mostrar os textos — mas a lógica do piso já está provada desde a Foundational.
+6. **US3 (T044–T051)**: depende de US1 (tela) e da Foundational (gate único, T019–T022). Pode rodar em paralelo com US2 depois que US1 terminar (arquivos majoritariamente diferentes — layout/gate vs. formulário/textos).
+7. **US4 (T052–T056)**: depende de US1 (tela) para a parte de interface; a lógica (T011–T018) já está prova desde a Foundational, então o "Independent Test" de robô (T056) pode rodar assim que a Foundational estiver pronta, mesmo antes de US1 — só o campo na tela (T052/T053) depende de US1.
+8. **Script + Gate Humano (T057–T062)**: T057–T060 podem começar assim que a Foundational estiver pronta (o script importa `antiBanFloor.js`/`destinationSpacing.js`); T061/T062 só depois de T058–T060 e, na prática, só fazem sentido depois que US1–US4 estiverem em staging (para a dona do produto ver a tela funcionando junto da medição).
+9. **Aviso e cutover (T063–T065)**: T063 depende de US1–US4 completas e implantadas em staging; T064/T065 podem ser preparadas em paralelo, mas só "concluídas" perto da data real do deploy de `main`.
+10. **Polish (T066–T072)**: T066–T070 depois de todas as histórias; T071 (PR para `develop`) depois de T063 (staging) e T070 (suíte verde); T072 (PR para `main`) **bloqueada** por T061/T062/T064/T065.
+
+### Histórias de usuário — independência
+
+- **US1** é a única com dependência estrutural forte na Foundational (precisa da API aditiva) mas nenhuma dependência de US2/US3/US4 para existir (a tela pode nascer mostrando os campos "crus" antes dos ajustes de linguagem/gate/spacing UI serem refinados).
+- **US2**, **US3** e **US4** podem ser desenvolvidas em paralelo por sessões/subagentes diferentes depois que US1 tiver a página base (T028) criada, porque tocam arquivos majoritariamente distintos (textos/formulário vs. layout/gate vs. campo de conta).
+
+---
+
+## Parallel Example: Foundational
+
+```text
+T005 [P] + T011 [P] + T019 [P] + T023 [P] + T024 [P]   # testes que não dependem uns dos outros
+depois: T006 [P] (mesmo arquivo de T005, sequencial nele) + T013 [P] + T018 [P] (arquivos próprios)
+```
+
+### US2 + US3 + US4 (depois de US1 pronta)
+
+```text
+T036 [P] + T040 [P] + T042 [P]                          # US2, testes
+T044 [P] + T047 [P] + T049 [P] + T051 [P]                # US3, testes
+T052 [P] + T055 [P]                                      # US4, testes
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First
+
+1. Completar Setup + Foundational (T001–T025) — nada muda para a cliente ainda, mas SC-004/SC-005/SC-005b/SC-005c já são prováveis por teste.
+2. Completar US1 (T026–T035) — tela única existe, menu tem 1 item, redirects funcionam. **Ponto seguro para pausar e avaliar**: mesmo sem US2/US3/US4 refinadas, a promessa central da feature (unificar) já está de pé.
+3. Completar US2 (linguagem leiga) — sem ela, a tela unificada ainda expõe jargão, então US2 é quase tão urgente quanto US1 para o objetivo da feature.
+
+### Incremental Delivery
+
+1. Foundational → nenhuma mudança visível, mas o robô já está com o comportamento novo por trás (medido pelo diagnóstico antes de ir para produção).
+2. US1 → tela unificada em staging.
+3. US2 → linguagem leiga, campos fixos escondidos.
+4. US3 → gate de plano coerente, bloqueio visível.
+5. US4 → campo do intervalo entre destinos na tela (a correção de robô já valeu desde a Foundational).
+6. Script + Gate Humano → medição real, decisão da dona do produto.
+7. Aviso + cutover → comunicação às clientes, deploy de `main` num horário combinado.
+
+### Guardrails de implementação (não regredir)
+
+- Nenhuma migration, nenhuma coluna nova, nenhuma coluna renomeada (`data-model.md`).
+- Nenhum processo PM2 novo, nenhuma dependência nova (`package.json` intocado).
+- Os três campos fixos só são comparados/trocados dentro de `src/core/antiBanFloor.js`, consumido só por `resolveDestinationPreservation`; a variação de imagem e o intervalo entre destinos **nunca** recebem piso.
+- O intervalo entre destinos só é decidido/combinado dentro de `src/core/destinationSpacing.js`; toda espera dele vira `deferSendJob`, nunca `sleep` no consumidor da fila.
+- `canAccessAdvancedPreservation` não existe mais em `dashboard/`; a única fonte de gate é `canUseAdvancedPreservation` de `src/billing/plans.js`.
+- Perder o plano nunca reseta, zera ou troca valores gravados — só bloqueia a tela e a gravação.
+- Rotas continuam aceitando os três campos fixos e `channelStaggerJitterMs` pelo nome atual, sem novo alias.
+- Linguagem leiga em toda superfície nova: nenhum termo da lista proibida, nenhuma promessa de "não será banido".
+- Deploy de `main` reinicia o `bot-supervisor` (reconecta todas as sessões) — sempre anunciado antes, nunca às cegas.
+- O valor final do intervalo entre destinos só é confirmado por medição real (T061), nunca decidido por suposição dentro do código.
+
+---
+
+## Task Completeness Validation
+
+- **US1**: verificável com uma conta PRO navegando pelo menu até "Anti-banimento" em até 2 cliques, sem nenhuma outra tela.
+- **US2**: verificável fazendo Ctrl+F na tela renderizada (zero termos proibidos) e comparando o ritmo efetivo de uma conta padrão antes/depois.
+- **US3**: verificável entrando com as 5 contas de teste e conferindo selo, bloqueio e resposta da API.
+- **US4**: verificável configurando o intervalo e publicando uma oferta de teste para múltiplos destinos, conferindo o espaçamento no `bot.log`.
+- Todas as tarefas usam checkbox, ID sequencial, rótulo de história quando aplicável (ausente em "Achados de abertura", Setup, Foundational, Script/Gate Humano, Aviso/Cutover e Polish) e caminho de arquivo explícito.
+- Format validation: todas as 72 tarefas seguem `- [ ] T0XX [P?] [USn?] Descrição com caminho de arquivo`.
