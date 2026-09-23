@@ -66,8 +66,36 @@ export function buildSalesSnapshot(source, query, updatedAt = new Date()) {
       orders.push({ id: opaque(orderKey), purchasedAt: iso(conversion.purchaseTime), convertedClickAt: iso(conversion.clickTime), status: classifyStatus(order.orderStatus || conversion.conversionStatus), rawStatusLabel: safeText(order.orderStatus || conversion.conversionStatus, 40), amount: amountComplete ? amount : null, estimatedCommission: soleOrder ? ec : null, confirmedCommission: soleOrder && status === 'confirmed' ? nc : null, commissionScope: soleOrder ? 'conversion' : 'multiple_orders', itemCount: count })
     }
   }
+  // Divisão Basic/PRO (2026-09-23): a tela do PRO mostra comissão POR DIA e
+  // os produtos que mais venderam. Os dois saem do período INTEIRO, aqui —
+  // calcular na tela a partir de uma página de pedidos daria número errado.
+  // Dia sem comissão confiável em alguma compra vira null (nunca um total a
+  // menos apresentado como se fosse o total).
+  const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+  const byDay = new Map()
+  for (const conversion of conversions) {
+    const at = iso(conversion.purchaseTime); if (!at) continue
+    const day = dayFmt.format(new Date(at))
+    const entry = byDay.get(day) ?? { date: day, purchases: 0, estimatedCommission: 0 }
+    entry.purchases += 1
+    const ec = finite(conversion.estimatedTotalCommission)
+    entry.estimatedCommission = ec == null || entry.estimatedCommission == null ? null : entry.estimatedCommission + ec
+    byDay.set(day, entry)
+  }
+  const daily = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date))
+  const byProduct = new Map()
+  for (const product of products) {
+    const key = `${product.name}|${product.shopName || ''}`
+    const entry = byProduct.get(key) ?? { id: opaque(`top:${key}`), name: product.name, shopName: product.shopName, quantity: 0, estimatedCommission: 0 }
+    entry.quantity += product.quantity
+    entry.estimatedCommission = product.estimatedCommission == null || entry.estimatedCommission == null ? null : entry.estimatedCommission + product.estimatedCommission
+    byProduct.set(key, entry)
+  }
+  const topProducts = [...byProduct.values()]
+    .sort((a, b) => (b.estimatedCommission ?? -1) - (a.estimatedCommission ?? -1) || b.quantity - a.quantity || a.name.localeCompare(b.name))
+    .slice(0, 5)
   const sorter = (a, b) => String(b.purchasedAt || '').localeCompare(String(a.purchasedAt || '')) || a.id.localeCompare(b.id); orders.sort(sorter); products.sort(sorter)
-  return { period: { from: query.from, to: query.to, timeZone: TZ }, summary: { attributedPurchases: conversions.length, orderCount: orders.length, itemQuantity, salesAmount: salesComplete ? sales : null, estimatedCommission: estimatedComplete ? estimated : null, confirmedCommission: confirmedCount && confirmedComplete ? confirmed : null, statusCounts }, orders: page(orders, query.orderPage, query.limit), products: page(products, query.productPage, query.limit), sourceUpdatedAt: updatedAt.toISOString(), stale: false, clickCoverage: 'converted_clicks_only' }
+  return { period: { from: query.from, to: query.to, timeZone: TZ }, summary: { attributedPurchases: conversions.length, orderCount: orders.length, itemQuantity, salesAmount: salesComplete ? sales : null, estimatedCommission: estimatedComplete ? estimated : null, confirmedCommission: confirmedCount && confirmedComplete ? confirmed : null, statusCounts }, orders: page(orders, query.orderPage, query.limit), products: page(products, query.productPage, query.limit), daily, topProducts, sourceUpdatedAt: updatedAt.toISOString(), stale: false, clickCoverage: 'converted_clicks_only' }
 }
 
 export function createShopeeSalesService({ database = db, client = createShopeeSalesClient() } = {}) {

@@ -19,6 +19,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainel, usePainelHeader } from './PainelShell'
 import { ActivationChecklist } from '@/components/ActivationChecklist'
+import { ProTag } from '@/components/pro/ProGate'
 
 function greeting(hour) {
   if (hour < 12) return 'Bom dia'
@@ -48,6 +49,7 @@ function Icon({ name, size = 20, stroke = 1.7 }) {
     case 'send': return <svg {...p}><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" /></svg>
     case 'plus': return <svg {...p}><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M12 8v8M8 12h8" /></svg>
     case 'spark': return <svg {...p}><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4" /><circle cx="12" cy="12" r="3.5" /></svg>
+    case 'money': return <svg {...p}><path d="M12 2v20" /><path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
     case 'tutorial': return <svg {...p}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z" /><path d="M4 5.5v16M9 8h6M9 12h7" /></svg>
     default: return null
   }
@@ -99,8 +101,77 @@ const ACTIONS = [
   { label: 'Tutorial', href: '/painel/tutorial', icon: 'tutorial', tag: 'Plano Basic' },
 ]
 
+function todaySaoPaulo() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+}
+
+const brl = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+
+/* Divisão Basic/PRO (2026-09-23): o quinto card é a comissão da Shopee de hoje.
+ * No Basic ele aparece EMBAÇADO e com cadeado — clicar abre a explicação do
+ * PRO. Para o Basic nenhuma chamada é feita (a API devolveria 403). O número
+ * é a comissão ESTIMADA (a confirmada só chega dias depois, pela Shopee). */
+// A tela inicial é aberta toda hora e cada leitura vai até a Shopee (o serviço
+// não guarda nada). Cinco minutos de memória nesta aba bastam para o número de
+// "hoje" e evitam uma chamada à Shopee a cada volta ao Painel.
+const COMMISSION_CACHE_MS = 5 * 60 * 1000
+let commissionCache = null // { day, at, state }
+
+function CommissionStat({ isPro, onLocked }) {
+  const [state, setState] = useState(() => {
+    const day = todaySaoPaulo()
+    return commissionCache && commissionCache.day === day && Date.now() - commissionCache.at < COMMISSION_CACHE_MS
+      ? commissionCache.state
+      : { loading: true, value: null, code: null }
+  })
+  useEffect(() => {
+    if (!isPro || !state.loading) return undefined
+    let active = true
+    const day = todaySaoPaulo()
+    const done = (next) => {
+      commissionCache = { day, at: Date.now(), state: next }
+      if (active) setState(next)
+    }
+    api.shopeeSales({ from: day, to: day, limit: 1 })
+      .then((d) => done({ loading: false, value: d?.summary?.estimatedCommission ?? null, code: null }))
+      .catch((e) => done({ loading: false, value: null, code: e?.code ?? 'SHOPEE_UNAVAILABLE' }))
+    return () => { active = false }
+  }, [isPro, state.loading])
+
+  if (!isPro) {
+    return (
+      <button type="button" className="pv-stat pnl-kpi-locked" onClick={onLocked} aria-label="Comissão Shopee hoje — disponível no plano PRO" style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
+        <span className="pnl-pro-lock-content" style={{ minWidth: 0 }} aria-hidden="true">
+          <span className="pv-stat-label">Comissão Shopee hoje</span>
+          <span className="pv-stat-num" style={{ color: 'var(--accent-strong)' }}>R$ 96</span>
+          <span className="pv-stat-foot">vendas pelos seus links</span>
+        </span>
+        <span className="pnl-pro-lock-tag"><ProTag small /></span>
+      </button>
+    )
+  }
+
+  const foot = state.code === 'SHOPEE_NOT_CONFIGURED'
+    ? 'cadastre sua Shopee para ver'
+    : state.code
+      ? 'a Shopee não respondeu agora'
+      : 'estimada, pelos links do robô'
+  return (
+    <Link href="/painel/vendas" className="pv-stat">
+      <span style={{ minWidth: 0 }}>
+        <span className="pv-stat-label">Comissão Shopee hoje</span>
+        {state.loading
+          ? <span className="pv-skel" style={{ width: 52, height: 30, marginTop: 8 }} />
+          : <span className="pv-stat-num" style={{ color: 'var(--accent-strong)' }}>{state.value == null ? '—' : brl(state.value)}</span>}
+        <span className="pv-stat-foot">{state.loading ? 'carregando…' : foot}</span>
+      </span>
+      <span className="pv-stat-ico" aria-hidden="true"><Icon name="money" size={21} /></span>
+    </Link>
+  )
+}
+
 export default function PainelPage() {
-  const { user } = usePainel()
+  const { user, isPro, openPro } = usePainel()
 
   const [counts, setCounts] = useState(null)
   const [offersToday, setOffersToday] = useState(null)
@@ -138,7 +209,7 @@ export default function PainelPage() {
       {/* 1. Checklist — o que ainda falta para o robô trabalhar. */}
       <ActivationChecklist userId={user?.id} />
 
-      {/* 2. Os quatro números. */}
+      {/* 2. Os números (o quinto, comissão Shopee, é do PRO). */}
       <section className="pv-stats">
         {STATS.map((s) => {
           const raw = values[s.key]
@@ -157,6 +228,7 @@ export default function PainelPage() {
             </Link>
           )
         })}
+        <CommissionStat isPro={isPro} onLocked={() => openPro('vendas')} />
       </section>
 
       {/* 3. Funções mais usadas. */}

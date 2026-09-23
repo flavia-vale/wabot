@@ -23,7 +23,8 @@ import {
 } from '@/lib/mobileTemplateStore'
 import { OFFER_TEMPLATE_VARIABLE_GROUPS } from '@/lib/mobileOfferComposer'
 import { buildRenderedOfferTemplatePreview, summarizeAutomationTemplateUsage } from '@/lib/offerTemplatePreview'
-import { usePainelHeader } from '../PainelShell'
+import { usePainel, usePainelHeader } from '../PainelShell'
+import { ProLock } from '@/components/pro/ProGate'
 import { WhatsAppBubble, TokenText } from '../WhatsAppBubble'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import styles from './mensagens.module.css'
@@ -60,6 +61,7 @@ function Chevron({ open }) {
 
 export default function MensagensPage() {
   usePainelHeader({ title: 'Templates de mensagens', subtitle: 'Crie templates e personalize os textos das suas ofertas' })
+  const { isPro } = usePainel()
 
   const [value, setValue] = useState({ copyVariationPoolJson: '{}', copyVariationEnabled: false, brandingGroupLink: '', couponLink: '' })
   const [templateStore, setTemplateStore] = useState(() => readLocalTemplateStore())
@@ -126,7 +128,10 @@ export default function MensagensPage() {
     try {
       await api.variationsUpdate({
         copyVariationPoolJson: value.copyVariationPoolJson,
-        copyVariationEnabled: value.copyVariationEnabled,
+        // Variação do texto é do PRO (2026-09-23): sem o plano, salvar os
+        // modelos nunca pode tentar LIGÁ-LA (a API devolveria 403 e o modelo
+        // não seria salvo).
+        copyVariationEnabled: isPro ? value.copyVariationEnabled : false,
         brandingGroupLink: value.brandingGroupLink,
         couponLink: value.couponLink,
         mobileTemplatesJson: JSON.stringify(storeOverride || templateStore),
@@ -339,6 +344,7 @@ export default function MensagensPage() {
         </div>
       </section>
 
+      <ProLock feature="variacao">
       <section aria-labelledby="variacoes-title">
         <div className={styles.sectionHeading}>
           <div><h2 id="variacoes-title">Frases que variam sozinhas</h2><p>O robô alterna entre elas para as mensagens não ficarem repetidas.</p></div>
@@ -366,6 +372,7 @@ export default function MensagensPage() {
           })}
         </div>
       </section>
+      </ProLock>
 
       <details className={styles.linksCard}>
         <summary><span><strong>Links opcionais</strong><small>Convite do grupo e página de cupom</small></span><Chevron /></summary>

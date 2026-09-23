@@ -24,11 +24,27 @@ test('buildEntitledGroupConfig removes all channel monitors, posts and targets f
   assert.deepEqual(result.groups.monitor[0].targetPostJids, ['post@g.us'])
   assert.deepEqual(result.groups.monitorJids, ['monitor@g.us'])
   assert.deepEqual(result.groups.post, ['post@g.us'])
-  // O plano Basic corta CANAIS, não a marca d'água: o destino de GRUPO mantém a
-  // escolha de imagem/marca que a cliente fez. Não existe gate de plano para
-  // marca d'água em lugar nenhum do código — se um dia existir, é aqui que ele
-  // aparece (e este assert é quem trava a regressão).
-  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null, imageMode: 'original_watermark', watermarkText: 'Minha marca', watermarkColor: null, watermarkSize: null, watermarkPosition: null }])
+  // Divisão Basic/PRO (2026-09-23): a marca d'água é do PRO. No Basic o destino
+  // sai SEM marca e no mesmo formato ('original_watermark' → 'original'), e o
+  // botão "Ver canal" também sai. O texto da marca fica guardado — voltar para o
+  // PRO não pede para configurar de novo.
+  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null, imageMode: 'original', watermarkText: 'Minha marca', watermarkColor: null, watermarkSize: null, watermarkPosition: null }])
+})
+
+test('Basic: card com marca vira card, e o botão "Ver canal" sai; PRO mantém os dois', () => {
+  const posts = [
+    { id: 'p1', role: 'post', waJid: 'a@g.us', kind: 'group', imageMode: 'preview_watermark', watermarkText: 'Marca', channelButtonJid: '123@newsletter', channelButtonName: 'Canal' },
+    { id: 'p2', role: 'post', waJid: 'b@g.us', kind: 'group', imageMode: 'original_watermark', watermarkText: 'Marca' },
+  ]
+  const basic = buildEntitledGroupConfig({ groups: posts, groupTargets: [], planSubject: { plan: 'basic' } }).groups.postDetails
+  assert.deepEqual(basic.map(d => d.imageMode), ['preview', 'original'])
+  assert.equal(basic[0].channelButtonJid, null)
+  assert.equal(basic[0].channelButtonName, null)
+  const pro = buildEntitledGroupConfig({ groups: posts, groupTargets: [], planSubject: { plan: 'pro' } }).groups.postDetails
+  assert.deepEqual(pro.map(d => d.imageMode), ['preview_watermark', 'original_watermark'])
+  assert.equal(pro[0].channelButtonJid, '123@newsletter')
+  const trial = buildEntitledGroupConfig({ groups: posts, groupTargets: [], planSubject: { plan: 'trial', accessExpiresAt: new Date(Date.now() + 86_400_000) } }).groups.postDetails
+  assert.deepEqual(trial.map(d => d.imageMode), ['preview_watermark', 'original_watermark'])
 })
 
 // 2026-08-28: o modo de imagem deixou de ser único/global e passou a ser

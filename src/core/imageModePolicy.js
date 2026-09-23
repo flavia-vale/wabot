@@ -129,6 +129,21 @@ export function destinationImageUsesWatermark(value) {
 }
 
 /**
+ * Divisão Basic/PRO (2026-09-23): a marca d'água é do PRO. Quem não tem o
+ * plano tem o modo trocado pelo par SEM marca — 'preview_watermark' vira
+ * 'preview' e 'original_watermark' vira 'original' (decisão da dona do
+ * produto). O formato da oferta (card ou foto) nunca muda por causa disso:
+ * só a marca sai.
+ * @param {string|null|undefined} mode
+ */
+export function destinationImageModeWithoutWatermark(mode) {
+  const resolved = resolveDestinationImageMode(mode)
+  if (resolved === DESTINATION_IMAGE_MODE.PREVIEW_WATERMARK) return DESTINATION_IMAGE_MODE.PREVIEW
+  if (resolved === DESTINATION_IMAGE_MODE.ORIGINAL_WATERMARK) return DESTINATION_IMAGE_MODE.ORIGINAL
+  return resolved
+}
+
+/**
  * O botão "Ver canal" e o card clicável são incompatíveis, e não por escolha
  * nossa: o WhatsApp só aceita o botão em corpo de MÍDIA
  * (`injectChannelForwardIntoPayload`, src/core/channelSend.js) — texto puro com

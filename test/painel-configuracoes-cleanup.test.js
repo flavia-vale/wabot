@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../dashboard/app/painel/configuracoes/page.js', import.meta.url), 'utf8')
+  + readFileSync(new URL('../dashboard/components/AccountAccessForms.js', import.meta.url), 'utf8')
 
 test('/painel/configuracoes no longer exposes global cadence or global mirror template defaults', () => {
   assert.doesNotMatch(source, /Cadência entre envios/)

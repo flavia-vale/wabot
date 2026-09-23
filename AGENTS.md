@@ -158,6 +158,7 @@ O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
 | painel admin (clientes, tags, funil, capacidade na tela, contato ativo) | `docs/rca/admin.md` |
 | SEO, marketing, páginas públicas, dados de mercado, marca | `docs/rca/seo-marketing.md` |
 | Instagram Stories | `docs/rca/instagram.md` |
+| plano Basic × PRO, cadeados do painel, menu, Minha conta | `docs/rca/planos-basic-pro.md` |
 
 ## Mapa de sintomas → onde olhar (atalhos mais usados)
 
@@ -184,6 +185,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | E-mail não chegou | `src/email/dispatcher.js`, `src/emailTriggers/lifecyclePolicy.js` | `diag-email-vencimento.mjs` (antes: conferir `SMTP_*`) | emails |
 | Tag Pagante/número repetido não aparece | `src/domain/admin/payingStatus.js`, `src/domain/admin/sharedPhoneStatus.js` | `diag-tag-pagante.mjs`, `backfill-numeros-whatsapp.mjs` | admin |
 | Página/SEO sem impressão, cadastro sem origem | `dashboard/lib/seo-registry.mjs`, `src/domain/admin/signupOrigin.js` | `diag-paginas-seo.mjs`, `diag-origem-cadastros.mjs` | seo-marketing |
+| Recurso aparece com cadeado / "só no PRO" / 403 `FEATURE_REQUIRES_PRO` | `src/billing/plans.js`, `dashboard/components/pro/ProGate.js` | `scripts/basic-sem-recursos-pro.mjs` (quem ainda guarda marca/botão/variação sem o PRO) | planos-basic-pro |
 | Deploy vermelho | `.github/workflows/deploy.yml`, `scripts/deploy_safe_*.sh` | ver "Pegadinhas" | deploy-e-infra |
 
 Se o sintoma não está no mapa: ler o tema no índice, depois `Grep` pelo texto

@@ -161,6 +161,8 @@ export const api = {
   },
 
   me: () => apiFetch('/api/auth/me'),
+  updateAccountName: (name) =>
+    apiFetch('/api/auth/me/name', { method: 'PATCH', body: JSON.stringify({ name }) }),
   updateAccountEmail: (email) =>
     apiFetch('/api/auth/me/email', { method: 'PATCH', body: JSON.stringify({ email }) }),
   updateAccountPassword: async (currentPassword, newPassword, confirmPassword) => {

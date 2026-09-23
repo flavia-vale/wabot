@@ -140,11 +140,35 @@ components:
             statusCounts: { $ref: '#/components/schemas/StatusCounts' }
         orders: { $ref: '#/components/schemas/OrderPage' }
         products: { $ref: '#/components/schemas/ProductPage' }
+        daily:
+          type: array
+          items: { $ref: '#/components/schemas/DailyRow' }
+        topProducts:
+          type: array
+          items: { $ref: '#/components/schemas/TopProductRow' }
         sourceUpdatedAt: { type: string, format: date-time }
         stale: { type: boolean, const: false }
         clickCoverage:
           type: string
           const: converted_clicks_only
+    DailyRow:
+      type: object
+      additionalProperties: false
+      required: [date, purchases]
+      properties:
+        date: { type: string, format: date }
+        purchases: { type: integer }
+        estimatedCommission: { $ref: '#/components/schemas/Money' }
+    TopProductRow:
+      type: object
+      additionalProperties: false
+      required: [id, name, quantity]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        shopName: { type: [string, 'null'] }
+        quantity: { type: integer }
+        estimatedCommission: { $ref: '#/components/schemas/Money' }
     Error:
       type: object
       additionalProperties: false

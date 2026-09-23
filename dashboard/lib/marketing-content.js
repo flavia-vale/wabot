@@ -214,9 +214,9 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$39',
     priceValue: 39,
     period: '30 dias',
-    desc: 'Para operar ofertas manualmente em grupos: espelhamento, conversão de links, criação de ofertas e agendamento.',
+    desc: 'Espelhamento, conversão de links, criação de ofertas e agendamento.',
     cta: 'Assinar Basic',
-    features: ['Espelhamento de grupos (monitor → destinos)', 'Conversão de links em 6 lojas: Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress', 'Painel de vendas e comissão da Shopee (pedidos, valor vendido e comissão)', 'Marca d\u2019água com o seu nome na foto da oferta', 'Card de oferta clicável: tocar no card abre a loja', 'Mensagem reescrita do seu jeito, não copiada da origem', 'Criar oferta a partir de link (título, preço e imagem)', 'Envio imediato e agendado', 'Relatórios de envio com histórico completo'],
+    features: ['Espelhamento de grupos', 'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)', 'Card de oferta clicável', 'Mensagem reescrita do seu jeito', 'Envio imediato ou agendado', 'Relatórios com histórico completo'],
   },
   {
     id: 'pro',
@@ -224,10 +224,10 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$69',
     priceValue: 69,
     period: '30 dias',
-    desc: 'Piloto automático e escala: tudo do Basic + canais, ofertas automáticas, filas de envio e controle de ritmo dos envios.',
+    desc: 'Tudo do Basic + canais, ofertas automáticas, filas de envio e controle de ritmo dos envios.',
     cta: 'Assinar Pro',
     highlight: true,
-    features: ['Tudo do Basic', 'Monitoramento e envio em canais', 'Garimpo automático de ofertas da Shopee: o robô acha as ofertas por palavra-chave e filtros, você não precisa colar link', 'Filas de ofertas com intervalo definido e limites por hora e por dia', 'Controle do ritmo dos envios por grupo (Módulo de Preservação Avançada): intervalo, horário de descanso, limite diário e variação do texto'],
+    features: ['Tudo do plano Basic', 'Espelhamento de grupos e CANAIS do WhatsApp', 'Garimpo automático de ofertas', 'Filas de ofertas', 'Sua marca d\u2019água nas ofertas', 'Horário de descanso, máximo de ofertas por dia, intervalo entre mensagens e variação do texto', 'Painel de vendas e comissão da Shopee'],
   },
 ]
 

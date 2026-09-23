@@ -18,6 +18,7 @@ import { buildJustConnectedNextStep } from '../../../../src/credentialBlockAlert
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { WhatsAppConnectedOverview } from '@/components/WhatsAppConnectedOverview'
+import RhythmCard from '@/components/pro/RhythmCard'
 import {
   QR_POLL_INTERVAL_MS,
   INACTIVITY_RESET_SECONDS,
@@ -675,12 +676,17 @@ export default function WhatsAppPage() {
 
   if (isConnected && !statusLoading && !statusError) {
     return (
-      <WhatsAppConnectedOverview
-        phone={status?.phone}
-        plan={painelUser?.plan}
-        onDisconnect={handleStop}
-        disconnecting={actionLoading === 'stop'}
-      />
+      <>
+        <WhatsAppConnectedOverview
+          phone={status?.phone}
+          plan={painelUser?.plan}
+          onDisconnect={handleStop}
+          disconnecting={actionLoading === 'stop'}
+        />
+        {/* Divisão Basic/PRO (2026-09-23): ritmo dos envios = preset padrão
+            da Preservação. No Basic aparece com cadeado. */}
+        <div style={{ maxWidth: 880, margin: '16px auto 0' }}><RhythmCard /></div>
+      </>
     )
   }
 

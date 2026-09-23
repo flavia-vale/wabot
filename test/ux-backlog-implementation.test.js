@@ -53,7 +53,8 @@ test('message templates page prioritizes models and progressively discloses supp
   const nav = read('dashboard/app/painel/nav.js')
   const page = read('dashboard/app/painel/mensagens/page.js')
 
-  assert.match(nav, /label: 'Templates de mensagens'/)
+  // Protótipo Basic/PRO (2026-09-23): o item do menu chama "Mensagens".
+  assert.match(nav, /label: 'Mensagens',\n\s+href: '\/painel\/mensagens'/)
   assert.match(page, /usePainelHeader\(\{ title: 'Templates de mensagens'/)
   assert.doesNotMatch(page, /PainelContentActions/)
 
@@ -112,7 +113,9 @@ test('template variable copy uses a real reusable clipboard helper with fallback
 })
 
 test('painel configuracoes only exposes account email and password settings', () => {
-  const page = read('dashboard/app/painel/configuracoes/page.js')
+  // O bloco de e-mail/senha virou componente, usado também em Minha conta.
+  const page = read('dashboard/components/AccountAccessForms.js')
+  assert.match(read('dashboard/app/painel/configuracoes/page.js'), /<AccountAccessForms \/>/)
   assert.match(page, /E-mail de acesso/)
   assert.match(page, /Alterar senha/)
   assert.match(page, /api\.updateAccountEmail/)
