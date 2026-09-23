@@ -7,7 +7,11 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { canAccessAdvancedPreservation } from '@/lib/plan'
+// Fonte ÚNICA do gate de plano (FR-015/FR-015a, specs/018-unificar-protecao-anti-ban):
+// a mesma função que o backend usa, importada direto de src/billing/plans.js —
+// nunca uma checagem própria da tela (era o bug do Premium ficando bloqueado
+// aqui, já que a função antiga só liberava pro/trial-ativo).
+import { canUseAdvancedPreservation } from '../../../../src/billing/plans.js'
 import { LoadingState } from '@/components/States'
 import { UpsellShell } from '@/components/preservacao/UpsellShell'
 
@@ -30,6 +34,6 @@ export default function PreservacaoLayout({ children }) {
 
   if (loading) return <LoadingState message="Carregando..." />
   if (error) return <p className="text-sm text-red-600" role="alert">{error}</p>
-  if (!canAccessAdvancedPreservation(planSubject)) return <UpsellShell ctaHref="/painel/plano" />
+  if (!planSubject || !canUseAdvancedPreservation(planSubject)) return <UpsellShell ctaHref="/painel/plano" />
   return <>{children}</>
 }
