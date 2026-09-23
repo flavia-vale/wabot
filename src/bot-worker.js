@@ -106,6 +106,8 @@ import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuaranti
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
+import { resolveSelfWelcomePilotEmails, shouldSendSelfWelcomeMessage, buildSelfWelcomeMessageText } from './core/selfWelcomeMessage.js'
+import { VIDEO_CADASTRO_ETIQUETAS_URL } from './tutorialVideo.js'
 import sharp from 'sharp'
 import { applySharpTuning } from './core/sharpTuning.js'
 
@@ -854,6 +856,28 @@ async function handlePhoneOwnership({ phone, sock }) {
   // pareamento, e apagar o auth faria a cliente escanear um QR novo para bater
   // na mesma parede.
   try { sock?.end?.(new Error('phone_reuse_blocked')) } catch { /* best-effort */ }
+}
+
+// Mensagem de boas-vindas pelo PRÓPRIO WhatsApp, na primeira conexão de
+// contas do PILOTO (ver src/core/selfWelcomeMessage.js — plano de reforço de
+// ativação, 2026-09-23). Best-effort e fail-safe: qualquer falha aqui não pode
+// derrubar a conexão real; a decisão de ENVIAR já foi tomada por quem chama
+// (precisa saber se `WaSession.phone` já tinha valor ANTES desta conexão).
+async function maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore }) {
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+    const deve = shouldSendSelfWelcomeMessage({ accountEmail: user?.email, hadPhoneBefore, pilotEmails })
+    if (!deve || !phone) return
+    const jid = `${phone}@s.whatsapp.net`
+    const texto = buildSelfWelcomeMessageText({ videoUrl: VIDEO_CADASTRO_ETIQUETAS_URL })
+    await sock.sendMessage(jid, { text: texto })
+    logger.info({ userId }, 'Mensagem de boas-vindas (piloto de ativação) enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_welcome_message_sent' })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de boas-vindas (piloto, best-effort)')
+  }
 }
 
 async function loadConfig() {
@@ -3309,6 +3333,13 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // histórico e as notificações que alimentam "Canais que sigo".
       selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
       if (sendIpc) sendIpc({ type: 'status', data: 'connected', phone })
+      // Lido ANTES do persistSessionPatch sobrescrever `phone` — é o sinal
+      // durável de "esta conta já conectou alguma vez" (mesmo usado por
+      // `waEverConnected` nos gatilhos de e-mail). Precisa vir antes, senão a
+      // mensagem de boas-vindas do piloto reenviaria em toda reconexão.
+      const hadPhoneBeforeThisOpen = Boolean(
+        (await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null))?.phone,
+      )
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
       // Este número já fez o teste em outra conta? O número só é conhecido
       // DEPOIS do open — é por isso que a checagem mora aqui e não na rota de
@@ -3325,6 +3356,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
       ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever no boot'))
+      maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore: hadPhoneBeforeThisOpen }).catch(() => {})
     }
 
     if (connection === 'close') {
