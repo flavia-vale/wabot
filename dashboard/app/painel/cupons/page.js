@@ -78,6 +78,9 @@ export default function CuponsPage() {
     }
   }
 
+  // Buscar os cupons ao abrir a tela é sincronizar com um sistema externo (a
+  // API) — mesmo padrão e mesma exceção da tela de filas.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [])
 
   function openCreate() {
