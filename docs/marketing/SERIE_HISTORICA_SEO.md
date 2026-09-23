@@ -337,6 +337,14 @@ dias:
   (barrado na borda), por isso não tem código. O que falta para fechar: a lista
   de **endereços** dos pedidos 4xx de 23/09.
 
+**Endereços de 23/09 (print do AI Crawl Control):** `/server-status` (21),
+`/.env.production` (18), `/api/v1/config` na porta 8080 (6), `/css../.env`,
+`/public/env.js`, `/.env.save`. **São robôs de ataque disfarçados com o nome de
+IA**, procurando arquivo de senha — não são o Claude nem a Perplexity lendo o
+site. Conferido em 23/09: todos devolvem 404, sem segredo no corpo. Portanto a
+taxa de falha de Claude-User/Perplexity-User **não** mede dificuldade real das
+IAs em ler o site.
+
 ### Bing Webmaster Tools (primeira leitura, 23/09)
 
 | Janela | Impressões | Cliques | CTR |
