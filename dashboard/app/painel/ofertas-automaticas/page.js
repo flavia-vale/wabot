@@ -111,6 +111,9 @@ const emptyForm = {
   publicationMode: 'direct',
   reviewTargetSize: 10,
   instagramDestinationIds: [],
+  // specs/017-client-coupon-catalog: desmarcada por padrão — automação
+  // existente nunca muda de comportamento sozinha (FR-023/SC-005).
+  useCoupons: false,
 }
 
 function nextSendLabel(lastSentAt, intervalMinutes, dailyRunTime) {
@@ -199,6 +202,7 @@ export default function OfertasAutomaticasPage() {
       publicationMode: a.publicationMode || 'direct',
       reviewTargetSize: a.reviewTargetSize || 10,
       instagramDestinationIds: a.instagramDestinationIds || [],
+      useCoupons: a.useCoupons ?? false,
     })
     setSaveError('')
     setShowForm(true)
@@ -473,6 +477,14 @@ export default function OfertasAutomaticasPage() {
               </label>
             </div>
           )}
+
+          <label className="pnl-check" style={{ alignItems: 'flex-start' }}>
+            <input type="checkbox" checked={form.useCoupons} onChange={(e) => setForm((f) => ({ ...f, useCoupons: e.target.checked }))} style={{ marginTop: 2 }} />
+            <span>
+              <span style={{ display: 'block', color: 'var(--ink)' }}>Usar meus cupons cadastrados nesta automação</span>
+              <span className="pnl-hint">Quando o modelo da mensagem tiver a variável {'{cupom}'}, o bot escolhe sozinho o melhor cupom da loja cadastrado em Cupons.</span>
+            </span>
+          </label>
 
           {saveError && <div className="pnl-note-box is-error" role="alert">{saveError}</div>}
 

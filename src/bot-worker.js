@@ -72,7 +72,8 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
-import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg, hasPublishableConversion } from './core/conversionFailureReason.js'
+import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
+import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -88,6 +89,7 @@ import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypin
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { convertPerPlatformSerially } from './core/conversionScheduler.js'
+import { chooseCoupon, renderCouponText, applyCouponToken } from './core/clientCouponPolicy.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
@@ -931,7 +933,22 @@ async function loadConfig() {
   const preservation = await getAdvancedPreservationAccess(userId, { db })
   // Efetivo = plano permite (Pro/Trial) E o usuário ligou o flag mestre opt-in.
   const preservationActive = isPreservationActive(preservation, botConfig)
-  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive }
+
+  // Cupons da própria cliente (specs/017-client-coupon-catalog, D1 da pesquisa):
+  // uma consulta a mais por CARGA de config (mesmo TTL de CONFIG_CACHE_TTL_MS
+  // das demais, ~60s), NUNCA por envio — processSendJob já chama getConfig()
+  // hoje, então ler os cupons daqui não acrescenta consulta nenhuma no
+  // caminho de envio (FR-028a/SC-009). Só os LIGADOS entram: a validade em si
+  // é comparada com o relógio a cada envio pela regra pura (chooseCoupon), não
+  // aqui — só o ligado/desligado tem a janela de até CONFIG_CACHE_TTL_MS.
+  let coupons = []
+  try {
+    coupons = await db.clientCoupon.findMany({ where: { userId, enabled: true } })
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao carregar cupons da cliente; ofertas seguem sem cupom até a próxima carga')
+  }
+
+  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive, coupons }
 }
 
 async function getConfig() {
@@ -1022,6 +1039,10 @@ async function checkScheduledMessages() {
           delayMs: 0,
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward: scheduledChannelForward,
+          // Agendado sai com cupom igual ao "Enviar agora" (decisão da dona do
+          // produto, 2026-09-23). O cupom é escolhido quando a mensagem SAI,
+          // não quando foi agendada: vencido ou desligado até lá, não sai.
+          couponContext: couponContextFromText(msg.text),
           ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
           onDone: async (result) => {
             state.remaining--
@@ -2494,6 +2515,67 @@ async function getDefaultPreservationPreset() {
   return defaultPresetCache.value
 }
 
+// specs/017-client-coupon-catalog (Trava #2 — convergência única do token):
+// mesmo applyCouponToken (src/core/clientCouponPolicy.js) para os campos de
+// texto conhecidos do payload de envio. Mutação in-place: nunca clona Buffer
+// de mídia, só troca string quando ela de fato contém `{cupom}`.
+function resolveCouponTextField(value, couponText) {
+  return (typeof value === 'string' && value.includes('{cupom}')) ? applyCouponToken(value, couponText) : value
+}
+
+function applyCouponTokenToPayload(payload, couponText) {
+  if (!payload || typeof payload !== 'object') return payload
+  if (payload.text !== undefined) payload.text = resolveCouponTextField(payload.text, couponText)
+  if (payload.caption !== undefined) payload.caption = resolveCouponTextField(payload.caption, couponText)
+  if (payload.primary) {
+    if (payload.primary.text !== undefined) payload.primary.text = resolveCouponTextField(payload.primary.text, couponText)
+    if (payload.primary.caption !== undefined) payload.primary.caption = resolveCouponTextField(payload.primary.caption, couponText)
+  }
+  if (Array.isArray(payload.fallbacks)) {
+    for (const fb of payload.fallbacks) {
+      if (!fb) continue
+      if (fb.text !== undefined) fb.text = resolveCouponTextField(fb.text, couponText)
+      if (fb.caption !== undefined) fb.caption = resolveCouponTextField(fb.caption, couponText)
+    }
+  }
+  // Caminho relay (escape hatch IMAGE_ORIGINAL_STRATEGY=relay): o proto já
+  // decodificado do WhatsApp carrega a legenda em campos próprios.
+  if (payload.relay?.proto) {
+    const proto = payload.relay.proto
+    if (proto.imageMessage?.caption !== undefined) proto.imageMessage.caption = resolveCouponTextField(proto.imageMessage.caption, couponText)
+    if (proto.videoMessage?.caption !== undefined) proto.videoMessage.caption = resolveCouponTextField(proto.videoMessage.caption, couponText)
+    if (proto.extendedTextMessage?.text !== undefined) proto.extendedTextMessage.text = resolveCouponTextField(proto.extendedTextMessage.text, couponText)
+  }
+  return payload
+}
+
+// Resolve o texto final do cupom (ou '' quando não há cupom aplicável) a
+// partir dos cupons já carregados em getConfig() (D1 da pesquisa: zero
+// consulta nova ao banco neste caminho) e do couponContext carregado pelo
+// job. NUNCA lança — best-effort absoluto (FR-028b).
+// Envios do painel (Enviar agora, Agendar, Inserir na fila): a loja sai do
+// primeiro link do texto — mesmo detector do espelhamento (src/detector.js).
+// Preço desconhecido: cai na ordem fixa e previsível do FR-011 em chooseCoupon.
+// Fonte ÚNICA para os dois caminhos, para agendado e imediato nunca divergirem.
+function couponContextFromText(text) {
+  const platform = detectLinks(text || '')[0]?.platform ?? null
+  return platform ? { platform, priceCents: null } : null
+}
+
+async function resolveCouponTextForJob(job) {
+  try {
+    const ctx = job?.couponContext
+    if (!ctx || !ctx.platform) return ''
+    const cfg = await getConfig().catch(() => null)
+    const coupons = cfg?.coupons ?? []
+    const choice = chooseCoupon({ coupons, platform: ctx.platform, priceCents: ctx.priceCents, now: Date.now() })
+    if (!choice) return ''
+    return renderCouponText({ coupon: choice.coupon, priceCents: ctx.priceCents, finalPriceCents: choice.finalPriceCents })
+  } catch {
+    return ''
+  }
+}
+
 async function processSendJob(job) {
   const startedAt = Date.now()
   let payload = null
@@ -2672,6 +2754,7 @@ async function processSendJob(job) {
       logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
     }
 
+    let couponTokenResolved = false
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         const sockForAttempt = activeSock
@@ -2682,6 +2765,20 @@ async function processSendJob(job) {
           else payload = job.payload
         }
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
+        // specs/017-client-coupon-catalog (D1/D3 da pesquisa, Trava #2): resolvido
+        // no ÚLTIMO instante possível — direto no dequeue —, para que FR-014
+        // (cupom desligado/vencido depois de enfileirado não sai) valha mesmo
+        // para item que ficou horas esperando na fila. Roda uma única vez (não
+        // a cada retry) e NUNCA aborta o envio (FR-028b, best-effort absoluto).
+        if (!couponTokenResolved) {
+          couponTokenResolved = true
+          try {
+            const couponText = await resolveCouponTextForJob(job)
+            payload = applyCouponTokenToPayload(payload, couponText)
+          } catch (err) {
+            logger.warn({ err: err?.message, destJid: job.destJid }, 'Falha ao resolver cupom no envio; oferta segue sem cupom')
+          }
+        }
         // Botão "Ver canal" do grupo de destino, injetado de forma central para
         // cobrir TODOS os caminhos não-relay (texto puro, imagem montada,
         // broadcast/oferta automática, agendado). O caminho relay (mídia
@@ -4061,11 +4158,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind }
         } catch (err) {
           if (err.stripFromMessage) {
-            // Cupom/voucher que não conseguiu virar link afiliado oficial: não
-            // removemos mais nada da mensagem espelhada. O link fica como veio
-            // para preservar a oferta/CTA original, enquanto os demais links
-            // válidos da mesma mensagem continuam sendo convertidos juntos.
-            return { platform, url, converted: url, passthrough: true, linkKind: 'coupon', failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
+            // Link que não virou link da cliente (cupom da Shopee recusado,
+            // qualquer falha do AliExpress). NUNCA publicar o original: é o link
+            // do concorrente. A mensagem inteira deixa de sair — ver
+            // core/mirrorLinkGuard.js (RCA 2026-09-23, 794 envios vazados).
+            logger.warn({ platform, url, err: err.message }, 'Link não convertido — oferta não será publicada com o link de origem')
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           // Motivo pré-classificado pelo converter (feature
           // 007-ml-vitrine-fallback-expired: skip:ml_vitrine_missing) tem
@@ -4128,31 +4226,62 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         })
       }
 
-      let finalText = sanitizedText
-      if (links.length) {
-      // Só passthrough (link original de terceiro) não é oferta publicável:
-      // ver hasPublishableConversion.
-      if (!hasPublishableConversion(conversions)) {
+      // Grava a oferta que NÃO saiu porque algum link de loja não virou link
+      // da cliente. Mesmo formato de sempre (`skip:no_valid_conversions:<motivo>`)
+      // para o painel e o aviso de cadastro contarem a mesma história.
+      async function recordUnconvertedSkip({ platform, originalUrl, errorMsg }) {
         await db.messageLog.create({
           data: {
             userId,
-            platform: links[0]?.platform || 'unknown',
+            platform: platform || 'unknown',
             sourceGroup: jid,
             destGroup: 'skipped',
-            originalUrl: links[0]?.url || '',
+            originalUrl: originalUrl || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || ''),
             status: 'skipped',
-            errorMsg: buildNoValidConversionsErrorMsg(linkResults.map(r => r?.failureReason)),
+            errorMsg,
           },
         }).catch(() => {})
-        return
       }
+
+      let finalText = sanitizedText
+      if (links.length) {
+        // No espelhamento TODO link de loja precisa virar link da cliente. Um
+        // só que falhe e a mensagem não sai: publicá-la manteria o link do
+        // concorrente no texto (RCA 2026-09-23 — ver core/mirrorLinkGuard.js).
+        const decision = decideMirrorConversions(linkResults)
+        if (!decision.publish) {
+          const firstFailed = linkResults.find(r => !(r && r.converted && !r.passthrough)) || linkResults[0]
+          if (conversions.length) {
+            logger.warn({ msgId: msg.key.id, links: links.length, failed: decision.failedCount }, 'Oferta não publicada: parte dos links não virou link da cliente')
+          }
+          await recordUnconvertedSkip({
+            platform: firstFailed?.platform || links[0]?.platform,
+            originalUrl: firstFailed?.url || links[0]?.url,
+            errorMsg: decision.errorMsg,
+          })
+          return
+        }
         // Relay mode ("Manter texto original convertido") deve apenas trocar
         // os links upstream pelos links convertidos do usuário. Variáveis globais
         // de /painel/mensagens, como {{grupoLink}} e {{cupomLink}}, pertencem ao
         // caminho de templates e não devem ser anexadas ao texto original.
         finalText = applyConversionsAndBranding(sanitizedText, conversions)
+      }
+      // Rede de segurança FINAL, antes do modelo e do texto adicional da
+      // cliente (que são dela): nenhum link de loja pode sobrar no texto sem ser
+      // um link convertido — inclusive o escrito sem `https://`, que o detector
+      // não enxerga mas o WhatsApp torna clicável.
+      const leakedLinks = findUnconvertedStoreLinks(finalText, conversions)
+      if (leakedLinks.length) {
+        logger.warn({ msgId: msg.key.id, leaked: leakedLinks.length }, 'Oferta não publicada: link de loja de origem ainda no texto')
+        await recordUnconvertedSkip({
+          platform: links[0]?.platform,
+          originalUrl: leakedLinks[0],
+          errorMsg: buildNoValidConversionsErrorMsg([CONVERSION_FAILURE.CONVERSION_FAILED]),
+        })
+        return
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
@@ -4186,13 +4315,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // o que vai sair. Quando o template cai no relay (texto inalterado), o
       // guard volta a valer normalmente.
       let templateApplied = false
+      // couponContext (specs/017-client-coupon-catalog): { platform, priceCents }
+      // resolvido aqui mesmo (sem leitura extra de rede), carregado no job de
+      // envio e consumido em processSendJob para resolver {cupom} no último
+      // instante possível (FR-014).
+      let couponContext = null
       // Só montamos o template quando há um link CONVERTIDO do nosso cliente.
       // No espelhamento os links de entrada são de OUTROS afiliados; a oferta
       // precisa sair com o link do nosso cliente (primary.converted) ou não
       // sair como oferta (cai no relay). NUNCA emitir primary.url (link do
       // terceiro) — isso daria comissão ao concorrente.
       if (effectiveTemplateKey && primary.converted) {
-        const templatedText = await applyMirrorTemplate(finalText, {
+        const templateResult = await applyMirrorTemplate(finalText, {
           botConfig: cfg.botConfig,
           templateKey: effectiveTemplateKey,
           // originalUrl = link do upstream (terceiro): usado só como alvo de
@@ -4205,9 +4339,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           credentialsMap: cfg.credentials,
           logger,
         })
+        const templatedText = templateResult.text
         if (templatedText !== finalText) {
           finalText = templatedText
           templateApplied = true
+          couponContext = templateResult.couponContext
         }
       }
       // O complemento pertence exclusivamente ao formato "Manter texto
@@ -4779,7 +4915,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // (mídia-only) adiciona o botão. Sem botão, mantemos o relay (fidelidade
           // máxima de mídia, inclui vídeo).
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original }) && !channelForward) {
-            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
+            // documentMessage também tem legenda: sem trocar, o documento saía
+            // com a legenda da ORIGEM (links do concorrente inclusos).
+            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage' || original.type === 'documentMessage'
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
             // e externalAdReply). forwardNewsletter=null: relay nunca injeta canal.
             const replayProto = buildRelayProto(original.proto, {
@@ -4929,6 +5067,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           delayMs: staggerMs,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
+          // specs/017-client-coupon-catalog: { platform, priceCents } | null,
+          // resolvido em applyMirrorTemplate SEM leitura extra de rede. Só
+          // campos escalares (nunca função/Buffer) — precisa sobreviver ao
+          // JSON.stringify do BullMQ como qualquer payload serializável.
+          couponContext,
           buildPayload,
           // Referência viva: buildPayload roda no dequeue e preenche este mesmo
           // objeto, que processSendJob lê depois para gravar no MessageLog.
@@ -5334,6 +5477,13 @@ const handleMessage = async msg => {
       sendIpc({ type: 'broadcastResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
+    // specs/017-client-coupon-catalog (T020): loja identificada pelo link do
+    // texto (mesmo detector usado no espelhamento, src/detector.js — nunca
+    // o de dashboard/lib, proibido aqui). Preço tratado como desconhecido
+    // (cai na ordem fixa e previsível do FR-011 dentro de chooseCoupon); a
+    // substituição em si acontece no MESMO ponto de processSendJob (T019).
+    const broadcastCouponContext = couponContextFromText(msg.text)
+
     let queued = 0
     const errors = []
     for (const jid of msg.jids) {
@@ -5376,6 +5526,7 @@ const handleMessage = async msg => {
         delayMs: 0,
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward: broadcastChannelForward,
+        couponContext: broadcastCouponContext,
         // Fila de ofertas com horário próprio pede para ignorar a janela
         // silenciosa global neste envio (origem 'offerQueue'). Propagado ao
         // gate em processSendJob. Sem o flag = comportamento histórico.

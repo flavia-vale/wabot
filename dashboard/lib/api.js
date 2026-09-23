@@ -210,6 +210,13 @@ export const api = {
   amazonSession: () => apiFetch('/api/credentials/amazon/session'),
   shopeeSession: () => apiFetch('/api/credentials/shopee/session'),
 
+  coupons: () => apiFetch('/api/coupons'),
+  couponCreate: (data) => apiFetch('/api/coupons', { method: 'POST', body: JSON.stringify(data) }),
+  couponUpdate: (id, data) => apiFetch(`/api/coupons/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  couponSetEnabled: (id, enabled) =>
+    apiFetch(`/api/coupons/${id}/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+  couponDelete: (id) => apiFetch(`/api/coupons/${id}`, { method: 'DELETE' }),
+
   convertLinks: (text) =>
     apiFetch('/api/link-conversion/convert', { method: 'POST', body: JSON.stringify({ text }) }),
   scrapeOffer: (url) =>

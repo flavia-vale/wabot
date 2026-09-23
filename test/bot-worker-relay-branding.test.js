@@ -18,12 +18,10 @@ test('bot-worker relay convertido não passa branding global para texto original
   )
 })
 
-test('bot-worker preserva link de cupom original quando conversor pede strip', () => {
+test('bot-worker não publica link de cupom original quando conversor pede strip', () => {
   const conversionCallIndex = botWorkerSource.indexOf('finalText = applyConversionsAndBranding(sanitizedText, conversions)')
-  const passthroughIndex = botWorkerSource.indexOf("return { platform, url, converted: url, passthrough: true, linkKind: 'coupon', failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }")
-
   assert.notEqual(conversionCallIndex, -1)
-  assert.notEqual(passthroughIndex, -1)
+  assert.equal(botWorkerSource.indexOf('passthrough: true'), -1)
   assert.doesNotMatch(botWorkerSource, /const userCouponLink = String\(cfg\.botConfig\.couponLink/)
   assert.doesNotMatch(botWorkerSource, /urlsToStrip|stripUrlsFromText\s*\(/)
 })

@@ -15,7 +15,7 @@ import { WhatsAppBubble } from '../WhatsAppBubble'
 import { getConversionStatusPresentation } from '@/lib/offerBuilderUi'
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import InstagramDestinationPicker, { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
-import { buildMobileOfferText } from '@/lib/mobileOfferComposer'
+import { buildMobileOfferText, showCouponStandIn, stripCouponToken } from '@/lib/mobileOfferComposer'
 import { composeTemplates, loadAllTemplates, loadTemplateStore } from '@/lib/mobileTemplateStore'
 import {
   readSavedTemplateKey,
@@ -138,6 +138,9 @@ export default function CriarOfertaPage() {
     link: generated?.link || link,
     template: selectedTemplate?.key,
     templateBody: selectedTemplate?.body,
+    // {cupom} fica para o robô trocar na hora do envio (Enviar agora, Agendar
+    // e Inserir na fila passam todos por ele).
+    keepCouponToken: true,
   })
   const offerMessage = customText ?? templateMessage
 
@@ -216,7 +219,9 @@ export default function CriarOfertaPage() {
 
   async function copyMessage() {
     try {
-      await navigator.clipboard.writeText(offerMessage)
+      // Copiar é o único caminho que NÃO passa pelo robô: sem isto o marcador
+      // de cupom chegaria cru ao grupo, colado à mão.
+      await navigator.clipboard.writeText(stripCouponToken(offerMessage))
       setCopyFeedback('Oferta copiada com sucesso.')
       setTimeout(() => setCopyFeedback(''), 2500)
     } catch {
@@ -398,7 +403,7 @@ export default function CriarOfertaPage() {
               )}
             </div>
             <div>
-              <WhatsAppBubble text={offerMessage} time={now} imageUrl={productImageUrl} format />
+              <WhatsAppBubble text={showCouponStandIn(offerMessage)} time={now} imageUrl={productImageUrl} format />
               {productImageUrl && (
                 <p className="pnl-hint" style={{ marginTop: 8 }}>A imagem é ilustrativa — copie o texto e anexe a foto no WhatsApp.</p>
               )}
