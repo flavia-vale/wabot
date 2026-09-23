@@ -37,6 +37,7 @@ import { combineRevenueTotals, countDistinctPayingUsers, computeAverageLtv, comp
 import { loadTestAccountUserIds, excludeUserIdsWhere, resolveTestAccountEmails } from '../../domain/admin/testAccounts.js'
 import { buildRoiReport } from '../../domain/admin/roi.js'
 import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
+import { DEFAULT_OWNER_ADMIN_EMAILS } from '../../auth/reservedAdminEmails.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -54,7 +55,7 @@ const ROLE_PERMISSIONS = {
 const PAID_PLANS = ['basic', 'pro', 'premium']
 const PLAN_PRICES = { trial: 0, basic: 39, pro: 69 }
 const EXPORT_LIMIT = 100
-const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
+const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = DEFAULT_OWNER_ADMIN_EMAILS
 const CANONICAL_OWNER_ADMIN_EMAILS = new Set(DEFAULT_BOOTSTRAP_ADMIN_EMAILS)
 
 
