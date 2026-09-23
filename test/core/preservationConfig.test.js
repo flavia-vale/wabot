@@ -7,13 +7,18 @@ import {
   HARD_DEFAULT_PRESERVATION,
 } from '../../src/core/preservationConfig.js'
 
+// burstCap 5 (< 6) e burstWindowSec 600 (>= 600) já satisfazem o piso
+// anti-banimento (specs/018-unificar-protecao-anti-ban) por construção, para
+// estes testes de PRECEDÊNCIA não interagirem com a regra do piso — essa regra
+// tem cobertura própria e completa em test/anti-ban-floor.test.js e
+// test/preservation-config-floor-integration.test.js.
 const PRESET = {
   operatingHoursEnabled: true,
   operatingHoursJson: '{"startHour":9,"endHour":21,"tz":"America/Sao_Paulo"}',
   throttleEnabled: true,
   minIntervalSec: 45,
   burstCap: 5,
-  burstWindowSec: 300,
+  burstWindowSec: 600,
   dailyCap: 100,
   // Descarte por idade na fila (coluna NOT NULL com default 300): um preset
   // real sempre traz o campo, então o fixture também traz.
@@ -55,9 +60,15 @@ test('resolve: dailyCap=0 do grupo é override válido (0 ≠ null)', () => {
   assert.equal(r.dailyCap, 0)
 })
 
-test('resolve: throttleEnabled=false do grupo é override válido (false ≠ null)', () => {
+test('resolve: throttleEnabled=false do grupo é override válido (false ≠ null) — o piso então recomeça do padrão do sistema', () => {
+  // O override É honrado (não cai de volta no `true` do preset por herança) —
+  // é exatamente esse override=false que aciona a exceção do piso anti-banimento
+  // (Achado C′): o efetivo final SEMPRE volta a throttleEnabled=true, porque
+  // "limites desligados" nunca é um estado que o robô entrega ao destino.
+  // Cobertura completa da exceção em test/anti-ban-floor.test.js.
   const r = resolveDestinationPreservation({ throttleEnabled: false }, { preset: PRESET })
-  assert.equal(r.throttleEnabled, false)
+  assert.equal(r.throttleEnabled, true)
+  assert.equal(r.minIntervalSec, HARD_DEFAULT_PRESERVATION.minIntervalSec, 'recomeça do padrão do sistema, não do preset (45s)')
 })
 
 test('resolve: sem preset atribuído cai no defaultPreset da conta', () => {

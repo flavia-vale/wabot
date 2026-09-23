@@ -5,6 +5,15 @@
 // (horário de funcionamento = quando ENVIA). Ver
 // docs/superpowers/plans/2026-06-22-plano-b-config-direcionada-design.md
 
+// Import tardio de propósito (depois de HARD_DEFAULT_PRESERVATION estar
+// declarado neste módulo): antiBanFloor.js importa HARD_DEFAULT_PRESERVATION
+// daqui como default de parâmetro, e este arquivo importa applyDestinationFloor/
+// isAntiBanFloorEnabled de lá — import circular estável em ESM (bindings
+// vivos; o valor só é lido em tempo de CHAMADA, nunca no topo do módulo), mas
+// mantido como o ÚLTIMO import do arquivo para deixar a ordem de inicialização
+// explícita e fácil de auditar.
+import { applyDestinationFloor, isAntiBanFloorEnabled } from './antiBanFloor.js'
+
 // Fallback final quando não há preset atribuído nem default (estado teórico —
 // a migração semeia um preset default por usuário). Espelha os defaults do
 // schema de PreservationPreset.
@@ -38,12 +47,21 @@ const FIELDS = Object.freeze([
  * preset default da conta → HARD_DEFAULT_PRESERVATION. Nunca devolve "sem
  * proteção": ausência total cai no default.
  *
+ * Depois da herança, o PISO ANTI-BANIMENTO (specs/018-unificar-protecao-anti-ban,
+ * contracts/anti-ban-floor.md) é aplicado — sempre por último, nunca antes:
+ * vale o mais conservador entre o valor herdado e os três campos fixos
+ * (burstCap/burstWindowSec/throttleEnabled). Chokepoint único: nenhum outro
+ * arquivo pode reimplementar essa comparação (guarda em
+ * test/anti-ban-floor-chokepoint.test.js). Escape hatch de rollback sem
+ * redeploy: env ANTI_BAN_FLOOR=off.
+ *
  * @param {object|null} group  campos de override (nuláveis) do Group
- * @param {{ preset?: object|null, defaultPreset?: object|null }} [opts]
- *        preset = preset atribuído ao grupo; defaultPreset = preset isDefault da conta
+ * @param {{ preset?: object|null, defaultPreset?: object|null, env?: object }} [opts]
+ *        preset = preset atribuído ao grupo; defaultPreset = preset isDefault da conta;
+ *        env = fonte de env para o escape hatch do piso (default process.env)
  * @returns {{operatingHoursEnabled:boolean, operatingHoursJson:string,
  *   throttleEnabled:boolean, minIntervalSec:number, burstCap:number,
- *   burstWindowSec:number, dailyCap:number|null}}
+ *   burstWindowSec:number, dailyCap:number|null, queueMaxAgeMin:number}}
  */
 export function resolveDestinationPreservation(group, opts = {}) {
   const base = opts.preset ?? opts.defaultPreset ?? HARD_DEFAULT_PRESERVATION
@@ -58,7 +76,7 @@ export function resolveDestinationPreservation(group, opts = {}) {
       out[field] = HARD_DEFAULT_PRESERVATION[field]
     }
   }
-  return out
+  return applyDestinationFloor(out, { enabled: isAntiBanFloorEnabled(opts.env ?? process.env) })
 }
 
 function parseHours(raw, fallback) {
