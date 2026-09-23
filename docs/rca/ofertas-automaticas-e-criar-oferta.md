@@ -383,17 +383,13 @@ Teste: `test/criar-oferta-imagem-shopee.test.js`.
 
 ### "Criar oferta" com link da Shopee saía SEM NOME NEM PREÇO (RCA 2026-09-23)
 
-Mesma família do RCA acima, no caminho de **título/preço**, não de foto —
-`fetchShopeeProductInfo` (a única fonte que funciona com credencial) tinha
-`catch { return null }` **sem nenhum diagnóstico**, e o fallback público v4
-(`fetchShopeeItemInfo`) já era conhecido como instável. As duas fontes podiam
-morrer juntas em silêncio total: nome, preço e foto vazios, sem uma linha de
-log explicando por quê.
+Mesma família do RCA acima, no caminho de **título/preço**:
+`fetchShopeeProductInfo` tinha `catch { return null }` sem diagnóstico nenhum, e
+o fallback público v4 (`fetchShopeeItemInfo`) é instável por design — as duas
+fontes morriam juntas em silêncio.
 
-**Causa raiz medida em produção** (conta `nandavieiraf@gmail.com`, link
-`https://s.shopee.com.br/3qNKeP0T3u`, resolvido corretamente para
-`shopId=515433918 itemId=19997980913` — a resolução do short link **não** era
-o problema): a API de afiliado respondia **200** com o erro
+**Causa raiz, MEDIDA com a chave real** (conta `nandavieiraf@gmail.com`,
+`scripts/diag-shopee-chave.mjs`): a Shopee responde **200** com
 
 ```
 error [10035]: You currently do not have access to the Shopee Affiliate Open
@@ -401,61 +397,44 @@ API Platform. Please check the error code description on the front-end page
 and contact the Shopee Affiliate team
 ```
 
-⚠️ **Primeira correção estava ERRADA e foi derrubada pela própria cliente no
-mesmo dia.** A primeira versão deste fix tratou `10035` como equivalente a
-`10020` ("Invalid Signature") — mesma classe de "chave recusada, TODA
-conversão para". Isso teria disparado o e-mail `chave_shopee_recusada`
-("as ofertas da Shopee pararam de sair") — e a cliente relatou que o
-**espelhamento dela continuava publicando ofertas de Shopee normalmente**
-o tempo todo, só "Criar oferta" via em branco. Mandar aquele e-mail teria
-sido uma mentira nova, pior que o silêncio original.
+em **todas** as operações testadas com a chave dela — `productOfferV2` por
+palavra-chave, `productOfferV2` por produto e `generateShortLink` (a conversão
+do espelhamento) — enquanto a chave de outra conta, no mesmo instante, responde
+OK. Um App ID **inventado** também recebe 10035 nas duas operações. Ou seja: é
+a resposta da Shopee para um App ID que ela não reconhece ou não liberou, e
+derruba a conta inteira, igual ao `10020`. Os envios confirmam: em 72h, 933
+falhas de conversão + 923 `skip:no_valid_conversions` contra 136 sucessos.
 
-**A explicação: a API de afiliado tem DUAS operações com autorização
-SEPARADA no mesmo endpoint.** `convert()`/espelhamento usa a mutation
-`generateShortLink` (gera o link em si) — não bateu em `10035` nesta conta.
-`fetchShopeeProductInfo` (título/preço), `fetchShopeeImage` (foto),
-`checkShopeeSession` (sondagem) e `offerAutomation/shopeeOffers.js` (busca
-das ofertas automáticas) usam a query `productOfferV2` (catálogo/descoberta
-de ofertas) — foi essa que devolveu `10035`. A Shopee libera/nega acesso por
-MÓDULO da API, não pela chave inteira: o direito básico de gerar link de
-afiliado é separado do módulo de catálogo. Diferente de `10020`, que é falha
-de assinatura e por isso derruba **qualquer** chamada (inclusive
-`generateShortLink`).
+⚠️ **O caminho até aqui teve uma volta errada — não repetir.** A cliente disse
+que "o espelhamento de Shopee estava funcionando", e por isso uma versão
+intermediária (#1811) tirou 10035 de `SHOPEE_AUTH_REJECTED_CODES`, supondo
+bloqueio só do catálogo. A medição derrubou isso: `generateShortLink` falha
+igual. A percepção dela vinha dos ~7% de envios que saem com sucesso e do fato
+de o painel não acusar nada — exatamente o silêncio que este RCA corrige.
+**"Está funcionando", dito pela cliente, não substitui medir a operação com a
+chave dela.**
+
+⚠️ Pista a conferir com a cliente: o App ID dela tem **12 dígitos**; o da conta
+de controle, e os que costumam aparecer, têm 11. Digitação errada no cadastro é
+a explicação mais simples para a Shopee não reconhecer o App ID.
 
 **Não regredir:**
 
-- **`10035` NUNCA entra em `SHOPEE_AUTH_REJECTED_CODES`** — só `10020`
-  continua lá. `SHOPEE_PRODUCT_OFFER_DENIED_CODE` (`src/converters/shopee.js`)
-  documenta o porquê no topo do arquivo. Fazer o contrário manda a cliente
-  ler "as ofertas da Shopee pararam de sair" quando o espelhamento dela está
-  de pé — exatamente o erro cometido e corrigido nesta mesma rodada.
-- **O diagnóstico distingue os dois casos por ESTÁGIO**, não só por mensagem
-  crua: `fetchShopeeProductInfo`/`fetchShopeeImage` reportam
-  `shopee_sem_acesso_catalogo_ofertas` (via `stageForShopeeApiError`) quando o
-  código é `10035`, e `shopee_api_erro` para qualquer outro erro do corpo
-  (que PODE ser chave morta de verdade e merece investigação). Quem lê o log
-  não pode concluir "chave recusada" a partir de um `shopee_api_erro` genérico
-  sem olhar o `detail`.
-- `fetchShopeeProductInfo` ganhou `onDiagnostic`, no MESMO contrato de
-  `fetchShopeeImage` (`{ stage, detail }`): `shopee_sem_credencial`,
-  `shopee_sem_ids`, `shopee_sem_acesso_catalogo_ofertas`, `shopee_api_erro`,
-  `shopee_item_fora_do_catalogo`, `shopee_catalogo_sem_titulo_ou_preco`,
-  `shopee_api_falhou`. O fallback público v4 (`fetchShopeeItemInfo`) ganhou os
-  mesmos sinais (`shopee_v4_sem_ids`, `shopee_v4_http_erro`,
-  `shopee_v4_sem_item`, `shopee_v4_falhou`). `buildScrapedOffer`/
-  `offerEngine.js` repassam `onDiagnostic` e a rota `/scrape-offer` loga
-  `Criar oferta: loja não devolveu título nem preço do produto` quando os três
-  campos saem vazios — mesmo padrão do log de foto ausente.
-- **Isto não conserta conta sem acesso ao módulo de catálogo/ofertas** — só a
-  própria Shopee libera isso (a cliente precisa contatar o time de afiliados
-  dela). O que muda é parar de ser silencioso: hoje o log diz exatamente qual
-  dos dois problemas é, sem escrever script avulso de novo.
-- Diagnóstico reutilizável para qualquer link específico:
-  `scripts/diag-criar-oferta-shopee.mjs <email> <url>` (read-only, mostra a
-  resposta CRUA da API de afiliado e do fallback v4 lado a lado). Para
-  confirmar se é este caso ou chave morta de verdade, compare com o
-  espelhamento: se ele continua publicando Shopee normalmente, é `10035`
-  (módulo de catálogo), não a chave inteira.
+- **`10035` está em `SHOPEE_AUTH_REJECTED_CODES`**, junto com `10020`. A
+  sondagem, o e-mail `chave_shopee_recusada` e o banner do painel acusam a
+  chave. Tirar exige medir `generateShortLink` com a chave afetada.
+- `fetchShopeeProductInfo` e `fetchShopeeImage` reportam `onDiagnostic`
+  (`{ stage, detail }`): `shopee_sem_credencial`, `shopee_sem_ids`,
+  `shopee_chave_recusada` (código em `SHOPEE_AUTH_REJECTED_CODES`),
+  `shopee_api_erro` (qualquer outro), `shopee_item_fora_do_catalogo`,
+  `shopee_catalogo_sem_titulo_ou_preco`, `shopee_api_falhou`. O fallback v4:
+  `shopee_v4_sem_ids`, `shopee_v4_http_erro`, `shopee_v4_sem_item`,
+  `shopee_v4_falhou`. A rota `/scrape-offer` loga `Criar oferta: loja não
+  devolveu título nem preço do produto` com os estágios.
+- Diagnósticos: `scripts/diag-shopee-chave.mjs <email> [url]` (cada operação
+  com a chave real + conta de controle + como terminaram os envios) e
+  `scripts/diag-criar-oferta-shopee.mjs <email> <url>` (resposta crua do
+  catálogo e do fallback v4 para um link).
 
 Testes: `test/shopee-affiliate-info.test.js`, `test/credential-expiry-alert.test.js`.
 

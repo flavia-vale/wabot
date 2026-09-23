@@ -95,7 +95,7 @@ de `EXPIRY_ALERT_PLATFORMS`.**
   leitura** (`productOfferV2` com `limit: 1`) — não gera link nem grava nada do
   lado da Shopee, então **não precisa de cache de sondagem** (diferente do
   ML/Amazon, onde o probe rotaciona credencial).
-- **Só o código `10020` vira `alive:false`** (`SHOPEE_AUTH_REJECTED_CODES`, com
+- **Só os códigos `10020` e `10035` viram `alive:false`** (`SHOPEE_AUTH_REJECTED_CODES`, com
   a classificação pura em `classifyShopeeProbeResponse`). Qualquer outro código,
   HTTP != 200, timeout ou rede fora fica **indeterminado**. Lembre que a API de
   afiliado responde **200 mesmo em erro**, sinalizando via `errors` — por isso a

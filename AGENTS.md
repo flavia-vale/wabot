@@ -172,6 +172,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Link de loja não converteu / link errado / página não existe | `src/converters/<loja>.js`, `src/core/conversionScheduler.js` | `diag-ml-sends.mjs`, `diag-ml-social-featured.mjs`, `diag-amazon-clicks.mjs`, `diag-shein-shortlink.mjs` | lojas-conversao |
 | Preço errado na oferta | `src/converters/amazonPrice.js`, `src/converters/productInfoScraper.js` | `diag-amazon-preco.mjs` | lojas-conversao |
 | "Faltou cadastrar a loja" / `skip:no_valid_conversions` | `src/credentialHealth.js`, `dashboard/lib/painel/logsCopy.js` | `diag-sem-etiqueta.mjs`, `diag-shopee-chave-por-conta.mjs` | credenciais-e-seguranca |
+| "Criar oferta" da Shopee sem nome/preço; chave Shopee recusada (erro 10020/10035) | `src/converters/shopee.js`, `src/converters/offerEngine.js` | `diag-shopee-chave.mjs` (cada operação com a chave real + conta de controle), `diag-criar-oferta-shopee.mjs` | ofertas-automaticas-e-criar-oferta |
 | Oferta de site próprio do grupo não espelha / link some | `src/core/customDomainLinkResolver.js` | `diag-dominio-proprio.mjs --horas=72` | espelhamento |
 | Espelhou para grupo errado / não espelhou / duplicou | `src/core/destinationRouting.js`, `src/core/incomingFreshness.js` | `diag-mirror-duplicates.mjs`, `diag-oferta-descartada.mjs` | espelhamento |
 | Fila não envia / envio atrasado / fila parada | `processSendJob` em `src/bot-worker.js`, `src/core/queueExpiry.js` | `diag-fila-grupo.mjs`, `diag-fila-parada.mjs` | envio-e-filas |

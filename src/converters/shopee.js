@@ -4,30 +4,33 @@ import { shouldConvertCouponLinks } from './couponPolicy.js'
 
 const ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql'
 
-// "You currently do not have access to the Shopee Affiliate Open API
-// Platform" — achado em produção (2026-09-23, conta nandavieiraf@gmail.com)
-// na query `productOfferV2` (busca/catálogo de ofertas), usada por
-// `fetchShopeeProductInfo` (título/preço), `fetchShopeeImage` (foto),
-// `checkShopeeSession` (sondagem) e `offerAutomation/shopeeOffers.js`.
+// Códigos com que a Shopee recusa a CHAVE INTEIRA. Só estes viram
+// `alive:false` na sondagem — que dispara o e-mail `chave_shopee_recusada`
+// ("as ofertas da Shopee pararam de sair"). Qualquer outro código fica
+// INDETERMINADO: avisar que a cliente parou de vender quando não parou é pior
+// do que não avisar (mesma regra de `alive === null` em
+// credentialExpiry/policy.js). Código só entra aqui com MEDIÇÃO.
 //
-// NÃO é falha de autenticação como 10020 ("Invalid Signature"): confirmado
-// com a própria cliente que o espelhamento dela continuava publicando
-// ofertas de Shopee normalmente enquanto "Criar oferta" via em branco. A
-// mutation `generateShortLink` (usada por `convert()`/espelhamento) roda no
-// MESMO endpoint com a MESMA chave e não bateu nesse erro — ou seja, a
-// Shopee autoriza/nega acesso à API por MÓDULO, não por chave inteira: o
-// direito básico de gerar link de afiliado é separado do módulo de
-// descoberta/catálogo de produtos. Por isso este código NUNCA entra em
-// `SHOPEE_AUTH_REJECTED_CODES` — fazer isso mandaria o e-mail "as ofertas da
-// Shopee pararam de sair" para uma conta cujo espelhamento está funcionando.
-const SHOPEE_PRODUCT_OFFER_DENIED_CODE = 10035
+// 10020 = "Invalid Signature" (RCA 2026-08).
+// 10035 = "You currently do not have access to the Shopee Affiliate Open API
+//   Platform" (RCA 2026-09-23, conta nandavieiraf@gmail.com). Medido com a
+//   chave real, operação por operação: `productOfferV2` por palavra-chave,
+//   `productOfferV2` por produto e `generateShortLink` (a conversão do
+//   espelhamento) — as TRÊS devolvem 10035, enquanto a chave de outra conta,
+//   no mesmo instante, responde OK. Um App ID inventado também recebe 10035
+//   nas duas operações: é a resposta da Shopee para App ID que ela não
+//   reconhece. Nos envios da conta: 933 falhas de conversão + 923
+//   `skip:no_valid_conversions` contra 136 sucessos em 72h.
+//   ⚠️ Uma versão intermediária tirou 10035 daqui supondo que só o catálogo
+//   estava bloqueado ("o espelhamento continua funcionando"). A medição
+//   derrubou isso — não repetir sem medir `generateShortLink` com a chave.
+export const SHOPEE_AUTH_REJECTED_CODES = Object.freeze([10020, 10035])
 
-// Estágio de diagnóstico a reportar para um erro `productOfferV2`: separa o
-// caso conhecido de "sem acesso ao catálogo/ofertas" (não afeta o
-// espelhamento) do erro genérico (que PODE ser chave morta de verdade).
+// Estágio de diagnóstico para um erro no corpo da resposta: separa chave
+// recusada (ação: recadastrar o App ID/chave) do erro genérico.
 function stageForShopeeApiError(apiError) {
   const code = Number(apiError?.extensions?.code ?? apiError?.code)
-  return code === SHOPEE_PRODUCT_OFFER_DENIED_CODE ? 'shopee_sem_acesso_catalogo_ofertas' : 'shopee_api_erro'
+  return SHOPEE_AUTH_REJECTED_CODES.includes(code) ? 'shopee_chave_recusada' : 'shopee_api_erro'
 }
 
 // SubID fixo enviado em TODO link de afiliado que geramos. Não é configuração
@@ -639,20 +642,8 @@ export async function fetchShopeeProductInfo(url, creds, { onDiagnostic } = {}) 
 // checkAmazonSession — { configured, alive, reason } — para o aviso por e-mail
 // tratar as três lojas pelo mesmo caminho.
 
-// Códigos que a Shopee devolve quando a autenticação em si é recusada. Só
-// estes viram `alive:false` — que dispara o e-mail `chave_shopee_recusada`
-// afirmando que "as ofertas da Shopee PARARAM de sair" (TODA conversão, não só
-// parte dela). Qualquer outro código fica INDETERMINADO: mandar a cliente
-// recadastrar uma chave viva, ou avisar que ela parou de vender quando não
-// parou, é pior do que não avisar (mesma regra de `alive === null` em
-// credentialExpiry/policy.js).
-export const SHOPEE_AUTH_REJECTED_CODES = Object.freeze([10020])
-
-// `SHOPEE_PRODUCT_OFFER_DENIED_CODE` (10035) fica de fora desta lista de
-// propósito — ver o comentário dela no topo do arquivo. Se subir de novo em
-// outra conta, o diagnóstico correto é: espelhamento (via `convert()`)
-// continua saindo? Se sim, é este caso — sem acesso à parte de OFERTAS/
-// CATÁLOGO, não à chave inteira.
+// `SHOPEE_AUTH_REJECTED_CODES` mora no topo do arquivo (com a medição que
+// decidiu cada código).
 
 // Consulta só de leitura, sem efeito colateral: não gera link nem grava nada do
 // lado da Shopee. O que importa é se a assinatura é aceita.
