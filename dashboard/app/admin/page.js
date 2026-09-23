@@ -919,7 +919,7 @@ function ErrorVolumeCard({ summary }) {
             return (
               <div key={item?.errorMsg ?? `error-${index}`} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 text-sm md:grid-cols-[1fr_130px_100px_150px]">
                 <div className="min-w-0">
-                  <p className="break-words font-mono text-xs font-bold text-slate-100">{item?.errorMsg || 'unknown'}</p>
+                  <p className="break-words text-xs font-bold text-slate-100">{item?.errorMsg || 'unknown'}</p>
                   {item?.sampleErrorMsg && item.sampleErrorMsg !== item.errorMsg && <p className="mt-1 break-words text-[11px] text-slate-500">Exemplo recente: {item.sampleErrorMsg}</p>}
                   <p className="mt-1 text-[11px] text-slate-500 md:hidden">{item?.category || 'UNKNOWN'} · último {formatDate(item?.lastSeenAt)}</p>
                 </div>
@@ -1196,7 +1196,7 @@ function OnlineDetailDrawer({ detail, loading, onClose }) {
                 {asArray(detail.errorsByType).map((item) => (
                   <div key={item.errorMsg} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
                     <div>
-                      <p className="break-words font-mono text-xs font-bold text-slate-900">{item.errorMsg}</p>
+                      <p className="break-words text-xs font-bold text-slate-900">{item.errorMsg}</p>
                       <p className="mt-1 text-xs text-slate-500">{item.category || 'UNKNOWN'} · último {formatDate(item.lastSeenAt)}</p>
                     </div>
                     <span className="self-start rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700">{formatNumber(item.count)}x</span>
@@ -1554,7 +1554,7 @@ function TutorialEditor({ tutorial, onSave }) {
       <h3 className="text-base font-black text-gray-900">Tutorial (Dashboard)</h3>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do tutorial" className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Texto principal do tutorial" className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
-      <textarea value={imagesText} onChange={(e) => setImagesText(e.target.value)} placeholder='[{"id":"print1","label":"PRINT 1","url":"https://...","note":"..."}]' className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-emerald-400" />
+      <textarea value={imagesText} onChange={(e) => setImagesText(e.target.value)} placeholder='[{"id":"print1","label":"PRINT 1","url":"https://...","note":"..."}]' className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-400" />
       <p className="text-xs text-gray-500">Use JSON para os prints: id, label, url e note.</p>
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar tutorial'}</button>
@@ -3579,11 +3579,11 @@ export default function AdminPage() {
                   <tbody className="divide-y divide-gray-100">
                     {asArray(affiliates?.profiles).map(a => (
                       <tr key={a?.id} className="align-top">
-                        <td className="px-3 py-3 font-mono text-xs font-bold text-gray-500">{a?.code ?? '—'}</td>
+                        <td className="px-3 py-3 text-xs font-bold text-gray-500">{a?.code ?? '—'}</td>
                         <td className="px-3 py-3"><p className="font-bold text-gray-900">{a?.user?.name ?? '—'}</p><p className="text-xs text-gray-500">{a?.user?.email ?? '—'}</p></td>
                         <td className="px-3 py-3 text-sm">{formatNumber(a?.totalReferrals ?? 0)}</td>
                         <td className="px-3 py-3 text-sm font-bold">{centsToBRL(a?.totalCommissions ?? 0)}</td>
-                        <td className="px-3 py-3 font-mono text-xs text-gray-500">{a?.pixKey ?? '—'}</td>
+                        <td className="px-3 py-3 text-xs text-gray-500">{a?.pixKey ?? '—'}</td>
                       </tr>
                     ))}
                     {!asArray(affiliates?.profiles).length && <tr><td colSpan={5} className="px-3 py-6 text-sm text-gray-400">Nenhum afiliado aprovado.</td></tr>}

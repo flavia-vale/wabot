@@ -33,7 +33,7 @@
   font-weight: 900;
   letter-spacing: -0.02em;
 }
-.pnl-mono { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; }
+.pnl-mono { font-family: inherit; }
 
 /* Visão conectada do WhatsApp — controles reais do preset padrão de
  * preservação. No Basic, a ausência de cor e a camada de cadeado comunicam o
@@ -51,7 +51,7 @@
 .wa-progress { height: 8px; margin: 13px 0 8px; overflow: hidden; border-radius: 99px; background: #e6efeb; }.wa-progress i { display: block; height: 100%; border-radius: inherit; background: #2b936f; }
 .wa-metric small,.wa-field small { color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
 .wa-field select,.wa-field input,.wa-time-grid select { width: 100%; min-height: 46px; border: 1px solid #b7ccc3; border-radius: 12px; padding: 0 14px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; outline: none; }.wa-field select:focus,.wa-field input:focus,.wa-time-grid select:focus { border-color: #258965; box-shadow: 0 0 0 3px #d9f1e8; }
-.wa-cap-field input { font-family: var(--font-jetbrains-mono), monospace; }
+.wa-cap-field input { font-family: inherit; }
 .wa-hours-card header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 30px; border-bottom: 1px solid var(--line); }.wa-hours-card h2 { font-size: 17px; }.wa-hours-card header p { margin-top: 3px; color: var(--ink-soft); font-size: 12px; }.wa-hours-card header>span { padding: 7px 13px; border-radius: 99px; background: #def2e9; color: #176b50; font-size: 12px; font-weight: 700; }
 .wa-hours-body { padding: 8px 30px 24px; }.wa-hours-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; }.wa-hours-row strong { font-size: 14px; }.wa-hours-row p { margin-top: 3px; color: var(--ink-soft); font-size: 12px; }
 .wa-switch { width: 48px; height: 28px; flex: 0 0 auto; padding: 3px; border: 0; border-radius: 99px; background: #c8d1cd; cursor: pointer; transition: background .18s; }.wa-switch i { display: block; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px #0002; transition: transform .18s; }.wa-switch.is-on { background: #2c936f; }.wa-switch.is-on i { transform: translateX(20px); }
@@ -92,7 +92,7 @@
   text-decoration: none;
 }
 .pnl-brand small {
-  font-family: var(--font-jetbrains-mono), monospace;
+  font-family: inherit;
   font-size: 11px;
   font-weight: 500;
   color: var(--ink-faint);
@@ -600,7 +600,7 @@
 }
 .pnl-input::placeholder { color: var(--ink-faint); }
 .pnl-input:focus { outline: none; border-color: var(--accent-strong); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 30%, transparent); }
-textarea.pnl-input { resize: vertical; min-height: 96px; line-height: 1.5; font-family: var(--font-jetbrains-mono), ui-monospace, monospace; font-size: 12.5px; }
+textarea.pnl-input { resize: vertical; min-height: 96px; line-height: 1.5; font-family: inherit; font-size: 12.5px; }
 
 .pnl-check { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
 .pnl-check input { width: 17px; height: 17px; accent-color: var(--accent-strong); }
@@ -967,7 +967,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   background: var(--surface);
   border-radius: 999px;
   padding: 5px 11px;
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-family: inherit;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--accent-strong);
@@ -983,11 +983,11 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   cursor: pointer;
 }
 .pnl-token-card:hover { background: var(--bg-soft); }
-.pnl-token-card code { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; font-size: 12px; font-weight: 600; color: var(--accent-strong); }
+.pnl-token-card code { font-family: inherit; font-size: 12px; font-weight: 600; color: var(--accent-strong); }
 .pnl-token-card div { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
 
 .pnl-pre {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-family: inherit;
   font-size: 11.5px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -1596,7 +1596,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 }
 .pnl-cred-input-wrap { position: relative; display: flex; }
 .pnl-cred-input-wrap .pnl-input { width: 100%; }
-.pnl-cred-secret { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; padding-right: 84px; }
+.pnl-cred-secret { font-family: inherit; padding-right: 84px; }
 .pnl-cred-eye {
   position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
   border: none; background: transparent; cursor: pointer;
@@ -1928,7 +1928,7 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .tc-detalhe.is-neutro .tc-url.is-destaque,
 .tc-detalhe.is-erro .tc-url.is-destaque { color: var(--ink-soft); }
 .tc-url {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: inherit;
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--ink-soft);

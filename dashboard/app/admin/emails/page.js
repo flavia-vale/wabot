@@ -229,7 +229,7 @@ function Editor({ slug, onClose, onSaved }) {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={16}
-            className="w-full rounded-xl border border-gray-200 px-3 py-2 font-mono text-xs"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs"
           />
 
           <div className="mt-2 rounded-xl bg-gray-50 p-3 text-xs text-gray-600">
@@ -247,7 +247,7 @@ function Editor({ slug, onClose, onSaved }) {
                   type="button"
                   title={`${variable.description} (ex.: ${variable.example})`}
                   onClick={() => setBody((atual) => `${atual}{{${variable.name}}}`)}
-                  className="rounded-lg bg-gray-100 px-2 py-1 text-[11px] font-mono text-gray-700 hover:bg-gray-200"
+                  className="rounded-lg bg-gray-100 px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-200"
                 >
                   {`{{${variable.name}}}`}
                 </button>

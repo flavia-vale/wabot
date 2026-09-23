@@ -18,9 +18,12 @@ test('Figtree hospedada no próprio dashboard e declarada no @font-face', () => 
   assert.match(css, /@font-face\s*{[^}]*font-family:\s*'Figtree'[^}]*font-weight:\s*300 900[^}]*url\('\/fonts\/figtree-latin\.woff2'\)/)
   assert.match(read('dashboard/app/layout.js'), /'--font-inter':\s*'Figtree,/)
   assert.doesNotMatch(read('dashboard/app/layout.js'), /from ['"]next\/font/)
+  // font-mono do Tailwind e code/pre/kbd do navegador também caem na Figtree.
+  assert.match(css, /--font-mono:\s*var\(--font-sans\)/)
+  assert.match(css, /code, kbd, samp, pre\s*{\s*font-family:\s*inherit;/)
 })
 
-test('nenhum serif sobrando no site nem no painel', () => {
+test('uma fonte só: nenhum serif nem fonte de código no site, painel e admin', () => {
   const files = []
   const walk = (dir) => {
     for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
@@ -32,7 +35,9 @@ test('nenhum serif sobrando no site nem no painel', () => {
   }
   walk('dashboard/app'); walk('dashboard/components')
   for (const file of files) {
-    assert.doesNotMatch(read(file), /instrument-serif|Instrument Serif|Georgia/, file)
+    const src = read(file)
+    assert.doesNotMatch(src, /instrument-serif|Instrument Serif|Georgia/, file)
+    if (file !== 'dashboard/app/globals.css') assert.doesNotMatch(src, /jetbrains|monospace|\bfont-mono\b/, file)
   }
 })
 

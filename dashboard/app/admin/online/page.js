@@ -201,7 +201,7 @@ function UserDrawer({ detail, loading, onClose }) {
                 {asArray(detail.errorsByType).map((item) => (
                   <div key={item.errorMsg} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
                     <div>
-                      <p className="break-words font-mono text-xs font-bold text-slate-900">{item.errorMsg}</p>
+                      <p className="break-words text-xs font-bold text-slate-900">{item.errorMsg}</p>
                       <p className="mt-1 text-xs text-slate-500">{item.category || 'UNKNOWN'} · último {formatDate(item.lastSeenAt)}</p>
                     </div>
                     <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700">{formatNumber(item.count)}x</span>
@@ -220,7 +220,7 @@ function UserDrawer({ detail, loading, onClose }) {
                     <div key={item.jid} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
                       <div>
                         <p className="break-words font-black text-slate-900">{item.name || 'Grupo sem nome resolvido'}</p>
-                        <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{item.jid}</p>
+                        <p className="mt-1 break-all text-[11px] text-slate-500">{item.jid}</p>
                         <p className="mt-1 text-xs text-slate-500">último {formatDate(item.lastSeenAt)}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1">

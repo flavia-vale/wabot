@@ -96,7 +96,7 @@ function RouteRow({ route }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-mono text-xs font-bold text-cyan-100">{route.method} {route.route}</p>
+        <p className="text-xs font-bold text-cyan-100">{route.method} {route.route}</p>
         <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-slate-200">{numberFmt(route.count)} req</span>
       </div>
       <div className="mt-3 grid gap-2 text-xs text-slate-400 sm:grid-cols-4">
@@ -213,7 +213,7 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
           onChange={(e) => setMfaToken(e.target.value)}
           placeholder="ADMIN_MFA_TOKEN"
           autoComplete="off"
-          className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 font-mono text-xs text-white placeholder:text-slate-500 focus:border-cyan-300 focus:outline-none"
+          className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:border-cyan-300 focus:outline-none"
         />
       </label>
 
