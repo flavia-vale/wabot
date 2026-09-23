@@ -4,14 +4,19 @@ import { existsSync, readFileSync } from 'node:fs'
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
-const PAGE = 'dashboard/app/painel/preservacao/configuracoes/page.js'
+// specs/018-unificar-protecao-anti-ban (US1): o conteúdo da antiga página
+// "Configurações avançadas" migrou para a parte "Ajustes da conta" da tela
+// única /painel/anti-banimento; a página antiga
+// (dashboard/app/painel/preservacao/configuracoes/page.js) virou um
+// redirect() puro (ver test/anti-banimento-rotas-antigas.test.js).
+const PAGE = 'dashboard/app/painel/anti-banimento/ContaPart.js'
 // Plano B / Fase 3 (passo 2): só os forms que controlam uma defesa de CONTA com
 // FeatureToggle. Throttle/QuietHours saíram (viraram config por destino).
 const FORMS = [
   ['FollowGuardForm.js', 'followGuardEnabled'],
 ]
 
-test('página renderiza só as defesas de conta (cadência/horário foram para por destino)', () => {
+test('parte "Ajustes da conta" renderiza só as defesas de conta (cadência/horário foram para "Ritmo por grupo")', () => {
   const source = read(PAGE)
   for (const component of ['ChannelStaggerForm', 'FollowGuardForm', 'ImageMutationToggle']) {
     assert.match(source, new RegExp(`<${component}\\b`), `${component} deve continuar visível`)
@@ -21,8 +26,6 @@ test('página renderiza só as defesas de conta (cadência/horário foram para p
   for (const hidden of ['ThrottleForm', 'QuietHoursForm', 'PreservationMasterToggle', 'ProbeToggle', 'ClickTrackerStatus', 'CopyVariationPoolEditor']) {
     assert.doesNotMatch(source, new RegExp(`<${hidden}\\b`), `${hidden} não pode aparecer na página`)
   }
-  // Aponta o usuário para onde a cadência/horário vive agora.
-  assert.match(source, /preservacao\/destinos/, 'deve linkar para a preservação por destino')
 })
 
 test('componentes globais legados foram removidos do código', () => {
