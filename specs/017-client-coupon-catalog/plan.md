@@ -19,7 +19,10 @@ A abordagem técnica se apoia em três decisões, detalhadas em
    montado na chegada da mensagem com `{cupom}` ainda intacto; quem substitui é
    `processSendJob`, imediatamente antes do envio. É isso que faz valer a
    validade e o ligado/desligado **do momento do envio** (FR-014) mesmo para um
-   item que ficou horas parado na fila.
+   item que ficou horas parado na fila. *(Revisado em 2026-09-23: a montagem
+   só mantém `{cupom}` intacto quando pedido — `keepCouponToken: true`, usado
+   pelos caminhos que passam pelo robô; o padrão é apagar, para o "copiar" do
+   Criar oferta nunca levar o marcador cru ao grupo. Ver research.md D3.)*
 2. **A fonte dos cupons no worker é o cache de configuração que já existe**
    (`getConfig`), invalidado pelo comando `reloadConfig` que já existe, com o
    TTL de 60s como rede de segurança. Zero consulta ao banco por envio
@@ -83,7 +86,7 @@ o `AGENTS.md`, e os portões abaixo saem dele.
 | **Não quebrar template de cliente em produção** | ✅ | `{linhaDeCupom}` sai do código, não do banco. A limpeza acontece na leitura (`canonicalizeTemplateBody`), que já serve tela e worker. |
 | **Não regredir a trava de repetição** | ✅ | A chave continua saindo dos **links**, calculada na chegada, sobre texto **sem** cupom. Resolver o cupom depois torna a propriedade mais forte, não mais fraca. |
 | **Fluxo `feature → develop → main`** | ✅ | Branch a partir de `develop`, PR contra `develop`, validação em staging, só então `develop → main`. |
-| **Nota do modo `remote`** | ✅ | Registrada na spec e repetida em `quickstart.md`: até o `bot-supervisor` reiniciar, espelhamento e fila ainda saem sem cupom — é o esperado. |
+| **Nota do modo `remote`** | ✅ | Registrada na spec e no `quickstart.md`: o diff toca `WORKER_CODE_PATHS_RE`, então o deploy reinicia o `bot-supervisor` sozinho e reconecta todas as sessões — anunciar antes do merge em `main`. |
 
 **Resultado**: nenhum portão violado. Nada a registrar em Complexity Tracking.
 
@@ -252,7 +255,7 @@ Buffer ali quebraria o envio.
 | Preço errado publicado no grupo | Sem preço confiável, **não** existe "de X por Y" (FR-018d). Preço final nunca é lido da loja, sempre calculado por nós. |
 | `{preçoDoTexto}` quebrar junto com `{linhaDeCupom}` | A função delimitadora é preservada de propósito; teste específico em `mirror-template.test.js`. |
 | Duas PRs paralelas adicionarem a mesma coluna | Guarda `test/migrations-no-duplicate-column.test.js`; conferir PRs abertas antes de abrir a branch (pegadinha #10). |
-| Correção não valer nos robôs em produção | A nota de operação do modo `remote` está na spec e no quickstart: sem `pm2 restart bot-supervisor`, espelhamento e fila ainda saem sem cupom. |
+| Deploy reconectar todas as sessões sem aviso | O deploy reinicia o `bot-supervisor` sozinho (o diff toca `WORKER_CODE_PATHS_RE`). Mitigação: anunciar às clientes antes do merge em `main`. Restart manual só com `RESTART_SUPERVISOR=0`. |
 
 ## Complexity Tracking
 
