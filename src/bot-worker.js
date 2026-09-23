@@ -1039,6 +1039,10 @@ async function checkScheduledMessages() {
           delayMs: 0,
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward: scheduledChannelForward,
+          // Agendado sai com cupom igual ao "Enviar agora" (decisão da dona do
+          // produto, 2026-09-23). O cupom é escolhido quando a mensagem SAI,
+          // não quando foi agendada: vencido ou desligado até lá, não sai.
+          couponContext: couponContextFromText(msg.text),
           ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
           onDone: async (result) => {
             state.remaining--
@@ -2548,6 +2552,15 @@ function applyCouponTokenToPayload(payload, couponText) {
 // partir dos cupons já carregados em getConfig() (D1 da pesquisa: zero
 // consulta nova ao banco neste caminho) e do couponContext carregado pelo
 // job. NUNCA lança — best-effort absoluto (FR-028b).
+// Envios do painel (Enviar agora, Agendar, Inserir na fila): a loja sai do
+// primeiro link do texto — mesmo detector do espelhamento (src/detector.js).
+// Preço desconhecido: cai na ordem fixa e previsível do FR-011 em chooseCoupon.
+// Fonte ÚNICA para os dois caminhos, para agendado e imediato nunca divergirem.
+function couponContextFromText(text) {
+  const platform = detectLinks(text || '')[0]?.platform ?? null
+  return platform ? { platform, priceCents: null } : null
+}
+
 async function resolveCouponTextForJob(job) {
   try {
     const ctx = job?.couponContext
@@ -5468,8 +5481,7 @@ const handleMessage = async msg => {
     // o de dashboard/lib, proibido aqui). Preço tratado como desconhecido
     // (cai na ordem fixa e previsível do FR-011 dentro de chooseCoupon); a
     // substituição em si acontece no MESMO ponto de processSendJob (T019).
-    const broadcastLinkPlatform = detectLinks(msg.text || '')[0]?.platform ?? null
-    const broadcastCouponContext = broadcastLinkPlatform ? { platform: broadcastLinkPlatform, priceCents: null } : null
+    const broadcastCouponContext = couponContextFromText(msg.text)
 
     let queued = 0
     const errors = []
