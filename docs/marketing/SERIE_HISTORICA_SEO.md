@@ -320,14 +320,22 @@ bloqueio da Cloudflare por reputação do IP de nuvem (ação nossa). O
 por nome de robô. O que separa: no AI Crawl Control, filtrar Claude-User e
 Perplexity-User e ver os códigos e os endereços dos pedidos sem sucesso.
 
-**Série diária exportada (23/09)** — Claude-User e Perplexity-User por dia. O
-arquivo traz só a contagem, **sem código nem endereço**, e a soma (123 e 17) não
-bate com nenhum dos totais do painel, então não serve para separar sucesso de
-falha. O que ela mostra: **pico em 18/09** nos dois (Claude-User 29, 6× a média;
-Perplexity-User 13, contra zero nos 25 dias anteriores) — **o mesmo dia do
-bloqueio da Cloudflare**. *Hipótese:* parte das falhas é daquele bloqueio, já
-desfeito. Confirma-se abrindo o detalhe de um dos robôs e olhando o código de
-resposta.
+**Códigos de resposta por dia (exportados em 23/09) — a hipótese do bloqueio
+de 18/09 CAIU.** O pico de 18/09 foi de **sucesso** (Claude-User 27 em 2xx,
+Perplexity-User 11 em 2xx). As falhas que aparecem com código estão em dois
+dias:
+
+| Dia | Claude-User | Perplexity-User |
+|---|---|---|
+| 07/09 | 40 em 4xx | — |
+| 23/09 | 21 em 4xx · 9 em 3xx | 39 em 4xx · 13 em 3xx |
+
+- 3xx em 23/09 é compatível com endereços antigos renomeados em 19/09 (308).
+  23/09 é também o dia da rodada de medição por IA.
+- Esses códigos somam **72** falhas do Claude-User, contra **308** "sem sucesso"
+  no painel. *Hipótese não verificada:* o resto nunca chegou ao nosso servidor
+  (barrado na borda), por isso não tem código. O que falta para fechar: a lista
+  de **endereços** dos pedidos 4xx de 23/09.
 
 ### Bing Webmaster Tools (primeira leitura, 23/09)
 
