@@ -316,7 +316,7 @@ export default function CriarOfertaPage() {
           </span>
           <input
             className="pnl-input"
-            style={{ flex: 1, minWidth: 180, fontFamily: "var(--font-jetbrains-mono), ui-monospace, monospace", fontSize: 13 }}
+            style={{ flex: 1, minWidth: 180, fontSize: 13 }}
             value={link}
             onChange={(e) => { setLink(e.target.value); setPasteFeedback('') }}
             placeholder="https://..."

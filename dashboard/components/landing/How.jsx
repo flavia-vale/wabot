@@ -24,7 +24,7 @@ const s = {
   visual: {
     background: 'var(--bg-soft)', borderRadius: 16, padding: 16,
     border: '1px dashed var(--line)', fontSize: 12,
-    fontFamily: "var(--font-jetbrains-mono), monospace", color: 'var(--ink-soft)',
+    color: 'var(--ink-soft)',
   },
 };
 

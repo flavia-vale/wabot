@@ -19,7 +19,6 @@ import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/
 // a Figtree. Pesos: 900 em títulos, preços e números; 400 no texto.
 const fontVariables = {
   '--font-inter': 'Figtree, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  '--font-jetbrains-mono': '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
 }
 
 export const metadata = {
