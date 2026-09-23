@@ -296,6 +296,17 @@ A segunda foi **rastreada em 21/09 e não indexada**. Diferente das LPs
 congeladas, é uma rota renomeada em 19/09 — vale um pedido. Se continuar fora
 depois disso, o motivo é conteúdo, não descoberta.
 
+### Duas conferências que ficaram da rodada de 23/09 (5 min cada)
+
+1. **Bing → Inspeção de URL** em `/shopee-afiliados-whatsapp` e
+   `/bot-achadinhos-whatsapp`. Decide se o Bing conhece as páginas que não
+   apareceram no Explorador de sites. Se disser "não indexada", pedir
+   indexação lá mesmo (o Bing aceita envio de URL).
+2. **Cloudflare → AI Crawl Control → filtrar `Claude-User`** (e depois
+   `Perplexity-User`), olhando os pedidos **sem sucesso**: print dos
+   endereços e dos códigos (404, 301/308, 403). Decide se a falha de 70-81% é
+   endereço inventado pela IA, endereço antigo ou bloqueio nosso.
+
 ---
 
 ## 2. Pesquisa de preço de concorrente — o que coletar e como

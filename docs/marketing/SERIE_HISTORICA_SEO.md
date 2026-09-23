@@ -283,6 +283,67 @@ com **19 de 19 robôs em 200** (GPTBot, ClaudeBot, PerplexityBot, Googlebot,
 bingbot e os demais). O bloqueio da Cloudflare de 18/09 segue desfeito. Números
 de visita por robô em janela de 30 dias: pendente (Cloudflare → AI Crawl Control).
 
+### 30 dias (Cloudflare AI Crawl Control, 24/08 a 23/09)
+
+**7 mil pedidos**, 5 mil respondidos, 2 mil sem sucesso. Página mais lida: a
+home (765). Só a OpenAI somou **1,84 mil** pedidos atendidos, mais que o
+Bing (1,26 mil) e o Google (844).
+
+| Robô | Atendidos | Sem sucesso | % sem sucesso | Quem é |
+|---|---:|---:|---:|---|
+| BingBot | 1.260 | 4 | 0% | busca |
+| Googlebot | 844 | 23 | 3% | busca |
+| ChatGPT-User | 773 | 81 | 9% | **pessoa perguntando ao ChatGPT agora** |
+| OAI-SearchBot | 644 | 92 | 12% | índice de busca do ChatGPT |
+| GPTBot | 420 | 167 | 28% | treino OpenAI |
+| ClaudeBot | 391 | 182 | 32% | treino Anthropic |
+| Applebot | 199 | 82 | 29% | Siri/Apple |
+| Bytespider | 181 | 82 | 31% | ByteDance |
+| PerplexityBot | 180 | 137 | 43% | índice da Perplexity |
+| Claude-User | 132 | **308** | **70%** | pessoa perguntando ao Claude agora |
+| Perplexity-User | 30 | **130** | **81%** | pessoa perguntando à Perplexity agora |
+| MistralAI-User | 28 | 72 | 72% | pessoa perguntando ao Mistral agora |
+| DuckAssistBot | 26 | 34 | 57% | DuckDuckGo |
+| Claude-SearchBot | 24 | 38 | 61% | índice do Claude |
+| Meta-ExternalAgent | 18 | 31 | 63% | Meta |
+| TikTok Spider | 6 | 634 | 99% | TikTok (irrelevante) |
+| Amazonbot | 5 | 91 | 95% | Amazon |
+| CCBot | 6 | 84 | 93% | Common Crawl |
+
+⚠️ **Achado a investigar, não conclusão:** os robôs que buscam a página **na
+hora em que uma pessoa pergunta** falham muito mais no Claude (70%), na
+Perplexity (81%) e no Mistral (72%) do que no ChatGPT (9%). Três causas
+possíveis, com ações opostas: endereço inventado pela IA (404, sem ação nossa),
+endereço antigo renomeado em 19/09 (redirecionamento contado como falha?) ou
+bloqueio da Cloudflare por reputação do IP de nuvem (ação nossa). O
+`diag-acesso-robos-ia.mjs` deu 19/19 em 200 **na home**, então não é bloqueio
+por nome de robô. O que separa: no AI Crawl Control, filtrar Claude-User e
+Perplexity-User e ver os códigos e os endereços dos pedidos sem sucesso.
+
+### Bing Webmaster Tools (primeira leitura, 23/09)
+
+| Janela | Impressões | Cliques | CTR |
+|---|---:|---:|---:|
+| 28/07 a 21/09 (8 semanas) | 265 | 17 | 6,4% |
+| 14 a 21/09 (8 dias) | 126 | 10 | 7,9% |
+
+- Metade das impressões de 8 semanas veio nos últimos 8 dias.
+- O Bing é **~1,6%** do volume do Google (16.581 impressões em 3 meses).
+- **11 dos 17 cliques são de marca** (`espelha grupos` 5, `espelha grupo` 4,
+  `espelhargrupos.com.br` 2). `achadinhosbot` e variações: 28 impressões,
+  posição ~7, 0 clique.
+- Muitas consultas longas e de comparação ("afilira bot afiliados whatsapp
+  preço avaliação", "pro afiliados whatsapp bot avaliação preço", "shozap
+  ferramenta afiliados site oficial preço"). *Hipótese não verificada:* são
+  buscas que as IAs fazem por baixo para montar a resposta.
+- **IndexNow funciona:** o deploy de produção de 23/09 avisou o Bing de **106
+  endereços, status 200**.
+- O Explorador de sites exportou **50** endereços da raiz, e só 38 deles estão
+  entre as rotas atuais. Faltam as 5 páginas de loja, `/bot-achadinhos-whatsapp`
+  e todas as renomeadas em 19/09; sobram 12 antigas (cidades, nichos, nomes com
+  "botinho"). ⚠️ 50 exatos pode ser teto da exportação: **não concluir** que o
+  Bing não conhece essas páginas antes de inspecionar uma delas no próprio Bing.
+
 ---
 
 ## 6. O que cada rodada derrubou
