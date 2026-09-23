@@ -16,7 +16,7 @@ const s = {
     display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between',
   },
   num: {
-    fontFamily: "var(--font-instrument-serif), serif", fontStyle: 'italic',
+    fontWeight: 900,
     fontSize: 64, lineHeight: 1, color: 'var(--accent-strong)', marginBottom: 24,
   },
   stepTitle: { fontSize: 22, fontWeight: 600, marginBottom: 10, letterSpacing: '-0.01em' },

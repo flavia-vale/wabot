@@ -34,7 +34,7 @@ const s = {
     boxShadow: 'var(--shadow-soft)',
   },
   preservationList: { margin: 0, paddingLeft: 18, color: 'var(--ink)', lineHeight: 1.7, fontSize: 14.5 },
-  bigStat: { fontFamily: "var(--font-instrument-serif), serif", fontStyle: 'italic', fontSize: 88, lineHeight: 1, color: 'var(--accent-strong)', letterSpacing: '-0.04em' },
+  bigStat: { fontWeight: 900, fontSize: 88, lineHeight: 1, color: 'var(--accent-strong)', letterSpacing: '-0.04em' },
   storeRow: { display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 20 },
   store: { padding: '8px 14px', borderRadius: 999, background: 'var(--bg-soft)', border: '1px solid var(--line)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' },
 };

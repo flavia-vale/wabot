@@ -1,4 +1,5 @@
 import "./globals.css";
+import { preload } from "react-dom";
 import { ToastProvider } from "@/components/ToastProvider";
 import { ConversionPrompt } from "@/components/marketing/ConversionPrompt";
 import { GoogleAdsTag } from "@/components/marketing/GoogleAdsTag";
@@ -11,11 +12,13 @@ import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/
 // de build; quando o VPS/GitHub Actions fica sem acesso ao Google Fonts, o build
 // falha depois de `rm -rf .next` e o Next passa a servir HTML apontando para
 // chunks/CSS inexistentes (`/_next/static/...` 404), quebrando rotas como /admin.
-// Mantemos as mesmas CSS vars com pilhas locais/sistema para o build ser
-// determinístico e independente de rede externa.
+// A fonte do site é a Figtree, servida do próprio dashboard
+// (`public/fonts/figtree-latin.woff2`, declarada no `@font-face` do
+// globals.css): o build continua determinístico e independente de rede externa.
+// `--font-inter` manteve o nome para não espalhar troca de variável; o valor é
+// a Figtree. Pesos: 900 em títulos, preços e números; 400 no texto.
 const fontVariables = {
-  '--font-inter': 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  '--font-instrument-serif': '"Instrument Serif", Georgia, "Times New Roman", serif',
+  '--font-inter': 'Figtree, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   '--font-jetbrains-mono': '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
 }
 
@@ -141,6 +144,7 @@ function buildGlobalJsonLd() {
 
 export default function RootLayout({ children }) {
   const jsonLd = buildGlobalJsonLd();
+  preload('/fonts/figtree-latin.woff2', { as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' });
   return (
     <html lang="pt-br" style={fontVariables}>
       <body style={{ background: '#EEF6F2' }}>
