@@ -1,6 +1,6 @@
 export const CAPACITY_SERVICE_VERSION = 'admin-capacity-v1';
 import { buildCapacityResponse, sanitizeCapacityComponent, sanitizeCapacitySource } from './contract.js'
-import { evaluateCapacity, evaluateResourceHealth } from './policy.js'
+import { evaluateCapacity, evaluateResourceHealth, capacityPolicyOptionsFromEnv } from './policy.js'
 import { createCapacityRepository } from './repository.js'
 import { forecastCapacity } from './forecast.js'
 import { calculateCapacityScenario } from './scenario.js'
@@ -118,7 +118,7 @@ function persistedDecision(raw) {
   // a leitura ficava permanentemente inútil. A saúde é derivada das medições
   // brutas do próprio snapshot (função pura, sem consulta nova).
   if (raw.policyVersion && raw.safeSessionLimit != null) return { policyVersion: raw.policyVersion, state: raw.operationalState, resourceHealth: evaluateResourceHealth(raw).resources, safeLimit: raw.safeSessionLimit, estimatedMaximum: raw.estimatedMaximum, reserveMb: raw.reserveMb, sessionCostMb: raw.sessionCostMb, fixedBaseBudgetMb: raw.fixedBaseBudgetMb, headroomSessions: raw.headroomSessions, headroomMemoryMb: raw.headroomMemoryMb, bottleneck: raw.bottleneck, sessions: [raw.connectedSessions, raw.productionWorkers].filter(Number.isFinite).length ? Math.max(...[raw.connectedSessions, raw.productionWorkers].filter(Number.isFinite)) : null, reasons }
-  return evaluateCapacity(raw)
+  return evaluateCapacity({ ...raw, sessionCostFloorMb: capacityPolicyOptionsFromEnv().sessionCostFloorMb })
 }
 
 function presentHistoryPoint(at, item) { return { at: iso(at), memoryAvailableMb: item.memoryAvailableMb ?? null, memoryFreeMb: item.memoryFreeMb ?? null, memoryCacheMb: item.memoryCacheMb ?? null, processRssTotalMb: item.processRssTotalMb ?? null, cpuPercent: item.cpuPercent ?? null, load1: item.load1 ?? null, load5: item.load5 ?? null, load15: item.load15 ?? null, diskUsedMb: item.diskUsedMb ?? null, diskAvailableMb: item.diskAvailableMb ?? null, diskUsedPercent: item.diskUsedPercent ?? null, inodeUsedPercent: item.inodeUsedPercent ?? null, swapUsedMb: item.swapUsedMb ?? null, swapInKbPerSec: item.swapInKbPerSec ?? null, swapOutKbPerSec: item.swapOutKbPerSec ?? null, connectedSessions: item.connectedSessions ?? null, productionWorkers: item.productionWorkers ?? null, safeSessionLimit: item.safeSessionLimit ?? null, state: item.operationalState ?? item.state ?? null, sampleCount: item.sampleCount ?? null, expectedSampleCount: item.expectedSampleCount ?? null } }

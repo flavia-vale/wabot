@@ -38,6 +38,28 @@ contínua, pouca `MemAvailable`, disco e headroom determinam atenção/criticida
 O forecast só fornece horizonte quando há cobertura suficiente e crescimento
 positivo, sempre com faixa e confiança.
 
+**Piso e janela configuráveis (2026-09-23).** O piso de 350 MB e a janela de
+90 dias do p95 viraram env, sem mudar o padrão:
+
+| Env | Padrão | Efeito |
+|---|---|---|
+| `CAPACITY_SESSION_COST_FLOOR_MB` | 350 | piso do custo por robô; grampeado em [150, 1000], inválido = 350 |
+| `CAPACITY_WORKER_HISTORY_SINCE` | vazio | data ISO: o p95 por robô só usa medições a partir dela |
+
+Motivo medido: com jemalloc (2026-09-23, 53 robôs) o RSS por robô deu
+**p95 198 MB, máximo 218 MB** — e o piso de 350 fazia o limite seguro ficar em
+~71 com 23,8 GB livres. Piso 250 (p95 + ~25%) põe o limite em ~100 no servidor
+de 31.337 MB. A janela existe porque o p95 de 90 dias mistura o regime antigo
+(robôs mais pesados) e levaria três meses para refletir a economia; com o corte
+em `2026-09-22T23:00:00Z`, os primeiros 14 dias usam o piso e depois o p95 do
+regime atual — **o maior dos dois continua valendo**, então robô pesado nunca é
+escondido pelo piso.
+
+**Não regredir:** o piso de 250 só vale com jemalloc. Voltar ao glibc
+(rollback do `WA_WORKER_LD_PRELOAD`) exige apagar `CAPACITY_SESSION_COST_FLOOR_MB`
+junto. E isto muda só a CONTA do painel e dos alertas: quem recusa robô de
+verdade é `MAX_SESSIONS_PER_PROCESS` (teto de vagas), que não é tocado aqui.
+
 Snapshots horários são retidos por 90 dias; rollups horários por 12 meses
 e diários permanecem. Alertas exigem confirmação em duas amostras, possuem
 cooldown de 24 h, registram piora e recuperação e nunca executam ações. Eventos
@@ -146,6 +168,81 @@ Ordem recomendada: medir 24 h → staging com jemalloc + semi-space 8 por 24 h �
 produção (as duas na mesma janela) → medir 24 h → só então
 `--optimize-for-size`. Testes: `test/core/worker-spawn-options.test.js`,
 `test/ops-memory-growth-diagnosis.test.js`.
+
+### Resultado em produção: jemalloc + semi-space 8 (medido 2026-09-23 — não regredir)
+
+Produção roda com as duas alavancas desde **2026-09-22 ~22:50 UTC**. As chaves
+estão no `.env` de `~/wabot`:
+
+```
+WA_WORKER_MALLOC_ARENA_MAX=2        # janela 1; inerte com jemalloc, volta a valer no rollback
+WA_WORKER_LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+WA_WORKER_MALLOC_CONF=background_thread:true,dirty_decay_ms:5000,muzzy_decay_ms:5000,narenas:2
+WA_WORKER_MAX_SEMI_SPACE_MB=8
+```
+
+Medição de 24 h com a mesma idade de robô dos dois lados. "Antes" são 142
+robôs com série longa. "Depois" são 54 robôs com série longa. Mediana de
+memória anônima (`RssAnon`):
+
+| Idade do robô | Antes | Depois |
+|---|---:|---:|
+| 0 a 2 h | 108,4 MiB | 86,6 MiB |
+| 2 a 6 h | 131,4 MiB | 96,6 MiB |
+| 6 a 12 h | 142,3 MiB | 93,5 MiB |
+| 12 a 24 h | 146,4 MiB | 103,7 MiB |
+
+| Crescimento por hora (idade ≥ 2 h) | Antes | Depois |
+|---|---:|---:|
+| memória anônima (`/proc`) | 0,90 MiB | 0,63 MiB |
+| RSS total (`getBotMetrics`) | 2,02 MiB | 0,73 MiB |
+
+- **O ganho veio do alocador.** A memória do V8 (`heapTotal`) ficou igual,
+  entre 52 e 54 MiB com 12 a 24 h. O semi-space 8 não mexeu nela de forma
+  visível. A economia está fora do V8, que é onde a análise apontava.
+- **Na frota, são ~43 MiB por robô a partir de 12 h de vida**, ou ~2,3 GB com
+  54 robôs.
+- **Nenhum sinal de crash do alocador.** Zero `<jemalloc>` nos logs de erro e
+  zero `segfault` no kernel. Erros fatais de robô: 0 nas 24 h antes e 2 nas
+  24 h depois (`write EPIPE` durante reinício do supervisor e `ENOENT` num
+  arquivo de credencial). Nenhum é do alocador. Os robôs que renasceram
+  sozinhos passaram de 7 para 14 em 24 h, e só esses 2 foram erro fatal.
+- A política de capacidade não mudou nesse passo; o piso passou a ser
+  configurável depois (ver "Piso e janela configuráveis", acima).
+
+**Não regredir:**
+
+- **Com jemalloc, a coluna `heap_brk`/`glibc` vai a ~5 MiB e não prova
+  nada.** O jemalloc não usa a área `[heap]`. Comparar sempre `RssAnon` ou PSS
+  por faixa de idade. O veredito `retencao_alocador` do
+  `diag-memoria-crescimento.mjs --serie` depende dessa coluna e **não dispara
+  mais**; retenção do jemalloc apareceria como `fora_heap`.
+- **O marco de "depois" se grava ANTES do restart**, nunca depois. Na primeira
+  leitura o marco foi gravado ~40 s depois da frota nascer, os robôs com
+  jemalloc caíram no "antes" e o resultado saiu errado. O corte correto foi a
+  hora em que a env entrou no `.env` (22:37).
+- **Comparar por idade de robô, nunca por relógio.** Houve três reinícios da
+  frota na janela, e só a comparação na mesma idade sobrevive a isso.
+- **Antes de reiniciar o `bot-supervisor` à mão, conferir que não há deploy
+  rodando** (`pm2 describe api` com uptime baixo, `ps aux | grep -E "npm ci|deploy_safe"`).
+  Em 2026-09-22 o restart das 22:37 coincidiu com um deploy (a `api` também
+  reiniciou às 22:39, e `node_modules/bullmq` tinha mtime 22:37). O supervisor
+  ficou "online" sem processar comando nenhum por ~14 min, com zero robôs e o
+  painel mostrando `listRunningBots`/`isRunning timed out`. Voltou com mais um
+  `pm2 restart bot-supervisor`. A colisão com o `npm ci` é a causa **provável**,
+  não provada; o log de erro tinha `Cannot find package .../bullmq/index.js`,
+  sem hora na linha.
+
+Rollback, se precisar (reconecta a frota):
+
+```bash
+sed -i '/^WA_WORKER_\(LD_PRELOAD\|MALLOC_CONF\|MAX_SEMI_SPACE_MB\)=/d' ~/wabot/.env
+pm2 restart bot-supervisor --update-env && pm2 save
+```
+
+Próxima alavanca da §6 da análise, se quiser mais: `WA_WORKER_V8_OPTIMIZE_FOR_SIZE=1`
+(−13 MiB fixos medidos em laboratório, ~10% de CPU em GC). Custa outra
+reconexão da frota e precisa da mesma medição por idade.
 
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
