@@ -252,6 +252,9 @@ export const CORE_SEO_ROUTES = [
   { path: '/llms.txt', template: 'ai-reference', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/pricing.md', template: 'ai-reference', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/termos', template: 'legal', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
+  // Política de reembolso pública (23/09/2026) — evidência de confiança que o
+  // ChatGPT cobrou na consulta "bot para afiliados no WhatsApp".
+  { path: '/politica-de-reembolso', template: 'legal', priority: 0.6, changeFrequency: 'monthly', lastModified: resolveLastModified('/politica-de-reembolso', '2026-09-23'), indexable: true },
   { path: '/privacidade', template: 'legal', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/quem-somos', template: 'institutional', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/suporte', template: 'support', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
@@ -285,6 +288,10 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/amazon-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/amazon-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/shein-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/shein-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/magalu-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/magalu-afiliados-whatsapp', '2026-09-02'), indexable: true },
+  // Modo "o robô busca a oferta sozinho" (23/09/2026): o ChatGPT lia "bot para
+  // afiliados" como garimpo automático e não sabia que temos esse modo.
+  // title/description ficam só em _preservationCommercialPages.js (FR-001).
+  { path: '/bot-que-busca-ofertas-shopee-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-que-busca-ofertas-shopee-whatsapp', '2026-09-23'), indexable: true },
   { path: '/bot-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-afiliados-whatsapp', '2026-07-30'), indexable: true },
   { path: '/bot-achadinhos-whatsapp', template: 'commercial-seo', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-achadinhos-whatsapp', '2026-07-30'), indexable: true },
   { path: '/anti-ban-whatsapp', template: 'commercial-seo', priority: 0.85, changeFrequency: 'weekly', lastModified: resolveLastModified('/anti-ban-whatsapp', '2026-07-30'), indexable: true },
@@ -398,6 +405,14 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/alternativas/shark', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/shark', '2026-09-17'), indexable: true },
   { path: '/alternativas/afiliado-inteligente', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/afiliado-inteligente', '2026-09-17'), indexable: true },
   { path: '/alternativas/afilimais', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/afilimais', '2026-09-17'), indexable: true },
+  // Cinco comparativos de 23/09/2026: nomes que o ChatGPT citou na consulta
+  // "bot para afiliados no WhatsApp", com preço coletado direto na página
+  // oficial de cada um. title/description ficam só em _comparisonContent.js.
+  { path: '/alternativas/easyfy', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/easyfy', '2026-09-23'), indexable: true },
+  { path: '/alternativas/lucreshop', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/lucreshop', '2026-09-23'), indexable: true },
+  { path: '/alternativas/afiliai', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/afiliai', '2026-09-23'), indexable: true },
+  { path: '/alternativas/achify', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/achify', '2026-09-23'), indexable: true },
+  { path: '/alternativas/afiliados-turbo', template: 'alternatives', priority: 0.85, changeFrequency: 'monthly', lastModified: resolveLastModified('/alternativas/afiliados-turbo', '2026-09-23'), indexable: true },
   // Intenção "clonar mensagens de grupo afiliado" (2026-08-26). O site
   // inteiro diz "espelhar"; o mercado busca "clonar" — e a Visão Geral do
   // Google responde essa busca listando concorrentes. title/description ficam

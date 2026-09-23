@@ -47,6 +47,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Depois de entrar no Shopee Afiliados, o trabalho deixa de ser achar oferta e passa a ser publicar. Cada produto precisa virar link com o seu código, o texto precisa ser montado, e tudo isso repetido em cada grupo. O Espelha Grupos faz esse caminho sozinho: acompanha as origens que você escolhe, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e registro do que saiu.',
     intent: 'shopee afiliados whatsapp',
     related: [
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Não tem grupo de onde copiar? O robô busca sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, no plano Pro.' },
       { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com a chave da Shopee', note: 'Onde ela fica, para que serve e como apagar quando quiser.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'A mensagem sai como publicação sua, com o seu link.' },
       { href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', label: 'Ainda não tem grupo grande?', note: 'O que dá para fazer com poucos contatos, sem esperar audiência chegar.' },
@@ -336,6 +337,111 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Amazon, Mercado Livre e Magalu entram no mesmo plano de entrada.'],
     ],
   },
+  /* Página do modo "o robô busca a oferta sozinho" (23/09/2026).
+   *
+   * Nasceu de medição: na consulta "bot para afiliados no WhatsApp", o ChatGPT
+   * leu a pergunta como "robô que garimpa oferta sozinho" e nos deixou de fora,
+   * porque nenhuma página pública dizia que temos esse modo — só o
+   * espelhamento aparecia. O recurso existe desde antes (ofertas automáticas
+   * da Shopee, plano Pro), e esta página diz com precisão o que ele faz.
+   *
+   * Tudo aqui foi conferido no código, não no marketing:
+   *  - src/offerAutomation/ (cron, dispatcher, shopeeOffers, searchListType);
+   *  - as 5 ordens de busca e a dica de cada uma vêm de
+   *    lib/offerAutomationSearch.js — nunca citar o número da API;
+   *  - intervalo de 15 min a 24 h ou 1x/dia em horário fixo, de 1 a 5 ofertas
+   *    por envio (src/api/routes/offerAutomation.js);
+   *  - é SÓ Shopee. Mercado Livre, Amazon e as outras lojas só convertem link
+   *    que já existe — não prometer busca nelas (docs/rca/ofertas-automaticas).
+   *
+   * Título entra pela palavra buscada; o termo interno ("ofertas automáticas",
+   * "garimpo") é explicado dentro da página. */
+  'bot-que-busca-ofertas-shopee-whatsapp': {
+    path: '/bot-que-busca-ofertas-shopee-whatsapp',
+    title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp',
+    description: 'Diga o tema e o robô procura ofertas na Shopee, filtra pelo desconto, troca o link pelo seu código e publica nos seus grupos. Plano Pro, 7 dias grátis.',
+    eyebrow: 'Ofertas automáticas da Shopee',
+    h1: 'Bot que busca ofertas da Shopee sozinho e publica no seu WhatsApp',
+    lead: 'Você escreve o tema — "air fryer", "tênis", "maquiagem" — e o Espelha Grupos procura as ofertas na Shopee, descarta as que não têm o desconto mínimo que você pediu, troca o link pelo seu código de afiliada e publica nos seus grupos no ritmo que você escolher. Não precisa de grupo de origem nenhum. No painel, esse modo se chama "ofertas automáticas" (o mercado também chama de garimpo automático) e faz parte do plano Pro.',
+    intent: 'bot que busca ofertas shopee whatsapp',
+    related: [
+      { href: '/bot-afiliados-whatsapp', label: 'O outro modo: espelhar grupos que você já segue', note: 'Converte o link em 6 lojas e republica nos seus grupos e canais.' },
+      { href: '/shopee-afiliados-whatsapp', label: 'Shopee Afiliados no WhatsApp', note: 'Como a oferta da Shopee sai com o seu link, inclusive cupom.' },
+      { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
+      { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee', note: 'A tabela de comissão e o prazo de atribuição.' },
+      { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com a chave da Shopee', note: 'Onde ela fica, para que serve e como apagar quando quiser.' },
+      { href: '/politica-de-reembolso', label: 'Política de reembolso', note: 'Até 7 dias do pagamento, valor integral de volta.' },
+      { href: '/precos', label: 'Preços e planos', note: 'Basic, Pro e o teste grátis de 7 dias lado a lado.' },
+    ],
+    about: ['Shopee Afiliados', 'Ofertas automáticas', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'O Espelha Grupos busca ofertas sozinho ou só repassa as de outros grupos?',
+        a: 'Faz os dois. O modo de espelhamento acompanha os grupos e canais que você já segue e republica as ofertas com o seu link, em 6 lojas. O modo de ofertas automáticas não precisa de grupo de origem: o próprio robô procura na Shopee pelo tema que você escreveu e publica sozinho. Os dois podem rodar juntos na mesma conta.',
+      },
+      {
+        q: 'Em quais lojas o robô busca oferta sozinho?',
+        a: 'Hoje, só na Shopee. Mercado Livre, Amazon, Magalu, SHEIN e AliExpress entram pela conversão de link: o robô troca pelo seu código o link que chega de um grupo que você acompanha, mas não sai procurando oferta nessas lojas.',
+      },
+      {
+        q: 'Como eu digo o que ele deve procurar?',
+        a: 'Você escreve o tema (palavra-chave), o desconto mínimo, a ordem da busca, quantas ofertas saem por vez (de 1 a 5) e de quanto em quanto tempo (de 15 minutos a 24 horas, ou uma vez por dia num horário fixo). E escolhe o grupo que recebe.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'As ofertas automáticas fazem parte do plano Pro, de R$69 a cada 30 dias. O teste grátis de 7 dias libera o Pro completo, sem cartão. O plano Basic, de R$39, não inclui esse modo — ele cobre o espelhamento e a conversão de link.',
+      },
+    ],
+    aside: {
+      pill: 'Os dois modos numa conta só',
+      title: 'Espelhar o que você já segue e buscar oferta sozinho.',
+      body: 'O mercado costuma dividir isso em duas ferramentas: uma que repassa o que aparece em outros grupos e outra que garimpa oferta sozinha. No Espelha Grupos os dois modos convivem: o espelhamento cobre 6 lojas, e a busca automática por tema funciona na Shopee, no plano Pro.',
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona',
+    problemTitle: 'Nem sempre existe um grupo bom de onde copiar oferta.',
+    problem: 'Quem está começando, ou divulga um nicho específico, muitas vezes não tem um grupo de origem confiável para acompanhar. Sobra abrir a Shopee, pesquisar, conferir desconto, gerar o link com o seu código e montar a mensagem — todo dia, várias vezes. A busca automática faz essa parte: você define o tema e as regras uma vez, e as ofertas passam a sair sozinhas no seu grupo.',
+    bestFor: {
+      yes: [
+        'Afiliada Shopee que quer ofertas de um tema específico saindo sozinhas no grupo, sem depender de outro grupo de origem.',
+        'Quem já espelha grupos e quer completar o dia com ofertas garimpadas por tema.',
+        'Quem quer controlar o desconto mínimo, a ordem da busca e o ritmo dos envios.',
+      ],
+      no: [
+        'Quem quer o robô buscando oferta sozinho em Amazon ou Mercado Livre: nessas lojas o Espelha Grupos só converte link que já chegou de um grupo.',
+        'Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.',
+        'Quem quer isso no plano Basic: a busca automática é recurso do plano Pro.',
+      ],
+    },
+    // Quem também vende "o robô busca sozinho". Sem preço aqui de propósito:
+    // preço de concorrente só sai com ficha datada, nas páginas de alternativa.
+    versus: [
+      { name: 'Achify', href: '/alternativas/achify', verdict: 'Tem piloto automático na Shopee já no plano de entrada, com Telegram, vitrine e selo de desconto na foto, mas envia para poucos grupos e só espelha a partir do plano intermediário. Escolha o Achify para poucos grupos; o Espelha Grupos para espelhar e buscar sem pagar por grupo.' },
+      { name: 'Afiliados Turbo', href: '/alternativas/afiliados-turbo', verdict: 'Busca ofertas nos marketplaces e classifica por categoria com IA, cobrando por grupos e por ofertas no mês. Escolha o Afiliados Turbo se quer categoria por grupo; o Espelha Grupos se publica muitas ofertas em vários grupos.' },
+      { name: 'AfiliAI', href: '/alternativas/afiliai', verdict: 'Tem AutoPilot e clone de grupos, WhatsApp e Telegram e vários números na mesma conta, com teto de grupos de destino por plano. Escolha o AfiliAI se precisa de Telegram; o Espelha Grupos se publica em muitos grupos ou divulga SHEIN e AliExpress.' },
+    ],
+    bullets: [
+      'Busca por tema na Shopee, com desconto mínimo que você define.',
+      'Cinco ordens de busca à escolha: relevância, mais vendidos, maior preço, menor preço ou maior comissão.',
+      'O link já sai com o seu código de afiliada Shopee.',
+      'O mesmo produto não é publicado de novo: o que já saiu fica de fora das próximas buscas.',
+    ],
+    process: [
+      'Cadastre a sua chave de afiliada da Shopee no painel (App ID e chave secreta).',
+      'Crie uma oferta automática: escreva o tema, o desconto mínimo e a ordem da busca.',
+      'Escolha o grupo que recebe, quantas ofertas saem por vez (1 a 5) e de quanto em quanto tempo (15 minutos a 24 horas, ou 1 vez por dia num horário fixo).',
+      'Acompanhe no histórico o que saiu e ajuste o tema ou a ordem se aparecer muito acessório.',
+    ],
+    faqs: [
+      ['Que ordens de busca existem?', 'Cinco, com os nomes da própria Shopee. Relevância segue o que a Shopee acha mais próximo do texto que você digitou. Mais vendidos costuma trazer acessório, porque acessório vende muito mais que o aparelho. Maior preço é a opção que, na nossa medição, traz o aparelho em si em vez do acessório dele. Menor preço traz quase sempre acessório. Maior comissão paga mais por venda, mas traz ainda mais acessório, porque é o acessório barato que paga mais comissão.'],
+      ['Por que às vezes só aparece capa ou cápsula?', 'Porque o acessório vende mais e paga mais comissão que o produto principal, então sobe nas ordens "mais vendidos" e "maior comissão". Duas coisas resolvem: escrever o nome do produto em vez da categoria ("máquina de lavar" em vez de "eletrodoméstico") e trocar a ordem para "maior preço".'],
+      ['Posso usar o espelhamento e a busca automática juntos?', 'Pode. Os dois modos rodam na mesma conta: o espelhamento repassa, com o seu link, o que aparece nos grupos que você acompanha (em 6 lojas), e a busca automática completa o grupo com ofertas da Shopee pelo tema que você escolheu.'],
+      ['A mesma oferta sai repetida?', 'Não. O produto que já foi publicado por aquela automação sai das próximas buscas, e o mesmo produto enviado ao mesmo grupo por outra automação é segurado por uma janela de tempo — a não ser que o preço tenha mudado, porque aí é oferta nova.'],
+      ['Preciso deixar o celular ligado?', 'Não. Depois de conectar o WhatsApp lendo o QR Code, o robô roda no servidor.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: quantas ofertas saem por vez, o intervalo entre as buscas e a revisão do que foi publicado.'],
+      ['E se eu pagar e não gostar?', 'Em até 7 dias corridos depois do pagamento, devolvemos o valor integral. Antes de pagar, o teste grátis de 7 dias já libera o Pro completo, sem cartão.'],
+    ],
+  },
   'bot-afiliados-whatsapp': {
     path: '/bot-afiliados-whatsapp',
     title: 'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',
@@ -352,6 +458,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
     intent: 'bot para afiliados whatsapp',
     related: [
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'O robô também busca oferta sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem (plano Pro).' },
+      { href: '/politica-de-reembolso', label: 'Política de reembolso', note: 'Até 7 dias do pagamento, valor integral de volta; depois, cancelamento sem multa.' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'Checklist, preço e como testar em 7 dias.' },
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'E quem faz cada uma.' },
@@ -385,6 +493,14 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
         a: `É um robô que acompanha os grupos que você já segue, troca o link de cada oferta pelo seu código de afiliado (${SUPPORTED_STORES.join(', ')}) e publica a oferta convertida nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.`,
       },
       {
+        // 23/09/2026: o ChatGPT lê "bot para afiliados" como "robô que busca
+        // oferta sozinho" e nos deixava de fora por não saber que temos esse
+        // modo. A resposta precisa dizer os DOIS modos, com o limite certo
+        // (busca automática só na Shopee, plano Pro).
+        q: 'Ele só repassa ofertas de outros grupos ou também busca oferta sozinho?',
+        a: 'Os dois. No modo de espelhamento, o robô acompanha os grupos e canais que você já segue e republica cada oferta com o seu código, em 6 lojas. No modo de ofertas automáticas (plano Pro), ele não precisa de grupo de origem: procura sozinho na Shopee pelo tema que você escrever, filtra pelo desconto mínimo e publica no seu grupo. Hoje a busca sozinha é só na Shopee; nas outras lojas o robô converte o link que chega dos grupos que você acompanha.',
+      },
+      {
         q: 'Como funciona na prática?',
         a: 'Você cadastra as credenciais de afiliada de cada loja, escolhe os grupos de origem (onde as ofertas aparecem primeiro) e os grupos/canais de destino (onde você publica), define o intervalo entre envios, e o robô converte e publica sozinho — com o que saiu, para onde e o que foi bloqueado registrado no histórico.',
       },
@@ -414,6 +530,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       yes: [
         'Afiliada que já acompanha grupos de ofertas e quer republicar nos seus com o próprio código, sem copiar e colar.',
         'Quem divulga mais de uma loja: as 6 lojas entram no plano de entrada, sem cobrar por grupo.',
+        'Quem quer os dois modos numa conta só: espelhar os grupos que já segue e, no Pro, deixar o robô buscar oferta da Shopee sozinho por tema.',
         'Quem quer ver no histórico o que saiu, o que foi bloqueado por repetição e por quê.',
       ],
       no: [
@@ -462,6 +579,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'bot para achadinhos whatsapp',
     relatedTitle: 'Continue: o que publicar nos seus achadinhos',
     related: [
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Bot que busca achadinhos da Shopee sozinho', note: 'Você escreve o tema e o desconto mínimo; o robô garimpa e publica (plano Pro).' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'Checklist, preço e como testar em 7 dias.' },
@@ -509,7 +627,11 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     process: ['Escolha os grupos onde os achadinhos aparecem primeiro — eles viram sua fonte.', 'Escolha os seus grupos e canais que vão receber as ofertas.', 'Defina o intervalo entre envios e quais palavras você não quer repassar.', 'Acompanhe no histórico o que saiu, para onde e o que foi bloqueado por repetição.'],
     faqs: [
       ['O que é um bot de achadinhos?', 'É um programa que acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.'],
-      ['De onde vêm os achadinhos?', 'Dos grupos que você já acompanha e escolhe como fonte. O bot não inventa oferta nem busca em lugar nenhum sozinho: ele repassa o que aparece nas fontes que você indicou, com o seu link no lugar do original.'],
+      // Corrigido em 23/09/2026: a resposta antiga dizia que o bot "não busca em
+      // lugar nenhum sozinho" — falso desde as ofertas automáticas da Shopee
+      // (plano Pro). Era exatamente a leitura que fazia o ChatGPT nos deixar
+      // de fora de "bot para afiliados no WhatsApp".
+      ['De onde vêm os achadinhos?', 'De dois lugares, à sua escolha. No espelhamento, dos grupos que você já acompanha e escolhe como fonte: o bot repassa o que aparece ali, com o seu link no lugar do original, em 6 lojas. No plano Pro, também da própria Shopee: você escreve o tema e o desconto mínimo, e o bot busca as ofertas sozinho e publica no seu grupo. A busca sozinha hoje é só na Shopee.'],
       ['A comissão fica comigo mesmo se a oferta veio de outro grupo?', 'Fica, desde que o link seja convertido antes de sair. É esse o ponto: encaminhar o link do jeito que veio credita a venda para quem publicou primeiro. O Espelha Grupos troca pelo seu código de Shopee, Amazon, Mercado Livre ou Magalu antes de publicar.'],
       ['Ele posta a mesma promoção várias vezes?', 'Não no mesmo grupo dentro da janela de repetição. Se a mesma oferta chega por duas fontes diferentes, ela sai uma vez só — e o histórico mostra quantas repetições foram bloqueadas.'],
       ['Preciso ficar com o celular ligado?', 'O aparelho precisa estar conectado à internet, como no WhatsApp Web. Mas você não precisa estar olhando: as ofertas saem sozinhas conforme as regras que você definiu.'],

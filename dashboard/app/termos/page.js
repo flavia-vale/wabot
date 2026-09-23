@@ -48,6 +48,8 @@ export default async function TermsPage() {
 
         <p>
           Dúvidas sobre estes termos podem ser enviadas pela página de <Link href="/suporte" className="text-inherit underline hover:no-underline">suporte</Link>.
+          Como pedir o dinheiro de volta e o que acontece depois dos 7 dias está na{' '}
+          <Link href="/politica-de-reembolso" className="text-inherit underline hover:no-underline">política de reembolso</Link>.
         </p>
       </div>
     </PublicPage>

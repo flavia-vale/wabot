@@ -3,6 +3,9 @@ import Link from 'next/link'
 const footerLinks = [
   { href: '/termos', label: 'Termos de Uso' },
   { href: '/privacidade', label: 'Privacidade' },
+  // Política de reembolso pública (23/09/2026): evidência de confiança que o
+  // ChatGPT cobrou na consulta "bot para afiliados no WhatsApp".
+  { href: '/politica-de-reembolso', label: 'Reembolso' },
   { href: '/quem-somos', label: 'Quem Somos' },
   { href: '/suporte', label: 'Suporte' },
   { href: '/bot-ofertas-whatsapp', label: 'Nichos' },
