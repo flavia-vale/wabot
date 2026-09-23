@@ -9,7 +9,8 @@ próprio (`now` entra por parâmetro), sem env lida no topo.
 | Consumidor | Uso |
 |---|---|
 | `src/bot-worker.js` → `processSendJob` | decide o espaçamento, combina com o gate do destino, adia via `deferSendJob` e atualiza o estado em memória |
-| `src/core/channelThrottle.js` → `checkAndReserve` | recebe a decisão de espaçamento e só reserva o slot do destino se a decisão combinada liberar |
+| `src/core/channelThrottle.js` → `checkAndReserve`/`peekDestinationDecision`/`reserveDestinationSlot` | decisão sem reservar (peek); reserva o slot do destino só quando a decisão combinada libera |
+| `src/api/routes/preservation.js` (GET `/config`) | usa **só** `toDestinationIntervalMs` para expor `effective.destinationIntervalSec` em segundos — nunca decide/combina |
 | `scripts/diag-antiban-valores.mjs` | projetar atraso e vazão (import, nunca cópia) |
 
 Nenhum outro arquivo pode calcular espera entre destinos nem combinar esperas.

@@ -9,6 +9,9 @@ import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRis
 import { getClickStats } from '../../core/clickTracker.js'
 import { getProbeMonitoringSummary } from '../../core/probeEvidence.js'
 import { getProbeSessionSnapshot, isProbeSessionSelectable, setProbeSession } from '../../core/probeSessions.js'
+import { describeDestinationFloor } from '../../core/antiBanFloor.js'
+import { resolveDestinationPreservation } from '../../core/preservationConfig.js'
+import { toDestinationIntervalMs } from '../../core/destinationSpacing.js'
 
 // Nota: as variações de texto (gancho/CTA/convite) — pool e liga/desliga —
 // NÃO vivem mais aqui. São editadas exclusivamente em "Templates de mensagens"
@@ -32,6 +35,11 @@ function pickConfig(botConfig) {
     out[publicKey] = botConfig?.[k] ?? null
   }
   out.probeAccountSessionId = botConfig?.probeAccountSessionId ?? null
+  // Campo ADITIVO (contracts/api-preservation.md § Leitura): o "Intervalo
+  // entre destinos" em SEGUNDOS, como a tela Anti-banimento mostra — derivado
+  // de channelStaggerJitterMs, nunca gravado por fora. Nenhum campo de conta
+  // tem piso, então não há ritmoMaisCuidadoso aqui.
+  out.effective = { destinationIntervalSec: Math.round(toDestinationIntervalMs(botConfig) / 1000) }
   return out
 }
 
@@ -210,7 +218,17 @@ export async function preservationRoutes(app) {
       select: PRESET_SELECT,
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
     })
-    return { presets }
+    // Campos ADITIVOS (contracts/api-preservation.md § Leitura): um preset não
+    // herda nada (é ele mesmo o "modelo"), então resolvedThrottleEnabled é o
+    // próprio valor gravado. `camposNoPiso` é só diagnóstico/log — nunca vai
+    // para a tela (contracts/anti-ban-floor.md).
+    const enriched = presets.map((preset) => {
+      const { ritmoMaisCuidadoso, recomecouDoPadrao } = describeDestinationFloor(preset, {
+        resolvedThrottleEnabled: preset.throttleEnabled !== false,
+      })
+      return { ...preset, ritmoMaisCuidadoso, recomecouDoPadrao }
+    })
+    return { presets: enriched }
   })
 
   app.post('/presets', async (req, reply) => {
@@ -276,12 +294,34 @@ export async function preservationRoutes(app) {
 
   app.get('/destinations', async (req, reply) => {
     if (await requirePreservationAccess(req, reply)) return
-    const destinations = await db.group.findMany({
-      where: { userId: req.user.sub, role: 'post' },
-      select: DESTINATION_SELECT,
-      orderBy: { name: 'asc' },
+    const [destinations, defaultPreset] = await Promise.all([
+      db.group.findMany({
+        where: { userId: req.user.sub, role: 'post' },
+        select: { ...DESTINATION_SELECT, preservationPreset: { select: PRESET_SELECT } },
+        orderBy: { name: 'asc' },
+      }),
+      db.preservationPreset.findFirst({ where: { userId: req.user.sub, isDefault: true } }),
+    ])
+    // Campos ADITIVOS (contracts/api-preservation.md § Leitura): `effective` é
+    // a config JÁ resolvida com o piso (mesmo caminho do robô,
+    // resolveDestinationPreservation). `resolvedThrottleEnabled` para a
+    // etiqueta precisa ser o valor resolvido ANTES do piso forçar
+    // throttleEnabled=true — por isso a segunda chamada com
+    // ANTI_BAN_FLOOR=off, só para enxergar esse estado (reaproveita o MESMO
+    // chokepoint, nunca reimplementa a comparação).
+    const enriched = destinations.map(({ preservationPreset, ...dest }) => {
+      const effective = resolveDestinationPreservation(dest, { preset: preservationPreset, defaultPreset })
+      const preFloor = resolveDestinationPreservation(dest, {
+        preset: preservationPreset,
+        defaultPreset,
+        env: { ANTI_BAN_FLOOR: 'off' },
+      })
+      const { ritmoMaisCuidadoso, recomecouDoPadrao } = describeDestinationFloor(dest, {
+        resolvedThrottleEnabled: preFloor.throttleEnabled,
+      })
+      return { ...dest, ritmoMaisCuidadoso, recomecouDoPadrao, effective }
     })
-    return { destinations }
+    return { destinations: enriched }
   })
 
   app.put('/destinations/:id', async (req, reply) => {

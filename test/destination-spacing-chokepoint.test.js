@@ -16,6 +16,11 @@ const repoRoot = resolve(__dirname, '..')
 const ALLOWED_IMPORTERS = [
   'src/bot-worker.js',
   'src/core/channelThrottle.js',
+  // Só usa toDestinationIntervalMs (leitura/formatação para exibir
+  // "Intervalo entre destinos" em segundos no GET /config) — nunca
+  // decideDestinationSpacing/combineGateDecisions. contracts/api-preservation.md
+  // § Leitura exige o campo aditivo `effective.destinationIntervalSec`.
+  'src/api/routes/preservation.js',
   'scripts/diag-antiban-valores.mjs',
 ]
 
@@ -41,6 +46,16 @@ test('só os consumidores permitidos importam src/core/destinationSpacing.js', (
       ALLOWED_IMPORTERS.includes(file),
       `${file} importa destinationSpacing.js mas não está na lista de consumidores permitidos (contracts/destination-spacing.md)`,
     )
+  }
+})
+
+test('src/api/routes/preservation.js só importa toDestinationIntervalMs de destinationSpacing.js (nunca decide/combina)', () => {
+  const source = readFileSync(join(repoRoot, 'src/api/routes/preservation.js'), 'utf8')
+  const importLine = source.split('\n').find((line) => line.includes("from '../../core/destinationSpacing.js'"))
+  assert.ok(importLine, 'preservation.js precisa importar de core/destinationSpacing.js')
+  assert.match(importLine, /\btoDestinationIntervalMs\b/)
+  for (const forbidden of ['decideDestinationSpacing', 'combineGateDecisions', 'reserveSpacingSlot']) {
+    assert.doesNotMatch(importLine, new RegExp(`\\b${forbidden}\\b`), `preservation.js não pode importar ${forbidden} — só formata para exibição`)
   }
 })
 
