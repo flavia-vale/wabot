@@ -320,6 +320,15 @@ bloqueio da Cloudflare por reputação do IP de nuvem (ação nossa). O
 por nome de robô. O que separa: no AI Crawl Control, filtrar Claude-User e
 Perplexity-User e ver os códigos e os endereços dos pedidos sem sucesso.
 
+**Série diária exportada (23/09)** — Claude-User e Perplexity-User por dia. O
+arquivo traz só a contagem, **sem código nem endereço**, e a soma (123 e 17) não
+bate com nenhum dos totais do painel, então não serve para separar sucesso de
+falha. O que ela mostra: **pico em 18/09** nos dois (Claude-User 29, 6× a média;
+Perplexity-User 13, contra zero nos 25 dias anteriores) — **o mesmo dia do
+bloqueio da Cloudflare**. *Hipótese:* parte das falhas é daquele bloqueio, já
+desfeito. Confirma-se abrindo o detalhe de um dos robôs e olhando o código de
+resposta.
+
 ### Bing Webmaster Tools (primeira leitura, 23/09)
 
 | Janela | Impressões | Cliques | CTR |
