@@ -56,7 +56,7 @@ usa (`presentGroupsForPlan`): a tela nunca mostra marca/botão que não sai.
 |---|---|
 | Etiqueta, cadeado, janela "Ver planos", página travada com prévia | `dashboard/components/pro/ProGate.js` |
 | Prévias de exemplo (nunca dado real) | `dashboard/components/pro/previews.js` |
-| Menu: Divulgar → Automatizar → Configurar → Preservação → Conta | `dashboard/app/painel/nav.js` |
+| Menu (nomes e ordem de sempre; itens PRO com cadeado; Minha conta no fim de Conta) | `dashboard/app/painel/nav.js` |
 | Ritmo dos envios na tela WhatsApp | `dashboard/components/pro/RhythmCard.js` |
 | Minha conta | `dashboard/app/painel/conta/page.js` (+ `PATCH /api/auth/me/name`) |
 

@@ -53,8 +53,7 @@ test('message templates page prioritizes models and progressively discloses supp
   const nav = read('dashboard/app/painel/nav.js')
   const page = read('dashboard/app/painel/mensagens/page.js')
 
-  // Protótipo Basic/PRO (2026-09-23): o item do menu chama "Mensagens".
-  assert.match(nav, /label: 'Mensagens',\n\s+href: '\/painel\/mensagens'/)
+  assert.match(nav, /label: 'Templates de mensagens'/)
   assert.match(page, /usePainelHeader\(\{ title: 'Templates de mensagens'/)
   assert.doesNotMatch(page, /PainelContentActions/)
 

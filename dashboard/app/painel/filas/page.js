@@ -44,7 +44,7 @@ function formatItemDate(value) {
 }
 
 export default function FilasPage() {
-  usePainelHeader({ title: 'Filas de ofertas', subtitle: 'Organize ofertas e preserve o ritmo de envio automaticamente' })
+  usePainelHeader({ title: 'Filas', subtitle: 'Organize ofertas e preserve o ritmo de envio automaticamente' })
   const [queues, setQueues] = useState([])
   const [groups, setGroups] = useState([])
   const [instagramDestinations, setInstagramDestinations] = useState([])
@@ -201,7 +201,7 @@ export default function FilasPage() {
   return <div className="pnl-grid" style={{ maxWidth: 980, margin: '0 auto' }}>
     <header className="pnl-pro-head">
       <div>
-        <h2>Filas de ofertas</h2>
+        <h2>Filas</h2>
         <p>Junte ofertas numa fila e o robô publica uma de cada vez, no ritmo que você escolher.</p>
       </div>
       <button type="button" className="pnl-btn is-primary" onClick={openCreate}>+ Nova fila</button>
@@ -272,7 +272,7 @@ export default function FilasPage() {
             title={queue.enabled ? 'Pausar fila' : 'Ativar fila e enviar a primeira oferta agora'}
             style={{ marginTop: 1, opacity: toggling === queue.id ? 0.55 : 1 }}
           ><span /></button>
-          <div style={{ minWidth: 0 }}><div className="pnl-card-title" style={{ fontSize: 15 }}>{queue.name}</div><p className="pnl-hint" style={{ marginTop: 4 }}>publica em {destinationsLabel(queue)} · {queue.enabled ? summary(queue) : 'envios pausados — os itens permanecem na fila'}</p></div>
+          <div style={{ minWidth: 0 }}><div className="pnl-card-title">{queue.name}</div><p className="pnl-hint" style={{ marginTop: 4 }}>publica em {destinationsLabel(queue)} · {queue.enabled ? summary(queue) : 'envios pausados — os itens permanecem na fila'}</p></div>
         </div>
         <span className={`pnl-tag ${queue.enabled ? 'is-success' : 'is-skip'}`}>{toggling === queue.id ? 'Atualizando…' : queue.enabled ? 'Ativa' : 'Pausada'}</span>
       </div>
