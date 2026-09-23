@@ -6242,37 +6242,61 @@ API Platform. Please check the error code description on the front-end page
 and contact the Shopee Affiliate team
 ```
 
-Diferente de `10020` ("Invalid Signature"), esse código nunca tinha sido visto
-antes e **não estava em `SHOPEE_AUTH_REJECTED_CODES`** — por regra
-(`classifyShopeeProbeResponse`), qualquer código fora da lista vira
-`alive: null` (indeterminado) de propósito, para nunca mandar a cliente
-recadastrar uma chave viva à toa. Só que `10035` não é ruído transitório: é a
-própria Shopee dizendo, em texto claro, que a conta perdeu acesso à API —
-mesma classe de recusa definitiva que `10020`, só que noutro código.
+⚠️ **Primeira correção estava ERRADA e foi derrubada pela própria cliente no
+mesmo dia.** A primeira versão deste fix tratou `10035` como equivalente a
+`10020` ("Invalid Signature") — mesma classe de "chave recusada, TODA
+conversão para". Isso teria disparado o e-mail `chave_shopee_recusada`
+("as ofertas da Shopee pararam de sair") — e a cliente relatou que o
+**espelhamento dela continuava publicando ofertas de Shopee normalmente**
+o tempo todo, só "Criar oferta" via em branco. Mandar aquele e-mail teria
+sido uma mentira nova, pior que o silêncio original.
+
+**A explicação: a API de afiliado tem DUAS operações com autorização
+SEPARADA no mesmo endpoint.** `convert()`/espelhamento usa a mutation
+`generateShortLink` (gera o link em si) — não bateu em `10035` nesta conta.
+`fetchShopeeProductInfo` (título/preço), `fetchShopeeImage` (foto),
+`checkShopeeSession` (sondagem) e `offerAutomation/shopeeOffers.js` (busca
+das ofertas automáticas) usam a query `productOfferV2` (catálogo/descoberta
+de ofertas) — foi essa que devolveu `10035`. A Shopee libera/nega acesso por
+MÓDULO da API, não pela chave inteira: o direito básico de gerar link de
+afiliado é separado do módulo de catálogo. Diferente de `10020`, que é falha
+de assinatura e por isso derruba **qualquer** chamada (inclusive
+`generateShortLink`).
 
 **Não regredir:**
 
-- **`10035` entrou em `SHOPEE_AUTH_REJECTED_CODES`** (junto com `10020`) — a
-  sondagem (`checkShopeeSession`), o aviso por e-mail
-  (`chave_shopee_recusada`) e o banner do painel passam a acusar essa conta
-  como chave recusada em vez de ficar mudos para sempre.
-- **`fetchShopeeProductInfo` ganhou `onDiagnostic`**, no MESMO contrato de
+- **`10035` NUNCA entra em `SHOPEE_AUTH_REJECTED_CODES`** — só `10020`
+  continua lá. `SHOPEE_PRODUCT_OFFER_DENIED_CODE` (`src/converters/shopee.js`)
+  documenta o porquê no topo do arquivo. Fazer o contrário manda a cliente
+  ler "as ofertas da Shopee pararam de sair" quando o espelhamento dela está
+  de pé — exatamente o erro cometido e corrigido nesta mesma rodada.
+- **O diagnóstico distingue os dois casos por ESTÁGIO**, não só por mensagem
+  crua: `fetchShopeeProductInfo`/`fetchShopeeImage` reportam
+  `shopee_sem_acesso_catalogo_ofertas` (via `stageForShopeeApiError`) quando o
+  código é `10035`, e `shopee_api_erro` para qualquer outro erro do corpo
+  (que PODE ser chave morta de verdade e merece investigação). Quem lê o log
+  não pode concluir "chave recusada" a partir de um `shopee_api_erro` genérico
+  sem olhar o `detail`.
+- `fetchShopeeProductInfo` ganhou `onDiagnostic`, no MESMO contrato de
   `fetchShopeeImage` (`{ stage, detail }`): `shopee_sem_credencial`,
-  `shopee_sem_ids`, `shopee_api_erro`, `shopee_item_fora_do_catalogo`,
-  `shopee_catalogo_sem_titulo_ou_preco`, `shopee_api_falhou`. O fallback
-  público v4 (`fetchShopeeItemInfo`) ganhou os mesmos sinais
-  (`shopee_v4_sem_ids`, `shopee_v4_http_erro`, `shopee_v4_sem_item`,
-  `shopee_v4_falhou`). `buildScrapedOffer`/`offerEngine.js` repassam
-  `onDiagnostic` e a rota `/scrape-offer` loga
+  `shopee_sem_ids`, `shopee_sem_acesso_catalogo_ofertas`, `shopee_api_erro`,
+  `shopee_item_fora_do_catalogo`, `shopee_catalogo_sem_titulo_ou_preco`,
+  `shopee_api_falhou`. O fallback público v4 (`fetchShopeeItemInfo`) ganhou os
+  mesmos sinais (`shopee_v4_sem_ids`, `shopee_v4_http_erro`,
+  `shopee_v4_sem_item`, `shopee_v4_falhou`). `buildScrapedOffer`/
+  `offerEngine.js` repassam `onDiagnostic` e a rota `/scrape-offer` loga
   `Criar oferta: loja não devolveu título nem preço do produto` quando os três
   campos saem vazios — mesmo padrão do log de foto ausente.
-- **Isto não conserta conta sem acesso à API de afiliado** — só a própria
-  Shopee restaura isso (a cliente precisa contatar o time de afiliados dela).
-  O que muda é a conta parar de ficar invisível: hoje ela aparece como "chave
-  recusada" em vez de "tudo verde e nada funciona".
+- **Isto não conserta conta sem acesso ao módulo de catálogo/ofertas** — só a
+  própria Shopee libera isso (a cliente precisa contatar o time de afiliados
+  dela). O que muda é parar de ser silencioso: hoje o log diz exatamente qual
+  dos dois problemas é, sem escrever script avulso de novo.
 - Diagnóstico reutilizável para qualquer link específico:
   `scripts/diag-criar-oferta-shopee.mjs <email> <url>` (read-only, mostra a
-  resposta CRUA da API de afiliado e do fallback v4 lado a lado).
+  resposta CRUA da API de afiliado e do fallback v4 lado a lado). Para
+  confirmar se é este caso ou chave morta de verdade, compare com o
+  espelhamento: se ele continua publicando Shopee normalmente, é `10035`
+  (módulo de catálogo), não a chave inteira.
 
 Testes: `test/shopee-affiliate-info.test.js`, `test/credential-expiry-alert.test.js`.
 

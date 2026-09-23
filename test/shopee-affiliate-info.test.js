@@ -69,7 +69,12 @@ test('fetchShopeeProductInfo retorna null sem credenciais', async () => {
   assert.equal(await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', {}), null)
 })
 
-test('fetchShopeeProductInfo reporta diagnóstico quando a API recusa (chave sem acesso à plataforma)', async (t) => {
+// Achado em produção 2026-09-23 (nandavieiraf@gmail.com): a Shopee nega
+// acesso a `productOfferV2` (título/preço/foto/busca) com este código, sem
+// afetar `generateShortLink` (usado pelo espelhamento) — não é chave morta.
+// O estágio de diagnóstico é DISTINTO de `shopee_api_erro` de propósito, para
+// quem ler o log já saber que não é caso de recadastrar a chave.
+test('fetchShopeeProductInfo reporta estágio PRÓPRIO quando a API nega acesso ao catálogo de ofertas (10035)', async (t) => {
   t.after(stubAxiosPost(async () => ({
     data: {
       errors: [{
@@ -84,8 +89,20 @@ test('fetchShopeeProductInfo reporta diagnóstico quando a API recusa (chave sem
     onDiagnostic: (event) => diagnostics.push(event),
   })
   assert.equal(info, null)
-  assert.equal(diagnostics[0]?.stage, 'shopee_api_erro')
+  assert.equal(diagnostics[0]?.stage, 'shopee_sem_acesso_catalogo_ofertas')
   assert.match(diagnostics[0]?.detail, /10035/)
+})
+
+test('fetchShopeeProductInfo reporta estágio GENÉRICO para outros erros da API', async (t) => {
+  t.after(stubAxiosPost(async () => ({
+    data: { errors: [{ message: 'error [10020]: Invalid Signature', extensions: { code: 10020 } }] },
+  })))
+
+  const diagnostics = []
+  await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', CREDS, {
+    onDiagnostic: (event) => diagnostics.push(event),
+  })
+  assert.equal(diagnostics[0]?.stage, 'shopee_api_erro')
 })
 
 // Regressão 1: o espelhamento da Shopee deve enviar o shortLink oficial de
