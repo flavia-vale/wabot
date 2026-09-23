@@ -41,3 +41,50 @@ test('thresholds e precedencia escolhem gargalo critico antes de atencao', () =>
   assert.equal(health.resources.inodes.state, 'attention')
   assert.equal(health.bottleneck, 'disk')
 })
+
+import { resolveSessionCostFloorMb, resolveWorkerHistorySince, capacityPolicyOptionsFromEnv, DEFAULT_SESSION_COST_FLOOR_MB } from '../src/ops/capacity/policy.js'
+
+test('piso por robô configurável: sem env continua 350', () => {
+  assert.equal(DEFAULT_SESSION_COST_FLOOR_MB, 350)
+  assert.equal(resolveSessionCostFloorMb(undefined), 350)
+  assert.equal(resolveSessionCostFloorMb(''), 350)
+  assert.equal(resolveSessionCostFloorMb('abc'), 350)
+  assert.equal(resolveSessionCostFloorMb('-5'), 350)
+  assert.equal(resolveSessionCostFloorMb('250'), 250)
+  assert.equal(resolveSessionCostFloorMb('50'), 150)
+  assert.equal(resolveSessionCostFloorMb('5000'), 1000)
+})
+
+test('produção medida (31.337 MB, p95 198 MB, piso 250) cabe ~100 robôs', () => {
+  const decision = evaluateCapacity({ memoryTotalMb: 31337, connectedSessions: 54, workerRssP95Mb: 198, workerHistoryDays: 1, sessionCostFloorMb: 250 })
+  assert.equal(decision.sessionCostMb, 250)
+  assert.equal(decision.sessionCostFloorMb, 250)
+  assert.equal(decision.safeLimit, 100)
+  assert.ok(decision.reasons.some((r) => r.message.includes('250 MB')))
+})
+
+test('p95 medido acima do piso continua mandando (piso nunca esconde robô pesado)', () => {
+  const decision = evaluateCapacity({ memoryTotalMb: 31337, connectedSessions: 54, workerRssP95Mb: 320, workerHistoryDays: 20, sessionCostFloorMb: 250 })
+  assert.equal(decision.sessionCostMb, 320)
+})
+
+test('corte do histórico: data inválida vira sem corte', () => {
+  assert.equal(resolveWorkerHistorySince(''), null)
+  assert.equal(resolveWorkerHistorySince('ontem'), null)
+  assert.equal(resolveWorkerHistorySince('2026-09-23T00:00:00Z').toISOString(), '2026-09-23T00:00:00.000Z')
+  assert.deepEqual(capacityPolicyOptionsFromEnv({}), { sessionCostFloorMb: 350, workerHistorySince: null })
+})
+
+import { createCapacityRepository } from '../src/ops/capacity/repository.js'
+
+test('histórico por robô respeita o corte e ignora o regime antigo', async () => {
+  let where
+  const db = { capacitySnapshot: { findMany: async (args) => { where = args.where; return [] } } }
+  const repo = createCapacityRepository(db, { now: () => new Date('2026-09-23T12:00:00Z') })
+  await repo.workerHistorySummary('h', { since: new Date('2026-09-22T23:00:00Z') })
+  assert.equal(where.collectedAt.gte.toISOString(), '2026-09-22T23:00:00.000Z')
+  await repo.workerHistorySummary('h', { since: new Date('2020-01-01T00:00:00Z') })
+  assert.equal(where.collectedAt.gte.toISOString(), '2026-06-25T12:00:00.000Z')
+  await repo.workerHistorySummary('h')
+  assert.equal(where.collectedAt.gte.toISOString(), '2026-06-25T12:00:00.000Z')
+})

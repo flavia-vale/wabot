@@ -27,8 +27,9 @@ export function createCapacityRepository(db, options = {}) {
   const latestSnapshot = (hostProfileId) => db.capacitySnapshot.findFirst({ where: { hostProfileId }, orderBy: { collectedAt: 'desc' } })
   const listSnapshots = (hostProfileId, { since, until = now(), limit = 600 } = {}) => db.capacitySnapshot.findMany({ where: { hostProfileId, collectedAt: { ...(since ? { gte: since } : {}), lte: until } }, orderBy: { collectedAt: 'asc' }, take: Math.min(600, Math.max(1, limit)) })
   const listRollups = (hostProfileId, { granularity, since, until = now(), limit = 600 } = {}) => db.capacityRollup.findMany({ where: { hostProfileId, ...(granularity ? { granularity } : {}), bucketStart: { ...(since ? { gte: since } : {}), lte: until } }, orderBy: { bucketStart: 'asc' }, take: Math.min(600, Math.max(1, limit)) })
-  async function workerHistorySummary(hostProfileId, { days = 90 } = {}) {
-    const until = now(); const since = new Date(until.getTime() - days * 86400000)
+  async function workerHistorySummary(hostProfileId, { days = 90, since: notBefore = null } = {}) {
+    const until = now(); const windowStart = new Date(until.getTime() - days * 86400000)
+    const since = notBefore instanceof Date && notBefore > windowStart ? notBefore : windowStart
     const samples = await db.capacitySnapshot.findMany({ where: { hostProfileId, collectedAt: { gte: since, lte: until } }, orderBy: { collectedAt: 'asc' }, select: { collectedAt: true, fixedBaseMb: true, workerRssP95Mb: true } })
     const quantile = (values) => { const sorted = finite(values).sort((a, b) => a - b); return sorted.length ? sorted[Math.ceil(sorted.length * .95) - 1] : null }
     const first = samples[0]?.collectedAt; const last = samples.at(-1)?.collectedAt
