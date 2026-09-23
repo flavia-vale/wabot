@@ -93,6 +93,13 @@ export const NAV_GROUPS = [
         icon: i(<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />),
       },
       {
+        // Logo abaixo dos templates: o cupom só aparece na oferta quando o
+        // template tem {cupom}, então os dois são configurados juntos.
+        label: 'Cupons',
+        href: '/painel/cupons',
+        icon: i(<><path d="M3 9a3 3 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a3 3 0 0 0 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" /><line x1="13" y1="5" x2="13" y2="19" strokeDasharray="2 2" /></>),
+      },
+      {
         label: 'Minhas credenciais',
         href: '/painel/ids-afiliada',
         icon: i(<><circle cx="7.5" cy="15.5" r="5.5" /><path d="M21 2l-9.6 9.6" /><path d="M15.5 7.5 18 10l3-3-2.5-2.5z" /></>),

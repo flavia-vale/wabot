@@ -81,3 +81,14 @@ test('Vendas é item PRO e Minha conta fecha o grupo Conta', () => {
   const labels = [...conta.matchAll(/label: '([^']+)'/g)].map(m => m[1])
   assert.deepEqual(labels, ['Plano', 'Afiliados', 'Minha conta'])
 })
+
+// A tela de cupons (specs/017-client-coupon-catalog) nasceu sem item no menu:
+// só se chegava nela pelo endereço. Ela fica logo abaixo dos templates porque
+// o cupom só aparece na oferta quando o template tem {cupom}.
+test('menu: Cupons fica logo abaixo de Templates de mensagens', () => {
+  const templates = navSource.indexOf("href: '/painel/mensagens'")
+  const cupons = navSource.indexOf("href: '/painel/cupons'")
+  const proximo = navSource.indexOf('href:', templates + 1)
+  assert.ok(cupons > 0, 'Cupons sumiu do menu')
+  assert.equal(cupons, proximo, 'Cupons deixou de ser o item logo abaixo de Templates de mensagens')
+})
