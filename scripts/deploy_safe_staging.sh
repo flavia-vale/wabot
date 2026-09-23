@@ -438,7 +438,7 @@ REVISION_AFTER_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
 # nem na lista de exceções. Foi assim que 33 arquivos carregados pelo worker
 # (entre eles src/detector.js e src/messageDedup.js) ficaram anos de fora sem
 # ninguém notar: correção de bot chegava ao disco e não valia nos bots.
-WORKER_CODE_PATHS_RE='^(src/bot-worker\.js|src/supervisor/|src/core/|src/converters/|src/monitored[A-Za-z]*\.js|src/message[A-Za-z]*\.js|src/send[A-Za-z]*\.js|src/credential[A-Za-z]*\.js|src/detector\.js|src/smartDelay\.js|src/forwardingPolicy\.js|src/conversionDiagnostics\.js|src/waConnectionTelemetry\.js|src/workerMetadata\.js|src/paths\.js|src/manager\.js|src/db\.js|src/logger\.js|src/analytics\.js|src/errorTaxonomy\.js|src/observability/|src/billing/|src/jobs/|src/events/|src/domain/session/|src/instagram/mirroring/|src/offerQueue/sourceTag\.js|prisma/schema\.prisma|package-lock\.json)'
+WORKER_CODE_PATHS_RE='^(src/bot-worker\.js|src/supervisor/|src/core/|src/delivery/|src/deliveryOutbox/|src/converters/|src/monitored[A-Za-z]*\.js|src/message[A-Za-z]*\.js|src/send[A-Za-z]*\.js|src/credential[A-Za-z]*\.js|src/detector\.js|src/smartDelay\.js|src/forwardingPolicy\.js|src/conversionDiagnostics\.js|src/waConnectionTelemetry\.js|src/workerMetadata\.js|src/paths\.js|src/manager\.js|src/db\.js|src/logger\.js|src/analytics\.js|src/errorTaxonomy\.js|src/observability/|src/billing/|src/jobs/|src/events/|src/domain/session/|src/instagram/mirroring/|src/offerQueue/sourceTag\.js|prisma/schema\.prisma|package-lock\.json)'
 
 SUPERVISOR_APP_NAME="${SUPERVISOR_APP:-bot-supervisor-staging}"
 STALE_WORKER_TOLERANCE_SEC="${STALE_WORKER_TOLERANCE_SEC:-60}"

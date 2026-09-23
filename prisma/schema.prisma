@@ -206,6 +206,16 @@ model Group {
   // (GroupTarget) e virava a origem para "todos" em silêncio — RCA 2026-08-26,
   // ver src/core/destinationRouting.js.
   targetsMode           String              @default("all")
+  // Feature 017 (arquitetura multicanal de entrega): aplicativo por onde este
+  // destino publica, ou de onde esta origem lê. NULO = WhatsApp (todo grupo
+  // gravado até esta feature é WhatsApp — FR-013). NUNCA é lido cru: sempre
+  // por resolveDeliveryNetwork() (src/core/delivery/networks.js), que
+  // devolve 'whatsapp' para nulo e para valor desconhecido. Destino/origem
+  // que não é WhatsApp grava `waJid` com prefixo de rede (`tg:<chatId>`) —
+  // como nenhum endereço de WhatsApp tem esse formato, `@@unique([userId,
+  // waJid, role])` abaixo continua valendo sem alteração (R10). O aplicativo
+  // de um destino não pode ser trocado depois de criado.
+  deliveryNetwork       String?
   monitorTargets        GroupTarget[]       @relation("MonitorTargets")
   postTargets           GroupTarget[]       @relation("PostTargets")
   channelHealth         ChannelHealth?
@@ -654,6 +664,14 @@ model MessageLog {
   // foto" de "saiu sem foto mesmo tendo foto na origem" — o caso que a cliente
   // reclama e que antes só aparecia quando ela reclamava.
   originImageBytes Int?
+  // Feature 017 (arquitetura multicanal de entrega): por qual aplicativo
+  // este envio saiu. NULO = WhatsApp (linha anterior à feature — FR-027).
+  // Não confundir com `platform`, que guarda a LOJA (Shopee/Amazon/...).
+  deliveryNetwork    String?
+  // O que precisou ser reduzido para caber no aplicativo de destino,
+  // códigos separados por vírgula (src/core/delivery/neutralOffer.js).
+  // NULO = nada foi reduzido. Traduzido para linguagem leiga só na tela.
+  deliveryReductions String?
   sentAt       DateTime @default(now())
 
   sendDedupKeys SendDedupKey[]
@@ -1522,4 +1540,47 @@ model CapacityAlert {
 
   @@index([hostProfileId, status, lastObservedAt])
   @@index([type, status])
+}
+
+// Feature 017 (arquitetura multicanal de entrega) — a oferta esperando para
+// sair num aplicativo que NÃO é WhatsApp. O worker nunca fala HTTP com essas
+// redes: quando um destino não é WhatsApp, ele grava uma linha aqui e segue
+// (D-A6 do plano). Quem drena é uma passada dentro do processo `api`
+// (Fatia 3), nunca dentro do processo por conta.
+model DeliveryOutbox {
+  id              String    @id @default(cuid())
+  userId          String
+  deliveryNetwork String // 'telegram' | (futuro) 'instagram'
+  destinationId   String // identificador namespaceado: 'tg:-100...'
+  sourceId        String? // origem, quando veio de espelhamento
+  messageLogId    String? // linha do histórico que esta entrega atualiza
+  offerJson       String // a oferta NEUTRA (src/core/delivery/neutralOffer.js), serializada
+  status          String    @default("pending") // pending | sending | done | failed | dropped
+  attempts        Int       @default(0)
+  notBeforeAt     DateTime? // espera por orçamento/limite do aplicativo — NUNCA descarte (FR-040)
+  enqueuedAt      DateTime  @default(now())
+  lastError       String? // motivo próprio, já dentro da taxonomia de falha por rede
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, notBeforeAt])
+  @@index([userId, status])
+  @@index([deliveryNetwork, status])
+}
+
+// Feature 017 (arquitetura multicanal de entrega) — "esta mensagem de origem
+// já foi processada". A gravação acontece ANTES do fan-out; colisão na
+// chave única = mensagem já processada, e o processamento para ali. É o que
+// faz FR-055/SC-016 valerem mesmo entre processos diferentes (uma janela em
+// memória não sobreviveria a um restart da API). Populada só na Fatia 5
+// (Telegram como origem) — a tabela nasce nesta fatia para o schema já
+// acomodar a origem sem migração destrutiva futura.
+model DeliveryInboxSeen {
+  id              String   @id @default(cuid())
+  deliveryNetwork String
+  sourceId        String // grupo de origem, namespaceado
+  messageId       String // id da mensagem no aplicativo de origem
+  seenAt          DateTime @default(now())
+
+  @@unique([deliveryNetwork, sourceId, messageId])
+  @@index([seenAt])
 }

@@ -19,6 +19,10 @@ export const FEATURE_CODES = Object.freeze({
   CHANNEL_BUTTON: 'channel_button',
   COPY_VARIATION: 'copy_variation',
   SHOPEE_SALES: 'shopee_sales',
+  // Feature 017 (arquitetura multicanal de entrega). Nunca reaproveitar
+  // `channels` — esse código já significa Canal do WhatsApp (`@newsletter`),
+  // um conceito diferente (FR-046, AGENTS.md "Vocabulário").
+  MULTI_NETWORK: 'multi_network',
 })
 
 const KNOWN_PLANS = new Set(Object.values(PLAN_IDS))
@@ -65,6 +69,14 @@ export function getPlanEntitlements(userOrPlan = {}, { now = new Date() } = {}) 
     canUseShopeeSales: hasProLikeAccess,
     // Instagram nunca é herdado pelo Trial nem pelo Pro. Só o plano superior.
     canUseInstagramStories: hasPremiumAccess,
+    // Feature 017 (arquitetura multicanal de entrega, D2): o multicanal
+    // (WhatsApp + Telegram) também NÃO é herdado pelo Trial nem pelo Pro —
+    // mesma reserva de plano que canUseInstagramStories já usa
+    // (PLAN_IDS.PREMIUM). Os dois recursos podem acabar sendo vendidos
+    // juntos (ver Fase 5 do plano desta feature); a decisão comercial final
+    // é da dona do produto, registrada em
+    // specs/017-multicanal-telegram-instagram/plan.md, "Questões em aberto".
+    canUseMultiNetwork: hasPremiumAccess,
   }
 }
 
@@ -102,6 +114,10 @@ export function canUseShopeeSales(userOrPlan = {}, options = {}) {
 
 export function canUseInstagramStories(userOrPlan = {}, options = {}) {
   return getPlanEntitlements(userOrPlan, options).canUseInstagramStories
+}
+
+export function canUseMultiNetwork(userOrPlan = {}, options = {}) {
+  return getPlanEntitlements(userOrPlan, options).canUseMultiNetwork
 }
 
 // Cache em memória pra evitar martelar o DB no fan-out do bot-worker e nos
@@ -195,6 +211,15 @@ export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
       requiredPlan: PLAN_IDS.PREMIUM,
     }
   }
+  if (featureCode === FEATURE_CODES.MULTI_NETWORK) {
+    return {
+      error: 'O multicanal (WhatsApp + Telegram) estará disponível em um novo plano acima do Pro.',
+      code: 'FEATURE_REQUIRES_PREMIUM',
+      feature: FEATURE_CODES.MULTI_NETWORK,
+      requiredPlan: PLAN_IDS.PREMIUM,
+    }
+  }
+
   if (featureCode === FEATURE_CODES.ADVANCED_PRESERVATION) {
     return {
       error: 'O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.',
