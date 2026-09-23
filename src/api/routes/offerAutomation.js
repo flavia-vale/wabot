@@ -90,7 +90,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
-    const { destGroupJid, destGroupName, instagramDestinationIds, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey, publicationMode = 'direct', reviewTargetSize = 10 } = req.body ?? {}
+    const { destGroupJid, destGroupName, instagramDestinationIds, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey, publicationMode = 'direct', reviewTargetSize = 10, useCoupons } = req.body ?? {}
 
     if (!keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     if (!['direct', 'review'].includes(publicationMode)) return reply.code(400).send({ error: 'Modo de publicação inválido' })
@@ -152,6 +152,9 @@ export async function offerAutomationRoutes(app, opts = {}) {
         isKeySeller: Boolean(isKeySeller ?? false),
         publicationMode,
         reviewTargetSize: targetSize,
+        // specs/017-client-coupon-catalog (FR-022/FR-023): ausente = false,
+        // igual ao default da coluna — opt-in explícito, nunca automático.
+        useCoupons: Boolean(useCoupons ?? false),
       },
     })
   })
@@ -163,7 +166,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, instagramDestinationIds, prioritizeAMS, isKeySeller, sortType, listType, templateKey, publicationMode, reviewTargetSize, confirmPublicationModeChange } = req.body ?? {}
+    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, instagramDestinationIds, prioritizeAMS, isKeySeller, sortType, listType, templateKey, publicationMode, reviewTargetSize, confirmPublicationModeChange, useCoupons } = req.body ?? {}
     const updates = {}
     if (publicationMode !== undefined) {
       if (!['direct', 'review'].includes(publicationMode)) return reply.code(400).send({ error: 'Modo de publicação inválido' })
@@ -242,6 +245,9 @@ export async function offerAutomationRoutes(app, opts = {}) {
       if (!parsedTemplateKey) return reply.code(400).send({ error: 'templateKey inválido' })
       updates.templateKey = parsedTemplateKey
     }
+    // specs/017-client-coupon-catalog (FR-023): ausente = não muda o valor
+    // atual (diferente do POST, onde ausente = false).
+    if (useCoupons !== undefined) updates.useCoupons = Boolean(useCoupons)
 
     const invalidatesReview = existing.publicationMode === 'review' && (publicationMode === 'direct' || templateKey !== undefined || destGroupJid !== undefined || instagramDestinationIds !== undefined)
     if (invalidatesReview) await db.offerAutomationReviewItem.updateMany({ where: { automationId: existing.id, userId: req.user.sub, status: { in: [REVIEW_STATUS.AWAITING, REVIEW_STATUS.APPROVED] } }, data: { status: REVIEW_STATUS.EXPIRED } })

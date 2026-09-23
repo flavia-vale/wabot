@@ -62,6 +62,11 @@ export const NAV_GROUPS = [
         pro: true,
         icon: i(<><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /><circle cx="2" cy="6" r=".5" /><circle cx="2" cy="12" r=".5" /><circle cx="2" cy="18" r=".5" /></>),
       },
+      {
+        label: 'Cupons',
+        href: '/painel/cupons',
+        icon: i(<><path d="M2 9a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z" /><path d="M9 9v6" strokeDasharray="1.5 1.5" /></>),
+      },
     ],
   },
   {

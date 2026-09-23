@@ -62,3 +62,40 @@ test('migration atualiza templates persistidos de todos os usuários e preserva 
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+// specs/017-client-coupon-catalog (T028, US4, FR-019/FR-020): {linhaDeCupom}
+// sai de templates salvos SEM reescrever o banco — a limpeza acontece na
+// leitura, nas duas superfícies que consomem canonicalizeTemplateStore (tela
+// de templates e worker).
+
+test('canonicalizeTemplateBody remove {linhaDeCupom} sozinha na linha, sem deixar lacuna', () => {
+  const body = 'Título\n{produto}\n{linhaDeCupom}\n{link}'
+  assert.equal(canonicalizeTemplateBody(body), 'Título\n{produto}\n{link}')
+})
+
+test('canonicalizeTemplateBody remove {linhaDeCupom} colada a outro texto na mesma linha', () => {
+  const body = 'Antes {linhaDeCupom} Depois'
+  assert.equal(canonicalizeTemplateBody(body), 'Antes  Depois')
+})
+
+test('canonicalizeTemplateStoreJson limpa {linhaDeCupom} em overrides e templates personalizados salvos', () => {
+  const normalized = JSON.parse(canonicalizeTemplateStoreJson(JSON.stringify({
+    overrides: { automatico_classico: '{produto}\n{linhaDeCupom}\n{link}' },
+    custom: [{ key: 'tpl_1', name: 'Com cupom velho', body: '{produto}\n{linhaDeCupom}\n{link}' }],
+  })))
+  assert.doesNotMatch(normalized.overrides.automatico_classico, /linhaDeCupom/)
+  assert.doesNotMatch(normalized.custom[0].body, /linhaDeCupom/)
+  // não deixa lacuna: nenhuma linha em branco sobrando onde a variável estava
+  assert.equal(normalized.overrides.automatico_classico, '{produto}\n{link}')
+  assert.equal(normalized.custom[0].body, '{produto}\n{link}')
+})
+
+test('canonicalizeTemplateBody não afeta {preçoDoTexto} nem outras variáveis', () => {
+  const body = '{produto}\n{preçoDoTexto}\n{linhaDeCupom}\n{link}\n{loja}'
+  const result = canonicalizeTemplateBody(body)
+  assert.match(result, /\{preçoDoTexto\}/)
+  assert.match(result, /\{produto\}/)
+  assert.match(result, /\{link\}/)
+  assert.match(result, /\{loja\}/)
+  assert.doesNotMatch(result, /linhaDeCupom/)
+})

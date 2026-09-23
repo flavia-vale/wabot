@@ -35,8 +35,8 @@ export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
       { token: '{vendas}', label: 'Vendas', example: '🛒 1.200+ vendidos' },
       { token: '{link}', label: 'Link da oferta', example: 'https://shope.ee/abc' },
       { token: '{loja}', label: 'Loja/plataforma', example: 'Shopee' },
-      { token: '{linhaDeCupom}', label: 'Linha de cupom', example: '🎟️ Use o cupom: OFERTA10' },
       { token: '{preçoDoTexto}', label: 'Preço escrito na oferta', example: 'De R$ 129,90 por R$ 89,90' },
+      { token: '{cupom}', label: 'Cupom de desconto', example: '🎟️ Use o cupom BEMVINDO10 — de R$ 300,00 por R$ 270,00 com o cupom' },
     ],
   },
   {
@@ -208,10 +208,38 @@ function cleanupEmptyValues(text) {
     .join('\n')
 }
 
-export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '', couponLine = '', textPrice = '' } = {}) {
+// Remove o marcador {cupom} sem deixar lacuna: linha que só tinha o marcador
+// some inteira; marcador no meio da linha some sem sobrar espaço duplo.
+export function stripCouponToken(text) {
+  return String(text ?? '')
+    .replace(/^[ \t]*\{cupom\}[ \t]*(?:\r?\n|$)/gm, '')
+    .replace(/[ \t]*\{cupom\}/g, '')
+}
+
+// O que as PRÉVIAS do painel mostram no lugar de {cupom}. Nunca um código de
+// exemplo: a cliente leria "BEMVINDO10" como se fosse o cupom dela.
+export const COUPON_PREVIEW_STAND_IN = '🎟️ _Aqui entra o seu melhor cupom ativo desta loja, escolhido na hora do envio_'
+
+export function showCouponStandIn(text) {
+  return String(text ?? '').replace(/\{cupom\}/g, COUPON_PREVIEW_STAND_IN)
+}
+
+export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '', textPrice = '', keepCouponToken = false } = {}) {
   let preparedBody = String(body ?? '').replace(SENTINELS_RE, '')
-  if (!couponLine) preparedBody = preparedBody.replace(/^[ \t]*\{linhaDeCupom\}[ \t]*(?:\r?\n|$)/gm, '')
+  // specs/017-client-coupon-catalog (US4, FR-019): {linhaDeCupom} saiu do
+  // produto — a linha é SEMPRE removida, mesmo em template salvo antes da
+  // mudança. Trava #1: extractCouponLine continua viva em mirrorTemplate.js,
+  // só esta VARIÁVEL sai.
+  preparedBody = preparedBody.replace(/^[ \t]*\{linhaDeCupom\}[ \t]*(?:\r?\n|$)/gm, '')
   if (!textPrice) preparedBody = preparedBody.replace(/^[ \t]*\{preçoDoTexto\}[ \t]*(?:\r?\n|$)/gm, '')
+  // specs/017-client-coupon-catalog: {cupom} só é trocado pelo robô, NA HORA DO
+  // ENVIO (applyCouponToken em src/core/clientCouponPolicy.js), porque é ali
+  // que se sabe se o cupom ainda está ligado e válido. Por isso quem monta um
+  // texto que VAI passar pelo robô pede para manter o marcador
+  // (keepCouponToken). O padrão é o contrário — apagar — para que nenhuma tela
+  // que publique ou copie o texto sem passar pelo robô deixe "{cupom}" cru
+  // chegar ao grupo (mesma regra do RCA de 19/09 para as demais variáveis).
+  if (!keepCouponToken) preparedBody = stripCouponToken(preparedBody)
   let result = preparedBody
     .replace(/\{produto\}/g, markValue(title))
     .replace(/\{preço\}/g, markValue(price))
@@ -220,7 +248,7 @@ export function applyTemplateVariables(body, { title = '', price = '', oldPrice 
     .replace(/\{rating\}/g, markValue(rating))
     .replace(/\{vendas\}/g, markValue(sales))
     .replace(/\{loja\}/g, markValue(storeName))
-    .replace(/\{linhaDeCupom\}/g, markValue(couponLine))
+    .replace(/\{linhaDeCupom\}/g, markValue(''))
     .replace(/\{preçoDoTexto\}/g, markValue(textPrice))
   if (oldPrice) {
     result = result.replace(/\{preço_de\}/g, markValue(oldPrice))
@@ -257,6 +285,7 @@ export function buildMobileOfferText({
   couponCta = '🎟 Mais cupons da {loja}:',
   offerStoreKey = '',
   preserveAutomationPlaceholders = false,
+  keepCouponToken = false,
 } = {}) {
   const normalized = normalizeMobileOfferProduct(product, manualProduct)
 
@@ -271,8 +300,8 @@ export function buildMobileOfferText({
       rating: normalized.rating,
       sales: normalized.sales,
       storeName: normalized.storeName,
-      couponLine: product?.couponLine,
       textPrice: product?.textPrice,
+      keepCouponToken,
     })
     lines = (preserveAutomationPlaceholders ? bodyText : stripAutomationTemplatePlaceholders(bodyText)).split('\n')
   } else {
