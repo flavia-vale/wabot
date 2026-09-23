@@ -107,6 +107,8 @@ O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
 - Estimativa: `RAM ≈ 1 GB + N_sessões × 0,18 GB + ~20%`; para decidir
   capacidade use **0,35 GB/sessão**. Servidor (2026-09-18): 30,6 GB, teto 80
   vagas, limite seguro da política ~71. Sinal que decide é o **swap**.
+  Robôs rodam com jemalloc + semi-space 8 desde 2026-09-22 (−29% de memória
+  com 12-24 h de vida); ver `docs/rca/memoria-e-capacidade.md`.
 
 ## Design system (canônico — toda alteração visual segue ele)
 
