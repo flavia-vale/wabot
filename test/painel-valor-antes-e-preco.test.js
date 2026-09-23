@@ -129,5 +129,5 @@ test('a tela de plano usa a conta e o painel expõe o número', () => {
   assert.match(page, /buildPricePerOffer\(/)
   assert.match(page, /\{precoPorOferta\.texto\}/)
   const shell = read('../dashboard/app/painel/PainelShell.js')
-  assert.match(shell, /offersPublished, refreshSession, setHeader \}\)/)
+  assert.match(shell, /offersPublished, refreshSession, setHeader, isPro, openPro \}\)/)
 })

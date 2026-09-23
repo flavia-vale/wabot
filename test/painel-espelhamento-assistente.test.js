@@ -159,7 +159,8 @@ test('a tela NÃO tem aviso de recurso PRO', () => {
 
 test('Ofertas automáticas continua sendo a tela com o bloqueio de plano', () => {
   const ofertas = read('../dashboard/app/painel/ofertas-automaticas/page.js')
-  assert.match(ofertas, /ProFeaturePaywall/)
+  // Divisão Basic/PRO (2026-09-23): o bloqueio virou a página travada com prévia.
+  assert.match(ofertas, /LockedPage/)
   assert.match(ofertas, /hasProLikeAccess/)
   const item = nav.slice(nav.indexOf("label: 'Ofertas automáticas'"))
   assert.match(item.slice(0, 200), /pro: true/)

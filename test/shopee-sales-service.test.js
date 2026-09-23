@@ -23,3 +23,14 @@ test('serviço isola credencial e conversões por tenant',async()=>{const stored
 const semHoraDoSnapshot=JSON.stringify({...result,sourceUpdatedAt:null});assert.doesNotMatch(semHoraDoSnapshot,/bob|99|app-b|secret-b/)})
 test('detalhe estrutural ausente não fabrica venda zero',()=>{const q=validateSalesQuery({from:'2026-08-01',to:'2026-08-01'});const base={utmContent:'espelhagrupos',estimatedTotalCommission:0};for(const [name,conversion] of [['sem pedidos',{...base,conversionId:'a'}],['pedidos vazios',{...base,conversionId:'b',orders:[]}],['sem items',{...base,conversionId:'c',orders:[{orderId:'o'}]}],['items vazios',{...base,conversionId:'d',orders:[{orderId:'o',items:[]}]}]]){const out=buildSalesSnapshot([conversion],q);assert.equal(out.summary.salesAmount,null,name);if(out.orders.rows[0])assert.equal(out.orders.rows[0].amount,null,name)}})
 test('zero reportado é preservado como zero, não indisponível',()=>{const q=validateSalesQuery({from:'2026-08-01',to:'2026-08-01'});const out=buildSalesSnapshot([{conversionId:'z',utmContent:'espelhagrupos',estimatedTotalCommission:0,orders:[{orderId:'o',items:[{itemId:'i',modelId:'m',qty:0,actualAmount:0,itemTotalCommission:0}]}]}],q);assert.equal(out.summary.salesAmount,0);assert.equal(out.orders.rows[0].amount,0);assert.equal(out.products.rows[0].amount,0);assert.equal(out.summary.estimatedCommission,0)})
+test('comissão por dia e produtos que mais venderam saem do período INTEIRO, não da página',()=>{
+  const q=validateSalesQuery({from:'2026-08-01',to:'2026-08-02',limit:'1'})
+  const mk=(id,t,ec,name,qty)=>({conversionId:id,utmContent:'espelhagrupos',purchaseTime:t,conversionStatus:'PENDING',estimatedTotalCommission:ec,orders:[{orderId:'o'+id,items:[{itemId:'i'+id,qty,actualAmount:10,itemName:name,itemTotalCommission:ec}]}]})
+  // 1785542400 = 2026-08-01 00:00 UTC = 31/07 21:00 em São Paulo
+  const out=buildSalesSnapshot([mk('a',1785596400,2,'Air Fryer',1),mk('b',1785600000,3,'Air Fryer',2),mk('c',1785682800,1,'Fone',1)],q)
+  assert.equal(out.orders.rows.length,1,'a página tem 1 pedido')
+  assert.deepEqual(out.daily,[{date:'2026-08-01',purchases:2,estimatedCommission:5},{date:'2026-08-02',purchases:1,estimatedCommission:1}])
+  assert.deepEqual(out.topProducts.map(p=>[p.name,p.quantity,p.estimatedCommission]),[['Air Fryer',3,5],['Fone',1,1]])
+  const semComissao=buildSalesSnapshot([mk('a',1785596400,null,'X',1),mk('b',1785600000,3,'X',1)],q)
+  assert.equal(semComissao.daily[0].estimatedCommission,null,'dia com comissão faltando não vira total menor')
+})

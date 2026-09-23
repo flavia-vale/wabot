@@ -14,6 +14,11 @@ export const FEATURE_CODES = Object.freeze({
   OFFER_AUTOMATIONS: 'offer_automations',
   OFFER_QUEUES: 'offer_queues',
   INSTAGRAM_STORIES: 'instagram_stories',
+  // Divisão Basic/PRO de 2026-09-23: recursos que o Basic deixou de ter.
+  WATERMARK: 'watermark',
+  CHANNEL_BUTTON: 'channel_button',
+  COPY_VARIATION: 'copy_variation',
+  SHOPEE_SALES: 'shopee_sales',
 })
 
 const KNOWN_PLANS = new Set(Object.values(PLAN_IDS))
@@ -51,6 +56,13 @@ export function getPlanEntitlements(userOrPlan = {}, { now = new Date() } = {}) 
     canUseAdvancedPreservation: hasProLikeAccess,
     canUseOfferAutomations: hasProLikeAccess,
     canUseOfferQueues: hasProLikeAccess,
+    // Divisão Basic/PRO (2026-09-23): marca d'água, botão "Ver canal",
+    // variação do texto e painel de vendas da Shopee são do PRO. O Trial ativo
+    // herda tudo do PRO, como os demais recursos.
+    canUseWatermark: hasProLikeAccess,
+    canUseChannelButton: hasProLikeAccess,
+    canUseCopyVariation: hasProLikeAccess,
+    canUseShopeeSales: hasProLikeAccess,
     // Instagram nunca é herdado pelo Trial nem pelo Pro. Só o plano superior.
     canUseInstagramStories: hasPremiumAccess,
   }
@@ -70,6 +82,22 @@ export function canUseOfferAutomations(userOrPlan = {}, options = {}) {
 
 export function canUseOfferQueues(userOrPlan = {}, options = {}) {
   return getPlanEntitlements(userOrPlan, options).canUseOfferQueues
+}
+
+export function canUseWatermark(userOrPlan = {}, options = {}) {
+  return getPlanEntitlements(userOrPlan, options).canUseWatermark
+}
+
+export function canUseChannelButton(userOrPlan = {}, options = {}) {
+  return getPlanEntitlements(userOrPlan, options).canUseChannelButton
+}
+
+export function canUseCopyVariation(userOrPlan = {}, options = {}) {
+  return getPlanEntitlements(userOrPlan, options).canUseCopyVariation
+}
+
+export function canUseShopeeSales(userOrPlan = {}, options = {}) {
+  return getPlanEntitlements(userOrPlan, options).canUseShopeeSales
 }
 
 export function canUseInstagramStories(userOrPlan = {}, options = {}) {
@@ -190,6 +218,21 @@ export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
       error: 'As filas de ofertas estão disponíveis no Trial ativo e no plano Pro.',
       code: 'FEATURE_REQUIRES_PRO',
       feature: FEATURE_CODES.OFFER_QUEUES,
+      requiredPlan: PLAN_IDS.PRO,
+    }
+  }
+
+  const PRO_ONLY_MESSAGES = {
+    [FEATURE_CODES.WATERMARK]: 'A marca d\'água nas ofertas está disponível no Trial ativo e no plano Pro.',
+    [FEATURE_CODES.CHANNEL_BUTTON]: 'O botão "Ver canal" está disponível no Trial ativo e no plano Pro.',
+    [FEATURE_CODES.COPY_VARIATION]: 'A variação do texto está disponível no Trial ativo e no plano Pro.',
+    [FEATURE_CODES.SHOPEE_SALES]: 'O painel de vendas e comissão da Shopee está disponível no Trial ativo e no plano Pro.',
+  }
+  if (PRO_ONLY_MESSAGES[featureCode]) {
+    return {
+      error: PRO_ONLY_MESSAGES[featureCode],
+      code: 'FEATURE_REQUIRES_PRO',
+      feature: featureCode,
       requiredPlan: PLAN_IDS.PRO,
     }
   }

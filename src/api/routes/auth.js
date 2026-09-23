@@ -806,6 +806,19 @@ export async function authRoutes(app) {
     return { ok: true, token }
   })
 
+  // Minha conta (2026-09-23): a cliente corrige o próprio nome. Só o nome —
+  // o celular de cadastro NÃO é editável aqui: ele é a trava contra teste
+  // grátis repetido (número único por conta, ver register) e trocá-lo pela
+  // tela liberaria o número para uma conta nova.
+  app.patch('/me/name', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const name = normalizeName(req.body?.name)
+    if (!name) return reply.code(400).send({ error: 'Escreva o seu nome.' })
+    if ([...name].length > 100) return reply.code(400).send({ error: 'O nome pode ter no máximo 100 caracteres.' })
+    await db.user.update({ where: { id: req.user.sub }, data: { name } })
+    const updated = await findCurrentUser(req.user.sub)
+    return publicUser(updated)
+  })
+
   // Permite ao usuário trocar o e-mail da própria conta. Necessário porque o
   // `payer_email` da assinatura recorrente (Mercado Pago) vem daqui — contas
   // com e-mail fictício/fallback `@sistema.com` não conseguem assinar até

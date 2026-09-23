@@ -46,8 +46,9 @@ import { SelectChannelModal } from '@/components/SelectChannelModal'
 import { TypeBadge, FollowBadge, AdminBadge, HealthBadge } from '@/components/ChannelStatusBadges'
 import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
 import { usePainel, usePainelHeader, PainelContentActions } from '../PainelShell'
+import { ProLock } from '@/components/pro/ProGate'
 import { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
-import { hasInstagramStoriesAccess } from '@/lib/planEntitlements'
+import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import { AFFILIATE_PLATFORMS } from '@/lib/painel/affiliatePlatforms'
 import { buildMirrorCards, planMirrorCreation, resolveInitialOrigin } from '../../../../src/domain/painel/mirrorWizard.js'
 
@@ -1221,7 +1222,7 @@ export default function EspelhamentoPage() {
     title: 'Espelhamento',
     subtitle: 'De quais grupos o robô pega ofertas e onde ele publica com o seu link',
   })
-  const { online, refreshSession } = usePainel()
+  const { online, refreshSession, openPro } = usePainel()
 
   const [groups, setGroups] = useState([])
   // Precisam ser declarados ANTES dos callbacks de destino: `post` entra na
@@ -1590,12 +1591,9 @@ export default function EspelhamentoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, loadTargets])
 
-  const canUseChannels = (() => {
-    if (planSubject.plan === 'pro') return true
-    if (planSubject.plan !== 'trial' || !planSubject.accessExpiresAt) return false
-    const expiresAt = new Date(planSubject.accessExpiresAt)
-    return !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()
-  })()
+  // Mesma regra do backend (Pro, premium ou teste ativo). A cópia local antiga
+  // esquecia o premium e travava canais que a API libera.
+  const canUseChannels = hasProLikeAccess(planSubject)
 
   const existingJidRoles = new Set(groups.map((g) => `${g.waJid}::${g.role}`))
 
@@ -1638,6 +1636,9 @@ export default function EspelhamentoPage() {
     // porquê. Ao ligar o botão, a API já grava o formato degradado, então o que
     // aparece aqui é a verdade.
     const temBotaoCanal = Boolean(g.channelButtonJid)
+    // Divisão Basic/PRO (2026-09-23): marca d'água e botão "Ver canal" são do
+    // PRO. Mesma regra de canais (Pro, premium ou teste ativo).
+    const temPro = canUseChannels
 
     if (tab === 'imagem') {
       return (
@@ -1659,6 +1660,10 @@ export default function EspelhamentoPage() {
               value={destinationImageMode}
               onChange={(e) => {
                 const nextMode = e.target.value
+                if (!temPro && ['original_watermark', 'preview_watermark'].includes(nextMode)) {
+                  openPro('marca')
+                  return
+                }
                 handleUpdateGroup(g.id, {
                   imageMode: nextMode,
                   // Ao ligar a marca pela 1ª vez sem texto salvo, sugere o
@@ -1670,9 +1675,9 @@ export default function EspelhamentoPage() {
               }}
             >
               <option value="original">Original</option>
-              <option value="original_watermark">Original com marca d&apos;água</option>
+              <option value="original_watermark">Original com marca d&apos;água{temPro ? '' : ' · 🔒 PRO'}</option>
               {!temBotaoCanal && <option value="preview">Preview clicável</option>}
-              {!temBotaoCanal && <option value="preview_watermark">Preview com marca d&apos;água</option>}
+              {!temBotaoCanal && <option value="preview_watermark">Preview com marca d&apos;água{temPro ? '' : ' · 🔒 PRO'}</option>}
             </select>
           </CfgRow>
           {watermarkMode && (
@@ -1779,6 +1784,7 @@ export default function EspelhamentoPage() {
               hint={'Com canal escolhido, a mensagem leva o botão "Ver canal" no fim e a foto sempre vem da mensagem de origem. Sem canal, ela sai igual, só sem o botão. Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão.'}
               last
             >
+              <ProLock feature="vercanal" locked={!temPro}>
               {g.channelButtonJid ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--pnl-radius-sm)', padding: 10 }}>
@@ -1795,6 +1801,7 @@ export default function EspelhamentoPage() {
                   Escolher canal do botão
                 </button>
               )}
+              </ProLock>
             </CfgRow>
           ) : (
             <CfgRow label={'Botão "Ver canal"'} hint="Disponível só em grupos — este destino já é um canal." last>

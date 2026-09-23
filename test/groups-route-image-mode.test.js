@@ -12,7 +12,7 @@ import { groupsRoutes } from '../src/api/routes/groups.js'
 
 let userCounter = 0
 
-async function buildApp() {
+async function buildApp({ plan = 'pro', accessExpiresAt = null } = {}) {
   const n = ++userCounter
   const userId = `user-image-mode-${n}-${Date.now()}-${Math.random().toString(16).slice(2)}`
   await db.user.create({
@@ -21,7 +21,8 @@ async function buildApp() {
       name: `Image Mode Test User ${n}`,
       email: `image-mode-test-${n}-${Date.now()}@groups-route-test.local`,
       passwordHash: 'x',
-      plan: 'pro',
+      plan,
+      accessExpiresAt,
     },
   })
   const app = Fastify({ logger: false })
@@ -295,5 +296,57 @@ test('PUT /:id recusa watermarkSize/watermarkPosition em grupo role=monitor (ori
 
   const putPosition = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { watermarkPosition: 'top-right' } })
   assert.equal(putPosition.statusCode, 400)
+  await app.close()
+})
+
+// Divisão Basic/PRO (2026-09-23): marca d'água e botão "Ver canal" são do PRO.
+const umDia = () => new Date(Date.now() + 86_400_000)
+
+test('Basic: ligar marca d\'água devolve 403 e não grava', async () => {
+  const { app } = await buildApp({ plan: 'basic', accessExpiresAt: umDia() })
+  const { id } = JSON.parse((await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'basic-wm@g.us', name: 'D', role: 'post', kind: 'group' } })).body)
+  const res = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'preview_watermark', watermarkText: 'Marca' } })
+  assert.equal(res.statusCode, 403)
+  assert.equal(res.json().feature, 'watermark')
+  assert.equal((await db.group.findUnique({ where: { id } })).imageMode, 'original')
+  await app.close()
+})
+
+test('Basic: ligar o botão "Ver canal" devolve 403; remover segue liberado', async () => {
+  const { app } = await buildApp({ plan: 'basic', accessExpiresAt: umDia() })
+  const { id } = JSON.parse((await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'basic-btn@g.us', name: 'D', role: 'post', kind: 'group' } })).body)
+  const liga = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { channelButtonJid: '120363000000000001@newsletter' } })
+  assert.equal(liga.statusCode, 403)
+  assert.equal(liga.json().feature, 'channel_button')
+  const remove = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { channelButtonJid: '' } })
+  assert.equal(remove.statusCode, 200)
+  await app.close()
+})
+
+test('Basic com escolha antiga: a tela mostra sem marca, e salvar outra coisa grava sem marca e sem botão', async () => {
+  const { app, userId } = await buildApp({ plan: 'basic', accessExpiresAt: umDia() })
+  const card = await db.group.create({ data: { userId, waJid: 'legado-card@g.us', name: 'Card', role: 'post', kind: 'group', imageMode: 'preview_watermark', watermarkText: 'Marca', channelButtonJid: '120363000000000002@newsletter', channelButtonName: 'Canal' } })
+  const foto = await db.group.create({ data: { userId, waJid: 'legado-foto@g.us', name: 'Foto', role: 'post', kind: 'group', imageMode: 'original_watermark', watermarkText: 'Marca' } })
+  const lista = (await app.inject({ method: 'GET', url: '/api/groups' })).json()
+  const byId = Object.fromEntries(lista.map(g => [g.id, g]))
+  assert.equal(byId[card.id].imageMode, 'preview')
+  assert.equal(byId[card.id].channelButtonJid, null)
+  assert.equal(byId[foto.id].imageMode, 'original')
+
+  assert.equal((await app.inject({ method: 'PUT', url: `/api/groups/${foto.id}`, payload: { welcomeMsg: 'oi' } })).statusCode, 200)
+  assert.equal((await db.group.findUnique({ where: { id: foto.id } })).imageMode, 'original')
+  assert.equal((await app.inject({ method: 'PUT', url: `/api/groups/${card.id}`, payload: { welcomeMsg: 'oi' } })).statusCode, 200)
+  const salvo = await db.group.findUnique({ where: { id: card.id } })
+  assert.equal(salvo.channelButtonJid, null)
+  assert.equal(salvo.imageMode, 'preview')
+  assert.equal(salvo.watermarkText, 'Marca')
+  await app.close()
+})
+
+test('Trial ativo segue podendo ligar marca d\'água (herda o PRO)', async () => {
+  const { app } = await buildApp({ plan: 'trial', accessExpiresAt: umDia() })
+  const { id } = JSON.parse((await app.inject({ method: 'POST', url: '/api/groups', payload: { waJid: 'trial-wm@g.us', name: 'D', role: 'post', kind: 'group' } })).body)
+  const res = await app.inject({ method: 'PUT', url: `/api/groups/${id}`, payload: { imageMode: 'original_watermark', watermarkText: 'Marca' } })
+  assert.equal(res.statusCode, 200)
   await app.close()
 })

@@ -8,7 +8,7 @@
  *   - (padrão): texto puro
  * Puramente visual. */
 
-const SENDER_DEFAULT = 'BOTinho'
+const SENDER_DEFAULT = 'Espelha Grupos'
 const TOKEN_RE = /(\{\{[^}]+\}\}|\{[^}]+\})/g
 
 export function TokenText({ text }) {

@@ -127,13 +127,13 @@ test('a tela tem duas colunas: o link e o resultado', () => {
   assert.ok(/@media \(max-width: 900px\)[^@]*\.tc-cols\s*\{[^}]*grid-template-columns:\s*1fr/.test(css), 'no celular precisa virar uma coluna')
 })
 
-test('"Testar conversão" está na sidebar, em Configuração', () => {
+test('"Testar conversão" está na sidebar, em Configurar', () => {
   assert.ok(nav.includes("label: 'Testar conversão'"), 'item sumiu da sidebar')
   assert.ok(nav.includes("href: '/painel/converte-links'"), 'caminho errado')
-  const credenciais = nav.indexOf("label: 'Minhas credenciais'")
+  const credenciais = nav.indexOf("label: 'IDs de afiliado'")
   const testar = nav.indexOf("label: 'Testar conversão'")
   const conta = nav.indexOf("title: 'Conta'")
-  assert.ok(credenciais > -1 && testar > credenciais, 'deve vir depois de Minhas credenciais')
+  assert.ok(credenciais > -1 && testar > credenciais, 'deve vir depois de IDs de afiliado')
   assert.ok(testar < conta, 'deve ficar no grupo Configuração, não em Conta')
 })
 

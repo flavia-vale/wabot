@@ -32,8 +32,8 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 ## Pricing (canonical, see /pricing.md)
 
 - Teste grátis (trial): R$0 for 7 days, everything in Pro.
-- Basic: R$39 per 30 days — mirroring, link conversion in the six stores, offer creation from a pasted link, immediate and scheduled sending, watermark, clickable card, Shopee sales dashboard, send reports.
-- Pro: R$69 per 30 days — everything in Basic plus channels, automatic Shopee offers, send queues and the pacing controls.
+- Basic: R$39 per 30 days — group mirroring, link conversion in the six stores, offer creation from a pasted link, immediate and scheduled sending, clickable card, rewritable messages, send reports.
+- Pro: R$69 per 30 days — everything in Basic plus channels, automatic Shopee offers, send queues, watermark, pacing controls with copy variation and the Shopee sales and commission dashboard.
 - Billing: Mercado Pago; optional automatic renewal (can be turned off from the panel; the paid period stays valid) or one-off 30-day payment.
 
 ## Who it is for

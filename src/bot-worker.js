@@ -1169,7 +1169,8 @@ async function monitorSilenceWatchdog() {
   await triggerWaGroupsRefresh('silence_watchdog')
 }
 
-const AD_TEXT = '💡 Bot gerenciado pelo Bot Conversor para Afiliados — automatize seus grupos de afiliados'
+// Marca única do produto (decisão 2026-09-23: "Espelha Grupos em tudo").
+const AD_TEXT = '💡 Bot gerenciado pelo Espelha Grupos — automatize seus grupos de afiliados'
 function envNumber(name, fallback) {
   if (process.env[name] === undefined) return fallback
   const value = Number(process.env[name])
