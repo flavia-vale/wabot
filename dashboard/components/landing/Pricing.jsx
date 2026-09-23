@@ -27,7 +27,7 @@ const s = {
     whiteSpace: 'nowrap',
   },
   planName: { fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent-strong)', marginBottom: 16 },
-  priceBig: { fontFamily: "var(--font-instrument-serif), serif", fontStyle: 'italic', fontSize: 64, lineHeight: 1, letterSpacing: '-0.03em' },
+  priceBig: { fontWeight: 900, fontSize: 64, lineHeight: 1, letterSpacing: '-0.03em' },
   priceUnit: { fontSize: 14, opacity: 0.7 },
   list: { listStyle: 'none', padding: 0, margin: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1 },
 };
