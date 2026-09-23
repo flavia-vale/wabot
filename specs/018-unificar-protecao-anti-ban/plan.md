@@ -81,6 +81,12 @@ Re-check pós-design: sem violação nova. Nenhuma complexidade a justificar.
 
 1. **Conexão WhatsApp (FR-006a)** — confirmado no código: **nenhum controle de
    proteção** na tela; nada a mover. (research R1)
+   **Adendo (T001, rodada `implement` de 2026-09-23):** checagem repetida
+   (`grep -riE "preserv|anti-ban|antiban|limite|hor[aá]rio|rajada|stagger|jitter|atraso.*canal|intervalo" dashboard/app/painel/whatsapp/page.js`)
+   confirma o mesmo achado de R1 — uma única linha, dentro do comentário JSX
+   `{/* ... */}` das linhas 672-675 (menção a "rajada esperada de Bad MAC"
+   no comentário sobre a remoção do banner de "conexão instável"), não texto
+   visível. Nenhum item T001a/T001b foi aberto.
 2. **Onde aplicar "mais conservador"** — leitura, chokepoint único
    `src/core/antiBanFloor.js`, consumido **só** por
    `resolveDestinationPreservation` (os três campos fixos são todos de
