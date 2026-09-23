@@ -48,7 +48,7 @@ import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
-import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
+import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
@@ -1252,6 +1252,26 @@ const WA_GROUP_DESYNC_ESCALATE_THRESHOLD = Math.max(0, envNumber('WA_GROUP_DESYN
 let groupDecryptTimestamps = new Map()
 let groupAutoRefreshTimestamps = new Map()
 const groupLastAutoRefreshAtByJid = new Map()
+// Camada 3-B (RCA 2026-09-23): CANAL (@newsletter) dessincronizado nunca é
+// curado pelo refresh de grupo (não é grupo) nem pela quarentena por msgId em
+// `msgRetryCounterCache` (cada mensagem nova do canal tem um id DIFERENTE —
+// "o mesmo id repetir" nunca acontece). Medido em produção: dois canais
+// diferentes derrubaram a MESMA conta duas vezes em menos de 2h, e 63% da
+// frota tinha o mesmo sintoma de decrypt-fail crônico. Reaproveita o MESMO
+// detector (`registerStuckMessageAndDecide`/`groupDecryptTimestamps`, acima)
+// — só a AÇÃO muda: em vez de tentar re-sincronizar (não existe refresh de
+// sender-key de canal exposto pelo Baileys), colocamos o canal numa
+// quarentena EM MEMÓRIA por uma janela — `shouldIgnoreJid` passa a ACKar e
+// descartar mensagens dele ANTES do decrypt (mesmo mecanismo do
+// WA_IGNORE_UNMONITORED_GROUPS), a sessão para de cair por causa dele, e ao
+// expirar a janela ele volta a ser processado normalmente. Default OFF:
+// validar em staging antes de ligar em produção. Canal na allowlist (fonte
+// monitorada de propósito) nunca entra em quarentena — ver shouldIgnoreDesyncedChannel.
+const WA_CHANNEL_DESYNC_QUARANTINE_ENABLED = ['1', 'true'].includes(String(process.env.WA_CHANNEL_DESYNC_QUARANTINE_ENABLED || '').trim().toLowerCase())
+const WA_CHANNEL_DESYNC_QUARANTINE_TTL_MS = Math.max(5 * 60_000, envNumber('WA_CHANNEL_DESYNC_QUARANTINE_TTL_MS', WA_GROUP_DESYNC_WINDOW_MS))
+// jid normalizado -> timestamp (ms) de quando entrou em quarentena. Escopo de
+// módulo pela mesma razão de groupDecryptTimestamps.
+const desyncedChannelJids = new Map()
 // Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
 // é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
 const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
@@ -1656,6 +1676,24 @@ function handleGroupDecryptSignal(args) {
     })
     groupDecryptTimestamps = r.state
     if (!r.stuck) return
+    // Canal (@newsletter): nunca tenta o refresh de grupo (não se aplica) —
+    // coloca em quarentena em memória e para por aqui. Ver comentário na
+    // declaração de WA_CHANNEL_DESYNC_QUARANTINE_ENABLED.
+    if (jid.endsWith('@newsletter')) {
+      if (!WA_CHANNEL_DESYNC_QUARANTINE_ENABLED) return
+      const normalizedJid = normalizeJidForMatch(jid)
+      if (allowedChatJids.has(normalizedJid)) return
+      const alreadyQuarantined = desyncedChannelJids.has(normalizedJid)
+      desyncedChannelJids.set(normalizedJid, now)
+      if (alreadyQuarantined) return
+      logger.warn(
+        { jid, decryptFailures: r.count, windowMs: WA_GROUP_DESYNC_WINDOW_MS, ttlMs: WA_CHANNEL_DESYNC_QUARANTINE_TTL_MS },
+        'Canal com falhas de decrypt repetidas (sender-key dessincronizada) — ignorando mensagens desse canal temporariamente para não derrubar a sessão'
+      )
+      const channelName = groupSubjectByJid.get(normalizeJidForMatch(jid)) || null
+      try { recordOperationalSignal('wa_channel_desync_quarantine', { userId, jid, name: channelName, count: r.count }) } catch {}
+      return
+    }
     const lastRefreshAt = groupLastAutoRefreshAtByJid.get(jid) || 0
     if (now - lastRefreshAt < WA_GROUP_DESYNC_REFRESH_COOLDOWN_MS) return
     groupLastAutoRefreshAtByJid.set(jid, now)
@@ -1683,6 +1721,21 @@ function handleGroupDecryptSignal(args) {
       })
       .catch(() => {})
   } catch {}
+}
+
+// Consultado pelo shouldIgnoreJid do socket (abaixo) a cada mensagem — decide
+// se ESTE jid está, agora, na quarentena de canal dessincronizado. Puro na
+// decisão (delegada a shouldIgnoreDesyncedChannel); só faz a leitura impura do
+// Map + normalização do jid, que fica de fora da função pura por vir do
+// socket em formato variável (às vezes com sufixo de device).
+function isChannelDesyncQuarantined(jid) {
+  const normalizedJid = normalizeJidForMatch(jid)
+  return shouldIgnoreDesyncedChannel(jid, {
+    enabled: WA_CHANNEL_DESYNC_QUARANTINE_ENABLED,
+    quarantinedAt: desyncedChannelJids.get(normalizedJid),
+    ttlMs: WA_CHANNEL_DESYNC_QUARANTINE_TTL_MS,
+    allowedJids: allowedChatJids,
+  })
 }
 
 // Envelopa o logger pino do Baileys (e seus filhos) para incrementar o contador
@@ -3002,6 +3055,10 @@ async function startBotInner() {
     // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
     // ignorar mensagem legítima enquanto a config ainda não carregou.
     shouldIgnoreJid: (jid) => {
+      // Camada 3-B: canal específico que provou estar com a sessão
+      // dessincronizada (ver handleGroupDecryptSignal). Checada primeiro —
+      // reage rápido, independe do modo de chat-scope.
+      if (isChannelDesyncQuarantined(jid)) return true
       // Regra nova (Fase 2): olhar só o que foi escolhido. Com o modo `off`
       // ela não decide nada e a regra antiga (lista de exceções) segue valendo
       // para quem já ligou WA_IGNORE_UNMONITORED_GROUPS.

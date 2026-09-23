@@ -156,6 +156,11 @@ export const ANALYTICS_EVENTS = new Set([
   // auto-refresh — precisa de ação manual (ex.: cliente sair/reentrar no
   // grupo). Nunca automático: só visibilidade para decisão humana.
   'ops_wa_group_desync_unresolved',
+  // Camada 3-B (RCA 2026-09-23): canal (@newsletter) com falhas de decrypt
+  // repetidas colocado em quarentena em memória por uma janela — sem isso,
+  // toda mensagem NOVA do canal reabria o ciclo decrypt-fail -> retry-receipt
+  // -> stream:error -> queda, pra sempre (medido: 63% da frota afetada).
+  'ops_wa_channel_desync_quarantine',
   'ops_wa_reception_blind',
   'ops_wa_reception_self_heal',
   'ops_wa_retry_giveup',

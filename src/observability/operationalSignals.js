@@ -40,6 +40,12 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   wa_group_desync_autoheal: 'ops_wa_group_desync_autoheal',
   // Auto-refresh repetido não resolveu — precisa de ação manual (humano).
   wa_group_desync_unresolved: 'ops_wa_group_desync_unresolved',
+  // Camada 3-B (RCA 2026-09-23): CANAL (@newsletter) com falhas de decrypt
+  // repetidas colocado em quarentena em memória (mensagens dele ACKadas e
+  // descartadas antes do decrypt, por uma janela) — diferente do grupo, não
+  // existe refresh de sender-key de canal, então a ação é ignorar até a
+  // sessão se resincronizar sozinha.
+  wa_channel_desync_quarantine: 'ops_wa_channel_desync_quarantine',
   // `failure reason=405`: o WhatsApp recusou o login/registro. Na prática é
   // sempre a versão do WA Web anunciada no handshake tendo sido cortada pelo
   // servidor — atinge TODAS as sessões de uma vez (RCA 2026-07-28), não um chip
