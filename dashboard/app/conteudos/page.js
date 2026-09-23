@@ -525,7 +525,7 @@ export default function Page() {
               <Link href={heroCta.href} data-seo-cta="content-hero-register" className="rounded-xl bg-emerald-600 px-4 py-3 text-white hover:bg-emerald-700">
                 {heroCta.label}
               </Link>
-              <Link href={`/materiais/checklist-divulgacao-ofertas-grupos-whatsapp?from=hub&exp_id=${experimentId}`} data-seo-cta="content-primary-checklist" className="rounded-xl border border-emerald-200 px-4 py-3 hover:bg-emerald-50">
+              <Link href="/materiais/checklist-divulgacao-ofertas-grupos-whatsapp" data-seo-cta="content-primary-checklist" data-cta-position="hub_hero" className="rounded-xl border border-emerald-200 px-4 py-3 hover:bg-emerald-50">
                 Ver checklist principal
               </Link>
             </div>
@@ -542,7 +542,7 @@ export default function Page() {
                   <ul className="mt-3 space-y-2 text-sm font-bold text-emerald-800">
                     {track.links.map((link) => (
                       <li key={link.href}>
-                        <Link href={`${link.href}?from=trilha-${track.id}&exp_id=${experimentId}`} data-seo-cta="content-roadmap-link" className="underline underline-offset-4">
+                        <Link href={link.href} data-seo-cta="content-roadmap-link" data-cta-position={`trilha-${track.id}`} className="underline underline-offset-4">
                           {link.label}
                         </Link>
                       </li>

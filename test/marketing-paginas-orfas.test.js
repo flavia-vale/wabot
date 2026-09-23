@@ -123,6 +123,14 @@ test('DIVIDA_HISTORICA não guarda rota que saiu do registry', () => {
 
 const HREF_INTERNO_COM_UTM = /href[=:]\s*[{'"`]*(\/(?!login|cadastro)[A-Za-z0-9/_-]+)\?[^'"`\s}]*utm_/g
 
+// RCA 2026-09-23: o Search Console listou /blog/...?from=trilha-...&exp_id=hub-fase4
+// como "página alternativa com tag canônica". A guarda acima só olhava `utm_`,
+// e `/conteudos` montava os links com `?from=` e `exp_id=` — inclusive em
+// template (`${link.href}?from=...`), que o padrão de rota literal não enxerga.
+// Qualquer parâmetro de rastreamento em link interno fora de /login e /cadastro
+// cria a mesma variante duplicada.
+const HREF_INTERNO_COM_RASTREIO = /href[=:]\s*\{?\s*[`'"](?!\/(?:login|cadastro)\b)([^`'"\s]*)\?[^`'"\s]*\b(?:from|exp_id|ref|src)=/g
+
 function arquivosDeFonte() {
   const out = []
   const walk = (dir) => {
@@ -145,6 +153,10 @@ test('link interno para página de conteúdo não carrega UTM', () => {
   for (const arquivo of arquivosDeFonte()) {
     const texto = fs.readFileSync(arquivo, 'utf8')
     for (const achado of texto.matchAll(HREF_INTERNO_COM_UTM)) {
+      ofensores.push(`${path.relative(raiz, arquivo)} -> ${achado[1]}`)
+    }
+    for (const achado of texto.matchAll(HREF_INTERNO_COM_RASTREIO)) {
+      if (/^https?:/.test(achado[1])) continue
       ofensores.push(`${path.relative(raiz, arquivo)} -> ${achado[1]}`)
     }
   }
