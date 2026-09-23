@@ -159,7 +159,7 @@ export default function RhythmCard() {
   return (
     <section className="pnl-card" aria-labelledby="rhythm-title">
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
-        <h2 id="rhythm-title" className="pnl-card-title" style={{ fontSize: 15, margin: 0 }}>Ritmo dos envios</h2>
+        <h2 id="rhythm-title" className="pnl-card-title" style={{ margin: 0 }}>Ritmo dos envios</h2>
         <span className="pnl-hint">protege o seu número</span>
       </div>
       <p className="pnl-hint" style={{ margin: '6px 0 14px' }}>

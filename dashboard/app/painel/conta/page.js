@@ -70,7 +70,7 @@ export default function MinhaContaPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 18, borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
           <span className="pnl-avatar" style={{ width: 60, height: 60, fontSize: 20 }} aria-hidden="true">{initialsOf(savedName, user?.email)}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 17 }}>{savedName || 'Sem nome'}</div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>{savedName || 'Sem nome'}</div>
             <div className="pnl-hint" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <span>{user?.email}</span> · <span>{planLabel(user, isPro)}</span>
             </div>

@@ -105,7 +105,7 @@ function SalesLive() {
   const guidance = errorGuidance(error?.code)
   const activePreset = Object.entries(presets).find(([, make]) => { const value = make(); return value.from === period.from && value.to === period.to })?.[0]
   return <section className="sales-page">
-    <header className="pnl-pro-head"><div><h2>Vendas Shopee</h2><p>Suas vendas e comissões da Shopee, direto no painel. Período de {period.from.split('-').reverse().join('/')} a {period.to.split('-').reverse().join('/')} · horário de São Paulo</p></div>{snapshot && <small className="pnl-pro-muted">Atualizado em {date(snapshot.sourceUpdatedAt)}</small>}</header>
+    <header className="pnl-pro-head"><div><h2>Vendas</h2><p>Suas vendas e comissões da Shopee, direto no painel. Período de {period.from.split('-').reverse().join('/')} a {period.to.split('-').reverse().join('/')} · horário de São Paulo</p></div>{snapshot && <small className="pnl-pro-muted">Atualizado em {date(snapshot.sourceUpdatedAt)}</small>}</header>
     <div className="sales-scope-banner" role="status">Por enquanto, esta tela mostra vendas apenas da <strong>Shopee</strong>, a partir de 27/08/2026. Amazon, Mercado Livre e outras lojas chegam em breve.</div>
     <form className="sales-filters" onSubmit={applyCustom}><div className="sales-presets"><button type="button" aria-pressed={activePreset === 'today'} onClick={() => choose('today')}>Hoje</button><button type="button" aria-pressed={activePreset === 'seven'} onClick={() => choose('seven')}>7 dias</button><button type="button" aria-pressed={activePreset === 'thirty'} onClick={() => choose('thirty')}>30 dias</button></div><label>De<input type="date" value={draft.from} onChange={e => dispatch({ type: 'draft', field: 'from', value: e.target.value })} /></label><label>Até<input type="date" value={draft.to} onChange={e => dispatch({ type: 'draft', field: 'to', value: e.target.value })} /></label><button type="submit" disabled={loading}>Aplicar</button></form>
     {loading && !snapshot && <div className="sales-info" role="status">Carregando vendas da Shopee…</div>}
@@ -124,7 +124,7 @@ function SalesLive() {
 }
 
 export default function SalesDashboard() {
-  usePainelHeader({ title: 'Vendas Shopee', subtitle: 'Resultados da Shopee gerados pelos links do robô' })
+  usePainelHeader({ title: 'Vendas', subtitle: 'Resultados da Shopee gerados pelos links do robô' })
   const { isPro } = usePainel()
   // Divisão Basic/PRO (2026-09-23): no Basic a tela explica o recurso e mostra
   // uma prévia de exemplo — e NÃO consulta a Shopee (a API devolveria 403).
