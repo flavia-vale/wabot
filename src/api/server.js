@@ -63,13 +63,14 @@ import { storyAssetRoutes } from './routes/storyAssets.js'
 import { createStoryAssetStorageFromEnv } from '../instagram/storage/localStoryAssetStorage.js'
 import { startStoryAssetCleanup } from '../instagram/storage/storyAssetService.js'
 import { instagramRoutes } from './routes/instagram.js'
+import { TRUSTED_PROXIES } from './trustedProxies.js'
 import { instagramOAuthConfig } from '../instagram/oauth/config.js'
 import { startInstagramTokenSweep } from '../instagram/oauth/sweep.js'
 import { startInstagramPublishingRuntime } from '../instagram/publishing/runtime.js'
 import { startInstagramMirrorIngressCron } from '../instagram/mirroring/service.js'
 import { startInstagramReconciliation } from '../instagram/publishing/reconcile.js'
 
-const app = Fastify({ logger: true, trustProxy: true })
+const app = Fastify({ logger: true, trustProxy: TRUSTED_PROXIES })
 const storyAssetStorage = createStoryAssetStorageFromEnv()
 registerApiMetricsHooks(app)
 const activityWriteThrottleMs = Math.max(0, Number(process.env.ACTIVITY_WRITE_THROTTLE_MS || 60_000))
@@ -411,7 +412,8 @@ await app.register(fastifyCors, {
 // brute-force de /payments/recover, scraping de endpoints caros). Limites
 // específicos mais apertados já existem in-route em /login e /link-conversion;
 // este é o teto geral. Probes de orquestração (health/ready/metrics) ficam fora.
-// trustProxy=true já resolve req.ip a partir de X-Forwarded-For do proxy local.
+// req.ip vem de X-Forwarded-For, mas só dos saltos confiáveis (esta máquina e
+// a Cloudflare) — ver src/api/trustedProxies.js.
 const RATE_LIMIT_MAX = Math.max(1, Number(process.env.RATE_LIMIT_MAX || 300))
 const RATE_LIMIT_WINDOW = String(process.env.RATE_LIMIT_WINDOW || '1 minute')
 const RATE_LIMIT_ALLOWLIST = new Set(['/health', '/ready', '/metrics'])
