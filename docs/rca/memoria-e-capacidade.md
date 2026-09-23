@@ -38,6 +38,28 @@ contínua, pouca `MemAvailable`, disco e headroom determinam atenção/criticida
 O forecast só fornece horizonte quando há cobertura suficiente e crescimento
 positivo, sempre com faixa e confiança.
 
+**Piso e janela configuráveis (2026-09-23).** O piso de 350 MB e a janela de
+90 dias do p95 viraram env, sem mudar o padrão:
+
+| Env | Padrão | Efeito |
+|---|---|---|
+| `CAPACITY_SESSION_COST_FLOOR_MB` | 350 | piso do custo por robô; grampeado em [150, 1000], inválido = 350 |
+| `CAPACITY_WORKER_HISTORY_SINCE` | vazio | data ISO: o p95 por robô só usa medições a partir dela |
+
+Motivo medido: com jemalloc (2026-09-23, 53 robôs) o RSS por robô deu
+**p95 198 MB, máximo 218 MB** — e o piso de 350 fazia o limite seguro ficar em
+~71 com 23,8 GB livres. Piso 250 (p95 + ~25%) põe o limite em ~100 no servidor
+de 31.337 MB. A janela existe porque o p95 de 90 dias mistura o regime antigo
+(robôs mais pesados) e levaria três meses para refletir a economia; com o corte
+em `2026-09-22T23:00:00Z`, os primeiros 14 dias usam o piso e depois o p95 do
+regime atual — **o maior dos dois continua valendo**, então robô pesado nunca é
+escondido pelo piso.
+
+**Não regredir:** o piso de 250 só vale com jemalloc. Voltar ao glibc
+(rollback do `WA_WORKER_LD_PRELOAD`) exige apagar `CAPACITY_SESSION_COST_FLOOR_MB`
+junto. E isto muda só a CONTA do painel e dos alertas: quem recusa robô de
+verdade é `MAX_SESSIONS_PER_PROCESS` (teto de vagas), que não é tocado aqui.
+
 Snapshots horários são retidos por 90 dias; rollups horários por 12 meses
 e diários permanecem. Alertas exigem confirmação em duas amostras, possuem
 cooldown de 24 h, registram piora e recuperação e nunca executam ações. Eventos
@@ -185,8 +207,8 @@ memória anônima (`RssAnon`):
   24 h depois (`write EPIPE` durante reinício do supervisor e `ENOENT` num
   arquivo de credencial). Nenhum é do alocador. Os robôs que renasceram
   sozinhos passaram de 7 para 14 em 24 h, e só esses 2 foram erro fatal.
-- A política de capacidade **não muda**: ela usa o maior entre 350 MB e o p95
-  por robô, de propósito. O ganho aparece como folga de RAM, não como vaga nova.
+- A política de capacidade não mudou nesse passo; o piso passou a ser
+  configurável depois (ver "Piso e janela configuráveis", acima).
 
 **Não regredir:**
 
