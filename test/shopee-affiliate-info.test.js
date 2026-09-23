@@ -69,6 +69,25 @@ test('fetchShopeeProductInfo retorna null sem credenciais', async () => {
   assert.equal(await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', {}), null)
 })
 
+test('fetchShopeeProductInfo reporta diagnóstico quando a API recusa (chave sem acesso à plataforma)', async (t) => {
+  t.after(stubAxiosPost(async () => ({
+    data: {
+      errors: [{
+        message: 'error [10035]: You currently do not have access to the Shopee Affiliate Open API Platform',
+        extensions: { code: 10035 },
+      }],
+    },
+  })))
+
+  const diagnostics = []
+  const info = await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', CREDS, {
+    onDiagnostic: (event) => diagnostics.push(event),
+  })
+  assert.equal(info, null)
+  assert.equal(diagnostics[0]?.stage, 'shopee_api_erro')
+  assert.match(diagnostics[0]?.detail, /10035/)
+})
+
 // Regressão 1: o espelhamento da Shopee deve enviar o shortLink oficial de
 // afiliado retornado pela API (formato visual esperado: s.shopee.com.br/...).
 // Não resolver para a URL longa /product?...; se a API parar de devolver link

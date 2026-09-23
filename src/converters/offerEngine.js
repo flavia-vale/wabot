@@ -146,6 +146,7 @@ export async function buildScrapedOffer({
   fetchProductInfo = defaultFetchProductInfo,
   conversionTimeoutMs = CONVERSION_TIMEOUT_MS,
   logger = noopLogger,
+  onDiagnostic,
 } = {}) {
   const parsedLink = extractSingleLink(url)
   const platform = platformArg ?? parsedLink?.platform ?? null
@@ -219,7 +220,7 @@ export async function buildScrapedOffer({
   const displayUrlFor = (finalUrl) => keepOriginalLink ? displayUrl : (finalUrl || offerUrl)
 
   try {
-    let info = await fetchProductInfo(offerUrl, { mlCredentials, shopeeCredentials })
+    let info = await fetchProductInfo(offerUrl, { mlCredentials, shopeeCredentials, onDiagnostic })
 
     // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver
     // bloqueio de redirect/anti-bot no scrape do convertido, ou o scrape pode
@@ -227,7 +228,7 @@ export async function buildScrapedOffer({
     // complementar título/preço sem perder o offerUrl convertido.
     if (conversionSuccess && offerUrl !== url && !info?.newPrice) {
       try {
-        const fallbackInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials })
+        const fallbackInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials, onDiagnostic })
         if (hasUsefulOfferInfo(fallbackInfo)) {
           info = {
             ...info,
@@ -262,7 +263,7 @@ export async function buildScrapedOffer({
 
     if (conversionSuccess && offerUrl !== url) {
       try {
-        const originalInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials })
+        const originalInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials, onDiagnostic })
         if (hasUsefulOfferInfo(originalInfo)) {
           return {
             title: originalInfo?.title || '',

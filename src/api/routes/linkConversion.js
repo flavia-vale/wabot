@@ -149,6 +149,10 @@ export async function linkConversionRoutes(app, opts = {}) {
     // roda internamente só para BUSCAR título/preço (resolve short link,
     // cookie ML), mas a oferta sai sempre com o link colado. A busca de
     // título/preço vive no motor único compartilhado (offerEngine.js).
+    // O caminho de título/preço era MUDO como o da foto era antes do RCA
+    // 2026-09-16: qualquer erro (chave recusada, item fora do catálogo, API
+    // fora do ar) virava o MESMO `null`, sem log nenhum explicando por quê.
+    const infoDiagnostics = []
     const offer = await buildScrapedOffer({
       url,
       credentialsMap,
@@ -157,7 +161,15 @@ export async function linkConversionRoutes(app, opts = {}) {
       fetchProductInfo,
       conversionTimeoutMs: operational.conversionTimeoutMs,
       logger: app.log,
+      onDiagnostic: (event) => { if (event?.stage) infoDiagnostics.push(event) },
     })
+    if (!offer.title && !offer.newPrice && !offer.oldPrice) {
+      app.log.warn({
+        url,
+        stages: infoDiagnostics.map(item => item.stage),
+        detail: infoDiagnostics[infoDiagnostics.length - 1]?.detail || null,
+      }, 'Criar oferta: loja não devolveu título nem preço do produto')
+    }
 
     // A foto NÃO pode sair de `offer.finalUrl` cru. `finalUrl` é onde o fetch
     // de HTML terminou e, na Shopee, ele termina com frequência numa parede

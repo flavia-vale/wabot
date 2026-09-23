@@ -694,15 +694,18 @@ function extractShopeePriceRangeFromJsonInHtml(html) {
   return null
 }
 
-async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, shopeeCreds = null } = {}) {
+async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, shopeeCreds = null, onDiagnostic = null } = {}) {
   if (shopeeCreds?.appId) {
-    const affiliateResult = await fetchShopeeProductInfo(url, shopeeCreds)
+    const affiliateResult = await fetchShopeeProductInfo(url, shopeeCreds, { onDiagnostic })
     if (affiliateResult) return affiliateResult
   }
 
   const canonical = await resolveShopeeUrl(url, { timeoutMs })
   const ids = parseShopeeIdsFromUrl(canonical)
-  if (!ids) return null
+  if (!ids) {
+    try { onDiagnostic?.({ stage: 'shopee_v4_sem_ids', detail: canonical }) } catch {}
+    return null
+  }
   const endpoint = `https://shopee.com.br/api/v4/item/get?itemid=${ids.itemId}&shopid=${ids.shopId}`
   // Shopee v4 API exige csrf token para não retornar error 90309999.
   // SPC_F é o fingerprint de sessão anônima; csrftoken deve corresponder.
@@ -720,10 +723,16 @@ async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, sho
       signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      try { onDiagnostic?.({ stage: 'shopee_v4_http_erro', detail: res.status }) } catch {}
+      return null
+    }
     const payload = await res.json().catch(() => null)
     const item = payload?.data?.item
-    if (!item) return null
+    if (!item) {
+      try { onDiagnostic?.({ stage: 'shopee_v4_sem_item', detail: payload?.error }) } catch {}
+      return null
+    }
 
     const modelPrices = extractShopeeModelPrices(item)
     const oldRaw = firstPositiveShopeePrice(item.price_before_discount, item.price_max_before_discount, item.price_min_before_discount, modelPrices.maxOld)
@@ -734,7 +743,8 @@ async function fetchShopeeItemInfo(url, { timeoutMs = HTML_FETCH_TIMEOUT_MS, sho
       oldPrice: shopeePriceIntToString(oldRaw),
       newPrice: shopeePriceIntToString(currentRaw),
     }
-  } catch {
+  } catch (err) {
+    try { onDiagnostic?.({ stage: 'shopee_v4_falhou', detail: err?.message }) } catch {}
     return null
   }
 }

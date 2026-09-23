@@ -524,12 +524,27 @@ export function shopeeDecimalPriceToString(value) {
 // priceMax, priceDiscountRate, productName, imageUrl. NÃO existe `originPrice`
 // (pedir esse campo derruba a query inteira com erro 10010). O preço "de" é
 // derivado do preço atual + a taxa de desconto inteira (`priceDiscountRate`).
-export async function fetchShopeeProductInfo(url, creds) {
-  if (!creds?.appId || !creds?.secretKey) return null
+//
+// `onDiagnostic({ stage, detail })` é opcional e best-effort — mesmo contrato
+// de `fetchShopeeImage`. Até 2026-09-23 este caminho era tão MUDO quanto o da
+// foto era antes do RCA 2026-09-16: qualquer erro (chave recusada, item fora
+// do catálogo, API fora do ar) virava o MESMO `null`, e "Criar oferta" saía
+// sem nome nem preço sem uma linha de log sequer explicando por quê.
+export async function fetchShopeeProductInfo(url, creds, { onDiagnostic } = {}) {
+  const report = (stage, detail) => {
+    try { onDiagnostic?.({ stage, detail }) } catch {}
+  }
+  if (!creds?.appId || !creds?.secretKey) {
+    report('shopee_sem_credencial')
+    return null
+  }
   try {
     const canonical = await resolveCanonical(url)
     const ids = parseIds(canonical)
-    if (!ids) return null
+    if (!ids) {
+      report('shopee_sem_ids', canonical)
+      return null
+    }
 
     const body = {
       query: `{
@@ -545,8 +560,20 @@ export async function fetchShopeeProductInfo(url, creds) {
       headers: { Authorization: header, 'Content-Type': 'application/json' },
       timeout: 6000,
     })
+    // A API de afiliado responde 200 MESMO EM ERRO, sinalizando via `errors`
+    // (mesma armadilha da sondagem de credencial e da busca de foto). Sem ler
+    // o corpo, chave recusada ou sem acesso à plataforma (10020/10035) parecia
+    // "produto sem título/preço".
+    const apiError = Array.isArray(data?.errors) ? data.errors[0] : null
+    if (apiError) {
+      report('shopee_api_erro', apiError?.message || apiError?.code || 'erro sem detalhe')
+      return null
+    }
     const node = data?.data?.productOfferV2?.nodes?.[0]
-    if (!node) return null
+    if (!node) {
+      report('shopee_item_fora_do_catalogo', `${ids.shopId}/${ids.itemId}`)
+      return null
+    }
 
     const title = typeof node.productName === 'string' ? node.productName.trim() : ''
     const currentRaw = node.priceMin ?? node.price ?? null
@@ -561,9 +588,13 @@ export async function fetchShopeeProductInfo(url, creds) {
       oldPrice = shopeeDecimalPriceToString(current / (1 - rate / 100))
     }
 
-    if (!title && !newPrice) return null
+    if (!title && !newPrice) {
+      report('shopee_catalogo_sem_titulo_ou_preco', `${ids.shopId}/${ids.itemId}`)
+      return null
+    }
     return { title, newPrice, oldPrice }
-  } catch {
+  } catch (err) {
+    report('shopee_api_falhou', err?.message)
     return null
   }
 }
@@ -582,11 +613,26 @@ export async function fetchShopeeProductInfo(url, creds) {
 // checkAmazonSession — { configured, alive, reason } — para o aviso por e-mail
 // tratar as três lojas pelo mesmo caminho.
 
-// Códigos que a Shopee devolve quando a autenticação em si é recusada. Só estes
-// viram `alive:false`. Qualquer outro código fica INDETERMINADO: mandar a
-// cliente recadastrar uma chave viva é pior do que não avisar (mesma regra de
-// `alive === null` em credentialExpiry/policy.js).
-export const SHOPEE_AUTH_REJECTED_CODES = Object.freeze([10020])
+// Códigos que a Shopee devolve quando a autenticação/autorização em si é
+// recusada. Só estes viram `alive:false`. Qualquer outro código fica
+// INDETERMINADO: mandar a cliente recadastrar uma chave viva é pior do que não
+// avisar (mesma regra de `alive === null` em credentialExpiry/policy.js).
+//
+// 10020 = "Invalid Signature" (chave/appId incorretos ou assinatura mal
+// calculada).
+// 10035 = "You currently do not have access to the Shopee Affiliate Open API
+// Platform" — a Shopee revogou/nunca liberou o acesso da conta a essa API.
+// Achado em produção (2026-09-23, conta nandavieiraf@gmail.com): "Criar
+// oferta" com link de produto real da Shopee voltava sem título nem preço.
+// A API de afiliado respondia 200 com esse erro no corpo (fetchShopeeProductInfo
+// engolia em `catch { return null }`, sem log nenhum) e o fallback público v4
+// também falha por design (403/90309999, documentado acima) — as DUAS fontes
+// de título/preço/imagem da Shopee morrem juntas, silenciosamente, e a chave
+// nunca era sinalizada como recusada porque só 10020 contava. Diferente de um
+// rate-limit ou indisponibilidade pontual, a mensagem é explícita ("you
+// currently do not have access... contact the Shopee Affiliate team") — é
+// recusa de acesso, não ruído transitório.
+export const SHOPEE_AUTH_REJECTED_CODES = Object.freeze([10020, 10035])
 
 // Consulta só de leitura, sem efeito colateral: não gera link nem grava nada do
 // lado da Shopee. O que importa é se a assinatura é aceita.

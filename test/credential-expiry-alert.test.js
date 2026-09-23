@@ -377,7 +377,7 @@ test('lastAlertByPlatform devolve a data mais recente por loja e ignora metadata
 
 // ------------------------------------------------------- Shopee (RCA ago/2026)
 
-test('sondagem Shopee: só "Invalid Signature" (10020) conta como chave recusada', () => {
+test('sondagem Shopee: "Invalid Signature" (10020) ou sem acesso à plataforma (10035) contam como chave recusada', () => {
   const rejeitada = { configured: true, alive: false, reason: 'rejected' }
   assert.deepEqual(
     classifyShopeeProbeResponse({ status: 200, errors: [{ message: 'error [10020]: Invalid Signature', extensions: { code: 10020 } }] }),
@@ -385,6 +385,16 @@ test('sondagem Shopee: só "Invalid Signature" (10020) conta como chave recusada
   )
   // A API às vezes devolve o código fora de `extensions`.
   assert.deepEqual(classifyShopeeProbeResponse({ status: 200, errors: [{ code: 10020 }] }), rejeitada)
+  // Achado em produção 2026-09-23 (nandavieiraf@gmail.com): "Criar oferta"
+  // saía sem nome nem preço porque a Shopee recusa com este código, e ele
+  // não contava como chave recusada — o painel não avisava nada.
+  assert.deepEqual(
+    classifyShopeeProbeResponse({
+      status: 200,
+      errors: [{ message: 'error [10035]: You currently do not have access to the Shopee Affiliate Open API Platform', extensions: { code: 10035 } }],
+    }),
+    rejeitada,
+  )
 })
 
 test('sondagem Shopee: qualquer outro erro fica INDETERMINADO (nunca alarma)', () => {
