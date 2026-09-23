@@ -268,6 +268,17 @@ export default function PlanoPage() {
         </section>
       )}
 
+      {/* Já no Básico, com canal/automática/fila configurados: isso está
+          parado. Antes deste aviso a cliente pagava e descobria pelo canal
+          sem receber nada (RCA 2026-09-23). */}
+      {overview?.proFeaturesNotice?.kind === 'stopped' && (
+        <section className="pnl-note-box is-warn" role="alert">
+          <strong style={{ fontWeight: 600 }}>{overview.proFeaturesNotice.title}</strong>
+          <p style={{ marginTop: 6 }}>{overview.proFeaturesNotice.body}</p>
+          <p style={{ marginTop: 6, fontWeight: 600 }}>{overview.proFeaturesNotice.action}</p>
+        </section>
+      )}
+
       {/* Planos */}
       <section>
         <div style={{ marginBottom: 22 }}>
@@ -307,6 +318,18 @@ export default function PlanoPage() {
                   <p className="mt-5 rounded-xl bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">
                     {precoPorOferta.texto}
                   </p>
+                )}
+
+                {/* O teste grátis libera tudo do Pro. Sem este aviso, quem usa
+                    canal, automática ou fila escolhia o Básico e isso parava em
+                    silêncio logo depois de pagar (RCA 2026-09-23). O aviso fica
+                    NO card, colado aos botões: é ali que a decisão acontece. */}
+                {plan.id === 'basic' && overview?.proFeaturesNotice?.kind === 'before_choosing' && (
+                  <div className="mt-5 pnl-note-box is-warn" role="note">
+                    <strong style={{ fontWeight: 600 }}>{overview.proFeaturesNotice.title}</strong>
+                    <p style={{ marginTop: 4 }}>{overview.proFeaturesNotice.body}</p>
+                    <p style={{ marginTop: 4, fontWeight: 600 }}>{overview.proFeaturesNotice.action}</p>
+                  </div>
                 )}
 
                 <div className="mt-6 grid gap-2.5">
