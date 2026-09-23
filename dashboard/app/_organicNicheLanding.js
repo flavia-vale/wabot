@@ -44,7 +44,7 @@ const pages = {
     social: {
       linkedin: 'Restaurante não precisa depender de lembrete manual para divulgar combo, cupom e promoção de horário fraco. Primeiro valide oferta e região; depois automatize a distribuição com cadência.',
       instagram: 'Promo de restaurante sem processo vira esquecimento. Oferta validada + grupo/canal certo + cadência = rotina de divulgação melhor.',
-      utm: 'http://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=nicho-restaurantes',
+      utm: 'https://espelhagrupos.com.br/bot-ofertas-restaurantes-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=nicho-restaurantes',
     },
   },
   'bot-ofertas-marketplace-whatsapp': {
@@ -90,7 +90,7 @@ const pages = {
     social: {
       linkedin: 'Marketplace exige velocidade, mas afiliado não pode pular conferência. Link monetizado, tag, preço e estoque vêm antes da automação em grupos e canais.',
       instagram: 'Link sem tag = risco de comissão perdida. Confere primeiro. Automatiza depois.',
-      utm: 'http://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=nicho-marketplace',
+      utm: 'https://espelhagrupos.com.br/bot-ofertas-marketplace-whatsapp?utm_source=linkedin&utm_medium=social-organic&utm_campaign=prelaunch-botinho&utm_content=nicho-marketplace',
     },
   },
 }
