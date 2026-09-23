@@ -72,7 +72,8 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
-import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg, hasPublishableConversion } from './core/conversionFailureReason.js'
+import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
+import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -4060,11 +4061,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind }
         } catch (err) {
           if (err.stripFromMessage) {
-            // Cupom/voucher que não conseguiu virar link afiliado oficial: não
-            // removemos mais nada da mensagem espelhada. O link fica como veio
-            // para preservar a oferta/CTA original, enquanto os demais links
-            // válidos da mesma mensagem continuam sendo convertidos juntos.
-            return { platform, url, converted: url, passthrough: true, linkKind: 'coupon', failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
+            // Link que não virou link da cliente (cupom da Shopee recusado,
+            // qualquer falha do AliExpress). NUNCA publicar o original: é o link
+            // do concorrente. A mensagem inteira deixa de sair — ver
+            // core/mirrorLinkGuard.js (RCA 2026-09-23, 794 envios vazados).
+            logger.warn({ platform, url, err: err.message }, 'Link não convertido — oferta não será publicada com o link de origem')
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           // Motivo pré-classificado pelo converter (feature
           // 007-ml-vitrine-fallback-expired: skip:ml_vitrine_missing) tem
@@ -4127,31 +4129,62 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         })
       }
 
-      let finalText = sanitizedText
-      if (links.length) {
-      // Só passthrough (link original de terceiro) não é oferta publicável:
-      // ver hasPublishableConversion.
-      if (!hasPublishableConversion(conversions)) {
+      // Grava a oferta que NÃO saiu porque algum link de loja não virou link
+      // da cliente. Mesmo formato de sempre (`skip:no_valid_conversions:<motivo>`)
+      // para o painel e o aviso de cadastro contarem a mesma história.
+      async function recordUnconvertedSkip({ platform, originalUrl, errorMsg }) {
         await db.messageLog.create({
           data: {
             userId,
-            platform: links[0]?.platform || 'unknown',
+            platform: platform || 'unknown',
             sourceGroup: jid,
             destGroup: 'skipped',
-            originalUrl: links[0]?.url || '',
+            originalUrl: originalUrl || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || ''),
             status: 'skipped',
-            errorMsg: buildNoValidConversionsErrorMsg(linkResults.map(r => r?.failureReason)),
+            errorMsg,
           },
         }).catch(() => {})
-        return
       }
+
+      let finalText = sanitizedText
+      if (links.length) {
+        // No espelhamento TODO link de loja precisa virar link da cliente. Um
+        // só que falhe e a mensagem não sai: publicá-la manteria o link do
+        // concorrente no texto (RCA 2026-09-23 — ver core/mirrorLinkGuard.js).
+        const decision = decideMirrorConversions(linkResults)
+        if (!decision.publish) {
+          const firstFailed = linkResults.find(r => !(r && r.converted && !r.passthrough)) || linkResults[0]
+          if (conversions.length) {
+            logger.warn({ msgId: msg.key.id, links: links.length, failed: decision.failedCount }, 'Oferta não publicada: parte dos links não virou link da cliente')
+          }
+          await recordUnconvertedSkip({
+            platform: firstFailed?.platform || links[0]?.platform,
+            originalUrl: firstFailed?.url || links[0]?.url,
+            errorMsg: decision.errorMsg,
+          })
+          return
+        }
         // Relay mode ("Manter texto original convertido") deve apenas trocar
         // os links upstream pelos links convertidos do usuário. Variáveis globais
         // de /painel/mensagens, como {{grupoLink}} e {{cupomLink}}, pertencem ao
         // caminho de templates e não devem ser anexadas ao texto original.
         finalText = applyConversionsAndBranding(sanitizedText, conversions)
+      }
+      // Rede de segurança FINAL, antes do modelo e do texto adicional da
+      // cliente (que são dela): nenhum link de loja pode sobrar no texto sem ser
+      // um link convertido — inclusive o escrito sem `https://`, que o detector
+      // não enxerga mas o WhatsApp torna clicável.
+      const leakedLinks = findUnconvertedStoreLinks(finalText, conversions)
+      if (leakedLinks.length) {
+        logger.warn({ msgId: msg.key.id, leaked: leakedLinks.length }, 'Oferta não publicada: link de loja de origem ainda no texto')
+        await recordUnconvertedSkip({
+          platform: links[0]?.platform,
+          originalUrl: leakedLinks[0],
+          errorMsg: buildNoValidConversionsErrorMsg([CONVERSION_FAILURE.CONVERSION_FAILED]),
+        })
+        return
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
@@ -4778,7 +4811,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // (mídia-only) adiciona o botão. Sem botão, mantemos o relay (fidelidade
           // máxima de mídia, inclui vídeo).
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original }) && !channelForward) {
-            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
+            // documentMessage também tem legenda: sem trocar, o documento saía
+            // com a legenda da ORIGEM (links do concorrente inclusos).
+            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage' || original.type === 'documentMessage'
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
             // e externalAdReply). forwardNewsletter=null: relay nunca injeta canal.
             const replayProto = buildRelayProto(original.proto, {

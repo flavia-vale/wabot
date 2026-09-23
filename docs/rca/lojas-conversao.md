@@ -108,17 +108,28 @@ gravada como `success` com `convertedUrl = originalUrl`. Medido na conta
 `nandavieiraf@gmail.com` (chave da Shopee recusada, erro 10035): **774 envios
 assim em 3 dias**, todos no espelhamento.
 
-- O descarte agora usa `hasPublishableConversion`
-  (`src/core/conversionFailureReason.js`): só vale link convertido de verdade.
-  Só passthrough → `skip:no_valid_conversions:conversion_failed`.
-- ⚠️ **Decisão de produto em aberto:** com pelo menos um link convertido na
-  mesma mensagem, o link de cupom não convertido **continua indo como veio**
-  (comentário "preservar a oferta/CTA original" no worker e guarda em
-  `test/bot-worker-relay-branding.test.js`). Isso ainda contradiz a invariante
-  acima e o fail-closed do AliExpress. Não mudar sem decisão da dona do
-  produto.
-- Medir a frota (read-only): envios `success` com `convertedUrl = originalUrl`
-  no espelhamento são exatamente esse vazamento.
+Medido na frota (3 dias, `success` com `convertedUrl = originalUrl` fora de
+`broadcast`): nandavieiraf 783, brunarafaella 20, mais duas contas com 1.
+
+**Regra desde 2026-09-23 (decisão da dona do produto): no espelhamento, se não
+conseguir converter, NÃO envia.** Tudo mora em `src/core/mirrorLinkGuard.js`:
+
+- `decideMirrorConversions(linkResults)`: publica só se **TODOS** os links de
+  loja viraram link da cliente. Um que falhe (cupom recusado, loja desligada no
+  grupo, falta de cadastro, erro da loja) derruba a mensagem inteira, gravada
+  como `skip:no_valid_conversions:<motivo>`. Antes, na mensagem com vários
+  links, o que falhou ficava no texto com o link do concorrente.
+- O "passthrough" deixou de existir: `stripFromMessage` vira falha comum.
+- `findUnconvertedStoreLinks` é a rede final, **antes** do modelo e do texto
+  adicional (que são da cliente): nenhum link de loja pode sobrar no texto sem
+  ser um link convertido — inclusive o escrito **sem `https://`**
+  (`meli.la/abc`), que o detector não enxerga e o WhatsApp torna clicável.
+- O repasse de mídia (`relay`) de **documento** agora troca a legenda também;
+  antes o documento saía com a legenda da origem.
+
+**Não regredir:** não voltar a devolver o link original como `converted`; não
+trocar "não envia" por "remove só o link que falhou" sem nova decisão (sobra
+linha de produto sem link). Teste: `test/mirror-link-guard.test.js`.
 
 **O que só um teste real em staging resolve (não dá para validar no sandbox):**
 (1) o ML credita cupom de algum jeito? **Validar clicando no link num celular
