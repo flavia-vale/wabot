@@ -93,3 +93,17 @@ export function isMissingCredentialFailure(errorMsg) {
 export function isNoValidConversionsErrorMsg(errorMsg) {
   return typeof errorMsg === 'string' && errorMsg.startsWith(NO_VALID_CONVERSIONS_PREFIX)
 }
+
+/**
+ * A mensagem tem pelo menos um link convertido com a credencial da cliente?
+ *
+ * Link que a loja não deixou converter volta do worker como "passthrough", com
+ * o endereço ORIGINAL do grupo de origem, que é o link de afiliado de outra
+ * pessoa. Ele pode acompanhar um link convertido na mesma mensagem, mas sozinho
+ * não pode sair: seria publicar a oferta com a comissão indo para o
+ * concorrente. RCA 2026-09-23: com a chave da Shopee recusada, 774 envios de
+ * uma conta saíram assim em 3 dias, todos registrados como sucesso.
+ */
+export function hasPublishableConversion(conversions = []) {
+  return (Array.isArray(conversions) ? conversions : []).some(c => c && c.converted && !c.passthrough)
+}

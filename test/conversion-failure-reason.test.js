@@ -4,6 +4,7 @@ import {
   CONVERSION_FAILURE,
   NO_VALID_CONVERSIONS_PREFIX,
   buildNoValidConversionsErrorMsg,
+  hasPublishableConversion,
   isMissingCredentialFailure,
   isNoValidConversionsErrorMsg,
   parseConversionFailureReason,
@@ -53,4 +54,29 @@ test('outros errorMsg não são confundidos', () => {
     assert.equal(isNoValidConversionsErrorMsg(outro), false)
     assert.equal(isMissingCredentialFailure(outro), false)
   }
+})
+
+// RCA 2026-09-23: com a chave da Shopee recusada, a mensagem saía com o link
+// original do grupo de origem (comissão do concorrente) e era gravada como
+// sucesso. Link só "passthrough" não é oferta publicável.
+test('mensagem só com link não convertido (passthrough) NÃO é publicável', () => {
+  const original = 'https://s.shopee.com.br/concorrente'
+  assert.equal(hasPublishableConversion([{ platform: 'shopee', url: original, converted: original, passthrough: true }]), false)
+  assert.equal(hasPublishableConversion([]), false)
+  assert.equal(hasPublishableConversion(null), false)
+})
+
+test('link convertido de verdade torna a mensagem publicável, mesmo com passthrough junto', () => {
+  assert.equal(hasPublishableConversion([
+    { platform: 'shopee', url: 'https://s.shopee.com.br/cupom', converted: 'https://s.shopee.com.br/cupom', passthrough: true },
+    { platform: 'amazon', url: 'https://amzn.to/x', converted: 'https://amzn.to/nosso' },
+  ]), true)
+})
+
+test('o worker decide o descarte com hasPublishableConversion, e o passthrough carrega motivo', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const src = await readFile(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
+  assert.match(src, /if \(!hasPublishableConversion\(conversions\)\) \{/)
+  assert.doesNotMatch(src, /if \(!conversions\.length\) \{\n\s+await db\.messageLog\.create/)
+  assert.match(src, /passthrough: true, linkKind: 'coupon', failureReason: CONVERSION_FAILURE\.CONVERSION_FAILED/)
 })

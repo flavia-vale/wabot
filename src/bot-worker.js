@@ -72,7 +72,7 @@ import {
 import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
-import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
+import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg, hasPublishableConversion } from './core/conversionFailureReason.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -4064,7 +4064,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // removemos mais nada da mensagem espelhada. O link fica como veio
             // para preservar a oferta/CTA original, enquanto os demais links
             // válidos da mesma mensagem continuam sendo convertidos juntos.
-            return { platform, url, converted: url, passthrough: true, linkKind: 'coupon' }
+            return { platform, url, converted: url, passthrough: true, linkKind: 'coupon', failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           // Motivo pré-classificado pelo converter (feature
           // 007-ml-vitrine-fallback-expired: skip:ml_vitrine_missing) tem
@@ -4129,7 +4129,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
       let finalText = sanitizedText
       if (links.length) {
-      if (!conversions.length) {
+      // Só passthrough (link original de terceiro) não é oferta publicável:
+      // ver hasPublishableConversion.
+      if (!hasPublishableConversion(conversions)) {
         await db.messageLog.create({
           data: {
             userId,

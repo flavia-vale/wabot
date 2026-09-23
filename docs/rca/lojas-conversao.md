@@ -97,6 +97,29 @@ Invariante de segurança em TODOS os caminhos: **o link original de terceiro
 NUNCA é encaminhado.** Se a conversão falhar, cai no strip seguro (não vaza
 comissão).
 
+⚠️ **Essa invariante estava quebrada no worker (RCA 2026-09-23 — não
+regredir).** Quando o conversor lança erro com `stripFromMessage` (cupom da
+Shopee que a API recusa; **toda** falha do AliExpress), o `bot-worker.js`
+devolve um "passthrough" com `converted: url`, ou seja, o link ORIGINAL do
+grupo de origem. O descarte "nenhum link convertido" contava só
+`conversions.length`, e o passthrough entrava na conta. Resultado: mensagem sem
+**nenhum** link da cliente saía para o grupo com o link do concorrente, e era
+gravada como `success` com `convertedUrl = originalUrl`. Medido na conta
+`nandavieiraf@gmail.com` (chave da Shopee recusada, erro 10035): **774 envios
+assim em 3 dias**, todos no espelhamento.
+
+- O descarte agora usa `hasPublishableConversion`
+  (`src/core/conversionFailureReason.js`): só vale link convertido de verdade.
+  Só passthrough → `skip:no_valid_conversions:conversion_failed`.
+- ⚠️ **Decisão de produto em aberto:** com pelo menos um link convertido na
+  mesma mensagem, o link de cupom não convertido **continua indo como veio**
+  (comentário "preservar a oferta/CTA original" no worker e guarda em
+  `test/bot-worker-relay-branding.test.js`). Isso ainda contradiz a invariante
+  acima e o fail-closed do AliExpress. Não mudar sem decisão da dona do
+  produto.
+- Medir a frota (read-only): envios `success` com `convertedUrl = originalUrl`
+  no espelhamento são exatamente esse vazamento.
+
 **O que só um teste real em staging resolve (não dá para validar no sandbox):**
 (1) o ML credita cupom de algum jeito? **Validar clicando no link num celular
 ANTES de ligar em prod.** Testes: `test/shopee-affiliate-info.test.js` e
