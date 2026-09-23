@@ -8,6 +8,32 @@ quatro listas divergem em uma semana.
 
 ---
 
+## ⭐ Suas prioridades a partir de 24/09 (lista viva — comece por aqui)
+
+| # | Quando | O quê | Tempo |
+|---|---|---|---|
+| 1 | 24/09 | **Indexação — Dia 8** (abaixo): `lumi-ofertas-inteligentes` + 9 endereços | 15 min |
+| 2 | 24/09 | Mergear a PR #1833 (só documentação) em `develop` | 1 min |
+| 3 | 24/09 | Responder à outra sessão: **reembolso depois de 7 dias** (há ou não?) | 1 min |
+| 4 | 24/09 | **Depoimentos:** confirmar que os 5 textos são de clientes reais, com permissão, e ajustar as frases que prometem resultado (ver nota abaixo) | 20 min |
+| 5 | 25/09 | **Indexação — Dia 9** + as duas conferências no Bing | 15 min |
+| 6 | quando a PR da outra sessão chegar em `main` | **Indexação — Dia 10**: páginas novas (reembolso, ofertas automáticas da Shopee, 5 comparativos) e as editadas — a outra sessão entrega a lista | 15 min |
+| 7 | 28/09 | Conferir se o Dia 7 entrou no índice (seção "Como conferir o Dia 7") | 10 min |
+| 8 | 30/09 | **Medição:** export do Search Console (3 meses + `Gráfico.csv`), `diag-origem-cadastros --dias 30`, `diag-paginas-seo --dias 30` | 20 min |
+| 9 | quando der | Rodada de IA no Perplexity e no AI Overviews (o Gemini passa a ser por script) | 30 min |
+| 10 | opcional | Regra na Cloudflare contra robôs de ataque (passo a passo na conversa de 23/09) | 5 min |
+
+**Nota sobre os depoimentos (item 4).** Só publicar texto de cliente real, com
+autorização e sem mudar o sentido — depoimento inventado ou reescrito é
+publicidade enganosa (CDC art. 37) e, se uma IA ou concorrente descobrir,
+destrói a confiança que ele deveria criar. Três frases precisam da cliente
+confirmar que disse exatamente isso ou de ajuste: "dobrar minhas comissões"
+(resultado), "total estabilidade e zero dores de cabeça" com o módulo de
+preservação (soa como promessa de que não bane — linha que o site não cruza) e
+"converte sem errar".
+
+---
+
 ## Antes de tudo: nada de indexação antes do deploy em produção
 
 Tudo abaixo só vale depois que `develop` for validado em staging e mergeado em
@@ -243,12 +269,89 @@ insuficiente (a regra conta QUANTIDADE de link, não FORÇA — ver aviso em
 entre as `/alternativas/*` (mesmo risco que a rodada de 11/09 já flagou para as
 páginas de loja).
 
+**Adiantado em 23/09:** no export de 23/09, **nenhuma** `/alternativas/*` está
+mais em "Detectada, mas não indexada", e três das sete do Dia 7 já têm
+impressão (`afilimais` 3, `ia-divulgadora` 2, `shark` 1) — ou seja, estão
+indexadas. Em 28/09 só falta conferir as quatro ainda sem impressão:
+`busqy`, `afilira`, `divulga-ninja`, `afiliado-inteligente`.
+
 ### Como conferir que funcionou
 
 Em **7 dias**, Inspeção de URL nas quatro do Dia 1. O veredito precisa sair de
 "Detectada, mas não indexada" para **"URL está no Google"**. Se continuar
 "Detectada" com "Último rastreamento: N/D", o problema é descoberta e o link
 interno não bastou — aí a conversa é outra.
+
+**✅ Conferido em 23/09 — Dia 1 e Dia 2 estão TODOS no Google.** Três por
+Inspeção de URL (`/quanto-ganha-afiliado-shopee`, `/vendas-e-comissao-afiliado-whatsapp`,
+`/copiaram-minha-oferta-no-whatsapp`: "O URL está no Google", último
+rastreamento 11/09). As outras seis dispensam inspeção porque já recebem
+impressão, e página com impressão está indexada: `/espelha-grupos-e-confiavel`
+(36) e as cinco lojas (Shopee 61, Mercado Livre 55, Amazon 71, SHEIN 160,
+Magalu 6).
+
+### Leva de 23/09 — ✅ pedida (registrada em 23/09)
+
+```
+https://espelhagrupos.com.br/alternativas/achadinhos-bot              ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/alternativas/achadinho-pro               ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/bot-achadinhos-whatsapp                  ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/shopee-afiliados-whatsapp                ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp         ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/amazon-afiliados-whatsapp                ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/shein-afiliados-whatsapp                 ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/magalu-afiliados-whatsapp                ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/alternativas/divulgador-inteligente      ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/alternativas/divulgalinks                ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/alternativas/lumi-ofertas-inteligentes   ⏳ deu "Tentar novamente" (cota) — vai para o Dia 8
+```
+
+### Dia 8 (2026-09-24) — ⏳ a pedir (10 = uma cota)
+
+```
+https://espelhagrupos.com.br/alternativas/lumi-ofertas-inteligentes   ⏳
+```
+
+Tirado do export de indexação de 23/09. As quatro primeiras são as rotas
+renomeadas em 19/09 que o Google **nunca rastreou** (os nomes antigos
+`/…-botinho…` respondem 308 para elas) — são as de maior valor, porque carregam
+a entidade da marca. As quatro seguintes ganharam links em 17/09 e nunca foram
+pedidas. A última é sobra do Dia 6 (a outra sobra passou para o Dia 9).
+
+```
+https://espelhagrupos.com.br/protecao-antiban-espelha-grupos           ⏳
+https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                ⏳
+https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual          ⏳
+https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais        ⏳
+https://espelhagrupos.com.br/alternativas/fluxopromo                    ⏳
+https://espelhagrupos.com.br/alternativas/shozap                        ⏳
+https://espelhagrupos.com.br/alternativas/gigi-bot                      ⏳
+https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados   ⏳
+https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons     ⏳
+```
+
+### Dia 9 (2026-09-25) — ⏳ depois do Dia 8
+
+```
+https://espelhagrupos.com.br/consistencia-postagens-em-grupos           ⏳
+https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp          ⏳
+https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao    ⏳
+```
+
+A última foi **rastreada em 21/09 e não indexada**. Diferente das LPs
+congeladas, é uma rota renomeada em 19/09 — vale um pedido. Se continuar fora
+depois disso, o motivo é conteúdo, não descoberta.
+
+### Duas conferências que ficaram da rodada de 23/09 (5 min cada)
+
+1. **Bing → Inspeção de URL** em `/shopee-afiliados-whatsapp` e
+   `/bot-achadinhos-whatsapp`. Decide se o Bing conhece as páginas que não
+   apareceram no Explorador de sites. Se disser "não indexada", pedir
+   indexação lá mesmo (o Bing aceita envio de URL).
+2. **Cloudflare → AI Crawl Control → filtrar `Claude-User`** (e depois
+   `Perplexity-User`), olhando os pedidos **sem sucesso**: print dos
+   endereços e dos códigos (404, 301/308, 403). Decide se a falha de 70-81% é
+   endereço inventado pela IA, endereço antigo ou bloqueio nosso.
 
 ---
 

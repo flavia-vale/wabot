@@ -26,8 +26,8 @@ export const EDITORIAL_DATES = {
   // acusava 9 erros). Sem essa data não há sinal de frescor para o Google nem para
   // os motores de IA, que pesam recência ao escolher o que citar.
   '/bot-canais-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
-  '/bot-afiliados-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-18' },
-  '/bot-achadinhos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-08-03' },
+  '/bot-afiliados-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-23' },
+  '/bot-achadinhos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-23' },
   '/anti-ban-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-08-03' },
   '/grupo-para-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   '/bot-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
@@ -45,7 +45,7 @@ export const EDITORIAL_DATES = {
   // 3 rotas abaixo já tinham data em resolveLastModified() no seo-registry,
   // só faltava aqui. Reaproveita a MESMA data já em uso no registry para não
   // inventar dado novo.
-  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-08-05' },
+  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-23' },
   '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-07-31' },
@@ -90,16 +90,16 @@ export const EDITORIAL_DATES = {
   // As 5 páginas de loja do Tier 1 (02/09) e /alternativas/promium (02/09)
   // nunca tiveram data — no promium o Article caía no fallback de 2026-05-15,
   // antes de a página existir (RCA 2026-09-18).
-  '/shopee-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/shopee-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-23' },
   '/mercado-livre-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/amazon-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/shein-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/magalu-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/alternativas/promium': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
-  '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-08-31' },
+  '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-09-23' },
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
   // desta rodada, publicada em 2026-08-19.
-  '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-08-19' },
+  '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-09-23' },
   '/alternativas/gigi-bot': { publishedAt: '2026-08-26', updatedAt: '2026-08-26' },
   '/alternativas/proafiliados': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/alternativas/shozap': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
@@ -107,15 +107,25 @@ export const EDITORIAL_DATES = {
   '/alternativas/bot-para-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-07-31' },
   '/espelha-grupos-vs-planilha-manual': { publishedAt: '2026-05-15', updatedAt: '2026-09-19' },
   '/espelha-grupos-vs-ferramentas-genericas-automacao': { publishedAt: '2026-05-15', updatedAt: '2026-09-19' },
-  '/melhores-bots-para-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
+  '/melhores-bots-para-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
   '/glossario': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/estudos-de-caso': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/confiabilidade-sessao-whatsapp': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
-  '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
+  '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-23' },
   '/seguranca-credenciais-afiliado': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
   '/quanto-ganha-afiliado-shopee': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
   '/vendas-e-comissao-afiliado-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-23' },
   '/copiaram-minha-oferta-no-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
+  // 23/09/2026 — visibilidade no ChatGPT para "bot para afiliados no WhatsApp":
+  // política de reembolso pública, o modo de busca automática da Shopee e cinco
+  // comparativos com preço coletado na página oficial de cada concorrente.
+  '/politica-de-reembolso': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/bot-que-busca-ofertas-shopee-whatsapp': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/alternativas/easyfy': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/alternativas/lucreshop': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/alternativas/afiliai': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/alternativas/achify': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/alternativas/afiliados-turbo': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
 }
 
 export function formatDatePtBr(date) {

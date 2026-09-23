@@ -128,3 +128,26 @@ Só as Trilhas A e B entram: **9 consultas × 4 superfícies = 36 linhas**.
 10/09 **mudam** — o de 10/09 sobe, porque 2 das 8 consultas saem do denominador
 da marca. Registrar as duas leituras lado a lado no próximo relatório, não
 substituir a antiga em silêncio.
+
+---
+
+## Gemini por script (desde 23/09)
+
+A superfície Gemini pode ser medida sem navegador, pela API com a busca do
+Google ligada:
+
+```bash
+cd ~/wabot && GEMINI_API_KEY=<chave> node scripts/medir-citacao-ia.mjs --saida=/tmp/gemini.csv --json=/tmp/gemini.json
+cat /tmp/gemini.csv
+```
+
+- Chave grátis em https://aistudio.google.com/apikey. Nunca colar a chave no
+  repositório, em PR ou em conversa.
+- A linha sai com `platform` = `Gemini API (busca Google)` e `next_action` =
+  `revisar`. **Não misturar com as linhas `Google Gemini`** das rodadas manuais:
+  API e aplicativo podem responder diferente. Na primeira rodada, medir dos dois
+  jeitos para calibrar.
+- Regra de "citou": fonte `espelhagrupos.com.br` = sim; nas consultas de marca,
+  o nome repetido sem fonte nossa = parcial (a pergunta já trazia o nome).
+  Código em `src/ops/aiCitation.js`, teste em `test/ai-citation.test.js` (que
+  também falha se as consultas do script divergirem das 10 deste roteiro).
