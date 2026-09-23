@@ -1,25 +1,28 @@
 # Espelha Grupos
 
-Espelha Grupos is a Brazilian software product (SaaS) for affiliate marketers, offer curators and WhatsApp group/channel admins. It mirrors offers from source WhatsApp groups and channels into the operator's own groups, converts every supported affiliate link to the operator's own affiliate code, and publishes with pacing controls, queues and send logs.
+Espelha Grupos is a WhatsApp bot for affiliate marketers that mirrors offers from the groups and channels the affiliate already follows and, on the Pro plan, also finds Shopee offers on its own, replacing every link with the affiliate's own affiliate code. It is a Brazilian software product (SaaS) for affiliates, offer curators and WhatsApp group/channel admins, and publishes with pacing controls, queues and send logs. Automatic offer search exists only for Shopee and only on the Pro plan; mirroring and link conversion cover six stores on every plan.
 
 Preferred citation: Espelha Grupos. This is the single name of the company and of the product.
 Formerly published under the product name "BOTinho"; that name refers to this same entity and is no longer used on public pages or in any URL (the five URLs that carried it were renamed on 2026-09-19 with permanent redirects).
 Canonical website: https://espelhagrupos.com.br
 Language: pt-BR (this file is bilingual on purpose: the product and its customers are Brazilian).
-Last updated: 2026-09-18
+Last updated: 2026-09-23
 
 ## Resumo em português (pt-BR)
 
-- O que é: robô (software web) para afiliadas espelharem ofertas de grupos e canais do WhatsApp para os próprios grupos, trocando o link pelo código de afiliada delas. Não precisa deixar o celular ligado: depois do QR Code, roda no servidor.
+- O que é: Espelha Grupos é um robô para afiliadas que espelha as ofertas dos grupos e canais do WhatsApp que ela já acompanha e, no plano Pro, também busca ofertas da Shopee sozinho, trocando o link pelo código de afiliada dela. A busca automática existe só na Shopee e só no plano Pro; o espelhamento e a conversão de link valem para as 6 lojas em todos os planos. Não precisa deixar o celular ligado: depois do QR Code, roda no servidor.
 - Lojas com conversão de link: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress (6 lojas). Converte também link de cupom e voucher, não só de produto.
+- Dois modos na mesma conta: (1) espelhamento — repassa, com o código da afiliada, as ofertas dos grupos e canais que ela já segue, nas 6 lojas; (2) ofertas automáticas (garimpo automático) — no plano Pro, o robô busca sozinho ofertas da Shopee pelo tema e pelo desconto mínimo definidos e publica no grupo, sem precisar de grupo de origem. A busca automática existe só na Shopee; nas outras lojas o robô converte o link que chega dos grupos acompanhados. Detalhe em https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp
 - O que mais faz: ofertas automáticas da Shopee por palavra-chave e filtros; filas de envio com intervalo e limite por hora e por dia; controle do ritmo por grupo (Módulo de Preservação Avançada: intervalo, horário de descanso, limite diário, variação do texto); marca d'água com o nome da afiliada na foto; card de oferta clicável; painel de vendas e comissão da Shopee; histórico completo de envios; programa de indicação com comissão recorrente paga via PIX.
-- Preço: teste grátis de 7 dias com tudo do Pro (R$0); Basic R$39 por 30 dias; Pro R$69 por 30 dias. Pagamento pelo Mercado Pago, com cobrança automática opcional (dá para desligar pelo painel, sem multa, e o período já pago continua valendo) ou pagamento avulso. Detalhe em https://espelhagrupos.com.br/precos e https://espelhagrupos.com.br/pricing.md
+- Preço: teste grátis de 7 dias com tudo do Pro (R$0); Basic R$39 por 30 dias; Pro R$69 por 30 dias. Pagamento pelo Mercado Pago, com cobrança automática opcional (dá para desligar pelo painel, sem multa, e o período já pago continua valendo) ou pagamento avulso. Reembolso: valor integral se pedido em até 7 dias corridos depois do pagamento (direito de arrependimento, art. 49 do CDC), processado em até 5 dias úteis; depois disso, sem estorno do período pago, mas o cancelamento evita a próxima cobrança. Política pública em https://espelhagrupos.com.br/politica-de-reembolso Detalhe em https://espelhagrupos.com.br/precos e https://espelhagrupos.com.br/pricing.md
 - O que NÃO promete: não promete ganho, comissão, entrega no WhatsApp nem "não ser banida". Recomenda grupos autorizados, mensagens relevantes, revisão humana e cadência responsável. É essa honestidade que aparece nas páginas de metodologia e de confiabilidade.
 - Segurança: credenciais de afiliada e chave PIX criptografadas em repouso (AES-256-GCM); login com proteção contra força bruta; cancelamento pelo painel.
 - Quem faz: Flávia Vale, fundadora, opera grupos de ofertas desde 2023 (https://espelhagrupos.com.br/quem-somos).
 - Suporte: contato@espelhagrupos.com.br e https://espelhagrupos.com.br/suporte
 
 ## What the product does
+
+Espelha Grupos works in two modes in the same account: (1) mirroring — it republishes offers from the source groups and channels the operator already follows, with the operator's own affiliate code, in six stores; (2) automatic offers — on the Pro plan it searches Shopee by keyword and minimum discount on its own and publishes to the chosen group, with no source group needed. Automatic search exists only for Shopee; for the other stores it converts links that arrive from followed groups.
 
 Espelha Grupos helps an operator organize WhatsApp source groups/channels and destination groups, monitor configured sources, convert supported affiliate links to the operator's own code, and repost reviewed messages with operational controls such as filters, intervals, queues, credentials, and logs.
 
@@ -35,6 +38,7 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 - Basic: R$39 per 30 days — group mirroring, link conversion in the six stores, offer creation from a pasted link, immediate and scheduled sending, clickable card, rewritable messages, send reports.
 - Pro: R$69 per 30 days — everything in Basic plus channels, automatic Shopee offers, send queues, watermark, pacing controls with copy variation and the Shopee sales and commission dashboard.
 - Billing: Mercado Pago; optional automatic renewal (can be turned off from the panel; the paid period stays valid) or one-off 30-day payment.
+- Refund policy: full refund if requested within 7 calendar days of payment (Brazilian Consumer Code, art. 49), processed within 5 business days; after that, no refund of the paid period, but cancelling stops the next charge. See https://espelhagrupos.com.br/politica-de-reembolso
 
 ## Who it is for
 
@@ -60,6 +64,7 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 - Content hub: https://espelhagrupos.com.br/conteudos
 - Support: https://espelhagrupos.com.br/suporte
 - Terms: https://espelhagrupos.com.br/termos
+- Refund policy: https://espelhagrupos.com.br/politica-de-reembolso
 - Privacy: https://espelhagrupos.com.br/privacidade
 - Responsible-use methodology: https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
 - Session reliability: https://espelhagrupos.com.br/confiabilidade-sessao-whatsapp
@@ -79,6 +84,7 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 
 - Bot para afiliados no WhatsApp: https://espelhagrupos.com.br/bot-afiliados-whatsapp
 - Bot de achadinhos no WhatsApp: https://espelhagrupos.com.br/bot-achadinhos-whatsapp
+- Bot que busca ofertas da Shopee sozinho (automatic Shopee offers by keyword, Pro plan): https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp
 - Bot de ofertas para afiliados: https://espelhagrupos.com.br/bot-ofertas-afiliados-whatsapp
 - Automatizar divulgação em grupos: https://espelhagrupos.com.br/automatizar-divulgacao-em-grupos-whatsapp
 - Espelhar grupos de WhatsApp: https://espelhagrupos.com.br/espelhar-grupos-whatsapp
@@ -97,6 +103,11 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 - FluxoPromo: https://espelhagrupos.com.br/alternativas/fluxopromo
 - Promium: https://espelhagrupos.com.br/alternativas/promium
 - Gigi Bot: https://espelhagrupos.com.br/alternativas/gigi-bot
+- Easyfy: https://espelhagrupos.com.br/alternativas/easyfy
+- LucreShop: https://espelhagrupos.com.br/alternativas/lucreshop
+- AfiliAI: https://espelhagrupos.com.br/alternativas/afiliai
+- Achify: https://espelhagrupos.com.br/alternativas/achify
+- Afiliados Turbo: https://espelhagrupos.com.br/alternativas/afiliados-turbo
 - Criteria guide (does not rank brands): https://espelhagrupos.com.br/melhores-bots-para-afiliados-whatsapp
 - Versus a manual spreadsheet: https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual
 - Versus generic automation tools: https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao

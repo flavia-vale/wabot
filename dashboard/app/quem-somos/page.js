@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
-import { SISTER_SITES } from '@/lib/marketing-content'
+import { BRAND_DEFINITION_PT, SISTER_SITES, SUPPORTED_STORES } from '@/lib/marketing-content'
 import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 
 export const metadata = {
@@ -14,9 +14,25 @@ export default function AboutPage() {
     <PublicPage
       eyebrow="Quem somos"
       title="Espelha Grupos ajuda afiliados a operar com mais consistência no WhatsApp"
-      description="Somos um produto criado para reduzir tarefas repetitivas de quem trabalha com ofertas, grupos e links de afiliado."
+      description={BRAND_DEFINITION_PT}
     >
+      {/*
+        23/09/2026: a primeira frase de corpo (a `description` acima) define a
+        marca de forma auto-contida — em três medições o ChatGPT leu "Espelha
+        Grupos" como expressão genérica. Frase única em marketing-content.js
+        (BRAND_DEFINITION_PT), a mesma da home e do llms.txt.
+      */}
       <div className="space-y-5 text-sm leading-7 text-gray-600">
+        <p>
+          Na prática são dois modos na mesma conta. No espelhamento, o robô acompanha os grupos e canais que você escolhe
+          e republica cada oferta com o seu código de afiliada, em {SUPPORTED_STORES.length} lojas ({SUPPORTED_STORES.join(', ')}).
+          Nas{' '}
+          <Link href="/bot-que-busca-ofertas-shopee-whatsapp" className="font-bold text-green-700 underline underline-offset-4">
+            ofertas automáticas
+          </Link>
+          , recurso do plano Pro, ele procura sozinho na Shopee pelo tema e pelo desconto mínimo que você definir — a busca
+          automática existe só na Shopee; nas outras lojas o robô converte o link que chega dos grupos acompanhados.
+        </p>
         <p>
           O Espelha Grupos nasceu para apoiar afiliados que precisam converter links, organizar grupos de origem e destino e acompanhar envios sem depender de planilhas ou processos manuais repetitivos.
         </p>
