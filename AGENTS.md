@@ -6222,6 +6222,60 @@ o log diz qual dos dois é.
 
 Teste: `test/criar-oferta-imagem-shopee.test.js`.
 
+### "Criar oferta" com link da Shopee saía SEM NOME NEM PREÇO (RCA 2026-09-23)
+
+Mesma família do RCA acima, no caminho de **título/preço**, não de foto —
+`fetchShopeeProductInfo` (a única fonte que funciona com credencial) tinha
+`catch { return null }` **sem nenhum diagnóstico**, e o fallback público v4
+(`fetchShopeeItemInfo`) já era conhecido como instável. As duas fontes podiam
+morrer juntas em silêncio total: nome, preço e foto vazios, sem uma linha de
+log explicando por quê.
+
+**Causa raiz medida em produção** (conta `nandavieiraf@gmail.com`, link
+`https://s.shopee.com.br/3qNKeP0T3u`, resolvido corretamente para
+`shopId=515433918 itemId=19997980913` — a resolução do short link **não** era
+o problema): a API de afiliado respondia **200** com o erro
+
+```
+error [10035]: You currently do not have access to the Shopee Affiliate Open
+API Platform. Please check the error code description on the front-end page
+and contact the Shopee Affiliate team
+```
+
+Diferente de `10020` ("Invalid Signature"), esse código nunca tinha sido visto
+antes e **não estava em `SHOPEE_AUTH_REJECTED_CODES`** — por regra
+(`classifyShopeeProbeResponse`), qualquer código fora da lista vira
+`alive: null` (indeterminado) de propósito, para nunca mandar a cliente
+recadastrar uma chave viva à toa. Só que `10035` não é ruído transitório: é a
+própria Shopee dizendo, em texto claro, que a conta perdeu acesso à API —
+mesma classe de recusa definitiva que `10020`, só que noutro código.
+
+**Não regredir:**
+
+- **`10035` entrou em `SHOPEE_AUTH_REJECTED_CODES`** (junto com `10020`) — a
+  sondagem (`checkShopeeSession`), o aviso por e-mail
+  (`chave_shopee_recusada`) e o banner do painel passam a acusar essa conta
+  como chave recusada em vez de ficar mudos para sempre.
+- **`fetchShopeeProductInfo` ganhou `onDiagnostic`**, no MESMO contrato de
+  `fetchShopeeImage` (`{ stage, detail }`): `shopee_sem_credencial`,
+  `shopee_sem_ids`, `shopee_api_erro`, `shopee_item_fora_do_catalogo`,
+  `shopee_catalogo_sem_titulo_ou_preco`, `shopee_api_falhou`. O fallback
+  público v4 (`fetchShopeeItemInfo`) ganhou os mesmos sinais
+  (`shopee_v4_sem_ids`, `shopee_v4_http_erro`, `shopee_v4_sem_item`,
+  `shopee_v4_falhou`). `buildScrapedOffer`/`offerEngine.js` repassam
+  `onDiagnostic` e a rota `/scrape-offer` loga
+  `Criar oferta: loja não devolveu título nem preço do produto` quando os três
+  campos saem vazios — mesmo padrão do log de foto ausente.
+- **Isto não conserta conta sem acesso à API de afiliado** — só a própria
+  Shopee restaura isso (a cliente precisa contatar o time de afiliados dela).
+  O que muda é a conta parar de ficar invisível: hoje ela aparece como "chave
+  recusada" em vez de "tudo verde e nada funciona".
+- Diagnóstico reutilizável para qualquer link específico:
+  `scripts/diag-criar-oferta-shopee.mjs <email> <url>` (read-only, mostra a
+  resposta CRUA da API de afiliado e do fallback v4 lado a lado).
+
+Testes: `test/shopee-affiliate-info.test.js`, `test/credential-expiry-alert.test.js`.
+
 ## Página nova NUNCA nasce órfã (RCA 2026-09-11 — não regredir)
 
 As cinco páginas comerciais do Tier 1 (`/shopee-afiliados-whatsapp`,
