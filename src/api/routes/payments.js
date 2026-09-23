@@ -26,6 +26,7 @@ import { sendAdminAlert } from '../../email/adminAlerts.js'
 import { checkBillingConfig, describeBillingMachine, BILLING_SEVERITY } from '../../domain/payments/billingHealth.js'
 import { decideChargeFailureNotice, describeChargeFailureForCustomer } from '../../domain/payments/chargeFailureNotice.js'
 import { describeChargeStatusDetail, classifyChargeOutcome } from '../../domain/payments/chargeOutcome.js'
+import { listProFeaturesInUse, buildProFeaturesNotice } from '../../domain/payments/proFeaturesInUse.js'
 import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment, checkStuckPromotions } from '../../domain/affiliate/service.js'
 export { resolvePlanForPayment }
 
@@ -1832,6 +1833,27 @@ export async function paymentsRoutes(app) {
       chargeFailure = null
     }
 
+    // O teste grátis libera canais, ofertas automáticas e filas; o Básico não.
+    // Sem este aviso a cliente paga o Básico e esses recursos param em silêncio
+    // (RCA 2026-09-23, ver domain/payments/proFeaturesInUse.js). Falha de
+    // leitura NUNCA derruba a tela de plano: sem contagem, sem aviso.
+    let proFeaturesNotice = null
+    try {
+      const [channelCount, activeAutomationCount, activeQueueCount] = await Promise.all([
+        db.group.count({ where: { userId, kind: 'channel' } }),
+        db.offerAutomation.count({ where: { userId, enabled: true } }),
+        db.offerQueue.count({ where: { userId, enabled: true } }),
+      ])
+      proFeaturesNotice = buildProFeaturesNotice({
+        plan: user?.plan,
+        accessActive: isActive,
+        items: listProFeaturesInUse({ channelCount, activeAutomationCount, activeQueueCount }),
+      })
+    } catch (err) {
+      req.log?.warn?.({ err: err?.message, userId }, 'pro_features_notice_failed')
+      proFeaturesNotice = null
+    }
+
     const subscription = summarizeSubscriptionForPanel(openSubscription, {
       lastApprovedPaymentAt: lastApprovedPayment?.createdAt ?? null,
     })
@@ -1852,6 +1874,7 @@ export async function paymentsRoutes(app) {
       nextChargeAt,
       subscription,
       chargeFailure,
+      proFeaturesNotice,
       isActive,
       expiresInDays,
       actionRequired,

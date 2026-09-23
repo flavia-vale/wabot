@@ -8,6 +8,7 @@ import { NAV_GROUPS } from './nav'
 import SidebarOnboarding from '@/components/SidebarOnboarding'
 import { buildNoCredentialBanner } from '../../../src/credentialBlockAlert/message.js'
 import { shouldShowNoCredentialBanner } from '../../../src/domain/painel/journeyBanners.js'
+import { listProFeaturesInUse, buildProFeaturesNotice } from '../../../src/domain/payments/proFeaturesInUse.js'
 import { buildTrialEndingNotice } from '../../../src/domain/painel/trialNotice.js'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../src/tutorialVideo.js'
 
@@ -151,6 +152,27 @@ function NoCredentialBanner({ show }) {
   )
 }
 
+/* Canal parado porque o plano Básico não inclui canais (RCA 2026-09-23).
+ * No teste grátis tudo do Pro funciona; a cliente paga o Básico e o canal para
+ * de receber EM SILÊNCIO — o grupo ao lado segue normal e ela conclui "paguei e
+ * parou". Global de propósito: ela não volta à tela de planos para descobrir.
+ * O texto sai da regra pura (src/domain/payments/proFeaturesInUse.js), a mesma
+ * da tela de planos, para as duas superfícies dizerem a mesma coisa. */
+function ProFeaturesStoppedBanner({ notice }) {
+  if (!notice || notice.kind !== 'stopped') return null
+
+  return (
+    <div className="pnl-note-box is-warn pnl-expired-plan-banner" role="alert">
+      <div>
+        <strong style={{ fontWeight: 600 }}>{notice.title}</strong>
+        <p style={{ marginTop: 6 }}>{notice.body}</p>
+        <p style={{ marginTop: 6, fontWeight: 600 }}>{notice.action}</p>
+      </div>
+      <Link href="/painel/plano" className="pnl-btn is-primary" style={{ flexShrink: 0 }}>Mudar para o Pro</Link>
+    </div>
+  )
+}
+
 /* Fim do teste com a PROVA do que o robô já fez. Ver o porquê em
  * src/domain/painel/trialNotice.js — o teste acabava em silêncio, e quem paga
  * decide exatamente nesse dia. */
@@ -230,6 +252,7 @@ export default function PainelShell({ children }) {
   const [online, setOnline] = useState(null)
   const [phone, setPhone] = useState(null)
   const [groupCount, setGroupCount] = useState(null)
+  const [channelCount, setChannelCount] = useState(null)
   const [sessionHealth, setSessionHealth] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState({})
@@ -306,7 +329,10 @@ export default function PainelShell({ children }) {
     } else {
       setOnline(false)
     }
-    if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroupCount(g.value.length)
+    if (g.status === 'fulfilled' && Array.isArray(g.value)) {
+      setGroupCount(g.value.length)
+      setChannelCount(g.value.filter((group) => group?.kind === 'channel').length)
+    }
   }, [])
 
   const refreshSessionRef = useRef(refreshSession)
@@ -369,6 +395,21 @@ export default function PainelShell({ children }) {
       })),
     [user?.plan, user?.accessExpiresAt, offersPublished],
   )
+
+  // Só canais aqui: é o que já vem na lista de grupos, sem chamada nova. A tela
+  // de planos mostra o quadro completo (automáticas e filas também).
+  const userPlan = user?.plan
+  const userAccessExpiresAt = user?.accessExpiresAt
+  const proFeaturesNotice = useMemo(() => {
+    if (channelCount === null || userPlan !== 'basic') return null
+    const exp = userAccessExpiresAt ? new Date(userAccessExpiresAt) : null
+    const accessActive = !exp || Number.isNaN(exp.getTime()) ? true : exp > new Date()
+    return buildProFeaturesNotice({
+      plan: userPlan,
+      accessActive,
+      items: listProFeaturesInUse({ channelCount }),
+    })
+  }, [channelCount, userPlan, userAccessExpiresAt])
 
   const ctxValue = useMemo(
     () => ({ user, online, phone, groupCount, sessionHealth, hasAnyCredential, offersPublished, refreshSession, setHeader }),
@@ -526,6 +567,7 @@ export default function PainelShell({ children }) {
             <BlockedReasonBanner user={user} />
             <ExpiredPlanBanner user={user} />
             <TrialEndingBanner notice={trialNotice} />
+            <ProFeaturesStoppedBanner notice={proFeaturesNotice} />
             {/* A loja só é cobrada DEPOIS de conectar o WhatsApp — a mesma
                 regra do próximo passo na tela de conexão. Antes disso o robô
                 nem foi ligado, e o alarme não corresponde a nada. */}

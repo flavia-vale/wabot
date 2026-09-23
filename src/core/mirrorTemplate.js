@@ -2,6 +2,7 @@ import { buildMobileOfferText } from '../../dashboard/lib/mobileOfferComposer.js
 import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
 import { hasUsefulOfferInfo, withTimeout } from '../converters/offerEngine.js'
 import { fetchProductInfo as defaultFetchProductInfo } from '../converters/productInfoScraper.js'
+import { parseOfferPriceToCents } from './clientCouponPolicy.js'
 
 // Teto de tempo do scrape do modo template. O espelhamento roda numa fila
 // serial com MSG_QUEUE_TIMEOUT_MS=25s por mensagem; o scrape do template NÃO
@@ -184,6 +185,18 @@ export async function resolveMirrorOfferFromLink({
   }
 }
 
+// Retorno: { text, couponContext }. `couponContext` é `{ platform, priceCents }`
+// quando o template foi de fato aplicado (dados já resolvidos nesta função,
+// sem nenhuma leitura extra de rede/loja — FR-028c) ou `null` quando o
+// template caiu no relay/texto original (nada para resolver).
+//
+// specs/017-client-coupon-catalog (Trava #1, D3 da pesquisa): o token
+// `{cupom}` NÃO é mais substituído/removido aqui — ele sobrevive intacto no
+// texto final e é resolvido só no momento do envio (processSendJob), para
+// que FR-014 (cupom desligado depois de enfileirado não sai) valha mesmo
+// numa mensagem que fica horas esperando na fila. `extractCouponLine` NÃO foi
+// apagada: continua sendo o delimitador de `extractTextPrice`, que alimenta
+// `{preçoDoTexto}` (FR-021).
 export async function applyMirrorTemplate(text, {
   botConfig = {},
   templateKey = '',
@@ -196,7 +209,7 @@ export async function applyMirrorTemplate(text, {
   logger = null,
 } = {}) {
   const body = resolveMirrorTemplateBody(botConfig, templateKey)
-  if (!body) return text
+  if (!body) return { text, couponContext: null }
   let fields
   try {
     // Orçamento de tempo único cobrindo TODO o scrape (todos os candidatos).
@@ -208,9 +221,9 @@ export async function applyMirrorTemplate(text, {
     )
   } catch (err) {
     logger?.warn?.({ err: err?.message, originalUrl, convertedUrl, platform }, 'Template de espelhamento: falha ao buscar dados pelo link; mantendo texto original')
-    return text
+    return { text, couponContext: null }
   }
-  if (!fields?.link) return text
+  if (!fields?.link) return { text, couponContext: null }
   // Decisão de produto 3.1 + blindagem anti-lixo: uma oferta SEM TÍTULO é
   // inútil — e é exatamente a assinatura de um scrape envenenado (página
   // anti-bot do ML/Amazon: título genérico já filtrado para '' + preço de
@@ -218,7 +231,7 @@ export async function applyMirrorTemplate(text, {
   // a caption original útil. Sem título confiável, cai no relay.
   if (!String(fields.title || '').trim()) {
     logger?.warn?.({ originalUrl, convertedUrl, platform }, 'Template de espelhamento: scrape sem título confiável; mantendo texto original (relay)')
-    return text
+    return { text, couponContext: null }
   }
   // A copy da origem só deve participar do caminho de template quando a
   // cliente pediu explicitamente a variável. Além de evitar trabalho em todos
@@ -239,6 +252,13 @@ export async function applyMirrorTemplate(text, {
     template: templateKey,
     templateBody: applyMirrorGlobalLinkVariables(body, botConfig),
     preserveAutomationPlaceholders: false,
+    // {cupom} é trocado pelo robô na hora do envio (processSendJob).
+    keepCouponToken: true,
   })
-  return stripUnresolvedPlaceholders(rendered) || text
+  const renderedText = stripUnresolvedPlaceholders(rendered) || text
+  // priceCents vem do MESMO preço já raspado que alimenta {preço} — nenhuma
+  // leitura nova de rede/loja (FR-028c). `platform` é o que o conversor já
+  // resolveu (parâmetro desta função).
+  const couponContext = { platform: platform || null, priceCents: parseOfferPriceToCents(fields.price) }
+  return { text: renderedText, couponContext }
 }

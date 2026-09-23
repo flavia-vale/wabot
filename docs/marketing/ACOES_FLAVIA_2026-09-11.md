@@ -128,35 +128,38 @@ lista de ajustes do plano de melhoria.
 https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero          ✅ pedida 2026-09-12
 https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp  ✅ pedida 2026-09-12
 https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp    ✅ pedida 2026-09-12
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp                     ⏳ pendente
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp              ⏳ pendente
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp                     ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp              ✅ pedida 2026-09-22
 ```
 
-**Dia 4 pela metade.** Os dois que faltam são os que mais aparecem hoje:
-`como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
+**Dia 4 concluído** (3 em 12/09, os 2 que faltavam em 22/09). Eram os que mais
+aparecem hoje: `como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
 `como-divulgar-ofertas-mercado-livre-whatsapp` — já pegam a periferia do Tier 1,
 então relê-las é o que faz o link para as páginas de loja valer mais rápido.
 
-### Dia 5 — títulos que mudaram e a entidade de marca
+### Dia 5 — ✅ CONCLUÍDO — títulos que mudaram e a entidade de marca
 
 ```
-https://espelhagrupos.com.br/programa-de-afiliados
-https://espelhagrupos.com.br/alternativas/proafiliados
-https://espelhagrupos.com.br/alternativas/promium
-https://espelhagrupos.com.br/quem-somos
-https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
+https://espelhagrupos.com.br/programa-de-afiliados                    ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/alternativas/proafiliados                ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/alternativas/promium                     ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/quem-somos                               ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp     ✅ pedida 2026-09-22
 ```
 
 ### Dia 6 — a cauda (menor prioridade, faça se sobrar cota)
 
 ```
-https://espelhagrupos.com.br/estudos-de-caso
-https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp
-https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe
-https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons
-https://espelhagrupos.com.br/consistencia-postagens-em-grupos
-https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp
+https://espelhagrupos.com.br/estudos-de-caso                              ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp       ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe            ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons       ⏳ pendente
+https://espelhagrupos.com.br/consistencia-postagens-em-grupos             ⏳ pendente
+https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp  ⏳ pendente
 ```
+
+**Dia 6 pela metade** (3 de 6 em 22/09). Faltam só as 3 marcadas `⏳ pendente`
+acima — peça-as quando sobrar cota num próximo dia.
 
 `/parcerias`, `/parceiro-influenciador` e `/ferramentas/calculadora-tempo-grupos-whatsapp`
 saíram daqui — o export do Search Console de 21/09 (abaixo) confirma que
@@ -259,10 +262,10 @@ preço pode ser citado em página pública.
 
 ### Os dois que importam agora
 
-| Concorrente | Por quê | Preço que a IA disse (NÃO CONFIRMADO) |
+| Concorrente | Por quê | Status |
 |---|---|---|
-| **Ofertiva** | citado nas **duas** contas do ChatGPT, e é quem ganha de nós em SHEIN e AliExpress | R$ 39,90 |
-| **Comission** | citado como alternativa direta | R$ 47,90 a R$ 97,90 |
+| **Ofertiva** | citado nas **duas** contas do ChatGPT | ✅ **ficha criada em 22/09** — `dashboard/lib/competitors-data.js`, slug `ofertiva`, print de `ofertiva.app.br/#precos`. R$ 39,90 / R$ 69,90 / R$ 139,90 por mês, cobrança recorrente de verdade (não promo de 1º mês). Não converte Magalu; tem página na bio + Meta Pixel, que não temos. **Falta**: a página pública `/alternativas/ofertiva` (a ficha por si só não cita nada em página nenhuma) — próximo passo se você quiser. |
+| **Comission** | citado como alternativa direta | ⏳ **ainda sem site encontrado.** Você não achou e eu também não achei buscando "Comission" + afiliados/WhatsApp (nem variações de grafia) — nenhum resultado bate com esse nome. Pode ser grafia diferente da que o ChatGPT usou, ou o produto pode ter saído do ar/trocado de nome. Se você tiver o link de onde a IA citou (ou um print da resposta), mando eu mesma atrás; sem isso não tem como confirmar preço nem criar ficha. |
 
 ### O que coletar de cada um (print da tela, não texto copiado)
 

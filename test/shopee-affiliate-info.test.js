@@ -69,6 +69,40 @@ test('fetchShopeeProductInfo retorna null sem credenciais', async () => {
   assert.equal(await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', {}), null)
 })
 
+// RCA 2026-09-23 (nandavieiraf@gmail.com): 10035 é a Shopee recusando o App
+// ID inteiro. O estágio próprio diz a quem lê o log que a ação é recadastrar a
+// chave, não investigar o produto.
+test('fetchShopeeProductInfo reporta estágio de chave recusada no erro 10035', async (t) => {
+  t.after(stubAxiosPost(async () => ({
+    data: {
+      errors: [{
+        message: 'error [10035]: You currently do not have access to the Shopee Affiliate Open API Platform',
+        extensions: { code: 10035 },
+      }],
+    },
+  })))
+
+  const diagnostics = []
+  const info = await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', CREDS, {
+    onDiagnostic: (event) => diagnostics.push(event),
+  })
+  assert.equal(info, null)
+  assert.equal(diagnostics[0]?.stage, 'shopee_chave_recusada')
+  assert.match(diagnostics[0]?.detail, /10035/)
+})
+
+test('fetchShopeeProductInfo reporta estágio GENÉRICO para erros que não são chave recusada', async (t) => {
+  t.after(stubAxiosPost(async () => ({
+    data: { errors: [{ message: 'error [10010]: query error', extensions: { code: 10010 } }] },
+  })))
+
+  const diagnostics = []
+  await fetchShopeeProductInfo('https://shopee.com.br/product/1/2', CREDS, {
+    onDiagnostic: (event) => diagnostics.push(event),
+  })
+  assert.equal(diagnostics[0]?.stage, 'shopee_api_erro')
+})
+
 // Regressão 1: o espelhamento da Shopee deve enviar o shortLink oficial de
 // afiliado retornado pela API (formato visual esperado: s.shopee.com.br/...).
 // Não resolver para a URL longa /product?...; se a API parar de devolver link
