@@ -1824,7 +1824,7 @@ export default function EspelhamentoPage() {
                   initialHealth={healthByGroup[g.id]}
                   onHealthChange={(h) => setHealthByGroup((prev) => ({ ...prev, [g.id]: h }))}
                 />
-                <Link href="/painel/preservacao/destinos" className="pnl-link-btn">Preservação por grupo e canal →</Link>
+                <Link href={`/painel/anti-banimento?parte=ritmo&destino=${g.id}`} className="pnl-link-btn">Ajustar no Anti-banimento PRO →</Link>
               </div>
             </CfgSection>
           )}

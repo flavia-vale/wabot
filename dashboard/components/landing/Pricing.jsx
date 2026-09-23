@@ -110,7 +110,7 @@ export function Pricing({ initialPlans = null, showHeading = true }) {
         <div style={s.grid} className="landing-pricing-grid">
           {plans.map(p => (
             <div key={p.id} style={s.card(p.highlight)} className="landing-pricing-card">
-              {p.highlight && <div style={s.badge}>Canais + Automação + Preservação</div>}
+              {p.highlight && <div style={s.badge}>Canais + Automação + Anti-banimento</div>}
               <div style={s.planName}>{p.name}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8, color: p.highlight ? 'var(--surface)' : 'var(--ink)' }}>
                 <span style={s.priceBig}>{p.price}</span>
