@@ -95,10 +95,7 @@ test('o worker decide com a trava e nunca devolve o link de origem como converti
   // cliente), senão o link próprio dela no texto adicional seria barrado.
   const guard = src.indexOf('const leakedLinks = findUnconvertedStoreLinks(finalText, conversions)')
   const footer = src.indexOf('finalText = appendRelayFooter(finalText, monitorGroup?.relayFooterText)')
-  // Procura a CHAMADA, não o nome da variável: a feature de cupons
-  // (specs/017-client-coupon-catalog) passou a guardar o retorno em
-  // `templateResult` ({ text, couponContext }) e o nome antigo deixou este
-  // guarda cego (indexOf = -1), reprovando mesmo com a trava no lugar certo.
   const template = src.indexOf('await applyMirrorTemplate(finalText')
+  assert.ok(template > 0 && footer > 0, 'âncoras do modelo e do texto adicional precisam existir')
   assert.ok(guard > 0 && guard < template && guard < footer)
 })
