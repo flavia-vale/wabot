@@ -11,6 +11,7 @@ import { mlOAuthRoutes } from './routes/mlOAuth.js'
 import { sessionRoutes } from './routes/session.js'
 import { groupsRoutes } from './routes/groups.js'
 import { credentialsRoutes } from './routes/credentials.js'
+import { couponsRoutes } from './routes/coupons.js'
 import { paymentsRoutes } from './routes/payments.js'
 import { configRoutes } from './routes/config.js'
 import { broadcastRoutes } from './routes/broadcast.js'
@@ -521,6 +522,7 @@ app.register(mlOAuthRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
+app.register(couponsRoutes, { prefix: '/api/coupons' })
 app.register(paymentsRoutes, { prefix: '/api/payments' })
 app.register(configRoutes, { prefix: '/api/config' })
 app.register(broadcastRoutes, { prefix: '/api/broadcast' })

@@ -1,5 +1,5 @@
 import { applyVariation, resolveCopyVariationPoolJson } from '../../src/core/copyVariation.js'
-import { buildMobileOfferText } from './mobileOfferComposer.js'
+import { buildMobileOfferText, showCouponStandIn } from './mobileOfferComposer.js'
 
 export const OFFER_TEMPLATE_PREVIEW_SAMPLE = {
   groupId: 'preview-destino-whatsapp',
@@ -34,9 +34,10 @@ export function buildRenderedOfferTemplatePreview({
     template: template?.key,
     templateBody: template?.body,
     preserveAutomationPlaceholders: true,
+    keepCouponToken: true,
   })
 
-  return applyVariation(baseText, {
+  return applyVariation(showCouponStandIn(baseText), {
     groupId,
     date,
     random,

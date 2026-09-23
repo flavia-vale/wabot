@@ -9,6 +9,7 @@ import { composeTemplates } from '../../dashboard/lib/mobileTemplateStore.js'
 import { createAndEnqueueStory } from '../instagram/storyDeliveryService.js'
 import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
 import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
+import { chooseCoupon, renderCouponText, applyCouponToken } from '../core/clientCouponPolicy.js'
 
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
@@ -145,6 +146,9 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
       template: DEFAULT_AUTOMATION_TEMPLATE_KEY,
       templateBody,
       preserveAutomationPlaceholders: true,
+      // {cupom} é resolvido logo adiante em runAutomation (applyCouponToken),
+      // sempre — com cupom, ou apagado quando a automação não usa cupons.
+      keepCouponToken: true,
     })
   }
 
@@ -320,6 +324,18 @@ export async function runAutomation(automation, {
   const couponLink = botConfig?.couponLink ?? ''
   const templateBody = resolveAutomationTemplateBody(botConfig, automation.templateKey)
 
+  // specs/017-client-coupon-catalog (US3, FR-028d): opt-in explícito por
+  // automação, UMA leitura por EXECUÇÃO — nunca uma por oferta do lote.
+  // Falha na carga não aborta o laço: lista vazia = ofertas saem sem cupom.
+  let activeCoupons = []
+  if (automation.useCoupons === true) {
+    try {
+      activeCoupons = await dbInstance.clientCoupon.findMany({ where: { userId: automation.userId, enabled: true } })
+    } catch {
+      activeCoupons = []
+    }
+  }
+
   const sentIds = []
   // Envios seguem sequenciais (stagger anti-ban); só os logs de dedup cruzada
   // são acumulados para gravar de uma vez (createMany) após o loop, evitando
@@ -330,7 +346,7 @@ export async function runAutomation(automation, {
   const instagramRuntime = instagramDestinations.length ? instagramRuntimeFn() : null
   for (const offer of toSend) {
     const base = formatOfferMessage(offer, automation.keyword, templateBody)
-    const text = applyVariation(base, {
+    const varied = applyVariation(base, {
       groupId: automation.destGroupJid,
       poolJson,
       groupInviteLink,
@@ -338,6 +354,22 @@ export async function runAutomation(automation, {
       random: true,
       autoInjectWhenMissing: false,
     })
+    // specs/017-client-coupon-catalog: mesma função de convergência única
+    // (applyCouponToken) dos outros dois caminhos de envio. Best-effort
+    // absoluto (FR-028b) — qualquer falha aqui nunca aborta o item do lote,
+    // só faz a oferta sair sem cupom.
+    let text = varied
+    try {
+      let couponText = ''
+      if (activeCoupons.length) {
+        const priceCents = offerPriceCents(offer)
+        const choice = chooseCoupon({ coupons: activeCoupons, platform: 'shopee', priceCents, now: Date.now() })
+        if (choice) couponText = renderCouponText({ coupon: choice.coupon, priceCents, finalPriceCents: choice.finalPriceCents })
+      }
+      text = applyCouponToken(varied, couponText)
+    } catch {
+      text = applyCouponToken(varied, '')
+    }
     // Aceite por CANAL, não um booleano só. Com um booleano compartilhado,
     // falha de um destino Instagram (Meta fora do ar) impedia o item de entrar
     // em sentItemIds mesmo com o WhatsApp JÁ entregue — e o item voltava
