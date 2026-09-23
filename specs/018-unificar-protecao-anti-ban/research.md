@@ -1,278 +1,363 @@
-# Research — 018 Anti-banimento (fase plan, 2026-09-23)
+# Research — 018 Anti-banimento (fase plan, 2026-09-23, revisado após a 2ª rodada da spec)
 
 Tudo abaixo foi conferido no código da branch `018-unificar-protecao-anti-ban`
 (a partir de `develop`). Cada item fecha um "ponto em aberto" da spec ou uma
 incógnita do Technical Context.
 
+**O que mudou nesta revisão** (spec, decisões A–E): variação de imagem saiu dos
+campos fixos (R3); campos fixos passaram a ser **três**, todos por
+destino/modelo (R2/R3); "Atraso entre canais" virou **"Intervalo entre
+destinos"**, editável e com comportamento corrigido (R10, R11); destino com
+limites desligados recomeça do **padrão do sistema** (R3, Achado C′); perda de
+plano não reseta nada (R8); cutover = anunciar e deixar o supervisor reiniciar
+(R7); a vazão do intervalo entre destinos virou **gate humano** (R4, Parte B).
+
 ---
 
 ## R1 — A tela de Conexão WhatsApp tem controle de anti-banimento? (FR-006a)
 
-**Decision**: **nada a mexer.** A tela `dashboard/app/painel/whatsapp/page.js`
-não tem nenhum controle de proteção. A única ocorrência de vocabulário do tema
-(`rajada`, linha ~674) é um **comentário JSX** explicando por que um banner
-antigo foi removido — não é texto visível. O plano não remove nem redireciona
-nada ali; FR-006a fica satisfeito por confirmação.
+**Decision**: **nada a mexer.** `dashboard/app/painel/whatsapp/page.js` não tem
+nenhum controle de proteção. A única ocorrência de vocabulário do tema
+(`rajada`, ~linha 674) é um **comentário JSX** — não é texto visível.
 
 **Rationale**: busca por `preserv|anti-ban|limite|horário|rajada|stagger|atraso|intervalo`
-na página só devolveu esse comentário. Pôr um atalho para "Anti-banimento" nessa
-tela seria acréscimo, não mudança pedida, e a spec (FR-003) já coloca o item no
-mesmo grupo de menu "Configuração", logo abaixo de "Conexão WhatsApp".
+só devolveu esse comentário. FR-003 já põe o item "Anti-banimento" logo abaixo
+de "Conexão WhatsApp" no menu.
 
-**Alternatives considered**: adicionar um cartão "Proteja seu número" na tela de
-Conexão — rejeitado: a tela é o momento de maior ansiedade da cliente
-(`WHATSAPP_SAFETY_POINTS`) e o RCA de 2026-09-02 pede que ela diga só o que o
-robô faz com o WhatsApp dela.
+**Alternatives considered**: cartão "Proteja seu número" na tela de Conexão —
+rejeitado (RCA 2026-09-02: a tela diz só o que o robô faz com o WhatsApp dela).
 
 ---
 
 ## R2 — Onde aplicar "vale o mais conservador" (FR-011/FR-013)
 
-**Decision**: **chokepoint único de LEITURA**, num módulo puro novo
-`src/core/antiBanFloor.js`, consumido:
+**Decision**: **chokepoint único de LEITURA**, módulo puro
+`src/core/antiBanFloor.js`, consumido **somente** dentro de
+`resolveDestinationPreservation` (`src/core/preservationConfig.js`) — o único
+ponto que monta a config efetiva de destino (`bot-worker.js` ~2502, dentro de
+`processSendJob`). Cobre os três campos fixos em qualquer nível (override do
+grupo, modelo atribuído, modelo padrão, padrão do sistema).
 
-1. dentro de `resolveDestinationPreservation` (`src/core/preservationConfig.js`) —
-   o único ponto que monta a config efetiva de destino (`bot-worker.js:2502`);
-   cobre `burstCap`, `burstWindowSec` e `throttleEnabled` em qualquer nível
-   (override do grupo, modelo atribuído, modelo padrão, padrão do sistema);
-2. no carregamento do `botConfig` dentro do `getConfig()` do worker (um único
-   ponto, ~`bot-worker.js:932`), para o **atraso entre canais**
-   (`channelStaggerJitterMs`, lido em `bot-worker.js:4272`).
+O `getConfig()` do worker **não** passa pelo piso: nenhum campo de conta é fixo
+(decisões A e B da spec). O desenho anterior (piso de 20 s em
+`channelStaggerJitterMs`) foi **descartado**.
 
-**Sem migration DML.** Os valores gravados ficam como estão (dormentes quando
-menos conservadores que o fixo). As rotas continuam aceitando e gravando o campo
-antigo (FR-013) — o efeito é neutralizado na leitura. As respostas GET passam a
-devolver também o valor **efetivo** calculado pelo mesmo módulo.
+**Sem migration DML.** Valores gravados ficam como estão (dormentes quando menos
+conservadores ou quando o destino estava com limites desligados). As rotas
+continuam aceitando e gravando o campo antigo (FR-013); o efeito é decidido na
+leitura. GET passa a devolver também o valor **efetivo**.
 
-**Rationale** (padrões do AGENTS.md):
-- É o mesmo desenho de `Group.imageMode` (valor persistido ignorado,
-  chokepoint `toMonitorGroup`) e de `Group.listType`/`searchListType.js` (coluna
-  dormente, rota continua aceitando, sem migration).
-- "Na migração graciosa, o dado antigo não pode virar comportamento novo em
-  silêncio" — ler e decidir num lugar só garante FR-011 "para sempre", inclusive
-  para requisição antiga, script e dado legado, que uma DML única não cobre.
-- Reversível sem redeploy: `ANTI_BAN_FLOOR=off` (só o valor exato `off`
-  desliga, padrão ligado) devolve o comportamento histórico — mesmo padrão dos
-  interruptores de rollout (`SHEIN_SHORTLINK_ENABLED`, `PREVIEW_CARD_CANVAS`).
-  Valor inválido cai no padrão ligado.
+**Rationale**: mesmo desenho de `Group.imageMode`/`toMonitorGroup` e de
+`Group.listType`/`searchListType.js`; vale "para sempre", inclusive requisição
+antiga e dado legado; reversível por env `ANTI_BAN_FLOOR=off` (só o valor exato
+`off` desliga; inválido cai em ligado).
 
 **Alternatives considered**:
-- *DML que grava o valor final + clamp nas rotas de escrita*: tem uma vantagem
-  real — **não muda código carregado pelo robô**, logo não reinicia o
-  `bot-supervisor` (ver R7). Rejeitada como padrão porque (a) apaga a
-  customização da cliente sem volta, (b) depende de TODO caminho de escrita
-  lembrar da regra (duas rotas + presets + scripts), exatamente a duplicação que
-  o projeto proíbe, (c) não é reversível por env. **Fica registrada como
-  alternativa para a dona do produto** caso ela prefira não reconectar as
-  sessões (ver "Pontos para aprovação" no plan.md).
-- *Aplicar a regra no front*: rejeitada — o robô não passa pela tela.
+- *DML + clamp nas rotas*: não mexeria em código do robô (sem restart), mas
+  apaga customização, depende de todo caminho de escrita e não é reversível.
+  A decisão E da spec aceitou o restart, então a alternativa fica só registrada.
+- *Regra no front*: rejeitada — o robô não passa pela tela.
 
 ---
 
-## R3 — Os cinco campos fixos: o que é "padrão atual" de verdade
+## R3 — Os três campos fixos: padrão real e efeitos
 
-Conferido campo a campo. **Três achados mudam a spec e precisam de aprovação.**
-
-| Campo (spec) | Coluna real | Onde vive | Padrão real | Quem lê |
+| Campo (spec) | Coluna | Onde vive | Padrão real | Quem lê |
 |---|---|---|---|---|
 | Tamanho da rajada | `burstCap` | `Group` (nulável) e `PreservationPreset` (default 6) | 6 | worker via resolver |
 | Janela da rajada | `burstWindowSec` | idem (default 600) | 600 s | worker via resolver |
 | Limites do destino | `throttleEnabled` | idem (default true) | ligado | worker via resolver |
-| Atraso entre canais | `BotConfig.channelStaggerJitterMs` | conta (default 20000 ms) | 20 s | worker `:4272` |
-| Variação de imagem | **`BotConfig.imageMutationActive`** (o worker lê este; a API expõe como `imageMutationEnabled`) | conta | **DESLIGADO (default false)** | worker `:4751`, só em canal, só com plano |
 
-**Achado A — variação de imagem NÃO é ligada por padrão.** A spec tomou
-`imageMutationEnabled` (legado, default `true`) como padrão; o campo que o robô
-de fato lê é `imageMutationActive`, default `false` (migration
-`20260611120000_independent_preservation_features`). Fixar "ligado" para todas
-as contas com acesso **ligaria a variação para quase todo mundo**, contrariando
-FR-014 ("nenhum comportamento muda por padrão"). Efeitos colaterais: como
-`isPreservationActive` passa a ser `true` quando qualquer defesa de conta liga,
-`channelSnapshot.js` e `followGuard.js` também mudam de ramo para essas contas.
-Custo de RAM: nenhum (a mutação já roda dentro do passo único de
-`normalizeImageForWhatsApp`); CPU: marginal, só em canal.
+**Fora do piso (spec, decisões A e B)**:
 
-**Decision (proposta, pendente de aprovação)**: **tirar a variação de imagem do
-conjunto de campos fixos** — ela continua **editável** em "Ajustes da conta",
-com frase leiga ("Mudar levemente cada foto enviada para canais, para o WhatsApp
-não achar que é a mesma foto repetida"). Ficam fixos **4** campos. O script de
-diagnóstico (R4) mede quantas contas com acesso estão com ela desligada, para a
-dona decidir com número se prefere fixar ligado.
-*Alternativa*: fixar ligado como a spec diz — aceitar a mudança de comportamento
-e registrá-la como a segunda exceção de FR-014.
+- **Variação de imagem** (`BotConfig.imageMutationActive`, default **false**;
+  API expõe como `imageMutationEnabled`) — **sem nenhuma mudança** nesta
+  feature: continua editável, mesmo padrão, mesmo gate. (O Achado A da 1ª
+  rodada — o campo lido nasce desligado — foi o que motivou a decisão A.)
+- **Intervalo entre destinos** (`BotConfig.channelStaggerJitterMs`) — editável,
+  sem piso; ver R10/R11.
 
-**Achado B — a regra "campo a campo" deixa o preset "Leve" bem mais lento.**
-O botão pronto "⚡ Leve" grava `burstCap 10 / burstWindowSec 3600` (10 envios
-por hora). Campo a campo: 10 → 6 (fixo) e 3600 mantém (mais conservador) →
-**6 por hora**, mais devagar que o Leve **e** que o fixo (6 a cada 10 min). É o
-que a spec decidiu ("nunca pela combinação"), e é seguro, mas quem usa "Leve"
-vai sentir queda de vazão de 40% na rajada. O diagnóstico mede quantos destinos
-caem nesse caso. **Pendente de ciência da dona.** Alternativa descartada por ora:
-comparar pela taxa (envios/segundo) — mais justa, mas é "pela combinação", o que
-a spec proíbe.
+**Achado B — preset "Leve" fica mais lento (aprovado, decisão C da spec).**
+`burstCap 10 / burstWindowSec 3600` → campo a campo `6 / 3600` = 6 por hora.
+A tela renomeia/redescreve o botão pronto para não prometer o ritmo antigo.
 
-**Achado C — ligar `throttleEnabled` ativa mais do que a rajada.** Com
-`throttleEnabled=false` o gate do destino ignora intervalo mínimo, rajada **e**
-limite diário. Forçar ligado faz esses três voltarem a valer para o destino,
-inclusive o intervalo mínimo e o limite diário que a cliente deixou gravados.
-Coerente com "mais seguro", mas é mais que "a rajada volta"; o diagnóstico
-reporta intervalo/limite diário desses destinos.
+**Achado C′ — limites desligados recomeçam do padrão do sistema (decisão da dona
+do produto, repassada a esta fase).** Com `throttleEnabled=false`, `decideDestination`
+(`src/core/channelThrottle.js`) ignora intervalo mínimo, limite diário e rajada.
+Os valores gravados nesses destinos podem estar desatualizados (foram gravados e
+desligados). **Decision**: quando o `throttleEnabled` **efetivo** resolvido for
+`false`, o piso devolve:
 
-**Faixas válidas mantidas nas rotas** (compatibilidade): `burstCap 1..1000`,
+| Campo | Valor efetivo |
+|---|---|
+| `throttleEnabled` | `true` |
+| `minIntervalSec` | `HARD_DEFAULT_PRESERVATION.minIntervalSec` (30) |
+| `dailyCap` | `HARD_DEFAULT_PRESERVATION.dailyCap` (`null` = sem limite diário) |
+| `burstCap` | 6 |
+| `burstWindowSec` | 600 |
+| `operatingHoursEnabled/Json`, `queueMaxAgeMin` | **inalterados** (não são governados pelo liga/desliga) |
+
+Isto é **diferente** da regra geral "vale o mais conservador" (que continua
+valendo para rajada e janela quando os limites **estavam ligados**). "Padrão do
+sistema" = `HARD_DEFAULT_PRESERVATION`, **não** o modelo padrão da conta: o
+modelo padrão da conta pode ele mesmo estar desligado ou com valores antigos,
+e "recomeçar do padrão" pede uma referência que não dependa do que a conta
+gravou. Como a resolução é campo a campo, o `throttleEnabled=false` efetivo
+significa que o nível que forneceu o liga/desliga estava desligado; aplicar a
+exceção depois da resolução cobre override de grupo e modelo.
+
+⚠️ Contradiz a redação atual do Edge Case da spec ("passam a valer … o que esse
+destino já tinha gravado") — sinalizado no plan.md para correção da spec.
+
+**Alternatives considered**: usar os valores gravados (redação atual da spec) —
+rejeitado pela dona ("zerar e recomeçar do padrão"); usar o modelo padrão da
+conta — rejeitado pelo motivo acima.
+
+**Faixas nas rotas** (compatibilidade, inalteradas): `burstCap 1..1000`,
 `burstWindowSec 60..86400`, `channelStaggerJitterMs 0..600000`.
 
 ---
 
-## R4 — Medir o impacto antes do deploy
+## R4 — Medir o impacto antes do deploy (`scripts/diag-antiban-valores.mjs`)
 
-**Decision**: `scripts/diag-antiban-valores.mjs`, read-only, no padrão dos
-43 `scripts/diag-*.mjs`:
+Read-only, no padrão dos `scripts/diag-*.mjs`. **Importa** as regras do produto
+(`antiBanFloor.js`, `resolveDestinationPreservation`, `destinationSpacing.js`,
+`shouldDropExpiredQueueJob`) — nunca reimplementa. Toda consulta que falhar é
+**impressa**, nunca vira "zero" (lição do `diag-assinatura-recusada.mjs`).
+`--detalhes` lista contas por e-mail (nunca telefone). Datas via Prisma (o
+`sentAt` cru no SQLite é número em ms — armadilha documentada no AGENTS.md).
 
-- lê `Group` (role `post`), `PreservationPreset`, `BotConfig` e o plano do
-  `User`;
-- **importa** `applyAntiBanFloor` / `describeAntiBanFloor` de
-  `src/core/antiBanFloor.js` e `resolveDestinationPreservation` — nunca
-  reimplementa a regra (lição do `backfill-numeros-whatsapp.mjs`: script que
-  reescreve a regra passa a discordar dela em silêncio);
-- para cada um dos 4 campos fixos (+ variação de imagem, informativa): contas e
-  linhas **menos conservadoras** (mudam), **mais conservadoras** (mantêm e
-  ganham a etiqueta de R6), **iguais**, **herdando**; separado por "tem acesso
-  ao plano" × "não tem";
-- por destino: valor efetivo **antes** × **depois** (resolver sem piso × com
-  piso) nos 4 campos — é a prova de SC-004/SC-005: nenhuma linha "depois" pode
-  ser menos conservadora que "antes";
-- casos especiais: destinos com `throttleEnabled=false` (e o intervalo/limite
-  que voltam a valer), destinos cuja rajada fica mais lenta que o fixo por
-  efeito campo a campo (Achado B);
-- `--detalhes` lista as contas afetadas por e-mail (nunca telefone);
-- toda consulta que falhar é **impressa**, nunca vira "zero" (lição do
-  `diag-assinatura-recusada.mjs`).
+### Parte A — quem muda com o piso
 
-Rodar em staging e produção **antes** do merge em `main` e colar a saída na PR.
+- por campo fixo (3): linhas/contas **menos conservadoras** (mudam),
+  **mais conservadoras** (mantêm + etiqueta R6), **iguais**, **herdando**;
+  separado por "tem acesso ao plano" × "não tem";
+- por destino: efetivo **antes** (resolver sem piso) × **depois** (com piso) —
+  prova de SC-004/SC-005: nenhum "depois" menos conservador que o "antes";
+- destinos com limites **desligados**: quantos, e os valores gravados que serão
+  **ignorados** em favor do padrão do sistema (Achado C′);
+- destinos em "Leve" / rajada mais lenta que o fixo (Achado B).
+
+### Parte B — vazão do "Intervalo entre destinos" (GATE HUMANO)
+
+**Obrigatória.** É o número que a dona do produto pediu para ver antes de fixar
+o padrão final. Esta sessão não tem acesso ao banco; **quem roda é ela, no VPS,
+em staging e produção**. Saída colada na PR `develop → main`.
+
+1. **Destinos por conta** (grupos + canais + `status@broadcast` quando
+   `postToStatus`), juntos: p50, p90, máximo; top 10 contas.
+2. **Atraso projetado da última saída** de uma oferta para todos os destinos da
+   conta: `(N − 1) × intervalo`, com (a) o valor gravado da conta e (b) o padrão
+   provisório de 20 s. Também com o N **observado** por oferta nos últimos 7
+   dias (destinos distintos por mensagem de origem no `MessageLog`), não só o N
+   cadastrado.
+3. **Vazão**: teórica = `3600 / intervalo` envios/hora para destinos diferentes;
+   observada = pico de envios `success` por hora da conta em 7 dias. Listar
+   contas em que observado > teórico (acumulariam fila).
+4. **Descarte por idade**: comparar (2) e o acúmulo de (3) com o **menor
+   `queueMaxAgeMin` efetivo** dos destinos da conta (padrão 300 min).
+   Classificar: `ok` (< 50%), `atenção` (≥ 50%), `descartaria` (≥ 100%).
+5. Resumo final em linguagem simples: "com 20 s, a conta com mais destinos (N)
+   leva X min para terminar uma oferta; Y contas ficam em atenção; Z
+   descartariam ofertas".
+
+**Critério de decisão (da dona, não automático)**: se houver contas em
+"atenção"/"descartaria", escolher entre padrão menor, rever o teto de descarte
+dessas contas/padrão, ou aceitar. **Nada disso é implementado nesta feature.**
+O valor de 20 s é **provisório** até ela decidir.
 
 ---
 
 ## R5 — Fonte única do direito de acesso (FR-015/FR-015a)
 
-**Decision**: a tela importa **a mesma função do backend**:
-`canUseAdvancedPreservation` de `src/billing/plans.js`.
+**Decision**: a tela importa `canUseAdvancedPreservation` de
+`src/billing/plans.js` (módulo puro; o dashboard já importa módulos puros de
+`src/`). `canAccessAdvancedPreservation` (`dashboard/lib/plan.js`, esquece
+Premium) é **removida**; `hasProLikeAccess` passa a delegar a
+`getPlanEntitlements`. Teste compara tela × backend nos 5 perfis.
 
-- `plans.js` é puro (só importa `preservationFeatures.js` → `jid.js`, sem I/O no
-  topo), e o dashboard **já importa módulos puros de `src/`** direto
-  (`src/domain/painel/mirrorWizard.js`, `src/tutorialVideo.js`,
-  `src/domain/painel/trialNotice.js`). Mesmo padrão, zero rota nova.
-- `canAccessAdvancedPreservation` (`dashboard/lib/plan.js`, esquece Premium) é
-  **removida**; `hasProLikeAccess` (`dashboard/lib/planEntitlements.js`) passa a
-  delegar a `getPlanEntitlements` para não virar a próxima segunda fonte.
-- Guarda: teste compara tela × backend nos 5 perfis (Basic, Trial ativo, Trial
-  vencido, PRO, Premium) e falha estruturalmente se `canAccessAdvancedPreservation`
-  voltar a existir ou se `dashboard/app/painel/anti-banimento/` checar `plan ===`
-  à mão.
-
-**Alternatives considered**: expor `entitlements` em `GET /auth/me` — funciona,
-mas mexe numa rota central por um ganho que o import direto já dá; fica como
-evolução.
-
-**Achado lateral**: as rotas recusam com códigos diferentes — `preservation.js`
-devolve **402**, `config.js`/`groups.js` devolvem **403**, ambos com o mesmo
-corpo de `buildFeatureGateError`. Não unificar o código HTTP nesta feature (cliente
-antigo pode depender dele); só a mensagem muda para "O Anti-banimento é um
-recurso do plano PRO." (sem prometer que não bane).
+**Achado lateral**: `preservation.js` recusa com **402**, `config.js`/`groups.js`
+com **403**, mesmo corpo. Não unificar o código HTTP; só a mensagem muda para
+"O Anti-banimento é um recurso do plano PRO.".
 
 ---
 
 ## R6 — Destino com ritmo mais cuidadoso que o padrão (UX, FR-011)
 
-**Decision**: o backend (mesmo módulo, `describeAntiBanFloor`) devolve, por
-destino e por modelo, `ritmoMaisCuidadoso: boolean`. A tela mostra, no cartão
-do destino/modelo, uma etiqueta **só leitura**, sem controle:
+**Decision**: `describeDestinationFloor` devolve, por destino e por modelo,
+`ritmoMaisCuidadoso: boolean` = algum dos três campos gravados é
+**estritamente** mais conservador que o fixo **e** os limites estavam ligados.
+Destino que estava com limites desligados **nunca** recebe a etiqueta (ele
+recomeça do padrão — Achado C′). A tela mostra, só leitura:
 
 > 🐢 **Ritmo mais cuidadoso** — este grupo usa um ritmo mais devagar que o
 > padrão, escolhido antes. Ele continua valendo.
 
-E, para conta com atraso entre canais acima de 20 s, a mesma frase no bloco
-"Ajustes da conta" ("Sua conta espera mais entre um canal e outro do que o
-padrão"). Nenhum número técnico é exibido (rajada/janela não voltam à tela);
-não reabre edição. Texto e ícone, nunca só cor (FR-020, acessibilidade).
-Para voltar ao padrão, ela usa as escolhas prontas ("Equilibrado") — que gravam
-só os campos editáveis — e **um botão "Voltar ao ritmo padrão"** no destino que
-limpa os overrides (`null` = herdar); isso já é aceito pela rota
-`PUT /destinations/:id` e não exige contrato novo.
+Botão "Voltar ao ritmo padrão" limpa os overrides (`null`) pela rota existente.
+**Não existe mais etiqueta de conta** (nenhum campo de conta tem piso).
 
-**Alternatives considered**: mostrar os números antigos em cinza — rejeitado,
-reintroduz jargão ("6 envios em 600 s"); esconder completamente — rejeitado,
-tela e robô pareceriam discordar (a própria spec pede a frase).
+**Alternatives considered**: mostrar os números antigos em cinza (reintroduz
+jargão); esconder (tela e robô pareceriam discordar).
 
 ---
 
-## R7 — Risco de reconexão e RAM (Política de memória / "código não carregado")
+## R7 — Reconexão e RAM
 
-**RAM**: **zero impacto.** Nenhum processo PM2, worker, cache ou dependência
-nova. O piso é aritmética pura por envio (já existe a leitura do destino).
+**RAM**: zero. Nenhum processo, cache ou dependência nova; o estado do
+espaçamento são dois números em memória por worker.
 
-**Reconexão — SINALIZAR**: a feature **muda código que o bot-worker carrega**:
-`src/core/preservationConfig.js`, o novo `src/core/antiBanFloor.js` e o
-`getConfig()` de `src/bot-worker.js`. Todos batem em `WORKER_CODE_PATHS_RE`, então
-o deploy de produção **reinicia o `bot-supervisor` automaticamente** e **reconecta
-todas as sessões WhatsApp de uma vez**. Sem esse restart, o piso não vale nos
-robôs (RCA 2026-08-31). Mitigações:
-
-- anunciar/agendar a janela do deploy de `main`, ou subir com
-  `RESTART_SUPERVISOR=0` e reiniciar à mão num horário combinado;
-- a parte de TELA (unificação, nome, gate, redirecionamentos) não depende do
-  restart e pode ir antes, em PR separada, se a dona quiser desacoplar;
-- alternativa sem restart está em R2 (DML + clamp na escrita).
-
-Nada muda em Baileys, reconexão, filas, dedup ou `processSendJob` além de os
-números de preservação passarem pelo piso — a ordem canônica de
-`processSendJob` não se altera.
+**Reconexão — SINALIZAR**: mudam `src/core/preservationConfig.js`,
+`src/core/channelThrottle.js`, os novos `src/core/antiBanFloor.js` e
+`src/core/destinationSpacing.js`, e `processSendJob`/enqueue em
+`src/bot-worker.js` — todos em `WORKER_CODE_PATHS_RE`. O deploy de `main`
+**reinicia o `bot-supervisor` e reconecta todas as sessões**. Decisão E da spec:
+**anunciar às clientes antes e deixar reiniciar**. Sugestão para tasks: aviso
+no painel/e-mail com 24 h de antecedência e deploy em horário de menor
+movimento (madrugada de dia útil), com a dona acompanhando.
 
 ---
 
 ## R8 — Perder o plano (FR-019)
 
-**Como é hoje** (confirmado no código):
-- ritmo por destino (`resolveDestinationPreservation`) **não é gated por plano**
-  no worker: vale para toda conta, com ou sem plano;
-- atraso entre canais: também não é gated (lido direto do `botConfig`);
-- defesas de conta (variação de imagem, vigia de seguidas, observador,
-  variação de texto): só agem com `preservationActive`, que exige plano;
-- as rotas de edição recusam (402/403) sem plano; nada é apagado.
+**Como é hoje**: ritmo por destino e `channelStaggerJitterMs` **não** são gated
+por plano no worker; defesas de conta (variação de imagem, vigia de seguidas,
+observador, variação de texto) só agem com `preservationActive`; rotas recusam
+sem plano; nada é apagado.
 
-**Decision**: **manter exatamente isso**. Ao perder o plano, a tela volta a ficar
-bloqueada (FR-017) e os valores gravados continuam no banco **e continuam
-valendo** para o ritmo por destino — agora sempre com o piso, então nunca menos
-seguro que o fixo nos campos fixos. Ao voltar a assinar, ela reencontra a
-configuração que tinha. Nenhum "reset", nenhuma mudança de worker por plano.
-
-**Tensão com a spec (pendente de aprovação)**: o cenário US3-5 diz que a conta
-sem acesso "passa a usar o ritmo padrão seguro". Aplicar isso exigiria um gate de
-plano novo dentro do worker (outra mudança de runtime) e **aceleraria** quem
-tinha escolhido ir mais devagar — contra a regra de ouro da própria spec. O plano
-recomenda a leitura acima (valores gravados continuam, com piso) e atualizar a
-redação de US3-5/FR-019 na spec. Único resíduo: campos **editáveis** gravados
-mais rápidos que o padrão (ex.: intervalo mínimo de 5 s) continuam valendo sem
-plano — igual a hoje.
+**Decision (spec decisão D)**: manter. Sem plano, a tela bloqueia; o robô segue
+lendo os valores gravados — ritmo por destino **com piso** e **intervalo entre
+destinos gravado** (agora com o significado novo). Nenhum reset, nenhum gate
+novo no robô. Ao reassinar, reencontra tudo.
 
 ---
 
 ## R9 — Estrutura da tela e rotas antigas
 
-**Decision**: rota nova `/painel/anti-banimento` com três partes (Situação,
-Ritmo por grupo, Ajustes da conta) navegáveis por `?parte=` e
-`?destino=<groupId>`; as quatro rotas antigas viram `redirect()` do Next para a
-parte correspondente (mesmo padrão de `/painel/grupos` → `/painel/espelhamento`).
-Menu: sai o grupo "Preservação avançada" (3 itens); entra 1 item "Anti-banimento"
-com `pro: true` no grupo "Configuração", após "Conexão WhatsApp". Componentes em
-`dashboard/components/preservacao/` são reaproveitados/renomeados em texto — sem
-biblioteca nova. No celular, a lista de destinos é lista com busca, sem largura
-fixa (RCA 2026-09-05).
+**Decision**: rota `/painel/anti-banimento` com três partes por `?parte=` e
+`?destino=<groupId>`; as quatro rotas antigas viram `redirect()`. Menu: sai o
+grupo "Preservação avançada"; entra 1 item "Anti-banimento" (`pro: true`) no
+grupo "Configuração", após "Conexão WhatsApp". Celular: lista com busca, sem
+largura fixa.
 
-**Superfícies de texto a renomear** (lista para tasks): `src/billing/plans.js`
-(mensagem do gate), `dashboard/app/painel/nav.js`, `espelhamento/page.js`
-(atalho), `UpsellShell.js`, `dashboard/lib/painel/logsCopy.js`,
-`landing/Pricing.jsx`, `Hero.jsx`, `marketing-content.js`, `planEntitlements.js`
-(comentário). **Páginas públicas de SEO** (`_preservationCommercialPages.js`,
-`diagnostico-antiban-whatsapp`, blog, `conteudos`) só trocam o **nome do
-recurso** no corpo; **título, H1 e URL não mudam** (regra de SEO: mudar título de
-página indexada sem medição é risco), e nenhuma frase pode prometer que não bane.
+**Superfícies de texto a renomear**: `src/billing/plans.js`, `nav.js`,
+`espelhamento/page.js`, `UpsellShell.js`, `dashboard/lib/painel/logsCopy.js`,
+`landing/Pricing.jsx`, `Hero.jsx`, `marketing-content.js`,
+`planEntitlements.js`, e **`deferReasonMessage` do `bot-worker.js`** (cita
+"Preservação por destino" e "Máximo de envios na janela" — texto que chega ao
+painel pelo `MessageLog.errorMsg`). Páginas públicas de SEO só trocam o nome do
+recurso no corpo; título, H1 e URL não mudam; nenhuma frase promete que não bane.
+
+---
+
+## R10 — "Intervalo entre destinos": nome, coluna, faixa, semântica
+
+**Decision**:
+
+- **Coluna mantida**: `BotConfig.channelStaggerJitterMs` (Int, ms, default
+  20000). **Sem rename de coluna.** Rename no SQLite é recriação de tabela (DDL
+  com lock exclusivo — pegadinha #8, janela de parada da API) para ganho só
+  cosmético; a spec pede preservar o dado e aceitar o campo pelo nome atual. O
+  nome novo vive na tela e no texto; o código ganha um comentário e um alias de
+  leitura interno (`destinationIntervalMs` no módulo puro) para ninguém ler
+  "stagger/jitter" como significado atual.
+- **API**: continua `channelStaggerJitterMs` em PUT/GET (0..600000). Nenhum
+  segundo nome aceito na escrita (dois nomes para o mesmo campo é como uma tela
+  e um script passam a discordar).
+- **Semântica nova**: espera **fixa** (não mais sorteio 0..X) entre dois envios
+  consecutivos da conta para destinos **diferentes**, qualquer tipo (grupo,
+  canal, `status@broadcast`) e qualquer origem (espelhamento, filas, ofertas
+  automáticas, enviar agora, agendados). Envio consecutivo para o **mesmo**
+  destino é isento (quem controla é `minIntervalSec`).
+- **Faixa na tela**: 0 a 600 segundos, inteiro. **0 é aceito** e significa "sem
+  espaçamento extra" (os limites por destino continuam valendo).
+- **Padrão**: 20 s — **provisório** até o gate humano (R4 Parte B). Sem
+  migration nesta feature.
+- **Plano**: não é gated no worker (como hoje) — vale com ou sem plano; editar
+  exige plano (tela e rota).
+- **Pendência (1) do RCA 2026-07-28** ("vale mesmo com a proteção desligada")
+  deixa de ser pendência: o intervalo passa a ser parte declarada da proteção.
+
+**Alternatives considered**: manter sorteio 0..X (rejeitado — a spec pede
+intervalo, e sorteio não garante SC-005c); aplicar só a canais (rejeitado —
+FR-023); `ALTER TABLE RENAME COLUMN` (rejeitado acima).
+
+---
+
+## R11 — Reaproveitar `deferSendJob`/`notBefore` para o intervalo entre destinos
+
+**Como é hoje** (conferido):
+
+- enqueue do espelhamento (`bot-worker.js` ~4611) sorteia
+  `staggerMs = random(0..channelStaggerJitterMs)` só para `destIndex > 0` e
+  destino canal, e grava em `job.delayMs`;
+- `processSendJob` (~2583) soma `job.delayMs` ao freio de pressão e ao descanso
+  e faz `await sleep(totalDelayMs)` **dentro do consumidor serial** — é o
+  defeito do RCA;
+- o gate do destino (`throttleCheckAndReserve` → `decideDestination`) já sabe
+  adiar sem travar: espera > `THROTTLE_INLINE_WAIT_MAX_MS` (5 s) →
+  `deferSendJob(job, gate)`, que volta o `MessageLog` para `queued` e
+  re-enfileira com `notBefore = gate.deferUntil`; o backend memória guarda o job
+  em `scheduled` (fora da fila) e o BullMQ usa `delay` nativo;
+  `job.enqueuedAt` é preservado (o descarte por idade continua valendo).
+
+**Decision**:
+
+1. **Chokepoint puro novo `src/core/destinationSpacing.js`** (contrato em
+   `contracts/destination-spacing.md`):
+   - `decideDestinationSpacing({ now, destJid, intervalMs, state })` →
+     `{ allow, deferUntil, reason: 'destination_spacing' }`, onde `state =
+     { lastSendAt, lastDestJid, nextFreeSlotAt }`;
+   - `combineGateDecisions(destDecision, spacingDecision)` → a decisão com a
+     **maior** espera (`deferUntil` maior); `allow` só se as duas liberam. É aqui
+     que mora a regra de FR-025 ("vale a maior, não soma, não substitui").
+   - `reserveSpacingSlot(state, { now, destJid, deferUntil, intervalMs })` →
+     novo estado (cursor da próxima vaga).
+2. **`channelThrottle.js`** ganha a decisão **sem reserva** (peek) — `checkAndReserve`
+   passa a aceitar a decisão de espaçamento e só reserva o slot do destino se a
+   decisão **combinada** liberar. Sem isso, o destino reservaria a vaga
+   (contaria na rajada/limite diário) e o job seria adiado pelo espaçamento —
+   vaga queimada.
+3. **`processSendJob`**: o gate combinado roda para **todo** destino (inclusive
+   sem `Group`, como `status@broadcast`, onde só o espaçamento decide). Se a
+   decisão combinada não libera por espaçamento, **sempre** `deferSendJob`
+   (mesmo espera curta — FR-024 proíbe esperar dentro da fila); o caminho de
+   espera inline curta continua existindo **só** para o `min_interval` do
+   próprio destino, como hoje. Ordem canônica preservada: preservação →
+   revalidação de vínculo → descarte por idade → freio de pressão/descanso →
+   **gate combinado (destino + espaçamento)** → tentativas de envio.
+4. **Estado em memória do worker** (um worker por conta, consumidor serial):
+   `lastSendAt`, `lastDestJid` e `nextFreeSlotAt`, atualizados no momento em que
+   o gate combinado libera (mesmo instante da reserva do destino). Zera no
+   restart do worker — no primeiro envio após restart não há espaçamento
+   (aceitável: o restart já é um evento raro e a proteção por destino continua;
+   persistir custaria escrita a cada envio).
+5. **Cursor de próxima vaga** (contra churn N²): quando o espaçamento adia um
+   job, ele recebe `deferUntil = max(nextFreeSlotAt, lastSendAt + intervalo,
+   deferUntil do destino)` e o cursor avança `deferUntil + intervalo`. Sem
+   cursor, N jobs adiados para o mesmo instante seriam re-adiados em cascata
+   (N(N−1)/2 updates de `MessageLog` por oferta). Vaga reservada por job que
+   depois for descartado/adiado pelo destino só deixa um buraco (mais lento,
+   nunca mais rápido).
+6. **Remoção**: o sorteio `staggerMs` sai do enqueue (`delayMs: 0`), e
+   `processSendJob` deixa de dormir `job.delayMs` (jobs antigos persistidos no
+   BullMQ com `delayMs` são tratados pelo gate novo, sem `sleep`).
+7. **Motivo no painel**: `deferReasonMessage('destination_spacing')` em
+   linguagem leiga ("Esperando o intervalo entre destinos que você definiu no
+   Anti-banimento"). Log `info` com nome próprio para medir em produção.
+8. **Escape hatch**: `DESTINATION_SPACING=off` (só o valor exato) faz
+   `decideDestinationSpacing` sempre liberar — **não** volta o `sleep` antigo.
+
+**Interpretação de SC-005b**: como o espaçamento é da conta inteira, durante o
+intervalo nenhum envio para **outro** destino sai (é o objetivo). O que a
+correção garante é que o **consumidor não fica congelado**: jobs para o mesmo
+destino (sujeitos ao `minIntervalSec`), descartes por idade/vínculo, e jobs
+cujo adiamento já venceu continuam sendo processados. O teste de SC-005b mede
+"nenhum `sleep` do espaçamento no consumidor" e "log de adiamento com horário",
+não "outros destinos saindo durante o intervalo".
+
+**Alternatives considered**:
+- manter `sleep` curto inline para espera ≤ 5 s (rejeitado: FR-024 é absoluto);
+- persistir `lastSendAt` da conta no banco (rejeitado: uma escrita a mais por
+  envio para cobrir só o primeiro envio pós-restart);
+- adiar sem cursor (rejeitado: churn N²);
+- somar as esperas (rejeitado: FR-025).
