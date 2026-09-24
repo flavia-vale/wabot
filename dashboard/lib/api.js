@@ -52,6 +52,16 @@ const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça lo
 const AUTH_TOKEN_KEY = 'wb_auth_token'
 export const TERMS_VERSION = '2026-09-09-teste-unico-por-pessoa'
 
+// O login mora SÓ no cookie HttpOnly `wb_auth`, que script nenhum da página
+// consegue ler (auditoria 2026-09-23). Até aqui o token era copiado também para
+// o localStorage — e qualquer falha de script no painel poderia levá-lo embora,
+// anulando a proteção do cookie. A cópia nasceu em 2026-05 para quando o painel
+// falava com a API em outra porta; hoje as duas pontas estão no mesmo endereço
+// (NEXT_PUBLIC_FORCE_SAME_ORIGIN_API) e o cookie basta.
+//
+// Transição: o painel não GRAVA mais o token; o que já estava gravado segue
+// sendo enviado até vencer (no máximo 7 dias), para ninguém cair no deploy, e é
+// apagado no próximo login, troca de senha ou saída.
 function getAuthToken() {
   if (typeof window === 'undefined') return ''
   try {
@@ -61,11 +71,10 @@ function getAuthToken() {
   }
 }
 
-function setAuthToken(token) {
+function setAuthToken(_token) {
   if (typeof window === 'undefined') return
   try {
-    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
-    else localStorage.removeItem(AUTH_TOKEN_KEY)
+    localStorage.removeItem(AUTH_TOKEN_KEY)
   } catch {}
 }
 

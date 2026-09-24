@@ -13,6 +13,7 @@ import { resolveDailyWindowStart, nextDailyWindowStart, describeWindowStart } fr
 import { extractVariables } from '../../email/markup.js'
 import { buildAudienceWhere, describeAudience, loadAudience, AUDIENCE_FILTERS } from '../../email/audience.js'
 import { enqueueEmailBatch, cancelEmailBatch, resolveBatchSize } from '../../email/queue.js'
+import { isAdminMfaVerified } from '../adminMfa.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -37,6 +38,12 @@ export async function adminEmailsRoutes(app, opts = {}) {
     const access = resolveAdminAccess(user)
     if (!access.role || !(ROLE_PERMISSIONS[access.role] ?? []).includes(permission)) {
       reply.code(403).send({ error: 'Acesso admin negado' })
+      return null
+    }
+    // Mesma segunda senha das escritas do admin.js — antes estas rotas (disparo
+    // em massa, pagamento de comissão) passavam só com o login.
+    if (permission.endsWith(':write') && !isAdminMfaVerified(req)) {
+      reply.code(401).send({ error: 'MFA obrigatória para esta operação administrativa' })
       return null
     }
     req.admin = { email: user?.email, role: access.role, adminUserId: access.adminUserId }

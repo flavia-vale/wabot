@@ -52,7 +52,8 @@ export async function clickTrackerRoutes(app, opts = {}) {
       const result = await createShortlink(req.user.sub, originalUrl, { groupId, messageLogId })
       return result
     } catch (err) {
-      return reply.code(500).send({ error: err.message })
+      req.log.error({ err: err?.message }, 'createShortlink falhou')
+      return reply.code(500).send({ error: 'Não foi possível criar o link agora. Tente novamente.' })
     }
   })
 

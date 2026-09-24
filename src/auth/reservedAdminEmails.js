@@ -7,8 +7,12 @@
 // disparo de e-mail em massa. Por isso eles ficam RESERVADOS: nenhum caminho de
 // autoatendimento (cadastro, troca de e-mail) pode gravá-los. Conta que já tem
 // um deles continua funcionando como antes.
+// A dona principal é sempre dona, mesmo com registro de AdminUser dizendo
+// outra coisa (ver resolveAdminAccess).
+export const PRIMARY_OWNER_ADMIN_EMAIL = 'flavia.vale@usp.br'
+
 export const DEFAULT_OWNER_ADMIN_EMAILS = Object.freeze([
-  'flavia.vale@usp.br',
+  PRIMARY_OWNER_ADMIN_EMAIL,
   'flaviaroberta.1496@gmail.com',
   'tacianeaas02@gmail.com',
 ])

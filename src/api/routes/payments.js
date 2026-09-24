@@ -28,6 +28,8 @@ import { decideChargeFailureNotice, describeChargeFailureForCustomer } from '../
 import { describeChargeStatusDetail, classifyChargeOutcome } from '../../domain/payments/chargeOutcome.js'
 import { listProFeaturesInUse, buildProFeaturesNotice } from '../../domain/payments/proFeaturesInUse.js'
 import { tryCreateAffiliateCommission, reconcileAffiliateCommissions, promoteEligibleAffiliateCommissions, reverseAffiliateCommissionForPayment, checkStuckPromotions } from '../../domain/affiliate/service.js'
+import { hasConfiguredStepUpMfa, safeEqualString } from '../adminMfa.js'
+import { resolveAdminAccess } from './admin.js'
 export { resolvePlanForPayment }
 
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET
@@ -145,15 +147,17 @@ export function isValidMercadoPagoWebhookSignature({ signature = '', requestId =
   if (!ts || !v1 || !requestId || !dataId) return false
   const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`
   const expected = createHmac('sha256', secret).update(manifest).digest('hex')
-  return expected === v1
+  // Comparação em tempo constante. Sem janela de `ts` de propósito: não está
+  // confirmado que o Mercado Pago renova o `ts` ao reenviar um aviso, e recusar
+  // reenvio legítimo é cliente pagando sem receber acesso. Repetir um aviso já
+  // aceito é inócuo: o evento é deduplicado por id e o pagamento é reconsultado
+  // no Mercado Pago antes de liberar qualquer coisa.
+  return safeEqualString(expected, String(v1).toLowerCase())
 }
 
 
 export function hasStepUpMfa(req) {
-  const configuredToken = String(process.env.ADMIN_MFA_TOKEN ?? '').trim()
-  if (!configuredToken) return false
-  const providedToken = String(req.headers['x-admin-mfa-token'] ?? '').trim()
-  return providedToken && providedToken === configuredToken
+  return hasConfiguredStepUpMfa(req)
 }
 
 function warnMissingProductionEnv(log) {
@@ -1579,7 +1583,7 @@ export async function paymentsRoutes(app) {
   // Não requer JWT; a identidade do usuário vem do external_reference salvo na Preference
   app.get('/callback', async (req, reply) => {
     const dashboardUrl = stripApiSuffix(getDashboardUrl())
-    const { collection_id, collection_status, payment_id, status, external_reference } = req.query
+    const { collection_id, collection_status, payment_id, status } = req.query
 
     const mpPaymentId = String(payment_id ?? collection_id ?? '').trim()
     const paymentStatus = String(collection_status ?? status ?? '').trim()
@@ -1606,8 +1610,11 @@ export async function paymentsRoutes(app) {
       return reply.redirect(`${dashboardUrl}/painel/plano?status=failure`)
     }
 
-    // external_reference from MP API is authoritative (set by us when creating the preference)
-    const userId = snapshot.externalReference ?? external_reference ?? null
+    // O dono vem SÓ do Mercado Pago (external_reference gravado por nós na
+    // criação do checkout). O valor da query string é de quem chama: aceitá-lo
+    // quando o MP não traz referência deixava qualquer pessoa creditar na
+    // própria conta um pagamento aprovado sem dono (auditoria 2026-09-23).
+    const userId = snapshot.externalReference ?? null
     if (!userId) {
       req.log.warn({ mpPaymentId }, 'Callback sem external_reference — não foi possível identificar usuário')
       return reply.redirect(`${dashboardUrl}/painel/plano?status=pending`)
@@ -1669,7 +1676,14 @@ export async function paymentsRoutes(app) {
     return { ok: true, ...result }
   })
 
-  app.get('/health', { onRequest: [app.authenticate] }, async (req) => {
+  app.get('/health', { onRequest: [app.authenticate] }, async (req, reply) => {
+    // Contagem de pagamentos da base inteira: só para o admin (a tela que usa é
+    // /admin/observabilidade). Antes qualquer conta logada lia.
+    const viewer = await db.user.findUnique({
+      where: { id: req.user.sub },
+      select: { email: true, adminUser: { select: { id: true, role: true, status: true } } },
+    }).catch(() => null)
+    if (!resolveAdminAccess(viewer).role) return reply.code(403).send({ error: 'Acesso negado' })
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
     const [pending, dlqOpen] = await Promise.all([
       db.payment.count({ where: { status: 'pending', createdAt: { gte: since } } }),
@@ -1895,6 +1909,9 @@ export async function paymentsRoutes(app) {
   app.post('/recover', { onRequest: [app.authenticate] }, async (req, reply) => {
     const { paymentId } = req.body ?? {}
     if (!paymentId) return sendError(reply, 400, 'MISSING_PAYMENT_ID', 'paymentId obrigatório')
+    // Id do Mercado Pago é numérico; qualquer outra coisa iria crua para o
+    // caminho da API do MP, chamada com o NOSSO token.
+    if (!/^\d{1,20}$/.test(String(paymentId).trim())) return sendError(reply, 400, 'INVALID_PAYMENT_ID', 'Número de pagamento inválido')
 
     const accessToken = getMpAccessToken()
     if (!accessToken) return sendError(reply, 500, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'MP não configurado')
@@ -1927,7 +1944,13 @@ export async function paymentsRoutes(app) {
     // ainda não persistido em Payment (a trava por mpPaymentId só cobre os já
     // registrados).
     const mpUserRef = String(mpExternalReference ?? '').trim()
-    if (mpUserRef && mpUserRef !== String(userId)) {
+    // Pagamento sem dono não nasceu no nosso checkout: não há como provar de
+    // quem é, então não libera acesso por aqui (o suporte confere e registra
+    // pelo admin, em "Registrar pagamento por fora").
+    if (!mpUserRef) {
+      return sendError(reply, 403, 'PAYMENT_NOT_OWNED', 'Não conseguimos confirmar que este pagamento é seu. Fale com o suporte.')
+    }
+    if (mpUserRef !== String(userId)) {
       return sendError(reply, 403, 'PAYMENT_NOT_OWNED', 'Este pagamento pertence a outra conta.')
     }
 
