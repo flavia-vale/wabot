@@ -34,6 +34,12 @@ export const SEND_PAUSE_KIND = Object.freeze({
 
 export const ANTI_BAN_SETTINGS_HREF = '/painel/anti-banimento?parte=ritmo'
 
+// Só conta linha `queued` tocada nas últimas 6h. Acima disso é linha-fantasma:
+// o envio morreu num reinício antigo e a linha ficou "na fila" no banco para
+// sempre (medido em produção 2026-09-24: linhas de 9 a 73 dias). Contá-las
+// faria a faixa acusar espera que não existe. O descarte por idade padrão é 5h.
+export const SEND_PAUSE_MAX_AGE_MS = 6 * 60 * 60 * 1000
+
 function hourLabel(h) {
   return `${h}h`
 }
@@ -100,13 +106,9 @@ export function summarizeQueuedByKind(rows = []) {
   return { byKind, total, oldestAt: oldestAt == null ? null : new Date(oldestAt).toISOString() }
 }
 
-function waitingLabel(total, oldestAt, now) {
+function offersLabel(total) {
   const n = Number(total) || 0
-  const base = n === 1 ? '1 oferta está na fila' : `${n} ofertas estão na fila`
-  const ts = oldestAt ? Number(new Date(oldestAt)) : NaN
-  if (!Number.isFinite(ts) || ts <= 0 || now - ts < 60_000) return base
-  const min = Math.round((now - ts) / 60_000)
-  return `${base} (a mais antiga há ${min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}min` : ''}` : `${min} min`})`
+  return n === 1 ? '1 oferta esperando' : `${n} ofertas esperando`
 }
 
 /**
@@ -120,47 +122,29 @@ function waitingLabel(total, oldestAt, now) {
 export function buildSendPauseNotice({ groups = [], queued = null, online = null, now = Date.now() } = {}) {
   // Desconectado, o assunto é a conexão (a shell já mostra) — não a espera.
   if (online !== true) return null
-  const cta = { ctaLabel: 'Mudar esse tempo no Anti-banimento', ctaHref: ANTI_BAN_SETTINGS_HREF }
+  // Faixa de UMA linha (pedido da dona do produto, 2026-09-24): texto curto e
+  // chamativo + "Ajustar". O detalhe de cada oferta continua em Envios → "Ver motivo".
+  const cta = { ctaLabel: 'Ajustar', ctaHref: ANTI_BAN_SETTINGS_HREF }
 
   const hours = describeSendPause(groups, now)
   if (hours) {
-    return { kind: SEND_PAUSE_KIND.HORARIO, title: hours.title, body: `${hours.detail} Isso é o horário de envio que você definiu no Anti-banimento — não é defeito.`, ...cta }
+    return { kind: SEND_PAUSE_KIND.HORARIO, title: `Envio pausado até ${hourLabel(hours.opensAtHour)} · fora do horário de envio`, ...cta }
   }
 
   const byKind = queued?.byKind && typeof queued.byKind === 'object' ? queued.byKind : {}
   const count = (k) => Number(byKind[k]) || 0
   const total = Number(queued?.total) || Object.values(byKind).reduce((a, b) => a + (Number(b) || 0), 0)
   if (total <= 0) return null
-  const fila = waitingLabel(total, queued?.oldestAt, now)
+  const ofertas = offersLabel(total)
 
   if (count(SEND_PAUSE_KIND.LIMITE_DIARIO) > 0) {
-    return {
-      kind: SEND_PAUSE_KIND.LIMITE_DIARIO,
-      title: 'O robô está segurando ofertas: limite diário atingido',
-      body: `${fila}. Um ou mais destinos já bateram o limite diário de ofertas que você definiu no Anti-banimento; elas voltam a sair amanhã. Não é defeito — é a proteção do seu número.`,
-      ...cta,
-    }
+    return { kind: SEND_PAUSE_KIND.LIMITE_DIARIO, title: `${ofertas} por causa do limite diário`, ...cta }
   }
   if (count(SEND_PAUSE_KIND.SEGURANCA) > 0) {
-    return {
-      kind: SEND_PAUSE_KIND.SEGURANCA,
-      title: 'O robô pausou os envios por segurança',
-      body: `${fila}. O Anti-banimento detectou sinal de risco num destino e segurou os envios para ele por um tempo. Ele volta sozinho; você não precisa fazer nada.`,
-      ...cta,
-    }
+    return { kind: SEND_PAUSE_KIND.SEGURANCA, title: `${ofertas} · pausa de segurança (volta sozinha)`, ...cta }
   }
   if (count(SEND_PAUSE_KIND.HORARIO) > 0) {
-    return {
-      kind: SEND_PAUSE_KIND.HORARIO,
-      title: 'O robô está esperando o horário de envio de um destino',
-      body: `${fila} esperando o horário de envio que você definiu no Anti-banimento para esse destino. Não é defeito.`,
-      ...cta,
-    }
+    return { kind: SEND_PAUSE_KIND.HORARIO, title: `${ofertas} pelo horário de envio`, ...cta }
   }
-  return {
-    kind: SEND_PAUSE_KIND.RITMO,
-    title: 'O robô está esperando o tempo que você definiu no Anti-banimento',
-    body: `${fila} esperando o intervalo entre envios. Não é defeito — é o ritmo que protege o seu número. Se quiser envios mais rápidos, ajuste o intervalo.`,
-    ...cta,
-  }
+  return { kind: SEND_PAUSE_KIND.RITMO, title: `${ofertas} pelo intervalo entre envios`, ...cta }
 }

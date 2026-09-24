@@ -4,7 +4,7 @@ import { buildOfferQueueSource, parseOfferQueueSourceId } from '../../offerQueue
 import { clearUserQueuedSendLogs } from '../../jobs/stuckSendLogs.js'
 import { buildCredentialBlockAlerts } from '../../credentialBlockAlert/message.js'
 import { MISSING_CREDENTIAL_ERROR_PREFIX } from '../../core/conversionFailureReason.js'
-import { summarizeQueuedByKind } from '../../domain/painel/sendPauseStatus.js'
+import { SEND_PAUSE_MAX_AGE_MS, summarizeQueuedByKind } from '../../domain/painel/sendPauseStatus.js'
 
 // P3 (specs/013-inbound-leads-strategy): janela fixa de 7 dias, constante no
 // módulo — não vira query param para a rota não virar superfície de
@@ -207,7 +207,7 @@ export async function logsRoutes(app) {
     const cached = getCachedSummary(cacheKey)
     if (cached) return cached
     const rows = await db.messageLog.findMany({
-      where: { userId, status: 'queued', errorMsg: { not: null } },
+      where: { userId, status: 'queued', errorMsg: { not: null }, sentAt: { gte: new Date(Date.now() - SEND_PAUSE_MAX_AGE_MS) } },
       select: { errorMsg: true, sentAt: true },
       orderBy: { sentAt: 'asc' },
       take: 500,

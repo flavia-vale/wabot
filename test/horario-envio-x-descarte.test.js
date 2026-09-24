@@ -277,24 +277,27 @@ test('aviso global: robô desconectado ou nada segurado → null', () => {
 test('aviso global: horário fechado ganha de tudo; depois limite diário; depois segurança; depois ritmo — sempre com link para o Anti-banimento', () => {
   const horario = buildSendPauseNotice({ groups: [dest('A', JANELA)], queued: { total: 2, byKind: { ritmo: 2 } }, online: true, now: NOITE })
   assert.equal(horario.kind, SEND_PAUSE_KIND.HORARIO)
-  assert.match(horario.title, /fora do horário \(8h–22h\)/)
+  assert.match(horario.title, /^Envio pausado até 8h · fora do horário de envio$/)
 
-  const diario = buildSendPauseNotice({ groups: [dest('A', JANELA)], queued: { total: 5, byKind: { ritmo: 4, limite_diario: 1 }, oldestAt: new Date(TARDE - 90 * 60_000).toISOString() }, online: true, now: TARDE })
+  const diario = buildSendPauseNotice({ groups: [dest('A', JANELA)], queued: { total: 12, byKind: { ritmo: 4, limite_diario: 8 }, oldestAt: new Date(TARDE - 90 * 60_000).toISOString() }, online: true, now: TARDE })
   assert.equal(diario.kind, SEND_PAUSE_KIND.LIMITE_DIARIO)
-  assert.match(diario.body, /5 ofertas estão na fila \(a mais antiga há 1h 30min\)/)
-  assert.match(diario.body, /voltam a sair amanhã/)
+  assert.equal(diario.title, '12 ofertas esperando por causa do limite diário')
 
   const seguranca = buildSendPauseNotice({ groups: [], queued: { total: 1, byKind: { seguranca: 1, ritmo: 0 } }, online: true, now: TARDE })
   assert.equal(seguranca.kind, SEND_PAUSE_KIND.SEGURANCA)
+  assert.match(seguranca.title, /^1 oferta esperando/)
 
-  const ritmo = buildSendPauseNotice({ groups: [], queued: { total: 1, byKind: { ritmo: 1 } }, online: true, now: TARDE })
+  const ritmo = buildSendPauseNotice({ groups: [], queued: { total: 3, byKind: { ritmo: 3 } }, online: true, now: TARDE })
   assert.equal(ritmo.kind, SEND_PAUSE_KIND.RITMO)
-  assert.match(ritmo.title, /tempo que você definiu no Anti-banimento/)
+  assert.equal(ritmo.title, '3 ofertas esperando pelo intervalo entre envios')
 
   for (const n of [horario, diario, seguranca, ritmo]) {
     assert.equal(n.ctaHref, '/painel/anti-banimento?parte=ritmo')
-    assert.match(n.ctaLabel, /Anti-banimento/)
-    assert.doesNotMatch(`${n.title} ${n.body}`, /burst|throttle|preset|jitter|cap\b|preservação por/i)
+    assert.equal(n.ctaLabel, 'Ajustar')
+    // Faixa de UMA linha: sem parágrafo, título curto.
+    assert.equal(n.body, undefined)
+    assert.ok(n.title.length <= 60, `título longo demais: "${n.title}"`)
+    assert.doesNotMatch(n.title, /burst|throttle|preset|jitter|cap\b|preservação por/i)
   }
 })
 
