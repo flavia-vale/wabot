@@ -6,9 +6,10 @@
 /* Endereço da extensão que copia o código de acesso das lojas. Fica numa
  * constante porque três lojas apontam para ela: antes era um CARTÃO inteiro no
  * meio da lista ("Extensão necessária"), lido por quem não precisava dele e
- * ignorado por quem precisava. Agora vive na ajuda do campo que a usa. */
+ * ignorado por quem precisava. Vive na ajuda do campo que a usa e, a pedido da
+ * dona do produto (2026-09-24), também num aviso curto no topo da tela. */
 export const COOKIE_EDITOR_URL =
-  'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm?pli=1'
+  'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm'
 
 export const AFFILIATE_PLATFORMS = [
   {
