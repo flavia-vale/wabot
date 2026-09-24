@@ -167,6 +167,20 @@ Portanto:
   teto de descarte dessas contas/padrão, ou (c) aceitar. **Nenhuma mudança em
   `queueMaxAgeMin` é implementada nesta feature**; só o sinal e o critério.
 
+### Status desta seção (rodada implement, 2026-09-24) — o gate CONTINUA aberto
+
+O script `scripts/diag-antiban-valores.mjs` está **implementado e testado**
+(`test/diag-antiban-valores.test.js`, `src/domain/antiban/diagnostics.js`),
+cobrindo as duas partes descritas acima — rodado localmente contra um banco de
+teste (T060), nunca contra staging/produção reais (esta sessão não tem
+acesso). **Isso NÃO fecha o gate.** T061 (rodar o script em `~/wabot-staging`
+e `~/wabot`, ler a saída, decidir e confirmar o valor final do intervalo entre
+destinos) e T062 (registrar aqui o resultado) continuam **pendentes**,
+marcados `[ ]` em `tasks.md` de propósito — nenhum agente de implementação
+pode marcá-los `[X]`. O valor em produção/staging continua sendo o
+provisório de 20s (migration `20260728120000_channel_stagger_default_20s`),
+sem qualquer mudança.
+
 ## Project Structure
 
 ### Documentation (this feature)
