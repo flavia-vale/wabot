@@ -15,6 +15,7 @@ import { Alert } from '@/components/Alert'
 import { LoadingState, ErrorState, EmptyState } from '@/components/States'
 import { OperatingHoursForm } from '@/components/preservacao/OperatingHoursForm'
 import { PreservationLimitsForm } from '@/components/preservacao/PreservationLimitsForm'
+import { summarizePreset } from '@/lib/preservationPresetSummary'
 
 const NEW_PRESET = {
   name: '',
@@ -26,20 +27,6 @@ const NEW_PRESET = {
   dailyCap: null,
   // Descarte por idade na fila: 5h. Ver src/core/queueExpiry.js.
   queueMaxAgeMin: 300,
-}
-
-// "Máximo de envios na janela"/"Janela de rajada" não entram no resumo: viraram
-// campos fixos (piso anti-banimento), não são mais informação que a cliente
-// escolheu — mostrar o valor herdado confundiria com "isto é ajustável".
-function summarizePreset(p) {
-  const parts = []
-  if (p.operatingHoursEnabled) {
-    try { const h = JSON.parse(p.operatingHoursJson); parts.push(`envia ${h.startHour}h–${h.endHour}h`) }
-    catch { /* ignore */ }
-  } else parts.push('envia 24h')
-  parts.push(`espera pelo menos ${p.minIntervalSec}s entre envios${p.dailyCap ? ` · até ${p.dailyCap}/dia` : ''}`)
-  if (Number(p.queueMaxAgeMin) > 0) parts.push(`descarta após ${Math.round(Number(p.queueMaxAgeMin) / 60)}h na fila`)
-  return parts.join(' · ')
 }
 
 // Campos de override DIRETO no destino (Group), fora do preset atribuído —
