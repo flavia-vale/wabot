@@ -551,10 +551,11 @@ function WhatsAppTab() {
   const carregarLista = useCallback((params) => api.adminWhatsappConnectedClients(params).then((r) => r.clientes ?? []), [])
 
   // Recarrega a lista sempre que um filtro muda. Não busca a cada tecla da
-  // busca por nome/e-mail — isso é filtro local (useMemo abaixo).
+  // busca por nome/e-mail — isso é filtro local (useMemo abaixo). A lista
+  // ANTIGA continua na tela até a nova chegar — sem "Carregando…" piscando
+  // a cada filtro trocado, só no carregamento inicial.
   useEffect(() => {
     let ativo = true
-    setCarregando(true)
     Promise.all([api.adminWhatsappContactHistory(100), carregarLista(filtros)])
       .then(([hist, clientes]) => {
         if (!ativo) return
