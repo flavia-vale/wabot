@@ -1,0 +1,30 @@
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
+index c46b096..0418a65 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
+@@ -7,7 +7,7 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
+ import { WAMessageStatus, WAMessageStubType } from '../Types/index.js';
+ import { aesDecryptCTR, aesEncryptGCM, cleanMessage, Curve, decodeMediaRetryNode, decodeMessageNode, decryptMessageNode, delay, derivePairingCodeKey, encodeBigEndian, encodeSignedDeviceIdentity, getCallStatusFromNode, getHistoryMsg, getNextPreKeys, getStatusFromReceiptType, hkdf, MISSING_KEYS_ERROR_TEXT, NACK_REASONS, NO_MESSAGE_FOUND_ERROR_TEXT, unixTimestampSeconds, xmppPreKey, xmppSignedPreKey } from '../Utils/index.js';
+ import { makeMutex } from '../Utils/make-mutex.js';
+-import { areJidsSameUser, getAllBinaryNodeChildren, getBinaryNodeChild, getBinaryNodeChildBuffer, getBinaryNodeChildren, getBinaryNodeChildString, isJidGroup, isJidStatusBroadcast, isJidUser, isLidUser, jidDecode, jidNormalizedUser, S_WHATSAPP_NET } from '../WABinary/index.js';
++import { areJidsSameUser, getAllBinaryNodeChildren, getBinaryNodeChild, getBinaryNodeChildBuffer, getBinaryNodeChildren, getBinaryNodeChildString, isJidGroup, isJidNewsletter, isJidStatusBroadcast, isJidUser, isLidUser, jidDecode, jidNormalizedUser, S_WHATSAPP_NET } from '../WABinary/index.js';
+ import { extractGroupMetadata } from './groups.js';
+ import { makeMessagesSocket } from './messages-send.js';
+ export const makeMessagesRecvSocket = (config) => {
+@@ -668,6 +668,16 @@ export const makeMessagesRecvSocket = (config) => {
+                             }
+                         });
+                     }
++                    else if (isJidNewsletter(msg.key.remoteJid)) {
++                        // wabot patch (RCA 2026-09-24): mensagem de CANAL e confirmada com <ack>,
++                        // nunca com <receipt> - e o que o WA Web faz e o que o Baileys 7.x faz
++                        // desde o commit f46e8b1 ("handle newsletter and unavailable message
++                        // acks", nov/2025). Na 6.7.x o <receipt to=...@newsletter> e rejeitado
++                        // pelo servidor com <stream:error><ack .../></stream:error> (500), a
++                        // conexao cai, o WhatsApp reentrega a mesma mensagem e o ciclo repete.
++                        await sendMessageAck(node);
++                        logger.debug({ key: msg.key }, 'processed newsletter message without receipts');
++                    }
+                     else {
+                         // no type in the receipt => message delivered
+                         let type = undefined;

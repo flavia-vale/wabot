@@ -98,6 +98,45 @@ Ele cruza `MessageLog` (incluindo pendentes), `SendDedupKey`,
 Testes: `test/incoming-freshness.test.js`, `test/mirror-duplicate-replay.test.js`,
 `test/bot-worker-relay-branding.test.js`.
 
+### Adendo 2026-09-24: o portão de 5 min jogava fora a oferta entregue depois da queda
+
+O portão acima continua certo para a REENTREGA — mas passou a descartar
+também mensagem legítima. Medido em produção: as sessões caem com 500 ~1×/hora
+por conta (causa de fundo em `whatsapp-sessao.md`), e o que o grupo publica
+DURANTE a queda é entregue pelo WhatsApp **27–58 min** depois da reconexão —
+acima dos 5 min, direto para `stale`. Em 60 MB de `bot.log`: **196** descartes
+de 10–60 min e **231** de 1h+, em **47 robôs**; numa conta, 35 de 87 mensagens
+dos grupos monitorados. Era a causa 2 do chamado "o espelhamento parou".
+
+Decisão da dona do produto: **até 60 min passa**
+(`INCOMING_LATE_MAX_AGE_MS`), se (a) a mensagem veio de uma **origem
+monitorada** e (b) o **id nunca foi visto** por este robô. Regra pura em
+`shouldProcessIncomingMessage` (parâmetros novos `lateMaxAgeMs`,
+`isMonitoredSource`, `seenBefore`; chamada antiga se comporta igual). O
+conjunto de ids vistos é `seenIds` no **arquivo da dedup, em disco**
+(`messageDedup.js`: `hasSeenIncomingId`/`rememberSeenIncomingId`), com janela
+**sempre maior** que a tardia (`max(2h, 2×)`): em memória ele zeraria no
+reinício em massa da frota (56 contas às 01h e 06h de 24/09) e a fila offline
+drenada na volta entraria toda de novo — a reoferta deste RCA. `append` sem
+timestamp continua descartada; acima de 60 min continua descartada; reentrega
+do mesmo id dentro dos 60 min vira `stale_replay`. A dedup de link no envio
+segue como segunda rede.
+
+**Custo:** ~1.000 ids × ~80 bytes ≈ **80 KB por robô** no pior caso (conta com
+~500 mensagens/h, 2h de janela), em disco e em memória; teto de 50.000
+entradas. O `getConfig` (cacheado) e a consulta ao conjunto só rodam quando a
+mensagem já seria descartada por idade E cabe na janela tardia — o caminho
+comum (mensagem ao vivo) não paga nada. Rollback sem redeploy:
+`INCOMING_LATE_MAX_AGE_MS=0` no `.env` (pegadinha #1: `pm2 delete` + `start`,
+e em `remote` reiniciar o `bot-supervisor`).
+
+**Não regredir:** `DEDUP_MSGID_WINDOW_MS` continua em 5 min e
+`linkDedupWindowMs` continua independente — o teste falha se a janela tardia
+for "compensada" por aí. Cada aceitação tardia deixa a linha `Mensagem
+atrasada aceita: origem monitorada e id nunca visto` no `bot.log`.
+
+Teste: `test/portao-de-entrada-tardio.test.js`.
+
 ## Espelhamento para grupo NÃO escolhido + foto borrada (RCA 2026-08-26 — não regredir)
 
 Cliente `julianepumuceno16@gmail.com` reportou três coisas no mesmo dia: oferta
@@ -940,3 +979,28 @@ Não regredir: não pintar de vermelho o que é escolha da cliente; não afirmar
 "cadastro certo" sem olhar o cadastro. Teste: `test/loja-nao-usada-e-reenviada.test.js`.
 Perdas reais restantes (reinício em massa + fila > 5 h) são de sessão/fila —
 ver `envio-e-filas.md` e `memoria-e-capacidade.md`.
+
+### Adendo (2026-09-24, mesma investigação): o relato do cliente estava CERTO
+
+O texto acima foi escrito antes de olhar hora a hora. Somando 24h parecia que
+"o robô funcionava"; hora a hora, **das 21h BRT de 23/09 até 13:40 BRT de
+24/09 nenhuma oferta espelhada saiu** — e o "Criar oferta" seguia, porque ele
+só envia (não depende de receber mensagem nem da fila do espelhamento). Três
+causas somadas, nenhuma exclusiva da conta:
+
+| # | Causa | Onde está tratada |
+|---|---|---|
+| 1 | Horário de envio 8h–22h no modelo padrão + limite de espera de 5h: a oferta da noite esperava até as 8h e era descartada por idade (547 descartes em 23/09, 855 em 24/09; 45 de 48 modelos padrão da frota) | `envio-e-filas.md`, "Horário de envio × limite de espera" (descarte na hora com motivo próprio + aviso na tela) |
+| 2 | Portão de entrada de 5 min (`incomingFreshness.js`) descartando mensagem que o WhatsApp entregou 27–58 min depois de uma queda (196 descartes de 10–60 min na frota, 47 robôs) | adendo da seção "Mensagem espelhada N vezes" acima, quando fechado |
+| 3 | Quedas 500 crônicas (~600/dia há ≥10 dias, 85% com `stuckMsg:true`, 60 ids diferentes — a quarentena, que exige o mesmo id 2×, nunca dispara) | `whatsapp-sessao.md` — causa de fundo em investigação, não trocar biblioteca por palpite |
+
+O 408 em massa de 24/09 (1.019 quedas, 10h–12h UTC) foi bloqueio da VPS e
+zerou sozinho; memória (swap 0) e a mudança jemalloc/semi-space de 22/09 foram
+descartadas com dado.
+
+**Erros de método desta investigação (não repetir):** afirmar "está
+espelhando" somando 24h sem olhar hora a hora; consultar a preservação só pelo
+modelo atribuído ao grupo em vez da ordem real (override do grupo → modelo
+atribuído → **modelo padrão da conta** → padrão do sistema); filtro de data em
+SQL comparando `sentAt` inteiro com texto (devolve vazio e parece ausência de
+dado — usar `CASE typeof(x) WHEN 'integer' THEN datetime(x/1000,'unixepoch') ELSE x END`).

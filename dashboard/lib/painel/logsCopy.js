@@ -10,6 +10,7 @@ import {
   isCredentialBlockErrorMsg,
   CREDENTIAL_BLOCK_STATUS_TAG,
 } from '../../../src/credentialBlockAlert/message.js'
+import { parseOutsideSendWindowReason } from '../../../src/core/sendWindow.js'
 
 // P3 (specs/013-inbound-leads-strategy): terceiro ponto de exibição da
 // Assumption (histórico de envios) — mesma fonte de vocabulário do aviso
@@ -111,6 +112,12 @@ export function explainErrorMsg(errorMsg, platform) {
       return `Essa oferta esperou ${formatDuration(Number(m[1]) * 60)} na fila desse destino e foi descartada — o limite de espera que você configurou é ${formatDuration(Number(m[2]) * 60)}. Para segurar por mais tempo, aumente "Descartar oferta que esperou mais de" em Preservação por grupo e canal.`
     }
     return 'Essa oferta esperou tempo demais na fila desse destino e foi descartada. O limite de espera fica em Preservação por grupo e canal.'
+  }
+  if (errorMsg.startsWith('skip:outside_send_window')) {
+    const w = parseOutsideSendWindowReason(errorMsg)
+    const janela = w?.startHour != null ? ` (${w.startHour}h–${w.endHour}h)` : ''
+    const limite = w?.maxMin ? ` de ${formatDuration(w.maxMin * 60)}` : ''
+    return `Essa oferta chegou fora do seu horário de envio${janela} e não conseguiria sair antes do limite de espera${limite}, então foi descartada na hora em vez de ficar presa na fila. Para receber ofertas da noite, amplie o horário de envio ou o limite de espera desse destino no Anti-banimento.`
   }
   if (errorMsg.startsWith('skip:decrypt_failed')) return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
   if (errorMsg.startsWith('skip:incoming_error')) {

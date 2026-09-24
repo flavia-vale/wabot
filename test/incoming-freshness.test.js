@@ -75,11 +75,11 @@ test('limite de idade é exatamente INCOMING_MAX_AGE_MS', () => {
 test('bot-worker usa shouldProcessIncomingMessage no messages.upsert e loga o descarte', () => {
   assert.match(
     botWorkerSource,
-    /import \{ INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage \} from '\.\/core\/incomingFreshness\.js'/,
+    /import \{[^}]*\bINCOMING_MAX_AGE_MS\b[^}]*\bshouldProcessIncomingMessage\b[^}]*\} from '\.\/core\/incomingFreshness\.js'/,
   )
   assert.match(
     botWorkerSource,
-    /const freshness = shouldProcessIncomingMessage\(\{\s*\n\s*upsertType: type,\s*\n\s*messageTimestampMs: msgTs,/,
+    /let freshness = shouldProcessIncomingMessage\(\{\s*\n\s*upsertType: type,\s*\n\s*messageTimestampMs: msgTs,/,
     'o filtro de frescor precisa receber o tipo do upsert (notify vs append)',
   )
   assert.match(
