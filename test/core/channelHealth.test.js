@@ -11,6 +11,7 @@ import {
   recordStreamError,
   PAUSE_DURATION_MS,
   CONSECUTIVE_FAIL_THRESHOLD,
+  describeChannelHealthStatus,
 } from '../../src/core/channelHealth.js'
 
 test('HEALTH_STATUS imutável e completo', () => {
@@ -175,4 +176,38 @@ test('recordStreamError com código irrelevante é no-op', async () => {
   const db = makeFakeDb({ channelHealth: records, group: { findMany: async () => [{ id: 'g-1' }] } })
   await recordStreamError('u-1', 'something-else', { db })
   assert.equal(records.get('g-1').status, 'green')
+})
+
+// describeChannelHealthStatus — a tela nunca pode mostrar só a cor do status
+// (2026-09-24, feedback da dona do produto): precisa dizer o motivo e o que
+// fazer, senão "um status sozinho não diz nada".
+test('describeChannelHealthStatus: sem registro (nunca enviou) vira "Sem dados", nunca "Saudável"', () => {
+  const desc = describeChannelHealthStatus(null)
+  assert.equal(desc.label, 'Sem dados')
+  assert.match(desc.motivo, /não houve envio/i)
+})
+
+test('describeChannelHealthStatus: verde com envio já feito é "Saudável" e não pede ação', () => {
+  const desc = describeChannelHealthStatus({ status: 'green', lastPostedAt: new Date(), consecutiveFailures: 0 })
+  assert.equal(desc.label, 'Saudável')
+  assert.equal(desc.oQueFazer, 'Nada a fazer.')
+})
+
+test('describeChannelHealthStatus: amarelo com 429/rate-overlimit explica o limite do WhatsApp', () => {
+  const desc = describeChannelHealthStatus({ status: 'yellow', lastError: 'rate-overlimit', consecutiveFailures: 2 })
+  assert.equal(desc.label, 'Atenção')
+  assert.match(desc.motivo, /pediu para esperar/i)
+})
+
+test('describeChannelHealthStatus: vermelho com 401/403 aponta perda de permissão e diz o que fazer', () => {
+  const desc = describeChannelHealthStatus({ status: 'red', lastError: '403', consecutiveFailures: 3, pausedUntil: new Date(Date.now() + 3600000) })
+  assert.equal(desc.label, 'Pausado')
+  assert.match(desc.motivo, /permissão/i)
+  assert.match(desc.oQueFazer, /admin do canal/i)
+})
+
+test('describeChannelHealthStatus: crítico é distinto de "sem dados" (não pode virar cinza)', () => {
+  const desc = describeChannelHealthStatus({ status: 'critical', lastError: '401' })
+  assert.equal(desc.label, 'Crítico')
+  assert.notEqual(desc.label, 'Sem dados')
 })

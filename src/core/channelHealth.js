@@ -52,6 +52,64 @@ export function isChannelPaused(health, now = Date.now()) {
   return ms > now
 }
 
+// Traduz status+lastError+contadores em algo que a cliente possa AGIR — só o
+// status ("verde"/"amarelo") não diz o que fez o canal cair nem o que fazer a
+// respeito. Pura, sem I/O, para caber tanto no backend quanto (via import
+// direto, mesmo padrão de canUseAdvancedPreservation) na tela do painel.
+export function describeChannelHealthStatus(health, now = Date.now()) {
+  const status = health?.status ?? HEALTH_STATUS.GREEN
+  const lastError = health?.lastError ?? null
+  const consecutiveFailures = health?.consecutiveFailures ?? 0
+  const paused = isChannelPaused(health, now)
+  const isBlockingError = lastError != null && BLOCKING_HTTP_CODES.has(String(lastError).replace(/^stream:/, ''))
+  const isRateError = lastError != null && STREAM_YELLOW_CODES.has(String(lastError).replace(/^stream:/, ''))
+
+  if (status === HEALTH_STATUS.CRITICAL) {
+    return {
+      emoji: '🟠',
+      label: 'Crítico',
+      motivo: 'O WhatsApp bloqueou o robô neste canal (sem permissão para postar).',
+      oQueFazer: 'Confira se o robô ainda é admin do canal, ou reconecte o WhatsApp.',
+    }
+  }
+  if (status === HEALTH_STATUS.RED || paused) {
+    return {
+      emoji: '🔴',
+      label: 'Pausado',
+      motivo: isBlockingError
+        ? `Perdeu a permissão de postar (código ${lastError}).`
+        : `Pausado depois de ${consecutiveFailures} falhas seguidas ao enviar.`,
+      oQueFazer: health?.pausedUntil
+        ? `Confira se o robô continua admin do canal. Ele tenta de novo sozinho às ${new Date(health.pausedUntil).toLocaleString('pt-BR')}.`
+        : 'Confira se o robô continua sendo admin do canal.',
+    }
+  }
+  if (status === HEALTH_STATUS.YELLOW) {
+    return {
+      emoji: '🟡',
+      label: 'Atenção',
+      motivo: isRateError
+        ? 'O WhatsApp pediu para esperar (limite de envio atingido).'
+        : `Teve ${consecutiveFailures || 'algumas'} falha(s) recente(s) ao enviar.`,
+      oQueFazer: 'O robô já está enviando mais devagar sozinho. Se continuar amanhã, confira a permissão do robô no canal.',
+    }
+  }
+  if (status === HEALTH_STATUS.GREEN && health && (health.lastPostedAt || health.lastProbeSeenAt)) {
+    return {
+      emoji: '🟢',
+      label: 'Saudável',
+      motivo: 'Está enviando normalmente.',
+      oQueFazer: 'Nada a fazer.',
+    }
+  }
+  return {
+    emoji: '⚫',
+    label: 'Sem dados',
+    motivo: 'Ainda não houve envio para este canal para medir.',
+    oQueFazer: 'Nada a fazer — aguarde a primeira oferta ser enviada.',
+  }
+}
+
 export async function getHealth(groupId, opts = {}) {
   const db = opts.db ?? defaultDb
   const row = await db.channelHealth.findUnique({ where: { groupId } })

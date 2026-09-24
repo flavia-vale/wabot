@@ -194,15 +194,15 @@ export default function RitmoPart({ initialDestino }) {
         ) : (
           <ul className="flex flex-col gap-2">
             {presets.map(p => (
-              <li key={p.id} className="bg-white rounded-xl shadow px-4 py-3 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-gray-800">
+              <li key={p.id} className="bg-white rounded-xl shadow px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-gray-800 break-words">
                     {p.name} {p.isDefault && <span className="ml-1 text-[11px] rounded bg-green-100 text-green-700 px-1.5 py-0.5">padrão</span>}
                     {p.ritmoMaisCuidadoso && <span className="ml-1 text-[11px] rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">🐢 Ritmo mais cuidadoso</span>}
                   </div>
-                  <div className="text-xs text-gray-500">{summarizePreset(p)}</div>
+                  <div className="text-xs text-gray-500 break-words">{summarizePreset(p)}</div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   <button onClick={() => setEditing({ ...p })} className="text-sm text-gray-600 hover:text-gray-900">Editar</button>
                   {!p.isDefault && <button onClick={() => removePreset(p.id)} className="text-sm text-red-600 hover:text-red-800">Excluir</button>}
                 </div>
@@ -248,10 +248,10 @@ export default function RitmoPart({ initialDestino }) {
                         {d.ritmoMaisCuidadoso && <span className="ml-1 rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">🐢 Ritmo mais cuidadoso</span>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <select value={d.preservationPresetId || ''}
                         onChange={e => assignPreset(d.id, e.target.value)}
-                        className="border rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-400">
+                        className="min-w-0 max-w-full border rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-400">
                         <option value="">Ritmo padrão da conta</option>
                         {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
