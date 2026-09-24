@@ -233,7 +233,7 @@ const methodologyPages = [
   {
     href: '/como-funciona-espelha-grupos-canais',
     title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
-    description: 'Fluxo operacional de fontes, destinos, cadência, monitoramento e recuperação.',
+    description: 'Fluxo operacional de fontes, destinos, cadência, variação e saúde de cada canal.',
   },
   {
     href: '/protecao-antiban-espelha-grupos',

@@ -38,8 +38,8 @@ function blocoPost(chave) {
 }
 
 const PROIBIDO = [
-  [/pausas? preventivas?/i, 'o produto não pausa sozinho por risco'],
-  [/monitoramento de saúde/i, 'o produto não mede saúde nem alcance do canal'],
+  [/pausas? preventivas?/i, 'o produto só pausa o canal que recusa envios (1 h), não "antes do risco"'],
+  [/monitoramento de saúde/i, 'a saúde do canal vem só das falhas de envio; alcance e cliques não são medidos'],
   [/lista vip/i, 'o produto está no ar: o convite é o teste grátis'],
   [/\bstaging\b|sprint|lead magnet|\bAI SEO\b|E-E-A-T|SEO\/AEO|Cluster 1|parseáve/i, 'jargão interno visível'],
   [/>CTA</, 'título "CTA" visível'],

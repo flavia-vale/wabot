@@ -625,3 +625,17 @@ projetado nunca viram um número só; retenção sai da COBERTURA paga (plano de
 menos de 5 pagantes ou zero cancelamento observado → sem projeção. O plano de
 marketing bloqueia anúncio pago até esse número existir. Teste:
 `test/admin-ltv-retencao.test.js`.
+
+### Não regredir — o que as páginas públicas podem dizer sobre preservação (2026-09-24)
+
+- **Existe (plano Pro):** status de saúde de cada canal calculado pelas falhas de
+  envio e pausa automática de **1 hora** do canal que recusa envios 3 vezes
+  seguidas (`src/core/channelHealth.js`); score de risco heurístico
+  (`src/core/reportRiskScore.js`); horário de descanso, intervalo, limite por
+  dia, variação de texto.
+- **Não existe:** "pausa preventiva" antes do risco, medição de cliques ou
+  visualizações do canal (`clickTracker.js` não está ligado no envio), plano de
+  recuperação como função da ferramenta (é da cliente).
+- O PR #1848 errou para o outro lado ("não pausa sozinha", "não mede saúde") —
+  corrigido. Convite é "Testar 7 dias grátis", nunca "Lista VIP"; sem "staging"/
+  "Sprint" em texto público. Guarda: `test/paginas-publicas-sem-promessa-falsa.test.js`.

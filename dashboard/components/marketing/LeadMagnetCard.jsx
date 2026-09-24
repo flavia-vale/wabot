@@ -28,7 +28,7 @@ const LEAD_MAGNET_VARIANTS = {
     body: 'Baixe o roteiro de 1 página para padronizar copy, links, horários, grupos de destino e métricas antes de ligar uma automação.',
     emailLabel: 'E-mail para receber o checklist',
     emailErrorEmpty: 'Informe seu e-mail para receber o checklist.',
-    submitLabel: 'Receber checklist e entrar na lista VIP',
+    submitLabel: 'Receber checklist e testar 7 dias grátis',
     links: [
       { href: '/materiais/checklist-operacao-whatsapp', label: 'Ver checklist online', kind: 'online' },
       { href: '/materiais/checklist-operacao-whatsapp.pdf', label: 'Baixar PDF', kind: 'pdf' },

@@ -254,7 +254,7 @@ export function LpTemplate({ slug }) {
   const conversionLinks = [
     { href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp', label: 'Checklist de divulgação' },
     { href: '/ferramentas/calculadora-tempo-grupos-whatsapp', label: 'Calculadora de tempo operacional' },
-    { href: '/login?mode=register', label: 'Entrar na lista VIP' },
+    { href: '/login?mode=register', label: 'Testar 7 dias grátis' },
   ]
 
   const breadcrumbJsonLd = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Início', item: getSiteUrl() }, { '@type': 'ListItem', position: 2, name: cfg.title.replace('', ''), item: `${getSiteUrl()}/${slug}` }] }
@@ -268,7 +268,6 @@ export function LpTemplate({ slug }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <Hero
         tone={theme.tone}
-        primaryCtaLabel="Entrar na Lista VIP"
         eyebrowLabel={theme.eyebrow}
         headlineOverride={heroCopy.headline}
         subOverride={heroCopy.sub}
