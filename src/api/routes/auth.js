@@ -232,7 +232,7 @@ async function findUserByNormalizedEmail(email) {
 async function createDefaultBotConfigForUser(userId) {
   try {
     await db.botConfig.create({
-      data: { userId, copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON },
+      data: { userId, copyVariationPoolJson: DEFAULT_COPY_VARIATION_POOL_JSON, channelStaggerJitterMs: 0 },
     })
   } catch (err) {
     if (String(err?.code) === 'P2002' || isPrismaShapeMismatch(err)) return
