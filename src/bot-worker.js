@@ -106,8 +106,17 @@ import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuaranti
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
-import { resolveSelfWelcomePilotEmails, shouldSendSelfWelcomeMessage, buildSelfWelcomeMessageText } from './core/selfWelcomeMessage.js'
-import { VIDEO_CADASTRO_ETIQUETAS_URL } from './tutorialVideo.js'
+import {
+  resolveSelfWelcomePilotEmails,
+  isPilotEmail,
+  shouldSendSelfWelcomeMessage,
+  decideActivationNudge,
+  buildSelfWelcomeMessageText,
+  buildFirstOfferPublishedMessageText,
+  buildMissingCredentialNudgeText,
+  buildMissingGroupsNudgeText,
+} from './core/selfWelcomeMessage.js'
+import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from './tutorialVideo.js'
 import sharp from 'sharp'
 import { applySharpTuning } from './core/sharpTuning.js'
 
@@ -646,6 +655,7 @@ function startHeartbeatIpc() {
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
+    maybeSendActivationNudge().catch(() => {})
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
@@ -877,6 +887,102 @@ async function maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore }) {
     trackAnalyticsEventSafe({ userId, event: 'ops_self_welcome_message_sent' })
   } catch (err) {
     logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de boas-vindas (piloto, best-effort)')
+  }
+}
+
+// Mensagem de "prova de valor" pelo PRÓPRIO WhatsApp, na 1ª oferta publicada
+// com sucesso (momento 2 — ver src/core/selfWelcomeMessage.js). Chamada só
+// quando `previousSuccessCount === 0`, no `onDone` do envio espelhado — é o
+// mesmo instante em que `first_send_success` já é gravado, então os dois
+// nascem juntos e nunca discordam sobre "foi a primeira".
+async function maybeSendFirstOfferMessage() {
+  try {
+    if (!activeSock) return
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+    if (!isPilotEmail(user?.email, pilotEmails)) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: buildFirstOfferPublishedMessageText() })
+    logger.info({ userId }, 'Mensagem de 1ª oferta publicada (piloto) enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_first_offer_message_sent' })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de 1ª oferta (piloto, best-effort)')
+  }
+}
+
+// Throttle do nudge de ativação (momentos 3 e 4): a checagem roda a cada tick
+// do heartbeat (15s), mas só precisa AVALIAR de tempos em tempos — em escopo
+// de módulo pra sobreviver a reconexões dentro do MESMO worker (mesma lição
+// do msgRetryCounterCache).
+let lastActivationNudgeCheckAt = 0
+const ACTIVATION_NUDGE_CHECK_INTERVAL_MS = Math.max(
+  Number(process.env.SELF_ACTIVATION_NUDGE_CHECK_INTERVAL_MS || 30 * 60 * 1000),
+  5 * 60 * 1000,
+)
+const ACTIVATION_NUDGE_MIN_DELAY_MS = Math.max(
+  Number(process.env.SELF_ACTIVATION_NUDGE_MIN_DELAY_MS || 24 * 60 * 60 * 1000),
+  0,
+)
+
+// Nudge de ativação pelo PRÓPRIO WhatsApp — momentos 3 (falta etiqueta) e 4
+// (falta grupo), 24h depois da 1ª conexão (ver decideActivationNudge em
+// src/core/selfWelcomeMessage.js). Best-effort e fail-safe: qualquer falha
+// aqui é só logada, nunca afeta a sessão real.
+async function maybeSendActivationNudge() {
+  if (!activeSock) return
+  const now = Date.now()
+  if (now - lastActivationNudgeCheckAt < ACTIVATION_NUDGE_CHECK_INTERVAL_MS) return
+  lastActivationNudgeCheckAt = now
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const [user, firstConnected, credentialCount, groups, sentNudges] = await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { email: true } }),
+      db.analyticsEvent.findFirst({
+        where: { userId, event: 'whatsapp_connected' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      db.credential.count({ where: { userId } }),
+      db.group.findMany({ where: { userId }, select: { role: true } }),
+      db.analyticsEvent.findMany({ where: { userId, event: 'ops_self_activation_nudge_sent' }, select: { metadata: true } }),
+    ])
+    if (!isPilotEmail(user?.email, pilotEmails)) return
+    const connectedForMs = firstConnected?.createdAt ? now - firstConnected.createdAt.getTime() : null
+    const hasCredential = credentialCount > 0
+    const hasGroups = groups.some(g => g.role === 'monitor') && groups.some(g => g.role === 'post')
+    let sentCredentialNudge = false
+    let sentGroupsNudge = false
+    for (const row of sentNudges) {
+      try {
+        const kind = JSON.parse(row.metadata || '{}').kind
+        if (kind === 'missing_credential') sentCredentialNudge = true
+        if (kind === 'missing_groups') sentGroupsNudge = true
+      } catch { /* linha antiga sem metadata legível: ignora */ }
+    }
+    const kind = decideActivationNudge({
+      accountEmail: user?.email,
+      pilotEmails,
+      connectedForMs,
+      minDelayMs: ACTIVATION_NUDGE_MIN_DELAY_MS,
+      hasCredential,
+      hasGroups,
+      sentCredentialNudge,
+      sentGroupsNudge,
+    })
+    if (!kind) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    const texto = kind === 'missing_credential'
+      ? buildMissingCredentialNudgeText({ videoUrl: VIDEO_CADASTRO_ETIQUETAS_URL })
+      : buildMissingGroupsNudgeText({ videoUrl: VIDEO_ATIVACAO_ROBO_URL })
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+    logger.info({ userId, kind }, 'Nudge de ativação (piloto) enviado para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_activation_nudge_sent', metadata: { kind } })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao avaliar/enviar nudge de ativação (piloto, best-effort)')
   }
 }
 
@@ -5113,7 +5219,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           onDone: async (result) => {
             if (result.ok) {
               logger.info({ destJid, platforms, deliveryKind: deliveryInfo.kind, originImageBytes: deliveryInfo.originImageBytes }, 'Mensagem enviada')
-              if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+              if (previousSuccessCount === 0) {
+                trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+                maybeSendFirstOfferMessage().catch(() => {})
+              }
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
             }
