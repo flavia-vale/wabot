@@ -1,12 +1,12 @@
 # Pricing — Espelha Grupos
 
-Last updated: 2026-09-23
+Last updated: 2026-09-24
 Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: Espelha Grupos pricing.
 Formerly published under the product name "BOTinho"; that name refers to this same product.
 
-Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups: mirroring, link conversion, offer creation and scheduling, with the clickable offer card and fully rewritable message templates. Pro adds channels, automatic Shopee offers, send queues, the watermark on offer images, pacing controls with copy variation and the Shopee sales and commission dashboard. Prices below reflect the public defaults used by the application and may be updated only after staging validation.
+Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups: mirroring, link conversion, offer creation and scheduling, with the clickable offer card and fully rewritable message templates. Pro adds channels, automatic Shopee offers, send queues, the watermark on offer images, pacing controls with copy variation and the Shopee sales and commission dashboard. Prices below reflect the public defaults used by the application.
 
 ## Teste grátis
 

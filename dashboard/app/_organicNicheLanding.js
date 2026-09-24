@@ -177,7 +177,6 @@ export function OrganicNicheLanding({ pageKey }) {
       ))}
       <Hero
         eyebrowLabel={page.eyebrow}
-        primaryCtaLabel="Entrar na Lista VIP"
         headlineOverride={headline}
         subOverride={page.directAnswer}
         heroStyle={{ background: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-3) 50%, var(--surface)), transparent)', borderRadius: 24, paddingInline: 20 }}
@@ -259,7 +258,7 @@ export function OrganicNicheLanding({ pageKey }) {
                 ))}
               </ul>
               <Link href={registerHref} data-seo-cta="organic-niche-register" className="btn btn-accent" style={{ marginTop: 20 }}>
-                Entrar na Lista VIP
+                Testar 7 dias grátis
               </Link>
             </aside>
           </div>

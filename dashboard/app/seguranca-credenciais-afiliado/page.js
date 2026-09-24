@@ -12,7 +12,7 @@ const layers = [
   ['Apagar quando quiser, sem pedir para ninguém', 'Cada loja tem um botão que apaga seus dados na hora, direto no painel. Sair da sua conta dentro da própria loja também derruba na mesma hora qualquer código já cadastrado.'],
   ['Criptografia em repouso (AES-256-GCM)', 'As credenciais das suas contas de afiliado e sua chave PIX ficam cifradas no banco de dados, não em texto puro. Mesmo em caso de acesso indevido ao banco, os valores não ficam legíveis diretamente.'],
   ['Proteção contra força bruta no login', 'Tentativas de login são limitadas por conta e por IP, com bloqueio temporário após várias tentativas falhas — reduz o risco de alguém tentar adivinhar sua senha.'],
-  ['Isolamento entre staging e produção', 'Ambiente de testes e ambiente de produção usam bancos, credenciais e chaves de criptografia completamente separados — uma mudança em teste não expõe dados reais.'],
+  ['Ambiente de testes separado da produção', 'Ambiente de testes e ambiente de produção usam bancos, credenciais e chaves de criptografia completamente separados — uma mudança em teste não expõe dados reais.'],
   ['Migração sem perda de acesso', 'Quando a criptografia foi implementada, os dados já existentes foram migrados sem exigir que nenhum operador recadastrasse suas credenciais.'],
 ]
 

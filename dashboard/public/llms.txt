@@ -53,7 +53,7 @@ Shopee, Mercado Livre, Amazon, Magalu, SHEIN, AliExpress — six stores, on ever
 - Espelha Grupos does not promise revenue, commission, sales lift, WhatsApp deliverability, protection against bans, or approval by any external marketplace or affiliate program.
 - Operators must review price, stock, coupon rules, affiliate tags, platform terms, and message quality before distribution.
 - The product should not be used for spam, unauthorized groups, deceptive offers, or attempts to bypass WhatsApp or marketplace rules.
-- Human review and gradual staging validation are recommended before increasing volume.
+- Human review and a gradual increase in volume are recommended.
 
 ## Supported public pages
 
