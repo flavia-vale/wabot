@@ -83,3 +83,14 @@ test('a rota usa o e-mail informado e o reaproveitamento confere o e-mail', () =
   const page = readFileSync(new URL('../dashboard/app/painel/plano/page.js', import.meta.url), 'utf8')
   assert.match(page, /paymentsCreateSubscription\(planId, mpEmail\.trim\(\) \|\| undefined\)/)
 })
+
+test('o campo do e-mail do Mercado Pago fica DENTRO do card, logo antes dos botões', () => {
+  const page = readFileSync(new URL('../dashboard/app/painel/plano/page.js', import.meta.url), 'utf8')
+  const inicioCard = page.indexOf('<article')
+  const fimCard = page.indexOf('</article>')
+  const campo = page.indexOf('onChange={(e) => setMpEmail(e.target.value)}')
+  const botao = page.indexOf('onClick={() => handleSubscribe(plan.id)}')
+  assert.ok(campo > inicioCard && campo < fimCard, 'o campo precisa estar dentro do card do plano')
+  assert.ok(campo < botao, 'o campo precisa vir antes do botão de cobrança automática')
+  assert.equal(page.split('setMpEmail(e.target.value)').length - 1, 1, 'um campo só (renderizado em cada card), nunca uma cópia fora dos cards')
+})

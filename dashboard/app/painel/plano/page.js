@@ -330,7 +330,26 @@ export default function PlanoPage() {
                   </div>
                 )}
 
-                <div className="mt-6 grid gap-2.5">
+                {/* E-mail do Mercado Pago COLADO aos botões (pedido da dona do
+                    produto, 2026-09-24): abaixo dos cards a cliente não via, e
+                    o checkout de assinatura barra quem entra no Mercado Pago
+                    com e-mail diferente do enviado. Os dois cards dividem o
+                    mesmo valor. */}
+                <label className="mt-6 block rounded-xl bg-slate-50 px-3 py-3 text-left">
+                  <span className="block text-xs font-bold text-slate-700">{CARD_HELP_MP_EMAIL_TITLE}</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">{CARD_HELP_MP_EMAIL_TEXT}</span>
+                  <input
+                    type="email"
+                    className="pnl-input"
+                    style={{ marginTop: 8, width: '100%' }}
+                    placeholder={user?.email || 'email-do-mercado-pago@exemplo.com'}
+                    autoComplete="email"
+                    value={mpEmail}
+                    onChange={(e) => setMpEmail(e.target.value)}
+                  />
+                </label>
+
+                <div className="mt-3 grid gap-2.5">
                   <button
                     type="button"
                     className={`pnl-btn ${presentation.featured ? 'is-pro' : 'is-primary'}`}
@@ -387,23 +406,6 @@ export default function PlanoPage() {
             </div>
           </div>
         )}
-
-        {/* Fora do guia recolhido de propósito: o checkout de assinatura do
-            Mercado Pago barra quem entra lá com e-mail diferente do enviado,
-            e ela precisa ver este campo ANTES de tentar, não depois. */}
-        <div className="pnl-note-box" style={{ marginTop: 14 }}>
-          <strong style={{ fontWeight: 600 }}>{CARD_HELP_MP_EMAIL_TITLE}</strong>
-          <p className="pnl-hint" style={{ marginTop: 4 }}>{CARD_HELP_MP_EMAIL_TEXT}</p>
-          <input
-            type="email"
-            className="pnl-input"
-            style={{ marginTop: 8, width: '100%' }}
-            placeholder={user?.email || 'email-do-mercado-pago@exemplo.com'}
-            autoComplete="email"
-            value={mpEmail}
-            onChange={(e) => setMpEmail(e.target.value)}
-          />
-        </div>
 
         {/* Guia do cartão recusado (RCA 2026-09-24): a tela de recusa do
             Mercado Pago não diz o motivo e a cliente desiste. Aqui ficam as
