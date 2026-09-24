@@ -48,7 +48,7 @@ export default function Page() {
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, '\\u003c') }} />
       ))}
       <PublicPage
-        eyebrow="Lead magnet · Preservação Avançada"
+        eyebrow="Material · Preservação Avançada"
         title="Checklist de Preservação Avançada para WhatsApp"
         description="Use este roteiro antes de aumentar volume em grupos e Canais do WhatsApp. O objetivo é reduzir exposição operacional — não prometer banimento zero."
       >
