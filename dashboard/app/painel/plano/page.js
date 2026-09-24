@@ -18,6 +18,8 @@ import {
   CARD_HELP_PIX_TITLE,
   CARD_HELP_PIX_TEXT,
   CARD_HELP_PIX_BUTTON,
+  CARD_HELP_MP_EMAIL_TITLE,
+  CARD_HELP_MP_EMAIL_TEXT,
   buildCardPaymentSteps,
 } from '../../../../src/domain/painel/cardPaymentHelp.js'
 
@@ -79,6 +81,9 @@ export default function PlanoPage() {
   // Plano da última tentativa de cobrança automática: é para ele que o atalho
   // do PIX aponta, nunca para um plano que ela não escolheu.
   const [lastSubscribePlan, setLastSubscribePlan] = useState('')
+  // E-mail que ela usa no Mercado Pago, quando é diferente do da conta daqui.
+  // Vai só para a cobrança; a conta não muda.
+  const [mpEmail, setMpEmail] = useState('')
 
   async function refreshOverview() {
     try {
@@ -130,7 +135,7 @@ export default function PlanoPage() {
     setLastSubscribePlan(planId)
     setCheckoutPlan(planId)
     try {
-      const data = await api.paymentsCreateSubscription(planId)
+      const data = await api.paymentsCreateSubscription(planId, mpEmail.trim() || undefined)
       if (!data?.init_point) throw new Error('Assinatura indisponível no momento. Tente novamente ou fale com o suporte.')
       window.location.assign(data.init_point)
     } catch (err) {
@@ -382,6 +387,23 @@ export default function PlanoPage() {
             </div>
           </div>
         )}
+
+        {/* Fora do guia recolhido de propósito: o checkout de assinatura do
+            Mercado Pago barra quem entra lá com e-mail diferente do enviado,
+            e ela precisa ver este campo ANTES de tentar, não depois. */}
+        <div className="pnl-note-box" style={{ marginTop: 14 }}>
+          <strong style={{ fontWeight: 600 }}>{CARD_HELP_MP_EMAIL_TITLE}</strong>
+          <p className="pnl-hint" style={{ marginTop: 4 }}>{CARD_HELP_MP_EMAIL_TEXT}</p>
+          <input
+            type="email"
+            className="pnl-input"
+            style={{ marginTop: 8, width: '100%' }}
+            placeholder={user?.email || 'email-do-mercado-pago@exemplo.com'}
+            autoComplete="email"
+            value={mpEmail}
+            onChange={(e) => setMpEmail(e.target.value)}
+          />
+        </div>
 
         {/* Guia do cartão recusado (RCA 2026-09-24): a tela de recusa do
             Mercado Pago não diz o motivo e a cliente desiste. Aqui ficam as
