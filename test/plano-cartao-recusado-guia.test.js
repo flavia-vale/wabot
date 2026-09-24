@@ -34,6 +34,7 @@ test('linguagem leiga: nada de jargão do provedor na tela', () => {
 test('a aba Planos mostra o guia e abre sozinho quando a tentativa falha', () => {
   const page = readFileSync(new URL('../dashboard/app/painel/plano/page.js', import.meta.url), 'utf8')
   assert.match(page, /buildCardPaymentSteps\(\{ accountEmail: user\?\.email \}\)/)
-  assert.match(page, /open=\{Boolean\(checkoutError\)/)
-  assert.match(page, /setBillingMode\('once'\); handleCheckout\(selectedPlanId\)/)
+  assert.match(page, /open=\{Boolean\(checkoutError \|\| lastSubscribePlan\)/)
+  // O atalho do PIX paga o plano que ela tentou, nunca um plano escolhido por nós.
+  assert.match(page, /onClick=\{\(\) => handleCheckout\(lastSubscribePlan\)\}/)
 })
