@@ -110,6 +110,18 @@ export function describeSaveSessionCheck({ platform, validation, probe, fallback
 
   const noun = CREDENTIAL_NOUN[platform] || 'código de acesso'
 
+  // Amazon só com a etiqueta: não há código para testar, e isso NÃO é falha —
+  // a comissão sai pelo link longo. Cair no "a loja não respondeu" abaixo
+  // mentiria e mandaria a cliente atrás de um problema que não existe.
+  if (platform === 'amazon' && probe?.reason === 'no_cookie') {
+    return comMarco({
+      tone: 'success',
+      message:
+        'Salvamos sua etiqueta da Amazon. Suas ofertas já saem com a sua comissão, com o link mais comprido. ' +
+        'Se quiser o link curtinho, cole também o código de acesso da conta.',
+    })
+  }
+
   // A loja RECUSOU a credencial. É o caso que motivou este módulo: dizer na
   // cara, no mesmo lugar onde a pessoa acabou de colar, que aquilo não serve.
   if (probe?.alive === false) {
