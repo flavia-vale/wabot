@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { LoadingState, ErrorState } from '@/components/States'
-import { describeChannelHealthStatus } from '../../../src/core/channelHealth.js'
+import { describeChannelHealthStatus } from '../../../src/core/channelHealthStatus.js'
 
 export function HealthOverview() {
   const [items, setItems] = useState(null)
