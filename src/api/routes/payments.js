@@ -2,7 +2,7 @@ import axios from 'axios'
 import { createHmac } from 'crypto'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
-import { classifyPayerEmail } from '../../domain/payments/payerEmail.js'
+import { resolveSubscriptionPayerEmail, samePayerEmail } from '../../domain/payments/payerEmail.js'
 import { classifyMpAccessTokenMode, isSandboxTokenInProduction, SANDBOX_TOKEN_USER_MESSAGE } from '../../domain/payments/accessTokenMode.js'
 import {
   SUBSCRIPTION_OPEN_STATUSES,
@@ -1319,20 +1319,22 @@ export async function paymentsRoutes(app) {
   app.post('/create-subscription', { onRequest: [app.authenticate] }, async (req, reply) => {
     const userId = req.user.sub
     try {
-      const { plan } = req.body ?? {}
+      const { plan, payerEmail: informedPayerEmail } = req.body ?? {}
       const plans = await getBillingPlans()
       if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
       const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
-      const payerEmail = user?.email ?? null
+      // E-mail do Mercado Pago informado só para a cobrança (ver payerEmail.js).
+      const payer = resolveSubscriptionPayerEmail({ accountEmail: user?.email, informedEmail: informedPayerEmail })
+      const payerEmail = payer.email
 
       // RCA do 502: o MP recusa `payer_email` inválido/fictício/fallback no
       // `/preapproval` (às vezes com 500 cru). Pega os casos localmente óbvios
       // ANTES da chamada e devolve erro claro + `needsEmailUpdate` para o painel
       // oferecer a troca de e-mail em vez de um 502 opaco.
-      const emailIssue = classifyPayerEmail(payerEmail)
+      const emailIssue = payer.issue
       if (emailIssue) {
-        trackAnalyticsEventSafe({ userId, event: 'subscription_email_blocked', metadata: { plan, reason: emailIssue.reason } })
+        trackAnalyticsEventSafe({ userId, event: 'subscription_email_blocked', metadata: { plan, reason: emailIssue.reason, source: payer.source } })
         return reply.code(400).send({
           code: 'SUBSCRIPTION_EMAIL_REQUIRED',
           needsEmailUpdate: true,
@@ -1373,7 +1375,8 @@ export async function paymentsRoutes(app) {
         // Só reaproveita o que o MP confirma que continua em aberto. Falha de
         // rede, checkout já concluído ou apagado no MP caem no caminho normal —
         // checkout em aberto nunca pode deixar a conta sem conseguir assinar.
-        if (snapshot.ok && String(snapshot.status ?? '').toLowerCase() === 'pending' && snapshot.initPoint) {
+        // E só para o MESMO e-mail (ver `samePayerEmail`).
+        if (snapshot.ok && String(snapshot.status ?? '').toLowerCase() === 'pending' && snapshot.initPoint && samePayerEmail(snapshot.payerEmail, payerEmail)) {
           trackAnalyticsEventSafe({ userId, event: 'subscription_checkout_reused', metadata: { plan } })
           req.log.info({ userId, plan }, 'Checkout de assinatura reaproveitado em vez de criar outro igual')
           return { init_point: snapshot.initPoint }
@@ -1416,7 +1419,7 @@ export async function paymentsRoutes(app) {
       // checkout em aberto (`subscription_checkout_reused`) e o que foi adiado
       // (`subscription_attempt_throttled`) — os três caminhos viravam um número
       // só, e era impossível ver quantas clientes estavam batendo em cada um.
-      trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan } })
+      trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan, payerEmailSource: payer.source } })
 
       const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
       await db.subscription.upsert({
