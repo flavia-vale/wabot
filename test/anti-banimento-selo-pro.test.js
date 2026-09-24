@@ -12,7 +12,10 @@ test('menu: item "Anti-banimento" tem pro:true e o componente de menu renderiza 
   assert.match(trecho, /pro:\s*true/)
 
   const shell = readFileSync(new URL('../dashboard/app/painel/PainelShell.js', import.meta.url), 'utf8')
-  assert.match(shell, /item\.pro[\s\S]{0,40}>PRO</, 'o menu precisa renderizar o TEXTO "PRO", não só uma cor')
+  // O selo pode vir com um ícone de cadeado antes do texto (divisão Basic/PRO,
+  // 2026-09-23) — o que importa pra FR-020 é o texto "PRO" aparecer visível
+  // dentro do span, não a formatação exata do JSX ao redor.
+  assert.match(shell, /item\.pro[\s\S]{0,600}>PRO\s*</, 'o menu precisa renderizar o TEXTO "PRO", não só uma cor')
 })
 
 test('título da tela Anti-banimento mostra o texto "PRO"', () => {

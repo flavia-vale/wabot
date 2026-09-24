@@ -1810,10 +1810,15 @@ export default function EspelhamentoPage() {
           )}
           </CfgSection>
 
-          {/* Saúde do canal: veio da antiga aba "Anti-ban". Só aparece em
-              canal, que é onde ela configura alguma coisa. */}
-          {g.kind === 'channel' && (
-            <CfgSection icon="shield" title="Saúde deste canal" desc="Os limites que protegem o seu número de ser bloqueado.">
+          {/* Saúde deste destino: veio da antiga aba "Anti-ban" (removida
+              2026-09-19 — para um GRUPO era só uma frase e um link). O ritmo
+              de envio (rajada/intervalo/horário) mora inteiro no Anti-banimento
+              agora (specs/018-unificar-protecao-anti-ban); aqui fica só o
+              atalho, mais — só em CANAL, que é configuração de verdade — o
+              status de admin/saúde do canal em si (não duplicar esse controle
+              de edição para grupo, que não tem admin de canal). */}
+          {g.kind === 'channel' ? (
+            <CfgSection icon="shield" title="Saúde deste destino" desc="Os limites que protegem o seu número de ser bloqueado.">
               <div style={{ padding: '14px 20px', display: 'grid', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <AdminBadge status={adminStatus[g.id] ?? 'unknown'} onRefresh={() => refreshAdmin(g)} refreshing={refreshingAdminId === g.id} />
@@ -1824,6 +1829,16 @@ export default function EspelhamentoPage() {
                   initialHealth={healthByGroup[g.id]}
                   onHealthChange={(h) => setHealthByGroup((prev) => ({ ...prev, [g.id]: h }))}
                 />
+                <Link href={`/painel/anti-banimento?parte=ritmo&destino=${g.id}`} className="pnl-link-btn">Ajustar no Anti-banimento PRO →</Link>
+              </div>
+            </CfgSection>
+          ) : (
+            <CfgSection icon="shield" title="Saúde deste destino" desc="Os limites que protegem o seu número de ser bloqueado.">
+              <div style={{ padding: '14px 20px', display: 'grid', gap: 10 }}>
+                <p className="pnl-hint" style={{ margin: 0 }}>
+                  O ritmo de envio deste grupo (quantas ofertas por dia, quanto tempo entre uma e outra,
+                  horário de funcionamento) fica no Anti-banimento, que vale para todos os destinos.
+                </p>
                 <Link href={`/painel/anti-banimento?parte=ritmo&destino=${g.id}`} className="pnl-link-btn">Ajustar no Anti-banimento PRO →</Link>
               </div>
             </CfgSection>
