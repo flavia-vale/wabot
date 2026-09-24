@@ -71,12 +71,16 @@ test('Espelhamento: marca d\'água e botão "Ver canal" do PRO', () => {
   assert.match(page, /const canUseChannels = hasProLikeAccess\(planSubject\)/, 'premium não pode ser travado na tela')
 })
 
-test('WhatsApp: ritmo dos envios = preset PADRÃO da Preservação, com cadeado no Basic', () => {
+test('WhatsApp: ritmo dos envios = resumo somente-leitura do preset PADRÃO da Preservação, com cadeado no Basic', () => {
+  // 2026-09-24: virou resumo + link para o Anti-banimento (único lugar de
+  // edição) — duas telas editando o mesmo preset em paralelo divergiam entre
+  // si sem revalidação cruzada.
   const card = read('dashboard/components/pro/RhythmCard.js')
   assert.match(card, /p\.isDefault/)
-  assert.match(card, /updatePreservationPreset\(preset\.id/)
-  assert.match(card, /createPreservationPreset\(\{ name: 'Padrão', isDefault: true/)
+  assert.doesNotMatch(card, /updatePreservationPreset\(/, 'edição saiu daqui — mora só no Anti-banimento')
+  assert.doesNotMatch(card, /createPreservationPreset\(/, 'edição saiu daqui — mora só no Anti-banimento')
   assert.match(card, /<ProLock feature="ritmo">/)
+  assert.match(card, /href="\/painel\/anti-banimento\?parte=ritmo"/)
   assert.match(read('dashboard/app/painel/whatsapp/page.js'), /<RhythmCard \/>/)
 })
 
