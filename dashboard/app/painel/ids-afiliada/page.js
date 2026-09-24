@@ -539,6 +539,15 @@ export default function IdsAfiliadaPage() {
 
   return (
     <div className="pnl-cred-page">
+      <div className="pnl-cred-note pnl-cred-extension">
+        <IconSpark />
+        <span>
+          Baixe no seu Google Chrome o{' '}
+          <a href={COOKIE_EDITOR_URL} target="_blank" rel="noopener noreferrer">Cookie Editor</a>
+          {' '}(para Amazon, ML e SHEIN é necessário).
+        </span>
+      </div>
+
       <CredentialsVideoBanner />
 
       <p className="pnl-cred-lede">Cadastre os dados de afiliada de cada loja — o robô usa para montar seus links já com a sua comissão.</p>

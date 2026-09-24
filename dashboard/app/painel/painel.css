@@ -1513,6 +1513,8 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   padding: 11px 14px; margin-bottom: 12px;
 }
 .pnl-cred-note svg { flex-shrink: 0; margin-top: 2px; }
+.pnl-cred-extension { color: var(--ink); font-weight: 600; }
+.pnl-cred-extension a { color: var(--accent-strong); text-decoration: underline; }
 
 .pnl-cred-tip {
   display: flex; align-items: center; gap: 8px;
