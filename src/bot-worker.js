@@ -3046,12 +3046,20 @@ async function markInterruptedSendLogs() {
 // sido reenviada (cliente reclamou: "O bot reiniciou enquanto essa mensagem
 // estava esperando para ser enviada").
 //
-// Reenvia como texto+link (preview automático do WhatsApp), não com o card
-// manual (foto/watermark): a imagem/mediaKey da mensagem de origem morreu
-// junto com o processo antigo, e reconstruir o card exigiria reabrir a
-// mensagem original do WhatsApp, que não existe mais em memória. É o MESMO
-// nível de qualidade que uma mensagem agendada sem imagem já usa hoje (ver
-// checkScheduledMessages) — pior card, mas a oferta não se perde mais.
+// Remonta o MESMO card manual do envio ao vivo (buildManualLinkPreview: foto
+// raspada da loja + marca d'água do destino) a partir só do que sobrevive no
+// MessageLog (platform/originalUrl/convertedUrl/messageText) — a mensagem
+// original do WhatsApp e a imagem já processada morreram com o processo
+// antigo, então a foto é raspada de novo da loja, não reaproveitada. Sem
+// `couponTextSignal` real (não temos o texto/warning da mensagem original),
+// o banner de marca de cupom (feature opt-in, default OFF) nunca dispara
+// aqui — na dúvida, sai foto de produto, não banner.
+//
+// A montagem do card roda DENTRO do `buildPayload` do job (lazy, no dequeue),
+// não aqui no boot: raspar imagem/fazer upload é I/O lento, e fazer isso
+// para dezenas de ofertas ANTES de abrir o socket do WhatsApp atrasaria a
+// reconexão. `uploadToServer` (activeSock?.waUploadToServer) só existe depois
+// que o socket conecta — outro motivo para ser lazy.
 //
 // Só olha os últimos WORKER_RESTART_REPROCESS_WINDOW_MS: protege contra
 // reprocessar erro antigo de uma sessão anterior (bot ficou dias offline).
@@ -3100,6 +3108,19 @@ async function reprocessRestartFailures() {
         },
       })
       const postDetail = cfg.groups.postDetails.find(g => g.waJid === row.destGroup)
+      const channelForward = resolveChannelForward(postDetail)
+      // Mesma resolução de marca d'água do envio ao vivo (ver linhas próximas
+      // a `destinationImageUsesWatermark` no handler de messages.upsert):
+      // config é por destino, então precisa ser recalculada aqui, não herdada
+      // da oferta original.
+      const destinationImageMode = effectiveDestinationImageMode(postDetail?.imageMode, { hasChannelButton: !!channelForward })
+      const watermarkText = String(postDetail?.watermarkText ?? '').trim()
+      const watermarkColor = postDetail?.watermarkColor ?? undefined
+      const watermarkSize = postDetail?.watermarkSize ?? undefined
+      const watermarkPosition = postDetail?.watermarkPosition ?? undefined
+      const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
+      const primary = { platform: row.platform, url: row.originalUrl, converted: row.convertedUrl }
+
       const accepted = await enqueueSendJob({
         type: 'converted',
         logId: log.id,
@@ -3109,9 +3130,28 @@ async function reprocessRestartFailures() {
         plan: cfg.plan,
         delayMs: 0,
         typingDelayMs: calculateTypingDelayMs({ text: row.messageText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
-        channelForward: resolveChannelForward(postDetail),
+        channelForward,
         couponContext: couponContextFromText(row.messageText),
-        payload: { text: row.messageText },
+        buildPayload: async () => {
+          const linkPreview = await buildManualLinkPreview({
+            text: row.messageText,
+            primary,
+            credentialsMap: cfg.credentials,
+            uploadToServer: activeSock?.waUploadToServer,
+            destJid: row.destGroup,
+            couponTextSignal: false,
+            watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
+          }).catch(err => {
+            logger.warn({ err: err?.message, destJid: row.destGroup, logId: log.id }, 'Reprocessamento pós-restart: card de preview falhou; oferta sai como texto')
+            return null
+          })
+          return buildMonitoredMessagePayload({
+            finalText: row.messageText,
+            image: null,
+            useLinkPreview: true,
+            linkPreview,
+          })
+        },
       })
       if (!accepted) {
         await db.messageLog.update({
