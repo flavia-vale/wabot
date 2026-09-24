@@ -48,7 +48,7 @@ export const AFFILIATE_PLATFORMS = [
     platformWarning: 'Com a etiqueta e o código de acesso o link sai curtinho; só com a etiqueta a oferta sai igual, o link é que fica mais comprido.',
     sessionCareNote: 'Depois de colar o código aqui, não clique em "Sair" na Amazon e não use janela anônima — sair da conta derruba o código na hora e você precisa cadastrar tudo de novo (fechar a aba pode).',
     fields: [
-      { key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'É o código que identifica suas vendas. Ex.: suaetiqueta-20' },
+      { key: 'tag', label: 'StoreID/Etiqueta de afiliado', hint: 'É o código que identifica suas vendas. Ex.: suaetiqueta-20' },
       { key: 'cookie', label: 'Código de acesso da conta', required: false, sensitive: true, cookieField: true, recommended: true, hint: 'Deixa o link da oferta curtinho.', help: 'No computador, entre em associados.amazon.com.br já logada, clique na extensão Cookie-Editor → botão Export (canto inferior direito) → JSON. O código é copiado sozinho; é só colar aqui.' },
       { key: 'ubid-acbbr', label: 'Código alternativo (ubid-acbbr)', required: false, cookieField: true, sensitive: true, advanced: true, help: 'Só precisa se NÃO colou o código de acesso acima. Mesmo lugar, na extensão Cookie-Editor.' },
       { key: 'at-acbbr', label: 'Código alternativo (at-acbbr)', required: false, cookieField: true, sensitive: true, advanced: true, help: 'Só precisa se NÃO colou o código de acesso acima. Mesmo lugar, na extensão Cookie-Editor.' },
