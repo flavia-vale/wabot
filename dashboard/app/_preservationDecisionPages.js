@@ -16,19 +16,19 @@ const sharedCtas = {
 }
 
 export const PRESERVATION_DECISION_PAGES = {
-  '/bot-comum-vs-botinho': {
-    slug: '/bot-comum-vs-botinho',
+  '/bot-comum-vs-espelha-grupos': {
+    slug: '/bot-comum-vs-espelha-grupos',
     template: 'comparison',
     eyebrow: 'Comparativo · Bot comum vs Espelha Grupos',
     title: 'Bot comum vs Espelha Grupos: qual preserva o chip',
-    description: 'Compare bot comum e Espelha Grupos para afiliados no WhatsApp: repostagem simples, cadência, variações, monitoramento, canais e preservação avançada.',
-    intent: 'bot comum vs botinho',
+    description: 'Compare bot comum e Espelha Grupos para afiliados no WhatsApp: repostagem simples, cadência, variações, saúde por canal e preservação avançada.',
+    intent: 'bot comum vs espelha grupos',
     h1: 'Bot comum só espalha. Espelha Grupos organiza uma operação com preservação.',
-    intro: 'A diferença principal não é “postar mais”. É controlar fonte, destino, ritmo, variação, sinais de risco e recuperação para que grupos, canais e chip sejam tratados como ativos do negócio.',
+    intro: 'A diferença principal não é “postar mais”. É controlar fonte, destino, ritmo, variação e sinais de risco para que grupos, canais e chip sejam tratados como ativos do negócio.',
     sections: [
       {
         title: 'Resposta direta',
-        body: 'Um bot comum pode resolver repostagem simples. O Espelha Grupos faz sentido quando a operação precisa de grupos e canais com papéis diferentes, cadência por destino, variações, monitoramento e plano de recuperação.',
+        body: 'Um bot comum pode resolver repostagem simples. O Espelha Grupos faz sentido quando a operação precisa de grupos e canais com papéis diferentes, cadência por destino, variações e acompanhamento da saúde de cada canal.',
       },
       {
         title: 'Quando um bot comum basta',
@@ -36,7 +36,7 @@ export const PRESERVATION_DECISION_PAGES = {
       },
       {
         title: 'Quando o Espelha Grupos fica mais indicado',
-        bullets: ['Vários grupos e Canais do WhatsApp.', 'Necessidade de publicar em horários e ritmos diferentes.', 'Risco de mensagem idêntica em massa.', 'Equipe precisa de logs, monitoramento e recuperação.'],
+        bullets: ['Vários grupos e Canais do WhatsApp.', 'Necessidade de publicar em horários e ritmos diferentes.', 'Risco de mensagem idêntica em massa.', 'Equipe precisa de histórico de envio e de saber qual canal está falhando.'],
       },
     ],
     comparison: {
@@ -45,13 +45,13 @@ export const PRESERVATION_DECISION_PAGES = {
         ['Repostagem básica', 'Geralmente sim', 'Sim, com regras de origem e destino'],
         ['Grupos e canais juntos', 'Limitado ou manual', 'Fluxos grupo→canal, canal→grupo, canal→canal e grupo→grupo'],
         ['Cadência por destino', 'Pouco controle', 'Intervalos, limites e horários por operação'],
-        ['Variações anti-fingerprint', 'Raro', 'Variações de chamada, emoji, ordem e contexto'],
-        ['Monitoramento de saúde', 'Normalmente ausente', 'Sinais, cliques, erros e pausa preventiva'],
-        ['Plano de recuperação', 'Improvisado', 'Chip dedicado, backup de configuração e plano B'],
+        ['Variação de texto', 'Raro', 'Saudação, chamada e fechamento variam por envio'],
+        ['Saúde por canal', 'Normalmente ausente', 'Status de cada canal pelas falhas de envio e pausa automática de 1 hora do canal que recusa envios (plano Pro)'],
+        ['Plano de recuperação', 'Improvisado', 'Continua com você: chip dedicado, backup da lista de grupos e plano B'],
       ],
     },
     faqs: [
-      { q: 'Espelha Grupos substitui qualquer bot comum?', a: 'Não necessariamente. Se a operação é pequena e manualmente controlável, um fluxo simples pode bastar. O Espelha Grupos é mais indicado quando volume, cadência, canais e recuperação viram prioridade.' },
+      { q: 'Espelha Grupos substitui qualquer bot comum?', a: 'Não necessariamente. Se a operação é pequena e manualmente controlável, um fluxo simples pode bastar. O Espelha Grupos é mais indicado quando volume, cadência e canais viram prioridade.' },
       { q: 'O Espelha Grupos promete não banir?', a: 'Não. O diferencial é preservação avançada e redução de exposição operacional, não garantia contra decisões da plataforma.' },
       { q: 'Qual primeiro passo para comparar?', a: 'Calcule seu risco operacional e revise o checklist de preservação antes de escolher ferramenta.' },
     ],
@@ -82,22 +82,22 @@ export const PRESERVATION_DECISION_PAGES = {
       { q: 'Meu número está em risco. O que faço agora?', a: 'Reduza o volume imediatamente, pare de mandar mensagem idêntica para vários grupos, saia dos grupos onde você não foi convidado a divulgar e prepare o plano B: segundo chip, backup da lista de grupos e das configurações. Depois retome devagar.' },
     ],
   },
-  '/como-funciona-botinho-canais': {
-    slug: '/como-funciona-botinho-canais',
+  '/como-funciona-espelha-grupos-canais': {
+    slug: '/como-funciona-espelha-grupos-canais',
     template: 'howto',
     eyebrow: 'Como funciona · Canais',
     title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
-    description: 'Veja o fluxo operacional do Espelha Grupos para Canais do WhatsApp: fontes, destinos, cadência, variações, monitoramento e preservação avançada.',
-    intent: 'como funciona botinho canais',
+    description: 'Veja o fluxo operacional do Espelha Grupos para Canais do WhatsApp: fontes, destinos, cadência, variações, saúde por canal e preservação avançada.',
+    intent: 'como funciona espelha grupos canais',
     h1: 'Como o Espelha Grupos transforma grupos e canais em uma operação controlada.',
     intro: 'O Espelha Grupos conecta fontes e destinos para que ofertas possam circular entre grupos e Canais do WhatsApp com regras. O objetivo é tirar a operação do improviso antes de aumentar volume.',
     steps: [
       'Mapeie fontes de oferta, grupos de comunidade, canais de vitrine e destinos de backup.',
       'Defina o papel de cada ambiente: fonte, comunidade, vitrine principal, teste ou recuperação.',
       'Configure cadência: intervalo mínimo, limites por hora/dia e horário de silêncio.',
-      'Ative variações de texto, emojis, ordem dos elementos e contexto por destino quando fizer sentido.',
-      'Monitore sinais de saúde, cliques, erros e queda de entrega para pausar antes do prejuízo.',
-      'Documente recuperação: chip dedicado, backup de configuração e processo de recriação.',
+      'Ative a variação de texto (saudação, chamada e fechamento) quando fizer sentido.',
+      'Acompanhe o status de cada canal no Monitoramento: o canal que recusa envios 3 vezes seguidas é pausado sozinho por 1 hora (plano Pro).',
+      'Deixe seu plano B pronto (fica com você): chip dedicado, backup da lista de grupos e processo de recriação.',
     ],
     sections: [
       { title: 'Fluxos possíveis', bullets: ['Grupo → Canal', 'Canal → Grupo', 'Canal → Canal', 'Grupo → Grupo', 'Múltiplas fontes → múltiplos destinos'] },
@@ -106,11 +106,11 @@ export const PRESERVATION_DECISION_PAGES = {
     faqs: [
       { q: 'Preciso abandonar meus grupos?', a: 'Não. Muitos afiliados usam grupos como fonte ou comunidade e Canais do WhatsApp como vitrine de ofertas.' },
       { q: 'O fluxo funciona para vários canais?', a: 'Sim. A ideia é escalonar destinos e evitar que todos recebam a mesma mensagem no mesmo minuto.' },
-      { q: 'Onde entra a preservação avançada?', a: 'Ela entra nas regras de cadência, variação, monitoramento, pausa preventiva e recuperação.' },
+      { q: 'Onde entra a preservação avançada?', a: 'No plano Pro: horário de descanso, limite por dia, intervalo entre envios, variação de texto e status de saúde de cada canal, com pausa automática de 1 hora do canal que recusa envios. O plano B em caso de banimento continua sendo seu.' },
     ],
   },
-  '/protecao-antiban-botinho': {
-    slug: '/protecao-antiban-botinho',
+  '/protecao-antiban-espelha-grupos': {
+    slug: '/protecao-antiban-espelha-grupos',
     template: 'module-deep-dive',
     eyebrow: 'Como não tomar ban · o que dá para controlar',
     title: 'Como evitar banimento do WhatsApp em 5 camadas',

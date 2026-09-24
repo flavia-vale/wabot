@@ -14,6 +14,8 @@ import { checkDuplicateTrialAtSignup } from '../../domain/signup/duplicateTrialA
 // O celular do cadastro precisa do código do país para ser discável — ver
 // src/domain/signup/contactPhone.js para o porquê e a regra por comprimento.
 import { normalizeContactPhone } from '../../domain/signup/contactPhone.js'
+import { isReservedAdminEmail } from '../../auth/reservedAdminEmails.js'
+import { passwordVersion } from '../../auth/sessionVersion.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
 // no caminho "usuário não existe". Sem ele, login com e-mail inexistente
@@ -445,6 +447,9 @@ export async function authRoutes(app) {
       ensureUniqueContactPhone(contactPhone),
     ])
     if (existingEmail) return reply.code(409).send({ error: 'Email já cadastrado' })
+    // E-mail reservado ao admin responde igual a e-mail já usado: a resposta não
+    // pode virar um jeito de descobrir quais endereços dão acesso de dona.
+    if (isReservedAdminEmail(email)) return reply.code(409).send({ error: 'Email já cadastrado' })
 
     const passwordHash = await bcrypt.hash(password, 10)
     const now = new Date()
@@ -630,7 +635,7 @@ export async function authRoutes(app) {
         })
     }
 
-    const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
+    const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12), pv: passwordVersion(passwordHash) }, { expiresIn: '7d' })
     setAuthCookie(reply, token, req)
     return { user: publicUser(user), token }
   })
@@ -675,7 +680,7 @@ export async function authRoutes(app) {
     const updated = await updateLoginActivity(user)
     trackAnalyticsEventSafe({ userId: updated.id, event: 'login_completed' })
 
-    const token = app.jwt.sign({ sub: updated.id, email: updated.email, jti: randomToken(12) }, { expiresIn: '7d' })
+    const token = app.jwt.sign({ sub: updated.id, email: updated.email, jti: randomToken(12), pv: passwordVersion(user.passwordHash) }, { expiresIn: '7d' })
     setAuthCookie(reply, token, req)
     return { user: publicUser(updated), token }
   })
@@ -765,10 +770,12 @@ export async function authRoutes(app) {
 
     const passwordHash = await bcrypt.hash(password, 10)
     await db.user.update({ where: { id: user.id }, data: { passwordHash } })
+    // Redefinir a senha derruba todo login anterior (ver src/auth/sessionVersion.js).
+    app.invalidateSessionVersion?.(user.id)
     clearLoginAttempts({ email: normalizeEmail(user.email), ip: req.ip })
     trackAnalyticsEventSafe({ userId: user.id, event: 'password_reset_completed' })
 
-    const authToken = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
+    const authToken = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12), pv: passwordVersion(passwordHash) }, { expiresIn: '7d' })
     setAuthCookie(reply, authToken, req)
     return { ok: true, token: authToken, message: 'Senha trocada! Já entramos com a sua conta.' }
   })
@@ -798,12 +805,26 @@ export async function authRoutes(app) {
 
     const passwordHash = await bcrypt.hash(newPassword, 10)
     await db.user.update({ where: { id: userId }, data: { passwordHash } })
+    app.invalidateSessionVersion?.(userId)
 
     if (req.user?.jti) app.revokeTokenJti?.(req.user.jti, req.user.exp)
-    const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12) }, { expiresIn: '7d' })
+    const token = app.jwt.sign({ sub: user.id, email: user.email, jti: randomToken(12), pv: passwordVersion(passwordHash) }, { expiresIn: '7d' })
     setAuthCookie(reply, token, req)
     trackAnalyticsEventSafe({ userId, event: 'account_password_updated' })
     return { ok: true, token }
+  })
+
+  // Minha conta (2026-09-23): a cliente corrige o próprio nome. Só o nome —
+  // o celular de cadastro NÃO é editável aqui: ele é a trava contra teste
+  // grátis repetido (número único por conta, ver register) e trocá-lo pela
+  // tela liberaria o número para uma conta nova.
+  app.patch('/me/name', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const name = normalizeName(req.body?.name)
+    if (!name) return reply.code(400).send({ error: 'Escreva o seu nome.' })
+    if ([...name].length > 100) return reply.code(400).send({ error: 'O nome pode ter no máximo 100 caracteres.' })
+    await db.user.update({ where: { id: req.user.sub }, data: { name } })
+    const updated = await findCurrentUser(req.user.sub)
+    return publicUser(updated)
   })
 
   // Permite ao usuário trocar o e-mail da própria conta. Necessário porque o
@@ -821,6 +842,12 @@ export async function authRoutes(app) {
 
     const existing = await findUserByNormalizedEmail(email)
     if (existing && existing.id !== userId) {
+      return reply.code(409).send({ error: 'Este e-mail já está em uso por outra conta.' })
+    }
+    // Trocar a própria conta para um e-mail de dona do admin daria o painel
+    // inteiro sem prova de posse do endereço (ver src/auth/reservedAdminEmails.js).
+    // Só a própria conta que já tem o e-mail passa (reenviar o mesmo valor).
+    if (isReservedAdminEmail(email) && existing?.id !== userId) {
       return reply.code(409).send({ error: 'Este e-mail já está em uso por outra conta.' })
     }
 

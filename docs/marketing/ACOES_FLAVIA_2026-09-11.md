@@ -8,6 +8,40 @@ quatro listas divergem em uma semana.
 
 ---
 
+## ⭐ Suas prioridades a partir de 24/09 (lista viva — comece por aqui)
+
+| # | Quando | O quê | Tempo |
+|---|---|---|---|
+| 🔝 | **assim que `develop` chegar em `main`** | **Reindexação das páginas corrigidas — Leva R1** (abaixo): 10 páginas que diziam coisa errada sobre o produto. Passa na frente de qualquer outra indexação | 15 min |
+| 🔝 | dia seguinte à R1 | **Leva R2** (10 páginas) e, no outro dia, **Leva R3** (3 páginas) | 15 min cada |
+| 1 | 24/09 | **Indexação — Dia 8** (abaixo): `lumi-ofertas-inteligentes` + 9 endereços | 15 min |
+| 2 | 24/09 | Mergear a PR #1833 (só documentação) em `develop` | 1 min |
+| 3 | 24/09 | Responder à outra sessão: **reembolso depois de 7 dias** (há ou não?) | 1 min |
+| 4 | 24/09 | **Depoimentos:** confirmar que os 5 textos são de clientes reais, com permissão, e ajustar as frases que prometem resultado (ver nota abaixo) | 20 min |
+| 5 | 25/09 | **Indexação — Dia 9** + as duas conferências no Bing | 15 min |
+| 6 | quando a PR da outra sessão chegar em `main` | **Indexação — Dia 10**: páginas novas (reembolso, ofertas automáticas da Shopee, 5 comparativos) e as editadas — a outra sessão entrega a lista | 15 min |
+| 7 | 28/09 | Conferir se o Dia 7 entrou no índice (seção "Como conferir o Dia 7") | 10 min |
+| 8 | 30/09 | **Medição:** export do Search Console (3 meses + `Gráfico.csv`), `diag-origem-cadastros --dias 30`, `diag-paginas-seo --dias 30` | 20 min |
+| 9 | quando der | Rodada de IA no Perplexity e no AI Overviews (o Gemini passa a ser por script) | 30 min |
+| 10 | opcional | Regra na Cloudflare contra robôs de ataque (passo a passo na conversa de 23/09) | 5 min |
+
+**Regra da lista (pedido da Flávia, 24/09):** sempre que uma mudança de texto
+em página pública precisar de reindexação, ela entra **no topo desta tabela**
+(linha 🔝), antes das levas de indexação comuns — e só vale depois do deploy em
+`main`. Página que já estava numa leva comum e mudou de texto sai de lá e vai
+para a leva de reindexação (pedir antes do deploy gasta a cota com o texto velho).
+
+**Nota sobre os depoimentos (item 4).** Só publicar texto de cliente real, com
+autorização e sem mudar o sentido — depoimento inventado ou reescrito é
+publicidade enganosa (CDC art. 37) e, se uma IA ou concorrente descobrir,
+destrói a confiança que ele deveria criar. Três frases precisam da cliente
+confirmar que disse exatamente isso ou de ajuste: "dobrar minhas comissões"
+(resultado), "total estabilidade e zero dores de cabeça" com o módulo de
+preservação (soa como promessa de que não bane — linha que o site não cruza) e
+"converte sem errar".
+
+---
+
 ## Antes de tudo: nada de indexação antes do deploy em produção
 
 Tudo abaixo só vale depois que `develop` for validado em staging e mergeado em
@@ -30,6 +64,61 @@ http://178.105.54.0:3006/precos
 
 ## 1. Indexação — a fila, em ordem de prioridade
 
+### 🔝 Reindexação das páginas corrigidas (PRs #1848 e #1850, 24/09) — ⏳ só depois do deploy em `main`
+
+Estas páginas **já estão no Google com texto errado**: prometiam "pausa
+preventiva", medir cliques e "Lista VIP", ou diziam que o produto não pausa o
+canal (ele pausa por 1 h o canal que recusa envios, no plano Pro). Reindexar é
+o que faz o Google (e as IAs que leem o índice) trocar o texto velho pelo
+certo. Por isso passam na frente das levas comuns.
+
+**Como pedir:** Search Console → Inspeção de URL → colar o endereço →
+"Solicitar indexação". Antes, abrir a página em produção e conferir que o
+texto novo está no ar (ex.: `/bot-canais-whatsapp` mostra "pausado sozinho por
+1 hora"); se ainda mostrar o texto velho, o deploy não chegou — não pedir.
+
+**Leva R1 — as que falavam errado do produto (1ª cota)**
+
+```
+https://espelhagrupos.com.br/bot-canais-whatsapp                        ⏳
+https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                ⏳
+https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais        ⏳
+https://espelhagrupos.com.br/blog/bot-whatsapp-antiban-existe           ⏳
+https://espelhagrupos.com.br/blog/shadowban-whatsapp-canais             ⏳
+https://espelhagrupos.com.br/blog/como-evitar-banimento-whatsapp-afiliados ⏳
+https://espelhagrupos.com.br/blog/grupo-ou-canal-whatsapp-achadinhos    ⏳
+https://espelhagrupos.com.br/blog/chip-dedicado-bot-whatsapp            ⏳
+https://espelhagrupos.com.br/blog/migrar-grupo-achadinhos-para-canal    ⏳
+https://espelhagrupos.com.br/diagnostico-antiban-whatsapp               ⏳
+```
+
+**Leva R2 — as 16 editoriais revisadas que restam (dia seguinte)**
+
+```
+https://espelhagrupos.com.br/conteudos                                  ⏳
+https://espelhagrupos.com.br/glossario                                  ⏳
+https://espelhagrupos.com.br/estudos-de-caso                            ⏳
+https://espelhagrupos.com.br/benchmarks/operacao-grupos-ofertas-whatsapp ⏳
+https://espelhagrupos.com.br/blog/como-escalar-grupos-sem-operacao-manual ⏳
+https://espelhagrupos.com.br/blog/checklist-padronizar-divulgacao-whatsapp ⏳
+https://espelhagrupos.com.br/blog/conferir-converter-link-afiliado-whatsapp ⏳
+https://espelhagrupos.com.br/blog/bot-para-afiliados-whatsapp-grupos-cupons ⏳
+https://espelhagrupos.com.br/materiais/checklist-operacao-whatsapp      ⏳
+https://espelhagrupos.com.br/materiais/checklist-divulgacao-ofertas-grupos-whatsapp ⏳
+```
+
+**Leva R3 — ajuste menor (se sobrar cota)**
+
+```
+https://espelhagrupos.com.br/seguranca-credenciais-afiliado             ⏳
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ⏳
+https://espelhagrupos.com.br/quem-somos                                 ⏳
+```
+
+As landings e hubs que só trocaram o botão "Lista VIP" por "Testar 7 dias
+grátis" **não** precisam de pedido: o Google relê sozinho, e a mudança não
+altera o assunto da página.
+
 ### 📌 Estado em 12/09 — 17 pedidos feitos; falta o fim do Dia 4
 
 | Leva | Pedidas | Pendentes |
@@ -41,6 +130,12 @@ http://178.105.54.0:3006/precos
 | Dia 5 em diante | — | tudo |
 
 **Próxima leva:** os 2 que faltam do Dia 4 e, na sequência, o Dia 5.
+
+⚠️ **Desatualizado — pule para "Dia 7 (2026-09-21)" abaixo.** Esta tabela é o
+retrato de 12/09; nada abaixo dela foi conferido contra o Search Console de
+verdade. Em 21/09 um export real do Search Console mostrou que Dia 4/5/6
+tinham ficado incompletos e que apareceram páginas novas (`/alternativas/*`)
+nunca antes rastreadas — a fila real, hoje, é só o Dia 7.
 
 As onze já pedidas foram conferidas ao vivo: **todas respondem 200 em produção
 com o conteúdo novo**, incluindo os links de entrada e a página de confiança.
@@ -122,39 +217,126 @@ lista de ajustes do plano de melhoria.
 https://espelhagrupos.com.br/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero          ✅ pedida 2026-09-12
 https://espelhagrupos.com.br/blog/como-converter-link-de-afiliado-automaticamente-whatsapp  ✅ pedida 2026-09-12
 https://espelhagrupos.com.br/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp    ✅ pedida 2026-09-12
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp                     ⏳ pendente
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp              ⏳ pendente
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp                     ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp              ✅ pedida 2026-09-22
 ```
 
-**Dia 4 pela metade.** Os dois que faltam são os que mais aparecem hoje:
-`como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
+**Dia 4 concluído** (3 em 12/09, os 2 que faltavam em 22/09). Eram os que mais
+aparecem hoje: `como-divulgar-ofertas-amazon-whatsapp` (450 impressões) e
 `como-divulgar-ofertas-mercado-livre-whatsapp` — já pegam a periferia do Tier 1,
 então relê-las é o que faz o link para as páginas de loja valer mais rápido.
 
-### Dia 5 — títulos que mudaram e a entidade de marca
+### Dia 5 — ✅ CONCLUÍDO — títulos que mudaram e a entidade de marca
 
 ```
-https://espelhagrupos.com.br/programa-de-afiliados
-https://espelhagrupos.com.br/alternativas/proafiliados
-https://espelhagrupos.com.br/alternativas/promium
-https://espelhagrupos.com.br/quem-somos
-https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp
+https://espelhagrupos.com.br/programa-de-afiliados                    ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/alternativas/proafiliados                ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/alternativas/promium                     ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/quem-somos                               ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp     ✅ pedida 2026-09-22
 ```
 
 ### Dia 6 — a cauda (menor prioridade, faça se sobrar cota)
 
 ```
-https://espelhagrupos.com.br/parcerias
-https://espelhagrupos.com.br/parceiro-influenciador
-https://espelhagrupos.com.br/estudos-de-caso
-https://espelhagrupos.com.br/protecao-antiban-botinho
-https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp
-https://espelhagrupos.com.br/ferramentas/calculadora-tempo-grupos-whatsapp
-https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe
-https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons
-https://espelhagrupos.com.br/consistencia-postagens-em-grupos
-https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp
+https://espelhagrupos.com.br/estudos-de-caso                              ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp       ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe            ✅ pedida 2026-09-22
+https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons       ⏳ pendente
+https://espelhagrupos.com.br/consistencia-postagens-em-grupos             ⏳ pendente
+https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp  ⏳ pendente
 ```
+
+**Dia 6 pela metade** (3 de 6 em 22/09). Faltam só as 3 marcadas `⏳ pendente`
+acima — peça-as quando sobrar cota num próximo dia.
+
+`/parcerias`, `/parceiro-influenciador` e `/ferramentas/calculadora-tempo-grupos-whatsapp`
+saíram daqui — o export do Search Console de 21/09 (abaixo) confirma que
+continuam sem indexar, então foram promovidas para o Dia 7.
+`/protecao-antiban-botinho` também saiu — a rota foi renomeada em 19/09 e não
+apareceu como pendente no export; pedir o endereço antigo pediria a versão que
+hoje só redireciona.
+
+### ⚠️ Dias 7-10 antigos foram SUBSTITUÍDOS (21/09) — eram estimativa, isto é dado real
+
+Você mandou o export do Search Console (relatório de Indexação de Páginas,
+duas abas: "Rastreada, mas não indexada" e "Detectada, mas não indexada") e o
+CSV do gráfico. As listas de "Dia 7" a "Dia 10" que estavam aqui antes eram
+inferidas do histórico do projeto — nunca confirmadas contra o Search Console
+de verdade. Jogue-as fora; o que segue é o que o relatório de hoje mostra.
+
+**Não dá pra saber, olhando só o Search Console, o que você já PEDIU antes** —
+o relatório mostra só o que está indexado ou não, não um histórico de pedidos.
+Mas isso não importa: se a página ainda aparece como não indexada, pedir de
+novo é a ação certa, independente de já ter pedido antes ou não.
+
+### Dia 7 (2026-09-21) — ✅ CONCLUÍDO, as 10 pedidas em 2026-09-21
+
+Exatamente 10 páginas reais (cabe num dia só de cota). Tirado direto das duas
+abas "Rastreada, mas não indexada" e "Detectada, mas não indexada" do seu
+export — retirando o que não é página (fontes `.woff2`, `favicon.ico`,
+`llms.txt`, `pricing.md` — esses três últimos são de propósito, não devem ser
+indexados como página de busca) e o que é linha CONGELADA de propósito (ver
+aviso abaixo).
+
+```
+https://espelhagrupos.com.br/alternativas/afiliado-inteligente        ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/afilimais                   ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/afilira                     ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/busqy                       ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/divulga-ninja               ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/ia-divulgadora              ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/alternativas/shark                       ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/parceiro-influenciador                   ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/parcerias                                ✅ pedida 2026-09-21
+https://espelhagrupos.com.br/ferramentas/calculadora-tempo-grupos-whatsapp ✅ pedida 2026-09-21
+```
+
+**Dia 7 concluído.** Próxima ação é só conferência — ver "Como conferir o Dia
+7" logo abaixo. A partir de **28/09** (7 dias depois), rode a Inspeção de URL
+nas 10 acima; antes disso o veredito ainda não teve tempo de mudar.
+
+As 7 páginas `/alternativas/*` são novidade: existem no site (conferido no
+código), têm pelo menos 3 links internos cada uma — cumprem a regra de "página
+nova não nasce órfã" — e o Google já as DETECTOU (achou por link/sitemap), só
+falta indexar. É a categoria "Detectada, mas não indexada" inteira, sem sobrar
+nenhuma.
+
+⚠️ **Nove páginas apareceram como "Rastreada, mas não indexada" e NÃO estão na
+lista acima — de propósito.** São as LPs de cidade
+(`espelhar-grupos-whatsapp-brasilia/belem/goiania/campinas/belo-horizonte`) e
+de nicho (`bot-ofertas-pet-shop/supermercado/moda/beleza-whatsapp`) — exatamente
+as linhas que o AGENTS.md marca como **CONGELADAS** desde 30/07 (seção "SEO
+orgânico — linhas CONGELADAS"): tiveram quase zero impressão quando testadas e
+a decisão foi parar de investir nelas. O Google rastreou essas páginas e
+decidiu, sozinho, não indexar — isso é o esperado, não um problema, e pedir
+indexação nelas gastaria cota sem mudar nada (o Google já viu e escolheu não
+indexar; pedir de novo não muda a decisão dele). **Não peça indexação para
+essas 9.**
+
+⚠️ **Duas outras páginas apareceram no relatório de VÍDEO (não no de
+indexação), com data de rastreamento recente (16-21/09)**: isso é sinal
+BOM — confirma que o Google está visitando o site ativamente agora — mas é um
+relatório diferente ("por que o vídeo incorporado não virou resultado de
+vídeo", não "a página está indexada"). Não precisa de ação: não afeta se a
+página em si é indexada.
+
+### Como conferir o Dia 7, a partir de 28/09
+
+Inspeção de URL nas 10 do Dia 7. O veredito precisa sair de "Detectada" ou
+"Rastreada, mas não indexada" para **"URL está no Google"**. Se
+`/alternativas/*` continuar "Detectada" com "Último rastreamento: N/D" depois
+de 7 dias, o problema deixa de ser indexação e passa a ser: link interno
+insuficiente (a regra conta QUANTIDADE de link, não FORÇA — ver aviso em
+"Página nova NUNCA nasce órfã" no AGENTS.md) ou conteúdo repetitivo demais
+entre as `/alternativas/*` (mesmo risco que a rodada de 11/09 já flagou para as
+páginas de loja).
+
+**Adiantado em 23/09:** no export de 23/09, **nenhuma** `/alternativas/*` está
+mais em "Detectada, mas não indexada", e três das sete do Dia 7 já têm
+impressão (`afilimais` 3, `ia-divulgadora` 2, `shark` 1) — ou seja, estão
+indexadas. Em 28/09 só falta conferir as quatro ainda sem impressão:
+`busqy`, `afilira`, `divulga-ninja`, `afiliado-inteligente`.
 
 ### Como conferir que funcionou
 
@@ -162,6 +344,80 @@ Em **7 dias**, Inspeção de URL nas quatro do Dia 1. O veredito precisa sair de
 "Detectada, mas não indexada" para **"URL está no Google"**. Se continuar
 "Detectada" com "Último rastreamento: N/D", o problema é descoberta e o link
 interno não bastou — aí a conversa é outra.
+
+**✅ Conferido em 23/09 — Dia 1 e Dia 2 estão TODOS no Google.** Três por
+Inspeção de URL (`/quanto-ganha-afiliado-shopee`, `/vendas-e-comissao-afiliado-whatsapp`,
+`/copiaram-minha-oferta-no-whatsapp`: "O URL está no Google", último
+rastreamento 11/09). As outras seis dispensam inspeção porque já recebem
+impressão, e página com impressão está indexada: `/espelha-grupos-e-confiavel`
+(36) e as cinco lojas (Shopee 61, Mercado Livre 55, Amazon 71, SHEIN 160,
+Magalu 6).
+
+### Leva de 23/09 — ✅ pedida (registrada em 23/09)
+
+```
+https://espelhagrupos.com.br/alternativas/achadinhos-bot              ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/alternativas/achadinho-pro               ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/bot-achadinhos-whatsapp                  ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/shopee-afiliados-whatsapp                ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp         ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/amazon-afiliados-whatsapp                ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/shein-afiliados-whatsapp                 ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/magalu-afiliados-whatsapp                ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/alternativas/divulgador-inteligente      ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/alternativas/divulgalinks                ✅ pedida 2026-09-23
+https://espelhagrupos.com.br/alternativas/lumi-ofertas-inteligentes   ⏳ deu "Tentar novamente" (cota) — vai para o Dia 8
+```
+
+### Dia 8 (2026-09-24) — ⏳ a pedir (10 = uma cota)
+
+```
+https://espelhagrupos.com.br/alternativas/lumi-ofertas-inteligentes   ⏳
+```
+
+Tirado do export de indexação de 23/09. As quatro primeiras são as rotas
+renomeadas em 19/09 que o Google **nunca rastreou** (os nomes antigos
+`/…-botinho…` respondem 308 para elas) — são as de maior valor, porque carregam
+a entidade da marca. As quatro seguintes ganharam links em 17/09 e nunca foram
+pedidas. A última é sobra do Dia 6 (a outra sobra passou para o Dia 9).
+
+```
+https://espelhagrupos.com.br/protecao-antiban-espelha-grupos           ⏳
+https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual          ⏳
+https://espelhagrupos.com.br/alternativas/fluxopromo                    ⏳
+https://espelhagrupos.com.br/alternativas/shozap                        ⏳
+https://espelhagrupos.com.br/alternativas/gigi-bot                      ⏳
+https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados   ⏳
+https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons     ⏳
+https://espelhagrupos.com.br/consistencia-postagens-em-grupos           ⏳
+https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp          ⏳
+```
+
+(24/09) `bot-comum-vs-espelha-grupos` e `como-funciona-espelha-grupos-canais`
+saíram daqui: o texto delas mudou nas PRs #1848/#1850 e elas foram para a
+**Leva R1**, que só vale depois do deploy em `main`. As duas do Dia 9 subiram
+para fechar a cota.
+
+### Dia 9 (2026-09-25) — ⏳ depois do Dia 8
+
+```
+https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao    ⏳
+```
+
+A última foi **rastreada em 21/09 e não indexada**. Diferente das LPs
+congeladas, é uma rota renomeada em 19/09 — vale um pedido. Se continuar fora
+depois disso, o motivo é conteúdo, não descoberta.
+
+### Duas conferências que ficaram da rodada de 23/09 (5 min cada)
+
+1. **Bing → Inspeção de URL** em `/shopee-afiliados-whatsapp` e
+   `/bot-achadinhos-whatsapp`. Decide se o Bing conhece as páginas que não
+   apareceram no Explorador de sites. Se disser "não indexada", pedir
+   indexação lá mesmo (o Bing aceita envio de URL).
+2. **Cloudflare → AI Crawl Control → filtrar `Claude-User`** (e depois
+   `Perplexity-User`), olhando os pedidos **sem sucesso**: print dos
+   endereços e dos códigos (404, 301/308, 403). Decide se a falha de 70-81% é
+   endereço inventado pela IA, endereço antigo ou bloqueio nosso.
 
 ---
 
@@ -175,10 +431,10 @@ preço pode ser citado em página pública.
 
 ### Os dois que importam agora
 
-| Concorrente | Por quê | Preço que a IA disse (NÃO CONFIRMADO) |
+| Concorrente | Por quê | Status |
 |---|---|---|
-| **Ofertiva** | citado nas **duas** contas do ChatGPT, e é quem ganha de nós em SHEIN e AliExpress | R$ 39,90 |
-| **Comission** | citado como alternativa direta | R$ 47,90 a R$ 97,90 |
+| **Ofertiva** | citado nas **duas** contas do ChatGPT | ✅ **ficha criada em 22/09** — `dashboard/lib/competitors-data.js`, slug `ofertiva`, print de `ofertiva.app.br/#precos`. R$ 39,90 / R$ 69,90 / R$ 139,90 por mês, cobrança recorrente de verdade (não promo de 1º mês). Não converte Magalu; tem página na bio + Meta Pixel, que não temos. **Falta**: a página pública `/alternativas/ofertiva` (a ficha por si só não cita nada em página nenhuma) — próximo passo se você quiser. |
+| **Comission** | citado como alternativa direta | ⏳ **ainda sem site encontrado.** Você não achou e eu também não achei buscando "Comission" + afiliados/WhatsApp (nem variações de grafia) — nenhum resultado bate com esse nome. Pode ser grafia diferente da que o ChatGPT usou, ou o produto pode ter saído do ar/trocado de nome. Se você tiver o link de onde a IA citou (ou um print da resposta), mando eu mesma atrás; sem isso não tem como confirmar preço nem criar ficha. |
 
 ### O que coletar de cada um (print da tela, não texto copiado)
 

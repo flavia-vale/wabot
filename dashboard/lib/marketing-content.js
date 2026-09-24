@@ -28,10 +28,17 @@
  *    citações antigas a esta mesma entidade;
  *  - continua no PAINEL (área logada), onde a pessoa já sabe onde está e não
  *    existe ambiguidade nenhuma;
- *  - as ROTAS com "botinho" no endereço (/protecao-antiban-botinho,
- *    /botinho-vs-planilha-manual etc.) ficam como estão. Trocar URL descarta o
- *    histórico que o Google acumulou nelas, que é o ativo que estamos tentando
- *    crescer.
+ *  - as ROTAS que carregavam o nome antigo no endereço foram RENOMEADAS em
+ *    19/09/2026 (decisão da dona do produto), com redirect permanente em
+ *    `next.config.mjs` (LEGACY_ROUTE_REDIRECTS). Somavam 27 impressões e 1
+ *    clique em 3 meses; o redirect preserva o pouco histórico que havia.
+ *
+ * Regra de escrita em superfície PÚBLICA (decisão de 19/09/2026): só
+ * "Espelha Grupos". Nem o nome antigo sozinho, nem emparelhado ("X é o nome do
+ * robô do Espelha Grupos") — a versão emparelhada existiu de 11/09 a 19/09 em
+ * seis páginas e foi retirada. A ligação com as citações antigas fica SÓ no
+ * schema (`alternateName`) e na linha de "nome anterior" do llms.txt.
+ * Guarda: test/nome-antigo-fora-do-texto-publico.test.js.
  */
 export const BRAND_ORG_NAME = 'Espelha Grupos'
 export const BRAND_PRODUCT_NAME = 'Espelha Grupos'
@@ -69,6 +76,26 @@ export const SUPPORT_RESPONSE_SLA = 'Respondemos em até 1 dia útil'
 export const BRAND_YOUTUBE_URL =
   process.env.NEXT_PUBLIC_BRAND_YOUTUBE_URL || 'https://www.youtube.com/@espelhagrupos'
 
+// Perfil oficial no Instagram (confirmado pela dona do produto em 19/09/2026:
+// @espelhagrupos). Mesma regra do YouTube: URL pública, default no código, env
+// só como override.
+export const BRAND_INSTAGRAM_URL =
+  process.env.NEXT_PUBLIC_BRAND_INSTAGRAM_URL || 'https://www.instagram.com/espelhagrupos'
+
+// Perfil oficial no TikTok (confirmado pela dona do produto em 20/09/2026:
+// @espelhagrupos). Mesma regra do YouTube/Instagram: URL pública, default no
+// código, env só como override.
+export const BRAND_TIKTOK_URL =
+  process.env.NEXT_PUBLIC_BRAND_TIKTOK_URL || 'https://www.tiktok.com/@espelhagrupos'
+
+// Página da EMPRESA no LinkedIn (confirmada pela dona do produto em
+// 20/09/2026; endereço trocado do id numérico para o nome da marca,
+// /company/espelha-grupos/, por decisão dela em 23/09/2026). Vai no `sameAs` da Organization — é distinta do perfil PESSOAL
+// dela, que vai em FOUNDER_SAME_AS (a mesma separação Organization/Person já
+// documentada no comentário de BRAND_SAME_AS).
+export const BRAND_LINKEDIN_URL =
+  process.env.NEXT_PUBLIC_BRAND_LINKEDIN_URL || 'https://www.linkedin.com/company/espelha-grupos/'
+
 // Tutorial oficial de criação de conta. É a prova social VERIFICÁVEL que
 // substituiu os números inventados do bloco `Social` (auditoria de funil
 // 2026-08-05, §1.1) — qualquer visitante confere no canal. `-nocookie` evita
@@ -95,6 +122,9 @@ export const CUPONITO_ABOUT_URL = `${CUPONITO_URL}/quem-somos`
 export const BRAND_SAME_AS = [
   SUPPORT_WHATSAPP_URL,
   BRAND_YOUTUBE_URL,
+  BRAND_INSTAGRAM_URL,
+  BRAND_TIKTOK_URL,
+  BRAND_LINKEDIN_URL,
   CUPONITO_ABOUT_URL,
 ].filter(Boolean)
 
@@ -106,10 +136,17 @@ export const BRAND_SAME_AS = [
 // (ChatGPT tratou Espelha Grupos e BOTinho como concorrentes; medição de
 // 01/09). Os dois endereços são os `@id` de Person que os outros sites já
 // publicam no próprio JSON-LD (verificado em 18/09/2026).
+// Perfil PESSOAL dela no LinkedIn (confirmado 20/09/2026) — distinto da
+// página da empresa (BRAND_LINKEDIN_URL, acima). Vai aqui porque `sameAs`
+// da Person é a ligação principal da entidade única.
+export const FOUNDER_LINKEDIN_URL =
+  process.env.NEXT_PUBLIC_FOUNDER_LINKEDIN_URL || 'https://www.linkedin.com/in/flaviavale/'
+
 export const FOUNDER_SAME_AS = [
   `${CUPONITO_ABOUT_URL}#person`,
   CUPONITO_ABOUT_URL,
   'https://aulasdematematicabh.com.br/#flavia',
+  FOUNDER_LINKEDIN_URL,
 ]
 
 // Caminho do `@id` da Person. É CITADO DE FORA: o JSON-LD do Cuponito aponta a
@@ -118,7 +155,15 @@ export const FOUNDER_SAME_AS = [
 // ligação em silêncio — o Cuponito afirma e o Espelha Grupos não confirma.
 export const FOUNDER_PERSON_ID_PATH = '/quem-somos#person'
 
-export const PRODUCT_DEFINITION = 'O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
+// Definição da marca em UMA frase auto-contida (23/09/2026). É a primeira frase
+// de corpo da home, de /quem-somos e do llms.txt: em três rodadas de medição o
+// ChatGPT leu "Espelha Grupos" como expressão genérica, e não como nome de
+// produto, porque nada abria dizendo o que a marca É. Os dois modos entram com
+// o limite exato do automático — só Shopee e só no plano Pro — para a frase
+// nunca prometer ao Basic o que ele não entrega.
+export const BRAND_DEFINITION_PT = 'Espelha Grupos é um robô para afiliadas que espelha as ofertas dos grupos e canais que você já acompanha e, no plano Pro, também busca ofertas da Shopee sozinho, trocando o link pelo seu código de afiliada.'
+
+export const PRODUCT_DEFINITION ='O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 
 // Lojas com conversão de link suportada. Fonte ÚNICA para texto público,
 // schema e FAQ: em 2026-09-18 a página de preços, a API pública de planos e a
@@ -178,9 +223,9 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$39',
     priceValue: 39,
     period: '30 dias',
-    desc: 'Para operar ofertas manualmente em grupos: espelhamento, conversão de links, criação de ofertas e agendamento.',
+    desc: 'Espelhamento, conversão de links, criação de ofertas e agendamento.',
     cta: 'Assinar Basic',
-    features: ['Espelhamento de grupos (monitor → destinos)', 'Conversão de links em 6 lojas: Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress', 'Painel de vendas e comissão da Shopee (pedidos, valor vendido e comissão)', 'Marca d\u2019água com o seu nome na foto da oferta', 'Card de oferta clicável: tocar no card abre a loja', 'Mensagem reescrita do seu jeito, não copiada da origem', 'Criar oferta a partir de link (título, preço e imagem)', 'Envio imediato e agendado', 'Relatórios de envio com histórico completo'],
+    features: ['Espelhamento de grupos', 'Conversão de links de 6 lojas (Shopee, Mercado Livre, Amazon, SHEIN, Magalu e AliExpress)', 'Card de oferta clicável', 'Mensagem reescrita do seu jeito', 'Envio imediato ou agendado', 'Relatórios com histórico completo'],
   },
   {
     id: 'pro',
@@ -188,10 +233,10 @@ export const DEFAULT_LANDING_PLANS = [
     price: 'R$69',
     priceValue: 69,
     period: '30 dias',
-    desc: 'Piloto automático e escala: tudo do Basic + canais, ofertas automáticas, filas de envio e controle de ritmo dos envios.',
+    desc: 'Tudo do Basic + canais, ofertas automáticas, filas de envio e controle de ritmo dos envios.',
     cta: 'Assinar Pro',
     highlight: true,
-    features: ['Tudo do Basic', 'Monitoramento e envio em canais', 'Garimpo automático de ofertas da Shopee: o robô acha as ofertas por palavra-chave e filtros, você não precisa colar link', 'Filas de ofertas com intervalo definido e limites por hora e por dia', 'Controle do ritmo dos envios por grupo (Módulo de Preservação Avançada): intervalo, horário de descanso, limite diário e variação do texto'],
+    features: ['Tudo do plano Basic', 'Espelhamento de grupos e CANAIS do WhatsApp', 'Garimpo automático de ofertas', 'Filas de ofertas', 'Sua marca d\u2019água nas ofertas', 'Horário de descanso, máximo de ofertas por dia, intervalo entre mensagens e variação do texto', 'Painel de vendas e comissão da Shopee'],
   },
 ]
 

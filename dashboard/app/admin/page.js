@@ -365,7 +365,7 @@ function CumulativeProfitChart({ past, present, projection, paybackMonth }) {
   )
 }
 
-function RoiPanel({ data, loading, months, onMonths }) {
+function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling }) {
   const [scenario, setScenario] = useState('base')
 
   if (loading && !data) return <LoadingState message="Montando a conta do ROI…" />
@@ -394,6 +394,9 @@ function RoiPanel({ data, loading, months, onMonths }) {
               Fora da conta: {data.excludedTestAccounts.join(', ')} (assinatura de teste)
             </span>
           )}
+          <button type="button" onClick={onReconcile} disabled={reconciling} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">
+            {reconciling ? 'Conciliando…' : '↻ Conciliar com o Financeiro'}
+          </button>
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -405,7 +408,7 @@ function RoiPanel({ data, loading, months, onMonths }) {
           <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-100">
             <p className="text-xs font-bold uppercase tracking-wide text-rose-600">Saiu (Claude + servidor)</p>
             <p className="mt-1 text-2xl font-black text-rose-700">{formatCurrency(summary.investedToDate ?? summary.totalInvested)}</p>
-            <p className="mt-1 text-[11px] text-rose-600">tudo que você já pagou para o BOTinho existir, com a conta deste mês inteira</p>
+            <p className="mt-1 text-[11px] text-rose-600">tudo que você já pagou para o Espelha Grupos existir, com a conta deste mês inteira</p>
           </div>
           <div className={`rounded-xl p-4 ring-1 ${seCustear ? 'bg-emerald-600 ring-emerald-500' : 'bg-slate-900 ring-slate-800'}`}>
             <p className="text-xs font-bold uppercase tracking-wide text-cyan-200">{seCustear ? 'Já sobrou' : 'Ainda falta'}</p>
@@ -447,6 +450,10 @@ function RoiPanel({ data, loading, months, onMonths }) {
               <div className="flex items-center justify-between gap-3">
                 <span className="text-gray-600">(–) taxas que o Mercado Pago retém</span>
                 <span className="font-bold text-rose-700">− {formatCurrency(reconciliation.mpFeesAllTime)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600">(–) reembolsos devolvidos por PIX</span>
+                <span className="font-bold text-rose-700">− {formatCurrency(reconciliation.refundsAllTime ?? 0)}</span>
               </div>
               <div className="flex items-center justify-between gap-3 border-t-2 border-gray-300 pt-1">
                 <span className="font-bold text-gray-900">(=) o número do placar acima</span>
@@ -912,7 +919,7 @@ function ErrorVolumeCard({ summary }) {
             return (
               <div key={item?.errorMsg ?? `error-${index}`} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 text-sm md:grid-cols-[1fr_130px_100px_150px]">
                 <div className="min-w-0">
-                  <p className="break-words font-mono text-xs font-bold text-slate-100">{item?.errorMsg || 'unknown'}</p>
+                  <p className="break-words text-xs font-bold text-slate-100">{item?.errorMsg || 'unknown'}</p>
                   {item?.sampleErrorMsg && item.sampleErrorMsg !== item.errorMsg && <p className="mt-1 break-words text-[11px] text-slate-500">Exemplo recente: {item.sampleErrorMsg}</p>}
                   <p className="mt-1 text-[11px] text-slate-500 md:hidden">{item?.category || 'UNKNOWN'} · último {formatDate(item?.lastSeenAt)}</p>
                 </div>
@@ -1189,7 +1196,7 @@ function OnlineDetailDrawer({ detail, loading, onClose }) {
                 {asArray(detail.errorsByType).map((item) => (
                   <div key={item.errorMsg} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-sm">
                     <div>
-                      <p className="break-words font-mono text-xs font-bold text-slate-900">{item.errorMsg}</p>
+                      <p className="break-words text-xs font-bold text-slate-900">{item.errorMsg}</p>
                       <p className="mt-1 text-xs text-slate-500">{item.category || 'UNKNOWN'} · último {formatDate(item.lastSeenAt)}</p>
                     </div>
                     <span className="self-start rounded-full bg-red-50 px-3 py-1 text-xs font-black text-red-700">{formatNumber(item.count)}x</span>
@@ -1518,8 +1525,8 @@ function FaqEditor({ faq, onSave, onDelete }) {
 
 function TutorialEditor({ tutorial, onSave }) {
   const defaultTemplate = {
-    title: 'Guia de Configuração: Pegando suas Credenciais (BOTinho)',
-    body: `Para que o BOTinho trabalhe para você, precisamos conectar suas contas de afiliado.\n\n🛠️ Passo 0 — Ferramenta Essencial\n1. Instale a extensão Cookie-Editor no Google Chrome (computador).\n2. Abra a Chrome Web Store e clique em “Usar no Chrome”.\n\n🔵 Mercado Livre — Como conseguir credenciais\n1. Faça login na sua conta de afiliado.\n2. Acesse o Gerador de Links: https://www.mercadolivre.com.br/afiliados/linkbuilder#hub\n3. Copie a Etiqueta em uso exibida no Gerador de Links.\n4. Clique na extensão Cookie-Editor e localize o cookie “ssid”.\n5. Copie o valor do “ssid” e salve no BOTinho.\n\n🟡 Amazon — Como conseguir credenciais\n1. Acesse https://associados.amazon.com.br/\n2. Com a página aberta, clique no Cookie-Editor.\n3. Copie os cookies solicitados pelo BOTinho.\n\n🟠 Shopee — Solicitação de API\n1. Acesse o formulário: https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=\n2. Respostas: AFILIADO > Dúvidas sobre o Programa de Afiliados > Próximo > SIM > Não, estou com outras dificuldades/dúvidas.\n3. Informe seu ID de afiliado e selecione tema/cenário para ativar API.\n4. Envie e acompanhe diariamente: https://affiliate.shopee.com.br/open_api\n\n⏳ E agora?\nApós a liberação da Shopee, clique em “Redefinir” para visualizar Key/Secret e colar no BOTinho.`,
+    title: 'Guia de Configuração: Pegando suas Credenciais (Espelha Grupos)',
+    body: `Para que o Espelha Grupos trabalhe para você, precisamos conectar suas contas de afiliado.\n\n🛠️ Passo 0 — Ferramenta Essencial\n1. Instale a extensão Cookie-Editor no Google Chrome (computador).\n2. Abra a Chrome Web Store e clique em “Usar no Chrome”.\n\n🔵 Mercado Livre — Como conseguir credenciais\n1. Faça login na sua conta de afiliado.\n2. Acesse o Gerador de Links: https://www.mercadolivre.com.br/afiliados/linkbuilder#hub\n3. Copie a Etiqueta em uso exibida no Gerador de Links.\n4. Clique na extensão Cookie-Editor e localize o cookie “ssid”.\n5. Copie o valor do “ssid” e salve no Espelha Grupos.\n\n🟡 Amazon — Como conseguir credenciais\n1. Acesse https://associados.amazon.com.br/\n2. Com a página aberta, clique no Cookie-Editor.\n3. Copie os cookies solicitados pelo Espelha Grupos.\n\n🟠 Shopee — Solicitação de API\n1. Acesse o formulário: https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091?entryPoint=1&lastArticleID=\n2. Respostas: AFILIADO > Dúvidas sobre o Programa de Afiliados > Próximo > SIM > Não, estou com outras dificuldades/dúvidas.\n3. Informe seu ID de afiliado e selecione tema/cenário para ativar API.\n4. Envie e acompanhe diariamente: https://affiliate.shopee.com.br/open_api\n\n⏳ E agora?\nApós a liberação da Shopee, clique em “Redefinir” para visualizar Key/Secret e colar no Espelha Grupos.`,
     images: [
       { id: 'print-1', label: 'PRINT 1 — Cookie-Editor', url: '', note: 'Destaque o botão “Usar no Chrome”.' },
       { id: 'print-2', label: 'PRINT 2 — Mercado Livre Etiqueta em uso', url: '', note: 'Destaque a Etiqueta em uso.' },
@@ -1547,7 +1554,7 @@ function TutorialEditor({ tutorial, onSave }) {
       <h3 className="text-base font-black text-gray-900">Tutorial (Dashboard)</h3>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título do tutorial" className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
       <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Texto principal do tutorial" className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400" required />
-      <textarea value={imagesText} onChange={(e) => setImagesText(e.target.value)} placeholder='[{"id":"print1","label":"PRINT 1","url":"https://...","note":"..."}]' className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-emerald-400" />
+      <textarea value={imagesText} onChange={(e) => setImagesText(e.target.value)} placeholder='[{"id":"print1","label":"PRINT 1","url":"https://...","note":"..."}]' className="min-h-32 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-400" />
       <p className="text-xs text-gray-500">Use JSON para os prints: id, label, url e note.</p>
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar tutorial'}</button>
@@ -2312,6 +2319,7 @@ export default function AdminPage() {
   // antigo como se fosse o novo).
   const [roi, setRoi] = useState(null)
   const [roiMonths, setRoiMonths] = useState(12)
+  const [reconcilingRoi, setReconcilingRoi] = useState(false)
   const roiLoading = tab === 'financeiro' && financeTab === 'roi' && roi?.key !== roiMonths
 
   useEffect(() => {
@@ -2322,6 +2330,36 @@ export default function AdminPage() {
       .catch(() => { if (active) setRoi(null) })
     return () => { active = false }
   }, [tab, financeTab, roiMonths])
+
+  async function reconcileRoi() {
+    setReconcilingRoi(true)
+    try {
+      const [financeData, roiData] = await Promise.all([
+        api.adminFinanceOverview({ period: financePeriod }),
+        api.adminFinanceRoi(roiMonths),
+      ])
+      setFinance(financeData)
+      setRoi({ ...roiData, key: roiMonths })
+    } finally {
+      setReconcilingRoi(false)
+    }
+  }
+
+  async function refundPayment(customer) {
+    const payment = customer?.lastPayment
+    if (!payment?.id || payment?.refund) return
+    const reason = window.prompt(`Motivo do reembolso integral de ${formatCurrency(payment.amount)} para ${customer.email}:`)
+    if (!reason?.trim()) return
+    if (!window.confirm(`Confirmar devolução integral por PIX? A taxa do Mercado Pago continuará como prejuízo.`)) return
+    await api.adminRefundPayment(payment.id, reason.trim())
+    setPaidCustomersList(null)
+    const [financeData, roiData] = await Promise.all([
+      api.adminFinanceOverview({ period: financePeriod }),
+      api.adminFinanceRoi(roiMonths),
+    ])
+    setFinance(financeData)
+    setRoi({ ...roiData, key: roiMonths })
+  }
   // Drill-down dos cards técnicos ('infra' | 'filas' | null). Não busca nada
   // novo: mostra o detalhe do que a página já carregou.
   const [techDrilldown, setTechDrilldown] = useState(null)
@@ -2801,7 +2839,7 @@ export default function AdminPage() {
               {admin?.permissions?.includes('tech:read') && <Link href="/admin/teste-shard" className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-100">Teste shard</Link>}
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-base font-black text-white">B</div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-lg font-black text-gray-900">BOTinho</span>
+                <span className="text-lg font-black text-gray-900">Espelha Grupos</span>
                 <span className="text-xs font-semibold text-gray-400">admin</span>
               </div>
             </div>
@@ -2814,7 +2852,7 @@ export default function AdminPage() {
               <Link href="/admin/erros" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Erros</Link>
               <Link href="/admin/clientes" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Clientes</Link>
               <Link href="/admin/funil" className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Funil</Link>
-              <Link href="/admin/emails" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">E-mails</Link>
+              <Link href="/admin/emails" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Contato com cliente</Link>
               <button onClick={() => applyFilters()} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Atualizar</button>
               <Link href="/painel" className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Voltar</Link>
             </div>
@@ -2906,6 +2944,22 @@ export default function AdminPage() {
                 tone={severityTone(0)}
                 helper={`${online?.summary?.stabilityPct ?? '—'}% estabilidade`}
                 help={CARD_HELP.onlineAgora}
+                onClick={() => openWaStatus('connected')}
+              />
+              <CommandCard
+                label="Pagantes atuais"
+                value={online?.summary?.currentPayingUsers ?? '—'}
+                tone="ok"
+                helper="com acesso pago ainda válido"
+                help="Clientes dos planos pagos cujo acesso ainda não venceu."
+                onClick={() => { setOnlineFilters({ ...onlineFilters, plan: 'all' }); setTab('online') }}
+              />
+              <CommandCard
+                label="Pagantes online"
+                value={online?.summary?.payingUsersOnline ?? '—'}
+                tone="ok"
+                helper="pagando e conectados agora"
+                help="Pagantes atuais com o WhatsApp conectado neste momento."
                 onClick={() => openWaStatus('connected')}
               />
               <CommandCard
@@ -3153,7 +3207,7 @@ export default function AdminPage() {
             </div>
 
             {financeTab === 'roi' && (
-              <RoiPanel data={roi} loading={roiLoading} months={roiMonths} onMonths={setRoiMonths} />
+              <RoiPanel data={roi} loading={roiLoading} months={roiMonths} onMonths={setRoiMonths} onReconcile={reconcileRoi} reconciling={reconcilingRoi} />
             )}
 
             {financeTab === 'cobrancas' && (
@@ -3190,6 +3244,11 @@ export default function AdminPage() {
                 <p className="text-xs font-bold uppercase tracking-wide text-rose-600">(–) Taxas Mercado Pago</p>
                 <p className="mt-1 text-2xl font-black text-rose-700">− {formatCurrency(finance.mpFees30d ?? 0)}</p>
                 <p className="mt-1 text-[11px] text-rose-600">{finance.mpFeePercent ?? 0}% do bruto{finance.mpFeeFixedCents ? ` + ${formatCurrency((finance.mpFeeFixedCents ?? 0) / 100)}/transação` : ''}</p>
+              </div>
+              <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-200">
+                <p className="text-xs font-bold uppercase tracking-wide text-rose-600">(–) Reembolsos por PIX</p>
+                <p className="mt-1 text-2xl font-black text-rose-700">− {formatCurrency(finance.refunds30d ?? 0)}</p>
+                <p className="mt-1 text-[11px] text-rose-600">{formatNumber(finance.refunds30dCount ?? 0)} devolução(ões) · taxa perdida {formatCurrency(finance.refundFeeLoss30d ?? 0)}</p>
               </div>
               <div className="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
                 <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">(=) Receita líquida · {finance.periodLabel ?? '30 dias'}</p>
@@ -3296,6 +3355,7 @@ export default function AdminPage() {
                       <th className="px-3 py-2 font-bold">Próxima cobrança / cancelou</th>
                       <th className="px-3 py-2 font-bold">Pagamentos</th>
                       <th className="px-3 py-2 font-bold">Total pago</th>
+                      <th className="px-3 py-2 font-bold">Reembolso</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -3318,14 +3378,21 @@ export default function AdminPage() {
                           </td>
                           <td className="px-3 py-2 text-gray-600">{formatNumber(customer.paidCount)}</td>
                           <td className="px-3 py-2 text-gray-600">{formatCurrency(customer.ltv)}</td>
+                          <td className="px-3 py-2" onClick={event => event.stopPropagation()}>
+                            {customer.lastPayment?.refund
+                              ? <span className="rounded-full bg-rose-100 px-2 py-1 text-[11px] font-black text-rose-700">Reembolsado por PIX</span>
+                              : admin?.permissions?.includes('billing:write') && customer.lastPayment?.id
+                                ? <button type="button" onClick={() => refundPayment(customer)} className="rounded-lg border border-rose-200 px-2 py-1 text-[11px] font-black text-rose-700 hover:bg-rose-50">Marcar reembolso</button>
+                                : '—'}
+                          </td>
                         </tr>
                       )
                     })}
                     {paidCustomersList && !asArray(paidCustomersList?.subscriptions).length && (
-                      <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Ninguém pagou ainda.</td></tr>
+                      <tr><td colSpan={9} className="px-3 py-6 text-center text-gray-400">Ninguém pagou ainda.</td></tr>
                     )}
                     {!paidCustomersList && (
-                      <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Carregando…</td></tr>
+                      <tr><td colSpan={9} className="px-3 py-6 text-center text-gray-400">Carregando…</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -3512,11 +3579,11 @@ export default function AdminPage() {
                   <tbody className="divide-y divide-gray-100">
                     {asArray(affiliates?.profiles).map(a => (
                       <tr key={a?.id} className="align-top">
-                        <td className="px-3 py-3 font-mono text-xs font-bold text-gray-500">{a?.code ?? '—'}</td>
+                        <td className="px-3 py-3 text-xs font-bold text-gray-500">{a?.code ?? '—'}</td>
                         <td className="px-3 py-3"><p className="font-bold text-gray-900">{a?.user?.name ?? '—'}</p><p className="text-xs text-gray-500">{a?.user?.email ?? '—'}</p></td>
                         <td className="px-3 py-3 text-sm">{formatNumber(a?.totalReferrals ?? 0)}</td>
                         <td className="px-3 py-3 text-sm font-bold">{centsToBRL(a?.totalCommissions ?? 0)}</td>
-                        <td className="px-3 py-3 font-mono text-xs text-gray-500">{a?.pixKey ?? '—'}</td>
+                        <td className="px-3 py-3 text-xs text-gray-500">{a?.pixKey ?? '—'}</td>
                       </tr>
                     ))}
                     {!asArray(affiliates?.profiles).length && <tr><td colSpan={5} className="px-3 py-6 text-sm text-gray-400">Nenhum afiliado aprovado.</td></tr>}

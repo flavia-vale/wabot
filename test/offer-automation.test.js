@@ -352,7 +352,7 @@ test('GET /api/offer-automations: returns user automations', async () => {
     { id: 'a1', userId: 'user-1', keyword: 'festa', intervalMinutes: 120,
       offersPerSend: 2, minDiscountPct: 20, enabled: true, destGroupJid: '123@g.us',
       destGroupName: 'Grupo Festas', lastSentAt: null, sentItemIds: '[]',
-      createdAt: new Date(), updatedAt: new Date() },
+      createdAt: new Date(), updatedAt: new Date(), _count: { reviewItems: 3 } },
   ]
   const dbMock = {
     offerAutomation: {
@@ -365,6 +365,8 @@ test('GET /api/offer-automations: returns user automations', async () => {
   const body = JSON.parse(res.body)
   assert.equal(body.length, 1)
   assert.equal(body[0].keyword, 'festa')
+  assert.equal(body[0].approvedReviewCount, 3)
+  assert.equal(body[0]._count, undefined, 'detalhe interno do Prisma não deve vazar')
 })
 
 test('POST /api/offer-automations: creates automation', async () => {
@@ -874,4 +876,137 @@ test('sem contador, filterOffers segue com o mesmo resultado de sempre', () => {
     filterOffers(offers, { minDiscountPct: 20, excludeItemIds: [] }).map(o => o.itemId),
     [1],
   )
+})
+
+// specs/017-client-coupon-catalog (T023, US3): opt-in explícito por
+// automação. useCoupons ausente/false NUNCA muda o texto de antes (SC-005);
+// useCoupons:true com cupom ativo da loja da oferta aplica {cupom}; marcado
+// mas sem cupom ativo sai normal, sem sobra de formatação; falha ao carregar
+// os cupons não aborta o laço.
+
+function couponRow(overrides = {}) {
+  return {
+    id: 'coupon-1',
+    userId: 'user-x',
+    code: 'PROMO10',
+    platform: 'shopee',
+    discountType: 'percent',
+    discountValue: 10,
+    enabled: true,
+    validUntil: null,
+    createdAt: new Date('2026-09-01T00:00:00.000Z'),
+    ...overrides,
+  }
+}
+
+test('runAutomation: automação SEM useCoupons (ausente = default false do banco) envia texto idêntico ao de antes, sem cupom', async () => {
+  const sent = []
+  const automation = baseAutomation({ id: 'auto-no-coupon', userId: 'user-x' }) // sem useCoupons no objeto — simula coluna ausente/default
+  const findManyCalls = []
+  const dbOverride = {
+    ...credOk,
+    clientCoupon: { findMany: async (...args) => { findManyCalls.push(args); return [couponRow()] } },
+  }
+
+  await runAutomation(automation, {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [{
+      itemId: '900', productName: 'Produto sem cupom', priceMin: 100, priceDiscountRate: 20, offerLink: 'https://shope.ee/x',
+    }] }),
+    sendBroadcastFn: async (_userId, text) => sent.push(text),
+  })
+
+  assert.equal(sent.length, 1)
+  assert.doesNotMatch(sent[0], /PROMO10/)
+  // FR-028d: sem opt-in, nem chega a consultar os cupons.
+  assert.equal(findManyCalls.length, 0)
+})
+
+test('runAutomation: useCoupons:true com cupom ativo da loja aplica {cupom} no texto', async () => {
+  const sent = []
+  const automation = baseAutomation({
+    id: 'auto-with-coupon', userId: 'user-x', useCoupons: true,
+    templateKey: 'tpl_cupom_auto',
+  })
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({
+      mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_cupom_auto', name: 'Com cupom', body: '{produto}\n{cupom}\n{link}' }] }),
+      copyVariationPoolJson: '{}',
+    }) },
+    offerAutomation: { update: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
+    clientCoupon: { findMany: async () => [couponRow()] },
+  }
+
+  await runAutomation(automation, {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [{
+      itemId: '901', productName: 'Produto com cupom', priceMin: 100, priceDiscountRate: 0, offerLink: 'https://shope.ee/y',
+    }] }),
+    sendBroadcastFn: async (_userId, text) => sent.push(text),
+  })
+
+  assert.equal(sent.length, 1)
+  assert.match(sent[0], /PROMO10/)
+  assert.doesNotMatch(sent[0], /\{cupom\}/)
+})
+
+test('runAutomation: useCoupons:true mas sem cupom ativo daquela loja sai normal, sem sobra de formatação', async () => {
+  const sent = []
+  const automation = baseAutomation({
+    id: 'auto-no-active-coupon', userId: 'user-x', useCoupons: true,
+    templateKey: 'tpl_cupom_auto2',
+  })
+  const dbOverride = {
+    credential: { findUnique: async () => ({ data: JSON.stringify({ appId: 'a', secretKey: 's' }) }) },
+    botConfig: { findUnique: async () => ({
+      mobileTemplatesJson: JSON.stringify({ custom: [{ key: 'tpl_cupom_auto2', name: 'Com cupom', body: '{produto}\n{cupom}\n{link}' }] }),
+      copyVariationPoolJson: '{}',
+    }) },
+    offerAutomation: { update: async () => ({}) },
+    offerAutomationSentLog: { findMany: async () => [], create: async () => ({}), createMany: async () => ({}), deleteMany: async () => ({}) },
+    // Cupom ligado, mas de OUTRA loja — nenhum cupom aplicável a shopee.
+    clientCoupon: { findMany: async () => [couponRow({ platform: 'amazon' })] },
+  }
+
+  await runAutomation(automation, {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 1, offers: [{
+      itemId: '902', productName: 'Produto sem cupom ativo', priceMin: 100, priceDiscountRate: 0, offerLink: 'https://shope.ee/z',
+    }] }),
+    sendBroadcastFn: async (_userId, text) => sent.push(text),
+  })
+
+  assert.equal(sent.length, 1)
+  assert.doesNotMatch(sent[0], /\{cupom\}/)
+  assert.doesNotMatch(sent[0], /\n{3,}/)
+  assert.doesNotMatch(sent[0], /\(\s*\)/)
+})
+
+test('runAutomation: falha ao carregar os cupons no início da execução NÃO aborta o laço', async () => {
+  const sent = []
+  const automation = baseAutomation({
+    id: 'auto-coupon-load-fails', userId: 'user-x', useCoupons: true, offersPerSend: 2,
+  })
+  const dbOverride = {
+    ...credOk,
+    clientCoupon: { findMany: async () => { throw new Error('banco indisponível') } },
+  }
+
+  const result = await runAutomation(automation, {
+    dbOverride,
+    isRunningFn: () => true,
+    fetchOffersFn: async () => ({ rawCount: 2, offers: [
+      { itemId: '910', productName: 'Produto A', priceMin: 50, priceDiscountRate: 30, offerLink: 'https://shope.ee/a' },
+      { itemId: '911', productName: 'Produto B', priceMin: 60, priceDiscountRate: 30, offerLink: 'https://shope.ee/b' },
+    ] }),
+    sendBroadcastFn: async (_userId, text) => sent.push(text),
+  })
+
+  assert.equal(result.sent, 2)
+  assert.equal(sent.length, 2)
 })

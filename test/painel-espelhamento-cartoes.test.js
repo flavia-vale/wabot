@@ -181,6 +181,21 @@ test('a aba Grupos tem as duas colunas, e cada card abre o painel lateral', () =
   assert.doesNotMatch(page, /expandedConfigId/, 'a configuração voltou a abrir dentro da lista')
 })
 
+test('grupos e conexões vivem na mesma página, sem seletor entre as duas visões', () => {
+  const cols = page.indexOf('className="pnl-grid pnl-esp-cols"')
+  const connections = page.indexOf('className="pnl-card pnl-esp-connections"')
+  assert.ok(cols > -1 && connections > cols, 'o mapa de conexões precisa aparecer abaixo das listas')
+  assert.doesNotMatch(page, /setTab\('conexoes'\)|aria-label="Ver como listas ou como mapa de conexões"/)
+  assert.match(page, /ADICIONAR NOVO ESPELHAMENTO/)
+})
+
+test('cards resumem a configuração que muda a publicação', () => {
+  const cartao = page.slice(page.indexOf('function GroupCard('), page.indexOf('function GroupColumn('))
+  assert.match(cartao, /card\.messageModeLabel/, 'origem precisa dizer mensagem original ou template')
+  assert.match(cartao, /Imagem: \{card\.imageModeLabel\}/, 'destino precisa dizer o modo da imagem')
+  assert.doesNotMatch(cartao, /esp-loja/, 'ícones de lojas não devem voltar ao card de origem')
+})
+
 test('o cartão da origem continua sendo montado pela regra pura', () => {
   // O cálculo de destinos/lojas/ofertas do dia é o MESMO do cartão de 2026-09-19;
   // reescrevê-lo na tela faria cartão e mapa discordarem sobre a mesma origem.
@@ -213,7 +228,10 @@ test('no celular as duas colunas viram uma lista só, com seletor', () => {
   assert.match(page, /Destinos \(\{post\.length\}\)/)
   const mobile = css.slice(css.indexOf('@media (max-width: 760px)'))
   assert.match(mobile, /\.pnl-esp-cols \{ grid-template-columns: 1fr/)
-  assert.match(mobile, /\.pnl-esp-mobile-switch \{ display: inline-flex/)
+  // O seletor precisa APARECER aqui (fora do celular ele é `display: none`).
+  // Qual display ele usa é decisão de desenho — em 2026-09-19 virou `flex` de
+  // largura total; o teste abaixo, "ocupa a tela toda", é quem trava isso.
+  assert.match(mobile, /\.pnl-esp-mobile-switch \{\s*\n?\s*display: (?!none)/)
   assert.match(mobile, /\.pnl-esp-col\.is-hidden-mobile \{ display: none/)
 })
 
@@ -222,7 +240,164 @@ test('a gaveta vira folha de tela cheia no celular, sem largura fixa', () => {
   // (RCA 2026-09-05, test/dialogos-no-celular.test.js).
   const mobile = css.slice(css.indexOf('@media (max-width: 560px)', css.indexOf('.pnl-drawer {')))
   assert.match(mobile, /\.pnl-drawer \{[^}]*width: 100%/s)
-  assert.match(mobile, /\.pnl-drawer-head \{[^}]*position: sticky/s)
+  // `position: sticky` no cabeçalho SAIU (2026-09-19): ele vive fora do que
+  // rola, então nunca grudava em nada — e era o único elemento posicionado
+  // ali, o que deixava o empilhamento com surpresa. Quem segura a gaveta hoje
+  // é o contrato flex do teste abaixo.
+  assert.doesNotMatch(css, /\.pnl-drawer-head \{[^}]*position: sticky/s)
   // As abas do painel precisam rolar de lado em vez de espremer.
   assert.match(css, /\.pnl-drawer-tabs \{[^}]*overflow-x: auto/s)
+})
+
+/* ── Celular: o que foi MEDIDO em 375px (2026-09-19) ───────────────────
+ * Antes destas regras sobravam 108px para o texto do card — o nome, o
+ * "envia para" e as lojas saíam picados em 5 ou 6 linhas, e "Cabeleireira"
+ * quebrava no meio. Depois: 215px. Cada asserção abaixo guarda um pedaço
+ * dessa medição. */
+
+test('o nome do card tem tamanho próprio e não parte palavra no meio', () => {
+  // `overflow-wrap: anywhere` parte a palavra assim que ela não cabe na SOBRA
+  // da linha; `break-word` só parte a que sozinha não cabe na linha inteira.
+  // E sem `font-size` o nome herdava 16px, maior que o do card antigo.
+  assert.match(css, /\.pnl-esp-card-name \{[^}]*font-size: \d/s, 'nome sem tamanho próprio volta a herdar 16px')
+  assert.match(css, /\.pnl-esp-card-name \{[^}]*overflow-wrap: break-word/s)
+  assert.doesNotMatch(
+    css,
+    /\.pnl-esp-card-name \{[^}]*overflow-wrap: anywhere/s,
+    'anywhere volta a quebrar "Cabeleireir/a" no meio',
+  )
+})
+
+test('no celular sai a engrenagem e a pílula, não o alvo de toque', () => {
+  const mobile = css.slice(css.indexOf('@media (max-width: 560px)', css.indexOf('.pnl-esp-card {')))
+  // Dois alvos lado a lado em 36px só produzem toque errado: o card inteiro
+  // já abre a configuração.
+  assert.match(mobile, /\.pnl-esp-gear,\s*\n\s*\.pnl-esp-pill \{ display: none/)
+  // A seta entra como sinal visual e NÃO como segundo botão.
+  assert.match(mobile, /\.pnl-esp-card-chevron \{ display: inline-flex/)
+  const cartao = page.slice(page.indexOf('function GroupCard('), page.indexOf('function GroupColumn('))
+  const hit = cartao.slice(cartao.indexOf('pnl-esp-card-hit'), cartao.indexOf('</button>'))
+  assert.match(hit, /className="pnl-esp-card-chevron" aria-hidden="true"/, 'a seta precisa viver DENTRO do alvo de toque')
+})
+
+test('o cabeçalho da coluna empilha no celular', () => {
+  // Em linha, o "+ Adicionar" ficava com ~90px e o rótulo quebrava
+  // ("Adicio/nar").
+  const mobile = css.slice(css.indexOf('@media (max-width: 760px)'))
+  assert.match(mobile, /\.pnl-esp-col-head \{[^}]*flex-direction: column/s)
+})
+
+test('a linha de fluxo do card é <span>: <div> não vale dentro de <button>', () => {
+  const flow = page.slice(page.indexOf('function FlowLine('), page.indexOf('function GroupCard('))
+  assert.doesNotMatch(flow, /<div className="pnl-esp-flow"/)
+  assert.match(flow, /<span className="pnl-esp-flow"/)
+})
+
+test('o corpo da gaveta não pode ser grid — a seção encolhe e corta', () => {
+  // `.cfg-section` tem `overflow: hidden`, então o tamanho mínimo automático
+  // dela vira zero e num grid de altura definida a linha encolhe. Medido em
+  // 375px: a seção de destinos ficava com 257px para 398px de conteúdo e a
+  // lista saía cortada no meio de um nome.
+  assert.match(css, /\.pnl-drawer-body \{[^}]*display: flex/s)
+  assert.doesNotMatch(css, /\.pnl-drawer-body \{[^}]*display: grid/s)
+  assert.match(css, /\.pnl-drawer-body > \* \{ flex: 0 0 auto/)
+})
+
+test('no celular "Excluir grupo" não fica encostado em "Salvar"', () => {
+  // Em linha, a ação que apaga o grupo caía na mesma faixa do polegar que a
+  // que salva. `column-reverse` inverte só a pintura — a ordem do DOM (e do
+  // leitor de tela) continua Excluir → Salvar.
+  const mobile = css.slice(css.indexOf('@media (max-width: 560px)', css.indexOf('.pnl-drawer {')))
+  assert.match(mobile, /\.pnl-drawer-foot \{[^}]*flex-direction: column-reverse/s)
+})
+
+test('no celular os dois papéis do modal "Adicionar" cabem na tela', () => {
+  // Medido em 375px na régua de `.pnl-seg`: 429px de conteúdo para 315px de
+  // espaço — "Destino · o robô publica" nascia fora da tela e a pessoa não
+  // via que existia uma segunda opção.
+  assert.match(page, /className="pnl-seg pnl-esp-add-role"/)
+  const mobile = css.slice(css.indexOf('@media (max-width: 560px)', css.indexOf('.pnl-drawer {')))
+  assert.match(mobile, /\.pnl-esp-add-role \{[^}]*grid-template-columns: 1fr/s)
+})
+
+test('no celular a lista do modal não rola dentro da rolagem do modal', () => {
+  // Duas rolagens encaixadas: no toque a de dentro rouba o gesto da de fora.
+  assert.match(css, /\.pnl-esp-add-list \{[^}]*max-height: 240px/s, 'o teto continua valendo no computador')
+  const mobile = css.slice(css.indexOf('@media (max-width: 560px)', css.indexOf('.pnl-drawer {')))
+  assert.match(mobile, /\.pnl-esp-add-list \{ max-height: none/)
+})
+
+/* ── Segunda rodada de celular (2026-09-19) ────────────────────────────
+ * A cliente fotografou o cabeçalho da gaveta escrito por cima do texto da
+ * primeira seção, o "Salvar" do rodapé sem efeito nenhum e o seletor
+ * Origens|Destinos pequeno no meio da tela. */
+
+test('a gaveta é coluna flex com as pontas travadas e o meio rolando', () => {
+  // Reproduzido em 375x667 impedindo o corpo de rolar: sem estas duas regras
+  // o corpo (flex: 1, `min-height: auto`) se recusa a ficar menor que o
+  // conteúdo, empurra os irmãos — que encolhem, porque `flex-shrink` nasce 1 —
+  // e o texto da primeira seção sobe para dentro das abas e do cabeçalho.
+  assert.match(css, /\.pnl-drawer-head,\s*\n\s*\.pnl-drawer-tabs,\s*\n\s*\.pnl-drawer-foot \{ flex-shrink: 0; \}/)
+  assert.match(css, /\.pnl-drawer-body \{[^}]*min-height: 0/s)
+})
+
+test('botão desligado tem cara de desligado', () => {
+  // Sem isto o "Salvar" desligado ficava idêntico ao ligado: a cliente
+  // clicava e nada acontecia, sem nenhum sinal do porquê.
+  assert.match(css, /\.pnl-btn:disabled[^{]*\{[^}]*opacity/s)
+})
+
+test('o "Salvar" da gaveta só desliga enquanto salva, e ao salvar FECHA', () => {
+  const gaveta = page.slice(page.indexOf('function GroupDrawer('), page.indexOf('function AddGroupModal('))
+  assert.match(gaveta, /onClick=\{onSave\} disabled=\{saving\}/, 'o botão não pode voltar a desligar por "nada mudou"')
+  assert.doesNotMatch(gaveta, /disabled=\{!dirty/)
+
+  const salvar = page.slice(page.indexOf('async function handleDrawerSave()'), page.indexOf('async function handleLoadWA()'))
+  assert.match(salvar, /setDrawerId\(null\)/, 'salvar precisa fechar a gaveta')
+  // Fechar por cima de um erro esconderia que nada foi para o servidor.
+  assert.match(salvar, /if \(ok === false\) return/)
+})
+
+test('a aba "Anti-ban" saiu do destino e a saúde do canal ficou', () => {
+  const abas = page.slice(page.indexOf('const DEST_TABS'), page.indexOf('const GRADIENTS'))
+  assert.doesNotMatch(abas, /antiban|Anti-ban/)
+  assert.match(abas, /key: 'imagem'/)
+  assert.match(abas, /key: 'mensagens'/)
+  // O painel de saúde do canal é configuração de verdade — não pode sumir junto.
+  assert.match(page, /<ChannelHealthPanel/)
+  // Aba desconhecida (a antiga, guardada no estado) não pode abrir em branco.
+  assert.match(page, /const drawerTabSafe = drawerTabs\.some/)
+})
+
+test('no celular o seletor Origens|Destinos ocupa a tela toda', () => {
+  const mobile = css.slice(css.indexOf('@media (max-width: 760px)'))
+  const bloco = mobile.slice(mobile.indexOf('.pnl-esp-mobile-switch {'))
+  assert.match(bloco, /width: 100%/)
+  assert.doesNotMatch(bloco.slice(0, bloco.indexOf('}')), /display: inline-flex/)
+  // Alvo de toque: como régua de 26px ele era enfeite, não navegação.
+  assert.match(mobile, /\.pnl-esp-mobile-switch button \{[^}]*min-height: 44px/s)
+})
+
+test('a janela "Adicionar" tem cabeçalho preso e corpo rolando', () => {
+  // Com a lista de grupos do WhatsApp inteira dentro dela, era o modal todo
+  // que rolava: o título e o "fechar" saíam da tela. Medido em 375px com 10
+  // grupos — depois de rolar 662px o cabeçalho continua em y12.
+  assert.match(page, /className="pnl-esp-add-head"/)
+  assert.match(page, /className="pnl-esp-add-body"/)
+  assert.match(css, /\.pnl-esp-add \{[^}]*flex-direction: column/s)
+  assert.match(css, /\.pnl-esp-add \{[^}]*overflow: hidden/s)
+  // Mesma receita da gaveta: ponta travada, meio podendo encolher até zero.
+  assert.match(css, /\.pnl-esp-add-head \{[^}]*flex-shrink: 0/s)
+  assert.match(css, /\.pnl-esp-add-body \{[^}]*min-height: 0/s)
+  assert.match(css, /\.pnl-esp-add-body \{[^}]*overflow-y: auto/s)
+})
+
+test('janela alta no celular respeita a barra do navegador', () => {
+  // `100vh` e o `inset: 0` de um elemento fixo NÃO descontam a barra de
+  // endereço nem a barra de baixo: a janela nasce por baixo delas e o título
+  // fica ilegível. `dvh` desconta. Navegador sem suporte ignora a linha, por
+  // isso a versão em `vh` fica antes, como plano B.
+  assert.match(css, /\.pnl-modal-overlay \{ height: 100dvh; \}/)
+  assert.match(css, /\.pnl-drawer-overlay \{ height: 100dvh; \}/)
+  assert.match(css, /\.pnl-esp-add \{[^}]*max-height: calc\(100vh - 40px\);[^}]*max-height: calc\(100dvh - 40px\)/s)
 })

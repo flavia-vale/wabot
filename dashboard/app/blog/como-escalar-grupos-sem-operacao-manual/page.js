@@ -8,7 +8,7 @@ const slug = '/blog/como-escalar-grupos-sem-operacao-manual'
 const dates = getEditorialDates(slug)
 
 const faq = [
-  { q: 'Como escalar grupos sem perder controle?', a: 'Comece com poucos grupos, padronize fonte, copy e destino, use intervalos responsáveis e revise logs antes de aumentar volume.' },
+  { q: 'Como escalar grupos sem perder controle?', a: 'Comece com poucos grupos, padronize fonte, texto e destino, use intervalos responsáveis e revise o histórico de envios antes de aumentar o volume.' },
   { q: 'Automação substitui a operação manual?', a: 'Não. Ela reduz tarefas repetitivas, mas a curadoria, aprovação da oferta e revisão das regras continuam sendo humanas.' },
   { q: 'Qual métrica acompanhar primeiro?', a: 'Acompanhe tempo até o primeiro envio correto, falhas de envio, grupo de destino, horário e aderência da mensagem ao público.' },
 ]
@@ -28,11 +28,11 @@ export default function Page() {
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <ArticleShell eyebrow="Conteúdo de dor · Cluster 1" title={title} description={description} origin="artigo_escalar_grupos_sem_operacao_manual" publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
+      <ArticleShell eyebrow="Operação · Escalar grupos" title={title} description={description} origin="artigo_escalar_grupos_sem_operacao_manual" publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
         <section>
           <h2>Resposta direta</h2>
           <p>
-            Para escalar grupos sem operação manual, documente o fluxo de fonte, roteiro, distribuição e monitoramento; automatize apenas a etapa repetitiva; e acompanhe logs para validar se a mensagem certa chegou ao grupo certo no horário planejado.
+            Para escalar grupos sem operação manual, documente o fluxo de fonte, roteiro, distribuição e monitoramento; automatize apenas a etapa repetitiva; e acompanhe o histórico de envios para validar se a mensagem certa chegou ao grupo certo no horário planejado.
           </p>
         </section>
 
@@ -55,7 +55,7 @@ export default function Page() {
             <li><strong>Monitoramento:</strong> acompanhe envio, falha, timing e primeira conversão para ajustar a cadência.</li>
           </ol>
           <p>
-            O Espelha Grupos entra na terceira e quarta camadas: replica a mensagem para múltiplos destinos, reduz retrabalho e mantém logs para o operador saber se a rotina foi executada.
+            O Espelha Grupos entra na terceira e na quarta camadas: acompanha as origens que você escolhe, troca cada link pelo seu código de afiliada em Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress, publica nos destinos com intervalo entre os envios e guarda o histórico do que saiu, do que foi bloqueado por repetição e do que falhou.
           </p>
         </section>
 
@@ -78,7 +78,7 @@ export default function Page() {
             Para uma operação de ofertas, ativação não é apenas criar conta. A métrica que importa é chegar ao primeiro espelhamento correto: mensagem certa, no grupo certo, com link certo e no horário combinado.
           </p>
           <p>
-            O objetivo do sprint de lançamento é reduzir esse caminho para menos de 15 minutos. Por isso, o checklist ao lado força o operador a organizar fonte, destinos, copy e critérios antes de ampliar volume.
+            Com uma ferramenta pronta, esse caminho é curto: ler o QR Code, escolher origens e destinos, cadastrar o código de afiliada de cada loja e conferir o primeiro envio no histórico. O checklist ao lado ajuda a organizar fonte, destinos e texto antes de aumentar o volume.
           </p>
         </section>
 

@@ -52,8 +52,8 @@ const faq = [
     a: 'Hoje o painel de vendas cobre a Shopee. A conversão de links funciona em seis lojas — Mercado Livre, Amazon, Shopee, Magalu, SHEIN e AliExpress —, mas a leitura de vendas e comissão dentro do produto é da Shopee. Para as demais, o relatório continua sendo o da própria loja.',
   },
   {
-    q: 'Preciso do plano mais caro para ver as vendas?',
-    a: 'Não. O painel de vendas está em todos os planos, incluindo o Basic e os 7 dias de teste grátis. Não é um recurso vendido à parte.',
+    q: 'Em qual plano o painel de vendas está?',
+    a: 'No plano Pro (R$ 69 a cada 30 dias) e nos 7 dias de teste grátis, que liberam tudo do Pro. O Basic não inclui o painel de vendas.',
   },
   {
     q: 'Por que a comissão estimada e a confirmada são diferentes?',
@@ -93,7 +93,7 @@ export default function Page() {
             <section>
               <h2>Resposta direta</h2>
               <p>O <strong>Espelha Grupos</strong> tem uma aba <strong>Vendas</strong> no painel que mostra, para as ofertas da Shopee publicadas pelo robô: pedidos atribuídos, itens comprados, valor vendido e <strong>comissão estimada e confirmada</strong>, com quebra por pedido e por produto.</p>
-              <p>Está em <strong>todos os planos</strong>, incluindo o Basic de R$ 39 e os 7 dias de teste grátis. <strong>BOTinho é o nome do robô do Espelha Grupos</strong> — mesmo produto, não são dois.</p>
+              <p>Está no <strong>plano Pro</strong> (R$ 69 a cada 30 dias) e nos 7 dias de teste grátis, que liberam tudo do Pro.</p>
             </section>
 
             <section>
@@ -137,7 +137,7 @@ export default function Page() {
               <ul>
                 <li><strong>Não é promessa de ganho.</strong> O painel mostra o que aconteceu. Quanto vai ser depende do seu público e do que você divulga — o produto não promete comissão nem aumento de vendas.</li>
                 <li><strong>Não é substituto do relatório da loja.</strong> A fonte final da sua comissão é sempre a Shopee. O painel serve para você ligar a venda à oferta que a gerou, coisa que o relatório da loja sozinho não faz.</li>
-                <li><strong>Não é recurso de plano caro.</strong> Está no Basic e no teste grátis.</li>
+                <li><strong>Não é pago à parte.</strong> Vem junto com o plano Pro, e dá para testar nos 7 dias grátis.</li>
               </ul>
             </section>
 

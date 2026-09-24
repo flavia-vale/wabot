@@ -254,6 +254,34 @@ Nada foi apagado: seus grupos, suas etiquetas de afiliada e suas configurações
 
 Se o robô não te atendeu como você esperava, responde este e-mail contando o que faltou — a gente quer saber de verdade.`,
   },
+  {
+    // Irmão de `teste_acabou`, para quem já teve oferta publicada no teste
+    // (medição de 2026-09-23: 62 contas usaram o robô de verdade e não
+    // pagaram — o maior grupo depois de quem nunca conectou). A escolha entre
+    // os dois é feita em `lifecyclePolicy.js` (`applyExpiredTrialProof`), pela
+    // mesma regra pura de `trialProof.js`; nunca sai junto com `teste_acabou`
+    // no mesmo dia — são o mesmo passo da jornada, o `de`/`ate` continua em
+    // `expiredTrialJourney.js`.
+    slug: 'teste_acabou_com_prova',
+    name: 'Teste grátis acabou (já teve oferta publicada)',
+    description: 'Sai no lugar de "Teste grátis acabou" quando a conta já teve ao menos uma oferta publicada no teste — mostra o que o robô já fez, em vez do aviso genérico.',
+    group: 'conta',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 30,
+    variables: [VAR_OFERTAS, VAR_MENSAGENS, VAR_GRUPOS],
+    title: 'Seu teste acabou — e ele já tinha funcionado',
+    subject: 'Seu robô publicou {{ofertas_publicadas}} ofertas antes de parar',
+    body: `{{saudacao}} Seus 7 dias de teste terminaram e o robô parou de enviar suas ofertas.
+
+Antes de parar, ele publicou **{{ofertas_publicadas}} ofertas** em {{grupos}} grupo(s) — **{{mensagens_poupadas}} mensagens** que você não precisou copiar, colar nem converter uma por uma, cada uma com a sua etiqueta de afiliada.
+
+Nada foi apagado: seus grupos, suas etiquetas de afiliada e suas configurações continuam salvos do jeito que você deixou. Escolher um plano só religa o envio.
+
+[[botao:Continuar com o robô|{{link_planos}}]]
+
+Se alguma coisa não funcionou como você esperava, responde este e-mail contando o que foi — a gente quer saber de verdade.`,
+  },
   // Jornada de quem testou e não assinou: dias 3, 5 e 7 depois do fim do teste.
   // Até 2026-09-19 a conta recebia SÓ o aviso acima e nunca mais nada, com tudo
   // dela ainda guardado no sistema. Os dias, o espaçamento e o fim da jornada

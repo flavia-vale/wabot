@@ -4,6 +4,35 @@ import { shouldConvertCouponLinks } from './couponPolicy.js'
 
 const ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql'
 
+// Códigos com que a Shopee recusa a CHAVE INTEIRA. Só estes viram
+// `alive:false` na sondagem — que dispara o e-mail `chave_shopee_recusada`
+// ("as ofertas da Shopee pararam de sair"). Qualquer outro código fica
+// INDETERMINADO: avisar que a cliente parou de vender quando não parou é pior
+// do que não avisar (mesma regra de `alive === null` em
+// credentialExpiry/policy.js). Código só entra aqui com MEDIÇÃO.
+//
+// 10020 = "Invalid Signature" (RCA 2026-08).
+// 10035 = "You currently do not have access to the Shopee Affiliate Open API
+//   Platform" (RCA 2026-09-23, conta nandavieiraf@gmail.com). Medido com a
+//   chave real, operação por operação: `productOfferV2` por palavra-chave,
+//   `productOfferV2` por produto e `generateShortLink` (a conversão do
+//   espelhamento) — as TRÊS devolvem 10035, enquanto a chave de outra conta,
+//   no mesmo instante, responde OK. Um App ID inventado também recebe 10035
+//   nas duas operações: é a resposta da Shopee para App ID que ela não
+//   reconhece. Nos envios da conta: 933 falhas de conversão + 923
+//   `skip:no_valid_conversions` contra 136 sucessos em 72h.
+//   ⚠️ Uma versão intermediária tirou 10035 daqui supondo que só o catálogo
+//   estava bloqueado ("o espelhamento continua funcionando"). A medição
+//   derrubou isso — não repetir sem medir `generateShortLink` com a chave.
+export const SHOPEE_AUTH_REJECTED_CODES = Object.freeze([10020, 10035])
+
+// Estágio de diagnóstico para um erro no corpo da resposta: separa chave
+// recusada (ação: recadastrar o App ID/chave) do erro genérico.
+function stageForShopeeApiError(apiError) {
+  const code = Number(apiError?.extensions?.code ?? apiError?.code)
+  return SHOPEE_AUTH_REJECTED_CODES.includes(code) ? 'shopee_chave_recusada' : 'shopee_api_erro'
+}
+
 // SubID fixo enviado em TODO link de afiliado que geramos. Não é configuração
 // de ambiente nem campo por cliente de propósito: é requisito de produto (todo
 // clique tem que cair no relatório da Shopee sob esta origem), e uma env
@@ -491,7 +520,7 @@ export async function fetchShopeeImage(url, creds, { onDiagnostic } = {}) {
     // Sem ler o corpo, chave recusada (10020) parecia "produto sem foto".
     const apiError = Array.isArray(data?.errors) ? data.errors[0] : null
     if (apiError) {
-      report('shopee_api_erro', apiError?.message || apiError?.code || 'erro sem detalhe')
+      report(stageForShopeeApiError(apiError), apiError?.message || apiError?.code || 'erro sem detalhe')
       return null
     }
     const node = data?.data?.productOfferV2?.nodes?.[0]
@@ -524,12 +553,27 @@ export function shopeeDecimalPriceToString(value) {
 // priceMax, priceDiscountRate, productName, imageUrl. NÃO existe `originPrice`
 // (pedir esse campo derruba a query inteira com erro 10010). O preço "de" é
 // derivado do preço atual + a taxa de desconto inteira (`priceDiscountRate`).
-export async function fetchShopeeProductInfo(url, creds) {
-  if (!creds?.appId || !creds?.secretKey) return null
+//
+// `onDiagnostic({ stage, detail })` é opcional e best-effort — mesmo contrato
+// de `fetchShopeeImage`. Até 2026-09-23 este caminho era tão MUDO quanto o da
+// foto era antes do RCA 2026-09-16: qualquer erro (chave recusada, item fora
+// do catálogo, API fora do ar) virava o MESMO `null`, e "Criar oferta" saía
+// sem nome nem preço sem uma linha de log sequer explicando por quê.
+export async function fetchShopeeProductInfo(url, creds, { onDiagnostic } = {}) {
+  const report = (stage, detail) => {
+    try { onDiagnostic?.({ stage, detail }) } catch {}
+  }
+  if (!creds?.appId || !creds?.secretKey) {
+    report('shopee_sem_credencial')
+    return null
+  }
   try {
     const canonical = await resolveCanonical(url)
     const ids = parseIds(canonical)
-    if (!ids) return null
+    if (!ids) {
+      report('shopee_sem_ids', canonical)
+      return null
+    }
 
     const body = {
       query: `{
@@ -545,8 +589,20 @@ export async function fetchShopeeProductInfo(url, creds) {
       headers: { Authorization: header, 'Content-Type': 'application/json' },
       timeout: 6000,
     })
+    // A API de afiliado responde 200 MESMO EM ERRO, sinalizando via `errors`
+    // (mesma armadilha da sondagem de credencial e da busca de foto). Sem ler
+    // o corpo, chave recusada ou sem acesso à plataforma (10020/10035) parecia
+    // "produto sem título/preço".
+    const apiError = Array.isArray(data?.errors) ? data.errors[0] : null
+    if (apiError) {
+      report(stageForShopeeApiError(apiError), apiError?.message || apiError?.code || 'erro sem detalhe')
+      return null
+    }
     const node = data?.data?.productOfferV2?.nodes?.[0]
-    if (!node) return null
+    if (!node) {
+      report('shopee_item_fora_do_catalogo', `${ids.shopId}/${ids.itemId}`)
+      return null
+    }
 
     const title = typeof node.productName === 'string' ? node.productName.trim() : ''
     const currentRaw = node.priceMin ?? node.price ?? null
@@ -561,9 +617,13 @@ export async function fetchShopeeProductInfo(url, creds) {
       oldPrice = shopeeDecimalPriceToString(current / (1 - rate / 100))
     }
 
-    if (!title && !newPrice) return null
+    if (!title && !newPrice) {
+      report('shopee_catalogo_sem_titulo_ou_preco', `${ids.shopId}/${ids.itemId}`)
+      return null
+    }
     return { title, newPrice, oldPrice }
-  } catch {
+  } catch (err) {
+    report('shopee_api_falhou', err?.message)
     return null
   }
 }
@@ -582,11 +642,8 @@ export async function fetchShopeeProductInfo(url, creds) {
 // checkAmazonSession — { configured, alive, reason } — para o aviso por e-mail
 // tratar as três lojas pelo mesmo caminho.
 
-// Códigos que a Shopee devolve quando a autenticação em si é recusada. Só estes
-// viram `alive:false`. Qualquer outro código fica INDETERMINADO: mandar a
-// cliente recadastrar uma chave viva é pior do que não avisar (mesma regra de
-// `alive === null` em credentialExpiry/policy.js).
-export const SHOPEE_AUTH_REJECTED_CODES = Object.freeze([10020])
+// `SHOPEE_AUTH_REJECTED_CODES` mora no topo do arquivo (com a medição que
+// decidiu cada código).
 
 // Consulta só de leitura, sem efeito colateral: não gera link nem grava nada do
 // lado da Shopee. O que importa é se a assinatura é aceita.

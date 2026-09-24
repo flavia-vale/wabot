@@ -387,6 +387,18 @@ test('sondagem Shopee: só "Invalid Signature" (10020) conta como chave recusada
   assert.deepEqual(classifyShopeeProbeResponse({ status: 200, errors: [{ code: 10020 }] }), rejeitada)
 })
 
+// RCA 2026-09-23 (nandavieiraf@gmail.com): medido com a chave real, 10035 sai
+// em `productOfferV2` E em `generateShortLink` (a conversão do espelhamento),
+// enquanto outra conta responde OK no mesmo instante. É a chave inteira sendo
+// recusada, com a mesma consequência do 10020.
+test('sondagem Shopee: "sem acesso à Affiliate Open API Platform" (10035) conta como chave recusada', () => {
+  const res = classifyShopeeProbeResponse({
+    status: 200,
+    errors: [{ message: 'error [10035]: You currently do not have access to the Shopee Affiliate Open API Platform', extensions: { code: 10035 } }],
+  })
+  assert.deepEqual(res, { configured: true, alive: false, reason: 'rejected' })
+})
+
 test('sondagem Shopee: qualquer outro erro fica INDETERMINADO (nunca alarma)', () => {
   for (const resposta of [
     { status: 200, errors: [{ extensions: { code: 90309999 } }] },

@@ -35,6 +35,7 @@ import { shouldUseCouponBrandCard, resolveCouponTextSignal } from './converters/
 import { isDirectVitrineShare } from './converters/mercadolivre.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
+import { downloadHighQualityLinkPreview } from './core/linkPreviewThumbnail.js'
 import { appendRelayFooter } from './core/relayFooter.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
@@ -47,7 +48,7 @@ import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
-import { shouldIgnoreChatJid, buildAllowedJidSet } from './core/ignoredJidPolicy.js'
+import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
@@ -72,6 +73,7 @@ import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrott
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
 import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
+import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -87,6 +89,7 @@ import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypin
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { convertPerPlatformSerially } from './core/conversionScheduler.js'
+import { chooseCoupon, renderCouponText, applyCouponToken, sanitizePriceCents } from './core/clientCouponPolicy.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
@@ -103,6 +106,18 @@ import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuaranti
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
+import {
+  resolveSelfWelcomePilotEmails,
+  isPilotEmail,
+  shouldSendSelfWelcomeMessage,
+  decideActivationNudge,
+  buildSelfWelcomeMessageText,
+  buildFirstOfferPublishedMessageText,
+  buildMissingCredentialNudgeText,
+  buildMissingGroupsNudgeText,
+  buildAdminSupportMessageText,
+} from './core/selfWelcomeMessage.js'
+import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from './tutorialVideo.js'
 import sharp from 'sharp'
 import { applySharpTuning } from './core/sharpTuning.js'
 
@@ -641,6 +656,7 @@ function startHeartbeatIpc() {
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
+    maybeSendActivationNudge().catch(() => {})
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
@@ -853,6 +869,144 @@ async function handlePhoneOwnership({ phone, sock }) {
   try { sock?.end?.(new Error('phone_reuse_blocked')) } catch { /* best-effort */ }
 }
 
+// Mensagem de boas-vindas pelo PRÓPRIO WhatsApp, na primeira conexão de
+// contas do PILOTO (ver src/core/selfWelcomeMessage.js — plano de reforço de
+// ativação, 2026-09-23). Best-effort e fail-safe: qualquer falha aqui não pode
+// derrubar a conexão real; a decisão de ENVIAR já foi tomada por quem chama
+// (precisa saber se `WaSession.phone` já tinha valor ANTES desta conexão).
+//
+// Toda mensagem pelo próprio WhatsApp (automática ou manual da admin) grava
+// em CustomerContactLog — a MESMA tabela do "Registrar contato de CS" — para
+// aparecer no histórico único da aba "Contato com cliente" e no drill-down
+// da cliente em /admin/clientes/[id]. Best-effort: falha aqui nunca pode
+// derrubar o envio real, que já aconteceu.
+async function logWhatsappSelfMessageContact({ reason, texto, actorUserId = null }) {
+  try {
+    await db.customerContactLog.create({
+      data: { userId, channel: 'whatsapp', reason, outcome: 'contacted', notes: texto, actorUserId },
+    })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err), reason }, 'Falha ao registrar contato de WhatsApp no histórico (best-effort)')
+  }
+}
+
+async function maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore }) {
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+    const deve = shouldSendSelfWelcomeMessage({ accountEmail: user?.email, hadPhoneBefore, pilotEmails })
+    if (!deve || !phone) return
+    const jid = `${phone}@s.whatsapp.net`
+    const texto = buildSelfWelcomeMessageText({ videoUrl: VIDEO_CADASTRO_ETIQUETAS_URL })
+    await sock.sendMessage(jid, { text: texto })
+    logger.info({ userId }, 'Mensagem de boas-vindas (piloto de ativação) enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_welcome_message_sent' })
+    logWhatsappSelfMessageContact({ reason: 'boas_vindas_conexao', texto })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de boas-vindas (piloto, best-effort)')
+  }
+}
+
+// Mensagem de "prova de valor" pelo PRÓPRIO WhatsApp, na 1ª oferta publicada
+// com sucesso (momento 2 — ver src/core/selfWelcomeMessage.js). Chamada só
+// quando `previousSuccessCount === 0`, no `onDone` do envio espelhado — é o
+// mesmo instante em que `first_send_success` já é gravado, então os dois
+// nascem juntos e nunca discordam sobre "foi a primeira".
+async function maybeSendFirstOfferMessage() {
+  try {
+    if (!activeSock) return
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+    if (!isPilotEmail(user?.email, pilotEmails)) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    const texto = buildFirstOfferPublishedMessageText()
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+    logger.info({ userId }, 'Mensagem de 1ª oferta publicada (piloto) enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_first_offer_message_sent' })
+    logWhatsappSelfMessageContact({ reason: 'primeira_oferta_publicada', texto })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de 1ª oferta (piloto, best-effort)')
+  }
+}
+
+// Throttle do nudge de ativação (momentos 3 e 4): a checagem roda a cada tick
+// do heartbeat (15s), mas só precisa AVALIAR de tempos em tempos — em escopo
+// de módulo pra sobreviver a reconexões dentro do MESMO worker (mesma lição
+// do msgRetryCounterCache).
+let lastActivationNudgeCheckAt = 0
+const ACTIVATION_NUDGE_CHECK_INTERVAL_MS = Math.max(
+  Number(process.env.SELF_ACTIVATION_NUDGE_CHECK_INTERVAL_MS || 30 * 60 * 1000),
+  5 * 60 * 1000,
+)
+const ACTIVATION_NUDGE_MIN_DELAY_MS = Math.max(
+  Number(process.env.SELF_ACTIVATION_NUDGE_MIN_DELAY_MS || 24 * 60 * 60 * 1000),
+  0,
+)
+
+// Nudge de ativação pelo PRÓPRIO WhatsApp — momentos 3 (falta etiqueta) e 4
+// (falta grupo), 24h depois da 1ª conexão (ver decideActivationNudge em
+// src/core/selfWelcomeMessage.js). Best-effort e fail-safe: qualquer falha
+// aqui é só logada, nunca afeta a sessão real.
+async function maybeSendActivationNudge() {
+  if (!activeSock) return
+  const now = Date.now()
+  if (now - lastActivationNudgeCheckAt < ACTIVATION_NUDGE_CHECK_INTERVAL_MS) return
+  lastActivationNudgeCheckAt = now
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const [user, firstConnected, credentialCount, groups, sentNudges] = await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { email: true } }),
+      db.analyticsEvent.findFirst({
+        where: { userId, event: 'whatsapp_connected' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      db.credential.count({ where: { userId } }),
+      db.group.findMany({ where: { userId }, select: { role: true } }),
+      db.analyticsEvent.findMany({ where: { userId, event: 'ops_self_activation_nudge_sent' }, select: { metadata: true } }),
+    ])
+    if (!isPilotEmail(user?.email, pilotEmails)) return
+    const connectedForMs = firstConnected?.createdAt ? now - firstConnected.createdAt.getTime() : null
+    const hasCredential = credentialCount > 0
+    const hasGroups = groups.some(g => g.role === 'monitor') && groups.some(g => g.role === 'post')
+    let sentCredentialNudge = false
+    let sentGroupsNudge = false
+    for (const row of sentNudges) {
+      try {
+        const kind = JSON.parse(row.metadata || '{}').kind
+        if (kind === 'missing_credential') sentCredentialNudge = true
+        if (kind === 'missing_groups') sentGroupsNudge = true
+      } catch { /* linha antiga sem metadata legível: ignora */ }
+    }
+    const kind = decideActivationNudge({
+      accountEmail: user?.email,
+      pilotEmails,
+      connectedForMs,
+      minDelayMs: ACTIVATION_NUDGE_MIN_DELAY_MS,
+      hasCredential,
+      hasGroups,
+      sentCredentialNudge,
+      sentGroupsNudge,
+    })
+    if (!kind) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    const texto = kind === 'missing_credential'
+      ? buildMissingCredentialNudgeText({ videoUrl: VIDEO_CADASTRO_ETIQUETAS_URL })
+      : buildMissingGroupsNudgeText({ videoUrl: VIDEO_ATIVACAO_ROBO_URL })
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+    logger.info({ userId, kind }, 'Nudge de ativação (piloto) enviado para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_activation_nudge_sent', metadata: { kind } })
+    logWhatsappSelfMessageContact({ reason: kind === 'missing_credential' ? 'lembrete_sem_etiqueta' : 'lembrete_sem_grupo', texto })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao avaliar/enviar nudge de ativação (piloto, best-effort)')
+  }
+}
+
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -930,7 +1084,22 @@ async function loadConfig() {
   const preservation = await getAdvancedPreservationAccess(userId, { db })
   // Efetivo = plano permite (Pro/Trial) E o usuário ligou o flag mestre opt-in.
   const preservationActive = isPreservationActive(preservation, botConfig)
-  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive }
+
+  // Cupons da própria cliente (specs/017-client-coupon-catalog, D1 da pesquisa):
+  // uma consulta a mais por CARGA de config (mesmo TTL de CONFIG_CACHE_TTL_MS
+  // das demais, ~60s), NUNCA por envio — processSendJob já chama getConfig()
+  // hoje, então ler os cupons daqui não acrescenta consulta nenhuma no
+  // caminho de envio (FR-028a/SC-009). Só os LIGADOS entram: a validade em si
+  // é comparada com o relógio a cada envio pela regra pura (chooseCoupon), não
+  // aqui — só o ligado/desligado tem a janela de até CONFIG_CACHE_TTL_MS.
+  let coupons = []
+  try {
+    coupons = await db.clientCoupon.findMany({ where: { userId, enabled: true } })
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao carregar cupons da cliente; ofertas seguem sem cupom até a próxima carga')
+  }
+
+  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive, coupons }
 }
 
 async function getConfig() {
@@ -1021,6 +1190,10 @@ async function checkScheduledMessages() {
           delayMs: 0,
           typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward: scheduledChannelForward,
+          // Agendado sai com cupom igual ao "Enviar agora" (decisão da dona do
+          // produto, 2026-09-23). O cupom é escolhido quando a mensagem SAI,
+          // não quando foi agendada: vencido ou desligado até lá, não sai.
+          couponContext: couponContextFromText(msg.text, msg.couponPriceCents),
           ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
           onDone: async (result) => {
             state.remaining--
@@ -1147,7 +1320,8 @@ async function monitorSilenceWatchdog() {
   await triggerWaGroupsRefresh('silence_watchdog')
 }
 
-const AD_TEXT = '💡 Bot gerenciado pelo Bot Conversor para Afiliados — automatize seus grupos de afiliados'
+// Marca única do produto (decisão 2026-09-23: "Espelha Grupos em tudo").
+const AD_TEXT = '💡 Bot gerenciado pelo Espelha Grupos — automatize seus grupos de afiliados'
 function envNumber(name, fallback) {
   if (process.env[name] === undefined) return fallback
   const value = Number(process.env[name])
@@ -1251,6 +1425,26 @@ const WA_GROUP_DESYNC_ESCALATE_THRESHOLD = Math.max(0, envNumber('WA_GROUP_DESYN
 let groupDecryptTimestamps = new Map()
 let groupAutoRefreshTimestamps = new Map()
 const groupLastAutoRefreshAtByJid = new Map()
+// Camada 3-B (RCA 2026-09-23): CANAL (@newsletter) dessincronizado nunca é
+// curado pelo refresh de grupo (não é grupo) nem pela quarentena por msgId em
+// `msgRetryCounterCache` (cada mensagem nova do canal tem um id DIFERENTE —
+// "o mesmo id repetir" nunca acontece). Medido em produção: dois canais
+// diferentes derrubaram a MESMA conta duas vezes em menos de 2h, e 63% da
+// frota tinha o mesmo sintoma de decrypt-fail crônico. Reaproveita o MESMO
+// detector (`registerStuckMessageAndDecide`/`groupDecryptTimestamps`, acima)
+// — só a AÇÃO muda: em vez de tentar re-sincronizar (não existe refresh de
+// sender-key de canal exposto pelo Baileys), colocamos o canal numa
+// quarentena EM MEMÓRIA por uma janela — `shouldIgnoreJid` passa a ACKar e
+// descartar mensagens dele ANTES do decrypt (mesmo mecanismo do
+// WA_IGNORE_UNMONITORED_GROUPS), a sessão para de cair por causa dele, e ao
+// expirar a janela ele volta a ser processado normalmente. Default OFF:
+// validar em staging antes de ligar em produção. Canal na allowlist (fonte
+// monitorada de propósito) nunca entra em quarentena — ver shouldIgnoreDesyncedChannel.
+const WA_CHANNEL_DESYNC_QUARANTINE_ENABLED = ['1', 'true'].includes(String(process.env.WA_CHANNEL_DESYNC_QUARANTINE_ENABLED || '').trim().toLowerCase())
+const WA_CHANNEL_DESYNC_QUARANTINE_TTL_MS = Math.max(5 * 60_000, envNumber('WA_CHANNEL_DESYNC_QUARANTINE_TTL_MS', WA_GROUP_DESYNC_WINDOW_MS))
+// jid normalizado -> timestamp (ms) de quando entrou em quarentena. Escopo de
+// módulo pela mesma razão de groupDecryptTimestamps.
+const desyncedChannelJids = new Map()
 // Keep-alive do socket: sem ping periódico, um socket morto silenciosamente só
 // é detectado tarde, causando reconexão (e nova notificação). 25s é conservador.
 const WA_KEEPALIVE_INTERVAL_MS = Math.max(10_000, envNumber('WA_KEEPALIVE_INTERVAL_MS', 25_000))
@@ -1655,6 +1849,24 @@ function handleGroupDecryptSignal(args) {
     })
     groupDecryptTimestamps = r.state
     if (!r.stuck) return
+    // Canal (@newsletter): nunca tenta o refresh de grupo (não se aplica) —
+    // coloca em quarentena em memória e para por aqui. Ver comentário na
+    // declaração de WA_CHANNEL_DESYNC_QUARANTINE_ENABLED.
+    if (jid.endsWith('@newsletter')) {
+      if (!WA_CHANNEL_DESYNC_QUARANTINE_ENABLED) return
+      const normalizedJid = normalizeJidForMatch(jid)
+      if (allowedChatJids.has(normalizedJid)) return
+      const alreadyQuarantined = desyncedChannelJids.has(normalizedJid)
+      desyncedChannelJids.set(normalizedJid, now)
+      if (alreadyQuarantined) return
+      logger.warn(
+        { jid, decryptFailures: r.count, windowMs: WA_GROUP_DESYNC_WINDOW_MS, ttlMs: WA_CHANNEL_DESYNC_QUARANTINE_TTL_MS },
+        'Canal com falhas de decrypt repetidas (sender-key dessincronizada) — ignorando mensagens desse canal temporariamente para não derrubar a sessão'
+      )
+      const channelName = groupSubjectByJid.get(normalizeJidForMatch(jid)) || null
+      try { recordOperationalSignal('wa_channel_desync_quarantine', { userId, jid, name: channelName, count: r.count }) } catch {}
+      return
+    }
     const lastRefreshAt = groupLastAutoRefreshAtByJid.get(jid) || 0
     if (now - lastRefreshAt < WA_GROUP_DESYNC_REFRESH_COOLDOWN_MS) return
     groupLastAutoRefreshAtByJid.set(jid, now)
@@ -1682,6 +1894,21 @@ function handleGroupDecryptSignal(args) {
       })
       .catch(() => {})
   } catch {}
+}
+
+// Consultado pelo shouldIgnoreJid do socket (abaixo) a cada mensagem — decide
+// se ESTE jid está, agora, na quarentena de canal dessincronizado. Puro na
+// decisão (delegada a shouldIgnoreDesyncedChannel); só faz a leitura impura do
+// Map + normalização do jid, que fica de fora da função pura por vir do
+// socket em formato variável (às vezes com sufixo de device).
+function isChannelDesyncQuarantined(jid) {
+  const normalizedJid = normalizeJidForMatch(jid)
+  return shouldIgnoreDesyncedChannel(jid, {
+    enabled: WA_CHANNEL_DESYNC_QUARANTINE_ENABLED,
+    quarantinedAt: desyncedChannelJids.get(normalizedJid),
+    ttlMs: WA_CHANNEL_DESYNC_QUARANTINE_TTL_MS,
+    allowedJids: allowedChatJids,
+  })
 }
 
 // Envelopa o logger pino do Baileys (e seus filhos) para incrementar o contador
@@ -1913,13 +2140,19 @@ function reportWatermarkMissing(stage, ctx = {}) {
 // mudar de tamanho conforme a loja/foto que originou a oferta. Tela desligada
 // (`PREVIEW_CARD_CANVAS=off`) ou composição que falha caem no caminho
 // histórico: melhor card de tamanho irregular do que oferta sem foto.
-async function prepararFotoDoCard(buf) {
+async function prepararFotoDoCard(buf, { upscale = true } = {}) {
   if (!buf?.length) return null
-  const tela = await composePreviewCardImage(buf).catch(() => null)
-  if (tela?.main && tela?.thumbnail) return { buffer: tela.main, jpegThumbnail: tela.thumbnail }
-  const normalized = await normalizeImageForWhatsApp(buf)
+  // A ordem é a correção: medir/ampliar a FOTO enquanto ela ainda tem suas
+  // dimensões reais; só depois montar o canvas 1080px. Se inverter, o guard vê
+  // o canvas grande e mantém o produto como selo pequeno no centro.
+  const preparada = upscale ? await upscaleCardPhotoIfTiny(buf) : { buffer: buf, upscaled: null }
+  const tela = await composePreviewCardImage(preparada.buffer).catch(() => null)
+  if (tela?.main && tela?.thumbnail) return { buffer: tela.main, jpegThumbnail: tela.thumbnail, upscaled: preparada.upscaled }
+  // Com a tela desligada/falhando, normalize recebe a mesma fonte já preparada
+  // (ele nunca amplia de propósito).
+  const normalized = await normalizeImageForWhatsApp(preparada.buffer)
   if (!normalized?.jpegThumbnail) return null
-  return { buffer: normalized.buffer || normalized.jpegThumbnail, jpegThumbnail: normalized.jpegThumbnail }
+  return { buffer: normalized.buffer || normalized.jpegThumbnail, jpegThumbnail: normalized.jpegThumbnail, upscaled: preparada.upscaled }
 }
 
 function kindDoCard(fonte) {
@@ -1990,7 +2223,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // que o WhatsApp desenha ANTES de baixar, e de tamanho diferente do card de
     // produto. Passa pela MESMA tela fixa das fotos, para o card de cupom não
     // sair maior/menor que o card da oferta ao lado dele no grupo.
-    const telaBanner = banner ? await prepararFotoDoCard(banner) : null
+    const telaBanner = banner ? await prepararFotoDoCard(banner, { upscale: false }) : null
     jpegThumbnail = telaBanner?.jpegThumbnail || (banner ? await buildInlineThumbnail(banner).catch(() => banner) : undefined)
     hqSourceBuffer = telaBanner?.buffer || banner
     if (banner) marcarFonte('banner')
@@ -2020,7 +2253,10 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         }
         jpegThumbnail = preparada?.jpegThumbnail || undefined
         hqSourceBuffer = preparada?.buffer || jpegThumbnail
-        if (jpegThumbnail) marcarFonte('loja')
+        if (jpegThumbnail) {
+          marcarFonte('loja')
+          if (preparada?.upscaled) logger.info({ platform: primary?.platform, sourceUrl, de: preparada.upscaled.from, para: preparada.upscaled.to }, 'Card de preview: foto pequena ampliada antes de montar a tela')
+        }
       } catch (err) {
         reportPreviewCardNoImage('download_falhou', { platform: primary.platform, imageUrl, sourceUrl, err: err?.message })
       }
@@ -2052,6 +2288,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
         jpegThumbnail = preparada.jpegThumbnail
         hqSourceBuffer = preparada.buffer
         marcarFonte('origem')
+        if (preparada.upscaled) logger.info({ platform: primary?.platform, sourceUrl, de: preparada.upscaled.from, para: preparada.upscaled.to }, 'Card de preview: foto pequena ampliada antes de montar a tela')
         // Sinal PRÓPRIO (não é `ops_preview_card_no_image`): aqui a oferta SAIU
         // com card e com foto. Misturar os dois esconderia justamente o número
         // que interessa — quantas ofertas o plano B salvou, e de qual loja.
@@ -2062,25 +2299,6 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
       // Best-effort: o plano B falhando devolve o caso ao estado que já era o
       // atual (card descartado, texto puro). Nunca derruba o envio.
       logger.warn({ err: err?.message, sourceUrl }, 'Card de preview: plano B da foto de origem falhou')
-    }
-  }
-
-  // FOTO PEQUENA VIRANDO SELO NO CARD (RCA 2026-09-18).
-  //
-  // `prepareWAMessageMedia` grava no proto as dimensões REAIS do buffer que
-  // sobe, e o WhatsApp desenha o card nesse tamanho — foto de poucas centenas
-  // de pixels sai como um quadradinho no centro, cercada por uma ampliação
-  // borrada dela mesma (print da cliente). Acontece sobretudo no plano B da
-  // foto de origem, que costuma ser a miniatura embutida do card da origem
-  // (medido: 5.539 bytes). Ver `core/cardPhotoUpscalePolicy.js`.
-  //
-  // Fica FORA do banner de cupom de propósito: ele já nasce em 720x720, com
-  // tamanho escolhido, e não é foto de produto.
-  if (hqSourceBuffer && !useCouponBrandCard) {
-    const { buffer: ampliada, upscaled } = await upscaleCardPhotoIfTiny(hqSourceBuffer)
-    if (upscaled) {
-      hqSourceBuffer = ampliada
-      logger.info({ platform: primary?.platform, sourceUrl, de: upscaled.from, para: upscaled.to }, 'Card de preview: foto pequena ampliada para o card não sair como selo')
     }
   }
 
@@ -2205,10 +2423,10 @@ async function buildBroadcastLinkPreview({ text, destJid, jpegThumbnail, hqBuffe
   // a proporção que a loja usa, e sem isto cada oferta da fila sai com um card
   // de tamanho diferente. A miniatura embutida é refeita a partir da imagem
   // composta — divergir dela traria de volta o "muda de tamanho ao carregar".
-  const tela = hqBuffer ? await composePreviewCardImage(hqBuffer).catch(() => null) : null
-  if (tela?.main && tela?.thumbnail) {
-    thumb = tela.thumbnail
-    hq = tela.main
+  const preparada = hqBuffer ? await prepararFotoDoCard(hqBuffer) : null
+  if (preparada?.buffer && preparada?.jpegThumbnail) {
+    thumb = preparada.jpegThumbnail
+    hq = preparada.buffer
   } else if (!thumb && hqBuffer) {
     const normalized = await normalizeImageForWhatsApp(hqBuffer)
     thumb = normalized?.jpegThumbnail
@@ -2448,6 +2666,69 @@ async function getDefaultPreservationPreset() {
   return defaultPresetCache.value
 }
 
+// specs/017-client-coupon-catalog (Trava #2 — convergência única do token):
+// mesmo applyCouponToken (src/core/clientCouponPolicy.js) para os campos de
+// texto conhecidos do payload de envio. Mutação in-place: nunca clona Buffer
+// de mídia, só troca string quando ela de fato contém `{cupom}`.
+function resolveCouponTextField(value, couponText) {
+  return (typeof value === 'string' && value.includes('{cupom}')) ? applyCouponToken(value, couponText) : value
+}
+
+function applyCouponTokenToPayload(payload, couponText) {
+  if (!payload || typeof payload !== 'object') return payload
+  if (payload.text !== undefined) payload.text = resolveCouponTextField(payload.text, couponText)
+  if (payload.caption !== undefined) payload.caption = resolveCouponTextField(payload.caption, couponText)
+  if (payload.primary) {
+    if (payload.primary.text !== undefined) payload.primary.text = resolveCouponTextField(payload.primary.text, couponText)
+    if (payload.primary.caption !== undefined) payload.primary.caption = resolveCouponTextField(payload.primary.caption, couponText)
+  }
+  if (Array.isArray(payload.fallbacks)) {
+    for (const fb of payload.fallbacks) {
+      if (!fb) continue
+      if (fb.text !== undefined) fb.text = resolveCouponTextField(fb.text, couponText)
+      if (fb.caption !== undefined) fb.caption = resolveCouponTextField(fb.caption, couponText)
+    }
+  }
+  // Caminho relay (escape hatch IMAGE_ORIGINAL_STRATEGY=relay): o proto já
+  // decodificado do WhatsApp carrega a legenda em campos próprios.
+  if (payload.relay?.proto) {
+    const proto = payload.relay.proto
+    if (proto.imageMessage?.caption !== undefined) proto.imageMessage.caption = resolveCouponTextField(proto.imageMessage.caption, couponText)
+    if (proto.videoMessage?.caption !== undefined) proto.videoMessage.caption = resolveCouponTextField(proto.videoMessage.caption, couponText)
+    if (proto.extendedTextMessage?.text !== undefined) proto.extendedTextMessage.text = resolveCouponTextField(proto.extendedTextMessage.text, couponText)
+  }
+  return payload
+}
+
+// Resolve o texto final do cupom (ou '' quando não há cupom aplicável) a
+// partir dos cupons já carregados em getConfig() (D1 da pesquisa: zero
+// consulta nova ao banco neste caminho) e do couponContext carregado pelo
+// job. NUNCA lança — best-effort absoluto (FR-028b).
+// Envios do painel (Enviar agora, Agendar, Inserir na fila): a loja sai do
+// primeiro link do texto — mesmo detector do espelhamento (src/detector.js).
+// Preço desconhecido: cai na ordem fixa e previsível do FR-011 em chooseCoupon.
+// Fonte ÚNICA para os dois caminhos, para agendado e imediato nunca divergirem.
+// `priceCents` é o preço que a tela do Criar oferta leu da loja: com ele sai o
+// "de X por Y com o cupom" também no envio. Sem ele, preço desconhecido.
+function couponContextFromText(text, priceCents = null) {
+  const platform = detectLinks(text || '')[0]?.platform ?? null
+  return platform ? { platform, priceCents: sanitizePriceCents(priceCents) } : null
+}
+
+async function resolveCouponTextForJob(job) {
+  try {
+    const ctx = job?.couponContext
+    if (!ctx || !ctx.platform) return ''
+    const cfg = await getConfig().catch(() => null)
+    const coupons = cfg?.coupons ?? []
+    const choice = chooseCoupon({ coupons, platform: ctx.platform, priceCents: ctx.priceCents, now: Date.now() })
+    if (!choice) return ''
+    return renderCouponText({ coupon: choice.coupon, priceCents: ctx.priceCents, finalPriceCents: choice.finalPriceCents })
+  } catch {
+    return ''
+  }
+}
+
 async function processSendJob(job) {
   const startedAt = Date.now()
   let payload = null
@@ -2626,6 +2907,7 @@ async function processSendJob(job) {
       logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
     }
 
+    let couponTokenResolved = false
     for (let attempt = 1; attempt <= SEND_MAX_ATTEMPTS; attempt++) {
       try {
         const sockForAttempt = activeSock
@@ -2636,6 +2918,20 @@ async function processSendJob(job) {
           else payload = job.payload
         }
         if (payload === undefined) throw new Error('Invalid send job: payload/buildPayload ausente')
+        // specs/017-client-coupon-catalog (D1/D3 da pesquisa, Trava #2): resolvido
+        // no ÚLTIMO instante possível — direto no dequeue —, para que FR-014
+        // (cupom desligado/vencido depois de enfileirado não sai) valha mesmo
+        // para item que ficou horas esperando na fila. Roda uma única vez (não
+        // a cada retry) e NUNCA aborta o envio (FR-028b, best-effort absoluto).
+        if (!couponTokenResolved) {
+          couponTokenResolved = true
+          try {
+            const couponText = await resolveCouponTextForJob(job)
+            payload = applyCouponTokenToPayload(payload, couponText)
+          } catch (err) {
+            logger.warn({ err: err?.message, destJid: job.destJid }, 'Falha ao resolver cupom no envio; oferta segue sem cupom')
+          }
+        }
         // Botão "Ver canal" do grupo de destino, injetado de forma central para
         // cobrir TODOS os caminhos não-relay (texto puro, imagem montada,
         // broadcast/oferta automática, agendado). O caminho relay (mídia
@@ -2762,6 +3058,137 @@ async function markInterruptedSendLogs() {
       data: { status: 'failed', sentAt: now },
     }),
   ])
+}
+
+// Reenfileira automaticamente, a cada boot, as ofertas perdidas por restart
+// do worker (deploy, crash, cutover) — markInterruptedSendLogs() acima marca
+// como `error:worker_restart` tudo que estava `queued`/`sending` quando o
+// processo anterior morreu, e sem isso a oferta some da fila sem nunca ter
+// sido reenviada (cliente reclamou: "O bot reiniciou enquanto essa mensagem
+// estava esperando para ser enviada").
+//
+// Remonta o MESMO card manual do envio ao vivo (buildManualLinkPreview: foto
+// raspada da loja + marca d'água do destino) a partir só do que sobrevive no
+// MessageLog (platform/originalUrl/convertedUrl/messageText) — a mensagem
+// original do WhatsApp e a imagem já processada morreram com o processo
+// antigo, então a foto é raspada de novo da loja, não reaproveitada. Sem
+// `couponTextSignal` real (não temos o texto/warning da mensagem original),
+// o banner de marca de cupom (feature opt-in, default OFF) nunca dispara
+// aqui — na dúvida, sai foto de produto, não banner.
+//
+// A montagem do card roda DENTRO do `buildPayload` do job (lazy, no dequeue),
+// não aqui no boot: raspar imagem/fazer upload é I/O lento, e fazer isso
+// para dezenas de ofertas ANTES de abrir o socket do WhatsApp atrasaria a
+// reconexão. `uploadToServer` (activeSock?.waUploadToServer) só existe depois
+// que o socket conecta — outro motivo para ser lazy.
+//
+// Só olha os últimos WORKER_RESTART_REPROCESS_WINDOW_MS: protege contra
+// reprocessar erro antigo de uma sessão anterior (bot ficou dias offline).
+// Escape hatch: WORKER_RESTART_REPROCESS_ENABLED=false desliga sem deploy.
+const WORKER_RESTART_REPROCESS_ENABLED = process.env.WORKER_RESTART_REPROCESS_ENABLED !== 'false'
+const WORKER_RESTART_REPROCESS_WINDOW_MS = Math.max(60_000, Number(process.env.WORKER_RESTART_REPROCESS_WINDOW_MS) || 30 * 60_000)
+
+async function reprocessRestartFailures() {
+  if (!WORKER_RESTART_REPROCESS_ENABLED) return
+  const cutoff = new Date(Date.now() - WORKER_RESTART_REPROCESS_WINDOW_MS)
+  const stuck = await db.messageLog.findMany({
+    where: {
+      userId,
+      status: 'error',
+      errorMsg: 'error:worker_restart',
+      platform: { not: 'scheduled' },
+      sentAt: { gte: cutoff },
+    },
+    take: 200,
+  })
+  if (stuck.length === 0) return
+
+  const cfg = await getConfig().catch(() => null)
+  let requeued = 0
+  for (const row of stuck) {
+    try {
+      // Claim atômico: evita reprocessar a mesma linha duas vezes se esta
+      // função for chamada mais de uma vez (defesa em profundidade).
+      const claimed = await db.messageLog.updateMany({
+        where: { id: row.id, errorMsg: 'error:worker_restart' },
+        data: { errorMsg: 'error:worker_restart:requeued' },
+      })
+      if (claimed.count !== 1) continue
+      if (!row.destGroup || !row.messageText || !cfg) continue
+
+      const log = await db.messageLog.create({
+        data: {
+          userId,
+          platform: row.platform,
+          sourceGroup: row.sourceGroup,
+          destGroup: row.destGroup,
+          originalUrl: row.originalUrl,
+          convertedUrl: row.convertedUrl,
+          messageText: row.messageText,
+          status: 'queued',
+        },
+      })
+      const postDetail = cfg.groups.postDetails.find(g => g.waJid === row.destGroup)
+      const channelForward = resolveChannelForward(postDetail)
+      // Mesma resolução de marca d'água do envio ao vivo (ver linhas próximas
+      // a `destinationImageUsesWatermark` no handler de messages.upsert):
+      // config é por destino, então precisa ser recalculada aqui, não herdada
+      // da oferta original.
+      const destinationImageMode = effectiveDestinationImageMode(postDetail?.imageMode, { hasChannelButton: !!channelForward })
+      const watermarkText = String(postDetail?.watermarkText ?? '').trim()
+      const watermarkColor = postDetail?.watermarkColor ?? undefined
+      const watermarkSize = postDetail?.watermarkSize ?? undefined
+      const watermarkPosition = postDetail?.watermarkPosition ?? undefined
+      const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
+      const primary = { platform: row.platform, url: row.originalUrl, converted: row.convertedUrl }
+
+      const accepted = await enqueueSendJob({
+        type: 'converted',
+        logId: log.id,
+        destJid: row.destGroup,
+        sourceJid: row.sourceGroup,
+        platforms: row.platform,
+        plan: cfg.plan,
+        delayMs: 0,
+        typingDelayMs: calculateTypingDelayMs({ text: row.messageText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+        channelForward,
+        couponContext: couponContextFromText(row.messageText),
+        buildPayload: async () => {
+          const linkPreview = await buildManualLinkPreview({
+            text: row.messageText,
+            primary,
+            credentialsMap: cfg.credentials,
+            uploadToServer: activeSock?.waUploadToServer,
+            destJid: row.destGroup,
+            couponTextSignal: false,
+            watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
+          }).catch(err => {
+            logger.warn({ err: err?.message, destJid: row.destGroup, logId: log.id }, 'Reprocessamento pós-restart: card de preview falhou; oferta sai como texto')
+            return null
+          })
+          return buildMonitoredMessagePayload({
+            finalText: row.messageText,
+            image: null,
+            useLinkPreview: true,
+            linkPreview,
+          })
+        },
+      })
+      if (!accepted) {
+        await db.messageLog.update({
+          where: { id: log.id },
+          data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
+        }).catch(() => {})
+        continue
+      }
+      requeued++
+    } catch (err) {
+      logger.warn({ err: err?.message, logId: row.id }, 'Reprocessamento pós-restart falhou para esta oferta')
+    }
+  }
+  if (requeued > 0) {
+    logger.info({ found: stuck.length, requeued }, 'Ofertas perdidas por restart do worker reenfileiradas automaticamente')
+  }
 }
 
 async function createSendBackend() {
@@ -2924,6 +3351,9 @@ async function startBotInner() {
   if (!interruptedSendLogsMarked) {
     interruptedSendLogsMarked = true
     await markInterruptedSendLogs()
+    await reprocessRestartFailures().catch(err => {
+      logger.error({ err: err?.message }, 'Reprocessamento automático pós-restart falhou')
+    })
   }
 
   // Duas janelas: msgIds (curta) protege contra redelivery do WhatsApp do
@@ -3010,6 +3440,10 @@ async function startBotInner() {
     // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
     // ignorar mensagem legítima enquanto a config ainda não carregou.
     shouldIgnoreJid: (jid) => {
+      // Camada 3-B: canal específico que provou estar com a sessão
+      // dessincronizada (ver handleGroupDecryptSignal). Checada primeiro —
+      // reage rápido, independe do modo de chat-scope.
+      if (isChannelDesyncQuarantined(jid)) return true
       // Regra nova (Fase 2): olhar só o que foi escolhido. Com o modo `off`
       // ela não decide nada e a regra antiga (lista de exceções) segue valendo
       // para quem já ligou WA_IGNORE_UNMONITORED_GROUPS.
@@ -3160,6 +3594,13 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // histórico e as notificações que alimentam "Canais que sigo".
       selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
       if (sendIpc) sendIpc({ type: 'status', data: 'connected', phone })
+      // Lido ANTES do persistSessionPatch sobrescrever `phone` — é o sinal
+      // durável de "esta conta já conectou alguma vez" (mesmo usado por
+      // `waEverConnected` nos gatilhos de e-mail). Precisa vir antes, senão a
+      // mensagem de boas-vindas do piloto reenviaria em toda reconexão.
+      const hadPhoneBeforeThisOpen = Boolean(
+        (await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null))?.phone,
+      )
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
       // Este número já fez o teste em outra conta? O número só é conhecido
       // DEPOIS do open — é por isso que a checagem mora aqui e não na rota de
@@ -3176,6 +3617,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
       ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever no boot'))
+      maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore: hadPhoneBeforeThisOpen }).catch(() => {})
     }
 
     if (connection === 'close') {
@@ -3804,8 +4246,24 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           }
         }
 
-        // 3) jpegThumbnail embutido em link preview (extendedTextMessage). Baixa qualidade
-        // mas sempre presente quando há preview, e não exige rede — bytes já vêm decifrados.
+        // 3) Link preview HQ hospedado pelo próprio WhatsApp. O proto traz um
+        // placeholder inline minúsculo E, quando o remetente gerou preview HQ,
+        // thumbnailDirectPath/mediaKey. Baixar a segunda evita publicar os
+        // 545–1999 bytes medidos nas ofertas Magalu como se fossem a foto.
+        const hqLinkPreview = await downloadHighQualityLinkPreview({
+          message: msg,
+          extendedTextMessage: ext,
+          downloadMediaMessage,
+          logger,
+          reuploadRequest: sock.updateMediaMessage,
+        })
+        if (hqLinkPreview) {
+          logger.info({ msgId: msg.key.id, size: hqLinkPreview.length, source: 'linkPreviewHq' }, 'Imagem original baixada')
+          return { buffer: hqLinkPreview, mimetype: 'image/jpeg' }
+        }
+
+        // 4) Último recurso: jpegThumbnail embutido. Baixa qualidade, mas não
+        // exige rede — os bytes já vêm decifrados.
         const thumb = ext?.jpegThumbnail
         if (thumb && thumb.length) {
           const buf = Buffer.isBuffer(thumb) ? thumb : Buffer.from(thumb)
@@ -3964,8 +4422,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // Devolve o MOTIVO em vez de null: sem `converted` o item continua
           // fora de `conversions`, mas a mensagem deixa de ser gravada como
           // "faltou cadastrar a loja" quando o cadastro está perfeito e a loja
-          // só está desligada NESTE grupo (RCA 2026-09-09).
-          return { platform, url, failureReason: CONVERSION_FAILURE.STORE_DISABLED }
+          // só está desligada NESTE grupo (RCA 2026-09-09). Sem cadastro da
+          // loja, é escolha da cliente não usá-la — não dizer que o cadastro
+          // "está certo" (RCA 2026-09-24).
+          const registered = validateCredentialData(platform, cfg.credentials[platform]).configured
+          return { platform, url, failureReason: registered ? CONVERSION_FAILURE.STORE_DISABLED : CONVERSION_FAILURE.STORE_NOT_USED }
         }
         logger.info({ platform, url }, 'Link detectado')
         const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
@@ -3995,11 +4456,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           return { platform, url, converted: conversionResult.url, warning: conversionResult.warning, linkKind }
         } catch (err) {
           if (err.stripFromMessage) {
-            // Cupom/voucher que não conseguiu virar link afiliado oficial: não
-            // removemos mais nada da mensagem espelhada. O link fica como veio
-            // para preservar a oferta/CTA original, enquanto os demais links
-            // válidos da mesma mensagem continuam sendo convertidos juntos.
-            return { platform, url, converted: url, passthrough: true, linkKind: 'coupon' }
+            // Link que não virou link da cliente (cupom da Shopee recusado,
+            // qualquer falha do AliExpress). NUNCA publicar o original: é o link
+            // do concorrente. A mensagem inteira deixa de sair — ver
+            // core/mirrorLinkGuard.js (RCA 2026-09-23, 794 envios vazados).
+            logger.warn({ platform, url, err: err.message }, 'Link não convertido — oferta não será publicada com o link de origem')
+            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
           }
           // Motivo pré-classificado pelo converter (feature
           // 007-ml-vitrine-fallback-expired: skip:ml_vitrine_missing) tem
@@ -4062,29 +4524,62 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         })
       }
 
-      let finalText = sanitizedText
-      if (links.length) {
-      if (!conversions.length) {
+      // Grava a oferta que NÃO saiu porque algum link de loja não virou link
+      // da cliente. Mesmo formato de sempre (`skip:no_valid_conversions:<motivo>`)
+      // para o painel e o aviso de cadastro contarem a mesma história.
+      async function recordUnconvertedSkip({ platform, originalUrl, errorMsg }) {
         await db.messageLog.create({
           data: {
             userId,
-            platform: links[0]?.platform || 'unknown',
+            platform: platform || 'unknown',
             sourceGroup: jid,
             destGroup: 'skipped',
-            originalUrl: links[0]?.url || '',
+            originalUrl: originalUrl || '',
             convertedUrl: '',
             messageText: sanitizeMessageForLog(sanitizedText || ''),
             status: 'skipped',
-            errorMsg: buildNoValidConversionsErrorMsg(linkResults.map(r => r?.failureReason)),
+            errorMsg,
           },
         }).catch(() => {})
-        return
       }
+
+      let finalText = sanitizedText
+      if (links.length) {
+        // No espelhamento TODO link de loja precisa virar link da cliente. Um
+        // só que falhe e a mensagem não sai: publicá-la manteria o link do
+        // concorrente no texto (RCA 2026-09-23 — ver core/mirrorLinkGuard.js).
+        const decision = decideMirrorConversions(linkResults)
+        if (!decision.publish) {
+          const firstFailed = linkResults.find(r => !(r && r.converted && !r.passthrough)) || linkResults[0]
+          if (conversions.length) {
+            logger.warn({ msgId: msg.key.id, links: links.length, failed: decision.failedCount }, 'Oferta não publicada: parte dos links não virou link da cliente')
+          }
+          await recordUnconvertedSkip({
+            platform: firstFailed?.platform || links[0]?.platform,
+            originalUrl: firstFailed?.url || links[0]?.url,
+            errorMsg: decision.errorMsg,
+          })
+          return
+        }
         // Relay mode ("Manter texto original convertido") deve apenas trocar
         // os links upstream pelos links convertidos do usuário. Variáveis globais
         // de /painel/mensagens, como {{grupoLink}} e {{cupomLink}}, pertencem ao
         // caminho de templates e não devem ser anexadas ao texto original.
         finalText = applyConversionsAndBranding(sanitizedText, conversions)
+      }
+      // Rede de segurança FINAL, antes do modelo e do texto adicional da
+      // cliente (que são dela): nenhum link de loja pode sobrar no texto sem ser
+      // um link convertido — inclusive o escrito sem `https://`, que o detector
+      // não enxerga mas o WhatsApp torna clicável.
+      const leakedLinks = findUnconvertedStoreLinks(finalText, conversions)
+      if (leakedLinks.length) {
+        logger.warn({ msgId: msg.key.id, leaked: leakedLinks.length }, 'Oferta não publicada: link de loja de origem ainda no texto')
+        await recordUnconvertedSkip({
+          platform: links[0]?.platform,
+          originalUrl: leakedLinks[0],
+          errorMsg: buildNoValidConversionsErrorMsg([CONVERSION_FAILURE.CONVERSION_FAILED]),
+        })
+        return
       }
       // Eleição do link primário (oferta/dedup/log) entre as conversões válidas.
       // Decisão de produto 3.4: o grupo escolhe primeiro/último link; sem override
@@ -4118,13 +4613,18 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // o que vai sair. Quando o template cai no relay (texto inalterado), o
       // guard volta a valer normalmente.
       let templateApplied = false
+      // couponContext (specs/017-client-coupon-catalog): { platform, priceCents }
+      // resolvido aqui mesmo (sem leitura extra de rede), carregado no job de
+      // envio e consumido em processSendJob para resolver {cupom} no último
+      // instante possível (FR-014).
+      let couponContext = null
       // Só montamos o template quando há um link CONVERTIDO do nosso cliente.
       // No espelhamento os links de entrada são de OUTROS afiliados; a oferta
       // precisa sair com o link do nosso cliente (primary.converted) ou não
       // sair como oferta (cai no relay). NUNCA emitir primary.url (link do
       // terceiro) — isso daria comissão ao concorrente.
       if (effectiveTemplateKey && primary.converted) {
-        const templatedText = await applyMirrorTemplate(finalText, {
+        const templateResult = await applyMirrorTemplate(finalText, {
           botConfig: cfg.botConfig,
           templateKey: effectiveTemplateKey,
           // originalUrl = link do upstream (terceiro): usado só como alvo de
@@ -4137,9 +4637,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           credentialsMap: cfg.credentials,
           logger,
         })
+        const templatedText = templateResult.text
         if (templatedText !== finalText) {
           finalText = templatedText
           templateApplied = true
+          couponContext = templateResult.couponContext
         }
       }
       // O complemento pertence exclusivamente ao formato "Manter texto
@@ -4711,7 +5213,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // (mídia-only) adiciona o botão. Sem botão, mantemos o relay (fidelidade
           // máxima de mídia, inclui vídeo).
           if (shouldUseRelayPath({ destJid, hasOriginal: !!original }) && !channelForward) {
-            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage'
+            // documentMessage também tem legenda: sem trocar, o documento saía
+            // com a legenda da ORIGEM (links do concorrente inclusos).
+            const hasCaption = original.type === 'imageMessage' || original.type === 'videoMessage' || original.type === 'documentMessage'
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
             // e externalAdReply). forwardNewsletter=null: relay nunca injeta canal.
             const replayProto = buildRelayProto(original.proto, {
@@ -4861,6 +5365,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           delayMs: staggerMs,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
+          // specs/017-client-coupon-catalog: { platform, priceCents } | null,
+          // resolvido em applyMirrorTemplate SEM leitura extra de rede. Só
+          // campos escalares (nunca função/Buffer) — precisa sobreviver ao
+          // JSON.stringify do BullMQ como qualquer payload serializável.
+          couponContext,
           buildPayload,
           // Referência viva: buildPayload roda no dequeue e preenche este mesmo
           // objeto, que processSendJob lê depois para gravar no MessageLog.
@@ -4868,7 +5377,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           onDone: async (result) => {
             if (result.ok) {
               logger.info({ destJid, platforms, deliveryKind: deliveryInfo.kind, originImageBytes: deliveryInfo.originImageBytes }, 'Mensagem enviada')
-              if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+              if (previousSuccessCount === 0) {
+                trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+                maybeSendFirstOfferMessage().catch(() => {})
+              }
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
             }
@@ -5266,6 +5778,13 @@ const handleMessage = async msg => {
       sendIpc({ type: 'broadcastResult', requestId: msg.requestId, error: 'Bot não conectado' })
       return
     }
+    // specs/017-client-coupon-catalog (T020): loja identificada pelo link do
+    // texto (mesmo detector usado no espelhamento, src/detector.js — nunca
+    // o de dashboard/lib, proibido aqui). Preço tratado como desconhecido
+    // (cai na ordem fixa e previsível do FR-011 dentro de chooseCoupon); a
+    // substituição em si acontece no MESMO ponto de processSendJob (T019).
+    const broadcastCouponContext = couponContextFromText(msg.text, msg.options?.couponPriceCents)
+
     let queued = 0
     const errors = []
     for (const jid of msg.jids) {
@@ -5308,6 +5827,7 @@ const handleMessage = async msg => {
         delayMs: 0,
         typingDelayMs: calculateTypingDelayMs({ text: msg.text, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward: broadcastChannelForward,
+        couponContext: broadcastCouponContext,
         // Fila de ofertas com horário próprio pede para ignorar a janela
         // silenciosa global neste envio (origem 'offerQueue'). Propagado ao
         // gate em processSendJob. Sem o flag = comportamento histórico.
@@ -5326,6 +5846,32 @@ const handleMessage = async msg => {
       }
     }
     sendIpc({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
+  }
+
+  // Admin > Contato com cliente: mensagem manual pro PRÓPRIO número da conta
+  // (self-chat), fora do pipeline de oferta — sem MessageLog, sem dedup, sem
+  // preservação. Igual às mensagens automáticas do piloto
+  // (maybeSendSelfWelcomeMessage e cia), só que disparada por ação humana.
+  if (msg?.type === 'sendSelfMessage') {
+    if (!activeSock) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: 'Número não identificado' })
+      return
+    }
+    try {
+      const texto = buildAdminSupportMessageText({ corpo: msg.text })
+      await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+      logger.info({ userId }, 'Mensagem manual do suporte enviada para o próprio número')
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, data: { ok: true } })
+      logWhatsappSelfMessageContact({ reason: 'mensagem_manual_suporte', texto, actorUserId: msg.actorUserId ?? null })
+    } catch (err) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: String(err?.message ?? err) })
+    }
+    return
   }
 
   if (msg?.type === 'channel:metadata') {

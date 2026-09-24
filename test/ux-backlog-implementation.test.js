@@ -49,7 +49,7 @@ test('offer automation logs are labeled differently from manual sends', () => {
   assert.equal(item.de, 'Oferta automática')
 })
 
-test('message templates page prioritizes templates and progressively discloses supporting content', () => {
+test('message templates page prioritizes models and progressively discloses supporting content', () => {
   const nav = read('dashboard/app/painel/nav.js')
   const page = read('dashboard/app/painel/mensagens/page.js')
 
@@ -57,29 +57,27 @@ test('message templates page prioritizes templates and progressively discloses s
   assert.match(page, /usePainelHeader\(\{ title: 'Templates de mensagens'/)
   assert.doesNotMatch(page, /PainelContentActions/)
 
-  const templatesSection = page.indexOf('>Templates de mensagens</div>')
-  const educationalSection = page.indexOf('<summary>Como funcionam os templates</summary>')
-  const dynamicTextsSection = page.indexOf('Textos dinâmicos')
-  const linksSection = page.indexOf('>Links<')
-  const referenceSection = page.indexOf('<summary>Referência de variáveis</summary>')
+  const templatesSection = page.indexOf('id="modelos-title">Modelos de mensagem</h2>')
+  const automaticFieldsSection = page.indexOf('id="campos-title">Campos automáticos</h2>')
+  const dynamicTextsSection = page.indexOf('id="variacoes-title">Frases que variam sozinhas</h2>')
+  const linksSection = page.indexOf('<strong>Links opcionais</strong>')
 
   assert.ok(templatesSection !== -1)
-  assert.ok(templatesSection < educationalSection)
-  assert.ok(educationalSection < dynamicTextsSection)
+  assert.ok(templatesSection < automaticFieldsSection)
+  assert.ok(automaticFieldsSection < dynamicTextsSection)
   assert.ok(dynamicTextsSection < linksSection)
-  assert.ok(linksSection < referenceSection)
-  assert.match(page, /templateMode === 'list'[\s\S]*Criar template/)
+  assert.match(page, /templateMode === 'list'[\s\S]*Novo modelo/)
   // Um clique só: o botão do editor aplica E grava (nunca voltar ao par
   // "Concluir edição" + "Salvar", que fazia o primeiro clique parecer o salvamento).
   assert.doesNotMatch(page, /Concluir edição/)
   assert.match(page, /onClick=\{saveTemplate\}/)
-  assert.match(page, /Salvar template/)
+  assert.match(page, /Salvar modelo/)
   assert.match(page, /async function saveTemplate\(\)[\s\S]*applyAndPersist/)
   assert.match(page, /async function applyAndPersist\(nextStore\)[\s\S]*handleSave\(nextStore\)/)
-  assert.match(page, /Salvar templates, textos e links/)
+  assert.match(page, /Salvar alterações/)
   assert.doesNotMatch(page, /<details[^>]*\sopen(?:=|\s|>)/)
   assert.doesNotMatch(page, /pra nunca repetir|>Fechamento</)
-  assert.doesNotMatch(page, />[^<{]*(?:modelo|modelos)[^<{]*</i)
+  assert.match(page, /aria-expanded=\{open\}/)
 })
 
 test('template variable UI only advertises canonical gancho, cta and convitegrupo names', () => {
@@ -114,7 +112,9 @@ test('template variable copy uses a real reusable clipboard helper with fallback
 })
 
 test('painel configuracoes only exposes account email and password settings', () => {
-  const page = read('dashboard/app/painel/configuracoes/page.js')
+  // O bloco de e-mail/senha virou componente, usado também em Minha conta.
+  const page = read('dashboard/components/AccountAccessForms.js')
+  assert.match(read('dashboard/app/painel/configuracoes/page.js'), /<AccountAccessForms \/>/)
   assert.match(page, /E-mail de acesso/)
   assert.match(page, /Alterar senha/)
   assert.match(page, /api\.updateAccountEmail/)

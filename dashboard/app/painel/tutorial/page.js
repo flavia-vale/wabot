@@ -177,7 +177,7 @@ export default function TutorialPage() {
           📚 Guia de Configuração de Credenciais
         </h1>
         <p className="text-gray-600 text-sm leading-relaxed">
-          Para o <strong>BOTinho</strong> funcionar, ele precisa se conectar às suas contas de afiliado. Siga os passos abaixo com calma — é mais simples do que parece!
+          Para o <strong>Espelha Grupos</strong> funcionar, ele precisa se conectar às suas contas de afiliado. Siga os passos abaixo com calma — é mais simples do que parece!
         </p>
         <div className="flex flex-wrap gap-2">
           <Badge color="green">Tempo médio: 15-25 min</Badge>
@@ -267,7 +267,7 @@ export default function TutorialPage() {
             </div>
           </>,
           <>Para cada um: clique no nome do cookie na lista para expandir e copie o valor que aparece no campo <strong>Value</strong>.</>,
-          <>Cole cada valor no campo correspondente na tela de <strong>IDs de afiliada</strong> do BOTinho.</>,
+          <>Cole cada valor no campo correspondente na tela de <strong>IDs de afiliada</strong> do Espelha Grupos.</>,
         ]} />
         <TutorialInlineImage src="https://i.postimg.cc/XrFqXH3x/Captura-de-Tela-2026-05-16-a-s-11-27-22.png" alt="Amazon: abrir Cookie-Editor após login" />
         <TutorialInlineImage src="https://i.postimg.cc/JsJ0t6mJ/Captura-de-Tela-2026-05-16-a-s-11-27-33.png" alt="Amazon: cookies necessários listados na extensão" />
@@ -332,7 +332,7 @@ export default function TutorialPage() {
         <StepList steps={[
           <><ExternalLink href={LINKS.shopeeOpenApi}>Acesse o painel Shopee Open API</ExternalLink> diariamente até o acesso ser liberado.</>,
           <>Quando aparecer o botão <strong>&quot;Redefinir&quot;</strong>, clique nele — a <strong>Key</strong> e o <strong>Secret</strong> serão exibidos na tela.</>,
-          <>Copie os dois valores e cole nos campos correspondentes na tela de <strong>IDs de afiliada</strong> do BOTinho.</>,
+          <>Copie os dois valores e cole nos campos correspondentes na tela de <strong>IDs de afiliada</strong> do Espelha Grupos.</>,
         ]} />
         <Tip>
           ⏳ <strong>E agora?</strong> A Shopee leva alguns dias para liberar. Verifique o painel diariamente. Quando o botão <strong>Redefinir</strong> aparecer, clique nele e os dados (Key/Secret) aparecerão para você copiar.
@@ -343,7 +343,7 @@ export default function TutorialPage() {
       <div className="rounded-2xl border border-green-200 bg-green-50 p-5 space-y-3">
         <h2 className="font-black text-green-900 text-base">✅ Tudo pronto!</h2>
         <p className="text-sm text-green-800 leading-relaxed">
-          Após salvar suas credenciais na tela de <strong>IDs de afiliada</strong>, o BOTinho já consegue gerar links de afiliado automaticamente. Se tiver dúvidas ou algum código não funcionar, fale com o suporte — estamos aqui para ajudar!
+          Após salvar suas credenciais na tela de <strong>IDs de afiliada</strong>, o Espelha Grupos já consegue gerar links de afiliado automaticamente. Se tiver dúvidas ou algum código não funcionar, fale com o suporte — estamos aqui para ajudar!
         </p>
         <div className="rounded-xl border border-green-300 bg-white/80 p-3">
           <p className="text-sm font-bold text-green-900">Próximo passo recomendado (2 minutos):</p>

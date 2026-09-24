@@ -127,6 +127,17 @@ export const COMPARISON_PAGES = {
     // páginas ranqueavam para as mesmas consultas e não se linkavam, então o
     // Google não tinha como saber qual responde o quê. Aqui fica a busca por
     // NOME do concorrente; lá, a busca genérica por "bot para achadinhos".
+    // Páginas de resposta (19/09/2026): quem chega comparando ferramenta ainda
+    // está decidindo COMO divulgar — os três guias respondem isso de frente.
+    guides: [
+      { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', title: 'Como espelhar mensagens entre grupos de WhatsApp' },
+      { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', title: 'Melhores automações para afiliado Shopee em 2026' },
+      { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp' },
+      // 23/09/2026: estes concorrentes vendem busca automática na Shopee; quem
+      // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
+    ],
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
@@ -428,6 +439,17 @@ export const COMPARISON_PAGES = {
     title: 'Alternativa ao Achadinho Pro: 6 lojas por R$ 39',
     description: 'O Achadinho Pro cobre só Shopee no plano de entrada. No Espelha Grupos, 6 lojas (Shopee, Amazon, Mercado Livre, Magalu, SHEIN, AliExpress) por R$ 39/30 dias.',
     competitorSlugs: ['achadinho-pro'],
+    // Páginas de resposta (19/09/2026): quem chega comparando ferramenta ainda
+    // está decidindo COMO divulgar — os três guias respondem isso de frente.
+    guides: [
+      { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', title: 'Como espelhar mensagens entre grupos de WhatsApp' },
+      { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', title: 'Melhores automações para afiliado Shopee em 2026' },
+      { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp' },
+      // 23/09/2026: estes concorrentes vendem busca automática na Shopee; quem
+      // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
+    ],
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
@@ -572,7 +594,7 @@ export const COMPARISON_PAGES = {
       { q: 'Trocar de ferramenta faz perder os grupos?', a: 'Não. Os grupos são seus, no seu WhatsApp. O que muda é qual ferramenta se conecta a eles, então dá para rodar as duas em paralelo por uma semana antes de cancelar a atual.' },
     ],
   },
-  '/botinho-vs-planilha-manual': {
+  '/espelha-grupos-vs-planilha-manual': {
     format: 'vs',
     eyebrow: 'Comparativo · Operação manual',
     title: 'Planilha ou bot para divulgar ofertas: quando vale',
@@ -606,7 +628,7 @@ export const COMPARISON_PAGES = {
       { q: 'A planilha deixa de ser útil?', a: 'Não. Ela pode continuar como planejamento editorial, enquanto o Espelha Grupos organiza a execução recorrente.' },
     ],
   },
-  '/botinho-vs-ferramentas-genericas-automacao': {
+  '/espelha-grupos-vs-ferramentas-genericas-automacao': {
     format: 'vs',
     eyebrow: 'Comparativo · Automação genérica',
     title: 'Bot de afiliados ou automação genérica: qual usar',
@@ -645,15 +667,26 @@ export const COMPARISON_PAGES = {
     eyebrow: 'Critérios · Avaliação de ferramentas',
     title: 'Melhores bots para afiliados no WhatsApp: como comparar',
     description: 'Lista de critérios para avaliar bots e ferramentas de WhatsApp para afiliados sem ranking falso, promessa de ganho ou prova social inventada.',
-    tldr: 'Não escolha por promessa de ganho: escolha por processo confiável, rastreabilidade e aderência às políticas das plataformas.',
-    directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação.',
+    tldr: 'Não escolha por promessa de ganho: escolha por processo confiável, rastreabilidade e aderência às políticas das plataformas. E confira qual dos dois modos você precisa — espelhar grupos que já segue ou deixar o robô buscar oferta sozinho —, porque o mercado divide isso em ferramentas diferentes.',
+    // 23/09/2026: "bot para afiliados" é lido por IA como "robô que busca oferta
+    // sozinho". O critério dos dois modos entra aqui para a página responder
+    // essa leitura — e o Espelha Grupos cobre os dois (busca automática só na
+    // Shopee, plano Pro).
+    directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação. Antes disso, decida o modo: há bots que espelham os grupos que você já segue (repassam a oferta com o seu link) e bots que buscam oferta sozinhos na loja por tema. O Espelha Grupos faz os dois na mesma conta: espelha em 6 lojas e, no plano Pro, busca ofertas da Shopee sozinho por tema e desconto mínimo. Confira também se a ferramenta publica a política de reembolso.',
+    guides: [
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: espelhar e buscar oferta' },
+      { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
+    ],
     rows: [
+      ['Modo de operação', 'O bot espelha grupos que você já segue, busca oferta sozinho na loja, ou faz os dois?', 'Espelhar depende de ter bons grupos de origem; buscar sozinho depende de a loja ter busca por tema. O Espelha Grupos faz os dois (busca automática só na Shopee).'],
+      ['Confiança', 'A ferramenta publica preço, política de reembolso e o que NÃO promete?', 'Regra escrita e pública vale mais que promessa de ganho ou de banimento zero.'],
       ['Link monetizado', 'A ferramenta ajuda a conferir ou converter links suportados sem remover tags?', 'Reduz risco operacional, mas não elimina revisão humana.'],
       ['Grupos e destinos', 'Existe separação clara entre origem, destino, nicho e prioridade?', 'Evita publicar no público errado.'],
       ['Cadência', 'Há intervalos, filtros e controle para evitar repetição?', 'Ajuda a proteger experiência dos grupos.'],
       ['Logs', 'A operação consegue auditar envio, falha e campanha?', 'Permite aprender e corrigir processo.'],
     ],
-    criteria: ['Transparência de preço', 'Limites de uso responsável', 'Logs e auditoria', 'Suporte a afiliados', 'Ausência de promessa de ganho garantido'],
+    criteria: ['Modo: espelhar grupos, buscar oferta sozinho ou os dois', 'Transparência de preço', 'Política de reembolso publicada', 'Limites de uso responsável', 'Logs e auditoria', 'Suporte a afiliados', 'Ausência de promessa de ganho garantido'],
     bestFit: [
       'A melhor ferramenta será a que reduzir erros operacionais mantendo revisão humana e trilha de auditoria.',
     ],
@@ -664,6 +697,8 @@ export const COMPARISON_PAGES = {
     faq: [
       { q: 'Por que esta página não ranqueia marcas como primeiro, segundo e terceiro lugar?', a: 'Sem testes públicos equivalentes e consentimento de dados, ranking numérico seria pouco confiável. A página usa critérios para avaliação responsável.' },
       { q: 'Espelha Grupos entra nesses critérios?', a: 'Sim. O Espelha Grupos foi desenhado para grupos, links suportados, cadência e logs, mas ainda exige revisão humana e autorização dos grupos.' },
+      { q: 'O Espelha Grupos busca ofertas sozinho ou só espelha grupos?', a: 'Os dois. O espelhamento repassa, com o seu código, as ofertas dos grupos e canais que você acompanha, em 6 lojas. No plano Pro, as ofertas automáticas buscam na Shopee pelo tema e pelo desconto mínimo que você definir e publicam sozinhas, sem grupo de origem. Nas outras lojas não há busca automática.' },
+      { q: 'O Espelha Grupos tem reembolso?', a: 'Tem, publicado: valor integral em até 7 dias corridos depois do pagamento (direito de arrependimento, art. 49 do CDC), processado em até 5 dias úteis. Depois disso, o cancelamento evita a próxima cobrança.' },
       { q: 'O que evitar ao escolher um bot?', a: 'Evite promessa de comissão garantida, disparo sem consentimento, ausência de logs e ferramenta que não explica limites de uso.' },
     ],
   },
@@ -1199,6 +1234,267 @@ export const COMPARISON_PAGES = {
       { q: 'Preciso de qual plano do Afilimais para divulgar Mercado Livre?', a: 'Pelo material consultado, o Mercado Livre entra a partir do Grow, de R$ 196/mês. No Espelha Grupos ele já está no plano Basic, de R$ 39 por 30 dias.' },
     ],
   },
+  /* Cinco comparativos de 23/09/2026. Origem: na consulta "bot para afiliados
+   * no WhatsApp" o ChatGPT citou estes nomes e nos deixou de fora — por ler a
+   * consulta como "robô que busca oferta sozinho" e por querer evidência de
+   * confiança (premiou um concorrente pela política de reembolso pública).
+   *
+   * Todos os preços vêm de `competitors-data.js`, coletados DIRETAMENTE da
+   * página oficial de cada um no mesmo dia (nunca de tabela de IA ou de outro
+   * concorrente). Regra de sempre: dizer onde o concorrente é melhor. E dizer
+   * que temos os DOIS modos — espelhamento (6 lojas) e busca automática
+   * (Shopee, Pro) —, que é o ponto que a IA não enxergava. */
+  '/alternativas/easyfy': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Easyfy',
+    title: 'Alternativa à Easyfy: grupos ilimitados por R$ 69',
+    description: 'O PRO da Easyfy publica em até 10 grupos e canais. No Espelha Grupos o Pro custa R$ 69 por 30 dias, sem limite de grupos, e busca ofertas da Shopee sozinho.',
+    competitorSlugs: ['easyfy'],
+    productPage: {
+      href: '/bot-que-busca-ofertas-shopee-whatsapp',
+      label: 'Como o robô busca ofertas da Shopee sozinho',
+      note: 'O modo de ofertas automáticas, além do espelhamento dos grupos que você segue.',
+    },
+    guides: [
+      { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: os dois modos' },
+      { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
+    ],
+    tldr: 'A Easyfy tem plano gratuito permanente (1 grupo monitorado e 1 de destino, 10 promoções automáticas por dia) e planos de R$ 59,90 e R$ 89,90 por mês, com WhatsApp e Telegram e 8 plataformas. O PRO publica em até 10 grupos e canais de destino, com 1 número de WhatsApp. O Espelha Grupos cobra R$ 39 por 30 dias no Basic e R$ 69 no Pro, sem limite de grupos, e no Pro também busca ofertas da Shopee sozinho por tema.',
+    directAnswer: 'A Easyfy é uma plataforma larga para afiliados: converte links de 8 plataformas (Amazon, Mercado Livre, Shopee, Magazine Luiza, AliExpress, AWIN, Rakuten e SHEIN), monitora grupos, publica no WhatsApp e no Telegram, mostra comissões reais da Shopee e da Awin, tem encurtador próprio, vitrine, link na bio e, no Elite, imagens de produto geradas por IA. O plano gratuito é permanente e o PRO custa R$ 59,90/mês, com 1 número de WhatsApp e até 10 grupos e canais de destino. O Espelha Grupos é só WhatsApp e cobre 6 lojas, mas não limita grupos: o Basic, de R$ 39 por 30 dias, espelha os grupos que você segue com o seu link, e o Pro, de R$ 69, acrescenta canais, filas, controle de ritmo e a busca automática de ofertas da Shopee por tema e desconto mínimo. Os dois modos — repassar o que aparece nos seus grupos de origem e buscar oferta sozinho — ficam na mesma conta. Há 7 dias grátis com o Pro completo, sem cartão, e reembolso integral em até 7 dias do pagamento.',
+    rows: [
+      { key: 'preco', label: 'Preço', produto: 'Basic R$ 39 e Pro R$ 69, por 30 dias.', concorrente: 'Free R$ 0, PRO R$ 59,90/mês e Elite R$ 89,90/mês.', reading: 'A Easyfy tem um gratuito permanente; nós temos o Pro completo por 7 dias e um plano pago de entrada mais barato.' },
+      { key: 'grupos', label: 'Quantos grupos recebem', produto: 'Sem limite de grupos.', concorrente: 'PRO: até 10 grupos e canais de destino. Free: 1 grupo de destino.', reading: 'Se você publica em mais de 10 destinos, a conta muda a nosso favor.' },
+      { key: 'lojas', label: 'Lojas e canais', produto: 'Seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress), só WhatsApp.', concorrente: 'Oito plataformas, incluindo AWIN e Rakuten, e WhatsApp e Telegram.', reading: 'Aqui a Easyfy ganha: se você divulga AWIN, Rakuten ou usa Telegram, é um motivo real para escolhê-la.' },
+      { key: 'busca', label: 'Oferta sem grupo de origem', produto: 'No Pro, o robô busca ofertas da Shopee sozinho por tema, desconto mínimo e ordem de busca.', concorrente: 'Monitora grupos e converte cada link; permite programar envios automáticos de ofertas.', reading: 'Os dois cobrem o espelhamento; confira como cada um escolhe a oferta quando não há grupo de origem.' },
+      { key: 'extras', label: 'Além da publicação', produto: 'Histórico completo de envios, marca d’água e painel de vendas da Shopee no Pro.', concorrente: 'Encurtador com rastreamento, vitrine, link na bio, analytics com comissões da Shopee e da Awin, imagens com IA no Elite.', reading: 'A Easyfy traz mais ferramentas de vitrine e conteúdo; nós focamos na publicação recorrente nos grupos.' },
+    ],
+    criteria: ['Quantos grupos e canais recebem as ofertas', 'Se você usa Telegram além do WhatsApp', 'Se divulga AWIN ou Rakuten', 'Se quer o robô buscando oferta sozinho', 'Se prefere um gratuito permanente limitado ou o plano completo por 7 dias'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o robô somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'Preço e limites de qualquer concorrente mudam sem aviso — confirme na página oficial antes de decidir.'],
+    botinhoDifferentials: ['Grupos ilimitados, sem faixa por quantidade', 'Espelhamento no Basic de R$ 39 por 30 dias', 'Busca automática de ofertas da Shopee no Pro de R$ 69', 'Seis lojas, com conversão de produto e de cupom', 'Grupos, Canais e Comunidades do WhatsApp', 'Controle do ritmo dos envios por grupo', '7 dias grátis com o Pro completo, sem cartão', 'Reembolso integral em até 7 dias do pagamento'],
+    bestFit: [
+      'Escolha o Espelha Grupos se você publica em mais de 10 grupos, quer pagar o mesmo com poucos ou muitos grupos e quer os dois modos (espelhar e buscar oferta sozinho) na mesma conta.',
+      'Escolha a Easyfy se usa Telegram, divulga AWIN ou Rakuten, ou quer encurtador próprio, vitrine e imagens com IA no mesmo lugar.',
+      'Se você quer começar sem pagar nada e por tempo indeterminado, o gratuito permanente da Easyfy cobre 1 grupo monitorado e 1 de destino.',
+    ],
+    notIdealFit: [
+      'A Easyfy não é ideal para quem publica em muitos grupos: o PRO cobre até 10 destinos e 1 número de WhatsApp.',
+      'O Espelha Grupos não é ideal para quem precisa de Telegram, AWIN ou Rakuten — não cobrimos esses canais nem essas redes.',
+      'O Espelha Grupos não tem vitrine, link na bio nem geração de imagem por IA.',
+    ],
+    migrationPath: [
+      'Liste os grupos de onde vêm as ofertas e os grupos, Canais ou Comunidades onde você publica.',
+      'Confira se as lojas que você divulga estão entre as seis que cobrimos.',
+      'Comece os 7 dias grátis e compare pelo histórico de envios, não pela impressão.',
+      'Cancele a outra só depois de confirmar que grupos, lojas e links funcionam como você espera.',
+    ],
+    faq: [
+      { q: 'A Easyfy tem plano grátis?', a: 'Tem, permanente e sem cartão: links de afiliado ilimitados, 1 canal (WhatsApp ou Telegram), 1 grupo monitorado, 1 grupo de destino e 10 promoções automáticas por dia, conforme a página oficial consultada em 23/09/2026.' },
+      { q: 'Quanto custa a Easyfy?', a: 'PRO por R$ 59,90/mês e Elite por R$ 89,90/mês, cobrados mensalmente. O Espelha Grupos custa R$ 39 (Basic) ou R$ 69 (Pro) por 30 dias.' },
+      { q: 'O Espelha Grupos busca ofertas sozinho?', a: 'Sim, no plano Pro: você escreve o tema e o desconto mínimo, e o robô procura na Shopee e publica no seu grupo. Nas outras lojas, o Espelha Grupos converte o link que chega dos grupos que você acompanha.' },
+      { q: 'Em que a Easyfy é melhor?', a: 'Em Telegram, em AWIN e Rakuten, e nas ferramentas de vitrine, encurtador e imagem por IA. Não fazemos nada disso.' },
+    ],
+  },
+  '/alternativas/lucreshop': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · LucreShop',
+    title: 'Alternativa à LucreShop: sem cota de grupos',
+    description: 'A LucreShop limita grupos por número de WhatsApp e por plano. No Espelha Grupos o Pro custa R$ 69 por 30 dias, sem limite de grupos, com 6 lojas.',
+    competitorSlugs: ['lucreshop'],
+    productPage: {
+      href: '/bot-que-busca-ofertas-shopee-whatsapp',
+      label: 'Como o robô busca ofertas da Shopee sozinho',
+      note: 'O modo de ofertas automáticas, além do espelhamento dos grupos que você segue.',
+    },
+    guides: [
+      { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: os dois modos' },
+      { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
+    ],
+    tldr: 'A LucreShop tem cinco planos, de R$ 29,90 a R$ 530 por mês, com os 4 marketplaces (Amazon, Shopee, Mercado Livre e Magalu), bot de nicho que busca e publica sozinho, espelhamento, Telegram e automação de Instagram. O que muda entre os planos é a cota: 1 grupo no de entrada, 3, 8, 20 e 100 grupos por loja nos seguintes. O Espelha Grupos cobra R$ 39 (Basic) ou R$ 69 (Pro) por 30 dias sem limite de grupos, com 6 lojas.',
+    directAnswer: 'A LucreShop é uma plataforma completa para afiliados de Amazon, Shopee, Mercado Livre e Magalu: bot de nicho que busca a oferta e publica sozinho, espelhamento de grupos, campanhas cronometradas, WhatsApp e Telegram, automação de Instagram (resposta a comentário e mensagem no Direct), vitrine própria com subdomínio, link inteligente que troca de grupo quando lota e relatórios de cliques, participantes e ROI. O preço começa em R$ 29,90/mês, com 3 dias grátis sem cartão, mas o plano de entrada cobre 1 grupo ou canal por número de WhatsApp; 20 grupos por loja só no Pro, de R$ 185/mês. O Espelha Grupos não cobra por quantidade de grupos: o Basic, de R$ 39 por 30 dias, espelha os grupos que você segue em 6 lojas, e o Pro, de R$ 69, acrescenta canais, filas, controle de ritmo e a busca automática de ofertas da Shopee por tema. Não temos Telegram, Instagram, vitrine nem relatório de cliques — nesses pontos a LucreShop entrega mais.',
+    rows: [
+      { key: 'preco', label: 'Preço de entrada', produto: 'Basic R$ 39 por 30 dias, sem limite de grupos.', concorrente: 'Meu Primeiro Grupo: a partir de R$ 29,90/mês, com 1 grupo ou canal por número.', reading: 'A LucreShop começa mais barata, mas com 1 grupo. Com mais grupos, o valor a comparar sobe.' },
+      { key: 'grupos', label: 'Quantos grupos recebem', produto: 'Sem limite de grupos.', concorrente: '1 grupo (R$ 29,90), 3 (R$ 59,90), 8 (R$ 95), 20 por loja (R$ 185) e 100 por loja (R$ 530).', reading: 'Quem tem 10 grupos precisa do Pro de R$ 185 lá; aqui paga o mesmo que quem tem um.' },
+      { key: 'busca', label: 'Oferta sem grupo de origem', produto: 'No Pro, busca automática de ofertas da Shopee por tema, desconto mínimo e ordem de busca.', concorrente: 'Bot de nicho em todos os planos: você define categorias e lojas e ele busca, monta a mensagem e publica.', reading: 'Os dois buscam oferta sozinhos; confira em quais lojas cada um faz isso.' },
+      { key: 'lojas', label: 'Lojas', produto: 'Seis: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress.', concorrente: 'Quatro: Amazon, Shopee, Mercado Livre e Magazine Luiza.', reading: 'Se você divulga SHEIN ou AliExpress, nós cobrimos e a LucreShop não lista.' },
+      { key: 'alem', label: 'Além do WhatsApp', produto: 'Grupos, Canais e Comunidades do WhatsApp.', concorrente: 'Telegram, automação de Instagram, vitrine com subdomínio, landing pages, link inteligente anti-lotação e relatórios de cliques e ROI.', reading: 'Aqui a LucreShop ganha com folga.' },
+    ],
+    criteria: ['Quantos grupos você tem hoje e quantos pretende ter', 'Se usa Telegram ou Instagram', 'Se divulga SHEIN ou AliExpress', 'Se precisa de relatório de cliques e ROI', 'Se prefere cota por plano ou preço fixo'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o robô somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'Preço e limites de qualquer concorrente mudam sem aviso — confirme na página oficial antes de decidir.'],
+    botinhoDifferentials: ['Grupos ilimitados, sem cota por número ou por plano', 'Seis lojas, SHEIN e AliExpress incluídas', 'Espelhamento no Basic de R$ 39 por 30 dias', 'Busca automática de ofertas da Shopee no Pro de R$ 69', 'Conversão de links de produto e de cupom', '7 dias grátis com o Pro completo, sem cartão', 'Reembolso integral em até 7 dias do pagamento'],
+    bestFit: [
+      'Escolha o Espelha Grupos se você publica em vários grupos e não quer trocar de plano a cada grupo novo, ou se divulga SHEIN e AliExpress.',
+      'Escolha a LucreShop se usa Telegram ou Instagram, quer vitrine própria com SEO e relatórios de cliques e ROI, ou opera um grupo só e quer o menor preço de entrada.',
+      'A LucreShop também faz sentido para quem gerencia várias marcas separadas, com vitrines independentes por loja.',
+    ],
+    notIdealFit: [
+      'A LucreShop não é ideal para quem tem muitos grupos com orçamento curto: 20 grupos por loja só a partir de R$ 185/mês.',
+      'O Espelha Grupos não é ideal para quem precisa de Telegram, Instagram, vitrine ou relatório de cliques.',
+      'O Espelha Grupos trabalha somente com WhatsApp.',
+    ],
+    migrationPath: [
+      'Conte os grupos de destino — é o número que define o plano na LucreShop.',
+      'Liste as lojas que você divulga e confira se estão entre as seis que cobrimos.',
+      'Comece os 7 dias grátis e compare pelo histórico de envios.',
+      'Cancele a outra só depois de confirmar que grupos, lojas e links funcionam como você espera.',
+    ],
+    faq: [
+      { q: 'Quanto custa a LucreShop?', a: 'Conforme a página oficial consultada em 23/09/2026: Meu Primeiro Grupo a partir de R$ 29,90/mês, Grupo em Crescimento R$ 59,90, Start R$ 95, Pro R$ 185 e Elite R$ 530 por mês.' },
+      { q: 'A LucreShop tem teste grátis?', a: 'Tem: 3 dias grátis sem cartão, no plano Meu Primeiro Grupo. O Espelha Grupos oferece 7 dias com o Pro completo, sem cartão.' },
+      { q: 'Quantos grupos cabem em cada plano da LucreShop?', a: '1 grupo ou canal no de entrada, até 3 no Grupo em Crescimento, até 8 no Start, até 20 por loja no Pro e até 100 por loja no Elite. O Espelha Grupos não limita grupos.' },
+      { q: 'Em que a LucreShop é melhor?', a: 'Em Telegram, automação de Instagram, vitrine com subdomínio, link inteligente anti-lotação e relatórios de cliques, participantes e ROI.' },
+    ],
+  },
+  '/alternativas/afiliai': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · AfiliAI',
+    title: 'Alternativa ao AfiliAI: grupos ilimitados e 6 lojas',
+    description: 'O AfiliAI publica em até 5 ou 10 grupos de destino e lista 4 lojas. No Espelha Grupos o Pro custa R$ 69 por 30 dias, sem limite de grupos, com 6 lojas.',
+    competitorSlugs: ['afiliai'],
+    productPage: {
+      href: '/bot-que-busca-ofertas-shopee-whatsapp',
+      label: 'Como o robô busca ofertas da Shopee sozinho',
+      note: 'O modo de ofertas automáticas, além do espelhamento dos grupos que você segue.',
+    },
+    guides: [
+      { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: os dois modos' },
+      { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
+    ],
+    tldr: 'O AfiliAI clona grupos, tem AutoPilot que busca oferta e posta sozinho, e publica no WhatsApp e no Telegram. O plano Ofertas custa R$ 49,90/mês para até 5 grupos de destino e o Combo, R$ 99,00/mês para até 10 — os dois exibidos ao lado de um valor "de" riscado. O Espelha Grupos cobra R$ 39 (Basic) ou R$ 69 (Pro) por 30 dias, sem limite de grupos, com 6 lojas.',
+    directAnswer: 'O AfiliAI automatiza a divulgação de afiliados no WhatsApp e no Telegram: clona promoções de grupos externos com o card reescrito por IA, tem AutoPilot que busca produto em oferta e posta sozinho, blocos de campanha com intervalo, agendamento com CTAs, vários WhatsApps conectados, vitrine e relatórios diários. Tem também um robô para encher grupo, vendido separado. A página lista Shopee, Mercado Livre, Amazon e Magalu. O plano Ofertas cobre até 5 grupos de destino por R$ 49,90/mês e o Combo, até 10 por R$ 99,00/mês; os dois aparecem ao lado de um valor "de" riscado, sem dizer se ele volta a valer. O Espelha Grupos não limita grupos: o Basic, de R$ 39 por 30 dias, espelha os grupos que você segue em 6 lojas (SHEIN e AliExpress incluídas), e o Pro, de R$ 69, acrescenta canais, filas, controle de ritmo e a busca automática de ofertas da Shopee. Não temos Telegram nem vários números na mesma conta — nesses pontos o AfiliAI entrega mais.',
+    rows: [
+      { key: 'preco', label: 'Preço', produto: 'Basic R$ 39 e Pro R$ 69, por 30 dias.', concorrente: 'Ofertas R$ 49,90/mês e Combo R$ 99,00/mês, exibidos ao lado de "de R$ 99,90" e "de R$ 209,90".', reading: 'Confirme com eles se o valor riscado volta a valer depois — a página não diz.' },
+      { key: 'grupos', label: 'Quantos grupos recebem', produto: 'Sem limite de grupos.', concorrente: 'Até 5 grupos de destino no Ofertas e até 10 no Combo.', reading: 'Com mais de 5 destinos, o valor a comparar lá é o Combo.' },
+      { key: 'busca', label: 'Oferta sem grupo de origem', produto: 'No Pro, busca automática de ofertas da Shopee por tema e desconto mínimo.', concorrente: 'AutoPilot: busca produtos em oferta e posta sozinho, já no plano Ofertas.', reading: 'Os dois buscam oferta sozinhos; o AfiliAI inclui isso no plano de entrada.' },
+      { key: 'lojas', label: 'Lojas', produto: 'Seis: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress.', concorrente: 'Quatro: Shopee, Mercado Livre, Amazon e Magalu.', reading: 'Se você divulga SHEIN ou AliExpress, nós cobrimos.' },
+      { key: 'canais', label: 'Canais e números', produto: 'Só WhatsApp (grupos, Canais e Comunidades), um número por conta.', concorrente: 'WhatsApp e Telegram, 2 WhatsApps no Ofertas e 5 no Combo.', reading: 'Aqui o AfiliAI ganha: Telegram e vários números na mesma conta.' },
+    ],
+    criteria: ['Quantos grupos de destino você tem', 'Se usa Telegram ou vários números de WhatsApp', 'Se divulga SHEIN ou AliExpress', 'Se o valor riscado do plano volta a valer', 'Se quer testar antes de pagar'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o robô somente em grupos e canais nos quais você tem autorização para publicar.', 'Adicionar pessoas a grupos sem que elas peçam aumenta denúncias e risco de restrição do número.', 'Preço e limites de qualquer concorrente mudam sem aviso — confirme na página oficial antes de decidir.'],
+    botinhoDifferentials: ['Grupos ilimitados, sem faixa por quantidade', 'Seis lojas, SHEIN e AliExpress incluídas', 'Espelhamento no Basic de R$ 39 por 30 dias', 'Busca automática de ofertas da Shopee no Pro de R$ 69', '7 dias grátis com o Pro completo, sem cartão', 'Reembolso integral em até 7 dias do pagamento', 'Preço publicado sem valor riscado'],
+    bestFit: [
+      'Escolha o Espelha Grupos se você publica em mais de 10 grupos, divulga SHEIN ou AliExpress, ou quer testar o plano completo antes de pagar.',
+      'Escolha o AfiliAI se usa Telegram, precisa de vários números de WhatsApp na mesma conta ou quer o AutoPilot já no plano de entrada.',
+      'O AfiliAI também tem um plano só de crescimento de grupo, que não fazemos.',
+    ],
+    notIdealFit: [
+      'O AfiliAI não é ideal para quem publica em muitos grupos: o teto do Combo é de 10 grupos de destino.',
+      'O Espelha Grupos não é ideal para quem precisa de Telegram ou de vários números na mesma conta.',
+      'O Espelha Grupos não adiciona membros a grupos.',
+    ],
+    migrationPath: [
+      'Conte os grupos de destino — é o número que define o plano no AfiliAI.',
+      'Liste as lojas que você divulga e confira se estão entre as seis que cobrimos.',
+      'Comece os 7 dias grátis e compare pelo histórico de envios.',
+      'Cancele a outra só depois de confirmar que grupos, lojas e links funcionam como você espera.',
+    ],
+    faq: [
+      { q: 'Quanto custa o AfiliAI?', a: 'Conforme a página oficial afiliai.com.br consultada em 23/09/2026: Ofertas R$ 49,90/mês (até 5 grupos de destino), Combo R$ 99,00/mês (até 10) e Robo R$ 59,90/mês (só para encher grupo). Os três aparecem ao lado de um valor "de" riscado.' },
+      { q: 'O AfiliAI busca ofertas sozinho?', a: 'Sim, pelo AutoPilot, e também clona grupos externos. O Espelha Grupos faz os dois modos: espelha os grupos que você segue em 6 lojas e, no Pro, busca ofertas da Shopee sozinho por tema.' },
+      { q: 'O AfiliAI tem teste grátis ou reembolso?', a: 'A página consultada tem botão para criar conta grátis, mas não detalha teste, garantia nem política de reembolso. O Espelha Grupos tem 7 dias grátis com o Pro completo e devolve o valor integral em até 7 dias do pagamento.' },
+      { q: 'Em que o AfiliAI é melhor?', a: 'Em Telegram, em vários números de WhatsApp na mesma conta e no AutoPilot já no plano de entrada.' },
+    ],
+  },
+  '/alternativas/achify': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Achify',
+    title: 'Alternativa ao Achify: espelhar sem pagar por grupo',
+    description: 'No Achify o Start envia para 1 grupo e o espelhamento começa no Pro. No Espelha Grupos o Basic de R$ 39 já espelha, sem limite de grupos.',
+    competitorSlugs: ['achify'],
+    productPage: {
+      href: '/bot-que-busca-ofertas-shopee-whatsapp',
+      label: 'Como o robô busca ofertas da Shopee sozinho',
+      note: 'O modo de ofertas automáticas, além do espelhamento dos grupos que você segue.',
+    },
+    guides: [
+      { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: os dois modos' },
+      { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
+    ],
+    tldr: 'O Achify tem piloto automático 24h na Shopee e publica no WhatsApp e no Telegram. O Start custa R$ 57/mês e envia para 1 grupo; o espelhamento de um grupo de origem começa no Pro, de R$ 97/mês, com 3 grupos para envio; o Ultra, de R$ 147/mês, envia para 10. O Espelha Grupos espelha já no Basic, de R$ 39 por 30 dias, sem limite de grupos, e no Pro de R$ 69 também busca ofertas da Shopee sozinho.',
+    directAnswer: 'O Achify automatiza grupos de achadinhos: na Shopee roda um piloto automático 24h que garimpa, aplica o link e envia sozinho; para Amazon e Mercado Livre, as ofertas chegam numa central para você aprovar em poucos cliques. Cada foto sai com marca d’água, moldura e selo de desconto, e todos os planos têm vitrine e link na bio, com WhatsApp e Telegram. O preço acompanha os grupos: Start R$ 57/mês com 1 grupo para envio, Pro R$ 97/mês com 1 grupo monitorado e 3 para envio, Ultra R$ 147/mês com 5 monitorados e 10 para envio. Há garantia de 7 dias com devolução de 100%. O Espelha Grupos espelha os grupos que você segue já no Basic, de R$ 39 por 30 dias, em 6 lojas e sem limite de grupos; o Pro, de R$ 69, acrescenta canais, filas, marca d’água, controle de ritmo e a busca automática de ofertas da Shopee por tema. Também devolvemos o valor integral em até 7 dias do pagamento, e antes disso há 7 dias grátis sem cartão.',
+    rows: [
+      { key: 'espelhar', label: 'Espelhar um grupo de origem', produto: 'Já no Basic, de R$ 39 por 30 dias, com quantos grupos de origem quiser.', concorrente: 'Começa no Pro, de R$ 97/mês, com 1 grupo monitorado; 5 no Ultra, de R$ 147/mês.', reading: 'Se o que você quer é espelhar, o valor a comparar lá é R$ 97, não R$ 57.' },
+      { key: 'grupos', label: 'Quantos grupos recebem', produto: 'Sem limite de grupos.', concorrente: '1 grupo no Start, 3 no Pro e 10 no Ultra.', reading: 'Com mais de 10 grupos, o Achify não tem plano publicado que cubra.' },
+      { key: 'busca', label: 'Oferta sem grupo de origem', produto: 'No Pro, busca automática de ofertas da Shopee por tema, desconto mínimo e ordem de busca.', concorrente: 'Piloto automático 24h na Shopee em todos os planos; Amazon e Mercado Livre por aprovação manual.', reading: 'Os dois buscam oferta sozinhos na Shopee; o Achify inclui isso no plano de entrada.' },
+      { key: 'lojas', label: 'Lojas', produto: 'Seis: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress.', concorrente: 'Três: Shopee, Amazon e Mercado Livre.', reading: 'Se você divulga Magalu, SHEIN ou AliExpress, nós cobrimos.' },
+      { key: 'garantia', label: 'Teste e devolução', produto: '7 dias grátis sem cartão; reembolso integral em até 7 dias do pagamento.', concorrente: 'R$ 1,00 por 8 dias no cartão (renova por R$ 57/mês) e garantia de 7 dias com devolução de 100%.', reading: 'Os dois devolvem o dinheiro em 7 dias; nós deixamos testar antes sem cartão.' },
+      { key: 'alem', label: 'Além do WhatsApp', produto: 'Grupos, Canais e Comunidades do WhatsApp.', concorrente: 'Telegram, vitrine online, link na bio, menção @todos e selo de desconto na foto.', reading: 'Aqui o Achify entrega mais.' },
+    ],
+    criteria: ['Se você quer espelhar um grupo de origem ou só garimpar na Shopee', 'Quantos grupos recebem as ofertas', 'Se divulga Magalu, SHEIN ou AliExpress', 'Se usa Telegram ou quer vitrine', 'Se prefere testar sem cartão ou pagar com garantia'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o robô somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'Preço e limites de qualquer concorrente mudam sem aviso — confirme na página oficial antes de decidir.'],
+    botinhoDifferentials: ['Espelhamento já no Basic de R$ 39 por 30 dias', 'Grupos ilimitados, sem faixa por quantidade', 'Seis lojas, com conversão de produto e de cupom', 'Busca automática de ofertas da Shopee no Pro de R$ 69', '7 dias grátis sem cartão', 'Reembolso integral em até 7 dias do pagamento'],
+    bestFit: [
+      'Escolha o Espelha Grupos se quer espelhar grupos de origem sem pagar por quantidade de grupos, ou se divulga Magalu, SHEIN ou AliExpress.',
+      'Escolha o Achify se opera poucos grupos, quer o piloto automático da Shopee já no plano de entrada e valoriza vitrine, link na bio, Telegram e selo de desconto na foto.',
+      'O plano trimestral do Achify sai mais barato por mês para quem já decidiu ficar.',
+    ],
+    notIdealFit: [
+      'O Achify não é ideal para quem publica em muitos grupos: o teto publicado é de 10 grupos para envio.',
+      'O Achify não é ideal para quem quer espelhar grupo no plano mais barato: o monitoramento começa no Pro.',
+      'O Espelha Grupos não é ideal para quem precisa de Telegram, vitrine ou link na bio.',
+    ],
+    migrationPath: [
+      'Decida se o que você precisa é espelhar grupos de origem, garimpar na Shopee ou os dois.',
+      'Conte os grupos que recebem as ofertas.',
+      'Comece os 7 dias grátis e compare pelo histórico de envios.',
+      'Cancele a outra só depois de confirmar que grupos, lojas e links funcionam como você espera.',
+    ],
+    faq: [
+      { q: 'Quanto custa o Achify?', a: 'Conforme a página oficial consultada em 23/09/2026, no plano mensal: Start R$ 57, Pro R$ 97 e Ultra R$ 147 por mês. O Start também tem opção trimestral de R$ 97 por 3 meses.' },
+      { q: 'O Achify espelha grupos?', a: 'Sim, a partir do Pro, que inclui 1 grupo monitorado; o Ultra inclui 5. O Start garimpa na Shopee e envia para 1 grupo, mas não monitora grupo de origem.' },
+      { q: 'O Achify tem garantia?', a: 'Tem: 7 dias com devolução de 100% do valor pago. O Espelha Grupos também devolve o valor integral em até 7 dias do pagamento, e antes disso deixa testar 7 dias sem cartão.' },
+      { q: 'Em que o Achify é melhor?', a: 'No piloto automático da Shopee já no plano de entrada, em Telegram, vitrine, link na bio, menção @todos e selo de desconto na foto.' },
+    ],
+  },
+  '/alternativas/afiliados-turbo': {
+    format: 'alternative-plural',
+    eyebrow: 'Alternativas · Afiliados Turbo',
+    title: 'Alternativa ao Afiliados Turbo: sem cota de ofertas',
+    description: 'O Afiliados Turbo cobra por grupos e por ofertas no mês: 1 grupo e 30 ofertas no Starter. No Espelha Grupos o Pro é R$ 69 por 30 dias, sem limite de grupos.',
+    competitorSlugs: ['afiliados-turbo'],
+    productPage: {
+      href: '/bot-que-busca-ofertas-shopee-whatsapp',
+      label: 'Como o robô busca ofertas da Shopee sozinho',
+      note: 'O modo de ofertas automáticas, além do espelhamento dos grupos que você segue.',
+    },
+    guides: [
+      { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: os dois modos' },
+      { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
+    ],
+    tldr: 'O Afiliados Turbo busca ofertas no Mercado Livre, na Amazon e na Shopee, converte o link e publica nos grupos com janela de horário, intervalo e teto diário. O Starter custa R$ 79,90/mês para 1 grupo e 30 ofertas por mês, o Profissional R$ 111,90 para 5 grupos e 200 ofertas, o Premium R$ 219,90. O Espelha Grupos cobra R$ 39 (Basic) ou R$ 69 (Pro) por 30 dias, sem limite de grupos nem de ofertas por mês.',
+    directAnswer: 'O Afiliados Turbo é um sistema que captura ofertas dos marketplaces e de grupos de WhatsApp, classifica por IA, converte o link para a sua etiqueta (Mercado Livre, Amazon e Shopee) e publica nos seus grupos, com categoria por grupo, janela de horário, intervalo mínimo e teto diário. Tem 7 dias grátis sem cartão, sem fidelidade. O preço acompanha duas cotas: grupos de publicação e ofertas por mês — 1 grupo e 30 ofertas no Starter (R$ 79,90/mês), 5 grupos e 200 ofertas no Profissional (R$ 111,90), 999 grupos no Premium (R$ 219,90). O Espelha Grupos não cobra por grupo nem por oferta: o Basic, de R$ 39 por 30 dias, espelha os grupos que você segue em 6 lojas, e o Pro, de R$ 69, acrescenta canais, filas, controle de ritmo e a busca automática de ofertas da Shopee. A busca por categoria com classificação por IA e a vitrine com domínio próprio são pontos em que o Afiliados Turbo entrega mais.',
+    rows: [
+      { key: 'preco', label: 'Preço de entrada', produto: 'Basic R$ 39 por 30 dias.', concorrente: 'Starter R$ 79,90/mês.', reading: 'O nosso plano de entrada custa menos da metade.' },
+      { key: 'cota', label: 'Pelo que você paga', produto: 'Pelo plano. Sem limite de grupos nem de ofertas por mês.', concorrente: 'Por grupos de publicação e ofertas por mês: 1 e 30 (Starter), 5 e 200 (Profissional), 999 e 9999 (Premium).', reading: '30 ofertas por mês é uma por dia; confira quantas você publica hoje.' },
+      { key: 'busca', label: 'Oferta sem grupo de origem', produto: 'No Pro, busca automática de ofertas da Shopee por tema, desconto mínimo e ordem de busca.', concorrente: 'Catálogo de ofertas dos marketplaces classificado por IA, com categoria por grupo; busca de produtos no Mercado Livre.', reading: 'Os dois buscam oferta sozinhos; a classificação por categoria é um ponto forte deles.' },
+      { key: 'lojas', label: 'Lojas com o seu link', produto: 'Seis: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress.', concorrente: 'Três com a sua etiqueta (Mercado Livre, Amazon e Shopee); outras 15 só reconhecidas.', reading: 'Se você divulga Magalu, SHEIN ou AliExpress, nós convertemos o link.' },
+      { key: 'teste', label: 'Teste e devolução', produto: '7 dias grátis sem cartão; reembolso integral em até 7 dias do pagamento.', concorrente: '7 dias grátis sem cartão, sem fidelidade e sem multa.', reading: 'Os dois deixam testar antes de pagar.' },
+    ],
+    criteria: ['Quantas ofertas você publica por mês', 'Quantos grupos recebem as ofertas', 'Se divulga Magalu, SHEIN ou AliExpress', 'Se quer ofertas separadas por categoria para cada grupo', 'Se precisa de vitrine com domínio próprio'],
+    limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o robô somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'Preço e limites de qualquer concorrente mudam sem aviso — confirme na página oficial antes de decidir.'],
+    botinhoDifferentials: ['Sem cota de ofertas por mês', 'Grupos ilimitados, sem faixa por quantidade', 'Seis lojas convertidas com o seu link', 'Espelhamento no Basic de R$ 39 por 30 dias', 'Busca automática de ofertas da Shopee no Pro de R$ 69', 'Reembolso integral em até 7 dias do pagamento'],
+    bestFit: [
+      'Escolha o Espelha Grupos se você publica mais de uma oferta por dia, em vários grupos, ou divulga Magalu, SHEIN ou AliExpress.',
+      'Escolha o Afiliados Turbo se quer um catálogo de ofertas classificado por IA, com categorias diferentes para cada grupo, e vitrine com domínio próprio no Premium.',
+      'O Afiliados Turbo também é uma boa escolha para quem quer ver a fila e o ritmo de cada grupo em detalhe antes de publicar.',
+    ],
+    notIdealFit: [
+      'O Afiliados Turbo não é ideal para quem publica muito com orçamento curto: o Starter cobre 30 ofertas por mês e 1 grupo.',
+      'O Espelha Grupos não é ideal para quem precisa de vitrine própria ou de classificação de ofertas por categoria.',
+      'O Espelha Grupos trabalha somente com WhatsApp.',
+    ],
+    migrationPath: [
+      'Conte quantas ofertas você publica por mês e em quantos grupos.',
+      'Liste as lojas que você divulga e confira se estão entre as seis que cobrimos.',
+      'Comece os 7 dias grátis e compare pelo histórico de envios.',
+      'Cancele a outra só depois de confirmar que grupos, lojas e links funcionam como você espera.',
+    ],
+    faq: [
+      { q: 'Quanto custa o Afiliados Turbo?', a: 'Conforme a página oficial consultada em 23/09/2026: Starter R$ 79,90/mês, Profissional R$ 111,90/mês e Premium R$ 219,90/mês, todos com 7 dias grátis sem cartão.' },
+      { q: 'O que o Starter do Afiliados Turbo inclui?', a: '1 grupo de publicação e 30 ofertas por mês, com conversor de links, bio page, publicação automática no WhatsApp e busca de produtos no Mercado Livre.' },
+      { q: 'O Espelha Grupos limita ofertas por mês?', a: 'Não. Nem ofertas por mês nem grupos. O que você controla é o ritmo: intervalo entre envios e limite por destino.' },
+      { q: 'Em que o Afiliados Turbo é melhor?', a: 'Na classificação das ofertas por IA com categoria por grupo, na tela de fila que mostra o ritmo de cada grupo e na vitrine com domínio próprio.' },
+    ],
+  },
 }
 
 export function getComparisonMetadata(slug) {
@@ -1456,6 +1752,11 @@ export function ComparisonPage({ slug }) {
                 {relatedPages.map((related) => (
                   <li key={related.href}>
                     <Link href={related.href} data-comparison-cta="related-page">{related.title}</Link>
+                  </li>
+                ))}
+                {(page.guides ?? []).map((guide) => (
+                  <li key={guide.href}>
+                    <Link href={guide.href} data-comparison-cta="related-guide">{guide.title}</Link>
                   </li>
                 ))}
               </ul>

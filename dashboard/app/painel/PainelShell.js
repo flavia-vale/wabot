@@ -8,8 +8,11 @@ import { NAV_GROUPS } from './nav'
 import SidebarOnboarding from '@/components/SidebarOnboarding'
 import { buildNoCredentialBanner } from '../../../src/credentialBlockAlert/message.js'
 import { shouldShowNoCredentialBanner } from '../../../src/domain/painel/journeyBanners.js'
+import { listProFeaturesInUse, buildProFeaturesNotice } from '../../../src/domain/payments/proFeaturesInUse.js'
 import { buildTrialEndingNotice } from '../../../src/domain/painel/trialNotice.js'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../src/tutorialVideo.js'
+import { hasProLikeAccess } from '@/lib/planEntitlements'
+import { ProModal } from '@/components/pro/ProGate'
 
 /* Contexto compartilhado: dados de sessão/usuário reusados pelas páginas. O
  * status de sessão (`online`/`phone`) é re-buscado periodicamente e ao focar a
@@ -151,6 +154,27 @@ function NoCredentialBanner({ show }) {
   )
 }
 
+/* Canal parado porque o plano Básico não inclui canais (RCA 2026-09-23).
+ * No teste grátis tudo do Pro funciona; a cliente paga o Básico e o canal para
+ * de receber EM SILÊNCIO — o grupo ao lado segue normal e ela conclui "paguei e
+ * parou". Global de propósito: ela não volta à tela de planos para descobrir.
+ * O texto sai da regra pura (src/domain/payments/proFeaturesInUse.js), a mesma
+ * da tela de planos, para as duas superfícies dizerem a mesma coisa. */
+function ProFeaturesStoppedBanner({ notice }) {
+  if (!notice || notice.kind !== 'stopped') return null
+
+  return (
+    <div className="pnl-note-box is-warn pnl-expired-plan-banner" role="alert">
+      <div>
+        <strong style={{ fontWeight: 600 }}>{notice.title}</strong>
+        <p style={{ marginTop: 6 }}>{notice.body}</p>
+        <p style={{ marginTop: 6, fontWeight: 600 }}>{notice.action}</p>
+      </div>
+      <Link href="/painel/plano" className="pnl-btn is-primary" style={{ flexShrink: 0 }}>Mudar para o Pro</Link>
+    </div>
+  )
+}
+
 /* Fim do teste com a PROVA do que o robô já fez. Ver o porquê em
  * src/domain/painel/trialNotice.js — o teste acabava em silêncio, e quem paga
  * decide exatamente nesse dia. */
@@ -180,7 +204,7 @@ function planInfo(user) {
   const expired = validExp && exp < new Date()
   const label = expired
     ? 'Plano vencido'
-    : plan === 'pro' ? 'Plano Pro'
+    : plan === 'pro' ? 'Plano PRO'
       : plan === 'basic' ? 'Plano Basic'
         : plan === 'trial' ? 'Trial'
           : 'Plano e cobrança'
@@ -230,6 +254,7 @@ export default function PainelShell({ children }) {
   const [online, setOnline] = useState(null)
   const [phone, setPhone] = useState(null)
   const [groupCount, setGroupCount] = useState(null)
+  const [channelCount, setChannelCount] = useState(null)
   const [sessionHealth, setSessionHealth] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState({})
@@ -238,6 +263,9 @@ export default function PainelShell({ children }) {
   const [mlSsidExpired, setMlSsidExpired] = useState(false)
   const [hasAnyCredential, setHasAnyCredential] = useState(null)
   const [offersPublished, setOffersPublished] = useState(null)
+  // Janela "recurso do PRO" (components/pro/ProGate.js). Chave do recurso em
+  // lib/planFeatures.js, ou null quando fechada.
+  const [proModal, setProModal] = useState(null)
 
   // Autenticação — mesmo contrato do dashboard atual (api.me → /login no erro).
   useEffect(() => {
@@ -306,7 +334,10 @@ export default function PainelShell({ children }) {
     } else {
       setOnline(false)
     }
-    if (g.status === 'fulfilled' && Array.isArray(g.value)) setGroupCount(g.value.length)
+    if (g.status === 'fulfilled' && Array.isArray(g.value)) {
+      setGroupCount(g.value.length)
+      setChannelCount(g.value.filter((group) => group?.kind === 'channel').length)
+    }
   }, [])
 
   const refreshSessionRef = useRef(refreshSession)
@@ -370,9 +401,30 @@ export default function PainelShell({ children }) {
     [user?.plan, user?.accessExpiresAt, offersPublished],
   )
 
+  // Só canais aqui: é o que já vem na lista de grupos, sem chamada nova. A tela
+  // de planos mostra o quadro completo (automáticas e filas também).
+  const userPlan = user?.plan
+  const userAccessExpiresAt = user?.accessExpiresAt
+  const proFeaturesNotice = useMemo(() => {
+    if (channelCount === null || userPlan !== 'basic') return null
+    const exp = userAccessExpiresAt ? new Date(userAccessExpiresAt) : null
+    const accessActive = !exp || Number.isNaN(exp.getTime()) ? true : exp > new Date()
+    return buildProFeaturesNotice({
+      plan: userPlan,
+      accessActive,
+      items: listProFeaturesInUse({ channelCount }),
+    })
+  }, [channelCount, userPlan, userAccessExpiresAt])
+
+  // Divisão Basic/PRO (2026-09-23): a MESMA regra do backend (Pro, premium ou
+  // teste grátis ativo). Só decide o que a tela mostra — quem trava de verdade
+  // é a API (403 FEATURE_REQUIRES_PRO).
+  const isPro = hasProLikeAccess({ plan: userPlan, accessExpiresAt: userAccessExpiresAt })
+  const openPro = useCallback((feature) => setProModal(feature || 'garimpo'), [])
+
   const ctxValue = useMemo(
-    () => ({ user, online, phone, groupCount, sessionHealth, hasAnyCredential, offersPublished, refreshSession, setHeader }),
-    [user, online, phone, groupCount, sessionHealth, hasAnyCredential, offersPublished, refreshSession],
+    () => ({ user, online, phone, groupCount, sessionHealth, hasAnyCredential, offersPublished, refreshSession, setHeader, isPro, openPro }),
+    [user, online, phone, groupCount, sessionHealth, hasAnyCredential, offersPublished, refreshSession, isPro, openPro],
   )
 
   if (checking) {
@@ -392,7 +444,7 @@ export default function PainelShell({ children }) {
 
         <aside className="pnl-sidebar">
           <Link href="/painel" className="pnl-brand" onClick={() => setMenuOpen(false)}>
-            BOTinho <small>.app</small>
+            Espelha Grupos
           </Link>
           <nav className="pnl-nav" aria-label="Navegação do painel">
             <SidebarOnboarding userId={user?.id} onNavigate={() => setMenuOpen(false)} />
@@ -403,12 +455,16 @@ export default function PainelShell({ children }) {
                   key={item.href}
                   href={item.href}
                   aria-current={isActive(item.href) ? 'page' : undefined}
-                  className={`pnl-nav-item${isActive(item.href) ? ' is-active' : ''}`}
+                  className={`pnl-nav-item${isActive(item.href) ? ' is-active' : ''}${item.pro && !isPro ? ' is-pro-locked' : ''}`}
                   onClick={() => setMenuOpen(false)}
                 >
                   <Icon path={item.icon} />
                   <span>{item.label}</span>
-                  {item.pro && <span className="pnl-pro">PRO</span>}
+                  {item.pro && !isPro && (
+                    <span className="pnl-pro" title="Disponível no plano PRO">
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{LOCK_ICON}</svg>PRO
+                    </span>
+                  )}
                   {item.free && <span className="pnl-free">GRÁTIS</span>}
                 </Link>
               )
@@ -444,8 +500,17 @@ export default function PainelShell({ children }) {
 
           {(() => {
             const pi = planInfo(user)
+            if (!pi.expired && !isPro) {
+              return (
+                <Link href="/painel/plano" className="pnl-plan-upsell" onClick={() => setMenuOpen(false)}>
+                  <span className="pnl-plan-upsell-title" style={{ display: 'block' }}>{pi.label}</span>
+                  <span className="pnl-plan-upsell-sub" style={{ display: 'block' }}>Desbloqueie canais, ofertas automáticas e filas.</span>
+                  <span className="pnl-btn is-pro is-sm">Ver planos</span>
+                </Link>
+              )
+            }
             return (
-              <Link href="/painel/plano" className={`pnl-plan${pi.expired ? ' is-expired' : ''}`} onClick={() => setMenuOpen(false)}>
+              <Link href="/painel/plano" className={`pnl-plan${pi.expired ? ' is-expired' : ' is-pro'}`} onClick={() => setMenuOpen(false)}>
                 <span className="pnl-plan-ico"><Icon path={pi.expired ? LOCK_ICON : STAR_ICON} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span className="pnl-plan-title" style={{ display: 'block' }}>{pi.label}</span>
@@ -461,9 +526,9 @@ export default function PainelShell({ children }) {
               <>
                 <button type="button" aria-label="Fechar menu da conta" className="pnl-usermenu-scrim" onClick={() => setUserMenuOpen(false)} />
                 <div className="pnl-usermenu" role="menu">
-                  <Link href="/painel/configuracoes" role="menuitem" className="pnl-usermenu-item" onClick={() => { setUserMenuOpen(false); setMenuOpen(false) }}>
+                  <Link href="/painel/conta" role="menuitem" className="pnl-usermenu-item" onClick={() => { setUserMenuOpen(false); setMenuOpen(false) }}>
                     <Icon path={SETTINGS_ICON} />
-                    <span>Configurações da conta</span>
+                    <span>Minha conta</span>
                   </Link>
                   <button type="button" role="menuitem" className="pnl-usermenu-item is-danger" onClick={logout}>
                     <Icon path={LOGOUT_ICON} />
@@ -526,6 +591,7 @@ export default function PainelShell({ children }) {
             <BlockedReasonBanner user={user} />
             <ExpiredPlanBanner user={user} />
             <TrialEndingBanner notice={trialNotice} />
+            <ProFeaturesStoppedBanner notice={proFeaturesNotice} />
             {/* A loja só é cobrada DEPOIS de conectar o WhatsApp — a mesma
                 regra do próximo passo na tela de conexão. Antes disso o robô
                 nem foi ligado, e o alarme não corresponde a nada. */}
@@ -534,6 +600,7 @@ export default function PainelShell({ children }) {
             {children}
           </div>
         </div>
+        {proModal && <ProModal feature={proModal} onClose={() => setProModal(null)} />}
       </div>
     </PainelContext.Provider>
   )

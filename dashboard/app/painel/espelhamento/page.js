@@ -46,8 +46,9 @@ import { SelectChannelModal } from '@/components/SelectChannelModal'
 import { TypeBadge, FollowBadge, AdminBadge, HealthBadge } from '@/components/ChannelStatusBadges'
 import { ChannelHealthPanel } from '@/components/ChannelHealthPanel'
 import { usePainel, usePainelHeader, PainelContentActions } from '../PainelShell'
+import { ProLock } from '@/components/pro/ProGate'
 import { instagramDestinationsFromConnections } from '@/components/InstagramDestinationPicker'
-import { hasInstagramStoriesAccess } from '@/lib/planEntitlements'
+import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import { AFFILIATE_PLATFORMS } from '@/lib/painel/affiliatePlatforms'
 import { buildMirrorCards, planMirrorCreation, resolveInitialOrigin } from '../../../../src/domain/painel/mirrorWizard.js'
 
@@ -63,7 +64,6 @@ const WATERMARK_SIZES = ['small', 'medium', 'large']
 const WATERMARK_POSITIONS = ['center', 'top-left', 'top-right', 'bottom-left', 'bottom-right']
 const RELAY_FOOTER_MAX_CHARS = 1000
 // Quanto tempo o "Salvo" do rodapé do painel lateral fica na tela.
-const DRAWER_SAVED_FEEDBACK_MS = 2000
 
 const roleLabels = {
   monitor: 'origem',
@@ -91,10 +91,13 @@ const ORIGIN_TABS = [
   { key: 'publicacao', label: 'Publicação' },
 ]
 
+/* A aba "Anti-ban" saiu a pedido da dona do produto (2026-09-19): para um GRUPO
+ * ela era uma frase e um link para outra tela, e aba que não configura nada é
+ * só mais um lugar para procurar. A saúde do CANAL, que é configuração de
+ * verdade, foi para "Mensagens" — junto do resto que só existe em canal. */
 const DEST_TABS = [
   { key: 'imagem', label: 'Imagem' },
   { key: 'mensagens', label: 'Mensagens' },
-  { key: 'antiban', label: 'Anti-ban' },
 ]
 
 const GRADIENTS = [
@@ -149,6 +152,7 @@ function CfgIcon({ name, size = 17 }) {
   if (name === 'x')      return <svg {...p} strokeWidth={2}><path d="M6 6l12 12M18 6 6 18"/></svg>
   if (name === 'plus')   return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>
   if (name === 'arrow')  return <svg {...p}><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+  if (name === 'chevron') return <svg {...p}><path d="m9 6 6 6-6 6"/></svg>
   return null
 }
 
@@ -775,25 +779,27 @@ function MonitorGroupConfig({ g, tab, onUpdate, canUseChannels, post, targetsSta
  * "padrão: todos" marca a origem em modo 'all', que hoje alcança todos os
  * destinos por fallback, e não por escolha. */
 function FlowLine({ direction, card, loading }) {
-  if (loading) return <div className="pnl-esp-flow">carregando ligações…</div>
+  // <span> e não <div>: esta linha vive DENTRO do <button> do card, e botão
+  // não aceita conteúdo de bloco. O `display:block` vem do CSS.
+  if (loading) return <span className="pnl-esp-flow">carregando ligações…</span>
 
   if (card.counterpartCount === 0) {
     return (
-      <div className="pnl-esp-flow">
+      <span className="pnl-esp-flow">
         <strong>
           {direction === 'origin'
             ? 'nenhum destino escolhido — esta origem não está espelhando'
             : 'nenhuma origem envia para este grupo'}
         </strong>
-      </div>
+      </span>
     )
   }
 
   return (
-    <div className="pnl-esp-flow">
+    <span className="pnl-esp-flow">
       {direction === 'origin' ? 'envia para ' : 'recebe de '}
       <strong>{card.counterpartNames}</strong>
-    </div>
+    </span>
   )
 }
 
@@ -826,22 +832,22 @@ function GroupCard({ card, index, direction, loading, selected, dirty, saving, s
               {card.enviadasHoje !== null && (
                 <span>{card.enviadasHoje} {card.enviadasHoje === 1 ? 'oferta repostada' : 'ofertas repostadas'} hoje</span>
               )}
-              <span className="esp-lojas">
-                {(card.lojas ?? []).map((id) => {
-                  const loja = AFFILIATE_PLATFORMS.find((x) => x.id === id)
-                  if (!loja) return null
-                  return (
-                    <span
-                      key={id}
-                      className="esp-loja"
-                      title={loja.label}
-                      style={{ background: loja.color, color: loja.badgeInk ? 'var(--ink)' : '#fff' }}
-                    >{loja.initials}</span>
-                  )
-                })}
+              <span className={`pnl-esp-choice${card.usesTemplate ? ' is-template' : ''}`}>
+                {card.messageModeLabel}
               </span>
             </span>
           )}
+          {direction === 'dest' && (
+            <span className="pnl-esp-card-meta">
+              <span className="pnl-esp-choice">Imagem: {card.imageModeLabel}</span>
+            </span>
+          )}
+        </span>
+        {/* Sinal de "aqui abre configuração" para o celular, onde a engrenagem
+          * some (ver painel.css). Fica DENTRO do botão de propósito: assim não
+          * vira um segundo alvo de toque disputando os mesmos pixels. */}
+        <span className="pnl-esp-card-chevron" aria-hidden="true">
+          <CfgIcon name="chevron" size={18} />
         </span>
       </button>
       <span className={`pnl-esp-pill ${direction === 'origin' ? 'is-origin' : 'is-dest'}`} aria-hidden="true">
@@ -1007,14 +1013,12 @@ function ConnectionsDiagram({ origens, destinos, destIdsOf, selectedOriginId, on
  * fixo: Salvar (só ativo quando há mudança pendente), a resposta do salvar e a
  * ação destrutiva de remover o grupo. O erro nasce DENTRO do painel, acima do
  * rodapé — banner na página de trás fica escondido pela gaveta. */
-function GroupDrawer({ group, index, direction, flowLabel, tabs, tab, onTab, dirty, saving, savedAt, error, onSave, onClose, onDelete, children }) {
+function GroupDrawer({ group, index, direction, flowLabel, tabs, tab, onTab, saving, error, onSave, onClose, onDelete, children }) {
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
-
-  const justSaved = Boolean(savedAt) && !dirty
 
   return (
     <div className="pnl-drawer-overlay" role="presentation" onClick={onClose}>
@@ -1064,13 +1068,12 @@ function GroupDrawer({ group, index, direction, flowLabel, tabs, tab, onTab, dir
           </button>
           <span style={{ flex: 1 }} />
           {saving && <span className="pnl-hint" style={{ color: 'var(--accent-strong)' }}>salvando…</span>}
-          {!saving && justSaved && (
-            <span className="pnl-hint" style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <CfgIcon name="check" size={13} /> Salvo
-            </span>
-          )}
-          <button type="button" className="pnl-btn is-primary" onClick={onSave} disabled={!dirty || saving}>
-            Salvar
+          {/* Este é o "pronto" da gaveta: salva o que estiver pendente e FECHA.
+            * Desligado quando nada mudou ele parecia clicável (o `.pnl-btn` não
+            * tinha cara de desligado) e não fazia nada — a cliente clicava e a
+            * janela ficava aberta. Só fica desligado enquanto está salvando. */}
+          <button type="button" className="pnl-btn is-primary" onClick={onSave} disabled={saving}>
+            {saving ? 'Salvando…' : 'Salvar'}
           </button>
         </footer>
       </aside>
@@ -1109,7 +1112,10 @@ function AddGroupModal({
         aria-label="Adicionar grupo"
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        {/* Cabeçalho preso e corpo rolando: com a lista de grupos do WhatsApp
+          * inteira aqui dentro, o título e o "fechar" saíam da tela e no
+          * celular ficavam atrás da barra de endereço do navegador. */}
+        <div className="pnl-esp-add-head">
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3>Adicionar grupo</h3>
             <p>Escolha de onde ele vem e qual o papel dele.</p>
@@ -1119,9 +1125,14 @@ function AddGroupModal({
           </button>
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div className="pnl-esp-add-body">
+        <div style={{ marginTop: 0 }}>
           <p className="pnl-label" style={{ marginBottom: 6 }}>Papel</p>
-          <div className="pnl-seg" role="tablist" aria-label="Papel do grupo">
+          {/* Classe própria: estes dois rótulos são longos e, na régua de
+            * `.pnl-seg`, em 375px o "Destino" nascia fora da tela — a pessoa
+            * não via que havia uma segunda opção. No celular eles viram duas
+            * linhas inteiras (ver painel.css). */}
+          <div className="pnl-seg pnl-esp-add-role" role="tablist" aria-label="Papel do grupo">
             <button type="button" role="tab" aria-selected={role === 'monitor'} className={role === 'monitor' ? 'is-active' : ''} onClick={() => onRole('monitor')}>
               Origem · o robô pega ofertas
             </button>
@@ -1200,6 +1211,7 @@ function AddGroupModal({
             Depois de adicionar, escolha para onde ele envia. Sem escolha, ele envia para todos os seus destinos.
           </p>
         )}
+        </div>
       </div>
     </div>
   )
@@ -1210,7 +1222,7 @@ export default function EspelhamentoPage() {
     title: 'Espelhamento',
     subtitle: 'De quais grupos o robô pega ofertas e onde ele publica com o seu link',
   })
-  const { online, refreshSession } = usePainel()
+  const { online, refreshSession, openPro } = usePainel()
 
   const [groups, setGroups] = useState([])
   // Precisam ser declarados ANTES dos callbacks de destino: `post` entra na
@@ -1225,7 +1237,6 @@ export default function EspelhamentoPage() {
   const [summary, setSummary] = useState(null)
   const [switchingMirror, setSwitchingMirror] = useState(false)
 
-  const [tab, setTab] = useState('grupos')
   const [mobileCol, setMobileCol] = useState('origem')
   // `undefined` = a cliente nunca escolheu (a regra destaca a primeira);
   // `null` = ela desmarcou de propósito. Ver `origemDestacada` abaixo.
@@ -1239,7 +1250,6 @@ export default function EspelhamentoPage() {
   const [drawerId, setDrawerId] = useState(null)
   const [drawerTab, setDrawerTab] = useState('destinos')
   const [drawerHint, setDrawerHint] = useState(false)
-  const [drawerSavedAt, setDrawerSavedAt] = useState(null)
   const [confirmDiscard, setConfirmDiscard] = useState(null)
 
   const [savingGroupId, setSavingGroupId] = useState(null)
@@ -1440,10 +1450,12 @@ export default function EspelhamentoPage() {
           return next
         })
       }, WATERMARK_SAVED_FEEDBACK_MS)
+      return true
     } catch (err) {
       // O erro nasce AO LADO do campo. Nada de `load()` aqui: recarregar todos
       // os grupos era o que apagava o texto que a pessoa acabou de escrever.
       setWatermarkErrors((prev) => ({ ...prev, [id]: err.message }))
+      return false
     } finally {
       setWatermarkSaving((prev) => ({ ...prev, [id]: false }))
     }
@@ -1519,7 +1531,10 @@ export default function EspelhamentoPage() {
 
   const saveTargets = useCallback(async (groupId) => {
     const current = targetsState[groupId]
-    if (!current || current.loading || current.saving || !Array.isArray(current.savedIds)) return
+    // Devolve `true` quando gravou e `false` quando falhou: o "Salvar" da
+    // gaveta só fecha com `true` — fechar por cima de um erro esconderia que
+    // nada foi para o servidor.
+    if (!current || current.loading || current.saving || !Array.isArray(current.savedIds)) return false
     // Só mandamos ids que ainda existem na lista de destinos da tela. Id de um
     // grupo já apagado faz a rota devolver 400 ("Lista de grupos destino
     // inválida") e a escolha inteira se perde — com cara de "não salvou".
@@ -1549,12 +1564,14 @@ export default function EspelhamentoPage() {
         mode: 'explicit',
         savedAt: Date.now(),
       })
+      return true
     } catch (err) {
       // O aviso nasce ao lado do botão: o banner do topo da página fica fora da
       // tela no celular, então a falha passava despercebida e a cliente saía
       // achando que tinha salvado.
       patchTargets(groupId, { saving: false, error: err.message })
       setActionError(err.message)
+      return false
     }
   }, [targetsState, post, patchTargets])
 
@@ -1574,12 +1591,9 @@ export default function EspelhamentoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, loadTargets])
 
-  const canUseChannels = (() => {
-    if (planSubject.plan === 'pro') return true
-    if (planSubject.plan !== 'trial' || !planSubject.accessExpiresAt) return false
-    const expiresAt = new Date(planSubject.accessExpiresAt)
-    return !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()
-  })()
+  // Mesma regra do backend (Pro, premium ou teste ativo). A cópia local antiga
+  // esquecia o premium e travava canais que a API libera.
+  const canUseChannels = hasProLikeAccess(planSubject)
 
   const existingJidRoles = new Set(groups.map((g) => `${g.waJid}::${g.role}`))
 
@@ -1622,6 +1636,9 @@ export default function EspelhamentoPage() {
     // porquê. Ao ligar o botão, a API já grava o formato degradado, então o que
     // aparece aqui é a verdade.
     const temBotaoCanal = Boolean(g.channelButtonJid)
+    // Divisão Basic/PRO (2026-09-23): marca d'água e botão "Ver canal" são do
+    // PRO. Mesma regra de canais (Pro, premium ou teste ativo).
+    const temPro = canUseChannels
 
     if (tab === 'imagem') {
       return (
@@ -1643,6 +1660,10 @@ export default function EspelhamentoPage() {
               value={destinationImageMode}
               onChange={(e) => {
                 const nextMode = e.target.value
+                if (!temPro && ['original_watermark', 'preview_watermark'].includes(nextMode)) {
+                  openPro('marca')
+                  return
+                }
                 handleUpdateGroup(g.id, {
                   imageMode: nextMode,
                   // Ao ligar a marca pela 1ª vez sem texto salvo, sugere o
@@ -1654,9 +1675,9 @@ export default function EspelhamentoPage() {
               }}
             >
               <option value="original">Original</option>
-              <option value="original_watermark">Original com marca d&apos;água</option>
+              <option value="original_watermark">Original com marca d&apos;água{temPro ? '' : ' · 🔒 PRO'}</option>
               {!temBotaoCanal && <option value="preview">Preview clicável</option>}
-              {!temBotaoCanal && <option value="preview_watermark">Preview com marca d&apos;água</option>}
+              {!temBotaoCanal && <option value="preview_watermark">Preview com marca d&apos;água{temPro ? '' : ' · 🔒 PRO'}</option>}
             </select>
           </CfgRow>
           {watermarkMode && (
@@ -1737,7 +1758,8 @@ export default function EspelhamentoPage() {
 
     if (tab === 'mensagens') {
       return (
-        <CfgSection icon="chat" title="Mensagens deste destino" desc="O recado de boas-vindas e o botão que leva ao seu canal.">
+        <>
+          <CfgSection icon="chat" title="Mensagens deste destino" desc="O recado de boas-vindas e o botão que leva ao seu canal.">
           <CfgRow label="Mensagem de boas-vindas" hint="Enviada quando alguém entra no grupo (opcional). Salva ao sair do campo.">
             {/* `defaultValue` + `onBlur`: salvar a cada tecla faria a tela se
                 repintar no meio da digitação — exatamente a briga com o campo
@@ -1762,6 +1784,7 @@ export default function EspelhamentoPage() {
               hint={'Com canal escolhido, a mensagem leva o botão "Ver canal" no fim e a foto sempre vem da mensagem de origem. Sem canal, ela sai igual, só sem o botão. Se a oferta de origem não tiver foto, a mensagem sai mesmo assim — só sem imagem e sem o botão.'}
               last
             >
+              <ProLock feature="vercanal" locked={!temPro}>
               {g.channelButtonJid ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--pnl-radius-sm)', padding: 10 }}>
@@ -1778,42 +1801,38 @@ export default function EspelhamentoPage() {
                   Escolher canal do botão
                 </button>
               )}
+              </ProLock>
             </CfgRow>
           ) : (
             <CfgRow label={'Botão "Ver canal"'} hint="Disponível só em grupos — este destino já é um canal." last>
               <span className="pnl-hint">—</span>
             </CfgRow>
           )}
-        </CfgSection>
+          </CfgSection>
+
+          {/* Saúde do canal: veio da antiga aba "Anti-ban". Só aparece em
+              canal, que é onde ela configura alguma coisa. */}
+          {g.kind === 'channel' && (
+            <CfgSection icon="shield" title="Saúde deste canal" desc="Os limites que protegem o seu número de ser bloqueado.">
+              <div style={{ padding: '14px 20px', display: 'grid', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <AdminBadge status={adminStatus[g.id] ?? 'unknown'} onRefresh={() => refreshAdmin(g)} refreshing={refreshingAdminId === g.id} />
+                  {healthByGroup[g.id] && <HealthBadge status={healthByGroup[g.id].status} />}
+                </div>
+                <ChannelHealthPanel
+                  group={g}
+                  initialHealth={healthByGroup[g.id]}
+                  onHealthChange={(h) => setHealthByGroup((prev) => ({ ...prev, [g.id]: h }))}
+                />
+                <Link href="/painel/preservacao/destinos" className="pnl-link-btn">Preservação por grupo e canal →</Link>
+              </div>
+            </CfgSection>
+          )}
+        </>
       )
     }
 
-    return (
-      <CfgSection icon="shield" title="Saúde deste destino" desc="Os limites que protegem o seu número de ser bloqueado.">
-        {g.kind === 'channel' ? (
-          <div style={{ padding: '14px 20px', display: 'grid', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <AdminBadge status={adminStatus[g.id] ?? 'unknown'} onRefresh={() => refreshAdmin(g)} refreshing={refreshingAdminId === g.id} />
-              {healthByGroup[g.id] && <HealthBadge status={healthByGroup[g.id].status} />}
-            </div>
-            <ChannelHealthPanel
-              group={g}
-              initialHealth={healthByGroup[g.id]}
-              onHealthChange={(h) => setHealthByGroup((prev) => ({ ...prev, [g.id]: h }))}
-            />
-            <Link href="/painel/preservacao/destinos" className="pnl-link-btn">Preservação por grupo e canal →</Link>
-          </div>
-        ) : (
-          <div style={{ padding: '14px 20px', display: 'grid', gap: 10 }}>
-            <p className="pnl-hint" style={{ margin: 0 }}>
-              O ritmo de envio deste grupo (quantas ofertas por dia, quanto tempo entre uma e outra,
-              horário de funcionamento) fica na tela de preservação, que vale para todos os destinos.
-            </p>
-            <Link href="/painel/preservacao/destinos" className="pnl-link-btn">Preservação por grupo e canal →</Link>
-          </div>
-        )}
-      </CfgSection>
-    )
+    return null
   }
 
   /* ── Cartões do nível 1 ─────────────────────────────────────────── */
@@ -1838,10 +1857,16 @@ export default function EspelhamentoPage() {
     counterpartNames: card.destinos.map((d) => d.name).join(', '),
     mode: card.modo,
     enviadasHoje: card.enviadasHoje,
-    lojas: card.lojas,
+    usesTemplate: (card.origem.templateKey == null ? defaultTemplateKey : card.origem.templateKey) !== '',
+    messageModeLabel: (() => {
+      const key = card.origem.templateKey == null ? defaultTemplateKey : card.origem.templateKey
+      if (!key) return 'Mensagem original'
+      const name = templates.find((template) => template.key === key)?.name
+      return name ? `Template: ${name}` : 'Com template'
+    })(),
   }))
 
-  /* A origem destacada na aba Conexões é DERIVADA no render, nunca gravada por
+  /* A origem destacada no mapa de conexões é DERIVADA no render, nunca gravada por
    * efeito: `setState` dentro de `useEffect` dispara renderização em cascata
    * (regra `react-hooks/set-state-in-effect`) e ainda deixaria um quadro com
    * nada destacado. A aba nascia sem destaque nenhum, e o desenho com todas as
@@ -1857,6 +1882,12 @@ export default function EspelhamentoPage() {
       group: d,
       counterpartCount: os.length,
       counterpartNames: os.map((o) => o.name).join(', '),
+      imageModeLabel: ({
+        original: 'original',
+        original_watermark: 'original com marca d’água',
+        preview: 'card da oferta',
+        preview_watermark: 'card com marca d’água',
+      })[d.imageMode] || 'original',
     }
   })
 
@@ -1885,6 +1916,11 @@ export default function EspelhamentoPage() {
     })
     : null
 
+  // A aba guardada pode não existir mais (a "Anti-ban" saiu em 2026-09-19).
+  // Sem isto o painel abriria em branco em vez de cair na primeira aba.
+  const drawerTabs = drawerIsOrigin ? ORIGIN_TABS : DEST_TABS
+  const drawerTabSafe = drawerTabs.some((t) => t.key === drawerTab) ? drawerTab : drawerTabs[0].key
+
   const drawerIndex = drawerGroup
     ? (drawerIsOrigin ? monitor : post).findIndex((g) => g.id === drawerGroup.id)
     : 0
@@ -1903,7 +1939,6 @@ export default function EspelhamentoPage() {
     setDrawerId(id)
     setDrawerTab(tab ?? (role === 'monitor' ? 'destinos' : 'imagem'))
     setDrawerHint(Boolean(hint))
-    setDrawerSavedAt(null)
   }
 
   function requestCloseDrawer() {
@@ -1918,12 +1953,25 @@ export default function EspelhamentoPage() {
     setDrawerId(null)
   }
 
+  // Salvar o que ficou de rascunho e FECHAR. Os demais campos do painel já
+  // gravam sozinhos (modo da imagem, boas-vindas ao sair do campo, botão do
+  // canal), então com nada pendente este botão é só o "pronto" — fechar é o
+  // que a cliente espera dele, e não fazer nada foi o defeito relatado.
+  // A gaveta só continua aberta quando o salvamento FALHA: aí o erro precisa
+  // ser lido, e fechar por cima dele esconderia que nada foi gravado.
   async function handleDrawerSave() {
     if (!drawerGroup) return
-    if (drawerIsOrigin) await saveTargets(drawerGroup.id)
-    else if (watermarkDirtyFor(drawerGroup.id)) await saveWatermarkText(drawerGroup.id, watermarkDrafts[drawerGroup.id])
-    setDrawerSavedAt(Date.now())
-    window.setTimeout(() => setDrawerSavedAt(null), DRAWER_SAVED_FEEDBACK_MS)
+    const id = drawerGroup.id
+    if (drawerIsOrigin) {
+      if (targetsDirtyFor(id)) {
+        const ok = await saveTargets(id)
+        if (ok === false) return
+      }
+    } else if (watermarkDirtyFor(id)) {
+      const ok = await saveWatermarkText(id, watermarkDrafts[id])
+      if (ok === false) return
+    }
+    setDrawerId(null)
   }
 
   async function handleLoadWA() {
@@ -2010,12 +2058,7 @@ export default function EspelhamentoPage() {
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1120, margin: '0 auto' }}>
-      <PainelContentActions>
-        <div className="pnl-toolbar">
-          <HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink>
-          <button type="button" className="pnl-btn is-primary" onClick={() => setAddModal({ role: 'monitor' })}>+ Adicionar</button>
-        </div>
-      </PainelContentActions>
+      <PainelContentActions><HelpLink topic="como-cadastrar-grupos">Ajuda</HelpLink></PainelContentActions>
 
       {actionError && (
         <div className="pnl-note-box is-error" role="alert">
@@ -2039,7 +2082,7 @@ export default function EspelhamentoPage() {
       )}
 
       {/* Controle mestre — reflete a conexão WhatsApp (não há flag própria) */}
-      <section className="pnl-master">
+      <section className="pnl-master pnl-master-compact">
         <div className="pnl-master-ico">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M3 7a5 5 0 0 1 5-5h4" /><path d="M7 12l-4-5 5-2" />
@@ -2107,18 +2150,10 @@ export default function EspelhamentoPage() {
             </div>
           </details>
 
-          {/* Visualizações Grupos / Conexões */}
-          <div className="pnl-seg" role="tablist" aria-label="Ver como listas ou como mapa de conexões" style={{ justifySelf: 'start' }}>
-            <button type="button" role="tab" aria-selected={tab === 'grupos'} className={tab === 'grupos' ? 'is-active' : ''} onClick={() => setTab('grupos')}>
-              Grupos
-            </button>
-            <button type="button" role="tab" aria-selected={tab === 'conexoes'} className={tab === 'conexoes' ? 'is-active' : ''} onClick={() => setTab('conexoes')}>
-              Conexões
-            </button>
+          <div className="pnl-esp-add-primary">
+            <button type="button" className="pnl-btn is-primary" onClick={() => setAddModal({ role: 'monitor' })}>+ ADICIONAR NOVO ESPELHAMENTO</button>
           </div>
 
-          {tab === 'grupos' ? (
-            <>
               {/* No celular as duas colunas viram uma lista só */}
               <div className="pnl-seg pnl-esp-mobile-switch" role="tablist" aria-label="Ver origens ou destinos">
                 <button type="button" role="tab" aria-selected={mobileCol === 'origem'} className={mobileCol === 'origem' ? 'is-active' : ''} onClick={() => setMobileCol('origem')}>
@@ -2169,9 +2204,8 @@ export default function EspelhamentoPage() {
                   />
                 </div>
               )}
-            </>
-          ) : (
-            <section className="pnl-card">
+          <section className="pnl-card pnl-esp-connections">
+              <div className="pnl-card-title" style={{ marginBottom: 12 }}>Conexões do espelhamento</div>
               <div className="pnl-note-box is-info" style={{ marginBottom: 18 }}>
                 {monitor.length === 0 || post.length === 0
                   ? 'Cadastre pelo menos um grupo de origem e um de destino para o espelhamento entrar em ação.'
@@ -2196,8 +2230,7 @@ export default function EspelhamentoPage() {
                   </button>
                 </div>
               )}
-            </section>
-          )}
+          </section>
         </>
       )}
 
@@ -2207,12 +2240,10 @@ export default function EspelhamentoPage() {
           index={drawerIndex < 0 ? 0 : drawerIndex}
           direction={drawerIsOrigin ? 'origin' : 'dest'}
           flowLabel={drawerFlow}
-          tabs={drawerIsOrigin ? ORIGIN_TABS : DEST_TABS}
-          tab={drawerTab}
+          tabs={drawerTabs}
+          tab={drawerTabSafe}
           onTab={setDrawerTab}
-          dirty={drawerDirty}
           saving={drawerSaving}
-          savedAt={drawerSavedAt}
           error={drawerError}
           onSave={handleDrawerSave}
           onClose={requestCloseDrawer}
@@ -2221,7 +2252,7 @@ export default function EspelhamentoPage() {
           {drawerIsOrigin ? (
             <MonitorGroupConfig
               g={drawerGroup}
-              tab={drawerTab}
+              tab={drawerTabSafe}
               onUpdate={handleUpdateGroup}
               canUseChannels={canUseChannels}
               post={post}
@@ -2230,7 +2261,7 @@ export default function EspelhamentoPage() {
               onSetActionError={setActionError}
               templates={templates}
               defaultTemplateKey={defaultTemplateKey}
-              targetsHint={drawerHint && drawerTab === 'destinos'}
+              targetsHint={drawerHint && drawerTabSafe === 'destinos'}
               plano={drawerPlano}
               instagram={{
                 destinos: instagramDestinations,
@@ -2239,7 +2270,7 @@ export default function EspelhamentoPage() {
                 onToggle: toggleInstagramMirror,
               }}
             />
-          ) : renderPostConfig(drawerGroup, drawerTab)}
+          ) : renderPostConfig(drawerGroup, drawerTabSafe)}
           {drawerGroup.kind === 'channel' && drawerIsOrigin && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <FollowBadge status={followStatus[drawerGroup.id] ?? 'unknown'} />

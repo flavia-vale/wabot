@@ -2,7 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const filePath = path.resolve(process.cwd(), 'app/painel/configuracoes/page.js')
-const source = fs.readFileSync(filePath, 'utf8')
+// 2026-09-23: e-mail e senha viraram o componente AccountAccessForms, usado
+// também em Minha conta. A guarda lê a tela E o componente — senão ela
+// deixaria de enxergar justamente o que protege.
+const componentPath = path.resolve(process.cwd(), 'components/AccountAccessForms.js')
+const pageSource = fs.readFileSync(filePath, 'utf8')
+const source = pageSource + (pageSource.includes('AccountAccessForms') ? fs.readFileSync(componentPath, 'utf8') : '')
 
 function assert(condition, message) {
   if (!condition) {

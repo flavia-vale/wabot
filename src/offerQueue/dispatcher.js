@@ -1,4 +1,5 @@
 import dbDefault from '../db.js'
+import { sanitizePriceCents } from '../core/clientCouponPolicy.js'
 import { isRunning as isRunningDefault, sendBroadcast as sendBroadcastDefault } from '../manager.js'
 import { startOfSaoPauloDayUtc } from './time.js'
 import { isOutsideOperatingHours } from './operatingHours.js'
@@ -156,7 +157,11 @@ async function drainQueueUnlocked(queue, deps = {}) {
     if (targetJids.length) {
       const online = await (deps.isRunning ?? isRunningDefault)(queue.userId)
       if (!online) throw new Error('Bot não está rodando')
-      await sendBroadcast(queue.userId, item.text, targetJids, { imageUrl: item.imageUrl ?? undefined, imageRefererUrl: item.imageRefererUrl ?? undefined, source: 'offerQueue', queueId: queue.id, ignoreGlobalQuietHours: queue.operatingHoursEnabled === true })
+      // Preço guardado no item (o Criar oferta leu da loja): o robô usa para o
+      // "de X por Y" do cupom. Snapshot ilegível = preço desconhecido, nunca erro.
+      let couponPriceCents
+      try { couponPriceCents = sanitizePriceCents(JSON.parse(item.offerSnapshot || 'null')?.priceCents) ?? undefined } catch { couponPriceCents = undefined }
+      await sendBroadcast(queue.userId, item.text, targetJids, { imageUrl: item.imageUrl ?? undefined, imageRefererUrl: item.imageRefererUrl ?? undefined, source: 'offerQueue', queueId: queue.id, ignoreGlobalQuietHours: queue.operatingHoursEnabled === true, couponPriceCents })
     }
     await db.$transaction([
       db.offerQueueItem.updateMany({ where: { id: item.id, queueId: queue.id, userId: queue.userId, status: 'queued' }, data: { status: 'sent', sentAt: now, lastError: null } }),

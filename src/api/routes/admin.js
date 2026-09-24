@@ -37,6 +37,8 @@ import { combineRevenueTotals, countDistinctPayingUsers, computeAverageLtv, comp
 import { loadTestAccountUserIds, excludeUserIdsWhere, resolveTestAccountEmails } from '../../domain/admin/testAccounts.js'
 import { buildRoiReport } from '../../domain/admin/roi.js'
 import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
+import { DEFAULT_OWNER_ADMIN_EMAILS, PRIMARY_OWNER_ADMIN_EMAIL } from '../../auth/reservedAdminEmails.js'
+import { isAdminMfaVerified } from '../adminMfa.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -54,7 +56,7 @@ const ROLE_PERMISSIONS = {
 const PAID_PLANS = ['basic', 'pro', 'premium']
 const PLAN_PRICES = { trial: 0, basic: 39, pro: 69 }
 const EXPORT_LIMIT = 100
-const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
+const DEFAULT_BOOTSTRAP_ADMIN_EMAILS = DEFAULT_OWNER_ADMIN_EMAILS
 const CANONICAL_OWNER_ADMIN_EMAILS = new Set(DEFAULT_BOOTSTRAP_ADMIN_EMAILS)
 
 
@@ -117,6 +119,13 @@ export function resolveAdminAccess(user) {
   const adminUser = user.adminUser ?? null
   const hasActiveAdminUser = adminUser?.status === 'active'
 
+  // Dona principal: sempre dona, antes de qualquer registro de AdminUser —
+  // ninguém a rebaixa nem desativa pelo banco ou pelo admin (decisão da dona
+  // do produto, 2026-09-24).
+  if (email === PRIMARY_OWNER_ADMIN_EMAIL) {
+    return { role: 'owner', adminUserId: adminUser?.id ?? null, bootstrap: !hasActiveAdminUser }
+  }
+
   if (hasActiveAdminUser) {
     return { role: adminUser.role, adminUserId: adminUser.id ?? null, bootstrap: false }
   }
@@ -146,10 +155,7 @@ function requiresStepUpMfa(permission) {
 }
 
 function isMfaVerified(req) {
-  const configuredToken = String(process.env.ADMIN_MFA_TOKEN ?? '').trim()
-  if (!configuredToken) return true
-  const providedToken = String(req.headers['x-admin-mfa-token'] ?? '').trim()
-  return providedToken && providedToken === configuredToken
+  return isAdminMfaVerified(req)
 }
 
 function maskPhone(phone) {
@@ -999,7 +1005,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     ...(longExpiredWhere ? { AND: [longExpiredWhere] } : {}),
   }
 
-  const [users, allActiveSessions] = await Promise.all([
+  const [users, allActiveSessions, currentPayingUserRows] = await Promise.all([
     db.user.findMany({
       where,
       orderBy: [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }],
@@ -1029,7 +1035,17 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     }),
     db.waSession.findMany({
       where: { user: { status: 'active' } },
-      select: { status: true, lifecycle: true, lastHeartbeatAt: true },
+      select: { userId: true, status: true, lifecycle: true, lastHeartbeatAt: true },
+    }).catch(() => []),
+    db.user.findMany({
+      where: {
+        status: 'active', accessExpiresAt: { gt: now },
+        OR: [
+          { payments: { some: { status: 'approved' } } },
+          { subscriptionCharges: { some: { status: { in: CHARGE_OUTCOME_STATUSES.aprovada } } } },
+        ],
+      },
+      select: { id: true },
     }).catch(() => []),
   ])
   const userIds = users.map(user => user.id)
@@ -1145,6 +1161,9 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
 
   const totalSessions = allActiveSessions.length
   const onlineUsers = allActiveSessions.filter(session => isSessionOnline(session, now)).length
+  const currentPayingIds = new Set(currentPayingUserRows.map(user => user.id))
+  const currentPayingUsers = currentPayingIds.size
+  const payingUsersOnline = allActiveSessions.filter(session => currentPayingIds.has(session.userId) && isSessionOnline(session, now)).length
   const connectingUsers = allActiveSessions.filter(session => session.status === 'connecting').length
   const disconnectedAlerts = allActiveSessions.filter(session => session.status !== 'connected' && session.status !== 'connecting').length
   const stabilityPct = totalSessions ? Math.round((onlineUsers / totalSessions) * 1000) / 10 : 100
@@ -1165,6 +1184,8 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
     summary: {
       scenarios: scenarios ? scenarioCounts : null,
       onlineUsers,
+      currentPayingUsers,
+      payingUsersOnline,
       totalSessions,
       stabilityPct,
       disconnectedAlerts,
@@ -2023,6 +2044,8 @@ export async function adminRoutes(app) {
       commissionsAccruedPeriod,
       commissionsPayable,
       commissionsPaidPeriod,
+      refundsPeriod,
+      refundsAll,
     ] = await Promise.all([
       db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser, createdAt: { gte: periodStart, lte: periodEnd } }, _sum: { amount: true }, _count: { _all: true } }),
       db.payment.aggregate({ where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser }, _sum: { amount: true }, _count: { _all: true } }),
@@ -2047,6 +2070,8 @@ export async function adminRoutes(app) {
       db.affiliateCommission.aggregate({ where: { status: { in: ['pending', 'eligible', 'approved', 'held'] } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
       // Comissões efetivamente pagas no período (saída de caixa real).
       db.affiliateCommission.aggregate({ where: { status: 'paid', paidAt: { gte: periodStart, lte: periodEnd } }, _sum: { commissionAmountCents: true }, _count: { _all: true } }),
+      db.refund.aggregate({ where: { refundedAt: { gte: periodStart, lte: periodEnd }, ...notTestUser }, _sum: { amount: true, gatewayFeeLoss: true }, _count: { _all: true } }),
+      db.refund.aggregate({ where: { ...notTestUser }, _sum: { amount: true, gatewayFeeLoss: true }, _count: { _all: true } }),
     ])
 
     const currentPrices = await getCurrentPlanPrices()
@@ -2101,6 +2126,7 @@ export async function adminRoutes(app) {
       grossRevenue: revenuePeriod,
       affiliateCommissions: affiliateCommissionsPeriod,
       mpFees: mpFeesPeriod,
+      refunds: refundsPeriod._sum.amount ?? 0,
     })
 
     await writeAdminAuditLog(req, { action: 'admin.finance.overview.read', resource: 'finance', after: { period: range.period } })
@@ -2141,6 +2167,10 @@ export async function adminRoutes(app) {
       mpFeeFixedCents,
       mpFees30d: mpFeesPeriod,
       netRevenue30d: netRevenuePeriod,
+      refunds30d: refundsPeriod._sum.amount ?? 0,
+      refunds30dCount: refundsPeriod._count._all,
+      refundFeeLoss30d: refundsPeriod._sum.gatewayFeeLoss ?? 0,
+      refundsAll: refundsAll._sum.amount ?? 0,
       // Contas de teste tiradas das somas acima (continuam visíveis nas listas).
       excludedTestAccounts: testAccounts.emails,
     }
@@ -2331,7 +2361,7 @@ export async function adminRoutes(app) {
       ],
     }
 
-    const [payments, charges, commissions, activeBasic, activePro, prices] = await Promise.all([
+    const [payments, charges, commissions, refunds, activeBasic, activePro, prices] = await Promise.all([
       db.payment.findMany({
         where: { status: 'approved', ...oneTimePaymentWhere, ...notTestUser },
         select: { userId: true, amount: true, provider: true, createdAt: true },
@@ -2347,6 +2377,12 @@ export async function adminRoutes(app) {
       db.affiliateCommission.findMany({
         where: { status: { notIn: ['rejected', 'reversed'] }, ...excludeUserIdsWhere(testAccounts.ids, 'referredUserId') },
         select: { commissionAmountCents: true, createdAt: true },
+        take: ROI_ROW_LIMIT,
+      }),
+      db.refund.findMany({
+        where: { ...notTestUser },
+        select: { amount: true, refundedAt: true },
+        orderBy: { refundedAt: 'asc' },
         take: ROI_ROW_LIMIT,
       }),
       db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
@@ -2389,6 +2425,12 @@ export async function adminRoutes(app) {
       if (!month) continue
       const bucket = revenueByMonth[month] ?? (revenueByMonth[month] = { gross: 0, affiliateCommissions: 0, mpFees: 0, payments: 0, payingUsers: 0 })
       bucket.affiliateCommissions += (commission.commissionAmountCents ?? 0) / 100
+    }
+    for (const refund of refunds) {
+      const month = monthKeyOf(refund.refundedAt)
+      if (!month) continue
+      const bucket = revenueByMonth[month] ?? (revenueByMonth[month] = { gross: 0, affiliateCommissions: 0, mpFees: 0, refunds: 0, payments: 0, payingUsers: 0 })
+      bucket.refunds = (bucket.refunds ?? 0) + (refund.amount ?? 0)
     }
     for (const [month, payers] of payersByMonth) revenueByMonth[month].payingUsers = payers.size
 
@@ -2434,6 +2476,7 @@ export async function adminRoutes(app) {
     const truncated = payments.length >= ROI_ROW_LIMIT
       || charges.length >= ROI_ROW_LIMIT
       || commissions.length >= ROI_ROW_LIMIT
+      || refunds.length >= ROI_ROW_LIMIT
 
     return {
       ...report,
@@ -2479,6 +2522,34 @@ export async function adminRoutes(app) {
       amount: amount._sum.amount ?? 0,
       payments: payments.map(payment => ({ ...payment, user: sanitizeUser(payment.user, req.admin.role) })),
     }
+  })
+
+  // Registra a devolução integral feita por PIX sem apagar o recebimento
+  // original. A taxa do Mercado Pago permanece descontada: é justamente o
+  // prejuízo real que sumiria se apenas mudássemos Payment.status.
+  app.post('/payments/:paymentId/refund', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:write'))) return
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 500)
+    if (!reason) return reply.code(400).send({ error: 'Informe o motivo do reembolso.' })
+
+    const payment = await db.payment.findUnique({ where: { id: req.params.paymentId }, include: { refund: true } })
+    if (!payment) return reply.code(404).send({ error: 'Pagamento não encontrado.' })
+    if (payment.status !== 'approved') return reply.code(409).send({ error: 'Só um pagamento aprovado pode ser reembolsado.' })
+    if (payment.refund) return reply.code(409).send({ error: 'Este pagamento já foi marcado como reembolsado.' })
+
+    const feePercent = Number.parseFloat(process.env.MP_FEE_PERCENT ?? '4.99') || 0
+    const feeFixedCents = Number.parseInt(process.env.MP_FEE_FIXED_CENTS ?? '0', 10) || 0
+    const gatewayFeeLoss = payment.provider === 'mercado_pago'
+      ? computeMercadoPagoFees({ baseAmount: payment.amount, baseCount: 1, feePercent, feeFixedCents })
+      : 0
+    const refund = await db.refund.create({
+      data: { userId: payment.userId, paymentId: payment.id, amount: payment.amount, gatewayFeeLoss, method: 'pix', reason },
+    })
+    await writeAdminAuditLog(req, {
+      action: 'admin.payment.refund.create', resource: 'refund', resourceId: refund.id,
+      targetUserId: payment.userId, before: { payment }, after: { refund }, reason,
+    })
+    return reply.code(201).send({ ok: true, refund })
   })
 
   app.post('/payments/manual', async (req, reply) => {
@@ -2859,7 +2930,7 @@ export async function adminRoutes(app) {
           createdAt: true,
           lastActivityAt: true,
           supportStatus: true,
-          payments: { orderBy: { createdAt: 'desc' }, take: 1 },
+          payments: { where: { status: 'approved' }, orderBy: { createdAt: 'desc' }, take: 1, include: { refund: true } },
         },
       }),
       db.payment.groupBy({ by: ['userId'], where: { status: 'approved' }, _sum: { amount: true }, _count: { _all: true }, _max: { createdAt: true } }),

@@ -11,6 +11,7 @@ import { mlOAuthRoutes } from './routes/mlOAuth.js'
 import { sessionRoutes } from './routes/session.js'
 import { groupsRoutes } from './routes/groups.js'
 import { credentialsRoutes } from './routes/credentials.js'
+import { couponsRoutes } from './routes/coupons.js'
 import { paymentsRoutes } from './routes/payments.js'
 import { configRoutes } from './routes/config.js'
 import { broadcastRoutes } from './routes/broadcast.js'
@@ -62,13 +63,17 @@ import { storyAssetRoutes } from './routes/storyAssets.js'
 import { createStoryAssetStorageFromEnv } from '../instagram/storage/localStoryAssetStorage.js'
 import { startStoryAssetCleanup } from '../instagram/storage/storyAssetService.js'
 import { instagramRoutes } from './routes/instagram.js'
+import { TRUSTED_PROXIES } from './trustedProxies.js'
+import { createSessionVersionCache, isLoginToken } from '../auth/sessionVersion.js'
+import { installEgressGuard } from './egressGuard.js'
 import { instagramOAuthConfig } from '../instagram/oauth/config.js'
 import { startInstagramTokenSweep } from '../instagram/oauth/sweep.js'
 import { startInstagramPublishingRuntime } from '../instagram/publishing/runtime.js'
 import { startInstagramMirrorIngressCron } from '../instagram/mirroring/service.js'
 import { startInstagramReconciliation } from '../instagram/publishing/reconcile.js'
 
-const app = Fastify({ logger: true, trustProxy: true })
+const app = Fastify({ logger: true, trustProxy: TRUSTED_PROXIES })
+installEgressGuard({ log: app.log })
 const storyAssetStorage = createStoryAssetStorageFromEnv()
 registerApiMetricsHooks(app)
 const activityWriteThrottleMs = Math.max(0, Number(process.env.ACTIVITY_WRITE_THROTTLE_MS || 60_000))
@@ -410,7 +415,8 @@ await app.register(fastifyCors, {
 // brute-force de /payments/recover, scraping de endpoints caros). Limites
 // específicos mais apertados já existem in-route em /login e /link-conversion;
 // este é o teto geral. Probes de orquestração (health/ready/metrics) ficam fora.
-// trustProxy=true já resolve req.ip a partir de X-Forwarded-For do proxy local.
+// req.ip vem de X-Forwarded-For, mas só dos saltos confiáveis (esta máquina e
+// a Cloudflare) — ver src/api/trustedProxies.js.
 const RATE_LIMIT_MAX = Math.max(1, Number(process.env.RATE_LIMIT_MAX || 300))
 const RATE_LIMIT_WINDOW = String(process.env.RATE_LIMIT_WINDOW || '1 minute')
 const RATE_LIMIT_ALLOWLIST = new Set(['/health', '/ready', '/metrics'])
@@ -460,7 +466,17 @@ app.setErrorHandler((error, req, reply) => {
     }).catch(() => {})
   }
 
-  // Resposta INALTERADA: o comportamento visto pela cliente é o mesmo de antes.
+  // Erro NOSSO (5xx) não devolve a mensagem da biblioteca que quebrou (Prisma,
+  // axios): ela revela tabela, campo e serviço interno a quem chamou. O detalhe
+  // fica no log e no aviso interno acima. 4xx segue como antes — ali a mensagem
+  // é a validação que a tela mostra.
+  // Mesmo status e mesmo formato de resposta de antes — só o texto muda.
+  if (status >= 500) {
+    const safeError = new Error('Erro interno. Tente novamente em instantes.')
+    safeError.statusCode = status
+    reply.send(safeError)
+    return
+  }
   reply.send(error)
 })
 
@@ -494,6 +510,10 @@ try {
 await app.register(fastifyJwt, { secret: jwtSecret })
 await app.register(fastifyWebsocket)
 app.decorate('revokeTokenJti', revokeTokenJtiGlobal)
+const sessionVersions = createSessionVersionCache({
+  loadPasswordHash: async (userId) => (await db.user.findUnique({ where: { id: userId }, select: { passwordHash: true } }))?.passwordHash ?? null,
+})
+app.decorate('invalidateSessionVersion', (userId) => sessionVersions.invalidate(userId))
 
 app.decorate('authenticate', async function (req, reply) {
   const cookieToken = getTokenFromCookie(req.headers.cookie)
@@ -503,7 +523,9 @@ app.decorate('authenticate', async function (req, reply) {
   for (const token of candidates) {
     try {
       const user = app.jwt.verify(token)
+      if (!isLoginToken(user)) continue
       if (await isTokenRevokedGlobal(user.jti)) continue
+      if (!(await sessionVersions.matches(user.sub, user.pv))) continue
       const active = await verifyAuthenticatedUser(user.sub)
       if (!active) continue
       req.user = user
@@ -521,6 +543,7 @@ app.register(mlOAuthRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
+app.register(couponsRoutes, { prefix: '/api/coupons' })
 app.register(paymentsRoutes, { prefix: '/api/payments' })
 app.register(configRoutes, { prefix: '/api/config' })
 app.register(broadcastRoutes, { prefix: '/api/broadcast' })

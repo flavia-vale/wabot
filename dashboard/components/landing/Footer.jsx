@@ -90,6 +90,7 @@ function Footer() {
           <div>
             <div style={s.colTitle}>Legal</div>
             <Link style={s.colLink} href="/termos">Termos</Link>
+            <Link style={s.colLink} href="/politica-de-reembolso">Reembolso</Link>
             <Link style={s.colLink} href="/privacidade">Privacidade</Link>
             <Link style={s.colLink} href="/privacidade">LGPD</Link>
           </div>

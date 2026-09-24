@@ -110,7 +110,7 @@ export default function Page() {
           </div>
           <aside className="rounded-3xl border border-emerald-700 bg-emerald-900/80 p-5">
             <h2 className="text-xl font-black tracking-tight">Sem promessa de “anti-ban 100%”</h2>
-            <p className="mt-3 text-sm leading-7 text-emerald-50">O diagnóstico usa linguagem de busca do mercado, mas a entrega é preservação responsável: redução de risco, monitoramento e plano de recuperação.</p>
+            <p className="mt-3 text-sm leading-7 text-emerald-50">O diagnóstico usa linguagem de busca do mercado, mas a entrega é preservação responsável: mostra onde reduzir o risco e o que deixar pronto se algo der errado.</p>
           </aside>
         </section>
 

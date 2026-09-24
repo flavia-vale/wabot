@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { isStorePhotoPreferenceEnabled, shouldPreferStorePhoto } from '../src/core/storePhotoPreference.js'
 import { resolveMonitoredImage } from '../src/monitoredImageResolver.js'
+import { resolveLinkKind } from '../src/converters/linkKind.js'
 
 // RCA 2026-08-27: as origens que ANEXAM foto própria republicavam a marca
 // d'água do concorrente, porque o modo 'original' devolvia a foto da origem
@@ -15,6 +16,14 @@ test('troca vale quando o link aponta para um produto identificado', () => {
   // Shopee cai sempre em 'unknown' (fora do guard de scrape); a garantia ali
   // vem do linkKind, que o converter só marca depois de resolver shopId+itemId.
   assert.equal(shouldPreferStorePhoto({ linkKind: 'product', titleOverlap: 'unknown' }), true)
+})
+
+test('regressão Magalu: URL /divulgador/oferta ativa a busca da foto oficial', () => {
+  const linkKind = resolveLinkKind('magazineluiza', {
+    url: 'https://www.magazineluiza.com.br/relogio-gps/divulgador/oferta/ef43k19de1/te/smtw/',
+  })
+  assert.equal(linkKind, 'product')
+  assert.equal(shouldPreferStorePhoto({ linkKind, titleOverlap: 'unknown' }), true)
 })
 
 test('nunca troca quando não há produto identificado (evita foto aleatória)', () => {

@@ -7,6 +7,7 @@ import { encryptCredential, decryptCredential } from '../../credentialCrypto.js'
 import { createTrackGuard } from './affiliateTrackGuard.js'
 import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
 import db from '../../db.js'
+import { isAdminMfaVerified } from '../adminMfa.js'
 
 // R2: guarda in-memory do /affiliate/track (rate-limit + dedup). Cleanup unref().
 const trackGuard = createTrackGuard()
@@ -55,6 +56,12 @@ async function requireAdminAccess(req, reply, permission) {
   const access = resolveAdminAccess(user)
   if (!access.role || !hasPermission(access.role, permission)) {
     reply.code(403).send({ error: 'Acesso admin negado' })
+    return null
+  }
+  // Mesma segunda senha das escritas do admin.js — antes estas rotas (disparo
+  // em massa, pagamento de comissão) passavam só com o login.
+  if (permission.endsWith(':write') && !isAdminMfaVerified(req)) {
+    reply.code(401).send({ error: 'MFA obrigatória para esta operação administrativa' })
     return null
   }
   return access

@@ -50,6 +50,11 @@ export const COMMAND = Object.freeze({
   LIST_RUNNING_BOTS: 'listRunningBots',
   LIST_GROUPS: 'listGroups',
   SEND_BROADCAST: 'sendBroadcast',
+  // Aditivo (2026-09-24): admin > Contato com cliente, mensagem manual para o
+  // próprio número de uma conta conectada. Não exige bump de PROTOCOL_VERSION
+  // (mesmo espírito do SUPERVISOR_BOOTED_AT_KEY) — supervisor/worker antigos
+  // sem o handler simplesmente não reconhecem o comando até serem reiniciados.
+  SEND_SELF_MESSAGE: 'sendSelfMessage',
   REQUEST_PAIRING_CODE: 'requestPairingCode',
   GET_BOT_METRICS: 'getBotMetrics',
   RELOAD_CONFIG: 'reloadConfig',
@@ -98,6 +103,7 @@ export const COMMAND_TIMEOUTS_MS = Object.freeze({
   [COMMAND.LIST_RUNNING_BOTS]: 5_000,
   [COMMAND.LIST_GROUPS]: 10_000,
   [COMMAND.SEND_BROADCAST]: 30_000,
+  [COMMAND.SEND_SELF_MESSAGE]: 15_000,
   [COMMAND.REQUEST_PAIRING_CODE]: 45_000,
   [COMMAND.GET_BOT_METRICS]: 5_000,
   [COMMAND.RELOAD_CONFIG]: 5_000,

@@ -11,11 +11,13 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 
 const ABAS = [
-  ['modelos', 'Modelos'],
-  ['enviar', 'Enviar agora'],
-  ['historico', 'Histórico'],
+  ['modelos', 'Modelos (e-mail)'],
+  ['enviar', 'Enviar agora (e-mail)'],
+  ['historico', 'Histórico (e-mail)'],
+  ['whatsapp', 'WhatsApp'],
 ]
 
 const CATEGORIA_LABEL = {
@@ -229,7 +231,7 @@ function Editor({ slug, onClose, onSaved }) {
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={16}
-            className="w-full rounded-xl border border-gray-200 px-3 py-2 font-mono text-xs"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs"
           />
 
           <div className="mt-2 rounded-xl bg-gray-50 p-3 text-xs text-gray-600">
@@ -247,7 +249,7 @@ function Editor({ slug, onClose, onSaved }) {
                   type="button"
                   title={`${variable.description} (ex.: ${variable.example})`}
                   onClick={() => setBody((atual) => `${atual}{{${variable.name}}}`)}
-                  className="rounded-lg bg-gray-100 px-2 py-1 text-[11px] font-mono text-gray-700 hover:bg-gray-200"
+                  className="rounded-lg bg-gray-100 px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-200"
                 >
                   {`{{${variable.name}}}`}
                 </button>
@@ -517,6 +519,261 @@ function Historico({ batches, sends, onCancelar }) {
   )
 }
 
+const FILTRO_OPCOES = [['any', 'Tanto faz'], ['yes', 'Sim'], ['no', 'Não']]
+
+// Rascunho pro primeiro contato de quem conectou e nunca publicou nada —
+// ela escreveu o pedido, isto é só o ponto de partida: aparece só quando o
+// modo em massa é escolhido e o campo ainda está vazio, e continua editável
+// antes de enviar (mesmo espírito de "mostrar o texto pra aprovação" já
+// usado nos outros textos desta tela).
+const RASCUNHO_PRIMEIRO_CONTATO = [
+  'Notei que você conectou o WhatsApp e ainda não saiu nenhuma oferta. Preparei dois vídeos rápidos pra te ajudar:',
+  '',
+  `1️⃣ Como pegar sua etiqueta de afiliada (Shopee, Mercado Livre, Amazon ou Magalu): ${VIDEO_CADASTRO_ETIQUETAS_URL}`,
+  `2️⃣ Como configurar o robô (grupos de origem e destino): ${VIDEO_ATIVACAO_ROBO_URL}`,
+  '',
+  'Precisa de ajuda com algum desses passos? Pode me chamar por aqui mesmo.',
+].join('\n')
+
+function WhatsAppTab() {
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+  const [historico, setHistorico] = useState([])
+  const [conectados, setConectados] = useState([])
+  const [filtros, setFiltros] = useState({ connected: 'yes', everSent: 'any', hasCredential: 'any' })
+  const [modo, setModo] = useState('individual') // 'individual' | 'massa'
+  const [destinatarioId, setDestinatarioId] = useState('')
+  const [busca, setBusca] = useState('')
+  const [texto, setTexto] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState(null)
+
+  const carregarLista = useCallback((params) => api.adminWhatsappConnectedClients(params).then((r) => r.clientes ?? []), [])
+
+  // Recarrega a lista sempre que um filtro muda. Não busca a cada tecla da
+  // busca por nome/e-mail — isso é filtro local (useMemo abaixo). A lista
+  // ANTIGA continua na tela até a nova chegar — sem "Carregando…" piscando
+  // a cada filtro trocado, só no carregamento inicial.
+  useEffect(() => {
+    let ativo = true
+    Promise.all([api.adminWhatsappContactHistory(100), carregarLista(filtros)])
+      .then(([hist, clientes]) => {
+        if (!ativo) return
+        setHistorico(hist.contatos ?? [])
+        setConectados(clientes)
+        setErro('')
+      })
+      .catch((err) => { if (ativo) setErro(err.message) })
+      .finally(() => { if (ativo) setCarregando(false) })
+    return () => { ativo = false }
+  }, [filtros, carregarLista])
+
+  const filtrados = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    if (!q) return conectados
+    return conectados.filter((c) => c.email?.toLowerCase().includes(q) || c.nome?.toLowerCase().includes(q))
+  }, [conectados, busca])
+
+  // Envio em massa só alcança quem está conectado AGORA — mesmo que o
+  // filtro "Conectado" esteja em "Tanto faz" (ela pode estar só olhando
+  // quem está desconectado). O backend já garante isso; aqui é só a conta
+  // pra mostrar o número certo antes de clicar.
+  const elegiveisMassa = useMemo(() => filtrados.filter((c) => c.conectado), [filtrados])
+
+  function trocarModo(novoModo) {
+    setModo(novoModo)
+    setResultado(null)
+    if (novoModo === 'massa' && !texto.trim()) setTexto(RASCUNHO_PRIMEIRO_CONTATO)
+  }
+
+  async function recarregarHistorico() {
+    const hist = await api.adminWhatsappContactHistory(100)
+    setHistorico(hist.contatos ?? [])
+  }
+
+  async function enviarIndividual() {
+    if (!destinatarioId || texto.trim().length < 3) return
+    setEnviando(true)
+    setResultado(null)
+    try {
+      await api.adminWhatsappSend(destinatarioId, texto.trim())
+      setResultado({ ok: true, texto: 'Mensagem enviada.' })
+      setTexto('')
+      await recarregarHistorico()
+    } catch (err) {
+      setResultado({ ok: false, texto: err.message })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  async function enviarEmMassa() {
+    if (texto.trim().length < 3 || elegiveisMassa.length === 0) return
+    const confirmado = window.confirm(
+      `Isso manda a mensagem AGORA para ${elegiveisMassa.length} cliente(s) conectado(s). Não tem como desfazer. Confirma?`,
+    )
+    if (!confirmado) return
+    setEnviando(true)
+    setResultado(null)
+    try {
+      const resp = await api.adminWhatsappSendBulk(filtros, texto.trim())
+      const partes = [`${resp.enviados} de ${resp.elegiveis} enviadas.`]
+      if (resp.falhas?.length) partes.push(`${resp.falhas.length} falharam: ${resp.falhas.map((f) => f.email).join(', ')}.`)
+      setResultado({ ok: resp.falhas?.length === 0, texto: partes.join(' ') })
+      await recarregarHistorico()
+    } catch (err) {
+      setResultado({ ok: false, texto: err.message })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {erro && <Alert type="error" message={erro} />}
+
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-black text-gray-900">Mandar mensagem</h3>
+          <div className="flex gap-1 rounded-xl bg-gray-100 p-1">
+            <button
+              onClick={() => trocarModo('individual')}
+              className={`rounded-lg px-3 py-1 text-xs font-bold ${modo === 'individual' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+            >
+              1 cliente
+            </button>
+            <button
+              onClick={() => trocarModo('massa')}
+              className={`rounded-lg px-3 py-1 text-xs font-bold ${modo === 'massa' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+            >
+              Todos do filtro
+            </button>
+          </div>
+        </div>
+        <p className="mb-3 text-xs text-gray-500">
+          A mensagem chega no próprio celular da cliente, na conversa &quot;Mensagens para você mesmo&quot;. Só quem
+          está com o WhatsApp conectado agora pode receber.
+        </p>
+
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {[
+            ['connected', 'Conectado agora'],
+            ['everSent', 'Já fez algum envio'],
+            ['hasCredential', 'Tem credencial cadastrada'],
+          ].map(([campo, rotulo]) => (
+            <label key={campo} className="text-xs">
+              <span className="mb-1 block font-semibold text-gray-600">{rotulo}</span>
+              <select
+                value={filtros[campo]}
+                onChange={(e) => setFiltros((f) => ({ ...f, [campo]: e.target.value }))}
+                className="w-full rounded-xl border border-gray-200 px-2 py-1.5 text-xs"
+              >
+                {FILTRO_OPCOES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+
+        {carregando ? (
+          <p className="text-sm text-gray-500">Carregando…</p>
+        ) : filtrados.length === 0 ? (
+          <p className="text-sm text-gray-500">Nenhum cliente bate com esse filtro.</p>
+        ) : (
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Buscar por nome ou e-mail dentro do filtro…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+            />
+
+            {modo === 'individual' ? (
+              <select
+                value={destinatarioId}
+                onChange={(e) => setDestinatarioId(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+              >
+                <option value="">Escolha o cliente… ({filtrados.length} no filtro)</option>
+                {filtrados.map((c) => (
+                  <option key={c.userId} value={c.userId} disabled={!c.conectado}>
+                    {(c.nome ? `${c.nome} — ${c.email}` : c.email) + (c.conectado ? '' : ' (desconectado)')}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                Vai mandar pra <strong>{elegiveisMassa.length}</strong> cliente(s) conectado(s) agora, dos{' '}
+                {filtrados.length} que batem no filtro{filtrados.length !== elegiveisMassa.length ? ' (o resto está desconectado)' : ''}.
+              </p>
+            )}
+
+            <textarea
+              rows={6}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder="Escreva a mensagem…"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+              maxLength={1000}
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">{texto.length}/1000</span>
+              {modo === 'individual' ? (
+                <button
+                  onClick={enviarIndividual}
+                  disabled={enviando || !destinatarioId || texto.trim().length < 3}
+                  className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                >
+                  {enviando ? 'Enviando…' : 'Enviar'}
+                </button>
+              ) : (
+                <button
+                  onClick={enviarEmMassa}
+                  disabled={enviando || elegiveisMassa.length === 0 || texto.trim().length < 3}
+                  className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                >
+                  {enviando ? 'Enviando…' : `Enviar para ${elegiveisMassa.length}`}
+                </button>
+              )}
+            </div>
+            {resultado && <Alert type={resultado.ok ? 'success' : 'error'} message={resultado.texto} />}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+        <h3 className="mb-3 text-sm font-black text-gray-900">Histórico de contato por WhatsApp</h3>
+        <p className="mb-3 text-xs text-gray-500">Mensagens automáticas (piloto de ativação) e manuais, mais recentes primeiro.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="text-gray-500">
+              <tr>
+                <th className="py-1 pr-3">Quando</th>
+                <th className="py-1 pr-3">Cliente</th>
+                <th className="py-1 pr-3">Motivo</th>
+                <th className="py-1 pr-3">Mensagem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historico.map((h) => (
+                <tr key={h.id} className="border-t border-gray-100 align-top">
+                  <td className="py-1 pr-3 whitespace-nowrap text-gray-600">{formatDate(h.when)}</td>
+                  <td className="py-1 pr-3 font-medium text-gray-800">{h.clienteNome ? `${h.clienteNome} — ${h.clienteEmail}` : h.clienteEmail}</td>
+                  <td className="py-1 pr-3">
+                    <Chip tone={h.manual ? 'blue' : 'gray'}>{h.motivo}</Chip>
+                  </td>
+                  <td className="py-1 pr-3 max-w-xs truncate text-gray-600" title={h.texto ?? ''}>{h.texto ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {historico.length === 0 && <p className="py-3 text-sm text-gray-500">Nenhum contato por WhatsApp ainda.</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminEmailsPage() {
   const [aba, setAba] = useState('modelos')
   const [carregando, setCarregando] = useState(true)
@@ -582,8 +839,8 @@ export default function AdminEmailsPage() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-black text-gray-900">E-mails</h1>
-            <p className="text-sm text-gray-600">Edite os textos, mande teste e dispare campanhas.</p>
+            <h1 className="text-2xl font-black text-gray-900">Contato com cliente</h1>
+            <p className="text-sm text-gray-600">E-mails: edite os textos, mande teste e dispare campanhas. WhatsApp: veja o histórico e mande mensagem direto pelo painel.</p>
           </div>
           <Link href="/admin" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm ring-1 ring-gray-200">Voltar ao admin</Link>
         </div>
@@ -647,6 +904,7 @@ export default function AdminEmailsPage() {
 
         {aba === 'enviar' && <Enviar templates={templates} onEnviado={recarregar} />}
         {aba === 'historico' && <Historico batches={batches} sends={sends} onCancelar={cancelarCampanha} />}
+        {aba === 'whatsapp' && <WhatsAppTab />}
       </div>
     </main>
   )

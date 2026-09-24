@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { DEFAULT_LANDING_PLANS, SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { usePainel, usePainelHeader } from '../PainelShell'
+import { BASIC_FEATURE_LIST, PRO_FEATURE_LIST } from '@/lib/planFeatures'
 import { CONFIG_PRESERVED_NOTE } from '../../../../src/domain/painel/trialNotice.js'
 import { buildPricePerOffer, parsePriceToCents } from '../../../../src/domain/painel/pricePerOffer.js'
 import {
@@ -20,10 +21,17 @@ import {
   buildCardPaymentSteps,
 } from '../../../../src/domain/painel/cardPaymentHelp.js'
 
-const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do BOTinho, pode me ajudar?')}`
+const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do Espelha Grupos, pode me ajudar?')}`
 
 const PAID_PLAN_IDS = ['basic', 'pro']
 const PLAN_LABELS = { trial: 'Trial', basic: 'Basic', pro: 'Pro' }
+
+// Listas de recursos: fonte única em lib/planFeatures.js (a mesma da página de
+// preços). Divisão Basic/PRO de 2026-09-23 — o PRO é verde + roxo.
+const PLAN_PRESENTATION = {
+  basic: { eyebrow: 'Para começar', features: BASIC_FEATURE_LIST },
+  pro: { eyebrow: 'Mais completo', featured: true, features: PRO_FEATURE_LIST },
+}
 
 const FALLBACK_PLAN_CARDS = DEFAULT_LANDING_PLANS
   .filter((plan) => PAID_PLAN_IDS.includes(plan.id))
@@ -57,16 +65,12 @@ function mergePlanCards(dynamicPlans = []) {
 }
 
 export default function PlanoPage() {
-  usePainelHeader({ title: 'Plano e cobrança', subtitle: 'Sua assinatura, uso e forma de pagamento' })
+  usePainelHeader({ title: 'Planos', subtitle: 'Escolha o plano que combina com a sua rotina' })
 
   const [plans, setPlans] = useState(FALLBACK_PLAN_CARDS)
   const [overview, setOverview] = useState(null)
-  const [selectedPlanId, setSelectedPlanId] = useState('pro')
   const [checkoutPlan, setCheckoutPlan] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
-  // 'auto' = renovação automática (assinatura no Mercado Pago);
-  // 'once' = pagamento único de 30 dias (comportamento histórico).
-  const [billingMode, setBillingMode] = useState('auto')
   const [emailPrompt, setEmailPrompt] = useState(null)
   const [newEmail, setNewEmail] = useState('')
   const [savingEmail, setSavingEmail] = useState(false)
@@ -91,8 +95,6 @@ export default function PlanoPage() {
     })
     return () => { active = false }
   }, [])
-
-  const selectedPlan = useMemo(() => plans.find((p) => p.id === selectedPlanId) ?? plans[0], [plans, selectedPlanId])
 
   // D5 do plano de ativação de 2026-09-08: o mesmo preço, medido no uso REAL
   // dela. "R$ 69" é um número solto; "R$ 1,47 por oferta publicada" é a conta
@@ -150,7 +152,7 @@ export default function PlanoPage() {
     setCheckoutError('')
     try {
       await api.updateAccountEmail(email)
-      const plan = emailPrompt?.plan ?? selectedPlanId
+      const plan = emailPrompt?.plan ?? 'pro'
       setEmailPrompt(null)
       setNewEmail('')
       await handleSubscribe(plan)
@@ -187,7 +189,7 @@ export default function PlanoPage() {
   const lastDate = formatDate(overview?.lastApprovedPayment?.createdAt)
 
   return (
-    <div className="pnl-grid" style={{ maxWidth: 720, margin: '0 auto' }}>
+    <div className="pnl-grid" style={{ maxWidth: 940, margin: '0 auto' }}>
       {/* Assinatura atual */}
       {overview?.isActive && currentPlanLabel && (
         <section className="pnl-card" style={{ background: 'var(--ink)', color: 'var(--surface)', borderColor: 'var(--ink)' }}>
@@ -258,29 +260,94 @@ export default function PlanoPage() {
         </section>
       )}
 
+      {/* Já no Básico, com canal/automática/fila configurados: isso está
+          parado. Antes deste aviso a cliente pagava e descobria pelo canal
+          sem receber nada (RCA 2026-09-23). */}
+      {overview?.proFeaturesNotice?.kind === 'stopped' && (
+        <section className="pnl-note-box is-warn" role="alert">
+          <strong style={{ fontWeight: 600 }}>{overview.proFeaturesNotice.title}</strong>
+          <p style={{ marginTop: 6 }}>{overview.proFeaturesNotice.body}</p>
+          <p style={{ marginTop: 6, fontWeight: 600 }}>{overview.proFeaturesNotice.action}</p>
+        </section>
+      )}
+
       {/* Planos */}
-      <section className="pnl-card">
-        <div className="pnl-card-title" style={{ marginBottom: 4 }}>{overview?.isActive ? 'Renovar ou trocar de plano' : 'Escolha seu plano'}</div>
-        <p className="pnl-card-note" style={{ marginBottom: 14 }}>Cobrança a cada 30 dias, sem fidelidade.</p>
-        <div className="pnl-presets" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+      <section>
+        <div style={{ marginBottom: 22 }}>
+          <div className="pnl-card-title" style={{ marginBottom: 6 }}>{overview?.isActive ? 'Renove ou troque seu plano' : 'Escolha seu plano'}</div>
+          <p className="pnl-card-note">Dois planos simples, sem fidelidade. Cancele a cobrança automática quando quiser.</p>
+        </div>
+        <div className="grid items-stretch gap-5 md:grid-cols-2">
           {plans.map((plan) => {
-            const selected = plan.id === selectedPlanId
+            const presentation = PLAN_PRESENTATION[plan.id] ?? PLAN_PRESENTATION.basic
+            const precoPorOferta = precosPorOferta[plan.id]
             return (
-              <button key={plan.id} type="button" className={`pnl-preset${selected ? ' is-active' : ''}`} onClick={() => setSelectedPlanId(plan.id)} aria-pressed={selected}>
-                <div className="pnl-toolbar" style={{ justifyContent: 'space-between' }}>
-                  <b>{plan.name}</b>
-                  <span className={`pnl-tag ${selected ? 'is-success' : 'is-skip'}`}>{selected ? 'Selecionado' : 'Escolher'}</span>
+              <article
+                key={plan.id}
+                className={`flex h-full flex-col rounded-[24px] border bg-white p-6 shadow-[0_12px_36px_rgba(26,64,52,0.07)] sm:p-7 ${presentation.featured ? 'border-[#6F4FE8] ring-2 ring-[#ECE7FA]' : 'border-slate-200'}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className={`text-xs font-black uppercase tracking-[0.18em] ${presentation.featured ? 'text-[#4B34A8]' : 'text-emerald-700'}`}>{presentation.eyebrow}</p>
+                  {presentation.featured && <span className="rounded-full bg-[#ECE7FA] px-3 py-1 text-xs font-bold text-[#4B34A8]">Mais escolhido</span>}
                 </div>
-                <span className="pnl-serif" style={{ fontSize: 26, color: 'var(--accent-strong)', display: 'block', margin: '6px 0 2px' }}>{plan.price}<small style={{ fontSize: 11, color: 'var(--ink-faint)', fontWeight: 500 }}> / 30 dias</small></span>
-                <small>{plan.description}</small>
-                {Array.isArray(plan.features) && plan.features.length > 0 && (
-                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, display: 'grid', gap: 5 }}>
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="pnl-hint" style={{ listStyle: 'disc' }}>{feature}</li>
-                    ))}
-                  </ul>
+                <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{plan.id.toUpperCase()}</h2>
+                <div className="mt-2 flex items-end gap-1">
+                  <span className="text-4xl font-black tracking-tight text-slate-950">{plan.price}</span>
+                  <span className="pb-1 text-sm text-slate-500">/ 30 dias</span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-500">{plan.description}</p>
+
+                <ul className="mt-6 flex-1 space-y-3.5">
+                  {presentation.features.map((feature) => (
+                    <li key={feature} className="flex gap-3 text-sm leading-5 text-slate-700">
+                      <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-black ${presentation.featured ? 'bg-[#ECE7FA] text-[#6F4FE8]' : 'bg-emerald-100 text-emerald-700'}`} aria-hidden="true">✓</span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {precoPorOferta && (
+                  <p className="mt-5 rounded-xl bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">
+                    {precoPorOferta.texto}
+                  </p>
                 )}
-              </button>
+
+                {/* O teste grátis libera tudo do Pro. Sem este aviso, quem usa
+                    canal, automática ou fila escolhia o Básico e isso parava em
+                    silêncio logo depois de pagar (RCA 2026-09-23). O aviso fica
+                    NO card, colado aos botões: é ali que a decisão acontece. */}
+                {plan.id === 'basic' && overview?.proFeaturesNotice?.kind === 'before_choosing' && (
+                  <div className="mt-5 pnl-note-box is-warn" role="note">
+                    <strong style={{ fontWeight: 600 }}>{overview.proFeaturesNotice.title}</strong>
+                    <p style={{ marginTop: 4 }}>{overview.proFeaturesNotice.body}</p>
+                    <p style={{ marginTop: 4, fontWeight: 600 }}>{overview.proFeaturesNotice.action}</p>
+                  </div>
+                )}
+
+                <div className="mt-6 grid gap-2.5">
+                  <button
+                    type="button"
+                    className={`pnl-btn ${presentation.featured ? 'is-pro' : 'is-primary'}`}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={() => handleSubscribe(plan.id)}
+                    disabled={!!checkoutPlan}
+                  >
+                    {checkoutPlan === plan.id ? 'Aguarde…' : 'Cobrança automática'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`pnl-btn ${presentation.featured ? 'is-pro' : 'is-primary'}`}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={() => handleCheckout(plan.id)}
+                    disabled={!!checkoutPlan}
+                  >
+                    {checkoutPlan === plan.id ? 'Aguarde…' : 'Pagar uma vez'}
+                  </button>
+                </div>
+                <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+                  PIX ou cartão · acesso por 30 dias
+                </p>
+              </article>
             )
           })}
         </div>
@@ -308,7 +375,7 @@ export default function PlanoPage() {
               <button type="button" className="pnl-btn is-primary" onClick={handleSaveEmailAndRetry} disabled={savingEmail || !newEmail.trim()}>
                 {savingEmail ? 'Salvando…' : 'Salvar e continuar'}
               </button>
-              <button type="button" className="pnl-btn is-ghost" onClick={() => { setEmailPrompt(null); setBillingMode('once') }}>
+              <button type="button" className="pnl-btn is-ghost" onClick={() => { const plan = emailPrompt.plan; setEmailPrompt(null); handleCheckout(plan) }}>
                 Pagar uma vez, sem cobrança automática
               </button>
             </div>
@@ -385,13 +452,6 @@ export default function PlanoPage() {
         <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4 }}>
           {CONFIG_PRESERVED_NOTE}
         </p>
-        {/* Só aparece para quem JÁ tem ofertas publicadas: sem uso, essa conta
-            viraria promessa de volume que a gente não fez. */}
-        {precoPorOferta && (
-          <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 4, fontWeight: 600 }}>
-            {precoPorOferta.texto}
-          </p>
-        )}
       </section>
 
       {/* Dificuldades no pagamento */}

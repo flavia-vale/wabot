@@ -1,7 +1,7 @@
 export const PROOF_ASSETS = {
   methodology: {
     id: 'metodologia-operacional',
-    title: 'Metodologia operacional validada em staging',
+    title: 'Metodologia operacional antes de escalar',
     summary: 'Checklist de origem, revisão de oferta, regra de distribuição e análise de logs antes de escalar campanhas.',
     evidenceType: 'methodology',
     links: [

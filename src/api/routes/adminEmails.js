@@ -1,8 +1,13 @@
-// Aba E-mails do painel admin: ver e editar os textos, mandar teste, montar
-// público, disparar em massa e acompanhar o histórico.
+// Aba "Contato com cliente" do painel admin: e-mail (ver/editar textos,
+// mandar teste, montar público, disparar em massa) + WhatsApp (histórico de
+// contato — automático e manual — e envio manual para conta conectada).
 //
-// Nada aqui envia direto: tudo passa pelo despachante/fila (src/email/*), que
-// carregam as travas. Toda ação que muda algo grava AdminAuditLog.
+// Nada aqui envia e-mail direto: tudo passa pelo despachante/fila
+// (src/email/*), que carregam as travas. O envio de WhatsApp passa pelo
+// MESMO caminho do piloto de ativação (`manager.sendSelfMessage` ->
+// bot-worker.js), nunca por `sendBroadcast`/pipeline de oferta — mensagem de
+// suporte não é oferta, não deve levar dedup/preservação/MessageLog. Toda
+// ação que muda algo grava AdminAuditLog.
 
 import dbDefault from '../../db.js'
 import { resolveAdminAccess, writeAdminAuditLog } from './admin.js'
@@ -13,6 +18,10 @@ import { resolveDailyWindowStart, nextDailyWindowStart, describeWindowStart } fr
 import { extractVariables } from '../../email/markup.js'
 import { buildAudienceWhere, describeAudience, loadAudience, AUDIENCE_FILTERS } from '../../email/audience.js'
 import { enqueueEmailBatch, cancelEmailBatch, resolveBatchSize } from '../../email/queue.js'
+import { isAdminMfaVerified } from '../adminMfa.js'
+import { sendSelfMessage as defaultSendSelfMessage } from '../../manager.js'
+import { presentWhatsappContactRow } from '../../domain/admin/whatsappContactHistory.js'
+import { parseWhatsappContactFilters, matchesWhatsappContactFilters, isEligibleForBulkSend } from '../../domain/admin/whatsappContactFilters.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -28,6 +37,7 @@ const EXEMPLO_CLIENTE = { id: 'exemplo', name: 'Juliane Pumuceno', email: 'exemp
 export async function adminEmailsRoutes(app, opts = {}) {
   const db = opts.db ?? dbDefault
   const sendMail = opts.sendMail ?? defaultSendMail
+  const sendSelfMessage = opts.sendSelfMessage ?? defaultSendSelfMessage
 
   async function requireAdminAccess(req, reply, permission) {
     const user = await db.user.findUnique({
@@ -37,6 +47,12 @@ export async function adminEmailsRoutes(app, opts = {}) {
     const access = resolveAdminAccess(user)
     if (!access.role || !(ROLE_PERMISSIONS[access.role] ?? []).includes(permission)) {
       reply.code(403).send({ error: 'Acesso admin negado' })
+      return null
+    }
+    // Mesma segunda senha das escritas do admin.js — antes estas rotas (disparo
+    // em massa, pagamento de comissão) passavam só com o login.
+    if (permission.endsWith(':write') && !isAdminMfaVerified(req)) {
+      reply.code(401).send({ error: 'MFA obrigatória para esta operação administrativa' })
       return null
     }
     req.admin = { email: user?.email, role: access.role, adminUserId: access.adminUserId }
@@ -403,5 +419,162 @@ export async function adminEmailsRoutes(app, opts = {}) {
       proximaVirada: proximaVirada.toISOString(),
       proximaViradaLabel: describeWindowStart(proximaVirada),
     }
+  })
+
+  // --------------------------------------------------------- WhatsApp
+
+  const WHATSAPP_HISTORY_LIMIT = 200
+
+  // Histórico de contato por WhatsApp (automático do piloto + manual da
+  // admin) — lê CustomerContactLog, a MESMA tabela do "Registrar contato de
+  // CS", filtrada por canal.
+  app.get('/whatsapp/history', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await requireAdminAccess(req, reply, 'support:read'))) return
+    const limite = Math.min(Math.max(Number(req.query?.limit) || 50, 1), WHATSAPP_HISTORY_LIMIT)
+    const rows = await db.customerContactLog.findMany({
+      where: { channel: 'whatsapp' },
+      orderBy: { createdAt: 'desc' },
+      take: limite,
+      include: {
+        user: { select: { email: true, name: true } },
+        actorUser: { select: { email: true } },
+      },
+    })
+    return { contatos: rows.map(presentWhatsappContactRow) }
+  })
+
+  // Universo de candidatos pro envio manual/em massa, com os 3 fatos que os
+  // filtros da tela usam (conectado agora, já enviou alguma vez, tem
+  // credencial cadastrada) — SEMPRE em consulta de lote (groupBy), nunca uma
+  // por cliente, senão a lista de 80 contas vira 160 idas ao banco.
+  async function loadWhatsappContactCandidates({ busca = '' } = {}) {
+    const sessoes = await db.waSession.findMany({
+      where: busca
+        ? { user: { is: { OR: [{ email: { contains: busca } }, { name: { contains: busca } }] } } }
+        : {},
+      select: { userId: true, status: true, phone: true, user: { select: { email: true, name: true } } },
+      take: 300,
+    })
+    const comUsuario = sessoes.filter(s => s.user)
+    const ids = comUsuario.map(s => s.userId)
+    const [credenciais, sucessos] = ids.length
+      ? await Promise.all([
+          db.credential.groupBy({ by: ['userId'], where: { userId: { in: ids } }, _count: { _all: true } }),
+          db.messageLog.groupBy({ by: ['userId'], where: { userId: { in: ids }, status: 'success' }, _count: { _all: true } }),
+        ])
+      : [[], []]
+    const temCredencial = new Set(credenciais.filter(c => c._count._all > 0).map(c => c.userId))
+    const jaEnviou = new Set(sucessos.filter(c => c._count._all > 0).map(c => c.userId))
+    return comUsuario.map(s => ({
+      userId: s.userId,
+      email: s.user.email,
+      nome: s.user.name,
+      telefone: s.phone,
+      conectado: s.status === 'connected',
+      enviouAntes: jaEnviou.has(s.userId),
+      temCredencial: temCredencial.has(s.userId),
+    }))
+  }
+
+  // Lista de candidatos + os filtros da tela (conectado/já enviou/credencial).
+  // A prévia (quantos batem) e o envio em massa usam a MESMA função — nunca
+  // podem discordar sobre quem entra.
+  app.get('/whatsapp/connected', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!(await requireAdminAccess(req, reply, 'support:read'))) return
+    const busca = String(req.query?.q ?? '').trim()
+    const filtros = parseWhatsappContactFilters(req.query ?? {})
+    const candidatos = await loadWhatsappContactCandidates({ busca })
+    const clientes = candidatos.filter(c => matchesWhatsappContactFilters(
+      { connected: c.conectado, everSentSuccess: c.enviouAntes, hasCredential: c.temCredencial },
+      filtros,
+    ))
+    return { clientes, filtros }
+  })
+
+  // Manda a mensagem pelo PRÓPRIO WhatsApp da cliente (self-chat) — nunca
+  // por um número/grupo nosso. Fora do pipeline de oferta de propósito: é
+  // suporte, não anúncio (ver comentário no topo do arquivo).
+  app.post('/whatsapp/send', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'support:write')
+    if (!access) return
+
+    const targetUserId = String(req.body?.userId ?? '').trim()
+    const texto = String(req.body?.text ?? '').trim()
+    if (!targetUserId) return reply.code(400).send({ error: 'Cliente não informado' })
+    if (texto.length < 3) return reply.code(400).send({ error: 'Escreva a mensagem antes de enviar' })
+    if (texto.length > 1000) return reply.code(400).send({ error: 'Mensagem muito longa (máximo 1000 caracteres)' })
+
+    const cliente = await db.user.findUnique({ where: { id: targetUserId }, select: { id: true, email: true } })
+    if (!cliente) return reply.code(404).send({ error: 'Cliente não encontrado' })
+
+    const sessao = await db.waSession.findUnique({ where: { userId: targetUserId }, select: { status: true } })
+    if (sessao?.status !== 'connected') {
+      return reply.code(409).send({ error: 'Esse cliente não está com o WhatsApp conectado agora' })
+    }
+
+    try {
+      await sendSelfMessage(targetUserId, texto, req.user.sub)
+    } catch (err) {
+      return reply.code(502).send({ error: `Não consegui enviar: ${err?.message ?? 'erro desconhecido'}` })
+    }
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.whatsapp.self_message.send',
+      resource: 'user',
+      resourceId: targetUserId,
+      targetUserId,
+      after: { textLength: texto.length },
+    })
+
+    return { ok: true }
+  })
+
+  // Envio EM MASSA para quem bate no filtro — ex.: "conectados que nunca
+  // mandaram nada" (primeiro contato de ativação). Só manda pra quem está
+  // CONECTADO AGORA (isEligibleForBulkSend), mesmo que o filtro `connected`
+  // esteja em "any" — a intenção de "só ver quem está desconectado" nunca
+  // pode virar tentativa de mandar pra quem não pode receber.
+  //
+  // Sequencial, best-effort por cliente: uma conta falhando (sessão caiu no
+  // meio, worker reiniciando) não pode travar as demais. Sem trava de
+  // repetição própria — é ação manual da admin, sob o próprio julgamento;
+  // ela decide se e quando repete.
+  app.post('/whatsapp/send-bulk', { onRequest: [app.authenticate] }, async (req, reply) => {
+    const access = await requireAdminAccess(req, reply, 'support:write')
+    if (!access) return
+
+    const texto = String(req.body?.text ?? '').trim()
+    if (texto.length < 3) return reply.code(400).send({ error: 'Escreva a mensagem antes de enviar' })
+    if (texto.length > 1000) return reply.code(400).send({ error: 'Mensagem muito longa (máximo 1000 caracteres)' })
+
+    const filtros = parseWhatsappContactFilters(req.body?.filters ?? {})
+    const candidatos = await loadWhatsappContactCandidates({})
+    const elegiveis = candidatos.filter(c => {
+      const fatos = { connected: c.conectado, everSentSuccess: c.enviouAntes, hasCredential: c.temCredencial }
+      return matchesWhatsappContactFilters(fatos, filtros) && isEligibleForBulkSend(fatos)
+    })
+
+    if (!elegiveis.length) {
+      return reply.code(409).send({ error: 'Nenhum cliente conectado bate com esse filtro agora' })
+    }
+
+    const falhas = []
+    let enviados = 0
+    for (const cliente of elegiveis) {
+      try {
+        await sendSelfMessage(cliente.userId, texto, req.user.sub)
+        enviados += 1
+      } catch (err) {
+        falhas.push({ userId: cliente.userId, email: cliente.email, erro: err?.message ?? 'erro desconhecido' })
+      }
+    }
+
+    await writeAdminAuditLog(req, {
+      action: 'admin.whatsapp.self_message.send_bulk',
+      resource: 'user',
+      after: { filtros, elegiveis: elegiveis.length, enviados, falhas: falhas.length, textLength: texto.length },
+    })
+
+    return { elegiveis: elegiveis.length, enviados, falhas }
   })
 }

@@ -58,7 +58,7 @@ function SelectChannelModalContent({ onClose, onSelect }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
+    <div className="ui-dialog-layer fixed inset-0 flex items-end justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
       <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:max-h-[90vh] sm:rounded-lg sm:p-6">
         <div className="mb-4 flex min-w-0 items-start justify-between gap-3">
           <h2 className="min-w-0 text-lg font-semibold leading-snug">Escolher seu canal</h2>
@@ -136,7 +136,7 @@ function SelectChannelModalContent({ onClose, onSelect }) {
         {preview && (
           <div className="mt-4 rounded border bg-slate-50 p-3">
             <div className="break-words text-sm font-medium">{preview.name || 'Canal sem nome'}</div>
-            <div className="mt-1 break-all font-mono text-xs text-slate-500">{preview.jid}</div>
+            <div className="mt-1 break-all text-xs text-slate-500">{preview.jid}</div>
             {preview.isViewerOwner
               ? <div className="mt-1 text-sm text-emerald-700">✓ Você é dono deste canal</div>
               : <div className="mt-1 text-sm text-amber-700">⚠ Você não consta como dono.</div>}

@@ -159,7 +159,8 @@ test('a tela NÃO tem aviso de recurso PRO', () => {
 
 test('Ofertas automáticas continua sendo a tela com o bloqueio de plano', () => {
   const ofertas = read('../dashboard/app/painel/ofertas-automaticas/page.js')
-  assert.match(ofertas, /ProFeaturePaywall/)
+  // Divisão Basic/PRO (2026-09-23): o bloqueio virou a página travada com prévia.
+  assert.match(ofertas, /LockedPage/)
   assert.match(ofertas, /hasProLikeAccess/)
   const item = nav.slice(nav.indexOf("label: 'Ofertas automáticas'"))
   assert.match(item.slice(0, 200), /pro: true/)
@@ -172,15 +173,20 @@ test('o item se chama "Espelhamento" na sidebar e no painel', () => {
   assert.ok(!painel.includes("label: 'Espelhar grupos'"), 'nome antigo continua no painel')
 })
 
-test('a aba Conexões continua existindo, com o alternador Grupos/Conexões', () => {
-  // Pedido explícito: a parte de conexões não pode ser apagada.
+test('as conexões continuam existindo abaixo dos grupos, sem alternador de página', () => {
+  // Pedido explícito: a parte de conexões não pode ser apagada, mas agora deve
+  // ficar visível na mesma página, depois das duas colunas de grupos.
   assert.match(page, /ConnectionsDiagram/)
-  assert.match(page, /setTab\('grupos'\)/)
-  assert.match(page, /setTab\('conexoes'\)/)
+  assert.doesNotMatch(page, /setTab\('grupos'\)/)
+  assert.doesNotMatch(page, /setTab\('conexoes'\)/)
+  assert.ok(
+    page.indexOf('className="pnl-card pnl-esp-connections"') > page.indexOf('className="pnl-grid pnl-esp-cols"'),
+    'as conexões precisam vir depois das listas de grupos',
+  )
 })
 
 test('o mapa leva para a edição dos destinos daquela origem', () => {
-  // Sem isto, a aba Conexões só mostra o problema e não deixa consertar — era
+  // Sem isto, o mapa de conexões só mostra o problema e não deixa consertar — era
   // o buraco que o botão "Editar" do assistente tapava.
   assert.match(page, /Editar para onde/)
   assert.match(page, /openDrawerFor\(origemDestacada, 'monitor', 'destinos'\)/)

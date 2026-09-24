@@ -13,10 +13,10 @@ const diagnosticHref = '/diagnostico-antiban-whatsapp'
 const checklistHref = '/materiais/checklist-antiban-whatsapp'
 const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp'
 const decisionPages = [
-  { href: '/bot-comum-vs-botinho', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada.' },
+  { href: '/bot-comum-vs-espelha-grupos', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada.' },
   { href: '/faq-antiban-whatsapp', title: 'FAQ “anti-ban” honesto', description: 'Respostas diretas sem promessa de banimento zero.' },
-  { href: '/como-funciona-botinho-canais', title: 'Como funciona em canais', description: 'Fluxo de fontes, destinos, cadência e monitoramento.' },
-  { href: '/protecao-antiban-botinho', title: 'Proteção avançada', description: 'Limites, variações, pausa preventiva e recuperação.' },
+  { href: '/como-funciona-espelha-grupos-canais', title: 'Como funciona em canais', description: 'Fluxo de fontes, destinos, cadência e monitoramento.' },
+  { href: '/protecao-antiban-espelha-grupos', title: 'Proteção avançada', description: 'Limites, variações, saúde de cada canal e pausa automática.' },
 ]
 
 const title = 'Bot para Canais do WhatsApp com Módulo de Preservação Avançada'
@@ -80,12 +80,12 @@ const pillars = [
   {
     icon: '🔍',
     title: 'Detecção precoce de risco',
-    body: 'Acompanhe sinais de saúde por canal, erros, atraso de entrega, queda de cliques e camada de conta-sentinela quando disponível.',
+    body: 'Cada canal de destino tem um status de saúde calculado pelas falhas de envio. Canal que recusa o envio três vezes seguidas é pausado sozinho por 1 hora, e o score de risco estima se o ritmo está alto para o número de seguidores. Cliques e visualizações não entram na conta.',
   },
   {
     icon: '🪂',
     title: 'Plano de recuperação',
-    body: 'Trate canal, chip e audiência como ativos: use chip dedicado, mantenha configuração registrada e prepare recriação rápida se algo acontecer.',
+    body: 'Esta parte é sua, e pesa tanto quanto a ferramenta: use chip dedicado, mantenha a lista de grupos e canais anotada e tenha um canal reserva para avisar a audiência se algo acontecer.',
   },
 ]
 
@@ -94,7 +94,7 @@ const steps = [
   'Defina quais grupos continuam como fonte/comunidade e quais canais viram vitrine principal.',
   'Configure limites, pausas, horário de silêncio e variações antes de aumentar volume.',
   'Espelhe ofertas entre grupos e canais com cadência diferente para cada destino.',
-  'Monitore sinais de saúde e pause a publicação quando um canal entrar em zona de risco.',
+  'Acompanhe o status de cada canal no Monitoramento; o canal que recusa envios é pausado sozinho por 1 hora.',
 ]
 
 const comparisons = [
@@ -103,17 +103,21 @@ const comparisons = [
   ['Espelhar de canais para grupos', '⚠️ limitado', '✅'],
   ['Ritmo humano com pausas', '❌', '✅'],
   ['Variação automática de texto', '❌', '✅'],
-  ['Variação de imagem por destino', '❌', '✅'],
+  ['Variação de imagem nos canais', '❌', '✅'],
   ['Horário de silêncio', '❌', '✅'],
   ['Painel de saúde dos canais', '❌', '✅'],
-  ['Pausa preventiva por risco', '❌', '✅'],
-  ['Plano de recuperação', '❌', '✅'],
+  ['Pausa automática do canal que recusa envios', '❌', '✅'],
+  ['Score de risco por canal (estimativa)', '❌', '✅'],
 ]
 
 const faqs = [
   {
+    question: 'Em qual plano estão os canais e a preservação avançada?',
+    answer: 'No plano Pro, de R$ 69 a cada 30 dias. O plano Basic, de R$ 39, espelha e publica em grupos. O teste grátis de 7 dias libera o Pro completo.',
+  },
+  {
     question: 'O Módulo de Preservação Avançada garante que meu WhatsApp nunca será banido?',
-    answer: 'Não. Nenhuma ferramenta séria pode prometer 100% contra banimento. O Módulo de Preservação Avançada reduz risco com defesa em profundidade: cadência, limites, variações, monitoramento, alertas e plano de recuperação. O termo "anti-ban" aparece apenas como referência de busca, não como promessa absoluta.',
+    answer: 'Não. Nenhuma ferramenta séria pode prometer 100% contra banimento. O Módulo de Preservação Avançada reduz risco com defesa em profundidade: cadência, limites, variações, status de saúde de cada canal e pausa automática do canal que recusa envios. Chip dedicado e plano B continuam por sua conta. O termo "anti-ban" aparece apenas como referência de busca, não como promessa absoluta.',
   },
   {
     question: 'Preciso abandonar meus grupos de achadinhos?',
@@ -214,14 +218,14 @@ function MiniDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', marginBottom: 18 }}>
         <div>
           <strong style={{ display: 'block', fontSize: 18 }}>Painel de canais</strong>
-          <span style={s.small}>Saúde por destino · hoje</span>
+          <span style={s.small}>Saúde por destino · exemplo</span>
         </div>
         <span className="pill"><span className="dot" />preservação ativa</span>
       </div>
       {[
-        ['Achadinhos Casa', '🟢 Saudável', '12 posts · cadência OK'],
-        ['Ofertas Relâmpago', '🟡 Atenção', 'queda de cliques em 38%'],
-        ['Promo VIP Tech', '🔴 Em risco', 'pausa preventiva sugerida'],
+        ['Achadinhos Casa', '🟢 Saudável', '12 envios hoje · nenhuma falha'],
+        ['Ofertas Relâmpago', '🟡 Atenção', 'envios falhando'],
+        ['Promo VIP Tech', '🔴 Pausado', 'recusou o envio 3 vezes · volta em 1 h'],
       ].map(([name, status, meta]) => (
         <div key={name} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center', padding: '14px 0', borderTop: '1px solid var(--line)' }}>
           <div>
@@ -233,7 +237,7 @@ function MiniDashboard() {
       ))}
       <div style={{ marginTop: 18, padding: 16, borderRadius: 18, background: 'rgba(255,255,255,0.72)', border: '1px solid var(--line)' }}>
         <strong style={{ display: 'block', marginBottom: 6 }}>Próxima ação recomendada</strong>
-        <p style={s.small}>Reduzir frequência no canal em risco e manter distribuição escalonada nos canais saudáveis.</p>
+        <p style={s.small}>Conferir se o número ainda administra o canal pausado. Os outros canais seguem no ritmo normal.</p>
       </div>
     </div>
   )
@@ -279,7 +283,7 @@ export default function BotCanaisWhatsAppPage() {
                 <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="diagnostico_preservacao" data-cta-position="hero_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Fazer diagnóstico de preservação</Link>
               </div>
               <p style={{ ...s.small, marginTop: 16 }}>
-                Aviso honesto: nenhuma automação séria garante banimento zero. O Espelha Grupos trabalha com redução de risco, uso responsável, monitoramento preventivo e plano de recuperação.
+                Aviso honesto: nenhuma automação séria garante banimento zero. O Espelha Grupos trabalha com redução de risco: ritmo por destino, variação, status de saúde de cada canal e pausa automática do canal que recusa envios.
               </p>
             </div>
             <MiniDashboard />
@@ -328,7 +332,7 @@ export default function BotCanaisWhatsAppPage() {
             <SectionHeader
               eyebrow="Como funciona"
               title="Da operação vulnerável para uma rotina monitorada."
-              body="A Sprint 1 da campanha apresenta o fluxo comercial: diagnóstico, migração para canais, regras do Módulo de Preservação Avançada e monitoramento contínuo."
+              body="O caminho começa pelo diagnóstico, passa pela migração para canais e pelas regras do Módulo de Preservação Avançada, e segue com o acompanhamento de cada canal."
             />
             <ol style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16, listStyle: 'none', margin: 0, padding: 0, counterReset: 'step' }}>
               {steps.map((step, index) => (
@@ -346,7 +350,7 @@ export default function BotCanaisWhatsAppPage() {
             <SectionHeader
               eyebrow="Preservação avançada"
               title="Defesa em profundidade: camada sobre camada."
-              body="O Espelha Grupos não promete mágica. O Módulo de Preservação Avançada reduz risco combinando comportamento mais natural, controle de volume, monitoramento e recuperação."
+              body="O Espelha Grupos não promete mágica. O Módulo de Preservação Avançada reduz risco combinando ritmo mais natural, controle de volume, variação e o status de saúde de cada canal."
             />
             <div style={s.grid2}>
               {pillars.map((pillar) => (
@@ -365,7 +369,7 @@ export default function BotCanaisWhatsAppPage() {
             <SectionHeader
               eyebrow="Comparativo"
               title="Bot comum espalha. Espelha Grupos opera com preservação."
-              body="A diferença não está apenas em postar ofertas. Está em publicar com cadência, variações, sinais de saúde e plano de recuperação."
+              body="A diferença não está apenas em postar ofertas. Está em publicar com cadência, variações e o status de saúde de cada canal."
             />
             <div style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 24, background: 'var(--surface)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}>
@@ -398,7 +402,7 @@ export default function BotCanaisWhatsAppPage() {
                 <h2 id="honestidade-title" style={s.h2}>Promessa absoluta é sinal de alerta.</h2>
               </div>
               <p style={{ ...s.lead, fontSize: 18 }}>
-                O Espelha Grupos não controla decisões da plataforma. O Módulo de Preservação Avançada — buscado por muitos afiliados como “anti-ban” — entrega processo: chip dedicado, cadência responsável, variações, monitoramento, pausa preventiva e plano de recuperação para reduzir exposição.
+                O Espelha Grupos não controla decisões da plataforma. O Módulo de Preservação Avançada — buscado por muitos afiliados como “anti-ban” — entrega processo: cadência responsável, variações, status de saúde de cada canal e pausa automática do canal que recusa envios. Chip dedicado e plano B ficam por sua conta.
               </p>
             </div>
           </div>
@@ -414,12 +418,12 @@ export default function BotCanaisWhatsAppPage() {
             <div style={s.grid2}>
               <article style={s.card}>
                 <h3 id="ativos-p1-title" style={{ fontSize: 24, marginBottom: 10 }}>Checklist de Preservação Avançada</h3>
-                <p style={s.small}>Revise chip dedicado, fontes, destinos, cadência, variações, monitoramento e recuperação sem prometer “anti-ban” absoluto.</p>
+                <p style={s.small}>Revise chip dedicado, fontes, destinos, cadência, variações e o seu plano B sem prometer “anti-ban” absoluto.</p>
                 <Link className="btn btn-accent" style={{ marginTop: 18 }} href={checklistHref} data-seo-cta="landing_checklist" data-cta-position="p1_assets_primary" data-cta-stage="lead_magnet" data-cta-destination="checklist">Ver checklist</Link>
               </article>
               <article style={s.card}>
                 <h3 style={{ fontSize: 24, marginBottom: 10 }}>Calculadora de risco operacional</h3>
-                <p style={s.small}>Estime exposição por volume, intervalo, repetição de mensagens, chip, monitoramento e plano de recuperação.</p>
+                <p style={s.small}>Estime exposição por volume, intervalo, repetição de mensagens, chip e se você já tem um plano B.</p>
                 <Link className="btn btn-ghost" style={{ marginTop: 18 }} href={riskCalculatorHref} data-seo-cta="landing_risk_calculator" data-cta-position="p1_assets_secondary" data-cta-stage="tool" data-cta-destination="calculator">Calcular risco</Link>
               </article>
             </div>

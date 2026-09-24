@@ -59,6 +59,10 @@ const oQueFazemos = [
     'Preço publicado, sem fidelidade',
     'Os planos e valores ficam na página de preços, o teste é de 7 dias sem cartão e a cobrança automática pode ser desligada pelo painel. O período já pago continua valendo até o fim.',
   ],
+  [
+    'Reembolso por escrito, em página pública',
+    'Até 7 dias corridos depois do pagamento, devolvemos o valor integral (direito de arrependimento, art. 49 do Código de Defesa do Consumidor), com o pedido processado em até 5 dias úteis. Depois disso, o cancelamento evita a próxima cobrança. A regra completa está na política de reembolso.',
+  ],
 ]
 
 const faq = [
@@ -79,8 +83,8 @@ const faq = [
     a: `O endereço oficial é espelhagrupos.com.br. O contato oficial de suporte é ${SUPPORT_EMAIL}. Não temos outro domínio, e não pedimos pagamento por outro canal que não o checkout dentro do site.`,
   },
   {
-    q: 'Vi o nome BOTinho. É a mesma coisa?',
-    a: `Sim. BOTinho é o nome do robô do ${BRAND_NAME} — o mesmo produto, da mesma empresa. O nome BOTinho aparece em conteúdo anterior a 2026; a marca atual é ${BRAND_NAME}.`,
+    q: 'Se eu pagar e me arrepender, tenho o dinheiro de volta?',
+    a: 'Tem, se pedir em até 7 dias corridos depois do pagamento: devolvemos o valor integral e processamos o pedido em até 5 dias úteis. Depois dos 7 dias não há estorno do período já pago, mas o cancelamento evita a próxima cobrança. A regra completa está na política de reembolso.',
   },
   {
     q: 'Preciso pagar antes de testar?',
@@ -178,6 +182,10 @@ export default function Page() {
                 explica o que acontece quando o WhatsApp cai. Preço e planos estão em{' '}
                 <Link href="/precos" className="font-bold text-emerald-700 underline underline-offset-4">
                   preços
+                </Link>
+                , a regra de reembolso na{' '}
+                <Link href="/politica-de-reembolso" className="font-bold text-emerald-700 underline underline-offset-4">
+                  política de reembolso
                 </Link>
                 , e quem somos em{' '}
                 <Link href="/quem-somos" className="font-bold text-emerald-700 underline underline-offset-4">

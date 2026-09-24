@@ -14,6 +14,7 @@ import { getHubSeoRoute, getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoute
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { buildOgImageUrl } from '@/lib/seo-og'
 import { getProofAssetsForCluster } from '@/lib/proof-assets'
+import { getEditorialDates } from '@/lib/editorial-content'
 
 export const LP_CONFIG = {
   'espelhar-grupos-whatsapp-sao-paulo': { title: 'Espelhar grupos e canais WhatsApp em São Paulo', description: 'Automatize sua rotina de ofertas em grupos e canais de São Paulo com o Espelha Grupos e reduza trabalho manual.', uniqueHeadline: 'Operação em São Paulo: volume alto, rotina estável.', uniqueBody: 'Em SP, a disputa por atenção é maior e os grupos e canais giram rápido. O Espelha Grupos ajuda você a manter constância sem perder tempo no copia-e-cola.', uniqueBullets: ['Padronize campanhas em múltiplos bairros e públicos.', 'Evite atrasos nas postagens de ofertas relâmpago.', 'Mantenha frequência diária mesmo em horários de pico.'], faq: [{ q: 'Quanto tempo para ativar em São Paulo?', a: 'Normalmente no mesmo dia: conexão por QR Code, escolha dos grupos e/ou canais e regras básicas.' }, { q: 'Posso separar grupos e/ou canais por bairro?', a: 'Sim. Você pode organizar fontes e destinos por região e tipo de público.' }], howTo: ['Conecte seu WhatsApp de operação e valide os grupos e/ou canais de origem.', 'Defina os grupos e/ou canais de destino e o intervalo ideal para o público paulista.', 'Ative regras por horário para manter consistência nos picos de tráfego.'] },
@@ -243,7 +244,7 @@ export function LpTemplate({ slug }) {
   }
 
   const journeyLinks = [
-    { href: '/botinho-vs-planilha-manual', label: 'Comparar com planilha manual' },
+    { href: '/espelha-grupos-vs-planilha-manual', label: 'Comparar com planilha manual' },
     { href: '/metodologia-uso-responsavel-whatsapp', label: 'Ver metodologia de uso responsável' },
     { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Critérios para avaliar bots' },
   ]
@@ -253,7 +254,7 @@ export function LpTemplate({ slug }) {
   const conversionLinks = [
     { href: '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp', label: 'Checklist de divulgação' },
     { href: '/ferramentas/calculadora-tempo-grupos-whatsapp', label: 'Calculadora de tempo operacional' },
-    { href: '/login?mode=register', label: 'Entrar na lista VIP' },
+    { href: '/login?mode=register', label: 'Testar 7 dias grátis' },
   ]
 
   const breadcrumbJsonLd = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Início', item: getSiteUrl() }, { '@type': 'ListItem', position: 2, name: cfg.title.replace('', ''), item: `${getSiteUrl()}/${slug}` }] }
@@ -267,7 +268,6 @@ export function LpTemplate({ slug }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <Hero
         tone={theme.tone}
-        primaryCtaLabel="Entrar na Lista VIP"
         eyebrowLabel={theme.eyebrow}
         headlineOverride={heroCopy.headline}
         subOverride={heroCopy.sub}
@@ -281,6 +281,7 @@ export function LpTemplate({ slug }) {
             body={cfg.uniqueBody}
             pills={cfg.uniqueBullets}
             accent={lpType !== 'default'}
+            updatedAt={getEditorialDates(`/${slug}`).updatedAt}
           />
         </div>
       </section>

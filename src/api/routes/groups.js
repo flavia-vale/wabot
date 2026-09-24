@@ -1,10 +1,10 @@
 import db from '../../db.js'
 import { isValidWatermarkColor, isValidWatermarkSize, isValidWatermarkPosition, isWatermarkTextTooLong, normalizeWatermarkInputText } from '../../core/watermarkInput.js'
-import { effectiveDestinationImageMode } from '../../core/imageModePolicy.js'
+import { destinationImageModeWithoutWatermark, destinationImageUsesWatermark, effectiveDestinationImageMode } from '../../core/imageModePolicy.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { ensureCountQuota } from '../quotas.js'
+import { reloadWorkerConfig as _reloadWorkerConfig } from '../workerConfigReload.js'
 import {
-  reloadConfig as _reloadConfig,
   channelMetadata as _channelMetadata,
   followChannelImmediate as _followChannelImmediate,
   listFollowedChannels as _listFollowedChannels,
@@ -19,7 +19,7 @@ import { lintChannelTitle, lintCopyTemplate } from '../../core/copyLinter.js'
 import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRiskScore.js'
 import { registerProbeEvidence, resolveLatestSentForGroup } from '../../core/probeEvidence.js'
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
-import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannels, FEATURE_CODES } from '../../billing/plans.js'
+import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannelButton, canUseChannels, canUseWatermark, FEATURE_CODES } from '../../billing/plans.js'
 import { normalizeRelayFooter, RELAY_FOOTER_MAX_CHARS } from '../../core/relayFooter.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
@@ -55,14 +55,34 @@ async function ensureAdvancedPreservationAllowed(userId, reply) {
   return false
 }
 
+// Divisão Basic/PRO (2026-09-23): a tela mostra o que o robô de fato faz. Sem
+// o plano, o destino aparece sem marca d'água e sem botão "Ver canal" — mesma
+// regra do chokepoint do robô (billing/groupEntitlements.js), para painel e
+// envio nunca discordarem.
+export function presentGroupsForPlan(groups = [], planSubject = null) {
+  const subject = planSubject ?? { plan: 'basic' }
+  const allowWatermark = canUseWatermark(subject)
+  const allowChannelButton = canUseChannelButton(subject)
+  if (allowWatermark && allowChannelButton) return groups
+  return groups.map(group => {
+    if (group?.role !== 'post') return group
+    return {
+      ...group,
+      ...(allowWatermark ? {} : { imageMode: destinationImageModeWithoutWatermark(group.imageMode) }),
+      ...(allowChannelButton ? {} : { channelButtonJid: null, channelButtonName: null }),
+    }
+  })
+}
+
 export async function groupsRoutes(app, opts = {}) {
-  const reloadConfig = opts.reloadConfig ?? _reloadConfig
+  const reloadWorkerConfig = (userId) => _reloadWorkerConfig(userId, { reloadConfig: opts.reloadConfig })
   const channelMetadata = opts.channelMetadata ?? _channelMetadata
   const followChannelImmediate = opts.followChannelImmediate ?? _followChannelImmediate
   const listFollowedChannelsFn = opts.listFollowedChannels ?? _listFollowedChannels
   const isRunning = opts.isRunning ?? _isRunning
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
-    return db.group.findMany({ where: { userId: req.user.sub } })
+    const groups = await db.group.findMany({ where: { userId: req.user.sub } })
+    return presentGroupsForPlan(groups, await getPlanSubject(req.user.sub))
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -125,20 +145,6 @@ export async function groupsRoutes(app, opts = {}) {
       throw err
     }
   })
-
-  // `reloadConfig` é assíncrono no modo remote (comando via Redis até o
-  // supervisor) e devolve uma Promise. Sem `await`, a Promise ia crua para o
-  // logger e virava `configReloaded: {}` — parecia confirmação e não era: não
-  // dizia se o supervisor recebeu o comando nem se o worker invalidou o cache.
-  // Foi o que impediu de distinguir "job antigo ainda saindo" de "worker nem
-  // recarregou" no RCA 2026-08-26.
-  async function reloadWorkerConfig(userId) {
-    try {
-      return { ok: Boolean(await reloadConfig(userId)), error: null }
-    } catch (err) {
-      return { ok: false, error: err?.message || String(err) }
-    }
-  }
 
   app.get('/:id/targets', { onRequest: [app.authenticate] }, async (req, reply) => {
     const monitor = await db.group.findFirst({ where: { id: req.params.id, userId: req.user.sub, role: 'monitor' } })
@@ -304,12 +310,32 @@ export async function groupsRoutes(app, opts = {}) {
     // valer, gravamos já o formato que de fato vai sair — assim o painel mostra
     // a verdade em vez de prometer um card que o WhatsApp derruba. A marca
     // d'água é preservada na troca ('card com marca' vira 'foto com marca').
-    const channelButtonFinal = normalizedChannelButtonJid !== undefined
-      ? normalizedChannelButtonJid || null
-      : (group.channelButtonJid ?? null)
-    const imageModeSolicitado = imageMode ?? group.imageMode
+    // Divisão Basic/PRO (2026-09-23): marca d'água e botão "Ver canal" são do
+    // PRO. Pedir para LIGAR sem o plano é 403; salvar qualquer outra coisa num
+    // destino que ainda guarda a escolha antiga grava já o formato sem ela
+    // (card com marca → card; foto com marca → foto) — a configuração passa a
+    // dizer a verdade em vez de prometer algo que o robô não faz.
+    const planSubject = (await getPlanSubject(req.user.sub)) ?? { plan: 'basic' }
+    const allowWatermark = canUseWatermark(planSubject)
+    const allowChannelButton = canUseChannelButton(planSubject)
+    if (imageMode !== undefined && destinationImageUsesWatermark(imageMode) && !allowWatermark) {
+      return reply.code(403).send(buildFeatureGateError(FEATURE_CODES.WATERMARK))
+    }
+    if (normalizedChannelButtonJid && !allowChannelButton) {
+      return reply.code(403).send(buildFeatureGateError(FEATURE_CODES.CHANNEL_BUTTON))
+    }
+    const dropStoredChannelButton = !allowChannelButton && Boolean(group.channelButtonJid) && normalizedChannelButtonJid === undefined
+    const channelButtonFinal = dropStoredChannelButton
+      ? null
+      : normalizedChannelButtonJid !== undefined
+        ? normalizedChannelButtonJid || null
+        : (group.channelButtonJid ?? null)
+    const imageModePedido = imageMode ?? group.imageMode
+    const imageModeSolicitado = allowWatermark || group.role !== 'post'
+      ? imageModePedido
+      : destinationImageModeWithoutWatermark(imageModePedido)
     const imageModeFinal = effectiveDestinationImageMode(imageModeSolicitado, { hasChannelButton: Boolean(channelButtonFinal) })
-    const precisaDegradar = imageModeFinal !== imageModeSolicitado
+    const precisaDegradar = imageModeFinal !== imageModePedido
 
     const updated = await db.group.update({
       where: { id: req.params.id },
@@ -333,6 +359,7 @@ export async function groupsRoutes(app, opts = {}) {
         ...((noLinkScope !== undefined || forwardMode !== undefined) ? { noLinkScope: requestedNoLinkScope } : {}),
         ...(normalizedChannelButtonJid !== undefined ? { channelButtonJid: normalizedChannelButtonJid || null } : {}),
         ...(normalizedChannelButtonName !== undefined ? { channelButtonName: normalizedChannelButtonName || null } : {}),
+        ...(dropStoredChannelButton ? { channelButtonJid: null, channelButtonName: null } : {}),
       },
     })
     const configReload = await reloadWorkerConfig(req.user.sub)

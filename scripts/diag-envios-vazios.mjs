@@ -129,6 +129,24 @@ try {
 } catch {
   console.log('  não foi possível rodar `ps` aqui')
 }
+// O bot.log é UM arquivo para todas as contas do ambiente. Em produção (dezenas
+// de robôs) contar tudo que está nele atribui à conta o tráfego da frota
+// inteira — em 2026-09-24 isso gerou o alerta falso "todas as mensagens vieram
+// de chats não monitorados" para uma conta que espelhava normalmente. O pino
+// grava o `pid` em cada linha; o robô desta conta é achado por BOT_USER_ID em
+// /proc/<pid>/environ (mesma técnica do diag-frota-cega.mjs).
+const myPids = new Set()
+for (const l of workerLines) {
+  const pid = l.trim().split(/\s+/)[0]
+  try {
+    const env = readFileSync(`/proc/${pid}/environ`, 'utf8')
+    if (env.split('\0').includes(`BOT_USER_ID=${userId}`)) myPids.add(Number(pid))
+  } catch { /* processo de outro usuário do SO ou já morreu */ }
+}
+if (workerLines.length) console.log(`  robô desta conta: ${myPids.size ? [...myPids].map(p => `pid ${p}`).join(', ') : 'NÃO encontrado entre os processos vivos'}`)
+const logCompartilhado = workerLines.length > 1
+const logAtribuivel = !logCompartilhado || myPids.size > 0
+
 const authDir = getAuthInfoDir(userId)
 console.log({ authDir, existe: existsSync(authDir), credsJson: existsSync(join(authDir, 'creds.json')) })
 if (!existsSync(join(authDir, 'creds.json'))) {
@@ -211,6 +229,18 @@ console.log(`  linhas nas últimas ${hours}h: ${logs.length}`, byStatus)
 for (const l of logs.slice(0, 15)) {
   console.log(`    ${fmt(l.sentAt)}  ${l.status.padEnd(8)} ${(l.platform || '-').padEnd(14)} ${(l.errorMsg || '').slice(0, 48).padEnd(48)} ${String(l.messageText || '').replace(/\s+/g, ' ').slice(0, 40)}`)
 }
+// Resumo por motivo: é o que decide o caso quando há linhas no banco, e as 15
+// linhas acima são só as mais recentes (não representam a janela).
+const porMotivo = new Map()
+for (const l of logs) {
+  const tipo = l.platform === 'broadcast' ? 'criar-oferta' : 'espelho'
+  const k = `${l.status.padEnd(8)} ${tipo.padEnd(12)} ${(l.errorMsg || '').replace(/:age=\d+min.*/, '').slice(0, 60)}`
+  porMotivo.set(k, (porMotivo.get(k) || 0) + 1)
+}
+if (porMotivo.size) {
+  console.log('  por motivo (janela inteira):')
+  for (const [k, n] of [...porMotivo.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)) console.log(`    ${String(n).padStart(5)}  ${k}`)
+}
 const last = await db.messageLog.findFirst({ where: { userId }, orderBy: { sentAt: 'desc' }, select: { sentAt: true, status: true } })
 console.log(`  último envio registrado de todos os tempos: ${last ? `${fmt(last.sentAt)} (${ago(last.sentAt)}) status=${last.status}` : 'NENHUM'}`)
 
@@ -239,6 +269,10 @@ if (!existsSync(logFile)) {
     const m = l.match(/"time":(\d+)/)
     if (m) t = Number(m[1])
     if (t && t < sinceMs) continue
+    if (logCompartilhado) {
+      const p = l.match(/"pid":(\d+)/)
+      if (!p || !myPids.has(Number(p[1]))) continue
+    }
     if (l.includes('messages.upsert recebido')) counters.upsert++
     else if (l.includes('Mensagem aceita para processamento')) {
       counters.aceita++
@@ -255,7 +289,11 @@ if (!existsSync(logFile)) {
     else if (l.includes('Mensagem descartada após erro/timeout')) counters.erroTimeout++
   }
   console.log(`  nas últimas ${hours}h:`, counters)
-  console.log('  (o bot.log é compartilhado por TODAS as contas do ambiente — em staging normalmente é só a sua)')
+  if (logCompartilhado && myPids.size) {
+    console.log(`  (contando só as linhas do robô desta conta — pid ${[...myPids].join(', ')}. Antes do último reinício o pid era outro, então a janela real começa no início do processo: veja o etime acima)`)
+  } else if (logCompartilhado) {
+    console.log('  (bot.log compartilhado por vários robôs e o desta conta não está vivo — nada aqui pode ser atribuído a ela)')
+  }
   for (const a of amostra) console.log(`    ${a}`)
 }
 
@@ -278,7 +316,7 @@ if (!aceitasPorJid.size) {
     console.log(`    ${String(n).padStart(4)}x  ${jid}  ${monitorado ? '✔ MONITORADO' : '✗ não monitorado por esta conta'}${nome ? ` (${nome})` : ''}`)
   }
   console.log(`  total: ${aceitasMonitoradas} de grupo monitorado | ${aceitasForaDoMonitor} de outros chats`)
-  if (aceitasMonitoradas === 0) {
+  if (aceitasMonitoradas === 0 && logAtribuivel) {
     flag('TODAS as mensagens aceitas vieram de chats que esta conta NÃO monitora — o robô ignora em silêncio e nada aparece em Envios')
   }
 }

@@ -8,7 +8,7 @@ export function ClickTrackerStatus({ flags }) {
         Cada link enviado pelo bot pode virar um endereço curto que conta os cliques. Configurado no servidor — só pra conferência aqui.
       </p>
       <ul className="text-xs space-y-1 text-gray-700">
-        <li>Endereço base: <span className="font-mono">{flags?.shortlinkBaseUrl ?? 'não configurado'}</span></li>
+        <li>Endereço base: <span>{flags?.shortlinkBaseUrl ?? 'não configurado'}</span></li>
         <li>Chave de hash configurada: <strong>{flags?.clickTrackerSaltConfigured ? '✅ Sim' : '❌ Não'}</strong></li>
       </ul>
     </fieldset>

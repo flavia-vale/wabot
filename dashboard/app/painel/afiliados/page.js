@@ -119,9 +119,9 @@ const AFFILIATE_MATERIALS_URL = 'https://drive.google.com/drive/folders/1yJtLOfI
 function AffiliateMaterialsBalloon() {
   return (
     <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
-      <p className="text-sm font-black text-indigo-900">🎁 Materiais prontos para divulgar o BOTinho</p>
+      <p className="text-sm font-black text-indigo-900">🎁 Materiais prontos para divulgar o Espelha Grupos</p>
       <p className="mt-1 text-sm leading-6 text-indigo-900">
-        Neste link você encontra materiais de divulgação do BOTinho: imagens para feed, story e carrossel.
+        Neste link você encontra materiais de divulgação do Espelha Grupos: imagens para feed, story e carrossel.
         É só baixar, publicar e colocar o seu link de indicação junto.
       </p>
       <a

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isBareSignatureLine, isCreditSignatureLine, isSocialOnlyLine, stripSocialTail, stripTrailingSourceSignature } from '../src/core/sourceSignature.js'
+import { isBareSignatureLine, isCreditSignatureLine, isLabeledHandleSignatureLine, isSocialOnlyLine, stripSocialTail, stripTrailingSourceSignature } from '../src/core/sourceSignature.js'
 import { sanitizeInviteLinks } from '../src/messageProcessor.js'
 
 // As mensagens deste arquivo foram copiadas do MessageLog de PRODUÇÃO da conta
@@ -314,4 +314,35 @@ test('integração: sanitizeInviteLinks remove a assinatura junto com o resto', 
   assert.equal(result.includes('sharabarros'), false)
   assert.equal(result.includes('chat.whatsapp.com'), false)
   assert.equal(result.includes('https://s.shopee.com.br/50Y0e82AE9'), true)
+})
+
+// RCA 2026-09: `Curadoria@casabemmimada` escapava quando não vinha logo abaixo
+// do link (topo da mensagem ou depois de outra linha de conteúdo).
+test('assinatura "rótulo@perfil" sai em qualquer posição da oferta', () => {
+  const casos = [
+    'Produto X\nhttps://amzn.to/abc\n\n🛒 Frete grátis\n\nCuradoria@casabemmimada',
+    'Curadoria@casabemmimada\n\nProduto X\nhttps://amzn.to/abc',
+    'Produto X\n*Curadoria@casabemmimada*\nhttps://amzn.to/abc',
+    'Produto X\nhttps://amzn.to/abc\n\nCuradoria @casabemmimada',
+    'Produto X\nhttps://amzn.to/abc\n\nCréditos: @casabemmimada\n\nFrete grátis',
+  ]
+  for (const texto of casos) {
+    const saida = stripTrailingSourceSignature(texto)
+    assert.ok(!/casabemmimada/.test(saida), `ficou assinatura em: ${JSON.stringify(saida)}`)
+    assert.ok(saida.includes('https://amzn.to/abc'))
+  }
+})
+
+test('rótulo@perfil não apaga e-mail, chamada legítima nem cupom', () => {
+  for (const linha of [
+    'Siga @fulano para mais ofertas',
+    'contato@loja.com.br',
+    'Cupom@DESCONTO10',
+    'Use o cupom @CASAPROMO',
+  ]) {
+    assert.equal(isLabeledHandleSignatureLine(linha), false, linha)
+  }
+  const texto = 'Siga @fulano para mais ofertas\nProduto X\nhttps://amzn.to/abc'
+  assert.equal(stripTrailingSourceSignature(texto), texto)
+  assert.equal(stripTrailingSourceSignature('Curadoria@casabemmimada'), 'Curadoria@casabemmimada')
 })

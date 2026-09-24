@@ -125,7 +125,7 @@ export function ChannelHealthPanel({ group, initialHealth, onHealthChange }) {
           <ul className="text-xs space-y-1 max-h-40 overflow-y-auto">
             {snapshots.slice(0, 10).map(s => (
               <li key={s.id} className="flex justify-between gap-2 border-b border-slate-100 py-1">
-                <span className="font-mono truncate">{s.name || '(sem nome)'}</span>
+                <span className="truncate">{s.name || '(sem nome)'}</span>
                 <span className="text-slate-500 whitespace-nowrap">{formatDate(s.snapshotedAt)}</span>
               </li>
             ))}
@@ -148,7 +148,7 @@ export function ChannelHealthPanel({ group, initialHealth, onHealthChange }) {
               value={newJid}
               onChange={(e) => setNewJid(e.target.value)}
               placeholder="xxxxxxxxxxxx@newsletter"
-              className="w-full border rounded px-2 py-1 text-sm font-mono"
+              className="w-full border rounded px-2 py-1 text-sm"
             />
             <div className="flex gap-2">
               <button onClick={doRecreate} disabled={recreating}

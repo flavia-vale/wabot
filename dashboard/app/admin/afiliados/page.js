@@ -84,7 +84,7 @@ function ReferralsModal({ affiliate, onClose }) {
         <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-bold text-gray-900">Indicados de {affiliate.user?.name ?? affiliate.code}</h2>
-            <p className="text-xs text-gray-500">Código <span className="font-mono">{affiliate.code}</span> · {affiliate.user?.email ?? ''}</p>
+            <p className="text-xs text-gray-500">Código <span>{affiliate.code}</span> · {affiliate.user?.email ?? ''}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
@@ -240,7 +240,7 @@ function CandidaturesTab() {
                     <p className="font-semibold text-gray-900">{p.user?.name ?? '—'}</p>
                     <p className="text-xs text-gray-500">{p.user?.email ?? '—'}</p>
                   </td>
-                  <td className="px-4 py-3 text-gray-700 font-mono text-xs">{p.pixKey}</td>
+                  <td className="px-4 py-3 text-gray-700 text-xs">{p.pixKey}</td>
                   <td className="px-4 py-3 text-gray-500">{PIX_KEY_TYPE_LABELS[p.pixKeyType] ?? p.pixKeyType}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(p.appliedAt)}</td>
                   <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
@@ -341,7 +341,7 @@ function ApprovedTab() {
                 <p className="font-semibold text-gray-900">{p.user?.name ?? '—'}</p>
                 <p className="text-xs text-gray-500">{p.user?.email ?? '—'}</p>
               </td>
-              <td className="px-4 py-3 font-mono text-sm text-gray-700">{p.code}</td>
+              <td className="px-4 py-3 text-sm text-gray-700">{p.code}</td>
               <td className="px-4 py-3 text-right">
                 <button
                   onClick={() => setReferralsTarget(p)}
@@ -661,7 +661,7 @@ function PayoutRequestsTab() {
             <tbody className="divide-y divide-gray-50">
               {requests.map(r => (
                 <tr key={r.id} className="bg-white">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-700">{r.affiliateCode ?? r.affiliateId}</td>
+                  <td className="px-4 py-3 text-xs text-gray-700">{r.affiliateCode ?? r.affiliateId}</td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(r.amountCents)}</td>
                   <td className="px-4 py-3 text-right text-red-700">{(r.debtCents ?? 0) > 0 ? formatCurrency(r.debtCents) : '—'}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.requestedAt)}</td>

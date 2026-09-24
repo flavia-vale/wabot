@@ -4,6 +4,8 @@ export function isTrialActive(planSubject) {
   return !Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()
 }
 
+// Premium entra junto (mesma regra de hasProLikeAccess e do backend): a cópia
+// antiga esquecia o premium e mostrava a tela de venda a quem já tem acesso.
 export function canAccessAdvancedPreservation(planSubject) {
-  return planSubject?.plan === 'pro' || isTrialActive(planSubject)
+  return planSubject?.plan === 'pro' || planSubject?.plan === 'premium' || isTrialActive(planSubject)
 }

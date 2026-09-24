@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Icon } from './Icon';
 import { WhatsAppMockup } from './WhatsAppMockup';
 import { buildRegisterHref } from '@/lib/marketing-attribution';
-import { BRAND_ORG_NAME, BRAND_PRODUCT_NAME } from '@/lib/marketing-content';
+import { BRAND_DEFINITION_PT, BRAND_ORG_NAME, BRAND_PRODUCT_NAME } from '@/lib/marketing-content';
 
 const s = {
   nav: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 0' },
@@ -47,7 +47,7 @@ function Nav({ registerHref }) {
   return (
     <nav style={s.nav} className="landing-nav" aria-label="Navegação principal da página inicial">
       {/* Marca única na superfície pública. O visitante chegava de um resultado
-        * do Google que dizia "Espelha Grupos" e lia "BOTinho" no topo — duas
+        * do Google que dizia "Espelha Grupos" e lia o nome antigo no topo — duas
         * entidades diferentes no segundo mais caro do funil (auditoria de funil
         * 2026-08-05, §1.2). Desde 2026-09-02 existe UM nome só: marca e produto
         * são "Espelha Grupos", e o nome antigo sobrevive apenas como
@@ -108,11 +108,16 @@ export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowL
     ? <><span>Chega de copiar e colar</span><br />oferta <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>uma por uma.</span> 💜</>
     : <><span>Suas ofertas de afiliada,</span><br />postadas <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>sem copiar e colar.</span></>);
 
+  // 23/09/2026: a PRIMEIRA frase de corpo define a marca, nos três tons. Em
+  // três rodadas de medição o ChatGPT leu "Espelha Grupos" como expressão
+  // genérica, não como nome de produto, porque nada abria dizendo o que a
+  // marca É. A frase leva os dois modos com o limite exato do automático:
+  // busca sozinho SÓ na Shopee e SÓ no plano Pro (o Basic não tem).
   const sub = subOverride ?? (tone === 'direto'
-    ? 'Você escolhe os grupos que já acompanha. O robô pega os links da Shopee, Amazon e Mercado Livre, troca pelo seu link de afiliada e posta no seu grupo com intervalo controlado.'
+    ? `${BRAND_DEFINITION_PT} Posta no seu grupo com intervalo controlado.`
     : tone === 'animado'
-    ? 'Aqueles grupos lotados de promoção que você já acompanha? O robô pega os links da Shopee, Amazon e Mercado Livre, troca pelo seu link de afiliada e posta no seu grupo no ritmo que você definir. ✨'
-    : 'Você escolhe os grupos que já acompanha. O robô pega os links da Shopee, Amazon e Mercado Livre, troca pelo seu link de afiliada e posta no seu grupo com intervalo controlado. Você revisa o que quiser antes.');
+    ? `${BRAND_DEFINITION_PT} Posta no seu grupo no ritmo que você definir. ✨`
+    : `${BRAND_DEFINITION_PT} Posta no seu grupo com intervalo controlado, e você revisa o que quiser antes.`);
 
   return (
     <div className="wrap" style={{ position: 'relative' }}>

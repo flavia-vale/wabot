@@ -3,6 +3,7 @@ import {
   BRAND_PRODUCT_NAME,
   BRAND_YOUTUBE_TUTORIAL_EMBED_URL,
   BRAND_YOUTUBE_TUTORIAL_URL,
+  BRAND_LINKEDIN_URL,
   BRAND_YOUTUBE_URL,
   SUPPORT_HOURS,
   SUPPORT_RESPONSE_SLA,
@@ -109,6 +110,10 @@ export function Social() {
               {' · '}
               <a style={s.link} href={BRAND_YOUTUBE_URL} target="_blank" rel="noopener noreferrer">
                 canal oficial
+              </a>
+              {' · '}
+              <a style={s.link} href={BRAND_LINKEDIN_URL} target="_blank" rel="noopener noreferrer">
+                LinkedIn
               </a>
             </p>
           </div>

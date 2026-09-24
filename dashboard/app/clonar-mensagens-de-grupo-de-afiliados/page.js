@@ -3,7 +3,16 @@ import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
-import { buildArticleJsonLd, getEditorialDates, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
+import {
+  buildArticleJsonLd,
+  getEditorialDates,
+  EDITORIAL_PERSON_AUTHOR,
+  EDITORIAL_PERSON_AUTHOR_DESCRIPTION,
+  EDITORIAL_PERSON_AUTHOR_PHOTO_PATH,
+  EDITORIAL_PERSON_AUTHOR_LINKEDIN_URL,
+  EDITORIAL_PERSON_AUTHOR_ID_PATH,
+  EDITORIAL_PERSON_AUTHOR_SAME_AS,
+} from '@/lib/editorial-content'
 
 /* Página criada em 2026-08-26 para a intenção "clonar mensagens de grupo
  * afiliado" / "clonar grupo de WhatsApp".
@@ -174,7 +183,14 @@ export default function Page() {
     slug,
     siteUrl,
     faq,
-    author: { type: 'Person', name: EDITORIAL_PERSON_AUTHOR, description: EDITORIAL_PERSON_AUTHOR_DESCRIPTION },
+    author: {
+      type: 'Person',
+      name: EDITORIAL_PERSON_AUTHOR,
+      description: EDITORIAL_PERSON_AUTHOR_DESCRIPTION,
+      idPath: EDITORIAL_PERSON_AUTHOR_ID_PATH,
+      photoPath: EDITORIAL_PERSON_AUTHOR_PHOTO_PATH,
+      sameAs: EDITORIAL_PERSON_AUTHOR_SAME_AS,
+    },
   })
   const schemas = [...articleSchemas, howToJsonLd, toolsJsonLd, breadcrumbJsonLd]
   const registerHref = buildRegisterHref({ source: 'seo', campaign: 'clonar-grupo-afiliados', content: 'article_primary_cta' })
@@ -193,6 +209,8 @@ export default function Page() {
         publishedAt={dates.publishedAt}
         updatedAt={dates.updatedAt}
         author={EDITORIAL_PERSON_AUTHOR}
+        authorPhotoPath={EDITORIAL_PERSON_AUTHOR_PHOTO_PATH}
+        authorHref={EDITORIAL_PERSON_AUTHOR_LINKEDIN_URL}
       >
         <section>
           <h2>Resposta direta</h2>

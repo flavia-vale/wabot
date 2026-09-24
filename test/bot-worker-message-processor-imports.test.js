@@ -5,11 +5,11 @@ import { fileURLToPath } from 'node:url'
 
 import * as messageProcessor from '../src/messageProcessor.js'
 
-// Regressão: cupom/voucher que o conversor classifica como `stripFromMessage`
-// não pode mais remover nada da caption espelhada. O bot deve preservar o link
-// original como passthrough e continuar convertendo os demais links da mesma
-// mensagem. O segundo teste abaixo continua garantindo que qualquer função de
-// messageProcessor usada pelo bot-worker esteja importada corretamente.
+// RCA 2026-09-23: link que o conversor classifica como `stripFromMessage` NÃO
+// pode sair como veio (é o link do concorrente). A mensagem inteira deixa de
+// ser publicada — ver src/core/mirrorLinkGuard.js. O segundo teste abaixo
+// continua garantindo que qualquer função de messageProcessor usada pelo
+// bot-worker esteja importada corretamente.
 
 
 const botWorkerSource = readFileSync(
@@ -28,12 +28,13 @@ function importedNamesFromMessageProcessor(source) {
   )
 }
 
-test('bot-worker preserva links de cupom/voucher quando a conversão pede strip', () => {
-  assert.match(
+test('bot-worker nunca publica o link original quando a conversão pede strip', () => {
+  assert.doesNotMatch(
     botWorkerSource,
-    /err\.stripFromMessage[\s\S]*converted:\s*url[\s\S]*passthrough:\s*true/,
-    'cupom/voucher não convertido deve ser passthrough, não removido da mensagem',
+    /converted:\s*url[\s,]/,
+    'link não convertido não pode voltar como "convertido" com o endereço de origem',
   )
+  assert.doesNotMatch(botWorkerSource, /passthrough:\s*true/)
   assert.doesNotMatch(
     botWorkerSource,
     /urlsToStrip|stripUrlsFromText\s*\(/,

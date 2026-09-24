@@ -7,6 +7,7 @@ import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getHubSeoRoute, getSeoRoutesByCluster, buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { getEditorialDates } from '@/lib/editorial-content'
 
 const HUB_CONTENT = {
   /* ESPELHAMENTO — a categoria principal do produto, reescrita em 2026-09-02.
@@ -227,7 +228,6 @@ export function SeoHubPage({ hubSlug }) {
       {faqJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(faqJsonLd) }} /> : null}
       <Hero
         eyebrowLabel={content.eyebrow}
-        primaryCtaLabel="Entrar na Lista VIP"
         headlineOverride={headline}
         subOverride={content.intro}
         heroStyle={{ background: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-3) 42%, white), transparent)', borderRadius: 24, paddingInline: 20 }}
@@ -240,6 +240,7 @@ export function SeoHubPage({ hubSlug }) {
             title={title}
             body={content.intro}
             pills={content.checklist}
+            updatedAt={getEditorialDates(`/${hubSlug}`).updatedAt}
           />
         </div>
       </section>
@@ -250,7 +251,7 @@ export function SeoHubPage({ hubSlug }) {
             <span className="pill"><span className="dot" />Promessa do hub</span>
             <p style={{ marginTop: 14, fontSize: 16, lineHeight: 1.65, color: 'var(--ink)', fontWeight: 500 }}>{content.promise}</p>
             <Link href="/login?mode=register" data-seo-cta="hub-register" className="btn btn-accent" style={{ marginTop: 20 }}>
-              Entrar na Lista VIP
+              Testar 7 dias grátis
             </Link>
           </div>
         </div>

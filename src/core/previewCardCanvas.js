@@ -7,10 +7,10 @@ import { buildInlineThumbnail } from './inlineThumbnail.js'
 // espelhamento, e buildBroadcastLinkPreview, da fila/automáticas) passam por
 // aqui, para o tamanho não voltar a divergir entre eles.
 //
-// A foto entra INTEIRA (`fit: inside`) e nunca é ampliada: foto pequena
-// continua com os pixels que tem, só deixa de encolher o card. O vazio é
-// preenchido por um desfoque da própria foto — barra branca ficaria estranha em
-// foto colorida, e é o que os canais profissionais fazem.
+// A foto entra INTEIRA (`fit: inside`) e nunca é cortada. A decisão de ampliar
+// miniatura não mora neste compositor: `prepararFotoDoCard`, no bot-worker,
+// prepara a fonte ANTES de chamar este módulo. Assim o canvas continua com uma
+// responsabilidade só e não esconde as dimensões reais antes da decisão.
 
 // Fundo desfocado a partir de uma redução agressiva: desfocar 1080px custa caro
 // e o resultado visual é o mesmo de ampliar uma versão minúscula.

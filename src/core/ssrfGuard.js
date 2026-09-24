@@ -30,6 +30,7 @@ export function isPrivateIpv4(ip) {
   if (a === 172 && b >= 16 && b <= 31) return true // RFC1918
   if (a === 192 && b === 168) return true // RFC1918
   if (a === 100 && b >= 64 && b <= 127) return true // CGNAT (RFC6598)
+  if (a === 198 && (b === 18 || b === 19)) return true // rede de teste de equipamentos (RFC2544)
   if (a >= 224) return true // multicast / reservado
   return false
 }
@@ -39,9 +40,26 @@ export function isPrivateIpv6(ip) {
   if (lower === '::1' || lower === '::') return true // loopback / unspecified
   if (lower.startsWith('fc') || lower.startsWith('fd')) return true // ULA (fc00::/7)
   if (lower.startsWith('fe80')) return true // link-local
-  const mapped = lower.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/) // IPv4-mapped
-  if (mapped) return isPrivateIpv4(mapped[1])
+  if (/^fe[c-f]/.test(lower)) return true // site-local (fec0::/10, obsoleto mas roteável em rede interna)
+  const embedded = embeddedIpv4(lower)
+  if (embedded) return isPrivateIpv4(embedded)
   return false
+}
+
+// IPv6 que carrega um IPv4 dentro: mapeado (::ffff:), NAT64 (64:ff9b::) e o
+// antigo "compatível" (::a.b.c.d). O `new URL()` reescreve
+// `[::ffff:127.0.0.1]` como `[::ffff:7f00:1]` — só olhar a forma com pontos
+// deixava passar 127.0.0.1 e 169.254.169.254 (RCA 2026-09-23).
+function embeddedIpv4(lower) {
+  const match = lower.match(/^(?:::ffff:|64:ff9b::|::)(.+)$/)
+  if (!match) return null
+  const tail = match[1]
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(tail)) return tail
+  const hex = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+  if (!hex) return null
+  const hi = parseInt(hex[1], 16)
+  const lo = parseInt(hex[2], 16)
+  return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')
 }
 
 export function isBlockedIp(ip) {

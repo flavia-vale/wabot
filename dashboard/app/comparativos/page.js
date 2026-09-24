@@ -21,7 +21,7 @@ export const metadata = {
 }
 
 const p2ComparisonItems = [
-  { href: '/bot-comum-vs-botinho', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada para afiliados em grupos e Canais do WhatsApp.' },
+  { href: '/bot-comum-vs-espelha-grupos', title: 'Bot comum vs Espelha Grupos', description: 'Compare repostagem simples com operação preservada para afiliados em grupos e Canais do WhatsApp.' },
 ]
 
 export default function Page() {

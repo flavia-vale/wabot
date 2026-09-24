@@ -4,6 +4,35 @@ export const CAPACITY_POLICY_VERSION = 'capacity-policy-v1';
 const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : null
 const integer = (value) => { const number = finite(value); return number == null ? null : Math.max(0, Math.trunc(number)) }
 
+/**
+ * Piso do custo por robô. 350 MB é o padrão histórico (medido com glibc, antes
+ * do jemalloc). Produção pode baixar via CAPACITY_SESSION_COST_FLOOR_MB depois
+ * de medir o p95 real — em 2026-09-23, com jemalloc, deu p95 198 MB / máx 218.
+ * Fora de [150, 1000] é grampeado; inválido cai no padrão.
+ */
+export const DEFAULT_SESSION_COST_FLOOR_MB = 350
+export function resolveSessionCostFloorMb(value) {
+  if (value == null || String(value).trim() === '') return DEFAULT_SESSION_COST_FLOOR_MB
+  const number = Number(value)
+  if (!Number.isFinite(number) || number <= 0) return DEFAULT_SESSION_COST_FLOOR_MB
+  return Math.min(1000, Math.max(150, Math.ceil(number)))
+}
+
+/**
+ * Início do histórico usado para o p95 por robô. Sem isso, o p95 de 90 dias
+ * mistura o regime antigo (robôs mais pesados) com o atual e demora três meses
+ * para refletir uma economia de memória. Data inválida = sem corte.
+ */
+export function resolveWorkerHistorySince(value) {
+  if (value == null || String(value).trim() === '') return null
+  const date = new Date(String(value).trim())
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+export function capacityPolicyOptionsFromEnv(env = process.env) {
+  return { sessionCostFloorMb: resolveSessionCostFloorMb(env.CAPACITY_SESSION_COST_FLOOR_MB), workerHistorySince: resolveWorkerHistorySince(env.CAPACITY_WORKER_HISTORY_SINCE) }
+}
+
 export function evaluateResourceHealth(input = {}) {
   const cpu = finite(input.cpuPercent)
   const disk = finite(input.diskUsedPercent)
@@ -42,8 +71,9 @@ export function evaluateCapacity(input = {}) {
   const reserveMb = Math.ceil(Math.max(memoryTotalMb * 0.2, 1536, finite(input.fixedBaseP95Mb) ?? 0))
   const observedP95 = finite(input.workerRssP95Mb)
   const p95Reliable = (finite(input.workerHistoryDays) ?? 0) >= 14 && observedP95 != null
-  const sessionCostMb = Math.ceil(Math.max(350, p95Reliable ? observedP95 : 0))
-  if (!p95Reliable) reasons.push({ code: 'CONSERVATIVE_SESSION_COST', severity: 'info', message: 'Usado piso conservador de 350 MB por sessão.' })
+  const sessionCostFloorMb = resolveSessionCostFloorMb(input.sessionCostFloorMb)
+  const sessionCostMb = Math.ceil(Math.max(sessionCostFloorMb, p95Reliable ? observedP95 : 0))
+  if (!p95Reliable) reasons.push({ code: 'CONSERVATIVE_SESSION_COST', severity: 'info', message: `Usado piso conservador de ${sessionCostFloorMb} MB por sessão.` })
   const usableMb = Math.max(0, memoryTotalMb - reserveMb)
   const safeLimit = Math.floor(usableMb / sessionCostMb)
   const estimatedMaximum = Math.floor(Math.max(0, memoryTotalMb - 1024) / sessionCostMb)
@@ -58,5 +88,5 @@ export function evaluateCapacity(input = {}) {
   const health = partialHealth
   if (health.bottleneck && health.resources[health.bottleneck].state === 'critical') state = 'critical'
   else if (state === 'healthy' && health.bottleneck) state = 'attention'
-  return { state, sessions, safeLimit, estimatedMaximum, headroomSessions, headroomMemoryMb, bottleneck: health.bottleneck || 'memory', resourceHealth: health.resources, recommendation, reserveMb, sessionCostMb, policyVersion: CAPACITY_POLICY_VERSION, reasons }
+  return { state, sessions, safeLimit, estimatedMaximum, headroomSessions, headroomMemoryMb, bottleneck: health.bottleneck || 'memory', resourceHealth: health.resources, recommendation, reserveMb, sessionCostMb, sessionCostFloorMb, policyVersion: CAPACITY_POLICY_VERSION, reasons }
 }

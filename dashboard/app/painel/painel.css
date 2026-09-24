@@ -27,12 +27,44 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Destaque de título/número: mesma Figtree, peso 900 (padrão do card de Plano). */
 .pnl-serif {
-  font-family: var(--font-instrument-serif), Georgia, serif;
-  font-weight: 400;
-  letter-spacing: -0.01em;
+  font-family: inherit;
+  font-weight: 900;
+  letter-spacing: -0.02em;
 }
-.pnl-mono { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; }
+.pnl-mono { font-family: inherit; }
+
+/* Visão conectada do WhatsApp — controles reais do preset padrão de
+ * preservação. No Basic, a ausência de cor e a camada de cadeado comunicam o
+ * bloqueio sem esconder o valor do Pro. */
+.wa-overview { max-width: 980px; margin: 18px auto 0; display: grid; gap: 22px; }
+.wa-connected-bar { display: grid; grid-template-columns: 56px 1fr auto; gap: 18px; align-items: center; padding: 20px 26px; border-radius: 20px; background: #dcf3e8; border: 1px solid #c9eadc; }
+.wa-mark { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 15px; background: #fff; color: #248765; font-size: 28px; transform: rotate(-12deg); }
+.wa-connected-bar strong { display: block; font-size: 16px; }
+.wa-connected-bar span:not(.wa-mark) { display: block; margin-top: 3px; color: var(--ink-soft); font-size: 13px; }
+.wa-connected-bar button,.wa-save-row button,.wa-pro-lock a { border: 1px solid #cbd7d2; border-radius: 11px; padding: 10px 18px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; font-weight: 650; text-decoration: none; cursor: pointer; }
+.wa-protection-card,.wa-hours-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: 0 12px 36px -30px rgba(22, 74, 57, .45); }
+.wa-protection-body { display: grid; grid-template-columns: 1fr 1.05fr .62fr; gap: 28px; align-items: end; padding: 26px 30px; }
+.wa-metric label,.wa-field>span,.wa-time-grid span { display: block; margin-bottom: 7px; color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.wa-metric p { color: var(--ink-soft); font-size: 14px; }.wa-metric p strong { color: var(--ink); font-size: 30px; line-height: 1; }
+.wa-progress { height: 8px; margin: 13px 0 8px; overflow: hidden; border-radius: 99px; background: #e6efeb; }.wa-progress i { display: block; height: 100%; border-radius: inherit; background: #2b936f; }
+.wa-metric small,.wa-field small { color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
+.wa-field select,.wa-field input,.wa-time-grid select { width: 100%; min-height: 46px; border: 1px solid #b7ccc3; border-radius: 12px; padding: 0 14px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; outline: none; }.wa-field select:focus,.wa-field input:focus,.wa-time-grid select:focus { border-color: #258965; box-shadow: 0 0 0 3px #d9f1e8; }
+.wa-cap-field input { font-family: inherit; }
+.wa-hours-card header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 30px; border-bottom: 1px solid var(--line); }.wa-hours-card h2 { font-size: 17px; }.wa-hours-card header p { margin-top: 3px; color: var(--ink-soft); font-size: 12px; }.wa-hours-card header>span { padding: 7px 13px; border-radius: 99px; background: #def2e9; color: #176b50; font-size: 12px; font-weight: 700; }
+.wa-hours-body { padding: 8px 30px 24px; }.wa-hours-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; }.wa-hours-row strong { font-size: 14px; }.wa-hours-row p { margin-top: 3px; color: var(--ink-soft); font-size: 12px; }
+.wa-switch { width: 48px; height: 28px; flex: 0 0 auto; padding: 3px; border: 0; border-radius: 99px; background: #c8d1cd; cursor: pointer; transition: background .18s; }.wa-switch i { display: block; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px #0002; transition: transform .18s; }.wa-switch.is-on { background: #2c936f; }.wa-switch.is-on i { transform: translateX(20px); }
+.wa-time-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }.wa-save-row { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 4px; }.wa-save-row span { color: var(--ink-soft); font-size: 12px; }.wa-save-row button { background: #247f60; border-color: #247f60; color: #fff; }
+.wa-pro-lock { display: none; }.wa-inline-lock { display: none; }
+.wa-protection-card.is-locked,.wa-hours-card.is-locked { filter: grayscale(1); background: #f5f5f4; }.is-locked .wa-protection-body,.is-locked .wa-hours-body,.is-locked header { opacity: .42; pointer-events: none; }.is-locked .wa-pro-lock { display: flex; position: relative; z-index: 2; align-items: center; gap: 13px; padding: 16px 22px; border-bottom: 1px solid #d4d4d4; background: #262626; color: #fff; }.wa-pro-lock>span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #222; }.wa-pro-lock svg,.wa-inline-lock svg { width: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; }.wa-pro-lock div { flex: 1; }.wa-pro-lock strong { font-size: 13px; }.wa-pro-lock p { margin-top: 2px; color: #d4d4d4; font-size: 11px; }.wa-pro-lock a { color: #171717; white-space: nowrap; }.is-locked .wa-inline-lock { display: flex; position: absolute; z-index: 2; inset: 0; align-items: center; justify-content: center; gap: 8px; color: #252525; font-size: 13px; font-weight: 750; }
+
+@media (max-width: 720px) {
+  .wa-overview { margin-top: 0; gap: 14px; }
+  .wa-connected-bar { grid-template-columns: 44px 1fr; padding: 16px; gap: 12px; }.wa-mark { width: 44px; height: 44px; }.wa-connected-bar button { grid-column: 1 / -1; width: 100%; }
+  .wa-protection-body { grid-template-columns: 1fr; gap: 18px; padding: 20px; }.wa-hours-card header,.wa-hours-body { padding-left: 20px; padding-right: 20px; }.wa-hours-card header { align-items: flex-start; }.wa-time-grid { grid-template-columns: 1fr 1fr; }
+  .wa-pro-lock { align-items: flex-start; flex-wrap: wrap; }.wa-pro-lock a { width: 100%; text-align: center; }
+}
 
 /* ── Sidebar ─────────────────────────────────────────────────────────── */
 .pnl-sidebar {
@@ -60,7 +92,7 @@
   text-decoration: none;
 }
 .pnl-brand small {
-  font-family: var(--font-jetbrains-mono), monospace;
+  font-family: inherit;
   font-size: 11px;
   font-weight: 500;
   color: var(--ink-faint);
@@ -279,7 +311,7 @@
   top: 0;
   z-index: 10;
 }
-.pnl-header h1 { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; }
+.pnl-header h1 { font-size: 19px; font-weight: 900; letter-spacing: -0.015em; }
 .pnl-header .pnl-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
 .pnl-header-right { display: flex; align-items: center; gap: 12px; }
 .pnl-bell {
@@ -361,7 +393,7 @@
   gap: 18px;
 }
 .pnl-hero-label { font-size: 12.5px; color: rgba(255, 255, 255, 0.62); }
-.pnl-hero-num { font-size: 52px; line-height: 1; margin: 6px 0 4px; }
+.pnl-hero-num { font-size: 52px; font-weight: 900; line-height: 1; margin: 6px 0 4px; }
 .pnl-hero-sub { font-size: 12.5px; color: rgba(255, 255, 255, 0.55); }
 .pnl-hero-pill {
   font-size: 12px;
@@ -376,7 +408,7 @@
 .pnl-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .pnl-kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--pnl-radius-sm); padding: 15px 16px; }
 .pnl-kpi-label { font-size: 11.5px; color: var(--ink-soft); }
-.pnl-kpi-num { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; }
+.pnl-kpi-num { font-size: 26px; font-weight: 900; letter-spacing: -0.02em; margin-top: 4px; }
 .pnl-kpi-foot { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
 
 /* Funil */
@@ -432,6 +464,11 @@
   cursor: pointer;
 }
 .pnl-btn:hover { background: var(--bg-soft); }
+/* Sem isto, um botão desligado fica idêntico a um ligado — foi assim que o
+ * "Salvar" da gaveta parecia clicável e não fazia nada. */
+.pnl-btn:disabled,
+.pnl-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+
 .pnl-btn.is-primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .pnl-btn.is-primary:hover { background: #16201d; }
 
@@ -563,7 +600,7 @@
 }
 .pnl-input::placeholder { color: var(--ink-faint); }
 .pnl-input:focus { outline: none; border-color: var(--accent-strong); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 30%, transparent); }
-textarea.pnl-input { resize: vertical; min-height: 96px; line-height: 1.5; font-family: var(--font-jetbrains-mono), ui-monospace, monospace; font-size: 12.5px; }
+textarea.pnl-input { resize: vertical; min-height: 96px; line-height: 1.5; font-family: inherit; font-size: 12.5px; }
 
 .pnl-check { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
 .pnl-check input { width: 17px; height: 17px; accent-color: var(--accent-strong); }
@@ -606,6 +643,77 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-wa-var { background: color-mix(in oklab, var(--accent-2) 60%, transparent); padding: 1px 5px; border-radius: 5px; color: var(--ink); font-weight: 500; }
 .pnl-wa-var-block { background: color-mix(in oklab, var(--success) 20%, var(--surface)); color: var(--success); font-weight: 600; }
 
+/* ── WhatsApp desconectado — conexão guiada ─────────────────────────── */
+.whatsapp-page { width: 100%; max-width: 640px; margin: 0 auto; gap: 16px; }
+.whatsapp-page.is-disconnected { max-width: 1040px; gap: 22px; }
+.whatsapp-page.is-disconnected .whatsapp-help { position: absolute; right: 32px; margin-top: -55px; }
+.whatsapp-steps,
+.whatsapp-connect-card,
+.whatsapp-live-qr {
+  border: 1px solid var(--line); border-radius: 18px; background: var(--surface);
+  box-shadow: 0 8px 30px rgba(28, 65, 53, .035);
+}
+.whatsapp-steps { padding: 24px 28px 28px; }
+.whatsapp-steps header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.whatsapp-steps h2 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 650; }
+.whatsapp-steps header > span { color: var(--ink-faint); font-size: 17px; }
+.whatsapp-steps ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 0; padding: 0; list-style: none; }
+.whatsapp-steps li { min-height: 170px; display: flex; align-items: flex-start; flex-direction: column; padding: 24px; border: 1px solid var(--line); border-radius: 16px; }
+.whatsapp-steps li > span { width: 29px; height: 29px; display: grid; place-items: center; margin-bottom: 16px; border-radius: 50%; background: #e0f3e9; color: var(--accent-strong); font-size: 12px; font-weight: 750; }
+.whatsapp-steps strong { color: var(--ink); font-size: 18px; line-height: 1.12; letter-spacing: -.02em; }
+.whatsapp-steps small { margin-top: 10px; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+
+.whatsapp-safety { order: 4; color: var(--ink-soft); }
+.whatsapp-safety details { border: 1px solid var(--line); border-radius: 14px; background: color-mix(in oklab, var(--bg-soft) 45%, var(--surface)); padding: 14px 18px; }
+.whatsapp-safety summary { cursor: pointer; color: var(--ink); font-size: 12.5px; font-weight: 650; }
+.whatsapp-safety ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin: 14px 0 0; padding: 0; list-style: none; }
+.whatsapp-safety li { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; }
+.whatsapp-safety li > span:first-child { color: var(--accent-strong); font-weight: 750; }
+.whatsapp-safety p { margin-top: 12px; font-size: 11.5px; }
+
+.whatsapp-connect-card { overflow: hidden; }
+.whatsapp-connect-card > section { padding: 28px; }
+.whatsapp-connect-heading { color: var(--ink); font-size: 13px; font-weight: 650; }
+.whatsapp-connect-note { margin: 4px 0 18px; color: var(--ink-soft); font-size: 11.5px; }
+.whatsapp-method-tabs { display: flex; gap: 4px; width: fit-content; margin-bottom: 22px; padding: 4px; border-radius: 10px; background: var(--bg-soft); }
+.whatsapp-method-tabs button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; }
+.whatsapp-method-tabs button[aria-selected="true"] { background: var(--surface); color: var(--accent-strong); box-shadow: 0 2px 8px rgba(28, 65, 53, .09); }
+.whatsapp-qr-layout,
+.whatsapp-live-qr { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; align-items: center; gap: clamp(36px, 8vw, 100px); }
+.whatsapp-qr-placeholder { aspect-ratio: 1; display: grid; place-items: center; align-content: center; gap: 18px; border: 1px dashed #bfd4cc; border-radius: 16px; background: repeating-linear-gradient(135deg, #f8fcfa 0 13px, #eaf4f0 13px 26px); }
+.whatsapp-qr-placeholder > span { color: #819990; font-size: 42px; opacity: .72; }
+.whatsapp-qr-placeholder .pnl-btn { border-radius: 11px; background: var(--accent-strong); border-color: var(--accent-strong); }
+.whatsapp-qr-copy h2,
+.whatsapp-pairing-form h2 { margin: 0; color: var(--ink); font-size: 21px; font-weight: 680; letter-spacing: -.025em; }
+.whatsapp-qr-copy > p,
+.whatsapp-pairing-form > p { max-width: 390px; margin-top: 8px; color: var(--ink-soft); font-size: 14px; line-height: 1.55; }
+.whatsapp-awaiting { display: flex; align-items: center; width: fit-content; gap: 7px; margin: 20px 0; padding: 6px 12px; border-radius: 999px; background: #edf3f0; color: var(--ink-soft); font-size: 11.5px; font-weight: 650; }
+.whatsapp-awaiting i { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.whatsapp-awaiting.is-expired { color: var(--danger); }
+.whatsapp-awaiting.is-expired i { background: var(--danger); }
+.whatsapp-qr-copy > .pnl-btn { border-radius: 11px; }
+.whatsapp-qr-copy > small { display: block; max-width: 390px; margin: -5px 0 18px; color: var(--ink-faint); font-size: 11px; line-height: 1.5; }
+.whatsapp-qr-copy > small.is-validating { color: #8a5a1e; }
+.whatsapp-pairing-form { max-width: 560px; display: grid; gap: 16px; margin: 0 auto; }
+.whatsapp-advanced { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 28px; border-top: 1px solid var(--line); background: color-mix(in oklab, var(--bg-soft) 48%, var(--surface)); color: var(--ink-faint); font-size: 10.5px; }
+.whatsapp-live-qr { max-width: 1040px; padding: 30px; }
+.whatsapp-live-qr-code { min-height: 330px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+
+@media (max-width: 760px) {
+  .whatsapp-page.is-disconnected .whatsapp-help { position: static; margin-top: 0; }
+  .whatsapp-steps { padding: 18px 16px; }
+  .whatsapp-steps ol { grid-template-columns: 1fr; gap: 10px; }
+  .whatsapp-steps li { min-height: 0; display: grid; grid-template-columns: auto 1fr; column-gap: 12px; padding: 16px; }
+  .whatsapp-steps li > span { grid-row: 1 / 3; margin: 0; }
+  .whatsapp-steps strong { font-size: 15px; }
+  .whatsapp-steps small { margin-top: 5px; }
+  .whatsapp-connect-card > section { padding: 18px 16px; }
+  .whatsapp-qr-layout, .whatsapp-live-qr { grid-template-columns: 1fr; gap: 24px; }
+  .whatsapp-qr-placeholder { width: min(100%, 330px); margin: 0 auto; }
+  .whatsapp-live-qr { padding: 16px; }
+  .whatsapp-safety ul { grid-template-columns: 1fr; }
+}
+
 /* ── Card-mestre escuro (Ofertas automáticas) ────────────────────────── */
 .pnl-master {
   position: relative;
@@ -635,6 +743,101 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-master-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--accent-2); }
 .pnl-master-status .pnl-dot { box-shadow: 0 0 0 3px rgba(62, 156, 122, 0.3); }
 .pnl-master-sub { font-size: 13px; color: rgba(255, 255, 255, 0.65); margin-top: 4px; }
+.pnl-master.pnl-master-compact { padding: 14px 16px; gap: 12px; }
+.pnl-master-compact .pnl-master-ico { width: 38px; height: 38px; }
+.pnl-master-compact .pnl-master-title { font-size: 15px; }
+.pnl-master-compact .pnl-master-sub { font-size: 11.5px; margin-top: 2px; }
+
+/* ── Ofertas automáticas — painel editorial e operacional ───────────── */
+.offer-auto-page { width: 100%; max-width: 1040px; margin: 0 auto; gap: 20px; }
+.offer-auto-new-row { display: flex; justify-content: flex-end; margin-top: -6px; }
+.offer-auto-new { padding: 11px 20px; border-radius: 12px; background: var(--accent-strong) !important; border-color: var(--accent-strong) !important; }
+.offer-auto-guide,
+.offer-auto-status {
+  display: flex; align-items: center; gap: 16px; min-height: 80px; padding: 16px 20px;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--surface);
+  color: var(--ink); text-decoration: none; box-shadow: 0 8px 30px rgba(28, 65, 53, .035);
+}
+.offer-auto-guide { transition: border-color .2s, transform .2s, box-shadow .2s; }
+.offer-auto-guide:hover { border-color: color-mix(in oklab, var(--accent-strong) 45%, var(--line)); transform: translateY(-1px); box-shadow: 0 12px 34px rgba(28, 65, 53, .08); }
+.offer-auto-guide-play,
+.offer-auto-status-icon {
+  width: 46px; height: 46px; flex: 0 0 46px; display: grid; place-items: center;
+  border-radius: 50%; background: #e1f3eb; color: var(--accent-strong); font-size: 13px;
+}
+.offer-auto-status-icon { border-radius: 13px; background: var(--bg-soft); color: var(--ink-faint); font-size: 22px; }
+.offer-auto-status-icon.is-on { background: #dff2e9; color: var(--accent-strong); }
+.offer-auto-guide-copy,
+.offer-auto-status-copy { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.offer-auto-guide-copy strong,
+.offer-auto-status-copy strong { font-size: 14px; font-weight: 650; }
+.offer-auto-guide-copy small,
+.offer-auto-status-copy small { font-size: 12px; color: var(--ink-soft); }
+.offer-auto-guide-time { padding: 5px 10px; border-radius: 999px; background: var(--bg-soft); color: var(--ink-soft); font-size: 11px; white-space: nowrap; }
+.offer-auto-guide-cta { color: var(--accent-strong); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.offer-auto-bulk-label { color: var(--ink-soft); font-size: 11px; }
+
+.offer-auto-topics,
+.offer-auto-rules { border: 1px solid var(--line); border-radius: 17px; background: var(--surface); overflow: hidden; box-shadow: 0 8px 30px rgba(28, 65, 53, .035); }
+.offer-auto-section-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 24px; }
+.offer-auto-section-head h2 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+.offer-auto-section-head p { margin-top: 4px; color: var(--ink-soft); font-size: 11.5px; }
+.offer-auto-section-head > span { color: var(--ink-soft); font-size: 11px; white-space: nowrap; }
+.offer-auto-table-head,
+.offer-auto-topic { display: grid; grid-template-columns: minmax(230px, 1.65fr) minmax(170px, 1fr) 130px 150px 54px; gap: 16px; align-items: center; }
+.offer-auto-table-head { padding: 12px 24px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: color-mix(in oklab, var(--bg-soft) 45%, var(--surface)); color: var(--ink-faint); font-size: 10px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
+.offer-auto-topic-list { display: grid; gap: 8px; padding: 8px; background: color-mix(in oklab, var(--bg-soft) 48%, var(--surface)); }
+.offer-auto-topic { position: relative; padding: 17px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: background .18s, border-color .18s; }
+.offer-auto-topic:hover { background: color-mix(in oklab, var(--bg-soft) 34%, transparent); }
+.offer-auto-topic.is-paused { color: var(--ink-soft); background: color-mix(in oklab, var(--bg-soft) 38%, transparent); }
+.offer-auto-topic.is-paused > *:not(.offer-auto-topic-toggle) { opacity: .68; }
+.offer-auto-topic-main { min-width: 0; }
+.offer-auto-topic-main > strong { display: block; overflow: hidden; color: var(--ink); font-size: 13.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.offer-auto-topic-main > small,
+.offer-auto-rhythm small { display: block; margin-top: 3px; color: var(--ink-faint); font-size: 10.5px; line-height: 1.35; }
+.offer-auto-topic-main .pnl-toolbar { gap: 10px; margin-top: 7px !important; opacity: 0; transition: opacity .18s; }
+.offer-auto-topic:hover .offer-auto-topic-main .pnl-toolbar,
+.offer-auto-topic:focus-within .offer-auto-topic-main .pnl-toolbar { opacity: 1; }
+.offer-auto-topic-main .pnl-link-btn { padding: 0; font-size: 10.5px; }
+.offer-auto-topic-destination { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink-soft); font-size: 11.5px; }
+.offer-auto-topic-destination > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.offer-auto-publication { display: grid; gap: 3px; justify-items: start; font-size: 11px; }
+.offer-auto-publication strong { padding: 5px 9px; border-radius: 999px; background: #eaf3ef; color: #386154; white-space: nowrap; }
+.offer-auto-publication.is-review strong { background: #fff3d6; color: #8a5a12; }
+.offer-auto-publication small { color: var(--ink-soft); }
+.offer-auto-discount { display: inline-flex; padding: 5px 10px; border-radius: 999px; background: #eaf3ef; color: #516d64; font-size: 11px; white-space: nowrap; }
+.offer-auto-rhythm { color: var(--ink); font-size: 11.5px; }
+.offer-auto-topic-toggle { display: flex; justify-content: flex-end; }
+.offer-auto-topic > .pnl-card { grid-column: 1 / -1; margin-top: 4px; box-shadow: none; }
+.offer-auto-result,
+.offer-auto-review { grid-column: 1 / -1; margin-top: 4px; font-size: 11.5px; }
+.offer-auto-rule { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 0 24px; border-top: 1px solid var(--line); font-size: 13px; }
+.offer-auto-rule a { color: var(--accent-strong); font-size: 12px; font-weight: 650; text-decoration: none; }
+.offer-auto-rule small { max-width: 380px; color: var(--ink-soft); font-size: 11.5px; text-align: right; }
+
+@media (max-width: 900px) {
+  .offer-auto-table-head { display: none; }
+  .offer-auto-topic { grid-template-columns: minmax(0, 1fr) auto; gap: 12px 18px; }
+  .offer-auto-topic-main { grid-column: 1; }
+  .offer-auto-topic-toggle { grid-column: 2; grid-row: 1; }
+  .offer-auto-topic-destination,
+  .offer-auto-topic > div:has(.offer-auto-discount),
+  .offer-auto-rhythm { grid-column: 1 / -1; }
+  .offer-auto-topic-main .pnl-toolbar { opacity: 1; }
+}
+
+@media (max-width: 560px) {
+  .offer-auto-page { gap: 14px; }
+  .offer-auto-guide, .offer-auto-status { padding: 14px; gap: 12px; }
+  .offer-auto-guide-time, .offer-auto-bulk-label { display: none; }
+  .offer-auto-guide-cta { font-size: 0; }
+  .offer-auto-guide-cta span { font-size: 16px; }
+  .offer-auto-section-head { align-items: flex-start; padding: 17px 16px; }
+  .offer-auto-section-head > span { white-space: normal; text-align: right; }
+  .offer-auto-topic { padding: 16px; }
+  .offer-auto-rule { min-height: 64px; margin: 0 16px; align-items: flex-start; flex-direction: column; justify-content: center; gap: 5px; }
+  .offer-auto-rule small { text-align: left; }
+}
 
 /* ── Donut / legenda (Painel analítico) ──────────────────────────────── */
 .pnl-legend { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0; }
@@ -646,7 +849,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-icon-tile { width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(135deg, var(--accent-strong), var(--accent)); }
 .pnl-store-badge { width: 18px; height: 18px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
 .pnl-prod-img { width: 84px; height: 84px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--bg-soft); border: 1px solid var(--line); color: var(--ink-faint); }
-.pnl-price-now { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: var(--accent-strong); }
+.pnl-price-now { font-size: 24px; font-weight: 900; letter-spacing: -0.02em; color: var(--accent-strong); }
 .pnl-price-old { font-size: 13px; color: var(--ink-faint); text-decoration: line-through; }
 .pnl-disc { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: color-mix(in oklab, var(--success) 18%, var(--surface)); color: var(--success); }
 
@@ -764,7 +967,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   background: var(--surface);
   border-radius: 999px;
   padding: 5px 11px;
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-family: inherit;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--accent-strong);
@@ -780,11 +983,11 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   cursor: pointer;
 }
 .pnl-token-card:hover { background: var(--bg-soft); }
-.pnl-token-card code { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; font-size: 12px; font-weight: 600; color: var(--accent-strong); }
+.pnl-token-card code { font-family: inherit; font-size: 12px; font-weight: 600; color: var(--accent-strong); }
 .pnl-token-card div { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
 
 .pnl-pre {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-family: inherit;
   font-size: 11.5px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -822,7 +1025,6 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
  * não por escolha da cliente (ver src/core/destinationRouting.js). */
 .pnl-esp-tag {
   display: inline-block;
-  margin-left: 6px;
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--bg-soft);
@@ -894,7 +1096,14 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 @media (max-width: 560px) { .pnl-presets { grid-template-columns: 1fr; } }
 
 /* Modal simples */
+/* `height: 100dvh` depois do `inset: 0`: no celular a barra de endereço e a
+ * barra de baixo ficam FORA da altura visível, mas dentro de `100vh` e do
+ * `inset: 0` de um elemento fixo. Sem isto uma janela alta nasce por baixo da
+ * barra de endereço e o título não dá para ler (relato de 2026-09-19).
+ * Navegador sem `dvh` ignora a linha e fica no comportamento de antes. */
 .pnl-modal-overlay { position: fixed; inset: 0; background: rgba(31, 45, 42, 0.45); z-index: 80; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.pnl-modal-overlay { height: 100dvh; }
+.pnl-drawer-overlay { height: 100dvh; }
 .pnl-modal { background: var(--surface); border-radius: var(--pnl-radius); padding: 22px; max-width: 420px; width: 100%; box-shadow: var(--pnl-shadow); }
 .pnl-modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .pnl-modal p { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
@@ -1257,7 +1466,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   .cfg-section-head { padding: 14px 16px; }
 }
 /* Vendas Shopee */
-.sales-page{display:grid;gap:18px;max-width:1280px}.sales-heading{display:flex;justify-content:space-between;align-items:end;gap:16px}.sales-heading h2,.sales-card h3{margin:0}.sales-heading p,.sales-heading small,.sales-disclosure{color:var(--pnl-muted,#667085)}.sales-filters{display:flex;align-items:end;flex-wrap:wrap;gap:10px;padding:14px;border:1px solid var(--pnl-border,#e4e7ec);border-radius:14px;background:var(--pnl-card,#fff)}.sales-filters label{display:grid;gap:5px;font-size:.82rem;font-weight:600}.sales-filters input,.sales-filters button,.sales-pager button,.sales-alert button{min-height:40px;border:1px solid var(--pnl-border,#d0d5dd);border-radius:9px;padding:0 12px;background:var(--pnl-card,#fff);color:inherit}.sales-filters button,.sales-pager button,.sales-alert button{cursor:pointer;font-weight:650}.sales-presets{display:flex;gap:6px}.sales-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.sales-kpis article,.sales-card{padding:18px;border:1px solid var(--pnl-border,#e4e7ec);border-radius:14px;background:var(--pnl-card,#fff)}.sales-kpis article{display:grid;gap:6px}.sales-kpis span{color:var(--pnl-muted,#667085);font-size:.85rem}.sales-kpis strong{font-size:1.55rem}.sales-kpis small{color:var(--pnl-muted,#667085)}.sales-card{display:grid;gap:14px}.sales-status-list{display:flex;flex-wrap:wrap;gap:12px}.sales-status-list>div{display:flex;gap:8px;align-items:center}.sales-status{display:inline-flex;padding:4px 9px;border-radius:999px;background:#f2f4f7;color:#344054;font-size:.78rem;font-weight:700;white-space:nowrap}.sales-status.is-confirmed{background:#dcfae6;color:#067647}.sales-status.is-pending{background:#fef0c7;color:#93370d}.sales-status.is-unpaid,.sales-status.is-cancelled,.sales-status.is-refunded{background:#fee4e2;color:#b42318}.sales-table-wrap{overflow-x:auto}.sales-card table{border-collapse:collapse;width:100%;min-width:700px}.sales-card th,.sales-card td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--pnl-border,#eaecf0);font-size:.87rem}.sales-card th{color:var(--pnl-muted,#667085)}.sales-pager{display:flex;justify-content:flex-end;align-items:center;gap:10px}.sales-pager button:disabled{cursor:not-allowed;opacity:.45}.sales-scope-banner{padding:12px 16px;border-radius:12px;background:#eff8ff;color:#175cd3;border:1px solid #b2ddff;font-size:.88rem;font-weight:600}
+.sales-page{display:grid;gap:18px;max-width:1280px}.sales-heading{display:flex;justify-content:space-between;align-items:end;gap:16px}.sales-heading h2,.sales-card h3{margin:0}.sales-heading p,.sales-heading small,.sales-disclosure{color:var(--pnl-muted,#667085)}.sales-filters{display:flex;align-items:end;flex-wrap:wrap;gap:10px;padding:14px;border:1px solid var(--pnl-border,#e4e7ec);border-radius:14px;background:var(--pnl-card,#fff)}.sales-filters label{display:grid;gap:5px;font-size:.82rem;font-weight:600}.sales-filters input,.sales-filters button,.sales-pager button,.sales-alert button{min-height:40px;border:1px solid var(--pnl-border,#d0d5dd);border-radius:9px;padding:0 12px;background:var(--pnl-card,#fff);color:inherit}.sales-filters button,.sales-pager button,.sales-alert button{cursor:pointer;font-weight:650}.sales-presets{display:flex;gap:6px}.sales-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.sales-kpis article,.sales-card{padding:18px;border:1px solid var(--pnl-border,#e4e7ec);border-radius:14px;background:var(--pnl-card,#fff)}.sales-kpis article{display:grid;gap:6px}.sales-kpis span{color:var(--pnl-muted,#667085);font-size:.85rem}.sales-kpis strong{font-size:1.55rem;font-weight:900}.sales-kpis small{color:var(--pnl-muted,#667085)}.sales-card{display:grid;gap:14px}.sales-status-list{display:flex;flex-wrap:wrap;gap:12px}.sales-status-list>div{display:flex;gap:8px;align-items:center}.sales-status{display:inline-flex;padding:4px 9px;border-radius:999px;background:#f2f4f7;color:#344054;font-size:.78rem;font-weight:700;white-space:nowrap}.sales-status.is-confirmed{background:#dcfae6;color:#067647}.sales-status.is-pending{background:#fef0c7;color:#93370d}.sales-status.is-unpaid,.sales-status.is-cancelled,.sales-status.is-refunded{background:#fee4e2;color:#b42318}.sales-table-wrap{overflow-x:auto}.sales-card table{border-collapse:collapse;width:100%;min-width:700px}.sales-card th,.sales-card td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--pnl-border,#eaecf0);font-size:.87rem}.sales-card th{color:var(--pnl-muted,#667085)}.sales-pager{display:flex;justify-content:flex-end;align-items:center;gap:10px}.sales-pager button:disabled{cursor:not-allowed;opacity:.45}.sales-scope-banner{padding:12px 16px;border-radius:12px;background:#eff8ff;color:#175cd3;border:1px solid #b2ddff;font-size:.88rem;font-weight:600}
 .sales-alert,.sales-info{padding:14px 16px;border-radius:12px;background:#fef3f2;color:#912018}.sales-alert.is-stale{background:#fffaeb;color:#93370d}.sales-alert button{margin-left:10px}.sales-info{background:#eff8ff;color:#175cd3}.sales-disclosure{font-size:.84rem}.sales-skeleton{background:#e4e7ec;border-radius:14px;animation:sales-pulse 1.4s infinite alternate}.sales-skeleton-filter{height:68px}.sales-skeleton-card{height:120px}.sales-skeleton-table{height:260px}@keyframes sales-pulse{to{opacity:.45}}@media(max-width:900px){.sales-kpis{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.sales-heading{align-items:start;flex-direction:column}.sales-kpis{grid-template-columns:1fr}.sales-filters,.sales-presets{align-items:stretch;display:grid;width:100%}.sales-filters label,.sales-filters input{width:100%}.sales-card{padding:14px}.sales-alert button{display:block;margin:10px 0 0}.sales-pager{justify-content:space-between}}
 
 /* Botão de ajuda das linhas do histórico bloqueadas por falta de cadastro da
@@ -1387,7 +1596,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 }
 .pnl-cred-input-wrap { position: relative; display: flex; }
 .pnl-cred-input-wrap .pnl-input { width: 100%; }
-.pnl-cred-secret { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; padding-right: 84px; }
+.pnl-cred-secret { font-family: inherit; padding-right: 84px; }
 .pnl-cred-eye {
   position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
   border: none; background: transparent; cursor: pointer;
@@ -1494,7 +1703,7 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pv-section-note { font-size: 12.5px; color: var(--ink-soft); margin: 3px 0 0; }
 
 /* ── Cards de números ─────────────────────────────────────────────────── */
-.pv-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.pv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
 .pv-stat {
   display: flex;
   align-items: flex-start;
@@ -1515,7 +1724,7 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .pv-stat-num {
   display: block;
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 1;
   margin-top: 8px;
@@ -1719,7 +1928,7 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .tc-detalhe.is-neutro .tc-url.is-destaque,
 .tc-detalhe.is-erro .tc-url.is-destaque { color: var(--ink-soft); }
 .tc-url {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: inherit;
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--ink-soft);
@@ -1862,13 +2071,6 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   color: var(--accent-strong);
 }
 
-.esp-lojas { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-.esp-loja {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: 6px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
-}
-
 .esp-seta { display: inline-flex; color: var(--ink-soft); }
 .esp-nota { margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
 .esp-vazio { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
@@ -1923,7 +2125,22 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .pnl-esp-card-hit:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
 .pnl-esp-card-main { min-width: 0; flex: 1; display: block; }
 .pnl-esp-card-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.pnl-esp-card-name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+/* `break-word` e NÃO `anywhere`: com `anywhere` o navegador parte a palavra
+ * assim que ela não cabe na SOBRA da linha, e no celular saía
+ * "Cabeleireir/a Profissional". `break-word` só parte a palavra que sozinha
+ * não cabe na linha inteira. O tamanho fixo também importa: sem ele o nome
+ * herdava 16px e ficava maior que o do card antigo (14.5px), gastando a
+ * largura que já era pouca. */
+.pnl-esp-card-name { font-size: 14.5px; font-weight: 650; color: var(--ink); overflow-wrap: break-word; }
+.pnl-esp-card-meta { display: block; margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
+.pnl-esp-choice { display: inline-flex; margin-top: 6px; padding: 4px 8px; border-radius: 999px; background: var(--bg-soft); color: var(--ink-soft); font-size: 11px; font-weight: 650; }
+.pnl-esp-choice.is-template { background: color-mix(in oklab, var(--accent) 18%, var(--surface)); color: var(--accent-strong); }
+.pnl-esp-add-primary { display: flex; justify-content: flex-start; }
+.pnl-esp-connections { margin-top: 4px; }
+/* Seta de "abre configuração": só no celular, onde a engrenagem sai para
+ * devolver largura ao texto. Não é botão — quem recebe o toque é o card
+ * inteiro, então não há dois alvos disputando o mesmo dedo. */
+.pnl-esp-card-chevron { display: none; }
 .pnl-esp-gear {
   width: 36px; height: 36px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -1956,6 +2173,15 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   animation: pnl-drawer-in .18s ease both;
 }
 @keyframes pnl-drawer-in { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+/* As três pontas NUNCA encolhem e o meio pode encolher até zero. Sem isso o
+ * corpo (flex: 1, `min-height: auto`) se recusa a ficar menor que o conteúdo,
+ * empurra os irmãos — que encolhem, porque `flex-shrink` nasce 1 — e o
+ * cabeçalho some por baixo do texto da primeira seção. Foi o "um escrito em
+ * cima do outro" que a cliente fotografou em 2026-09-19. Reproduzido em
+ * 375x667 com o corpo impedido de rolar: o texto sobe para dentro das abas. */
+.pnl-drawer-head,
+.pnl-drawer-tabs,
+.pnl-drawer-foot { flex-shrink: 0; }
 .pnl-drawer-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 14px; }
 .pnl-drawer-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pnl-drawer-name { font-size: 16.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
@@ -1980,7 +2206,13 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .pnl-drawer-tabs button.is-active { color: var(--accent-strong); border-bottom-color: var(--accent-strong); }
-.pnl-drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: grid; gap: 16px; align-content: start; }
+/* Coluna FLEX e não grid: como `.cfg-section` tem `overflow: hidden`, o
+ * tamanho mínimo automático dela vira zero, e num grid de altura definida as
+ * linhas encolhem — medido em 375px, a seção de destinos ficava com 257px
+ * para 398px de conteúdo e a lista saía cortada no meio de um nome. Com
+ * `flex-shrink: 0` em cada filho nada encolhe: o que não cabe rola. */
+.pnl-drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+.pnl-drawer-body > * { flex: 0 0 auto; }
 .pnl-drawer-body .cfg-section { margin: 0; }
 .pnl-drawer-error {
   margin: 0 20px 10px; padding: 10px 12px;
@@ -1994,7 +2226,28 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 }
 
 /* ── Modal "Adicionar" ── */
-.pnl-esp-add { max-width: 620px; max-height: calc(100vh - 40px); overflow-y: auto; }
+/* Mesma receita da gaveta: pontas travadas, meio rolando. Aqui a lista de
+ * grupos do WhatsApp é longa e era o modal inteiro que rolava, levando o
+ * título e o "fechar" para fora da tela. */
+.pnl-esp-add {
+  max-width: 620px;
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+.pnl-esp-add-head {
+  flex-shrink: 0;
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 22px 22px 14px;
+}
+.pnl-esp-add-body {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  padding: 0 22px 22px;
+}
 .pnl-esp-add-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
 .pnl-esp-add-card {
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
@@ -2021,11 +2274,53 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 
 @media (max-width: 760px) {
   .pnl-esp-cols { grid-template-columns: 1fr; }
-  .pnl-esp-mobile-switch { display: inline-flex; justify-self: start; }
+  /* No celular este seletor É a navegação entre as duas listas: ocupa a
+   * largura toda, metade para cada lado, e com altura de alvo de toque. Como
+   * `inline-flex` encostado à esquerda ele ficava do tamanho do texto, no meio
+   * da tela, parecendo enfeite. */
+  .pnl-esp-mobile-switch {
+    display: flex;
+    width: 100%;
+    justify-self: stretch;
+    padding: 4px;
+    border-radius: var(--pnl-radius-sm);
+  }
+  .pnl-esp-mobile-switch button {
+    flex: 1;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 14px;
+    border-radius: calc(var(--pnl-radius-sm) - 4px);
+  }
   .pnl-esp-col.is-hidden-mobile { display: none; }
+  /* O cabeçalho da coluna é irmão do `.pnl-card-head`, que já empilha aqui —
+   * sem esta regra o "+ Adicionar" ficava espremido em ~90px e o rótulo
+   * quebrava no meio ("Adicio/nar"). */
+  .pnl-esp-col-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .pnl-esp-col-head .pnl-btn { justify-content: center; white-space: nowrap; }
 }
 
 @media (max-width: 560px) {
+  /* ── Card do nível 1 no celular ──────────────────────────────────────
+   * Medido em 375px antes desta regra: sobravam 108px para o nome, o
+   * "envia para" e as lojas — o avatar, a pílula de contagem, a engrenagem
+   * e três paddings comiam o resto, e toda frase saía picada em 5 ou 6
+   * linhas. Aqui a pílula e a engrenagem saem e o texto volta a ~230px.
+   *
+   * Some a ENGRENAGEM, não o card: o card inteiro já é o alvo de toque
+   * (`aria-label="Configurar <nome>"`), então dois alvos lado a lado num
+   * espaço de 36px só produziam toque errado. A seta entra como sinal
+   * visual de que ali abre alguma coisa — ela não recebe clique.
+   *
+   * Some a PÍLULA "3→" porque ela repete o que a linha de fluxo logo abaixo
+   * já diz por extenso ("envia para Fulano, Beltrano"). No computador as
+   * duas cabem; aqui a contagem custaria ~45px do texto. */
+  .pnl-esp-card { padding: 4px; gap: 0; }
+  .pnl-esp-card-hit { padding: 10px; gap: 10px; min-height: 56px; }
+  .pnl-esp-gear,
+  .pnl-esp-pill { display: none; }
+  .pnl-esp-card-chevron { display: inline-flex; flex-shrink: 0; align-self: center; color: var(--ink-faint); }
+
   /* Gaveta vira folha de tela cheia, presa às duas laterais: nada de largura
    * fixa, que é como um painel some para fora da tela em 375px. */
   .pnl-drawer-overlay { align-items: flex-end; }
@@ -2035,10 +2330,132 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
     animation: pnl-drawer-up .2s ease both;
   }
   @keyframes pnl-drawer-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
-  .pnl-drawer-head { position: sticky; top: 0; background: var(--surface); z-index: 2; }
+  .pnl-drawer-close { width: 40px; height: 40px; }
   .pnl-drawer-body { padding: 14px; }
-  .pnl-drawer-foot { padding: 12px 14px; }
-  .pnl-drawer-foot .pnl-btn { flex: 1; justify-content: center; }
+
+  /* O rodapé empilha e "Salvar" sobe para cima de "Excluir grupo": em linha,
+   * a ação que apaga o grupo ficava encostada na que salva, bem na faixa do
+   * polegar. `column-reverse` mantém a ordem do DOM (Salvar é o último) e
+   * inverte só a pintura, então a leitura por teclado/leitor não muda. */
+  .pnl-drawer-foot { padding: 12px 14px; flex-direction: column-reverse; align-items: stretch; gap: 10px; }
+  .pnl-drawer-foot .pnl-btn { flex: 0 0 auto; justify-content: center; }
+  .pnl-drawer-foot .pnl-link-btn { padding: 6px 0; text-align: center; }
+  .pnl-drawer-foot .pnl-hint { text-align: center; }
+  /* O espaçador do rodapé é um <span> sem classe com `flex:1` inline: em
+   * coluna ele viraria um vão vertical no meio dos botões. */
+  .pnl-drawer-foot > span:not([class]) { display: none; }
+
   .pnl-esp-add-cards { grid-template-columns: 1fr; }
-  .pnl-esp-add { max-height: calc(100vh - 24px); }
+  .pnl-esp-add { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
+  .pnl-esp-add-head { padding: 18px 18px 12px; }
+  .pnl-esp-add-body { padding: 0 18px 18px; }
+  /* Os dois papéis viram duas linhas inteiras: na régua rolável de `.pnl-seg`
+   * o "Destino · o robô publica" nascia fora da tela em 375px (medido:
+   * 429px de conteúdo para 315px de espaço) e parecia não existir. */
+  .pnl-esp-add-role { display: grid; grid-template-columns: 1fr; overflow-x: visible; }
+  .pnl-esp-add-role button { white-space: normal; text-align: center; }
+  /* Sem teto na lista: com ele há uma rolagem dentro da outra, e no toque a
+   * de dentro rouba o gesto da de fora. O próprio modal já rola. */
+  .pnl-esp-add-list { max-height: none; }
+}
+
+/* ── Divisão Basic/PRO (2026-09-23) ──────────────────────────────────────
+ * O PRO é verde + roxo: o verde do produto continua sendo a cor de "ligado"
+ * e de ação principal; o roxo marca o que é do PRO (etiqueta, cadeado, botão
+ * "Ver planos"). A fonte não muda. Componentes: components/pro/ProGate.js. */
+.pnl-root {
+  --pro: #6F4FE8;
+  --pro-ink: #4B34A8;
+  --pro-soft: #ECE7FA;
+  --pro-gradient: linear-gradient(135deg, var(--accent-strong) 0%, var(--pro) 100%);
+}
+.pnl-pro-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .03em;
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--pro-soft); color: var(--pro-ink); white-space: nowrap;
+}
+.pnl-pro-tag.is-sm { font-size: 10px; padding: 2px 7px; gap: 3px; }
+.pnl-nav-item .pnl-pro { color: var(--pro-ink); background: var(--pro-soft); display: inline-flex; align-items: center; gap: 3px; }
+.pnl-nav-item.is-pro-locked { color: var(--ink-faint); }
+.pnl-btn.is-pro { background: var(--pro-gradient); color: #fff; border-color: transparent; }
+.pnl-btn.is-pro:hover { filter: brightness(.94); background: var(--pro-gradient); }
+.pnl-btn.is-sm { padding: 6px 12px; font-size: 12px; }
+.pnl-pro-iconbox {
+  width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--pro-soft); color: var(--pro-ink);
+}
+.pnl-pro-iconbox.is-lg { width: 50px; height: 50px; border-radius: 15px; }
+.pnl-pro-muted { color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; margin: 6px 0 0; }
+
+.pnl-pro-lock { position: relative; }
+.pnl-pro-lock-content { opacity: .5; filter: grayscale(.35) blur(1.5px); pointer-events: none; user-select: none; }
+.pnl-pro-lock-hit { position: absolute; inset: 0; background: transparent; border: none; cursor: pointer; border-radius: var(--pnl-radius-sm); }
+.pnl-pro-lock-hit:focus-visible { outline: 2px solid var(--pro); outline-offset: 2px; }
+.pnl-pro-lock-tag { position: absolute; top: 8px; right: 8px; pointer-events: none; }
+
+.pnl-pro-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(31, 45, 42, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.pnl-pro-modal { width: 100%; max-width: 460px; background: var(--surface); border-radius: var(--pnl-radius); box-shadow: var(--pnl-shadow); overflow: hidden; }
+.pnl-pro-modal-body { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+.pnl-pro-modal-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.pnl-pro-close { border: none; background: var(--bg-soft); width: 32px; height: 32px; border-radius: 10px; font-size: 15px; cursor: pointer; color: var(--ink); }
+.pnl-pro-modal-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pnl-pro-modal-title-row h3 { font-size: 15px; font-weight: 700; margin: 0; }
+.pnl-pro-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 22px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.pnl-pro-soft-card { background: var(--bg-soft); border-radius: var(--pnl-radius-sm); padding: 14px 16px; }
+.pnl-pro-soft-title { font-size: 12.5px; font-weight: 700; margin-bottom: 8px; }
+.pnl-pro-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 13px; }
+.pnl-pro-checks li { display: flex; gap: 8px; align-items: flex-start; }
+.pnl-pro-checks svg { color: var(--pro); margin-top: 2px; flex-shrink: 0; }
+.pnl-pro-checks.is-green svg { color: var(--accent-strong); }
+
+.pnl-pro-page { display: flex; flex-direction: column; gap: 18px; }
+.pnl-pro-banner { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--pnl-radius-sm); background: var(--pro-soft); flex-wrap: wrap; }
+.pnl-pro-banner .pnl-pro-iconbox { background: #fff; }
+.pnl-pro-banner-title { font-weight: 700; color: var(--pro-ink); font-size: 13px; }
+.pnl-pro-banner-text { font-size: 12.5px; color: var(--ink-soft); }
+.pnl-pro-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--pnl-radius); padding: 18px 20px; }
+.pnl-pro-steps-title { font-weight: 600; font-size: 13px; margin-bottom: 14px; }
+.pnl-pro-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.pnl-pro-step { background: var(--bg-soft); border-radius: var(--pnl-radius-sm); padding: 14px; }
+.pnl-pro-step strong { display: block; font-size: 13px; margin-top: 8px; }
+.pnl-pro-step-n { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--pro-gradient); color: #fff; }
+.pnl-pro-preview-label { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; color: var(--ink-faint); }
+.pnl-pro-preview { position: relative; border-radius: var(--pnl-radius); overflow: hidden; min-height: 320px; }
+.pnl-pro-preview-content { opacity: .5; filter: grayscale(.35); pointer-events: none; user-select: none; max-height: 560px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+.pnl-pro-preview-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.pnl-pro-preview-card { background: var(--surface); border-radius: var(--pnl-radius); box-shadow: var(--pnl-shadow); padding: 26px 28px; max-width: 360px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+.pnl-pro-preview-card .pnl-btn { margin-top: 6px; }
+
+/* Rodapé da sidebar para quem não tem o PRO. */
+.pnl-plan-upsell { display: block; margin: 10px 0 2px; padding: 14px; border-radius: 13px; background: var(--pro-soft); text-decoration: none; color: var(--ink); }
+.pnl-plan-upsell-title { font-size: 13px; font-weight: 700; }
+.pnl-plan-upsell-sub { font-size: 11.5px; color: var(--ink-soft); margin: 2px 0 10px; }
+.pnl-plan-upsell .pnl-btn { width: 100%; justify-content: center; }
+.pnl-plan.is-pro .pnl-plan-ico { background: var(--pro-gradient); }
+
+/* Telas do PRO redesenhadas (Ofertas automáticas, Filas, Vendas). */
+.pnl-pro-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.pnl-pro-head h2 { font-size: 15px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pnl-pro-head p { color: var(--ink-soft); font-size: 12.5px; margin: 4px 0 0; }
+.pnl-pro-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 18px; }
+.pnl-pro-stat-n { font-size: 30px; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.pnl-pro-stat-n.is-green { color: var(--accent-strong); }
+.pnl-pro-stat-l { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.pnl-pro-bars { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; align-items: end; height: 180px; }
+.pnl-pro-bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; min-width: 0; }
+.pnl-pro-bar { width: 100%; border-radius: 8px; background: color-mix(in oklab, var(--accent) 40%, transparent); min-height: 2px; }
+.pnl-pro-bar.is-max { background: var(--accent-strong); }
+.pnl-pro-bar-v { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pnl-pro-bar-d { font-size: 11px; color: var(--ink-soft); }
+
+/* Card com cadeado no Painel (comissão Shopee para o Basic). */
+.pnl-kpi-locked { position: relative; }
+
+@media (max-width: 640px) {
+  .pnl-pro-stats { grid-template-columns: 1fr 1fr; }
+  .pnl-pro-stat-n { font-size: 22px; }
+  .pnl-pro-bars { height: 140px; gap: 4px; }
+  .pnl-pro-bar-v { font-size: 9.5px; }
 }
