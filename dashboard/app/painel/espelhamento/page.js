@@ -306,8 +306,11 @@ function DestinationPicker({ groupId, post, state, onLoad, onToggle, onSetAll, o
   const dirty = ready && !sameIdSet(draft, state.savedIds)
   const justSaved = Boolean(state?.savedAt) && !dirty
 
+  // Sem destino nenhum não há o que marcar. Antes isto era um aviso sem botão
+  // (beco sem saída no primeiro espelhamento); quem resolve agora é o atalho
+  // "Adicionar novo grupo de destino" logo abaixo, que já nasce aberto.
   if (post.length === 0) {
-    return <p className="pnl-hint" style={{ color: 'var(--warn, #b45309)' }}>Cadastre ao menos um grupo de destino para escolher para onde esse grupo envia.</p>
+    return <p className="pnl-hint" style={{ margin: 0 }}>Você ainda não tem nenhum grupo de destino — o lugar onde o robô publica as ofertas.</p>
   }
   if (!ready) {
     return (
@@ -380,6 +383,108 @@ function DestinationPicker({ groupId, post, state, onLoad, onToggle, onSetAll, o
           {saving ? 'Salvando…' : 'Salvar destinos'}
         </button>
       </div>
+    </div>
+  )
+}
+
+/* ── Atalho "adicionar novo grupo de destino", dentro da aba Destinos ───
+ *
+ * Antes, quem cadastrava a PRIMEIRA origem caía na aba Destinos com o aviso
+ * "cadastre ao menos um destino" e nenhum botão: precisava fechar o painel,
+ * achar o "+ Adicionar" da outra coluna e voltar. Agora o destino é adicionado
+ * aqui mesmo, sem sair do contexto da origem.
+ *
+ * Invariantes:
+ *  - nasce ABERTO quando não existe destino nenhum (é o único próximo passo) e
+ *    recolhido quando já existe (não empurra a lista para baixo à toa);
+ *  - um grupo que já é origem não pode virar destino (o backend recusa com 409
+ *    e, se aceitasse, a oferta voltaria para o próprio grupo) — aparece
+ *    marcado "é uma origem", sem botão;
+ *  - as configurações do destino (imagem, marca d'água, boas-vindas, anti-ban)
+ *    NÃO aparecem aqui: têm padrão e continuam no card do destino. */
+function QuickAddDestination({ quickAdd, startOpen }) {
+  const [open, setOpen] = useState(Boolean(startOpen))
+  const [filter, setFilter] = useState('')
+  const { waGroups, loadingWA, waError, onLoadWA, monitorJids, postJids, addingJid, onAdd, notice } = quickAdd
+
+  useEffect(() => {
+    if (open && !waGroups && !loadingWA && !waError) onLoadWA()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  if (!open) {
+    return (
+      <div>
+        <button type="button" className="pnl-btn" onClick={() => setOpen(true)}>
+          <CfgIcon name="plus" size={14} /> Adicionar novo grupo de destino
+        </button>
+        {notice && <p className="pnl-hint" role="status" style={{ marginTop: 8 }}>{notice}</p>}
+      </div>
+    )
+  }
+
+  const term = filter.trim().toLowerCase()
+  const list = (waGroups ?? []).filter((g) => !term || g.name.toLowerCase().includes(term))
+
+  return (
+    <div className="cfg-dest-picker" aria-label="Adicionar novo grupo de destino">
+      <div className="cfg-dest-bar">
+        <span className="cfg-dest-count">Adicionar novo grupo de destino</span>
+        {!startOpen && (
+          <button type="button" className="pnl-link-btn" onClick={() => setOpen(false)}>Fechar</button>
+        )}
+      </div>
+      <p className="pnl-hint" style={{ margin: 0 }}>
+        Escolha o grupo do seu WhatsApp onde o robô vai publicar as ofertas. Imagem, marca d&apos;água e demais
+        ajustes do destino têm padrão e podem ser mudados depois, no card dele.
+      </p>
+
+      {loadingWA && <p className="pnl-hint" aria-live="polite" style={{ margin: 0 }}>Carregando os seus grupos…</p>}
+
+      {waError && (
+        <div className="pnl-note-box is-error" role="alert">
+          <strong style={{ fontWeight: 600 }}>Falha ao carregar os grupos do WhatsApp</strong>
+          <p style={{ marginTop: 4 }}>{waError} Confirme se o robô está conectado ao WhatsApp e tente novamente.</p>
+          <button type="button" className="pnl-btn" style={{ marginTop: 8 }} onClick={onLoadWA}>Tentar de novo</button>
+        </div>
+      )}
+
+      {waGroups && (
+        <>
+          <input
+            className="cfg-dest-search"
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Procurar grupo pelo nome"
+            aria-label="Procurar grupo para usar como destino"
+          />
+          <ul className="pnl-esp-add-list" style={{ marginTop: 0 }}>
+            {list.length === 0 && <li className="pnl-hint" style={{ padding: 12 }}>Nenhum grupo com esse nome.</li>}
+            {list.map((g) => {
+              const isOrigin = monitorJids.has(g.waJid)
+              const isDest = postJids.has(g.waJid)
+              return (
+                <li key={g.waJid} className="pnl-esp-add-row">
+                  <span className="pnl-esp-add-name">{g.name}</span>
+                  {isOrigin ? (
+                    <span className="pnl-hint">é uma origem</span>
+                  ) : isDest ? (
+                    <span className="pnl-hint">já é destino</span>
+                  ) : (
+                    <button type="button" className="pnl-btn is-primary" onClick={() => onAdd(g)} disabled={Boolean(addingJid)}>
+                      {addingJid === g.waJid ? 'Adicionando…' : 'Adicionar como destino'}
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          <p className="pnl-hint" style={{ margin: 0 }}>Quer publicar num canal? Use o &quot;+ Adicionar&quot; da coluna de destinos.</p>
+        </>
+      )}
+
+      {notice && <p className="pnl-hint" role="status" style={{ margin: 0 }}>{notice}</p>}
     </div>
   )
 }
@@ -476,7 +581,7 @@ function WatermarkTextField({ group, maxChars, draft, saving, savedAt, error, on
  * captura → como publica. A escolha de imagem NUNCA mora aqui: ela é do
  * destino (ver renderPostConfig). Guarda em test/image-mode-policy.test.js.
  */
-function MonitorGroupConfig({ g, tab, onUpdate, canUseChannels, post, targetsState, targetsHandlers, onSetActionError, templates, defaultTemplateKey, targetsHint, plano, instagram }) {
+function MonitorGroupConfig({ g, tab, onUpdate, canUseChannels, post, targetsState, targetsHandlers, onSetActionError, templates, defaultTemplateKey, targetsHint, plano, instagram, quickAdd }) {
   const [draft, setDraft] = useState('')
 
   const keywords = (g.blockedKeywords || '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -532,12 +637,18 @@ function MonitorGroupConfig({ g, tab, onUpdate, canUseChannels, post, targetsSta
     const nomeDoDestino = (id) => post.find((d) => d.id === id)?.name
     return (
       <>
-        {targetsHint && (
+        {targetsHint && post.length === 0 && (
+          <div className="pnl-note-box is-info">
+            Origem adicionada. Agora falta o <strong>destino</strong>: o grupo onde o robô publica as ofertas
+            que chegarem aqui. Escolha abaixo.
+          </div>
+        )}
+        {targetsHint && post.length !== 0 && (
           <div className="pnl-note-box is-info">
             Escolha para onde ele envia. Sem escolha, ele envia para todos os seus destinos.
           </div>
         )}
-        {!targetsHint && targetsMode === 'all' && (
+        {!targetsHint && post.length !== 0 && targetsMode === 'all' && (
           <div className="pnl-note-box">
             Hoje esta origem usa o <strong>padrão: todos</strong> — ela envia para todos os seus
             destinos porque nenhum foi escolhido ainda. Marque os que você quer e salve.
@@ -556,6 +667,15 @@ function MonitorGroupConfig({ g, tab, onUpdate, canUseChannels, post, targetsSta
               onSave={targetsHandlers.save}
               onReset={targetsHandlers.reset}
             />
+            {quickAdd && (
+              <QuickAddDestination
+                // Remonta quando a origem muda: o atalho aberto de uma origem
+                // não pode vazar para a próxima.
+                key={g.id}
+                startOpen={post.length === 0}
+                quickAdd={{ ...quickAdd, onAdd: (wa) => quickAdd.onAdd(g.id, wa), notice: quickAdd.noticeFor(g.id) }}
+              />
+            )}
           </div>
         </CfgSection>
 
@@ -1197,7 +1317,7 @@ function AddGroupModal({
 
         {role === 'monitor' && (
           <p className="pnl-hint" style={{ marginTop: 12 }}>
-            Depois de adicionar, escolha para onde ele envia. Sem escolha, ele envia para todos os seus destinos.
+            Depois de adicionar, você escolhe para onde ele envia. Se ainda não tiver grupo de destino, dá para adicionar ali mesmo.
           </p>
         )}
       </div>
@@ -1258,12 +1378,19 @@ export default function EspelhamentoPage() {
   // carregamento antigo é descartada em vez de sobrescrever o que a pessoa já
   // marcou (foi assim que a escolha da cliente sumia).
   const targetRequestRef = useRef({})
+  // Espelho do estado para handlers assíncronos: depois de um `await` o valor
+  // capturado no fechamento já pode estar velho.
+  const targetsStateRef = useRef(targetsState)
+  targetsStateRef.current = targetsState
 
   const [addModal, setAddModal] = useState(null)
   const [waGroups, setWaGroups] = useState(null)
   const [loadingWA, setLoadingWA] = useState(false)
   const [waError, setWaError] = useState('')
   const [addingKey, setAddingKey] = useState('')
+  // Atalho de destino dentro da aba Destinos da origem.
+  const [quickAddingJid, setQuickAddingJid] = useState('')
+  const [quickAddNotice, setQuickAddNotice] = useState(null) // { originId, text }
 
   const [showChannelModal, setShowChannelModal] = useState(false)
   const [channelButtonGroupId, setChannelButtonGroupId] = useState(null)
@@ -1940,6 +2067,67 @@ export default function EspelhamentoPage() {
     }
   }
 
+  // Adiciona um destino a partir da aba Destinos de uma origem e o deixa
+  // valendo para ela, sem mudar a regra de envio que a origem já tem:
+  //  - origem em modo 'all' (nunca escolheu): ela JÁ envia para todos os
+  //    destinos, então o novo passa a receber sozinho. Gravar uma lista aqui
+  //    congelaria a origem em 'explicit' e destinos futuros deixariam de
+  //    receber sem ninguém ter pedido — só recarregamos os vínculos;
+  //  - origem com escolha explícita e nada pendente: grava a escolha salva +
+  //    o novo destino;
+  //  - origem com alterações ainda não salvas: só marca o novo no rascunho.
+  //    Gravar aqui salvaria junto o que ela ainda estava decidindo.
+  async function handleQuickAddDestination(originId, g) {
+    setQuickAddingJid(g.waJid)
+    setQuickAddNotice(null)
+    setActionError('')
+    try {
+      const created = await api.addGroup(g.waJid, g.name, 'post')
+      const list = await api.groups()
+      setGroups(list)
+      if (!created?.id) return
+      const allPostIds = list.filter((x) => x.role === 'post').map((x) => x.id)
+      const current = targetsStateRef.current[originId]
+      const ready = current && Array.isArray(current.savedIds)
+      // Todas as origens em 'all' ganharam este destino no servidor: o
+      // registro local de cada uma precisa refletir isso (cards e mapa).
+      const staleAll = list
+        .filter((x) => x.role === 'monitor' && targetsStateRef.current[x.id]?.mode === 'all' && x.id !== originId)
+        .map((x) => x.id)
+      for (const id of staleAll) loadTargets(id, { force: true })
+
+      if (!ready || current.mode === 'all') {
+        await loadTargets(originId, { force: true })
+        setQuickAddNotice({ originId, text: `${g.name} foi adicionado e já recebe as ofertas desta origem.` })
+        return
+      }
+      const dirty = !sameIdSet(current.draftIds ?? [], current.savedIds)
+      if (dirty) {
+        patchTargets(originId, { draftIds: [...new Set([...(current.draftIds ?? []), created.id])], savedAt: null })
+        setQuickAddNotice({ originId, text: `${g.name} foi adicionado e marcado. Salve os destinos para valer.` })
+        return
+      }
+      const escolhidos = [...new Set([...current.savedIds, created.id])].filter((id) => allPostIds.includes(id))
+      const idsToSave = planMirrorCreation({
+        currentPostIds: current.savedIds,
+        currentMode: current.mode ?? 'explicit',
+        chosenPostIds: escolhidos,
+        allPostIds,
+        modo: 'editar',
+      }).postIds
+      patchTargets(originId, { saving: true, error: '' })
+      await api.updateGroupTargets(originId, idsToSave)
+      patchTargets(originId, { saving: false, error: '', savedIds: idsToSave, draftIds: idsToSave, mode: 'explicit', savedAt: Date.now() })
+      setQuickAddNotice({ originId, text: `${g.name} foi adicionado e já recebe as ofertas desta origem.` })
+    } catch (err) {
+      patchTargets(originId, { saving: false })
+      setActionError(err.message)
+      setQuickAddNotice({ originId, text: `Não deu para adicionar ${g.name}: ${err.message}` })
+    } finally {
+      setQuickAddingJid('')
+    }
+  }
+
   async function handleAddFromWA(g, role) {
     const key = `${g.waJid}::${role}`
     setAddingKey(key)
@@ -2232,6 +2420,17 @@ export default function EspelhamentoPage() {
               defaultTemplateKey={defaultTemplateKey}
               targetsHint={drawerHint && drawerTab === 'destinos'}
               plano={drawerPlano}
+              quickAdd={{
+                waGroups,
+                loadingWA,
+                waError,
+                onLoadWA: handleLoadWA,
+                monitorJids: new Set(monitor.map((x) => x.waJid)),
+                postJids: new Set(post.map((x) => x.waJid)),
+                addingJid: quickAddingJid,
+                onAdd: handleQuickAddDestination,
+                noticeFor: (id) => (quickAddNotice?.originId === id ? quickAddNotice.text : null),
+              }}
               instagram={{
                 destinos: instagramDestinations,
                 escolhidos: instagramMirrorTargets,
