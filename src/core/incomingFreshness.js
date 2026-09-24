@@ -31,9 +31,29 @@
 
 export const INCOMING_MAX_AGE_MS = 5 * 60_000
 
+// RCA 2026-09-24 (frota): as sessões caem com 500 ~1×/hora por conta, e as
+// mensagens publicadas DURANTE a queda chegam 27–58 min depois — e eram
+// jogadas fora por este mesmo portão (196 descartes de 10–60 min em 60 MB de
+// log, 47 robôs; numa conta, 35 de 87 mensagens dos grupos monitorados).
+// Decisão da dona do produto: mensagem de ORIGEM MONITORADA com até
+// INCOMING_LATE_MAX_AGE_MS passa, desde que o id NUNCA tenha sido visto (o
+// conjunto de ids vistos fica em disco, no arquivo da dedup, com janela maior
+// que esta — ver seenIncomingIdWindowMs no bot-worker). Reentrega do mesmo
+// id continua descartada; `append` sem timestamp continua descartada; acima da
+// janela tardia continua descartada. A dedup de link no envio segue como
+// segunda rede. NÃO esticar DEDUP_MSGID_WINDOW_MS nem amarrar
+// linkDedupWindowMs para "compensar" — ver o não-regredir do RCA 2026-07.
+export const INCOMING_LATE_MAX_AGE_MS = 60 * 60_000
+
 export const INCOMING_DROP_REASON = Object.freeze({
   STALE: 'stale',
+  // Atrasada dentro da janela tardia, mas o id JÁ tinha sido visto: é reentrega.
+  STALE_REPLAY: 'stale_replay',
   REPLAY_WITHOUT_TIMESTAMP: 'replay_without_timestamp',
+})
+
+export const INCOMING_ACCEPT_REASON = Object.freeze({
+  LATE_MONITORED_SOURCE: 'late_monitored_source',
 })
 
 /**
@@ -42,19 +62,31 @@ export const INCOMING_DROP_REASON = Object.freeze({
  * @param {number|null} params.messageTimestampMs  timestamp da mensagem em ms (null = ausente/inválido)
  * @param {number} [params.now]
  * @param {number} [params.maxAgeMs]
- * @returns {{ process: boolean, reason: string|null, ageMs: number|null }}
+ * @param {number} [params.lateMaxAgeMs]   janela tardia para origem monitorada (0 desliga)
+ * @param {boolean} [params.isMonitoredSource]  a mensagem veio de uma origem monitorada
+ * @param {boolean} [params.seenBefore]    o id já foi visto neste robô (reentrega)
+ * @returns {{ process: boolean, reason: string|null, ageMs: number|null, late?: boolean }}
  */
 export function shouldProcessIncomingMessage({
   upsertType,
   messageTimestampMs,
   now = Date.now(),
   maxAgeMs = INCOMING_MAX_AGE_MS,
+  lateMaxAgeMs = 0,
+  isMonitoredSource = false,
+  seenBefore = false,
 } = {}) {
   const ts = Number(messageTimestampMs)
   const hasTimestamp = Number.isFinite(ts) && ts > 0
   const ageMs = hasTimestamp ? now - ts : null
 
   if (hasTimestamp && ageMs >= maxAgeMs) {
+    const lateWindow = Number(lateMaxAgeMs)
+    const withinLateWindow = Number.isFinite(lateWindow) && lateWindow > maxAgeMs && ageMs < lateWindow
+    if (withinLateWindow && isMonitoredSource === true) {
+      if (seenBefore === true) return { process: false, reason: INCOMING_DROP_REASON.STALE_REPLAY, ageMs }
+      return { process: true, reason: INCOMING_ACCEPT_REASON.LATE_MONITORED_SOURCE, ageMs, late: true }
+    }
     return { process: false, reason: INCOMING_DROP_REASON.STALE, ageMs }
   }
   if (!hasTimestamp && upsertType === 'append') {
