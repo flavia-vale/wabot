@@ -12,6 +12,8 @@ quatro listas divergem em uma semana.
 
 | # | Quando | O quê | Tempo |
 |---|---|---|---|
+| 🔝 | **assim que `develop` chegar em `main`** | **Reindexação das páginas corrigidas — Leva R1** (abaixo): 10 páginas que diziam coisa errada sobre o produto. Passa na frente de qualquer outra indexação | 15 min |
+| 🔝 | dia seguinte à R1 | **Leva R2** (10 páginas) e, no outro dia, **Leva R3** (3 páginas) | 15 min cada |
 | 1 | 24/09 | **Indexação — Dia 8** (abaixo): `lumi-ofertas-inteligentes` + 9 endereços | 15 min |
 | 2 | 24/09 | Mergear a PR #1833 (só documentação) em `develop` | 1 min |
 | 3 | 24/09 | Responder à outra sessão: **reembolso depois de 7 dias** (há ou não?) | 1 min |
@@ -22,6 +24,12 @@ quatro listas divergem em uma semana.
 | 8 | 30/09 | **Medição:** export do Search Console (3 meses + `Gráfico.csv`), `diag-origem-cadastros --dias 30`, `diag-paginas-seo --dias 30` | 20 min |
 | 9 | quando der | Rodada de IA no Perplexity e no AI Overviews (o Gemini passa a ser por script) | 30 min |
 | 10 | opcional | Regra na Cloudflare contra robôs de ataque (passo a passo na conversa de 23/09) | 5 min |
+
+**Regra da lista (pedido da Flávia, 24/09):** sempre que uma mudança de texto
+em página pública precisar de reindexação, ela entra **no topo desta tabela**
+(linha 🔝), antes das levas de indexação comuns — e só vale depois do deploy em
+`main`. Página que já estava numa leva comum e mudou de texto sai de lá e vai
+para a leva de reindexação (pedir antes do deploy gasta a cota com o texto velho).
 
 **Nota sobre os depoimentos (item 4).** Só publicar texto de cliente real, com
 autorização e sem mudar o sentido — depoimento inventado ou reescrito é
@@ -55,6 +63,61 @@ http://178.105.54.0:3006/precos
 ---
 
 ## 1. Indexação — a fila, em ordem de prioridade
+
+### 🔝 Reindexação das páginas corrigidas (PRs #1848 e #1850, 24/09) — ⏳ só depois do deploy em `main`
+
+Estas páginas **já estão no Google com texto errado**: prometiam "pausa
+preventiva", medir cliques e "Lista VIP", ou diziam que o produto não pausa o
+canal (ele pausa por 1 h o canal que recusa envios, no plano Pro). Reindexar é
+o que faz o Google (e as IAs que leem o índice) trocar o texto velho pelo
+certo. Por isso passam na frente das levas comuns.
+
+**Como pedir:** Search Console → Inspeção de URL → colar o endereço →
+"Solicitar indexação". Antes, abrir a página em produção e conferir que o
+texto novo está no ar (ex.: `/bot-canais-whatsapp` mostra "pausado sozinho por
+1 hora"); se ainda mostrar o texto velho, o deploy não chegou — não pedir.
+
+**Leva R1 — as que falavam errado do produto (1ª cota)**
+
+```
+https://espelhagrupos.com.br/bot-canais-whatsapp                        ⏳
+https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                ⏳
+https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais        ⏳
+https://espelhagrupos.com.br/blog/bot-whatsapp-antiban-existe           ⏳
+https://espelhagrupos.com.br/blog/shadowban-whatsapp-canais             ⏳
+https://espelhagrupos.com.br/blog/como-evitar-banimento-whatsapp-afiliados ⏳
+https://espelhagrupos.com.br/blog/grupo-ou-canal-whatsapp-achadinhos    ⏳
+https://espelhagrupos.com.br/blog/chip-dedicado-bot-whatsapp            ⏳
+https://espelhagrupos.com.br/blog/migrar-grupo-achadinhos-para-canal    ⏳
+https://espelhagrupos.com.br/diagnostico-antiban-whatsapp               ⏳
+```
+
+**Leva R2 — as 16 editoriais revisadas que restam (dia seguinte)**
+
+```
+https://espelhagrupos.com.br/conteudos                                  ⏳
+https://espelhagrupos.com.br/glossario                                  ⏳
+https://espelhagrupos.com.br/estudos-de-caso                            ⏳
+https://espelhagrupos.com.br/benchmarks/operacao-grupos-ofertas-whatsapp ⏳
+https://espelhagrupos.com.br/blog/como-escalar-grupos-sem-operacao-manual ⏳
+https://espelhagrupos.com.br/blog/checklist-padronizar-divulgacao-whatsapp ⏳
+https://espelhagrupos.com.br/blog/conferir-converter-link-afiliado-whatsapp ⏳
+https://espelhagrupos.com.br/blog/bot-para-afiliados-whatsapp-grupos-cupons ⏳
+https://espelhagrupos.com.br/materiais/checklist-operacao-whatsapp      ⏳
+https://espelhagrupos.com.br/materiais/checklist-divulgacao-ofertas-grupos-whatsapp ⏳
+```
+
+**Leva R3 — ajuste menor (se sobrar cota)**
+
+```
+https://espelhagrupos.com.br/seguranca-credenciais-afiliado             ⏳
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ⏳
+https://espelhagrupos.com.br/quem-somos                                 ⏳
+```
+
+As landings e hubs que só trocaram o botão "Lista VIP" por "Testar 7 dias
+grátis" **não** precisam de pedido: o Google relê sozinho, e a mudança não
+altera o assunto da página.
 
 ### 📌 Estado em 12/09 — 17 pedidos feitos; falta o fim do Dia 4
 
@@ -320,21 +383,24 @@ pedidas. A última é sobra do Dia 6 (a outra sobra passou para o Dia 9).
 
 ```
 https://espelhagrupos.com.br/protecao-antiban-espelha-grupos           ⏳
-https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                ⏳
 https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual          ⏳
-https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais        ⏳
 https://espelhagrupos.com.br/alternativas/fluxopromo                    ⏳
 https://espelhagrupos.com.br/alternativas/shozap                        ⏳
 https://espelhagrupos.com.br/alternativas/gigi-bot                      ⏳
 https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados   ⏳
 https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons     ⏳
+https://espelhagrupos.com.br/consistencia-postagens-em-grupos           ⏳
+https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp          ⏳
 ```
+
+(24/09) `bot-comum-vs-espelha-grupos` e `como-funciona-espelha-grupos-canais`
+saíram daqui: o texto delas mudou nas PRs #1848/#1850 e elas foram para a
+**Leva R1**, que só vale depois do deploy em `main`. As duas do Dia 9 subiram
+para fechar a cota.
 
 ### Dia 9 (2026-09-25) — ⏳ depois do Dia 8
 
 ```
-https://espelhagrupos.com.br/consistencia-postagens-em-grupos           ⏳
-https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp          ⏳
 https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao    ⏳
 ```
 
