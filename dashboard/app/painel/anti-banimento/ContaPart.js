@@ -1,11 +1,9 @@
 'use client'
 
 /* Parte "Ajustes da conta" do Anti-banimento — o que vale para a conta toda,
- * não por grupo/canal: o intervalo entre destinos (ex-"atraso entre canais"),
- * seguir no máximo X canais por dia, e a variação de imagem. Reaproveita a
- * lógica/forms da antiga tela "Configurações avançadas"; a linguagem leiga
- * completa do campo de intervalo é da User Story 4 (T052/T053) — aqui a
- * parte ainda usa o form existente (ChannelStaggerForm). */
+ * não por grupo/canal: o intervalo entre destinos, seguir no máximo X canais
+ * por dia, e a variação leve de imagem. Reaproveita a lógica/forms da antiga
+ * tela "Configurações avançadas". */
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'

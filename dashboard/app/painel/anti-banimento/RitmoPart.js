@@ -23,28 +23,41 @@ const NEW_PRESET = {
   operatingHoursJson: '{"startHour":8,"endHour":22,"tz":"America/Sao_Paulo"}',
   throttleEnabled: true,
   minIntervalSec: 30,
-  burstCap: 6,
-  burstWindowSec: 600,
   dailyCap: null,
   // Descarte por idade na fila: 5h. Ver src/core/queueExpiry.js.
   queueMaxAgeMin: 300,
 }
 
+// "Máximo de envios na janela"/"Janela de rajada" não entram no resumo: viraram
+// campos fixos (piso anti-banimento), não são mais informação que a cliente
+// escolheu — mostrar o valor herdado confundiria com "isto é ajustável".
 function summarizePreset(p) {
   const parts = []
   if (p.operatingHoursEnabled) {
     try { const h = JSON.parse(p.operatingHoursJson); parts.push(`envia ${h.startHour}h–${h.endHour}h`) }
     catch { /* ignore */ }
   } else parts.push('envia 24h')
-  if (p.throttleEnabled !== false) parts.push(`min ${p.minIntervalSec}s · ${p.burstCap}/janela${p.dailyCap ? ` · ${p.dailyCap}/dia` : ''}`)
-  else parts.push('sem limite anti-ban')
+  parts.push(`espera pelo menos ${p.minIntervalSec}s entre envios${p.dailyCap ? ` · até ${p.dailyCap}/dia` : ''}`)
   if (Number(p.queueMaxAgeMin) > 0) parts.push(`descarta após ${Math.round(Number(p.queueMaxAgeMin) / 60)}h na fila`)
   return parts.join(' · ')
+}
+
+// Campos de override DIRETO no destino (Group), fora do preset atribuído —
+// "Voltar ao ritmo padrão" zera só estes, mantendo o preset atribuído
+// (contracts/ui-anti-banimento.md § Ritmo por grupo).
+const DESTINATION_OVERRIDE_KEYS = [
+  'throttleEnabled', 'minIntervalSec', 'dailyCap', 'burstCap', 'burstWindowSec',
+  'operatingHoursEnabled', 'operatingHoursJson', 'queueMaxAgeMin',
+]
+
+function hasOwnOverride(d) {
+  return DESTINATION_OVERRIDE_KEYS.some((k) => d[k] !== null && d[k] !== undefined)
 }
 
 export default function RitmoPart({ initialDestino }) {
   const [presets, setPresets] = useState(null)
   const [destinations, setDestinations] = useState([])
+  const [busca, setBusca] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [editing, setEditing] = useState(null) // preset em edição (objeto) ou null
@@ -79,18 +92,22 @@ export default function RitmoPart({ initialDestino }) {
       const body = { ...editing }
       delete body.id; delete body.createdAt; delete body.updatedAt
       delete body.ritmoMaisCuidadoso; delete body.recomecouDoPadrao
+      // O liga/desliga dos limites virou fixo (sempre ligado) — salvar sempre
+      // manda throttleEnabled: true, o que faz o destino sair do estado
+      // "limites desligados" pelo caminho normal de escrita (T037).
+      body.throttleEnabled = true
       if (editing.id) await api.updatePreservationPreset(editing.id, body)
       else await api.createPreservationPreset(body)
       setEditing(null)
       await load()
-      flash('Preset salvo.')
+      flash('Ritmo salvo.')
     } catch (e) { setError(e.message) }
     finally { setBusy(false) }
   }
 
   async function removePreset(id) {
     setBusy(true); setError('')
-    try { await api.deletePreservationPreset(id); await load(); flash('Preset excluído.') }
+    try { await api.deletePreservationPreset(id); await load(); flash('Ritmo excluído.') }
     catch (e) { setError(e.message) }
     finally { setBusy(false) }
   }
@@ -103,6 +120,24 @@ export default function RitmoPart({ initialDestino }) {
       flash('Destino atualizado.')
     } catch (e) { setError(e.message) }
   }
+
+  // "Voltar ao ritmo padrão": zera só os campos de override GRAVADOS direto no
+  // destino (nunca o preset atribuído), fazendo-o voltar a herdar do preset ou
+  // do padrão da conta (contracts/ui-anti-banimento.md).
+  async function resetDestino(destId) {
+    setError('')
+    try {
+      const patch = Object.fromEntries(DESTINATION_OVERRIDE_KEYS.map((k) => [k, null]))
+      const { destination } = await api.updatePreservationDestination(destId, patch)
+      await load()
+      flash('Destino voltou ao ritmo padrão.')
+      void destination
+    } catch (e) { setError(e.message) }
+  }
+
+  const destinationsFiltradas = busca.trim()
+    ? destinations.filter((d) => (d.name || d.waJid || '').toLowerCase().includes(busca.trim().toLowerCase()))
+    : destinations
 
   if (!presets && !error) return <LoadingState message="Carregando ritmo por grupo..." />
   if (error && !presets) return <ErrorState message={error} actionLabel="Tentar novamente" onAction={load} />
@@ -186,29 +221,55 @@ export default function RitmoPart({ initialDestino }) {
         {destinations.length === 0 ? (
           <EmptyState title="Nenhum destino" message="O ritmo por grupo aparece quando você tiver grupos de envio." actionLabel="Ir para Espelhamento" actionHref="/painel/espelhamento" />
         ) : (
-          <ul className="flex flex-col gap-2">
-            {destinations.map(d => (
-              <li
-                key={d.id}
-                ref={d.id === initialDestino ? destinoRef : undefined}
-                className={`bg-white rounded-xl shadow px-4 py-3 flex items-center justify-between gap-3${d.id === initialDestino ? ' ring-2 ring-green-400' : ''}`}
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-gray-800 truncate">{d.name || d.waJid}</div>
-                  <div className="text-xs text-gray-500 truncate">
-                    {d.kind === 'channel' ? 'Canal' : 'Grupo'}
-                    {d.ritmoMaisCuidadoso && <span className="ml-1 rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">🐢 Ritmo mais cuidadoso</span>}
-                  </div>
-                </div>
-                <select value={d.preservationPresetId || ''}
-                  onChange={e => assignPreset(d.id, e.target.value)}
-                  className="border rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-400">
-                  <option value="">Ritmo padrão da conta</option>
-                  {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </li>
-            ))}
-          </ul>
+          <>
+            {destinations.length > 6 && (
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar grupo ou canal..."
+                className="mb-3 w-full max-w-sm border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+              />
+            )}
+            {destinationsFiltradas.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhum grupo ou canal encontrado para &quot;{busca}&quot;.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {destinationsFiltradas.map(d => (
+                  <li
+                    key={d.id}
+                    ref={d.id === initialDestino ? destinoRef : undefined}
+                    className={`bg-white rounded-xl shadow px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between${d.id === initialDestino ? ' ring-2 ring-green-400' : ''}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-gray-800 truncate">{d.name || d.waJid}</div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {d.kind === 'channel' ? 'Canal' : 'Grupo'}
+                        {d.ritmoMaisCuidadoso && <span className="ml-1 rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">🐢 Ritmo mais cuidadoso</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select value={d.preservationPresetId || ''}
+                        onChange={e => assignPreset(d.id, e.target.value)}
+                        className="border rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-green-400">
+                        <option value="">Ritmo padrão da conta</option>
+                        {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      {hasOwnOverride(d) && (
+                        <button
+                          type="button"
+                          onClick={() => resetDestino(d.id)}
+                          className="whitespace-nowrap text-xs font-semibold text-green-700 hover:underline"
+                        >
+                          Voltar ao ritmo padrão
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </section>
     </div>

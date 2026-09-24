@@ -2641,13 +2641,30 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
  * finalizamos o job se ele NÃO couber na fila.
  */
 function deferReasonMessage(reason) {
+  // specs/018-unificar-protecao-anti-ban (User Story 2): nenhuma dessas frases
+  // pode citar tela antiga ("Preservação por destino") nem termo técnico — o
+  // ritmo dos três campos fixos (rajada/janela/liga-desliga) agora é fixo (ver
+  // core/antiBanFloor no domínio de preservação) e a cliente não edita mais
+  // nenhum deles.
   if (reason === 'burst_cap') {
-    return 'O bot está segurando os envios por alguns minutos para não mandar muitas mensagens de uma vez para este grupo/canal. A espera foi definida na página "Preservação por destino", no campo "Máximo de envios na janela".'
+    return 'O bot está segurando os envios por alguns minutos para não mandar muitas ofertas de uma vez para este grupo/canal (ritmo de segurança do Anti-banimento).'
+  }
+  if (reason === 'daily_cap') {
+    return 'Este grupo/canal já bateu o limite diário de ofertas configurado no Anti-banimento. Os envios continuam amanhã.'
+  }
+  if (reason === 'min_interval') {
+    return 'Esperando o intervalo mínimo entre uma oferta e outra deste grupo/canal, configurado no Anti-banimento.'
+  }
+  if (reason === 'outside_operating_hours' || reason === 'quiet_hours') {
+    return 'Fora do horário de envio configurado para este grupo/canal no Anti-banimento.'
+  }
+  if (reason === 'health_paused') {
+    return 'O bot pausou os envios para este grupo/canal por segurança. Deve voltar sozinho em breve.'
   }
   if (reason === DESTINATION_SPACING_REASON) {
     return 'Esperando o intervalo entre destinos que você definiu no Anti-banimento.'
   }
-  return `aguardando janela de envio do destino (${reason ?? 'throttle'})`
+  return 'Aguardando a vez certa de enviar para este grupo/canal (Anti-banimento).'
 }
 
 async function deferSendJob(job, gate) {

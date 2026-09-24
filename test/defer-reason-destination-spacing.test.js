@@ -38,8 +38,37 @@ test('motivo "destination_spacing" devolve o texto leigo esperado, sem jargão',
   }
 })
 
-test('motivo "burst_cap" continua com o texto histórico (não regredir)', () => {
+test('motivo "burst_cap" explica o que está acontecendo, sem citar tela antiga (US2, 2026-09-23)', () => {
+  // A frase antiga citava a página "Preservação por destino" e o campo
+  // "Máximo de envios na janela" — os dois saíram da tela (T037: viraram
+  // fixos) e o nome da tela mudou para Anti-banimento. Citar um endereço que
+  // não existe mais é pior que não citar nenhum.
   const deferReasonMessage = extractDeferReasonMessage()
   const msg = deferReasonMessage('burst_cap')
-  assert.match(msg, /não mandar muitas mensagens de uma vez/)
+  assert.match(msg, /n[ãa]o mandar muitas ofertas de uma vez/)
+  assert.match(msg, /Anti-banimento/)
+  assert.doesNotMatch(msg, /Preserva[çc][ãa]o por destino/i)
+  assert.doesNotMatch(msg, /M[áa]ximo de envios na janela/i)
+})
+
+for (const [reason, esperado] of [
+  ['daily_cap', /limite di[áa]rio/i],
+  ['min_interval', /intervalo m[íi]nimo/i],
+  ['outside_operating_hours', /hor[áa]rio de envio/i],
+  ['quiet_hours', /hor[áa]rio de envio/i],
+  ['health_paused', /pausou/i],
+]) {
+  test(`motivo "${reason}" tem texto leigo próprio (não cai no genérico com jargão)`, () => {
+    const deferReasonMessage = extractDeferReasonMessage()
+    const msg = deferReasonMessage(reason)
+    assert.match(msg, esperado)
+    assert.doesNotMatch(msg.toLowerCase(), /throttle/)
+  })
+}
+
+test('motivo desconhecido não expõe o código cru nem a palavra "throttle"', () => {
+  const deferReasonMessage = extractDeferReasonMessage()
+  const msg = deferReasonMessage('algum_motivo_novo_desconhecido')
+  assert.doesNotMatch(msg.toLowerCase(), /throttle/)
+  assert.doesNotMatch(msg, /algum_motivo_novo_desconhecido/)
 })
