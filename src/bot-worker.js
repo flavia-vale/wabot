@@ -98,8 +98,8 @@ import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { convertPerPlatformSerially } from './core/conversionScheduler.js'
 import { chooseCoupon, renderCouponText, applyCouponToken, sanitizePriceCents } from './core/clientCouponPolicy.js'
-import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
-import { INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
+import { buildIncomingDedupKey, hasRecentDedupEntry, hasSeenIncomingId, pruneDedupStore, rememberDedupEntry, rememberSeenIncomingId } from './messageDedup.js'
+import { INCOMING_ACCEPT_REASON, INCOMING_DROP_REASON, INCOMING_LATE_MAX_AGE_MS, INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
 import { recoverStuckSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from './jobs/stuckSendLogs.js'
 import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
@@ -694,12 +694,19 @@ function normalizeDedup(store) {
   return {
     msgIds: Array.isArray(store?.msgIds) ? store.msgIds : [],
     links: store?.links && typeof store.links === 'object' ? store.links : {},
+    // Ids ACEITOS nas últimas SEEN_INCOMING_ID_WINDOW_MS (RCA 2026-09-24):
+    // é o que permite aceitar mensagem atrasada de origem monitorada sem
+    // reabrir a reoferta do RCA 2026-07. Em disco de propósito — o reinício
+    // em massa da frota (56 contas às 01h e 06h de 24/09) recriaria um
+    // conjunto vazio em memória e a fila offline drenada na volta entraria
+    // toda de novo.
+    seenIds: store?.seenIds && typeof store.seenIds === 'object' ? store.seenIds : {},
   }
 }
 
 function loadDedup() {
   try { return normalizeDedup(JSON.parse(readFileSync(DEDUP_FILE, 'utf8'))) }
-  catch { return { msgIds: [], links: {} } }
+  catch { return { msgIds: [], links: {}, seenIds: {} } }
 }
 
 function scheduleDedupSave(store) {
@@ -3471,10 +3478,22 @@ async function startBotInner() {
   // (linkDedupWindowMs) bloqueava esses reenvios legítimos por tempo
   // demais. Default 5min; override via COUPON_DEDUP_WINDOW_MS.
   const couponDedupWindowMs = Math.max(1_000, Number(process.env.COUPON_DEDUP_WINDOW_MS) || 5 * 60_000)
+  // Janela tardia do portão de entrada (RCA 2026-09-24): mensagem de origem
+  // monitorada com até INCOMING_LATE_MAX_AGE_MS passa se o id nunca foi visto.
+  // `INCOMING_LATE_MAX_AGE_MS=0` no .env desliga (volta aos 5min puros). A
+  // janela dos ids vistos é SEMPRE maior que a tardia (2×, mínimo 2h): um id
+  // aceito há 50min precisa continuar "visto" quando a reentrega chega aos 59.
+  const incomingLateMaxAgeMs = (() => {
+    const raw = process.env.INCOMING_LATE_MAX_AGE_MS
+    if (raw === undefined || raw === '') return INCOMING_LATE_MAX_AGE_MS
+    const n = Number(raw)
+    return Number.isFinite(n) && n >= 0 ? n : INCOMING_LATE_MAX_AGE_MS
+  })()
+  const seenIncomingIdWindowMs = Math.max(2 * 60 * 60_000, 2 * incomingLateMaxAgeMs)
   const dedup = pruneDedupStore(
     loadDedup(),
     Date.now(),
-    { msgIds: dedupeWindowMs, links: linkDedupWindowMs },
+    { msgIds: dedupeWindowMs, links: linkDedupWindowMs, seenIds: seenIncomingIdWindowMs },
   )
   scheduleDedupSave(dedup)
 
@@ -5563,12 +5582,36 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // não reentram no pipeline — ver src/core/incomingFreshness.js. Antes o
       // descarte era um `continue` mudo: nem o motivo nem a idade apareciam no
       // bot.log, o que tornava impossível ver reoferta acontecendo.
-      const freshness = shouldProcessIncomingMessage({
+      const dedupKey = buildIncomingDedupKey(msg)
+      let freshness = shouldProcessIncomingMessage({
         upsertType: type,
         messageTimestampMs: msgTs,
         now: Date.now(),
         maxAgeMs: INCOMING_MAX_AGE_MS,
       })
+      // Portão tardio (RCA 2026-09-24): só paga o getConfig (cacheado) e a
+      // consulta ao conjunto de ids vistos quando a mensagem já seria
+      // descartada por idade E ainda cabe na janela tardia.
+      if (
+        !freshness.process &&
+        freshness.reason === INCOMING_DROP_REASON.STALE &&
+        incomingLateMaxAgeMs > INCOMING_MAX_AGE_MS &&
+        Number.isFinite(freshness.ageMs) && freshness.ageMs < incomingLateMaxAgeMs
+      ) {
+        const lateCfg = await getConfig().catch(() => null)
+        const isMonitoredSource = Boolean(
+          remoteJid && lateCfg?.groups?.monitor?.some(m => normalizeJidForMatch(m.waJid) === remoteJid)
+        )
+        freshness = shouldProcessIncomingMessage({
+          upsertType: type,
+          messageTimestampMs: msgTs,
+          now: Date.now(),
+          maxAgeMs: INCOMING_MAX_AGE_MS,
+          lateMaxAgeMs: incomingLateMaxAgeMs,
+          isMonitoredSource,
+          seenBefore: hasSeenIncomingId(dedup, dedupKey, Date.now(), seenIncomingIdWindowMs),
+        })
+      }
       if (!freshness.process) {
         logger.info({
           jid: msg.key.remoteJid,
@@ -5577,18 +5620,31 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           reason: freshness.reason,
           ageMs: freshness.ageMs,
           maxAgeMs: INCOMING_MAX_AGE_MS,
+          lateMaxAgeMs: incomingLateMaxAgeMs,
         }, 'Mensagem descartada: reentrega/mensagem velha não reentra no pipeline')
         continue
       }
+      if (freshness.reason === INCOMING_ACCEPT_REASON.LATE_MONITORED_SOURCE) {
+        logger.info({
+          jid: msg.key.remoteJid,
+          msgId: msg.key.id,
+          upsertType: type,
+          ageMs: freshness.ageMs,
+          lateMaxAgeMs: incomingLateMaxAgeMs,
+        }, 'Mensagem atrasada aceita: origem monitorada e id nunca visto (entrega tardia pós-queda)')
+      }
 
       const now = Date.now()
-      pruneDedupStore(dedup, now, { msgIds: dedupeWindowMs, links: linkDedupWindowMs })
-      const dedupKey = buildIncomingDedupKey(msg)
+      pruneDedupStore(dedup, now, { msgIds: dedupeWindowMs, links: linkDedupWindowMs, seenIds: seenIncomingIdWindowMs })
       if (dedupKey && hasRecentDedupEntry(dedup.msgIds, dedupKey, now, dedupeWindowMs)) {
         logger.info({ dedupKey, jid: msg.key.remoteJid, upsertType: type, ageMs: msgTs ? now - msgTs : null, windowMs: dedupeWindowMs }, 'Mensagem duplicada ignorada')
         continue
       }
-      if (rememberDedupEntry(dedup, dedupKey, now)) scheduleDedupSave(dedup)
+      const remembered = rememberDedupEntry(dedup, dedupKey, now)
+      // Todo id ACEITO entra no conjunto de vistos — é ele que impede a
+      // reentrega do mesmo id de reentrar pela janela tardia.
+      const rememberedSeen = rememberSeenIncomingId(dedup, dedupKey, now)
+      if (remembered || rememberedSeen) scheduleDedupSave(dedup)
 
       // Forense de reoferta (RCA 2026-07 — mensagem espelhada 5x): sem esta
       // linha era impossível provar, pelo bot.log, se o WhatsApp reofertou a

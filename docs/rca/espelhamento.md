@@ -98,6 +98,45 @@ Ele cruza `MessageLog` (incluindo pendentes), `SendDedupKey`,
 Testes: `test/incoming-freshness.test.js`, `test/mirror-duplicate-replay.test.js`,
 `test/bot-worker-relay-branding.test.js`.
 
+### Adendo 2026-09-24: o portão de 5 min jogava fora a oferta entregue depois da queda
+
+O portão acima continua certo para a REENTREGA — mas passou a descartar
+também mensagem legítima. Medido em produção: as sessões caem com 500 ~1×/hora
+por conta (causa de fundo em `whatsapp-sessao.md`), e o que o grupo publica
+DURANTE a queda é entregue pelo WhatsApp **27–58 min** depois da reconexão —
+acima dos 5 min, direto para `stale`. Em 60 MB de `bot.log`: **196** descartes
+de 10–60 min e **231** de 1h+, em **47 robôs**; numa conta, 35 de 87 mensagens
+dos grupos monitorados. Era a causa 2 do chamado "o espelhamento parou".
+
+Decisão da dona do produto: **até 60 min passa**
+(`INCOMING_LATE_MAX_AGE_MS`), se (a) a mensagem veio de uma **origem
+monitorada** e (b) o **id nunca foi visto** por este robô. Regra pura em
+`shouldProcessIncomingMessage` (parâmetros novos `lateMaxAgeMs`,
+`isMonitoredSource`, `seenBefore`; chamada antiga se comporta igual). O
+conjunto de ids vistos é `seenIds` no **arquivo da dedup, em disco**
+(`messageDedup.js`: `hasSeenIncomingId`/`rememberSeenIncomingId`), com janela
+**sempre maior** que a tardia (`max(2h, 2×)`): em memória ele zeraria no
+reinício em massa da frota (56 contas às 01h e 06h de 24/09) e a fila offline
+drenada na volta entraria toda de novo — a reoferta deste RCA. `append` sem
+timestamp continua descartada; acima de 60 min continua descartada; reentrega
+do mesmo id dentro dos 60 min vira `stale_replay`. A dedup de link no envio
+segue como segunda rede.
+
+**Custo:** ~1.000 ids × ~80 bytes ≈ **80 KB por robô** no pior caso (conta com
+~500 mensagens/h, 2h de janela), em disco e em memória; teto de 50.000
+entradas. O `getConfig` (cacheado) e a consulta ao conjunto só rodam quando a
+mensagem já seria descartada por idade E cabe na janela tardia — o caminho
+comum (mensagem ao vivo) não paga nada. Rollback sem redeploy:
+`INCOMING_LATE_MAX_AGE_MS=0` no `.env` (pegadinha #1: `pm2 delete` + `start`,
+e em `remote` reiniciar o `bot-supervisor`).
+
+**Não regredir:** `DEDUP_MSGID_WINDOW_MS` continua em 5 min e
+`linkDedupWindowMs` continua independente — o teste falha se a janela tardia
+for "compensada" por aí. Cada aceitação tardia deixa a linha `Mensagem
+atrasada aceita: origem monitorada e id nunca visto` no `bot.log`.
+
+Teste: `test/portao-de-entrada-tardio.test.js`.
+
 ## Espelhamento para grupo NÃO escolhido + foto borrada (RCA 2026-08-26 — não regredir)
 
 Cliente `julianepumuceno16@gmail.com` reportou três coisas no mesmo dia: oferta
