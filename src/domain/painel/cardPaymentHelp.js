@@ -28,5 +28,5 @@ export function buildCardPaymentSteps({ accountEmail } = {}) {
 }
 
 export const CARD_HELP_PIX_TITLE = 'Quer resolver agora?'
-export const CARD_HELP_PIX_TEXT = 'Pague 30 dias com PIX: é liberado na hora e não depende de cartão. Depois você liga a cobrança automática com calma.'
+export const CARD_HELP_PIX_TEXT = 'Toque em "Pagar uma vez" no seu plano e escolha PIX: é liberado na hora e não depende de cartão. Depois você liga a cobrança automática com calma.'
 export const CARD_HELP_PIX_BUTTON = 'Pagar com PIX agora'
