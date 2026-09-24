@@ -140,6 +140,7 @@ export async function configRoutes(app, opts = {}) {
       where: { userId },
       create: {
         userId,
+        channelStaggerJitterMs: 0,
         delayMin: delayMin ?? DEFAULTS.delayMin,
         delayMax: delayMax ?? DEFAULTS.delayMax,
         platforms: platforms ?? DEFAULTS.platforms,

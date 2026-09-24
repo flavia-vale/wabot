@@ -548,6 +548,76 @@ vezes (`WA_STUCK_MSG_THRESHOLD`, default 2) dentro de 2h
 `logger.error` + `AnalyticsEvent ops_wa_stuck_message_retry`. Assim a próxima
 conexão deixa de pedir retry da mensagem culpada em vez de apenas avisar.
 
+## Quedas 500 crônicas: mensagem de CANAL confirmada com `<receipt>` (RCA 2026-09-24 — não regredir)
+
+~600 quedas 500/dia há ≥10 dias (85% com `stuckMsg:true`, ~1 por conta por
+hora, 60 ids diferentes). A quarentena durável do RCA acima disparava (o
+mesmo id voltava 2×) e **não resolvia**: ela age no retry-receipt, e aqui a
+mensagem decifra bem — não há retry nenhum.
+
+**Medido no `bot.log` de produção (400 MB), cruzando o `<ack>` de cada
+`stream:error` com a recepção do MESMO id no MESMO pid:**
+
+| | |
+|---|---|
+| `stream:error` com `<ack>` | 344 |
+| tipo de chat do id | **canal (`@newsletter`): 223 (65%)** · `@lid`: 72 · sem linha: 49 |
+| forma do ack recusado | `class=message type=media/text`, sem `error` — o ack que o servidor ESPERAVA |
+| histórico do id antes da queda | cadeias "descartada como reentrega > descartada > quarentena > descartada…" |
+
+Ou seja: a mesma mensagem de canal era reentregue a cada reconexão porque
+nunca era confirmada do jeito que o servidor aceita.
+
+**Causa raiz (na fonte do Baileys 6.7.23, `lib/Socket/messages-recv.js`,
+`handleMessage`):** depois de decifrar, TODA mensagem — canal incluído —
+recebia `sendReceipt(remoteJid, participant, [id], type)` →
+`<receipt to=…@newsletter type=inactive>`. O servidor recusa esse receipt com
+`<stream:error><ack class="message" …/></stream:error>` (o ack que ele
+esperava), o Baileys não conhece esse motivo e cai no default
+`badSession` (500), a conexão fecha, a fila offline reentrega a mensagem na
+volta e o ciclo repete. O 7.x corrigiu no commit `f46e8b1` ("handle
+newsletter and unavailable message acks", nov/2025): canal recebe
+`sendMessageAck(node)` e **nunca** `sendReceipt`. A linha 6.7 nunca recebeu o
+conserto — `6.7.24` (a `legacy` do npm) é byte a byte igual à 6.7.23 fora o
+JSON de versão.
+
+**Hipóteses derrubadas com dado (não repetir):** `WA_IGNORE_UNMONITORED_GROUPS`
+(ligado em 14/09) — zero ids de grupo nos acks recusados; "ack sem `from`" —
+o servidor recusa o receipt, não o ack; mensagem "envenenada" — são 60 ids
+diferentes; migrar de biblioteca "por via das dúvidas".
+
+**Conserto: patch de 10 linhas no pacote instalado**
+(`patches/@whiskeysockets+baileys+6.7.23.patch`, aplicado por `patch-package`
+no `postinstall`, antes do `prisma generate`): espelha o ramo do 7.x —
+`else if (isJidNewsletter(remoteJid)) await sendMessageAck(node)` antes do
+ramo genérico de `sendReceipt`. Sem migrar para 7.x: o 7.x converte as
+sessões Signal para LID sem volta e exige `getMessage` — mudança grande que
+não é necessária para esta causa.
+
+**Não regredir:**
+- `test/baileys-newsletter-ack-patch.test.js` falha se o patch não estiver
+  aplicado no `node_modules` em uso, se o nome do patch não bater com a versão
+  instalada (subir o Baileys exige refazer o patch, ou confirmar que a versão
+  nova já confirma canal com `<ack>`), se o `postinstall` deixar de rodar
+  `patch-package` primeiro, ou se `patches/` sair de `WORKER_CODE_PATHS_RE`.
+- `patches/` está em `WORKER_CODE_PATHS_RE` dos dois scripts de deploy: mudar
+  um patch do Baileys reinicia o `bot-supervisor` (senão o conserto fica
+  dormente nos robôs — mesma família do RCA "código novo não carregado").
+- `class=status` (10 acks de `status@broadcast`) e `@lid` (72, DMs com
+  "failed to decrypt", o retry-receipt do RCA acima) **não** são cobertos por
+  este patch — são os baldes seguintes, muito menores; medir de novo depois.
+
+**Medição de aceite (staging 24h, depois produção):** a razão
+`500 / conexões` por dia tem que cair para perto de zero, e as cadeias
+"descartada > descartada > quarentena" de ids de canal têm que sumir do
+`bot.log`. Rodar de novo o script de cruzamento (`/tmp/ack.js` do
+relatório de 24/09) e conferir que `canal` deixa de ser o balde dominante.
+
+⚠️ Em modo `remote` o deploy da API não recarrega os bot-workers: o patch só
+vale nos robôs depois do restart do `bot-supervisor` (o deploy faz isso
+sozinho porque `package-lock.json` e `patches/` estão em
+`WORKER_CODE_PATHS_RE`) — reconecta TODAS as sessões, anunciar antes.
+
 ## `failure 405` derrubando TODAS as sessões: versão do WA Web cortada (RCA 2026-07-28)
 
 **Sintoma:** cliente reporta "não consigo reconectar meu WhatsApp"; o painel

@@ -6,6 +6,14 @@
 // provável).
 export const MAX_DEDUP_MSGID_ENTRIES = 20_000
 
+// Teto do conjunto de ids VISTOS (RCA 2026-09-24, portão de entrada tardio).
+// Diferente de msgIds (5min), ele guarda 2h de ids aceitos; numa conta pesada
+// (~500 mensagens/h) são ~1.000 entradas × ~80 bytes ≈ 80 KB em disco e em
+// memória — por robô. O teto só existe para um pico anômalo não crescer o
+// arquivo sem limite; mantém as mais NOVAS (descartar a antiga só reabre a
+// porta para um replay muito velho, que a janela tardia já descarta).
+export const MAX_SEEN_INCOMING_IDS = 50_000
+
 export function pruneDedupStore(store, now = Date.now(), windowMs = 300_000) {
   // Aceita número (mesma janela pra msgIds e links) OU objeto
   // { msgIds, links } pra janelas independentes — necessário porque o dedup
@@ -34,7 +42,40 @@ export function pruneDedupStore(store, now = Date.now(), windowMs = 300_000) {
     if (!Number.isFinite(ts) || now - ts >= linkWindow) delete store.links[key]
   }
 
+  // seenIds: janela própria (mais longa). Número simples de janela (legado)
+  // não poda seenIds — quem chama com número não conhece o campo.
+  const seenWindow = Math.max(0, Number(
+    typeof windowMs === 'object' && windowMs !== null ? windowMs.seenIds : 0,
+  ) || 0)
+  const seenIds = store?.seenIds && typeof store.seenIds === 'object' ? store.seenIds : {}
+  store.seenIds = seenIds
+  if (seenWindow > 0) {
+    for (const key of Object.keys(seenIds)) {
+      const ts = Number(seenIds[key] ?? 0)
+      if (!Number.isFinite(ts) || now - ts >= seenWindow) delete seenIds[key]
+    }
+    const keys = Object.keys(seenIds)
+    if (keys.length > MAX_SEEN_INCOMING_IDS) {
+      keys.sort((a, b) => Number(seenIds[a]) - Number(seenIds[b]))
+      for (const key of keys.slice(0, keys.length - MAX_SEEN_INCOMING_IDS)) delete seenIds[key]
+    }
+  }
+
   return store
+}
+
+/** O id já foi visto (aceito) por este robô dentro da janela? */
+export function hasSeenIncomingId(store, key, now = Date.now(), windowMs = 0) {
+  if (!key || !store?.seenIds || typeof store.seenIds !== 'object') return false
+  const ts = Number(store.seenIds[key] ?? 0)
+  return Number.isFinite(ts) && ts > 0 && now - ts < windowMs
+}
+
+export function rememberSeenIncomingId(store, key, ts = Date.now()) {
+  if (!key || !store) return false
+  if (!store.seenIds || typeof store.seenIds !== 'object') store.seenIds = {}
+  store.seenIds[key] = ts
+  return true
 }
 
 export function buildIncomingDedupKey(msg) {

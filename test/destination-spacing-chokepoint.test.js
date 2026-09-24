@@ -65,6 +65,11 @@ test('channelStaggerJitterMs só é lido/comparado em bot-worker.js e no módulo
     'src/bot-worker.js',
     'src/core/destinationSpacing.js',
     'src/api/routes/preservation.js',
+    // Incidente 2026-09-24 (intervalo opcional): criação de BotConfig grava 0
+    // explícito porque o DEFAULT físico da coluna em bancos antigos é 20000.
+    // Só escrevem na criação — nunca leem nem comparam.
+    'src/api/routes/auth.js',
+    'src/api/routes/config.js',
   ])
   for (const file of files) {
     assert.ok(allowed.has(file), `${file} lê/compara channelStaggerJitterMs fora dos consumidores permitidos`)
