@@ -11,6 +11,8 @@ Sem banco, sem rede, sem env lida no topo do módulo (env entra por parâmetro).
 | `src/core/preservationConfig.js` → `resolveDestinationPreservation` | aplica `applyDestinationFloor` no retorno (único caminho do robô para destino) |
 | `src/api/routes/preservation.js` (GET `/presets`, `/destinations`) | `describeDestinationFloor` para a etiqueta (R6) e valor efetivo |
 | `scripts/diag-antiban-valores.mjs` | medir impacto (import, nunca cópia) |
+| `scripts/diag-quem-parou-antiban.mjs` | medir quem foi segurado só pelo piso (import, nunca cópia) |
+| `scripts/diag-antiban-parados-agora.mjs` | fotografia de quem está parado pelo Anti-banimento agora (import, nunca cópia) |
 
 Nenhum outro arquivo pode comparar `burstCap`/`burstWindowSec`/`throttleEnabled`
 contra o fixo, nem trocar valores pelo padrão do sistema por causa de limites

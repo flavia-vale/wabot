@@ -17,6 +17,10 @@ const ALLOWED_IMPORTERS = [
   'src/core/preservationConfig.js',
   'src/api/routes/preservation.js',
   'scripts/diag-antiban-valores.mjs',
+  // Diagnósticos read-only do incidente 2026-09-24 (PR #1873): medem o
+  // impacto do piso importando a regra — nunca reimplementando a comparação.
+  'scripts/diag-quem-parou-antiban.mjs',
+  'scripts/diag-antiban-parados-agora.mjs',
 ]
 
 function grepImporters() {
