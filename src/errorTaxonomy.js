@@ -88,6 +88,9 @@ export function categorizeErrorMsg(errorMsg) {
   // decisão de configuração, não falha de envio — cai em CONFIG_BLOCK como os
   // demais `skip:`. Branch explícito só para documentar o motivo canônico.
   if (errorMsg.startsWith('skip:queue_expired')) return ERROR_CATEGORIES.CONFIG_BLOCK
+  // Fora do horário de envio do destino e sem chance de sair antes do limite
+  // de espera (RCA 2026-09-24) — descartada na hora, decisão de configuração.
+  if (errorMsg.startsWith('skip:outside_send_window')) return ERROR_CATEGORIES.CONFIG_BLOCK
   // Destino (ou a própria origem) deixou de estar vinculado enquanto o envio
   // esperava na fila — decisão de configuração da cliente, não falha de envio.
   if (errorMsg.startsWith('skip:dest_unlinked')) return ERROR_CATEGORIES.CONFIG_BLOCK

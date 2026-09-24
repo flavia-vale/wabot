@@ -58,6 +58,12 @@ export function friendlyMobileLogError(errorMsg) {
     if (errorMsg.endsWith(':unsupported_store')) return 'Ignorada: ainda não fazemos conversão de afiliado para essa loja.'
     return 'Mensagem fora das regras de encaminhamento que você configurou para este grupo.'
   }
+  if (errorMsg.startsWith('skip:queue_expired')) return 'Essa oferta esperou tempo demais na fila desse destino e foi descartada. O limite de espera fica no Anti-banimento.'
+  if (errorMsg.startsWith('skip:outside_send_window')) {
+    const m = /hours=(\d{1,2})-(\d{1,2})/.exec(errorMsg)
+    const janela = m ? ` (${m[1]}h–${m[2]}h)` : ''
+    return `Chegou fora do seu horário de envio${janela} e não sairia antes do limite de espera — descartada na hora. Ajuste o horário ou o limite no Anti-banimento.`
+  }
   if (errorMsg.startsWith('skip:decrypt_failed')) return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
   if (errorMsg.startsWith('skip:incoming_error')) {
     const detail = errorMsg.slice('skip:incoming_error'.length).replace(/^:/, '').trim()

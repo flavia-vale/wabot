@@ -80,6 +80,7 @@ import {
   reserveSpacingSlot,
 } from './core/destinationSpacing.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
+import { buildOutsideSendWindowReason, shouldDropOutsideSendWindow } from './core/sendWindow.js'
 import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
 import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
@@ -1597,6 +1598,7 @@ const sendMetrics = {
   rejectedTotal: 0,
   deferredTotal: 0,
   queueExpiredTotal: 0,
+  outsideSendWindowTotal: 0,
   broadcastQueuedTotal: 0,
   scheduledQueuedTotal: 0,
   convertedQueuedTotal: 0,
@@ -2885,6 +2887,31 @@ async function processSendJob(job) {
       }).catch(() => {})
       logger.warn({ destJid: job.destJid, logId: job.logId, ageMs: queueExpiry.ageMs, maxAgeMs: queueExpiry.maxAgeMs, type: job.type }, 'Envio descartado: esperou na fila além do teto do destino')
       await finishSendJob(job, { ok: false, error: 'queue_expired' })
+      return
+    }
+
+    // C2) Fora do horário de envio E sem chance de sair antes do limite de
+    // espera → descarta AGORA (RCA 2026-09-24, decisão A da dona do produto).
+    // Antes a oferta da noite ficava adiada até as 8h só para ser descartada
+    // pelo bloco C acima, horas depois, sem a cliente saber o porquê. Mesmo
+    // lugar da ordem canônica (antes do smart delay), motivo próprio no
+    // painel. Fila com horário próprio (ignoreGlobalQuietHours) e limite de
+    // espera desligado NÃO passam por aqui (ver src/core/sendWindow.js).
+    const windowDrop = shouldDropOutsideSendWindow({
+      now: Date.now(),
+      enqueuedAt: job.enqueuedAt,
+      preservation: destPreservation,
+      ignoreOperatingHours: job.ignoreGlobalQuietHours === true,
+    })
+    if (windowDrop.drop) {
+      const reason = buildOutsideSendWindowReason(windowDrop)
+      sendMetrics.outsideSendWindowTotal++
+      await db.messageLog.update({
+        where: { id: job.logId },
+        data: { status: 'skipped', errorMsg: reason, sentAt: new Date() },
+      }).catch(() => {})
+      logger.warn({ destJid: job.destJid, logId: job.logId, ageMs: windowDrop.ageMs, waitMs: windowDrop.waitMs, maxAgeMs: windowDrop.maxAgeMs, window: windowDrop.window, type: job.type }, 'Envio descartado: fora do horário de envio do destino e não sairia antes do limite de espera')
+      await finishSendJob(job, { ok: false, error: 'outside_send_window' })
       return
     }
 

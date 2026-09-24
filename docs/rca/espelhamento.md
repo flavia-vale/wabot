@@ -940,3 +940,28 @@ Não regredir: não pintar de vermelho o que é escolha da cliente; não afirmar
 "cadastro certo" sem olhar o cadastro. Teste: `test/loja-nao-usada-e-reenviada.test.js`.
 Perdas reais restantes (reinício em massa + fila > 5 h) são de sessão/fila —
 ver `envio-e-filas.md` e `memoria-e-capacidade.md`.
+
+### Adendo (2026-09-24, mesma investigação): o relato do cliente estava CERTO
+
+O texto acima foi escrito antes de olhar hora a hora. Somando 24h parecia que
+"o robô funcionava"; hora a hora, **das 21h BRT de 23/09 até 13:40 BRT de
+24/09 nenhuma oferta espelhada saiu** — e o "Criar oferta" seguia, porque ele
+só envia (não depende de receber mensagem nem da fila do espelhamento). Três
+causas somadas, nenhuma exclusiva da conta:
+
+| # | Causa | Onde está tratada |
+|---|---|---|
+| 1 | Horário de envio 8h–22h no modelo padrão + limite de espera de 5h: a oferta da noite esperava até as 8h e era descartada por idade (547 descartes em 23/09, 855 em 24/09; 45 de 48 modelos padrão da frota) | `envio-e-filas.md`, "Horário de envio × limite de espera" (descarte na hora com motivo próprio + aviso na tela) |
+| 2 | Portão de entrada de 5 min (`incomingFreshness.js`) descartando mensagem que o WhatsApp entregou 27–58 min depois de uma queda (196 descartes de 10–60 min na frota, 47 robôs) | adendo da seção "Mensagem espelhada N vezes" acima, quando fechado |
+| 3 | Quedas 500 crônicas (~600/dia há ≥10 dias, 85% com `stuckMsg:true`, 60 ids diferentes — a quarentena, que exige o mesmo id 2×, nunca dispara) | `whatsapp-sessao.md` — causa de fundo em investigação, não trocar biblioteca por palpite |
+
+O 408 em massa de 24/09 (1.019 quedas, 10h–12h UTC) foi bloqueio da VPS e
+zerou sozinho; memória (swap 0) e a mudança jemalloc/semi-space de 22/09 foram
+descartadas com dado.
+
+**Erros de método desta investigação (não repetir):** afirmar "está
+espelhando" somando 24h sem olhar hora a hora; consultar a preservação só pelo
+modelo atribuído ao grupo em vez da ordem real (override do grupo → modelo
+atribuído → **modelo padrão da conta** → padrão do sistema); filtro de data em
+SQL comparando `sentAt` inteiro com texto (devolve vazio e parece ausência de
+dado — usar `CASE typeof(x) WHEN 'integer' THEN datetime(x/1000,'unixepoch') ELSE x END`).
