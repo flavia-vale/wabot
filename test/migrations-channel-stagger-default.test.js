@@ -70,9 +70,6 @@ test('migration troca só o default antigo (90s -> 20s), preserva valor escolhid
   }
 })
 
-test('schema.prisma declara o novo default de 20s para contas novas', () => {
-  const schema = readFileSync(new URL('../prisma/schema.prisma', import.meta.url), 'utf8')
-  const line = schema.split('\n').find(l => l.includes('channelStaggerJitterMs'))
-  assert.ok(line, 'campo channelStaggerJitterMs sumiu do schema')
-  assert.match(line, /@default\(20000\)/, `esperava @default(20000), veio: ${line.trim()}`)
-})
+// O default de 20s foi substituído em 2026-09-24 (intervalo passou a ser
+// opcional): a guarda do default atual (0) está em
+// test/migrations-channel-stagger-opt-in.test.js.

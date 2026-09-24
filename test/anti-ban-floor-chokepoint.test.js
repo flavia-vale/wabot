@@ -17,8 +17,8 @@ const ALLOWED_IMPORTERS = [
   'src/core/preservationConfig.js',
   'src/api/routes/preservation.js',
   'scripts/diag-antiban-valores.mjs',
-  // Diagnósticos read-only do incidente 2026-09-24 (PR #1873): medem o
-  // impacto do piso importando a regra — nunca reimplementando a comparação.
+  // Diagnóstico read-only do incidente 2026-09-24: lê só a constante
+  // ANTI_BAN_FLOOR para comparar com a config gravada — não reimplementa o piso.
   'scripts/diag-quem-parou-antiban.mjs',
   'scripts/diag-antiban-parados-agora.mjs',
 ]
