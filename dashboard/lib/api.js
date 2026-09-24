@@ -514,6 +514,7 @@ export const api = {
     return apiFetch(`/api/logs?${params.toString()}`)
   },
   logsSummary: (period = '7d') => apiFetch(`/api/logs/summary?period=${encodeURIComponent(period)}`),
+  sendPause: () => apiFetch('/api/logs/send-pause'),
   logsSeries: (days = 7) => apiFetch(`/api/logs/series?days=${encodeURIComponent(days)}`),
   // P3 (specs/013-inbound-leads-strategy): sem parâmetro, janela fixa de 7
   // dias no servidor. Chamada só no mount e no `focus` da janela — ver
