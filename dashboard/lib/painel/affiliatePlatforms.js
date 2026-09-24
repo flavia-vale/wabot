@@ -101,7 +101,7 @@ export const AFFILIATE_PLATFORMS = [
     actionLinks: [
       {
         label: 'Abrir a página da loja',
-        href: 'https://www.shein.com/affiliate',
+        href: 'https://m.shein.com/br/affiliate/recruit?source=campuslp',
       },
     ],
     platformWarning: 'Com o ID e o código de acesso o link sai curtinho; só com o ID a oferta sai igual, o link é que fica mais comprido.',
@@ -115,11 +115,10 @@ export const AFFILIATE_PLATFORMS = [
       },
       {
         key: 'cookie',
-        label: 'Código de acesso (opcional)',
+        label: 'Cookie (opcional)',
         required: false,
         sensitive: true,
         cookieField: true,
-        advanced: true,
         hint: 'Deixa o link da oferta curtinho. Sem ele a oferta sai igual, só com link mais comprido.',
         help: 'No computador, entre em https://m.shein.com/br/affiliate/ já logada, clique em CONVERTER LINK. Em seguida clique na extensão Cookie-Editor e use o botão Export (canto inferior direito) e em seguida clique em JSON. O código é copiado sozinho; é só colar aqui.',
       },
