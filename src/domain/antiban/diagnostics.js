@@ -1,8 +1,9 @@
 // Regras PURAS (sem banco/rede) usadas pelo diagnóstico
 // `scripts/diag-antiban-valores.mjs` — separadas do script para que a lógica
 // de classificação seja testável sem precisar de um banco de dados, e para
-// que o script nunca reimplemente comparação campo a campo (isso já existe em
-// src/core/antiBanFloor.js, consumido aqui, nunca duplicado).
+// que o script nunca reimplemente comparação campo a campo (isso já existe no
+// módulo do piso anti-banimento, importado só pelo script, nunca duplicado
+// aqui).
 //
 // specs/018-unificar-protecao-anti-ban, Fase 7 (T057-T060).
 
