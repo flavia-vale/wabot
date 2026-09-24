@@ -1,4 +1,4 @@
-export const CREDENTIAL_RULES_VERSION = 'amazon-cookie-complete-v1'
+export const CREDENTIAL_RULES_VERSION = 'amazon-tag-only-v2'
 
 function normalizeStartedAt(value) {
   if (value instanceof Date) return value.toISOString()
