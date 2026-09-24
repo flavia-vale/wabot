@@ -1,22 +1,7 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-/* Monitoramento da Preservação avançada — versão Menta do painel. Reusa os
- * cards canônicos de monitoramento; o título vai para a
- * topbar via usePainelHeader. */
-
-import { HealthOverview } from '@/components/preservacao/HealthOverview'
-import { RiskScoreSummary } from '@/components/preservacao/RiskScoreSummary'
-import { usePainelHeader } from '../../PainelShell'
-
-export default function MonitoramentoPage() {
-  usePainelHeader({ title: 'Monitoramento', subtitle: 'Como o bot está protegendo seus canais, quase em tempo real' })
-
-  return (
-    <div className="max-w-5xl">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <HealthOverview />
-        <RiskScoreSummary />
-      </div>
-    </div>
-  )
+// Migrado para a parte "Situação" da tela única /painel/anti-banimento
+// (specs/018-unificar-protecao-anti-ban). Ver dashboard/app/painel/anti-banimento/.
+export default function MonitoramentoRedirect() {
+  redirect('/painel/anti-banimento?parte=situacao')
 }

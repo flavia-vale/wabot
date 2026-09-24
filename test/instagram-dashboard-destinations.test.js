@@ -38,6 +38,14 @@ test('seletores Instagram ficam restritos ao plano acima do Pro na UI', async ()
 })
 
 test('plano Premium herda as telas Pro em vez de cair no paywall', async () => {
+  // hasProLikeAccess delega para getPlanEntitlements (src/billing/plans.js —
+  // fonte ÚNICA do gate de plano, FR-015/FR-015a,
+  // specs/018-unificar-protecao-anti-ban) em vez de reimplementar a regra
+  // aqui: duas fontes discordando foi exatamente o bug que deixava o Premium
+  // bloqueado na tela antiga de Preservação.
   const entitlement = await read('dashboard/lib/planEntitlements.js')
-  assert.match(entitlement, /plan === 'pro' \|\| plan === 'premium'/)
+  assert.match(entitlement, /from ['"]\.\.\/\.\.\/src\/billing\/plans\.js['"]/)
+  assert.match(entitlement, /getPlanEntitlements/)
+  const { hasProLikeAccess } = await import('../dashboard/lib/planEntitlements.js')
+  assert.equal(hasProLikeAccess({ plan: 'premium', accessExpiresAt: null }), true)
 })

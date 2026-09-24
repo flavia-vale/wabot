@@ -36,7 +36,7 @@ export function RiskScoreSummary() {
         <div>
           <h3 className="font-semibold text-gray-800 text-sm">📊 Risco de denúncia</h3>
           <p className="text-xs text-gray-500">
-            Score 0-100 estima a chance de cada canal ser denunciado, baseado em quantidade de posts vs seguidores e diversidade de fontes. Quanto menor, melhor.
+            Um número de 0 a 100 que estima a chance de cada canal ser denunciado, baseado em quantidade de posts vs seguidores e diversidade de fontes. Quanto menor, melhor.
           </p>
         </div>
         <button onClick={recompute} disabled={recomputing} className="text-xs text-green-700 hover:underline disabled:opacity-50">
