@@ -246,20 +246,40 @@ horário **e** `idade na fila + tempo até abrir > queueMaxAgeMin` → linha
 tradução leiga em `logsCopy.js`/`mobileLogs.js`, citando o horário e o
 Anti-banimento). A fila não guarda por horas uma oferta que vai morrer às 8h.
 
-A tela de Espelhamento passa a dizer **"Envio pausado agora: fora do horário
-(8h–22h)"** (`dashboard/lib/painel/sendPauseNotice.js`, `pnl-note-box is-warn`)
-quando TODOS os destinos estão fechados. Para isso `GET /groups` devolve
-`sendWindow` efetivo por destino (`attachSendWindow` em `routes/groups.js`),
-resolvido pelo MESMO chokepoint do robô (`resolveDestinationPreservation`) —
-uma consulta a mais por listagem (os modelos da conta), nunca uma por grupo.
+**O painel inteiro passa a dizer quando o robô está esperando o
+Anti-banimento** (pedido da dona do produto no mesmo dia: "não fica claro para
+o cliente quando o robô está parado esperando o tempo configurado por ele").
+`SendPauseBanner` no `PainelShell` (vale em QUALQUER página, `pnl-note-box
+is-warn`) monta o aviso com a regra pura de
+`src/domain/painel/sendPauseStatus.js` (`buildSendPauseNotice`), sempre com o
+botão "Mudar esse tempo no Anti-banimento" → `/painel/anti-banimento?parte=ritmo`:
+
+| Situação | Como decide | O que a cliente lê |
+|---|---|---|
+| todos os destinos fora do horário | `describeSendPause` sobre `GET /groups` (que agora devolve `sendWindow` efetivo por destino, via `attachSendWindow` → `resolveDestinationPreservation`) | "Envio pausado agora: fora do horário (8h–22h)… voltam a sair às 8h" |
+| limite diário batido | linhas `queued` cujo motivo leigo (`deferReasonMessage`) fala em limite diário | "O robô está segurando ofertas: limite diário atingido… voltam amanhã" |
+| pausa por segurança | idem, "pausou os envios" | "O robô pausou os envios por segurança… volta sozinho" |
+| intervalo / rajada / intervalo entre destinos | idem | "O robô está esperando o tempo que você definiu no Anti-banimento… N ofertas na fila (a mais antiga há X min)" |
+
+Prioridade: horário > limite diário > segurança > ritmo (do mais longo para o
+mais curto). Robô desconectado → sem aviso (o assunto é a conexão). Linha
+`queued` SEM motivo é envio normal em vôo e não conta. Rota
+`GET /api/logs/send-pause` (só classifica `queued`, cache de 30s); a shell a
+consulta no MESMO tick de 20s em que já carrega grupos e status — uma consulta
+leve a mais por aba aberta, nenhum processo novo.
+
+**Não regredir:** a classificação lê o TEXTO gravado por `deferReasonMessage`
+(bot-worker) — o teste extrai as frases de lá e exige que cada uma caia num
+tipo conhecido; frase nova sem tipo = aviso sumindo em silêncio. E toda frase
+do aviso leva o caminho para mudar o tempo.
 
 **Não regredir:**
 - **Limite de espera desligado (`queueMaxAgeMin` 0) nunca descarta por aqui**
   — a oferta espera até abrir, comportamento histórico.
 - **Fila com horário próprio (`ignoreGlobalQuietHours`) não passa pelo
   horário do destino**, igual ao gate.
-- **Destino sem horário conta como aberto** no aviso da tela: ele envia 24h,
-  parte das ofertas sai, e o aviso mentiria.
+- **Destino sem horário conta como aberto** no aviso: ele envia 24h, parte
+  das ofertas sai, e o aviso mentiria.
 - `sendWindow.js` **não importa `channelThrottle.js`** (que arrasta `db.js`),
   porque a tela também o consome; o teste garante que `sendWindowState`
   concorda com `operatingHoursState` em 48 horários.

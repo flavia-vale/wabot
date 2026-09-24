@@ -10,6 +10,7 @@ import { buildNoCredentialBanner } from '../../../src/credentialBlockAlert/messa
 import { shouldShowNoCredentialBanner } from '../../../src/domain/painel/journeyBanners.js'
 import { listProFeaturesInUse, buildProFeaturesNotice } from '../../../src/domain/payments/proFeaturesInUse.js'
 import { buildTrialEndingNotice } from '../../../src/domain/painel/trialNotice.js'
+import { buildSendPauseNotice } from '@/lib/painel/sendPauseNotice'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../src/tutorialVideo.js'
 import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { ProModal } from '@/components/pro/ProGate'
@@ -154,6 +155,28 @@ function NoCredentialBanner({ show }) {
   )
 }
 
+/* "O robô está parado esperando o tempo que eu configurei?" (pedido da dona do
+ * produto, 2026-09-24). A espera do Anti-banimento — horário de envio, limite
+ * diário, intervalo entre envios, pausa por segurança — era invisível fora da
+ * aba Envios: a cliente via "conectado", nada saindo, e concluía defeito.
+ * Global de propósito (vale em qualquer página) e sempre com o caminho para
+ * mudar o tempo. A regra é pura (src/domain/painel/sendPauseStatus.js) e monta
+ * o aviso com o que a shell já carrega a cada 20s (grupos com horário efetivo)
+ * mais o resumo da fila (`GET /logs/send-pause`). */
+function SendPauseBanner({ notice }) {
+  if (!notice) return null
+
+  return (
+    <div className="pnl-note-box is-warn pnl-expired-plan-banner" role="status" data-testid="robo-esperando-anti-banimento">
+      <div>
+        <strong style={{ fontWeight: 600 }}>{notice.title}</strong>
+        <p style={{ marginTop: 6 }}>{notice.body}</p>
+      </div>
+      <Link href={notice.ctaHref} className="pnl-btn is-primary" style={{ flexShrink: 0 }}>{notice.ctaLabel}</Link>
+    </div>
+  )
+}
+
 /* Canal parado porque o plano Básico não inclui canais (RCA 2026-09-23).
  * No teste grátis tudo do Pro funciona; a cliente paga o Básico e o canal para
  * de receber EM SILÊNCIO — o grupo ao lado segue normal e ela conclui "paguei e
@@ -254,6 +277,10 @@ export default function PainelShell({ children }) {
   const [online, setOnline] = useState(null)
   const [phone, setPhone] = useState(null)
   const [groupCount, setGroupCount] = useState(null)
+  // Lista completa (com `sendWindow` efetivo por destino) + resumo da fila
+  // segurada pelo Anti-banimento — os dois insumos do aviso global de espera.
+  const [groupsList, setGroupsList] = useState([])
+  const [sendPauseQueued, setSendPauseQueued] = useState(null)
   const [channelCount, setChannelCount] = useState(null)
   const [sessionHealth, setSessionHealth] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -327,7 +354,7 @@ export default function PainelShell({ children }) {
   // ficaria preso em "desconectado" mesmo depois da sessão conectar, gerando a
   // inconsistência entre /painel/whatsapp (conectado) e o resto do painel.
   const refreshSession = useCallback(async () => {
-    const [s, g] = await Promise.allSettled([api.sessionStatusFast(), api.groups()])
+    const [s, g, q] = await Promise.allSettled([api.sessionStatusFast(), api.groups(), api.sendPause()])
     if (s.status === 'fulfilled') {
       setOnline(s.value?.status === 'connected')
       setPhone(s.value?.phone ?? null)
@@ -337,7 +364,11 @@ export default function PainelShell({ children }) {
     if (g.status === 'fulfilled' && Array.isArray(g.value)) {
       setGroupCount(g.value.length)
       setChannelCount(g.value.filter((group) => group?.kind === 'channel').length)
+      setGroupsList(g.value)
     }
+    // Falha aqui nunca some com o aviso do horário (que vem dos grupos): só
+    // deixa de contar a fila.
+    if (q.status === 'fulfilled') setSendPauseQueued(q.value?.queued ?? null)
   }, [])
 
   const refreshSessionRef = useRef(refreshSession)
@@ -390,6 +421,14 @@ export default function PainelShell({ children }) {
   // O aviso de fim de teste só aparece com a prova de valor já carregada
   // (`offersPublished !== null`): sem ela o texto cairia no ramo "o robô ainda
   // não publicou nada", que é o oposto do que a cliente ativa deveria ler.
+  // Sem `Date.now()` aqui (regra react-hooks/purity): a regra pura usa o
+  // relógio por conta própria, e os insumos chegam novos a cada tick de 20s,
+  // então o aviso recalcula na mesma cadência do resto da shell.
+  const sendPauseNotice = useMemo(
+    () => buildSendPauseNotice({ groups: groupsList, queued: sendPauseQueued, online }),
+    [groupsList, sendPauseQueued, online],
+  )
+
   const trialNotice = useMemo(
     () => (offersPublished === null
       ? null
@@ -592,6 +631,7 @@ export default function PainelShell({ children }) {
             <ExpiredPlanBanner user={user} />
             <TrialEndingBanner notice={trialNotice} />
             <ProFeaturesStoppedBanner notice={proFeaturesNotice} />
+            <SendPauseBanner notice={sendPauseNotice} />
             {/* A loja só é cobrada DEPOIS de conectar o WhatsApp — a mesma
                 regra do próximo passo na tela de conexão. Antes disso o robô
                 nem foi ligado, e o alarme não corresponde a nada. */}

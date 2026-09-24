@@ -51,7 +51,6 @@ import { instagramDestinationsFromConnections } from '@/components/InstagramDest
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import { AFFILIATE_PLATFORMS } from '@/lib/painel/affiliatePlatforms'
 import { buildMirrorCards, planMirrorCreation, resolveInitialOrigin } from '../../../../src/domain/painel/mirrorWizard.js'
-import { describeSendPause } from '@/lib/painel/sendPauseNotice'
 
 // Espelha WATERMARK_MAX_CHARS de src/core/destinationWatermark.js (a tela não
 // importa aquele módulo: ele carrega `sharp`). test/watermark-limite-caracteres.test.js
@@ -2071,9 +2070,9 @@ export default function EspelhamentoPage() {
     : null
 
   const nothingYet = !loadingGroups && monitor.length === 0 && post.length === 0
-  // RCA 2026-09-24: sem isto a tela dizia "Espelhamento ligado" enquanto todos
-  // os destinos estavam fora do horário de envio e nada ia sair até de manhã.
-  const sendPause = online ? describeSendPause(post, Date.now()) : null
+  // RCA 2026-09-24: "Envio pausado agora: fora do horário" e as demais esperas
+  // do Anti-banimento aparecem no aviso GLOBAL da shell (SendPauseBanner em
+  // PainelShell.js), que vale para esta e para qualquer outra página.
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1120, margin: '0 auto' }}>
@@ -2136,16 +2135,6 @@ export default function EspelhamentoPage() {
           <Link href="/painel/whatsapp" className="pnl-btn">Conexão WhatsApp</Link>
         </div>
       </section>
-
-      {sendPause && (
-        <div className="pnl-note-box is-warn" role="status" data-testid="envio-pausado-horario">
-          <strong style={{ fontWeight: 600 }}>{sendPause.title}</strong>
-          <p style={{ marginTop: 4 }}>
-            {sendPause.detail}{' '}
-            <Link href="/painel/anti-banimento?parte=ritmo" className="pnl-link-btn">Ajustar horário no Anti-banimento →</Link>
-          </p>
-        </div>
-      )}
 
       {nothingYet ? (
         <section className="pnl-card" style={{ textAlign: 'center', padding: '34px 20px' }}>
