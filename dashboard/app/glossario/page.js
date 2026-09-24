@@ -5,18 +5,23 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 
 const slug = '/glossario'
 const title = 'Glossário de automação para afiliados no WhatsApp'
-const description = 'Definições parseáveis sobre link monetizado, grupo de origem, grupo de destino, espelhamento, cadência, UTM, anti-spam e afiliado.'
+const description = 'O que significam link monetizado, código de afiliada, conversão de link, grupo de origem e de destino, espelhamento, cadência e outros termos de quem divulga ofertas.'
 const dates = getEditorialDates(slug)
 
 const terms = [
-  { term: 'Link monetizado', definition: 'URL com tag, código ou parâmetro de afiliado usado para atribuir clique, venda ou comissão a uma pessoa ou operação. Deve ser conferido no destino final antes da divulgação.' },
-  { term: 'Grupo de origem', definition: 'Grupo ou canal usado como fonte de mensagens/ofertas que serão revisadas antes de serem distribuídas para outros destinos.' },
-  { term: 'Grupo de destino', definition: 'Grupo autorizado que recebe uma mensagem revisada conforme nicho, contexto, regras internas, frequência e interesse do público.' },
-  { term: 'Espelhamento', definition: 'Rotina de copiar ou encaminhar uma mensagem de uma origem para destinos definidos, com filtros, revisão e cadência para reduzir erro operacional.' },
-  { term: 'Cadência', definition: 'Intervalo, janela de horário e frequência planejada para publicar mensagens sem saturar grupos ou repetir ofertas em excesso.' },
-  { term: 'UTM', definition: 'Parâmetros adicionados a URLs para identificar origem, mídia, campanha e conteúdo em relatórios de marketing.' },
-  { term: 'Anti-spam operacional', definition: 'Conjunto de limites, filtros e revisões para evitar mensagens irrelevantes, repetitivas, sem consentimento ou fora das regras dos grupos e plataformas.' },
-  { term: 'Afiliado', definition: 'Pessoa ou operação que divulga links de produtos ou ofertas e pode receber comissão conforme regras da plataforma, rastreio correto e comportamento do comprador.' },
+  { term: 'Link monetizado', definition: 'Link de produto ou de cupom que leva o seu código de afiliada, para a loja saber a quem pagar a comissão. Deve ser conferido no destino final antes da divulgação.' },
+  { term: 'Código de afiliada', definition: 'Identificador que cada loja usa para atribuir a venda: a tag da Amazon, o código de parceiro do Magalu, e assim por diante. Cada loja tem o seu formato e o seu jeito de creditar.' },
+  { term: 'Conversão de link', definition: 'Troca de um link de produto ou de cupom pelo mesmo endereço com o seu código de afiliada. No Espelha Grupos é automática em Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress; se não der para converter com segurança, a oferta não é publicada.' },
+  { term: 'Grupo de origem', definition: 'Grupo ou canal que você acompanha como fonte de ofertas. Você escolhe quais são as origens; o que chega delas pode ser filtrado antes de ir para os destinos.' },
+  { term: 'Grupo de destino', definition: 'Grupo ou canal onde você publica, com permissão de quem administra, e que recebe as ofertas conforme nicho, público e ritmo definidos.' },
+  { term: 'Espelhamento', definition: 'Acompanhar grupos ou canais de origem e republicar as ofertas nos seus destinos, com o link trocado pelo seu código de afiliada, filtros e intervalo entre os envios.' },
+  { term: 'Canal do WhatsApp', definition: 'Canal de transmissão do WhatsApp: só quem administra publica, e os seguidores recebem como vitrine, sem conversa entre membros. No Espelha Grupos, publicar em canal é do plano Pro.' },
+  { term: 'Cadência', definition: 'Intervalo, horário e quantidade de envios planejados para publicar sem saturar os grupos nem repetir ofertas em excesso.' },
+  { term: 'Módulo de Preservação Avançada', definition: 'Nome do conjunto de controles de ritmo do Espelha Grupos (plano Pro): intervalo entre envios, limite por dia, horário de descanso e variação do texto. Reduz o risco; não é garantia contra banimento.' },
+  { term: 'Chip dedicado', definition: 'Número usado só na operação de ofertas, separado do número pessoal, para que um bloqueio não atinja as suas conversas pessoais.' },
+  { term: 'UTM', definition: 'Parâmetros adicionados a um link para identificar de onde veio o clique (origem, mídia, campanha) nos relatórios.' },
+  { term: 'Anti-spam operacional', definition: 'Conjunto de limites, filtros e revisões para evitar mensagens irrelevantes, repetitivas, sem consentimento ou fora das regras dos grupos e das plataformas.' },
+  { term: 'Afiliado', definition: 'Pessoa que divulga links de produtos ou ofertas e recebe comissão da loja quando a venda é atribuída ao seu código, conforme as regras do programa de cada loja.' },
 ]
 
 export const metadata = {
@@ -56,14 +61,14 @@ export default function Page() {
       ))}
       <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
         <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Glossário · AI SEO</p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Glossário</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{title}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{description}</p>
           <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
 
           <section className="mt-8 rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
             <h2 className="text-2xl font-black tracking-tight text-gray-950">Resposta direta</h2>
-            <p className="mt-3 leading-8 text-gray-700">Este glossário define os termos mínimos para entender uma operação de afiliados no WhatsApp com revisão humana: link monetizado, grupos de origem e destino, espelhamento, cadência, UTM, anti-spam operacional e afiliado.</p>
+            <p className="mt-3 leading-8 text-gray-700">Este glossário define os termos para entender uma operação de afiliados no WhatsApp: link monetizado, código de afiliada, conversão de link, grupos de origem e de destino, espelhamento, Canal do WhatsApp, cadência, preservação, chip dedicado, UTM e anti-spam.</p>
           </section>
 
           <dl className="mt-8 grid gap-4 md:grid-cols-2">

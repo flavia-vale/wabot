@@ -10,26 +10,26 @@ Use este roteiro antes de escalar campanhas de ofertas, cupons ou links de afili
 
 ## 2. Link
 - [ ] URL final abre corretamente
-- [ ] Parâmetros de afiliado presentes
+- [ ] Código de afiliada presente no link final
 - [ ] Link encurtado ou limpo quando necessário
 - [ ] Destino testado no celular
 
-## 3. Copy
-- [ ] Headline curta com benefício
-- [ ] Preço/condição visível
+## 3. Texto
+- [ ] Primeira linha curta, com o benefício
+- [ ] Preço ou condição visível
 - [ ] Urgência sem promessa falsa
-- [ ] CTA direto para clicar ou salvar
+- [ ] Chamada direta para clicar ou salvar
 
 ## 4. Grupos
 - [ ] Origem e destino identificados
-- [ ] Segmento/cidade/nicho registrados
+- [ ] Nicho e público de cada grupo registrados
 - [ ] Intervalo mínimo entre envios definido
-- [ ] Grupos sensíveis fora de disparos repetidos
+- [ ] Grupos sensíveis fora de envios repetidos
 
-## 5. Métricas
-- [ ] UTM ou tag da campanha preenchida
-- [ ] Responsável pelo monitoramento definido
+## 5. Acompanhamento
+- [ ] UTM ou sub-ID da campanha preenchido
+- [ ] Responsável por acompanhar os envios definido
 - [ ] Falhas de envio revisadas
-- [ ] Aprendizados registrados para o próximo disparo
+- [ ] Aprendizados registrados para o próximo envio
 
-Próximo passo: entrar na lista VIP do Espelha Grupos e configurar o primeiro espelhamento guiado.
+Próximo passo: no Espelha Grupos, a troca do link pelo seu código de afiliada é automática em 6 lojas. Teste 7 dias grátis em espelhagrupos.com.br.

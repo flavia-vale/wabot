@@ -983,7 +983,7 @@ export function PreservationCommercialPage({ pageKey }) {
   const aside = page.aside ?? {
     pill: 'Módulo de Preservação Avançada',
     title: 'Redução de risco sem promessa absoluta.',
-    body: 'O Espelha Grupos usa cadência, variações, limites, monitoramento e plano de recuperação. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
+    body: 'O Espelha Grupos usa cadência, variação de texto, limites por dia e status de saúde de cada canal, com pausa automática do canal que recusa envios (plano Pro). O plano B continua sendo seu. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
   }
   // Links internos para o conteúdo editorial. Antes destas páginas comerciais só
   // apontarem para cadastro/diagnóstico/checklist, a força que elas acumulam ficava

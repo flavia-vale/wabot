@@ -170,3 +170,12 @@ export function buildMissingGroupsNudgeText({ videoUrl } = {}) {
     videoUrl,
   })
 }
+
+/**
+ * Momento 5 — mensagem MANUAL, escrita pela admin no painel (aba "Contato
+ * com cliente"), para uma conta com a sessão conectada AGORA. Não passa pelo
+ * piloto (`isPilotEmail`): é ação humana e deliberada, não experimento.
+ */
+export function buildAdminSupportMessageText({ corpo } = {}) {
+  return buildSelfMessageEnvelope({ titulo: '💬 Mensagem do suporte', corpo: String(corpo ?? '').trim() })
+}

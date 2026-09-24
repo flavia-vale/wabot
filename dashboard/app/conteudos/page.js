@@ -3,12 +3,15 @@ import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
+import { getEditorialDates } from '@/lib/editorial-content'
 
 const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
 const description = 'Central de conteúdos do Espelha Grupos com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
 const slug = '/conteudos'
 
-const lastUpdated = '2026-05-15'
+// Data da fonte única (EDITORIAL_DATES), a mesma do sitemap — antes era fixa em
+// 2026-05-15 e ficou para trás a cada página nova listada aqui.
+const lastUpdated = getEditorialDates(slug).updatedAt
 const editorialOwner = 'Time editorial do Espelha Grupos'
 const siteUrl = getSiteUrl()
 const formattedLastUpdated = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${lastUpdated}T00:00:00Z`))
@@ -63,6 +66,21 @@ const blogPosts = [
     href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp',
     title: 'Como converter link de afiliado automaticamente no WhatsApp',
     description: 'Troque qualquer link de produto ou cupom pelo seu, sem encaminhar link de terceiro.',
+  },
+  {
+    href: '/quanto-ganha-afiliado-shopee',
+    title: 'Quanto ganha um afiliado Shopee',
+    description: 'A tabela de comissão, o prazo de atribuição e como fazer a sua própria conta.',
+  },
+  {
+    href: '/vendas-e-comissao-afiliado-whatsapp',
+    title: 'Como ver as vendas e a comissão das suas ofertas',
+    description: 'A diferença entre relatório de envio e relatório de venda, e onde ver cada um.',
+  },
+  {
+    href: '/copiaram-minha-oferta-no-whatsapp',
+    title: 'Copiaram minha oferta no WhatsApp: o que fazer',
+    description: 'As três defesas que estão ao seu alcance: marca d’água, texto próprio e o seu link.',
   },
   {
     href: '/blog/quanto-custa-bot-para-whatsapp-afiliados',
@@ -154,6 +172,11 @@ const nichePages = [
   // Nasce linkada de propósito: a ação 8 mostrou que página que só existe no
   // sitemap acaba em "rastreada, mas não indexada".
   {
+    href: '/bot-que-busca-ofertas-shopee-whatsapp',
+    title: 'Bot que busca ofertas da Shopee sozinho',
+    description: 'O modo de ofertas automáticas por palavra-chave: o que faz, o limite e o plano.',
+  },
+  {
     href: '/shopee-afiliados-whatsapp',
     title: 'Shopee Afiliados: divulgar no WhatsApp',
     description: 'Para quem já é afiliada Shopee e quer publicar as ofertas sem copiar e colar.',
@@ -210,7 +233,7 @@ const methodologyPages = [
   {
     href: '/como-funciona-espelha-grupos-canais',
     title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
-    description: 'Fluxo operacional de fontes, destinos, cadência, monitoramento e recuperação.',
+    description: 'Fluxo operacional de fontes, destinos, cadência, variação e saúde de cada canal.',
   },
   {
     href: '/protecao-antiban-espelha-grupos',
@@ -267,7 +290,22 @@ const authorityPages = [
   {
     href: '/glossario',
     title: 'Glossário de automação para afiliados no WhatsApp',
-    description: 'Definições parseáveis de link monetizado, origem, destino, espelhamento, cadência, UTM e anti-spam.',
+    description: 'O que significam link monetizado, código de afiliada, conversão de link, espelhamento e cadência.',
+  },
+  {
+    href: '/espelha-grupos-e-confiavel',
+    title: 'O Espelha Grupos é confiável?',
+    description: 'O que fazemos com os seus dados, o que não prometemos e como cancelar.',
+  },
+  {
+    href: '/seguranca-credenciais-afiliado',
+    title: 'Segurança dos seus dados de afiliada',
+    description: 'Onde o código de acesso fica guardado, para que serve e como apagar.',
+  },
+  {
+    href: '/confiabilidade-sessao-whatsapp',
+    title: 'Confiabilidade da sessão do WhatsApp',
+    description: 'Como a sessão continua conectada durante as atualizações do sistema e o que o painel mostra quando ela cai.',
   },
   {
     href: '/estudos-de-caso',
