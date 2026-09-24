@@ -188,6 +188,7 @@ export async function preservationRoutes(app) {
       update: data,
       create: {
         userId: req.user.sub,
+        channelStaggerJitterMs: 0,
         ...data,
       },
     })
@@ -394,7 +395,7 @@ export async function preservationRoutes(app) {
     const updated = await db.botConfig.upsert({
       where: { userId: req.user.sub },
       update: { probeAccountSessionId },
-      create: { userId: req.user.sub, probeAccountSessionId },
+      create: { userId: req.user.sub, probeAccountSessionId, channelStaggerJitterMs: 0 },
     })
 
     return { ok: true, config: pickConfig(updated) }
