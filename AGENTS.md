@@ -162,6 +162,11 @@ arquivo (nova versão), não editar tela a tela.
 - Antes de "consertar" o deploy, conferir se a falha está no workflow
   (Actions) ou no smoke test pós-PM2 (`.env`/porta no VPS) — são causas
   diferentes com correções diferentes.
+- **Mudou texto de página pública que já está no Google?** Liste as URLs numa
+  leva de reindexação **no topo** da tabela de prioridades de
+  `docs/marketing/ACOES_FLAVIA_2026-09-11.md` (linha 🔝, antes das levas
+  comuns, até 10 por dia, só depois do deploy em `main`), e tire essas URLs
+  de qualquer leva comum que ainda não foi pedida.
 - Mudanças em banco/migrations sempre passam por staging antes de prod.
 - Antes de mudar `DATABASE_URL`, conferir contagem de registros no banco
   atual (`sqlite3 <db> "SELECT COUNT(*) FROM User"`).
