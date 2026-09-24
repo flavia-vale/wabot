@@ -69,8 +69,16 @@ import {
   recordSendResult as recordChannelSendResult,
   recordStreamError as recordChannelStreamError,
 } from './core/channelHealth.js'
-import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
+import { peekDestinationDecision, reserveDestinationSlot } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
+import {
+  DESTINATION_SPACING_REASON,
+  isDestinationSpacingEnabled,
+  toDestinationIntervalMs,
+  decideDestinationSpacing,
+  combineGateDecisions,
+  reserveSpacingSlot,
+} from './core/destinationSpacing.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
 import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
 import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
@@ -1552,6 +1560,15 @@ const TIMESTAMP_MAP_MAX_ENTRIES = Math.max(100, envNumber('TIMESTAMP_MAP_MAX_ENT
 const lastSendByDest = new Map()
 const lastIncomingByMonitorJid = new Map()
 
+// Estado do "Intervalo entre destinos" (core/destinationSpacing.js,
+// specs/018-unificar-protecao-anti-ban, FR-022 a FR-026). ESCOPO DE MÓDULO de
+// propósito (mesma lição de msgRetryCounterCache no RCA "Loop de retry-receipt
+// travado", AGENTS.md): precisa sobreviver a reconexões do MESMO worker, senão
+// o "último envio da conta" reseta a cada `open` e o espaçamento nunca chega a
+// valer. Zerado só no restart do processo — sem persistência entre reinícios,
+// conforme contracts/destination-spacing.md.
+let destinationSpacingState = { lastSendAt: null, lastDestJid: null, nextFreeSlotAt: null }
+
 function pruneTimestampMap(map, now = Date.now()) {
   for (const [key, ts] of map) {
     if (now - ts > TIMESTAMP_MAP_TTL_MS) map.delete(key)
@@ -2624,10 +2641,30 @@ async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
  * finalizamos o job se ele NÃO couber na fila.
  */
 function deferReasonMessage(reason) {
+  // specs/018-unificar-protecao-anti-ban (User Story 2): nenhuma dessas frases
+  // pode citar tela antiga ("Preservação por destino") nem termo técnico — o
+  // ritmo dos três campos fixos (rajada/janela/liga-desliga) agora é fixo (ver
+  // core/antiBanFloor no domínio de preservação) e a cliente não edita mais
+  // nenhum deles.
   if (reason === 'burst_cap') {
-    return 'O bot está segurando os envios por alguns minutos para não mandar muitas mensagens de uma vez para este grupo/canal. A espera foi definida na página "Preservação por destino", no campo "Máximo de envios na janela".'
+    return 'O bot está segurando os envios por alguns minutos para não mandar muitas ofertas de uma vez para este grupo/canal (ritmo de segurança do Anti-banimento).'
   }
-  return `aguardando janela de envio do destino (${reason ?? 'throttle'})`
+  if (reason === 'daily_cap') {
+    return 'Este grupo/canal já bateu o limite diário de ofertas configurado no Anti-banimento. Os envios continuam amanhã.'
+  }
+  if (reason === 'min_interval') {
+    return 'Esperando o intervalo mínimo entre uma oferta e outra deste grupo/canal, configurado no Anti-banimento.'
+  }
+  if (reason === 'outside_operating_hours' || reason === 'quiet_hours') {
+    return 'Fora do horário de envio configurado para este grupo/canal no Anti-banimento.'
+  }
+  if (reason === 'health_paused') {
+    return 'O bot pausou os envios para este grupo/canal por segurança. Deve voltar sozinho em breve.'
+  }
+  if (reason === DESTINATION_SPACING_REASON) {
+    return 'Esperando o intervalo entre destinos que você definiu no Anti-banimento.'
+  }
+  return 'Aguardando a vez certa de enviar para este grupo/canal (Anti-banimento).'
 }
 
 async function deferSendJob(job, gate) {
@@ -2859,50 +2896,100 @@ async function processSendJob(job) {
     // B) Freio progressivo medido POR DESTINO (ver getSendBackendQueueSizeForDest):
     // recalculado agora, no dequeue, em vez de congelado no enqueue com o
     // tamanho da fila GLOBAL — que fazia um destino lento penalizar todos.
+    // O antigo sorteio congelado no enqueue foi aposentado: o intervalo entre
+    // destinos é decidido/adiado mais abaixo, por core/destinationSpacing.js,
+    // nunca somado aqui dentro do smart delay.
     const destQueueSize = getSendBackendQueueSizeForDest(job.destJid)
     const pressureDelayMs = buildQueuePressureDelayMs(destQueueSize)
-    const totalDelayMs = Math.max(0, job.delayMs || 0) + pressureDelayMs + restDelayMs
+    const totalDelayMs = pressureDelayMs + restDelayMs
     if (totalDelayMs > 0) {
-      logger.info({ destJid: job.destJid, delayMs: totalDelayMs, baseDelayMs: job.delayMs || 0, pressureDelayMs, destQueueSize, restDelayMs, type: job.type }, 'Smart delay antes do envio')
+      logger.info({ destJid: job.destJid, delayMs: totalDelayMs, pressureDelayMs, destQueueSize, restDelayMs, type: job.type }, 'Smart delay antes do envio')
       await sleep(totalDelayMs)
     }
 
     try {
-      if (destGroupId && destPreservation) {
-        // checkAndReserve já cobre: pausa por health, horário/quiet, daily cap,
-        // intervalo mínimo, burst cap. Reserva o slot quando libera.
-        const cfgFull = await getConfig().catch(() => null)
-        const cfg = cfgFull?.botConfig ?? {}
-        const gateOpts = {
-          // A-2: fila com horário próprio sobrepõe a janela do destino (a fila já
-          // checou seu horário antes de despachar) → ignoreOperatingHours.
-          ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
-          // Plano B / Fase 3: destPreservation (preset/override → preset default →
-          // HARD_DEFAULT) é a ÚNICA fonte de verdade do gate. Anti-ban sempre
-          // ativo por destino; o master global e o legado decide() foram removidos.
-          destPreservation,
-        }
-        let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
-        let throttleCycles = 0
-        while (!gate.allow && !shuttingDown) {
-          const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
-          // Defer LONGO (quiet_hours/burst_cap/daily_cap/health_paused) não pode
-          // segurar o consumidor serial: ele congelaria TODOS os envios do
-          // usuário — inclusive para destinos liberados e outras fontes. Em vez
-          // de `await sleep`, re-enfileira o job com notBefore e retorna,
-          // liberando a fila para os próximos jobs. Defer CURTO (min_interval)
-          // continua sendo esperado inline (barato e preserva ordem).
-          if (waitMs > THROTTLE_INLINE_WAIT_MAX_MS) {
-            await deferSendJob(job, gate)
-            return
+      // "Intervalo entre destinos" (core/destinationSpacing.js): vale para
+      // QUALQUER destino da conta (grupo, canal, status@broadcast, com ou sem
+      // Group cadastrado) — não só canal, e não só quem tem preservação por
+      // destino configurada (FR-022/FR-023). Por isso o gate roda mesmo sem
+      // `destGroupId`; nesse caso só o espaçamento decide.
+      const cfgFull = await getConfig().catch(() => null)
+      const cfg = cfgFull?.botConfig ?? {}
+      const spacingEnabled = isDestinationSpacingEnabled()
+      const spacingIntervalMs = toDestinationIntervalMs(cfg)
+      const gateOpts = destPreservation ? {
+        // A-2: fila com horário próprio sobrepõe a janela do destino (a fila já
+        // checou seu horário antes de despachar) → ignoreOperatingHours.
+        ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
+        // Plano B / Fase 3: destPreservation (preset/override → preset default →
+        // HARD_DEFAULT) é a ÚNICA fonte de verdade do gate. Anti-ban sempre
+        // ativo por destino; o master global e o legado decide() foram removidos.
+        destPreservation,
+      } : null
+
+      let throttleCycles = 0
+      while (!shuttingDown) {
+        const spacing = decideDestinationSpacing({
+          now: Date.now(),
+          destJid: job.destJid,
+          intervalMs: spacingIntervalMs,
+          state: destinationSpacingState,
+          enabled: spacingEnabled,
+        })
+        // Peek: NÃO reserva rajada/limite diário ainda — só depois de saber
+        // que o gate COMBINADO libera (destino + espaçamento), senão um job
+        // adiado pelo espaçamento queimaria rajada/limite diário à toa
+        // (research R11, item 2).
+        const dest = (destGroupId && gateOpts)
+          ? await peekDestinationDecision(destGroupId, gateOpts)
+          : { allow: true }
+        const gate = combineGateDecisions(dest, spacing)
+
+        if (gate.allow) {
+          if (destGroupId && gateOpts) {
+            await reserveDestinationSlot(destGroupId, gateOpts)
           }
-          throttleCycles++
-          logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela curta de throttle do destino')
-          await sleep(waitMs)
-          gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
+          destinationSpacingState = reserveSpacingSlot(destinationSpacingState, {
+            now: Date.now(),
+            destJid: job.destJid,
+            intervalMs: spacingIntervalMs,
+          })
+          break
         }
-        if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do destino')
+
+        if (gate.source === 'spacing' || gate.source === 'both') {
+          // FR-024: o intervalo entre destinos NUNCA espera dentro da fila
+          // serial, mesmo quando a espera é curta — ele trava TODOS os envios
+          // da conta (não só este destino), diferente do defer curto abaixo,
+          // que é só do gate DESTE destino.
+          destinationSpacingState = reserveSpacingSlot(destinationSpacingState, {
+            now: Date.now(),
+            destJid: job.destJid,
+            intervalMs: spacingIntervalMs,
+            deferredUntil: gate.deferUntil,
+          })
+          logger.info({ destJid: job.destJid, deferUntil: gate.deferUntil }, 'Adiado pelo intervalo entre destinos')
+          await deferSendJob(job, gate)
+          return
+        }
+
+        // gate.source === 'destination': comportamento histórico preservado.
+        // Defer LONGO (quiet_hours/burst_cap/daily_cap/health_paused) não pode
+        // segurar o consumidor serial: ele congelaria TODOS os envios do
+        // usuário — inclusive para destinos liberados e outras fontes. Em vez
+        // de `await sleep`, re-enfileira o job com notBefore e retorna,
+        // liberando a fila para os próximos jobs. Defer CURTO (min_interval)
+        // continua sendo esperado inline (barato e preserva ordem).
+        const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
+        if (waitMs > THROTTLE_INLINE_WAIT_MAX_MS) {
+          await deferSendJob(job, gate)
+          return
+        }
+        throttleCycles++
+        logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela curta de throttle do destino')
+        await sleep(waitMs)
       }
+      if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do destino')
     } catch (err) {
       logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
     }
@@ -4769,9 +4856,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       }, { db }).catch(err => logger.warn({ err: err?.message, msgId: msg.key.id }, 'Falha ao capturar Story espelhado'))
 
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
-      // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
-      // Primeiro destino sem atraso; demais com jitter aleatório limitado.
-      const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
+      // "Intervalo entre destinos" (specs/018-unificar-protecao-anti-ban,
+      // FR-022 a FR-026): deixou de ser um sorteio congelado no enqueue e
+      // virou espera FIXA, decidida no DEQUEUE por
+      // core/destinationSpacing.js (processSendJob) — vale para qualquer
+      // destino (grupo, canal, status), não só canal, e nunca congela a fila
+      // serial (sempre adiamento, mesmo curto). Ver RCA "'Atraso entre
+      // canais' — default 90s → 20s" no AGENTS.md.
       // Cupom usa a janela curta (couponDedupWindowMs); produto mantém a
       // janela diária. primary.linkKind é resolvido por resolveLinkKind no
       // momento da conversão (mesmo em Amazon/ML, que não marcam sozinhos —
@@ -4784,9 +4875,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // produto usa o teto longo, porque um job adiado horas pela preservação
       // do destino continua sendo o MESMO envio esperando sair.
       const pendingDedupMaxAgeMs = isCouponLink ? effectiveDedupWindowMs : PENDING_DEDUP_MAX_AGE_MS
-      let destIndex = -1
       for (const destJid of destinations) {
-        destIndex++
         const postDetail = cfg.groups.postDetails.find(g => g.waJid === destJid)
         // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
         const channelForward = resolveChannelForward(postDetail)
@@ -5108,14 +5197,6 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               : finalText)
           : finalText
 
-        // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
-        // Plano B / Fase 3: o stagger entre canais virou config de conta dedicada
-        // (channelStaggerJitterMs), desacoplado do antigo toggle global de
-        // throttle — aplica sempre que houver jitter configurado.
-        const staggerMs = (destIndex > 0 && isChannelDest && staggerJitterMs > 0)
-          ? Math.floor(Math.random() * staggerJitterMs)
-          : 0
-
         // buildPayload é LAZY de propósito: roda no dequeue, dentro do
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
@@ -5360,9 +5441,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           sourceJid: jid,
           platforms,
           plan: cfg.plan,
-          // Só o stagger entre destinos fica congelado no job; o freio de fila
-          // é recalculado por destino no dequeue (processSendJob).
-          delayMs: staggerMs,
+          // O intervalo entre destinos NÃO congela mais no enqueue (era o
+          // sorteio `staggerMs`) — é decidido no DEQUEUE por
+          // core/destinationSpacing.js (processSendJob), junto do freio de
+          // fila recalculado por destino.
+          delayMs: 0,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
           // specs/017-client-coupon-catalog: { platform, priceCents } | null,

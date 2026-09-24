@@ -1,56 +1,34 @@
 // PR-5.C.1: detecção precoce de degradação de canais-destino.
-// Núcleo puro (`nextStateOnSuccess`, `nextStateOnFailure`, `isChannelPaused`)
-// + wrappers de I/O com Prisma injetável via opts.db (para testes).
+// Núcleo puro (`nextStateOnSuccess`, `nextStateOnFailure`, `isChannelPaused`,
+// `describeChannelHealthStatus`) mora em ./channelHealthStatus.js (módulo
+// leaf, sem import de db.js) — reexportado aqui. Não duplicar a lógica: quem
+// só precisa da regra pura (ex.: um componente client do dashboard) importa
+// direto de channelHealthStatus.js, para não puxar Prisma/`fs` no bundle.
+// Este arquivo soma os wrappers de I/O com Prisma injetável via opts.db.
 
 import defaultDb from '../db.js'
+import {
+  HEALTH_STATUS,
+  CONSECUTIVE_FAIL_THRESHOLD,
+  PAUSE_DURATION_MS,
+  nextStateOnSuccess,
+  nextStateOnFailure,
+  isChannelPaused,
+  describeChannelHealthStatus,
+} from './channelHealthStatus.js'
 
-export const HEALTH_STATUS = Object.freeze({
-  GREEN: 'green',
-  YELLOW: 'yellow',
-  RED: 'red',
-  CRITICAL: 'critical',
-})
+export {
+  HEALTH_STATUS,
+  CONSECUTIVE_FAIL_THRESHOLD,
+  PAUSE_DURATION_MS,
+  nextStateOnSuccess,
+  nextStateOnFailure,
+  isChannelPaused,
+  describeChannelHealthStatus,
+}
 
-export const CONSECUTIVE_FAIL_THRESHOLD = 3
-export const PAUSE_DURATION_MS = 60 * 60 * 1000 // 1h
-
-const BLOCKING_HTTP_CODES = new Set(['401', '403'])
 const STREAM_CRITICAL_CODES = new Set(['forbidden', 'not-authorized', '401', '403'])
 const STREAM_YELLOW_CODES = new Set(['rate-overlimit', '429'])
-
-export function nextStateOnSuccess({ currentStatus, consecutiveFailures, pausedUntil = null }) {
-  return {
-    status: currentStatus === HEALTH_STATUS.CRITICAL ? HEALTH_STATUS.CRITICAL : HEALTH_STATUS.GREEN,
-    consecutiveFailures: 0,
-    pausedUntil,
-  }
-}
-
-export function nextStateOnFailure({ currentStatus, consecutiveFailures, errorCode, now }) {
-  const nextFailures = consecutiveFailures + 1
-  const code = errorCode == null ? '' : String(errorCode)
-  const isBlocking = BLOCKING_HTTP_CODES.has(code)
-  if (isBlocking && nextFailures >= CONSECUTIVE_FAIL_THRESHOLD) {
-    return {
-      status: HEALTH_STATUS.RED,
-      consecutiveFailures: nextFailures,
-      pausedUntil: now + PAUSE_DURATION_MS,
-    }
-  }
-  return {
-    status: currentStatus,
-    consecutiveFailures: nextFailures,
-    pausedUntil: null,
-  }
-}
-
-export function isChannelPaused(health, now = Date.now()) {
-  if (!health?.pausedUntil) return false
-  const ms = health.pausedUntil instanceof Date
-    ? health.pausedUntil.getTime()
-    : new Date(health.pausedUntil).getTime()
-  return ms > now
-}
 
 export async function getHealth(groupId, opts = {}) {
   const db = opts.db ?? defaultDb

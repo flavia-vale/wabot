@@ -34,6 +34,7 @@ preços, `/api/public/plans` (migration `20260923120000_sync_public_faq_plans_ba
 | Botão "Ver canal" | `canUseChannelButton` | `PUT /groups/:id` → 403 ao ligar; salvar outra coisa limpa o botão | `toPostDetail` devolve `channelButtonJid: null` |
 | Variação do texto | `canUseCopyVariation` | `PUT /config` → 403 ao ligar | já era só canal + preservação (PRO) |
 | Vendas Shopee | `canUseShopeeSales` | `GET /shopee-sales` → 403 **antes** de chamar a Shopee | — |
+| Anti-banimento (tela única, ritmo por destino) | `canUseAdvancedPreservation` (libera PRO, Premium e Trial ativo) | `PUT`/`POST` de preservação → 402/403 sem alterar nada gravado | `resolveDestinationPreservation` aplica o piso de 3 campos fixos; ver `docs/rca/envio-e-filas.md` § "Anti-banimento — unificação da proteção do número" |
 
 Todas em `src/billing/plans.js`. `GET /groups` devolve o destino como o robô o
 usa (`presentGroupsForPlan`): a tela nunca mostra marca/botão que não sai.
