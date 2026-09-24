@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "patch-package && prisma generate",
     "start": "node src/api/server.js",
     "api": "node src/api/server.js",
     "dashboard": "cd dashboard && npm run dev",
@@ -45,6 +45,7 @@
     "dependency-cruiser": "^18.0.0",
     "dotenv": "^17.4.2",
     "ioredis-mock": "^8.13.1",
+    "patch-package": "^8.0.1",
     "prisma": "^5.22.0"
   }
 }
