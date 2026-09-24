@@ -12,10 +12,13 @@ const botWorkerSource = readFileSync(join(__dirname, '../src/bot-worker.js'), 'u
 // enviada") a cada deploy/restart do worker — a fila em memória some junto
 // com o processo e markInterruptedSendLogs() só MARCAVA como erro, nunca
 // reenfileirava. reprocessRestartFailures() fecha esse buraco: a cada boot,
-// reenfileira (texto+link) o que morreu no restart anterior. Teste
-// estrutural (grep de source) pelo mesmo motivo dos demais
-// bot-worker-*-wiring.test.js: bot-worker.js roda como processo próprio e
-// não expõe essa lógica para import direto.
+// reenfileira o que morreu no restart anterior remontando o MESMO card
+// manual do envio ao vivo (foto raspada da loja + marca d'água do destino),
+// via buildPayload lazy (roda no dequeue, não no boot, para não atrasar a
+// reconexão do WhatsApp com I/O de scrape/upload). Teste estrutural (grep de
+// source) pelo mesmo motivo dos demais bot-worker-*-wiring.test.js:
+// bot-worker.js roda como processo próprio e não expõe essa lógica para
+// import direto.
 
 test('reprocessRestartFailures é chamada logo após markInterruptedSendLogs no boot', () => {
   const markIndex = botWorkerSource.indexOf('await markInterruptedSendLogs()')
@@ -39,4 +42,20 @@ test('reprocessRestartFailures só reprocessa error:worker_restart exato (não o
   assert.match(fnBody, /platform:\s*\{\s*not:\s*'scheduled'\s*\}/, 'mensagens agendadas (platform scheduled) precisam ficar de fora do reprocessamento')
   // Escape hatch operacional, sem precisar de deploy para desligar.
   assert.match(fnBody, /WORKER_RESTART_REPROCESS_ENABLED/, 'precisa ter escape hatch por env var')
+})
+
+test('reprocessRestartFailures remonta o card manual (foto+watermark) via buildPayload lazy, não texto puro no boot', () => {
+  const fnIndex = botWorkerSource.indexOf('async function reprocessRestartFailures()')
+  assert.notEqual(fnIndex, -1, 'reprocessRestartFailures não encontrada')
+  const fnEnd = botWorkerSource.indexOf('\nasync function createSendBackend()', fnIndex)
+  const fnBody = botWorkerSource.slice(fnIndex, fnEnd === -1 ? undefined : fnEnd)
+
+  // buildPayload (não `payload: { text }` eager) — a montagem do card só pode
+  // rodar no dequeue (depois do socket abrir), nunca bloqueando o boot.
+  assert.match(fnBody, /buildPayload:\s*async\s*\(\)\s*=>/, 'precisa usar buildPayload lazy, não montar o payload no boot')
+  assert.match(fnBody, /buildManualLinkPreview\(/, 'precisa reusar buildManualLinkPreview (mesmo card do envio ao vivo)')
+  assert.doesNotMatch(fnBody, /payload:\s*\{\s*text:/, 'não deve mais enfileirar como texto puro — isso perde o card com foto')
+  // Marca d'água/imageMode são config POR DESTINO — precisam ser recalculados
+  // aqui, não herdados da oferta original perdida.
+  assert.match(fnBody, /destinationImageUsesWatermark\(/, 'precisa resolver a marca d\'água do destino antes de montar o card')
 })

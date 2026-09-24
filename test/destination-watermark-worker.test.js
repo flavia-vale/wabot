@@ -76,9 +76,14 @@ test('o card de preview compõe a marca antes do upload da miniatura de alta qua
   assert.match(block, /card sai com a foto sem marca/)
 })
 
-test('os dois caminhos que montam o card recebem a marca do destino', () => {
+test('os três caminhos que montam o card recebem a marca do destino', () => {
+  // Terceiro call site (2026-09-24): reprocessRestartFailures() remonta o
+  // card das ofertas perdidas por restart do worker, reusando o mesmo
+  // buildManualLinkPreview do envio ao vivo — precisa repassar a marca do
+  // destino igual aos outros dois, senão a oferta reenfileirada sai sem
+  // marca d'água em silêncio.
   const callSites = worker.split('await buildManualLinkPreview({').length - 1
-  assert.equal(callSites, 2, 'esperados exatamente dois call sites de buildManualLinkPreview')
+  assert.equal(callSites, 3, 'esperados exatamente três call sites de buildManualLinkPreview')
   const passandoMarca = worker.split('watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null').length - 1
   assert.equal(passandoMarca, callSites, 'todo caminho que monta o card precisa repassar a marca do destino')
 })
