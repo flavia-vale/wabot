@@ -3039,6 +3039,97 @@ async function markInterruptedSendLogs() {
   ])
 }
 
+// Reenfileira automaticamente, a cada boot, as ofertas perdidas por restart
+// do worker (deploy, crash, cutover) — markInterruptedSendLogs() acima marca
+// como `error:worker_restart` tudo que estava `queued`/`sending` quando o
+// processo anterior morreu, e sem isso a oferta some da fila sem nunca ter
+// sido reenviada (cliente reclamou: "O bot reiniciou enquanto essa mensagem
+// estava esperando para ser enviada").
+//
+// Reenvia como texto+link (preview automático do WhatsApp), não com o card
+// manual (foto/watermark): a imagem/mediaKey da mensagem de origem morreu
+// junto com o processo antigo, e reconstruir o card exigiria reabrir a
+// mensagem original do WhatsApp, que não existe mais em memória. É o MESMO
+// nível de qualidade que uma mensagem agendada sem imagem já usa hoje (ver
+// checkScheduledMessages) — pior card, mas a oferta não se perde mais.
+//
+// Só olha os últimos WORKER_RESTART_REPROCESS_WINDOW_MS: protege contra
+// reprocessar erro antigo de uma sessão anterior (bot ficou dias offline).
+// Escape hatch: WORKER_RESTART_REPROCESS_ENABLED=false desliga sem deploy.
+const WORKER_RESTART_REPROCESS_ENABLED = process.env.WORKER_RESTART_REPROCESS_ENABLED !== 'false'
+const WORKER_RESTART_REPROCESS_WINDOW_MS = Math.max(60_000, Number(process.env.WORKER_RESTART_REPROCESS_WINDOW_MS) || 30 * 60_000)
+
+async function reprocessRestartFailures() {
+  if (!WORKER_RESTART_REPROCESS_ENABLED) return
+  const cutoff = new Date(Date.now() - WORKER_RESTART_REPROCESS_WINDOW_MS)
+  const stuck = await db.messageLog.findMany({
+    where: {
+      userId,
+      status: 'error',
+      errorMsg: 'error:worker_restart',
+      platform: { not: 'scheduled' },
+      sentAt: { gte: cutoff },
+    },
+    take: 200,
+  })
+  if (stuck.length === 0) return
+
+  const cfg = await getConfig().catch(() => null)
+  let requeued = 0
+  for (const row of stuck) {
+    try {
+      // Claim atômico: evita reprocessar a mesma linha duas vezes se esta
+      // função for chamada mais de uma vez (defesa em profundidade).
+      const claimed = await db.messageLog.updateMany({
+        where: { id: row.id, errorMsg: 'error:worker_restart' },
+        data: { errorMsg: 'error:worker_restart:requeued' },
+      })
+      if (claimed.count !== 1) continue
+      if (!row.destGroup || !row.messageText || !cfg) continue
+
+      const log = await db.messageLog.create({
+        data: {
+          userId,
+          platform: row.platform,
+          sourceGroup: row.sourceGroup,
+          destGroup: row.destGroup,
+          originalUrl: row.originalUrl,
+          convertedUrl: row.convertedUrl,
+          messageText: row.messageText,
+          status: 'queued',
+        },
+      })
+      const postDetail = cfg.groups.postDetails.find(g => g.waJid === row.destGroup)
+      const accepted = await enqueueSendJob({
+        type: 'converted',
+        logId: log.id,
+        destJid: row.destGroup,
+        sourceJid: row.sourceGroup,
+        platforms: row.platform,
+        plan: cfg.plan,
+        delayMs: 0,
+        typingDelayMs: calculateTypingDelayMs({ text: row.messageText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+        channelForward: resolveChannelForward(postDetail),
+        couponContext: couponContextFromText(row.messageText),
+        payload: { text: row.messageText },
+      })
+      if (!accepted) {
+        await db.messageLog.update({
+          where: { id: log.id },
+          data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
+        }).catch(() => {})
+        continue
+      }
+      requeued++
+    } catch (err) {
+      logger.warn({ err: err?.message, logId: row.id }, 'Reprocessamento pós-restart falhou para esta oferta')
+    }
+  }
+  if (requeued > 0) {
+    logger.info({ found: stuck.length, requeued }, 'Ofertas perdidas por restart do worker reenfileiradas automaticamente')
+  }
+}
+
 async function createSendBackend() {
   const onRejected = () => { sendMetrics.rejectedTotal++ }
   // sendJobTracker é lido por shutdown() via waitUntilDrained para esperar
@@ -3199,6 +3290,9 @@ async function startBotInner() {
   if (!interruptedSendLogsMarked) {
     interruptedSendLogsMarked = true
     await markInterruptedSendLogs()
+    await reprocessRestartFailures().catch(err => {
+      logger.error({ err: err?.message }, 'Reprocessamento automático pós-restart falhou')
+    })
   }
 
   // Duas janelas: msgIds (curta) protege contra redelivery do WhatsApp do
