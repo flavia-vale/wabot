@@ -1,4 +1,5 @@
 import { Icon } from './Icon'
+import { formatDatePtBr } from '@/lib/editorial-content'
 
 const styles = {
   wrap: { display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 32, alignItems: 'stretch' },
@@ -34,6 +35,7 @@ const styles = {
   eyebrow: { fontSize: 12, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)' },
   title: { fontSize: 'clamp(24px, 2.6vw, 32px)', fontWeight: 600, letterSpacing: '-0.01em', marginTop: 2, lineHeight: 1.15 },
   body: { fontSize: 16, lineHeight: 1.6, color: 'var(--ink)', maxWidth: 620, margin: 0 },
+  updated: { fontSize: 13, fontWeight: 600, color: 'var(--ink-soft)', marginTop: 16 },
   pillsRow: { marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 8 },
   rulesLabel: { fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 18 },
   rulesRow: { display: 'flex', gap: 14, alignItems: 'flex-start', padding: '12px 0' },
@@ -60,7 +62,7 @@ const styles = {
  * Aceita como children um RulesCard ou outro card para layout 2 colunas; sem
  * children, ocupa a wrap inteira em coluna única.
  */
-export function IntroCard({ eyebrow, brandMark = 'b', title, body, pills, accent = false, id, children }) {
+export function IntroCard({ eyebrow, brandMark = 'b', title, body, pills, accent = false, id, updatedAt, children }) {
   const cardStyle = accent ? styles.cardAccent : styles.card
   const decorColor = accent ? 'var(--accent)' : 'var(--accent-2)'
 
@@ -81,6 +83,10 @@ export function IntroCard({ eyebrow, brandMark = 'b', title, body, pills, accent
           </div>
         </div>
         {body && <p style={styles.body}>{body}</p>}
+        {/* Frescor visível, a mesma data do dateModified/lastmod (EDITORIAL_DATES). */}
+        {updatedAt && (
+          <p style={styles.updated}>Atualizado em <time dateTime={updatedAt}>{formatDatePtBr(updatedAt)}</time></p>
+        )}
         {pills && pills.length > 0 && (
           <div style={styles.pillsRow}>
             {pills.map((tag) => <span key={tag} className="pill">{tag}</span>)}

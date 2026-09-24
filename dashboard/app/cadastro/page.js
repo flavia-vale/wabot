@@ -1,4 +1,10 @@
 import { redirect } from 'next/navigation'
+import { buildSeoRobots } from '@/lib/seo-registry.mjs'
+
+// A rota só redireciona, mas está no registro como não indexável: o sinal de
+// `noindex` precisa sair também na metadata, não só do sitemap
+// (validate:seo-consistency, contracts/seo-robots.md).
+export const metadata = { robots: buildSeoRobots('/cadastro') }
 
 /* Destino canônico dos links de indicação de afiliados
  * (https://espelhagrupos.com.br/cadastro?aff=CODIGO, gerados em

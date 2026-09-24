@@ -24,7 +24,7 @@ perfis em terceiros) não dá para ver de fora e está marcado "só você sabe".
 
 - **TikTok `@espelhagrupos` existe** e entrou no `sameAs` da Organization.
 - **Página da empresa no LinkedIn existe**
-  (`linkedin.com/company/145208936`) e entrou no `sameAs` da Organization —
+  (`linkedin.com/company/espelha-grupos`, nome da marca desde 23/09; antes `145208936`) e entrou no `sameAs` da Organization —
   não era mais 404, era só o endereço com o handle que eu tinha testado antes.
 - **Seu LinkedIn pessoal** (`linkedin.com/in/flaviavale`) entrou no `sameAs`
   da Person — é a mesma ligação de entidade única que já existia com o
@@ -120,11 +120,11 @@ Nada aqui depende de código. É tudo cadastro, medição ou decisão sua.
 |---|---|---|
 | 10 | `sameAs` com YouTube, Instagram, TikTok e LinkedIn (empresa + pessoal) | ✅ feito — TikTok/LinkedIn em PR aberta, chega na próxima `develop → main` |
 | 2 | 3 páginas de resposta | ✅ feito — falta só pedir indexação (item 2 da tabela acima) |
-| 3 | "Melhor para" em cada página comercial e Tier 1 | ❌ só `/bot-afiliados-whatsapp` tem (1 de 12) |
-| 5 | "Atualizado em" + `dateModified` em todas as rotas | ❌ 33 das 103 rotas sem data em `editorial-content.js` (home, `/quem-somos`, as LPs de dor, 10 `/alternativas/*`) |
+| 3 | "Melhor para" em cada página comercial e Tier 1 | ✅ 23/09: as 11 páginas de `_preservationCommercialPages.js` (5 lojas, busca Shopee, afiliados, achadinhos, WhatsApp banido, grupo→canal, canal); FAQ "outras lojas" passa a sair da lista canônica de 6 lojas |
+| 5 | "Atualizado em" + `dateModified` em todas as rotas | ✅ 23/09: todas as rotas indexáveis com data (nenhuma inventada); `EDITORIAL_DATES` virou fonte única também do `lastmod` do sitemap; data visível nas comerciais, LPs, hubs e home. ⚠ 17 páginas editoriais passam de 120 dias sem revisão — a data só muda quando o conteúdo for revisado |
 | 6 e 4.2 #13 | fichas datadas dos concorrentes que as IAs citam | ❌ zero fichas para Ofertiva, GoGoBot, Afiliado Analytics, Afiliados Pro Bot, Whats.Ly, PromoBot, Pai das Ofertas, DisparaPromo, Growify, OfertaFlux ("fora do ar") e nexoafiliados (= ProAfiliados). Preciso dos prints (preço + data) — sem print não entra |
-| 7 | validadores `validate:seo-consistency` e `validate:editorial-freshness` no gate | ❌ não existem |
-| 8 | validador do CSV de medição | ❌ não existe |
+| 7 | validadores `validate:seo-consistency` e `validate:editorial-freshness` no gate | ✅ 23/09: existiam e não rodavam (11 erros); consistência + cobertura + duplicidade BLOQUEIAM na PR (`deploy.yml`) e em `npm test`; frescor só avisa; `/cadastro` ganhou `noindex` na metadata |
+| 8 | validador do CSV de medição | ✅ 23/09: `node scripts/validar-medicao-ia.mjs` (regra em `src/ops/aiVisibilityCsv.js`) |
 | 9 | LTV e retenção, read-only | ✅ feito — falta só rodar (item 6 da tabela acima) |
 | 4.3 (b)(c) | nome antigo fora do texto público; 5 rotas renomeadas com redirect | ✅ feito |
 | 4 | topo das 20 páginas no padrão citado | ❌ não iniciado |

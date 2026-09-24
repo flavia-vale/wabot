@@ -148,6 +148,25 @@ jobs:
         working-directory: dashboard
         run: npm run guard:config-page
 
+      # Validadores de SEO (23/09/2026). Existiam desde 05/2026 e não rodavam
+      # em lugar nenhum: foi assim que 33 rotas ficaram sem data e /cadastro
+      # sem noindex na metadata. Os três primeiros BLOQUEIAM (são erro de
+      # código); o de frescor só AVISA — página velha se resolve revisando o
+      # conteúdo, e bloquear deploy pela passagem do tempo treinaria a pular o
+      # gate. Mesmo conjunto roda em `npm test` (test/seo-validadores-gate.test.js).
+      - name: Validadores de SEO (hard gate)
+        if: github.event_name == 'pull_request'
+        working-directory: dashboard
+        run: |
+          npm run validate:seo-p0
+          npm run validate:seo-consistency
+
+      - name: Frescor editorial (aviso, não bloqueia)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        working-directory: dashboard
+        run: npm run validate:editorial-freshness
+
       - name: Lint do dashboard
         if: github.event_name == 'pull_request'
         working-directory: dashboard

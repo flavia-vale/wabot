@@ -15,6 +15,23 @@ import { resolveExpiredTrialStep } from './expiredTrialJourney.js'
 import { buildRecoveryVoucher } from '../domain/payments/recoveryVoucher.js'
 import { buildTrialProofVars, shouldSendTrialProof } from './trialProof.js'
 
+/**
+ * Troca o passo `teste_acabou` (marcado `proofAware`) pelo irmão com prova
+ * quando a conta já teve oferta publicada no teste. Não mexe em janela nem
+ * nos outros passos da jornada — só qual e-mail sai NAQUELE dia.
+ *
+ * Sem oferta publicada (`buildTrialProofVars` devolve null), o passo original
+ * segue valendo: mandar "veja o que o robô fez" para quem nunca viu nada
+ * acontecer é a forma mais rápida de confirmar que o produto não funciona
+ * (mesma regra de `shouldSendTrialProof`).
+ */
+function applyExpiredTrialProof(passo, snapshot) {
+  if (!passo?.proofAware) return passo
+  const prova = buildTrialProofVars({ offersPublished: snapshot.offersPublished, destGroupCount: snapshot.destGroupCount })
+  if (!prova) return passo
+  return { ...passo, slug: 'teste_acabou_com_prova', proofVars: prova }
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const MS_PER_HOUR = 60 * 60 * 1000
 
@@ -170,9 +187,13 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
       // não assinou nenhuma vez. Antes daqui só existia o aviso do primeiro
       // dia, e depois dele a conta nunca mais recebia nada.
       if (restam <= 0) {
-        const passo = resolveExpiredTrialStep(-restam)
+        const passoBase = resolveExpiredTrialStep(-restam)
+        const passo = passoBase ? applyExpiredTrialProof(passoBase, snapshot) : null
         const decision = passo ? buildJourneyDecision(passo, snapshot, now) : null
-        if (decision) return decision
+        if (decision) {
+          if (passo.proofVars) decision.vars = { ...decision.vars, ...passo.proofVars }
+          return decision
+        }
       }
       // D1/D2 do plano de ativação de 2026-09-08: a prova do que o robô já fez,
       // no 3º dia do teste. Fica ANTES da contagem regressiva na ordem porque
@@ -214,8 +235,14 @@ export function decideLifecycleEmail(snapshot, now = new Date(), { triggersStart
       return { slug: 'whatsapp_desconectado', vars: {} }
     }
 
+    // Adiantado de D+2 para D+1 em 2026-09-23: medição do funil de ativação
+    // (scripts/diag-funil-ativacao.mjs, 30 dias) achou 66 cadastros (32% do
+    // total, maior grupo isolado) que nunca chegaram a pedir a conexão do
+    // WhatsApp — e o e-mail é o ÚNICO canal para essa pessoa, já que ela ainda
+    // não deu o número. Continua com folga de 1 dia inteiro do cadastro para
+    // não soar como cobrança do minuto zero.
     const diasDeConta = daysSince(snapshot.createdAt, now)
-    if (!snapshot.waEverConnected && dentroDaJanelaDeCadastro(diasDeConta, 2, SIGNUP_WINDOW_DAYS.onboarding)) {
+    if (!snapshot.waEverConnected && dentroDaJanelaDeCadastro(diasDeConta, 1, SIGNUP_WINDOW_DAYS.onboarding)) {
       return { slug: 'onboarding_conecte_whatsapp', vars: {} }
     }
 

@@ -176,6 +176,24 @@ pode virar promessa de que não banem. Corrigir a expectativa dentro da página 
 honesto; prometer é risco jurídico e contraria a política de uso responsável já
 publicada no `llms.txt`.
 
+## Datas, "Melhor para" e validadores de SEO (23/09/2026 — não regredir)
+
+- **`EDITORIAL_DATES` é a fonte ÚNICA da data** de toda rota indexável: o
+  `lastmod` do sitemap, o `dateModified` e o "Atualizado em" visível saem dela.
+  Nunca inventar data: `updatedAt` só muda quando o CONTEÚDO muda.
+- **Toda página de `_preservationCommercialPages.js` tem "Melhor para / Não é
+  ideal para"** — a IA recomenda por adequação. Guarda:
+  `test/paginas-comerciais-melhor-para-e-data.test.js`.
+- **Validadores de SEO rodam na PR e em `npm test`** (consistência, cobertura
+  do registro, duplicidade de metadata). O de frescor (120 dias) só AVISA —
+  resolve-se revisando a página, não mexendo na data.
+  Guarda: `test/seo-validadores-gate.test.js`.
+- **"Espelha Grupos" também no admin e no painel**, e o LinkedIn da empresa em
+  `https://www.linkedin.com/company/espelha-grupos/` (decisão da dona do
+  produto). Guarda: `test/marca-unica-espelha-grupos.test.js`.
+- **Medição de IA:** `node scripts/validar-medicao-ia.mjs` antes de fechar o
+  placar (um "SIM" maiúsculo zerou o de 01/09).
+
 ## Dados de mercado para marketing (canônico — usar em toda decisão de SEO/conteúdo)
 
 Baseline de **2026-07-30**, fonte: Search Console (12 meses), Planejador de

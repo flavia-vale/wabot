@@ -14,6 +14,7 @@ import { checkDuplicateTrialAtSignup } from '../../domain/signup/duplicateTrialA
 // O celular do cadastro precisa do código do país para ser discável — ver
 // src/domain/signup/contactPhone.js para o porquê e a regra por comprimento.
 import { normalizeContactPhone } from '../../domain/signup/contactPhone.js'
+import { isReservedAdminEmail } from '../../auth/reservedAdminEmails.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
 // no caminho "usuário não existe". Sem ele, login com e-mail inexistente
@@ -445,6 +446,9 @@ export async function authRoutes(app) {
       ensureUniqueContactPhone(contactPhone),
     ])
     if (existingEmail) return reply.code(409).send({ error: 'Email já cadastrado' })
+    // E-mail reservado ao admin responde igual a e-mail já usado: a resposta não
+    // pode virar um jeito de descobrir quais endereços dão acesso de dona.
+    if (isReservedAdminEmail(email)) return reply.code(409).send({ error: 'Email já cadastrado' })
 
     const passwordHash = await bcrypt.hash(password, 10)
     const now = new Date()
@@ -834,6 +838,12 @@ export async function authRoutes(app) {
 
     const existing = await findUserByNormalizedEmail(email)
     if (existing && existing.id !== userId) {
+      return reply.code(409).send({ error: 'Este e-mail já está em uso por outra conta.' })
+    }
+    // Trocar a própria conta para um e-mail de dona do admin daria o painel
+    // inteiro sem prova de posse do endereço (ver src/auth/reservedAdminEmails.js).
+    // Só a própria conta que já tem o e-mail passa (reenviar o mesmo valor).
+    if (isReservedAdminEmail(email) && existing?.id !== userId) {
       return reply.code(409).send({ error: 'Este e-mail já está em uso por outra conta.' })
     }
 

@@ -25,7 +25,14 @@
  */
 export const EXPIRED_TRIAL_JOURNEY = Object.freeze([
   // Aviso de conta: o robô parou agora. É o único transacional da lista.
-  { slug: 'teste_acabou', de: 0, ate: 2 },
+  // `proofAware`: marca puramente informativa, consumida em
+  // `lifecyclePolicy.js` (não muda slug/janela aqui). Quando a conta já teve
+  // oferta publicada no teste, a passada troca este passo pelo slug
+  // `teste_acabou_com_prova` (com o número de ofertas/mensagens poupadas) em
+  // vez do genérico — medição de 2026-09-23 achou 62 contas que usaram o robô
+  // de verdade e não pagaram; é para elas que a prova, no momento exato em que
+  // o robô para, faz diferença.
+  { slug: 'teste_acabou', de: 0, ate: 2, proofAware: true },
   { slug: 'teste_acabou_lembrete', de: 3, ate: 4 },
   // Os dois últimos levam o voucher de desconto para assinar. O segundo repete
   // o MESMO código e diz quanto prazo sobrou — número calculado, nunca escrito

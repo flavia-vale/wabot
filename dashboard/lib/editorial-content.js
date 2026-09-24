@@ -126,6 +126,45 @@ export const EDITORIAL_DATES = {
   '/alternativas/afiliai': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
   '/alternativas/achify': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
   '/alternativas/afiliados-turbo': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  // 33 rotas indexáveis sem data (23/09/2026). Nenhuma data inventada: cada
+  // updatedAt é a última mudança de CONTEÚDO verificável (commit, rótulo
+  // "Última atualização" da própria página ou comentário datado do registro).
+  // Sem evidência, fica a data que o sitemap já publicava (2026-05-15).
+  '/': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
+  '/llms.txt': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
+  '/pricing.md': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
+  '/termos': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
+  '/privacidade': { publishedAt: '2026-05-05', updatedAt: '2026-05-05' },
+  '/quem-somos': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
+  '/suporte': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  '/espelhar-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-02' },
+  '/bot-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-08-19' },
+  '/automacao-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  // LPs de dor: o bloco de recursos (Features.jsx) passou a dizer 6 lojas em 18/09.
+  '/bot-ofertas-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/automatizar-divulgacao-em-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/escalar-grupos-ofertas-sem-equipe': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/padronizar-divulgacao-afiliado-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/aumentar-conversao-em-grupos-de-cupons': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/consistencia-postagens-em-grupos': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/reduzir-tempo-operacional-em-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/organizar-calendario-de-ofertas-no-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/melhorar-alcance-em-grupos-de-promocoes': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/rastrear-resultados-de-divulgacao-em-grupos': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/bot-ofertas-restaurantes-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  '/bot-ofertas-marketplace-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  // As 10 comparações de 17/09 (data que o registro já publicava).
+  '/alternativas/divulgador-inteligente': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/divulgalinks': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/lumi-ofertas-inteligentes': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/busqy': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/afilira': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/ia-divulgadora': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/divulga-ninja': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/shark': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/afiliado-inteligente': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/afilimais': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
 }
 
 export function formatDatePtBr(date) {

@@ -197,3 +197,48 @@ test('os dois e-mails do voucher trazem o WhatsApp para a cliente resgatar', () 
     assert.match(body, /\{\{codigo_voucher\}\}/, `${slug} sem o código`)
   }
 })
+
+// -------------------------------------------------- prova de valor (2026-09-23)
+
+test('quem já teve oferta publicada recebe a prova em vez do aviso genérico', () => {
+  const comProva = testeAcabouHa(1, { offersPublished: 12, destGroupCount: 3 })
+  const decision = decideLifecycleEmail(comProva, NOW)
+  assert.equal(decision?.slug, 'teste_acabou_com_prova')
+  assert.equal(decision.vars.ofertas_publicadas, '12')
+  assert.equal(decision.vars.grupos, '3')
+  assert.equal(decision.vars.mensagens_poupadas, '36')
+})
+
+test('sem nenhuma oferta publicada, continua saindo o aviso genérico', () => {
+  const semProva = testeAcabouHa(1, { offersPublished: 0 })
+  assert.equal(decideLifecycleEmail(semProva, NOW)?.slug, 'teste_acabou')
+
+  const semDado = testeAcabouHa(1)
+  assert.equal(decideLifecycleEmail(semDado, NOW)?.slug, 'teste_acabou')
+})
+
+test('a prova só troca o passo teste_acabou — os outros três da jornada não mudam', () => {
+  for (const etapa of EXPIRED_TRIAL_JOURNEY.slice(1)) {
+    const decision = decideLifecycleEmail(testeAcabouHa(etapa.de, { offersPublished: 40, destGroupCount: 2 }), NOW)
+    assert.equal(decision?.slug, etapa.slug, `${etapa.slug} não pode virar prova`)
+  }
+})
+
+test('o e-mail com prova está no catálogo, é automático, fica no grupo da conta e é obrigação de serviço', () => {
+  const definition = getTemplateDefinition('teste_acabou_com_prova')
+  assert.ok(definition, 'catálogo não tem teste_acabou_com_prova')
+  assert.equal(definition.trigger, 'auto')
+  assert.equal(definition.group, 'conta')
+  assert.equal(definition.category, 'transactional', 'é o mesmo aviso de conta que teste_acabou, não divulgação')
+  assert.match(definition.body, /\[\[botao:/, 'sem botão')
+  assert.match(definition.body, /\{\{ofertas_publicadas\}\}/)
+  assert.match(definition.body, /\{\{mensagens_poupadas\}\}/)
+})
+
+test('o e-mail com prova não usa pressão falsa ou culpa', () => {
+  const definition = getTemplateDefinition('teste_acabou_com_prova')
+  const visivel = `${definition.subject}\n${definition.title ?? ''}\n${definition.body}`
+  for (const proibido of [/última chance/i, /culpa sua/i, /garantimos/i, /vamos apagar/i, /perderá? (?:tudo|seus dados)/i]) {
+    assert.doesNotMatch(visivel, proibido)
+  }
+})
