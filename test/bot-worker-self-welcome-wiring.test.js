@@ -75,3 +75,41 @@ test('emite os 3 sinais na allowlist do analytics', () => {
     assert.match(analytics, new RegExp(`'${evento}'`))
   }
 })
+
+// Admin > Contato com cliente: mensagem manual pro próprio número de uma
+// conta conectada (2026-09-24).
+
+test('o comando sendSelfMessage manda pro PRÓPRIO número, nunca grupo/canal', () => {
+  const fnStart = src.indexOf("msg?.type === 'sendSelfMessage'")
+  assert.notEqual(fnStart, -1, 'handler de sendSelfMessage não encontrado')
+  const fnBody = src.slice(fnStart, fnStart + 1400)
+  assert.match(fnBody, /\$\{phone\}@s\.whatsapp\.net/)
+  assert.doesNotMatch(fnBody, /@g\.us|@newsletter/)
+  assert.match(fnBody, /buildAdminSupportMessageText/)
+})
+
+test('as 4 mensagens (automáticas + manual) gravam no histórico de contato (CustomerContactLog)', () => {
+  assert.match(src, /async function logWhatsappSelfMessageContact/)
+  assert.match(src, /db\.customerContactLog\.create/)
+  for (const chamada of [
+    "logWhatsappSelfMessageContact\\({ reason: 'boas_vindas_conexao'",
+    "logWhatsappSelfMessageContact\\({ reason: 'primeira_oferta_publicada'",
+    "reason: kind === 'missing_credential' \\? 'lembrete_sem_etiqueta' : 'lembrete_sem_grupo'",
+    "logWhatsappSelfMessageContact\\({ reason: 'mensagem_manual_suporte'",
+  ]) {
+    assert.match(src, new RegExp(chamada), `chamada não encontrada: ${chamada}`)
+  }
+})
+
+test('o sendSelfMessage está no manager/sessionCore/supervisor, não só no worker', () => {
+  const sessionCore = readFileSync(join(__dirname, '../src/core/sessionCore.js'), 'utf8')
+  const manager = readFileSync(join(__dirname, '../src/manager.js'), 'utf8')
+  const protocol = readFileSync(join(__dirname, '../src/supervisor/protocol.js'), 'utf8')
+  const client = readFileSync(join(__dirname, '../src/supervisor/client.js'), 'utf8')
+  const supervisorIndex = readFileSync(join(__dirname, '../src/supervisor/index.js'), 'utf8')
+  assert.match(sessionCore, /export const sendSelfMessage/)
+  assert.match(manager, /export const sendSelfMessage/)
+  assert.match(protocol, /SEND_SELF_MESSAGE: 'sendSelfMessage'/)
+  assert.match(client, /const sendSelfMessage = /)
+  assert.match(supervisorIndex, /\[COMMAND\.SEND_SELF_MESSAGE\]/)
+})

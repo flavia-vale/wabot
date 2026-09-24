@@ -333,6 +333,15 @@ const COMMAND_HANDLERS = {
     }
     return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'broadcast', { text, jids, options }) : sessionCore.sendBroadcast(userId, text, jids, options)
   },
+  [COMMAND.SEND_SELF_MESSAGE]: ({ userId, text, actorUserId }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'sendSelfMessage')
+      throw new Error('Session owner mismatch')
+    }
+    return shardOwnedUsers.has(userId)
+      ? pocShard.command(userId, 'sendSelfMessage', { text, actorUserId })
+      : sessionCore.sendSelfMessage(userId, text, actorUserId)
+  },
   [COMMAND.REQUEST_PAIRING_CODE]: ({ userId, phone }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'requestPairingCode')

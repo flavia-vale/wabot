@@ -115,6 +115,7 @@ import {
   buildFirstOfferPublishedMessageText,
   buildMissingCredentialNudgeText,
   buildMissingGroupsNudgeText,
+  buildAdminSupportMessageText,
 } from './core/selfWelcomeMessage.js'
 import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from './tutorialVideo.js'
 import sharp from 'sharp'
@@ -873,6 +874,22 @@ async function handlePhoneOwnership({ phone, sock }) {
 // ativação, 2026-09-23). Best-effort e fail-safe: qualquer falha aqui não pode
 // derrubar a conexão real; a decisão de ENVIAR já foi tomada por quem chama
 // (precisa saber se `WaSession.phone` já tinha valor ANTES desta conexão).
+//
+// Toda mensagem pelo próprio WhatsApp (automática ou manual da admin) grava
+// em CustomerContactLog — a MESMA tabela do "Registrar contato de CS" — para
+// aparecer no histórico único da aba "Contato com cliente" e no drill-down
+// da cliente em /admin/clientes/[id]. Best-effort: falha aqui nunca pode
+// derrubar o envio real, que já aconteceu.
+async function logWhatsappSelfMessageContact({ reason, texto, actorUserId = null }) {
+  try {
+    await db.customerContactLog.create({
+      data: { userId, channel: 'whatsapp', reason, outcome: 'contacted', notes: texto, actorUserId },
+    })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err), reason }, 'Falha ao registrar contato de WhatsApp no histórico (best-effort)')
+  }
+}
+
 async function maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore }) {
   try {
     const pilotEmails = resolveSelfWelcomePilotEmails()
@@ -885,6 +902,7 @@ async function maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore }) {
     await sock.sendMessage(jid, { text: texto })
     logger.info({ userId }, 'Mensagem de boas-vindas (piloto de ativação) enviada para o próprio número')
     trackAnalyticsEventSafe({ userId, event: 'ops_self_welcome_message_sent' })
+    logWhatsappSelfMessageContact({ reason: 'boas_vindas_conexao', texto })
   } catch (err) {
     logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de boas-vindas (piloto, best-effort)')
   }
@@ -904,9 +922,11 @@ async function maybeSendFirstOfferMessage() {
     if (!isPilotEmail(user?.email, pilotEmails)) return
     const phone = activeSock.user?.id?.split(':')[0] ?? null
     if (!phone) return
-    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: buildFirstOfferPublishedMessageText() })
+    const texto = buildFirstOfferPublishedMessageText()
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
     logger.info({ userId }, 'Mensagem de 1ª oferta publicada (piloto) enviada para o próprio número')
     trackAnalyticsEventSafe({ userId, event: 'ops_self_first_offer_message_sent' })
+    logWhatsappSelfMessageContact({ reason: 'primeira_oferta_publicada', texto })
   } catch (err) {
     logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de 1ª oferta (piloto, best-effort)')
   }
@@ -981,6 +1001,7 @@ async function maybeSendActivationNudge() {
     await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
     logger.info({ userId, kind }, 'Nudge de ativação (piloto) enviado para o próprio número')
     trackAnalyticsEventSafe({ userId, event: 'ops_self_activation_nudge_sent', metadata: { kind } })
+    logWhatsappSelfMessageContact({ reason: kind === 'missing_credential' ? 'lembrete_sem_etiqueta' : 'lembrete_sem_grupo', texto })
   } catch (err) {
     logger.warn({ err: String(err?.message ?? err) }, 'Falha ao avaliar/enviar nudge de ativação (piloto, best-effort)')
   }
@@ -5782,6 +5803,32 @@ const handleMessage = async msg => {
       }
     }
     sendIpc({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
+  }
+
+  // Admin > Contato com cliente: mensagem manual pro PRÓPRIO número da conta
+  // (self-chat), fora do pipeline de oferta — sem MessageLog, sem dedup, sem
+  // preservação. Igual às mensagens automáticas do piloto
+  // (maybeSendSelfWelcomeMessage e cia), só que disparada por ação humana.
+  if (msg?.type === 'sendSelfMessage') {
+    if (!activeSock) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: 'Número não identificado' })
+      return
+    }
+    try {
+      const texto = buildAdminSupportMessageText({ corpo: msg.text })
+      await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+      logger.info({ userId }, 'Mensagem manual do suporte enviada para o próprio número')
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, data: { ok: true } })
+      logWhatsappSelfMessageContact({ reason: 'mensagem_manual_suporte', texto, actorUserId: msg.actorUserId ?? null })
+    } catch (err) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: String(err?.message ?? err) })
+    }
+    return
   }
 
   if (msg?.type === 'channel:metadata') {
