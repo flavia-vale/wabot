@@ -15,7 +15,14 @@ import { operatingHoursState } from '../src/core/channelThrottle.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../src/errorTaxonomy.js'
 import { explainErrorMsg } from '../dashboard/lib/painel/logsCopy.js'
 import { friendlyMobileLogError } from '../dashboard/lib/mobileLogs.js'
-import { describeSendPause } from '../dashboard/lib/painel/sendPauseNotice.js'
+import {
+  SEND_PAUSE_KIND,
+  buildSendPauseNotice,
+  classifyDeferMessage,
+  describeSendPause,
+  summarizeQueuedByKind,
+} from '../dashboard/lib/painel/sendPauseNotice.js'
+import { logsRoutes } from '../src/api/routes/logs.js'
 import { attachSendWindow, groupsRoutes } from '../src/api/routes/groups.js'
 import db from '../src/db.js'
 
@@ -146,10 +153,17 @@ test('processSendJob descarta fora do horário DEPOIS do descarte por idade e AN
 
 const pageSource = readFileSync(new URL('../dashboard/app/painel/espelhamento/page.js', import.meta.url), 'utf8')
 
-test('a tela de Espelhamento mostra "Envio pausado agora" a partir dos grupos já carregados', () => {
-  assert.match(pageSource, /describeSendPause\(post, Date\.now\(\)\)/)
-  assert.match(pageSource, /data-testid="envio-pausado-horario"/)
-  assert.match(pageSource, /pnl-note-box is-warn/)
+const shellSource = readFileSync(new URL('../dashboard/app/painel/PainelShell.js', import.meta.url), 'utf8')
+
+test('o aviso "robô esperando o Anti-banimento" é GLOBAL (shell), com link para o Anti-banimento', () => {
+  assert.match(shellSource, /function SendPauseBanner\(\{ notice \}\)/)
+  assert.match(shellSource, /data-testid="robo-esperando-anti-banimento"/)
+  assert.match(shellSource, /<SendPauseBanner notice=\{sendPauseNotice\} \/>/)
+  assert.match(shellSource, /buildSendPauseNotice\(\{ groups: groupsList, queued: sendPauseQueued, online \}\)/)
+  assert.match(shellSource, /api\.sendPause\(\)/, 'a shell precisa perguntar a fila segurada no mesmo tick dos grupos')
+  assert.match(shellSource, /<Link href=\{notice\.ctaHref\} className="pnl-btn is-primary"/)
+  // A tela de Espelhamento não duplica o aviso: ela já está dentro da shell.
+  assert.doesNotMatch(pageSource, /describeSendPause\(/)
 })
 
 const dest = (name, sendWindow) => ({ id: name, name, role: 'post', sendWindow })
@@ -218,6 +232,94 @@ test('GET /api/groups carrega sendWindow do modelo padrão (mesma resolução do
     const origem = list.find(g => g.role === 'monitor')
     assert.deepEqual(destino.sendWindow, JANELA)
     assert.equal(origem.sendWindow, undefined)
+  } finally {
+    await app.close()
+  }
+})
+
+// ---------- o aviso global: motivos da fila + prioridade ----------
+
+test('toda frase de deferReasonMessage (bot-worker) cai num tipo conhecido — senão o aviso some em silêncio', () => {
+  const fn = botWorkerSource.match(/function deferReasonMessage\(reason\) \{[\s\S]*?\n\}\n/)
+  assert.ok(fn, 'deferReasonMessage não encontrada')
+  const frases = [...fn[0].matchAll(/return '([^'\\]{10,})'/g)].map(m => m[1])
+  assert.ok(frases.length >= 6, `esperava as frases de adiamento, achei ${frases.length}`)
+  for (const frase of frases) {
+    assert.ok(classifyDeferMessage(frase), `frase sem tipo: "${frase}"`)
+  }
+  assert.equal(classifyDeferMessage('Este grupo/canal já bateu o limite diário de ofertas configurado no Anti-banimento. Os envios continuam amanhã.'), SEND_PAUSE_KIND.LIMITE_DIARIO)
+  assert.equal(classifyDeferMessage('Fora do horário de envio configurado para este grupo/canal no Anti-banimento.'), SEND_PAUSE_KIND.HORARIO)
+  assert.equal(classifyDeferMessage('O bot pausou os envios para este grupo/canal por segurança. Deve voltar sozinho em breve.'), SEND_PAUSE_KIND.SEGURANCA)
+  assert.equal(classifyDeferMessage('Esperando o intervalo entre destinos que você definiu no Anti-banimento.'), SEND_PAUSE_KIND.RITMO)
+  // Linha `queued` sem motivo é envio normal em vôo — não é espera.
+  assert.equal(classifyDeferMessage(null), null)
+  assert.equal(classifyDeferMessage(''), null)
+  assert.equal(classifyDeferMessage('skip:queue_expired:age=300min:max=300min'), null)
+})
+
+test('summarizeQueuedByKind conta por tipo e acha a mais antiga', () => {
+  const r = summarizeQueuedByKind([
+    { errorMsg: 'Esperando o intervalo mínimo entre uma oferta e outra deste grupo/canal, configurado no Anti-banimento.', sentAt: new Date(TARDE - 5 * 60_000) },
+    { errorMsg: 'Este grupo/canal já bateu o limite diário de ofertas configurado no Anti-banimento. Os envios continuam amanhã.', sentAt: new Date(TARDE - 40 * 60_000) },
+    { errorMsg: null, sentAt: new Date(TARDE) },
+  ])
+  assert.deepEqual(r.byKind, { ritmo: 1, limite_diario: 1 })
+  assert.equal(r.total, 2)
+  assert.equal(r.oldestAt, new Date(TARDE - 40 * 60_000).toISOString())
+})
+
+test('aviso global: robô desconectado ou nada segurado → null', () => {
+  assert.equal(buildSendPauseNotice({ groups: [dest('A', JANELA)], queued: { total: 3, byKind: { ritmo: 3 } }, online: false, now: NOITE }), null)
+  assert.equal(buildSendPauseNotice({ groups: [dest('A', JANELA)], queued: null, online: true, now: TARDE }), null)
+  assert.equal(buildSendPauseNotice({ groups: [dest('A', JANELA)], queued: { total: 0, byKind: {} }, online: true, now: TARDE }), null)
+})
+
+test('aviso global: horário fechado ganha de tudo; depois limite diário; depois segurança; depois ritmo — sempre com link para o Anti-banimento', () => {
+  const horario = buildSendPauseNotice({ groups: [dest('A', JANELA)], queued: { total: 2, byKind: { ritmo: 2 } }, online: true, now: NOITE })
+  assert.equal(horario.kind, SEND_PAUSE_KIND.HORARIO)
+  assert.match(horario.title, /fora do horário \(8h–22h\)/)
+
+  const diario = buildSendPauseNotice({ groups: [dest('A', JANELA)], queued: { total: 5, byKind: { ritmo: 4, limite_diario: 1 }, oldestAt: new Date(TARDE - 90 * 60_000).toISOString() }, online: true, now: TARDE })
+  assert.equal(diario.kind, SEND_PAUSE_KIND.LIMITE_DIARIO)
+  assert.match(diario.body, /5 ofertas estão na fila \(a mais antiga há 1h 30min\)/)
+  assert.match(diario.body, /voltam a sair amanhã/)
+
+  const seguranca = buildSendPauseNotice({ groups: [], queued: { total: 1, byKind: { seguranca: 1, ritmo: 0 } }, online: true, now: TARDE })
+  assert.equal(seguranca.kind, SEND_PAUSE_KIND.SEGURANCA)
+
+  const ritmo = buildSendPauseNotice({ groups: [], queued: { total: 1, byKind: { ritmo: 1 } }, online: true, now: TARDE })
+  assert.equal(ritmo.kind, SEND_PAUSE_KIND.RITMO)
+  assert.match(ritmo.title, /tempo que você definiu no Anti-banimento/)
+
+  for (const n of [horario, diario, seguranca, ritmo]) {
+    assert.equal(n.ctaHref, '/painel/anti-banimento?parte=ritmo')
+    assert.match(n.ctaLabel, /Anti-banimento/)
+    assert.doesNotMatch(`${n.title} ${n.body}`, /burst|throttle|preset|jitter|cap\b|preservação por/i)
+  }
+})
+
+test('GET /api/logs/send-pause resume a fila segurada da conta', async () => {
+  const userId = `user-send-pause-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  await db.user.create({ data: { id: userId, name: 'Fila', email: `${userId}@send-pause.local`, passwordHash: 'x', plan: 'pro' } })
+  await db.messageLog.createMany({ data: [
+    { userId, sourceGroup: 'o@g.us', destGroup: 'd@g.us', originalUrl: '', convertedUrl: '', messageText: 'a', platform: 'shopee', status: 'queued', errorMsg: 'Esperando o intervalo entre destinos que você definiu no Anti-banimento.' },
+    { userId, sourceGroup: 'o@g.us', destGroup: 'd@g.us', originalUrl: '', convertedUrl: '', messageText: 'b', platform: 'shopee', status: 'queued', errorMsg: null },
+    { userId, sourceGroup: 'o@g.us', destGroup: 'd@g.us', originalUrl: '', convertedUrl: '', messageText: 'c', platform: 'shopee', status: 'success', errorMsg: null },
+  ] })
+  const app = Fastify({ logger: false })
+  app.decorate('authenticate', async (req) => { req.user = { sub: userId } })
+  app.addHook('onClose', async () => {
+    await db.messageLog.deleteMany({ where: { userId } })
+    await db.user.deleteMany({ where: { id: userId } })
+  })
+  await app.register(logsRoutes, { prefix: '/api/logs' })
+  try {
+    const res = await app.inject({ method: 'GET', url: '/api/logs/send-pause' })
+    assert.equal(res.statusCode, 200)
+    const body = JSON.parse(res.body)
+    assert.equal(body.queued.total, 1)
+    assert.deepEqual(body.queued.byKind, { ritmo: 1 })
+    assert.ok(body.queued.oldestAt)
   } finally {
     await app.close()
   }
