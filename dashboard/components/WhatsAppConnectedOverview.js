@@ -11,7 +11,7 @@ const FALLBACK = {
   minIntervalSec: 60,
   burstCap: 6,
   burstWindowSec: 3600,
-  dailyCap: 250,
+  dailyCap: null,
   queueMaxAgeMin: 300,
 }
 
@@ -80,8 +80,8 @@ export function WhatsAppConnectedOverview({ phone, plan, onDisconnect, disconnec
     } finally { setSaving(false) }
   }
 
-  const cap = Number(preset.dailyCap) || 250
-  const progress = Math.min(100, Math.round((today / Math.max(cap, 1)) * 100))
+  const cap = Number(preset.dailyCap) > 0 ? Number(preset.dailyCap) : null
+  const progress = cap ? Math.min(100, Math.round((today / cap) * 100)) : 0
 
   return (
     <div className="wa-overview">
@@ -102,9 +102,9 @@ export function WhatsAppConnectedOverview({ phone, plan, onDisconnect, disconnec
         <div className="wa-protection-body" aria-disabled={isBasic}>
           <div className="wa-metric">
             <label>Publicações hoje</label>
-            <p><strong>{today}</strong> de {cap}</p>
-            <div className="wa-progress"><i style={{ width: `${progress}%` }} /></div>
-            <small>O limite protege o seu número. Ele zera à meia-noite.</small>
+            <p><strong>{today}</strong>{cap ? ` de ${cap}` : ' · sem limite por dia'}</p>
+            {cap && <div className="wa-progress"><i style={{ width: `${progress}%` }} /></div>}
+            <small>{cap ? 'O limite protege o seu número. Ele zera à meia-noite.' : 'Sem limite diário. Se quiser um, preencha abaixo.'}</small>
           </div>
           <label className="wa-field">
             <span>Intervalo entre as mensagens</span>
@@ -115,7 +115,7 @@ export function WhatsAppConnectedOverview({ phone, plan, onDisconnect, disconnec
           </label>
           <label className="wa-field wa-cap-field">
             <span>Limite de mensagens por dia</span>
-            <input type="number" min="1" max="10000" disabled={isBasic} value={cap} onChange={(e) => setPreset((p) => ({ ...p, dailyCap: Number(e.target.value) }))} />
+            <input type="number" min="1" max="10000" placeholder="Sem limite" disabled={isBasic} value={cap ?? ''} onChange={(e) => { const n = Number(e.target.value); setPreset((p) => ({ ...p, dailyCap: e.target.value === '' || !Number.isInteger(n) || n < 1 ? null : n })) }} />
           </label>
         </div>
       </section>

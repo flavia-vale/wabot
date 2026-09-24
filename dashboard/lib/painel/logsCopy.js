@@ -109,9 +109,9 @@ export function explainErrorMsg(errorMsg, platform) {
   if (errorMsg.startsWith('skip:queue_expired')) {
     const m = /age=(\d+)min:max=(\d+)min/.exec(errorMsg)
     if (m) {
-      return `Essa oferta esperou ${formatDuration(Number(m[1]) * 60)} na fila desse destino e foi descartada — o limite de espera que você configurou é ${formatDuration(Number(m[2]) * 60)}. Para segurar por mais tempo, aumente "Descartar oferta que esperou mais de" em Preservação por grupo e canal.`
+      return `Essa oferta esperou ${formatDuration(Number(m[1]) * 60)} na fila desse destino e foi descartada — o limite de espera que você configurou é ${formatDuration(Number(m[2]) * 60)}. Para segurar por mais tempo, aumente "Descartar oferta que esperou mais de" no Anti-banimento.`
     }
-    return 'Essa oferta esperou tempo demais na fila desse destino e foi descartada. O limite de espera fica em Preservação por grupo e canal.'
+    return 'Essa oferta esperou tempo demais na fila desse destino e foi descartada. O limite de espera fica no Anti-banimento.'
   }
   if (errorMsg.startsWith('skip:outside_send_window')) {
     const w = parseOutsideSendWindowReason(errorMsg)

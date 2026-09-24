@@ -950,6 +950,9 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-note-box.is-warn { background: color-mix(in oklab, var(--warn) 18%, transparent); color: #8a5a1e; }
 .pnl-note-box.is-success { background: color-mix(in oklab, var(--success) 16%, transparent); color: var(--accent-strong); }
 .pnl-note-box.is-error { background: color-mix(in oklab, var(--danger) 14%, transparent); color: var(--danger); }
+/* Faixa "ofertas esperando pelo Anti-banimento": uma linha, chamativa. */
+.pnl-hold-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; padding: 12px 16px; border-radius: var(--pnl-radius-sm); border-left: 5px solid var(--warn); background: color-mix(in oklab, var(--warn) 26%, transparent); color: var(--ink); font-size: 15px; font-weight: 700; line-height: 1.35; }
+.pnl-hold-banner-icon { font-size: 18px; margin-right: 8px; }
 .pnl-expired-plan-banner {
   display: flex;
   align-items: flex-start;

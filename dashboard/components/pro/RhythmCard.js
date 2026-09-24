@@ -164,7 +164,7 @@ export default function RhythmCard() {
       </div>
       <p className="pnl-hint" style={{ margin: '6px 0 14px' }}>
         Vale para todos os grupos e canais que usam o padrão. Quem tem ajuste próprio em{' '}
-        <Link href="/painel/preservacao/destinos">Preservação por grupo e canal</Link> continua com o ajuste dele.
+        <Link href="/painel/anti-banimento?parte=ritmo">Anti-banimento</Link> continua com o ajuste dele.
       </p>
       {!isPro ? (
         <ProLock feature="ritmo">
