@@ -50,3 +50,41 @@ export function classifyPayerEmail(email) {
   }
   return null
 }
+
+// Qual e-mail vai como `payer_email` na assinatura recorrente.
+//
+// O checkout de assinatura do Mercado Pago exige que a pessoa entre no Mercado
+// Pago com o MESMO e-mail enviado em `payer_email`. Mandávamos sempre o e-mail
+// da conta daqui — e quem usa outro e-mail no Mercado Pago ficava sem saída
+// (a única opção era trocar o e-mail de LOGIN da conta). Agora a cliente pode
+// informar o e-mail que usa no Mercado Pago só para a cobrança; a conta daqui
+// não muda. O vínculo com a conta é o `external_reference` (userId), nunca o
+// e-mail, então o aviso do pagamento continua achando a cliente certa.
+//
+// Devolve `{ email, source, issue }`: `source` é 'informed' ou 'account';
+// `issue` segue o formato de `classifyPayerEmail` (null quando aceitável).
+export function resolveSubscriptionPayerEmail({ accountEmail, informedEmail } = {}) {
+  const informed = typeof informedEmail === 'string' ? informedEmail.trim() : ''
+  if (informed) {
+    const issue = classifyPayerEmail(informed)
+    return {
+      email: informed,
+      source: 'informed',
+      issue: issue
+        ? { reason: issue.reason, message: 'O e-mail do Mercado Pago que você informou não parece válido. Confira e tente de novo.' }
+        : null,
+    }
+  }
+  const account = typeof accountEmail === 'string' ? accountEmail.trim() : ''
+  return { email: account || null, source: 'account', issue: classifyPayerEmail(account) }
+}
+
+// O checkout em aberto só pode ser reaproveitado se foi criado para o MESMO
+// e-mail: devolver a pessoa ao link com o e-mail antigo recriaria exatamente o
+// bloqueio que ela está tentando contornar. Sem e-mail confiável do lado do
+// Mercado Pago, NÃO reaproveita (cria um checkout novo, que é o caminho seguro).
+export function samePayerEmail(a, b) {
+  const x = typeof a === 'string' ? a.trim().toLowerCase() : ''
+  const y = typeof b === 'string' ? b.trim().toLowerCase() : ''
+  return Boolean(x) && x === y
+}

@@ -12,6 +12,7 @@ import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 import { getLandingPlans } from '@/lib/plans-server'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
+import { getEditorialDates } from '@/lib/editorial-content'
 
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template
@@ -47,6 +48,7 @@ function ProductDefinition() {
           title={<>O que é o <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{BRAND_NAME}?</span></>}
           body={PRODUCT_DEFINITION}
           pills={['Revisão humana', 'Cadência responsável', 'Histórico de logs', 'Grupos de origem & destino']}
+          updatedAt={getEditorialDates('/').updatedAt}
         >
           <RulesCard label={rulesLabel} negatives={negatives} positive={positive} />
         </IntroCard>

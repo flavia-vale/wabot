@@ -167,18 +167,21 @@ export function decideDestination({ now, throttle, isPaused, dest, ignoreOperati
 }
 
 /**
- * Decide e (se allow) reserva o slot atomicamente via upsert.
+ * "Peek": a MESMA decisão de `decideDestination` que `checkAndReserve` usa,
+ * mas SEM reservar o slot. Existe para o "Intervalo entre destinos"
+ * (`src/core/destinationSpacing.js`): o gate final é a COMBINAÇÃO da decisão
+ * do destino com a decisão de espaçamento (`combineGateDecisions`), e reservar
+ * a rajada/limite diário do destino ANTES de saber se o espaçamento também
+ * libera queimaria rajada/limite diário à toa quando o job for adiado pelo
+ * espaçamento (research R11, item 2).
  *
- * Plano B / Fase 3: a decisão é SEMPRE por destino. `opts.destPreservation` traz
- * a config resolvida (preset/override → preset default → HARD_DEFAULT). Sem ele,
- * cai no HARD_DEFAULT — nunca sem proteção anti-ban. O 2º parâmetro `botConfig`
- * é mantido só por compatibilidade de assinatura (não é mais lido).
+ * Mesma assinatura de `checkAndReserve` (sem o parâmetro `_botConfig`, que lá
+ * é legado e ignorado).
  * @param {string} groupId
- * @param {object} _botConfig (legado, ignorado)
  * @param {{ db?: any, now?: number, getHealth?: function,
  *   destPreservation?: object, ignoreGlobalQuietHours?: boolean }} [opts]
  */
-export async function checkAndReserve(groupId, _botConfig, opts = {}) {
+export async function peekDestinationDecision(groupId, opts = {}) {
   const now = opts.now ?? Date.now()
   const dest = opts.destPreservation ?? HARD_DEFAULT_PRESERVATION
   const db = opts.db ?? defaultDb
@@ -188,7 +191,7 @@ export async function checkAndReserve(groupId, _botConfig, opts = {}) {
     fetchHealth(groupId),
     db.channelThrottle.findUnique({ where: { groupId } }),
   ])
-  const decision = decideDestination({
+  return decideDestination({
     now,
     throttle,
     isPaused: isChannelPaused(health, now) ? health : false,
@@ -196,14 +199,49 @@ export async function checkAndReserve(groupId, _botConfig, opts = {}) {
     ignoreOperatingHours: opts.ignoreGlobalQuietHours === true,
     random: opts.random,
   })
-  if (!decision.allow) return decision
+}
 
-  if (dest.throttleEnabled !== false) {
-    await reserve(db, groupId, throttle, now, {
-      burstWindowSec: dest.burstWindowSec,
-      tz: parseQuietHours(dest.operatingHoursJson).tz,
-    })
-  }
+/**
+ * Reserva o slot do destino (rajada/limite diário) — chamar SÓ quando a
+ * decisão COMBINADA (destino + espaçamento) libera o envio. Mesmo guard de
+ * sempre: destino com limites desligados (`throttleEnabled === false`) não
+ * reserva nada (nada para contar).
+ * @param {string} groupId
+ * @param {{ db?: any, now?: number, destPreservation?: object }} [opts]
+ */
+export async function reserveDestinationSlot(groupId, opts = {}) {
+  const now = opts.now ?? Date.now()
+  const dest = opts.destPreservation ?? HARD_DEFAULT_PRESERVATION
+  const db = opts.db ?? defaultDb
+  if (dest.throttleEnabled === false) return
+  const throttle = await db.channelThrottle.findUnique({ where: { groupId } })
+  await reserve(db, groupId, throttle, now, {
+    burstWindowSec: dest.burstWindowSec,
+    tz: parseQuietHours(dest.operatingHoursJson).tz,
+  })
+}
+
+/**
+ * Decide e (se allow) reserva o slot atomicamente via upsert.
+ *
+ * Plano B / Fase 3: a decisão é SEMPRE por destino. `opts.destPreservation` traz
+ * a config resolvida (preset/override → preset default → HARD_DEFAULT). Sem ele,
+ * cai no HARD_DEFAULT — nunca sem proteção anti-ban. O 2º parâmetro `botConfig`
+ * é mantido só por compatibilidade de assinatura (não é mais lido).
+ *
+ * Composição de `peekDestinationDecision` + `reserveDestinationSlot` — mantida
+ * como função única para os chamadores que NÃO precisam combinar com o
+ * espaçamento entre destinos (ex.: testes existentes, chamadores futuros que
+ * só olham o gate do próprio destino).
+ * @param {string} groupId
+ * @param {object} _botConfig (legado, ignorado)
+ * @param {{ db?: any, now?: number, getHealth?: function,
+ *   destPreservation?: object, ignoreGlobalQuietHours?: boolean }} [opts]
+ */
+export async function checkAndReserve(groupId, _botConfig, opts = {}) {
+  const decision = await peekDestinationDecision(groupId, opts)
+  if (!decision.allow) return decision
+  await reserveDestinationSlot(groupId, opts)
   return decision
 }
 

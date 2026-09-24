@@ -13,6 +13,15 @@ import { usePainel, usePainelHeader } from '../PainelShell'
 import { BASIC_FEATURE_LIST, PRO_FEATURE_LIST } from '@/lib/planFeatures'
 import { CONFIG_PRESERVED_NOTE } from '../../../../src/domain/painel/trialNotice.js'
 import { buildPricePerOffer, parsePriceToCents } from '../../../../src/domain/painel/pricePerOffer.js'
+import {
+  CARD_HELP_TITLE,
+  CARD_HELP_PIX_TITLE,
+  CARD_HELP_PIX_TEXT,
+  CARD_HELP_PIX_BUTTON,
+  CARD_HELP_MP_EMAIL_TITLE,
+  CARD_HELP_MP_EMAIL_TEXT,
+  buildCardPaymentSteps,
+} from '../../../../src/domain/painel/cardPaymentHelp.js'
 
 const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do Espelha Grupos, pode me ajudar?')}`
 
@@ -69,6 +78,12 @@ export default function PlanoPage() {
   const [savingEmail, setSavingEmail] = useState(false)
   const [cancelState, setCancelState] = useState('idle')
   const [cancelMessage, setCancelMessage] = useState('')
+  // Plano da última tentativa de cobrança automática: é para ele que o atalho
+  // do PIX aponta, nunca para um plano que ela não escolheu.
+  const [lastSubscribePlan, setLastSubscribePlan] = useState('')
+  // E-mail que ela usa no Mercado Pago, quando é diferente do da conta daqui.
+  // Vai só para a cobrança; a conta não muda.
+  const [mpEmail, setMpEmail] = useState('')
 
   async function refreshOverview() {
     try {
@@ -92,7 +107,8 @@ export default function PlanoPage() {
   // D5 do plano de ativação de 2026-09-08: o mesmo preço, medido no uso REAL
   // dela. "R$ 69" é um número solto; "R$ 1,47 por oferta publicada" é a conta
   // que ela consegue refazer sozinha, com o número que é dela.
-  const { offersPublished } = usePainel()
+  const { offersPublished, user } = usePainel()
+  const cardSteps = useMemo(() => buildCardPaymentSteps({ accountEmail: user?.email }), [user?.email])
   const precosPorOferta = useMemo(() => Object.fromEntries(plans.map((plan) => [
     plan.id,
     buildPricePerOffer({ priceCents: parsePriceToCents(plan.price), offersPublished }),
@@ -116,9 +132,10 @@ export default function PlanoPage() {
     if (checkoutPlan) return
     setCheckoutError('')
     setEmailPrompt(null)
+    setLastSubscribePlan(planId)
     setCheckoutPlan(planId)
     try {
-      const data = await api.paymentsCreateSubscription(planId)
+      const data = await api.paymentsCreateSubscription(planId, mpEmail.trim() || undefined)
       if (!data?.init_point) throw new Error('Assinatura indisponível no momento. Tente novamente ou fale com o suporte.')
       window.location.assign(data.init_point)
     } catch (err) {
@@ -313,7 +330,26 @@ export default function PlanoPage() {
                   </div>
                 )}
 
-                <div className="mt-6 grid gap-2.5">
+                {/* E-mail do Mercado Pago COLADO aos botões (pedido da dona do
+                    produto, 2026-09-24): abaixo dos cards a cliente não via, e
+                    o checkout de assinatura barra quem entra no Mercado Pago
+                    com e-mail diferente do enviado. Os dois cards dividem o
+                    mesmo valor. */}
+                <label className="mt-6 block rounded-xl bg-slate-50 px-3 py-3 text-left">
+                  <span className="block text-xs font-bold text-slate-700">{CARD_HELP_MP_EMAIL_TITLE}</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">{CARD_HELP_MP_EMAIL_TEXT}</span>
+                  <input
+                    type="email"
+                    className="pnl-input"
+                    style={{ marginTop: 8, width: '100%' }}
+                    placeholder={user?.email || 'email-do-mercado-pago@exemplo.com'}
+                    autoComplete="email"
+                    value={mpEmail}
+                    onChange={(e) => setMpEmail(e.target.value)}
+                  />
+                </label>
+
+                <div className="mt-3 grid gap-2.5">
                   <button
                     type="button"
                     className={`pnl-btn ${presentation.featured ? 'is-pro' : 'is-primary'}`}
@@ -370,6 +406,34 @@ export default function PlanoPage() {
             </div>
           </div>
         )}
+
+        {/* Guia do cartão recusado (RCA 2026-09-24): a tela de recusa do
+            Mercado Pago não diz o motivo e a cliente desiste. Aqui ficam as
+            causas que ela resolve sozinha e a saída que não depende de cartão
+            (PIX). Abre sozinho quando a tentativa já deu errado. */}
+        <details className="pnl-note-box" style={{ marginTop: 14 }} open={Boolean(checkoutError || lastSubscribePlan) || undefined}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{CARD_HELP_TITLE}</summary>
+          <ol style={{ margin: '10px 0 0', paddingLeft: 20, display: 'grid', gap: 6 }}>
+            {cardSteps.map((step) => (
+              <li key={step} className="pnl-hint" style={{ listStyle: 'decimal' }}>{step}</li>
+            ))}
+          </ol>
+          <div style={{ marginTop: 12, borderTop: '1px solid var(--line, #e5e5e5)', paddingTop: 10 }}>
+            <strong style={{ fontWeight: 600 }}>{CARD_HELP_PIX_TITLE}</strong>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>{CARD_HELP_PIX_TEXT}</p>
+            {lastSubscribePlan && (
+              <button
+                type="button"
+                className="pnl-btn is-ghost"
+                style={{ marginTop: 8, width: '100%', justifyContent: 'center' }}
+                onClick={() => handleCheckout(lastSubscribePlan)}
+                disabled={!!checkoutPlan}
+              >
+                {CARD_HELP_PIX_BUTTON} — {lastSubscribePlan.toUpperCase()}
+              </button>
+            )}
+          </div>
+        </details>
 
         {/* D4 do plano de ativação: o medo de quem para aqui é perder a
             configuração, não o preço. A frase é a MESMA do aviso de fim de

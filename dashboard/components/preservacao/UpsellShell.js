@@ -1,24 +1,29 @@
 'use client'
 import Link from 'next/link'
 
+// Reescrito por specs/018-unificar-protecao-anti-ban (FR-006/FR-008a): a tela
+// unificada chama-se "Anti-banimento", em linguagem leiga, sem prometer que o
+// número não será banido — só que o robô toma cuidado extra por conta e por
+// grupo/canal. Detalhamento do estado bloqueado (o robô continua protegendo o
+// número mesmo sem o plano) fica completo na User Story 3.
 const FEATURES = [
-  { icon: '📈', title: 'Limite inteligente por canal', desc: 'O bot espalha envios pra não estourar cap diário ou em rajadas.' },
-  { icon: '🐢', title: 'Espaçamento humano', desc: 'Pausa pequena entre canais diferentes pra parecer natural.' },
-  { icon: '🎲', title: 'Variação automática de textos', desc: 'Cada mensagem sai com pequenas variações pré-configuradas.' },
-  { icon: '🖼️', title: 'Mutação leve de imagens', desc: 'Crop e recompressão sutis pra evitar hash duplicado.' },
-  { icon: '🩺', title: 'Saúde dos canais', desc: 'Status verde/amarelo/vermelho pra cada canal de destino.' },
-  { icon: '🔭', title: 'Observador externo', desc: 'Detecta sombras de banimento antes que afete o envio.' },
-  { icon: '📊', title: 'Score de risco', desc: 'Estimativa 0-100 da chance de denúncia por canal.' },
-  { icon: '📸', title: 'Snapshots diários', desc: 'Histórico do estado de cada canal — 30 dias guardados.' },
+  { icon: '📈', title: 'Limite por grupo e canal', desc: 'O robô espalha os envios para não estourar o limite diário nem mandar muitas ofertas de uma vez.' },
+  { icon: '🐢', title: 'Espaçamento entre destinos', desc: 'Uma pequena pausa entre um grupo/canal e outro, para o ritmo parecer humano.' },
+  { icon: '🎲', title: 'Variação automática de textos', desc: 'Cada mensagem sai com pequenas variações já configuradas.' },
+  { icon: '🖼️', title: 'Variação leve de imagens', desc: 'Pequenos ajustes na foto de cada envio para canais.' },
+  { icon: '🩺', title: 'Situação de cada canal', desc: 'Verde, amarelo ou vermelho para cada canal de destino.' },
+  { icon: '🔭', title: 'Vigia contra bloqueio escondido', desc: 'Percebe sinais de bloqueio antes que isso afete o envio.' },
 ]
 
 export function UpsellShell({ ctaHref = '/painel/plano' }) {
   return (
     <div className="max-w-3xl">
       <header className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">🛡️ Módulo de Preservação Avançada</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">🛡️ Anti-banimento</h2>
         <p className="text-sm text-gray-600">
-          Mantenha seus canais saudáveis com camadas extras de defesa estatística contra denúncia e shadowban.
+          Tudo que protege o seu número de ser bloqueado, num lugar só. O robô continua
+          protegendo o seu número mesmo sem este plano — com o ritmo padrão seguro, ou
+          com os ajustes que você já tinha deixado.
         </p>
       </header>
 
@@ -43,7 +48,7 @@ export function UpsellShell({ ctaHref = '/painel/plano' }) {
       <div className="mt-4 flex flex-wrap gap-3">
         <Link href={ctaHref}
           className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2">
-          Ativar Pro
+          Conhecer o plano PRO
         </Link>
         <Link href="/painel/plano"
           className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">

@@ -913,3 +913,55 @@ repete `tempo_esgotado` e `erro_de_rede:` — 403, 404 e `pagina_sem_link_de_loj
 saem na primeira. Ao ler o log, lembre que o motivo aparece DUAS vezes por
 falha (uma no resumo, uma dentro da tentativa): contar `"reason"` cru dá o dobro
 do número de falhas reais.
+
+## "Espelhamento não funciona, só o Criar oferta" — era a TELA assustando (RCA 2026-09-24)
+
+Conta (PRO) com só Shopee e Mercado Livre cadastrados; os 2 grupos monitorados
+com `allowedPlatforms=shopee,mercadolivre` (escolha dela, bate com o cadastro).
+24 h medidas no banco: **169 espelhadas com sucesso**, 112
+`skip:no_valid_conversions:store_disabled` (109 Amazon, 2 SHEIN, 1 Magalu), 78
+`error:worker_restart:requeued`, 56 `skip:queue_expired`, 16 `Bot não conectado`.
+O robô funcionava; a aba Envios mostrava ~190 linhas VERMELHAS:
+
+1. `store_disabled` dizia "Seu cadastro está certo… ligue essa loja" — sem
+   cadastro nenhum de Amazon. Novo motivo `store_not_used` (loja desligada no
+   grupo **e** sem cadastro): etiqueta cinza "loja que você não usa", texto
+   sem "cadastro certo", precedência mais baixa. `store_disabled` ficou só para
+   loja cadastrada. Decisão no `bot-worker.js` (ramo "Plataforma desabilitada").
+2. `error:worker_restart:requeued` é a linha ORIGINAL de uma oferta que o
+   `reprocessRestartFailures` já recolocou na fila (linha nova). Aparecia como
+   "falhou"; agora etiqueta "reenviada" (`statusTagForLog` em `logsCopy.js`).
+3. `diag-envios-vazios.mjs` contava o `bot.log` da FROTA inteira em prod e
+   acusava "todas as mensagens vieram de chats não monitorados". Agora filtra
+   pelo `pid` do robô da conta (`BOT_USER_ID` em `/proc/<pid>/environ`) e
+   imprime o resumo **por motivo** da janela toda (antes só 15 linhas).
+
+Não regredir: não pintar de vermelho o que é escolha da cliente; não afirmar
+"cadastro certo" sem olhar o cadastro. Teste: `test/loja-nao-usada-e-reenviada.test.js`.
+Perdas reais restantes (reinício em massa + fila > 5 h) são de sessão/fila —
+ver `envio-e-filas.md` e `memoria-e-capacidade.md`.
+
+### Adendo (2026-09-24, mesma investigação): o relato do cliente estava CERTO
+
+O texto acima foi escrito antes de olhar hora a hora. Somando 24h parecia que
+"o robô funcionava"; hora a hora, **das 21h BRT de 23/09 até 13:40 BRT de
+24/09 nenhuma oferta espelhada saiu** — e o "Criar oferta" seguia, porque ele
+só envia (não depende de receber mensagem nem da fila do espelhamento). Três
+causas somadas, nenhuma exclusiva da conta:
+
+| # | Causa | Onde está tratada |
+|---|---|---|
+| 1 | Horário de envio 8h–22h no modelo padrão + limite de espera de 5h: a oferta da noite esperava até as 8h e era descartada por idade (547 descartes em 23/09, 855 em 24/09; 45 de 48 modelos padrão da frota) | `envio-e-filas.md`, "Horário de envio × limite de espera" (descarte na hora com motivo próprio + aviso na tela) |
+| 2 | Portão de entrada de 5 min (`incomingFreshness.js`) descartando mensagem que o WhatsApp entregou 27–58 min depois de uma queda (196 descartes de 10–60 min na frota, 47 robôs) | adendo da seção "Mensagem espelhada N vezes" acima, quando fechado |
+| 3 | Quedas 500 crônicas (~600/dia há ≥10 dias, 85% com `stuckMsg:true`, 60 ids diferentes — a quarentena, que exige o mesmo id 2×, nunca dispara) | `whatsapp-sessao.md` — causa de fundo em investigação, não trocar biblioteca por palpite |
+
+O 408 em massa de 24/09 (1.019 quedas, 10h–12h UTC) foi bloqueio da VPS e
+zerou sozinho; memória (swap 0) e a mudança jemalloc/semi-space de 22/09 foram
+descartadas com dado.
+
+**Erros de método desta investigação (não repetir):** afirmar "está
+espelhando" somando 24h sem olhar hora a hora; consultar a preservação só pelo
+modelo atribuído ao grupo em vez da ordem real (override do grupo → modelo
+atribuído → **modelo padrão da conta** → padrão do sistema); filtro de data em
+SQL comparando `sentAt` inteiro com texto (devolve vazio e parece ausência de
+dado — usar `CASE typeof(x) WHEN 'integer' THEN datetime(x/1000,'unixepoch') ELSE x END`).

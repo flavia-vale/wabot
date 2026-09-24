@@ -51,6 +51,7 @@ import { instagramDestinationsFromConnections } from '@/components/InstagramDest
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import { AFFILIATE_PLATFORMS } from '@/lib/painel/affiliatePlatforms'
 import { buildMirrorCards, planMirrorCreation, resolveInitialOrigin } from '../../../../src/domain/painel/mirrorWizard.js'
+import { describeSendPause } from '@/lib/painel/sendPauseNotice'
 
 // Espelha WATERMARK_MAX_CHARS de src/core/destinationWatermark.js (a tela não
 // importa aquele módulo: ele carrega `sharp`). test/watermark-limite-caracteres.test.js
@@ -1810,10 +1811,15 @@ export default function EspelhamentoPage() {
           )}
           </CfgSection>
 
-          {/* Saúde do canal: veio da antiga aba "Anti-ban". Só aparece em
-              canal, que é onde ela configura alguma coisa. */}
-          {g.kind === 'channel' && (
-            <CfgSection icon="shield" title="Saúde deste canal" desc="Os limites que protegem o seu número de ser bloqueado.">
+          {/* Saúde deste destino: veio da antiga aba "Anti-ban" (removida
+              2026-09-19 — para um GRUPO era só uma frase e um link). O ritmo
+              de envio (rajada/intervalo/horário) mora inteiro no Anti-banimento
+              agora (specs/018-unificar-protecao-anti-ban); aqui fica só o
+              atalho, mais — só em CANAL, que é configuração de verdade — o
+              status de admin/saúde do canal em si (não duplicar esse controle
+              de edição para grupo, que não tem admin de canal). */}
+          {g.kind === 'channel' ? (
+            <CfgSection icon="shield" title="Saúde deste destino" desc="Os limites que protegem o seu número de ser bloqueado.">
               <div style={{ padding: '14px 20px', display: 'grid', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <AdminBadge status={adminStatus[g.id] ?? 'unknown'} onRefresh={() => refreshAdmin(g)} refreshing={refreshingAdminId === g.id} />
@@ -1824,7 +1830,17 @@ export default function EspelhamentoPage() {
                   initialHealth={healthByGroup[g.id]}
                   onHealthChange={(h) => setHealthByGroup((prev) => ({ ...prev, [g.id]: h }))}
                 />
-                <Link href="/painel/preservacao/destinos" className="pnl-link-btn">Preservação por grupo e canal →</Link>
+                <Link href={`/painel/anti-banimento?parte=ritmo&destino=${g.id}`} className="pnl-link-btn">Ajustar no Anti-banimento PRO →</Link>
+              </div>
+            </CfgSection>
+          ) : (
+            <CfgSection icon="shield" title="Saúde deste destino" desc="Os limites que protegem o seu número de ser bloqueado.">
+              <div style={{ padding: '14px 20px', display: 'grid', gap: 10 }}>
+                <p className="pnl-hint" style={{ margin: 0 }}>
+                  O ritmo de envio deste grupo (quantas ofertas por dia, quanto tempo entre uma e outra,
+                  horário de funcionamento) fica no Anti-banimento, que vale para todos os destinos.
+                </p>
+                <Link href={`/painel/anti-banimento?parte=ritmo&destino=${g.id}`} className="pnl-link-btn">Ajustar no Anti-banimento PRO →</Link>
               </div>
             </CfgSection>
           )}
@@ -2055,6 +2071,9 @@ export default function EspelhamentoPage() {
     : null
 
   const nothingYet = !loadingGroups && monitor.length === 0 && post.length === 0
+  // RCA 2026-09-24: sem isto a tela dizia "Espelhamento ligado" enquanto todos
+  // os destinos estavam fora do horário de envio e nada ia sair até de manhã.
+  const sendPause = online ? describeSendPause(post, Date.now()) : null
 
   return (
     <div className="pnl-grid" style={{ maxWidth: 1120, margin: '0 auto' }}>
@@ -2117,6 +2136,16 @@ export default function EspelhamentoPage() {
           <Link href="/painel/whatsapp" className="pnl-btn">Conexão WhatsApp</Link>
         </div>
       </section>
+
+      {sendPause && (
+        <div className="pnl-note-box is-warn" role="status" data-testid="envio-pausado-horario">
+          <strong style={{ fontWeight: 600 }}>{sendPause.title}</strong>
+          <p style={{ marginTop: 4 }}>
+            {sendPause.detail}{' '}
+            <Link href="/painel/anti-banimento?parte=ritmo" className="pnl-link-btn">Ajustar horário no Anti-banimento →</Link>
+          </p>
+        </div>
+      )}
 
       {nothingYet ? (
         <section className="pnl-card" style={{ textAlign: 'center', padding: '34px 20px' }}>

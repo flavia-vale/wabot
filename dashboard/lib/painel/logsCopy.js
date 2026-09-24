@@ -10,6 +10,7 @@ import {
   isCredentialBlockErrorMsg,
   CREDENTIAL_BLOCK_STATUS_TAG,
 } from '../../../src/credentialBlockAlert/message.js'
+import { parseOutsideSendWindowReason } from '../../../src/core/sendWindow.js'
 
 // P3 (specs/013-inbound-leads-strategy): terceiro ponto de exibição da
 // Assumption (histórico de envios) — mesma fonte de vocabulário do aviso
@@ -112,6 +113,12 @@ export function explainErrorMsg(errorMsg, platform) {
     }
     return 'Essa oferta esperou tempo demais na fila desse destino e foi descartada. O limite de espera fica em Preservação por grupo e canal.'
   }
+  if (errorMsg.startsWith('skip:outside_send_window')) {
+    const w = parseOutsideSendWindowReason(errorMsg)
+    const janela = w?.startHour != null ? ` (${w.startHour}h–${w.endHour}h)` : ''
+    const limite = w?.maxMin ? ` de ${formatDuration(w.maxMin * 60)}` : ''
+    return `Essa oferta chegou fora do seu horário de envio${janela} e não conseguiria sair antes do limite de espera${limite}, então foi descartada na hora em vez de ficar presa na fila. Para receber ofertas da noite, amplie o horário de envio ou o limite de espera desse destino no Anti-banimento.`
+  }
   if (errorMsg.startsWith('skip:decrypt_failed')) return 'O WhatsApp não conseguiu decifrar essa mensagem na sua ponta. Costuma ser pontual.'
   if (errorMsg.startsWith('skip:incoming_error')) {
     const detail = errorMsg.slice('skip:incoming_error'.length).replace(/^:/, '').trim()
@@ -122,6 +129,10 @@ export function explainErrorMsg(errorMsg, platform) {
   if (errorMsg.startsWith('timeout:send')) return 'O envio para o canal/grupo de destino demorou demais e foi cancelado.'
   if (errorMsg.startsWith('timeout:incoming')) return 'A leitura e o preparo dessa promoção demoraram demais. Costuma ser site de produto lento.'
   if (errorMsg.startsWith('error:queue_full')) return 'Fila interna de envios cheia neste instante — tente novamente em alguns minutos.'
+  // A linha original fica com esse errorMsg e o robô cria uma linha NOVA que
+  // sai de verdade (reprocessRestartFailures em bot-worker.js). Dizer só "o bot
+  // reiniciou" em vermelho fazia uma oferta entregue parecer perdida.
+  if (errorMsg === 'error:worker_restart:requeued') return 'O robô reiniciou enquanto essa oferta esperava na fila e a colocou de novo na fila sozinho. O envio de verdade aparece numa linha nova logo acima, não precisa fazer nada.'
   if (errorMsg.startsWith('error:worker_restart')) return 'O bot reiniciou enquanto essa mensagem estava esperando para ser enviada.'
   if (errorMsg.startsWith('error:channel_forbidden')) return 'O bot não tem permissão para postar nesse canal. Verifique se ele ainda é admin.'
   if (errorMsg.startsWith('error:channel_throttled')) return 'O WhatsApp limitou temporariamente os envios para esse canal. Tentaremos novamente.'
@@ -142,6 +153,8 @@ export const STATUS_TAG = {
   queued: { cls: 'is-flight', label: 'na fila' },
   sending: { cls: 'is-flight', label: 'enviando' },
 }
+
+const REQUEUED_TAG = Object.freeze({ cls: 'is-info', label: 'reenviada' })
 
 export const STATUS_TABS = [
   ['all', 'Todos'],
@@ -168,6 +181,7 @@ export function statusTag(status) {
 export function statusTagForLog(log) {
   const falha = describeConversionFailure(log?.errorMsg, log?.platform)
   if (falha) return falha.tag
+  if (log?.errorMsg === 'error:worker_restart:requeued') return REQUEUED_TAG
   return statusTag(log?.status)
 }
 

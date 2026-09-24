@@ -82,7 +82,7 @@ export function FAQ() {
             </a>
           </div>
           <div style={s.list}>
-            {status === 'static' && <div style={s.empty}>Perguntas essenciais carregadas. O painel administrativo pode complementar esta FAQ após validação em staging.</div>}
+            {status === 'static' && <div style={s.empty}>Estas são as perguntas mais comuns. Ficou alguma dúvida? Fale com o suporte.</div>}
             {status === 'ready' && items.length === 0 && <div style={s.empty}>FAQ em atualização. Enquanto isso, fale com nosso suporte.</div>}
             {items.map((it, i) => (
               <div key={it.id ?? i} style={s.item(open === i)}>

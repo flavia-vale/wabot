@@ -461,3 +461,22 @@ o veredito `buffers_em_fila` do `--serie` é o gatilho.
 - Nada aqui mexeu em `sessionCore.js` ([PROTECTED_CORE]): os interruptores
   entram pelo mesmo `resolveWorkerSpawnEnv`/`resolveWorkerExecArgv` da rodada
   anterior.
+
+## 11. Resultado em produção (2026-09-23)
+
+As duas alavancas (jemalloc com purga em segundo plano e semi-space 8) estão em
+produção desde 2026-09-22 ~22:50 UTC. Medido por 24 h, na mesma idade de robô:
+
+| Idade do robô | `RssAnon` antes | `RssAnon` depois |
+|---|---:|---:|
+| 0 a 2 h | 108,4 MiB | 86,6 MiB |
+| 2 a 6 h | 131,4 MiB | 96,6 MiB |
+| 6 a 12 h | 142,3 MiB | 93,5 MiB |
+| 12 a 24 h | 146,4 MiB | 103,7 MiB |
+
+O crescimento com a idade caiu de 0,90 para 0,63 MiB/h na memória anônima e de
+2,02 para 0,73 MiB/h no RSS total. A memória do V8 não mudou, então o ganho é
+do alocador, como a §2.2 previa. Nenhum crash atribuível ao jemalloc.
+
+Detalhes, lições de método e o incidente do restart que colidiu com um deploy
+ficam em `docs/rca/memoria-e-capacidade.md`, seção "Resultado em produção".

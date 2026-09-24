@@ -163,6 +163,16 @@ export const ANALYTICS_EVENTS = new Set([
   'ops_wa_channel_desync_quarantine',
   'ops_wa_reception_blind',
   'ops_wa_reception_self_heal',
+  // Piloto de reforço de ativação (2026-09-23): mensagem de boas-vindas pelo
+  // próprio WhatsApp na 1ª conexão de conta do piloto (ver
+  // src/core/selfWelcomeMessage.js). Cada evento é uma vez que o robô mandou —
+  // sem isso não há como medir se o piloto está sequer disparando.
+  'ops_self_welcome_message_sent',
+  // Mesmo piloto (2026-09-24): momento 2 (1ª oferta publicada) e momentos 3/4
+  // (24h sem etiqueta / sem grupo — metadata `kind`), todos pelo próprio
+  // WhatsApp. Ver src/core/selfWelcomeMessage.js.
+  'ops_self_first_offer_message_sent',
+  'ops_self_activation_nudge_sent',
   'ops_wa_retry_giveup',
   'ops_wa_retry_slowed',
   'ops_wa_chat_scope_filtered',

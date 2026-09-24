@@ -226,6 +226,54 @@ rest) → gate de throttle → tentativas de envio.
 Testes: `test/queue-pressure-and-expiry.test.js`,
 `test/core/preservationConfig.test.js`.
 
+### Horário de envio × limite de espera: a oferta da noite nunca sobrevivia (RCA 2026-09-24 — não regredir)
+
+Medido em produção (frota inteira, não uma conta): **45 de 48** modelos padrão
+(`PreservationPreset.isDefault`) têm horário de envio ligado, 8h–22h
+`America/Sao_Paulo`, e `queueMaxAgeMin=300`. Oferta que chega entre 22h e 8h
+fica adiada (`deferSendJob`/`notBefore`) até as 8h; às 8h o bloco de descarte
+por idade acima joga fora tudo com mais de 5h: **547** `skip:queue_expired`
+às 11h UTC em 23/09 e **855** em 24/09. Com janela fechada de 10h e limite de
+5h, **nenhuma** oferta da noite tinha como sair — e a cliente só via, de
+manhã, uma parede de linhas vermelhas "esperou tempo demais". Foi a causa 1
+do chamado "o espelhamento parou, só o Criar oferta funciona".
+
+Decisão da dona do produto (opção A): **descartar na hora**, com motivo
+próprio. `src/core/sendWindow.js` (`shouldDropOutsideSendWindow`, puro) roda
+em `processSendJob` logo depois do descarte por idade: destino fora do
+horário **e** `idade na fila + tempo até abrir > queueMaxAgeMin` → linha
+`skip:outside_send_window:hours=8-22:max=300min` (categoria `CONFIG_BLOCK`,
+tradução leiga em `logsCopy.js`/`mobileLogs.js`, citando o horário e o
+Anti-banimento). A fila não guarda por horas uma oferta que vai morrer às 8h.
+
+A tela de Espelhamento passa a dizer **"Envio pausado agora: fora do horário
+(8h–22h)"** (`dashboard/lib/painel/sendPauseNotice.js`, `pnl-note-box is-warn`)
+quando TODOS os destinos estão fechados. Para isso `GET /groups` devolve
+`sendWindow` efetivo por destino (`attachSendWindow` em `routes/groups.js`),
+resolvido pelo MESMO chokepoint do robô (`resolveDestinationPreservation`) —
+uma consulta a mais por listagem (os modelos da conta), nunca uma por grupo.
+
+**Não regredir:**
+- **Limite de espera desligado (`queueMaxAgeMin` 0) nunca descarta por aqui**
+  — a oferta espera até abrir, comportamento histórico.
+- **Fila com horário próprio (`ignoreGlobalQuietHours`) não passa pelo
+  horário do destino**, igual ao gate.
+- **Destino sem horário conta como aberto** no aviso da tela: ele envia 24h,
+  parte das ofertas sai, e o aviso mentiria.
+- `sendWindow.js` **não importa `channelThrottle.js`** (que arrasta `db.js`),
+  porque a tela também o consome; o teste garante que `sendWindowState`
+  concorda com `operatingHoursState` em 48 horários.
+- Ordem canônica de `processSendJob` passa a ser: preservação do destino →
+  descartar por idade → **descartar fora do horário** → smart delay → gate →
+  envio.
+
+⚠️ Em modo `remote` o deploy da API não recarrega os bot-workers: o descarte
+na hora só vale nos bots depois do restart do `bot-supervisor` (o deploy faz
+isso sozinho porque `src/core/` e `bot-worker.js` estão em
+`WORKER_CODE_PATHS_RE`; reconecta TODAS as sessões — anunciar antes).
+
+Teste: `test/horario-envio-x-descarte.test.js`.
+
 ## Timeouts no pipeline de mensagens
 
 | Constante                       | Default | Onde     | O que faz                                                          |
@@ -270,12 +318,11 @@ linhas ainda em 90000**. Quem escolheu valor próprio (inclusive `0`) mantém a
 escolha — é config de preservação, sobrescrever decisão do cliente seria pior
 que o atraso. Testes: `test/migrations-channel-stagger-default.test.js`.
 
-**Pendências conhecidas (não corrigidas ainda):** (1) o atraso aplicar mesmo com
-a preservação desligada; (2) o `sleep` rodar dentro do consumidor serial em vez
-de adiar o job (o mecanismo de `deferSendJob`/`notBefore` já existe justamente
-para não congelar a fila — o stagger não o usa). Enquanto isso não mudar,
-**qualquer aumento nesse campo custa atraso em TODOS os envios da conta**, não
-só entre canais.
+**Pendências conhecidas — CORRIGIDAS em 2026-09-23/24, ver seção
+"Anti-banimento — unificação da proteção do número" logo abaixo:** (1) o
+atraso aplicar mesmo com a preservação desligada; (2) o `sleep` rodar dentro do
+consumidor serial em vez de adiar o job. As duas eram verdade até esta seção
+ser escrita — não as trate como estado atual.
 
 **Diagnóstico rápido** (o atraso aparece no log com nome próprio):
 ```bash
@@ -283,6 +330,159 @@ grep '"msg":"Smart delay antes do envio"' $BOT_LOG_DIR/bot.log | tail -100 \
  | sed -n 's/.*"time":\([0-9]*\).*"baseDelayMs":\([0-9]*\).*/\1 \2/p' \
  | awk -v now=$(date +%s) '{ printf "%.1f min atras base=%.1fs\n", (now-$1/1000)/60, $2/1000 }'
 ```
+
+## Anti-banimento — unificação da proteção do número (2026-09-23/24, specs/018-unificar-protecao-anti-ban)
+
+**As duas "pendências conhecidas" da seção acima (2026-07-28) foram
+CORRIGIDAS aqui — não regredir.** O nome comercial único do recurso é
+**"Anti-banimento"** (decisão da dona do produto, 2026-09-23): antes eram três
+telas soltas ("Monitoramento", "Preservação por grupo e canal", "Configurações
+avançadas"), sem nome coerente e com dois defeitos de comportamento
+conhecidos havia dois meses e nunca corrigidos.
+
+| Peça | Onde |
+|---|---|
+| Piso de 3 campos fixos (rajada/janela/liga-desliga) | `src/core/antiBanFloor.js` |
+| Correção do "atraso entre canais" (vira "Intervalo entre destinos") | `src/core/destinationSpacing.js` |
+| Gate de plano — fonte única | `canUseAdvancedPreservation` (`src/billing/plans.js`) |
+| Tela única | `dashboard/app/painel/anti-banimento/*` (substitui as 3 antigas) |
+| Diagnóstico read-only (piso + vazão do intervalo) | `scripts/diag-antiban-valores.mjs` |
+
+### Piso de 3 campos fixos — "vale o mais conservador entre gravado e fixo"
+
+`burstCap` (fixo 6, menor vence), `burstWindowSec` (fixo 600s, maior vence) e
+`throttleEnabled` (fixo ligado) saíram da tela — viraram **fixos e dormentes**:
+continuam existindo na coluna e nas rotas (aceitos, gravados, FR-013), mas o
+**efetivo lido pelo robô** (`resolveDestinationPreservation`) sempre aplica o
+piso **depois** da herança normal (destino → modelo → padrão da conta →
+`HARD_DEFAULT_PRESERVATION`). A comparação é campo a campo, nunca pela taxa
+combinada: conta que já tinha valor mais conservador que o fixo mantém o
+próprio valor; conta menos conservadora passa ao fixo.
+
+**Exceção (Achado C′, decisão da dona do produto): destino com os limites
+DESLIGADOS não soma o piso ao valor antigo — ele RECOMEÇA DO PADRÃO DO
+SISTEMA.** `throttleEnabled=false` com `minIntervalSec`/`dailyCap`/`burstCap`/
+`burstWindowSec` gravados vira `throttleEnabled=true` com os quatro campos
+substituídos pelos valores de `HARD_DEFAULT_PRESERVATION`/`ANTI_BAN_FLOOR` —
+**nunca** reaplica os valores antigos gravados (eles eram do estado
+"desligado", que não representa ritmo nenhum). `operatingHours*` e
+`queueMaxAgeMin` não são governados pelo liga/desliga e ficam intocados nos
+dois ramos.
+
+**Não regredir:**
+- `src/core/antiBanFloor.js` é módulo PURO (sem banco/rede/env fora de
+  parâmetro) e tem consumidores permitidos **fechados**:
+  `src/core/preservationConfig.js`, `src/api/routes/preservation.js` e
+  `scripts/diag-antiban-valores.mjs` — nenhum outro arquivo pode importar nem
+  reimplementar a comparação campo a campo (guarda estrutural em
+  `test/anti-ban-floor-chokepoint.test.js`).
+- O piso entra **depois** da herança normal, nunca antes.
+- **Variação de imagem e intervalo entre destinos NUNCA recebem piso** — são
+  campos de conta, fora da tabela dos 3 fixos.
+- Escape hatch: `ANTI_BAN_FLOOR=off` desliga (só o valor exato `off`;
+  qualquer outro valor, incluindo ausente, mantém ligado — fail-safe).
+
+### "Intervalo entre destinos" — correção de causa raiz do "Atraso entre canais" (RCA 2026-07-28, fechado)
+
+As duas pendências da seção anterior — (1) o atraso valer mesmo com a
+preservação desligada e (2) o `sleep` rodar **dentro** do consumidor serial em
+vez de adiar o job — foram corrigidas juntas:
+
+- `src/core/destinationSpacing.js` (módulo puro) decide a espera entre
+  destinos **diferentes** — grupo ou canal, os dois — via `decideDestinationSpacing`
+  + `combineGateDecisions` (junta com a decisão do próprio destino, sempre a
+  de **maior** `deferUntil`, nunca soma os dois atrasos). O sorteio antigo
+  (`staggerMs = random(0, jitter)` gravado em `job.delayMs`) **não existe
+  mais** — o campo continua se chamando `channelStaggerJitterMs` no banco
+  (nenhum alias novo), mas virou um intervalo **fixo**, não sorteado.
+- **Toda espera decidida pelo espaçamento vira `deferSendJob`** (o mecanismo
+  de `notBefore` que já existia e não estava sendo usado aqui) — nunca
+  `await sleep()` dentro da fila. Uma mensagem esperando não trava a fila para
+  os outros destinos/fontes. Guarda estrutural:
+  `test/bot-worker-destination-spacing-wiring.test.js`.
+- O destino reserva a vaga (rajada/limite diário) só quando a decisão
+  **combinada** (destino + espaçamento) libera — sem isso, o destino queimaria
+  rajada/limite diário à toa enquanto espera o espaçamento (`channelThrottle.js`,
+  peek sem reservar + `checkAndReserve`).
+- Motivo leigo próprio no painel (`deferReasonMessage`, `bot-worker.js`):
+  "Esperando o intervalo entre destinos que você definiu no Anti-banimento." —
+  **nenhum** motivo de defer (burst_cap, daily_cap, min_interval, horário,
+  saúde) pode citar tela antiga ou termo técnico; motivo desconhecido nunca
+  expõe o código cru nem a palavra "throttle".
+- Escape hatch: `DESTINATION_SPACING=off` (só o valor exato `off`; qualquer
+  outro valor mantém ligado) — nunca volta ao `sleep` antigo, só desliga o
+  espaçamento.
+
+⚠️ **O valor do intervalo entre destinos continua PROVISÓRIO em 20s**
+(migration `20260728120000_channel_stagger_default_20s`). `scripts/diag-antiban-valores.mjs`
+mede, por conta, quantos destinos ela tem, o atraso projetado da última saída,
+a vazão teórica × observada, e a proximidade com o descarte por idade da fila
+(`queueMaxAgeMin`) — mas **rodar o script e aprovar o valor final é ação
+exclusiva da dona do produto**, com a saída em mãos (staging e produção). Não
+foi rodado em staging/produção ainda; não tratar 20s como valor confirmado.
+
+### Gate de plano — fonte única
+
+A tela antiga tinha uma checagem PRÓPRIA (`canAccessAdvancedPreservation` em
+`dashboard/lib/plan.js`) que **esquecia o Premium** e mostrava upsell indevido
+para quem já tinha acesso — removida. Hoje tela e backend usam a MESMA função
+(`canUseAdvancedPreservation`, `src/billing/plans.js`), liberando **PRO,
+Premium e Trial ativo**. Guarda: `test/anti-banimento-gate-fonte-unica.test.js`
+falha se qualquer função própria de checagem de plano voltar a existir fora de
+`src/billing/plans.js`.
+
+### Perder o plano NUNCA reseta nada (FR-019)
+
+`resolveDestinationPreservation` e `destinationSpacing.js` nunca leem
+`plan`/`accessExpiresAt` — perder o acesso bloqueia só a TELA e a GRAVAÇÃO
+(API recusa com "O Anti-banimento é um recurso do plano PRO.", 402/403
+conforme a rota, sem alterar nenhuma linha). Os valores gravados continuam
+sendo usados pelo robô no envio, sempre com o piso. Reassinar reencontra a
+configuração exatamente como foi deixada.
+
+### A tela única substitui as três antigas
+
+`dashboard/app/painel/anti-banimento/*` substitui "Monitoramento",
+"Preservação por grupo e canal" e "Configurações avançadas" (três itens de
+menu soltos, sem nome coerente). Os quatro endereços antigos (`/painel/preservacao`
+e as 3 subpáginas) viram redirects preservando `?destino=`, para link salvo em
+e-mail/favorito continuar funcionando. Menu (`nav.js`) troca o grupo
+"Preservação avançada" por um único item "Anti-banimento" (`pro: true`), logo
+após "Conexão WhatsApp".
+
+### Linguagem leiga obrigatória
+
+Nenhum destes termos pode chegar à tela, ao upsell, à mensagem de erro de
+plano ou ao motivo de adiamento que aparece no painel: burst, rajada, janela
+de rajada, throttle, jitter, preset, cap, anti-flood, shadowban, hash,
+snapshot, score, mutação, stagger, "atraso entre canais", "Preservação
+avançada", "Módulo de Preservação", "Preservação Pro", "Preservação por
+grupo", "Preservação por destino". Nenhuma frase promete que o número não
+será banido. Guarda: `test/anti-banimento-linguagem.test.js`.
+
+Testes: `test/anti-ban-floor.test.js`, `test/anti-ban-floor-chokepoint.test.js`,
+`test/destination-spacing.test.js`, `test/destination-spacing-chokepoint.test.js`,
+`test/bot-worker-destination-spacing-wiring.test.js`,
+`test/defer-reason-destination-spacing.test.js`,
+`test/anti-banimento-gate-fonte-unica.test.js`,
+`test/anti-banimento-rotas-antigas.test.js`,
+`test/anti-banimento-rotas-compat.test.js`,
+`test/anti-banimento-linguagem.test.js`,
+`test/anti-banimento-textos-atualizados.test.js`,
+`test/painel-ritmo-mais-cuidadoso.test.js`,
+`test/anti-banimento-tela-bloqueada.test.js`,
+`test/anti-banimento-selo-pro.test.js`,
+`test/anti-banimento-api-recusa-sem-gravar.test.js`,
+`test/anti-banimento-plano-nao-reseta.test.js`,
+`test/painel-intervalo-entre-destinos.test.js`,
+`test/anti-banimento-variacao-imagem-inalterada.test.js`,
+`test/diag-antiban-valores.test.js`.
+
+⚠️ Em modo `remote` o deploy de `main` **reinicia o `bot-supervisor`**
+(reconecta TODAS as sessões WhatsApp de uma vez), porque a feature toca
+`src/core/preservationConfig.js`, `src/core/channelThrottle.js`, os dois
+módulos novos e `src/bot-worker.js` — todos em `WORKER_CODE_PATHS_RE`.
+Anunciar às clientes antes, nunca às cegas (mesma regra de sempre).
 
 ## Fila de envio (BullMQ + DLQ)
 

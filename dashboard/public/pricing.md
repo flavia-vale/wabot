@@ -1,12 +1,12 @@
 # Pricing — Espelha Grupos
 
-Last updated: 2026-09-11
+Last updated: 2026-09-24
 Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: Espelha Grupos pricing.
 Formerly published under the product name "BOTinho"; that name refers to this same product.
 
-Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups: mirroring, link conversion, offer creation and scheduling, with the clickable offer card and fully rewritable message templates. Pro adds channels, automatic Shopee offers, send queues, the watermark on offer images, pacing controls with copy variation and the Shopee sales and commission dashboard. Prices below reflect the public defaults used by the application and may be updated only after staging validation.
+Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups: mirroring, link conversion, offer creation and scheduling, with the clickable offer card and fully rewritable message templates. Pro adds channels, automatic Shopee offers, send queues, the watermark on offer images, pacing controls with copy variation and the Shopee sales and commission dashboard. Prices below reflect the public defaults used by the application.
 
 ## Teste grátis
 
@@ -52,7 +52,7 @@ Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access
 - Includes:
   - Everything in Basic
   - Channel monitoring and sending
-  - Automatic Shopee offers found by keyword and filters, with smart dedup — the product finds the offers, the operator does not have to paste each link
+  - Automatic Shopee offers found by keyword and filters, with smart dedup — the product finds the offers, the operator does not have to paste each link (no source group needed; Shopee only). Details: https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp
   - Send queues with hourly and daily caps, and a configurable interval between sends per destination
   - Pacing controls, marketed as the Advanced Preservation Module: interval between sends, quiet hours, per-day limits and copy variation, set per destination group
   - Watermark with the operator's own text on the offer image, set per destination group
@@ -67,6 +67,13 @@ Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access
 - Espelha Grupos does not promise revenue, commission, sales lift, WhatsApp deliverability, or approval by external marketplaces or affiliate programs.
 - Review price, stock, coupon, affiliate tag, destination group, message copy, and UTM before publishing.
 - Do not use the product for spam, unauthorized groups, deceptive offers, or attempts to bypass platform rules.
+
+## Refund policy
+
+- Full refund if requested within 7 calendar days of payment (right of withdrawal, Brazilian Consumer Code, art. 49), no reason required.
+- Refunds are processed within 5 business days of the request. How long the amount takes to appear on the card statement or account depends on the bank, card issuer and Mercado Pago.
+- After 7 days there is no refund of the period already paid, but the operator can cancel at any time without a fee: cancelling stops the next charge and access stays valid until the end of the paid period.
+- Request by WhatsApp or e-mail through the support page. Full policy: https://espelhagrupos.com.br/politica-de-reembolso
 
 ## Security
 
@@ -84,4 +91,5 @@ Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access
 - Home: https://espelhagrupos.com.br/
 - Support: https://espelhagrupos.com.br/suporte
 - Terms: https://espelhagrupos.com.br/termos
+- Refund policy: https://espelhagrupos.com.br/politica-de-reembolso
 - Privacy: https://espelhagrupos.com.br/privacidade

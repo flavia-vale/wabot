@@ -96,8 +96,8 @@ test('WhatsApp caído há 3 horas NÃO vira aviso (o robô reconecta sozinho)', 
   assert.equal(decideLifecycleEmail(snapshot, NOW), null)
 })
 
-test('cadastrou e nunca conectou vira aviso depois de 2 dias', () => {
-  const snapshot = base({ waEverConnected: false, waConnected: false, createdAt: new Date(NOW.getTime() - 3 * DAY) })
+test('cadastrou e nunca conectou vira aviso depois de 1 dia (2026-09-23: era 2 dias)', () => {
+  const snapshot = base({ waEverConnected: false, waConnected: false, createdAt: new Date(NOW.getTime() - 1.5 * DAY) })
   assert.equal(decideLifecycleEmail(snapshot, NOW)?.slug, 'onboarding_conecte_whatsapp')
 
   const recem = base({ waEverConnected: false, waConnected: false, createdAt: new Date(NOW.getTime() - 6 * HOUR) })

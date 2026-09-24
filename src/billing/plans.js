@@ -221,8 +221,14 @@ export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
   }
 
   if (featureCode === FEATURE_CODES.ADVANCED_PRESERVATION) {
+    // Texto atualizado por specs/018-unificar-protecao-anti-ban (FR-013,
+    // contracts/api-preservation.md § Gate de plano): "Anti-banimento" é o
+    // nome único da tela unificada. `code`/`feature`/`requiredPlan` continuam
+    // inalterados de propósito — só a frase muda; os três pontos de recusa
+    // (preservation.js, config.js, groups.js) mantêm os mesmos códigos HTTP
+    // de hoje (402/403/403).
     return {
-      error: 'O Módulo de Preservação Avançada está disponível no Trial ativo e no plano Pro.',
+      error: 'O Anti-banimento é um recurso do plano PRO.',
       code: 'FEATURE_REQUIRES_PRO',
       feature: FEATURE_CODES.ADVANCED_PRESERVATION,
       requiredPlan: PLAN_IDS.PRO,

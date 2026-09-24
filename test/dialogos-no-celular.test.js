@@ -48,20 +48,33 @@ test('o balão de ajuda do admin fecha ao tocar fora e tem fundo próprio', () =
   assert.match(helpDot, /setOpen\(false\)/)
 })
 
-test('nenhuma tabela larga do admin fica sem rolagem horizontal', () => {
-  // Tabela com largura mínima dentro de um diálogo é o outro jeito de o
-  // conteúdo sumir para a direita — só que esse tem conserto conhecido:
-  // embrulhar em `overflow-x-auto`.
-  const base = new URL('../dashboard/app/admin/', import.meta.url)
+function arquivosDe(dir) {
   const arquivos = []
-  const varrer = (dir) => {
-    for (const item of readdirSync(dir, { withFileTypes: true })) {
-      const filho = new URL(`${item.name}${item.isDirectory() ? '/' : ''}`, dir)
+  const varrer = (d) => {
+    for (const item of readdirSync(d, { withFileTypes: true })) {
+      const filho = new URL(`${item.name}${item.isDirectory() ? '/' : ''}`, d)
       if (item.isDirectory()) varrer(filho)
       else if (item.name.endsWith('.js')) arquivos.push(filho)
     }
   }
-  varrer(base)
+  varrer(dir)
+  return arquivos
+}
+
+// Admin (histórico) + tela Anti-banimento (specs/018-unificar-protecao-anti-ban,
+// User Story 2, T041/T042): a lista/gaveta de destinos não pode nascer com
+// largura fixa fora de `sm:` nem tabela larga sem rolagem — mesmo RCA
+// 2026-09-05, superfície nova.
+const BASES = [
+  new URL('../dashboard/app/admin/', import.meta.url),
+  new URL('../dashboard/app/painel/anti-banimento/', import.meta.url),
+]
+
+test('nenhuma tabela larga do admin ou do Anti-banimento fica sem rolagem horizontal', () => {
+  // Tabela com largura mínima dentro de um diálogo é o outro jeito de o
+  // conteúdo sumir para a direita — só que esse tem conserto conhecido:
+  // embrulhar em `overflow-x-auto`.
+  const arquivos = BASES.flatMap(arquivosDe)
 
   for (const arquivo of arquivos) {
     const source = readFileSync(arquivo, 'utf8')
@@ -75,5 +88,17 @@ test('nenhuma tabela larga do admin fica sem rolagem horizontal', () => {
         `${arquivo.pathname} tem min-w-[${match[1]}px] sem rolagem horizontal por perto`,
       )
     }
+  }
+})
+
+test('a lista/gaveta de destinos do Anti-banimento não usa largura fixa fora de sm: no celular', () => {
+  const source = readFileSync(new URL('../dashboard/app/painel/anti-banimento/RitmoPart.js', import.meta.url), 'utf8')
+  // Largura fixa em px (w-64, w-72, w-[300px]...) só é aceitável a partir de
+  // `sm:` — no celular a lista precisa ocupar a largura disponível.
+  for (const match of source.matchAll(/(?:^|[\s"'`])(w-(?:\d+|\[[^\]]+\]))\b/g)) {
+    const classe = match[1]
+    const antes = source.slice(Math.max(0, match.index - 6), match.index)
+    const comPrefixoResponsivo = antes.includes('sm:') || antes.includes('lg:') || classe.startsWith('w-full')
+    assert.ok(comPrefixoResponsivo || classe === 'w-full', `classe de largura fixa "${classe}" fora de sm:/lg: em RitmoPart.js`)
   }
 })

@@ -52,6 +52,16 @@ const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou ou foi invalidada. Faça lo
 const AUTH_TOKEN_KEY = 'wb_auth_token'
 export const TERMS_VERSION = '2026-09-09-teste-unico-por-pessoa'
 
+// O login mora SÓ no cookie HttpOnly `wb_auth`, que script nenhum da página
+// consegue ler (auditoria 2026-09-23). Até aqui o token era copiado também para
+// o localStorage — e qualquer falha de script no painel poderia levá-lo embora,
+// anulando a proteção do cookie. A cópia nasceu em 2026-05 para quando o painel
+// falava com a API em outra porta; hoje as duas pontas estão no mesmo endereço
+// (NEXT_PUBLIC_FORCE_SAME_ORIGIN_API) e o cookie basta.
+//
+// Transição: o painel não GRAVA mais o token; o que já estava gravado segue
+// sendo enviado até vencer (no máximo 7 dias), para ninguém cair no deploy, e é
+// apagado no próximo login, troca de senha ou saída.
 function getAuthToken() {
   if (typeof window === 'undefined') return ''
   try {
@@ -61,11 +71,10 @@ function getAuthToken() {
   }
 }
 
-function setAuthToken(token) {
+function setAuthToken(_token) {
   if (typeof window === 'undefined') return
   try {
-    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token)
-    else localStorage.removeItem(AUTH_TOKEN_KEY)
+    localStorage.removeItem(AUTH_TOKEN_KEY)
   } catch {}
 }
 
@@ -226,8 +235,8 @@ export const api = {
   paymentsOverview: () => apiFetch('/api/payments/overview'),
   paymentsCheckout: (plan) =>
     apiFetch('/api/payments/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
-  paymentsCreateSubscription: (plan) =>
-    apiFetch('/api/payments/create-subscription', { method: 'POST', body: JSON.stringify({ plan }) }),
+  paymentsCreateSubscription: (plan, payerEmail) =>
+    apiFetch('/api/payments/create-subscription', { method: 'POST', body: JSON.stringify(payerEmail ? { plan, payerEmail } : { plan }) }),
   paymentsCancelSubscription: () =>
     apiFetch('/api/payments/subscription/cancel', { method: 'POST' }),
   paymentsRecover: (paymentId) =>
@@ -403,6 +412,15 @@ export const api = {
   adminEmailBatches: () => apiFetch('/api/admin/emails/batches'),
   adminEmailBatchCancel: (id) => apiFetch(`/api/admin/emails/batches/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   adminEmailSends: (params = {}) => apiFetch(`/api/admin/emails/sends?${new URLSearchParams(params).toString()}`),
+
+  // Aba "Contato com cliente" — parte WhatsApp (histórico + envio manual/em massa).
+  adminWhatsappContactHistory: (limit = 50) => apiFetch(`/api/admin/emails/whatsapp/history?limit=${encodeURIComponent(limit)}`),
+  adminWhatsappConnectedClients: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString()
+    return apiFetch(`/api/admin/emails/whatsapp/connected${query ? `?${query}` : ''}`)
+  },
+  adminWhatsappSend: (userId, text) => apiFetch('/api/admin/emails/whatsapp/send', { method: 'POST', body: JSON.stringify({ userId, text }) }),
+  adminWhatsappSendBulk: (filters, text) => apiFetch('/api/admin/emails/whatsapp/send-bulk', { method: 'POST', body: JSON.stringify({ filters, text }) }),
   adminStagingStatus: () => apiFetch('/api/admin/staging-power'),
   adminStagingPower: (action, { mfaToken } = {}) =>
     apiFetch('/api/admin/staging-power', {

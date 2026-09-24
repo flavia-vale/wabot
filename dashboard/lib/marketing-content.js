@@ -89,11 +89,12 @@ export const BRAND_TIKTOK_URL =
   process.env.NEXT_PUBLIC_BRAND_TIKTOK_URL || 'https://www.tiktok.com/@espelhagrupos'
 
 // Página da EMPRESA no LinkedIn (confirmada pela dona do produto em
-// 20/09/2026). Vai no `sameAs` da Organization — é distinta do perfil PESSOAL
+// 20/09/2026; endereço trocado do id numérico para o nome da marca,
+// /company/espelha-grupos/, por decisão dela em 23/09/2026). Vai no `sameAs` da Organization — é distinta do perfil PESSOAL
 // dela, que vai em FOUNDER_SAME_AS (a mesma separação Organization/Person já
 // documentada no comentário de BRAND_SAME_AS).
 export const BRAND_LINKEDIN_URL =
-  process.env.NEXT_PUBLIC_BRAND_LINKEDIN_URL || 'https://www.linkedin.com/company/145208936/'
+  process.env.NEXT_PUBLIC_BRAND_LINKEDIN_URL || 'https://www.linkedin.com/company/espelha-grupos/'
 
 // Tutorial oficial de criação de conta. É a prova social VERIFICÁVEL que
 // substituiu os números inventados do bloco `Social` (auditoria de funil
@@ -154,7 +155,15 @@ export const FOUNDER_SAME_AS = [
 // ligação em silêncio — o Cuponito afirma e o Espelha Grupos não confirma.
 export const FOUNDER_PERSON_ID_PATH = '/quem-somos#person'
 
-export const PRODUCT_DEFINITION = 'O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
+// Definição da marca em UMA frase auto-contida (23/09/2026). É a primeira frase
+// de corpo da home, de /quem-somos e do llms.txt: em três rodadas de medição o
+// ChatGPT leu "Espelha Grupos" como expressão genérica, e não como nome de
+// produto, porque nada abria dizendo o que a marca É. Os dois modos entram com
+// o limite exato do automático — só Shopee e só no plano Pro — para a frase
+// nunca prometer ao Basic o que ele não entrega.
+export const BRAND_DEFINITION_PT = 'Espelha Grupos é um robô para afiliadas que espelha as ofertas dos grupos e canais que você já acompanha e, no plano Pro, também busca ofertas da Shopee sozinho, trocando o link pelo seu código de afiliada.'
+
+export const PRODUCT_DEFINITION ='O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 
 // Lojas com conversão de link suportada. Fonte ÚNICA para texto público,
 // schema e FAQ: em 2026-09-18 a página de preços, a API pública de planos e a

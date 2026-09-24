@@ -66,9 +66,18 @@ import {
   recordSendResult as recordChannelSendResult,
   recordStreamError as recordChannelStreamError,
 } from './core/channelHealth.js'
-import { checkAndReserve as throttleCheckAndReserve } from './core/channelThrottle.js'
+import { peekDestinationDecision, reserveDestinationSlot } from './core/channelThrottle.js'
 import { resolveDestinationPreservation } from './core/preservationConfig.js'
+import {
+  DESTINATION_SPACING_REASON,
+  isDestinationSpacingEnabled,
+  toDestinationIntervalMs,
+  decideDestinationSpacing,
+  combineGateDecisions,
+  reserveSpacingSlot,
+} from './core/destinationSpacing.js'
 import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queueExpiry.js'
+import { buildOutsideSendWindowReason, shouldDropOutsideSendWindow } from './core/sendWindow.js'
 import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
 import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
@@ -92,7 +101,7 @@ import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypin
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
 import { convertPerPlatformSerially } from './core/conversionScheduler.js'
-import { chooseCoupon, renderCouponText, applyCouponToken } from './core/clientCouponPolicy.js'
+import { chooseCoupon, renderCouponText, applyCouponToken, sanitizePriceCents } from './core/clientCouponPolicy.js'
 import { buildIncomingDedupKey, hasRecentDedupEntry, pruneDedupStore, rememberDedupEntry } from './messageDedup.js'
 import { INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
@@ -109,6 +118,18 @@ import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuaranti
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
+import {
+  resolveSelfWelcomePilotEmails,
+  isPilotEmail,
+  shouldSendSelfWelcomeMessage,
+  decideActivationNudge,
+  buildSelfWelcomeMessageText,
+  buildFirstOfferPublishedMessageText,
+  buildMissingCredentialNudgeText,
+  buildMissingGroupsNudgeText,
+  buildAdminSupportMessageText,
+} from './core/selfWelcomeMessage.js'
+import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from './tutorialVideo.js'
 import sharp from 'sharp'
 import { applySharpTuning } from './core/sharpTuning.js'
 
@@ -647,6 +668,7 @@ function startHeartbeatIpc() {
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
+    maybeSendActivationNudge().catch(() => {})
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
@@ -859,6 +881,144 @@ async function handlePhoneOwnership({ phone, sock }) {
   try { sock?.end?.(new Error('phone_reuse_blocked')) } catch { /* best-effort */ }
 }
 
+// Mensagem de boas-vindas pelo PRÓPRIO WhatsApp, na primeira conexão de
+// contas do PILOTO (ver src/core/selfWelcomeMessage.js — plano de reforço de
+// ativação, 2026-09-23). Best-effort e fail-safe: qualquer falha aqui não pode
+// derrubar a conexão real; a decisão de ENVIAR já foi tomada por quem chama
+// (precisa saber se `WaSession.phone` já tinha valor ANTES desta conexão).
+//
+// Toda mensagem pelo próprio WhatsApp (automática ou manual da admin) grava
+// em CustomerContactLog — a MESMA tabela do "Registrar contato de CS" — para
+// aparecer no histórico único da aba "Contato com cliente" e no drill-down
+// da cliente em /admin/clientes/[id]. Best-effort: falha aqui nunca pode
+// derrubar o envio real, que já aconteceu.
+async function logWhatsappSelfMessageContact({ reason, texto, actorUserId = null }) {
+  try {
+    await db.customerContactLog.create({
+      data: { userId, channel: 'whatsapp', reason, outcome: 'contacted', notes: texto, actorUserId },
+    })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err), reason }, 'Falha ao registrar contato de WhatsApp no histórico (best-effort)')
+  }
+}
+
+async function maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore }) {
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+    const deve = shouldSendSelfWelcomeMessage({ accountEmail: user?.email, hadPhoneBefore, pilotEmails })
+    if (!deve || !phone) return
+    const jid = `${phone}@s.whatsapp.net`
+    const texto = buildSelfWelcomeMessageText({ videoUrl: VIDEO_CADASTRO_ETIQUETAS_URL })
+    await sock.sendMessage(jid, { text: texto })
+    logger.info({ userId }, 'Mensagem de boas-vindas (piloto de ativação) enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_welcome_message_sent' })
+    logWhatsappSelfMessageContact({ reason: 'boas_vindas_conexao', texto })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de boas-vindas (piloto, best-effort)')
+  }
+}
+
+// Mensagem de "prova de valor" pelo PRÓPRIO WhatsApp, na 1ª oferta publicada
+// com sucesso (momento 2 — ver src/core/selfWelcomeMessage.js). Chamada só
+// quando `previousSuccessCount === 0`, no `onDone` do envio espelhado — é o
+// mesmo instante em que `first_send_success` já é gravado, então os dois
+// nascem juntos e nunca discordam sobre "foi a primeira".
+async function maybeSendFirstOfferMessage() {
+  try {
+    if (!activeSock) return
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+    if (!isPilotEmail(user?.email, pilotEmails)) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    const texto = buildFirstOfferPublishedMessageText()
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+    logger.info({ userId }, 'Mensagem de 1ª oferta publicada (piloto) enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_first_offer_message_sent' })
+    logWhatsappSelfMessageContact({ reason: 'primeira_oferta_publicada', texto })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de 1ª oferta (piloto, best-effort)')
+  }
+}
+
+// Throttle do nudge de ativação (momentos 3 e 4): a checagem roda a cada tick
+// do heartbeat (15s), mas só precisa AVALIAR de tempos em tempos — em escopo
+// de módulo pra sobreviver a reconexões dentro do MESMO worker (mesma lição
+// do msgRetryCounterCache).
+let lastActivationNudgeCheckAt = 0
+const ACTIVATION_NUDGE_CHECK_INTERVAL_MS = Math.max(
+  Number(process.env.SELF_ACTIVATION_NUDGE_CHECK_INTERVAL_MS || 30 * 60 * 1000),
+  5 * 60 * 1000,
+)
+const ACTIVATION_NUDGE_MIN_DELAY_MS = Math.max(
+  Number(process.env.SELF_ACTIVATION_NUDGE_MIN_DELAY_MS || 24 * 60 * 60 * 1000),
+  0,
+)
+
+// Nudge de ativação pelo PRÓPRIO WhatsApp — momentos 3 (falta etiqueta) e 4
+// (falta grupo), 24h depois da 1ª conexão (ver decideActivationNudge em
+// src/core/selfWelcomeMessage.js). Best-effort e fail-safe: qualquer falha
+// aqui é só logada, nunca afeta a sessão real.
+async function maybeSendActivationNudge() {
+  if (!activeSock) return
+  const now = Date.now()
+  if (now - lastActivationNudgeCheckAt < ACTIVATION_NUDGE_CHECK_INTERVAL_MS) return
+  lastActivationNudgeCheckAt = now
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const [user, firstConnected, credentialCount, groups, sentNudges] = await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { email: true } }),
+      db.analyticsEvent.findFirst({
+        where: { userId, event: 'whatsapp_connected' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      db.credential.count({ where: { userId } }),
+      db.group.findMany({ where: { userId }, select: { role: true } }),
+      db.analyticsEvent.findMany({ where: { userId, event: 'ops_self_activation_nudge_sent' }, select: { metadata: true } }),
+    ])
+    if (!isPilotEmail(user?.email, pilotEmails)) return
+    const connectedForMs = firstConnected?.createdAt ? now - firstConnected.createdAt.getTime() : null
+    const hasCredential = credentialCount > 0
+    const hasGroups = groups.some(g => g.role === 'monitor') && groups.some(g => g.role === 'post')
+    let sentCredentialNudge = false
+    let sentGroupsNudge = false
+    for (const row of sentNudges) {
+      try {
+        const kind = JSON.parse(row.metadata || '{}').kind
+        if (kind === 'missing_credential') sentCredentialNudge = true
+        if (kind === 'missing_groups') sentGroupsNudge = true
+      } catch { /* linha antiga sem metadata legível: ignora */ }
+    }
+    const kind = decideActivationNudge({
+      accountEmail: user?.email,
+      pilotEmails,
+      connectedForMs,
+      minDelayMs: ACTIVATION_NUDGE_MIN_DELAY_MS,
+      hasCredential,
+      hasGroups,
+      sentCredentialNudge,
+      sentGroupsNudge,
+    })
+    if (!kind) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    const texto = kind === 'missing_credential'
+      ? buildMissingCredentialNudgeText({ videoUrl: VIDEO_CADASTRO_ETIQUETAS_URL })
+      : buildMissingGroupsNudgeText({ videoUrl: VIDEO_ATIVACAO_ROBO_URL })
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+    logger.info({ userId, kind }, 'Nudge de ativação (piloto) enviado para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_activation_nudge_sent', metadata: { kind } })
+    logWhatsappSelfMessageContact({ reason: kind === 'missing_credential' ? 'lembrete_sem_etiqueta' : 'lembrete_sem_grupo', texto })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao avaliar/enviar nudge de ativação (piloto, best-effort)')
+  }
+}
+
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -1045,7 +1205,7 @@ async function checkScheduledMessages() {
           // Agendado sai com cupom igual ao "Enviar agora" (decisão da dona do
           // produto, 2026-09-23). O cupom é escolhido quando a mensagem SAI,
           // não quando foi agendada: vencido ou desligado até lá, não sai.
-          couponContext: couponContextFromText(msg.text),
+          couponContext: couponContextFromText(msg.text, msg.couponPriceCents),
           ...(scheduledImageRecipe ? { payloadRecipe: scheduledImageRecipe } : { payload: { text: msg.text } }),
           onDone: async (result) => {
             state.remaining--
@@ -1395,6 +1555,15 @@ const TIMESTAMP_MAP_MAX_ENTRIES = Math.max(100, envNumber('TIMESTAMP_MAP_MAX_ENT
 const lastSendByDest = new Map()
 const lastIncomingByMonitorJid = new Map()
 
+// Estado do "Intervalo entre destinos" (core/destinationSpacing.js,
+// specs/018-unificar-protecao-anti-ban, FR-022 a FR-026). ESCOPO DE MÓDULO de
+// propósito (mesma lição de msgRetryCounterCache no RCA "Loop de retry-receipt
+// travado", AGENTS.md): precisa sobreviver a reconexões do MESMO worker, senão
+// o "último envio da conta" reseta a cada `open` e o espaçamento nunca chega a
+// valer. Zerado só no restart do processo — sem persistência entre reinícios,
+// conforme contracts/destination-spacing.md.
+let destinationSpacingState = { lastSendAt: null, lastDestJid: null, nextFreeSlotAt: null }
+
 function pruneTimestampMap(map, now = Date.now()) {
   for (const [key, ts] of map) {
     if (now - ts > TIMESTAMP_MAP_TTL_MS) map.delete(key)
@@ -1423,6 +1592,7 @@ const sendMetrics = {
   rejectedTotal: 0,
   deferredTotal: 0,
   queueExpiredTotal: 0,
+  outsideSendWindowTotal: 0,
   broadcastQueuedTotal: 0,
   scheduledQueuedTotal: 0,
   convertedQueuedTotal: 0,
@@ -2401,10 +2571,30 @@ function resolveChannelForward(postDetail) {
  * finalizamos o job se ele NÃO couber na fila.
  */
 function deferReasonMessage(reason) {
+  // specs/018-unificar-protecao-anti-ban (User Story 2): nenhuma dessas frases
+  // pode citar tela antiga ("Preservação por destino") nem termo técnico — o
+  // ritmo dos três campos fixos (rajada/janela/liga-desliga) agora é fixo (ver
+  // core/antiBanFloor no domínio de preservação) e a cliente não edita mais
+  // nenhum deles.
   if (reason === 'burst_cap') {
-    return 'O bot está segurando os envios por alguns minutos para não mandar muitas mensagens de uma vez para este grupo/canal. A espera foi definida na página "Preservação por destino", no campo "Máximo de envios na janela".'
+    return 'O bot está segurando os envios por alguns minutos para não mandar muitas ofertas de uma vez para este grupo/canal (ritmo de segurança do Anti-banimento).'
   }
-  return `aguardando janela de envio do destino (${reason ?? 'throttle'})`
+  if (reason === 'daily_cap') {
+    return 'Este grupo/canal já bateu o limite diário de ofertas configurado no Anti-banimento. Os envios continuam amanhã.'
+  }
+  if (reason === 'min_interval') {
+    return 'Esperando o intervalo mínimo entre uma oferta e outra deste grupo/canal, configurado no Anti-banimento.'
+  }
+  if (reason === 'outside_operating_hours' || reason === 'quiet_hours') {
+    return 'Fora do horário de envio configurado para este grupo/canal no Anti-banimento.'
+  }
+  if (reason === 'health_paused') {
+    return 'O bot pausou os envios para este grupo/canal por segurança. Deve voltar sozinho em breve.'
+  }
+  if (reason === DESTINATION_SPACING_REASON) {
+    return 'Esperando o intervalo entre destinos que você definiu no Anti-banimento.'
+  }
+  return 'Aguardando a vez certa de enviar para este grupo/canal (Anti-banimento).'
 }
 
 async function deferSendJob(job, gate) {
@@ -2485,9 +2675,11 @@ function applyCouponTokenToPayload(payload, couponText) {
 // primeiro link do texto — mesmo detector do espelhamento (src/detector.js).
 // Preço desconhecido: cai na ordem fixa e previsível do FR-011 em chooseCoupon.
 // Fonte ÚNICA para os dois caminhos, para agendado e imediato nunca divergirem.
-function couponContextFromText(text) {
+// `priceCents` é o preço que a tela do Criar oferta leu da loja: com ele sai o
+// "de X por Y com o cupom" também no envio. Sem ele, preço desconhecido.
+function couponContextFromText(text, priceCents = null) {
   const platform = detectLinks(text || '')[0]?.platform ?? null
-  return platform ? { platform, priceCents: null } : null
+  return platform ? { platform, priceCents: sanitizePriceCents(priceCents) } : null
 }
 
 async function resolveCouponTextForJob(job) {
@@ -2626,6 +2818,31 @@ async function processSendJob(job) {
       return
     }
 
+    // C2) Fora do horário de envio E sem chance de sair antes do limite de
+    // espera → descarta AGORA (RCA 2026-09-24, decisão A da dona do produto).
+    // Antes a oferta da noite ficava adiada até as 8h só para ser descartada
+    // pelo bloco C acima, horas depois, sem a cliente saber o porquê. Mesmo
+    // lugar da ordem canônica (antes do smart delay), motivo próprio no
+    // painel. Fila com horário próprio (ignoreGlobalQuietHours) e limite de
+    // espera desligado NÃO passam por aqui (ver src/core/sendWindow.js).
+    const windowDrop = shouldDropOutsideSendWindow({
+      now: Date.now(),
+      enqueuedAt: job.enqueuedAt,
+      preservation: destPreservation,
+      ignoreOperatingHours: job.ignoreGlobalQuietHours === true,
+    })
+    if (windowDrop.drop) {
+      const reason = buildOutsideSendWindowReason(windowDrop)
+      sendMetrics.outsideSendWindowTotal++
+      await db.messageLog.update({
+        where: { id: job.logId },
+        data: { status: 'skipped', errorMsg: reason, sentAt: new Date() },
+      }).catch(() => {})
+      logger.warn({ destJid: job.destJid, logId: job.logId, ageMs: windowDrop.ageMs, waitMs: windowDrop.waitMs, maxAgeMs: windowDrop.maxAgeMs, window: windowDrop.window, type: job.type }, 'Envio descartado: fora do horário de envio do destino e não sairia antes do limite de espera')
+      await finishSendJob(job, { ok: false, error: 'outside_send_window' })
+      return
+    }
+
     const restDelayMs = calculateRestWindowDelayMs({
       sentCount: sendMetrics.successTotal,
       every: SMART_DELAY_REST_EVERY,
@@ -2634,50 +2851,100 @@ async function processSendJob(job) {
     // B) Freio progressivo medido POR DESTINO (ver getSendBackendQueueSizeForDest):
     // recalculado agora, no dequeue, em vez de congelado no enqueue com o
     // tamanho da fila GLOBAL — que fazia um destino lento penalizar todos.
+    // O antigo sorteio congelado no enqueue foi aposentado: o intervalo entre
+    // destinos é decidido/adiado mais abaixo, por core/destinationSpacing.js,
+    // nunca somado aqui dentro do smart delay.
     const destQueueSize = getSendBackendQueueSizeForDest(job.destJid)
     const pressureDelayMs = buildQueuePressureDelayMs(destQueueSize)
-    const totalDelayMs = Math.max(0, job.delayMs || 0) + pressureDelayMs + restDelayMs
+    const totalDelayMs = pressureDelayMs + restDelayMs
     if (totalDelayMs > 0) {
-      logger.info({ destJid: job.destJid, delayMs: totalDelayMs, baseDelayMs: job.delayMs || 0, pressureDelayMs, destQueueSize, restDelayMs, type: job.type }, 'Smart delay antes do envio')
+      logger.info({ destJid: job.destJid, delayMs: totalDelayMs, pressureDelayMs, destQueueSize, restDelayMs, type: job.type }, 'Smart delay antes do envio')
       await sleep(totalDelayMs)
     }
 
     try {
-      if (destGroupId && destPreservation) {
-        // checkAndReserve já cobre: pausa por health, horário/quiet, daily cap,
-        // intervalo mínimo, burst cap. Reserva o slot quando libera.
-        const cfgFull = await getConfig().catch(() => null)
-        const cfg = cfgFull?.botConfig ?? {}
-        const gateOpts = {
-          // A-2: fila com horário próprio sobrepõe a janela do destino (a fila já
-          // checou seu horário antes de despachar) → ignoreOperatingHours.
-          ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
-          // Plano B / Fase 3: destPreservation (preset/override → preset default →
-          // HARD_DEFAULT) é a ÚNICA fonte de verdade do gate. Anti-ban sempre
-          // ativo por destino; o master global e o legado decide() foram removidos.
-          destPreservation,
-        }
-        let gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
-        let throttleCycles = 0
-        while (!gate.allow && !shuttingDown) {
-          const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
-          // Defer LONGO (quiet_hours/burst_cap/daily_cap/health_paused) não pode
-          // segurar o consumidor serial: ele congelaria TODOS os envios do
-          // usuário — inclusive para destinos liberados e outras fontes. Em vez
-          // de `await sleep`, re-enfileira o job com notBefore e retorna,
-          // liberando a fila para os próximos jobs. Defer CURTO (min_interval)
-          // continua sendo esperado inline (barato e preserva ordem).
-          if (waitMs > THROTTLE_INLINE_WAIT_MAX_MS) {
-            await deferSendJob(job, gate)
-            return
+      // "Intervalo entre destinos" (core/destinationSpacing.js): vale para
+      // QUALQUER destino da conta (grupo, canal, status@broadcast, com ou sem
+      // Group cadastrado) — não só canal, e não só quem tem preservação por
+      // destino configurada (FR-022/FR-023). Por isso o gate roda mesmo sem
+      // `destGroupId`; nesse caso só o espaçamento decide.
+      const cfgFull = await getConfig().catch(() => null)
+      const cfg = cfgFull?.botConfig ?? {}
+      const spacingEnabled = isDestinationSpacingEnabled()
+      const spacingIntervalMs = toDestinationIntervalMs(cfg)
+      const gateOpts = destPreservation ? {
+        // A-2: fila com horário próprio sobrepõe a janela do destino (a fila já
+        // checou seu horário antes de despachar) → ignoreOperatingHours.
+        ignoreGlobalQuietHours: job.ignoreGlobalQuietHours === true,
+        // Plano B / Fase 3: destPreservation (preset/override → preset default →
+        // HARD_DEFAULT) é a ÚNICA fonte de verdade do gate. Anti-ban sempre
+        // ativo por destino; o master global e o legado decide() foram removidos.
+        destPreservation,
+      } : null
+
+      let throttleCycles = 0
+      while (!shuttingDown) {
+        const spacing = decideDestinationSpacing({
+          now: Date.now(),
+          destJid: job.destJid,
+          intervalMs: spacingIntervalMs,
+          state: destinationSpacingState,
+          enabled: spacingEnabled,
+        })
+        // Peek: NÃO reserva rajada/limite diário ainda — só depois de saber
+        // que o gate COMBINADO libera (destino + espaçamento), senão um job
+        // adiado pelo espaçamento queimaria rajada/limite diário à toa
+        // (research R11, item 2).
+        const dest = (destGroupId && gateOpts)
+          ? await peekDestinationDecision(destGroupId, gateOpts)
+          : { allow: true }
+        const gate = combineGateDecisions(dest, spacing)
+
+        if (gate.allow) {
+          if (destGroupId && gateOpts) {
+            await reserveDestinationSlot(destGroupId, gateOpts)
           }
-          throttleCycles++
-          logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela curta de throttle do destino')
-          await sleep(waitMs)
-          gate = await throttleCheckAndReserve(destGroupId, cfg, gateOpts)
+          destinationSpacingState = reserveSpacingSlot(destinationSpacingState, {
+            now: Date.now(),
+            destJid: job.destJid,
+            intervalMs: spacingIntervalMs,
+          })
+          break
         }
-        if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do destino')
+
+        if (gate.source === 'spacing' || gate.source === 'both') {
+          // FR-024: o intervalo entre destinos NUNCA espera dentro da fila
+          // serial, mesmo quando a espera é curta — ele trava TODOS os envios
+          // da conta (não só este destino), diferente do defer curto abaixo,
+          // que é só do gate DESTE destino.
+          destinationSpacingState = reserveSpacingSlot(destinationSpacingState, {
+            now: Date.now(),
+            destJid: job.destJid,
+            intervalMs: spacingIntervalMs,
+            deferredUntil: gate.deferUntil,
+          })
+          logger.info({ destJid: job.destJid, deferUntil: gate.deferUntil }, 'Adiado pelo intervalo entre destinos')
+          await deferSendJob(job, gate)
+          return
+        }
+
+        // gate.source === 'destination': comportamento histórico preservado.
+        // Defer LONGO (quiet_hours/burst_cap/daily_cap/health_paused) não pode
+        // segurar o consumidor serial: ele congelaria TODOS os envios do
+        // usuário — inclusive para destinos liberados e outras fontes. Em vez
+        // de `await sleep`, re-enfileira o job com notBefore e retorna,
+        // liberando a fila para os próximos jobs. Defer CURTO (min_interval)
+        // continua sendo esperado inline (barato e preserva ordem).
+        const waitMs = Math.max(0, (gate.deferUntil ?? Date.now()) - Date.now())
+        if (waitMs > THROTTLE_INLINE_WAIT_MAX_MS) {
+          await deferSendJob(job, gate)
+          return
+        }
+        throttleCycles++
+        logger.info({ destJid: job.destJid, reason: gate.reason, waitMs, throttleCycles }, 'Velocity scheduler: aguardando janela curta de throttle do destino')
+        await sleep(waitMs)
       }
+      if (shuttingDown) throw new Error('Worker encerrando durante espera de throttle do destino')
     } catch (err) {
       logger.warn({ err: err?.message, destJid: job.destJid }, 'channelHealth/throttle lookup falhou; seguindo sem pausa')
     }
@@ -2842,6 +3109,137 @@ async function markInterruptedSendLogs() {
   ])
 }
 
+// Reenfileira automaticamente, a cada boot, as ofertas perdidas por restart
+// do worker (deploy, crash, cutover) — markInterruptedSendLogs() acima marca
+// como `error:worker_restart` tudo que estava `queued`/`sending` quando o
+// processo anterior morreu, e sem isso a oferta some da fila sem nunca ter
+// sido reenviada (cliente reclamou: "O bot reiniciou enquanto essa mensagem
+// estava esperando para ser enviada").
+//
+// Remonta o MESMO card manual do envio ao vivo (buildManualLinkPreview: foto
+// raspada da loja + marca d'água do destino) a partir só do que sobrevive no
+// MessageLog (platform/originalUrl/convertedUrl/messageText) — a mensagem
+// original do WhatsApp e a imagem já processada morreram com o processo
+// antigo, então a foto é raspada de novo da loja, não reaproveitada. Sem
+// `couponTextSignal` real (não temos o texto/warning da mensagem original),
+// o banner de marca de cupom (feature opt-in, default OFF) nunca dispara
+// aqui — na dúvida, sai foto de produto, não banner.
+//
+// A montagem do card roda DENTRO do `buildPayload` do job (lazy, no dequeue),
+// não aqui no boot: raspar imagem/fazer upload é I/O lento, e fazer isso
+// para dezenas de ofertas ANTES de abrir o socket do WhatsApp atrasaria a
+// reconexão. `uploadToServer` (activeSock?.waUploadToServer) só existe depois
+// que o socket conecta — outro motivo para ser lazy.
+//
+// Só olha os últimos WORKER_RESTART_REPROCESS_WINDOW_MS: protege contra
+// reprocessar erro antigo de uma sessão anterior (bot ficou dias offline).
+// Escape hatch: WORKER_RESTART_REPROCESS_ENABLED=false desliga sem deploy.
+const WORKER_RESTART_REPROCESS_ENABLED = process.env.WORKER_RESTART_REPROCESS_ENABLED !== 'false'
+const WORKER_RESTART_REPROCESS_WINDOW_MS = Math.max(60_000, Number(process.env.WORKER_RESTART_REPROCESS_WINDOW_MS) || 30 * 60_000)
+
+async function reprocessRestartFailures() {
+  if (!WORKER_RESTART_REPROCESS_ENABLED) return
+  const cutoff = new Date(Date.now() - WORKER_RESTART_REPROCESS_WINDOW_MS)
+  const stuck = await db.messageLog.findMany({
+    where: {
+      userId,
+      status: 'error',
+      errorMsg: 'error:worker_restart',
+      platform: { not: 'scheduled' },
+      sentAt: { gte: cutoff },
+    },
+    take: 200,
+  })
+  if (stuck.length === 0) return
+
+  const cfg = await getConfig().catch(() => null)
+  let requeued = 0
+  for (const row of stuck) {
+    try {
+      // Claim atômico: evita reprocessar a mesma linha duas vezes se esta
+      // função for chamada mais de uma vez (defesa em profundidade).
+      const claimed = await db.messageLog.updateMany({
+        where: { id: row.id, errorMsg: 'error:worker_restart' },
+        data: { errorMsg: 'error:worker_restart:requeued' },
+      })
+      if (claimed.count !== 1) continue
+      if (!row.destGroup || !row.messageText || !cfg) continue
+
+      const log = await db.messageLog.create({
+        data: {
+          userId,
+          platform: row.platform,
+          sourceGroup: row.sourceGroup,
+          destGroup: row.destGroup,
+          originalUrl: row.originalUrl,
+          convertedUrl: row.convertedUrl,
+          messageText: row.messageText,
+          status: 'queued',
+        },
+      })
+      const postDetail = cfg.groups.postDetails.find(g => g.waJid === row.destGroup)
+      const channelForward = resolveChannelForward(postDetail)
+      // Mesma resolução de marca d'água do envio ao vivo (ver linhas próximas
+      // a `destinationImageUsesWatermark` no handler de messages.upsert):
+      // config é por destino, então precisa ser recalculada aqui, não herdada
+      // da oferta original.
+      const destinationImageMode = effectiveDestinationImageMode(postDetail?.imageMode, { hasChannelButton: !!channelForward })
+      const watermarkText = String(postDetail?.watermarkText ?? '').trim()
+      const watermarkColor = postDetail?.watermarkColor ?? undefined
+      const watermarkSize = postDetail?.watermarkSize ?? undefined
+      const watermarkPosition = postDetail?.watermarkPosition ?? undefined
+      const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
+      const primary = { platform: row.platform, url: row.originalUrl, converted: row.convertedUrl }
+
+      const accepted = await enqueueSendJob({
+        type: 'converted',
+        logId: log.id,
+        destJid: row.destGroup,
+        sourceJid: row.sourceGroup,
+        platforms: row.platform,
+        plan: cfg.plan,
+        delayMs: 0,
+        typingDelayMs: calculateTypingDelayMs({ text: row.messageText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+        channelForward,
+        couponContext: couponContextFromText(row.messageText),
+        buildPayload: async () => {
+          const linkPreview = await buildManualLinkPreview({
+            text: row.messageText,
+            primary,
+            credentialsMap: cfg.credentials,
+            uploadToServer: activeSock?.waUploadToServer,
+            destJid: row.destGroup,
+            couponTextSignal: false,
+            watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
+          }).catch(err => {
+            logger.warn({ err: err?.message, destJid: row.destGroup, logId: log.id }, 'Reprocessamento pós-restart: card de preview falhou; oferta sai como texto')
+            return null
+          })
+          return buildMonitoredMessagePayload({
+            finalText: row.messageText,
+            image: null,
+            useLinkPreview: true,
+            linkPreview,
+          })
+        },
+      })
+      if (!accepted) {
+        await db.messageLog.update({
+          where: { id: log.id },
+          data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
+        }).catch(() => {})
+        continue
+      }
+      requeued++
+    } catch (err) {
+      logger.warn({ err: err?.message, logId: row.id }, 'Reprocessamento pós-restart falhou para esta oferta')
+    }
+  }
+  if (requeued > 0) {
+    logger.info({ found: stuck.length, requeued }, 'Ofertas perdidas por restart do worker reenfileiradas automaticamente')
+  }
+}
+
 async function createSendBackend() {
   const onRejected = () => { sendMetrics.rejectedTotal++ }
   // sendJobTracker é lido por shutdown() via waitUntilDrained para esperar
@@ -3002,6 +3400,9 @@ async function startBotInner() {
   if (!interruptedSendLogsMarked) {
     interruptedSendLogsMarked = true
     await markInterruptedSendLogs()
+    await reprocessRestartFailures().catch(err => {
+      logger.error({ err: err?.message }, 'Reprocessamento automático pós-restart falhou')
+    })
   }
 
   // Duas janelas: msgIds (curta) protege contra redelivery do WhatsApp do
@@ -3242,6 +3643,13 @@ await persistSessionPatch({ status: 'connecting', lifecycle: 'authenticating', o
       // histórico e as notificações que alimentam "Canais que sigo".
       selfChatJids = buildAllowedJidSet([sock.user?.id, sock.user?.lid, phone ? `${phone}@s.whatsapp.net` : null].filter(Boolean))
       if (sendIpc) sendIpc({ type: 'status', data: 'connected', phone })
+      // Lido ANTES do persistSessionPatch sobrescrever `phone` — é o sinal
+      // durável de "esta conta já conectou alguma vez" (mesmo usado por
+      // `waEverConnected` nos gatilhos de e-mail). Precisa vir antes, senão a
+      // mensagem de boas-vindas do piloto reenviaria em toda reconexão.
+      const hadPhoneBeforeThisOpen = Boolean(
+        (await db.waSession.findUnique({ where: { userId }, select: { phone: true } }).catch(() => null))?.phone,
+      )
 await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', ownerInstance: OWNER_INSTANCE, lastHeartbeatAt: new Date(), lastDisconnectCode: null, blockNotice: null })
       // Este número já fez o teste em outra conta? O número só é conhecido
       // DEPOIS do open — é por isso que a checagem mora aqui e não na rota de
@@ -3258,6 +3666,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       })
       trackAnalyticsEventSafe({ userId, event: 'whatsapp_connected' })
       ensureChannelSubscriptions().catch(err => logger.error({ err: err?.message }, 'channels: erro ao inscrever no boot'))
+      maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore: hadPhoneBeforeThisOpen }).catch(() => {})
     }
 
     if (connection === 'close') {
@@ -4062,8 +4471,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // Devolve o MOTIVO em vez de null: sem `converted` o item continua
           // fora de `conversions`, mas a mensagem deixa de ser gravada como
           // "faltou cadastrar a loja" quando o cadastro está perfeito e a loja
-          // só está desligada NESTE grupo (RCA 2026-09-09).
-          return { platform, url, failureReason: CONVERSION_FAILURE.STORE_DISABLED }
+          // só está desligada NESTE grupo (RCA 2026-09-09). Sem cadastro da
+          // loja, é escolha da cliente não usá-la — não dizer que o cadastro
+          // "está certo" (RCA 2026-09-24).
+          const registered = validateCredentialData(platform, cfg.credentials[platform]).configured
+          return { platform, url, failureReason: registered ? CONVERSION_FAILURE.STORE_DISABLED : CONVERSION_FAILURE.STORE_NOT_USED }
         }
         logger.info({ platform, url }, 'Link detectado')
         const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
@@ -4406,9 +4818,13 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       }, { db }).catch(err => logger.warn({ err: err?.message, msgId: msg.key.id }, 'Falha ao capturar Story espelhado'))
 
       const destinations = cfg.botConfig.postToStatus ? [...baseDestinations, 'status@broadcast'] : baseDestinations
-      // PR-5.B.2: stagger entre destinos para quebrar simultaneidade exata.
-      // Primeiro destino sem atraso; demais com jitter aleatório limitado.
-      const staggerJitterMs = Math.max(0, Number(cfg.botConfig.channelStaggerJitterMs ?? 0))
+      // "Intervalo entre destinos" (specs/018-unificar-protecao-anti-ban,
+      // FR-022 a FR-026): deixou de ser um sorteio congelado no enqueue e
+      // virou espera FIXA, decidida no DEQUEUE por
+      // core/destinationSpacing.js (processSendJob) — vale para qualquer
+      // destino (grupo, canal, status), não só canal, e nunca congela a fila
+      // serial (sempre adiamento, mesmo curto). Ver RCA "'Atraso entre
+      // canais' — default 90s → 20s" no AGENTS.md.
       // Cupom usa a janela curta (couponDedupWindowMs); produto mantém a
       // janela diária. primary.linkKind é resolvido por resolveLinkKind no
       // momento da conversão (mesmo em Amazon/ML, que não marcam sozinhos —
@@ -4421,9 +4837,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // produto usa o teto longo, porque um job adiado horas pela preservação
       // do destino continua sendo o MESMO envio esperando sair.
       const pendingDedupMaxAgeMs = isCouponLink ? effectiveDedupWindowMs : PENDING_DEDUP_MAX_AGE_MS
-      let destIndex = -1
       for (const destJid of destinations) {
-        destIndex++
         const postDetail = cfg.groups.postDetails.find(g => g.waJid === destJid)
         // Feature 017 (arquitetura multicanal de entrega), D-A4/D-A6/T022:
         // ÚNICO ramo de hand-off do worker. `postDetail.deliveryNetwork` já
@@ -4773,14 +5187,6 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               : finalText)
           : finalText
 
-        // Stagger: 1º destino sai sem atraso adicional; demais recebem jitter.
-        // Plano B / Fase 3: o stagger entre canais virou config de conta dedicada
-        // (channelStaggerJitterMs), desacoplado do antigo toggle global de
-        // throttle — aplica sempre que houver jitter configurado.
-        const staggerMs = (destIndex > 0 && isChannelDest && staggerJitterMs > 0)
-          ? Math.floor(Math.random() * staggerJitterMs)
-          : 0
-
         // buildPayload é LAZY de propósito: roda no dequeue, dentro do
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
@@ -5025,9 +5431,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           sourceJid: jid,
           platforms,
           plan: cfg.plan,
-          // Só o stagger entre destinos fica congelado no job; o freio de fila
-          // é recalculado por destino no dequeue (processSendJob).
-          delayMs: staggerMs,
+          // O intervalo entre destinos NÃO congela mais no enqueue (era o
+          // sorteio `staggerMs`) — é decidido no DEQUEUE por
+          // core/destinationSpacing.js (processSendJob), junto do freio de
+          // fila recalculado por destino.
+          delayMs: 0,
           typingDelayMs: calculateTypingDelayMs({ text: variantText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
           channelForward,
           // specs/017-client-coupon-catalog: { platform, priceCents } | null,
@@ -5042,7 +5450,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           onDone: async (result) => {
             if (result.ok) {
               logger.info({ destJid, platforms, deliveryKind: deliveryInfo.kind, originImageBytes: deliveryInfo.originImageBytes }, 'Mensagem enviada')
-              if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+              if (previousSuccessCount === 0) {
+                trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+                maybeSendFirstOfferMessage().catch(() => {})
+              }
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
             }
@@ -5445,7 +5856,7 @@ const handleMessage = async msg => {
     // o de dashboard/lib, proibido aqui). Preço tratado como desconhecido
     // (cai na ordem fixa e previsível do FR-011 dentro de chooseCoupon); a
     // substituição em si acontece no MESMO ponto de processSendJob (T019).
-    const broadcastCouponContext = couponContextFromText(msg.text)
+    const broadcastCouponContext = couponContextFromText(msg.text, msg.options?.couponPriceCents)
 
     let queued = 0
     const errors = []
@@ -5508,6 +5919,32 @@ const handleMessage = async msg => {
       }
     }
     sendIpc({ type: 'broadcastResult', requestId: msg.requestId, data: { queued, rejected: errors.length, errors } })
+  }
+
+  // Admin > Contato com cliente: mensagem manual pro PRÓPRIO número da conta
+  // (self-chat), fora do pipeline de oferta — sem MessageLog, sem dedup, sem
+  // preservação. Igual às mensagens automáticas do piloto
+  // (maybeSendSelfWelcomeMessage e cia), só que disparada por ação humana.
+  if (msg?.type === 'sendSelfMessage') {
+    if (!activeSock) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: 'Número não identificado' })
+      return
+    }
+    try {
+      const texto = buildAdminSupportMessageText({ corpo: msg.text })
+      await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+      logger.info({ userId }, 'Mensagem manual do suporte enviada para o próprio número')
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, data: { ok: true } })
+      logWhatsappSelfMessageContact({ reason: 'mensagem_manual_suporte', texto, actorUserId: msg.actorUserId ?? null })
+    } catch (err) {
+      sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: String(err?.message ?? err) })
+    }
+    return
   }
 
   if (msg?.type === 'channel:metadata') {

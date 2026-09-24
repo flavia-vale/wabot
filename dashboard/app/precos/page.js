@@ -53,6 +53,10 @@ const BILLING_FAQ = [
     a: 'Não. A assinatura é de 30 dias e você cancela pelo próprio painel, sem falar com ninguém e sem multa. O acesso segue até o fim do período já pago.',
   },
   {
+    q: 'Posso pedir reembolso?',
+    a: 'Pode, em até 7 dias corridos depois do pagamento: devolvemos o valor integral (direito de arrependimento, art. 49 do Código de Defesa do Consumidor) e processamos o pedido em até 5 dias úteis. Depois dos 7 dias não há estorno do período já pago, mas o cancelamento evita a próxima cobrança. Detalhes na política de reembolso.',
+  },
+  {
     q: 'Como eu pago?',
     a: 'O pagamento é pelo Mercado Pago, com Pix ou cartão de crédito. A liberação do acesso é automática assim que o pagamento é aprovado.',
   },
@@ -209,6 +213,10 @@ export default async function PrecosPage() {
             — {SUPPORT_HOURS.toLowerCase()}. {SUPPORT_RESPONSE_SLA}. Você também pode ver{' '}
             <Link href="/" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
               como o robô funciona
+            </Link>{' '}
+            e a{' '}
+            <Link href="/politica-de-reembolso" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
+              política de reembolso
             </Link>
             .
           </p>

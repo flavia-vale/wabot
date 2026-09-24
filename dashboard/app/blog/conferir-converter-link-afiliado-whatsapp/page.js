@@ -21,8 +21,8 @@ const faq = [
     a: 'Se a URL final não tiver o identificador de afiliado, se redirecionar para outro vendedor ou se quebrar no celular, a plataforma pode não atribuir a venda ao afiliado certo.',
   },
   {
-    q: 'O Espelha Grupos promete integração aprovada com marketplaces ou redes de afiliados?',
-    a: 'Não. O conteúdo orienta conferência operacional de links e divulgação no WhatsApp; qualquer integração depende das regras e aprovações de cada plataforma.',
+    q: 'O Espelha Grupos converte o link sozinho?',
+    a: 'Sim. Com o código de afiliada que você cadastra no painel, ele troca o link de produto em Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress, e o link de cupom e campanha onde a loja credita esse tipo de link (Shopee, Amazon e Magalu). Se não der para converter com segurança, a oferta não é publicada.',
   },
 ]
 
@@ -48,7 +48,7 @@ export default function Page() {
             Antes de divulgar no WhatsApp, o afiliado deve abrir a URL final no celular, confirmar se a tag ou o código de afiliado aparece no destino esperado e registrar qual link monetizado será enviado. Essa conferência reduz o risco de publicar uma oferta com link sem comissão, cupom errado ou redirecionamento quebrado.
           </p>
           <p>
-            O Espelha Grupos ajuda na rotina de organização e distribuição de mensagens em grupos, mas não promete integração aprovada com marketplaces, redes de afiliados ou programas externos. A responsabilidade de validar as regras de cada plataforma continua sendo do operador.
+            Se você usa o Espelha Grupos, a troca do link pelo seu código é automática nas 6 lojas suportadas, e oferta que não pôde ser convertida não é publicada: o link de outra pessoa nunca vai para o seu grupo. A conferência manual continua valendo para as primeiras ofertas e para lojas fora dessa lista. As regras de cada programa de afiliados continuam sendo suas de conhecer.
           </p>
         </section>
 
@@ -71,7 +71,7 @@ export default function Page() {
             <li>Verifique se a tag, código ou parâmetro de afiliado continua presente depois do redirecionamento.</li>
             <li>Compare produto, preço e cupom com a copy que será enviada.</li>
             <li>Salve o link aprovado em uma planilha ou rotina interna com data, nicho e campanha.</li>
-            <li>Use o Espelha Grupos para distribuir apenas a mensagem já conferida para os grupos corretos.</li>
+            <li>No Espelha Grupos, confira no histórico de envios as primeiras ofertas: o link que saiu e o motivo de qualquer oferta bloqueada.</li>
           </ol>
         </section>
 
@@ -96,13 +96,13 @@ export default function Page() {
         </section>
 
         <section>
-          <h2>CTA</h2>
+          <h2>Próximo passo</h2>
           <p>
-            Se a sua rotina já tem ofertas conferidas e o gargalo está em publicar com consistência, entre na lista VIP do Espelha Grupos e teste uma operação mais organizada para grupos de WhatsApp.
+            Se o gargalo é trocar link por link na mão e publicar em cada grupo, teste o Espelha Grupos por 7 dias grátis, com o plano Pro completo e sem cartão.
           </p>
           <p>
             <Link href="/login?mode=register&utm_source=blog&utm_medium=organic&utm_campaign=organic-marketing-sprint-1&utm_content=cta-link-afiliado" className="inline-flex min-h-12 items-center rounded-xl bg-emerald-600 px-5 font-black text-white hover:bg-emerald-700">
-              Entrar na lista VIP
+              Testar 7 dias grátis
             </Link>
           </p>
         </section>

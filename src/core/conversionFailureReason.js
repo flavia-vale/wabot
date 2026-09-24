@@ -22,6 +22,13 @@ export const CONVERSION_FAILURE = Object.freeze({
   /** A loja está desligada nas configurações DESTE grupo monitorado. O cadastro
    *  pode estar perfeito — o robô nem chegou a tentar converter. */
   STORE_DISABLED: 'store_disabled',
+  /** A loja está desligada neste grupo E a cliente nem cadastrou essa loja:
+   *  é a escolha dela de não trabalhar com essa loja, não uma falha. Caso real
+   *  (2026-09-24): conta com só Shopee e Mercado Livre cadastrados e os grupos
+   *  ligados só nessas duas viu 112 ofertas de Amazon em vermelho dizendo
+   *  "seu cadastro está certo, ligue a loja" — nem cadastro havia — e concluiu
+   *  que o espelhamento inteiro tinha parado. */
+  STORE_NOT_USED: 'store_not_used',
   /** O robô tentou converter e não conseguiu agora (a loja não respondeu, o
    *  link não pôde ser lido, a resposta veio incompleta). Costuma ser passageiro
    *  e a mesma oferta converte na tentativa seguinte. */
@@ -30,11 +37,12 @@ export const CONVERSION_FAILURE = Object.freeze({
 
 // Mais acionável primeiro: falta de cadastro é o que a cliente resolve em um
 // minuto; loja desligada é uma chave no painel; falha de conversão pode nem
-// exigir ação dela. Uma mensagem com vários links reporta o mais acionável.
+// exigir ação dela; loja que ela não usa não pede ação nenhuma. Uma mensagem com vários links reporta o mais acionável.
 const PRECEDENCE = [
   CONVERSION_FAILURE.MISSING_CREDENTIAL,
   CONVERSION_FAILURE.STORE_DISABLED,
   CONVERSION_FAILURE.CONVERSION_FAILED,
+  CONVERSION_FAILURE.STORE_NOT_USED,
 ]
 
 const KNOWN = new Set(PRECEDENCE)

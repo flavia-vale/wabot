@@ -56,7 +56,13 @@ function joinFriendly(fields = []) {
 
 export const REQUIRED_FIELDS = {
   shopee: ['appId', 'secretKey'],
-  amazon: ['tag', 'ubid-acbbr', 'at-acbbr', 'x-acbbr'],
+  // Amazon: só a etiqueta é obrigatória. O `?tag=` credita a comissão em
+  // qualquer link amazon.com.br; o código de acesso (cookie do SiteStripe) só
+  // deixa o link CURTO (amzn.to). Sem ele, `convert()` publica o link longo com
+  // a etiqueta. Antes os 3 cookies eram exigidos: quem tinha só a etiqueta não
+  // conseguia salvar, e o robô descartava a oferta (bot-worker/offerEngine
+  // barram por `configured`) — a tela prometia o contrário.
+  amazon: ['tag'],
   mercadolivre: ['tag'],
   magazineluiza: ['tag'],
   shein: ['tag'],
@@ -263,19 +269,6 @@ export function validateCredentialData(platform, data = {}) {
 
   const required = REQUIRED_FIELDS[platform] ?? []
   const missing = required.filter(field => !hasValue(data?.[field]))
-
-  if (platform === 'amazon') {
-    // O cookie string COMPLETO da sessão (campo `cookie`) satisfaz a autenticação
-    // do SiteStripe sozinho — não exigir os 3 cookies nomeados quando ele existe.
-    // Ver buildCookieHeader em src/converters/amazon.js.
-    const rawCookie = getString(data, 'cookie')
-    if (rawCookie.length >= 20) {
-      for (const legacy of ['ubid-acbbr', 'at-acbbr', 'x-acbbr']) {
-        const idx = missing.indexOf(legacy)
-        if (idx !== -1) missing.splice(idx, 1)
-      }
-    }
-  }
 
   if (platform === 'mercadolivre') {
     const ssid = getString(data, 'ssid')

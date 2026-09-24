@@ -52,6 +52,7 @@ function warnOnProtocolMismatch(raw) {
  * @property {()=>Promise<any>} listRunningBots
  * @property {(userId:string)=>Promise<any>} listGroups
  * @property {(userId:string,text:string,jids:string[],options?:Object)=>Promise<any>} sendBroadcast
+ * @property {(userId:string,text:string,actorUserId?:string|null)=>Promise<any>} sendSelfMessage
  * @property {(userId:string,phone:string)=>Promise<any>} requestPairingCode
  * @property {(userId:string)=>Promise<any>} getBotMetrics
  * @property {(userId:string)=>Promise<any>} reloadConfig
@@ -203,6 +204,7 @@ export function createSupervisorClient({
   const listRunningBots = () => send(COMMAND.LIST_RUNNING_BOTS, {})
   const listGroups = userId => send(COMMAND.LIST_GROUPS, { userId })
   const sendBroadcast = (userId, text, jids, options = {}) => send(COMMAND.SEND_BROADCAST, { userId, text, jids, options })
+  const sendSelfMessage = (userId, text, actorUserId = null) => send(COMMAND.SEND_SELF_MESSAGE, { userId, text, actorUserId })
   const requestPairingCode = (userId, phone) => send(COMMAND.REQUEST_PAIRING_CODE, { userId, phone })
   const getBotMetrics = userId => send(COMMAND.GET_BOT_METRICS, { userId })
   const reloadConfig = userId => send(COMMAND.RELOAD_CONFIG, { userId })
@@ -272,7 +274,7 @@ export function createSupervisorClient({
   return /** @type {SupervisorClient} */ ({
     // superfície igual a sessionCore.js
     startBot, stopBot, isRunning, listRunningBots,
-    listGroups, sendBroadcast, requestPairingCode, getBotMetrics, reloadConfig, refreshWaGroups,
+    listGroups, sendBroadcast, sendSelfMessage, requestPairingCode, getBotMetrics, reloadConfig, refreshWaGroups,
     channelMetadata, followChannelImmediate, listFollowedChannels,
     onQR, onStatus, getLastQR,
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,

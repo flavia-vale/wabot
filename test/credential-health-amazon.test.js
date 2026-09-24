@@ -28,16 +28,28 @@ test('Amazon: cookie completo em JSON (export de extensão) também configura', 
   assert.deepEqual(v.missing, [])
 })
 
-test('Amazon: sem cookie completo e sem os 3 nomeados fica incompleto', () => {
+test('Amazon: só a etiqueta já configura (sai com link longo ?tag=)', () => {
   const v = validateCredentialData('amazon', { tag: 'x-20' })
-  assert.equal(v.configured, false)
-  assert.ok(v.missing.includes('ubid-acbbr'))
-  assert.ok(v.missing.includes('at-acbbr'))
-  assert.ok(v.missing.includes('x-acbbr'))
+  assert.equal(v.configured, true)
+  assert.deepEqual(v.missing, [])
 })
 
-test('Amazon: cookie completo curto (<20) não conta como portador de auth', () => {
-  const v = validateCredentialData('amazon', { tag: 'x-20', cookie: 'a=b' })
+test('Amazon: sem etiqueta continua incompleto, mesmo com código de acesso', () => {
+  const v = validateCredentialData('amazon', { cookie: 'session-id=1; session-token=abcdef; at-acbbr=Atza|x' })
   assert.equal(v.configured, false)
-  assert.ok(v.missing.includes('at-acbbr'))
+  assert.deepEqual(v.missing, ['tag'])
+})
+
+test('Amazon só com etiqueta: save diz que salvou e que o link sai comprido, não que a loja falhou', async () => {
+  const { describeSaveSessionCheck } = await import('../src/credentialSaveCheck.js')
+  const validation = validateCredentialData('amazon', { tag: 'x-20' })
+  const r = describeSaveSessionCheck({
+    platform: 'amazon',
+    validation,
+    probe: { configured: false, alive: null, reason: 'no_cookie' },
+    fallbackMessage: 'fallback',
+  })
+  assert.equal(r.tone, 'success')
+  assert.match(r.message, /link mais comprido/)
+  assert.doesNotMatch(r.message, /não respondeu|venceu/)
 })

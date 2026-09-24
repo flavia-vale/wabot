@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { BRAND_YOUTUBE_TUTORIAL_URL, SUPPORT_EMAIL } from '@/lib/marketing-content'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
 const slug = '/estudos-de-caso'
@@ -13,13 +14,13 @@ const requirements = [
   'Contexto do nicho, volume aproximado e período analisado.',
   'Métrica operacional verificável, sem promessa de comissão garantida.',
   'Descrição do processo antes/depois e limitações do resultado.',
-  'Aprovação final antes da publicação em produção.',
+  'Aprovação final da pessoa citada antes de o texto ir ao ar.',
 ]
 
 const faq = [
   { q: 'Por que não há cases com números inventados?', a: 'Porque estudos de caso precisam de consentimento e dados verificáveis. Publicar números sem lastro prejudica confiança e pode induzir compradores a erro.' },
   { q: 'Que tipo de resultado pode virar estudo de caso?', a: 'Resultados operacionais como redução de retrabalho, melhoria de conferência, cobertura de grupos e clareza de logs são mais adequados do que promessa de comissão.' },
-  { q: 'Como enviar um caso para análise?', a: 'A operação deve documentar contexto, período, métrica, evidência e autorização de uso antes de solicitar publicação.' },
+  { q: 'Como enviar um caso para análise?', a: `Mande para ${SUPPORT_EMAIL} o contexto, o período, a métrica, a evidência (print do histórico de envios ou do relatório da loja) e a autorização de uso. Nada é publicado sem a sua aprovação do texto final.` },
 ]
 
 export const metadata = {
@@ -39,7 +40,7 @@ export default function Page() {
       ))}
       <main className="mx-auto w-full max-w-5xl px-5 py-10 md:px-8 md:py-16">
         <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">E-E-A-T · Prova responsável</p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Prova responsável</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{title}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{description}</p>
           <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
@@ -47,6 +48,10 @@ export default function Page() {
           <section className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5">
             <h2 className="text-2xl font-black tracking-tight text-gray-950">Status dos estudos públicos</h2>
             <p className="mt-3 leading-8 text-gray-700">O Espelha Grupos ainda não publica estudos de caso com métricas de clientes nesta página porque a política do site exige consentimento, período, metodologia e dados verificáveis. Essa decisão evita prova social falsa e protege compradores.</p>
+          </section>
+          <section className="mt-8">
+            <h2 className="text-2xl font-black text-gray-950">O que dá para conferir hoje</h2>
+            <p className="mt-3 text-gray-700">Enquanto não há case publicado, a prova é o próprio produto: o <a href={BRAND_YOUTUBE_TUTORIAL_URL} className="font-bold text-emerald-700 underline underline-offset-4">passo a passo real de criar a conta</a>, sem corte, está no canal oficial, e o teste de 7 dias libera o plano Pro completo para você ver as ofertas saindo com o seu link antes de pagar.</p>
           </section>
 
           <section className="mt-8">

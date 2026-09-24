@@ -6,6 +6,7 @@ import { IntroCard } from '@/components/landing/IntroCard'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { getEditorialDates } from '@/lib/editorial-content'
 
 const pages = {
   'bot-ofertas-restaurantes-whatsapp': {
@@ -176,7 +177,6 @@ export function OrganicNicheLanding({ pageKey }) {
       ))}
       <Hero
         eyebrowLabel={page.eyebrow}
-        primaryCtaLabel="Entrar na Lista VIP"
         headlineOverride={headline}
         subOverride={page.directAnswer}
         heroStyle={{ background: 'linear-gradient(180deg, color-mix(in oklab, var(--accent-3) 50%, var(--surface)), transparent)', borderRadius: 24, paddingInline: 20 }}
@@ -189,6 +189,7 @@ export function OrganicNicheLanding({ pageKey }) {
             title={page.h1}
             body={page.directAnswer}
             pills={page.bullets}
+            updatedAt={getEditorialDates(page.slug).updatedAt}
           />
         </div>
       </section>
@@ -257,7 +258,7 @@ export function OrganicNicheLanding({ pageKey }) {
                 ))}
               </ul>
               <Link href={registerHref} data-seo-cta="organic-niche-register" className="btn btn-accent" style={{ marginTop: 20 }}>
-                Entrar na Lista VIP
+                Testar 7 dias grátis
               </Link>
             </aside>
           </div>

@@ -107,6 +107,34 @@ O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
 - Estimativa: `RAM ≈ 1 GB + N_sessões × 0,18 GB + ~20%`; para decidir
   capacidade use **0,35 GB/sessão**. Servidor (2026-09-18): 30,6 GB, teto 80
   vagas, limite seguro da política ~71. Sinal que decide é o **swap**.
+  Robôs rodam com jemalloc + semi-space 8 desde 2026-09-22 (−29% de memória
+  com 12-24 h de vida); ver `docs/rca/memoria-e-capacidade.md`.
+
+## Design system (canônico — toda alteração visual segue ele)
+
+A fonte única de verdade visual é **`docs/design-system/design-system-v2.html`**
+(Espelha Grupos · Design System v2, arquivo autocontido — abrir no navegador).
+**Qualquer mudança visual no dashboard/painel/admin/site deve seguir esse
+documento**: cores, tipografia (Figtree), forma e sombra, botões, campos, cards/
+KPIs/tags, menu lateral, padrão de página, padrão PRO, planos e acesso, voz e
+texto e o checklist de página nova.
+
+Tokens principais (usar os tokens, nunca hex solto):
+
+| Token | Valor | Token | Valor |
+|---|---|---|---|
+| `--bg` | `#EEF6F2` | `--accent` | `#7CC9A9` |
+| `--bg-soft` | `#DDEDE5` | `--accent-strong` | `#3E9C7A` |
+| `--surface` | `#FCFEFD` | `--accent-2` | `#D9CFEA` |
+| `--ink` | `#1F2D2A` | `--accent-3` | `#F6E8D8` |
+| `--ink-soft` | `#5A6E68` | `--pro` | `#6F4FE8` |
+| `--ink-faint` | `#8FA09A` | `--pro-ink` / `--pro-soft` | `#4B34A8` / `#ECE7FA` |
+| `--warn` | `#E8A45A` | `--danger` | `#D97757` |
+
+**Não regredir:** padrão visual novo que não está no design system é decidido
+com a dona do produto e entra no documento ANTES de ir para a tela — senão cada
+tela volta a inventar o próprio estilo. Atualizar o design system = substituir o
+arquivo (nova versão), não editar tela a tela.
 
 ## Triagem de novas demandas (implementar agora vs. backlog)
 
@@ -134,6 +162,11 @@ O proxy do Next (`dashboard/app/api/[...path]/route.js`) já mapeia
 - Antes de "consertar" o deploy, conferir se a falha está no workflow
   (Actions) ou no smoke test pós-PM2 (`.env`/porta no VPS) — são causas
   diferentes com correções diferentes.
+- **Mudou texto de página pública que já está no Google?** Liste as URLs numa
+  leva de reindexação **no topo** da tabela de prioridades de
+  `docs/marketing/ACOES_FLAVIA_2026-09-11.md` (linha 🔝, antes das levas
+  comuns, até 10 por dia, só depois do deploy em `main`), e tire essas URLs
+  de qualquer leva comum que ainda não foi pedida.
 - Mudanças em banco/migrations sempre passam por staging antes de prod.
 - Antes de mudar `DATABASE_URL`, conferir contagem de registros no banco
   atual (`sqlite3 <db> "SELECT COUNT(*) FROM User"`).

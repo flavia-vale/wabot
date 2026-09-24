@@ -4,11 +4,17 @@ import Footer from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
-import { getEditorialDates } from '@/lib/editorial-content'
+import { formatDatePtBr, getEditorialDates } from '@/lib/editorial-content'
 import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '@/lib/marketing-content'
 
 const siteUrl = getSiteUrl()
+// "As outras lojas" sai da lista canônica: a resposta escrita à mão ficou
+// para trás quando SHEIN e AliExpress entraram (23/09/2026).
+function outrasLojas(loja) {
+  const outras = SUPPORTED_STORES.filter((nome) => nome !== loja)
+  return `${outras.slice(0, -1).join(', ')} e ${outras.at(-1)}`
+}
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
 const mainLandingHref = '/bot-canais-whatsapp'
 const diagnosticHref = '/diagnostico-antiban-whatsapp'
@@ -47,6 +53,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: 'Depois de entrar no Shopee Afiliados, o trabalho deixa de ser achar oferta e passa a ser publicar. Cada produto precisa virar link com o seu código, o texto precisa ser montado, e tudo isso repetido em cada grupo. O Espelha Grupos faz esse caminho sozinho: acompanha as origens que você escolhe, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e registro do que saiu.',
     intent: 'shopee afiliados whatsapp',
     related: [
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Não tem grupo de onde copiar? O robô busca sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, no plano Pro.' },
       { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com a chave da Shopee', note: 'Onde ela fica, para que serve e como apagar quando quiser.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'O que significa clonar um grupo de ofertas', note: 'A mensagem sai como publicação sua, com o seu link.' },
       { href: '/blog/comecar-afiliado-whatsapp-sem-grupo-grande', label: 'Ainda não tem grupo grande?', note: 'O que dá para fazer com poucos contatos, sem esperar audiência chegar.' },
@@ -80,6 +87,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       pill: 'O que a Shopee tem de diferente',
       title: 'Na Shopee, a chave recusada para a oferta inteira — não só encurta o link.',
       body: 'Nas outras lojas, credencial vencida faz o link sair mais comprido e a comissão continua sendo sua. Na Shopee não: sem chave aceita, a conversão falha e a oferta não é publicada. Por isso o painel avisa em verde ou vermelho o estado da sua chave, e você recebe e-mail quando ela para de ser aceita.',
+    },
+    bestFor: {
+      yes: [
+        "Afiliada Shopee que já acompanha grupos de ofertas e quer republicar nos seus com o próprio código, cupom incluído.",
+        "Quem quer, além do espelhamento, o robô buscando oferta da Shopee sozinho por palavra-chave (plano Pro).",
+        "Quem quer ver no painel as vendas e a comissão da Shopee que vieram das ofertas publicadas.",
+      ],
+      no: [
+        "Quem não tem (ou não quer cadastrar) a chave de afiliada da Shopee: sem chave aceita, a oferta da Shopee não sai.",
+        "Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.",
+        "Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.",
+      ],
     },
     primaryCta: 'Testar 7 dias grátis',
     secondaryCta: 'Ver como funciona a operação',
@@ -144,6 +163,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       title: 'Endereço montado por nós nunca é publicado.',
       body: 'Um link de anúncio do Mercado Livre montado a partir do código do produto pode apontar para uma página que não existe — a cliente clica e vê "esta página não existe". Quando a conversão falha, a oferta simplesmente não sai, em vez de sair com um endereço quebrado. Isso veio de um caso real e virou regra no código.',
     },
+    bestFor: {
+      yes: [
+        "Afiliada do Mercado Livre que divulga link de produto, de catálogo ou de anúncio, em vários grupos.",
+        "Quem prefere que a oferta não saia a vê-la sair com um endereço quebrado ou sem o seu código.",
+        "Quem divulga outras lojas junto: as 6 lojas entram no plano de entrada, sem custo por loja.",
+      ],
+      no: [
+        "Quem divulga principalmente cupom e campanha do Mercado Livre: nesse caso não afirmamos que a comissão cai.",
+        "Quem quer o robô achando oferta do Mercado Livre sozinho: a busca automática por palavra-chave hoje é só na Shopee.",
+        "Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.",
+      ],
+    },
     primaryCta: 'Testar 7 dias grátis',
     secondaryCta: 'Ver como funciona a operação',
     problemTitle: 'O gargalo de quem já é afiliada do Mercado Livre não é achar oferta.',
@@ -155,7 +186,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['E o link de cupom do Mercado Livre?', 'O link de produto é o caso coberto. Para campanha e cupom do Mercado Livre, o mecanismo de crédito é diferente do das outras lojas e não afirmamos que funciona — preferimos dizer isso a prometer comissão que talvez não caia.'],
       ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o afiliado do grupo de origem, que costuma ser um concorrente. Melhor não enviar do que enviar pagando para outra pessoa.'],
       ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
-      ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Amazon e Magalu entram no mesmo plano de entrada, sem custo a mais por loja.'],
+      ['Dá para divulgar outras lojas junto?', `Dá. ${outrasLojas('Mercado Livre')} entram no mesmo plano de entrada, sem custo a mais por loja.`],
     ],
   },
   /* Terceira loja da frente Tier 1. O `aside` usa o RCA de 2026-07: o link curto
@@ -202,6 +233,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       title: 'Link curto sem a tag funciona igual — e não paga nada.',
       body: 'É o pior tipo de perda, porque não dá sinal nenhum: a oferta sai bonita, o link abre o produto certo, a pessoa compra e a comissão vai para o vazio. Ninguém reclama, nada aparece no painel, e você só descobre quando olha o relatório da Amazon e vê zero clique atribuído. A tag precisa estar no endereço antes do encurtamento — depois não dá para consertar.',
     },
+    bestFor: {
+      yes: [
+        "Associada Amazon que quer a tag garantida em todo link, inclusive no link curto e no de cupom.",
+        "Quem republica ofertas de grupos que já acompanha e perde tempo trocando a tag na mão.",
+        "Quem divulga outras lojas junto: as 6 lojas entram no plano de entrada, sem custo por loja.",
+      ],
+      no: [
+        "Quem quer o robô achando oferta da Amazon sozinho: a busca automática por palavra-chave hoje é só na Shopee.",
+        "Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.",
+        "Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.",
+      ],
+    },
     primaryCta: 'Testar 7 dias grátis',
     secondaryCta: 'Ver como funciona a operação',
     problemTitle: 'O gargalo de quem já é afiliada Amazon não é achar oferta.',
@@ -213,7 +256,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['Funciona com cupom da Amazon, ou só com produto?', 'Com os dois. O link de campanha e de cupom também sai com a sua tag, o que importa quando o preço anunciado só fecha com o cupom aplicado.'],
       ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o afiliado do grupo de origem. Melhor não enviar do que enviar pagando para outra pessoa.'],
       ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
-      ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Mercado Livre e Magalu entram no mesmo plano de entrada, sem custo a mais por loja.'],
+      ['Dá para divulgar outras lojas junto?', `Dá. ${outrasLojas('Amazon')} entram no mesmo plano de entrada, sem custo a mais por loja.`],
     ],
   },
   /* Frente Tier 1 — Magalu. LINHA REABERTA em 2026-09-02 por decisão explícita
@@ -266,6 +309,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       title: 'No Magalu o seu código vale em qualquer endereço da loja.',
       body: 'Nas outras lojas, converter um link de cupom ou de campanha depende do mecanismo de cada programa, e nem sempre credita. No Magalu não: produto, campanha e cupom são tratados igual, e a oferta sai com você creditada em qualquer um deles. Se você divulga muita campanha e vitrine, essa diferença aparece no fim do mês.',
     },
+    bestFor: {
+      yes: [
+        "Divulgadora Magalu que publica muita campanha, vitrine e cupom: no Magalu o código vale em qualquer endereço da loja.",
+        "Quem republica ofertas de grupos que já acompanha e quer o próprio código em todas.",
+        "Quem divulga outras lojas junto: as 6 lojas entram no plano de entrada, sem custo por loja.",
+      ],
+      no: [
+        "Quem compartilha a oferta do Magalu só com texto e link: quando a loja não entrega a foto e a mensagem de origem não traz uma, a oferta sai sem imagem.",
+        "Quem quer o robô achando oferta do Magalu sozinho: a busca automática por palavra-chave hoje é só na Shopee.",
+        "Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.",
+      ],
+    },
     primaryCta: 'Testar 7 dias grátis',
     secondaryCta: 'Ver como funciona a operação',
     problemTitle: 'O gargalo de quem já divulga Magalu não é achar oferta.',
@@ -276,7 +331,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['Isso substitui o meu cadastro no programa do Magalu?', 'Não. O programa continua sendo do Magalu e a comissão é paga por ele, direto para você. O que muda é a distribuição.'],
       ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o divulgador do grupo de origem. Melhor não enviar do que enviar pagando para outra pessoa.'],
       ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
-      ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Amazon e Mercado Livre entram no mesmo plano de entrada, sem custo a mais por loja.'],
+      ['Dá para divulgar outras lojas junto?', `Dá. ${outrasLojas('Magalu')} entram no mesmo plano de entrada, sem custo a mais por loja.`],
     ],
   },
   /* Quinta loja da frente Tier 1. O `aside` diz o que a SHEIN tem de específico:
@@ -323,6 +378,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       title: 'O link curto vem da própria SHEIN, não de um encurtador nosso.',
       body: 'O endereço da SHEIN é longo e come o espaço da mensagem. A conversão pede o link curto ao próprio programa de afiliados da loja, e publica exatamente o que a SHEIN devolveu — sem reescrever nem acrescentar parâmetro. Se a resposta não vier, a oferta sai com o link comprido em vez de não sair: link comprido é feio, oferta que não sai é prejuízo.',
     },
+    bestFor: {
+      yes: [
+        "Afiliada SHEIN que quer o link curto do próprio programa da loja, com o seu código, em vez do endereço longo.",
+        "Quem prefere que a oferta saia com o link comprido a deixar de sair quando a SHEIN não devolve o link curto.",
+        "Quem divulga outras lojas junto: as 6 lojas entram no plano de entrada, sem custo por loja.",
+      ],
+      no: [
+        "Quem quer o robô achando oferta da SHEIN sozinho: a busca automática por palavra-chave hoje é só na Shopee.",
+        "Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.",
+        "Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.",
+      ],
+    },
     primaryCta: 'Testar 7 dias grátis',
     secondaryCta: 'Ver como funciona a operação',
     problemTitle: 'O gargalo de quem já é afiliada SHEIN não é achar oferta.',
@@ -333,7 +400,112 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['Isso substitui o meu cadastro no programa da SHEIN?', 'Não. O programa continua sendo da SHEIN e a comissão é paga por ela, direto para você. O que muda é a distribuição.'],
       ['E se a conversão falhar?', 'A oferta não é publicada. Encaminhar o link original daria a sua comissão para o afiliado do grupo de origem. Melhor não enviar do que enviar pagando para outra pessoa.'],
       ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: intervalo entre envios, limite por destino e variação de texto.'],
-      ['Dá para divulgar outras lojas junto?', 'Dá. Shopee, Amazon, Mercado Livre e Magalu entram no mesmo plano de entrada.'],
+      ['Dá para divulgar outras lojas junto?', `Dá. ${outrasLojas('SHEIN')} entram no mesmo plano de entrada, sem custo a mais por loja.`],
+    ],
+  },
+  /* Página do modo "o robô busca a oferta sozinho" (23/09/2026).
+   *
+   * Nasceu de medição: na consulta "bot para afiliados no WhatsApp", o ChatGPT
+   * leu a pergunta como "robô que garimpa oferta sozinho" e nos deixou de fora,
+   * porque nenhuma página pública dizia que temos esse modo — só o
+   * espelhamento aparecia. O recurso existe desde antes (ofertas automáticas
+   * da Shopee, plano Pro), e esta página diz com precisão o que ele faz.
+   *
+   * Tudo aqui foi conferido no código, não no marketing:
+   *  - src/offerAutomation/ (cron, dispatcher, shopeeOffers, searchListType);
+   *  - as 5 ordens de busca e a dica de cada uma vêm de
+   *    lib/offerAutomationSearch.js — nunca citar o número da API;
+   *  - intervalo de 15 min a 24 h ou 1x/dia em horário fixo, de 1 a 5 ofertas
+   *    por envio (src/api/routes/offerAutomation.js);
+   *  - é SÓ Shopee. Mercado Livre, Amazon e as outras lojas só convertem link
+   *    que já existe — não prometer busca nelas (docs/rca/ofertas-automaticas).
+   *
+   * Título entra pela palavra buscada; o termo interno ("ofertas automáticas",
+   * "garimpo") é explicado dentro da página. */
+  'bot-que-busca-ofertas-shopee-whatsapp': {
+    path: '/bot-que-busca-ofertas-shopee-whatsapp',
+    title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp',
+    description: 'Diga o tema e o robô procura ofertas na Shopee, filtra pelo desconto, troca o link pelo seu código e publica nos seus grupos. Plano Pro, 7 dias grátis.',
+    eyebrow: 'Ofertas automáticas da Shopee',
+    h1: 'Bot que busca ofertas da Shopee sozinho e publica no seu WhatsApp',
+    lead: 'Você escreve o tema — "air fryer", "tênis", "maquiagem" — e o Espelha Grupos procura as ofertas na Shopee, descarta as que não têm o desconto mínimo que você pediu, troca o link pelo seu código de afiliada e publica nos seus grupos no ritmo que você escolher. Não precisa de grupo de origem nenhum. No painel, esse modo se chama "ofertas automáticas" (o mercado também chama de garimpo automático) e faz parte do plano Pro.',
+    intent: 'bot que busca ofertas shopee whatsapp',
+    related: [
+      { href: '/bot-afiliados-whatsapp', label: 'O outro modo: espelhar grupos que você já segue', note: 'Converte o link em 6 lojas e republica nos seus grupos e canais.' },
+      { href: '/shopee-afiliados-whatsapp', label: 'Shopee Afiliados no WhatsApp', note: 'Como a oferta da Shopee sai com o seu link, inclusive cupom.' },
+      { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
+      { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee', note: 'A tabela de comissão e o prazo de atribuição.' },
+      { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com a chave da Shopee', note: 'Onde ela fica, para que serve e como apagar quando quiser.' },
+      { href: '/politica-de-reembolso', label: 'Política de reembolso', note: 'Até 7 dias do pagamento, valor integral de volta.' },
+      { href: '/precos', label: 'Preços e planos', note: 'Basic, Pro e o teste grátis de 7 dias lado a lado.' },
+    ],
+    about: ['Shopee Afiliados', 'Ofertas automáticas', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'O Espelha Grupos busca ofertas sozinho ou só repassa as de outros grupos?',
+        a: 'Faz os dois. O modo de espelhamento acompanha os grupos e canais que você já segue e republica as ofertas com o seu link, em 6 lojas. O modo de ofertas automáticas não precisa de grupo de origem: o próprio robô procura na Shopee pelo tema que você escreveu e publica sozinho. Os dois podem rodar juntos na mesma conta.',
+      },
+      {
+        q: 'Em quais lojas o robô busca oferta sozinho?',
+        a: 'Hoje, só na Shopee. Mercado Livre, Amazon, Magalu, SHEIN e AliExpress entram pela conversão de link: o robô troca pelo seu código o link que chega de um grupo que você acompanha, mas não sai procurando oferta nessas lojas.',
+      },
+      {
+        q: 'Como eu digo o que ele deve procurar?',
+        a: 'Você escreve o tema (palavra-chave), o desconto mínimo, a ordem da busca, quantas ofertas saem por vez (de 1 a 5) e de quanto em quanto tempo (de 15 minutos a 24 horas, ou uma vez por dia num horário fixo). E escolhe o grupo que recebe.',
+      },
+      {
+        q: 'Quanto custa?',
+        a: 'As ofertas automáticas fazem parte do plano Pro, de R$69 a cada 30 dias. O teste grátis de 7 dias libera o Pro completo, sem cartão. O plano Basic, de R$39, não inclui esse modo — ele cobre o espelhamento e a conversão de link.',
+      },
+    ],
+    aside: {
+      pill: 'Os dois modos numa conta só',
+      title: 'Espelhar o que você já segue e buscar oferta sozinho.',
+      body: 'O mercado costuma dividir isso em duas ferramentas: uma que repassa o que aparece em outros grupos e outra que garimpa oferta sozinha. No Espelha Grupos os dois modos convivem: o espelhamento cobre 6 lojas, e a busca automática por tema funciona na Shopee, no plano Pro.',
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona',
+    problemTitle: 'Nem sempre existe um grupo bom de onde copiar oferta.',
+    problem: 'Quem está começando, ou divulga um nicho específico, muitas vezes não tem um grupo de origem confiável para acompanhar. Sobra abrir a Shopee, pesquisar, conferir desconto, gerar o link com o seu código e montar a mensagem — todo dia, várias vezes. A busca automática faz essa parte: você define o tema e as regras uma vez, e as ofertas passam a sair sozinhas no seu grupo.',
+    bestFor: {
+      yes: [
+        'Afiliada Shopee que quer ofertas de um tema específico saindo sozinhas no grupo, sem depender de outro grupo de origem.',
+        'Quem já espelha grupos e quer completar o dia com ofertas garimpadas por tema.',
+        'Quem quer controlar o desconto mínimo, a ordem da busca e o ritmo dos envios.',
+      ],
+      no: [
+        'Quem quer o robô buscando oferta sozinho em Amazon ou Mercado Livre: nessas lojas o Espelha Grupos só converte link que já chegou de um grupo.',
+        'Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.',
+        'Quem quer isso no plano Basic: a busca automática é recurso do plano Pro.',
+      ],
+    },
+    // Quem também vende "o robô busca sozinho". Sem preço aqui de propósito:
+    // preço de concorrente só sai com ficha datada, nas páginas de alternativa.
+    versus: [
+      { name: 'Achify', href: '/alternativas/achify', verdict: 'Tem piloto automático na Shopee já no plano de entrada, com Telegram, vitrine e selo de desconto na foto, mas envia para poucos grupos e só espelha a partir do plano intermediário. Escolha o Achify para poucos grupos; o Espelha Grupos para espelhar e buscar sem pagar por grupo.' },
+      { name: 'Afiliados Turbo', href: '/alternativas/afiliados-turbo', verdict: 'Busca ofertas nos marketplaces e classifica por categoria com IA, cobrando por grupos e por ofertas no mês. Escolha o Afiliados Turbo se quer categoria por grupo; o Espelha Grupos se publica muitas ofertas em vários grupos.' },
+      { name: 'AfiliAI', href: '/alternativas/afiliai', verdict: 'Tem AutoPilot e clone de grupos, WhatsApp e Telegram e vários números na mesma conta, com teto de grupos de destino por plano. Escolha o AfiliAI se precisa de Telegram; o Espelha Grupos se publica em muitos grupos ou divulga SHEIN e AliExpress.' },
+    ],
+    bullets: [
+      'Busca por tema na Shopee, com desconto mínimo que você define.',
+      'Cinco ordens de busca à escolha: relevância, mais vendidos, maior preço, menor preço ou maior comissão.',
+      'O link já sai com o seu código de afiliada Shopee.',
+      'O mesmo produto não é publicado de novo: o que já saiu fica de fora das próximas buscas.',
+    ],
+    process: [
+      'Cadastre a sua chave de afiliada da Shopee no painel (App ID e chave secreta).',
+      'Crie uma oferta automática: escreva o tema, o desconto mínimo e a ordem da busca.',
+      'Escolha o grupo que recebe, quantas ofertas saem por vez (1 a 5) e de quanto em quanto tempo (15 minutos a 24 horas, ou 1 vez por dia num horário fixo).',
+      'Acompanhe no histórico o que saiu e ajuste o tema ou a ordem se aparecer muito acessório.',
+    ],
+    faqs: [
+      ['Que ordens de busca existem?', 'Cinco, com os nomes da própria Shopee. Relevância segue o que a Shopee acha mais próximo do texto que você digitou. Mais vendidos costuma trazer acessório, porque acessório vende muito mais que o aparelho. Maior preço é a opção que, na nossa medição, traz o aparelho em si em vez do acessório dele. Menor preço traz quase sempre acessório. Maior comissão paga mais por venda, mas traz ainda mais acessório, porque é o acessório barato que paga mais comissão.'],
+      ['Por que às vezes só aparece capa ou cápsula?', 'Porque o acessório vende mais e paga mais comissão que o produto principal, então sobe nas ordens "mais vendidos" e "maior comissão". Duas coisas resolvem: escrever o nome do produto em vez da categoria ("máquina de lavar" em vez de "eletrodoméstico") e trocar a ordem para "maior preço".'],
+      ['Posso usar o espelhamento e a busca automática juntos?', 'Pode. Os dois modos rodam na mesma conta: o espelhamento repassa, com o seu link, o que aparece nos grupos que você acompanha (em 6 lojas), e a busca automática completa o grupo com ofertas da Shopee pelo tema que você escolheu.'],
+      ['A mesma oferta sai repetida?', 'Não. O produto que já foi publicado por aquela automação sai das próximas buscas, e o mesmo produto enviado ao mesmo grupo por outra automação é segurado por uma janela de tempo — a não ser que o preço tenha mudado, porque aí é oferta nova.'],
+      ['Preciso deixar o celular ligado?', 'Não. Depois de conectar o WhatsApp lendo o QR Code, o robô roda no servidor.'],
+      ['Isso é "anti-ban"?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp. O que existe é controle do que está sob controle: quantas ofertas saem por vez, o intervalo entre as buscas e a revisão do que foi publicado.'],
+      ['E se eu pagar e não gostar?', 'Em até 7 dias corridos depois do pagamento, devolvemos o valor integral. Antes de pagar, o teste grátis de 7 dias já libera o Pro completo, sem cartão.'],
     ],
   },
   'bot-afiliados-whatsapp': {
@@ -352,6 +524,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
     intent: 'bot para afiliados whatsapp',
     related: [
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'O robô também busca oferta sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem (plano Pro).' },
+      { href: '/politica-de-reembolso', label: 'Política de reembolso', note: 'Até 7 dias do pagamento, valor integral de volta; depois, cancelamento sem multa.' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'Checklist, preço e como testar em 7 dias.' },
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'E quem faz cada uma.' },
@@ -385,6 +559,14 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
         a: `É um robô que acompanha os grupos que você já segue, troca o link de cada oferta pelo seu código de afiliado (${SUPPORTED_STORES.join(', ')}) e publica a oferta convertida nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.`,
       },
       {
+        // 23/09/2026: o ChatGPT lê "bot para afiliados" como "robô que busca
+        // oferta sozinho" e nos deixava de fora por não saber que temos esse
+        // modo. A resposta precisa dizer os DOIS modos, com o limite certo
+        // (busca automática só na Shopee, plano Pro).
+        q: 'Ele só repassa ofertas de outros grupos ou também busca oferta sozinho?',
+        a: 'Os dois. No modo de espelhamento, o robô acompanha os grupos e canais que você já segue e republica cada oferta com o seu código, em 6 lojas. No modo de ofertas automáticas (plano Pro), ele não precisa de grupo de origem: procura sozinho na Shopee pelo tema que você escrever, filtra pelo desconto mínimo e publica no seu grupo. Hoje a busca sozinha é só na Shopee; nas outras lojas o robô converte o link que chega dos grupos que você acompanha.',
+      },
+      {
         q: 'Como funciona na prática?',
         a: 'Você cadastra as credenciais de afiliada de cada loja, escolhe os grupos de origem (onde as ofertas aparecem primeiro) e os grupos/canais de destino (onde você publica), define o intervalo entre envios, e o robô converte e publica sozinho — com o que saiu, para onde e o que foi bloqueado registrado no histórico.',
       },
@@ -414,6 +596,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       yes: [
         'Afiliada que já acompanha grupos de ofertas e quer republicar nos seus com o próprio código, sem copiar e colar.',
         'Quem divulga mais de uma loja: as 6 lojas entram no plano de entrada, sem cobrar por grupo.',
+        'Quem quer os dois modos numa conta só: espelhar os grupos que já segue e, no Pro, deixar o robô buscar oferta da Shopee sozinho por tema.',
         'Quem quer ver no histórico o que saiu, o que foi bloqueado por repetição e por quê.',
       ],
       no: [
@@ -462,6 +645,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'bot para achadinhos whatsapp',
     relatedTitle: 'Continue: o que publicar nos seus achadinhos',
     related: [
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Bot que busca achadinhos da Shopee sozinho', note: 'Você escreve o tema e o desconto mínimo; o robô garimpa e publica (plano Pro).' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'Checklist, preço e como testar em 7 dias.' },
@@ -488,6 +672,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       title: 'Você escolhe as fontes. O resto sai sozinho.',
       body: 'O bot acompanha os grupos que você indicou como fonte, troca o link pelo seu código de afiliado e publica nos seus grupos e canais — com intervalo entre envios e sem repetir a mesma oferta no mesmo grupo.',
     },
+    bestFor: {
+      yes: [
+        "Quem tem grupo de achadinhos e já acompanha outros grupos onde as promoções aparecem primeiro.",
+        "Quem não consegue ficar no celular o dia todo e perde a oferta que dura minutos.",
+        "Quem divulga várias lojas: as 6 lojas entram no plano de entrada, sem custo por grupo.",
+      ],
+      no: [
+        "Quem quer o robô achando oferta sozinho em todas as lojas: a busca automática por palavra-chave é só na Shopee (plano Pro); nas outras lojas você escolhe as origens.",
+        "Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.",
+        "Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.",
+      ],
+    },
     primaryCta: 'Testar grátis por 7 dias',
     secondaryCta: 'Ver como funciona',
     // Esta página recebe a maior parte das suas impressões de gente digitando o
@@ -509,7 +705,11 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     process: ['Escolha os grupos onde os achadinhos aparecem primeiro — eles viram sua fonte.', 'Escolha os seus grupos e canais que vão receber as ofertas.', 'Defina o intervalo entre envios e quais palavras você não quer repassar.', 'Acompanhe no histórico o que saiu, para onde e o que foi bloqueado por repetição.'],
     faqs: [
       ['O que é um bot de achadinhos?', 'É um programa que acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp — sem você copiar e colar oferta por oferta.'],
-      ['De onde vêm os achadinhos?', 'Dos grupos que você já acompanha e escolhe como fonte. O bot não inventa oferta nem busca em lugar nenhum sozinho: ele repassa o que aparece nas fontes que você indicou, com o seu link no lugar do original.'],
+      // Corrigido em 23/09/2026: a resposta antiga dizia que o bot "não busca em
+      // lugar nenhum sozinho" — falso desde as ofertas automáticas da Shopee
+      // (plano Pro). Era exatamente a leitura que fazia o ChatGPT nos deixar
+      // de fora de "bot para afiliados no WhatsApp".
+      ['De onde vêm os achadinhos?', 'De dois lugares, à sua escolha. No espelhamento, dos grupos que você já acompanha e escolhe como fonte: o bot repassa o que aparece ali, com o seu link no lugar do original, em 6 lojas. No plano Pro, também da própria Shopee: você escreve o tema e o desconto mínimo, e o bot busca as ofertas sozinho e publica no seu grupo. A busca sozinha hoje é só na Shopee.'],
       ['A comissão fica comigo mesmo se a oferta veio de outro grupo?', 'Fica, desde que o link seja convertido antes de sair. É esse o ponto: encaminhar o link do jeito que veio credita a venda para quem publicou primeiro. O Espelha Grupos troca pelo seu código de Shopee, Amazon, Mercado Livre ou Magalu antes de publicar.'],
       ['Ele posta a mesma promoção várias vezes?', 'Não no mesmo grupo dentro da janela de repetição. Se a mesma oferta chega por duas fontes diferentes, ela sai uma vez só — e o histórico mostra quantas repetições foram bloqueadas.'],
       ['Preciso ficar com o celular ligado?', 'O aparelho precisa estar conectado à internet, como no WhatsApp Web. Mas você não precisa estar olhando: as ofertas saem sozinhas conforme as regras que você definiu.'],
@@ -537,6 +737,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       pill: 'Sem promessa de imunidade',
       title: 'Ninguém pode garantir que você não será banido.',
       body: 'O WhatsApp decide sozinho e não explica o critério. Quem promete banimento zero está vendendo o que não controla. O que dá para controlar é ritmo de envio, variação de texto, limite por grupo e divulgar só para quem aceitou receber.',
+    },
+    bestFor: {
+      yes: [
+        "Quem já teve número banido e quer controlar o que está sob controle: intervalo, limite por destino e variação do texto.",
+        "Quem publica em muitos grupos e quer tirar a rajada de mensagens iguais seguidas.",
+        "Quem quer histórico do que saiu e do que foi bloqueado, para ajustar o ritmo com dado.",
+      ],
+      no: [
+        "Quem procura garantia contra banimento. Ninguém pode dar isso, e quem promete está vendendo o que não entrega.",
+        "Quem adiciona pessoas em grupo sem elas pedirem: nenhum ajuste de ritmo compensa denúncia de membro.",
+        "Quem quer disparo em massa para lista de contatos: o Espelha Grupos publica em grupos e canais, não em conversa individual.",
+      ],
     },
     primaryCta: 'Testar grátis por 7 dias',
     secondaryCta: 'Fazer o teste de risco',
@@ -575,6 +787,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       title: 'Grupo e canal não são a mesma coisa — e você não precisa escolher.',
       body: 'No grupo as pessoas conversam, respondem e o limite de membros é fixo. No canal você publica para muita gente e quase ninguém responde. Quem migra de uma vez costuma perder as duas coisas ao mesmo tempo: a conversa que tinha e o alcance que ainda não construiu.',
     },
+    bestFor: {
+      yes: [
+        "Quem quer levar a audiência do grupo para um Canal do WhatsApp sem desligar o grupo no meio do caminho.",
+        "Quem quer usar o grupo como origem ou comunidade e o canal como vitrine, cada um com o seu ritmo.",
+        "Quem divulga como afiliada e quer o canal recebendo as ofertas já com o seu código.",
+      ],
+      no: [
+        "Quem quer migrar a audiência de uma vez por um aviso: parte das pessoas não atravessa, com ou sem ferramenta.",
+        "Quem está no plano Basic: publicar em Canais do WhatsApp é do plano Pro.",
+        "Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.",
+      ],
+    },
     primaryCta: 'Planejar minha migração',
     secondaryCta: 'Ver fluxos grupo e canal',
     problemTitle: 'Migrar de uma vez é como fechar a loja para mudar de rua.',
@@ -608,6 +832,18 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       pill: 'O que ninguém avisa',
       title: 'No canal, quando a entrega cai, nada avisa.',
       body: 'Grupo dá sinal: as pessoas somem, reclamam, saem. Canal não — o número de inscritos continua igual e as ofertas simplesmente aparecem para menos gente. Por isso ritmo e histórico importam mais no canal do que no grupo: é o único jeito de perceber antes de perder o alcance inteiro.',
+    },
+    bestFor: {
+      yes: [
+        "Quem usa o Canal do WhatsApp como vitrine de ofertas e quer publicar espaçado, com curadoria.",
+        "Quem tem mais de um canal e quer que cada um receba em momentos diferentes.",
+        "Quem quer histórico do que saiu e do que foi bloqueado por repetição.",
+      ],
+      no: [
+        "Quem quer publicar tudo o que aparece o mais rápido possível: canal com rajada perde alcance.",
+        "Quem está no plano Basic: publicar em Canais do WhatsApp é do plano Pro.",
+        "Quem procura promessa de banimento zero. Ninguém controla a decisão do WhatsApp.",
+      ],
     },
     primaryCta: 'Criar operação com canal',
     secondaryCta: 'Conhecer preservação avançada',
@@ -714,6 +950,7 @@ const s = {
   h1: { fontSize: 'clamp(40px, 5vw, 68px)', lineHeight: 0.98, letterSpacing: '-0.055em', margin: '18px 0' },
   h2: { fontSize: 'clamp(28px, 3vw, 44px)', lineHeight: 1.05, letterSpacing: '-0.04em', margin: '12px 0 14px' },
   lead: { fontSize: 'clamp(17px, 2vw, 21px)', lineHeight: 1.55, color: 'var(--ink-soft)' },
+  updated: { fontSize: 13, fontWeight: 700, color: 'var(--ink-soft)', margin: '10px 0 0' },
   small: { fontSize: 14.5, lineHeight: 1.65, color: 'var(--ink-soft)' },
   card: { background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 24, boxShadow: '0 10px 28px rgba(63, 63, 70, 0.04)' },
   softCard: { background: 'color-mix(in oklab, var(--accent) 12%, var(--surface))', border: '1px solid var(--line)', borderRadius: 24, padding: 24 },
@@ -746,7 +983,7 @@ export function PreservationCommercialPage({ pageKey }) {
   const aside = page.aside ?? {
     pill: 'Módulo de Preservação Avançada',
     title: 'Redução de risco sem promessa absoluta.',
-    body: 'O Espelha Grupos usa cadência, variações, limites, monitoramento e plano de recuperação. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
+    body: 'O Espelha Grupos usa cadência, variação de texto, limites por dia e status de saúde de cada canal, com pausa automática do canal que recusa envios (plano Pro). O plano B continua sendo seu. Quando falamos de “anti-ban”, é como termo de busca do mercado, não garantia.',
   }
   // Links internos para o conteúdo editorial. Antes destas páginas comerciais só
   // apontarem para cadastro/diagnóstico/checklist, a força que elas acumulam ficava
@@ -756,6 +993,7 @@ export function PreservationCommercialPage({ pageKey }) {
   const related = page.related ?? []
   const relatedTitle = page.relatedTitle ?? 'Continue no cluster de afiliados'
   const schemas = buildSchemas(page)
+  const dates = getEditorialDates(page.path)
   const trackerRoute = { slug: pageKey, path: page.path, cluster: 'canais-preservacao', intent: page.intent, template: 'commercial-seo' }
 
   return (
@@ -772,6 +1010,8 @@ export function PreservationCommercialPage({ pageKey }) {
               <span className="pill"><span className="dot" />{page.eyebrow}</span>
               <h1 id="page-title" style={s.h1}>{page.h1}</h1>
               <p style={s.lead}>{page.lead}</p>
+              {/* Frescor visível: a IA e a pessoa leem a mesma data do schema (dateModified). */}
+              <p style={s.updated}>Atualizado em <time dateTime={dates.updatedAt}>{formatDatePtBr(dates.updatedAt)}</time></p>
               {page.competitorNudge ? (
                 <p style={s.nudge}>
                   {page.competitorNudge.text}{' '}
