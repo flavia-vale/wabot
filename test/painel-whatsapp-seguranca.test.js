@@ -84,6 +84,14 @@ const paginaConexao = readFileSync(
   'utf8',
 )
 
+test('a ajuda para conectar não depende de estado de usuário fora do componente', () => {
+  // A ajuda é pública para qualquer estado da sessão. Mantê-la num componente
+  // sem props impede condicionais acidentais com variáveis que a página não
+  // declarou, sem proibir usos legítimos da palavra "user" no restante dela.
+  assert.match(paginaConexao, /function ConnectionHelp\(\)/)
+  assert.match(paginaConexao, /<ConnectionHelp \/>/)
+})
+
 test('A3: as garantias aparecem ANTES do formulário de conexão', () => {
   // É onde a dúvida existe. Depois do formulário elas não respondem nada —
   // quem hesitou já fechou a tela.
