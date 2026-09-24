@@ -158,6 +158,10 @@ function requestWithTimeout(userId, type, payload = {}, timeout = 10000, timeout
 
 export const listGroups = userId => requestWithTimeout(userId, 'listGroups', {}, 10000, 'Timeout ao buscar grupos')
 export const sendBroadcast = (userId, text, jids, options = {}) => requestWithTimeout(userId, 'broadcast', { text, jids, options }, 30000, 'Timeout ao enviar mensagem')
+// Admin > Contato com cliente: manda para o PRÓPRIO número da conta (self-chat),
+// nunca para grupo/canal. Sem MessageLog, sem dedup/preservação — é fora do
+// pipeline de oferta, ver `sendSelfMessage` em src/bot-worker.js.
+export const sendSelfMessage = (userId, text, actorUserId = null) => requestWithTimeout(userId, 'sendSelfMessage', { text, actorUserId }, 15000, 'Timeout ao enviar mensagem para o próprio número')
 export const getBotMetrics = userId => bots.has(userId) ? requestWithTimeout(userId, 'metrics', {}, 5000, 'Timeout ao buscar métricas') : Promise.resolve(null)
 export const blockSessionCommands = userId => { commandBlocks.add(userId); return true }
 export const unblockSessionCommands = userId => commandBlocks.delete(userId)

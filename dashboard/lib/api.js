@@ -412,6 +412,11 @@ export const api = {
   adminEmailBatches: () => apiFetch('/api/admin/emails/batches'),
   adminEmailBatchCancel: (id) => apiFetch(`/api/admin/emails/batches/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   adminEmailSends: (params = {}) => apiFetch(`/api/admin/emails/sends?${new URLSearchParams(params).toString()}`),
+
+  // Aba "Contato com cliente" — parte WhatsApp (histórico + envio manual).
+  adminWhatsappContactHistory: (limit = 50) => apiFetch(`/api/admin/emails/whatsapp/history?limit=${encodeURIComponent(limit)}`),
+  adminWhatsappConnectedClients: (q = '') => apiFetch(`/api/admin/emails/whatsapp/connected?q=${encodeURIComponent(q)}`),
+  adminWhatsappSend: (userId, text) => apiFetch('/api/admin/emails/whatsapp/send', { method: 'POST', body: JSON.stringify({ userId, text }) }),
   adminStagingStatus: () => apiFetch('/api/admin/staging-power'),
   adminStagingPower: (action, { mfaToken } = {}) =>
     apiFetch('/api/admin/staging-power', {

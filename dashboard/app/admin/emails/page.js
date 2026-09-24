@@ -13,9 +13,10 @@ import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 
 const ABAS = [
-  ['modelos', 'Modelos'],
-  ['enviar', 'Enviar agora'],
-  ['historico', 'Histórico'],
+  ['modelos', 'Modelos (e-mail)'],
+  ['enviar', 'Enviar agora (e-mail)'],
+  ['historico', 'Histórico (e-mail)'],
+  ['whatsapp', 'WhatsApp'],
 ]
 
 const CATEGORIA_LABEL = {
@@ -517,6 +518,145 @@ function Historico({ batches, sends, onCancelar }) {
   )
 }
 
+function WhatsAppTab() {
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+  const [historico, setHistorico] = useState([])
+  const [conectados, setConectados] = useState([])
+  const [destinatarioId, setDestinatarioId] = useState('')
+  const [busca, setBusca] = useState('')
+  const [texto, setTexto] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState(null)
+
+  // Só busca quando a aba é aberta — nem a lista de conectados nem o
+  // histórico são úteis fora daqui.
+  useEffect(() => {
+    let ativo = true
+    Promise.all([api.adminWhatsappContactHistory(100), api.adminWhatsappConnectedClients()])
+      .then(([hist, conn]) => {
+        if (!ativo) return
+        setHistorico(hist.contatos ?? [])
+        setConectados(conn.clientes ?? [])
+        setErro('')
+      })
+      .catch((err) => { if (ativo) setErro(err.message) })
+      .finally(() => { if (ativo) setCarregando(false) })
+    return () => { ativo = false }
+  }, [])
+
+  const filtrados = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    if (!q) return conectados
+    return conectados.filter((c) => c.email?.toLowerCase().includes(q) || c.nome?.toLowerCase().includes(q))
+  }, [conectados, busca])
+
+  async function enviar() {
+    if (!destinatarioId || texto.trim().length < 3) return
+    setEnviando(true)
+    setResultado(null)
+    try {
+      await api.adminWhatsappSend(destinatarioId, texto.trim())
+      setResultado({ ok: true, texto: 'Mensagem enviada.' })
+      setTexto('')
+      const hist = await api.adminWhatsappContactHistory(100)
+      setHistorico(hist.contatos ?? [])
+    } catch (err) {
+      setResultado({ ok: false, texto: err.message })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  if (carregando) return <p className="text-sm text-gray-500">Carregando…</p>
+
+  return (
+    <div className="space-y-4">
+      {erro && <Alert type="error" message={erro} />}
+
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+        <h3 className="mb-1 text-sm font-black text-gray-900">Mandar mensagem agora</h3>
+        <p className="mb-3 text-xs text-gray-500">
+          Só aparece quem está com o WhatsApp conectado neste momento. A mensagem chega no próprio celular da
+          cliente, na conversa &quot;Mensagens para você mesmo&quot;.
+        </p>
+        {conectados.length === 0 ? (
+          <p className="text-sm text-gray-500">Nenhum cliente conectado agora.</p>
+        ) : (
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Buscar por nome ou e-mail…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+            />
+            <select
+              value={destinatarioId}
+              onChange={(e) => setDestinatarioId(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+            >
+              <option value="">Escolha o cliente…</option>
+              {filtrados.map((c) => (
+                <option key={c.userId} value={c.userId}>{c.nome ? `${c.nome} — ${c.email}` : c.email}</option>
+              ))}
+            </select>
+            <textarea
+              rows={4}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder="Escreva a mensagem…"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+              maxLength={1000}
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">{texto.length}/1000</span>
+              <button
+                onClick={enviar}
+                disabled={enviando || !destinatarioId || texto.trim().length < 3}
+                className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+              >
+                {enviando ? 'Enviando…' : 'Enviar'}
+              </button>
+            </div>
+            {resultado && <Alert type={resultado.ok ? 'success' : 'error'} message={resultado.texto} />}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+        <h3 className="mb-3 text-sm font-black text-gray-900">Histórico de contato por WhatsApp</h3>
+        <p className="mb-3 text-xs text-gray-500">Mensagens automáticas (piloto de ativação) e manuais, mais recentes primeiro.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="text-gray-500">
+              <tr>
+                <th className="py-1 pr-3">Quando</th>
+                <th className="py-1 pr-3">Cliente</th>
+                <th className="py-1 pr-3">Motivo</th>
+                <th className="py-1 pr-3">Mensagem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historico.map((h) => (
+                <tr key={h.id} className="border-t border-gray-100 align-top">
+                  <td className="py-1 pr-3 whitespace-nowrap text-gray-600">{formatDate(h.when)}</td>
+                  <td className="py-1 pr-3 font-medium text-gray-800">{h.clienteNome ? `${h.clienteNome} — ${h.clienteEmail}` : h.clienteEmail}</td>
+                  <td className="py-1 pr-3">
+                    <Chip tone={h.manual ? 'blue' : 'gray'}>{h.motivo}</Chip>
+                  </td>
+                  <td className="py-1 pr-3 max-w-xs truncate text-gray-600" title={h.texto ?? ''}>{h.texto ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {historico.length === 0 && <p className="py-3 text-sm text-gray-500">Nenhum contato por WhatsApp ainda.</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminEmailsPage() {
   const [aba, setAba] = useState('modelos')
   const [carregando, setCarregando] = useState(true)
@@ -582,8 +722,8 @@ export default function AdminEmailsPage() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-2xl font-black text-gray-900">E-mails</h1>
-            <p className="text-sm text-gray-600">Edite os textos, mande teste e dispare campanhas.</p>
+            <h1 className="text-2xl font-black text-gray-900">Contato com cliente</h1>
+            <p className="text-sm text-gray-600">E-mails: edite os textos, mande teste e dispare campanhas. WhatsApp: veja o histórico e mande mensagem direto pelo painel.</p>
           </div>
           <Link href="/admin" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm ring-1 ring-gray-200">Voltar ao admin</Link>
         </div>
@@ -647,6 +787,7 @@ export default function AdminEmailsPage() {
 
         {aba === 'enviar' && <Enviar templates={templates} onEnviado={recarregar} />}
         {aba === 'historico' && <Historico batches={batches} sends={sends} onCancelar={cancelarCampanha} />}
+        {aba === 'whatsapp' && <WhatsAppTab />}
       </div>
     </main>
   )

@@ -12,6 +12,7 @@ import {
   buildFirstOfferPublishedMessageText,
   buildMissingCredentialNudgeText,
   buildMissingGroupsNudgeText,
+  buildAdminSupportMessageText,
 } from '../src/core/selfWelcomeMessage.js'
 
 test('sem env, o piloto é a lista padrão do código', () => {
@@ -123,4 +124,16 @@ test('decideActivationNudge: sem sinal confiável de conexão, nunca decide (fai
     decideActivationNudge({ accountEmail: 'flavia.vale@usp.br', pilotEmails: ['flavia.vale@usp.br'], connectedForMs: null, hasCredential: false, hasGroups: false }),
     null,
   )
+})
+
+test('mensagem manual do suporte: título fixo, corpo é o que a admin escreveu, sem pilot', () => {
+  const texto = buildAdminSupportMessageText({ corpo: 'Oi! Vi que você teve uma dúvida, posso ajudar?' })
+  assert.match(texto, /^\*💬 Mensagem do suporte\*/)
+  assert.match(texto, /Oi! Vi que você teve uma dúvida, posso ajudar\?/)
+  assert.match(texto, /suporte no número \(32\) 99984-4020\./)
+})
+
+test('mensagem manual do suporte tolera espaço/undefined no corpo', () => {
+  assert.doesNotThrow(() => buildAdminSupportMessageText({ corpo: '  texto  ' }))
+  assert.doesNotThrow(() => buildAdminSupportMessageText({}))
 })
