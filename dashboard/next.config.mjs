@@ -87,6 +87,8 @@ export const LEGACY_ROUTE_REDIRECTS = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Não anunciar a tecnologia do servidor no cabeçalho x-powered-by (auditoria 2026-09-23).
+  poweredByHeader: false,
   outputFileTracingRoot: __dirname,
   turbopack: {
     root: __dirname,

@@ -106,8 +106,17 @@ import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuaranti
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
-import { resolveSelfWelcomePilotEmails, shouldSendSelfWelcomeMessage, buildSelfWelcomeMessageText } from './core/selfWelcomeMessage.js'
-import { VIDEO_CADASTRO_ETIQUETAS_URL } from './tutorialVideo.js'
+import {
+  resolveSelfWelcomePilotEmails,
+  isPilotEmail,
+  shouldSendSelfWelcomeMessage,
+  decideActivationNudge,
+  buildSelfWelcomeMessageText,
+  buildFirstOfferPublishedMessageText,
+  buildMissingCredentialNudgeText,
+  buildMissingGroupsNudgeText,
+} from './core/selfWelcomeMessage.js'
+import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from './tutorialVideo.js'
 import sharp from 'sharp'
 import { applySharpTuning } from './core/sharpTuning.js'
 
@@ -646,6 +655,7 @@ function startHeartbeatIpc() {
     try { reportReceptionHealth(getReceptionHealth()) } catch {}
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
+    maybeSendActivationNudge().catch(() => {})
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
@@ -877,6 +887,102 @@ async function maybeSendSelfWelcomeMessage({ phone, sock, hadPhoneBefore }) {
     trackAnalyticsEventSafe({ userId, event: 'ops_self_welcome_message_sent' })
   } catch (err) {
     logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de boas-vindas (piloto, best-effort)')
+  }
+}
+
+// Mensagem de "prova de valor" pelo PRÓPRIO WhatsApp, na 1ª oferta publicada
+// com sucesso (momento 2 — ver src/core/selfWelcomeMessage.js). Chamada só
+// quando `previousSuccessCount === 0`, no `onDone` do envio espelhado — é o
+// mesmo instante em que `first_send_success` já é gravado, então os dois
+// nascem juntos e nunca discordam sobre "foi a primeira".
+async function maybeSendFirstOfferMessage() {
+  try {
+    if (!activeSock) return
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+    if (!isPilotEmail(user?.email, pilotEmails)) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: buildFirstOfferPublishedMessageText() })
+    logger.info({ userId }, 'Mensagem de 1ª oferta publicada (piloto) enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_first_offer_message_sent' })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao enviar mensagem de 1ª oferta (piloto, best-effort)')
+  }
+}
+
+// Throttle do nudge de ativação (momentos 3 e 4): a checagem roda a cada tick
+// do heartbeat (15s), mas só precisa AVALIAR de tempos em tempos — em escopo
+// de módulo pra sobreviver a reconexões dentro do MESMO worker (mesma lição
+// do msgRetryCounterCache).
+let lastActivationNudgeCheckAt = 0
+const ACTIVATION_NUDGE_CHECK_INTERVAL_MS = Math.max(
+  Number(process.env.SELF_ACTIVATION_NUDGE_CHECK_INTERVAL_MS || 30 * 60 * 1000),
+  5 * 60 * 1000,
+)
+const ACTIVATION_NUDGE_MIN_DELAY_MS = Math.max(
+  Number(process.env.SELF_ACTIVATION_NUDGE_MIN_DELAY_MS || 24 * 60 * 60 * 1000),
+  0,
+)
+
+// Nudge de ativação pelo PRÓPRIO WhatsApp — momentos 3 (falta etiqueta) e 4
+// (falta grupo), 24h depois da 1ª conexão (ver decideActivationNudge em
+// src/core/selfWelcomeMessage.js). Best-effort e fail-safe: qualquer falha
+// aqui é só logada, nunca afeta a sessão real.
+async function maybeSendActivationNudge() {
+  if (!activeSock) return
+  const now = Date.now()
+  if (now - lastActivationNudgeCheckAt < ACTIVATION_NUDGE_CHECK_INTERVAL_MS) return
+  lastActivationNudgeCheckAt = now
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    if (!pilotEmails.length) return
+    const [user, firstConnected, credentialCount, groups, sentNudges] = await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { email: true } }),
+      db.analyticsEvent.findFirst({
+        where: { userId, event: 'whatsapp_connected' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      db.credential.count({ where: { userId } }),
+      db.group.findMany({ where: { userId }, select: { role: true } }),
+      db.analyticsEvent.findMany({ where: { userId, event: 'ops_self_activation_nudge_sent' }, select: { metadata: true } }),
+    ])
+    if (!isPilotEmail(user?.email, pilotEmails)) return
+    const connectedForMs = firstConnected?.createdAt ? now - firstConnected.createdAt.getTime() : null
+    const hasCredential = credentialCount > 0
+    const hasGroups = groups.some(g => g.role === 'monitor') && groups.some(g => g.role === 'post')
+    let sentCredentialNudge = false
+    let sentGroupsNudge = false
+    for (const row of sentNudges) {
+      try {
+        const kind = JSON.parse(row.metadata || '{}').kind
+        if (kind === 'missing_credential') sentCredentialNudge = true
+        if (kind === 'missing_groups') sentGroupsNudge = true
+      } catch { /* linha antiga sem metadata legível: ignora */ }
+    }
+    const kind = decideActivationNudge({
+      accountEmail: user?.email,
+      pilotEmails,
+      connectedForMs,
+      minDelayMs: ACTIVATION_NUDGE_MIN_DELAY_MS,
+      hasCredential,
+      hasGroups,
+      sentCredentialNudge,
+      sentGroupsNudge,
+    })
+    if (!kind) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    const texto = kind === 'missing_credential'
+      ? buildMissingCredentialNudgeText({ videoUrl: VIDEO_CADASTRO_ETIQUETAS_URL })
+      : buildMissingGroupsNudgeText({ videoUrl: VIDEO_ATIVACAO_ROBO_URL })
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+    logger.info({ userId, kind }, 'Nudge de ativação (piloto) enviado para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_activation_nudge_sent', metadata: { kind } })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao avaliar/enviar nudge de ativação (piloto, best-effort)')
   }
 }
 
@@ -2933,6 +3039,137 @@ async function markInterruptedSendLogs() {
   ])
 }
 
+// Reenfileira automaticamente, a cada boot, as ofertas perdidas por restart
+// do worker (deploy, crash, cutover) — markInterruptedSendLogs() acima marca
+// como `error:worker_restart` tudo que estava `queued`/`sending` quando o
+// processo anterior morreu, e sem isso a oferta some da fila sem nunca ter
+// sido reenviada (cliente reclamou: "O bot reiniciou enquanto essa mensagem
+// estava esperando para ser enviada").
+//
+// Remonta o MESMO card manual do envio ao vivo (buildManualLinkPreview: foto
+// raspada da loja + marca d'água do destino) a partir só do que sobrevive no
+// MessageLog (platform/originalUrl/convertedUrl/messageText) — a mensagem
+// original do WhatsApp e a imagem já processada morreram com o processo
+// antigo, então a foto é raspada de novo da loja, não reaproveitada. Sem
+// `couponTextSignal` real (não temos o texto/warning da mensagem original),
+// o banner de marca de cupom (feature opt-in, default OFF) nunca dispara
+// aqui — na dúvida, sai foto de produto, não banner.
+//
+// A montagem do card roda DENTRO do `buildPayload` do job (lazy, no dequeue),
+// não aqui no boot: raspar imagem/fazer upload é I/O lento, e fazer isso
+// para dezenas de ofertas ANTES de abrir o socket do WhatsApp atrasaria a
+// reconexão. `uploadToServer` (activeSock?.waUploadToServer) só existe depois
+// que o socket conecta — outro motivo para ser lazy.
+//
+// Só olha os últimos WORKER_RESTART_REPROCESS_WINDOW_MS: protege contra
+// reprocessar erro antigo de uma sessão anterior (bot ficou dias offline).
+// Escape hatch: WORKER_RESTART_REPROCESS_ENABLED=false desliga sem deploy.
+const WORKER_RESTART_REPROCESS_ENABLED = process.env.WORKER_RESTART_REPROCESS_ENABLED !== 'false'
+const WORKER_RESTART_REPROCESS_WINDOW_MS = Math.max(60_000, Number(process.env.WORKER_RESTART_REPROCESS_WINDOW_MS) || 30 * 60_000)
+
+async function reprocessRestartFailures() {
+  if (!WORKER_RESTART_REPROCESS_ENABLED) return
+  const cutoff = new Date(Date.now() - WORKER_RESTART_REPROCESS_WINDOW_MS)
+  const stuck = await db.messageLog.findMany({
+    where: {
+      userId,
+      status: 'error',
+      errorMsg: 'error:worker_restart',
+      platform: { not: 'scheduled' },
+      sentAt: { gte: cutoff },
+    },
+    take: 200,
+  })
+  if (stuck.length === 0) return
+
+  const cfg = await getConfig().catch(() => null)
+  let requeued = 0
+  for (const row of stuck) {
+    try {
+      // Claim atômico: evita reprocessar a mesma linha duas vezes se esta
+      // função for chamada mais de uma vez (defesa em profundidade).
+      const claimed = await db.messageLog.updateMany({
+        where: { id: row.id, errorMsg: 'error:worker_restart' },
+        data: { errorMsg: 'error:worker_restart:requeued' },
+      })
+      if (claimed.count !== 1) continue
+      if (!row.destGroup || !row.messageText || !cfg) continue
+
+      const log = await db.messageLog.create({
+        data: {
+          userId,
+          platform: row.platform,
+          sourceGroup: row.sourceGroup,
+          destGroup: row.destGroup,
+          originalUrl: row.originalUrl,
+          convertedUrl: row.convertedUrl,
+          messageText: row.messageText,
+          status: 'queued',
+        },
+      })
+      const postDetail = cfg.groups.postDetails.find(g => g.waJid === row.destGroup)
+      const channelForward = resolveChannelForward(postDetail)
+      // Mesma resolução de marca d'água do envio ao vivo (ver linhas próximas
+      // a `destinationImageUsesWatermark` no handler de messages.upsert):
+      // config é por destino, então precisa ser recalculada aqui, não herdada
+      // da oferta original.
+      const destinationImageMode = effectiveDestinationImageMode(postDetail?.imageMode, { hasChannelButton: !!channelForward })
+      const watermarkText = String(postDetail?.watermarkText ?? '').trim()
+      const watermarkColor = postDetail?.watermarkColor ?? undefined
+      const watermarkSize = postDetail?.watermarkSize ?? undefined
+      const watermarkPosition = postDetail?.watermarkPosition ?? undefined
+      const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
+      const primary = { platform: row.platform, url: row.originalUrl, converted: row.convertedUrl }
+
+      const accepted = await enqueueSendJob({
+        type: 'converted',
+        logId: log.id,
+        destJid: row.destGroup,
+        sourceJid: row.sourceGroup,
+        platforms: row.platform,
+        plan: cfg.plan,
+        delayMs: 0,
+        typingDelayMs: calculateTypingDelayMs({ text: row.messageText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+        channelForward,
+        couponContext: couponContextFromText(row.messageText),
+        buildPayload: async () => {
+          const linkPreview = await buildManualLinkPreview({
+            text: row.messageText,
+            primary,
+            credentialsMap: cfg.credentials,
+            uploadToServer: activeSock?.waUploadToServer,
+            destJid: row.destGroup,
+            couponTextSignal: false,
+            watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
+          }).catch(err => {
+            logger.warn({ err: err?.message, destJid: row.destGroup, logId: log.id }, 'Reprocessamento pós-restart: card de preview falhou; oferta sai como texto')
+            return null
+          })
+          return buildMonitoredMessagePayload({
+            finalText: row.messageText,
+            image: null,
+            useLinkPreview: true,
+            linkPreview,
+          })
+        },
+      })
+      if (!accepted) {
+        await db.messageLog.update({
+          where: { id: log.id },
+          data: { status: 'error', errorMsg: classifyError(null, { kind: 'queue_full' }), sentAt: new Date() },
+        }).catch(() => {})
+        continue
+      }
+      requeued++
+    } catch (err) {
+      logger.warn({ err: err?.message, logId: row.id }, 'Reprocessamento pós-restart falhou para esta oferta')
+    }
+  }
+  if (requeued > 0) {
+    logger.info({ found: stuck.length, requeued }, 'Ofertas perdidas por restart do worker reenfileiradas automaticamente')
+  }
+}
+
 async function createSendBackend() {
   const onRejected = () => { sendMetrics.rejectedTotal++ }
   // sendJobTracker é lido por shutdown() via waitUntilDrained para esperar
@@ -3093,6 +3330,9 @@ async function startBotInner() {
   if (!interruptedSendLogsMarked) {
     interruptedSendLogsMarked = true
     await markInterruptedSendLogs()
+    await reprocessRestartFailures().catch(err => {
+      logger.error({ err: err?.message }, 'Reprocessamento automático pós-restart falhou')
+    })
   }
 
   // Duas janelas: msgIds (curta) protege contra redelivery do WhatsApp do
@@ -5113,7 +5353,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           onDone: async (result) => {
             if (result.ok) {
               logger.info({ destJid, platforms, deliveryKind: deliveryInfo.kind, originImageBytes: deliveryInfo.originImageBytes }, 'Mensagem enviada')
-              if (previousSuccessCount === 0) trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+              if (previousSuccessCount === 0) {
+                trackAnalyticsEventSafe({ userId, event: 'first_send_success', metadata: { platform: platforms } })
+                maybeSendFirstOfferMessage().catch(() => {})
+              }
             } else {
               trackAnalyticsEventSafe({ userId, event: 'send_error', metadata: { platform: platforms, errorType: result.error } })
             }
