@@ -13,6 +13,13 @@ import { usePainel, usePainelHeader } from '../PainelShell'
 import { BASIC_FEATURE_LIST, PRO_FEATURE_LIST } from '@/lib/planFeatures'
 import { CONFIG_PRESERVED_NOTE } from '../../../../src/domain/painel/trialNotice.js'
 import { buildPricePerOffer, parsePriceToCents } from '../../../../src/domain/painel/pricePerOffer.js'
+import {
+  CARD_HELP_TITLE,
+  CARD_HELP_PIX_TITLE,
+  CARD_HELP_PIX_TEXT,
+  CARD_HELP_PIX_BUTTON,
+  buildCardPaymentSteps,
+} from '../../../../src/domain/painel/cardPaymentHelp.js'
 
 const SUPPORT_PAYMENT_HELP_URL = `${SUPPORT_WHATSAPP_URL}?text=${encodeURIComponent('Oi! Estou com dificuldade no pagamento do Espelha Grupos, pode me ajudar?')}`
 
@@ -92,11 +99,15 @@ export default function PlanoPage() {
   // D5 do plano de ativação de 2026-09-08: o mesmo preço, medido no uso REAL
   // dela. "R$ 69" é um número solto; "R$ 1,47 por oferta publicada" é a conta
   // que ela consegue refazer sozinha, com o número que é dela.
-  const { offersPublished } = usePainel()
-  const precosPorOferta = useMemo(() => Object.fromEntries(plans.map((plan) => [
-    plan.id,
-    buildPricePerOffer({ priceCents: parsePriceToCents(plan.price), offersPublished }),
-  ])), [plans, offersPublished])
+  const { offersPublished, user } = usePainel()
+  const cardSteps = useMemo(() => buildCardPaymentSteps({ accountEmail: user?.email }), [user?.email])
+  const precoPorOferta = useMemo(
+    () => buildPricePerOffer({
+      priceCents: parsePriceToCents(selectedPlan?.price),
+      offersPublished,
+    }),
+    [selectedPlan?.price, offersPublished],
+  )
 
   async function handleCheckout(planId) {
     if (checkoutPlan) return
@@ -371,6 +382,69 @@ export default function PlanoPage() {
           </div>
         )}
 
+        <div className="pnl-presets" style={{ gridTemplateColumns: 'repeat(2, 1fr)', marginTop: 16 }}>
+          {[
+            { id: 'auto', title: 'Cobrança automática', desc: 'Renova sozinho todo mês no cartão. Você desliga quando quiser.' },
+            { id: 'once', title: 'Pagar uma vez', desc: '30 dias de acesso via PIX ou cartão. Você renova na mão ao acabar.' },
+          ].map((option) => {
+            const selected = billingMode === option.id
+            return (
+              <button key={option.id} type="button" className={`pnl-preset${selected ? ' is-active' : ''}`} onClick={() => setBillingMode(option.id)} aria-pressed={selected}>
+                <div className="pnl-toolbar" style={{ justifyContent: 'space-between' }}>
+                  <b>{option.title}</b>
+                  <span className={`pnl-tag ${selected ? 'is-success' : 'is-skip'}`}>{selected ? 'Selecionado' : 'Escolher'}</span>
+                </div>
+                <small>{option.desc}</small>
+              </button>
+            )
+          })}
+        </div>
+
+        <button
+          type="button"
+          className="pnl-btn is-primary"
+          style={{ marginTop: 16, width: '100%', justifyContent: 'center' }}
+          onClick={() => (billingMode === 'auto' ? handleSubscribe(selectedPlanId) : handleCheckout(selectedPlanId))}
+          disabled={!!checkoutPlan}
+        >
+          {checkoutPlan === selectedPlanId
+            ? 'Aguarde…'
+            : billingMode === 'auto'
+              ? `Ligar cobrança automática — ${selectedPlan.name}`
+              : `Pagar 30 dias — ${selectedPlan.name}`}
+        </button>
+        <p className="pnl-hint" style={{ textAlign: 'center', marginTop: 8 }}>
+          {billingMode === 'auto'
+            ? 'Cobrança automática no cartão, todo mês, sem fidelidade. Desligue quando quiser aqui mesmo.'
+            : 'Pagamento único de 30 dias via PIX ou cartão. Você renova manualmente ao expirar.'}
+        </p>
+        {/* Guia do cartão recusado (RCA 2026-09-24): a tela de recusa do
+            Mercado Pago não diz o motivo e a cliente desiste. Aqui ficam as
+            causas que ela resolve sozinha e a saída que não depende de cartão
+            (PIX). Abre sozinho quando a tentativa já deu errado. */}
+        {billingMode === 'auto' && (
+          <details className="pnl-note-box" style={{ marginTop: 12 }} open={Boolean(checkoutError) || undefined}>
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{CARD_HELP_TITLE}</summary>
+            <ol style={{ margin: '10px 0 0', paddingLeft: 20, display: 'grid', gap: 6 }}>
+              {cardSteps.map((step) => (
+                <li key={step} className="pnl-hint" style={{ listStyle: 'decimal' }}>{step}</li>
+              ))}
+            </ol>
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--line, #e5e5e5)', paddingTop: 10 }}>
+              <strong style={{ fontWeight: 600 }}>{CARD_HELP_PIX_TITLE}</strong>
+              <p className="pnl-hint" style={{ marginTop: 4 }}>{CARD_HELP_PIX_TEXT}</p>
+              <button
+                type="button"
+                className="pnl-btn is-ghost"
+                style={{ marginTop: 8, width: '100%', justifyContent: 'center' }}
+                onClick={() => { setBillingMode('once'); handleCheckout(selectedPlanId) }}
+                disabled={!!checkoutPlan}
+              >
+                {CARD_HELP_PIX_BUTTON}
+              </button>
+            </div>
+          </details>
+        )}
         {/* D4 do plano de ativação: o medo de quem para aqui é perder a
             configuração, não o preço. A frase é a MESMA do aviso de fim de
             teste (fonte única em trialNotice.js) — duas redações da mesma
