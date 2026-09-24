@@ -235,8 +235,8 @@ export const api = {
   paymentsOverview: () => apiFetch('/api/payments/overview'),
   paymentsCheckout: (plan) =>
     apiFetch('/api/payments/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
-  paymentsCreateSubscription: (plan) =>
-    apiFetch('/api/payments/create-subscription', { method: 'POST', body: JSON.stringify({ plan }) }),
+  paymentsCreateSubscription: (plan, payerEmail) =>
+    apiFetch('/api/payments/create-subscription', { method: 'POST', body: JSON.stringify(payerEmail ? { plan, payerEmail } : { plan }) }),
   paymentsCancelSubscription: () =>
     apiFetch('/api/payments/subscription/cancel', { method: 'POST' }),
   paymentsRecover: (paymentId) =>
