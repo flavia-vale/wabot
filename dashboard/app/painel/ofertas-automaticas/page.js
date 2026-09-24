@@ -405,12 +405,15 @@ export default function OfertasAutomaticasPage() {
           </div>}
 
           <div>
-            <label className="pnl-label">Enviar para qual grupo?</label>
+            <label className="pnl-label">
+              Enviar para qual grupo?{' '}
+              <Link href="/painel/espelhamento" style={{ fontWeight: 400, textDecoration: 'underline' }}>Cadastre um grupo de destino aqui.</Link>
+            </label>
             <select className="pnl-input" value={form.destGroupJid} onChange={(e) => handleGroupChange(e.target.value)}>
               <option value="">Selecione um grupo</option>
               {waGroups.map((g) => <option key={g.id} value={g.waJid}>{g.name}</option>)}
             </select>
-            {!waGroups.length && <p className="pnl-field-error" style={{ marginTop: 4 }}>Nenhum grupo de destino cadastrado. Vá em Grupos para adicionar.</p>}
+            {!waGroups.length && <p className="pnl-field-error" style={{ marginTop: 4 }}>Nenhum grupo de destino cadastrado. Vá em Espelhamento para adicionar.</p>}
           </div>
 
           <InstagramDestinationPicker destinations={instagramDestinations} selectedIds={form.instagramDestinationIds} onToggle={toggleInstagramDestination} title="Também publicar no Instagram" />
