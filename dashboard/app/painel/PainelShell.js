@@ -167,11 +167,8 @@ function SendPauseBanner({ notice }) {
   if (!notice) return null
 
   return (
-    <div className="pnl-note-box is-warn pnl-expired-plan-banner" role="status" data-testid="robo-esperando-anti-banimento">
-      <div>
-        <strong style={{ fontWeight: 600 }}>{notice.title}</strong>
-        <p style={{ marginTop: 6 }}>{notice.body}</p>
-      </div>
+    <div className="pnl-hold-banner" role="status" data-testid="robo-esperando-anti-banimento">
+      <span><span className="pnl-hold-banner-icon" aria-hidden="true">⏸</span>{notice.title}</span>
       <Link href={notice.ctaHref} className="pnl-btn is-primary" style={{ flexShrink: 0 }}>{notice.ctaLabel}</Link>
     </div>
   )
