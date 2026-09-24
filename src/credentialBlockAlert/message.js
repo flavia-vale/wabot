@@ -169,6 +169,19 @@ export function describeConversionFailure(errorMsg, platform = null) {
     }
   }
 
+  // Não é falha: ela não cadastrou essa loja e deixou a loja desligada no
+  // grupo. Etiqueta neutra (cinza), não vermelha — em vermelho, dezenas dessas
+  // linhas fizeram a cliente achar que o espelhamento tinha parado (RCA
+  // 2026-09-24). Nunca dizer "seu cadastro está certo": não há cadastro.
+  if (motivo === CONVERSION_FAILURE.STORE_NOT_USED) {
+    const daLoja = loja === 'dessa loja' ? 'de uma loja' : `da ${loja}`
+    return {
+      motivo,
+      tag: Object.freeze({ cls: 'is-skip', label: 'loja que você não usa' }),
+      texto: `Essa oferta era ${daLoja}, que você não usa: ela não está na sua lista de lojas e está desligada neste grupo. O robô deixa essas ofertas de lado de propósito, não é uma falha. Se quiser espelhar ofertas dessa loja também, adicione a loja em IDs de afiliada e depois ligue a loja nas configurações deste grupo.`,
+    }
+  }
+
   if (motivo === CONVERSION_FAILURE.CONVERSION_FAILED) {
     return {
       motivo,
