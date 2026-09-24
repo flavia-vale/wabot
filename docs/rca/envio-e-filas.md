@@ -226,6 +226,54 @@ rest) → gate de throttle → tentativas de envio.
 Testes: `test/queue-pressure-and-expiry.test.js`,
 `test/core/preservationConfig.test.js`.
 
+### Horário de envio × limite de espera: a oferta da noite nunca sobrevivia (RCA 2026-09-24 — não regredir)
+
+Medido em produção (frota inteira, não uma conta): **45 de 48** modelos padrão
+(`PreservationPreset.isDefault`) têm horário de envio ligado, 8h–22h
+`America/Sao_Paulo`, e `queueMaxAgeMin=300`. Oferta que chega entre 22h e 8h
+fica adiada (`deferSendJob`/`notBefore`) até as 8h; às 8h o bloco de descarte
+por idade acima joga fora tudo com mais de 5h: **547** `skip:queue_expired`
+às 11h UTC em 23/09 e **855** em 24/09. Com janela fechada de 10h e limite de
+5h, **nenhuma** oferta da noite tinha como sair — e a cliente só via, de
+manhã, uma parede de linhas vermelhas "esperou tempo demais". Foi a causa 1
+do chamado "o espelhamento parou, só o Criar oferta funciona".
+
+Decisão da dona do produto (opção A): **descartar na hora**, com motivo
+próprio. `src/core/sendWindow.js` (`shouldDropOutsideSendWindow`, puro) roda
+em `processSendJob` logo depois do descarte por idade: destino fora do
+horário **e** `idade na fila + tempo até abrir > queueMaxAgeMin` → linha
+`skip:outside_send_window:hours=8-22:max=300min` (categoria `CONFIG_BLOCK`,
+tradução leiga em `logsCopy.js`/`mobileLogs.js`, citando o horário e o
+Anti-banimento). A fila não guarda por horas uma oferta que vai morrer às 8h.
+
+A tela de Espelhamento passa a dizer **"Envio pausado agora: fora do horário
+(8h–22h)"** (`dashboard/lib/painel/sendPauseNotice.js`, `pnl-note-box is-warn`)
+quando TODOS os destinos estão fechados. Para isso `GET /groups` devolve
+`sendWindow` efetivo por destino (`attachSendWindow` em `routes/groups.js`),
+resolvido pelo MESMO chokepoint do robô (`resolveDestinationPreservation`) —
+uma consulta a mais por listagem (os modelos da conta), nunca uma por grupo.
+
+**Não regredir:**
+- **Limite de espera desligado (`queueMaxAgeMin` 0) nunca descarta por aqui**
+  — a oferta espera até abrir, comportamento histórico.
+- **Fila com horário próprio (`ignoreGlobalQuietHours`) não passa pelo
+  horário do destino**, igual ao gate.
+- **Destino sem horário conta como aberto** no aviso da tela: ele envia 24h,
+  parte das ofertas sai, e o aviso mentiria.
+- `sendWindow.js` **não importa `channelThrottle.js`** (que arrasta `db.js`),
+  porque a tela também o consome; o teste garante que `sendWindowState`
+  concorda com `operatingHoursState` em 48 horários.
+- Ordem canônica de `processSendJob` passa a ser: preservação do destino →
+  descartar por idade → **descartar fora do horário** → smart delay → gate →
+  envio.
+
+⚠️ Em modo `remote` o deploy da API não recarrega os bot-workers: o descarte
+na hora só vale nos bots depois do restart do `bot-supervisor` (o deploy faz
+isso sozinho porque `src/core/` e `bot-worker.js` estão em
+`WORKER_CODE_PATHS_RE`; reconecta TODAS as sessões — anunciar antes).
+
+Teste: `test/horario-envio-x-descarte.test.js`.
+
 ## Timeouts no pipeline de mensagens
 
 | Constante                       | Default | Onde     | O que faz                                                          |

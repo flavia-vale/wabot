@@ -21,6 +21,8 @@ import { registerProbeEvidence, resolveLatestSentForGroup } from '../../core/pro
 import { FORWARD_MODE, NO_LINK_SCOPE, normalizeForwardingPolicy } from '../../forwardingPolicy.js'
 import { buildFeatureGateError, canUseAdvancedPreservation, canUseChannelButton, canUseChannels, canUseWatermark, FEATURE_CODES } from '../../billing/plans.js'
 import { normalizeRelayFooter, RELAY_FOOTER_MAX_CHARS } from '../../core/relayFooter.js'
+import { resolveDestinationPreservation } from '../../core/preservationConfig.js'
+import { resolveSendWindow } from '../../core/sendWindow.js'
 
 const ALLOWED_KINDS = new Set([JID_KIND.GROUP, JID_KIND.CHANNEL])
 
@@ -59,6 +61,25 @@ async function ensureAdvancedPreservationAllowed(userId, reply) {
 // o plano, o destino aparece sem marca d'água e sem botão "Ver canal" — mesma
 // regra do chokepoint do robô (billing/groupEntitlements.js), para painel e
 // envio nunca discordarem.
+// RCA 2026-09-24: a tela de Espelhamento precisa dizer "Envio pausado agora:
+// fora do horário" — e isso depende do horário EFETIVO de cada destino
+// (override do grupo → modelo atribuído → modelo padrão da conta), que só o
+// robô sabia. `sendWindow` é aditivo: `{ startHour, endHour, tz }` quando o
+// horário está ligado, `null` quando não. Uma consulta a mais por listagem
+// (todos os modelos da conta), nunca uma por grupo. Cálculo pelo MESMO
+// chokepoint do robô (resolveDestinationPreservation), para tela e envio
+// nunca discordarem.
+export function attachSendWindow(groups = [], presets = []) {
+  const byId = new Map((Array.isArray(presets) ? presets : []).map(p => [p.id, p]))
+  const defaultPreset = (Array.isArray(presets) ? presets : []).find(p => p?.isDefault) ?? null
+  return (Array.isArray(groups) ? groups : []).map(group => {
+    if (group?.role !== 'post') return group
+    const preset = group.preservationPresetId ? byId.get(group.preservationPresetId) ?? null : null
+    const effective = resolveDestinationPreservation(group, { preset, defaultPreset })
+    return { ...group, sendWindow: resolveSendWindow(effective) }
+  })
+}
+
 export function presentGroupsForPlan(groups = [], planSubject = null) {
   const subject = planSubject ?? { plan: 'basic' }
   const allowWatermark = canUseWatermark(subject)
@@ -81,8 +102,11 @@ export async function groupsRoutes(app, opts = {}) {
   const listFollowedChannelsFn = opts.listFollowedChannels ?? _listFollowedChannels
   const isRunning = opts.isRunning ?? _isRunning
   app.get('/', { onRequest: [app.authenticate] }, async (req) => {
-    const groups = await db.group.findMany({ where: { userId: req.user.sub } })
-    return presentGroupsForPlan(groups, await getPlanSubject(req.user.sub))
+    const [groups, presets] = await Promise.all([
+      db.group.findMany({ where: { userId: req.user.sub } }),
+      db.preservationPreset.findMany({ where: { userId: req.user.sub } }),
+    ])
+    return presentGroupsForPlan(attachSendWindow(groups, presets), await getPlanSubject(req.user.sub))
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
