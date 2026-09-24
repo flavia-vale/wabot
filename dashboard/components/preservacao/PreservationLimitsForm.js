@@ -11,14 +11,14 @@ import { PresetButtons } from './PresetButtons'
 const FIELDS = [
   {
     key: 'minIntervalSec',
-    label: 'Intervalo mínimo entre envios',
+    label: 'Intervalo mínimo entre envios (segundos)',
     hint: 'Esperar pelo menos essa quantidade de segundos entre uma oferta e outra neste grupo. Ex.: 120 = pelo menos 2 minutos de intervalo.',
     min: 1,
     max: 86400,
   },
   {
     key: 'dailyCap',
-    label: 'Limite diário',
+    label: 'Limite diário (ofertas por dia)',
     hint: 'No máximo essa quantidade de ofertas por dia neste grupo. Vazio = sem limite.',
     min: 1,
     max: 10000,

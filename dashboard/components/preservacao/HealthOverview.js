@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { LoadingState, ErrorState } from '@/components/States'
-
-const STATUS_LABEL = { green: '🟢 Saudável', yellow: '🟡 Atenção', red: '🔴 Pausado', gray: '⚫ Sem dados' }
+import { describeChannelHealthStatus } from '../../../src/core/channelHealthStatus.js'
 
 export function HealthOverview() {
   const [items, setItems] = useState(null)
@@ -40,22 +39,23 @@ export function HealthOverview() {
       {!items && !error && <LoadingState message="Carregando saúde..." />}
       {items && items.length === 0 && <p className="text-xs text-gray-500">Sem canais de destino configurados.</p>}
       {items && items.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-gray-100 sm:border-0">
-          <table className="w-full min-w-[520px] text-xs">
-          <thead className="text-gray-500 text-left">
-            <tr><th className="py-1">Canal</th><th>Status</th><th>Última falha</th></tr>
-          </thead>
-          <tbody>
-            {items.map(it => (
-              <tr key={it.groupId} className="border-t border-gray-100">
-                <td className="py-1.5 pr-2 font-medium text-gray-700 break-words">{it.name || it.waJid}</td>
-                <td>{STATUS_LABEL[it.health?.status ?? 'gray'] ?? '⚫ Sem dados'}</td>
-                <td className="text-gray-500">{it.health?.lastFailureAt ? new Date(it.health.lastFailureAt).toLocaleString('pt-BR') : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-          </table>
-        </div>
+        <ul className="flex flex-col gap-2">
+          {items.map(it => {
+            const desc = describeChannelHealthStatus(it.health)
+            return (
+              <li key={it.groupId} className="rounded-xl border border-gray-100 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-gray-700 text-xs break-words">{it.name || it.waJid}</span>
+                  <span className="text-xs font-semibold whitespace-nowrap">{desc.emoji} {desc.label}</span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">{desc.motivo}</p>
+                {desc.oQueFazer !== 'Nada a fazer.' && (
+                  <p className="text-[11px] text-gray-700 mt-0.5"><strong>O que fazer:</strong> {desc.oQueFazer}</p>
+                )}
+              </li>
+            )
+          })}
+        </ul>
       )}
     </section>
   )

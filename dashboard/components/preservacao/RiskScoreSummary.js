@@ -32,7 +32,7 @@ export function RiskScoreSummary() {
 
   return (
     <section className="bg-white rounded-2xl shadow p-4">
-      <header className="flex items-center justify-between mb-3">
+      <header className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-gray-800 text-sm">📊 Risco de denúncia</h3>
           <p className="text-xs text-gray-500">
