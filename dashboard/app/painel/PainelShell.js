@@ -421,8 +421,11 @@ export default function PainelShell({ children }) {
   // O aviso de fim de teste só aparece com a prova de valor já carregada
   // (`offersPublished !== null`): sem ela o texto cairia no ramo "o robô ainda
   // não publicou nada", que é o oposto do que a cliente ativa deveria ler.
+  // Sem `Date.now()` aqui (regra react-hooks/purity): a regra pura usa o
+  // relógio por conta própria, e os insumos chegam novos a cada tick de 20s,
+  // então o aviso recalcula na mesma cadência do resto da shell.
   const sendPauseNotice = useMemo(
-    () => buildSendPauseNotice({ groups: groupsList, queued: sendPauseQueued, online, now: Date.now() }),
+    () => buildSendPauseNotice({ groups: groupsList, queued: sendPauseQueued, online }),
     [groupsList, sendPauseQueued, online],
   )
 

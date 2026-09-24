@@ -159,7 +159,7 @@ test('o aviso "robô esperando o Anti-banimento" é GLOBAL (shell), com link par
   assert.match(shellSource, /function SendPauseBanner\(\{ notice \}\)/)
   assert.match(shellSource, /data-testid="robo-esperando-anti-banimento"/)
   assert.match(shellSource, /<SendPauseBanner notice=\{sendPauseNotice\} \/>/)
-  assert.match(shellSource, /buildSendPauseNotice\(\{ groups: groupsList, queued: sendPauseQueued, online, now: Date\.now\(\) \}\)/)
+  assert.match(shellSource, /buildSendPauseNotice\(\{ groups: groupsList, queued: sendPauseQueued, online \}\)/)
   assert.match(shellSource, /api\.sendPause\(\)/, 'a shell precisa perguntar a fila segurada no mesmo tick dos grupos')
   assert.match(shellSource, /<Link href=\{notice\.ctaHref\} className="pnl-btn is-primary"/)
   // A tela de Espelhamento não duplica o aviso: ela já está dentro da shell.
