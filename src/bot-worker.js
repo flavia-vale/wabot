@@ -4422,8 +4422,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           // Devolve o MOTIVO em vez de null: sem `converted` o item continua
           // fora de `conversions`, mas a mensagem deixa de ser gravada como
           // "faltou cadastrar a loja" quando o cadastro está perfeito e a loja
-          // só está desligada NESTE grupo (RCA 2026-09-09).
-          return { platform, url, failureReason: CONVERSION_FAILURE.STORE_DISABLED }
+          // só está desligada NESTE grupo (RCA 2026-09-09). Sem cadastro da
+          // loja, é escolha da cliente não usá-la — não dizer que o cadastro
+          // "está certo" (RCA 2026-09-24).
+          const registered = validateCredentialData(platform, cfg.credentials[platform]).configured
+          return { platform, url, failureReason: registered ? CONVERSION_FAILURE.STORE_DISABLED : CONVERSION_FAILURE.STORE_NOT_USED }
         }
         logger.info({ platform, url }, 'Link detectado')
         const credentialValidation = validateCredentialData(platform, cfg.credentials[platform])
