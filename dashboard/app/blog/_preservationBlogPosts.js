@@ -21,7 +21,7 @@ export const PRESERVATION_BLOG_POSTS = {
   'grupo-ou-canal-whatsapp-achadinhos': {
     slug: '/blog/grupo-ou-canal-whatsapp-achadinhos',
     title: 'Grupo ou Canal do WhatsApp: qual é melhor?',
-    description: 'Entenda quando usar grupo, quando usar Canal do WhatsApp e como combinar os dois para divulgar achadinhos com mais organização e preservação operacional.',
+    description: 'Quando usar grupo, quando usar Canal do WhatsApp e como combinar os dois para divulgar achadinhos, com o que cada um exige de ritmo e de plano.',
     eyebrow: 'Canais · Estratégia de migração',
     origin: 'blog_grupo_ou_canal_whatsapp_achadinhos',
     heroImage: { path: '/blog/hero/21-grupo-canal.png', alt: 'Ilustração comparando grupo (comunidade) e Canal do WhatsApp (vitrine) lado a lado, com o símbolo de mais entre os dois', width: 1080, height: 1080 },
@@ -31,7 +31,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Resposta direta', paragraphs: ['Use grupos quando você precisa de conversa, feedback e senso de comunidade. Use Canais do WhatsApp quando a prioridade é publicar ofertas em formato de vitrine, com menos ruído e mais previsibilidade de leitura.', 'O erro é tratar grupo e canal como concorrentes. Em uma operação de achadinhos, o grupo pode continuar como fonte ou comunidade, enquanto o canal vira destino principal das ofertas selecionadas.'] },
       { h2: 'Quando o grupo faz sentido', bullets: ['Comunidade que comenta e pede indicação.', 'Curadoria colaborativa de achadinhos.', 'Relacionamento com seguidores mais próximos.', 'Testes rápidos de oferta e feedback.'] },
       { h2: 'Quando o canal faz sentido', bullets: ['Publicação de ofertas em vitrine limpa.', 'Menos ruído de conversa entre membros.', 'Organização por nicho, frequência e calendário.', 'Distribuição mais clara para quem quer só receber oportunidades.'] },
-      { h2: 'O modelo recomendado', paragraphs: ['Comece mapeando quais grupos geram boas ofertas, quais grupos têm audiência engajada e quais canais podem funcionar como vitrine. Depois, defina regras de espelhamento para que cada destino receba a oferta no ritmo certo.', 'O Espelha Grupos entra como camada operacional: espelha de grupo para canal, de canal para grupo e entre canais, mantendo cadência, variações e monitoramento dentro do Módulo de Preservação Avançada.'] },
+      { h2: 'O modelo recomendado', paragraphs: ['Comece mapeando quais grupos geram boas ofertas, quais grupos têm audiência engajada e quais canais podem funcionar como vitrine. Depois, defina regras de espelhamento para que cada destino receba a oferta no ritmo certo.', 'O Espelha Grupos entra como camada operacional: acompanha as origens que você escolhe, troca cada link pelo seu código de afiliada nas 6 lojas e publica nos seus destinos. Espelhar entre grupos está em todos os planos; publicar em Canal do WhatsApp e ajustar o ritmo de cada destino (intervalo, horário de descanso, limite por dia e variação do texto) são do plano Pro.'] },
     ],
     relatedTitle: 'Continue: o que divulgar nos seus achadinhos',
     relatedLinks: [
@@ -46,23 +46,23 @@ export const PRESERVATION_BLOG_POSTS = {
     faq: [
       { q: 'Canal vende mais que grupo?', a: 'Depende do público. Canal tende a ser melhor como vitrine organizada; grupo tende a ser melhor para conversa e comunidade. O ideal é testar os dois com papéis diferentes.' },
       { q: 'Preciso abandonar meus grupos?', a: 'Não. A migração mais segura mantém grupos úteis e adiciona canais como camada de distribuição organizada.' },
-      { q: 'Como o Espelha Grupos ajuda nessa escolha?', a: 'Ele permite espelhar entre grupos e canais, configurar cadência e aplicar o Módulo de Preservação Avançada para reduzir comportamento robótico.' },
+      { q: 'Como o Espelha Grupos ajuda nessa escolha?', a: 'Ele espelha entre grupos em todos os planos e entre grupos e canais no plano Pro, com o ritmo de cada destino configurado à parte. Ele não mede o alcance do canal: isso você acompanha nos números do próprio canal e nos cliques do seu link de afiliada.' },
     ],
   },
   'como-evitar-banimento-whatsapp-afiliados': {
     slug: '/blog/como-evitar-banimento-whatsapp-afiliados',
     title: 'Como reduzir o risco de banimento no WhatsApp',
-    description: 'Guia honesto para afiliados reduzirem risco no WhatsApp com chip dedicado, cadência, variações, canais e Módulo de Preservação Avançada.',
+    description: 'Guia honesto para afiliados reduzirem o risco no WhatsApp: chip dedicado, ritmo por destino, texto que varia e grupos autorizados. Sem promessa de imunidade.',
     eyebrow: 'Preservação avançada · Risco operacional',
     origin: 'blog_como_evitar_banimento_whatsapp_afiliados',
     heroImage: { path: '/blog/hero/22-protecao-camadas.png', alt: 'Preservação avançada em quatro camadas: cadência, variações, monitoramento e recuperação', width: 1080, height: 1080 },
     usePersonAuthor: true,
-    intro: 'Não existe garantia contra banimento. O que existe é uma operação menos robótica, com chip dedicado, volume controlado, variações, monitoramento e plano de recuperação.',
+    intro: 'Não existe garantia contra banimento. O que existe é uma operação menos robótica: chip dedicado, volume controlado, texto que varia, grupos que querem receber e um plano B se o número cair.',
     sections: [
-      { h2: 'Resposta direta', paragraphs: ['Para reduzir risco, pare de operar como disparo: use chip dedicado, limite frequência, evite madrugada, varie texto, distribua ofertas em horários diferentes e monitore sinais de saúde por canal.', 'O Módulo de Preservação Avançada do Espelha Grupos existe para organizar essas camadas. O termo “anti-ban” aparece em buscas, mas não deve ser tratado como promessa absoluta.'] },
-      { h2: 'Checklist mínimo de preservação', bullets: ['Usar chip dedicado, nunca número pessoal.', 'Definir limite por hora e por dia.', 'Ativar horário de silêncio.', 'Evitar mensagens idênticas em todos os destinos.', 'Ter plano de recuperação para canal e chip.'] },
-      { h2: 'O que aumenta risco', paragraphs: ['Publicar muitas ofertas em sequência, repetir o mesmo texto em vários destinos e depender de um único grupo ou chip aumenta a fragilidade da operação.', 'Outro ponto crítico é não perceber queda de entrega. Quando os cliques caem e ninguém monitora, o afiliado só descobre tarde demais que o canal perdeu força.'] },
-      { h2: 'Como o Espelha Grupos organiza o processo', paragraphs: ['O Espelha Grupos combina cadência, variações, espelhamento entre grupos e canais, monitoramento e pausas preventivas. A ferramenta não controla decisões da plataforma, mas ajuda o afiliado a evitar comportamento de operação improvisada.'] },
+      { h2: 'Resposta direta', paragraphs: ['Para reduzir risco, pare de operar como disparo: use chip dedicado, limite a quantidade por hora e por dia, evite madrugada, varie o texto, publique só em grupos onde você tem autorização e preste atenção a denúncias e saídas de membros.', 'No Espelha Grupos, os controles de ritmo ficam no Módulo de Preservação Avançada, do plano Pro. O termo “anti-ban” aparece nas buscas, mas não é promessa: nenhuma ferramenta controla a decisão do WhatsApp.'] },
+      { h2: 'Checklist mínimo de preservação', bullets: ['Usar chip dedicado, nunca o número pessoal.', 'Definir intervalo entre envios e limite por dia em cada destino.', 'Ter horário de descanso, sem envio de madrugada.', 'Evitar a mesma mensagem idêntica em todos os destinos.', 'Publicar só em grupos com autorização de quem administra.', 'Ter um plano B: um segundo chip e a lista dos grupos e canais que você administra.'] },
+      { h2: 'O que aumenta risco', paragraphs: ['Publicar muitas ofertas em sequência, repetir o mesmo texto em vários destinos e depender de um único grupo ou chip aumenta a fragilidade da operação.', 'Outro ponto crítico é não perceber que algo mudou. Denúncia de membro pesa mais que volume, e saída em massa de um grupo é sinal para reduzir o ritmo naquele destino antes que o problema chegue ao número.'] },
+      { h2: 'Como o Espelha Grupos organiza o processo', paragraphs: ['No plano Pro, cada destino tem intervalo mínimo entre envios, limite de envios em sequência, limite por dia, horário de descanso e variação do texto; oferta que esperou demais na fila é descartada em vez de sair velha. Em todos os planos, a mesma oferta não sai duas vezes no mesmo grupo e o histórico mostra o que saiu, o que foi bloqueado e por quê.', 'A ferramenta não controla a decisão do WhatsApp e não mede o alcance dos seus canais. O que ela faz é tirar da operação o comportamento de disparo.'] },
     ],
     relatedTitle: 'Continue no cluster de afiliados',
     relatedLinks: [
@@ -73,13 +73,13 @@ export const PRESERVATION_BLOG_POSTS = {
     faq: [
       { q: 'Existe “anti-ban” 100%?', a: 'Não. Qualquer promessa absoluta deve ser tratada como sinal de alerta. A abordagem correta é redução de risco com camadas de preservação.' },
       { q: 'Chip dedicado é obrigatório?', a: 'É a recomendação mais segura. O número pessoal não deve sustentar uma operação comercial de achadinhos.' },
-      { q: 'Canal é mais seguro que grupo?', a: 'Canal ajuda a organizar a vitrine, mas ainda precisa de cadência, variações e monitoramento. Formato sozinho não resolve operação mal configurada.' },
+      { q: 'Canal é mais seguro que grupo?', a: 'Canal ajuda a organizar a vitrine, mas ainda precisa de ritmo e de texto que varia. Formato sozinho não resolve operação mal configurada.' },
     ],
   },
   'shadowban-whatsapp-canais': {
     slug: '/blog/shadowban-whatsapp-canais',
     title: 'Shadowban em Canais do WhatsApp: sinais para notar',
-    description: 'Veja sinais de queda silenciosa em Canais do WhatsApp e como afiliados podem monitorar entrega, cliques e saúde antes do prejuízo.',
+    description: 'Os sinais de queda silenciosa em Canais do WhatsApp e o que conferir (cliques, entrega e uma conta-sentinela) antes do prejuízo.',
     eyebrow: 'Monitoramento · Canais do WhatsApp',
     origin: 'blog_shadowban_whatsapp_canais',
     heroImage: { path: '/blog/hero/28-sinais.png', alt: 'Cinco sinais silenciosos de shadowban: cliques caindo, respostas caindo, mensagens idênticas em canais diferentes, destino falhando sem aviso', width: 1080, height: 1080 },
@@ -89,7 +89,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Resposta direta', paragraphs: ['Você deve monitorar queda brusca de cliques, atraso de entrega, erros recorrentes, sumiço de visualizações e divergência entre publicação e recebimento por uma conta-sentinela.', 'Nenhum sinal isolado prova shadowban. Mas um conjunto de sinais deve acionar redução de cadência e revisão da operação.'] },
       { h2: 'Sinais que merecem atenção', bullets: ['Cliques caem sem mudança de oferta ou horário.', 'Seguidores relatam que não viram publicações.', 'Mensagens demoram mais para aparecer.', 'Canais parecidos performam bem, mas um canal específico despenca.', 'Erros técnicos começam a se repetir.'] },
       { h2: 'Conta-sentinela: por que ela importa', paragraphs: ['Uma conta-sentinela é um número secundário que segue seus canais e confirma se as mensagens aparecem como deveriam. Ela ajuda a detectar diferença entre “post publicado” e “post realmente visto”.'] },
-      { h2: 'O que fazer quando o risco sobe', paragraphs: ['Reduza frequência, pause publicações no canal afetado, revise variações e confira se houve mudança de comportamento recente. Se o canal continuar em risco, prepare plano de recuperação antes que a audiência fique inacessível.'] },
+      { h2: 'O que fazer quando o risco sobe', paragraphs: ['Reduza frequência, pause publicações no canal afetado, revise o texto e confira se houve mudança de comportamento recente. Se o canal continuar em risco, prepare um plano B antes que a audiência fique inacessível: um canal reserva e um jeito de avisar seus seguidores.', 'No Espelha Grupos (plano Pro), dá para reduzir o ritmo só daquele canal, com intervalo maior e menos envios por dia, sem mexer nos outros destinos.'] },
     ],
     relatedTitle: 'Continue: risco de bloqueio no WhatsApp',
     relatedLinks: [
@@ -100,7 +100,7 @@ export const PRESERVATION_BLOG_POSTS = {
     ],
     faq: [
       { q: 'Shadowban no WhatsApp é sempre comprovável?', a: 'Não. Normalmente você trabalha com sinais indiretos: cliques, entrega, relatos, conta-sentinela e comparação entre canais.' },
-      { q: 'O Espelha Grupos detecta todos os casos?', a: 'Não existe detecção perfeita. O Espelha Grupos ajuda a monitorar sinais e agir preventivamente quando a operação sai do padrão esperado.' },
+      { q: 'O Espelha Grupos detecta shadowban?', a: 'Não. Ele não mede alcance nem visualização do canal. O que ele mostra é o lado do envio: o que saiu, quando e o que falhou. Para alcance, compare os cliques no seu link de afiliada e use uma conta-sentinela.' },
       { q: 'O que fazer primeiro diante de queda brusca?', a: 'Pause ou reduza cadência, compare canais semelhantes e valide recebimento com conta-sentinela.' },
     ],
   },
@@ -114,10 +114,10 @@ export const PRESERVATION_BLOG_POSTS = {
     usePersonAuthor: true,
     intro: 'A migração não deve ser um corte brusco. O caminho mais seguro é transformar o canal em vitrine, manter o grupo como apoio e usar espelhamento com cadência controlada.',
     sections: [
-      { h2: 'Resposta direta', paragraphs: ['Crie o canal, anuncie a mudança no grupo, publique ofertas em paralelo por alguns dias, acompanhe cliques e só depois reduza a dependência do grupo.', 'Com o Espelha Grupos, você pode espelhar ofertas entre grupo e canal enquanto testa cadência, formato e aceitação da audiência.'] },
+      { h2: 'Resposta direta', paragraphs: ['Crie o canal, anuncie a mudança no grupo, publique ofertas em paralelo por alguns dias, acompanhe cliques e só depois reduza a dependência do grupo.', 'Com o Espelha Grupos (plano Pro), você publica as mesmas ofertas no grupo e no canal durante a transição, cada destino com o seu ritmo, sem copiar e colar duas vezes.'] },
       { h2: 'Passo a passo recomendado', bullets: ['Faça inventário dos grupos, canais e fontes atuais.', 'Crie o canal com nome claro e descrição fiel ao conteúdo.', 'Avise o grupo com CTA simples para seguir o canal.', 'Publique em paralelo antes de cortar qualquer fluxo.', 'Monitore cliques, visualizações e reclamações.'] },
       { h2: 'Como evitar uma migração confusa', paragraphs: ['Não mude tudo de uma vez. Se você troca formato, frequência e copy no mesmo dia, fica impossível saber o que afetou o resultado. Preserve um padrão por vez e compare dados.'] },
-      { h2: 'Onde entra o Módulo de Preservação Avançada', paragraphs: ['Ele organiza limites, variações, pausa e monitoramento para que o novo canal não nasça com comportamento mecânico. O canal deve parecer administrado por uma pessoa, não por um disparador.'] },
+      { h2: 'Onde entra o Módulo de Preservação Avançada', paragraphs: ['Ele define intervalo entre envios, limite por dia, horário de descanso e variação do texto em cada destino, para que o canal novo não nasça com cara de disparo. O canal deve parecer administrado por uma pessoa, não por um disparador. É um recurso do plano Pro.'] },
     ],
     relatedTitle: 'Continue: grupos, canais e achadinhos',
     relatedLinks: [
@@ -130,7 +130,7 @@ export const PRESERVATION_BLOG_POSTS = {
     faq: [
       { q: 'Quanto tempo dura a migração?', a: 'Depende do tamanho da audiência, mas uma janela de paralelismo entre grupo e canal costuma ser mais segura que migração imediata.' },
       { q: 'Posso manter grupo e canal para sempre?', a: 'Sim. Muitos afiliados usam grupo como comunidade e canal como vitrine de ofertas.' },
-      { q: 'O Espelha Grupos espelha grupo para canal?', a: 'Sim. O Espelha Grupos foi posicionado para operar grupo para canal, canal para grupo, canal para canal e grupo para grupo.' },
+      { q: 'O Espelha Grupos espelha grupo para canal?', a: 'Sim, no plano Pro: grupo para canal, canal para grupo e canal para canal. Grupo para grupo está em todos os planos.' },
     ],
   },
   'chip-dedicado-bot-whatsapp': {
@@ -146,7 +146,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Resposta direta', paragraphs: ['Afiliados devem usar chip dedicado porque o número que publica, segue canais e administra rotina de ofertas é parte da infraestrutura do negócio.', 'Se esse número cair, travar ou precisar ser substituído, o impacto deve ficar isolado da sua vida pessoal e do seu atendimento principal.'] },
       { h2: 'Riscos de usar número pessoal', bullets: ['Perder acesso a conversas pessoais em caso de bloqueio.', 'Misturar rotina comercial e vida privada.', 'Dificultar recuperação da operação.', 'Não conseguir separar testes, canais e alertas.', 'Aumentar ansiedade operacional a cada instabilidade.'] },
       { h2: 'Como tratar chip como ativo', paragraphs: ['Registre quem usa o chip, onde ele está conectado, quais canais administra e quais rotinas dependem dele. Tenha backup de configurações, lista de canais e processo de substituição.'] },
-      { h2: 'Papel do Espelha Grupos', paragraphs: ['O Espelha Grupos não elimina risco do chip, mas ajuda a operar com cadência, monitoramento, pausas e plano de recuperação. Isso torna o chip parte de um processo, não um ponto único de improviso.'] },
+      { h2: 'Papel do Espelha Grupos', paragraphs: ['O Espelha Grupos não elimina o risco do chip. Depois que você lê o QR Code, ele roda no servidor, então o celular com o chip não precisa ficar ligado, e o painel mostra quando a conexão cai.', 'Se precisar trocar de chip, as configurações ficam na sua conta: basta ler o QR Code com o número novo, que precisa estar nos mesmos grupos e canais.'] },
     ],
     relatedTitle: 'Continue: proteger o número da operação',
     relatedLinks: [
@@ -158,22 +158,23 @@ export const PRESERVATION_BLOG_POSTS = {
     faq: [
       { q: 'Posso começar com meu número pessoal?', a: 'Não é recomendado. Mesmo operações pequenas deveriam separar número pessoal e número operacional desde o início.' },
       { q: 'Preciso de mais de um chip?', a: 'Para começar, um chip dedicado já reduz bastante a mistura de risco. Operações maiores podem estruturar chips por função.' },
-      { q: 'Chip dedicado evita banimento?', a: 'Não. Ele reduz impacto e melhora organização, mas precisa vir junto de cadência, variações, monitoramento e uso responsável.' },
+      { q: 'Chip dedicado evita banimento?', a: 'Não. Ele reduz o impacto e melhora a organização, mas precisa vir junto de ritmo, texto que varia e uso responsável.' },
     ],
   },
   'bot-whatsapp-antiban-existe': {
     slug: '/blog/bot-whatsapp-antiban-existe',
     title: 'Bot “anti-ban” para WhatsApp existe? A resposta honesta',
-    description: 'Entenda por que “anti-ban” absoluto não existe e como o Módulo de Preservação Avançada do Espelha Grupos reduz risco com camadas operacionais.',
+    description: 'Por que “anti-ban” absoluto não existe e o que o Módulo de Preservação Avançada do Espelha Grupos controla de fato para reduzir o risco.',
     eyebrow: 'Busca “anti-ban” · Resposta honesta',
     origin: 'blog_bot_whatsapp_antiban_existe',
     heroImage: { path: '/blog/hero/23-sem-promessa.png', alt: 'Comparação entre a promessa vazia de "anti-ban 100%" e o processo real de preservação em camadas', width: 1080, height: 1080 },
     usePersonAuthor: true,
-    intro: 'A resposta honesta é: bot “anti-ban” absoluto não existe. O que existe é preservação avançada, uma combinação de decisões operacionais para reduzir risco e recuperar mais rápido.',
+    intro: 'A resposta honesta é: bot “anti-ban” absoluto não existe. O que existe é controlar o ritmo do que sai e cuidar de como a operação é montada: chip dedicado, grupos autorizados e texto que não se repete idêntico.',
     sections: [
-      { h2: 'Resposta direta', paragraphs: ['Nenhum bot controla decisões da plataforma. Portanto, qualquer promessa de “anti-ban 100%” deve ser tratada como exagero comercial.', 'O Espelha Grupos usa Módulo de Preservação Avançada: ritmo humano, variações, monitoramento, pausa preventiva, chip dedicado e plano de recuperação.'] },
+      { h2: 'Resposta direta', paragraphs: ['Nenhum bot controla decisões da plataforma. Portanto, qualquer promessa de “anti-ban 100%” deve ser tratada como exagero comercial.', 'O Espelha Grupos tem o Módulo de Preservação Avançada (plano Pro), que controla o ritmo de cada destino. Chip dedicado e grupos autorizados ficam por sua conta, e pesam tanto quanto.'] },
       { h2: 'Por que o termo “anti-ban” aparece', paragraphs: ['Afiliados pesquisam por “anti-ban” porque sentem medo real de perder chip, canal e audiência. Usar o termo ajuda a responder a busca, mas a comunicação precisa deixar claro que não é garantia absoluta.'] },
-      { h2: 'O que é preservação avançada', bullets: ['Cadência por destino.', 'Limites por hora e dia.', 'Horário de silêncio.', 'Variações de copy e ordem da oferta.', 'Monitoramento de saúde e cliques.', 'Pausa preventiva quando o risco aumenta.', 'Plano de recuperação para canal e chip.'] },
+      { h2: 'O que a preservação avançada faz', bullets: ['Intervalo mínimo entre envios em cada destino.', 'Limite de envios em sequência e limite por dia.', 'Horário de descanso, sem envio de madrugada.', 'Variação do texto, para a mesma oferta não sair idêntica em todos os destinos.', 'Descarte da oferta que esperou demais na fila, em vez de sair velha.', 'Em todos os planos: a mesma oferta não sai duas vezes no mesmo grupo.'] },
+      { h2: 'O que ela não faz', paragraphs: ['Não mede alcance nem cliques do canal, não pausa sozinha quando o risco sobe e não recupera um número banido. Esses sinais você acompanha e essas decisões você toma; a ferramenta controla o ritmo do que sai.'] },
       { h2: 'Como avaliar uma ferramenta', paragraphs: ['Desconfie de ferramenta que só promete “não banir”. Prefira produto que explica limites, recomenda chip dedicado, fala de uso responsável e mostra quais camadas realmente controla.'] },
     ],
     relatedTitle: 'Continue: o que dá e o que não dá para prometer',
@@ -184,9 +185,9 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/protecao-antiban-espelha-grupos', label: 'Como o Espelha Grupos preserva a sessão', note: 'o que a ferramenta faz de fato' },
     ],
     faq: [
-      { q: 'Então o Espelha Grupos é “anti-ban”?', a: 'Não como promessa absoluta. O Espelha Grupos oferece Módulo de Preservação Avançada para reduzir risco, monitorar sinais e preparar recuperação.' },
+      { q: 'Então o Espelha Grupos é “anti-ban”?', a: 'Não como promessa. O Espelha Grupos controla o ritmo do que sai para reduzir o risco; a decisão de banir é do WhatsApp.' },
       { q: 'Por que não prometer 100%?', a: 'Porque nenhuma ferramenta externa controla todas as decisões da plataforma. Prometer 100% seria desonesto.' },
-      { q: 'O que devo ativar primeiro?', a: 'Chip dedicado, limites por destino, horário de silêncio, variações e monitoramento básico de cliques e entrega.' },
+      { q: 'O que devo ativar primeiro?', a: 'Chip dedicado, intervalo e limite por dia em cada destino, horário de descanso e variação do texto.' },
     ],
   },
   'comecar-afiliado-whatsapp-sem-grupo-grande': {

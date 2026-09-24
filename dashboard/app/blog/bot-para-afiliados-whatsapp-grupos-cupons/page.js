@@ -15,7 +15,7 @@ const faq = [
   },
   {
     q: 'O Espelha Grupos serve para espelhar ofertas entre grupos?',
-    a: 'Sim, a proposta é ajudar na organização e no espelhamento de mensagens entre grupos autorizados, reduzindo copia-e-cola manual.',
+    a: 'Sim. Ele acompanha os grupos de origem que você escolhe e republica as ofertas nos seus grupos com o link trocado pelo seu código de afiliada, sem copia-e-cola.',
   },
   {
     q: 'Automatizar grupos de cupons é spam?',
@@ -42,7 +42,7 @@ export default function Page() {
         <section>
           <h2>Resposta direta</h2>
           <p>
-            Um bot para afiliados no WhatsApp faz sentido quando a operação já tem ofertas validadas e precisa distribuir mensagens para grupos certos, com menos copia-e-cola e mais controle. O Espelha Grupos apoia espelhamento e rotina de publicação; ele não deve ser usado para prometer comissão, burlar regras ou enviar spam.
+            Um bot para afiliados no WhatsApp faz sentido quando a operação já tem ofertas validadas e precisa distribuir mensagens para grupos certos, com menos copia-e-cola e mais controle. O Espelha Grupos acompanha as origens que você escolhe, troca o link pelo seu código de afiliada em Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress e publica nos seus grupos com intervalo entre os envios. Ele não deve ser usado para prometer comissão, burlar regras ou enviar spam.
           </p>
         </section>
 
@@ -60,7 +60,7 @@ export default function Page() {
           <h2>Fluxo recomendado para grupos de cupons</h2>
           <ol>
             <li>Curadoria da oferta e validação do preço.</li>
-            <li>Conferência do link monetizado, tag ou código de afiliado.</li>
+            <li>Troca do link pelo seu código de afiliada (automática no Espelha Grupos) e conferência das primeiras ofertas.</li>
             <li>Padronização da copy com benefício, condição e aviso de validade.</li>
             <li>Escolha dos grupos de destino com permissão e aderência ao nicho.</li>
             <li>Espelhamento com intervalo responsável e revisão dos primeiros envios.</li>
@@ -71,9 +71,9 @@ export default function Page() {
         </section>
 
         <section>
-          <h2>Cuidados comerciais e de compliance</h2>
+          <h2>Cuidados com as regras</h2>
           <p>
-            Não assuma que toda plataforma aprova automações, scraping, redirecionadores ou integrações externas. A sprint orgânica do Espelha Grupos deve comunicar benefícios operacionais de organização e espelhamento, sem prometer integração não aprovada, ganho garantido ou atribuição automática de comissão.
+            Não assuma que toda plataforma aprova qualquer automação. Confira as regras do programa de afiliados de cada loja e as regras de cada grupo. A comissão continua sendo paga pela loja, conforme o rastreio dela: nenhuma ferramenta garante ganho.
           </p>
           <p>
             O posicionamento correto é: automatize a rotina permitida, confira links antes de distribuir e respeite as regras dos grupos e das plataformas de afiliados.
@@ -91,9 +91,9 @@ export default function Page() {
         </section>
 
         <section>
-          <h2>CTA</h2>
+          <h2>Próximo passo</h2>
           <p>
-            Quer sair do copia-e-cola e transformar grupos de cupons em uma operação mais previsível? Entre na lista VIP do Espelha Grupos e valide o fluxo em staging antes de qualquer produção.
+            Quer sair do copia-e-cola e transformar grupos de cupons em uma operação mais previsível? Teste o Espelha Grupos por 7 dias grátis, com o plano Pro completo e sem cartão.
           </p>
           <p>
             <Link href="/login?mode=register&utm_source=blog&utm_medium=organic&utm_campaign=organic-marketing-sprint-1&utm_content=cta-bot-afiliados" className="inline-flex min-h-12 items-center rounded-xl bg-emerald-600 px-5 font-black text-white hover:bg-emerald-700">

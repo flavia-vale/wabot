@@ -11,7 +11,7 @@ const dates = getEditorialDates(slug)
 const faq = [
   { q: 'Por que padronizar divulgação antes de automatizar?', a: 'Porque automação amplia o processo existente. Se oferta, link, copy e destino não estiverem padronizados, o erro também escala para mais grupos.' },
   { q: 'O checklist substitui revisão humana?', a: 'Não. Ele organiza a revisão humana antes da automação e reduz esquecimento de pontos como preço, cupom, tag de afiliado, grupo e horário.' },
-  { q: 'Como usar o checklist com o Espelha Grupos?', a: 'Use o checklist para aprovar a mensagem e os grupos; depois configure origem, destino, filtros e intervalos no Espelha Grupos e revise os primeiros logs.' },
+  { q: 'Como usar o checklist com o Espelha Grupos?', a: 'Use o checklist para aprovar a mensagem e os grupos; depois configure origem, destino, filtros e intervalos no Espelha Grupos e revise os primeiros envios no histórico. A troca do link pelo seu código de afiliada é automática nas 6 lojas suportadas.' },
 ]
 
 export const metadata = {
@@ -29,7 +29,7 @@ export default function Page() {
       {schemas.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <ArticleShell eyebrow="Conteúdo de dor · Cluster 1" title={title} description={description} origin="artigo_checklist_padronizar_divulgacao_whatsapp" publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
+      <ArticleShell eyebrow="Operação · Padronizar divulgação" title={title} description={description} origin="artigo_checklist_padronizar_divulgacao_whatsapp" publishedAt={dates.publishedAt} updatedAt={dates.updatedAt}>
         <section>
           <h2>Resposta direta</h2>
           <p>
@@ -84,8 +84,8 @@ export default function Page() {
           <h2>Como conectar esse checklist ao Espelha Grupos</h2>
           <ol>
             <li>Use o checklist para definir quais grupos são origem e quais são destino.</li>
-            <li>Transforme a copy padrão em modelo de campanha recorrente.</li>
-            <li>Configure a rotina de espelhamento e revise os primeiros envios em logs.</li>
+            <li>Transforme a copy padrão em um modelo de mensagem no painel (Templates de mensagens).</li>
+            <li>Configure a rotina de espelhamento e revise os primeiros envios no histórico.</li>
             <li>Ajuste frequência e destinos a partir dos dados do primeiro dia.</li>
           </ol>
           <p>
