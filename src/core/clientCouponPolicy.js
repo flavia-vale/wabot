@@ -233,9 +233,15 @@ export function renderCouponText({ coupon, priceCents, finalPriceCents } = {}) {
 
   const code = String(coupon.code || '').trim()
   if (!code) return ''
-  return withPrice
+  const line = withPrice
     ? `🎟️ Use o cupom ${code} — de ${formatBrl(priceCents)} por ${formatBrl(finalPriceCents)} com o cupom${cond}`
     : `🎟️ Use o cupom ${code}${cond}`
+  // Link opcional da página onde se insere o código (decisão de 2026-09-25):
+  // só sai se foi preenchido E é da própria loja; senão, só o código.
+  const url = String(coupon.redeemUrl ?? '').trim()
+  return url && isStoreCouponLink(url, coupon.platform)
+    ? `${line}\nInsira o código do cupom aqui: ${url}`
+    : line
 }
 
 /**

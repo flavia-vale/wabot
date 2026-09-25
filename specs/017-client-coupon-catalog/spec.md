@@ -378,6 +378,13 @@ serial** — qualquer custo ou falha ali é pago por todos os destinos da conta.
   mostra todas as condições cadastradas: "(10% OFF, até R$ 20,00, em compras
   acima de R$ 79,00)".
 
+- **FR-031** (2026-09-25): Cupom de **código** ganha campo opcional "Link da
+  página para inserir o código" (mesma regra do link: `https://` e da loja
+  escolhida). Vazio → nada muda. Preenchido → a oferta ganha uma linha logo
+  abaixo do cupom: "Insira o código do cupom aqui: link". Não muda a escolha do
+  melhor cupom. Os botões "Com código / Por link" usam o estilo grande da tela
+  Grupos e ocupam a largura toda no celular.
+
 ### Nota de verificação: o cupom NÃO mexe na trava de repetição
 
 Não é requisito novo — é achado já verificado no código, registrado aqui para o

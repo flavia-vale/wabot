@@ -149,7 +149,9 @@ export default function CuponsPage() {
       const payload = {
         kind: form.kind,
         code: form.kind === 'code' ? form.code.trim() : '',
-        redeemUrl: form.kind === 'link' ? form.redeemUrl.trim() : null,
+        // Opcional no cupom de código (página onde se insere o código);
+        // obrigatório no de link. Vazio apaga o que estava salvo.
+        redeemUrl: form.redeemUrl.trim() || null,
         platform: form.platform,
         discountType: form.discountType,
         // Na tela, valor em reais entra como "R$" comum (ex.: 20 = R$20,00);
@@ -227,7 +229,7 @@ export default function CuponsPage() {
 
           <div>
             <label className="pnl-label">Como o cupom é usado?</label>
-            <div className="pnl-seg" role="group" aria-label="Como o cupom é usado">
+            <div className="pnl-seg pnl-groups-role-toggle" role="group" aria-label="Como o cupom é usado">
               <button type="button" className={form.kind === 'code' ? 'is-active' : ''} aria-pressed={form.kind === 'code'} onClick={() => setForm((f) => ({ ...f, kind: 'code' }))}>Com código</button>
               <button type="button" className={form.kind === 'link' ? 'is-active' : ''} aria-pressed={form.kind === 'link'} onClick={() => setForm((f) => ({ ...f, kind: 'link' }))}>Por link</button>
             </div>
@@ -246,6 +248,7 @@ export default function CuponsPage() {
           </div>
 
           {form.kind === 'code' ? (
+          <>
           <div>
             <label className="pnl-label">Código do cupom</label>
             <input
@@ -257,6 +260,19 @@ export default function CuponsPage() {
             />
             <p className="pnl-hint" style={{ marginTop: 4 }}>Escreva do jeito que a loja te deu, com maiúsculas e minúsculas certinhas.</p>
           </div>
+
+          <div>
+            <label className="pnl-label">Link da página para inserir o código (opcional)</label>
+            <input
+              type="url"
+              className="pnl-input"
+              value={form.redeemUrl}
+              onChange={(e) => setForm((f) => ({ ...f, redeemUrl: e.target.value }))}
+              placeholder="Ex: https://s.shopee.com.br/..."
+            />
+            <p className="pnl-hint" style={{ marginTop: 4 }}>Se preencher, a oferta ganha uma linha a mais: &quot;Insira o código do cupom aqui: link&quot;. Precisa ser um link da loja {lojaLabel(form.platform)}.</p>
+          </div>
+          </>
           ) : (
           <div>
             <label className="pnl-label">Link de resgate do cupom</label>
@@ -365,7 +381,7 @@ export default function CuponsPage() {
             </div>
             {c.label && <p className="pnl-hint" style={{ marginTop: 2 }}>{c.label}</p>}
             <p className="pnl-hint" style={{ marginTop: 2 }}>{descontoLabel(c)} · {validadeLabel(c)}</p>
-            {c.kind === 'link' && c.redeemUrl && (
+            {c.redeemUrl && (
               <p className="pnl-hint" style={{ marginTop: 2, overflowWrap: 'anywhere' }}>{c.redeemUrl}</p>
             )}
           </div>
