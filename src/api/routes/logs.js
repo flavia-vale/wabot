@@ -4,6 +4,7 @@ import { buildOfferQueueSource, parseOfferQueueSourceId } from '../../offerQueue
 import { clearUserQueuedSendLogs } from '../../jobs/stuckSendLogs.js'
 import { buildCredentialBlockAlerts } from '../../credentialBlockAlert/message.js'
 import { MISSING_CREDENTIAL_ERROR_PREFIX } from '../../core/conversionFailureReason.js'
+import { SEND_PAUSE_MAX_AGE_MS, summarizeQueuedByKind } from '../../domain/painel/sendPauseStatus.js'
 
 // P3 (specs/013-inbound-leads-strategy): janela fixa de 7 dias, constante no
 // módulo — não vira query param para a rota não virar superfície de
@@ -194,6 +195,28 @@ export async function logsRoutes(app) {
   // Resumo agregado para os cards da página de Logs do cliente.
   // Conta sucessos, bloqueios por proteção (dedup) ou configuração, timeouts
   // e falhas reais no período pedido. As categorias vêm do errorTaxonomy.
+  // Aviso global "o robô está esperando o Anti-banimento" (2026-09-24). Só
+  // classifica as linhas `queued` pelo motivo leigo gravado por
+  // `deferReasonMessage` (bot-worker). O horário de envio NÃO entra aqui: a
+  // shell já carrega `GET /groups` (com `sendWindow`) a cada 20s e decide isso
+  // no navegador. Cache de 30s (o mesmo do /summary): a shell pergunta a cada
+  // 20s por aba aberta.
+  app.get('/send-pause', { onRequest: [app.authenticate] }, async (req) => {
+    const userId = req.user.sub
+    const cacheKey = `${userId}:send-pause`
+    const cached = getCachedSummary(cacheKey)
+    if (cached) return cached
+    const rows = await db.messageLog.findMany({
+      where: { userId, status: 'queued', errorMsg: { not: null }, sentAt: { gte: new Date(Date.now() - SEND_PAUSE_MAX_AGE_MS) } },
+      select: { errorMsg: true, sentAt: true },
+      orderBy: { sentAt: 'asc' },
+      take: 500,
+    })
+    const result = { queued: summarizeQueuedByKind(rows) }
+    setCachedSummary(cacheKey, result)
+    return result
+  })
+
   app.get('/summary', { onRequest: [app.authenticate] }, async (req) => {
     const userId = req.user.sub
     const rawPeriod = String(req.query?.period || '7d').toLowerCase()

@@ -130,3 +130,18 @@ CREATE INDEX "ClientCoupon_userId_platform_idx" ON "ClientCoupon"("userId", "pla
 -- Opt-in por automação. DEFAULT false = automação existente não muda (FR-023).
 ALTER TABLE "OfferAutomation" ADD COLUMN "useCoupons" BOOLEAN NOT NULL DEFAULT false;
 ```
+
+### Acréscimo 2026-09-25: cupom por link, compra mínima, desconto máximo (FR-029/FR-030)
+
+Migration `20260925120000_client_coupon_link_min_cap` (só aditiva):
+
+| Coluna | Tipo | Regra |
+|---|---|---|
+| `kind` | TEXT NOT NULL DEFAULT `'code'` | `code` ou `link`; linha antiga = código |
+| `redeemUrl` | TEXT NULL | obrigatório em `link`: `https://` do domínio da loja (`isStoreCouponLink`) |
+| `minPurchaseCents` | INTEGER NULL | compra mínima em centavos; vazio = sem mínimo |
+| `maxDiscountCents` | INTEGER NULL | teto em centavos; só vale para `percent` (em `amount` fica NULL) |
+
+Cupom de link grava `code = ''` (a coluna segue NOT NULL). Aviso de repetido:
+mesmo código na mesma loja (código) ou mesmo link na mesma loja (link).
+

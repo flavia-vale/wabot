@@ -123,7 +123,6 @@ test('checkAndReserve aloca o primeiro slot e atualiza throttle (sem dest → HA
   assert.equal(res.allow, true)
   const stored = db._records.get('g-1')
   assert.equal(stored.postsToday, 1)
-  assert.equal(stored.postsInBurstWindow, 1)
   assert.ok(stored.lastPostAt)
 })
 
@@ -140,13 +139,12 @@ test('checkAndReserve respeita pausa do health', async () => {
   assert.equal(db._records.size, 0)
 })
 
-test('recordPost incrementa contadores e atualiza burst window', async () => {
+test('recordPost incrementa contadores', async () => {
   const db = makeFakeDb()
   await recordPost('g-1', { db, now: NOON_BRT_MS, botConfig: DEFAULT_CONFIG })
   await recordPost('g-1', { db, now: NOON_BRT_MS + 60 * SEC, botConfig: DEFAULT_CONFIG })
   const stored = db._records.get('g-1')
   assert.equal(stored.postsToday, 2)
-  assert.equal(stored.postsInBurstWindow, 2)
 })
 
 // ============================================================================
@@ -158,8 +156,6 @@ const DEST_DEFAULT = {
   operatingHoursJson: '{"startHour":8,"endHour":22,"tz":"America/Sao_Paulo"}',
   throttleEnabled: true,
   minIntervalSec: 30,
-  burstCap: 6,
-  burstWindowSec: 600,
   dailyCap: null,
 }
 
@@ -221,18 +217,19 @@ test('decideDestination: horário desabilitado nunca bloqueia por horário', () 
   assert.equal(res.allow, true)
 })
 
-test('decideDestination: ignoreOperatingHours pula o horário mas mantém anti-ban', () => {
+test('decideDestination: ignoreOperatingHours pula o horário mas mantém o intervalo mínimo', () => {
   const now = NOON_BRT_MS
-  const windowStart = now - 5 * MIN
+  const lastPostMs = now - 10 * SEC
   const res = decideDestination({
     now,
-    throttle: { postsToday: 6, dayBucket: tzDayBucket(now, 'America/Sao_Paulo'), lastPostAt: new Date(now - 60 * SEC), burstWindowStart: new Date(windowStart), postsInBurstWindow: 6 },
+    throttle: { postsToday: 6, dayBucket: tzDayBucket(now, 'America/Sao_Paulo'), lastPostAt: new Date(lastPostMs) },
     isPaused: false,
-    dest: { ...DEST_DEFAULT, operatingHoursEnabled: true, burstCap: 6, burstWindowSec: 600 },
+    dest: { ...DEST_DEFAULT, operatingHoursEnabled: true, minIntervalSec: 60 },
     ignoreOperatingHours: true,
+    random: () => 0,
   })
   assert.equal(res.allow, false)
-  assert.equal(res.reason, DEFER_REASON.BURST_CAP)
+  assert.equal(res.reason, DEFER_REASON.MIN_INTERVAL)
 })
 
 test('decideDestination: limites anti-ban vêm do destino com jitter de 0% no mínimo', () => {
@@ -240,7 +237,7 @@ test('decideDestination: limites anti-ban vêm do destino com jitter de 0% no m�
   const lastPostMs = now - 40 * SEC
   const res = decideDestination({
     now,
-    throttle: { postsToday: 1, dayBucket: tzDayBucket(now, 'America/Sao_Paulo'), lastPostAt: new Date(lastPostMs), burstWindowStart: new Date(lastPostMs), postsInBurstWindow: 1 },
+    throttle: { postsToday: 1, dayBucket: tzDayBucket(now, 'America/Sao_Paulo'), lastPostAt: new Date(lastPostMs) },
     isPaused: false,
     dest: { ...DEST_DEFAULT, minIntervalSec: 60 }, // 40s < 60s → bloqueia
     random: () => 0,
@@ -255,13 +252,11 @@ test('decideDestination waits until lastPostAt plus randomized min interval', ()
   const lastPostAt = new Date(Date.UTC(2026, 0, 1, 12, 0, 0))
   const res = decideDestination({
     now,
-    throttle: { lastPostAt, dayBucket: '2026-01-01', postsToday: 1, burstWindowStart: lastPostAt, postsInBurstWindow: 1 },
+    throttle: { lastPostAt, dayBucket: '2026-01-01', postsToday: 1 },
     isPaused: false,
     dest: {
       ...DEST_DEFAULT,
       minIntervalSec: 600,
-      burstCap: 99,
-      burstWindowSec: 3600,
       dailyCap: null,
     },
     random: () => 0.999,

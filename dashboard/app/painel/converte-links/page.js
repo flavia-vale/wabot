@@ -40,6 +40,7 @@ const PLATFORM_BY_ID = new Map(AFFILIATE_PLATFORMS.map((p) => [p.id, p]))
  * `link` e `temporario` são neutros: não é defeito da conta dela. */
 const TOM = {
   [VEREDITO.OK]: 'is-ok',
+  [VEREDITO.PROPRIO]: 'is-ok',
   [VEREDITO.RESSALVA]: 'is-ressalva',
   [VEREDITO.CREDENCIAL]: 'is-erro',
   [VEREDITO.LINK]: 'is-neutro',
@@ -48,6 +49,7 @@ const TOM = {
 
 const SELO = {
   [VEREDITO.OK]: 'saiu com a sua identificação',
+  [VEREDITO.PROPRIO]: 'já é seu link',
   [VEREDITO.RESSALVA]: 'saiu com ressalva',
   [VEREDITO.CREDENCIAL]: 'falta cadastro',
   [VEREDITO.LINK]: 'link fora do teste',
@@ -72,7 +74,7 @@ function Icon({ name, size = 20, stroke = 1.8 }) {
 }
 
 function ICONE_DO_VEREDITO(veredito) {
-  if (veredito === VEREDITO.OK) return 'check'
+  if (veredito === VEREDITO.OK || veredito === VEREDITO.PROPRIO) return 'check'
   if (veredito === VEREDITO.CREDENCIAL) return 'x'
   return 'alert'
 }
@@ -240,9 +242,16 @@ export default function TestarConversaoPage() {
                   <div className="tc-banner-titulo">{veredito.titulo}</div>
                   <p className="tc-banner-texto">{veredito.texto}</p>
                   {veredito.mostrarCredenciais && (
-                    <Link href="/painel/ids-afiliada" className="pnl-btn tc-banner-btn">
-                      Cadastrar minhas lojas <Icon name="arrow" size={14} />
-                    </Link>
+                    <div className="tc-banner-acoes">
+                      <Link href="/painel/ids-afiliada" className="pnl-btn tc-banner-btn">
+                        Cadastrar minhas lojas <Icon name="arrow" size={14} />
+                      </Link>
+                      {veredito.videoUrl && (
+                        <a href={veredito.videoUrl} target="_blank" rel="noreferrer" className="pnl-btn tc-banner-btn">
+                          Assistir vídeo de cadastro <Icon name="arrow" size={14} />
+                        </a>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -283,7 +292,7 @@ export default function TestarConversaoPage() {
                           <Icon name="copy" size={14} /> {copiado ? 'Copiado' : 'Copiar link'}
                         </button>
                       )}
-                      {veredito.veredito === VEREDITO.OK && (
+                      {(veredito.veredito === VEREDITO.OK || veredito.veredito === VEREDITO.PROPRIO) && (
                         <Link href="/painel/espelhamento" className="pnl-btn">
                           Ir para Espelhamento <Icon name="arrow" size={14} />
                         </Link>

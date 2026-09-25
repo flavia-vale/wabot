@@ -38,15 +38,10 @@ test('motivo "destination_spacing" devolve o texto leigo esperado, sem jargão',
   }
 })
 
-test('motivo "burst_cap" explica o que está acontecendo, sem citar tela antiga (US2, 2026-09-23)', () => {
-  // A frase antiga citava a página "Preservação por destino" e o campo
-  // "Máximo de envios na janela" — os dois saíram da tela (T037: viraram
-  // fixos) e o nome da tela mudou para Anti-banimento. Citar um endereço que
-  // não existe mais é pior que não citar nenhum.
+test('motivo "burst_cap" não existe mais (gate de rajada removido em 2026-09-25) — cai no genérico sem jargão', () => {
   const deferReasonMessage = extractDeferReasonMessage()
   const msg = deferReasonMessage('burst_cap')
-  assert.match(msg, /n[ãa]o mandar muitas ofertas de uma vez/)
-  assert.match(msg, /Anti-banimento/)
+  assert.doesNotMatch(msg.toLowerCase(), /throttle/)
   assert.doesNotMatch(msg, /Preserva[çc][ãa]o por destino/i)
   assert.doesNotMatch(msg, /M[áa]ximo de envios na janela/i)
 })

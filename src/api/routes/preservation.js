@@ -9,14 +9,13 @@ import { recomputeScore as recomputeReportRiskScore } from '../../core/reportRis
 import { getClickStats } from '../../core/clickTracker.js'
 import { getProbeMonitoringSummary } from '../../core/probeEvidence.js'
 import { getProbeSessionSnapshot, isProbeSessionSelectable, setProbeSession } from '../../core/probeSessions.js'
-import { describeDestinationFloor } from '../../core/antiBanFloor.js'
 import { resolveDestinationPreservation } from '../../core/preservationConfig.js'
 import { toDestinationIntervalMs } from '../../core/destinationSpacing.js'
 
 // Nota: as variações de texto (gancho/CTA/convite) — pool e liga/desliga —
 // NÃO vivem mais aqui. São editadas exclusivamente em "Templates de mensagens"
 // (rota /api/config). Esta rota cuida só das defesas de preservação.
-// Plano B / Fase 3 (passo 2): a cadência/janela (min interval, burst, daily,
+// Plano B / Fase 3 (passo 2): a cadência/janela (min interval, daily,
 // quiet hours + seus toggles) saiu da config GLOBAL e virou config POR DESTINO
 // (presets em /presets e overrides em /destinations). Esta rota cuida só do que
 // continua de conta: o stagger entre canais (dedicado) e as defesas opcionais.
@@ -131,8 +130,6 @@ function collectPreservationFields(body, { nullable }) {
   hoursJson('operatingHoursJson')
   bool('throttleEnabled')
   num('minIntervalSec', 1, 86400)
-  num('burstCap', 1, 1000)
-  num('burstWindowSec', 60, 86400)
   num('dailyCap', 1, 10000, true)
   // Descarte por idade na fila (minutos). 0 = nunca descarta; teto de 7 dias.
   num('queueMaxAgeMin', 0, 10080)
@@ -199,7 +196,7 @@ export async function preservationRoutes(app) {
   const PRESET_SELECT = {
     id: true, name: true, isDefault: true,
     operatingHoursEnabled: true, operatingHoursJson: true,
-    throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true, dailyCap: true,
+    throttleEnabled: true, minIntervalSec: true, dailyCap: true,
     queueMaxAgeMin: true,
     createdAt: true, updatedAt: true,
   }
@@ -219,17 +216,7 @@ export async function preservationRoutes(app) {
       select: PRESET_SELECT,
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
     })
-    // Campos ADITIVOS (contracts/api-preservation.md § Leitura): um preset não
-    // herda nada (é ele mesmo o "modelo"), então resolvedThrottleEnabled é o
-    // próprio valor gravado. `camposNoPiso` é só diagnóstico/log — nunca vai
-    // para a tela (contracts/anti-ban-floor.md).
-    const enriched = presets.map((preset) => {
-      const { ritmoMaisCuidadoso, recomecouDoPadrao } = describeDestinationFloor(preset, {
-        resolvedThrottleEnabled: preset.throttleEnabled !== false,
-      })
-      return { ...preset, ritmoMaisCuidadoso, recomecouDoPadrao }
-    })
-    return { presets: enriched }
+    return { presets }
   })
 
   app.post('/presets', async (req, reply) => {
@@ -289,7 +276,7 @@ export async function preservationRoutes(app) {
   const DESTINATION_SELECT = {
     id: true, name: true, waJid: true, kind: true, preservationPresetId: true,
     operatingHoursEnabled: true, operatingHoursJson: true,
-    throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true, dailyCap: true,
+    throttleEnabled: true, minIntervalSec: true, dailyCap: true,
     queueMaxAgeMin: true,
   }
 
@@ -303,24 +290,12 @@ export async function preservationRoutes(app) {
       }),
       db.preservationPreset.findFirst({ where: { userId: req.user.sub, isDefault: true } }),
     ])
-    // Campos ADITIVOS (contracts/api-preservation.md § Leitura): `effective` é
-    // a config JÁ resolvida com o piso (mesmo caminho do robô,
-    // resolveDestinationPreservation). `resolvedThrottleEnabled` para a
-    // etiqueta precisa ser o valor resolvido ANTES do piso forçar
-    // throttleEnabled=true — por isso a segunda chamada com
-    // ANTI_BAN_FLOOR=off, só para enxergar esse estado (reaproveita o MESMO
-    // chokepoint, nunca reimplementa a comparação).
+    // Campo ADITIVO (contracts/api-preservation.md § Leitura): `effective` é a
+    // config JÁ resolvida por herança (mesmo caminho do robô,
+    // resolveDestinationPreservation) — sem piso nenhum por cima (2026-09-25).
     const enriched = destinations.map(({ preservationPreset, ...dest }) => {
       const effective = resolveDestinationPreservation(dest, { preset: preservationPreset, defaultPreset })
-      const preFloor = resolveDestinationPreservation(dest, {
-        preset: preservationPreset,
-        defaultPreset,
-        env: { ANTI_BAN_FLOOR: 'off' },
-      })
-      const { ritmoMaisCuidadoso, recomecouDoPadrao } = describeDestinationFloor(dest, {
-        resolvedThrottleEnabled: preFloor.throttleEnabled,
-      })
-      return { ...dest, ritmoMaisCuidadoso, recomecouDoPadrao, effective }
+      return { ...dest, effective }
     })
     return { destinations: enriched }
   })

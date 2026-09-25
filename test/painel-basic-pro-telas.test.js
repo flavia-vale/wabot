@@ -71,13 +71,19 @@ test('Espelhamento: marca d\'água e botão "Ver canal" do PRO', () => {
   assert.match(page, /const canUseChannels = hasProLikeAccess\(planSubject\)/, 'premium não pode ser travado na tela')
 })
 
-test('WhatsApp: ritmo dos envios = preset PADRÃO da Preservação, com cadeado no Basic', () => {
-  const card = read('dashboard/components/pro/RhythmCard.js')
-  assert.match(card, /p\.isDefault/)
-  assert.match(card, /updatePreservationPreset\(preset\.id/)
-  assert.match(card, /createPreservationPreset\(\{ name: 'Padrão', isDefault: true/)
-  assert.match(card, /<ProLock feature="ritmo">/)
-  assert.match(read('dashboard/app/painel/whatsapp/page.js'), /<RhythmCard \/>/)
+test('WhatsApp: ritmo dos envios = resumo somente-leitura do preset PADRÃO da Preservação, com cadeado no Basic', () => {
+  // 2026-09-25: RhythmCard.js foi removido (era um SEGUNDO formulário editável
+  // duplicando WhatsAppConnectedOverview.js na mesma tela). Agora
+  // WhatsAppConnectedOverview.js é o único lugar da tela WhatsApp que fala de
+  // ritmo, e é só leitura — editar é só no Anti-banimento.
+  const overview = read('dashboard/components/WhatsAppConnectedOverview.js')
+  assert.match(overview, /isDefault/)
+  assert.doesNotMatch(overview, /updatePreservationPreset\(/, 'edição saiu daqui — mora só no Anti-banimento')
+  assert.doesNotMatch(overview, /createPreservationPreset\(/, 'edição saiu daqui — mora só no Anti-banimento')
+  assert.doesNotMatch(overview, /<select|<input/, 'nenhum campo editável de ritmo nesta tela')
+  assert.match(overview, /isBasic.*wa-pro-lock|wa-pro-lock/s)
+  assert.match(overview, /href="\/painel\/anti-banimento\?parte=ritmo"/)
+  assert.doesNotMatch(read('dashboard/app/painel/whatsapp/page.js'), /RhythmCard/)
 })
 
 test('página pública de vendas não diz mais que está no Basic', () => {

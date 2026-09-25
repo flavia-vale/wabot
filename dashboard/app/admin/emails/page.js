@@ -521,6 +521,22 @@ function Historico({ batches, sends, onCancelar }) {
 
 const FILTRO_OPCOES = [['any', 'Tanto faz'], ['yes', 'Sim'], ['no', 'Não']]
 
+// Frase em português dos filtros ATIVOS — usada na confirmação antes de
+// mandar em massa, pra deixar o público visível no clique, não só na tela
+// de configuração (RCA 2026-09-24: mensagem "nunca enviou nada" foi mandada
+// sem o filtro "já fez envio" estar marcado, e ninguém viu isso antes de
+// confirmar).
+function descreverFiltrosMassa(filtros) {
+  const partes = []
+  if (filtros.connected === 'yes') partes.push('estão conectados agora')
+  if (filtros.connected === 'no') partes.push('estão desconectados')
+  if (filtros.everSent === 'yes') partes.push('já fizeram algum envio')
+  if (filtros.everSent === 'no') partes.push('nunca fizeram nenhum envio')
+  if (filtros.hasCredential === 'yes') partes.push('têm credencial cadastrada')
+  if (filtros.hasCredential === 'no') partes.push('não têm credencial cadastrada')
+  return partes.length ? partes.join(', ') : 'qualquer cliente (nenhum filtro restringindo)'
+}
+
 // Rascunho pro primeiro contato de quem conectou e nunca publicou nada —
 // ela escreveu o pedido, isto é só o ponto de partida: aparece só quando o
 // modo em massa é escolhido e o campo ainda está vazio, e continua editável
@@ -583,7 +599,17 @@ function WhatsAppTab() {
   function trocarModo(novoModo) {
     setModo(novoModo)
     setResultado(null)
-    if (novoModo === 'massa' && !texto.trim()) setTexto(RASCUNHO_PRIMEIRO_CONTATO)
+    // RCA 2026-09-24: a mensagem "você conectou e não enviou nada" foi pro ar
+    // pra clientes que JÁ tinham enviado oferta — o rascunho vinha preenchido
+    // sozinho, mas o filtro "já fez envio" continuava em "Tanto faz" (o
+    // padrão da tela), e nada amarrava o TEXTO ao PÚBLICO certo. Agora, ao
+    // entrar no modo em massa com o rascunho (só quando o texto ainda está
+    // vazio — nunca sobrescreve texto que já foi editado), o filtro certo
+    // vem junto: conectado + nunca enviou. Continua editável antes de mandar.
+    if (novoModo === 'massa' && !texto.trim()) {
+      setTexto(RASCUNHO_PRIMEIRO_CONTATO)
+      setFiltros((f) => ({ ...f, connected: 'yes', everSent: 'no' }))
+    }
   }
 
   async function recarregarHistorico() {
@@ -610,7 +636,7 @@ function WhatsAppTab() {
   async function enviarEmMassa() {
     if (texto.trim().length < 3 || elegiveisMassa.length === 0) return
     const confirmado = window.confirm(
-      `Isso manda a mensagem AGORA para ${elegiveisMassa.length} cliente(s) conectado(s). Não tem como desfazer. Confirma?`,
+      `Isso manda a mensagem AGORA para ${elegiveisMassa.length} cliente(s) que ${descreverFiltrosMassa(filtros)}.\n\nNão tem como desfazer. Confirma?`,
     )
     if (!confirmado) return
     setEnviando(true)

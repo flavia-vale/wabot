@@ -47,7 +47,7 @@ export const STANDARD_VARIABLES = Object.freeze([
   { name: 'link_login', description: 'Endereço da tela de entrada', example: 'https://espelhagrupos.com.br/login' },
   { name: 'link_planos', description: 'Endereço da tela de planos', example: 'https://espelhagrupos.com.br/painel/planos' },
   { name: 'link_lojas', description: 'Endereço da tela onde a cliente cadastra a etiqueta de afiliada de cada loja', example: 'https://espelhagrupos.com.br/painel/ids-afiliada' },
-  { name: 'video_etiquetas', description: 'Vídeo-aula de como cadastrar a etiqueta de afiliada de cada loja (o mesmo do painel)', example: 'https://youtu.be/6F2AUM88FKk' },
+  { name: 'video_etiquetas', description: 'Vídeo-aula de como cadastrar a etiqueta de afiliada de cada loja (o mesmo do painel)', example: 'https://youtu.be/D-uR4yOrNso' },
   { name: 'email_suporte', description: 'E-mail de suporte', example: 'contato@espelhagrupos.com.br' },
   { name: 'whatsapp_suporte', description: 'WhatsApp de suporte', example: 'https://wa.me/5532999844020' },
   { name: 'marca', description: 'Nome da marca', example: 'Espelha Grupos' },
@@ -56,7 +56,7 @@ export const STANDARD_VARIABLES = Object.freeze([
   ...VIDEO_ETIQUETAS_CAPITULOS.map((c) => ({
     name: `video_${c.chave}`,
     description: `Vídeo-aula no trecho: ${c.rotulo}`,
-    example: videoEtiquetasEm(c.segundos, 'https://youtu.be/6F2AUM88FKk'),
+    example: videoEtiquetasEm(c.segundos, 'https://youtu.be/D-uR4yOrNso'),
   })),
 ])
 

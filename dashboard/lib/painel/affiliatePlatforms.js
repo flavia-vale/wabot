@@ -6,9 +6,10 @@
 /* Endereço da extensão que copia o código de acesso das lojas. Fica numa
  * constante porque três lojas apontam para ela: antes era um CARTÃO inteiro no
  * meio da lista ("Extensão necessária"), lido por quem não precisava dele e
- * ignorado por quem precisava. Agora vive na ajuda do campo que a usa. */
+ * ignorado por quem precisava. Vive na ajuda do campo que a usa e, a pedido da
+ * dona do produto (2026-09-24), também num aviso curto no topo da tela. */
 export const COOKIE_EDITOR_URL =
-  'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm?pli=1'
+  'https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm'
 
 export const AFFILIATE_PLATFORMS = [
   {
@@ -48,7 +49,7 @@ export const AFFILIATE_PLATFORMS = [
     platformWarning: 'Com a etiqueta e o código de acesso o link sai curtinho; só com a etiqueta a oferta sai igual, o link é que fica mais comprido.',
     sessionCareNote: 'Depois de colar o código aqui, não clique em "Sair" na Amazon e não use janela anônima — sair da conta derruba o código na hora e você precisa cadastrar tudo de novo (fechar a aba pode).',
     fields: [
-      { key: 'tag', label: 'Sua etiqueta de afiliada', hint: 'É o código que identifica suas vendas. Ex.: suaetiqueta-20' },
+      { key: 'tag', label: 'StoreID/Etiqueta de afiliado', hint: 'É o código que identifica suas vendas. Ex.: suaetiqueta-20' },
       { key: 'cookie', label: 'Código de acesso da conta', required: false, sensitive: true, cookieField: true, recommended: true, hint: 'Deixa o link da oferta curtinho.', help: 'No computador, entre em associados.amazon.com.br já logada, clique na extensão Cookie-Editor → botão Export (canto inferior direito) → JSON. O código é copiado sozinho; é só colar aqui.' },
       { key: 'ubid-acbbr', label: 'Código alternativo (ubid-acbbr)', required: false, cookieField: true, sensitive: true, advanced: true, help: 'Só precisa se NÃO colou o código de acesso acima. Mesmo lugar, na extensão Cookie-Editor.' },
       { key: 'at-acbbr', label: 'Código alternativo (at-acbbr)', required: false, cookieField: true, sensitive: true, advanced: true, help: 'Só precisa se NÃO colou o código de acesso acima. Mesmo lugar, na extensão Cookie-Editor.' },
@@ -101,7 +102,7 @@ export const AFFILIATE_PLATFORMS = [
     actionLinks: [
       {
         label: 'Abrir a página da loja',
-        href: 'https://www.shein.com/affiliate',
+        href: 'https://m.shein.com/br/affiliate/recruit?source=campuslp',
       },
     ],
     platformWarning: 'Com o ID e o código de acesso o link sai curtinho; só com o ID a oferta sai igual, o link é que fica mais comprido.',
@@ -115,11 +116,10 @@ export const AFFILIATE_PLATFORMS = [
       },
       {
         key: 'cookie',
-        label: 'Código de acesso (opcional)',
+        label: 'Cookie (opcional)',
         required: false,
         sensitive: true,
         cookieField: true,
-        advanced: true,
         hint: 'Deixa o link da oferta curtinho. Sem ele a oferta sai igual, só com link mais comprido.',
         help: 'No computador, entre em https://m.shein.com/br/affiliate/ já logada, clique em CONVERTER LINK. Em seguida clique na extensão Cookie-Editor e use o botão Export (canto inferior direito) e em seguida clique em JSON. O código é copiado sozinho; é só colar aqui.',
       },

@@ -44,25 +44,21 @@
 .wa-connected-bar strong { display: block; font-size: 16px; }
 .wa-connected-bar span:not(.wa-mark) { display: block; margin-top: 3px; color: var(--ink-soft); font-size: 13px; }
 .wa-connected-bar button,.wa-save-row button,.wa-pro-lock a { border: 1px solid #cbd7d2; border-radius: 11px; padding: 10px 18px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; font-weight: 650; text-decoration: none; cursor: pointer; }
-.wa-protection-card,.wa-hours-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: 0 12px 36px -30px rgba(22, 74, 57, .45); }
+.wa-protection-card { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: 0 12px 36px -30px rgba(22, 74, 57, .45); }
 .wa-protection-body { display: grid; grid-template-columns: 1fr 1.05fr .62fr; gap: 28px; align-items: end; padding: 26px 30px; }
-.wa-metric label,.wa-field>span,.wa-time-grid span { display: block; margin-bottom: 7px; color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.wa-protection-body-readonly { grid-template-columns: 1fr 1.4fr; align-items: start; }
+.wa-metric label,.wa-rhythm-summary>label { display: block; margin-bottom: 7px; color: var(--ink-soft); font-size: 12px; font-weight: 600; }
 .wa-metric p { color: var(--ink-soft); font-size: 14px; }.wa-metric p strong { color: var(--ink); font-size: 30px; line-height: 1; }
 .wa-progress { height: 8px; margin: 13px 0 8px; overflow: hidden; border-radius: 99px; background: #e6efeb; }.wa-progress i { display: block; height: 100%; border-radius: inherit; background: #2b936f; }
-.wa-metric small,.wa-field small { color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
-.wa-field select,.wa-field input,.wa-time-grid select { width: 100%; min-height: 46px; border: 1px solid #b7ccc3; border-radius: 12px; padding: 0 14px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; outline: none; }.wa-field select:focus,.wa-field input:focus,.wa-time-grid select:focus { border-color: #258965; box-shadow: 0 0 0 3px #d9f1e8; }
-.wa-cap-field input { font-family: inherit; }
-.wa-hours-card header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 30px; border-bottom: 1px solid var(--line); }.wa-hours-card h2 { font-size: 17px; }.wa-hours-card header p { margin-top: 3px; color: var(--ink-soft); font-size: 12px; }.wa-hours-card header>span { padding: 7px 13px; border-radius: 99px; background: #def2e9; color: #176b50; font-size: 12px; font-weight: 700; }
-.wa-hours-body { padding: 8px 30px 24px; }.wa-hours-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; }.wa-hours-row strong { font-size: 14px; }.wa-hours-row p { margin-top: 3px; color: var(--ink-soft); font-size: 12px; }
-.wa-switch { width: 48px; height: 28px; flex: 0 0 auto; padding: 3px; border: 0; border-radius: 99px; background: #c8d1cd; cursor: pointer; transition: background .18s; }.wa-switch i { display: block; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px #0002; transition: transform .18s; }.wa-switch.is-on { background: #2c936f; }.wa-switch.is-on i { transform: translateX(20px); }
-.wa-time-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }.wa-save-row { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 4px; }.wa-save-row span { color: var(--ink-soft); font-size: 12px; }.wa-save-row button { background: #247f60; border-color: #247f60; color: #fff; }
+.wa-metric small { color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
+.wa-rhythm-summary .pnl-hint { margin: 0 0 12px; }
 .wa-pro-lock { display: none; }.wa-inline-lock { display: none; }
-.wa-protection-card.is-locked,.wa-hours-card.is-locked { filter: grayscale(1); background: #f5f5f4; }.is-locked .wa-protection-body,.is-locked .wa-hours-body,.is-locked header { opacity: .42; pointer-events: none; }.is-locked .wa-pro-lock { display: flex; position: relative; z-index: 2; align-items: center; gap: 13px; padding: 16px 22px; border-bottom: 1px solid #d4d4d4; background: #262626; color: #fff; }.wa-pro-lock>span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #222; }.wa-pro-lock svg,.wa-inline-lock svg { width: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; }.wa-pro-lock div { flex: 1; }.wa-pro-lock strong { font-size: 13px; }.wa-pro-lock p { margin-top: 2px; color: #d4d4d4; font-size: 11px; }.wa-pro-lock a { color: #171717; white-space: nowrap; }.is-locked .wa-inline-lock { display: flex; position: absolute; z-index: 2; inset: 0; align-items: center; justify-content: center; gap: 8px; color: #252525; font-size: 13px; font-weight: 750; }
+.wa-protection-card.is-locked { filter: grayscale(1); background: #f5f5f4; }.is-locked .wa-protection-body { opacity: .42; pointer-events: none; }.is-locked .wa-pro-lock { display: flex; position: relative; z-index: 2; align-items: center; gap: 13px; padding: 16px 22px; border-bottom: 1px solid #d4d4d4; background: #262626; color: #fff; }.wa-pro-lock>span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: #222; }.wa-pro-lock svg,.wa-inline-lock svg { width: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; }.wa-pro-lock div { flex: 1; }.wa-pro-lock strong { font-size: 13px; }.wa-pro-lock p { margin-top: 2px; color: #d4d4d4; font-size: 11px; }.wa-pro-lock a { color: #171717; white-space: nowrap; }.is-locked .wa-inline-lock { display: flex; position: absolute; z-index: 2; inset: 0; align-items: center; justify-content: center; gap: 8px; color: #252525; font-size: 13px; font-weight: 750; }
 
 @media (max-width: 720px) {
   .wa-overview { margin-top: 0; gap: 14px; }
   .wa-connected-bar { grid-template-columns: 44px 1fr; padding: 16px; gap: 12px; }.wa-mark { width: 44px; height: 44px; }.wa-connected-bar button { grid-column: 1 / -1; width: 100%; }
-  .wa-protection-body { grid-template-columns: 1fr; gap: 18px; padding: 20px; }.wa-hours-card header,.wa-hours-body { padding-left: 20px; padding-right: 20px; }.wa-hours-card header { align-items: flex-start; }.wa-time-grid { grid-template-columns: 1fr 1fr; }
+  .wa-protection-body { grid-template-columns: 1fr; gap: 18px; padding: 20px; }
   .wa-pro-lock { align-items: flex-start; flex-wrap: wrap; }.wa-pro-lock a { width: 100%; text-align: center; }
 }
 
@@ -950,6 +946,9 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-note-box.is-warn { background: color-mix(in oklab, var(--warn) 18%, transparent); color: #8a5a1e; }
 .pnl-note-box.is-success { background: color-mix(in oklab, var(--success) 16%, transparent); color: var(--accent-strong); }
 .pnl-note-box.is-error { background: color-mix(in oklab, var(--danger) 14%, transparent); color: var(--danger); }
+/* Faixa "ofertas esperando pelo Anti-banimento": uma linha, chamativa. */
+.pnl-hold-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; padding: 12px 16px; border-radius: var(--pnl-radius-sm); border-left: 5px solid var(--warn); background: color-mix(in oklab, var(--warn) 26%, transparent); color: var(--ink); font-size: 15px; font-weight: 700; line-height: 1.35; }
+.pnl-hold-banner-icon { font-size: 18px; margin-right: 8px; }
 .pnl-expired-plan-banner {
   display: flex;
   align-items: flex-start;
@@ -1510,6 +1509,8 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
   padding: 11px 14px; margin-bottom: 12px;
 }
 .pnl-cred-note svg { flex-shrink: 0; margin-top: 2px; }
+.pnl-cred-extension { color: var(--ink); font-weight: 600; }
+.pnl-cred-extension a { color: var(--accent-strong); text-decoration: underline; }
 
 .pnl-cred-tip {
   display: flex; align-items: center; gap: 8px;
@@ -1891,6 +1892,8 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .tc-banner-titulo { font-size: 14.5px; font-weight: 700; line-height: 1.35; color: var(--ink); }
 .tc-banner-texto { margin: 5px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-soft); }
 .tc-banner-btn { margin-top: 12px; gap: 7px; background: var(--surface); }
+.tc-banner-acoes { display: flex; flex-wrap: wrap; gap: 10px; }
+.tc-banner-acoes .tc-banner-btn { margin-top: 12px; }
 
 /* Cartão de comparação dos endereços */
 .tc-detalhe { padding: 0; overflow: hidden; }

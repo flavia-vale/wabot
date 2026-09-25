@@ -77,13 +77,13 @@ mande **um** link, já posicionado no segundo:
 
 | Trecho | Link direto |
 |---|---|
-| Shopee — pedir o acesso de afiliada (0:15) | https://youtu.be/6F2AUM88FKk?t=15 |
-| Shopee — copiar a chave (1:43) | https://youtu.be/6F2AUM88FKk?t=103 |
-| Instalar o programinha (3:15) — antes de Amazon e ML | https://youtu.be/6F2AUM88FKk?t=195 |
-| Amazon — código de acesso (4:10) | https://youtu.be/6F2AUM88FKk?t=250 |
-| Mercado Livre — código de acesso (6:11) | https://youtu.be/6F2AUM88FKk?t=371 |
-| Mercado Livre — link da vitrine (8:20) | https://youtu.be/6F2AUM88FKk?t=500 |
-| Magalu — etiqueta de afiliada (9:22) | https://youtu.be/6F2AUM88FKk?t=562 |
+| Shopee — pedir o acesso de afiliada (0:15) | https://youtu.be/D-uR4yOrNso?t=15 |
+| Shopee — copiar a chave (1:43) | https://youtu.be/D-uR4yOrNso?t=103 |
+| Instalar o programinha (3:15) — antes de Amazon e ML | https://youtu.be/D-uR4yOrNso?t=195 |
+| Amazon — código de acesso (4:10) | https://youtu.be/D-uR4yOrNso?t=250 |
+| Mercado Livre — código de acesso (6:11) | https://youtu.be/D-uR4yOrNso?t=371 |
+| Mercado Livre — link da vitrine (8:20) | https://youtu.be/D-uR4yOrNso?t=500 |
+| Magalu — etiqueta de afiliada (9:22) | https://youtu.be/D-uR4yOrNso?t=562 |
 
 > Perfeito! Esse aqui já abre no minuto da {LOJA}: {LINK}
 >
@@ -104,7 +104,7 @@ Mais curto, e sem cobrar:
 > chega a publicar nada — falta a etiqueta de afiliada de alguma loja, e sem
 > ela ele segura as ofertas para a comissão não ir para outra pessoa.
 >
-> Se ainda fizer sentido para você, são 5 minutos: https://youtu.be/6F2AUM88FKk
+> Se ainda fizer sentido para você, são 5 minutos: https://youtu.be/D-uR4yOrNso
 >
 > E se não fizer mais, me conta o que te fez desistir? Ajuda demais aqui.
 

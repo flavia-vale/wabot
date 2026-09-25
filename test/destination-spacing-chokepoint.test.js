@@ -21,7 +21,6 @@ const ALLOWED_IMPORTERS = [
   // decideDestinationSpacing/combineGateDecisions. contracts/api-preservation.md
   // § Leitura exige o campo aditivo `effective.destinationIntervalSec`.
   'src/api/routes/preservation.js',
-  'scripts/diag-antiban-valores.mjs',
 ]
 
 function grepFiles(pattern, dirs) {
@@ -37,8 +36,7 @@ function grepFiles(pattern, dirs) {
 
 test('só os consumidores permitidos importam src/core/destinationSpacing.js', () => {
   // Grep de IMPORT de verdade (from '...destinationSpacing.js'), não qualquer
-  // menção em comentário/JSDoc a "destinationSpacing.js" (ex.: o comentário de
-  // topo de antiBanFloor.js cita o nome do arquivo irmão como referência).
+  // menção em comentário/JSDoc a "destinationSpacing.js".
   const importers = grepFiles("from '.*destinationSpacing\\.js'", ['src', 'scripts'])
     .filter((f) => f !== 'src/core/destinationSpacing.js')
   for (const file of importers) {

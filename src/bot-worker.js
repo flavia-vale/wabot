@@ -2578,14 +2578,10 @@ function resolveChannelForward(postDetail) {
  * finalizamos o job se ele NÃO couber na fila.
  */
 function deferReasonMessage(reason) {
-  // specs/018-unificar-protecao-anti-ban (User Story 2): nenhuma dessas frases
-  // pode citar tela antiga ("Preservação por destino") nem termo técnico — o
-  // ritmo dos três campos fixos (rajada/janela/liga-desliga) agora é fixo (ver
-  // core/antiBanFloor no domínio de preservação) e a cliente não edita mais
-  // nenhum deles.
-  if (reason === 'burst_cap') {
-    return 'O bot está segurando os envios por alguns minutos para não mandar muitas ofertas de uma vez para este grupo/canal (ritmo de segurança do Anti-banimento).'
-  }
+  // Nenhuma dessas frases pode citar tela antiga ("Preservação por destino")
+  // nem termo técnico. O gate de rajada (burst) foi removido em 2026-09-25 —
+  // só intervalo mínimo, limite diário e horário de funcionamento seguem
+  // adiando envio.
   if (reason === 'daily_cap') {
     return 'Este grupo/canal já bateu o limite diário de ofertas configurado no Anti-banimento. Os envios continuam amanhã.'
   }
@@ -2743,7 +2739,7 @@ async function processSendJob(job) {
           id: true,
           // Plano B: config de preservação por destino (Fase 1b).
           preservationPresetId: true, operatingHoursEnabled: true, operatingHoursJson: true,
-          throttleEnabled: true, minIntervalSec: true, burstCap: true, burstWindowSec: true,
+          throttleEnabled: true, minIntervalSec: true,
           dailyCap: true, queueMaxAgeMin: true, preservationPreset: true,
         },
       })
