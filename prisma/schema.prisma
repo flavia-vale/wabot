@@ -899,11 +899,21 @@ model ClientCoupon {
   id            String    @id @default(cuid())
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 'code' (a pessoa digita no carrinho) ou 'link' (entra e resgata no site).
+  kind          String    @default("code")
+  // Cupom de link grava '' aqui: a coluna é obrigatória desde a criação, e
+  // torná-la opcional exigiria recriar a tabela (migration só aditiva).
   code          String
+  // Link de resgate do cupom de link — sempre um endereço da própria loja.
+  redeemUrl     String?
   label         String?
   platform      String
   discountType  String
   discountValue Int
+  // Opcionais, em centavos: compra mínima (os dois tipos) e teto de desconto
+  // (só faz sentido no tipo %). Null = sem essa condição.
+  minPurchaseCents Int?
+  maxDiscountCents Int?
   validUntil    DateTime?
   enabled       Boolean   @default(true)
   createdAt     DateTime  @default(now())

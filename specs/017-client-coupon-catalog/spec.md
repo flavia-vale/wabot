@@ -305,8 +305,9 @@ tela nem a mensagem podem conter `{linhaDeCupom}` ou uma lacuna estranha.
 - **FR-024**: Na fila de ofertas e no espelhamento de grupos monitorados, o cupom
   MUST entrar **somente** quando o envio estiver usando template **e** o template
   contiver a variável de cupom. Sem template ou sem a variável, nada muda.
-- **FR-025**: O painel "Criar oferta" NÃO ganha seletor de cupom nem prévia do
-  cupom escolhido. Mas o texto que ele monta preserva `{cupom}`, e todo envio do
+- **FR-025**: O painel "Criar oferta" NÃO ganha seletor de cupom. Ganhou (2026-09-24)
+  a caixa "Inserir cupons cadastrados" (marcada por padrão, sem duplicar quando o
+  template já tem `{cupom}`) e a prévia com o cupom que sairia. O texto que ele monta preserva `{cupom}`, e todo envio do
   painel passa pelo robô, que escolhe o cupom na hora do envio. Portanto
   (decisão explícita da dona do produto — a fila de ofertas nasce nesta tela):
   - **Enviar agora**, **Agendar** e **Inserir na fila** publicam com o melhor
@@ -362,6 +363,20 @@ serial** — qualquer custo ou falha ali é pago por todos os destinos da conta.
   nova.
 - **FR-028**: A mudança de banco MUST ser apenas aditiva (nada é removido nem
   renomeado no que já existe).
+
+- **FR-029** (2026-09-25): Cupom por **link** além do de código. A cliente
+  escolhe ANTES de preencher se o cupom é "Com código" ou "Por link". O link
+  MUST ser `https://` e do domínio da loja escolhida (aceita o link curto da
+  própria loja; mesma lista de domínios do detector, checagem ancorada no fim
+  do endereço). Link de outro site é recusado com explicação ("Este link não é
+  da loja X…"). Na mensagem: "🎟️ Resgate o cupom e pague Y em vez de X (cond):
+  link" com preço; "🎟️ Resgate o cupom (cond): link" sem preço.
+- **FR-030** (2026-09-25): **Compra mínima** (opcional, os dois tipos de cupom)
+  e **desconto máximo** (opcional, só para porcentagem). Produto com preço lido
+  abaixo do mínimo → aquele cupom não entra. Sem preço lido → o cupom entra com
+  a condição escrita. A economia da porcentagem é limitada pelo teto. A mensagem
+  mostra todas as condições cadastradas: "(10% OFF, até R$ 20,00, em compras
+  acima de R$ 79,00)".
 
 ### Nota de verificação: o cupom NÃO mexe na trava de repetição
 
@@ -424,14 +439,11 @@ a ser calculada sobre o texto já com o cupom aplicado.
 
 ## Assumptions
 
-- **Comparação simplificada**: como esta versão **não** tem valor mínimo de
-  compra, teto de desconto nem limite de usos, a comparação entre cupons é
-  apenas porcentagem × preço contra valor fixo em reais. Se esses campos entrarem
-  numa versão futura, a regra de escolha precisará ser revista — esta premissa
-  fica registrada de propósito.
-- **Fora de escopo nesta versão**: valor mínimo de compra, teto de desconto,
-  limite de quantidade de usos, seletor/prévia de cupom no "Criar oferta"
-  (ver FR-025 — o envio dele publica com cupom), cupom por grupo de destino, cupom por produto específico, validação do cupom junto à loja
+- **Comparação**: porcentagem × preço (limitada pelo desconto máximo, quando
+  houver) contra valor fixo em reais; cupom com compra mínima acima do preço
+  lido fica de fora (FR-030). Limite de usos não existe.
+- **Fora de escopo nesta versão**: limite de quantidade de usos, seletor de
+  cupom no "Criar oferta" (ver FR-025), cupom por grupo de destino, cupom por produto específico, validação do cupom junto à loja
   (o produto confia no que a cliente cadastrou) e qualquer relatório de uso ou
   desempenho de cupom.
 - **Sem verificação junto à loja**: o produto não tem como saber se o cupom

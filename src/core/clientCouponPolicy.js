@@ -12,6 +12,48 @@
 
 const KNOWN_PLATFORMS = new Set(['amazon', 'mercadolivre', 'shopee', 'magazineluiza', 'shein', 'aliexpress'])
 
+// Cupom de CÓDIGO (a pessoa digita no carrinho) ou de LINK (entra e resgata no
+// site). Linha antiga sem `kind` é cupom de código.
+export const COUPON_KINDS = ['code', 'link']
+
+// Domínios de cada loja aceitos no link de resgate — os mesmos que o detector
+// de links (src/detector.js, PATTERNS) reconhece como da loja, inclusive os
+// encurtadores da própria loja. Guarda contra divergência em
+// test/cupom-link-minimo-teto.test.js. Checagem ANCORADA no fim do endereço:
+// `shopee.com.br.site-falso.com` não passa (mesma lição do T070 da SHEIN).
+export const COUPON_LINK_DOMAINS = {
+  mercadolivre: ['mercadolivre.com.br', 'mercadolivre.com', 'mercadolibre.com', 'meli.la', 'mluvem.com'],
+  amazon: ['amazon.com.br', 'link.amazon', 'amzn.to', 'amzn.la', 'a.co', 'amzn.divulgador.link', 'amzn.divulguei.app', 'amzlink.to'],
+  shopee: ['shope.ee', 'shopee.com.br'],
+  magazineluiza: ['magazineluiza.com.br', 'magazinevoce.com.br', 'mlz.me'],
+  shein: ['shein.com', 'onelink.shein.com', 'shein.top'],
+  aliexpress: ['aliexpress.com', 'aliexpress.us'],
+}
+
+// true só para https, sem usuário/senha no endereço, e host da loja escolhida.
+export function isStoreCouponLink(url, platform) {
+  const domains = COUPON_LINK_DOMAINS[platform]
+  if (!domains) return false
+  let parsed
+  try {
+    parsed = new URL(String(url ?? '').trim())
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== 'https:') return false
+  if (parsed.username || parsed.password) return false
+  const host = parsed.hostname.toLowerCase()
+  return domains.some((d) => host === d || host.endsWith(`.${d}`))
+}
+
+function couponKind(coupon) {
+  return coupon?.kind === 'link' ? 'link' : 'code'
+}
+
+function optionalCents(value) {
+  return isFiniteNumber(value) && value > 0 ? value : null
+}
+
 function isFiniteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value)
 }
@@ -26,7 +68,11 @@ function isValidCouponShape(coupon) {
   if (typeof coupon.platform !== 'string' || !coupon.platform) return false
   if (coupon.discountType !== 'percent' && coupon.discountType !== 'amount') return false
   if (!isFiniteNumber(coupon.discountValue) || coupon.discountValue <= 0) return false
-  return true
+  // Cupom de código precisa do código; cupom de link precisa de um link da
+  // própria loja — link inválido nunca chega ao grupo, mesmo se escapar do
+  // cadastro.
+  if (couponKind(coupon) === 'link') return isStoreCouponLink(coupon.redeemUrl, coupon.platform)
+  return String(coupon.code ?? '').trim() !== ''
 }
 
 function isNotExpired(coupon, now) {
@@ -42,9 +88,23 @@ function createdAtMs(coupon) {
   return Number.isFinite(ms) ? ms : 0
 }
 
+// Com preço conhecido, cupom com compra mínima acima do preço NÃO se aplica a
+// esta oferta (decisão da dona do produto, 2026-09-25): nunca prometer um
+// desconto que o produto sozinho não alcança. Sem preço, vale — a condição
+// sai escrita no texto e a pessoa confere.
+function meetsMinimum(coupon, priceCents) {
+  const min = optionalCents(coupon.minPurchaseCents)
+  if (min == null || !hasReliablePrice(priceCents)) return true
+  return priceCents >= min
+}
+
 function savingsForCoupon(coupon, priceCents) {
   if (coupon.discountType === 'percent') {
-    return Math.round((priceCents * coupon.discountValue) / 100)
+    // % limitada ao teto de desconto (quando cadastrado) e ao preço.
+    let savings = Math.round((priceCents * coupon.discountValue) / 100)
+    const cap = optionalCents(coupon.maxDiscountCents)
+    if (cap != null) savings = Math.min(savings, cap)
+    return Math.min(savings, priceCents)
   }
   // amount: centavos. Teto do FR-009 — nunca economiza mais que o próprio preço.
   return Math.min(coupon.discountValue, priceCents)
@@ -69,6 +129,7 @@ export function chooseCoupon({ coupons, platform, priceCents, now } = {}) {
       if (!isValidCouponShape(coupon)) return false
       if (coupon.platform !== platform) return false
       if (!isNotExpired(coupon, referenceNow)) return false
+      if (!meetsMinimum(coupon, priceCents)) return false
       return true
     } catch {
       return false
@@ -138,19 +199,43 @@ export function formatBrl(cents) {
 /**
  * renderCouponText({ coupon, priceCents, finalPriceCents }) → string
  */
+// Condições cadastradas, sempre escritas (decisão da dona do produto,
+// 2026-09-25): "10% OFF, até R$ 20,00, em compras acima de R$ 79,00".
+export function describeCouponConditions(coupon) {
+  if (!coupon || typeof coupon !== 'object') return ''
+  const parts = []
+  if (coupon.discountType === 'percent') {
+    parts.push(`${coupon.discountValue}% OFF`)
+    const cap = optionalCents(coupon.maxDiscountCents)
+    if (cap != null) parts.push(`até ${formatBrl(cap)}`)
+  } else if (isFiniteNumber(coupon.discountValue)) {
+    parts.push(`${formatBrl(coupon.discountValue)} OFF`)
+  }
+  const min = optionalCents(coupon.minPurchaseCents)
+  if (min != null) parts.push(`em compras acima de ${formatBrl(min)}`)
+  return parts.join(', ')
+}
+
 export function renderCouponText({ coupon, priceCents, finalPriceCents } = {}) {
   if (!coupon || typeof coupon !== 'object') return ''
+  const conditions = describeCouponConditions(coupon)
+  const cond = conditions ? ` (${conditions})` : ''
+  const withPrice = hasReliablePrice(priceCents) && isFiniteNumber(finalPriceCents) && finalPriceCents > 0
+
+  if (couponKind(coupon) === 'link') {
+    // O link só sai se for da própria loja (mesma checagem do cadastro).
+    const url = String(coupon.redeemUrl ?? '').trim()
+    if (!isStoreCouponLink(url, coupon.platform)) return ''
+    return withPrice
+      ? `🎟️ Resgate o cupom e pague ${formatBrl(finalPriceCents)} em vez de ${formatBrl(priceCents)}${cond}: ${url}`
+      : `🎟️ Resgate o cupom${cond}: ${url}`
+  }
+
   const code = String(coupon.code || '').trim()
   if (!code) return ''
-
-  if (hasReliablePrice(priceCents) && isFiniteNumber(finalPriceCents) && finalPriceCents > 0) {
-    return `🎟️ Use o cupom ${code} — de ${formatBrl(priceCents)} por ${formatBrl(finalPriceCents)} com o cupom`
-  }
-
-  if (coupon.discountType === 'percent') {
-    return `🎟️ Use o cupom ${code} (${coupon.discountValue}% de desconto)`
-  }
-  return `🎟️ Use o cupom ${code} (${formatBrl(coupon.discountValue)} de desconto)`
+  return withPrice
+    ? `🎟️ Use o cupom ${code} — de ${formatBrl(priceCents)} por ${formatBrl(finalPriceCents)} com o cupom${cond}`
+    : `🎟️ Use o cupom ${code}${cond}`
 }
 
 /**
