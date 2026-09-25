@@ -32,6 +32,13 @@ test('conversão limpa é o único "tudo certo"', () => {
   assert.match(v.texto, /Mercado Livre/)
 })
 
+test('link que já é da própria afiliada tem veredito e mensagem próprios', () => {
+  const v = describeConversionTest({ status: 'already_own_link', label: 'Amazon' })
+  assert.equal(v.veredito, VEREDITO.PROPRIO)
+  assert.equal(v.mostrarCredenciais, false)
+  assert.match(v.titulo, /já é seu link de afiliado/i)
+})
+
 test('código de acesso vencido NÃO é verde — o link saiu, mas há o que fazer', () => {
   // ML e Amazon publicam pelo plano B com o código vencido. Verde aqui
   // esconderia exatamente o que a tela foi feita para mostrar.

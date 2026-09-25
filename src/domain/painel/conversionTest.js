@@ -25,6 +25,7 @@
 
 export const VEREDITO = Object.freeze({
   OK: 'ok',
+  PROPRIO: 'proprio',
   RESSALVA: 'ressalva',
   CREDENCIAL: 'credencial',
   LINK: 'link',
@@ -100,6 +101,16 @@ function falaDeEsperaPassageira(mensagem) {
  */
 export function describeConversionTest(resultado = {}) {
   const loja = String(resultado.label || '').trim() || 'a loja'
+
+  if (resultado.status === 'already_own_link') {
+    return {
+      veredito: VEREDITO.PROPRIO,
+      titulo: 'Esse já é seu link de afiliado!',
+      texto: `O link colado já está com a sua identificação de afiliada ${loja === 'a loja' ? '' : `da ${loja} `}— não precisa converter de novo. Pode espelhar direto.`,
+      mostrarCredenciais: false,
+      avisoTecnico: null,
+    }
+  }
 
   if (resultado.status === 'converted') {
     const aviso = String(resultado.warning || '').trim()
