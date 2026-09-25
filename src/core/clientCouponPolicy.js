@@ -216,6 +216,7 @@ export function describeCouponConditions(coupon) {
   return parts.join(', ')
 }
 
+// O preço com cupom sai em *negrito* do WhatsApp (decisão de 2026-09-25).
 export function renderCouponText({ coupon, priceCents, finalPriceCents } = {}) {
   if (!coupon || typeof coupon !== 'object') return ''
   const conditions = describeCouponConditions(coupon)
@@ -227,15 +228,21 @@ export function renderCouponText({ coupon, priceCents, finalPriceCents } = {}) {
     const url = String(coupon.redeemUrl ?? '').trim()
     if (!isStoreCouponLink(url, coupon.platform)) return ''
     return withPrice
-      ? `🎟️ Resgate o cupom e pague ${formatBrl(finalPriceCents)} em vez de ${formatBrl(priceCents)}${cond}: ${url}`
+      ? `🎟️ Resgate o cupom e pague *${formatBrl(finalPriceCents)}* em vez de ${formatBrl(priceCents)}${cond}: ${url}`
       : `🎟️ Resgate o cupom${cond}: ${url}`
   }
 
   const code = String(coupon.code || '').trim()
   if (!code) return ''
-  return withPrice
-    ? `🎟️ Use o cupom ${code} — de ${formatBrl(priceCents)} por ${formatBrl(finalPriceCents)} com o cupom${cond}`
+  const line = withPrice
+    ? `🎟️ Use o cupom ${code} — de ${formatBrl(priceCents)} por *${formatBrl(finalPriceCents)}* com o cupom${cond}`
     : `🎟️ Use o cupom ${code}${cond}`
+  // Link opcional da página onde se insere o código (decisão de 2026-09-25):
+  // só sai se foi preenchido E é da própria loja; senão, só o código.
+  const url = String(coupon.redeemUrl ?? '').trim()
+  return url && isStoreCouponLink(url, coupon.platform)
+    ? `${line}\nInsira o código do cupom aqui: ${url}`
+    : line
 }
 
 /**
