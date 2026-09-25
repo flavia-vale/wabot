@@ -4,15 +4,14 @@
 // converte a semântica antiga (janela silenciosa = bloqueio) para a nova
 // (horário de funcionamento = quando ENVIA). Ver
 // docs/superpowers/plans/2026-06-22-plano-b-config-direcionada-design.md
-
-// Import tardio de propósito (depois de HARD_DEFAULT_PRESERVATION estar
-// declarado neste módulo): antiBanFloor.js importa HARD_DEFAULT_PRESERVATION
-// daqui como default de parâmetro, e este arquivo importa applyDestinationFloor/
-// isAntiBanFloorEnabled de lá — import circular estável em ESM (bindings
-// vivos; o valor só é lido em tempo de CHAMADA, nunca no topo do módulo), mas
-// mantido como o ÚLTIMO import do arquivo para deixar a ordem de inicialização
-// explícita e fácil de auditar.
-import { applyDestinationFloor, isAntiBanFloorEnabled } from './antiBanFloor.js'
+//
+// 2026-09-25: o "piso anti-banimento" (specs/018-unificar-protecao-anti-ban) —
+// que forçava burstCap/burstWindowSec/throttleEnabled para um valor fixo,
+// independente do que a cliente configurasse — foi REMOVIDO por pedido
+// explícito da dona do produto. Só os três campos que a tela oferece
+// (minIntervalSec, dailyCap, queueMaxAgeMin) continuam existindo, e o valor
+// gravado é usado como veio, sem nenhum piso por cima. Não reintroduzir esse
+// mecanismo sem pedido novo e explícito.
 
 // Fallback final quando não há preset atribuído nem default (estado teórico —
 // a migração semeia um preset default por usuário). Espelha os defaults do
@@ -22,8 +21,6 @@ export const HARD_DEFAULT_PRESERVATION = Object.freeze({
   operatingHoursJson: '{"startHour":8,"endHour":22,"tz":"America/Sao_Paulo"}',
   throttleEnabled: true,
   minIntervalSec: 30,
-  burstCap: 6,
-  burstWindowSec: 600,
   dailyCap: null,
   // Descarte por idade na fila (minutos). 0 = nunca descarta. Ver
   // src/core/queueExpiry.js e o RCA da fila entupida no AGENTS.md.
@@ -35,8 +32,6 @@ const FIELDS = Object.freeze([
   'operatingHoursJson',
   'throttleEnabled',
   'minIntervalSec',
-  'burstCap',
-  'burstWindowSec',
   'dailyCap',
   'queueMaxAgeMin',
 ])
@@ -45,23 +40,15 @@ const FIELDS = Object.freeze([
  * Resolve a config efetiva de preservação de um destino.
  * Precedência por campo: override do grupo (não-nulo) → preset atribuído →
  * preset default da conta → HARD_DEFAULT_PRESERVATION. Nunca devolve "sem
- * proteção": ausência total cai no default.
- *
- * Depois da herança, o PISO ANTI-BANIMENTO (specs/018-unificar-protecao-anti-ban,
- * contracts/anti-ban-floor.md) é aplicado — sempre por último, nunca antes:
- * vale o mais conservador entre o valor herdado e os três campos fixos
- * (burstCap/burstWindowSec/throttleEnabled). Chokepoint único: nenhum outro
- * arquivo pode reimplementar essa comparação (guarda em
- * test/anti-ban-floor-chokepoint.test.js). Escape hatch de rollback sem
- * redeploy: env ANTI_BAN_FLOOR=off.
+ * proteção": ausência total cai no default. Sem piso por cima — o valor
+ * herdado/gravado é o valor que vale (2026-09-25).
  *
  * @param {object|null} group  campos de override (nuláveis) do Group
- * @param {{ preset?: object|null, defaultPreset?: object|null, env?: object }} [opts]
- *        preset = preset atribuído ao grupo; defaultPreset = preset isDefault da conta;
- *        env = fonte de env para o escape hatch do piso (default process.env)
+ * @param {{ preset?: object|null, defaultPreset?: object|null }} [opts]
+ *        preset = preset atribuído ao grupo; defaultPreset = preset isDefault da conta
  * @returns {{operatingHoursEnabled:boolean, operatingHoursJson:string,
- *   throttleEnabled:boolean, minIntervalSec:number, burstCap:number,
- *   burstWindowSec:number, dailyCap:number|null, queueMaxAgeMin:number}}
+ *   throttleEnabled:boolean, minIntervalSec:number, dailyCap:number|null,
+ *   queueMaxAgeMin:number}}
  */
 export function resolveDestinationPreservation(group, opts = {}) {
   const base = opts.preset ?? opts.defaultPreset ?? HARD_DEFAULT_PRESERVATION
@@ -76,7 +63,7 @@ export function resolveDestinationPreservation(group, opts = {}) {
       out[field] = HARD_DEFAULT_PRESERVATION[field]
     }
   }
-  return applyDestinationFloor(out, { enabled: isAntiBanFloorEnabled(opts.env ?? process.env) })
+  return out
 }
 
 function parseHours(raw, fallback) {

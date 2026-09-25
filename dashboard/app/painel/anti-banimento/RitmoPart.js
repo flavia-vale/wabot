@@ -5,9 +5,13 @@
  * ajuste por destino. Reaproveita a lógica da antiga tela "Preservação por
  * grupo e canal" (dashboard/components/preservacao/*), com o acréscimo de
  * abrir/realçar um destino específico via ?destino=<groupId> (atalho vindo do
- * painel de Espelhamento). Linguagem leiga completa e a etiqueta "Ritmo mais
- * cuidadoso"/"recomeçou do padrão" ficam para a User Story 2 — aqui a parte
- * ainda reaproveita os componentes/textos existentes. */
+ * painel de Espelhamento).
+ *
+ * 2026-09-25: o piso anti-banimento (rajada fixa + etiqueta "Ritmo mais
+ * cuidadoso"/"recomeçou do padrão") foi REMOVIDO por pedido da dona do
+ * produto. Só os três campos do formulário (intervalo, limite diário,
+ * descarte por idade na fila) existem e valem exatamente o que a cliente
+ * escolher. */
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
@@ -33,7 +37,7 @@ const NEW_PRESET = {
 // "Voltar ao ritmo padrão" zera só estes, mantendo o preset atribuído
 // (contracts/ui-anti-banimento.md § Ritmo por grupo).
 const DESTINATION_OVERRIDE_KEYS = [
-  'throttleEnabled', 'minIntervalSec', 'dailyCap', 'burstCap', 'burstWindowSec',
+  'throttleEnabled', 'minIntervalSec', 'dailyCap',
   'operatingHoursEnabled', 'operatingHoursJson', 'queueMaxAgeMin',
 ]
 
@@ -78,7 +82,6 @@ export default function RitmoPart({ initialDestino }) {
     try {
       const body = { ...editing }
       delete body.id; delete body.createdAt; delete body.updatedAt
-      delete body.ritmoMaisCuidadoso; delete body.recomecouDoPadrao
       // O liga/desliga dos limites virou fixo (sempre ligado) — salvar sempre
       // manda throttleEnabled: true, o que faz o destino sair do estado
       // "limites desligados" pelo caminho normal de escrita (T037).
@@ -185,7 +188,6 @@ export default function RitmoPart({ initialDestino }) {
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-gray-800 break-words">
                     {p.name} {p.isDefault && <span className="ml-1 text-[11px] rounded bg-green-100 text-green-700 px-1.5 py-0.5">padrão</span>}
-                    {p.ritmoMaisCuidadoso && <span className="ml-1 text-[11px] rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">🐢 Ritmo mais cuidadoso</span>}
                   </div>
                   <div className="text-xs text-gray-500 break-words">{summarizePreset(p)}</div>
                 </div>
@@ -232,7 +234,6 @@ export default function RitmoPart({ initialDestino }) {
                       <div className="text-sm font-semibold text-gray-800 truncate">{d.name || d.waJid}</div>
                       <div className="text-xs text-gray-500 truncate">
                         {d.kind === 'channel' ? 'Canal' : 'Grupo'}
-                        {d.ritmoMaisCuidadoso && <span className="ml-1 rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">🐢 Ritmo mais cuidadoso</span>}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">

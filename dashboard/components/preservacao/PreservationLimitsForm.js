@@ -1,12 +1,13 @@
 'use client'
 import { PresetButtons } from './PresetButtons'
 
-// Ritmo por grupo/canal (specs/018-unificar-protecao-anti-ban, User Story 2).
-// Os campos "Máximo de envios na janela" e "Janela de rajada" saíram da tela
-// — viraram FIXOS (piso anti-banimento, ver src/core/antiBanFloor.js) e não
-// são mais renderizados nem enviados no payload. O liga/desliga dos limites
-// também é fixo (sempre ligado): ao salvar, quem usa este formulário sempre
-// manda throttleEnabled: true junto (contracts/api-preservation.md).
+// Ritmo por grupo/canal. Os campos "Máximo de envios na janela" e "Janela de
+// rajada" saíram da tela em 2026-09 e nunca mais existiram como piso: desde
+// 2026-09-25 (pedido explícito da dona do produto) esse mecanismo foi
+// REMOVIDO por completo do sistema, não só escondido — o ritmo de envio é
+// governado só pelos três campos abaixo. O liga/desliga dos limites continua
+// fixo (sempre ligado): ao salvar, quem usa este formulário sempre manda
+// throttleEnabled: true junto (contracts/api-preservation.md).
 
 const FIELDS = [
   {
@@ -41,11 +42,9 @@ const QUEUE_MAX_AGE_FIELD = {
 const PRESETS = [
   { label: '🛡️ Bem devagar', tone: 'safe', description: 'Lento e seguro — contas novas ou que levaram aviso.', values: { minIntervalSec: 120, dailyCap: 80, queueMaxAgeMin: 300 } },
   { label: '⚖️ Equilibrado', tone: 'medium', description: 'Bom ritmo padrão para contas já aquecidas.', values: { minIntervalSec: 60, dailyCap: 150, queueMaxAgeMin: 300 } },
-  // "Mais rápido" (antigo "Leve"): o ritmo real que ele entrega hoje é 6
-  // envios a cada 10 minutos, por causa do piso anti-banimento — a descrição
-  // não pode prometer o valor antigo (10/hora), que não existe mais
-  // (Achado B, aprovado pela dona do produto, 2026-09-23).
-  { label: '⚡ Mais rápido', tone: 'aggressive', description: 'O ritmo mais rápido que o Anti-banimento libera. Só use se a conta está estável há semanas.', values: { minIntervalSec: 30, dailyCap: 300, queueMaxAgeMin: 300 } },
+  // "Mais rápido" (antigo "Leve"): desde a remoção do piso anti-banimento
+  // (2026-09-25) o intervalo mínimo é o único freio — 30s entre envios.
+  { label: '⚡ Mais rápido', tone: 'aggressive', description: 'Mais rápido, mais risco. Só use se a conta está estável há semanas.', values: { minIntervalSec: 30, dailyCap: 300, queueMaxAgeMin: 300 } },
 ]
 
 export function PreservationLimitsForm({ value, onChange, disabled }) {

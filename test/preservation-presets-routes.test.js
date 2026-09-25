@@ -89,8 +89,8 @@ test('presets: CRUD + único default + ownership + apply', async (t) => {
   assert.equal(defaults.length, 1)
   assert.equal(defaults[0].name, 'Agressivo')
 
-  // validação no PUT: burstWindowSec fora do range
-  const badPut = await app.inject({ method: 'PUT', url: `/presets/${preset.id}`, payload: { burstWindowSec: 5 } })
+  // validação no PUT: minIntervalSec fora do range
+  const badPut = await app.inject({ method: 'PUT', url: `/presets/${preset.id}`, payload: { minIntervalSec: 0 } })
   assert.equal(badPut.statusCode, 400)
 
   // delete do default é bloqueado
