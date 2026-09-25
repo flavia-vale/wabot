@@ -108,7 +108,7 @@ test('cupom por link: com preço mostra quanto paga e o link; sem preço mostra 
   const c = coupon({ kind: 'link', code: '', redeemUrl: 'https://s.shopee.com.br/cupom10' })
   assert.equal(
     plain(renderCouponText({ coupon: c, priceCents: 15000, finalPriceCents: 13500 })),
-    '🎟️ Resgate o cupom e pague R$ 135,00 em vez de R$ 150,00 (10% OFF): https://s.shopee.com.br/cupom10',
+    '🎟️ Resgate o cupom e pague *R$ 135,00* em vez de R$ 150,00 (10% OFF): https://s.shopee.com.br/cupom10',
   )
   assert.equal(
     plain(renderCouponText({ coupon: c, priceCents: null, finalPriceCents: null })),
@@ -254,7 +254,7 @@ test('cupom de código com link: linha a mais "Insira o código do cupom aqui"; 
   const withLink = coupon({ code: 'BEMVINDO10', redeemUrl: 'https://s.shopee.com.br/inserir' })
   assert.equal(
     plain(renderCouponText({ coupon: withLink, priceCents: 15000, finalPriceCents: 13500 })),
-    '🎟️ Use o cupom BEMVINDO10 — de R$ 150,00 por R$ 135,00 com o cupom (10% OFF)\nInsira o código do cupom aqui: https://s.shopee.com.br/inserir',
+    '🎟️ Use o cupom BEMVINDO10 — de R$ 150,00 por *R$ 135,00* com o cupom (10% OFF)\nInsira o código do cupom aqui: https://s.shopee.com.br/inserir',
   )
   assert.equal(
     plain(renderCouponText({ coupon: coupon({ code: 'BEMVINDO10' }), priceCents: null, finalPriceCents: null })),
