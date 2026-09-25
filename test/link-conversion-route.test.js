@@ -61,6 +61,47 @@ test('POST /convert converte um link com credenciais do usuário', async (t) => 
   assert.equal(calls, 1)
 })
 
+test('POST /convert detecta link que já é o próprio link de afiliado, sem chamar o conversor', async (t) => {
+  let calls = 0
+  const { app } = await buildApp({
+    credentials: [credential('amazon', { tag: 'botinho-20', 'ubid-acbbr': 'ubid-cookie-value', 'at-acbbr': 'at-cookie-value', 'x-acbbr': 'x-cookie-value' })],
+    converter: async () => { calls += 1; return 'never' },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/link-conversion/convert',
+    payload: { text: 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20' },
+  })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.results[0].status, 'already_own_link')
+  assert.equal(body.results[0].convertedUrl, 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20')
+  assert.equal(calls, 0, 'não precisa chamar o conversor — a identificação já é a dela')
+})
+
+test('POST /convert NÃO confunde a tag de outro afiliado com a própria', async (t) => {
+  let calls = 0
+  const { app } = await buildApp({
+    credentials: [credential('amazon', { tag: 'botinho-20', 'ubid-acbbr': 'ubid-cookie-value', 'at-acbbr': 'at-cookie-value', 'x-acbbr': 'x-cookie-value' })],
+    converter: async () => { calls += 1; return 'https://www.amazon.com.br/dp/B09VQ39F41?tag=botinho-20' },
+  })
+  t.after(async () => { await app.close() })
+
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/link-conversion/convert',
+    payload: { text: 'https://www.amazon.com.br/dp/B09VQ39F41?tag=concorrente-20' },
+  })
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.results[0].status, 'converted')
+  assert.equal(calls, 1, 'tag de outra pessoa precisa passar pela conversão normal')
+})
+
 test('POST /convert rejeita mais de 10 links com mensagem explicativa', async (t) => {
   const { app } = await buildApp({ converter: async () => 'never' })
   t.after(async () => { await app.close() })
