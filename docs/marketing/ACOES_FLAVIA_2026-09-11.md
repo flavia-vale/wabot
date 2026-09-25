@@ -242,13 +242,12 @@ https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp     ✅ pedida
 https://espelhagrupos.com.br/estudos-de-caso                              ✅ pedida 2026-09-22
 https://espelhagrupos.com.br/ferramentas/calculadora-risco-whatsapp       ✅ pedida 2026-09-22
 https://espelhagrupos.com.br/escalar-grupos-ofertas-sem-equipe            ✅ pedida 2026-09-22
-https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons       ⏳ pendente
-https://espelhagrupos.com.br/consistencia-postagens-em-grupos             ⏳ pendente
-https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp  ⏳ pendente
+https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons       ✅ pedida 2026-09-25
+https://espelhagrupos.com.br/consistencia-postagens-em-grupos             ✅ pedida 2026-09-25
+https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp  ✅ pedida 2026-09-25
 ```
 
-**Dia 6 pela metade** (3 de 6 em 22/09). Faltam só as 3 marcadas `⏳ pendente`
-acima — peça-as quando sobrar cota num próximo dia.
+**Dia 6 concluído** (6 de 6 em 25/09).
 
 `/parcerias`, `/parceiro-influenciador` e `/ferramentas/calculadora-tempo-grupos-whatsapp`
 saíram daqui — o export do Search Console de 21/09 (abaixo) confirma que
@@ -369,44 +368,37 @@ https://espelhagrupos.com.br/alternativas/divulgalinks                ✅ pedida
 https://espelhagrupos.com.br/alternativas/lumi-ofertas-inteligentes   ⏳ deu "Tentar novamente" (cota) — vai para o Dia 8
 ```
 
-### Dia 8 (2026-09-24) — ⏳ a pedir (10 = uma cota)
-
-```
-https://espelhagrupos.com.br/alternativas/lumi-ofertas-inteligentes   ⏳
-```
+### Dia 8 (2026-09-24) — ✅ pedida 2026-09-25 (8 de 9)
 
 Tirado do export de indexação de 23/09. As quatro primeiras são as rotas
 renomeadas em 19/09 que o Google **nunca rastreou** (os nomes antigos
 `/…-botinho…` respondem 308 para elas) — são as de maior valor, porque carregam
 a entidade da marca. As quatro seguintes ganharam links em 17/09 e nunca foram
-pedidas. A última é sobra do Dia 6 (a outra sobra passou para o Dia 9).
+pedidas.
 
 ```
-https://espelhagrupos.com.br/protecao-antiban-espelha-grupos           ⏳
-https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual          ⏳
-https://espelhagrupos.com.br/alternativas/fluxopromo                    ⏳
-https://espelhagrupos.com.br/alternativas/shozap                        ⏳
-https://espelhagrupos.com.br/alternativas/gigi-bot                      ⏳
-https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados   ⏳
-https://espelhagrupos.com.br/aumentar-conversao-em-grupos-de-cupons     ⏳
-https://espelhagrupos.com.br/consistencia-postagens-em-grupos           ⏳
-https://espelhagrupos.com.br/organizar-calendario-de-ofertas-no-whatsapp          ⏳
+https://espelhagrupos.com.br/protecao-antiban-espelha-grupos           ✅ pedida 2026-09-25
+https://espelhagrupos.com.br/espelha-grupos-vs-planilha-manual          ✅ pedida 2026-09-25
+https://espelhagrupos.com.br/alternativas/fluxopromo                    ✅ pedida 2026-09-25
+https://espelhagrupos.com.br/alternativas/shozap                        ✅ pedida 2026-09-25
+https://espelhagrupos.com.br/alternativas/gigi-bot                      ✅ pedida 2026-09-25
+https://espelhagrupos.com.br/alternativas/bot-para-whatsapp-afiliados   ✅ pedida 2026-09-25
+https://espelhagrupos.com.br/alternativas/lumi-ofertas-inteligentes     ✅ pedida 2026-09-25 (retentativa)
 ```
 
 (24/09) `bot-comum-vs-espelha-grupos` e `como-funciona-espelha-grupos-canais`
 saíram daqui: o texto delas mudou nas PRs #1848/#1850 e elas foram para a
-**Leva R1**, que só vale depois do deploy em `main`. As duas do Dia 9 subiram
-para fechar a cota.
+**Leva R1**, que só vale depois do deploy em `main`.
 
-### Dia 9 (2026-09-25) — ⏳ depois do Dia 8
+### Dia 9 (2026-09-25) — ✅ pedida 2026-09-25
 
 ```
-https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao    ⏳
+https://espelhagrupos.com.br/espelha-grupos-vs-ferramentas-genericas-automacao    ✅ pedida 2026-09-25
 ```
 
-A última foi **rastreada em 21/09 e não indexada**. Diferente das LPs
-congeladas, é uma rota renomeada em 19/09 — vale um pedido. Se continuar fora
-depois disso, o motivo é conteúdo, não descoberta.
+Foi **rastreada em 21/09 e não indexada**. Diferente das LPs congeladas, é uma
+rota renomeada em 19/09 — vale um pedido. Se continuar fora depois disso, o
+motivo é conteúdo, não descoberta.
 
 ### Duas conferências que ficaram da rodada de 23/09 (5 min cada)
 
