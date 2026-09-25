@@ -4,14 +4,15 @@ import Fastify from 'fastify'
 import db from '../src/db.js'
 import { preservationRoutes } from '../src/api/routes/preservation.js'
 import { __resetCacheForTests } from '../src/billing/plans.js'
-import { resolveDestinationPreservation } from '../src/core/preservationConfig.js'
 
 // Contrato: specs/018-unificar-protecao-anti-ban/contracts/api-preservation.md
-// Compatibilidade retroativa total: nenhuma rota nova/removida, nenhum campo
-// renomeado. Campos fixos (burstCap/burstWindowSec/throttleEnabled) e
-// channelStaggerJitterMs continuam aceitos/gravados pelo NOME atual — o efeito
-// no envio (piso/espaçamento) só entra na LEITURA (resolveDestinationPreservation),
-// nunca na escrita.
+// Compatibilidade retroativa: rotas e campos de conta (channelStaggerJitterMs
+// etc.) continuam aceitos/gravados pelo NOME atual.
+//
+// 2026-09-25: os testes de burstCap/burstWindowSec e das etiquetas
+// ritmoMaisCuidadoso/recomecouDoPadrao foram REMOVIDOS junto com o piso
+// anti-banimento (pedido explícito da dona do produto) — esses três campos
+// não existem mais na API nem no envio.
 
 let userCounter = 0
 
@@ -64,7 +65,7 @@ test('PUT /config: channelStaggerJitterMs fora da faixa (>600000) é rejeitado c
   await app.close()
 })
 
-test('POST /presets continua aceitando burstCap/burstWindowSec/throttleEnabled sem erro e sem descartar o resto do corpo', async () => {
+test('POST /presets continua aceitando throttleEnabled/minIntervalSec/dailyCap sem erro e sem descartar o resto do corpo', async () => {
   const { app } = await buildApp()
   const res = await app.inject({
     method: 'POST',
@@ -73,8 +74,6 @@ test('POST /presets continua aceitando burstCap/burstWindowSec/throttleEnabled s
       name: 'Teste 999',
       throttleEnabled: true,
       minIntervalSec: 45,
-      burstCap: 999, // menos conservador que o fixo (6) — a rota grava como veio
-      burstWindowSec: 120,
       dailyCap: 10,
       queueMaxAgeMin: 120,
     },
@@ -82,31 +81,22 @@ test('POST /presets continua aceitando burstCap/burstWindowSec/throttleEnabled s
   assert.equal(res.statusCode, 200)
   const preset = res.json().preset
   assert.equal(preset.name, 'Teste 999')
-  assert.equal(preset.burstCap, 999, 'grava o valor recebido, mesmo menos conservador que o fixo')
-  assert.equal(preset.burstWindowSec, 120)
   assert.equal(preset.minIntervalSec, 45, 'resto do corpo não é descartado')
   assert.equal(preset.dailyCap, 10)
   await app.close()
 })
 
-test('PUT /destinations/:id continua aceitando os três campos fixos; efetivo lido depois via resolveDestinationPreservation aplica o piso', async () => {
-  const { app, userId } = await buildApp()
-  const group = await db.group.create({
-    data: { userId, waJid: `${Date.now()}@g.us`, name: 'Destino teste', kind: 'group', role: 'post' },
+test('POST /presets: burstCap/burstWindowSec no corpo são ignorados (campos removidos, não existem mais na API)', async () => {
+  const { app } = await buildApp()
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/preservation/presets',
+    payload: { name: 'Teste legado', minIntervalSec: 45, burstCap: 999, burstWindowSec: 120 },
   })
-
-  const putRes = await app.inject({
-    method: 'PUT',
-    url: `/api/preservation/destinations/${group.id}`,
-    payload: { burstCap: 999, burstWindowSec: 120, throttleEnabled: true },
-  })
-  assert.equal(putRes.statusCode, 200)
-  assert.equal(putRes.json().destination.burstCap, 999, 'grava cru, sem aplicar piso na ESCRITA')
-
-  const stored = await db.group.findUnique({ where: { id: group.id } })
-  const effective = resolveDestinationPreservation(stored, {})
-  assert.equal(effective.burstCap, 6, 'na LEITURA o piso aplica: 999 é menos conservador que o fixo 6')
-
+  assert.equal(res.statusCode, 200)
+  const preset = res.json().preset
+  assert.equal('burstCap' in preset, false)
+  assert.equal('burstWindowSec' in preset, false)
   await app.close()
 })
 
@@ -140,40 +130,38 @@ test('GET /config: sem channelStaggerJitterMs gravado, destinationIntervalSec é
   await app.close()
 })
 
-test('GET /presets soma ritmoMaisCuidadoso e recomecouDoPadrao por preset, mantendo os campos antigos', async () => {
+test('GET /presets não soma mais ritmoMaisCuidadoso/recomecouDoPadrao (etiquetas do piso removido)', async () => {
   const { app } = await buildApp()
   await app.inject({
     method: 'POST',
     url: '/api/preservation/presets',
-    payload: { name: 'Cuidadoso', throttleEnabled: true, minIntervalSec: 30, burstCap: 2, burstWindowSec: 600, dailyCap: null, queueMaxAgeMin: 300 },
+    payload: { name: 'Cuidadoso', throttleEnabled: true, minIntervalSec: 30, dailyCap: null, queueMaxAgeMin: 300 },
   })
   const res = await app.inject({ method: 'GET', url: '/api/preservation/presets' })
   assert.equal(res.statusCode, 200)
   const preset = res.json().presets.find((p) => p.name === 'Cuidadoso')
-  assert.ok(preset, 'preset antigo continua na lista')
-  assert.equal(preset.burstCap, 2, 'campo antigo intacto')
-  assert.equal(preset.ritmoMaisCuidadoso, true)
-  assert.equal(preset.recomecouDoPadrao, false)
+  assert.ok(preset, 'preset continua na lista')
+  assert.equal('ritmoMaisCuidadoso' in preset, false)
+  assert.equal('recomecouDoPadrao' in preset, false)
   await app.close()
 })
 
-test('GET /destinations soma ritmoMaisCuidadoso, recomecouDoPadrao e effective por destino, mantendo os campos antigos', async () => {
+test('GET /destinations soma effective por destino (sem piso, herda tal como gravado)', async () => {
   const { app, userId } = await buildApp()
   const group = await db.group.create({
     data: {
       userId, waJid: `${Date.now()}-b@g.us`, name: 'Destino aditivo', kind: 'group', role: 'post',
-      throttleEnabled: false, minIntervalSec: 300, dailyCap: 3, burstCap: 2, burstWindowSec: 3600,
+      throttleEnabled: false, minIntervalSec: 300, dailyCap: 3,
     },
   })
   const res = await app.inject({ method: 'GET', url: '/api/preservation/destinations' })
   assert.equal(res.statusCode, 200)
   const dest = res.json().destinations.find((d) => d.id === group.id)
-  assert.ok(dest, 'destino antigo continua na lista')
+  assert.ok(dest, 'destino continua na lista')
   assert.equal(dest.waJid, group.waJid, 'campo antigo intacto')
-  assert.equal(dest.recomecouDoPadrao, true, 'estava com limites desligados')
-  assert.equal(dest.ritmoMaisCuidadoso, false)
-  assert.equal(dest.effective.throttleEnabled, true)
-  assert.equal(dest.effective.burstCap, 6)
-  assert.equal(dest.effective.minIntervalSec, 30)
+  assert.equal('ritmoMaisCuidadoso' in dest, false)
+  assert.equal('recomecouDoPadrao' in dest, false)
+  assert.equal(dest.effective.throttleEnabled, false, 'sem piso, o override gravado vale como está')
+  assert.equal(dest.effective.minIntervalSec, 300)
   await app.close()
 })

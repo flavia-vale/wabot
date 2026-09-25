@@ -1,8 +1,14 @@
 // PR-5.B.1: velocity scheduler por canal-destino.
 // Plano B / Fase 3: a decisão é SEMPRE por destino (decideDestination). Ordem
 // dos cheques: health pause → horário de funcionamento → daily cap → min
-// interval → burst cap → allow + reserve. O caminho legado global (decide() +
+// interval → allow + reserve. O caminho legado global (decide() +
 // botConfig.channel*/janela silenciosa) foi removido no teardown.
+//
+// 2026-09-25: o gate de "rajada" (burstCap/burstWindowSec) foi REMOVIDO por
+// pedido explícito da dona do produto — só os três campos que aparecem na
+// tela (intervalo mínimo, limite diário, descarte por idade na fila) devem
+// governar o ritmo de envio. Não reintroduzir o cheque de rajada sem pedido
+// novo e explícito.
 
 import defaultDb from '../db.js'
 import { getHealth, isChannelPaused } from './channelHealth.js'
@@ -16,7 +22,6 @@ export const DEFER_REASON = Object.freeze({
   OUTSIDE_OPERATING_HOURS: 'outside_operating_hours',
   DAILY_CAP: 'daily_cap',
   MIN_INTERVAL: 'min_interval',
-  BURST_CAP: 'burst_cap',
 })
 
 const SEC = 1000
@@ -154,15 +159,6 @@ export function decideDestination({ now, throttle, isPaused, dest, ignoreOperati
     return { allow: false, reason: DEFER_REASON.MIN_INTERVAL, deferUntil: lastPostMs + minIntervalMs }
   }
 
-  const burstWindowMs = (dest.burstWindowSec ?? 3600) * SEC
-  const burstCap = dest.burstCap ?? 6
-  const winStartMs = toMs(throttle?.burstWindowStart)
-  const windowActive = winStartMs && now - winStartMs < burstWindowMs
-  const postsInWindow = windowActive ? (throttle?.postsInBurstWindow ?? 0) : 0
-  if (throttleOn && windowActive && postsInWindow >= burstCap) {
-    return { allow: false, reason: DEFER_REASON.BURST_CAP, deferUntil: winStartMs + burstWindowMs }
-  }
-
   return { allow: true }
 }
 
@@ -171,9 +167,9 @@ export function decideDestination({ now, throttle, isPaused, dest, ignoreOperati
  * mas SEM reservar o slot. Existe para o "Intervalo entre destinos"
  * (`src/core/destinationSpacing.js`): o gate final é a COMBINAÇÃO da decisão
  * do destino com a decisão de espaçamento (`combineGateDecisions`), e reservar
- * a rajada/limite diário do destino ANTES de saber se o espaçamento também
- * libera queimaria rajada/limite diário à toa quando o job for adiado pelo
- * espaçamento (research R11, item 2).
+ * o limite diário do destino ANTES de saber se o espaçamento também libera
+ * queimaria o limite diário à toa quando o job for adiado pelo espaçamento
+ * (research R11, item 2).
  *
  * Mesma assinatura de `checkAndReserve` (sem o parâmetro `_botConfig`, que lá
  * é legado e ignorado).
@@ -202,7 +198,7 @@ export async function peekDestinationDecision(groupId, opts = {}) {
 }
 
 /**
- * Reserva o slot do destino (rajada/limite diário) — chamar SÓ quando a
+ * Reserva o slot do destino (limite diário) — chamar SÓ quando a
  * decisão COMBINADA (destino + espaçamento) libera o envio. Mesmo guard de
  * sempre: destino com limites desligados (`throttleEnabled === false`) não
  * reserva nada (nada para contar).
@@ -216,7 +212,6 @@ export async function reserveDestinationSlot(groupId, opts = {}) {
   if (dest.throttleEnabled === false) return
   const throttle = await db.channelThrottle.findUnique({ where: { groupId } })
   await reserve(db, groupId, throttle, now, {
-    burstWindowSec: dest.burstWindowSec,
     tz: parseQuietHours(dest.operatingHoursJson).tz,
   })
 }
@@ -245,37 +240,26 @@ export async function checkAndReserve(groupId, _botConfig, opts = {}) {
   return decision
 }
 
-// `effective` = { burstWindowSec, tz }. Aceita também o formato legado do
-// botConfig (channelBurstWindowSec/channelQuietHoursJson) para retrocompat dos
-// chamadores antigos (ex.: recordPost).
+// `effective` = { tz }. Aceita também o formato legado do botConfig
+// (channelQuietHoursJson) para retrocompat dos chamadores antigos (ex.:
+// recordPost).
 async function reserve(db, groupId, throttle, now, effective = {}) {
   const tz = effective.tz ?? parseQuietHours(effective.channelQuietHoursJson).tz
-  const burstWindowSec = effective.burstWindowSec ?? effective.channelBurstWindowSec
   const today = tzDayBucket(now, tz)
-  const burstWindowMs = (burstWindowSec ?? 3600) * SEC
-  const winStartMs = toMs(throttle?.burstWindowStart)
-  const windowActive = winStartMs && now - winStartMs < burstWindowMs
 
   const sameDay = throttle?.dayBucket === today
   const postsToday = sameDay ? (throttle?.postsToday ?? 0) : 0
-
-  const burstWindowStart = windowActive ? throttle.burstWindowStart : new Date(now)
-  const postsInBurstWindow = windowActive ? (throttle?.postsInBurstWindow ?? 0) + 1 : 1
 
   await db.channelThrottle.upsert({
     where: { groupId },
     create: {
       groupId,
       lastPostAt: new Date(now),
-      burstWindowStart,
-      postsInBurstWindow,
       postsToday: postsToday + 1,
       dayBucket: today,
     },
     update: {
       lastPostAt: new Date(now),
-      burstWindowStart,
-      postsInBurstWindow,
       postsToday: postsToday + 1,
       dayBucket: today,
     },

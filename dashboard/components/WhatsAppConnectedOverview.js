@@ -10,8 +10,6 @@ const FALLBACK = {
   operatingHoursJson: '{"startHour":8,"endHour":22,"tz":"America/Sao_Paulo"}',
   throttleEnabled: true,
   minIntervalSec: 60,
-  burstCap: 6,
-  burstWindowSec: 3600,
   dailyCap: null,
   queueMaxAgeMin: 300,
 }

@@ -362,45 +362,45 @@ conhecidos havia dois meses e nunca corrigidos.
 
 | Peça | Onde |
 |---|---|
-| Piso de 3 campos fixos (rajada/janela/liga-desliga) | `src/core/antiBanFloor.js` |
 | Correção do "atraso entre canais" (vira "Intervalo entre destinos") | `src/core/destinationSpacing.js` |
 | Gate de plano — fonte única | `canUseAdvancedPreservation` (`src/billing/plans.js`) |
 | Tela única | `dashboard/app/painel/anti-banimento/*` (substitui as 3 antigas) |
-| Diagnóstico read-only (piso + vazão do intervalo) | `scripts/diag-antiban-valores.mjs` |
 
-### Piso de 3 campos fixos — "vale o mais conservador entre gravado e fixo"
+### Piso de 3 campos fixos — REMOVIDO por completo (2026-09-25, não reintroduzir sem pedido novo)
 
-`burstCap` (fixo 6, menor vence), `burstWindowSec` (fixo 600s, maior vence) e
-`throttleEnabled` (fixo ligado) saíram da tela — viraram **fixos e dormentes**:
-continuam existindo na coluna e nas rotas (aceitos, gravados, FR-013), mas o
-**efetivo lido pelo robô** (`resolveDestinationPreservation`) sempre aplica o
-piso **depois** da herança normal (destino → modelo → padrão da conta →
-`HARD_DEFAULT_PRESERVATION`). A comparação é campo a campo, nunca pela taxa
-combinada: conta que já tinha valor mais conservador que o fixo mantém o
-próprio valor; conta menos conservadora passa ao fixo.
+Entre 2026-09-23 e 2026-09-25 existiu um "piso anti-banimento": `burstCap`
+(fixo 6), `burstWindowSec` (fixo 600s) e `throttleEnabled` (fixo ligado) saíam
+da tela mas continuavam agindo por baixo — o efetivo lido pelo robô sempre
+aplicava o mais conservador entre o valor gravado e esses três fixos, e
+`throttleEnabled=false` era revertido para `true` com os campos voltando ao
+padrão do sistema.
 
-**Exceção (Achado C′, decisão da dona do produto): destino com os limites
-DESLIGADOS não soma o piso ao valor antigo — ele RECOMEÇA DO PADRÃO DO
-SISTEMA.** `throttleEnabled=false` com `minIntervalSec`/`dailyCap`/`burstCap`/
-`burstWindowSec` gravados vira `throttleEnabled=true` com os quatro campos
-substituídos pelos valores de `HARD_DEFAULT_PRESERVATION`/`ANTI_BAN_FLOOR` —
-**nunca** reaplica os valores antigos gravados (eles eram do estado
-"desligado", que não representa ritmo nenhum). `operatingHours*` e
-`queueMaxAgeMin` não são governados pelo liga/desliga e ficam intocados nos
-dois ramos.
+**A cliente pediu a remoção total** ("essas outras não devem existir mais
+para ninguém") assim que percebeu que só 3 dos 5 campos apareciam na tela e
+descobriu que os outros dois viravam regra fixa por baixo. Removido:
 
-**Não regredir:**
-- `src/core/antiBanFloor.js` é módulo PURO (sem banco/rede/env fora de
-  parâmetro) e tem consumidores permitidos **fechados**:
-  `src/core/preservationConfig.js`, `src/api/routes/preservation.js` e
-  `scripts/diag-antiban-valores.mjs` — nenhum outro arquivo pode importar nem
-  reimplementar a comparação campo a campo (guarda estrutural em
-  `test/anti-ban-floor-chokepoint.test.js`).
-- O piso entra **depois** da herança normal, nunca antes.
-- **Variação de imagem e intervalo entre destinos NUNCA recebem piso** — são
-  campos de conta, fora da tabela dos 3 fixos.
-- Escape hatch: `ANTI_BAN_FLOOR=off` desliga (só o valor exato `off`;
-  qualquer outro valor, incluindo ausente, mantém ligado — fail-safe).
+- `src/core/antiBanFloor.js` — apagado.
+- O gate de rajada em `decideDestination`/`reserve` (`src/core/channelThrottle.js`)
+  — não existe mais `DEFER_REASON.BURST_CAP`.
+- `burstCap`/`burstWindowSec` saíram de `FIELDS`/`HARD_DEFAULT_PRESERVATION`
+  (`src/core/preservationConfig.js`), da validação e do `SELECT` da API
+  (`src/api/routes/preservation.js`), e das etiquetas "Ritmo mais
+  cuidadoso"/"recomeçou do padrão" na tela (`RitmoPart.js`).
+- `scripts/diag-antiban-valores.mjs`, `diag-antiban-parados-agora.mjs` e
+  `diag-quem-parou-antiban.mjs` — apagados (existiam só para medir/depurar o
+  piso).
+- As colunas `burstCap`/`burstWindowSec` em `Group`/`PreservationPreset`
+  **continuam no banco** (sem migration) — ficam inertes, ninguém lê nem
+  escreve nelas pela aplicação.
+
+**O que vale hoje:** só três campos governam o ritmo de envio —
+`minIntervalSec`, `dailyCap` e `queueMaxAgeMin` — exatamente como a cliente
+grava na tela, sem nenhum piso por cima. `throttleEnabled=false` desliga os
+limites de verdade (não existe caminho de UI para isso hoje, mas o campo
+responde caso alguém grave via API).
+
+**Não reintroduzir esse mecanismo sem pedido novo e explícito** — inclusive
+qualquer variante ("piso mais frouxo", "aviso em vez de trava").
 
 ### "Intervalo entre destinos" — correção de causa raiz do "Atraso entre canais" (RCA 2026-07-28, fechado)
 
