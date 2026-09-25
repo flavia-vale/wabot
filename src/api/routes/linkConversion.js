@@ -6,6 +6,7 @@ import { validateCredentialData } from '../../credentialHealth.js'
 import { persistCredentialPatch } from '../../credentialPatch.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
 import { pickOfferImageSourceUrl } from '../../core/offerImageSource.js'
+import { isOwnAffiliateLink } from '../../converters/ownAffiliateLink.js'
 import {
   buildScrapedOffer,
   buildCredentialsMap,
@@ -307,6 +308,21 @@ export async function linkConversionRoutes(app, opts = {}) {
         const validation = validateCredentialData(link.platform, credentialsMap[link.platform])
         if (!validation.configured) {
           results.push(buildErrorResult(index, link, validation, 'MISSING_CREDENTIALS', missingCredentialMessage(validation)))
+          continue
+        }
+
+        if (isOwnAffiliateLink(link.platform, link.url, credentialsMap[link.platform])) {
+          results.push({
+            index,
+            platform: link.platform,
+            label: validation.label,
+            originalUrl: link.url,
+            convertedUrl: link.url,
+            warning: null,
+            status: 'already_own_link',
+            code: null,
+            error: null,
+          })
           continue
         }
 
