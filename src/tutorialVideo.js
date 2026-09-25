@@ -12,7 +12,7 @@
 // importava de lá.
 
 export const VIDEO_CADASTRO_ETIQUETAS_URL =
-  process.env.VIDEO_CREDENCIAIS_URL || 'https://youtu.be/6F2AUM88FKk'
+  process.env.VIDEO_CREDENCIAIS_URL || 'https://youtu.be/D-uR4yOrNso'
 
 // Vídeo-aula de ativação: conectar o WhatsApp e escolher os grupos. É o outro
 // vídeo do canal, linkado no checklist do painel — e agora também na tela de
