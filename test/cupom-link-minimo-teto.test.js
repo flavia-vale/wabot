@@ -108,7 +108,7 @@ test('cupom por link: com preço mostra quanto paga e o link; sem preço mostra 
   const c = coupon({ kind: 'link', code: '', redeemUrl: 'https://s.shopee.com.br/cupom10' })
   assert.equal(
     plain(renderCouponText({ coupon: c, priceCents: 15000, finalPriceCents: 13500 })),
-    '🎟️ Resgate o cupom e pague R$ 135,00 em vez de R$ 150,00 (10% OFF): https://s.shopee.com.br/cupom10',
+    '🎟️ Resgate o cupom e pague *R$ 135,00* em vez de R$ 150,00 (10% OFF): https://s.shopee.com.br/cupom10',
   )
   assert.equal(
     plain(renderCouponText({ coupon: c, priceCents: null, finalPriceCents: null })),
@@ -238,10 +238,53 @@ test('rota: editar troca cupom de código para link e valida contra o cupom salv
     assert.equal(storeOnly.statusCode, 400)
     assert.match(storeOnly.json().error, /não é da loja Amazon/)
 
-    const back = await app.inject({ method: 'PUT', url: `/api/coupons/${id}`, payload: { kind: 'code', code: 'VOLTEI' } })
+    const back = await app.inject({ method: 'PUT', url: `/api/coupons/${id}`, payload: { kind: 'code', code: 'VOLTEI', redeemUrl: '' } })
     assert.equal(back.statusCode, 200)
     assert.equal(back.json().code, 'VOLTEI')
     assert.equal(back.json().redeemUrl, null)
+  } finally {
+    await app.close()
+    await cleanup(userId)
+  }
+})
+
+// ---- Link opcional no cupom de código (2026-09-25) ----
+
+test('cupom de código com link: linha a mais "Insira o código do cupom aqui"; sem link, só o código', () => {
+  const withLink = coupon({ code: 'BEMVINDO10', redeemUrl: 'https://s.shopee.com.br/inserir' })
+  assert.equal(
+    plain(renderCouponText({ coupon: withLink, priceCents: 15000, finalPriceCents: 13500 })),
+    '🎟️ Use o cupom BEMVINDO10 — de R$ 150,00 por *R$ 135,00* com o cupom (10% OFF)\nInsira o código do cupom aqui: https://s.shopee.com.br/inserir',
+  )
+  assert.equal(
+    plain(renderCouponText({ coupon: coupon({ code: 'BEMVINDO10' }), priceCents: null, finalPriceCents: null })),
+    '🎟️ Use o cupom BEMVINDO10 (10% OFF)',
+  )
+  // Link de outro site nunca sai: fica só o código.
+  const bad = coupon({ code: 'BEMVINDO10', redeemUrl: 'https://bit.ly/golpe' })
+  assert.equal(plain(renderCouponText({ coupon: bad, priceCents: null, finalPriceCents: null })), '🎟️ Use o cupom BEMVINDO10 (10% OFF)')
+})
+
+test('rota: cupom de código aceita link opcional da loja e recusa link de outro site', async () => {
+  const { app, userId } = await buildApp()
+  try {
+    const base = { kind: 'code', code: 'BEMVINDO', platform: 'shopee', discountType: 'percent', discountValue: 10 }
+    const noLink = await app.inject({ method: 'POST', url: '/api/coupons', payload: base })
+    assert.equal(noLink.statusCode, 201)
+    assert.equal(noLink.json().redeemUrl, null)
+
+    const withLink = await app.inject({ method: 'POST', url: '/api/coupons', payload: { ...base, code: 'OUTRO', redeemUrl: 'https://s.shopee.com.br/inserir' } })
+    assert.equal(withLink.statusCode, 201, withLink.body)
+    assert.equal(withLink.json().kind, 'code')
+    assert.equal(withLink.json().redeemUrl, 'https://s.shopee.com.br/inserir')
+
+    const bad = await app.inject({ method: 'POST', url: '/api/coupons', payload: { ...base, redeemUrl: 'https://bit.ly/abc' } })
+    assert.equal(bad.statusCode, 400)
+    assert.match(bad.json().error, /não é da loja Shopee/)
+
+    const cleared = await app.inject({ method: 'PUT', url: `/api/coupons/${withLink.json().id}`, payload: { redeemUrl: '' } })
+    assert.equal(cleared.statusCode, 200)
+    assert.equal(cleared.json().redeemUrl, null)
   } finally {
     await app.close()
     await cleanup(userId)

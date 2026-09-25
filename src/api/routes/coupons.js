@@ -40,14 +40,16 @@ function buildCoupon(body = {}, existing = null) {
   if (!PLATFORM_SET.has(platform)) return { error: 'Esta loja ainda não é aceita.' }
 
   let code = ''
-  let redeemUrl = null
+  // No cupom de código o link (página onde se insere o código) é opcional;
+  // no de link é obrigatório. Preenchido, os dois seguem a mesma regra.
+  const redeemUrl = String(pick('redeemUrl', '') ?? '').trim() || null
   if (kind === 'code') {
     code = String(pick('code', '') ?? '').trim()
     if (!code) return { error: 'Escreva o código do cupom, do jeito que a loja te deu.' }
-  } else {
-    redeemUrl = String(pick('redeemUrl', '') ?? '').trim()
+  }
+  if (kind === 'link' || redeemUrl) {
     let parsed = null
-    try { parsed = new URL(redeemUrl) } catch { parsed = null }
+    try { parsed = new URL(redeemUrl ?? '') } catch { parsed = null }
     if (!parsed || parsed.protocol !== 'https:') return { error: 'Cole o link completo do cupom, começando com https://.' }
     if (!isStoreCouponLink(redeemUrl, platform)) {
       const loja = STORE_NAMES[platform] ?? 'escolhida'
