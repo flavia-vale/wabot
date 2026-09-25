@@ -58,7 +58,7 @@ usa (`presentGroupsForPlan`): a tela nunca mostra marca/botão que não sai.
 | Etiqueta, cadeado, janela "Ver planos", página travada com prévia | `dashboard/components/pro/ProGate.js` |
 | Prévias de exemplo (nunca dado real) | `dashboard/components/pro/previews.js` |
 | Menu (nomes e ordem de sempre; itens PRO com cadeado; Minha conta no fim de Conta) | `dashboard/app/painel/nav.js` |
-| Ritmo dos envios na tela WhatsApp | `dashboard/components/pro/RhythmCard.js` |
+| Ritmo dos envios na tela WhatsApp (resumo só-leitura) | `dashboard/components/WhatsAppConnectedOverview.js` |
 | Minha conta | `dashboard/app/painel/conta/page.js` (+ `PATCH /api/auth/me/name`) |
 
 - **Cores:** o PRO é verde + roxo (`--pro #6F4FE8`, `--pro-gradient` em
@@ -68,7 +68,11 @@ usa (`presentGroupsForPlan`): a tela nunca mostra marca/botão que não sai.
   explicando o recurso.
 - **Ritmo na tela WhatsApp = preset PADRÃO da Preservação** (`isDefault`). Não
   é teto novo: vale para quem usa o padrão; destino com ajuste próprio segue o
-  dele. Sem preset padrão, o primeiro salvamento cria "Padrão".
+  dele. Desde 2026-09-25 a tela WhatsApp só EXIBE o resumo — editar é só na
+  aba "Ritmo por grupo" do Anti-banimento (`/painel/anti-banimento?parte=ritmo`).
+  Motivo: dois formulários editando o mesmo preset em paralelo (WhatsApp +
+  Anti-banimento) sem revalidação cruzada, cliente via valor divergente entre
+  as telas.
 - **Painel inicial:** 5º card "Comissão Shopee hoje". No Basic, embaçado e com
   cadeado, **sem chamada à API**. No PRO, 5 min de memória na aba (o serviço de
   vendas não tem cache e cada leitura vai à Shopee).
