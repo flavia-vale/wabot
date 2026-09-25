@@ -1,60 +1,108 @@
 import dbDefault from '../../db.js'
 import { PLATFORMS } from '../../credentialHealth.js'
 import { reloadWorkerConfig as defaultReloadWorkerConfig } from '../workerConfigReload.js'
+import { COUPON_KINDS, isStoreCouponLink } from '../../core/clientCouponPolicy.js'
 
 const PLATFORM_SET = new Set(PLATFORMS)
 
-// FR-006: mensagens sempre em português simples, nunca o nome do campo
-// técnico (data-model.md, tabela de validação).
-function validateCouponBody(body = {}, { partial = false } = {}) {
-  const hasField = (key) => Object.prototype.hasOwnProperty.call(body, key)
-
-  if (!partial || hasField('code')) {
-    const code = String(body.code ?? '').trim()
-    if (!code) return 'Escreva o código do cupom, do jeito que a loja te deu.'
-  }
-
-  if (!partial || hasField('platform')) {
-    const platform = String(body.platform ?? '').trim()
-    if (!platform) return 'Escolha em qual loja este cupom vale.'
-    if (!PLATFORM_SET.has(platform)) return 'Esta loja ainda não é aceita.'
-  }
-
-  const discountType = hasField('discountType') ? String(body.discountType ?? '').trim() : null
-  if (!partial && !discountType) return 'Escolha o tipo de desconto: porcentagem ou valor fixo.'
-  if (discountType && discountType !== 'percent' && discountType !== 'amount') {
-    return 'Escolha o tipo de desconto: porcentagem ou valor fixo.'
-  }
-
-  // A regra de faixa depende do TIPO efetivo (o do corpo, quando presente; em
-  // PUT parcial sem discountType novo, a validação de faixa é pulada aqui —
-  // quem decide o tipo final é a rota, que já tem o registro salvo).
-  if (hasField('discountValue')) {
-    const value = Number(body.discountValue)
-    const effectiveType = discountType
-    if (effectiveType === 'percent') {
-      if (!Number.isFinite(value) || value < 1 || value > 100) return 'A porcentagem precisa ser entre 1 e 100.'
-    } else if (effectiveType === 'amount') {
-      if (!Number.isFinite(value) || value <= 0) return 'O valor do desconto precisa ser maior que zero.'
-    } else if (!partial) {
-      // Sem discountType (já barrado acima em !partial), nunca chega aqui.
-    }
-  } else if (!partial) {
-    return 'Informe o valor do desconto.'
-  }
-
-  if (hasField('validUntil') && body.validUntil != null && body.validUntil !== '') {
-    const parsed = new Date(body.validUntil)
-    if (Number.isNaN(parsed.getTime())) return 'Não consegui entender essa data de validade.'
-  }
-
-  return null
+const STORE_NAMES = {
+  shopee: 'Shopee',
+  amazon: 'Amazon',
+  mercadolivre: 'Mercado Livre',
+  magazineluiza: 'Magazine Luiza',
+  shein: 'SHEIN',
+  aliexpress: 'AliExpress',
 }
 
-function normalizeValidUntil(value) {
-  if (value == null || value === '') return null
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
+const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj ?? {}, key)
+
+// Campo opcional em centavos: vazio/null = sem condição; qualquer outra coisa
+// precisa ser número maior que zero.
+function readOptionalCents(value) {
+  if (value == null || value === '') return { ok: true, value: null }
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return { ok: false }
+  return { ok: true, value: Math.round(n) }
+}
+
+// Monta o cupom EFETIVO (o salvo + o que chegou no corpo, em PUT) e valida o
+// conjunto — tipo de cupom, loja e tipo de desconto dependem uns dos outros
+// (link precisa ser da loja; teto só existe para porcentagem).
+// FR-006: mensagens sempre em português simples, nunca o nome do campo técnico.
+function buildCoupon(body = {}, existing = null) {
+  const pick = (key, fallback) => (has(body, key) ? body[key] : (existing ? existing[key] : fallback))
+
+  const kind = String(pick('kind', 'code') ?? 'code').trim() || 'code'
+  if (!COUPON_KINDS.includes(kind)) return { error: 'Escolha como o cupom é usado: com código ou por link.' }
+
+  const platform = String(pick('platform', '') ?? '').trim()
+  if (!platform) return { error: 'Escolha em qual loja este cupom vale.' }
+  if (!PLATFORM_SET.has(platform)) return { error: 'Esta loja ainda não é aceita.' }
+
+  let code = ''
+  let redeemUrl = null
+  if (kind === 'code') {
+    code = String(pick('code', '') ?? '').trim()
+    if (!code) return { error: 'Escreva o código do cupom, do jeito que a loja te deu.' }
+  } else {
+    redeemUrl = String(pick('redeemUrl', '') ?? '').trim()
+    let parsed = null
+    try { parsed = new URL(redeemUrl) } catch { parsed = null }
+    if (!parsed || parsed.protocol !== 'https:') return { error: 'Cole o link completo do cupom, começando com https://.' }
+    if (!isStoreCouponLink(redeemUrl, platform)) {
+      const loja = STORE_NAMES[platform] ?? 'escolhida'
+      return { error: `Este link não é da loja ${loja}. Cole o link de resgate que a própria loja te deu.` }
+    }
+  }
+
+  const discountType = String(pick('discountType', '') ?? '').trim()
+  if (discountType !== 'percent' && discountType !== 'amount') {
+    return { error: 'Escolha o tipo de desconto: porcentagem ou valor fixo.' }
+  }
+
+  const rawValue = pick('discountValue', null)
+  if (rawValue == null || rawValue === '') return { error: 'Informe o valor do desconto.' }
+  const value = Number(rawValue)
+  if (discountType === 'percent') {
+    if (!Number.isFinite(value) || value < 1 || value > 100) return { error: 'A porcentagem precisa ser entre 1 e 100.' }
+  } else if (!Number.isFinite(value) || value <= 0) {
+    return { error: 'O valor do desconto precisa ser maior que zero.' }
+  }
+
+  const min = readOptionalCents(pick('minPurchaseCents', null))
+  if (!min.ok) return { error: 'A compra mínima precisa ser um valor maior que zero.' }
+
+  let maxDiscountCents = null
+  if (discountType === 'percent') {
+    const max = readOptionalCents(pick('maxDiscountCents', null))
+    if (!max.ok) return { error: 'O desconto máximo precisa ser um valor maior que zero.' }
+    maxDiscountCents = max.value
+  }
+
+  const rawValidUntil = pick('validUntil', null)
+  let validUntil = null
+  if (rawValidUntil != null && rawValidUntil !== '') {
+    validUntil = new Date(rawValidUntil)
+    if (Number.isNaN(validUntil.getTime())) return { error: 'Não consegui entender essa data de validade.' }
+  }
+
+  const rawLabel = pick('label', null)
+  const label = rawLabel != null ? String(rawLabel).trim() || null : null
+
+  return {
+    data: {
+      kind,
+      code,
+      redeemUrl,
+      label,
+      platform,
+      discountType,
+      discountValue: Math.round(value),
+      minPurchaseCents: min.value,
+      maxDiscountCents,
+      validUntil,
+    },
+  }
 }
 
 // `expired` é calculado na resposta, nunca gravado — tela e envio usam a
@@ -64,11 +112,15 @@ function presentCoupon(coupon, now = new Date()) {
   const expired = coupon.validUntil != null && new Date(coupon.validUntil).getTime() < now.getTime()
   return {
     id: coupon.id,
+    kind: coupon.kind === 'link' ? 'link' : 'code',
     code: coupon.code,
+    redeemUrl: coupon.redeemUrl ?? null,
     label: coupon.label,
     platform: coupon.platform,
     discountType: coupon.discountType,
     discountValue: coupon.discountValue,
+    minPurchaseCents: coupon.minPurchaseCents ?? null,
+    maxDiscountCents: coupon.maxDiscountCents ?? null,
     validUntil: coupon.validUntil,
     enabled: coupon.enabled,
     expired,
@@ -96,29 +148,18 @@ export async function couponsRoutes(app, opts = {}) {
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const body = req.body ?? {}
-    const error = validateCouponBody(body, { partial: false })
+    const { error, data } = buildCoupon(req.body ?? {})
     if (error) return reply.code(400).send({ error })
 
-    const platform = String(body.platform).trim()
-    const code = String(body.code).trim()
-
     const duplicate = await db.clientCoupon.findFirst({
-      where: { userId: req.user.sub, platform, code },
+      where: data.kind === 'link'
+        ? { userId: req.user.sub, platform: data.platform, kind: 'link', redeemUrl: data.redeemUrl }
+        : { userId: req.user.sub, platform: data.platform, code: data.code },
       select: { id: true },
     })
 
     const coupon = await db.clientCoupon.create({
-      data: {
-        userId: req.user.sub,
-        code,
-        label: body.label != null ? String(body.label).trim() || null : null,
-        platform,
-        discountType: String(body.discountType).trim(),
-        discountValue: Math.round(Number(body.discountValue)),
-        validUntil: normalizeValidUntil(body.validUntil),
-        enabled: true,
-      },
+      data: { userId: req.user.sub, ...data, enabled: true },
     })
 
     await logReload(req.user.sub, 'created', { couponId: coupon.id })
@@ -133,17 +174,8 @@ export async function couponsRoutes(app, opts = {}) {
     const existing = await db.clientCoupon.findFirst({ where: { id: req.params.id, userId: req.user.sub } })
     if (!existing) return reply.code(404).send({ error: 'Cupom não encontrado.' })
 
-    const body = req.body ?? {}
-    const error = validateCouponBody(body, { partial: true })
+    const { error, data } = buildCoupon(req.body ?? {}, existing)
     if (error) return reply.code(400).send({ error })
-
-    const data = {}
-    if (Object.prototype.hasOwnProperty.call(body, 'code')) data.code = String(body.code).trim()
-    if (Object.prototype.hasOwnProperty.call(body, 'label')) data.label = body.label != null ? String(body.label).trim() || null : null
-    if (Object.prototype.hasOwnProperty.call(body, 'platform')) data.platform = String(body.platform).trim()
-    if (Object.prototype.hasOwnProperty.call(body, 'discountType')) data.discountType = String(body.discountType).trim()
-    if (Object.prototype.hasOwnProperty.call(body, 'discountValue')) data.discountValue = Math.round(Number(body.discountValue))
-    if (Object.prototype.hasOwnProperty.call(body, 'validUntil')) data.validUntil = normalizeValidUntil(body.validUntil)
 
     const updated = await db.clientCoupon.update({ where: { id: existing.id }, data })
     await logReload(req.user.sub, 'updated', { couponId: updated.id })
@@ -183,4 +215,4 @@ export async function couponsRoutes(app, opts = {}) {
   })
 }
 
-export const __couponsInternals = { validateCouponBody, presentCoupon }
+export const __couponsInternals = { buildCoupon, presentCoupon }

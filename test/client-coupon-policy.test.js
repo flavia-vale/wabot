@@ -202,13 +202,13 @@ test('renderCouponText: preço e final conhecidos traz "com o cupom"', () => {
 
 test('renderCouponText: sem final confiável, cupom percent', () => {
   const text = renderCouponText({ coupon: coupon({ code: 'BEMVINDO10', discountType: 'percent', discountValue: 10 }), priceCents: null, finalPriceCents: null })
-  assert.equal(text, '🎟️ Use o cupom BEMVINDO10 (10% de desconto)')
+  assert.equal(text, '🎟️ Use o cupom BEMVINDO10 (10% OFF)')
 })
 
 test('renderCouponText: sem final confiável, cupom amount', () => {
   const text = renderCouponText({ coupon: coupon({ code: 'TOP50', discountType: 'amount', discountValue: 5000 }), priceCents: null, finalPriceCents: null })
   assert.match(text, /TOP50/)
-  assert.match(text, /desconto/)
+  assert.match(text, /OFF/)
   assert.match(text, /R\$\D?50,00/)
 })
 
