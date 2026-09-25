@@ -28,5 +28,5 @@ test('"esperou tempo demais" aponta para o Anti-banimento, não para a tela anti
     assert.match(text, /Anti-banimento/)
     assert.doesNotMatch(text, /Preservação por grupo e canal/)
   }
-  assert.doesNotMatch(read('dashboard/components/pro/RhythmCard.js'), /Preservação por grupo e canal|href="\/painel\/preservacao\/destinos"/)
+  assert.doesNotMatch(read('dashboard/components/WhatsAppConnectedOverview.js'), /Preservação por grupo e canal|href="\/painel\/preservacao\/destinos"/)
 })

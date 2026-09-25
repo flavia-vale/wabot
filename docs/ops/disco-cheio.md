@@ -121,6 +121,32 @@ pm2 set pm2-logrotate:compress true
 **Passo 4 — desligar staging fora de validação** (já existe botão no painel
 admin). Além de liberar ~1–1,4 GB de RAM, staging para de escrever log.
 
+**Passo 5 — automatizar a limpeza recorrente (2026-09-25 — expurgo de longo
+prazo).** Os passos 1–3 resolvem uma vez; sem agendamento, `bot.log`,
+`journald`, cache do npm/apt e log rotacionado do PM2 voltam a crescer até
+alguém rodar o script na mão de novo. `limpar-disco.sh` já é seguro por design
+(nunca toca em `auth_info`, `*.db`, backup dentro da retenção, `node_modules`
+ou `dashboard/.next`), então o agendamento é só chamá-lo com `--aplicar` toda
+semana:
+
+```bash
+# como o usuário deploy, uma vez:
+crontab -l > /tmp/crontab.bak   # backup do crontab atual, por segurança
+(crontab -l 2>/dev/null; echo "0 4 * * 0 /usr/bin/bash \$HOME/wabot/scripts/limpar-disco.sh --aplicar >> \$HOME/wabot-backups/limpeza-disco.log 2>&1") | crontab -
+crontab -l | tail -5           # confere que entrou
+```
+
+Domingo às 4h, junto com o horário de menor tráfego. A saída fica em
+`~/wabot-backups/limpeza-disco.log` (mesmo diretório do backup, já fora do
+código e já coberto pela rotina de backup); esse log não tem rotação própria
+— confira o tamanho dele de vez em quando (`limpar-disco.sh` já trata o
+`backup.log` do cron de backup do mesmo jeito, mas não o seu próprio).
+
+Isso NÃO substitui o Passo 3 (logrotate do `bot.log`): o `limpar-disco.sh`
+só trunca o `bot.log` quando ele já passou de `BOT_LOG_KEEP_MB` (default
+50 MB) — é uma rede de segurança, não rotação. Sem o logrotate instalado, o
+arquivo ainda cresce livre a semana toda entre uma passada e outra.
+
 ## Não regredir
 
 - **`bot.log` NÃO é coberto pelo `pm2-logrotate`.** Qualquer conversa futura
@@ -134,3 +160,8 @@ admin). Além de liberar ~1–1,4 GB de RAM, staging para de escrever log.
   tarball é a única cópia de `auth_info` + `.env`.
 - Os dois scripts são de leitura por padrão: `diag-disco.sh` nunca escreve, e
   `limpar-disco.sh` só age com `--aplicar`.
+- **O cron do Passo 5 é o que faz a limpeza ser permanente, não só um
+  RCA pontual.** Se o disco voltar a subir devagar ao longo de semanas (não de
+  um pico único), confira `crontab -l` antes de investigar causa nova — pode
+  ser só o cron que caiu (troca de usuário, VPS recriado, migração) e não
+  regressão de código.
