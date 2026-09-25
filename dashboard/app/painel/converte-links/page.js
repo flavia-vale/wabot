@@ -242,9 +242,16 @@ export default function TestarConversaoPage() {
                   <div className="tc-banner-titulo">{veredito.titulo}</div>
                   <p className="tc-banner-texto">{veredito.texto}</p>
                   {veredito.mostrarCredenciais && (
-                    <Link href="/painel/ids-afiliada" className="pnl-btn tc-banner-btn">
-                      Cadastrar minhas lojas <Icon name="arrow" size={14} />
-                    </Link>
+                    <div className="tc-banner-acoes">
+                      <Link href="/painel/ids-afiliada" className="pnl-btn tc-banner-btn">
+                        Cadastrar minhas lojas <Icon name="arrow" size={14} />
+                      </Link>
+                      {veredito.videoUrl && (
+                        <a href={veredito.videoUrl} target="_blank" rel="noreferrer" className="pnl-btn tc-banner-btn">
+                          Assistir vídeo de cadastro <Icon name="arrow" size={14} />
+                        </a>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

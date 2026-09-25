@@ -25,11 +25,23 @@ const page = read('../dashboard/app/painel/converte-links/page.js')
 const nav = read('../dashboard/app/painel/nav.js')
 const css = read('../dashboard/app/painel/painel.css')
 
-test('conversão limpa é o único "tudo certo"', () => {
+test('conversão limpa é o único "tudo certo" — e deixa claro que o link não era dela', () => {
   const v = describeConversionTest({ status: 'converted', label: 'Mercado Livre', warning: null })
   assert.equal(v.veredito, VEREDITO.OK)
   assert.equal(v.mostrarCredenciais, false)
+  assert.match(v.titulo, /não era seu/i)
+  assert.match(v.titulo, /válida/i)
   assert.match(v.texto, /Mercado Livre/)
+})
+
+test('sem credencial válida: não converte, avisa e leva ao vídeo de cadastro', () => {
+  const v = describeConversionTest({ status: 'error', code: 'MISSING_CREDENTIALS', label: 'Amazon', platform: 'amazon', error: 'faltam dados' })
+  assert.equal(v.veredito, VEREDITO.CREDENCIAL)
+  assert.match(v.titulo, /não é seu/i)
+  assert.match(v.titulo, /não está válida/i)
+  assert.equal(v.mostrarCredenciais, true)
+  assert.match(v.texto, /vídeo/i)
+  assert.ok(v.videoUrl, 'precisa apontar para o vídeo de cadastro')
 })
 
 test('link que já é da própria afiliada tem veredito e mensagem próprios', () => {

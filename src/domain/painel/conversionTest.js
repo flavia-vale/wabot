@@ -23,6 +23,8 @@
  * afiliados e a comissão de fato pode não ser creditada.
  */
 
+import { videoEtiquetasParaLoja } from '../../tutorialVideo.js'
+
 export const VEREDITO = Object.freeze({
   OK: 'ok',
   PROPRIO: 'proprio',
@@ -137,8 +139,8 @@ export function describeConversionTest(resultado = {}) {
     }
     return {
       veredito: VEREDITO.OK,
-      titulo: 'Tudo certo — o link saiu com a sua identificação',
-      texto: `Seus links ${loja === 'a loja' ? 'dessa loja' : `da ${loja}`} estão saindo com a sua identificação de afiliada. Pode espelhar.`,
+      titulo: `Esse link não era seu, mas sua credencial ${loja === 'a loja' ? 'dessa loja' : `da ${loja}`} está válida`,
+      texto: `Convertemos para você: esse é o seu link${loja === 'a loja' ? '' : ` da ${loja}`}, já com a sua identificação de afiliada — confira abaixo.`,
       mostrarCredenciais: false,
       avisoTecnico: null,
     }
@@ -149,9 +151,10 @@ export function describeConversionTest(resultado = {}) {
   if (resultado.code === 'MISSING_CREDENTIALS' || (resultado.code === 'CONVERSION_FAILED' && falaDeCredencial(mensagem))) {
     return {
       veredito: VEREDITO.CREDENCIAL,
-      titulo: `Falta o seu cadastro ${loja === 'a loja' ? 'dessa loja' : `da ${loja}`}`,
-      texto: 'Sem os seus dados dessa loja o robô não consegue montar o link com a sua identificação — e ele prefere não publicar a mandar o link de outra pessoa. Cadastre e teste de novo.',
+      titulo: `Esse link não é seu, e sua credencial ${loja === 'a loja' ? 'dessa loja' : `da ${loja}`} não está válida`,
+      texto: 'Sem os seus dados dessa loja não é possível converter. Para aprender a cadastrar suas credenciais, assista ao vídeo abaixo.',
       mostrarCredenciais: true,
+      videoUrl: videoEtiquetasParaLoja(resultado.platform),
       avisoTecnico: resultado.code || null,
     }
   }

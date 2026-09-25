@@ -1892,6 +1892,8 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .tc-banner-titulo { font-size: 14.5px; font-weight: 700; line-height: 1.35; color: var(--ink); }
 .tc-banner-texto { margin: 5px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-soft); }
 .tc-banner-btn { margin-top: 12px; gap: 7px; background: var(--surface); }
+.tc-banner-acoes { display: flex; flex-wrap: wrap; gap: 10px; }
+.tc-banner-acoes .tc-banner-btn { margin-top: 12px; }
 
 /* Cartão de comparação dos endereços */
 .tc-detalhe { padding: 0; overflow: hidden; }
