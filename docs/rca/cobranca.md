@@ -459,6 +459,16 @@ e não havia como responder "valeu a pena até agora?".
 Envs (todas opcionais): `FINANCE_TEST_ACCOUNT_EMAILS`, `USD_BRL_RATE`,
 `COST_CLAUDE_MONTHLY_BRL`, `COST_VPS_MONTHLY_BRL`, `COST_RECURRING_START_MONTH`.
 
+**Gastos fixos editáveis na tela (2026-09-26).** Bloco "Gastos fixos" no ROI
+(Claude/mês, servidor/mês, cotação do dólar) com botão Salvar →
+`PUT /api/admin/finance/costs` (`billing:write`, auditado) grava na tabela
+`OperatingCostSettings` (linha única, id 1) e a tela busca o ROI de novo, então
+passado desde a virada, presente e projeção são refeitos. Prioridade: tela >
+env > padrão do código. Campo vazio = volta ao env/padrão; valor inválido é
+recusado (400), nunca vira zero. Falha ao ler a tabela cai no env/padrão (o ROI
+nunca deixa de abrir). O valor salvo vale para TODOS os meses a partir de
+`COST_RECURRING_START_MONTH` (inclusive set/2026).
+
 ⚠️ **Aumentar o teto de clientes muda a projeção** (o teto de receita sai de
 `MAX_SESSIONS_PER_PROCESS`), e continua valendo que subir esse teto é mudança
 memory-heavy — ver "Teto de robôs por processo".

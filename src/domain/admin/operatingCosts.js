@@ -122,12 +122,57 @@ function positiveNumber(raw, fallback) {
 }
 
 /**
- * Configuração efetiva do ledger, com os pontos ajustáveis por env:
- * `USD_BRL_RATE`, `COST_CLAUDE_MONTHLY_BRL`, `COST_VPS_MONTHLY_BRL`,
- * `COST_RECURRING_START_MONTH`.
+ * Limites do que a tela aceita salvar. Não é regra de negócio — é só o que
+ * separa um valor plausível de um dedo escorregado (R$ 56.500 no lugar de 565).
  */
-export function resolveCostConfig(env = process.env) {
-  const usdBrlRate = positiveNumber(env?.USD_BRL_RATE, DEFAULT_USD_BRL_RATE)
+export const COST_OVERRIDE_LIMITS = Object.freeze({
+  monthlyBrlMax: 100000,
+  usdBrlRateMin: 1,
+  usdBrlRateMax: 50,
+})
+
+function overrideNumber(raw, min, max) {
+  if (raw === null || raw === undefined || raw === '') return null
+  const numeric = typeof raw === 'number' ? raw : Number.parseFloat(String(raw).replace(',', '.'))
+  if (!Number.isFinite(numeric) || numeric < min || numeric > max) return undefined
+  return round2(numeric)
+}
+
+/**
+ * Valida o que a dona do produto digitou em "Gastos fixos" do ROI.
+ * Campo vazio = "volta ao padrão" (`null`). Devolve `{ ok, value }` ou
+ * `{ ok: false, error }` — valor inválido NUNCA vira zero, custo zerado mentiria.
+ */
+export function normalizeCostOverrides(input = {}) {
+  const fields = [
+    ['claudeMonthlyBrl', 0, COST_OVERRIDE_LIMITS.monthlyBrlMax, 'Valor do Claude inválido.'],
+    ['vpsMonthlyBrl', 0, COST_OVERRIDE_LIMITS.monthlyBrlMax, 'Valor do servidor inválido.'],
+    ['usdBrlRate', COST_OVERRIDE_LIMITS.usdBrlRateMin, COST_OVERRIDE_LIMITS.usdBrlRateMax, 'Cotação do dólar inválida.'],
+  ]
+  const value = {}
+  for (const [key, min, max, error] of fields) {
+    const parsed = overrideNumber(input?.[key], min, max)
+    if (parsed === undefined) return { ok: false, error }
+    value[key] = parsed
+  }
+  return { ok: true, value }
+}
+
+function overrideOr(raw, fallback) {
+  return Number.isFinite(raw) && raw >= 0 ? raw : fallback
+}
+
+/**
+ * Configuração efetiva do ledger. Ordem de prioridade de cada valor:
+ * 1. o que foi salvo na tela (`overrides`, tabela `OperatingCostSettings`);
+ * 2. env (`USD_BRL_RATE`, `COST_CLAUDE_MONTHLY_BRL`, `COST_VPS_MONTHLY_BRL`,
+ *    `COST_RECURRING_START_MONTH`);
+ * 3. o padrão deste arquivo.
+ */
+export function resolveCostConfig(env = process.env, overrides = null) {
+  const usdBrlRate = overrides?.usdBrlRate > 0
+    ? overrides.usdBrlRate
+    : positiveNumber(env?.USD_BRL_RATE, DEFAULT_USD_BRL_RATE)
   const startMonth = isMonthKey(env?.COST_RECURRING_START_MONTH)
     ? env.COST_RECURRING_START_MONTH
     : RECURRING_COSTS.startMonth
@@ -135,10 +180,17 @@ export function resolveCostConfig(env = process.env) {
     usdBrlRate,
     recurring: {
       startMonth,
-      [COST_CATEGORIES.CLAUDE]: positiveNumber(env?.COST_CLAUDE_MONTHLY_BRL, RECURRING_COSTS[COST_CATEGORIES.CLAUDE]),
-      [COST_CATEGORIES.VPS]: positiveNumber(env?.COST_VPS_MONTHLY_BRL, RECURRING_COSTS[COST_CATEGORIES.VPS]),
+      [COST_CATEGORIES.CLAUDE]: overrideOr(
+        overrides?.claudeMonthlyBrl,
+        positiveNumber(env?.COST_CLAUDE_MONTHLY_BRL, RECURRING_COSTS[COST_CATEGORIES.CLAUDE]),
+      ),
+      [COST_CATEGORIES.VPS]: overrideOr(
+        overrides?.vpsMonthlyBrl,
+        positiveNumber(env?.COST_VPS_MONTHLY_BRL, RECURRING_COSTS[COST_CATEGORIES.VPS]),
+      ),
     },
     historical: HISTORICAL_COSTS,
+    edited: Boolean(overrides && ['claudeMonthlyBrl', 'vpsMonthlyBrl', 'usdBrlRate'].some(key => Number.isFinite(overrides[key]))),
   }
 }
 

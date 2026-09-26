@@ -365,7 +365,81 @@ function CumulativeProfitChart({ past, present, projection, paybackMonth }) {
   )
 }
 
-function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling }) {
+// Gastos fixos editáveis: simula troca de plano do Claude/servidor. Salvar
+// grava no backend e a tela pede o ROI de novo — todas as contas são refeitas.
+function FixedCostsEditor({ config, onSave }) {
+  const toField = value => (value === null || value === undefined ? '' : String(value).replace('.', ','))
+  const initial = {
+    claudeMonthlyBrl: toField(config?.claudeMonthly),
+    vpsMonthlyBrl: toField(config?.vpsMonthly),
+    usdBrlRate: toField(config?.usdBrlRate),
+  }
+  const [form, setForm] = useState(initial)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+  // Valores novos vindos do servidor (depois de salvar) repõem o formulário.
+  const configKey = `${config?.claudeMonthly}|${config?.vpsMonthly}|${config?.usdBrlRate}`
+  const [syncedKey, setSyncedKey] = useState(configKey)
+  if (syncedKey !== configKey) {
+    setSyncedKey(configKey)
+    setForm(initial)
+  }
+
+  const dirty = Object.keys(initial).some(key => form[key] !== initial[key])
+
+  async function save(event) {
+    event.preventDefault()
+    setSaving(true)
+    setMessage(null)
+    try {
+      await onSave(form)
+      setMessage({ type: 'ok', text: 'Salvo. As contas foram refeitas com os valores novos.' })
+    } catch (error) {
+      setMessage({ type: 'error', text: error?.message || 'Não foi possível salvar agora.' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fields = [
+    ['claudeMonthlyBrl', 'Claude por mês (R$)'],
+    ['vpsMonthlyBrl', 'Servidor por mês (R$)'],
+    ['usdBrlRate', 'Cotação do dólar (R$)'],
+  ]
+
+  return (
+    <form onSubmit={save} className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+      <h4 className="text-xs font-black uppercase tracking-wide text-gray-500">Gastos fixos</h4>
+      <p className="mt-1 text-[11px] text-gray-500">
+        Mudou de plano do Claude ou do servidor? Troque aqui e salve para ver quanto sobra. Vale a partir de {formatMonthLong(config?.recurringStartMonth)}. Campo vazio volta ao valor padrão.
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {fields.map(([key, label]) => (
+          <label key={key} className="block text-xs font-bold text-gray-600">
+            {label}
+            <input
+              type="text"
+              inputMode="decimal"
+              value={form[key]}
+              onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal text-gray-900"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button type="submit" disabled={saving || !dirty} className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60">
+          {saving ? 'Salvando…' : 'Salvar'}
+        </button>
+        {message && (
+          <span className={`text-xs font-bold ${message.type === 'ok' ? 'text-emerald-700' : 'text-rose-700'}`}>{message.text}</span>
+        )}
+      </div>
+    </form>
+  )
+}
+
+function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling, onSaveCosts }) {
   const [scenario, setScenario] = useState('base')
 
   if (loading && !data) return <LoadingState message="Montando a conta do ROI…" />
@@ -531,6 +605,7 @@ function RoiPanel({ data, loading, months, onMonths, onReconcile, reconciling })
         <p className="mt-2 text-[11px] text-gray-500">
           Faturas em dólar convertidas a R$ {formatNumber(data.config?.usdBrlRate ?? 0)}. A partir de {formatMonthLong(data.config?.recurringStartMonth)} o custo passa a ser o valor fixo combinado: {formatCurrency(data.config?.claudeMonthly)} de Claude + {formatCurrency(data.config?.vpsMonthly)} de servidor.
         </p>
+        {onSaveCosts && <FixedCostsEditor config={data.config} onSave={onSaveCosts} />}
       </div>
 
       {/* ------------------------------ PRESENTE ------------------------------ */}
@@ -2345,6 +2420,12 @@ export default function AdminPage() {
     }
   }
 
+  async function saveFixedCosts(costs) {
+    await api.adminUpdateFinanceCosts(costs)
+    const roiData = await api.adminFinanceRoi(roiMonths)
+    setRoi({ ...roiData, key: roiMonths })
+  }
+
   async function refundPayment(customer) {
     const payment = customer?.lastPayment
     if (!payment?.id || payment?.refund) return
@@ -3207,7 +3288,7 @@ export default function AdminPage() {
             </div>
 
             {financeTab === 'roi' && (
-              <RoiPanel data={roi} loading={roiLoading} months={roiMonths} onMonths={setRoiMonths} onReconcile={reconcileRoi} reconciling={reconcilingRoi} />
+              <RoiPanel data={roi} loading={roiLoading} months={roiMonths} onMonths={setRoiMonths} onReconcile={reconcileRoi} reconciling={reconcilingRoi} onSaveCosts={saveFixedCosts} />
             )}
 
             {financeTab === 'cobrancas' && (

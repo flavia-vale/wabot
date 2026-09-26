@@ -36,7 +36,7 @@ import { resolveFinancePeriod, FINANCE_PERIODS } from '../../domain/admin/financ
 import { combineRevenueTotals, countDistinctPayingUsers, computeAverageLtv, computeMercadoPagoFees, computeNetRevenue } from '../../domain/admin/financeOverview.js'
 import { loadTestAccountUserIds, excludeUserIdsWhere, resolveTestAccountEmails } from '../../domain/admin/testAccounts.js'
 import { buildRoiReport } from '../../domain/admin/roi.js'
-import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
+import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, normalizeCostOverrides, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
 import { DEFAULT_OWNER_ADMIN_EMAILS, PRIMARY_OWNER_ADMIN_EMAIL } from '../../auth/reservedAdminEmails.js'
 import { isAdminMfaVerified } from '../adminMfa.js'
 
@@ -2324,11 +2324,43 @@ export async function adminRoutes(app) {
    *
    * A montagem mês a mês, a projeção e o payback ficam em `roi.js` (puro).
    */
+  // Gastos fixos salvos na tela. Fail-safe: falha de leitura (banco fora,
+  // migration ainda não aplicada) cai nos valores de env/padrão — o ROI nunca
+  // deixa de abrir por causa disso.
+  async function loadCostOverrides() {
+    return db.operatingCostSettings.findUnique({ where: { id: 1 } }).catch(() => null)
+  }
+
+  /**
+   * Edita os gastos fixos mensais (Claude + servidor) e a cotação do dólar do
+   * ROI. Serve para simular troca de plano do Claude/VPS: salvou, a tela busca
+   * o ROI de novo e todas as contas são refeitas com os valores novos.
+   * Campo vazio = volta ao padrão (env/código).
+   */
+  app.put('/finance/costs', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'billing:write'))) return
+    const parsed = normalizeCostOverrides(req.body ?? {})
+    if (!parsed.ok) return reply.code(400).send({ error: parsed.error })
+
+    const before = await loadCostOverrides()
+    const data = { ...parsed.value, updatedBy: req.admin?.email ?? null }
+    const saved = await db.operatingCostSettings.upsert({
+      where: { id: 1 },
+      create: { id: 1, ...data },
+      update: data,
+    })
+    await writeAdminAuditLog(req, {
+      action: 'admin.finance.costs.update', resource: 'finance', before, after: saved,
+    })
+    return { ok: true, costs: saved }
+  })
+
   app.get('/finance/roi', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'billing:read'))) return
 
     const now = new Date()
-    const config = resolveCostConfig()
+    const costOverrides = await loadCostOverrides()
+    const config = resolveCostConfig(process.env, costOverrides)
 
     // ⚠️ A receita é lida SEM corte de data, de propósito. Cortar no primeiro
     // mês de fatura (era o que esta rota fazia) tinha dois defeitos:
@@ -2439,6 +2471,7 @@ export async function adminRoutes(app) {
       now,
       projectionMonths,
       activeMrr: activeBasic * prices.basic + activePro * prices.pro,
+      costOverrides,
     })
 
     // Faturas do passado, uma linha por lançamento — é o que sustenta o número.

@@ -1184,6 +1184,17 @@ model AffiliateSettings {
   payoutRequestsEnabled      Boolean @default(true)
 }
 
+// Gastos fixos do ROI editados na tela (Admin > Financeiro > ROI). Linha
+// única (id = 1). Campo null = usa env/padrão de `operatingCosts.js`.
+model OperatingCostSettings {
+  id               Int      @id @default(1)
+  claudeMonthlyBrl Float?
+  vpsMonthlyBrl    Float?
+  usdBrlRate       Float?
+  updatedBy        String?
+  updatedAt        DateTime @updatedAt
+}
+
 // 009-affiliate-improvements-r1 (US2): pedido de saque self-service do
 // afiliado. Estados: requested -> paid | rejected. O valor é sempre um
 // snapshot do saldo disponível calculado no servidor (nunca vem do cliente).
