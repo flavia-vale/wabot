@@ -199,50 +199,47 @@ export function formatBrl(cents) {
 /**
  * renderCouponText({ coupon, priceCents, finalPriceCents }) → string
  */
-// Condições cadastradas, sempre escritas (decisão da dona do produto,
-// 2026-09-25): "10% OFF, até R$ 20,00, em compras acima de R$ 79,00".
-export function describeCouponConditions(coupon) {
-  if (!coupon || typeof coupon !== 'object') return ''
-  const parts = []
-  if (coupon.discountType === 'percent') {
-    parts.push(`${coupon.discountValue}% OFF`)
-    const cap = optionalCents(coupon.maxDiscountCents)
-    if (cap != null) parts.push(`até ${formatBrl(cap)}`)
-  } else if (isFiniteNumber(coupon.discountValue)) {
-    parts.push(`${formatBrl(coupon.discountValue)} OFF`)
-  }
-  const min = optionalCents(coupon.minPurchaseCents)
-  if (min != null) parts.push(`em compras acima de ${formatBrl(min)}`)
-  return parts.join(', ')
+// Valor redondo sem centavos ("R$ 10"), quebrado com centavos ("R$ 10,50").
+function formatBrlShort(cents) {
+  const full = formatBrl(cents)
+  return isFiniteNumber(cents) && cents % 100 === 0 ? full.replace(/,00$/, '') : full
 }
 
-// O preço com cupom sai em *negrito* do WhatsApp (decisão de 2026-09-25).
+// Só o desconto ("10% OFF" / "R$ 10 OFF"). Compra mínima e desconto máximo
+// NÃO aparecem na mensagem — servem só para escolher o cupom e decidir se ele
+// vale (decisão da dona do produto, 2026-09-26).
+export function describeCouponDiscount(coupon) {
+  if (!coupon || typeof coupon !== 'object') return ''
+  if (coupon.discountType === 'percent') return `${coupon.discountValue}% OFF`
+  if (isFiniteNumber(coupon.discountValue)) return `${formatBrlShort(coupon.discountValue)} OFF`
+  return ''
+}
+
+// Modelo aprovado em 2026-09-26: preço com cupom em *negrito*; o link vai
+// sozinho na linha de baixo, depois de um título em negrito com a setinha.
+//   🎟️ Resgate o cupom de R$ 10 OFF e pague *R$ 117,00*
+//   *Resgate aqui seu cupom* ⤵️
+//   https://…
 export function renderCouponText({ coupon, priceCents, finalPriceCents } = {}) {
   if (!coupon || typeof coupon !== 'object') return ''
-  const conditions = describeCouponConditions(coupon)
-  const cond = conditions ? ` (${conditions})` : ''
+  const discount = describeCouponDiscount(coupon)
+  const off = discount ? ` de ${discount}` : ''
   const withPrice = hasReliablePrice(priceCents) && isFiniteNumber(finalPriceCents) && finalPriceCents > 0
+  const pay = withPrice ? ` e pague *${formatBrl(finalPriceCents)}*` : ''
+  const url = String(coupon.redeemUrl ?? '').trim()
+  // O link só sai se for da própria loja (mesma checagem do cadastro).
+  const storeLink = url && isStoreCouponLink(url, coupon.platform) ? url : ''
 
   if (couponKind(coupon) === 'link') {
-    // O link só sai se for da própria loja (mesma checagem do cadastro).
-    const url = String(coupon.redeemUrl ?? '').trim()
-    if (!isStoreCouponLink(url, coupon.platform)) return ''
-    return withPrice
-      ? `🎟️ Resgate o cupom e pague *${formatBrl(finalPriceCents)}* em vez de ${formatBrl(priceCents)}${cond}: ${url}`
-      : `🎟️ Resgate o cupom${cond}: ${url}`
+    if (!storeLink) return ''
+    return `🎟️ Resgate o cupom${off}${pay}\n*Resgate aqui seu cupom* ⤵️\n${storeLink}`
   }
 
   const code = String(coupon.code || '').trim()
   if (!code) return ''
-  const line = withPrice
-    ? `🎟️ Use o cupom ${code} — de ${formatBrl(priceCents)} por *${formatBrl(finalPriceCents)}* com o cupom${cond}`
-    : `🎟️ Use o cupom ${code}${cond}`
-  // Link opcional da página onde se insere o código (decisão de 2026-09-25):
-  // só sai se foi preenchido E é da própria loja; senão, só o código.
-  const url = String(coupon.redeemUrl ?? '').trim()
-  return url && isStoreCouponLink(url, coupon.platform)
-    ? `${line}\nInsira o código do cupom aqui: ${url}`
-    : line
+  const line = `🎟️ Use o cupom ${code}${off}${pay}`
+  // Link opcional da página onde se insere o código: só sai se preenchido.
+  return storeLink ? `${line}\n*Insira aqui o código do cupom* ⤵️\n${storeLink}` : line
 }
 
 /**
@@ -264,8 +261,8 @@ export function applyCouponToken(text, couponText) {
 
   return result
     .replace(/\(\s*\)/g, '')
-    .replace(/\*\s*\*/g, '')
-    .replace(/~\s*~/g, '')
+    .replace(/\*[ \t]*\*/g, '')
+    .replace(/~[ \t]*~/g, '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/^\s*(?:💰|💥|👉|🛒|🎟️|🎟)?\s*$/gm, '')
     .replace(/\n{3,}/g, '\n\n')

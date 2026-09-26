@@ -33,10 +33,10 @@ test('sem linha de preço: entra antes do link; sem link: no fim', () => {
   assert.equal(ensureCouponSlot(undefined), undefined)
 })
 
-test('prévia/cópia com preço: "de X por Y com o cupom" numa linha própria', () => {
+test('prévia/cópia com preço: "e pague *Y*" numa linha própria', () => {
   const texto = currentCouponText({ coupons: [shopee10], platform: 'shopee', priceCents: 25000, now: Date.parse('2026-09-23') })
   // O formatador de reais usa espaço não separável depois do "R$" (não quebra linha).
-  assert.equal(texto.replace(/\u00a0/g, ' '), '🎟️ Use o cupom PROMO10 — de R$ 250,00 por *R$ 225,00* com o cupom (10% OFF)')
+  assert.equal(texto.replace(/\u00a0/g, ' '), '🎟️ Use o cupom PROMO10 de 10% OFF e pague *R$ 225,00*')
   assert.equal(resolveCouponForDisplay('A\n{cupom}\nB', texto), `A\n${texto}\nB`)
 })
 

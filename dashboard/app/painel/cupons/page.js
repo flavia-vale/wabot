@@ -270,7 +270,7 @@ export default function CuponsPage() {
               onChange={(e) => setForm((f) => ({ ...f, redeemUrl: e.target.value }))}
               placeholder="Ex: https://s.shopee.com.br/..."
             />
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Se preencher, a oferta ganha uma linha a mais: &quot;Insira o código do cupom aqui: link&quot;. Precisa ser um link da loja {lojaLabel(form.platform)}.</p>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>Se preencher, a oferta ganha o título &quot;Insira aqui o código do cupom&quot; com o link embaixo. Precisa ser um link da loja {lojaLabel(form.platform)}.</p>
           </div>
           </>
           ) : (
@@ -319,7 +319,7 @@ export default function CuponsPage() {
               onChange={(e) => setForm((f) => ({ ...f, minPurchase: e.target.value }))}
               placeholder="Ex: 79,00"
             />
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Se o produto custar menos que isso, este cupom não entra na oferta. Deixe em branco se não tem compra mínima.</p>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>Se o produto custar menos que isso, este cupom não entra na oferta. Não aparece na mensagem. Deixe em branco se não tem compra mínima.</p>
           </div>
 
           {form.discountType === 'percent' && (
@@ -333,7 +333,7 @@ export default function CuponsPage() {
                 onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
                 placeholder="Ex: 20,00"
               />
-              <p className="pnl-hint" style={{ marginTop: 4 }}>Quando a loja limita o desconto (ex.: 10% até R$ 20,00). Deixe em branco se não tem limite.</p>
+              <p className="pnl-hint" style={{ marginTop: 4 }}>Quando a loja limita o desconto (ex.: 10% até R$ 20,00). Usado só para escolher o melhor cupom — não aparece na mensagem. Deixe em branco se não tem limite.</p>
             </div>
           )}
 
