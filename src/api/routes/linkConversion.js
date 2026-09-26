@@ -77,12 +77,12 @@ function attachCredentialPatchHandler(credentialsMap, userId, logger) {
 // De quem era o link colado (tela "Testar conversão"). Na Shopee o ID de
 // afiliada da cliente só aparece no destino do link que acabamos de gerar —
 // uma resolução a mais, com teto de tempo; falhou → 'unknown', sem afirmar nada.
-async function detectOwnership({ platform, originalUrl, convertedUrl, sourceUrl, creds, timeoutMs, resolveShopeeTarget }) {
+async function detectOwnership({ platform, originalUrl, convertedUrl, sourceUrl, warning, creds, timeoutMs, resolveShopeeTarget }) {
   let convertedTargetUrl = null
   if (platform === 'shopee' && timeoutMs > 0) {
     convertedTargetUrl = await resolveShopeeTarget(convertedUrl, { timeoutMs }).catch(() => null)
   }
-  return judgePastedLinkOwnership({ platform, originalUrl, convertedUrl, sourceUrl, convertedTargetUrl, creds })
+  return judgePastedLinkOwnership({ platform, originalUrl, convertedUrl, sourceUrl, convertedTargetUrl, warning, creds })
 }
 
 function buildErrorResult(index, link, validation, code, error) {
@@ -377,6 +377,7 @@ export async function linkConversionRoutes(app, opts = {}) {
             originalUrl: link.url,
             convertedUrl: conversionResult.url,
             sourceUrl,
+            warning: conversionResult.warning ?? null,
             creds: credentialsMap[link.platform],
             timeoutMs: Math.min(5_000, Math.max(0, deadlineAt - Date.now())),
             resolveShopeeTarget,
