@@ -41,6 +41,7 @@ const PLATFORM_BY_ID = new Map(AFFILIATE_PLATFORMS.map((p) => [p.id, p]))
 const TOM = {
   [VEREDITO.OK]: 'is-ok',
   [VEREDITO.PROPRIO]: 'is-ok',
+  [VEREDITO.ALHEIO]: 'is-ressalva',
   [VEREDITO.RESSALVA]: 'is-ressalva',
   [VEREDITO.CREDENCIAL]: 'is-erro',
   [VEREDITO.LINK]: 'is-neutro',
@@ -50,6 +51,7 @@ const TOM = {
 const SELO = {
   [VEREDITO.OK]: 'saiu com a sua identificação',
   [VEREDITO.PROPRIO]: 'já é seu link',
+  [VEREDITO.ALHEIO]: 'use este link',
   [VEREDITO.RESSALVA]: 'saiu com ressalva',
   [VEREDITO.CREDENCIAL]: 'falta cadastro',
   [VEREDITO.LINK]: 'link fora do teste',
@@ -292,7 +294,7 @@ export default function TestarConversaoPage() {
                           <Icon name="copy" size={14} /> {copiado ? 'Copiado' : 'Copiar link'}
                         </button>
                       )}
-                      {(veredito.veredito === VEREDITO.OK || veredito.veredito === VEREDITO.PROPRIO) && (
+                      {(veredito.veredito === VEREDITO.OK || veredito.veredito === VEREDITO.PROPRIO || veredito.veredito === VEREDITO.ALHEIO) && (
                         <Link href="/painel/espelhamento" className="pnl-btn">
                           Ir para Espelhamento <Icon name="arrow" size={14} />
                         </Link>

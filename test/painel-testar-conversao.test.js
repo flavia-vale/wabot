@@ -25,13 +25,18 @@ const page = read('../dashboard/app/painel/converte-links/page.js')
 const nav = read('../dashboard/app/painel/nav.js')
 const css = read('../dashboard/app/painel/painel.css')
 
-test('conversão limpa de link de outra pessoa é "tudo certo" — e deixa claro que o link não era dela', () => {
+test('link de outra pessoa: card amarelo "não é seu", credencial válida e "use o link abaixo"', () => {
+  // 2026-09-26: meli.la de outra pessoa aparecia verde e neutro.
   const v = describeConversionTest({ status: 'converted', label: 'Mercado Livre', warning: null, ownership: 'foreign' })
-  assert.equal(v.veredito, VEREDITO.OK)
+  assert.equal(v.veredito, VEREDITO.ALHEIO)
   assert.equal(v.mostrarCredenciais, false)
-  assert.match(v.titulo, /não era seu/i)
-  assert.match(v.titulo, /válida/i)
-  assert.match(v.texto, /Mercado Livre/)
+  assert.match(v.titulo, /não é seu/i)
+  assert.match(v.texto, /credencial do Mercado Livre está válida|credencial da Mercado Livre está válida/i)
+  assert.match(v.texto, /use o link abaixo/i)
+})
+
+test('a tela pinta "link de outra pessoa" de amarelo, não de verde', () => {
+  assert.match(page, /\[VEREDITO\.ALHEIO\]:\s*'is-ressalva'/)
 })
 
 test('sem credencial válida: não converte, avisa e leva ao vídeo de cadastro', () => {
@@ -169,22 +174,23 @@ test('link curto que era da própria cliente (ML/Shopee) diz que já era dela', 
     const v = describeConversionTest({ status: 'converted', label, warning: null, ownership: 'own' })
     assert.equal(v.veredito, VEREDITO.PROPRIO, label)
     assert.match(v.titulo, /já é seu link/i, label)
-    assert.doesNotMatch(`${v.titulo} ${v.texto}`, /não era seu/i, label)
+    assert.doesNotMatch(`${v.titulo} ${v.texto}`, /não é seu|não era seu/i, label)
   }
 })
 
 test('sem dado de quem era o link, a tela não afirma que não era dela', () => {
   const v = describeConversionTest({ status: 'converted', label: 'Shopee', warning: null, ownership: 'unknown' })
   assert.equal(v.veredito, VEREDITO.OK)
-  assert.doesNotMatch(`${v.titulo} ${v.texto}`, /não era seu|já era seu/i)
+  assert.doesNotMatch(`${v.titulo} ${v.texto}`, /não é seu|já era seu/i)
   assert.match(v.titulo, /credencial da Shopee está válida/i)
 })
 
 test('Amazon de outra pessoa com código vencido: diz que não era dela, que a tag é dela e que saiu longo', () => {
   const v = describeConversionTest({ status: 'converted', label: 'Amazon', warning: 'amazon_cookies_expired', ownership: 'foreign' })
   assert.equal(v.veredito, VEREDITO.RESSALVA)
-  assert.match(v.titulo, /não era seu/i)
+  assert.match(v.titulo, /não é seu/i)
   assert.match(v.titulo, /sua identificação/i)
+  assert.match(v.texto, /use o link abaixo/i)
   assert.match(v.titulo, /longo/i)
   assert.match(v.texto, /tag de afiliada válida/i)
   assert.match(v.texto, /código de acesso da Amazon venceu/i)
@@ -193,7 +199,7 @@ test('Amazon de outra pessoa com código vencido: diz que não era dela, que a t
 
 test('outras ressalvas ganham a abertura de quem era o link no texto', () => {
   const v = describeConversionTest({ status: 'converted', label: 'Mercado Livre', warning: 'ml_affiliate_busy', ownership: 'foreign' })
-  assert.match(v.texto, /^Esse link não era seu\./)
+  assert.match(v.texto, /^Esse link não é seu: para a comissão cair para você, use o link abaixo\./)
   const semDado = describeConversionTest({ status: 'converted', label: 'Mercado Livre', warning: 'ml_affiliate_busy' })
-  assert.doesNotMatch(semDado.texto, /não era seu/i)
+  assert.doesNotMatch(semDado.texto, /não é seu/i)
 })
