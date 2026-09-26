@@ -197,10 +197,13 @@ export function describeConversionTest(resultado = {}) {
         avisoTecnico: null,
       }
     }
+    // Não deu para confirmar de quem era: verde é SÓ para link confirmado
+    // como dela (pedido da dona do produto, 2026-09-26). Aqui fica amarelo,
+    // sem afirmar que é de outra pessoa.
     return {
-      veredito: VEREDITO.OK,
-      titulo: `Sua credencial ${daLoja} está válida`,
-      texto: `O link abaixo é o seu${loja === 'a loja' ? '' : ` da ${loja}`}, já com a sua identificação de afiliada — confira abaixo.`,
+      veredito: VEREDITO.ALHEIO,
+      titulo: 'Não reconhecemos esse link como seu',
+      texto: `Não encontramos a sua identificação no link colado. Sua credencial ${daLoja} está válida: para garantir que a comissão caia para você, use o link abaixo, que já está com a sua identificação.`,
       mostrarCredenciais: false,
       avisoTecnico: null,
     }
