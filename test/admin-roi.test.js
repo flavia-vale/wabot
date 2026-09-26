@@ -17,6 +17,7 @@ import {
   monthKeyOf,
   monthlyRecurringCost,
   resolveCostConfig,
+  normalizeCostOverrides,
 } from '../src/domain/admin/operatingCosts.js'
 import {
   MAX_MONTHLY_GROWTH,
@@ -524,4 +525,51 @@ test('o script imprime os meses EM ORDEM, inclusive os que só têm custo', () =
   // cheio contra receita parcial — "negativo" se leria como piora.
   assert.ok(script.includes('ESTIMATIVA, no ritmo deste mês'))
   assert.ok(script.includes('cheio, já cobrado'))
+})
+
+// ---------------------------------------------------------------------------
+// Gastos fixos editados na tela
+// ---------------------------------------------------------------------------
+
+test('gasto fixo salvo na tela vale mais que env e padrão, e refaz a conta', () => {
+  const config = resolveCostConfig(
+    { COST_CLAUDE_MONTHLY_BRL: '700', USD_BRL_RATE: '5' },
+    { claudeMonthlyBrl: 110, vpsMonthlyBrl: 90, usdBrlRate: 6 },
+  )
+  assert.equal(monthlyRecurringCost(config), 200)
+  assert.equal(costForMonth('2026-10', config).total, 200)
+  assert.equal(config.usdBrlRate, 6)
+  assert.equal(config.edited, true)
+  // Mês antes da virada continua sendo fatura real (convertida pela cotação nova).
+  assert.equal(costForMonth('2026-05', config).vps, 33.54)
+})
+
+test('campo vazio na tela volta ao env/padrão, nunca vira zero por engano', () => {
+  const config = resolveCostConfig({}, { claudeMonthlyBrl: null, vpsMonthlyBrl: 0, usdBrlRate: null })
+  assert.equal(config.recurring.claude, 565)
+  assert.equal(config.recurring.vps, 0, 'zero digitado é zero de propósito')
+  assert.equal(resolveCostConfig({}, null).edited, false)
+})
+
+test('validação dos gastos fixos: aceita vírgula, recusa lixo e valor absurdo', () => {
+  assert.deepEqual(normalizeCostOverrides({ claudeMonthlyBrl: '565,50', vpsMonthlyBrl: 190, usdBrlRate: '' }), {
+    ok: true,
+    value: { claudeMonthlyBrl: 565.5, vpsMonthlyBrl: 190, usdBrlRate: null },
+  })
+  assert.equal(normalizeCostOverrides({ claudeMonthlyBrl: 'abacaxi' }).ok, false)
+  assert.equal(normalizeCostOverrides({ vpsMonthlyBrl: -1 }).ok, false)
+  assert.equal(normalizeCostOverrides({ claudeMonthlyBrl: 999999 }).ok, false)
+  assert.equal(normalizeCostOverrides({ usdBrlRate: '0' }).ok, false)
+})
+
+test('buildRoiReport usa os gastos fixos salvos', () => {
+  const report = buildRoiReport({
+    revenueByMonth: {},
+    now: new Date('2026-10-15T12:00:00-03:00'),
+    env: {},
+    costOverrides: { claudeMonthlyBrl: 300, vpsMonthlyBrl: 100 },
+  })
+  assert.equal(report.config.fixedMonthlyCost, 400)
+  assert.equal(report.config.edited, true)
+  assert.equal(report.present.cost, 400)
 })
