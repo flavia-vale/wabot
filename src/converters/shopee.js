@@ -147,8 +147,8 @@ async function generateAffiliateShortLink(originUrl, { appId, secretKey }, { att
   throw new Error(`Shopee converter: ${lastErr.message}`)
 }
 
-export async function convert(url, creds) {
-  const canonical = await resolveCanonical(url)
+export async function convert(url, creds, options) {
+  const canonical = await resolveCanonical(url, options?.onSourceResolved)
 
   // Se a resolução server-side do short link cair em /unsupported.html, NÃO
   // use essa URL como originUrl da generateShortLink. Esse foi o caso observado
@@ -462,9 +462,12 @@ export async function resolveShopeeShortLink(url, { timeoutMs = 8000, fetchImpl 
   return current
 }
 
-async function resolveCanonical(url) {
+async function resolveCanonical(url, onSourceResolved) {
   try {
     const resolved = await resolveShopeeShortLink(url, { timeoutMs: 5000 })
+    // Tela "Testar conversão": o destino cru (ainda com `utm_source=an_<id>`)
+    // diz de quem era o link colado. Só leitura, não muda a conversão.
+    try { onSourceResolved?.(resolved) } catch { /* ignore */ }
     return normalizeShopeeUrl(resolved)
   } catch { return url }
 }
