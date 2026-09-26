@@ -21,6 +21,11 @@
  * que o envio está pausado quando o código vence"). A única exceção é
  * `ml_url_not_supported`, onde o ML recusou o endereço no programa de
  * afiliados e a comissão de fato pode não ser creditada.
+ *
+ * ⚠️ "Esse link não era seu" só com DADO (`resultado.ownership`, calculado em
+ * src/converters/pastedLinkOwnership.js). Até 2026-09-26 toda conversão verde
+ * dizia "não era seu" — inclusive para o meli.la e o s.shopee da própria
+ * cliente, que escondem a identificação no link curto.
  */
 
 import { videoEtiquetasParaLoja } from '../../tutorialVideo.js'
@@ -37,14 +42,19 @@ export const VEREDITO = Object.freeze({
 /* Ressalvas de conversão BEM-SUCEDIDA, por código de aviso do conversor.
  * `credenciais: true` liga o botão que leva ao cadastro da loja. */
 const RESSALVAS = Object.freeze({
+  // Código vencido: a identificação (etiqueta/tag) continua valendo no link
+  // longo. O título diz as duas coisas que a cliente precisa saber — saiu com
+  // a identificação dela, só que longo — e o texto explica o porquê.
   ml_ssid_expired: {
-    titulo: 'Saiu, mas o código de acesso do Mercado Livre venceu',
-    texto: 'A oferta continua sendo publicada e a comissão continua sua — só que com o link mais comprido, em vez do curto. Recadastre o código de acesso para o link voltar a sair curto.',
+    titulo: 'saiu com a sua identificação, mas no formato longo',
+    tituloSemDono: 'Saiu com a sua identificação, mas no formato longo',
+    texto: 'O link tem a sua etiqueta de afiliada válida, então a comissão continua sua. Ele só saiu comprido, em vez de curto, porque o código de acesso do Mercado Livre venceu. Recadastre o código de acesso para o link voltar a sair curto.',
     credenciais: true,
   },
   amazon_cookies_expired: {
-    titulo: 'Saiu, mas o código de acesso da Amazon venceu',
-    texto: 'A oferta continua sendo publicada e a comissão continua sua — só que com o link mais comprido, em vez do curto. Recadastre o código de acesso para o link voltar a sair curto.',
+    titulo: 'saiu com a sua identificação, mas no formato longo',
+    tituloSemDono: 'Saiu com a sua identificação, mas no formato longo',
+    texto: 'O link tem a sua tag de afiliada válida, então a comissão continua sua. Ele só saiu comprido, em vez de curto, porque o código de acesso da Amazon venceu. Recadastre o código de acesso para o link voltar a sair curto.',
     credenciais: true,
   },
   ml_affiliate_forbidden: {
@@ -76,6 +86,14 @@ const RESSALVAS = Object.freeze({
   },
 })
 
+/* De quem era o link colado. Sem dado → nada é dito sobre isso. */
+const DONO = Object.freeze({ PROPRIO: 'own', OUTRO: 'foreign' })
+
+const ABERTURA_POR_DONO = Object.freeze({
+  [DONO.PROPRIO]: 'Esse link já era seu',
+  [DONO.OUTRO]: 'Esse link não era seu',
+})
+
 function texto(valor) {
   return String(valor ?? '').toLowerCase()
 }
@@ -98,7 +116,7 @@ function falaDeEsperaPassageira(mensagem) {
 /**
  * Traduz UM resultado da rota de conversão no veredito da tela.
  *
- * @param {{status?: string, code?: string|null, error?: string|null, warning?: string|null, label?: string|null}} resultado
+ * @param {{status?: string, code?: string|null, error?: string|null, warning?: string|null, label?: string|null, ownership?: 'own'|'foreign'|'unknown'|null}} resultado
  * @returns {{veredito: string, titulo: string, texto: string, mostrarCredenciais: boolean, avisoTecnico: string|null}}
  */
 export function describeConversionTest(resultado = {}) {
@@ -117,11 +135,24 @@ export function describeConversionTest(resultado = {}) {
   if (resultado.status === 'converted') {
     const aviso = String(resultado.warning || '').trim()
     const ressalva = RESSALVAS[aviso]
+    const abertura = ABERTURA_POR_DONO[resultado.ownership] || null
     if (ressalva) {
+      // Ressalva com título próprio para o dono (código vencido): "Esse link
+      // não era seu — saiu com a sua identificação, mas no formato longo".
+      // As demais mantêm o título e ganham a abertura no começo do texto.
+      if (ressalva.tituloSemDono) {
+        return {
+          veredito: VEREDITO.RESSALVA,
+          titulo: abertura ? `${abertura} — ${ressalva.titulo}` : ressalva.tituloSemDono,
+          texto: ressalva.texto,
+          mostrarCredenciais: ressalva.credenciais,
+          avisoTecnico: aviso,
+        }
+      }
       return {
         veredito: VEREDITO.RESSALVA,
         titulo: ressalva.titulo,
-        texto: ressalva.texto,
+        texto: abertura ? `${abertura}. ${ressalva.texto}` : ressalva.texto,
         mostrarCredenciais: ressalva.credenciais,
         avisoTecnico: aviso,
       }
@@ -137,10 +168,31 @@ export function describeConversionTest(resultado = {}) {
         avisoTecnico: aviso,
       }
     }
+    const daLoja = loja === 'a loja' ? 'dessa loja' : `da ${loja}`
+    if (resultado.ownership === DONO.PROPRIO) {
+      // Link curto dela (meli.la, s.shopee): a conversão pode devolver outro
+      // endereço, mas a identificação é a mesma.
+      return {
+        veredito: VEREDITO.PROPRIO,
+        titulo: 'Esse já é seu link de afiliado!',
+        texto: `O link colado já estava com a sua identificação de afiliada ${daLoja}, e a sua credencial está válida. Pode espelhar direto.`,
+        mostrarCredenciais: false,
+        avisoTecnico: null,
+      }
+    }
+    if (resultado.ownership === DONO.OUTRO) {
+      return {
+        veredito: VEREDITO.OK,
+        titulo: `Esse link não era seu, mas sua credencial ${daLoja} está válida`,
+        texto: `Convertemos para você: esse é o seu link${loja === 'a loja' ? '' : ` da ${loja}`}, já com a sua identificação de afiliada — confira abaixo.`,
+        mostrarCredenciais: false,
+        avisoTecnico: null,
+      }
+    }
     return {
       veredito: VEREDITO.OK,
-      titulo: `Esse link não era seu, mas sua credencial ${loja === 'a loja' ? 'dessa loja' : `da ${loja}`} está válida`,
-      texto: `Convertemos para você: esse é o seu link${loja === 'a loja' ? '' : ` da ${loja}`}, já com a sua identificação de afiliada — confira abaixo.`,
+      titulo: `Sua credencial ${daLoja} está válida`,
+      texto: `O link abaixo é o seu${loja === 'a loja' ? '' : ` da ${loja}`}, já com a sua identificação de afiliada — confira abaixo.`,
       mostrarCredenciais: false,
       avisoTecnico: null,
     }

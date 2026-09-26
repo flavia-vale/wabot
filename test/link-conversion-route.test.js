@@ -674,3 +674,40 @@ test('falha ao carregar imageScrapers/sharp omite foto sem quebrar scrape-offer'
   assert.equal(response.json().imageRefererUrl, null)
   assert.equal(imageModuleLoads, 1)
 })
+
+/* 2026-09-26: a tela "Testar conversão" dizia "não era seu" para o meli.la e o
+ * s.shopee da própria cliente. A rota devolve `ownership` com dado. */
+test('POST /convert marca como da cliente o meli.la que volta igual', async (t) => {
+  const { app } = await buildApp({
+    credentials: [credential('mercadolivre', { tag: '475630078', cookie: 'ssid=abc12345678901234567890; _csrf=csrf-token' })],
+    converter: async () => 'https://meli.la/331tUL8',
+  })
+  t.after(async () => { await app.close() })
+  const res = await app.inject({ method: 'POST', url: '/api/link-conversion/convert', payload: { text: 'https://meli.la/331tUL8' } })
+  const body = JSON.parse(res.body)
+  assert.equal(body.results[0].status, 'converted')
+  assert.equal(body.results[0].ownership, 'own')
+})
+
+test('POST /convert compara o ID de afiliada da Shopee pelo destino do link', async (t) => {
+  const destinos = {
+    'https://s.shopee.com.br/4Vd4qRX3cP': 'https://shopee.com.br/product/1/2?utm_source=an_18300000001',
+    'https://s.shopee.com.br/7VGiCRzkpk': 'https://shopee.com.br/product/1/2?utm_source=an_18300000001',
+    'https://s.shopee.com.br/outra': 'https://shopee.com.br/product/1/2?utm_source=an_18399999999',
+  }
+  const { app } = await buildApp({
+    credentials: [credential('shopee', { appId: '123456', secretKey: 'secret-key-very-long' })],
+    converter: async () => 'https://s.shopee.com.br/7VGiCRzkpk',
+    routeOptions: { resolveShopeeTarget: async (url) => destinos[url] || null },
+  })
+  t.after(async () => { await app.close() })
+
+  // O destino do link colado vem do conversor real (onSourceResolved); aqui o
+  // converter é stub, então o colado é lido pela própria URL — por isso o teste
+  // cola a URL longa do destino.
+  const propria = await app.inject({ method: 'POST', url: '/api/link-conversion/convert', payload: { text: destinos['https://s.shopee.com.br/4Vd4qRX3cP'] } })
+  assert.equal(JSON.parse(propria.body).results[0].ownership, 'own')
+
+  const alheia = await app.inject({ method: 'POST', url: '/api/link-conversion/convert', payload: { text: destinos['https://s.shopee.com.br/outra'] } })
+  assert.equal(JSON.parse(alheia.body).results[0].ownership, 'foreign')
+})

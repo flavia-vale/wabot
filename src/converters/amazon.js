@@ -438,7 +438,7 @@ export async function checkAmazonSession(creds = {}) {
   }
 }
 
-export async function convert(url, creds) {
+export async function convert(url, creds, options) {
   const { tag } = creds
   const hasCookies = !!buildCookieHeader(creds)
 
@@ -460,6 +460,9 @@ export async function convert(url, creds) {
         if (extractAsin(viaAxios)) target = viaAxios
       }
     }
+    // Tela "Testar conversão": o destino do link colado diz de quem ele era
+    // (`tag=` de outra afiliada × dela). Só leitura, não muda a conversão.
+    try { options?.onSourceResolved?.(target) } catch { /* ignore */ }
 
     const asin = extractAsin(target)
     if (!asin) {
