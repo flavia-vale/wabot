@@ -22,7 +22,7 @@
  * `ml_url_not_supported`, onde o ML recusou o endereço no programa de
  * afiliados e a comissão de fato pode não ser creditada.
  *
- * ⚠️ "Esse link não era seu" só com DADO (`resultado.ownership`, calculado em
+ * ⚠️ "Esse link não é seu" só com DADO (`resultado.ownership`, calculado em
  * src/converters/pastedLinkOwnership.js). Até 2026-09-26 toda conversão verde
  * dizia "não era seu" — inclusive para o meli.la e o s.shopee da própria
  * cliente, que escondem a identificação no link curto.
@@ -33,6 +33,10 @@ import { videoEtiquetasParaLoja } from '../../tutorialVideo.js'
 export const VEREDITO = Object.freeze({
   OK: 'ok',
   PROPRIO: 'proprio',
+  // Link de outra pessoa: a conversão deu certo, mas o link COLADO não
+  // renderia comissão para ela. Card amarelo — o que ela precisa fazer é usar
+  // o link de baixo, não o que colou.
+  ALHEIO: 'alheio',
   RESSALVA: 'ressalva',
   CREDENCIAL: 'credencial',
   LINK: 'link',
@@ -91,7 +95,7 @@ const DONO = Object.freeze({ PROPRIO: 'own', OUTRO: 'foreign' })
 
 const ABERTURA_POR_DONO = Object.freeze({
   [DONO.PROPRIO]: 'Esse link já era seu',
-  [DONO.OUTRO]: 'Esse link não era seu',
+  [DONO.OUTRO]: 'Esse link não é seu',
 })
 
 function texto(valor) {
@@ -138,13 +142,15 @@ export function describeConversionTest(resultado = {}) {
     const abertura = ABERTURA_POR_DONO[resultado.ownership] || null
     if (ressalva) {
       // Ressalva com título próprio para o dono (código vencido): "Esse link
-      // não era seu — saiu com a sua identificação, mas no formato longo".
+      // não é seu — saiu com a sua identificação, mas no formato longo".
       // As demais mantêm o título e ganham a abertura no começo do texto.
       if (ressalva.tituloSemDono) {
         return {
           veredito: VEREDITO.RESSALVA,
           titulo: abertura ? `${abertura} — ${ressalva.titulo}` : ressalva.tituloSemDono,
-          texto: ressalva.texto,
+          texto: resultado.ownership === DONO.OUTRO
+            ? `Para a comissão cair para você, use o link abaixo. ${ressalva.texto}`
+            : ressalva.texto,
           mostrarCredenciais: ressalva.credenciais,
           avisoTecnico: aviso,
         }
@@ -152,7 +158,9 @@ export function describeConversionTest(resultado = {}) {
       return {
         veredito: VEREDITO.RESSALVA,
         titulo: ressalva.titulo,
-        texto: abertura ? `${abertura}. ${ressalva.texto}` : ressalva.texto,
+        texto: resultado.ownership === DONO.OUTRO
+          ? `${abertura}: para a comissão cair para você, use o link abaixo. ${ressalva.texto}`
+          : (abertura ? `${abertura}. ${ressalva.texto}` : ressalva.texto),
         mostrarCredenciais: ressalva.credenciais,
         avisoTecnico: aviso,
       }
@@ -182,9 +190,9 @@ export function describeConversionTest(resultado = {}) {
     }
     if (resultado.ownership === DONO.OUTRO) {
       return {
-        veredito: VEREDITO.OK,
-        titulo: `Esse link não era seu, mas sua credencial ${daLoja} está válida`,
-        texto: `Convertemos para você: esse é o seu link${loja === 'a loja' ? '' : ` da ${loja}`}, já com a sua identificação de afiliada — confira abaixo.`,
+        veredito: VEREDITO.ALHEIO,
+        titulo: 'Esse link não é seu',
+        texto: `O link colado é de outra pessoa (ou não tem identificação de afiliada). Sua credencial ${daLoja} está válida: para a comissão cair para você, use o link abaixo, que já está com a sua identificação.`,
         mostrarCredenciais: false,
         avisoTecnico: null,
       }

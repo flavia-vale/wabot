@@ -71,12 +71,46 @@ test('Amazon: encurtador com a tag dela → dela', () => {
   assert.equal(dono, DONO_DO_LINK.PROPRIO)
 })
 
-test('sem identificação nenhuma no link colado → desconhecido (não afirma)', () => {
+test('ML: meli.la colado que volta como OUTRO meli.la pela API → não é dela', () => {
+  // Caso real 2026-09-26: meli.la/1NmtGBi → meli.la/1p1MaCM.
+  const dono = judgePastedLinkOwnership({
+    platform: 'mercadolivre',
+    originalUrl: 'https://meli.la/1NmtGBi',
+    convertedUrl: 'https://meli.la/1p1MaCM',
+    creds: { tag: 'minha' },
+  })
+  assert.equal(dono, DONO_DO_LINK.OUTRO)
+})
+
+test('ML: meli.la colado que saiu pelo plano B (código vencido) → desconhecido', () => {
+  // Pode ser o meli.la dela: sem a API não dá para comparar.
   const dono = judgePastedLinkOwnership({
     platform: 'mercadolivre',
     originalUrl: 'https://meli.la/aaa',
-    convertedUrl: 'https://meli.la/bbb',
+    convertedUrl: 'https://www.mercadolivre.com.br/p/MLB1?partner_id=minha',
+    warning: 'ml_ssid_expired',
     creds: { tag: 'minha' },
+  })
+  assert.equal(dono, DONO_DO_LINK.DESCONHECIDO)
+})
+
+test('link sem identificação nenhuma → não é dela', () => {
+  const dono = judgePastedLinkOwnership({
+    platform: 'amazon',
+    originalUrl: 'https://www.amazon.com.br/dp/B09VMDMNZD',
+    convertedUrl: 'https://amzn.to/abc',
+    creds: { tag: 'fafaciane-20' },
+  })
+  assert.equal(dono, DONO_DO_LINK.OUTRO)
+})
+
+test('encurtador que não resolveu → desconhecido (não afirma)', () => {
+  const dono = judgePastedLinkOwnership({
+    platform: 'amazon',
+    originalUrl: 'https://amzn.to/xyz',
+    convertedUrl: 'https://amzn.to/abc',
+    sourceUrl: 'https://amzn.to/xyz',
+    creds: { tag: 'fafaciane-20' },
   })
   assert.equal(dono, DONO_DO_LINK.DESCONHECIDO)
 })
