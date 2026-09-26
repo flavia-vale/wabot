@@ -192,24 +192,22 @@ test('formatBrl formata em reais com vírgula decimal', () => {
 
 // ---- renderCouponText ----
 
-test('renderCouponText: preço e final conhecidos traz "com o cupom"', () => {
+test('renderCouponText: preço e final conhecidos traz "e pague" com o preço final em negrito', () => {
   const text = renderCouponText({ coupon: coupon({ code: 'BEMVINDO10' }), priceCents: 30000, finalPriceCents: 27000 })
-  assert.match(text, /com o cupom/)
+  assert.match(text, /e pague \*R\$\D?270,00\*/)
   assert.match(text, /BEMVINDO10/)
-  assert.match(text, /R\$\D?300,00/)
-  assert.match(text, /R\$\D?270,00/)
 })
 
 test('renderCouponText: sem final confiável, cupom percent', () => {
   const text = renderCouponText({ coupon: coupon({ code: 'BEMVINDO10', discountType: 'percent', discountValue: 10 }), priceCents: null, finalPriceCents: null })
-  assert.equal(text, '🎟️ Use o cupom BEMVINDO10 (10% OFF)')
+  assert.equal(text, '🎟️ Use o cupom BEMVINDO10 de 10% OFF')
 })
 
 test('renderCouponText: sem final confiável, cupom amount', () => {
   const text = renderCouponText({ coupon: coupon({ code: 'TOP50', discountType: 'amount', discountValue: 5000 }), priceCents: null, finalPriceCents: null })
   assert.match(text, /TOP50/)
   assert.match(text, /OFF/)
-  assert.match(text, /R\$\D?50,00/)
+  assert.match(text, /R\$\D?50 OFF/)
 })
 
 test('renderCouponText: cupom nulo devolve string vazia', () => {

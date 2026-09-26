@@ -385,6 +385,23 @@ serial** — qualquer custo ou falha ali é pago por todos os destinos da conta.
   melhor cupom. Os botões "Com código / Por link" usam o estilo grande da tela
   Grupos e ocupam a largura toda no celular.
 
+- **FR-032** (2026-09-26, substitui o texto da mensagem de FR-029/030/031):
+  modelo aprovado pela dona do produto. Só o desconto aparece ("10% OFF" /
+  "R$ 10 OFF", sem centavos quando redondo); compra mínima e desconto máximo
+  NUNCA aparecem na mensagem — servem só para escolher o cupom e decidir se
+  ele vale. O preço antigo ("de X") sai; fica "e pague *Y*" em negrito.
+  ```
+  🎟️ Resgate o cupom de R$ 10 OFF e pague *R$ 117,00*
+  *Resgate aqui seu cupom* ⤵️
+  https://link-da-loja
+  ```
+  ```
+  🎟️ Use o cupom BEMVINDO10 de R$ 10 OFF e pague *R$ 117,00*
+  *Insira aqui o código do cupom* ⤵️   (só se o link foi preenchido)
+  https://link-da-loja
+  ```
+  Sem preço lido, some o trecho "e pague *Y*".
+
 ### Nota de verificação: o cupom NÃO mexe na trava de repetição
 
 Não é requisito novo — é achado já verificado no código, registrado aqui para o

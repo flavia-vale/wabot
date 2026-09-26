@@ -11,7 +11,8 @@ import {
   isStoreCouponLink,
   chooseCoupon,
   renderCouponText,
-  describeCouponConditions,
+  describeCouponDiscount,
+  applyCouponToken,
 } from '../src/core/clientCouponPolicy.js'
 
 const NOW = Date.parse('2026-09-25T12:00:00.000Z')
@@ -72,12 +73,12 @@ test('compra mínima: produto abaixo do mínimo não usa o cupom; acima usa', ()
   assert.equal(ok.finalPriceCents, 13500)
 })
 
-test('compra mínima sem preço lido: usa o cupom e escreve a condição', () => {
+test('compra mínima sem preço lido: usa o cupom, mas a condição NÃO aparece na mensagem', () => {
   const c = coupon({ code: 'MIN79', minPurchaseCents: 7900 })
   const pick = chooseCoupon({ coupons: [c], platform: 'shopee', priceCents: null, now: NOW })
   assert.equal(pick.coupon.code, 'MIN79')
   const text = plain(renderCouponText({ coupon: pick.coupon, priceCents: null, finalPriceCents: null }))
-  assert.equal(text, '🎟️ Use o cupom MIN79 (10% OFF, em compras acima de R$ 79,00)')
+  assert.equal(text, '🎟️ Use o cupom MIN79 de 10% OFF')
 })
 
 test('desconto máximo limita a economia do cupom de porcentagem e muda o vencedor', () => {
@@ -91,28 +92,26 @@ test('desconto máximo limita a economia do cupom de porcentagem e muda o venced
   assert.equal(alone.finalPriceCents, 38000)
 })
 
-test('condições escritas: porcentagem com teto e mínimo; valor fixo ignora teto', () => {
-  assert.equal(
-    plain(describeCouponConditions(coupon({ maxDiscountCents: 2000, minPurchaseCents: 7900 }))),
-    '10% OFF, até R$ 20,00, em compras acima de R$ 79,00',
-  )
-  assert.equal(
-    plain(describeCouponConditions(coupon({ discountType: 'amount', discountValue: 9000, maxDiscountCents: 2000 }))),
-    'R$ 90,00 OFF',
-  )
+test('mensagem mostra só o desconto: teto e mínimo nunca aparecem; valor redondo sem centavos', () => {
+  assert.equal(describeCouponDiscount(coupon({ maxDiscountCents: 2000, minPurchaseCents: 7900 })), '10% OFF')
+  assert.equal(plain(describeCouponDiscount(coupon({ discountType: 'amount', discountValue: 1000 }))), 'R$ 10 OFF')
+  assert.equal(plain(describeCouponDiscount(coupon({ discountType: 'amount', discountValue: 1050 }))), 'R$ 10,50 OFF')
+  const withConditions = coupon({ code: 'PCT10', maxDiscountCents: 2000, minPurchaseCents: 7900 })
+  const text = plain(renderCouponText({ coupon: withConditions, priceCents: 15000, finalPriceCents: 13500 }))
+  assert.doesNotMatch(text, /até|acima|mínima/)
 })
 
 // ---- Texto do cupom por link ----
 
-test('cupom por link: com preço mostra quanto paga e o link; sem preço mostra condições e o link', () => {
+test('cupom por link: modelo aprovado — título em negrito com setinha e link na linha de baixo', () => {
   const c = coupon({ kind: 'link', code: '', redeemUrl: 'https://s.shopee.com.br/cupom10' })
   assert.equal(
     plain(renderCouponText({ coupon: c, priceCents: 15000, finalPriceCents: 13500 })),
-    '🎟️ Resgate o cupom e pague *R$ 135,00* em vez de R$ 150,00 (10% OFF): https://s.shopee.com.br/cupom10',
+    '🎟️ Resgate o cupom de 10% OFF e pague *R$ 135,00*\n*Resgate aqui seu cupom* ⤵️\nhttps://s.shopee.com.br/cupom10',
   )
   assert.equal(
     plain(renderCouponText({ coupon: c, priceCents: null, finalPriceCents: null })),
-    '🎟️ Resgate o cupom (10% OFF): https://s.shopee.com.br/cupom10',
+    '🎟️ Resgate o cupom de 10% OFF\n*Resgate aqui seu cupom* ⤵️\nhttps://s.shopee.com.br/cupom10',
   )
 })
 
@@ -250,19 +249,26 @@ test('rota: editar troca cupom de código para link e valida contra o cupom salv
 
 // ---- Link opcional no cupom de código (2026-09-25) ----
 
-test('cupom de código com link: linha a mais "Insira o código do cupom aqui"; sem link, só o código', () => {
+test('cupom de código com link: título "Insira aqui o código do cupom" em negrito com setinha; sem link, só o código', () => {
   const withLink = coupon({ code: 'BEMVINDO10', redeemUrl: 'https://s.shopee.com.br/inserir' })
   assert.equal(
     plain(renderCouponText({ coupon: withLink, priceCents: 15000, finalPriceCents: 13500 })),
-    '🎟️ Use o cupom BEMVINDO10 — de R$ 150,00 por *R$ 135,00* com o cupom (10% OFF)\nInsira o código do cupom aqui: https://s.shopee.com.br/inserir',
+    '🎟️ Use o cupom BEMVINDO10 de 10% OFF e pague *R$ 135,00*\n*Insira aqui o código do cupom* ⤵️\nhttps://s.shopee.com.br/inserir',
   )
   assert.equal(
     plain(renderCouponText({ coupon: coupon({ code: 'BEMVINDO10' }), priceCents: null, finalPriceCents: null })),
-    '🎟️ Use o cupom BEMVINDO10 (10% OFF)',
+    '🎟️ Use o cupom BEMVINDO10 de 10% OFF',
   )
   // Link de outro site nunca sai: fica só o código.
   const bad = coupon({ code: 'BEMVINDO10', redeemUrl: 'https://bit.ly/golpe' })
-  assert.equal(plain(renderCouponText({ coupon: bad, priceCents: null, finalPriceCents: null })), '🎟️ Use o cupom BEMVINDO10 (10% OFF)')
+  assert.equal(plain(renderCouponText({ coupon: bad, priceCents: null, finalPriceCents: null })), '🎟️ Use o cupom BEMVINDO10 de 10% OFF')
+})
+
+test('limpeza do texto não apaga o negrito entre a linha do preço e o título do link', () => {
+  const c = coupon({ kind: 'link', code: '', redeemUrl: 'https://s.shopee.com.br/abc', discountType: 'amount', discountValue: 1000 })
+  const couponText = renderCouponText({ coupon: c, priceCents: 12700, finalPriceCents: 11700 })
+  const out = plain(applyCouponToken('Produto\n{cupom}\nhttps://s.shopee.com.br/prod', couponText))
+  assert.equal(out, 'Produto\n🎟️ Resgate o cupom de R$ 10 OFF e pague *R$ 117,00*\n*Resgate aqui seu cupom* ⤵️\nhttps://s.shopee.com.br/abc\nhttps://s.shopee.com.br/prod')
 })
 
 test('rota: cupom de código aceita link opcional da loja e recusa link de outro site', async () => {
