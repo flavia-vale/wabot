@@ -25,8 +25,8 @@ const page = read('../dashboard/app/painel/converte-links/page.js')
 const nav = read('../dashboard/app/painel/nav.js')
 const css = read('../dashboard/app/painel/painel.css')
 
-test('conversão limpa é o único "tudo certo" — e deixa claro que o link não era dela', () => {
-  const v = describeConversionTest({ status: 'converted', label: 'Mercado Livre', warning: null })
+test('conversão limpa de link de outra pessoa é "tudo certo" — e deixa claro que o link não era dela', () => {
+  const v = describeConversionTest({ status: 'converted', label: 'Mercado Livre', warning: null, ownership: 'foreign' })
   assert.equal(v.veredito, VEREDITO.OK)
   assert.equal(v.mostrarCredenciais, false)
   assert.match(v.titulo, /não era seu/i)
@@ -160,4 +160,40 @@ test('linguagem leiga: nada de jargão na tela', () => {
   for (const jargao of ['payload', 'endpoint', 'API', 'token', 'cookie', 'scrape', 'SSID']) {
     assert.ok(!page.includes(jargao), `jargão "${jargao}" chegou à tela`)
   }
+})
+
+/* 2026-09-26: meli.la e s.shopee da própria cliente apareciam como "Esse link
+ * não era seu". "Não era seu" só com dado de quem era o link. */
+test('link curto que era da própria cliente (ML/Shopee) diz que já era dela', () => {
+  for (const label of ['Mercado Livre', 'Shopee']) {
+    const v = describeConversionTest({ status: 'converted', label, warning: null, ownership: 'own' })
+    assert.equal(v.veredito, VEREDITO.PROPRIO, label)
+    assert.match(v.titulo, /já é seu link/i, label)
+    assert.doesNotMatch(`${v.titulo} ${v.texto}`, /não era seu/i, label)
+  }
+})
+
+test('sem dado de quem era o link, a tela não afirma que não era dela', () => {
+  const v = describeConversionTest({ status: 'converted', label: 'Shopee', warning: null, ownership: 'unknown' })
+  assert.equal(v.veredito, VEREDITO.OK)
+  assert.doesNotMatch(`${v.titulo} ${v.texto}`, /não era seu|já era seu/i)
+  assert.match(v.titulo, /credencial da Shopee está válida/i)
+})
+
+test('Amazon de outra pessoa com código vencido: diz que não era dela, que a tag é dela e que saiu longo', () => {
+  const v = describeConversionTest({ status: 'converted', label: 'Amazon', warning: 'amazon_cookies_expired', ownership: 'foreign' })
+  assert.equal(v.veredito, VEREDITO.RESSALVA)
+  assert.match(v.titulo, /não era seu/i)
+  assert.match(v.titulo, /sua identificação/i)
+  assert.match(v.titulo, /longo/i)
+  assert.match(v.texto, /tag de afiliada válida/i)
+  assert.match(v.texto, /código de acesso da Amazon venceu/i)
+  assert.equal(v.mostrarCredenciais, true)
+})
+
+test('outras ressalvas ganham a abertura de quem era o link no texto', () => {
+  const v = describeConversionTest({ status: 'converted', label: 'Mercado Livre', warning: 'ml_affiliate_busy', ownership: 'foreign' })
+  assert.match(v.texto, /^Esse link não era seu\./)
+  const semDado = describeConversionTest({ status: 'converted', label: 'Mercado Livre', warning: 'ml_affiliate_busy' })
+  assert.doesNotMatch(semDado.texto, /não era seu/i)
 })

@@ -7,6 +7,8 @@ import { persistCredentialPatch } from '../../credentialPatch.js'
 import { assertPublicUrl } from '../../core/ssrfGuard.js'
 import { pickOfferImageSourceUrl } from '../../core/offerImageSource.js'
 import { isOwnAffiliateLink } from '../../converters/ownAffiliateLink.js'
+import { judgePastedLinkOwnership } from '../../converters/pastedLinkOwnership.js'
+import { resolveShopeeShortLink } from '../../converters/shopee.js'
 import {
   buildScrapedOffer,
   buildCredentialsMap,
@@ -72,6 +74,17 @@ function attachCredentialPatchHandler(credentialsMap, userId, logger) {
   return credentialsMap
 }
 
+// De quem era o link colado (tela "Testar conversão"). Na Shopee o ID de
+// afiliada da cliente só aparece no destino do link que acabamos de gerar —
+// uma resolução a mais, com teto de tempo; falhou → 'unknown', sem afirmar nada.
+async function detectOwnership({ platform, originalUrl, convertedUrl, sourceUrl, creds, timeoutMs, resolveShopeeTarget }) {
+  let convertedTargetUrl = null
+  if (platform === 'shopee' && timeoutMs > 0) {
+    convertedTargetUrl = await resolveShopeeTarget(convertedUrl, { timeoutMs }).catch(() => null)
+  }
+  return judgePastedLinkOwnership({ platform, originalUrl, convertedUrl, sourceUrl, convertedTargetUrl, creds })
+}
+
 function buildErrorResult(index, link, validation, code, error) {
   return {
     index,
@@ -102,6 +115,7 @@ const SCRAPE_OFFER_URL_RE = /^https?:\/\/[^\s]+$/i
 export async function linkConversionRoutes(app, opts = {}) {
   const convertLink = opts.converter ? normalizeConverter(opts.converter) : defaultConvertLink
   const fetchProductInfo = opts.fetchProductInfo ?? defaultFetchProductInfo
+  const resolveShopeeTarget = opts.resolveShopeeTarget ?? resolveShopeeShortLink
   // imageScrapers carrega `sharp` (binário nativo). O resolver precisa ser
   // lazy para que uma instalação incompatível/ausente de sharp nunca derrube
   // toda a API no boot; nesse cenário apenas a foto opcional é omitida.
@@ -339,8 +353,11 @@ export async function linkConversionRoutes(app, opts = {}) {
         }
 
         try {
+          let sourceUrl = null
           const conversionResult = await withTimeout(
-            convertLink(link.platform, link.url, credentialsMap),
+            convertLink(link.platform, link.url, credentialsMap, {
+              onSourceResolved: (resolved) => { sourceUrl = resolved },
+            }),
             Math.min(operational.conversionTimeoutMs, remainingMs),
             `Tempo limite de conversão excedido para ${validation.label}. Tente novamente ou envie menos links por vez.`,
           )
@@ -355,6 +372,16 @@ export async function linkConversionRoutes(app, opts = {}) {
             continue
           }
 
+          const ownership = await detectOwnership({
+            platform: link.platform,
+            originalUrl: link.url,
+            convertedUrl: conversionResult.url,
+            sourceUrl,
+            creds: credentialsMap[link.platform],
+            timeoutMs: Math.min(5_000, Math.max(0, deadlineAt - Date.now())),
+            resolveShopeeTarget,
+          })
+
           results.push({
             index,
             platform: link.platform,
@@ -362,6 +389,7 @@ export async function linkConversionRoutes(app, opts = {}) {
             originalUrl: link.url,
             convertedUrl: conversionResult.url,
             warning: conversionResult.warning ?? null,
+            ownership,
             status: 'converted',
             code: null,
             error: null,
