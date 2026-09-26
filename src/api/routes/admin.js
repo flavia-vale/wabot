@@ -2309,21 +2309,6 @@ export async function adminRoutes(app) {
     }
   })
 
-  /**
-   * Sub-aba "ROI" do Financeiro.
-   *
-   * Responde a pergunta que nenhuma tela respondia: o BOTinho já se pagou?
-   * Cruza o que ENTRA (pagamentos aprovados, menos comissões de afiliado e
-   * taxas do Mercado Pago) com o que SAI para manter o produto de pé (Claude +
-   * servidor, ledger em `src/domain/admin/operatingCosts.js`).
-   *
-   * Só leitura e tudo em lote: duas consultas de linhas (pagamentos aprovados e
-   * comissões, desde o primeiro mês com custo) e as contagens de plano ativo.
-   * Nenhum processo novo, nenhum timer, ZERO impacto de RAM — a janela é de
-   * meses, não de mensagens, então o volume é de centenas de linhas.
-   *
-   * A montagem mês a mês, a projeção e o payback ficam em `roi.js` (puro).
-   */
   // Gastos fixos salvos na tela. Fail-safe: falha de leitura (banco fora,
   // migration ainda não aplicada) cai nos valores de env/padrão — o ROI nunca
   // deixa de abrir por causa disso.
@@ -2355,6 +2340,21 @@ export async function adminRoutes(app) {
     return { ok: true, costs: saved }
   })
 
+  /**
+   * Sub-aba "ROI" do Financeiro.
+   *
+   * Responde a pergunta que nenhuma tela respondia: o BOTinho já se pagou?
+   * Cruza o que ENTRA (pagamentos aprovados, menos comissões de afiliado e
+   * taxas do Mercado Pago) com o que SAI para manter o produto de pé (Claude +
+   * servidor, ledger em `src/domain/admin/operatingCosts.js`).
+   *
+   * Só leitura e tudo em lote: duas consultas de linhas (pagamentos aprovados e
+   * comissões, desde o primeiro mês com custo) e as contagens de plano ativo.
+   * Nenhum processo novo, nenhum timer, ZERO impacto de RAM — a janela é de
+   * meses, não de mensagens, então o volume é de centenas de linhas.
+   *
+   * A montagem mês a mês, a projeção e o payback ficam em `roi.js` (puro).
+   */
   app.get('/finance/roi', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'billing:read'))) return
 
