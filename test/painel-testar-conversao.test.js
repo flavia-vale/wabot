@@ -178,11 +178,24 @@ test('link curto que era da própria cliente (ML/Shopee) diz que já era dela', 
   }
 })
 
-test('sem dado de quem era o link, a tela não afirma que não era dela', () => {
+test('sem confirmar que o link é dela: amarelo, sem afirmar que é de outra pessoa', () => {
+  // Verde é só para link confirmado como dela.
   const v = describeConversionTest({ status: 'converted', label: 'Shopee', warning: null, ownership: 'unknown' })
-  assert.equal(v.veredito, VEREDITO.OK)
+  assert.equal(v.veredito, VEREDITO.ALHEIO)
   assert.doesNotMatch(`${v.titulo} ${v.texto}`, /não é seu|já era seu/i)
-  assert.match(v.titulo, /credencial da Shopee está válida/i)
+  assert.match(v.titulo, /não reconhecemos/i)
+  assert.match(v.texto, /credencial da Shopee está válida/i)
+  assert.match(v.texto, /use o link abaixo/i)
+})
+
+test('verde (ok/proprio) só aparece quando o link é confirmado como dela', () => {
+  for (const ownership of ['foreign', 'unknown', undefined]) {
+    const v = describeConversionTest({ status: 'converted', label: 'Amazon', warning: null, ownership })
+    assert.notEqual(v.veredito, VEREDITO.OK, String(ownership))
+    assert.notEqual(v.veredito, VEREDITO.PROPRIO, String(ownership))
+  }
+  const dela = describeConversionTest({ status: 'converted', label: 'Amazon', warning: null, ownership: 'own' })
+  assert.equal(dela.veredito, VEREDITO.PROPRIO)
 })
 
 test('Amazon de outra pessoa com código vencido: diz que não era dela, que a tag é dela e que saiu longo', () => {
