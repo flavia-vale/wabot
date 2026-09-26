@@ -202,6 +202,7 @@ function projectScenario({ scenario, growth, baseline, startMonth, months, confi
  * @param {number} [input.projectionMonths]
  * @param {number} [input.activeMrr]     MRR das assinaturas ativas hoje
  * @param {number} [input.avgTicketNet]  receita líquida média por cliente/mês
+ * @param {object} [input.costOverrides] gastos fixos salvos na tela (`OperatingCostSettings`)
  */
 export function buildRoiReport({
   revenueByMonth = {},
@@ -210,8 +211,9 @@ export function buildRoiReport({
   projectionMonths = DEFAULT_PROJECTION_MONTHS,
   activeMrr = 0,
   timeZone = 'America/Sao_Paulo',
+  costOverrides = null,
 } = {}) {
-  const config = resolveCostConfig(env)
+  const config = resolveCostConfig(env, costOverrides)
   const currentMonth = monthKeyOf(now, timeZone)
   const currentIndex = monthIndex(currentMonth)
 
@@ -356,6 +358,7 @@ export function buildRoiReport({
       claudeMonthly: config.recurring.claude,
       vpsMonthly: config.recurring.vps,
       fixedMonthlyCost,
+      edited: config.edited,
     },
     past,
     summary: {
