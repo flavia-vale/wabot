@@ -8,6 +8,8 @@ import { getHubSeoRoute, getSeoRoutesByCluster, buildSeoRobots } from '@/lib/seo
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
 import { getEditorialDates } from '@/lib/editorial-content'
+import { SUPPORTED_STORES } from '@/lib/marketing-content'
+import { AUTOMATION_MODELS, BASIC_PRICE_LABEL, PRO_PRICE_LABEL, OUR_MODEL_COVERAGE, buildCompetitorModelRows } from '@/lib/automation-models'
 
 const HUB_CONTENT = {
   /* ESPELHAMENTO — a categoria principal do produto, reescrita em 2026-09-02.
@@ -100,16 +102,95 @@ const HUB_CONTENT = {
     promise: 'Ideal para afiliados, curadores e admins que publicam ofertas por categoria.',
     checklist: ['Criar checklist de validação por nicho.', 'Padronizar benefício, preço, validade e CTA da oferta.', 'Medir quais categorias justificam mais frequência.'],
   },
+  /* AUTOMAÇÃO PARA AFILIADAS — reescrito em 2026-09-27 (PLANO_SEO_GEO, B7).
+   *
+   * Medido em 27/09: em "bot para afiliados no WhatsApp" Gemini e AI
+   * Overviews não nos citam; a Perplexity nos lista em 6º com "lojas
+   * suportadas variam" e classifica o mercado em TRÊS modelos — espelhador de
+   * grupos, garimpo/curadoria automática e formatador/divulgador. O produto
+   * tem os três (fontes em lib/automation-models.js), mas nenhuma página
+   * dizia isso com essa palavra. Esta URL (35 impressões, posição 12,6) vira
+   * a página canônica da categoria; /melhores-bots-para-afiliados-whatsapp
+   * segue no ar (67 impressões, posição 7,5) e aponta para cá como "veja
+   * também" — apagar ou redirecionar perderia o histórico.
+   *
+   * Tabela só com ferramenta que tem FICHA datada em competitors-data.js. O
+   * que a ficha não diz fica "—" (não inferir do site do concorrente).
+   * Continua sendo hub (HUB_SEO_ROUTES.length === 3 é travado por teste) e
+   * continua listando os spokes de dores operacionais. */
   'automacao-whatsapp-afiliados': {
-    eyebrow: 'Hub de dores operacionais',
-    intro: 'Diagnostique gargalos de escala, consistência, tempo operacional e rastreamento antes de automatizar. A automação deve ampliar um processo correto, não esconder falhas.',
-    promise: 'Ideal para quem já divulga em grupos e quer transformar esforço manual em rotina controlada.',
-    checklist: ['Identificar o gargalo principal antes de configurar automação.', 'Acompanhar logs, falhas e aprendizados por campanha.', 'Escalar apenas grupos permitidos e com mensagens relevantes.'],
+    eyebrow: 'Automação para afiliadas',
+    title: 'Automação para afiliados no WhatsApp: 3 modelos, 8 bots',
+    description: 'Espelhador de grupos, garimpo automático e formatador: o que cada modelo faz, para quem serve e 8 ferramentas comparadas com preço datado. A partir de R$ 39.',
+    intro: `Automação para afiliados no WhatsApp é um software que publica ofertas com o seu código de afiliada nos seus grupos e canais, sem copiar e colar. O mercado se divide em três modelos: espelhador de grupos, garimpo automático e formatador de oferta. O Espelha Grupos tem os três numa conta só, em ${SUPPORTED_STORES.length} lojas, a partir de ${BASIC_PRICE_LABEL} (Basic) ou ${PRO_PRICE_LABEL} (Pro), com 7 dias grátis sem cartão.`,
+    promise: 'Para afiliada que divulga em grupos de WhatsApp e quer saber qual modelo de automação resolve o seu caso antes de assinar qualquer ferramenta.',
+    checklist: ['Espelhador: republica o que já circula nos grupos que você segue.', 'Garimpo: o robô acha a oferta sozinho por tema e desconto.', 'Formatador: cola o link e a oferta sai montada.'],
+    models: {
+      title: 'Os 3 modelos de automação, e qual serve para você',
+      body: 'Cada modelo resolve um gargalo diferente. Antes de comparar preço, veja em qual deles está o seu trabalho manual de hoje: repassar oferta que já circula, achar oferta nova ou montar a mensagem.',
+    },
+    toolsTable: {
+      title: 'Espelha Grupos e 8 ferramentas do mercado, por modelo',
+      body: 'Só entram ferramentas com ficha própria, conferida na página de planos de cada uma na data indicada. Onde a ficha não informa, a célula fica "—": não inferimos do site de ninguém. O comparativo completo de cada uma está no link da linha.',
+    },
+    seeAlso: {
+      title: 'Veja também',
+      links: [
+        { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Como comparar bots para afiliados no WhatsApp', note: 'Os critérios de avaliação, sem ranking falso.' },
+        { href: '/bot-afiliados-whatsapp', label: 'Bot para afiliados no WhatsApp', note: 'O espelhador com conversão em 6 lojas, preço e teste grátis.' },
+        { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Bot que busca ofertas da Shopee sozinho', note: 'O garimpo por tema e desconto mínimo, plano Pro.' },
+        { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?', note: 'Quando compensa e quando não.' },
+        { href: '/precos', label: 'Preços e planos', note: 'Basic, Pro e o que entra em cada um.' },
+      ],
+    },
+    plainAnswers: [
+      {
+        q: 'O que é automação para afiliados no WhatsApp?',
+        a: `É um software que publica ofertas com o seu código de afiliada nos seus grupos e canais do WhatsApp sem você copiar e colar. Existem três modelos: o espelhador republica o que aparece nos grupos que você já segue; o garimpo procura a oferta sozinho na loja por tema e desconto; o formatador monta a oferta a partir de um link que você cola. O Espelha Grupos faz os três, em ${SUPPORTED_STORES.length} lojas.`,
+      },
+      {
+        q: 'Qual dos três modelos eu preciso?',
+        a: 'Se você já acompanha grupos de ofertas e o seu trabalho é repassar, precisa do espelhador. Se você não segue grupo nenhum e quer um fluxo constante de um tema, precisa do garimpo. Se você escolhe a oferta na mão e só quer ganhar tempo montando a mensagem, o formatador resolve. Muita afiliada usa dois: espelha os grupos que segue e deixa o garimpo preencher os horários vazios.',
+      },
+      {
+        q: 'O Espelha Grupos é espelhador, garimpo ou formatador?',
+        a: `Os três, na mesma conta. O espelhamento está no Basic e no Pro, em ${SUPPORTED_STORES.join(', ')}, sem teto de grupos. O garimpo automático está no Pro e hoje é só na Shopee, por palavra-chave e desconto mínimo. O "Criar oferta" a partir de um link está no Basic e no Pro.`,
+      },
+      {
+        q: 'Quanto custa?',
+        a: `Sete dias grátis, sem cartão, com o Pro completo. Depois, Basic por ${BASIC_PRICE_LABEL} (espelhamento, conversão de link e criar oferta) ou Pro por ${PRO_PRICE_LABEL} (acrescenta Canais do WhatsApp, garimpo automático da Shopee e filas de envio). Sem fidelidade, cancela pelo painel.`,
+      },
+      {
+        q: 'Preciso de API, n8n ou programação?',
+        a: 'Não. Você lê um QR Code como no WhatsApp Web, escolhe os grupos de origem e de destino em duas telas e o robô roda no servidor. Não há integração para montar nem servidor para manter.',
+      },
+      {
+        q: 'Qual ferramenta cobre mais lojas?',
+        a: `Pela ficha de cada uma: o Gigi Bot lista 9 lojas no plano gratuito (mas só envia sozinho para o WhatsApp no plano mais caro); a Afilira soma Awin, Terabyte e SHEIN a partir do Professional; o Espelha Grupos converte ${SUPPORTED_STORES.length} lojas desde o plano de entrada, sem cobrar por grupo. A tabela acima mostra loja por loja.`,
+      },
+      {
+        q: 'Automação para afiliados é o mesmo que disparo em massa?',
+        a: 'Não. Disparo em massa é enviar a mesma mensagem para muita gente que não pediu. Automação para afiliada publica ofertas nos seus próprios grupos e canais, com intervalo entre envios, limite por destino e histórico. Espelhar em grupo onde você não tem autorização para publicar é problema em qualquer ferramenta.',
+      },
+    ],
+    honesty: {
+      pill: 'O que não prometemos',
+      title: 'Nenhuma ferramenta controla a decisão do WhatsApp.',
+      body: 'Quem garante que você não vai ser bloqueada está vendendo o que não pode entregar. O que existe aqui é controle do que está sob controle: intervalo entre os envios, limite por destino, horários de descanso e variação de texto (Pro). Volume sem contexto aumenta ruído em qualquer modelo dos três.',
+    },
   },
 }
 
 function jsonLd(data) {
   return JSON.stringify(data).replace(/</g, '\\u003c')
+}
+
+// Tabela dos 3 modelos × ferramentas (hub de automação). Mesmos tokens da
+// tabela de preço de _preservationCommercialPages.js.
+const hubTable = {
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: 14.5, minWidth: 880 },
+  th: { textAlign: 'left', padding: '12px 10px', borderBottom: '2px solid var(--line)', fontSize: 12.5, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--ink-soft)' },
+  td: { padding: '12px 10px', borderTop: '1px solid var(--line)', verticalAlign: 'top', lineHeight: 1.55, color: 'var(--ink)' },
 }
 
 export function getSeoHubMetadata(hubSlug) {
@@ -159,6 +240,23 @@ export function SeoHubPage({ hubSlug }) {
   // cai para o do registry (hubs que ainda não migraram título/descrição pra cá).
   const title = content.title ?? route.title
   const description = content.description ?? route.description
+  // Linhas da tabela de ferramentas: lidas da ficha em tempo de render
+  // (preço e data nunca digitados aqui).
+  const toolRows = content.toolsTable ? buildCompetitorModelRows() : []
+
+  // ItemList das ferramentas comparadas (o hub de automação): a IA extrai a
+  // lista com nome e página de comparação de cada uma.
+  const toolsItemListJsonLd = toolRows.length
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        name: content.toolsTable.title,
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: OUR_MODEL_COVERAGE.name, url: `${siteUrl}${OUR_MODEL_COVERAGE.href}` },
+          ...toolRows.map((row, index) => ({ '@type': 'ListItem', position: index + 2, name: row.name, url: `${siteUrl}${row.href}` })),
+        ],
+      }
+    : null
 
   const collectionJsonLd = {
     '@context': 'https://schema.org',
@@ -226,6 +324,7 @@ export function SeoHubPage({ hubSlug }) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(itemListJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbJsonLd) }} />
       {faqJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(faqJsonLd) }} /> : null}
+      {toolsItemListJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(toolsItemListJsonLd) }} /> : null}
       <Hero
         eyebrowLabel={content.eyebrow}
         headlineOverride={headline}
@@ -268,6 +367,93 @@ export function SeoHubPage({ hubSlug }) {
                   <li key={step} style={{ fontSize: 15.5, lineHeight: 1.65, color: 'var(--ink)' }}>{step}</li>
                 ))}
               </ol>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {content.models ? (
+        <section aria-labelledby="hub-models-title">
+          <div className="wrap" style={{ marginTop: 28 }}>
+            <span className="pill"><span className="dot" />Os 3 modelos</span>
+            <h2 id="hub-models-title" style={{ fontSize: 'clamp(28px, 3vw, 40px)', lineHeight: 1.1, marginTop: 14 }}>{content.models.title}</h2>
+            <p style={{ marginTop: 12, fontSize: 15.5, lineHeight: 1.7, color: 'var(--ink-soft)', maxWidth: 760 }}>{content.models.body}</p>
+            <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+              {AUTOMATION_MODELS.map((model) => (
+                <article key={model.id} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 24 }}>
+                  <h3 style={{ fontSize: 20, lineHeight: 1.2, margin: 0 }}>{model.name}</h3>
+                  <p style={{ marginTop: 10, fontSize: 14.5, lineHeight: 1.65, color: 'var(--ink-soft)' }}>{model.what}</p>
+                  <p style={{ marginTop: 12, fontSize: 14.5, lineHeight: 1.65, color: 'var(--ink)' }}><strong>Melhor para:</strong> {model.bestFor}</p>
+                  <p style={{ marginTop: 8, fontSize: 14.5, lineHeight: 1.65, color: 'var(--ink)' }}><strong>Não é ideal para:</strong> {model.notIdealFor}</p>
+                  <p style={{ marginTop: 8, fontSize: 14.5, lineHeight: 1.65, color: 'var(--ink-soft)' }}><strong style={{ color: 'var(--accent-strong)' }}>No Espelha Grupos:</strong> {model.ours}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {content.toolsTable ? (
+        <section aria-labelledby="hub-tools-title">
+          <div className="wrap" style={{ marginTop: 28 }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 24, padding: 28 }}>
+              <span className="pill"><span className="dot" />Ferramentas com ficha</span>
+              <h2 id="hub-tools-title" style={{ fontSize: 'clamp(28px, 3vw, 40px)', lineHeight: 1.1, marginTop: 14 }}>{content.toolsTable.title}</h2>
+              <p style={{ marginTop: 12, fontSize: 15.5, lineHeight: 1.7, color: 'var(--ink-soft)', maxWidth: 760 }}>{content.toolsTable.body}</p>
+              <div style={{ overflowX: 'auto', marginTop: 20 }}>
+                <table style={hubTable.table}>
+                  <thead>
+                    <tr>
+                      <th style={hubTable.th}>Ferramenta</th>
+                      <th style={hubTable.th}>Espelhador</th>
+                      <th style={hubTable.th}>Garimpo automático</th>
+                      <th style={hubTable.th}>Formatador (oferta do link)</th>
+                      <th style={hubTable.th}>Lojas</th>
+                      <th style={hubTable.th}>Preço de entrada (data da ficha)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={hubTable.td}><strong>{OUR_MODEL_COVERAGE.name}</strong></td>
+                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.espelhador}</td>
+                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.garimpo}</td>
+                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.formatador}</td>
+                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.stores}</td>
+                      <td style={hubTable.td}>{OUR_MODEL_COVERAGE.entryPrice}</td>
+                    </tr>
+                    {toolRows.map((row) => (
+                      <tr key={row.slug}>
+                        <td style={hubTable.td}><Link href={row.href} data-seo-cta="hub-tool-comparison" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>{row.name}</Link></td>
+                        <td style={hubTable.td}>{row.espelhador}</td>
+                        <td style={hubTable.td}>{row.garimpo}</td>
+                        <td style={hubTable.td}>{row.formatador}</td>
+                        <td style={hubTable.td}>{row.stores}</td>
+                        <td style={hubTable.td}>{row.entryPrice}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ marginTop: 14, fontSize: 13, lineHeight: 1.6, color: 'var(--ink-soft)' }}>
+                &quot;—&quot; = a ficha da ferramenta não informa. Preço de entrada é o primeiro plano com preço publicado, no valor recorrente, conferido na data entre parênteses; o Shozap não tem preço citado aqui. O Espelha Grupos cobra {BASIC_PRICE_LABEL} no Basic e {PRO_PRICE_LABEL} no Pro, sem cobrar por grupo.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {content.seeAlso ? (
+        <section aria-labelledby="hub-see-also-title">
+          <div className="wrap" style={{ marginTop: 28 }}>
+            <span className="pill"><span className="dot" />{content.seeAlso.title}</span>
+            <h2 id="hub-see-also-title" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{content.seeAlso.title}</h2>
+            <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+              {content.seeAlso.links.map((item) => (
+                <Link key={item.href} href={item.href} data-seo-cta="hub-see-also" style={{ display: 'block', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 20, padding: '18px 22px', color: 'var(--ink)', textDecoration: 'none' }}>
+                  <span style={{ display: 'block', fontSize: 16.5, fontWeight: 600, lineHeight: 1.3 }}>{item.label}</span>
+                  <span style={{ display: 'block', marginTop: 8, fontSize: 14, lineHeight: 1.55, color: 'var(--ink-soft)' }}>{item.note}</span>
+                </Link>
+              ))}
             </div>
           </div>
         </section>

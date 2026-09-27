@@ -49,8 +49,9 @@ const hubRoutes = [
     slug: 'automacao-whatsapp-afiliados',
     path: '/automacao-whatsapp-afiliados',
     label: 'Automação para afiliados',
-    title: 'Automação de WhatsApp para afiliados e grupos de ofertas',
-    description: 'Hub para resolver gargalos de rotina, escala, consistência e rastreamento em grupos de WhatsApp para afiliados.',
+    // title/description ficam só em _seoHubShared.js (HUB_CONTENT), fonte
+    // única FR-001 — reescrito em 2026-09-27 (PLANO_SEO_GEO, B7): o hub dos 3
+    // modelos de automação para afiliadas.
     type: 'hub',
     cluster: 'dores-operacionais',
     intent: 'automacao whatsapp afiliados',

@@ -7,6 +7,7 @@ import { buildOgImageUrl } from '@/lib/seo-og'
 import { formatDatePtBr, getEditorialDates } from '@/lib/editorial-content'
 import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '@/lib/marketing-content'
+import { AUTOMATION_MODELS, OUR_MODEL_COVERAGE, buildCompetitorModelRows } from '@/lib/automation-models'
 
 const siteUrl = getSiteUrl()
 // "As outras lojas" sai da lista canônica: a resposta escrita à mão ficou
@@ -549,6 +550,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'bot que busca ofertas shopee whatsapp',
     related: [
       { href: '/bot-afiliados-whatsapp', label: 'O outro modo: espelhar grupos que você já segue', note: 'Converte o link em 6 lojas e republica nos seus grupos e canais.' },
+      { href: '/automacao-whatsapp-afiliados', label: 'Os 3 modelos de automação para afiliadas', note: 'Espelhador, garimpo e formatador lado a lado, com 8 ferramentas e preço datado.' },
       { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar ou garimpar?', note: 'O que cada modo resolve e por que dá para usar os dois.' },
       { href: '/shopee-afiliados-whatsapp', label: 'Shopee Afiliados no WhatsApp', note: 'Como a oferta da Shopee sai com o seu link, inclusive cupom.' },
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
@@ -642,6 +644,9 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
     intent: 'bot para afiliados whatsapp',
     related: [
+      // 27/09/2026 (PLANO_SEO_GEO, B7): o hub dos 3 modelos nasce linkado
+      // daqui — esta é a página de mais impressão do tema (942).
+      { href: '/automacao-whatsapp-afiliados', label: 'Os 3 modelos de automação para afiliadas', note: 'Espelhador, garimpo e formatador: qual serve para você, e 8 ferramentas comparadas com preço datado.' },
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'O robô também busca oferta sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem (plano Pro).' },
       { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?', note: 'Quando compensa, quando não, e como evitar oferta repetida e link de outro afiliado.' },
       { href: '/politica-de-reembolso', label: 'Política de reembolso', note: 'Até 7 dias do pagamento, valor integral de volta; depois, cancelamento sem multa.' },
@@ -729,6 +734,23 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     // Tabela de preço estática, na própria página (os mesmos valores de
     // DEFAULT_LANDING_PLANS — nenhum número novo).
     priceTable: true,
+    // 27/09/2026 (PLANO_SEO_GEO, B3): a Perplexity classifica o mercado em 3
+    // modelos (espelhador, garimpo, formatador) e Gemini/AIO citam quem se
+    // descreve nesses termos. O produto tem os três — dito aqui, com a fonte
+    // de cada um em lib/automation-models.js.
+    automationModels: {
+      title: 'Os 3 modelos de automação para afiliadas, e qual serve para você',
+      body: 'O mercado divide os bots para afiliados em três modelos, e a maioria das ferramentas faz um só. Veja em qual está o seu trabalho manual de hoje. O Espelha Grupos tem os três na mesma conta; o detalhe de cada um está no hub de automação para afiliadas.',
+      href: '/automacao-whatsapp-afiliados',
+    },
+    // Tabela com os 3 concorrentes que as IAs mais citam nesta consulta. Preço
+    // e data saem da FICHA (competitors-data.js) em tempo de render; o que a
+    // ficha não diz fica "—".
+    competitorTable: {
+      title: 'Espelha Grupos × Afilira × Achadinho Pro × Pro Afiliados',
+      body: 'Só o que a ficha de cada um informa, com a data em que a página de planos foi conferida. Preço de entrada é o primeiro plano com preço publicado, no valor recorrente.',
+      slugs: ['afilira', 'achadinho-pro', 'proafiliados-com'],
+    },
     // Comparação com quem as IAs mais citam nesta consulta. Sem preço aqui de
     // propósito: preço de concorrente só sai com ficha datada, e ela mora nas
     // páginas de alternativa linkadas.
@@ -748,6 +770,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['E se a mesma oferta chegar de duas fontes diferentes?', 'Ela sai uma vez só. A repetição no mesmo destino dentro da janela é bloqueada e aparece no histórico como bloqueio, não como envio — assim você vê quantas vezes a mesma promoção tentou entrar.'],
       ['Isso é o mesmo que “anti-ban”?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp, e quem garante banimento zero está vendendo o que não pode entregar. O que existe aqui é controle do que está sob controle: intervalo entre envios, limite por destino e variação.'],
       ['Preciso ter grupo grande para valer a pena?', 'Não. O ganho principal é de tempo e de comissão que deixa de se perder no caminho, e isso vale desde o primeiro grupo. Volume grande muda a conta, não a lógica.'],
+      ['Quais são os 3 modelos de bot para afiliados, e qual o Espelha Grupos é?', `Espelhador (republica, com o seu código, o que aparece nos grupos que você já segue), garimpo automático (o robô acha a oferta sozinho na loja por tema e desconto) e formatador (você cola o link e a oferta sai montada). O Espelha Grupos faz os três: espelha em ${SUPPORTED_STORES.length} lojas no Basic e no Pro, busca ofertas da Shopee sozinho no Pro e monta a oferta a partir de um link no "Criar oferta", em qualquer plano.`],
     ],
   },
   'bot-achadinhos-whatsapp': {
@@ -767,6 +790,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     relatedTitle: 'Continue: o que publicar nos seus achadinhos',
     related: [
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Bot que busca achadinhos da Shopee sozinho', note: 'Você escreve o tema e o desconto mínimo; o robô garimpa e publica (plano Pro).' },
+      { href: '/automacao-whatsapp-afiliados', label: 'Espelhar, garimpar ou formatar: os 3 modelos', note: 'Qual modelo de automação resolve o seu caso, e 8 ferramentas comparadas com preço datado.' },
       { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos de ofertas vale a pena?', note: 'As críticas ao espelhamento e o controle que responde a cada uma.' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
@@ -1198,6 +1222,25 @@ export function PreservationCommercialPage({ pageKey }) {
           </section>
         )}
 
+        {page.automationModels ? (
+          <section style={s.section} aria-labelledby="automation-models-title">
+            <div className="wrap">
+              <SectionHeader eyebrow="Os 3 modelos" title={page.automationModels.title} body={page.automationModels.body} />
+              <div style={s.grid}>
+                {AUTOMATION_MODELS.map((model) => (
+                  <article key={model.id} style={s.card}>
+                    <h3 style={{ fontSize: 20, marginBottom: 10 }}>{model.name}</h3>
+                    <p style={s.small}>{model.what}</p>
+                    <p style={{ ...s.small, marginTop: 10, color: 'var(--ink)' }}><strong>Melhor para:</strong> {model.bestFor}</p>
+                    <p style={{ ...s.small, marginTop: 6 }}><strong style={{ color: 'var(--accent-strong)' }}>No Espelha Grupos:</strong> {model.ours}</p>
+                  </article>
+                ))}
+              </div>
+              <Link className="btn btn-ghost" style={{ marginTop: 18 }} href={page.automationModels.href} data-seo-cta="commercial_automation_hub" data-cta-position="automation_models" data-cta-stage="consideration" data-cta-destination="content">Ver os 3 modelos e 8 ferramentas comparadas</Link>
+            </div>
+          </section>
+        ) : null}
+
         {page.bestFor ? (
           <section style={s.section} aria-labelledby="best-for-title">
             <div className="wrap">
@@ -1294,6 +1337,52 @@ export function PreservationCommercialPage({ pageKey }) {
                   </article>
                 ))}
               </div>
+            </div>
+          </section>
+        ) : null}
+
+        {page.competitorTable ? (
+          <section style={s.section} aria-labelledby="competitor-table-title">
+            <div className="wrap">
+              <SectionHeader eyebrow="Lado a lado" title={page.competitorTable.title} body={page.competitorTable.body} />
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ ...s.table, minWidth: 880 }}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>Ferramenta</th>
+                      <th style={s.th}>Espelhamento</th>
+                      <th style={s.th}>Garimpo automático</th>
+                      <th style={s.th}>Criar oferta do link</th>
+                      <th style={s.th}>Lojas</th>
+                      <th style={s.th}>Preço de entrada (data da ficha)</th>
+                      <th style={s.th}>Teste grátis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={s.td}><strong>{OUR_MODEL_COVERAGE.name}</strong></td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.espelhador}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.garimpo}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.formatador}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.stores}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.entryPrice}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.freeTrial}</td>
+                    </tr>
+                    {buildCompetitorModelRows(page.competitorTable.slugs).map((row) => (
+                      <tr key={row.slug}>
+                        <td style={s.td}><Link href={row.href} data-seo-cta="commercial_competitor_table" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>{row.name}</Link></td>
+                        <td style={s.td}>{row.espelhador}</td>
+                        <td style={s.td}>{row.garimpo}</td>
+                        <td style={s.td}>{row.formatador}</td>
+                        <td style={s.td}>{row.stores}</td>
+                        <td style={s.td}>{row.entryPrice}</td>
+                        <td style={s.td}>{row.freeTrial}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ ...s.small, marginTop: 14, fontSize: 13 }}>&quot;—&quot; = a ficha da ferramenta não informa. Não inferimos nada do site de ninguém: o que está aqui é o que a página de planos de cada um dizia na data indicada.</p>
             </div>
           </section>
         ) : null}
