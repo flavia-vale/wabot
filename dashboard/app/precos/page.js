@@ -5,6 +5,7 @@ import { FichaTecnica } from '@/components/landing/FichaTecnica'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getLandingPlans } from '@/lib/plans-server'
+import { buildOgImageUrl } from '@/lib/seo-og'
 import {
   BRAND_ORG_NAME,
   BRAND_PRODUCT_NAME,
@@ -103,6 +104,11 @@ function buildPricingJsonLd(plans) {
       '@context': 'https://schema.org',
       '@type': 'Product',
       name: BRAND_PRODUCT_NAME,
+      // Sem "image" o Google Merchant Listings recusa o item inteiro como
+      // inválido (Inspeção de URL, 27/09/2026) — usa a mesma arte OG padrão
+      // do site (dashboard/public/og-default.png, 1200x630), que já é
+      // validada por test/og-image-existe.test.js.
+      image: buildOgImageUrl(),
       brand: { '@type': 'Brand', name: BRAND_ORG_NAME },
       // Lojas vêm da mesma constante do FAQ (6, não 4 — RCA 2026-09-18).
       description: PRICING_PRODUCT_DESCRIPTION,
@@ -113,6 +119,17 @@ function buildPricingJsonLd(plans) {
         priceCurrency: 'BRL',
         availability: 'https://schema.org/InStock',
         url: 'https://espelhagrupos.com.br/precos',
+        // Reembolso integral em até 7 dias (art. 49 CDC) — mesmo texto do
+        // FAQ de cobrança acima. Resolve o aviso opcional
+        // "hasMerchantReturnPolicy não encontrado" do Merchant Listings.
+        hasMerchantReturnPolicy: {
+          '@type': 'MerchantReturnPolicy',
+          applicableCountry: 'BR',
+          returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+          merchantReturnDays: 7,
+          returnMethod: 'https://schema.org/ReturnByMail',
+          returnFees: 'https://schema.org/FreeReturn',
+        },
       })),
     },
     {
