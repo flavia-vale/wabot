@@ -10,12 +10,13 @@ import {
   buildTrackingRow,
 } from '../src/ops/aiCitation.js'
 
-test('as consultas do script são exatamente as 10 do roteiro canônico', () => {
+test('as consultas do script são exatamente as 18 do roteiro canônico (A, B, C e D)', () => {
   const roteiro = readFileSync(new URL('../docs/marketing/ROTEIRO_MEDICAO_IA.md', import.meta.url), 'utf8')
   const numbered = [...roteiro.matchAll(/^(\d+)\. (.+)$/gm)]
-    .filter(([, n]) => Number(n) <= 10)
+    .filter(([, n]) => Number(n) <= 18)
     .map(([, , text]) => text.replace(/\*\*/g, '').replace(/\s*\*\(.*\)\*\s*$/, '').trim())
-  assert.deepEqual(ROUND_QUERIES.map((q) => q.query), numbered.slice(0, 10))
+  assert.deepEqual(ROUND_QUERIES.map((q) => q.query), numbered.slice(0, 18))
+  assert.equal(ROUND_QUERIES.filter((q) => q.cluster === 'compra').length, 8)
 })
 
 test('pede a busca do Google na requisição', () => {
@@ -57,6 +58,10 @@ test('em consulta de marca, repetir o nome sem fonte é só parcial', () => {
 test('em consulta de categoria, citar o nome já conta', () => {
   assert.equal(classifyCitation({ cluster: 'categoria', text: 'Opções: Espelha Grupos, Afilira', sources: [] }), 'sim')
   assert.equal(classifyCitation({ cluster: 'categoria', text: 'Opções: Afilira', sources: ['afilira.com'] }), 'nao')
+  // Trilha D: consulta sem a marca conta o nome; consulta COM a marca ('espelha grupos ou afilira') só conta com fonte nossa.
+  assert.equal(classifyCitation({ cluster: 'compra', query: 'bot de achadinhos para whatsapp', text: 'Use o Espelha Grupos', sources: [] }), 'sim')
+  assert.equal(classifyCitation({ cluster: 'compra', query: 'espelha grupos ou afilira', text: 'O Espelha Grupos é mais barato', sources: [] }), 'parcial')
+  assert.equal(classifyCitation({ cluster: 'compra', query: 'espelha grupos ou afilira', text: 'O Espelha Grupos é mais barato', sources: ['espelhagrupos.com.br'] }), 'sim')
 })
 
 test('acha concorrentes sem repetir e sem diferenciar maiúsculas', () => {

@@ -16,6 +16,15 @@ export const ROUND_QUERIES = Object.freeze([
   { query: 'espelha grupos é confiável', cluster: 'marca' },
   { query: 'espelha grupos metodologia WhatsApp', cluster: 'marca' },
   { query: 'BOTinho preço', cluster: 'contaminacao' },
+  // Trilha D — intenção de compra (série desde 10/2026; ver ROTEIRO §Trilha D).
+  { query: 'melhor bot para afiliado shopee no whatsapp', cluster: 'compra' },
+  { query: 'robô que busca ofertas da shopee sozinho', cluster: 'compra' },
+  { query: 'automação para afiliados no whatsapp', cluster: 'compra' },
+  { query: 'espelhar grupos de ofertas whatsapp vale a pena', cluster: 'compra' },
+  { query: 'ferramenta para afiliada divulgar ofertas em grupos de whatsapp', cluster: 'compra' },
+  { query: 'bot de achadinhos para whatsapp', cluster: 'compra' },
+  { query: 'como ser afiliada shopee e divulgar no whatsapp', cluster: 'compra' },
+  { query: 'espelha grupos ou afilira', cluster: 'compra' },
 ])
 
 // Nomes citados pelas IAs que ainda não têm ficha em competitors-data.js.
@@ -81,13 +90,16 @@ export function findCompetitors(text, names) {
 // parcial = consulta de marca em que o nome aparece no texto sem fonte nossa:
 //           a pergunta já tinha o nome, então repeti-lo não prova que ela nos achou.
 // nao     = nenhum dos dois.
-export function classifyCitation({ cluster, text, sources }) {
+// Consulta que JÁ traz a marca (Trilha B, ou a #18 da Trilha D "espelha grupos
+// ou afilira"): o nome repetido sem fonte nossa é `parcial`, nunca `sim`.
+export function classifyCitation({ cluster, text, sources, query = '' }) {
   const answer = String(text || '')
   const fromSources = (sources || []).some((label) => String(label).toLowerCase().includes(OUR_DOMAIN))
   const hasDomainInText = answer.toLowerCase().includes('espelhagrupos.com.br')
   if (fromSources || hasDomainInText) return 'sim'
   if (!BRAND_RE.test(answer)) return 'nao'
-  return cluster === 'marca' ? 'parcial' : 'sim'
+  const queryHasBrand = BRAND_RE.test(String(query || ''))
+  return cluster === 'marca' || queryHasBrand ? 'parcial' : 'sim'
 }
 
 function csvCell(value) {
@@ -100,7 +112,7 @@ export function toCsvRow(fields) {
 }
 
 export function buildTrackingRow({ query, cluster, date, model, parsed, competitorNames }) {
-  const cited = classifyCitation({ cluster, text: parsed.text, sources: parsed.sources })
+  const cited = classifyCitation({ cluster, text: parsed.text, sources: parsed.sources, query })
   const competitors = findCompetitors(parsed.text, competitorNames).join('; ')
   const summary = parsed.text.replace(/\s+/g, ' ').slice(0, 400)
   const notes = [
