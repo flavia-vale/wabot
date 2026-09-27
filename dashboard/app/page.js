@@ -5,6 +5,7 @@ import { Features } from '@/components/landing/Features'
 import { Social } from '@/components/landing/Social'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
+import { FichaTecnica } from '@/components/landing/FichaTecnica'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { IntroCard, RulesCard } from '@/components/landing/IntroCard'
 import { BRAND_NAME, BRAND_SHORT_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
@@ -89,6 +90,9 @@ export default async function LandingPage({ searchParams = {} }) {
       <Features />
       <Social />
       <Pricing initialPlans={plans} />
+      {/* Ficha técnica canônica (medição de IA 27/09/2026): a mesma tabela
+        * "Recurso | Basic | Pro" da /precos, do llms.txt e do pricing.md. */}
+      <FichaTecnica />
       <ProductDefinition />
       <FAQ />
       <FinalCTA />

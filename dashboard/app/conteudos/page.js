@@ -54,7 +54,7 @@ const blogPosts = [
   },
   {
     href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
-    title: 'Como divulgar ofertas do Mercado Livre no WhatsApp como afiliado',
+    title: 'Afiliado Mercado Livre no WhatsApp: comissão até 16%',
     description: 'Link de afiliado, conversão automática de MLB e landings, preview com imagem e cadência.',
   },
   {
@@ -193,7 +193,7 @@ const nichePages = [
   },
   {
     href: '/amazon-afiliados-whatsapp',
-    title: 'Afiliado Amazon: divulgar ofertas no WhatsApp',
+    title: 'Afiliado Amazon no WhatsApp: até 13% e 7 dias grátis',
     description: 'Para quem já é afiliada Amazon e quer publicar sem perder a tag no caminho.',
   },
   {

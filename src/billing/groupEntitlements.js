@@ -1,6 +1,7 @@
 import { JID_KIND } from '../core/jid.js'
-import { canUseChannelButton, canUseChannels, canUseWatermark } from './plans.js'
+import { canUseChannelButton, canUseChannels, canUseWatermark, canUseMultiNetwork } from './plans.js'
 import { destinationImageModeWithoutWatermark, resolveDestinationImageMode } from '../core/imageModePolicy.js'
+import { resolveDeliveryNetwork, isDeliveryNetworkEnabled, DELIVERY_NETWORK } from '../core/delivery/networks.js'
 
 function isChannelGroup(group) {
   return group?.kind === JID_KIND.CHANNEL
@@ -29,6 +30,11 @@ function toMonitorGroup(group, targetPostJids = []) {
     // 'explicit' = ela escolheu; lista vazia então significa NENHUM destino.
     // Ausente/desconhecido cai em 'all' = comportamento histórico.
     targetsMode: group.targetsMode === 'explicit' ? 'explicit' : 'all',
+    // Feature 017 (arquitetura multicanal de entrega): aplicativo por onde
+    // esta origem lê. Ausente/desconhecido cai em 'whatsapp' — nunca
+    // "desconhecido" (FR-013/SC-003). É este o ÚNICO ponto onde
+    // `group.deliveryNetwork` vira config do worker (D-A4 do plano).
+    deliveryNetwork: resolveDeliveryNetwork(group.deliveryNetwork),
   }
 }
 
@@ -59,22 +65,42 @@ function toPostDetail(group, { allowWatermark = true, allowChannelButton = true 
     // 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
     // nulo = padrão ('center'), resolvido no renderizador.
     watermarkPosition: group.watermarkPosition ?? null,
+    // Feature 017 (arquitetura multicanal de entrega): aplicativo por onde
+    // este destino publica. Ausente/desconhecido cai em 'whatsapp' — nunca
+    // "desconhecido" (FR-013/SC-003).
+    deliveryNetwork: resolveDeliveryNetwork(group.deliveryNetwork),
   }
 }
 
-export function buildEntitledGroupConfig({ groups = [], groupTargets = [], planSubject = {}, logger = null } = {}) {
+// Feature 017 (arquitetura multicanal de entrega), D-A4: um grupo/canal cuja
+// rede de entrega NÃO é WhatsApp só entra na config do worker quando (1) o
+// interruptor de rollout habilita aquela rede E (2) a conta tem direito de
+// plano ao multicanal — as DUAS camadas de FR-047. Com o interruptor no
+// default (`whatsapp`), esta função devolve `false` para qualquer grupo
+// não-WhatsApp e o ramo de hand-off do worker (bot-worker.js) permanece
+// inalcançável por construção, não por cuidado.
+function isDeliveryNetworkVisible(group, { allowMultiNetwork, env }) {
+  const network = resolveDeliveryNetwork(group.deliveryNetwork)
+  if (network === DELIVERY_NETWORK.WHATSAPP) return true
+  return isDeliveryNetworkEnabled(network, env) && allowMultiNetwork
+}
+
+export function buildEntitledGroupConfig({ groups = [], groupTargets = [], planSubject = {}, logger = null, env = process.env } = {}) {
   const allowChannels = canUseChannels(planSubject)
+  const allowMultiNetwork = canUseMultiNetwork(planSubject)
   const postOptions = {
     allowWatermark: canUseWatermark(planSubject),
     allowChannelButton: canUseChannelButton(planSubject),
   }
-  const visibleGroups = allowChannels ? groups : groups.filter(group => !isChannelGroup(group))
+  const visibleGroups = groups
+    .filter(group => allowChannels || !isChannelGroup(group))
+    .filter(group => isDeliveryNetworkVisible(group, { allowMultiNetwork, env }))
   const visiblePostJids = new Set(visibleGroups.filter(group => group.role === 'post').map(group => group.waJid))
 
   const targetsByMonitor = new Map()
   for (const target of groupTargets) {
     const postJid = target.post?.waJid
-    if (!postJid || (!allowChannels && !visiblePostJids.has(postJid))) continue
+    if (!postJid || !visiblePostJids.has(postJid)) continue
     if (!targetsByMonitor.has(target.monitorId)) targetsByMonitor.set(target.monitorId, [])
     targetsByMonitor.get(target.monitorId).push(postJid)
   }
@@ -82,9 +108,13 @@ export function buildEntitledGroupConfig({ groups = [], groupTargets = [], planS
   const monitorGroups = visibleGroups.filter(group => group.role === 'monitor')
   const postGroups = visibleGroups.filter(group => group.role === 'post')
   const blockedChannelCount = allowChannels ? 0 : groups.filter(group => isChannelGroup(group)).length
+  const blockedDeliveryNetworkCount = groups.filter(group => !isDeliveryNetworkVisible(group, { allowMultiNetwork, env })).length
 
   if (blockedChannelCount > 0) {
     logger?.warn?.({ blockedChannelCount }, 'Canais preservados foram removidos da config porque o plano atual não permite canais')
+  }
+  if (blockedDeliveryNetworkCount > 0) {
+    logger?.warn?.({ blockedDeliveryNetworkCount }, 'Destinos/origens de outro aplicativo foram removidos da config (interruptor desligado ou plano sem direito ao multicanal)')
   }
 
   return {

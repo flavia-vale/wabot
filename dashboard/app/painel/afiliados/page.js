@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
+import { buildAffiliateLink } from '../../../../src/domain/painel/referralInvite.js'
 
 const PIX_KEY_TYPE_LABELS = { cpf: 'CPF', email: 'E-mail', phone: 'Telefone', random: 'Chave aleatória' }
 const DEFAULT_AFFILIATE_CONFIG = { commissionPercent: 30, commissionRecurringPercent: 30, recurringCommissionEnabled: true, commissionHoldDays: 30, attributionWindowDays: 30 }
@@ -500,7 +501,7 @@ export default function AffiliatePage() {
     )
   }
 
-  const affiliateLink = `https://espelhagrupos.com.br/cadastro?aff=${profile.code}`
+  const affiliateLink = buildAffiliateLink(profile.code)
   const { stats = {}, months = [] } = data
 
   return (

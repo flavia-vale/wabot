@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
@@ -10,6 +10,8 @@ import { buildNoCredentialBanner } from '../../../src/credentialBlockAlert/messa
 import { shouldShowNoCredentialBanner } from '../../../src/domain/painel/journeyBanners.js'
 import { listProFeaturesInUse, buildProFeaturesNotice } from '../../../src/domain/payments/proFeaturesInUse.js'
 import { buildTrialEndingNotice } from '../../../src/domain/painel/trialNotice.js'
+import { buildTrialDecisionScreen, TRIAL_DECISION_STORAGE_KEY } from '../../../src/domain/painel/trialDecision.js'
+import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
 import { buildSendPauseNotice } from '@/lib/painel/sendPauseNotice'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../src/tutorialVideo.js'
 import { hasProLikeAccess } from '@/lib/planEntitlements'
@@ -213,6 +215,47 @@ function TrialEndingBanner({ notice }) {
         )}
       </div>
       <Link href={notice.ctaHref} className="pnl-btn is-primary" style={{ flexShrink: 0 }}>{notice.ctaLabel}</Link>
+    </div>
+  )
+}
+
+/* Tela de decisão do dia 5 do teste — por cima do painel, uma vez por dia, com
+ * a prova e o preço na conta dela. Regra e porquê em
+ * src/domain/painel/trialDecision.js. A faixa (TrialEndingBanner) continua
+ * existindo: esta tela é o pedido de venda; a faixa é a lembrança. */
+const TRIAL_DECISION_EVENT = 'eg:trial-decision-shown'
+function readLastShownDay() {
+  try { return window.localStorage.getItem(TRIAL_DECISION_STORAGE_KEY) } catch { return null }
+}
+function rememberShownDay(dayKey) {
+  try { window.localStorage.setItem(TRIAL_DECISION_STORAGE_KEY, dayKey) } catch { /* sem armazenamento, mostra de novo amanhã */ }
+  try { window.dispatchEvent(new Event(TRIAL_DECISION_EVENT)) } catch { /* ambiente sem Event */ }
+}
+function subscribeLastShownDay(onChange) {
+  window.addEventListener('storage', onChange)
+  window.addEventListener(TRIAL_DECISION_EVENT, onChange)
+  return () => {
+    window.removeEventListener('storage', onChange)
+    window.removeEventListener(TRIAL_DECISION_EVENT, onChange)
+  }
+}
+// No servidor não há navegador: `undefined` = "ainda não sei", e a tela espera.
+const serverLastShownDay = () => undefined
+
+function TrialDecisionOverlay({ screen, onDismiss }) {
+  if (!screen) return null
+  return (
+    <div className="pnl-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="trial-decision-title">
+      <div className="pnl-modal">
+        <h3 id="trial-decision-title">{screen.headline}</h3>
+        <p>{screen.proof}</p>
+        {screen.priceLine && <p style={{ marginTop: 8 }}>{screen.priceLine}</p>}
+        <p style={{ marginTop: 8 }}>{screen.preserved}</p>
+        <div className="pnl-modal-actions">
+          <button type="button" className="pnl-btn is-ghost" onClick={onDismiss}>{screen.dismissLabel}</button>
+          <Link href={screen.ctaHref} className="pnl-btn is-primary" onClick={onDismiss}>{screen.ctaLabel}</Link>
+        </div>
+      </div>
     </div>
   )
 }
@@ -437,6 +480,34 @@ export default function PainelShell({ children }) {
     [user?.plan, user?.accessExpiresAt, offersPublished],
   )
 
+  // Tela de decisão do dia 5 — `lastShownDay` vem do navegador no cliente;
+  // o dispensar de hoje vale até amanhã (regra pura decide pela data).
+  const trialDecisionLastShown = useSyncExternalStore(subscribeLastShownDay, readLastShownDay, serverLastShownDay)
+  const destGroupCount = useMemo(
+    () => (Array.isArray(groupsList) ? groupsList.filter((g) => g?.role === 'post').length : 0),
+    [groupsList],
+  )
+  const trialDecision = useMemo(() => {
+    if (trialDecisionLastShown === undefined || offersPublished === null) return null
+    const cents = (id) => {
+      const v = DEFAULT_LANDING_PLANS.find((p) => p.id === id)?.priceValue
+      return Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) : null
+    }
+    return buildTrialDecisionScreen({
+      plan: user?.plan,
+      accessExpiresAt: user?.accessExpiresAt,
+      offersPublished,
+      destGroupCount,
+      basicPriceCents: cents('basic'),
+      proPriceCents: cents('pro'),
+      lastShownDay: trialDecisionLastShown,
+    })
+  }, [user?.plan, user?.accessExpiresAt, offersPublished, destGroupCount, trialDecisionLastShown])
+  // Guardar o dia dispara o evento, o store relê e a tela fecha sozinha.
+  const dismissTrialDecision = useCallback(() => {
+    if (trialDecision) rememberShownDay(trialDecision.dayKey)
+  }, [trialDecision])
+
   // Só canais aqui: é o que já vem na lista de grupos, sem chamada nova. A tela
   // de planos mostra o quadro completo (automáticas e filas também).
   const userPlan = user?.plan
@@ -627,6 +698,7 @@ export default function PainelShell({ children }) {
             <BlockedReasonBanner user={user} />
             <ExpiredPlanBanner user={user} />
             <TrialEndingBanner notice={trialNotice} />
+            <TrialDecisionOverlay screen={trialDecision} onDismiss={dismissTrialDecision} />
             <ProFeaturesStoppedBanner notice={proFeaturesNotice} />
             <SendPauseBanner notice={sendPauseNotice} />
             {/* A loja só é cobrada DEPOIS de conectar o WhatsApp — a mesma
