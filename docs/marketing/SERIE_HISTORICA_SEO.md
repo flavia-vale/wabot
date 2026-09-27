@@ -62,6 +62,18 @@ endereços, dos quais 11 são LPs de cidade/nicho **congeladas** (esperado), 6 s
 arquivos (fonte, favicon, `llms.txt`, `pricing.md`) e 1 é página de verdade:
 `/espelha-grupos-vs-ferramentas-genericas-automacao`, rastreada em 21/09.
 
+**Indexação em 27/09 (export de cobertura; o gráfico vai até 20/09):**
+**108 indexadas** (91 em 04/09, 96 em 14/09, 108 em 18/09). As mesmas 4
+"Detectada" continuam **nunca rastreadas** (último rastreamento em branco). O
+pedido de indexação delas foi feito em 25/09 (Dia 8) e o gráfico do export só
+vai até 20/09 — ainda não dá para ler o efeito. Reconferir no próximo export. "Rastreada,
+mas não indexada": 18 (mesma composição; a única página real segue
+`/espelha-grupos-vs-ferramentas-genericas-automacao`). 15 com `noindex` e 1
+bloqueada pelo `robots.txt`, as duas por decisão. **9 "página alternativa com
+canônica"** são endereços com `?utm_…` ou `?from=…&exp_id=…` gerados pelos
+nossos próprios links internos; a canônica resolve, mas cada um gasta
+rastreamento do Google.
+
 ### Páginas por loja (Tier 1), impressões / cliques na janela de 3 meses
 
 | Página | 16/09 | **23/09** |
@@ -126,15 +138,67 @@ distância está parada em ~1,35-1,4× desde que os títulos foram encurtados.
 | 10/09 | 43 | **10** (+1 parcial) | conjunto ainda media o nome aposentado |
 | 11/09 | 16 | **9** (+1 parcial) | primeira rodada da Trilha B (marca atual) |
 | 23/09 | 10 (só ChatGPT até agora) | **5** | Trilha A 2/5 · Trilha B 3/4 · Trilha C sem contaminação |
+| **23 a 27/09** (rodada completa) | 36 no placar (+10 do ChatGPT com histórico, fora) | **19** (+1 parcial) | Trilha A **6/20** · Trilha B **13/16** (+1 parcial) · Trilha C: nenhum concorrente herdou o nome |
 
 ### Por superfície
 
-| Superfície | 01/09 | 10/09 | 11/09 | 23/09 |
+| Superfície | 01/09 | 10/09 | 11/09 | 23 a 27/09 |
 |---|---|---|---|---|
-| ChatGPT Search | 3/7 | 3/7 (conta neutra) · 6/8 (conta logada, inflada) | 2/4 | **5/9** (A 2/5 · B 3/4) |
-| Google AI Overviews | 0/7 | 1/8 | 2/4 | ⏳ |
-| Google Gemini | 0/7 | 0/6 (+1 parcial) | **3/4** | ⏳ |
-| Perplexity | 0/7 | 0/6 | 2/4 (+1 parcial) | ⏳ |
+| ChatGPT Search | 3/7 | 3/7 (conta neutra) · 6/8 (conta logada, inflada) | 2/4 | **5/9** (A 2/5 · B 3/4), 23/09 · 27/09 com histórico: 6/9, fora do placar |
+| Google AI Overviews | 0/7 | 1/8 | 2/4 | **5/9** (A 1/5 · B 4/4), 27/09 |
+| Google Gemini | 0/7 | 0/6 (+1 parcial) | **3/4** | **4/9** (+1 parcial) (A 1/5 · B 3/4), 27/09 |
+| Perplexity | 0/7 | 0/6 | 2/4 (+1 parcial) | **5/9** (A 2/5 · B 3/4), 27/09 |
+
+### Rodada completa de 23 a 27/09 — por consulta
+
+| Consulta | ChatGPT (23/09) | Gemini | Perplexity | AI Overviews | Placar |
+|---|---|---|---|---|---|
+| bot para afiliados | ❌ | ❌ | ✅ (5º, descrição fraca) | ❌ | 1/4 |
+| ferramenta para divulgar ofertas | ✅ 1º | ❌ | ❌ | ✅ 4º | 2/4 |
+| como espelhar mensagens | ✅ 1º | ✅ | ✅ 1º | ❌ (sem nomes) | 3/4 |
+| postar em vários grupos sem spam | ❌ | ❌ | ❌ | ❌ | 0/4 |
+| padronizar cupons | ❌ | ❌ | ❌ | ❌ | 0/4 |
+| **espelha grupos o que é** | ❌ | ✅ | ✅ | ✅ | **3/4 (era 0/4)** |
+| espelha grupos preço | ✅ | ✅ com erro | ✅ | ✅ | 4/4 |
+| espelha grupos é confiável | ✅ com objeção | ✅ | ❌ (critica a prática) | ✅ | 3/4 |
+| espelha grupos metodologia | ✅ | ◐ (lê como lançamento) | ✅ | ✅ | 3/4 (+1 parcial) |
+
+**Metas de 18/10 (`PLANO_MAQUINA_DE_VENDAS_IA_2026-09-18.md`):** Gemini,
+Perplexity e AI Overviews com ao menos 1 citação na Trilha A — **batida**
+(1, 2, 1). "Espelha grupos o que é" com 2/4 — **batida** (3/4).
+
+**O que a rodada mostra:**
+
+- **A marca passou a existir como nome.** "O que é" foi de 0/4 para 3/4; a
+  Perplexity diz com todas as letras "Espelha Grupos é também o nome de um
+  software brasileiro".
+- **A disputa que falta é a de categoria.** Em "bot para afiliados" só a
+  Perplexity nos cita, em 5º, com "lojas suportadas variam". Os nomes que
+  ocupam essa consulta são sempre os mesmos: **Achadinhos Pro, Afilira,
+  ProAfiliados, Shozap, DivulgaLinks**.
+- **Erro que nasce no nosso texto:** o Gemini disse que o Basic é "operação
+  manual" e que só o Pro tem o robô que monitora e publica. A frase de origem é
+  a primeira linha de `dashboard/public/pricing.md`: "Basic covers manual offer
+  operation in groups". O espelhamento é automático nos dois planos.
+- **Recursos inventados:** Gemini atribui "Telegram para WhatsApp" e cópia de
+  "áudios e figurinhas"; não temos nenhum dos dois.
+- **Contra-narrativa de concorrente:** a página do Achadinhos Pro "Espelhar
+  grupos de ofertas vale a pena? (e a alternativa que converte mais)" é fonte do
+  AI Overviews em "é confiável" e o mesmo argumento aparece na Perplexity:
+  espelhar é "arriscado e pouco sustentável", "terceiriza a curadoria para
+  concorrentes", "migre para garimpo com IA". Não temos página respondendo — e
+  o Pro faz os dois (espelha e garimpa a Shopee).
+- **Golpe do espelhamento de tela** aparece em Gemini e AI Overviews, agora
+  para dizer que não há relação. A objeção mudou de lugar, não sumiu.
+- **ChatGPT de 27/09 veio de conta com histórico** ("para o seu caso", "como
+  você trabalha com Shopee + ML + Amazon") e ficou fora do placar. Mesmo assim
+  mostra a marca partida de novo: "Afilira × Espelha Grupos × Shozap ×
+  **BOTinho**".
+- A Perplexity elogiou "sem rankings falsos ou prova social inventada" — reforço
+  para só publicar depoimento verificado.
+- Concorrentes novos, sem ficha: Garimpa Links, ShoMetrics + Dispy, AutoProd,
+  Afiliado Analytics, WHAMetrics Bridge, ZapMito, BotCash, Bot do Afiliado,
+  Promospot, Vendizap.
 
 **ChatGPT em 23/09 (busca ligada, conta não informada, sem sinal de
 personalização):** cita e recomenda em "ferramenta para divulgar ofertas" e em
@@ -185,6 +249,8 @@ de CNPJ, o que é ❌.
 | 01/09 | BOTinho | calçado infantil (3 de 4 superfícies) |
 | 10/09 | BOTinho | calçado, Projeto Botinho (bombeiros), peixe de aquário, BotConversa, Afiliados Pro Bot |
 | 11/09 | Espelha Grupos | produto correto em 9 de 16 — **exceto** `é confiável` no AI Overviews, que devolve **golpe de espelhamento de tela** |
+| 27/09 | BOTinho | calçado (Pittol), mascote do Botafogo, bota ortopédica, chatbot genérico; **nenhum concorrente**. ChatGPT (conta com histórico) segue tratando BOTinho como produto separado |
+| 27/09 | Espelha Grupos | golpe do espelhamento de tela citado por Gemini e AI Overviews **para dizer que não há relação**; Gemini lê "metodologia" como lançamento digital |
 
 A colisão mudou de natureza: deixou de ser um homônimo inofensivo (calçado) e
 passou a ser **fraude**, na consulta em que a pessoa decide se confia.
@@ -193,16 +259,16 @@ passou a ser **fraude**, na consulta em que a pessoa decide se confia.
 
 ## 4. Origem de cadastro e receita
 
-| Métrica | 01/09 | **23/09** (30 dias, desde 24/08) |
-|---|---:|---:|
-| Cadastros no período | 72 | **205** |
-| Cadastros com carimbo do ChatGPT | 43% (31 de 72) | **26% (54 de 205)** |
-| Cadastros que entraram por página de conteúdo | — | 37% (75) |
-| Visitas vindas do ChatGPT (por referenciador) | 18% | 8% (78 de 1.034) — ver aviso |
-| Visitas vindas do Google | 70% | 86% (892) |
-| Pagantes no período | — | **18 (9% dos cadastros)** |
-| Pagantes que entraram por página de conteúdo | 86% | 44% (8 de 18) — janelas diferentes |
-| Dias entre cadastro e 1º pagamento | — | 7,4 (≈ o teste grátis) |
+| Métrica | 01/09 | 23/09 (30 dias, desde 24/08) | **27/09** (30 dias, desde 28/08) |
+|---|---:|---:|---:|
+| Cadastros no período | 72 | 205 | **214** |
+| Cadastros com carimbo do ChatGPT | 43% (31 de 72) | 26% (54 de 205) | **28% (60 de 214)** |
+| Cadastros que entraram por página de conteúdo | — | 37% (75) | 37% (79) |
+| Visitas vindas do ChatGPT (por referenciador) | 18% | 8% (78 de 1.034) — ver aviso | 7% (77 de 1.113) |
+| Visitas vindas do Google | 70% | 86% (892) | 88% (976) |
+| Pagantes no período | — | 18 (9% dos cadastros) | **24 (11%)** |
+| Pagantes que entraram por página de conteúdo | 86% | 44% (8 de 18) — janelas diferentes | 46% (11 de 24) |
+| Dias entre cadastro e 1º pagamento | — | 7,4 (≈ o teste grátis) | 6,6 |
 
 O ChatGPT converte **2,4× acima** da sua participação em visitas. É a assimetria
 mais forte de todo o conjunto e é o que sustenta priorizar citação por IA.
@@ -217,6 +283,27 @@ de 60 até 18/10 (`PLANO_MAQUINA_DE_VENDAS_IA_2026-09-18.md`, seção 8).
 Entrada dos cadastros de 23/09: home 50% (102, ambíguo — inclui 44 que chegaram
 em `/?utm_source=chatgpt.com`), página de busca 32% (66), direto no cadastro
 11%, comparativo 3% (6), `/precos` 2%, blog 1%.
+
+### Funil por página (`diag-paginas-seo.mjs --dias 30`, 27/09)
+
+| Página | Visitas | Clique em CTA | Cadastros |
+|---|---:|---:|---:|
+| `/` | 1.054 | 25,8% | 110 |
+| `/bot-achadinhos-whatsapp` | 312 | 37,8% | 38 |
+| `/alternativas/achadinhos-bot` | 133 | **9,8%** (leu 50%: 24,8%) | 4 |
+| `/precos` | 125 | 25,6% | 6 |
+| `/bot-afiliados-whatsapp` | 116 | **48,3%** | 16 |
+| `/alternativas/achadinho-pro` | 56 | 19,6% | 1 |
+
+Total: 2.108 visitas, 572 cliques em CTA (27,1%). Zero clique com 5+ visitas:
+`/alternativas/shozap` (13, mas 46% leram metade), `/alternativas/bot-para-whatsapp-afiliados`
+(12), `/rastrear-resultados-de-divulgacao-em-grupos` (8). A página nova
+`/bot-que-busca-ofertas-shopee-whatsapp` já tem 5 visitas e 2 cliques.
+
+**Leitura:** `/alternativas/achadinhos-bot` é a terceira página em visitas e a
+pior em conversão das grandes — **só 1 em 4 lê metade** e 1 em 10 clica. Quem
+chega buscando "achadinho pro"/"achadinhos bot" não se convence ali; a mesma
+busca levada a `/bot-achadinhos-whatsapp` converte 4× mais.
 
 ### Funil por página (`diag-paginas-seo.mjs --dias 30`, 23/09)
 
@@ -233,7 +320,35 @@ Páginas com 5+ visitas e **zero** clique: `/alternativas/bot-para-whatsapp-afil
 (14), `/alternativas/shozap` (13), `/rastrear-resultados-de-divulgacao-em-grupos` (8).
 Os comparativos novos de 17/09 têm 1-2 visitas cada: cedo demais para ler.
 
-## 4b. LTV e retenção (`diag-ltv-retencao.mjs`, primeira leitura em 23/09)
+## 4b. LTV e retenção (`diag-ltv-retencao.mjs`)
+
+### 27/09
+
+| Realizado (medido) | 23/09 | **27/09** |
+|---|---:|---:|
+| Clientes pagantes | 30 | **38** |
+| Receita aprovada somada | R$ 1.613,10 | **R$ 2.123,10** |
+| Valor médio por cliente (mediana) | R$ 53,77 (R$ 39) | R$ 55,87 (R$ 47) |
+| Renovaram ao menos uma vez | 17% | 18% — Pro 22% (de 18), Basic 15% (de 20) |
+| Com acesso pago em dia | — | 35 · deixaram vencer: 3 |
+
+| Coorte do 1º pagamento | Clientes | Ainda pagando 1 mês depois |
+|---|---:|---|
+| 2026-07 | 2 | 1 de 2 |
+| **2026-08** | 8 | **7 de 7 mensuráveis (100%)** |
+| 2026-09 | 26 | — (ainda não chegou a hora de renovar) |
+
+Projeção: cancelamento 7%/mês (3 em 44 cliente-mês), vida de 14 meses,
+**R$ 689 por cliente — confiança média**.
+
+⚠️ **Correção da leitura de 23/09 — "o gargalo virou retenção" era falso.**
+"Renovaram ao menos uma vez" divide por TODOS os pagantes, e 26 dos 38 pagaram
+pela primeira vez em setembro: ainda não chegou a data de renovar. A medida
+certa é a coorte, e a única com tamanho para ler (agosto) renovou **7 de 7**.
+Cancelamento observado: 3 clientes em toda a história. O que ainda decide o
+anúncio é a turma de setembro renovar na primeira quinzena de outubro.
+
+### 23/09 (primeira leitura)
 
 | Realizado (medido) | Valor |
 |---|---:|
@@ -390,6 +505,11 @@ IAs em ler o site.
   como consulta na primeira semana.
 - **23/09:** a fatia do ChatGPT nas visitas não serve para calcular conversão —
   o referenciador some no app. Contar só pelo carimbo no cadastro.
+- **27/09:** "o gargalo virou retenção" (23/09) era leitura errada de uma
+  média: "renovaram ao menos uma vez" inclui quem ainda não chegou à data de
+  renovar. Na coorte de agosto, **7 de 7** renovaram.
+- **27/09:** "espelha grupos é lido como expressão, não como marca" (três
+  rodadas) caiu: "o que é" foi de 0/4 para 3/4.
 - **11/09 (segunda correção):** "não existe página comercial nossa disputando
   Tier 1" era **falso nas três análises que o afirmaram**. As cinco páginas de
   loja existem em produção desde 02/09 e têm zero impressão porque não foram

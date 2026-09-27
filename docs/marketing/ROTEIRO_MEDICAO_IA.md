@@ -64,6 +64,29 @@ concorrentes** — é o critério de aceite da Issue 1.
 
 10. BOTinho preço
 
+### Trilha D — Intenção de compra (8 consultas, série nova a partir de 10/2026)
+
+Mede se aparecemos quando a pessoa já sabe o que quer comprar. Nasceu da
+rodada de 27/09 (`PLANO_SEO_GEO_2026-09-27.md`, §2 padrão 1): duas consultas
+da Trilha A ("postar em vários grupos", "padronizar cupons") são lidas pelas
+4 IAs como problema de EMPRESA (CRM, API oficial), e o placar de categoria
+ficou em 6/20 sem dizer se perdemos por intenção ou por ausência. A Trilha D
+pergunta como a afiliada pergunta. As Trilhas A, B e C **não mudam** (série).
+
+11. melhor bot para afiliado shopee no whatsapp
+12. robô que busca ofertas da shopee sozinho
+13. automação para afiliados no whatsapp
+14. espelhar grupos de ofertas whatsapp vale a pena
+15. ferramenta para afiliada divulgar ofertas em grupos de whatsapp
+16. bot de achadinhos para whatsapp
+17. como ser afiliada shopee e divulgar no whatsapp
+18. espelha grupos ou afilira
+
+Registrar como `cluster: 'compra'`. A #14 mede a objeção do concorrente
+("espelhar não vale a pena", Achadinhos Pro) na pergunta em que ela nasce; a
+#18 contém a nossa marca, então repetir o nome sem fonte nossa conta como
+`parcial`, igual à Trilha B.
+
 Em 10/09 esta consulta devolveu, entre as quatro superfícies: calçado infantil,
 Projeto Botinho do Corpo de Bombeiros, peixe de aquário (Hassar gabiru),
 **BotConversa** e **Afiliados Pro Bot**. Os dois últimos são o problema — os
@@ -99,19 +122,20 @@ induzida **não vale como citação**; o que vale é o contraste entre superfíc
 
 ChatGPT Search · Google Gemini · Perplexity · Google AI Overviews
 
-10 consultas × 4 superfícies = **40 linhas por rodada**.
+18 consultas × 4 superfícies = **72 linhas por rodada** (10 até 09/2026; a Trilha D entra em 10/2026).
 
 ---
 
 ## Placar
 
-Só as Trilhas A e B entram: **9 consultas × 4 superfícies = 36 linhas**.
+Trilhas A e B: **9 consultas × 4 superfícies = 36 linhas** (série desde 09/2026). Trilha D: **8 × 4 = 32 linhas**, placar separado, série desde 10/2026. Nunca somar A+B com D numa linha só.
 
 | Trilha | Pergunta que responde |
 |---|---|
 | A (5) | aparecemos para quem não nos conhece? |
 | B (4) | a nossa marca existe e está descrita certo? |
 | C (1) | concorrente está herdando nossas citações antigas? |
+| D (8) | aparecemos para quem já sabe o que quer comprar? |
 
 ---
 
@@ -151,3 +175,17 @@ cat /tmp/gemini.csv
   o nome repetido sem fonte nossa = parcial (a pergunta já trazia o nome).
   Código em `src/ops/aiCitation.js`, teste em `test/ai-citation.test.js` (que
   também falha se as consultas do script divergirem das 10 deste roteiro).
+
+### ⚠️ Conta nova não roda de graça (medido em 25/09)
+
+- `gemini-2.5-flash` e `gemini-2.5-flash-lite`: recusados com "no longer
+  available to new users".
+- Família Gemini 3 (inclusive `gemini-3.8-flash`, o padrão do script): aceita,
+  mas a cota grátis de **busca do Google** ("Pesquisar conteúdo de
+  embasamento" em ai.dev/rate-limit) é **0** — a primeira pergunta volta 429
+  "You exceeded your current quota".
+- Só a família 2.5 tinha busca grátis (1.500/dia), e ela não aceita conta nova.
+
+**Conclusão:** sem faturamento ativo no AI Studio, o Gemini volta a ser medido à
+mão. Ativar a cobrança (com limite de gasto baixo) é decisão da Flávia. Não
+rodar sem a busca: responderia de memória e a medição não vale (regra 2).

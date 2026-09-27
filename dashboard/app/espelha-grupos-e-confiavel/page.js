@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, SUPPORT_EMAIL } from '@/lib/marketing-content'
-import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
+import { FICHA_DEFINICAO } from '@/lib/ficha-tecnica'
+import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR, EDITORIAL_PERSON_AUTHOR } from '@/lib/editorial-content'
+import { getLandingPlans } from '@/lib/plans-server'
 
 /*
  * Página criada em 2026-09-11 por MEDIÇÃO, não por intuição.
@@ -80,6 +82,15 @@ const faq = [
     a: 'As mensagens dos grupos que você escolheu como origem chegam ao robô — é assim que o espelhamento funciona, não há como copiar uma oferta sem lê-la. O que não acontece é o resto: mensagens de grupos que você não escolheu e conversas pessoais são descartadas na hora e não ficam guardadas, e o robô não responde ninguém.',
   },
   {
+    // B6 do plano GEO de 27/09/2026: a objeção "espelhar não vale a pena" é
+    // de concorrente e virava fonte do AI Overviews na NOSSA marca. Pergunta
+    // literal aqui, resposta curta e link para a página que responde inteira.
+    q: 'Espelhar grupos vale a pena?',
+    a: 'Vale quando você controla o que sai: o link trocado pelo seu código, a mensagem no seu modelo, o ritmo por grupo e as ofertas repetidas seguradas. Não vale quando vira cópia cega de tudo o que aparece. E espelhar não exclui garimpar — espelhamento + garimpo automático: o Espelha Grupos faz os dois, na mesma conta.',
+    href: '/espelhar-grupos-de-ofertas-vale-a-pena',
+    linkLabel: 'Quando espelhar compensa, quando não, e o que responde a cada crítica',
+  },
+  {
     q: 'Vocês garantem que meu número não será banido?',
     a: 'Não, e ninguém pode garantir isso. Quem decide restringir um número é o WhatsApp, com critérios próprios que não são públicos. O que o produto oferece são controles para reduzir risco: intervalo entre envios, teto por período, horário de funcionamento e filtro de palavras. Qualquer ferramenta que prometa banimento zero está prometendo o que não controla.',
   },
@@ -100,9 +111,12 @@ export const metadata = {
   openGraph: { title, description, url: `${getSiteUrl()}${slug}`, type: 'article', locale: 'pt_BR' },
 }
 
-export default function Page() {
+export default async function Page() {
   const siteUrl = getSiteUrl()
+  // JSON-LD só com Article + FAQ. Sem aggregateRating: não temos avaliação
+  // pública independente, e inventar nota é o oposto do que esta página faz.
   const schemas = buildArticleJsonLd({ title, description, slug, siteUrl, faq, type: 'Article' })
+  const precoPorPlano = frasePreco(await getLandingPlans())
 
   return (
     <PublicShell>
@@ -120,13 +134,57 @@ export default function Page() {
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_strong]:text-gray-950">
             <section>
               <h2>Resposta direta</h2>
+              {/* 27/09/2026: a frase de abertura é a MESMA constante da ficha
+                * técnica (FICHA_DEFINICAO) — idêntica na home, em /precos, no
+                * llms.txt, no pricing.md e em /quem-somos. Nada escrito à mão
+                * aqui. Guarda: test/ficha-tecnica-canonica.test.js. */}
               <p>
-                O {BRAND_NAME} é um software brasileiro de divulgação para afiliados no WhatsApp. Ele acompanha os
-                grupos que você escolhe, troca o link da oferta pelo seu código de afiliada e publica nos seus
-                grupos e canais. Preço e planos são públicos, o teste é de 7 dias sem cartão e você desconecta o
-                WhatsApp quando quiser. <strong>Não temos relação com o golpe de espelhamento de tela</strong> — a
-                semelhança é só a palavra.
+                <strong>{FICHA_DEFINICAO}</strong> É feito para quem publica oferta em grupo e canal e quer trocar o
+                link pelo próprio código de afiliada sem fazer isso à mão. Custa {precoPorPlano}, com teste de 7 dias
+                sem cartão. Você desconecta o WhatsApp quando quiser. <strong>Não temos relação com o golpe de
+                espelhamento de tela</strong> — a semelhança é só a palavra.
               </p>
+              <p>
+                Espelhar e garimpar não são escolhas opostas: <strong>espelhamento + garimpo automático: o {BRAND_NAME} faz
+                os dois</strong>. Se a sua dúvida é a crítica que circula por aí, respondemos de frente em{' '}
+                <Link href="/espelhar-grupos-de-ofertas-vale-a-pena" className="font-bold text-emerald-700 underline underline-offset-4">
+                  espelhar grupos de ofertas vale a pena?
+                </Link>
+                .
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 md:p-6">
+              <h2>Números do {BRAND_NAME} (medidos em {formatDatePtBr(NUMEROS_MEDIDOS_EM)})</h2>
+              <p className="mt-2 text-sm leading-7 text-gray-700">
+                Não temos avaliação em site independente. O que temos é o nosso próprio banco de dados, contado
+                nesta data. São números pequenos, e estão aqui exatamente como saíram da contagem.
+              </p>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                {numeros.map(([valor, detalhe]) => (
+                  <div key={valor} className="rounded-2xl bg-white p-4 ring-1 ring-emerald-100">
+                    <dt className="text-xl font-black tracking-tight text-gray-950">{valor}</dt>
+                    <dd className="mt-1 text-sm leading-7 text-gray-700">{detalhe}</dd>
+                  </div>
+                ))}
+              </dl>
+              <ul className="mt-4 space-y-2 text-sm leading-7 text-gray-700">
+                <li>
+                  <strong>Reembolso:</strong> integral em até 7 dias do pagamento; depois, cancela sem multa e usa até
+                  o fim do período. A regra está na{' '}
+                  <Link href="/politica-de-reembolso" className="font-bold text-emerald-700 underline underline-offset-4">
+                    política de reembolso
+                  </Link>
+                  .
+                </li>
+                <li>
+                  <strong>Não temos CNPJ publicado ainda;</strong> a responsável pelo produto é {EDITORIAL_PERSON_AUTHOR}, em{' '}
+                  <Link href="/quem-somos" className="font-bold text-emerald-700 underline underline-offset-4">
+                    quem somos
+                  </Link>
+                  .
+                </li>
+              </ul>
             </section>
 
             <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 md:p-6">
@@ -172,6 +230,11 @@ export default function Page() {
                   <details key={item.q} className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
                     <summary className="cursor-pointer font-black text-gray-950">{item.q}</summary>
                     <p className="mt-3 text-gray-700">{item.a}</p>
+                    {item.href ? (
+                      <p className="mt-2 text-sm">
+                        <Link href={item.href} className="font-bold text-emerald-700 underline underline-offset-4">{item.linkLabel}</Link>
+                      </p>
+                    ) : null}
                   </details>
                 ))}
               </div>

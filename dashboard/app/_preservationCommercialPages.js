@@ -7,6 +7,7 @@ import { buildOgImageUrl } from '@/lib/seo-og'
 import { formatDatePtBr, getEditorialDates } from '@/lib/editorial-content'
 import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '@/lib/marketing-content'
+import { AUTOMATION_MODELS, OUR_MODEL_COVERAGE, buildCompetitorModelRows } from '@/lib/automation-models'
 
 const siteUrl = getSiteUrl()
 // "As outras lojas" sai da lista canônica: a resposta escrita à mão ficou
@@ -15,6 +16,15 @@ function outrasLojas(loja) {
   const outras = SUPPORTED_STORES.filter((nome) => nome !== loja)
   return `${outras.slice(0, -1).join(', ')} e ${outras.at(-1)}`
 }
+// "Basic R$39 ou Pro R$69 a cada 30 dias", montado de DEFAULT_LANDING_PLANS
+// para a abertura das páginas-resposta (plano GEO 27/09/2026: as 3 primeiras
+// linhas dizem o que é, para quem e quanto custa — preço nunca escrito à mão).
+const precoPlanosFrase = (() => {
+  const pagos = DEFAULT_LANDING_PLANS.filter((plan) => Number(plan.priceValue) > 0)
+  const partes = pagos.map((plan) => `${plan.name} ${plan.price}`)
+  const lista = partes.length <= 1 ? partes.join('') : `${partes.slice(0, -1).join(', ')} ou ${partes.at(-1)}`
+  return pagos[0]?.period ? `${lista} a cada ${pagos[0].period}` : lista
+})()
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
 const mainLandingHref = '/bot-canais-whatsapp'
 const diagnosticHref = '/diagnostico-antiban-whatsapp'
@@ -52,6 +62,13 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Shopee Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
     lead: 'Depois de entrar no Shopee Afiliados, o trabalho deixa de ser achar oferta e passa a ser publicar. Cada produto precisa virar link com o seu código, o texto precisa ser montado, e tudo isso repetido em cada grupo. O Espelha Grupos faz esse caminho sozinho: acompanha as origens que você escolhe, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e registro do que saiu.',
     intent: 'shopee afiliados whatsapp',
+    // Frente D2: volta para o post que já está na página 1 ("como ser
+    // afiliado shopee"); ele aponta para cá como próximo passo.
+    guide: {
+      text: 'Ainda não é afiliada?',
+      href: '/blog/como-ser-afiliado-shopee-whatsapp',
+      label: 'Guia completo: como ser afiliado Shopee em 5 passos',
+    },
     related: [
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Não tem grupo de onde copiar? O robô busca sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, no plano Pro.' },
       { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com a chave da Shopee', note: 'Onde ela fica, para que serve e como apagar quando quiser.' },
@@ -131,6 +148,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Afiliado do Mercado Livre: como divulgar suas ofertas no WhatsApp sem copiar e colar',
     lead: 'Depois de entrar no programa de afiliados do Mercado Livre, o trabalho vira publicação: gerar o link com o seu código, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'mercado livre afiliados whatsapp',
+    // Frente D2: par recíproco com o post de Mercado Livre.
+    guide: {
+      text: 'Ainda não é afiliada?',
+      href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
+      label: 'Guia completo: afiliado Mercado Livre, comissão até 16%',
+    },
     related: [
       { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Levar o grupo para o Canal sem perder ninguém', note: 'O Canal alcança mais e ninguém responde por cima da oferta.' },
       { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar', note: 'O que muda no alcance e em quem pode responder.' },
@@ -195,12 +218,20 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    * temos para uma afiliada Amazon, e é verdade nossa, verificada. */
   'amazon-afiliados-whatsapp': {
     path: '/amazon-afiliados-whatsapp',
-    title: 'Afiliado Amazon: divulgar ofertas no WhatsApp',
-    description: 'Já é afiliada Amazon? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com a sua tag, sem copiar e colar oferta por oferta. 7 dias grátis.',
+    // 27/09/2026: 102 impressões e 0 clique na posição 7,3 — o título só
+    // repetia a consulta. Agora traz dois números (comissão e teste grátis).
+    title: 'Afiliado Amazon no WhatsApp: até 13% e 7 dias grátis',
+    description: 'Já é afiliada Amazon? Publique suas ofertas em vários grupos e canais do WhatsApp com a sua tag no link, sem copiar e colar oferta por oferta. 7 dias grátis.',
     eyebrow: 'Amazon Associados',
-    h1: 'Afiliado Amazon: como divulgar suas ofertas no WhatsApp sem copiar e colar',
+    h1: 'Afiliado Amazon no WhatsApp: divulgue suas ofertas com a sua tag, sem copiar e colar',
     lead: 'Depois de entrar no Amazon Associados, o trabalho vira publicação: gerar o link com a sua tag, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'afiliado amazon whatsapp',
+    // Frente D2: par recíproco com o post de Amazon.
+    guide: {
+      text: 'Ainda não é afiliada?',
+      href: '/blog/como-divulgar-ofertas-amazon-whatsapp',
+      label: 'Guia completo: como divulgar Amazon, comissão de 0% a 13%',
+    },
     related: [
       { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho, sem você precisar reconectar.' },
       { href: '/bot-canal-whatsapp', label: 'Publicar em Canal do WhatsApp', note: 'Alcança mais gente e ninguém responde por cima da oferta.' },
@@ -422,6 +453,107 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    *
    * Título entra pela palavra buscada; o termo interno ("ofertas automáticas",
    * "garimpo") é explicado dentro da página. */
+  // 27/09/2026 — resposta à contra-narrativa "espelhar grupos não vale a pena".
+  // Na rodada de IA de 27/09, a página de um concorrente com esse argumento virou
+  // FONTE do Google AI Overviews em "espelha grupos é confiável", e a Perplexity
+  // repetiu a tese ("arriscado e pouco sustentável", "migre para garimpo com IA").
+  // O objetivo aqui é ser citável por IA, não volume de busca: "espelhamento" como
+  // porta de entrada segue congelado no Google por falta de volume (seo-marketing).
+  // Regra da página: dar razão ao que é verdade na crítica e mostrar o que o
+  // produto faz de fato — nunca prometer que não bane nem que converte mais.
+  'espelhar-grupos-de-ofertas-vale-a-pena': {
+    path: '/espelhar-grupos-de-ofertas-vale-a-pena',
+    title: 'Espelhar grupos de ofertas vale a pena? Quando sim',
+    description: 'Quando espelhar grupos de ofertas compensa, quando não, e como evitar oferta repetida, link de outro afiliado e ritmo de robô. Com os dois modos lado a lado.',
+    eyebrow: 'Espelhar ou garimpar',
+    h1: 'Espelhar grupos de ofertas vale a pena? Depende de como você espelha',
+    // 27/09/2026: as 3 primeiras linhas respondem de frente (vale quando, para
+    // quem, quanto custa — preço de DEFAULT_LANDING_PLANS), antes de tratar a
+    // crítica. Espelhamento + garimpo: o produto faz os dois.
+    lead: `Vale a pena quando você controla o que sai: o link trocado pelo seu código de afiliada, a mensagem no seu modelo, o ritmo por grupo e as ofertas repetidas seguradas. É para afiliadas que já acompanham grupos de ofertas do seu nicho e publicam em mais de um grupo ou canal do WhatsApp; no Espelha Grupos custa ${precoPlanosFrase}, com 7 dias grátis sem cartão. A crítica mais comum — "o seu grupo fica igual a todos os outros" — vale para robô que só copia e cola. Aqui os grupos que você acompanha funcionam como garimpadores: o robô aproveita só o que importa, qual produto entrou em promoção, e monta a sua oferta com o seu modelo de mensagem e o seu link. Espelhamento + garimpo automático: o Espelha Grupos faz os dois — no plano Pro, ele também busca ofertas da Shopee sozinho, pelo tema que você escolher.`,
+    intent: 'espelhar grupos de ofertas vale a pena',
+    relatedTitle: 'Para decidir com calma',
+    related: [
+      { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'O outro modo: o robô busca oferta sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, no plano Pro.' },
+      { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os caminhos possíveis e o passo a passo com o robô.' },
+      { href: '/metodologia-uso-responsavel-whatsapp', label: 'Metodologia de uso responsável', note: 'Revisão, cadência e histórico antes de aumentar o volume.' },
+      { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?', note: 'O que ele faz com o seu WhatsApp e com os seus dados.' },
+      { href: '/alternativas/achadinho-pro', label: 'Espelha Grupos × Achadinho Pro', note: 'Preço, lojas e grupos lado a lado.' },
+      { href: '/politica-de-reembolso', label: 'Política de reembolso', note: 'Até 7 dias do pagamento, valor integral de volta.' },
+    ],
+    about: ['Espelhamento de grupos', 'Afiliados', 'Grupos de WhatsApp'],
+    decisionQA: [
+      {
+        q: 'Se eu espelho, minha oferta não fica igual à de todo mundo?',
+        a: 'Só se você deixar. O robô não precisa repassar a mensagem do outro grupo: ele pega qual produto está em promoção e o link, e publica no modelo de mensagem que você escreveu — com o seu gancho, a sua chamada e o seu link de afiliada. Dá para ter um modelo diferente para cada grupo de origem, e no plano Pro o robô ainda alterna ganchos, chamadas e convites para as mensagens não saírem repetidas. Do outro grupo, fica só a descoberta da oferta.',
+      },
+      {
+        q: 'Espelhar grupos de ofertas vale a pena?',
+        a: 'Vale quando o grupo de origem publica ofertas boas no seu nicho e você controla o que sai: o link trocado pelo seu código, a mensagem no seu modelo, o ritmo por grupo e as ofertas repetidas seguradas. Não vale quando vira cópia cega de tudo o que aparece, em qualquer ritmo, porque aí o grupo fica igual a todos os outros e o risco com o WhatsApp sobe.',
+      },
+      {
+        q: 'Quem espelha não chega sempre depois de quem achou a oferta?',
+        a: 'Chega depois de quem publicou primeiro, sim — é da natureza do espelhamento. A diferença é que você chega antes de quem ainda está copiando e colando à mão. Se chegar primeiro é o que importa no seu nicho, complemente com busca própria: no Espelha Grupos, o plano Pro procura ofertas da Shopee sozinho, sem depender de grupo de origem.',
+      },
+      {
+        q: 'O link não continua sendo de outro afiliado?',
+        a: 'Não deveria, e no Espelha Grupos não sai: o robô troca o link pelo seu código de afiliada em 6 lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress), inclusive link de cupom. Quando a troca não dá certo, a oferta não é publicada com o link de outra pessoa — ela fica registrada no histórico com o motivo.',
+      },
+      {
+        q: 'Espelhar dá ban?',
+        a: 'Nenhuma ferramenta pode garantir que o WhatsApp não vai restringir um número, e quem promete isso está prometendo o que não controla. O que existe é controle do que está do seu lado: intervalo entre envios, limite por grupo, ofertas repetidas seguradas, chip dedicado e publicar só em grupos em que você tem permissão.',
+      },
+    ],
+    aside: {
+      pill: 'Os dois modos numa conta só',
+      title: 'Garimpo dos outros, oferta com a sua cara.',
+      body: 'O mercado costuma tratar espelhamento e garimpo como escolhas opostas. No Espelha Grupos, espelhar já é garimpar: os grupos que você acompanha descobrem a promoção, e a mensagem sai no seu modelo, com o seu link. E, no plano Pro, o robô também busca ofertas da Shopee sozinho, pelo tema que você escolher.',
+    },
+    primaryCta: 'Testar 7 dias grátis',
+    secondaryCta: 'Ver como funciona',
+    // Bloco de conversão com a tabela de preço vinda de DEFAULT_LANDING_PLANS.
+    priceTable: true,
+    problemTitle: 'Os outros grupos garimpam. A oferta que sai é sua.',
+    problem: 'Quem garimpa ofertas o dia inteiro faz o trabalho mais pesado: procurar, conferir preço, achar o cupom. O espelhamento aproveita esse trabalho sem copiar o resultado. O robô lê a oferta nos grupos que você acompanha, descobre qual é o produto e o preço, troca o link pelo seu código e monta a mensagem com o seu modelo — então quem recebe vê a sua oferta, no seu jeito de escrever, e não a do grupo de origem. As outras críticas também têm resposta: link de outro afiliado não sai (se a troca falhar, a oferta não é publicada), o mesmo produto não se repete no mesmo grupo dentro da janela de tempo, o ritmo por grupo é você quem define e, para não depender só dos outros, o plano Pro busca ofertas da Shopee sozinho.',
+    bestFor: {
+      yes: [
+        'Quem já acompanha grupos de ofertas bons no seu nicho e passa horas copiando, trocando link e colando.',
+        'Quem divulga várias lojas e quer o link trocado pelo seu código sem conferir um por um.',
+        'Quem quer somar as duas fontes: o que já circula nos grupos e ofertas da Shopee buscadas por tema.',
+      ],
+      no: [
+        'Quem quer publicar em grupos em que não tem permissão para divulgar — espelhar não muda essa regra.',
+        'Quem quer tudo saindo sem nenhuma conferência: vale revisar o histórico e ajustar filtros nas primeiras semanas.',
+        'Quem precisa de Telegram como destino — o Espelha Grupos publica em grupos e Canais do WhatsApp.',
+      ],
+    },
+    versus: [
+      { name: 'Achadinho Pro', href: '/alternativas/achadinho-pro', verdict: 'Aposta em pesquisa de produtos da Shopee com IA e em vários números de WhatsApp. Escolha o Achadinho Pro se esse é o centro da sua rotina; o Espelha Grupos se quer espelhar os grupos que você já segue em 6 lojas e também buscar ofertas da Shopee sozinho.' },
+    ],
+    bullets: [
+      'Os outros grupos viram o seu garimpo: o robô aproveita o produto em promoção, não o texto de ninguém.',
+      'A mensagem sai no seu modelo, com o seu gancho e a sua chamada — um modelo diferente para cada grupo de origem, se quiser.',
+      'No plano Pro, o robô alterna ganchos, chamadas e convites para as ofertas não saírem com o mesmo texto.',
+      'Troca o link pelo seu código em 6 lojas, inclusive cupom — e não publica se a troca falhar.',
+      'O mesmo produto não sai repetido no mesmo grupo dentro da janela de tempo.',
+      'Intervalo entre envios e limite por grupo definidos por você.',
+      'Histórico de tudo o que saiu, foi segurado ou falhou, com o motivo.',
+    ],
+    process: [
+      'Escolha poucos grupos de origem, do seu nicho, com ofertas que você publicaria.',
+      'Cadastre o seu código de afiliada nas lojas que você divulga.',
+      'Escreva o seu modelo de mensagem (um por grupo de origem, se quiser) e defina intervalo e limite por grupo.',
+      'Acompanhe o histórico na primeira semana, bloqueie palavras e troque origens que só trazem repetição.',
+      'Se quiser ofertas que ninguém mais está repassando, ligue a busca automática da Shopee (plano Pro).',
+    ],
+    faqs: [
+      ['Espelhar grupos é permitido?', 'O robô só lê grupos de que o seu número já participa. O cuidado que é seu: publicar só em grupos e canais em que você tem permissão para divulgar e respeitar as regras de cada grupo, do WhatsApp e dos programas de afiliados.'],
+      ['Garimpo com IA converte mais que espelhar?', 'Não temos medição que prove isso para um lado ou para o outro, e desconfie de quem afirma sem mostrar o dado. O que dá para dizer: garimpar traz ofertas que não circulam em outros grupos, e espelhar aproveita a curadoria de grupos que já funcionam. No Espelha Grupos os dois modos rodam juntos: em 27/09/2026, 43 contas tinham ofertas automáticas ativas e 38 clientes pagavam pelo produto.'],
+      ['Preciso deixar o celular ligado?', 'Não. Depois de conectar o WhatsApp lendo o QR Code, o robô roda no servidor, 24 horas por dia.'],
+      ['Quanto custa?', 'Basic R$ 39 e Pro R$ 69 a cada 30 dias. O espelhamento com troca de link está nos dois planos; a busca automática da Shopee é do Pro. O teste grátis de 7 dias libera o Pro completo, sem cartão.'],
+      ['E se eu pagar e não gostar?', 'Em até 7 dias corridos depois do pagamento, devolvemos o valor integral.'],
+    ],
+  },
   'bot-que-busca-ofertas-shopee-whatsapp': {
     path: '/bot-que-busca-ofertas-shopee-whatsapp',
     title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp',
@@ -432,6 +564,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     intent: 'bot que busca ofertas shopee whatsapp',
     related: [
       { href: '/bot-afiliados-whatsapp', label: 'O outro modo: espelhar grupos que você já segue', note: 'Converte o link em 6 lojas e republica nos seus grupos e canais.' },
+      { href: '/automacao-whatsapp-afiliados', label: 'Os 3 modelos de automação para afiliadas', note: 'Espelhador, garimpo e formatador lado a lado, com 8 ferramentas e preço datado.' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar ou garimpar?', note: 'O que cada modo resolve e por que dá para usar os dois.' },
       { href: '/shopee-afiliados-whatsapp', label: 'Shopee Afiliados no WhatsApp', note: 'Como a oferta da Shopee sai com o seu link, inclusive cupom.' },
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
       { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee', note: 'A tabela de comissão e o prazo de atribuição.' },
@@ -524,7 +658,11 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
     intent: 'bot para afiliados whatsapp',
     related: [
+      // 27/09/2026 (PLANO_SEO_GEO, B7): o hub dos 3 modelos nasce linkado
+      // daqui — esta é a página de mais impressão do tema (942).
+      { href: '/automacao-whatsapp-afiliados', label: 'Os 3 modelos de automação para afiliadas', note: 'Espelhador, garimpo e formatador: qual serve para você, e 8 ferramentas comparadas com preço datado.' },
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'O robô também busca oferta sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem (plano Pro).' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?', note: 'Quando compensa, quando não, e como evitar oferta repetida e link de outro afiliado.' },
       { href: '/politica-de-reembolso', label: 'Política de reembolso', note: 'Até 7 dias do pagamento, valor integral de volta; depois, cancelamento sem multa.' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'Checklist, preço e como testar em 7 dias.' },
@@ -535,6 +673,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/bot-canal-whatsapp', label: 'Publicar em Canal do WhatsApp', note: 'O Canal alcança mais gente e ninguém responde por cima da oferta.' },
       { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa um bot para WhatsApp', note: 'Preço das ferramentas do mercado lado a lado, com fonte e data.' },
       { href: '/blog/checklist-padronizar-divulgacao-whatsapp', label: 'Checklist para padronizar o que você publica', note: 'O que conferir antes de cada oferta sair.' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Como padronizar a divulgação de cupons', note: 'Modelo de mensagem pronto com cupom e link com o seu código, o mesmo em todos os grupos.' },
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar em vários grupos ao mesmo tempo sem spam', note: 'Os 4 caminhos lado a lado e o que o WhatsApp trata como spam.' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
       { href: '/vendas-e-comissao-afiliado-whatsapp', label: 'Quanto você ganhou de comissão', note: 'Pedidos, valor vendido e comissão estimada e confirmada das ofertas que o robô publicou.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'Cadastro gratuito, 3% na venda padrão e até 30% na Comissão Extra.' },
@@ -608,6 +748,23 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     // Tabela de preço estática, na própria página (os mesmos valores de
     // DEFAULT_LANDING_PLANS — nenhum número novo).
     priceTable: true,
+    // 27/09/2026 (PLANO_SEO_GEO, B3): a Perplexity classifica o mercado em 3
+    // modelos (espelhador, garimpo, formatador) e Gemini/AIO citam quem se
+    // descreve nesses termos. O produto tem os três — dito aqui, com a fonte
+    // de cada um em lib/automation-models.js.
+    automationModels: {
+      title: 'Os 3 modelos de automação para afiliadas, e qual serve para você',
+      body: 'O mercado divide os bots para afiliados em três modelos, e a maioria das ferramentas faz um só. Veja em qual está o seu trabalho manual de hoje. O Espelha Grupos tem os três na mesma conta; o detalhe de cada um está no hub de automação para afiliadas.',
+      href: '/automacao-whatsapp-afiliados',
+    },
+    // Tabela com os 3 concorrentes que as IAs mais citam nesta consulta. Preço
+    // e data saem da FICHA (competitors-data.js) em tempo de render; o que a
+    // ficha não diz fica "—".
+    competitorTable: {
+      title: 'Espelha Grupos × Afilira × Achadinho Pro × Pro Afiliados',
+      body: 'Só o que a ficha de cada um informa, com a data em que a página de planos foi conferida. Preço de entrada é o primeiro plano com preço publicado, no valor recorrente.',
+      slugs: ['afilira', 'achadinho-pro', 'proafiliados-com'],
+    },
     // Comparação com quem as IAs mais citam nesta consulta. Sem preço aqui de
     // propósito: preço de concorrente só sai com ficha datada, e ela mora nas
     // páginas de alternativa linkadas.
@@ -627,6 +784,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       ['E se a mesma oferta chegar de duas fontes diferentes?', 'Ela sai uma vez só. A repetição no mesmo destino dentro da janela é bloqueada e aparece no histórico como bloqueio, não como envio — assim você vê quantas vezes a mesma promoção tentou entrar.'],
       ['Isso é o mesmo que “anti-ban”?', 'Não como promessa. Nenhuma ferramenta controla a decisão do WhatsApp, e quem garante banimento zero está vendendo o que não pode entregar. O que existe aqui é controle do que está sob controle: intervalo entre envios, limite por destino e variação.'],
       ['Preciso ter grupo grande para valer a pena?', 'Não. O ganho principal é de tempo e de comissão que deixa de se perder no caminho, e isso vale desde o primeiro grupo. Volume grande muda a conta, não a lógica.'],
+      ['Quais são os 3 modelos de bot para afiliados, e qual o Espelha Grupos é?', `Espelhador (republica, com o seu código, o que aparece nos grupos que você já segue), garimpo automático (o robô acha a oferta sozinho na loja por tema e desconto) e formatador (você cola o link e a oferta sai montada). O Espelha Grupos faz os três: espelha em ${SUPPORTED_STORES.length} lojas no Basic e no Pro, busca ofertas da Shopee sozinho no Pro e monta a oferta a partir de um link no "Criar oferta", em qualquer plano.`],
     ],
   },
   'bot-achadinhos-whatsapp': {
@@ -646,6 +804,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     relatedTitle: 'Continue: o que publicar nos seus achadinhos',
     related: [
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Bot que busca achadinhos da Shopee sozinho', note: 'Você escreve o tema e o desconto mínimo; o robô garimpa e publica (plano Pro).' },
+      { href: '/automacao-whatsapp-afiliados', label: 'Espelhar, garimpar ou formatar: os 3 modelos', note: 'Qual modelo de automação resolve o seu caso, e 8 ferramentas comparadas com preço datado.' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos de ofertas vale a pena?', note: 'As críticas ao espelhamento e o controle que responde a cada uma.' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'Os 4 caminhos e o passo a passo com o robô.' },
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'Espelhar, garimpar, converter, enfileirar — e quem faz cada uma.' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'Checklist, preço e como testar em 7 dias.' },
@@ -657,6 +817,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'Clonar mensagens de um grupo de afiliados', note: 'O que a busca chama de "clonar" e como o link vira o seu.' },
       { href: '/copiaram-minha-oferta-no-whatsapp', label: 'Copiaram a sua oferta?', note: 'Marca d\u2019água, texto próprio e link com o seu código: o que muda quem leva o crédito.' },
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar achadinhos em vários grupos sem spam', note: 'Encaminhar, Comunidades, extensão ou robô com fila: prós e contras de cada um.' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Padronizar a divulgação de cupons', note: 'O modelo de mensagem pronto, com cupom e link com o seu código.' },
       // Links por loja adicionados em 16/09. Esta é a 2ª página mais forte do
       // site (2.514 impressões, CTR 5,0%) e não apontava para nenhuma das cinco
       // páginas por loja — que existem desde 02/09 e seguem com ~30 impressões
@@ -1027,6 +1189,24 @@ export function PreservationCommercialPage({ pageKey }) {
                   </Link>
                 </p>
               ) : null}
+              {/* Frente D2 (PLANO_SEO_GEO_2026-09-27): a comercial de loja
+                  linka de volta para o guia completo do blog que já ranqueia
+                  — o par (post → comercial → post) é o que funde a força. */}
+              {page.guide ? (
+                <p style={s.nudge}>
+                  {page.guide.text}{' '}
+                  <Link
+                    href={page.guide.href}
+                    style={s.nudgeLink}
+                    data-seo-cta="commercial_guide"
+                    data-cta-position="hero_guide"
+                    data-cta-stage="education"
+                    data-cta-destination="content"
+                  >
+                    {page.guide.label}
+                  </Link>
+                </p>
+              ) : null}
               <div style={s.ctas}>
                 <Link className="btn btn-accent" href={registerHref} data-seo-cta="commercial_signup" data-cta-position="hero_primary" data-cta-stage="conversion" data-cta-destination="signup">{page.primaryCta}</Link>
                 <Link className="btn btn-ghost" href={diagnosticHref} data-seo-cta="commercial_diagnostic" data-cta-position="hero_secondary" data-cta-stage="diagnostic" data-cta-destination="diagnostic">Fazer diagnóstico</Link>
@@ -1055,6 +1235,25 @@ export function PreservationCommercialPage({ pageKey }) {
             </div>
           </section>
         )}
+
+        {page.automationModels ? (
+          <section style={s.section} aria-labelledby="automation-models-title">
+            <div className="wrap">
+              <SectionHeader eyebrow="Os 3 modelos" title={page.automationModels.title} body={page.automationModels.body} />
+              <div style={s.grid}>
+                {AUTOMATION_MODELS.map((model) => (
+                  <article key={model.id} style={s.card}>
+                    <h3 style={{ fontSize: 20, marginBottom: 10 }}>{model.name}</h3>
+                    <p style={s.small}>{model.what}</p>
+                    <p style={{ ...s.small, marginTop: 10, color: 'var(--ink)' }}><strong>Melhor para:</strong> {model.bestFor}</p>
+                    <p style={{ ...s.small, marginTop: 6 }}><strong style={{ color: 'var(--accent-strong)' }}>No Espelha Grupos:</strong> {model.ours}</p>
+                  </article>
+                ))}
+              </div>
+              <Link className="btn btn-ghost" style={{ marginTop: 18 }} href={page.automationModels.href} data-seo-cta="commercial_automation_hub" data-cta-position="automation_models" data-cta-stage="consideration" data-cta-destination="content">Ver os 3 modelos e 8 ferramentas comparadas</Link>
+            </div>
+          </section>
+        ) : null}
 
         {page.bestFor ? (
           <section style={s.section} aria-labelledby="best-for-title">
@@ -1152,6 +1351,52 @@ export function PreservationCommercialPage({ pageKey }) {
                   </article>
                 ))}
               </div>
+            </div>
+          </section>
+        ) : null}
+
+        {page.competitorTable ? (
+          <section style={s.section} aria-labelledby="competitor-table-title">
+            <div className="wrap">
+              <SectionHeader eyebrow="Lado a lado" title={page.competitorTable.title} body={page.competitorTable.body} />
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ ...s.table, minWidth: 880 }}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}>Ferramenta</th>
+                      <th style={s.th}>Espelhamento</th>
+                      <th style={s.th}>Garimpo automático</th>
+                      <th style={s.th}>Criar oferta do link</th>
+                      <th style={s.th}>Lojas</th>
+                      <th style={s.th}>Preço de entrada (data da ficha)</th>
+                      <th style={s.th}>Teste grátis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={s.td}><strong>{OUR_MODEL_COVERAGE.name}</strong></td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.espelhador}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.garimpo}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.formatador}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.stores}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.entryPrice}</td>
+                      <td style={s.td}>{OUR_MODEL_COVERAGE.freeTrial}</td>
+                    </tr>
+                    {buildCompetitorModelRows(page.competitorTable.slugs).map((row) => (
+                      <tr key={row.slug}>
+                        <td style={s.td}><Link href={row.href} data-seo-cta="commercial_competitor_table" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>{row.name}</Link></td>
+                        <td style={s.td}>{row.espelhador}</td>
+                        <td style={s.td}>{row.garimpo}</td>
+                        <td style={s.td}>{row.formatador}</td>
+                        <td style={s.td}>{row.stores}</td>
+                        <td style={s.td}>{row.entryPrice}</td>
+                        <td style={s.td}>{row.freeTrial}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ ...s.small, marginTop: 14, fontSize: 13 }}>&quot;—&quot; = a ficha da ferramenta não informa. Não inferimos nada do site de ninguém: o que está aqui é o que a página de planos de cada um dizia na data indicada.</p>
             </div>
           </section>
         ) : null}

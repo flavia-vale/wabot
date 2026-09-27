@@ -1,12 +1,40 @@
 # Pricing — Espelha Grupos
 
-Last updated: 2026-09-24
+Last updated: 2026-09-27
 Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: Espelha Grupos pricing.
 Formerly published under the product name "BOTinho"; that name refers to this same product.
 
-Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups: mirroring, link conversion, offer creation and scheduling, with the clickable offer card and fully rewritable message templates. Pro adds channels, automatic Shopee offers, send queues, the watermark on offer images, pacing controls with copy variation and the Shopee sales and commission dashboard. Prices below reflect the public defaults used by the application.
+Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Both paid plans include the automatic mirroring robot: it reads the chosen source groups 24 hours a day, converts each store link to the affiliate's own code and publishes in the destination groups without anyone copying and pasting. Basic covers that automatic mirroring in groups plus link conversion, offer creation and scheduling, with the clickable offer card and fully rewritable message templates. Pro adds channels, automatic Shopee offers, send queues, the watermark on offer images, pacing controls with copy variation and the Shopee sales and commission dashboard. Prices below reflect the public defaults used by the application.
+
+The canonical feature sheet below (in Portuguese, the customers' language) is identical to the one on the homepage, on /precos and in /llms.txt: named stores, WhatsApp only (no Telegram, no Instagram) and the exact Basic vs. Pro split.
+
+## Ficha técnica (canônica — idêntica na home, em /precos, no llms.txt e no pricing.md)
+
+Espelha Grupos é um software web para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
+
+- Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto.
+- Canal de publicação: Só WhatsApp (grupos e, no Pro, canais). Não envia para Telegram nem para Instagram.
+- Teste grátis: 7 dias com o Pro completo, sem cartão.
+- Reembolso e cancelamento: Reembolso integral em até 7 dias corridos depois do pagamento; depois disso, cancela sem multa e usa até o fim do período pago.
+- Conexão: Pelo QR Code do WhatsApp; roda no servidor 24 h, sem deixar o celular ligado. Recomendamos um número dedicado. Nenhum software garante que o número não será bloqueado.
+
+| Recurso | Basic (R$39 / 30 dias) | Pro (R$69 / 30 dias) |
+|---|---|---|
+| Espelhamento automático: lê os grupos de origem e publica nos grupos de destino, sem copiar e colar | Sim | Sim |
+| Troca do link pelo seu código de afiliada nas 6 lojas (inclusive cupom) | Sim | Sim |
+| Se a troca do link falhar, a oferta NÃO é publicada (nunca sai o link de outra pessoa) | Sim | Sim |
+| Modelo de mensagem: a oferta sai reescrita do seu jeito | Sim | Sim |
+| Palavras bloqueadas: filtro do que não espelhar, geral e por grupo de origem | Sim | Sim |
+| Imagem e card da oferta preservados: a foto do produto sai no card clicável, sem cortar | Sim | Sim |
+| Criar oferta a partir de um link: você cola o seu link, o robô busca nome, preço e foto e monta a oferta | Sim | Sim |
+| Canais do WhatsApp como origem e destino | Não | Sim |
+| Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem | Não | Sim |
+| Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por dia) | Não | Sim |
+| Variação do texto entre os envios | Não | Sim |
+| Marca d’água com o seu nome na foto da oferta | Não | Sim |
+| Painel de vendas e comissão da Shopee | Não | Sim |
 
 ## Teste grátis
 
@@ -29,9 +57,9 @@ Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access
 
 - Plan ID: `basic`
 - Price: R$39 / 30 days
-- Best for: manual offer operation in WhatsApp groups
+- Best for: automatic offer mirroring in WhatsApp groups (the robot reads the source groups and publishes by itself)
 - Includes:
-  - Group mirroring (monitor → destination groups)
+  - Automatic group mirroring, 24 hours a day (monitor → destination groups), with no copy and paste
   - Affiliate link conversion in six stores: Mercado Livre, Amazon, Shopee, Magalu, SHEIN and AliExpress
   - Coupon and voucher link conversion (not only product links) as the affiliate's own code
   - Clickable offer card: tapping the card opens the product page in the store

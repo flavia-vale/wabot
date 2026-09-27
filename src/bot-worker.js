@@ -9,6 +9,7 @@ import makeWASocket, {
   downloadMediaMessage,
   extractMessageContent,
   prepareWAMessageMedia,
+  proto,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
@@ -45,7 +46,7 @@ import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, effectiveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
-import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
+import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
@@ -56,11 +57,8 @@ import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
-import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
-import { buildStableSendMessageId } from './core/stableMessageId.js'
 import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
 import { checkAndSetGlobalDedup } from './core/globalDedup.js'
-import { resolveSendTimeoutOverrideMs, resolveSendTimeoutMs as resolveSendTimeoutMsPure, DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS } from './core/sendTimeout.js'
 import { detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
@@ -86,7 +84,7 @@ import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirro
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
-import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
+import { shouldUseRelayPath, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { createPairingAuthBackup } from './core/pairingAuthBackup.js'
 import { resolveWaWebVersion, WA_VERSION_REGISTRY_URL_DEFAULT, WA_FAILURE_VERSION_REJECTED } from './core/waVersion.js'
@@ -94,6 +92,12 @@ import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, 
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
+// Feature 017 (arquitetura multicanal de entrega), D-A2: sendPreparedPayload
+// é o único ponto que fala com o socket do WhatsApp, movido para o adaptador
+// de WhatsApp com o corpo INALTERADO (test/delivery-whatsapp-send-inalterado.test.js).
+import { sendPreparedPayload } from './delivery/whatsapp/send.js'
+import { DELIVERY_NETWORK } from './core/delivery/networks.js'
+import { enqueueDeliveryOutbox } from './deliveryOutbox/enqueue.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
@@ -112,6 +116,7 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { createSentMessageStore } from './core/sentMessageStore.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
@@ -543,6 +548,58 @@ const msgRetryCounterCache = createDurableStuckMessageRetryCache({
   logger,
 })
 const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
+// RCA 2026-09 ("Aguardando mensagem" nos membros do grupo de destino): quem
+// recebe e não consegue decifrar pede reenvio; o Baileys só reenvia se
+// `getMessage` devolver a mensagem original. Sem isso (default = undefined) o
+// pedido morria em silêncio e o membro ficava preso para sempre. Guardado em
+// disco (src/core/sentMessageStore.js), escopo de módulo para sobreviver a
+// reconexões. Ver docs/rca/whatsapp-sessao.md.
+const sentMessageStore = createSentMessageStore({
+  dir: getSentMessagesDir(userId),
+  encode: (message) => proto.Message.encode(proto.Message.fromObject(message)).finish(),
+  decode: (bytes) => proto.Message.decode(bytes),
+  logger,
+})
+sentMessageStore.prune()
+
+function rememberSentMessage(id, message) {
+  if (!id || !message) return
+  sentMessageStore.save(id, message)
+}
+
+// Guarda cada mensagem enviada para atender pedido de reenvio. O
+// `sendMessage` do Baileys emite `messages.upsert` (type 'append', fromMe)
+// depois do envio; o caminho `relay` (src/delivery/whatsapp/send.js) chama
+// `socket.relayMessage` direto e não emite nada — por isso o embrulho. O
+// `sendMessage` interno usa a própria closure de relayMessage, então o
+// embrulho não grava em dobro.
+function attachSentMessageRecorder(socket) {
+  const originalRelayMessage = socket.relayMessage
+  socket.relayMessage = async (jid, message, opts) => {
+    const msgId = await originalRelayMessage(jid, message, opts)
+    rememberSentMessage(msgId, message)
+    return msgId
+  }
+  socket.ev.on('messages.upsert', ({ messages, type }) => {
+    if (type !== 'append') return
+    for (const msg of messages || []) {
+      if (msg?.key?.fromMe && msg.message) rememberSentMessage(msg.key.id, msg.message)
+    }
+  })
+}
+
+async function getSentMessageForRetry(key) {
+  const message = sentMessageStore.load(key?.id)
+  // Nível info de propósito: é a medição de aceite do conserto (quantos
+  // pedidos de reenvio chegam e quantos são atendidos).
+  logger.info({
+    remoteJid: key?.remoteJid,
+    participant: key?.participant,
+    msgId: key?.id,
+    found: Boolean(message),
+  }, message ? 'retry-receipt: reenviando mensagem pedida pelo destinatário' : 'retry-receipt: mensagem pedida não está guardada')
+  return message
+}
 // Timestamp (Date.now()) até quando uma reconexão automática já está agendada
 // (setTimeout(startBot, ...) pendente). Existe um intervalo real entre o close
 // (activeSock/pendingSock viram null) e o próximo startBot() de fato criar um
@@ -1474,15 +1531,6 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_
 // Política por tentativa: 1ª paciente (gera link preview, mídia hospedada,
 // rede pode oscilar), demais rápidas para liberar a fila. Configurável via
 // env caso precise uniformizar em incidentes — caem todos no mesmo valor.
-// Override uniforme opcional; vazio/0 => null para cair no array por-tentativa.
-// (Lógica pura em core/sendTimeout.js — corrige o bug em que a expressão antiga
-// `Math.max(5000, envNumber(...,0)) || null` devolvia 5000 SEMPRE, travando
-// todo envio em 5s e deixando o array [90,60,45]s morto.)
-const SEND_MESSAGE_TIMEOUT_MS = resolveSendTimeoutOverrideMs(process.env.SEND_MESSAGE_TIMEOUT_MS)
-const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS
-function resolveSendTimeoutMs(attempt) {
-  return resolveSendTimeoutMsPure(attempt, { overrideMs: SEND_MESSAGE_TIMEOUT_MS, byAttempt: SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS })
-}
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
 const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
@@ -2068,12 +2116,6 @@ async function finishSendJob(job, result) {
   await finalizeSendJob(onDone, job, result)
 }
 
-function withSendTimeout(promise, ctx) {
-  const timeoutMs = resolveSendTimeoutMs(ctx?.attempt)
-  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs })
-}
-
-
 function isHttpUrl(value) {
   if (typeof value !== 'string') return false
   try {
@@ -2581,66 +2623,6 @@ function resolveChannelForward(postDetail) {
   return null
 }
 
-async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
-  // messageId ESTÁVEL por job (derivado do logId), reutilizado em TODAS as rotas
-  // e tentativas: o WhatsApp deduplica no servidor pela key.id, então um
-  // timeout/Connection Closed que já entregou não vira duplicata quando o
-  // retry/fallback reenvia. null => Baileys gera o id normalmente (comportamento
-  // histórico) quando não há logId.
-  const stableMessageId = buildStableSendMessageId(job.logId)
-  const sendOptionsWith = (opts) => {
-    if (!stableMessageId) return opts || undefined
-    return { ...(opts || {}), messageId: stableMessageId }
-  }
-
-  if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
-    await withSendTimeout(
-      sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, stableMessageId ? { messageId: stableMessageId } : {}),
-      { destJid: job.destJid, route: 'relay', attempt },
-    )
-    return
-  }
-
-  if (payload && payload.primary) {
-    const channelDest = isChannelDestination(job.destJid)
-    if (detectKind(job.destJid) === null) {
-      logger.warn({ destJid: job.destJid }, 'JID kind inesperado chegou ao send path; usando sendMessage como fallback')
-    }
-    const routes = [
-      {
-        body: channelDest ? stripChannelUnsafeFields(payload.primary) : payload.primary,
-        sendOptions: payload.primarySendOptions,
-      },
-      ...(payload.fallbacks || []).map((body, idx) => ({
-        body: channelDest ? stripChannelUnsafeFields(body) : body,
-        sendOptions: payload.fallbackSendOptions?.[idx],
-      })),
-    ]
-    let lastErr = null
-    for (let i = 0; i < routes.length; i++) {
-      const route = routes[i]
-      try {
-        await withSendTimeout(
-          sock.sendMessage(job.destJid, route.body, sendOptionsWith(route.sendOptions)),
-          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]`, attempt },
-        )
-        return
-      } catch (err) {
-        lastErr = err
-        if (err?.code === 'SEND_MESSAGE_TIMEOUT') {
-          logger.warn({ destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` }, 'sendMessage timeout; tentando próximo fallback se houver')
-        }
-      }
-    }
-    throw lastErr || new Error('Todos os fallbacks de envio falharam')
-  }
-
-  await withSendTimeout(
-    sock.sendMessage(job.destJid, payload, sendOptionsWith()),
-    { destJid: job.destJid, route: 'default', attempt },
-  )
-}
-
 /**
  * Re-enfileira um job adiado por defer LONGO (janela silenciosa, burst/daily
  * cap, pausa de saúde) sem congelar a fila serial. Reverte o MessageLog para
@@ -3090,6 +3072,13 @@ async function processSendJob(job) {
             sentAt: new Date(),
             ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
             ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
+            // Feature 017 (arquitetura multicanal de entrega), T023: este é o
+            // caminho de envio de WhatsApp — toda linha nova sai marcada
+            // 'whatsapp', sem reduções (FR-027/SC-003). Sem backfill: linha
+            // anterior a esta feature já lê como WhatsApp por resolver
+            // null como whatsapp em toda leitura.
+            deliveryNetwork: DELIVERY_NETWORK.WHATSAPP,
+            deliveryReductions: null,
           },
         })
 
@@ -3564,6 +3553,8 @@ async function startBotInner() {
     msgRetryCounterCache,
     placeholderResendCache,
     maxMsgRetryCount: WA_MAX_MSG_RETRY_COUNT,
+    // Reenvio para quem pediu (retry receipt) — ver sentMessageStore acima.
+    getMessage: getSentMessageForRetry,
     // Fix de causa raiz: grupo @g.us não-monitorado e dessincronizado que
     // derrubava a sessão via retry-receipt agora é ACKado e descartado antes do
     // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
@@ -3596,6 +3587,8 @@ async function startBotInner() {
   })
 
   pendingSock = sock
+
+  attachSentMessageRecorder(sock)
 
   // Aquece o allowlist antes de qualquer mensagem chegar (o shouldIgnoreJid é
   // síncrono; sem isso o 1º lote de mensagens passaria com ready=false). Best
@@ -4919,6 +4912,34 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const pendingDedupMaxAgeMs = isCouponLink ? effectiveDedupWindowMs : PENDING_DEDUP_MAX_AGE_MS
       for (const destJid of destinations) {
         const postDetail = cfg.groups.postDetails.find(g => g.waJid === destJid)
+        // Feature 017 (arquitetura multicanal de entrega), D-A4/D-A6/T022:
+        // ÚNICO ramo de hand-off do worker. `postDetail.deliveryNetwork` já
+        // vem RESOLVIDO por toPostDetail() (src/billing/groupEntitlements.js)
+        // — 'whatsapp' para destino ausente/legado. `status@broadcast` (sem
+        // postDetail) também é sempre WhatsApp. Com o interruptor
+        // DELIVERY_NETWORKS_ENABLED no default, buildEntitledGroupConfig já
+        // filtrou qualquer destino não-WhatsApp para fora de
+        // cfg.groups.postDetails — este ramo é INALCANÇÁVEL em produção
+        // hoje, por construção (ver test/delivery-rollout-fora-do-worker.test.js).
+        // Nada do caminho de WhatsApp abaixo (dedup, buildPayload, envio) é
+        // tocado quando o destino É WhatsApp — o `continue` só corre para o
+        // destino de outra rede.
+        const destDeliveryNetwork = postDetail?.deliveryNetwork ?? DELIVERY_NETWORK.WHATSAPP
+        if (destDeliveryNetwork !== DELIVERY_NETWORK.WHATSAPP) {
+          await enqueueDeliveryOutbox({
+            userId,
+            deliveryNetwork: destDeliveryNetwork,
+            destinationId: destJid,
+            sourceId: jid,
+            offer: {
+              texto: finalText,
+              linkConvertido: primary.converted || primary.url || '',
+              imagem: null,
+              produto: { titulo: null, preco: null },
+            },
+          }).catch(err => logger.warn({ err: err?.message, destJid, deliveryNetwork: destDeliveryNetwork }, 'Falha ao enfileirar hand-off multicanal'))
+          continue
+        }
         // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
         const channelForward = resolveChannelForward(postDetail)
         // Aparência da imagem: escolhida pelo DESTINO, não pela origem. Ver

@@ -14,8 +14,45 @@ import {
 } from '@/lib/editorial-content'
 import { internalContentHref } from '@/lib/marketing-attribution'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
+import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
+import { getCompetitorBySlug } from '@/lib/competitors-data'
+import { formatDatePtBr } from '@/lib/editorial-content'
 
 const siteUrl = getSiteUrl()
+
+// Preço próprio na frase, montado de DEFAULT_LANDING_PLANS (plano GEO de
+// 27/09/2026: bloco de conversão com preço vindo das constantes, nunca à mão).
+const precoPlanosFrase = (() => {
+  const pagos = DEFAULT_LANDING_PLANS.filter((plan) => Number(plan.priceValue) > 0)
+  const partes = pagos.map((plan) => `${plan.name} ${plan.price}`)
+  const lista = partes.length <= 1 ? partes.join('') : `${partes.slice(0, -1).join(', ')} ou ${partes.at(-1)}`
+  return pagos[0]?.period ? `${lista} a cada ${pagos[0].period}` : lista
+})()
+
+// Números próprios, MEDIDOS no banco de produção em 27/09/2026 (decisão da dona
+// do produto; os mesmos de /espelha-grupos-e-confiavel). Para atualizar, medir
+// de novo e trocar a data junto.
+const NUMEROS_MEDIDOS_EM = '2026-09-27'
+const NUMEROS_PROPRIOS = {
+  clientesPagantes: 38,
+  contasComOfertasAutomaticas: 43,
+  renovacaoAgosto: '7 de 7',
+}
+
+// Linha de concorrente numa lista comparada: nome, o que faz e o preço de
+// ENTRADA lidos da ficha datada em competitors-data.js — nunca digitados aqui
+// (FR-031). Se a ficha mudar, a linha muda junto.
+function opcaoDaFicha(slug, { href, oQueFaz, bestFor }) {
+  const ficha = getCompetitorBySlug(slug)
+  const entrada = ficha.pricingTiers[0]
+  return {
+    name: ficha.name,
+    text: `${oQueFaz} Plano de entrada: ${entrada.name}, ${entrada.price} (ficha conferida em ${formatDatePtBr(ficha.verifiedAt)}).`,
+    bestFor,
+    href,
+    linkLabel: `Ficha completa: alternativa ao ${ficha.name}`,
+  }
+}
 
 export const PRESERVATION_BLOG_POSTS = {
   'grupo-ou-canal-whatsapp-achadinhos': {
@@ -221,8 +258,11 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-ser-afiliado-shopee-whatsapp': {
     slug: '/blog/como-ser-afiliado-shopee-whatsapp',
-    title: 'Shopee Afiliados: como entrar e quanto paga',
-    description: 'Como entrar no Shopee Afiliados, quanto a Shopee paga por tipo de venda, o prazo para a comissão contar e como divulgar no WhatsApp sem perder venda.',
+    // 27/09/2026 (Frente D1/D2): 532 impressões, CTR 0,56% na posição 9,4 —
+    // periferia de "como ser afiliado shopee" (5.000/mês). O título passa a
+    // ser a pergunta literal + o número de passos que a página já ensina.
+    title: 'Como ser afiliado Shopee: 5 passos e comissão de 3%',
+    description: 'Como ser afiliado Shopee em 5 passos: cadastro gratuito, comissão a partir de 3% (até 30% na Comissão Extra), atribuição de 7 dias e como divulgar no WhatsApp.',
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
     heroImage: { path: '/blog/hero/shopee-afiliada-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas da Shopee no Espelha Grupos', width: 1024, height: 1024 },
@@ -258,6 +298,15 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Como divulgar sem queimar o número', paragraphs: ['Use um chip dedicado, publique poucas ofertas boas por vez, varie o texto e evite mandar a mesma mensagem idêntica para todos os destinos ao mesmo tempo.', 'Quem dispara dezenas de links iguais em sequência arrisca o número e ainda cansa a audiência. Cadência responsável vende mais no médio prazo.'] },
       { h2: 'Como o Espelha Grupos automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o Espelha Grupos converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
     ],
+    // Frente D2 (PLANO_SEO_GEO_2026-09-27): este post está na página 1 para a
+    // periferia de "como ser afiliado shopee" — é a porta que já abre. O
+    // "próximo passo" manda a força para a comercial do Tier 1, que responde
+    // "já sou afiliada, como distribuo"; ela linka de volta como guia completo.
+    nextStep: {
+      href: '/shopee-afiliados-whatsapp',
+      label: 'Já é afiliada Shopee? Veja como divulgar no WhatsApp',
+      body: 'Depois do cadastro, o trabalho vira publicar oferta por oferta com o seu link. A página de Shopee Afiliados no WhatsApp mostra como o robô faz isso sozinho, com 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'espelhar, garimpar, converter, enfileirar — e quem faz cada uma' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'os 4 caminhos e o passo a passo com o robô' },
@@ -284,8 +333,11 @@ export const PRESERVATION_BLOG_POSTS = {
     slug: '/blog/como-divulgar-ofertas-amazon-whatsapp',
     // Título encurtado em 2026-08-19 (P1): era 75 chars de texto próprio. O
     // número da comissão vai na frente — é o motivo concreto pra clicar.
-    title: 'Afiliado Amazon: comissão por categoria (0% a 13%)',
-    description: 'Guia de afiliado Amazon: quanto paga de comissão por categoria, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
+    // 27/09/2026 (Frente D1): 618 impressões, CTR 1,6% na posição 8,3. Entra
+    // pela pergunta do slug ("como divulgar ... whatsapp") e mantém o número;
+    // deixa de disputar o mesmo título da comercial /amazon-afiliados-whatsapp.
+    title: 'Como divulgar Amazon no WhatsApp: comissão de 0% a 13%',
+    description: 'Quanto a Amazon paga por categoria (0% a 13%), como conferir se a sua tag está no link e a cadência para divulgar no WhatsApp sem queimar o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
     heroImage: { path: '/blog/hero/amazon-associado-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas da Amazon no Espelha Grupos', width: 1024, height: 1024 },
@@ -306,6 +358,13 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Cadência e preservação do número', paragraphs: ['A Amazon costuma ter muitas ofertas, e a tentação é mandar tudo de uma vez. Resista: poucas ofertas selecionadas por vez, com variação de texto, performam melhor e protegem o número.', 'Use chip dedicado e horário de silêncio para a operação não parecer um robô disparando.'] },
       { h2: 'Como o Espelha Grupos cuida da Amazon', paragraphs: ['Com a sua tag de associado cadastrada, o Espelha Grupos converte os links da Amazon automaticamente, busca a imagem em alta resolução para o preview do WhatsApp e distribui a oferta para seus grupos e canais com cadência responsável.', 'Isso evita o erro clássico de enviar um link sem tag e garante que a oferta chegue com cara profissional.'] },
     ],
+    // Frente D2: mesmo desenho do post da Shopee — o guia manda para a
+    // comercial /amazon-afiliados-whatsapp como próximo passo, e ela linka de volta.
+    nextStep: {
+      href: '/amazon-afiliados-whatsapp',
+      label: 'Já é afiliada Amazon? Veja como divulgar no WhatsApp',
+      body: 'Com a tag cadastrada, a página de Afiliado Amazon no WhatsApp mostra como o robô converte o link, busca a imagem do produto e publica nos seus grupos com intervalo. 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Amazon, Shopee ou Mercado Livre: qual paga mais na sua categoria', note: 'a comissão muda muito conforme o produto' },
       { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa automatizar isso', note: 'preço das ferramentas do mercado, lado a lado' },
@@ -315,6 +374,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para a tag nunca cair no caminho' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'os 4 caminhos e o passo a passo com o robô' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'checklist, preço e como testar em 7 dias' },
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar a oferta da Amazon em vários grupos sem spam', note: 'os 4 caminhos e o que o WhatsApp trata como spam' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Padronizar a divulgação de cupons', note: 'modelo de mensagem pronto, com cupom e link com a sua tag' },
     ],
     faq: [
       { q: 'Como sei se o link tem minha tag?', a: 'O link de afiliado da Amazon inclui um parâmetro de tag (tag=seucodigo). Sem ela, a venda não é atribuída a você. Uma ferramenta de conversão garante isso automaticamente.' },
@@ -326,8 +387,10 @@ export const PRESERVATION_BLOG_POSTS = {
   'como-divulgar-ofertas-mercado-livre-whatsapp': {
     slug: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
     // Título encurtado em 2026-08-19 (P1): era 74 chars de texto próprio.
-    title: 'Afiliado Mercado Livre: de 0% a 16% por categoria',
-    description: 'Quanto o Mercado Livre paga de comissão por categoria (direta e indireta), prazo de pagamento e como divulgar no WhatsApp sem perder a atribuição.',
+    // Reescrito em 27/09/2026: 153 impressões e 0 clique — faltava "WhatsApp",
+    // que é metade da consulta, e o número vinha depois do corte do celular.
+    title: 'Afiliado Mercado Livre no WhatsApp: comissão até 16%',
+    description: 'Quanto o Mercado Livre paga por categoria (0% a 16%, direta e indireta), prazo de pagamento e o passo a passo para divulgar no WhatsApp sem perder a atribuição.',
     eyebrow: 'Afiliado Mercado Livre · Guia completo',
     usePersonAuthor: true,
     origin: 'blog_como_divulgar_ofertas_mercado_livre_whatsapp',
@@ -344,6 +407,13 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Por que o preview com imagem importa', paragraphs: ['No WhatsApp, o card clicável com foto do produto em boa resolução converte muito mais que um link seco. O Espelha Grupos monta o preview com a imagem em alta e o nome da loja acima do domínio, mantendo o card sempre renderizado.', 'Sem imagem, a oferta compete em desvantagem com todos os outros links do grupo. Com imagem, ela ocupa espaço visual e chama o olho.'] },
       { h2: 'Cadência que protege o número', paragraphs: ['Despejar 20 ofertas em sequência é o caminho mais rápido para o número entrar em risco. Distribua ao longo do dia, varie o texto e respeite horário de silêncio.', 'No plano Pro, a Preservação Avançada organiza essas camadas: intervalo entre envios, limite por dia, horário de descanso e variação do texto, para que a operação não pareça robótica.'] },
     ],
+    // Frente D2: mesmo desenho dos posts de Shopee e Amazon — próximo passo
+    // é a comercial /mercado-livre-afiliados-whatsapp, que linka de volta.
+    nextStep: {
+      href: '/mercado-livre-afiliados-whatsapp',
+      label: 'Já é afiliada do Mercado Livre? Veja como divulgar no WhatsApp',
+      body: 'Depois do cadastro, a página de Afiliado Mercado Livre no WhatsApp mostra como o robô troca o link pelo seu código e publica nos seus grupos com intervalo entre os envios. 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Mercado Livre, Amazon ou Shopee: qual paga mais', note: 'comissão por categoria nos três programas' },
       { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Quando o trabalho manual deixa de caber', note: 'o sinal de que a operação passou do ponto' },
@@ -398,8 +468,11 @@ export const PRESERVATION_BLOG_POSTS = {
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 64 chars de texto próprio, o que empurrava o corte do Google no
     // celular. Motivo pra clicar ("horário certo") na frente.
-    title: 'Melhor horário para postar oferta: 7h, 12h e 19h',
-    description: 'Os três horários em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
+    // 27/09/2026 (Frente D1): 547 impressões, CTR 0,55% na posição 6,6 para
+    // "melhor horário para postar no whatsapp". O título vira a pergunta
+    // literal + o número de faixas que a página já afirma (nada inventado).
+    title: 'Qual o melhor horário para postar no WhatsApp? 3 faixas',
+    description: 'As 3 faixas em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
     heroImage: { path: '/blog/hero/02-radar.png', alt: 'Radar monitorando ofertas de vários grupos de origem ao mesmo tempo, para não perder o timing', width: 1080, height: 1080 },
@@ -531,13 +604,19 @@ export const PRESERVATION_BLOG_POSTS = {
   // porque comparação sem ele converteu 0% (medição de 11/09), e entra
   // linkada de páginas COM impressão (regra "página nova nunca nasce órfã").
   //
-  // Preço de concorrente NÃO aparece aqui: só nome e o que faz, com link para
-  // a ficha datada em /alternativas/* (FR-031). O nosso pode.
+  // Preço de concorrente NÃO é digitado aqui: ou não aparece (só nome e o que
+  // faz, com link para a ficha datada em /alternativas/*), ou é LIDO da ficha
+  // em competitors-data.js por `opcaoDaFicha()`, com a data de conferência
+  // junto (FR-031). O nosso vem de DEFAULT_LANDING_PLANS.
   // -------------------------------------------------------------------------
   'como-espelhar-mensagens-entre-grupos-whatsapp': {
     slug: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp',
-    title: 'Como espelhar mensagens entre grupos de WhatsApp',
-    description: 'Os 4 jeitos de espelhar mensagens entre grupos de WhatsApp — na mão, com agendador, com automação genérica ou com robô de afiliada — e o que cada um custa.',
+    // 27/09/2026 (plano GEO, B5): posição 3,2 com 59 impressões e ZERO clique
+    // — o problema era título/descrição sem promessa. Título ≤ 55 (teto medido
+    // do celular) com o número de caminhos; descrição com os 4 caminhos, o
+    // link trocado e o preço.
+    title: 'Espelhar mensagens entre grupos de WhatsApp: 4 jeitos',
+    description: '4 jeitos de espelhar mensagens entre grupos de WhatsApp sem programar: na mão, agendador, automação ou robô que troca o link pelo seu código. De R$ 39/30 dias.',
     eyebrow: 'Espelhamento · Passo a passo',
     origin: 'blog_como_espelhar_mensagens_entre_grupos_whatsapp',
     heroImage: { path: '/blog/hero/06-escalar.png', alt: 'Um robô central distribuindo ofertas para vários grupos e canais de destino ao mesmo tempo', width: 1080, height: 1080 },
@@ -579,7 +658,7 @@ export const PRESERVATION_BLOG_POSTS = {
       },
       { h2: 'O que espelhar mensagens NÃO é', bullets: ['Não é espelhar o WhatsApp em outro celular ou no computador — isso é usar a mesma conta em dois aparelhos, e não tem relação com grupos de ofertas.', 'Não é clonar contatos nem entrar em grupo escondido: o robô usa o seu número, nos grupos onde ele já está, e publica como você.', 'Não é disparo em massa: espelhar é republicar UMA oferta de origem nos SEUS destinos, com intervalo — o oposto de mandar a mesma mensagem para uma lista fria.'] },
       { h2: 'Melhor para e não é ideal para', bullets: ['Melhor para: afiliada que já segue grupos onde a promoção aparece primeiro, publica em mais de um grupo ou canal e perde comissão por link errado ou por oferta que chega atrasada.', 'Melhor para: quem quer o robô publicando 24 horas sem depender de estar no celular.', 'Não é ideal para: quem cria todas as ofertas do zero, sem grupo de origem — um agendador resolve por menos.', 'Não é ideal para: quem espera que uma ferramenta impeça banimento. Nenhuma ferramenta controla a decisão do WhatsApp; o que dá para controlar é ritmo, variação e para quem você publica.'] },
-      { h2: 'Como o Espelha Grupos faz isso', paragraphs: ['O Espelha Grupos é um espelhador: acompanha os grupos de origem que você escolhe, troca o link de cada oferta pelo seu código de afiliada em seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress), converte também link de cupom, e publica nos seus grupos e canais com intervalo, limite por destino e histórico completo. Além do espelhamento, tem filas de ofertas e busca automática de ofertas da Shopee.', 'Ele não promete que ninguém será banido e não promete quanto você vai vender. O que promete é o trabalho repetitivo saindo da sua mão, com registro de tudo o que saiu.'] },
+      { h2: 'Como o Espelha Grupos faz isso', paragraphs: ['O Espelha Grupos é um espelhador: acompanha os grupos de origem que você escolhe, troca o link de cada oferta pelo seu código de afiliada em seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress), converte também link de cupom, e publica nos seus grupos e canais com intervalo, limite por destino e histórico completo. Além do espelhamento, cria a oferta a partir de um link que você cola e, no plano Pro, busca ofertas da Shopee sozinho.', `Ele não promete que ninguém será banido e não promete quanto você vai vender. O que promete é o trabalho repetitivo saindo da sua mão, com registro de tudo o que saiu. Números nossos, medidos em ${formatDatePtBr(NUMEROS_MEDIDOS_EM)}: ${NUMEROS_PROPRIOS.clientesPagantes} clientes pagantes e ${NUMEROS_PROPRIOS.renovacaoAgosto} das que pagaram em agosto renovaram no mês seguinte.`] },
     ],
     relatedLinks: [
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'origens, conversão de link, destinos e histórico' },
@@ -589,6 +668,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'checklist antes de assinar qualquer uma' },
       { href: '/espelha-grupos-vs-planilha-manual', label: 'Quando a planilha ainda basta', note: 'e quando o robô passa a compensar' },
       { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar como destino', note: 'o que muda no alcance e em quem pode responder' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?', note: 'a crítica mais comum e o controle que responde a cada uma' },
     ],
     faq: [
       { q: 'Espelhar mensagens entre grupos é o mesmo que espelhar o WhatsApp em outro celular?', a: 'Não. Espelhar o WhatsApp em outro aparelho é usar a mesma conta em dois lugares. Espelhar mensagens entre grupos é republicar, nos seus grupos, a oferta que apareceu num grupo de origem — com o seu link de afiliada no lugar do original.' },
@@ -667,14 +747,19 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'ferramenta-para-divulgar-ofertas-em-grupos-whatsapp': {
     slug: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp',
-    title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp',
-    description: 'O que uma ferramenta para divulgar ofertas em grupos do WhatsApp precisa ter em 2026, quanto custa, para quem serve e como testar antes de assinar.',
-    eyebrow: 'Divulgação em grupos · Como escolher',
+    // 27/09/2026 (plano GEO, B4): posição 3,8 e 30 impressões — virou lista
+    // "6 opções comparadas" (ItemList), nossa linha primeiro e mais 5 com ficha
+    // datada em competitors-data.js. Título ≤ 55 (teto medido do celular): "de
+    // WhatsApp" e o ano não couberam junto de "6 opções"; a consulta inteira e
+    // o 2026 ficam na descrição e no H2.
+    title: 'Ferramenta para divulgar ofertas em grupos: 6 opções',
+    description: '6 ferramentas para divulgar ofertas em grupos de WhatsApp em 2026, com preço: Espelha Grupos, Afilira, Achadinho Pro, Shozap, Ofertiva e ProAfiliados.',
+    eyebrow: 'Divulgação em grupos · 6 opções comparadas · 2026',
     origin: 'blog_ferramenta_para_divulgar_ofertas_em_grupos_whatsapp',
     heroImage: { path: '/blog/hero/00-mascote.png', alt: 'Bit, o assistente do Espelha Grupos, que monitora, encaminha e converte links de afiliado', width: 1080, height: 1080 },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
-    intro: 'Uma ferramenta para divulgar ofertas em grupos do WhatsApp é um robô que publica as ofertas nos seus grupos e canais por você: pega a oferta de um grupo de origem ou de uma busca, troca o link pelo seu código de afiliada e envia com intervalo. Serve para afiliadas e admins de grupo de promoções que hoje fazem isso na mão. O Espelha Grupos faz isso a partir de R$ 39 por 30 dias, com grupos ilimitados e 7 dias de teste sem cartão.',
+    intro: `Uma ferramenta para divulgar ofertas em grupos do WhatsApp é um robô que publica as ofertas nos seus grupos e canais por você: pega a oferta de um grupo de origem, de um link que você cola ou de uma busca, troca o link pelo seu código de afiliada e envia com intervalo. Serve para afiliadas e admins de grupo de promoções que hoje fazem isso na mão. Abaixo, 6 opções comparadas em 2026 — a nossa primeiro, e cinco concorrentes com preço lido da ficha datada de cada um. O Espelha Grupos custa ${precoPlanosFrase}, com grupos ilimitados e 7 dias de teste sem cartão.`,
     midBridge: {
       question: 'Quer testar com os seus grupos antes de decidir?',
       body: 'Conecte o número, escolha origem e destinos, cadastre o seu código de afiliada e veja as ofertas saindo — com histórico de tudo. Basic R$ 39 e Pro R$ 69 a cada 30 dias; 7 dias grátis, sem cartão.',
@@ -683,7 +768,45 @@ export const PRESERVATION_BLOG_POSTS = {
       secondary: { label: 'Como funciona a operação para afiliados', href: '/bot-afiliados-whatsapp' },
     },
     sections: [
-      { h2: 'Resposta direta', paragraphs: ['Em 2026, uma ferramenta para divulgar ofertas em grupos do WhatsApp precisa fazer cinco coisas: ler a origem da oferta (grupo, canal ou busca na loja), trocar o link pelo seu código de afiliada, publicar nos seus grupos e canais com intervalo e limite, não repetir a mesma oferta no mesmo destino e guardar o histórico do que saiu. O resto — arte, texto gerado, site próprio — é acessório. Se uma das cinco falta, você continua com trabalho na mão ou com comissão indo para outra pessoa.'] },
+      { h2: 'Resposta direta', paragraphs: ['Em 2026, uma ferramenta para divulgar ofertas em grupos do WhatsApp precisa fazer cinco coisas: ler a origem da oferta (grupo, canal, link colado ou busca na loja), trocar o link pelo seu código de afiliada, publicar nos seus grupos e canais com intervalo e limite, não repetir a mesma oferta no mesmo destino e guardar o histórico do que saiu. O resto — arte, texto gerado, site próprio — é acessório. Se uma das cinco falta, você continua com trabalho na mão ou com comissão indo para outra pessoa.', `As seis opções abaixo estão em ordem: a nossa primeiro, declarada como tal, e depois cinco ferramentas cujo preço e recursos têm ficha própria, com a data em que foram conferidos. Onde cada uma é melhor está dito na ficha. Números nossos, medidos em ${formatDatePtBr(NUMEROS_MEDIDOS_EM)}: ${NUMEROS_PROPRIOS.clientesPagantes} clientes pagantes e ${NUMEROS_PROPRIOS.contasComOfertasAutomaticas} contas com ofertas automáticas ativas.`] },
+      {
+        h2: 'As 6 opções comparadas em 2026 (preço de entrada com data de conferência)',
+        schema: 'ItemList',
+        items: [
+          {
+            name: 'Espelha Grupos (a nossa)',
+            text: `Espelha os grupos e canais que você já acompanha, troca o link pelo seu código em 6 lojas (inclusive cupom), cria a oferta a partir de um link colado e, no Pro, busca ofertas da Shopee sozinho. Só WhatsApp. ${precoPlanosFrase}, grupos ilimitados nos dois planos, 7 dias grátis sem cartão.`,
+            bestFor: 'afiliada que já acompanha grupos de origem, publica em mais de um grupo ou canal e quer o mesmo preço para poucos ou muitos grupos',
+            href: '/precos',
+            linkLabel: 'Preços e planos',
+          },
+          opcaoDaFicha('afilira', {
+            href: '/alternativas/afilira',
+            oQueFaz: 'Busca ofertas sozinha em grupos e nas lojas, prepara o link com a comissão e envia para WhatsApp e Telegram; o espelhamento entre grupos entra a partir do plano intermediário.',
+            bestFor: 'quem quer a ferramenta achando a oferta e precisa de Awin, Terabyte e SHEIN além dos marketplaces',
+          }),
+          opcaoDaFicha('achadinho-pro', {
+            href: '/alternativas/achadinho-pro',
+            oQueFaz: 'Bot de afiliados com IA para selecionar produtos e gerar links, com vários números de WhatsApp por conta; o plano de entrada cobre só Shopee.',
+            bestFor: 'quem começa só com Shopee e quer evoluir depois para Mercado Livre e Amazon',
+          }),
+          opcaoDaFicha('shozap', {
+            href: '/alternativas/shozap',
+            oQueFaz: 'Campanhas e monitoramento de grupos para WhatsApp e Telegram, com créditos de IA e de SMS, escalando por número de conexões e de contas de marketplace.',
+            bestFor: 'quem opera WhatsApp e Telegram juntos e precisa de várias conexões na mesma conta',
+          }),
+          opcaoDaFicha('ofertiva', {
+            href: '/alternativas/ofertiva',
+            oQueFaz: 'Bot de ofertas com página na bio (vitrine com IA) em todo plano e Meta Pixel a partir do intermediário; cobra por WhatsApps conectados, destinos e grupos espelhados.',
+            bestFor: 'quem quer, junto do robô, uma página de bio pronta e pixel para medir anúncio, com poucos grupos espelhados',
+          }),
+          opcaoDaFicha('proafiliados-com', {
+            href: '/alternativas/proafiliados',
+            oQueFaz: 'Bot para WhatsApp e Telegram com plano gratuito permanente (com a tag do sistema nas mensagens) e cobrança via PIX nos planos pagos.',
+            bestFor: 'quem quer testar automação de afiliados sem custo nenhum antes de pagar por qualquer coisa',
+          }),
+        ],
+      },
       { h2: 'O que ela precisa ter (checklist)', bullets: ['Conversão de link nas lojas que você divulga — produto E cupom. Sem isso, a oferta sai com o link do grupo de origem e a comissão não é sua.', 'Grupos de origem que você escolhe, e não um feed pronto: quem escolhe o que entra é você.', 'Intervalo entre envios, limite por grupo e horário de funcionamento, por destino.', 'Bloqueio de repetição: a mesma oferta não pode sair duas vezes no mesmo grupo no mesmo dia.', 'Histórico do que saiu, do que foi segurado e do que falhou — com o motivo em português.', 'Canal do WhatsApp como destino, além de grupo.', 'Preço que não muda quando você adiciona grupo.'] },
       {
         h2: 'Tipos de ferramenta e para quem serve cada uma',
@@ -697,7 +820,7 @@ export const PRESERVATION_BLOG_POSTS = {
           ],
         },
       },
-      { h2: 'Quanto custa', paragraphs: ['No Espelha Grupos: Basic por R$ 39 e Pro por R$ 69, a cada 30 dias, grupos ilimitados nos dois, seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress) e 7 dias de teste com o Pro completo, sem cartão. Preços verificados em 19/09/2026 na página de preços.', 'Concorrentes cobram por grupo, por conexão de WhatsApp ou por número de usuários — e é isso que muda a conta quando a operação cresce. Os preços de cada um, com a data em que foram conferidos, estão nas fichas em /alternativas.'] },
+      { h2: 'Quanto custa', paragraphs: [`No Espelha Grupos: ${precoPlanosFrase}, grupos ilimitados nos dois, seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress) e 7 dias de teste com o Pro completo, sem cartão. O valor sai da mesma tabela da página de preços.`, 'Concorrentes cobram por grupo, por conexão de WhatsApp ou por número de usuários — e é isso que muda a conta quando a operação cresce. O preço de entrada de cada um está na lista acima, lido da ficha com a data em que foi conferido; a ficha completa, com todos os planos, está em /alternativas.'] },
       { h2: 'Melhor para e não é ideal para', bullets: ['Melhor para: afiliada ou admin de grupo de promoções que publica todo dia, em mais de um grupo ou canal, e quer o robô cuidando do que se repete.', 'Melhor para: quem divulga mais de uma loja e precisa que cada link saia com o código certo.', 'Não é ideal para: quem publica menos de 10 ofertas por semana num grupo só — o custo não se paga em tempo.', 'Não é ideal para: quem quer disparar para lista fria. Isso não é divulgação em grupo, é spam, e nenhuma ferramenta séria deveria fazer.'] },
       { h2: 'Como testar em 7 dias sem se comprometer', bullets: ['Dia 1: chip dedicado conectado, um grupo de origem e um destino de teste (pode ser um grupo só seu).', 'Dia 2: cadastre o código de afiliada de uma loja e confira, no celular, se o link publicado é o seu.', 'Dias 3 a 5: adicione os destinos reais com intervalo e limite; olhe o histórico todo dia.', 'Dias 6 e 7: compare com a semana anterior — tempo gasto, ofertas publicadas, link certo em 100% delas. Aí decida.'] },
     ],
@@ -708,10 +831,12 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa um bot para WhatsApp de afiliados', note: 'o custo real além da mensalidade' },
       { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Critérios para comparar bots', note: 'sem ranking falso nem promessa de ganho' },
       { href: '/alternativas/bot-para-whatsapp-afiliados', label: 'Comparativo de bots para afiliados', note: 'planilha, automação genérica e ferramentas, lado a lado' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?', note: 'quando compensa, quando não, e o que responde a cada crítica' },
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Ainda não tem grupo?', note: 'os primeiros passos antes de automatizar' },
     ],
     faq: [
-      { q: 'Qual a melhor ferramenta para divulgar ofertas em grupos do WhatsApp?', a: 'A que faz as cinco coisas da resposta direta para as lojas que você divulga, sem cobrar por grupo. Para afiliada que publica todo dia, isso é um espelhador com conversão de link; para quem publica pouco, um conversor de link e o próprio WhatsApp bastam.' },
+      { q: 'Qual a melhor ferramenta para divulgar ofertas em grupos do WhatsApp?', a: 'A que faz as cinco coisas da resposta direta para as lojas que você divulga, sem cobrar por grupo. Para afiliada que publica todo dia, isso é um espelhador com conversão de link; para quem publica pouco, um conversor de link e o próprio WhatsApp bastam. Das seis comparadas acima, cada ficha diz quando o concorrente é a melhor escolha.' },
+      { q: 'Os preços dos concorrentes nesta lista estão atualizados?', a: 'Cada preço vem da ficha da ferramenta, com a data em que foi conferido, e não é digitado na lista. Preço muda; antes de assinar qualquer uma, confirme no site oficial dela.' },
       { q: 'Existe ferramenta grátis para divulgar ofertas em grupos?', a: 'Existem geradores de link gratuitos e agendadores simples. O que costuma ser pago é a parte que economiza tempo de verdade: ler o grupo de origem, converter e publicar sozinho. No Espelha Grupos o teste de 7 dias é gratuito e não pede cartão.' },
       { q: 'Ferramenta de divulgação dá banimento?', a: 'Ninguém pode garantir que um número não será banido. O que aumenta o risco é padrão de rajada, mensagem idêntica repetida e gente que não pediu para receber. Uma ferramenta séria controla os dois primeiros; o terceiro é decisão sua.' },
       { q: 'Preciso de um número só para isso?', a: 'É o mais recomendado. Se o número da operação tiver problema, os seus contatos e conversas pessoais continuam intactos em outro número.' },
@@ -941,6 +1066,38 @@ export function PreservationBlogPost({ postKey }) {
           </section>
         ) : null}
 
+        {/* Frente D2 (PLANO_SEO_GEO_2026-09-27): post que já ranqueia para a
+            consulta de loja manda a força para a comercial do Tier 1 como
+            próximo passo único — em vez do bloco genérico de preservação, que
+            não é o assunto de quem chegou perguntando de comissão. */}
+        {post.nextStep ? (
+          <section>
+            <h2>Próximo passo</h2>
+            <p>{post.nextStep.body}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Link
+                className="rounded-2xl bg-emerald-600 px-5 py-4 text-center font-black text-white no-underline hover:bg-emerald-700"
+                href={post.nextStep.href}
+                data-seo-cta="blog_store_landing"
+                data-cta-position="article_next_step_primary"
+                data-cta-stage="consideration"
+                data-cta-destination="landing"
+              >
+                {post.nextStep.label}
+              </Link>
+              <Link
+                className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
+                href="/precos"
+                data-seo-cta="blog_pricing"
+                data-cta-position="article_next_step_secondary"
+                data-cta-stage="consideration"
+                data-cta-destination="pricing"
+              >
+                Ver preços e testar 7 dias grátis
+              </Link>
+            </div>
+          </section>
+        ) : (
         <section>
           <h2>Próximo passo</h2>
           <p>
@@ -989,6 +1146,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
           </div>
         </section>
+        )}
 
         <section>
           <h2>FAQ</h2>

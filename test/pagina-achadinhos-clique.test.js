@@ -121,14 +121,15 @@ test('o comparativo não renderiza o mesmo bloco duas vezes', () => {
   assert.equal(vezes('id={SECTION_IDS.comparativo}'), 1, 'bloco do comparativo duplicado')
 })
 
-test('o comparativo apresenta preço, grupos e as cinco lojas do BOTinho em toda a decisão', () => {
+test('o comparativo apresenta preço, grupos e as seis lojas do Espelha Grupos em toda a decisão', () => {
   const comparativo = lerFonte('dashboard/app/_comparisonContent.js')
   const inicio = comparativo.indexOf("'/alternativas/achadinhos-bot': {")
   const fim = comparativo.indexOf("'/alternativas/proafiliados': {", inicio)
   const bloco = comparativo.slice(inicio, fim)
 
   assert.match(bloco, /R\$ 39 por 30 dias \(grupos ilimitados\)/)
-  assert.match(bloco, /Shopee, Amazon, Mercado Livre, Magalu e SHEIN/)
+  assert.match(bloco, /Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress/)
+  assert.doesNotMatch(bloco, /cinco lojas/, 'a AliExpress entrou em 10/09: são seis lojas')
   assert.match(bloco, /productProfile:\s*{[\s\S]*name: 'Espelha Grupos'/)
   assert.match(bloco, /productDefinition: 'O Espelha Grupos é para quem administra grupos/)
   assert.match(bloco, /Qual é mais barato: Espelha Grupos, AchadinhosBot ou Achadinho Pro\?/)
@@ -143,4 +144,16 @@ test('o texto aprovado usa o layout existente e não cria uma seção visual nov
   assert.match(comparativo, /page\.limitations \|\| PRODUCT_LIMITATIONS/)
   assert.match(comparativo, /page\.productProfile && <CompetitorCard/)
   assert.match(comparativo, /page\.productDefinition \|\| PRODUCT_DEFINITION/)
+})
+
+test('quem procurava o Achadinho Pro é avisado na primeira dobra e a comercial aparece no topo', () => {
+  const comparativo = lerFonte('dashboard/app/_comparisonContent.js')
+  const inicio = comparativo.indexOf("'/alternativas/achadinhos-bot': {")
+  const fim = comparativo.indexOf("'/alternativas/proafiliados': {", inicio)
+  const bloco = comparativo.slice(inicio, fim)
+  // "achadinho pro" é a busca que mais traz gente a esta página, e é outro produto.
+  assert.match(bloco, /competitorNotice:\s*{[\s\S]*href: '\/alternativas\/achadinho-pro'/)
+  const tldrCard = comparativo.slice(comparativo.indexOf('eyebrow="Resumo rápido"'), comparativo.indexOf('title="Resposta direta"'))
+  assert.match(tldrCard, /page\.competitorNotice/)
+  assert.match(tldrCard, /data-comparison-cta="product-page-top"/)
 })
