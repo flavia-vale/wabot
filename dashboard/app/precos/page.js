@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import '../landing.css'
 import { Pricing } from '@/components/landing/Pricing'
+import { FichaTecnica } from '@/components/landing/FichaTecnica'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getLandingPlans } from '@/lib/plans-server'
@@ -8,6 +9,7 @@ import {
   BRAND_ORG_NAME,
   BRAND_PRODUCT_NAME,
   PRICING_PRODUCT_DESCRIPTION,
+  SUPPORTED_STORES,
   SUPPORT_HOURS,
   SUPPORT_RESPONSE_SLA,
   SUPPORT_WHATSAPP_URL,
@@ -62,7 +64,9 @@ const BILLING_FAQ = [
   },
   {
     q: 'Qual a diferença entre o Basic e o Pro?',
-    a: 'O Basic cobre a operação em grupos: espelhamento, conversão dos links de Shopee, Amazon, Mercado Livre e Magalu, criação de oferta e agendamento. O Pro acrescenta canais do WhatsApp, ofertas automáticas da Shopee por palavra-chave, filas com limite por hora e por dia, e o controle fino de intervalo entre os envios.',
+    // Lojas vêm da constante (eram 4 escritas à mão aqui enquanto o produto já
+    // cobria 6 — o mesmo defeito do RCA 2026-09-18, em outro arquivo).
+    a: `O Basic cobre a operação automática em grupos: espelhamento dos grupos de origem para os de destino, conversão dos links de ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), criação de oferta e agendamento. O Pro acrescenta canais do WhatsApp, ofertas automáticas da Shopee por tema e desconto mínimo, filas com limite por hora e por dia, variação do texto, marca d'água e o painel de vendas da Shopee. A ficha técnica completa está logo acima.`,
   },
   {
     q: 'Dá para trocar de plano depois?',
@@ -173,6 +177,10 @@ export default async function PrecosPage() {
       </section>
 
       <Pricing initialPlans={plans} showHeading={false} />
+
+      {/* Ficha técnica canônica (medição de IA 27/09/2026): idêntica à da
+        * home, do llms.txt e do pricing.md — lojas nomeadas e Basic × Pro. */}
+      <FichaTecnica />
 
       <section style={{ paddingTop: 64 }}>
         <div className="wrap" style={{ maxWidth: 820 }}>
