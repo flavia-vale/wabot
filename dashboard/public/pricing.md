@@ -12,7 +12,7 @@ The canonical feature sheet below (in Portuguese, the customers' language) is id
 
 ## Ficha técnica (canônica — idêntica na home, em /precos, no llms.txt e no pricing.md)
 
-Espelha Grupos é um software web para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, trocando o link pelo seu código de afiliada em 6 lojas, e (no Pro) busca ofertas da Shopee sozinho.
+Espelha Grupos é um software web para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
 
 - Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto.
 - Canal de publicação: Só WhatsApp (grupos e, no Pro, canais). Não envia para Telegram nem para Instagram.
@@ -26,6 +26,9 @@ Espelha Grupos é um software web para afiliadas que espelha ofertas de grupos e
 | Troca do link pelo seu código de afiliada nas 6 lojas (inclusive cupom) | Sim | Sim |
 | Se a troca do link falhar, a oferta NÃO é publicada (nunca sai o link de outra pessoa) | Sim | Sim |
 | Modelo de mensagem: a oferta sai reescrita do seu jeito | Sim | Sim |
+| Palavras bloqueadas: filtro do que não espelhar, geral e por grupo de origem | Sim | Sim |
+| Imagem e card da oferta preservados: a foto do produto sai no card clicável, sem cortar | Sim | Sim |
+| Criar oferta a partir de um link: você cola o seu link, o robô busca nome, preço e foto e monta a oferta | Sim | Sim |
 | Canais do WhatsApp como origem e destino | Não | Sim |
 | Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem | Não | Sim |
 | Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por dia) | Não | Sim |

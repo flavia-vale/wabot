@@ -25,8 +25,14 @@ const pro = planoPorId('pro')
 
 const listaLojas = `${SUPPORTED_STORES.slice(0, -1).join(', ')} e ${SUPPORTED_STORES[SUPPORTED_STORES.length - 1]}`
 
-/** Frase de definição — a MESMA nos 4 lugares. */
-export const FICHA_DEFINICAO = `${BRAND_NAME} é um software web para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, trocando o link pelo seu código de afiliada em ${SUPPORTED_STORES.length} lojas, e (no Pro) busca ofertas da Shopee sozinho.`
+/**
+ * Frase de definição — a MESMA em todo lugar que define o produto: home,
+ * /precos, llms.txt, pricing.md, /quem-somos e /espelha-grupos-e-confiavel.
+ * Cita os três modelos que o mercado usa para classificar (plano GEO de
+ * 27/09/2026, §3): espelhador, formatador (criar oferta a partir de um link)
+ * e garimpo automático (ofertas automáticas da Shopee, Pro).
+ */
+export const FICHA_DEFINICAO = `${BRAND_NAME} é um software web para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em ${SUPPORTED_STORES.length} lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.`
 
 /** Rótulo de plano com preço, ex.: "Basic (R$39 / 30 dias)". */
 export const rotuloPlano = (plan) => `${plan.name} (${plan.price} / ${plan.period})`
@@ -66,6 +72,10 @@ export const FICHA_LINHAS = [
   { recurso: `Troca do link pelo seu código de afiliada nas ${SUPPORTED_STORES.length} lojas (inclusive cupom)`, basic: true, pro: true }, // src/converters/*
   { recurso: 'Se a troca do link falhar, a oferta NÃO é publicada (nunca sai o link de outra pessoa)', basic: true, pro: true }, // mirrorLinkGuard
   { recurso: 'Modelo de mensagem: a oferta sai reescrita do seu jeito', basic: true, pro: true }, // DEFAULT_LANDING_PLANS.basic
+  // 27/09/2026 — três fatos que a IA listava como ausentes e que existem no código, sem cadeado de plano:
+  { recurso: 'Palavras bloqueadas: filtro do que não espelhar, geral e por grupo de origem', basic: true, pro: true }, // blockedKeywords em src/api/routes/config.js e groups.js (sem gate de plano)
+  { recurso: 'Imagem e card da oferta preservados: a foto do produto sai no card clicável, sem cortar', basic: true, pro: true }, // src/core/previewCardCanvas.js + cardPhoto.js (sem gate de plano)
+  { recurso: 'Criar oferta a partir de um link: você cola o seu link, o robô busca nome, preço e foto e monta a oferta', basic: true, pro: true }, // /painel/criar-oferta + /api/link-conversion/scrape-offer via buildScrapedOffer (sem gate de plano)
   { recurso: 'Canais do WhatsApp como origem e destino', basic: false, pro: true }, // canUseChannels
   { recurso: 'Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem', basic: false, pro: true }, // canUseOfferAutomations + minDiscountPct
   { recurso: 'Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por dia)', basic: false, pro: true }, // canUseOfferQueues + canUseAdvancedPreservation

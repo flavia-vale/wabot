@@ -16,6 +16,7 @@ quatro listas divergem em uma semana.
 | 🔝 | **junto com a R1, assim que a PR dos títulos chegar em `main`** | **Leva R5 (27/09)** (abaixo): 5 páginas com muita impressão e quase zero clique que ganharam título e descrição novos (Achadinho Pro, comissão de afiliado, quanto ganha afiliado Shopee, Mercado Livre e Amazon no WhatsApp). Inclui a maior consulta do site (`achadinho pro`, 4.005 impressões) | 10 min |
 | 🔝 | dia seguinte à R1 | **Leva R4 (27/09)** (abaixo): 7 páginas — comparativo do AchadinhosBot refeito, página nova "espelhar grupos vale a pena?", reembolso e as que ganharam link. Passa na frente da R2 porque inclui a 3ª página mais visitada do site | 15 min |
 | 🔝 | depois da R4 | **Leva R2** (10 páginas) e, no outro dia, **Leva R3** (3 páginas) | 15 min cada |
+| 🔝 | junto com a R4 (mesma PR de `develop` → `main`) | **Leva R6 (27/09, GEO)** (abaixo): 6 páginas que ganharam a ficha técnica com 3 linhas novas, a frase dos 3 modelos, o link para "espelhar grupos vale a pena?" e os dois posts do blog com título novo (um deles estava em 3,2 com ZERO clique). As que já estão na R1/R4 não repetem | 10 min |
 | 1 | ✅ 25/09 | Indexação — Dia 8 (8 de 9 pedidas) | — |
 | 2 | ✅ 23/09 | PR #1833 (dados de 23/09 + script do Gemini) e #1905 (modelo do Gemini) mergeadas em `develop` | — |
 | 3 | ✅ 27/09 | Reembolso depois de 7 dias: não há, escrito com cuidado em `/politica-de-reembolso` | — |
@@ -135,6 +136,26 @@ https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp      ⏳
 
 No Bing Webmaster Tools, enviar as mesmas 7 em "Enviar URLs" (o aviso
 automático do deploy também avisa, mas o envio manual acelera).
+
+**Leva R6 — GEO de 27/09 (junto com a R4; só depois do deploy em `main`)**
+
+Conferir antes em produção: a ficha técnica da home e de `/precos` tem as
+linhas "Palavras bloqueadas", "Imagem e card da oferta preservados" e "Criar
+oferta a partir de um link"; `/quem-somos` e `/espelha-grupos-e-confiavel`
+abrem com "...cria a oferta a partir de um link e (no Pro) busca ofertas da
+Shopee sozinho"; `/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp`
+tem título "…6 opções" e `/blog/como-espelhar-mensagens-entre-grupos-whatsapp`
+tem título "…4 jeitos". `/`, `/precos` e `/espelha-grupos-e-confiavel` já
+estão na R1 e `/espelhar-grupos-de-ofertas-vale-a-pena` na R4 — não repetir.
+
+```
+https://espelhagrupos.com.br/quem-somos                                             ⏳
+https://espelhagrupos.com.br/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp ⏳
+https://espelhagrupos.com.br/blog/como-espelhar-mensagens-entre-grupos-whatsapp     ⏳
+```
+
+No Bing Webmaster Tools, além das 3 acima, inspecionar `/llms.txt` e
+`/pricing.md` (o ChatGPT recupera via Bing; a ficha nova está neles).
 
 **Leva R2 — as 16 editoriais revisadas que restam (depois da R4)**
 
