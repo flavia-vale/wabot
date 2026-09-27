@@ -120,8 +120,12 @@ export const COMPARISON_PAGES = {
     // /bot-achadinhos-whatsapp deixou de disputar o mesmo termo. As duas
     // ranqueavam para as MESMAS consultas (529 e 226 impressões), dividindo o
     // sinal entre si sem nenhuma delas subir.
-    title: 'Alternativa ao AchadinhosBot: grupos ilimitados',
-    description: 'O AchadinhosBot cobra por número de grupos e cobre só Shopee. No Espelha Grupos: grupos ilimitados, 6 lojas e 7 dias grátis por R$ 39/30 dias.',
+    // 27/09/2026 (Frente D1): 6.508 impressões em 3 meses, CTR 1,38% na
+    // posição 6,4 — a maior página do site com o menor clique. Em consulta de
+    // MARCA de concorrente há teto (quem digita a marca quer a marca); o ganho
+    // está no diferencial com número: 6 lojas por R$ 39.
+    title: 'Alternativa ao AchadinhosBot: 6 lojas por R$ 39',
+    description: 'O AchadinhosBot cobra por grupo e só cobre Shopee. O Espelha Grupos custa R$ 39 por 30 dias, com grupos ilimitados, 6 lojas e 7 dias grátis com o Pro completo.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
     // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
     // páginas ranqueavam para as mesmas consultas e não se linkavam, então o
@@ -277,16 +281,19 @@ export const COMPARISON_PAGES = {
   '/alternativas/shozap': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Shozap',
-    title: 'Alternativa ao Shozap: preço e limites por plano',
-    description: 'Shozap e Espelha Grupos lado a lado: preço por plano, quantas conexões e grupos cabem e quais lojas entram em cada faixa. Verificado em 04/08/2026.',
+    // 27/09/2026 (Frente D1): 531 impressões, CTR 0,94% na posição 6,2. O
+    // título dizia "preço e limites" sem número nenhum; agora traz o
+    // diferencial concreto. Sem preço do Shozap (não visível no site dele).
+    title: 'Alternativa ao Shozap: grupos ilimitados por R$ 39',
+    description: 'Shozap ou Espelha Grupos? Compare grupos, conexões e lojas por plano. Aqui: grupos ilimitados por R$ 39/30 dias e 7 dias grátis. Verificado em 04/08/2026.',
     competitorSlugs: ['shozap'],
     productPage: {
       href: '/bot-afiliados-whatsapp',
       label: 'Como funciona a operação para afiliados, do começo ao fim',
-      note: 'Quatro lojas e grupos ilimitados já no plano de entrada.',
+      note: 'Seis lojas e grupos ilimitados já no plano de entrada.',
     },
     tldr: 'O Shozap escala por cota — conexões, campanhas, grupos por campanha e contas de marketplace. Some seus grupos antes de comparar preço: o plano de entrada cobre 3 grupos por campanha e só Shopee.',
-    directAnswer: 'O Shozap é uma plataforma de divulgação para WhatsApp e Telegram que cobra por cota de uso: R$ 50/mês no Básico (1 conexão de cada, 3 campanhas, 3 grupos por campanha, só Shopee), R$ 100/mês no Intermediário (adiciona Mercado Livre e Amazon), R$ 150/mês no Elite (adiciona Shein e Magalu) e R$ 300/mês no Avançado. A alternativa mais próxima é o Espelha Grupos, que cobre quatro marketplaces já no plano de R$ 39 e não limita número de grupos, mas atende só WhatsApp.',
+    directAnswer: 'O Shozap é uma plataforma de divulgação para WhatsApp e Telegram que cobra por cota de uso: R$ 50/mês no Básico (1 conexão de cada, 3 campanhas, 3 grupos por campanha, só Shopee), R$ 100/mês no Intermediário (adiciona Mercado Livre e Amazon), R$ 150/mês no Elite (adiciona Shein e Magalu) e R$ 300/mês no Avançado. A alternativa mais próxima é o Espelha Grupos, que cobre seis lojas já no plano de R$ 39 e não limita número de grupos, mas atende só WhatsApp.',
     rows: [
       { key: 'preco', label: 'Preço de entrada', produto: 'R$ 39/30 dias (Basic).', concorrente: 'Shozap: R$ 50/mês (Básico).', reading: 'A diferença real não está aqui — está no que cada plano de entrada inclui.' },
       { key: 'marketplaces', label: 'Marketplaces no plano de entrada', produto: 'Shopee, Amazon, Mercado Livre e Magalu já no Basic.', concorrente: 'Shozap: só Shopee (1 conta). Mercado Livre e Amazon a partir de R$ 100/mês; Shein e Magalu a partir de R$ 150/mês.', reading: 'Se você divulga mais de um marketplace, compare o plano de R$ 100 do Shozap, não o de R$ 50.' },
@@ -296,7 +303,7 @@ export const COMPARISON_PAGES = {
       { key: 'recursos-extra', label: 'Recursos que o Espelha Grupos não tem', produto: 'Sem equivalente.', concorrente: 'Shozap: créditos de IA por mês e créditos de SMS a partir do Intermediário.', reading: 'Se SMS faz parte da sua operação, isso não tem equivalente aqui.' },
     ],
     criteria: ['Quantos grupos de destino você tem hoje', 'Quantos marketplaces você realmente divulga', 'Se opera mais de um número de WhatsApp', 'Se parte da audiência está no Telegram', 'Se precisa converter cupom além de link de produto'],
-    botinhoDifferentials: ['Quatro marketplaces já no plano de entrada', 'Sem limite de grupos ou de campanhas', 'Conversão de link de cupom, não só de produto', 'Teste grátis de 7 dias com o Pro completo', 'Canais e Comunidades do WhatsApp', 'Histórico de envios com o que foi bloqueado por repetição'],
+    botinhoDifferentials: ['Seis lojas já no plano de entrada', 'Sem limite de grupos ou de campanhas', 'Conversão de link de cupom, não só de produto', 'Teste grátis de 7 dias com o Pro completo', 'Canais e Comunidades do WhatsApp', 'Histórico de envios com o que foi bloqueado por repetição'],
     richDifferentials: true,
     bestFit: [
       'Escolha o Shozap se opera WhatsApp e Telegram juntos — ele cobre os dois no mesmo plano, inclusive no de entrada.',
@@ -327,8 +334,10 @@ export const COMPARISON_PAGES = {
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 72 chars de texto próprio, cortado no celular. Mantém "Alternativa
     // ao" na frente (FR-030 — nunca se apresenta como o concorrente).
-    title: 'Alternativa ao FluxoPromo: sem teto de ofertas/dia',
-    description: 'O FluxoPromo limita ofertas por dia em todos os planos, menos no de R$ 197. No Espelha Grupos não há teto, e o espelhamento parte dos grupos que você escolhe.',
+    // 27/09/2026 (Frente D1): 203 impressões, CTR 0,99% na posição 4,9 — teto
+    // de quem busca a marca; o que resta ganhar é o número no título.
+    title: 'Alternativa ao FluxoPromo: ofertas sem teto por R$ 39',
+    description: 'O FluxoPromo limita ofertas por dia em todos os planos, menos no de R$ 197. Aqui não há teto: espelhe os grupos que escolher por R$ 39, com 7 dias grátis.',
     competitorSlugs: ['fluxopromo'],
     productPage: {
       href: '/espelhar-grupos-whatsapp',
@@ -484,7 +493,7 @@ export const COMPARISON_PAGES = {
       { key: 'cupom', label: 'Conversão de cupom', produto: 'Converte link de cupom, não só de produto.', concorrente: 'Não indicada nas páginas públicas do Achadinho Pro.', reading: 'Só faz diferença para quem divulga campanha de cupom além de produto avulso.' },
     ],
     criteria: ['Quantos marketplaces você divulga hoje', 'Quantos números de WhatsApp a operação usa', 'Se precisa validar antes de pagar (teste grátis)', 'Se converte cupom além de produto', 'Se quer Canais do WhatsApp além de grupos'],
-    botinhoDifferentials: ['Quatro marketplaces já no plano de entrada', 'Teste grátis de 7 dias com o Pro completo, sem cartão', 'Conversão de link de cupom, não só de produto', 'Canais e Comunidades do WhatsApp', 'Sem limite de grupos', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
+    botinhoDifferentials: ['Seis lojas já no plano de entrada', 'Teste grátis de 7 dias com o Pro completo, sem cartão', 'Conversão de link de cupom, não só de produto', 'Canais e Comunidades do WhatsApp', 'Sem limite de grupos', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
     richDifferentials: true,
     bestFit: [
       'Escolha o Achadinho Pro se vai começar só com Shopee, quer pagar pouco a mais (R$10/mês) para depois somar Mercado Livre e Amazon, ou precisa operar vários números de WhatsApp na mesma conta.',
@@ -563,8 +572,11 @@ export const COMPARISON_PAGES = {
   '/alternativas/gigi-bot': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Gigi Bot',
-    title: 'Alternativa ao Gigi Bot: o que o plano grátis faz',
-    description: 'Comparativo entre Gigi Bot e Espelha Grupos: qual envia sozinho para o WhatsApp, quanto custa e o que o plano grátis faz. Tabela verificada em 26/08/2026.',
+    // 27/09/2026 (Frente D1): 216 impressões, CTR 0,93% na posição 9,4. O
+    // corte que decide (envio automático só no plano mais caro dele) vai para
+    // o título, com o nosso preço.
+    title: 'Alternativa ao Gigi Bot: envio automático por R$ 39',
+    description: 'O Gigi Bot só publica sozinho no WhatsApp no plano mais caro. No Espelha Grupos, envio automático e espelhamento de grupos já vêm por R$ 39, com 7 dias grátis.',
     competitorSlugs: ['gigi-bot'],
     productPage: {
       href: '/bot-achadinhos-whatsapp',
@@ -582,7 +594,7 @@ export const COMPARISON_PAGES = {
       { key: 'relatorio', label: 'Relatório', produto: 'Histórico completo de envios, incluindo o que foi bloqueado por repetição.', concorrente: 'Gigi Bot: relatório de comissões da Shopee, recurso que não vimos nos outros concorrentes mapeados.', reading: 'São relatórios de coisas diferentes: um olha a comissão na loja, o outro olha o que o robô fez com cada oferta.' },
     ],
     criteria: ['Se você precisa que o robô publique sozinho ou só quer converter link', 'Quantos grupos recebem oferta hoje (e se cabem em 20 por fila)', 'Quantas lojas você divulga de verdade', 'Se Amazon faz parte da rotina', 'Se você prefere operar por Telegram ou por painel no navegador'],
-    botinhoDifferentials: ['Envio automático para os grupos já no plano de entrada', 'Espelhamento de grupos sem limite de grupos', 'Quatro marketplaces incluídos, Amazon entre eles', 'Teste grátis de 7 dias com o plano Pro completo, sem cartão', 'Conversão de link de cupom, não só de produto', 'Canais e Comunidades do WhatsApp', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
+    botinhoDifferentials: ['Envio automático para os grupos já no plano de entrada', 'Espelhamento de grupos sem limite de grupos', 'Seis lojas incluídas, Amazon entre elas', 'Teste grátis de 7 dias com o plano Pro completo, sem cartão', 'Conversão de link de cupom, não só de produto', 'Canais e Comunidades do WhatsApp', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
     richDifferentials: true,
     bestFit: [
       'Escolha o Gigi Bot se você divulga AliExpress, Temu, Shein, Kabum, Terabyte ou Natura — nenhum concorrente que mapeamos cobre tantas lojas.',

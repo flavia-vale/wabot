@@ -40,6 +40,7 @@ para baixo; cada item diz o que decide.
 |---|---|---|---|
 | 🔝 | **assim que `develop` chegar em `main`** | **Reindexação das páginas corrigidas — Leva R1** (abaixo): 10 páginas que diziam coisa errada sobre o produto. Passa na frente de qualquer outra indexação | 15 min |
 | 🔝 | **junto com a R1, assim que a PR dos títulos chegar em `main`** | **Leva R5 (27/09)** (abaixo): 5 páginas com muita impressão e quase zero clique que ganharam título e descrição novos (Achadinho Pro, comissão de afiliado, quanto ganha afiliado Shopee, Mercado Livre e Amazon no WhatsApp). Inclui a maior consulta do site (`achadinho pro`, 4.005 impressões) | 10 min |
+| 🔝 | **junto com a R5, assim que a PR do lote 2 de títulos chegar em `main`** | **Leva R6 (27/09, lote 2)** (abaixo): 8 páginas — 6 que ganharam título e descrição novos (AchadinhosBot já está na R4; Shozap, Gigi Bot, FluxoPromo, como ser afiliado Shopee, divulgar Amazon, melhor horário) e as 2 páginas de loja que ganharam o link "guia completo" (Shopee e Mercado Livre no WhatsApp) | 10 min |
 | 🔝 | dia seguinte à R1 | **Leva R4 (27/09)** (abaixo): 7 páginas — comparativo do AchadinhosBot refeito, página nova "espelhar grupos vale a pena?", reembolso e as que ganharam link. Passa na frente da R2 porque inclui a 3ª página mais visitada do site | 15 min |
 | 🔝 | depois da R4 | **Leva R2** (10 páginas) e, no outro dia, **Leva R3** (3 páginas) | 15 min cada |
 | 1 | ✅ 25/09 | Indexação — Dia 8 (8 de 9 pedidas) | — |
@@ -142,6 +143,30 @@ https://espelhagrupos.com.br/amazon-afiliados-whatsapp                     ⏳
 
 `/alternativas/achadinho-pro` já está na R4 — se a R5 for pedida antes, tirar
 de lá para não gastar uma das 10 vagas do dia em duplicata.
+
+**Leva R6 — lote 2 de títulos (27/09) + links do Tier 1 (junto com a R5, no dia seguinte se a cota acabar)**
+
+Conferir antes em produção (aba do navegador): `/alternativas/shozap` começa
+com "Alternativa ao Shozap: grupos ilimitados por R$ 39";
+`/blog/como-ser-afiliado-shopee-whatsapp` começa com "Como ser afiliado
+Shopee: 5 passos"; `/shopee-afiliados-whatsapp` mostra "Ainda não é afiliada?
+Guia completo" logo abaixo do título. Medir pela série DIÁRIA.
+
+```
+https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp        ⏳
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp    ⏳
+https://espelhagrupos.com.br/blog/melhores-horarios-para-postar-ofertas-no-whatsapp ⏳
+https://espelhagrupos.com.br/alternativas/shozap                           ⏳
+https://espelhagrupos.com.br/alternativas/gigi-bot                         ⏳
+https://espelhagrupos.com.br/alternativas/fluxopromo                       ⏳
+https://espelhagrupos.com.br/shopee-afiliados-whatsapp                     ⏳
+https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp              ⏳
+```
+
+`/alternativas/achadinhos-bot` (título novo neste lote também) já está na R4;
+`/amazon-afiliados-whatsapp`, `/quanto-ganha-afiliado-shopee` e
+`/blog/como-divulgar-ofertas-mercado-livre-whatsapp` (ganharam o bloco
+"próximo passo"/"guia completo") já estão na R5 — não repetir.
 
 **Leva R4 — mudanças de 27/09 (dia seguinte à R1, antes da R2)**
 

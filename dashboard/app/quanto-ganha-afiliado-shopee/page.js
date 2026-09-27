@@ -179,10 +179,40 @@ export default function Page() {
               </div>
             </section>
 
+            {/* Frente D2 (PLANO_SEO_GEO_2026-09-27): próximo passo único para a
+                comercial do Tier 1 — esta página e o post de cadastro fundem
+                força em /shopee-afiliados-whatsapp. */}
+            <section>
+              <h2>Próximo passo</h2>
+              <p>Se você já é afiliada e o que pesa é publicar oferta por oferta com o seu link, o caminho é a página de Shopee Afiliados no WhatsApp: ela mostra como o robô converte o link, monta a oferta e publica nos seus grupos com intervalo entre os envios.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Link
+                  href="/shopee-afiliados-whatsapp"
+                  className="rounded-2xl bg-emerald-600 px-5 py-4 text-center font-black text-white no-underline hover:bg-emerald-700"
+                  data-seo-cta="article_store_landing"
+                  data-cta-position="article_next_step_primary"
+                  data-cta-stage="consideration"
+                  data-cta-destination="landing"
+                >
+                  Já é afiliada Shopee? Veja como divulgar no WhatsApp
+                </Link>
+                <Link
+                  href="/precos"
+                  className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
+                  data-seo-cta="article_pricing"
+                  data-cta-position="article_next_step_secondary"
+                  data-cta-stage="consideration"
+                  data-cta-destination="pricing"
+                >
+                  Ver preços e testar 7 dias grátis
+                </Link>
+              </div>
+            </section>
+
             <section>
               <h2>Continue lendo</h2>
               <ul>
-                <li><Link href="/blog/como-ser-afiliado-shopee-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Shopee Afiliados: como entrar e quanto paga</Link> — o cadastro passo a passo e as regras do programa.</li>
+                <li><Link href="/blog/como-ser-afiliado-shopee-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Como ser afiliado Shopee: 5 passos e comissão de 3%</Link> — o cadastro passo a passo e as regras do programa.</li>
                 <li><Link href="/shopee-afiliados-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Divulgar Shopee no WhatsApp sem copiar e colar</Link> — o que muda na prática depois do cadastro.</li>
                 <li><Link href="/programa-de-afiliados" className="font-bold text-emerald-700 hover:text-emerald-800">Shopee, Amazon ou Mercado Livre: qual programa escolher</Link> — comissão e prazo de atribuição dos três lado a lado.</li>
               </ul>
