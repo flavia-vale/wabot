@@ -15,7 +15,7 @@ Webmaster Tools. Números completos em `SERIE_HISTORICA_SEO.md`.
 | 4 | **O ChatGPT recomenda quando a pergunta é sobre espelhar oferta** e nos deixa de fora quando é "bot para afiliados" (lê como robô que acha oferta sozinho) | Trilha A 2/5, Trilha B 3/4 |
 | 5 | **A objeção nova é confiança, não recurso.** Sem CNPJ, a IA diz "não diria ainda que é confiável no sentido empresarial" e premia concorrente com razão social e política de reembolso | consulta "é confiável" + pergunta indutora de 23/09 |
 | 6 | **"Espelha grupos" ainda é lido como expressão, não como marca** | "o que é": 0 citações em 3 rodadas seguidas |
-| 7 | **O gargalo virou retenção, não aquisição** | 17% renovam; **Basic 6%**, Pro 29%; LTV médio R$ 53,77 |
+| 7 | ~~O gargalo virou retenção, não aquisição~~ **Corrigido em 27/09: leitura errada.** "Renovaram 17%" dividia por todos, inclusive quem ainda não chegou à data de renovar. Na coorte de agosto, 7 de 7 renovaram | ver `SERIE_HISTORICA_SEO.md`, seção 4b |
 | 8 | Páginas de loja (Tier 1) foram achadas, mas não disputam o termo grande | 123 → 353 impressões; termos principais ainda ausentes |
 | 9 | Celular clica menos | 3,52% contra 4,85% no computador |
 | 10 | Bing é pequeno, mas cresce e o aviso automático funciona | 265 impressões em 8 semanas, metade nos últimos 8 dias; IndexNow 106 URLs, status 200 |

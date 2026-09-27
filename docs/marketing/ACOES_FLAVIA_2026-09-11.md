@@ -14,17 +14,20 @@ quatro listas divergem em uma semana.
 |---|---|---|---|
 | 🔝 | **assim que `develop` chegar em `main`** | **Reindexação das páginas corrigidas — Leva R1** (abaixo): 10 páginas que diziam coisa errada sobre o produto. Passa na frente de qualquer outra indexação | 15 min |
 | 🔝 | dia seguinte à R1 | **Leva R2** (10 páginas) e, no outro dia, **Leva R3** (3 páginas) | 15 min cada |
-| 1 | 24/09 | **Indexação — Dia 8** (abaixo): `lumi-ofertas-inteligentes` + 9 endereços | 15 min |
+| 1 | ✅ 25/09 | Indexação — Dia 8 (8 de 9 pedidas) | — |
 | 2 | ✅ 23/09 | PR #1833 (dados de 23/09 + script do Gemini) e #1905 (modelo do Gemini) mergeadas em `develop` | — |
 | 3 | 24/09 | Responder à outra sessão: **reembolso depois de 7 dias** (há ou não?) | 1 min |
 | 4 | 24/09 | **Depoimentos:** confirmar que os 5 textos são de clientes reais, com permissão, e ajustar as frases que prometem resultado (ver nota abaixo) | 20 min |
-| 5 | 25/09 | **Indexação — Dia 9** + as duas conferências no Bing | 15 min |
+| 5 | ✅ 25/09 | Indexação — Dia 9. **Falta:** as duas conferências no Bing (seção "Duas conferências") | 10 min |
 | 6 | quando a PR da outra sessão chegar em `main` | **Indexação — Dia 10**: páginas novas (reembolso, ofertas automáticas da Shopee, 5 comparativos) e as editadas — a outra sessão entrega a lista | 15 min |
 | 7 | 28/09 | Conferir se o Dia 7 entrou no índice (seção "Como conferir o Dia 7") | 10 min |
 | 8 | 30/09 | **Medição:** export do Search Console (3 meses + `Gráfico.csv`), `diag-origem-cadastros --dias 30`, `diag-paginas-seo --dias 30` | 20 min |
-| 9 | quando der | **Rodada de IA à mão no Gemini, Perplexity e AI Overviews** — as 10 perguntas do `ROTEIRO_MEDICAO_IA.md`, aba anônima, sem pergunta extra. O Gemini por script **não roda grátis** (ver ROTEIRO, seção "Gemini por script"): só volta se você ativar a cobrança no AI Studio | 30 min |
+| 9 | ✅ 27/09 | ~~Rodada de IA à mão no Gemini, Perplexity e AI Overviews~~ feita e registrada (placar em `SERIE_HISTORICA_SEO.md`, seção 2). Próxima rodada: ~11/10 — as 10 perguntas do `ROTEIRO_MEDICAO_IA.md`, aba anônima, sem pergunta extra. O Gemini por script **não roda grátis** (ver ROTEIRO, seção "Gemini por script"): só volta se você ativar a cobrança no AI Studio | 30 min |
 | 10 | opcional | Regra na Cloudflare contra robôs de ataque — passo a passo em `SESSAO_2026-09-23_PROMPTS_E_DECISOES.md` | 5 min |
-| 11 | quando der | Rodar em outras sessões os prompts de **segurança**, **renovação** e **funil comercial** (texto pronto em `SESSAO_2026-09-23_PROMPTS_E_DECISOES.md`) | — |
+| 11 | quando der | Rodar em outras sessões os prompts de **segurança** e **funil comercial** (texto pronto em `SESSAO_2026-09-23_PROMPTS_E_DECISOES.md`). **Renovação: esperar** a turma de setembro renovar (1ª quinzena de outubro) — a leitura de 23/09 estava errada | — |
+| 13 | decisão sua (27/09) | Corrigir a frase do `pricing.md` que faz o Gemini dizer que o Basic é "operação manual" (o espelhamento é automático nos dois planos) | — |
+| 14 | decisão sua (27/09) | Página respondendo "espelhar grupos vale a pena?" — contra-narrativa do Achadinhos Pro já é fonte do AI Overviews e da Perplexity; o Pro faz os dois (espelha e garimpa) | — |
+| 15 | decisão sua (27/09) | Refazer `/alternativas/achadinhos-bot`: 3ª página em visitas, 9,8% de clique e só 1 em 4 lê metade | — |
 | 12 | decisão sua | Ativar ou não a cobrança do Gemini (menos de R$ 2 por rodada, estimativa não conferida) | — |
 
 **Regra da lista (pedido da Flávia, 24/09):** sempre que uma mudança de texto

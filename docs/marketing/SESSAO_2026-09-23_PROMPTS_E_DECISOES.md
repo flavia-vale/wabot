@@ -172,6 +172,12 @@ evidência | correção | quem faz), com os críticos primeiro, em linguagem sim
 
 ## Prompt C — estudo da renovação
 
+⚠️ **Corrigido em 27/09:** o problema descrito no prompt ("só 17% renovaram")
+era leitura errada — a média incluía quem ainda não tinha chegado à data de
+renovar. Na coorte de agosto, 7 de 7 renovaram. Se este prompt já rodou em
+outra sessão, avisar lá; se não rodou, esperar a turma de setembro renovar
+(primeira quinzena de outubro) antes de rodar.
+
 ```
 Repo flavia-vale/wabot. Leia AGENTS.md, docs/rca/cobranca.md, docs/rca/admin.md,
 docs/rca/emails.md e a seção "4b. LTV e retenção" de
