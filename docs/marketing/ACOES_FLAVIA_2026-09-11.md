@@ -13,6 +13,7 @@ quatro listas divergem em uma semana.
 | # | Quando | O quê | Tempo |
 |---|---|---|---|
 | 🔝 | **assim que `develop` chegar em `main`** | **Reindexação das páginas corrigidas — Leva R1** (abaixo): 10 páginas que diziam coisa errada sobre o produto. Passa na frente de qualquer outra indexação | 15 min |
+| 🔝 | **junto com a R1, assim que a PR dos títulos chegar em `main`** | **Leva R5 (27/09)** (abaixo): 5 páginas com muita impressão e quase zero clique que ganharam título e descrição novos (Achadinho Pro, comissão de afiliado, quanto ganha afiliado Shopee, Mercado Livre e Amazon no WhatsApp). Inclui a maior consulta do site (`achadinho pro`, 4.005 impressões) | 10 min |
 | 🔝 | dia seguinte à R1 | **Leva R4 (27/09)** (abaixo): 7 páginas — comparativo do AchadinhosBot refeito, página nova "espelhar grupos vale a pena?", reembolso e as que ganharam link. Passa na frente da R2 porque inclui a 3ª página mais visitada do site | 15 min |
 | 🔝 | depois da R4 | **Leva R2** (10 páginas) e, no outro dia, **Leva R3** (3 páginas) | 15 min cada |
 | 1 | ✅ 25/09 | Indexação — Dia 8 (8 de 9 pedidas) | — |
@@ -97,6 +98,24 @@ https://espelhagrupos.com.br/blog/chip-dedicado-bot-whatsapp            ⏳
 https://espelhagrupos.com.br/blog/migrar-grupo-achadinhos-para-canal    ⏳
 https://espelhagrupos.com.br/diagnostico-antiban-whatsapp               ⏳
 ```
+
+**Leva R5 — títulos reescritos em 27/09 (junto com a R1; a R4 pode esperar um dia)**
+
+Conferir antes em produção (aba do navegador): `/alternativas/achadinho-pro`
+começa com "Achadinho Pro: alternativa com 6 lojas"; `/programa-de-afiliados`
+começa com "Comissão de afiliado". Medir o efeito pela série DIÁRIA do Search
+Console, nunca pelo acumulado de 3 meses (ver `docs/rca/seo-marketing.md`).
+
+```
+https://espelhagrupos.com.br/alternativas/achadinho-pro                    ⏳
+https://espelhagrupos.com.br/programa-de-afiliados                         ⏳
+https://espelhagrupos.com.br/quanto-ganha-afiliado-shopee                  ⏳
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ⏳
+https://espelhagrupos.com.br/amazon-afiliados-whatsapp                     ⏳
+```
+
+`/alternativas/achadinho-pro` já está na R4 — se a R5 for pedida antes, tirar
+de lá para não gastar uma das 10 vagas do dia em duplicata.
 
 **Leva R4 — mudanças de 27/09 (dia seguinte à R1, antes da R2)**
 

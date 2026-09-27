@@ -5,9 +5,11 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_PERSON
 
 const slug = '/programa-de-afiliados'
 // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1): era
-// 73 chars de texto próprio. "Qual paga mais" é o motivo pra clicar.
-const title = 'Qual paga mais: ML até 16%, Amazon até 13%, Shopee 3%'
-const description = 'Mercado Livre paga de 0% a 16% por categoria, Amazon de 0% a 13% e Shopee 3% na venda padrão. Entrada gratuita nos três, com fonte e data.'
+// 73 chars de texto próprio. Reescrito em 27/09/2026: "Qual paga mais" teve
+// 0 clique em 225 impressões (posição 8) — agora entra pela palavra buscada
+// ("comissão de afiliado") e entrega a resposta em número já no título.
+const title = 'Comissão de afiliado: Shopee 3%, Amazon 0-13%, ML 0-16%'
+const description = 'Programas de afiliados Shopee, Amazon e Mercado Livre lado a lado: comissão por categoria, prazo de atribuição e entrada gratuita nos três, com fonte e data.'
 const dates = getEditorialDates(slug)
 
 // Resposta direta em 40–60 palavras: é o bloco que o Google usa como snippet e
@@ -104,7 +106,7 @@ export default function Page() {
       <main className="mx-auto w-full max-w-5xl px-5 py-10 md:px-8 md:py-16">
         <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-10">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Programas de afiliados · Comparativo</p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">Programa de afiliados: Shopee, Amazon ou Mercado Livre?</h1>
+          <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">Comissão de afiliado: Shopee 3%, Amazon de 0% a 13%, Mercado Livre de 0% a 16%</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{directAnswer}</p>
           <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_PERSON_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
 

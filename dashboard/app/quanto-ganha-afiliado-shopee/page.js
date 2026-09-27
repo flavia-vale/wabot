@@ -17,8 +17,11 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 // promete quanto alguém vai ganhar. A política de uso responsável já publicada
 // diz que não prometemos comissão nem aumento de vendas.
 
-const title = 'Quanto ganha um afiliado Shopee? A conta real, sem promessa'
-const description = 'Quanto a Shopee paga de comissão, em quanto tempo a venda é atribuída a você e como fazer a conta do quanto dá para ganhar por mês — com a tabela oficial e sem promessa de resultado.'
+// 27/09/2026: 248 impressões e 1 clique na posição 7,4 — "A conta real, sem
+// promessa" não dava motivo para clicar. A pergunta literal fica, e o número
+// da tabela oficial entra no título (3% na venda padrão, até 30% na Extra).
+const title = 'Quanto ganha um afiliado Shopee? 3% por venda, até 30%'
+const description = 'A Shopee paga 3% na venda padrão e até 30% em produtos de Comissão Extra. Veja o prazo de atribuição e como fazer a conta do quanto dá para ganhar por mês.'
 const slug = '/quanto-ganha-afiliado-shopee'
 const dates = getEditorialDates(slug)
 
