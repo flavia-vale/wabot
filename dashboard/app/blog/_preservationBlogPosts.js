@@ -258,8 +258,11 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-ser-afiliado-shopee-whatsapp': {
     slug: '/blog/como-ser-afiliado-shopee-whatsapp',
-    title: 'Shopee Afiliados: como entrar e quanto paga',
-    description: 'Como entrar no Shopee Afiliados, quanto a Shopee paga por tipo de venda, o prazo para a comissão contar e como divulgar no WhatsApp sem perder venda.',
+    // 27/09/2026 (Frente D1/D2): 532 impressões, CTR 0,56% na posição 9,4 —
+    // periferia de "como ser afiliado shopee" (5.000/mês). O título passa a
+    // ser a pergunta literal + o número de passos que a página já ensina.
+    title: 'Como ser afiliado Shopee: 5 passos e comissão de 3%',
+    description: 'Como ser afiliado Shopee em 5 passos: cadastro gratuito, comissão a partir de 3% (até 30% na Comissão Extra), atribuição de 7 dias e como divulgar no WhatsApp.',
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
     heroImage: { path: '/blog/hero/shopee-afiliada-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas da Shopee no Espelha Grupos', width: 1024, height: 1024 },
@@ -295,6 +298,15 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Como divulgar sem queimar o número', paragraphs: ['Use um chip dedicado, publique poucas ofertas boas por vez, varie o texto e evite mandar a mesma mensagem idêntica para todos os destinos ao mesmo tempo.', 'Quem dispara dezenas de links iguais em sequência arrisca o número e ainda cansa a audiência. Cadência responsável vende mais no médio prazo.'] },
       { h2: 'Como o Espelha Grupos automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o Espelha Grupos converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
     ],
+    // Frente D2 (PLANO_SEO_GEO_2026-09-27): este post está na página 1 para a
+    // periferia de "como ser afiliado shopee" — é a porta que já abre. O
+    // "próximo passo" manda a força para a comercial do Tier 1, que responde
+    // "já sou afiliada, como distribuo"; ela linka de volta como guia completo.
+    nextStep: {
+      href: '/shopee-afiliados-whatsapp',
+      label: 'Já é afiliada Shopee? Veja como divulgar no WhatsApp',
+      body: 'Depois do cadastro, o trabalho vira publicar oferta por oferta com o seu link. A página de Shopee Afiliados no WhatsApp mostra como o robô faz isso sozinho, com 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'espelhar, garimpar, converter, enfileirar — e quem faz cada uma' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'os 4 caminhos e o passo a passo com o robô' },
@@ -321,8 +333,11 @@ export const PRESERVATION_BLOG_POSTS = {
     slug: '/blog/como-divulgar-ofertas-amazon-whatsapp',
     // Título encurtado em 2026-08-19 (P1): era 75 chars de texto próprio. O
     // número da comissão vai na frente — é o motivo concreto pra clicar.
-    title: 'Afiliado Amazon: comissão por categoria (0% a 13%)',
-    description: 'Guia de afiliado Amazon: quanto paga de comissão por categoria, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
+    // 27/09/2026 (Frente D1): 618 impressões, CTR 1,6% na posição 8,3. Entra
+    // pela pergunta do slug ("como divulgar ... whatsapp") e mantém o número;
+    // deixa de disputar o mesmo título da comercial /amazon-afiliados-whatsapp.
+    title: 'Como divulgar Amazon no WhatsApp: comissão de 0% a 13%',
+    description: 'Quanto a Amazon paga por categoria (0% a 13%), como conferir se a sua tag está no link e a cadência para divulgar no WhatsApp sem queimar o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
     heroImage: { path: '/blog/hero/amazon-associado-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas da Amazon no Espelha Grupos', width: 1024, height: 1024 },
@@ -343,6 +358,13 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Cadência e preservação do número', paragraphs: ['A Amazon costuma ter muitas ofertas, e a tentação é mandar tudo de uma vez. Resista: poucas ofertas selecionadas por vez, com variação de texto, performam melhor e protegem o número.', 'Use chip dedicado e horário de silêncio para a operação não parecer um robô disparando.'] },
       { h2: 'Como o Espelha Grupos cuida da Amazon', paragraphs: ['Com a sua tag de associado cadastrada, o Espelha Grupos converte os links da Amazon automaticamente, busca a imagem em alta resolução para o preview do WhatsApp e distribui a oferta para seus grupos e canais com cadência responsável.', 'Isso evita o erro clássico de enviar um link sem tag e garante que a oferta chegue com cara profissional.'] },
     ],
+    // Frente D2: mesmo desenho do post da Shopee — o guia manda para a
+    // comercial /amazon-afiliados-whatsapp como próximo passo, e ela linka de volta.
+    nextStep: {
+      href: '/amazon-afiliados-whatsapp',
+      label: 'Já é afiliada Amazon? Veja como divulgar no WhatsApp',
+      body: 'Com a tag cadastrada, a página de Afiliado Amazon no WhatsApp mostra como o robô converte o link, busca a imagem do produto e publica nos seus grupos com intervalo. 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Amazon, Shopee ou Mercado Livre: qual paga mais na sua categoria', note: 'a comissão muda muito conforme o produto' },
       { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa automatizar isso', note: 'preço das ferramentas do mercado, lado a lado' },
@@ -352,6 +374,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para a tag nunca cair no caminho' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'os 4 caminhos e o passo a passo com o robô' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'checklist, preço e como testar em 7 dias' },
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar a oferta da Amazon em vários grupos sem spam', note: 'os 4 caminhos e o que o WhatsApp trata como spam' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Padronizar a divulgação de cupons', note: 'modelo de mensagem pronto, com cupom e link com a sua tag' },
     ],
     faq: [
       { q: 'Como sei se o link tem minha tag?', a: 'O link de afiliado da Amazon inclui um parâmetro de tag (tag=seucodigo). Sem ela, a venda não é atribuída a você. Uma ferramenta de conversão garante isso automaticamente.' },
@@ -383,6 +407,13 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Por que o preview com imagem importa', paragraphs: ['No WhatsApp, o card clicável com foto do produto em boa resolução converte muito mais que um link seco. O Espelha Grupos monta o preview com a imagem em alta e o nome da loja acima do domínio, mantendo o card sempre renderizado.', 'Sem imagem, a oferta compete em desvantagem com todos os outros links do grupo. Com imagem, ela ocupa espaço visual e chama o olho.'] },
       { h2: 'Cadência que protege o número', paragraphs: ['Despejar 20 ofertas em sequência é o caminho mais rápido para o número entrar em risco. Distribua ao longo do dia, varie o texto e respeite horário de silêncio.', 'No plano Pro, a Preservação Avançada organiza essas camadas: intervalo entre envios, limite por dia, horário de descanso e variação do texto, para que a operação não pareça robótica.'] },
     ],
+    // Frente D2: mesmo desenho dos posts de Shopee e Amazon — próximo passo
+    // é a comercial /mercado-livre-afiliados-whatsapp, que linka de volta.
+    nextStep: {
+      href: '/mercado-livre-afiliados-whatsapp',
+      label: 'Já é afiliada do Mercado Livre? Veja como divulgar no WhatsApp',
+      body: 'Depois do cadastro, a página de Afiliado Mercado Livre no WhatsApp mostra como o robô troca o link pelo seu código e publica nos seus grupos com intervalo entre os envios. 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Mercado Livre, Amazon ou Shopee: qual paga mais', note: 'comissão por categoria nos três programas' },
       { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Quando o trabalho manual deixa de caber', note: 'o sinal de que a operação passou do ponto' },
@@ -437,8 +468,11 @@ export const PRESERVATION_BLOG_POSTS = {
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 64 chars de texto próprio, o que empurrava o corte do Google no
     // celular. Motivo pra clicar ("horário certo") na frente.
-    title: 'Melhor horário para postar oferta: 7h, 12h e 19h',
-    description: 'Os três horários em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
+    // 27/09/2026 (Frente D1): 547 impressões, CTR 0,55% na posição 6,6 para
+    // "melhor horário para postar no whatsapp". O título vira a pergunta
+    // literal + o número de faixas que a página já afirma (nada inventado).
+    title: 'Qual o melhor horário para postar no WhatsApp? 3 faixas',
+    description: 'As 3 faixas em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
     heroImage: { path: '/blog/hero/02-radar.png', alt: 'Radar monitorando ofertas de vários grupos de origem ao mesmo tempo, para não perder o timing', width: 1080, height: 1080 },
@@ -1032,6 +1066,38 @@ export function PreservationBlogPost({ postKey }) {
           </section>
         ) : null}
 
+        {/* Frente D2 (PLANO_SEO_GEO_2026-09-27): post que já ranqueia para a
+            consulta de loja manda a força para a comercial do Tier 1 como
+            próximo passo único — em vez do bloco genérico de preservação, que
+            não é o assunto de quem chegou perguntando de comissão. */}
+        {post.nextStep ? (
+          <section>
+            <h2>Próximo passo</h2>
+            <p>{post.nextStep.body}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Link
+                className="rounded-2xl bg-emerald-600 px-5 py-4 text-center font-black text-white no-underline hover:bg-emerald-700"
+                href={post.nextStep.href}
+                data-seo-cta="blog_store_landing"
+                data-cta-position="article_next_step_primary"
+                data-cta-stage="consideration"
+                data-cta-destination="landing"
+              >
+                {post.nextStep.label}
+              </Link>
+              <Link
+                className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
+                href="/precos"
+                data-seo-cta="blog_pricing"
+                data-cta-position="article_next_step_secondary"
+                data-cta-stage="consideration"
+                data-cta-destination="pricing"
+              >
+                Ver preços e testar 7 dias grátis
+              </Link>
+            </div>
+          </section>
+        ) : (
         <section>
           <h2>Próximo passo</h2>
           <p>
@@ -1080,6 +1146,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
           </div>
         </section>
+        )}
 
         <section>
           <h2>FAQ</h2>

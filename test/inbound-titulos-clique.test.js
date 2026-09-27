@@ -222,7 +222,12 @@ test('fonte única (FR-001): os 10 caminhos de FR-004 não têm title/descriptio
 const ALVOS_TIER_1 = [
   {
     path: '/blog/como-ser-afiliado-shopee-whatsapp',
-    termo: /shopee afiliados/i,
+    // 27/09/2026 (Frente D1/D2): o Search Console mostra a página na posição
+    // 9,4 para a periferia de "como ser afiliado shopee" (5.000/mês), e o
+    // título passou a ser essa pergunta literal. "afiliado shopee" é o mesmo
+    // termo de 50.000 buscas em outra ordem — a guarda aceita as duas, e
+    // continua barrando título sem a loja.
+    termo: /shopee afiliados|afiliados? shopee/i,
     fonte: () => blocoChave('dashboard/app/blog/_preservationBlogPosts.js', 'como-ser-afiliado-shopee-whatsapp'),
   },
 ]
