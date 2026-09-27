@@ -19,6 +19,7 @@ import {
   shouldRefreshPendingSubscription,
   summarizeSubscriptionForPanel,
 } from '../../domain/payments/subscriptionPolicy.js'
+import { subscriptionStartDate } from '../../domain/payments/checkoutOffer.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
 import { notifyPaymentApproved, notifyChargeFailed } from '../../emailTriggers/events.js'
@@ -455,7 +456,7 @@ async function cancelMercadoPagoSubscription(preapprovalId) {
   }
 }
 
-async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
+async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDate = null }) {
   if (!payerEmail) {
     const err = new Error('payer_email obrigatório para criar assinatura')
     err.code = 'MISSING_PAYER_EMAIL'
@@ -504,6 +505,9 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
           frequency_type: 'months',
           transaction_amount: normalizedPlan.price,
           currency_id: 'BRL',
+          // Quem já pagou o mês não é cobrada de novo agora: a recorrência
+          // começa quando o período pago termina (ver checkoutOffer.js).
+          ...(startDate ? { start_date: startDate.toISOString() } : {}),
         },
         back_url: `${dashboardUrl}/painel/pagamento/sucesso`,
         // Sem isso os avisos da assinatura dependem só do que estiver marcado no
@@ -1323,7 +1327,8 @@ export async function paymentsRoutes(app) {
       const plans = await getBillingPlans()
       if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
-      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, plan: true, accessExpiresAt: true } })
+      const startDate = subscriptionStartDate({ plan: user?.plan, accessExpiresAt: user?.accessExpiresAt })
       // E-mail do Mercado Pago informado só para a cobrança (ver payerEmail.js).
       const payer = resolveSubscriptionPayerEmail({ accountEmail: user?.email, informedEmail: informedPayerEmail })
       const payerEmail = payer.email
@@ -1421,7 +1426,7 @@ export async function paymentsRoutes(app) {
       // só, e era impossível ver quantas clientes estavam batendo em cada um.
       trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan, payerEmailSource: payer.source } })
 
-      const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
+      const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail, startDate })
       await db.subscription.upsert({
         where: { mpSubscriptionId },
         update: { plan, status: 'pending', updatedAt: new Date() },

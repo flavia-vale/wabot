@@ -13,6 +13,7 @@ import { usePainel, usePainelHeader } from '../PainelShell'
 import { BASIC_FEATURE_LIST, PRO_FEATURE_LIST } from '@/lib/planFeatures'
 import { CONFIG_PRESERVED_NOTE } from '../../../../src/domain/painel/trialNotice.js'
 import { buildPricePerOffer, parsePriceToCents } from '../../../../src/domain/painel/pricePerOffer.js'
+import { decideCheckoutOffer } from '../../../../src/domain/payments/checkoutOffer.js'
 import {
   CARD_HELP_TITLE,
   CARD_HELP_PIX_TITLE,
@@ -188,6 +189,15 @@ export default function PlanoPage() {
     }
   }
 
+  // Primeiro pagamento avulso; renovação automática só para quem já tem acesso
+  // pago, começando no vencimento. Porquê e dado em checkoutOffer.js.
+  const checkoutOffer = useMemo(() => decideCheckoutOffer({
+    plan: overview?.plan,
+    isActive: overview?.isActive,
+    autoRenew: overview?.autoRenew,
+    accessExpiresAt: overview?.accessExpiresAt,
+  }), [overview?.plan, overview?.isActive, overview?.autoRenew, overview?.accessExpiresAt])
+
   const currentPlanLabel = overview?.plan ? (PLAN_LABELS[overview.plan] ?? overview.plan) : null
   const expiresAtLabel = formatDate(overview?.accessExpiresAt)
   const nextChargeLabel = formatDate(overview?.nextChargeAt)
@@ -281,7 +291,7 @@ export default function PlanoPage() {
       <section>
         <div style={{ marginBottom: 22 }}>
           <div className="pnl-card-title" style={{ marginBottom: 6 }}>{overview?.isActive ? 'Renove ou troque seu plano' : 'Escolha seu plano'}</div>
-          <p className="pnl-card-note">Dois planos simples, sem fidelidade. Cancele a cobrança automática quando quiser.</p>
+          <p className="pnl-card-note">Dois planos simples, sem fidelidade. Pague por Pix ou cartão; a renovação automática é opcional e você desliga quando quiser.</p>
         </div>
         <div className="grid items-stretch gap-5 md:grid-cols-2">
           {plans.map((plan) => {
@@ -354,24 +364,27 @@ export default function PlanoPage() {
                     type="button"
                     className={`pnl-btn ${presentation.featured ? 'is-pro' : 'is-primary'}`}
                     style={{ width: '100%', justifyContent: 'center' }}
-                    onClick={() => handleSubscribe(plan.id)}
-                    disabled={!!checkoutPlan}
-                  >
-                    {checkoutPlan === plan.id ? 'Aguarde…' : 'Cobrança automática'}
-                  </button>
-                  <button
-                    type="button"
-                    className={`pnl-btn ${presentation.featured ? 'is-pro' : 'is-primary'}`}
-                    style={{ width: '100%', justifyContent: 'center' }}
                     onClick={() => handleCheckout(plan.id)}
                     disabled={!!checkoutPlan}
                   >
-                    {checkoutPlan === plan.id ? 'Aguarde…' : 'Pagar uma vez'}
+                    {checkoutPlan === plan.id ? 'Aguarde…' : checkoutOffer.primaryLabel}
                   </button>
+                  {checkoutOffer.showAutoRenew && (
+                    <button
+                      type="button"
+                      className="pnl-btn is-ghost"
+                      style={{ width: '100%', justifyContent: 'center' }}
+                      onClick={() => handleSubscribe(plan.id)}
+                      disabled={!!checkoutPlan}
+                    >
+                      {checkoutPlan === plan.id ? 'Aguarde…' : checkoutOffer.autoRenewLabel}
+                    </button>
+                  )}
                 </div>
                 <p className="mt-3 text-center text-xs leading-5 text-slate-500">
                   PIX ou cartão · acesso por 30 dias
                 </p>
+                <p className="mt-1 text-center text-xs leading-5 text-slate-500">{checkoutOffer.note}</p>
               </article>
             )
           })}
