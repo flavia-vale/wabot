@@ -28,7 +28,10 @@ test('buildEntitledGroupConfig removes all channel monitors, posts and targets f
   // sai SEM marca e no mesmo formato ('original_watermark' → 'original'), e o
   // botão "Ver canal" também sai. O texto da marca fica guardado — voltar para o
   // PRO não pede para configurar de novo.
-  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null, imageMode: 'original', watermarkText: 'Minha marca', watermarkColor: null, watermarkSize: null, watermarkPosition: null }])
+  // Feature 017 (arquitetura multicanal de entrega): toPostDetail passou a
+  // carregar `deliveryNetwork` — ausente na fixture, então resolve para
+  // 'whatsapp' (FR-013/SC-003).
+  assert.deepEqual(result.groups.postDetails, [{ waJid: 'post@g.us', kind: 'group', welcomeMsg: 'oi', channelButtonJid: null, channelButtonName: null, imageMode: 'original', watermarkText: 'Minha marca', watermarkColor: null, watermarkSize: null, watermarkPosition: null, deliveryNetwork: 'whatsapp' }])
 })
 
 test('Basic: card com marca vira card, e o botão "Ver canal" sai; PRO mantém os dois', () => {
