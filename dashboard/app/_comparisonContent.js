@@ -141,6 +141,10 @@ export const COMPARISON_PAGES = {
       // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
       { href: '/espelhar-grupos-de-ofertas-vale-a-pena', title: 'Espelhar grupos de ofertas vale a pena?' },
+      // 27/09/2026 (B1/B2 do plano GEO): as duas perguntas que as IAs respondem
+      // como problema de empresa, respondidas para afiliada.
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', title: 'Como postar em vários grupos de WhatsApp ao mesmo tempo sem spam' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', title: 'Como padronizar a divulgação de cupons no WhatsApp' },
       { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
     ],
     // 27/09/2026: a busca que mais traz gente para cá é "achadinho pro" (3.806
