@@ -8,6 +8,32 @@ quatro listas divergem em uma semana.
 
 ---
 
+## ⭐⭐ Sua parte do plano SEO + GEO (27/09) — passo a passo, por prioridade
+
+Fonte: `PLANO_SEO_GEO_2026-09-27.md` e `DIAGNOSTICO_MAQUINA_DE_VENDAS_2026-09-27.md`.
+A parte de código é minha (PRs contra `develop`). Esta é a sua. Faça de cima
+para baixo; cada item diz o que decide.
+
+| # | Quando | O quê | Como | Tempo |
+|---|---|---|---|---|
+| 1 | hoje | **Validar staging e levar `develop` → `main`** (7 PRs de 27/09: tela do dia 5, assinatura, ficha técnica, títulos, indicação, "é confiável", dados da pagadora) | `http://178.105.54.0:3006`: home e `/precos` com a ficha técnica; `/espelha-grupos-e-confiavel` com os números; `/painel/plano` em conta de teste só com "Pagar agora"; card de indicação após 1ª oferta. Depois abrir PR `develop → main` | 20 min |
+| 2 | assim que `main` subir | **Reindexação, leva 🔝 das páginas alteradas hoje** (10 por dia): `/`, `/precos`, `/espelha-grupos-e-confiavel`, `/alternativas/achadinho-pro`, `/programa-de-afiliados`, `/quanto-ganha-afiliado-shopee`, `/blog/como-divulgar-ofertas-mercado-livre-whatsapp`, `/amazon-afiliados-whatsapp`, `/espelhar-grupos-de-ofertas-vale-a-pena`, `/politica-de-reembolso` | Search Console → Inspeção de URL → conferir que a produção mostra o texto novo → Solicitar indexação | 15 min |
+| 3 | dia seguinte | **Bing Webmaster Tools, Inspeção de URL** de `/`, `/precos`, `/bot-afiliados-whatsapp`, `/blog/como-espelhar-mensagens-entre-grupos-whatsapp`; se faltar, "Enviar URL" | bing.com/webmasters → Inspeção. Decide se o ChatGPT (que busca pelo Bing) lê a versão atual | 10 min |
+| 4 | dia seguinte | **Planejador de Palavras-Chave**: `automação para afiliados` e `automação para afiliado shopee` (volume e concorrência) | Google Ads → Planejador → "Descobrir novas palavras-chave". Me mande os dois números. Decide se o hub dos 3 modelos disputa o Google | 10 min |
+| 5 | dias 2–4 | **Levas de indexação 1 a 4** (lista em `DIAGNOSTICO_MAQUINA_DE_VENDAS_2026-09-27.md`, item 4): novas de 23–27/09 → R1 (falavam errado do produto) → páginas de confiança/preço → R2 restante | 10 por dia, de cima para baixo | 15 min/dia |
+| 6 | esta semana | **WhatsApp para os 63 que ativaram e sumiram** (SQL e mensagem no `DIAGNOSTICO_…`, item 2); anotar as respostas em 4 caixas: preço, função, medo de bloqueio, tempo/outro | 5 a 10 por dia; parar de mandar e-mail (zero respostas) | 20 min/dia |
+| 7 | esta semana | **Depoimentos reais** (3 a 5) com nome e permissão por escrito, sem reescrever; frases que prometem resultado ou "nunca banido" ficam de fora | me mande o texto exato + nome + autorização; eu publico em `/espelha-grupos-e-confiavel` e `/estudos-de-caso` | 1 h |
+| 8 | semana 1 | **Vídeo 1**: "Como espelhar mensagens entre grupos de WhatsApp (sem programar)" — tela do painel, 3 a 5 min; YouTube + TikTok + Instagram + LinkedIn (tela). Descrição = frase canônica da ficha + link da página `/blog/como-espelhar-mensagens-entre-grupos-whatsapp` | roteiro: QR → escolher origem → escolher destino → oferta saindo com o SEU link | 2 h |
+| 9 | semanas 2–8 | **Vídeos 2 a 8**, um por semana, nesta ordem: "Bot para afiliados no WhatsApp: como funciona o Espelha Grupos (6 lojas, a partir de R$39)" · "Espelha Grupos é confiável? O que ele faz com o seu WhatsApp" (rosto; LinkedIn só tela) · "Robô que busca ofertas da Shopee sozinho" · "Ferramenta para divulgar ofertas em grupos: 6 opções comparadas em 2026" · "Como postar em vários grupos ao mesmo tempo sem spam" · "Quanto custa um bot de afiliados? Basic R$39, Pro R$69" · "Dá para usar pelo celular, sem computador?" | título = a pergunta, literal; nunca "anti-ban"; sempre "Espelha Grupos" na legenda | 2 h/semana |
+| 10 | semana 2 | **Guest-parágrafo** em superfrete.com/blog/grupos-vendas-whatsapp e remessaonline.com.br/blog/grupo-de-promocoes-no-whatsapp (seções "Potencialize seus grupos"/"Vale a pena automatizar?" sem ferramenta citada) | e-mail ao editor oferecendo um parágrafo com exemplo real de espelhamento com link convertido; texto-padrão de 62 palavras do plano de 18/09 | 1 h |
+| 11 | semanas 3–6 | **Criadores pequenos do YouTube** que ensinam "bot de achadinhos" (lista nominal em `PLANO_MAQUINA_DE_VENDAS_IA_2026-09-18.md`, item 8): teste estendido + programa de afiliadas (30% recorrente) + pedir "Espelha Grupos" no TÍTULO do vídeo | contato pela descrição/Instagram do canal | 2 h |
+| 12 | semanas 4–8 | **Comunidades oficiais no Telegram** (Shopee, Mercado Livre) com o checklist gratuito, só com autorização do admin; **Quora pt-BR** nas perguntas já indexadas ("Como ser afiliado Shopee?") com resposta completa e UMA menção | conteúdo, não anúncio | 1 h/semana |
+| 13 | 15/10 | **Decidir o teto de vagas** (62 de 80; servidor com 22,6 GB livres e swap zero): proposta é 100 vagas, reinício anunciado do supervisor de madrugada | responder "sim" ou "não"; eu passo os 5 comandos | 5 min |
+| 14 | 27/10 | **Rodada mensal de medição**: Trilhas A, B, C e a nova D (18 consultas × 4 IAs; Gemini pela API), conta neutra, ChatGPT com busca; `node scripts/validar-medicao-ia.mjs` antes de fechar. Junto: Search Console (3 meses + série diária), `diag-funil-ativacao --dias 30`, `diag-ltv-retencao`, `diag-motivo-nao-renovou`, `diag-origem-cadastros --dias 30`, SQL de `Subscription` e `referredBy` | roteiro em `ROTEIRO_MEDICAO_IA.md`; comandos na seção 6 do `DIAGNOSTICO_…` | 2 h |
+| 15 | mensal | **Cloudflare**: `node scripts/diag-acesso-robos-ia.mjs` (19 robôs em 200) e a coluna "Unsuccessful" do AI Crawl Control para Claude-User/GPTBot | 5 min | 5 min |
+
+**Não fazer:** e-mail como pesquisa; anúncio pago antes da renovação de outubro; prometer anti-ban ou Telegram; listicle de concorrente (ofertasbot = PromoBot); Reclame Aqui/G2 sem CNPJ; mudar título de página fora das listas do plano.
+
 ## ⭐ Suas prioridades a partir de 24/09 (lista viva — comece por aqui)
 
 | # | Quando | O quê | Tempo |
