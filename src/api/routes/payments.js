@@ -20,6 +20,7 @@ import {
   summarizeSubscriptionForPanel,
 } from '../../domain/payments/subscriptionPolicy.js'
 import { subscriptionStartDate } from '../../domain/payments/checkoutOffer.js'
+import { buildCheckoutPayer, buildCheckoutItem } from '../../domain/payments/checkoutPayer.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
 import { notifyPaymentApproved, notifyChargeFailed } from '../../emailTriggers/events.js'
@@ -537,7 +538,7 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDa
   }
 }
 
-async function createMercadoPagoPreference({ userId, plan }) {
+async function createMercadoPagoPreference({ userId, plan, payer = null }) {
   const accessToken = getMpAccessToken()
   if (!accessToken) {
     const err = new Error('MP_ACCESS_TOKEN não configurado')
@@ -570,13 +571,11 @@ async function createMercadoPagoPreference({ userId, plan }) {
   // Mercado Pago validates `back_urls` as user-facing return URLs.
   const callbackBase = `${callbackOrigin}/api/payments/callback`
 
+  // Pagador e item completos: é o que o antifraude do MP usa para aprovar
+  // (recusas "high_risk" em cartão avulso, 27/09/2026 — ver checkoutPayer.js).
   const preference = {
-    items: [{
-      title: normalizedPlan.title,
-      quantity: 1,
-      unit_price: normalizedPlan.price,
-      currency_id: 'BRL',
-    }],
+    items: [buildCheckoutItem({ plan, title: normalizedPlan.title, price: normalizedPlan.price })],
+    ...(payer ? { payer } : {}),
     external_reference: userId,
     metadata: { plan },
     back_urls: {
@@ -1300,7 +1299,9 @@ export async function paymentsRoutes(app) {
     trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
 
     try {
-      const checkoutUrl = await createMercadoPagoPreference({ userId, plan })
+      const payerUser = await db.user.findUnique({ where: { id: userId }, select: { name: true, email: true, contactPhone: true } }).catch(() => null)
+      const payer = buildCheckoutPayer({ name: payerUser?.name, email: payerUser?.email, phone: payerUser?.contactPhone })
+      const checkoutUrl = await createMercadoPagoPreference({ userId, plan, payer })
       return { checkout_url: checkoutUrl }
     } catch (err) {
       if (err?.code === 'INVALID_PLAN_CONFIG') {
