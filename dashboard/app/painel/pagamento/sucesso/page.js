@@ -6,12 +6,13 @@
 
 import Link from 'next/link'
 import { usePainelHeader } from '../../PainelShell'
+import { ReferralInviteCard } from '@/components/ReferralInviteCard'
 
 export default function PagamentoSucessoPage() {
   usePainelHeader({ title: 'Pagamento confirmado', subtitle: 'Seu pagamento foi registrado com sucesso' })
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-xl" style={{ display: 'grid', gap: 18 }}>
       <div className="rounded-2xl border border-green-200 bg-green-50 p-6 shadow">
         <h1 className="text-2xl font-bold text-green-800 mb-2">Pagamento confirmado com sucesso!</h1>
         <p className="text-sm text-green-700 mb-5">
@@ -24,6 +25,11 @@ export default function PagamentoSucessoPage() {
           Voltar para meu painel
         </Link>
       </div>
+
+      {/* Momento de maior satisfação: pagamento aprovado. Link de indicação +
+        * a regra de comissão que /painel/afiliados já explica (percentual vem
+        * de GET /affiliate/config, nunca escrito à mão). */}
+      <ReferralInviteCard variant="payment" />
     </div>
   )
 }
