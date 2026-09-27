@@ -693,6 +693,10 @@ export const COMPARISON_PAGES = {
     // Shopee, plano Pro).
     directAnswer: 'Os melhores bots para afiliados no WhatsApp devem ser avaliados por critérios de processo, não por promessa de comissão. Priorize revisão de link monetizado, controle de grupos, filtros, cadência, logs, limites contra spam, clareza de preço e suporte a plataformas realmente usadas pela operação. Antes disso, decida o modo: há bots que espelham os grupos que você já segue (repassam a oferta com o seu link) e bots que buscam oferta sozinhos na loja por tema. O Espelha Grupos faz os dois na mesma conta: espelha em 6 lojas e, no plano Pro, busca ofertas da Shopee sozinho por tema e desconto mínimo. Confira também se a ferramenta publica a política de reembolso.',
     guides: [
+      // 27/09/2026 (PLANO_SEO_GEO, B7): o hub dos 3 modelos é a página
+      // canônica da categoria; esta fica no ar (67 impressões, posição 7,5) e
+      // aponta para lá — apagar ou redirecionar perderia o histórico.
+      { href: '/automacao-whatsapp-afiliados', title: 'Automação para afiliados no WhatsApp: os 3 modelos e 8 ferramentas comparadas' },
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
       { href: '/bot-afiliados-whatsapp', title: 'Bot para afiliados no WhatsApp: espelhar e buscar oferta' },
       { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
@@ -719,6 +723,7 @@ export const COMPARISON_PAGES = {
       { q: 'O Espelha Grupos busca ofertas sozinho ou só espelha grupos?', a: 'Os dois. O espelhamento repassa, com o seu código, as ofertas dos grupos e canais que você acompanha, em 6 lojas. No plano Pro, as ofertas automáticas buscam na Shopee pelo tema e pelo desconto mínimo que você definir e publicam sozinhas, sem grupo de origem. Nas outras lojas não há busca automática.' },
       { q: 'O Espelha Grupos tem reembolso?', a: 'Tem, publicado: valor integral em até 7 dias corridos depois do pagamento (direito de arrependimento, art. 49 do CDC), processado em até 5 dias úteis. Depois disso, o cancelamento evita a próxima cobrança.' },
       { q: 'O que evitar ao escolher um bot?', a: 'Evite promessa de comissão garantida, disparo sem consentimento, ausência de logs e ferramenta que não explica limites de uso.' },
+      { q: 'Quais são os modelos de automação para afiliados no WhatsApp?', a: 'Três: espelhador de grupos (republica, com o seu código, o que aparece nos grupos que você segue), garimpo automático (o robô acha a oferta sozinho na loja por tema e desconto) e formatador (você cola o link e a oferta sai montada). O hub de automação para afiliadas explica cada um, diz para quem serve e compara 8 ferramentas com ficha datada.' },
     ],
   },
   /* Três páginas novas em 17/09/2026, a pedido da dona do produto ("quero ter

@@ -15,6 +15,7 @@ quatro listas divergem em uma semana.
 | 🔝 | **assim que `develop` chegar em `main`** | **Reindexação das páginas corrigidas — Leva R1** (abaixo): 10 páginas que diziam coisa errada sobre o produto. Passa na frente de qualquer outra indexação | 15 min |
 | 🔝 | **junto com a R1, assim que a PR dos títulos chegar em `main`** | **Leva R5 (27/09)** (abaixo): 5 páginas com muita impressão e quase zero clique que ganharam título e descrição novos (Achadinho Pro, comissão de afiliado, quanto ganha afiliado Shopee, Mercado Livre e Amazon no WhatsApp). Inclui a maior consulta do site (`achadinho pro`, 4.005 impressões) | 10 min |
 | 🔝 | dia seguinte à R1 | **Leva R4 (27/09)** (abaixo): 7 páginas — comparativo do AchadinhosBot refeito, página nova "espelhar grupos vale a pena?", reembolso e as que ganharam link. Passa na frente da R2 porque inclui a 3ª página mais visitada do site | 15 min |
+| 🔝 | junto com a R4, assim que a PR `feat/geo-bot-afiliados-hub-3-modelos` chegar em `main` | **Leva R6 (27/09)** (abaixo): 4 páginas — o hub dos 3 modelos de automação para afiliadas (título novo), o comparativo de bots que passou a apontar para ele, o topo da metodologia e `/precos` (ganhou o link). As 3 da R4 que também mudaram (`/bot-afiliados-whatsapp`, `/bot-achadinhos-whatsapp`, `/bot-que-busca-ofertas-shopee-whatsapp`) só podem ser pedidas DEPOIS desta PR em `main` | 10 min |
 | 🔝 | depois da R4 | **Leva R2** (10 páginas) e, no outro dia, **Leva R3** (3 páginas) | 15 min cada |
 | 1 | ✅ 25/09 | Indexação — Dia 8 (8 de 9 pedidas) | — |
 | 2 | ✅ 23/09 | PR #1833 (dados de 23/09 + script do Gemini) e #1905 (modelo do Gemini) mergeadas em `develop` | — |
@@ -135,6 +136,28 @@ https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp      ⏳
 
 No Bing Webmaster Tools, enviar as mesmas 7 em "Enviar URLs" (o aviso
 automático do deploy também avisa, mas o envio manual acelera).
+
+**Leva R6 — mudanças de 27/09 (PR `feat/geo-bot-afiliados-hub-3-modelos`, junto com a R4)**
+
+Conferir antes em produção: `/automacao-whatsapp-afiliados` abre com o título
+"Automação para afiliados no WhatsApp: 3 modelos, 8 bots" e mostra a tabela
+das ferramentas; `/bot-afiliados-whatsapp` mostra a tabela "Espelha Grupos ×
+Afilira × Achadinho Pro × Pro Afiliados"; `/metodologia-uso-responsavel-whatsapp`
+começa com "Esta é a metodologia do Espelha Grupos para afiliadas".
+
+⚠️ `/bot-afiliados-whatsapp`, `/bot-achadinhos-whatsapp` e
+`/bot-que-busca-ofertas-shopee-whatsapp` já estão na R4 e TAMBÉM mudaram nesta
+PR: pedir só depois que ela chegar em `main` (pedir antes gasta a cota com o
+texto velho).
+
+```
+https://espelhagrupos.com.br/automacao-whatsapp-afiliados               ⏳ (título e conteúdo novos)
+https://espelhagrupos.com.br/melhores-bots-para-afiliados-whatsapp      ⏳
+https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp       ⏳
+https://espelhagrupos.com.br/precos                                     ⏳
+```
+
+No Bing Webmaster Tools, enviar as mesmas 4 em "Enviar URLs".
 
 **Leva R2 — as 16 editoriais revisadas que restam (depois da R4)**
 

@@ -26,8 +26,8 @@ export const EDITORIAL_DATES = {
   // acusava 9 erros). Sem essa data não há sinal de frescor para o Google nem para
   // os motores de IA, que pesam recência ao escolher o que citar.
   '/bot-canais-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-24' },
-  '/bot-afiliados-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-23' },
-  '/bot-achadinhos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-23' },
+  '/bot-afiliados-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-27' },
+  '/bot-achadinhos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-27' },
   '/anti-ban-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-08-03' },
   '/grupo-para-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   '/bot-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
@@ -86,7 +86,7 @@ export const EDITORIAL_DATES = {
   '/materiais/checklist-divulgacao-ofertas-grupos-whatsapp': { publishedAt: '2026-05-14', updatedAt: '2026-09-24' },
   // Parágrafo de identidade de marca entrou em 2026-09-11 (e3f5273); a data
   // ficava em 05/2026 e a página é o ativo mais citado pelas IAs.
-  '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-11' },
+  '/metodologia-uso-responsavel-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-27' },
   // As 5 páginas de loja do Tier 1 (02/09) e /alternativas/promium (02/09)
   // nunca tiveram data — no promium o Article caía no fallback de 2026-05-15,
   // antes de a página existir (RCA 2026-09-18).
@@ -107,7 +107,7 @@ export const EDITORIAL_DATES = {
   '/alternativas/bot-para-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-07-31' },
   '/espelha-grupos-vs-planilha-manual': { publishedAt: '2026-05-15', updatedAt: '2026-09-19' },
   '/espelha-grupos-vs-ferramentas-genericas-automacao': { publishedAt: '2026-05-15', updatedAt: '2026-09-19' },
-  '/melhores-bots-para-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
+  '/melhores-bots-para-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-27' },
   '/glossario': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/estudos-de-caso': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/confiabilidade-sessao-whatsapp': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
@@ -120,7 +120,7 @@ export const EDITORIAL_DATES = {
   // política de reembolso pública, o modo de busca automática da Shopee e cinco
   // comparativos com preço coletado na página oficial de cada concorrente.
   '/politica-de-reembolso': { publishedAt: '2026-09-23', updatedAt: '2026-09-27' },
-  '/bot-que-busca-ofertas-shopee-whatsapp': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/bot-que-busca-ofertas-shopee-whatsapp': { publishedAt: '2026-09-23', updatedAt: '2026-09-27' },
   '/espelhar-grupos-de-ofertas-vale-a-pena': { publishedAt: '2026-09-27', updatedAt: '2026-09-27' },
   '/alternativas/easyfy': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
   '/alternativas/lucreshop': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
@@ -140,7 +140,7 @@ export const EDITORIAL_DATES = {
   '/suporte': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/espelhar-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-02' },
   '/bot-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-08-19' },
-  '/automacao-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
+  '/automacao-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-09-27' },
   // LPs de dor: o bloco de recursos (Features.jsx) passou a dizer 6 lojas em 18/09.
   '/bot-ofertas-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
   '/automatizar-divulgacao-em-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },

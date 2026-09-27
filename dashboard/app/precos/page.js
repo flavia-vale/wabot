@@ -221,12 +221,16 @@ export default async function PrecosPage() {
             — {SUPPORT_HOURS.toLowerCase()}. {SUPPORT_RESPONSE_SLA}. Você também pode ver{' '}
             <Link href="/" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
               como o robô funciona
-            </Link>{' '}
-            e a{' '}
+            </Link>
+            , a{' '}
             <Link href="/politica-de-reembolso" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
               política de reembolso
-            </Link>
-            .
+            </Link>{' '}
+            e{' '}
+            <Link href="/automacao-whatsapp-afiliados" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
+              os 3 modelos de automação para afiliadas
+            </Link>{' '}
+            (espelhador, garimpo e formatador) que o Basic e o Pro cobrem.
           </p>
         </div>
       </section>
