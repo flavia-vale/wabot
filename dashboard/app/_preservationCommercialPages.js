@@ -436,7 +436,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Quando espelhar grupos de ofertas compensa, quando não, e como evitar oferta repetida, link de outro afiliado e ritmo de robô. Com os dois modos lado a lado.',
     eyebrow: 'Espelhar ou garimpar',
     h1: 'Espelhar grupos de ofertas vale a pena? Depende de como você espelha',
-    lead: 'Espelhar grupos é deixar um robô acompanhar grupos de ofertas que você já segue e republicar cada oferta nos seus grupos, com o link trocado pelo seu código de afiliada. As críticas mais comuns têm fundamento: dá para acabar com ofertas iguais às de todo mundo, com link de outro afiliado ou num ritmo que chama atenção do WhatsApp. Nenhuma delas é inevitável — cada uma tem um controle. E espelhar não precisa ser a única fonte: no Espelha Grupos, o plano Pro também busca ofertas da Shopee sozinho, pelo tema que você escolher.',
+    lead: 'A crítica mais comum ao espelhamento é que o seu grupo fica igual a todos os outros. Isso acontece quando o robô só copia e cola. Não é o que o Espelha Grupos faz: ele usa os grupos que você acompanha como garimpadores — aproveita só a informação que importa, qual produto entrou em promoção, e monta a sua oferta do zero, com o seu modelo de mensagem e o seu link de afiliada. Outra pessoa faz a garimpagem; quem publica com a sua cara e ganha a comissão é você. E, se quiser ofertas que ninguém mais está repassando, o plano Pro também busca ofertas da Shopee sozinho, pelo tema que você escolher.',
     intent: 'espelhar grupos de ofertas vale a pena',
     relatedTitle: 'Para decidir com calma',
     related: [
@@ -449,6 +449,10 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     ],
     about: ['Espelhamento de grupos', 'Afiliados', 'Grupos de WhatsApp'],
     decisionQA: [
+      {
+        q: 'Se eu espelho, minha oferta não fica igual à de todo mundo?',
+        a: 'Só se você deixar. O robô não precisa repassar a mensagem do outro grupo: ele pega qual produto está em promoção e o link, e publica no modelo de mensagem que você escreveu — com o seu gancho, a sua chamada e o seu link de afiliada. Dá para ter um modelo diferente para cada grupo de origem, e no plano Pro o robô ainda alterna ganchos, chamadas e convites para as mensagens não saírem repetidas. Do outro grupo, fica só a descoberta da oferta.',
+      },
       {
         q: 'Espelhar grupos de ofertas vale a pena?',
         a: 'Vale quando o grupo de origem publica ofertas boas no seu nicho e você controla o que sai: o link trocado pelo seu código, a mensagem no seu modelo, o ritmo por grupo e as ofertas repetidas seguradas. Não vale quando vira cópia cega de tudo o que aparece, em qualquer ritmo, porque aí o grupo fica igual a todos os outros e o risco com o WhatsApp sobe.',
@@ -468,13 +472,13 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     ],
     aside: {
       pill: 'Os dois modos numa conta só',
-      title: 'Espelhar o que você já segue e buscar oferta sozinho.',
-      body: 'O mercado costuma tratar espelhamento e garimpo como escolhas opostas. No Espelha Grupos os dois convivem: o espelhamento cobre 6 lojas nos dois planos, e a busca automática por tema funciona na Shopee, no plano Pro.',
+      title: 'Garimpo dos outros, oferta com a sua cara.',
+      body: 'O mercado costuma tratar espelhamento e garimpo como escolhas opostas. No Espelha Grupos, espelhar já é garimpar: os grupos que você acompanha descobrem a promoção, e a mensagem sai no seu modelo, com o seu link. E, no plano Pro, o robô também busca ofertas da Shopee sozinho, pelo tema que você escolher.',
     },
     primaryCta: 'Testar 7 dias grátis',
     secondaryCta: 'Ver como funciona',
-    problemTitle: 'As críticas ao espelhamento, e o que responde a cada uma.',
-    problem: 'Oferta igual à de todo mundo: você escolhe de quais grupos copiar, por nicho, bloqueia palavras e publica no seu próprio modelo de mensagem. Link de outro afiliado: a troca é automática e, se falhar, a oferta não sai. Oferta repetida: o mesmo produto enviado ao mesmo grupo é segurado por uma janela de tempo. Ritmo de robô: você define o intervalo e o limite por grupo. Depender de grupos de terceiros: dá para somar busca própria de ofertas da Shopee no plano Pro.',
+    problemTitle: 'Os outros grupos garimpam. A oferta que sai é sua.',
+    problem: 'Quem garimpa ofertas o dia inteiro faz o trabalho mais pesado: procurar, conferir preço, achar o cupom. O espelhamento aproveita esse trabalho sem copiar o resultado. O robô lê a oferta nos grupos que você acompanha, descobre qual é o produto e o preço, troca o link pelo seu código e monta a mensagem com o seu modelo — então quem recebe vê a sua oferta, no seu jeito de escrever, e não a do grupo de origem. As outras críticas também têm resposta: link de outro afiliado não sai (se a troca falhar, a oferta não é publicada), o mesmo produto não se repete no mesmo grupo dentro da janela de tempo, o ritmo por grupo é você quem define e, para não depender só dos outros, o plano Pro busca ofertas da Shopee sozinho.',
     bestFor: {
       yes: [
         'Quem já acompanha grupos de ofertas bons no seu nicho e passa horas copiando, trocando link e colando.',
@@ -491,8 +495,10 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { name: 'Achadinho Pro', href: '/alternativas/achadinho-pro', verdict: 'Aposta em pesquisa de produtos da Shopee com IA e em vários números de WhatsApp. Escolha o Achadinho Pro se esse é o centro da sua rotina; o Espelha Grupos se quer espelhar os grupos que você já segue em 6 lojas e também buscar ofertas da Shopee sozinho.' },
     ],
     bullets: [
+      'Os outros grupos viram o seu garimpo: o robô aproveita o produto em promoção, não o texto de ninguém.',
+      'A mensagem sai no seu modelo, com o seu gancho e a sua chamada — um modelo diferente para cada grupo de origem, se quiser.',
+      'No plano Pro, o robô alterna ganchos, chamadas e convites para as ofertas não saírem com o mesmo texto.',
       'Troca o link pelo seu código em 6 lojas, inclusive cupom — e não publica se a troca falhar.',
-      'Mensagem no seu modelo, não o texto copiado da origem.',
       'O mesmo produto não sai repetido no mesmo grupo dentro da janela de tempo.',
       'Intervalo entre envios e limite por grupo definidos por você.',
       'Histórico de tudo o que saiu, foi segurado ou falhou, com o motivo.',
@@ -500,7 +506,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     process: [
       'Escolha poucos grupos de origem, do seu nicho, com ofertas que você publicaria.',
       'Cadastre o seu código de afiliada nas lojas que você divulga.',
-      'Monte o modelo da mensagem e defina intervalo e limite por grupo.',
+      'Escreva o seu modelo de mensagem (um por grupo de origem, se quiser) e defina intervalo e limite por grupo.',
       'Acompanhe o histórico na primeira semana, bloqueie palavras e troque origens que só trazem repetição.',
       'Se quiser ofertas que ninguém mais está repassando, ligue a busca automática da Shopee (plano Pro).',
     ],
