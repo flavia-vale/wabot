@@ -195,10 +195,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
    * temos para uma afiliada Amazon, e é verdade nossa, verificada. */
   'amazon-afiliados-whatsapp': {
     path: '/amazon-afiliados-whatsapp',
-    title: 'Afiliado Amazon: divulgar ofertas no WhatsApp',
-    description: 'Já é afiliada Amazon? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com a sua tag, sem copiar e colar oferta por oferta. 7 dias grátis.',
+    // 27/09/2026: 102 impressões e 0 clique na posição 7,3 — o título só
+    // repetia a consulta. Agora traz dois números (comissão e teste grátis).
+    title: 'Afiliado Amazon no WhatsApp: até 13% e 7 dias grátis',
+    description: 'Já é afiliada Amazon? Publique suas ofertas em vários grupos e canais do WhatsApp com a sua tag no link, sem copiar e colar oferta por oferta. 7 dias grátis.',
     eyebrow: 'Amazon Associados',
-    h1: 'Afiliado Amazon: como divulgar suas ofertas no WhatsApp sem copiar e colar',
+    h1: 'Afiliado Amazon no WhatsApp: divulgue suas ofertas com a sua tag, sem copiar e colar',
     lead: 'Depois de entrar no Amazon Associados, o trabalho vira publicação: gerar o link com a sua tag, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'afiliado amazon whatsapp',
     related: [

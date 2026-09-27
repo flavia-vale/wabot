@@ -326,8 +326,10 @@ export const PRESERVATION_BLOG_POSTS = {
   'como-divulgar-ofertas-mercado-livre-whatsapp': {
     slug: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
     // Título encurtado em 2026-08-19 (P1): era 74 chars de texto próprio.
-    title: 'Afiliado Mercado Livre: de 0% a 16% por categoria',
-    description: 'Quanto o Mercado Livre paga de comissão por categoria (direta e indireta), prazo de pagamento e como divulgar no WhatsApp sem perder a atribuição.',
+    // Reescrito em 27/09/2026: 153 impressões e 0 clique — faltava "WhatsApp",
+    // que é metade da consulta, e o número vinha depois do corte do celular.
+    title: 'Afiliado Mercado Livre no WhatsApp: comissão até 16%',
+    description: 'Quanto o Mercado Livre paga por categoria (0% a 16%, direta e indireta), prazo de pagamento e o passo a passo para divulgar no WhatsApp sem perder a atribuição.',
     eyebrow: 'Afiliado Mercado Livre · Guia completo',
     usePersonAuthor: true,
     origin: 'blog_como_divulgar_ofertas_mercado_livre_whatsapp',

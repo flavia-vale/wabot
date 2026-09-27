@@ -48,7 +48,7 @@ export const EDITORIAL_DATES = {
   '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-23' },
   '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
-  '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-07-31' },
+  '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-09-27' },
   '/clonar-mensagens-de-grupo-de-afiliados': { publishedAt: '2026-08-26', updatedAt: '2026-08-26' },
   '/conteudos': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/benchmarks/operacao-grupos-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
@@ -65,7 +65,7 @@ export const EDITORIAL_DATES = {
   '/blog/comecar-afiliado-whatsapp-sem-grupo-grande': { publishedAt: '2026-06-08', updatedAt: '2026-06-08' },
   '/blog/como-ser-afiliado-shopee-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-07-31' },
   '/blog/como-divulgar-ofertas-amazon-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-07-31' },
-  '/blog/como-divulgar-ofertas-mercado-livre-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-09-24' },
+  '/blog/como-divulgar-ofertas-mercado-livre-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-09-27' },
   '/blog/quanto-custa-bot-para-whatsapp-afiliados': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
@@ -92,14 +92,14 @@ export const EDITORIAL_DATES = {
   // antes de a página existir (RCA 2026-09-18).
   '/shopee-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-23' },
   '/mercado-livre-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
-  '/amazon-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/amazon-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-27' },
   '/shein-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/magalu-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/alternativas/promium': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-09-27' },
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
   // desta rodada, publicada em 2026-08-19.
-  '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-09-23' },
+  '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-09-27' },
   '/alternativas/gigi-bot': { publishedAt: '2026-08-26', updatedAt: '2026-08-26' },
   '/alternativas/proafiliados': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/alternativas/shozap': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
@@ -113,7 +113,7 @@ export const EDITORIAL_DATES = {
   '/confiabilidade-sessao-whatsapp': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
   '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-27' },
   '/seguranca-credenciais-afiliado': { publishedAt: '2026-07-15', updatedAt: '2026-09-24' },
-  '/quanto-ganha-afiliado-shopee': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
+  '/quanto-ganha-afiliado-shopee': { publishedAt: '2026-09-11', updatedAt: '2026-09-27' },
   '/vendas-e-comissao-afiliado-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-23' },
   '/copiaram-minha-oferta-no-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-11' },
   // 23/09/2026 — visibilidade no ChatGPT para "bot para afiliados no WhatsApp":

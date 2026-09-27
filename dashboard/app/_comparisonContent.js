@@ -447,8 +447,15 @@ export const COMPARISON_PAGES = {
   '/alternativas/achadinho-pro': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Achadinho Pro',
-    title: 'Alternativa ao Achadinho Pro: 6 lojas por R$ 39',
-    description: 'O Achadinho Pro cobre só Shopee no plano de entrada. No Espelha Grupos, 6 lojas (Shopee, Amazon, Mercado Livre, Magalu, SHEIN, AliExpress) por R$ 39/30 dias.',
+    // 27/09/2026: `achadinho pro` é a maior consulta do site (4.005 impressões)
+    // e quem a respondia era /alternativas/achadinhos-bot, com o nome de OUTRO
+    // concorrente no título. O título entra pela palavra buscada e traz o
+    // diferencial em número no formato do título que mais converte no site
+    // ("6 lojas e 7 dias grátis"). A FR-030 (test/marketing-limites-que-nao-
+    // se-cruzam.test.js) proíbe título que COMEÇA com o nome do concorrente —
+    // por isso "Alternativa ao" vem antes e a marca dele logo em seguida.
+    title: 'Alternativa ao Achadinho Pro: 6 lojas e 7 dias grátis',
+    description: 'O Achadinho Pro cobre só Shopee no plano de entrada (R$ 49,97/mês). No Espelha Grupos são 6 lojas por R$ 39 ou R$ 69 a cada 30 dias e 7 dias grátis sem cartão.',
     competitorSlugs: ['achadinho-pro'],
     // Páginas de resposta (19/09/2026): quem chega comparando ferramenta ainda
     // está decidindo COMO divulgar — os três guias respondem isso de frente.
