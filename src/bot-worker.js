@@ -9,6 +9,7 @@ import makeWASocket, {
   downloadMediaMessage,
   extractMessageContent,
   prepareWAMessageMedia,
+  proto,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
@@ -45,7 +46,7 @@ import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, effectiveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
-import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
+import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
@@ -115,6 +116,7 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { createSentMessageStore } from './core/sentMessageStore.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
@@ -546,6 +548,58 @@ const msgRetryCounterCache = createDurableStuckMessageRetryCache({
   logger,
 })
 const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
+// RCA 2026-09 ("Aguardando mensagem" nos membros do grupo de destino): quem
+// recebe e não consegue decifrar pede reenvio; o Baileys só reenvia se
+// `getMessage` devolver a mensagem original. Sem isso (default = undefined) o
+// pedido morria em silêncio e o membro ficava preso para sempre. Guardado em
+// disco (src/core/sentMessageStore.js), escopo de módulo para sobreviver a
+// reconexões. Ver docs/rca/whatsapp-sessao.md.
+const sentMessageStore = createSentMessageStore({
+  dir: getSentMessagesDir(userId),
+  encode: (message) => proto.Message.encode(proto.Message.fromObject(message)).finish(),
+  decode: (bytes) => proto.Message.decode(bytes),
+  logger,
+})
+sentMessageStore.prune()
+
+function rememberSentMessage(id, message) {
+  if (!id || !message) return
+  sentMessageStore.save(id, message)
+}
+
+// Guarda cada mensagem enviada para atender pedido de reenvio. O
+// `sendMessage` do Baileys emite `messages.upsert` (type 'append', fromMe)
+// depois do envio; o caminho `relay` (src/delivery/whatsapp/send.js) chama
+// `socket.relayMessage` direto e não emite nada — por isso o embrulho. O
+// `sendMessage` interno usa a própria closure de relayMessage, então o
+// embrulho não grava em dobro.
+function attachSentMessageRecorder(socket) {
+  const originalRelayMessage = socket.relayMessage
+  socket.relayMessage = async (jid, message, opts) => {
+    const msgId = await originalRelayMessage(jid, message, opts)
+    rememberSentMessage(msgId, message)
+    return msgId
+  }
+  socket.ev.on('messages.upsert', ({ messages, type }) => {
+    if (type !== 'append') return
+    for (const msg of messages || []) {
+      if (msg?.key?.fromMe && msg.message) rememberSentMessage(msg.key.id, msg.message)
+    }
+  })
+}
+
+async function getSentMessageForRetry(key) {
+  const message = sentMessageStore.load(key?.id)
+  // Nível info de propósito: é a medição de aceite do conserto (quantos
+  // pedidos de reenvio chegam e quantos são atendidos).
+  logger.info({
+    remoteJid: key?.remoteJid,
+    participant: key?.participant,
+    msgId: key?.id,
+    found: Boolean(message),
+  }, message ? 'retry-receipt: reenviando mensagem pedida pelo destinatário' : 'retry-receipt: mensagem pedida não está guardada')
+  return message
+}
 // Timestamp (Date.now()) até quando uma reconexão automática já está agendada
 // (setTimeout(startBot, ...) pendente). Existe um intervalo real entre o close
 // (activeSock/pendingSock viram null) e o próximo startBot() de fato criar um
@@ -3499,6 +3553,8 @@ async function startBotInner() {
     msgRetryCounterCache,
     placeholderResendCache,
     maxMsgRetryCount: WA_MAX_MSG_RETRY_COUNT,
+    // Reenvio para quem pediu (retry receipt) — ver sentMessageStore acima.
+    getMessage: getSentMessageForRetry,
     // Fix de causa raiz: grupo @g.us não-monitorado e dessincronizado que
     // derrubava a sessão via retry-receipt agora é ACKado e descartado antes do
     // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
@@ -3531,6 +3587,8 @@ async function startBotInner() {
   })
 
   pendingSock = sock
+
+  attachSentMessageRecorder(sock)
 
   // Aquece o allowlist antes de qualquer mensagem chegar (o shouldIgnoreJid é
   // síncrono; sem isso o 1º lote de mensagens passaria com ready=false). Best
