@@ -315,6 +315,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para a tag nunca cair no caminho' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'os 4 caminhos e o passo a passo com o robô' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'checklist, preço e como testar em 7 dias' },
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar a oferta da Amazon em vários grupos sem spam', note: 'os 4 caminhos e o que o WhatsApp trata como spam' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Padronizar a divulgação de cupons', note: 'modelo de mensagem pronto, com cupom e link com a sua tag' },
     ],
     faq: [
       { q: 'Como sei se o link tem minha tag?', a: 'O link de afiliado da Amazon inclui um parâmetro de tag (tag=seucodigo). Sem ela, a venda não é atribuída a você. Uma ferramenta de conversão garante isso automaticamente.' },

@@ -635,6 +635,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/bot-canal-whatsapp', label: 'Publicar em Canal do WhatsApp', note: 'O Canal alcança mais gente e ninguém responde por cima da oferta.' },
       { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa um bot para WhatsApp', note: 'Preço das ferramentas do mercado lado a lado, com fonte e data.' },
       { href: '/blog/checklist-padronizar-divulgacao-whatsapp', label: 'Checklist para padronizar o que você publica', note: 'O que conferir antes de cada oferta sair.' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Como padronizar a divulgação de cupons', note: 'Modelo de mensagem pronto com cupom e link com o seu código, o mesmo em todos os grupos.' },
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar em vários grupos ao mesmo tempo sem spam', note: 'Os 4 caminhos lado a lado e o que o WhatsApp trata como spam.' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre: comissão e prazo de atribuição lado a lado.' },
       { href: '/vendas-e-comissao-afiliado-whatsapp', label: 'Quanto você ganhou de comissão', note: 'Pedidos, valor vendido e comissão estimada e confirmada das ofertas que o robô publicou.' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: cadastro e comissão', note: 'Cadastro gratuito, 3% na venda padrão e até 30% na Comissão Extra.' },
@@ -758,6 +760,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'Os primeiros passos antes de automatizar.' },
       { href: '/clonar-mensagens-de-grupo-de-afiliados', label: 'Clonar mensagens de um grupo de afiliados', note: 'O que a busca chama de "clonar" e como o link vira o seu.' },
       { href: '/copiaram-minha-oferta-no-whatsapp', label: 'Copiaram a sua oferta?', note: 'Marca d\u2019água, texto próprio e link com o seu código: o que muda quem leva o crédito.' },
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar achadinhos em vários grupos sem spam', note: 'Encaminhar, Comunidades, extensão ou robô com fila: prós e contras de cada um.' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Padronizar a divulgação de cupons', note: 'O modelo de mensagem pronto, com cupom e link com o seu código.' },
       // Links por loja adicionados em 16/09. Esta é a 2ª página mais forte do
       // site (2.514 impressões, CTR 5,0%) e não apontava para nenhuma das cinco
       // páginas por loja — que existem desde 02/09 e seguem com ~30 impressões
