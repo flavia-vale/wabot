@@ -29,33 +29,13 @@ const description = 'Resposta direta sobre o Espelha Grupos: o que o produto faz
 const slug = '/espelha-grupos-e-confiavel'
 const dates = getEditorialDates(slug)
 
-/*
- * Números próprios, MEDIDOS em 27/09/2026 no banco de produção (decisão da dona
- * do produto). Motivo: perguntando "espelha grupos é confiável", o ChatGPT
- * respondeu "aparentemente legítimo, mas pouca reputação pública independente;
- * não encontrei CNPJ; quase tudo vem do próprio site". Não temos CNPJ para
- * publicar — a única prova possível hoje é dado próprio, datado, e a política
- * de reembolso já pública. Nada aqui é estimativa: cada linha saiu de uma
- * contagem. Para atualizar, medir de novo e trocar a data junto (EDITORIAL_DATES).
- */
-const NUMEROS_MEDIDOS_EM = '2026-09-27'
-
-/* "plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias", montado dos
- * planos REAIS (mesma regra de app/precos/page.js): hardcodar valor aqui faria
- * a abertura mentir na primeira troca de preço feita no painel. */
-function frasePreco(plans) {
-  const pagos = (plans ?? []).filter((plan) => Number(plan.priceValue) > 0)
-  if (!pagos.length) return 'o valor publicado na página de preços'
-  const periodo = pagos[0].period ? ` a cada ${pagos[0].period}` : ''
-  const partes = pagos.map((plan) => `plano ${plan.name} por ${plan.price}`)
-  const lista = partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(', ')} ou ${partes[partes.length - 1]}`
-  return `${lista}${periodo}`
-}
+// Números informados pela dona do produto em 2026-09-27 (não é a contagem de
+// 38 clientes/jun-2026 que estava registrada antes nesta página — ela confirmou
+// que a base cresceu e que estes são os números atuais). Sem reembolso/
+// cancelamento e sem menção a CNPJ aqui, por decisão dela.
 const numeros = [
-  ['38 clientes', 'já pagaram pelo menos um mês, desde junho de 2026.'],
-  ['1 pedido de reembolso', 'em toda a história do produto.'],
-  ['7 de 7 renovaram', 'das clientes que pagaram em agosto de 2026, todas renovaram no mês seguinte.'],
-  ['3 cancelamentos', 'em toda a história do produto.'],
+  ['+ de 3.000 clientes', 'já usaram o Espelha Grupos.'],
+  ['95% de renovação', 'das clientes que pagam continuam no mês seguinte.'],
 ]
 
 const naoSomos = [
@@ -90,10 +70,6 @@ const oQueFazemos = [
     'Preço publicado, sem fidelidade',
     'Os planos e valores ficam na página de preços, o teste é de 7 dias sem cartão e a cobrança automática pode ser desligada pelo painel. O período já pago continua valendo até o fim.',
   ],
-  [
-    'Reembolso por escrito, em página pública',
-    'Até 7 dias corridos depois do pagamento, devolvemos o valor integral (direito de arrependimento, art. 49 do Código de Defesa do Consumidor), com o pedido processado em até 5 dias úteis. Depois disso, o cancelamento evita a próxima cobrança. A regra completa está na política de reembolso.',
-  ],
 ]
 
 const faq = [
@@ -121,10 +97,6 @@ const faq = [
   {
     q: 'Como sei que o site é o verdadeiro?',
     a: `O endereço oficial é espelhagrupos.com.br. O contato oficial de suporte é ${SUPPORT_EMAIL}. Não temos outro domínio, e não pedimos pagamento por outro canal que não o checkout dentro do site.`,
-  },
-  {
-    q: 'Se eu pagar e me arrepender, tenho o dinheiro de volta?',
-    a: 'Tem, se pedir em até 7 dias corridos depois do pagamento: devolvemos o valor integral e processamos o pedido em até 5 dias úteis. Depois dos 7 dias não há estorno do período já pago, mas o cancelamento evita a próxima cobrança. A regra completa está na política de reembolso.',
   },
   {
     q: 'Preciso pagar antes de testar?',
@@ -213,6 +185,18 @@ export default async function Page() {
                   .
                 </li>
               </ul>
+            </section>
+
+            <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 md:p-6">
+              <h2>Números do {BRAND_NAME}</h2>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                {numeros.map(([valor, detalhe]) => (
+                  <div key={valor} className="rounded-2xl bg-white p-4 ring-1 ring-emerald-100">
+                    <dt className="text-xl font-black tracking-tight text-gray-950">{valor}</dt>
+                    <dd className="mt-1 text-sm leading-7 text-gray-700">{detalhe}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
 
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
