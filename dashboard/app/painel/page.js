@@ -19,7 +19,20 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainel, usePainelHeader } from './PainelShell'
 import { ActivationChecklist } from '@/components/ActivationChecklist'
+import { ReferralInviteCard } from '@/components/ReferralInviteCard'
 import { ProTag } from '@/components/pro/ProGate'
+import { shouldShowFirstOfferInvite } from '../../../src/domain/painel/referralInvite.js'
+
+// Card do link de indicação na 1ª oferta publicada: some quando ela fecha, e
+// não volta (por conta, no navegador). Regra em src/domain/painel/referralInvite.js.
+const REFERRAL_INVITE_DISMISSED_KEY = 'wb_referral_invite_dismissed'
+function inviteDismissedKey(userId) { return userId ? `${REFERRAL_INVITE_DISMISSED_KEY}_${userId}` : REFERRAL_INVITE_DISMISSED_KEY }
+function readInviteDismissed(userId) {
+  try { return localStorage.getItem(inviteDismissedKey(userId)) === '1' } catch { return false }
+}
+function writeInviteDismissed(userId) {
+  try { localStorage.setItem(inviteDismissedKey(userId), '1') } catch { /* ignore */ }
+}
 
 function greeting(hour) {
   if (hour < 12) return 'Bom dia'
@@ -175,6 +188,11 @@ export default function PainelPage() {
 
   const [counts, setCounts] = useState(null)
   const [offersToday, setOffersToday] = useState(null)
+  // `null` = ainda não sabemos se alguma oferta já saiu (não mostra o card).
+  const [hasSuccessfulLog, setHasSuccessfulLog] = useState(null)
+  // O shell só renderiza a página com `user` carregado, então o id já existe
+  // aqui (mesmo padrão do `doneBefore` da ActivationChecklist).
+  const [inviteDismissed, setInviteDismissed] = useState(() => typeof window !== 'undefined' && readInviteDismissed(user?.id))
 
   const now = new Date()
   const dateLabel = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -184,7 +202,7 @@ export default function PainelPage() {
     let active = true
     const load = () => {
       api.dashboardStatus()
-        .then((d) => { if (active) setCounts(d?.counts ?? {}) })
+        .then((d) => { if (active) { setCounts(d?.counts ?? {}); setHasSuccessfulLog(d?.hasSuccessfulLog === true) } })
         .catch(() => { if (active) setCounts({}) })
       api.logsSummary('today')
         .then((s) => { if (active) setOffersToday(num(s?.counts?.success)) })
@@ -208,6 +226,14 @@ export default function PainelPage() {
     <div className="pv-page">
       {/* 1. Checklist — o que ainda falta para o robô trabalhar. */}
       <ActivationChecklist userId={user?.id} />
+
+      {/* 1b. Deu certo? Hora de pedir indicação — só depois da 1ª oferta publicada. */}
+      {shouldShowFirstOfferInvite({ hasSuccessfulLog, dismissed: inviteDismissed }) && (
+        <ReferralInviteCard
+          variant="first-offer"
+          onDismiss={() => { writeInviteDismissed(user?.id); setInviteDismissed(true) }}
+        />
+      )}
 
       {/* 2. Os números (o quinto, comissão Shopee, é do PRO). */}
       <section className="pv-stats">
