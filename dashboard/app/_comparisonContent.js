@@ -227,8 +227,8 @@ export const COMPARISON_PAGES = {
   '/alternativas/proafiliados': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · ProAfiliados',
-    title: 'Alternativa ao ProAfiliados: sem anúncio e sem limite de 2 h por dia',
-    description: 'O ProAfiliados tem plano grátis permanente, mas o robô fica ligado só 2 h por dia e assina as mensagens com a marca dele. Compare preço, anúncios, lojas e relatórios. Verificado em 27/09/2026.',
+    title: 'Alternativa ao ProAfiliados: sem anúncio e sem 2 h/dia',
+    description: 'ProAfiliados: grátis permanente, mas só 2 h/dia e com a marca dele nas mensagens. Compare preço, anúncios, lojas e relatórios. Verificado em 27/09/2026.',
     competitorSlugs: ['proafiliados-com'],
     productPage: {
       href: '/bot-afiliados-whatsapp',
