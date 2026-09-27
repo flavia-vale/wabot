@@ -3,7 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, SUPPORT_EMAIL } from '@/lib/marketing-content'
 import { FICHA_DEFINICAO } from '@/lib/ficha-tecnica'
-import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR, EDITORIAL_PERSON_AUTHOR } from '@/lib/editorial-content'
+import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 import { getLandingPlans } from '@/lib/plans-server'
 
 /*
@@ -37,6 +37,18 @@ const numeros = [
   ['+ de 3.000 clientes', 'já usaram o Espelha Grupos.'],
   ['95% de renovação', 'das clientes que pagam continuam no mês seguinte.'],
 ]
+
+/* "plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias", montado dos
+ * planos REAIS (mesma regra de app/precos/page.js): hardcodar valor aqui faria
+ * a abertura mentir na primeira troca de preço feita no painel. */
+function frasePreco(plans) {
+  const pagos = (plans ?? []).filter((plan) => Number(plan.priceValue) > 0)
+  if (!pagos.length) return 'o valor publicado na página de preços'
+  const periodo = pagos[0].period ? ` a cada ${pagos[0].period}` : ''
+  const partes = pagos.map((plan) => `plano ${plan.name} por ${plan.price}`)
+  const lista = partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(', ')} ou ${partes[partes.length - 1]}`
+  return `${lista}${periodo}`
+}
 
 const naoSomos = [
   [
@@ -152,39 +164,6 @@ export default async function Page() {
                 </Link>
                 .
               </p>
-            </section>
-
-            <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 md:p-6">
-              <h2>Números do {BRAND_NAME} (medidos em {formatDatePtBr(NUMEROS_MEDIDOS_EM)})</h2>
-              <p className="mt-2 text-sm leading-7 text-gray-700">
-                Não temos avaliação em site independente. O que temos é o nosso próprio banco de dados, contado
-                nesta data. São números pequenos, e estão aqui exatamente como saíram da contagem.
-              </p>
-              <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-                {numeros.map(([valor, detalhe]) => (
-                  <div key={valor} className="rounded-2xl bg-white p-4 ring-1 ring-emerald-100">
-                    <dt className="text-xl font-black tracking-tight text-gray-950">{valor}</dt>
-                    <dd className="mt-1 text-sm leading-7 text-gray-700">{detalhe}</dd>
-                  </div>
-                ))}
-              </dl>
-              <ul className="mt-4 space-y-2 text-sm leading-7 text-gray-700">
-                <li>
-                  <strong>Reembolso:</strong> integral em até 7 dias do pagamento; depois, cancela sem multa e usa até
-                  o fim do período. A regra está na{' '}
-                  <Link href="/politica-de-reembolso" className="font-bold text-emerald-700 underline underline-offset-4">
-                    política de reembolso
-                  </Link>
-                  .
-                </li>
-                <li>
-                  <strong>Não temos CNPJ publicado ainda;</strong> a responsável pelo produto é {EDITORIAL_PERSON_AUTHOR}, em{' '}
-                  <Link href="/quem-somos" className="font-bold text-emerald-700 underline underline-offset-4">
-                    quem somos
-                  </Link>
-                  .
-                </li>
-              </ul>
             </section>
 
             <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 md:p-6">
