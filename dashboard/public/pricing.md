@@ -1,12 +1,12 @@
 # Pricing — Espelha Grupos
 
-Last updated: 2026-09-24
+Last updated: 2026-09-27
 Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: Espelha Grupos pricing.
 Formerly published under the product name "BOTinho"; that name refers to this same product.
 
-Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Basic covers manual offer operation in groups: mirroring, link conversion, offer creation and scheduling, with the clickable offer card and fully rewritable message templates. Pro adds channels, automatic Shopee offers, send queues, the watermark on offer images, pacing controls with copy variation and the Shopee sales and commission dashboard. Prices below reflect the public defaults used by the application.
+Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access model for paid WhatsApp offer workflows. Both paid plans include the automatic mirroring robot: it reads the chosen source groups 24 hours a day, converts each store link to the affiliate's own code and publishes in the destination groups without anyone copying and pasting. Basic covers that automatic mirroring in groups plus link conversion, offer creation and scheduling, with the clickable offer card and fully rewritable message templates. Pro adds channels, automatic Shopee offers, send queues, the watermark on offer images, pacing controls with copy variation and the Shopee sales and commission dashboard. Prices below reflect the public defaults used by the application.
 
 ## Teste grátis
 
@@ -29,9 +29,9 @@ Espelha Grupos uses a 7-day free trial for validation and a simple 30-day access
 
 - Plan ID: `basic`
 - Price: R$39 / 30 days
-- Best for: manual offer operation in WhatsApp groups
+- Best for: automatic offer mirroring in WhatsApp groups (the robot reads the source groups and publishes by itself)
 - Includes:
-  - Group mirroring (monitor → destination groups)
+  - Automatic group mirroring, 24 hours a day (monitor → destination groups), with no copy and paste
   - Affiliate link conversion in six stores: Mercado Livre, Amazon, Shopee, Magalu, SHEIN and AliExpress
   - Coupon and voucher link conversion (not only product links) as the affiliate's own code
   - Clickable offer card: tapping the card opens the product page in the store

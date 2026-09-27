@@ -96,7 +96,7 @@ export const EDITORIAL_DATES = {
   '/shein-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/magalu-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/alternativas/promium': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
-  '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-09-23' },
+  '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-09-27' },
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
   // desta rodada, publicada em 2026-08-19.
   '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-09-23' },
@@ -119,8 +119,9 @@ export const EDITORIAL_DATES = {
   // 23/09/2026 — visibilidade no ChatGPT para "bot para afiliados no WhatsApp":
   // política de reembolso pública, o modo de busca automática da Shopee e cinco
   // comparativos com preço coletado na página oficial de cada concorrente.
-  '/politica-de-reembolso': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/politica-de-reembolso': { publishedAt: '2026-09-23', updatedAt: '2026-09-27' },
   '/bot-que-busca-ofertas-shopee-whatsapp': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
+  '/espelhar-grupos-de-ofertas-vale-a-pena': { publishedAt: '2026-09-27', updatedAt: '2026-09-27' },
   '/alternativas/easyfy': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
   '/alternativas/lucreshop': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },
   '/alternativas/afiliai': { publishedAt: '2026-09-23', updatedAt: '2026-09-23' },

@@ -34,7 +34,7 @@ const faq = [
   },
   {
     q: 'E depois dos 7 dias?',
-    a: 'Depois dos 7 dias não há estorno do período já pago, mas você pode cancelar a qualquer momento, sem multa. O cancelamento evita a próxima cobrança, e o acesso continua valendo até o fim do período que você já pagou.',
+    a: 'Depois dos 7 dias a gente não devolve o valor do período que já começou — somando o teste grátis e o prazo de arrependimento, são 14 dias para decidir com calma. Mas nada te prende ao plano: você cancela quando quiser, sem multa, a próxima cobrança não acontece e o acesso continua valendo até o último dia que você já pagou. E se algo não estiver funcionando como esperava, fale com o suporte antes de desistir: muitas vezes é um ajuste de configuração.',
   },
   {
     q: 'Preciso pagar para testar?',
@@ -91,7 +91,7 @@ export default function RefundPolicyPage() {
           <ul className="mt-3 list-disc space-y-1 pl-6">
             <li>Até 7 dias corridos depois do pagamento: devolvemos o valor integral.</li>
             <li>Processamos o reembolso em até 5 dias úteis depois do pedido.</li>
-            <li>Depois dos 7 dias: sem estorno do que já foi pago, mas você cancela sem multa e não há próxima cobrança.</li>
+            <li>Depois dos 7 dias: o período que já começou não é devolvido, mas você cancela quando quiser, sem multa, e usa até o último dia pago.</li>
           </ul>
           <p className="mt-3 text-sm font-semibold text-emerald-800">Atualizada em {formatDatePtBr(dates.updatedAt)}</p>
         </div>
@@ -131,11 +131,19 @@ export default function RefundPolicyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-xl font-bold text-gray-950">4. Depois dos 7 dias: cancelamento sem multa</h2>
+          <h2 className="text-xl font-bold text-gray-950">4. Depois dos 7 dias: você usa o que pagou e cancela quando quiser</h2>
           <p>
-            Passados os 7 dias, não há estorno do período já pago. Você continua podendo cancelar a qualquer momento, sem
-            multa e sem falar com ninguém: pelo painel, desligando a cobrança automática. O cancelamento evita a próxima
-            cobrança, e o acesso segue valendo até o fim do período que você já pagou.
+            Passados os 7 dias, a gente não devolve o valor do período que já começou. Fizemos assim porque dá tempo de
+            decidir com calma: são 7 dias de teste grátis, sem cartão, e mais 7 dias de arrependimento depois de pagar.
+          </p>
+          <p>
+            Nada te prende ao plano. Dá para cancelar a qualquer momento, sem multa e sem falar com ninguém: pelo
+            painel, desligando a cobrança automática. A próxima cobrança não acontece e o acesso segue valendo até o último
+            dia do período que você já pagou — nada do que foi pago se perde.
+          </p>
+          <p>
+            Se o motivo for algo que não está funcionando, fale com o suporte antes de cancelar. Muitas vezes é um ajuste
+            de configuração que resolvemos juntos.
           </p>
         </section>
 
