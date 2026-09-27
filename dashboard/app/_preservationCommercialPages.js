@@ -52,6 +52,13 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Shopee Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
     lead: 'Depois de entrar no Shopee Afiliados, o trabalho deixa de ser achar oferta e passa a ser publicar. Cada produto precisa virar link com o seu código, o texto precisa ser montado, e tudo isso repetido em cada grupo. O Espelha Grupos faz esse caminho sozinho: acompanha as origens que você escolhe, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e registro do que saiu.',
     intent: 'shopee afiliados whatsapp',
+    // Frente D2: volta para o post que já está na página 1 ("como ser
+    // afiliado shopee"); ele aponta para cá como próximo passo.
+    guide: {
+      text: 'Ainda não é afiliada?',
+      href: '/blog/como-ser-afiliado-shopee-whatsapp',
+      label: 'Guia completo: como ser afiliado Shopee em 5 passos',
+    },
     related: [
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', label: 'Não tem grupo de onde copiar? O robô busca sozinho', note: 'Ofertas automáticas da Shopee por tema e desconto mínimo, no plano Pro.' },
       { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com a chave da Shopee', note: 'Onde ela fica, para que serve e como apagar quando quiser.' },
@@ -131,6 +138,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Afiliado do Mercado Livre: como divulgar suas ofertas no WhatsApp sem copiar e colar',
     lead: 'Depois de entrar no programa de afiliados do Mercado Livre, o trabalho vira publicação: gerar o link com o seu código, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'mercado livre afiliados whatsapp',
+    // Frente D2: par recíproco com o post de Mercado Livre.
+    guide: {
+      text: 'Ainda não é afiliada?',
+      href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
+      label: 'Guia completo: afiliado Mercado Livre, comissão até 16%',
+    },
     related: [
       { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Levar o grupo para o Canal sem perder ninguém', note: 'O Canal alcança mais e ninguém responde por cima da oferta.' },
       { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar', note: 'O que muda no alcance e em quem pode responder.' },
@@ -203,6 +216,12 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     h1: 'Afiliado Amazon no WhatsApp: divulgue suas ofertas com a sua tag, sem copiar e colar',
     lead: 'Depois de entrar no Amazon Associados, o trabalho vira publicação: gerar o link com a sua tag, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
     intent: 'afiliado amazon whatsapp',
+    // Frente D2: par recíproco com o post de Amazon.
+    guide: {
+      text: 'Ainda não é afiliada?',
+      href: '/blog/como-divulgar-ofertas-amazon-whatsapp',
+      label: 'Guia completo: como divulgar Amazon, comissão de 0% a 13%',
+    },
     related: [
       { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho, sem você precisar reconectar.' },
       { href: '/bot-canal-whatsapp', label: 'Publicar em Canal do WhatsApp', note: 'Alcança mais gente e ninguém responde por cima da oferta.' },
@@ -1125,6 +1144,24 @@ export function PreservationCommercialPage({ pageKey }) {
                     data-cta-destination="comparison"
                   >
                     {page.competitorNudge.label}
+                  </Link>
+                </p>
+              ) : null}
+              {/* Frente D2 (PLANO_SEO_GEO_2026-09-27): a comercial de loja
+                  linka de volta para o guia completo do blog que já ranqueia
+                  — o par (post → comercial → post) é o que funde a força. */}
+              {page.guide ? (
+                <p style={s.nudge}>
+                  {page.guide.text}{' '}
+                  <Link
+                    href={page.guide.href}
+                    style={s.nudgeLink}
+                    data-seo-cta="commercial_guide"
+                    data-cta-position="hero_guide"
+                    data-cta-stage="education"
+                    data-cta-destination="content"
+                  >
+                    {page.guide.label}
                   </Link>
                 </p>
               ) : null}

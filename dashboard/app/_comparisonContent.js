@@ -120,8 +120,12 @@ export const COMPARISON_PAGES = {
     // /bot-achadinhos-whatsapp deixou de disputar o mesmo termo. As duas
     // ranqueavam para as MESMAS consultas (529 e 226 impressões), dividindo o
     // sinal entre si sem nenhuma delas subir.
-    title: 'Alternativa ao AchadinhosBot: grupos ilimitados',
-    description: 'O AchadinhosBot cobra por número de grupos e cobre só Shopee. No Espelha Grupos: grupos ilimitados, 6 lojas e 7 dias grátis por R$ 39/30 dias.',
+    // 27/09/2026 (Frente D1): 6.508 impressões em 3 meses, CTR 1,38% na
+    // posição 6,4 — a maior página do site com o menor clique. Em consulta de
+    // MARCA de concorrente há teto (quem digita a marca quer a marca); o ganho
+    // está no diferencial com número: 6 lojas por R$ 39.
+    title: 'Alternativa ao AchadinhosBot: 6 lojas por R$ 39',
+    description: 'O AchadinhosBot cobra por grupo e só cobre Shopee. O Espelha Grupos custa R$ 39 por 30 dias, com grupos ilimitados, 6 lojas e 7 dias grátis com o Pro completo.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
     // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
     // páginas ranqueavam para as mesmas consultas e não se linkavam, então o
@@ -277,8 +281,11 @@ export const COMPARISON_PAGES = {
   '/alternativas/shozap': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Shozap',
-    title: 'Alternativa ao Shozap: preço e limites por plano',
-    description: 'Shozap e Espelha Grupos lado a lado: preço por plano, quantas conexões e grupos cabem e quais lojas entram em cada faixa. Verificado em 04/08/2026.',
+    // 27/09/2026 (Frente D1): 531 impressões, CTR 0,94% na posição 6,2. O
+    // título dizia "preço e limites" sem número nenhum; agora traz o
+    // diferencial concreto. Sem preço do Shozap (não visível no site dele).
+    title: 'Alternativa ao Shozap: grupos ilimitados por R$ 39',
+    description: 'Shozap ou Espelha Grupos? Compare grupos, conexões e lojas por plano. Aqui: grupos ilimitados por R$ 39/30 dias e 7 dias grátis. Verificado em 04/08/2026.',
     competitorSlugs: ['shozap'],
     productPage: {
       href: '/bot-afiliados-whatsapp',
@@ -327,8 +334,10 @@ export const COMPARISON_PAGES = {
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 72 chars de texto próprio, cortado no celular. Mantém "Alternativa
     // ao" na frente (FR-030 — nunca se apresenta como o concorrente).
-    title: 'Alternativa ao FluxoPromo: sem teto de ofertas/dia',
-    description: 'O FluxoPromo limita ofertas por dia em todos os planos, menos no de R$ 197. No Espelha Grupos não há teto, e o espelhamento parte dos grupos que você escolhe.',
+    // 27/09/2026 (Frente D1): 203 impressões, CTR 0,99% na posição 4,9 — teto
+    // de quem busca a marca; o que resta ganhar é o número no título.
+    title: 'Alternativa ao FluxoPromo: ofertas sem teto por R$ 39',
+    description: 'O FluxoPromo limita ofertas por dia em todos os planos, menos no de R$ 197. Aqui não há teto: espelhe os grupos que escolher por R$ 39, com 7 dias grátis.',
     competitorSlugs: ['fluxopromo'],
     productPage: {
       href: '/espelhar-grupos-whatsapp',
@@ -563,8 +572,11 @@ export const COMPARISON_PAGES = {
   '/alternativas/gigi-bot': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · Gigi Bot',
-    title: 'Alternativa ao Gigi Bot: o que o plano grátis faz',
-    description: 'Comparativo entre Gigi Bot e Espelha Grupos: qual envia sozinho para o WhatsApp, quanto custa e o que o plano grátis faz. Tabela verificada em 26/08/2026.',
+    // 27/09/2026 (Frente D1): 216 impressões, CTR 0,93% na posição 9,4. O
+    // corte que decide (envio automático só no plano mais caro dele) vai para
+    // o título, com o nosso preço.
+    title: 'Alternativa ao Gigi Bot: envio automático por R$ 39',
+    description: 'O Gigi Bot só publica sozinho no WhatsApp no plano mais caro. No Espelha Grupos, envio automático e espelhamento de grupos já vêm por R$ 39, com 7 dias grátis.',
     competitorSlugs: ['gigi-bot'],
     productPage: {
       href: '/bot-achadinhos-whatsapp',
