@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, SUPPORT_EMAIL } from '@/lib/marketing-content'
-import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
+import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR, EDITORIAL_PERSON_AUTHOR } from '@/lib/editorial-content'
+import { getLandingPlans } from '@/lib/plans-server'
 
 /*
  * Página criada em 2026-09-11 por MEDIÇÃO, não por intuição.
@@ -26,6 +27,35 @@ const title = 'O Espelha Grupos é confiável? O que é, quem está por trás e 
 const description = 'Resposta direta sobre o Espelha Grupos: o que o produto faz, o que fazemos com os seus dados, o que não garantimos e por que ele não tem relação com o golpe de espelhamento de tela.'
 const slug = '/espelha-grupos-e-confiavel'
 const dates = getEditorialDates(slug)
+
+/*
+ * Números próprios, MEDIDOS em 27/09/2026 no banco de produção (decisão da dona
+ * do produto). Motivo: perguntando "espelha grupos é confiável", o ChatGPT
+ * respondeu "aparentemente legítimo, mas pouca reputação pública independente;
+ * não encontrei CNPJ; quase tudo vem do próprio site". Não temos CNPJ para
+ * publicar — a única prova possível hoje é dado próprio, datado, e a política
+ * de reembolso já pública. Nada aqui é estimativa: cada linha saiu de uma
+ * contagem. Para atualizar, medir de novo e trocar a data junto (EDITORIAL_DATES).
+ */
+const NUMEROS_MEDIDOS_EM = '2026-09-27'
+
+/* "plano Basic por R$39 ou plano Pro por R$69 a cada 30 dias", montado dos
+ * planos REAIS (mesma regra de app/precos/page.js): hardcodar valor aqui faria
+ * a abertura mentir na primeira troca de preço feita no painel. */
+function frasePreco(plans) {
+  const pagos = (plans ?? []).filter((plan) => Number(plan.priceValue) > 0)
+  if (!pagos.length) return 'o valor publicado na página de preços'
+  const periodo = pagos[0].period ? ` a cada ${pagos[0].period}` : ''
+  const partes = pagos.map((plan) => `plano ${plan.name} por ${plan.price}`)
+  const lista = partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(', ')} ou ${partes[partes.length - 1]}`
+  return `${lista}${periodo}`
+}
+const numeros = [
+  ['38 clientes', 'já pagaram pelo menos um mês, desde junho de 2026.'],
+  ['1 pedido de reembolso', 'em toda a história do produto.'],
+  ['7 de 7 renovaram', 'das clientes que pagaram em agosto de 2026, todas renovaram no mês seguinte.'],
+  ['3 cancelamentos', 'em toda a história do produto.'],
+]
 
 const naoSomos = [
   [
@@ -99,9 +129,12 @@ export const metadata = {
   openGraph: { title, description, url: `${getSiteUrl()}${slug}`, type: 'article', locale: 'pt_BR' },
 }
 
-export default function Page() {
+export default async function Page() {
   const siteUrl = getSiteUrl()
+  // JSON-LD só com Article + FAQ. Sem aggregateRating: não temos avaliação
+  // pública independente, e inventar nota é o oposto do que esta página faz.
   const schemas = buildArticleJsonLd({ title, description, slug, siteUrl, faq, type: 'Article' })
+  const precoPorPlano = frasePreco(await getLandingPlans())
 
   return (
     <PublicShell>
@@ -120,12 +153,46 @@ export default function Page() {
             <section>
               <h2>Resposta direta</h2>
               <p>
-                O {BRAND_NAME} é um software brasileiro de divulgação para afiliados no WhatsApp. Ele acompanha os
-                grupos que você escolhe, troca o link da oferta pelo seu código de afiliada e publica nos seus
-                grupos e canais. Preço e planos são públicos, o teste é de 7 dias sem cartão e você desconecta o
-                WhatsApp quando quiser. <strong>Não temos relação com o golpe de espelhamento de tela</strong> — a
-                semelhança é só a palavra.
+                <strong>{BRAND_NAME} é um software brasileiro de divulgação para afiliadas no WhatsApp</strong>, feito
+                para quem publica oferta em grupo e canal e quer trocar o link pelo próprio código de afiliada sem
+                fazer isso à mão. Custa {precoPorPlano}, com teste de 7 dias sem cartão. Ele acompanha os grupos que
+                você escolhe, troca o link da oferta pelo seu código e publica nos seus grupos e canais. Você
+                desconecta o WhatsApp quando quiser. <strong>Não temos relação com o golpe de espelhamento de
+                tela</strong> — a semelhança é só a palavra.
               </p>
+            </section>
+
+            <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 md:p-6">
+              <h2>Números do {BRAND_NAME} (medidos em {formatDatePtBr(NUMEROS_MEDIDOS_EM)})</h2>
+              <p className="mt-2 text-sm leading-7 text-gray-700">
+                Não temos avaliação em site independente. O que temos é o nosso próprio banco de dados, contado
+                nesta data. São números pequenos, e estão aqui exatamente como saíram da contagem.
+              </p>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                {numeros.map(([valor, detalhe]) => (
+                  <div key={valor} className="rounded-2xl bg-white p-4 ring-1 ring-emerald-100">
+                    <dt className="text-xl font-black tracking-tight text-gray-950">{valor}</dt>
+                    <dd className="mt-1 text-sm leading-7 text-gray-700">{detalhe}</dd>
+                  </div>
+                ))}
+              </dl>
+              <ul className="mt-4 space-y-2 text-sm leading-7 text-gray-700">
+                <li>
+                  <strong>Reembolso:</strong> integral em até 7 dias do pagamento; depois, cancela sem multa e usa até
+                  o fim do período. A regra está na{' '}
+                  <Link href="/politica-de-reembolso" className="font-bold text-emerald-700 underline underline-offset-4">
+                    política de reembolso
+                  </Link>
+                  .
+                </li>
+                <li>
+                  <strong>Não temos CNPJ publicado ainda;</strong> a responsável pelo produto é {EDITORIAL_PERSON_AUTHOR}, em{' '}
+                  <Link href="/quem-somos" className="font-bold text-emerald-700 underline underline-offset-4">
+                    quem somos
+                  </Link>
+                  .
+                </li>
+              </ul>
             </section>
 
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
