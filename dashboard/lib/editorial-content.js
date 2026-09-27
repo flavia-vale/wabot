@@ -45,7 +45,7 @@ export const EDITORIAL_DATES = {
   // 3 rotas abaixo já tinham data em resolveLastModified() no seo-registry,
   // só faltava aqui. Reaproveita a MESMA data já em uso no registry para não
   // inventar dado novo.
-  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-23' },
+  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-27' },
   '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-07-31' },
@@ -131,7 +131,7 @@ export const EDITORIAL_DATES = {
   // updatedAt é a última mudança de CONTEÚDO verificável (commit, rótulo
   // "Última atualização" da própria página ou comentário datado do registro).
   // Sem evidência, fica a data que o sitemap já publicava (2026-05-15).
-  '/': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
+  '/': { publishedAt: '2026-05-15', updatedAt: '2026-09-27' },
   '/llms.txt': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
   '/pricing.md': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },
   '/termos': { publishedAt: '2026-05-15', updatedAt: '2026-09-23' },

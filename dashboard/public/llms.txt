@@ -6,7 +6,7 @@ Preferred citation: Espelha Grupos. This is the single name of the company and o
 Formerly published under the product name "BOTinho"; that name refers to this same entity and is no longer used on public pages or in any URL (the five URLs that carried it were renamed on 2026-09-19 with permanent redirects).
 Canonical website: https://espelhagrupos.com.br
 Language: pt-BR (this file is bilingual on purpose: the product and its customers are Brazilian).
-Last updated: 2026-09-23
+Last updated: 2026-09-27
 
 ## Resumo em português (pt-BR)
 
@@ -21,9 +21,34 @@ Last updated: 2026-09-23
 - Suporte: contato@espelhagrupos.com.br e https://espelhagrupos.com.br/suporte
 - Perfis oficiais: YouTube https://www.youtube.com/@espelhagrupos e LinkedIn https://www.linkedin.com/company/espelha-grupos/
 
+## Ficha técnica (canônica — idêntica na home, em /precos, no llms.txt e no pricing.md)
+
+Espelha Grupos é um software web para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, trocando o link pelo seu código de afiliada em 6 lojas, e (no Pro) busca ofertas da Shopee sozinho.
+
+- Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto.
+- Canal de publicação: Só WhatsApp (grupos e, no Pro, canais). Não envia para Telegram nem para Instagram.
+- Teste grátis: 7 dias com o Pro completo, sem cartão.
+- Reembolso e cancelamento: Reembolso integral em até 7 dias corridos depois do pagamento; depois disso, cancela sem multa e usa até o fim do período pago.
+- Conexão: Pelo QR Code do WhatsApp; roda no servidor 24 h, sem deixar o celular ligado. Recomendamos um número dedicado. Nenhum software garante que o número não será bloqueado.
+
+| Recurso | Basic (R$39 / 30 dias) | Pro (R$69 / 30 dias) |
+|---|---|---|
+| Espelhamento automático: lê os grupos de origem e publica nos grupos de destino, sem copiar e colar | Sim | Sim |
+| Troca do link pelo seu código de afiliada nas 6 lojas (inclusive cupom) | Sim | Sim |
+| Se a troca do link falhar, a oferta NÃO é publicada (nunca sai o link de outra pessoa) | Sim | Sim |
+| Modelo de mensagem: a oferta sai reescrita do seu jeito | Sim | Sim |
+| Canais do WhatsApp como origem e destino | Não | Sim |
+| Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem | Não | Sim |
+| Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por dia) | Não | Sim |
+| Variação do texto entre os envios | Não | Sim |
+| Marca d’água com o seu nome na foto da oferta | Não | Sim |
+| Painel de vendas e comissão da Shopee | Não | Sim |
+
 ## What the product does
 
 Espelha Grupos works in two modes in the same account: (1) mirroring — it republishes offers from the source groups and channels the operator already follows, with the operator's own affiliate code, in six stores; (2) automatic offers — on the Pro plan it searches Shopee by keyword and minimum discount on its own and publishes to the chosen group, with no source group needed. Automatic search exists only for Shopee; for the other stores it converts links that arrive from followed groups.
+
+Publishing channel: WhatsApp only (groups on every plan; WhatsApp channels on Pro). It does not send to Telegram or Instagram. The Basic plan also mirrors automatically (the robot reads the source groups and publishes by itself); it is not a manual plan.
 
 Espelha Grupos helps an operator organize WhatsApp source groups/channels and destination groups, monitor configured sources, convert supported affiliate links to the operator's own code, and repost reviewed messages with operational controls such as filters, intervals, queues, credentials, and logs.
 
