@@ -136,15 +136,25 @@ export const COMPARISON_PAGES = {
       // 23/09/2026: estes concorrentes vendem busca automática na Shopee; quem
       // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', title: 'Espelhar grupos de ofertas vale a pena?' },
       { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
     ],
+    // 27/09/2026: a busca que mais traz gente para cá é "achadinho pro" (3.806
+    // impressões em 3 meses), outro produto. Só 1 em 4 visitantes lia metade da
+    // página e 1 em 10 clicava. O aviso manda quem procurava o Achadinho Pro
+    // direto para a comparação certa, na primeira dobra.
+    competitorNotice: {
+      text: 'Procurando o Achadinho Pro? É outra ferramenta, de outra empresa, com nome parecido.',
+      href: '/alternativas/achadinho-pro',
+      label: 'Ver Espelha Grupos × Achadinho Pro',
+    },
     productPage: {
       href: '/bot-achadinhos-whatsapp',
       label: 'Como funciona o bot para achadinhos no WhatsApp',
       note: 'Grupos ilimitados, seis lojas e 7 dias grátis.',
     },
-    tldr: 'Entre as opções comparadas, o Espelha Grupos oferece o conjunto mais completo pelo menor preço de entrada: custa R$ 39 por 30 dias, permite grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Para quem quer divulgar várias lojas, crescer sem pagar por quantidade de grupos e testar tudo antes de assinar, é a opção mais vantajosa entre as três.',
-    directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco somente em Shopee. Seus planos começam em R$ 59,90 por mês para 1 grupo e chegam a R$ 199,90 para 15 grupos. O Espelha Grupos custa R$ 39 por 30 dias, permite grupos ilimitados e já inclui Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Também converte links de produto e de cupom, trabalha com grupos, Canais e Comunidades do WhatsApp e oferece 7 dias grátis com o plano Pro completo. Para quem divulga várias lojas e não quer pagar mais ao adicionar grupos, o Espelha Grupos entrega mais recursos por um preço menor. O Achadinho Pro, apesar do nome parecido, é outra ferramenta, de outra empresa: começa em R$ 49,97 por mês, também somente com Shopee, e tem página de comparação própria aqui no site.',
+    tldr: 'Se você divulga só Shopee em poucos grupos, o AchadinhosBot resolve. Se divulga mais de uma loja ou tem vários grupos, o Espelha Grupos sai mais barato: R$ 39 por 30 dias, sem cobrar por grupo, com Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress. Dá para testar 7 dias com o plano Pro completo, sem cartão.',
+    directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco somente em Shopee. Seus planos começam em R$ 59,90 por mês para 1 grupo e chegam a R$ 199,90 para 15 grupos. O Espelha Grupos custa R$ 39 por 30 dias, permite grupos ilimitados e já inclui Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress. Também converte links de produto e de cupom, trabalha com grupos, Canais e Comunidades do WhatsApp e oferece 7 dias grátis com o plano Pro completo. Para quem divulga várias lojas e não quer pagar mais ao adicionar grupos, o Espelha Grupos entrega mais recursos por um preço menor. O Achadinho Pro, apesar do nome parecido, é outra ferramenta, de outra empresa: começa em R$ 49,97 por mês, também somente com Shopee, e tem página de comparação própria aqui no site.',
     // Formato de objeto (em vez de tupla) liga o comparador interativo por
     // critério (InteractiveComparisonTable) nesta página — ver
     // `isInteractiveComparison` em ComparisonPage. Mesmos fatos e preços da
@@ -153,34 +163,35 @@ export const COMPARISON_PAGES = {
     // nada novo).
     rows: [
       { key: 'preco', label: 'Preço de entrada', produto: 'R$ 39 por 30 dias (grupos ilimitados).', concorrente: 'AchadinhosBot: R$ 59,90/mês para 1 grupo. Achadinho Pro: R$ 49,97/mês, somente com Shopee.', reading: 'O Espelha Grupos é o mais barato entre as três opções e não prende o preço à quantidade de grupos.' },
-      { key: 'marketplaces', label: 'Lojas suportadas', produto: 'Shopee, Amazon, Mercado Livre, Magalu e SHEIN.', concorrente: 'AchadinhosBot: Shopee. Achadinho Pro: Shopee no Basic; Amazon e Mercado Livre somente no Pro de R$ 59,97/mês.', reading: 'O Espelha Grupos oferece cinco lojas pelo menor preço. Nas outras opções, a cobertura é menor ou exige um plano mais caro.' },
+      { key: 'marketplaces', label: 'Lojas suportadas', produto: 'Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress.', concorrente: 'AchadinhosBot: Shopee. Achadinho Pro: Shopee no Basic; Amazon e Mercado Livre somente no Pro de R$ 59,97/mês.', reading: 'O Espelha Grupos oferece seis lojas pelo menor preço. Nas outras opções, a cobertura é menor ou exige um plano mais caro.' },
       { key: 'escala', label: 'Limite de grupos', produto: 'Sem limite de grupos.', concorrente: 'AchadinhosBot: o preço aumenta por faixa de 1, 5, 10 ou 15 grupos. Achadinho Pro: grupos ilimitados por automação.', reading: 'Com o Espelha Grupos, você adiciona novos grupos sem subir de plano somente porque a operação cresceu.' },
       { key: 'teste', label: 'Teste grátis', produto: '7 dias com o plano Pro completo, sem cartão.', concorrente: 'AchadinhosBot: 3 dias, 1 grupo, 30 envios/dia, marca d’água e conexão descrita como "menos estável". Achadinho Pro: a página consultada não informa teste grátis.', reading: 'O Espelha Grupos oferece mais tempo e libera o plano completo para você testar a rotina real antes de pagar.' },
+      { key: 'busca', label: 'Busca automática de ofertas', produto: 'Espelha as ofertas dos grupos que você segue e, no plano Pro, também busca ofertas da Shopee sozinho pelo tema que você escolher.', concorrente: 'AchadinhosBot: foco em Shopee. Achadinho Pro: anuncia recursos próprios de pesquisa de produtos.', reading: 'Se você quer as duas coisas — repassar o que já circula e garimpar por tema — o Espelha Grupos faz as duas na mesma conta.' },
       { key: 'cupom', label: 'Conversão de cupom', produto: 'Converte links de produto e também links de cupom das lojas suportadas.', concorrente: 'Não indicada nas páginas públicas consultadas dos dois concorrentes.', reading: 'Para quem divulga campanhas, vitrines e cupons, o Espelha Grupos cobre uma parte importante da rotina que não aparece nas outras ofertas públicas.' },
       { key: 'canais', label: 'Canais e Comunidades', produto: 'Trabalha com grupos, Canais e Comunidades do WhatsApp.', concorrente: 'As páginas consultadas destacam automações e grupos.', reading: 'O Espelha Grupos permite organizar diferentes formas de divulgação dentro do WhatsApp, sem prender a operação somente a grupos.' },
     ],
     criteria: ['Quantas lojas você divulga hoje', 'Quantos grupos administra e pretende adicionar', 'Se divulga links de cupom além de links de produto', 'Se precisa publicar em Canais e Comunidades', 'Se quer testar a ferramenta completa antes de pagar', 'Se o preço aumenta quando sua operação cresce'],
     limitations: ['Nenhuma ferramenta pode garantir vendas ou comissões.', 'Use o bot somente em grupos e canais nos quais você tem autorização para publicar.', 'Revise preço, cupom, estoque e link de afiliado antes da divulgação.', 'Evite mandar a mesma oferta muitas vezes ou em intervalos curtos.', 'Continue acompanhando seus grupos mesmo depois de automatizar a rotina.'],
-    botinhoDifferentials: ['Menor preço entre as opções: R$ 39 por 30 dias', 'Grupos ilimitados sem aumento por quantidade', 'Cinco lojas: Shopee, Amazon, Mercado Livre, Magalu e SHEIN', 'Conversão de links de produto e de cupom', 'Grupos, Canais e Comunidades do WhatsApp', 'Controle de repetição e intervalo', 'Histórico completo de envios', 'Mensagem de boas-vindas', 'Suporte pelo WhatsApp', '7 dias com o Pro completo, sem cartão', 'Configuração rápida e cancelamento simples'],
+    botinhoDifferentials: ['Menor preço entre as opções: R$ 39 por 30 dias', 'Grupos ilimitados sem aumento por quantidade', 'Seis lojas: Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress', 'Conversão de links de produto e de cupom', 'Grupos, Canais e Comunidades do WhatsApp', 'Controle de repetição e intervalo', 'Histórico completo de envios', 'Mensagem de boas-vindas', 'Suporte pelo WhatsApp', '7 dias com o Pro completo, sem cartão', 'Configuração rápida e cancelamento simples'],
     // Mockup do Claude Design ("Landing Comparativo") pede peso visual maior
     // para esta seção — cartão por item em vez de chip. Ligado só nesta
     // página para servir de piloto antes de estender às outras 6.
     richDifferentials: true,
     bestFit: [
-      'Escolha o Espelha Grupos se quer pagar menos, divulgar Shopee, Amazon, Mercado Livre, Magalu e SHEIN na mesma conta e trabalhar com grupos ilimitados.',
+      'Escolha o Espelha Grupos se quer pagar menos, divulgar Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress na mesma conta e trabalhar com grupos ilimitados.',
       'Escolha o Espelha Grupos se divulga produto e cupom, quer usar grupos, Canais ou Comunidades e prefere testar o plano completo por 7 dias antes de pagar.',
       'O AchadinhosBot pode atender uma operação pequena que trabalha somente com Shopee e prefere um plano cobrado por quantidade de grupos, mesmo começando por um preço maior.',
-      'O Achadinho Pro pode atender quem trabalha com vários números de WhatsApp ou considera seus recursos próprios de pesquisa de produtos mais importantes que preço e quantidade de lojas.',
+      'O Achadinho Pro pode atender quem trabalha com vários números de WhatsApp ou dá mais valor aos recursos próprios de pesquisa de produtos do que a preço e quantidade de lojas.',
     ],
     notIdealFit: [
       'No AchadinhosBot, o plano de R$ 59,90 cobre somente 1 grupo e apenas Shopee; para chegar a 15 grupos, o valor publicado é R$ 199,90/mês.',
       'No Achadinho Pro, o plano de entrada cobre somente Shopee; Amazon e Mercado Livre exigem o Pro de R$ 59,97/mês.',
-      'Entre as três opções, somente o Espelha Grupos reúne R$ 39 por 30 dias, cinco lojas e grupos ilimitados.',
+      'Entre as três opções, somente o Espelha Grupos reúne R$ 39 por 30 dias, seis lojas e grupos ilimitados.',
       'O Espelha Grupos trabalha somente com WhatsApp. Se sua operação depende de Telegram, será necessário usar outra solução para esse canal.',
     ],
     migrationPath: [
       'Faça uma lista dos grupos de onde vêm as ofertas e dos grupos, Canais ou Comunidades onde deseja publicá-las.',
-      'Cadastre as lojas que divulga: Shopee, Amazon, Mercado Livre, Magalu e SHEIN.',
+      'Cadastre as lojas que divulga: Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress.',
       'Comece os 7 dias grátis do Espelha Grupos e confira a conversão dos links, a aparência das mensagens e o ritmo das publicações.',
       'Rode as duas ferramentas por alguns dias e confira no histórico o que foi enviado, falhou ou foi segurado por repetição.',
       'Cancele a ferramenta antiga somente depois de confirmar que grupos, lojas e links funcionam como esperado.',
@@ -193,18 +204,18 @@ export const COMPARISON_PAGES = {
       notIdealFor: 'Quem precisa publicar no Telegram ou quer deixar toda a operação funcionando sem nenhuma conferência humana.',
       migrationNotes: 'Use os 7 dias grátis com o Pro completo para testar links, grupos, Canais e Comunidades antes de cancelar outra ferramenta.',
       source: 'Página pública de preços e recursos do Espelha Grupos.',
-      verifiedAt: '2026-08-31',
+      verifiedAt: '2026-09-27',
     },
-    productDefinition: 'O Espelha Grupos é para quem administra grupos, Canais ou Comunidades de ofertas no WhatsApp e está cansada de copiar, trocar e publicar cada link manualmente. Você escolhe de onde vêm as ofertas e onde deseja publicá-las. O Espelha Grupos prepara o link com o seu código de afiliada, envia a mensagem, ajuda a controlar intervalos e ofertas repetidas e guarda o histórico. Funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN, permite grupos ilimitados e custa R$ 39 por 30 dias, com 7 dias grátis para testar o plano Pro completo, sem cartão.',
+    productDefinition: 'O Espelha Grupos é para quem administra grupos, Canais ou Comunidades de ofertas no WhatsApp e está cansada de copiar, trocar e publicar cada link manualmente. Você escolhe de onde vêm as ofertas e onde deseja publicá-las. O Espelha Grupos prepara o link com o seu código de afiliada, envia a mensagem, ajuda a controlar intervalos e ofertas repetidas e guarda o histórico. Funciona com Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress, permite grupos ilimitados e custa R$ 39 por 30 dias, com 7 dias grátis para testar o plano Pro completo, sem cartão.',
     faq: [
-      { q: 'Qual é a melhor alternativa ao AchadinhosBot?', a: 'Para quem divulga ofertas no WhatsApp, o Espelha Grupos é a alternativa mais completa entre as três comparadas: custa R$ 39 por 30 dias, aceita grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN.' },
-      { q: 'Qual é mais barato: Espelha Grupos, AchadinhosBot ou Achadinho Pro?', a: 'O Espelha Grupos é o mais barato entre os três: R$ 39 por 30 dias. O Achadinho Pro começa em R$ 49,97/mês e o AchadinhosBot em R$ 59,90/mês. Além do menor preço, o Espelha Grupos não limita grupos e já inclui cinco lojas.' },
-      { q: 'Qual bot aceita mais lojas pelo menor preço?', a: 'O Espelha Grupos. Por R$ 39 por 30 dias, funciona com Shopee, Amazon, Mercado Livre, Magalu e SHEIN. Os planos de entrada do AchadinhosBot e do Achadinho Pro cobrem somente Shopee.' },
+      { q: 'Qual é a melhor alternativa ao AchadinhosBot?', a: 'Para quem divulga ofertas no WhatsApp, o Espelha Grupos é a alternativa mais completa entre as três comparadas: custa R$ 39 por 30 dias, aceita grupos ilimitados e funciona com Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress.' },
+      { q: 'Qual é mais barato: Espelha Grupos, AchadinhosBot ou Achadinho Pro?', a: 'O Espelha Grupos é o mais barato entre os três: R$ 39 por 30 dias. O Achadinho Pro começa em R$ 49,97/mês e o AchadinhosBot em R$ 59,90/mês. Além do menor preço, o Espelha Grupos não limita grupos e já inclui seis lojas.' },
+      { q: 'Qual bot aceita mais lojas pelo menor preço?', a: 'O Espelha Grupos. Por R$ 39 por 30 dias, funciona com Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress. Os planos de entrada do AchadinhosBot e do Achadinho Pro cobrem somente Shopee.' },
       { q: 'O Espelha Grupos limita a quantidade de grupos?', a: 'Não. O Espelha Grupos permite grupos ilimitados e o preço não aumenta somente porque você adicionou mais grupos.' },
-      { q: 'O Espelha Grupos funciona com SHEIN?', a: 'Sim. O Espelha Grupos aceita ofertas da SHEIN, além de Shopee, Amazon, Mercado Livre e Magalu. Para converter os links, é necessário cadastrar seus dados de afiliada da SHEIN no painel.' },
+      { q: 'O Espelha Grupos funciona com SHEIN?', a: 'Sim. O Espelha Grupos aceita ofertas da SHEIN, além de Shopee, Amazon, Mercado Livre, Magalu e AliExpress. Para converter os links, é necessário cadastrar seus dados de afiliada da SHEIN no painel.' },
       { q: 'Quanto custa o AchadinhosBot?', a: 'Conforme a página pública consultada em 31/07/2026: R$ 59,90/mês para 1 grupo, R$ 99,90 para 5, R$ 149,90 para 10 e R$ 199,90 para 15 grupos, além de um teste grátis de 3 dias. Confirme na página oficial antes de decidir — preços mudam.' },
       { q: 'O AchadinhosBot tem teste grátis?', a: 'Sim, 3 dias sem cartão, com 1 grupo, 30 envios por dia, intervalo mínimo de 10 minutos, marca d’água e uma conexão descrita pelo próprio site como "menos estável". O Espelha Grupos oferece 7 dias com o Pro completo.' },
-      { q: 'O Achadinho Pro é mais barato que o Espelha Grupos?', a: 'Não. O Basic custa R$ 49,97/mês e cobre somente Shopee. O Espelha Grupos custa R$ 39 por 30 dias e inclui cinco lojas. Para incluir Amazon e Mercado Livre no Achadinho Pro, é necessário o Pro de R$ 59,97/mês.' },
+      { q: 'O Achadinho Pro é mais barato que o Espelha Grupos?', a: 'Não. O Basic custa R$ 49,97/mês e cobre somente Shopee. O Espelha Grupos custa R$ 39 por 30 dias e inclui seis lojas. Para incluir Amazon e Mercado Livre no Achadinho Pro, é necessário o Pro de R$ 59,97/mês.' },
       { q: 'Em que situação o AchadinhosBot pode fazer sentido?', a: 'Pode atender uma operação pequena que divulga somente Shopee, cabe em uma das faixas de grupos e prefere exatamente esse modelo de planos. Para quem compara preço, quantidade de grupos e cobertura de lojas, o Espelha Grupos oferece mais por um valor menor.' },
       { q: 'Em que situação o Achadinho Pro pode fazer sentido?', a: 'Pode fazer sentido para quem precisa administrar vários números de WhatsApp ou deseja seus recursos próprios de pesquisa de produtos. Para quem prioriza preço, lojas, teste grátis e grupos ilimitados, o Espelha Grupos apresenta o conjunto mais vantajoso desta página.' },
       { q: 'O Espelha Grupos converte links de cupom?', a: 'Sim. Além de links de produto, o Espelha Grupos converte links de cupons e campanhas compatíveis das lojas suportadas.' },
@@ -448,6 +459,7 @@ export const COMPARISON_PAGES = {
       // 23/09/2026: estes concorrentes vendem busca automática na Shopee; quem
       // chega aqui precisa saber que o Espelha Grupos também tem esse modo.
       { href: '/bot-que-busca-ofertas-shopee-whatsapp', title: 'Bot que busca ofertas da Shopee sozinho no WhatsApp' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', title: 'Espelhar grupos de ofertas vale a pena?' },
       { href: '/politica-de-reembolso', title: 'Política de reembolso do Espelha Grupos' },
     ],
     productPage: {
@@ -1605,7 +1617,29 @@ export function ComparisonPage({ slug }) {
             * primeira dobra não pode precisar rolar até o rodapé para clicar. */}
           <SectionCard tone="accent" eyebrow="Resumo rápido" title="A resposta curta">
             <p style={{ color: 'var(--ink)', lineHeight: 1.7, fontSize: 17, maxWidth: '70ch' }}>{page.tldr || page.directAnswer}</p>
+            {page.competitorNotice ? (
+              <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, maxWidth: '70ch' }}>
+                {page.competitorNotice.text}{' '}
+                <Link href={page.competitorNotice.href} data-comparison-cta="competitor-notice" style={{ fontWeight: 700 }}>
+                  {page.competitorNotice.label}
+                </Link>
+              </p>
+            ) : null}
             <TrialCta slug={slug} content="tldr-register" />
+            {/*
+              27/09/2026: a saída para a comercial também na primeira dobra. Só no
+              fechamento, ela ficava depois de 9 seções — e só 1 em 4 visitantes
+              de /alternativas/achadinhos-bot chegava à metade da página, enquanto
+              a comercial do mesmo tema converte 4× mais.
+            */}
+            {page.productPage ? (
+              <p style={{ color: 'var(--ink)', lineHeight: 1.6, maxWidth: '70ch' }}>
+                <Link href={page.productPage.href} data-comparison-cta="product-page-top" style={{ fontWeight: 700 }}>
+                  {page.productPage.label}
+                </Link>
+                {page.productPage.note ? ` — ${page.productPage.note}` : null}
+              </p>
+            ) : null}
             <SectionNav items={navItems} />
           </SectionCard>
 
