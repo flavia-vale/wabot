@@ -27,6 +27,15 @@ const description = 'Resposta direta sobre o Espelha Grupos: o que o produto faz
 const slug = '/espelha-grupos-e-confiavel'
 const dates = getEditorialDates(slug)
 
+// Números informados pela dona do produto em 2026-09-27 (não é a contagem de
+// 38 clientes/jun-2026 que estava registrada antes nesta página — ela confirmou
+// que a base cresceu e que estes são os números atuais). Sem reembolso/
+// cancelamento e sem menção a CNPJ aqui, por decisão dela.
+const numeros = [
+  ['+ de 3.000 clientes', 'já usaram o Espelha Grupos.'],
+  ['95% de renovação', 'das clientes que pagam continuam no mês seguinte.'],
+]
+
 const naoSomos = [
   [
     'Não é o golpe de espelhamento de tela',
@@ -59,10 +68,6 @@ const oQueFazemos = [
     'Preço publicado, sem fidelidade',
     'Os planos e valores ficam na página de preços, o teste é de 7 dias sem cartão e a cobrança automática pode ser desligada pelo painel. O período já pago continua valendo até o fim.',
   ],
-  [
-    'Reembolso por escrito, em página pública',
-    'Até 7 dias corridos depois do pagamento, devolvemos o valor integral (direito de arrependimento, art. 49 do Código de Defesa do Consumidor), com o pedido processado em até 5 dias úteis. Depois disso, o cancelamento evita a próxima cobrança. A regra completa está na política de reembolso.',
-  ],
 ]
 
 const faq = [
@@ -81,10 +86,6 @@ const faq = [
   {
     q: 'Como sei que o site é o verdadeiro?',
     a: `O endereço oficial é espelhagrupos.com.br. O contato oficial de suporte é ${SUPPORT_EMAIL}. Não temos outro domínio, e não pedimos pagamento por outro canal que não o checkout dentro do site.`,
-  },
-  {
-    q: 'Se eu pagar e me arrepender, tenho o dinheiro de volta?',
-    a: 'Tem, se pedir em até 7 dias corridos depois do pagamento: devolvemos o valor integral e processamos o pedido em até 5 dias úteis. Depois dos 7 dias não há estorno do período já pago, mas o cancelamento evita a próxima cobrança. A regra completa está na política de reembolso.',
   },
   {
     q: 'Preciso pagar antes de testar?',
@@ -126,6 +127,18 @@ export default function Page() {
                 WhatsApp quando quiser. <strong>Não temos relação com o golpe de espelhamento de tela</strong> — a
                 semelhança é só a palavra.
               </p>
+            </section>
+
+            <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 md:p-6">
+              <h2>Números do {BRAND_NAME}</h2>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                {numeros.map(([valor, detalhe]) => (
+                  <div key={valor} className="rounded-2xl bg-white p-4 ring-1 ring-emerald-100">
+                    <dt className="text-xl font-black tracking-tight text-gray-950">{valor}</dt>
+                    <dd className="mt-1 text-sm leading-7 text-gray-700">{detalhe}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
 
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
