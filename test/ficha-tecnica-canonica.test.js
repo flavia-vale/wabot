@@ -43,13 +43,44 @@ test('home e /precos renderizam o MESMO componente, que lê só de lib/ficha-tec
   for (const loja of SUPPORTED_STORES) assert.ok(!componente.includes(loja), `loja "${loja}" escrita à mão no componente — deve vir da constante`)
 })
 
-test('a definição é uma só e cita as lojas pela constante', () => {
+test('a definição é uma só, cita as lojas pela constante e os 3 modelos (espelhar, criar a partir do link, garimpar)', () => {
   assert.match(FICHA_DEFINICAO, /^Espelha Grupos é um software web para afiliadas/)
   assert.ok(FICHA_DEFINICAO.includes(`${SUPPORTED_STORES.length} lojas`))
+  // Plano GEO 27/09/2026 §3: a Perplexity classifica o mercado em espelhador,
+  // formatador e garimpo automático — a frase precisa nomear os três.
+  assert.match(FICHA_DEFINICAO, /espelha ofertas de grupos e canais do WhatsApp/)
+  assert.match(FICHA_DEFINICAO, /cria a oferta a partir de um link/)
   assert.match(FICHA_DEFINICAO, /\(no Pro\) busca ofertas da Shopee sozinho/)
+  assert.doesNotMatch(FICHA_DEFINICAO, /Telegram|anti-?ban|BOTinho/i)
   const lojas = FICHA_FATOS.find((f) => f.rotulo === 'Lojas com conversão de link')
   for (const loja of SUPPORTED_STORES) assert.ok(lojas.valor.includes(loja), `fato de lojas sem ${loja}`)
   assert.match(lojas.valor, /cupom/)
+})
+
+test('a MESMA frase de definição abre /quem-somos e /espelha-grupos-e-confiavel (constante, não texto à mão)', () => {
+  // A3 do plano GEO de 27/09/2026: "o que é" precisa sair idêntico, byte a
+  // byte, em todo lugar que define o produto — inclusive nas duas páginas que
+  // as IAs leem quando perguntam "o que é" e "é confiável".
+  for (const rel of ['dashboard/app/quem-somos/page.js', 'dashboard/app/espelha-grupos-e-confiavel/page.js']) {
+    const fonte = ler(rel)
+    assert.match(fonte, /import \{[^}]*\bFICHA_DEFINICAO\b[^}]*\} from '@\/lib\/ficha-tecnica'/, `${rel} não importa FICHA_DEFINICAO`)
+    assert.match(fonte, /\{FICHA_DEFINICAO\}/, `${rel} não renderiza FICHA_DEFINICAO`)
+    assert.ok(!fonte.includes('é um software brasileiro de divulgação'), `${rel}: frase de abertura ainda escrita à mão`)
+  }
+})
+
+test('os 3 fatos que a IA pedia (palavras bloqueadas, imagem/card, criar oferta pelo link) estão na ficha, nos dois planos', () => {
+  // Medição de 27/09/2026: o Gemini listava "filtro de palavras-chave" e
+  // "preserva imagem/card" como ausentes; a Perplexity não sabia do modelo
+  // "formatador". Os três existem sem cadeado de plano: `blockedKeywords` em
+  // src/api/routes/{config,groups}.js, src/core/previewCardCanvas.js e
+  // /painel/criar-oferta (+ /api/link-conversion/scrape-offer).
+  for (const trecho of ['Palavras bloqueadas', 'Imagem e card da oferta preservados', 'Criar oferta a partir de um link']) {
+    const linha = FICHA_LINHAS.find((l) => l.recurso.startsWith(trecho))
+    assert.ok(linha, `linha "${trecho}" sumiu da ficha`)
+    assert.equal(linha.basic, true, `${trecho}: não tem gate de plano no código, precisa ser Sim no Basic`)
+    assert.equal(linha.pro, true)
+  }
 })
 
 test('só WhatsApp: a ficha nega Telegram e Instagram e nunca promete não banir', () => {
