@@ -151,3 +151,17 @@ cat /tmp/gemini.csv
   o nome repetido sem fonte nossa = parcial (a pergunta já trazia o nome).
   Código em `src/ops/aiCitation.js`, teste em `test/ai-citation.test.js` (que
   também falha se as consultas do script divergirem das 10 deste roteiro).
+
+### ⚠️ Conta nova não roda de graça (medido em 25/09)
+
+- `gemini-2.5-flash` e `gemini-2.5-flash-lite`: recusados com "no longer
+  available to new users".
+- Família Gemini 3 (inclusive `gemini-3.8-flash`, o padrão do script): aceita,
+  mas a cota grátis de **busca do Google** ("Pesquisar conteúdo de
+  embasamento" em ai.dev/rate-limit) é **0** — a primeira pergunta volta 429
+  "You exceeded your current quota".
+- Só a família 2.5 tinha busca grátis (1.500/dia), e ela não aceita conta nova.
+
+**Conclusão:** sem faturamento ativo no AI Studio, o Gemini volta a ser medido à
+mão. Ativar a cobrança (com limite de gasto baixo) é decisão da Flávia. Não
+rodar sem a busca: responderia de memória e a medição não vale (regra 2).
