@@ -16,6 +16,15 @@ function outrasLojas(loja) {
   const outras = SUPPORTED_STORES.filter((nome) => nome !== loja)
   return `${outras.slice(0, -1).join(', ')} e ${outras.at(-1)}`
 }
+// "Basic R$39 ou Pro R$69 a cada 30 dias", montado de DEFAULT_LANDING_PLANS
+// para a abertura das páginas-resposta (plano GEO 27/09/2026: as 3 primeiras
+// linhas dizem o que é, para quem e quanto custa — preço nunca escrito à mão).
+const precoPlanosFrase = (() => {
+  const pagos = DEFAULT_LANDING_PLANS.filter((plan) => Number(plan.priceValue) > 0)
+  const partes = pagos.map((plan) => `${plan.name} ${plan.price}`)
+  const lista = partes.length <= 1 ? partes.join('') : `${partes.slice(0, -1).join(', ')} ou ${partes.at(-1)}`
+  return pagos[0]?.period ? `${lista} a cada ${pagos[0].period}` : lista
+})()
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
 const mainLandingHref = '/bot-canais-whatsapp'
 const diagnosticHref = '/diagnostico-antiban-whatsapp'
@@ -458,7 +467,10 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Quando espelhar grupos de ofertas compensa, quando não, e como evitar oferta repetida, link de outro afiliado e ritmo de robô. Com os dois modos lado a lado.',
     eyebrow: 'Espelhar ou garimpar',
     h1: 'Espelhar grupos de ofertas vale a pena? Depende de como você espelha',
-    lead: 'A crítica mais comum ao espelhamento é que o seu grupo fica igual a todos os outros. Isso acontece quando o robô só copia e cola. Não é o que o Espelha Grupos faz: ele usa os grupos que você acompanha como garimpadores — aproveita só a informação que importa, qual produto entrou em promoção, e monta a sua oferta do zero, com o seu modelo de mensagem e o seu link de afiliada. Outra pessoa faz a garimpagem; quem publica com a sua cara e ganha a comissão é você. E, se quiser ofertas que ninguém mais está repassando, o plano Pro também busca ofertas da Shopee sozinho, pelo tema que você escolher.',
+    // 27/09/2026: as 3 primeiras linhas respondem de frente (vale quando, para
+    // quem, quanto custa — preço de DEFAULT_LANDING_PLANS), antes de tratar a
+    // crítica. Espelhamento + garimpo: o produto faz os dois.
+    lead: `Vale a pena quando você controla o que sai: o link trocado pelo seu código de afiliada, a mensagem no seu modelo, o ritmo por grupo e as ofertas repetidas seguradas. É para afiliadas que já acompanham grupos de ofertas do seu nicho e publicam em mais de um grupo ou canal do WhatsApp; no Espelha Grupos custa ${precoPlanosFrase}, com 7 dias grátis sem cartão. A crítica mais comum — "o seu grupo fica igual a todos os outros" — vale para robô que só copia e cola. Aqui os grupos que você acompanha funcionam como garimpadores: o robô aproveita só o que importa, qual produto entrou em promoção, e monta a sua oferta com o seu modelo de mensagem e o seu link. Espelhamento + garimpo automático: o Espelha Grupos faz os dois — no plano Pro, ele também busca ofertas da Shopee sozinho, pelo tema que você escolher.`,
     intent: 'espelhar grupos de ofertas vale a pena',
     relatedTitle: 'Para decidir com calma',
     related: [
@@ -499,6 +511,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     },
     primaryCta: 'Testar 7 dias grátis',
     secondaryCta: 'Ver como funciona',
+    // Bloco de conversão com a tabela de preço vinda de DEFAULT_LANDING_PLANS.
+    priceTable: true,
     problemTitle: 'Os outros grupos garimpam. A oferta que sai é sua.',
     problem: 'Quem garimpa ofertas o dia inteiro faz o trabalho mais pesado: procurar, conferir preço, achar o cupom. O espelhamento aproveita esse trabalho sem copiar o resultado. O robô lê a oferta nos grupos que você acompanha, descobre qual é o produto e o preço, troca o link pelo seu código e monta a mensagem com o seu modelo — então quem recebe vê a sua oferta, no seu jeito de escrever, e não a do grupo de origem. As outras críticas também têm resposta: link de outro afiliado não sai (se a troca falhar, a oferta não é publicada), o mesmo produto não se repete no mesmo grupo dentro da janela de tempo, o ritmo por grupo é você quem define e, para não depender só dos outros, o plano Pro busca ofertas da Shopee sozinho.',
     bestFor: {
@@ -534,7 +548,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     ],
     faqs: [
       ['Espelhar grupos é permitido?', 'O robô só lê grupos de que o seu número já participa. O cuidado que é seu: publicar só em grupos e canais em que você tem permissão para divulgar e respeitar as regras de cada grupo, do WhatsApp e dos programas de afiliados.'],
-      ['Garimpo com IA converte mais que espelhar?', 'Não temos medição que prove isso para um lado ou para o outro, e desconfie de quem afirma sem mostrar o dado. O que dá para dizer: garimpar traz ofertas que não circulam em outros grupos, e espelhar aproveita a curadoria de grupos que já funcionam. No Espelha Grupos os dois modos rodam juntos.'],
+      ['Garimpo com IA converte mais que espelhar?', 'Não temos medição que prove isso para um lado ou para o outro, e desconfie de quem afirma sem mostrar o dado. O que dá para dizer: garimpar traz ofertas que não circulam em outros grupos, e espelhar aproveita a curadoria de grupos que já funcionam. No Espelha Grupos os dois modos rodam juntos: em 27/09/2026, 43 contas tinham ofertas automáticas ativas e 38 clientes pagavam pelo produto.'],
       ['Preciso deixar o celular ligado?', 'Não. Depois de conectar o WhatsApp lendo o QR Code, o robô roda no servidor, 24 horas por dia.'],
       ['Quanto custa?', 'Basic R$ 39 e Pro R$ 69 a cada 30 dias. O espelhamento com troca de link está nos dois planos; a busca automática da Shopee é do Pro. O teste grátis de 7 dias libera o Pro completo, sem cartão.'],
       ['E se eu pagar e não gostar?', 'Em até 7 dias corridos depois do pagamento, devolvemos o valor integral.'],
