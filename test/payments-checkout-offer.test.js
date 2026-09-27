@@ -9,14 +9,16 @@ import { decideCheckoutOffer, subscriptionStartDate, hasPaidActiveAccess } from 
 const now = new Date('2026-09-27T15:00:00.000Z')
 const DAY = 86400000
 
-test('em teste ou vencida: só pagamento avulso, sem botão de cobrança automática', () => {
+test('em teste ou vencida: avulso (Pix ou cartão) primeiro e cobrança automática como opção, começando agora', () => {
   const trial = decideCheckoutOffer({ plan: 'trial', isActive: true, autoRenew: false, accessExpiresAt: new Date(now.getTime() + 3 * DAY), now })
   assert.equal(trial.mode, 'first_payment')
-  assert.equal(trial.showAutoRenew, false)
+  assert.equal(trial.showAutoRenew, true)
+  assert.equal(trial.autoRenewStartsAt, null)
   assert.match(trial.primaryLabel, /Pix ou cartão/)
+  assert.match(trial.autoRenewLabel, /cobrança automática/i)
   const vencida = decideCheckoutOffer({ plan: 'pro', isActive: false, autoRenew: false, accessExpiresAt: new Date(now.getTime() - DAY), now })
   assert.equal(vencida.mode, 'first_payment')
-  assert.equal(vencida.showAutoRenew, false)
+  assert.equal(vencida.showAutoRenew, true)
 })
 
 test('com acesso pago em dia e sem renovação: oferece ligar a automática começando no vencimento', () => {

@@ -8,11 +8,17 @@
 // assinatura do MP não aceita). Nenhuma venda se perdeu, mas quase ninguém
 // ficou com renovação automática.
 //
-// Decisão (dona do produto, 27/09): o PRIMEIRO pagamento é sempre avulso (Pix
-// ou cartão, o caminho que aprova). A renovação automática só é oferecida a
-// quem já tem acesso pago, e começa a cobrar quando o período atual termina —
-// nunca duas cobranças pelo mesmo mês. Hipótese a medir: com histórico de
-// pagamento aprovado, o antifraude aceita a recorrência.
+// Decisão (dona do produto, 27/09, revista no mesmo dia): as recusas do
+// antifraude aconteciam TAMBÉM no avulso, então esconder a recorrência no
+// primeiro pagamento não atacava a causa. A cobrança automática volta a ser
+// oferecida desde o primeiro pagamento, como opção ao lado do avulso (avulso
+// primeiro, porque aceita Pix). O que fica desta regra: para quem JÁ tem
+// acesso pago, a recorrência começa no fim do período pago (nunca duas
+// cobranças pelo mesmo mês) e, com renovação ligada, não se oferece de novo.
+// Limite honesto: a criação de assinatura no Mercado Pago (`/preapproval`)
+// só recebe o e-mail da pagadora; nome, telefone e CPF são digitados por ela
+// na tela do próprio Mercado Pago. Os dados completos que passamos a mandar
+// valem para o avulso (`checkoutPayer.js`).
 
 const PAID_PLANS = new Set(['basic', 'pro'])
 
@@ -88,9 +94,9 @@ export function decideCheckoutOffer({ plan, isActive, autoRenew, accessExpiresAt
   return {
     mode: 'first_payment',
     primaryLabel: 'Pagar agora (Pix ou cartão)',
-    showAutoRenew: false,
-    autoRenewLabel: null,
+    showAutoRenew: true,
+    autoRenewLabel: 'Assinar com cobrança automática (cartão)',
     autoRenewStartsAt: null,
-    note: 'Depois do primeiro pagamento você pode ligar a renovação automática no cartão, se quiser.',
+    note: 'Pix ou cartão no pagamento avulso; a cobrança automática é só no cartão e você desliga quando quiser.',
   }
 }

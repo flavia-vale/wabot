@@ -204,6 +204,37 @@ A nossa vantagem de percepção está no tom; a dele, na sensação de app.
   tela se atualiza sozinha". A nossa Filas é PRO e é configuração, não
   visualização ao vivo do que vai sair.
 
+### 2.4 Comparação tela a tela (27/09/2026 — conta Basic paga no nosso painel × conta grátis no dele)
+
+| Tela | Pro Afiliados | Espelha Grupos | Quem leva e por quê |
+|---|---|---|---|
+| **Início** | Card fixo "Seu robô está funcionando? Ainda não. Falta pouco!" + barra "Passo 2 de 3 · leva uns 5 minutos" + 4 cards (conexão, fila, grupos, membros entraram/saíram) + últimos envios | "Primeiros passos 0/5 · ≈ 4 min", passos que se marcam sozinhos, atalho "Quer ver funcionando antes de conectar? Cadastre uma loja e teste um link" | **Empate técnico.** O nosso "testar antes de conectar" é melhor ideia; o dele repete o card em TODAS as telas e o nosso só na home |
+| **Conexão** | Abas WhatsApp/Telegram; QR ou código de 8 dígitos; botões Pausar robô / Sair; "3 dicas para não bloquear" | "Conectar em 3 passos" ilustrado; QR ou **número de celular** ("Estou no celular — conectar por número"); resumo do ritmo | **Empate.** Os dois têm pareamento por número (o item B16 do backlog está errado: já temos) |
+| **Lojas / credenciais** | 12 cards; cola o link de afiliado e ele extrai o ID sozinho; ML por etiqueta, Amazon por StoreID, sem cookie | 6 cards; aviso no topo "Baixe no Chrome o Cookie Editor (Amazon, ML e SHEIN é necessário)"; Magalu e SHEIN "mais rápida · 1 campo"; vídeo tutorial; texto "sem loja aqui o robô não publica" | **Ele.** Cookie por extensão exige computador e é a maior fricção do nosso onboarding. Amazon (StoreID) e ML (etiqueta) sem cookie viram item novo do backlog (B41) |
+| **Grupos / espelhamento** | Lista única com dois botões por grupo: "Copiar daqui" / "Postar aqui"; filtro por tipo; marcar todos | "Espelhamento pausado · robô desconectado"; "Adicionar grupo de origem" / "de destino" em telas separadas; aviso "Canais bloqueados no Basic" | **Ele.** Um toque por grupo é mais rápido que dois fluxos. Nosso aviso de canais aparece antes de haver qualquer grupo |
+| **Enviar oferta** | Link → modelo (5 prontos) → texto extra → grupos (buscar, marcar todos) → Enviar; aba "Enviar aviso" | "Criar oferta": cola link → Colar/Gerar; checkbox cupons; aviso amarelo "por enquanto o link não é convertido" quando não há credencial; "Enviar agora" em tela separada | **Ele.** Um formulário só, com destino escolhido na hora. Nosso aviso amarelo em conta sem credencial soa como defeito |
+| **Fila / envios** | "Fila de envio": lista com contagem regressiva, cancelar 1, limpar tudo, atualiza sozinha | "Envios": abas Histórico / Próximos envios; resumo Hoje/7/30 dias (enviados, bloqueados por repetição, bloqueados pela regra, falhas, taxa de entrega); busca; filtros por status; caixa laranja "Fila de envio travada? Limpar ofertas da fila" | **Nós no dado, ele na leitura.** Temos 30 dias e motivo de bloqueio; ele tem 24 h. Mas a caixa laranja com botão destrutivo aparece mesmo com fila vazia — item novo B42 |
+| **Histórico** | Últimas 24 h, 4 contadores (total, enviados, não enviados, esperando) | Ver linha acima (histórico completo) | **Nós.** |
+| **Robô no automático** | "Encontrar ofertas": toggle + palavras-chave + onde postar + "mais opções (foto, lojas, espera)"; "Ofertas da comunidade": 22 nichos, centenas de fontes | "Ofertas automáticas" (PRO, com cadeado e prévia) | **Ele no alcance, nós na qualidade.** Ele posta o que outros usuários recebem; nós buscamos na Shopee por tema e desconto |
+| **Ajustes** | 4 cards: espera entre mensagens (com "sem espera (perigoso)" ligado por padrão na conta teste), alternar lojas, horário do robô, como a mensagem sai (Status, link do grupo, texto no fim, modelo, "encaminhada de canal seu") + Indique e ganhe | Espalhado em 6 telas: Anti-banimento (PRO), Templates, Cupons, Credenciais, Testar conversão, Conta | **Ele na simplicidade, nós na proteção.** Nosso padrão de ritmo é seguro e por destino; o dele depende da cliente ligar |
+| **Templates** | 5 modelos prontos ("MODELO 1…5") com 6 variáveis; "Editar modelos" | 2 modelos prontos ("Automático clássico", "Simples"), 17 variáveis (`{rating}`, `{vendas}`, `{cupom}`, `{{gancho}}`, `{{cta}}`…), "Frases que variam sozinhas" (PRO) | **Nós.** Mais poder e já vem com modelo. Item B08 vira "modelos por nicho", não "criar modelos" |
+| **Vendas** | Não existe | Prévia bloqueada no Basic com números de exemplo e "Como funciona em 3 passos"; no PRO, comissão por dia e produto | **Nós.** A prévia bloqueada é o melhor upsell do painel; falta ela existir também fora do painel (site) |
+| **Plano** | Modal "Planos & Tipos de Anúncios" com barra "120 min restantes hoje", 3 colunas e "exemplos reais dos anúncios" | Card escuro da assinatura atual (renovação em 17 dias, último pagamento, "Desligar cobrança automática") + 2 colunas Basic/PRO | **Empate.** O dele é mais honesto sobre o que a cliente ganha ao pagar; o nosso é mais claro sobre a cobrança |
+| **Celular** | Barra inferior fixa (Início · Grupos · Enviar · Fila · Menu), tudo com um toque | Menu hambúrguer; card de passos ocupa a tela inteira antes de qualquer ação | **Ele.** Mantém B18 |
+| **Tema** | Escuro (padrão) e claro | Claro | Ele em percepção de "app"; nós em legibilidade |
+
+**Leitura geral da área logada.** Ele ganha em *quantidade de decisões por
+tela* (uma tela, um toggle, um botão verde) e em *repetição do próximo passo*.
+Nós ganhamos em *dado* (30 dias, motivo de bloqueio, vendas), em *proteção
+padrão* e em *poder do template*. O que dói mais para quem chega é a nossa
+tela de credenciais: cookie por extensão em 3 das 6 lojas, contra "cole o
+link" em 12 lojas do lado dele.
+
+**Correções ao backlog a partir desta rodada:** B16 (pareamento por número)
+já existe — sai. B19 (fila ao vivo) existe parcialmente como aba "Próximos
+envios" — vira "mostrar contagem regressiva e cancelar por item". B08 vira
+"modelos por nicho" (já existem 2 genéricos). Entram B41 e B42 abaixo.
+
 ---
 
 ## 3. Vantagem própria — o que temos e ele não tem
@@ -353,7 +384,7 @@ Alto/Médio/Baixo. Prioridade: P1 (0–30 d, quick win) · P2 (30–90 d) · P3 
 | B05 | Contadores de uso no hero (afiliadas ativas, ofertas enviadas 30 d, lojas, dias de sessão) | Vendas/Growth | Paridade de prova social; vêm de `diag-*` já existentes, atualizados por cron diário | Alto | Médio | P1 |
 | B06 | "Como usar esta tela" em toda tela do painel (2 linhas + próximo passo) | UI/UX | Reduz fricção sem redesenhar; copy vive em `logsCopy`-like | Médio | Baixo | P1 |
 | B07 | Card de diagnóstico fixo "Seu robô está funcionando?" em todas as telas (não só home) | UI/UX | Passo N de 3, tempo estimado, botão que resolve; usa `ActivationChecklist` + `receptionHealth` | Alto | Médio | P1 |
-| B08 | 5 templates prontos por padrão na conta nova (por nicho) | Produto | Cliente não começa do zero; reduz tempo até 1º envio | Médio | Baixo | P1 |
+| B08 | Modelos prontos por nicho (moda, casa, tech, bebê, beleza) além dos 2 genéricos | Produto | Já vêm "Automático clássico" e "Simples"; nicho aproxima do 1º envio | Médio | Baixo | P1 |
 | B09 | Guias por loja `/guia/<loja>-afiliados` (6 lojas): cadastro no programa + onde achar o ID + como colar no painel | SEO | Cluster que ele tem 9 páginas e nós 0; linkar dos Tier 1 e do painel | Alto | Médio | P1 |
 | B10 | Reivindicar Reclame Aqui + pedir inclusão no ranking do ofertasbot.com | GEO/IA | Duas menções de terceiro que a IA cita; ele já está no ranking | Alto | Baixo | P1 |
 | B11 | Pré-pago com desconto (3/6/12 meses) via Mercado Pago, além da recorrência | Vendas/Growth | Paridade de paz de espírito; caixa antecipado; testar LTV contra 17 % de renovação | Alto | Médio | P1 |
@@ -361,10 +392,10 @@ Alto/Médio/Baixo. Prioridade: P1 (0–30 d, quick win) · P2 (30–90 d) · P3 
 | B13 | Toggle "Colocar link do grupo no fim" e "Texto no fim de toda mensagem" na tela de espelhamento | Produto | Já existe via `{{grupoLink}}`; virar 2 checkboxes que ele tem | Baixo | Baixo | P1 |
 | B14 | FAQPage com as 10 perguntas que a IA faz em todas as páginas comerciais | GEO/IA | "tem Telegram?", "é grátis?", "mostra comissão?", "bloqueia?"; respostas curtas e datadas | Médio | Baixo | P1 |
 | B15 | Rodar as consultas de IA com os termos novos (grátis, Telegram, comissão, "proafiliados vale a pena") | GEO/IA | Placar base antes das mudanças | Médio | Baixo | P1 |
-| B16 | Pareamento por código de 8 dígitos (sem QR) | Produto | Quem configura pelo próprio celular não consegue ler QR; Baileys suporta `requestPairingCode` | Médio | Médio | P2 |
+| B16 | ~~Pareamento por código de 8 dígitos~~ — **já existe** ("Estou no celular — conectar por número", conferido em 27/09) | Produto | Sai do backlog; entra como argumento na página de conexão | — | — | feito |
 | B17 | Tema escuro no painel | UI/UX | Paridade de percepção "app"; tokens já existem no design system | Baixo | Médio | P2 |
 | B18 | Barra inferior no celular (Início · Espelhamento · Criar oferta · Envios · Menu) | UI/UX | Uso é majoritariamente celular; CTR celular já é menor | Médio | Médio | P2 |
-| B19 | Fila ao vivo (o que vai sair, contagem regressiva, cancelar 1, limpar) visível no Basic | UI/UX | Ele mostra em todos os planos; nossa "Filas" é configuração PRO | Médio | Médio | P2 |
+| B19 | Contagem regressiva e cancelar por item na aba "Próximos envios" | UI/UX | A aba já existe no Basic; falta o "sai em 4:32" e o cancelar 1 que ele tem | Médio | Baixo | P2 |
 | B20 | Cliques por destino e por oferta no painel (usar `/r/:hash`) | Produto | Primeiro passo do "qual grupo rende" (gap 1) | Alto | Médio | P2 |
 | B21 | Comissão Shopee por grupo de destino | Produto | Cruza `shopee-sales` com log de envio; ninguém tem | Alto | Alto | P2 |
 | B22 | Mensagens recorrentes (intervalo, diário, dias da semana) com imagem | Produto | Paridade com "Mensagens agendadas"; reaproveita `agendados` | Médio | Médio | P2 |
@@ -386,16 +417,18 @@ Alto/Médio/Baixo. Prioridade: P1 (0–30 d, quick win) · P2 (30–90 d) · P3 
 | B38 | Copiar Tudo (mídia, enquete, figurinha) por fonte | Produto | Paridade para quem clona canal | Baixo | Alto | P3 |
 | B39 | Camada gratuita permanente limitada (ex.: 1 grupo de destino, 10 ofertas/dia, sem anúncio) | Vendas/Growth | Porta de entrada que ele e mais 4 concorrentes têm; decidir com dado das renovações de outubro; custo de RAM por sessão grátis exige teto | Alto | Alto | P3 |
 | B40 | Status do WhatsApp como destino | Produto | Paridade; baixo volume de pedido | Baixo | Médio | P3 |
+| B41 | Credencial sem cookie para Amazon (StoreID) e Mercado Livre (etiqueta/link), como o concorrente | Produto | Maior fricção do onboarding hoje: 3 das 6 lojas pedem extensão Cookie Editor no Chrome (só computador). Verificar o que a conversão perde sem cookie (link curto oficial × link com tag) antes de decidir | Alto | Médio | P1 |
+| B42 | Esconder a caixa "Fila de envio travada? Limpar ofertas da fila" quando a fila está vazia ou andando | UI/UX | Botão destrutivo laranja aparece em conta nova sem nenhum envio; só mostrar com item preso há mais de N minutos | Médio | Baixo | P1 |
 
 ### Roadmap no tempo
 
 **Sprints iniciais (0–30 dias) — P1, alto impacto e baixo/médio esforço**
-B01, B02, B03, B04, B05, B06, B07, B08, B09, B10, B11, B12, B13, B14, B15.
+B01 (feito em 27/09), B02, B03, B04, B05, B06, B07, B08, B09, B10, B11, B12, B13, B14, B15, B41, B42.
 Ordem sugerida: B01 → B02 → B03/B04 (mesma PR de página de preços) → B10 → B14
 → B09 → B05 → B06/B07 → B08/B13 → B11 → B12 → B15 (mede o efeito).
 
 **Fase de escala (30–90 dias) — P2, retenção, autoridade e painel**
-Retenção/painel: B16, B18, B19, B20, B21, B22, B31, B32. Autoridade: B25,
+Retenção/painel: B18, B19, B20, B21, B22, B31, B32. Autoridade: B25,
 B26, B27, B28, B29, B30. Paridade barata: B17, B23, B24.
 
 **Fase de domínio (90+ dias) — P3, diferenciais e gaps**
@@ -407,8 +440,9 @@ permanente, só com dado de outubro), B36, B37, B38, B40.
 ## Anexos e evidências
 
 - Prints da área logada dele (home, 10 telas, modal de planos, tema claro,
-  celular) e do site (hero, preços) ficaram na sessão desta análise; não foram
-  commitados porque mostram o e-mail da conta de teste.
+  celular), do nosso painel (18 telas, conta Basic, 27/09) e dos dois sites
+  (hero, preços) ficaram na sessão desta análise; não foram commitados porque
+  mostram o e-mail das contas de teste.
 - Rotas de API que o painel dele chama (36), úteis para entender o modelo:
   `/api/dashboard/health` (diagnóstico com `issues[]` e `free_plan.minutes_remaining`),
   `/api/radar-ofertas/config`, `/api/global-feed/{config,sources}`,
