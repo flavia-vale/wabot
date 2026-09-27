@@ -227,51 +227,56 @@ export const COMPARISON_PAGES = {
   '/alternativas/proafiliados': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · ProAfiliados',
-    title: 'Alternativa ao ProAfiliados: sem tag, sem pagar R$ 50',
-    description: 'O ProAfiliados tem plano grátis, mas assina as mensagens com a tag dele. Compare preço por plano e o que cada um cobre. Verificado em 04/08/2026.',
+    title: 'Alternativa ao ProAfiliados: sem anúncio e sem limite de 2 h por dia',
+    description: 'O ProAfiliados tem plano grátis permanente, mas o robô fica ligado só 2 h por dia e assina as mensagens com a marca dele. Compare preço, anúncios, lojas e relatórios. Verificado em 27/09/2026.',
     competitorSlugs: ['proafiliados-com'],
     productPage: {
       href: '/bot-afiliados-whatsapp',
       label: 'Como funciona a operação para afiliados, do começo ao fim',
-      note: 'Nenhum plano insere marca nas suas mensagens.',
+      note: 'Nenhum plano insere marca ou anúncio nas suas mensagens.',
     },
-    tldr: 'Se você quer testar automação de afiliados sem pagar nada, o plano grátis do ProAfiliados é o mais generoso do mercado — e não é trial, é grátis para sempre. O custo é a tag deles nas suas mensagens.',
-    directAnswer: 'O ProAfiliados é um bot de afiliados para WhatsApp e Telegram com plano gratuito permanente (grupos ilimitados, monitoramento 24/7 e 5 plataformas), cobrando R$ 50/mês no Premium para remover a tag "proafiliados" das mensagens e R$ 100/mês no Premium Plus para tirar os anúncios do sistema. O pagamento é via PIX, sem cartão. A alternativa mais próxima é o Espelha Grupos, que não insere tag nem anúncio em nenhum plano, mas não tem camada gratuita permanente — o teste grátis é de 7 dias.',
+    tldr: 'Se você quer testar automação de afiliados sem pagar nada e sem prazo, o plano grátis do ProAfiliados é o mais generoso do mercado — mas o robô só fica ligado 2 horas por dia, cada mensagem sai com a marca dele e a cada 30 envios entra um post de propaganda dele no seu grupo. O Espelha Grupos não tem plano grátis permanente: são 7 dias de teste e depois é pago, sem marca e sem anúncio de ninguém.',
+    directAnswer: 'O ProAfiliados é um bot de afiliados para WhatsApp e Telegram com plano gratuito permanente (todas as funções, grupos sem limite, 12 integrações de loja), limitado a 2 horas de robô ligado por dia, com uma linha de crédito no fim de cada mensagem e um post de divulgação dele a cada 30 envios por grupo. O Premium (R$ 50/mês) libera 24 h e tira a linha de crédito, mas mantém o post a cada 30 envios; só o Premium Plus (R$ 100/mês) é sem anúncio. O pagamento é por Pix pré-pago, de 1 a 12 meses, sem reembolso publicado. A alternativa mais próxima é o Espelha Grupos: 7 dias grátis com tudo do Pro, depois R$ 39 (Basic) ou R$ 69 (Pro) por 30 dias, sem marca nem anúncio em nenhum plano, com histórico completo de envios e painel de vendas e comissão da Shopee — mas só WhatsApp e 6 lojas.',
     // Formato de objeto liga o comparador interativo por critério (ver
-    // `isInteractiveComparison` em ComparisonPage). Mesmos fatos/preços do
-    // texto anterior, só separados em coluna própria por opção.
+    // `isInteractiveComparison` em ComparisonPage). Fatos do concorrente
+    // conferidos em 27/09/2026 nas páginas /precos, /faq e /comparativo dele e
+    // no modal de planos do painel (conta de teste). Antes disso (04/08) a
+    // página dizia "grátis 24/7, 5 plataformas, tag": o modelo mudou.
     rows: [
-      { key: 'plano-gratis', label: 'Plano grátis', produto: 'Teste de 7 dias com o Pro completo, depois é pago.', concorrente: 'ProAfiliados: grátis para sempre, com grupos ilimitados, 5 plataformas e monitoramento 24/7.', reading: 'Se o seu critério é não pagar nada nunca, o ProAfiliados ganha sem discussão. Não é trial disfarçado.' },
-      { key: 'custo-gratis', label: 'O que o grátis custa', produto: 'Não insere tag nem anúncio em nenhum plano, inclusive no teste.', concorrente: 'ProAfiliados: as mensagens saem com a tag "proafiliados" e o sistema insere anúncios próprios.', reading: 'A tag aparece para os seus membros. Se o grupo é sua marca, isso pesa; se você está validando, não pesa nada.' },
-      { key: 'preco-tag', label: 'Preço para tirar a tag', produto: 'R$ 39/30 dias no Basic, R$ 69 no Pro.', concorrente: 'ProAfiliados: R$ 50/mês (Premium).', reading: 'Comparar Premium (R$50) com Basic (R$39) só vale se os recursos que você usa estiverem no Basic.' },
-      { key: 'preco-anuncios', label: 'Preço para tirar os anúncios', produto: 'Não se aplica — não há anúncio do sistema em nenhum plano.', concorrente: 'ProAfiliados: R$ 100/mês (Premium Plus).', reading: 'É o ponto onde a comparação de preço vira outra: R$ 100 contra R$ 69.' },
-      { key: 'pagamento', label: 'Pagamento', produto: 'Cartão e PIX via Mercado Pago.', concorrente: 'ProAfiliados: PIX, sem cartão de crédito.', reading: 'PIX sem cartão é vantagem real para quem não quer recorrência no cartão.' },
-      { key: 'telegram', label: 'Telegram', produto: 'Só WhatsApp (grupos, canais e comunidades).', concorrente: 'ProAfiliados: WhatsApp e Telegram.', reading: 'Se parte da sua audiência está no Telegram, o Espelha Grupos não atende.' },
+      { key: 'plano-gratis', label: 'Plano grátis', produto: 'Teste de 7 dias com o Pro completo, depois é pago.', concorrente: 'ProAfiliados: grátis para sempre, todas as funções e grupos sem limite — mas o robô fica ligado no máximo 2 horas por dia.', reading: 'Se o seu critério é não pagar nunca, o ProAfiliados ganha. Se o critério é o robô trabalhar o dia inteiro, o grátis dele não serve: 2 h/dia.' },
+      { key: 'custo-gratis', label: 'O que o grátis custa', produto: 'Não insere marca nem anúncio em nenhum plano, inclusive no teste.', concorrente: 'ProAfiliados: toda mensagem termina com "esta oferta foi buscada automaticamente pela ferramenta proafiliados.com" e a cada 30 envios entra um post de propaganda dele, com imagem, no seu grupo.', reading: 'A linha e o post aparecem para os seus membros. Se o grupo é a sua marca, isso pesa; se você está só validando, não pesa nada.' },
+      { key: 'preco-tag', label: 'Preço para tirar a marca das mensagens', produto: 'R$ 39/30 dias no Basic, R$ 69 no Pro.', concorrente: 'ProAfiliados: R$ 50/mês (Premium) — tira a linha de crédito e libera 24 h, mas o post a cada 30 envios continua.', reading: 'Comparar Premium (R$ 50) com Basic (R$ 39) só vale se os recursos que você usa estiverem no Basic.' },
+      { key: 'preco-anuncios', label: 'Preço para tirar os anúncios', produto: 'Não se aplica — não há anúncio do sistema em nenhum plano.', concorrente: 'ProAfiliados: R$ 100/mês (Premium Plus).', reading: 'É o ponto onde a comparação de preço vira outra: R$ 100 contra R$ 69 para ter o grupo só com a sua marca.' },
+      { key: 'pagamento', label: 'Pagamento e reembolso', produto: 'Cartão ou Pix via Mercado Pago, cobrança automática opcional, reembolso em até 7 dias.', concorrente: 'ProAfiliados: Pix pré-pago de 1 a 12 meses, com desconto nos planos longos, sem cobrança automática e sem política de reembolso publicada.', reading: 'Pix sem cartão é vantagem real para quem não quer recorrência. Reembolso publicado é vantagem de quem quer poder voltar atrás.' },
+      { key: 'lojas', label: 'Lojas com conversão de link', produto: 'Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress (6 lojas), inclusive link de cupom.', concorrente: 'ProAfiliados: 12 integrações — as mesmas 6 mais TikTok Shop, TerabyteShop, Pró Spin e as redes Awin, Lomadee e Rakuten.', reading: 'Se você divulga Kabum, Nike ou TikTok Shop, o ProAfiliados converte e o Espelha Grupos não.' },
+      { key: 'telegram', label: 'Telegram', produto: 'Só WhatsApp (grupos, canais e comunidades).', concorrente: 'ProAfiliados: WhatsApp e Telegram, inclusive copiar de um e postar no outro.', reading: 'Se parte da sua audiência está no Telegram, o Espelha Grupos não atende.' },
+      { key: 'relatorios', label: 'Histórico e vendas', produto: 'Histórico completo de envios, com o que foi bloqueado por repetição, e painel de vendas e comissão da Shopee (Pro).', concorrente: 'ProAfiliados: histórico só das últimas 24 horas; não mostra vendas nem comissão.', reading: 'Quem quer saber o que vendeu, e não só o que saiu, não encontra isso lá.' },
     ],
-    criteria: ['Se você aceita tag e anúncio de terceiro nas suas mensagens', 'Se opera Telegram além de WhatsApp', 'Se precisa converter cupom além de link de produto', 'Quanto tempo você quer validar antes de pagar', 'Se prefere pagar por PIX em vez de cartão'],
-    botinhoDifferentials: ['Nenhuma tag ou anúncio de terceiro nas mensagens, em nenhum plano', 'Conversão de link de cupom, não só de produto', 'Canais e Comunidades do WhatsApp', 'Controle de cadência por destino e limites por hora/dia', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição'],
+    criteria: ['Se o robô precisa ficar ligado mais de 2 horas por dia sem pagar', 'Se você aceita a marca e o anúncio de terceiro nas suas mensagens', 'Se opera Telegram além de WhatsApp', 'Se precisa de loja fora das 6 (TikTok Shop, Kabum, Nike, Terabyte)', 'Se quer saber o que vendeu, não só o que foi enviado'],
+    botinhoDifferentials: ['Nenhuma marca ou anúncio de terceiro nas mensagens, em nenhum plano', 'Histórico completo de envios, incluindo o que foi bloqueado por repetição', 'Painel de vendas e comissão da Shopee, por dia e por produto', 'Conversão de link de cupom, não só de produto', 'Marca d’água com o seu nome na foto da oferta', 'Reembolso em até 7 dias e suporte humano no WhatsApp'],
     richDifferentials: true,
     bestFit: [
-      'Escolha o ProAfiliados se o orçamento hoje é zero e você quer validar a ideia sem pagar nada — o plano grátis é permanente e cobre grupos ilimitados.',
-      'Escolha o ProAfiliados também se opera Telegram junto com o WhatsApp, ou se prefere pagar por PIX sem cartão.',
-      'Escolha o Espelha Grupos se o grupo é a sua marca e você não quer tag nem anúncio de terceiro nas mensagens, ou se divulga campanha de cupom além de produto avulso.',
+      'Escolha o ProAfiliados se o orçamento hoje é zero e 2 horas de robô por dia bastam para validar a ideia — o plano grátis é permanente e cobre grupos ilimitados e 12 lojas.',
+      'Escolha o ProAfiliados também se opera Telegram junto com o WhatsApp, divulga lojas fora das 6 ou prefere pagar por Pix sem recorrência.',
+      'Escolha o Espelha Grupos se o grupo é a sua marca e você não quer linha de crédito nem post de terceiro nas mensagens, ou se precisa ver o que vendeu e o histórico além de 24 horas.',
     ],
     notIdealFit: [
-      'O ProAfiliados não é ideal para quem trata o grupo como marca própria: no plano grátis as mensagens carregam a tag deles, e os anúncios do sistema só somem no plano de R$ 100/mês.',
-      'O Espelha Grupos não é ideal para quem quer uma camada gratuita permanente — o teste grátis são 7 dias, depois é pago.',
-      'O Espelha Grupos também não atende quem publica no Telegram: o produto é só WhatsApp.',
+      'O ProAfiliados não é ideal para quem trata o grupo como marca própria: no grátis toda mensagem carrega a marca dele, e o post de propaganda só some no plano de R$ 100/mês.',
+      'O ProAfiliados também não é ideal para quem precisa do robô o dia inteiro sem pagar: o grátis desliga depois de 2 horas por dia.',
+      'O Espelha Grupos não é ideal para quem quer uma camada gratuita permanente (o teste são 7 dias), para quem publica no Telegram ou para quem divulga loja fora das 6.',
     ],
     migrationPath: [
       'Use o plano grátis do ProAfiliados primeiro. Ele é permanente e serve para responder a pergunta mais importante: automação resolve o seu problema?',
-      'Se resolver, decida o que incomoda mais — a tag nas mensagens ou o custo mensal. Isso define qual ferramenta faz sentido.',
+      'Se resolver, veja o que incomoda mais — o limite de 2 horas, a marca dele nas mensagens, o post a cada 30 envios ou não saber o que vendeu. Cada um leva a uma ferramenta.',
       'Rode uma semana em paralelo antes de cancelar qualquer coisa, comparando a qualidade do link convertido e do preview no celular.',
     ],
     faq: [
-      { q: 'O ProAfiliados é grátis mesmo?', a: 'Sim, e não é trial: a página de preços consultada em 04/08/2026 descreve o plano Grátis como "R$ 0 para sempre", com grupos ilimitados, monitoramento 24/7 e 5 plataformas. A contrapartida é que as mensagens saem com a tag "proafiliados" e o sistema insere anúncios próprios.' },
-      { q: 'Quanto custa o ProAfiliados?', a: 'Conforme a página pública consultada em 04/08/2026: Grátis (R$ 0 para sempre), Premium a R$ 50/mês e Premium Plus a R$ 100/mês. O pagamento é via PIX, sem cartão de crédito, e o cancelamento pode ser feito a qualquer momento. Confirme na página oficial antes de decidir — preços mudam.' },
-      { q: 'Em que o ProAfiliados é melhor que o Espelha Grupos?', a: 'Em três pontos concretos. O plano gratuito permanente não tem equivalente aqui — o nosso teste grátis dura 7 dias. O ProAfiliados cobre Telegram, e o Espelha Grupos é só WhatsApp. E o pagamento por PIX sem cartão é mais simples para quem não quer recorrência no cartão de crédito.' },
-      { q: 'O que é a "tag proafiliados" nas mensagens?', a: 'Segundo a própria página de preços, o plano grátis inclui essa tag nas mensagens enviadas, e removê-la é justamente o que o plano Premium (R$ 50/mês) oferece. Na prática, os membros do seu grupo veem a marca da ferramenta junto com a sua oferta.' },
-      { q: 'Vale a pena pagar R$ 100 no Premium Plus?', a: 'Depende de quanto os anúncios do sistema incomodam. Esse é o único plano da linha que os remove por completo, e a página o descreve como voltado para times e agências. Se você opera sozinha e a tag já saiu no Premium, o salto para R$ 100 precisa se justificar por outra coisa.' },
+      { q: 'O ProAfiliados é grátis mesmo?', a: 'Sim, e não é trial: a página de preços consultada em 27/09/2026 descreve o plano Grátis como "R$ 0 para sempre", sem cartão, com todas as funções e grupos sem limite. A contrapartida: o robô fica ligado no máximo 2 horas por dia, toda mensagem termina com a linha "esta oferta foi buscada automaticamente pela ferramenta proafiliados.com" e a cada 30 envios em cada grupo sai um post de divulgação dele, com imagem.' },
+      { q: 'Quanto custa o ProAfiliados?', a: 'Conforme a página pública consultada em 27/09/2026: Grátis (R$ 0 para sempre, 2 h/dia), Premium a R$ 50/mês e Premium Plus a R$ 100/mês. O pagamento é por Pix pré-pago, de 1 a 12 meses, com desconto nos planos longos e sem cobrança automática; ao não renovar, a conta volta ao grátis. Cada número extra precisa da própria assinatura. Confirme na página oficial antes de decidir — preços mudam.' },
+      { q: 'Em que o ProAfiliados é melhor que o Espelha Grupos?', a: 'Em quatro pontos concretos. O plano gratuito permanente não tem equivalente aqui — o nosso teste grátis dura 7 dias. O ProAfiliados cobre Telegram, e o Espelha Grupos é só WhatsApp. Ele converte 12 integrações de loja, contra 6 aqui. E o pagamento por Pix pré-pago, sem recorrência, é mais simples para quem não quer cobrança no cartão.' },
+      { q: 'O que é a "linha de crédito" e o "post do sistema" nas mensagens?', a: 'São os dois anúncios do ProAfiliados, segundo o FAQ dele. No plano grátis, toda mensagem termina com a frase "esta oferta foi buscada automaticamente pela ferramenta proafiliados.com". Além disso, no grátis e no Premium, sai um post de divulgação dele, com imagem, a cada 30 envios em cada grupo. Só o Premium Plus (R$ 100/mês) não tem nenhum dos dois. O Espelha Grupos não insere marca nem anúncio em nenhum plano.' },
+      { q: 'O ProAfiliados mostra quanto eu vendi?', a: 'Não. Em 27/09/2026 o painel dele guardava só o histórico das últimas 24 horas e não tinha relatório de vendas ou comissão. O Espelha Grupos mantém o histórico completo de envios em todos os planos e, no Pro, mostra vendas e comissão da Shopee por dia e por produto.' },
+      { q: 'Vale a pena pagar R$ 100 no Premium Plus?', a: 'Depende de quanto o post de propaganda incomoda. Ele é o único plano da linha que tira os dois anúncios. Se você opera sozinha e a linha de crédito já saiu no Premium, o salto de R$ 50 para R$ 100 precisa se justificar pelo post a cada 30 envios — e aí vale comparar com o Pro do Espelha Grupos, a R$ 69, que nunca teve anúncio.' },
     ],
   },
   '/alternativas/shozap': {
