@@ -4,6 +4,42 @@
 > Leia este arquivo ANTES de mexer no assunto. Referências a "AGENTS.md" em
 > comentários de código/testes apontam para as seções abaixo.
 
+## "Aguardando mensagem" nos membros do grupo de destino: robô não atendia pedido de reenvio (RCA 2026-09-27)
+
+**Sintoma:** membros do grupo de destino veem as ofertas espelhadas como
+"Aguardando mensagem. Essa ação pode levar alguns instantes" para sempre.
+Mensagens mandadas pelo celular da cliente no mesmo grupo abrem normal.
+
+**Causa (lida no código, Baileys 6.7.23):** quando o aparelho de um membro não
+consegue decifrar uma mensagem (aparelho/WhatsApp novo, entrou há pouco no
+grupo, WhatsApp Web), ele manda ao remetente um retry receipt ("reenvia").
+O Baileys atende em `sendMessagesAgain` (`Socket/messages-recv.js:466`)
+chamando `getMessage(key)`. Não passávamos `getMessage` ao `makeWASocket`, e
+o default (`Defaults/index.js:57`) devolve `undefined`. O pedido era descartado
+com `recv retry request, but message not available`, em **debug**, invisível
+no nosso log (nível info). O celular da cliente guarda o que envia, por isso as
+mensagens dela abriam.
+
+**Conserto:** `src/core/sentMessageStore.js` guarda em **disco** o protobuf de
+cada mensagem enviada (`BOT_LOG_DIR/sent-messages/<userId>/<msgId>.bin`, TTL
+24 h, teto 3000 arquivos por sessão). Fica fora do `auth_info` porque ele entra
+no backup diário. Gravação: `messages.upsert` type `append` fromMe (caminho
+`sendMessage`) + embrulho de `sock.relayMessage` (caminho `relay` de
+`src/delivery/whatsapp/send.js`, que não emite evento). RAM: só o contador.
+Falha de disco nunca quebra o envio.
+
+**Medição (info no `bot.log`):**
+- `retry-receipt: reenviando mensagem pedida pelo destinatário`: pedido atendido.
+- `retry-receipt: mensagem pedida não está guardada`: id fora do TTL, ou
+  mandado antes do deploy.
+
+**Não regredir:**
+- `test/sent-message-store.test.js` falha se `getMessage` sair do
+  `makeWASocket`, se a gravação dos dois caminhos sumir ou se o armazenamento
+  sair do escopo de módulo.
+- Mensagens presas de antes do deploy não se recuperam.
+- Vale só após `pm2 restart bot-supervisor` (código do worker).
+
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
 Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel
