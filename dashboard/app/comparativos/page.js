@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { COMPARISON_PAGES } from '@/app/_comparisonContent'
 import { getSiteUrl } from '@/lib/site-url'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/comparativos'
 const title = 'Comparativos e alternativas para operação de afiliados no WhatsApp'
@@ -50,6 +51,7 @@ export default function Page() {
           </ul>
         </section>
       </main>
+   <EditorialFreshness pathname="/comparativos" />
     </PublicShell>
   )
 }

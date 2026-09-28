@@ -3,6 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PartnerLeadForm } from '@/components/marketing/PartnerLeadForm'
 import { getSiteUrl } from '@/lib/site-url'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/parcerias'
 const siteUrl = getSiteUrl()
@@ -179,6 +180,7 @@ export default function Page() {
           </ul>
         </section>
       </main>
+   <EditorialFreshness pathname="/parcerias" />
     </PublicShell>
   )
 }

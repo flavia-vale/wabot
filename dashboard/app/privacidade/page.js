@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PublicPage } from '@/components/PublicShell'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 export const metadata = {
   title: 'Política de Privacidade',
@@ -37,6 +38,7 @@ export default function PrivacyPage() {
           Para dúvidas, solicitações de acesso, correção ou exclusão de dados, fale com o <Link href="/suporte" className="font-semibold text-green-700 hover:underline">suporte do Espelha Grupos</Link>.
         </p>
       </div>
+   <EditorialFreshness pathname="/privacidade" />
     </PublicPage>
   )
 }

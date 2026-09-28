@@ -4,6 +4,7 @@ import Footer from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const pagePath = '/bot-canais-whatsapp'
 const siteUrl = getSiteUrl()
@@ -479,6 +480,7 @@ export default function BotCanaisWhatsAppPage() {
       </main>
 
       <Footer />
+   <EditorialFreshness pathname="/bot-canais-whatsapp" />
     </div>
   )
 }

@@ -14,6 +14,7 @@ import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 import { getLandingPlans } from '@/lib/plans-server'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
 import { getEditorialDates } from '@/lib/editorial-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template
@@ -97,6 +98,7 @@ export default async function LandingPage({ searchParams = {} }) {
       <FAQ />
       <FinalCTA />
       <Footer />
+   <EditorialFreshness pathname="/" />
     </div>
   )
 }

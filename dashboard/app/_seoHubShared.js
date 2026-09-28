@@ -235,6 +235,7 @@ export function SeoHubPage({ hubSlug }) {
   const siteUrl = getSiteUrl()
 
   if (!route || !content) return null
+  const dates = getEditorialDates(route.path)
 
   // Fonte única (FR-001): usa o título do módulo quando ele existir, senão
   // cai para o do registry (hubs que ainda não migraram título/descrição pra cá).
@@ -264,6 +265,8 @@ export function SeoHubPage({ hubSlug }) {
     name: title,
     description,
     url: `${siteUrl}${route.path}`,
+    datePublished: dates.publishedAt,
+    dateModified: dates.updatedAt,
     mainEntity: {
       '@type': 'ItemList',
       itemListElement: spokes.map((spoke, index) => ({
@@ -339,7 +342,7 @@ export function SeoHubPage({ hubSlug }) {
             title={title}
             body={content.intro}
             pills={content.checklist}
-            updatedAt={getEditorialDates(`/${hubSlug}`).updatedAt}
+            updatedAt={dates.updatedAt}
           />
         </div>
       </section>

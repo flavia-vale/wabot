@@ -15,6 +15,7 @@ import {
   SUPPORT_RESPONSE_SLA,
   SUPPORT_WHATSAPP_URL,
 } from '@/lib/marketing-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 /* PÁGINA DE PREÇO (auditoria de funil 2026-08-05, §1.4).
  *
@@ -254,6 +255,7 @@ export default async function PrecosPage() {
 
       <FinalCTA />
       <Footer />
+   <EditorialFreshness pathname="/precos" />
     </div>
   )
 }

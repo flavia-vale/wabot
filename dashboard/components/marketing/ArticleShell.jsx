@@ -33,7 +33,7 @@ export function ArticleShell({ eyebrow, title, description, children, origin, pu
               ) : (
                 author
               )}{' '}
-              · Publicado em {formatDatePtBr(publishedAt || updatedAt)} · Atualizado em {formatDatePtBr(updatedAt || publishedAt)}
+              · Publicado em {formatDatePtBr(publishedAt || updatedAt)} · Revisado em {formatDatePtBr(updatedAt || publishedAt)}
             </p>
           )}
           {heroImage ? (
