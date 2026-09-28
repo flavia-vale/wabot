@@ -17,6 +17,7 @@ import { buildOgImageDescriptor } from '@/lib/seo-og'
 import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
 import { getCompetitorBySlug } from '@/lib/competitors-data'
 import { formatDatePtBr } from '@/lib/editorial-content'
+import { VIDEO_ESPELHAMENTO, VIDEO_ESPELHAMENTO_URL, VIDEO_ESPELHAMENTO_EMBED_URL, VIDEO_ESPELHAMENTO_THUMB_URL } from '../../../src/tutorialVideo.js'
 
 const siteUrl = getSiteUrl()
 
@@ -620,6 +621,17 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Espelhamento · Passo a passo',
     origin: 'blog_como_espelhar_mensagens_entre_grupos_whatsapp',
     heroImage: { path: '/blog/hero/06-escalar.png', alt: 'Um robô central distribuindo ofertas para vários grupos e canais de destino ao mesmo tempo', width: 1080, height: 1080 },
+    // 28/09/2026 (plano GEO, C1): vídeo 1 do canal responde à MESMA pergunta
+    // e a descrição dele aponta para cá. Vídeo e página apontando um para o
+    // outro (VideoObject aqui) é o que o plano mede em "AIO embute vídeo nosso".
+    video: {
+      title: VIDEO_ESPELHAMENTO.titulo,
+      description: 'Na tela do painel: conectar o WhatsApp, escolher o grupo de origem e os seus destinos, e ver a oferta sair com o seu link de afiliada.',
+      uploadDate: VIDEO_ESPELHAMENTO.publicadoEm,
+      url: VIDEO_ESPELHAMENTO_URL,
+      embedUrl: VIDEO_ESPELHAMENTO_EMBED_URL,
+      thumbnailUrl: VIDEO_ESPELHAMENTO_THUMB_URL,
+    },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Espelhar mensagens entre grupos de WhatsApp é fazer a oferta que aparece num grupo de origem sair, sozinha, nos seus grupos e canais — com o link trocado pelo seu código de afiliada. Serve para quem divulga ofertas de Shopee, Mercado Livre, Amazon, Magalu, SHEIN ou AliExpress e hoje copia e cola oferta por oferta. Dá para fazer de quatro jeitos; com robô especializado custa a partir de R$ 39 por 30 dias e tem 7 dias de teste sem cartão.',
@@ -943,6 +955,42 @@ export function buildSectionSchemas(post, baseUrl) {
   return out
 }
 
+export function buildVideoSchema(video) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    name: video.title,
+    description: video.description,
+    thumbnailUrl: [video.thumbnailUrl],
+    uploadDate: video.uploadDate,
+    contentUrl: video.url,
+    embedUrl: video.embedUrl,
+  }
+}
+
+function ArticleVideo({ video }) {
+  return (
+    <section>
+      <h2>Veja em vídeo</h2>
+      <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-2xl ring-1 ring-emerald-100">
+        <iframe
+          src={video.embedUrl}
+          title={video.title}
+          className="absolute inset-0 h-full w-full border-0"
+          loading="lazy"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+      <p className="mt-3 text-sm text-gray-500">
+        {video.description}{' '}
+        <a href={video.url} target="_blank" rel="noopener noreferrer" className="font-bold text-emerald-700 underline underline-offset-4">Assistir no YouTube</a>
+      </p>
+    </section>
+  )
+}
+
 export function PreservationBlogPost({ postKey }) {
   const post = PRESERVATION_BLOG_POSTS[postKey]
   const dates = getEditorialDates(post.slug)
@@ -959,6 +1007,7 @@ export function PreservationBlogPost({ postKey }) {
   const schemas = [
     ...buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq, author: personAuthor, image: post.heroImage }),
     ...buildSectionSchemas(post, siteUrl),
+    ...(post.video ? [buildVideoSchema(post.video)] : []),
   ]
 
   return (
@@ -983,6 +1032,8 @@ export function PreservationBlogPost({ postKey }) {
           <h2>Resumo prático</h2>
           <p>{post.intro}</p>
         </section>
+
+        {post.video ? <ArticleVideo video={post.video} /> : null}
 
         {post.sections.map((section, sectionIndex) => (
           <Fragment key={section.h2}>

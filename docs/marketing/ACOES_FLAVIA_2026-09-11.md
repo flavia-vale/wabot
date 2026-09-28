@@ -25,7 +25,7 @@ para baixo; cada item diz o que decide.
 | 5 | dias 2–4 | **Levas de indexação 1 a 4** (lista em `DIAGNOSTICO_MAQUINA_DE_VENDAS_2026-09-27.md`, item 4): novas de 23–27/09 → R1 (falavam errado do produto) → páginas de confiança/preço → R2 restante | 10 por dia, de cima para baixo | 15 min/dia |
 | 6 | esta semana | **WhatsApp para os 63 que ativaram e sumiram** (SQL e mensagem no `DIAGNOSTICO_…`, item 2); anotar as respostas em 4 caixas: preço, função, medo de bloqueio, tempo/outro | 5 a 10 por dia; parar de mandar e-mail (zero respostas) | 20 min/dia |
 | 7 | esta semana | **Depoimentos reais** (3 a 5) com nome e permissão por escrito, sem reescrever; frases que prometem resultado ou "nunca banido" ficam de fora | me mande o texto exato + nome + autorização; eu publico em `/espelha-grupos-e-confiavel` e `/estudos-de-caso` | 1 h |
-| 8 | semana 1 | **Vídeo 1**: "Como espelhar mensagens entre grupos de WhatsApp (sem programar)" — tela do painel, 3 a 5 min; YouTube + TikTok + Instagram + LinkedIn (tela). Descrição = frase canônica da ficha + link da página `/blog/como-espelhar-mensagens-entre-grupos-whatsapp` | roteiro: QR → escolher origem → escolher destino → oferta saindo com o SEU link | 2 h |
+| 8 | ✅ 28/09 | **Vídeo 1** publicado: https://www.youtube.com/watch?v=nch0Lo3Zz1U (e o Short vertical). Embutido no post `/blog/como-espelhar-mensagens-entre-grupos-whatsapp` e na tela Espelhamento do painel — reindexar o post na **Leva R7** | roteiro: QR → escolher origem → escolher destino → oferta saindo com o SEU link | 2 h |
 | 9 | semanas 2–8 | **Vídeos 2 a 8**, um por semana, nesta ordem: "Bot para afiliados no WhatsApp: como funciona o Espelha Grupos (6 lojas, a partir de R$39)" · "Espelha Grupos é confiável? O que ele faz com o seu WhatsApp" (rosto; LinkedIn só tela) · "Robô que busca ofertas da Shopee sozinho" · "Ferramenta para divulgar ofertas em grupos: 6 opções comparadas em 2026" · "Como postar em vários grupos ao mesmo tempo sem spam" · "Quanto custa um bot de afiliados? Basic R$39, Pro R$69" · "Dá para usar pelo celular, sem computador?" | título = a pergunta, literal; nunca "anti-ban"; sempre "Espelha Grupos" na legenda | 2 h/semana |
 | 10 | semana 2 | **Guest-parágrafo** em superfrete.com/blog/grupos-vendas-whatsapp e remessaonline.com.br/blog/grupo-de-promocoes-no-whatsapp (seções "Potencialize seus grupos"/"Vale a pena automatizar?" sem ferramenta citada) | e-mail ao editor oferecendo um parágrafo com exemplo real de espelhamento com link convertido; texto-padrão de 62 palavras do plano de 18/09 | 1 h |
 | 11 | semanas 3–6 | **Criadores pequenos do YouTube** que ensinam "bot de achadinhos" (lista nominal em `PLANO_MAQUINA_DE_VENDAS_IA_2026-09-18.md`, item 8): teste estendido + programa de afiliadas (30% recorrente) + pedir "Espelha Grupos" no TÍTULO do vídeo | contato pela descrição/Instagram do canal | 2 h |
@@ -40,6 +40,7 @@ para baixo; cada item diz o que decide.
 
 | # | Quando | O quê | Tempo |
 |---|---|---|---|
+| 🔝 | **assim que a PR `feat/video-espelhar-blog-painel` chegar em `main`** | **Leva R7 (28/09, vídeo)** (abaixo): 1 página — `/blog/como-espelhar-mensagens-entre-grupos-whatsapp` ganhou o vídeo embutido e a marcação VideoObject. Substitui o pedido dela na R6 | 2 min |
 | 🔝 | **assim que `develop` chegar em `main`** | **Reindexação das páginas corrigidas — Leva R1** (abaixo): 10 páginas que diziam coisa errada sobre o produto. Passa na frente de qualquer outra indexação | 15 min |
 | 🔝 | **junto com a R1, assim que a PR dos títulos chegar em `main`** | **Leva R5 (27/09)** (abaixo): 5 páginas com muita impressão e quase zero clique que ganharam título e descrição novos (Achadinho Pro, comissão de afiliado, quanto ganha afiliado Shopee, Mercado Livre e Amazon no WhatsApp). Inclui a maior consulta do site (`achadinho pro`, 4.005 impressões) | 10 min |
 | 🔝 | **junto com a R5, assim que a PR do lote 2 de títulos chegar em `main`** | **Leva R6 (27/09, lote 2)** (abaixo): 8 páginas — 6 que ganharam título e descrição novos (AchadinhosBot já está na R4; Shozap, Gigi Bot, FluxoPromo, como ser afiliado Shopee, divulgar Amazon, melhor horário) e as 2 páginas de loja que ganharam o link "guia completo" (Shopee e Mercado Livre no WhatsApp) | 10 min |
@@ -191,6 +192,19 @@ https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp      ⏳
 No Bing Webmaster Tools, enviar as mesmas 7 em "Enviar URLs" (o aviso
 automático do deploy também avisa, mas o envio manual acelera).
 
+**Leva R7 — vídeo 1 no post (28/09; só depois do deploy em `main`)**
+
+Conferir antes em produção: o post abre o vídeo logo depois do "Resumo
+prático" e o código da página tem `"@type":"VideoObject"`. Depois, no Search
+Console, "Testar URL publicada" → deve aparecer "Vídeos" entre os itens
+detectados.
+
+```
+https://espelhagrupos.com.br/blog/como-espelhar-mensagens-entre-grupos-whatsapp     ⏳
+```
+
+No Bing Webmaster Tools, inspecionar a mesma URL (ela já está no item E1 do plano).
+
 **Leva R6 — GEO de 27/09 (junto com a R4; só depois do deploy em `main`)**
 
 Conferir antes em produção: a ficha técnica da home e de `/precos` tem as
@@ -201,14 +215,15 @@ Shopee sozinho"; `/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp`
 tem título "…6 opções" e `/blog/como-espelhar-mensagens-entre-grupos-whatsapp`
 tem título "…4 jeitos". `/`, `/precos` e `/espelha-grupos-e-confiavel` já
 estão na R1 e `/espelhar-grupos-de-ofertas-vale-a-pena` na R4 — não repetir.
+`/blog/como-espelhar-mensagens-entre-grupos-whatsapp` saiu daqui e foi para a
+**Leva R7** (ganhou o vídeo em 28/09): pedir uma vez só, depois daquela PR em `main`.
 
 ```
 https://espelhagrupos.com.br/quem-somos                                             ⏳
 https://espelhagrupos.com.br/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp ⏳
-https://espelhagrupos.com.br/blog/como-espelhar-mensagens-entre-grupos-whatsapp     ⏳
 ```
 
-No Bing Webmaster Tools, além das 3 acima, inspecionar `/llms.txt` e
+No Bing Webmaster Tools, além das 2 acima (e da R7), inspecionar `/llms.txt` e
 `/pricing.md` (o ChatGPT recupera via Bing; a ficha nova está neles).
 
 **Leva R6 — mudanças de 27/09 (PR `feat/geo-bot-afiliados-hub-3-modelos`, junto com a R4)**
