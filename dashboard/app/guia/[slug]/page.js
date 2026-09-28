@@ -66,6 +66,21 @@ export default async function StoreGuidePage({ params }) {
           </section>
 
           <section className="mt-10"><h2 className="text-2xl font-black text-gray-950">Perguntas rápidas</h2><div className="mt-4 grid gap-3">{faq.map((item) => <details key={item.q} className="rounded-2xl border border-emerald-100 p-5"><summary className="cursor-pointer font-black text-gray-950">{item.q}</summary><p className="mt-3 text-gray-700">{item.a}</p></details>)}</div></section>
+
+          {/* Links entre os guias: sem isto as 6 páginas nascem órfãs
+              (test/marketing-paginas-orfas.test.js exige 3+ links de entrada). */}
+          <nav className="mt-10" aria-label="Guias de outras lojas">
+            <h2 className="text-2xl font-black text-gray-950">Guias de outras lojas</h2>
+            <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+              {STORE_GUIDE_SLUGS.filter((other) => other !== slug).map((other) => (
+                <li key={other}>
+                  <Link href={`/guia/${other}`} className="block rounded-2xl border border-emerald-100 p-4 font-black text-emerald-800 no-underline hover:bg-emerald-50">
+                    {STORE_GUIDES[other].name} Afiliados: cadastro e ID →
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </article>
       </main>
     </PublicShell>
