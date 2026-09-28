@@ -4,6 +4,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { AFFILIATE_PLATFORMS } from '@/lib/painel/affiliatePlatforms'
 import { STORE_GUIDES, STORE_GUIDE_SLUGS } from '@/lib/store-guides'
 import { getSiteUrl } from '@/lib/site-url'
+import { formatDatePtBr, getEditorialDates } from '@/lib/editorial-content'
 
 export const dynamicParams = false
 export function generateStaticParams() { return STORE_GUIDE_SLUGS.map((slug) => ({ slug })) }
@@ -24,6 +25,8 @@ export default async function StoreGuidePage({ params }) {
   if (!guide) notFound()
   const platform = AFFILIATE_PLATFORMS.find((item) => item.id === guide.platformId)
   const pageUrl = `${getSiteUrl()}/guia/${slug}`
+  // Mesma data do sitemap (EDITORIAL_DATES): revisar o guia = mudar só lá.
+  const dates = getEditorialDates(`/guia/${slug}`)
   const faq = [
     { q: `Preciso pagar para entrar no programa ${guide.name}?`, a: 'O cadastro no programa de afiliados é feito diretamente na loja. Confira os termos atuais na página oficial antes de concluir.' },
     { q: 'Onde colo o identificador no Espelha Grupos?', a: 'Entre no painel, abra Minhas credenciais, escolha a loja e preencha somente os campos indicados. Depois, salve e use Testar conversão.' },
@@ -31,7 +34,7 @@ export default async function StoreGuidePage({ params }) {
   ]
   const schemas = [{
     '@context': 'https://schema.org', '@type': 'HowTo', name: `Como cadastrar ${guide.name} no Espelha Grupos`, url: pageUrl,
-    dateModified: '2026-09-28', step: guide.signup.map((text, index) => ({ '@type': 'HowToStep', position: index + 1, name: `Passo ${index + 1}`, text })),
+    datePublished: dates.publishedAt, dateModified: dates.updatedAt, step: guide.signup.map((text, index) => ({ '@type': 'HowToStep', position: index + 1, name: `Passo ${index + 1}`, text })),
   }, {
     '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map((item) => ({ '@type': 'Question', name: item.q, acceptedAnswer: { '@type': 'Answer', text: item.a } })),
   }]
@@ -41,7 +44,7 @@ export default async function StoreGuidePage({ params }) {
       {schemas.map((schema) => <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />)}
       <main className="mx-auto w-full max-w-5xl px-5 py-10 md:px-8 md:py-16">
         <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Guia por loja · revisado em 28/09/2026</p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Guia por loja · revisado em <time dateTime={dates.updatedAt}>{formatDatePtBr(dates.updatedAt)}</time></p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{guide.name} Afiliados: do cadastro ao primeiro link convertido</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">Três etapas: entrar no programa oficial, localizar a identificação correta e cadastrar no painel sem compartilhar seus segredos.</p>
 
