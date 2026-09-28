@@ -106,7 +106,7 @@ export default async function LandingPage({ searchParams = {} }) {
       <FAQ />
       <FinalCTA />
       <Footer />
-   <EditorialFreshness pathname="/" />
+   <EditorialFreshness pathname="/" showLabel={false} />
     </div>
   )
 }

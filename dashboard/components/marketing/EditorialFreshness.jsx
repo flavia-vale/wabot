@@ -13,8 +13,12 @@ const styles = {
   },
 }
 
-/** Selo e WebPage canônicos de todas as páginas editoriais públicas. */
-export function EditorialFreshness({ pathname }) {
+/**
+ * Selo e WebPage canônicos de todas as páginas editoriais públicas.
+ * `showLabel={false}`: a página já mostra "Revisado em" em outro lugar (a home,
+ * no card "O que é") — só o JSON-LD sai, para a data não aparecer duas vezes.
+ */
+export function EditorialFreshness({ pathname, showLabel = true }) {
   const dates = EDITORIAL_DATES[pathname]
 
   if (!dates) return null
@@ -32,9 +36,11 @@ export function EditorialFreshness({ pathname }) {
 
   return (
     <>
-      <aside aria-label="Data da revisão editorial" style={styles.wrap}>
-        Revisado em <time dateTime={dates.updatedAt}>{formatDatePtBr(dates.updatedAt)}</time>
-      </aside>
+      {showLabel && (
+        <aside aria-label="Data da revisão editorial" style={styles.wrap}>
+          Revisado em <time dateTime={dates.updatedAt}>{formatDatePtBr(dates.updatedAt)}</time>
+        </aside>
+      )}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
     </>
   )
