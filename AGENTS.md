@@ -213,6 +213,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Fila não envia / envio atrasado / fila parada | `processSendJob` em `src/bot-worker.js`, `src/core/queueExpiry.js` | `diag-fila-grupo.mjs`, `diag-fila-parada.mjs` | envio-e-filas |
 | Ofertas automáticas: só acessório, não envia | `src/offerAutomation/dispatcher.js`, `src/offerAutomation/searchListType.js` | `diag-busca-shopee.mjs`, `diag-offer-review.mjs` | ofertas-automaticas-e-criar-oferta |
 | Membro do grupo vê oferta como "Aguardando mensagem" | `src/core/sentMessageStore.js`, `getMessage` no `makeWASocket` de `src/bot-worker.js` | `grep -c "retry-receipt:" bot.log` | whatsapp-sessao |
+| Membro do grupo de destino vê "Aguardando mensagem" nas ofertas do robô | `patches/@whiskeysockets+baileys+6.7.23.patch`, `src/core/sentMessageStore.js` | `diag-aguardando-mensagem.mjs <email> [grupo] --desde=ISO` | whatsapp-sessao |
 | WhatsApp caindo / "conectado" sem receber / não conecta | `src/core/reconnectPolicy.js`, `src/core/receptionHealth.js`, `src/core/waVersion.js` | `diag-nao-conecta.mjs`, `diag-frota-cega.mjs` | whatsapp-sessao |
 | "Servidor no limite de robôs" / sem vaga | `src/domain/session/startRefusal.js`, `src/supervisor/index.js` | `diag-vagas-robos.mjs`, `diag-clientes-sem-vaga.mjs` | memoria-e-capacidade |
 | RAM/swap subindo | `src/ops/capacity/policy.js` | `diag-memoria-crescimento.mjs`, `diag-memoria-nativa.mjs` | memoria-e-capacidade |

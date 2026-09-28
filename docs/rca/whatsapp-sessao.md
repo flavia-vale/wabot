@@ -89,6 +89,52 @@ têm que cair para perto de 0.
 - em conversa individual a regra original fica;
 - o teste roda a criptografia real para aparelho vinculado e para celular principal.
 
+### Parte 4 (RCA 2026-09-28, 13:25 BRT): retry no log "resolvido", cliente segue vendo "Aguardando mensagem"
+
+**Dado (prod, desde o restart 15:49:20Z com as partes 1–3):** 128 pedidos
+(`sendToAll:false` 94 / `true` 34), 53 atendidos na 1ª, 4 pediram de novo,
+53 `não guardada`, 0 erros, 8 "desistiu". Clientes `queridoachadoparceiro@gmail.com`
+("OFERTAS DO DIA", temporárias 7 dias, só admins) e `+5547991314690`
+("OFERTANDO PROMO DO DIA") relatam que TODAS as mensagens do robô chegam
+presas; as do celular abrem.
+
+**Hipótese 1 (sender key nomeado com PN na 6.7.23 × LID na 7.x) — REFUTADA
+com criptografia real** (`test/baileys-sender-key-identity.test.js`): o nome do
+sender key é só o rótulo do arquivo local `sender-key-<grupo>::<user>::<device>`.
+A SKDM que vai no fio leva id, iteração e chaves — nenhum endereço; o membro
+guarda a chave sob o `participant` que o SERVIDOR carimba. Uma SKDM criada sob
+o PN abre sob o LID. Portar `groupSenderIdentity = meLid` da 7.x **não muda nada
+para o membro** e cria uma chave NOVA que ninguém tem (o teste mostra o membro
+preso na hora). Não fazer.
+
+**O que o mesmo teste prova (mecanismo que deixa TODO MUNDO preso de uma vez):**
+se o arquivo `sender-key-…` do grupo some ou troca de `senderKeyId` enquanto o
+`sender-key-memory-<grupo>.json` segue dizendo que os aparelhos "já têm a
+chave", o envio normal sai com chave que ninguém recebeu e sem SKDM. Só o
+reenvio direto (parte 2) recupera, um aparelho por vez. É a única hipótese que
+explica "todas as mensagens, para todos" sem depender de LID.
+
+**Conserto pequeno que entrou (lido no código, 6.7.23 × 7.x):** no reenvio de
+grupo, `isMe` comparava o `participant` (`@lid` em grupo LID) com o PN do robô;
+o celular da PRÓPRIA conta nunca batia e recebia o reenvio sem
+`deviceSentMessage`. Agora compara com `creds.me.lid` quando o pedido vem em
+LID (patch + teste).
+
+**O que ainda NÃO tem dado (não corrigir por suposição):**
+- se as mensagens presas que a cliente vê são de ANTES do restart (fora do TTL
+  de 24 h e do teto de 5 pedidos do aparelho — não se recuperam) ou NOVAS;
+- se os aparelhos das clientes estão sequer pedindo reenvio (o log só vê pedido
+  que chega; 0 pedido + envios = falha primária invisível ao retry);
+- se o reenvio atendido abre de fato no aparelho (só um celular de teste no
+  grupo responde).
+
+**Diagnóstico pronto (read-only):** `scripts/diag-aguardando-mensagem.mjs
+<email> [jid|nome] --desde=2026-09-28T15:49:20Z` — por grupo de destino: estado
+do `sender-key` (estados/keyId/iteração/mtime) e do `sender-key-memory`
+(quantos aparelhos, lid × pn), envios × pedidos (membros distintos, count,
+`<keys>`, repetidos, não guardada, erro) e uma linha de leitura. Passo
+seguinte obrigatório: grupo de teste com um celular real como membro.
+
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
 Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel
