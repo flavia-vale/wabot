@@ -14,6 +14,7 @@ import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 import { getLandingPlans } from '@/lib/plans-server'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
 import { getEditorialDates } from '@/lib/editorial-content'
+import { getSiteUrl } from '@/lib/site-url'
 
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template
@@ -59,7 +60,19 @@ function ProductDefinition() {
 }
 
 function buildHomeJsonLd() {
+  const dates = getEditorialDates('/')
+  const siteUrl = getSiteUrl()
   return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      '@id': `${siteUrl}/#webpage`,
+      url: siteUrl,
+      name: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp',
+      datePublished: dates.publishedAt,
+      dateModified: dates.updatedAt,
+      isPartOf: { '@id': `${siteUrl}#website` },
+    },
     {
       '@context': 'https://schema.org',
       '@type': 'FAQPage',

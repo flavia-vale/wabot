@@ -179,7 +179,7 @@ publicada no `llms.txt`.
 ## Datas, "Melhor para" e validadores de SEO (23/09/2026 — não regredir)
 
 - **`EDITORIAL_DATES` é a fonte ÚNICA da data** de toda rota indexável: o
-  `lastmod` do sitemap, o `dateModified` e o "Atualizado em" visível saem dela.
+  `lastmod` do sitemap, o `dateModified` e o "Revisado em" visível saem dela.
   Nunca inventar data: `updatedAt` só muda quando o CONTEÚDO muda.
 - **Toda página de `_preservationCommercialPages.js` tem "Melhor para / Não é
   ideal para"** — a IA recomenda por adequação. Guarda:

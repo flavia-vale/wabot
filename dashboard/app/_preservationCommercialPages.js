@@ -1173,7 +1173,7 @@ export function PreservationCommercialPage({ pageKey }) {
               <h1 id="page-title" style={s.h1}>{page.h1}</h1>
               <p style={s.lead}>{page.lead}</p>
               {/* Frescor visível: a IA e a pessoa leem a mesma data do schema (dateModified). */}
-              <p style={s.updated}>Atualizado em <time dateTime={dates.updatedAt}>{formatDatePtBr(dates.updatedAt)}</time></p>
+              <p style={s.updated}>Revisado em <time dateTime={dates.updatedAt}>{formatDatePtBr(dates.updatedAt)}</time></p>
               {page.competitorNudge ? (
                 <p style={s.nudge}>
                   {page.competitorNudge.text}{' '}

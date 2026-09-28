@@ -201,6 +201,7 @@ export function getLpMetadata(slug) {
 
 export function LpTemplate({ slug }) {
   const cfg = LP_CONFIG[slug]
+  const dates = getEditorialDates(`/${slug}`)
   const seoRoute = getProgrammaticSeoRoute(slug)
   const lpType = getLpType(slug, cfg)
   const hubRoute = getHubSeoRoute(seoRoute?.parentPath ?? seoRoute?.cluster)
@@ -223,6 +224,8 @@ export function LpTemplate({ slug }) {
     description: `${cfg.description} ${PRODUCT_DEFINITION}`,
     url: `${getSiteUrl()}/${slug}`,
     mainEntityOfPage: `${getSiteUrl()}/${slug}`,
+    datePublished: dates.publishedAt,
+    dateModified: dates.updatedAt,
     image: [`${getSiteUrl()}/botinho-logo.svg`],
     brand: { '@id': `${getSiteUrl()}#organization` },
     publisher: { '@id': `${getSiteUrl()}#organization` },
@@ -286,7 +289,7 @@ export function LpTemplate({ slug }) {
             body={cfg.uniqueBody}
             pills={cfg.uniqueBullets}
             accent={lpType !== 'default'}
-            updatedAt={getEditorialDates(`/${slug}`).updatedAt}
+            updatedAt={dates.updatedAt}
           />
         </div>
       </section>
