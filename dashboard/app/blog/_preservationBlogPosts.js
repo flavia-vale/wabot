@@ -498,7 +498,7 @@ export const PRESERVATION_BLOG_POSTS = {
   'oferta-sem-foto-no-whatsapp-por-que-acontece': {
     slug: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece',
     title: 'Oferta sem foto no WhatsApp: por que acontece',
-    description: 'A oferta saiu só com texto, sem o card com a foto do produto. As causas mais comuns, o que a conversão do link tem a ver com isso e o que conferir antes de pedir ajuda.',
+    description: 'A oferta saiu só com texto, sem o card com a foto do produto. As causas mais comuns e o que conferir antes de pedir ajuda.',
     eyebrow: 'Suporte · Card sem foto',
     usePersonAuthor: true,
     origin: 'blog_oferta_sem_foto_whatsapp',
