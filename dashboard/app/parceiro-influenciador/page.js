@@ -3,6 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/parceiro-influenciador'
 const title = 'Parceria para criadores: robô grátis + 30% de comissão recorrente'
@@ -234,6 +235,7 @@ export default function Page() {
           </p>
         </article>
       </main>
+   <EditorialFreshness pathname="/parceiro-influenciador" />
     </PublicShell>
   )
 }

@@ -181,6 +181,11 @@ publicada no `llms.txt`.
 - **`EDITORIAL_DATES` é a fonte ÚNICA da data** de toda rota indexável: o
   `lastmod` do sitemap, o `dateModified` e o "Revisado em" visível saem dela.
   Nunca inventar data: `updatedAt` só muda quando o CONTEÚDO muda.
+- Páginas sem autoria/data próprias usam
+  `components/marketing/EditorialFreshness.jsx`, que imprime o selo e o schema
+  `WebPage`. A guarda HTTP `npm run validate:editorial-dates` cobre todas as
+  páginas HTML indexáveis. `llms.txt` e `pricing.md` são recursos de texto, não
+  páginas HTML.
 - **Toda página de `_preservationCommercialPages.js` tem "Melhor para / Não é
   ideal para"** — a IA recomenda por adequação. Guarda:
   `test/paginas-comerciais-melhor-para-e-data.test.js`.

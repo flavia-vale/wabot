@@ -4,6 +4,7 @@ import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PreservationDiagnostic } from '@/components/marketing/PreservationDiagnostic'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/diagnostico-antiban-whatsapp'
 const siteUrl = getSiteUrl()
@@ -127,6 +128,7 @@ export default function Page() {
           ))}
         </section>
       </main>
+   <EditorialFreshness pathname="/diagnostico-antiban-whatsapp" />
     </PublicShell>
   )
 }

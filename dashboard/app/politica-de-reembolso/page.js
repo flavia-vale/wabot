@@ -3,6 +3,7 @@ import { PublicPage } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { getEditorialDates, formatDatePtBr } from '@/lib/editorial-content'
 import { SUPPORT_EMAIL, SUPPORT_HOURS, SUPPORT_RESPONSE_SLA, SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 /*
  * Política de reembolso pública (23/09/2026).
@@ -93,7 +94,7 @@ export default function RefundPolicyPage() {
             <li>Processamos o reembolso em até 5 dias úteis depois do pedido.</li>
             <li>Depois dos 7 dias: o período que já começou não é devolvido, mas você cancela quando quiser, sem multa, e usa até o último dia pago.</li>
           </ul>
-          <p className="mt-3 text-sm font-semibold text-emerald-800">Atualizada em {formatDatePtBr(dates.updatedAt)}</p>
+          <p className="mt-3 text-sm font-semibold text-emerald-800">Revisada em {formatDatePtBr(dates.updatedAt)}</p>
         </div>
 
         <section className="space-y-3">
@@ -175,6 +176,7 @@ export default function RefundPolicyPage() {
           <Link href="/espelha-grupos-e-confiavel" className="underline hover:no-underline">O Espelha Grupos é confiável?</Link>.
         </p>
       </div>
+   <EditorialFreshness pathname="/politica-de-reembolso" />
     </PublicPage>
   )
 }

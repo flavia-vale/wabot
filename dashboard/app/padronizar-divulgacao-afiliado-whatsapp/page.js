@@ -121,6 +121,7 @@ const entradas = [
 
 function buildSchemas(siteUrl) {
   const url = `${siteUrl}${path}`
+  const dates = getEditorialDates(path)
   return [
     {
       '@context': 'https://schema.org',
@@ -144,6 +145,8 @@ function buildSchemas(siteUrl) {
       description: `${cfg.description} ${PRODUCT_DEFINITION}`,
       url,
       mainEntityOfPage: url,
+      datePublished: dates.publishedAt,
+      dateModified: dates.updatedAt,
       image: [`${siteUrl}/botinho-logo.svg`],
       brand: { '@id': `${siteUrl}#organization` },
       publisher: { '@id': `${siteUrl}#organization` },
@@ -186,7 +189,7 @@ export default function Page() {
           <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Grupos de ofertas · Cupons padronizados</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{h1}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{cfg.description}</p>
-          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
 
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_h3]:text-lg [&_h3]:font-black [&_h3]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-6 [&_strong]:text-gray-950">
             <section>

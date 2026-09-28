@@ -4,6 +4,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
 import { getEditorialDates } from '@/lib/editorial-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
 const description = 'Central de conteúdos do Espelha Grupos com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
@@ -626,6 +627,7 @@ export default function Page() {
         </section>
       </main>
     </PublicShell>
+   <EditorialFreshness pathname="/conteudos" />
     </>
   )
 }

@@ -31,7 +31,7 @@ test('a FAQ "outras lojas" sai da lista canônica, nunca escrita à mão', () =>
   assert.match(comercial, /outrasLojas\('Mercado Livre'\)/)
 })
 
-test('"Revisado em" visível nos templates comerciais', () => {
+test('"Revisado em" visível nas páginas comerciais', () => {
   assert.match(comercial, /Revisado em <time dateTime=\{dates\.updatedAt\}>/)
   assert.match(ler('dashboard/components/landing/IntroCard.jsx'), /Revisado em <time dateTime=\{updatedAt\}>/)
   for (const rel of ['dashboard/app/_lpShared.js', 'dashboard/app/_seoHubShared.js', 'dashboard/app/_organicNicheLanding.js', 'dashboard/app/page.js']) {
@@ -39,18 +39,25 @@ test('"Revisado em" visível nos templates comerciais', () => {
   }
 })
 
-test('dateModified vem de EDITORIAL_DATES no JSON-LD dos templates comerciais', () => {
+test('dateModified vem de EDITORIAL_DATES no JSON-LD das páginas comerciais', () => {
   assert.match(comercial, /dateModified: dates\.updatedAt/)
 
   const templates = [
     'dashboard/app/_organicNicheLanding.js',
     'dashboard/app/_lpShared.js',
     'dashboard/app/_seoHubShared.js',
-    'dashboard/app/page.js',
   ]
   for (const rel of templates) {
     const fonte = ler(rel)
     assert.match(fonte, /dateModified:/, `${rel}: JSON-LD sem dateModified`)
     assert.match(fonte, /getEditorialDates\(/, `${rel}: data fora da fonte editorial canônica`)
   }
+})
+
+test('componente canônico gera data visível e WebPage.dateModified', () => {
+  const freshness = ler('dashboard/components/marketing/EditorialFreshness.jsx')
+  assert.match(freshness, /EDITORIAL_DATES\[pathname\]/)
+  assert.match(freshness, /Revisado em <time dateTime=\{dates\.updatedAt\}>/)
+  assert.match(freshness, /'@type': 'WebPage'/)
+  assert.match(freshness, /dateModified: dates\.updatedAt/)
 })
