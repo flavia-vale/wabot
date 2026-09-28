@@ -15,6 +15,7 @@ import { getLandingPlans } from '@/lib/plans-server'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
 import { getEditorialDates } from '@/lib/editorial-content'
 import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 // Descrição curta só para <meta name="description">/OG (Bing Webmaster, 27/09/2026:
 // "Descrição Meta muito longa"). PRODUCT_DEFINITION (283 chars) é o texto certo

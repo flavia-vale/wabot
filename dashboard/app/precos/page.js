@@ -4,6 +4,7 @@ import { Pricing } from '@/components/landing/Pricing'
 import { FichaTecnica } from '@/components/landing/FichaTecnica'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 import { getLandingPlans } from '@/lib/plans-server'
 import { buildOgImageUrl } from '@/lib/seo-og'
 import {
