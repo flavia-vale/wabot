@@ -12,8 +12,9 @@ export async function generateMetadata({ params }) {
   const { slug } = await params
   const guide = STORE_GUIDES[slug]
   if (!guide) return {}
-  const title = `${guide.name} Afiliados: cadastro e ID no painel`
-  const description = `Guia para entrar no programa ${guide.name}, localizar seu identificador de afiliado e cadastrar com segurança no Espelha Grupos.`
+  // title/description ficam em lib/store-guides.js (fonte única lida também
+  // por scripts/lint-seo-metadata-duplicates.mjs).
+  const { title, description } = guide
   return { title, description, alternates: { canonical: `/guia/${slug}` }, openGraph: { title, description, url: `/guia/${slug}` } }
 }
 

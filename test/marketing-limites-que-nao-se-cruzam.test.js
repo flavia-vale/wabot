@@ -489,7 +489,10 @@ test('FR-033: "robô" não vira termo próprio de cluster (Trends: "robô whatsa
 // comercial por loja é o padrão da frente Tier 1 (mesma forma de Shopee,
 // Mercado Livre, Amazon e SHEIN), mas cidade, nicho e dor seguem congelados, e
 // nenhuma outra rota de Magalu pode nascer sem passar por aqui de novo.
-const ROTAS_MAGALU_APROVADAS = new Set(['/magalu-afiliados-whatsapp'])
+// 2026-09-28: a dona do produto liberou também o guia de cadastro por loja
+// (/guia/magalu-afiliados, item B09 da análise Pro Afiliados). Cidade, nicho e
+// dor de Magalu seguem congelados.
+const ROTAS_MAGALU_APROVADAS = new Set(['/magalu-afiliados-whatsapp', '/guia/magalu-afiliados'])
 
 test('FR-033: Magalu só existe na rota comercial aprovada em 02/09 — nenhuma outra', () => {
   for (const route of SEO_ROUTES) {
