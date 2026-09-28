@@ -14,7 +14,7 @@ import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 import { getLandingPlans } from '@/lib/plans-server'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
 import { getEditorialDates } from '@/lib/editorial-content'
-import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
+import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
 
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template
@@ -91,6 +91,7 @@ export default async function LandingPage({ searchParams = {} }) {
       <Features />
       <Social />
       <Pricing initialPlans={plans} />
+      <GuaranteeBlock />
       {/* Ficha técnica canônica (medição de IA 27/09/2026): a mesma tabela
         * "Recurso | Basic | Pro" da /precos, do llms.txt e do pricing.md. */}
       <FichaTecnica />

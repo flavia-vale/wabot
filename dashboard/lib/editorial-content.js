@@ -95,6 +95,12 @@ export const EDITORIAL_DATES = {
   '/amazon-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-27' },
   '/shein-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/magalu-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/guia/shopee-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/amazon-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/mercado-livre-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/magalu-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/shein-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/aliexpress-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
   '/alternativas/promium': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-09-27' },
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
