@@ -461,3 +461,30 @@ vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODA
 as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
 
 Teste: `test/ml-oferta-de-produto-virou-vitrine.test.js`.
+
+## ML: código de acesso vencendo minutos depois de colado (RCA 2026-09-28 — não regredir)
+
+Clientes relatavam "coloco o código do ML e ele já vence". Medido em produção
+(`AnalyticsEvent` `credential_saved` × `MessageLog`, 7 dias, 122 cadastros):
+
+| Hipótese | Veredito |
+|---|---|
+| Chamadas em excesso ao `createLink` gastam o código | **FALSA** — 1 chamada por oferta, e o ML **não** rotaciona cookie no `createLink` (`rotatedCookie` = 0 em 2.161 chamadas) |
+| Painel/varredura diária batendo no ML | **FALSA** — nenhuma sondagem perto das quedas; varredura é 1×/dia |
+| Teste ao salvar aprova código morto | **Minoria** — 7 de 11 mortes rápidas converteram 1–11 links antes |
+| Raspagem da página do produto COM o cookie da cliente | **Forte correlação** — quem usa modelo de mensagem (caminho que raspava com cookie): 12 de 13 códigos morreram; sem modelo: 13 de 36 |
+
+`fetchProductInfo` (`src/converters/productInfoScraper.js`), usado pelo modelo de
+mensagem do espelhamento e pelo "Criar oferta", abria a página do produto no ML
+com o cookie da cliente (UA de celular, IP do servidor) **antes** de tentar
+qualquer caminho sem sessão, e descartava o `Set-Cookie` da resposta.
+
+**Fix:** ordem das fontes de título/preço para ML: (1) leitura sem sessão +
+UA de crawler (`facebookexternalhit`) se veio anti-bot; (2) API oficial
+(`api.mercadolibre.com`, token do app/OAuth — não usa cookie); (3) **só então**
+a página com a sessão da cliente, uma vez.
+
+**Não regredir:** não mandar o cookie na 1ª leitura nem antes do crawler/API.
+Testes em `test/product-info-scraper.test.js` ("NÃO usa a sessão…", "ÚLTIMO
+recurso"). Validar pós-deploy repetindo a medição "com modelo × sem modelo":
+sucesso = o grupo com modelo parar de perder o código.

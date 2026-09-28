@@ -893,9 +893,8 @@ function isMercadoLivreSocialShare(url) {
 }
 
 export async function fetchProductInfo(url, opts = {}) {
-  // Para URLs do ML, usa a sessão autenticada do usuário (cookie ssid) e o UA
-  // mobile: sem isso o ML responde com a página anti-bot /gz/account-verification
-  // (title "Mercado Libre", sem og:title nem preço) e nada é extraído.
+  // Sessão da cliente no ML (cookie ssid) é ÚLTIMO recurso — ver o bloco
+  // "ÚLTIMO recurso" abaixo e docs/rca/lojas-conversao.md (RCA 2026-09-28).
   const mlCookieHeader = opts.mlCookieHeader || buildMlCookieHeader(opts.mlCredentials)
   const shopeeCreds = opts.shopeeCreds || opts.shopeeCredentials || null
   const fetchOpts = { ...opts }
@@ -936,13 +935,9 @@ export async function fetchProductInfo(url, opts = {}) {
     resolvedUrl = await resolveAmazonShortLink(url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
   }
 
-  // Cookie/UA mobile são checados sobre a URL JÁ resolvida: meli.la/mluvem.com
-  // não casam isMercadoLivreUrl, mas a canônica produto.mercadolivre.com.br
-  // sim — sem isso o fetch da resolvida cai no anti-bot /gz/account-verification.
-  if (mlCookieHeader && isMercadoLivreUrl(resolvedUrl)) {
-    fetchOpts.cookieHeader = mlCookieHeader
-    fetchOpts.ua = opts.ua || ML_MOBILE_UA
-  }
+  // A 1ª leitura de página do ML sai SEM a sessão da cliente (RCA 2026-09-28):
+  // abrir página do ML com o cookie dela, do IP do servidor, derrubava o código
+  // de acesso em minutos. Ela só entra no fim, se nada sem sessão resolveu.
 
   let html = null
   let finalUrl = resolvedUrl
@@ -1005,41 +1000,61 @@ export async function fetchProductInfo(url, opts = {}) {
     }
   }
 
-  // Bug: links curtos do ML (meli.la, mluvem.com) redirecionam para
-  // mercadolivre.com.br, mas o fetch() descarta o cabeçalho Cookie em
-  // redirects cross-domain (undici/browser — segurança contra CSRF). Dois
-  // cenários surgem:
-  //   a) html=null  → ML retornou 403 sem autenticação
-  //   b) html=antibot → ML retornou 200 com /gz/account-verification (sem ssid)
-  //
-  // Solução: se chegamos a uma URL ML (redirect funcionou), temos credenciais
-  // mas não as aplicamos na requisição inicial (URL de origem não era ML) →
-  // refaz diretamente na URL ML com cookie + UA mobile.
-  const needsMlCookieRetry = mlCookieHeader && !fetchOpts.cookieHeader && isMercadoLivreUrl(finalUrl)
-  if (needsMlCookieRetry) {
-    const noUsefulMlHtml = !html
-      || (html.length < 50_000 && !html.includes('ui-pdp') && !html.includes('andes-money-amount'))
-    if (noUsefulMlHtml) {
-      try {
-        const retried = await fetchHtml(finalUrl, { ...fetchOpts, cookieHeader: mlCookieHeader, ua: ML_MOBILE_UA })
-        if (retried?.html) {
-          html = retried.html
-          finalUrl = retried.finalUrl || finalUrl
-        }
-      } catch {}
-    }
-  }
-
-  // ML sem creds: quando o HTML parece anti-bot e não há cookie ssid, tenta
-  // uma vez com UA de crawler — ML o whitelist para preview de links e pode
-  // servir HTML com og:title e preços. Só dispara sem credenciais (com creds
-  // o bloco needsMlCookieRetry acima já cobre).
-  if (!mlCookieHeader && isMercadoLivreUrl(finalUrl) && isMercadoLivreAntiBotHtml(html)) {
+  // ML: ordem das fontes de título/preço (RCA 2026-09-28, "código do ML vence
+  // logo depois de colar"). Em 7 dias, 12 de 13 códigos de quem usa modelo de
+  // mensagem morreram, contra 13 de 36 de quem não usa — o modelo é o caminho
+  // que abria a página do produto COM o cookie da cliente. Por isso:
+  //   1. leitura de prévia (UA de crawler, sem sessão) quando veio anti-bot;
+  //   2. API oficial do ML (token do app / OAuth — não usa o cookie);
+  //   3. ÚLTIMO recurso: página com a sessão da cliente, só se 1 e 2 não
+  //      trouxeram título E preço.
+  // Não regredir: não voltar a mandar o cookie na 1ª leitura nem antes da API.
+  const isMlPage = isMercadoLivreUrl(finalUrl) || isMercadoLivreUrl(resolvedUrl)
+  const mlPageUrl = isMercadoLivreUrl(finalUrl) ? finalUrl : resolvedUrl
+  if (isMlPage && isMercadoLivreAntiBotHtml(html)) {
     try {
-      const crawlerResult = await fetchHtml(finalUrl, { ua: ML_CRAWLER_UA, timeoutMs: HTML_FETCH_TIMEOUT_MS })
+      const crawlerResult = await fetchHtml(mlPageUrl, { ua: ML_CRAWLER_UA, timeoutMs: HTML_FETCH_TIMEOUT_MS })
       if (crawlerResult?.html && !isMercadoLivreAntiBotHtml(crawlerResult.html)) {
         html = crawlerResult.html
         finalUrl = crawlerResult.finalUrl || finalUrl
+      }
+    } catch {
+      // mantém html anterior
+    }
+  }
+
+  // ML Products API como fallback: só chamar se não temos título E preço
+  // do HTML (a API requer autenticação OAuth em acessos de IP de datacenter,
+  // chamá-la quando o HTML já deu o suficiente desperdiça até 8s por oferta).
+  // O preço do bloco previous/current_price (share /social/) também conta —
+  // sem ele a share, que o ML serve sem sessão, cairia na leitura com cookie.
+  const htmlHasTitleAndPrice = (page) => {
+    if (!page) return false
+    const ld = extractFromJsonLd(page)
+    const ml = extractMercadoLivreFromHtml(page)
+    const landingPrice = extractFromMercadoLivreLanding(page)?.newPrice
+    return !!((ld?.title && ld?.newPrice) || (ml?.title && (ml?.newPrice || landingPrice)))
+  }
+  const hasHtmlTitleAndPrice = htmlHasTitleAndPrice(html)
+  const mercadoLivreApiFallback = hasHtmlTitleAndPrice
+    ? null
+    : await fetchMercadoLivreProductInfo(finalUrl || url, opts)
+  const mlItemApiFallback = (hasHtmlTitleAndPrice || mercadoLivreApiFallback)
+    ? null
+    : await fetchMercadoLivreItemInfo(finalUrl || url, opts)
+
+  const mlApiTitle = mercadoLivreApiFallback?.title || mlItemApiFallback?.title
+  const mlApiPrice = mercadoLivreApiFallback?.newPrice || mlItemApiFallback?.newPrice
+  if (mlCookieHeader && isMlPage && !hasHtmlTitleAndPrice && !(mlApiTitle && mlApiPrice)) {
+    try {
+      const withSession = await fetchHtml(isMercadoLivreUrl(finalUrl) ? finalUrl : mlPageUrl, {
+        timeoutMs: fetchOpts.timeoutMs,
+        cookieHeader: mlCookieHeader,
+        ua: ML_MOBILE_UA,
+      })
+      if (withSession?.html && !isMercadoLivreAntiBotHtml(withSession.html)) {
+        html = withSession.html
+        finalUrl = withSession.finalUrl || finalUrl
       }
     } catch {
       // mantém html anterior
@@ -1062,19 +1077,6 @@ export async function fetchProductInfo(url, opts = {}) {
   const isShopeePage = Boolean(extractShopeeIds(shopeeApiSourceUrl)) || isShopeeHost(finalUrl) || isShopeeHost(resolvedUrl) || isShopeeHost(url)
   const shopeeHtmlRange = isShopeePage ? extractShopeePriceRangeFromHtml(html) : null
   const shopeeJsonRange = isShopeePage ? extractShopeePriceRangeFromJsonInHtml(html) : null
-
-  // ML Products API como último recurso: só chamar se não temos título E preço
-  // do HTML (a API requer autenticação OAuth em acessos de IP de datacenter,
-  // chamá-la quando o HTML já deu o suficiente desperdiça até 8s por oferta).
-  const hasHtmlTitleAndPrice = !!(
-    (jsonLd?.title && jsonLd?.newPrice) || (mlHtml?.title && mlHtml?.newPrice)
-  )
-  const mercadoLivreApiFallback = hasHtmlTitleAndPrice
-    ? null
-    : await fetchMercadoLivreProductInfo(finalUrl || url, opts)
-  const mlItemApiFallback = (hasHtmlTitleAndPrice || mercadoLivreApiFallback)
-    ? null
-    : await fetchMercadoLivreItemInfo(finalUrl || url, opts)
 
   const titleFromUrl = extractTitleFromUrl(finalUrl || url) || extractTitleFromUrl(resolvedUrl) || extractTitleFromUrl(url)
   const rawFallbackTitle = extractTitleFallback(html)
