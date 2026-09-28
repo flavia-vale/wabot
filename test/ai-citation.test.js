@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   ROUND_QUERIES,
+  PROAFILIADOS_BASELINE_QUERIES,
   buildGeminiRequest,
   parseGeminiResponse,
   classifyCitation,
@@ -17,6 +18,16 @@ test('as consultas do script são exatamente as 18 do roteiro canônico (A, B, C
     .map(([, , text]) => text.replace(/\*\*/g, '').replace(/\s*\*\(.*\)\*\s*$/, '').trim())
   assert.deepEqual(ROUND_QUERIES.map((q) => q.query), numbered.slice(0, 18))
   assert.equal(ROUND_QUERIES.filter((q) => q.cluster === 'compra').length, 8)
+})
+
+test('B15 tem quatro consultas separadas da série histórica', () => {
+  assert.deepEqual(PROAFILIADOS_BASELINE_QUERIES.map((item) => item.query), [
+    'existe bot grátis para afiliados no WhatsApp',
+    'bot para afiliados com Telegram',
+    'bot para afiliados que mostra comissão por grupo',
+    'proafiliados vale a pena',
+  ])
+  assert.ok(PROAFILIADOS_BASELINE_QUERIES.every((item) => item.cluster === 'b15'))
 })
 
 test('pede a busca do Google na requisição', () => {

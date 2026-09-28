@@ -15,6 +15,7 @@ import {
   SUPPORT_RESPONSE_SLA,
   SUPPORT_WHATSAPP_URL,
 } from '@/lib/marketing-content'
+import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
 
 /* PÁGINA DE PREÇO (auditoria de funil 2026-08-05, §1.4).
  *
@@ -194,6 +195,7 @@ export default async function PrecosPage() {
       </section>
 
       <Pricing initialPlans={plans} showHeading={false} />
+      <GuaranteeBlock />
 
       {/* Ficha técnica canônica (medição de IA 27/09/2026): idêntica à da
         * home, do llms.txt e do pricing.md — lojas nomeadas e Basic × Pro. */}
