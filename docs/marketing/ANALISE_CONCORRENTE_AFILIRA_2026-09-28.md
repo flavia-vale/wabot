@@ -1,5 +1,7 @@
 # Análise competitiva — Afilira (afilira.com) × Espelha Grupos — 2026-09-28
 
+> 📌 **A fila de trabalho unificada (suas ações, código e backlog) está em `PENDENCIAS_UNIFICADAS_2026-09-28.md`** (seção 2.1b e Parte 3). Este arquivo fica como registro e fonte de dados.
+
 Fontes: site público (home, /precos, /pricing.md, /llms.txt, /robots.txt, sitemap
 com 80 URLs, /sobre, /termos, /status, blog), **área logada com conta de teste sem
 plano** (/dashboard, /dashboard/planos, /dashboard/checkout), BrasilAPI (CNPJ), RDAP

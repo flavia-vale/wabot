@@ -7,7 +7,9 @@ dos cinco relatórios abaixo. Os relatórios continuam existindo como registro
 Fontes unidas: `ACOES_FLAVIA_2026-09-11.md`, `RESUMO_E_PLANO_2026-09-23.md`,
 `BRIEFING_FABLE_MAQUINA_DE_VENDAS_2026-09-27.md`,
 `PLANO_MAQUINA_DE_VENDAS_IA_2026-09-18.md`,
-`ANALISE_CONCORRENTE_PROAFILIADOS_2026-09-27.md` (+ o que eles mandam ler:
+`ANALISE_CONCORRENTE_PROAFILIADOS_2026-09-27.md`, mais a
+`ANALISE_CONCORRENTE_AFILIRA_2026-09-28.md` (PR #1981) e a leva de indexação
+da PR #1979 em `ACOES_FLAVIA` (+ o que eles mandam ler:
 `PLANO_EXECUCAO_BACKLOG_PROAFILIADOS_2026-09-28.md`,
 `DIAGNOSTICO_MAQUINA_DE_VENDAS_2026-09-27.md`, `PLANO_SEO_GEO_2026-09-27.md`).
 
@@ -77,8 +79,16 @@ conferir em produção → Solicitar indexação):
 | **B** (R1 — falavam errado do produto) | `/bot-canais-whatsapp` · `/bot-comum-vs-espelha-grupos` · `/como-funciona-espelha-grupos-canais` · `/blog/bot-whatsapp-antiban-existe` · `/blog/shadowban-whatsapp-canais` · `/blog/como-evitar-banimento-whatsapp-afiliados` · `/blog/grupo-ou-canal-whatsapp-achadinhos` · `/blog/chip-dedicado-bot-whatsapp` · `/blog/migrar-grupo-achadinhos-para-canal` · `/diagnostico-antiban-whatsapp` |
 | **C** (R7 + GEO + títulos) | `/blog/como-espelhar-mensagens-entre-grupos-whatsapp` (vídeo 1) · `/quem-somos` · `/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp` · `/melhores-bots-para-afiliados-whatsapp` · `/metodologia-uso-responsavel-whatsapp` · `/blog/como-ser-afiliado-shopee-whatsapp` · `/blog/como-divulgar-ofertas-amazon-whatsapp` · `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp` · `/alternativas/shozap` · `/alternativas/gigi-bot` |
 | **D** (R3 + R2) | `/alternativas/fluxopromo` · `/seguranca-credenciais-afiliado` · `/conteudos` · `/glossario` · `/estudos-de-caso` · `/benchmarks/operacao-grupos-ofertas-whatsapp` · `/blog/como-escalar-grupos-sem-operacao-manual` · `/blog/checklist-padronizar-divulgacao-whatsapp` · `/blog/conferir-converter-link-afiliado-whatsapp` · `/blog/bot-para-afiliados-whatsapp-grupos-cupons` |
+| **F** (PR #1979 — só depois do deploy em `main`) | Novas: `/guia/shopee-afiliados` · `/guia/amazon-afiliados` · `/guia/mercado-livre-afiliados` · `/guia/magalu-afiliados` · `/guia/shein-afiliados` · `/guia/aliexpress-afiliados`. Editadas (ganharam links em "Continue lendo"): `/padronizar-divulgacao-afiliado-whatsapp` · `/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo` |
 | **E** (sobra) | `/materiais/checklist-operacao-whatsapp` · `/materiais/checklist-divulgacao-ofertas-grupos-whatsapp` |
 
+- ⚠️ **Dia F depende de `develop → main`.** Conferido em 28/09: a #1979 (guias
+  por loja + 2 páginas editadas) e a #1978 (card "Seu robô está funcionando?"
+  só com pendência) estão em `develop`, **ainda não em `main`**. Valide em
+  `http://178.105.54.0:3006` (`/guia/shopee-afiliados` termina com "Guias de
+  outras lojas"), abra a PR `develop → main` e só então peça o Dia F. A #1979
+  registrou esse pedido como linha 🔝 nova no `ACOES_FLAVIA`; aqui ele fica
+  **depois do Dia A**, porque A/B corrigem texto que já está no Google.
 - Já pedidas em 28/09 (não repetir): `/precos`, `/espelha-grupos-e-confiavel`,
   `/alternativas/achadinho-pro`, `/programa-de-afiliados`,
   `/quanto-ganha-afiliado-shopee`, `/blog/como-divulgar-ofertas-mercado-livre-whatsapp`,
@@ -157,6 +167,7 @@ será inventado.
 | D2 | **Teto de vagas: 62 de 80 → 100?** Servidor com 22,6 GB livres, swap zero; +20 vagas ≈ +7 GB. Alternativa mais leve: 1 número por conta em teste | **15/10** | Respondo com os 5 comandos e reinício anunciado do supervisor de madrugada. Só com "sim" explícito |
 | D3 | **Quando reiniciar o `bot-supervisor`** (destrava P1-4: hoje uma oferta cujo único link é de loja não suportada sai **sem o link**, em silêncio; ver `docs/produto/backlog-p1-4-loja-nao-suportada.md`) | escolher janela | Reconecta TODAS as sessões — anunciar antes. Pode ir junto com D2 |
 | D4 | **Ativar cobrança do Gemini** (menos de R$ 2 por rodada, estimativa não conferida) para a medição mensal por script | antes de 27/10 | Sem isso a rodada do Gemini é manual |
+| D6 | **Campanha "Troque de robô"** (1º mês R$ 39 no PRO para quem vem de outro bot — EG-14) e **Google Ads na marca/"bot de afiliados"** (EG-32). Os dois mexem em preço ou em anúncio pago, que está adiado até a renovação de outubro | depois de 27/10 | Só preparo landing/código com o seu "sim" |
 | D5 | **Telegram: sim ou não** | quando quiser | Hoje está no backlog (B34) como "não recomendado agora" |
 
 ## 1.11 🟠 Admin no GitHub — 5 min, ninguém além de você consegue
@@ -219,6 +230,32 @@ começar qualquer uma: "faz o C3". Ordem = impacto ÷ esforço.
 | **C12** | **B14/B26 lacunas restantes**: FAQ e comparativos só onde falta e existe ficha datada. Seis dos oito comparativos pedidos já existem; PromoBot/OfertasBot **não entram** sem ficha (OfertasBot é o site do PromoBot) | — | Pro Afiliados |
 
 > A ficha do Ofertiva (22/09) ainda não tem página pública `/alternativas/ofertiva`. Não criei item: vai contra "parar de criar `/alternativas/*`". Se quiser, diga.
+
+## 2.1b Da análise do Afilira (28/09) — código e conteúdo
+
+Ele foi aberto em 04/05/2026 (ME em Capão da Canoa/RS), vende 47/97/197, **não
+tem trial** e cresce por SEO em massa + GEO + Google Ads. O que ele faz melhor:
+palavra exata no H1 e hero "máquina funcionando". O que nós fazemos melhor: 7
+dias com tudo liberado, comissão no painel e espelhamento desde o Basic. IDs
+`EG-xx` vêm do documento dele.
+
+| # | O quê | Métrica / observação | Origem |
+|---|---|---|---|
+| **A1** | **Tabela "preço por grupo" na `/precos` e na home**: Espelha R$ 69 (até 50 grupos, espelhamento) × Afilira Starter R$ 47 (1 origem + 1 destino), Pro R$ 97 | Só com a ficha datada de `competitors-data.js` (transcrita em 17/09; **reconferir o preço antes de publicar**) | EG-02 |
+| **A2** | **H1/title da home com a palavra exata** ("bot para afiliados…"), dor como sub-headline. *Conferir antes o H1 atual: pode ter mudado nos lotes de 27/09* | CTR da home e posição em "bot de afiliados". Não mexer se estiver subindo | EG-03 |
+| **A3** | **Seção "O que o Espelha Grupos não faz"** em `/espelha-grupos-e-confiavel`. *A página já tem números e reembolso desde 27/09; falta só essa seção* | IA deixa de ler "espelhar grupos" como golpe | EG-05 |
+| **A4** | **Motivo visível para oferta que ficou de fora** (tela Envios). *A tela já mostra "bloqueados por repetição/regra"; conferir o que falta antes de mexer* | Menos ticket "não enviou" | EG-08 |
+| **A5** | **Robots e JSON-LD para IA**: conferir `robots.txt` (OAI-SearchBot, ChatGPT-User, PerplexityBot, Claude-SearchBot, Google-Extended), `SoftwareApplication` com `Offer` por plano, `Speakable`, `Organization` com `foundingDate` | Acesso dos robôs já 19/19 em 200; `taxID`/`legalName` seguem em B02 | EG-11 |
+| **A6** | **6 posts "suporte como conteúdo"** das nossas RCAs: "bot conectado mas não envia", "oferta sem foto no WhatsApp", "número banido, o que fazer", "link de afiliado não gera comissão", "como aquecer número", "Shopee suspendeu afiliado". Sem prometer anti-ban; cada página nasce com 3+ links internos | cauda longa; série diária | EG-12 |
+| **A7** | **Reformatar `/alternativas/afilira`** (já existe) com tabela preço-por-grupo + CTA de teste. *Não é página nova* | comparativo converte 3% hoje | EG-10 |
+| **A8** | **5 páginas por loja com a palavra exata** no title/H1 (353 impressões, 7 cliques). *Junto com C6/C7* | consulta-cabeça em posição < 20 | EG-13 |
+| **A9** | **Calculadora de comissão/ROI de afiliado** (ferramenta grátis; já existem as de risco e de tempo) | cauda longa + e-mail com consentimento | EG-29 |
+| **A10** | **Relatório trimestral com dado próprio** (horário e loja que mais convertem), só com números do nosso banco | fonte citável por IA | EG-27 |
+| **A11** | **Monitoramento mensal**: incluir "Afilira", "melhor bot de afiliados para WhatsApp" e "alternativa ao Afilira" na rodada de 27/10 (junto de C3) | placar da rodada | EG-31 |
+
+Já coberto por outro item (não duplicar): EG-01 = **B11** · EG-06 = **1.2** ·
+EG-07 = **B03** (feito) · EG-09 = **B07** e PR #1978 (feito) · EG-15 e EG-28 =
+**1.8**.
 
 ## 2.2 Prontas, esperando um dado seu (Parte 1.9)
 
@@ -291,6 +328,22 @@ Afiliados (B) ou dos outros relatórios.
 | B37 | **Vários números na mesma conta** (cobrança por conexão) | Médio | Alto | **MEMÓRIA — SUPER SINALIZAR** (~0,35 GB por sessão) |
 | B38 | **Copiar Tudo** (mídia, enquete, figurinha) por fonte | Baixo | Alto | — |
 
+## Do Afilira (28/09) — entram no backlog, sem decisão ainda
+
+| ID | Funcionalidade | Prazo | Impacto | Esforço | Observação |
+|---|---|---|---|---|---|
+| EG-17 | **Página `/status` pública** (uptime de conexão, conversão e envio) | P2 | Médio | Médio | Responde "o robô caiu?" sem ticket |
+| EG-19 | **Ofertas automáticas para ML/Amazon** + feed para quem não tem grupo de origem | P2 | Alto | Alto | Responde o "feed da comunidade" dele. Avisar carga/RAM antes |
+| EG-20 | **Filtros por destino** (loja e categoria por grupo) + ordem das lojas | P2 | Médio | Médio | Paridade com o Pro dele |
+| EG-04 | **Hero da home com painel "ao vivo"** (demo marcada como ilustrativa) | P2 | Médio | Médio | Padrão novo: **entra antes no design system v2** |
+| EG-22 | Postar no **Status** do WhatsApp | P2 | Médio | Médio | = B40 (flag desligada, conta de teste) |
+| EG-18 | **ROI multi-loja** (Shopee + ML + Amazon por grupo e oferta) | P3 | Alto | Alto | Começa em C9/B21 |
+| EG-24 | **Boas-vindas no privado** + link de convite rastreado | P3 | Médio | Médio | Crescer o grupo |
+| EG-25 | **Vitrine pública do grupo** | P3 | Médio | Alto | = B33 |
+| EG-26 | **Aquecimento guiado de número** (sem garantia de anti-ban) | P3 | Alto | Alto | "Garantia anti-ban 7 dias" **fica de fora** (regra: nunca prometer) |
+| EG-30 | **Checagem de texto proibido da Shopee** antes de enviar | P3 | Médio | Médio | Dor real: suspensão de afiliado |
+| EG-21 / EG-23 | Telegram / vários números | P3 | Médio | Alto | = B34 / B37; **MEMÓRIA — SUPER SINALIZAR** |
+
 ## Ideias do "espaço em branco" (nenhum concorrente atende) — sem prioridade ainda
 
 1. **Qual grupo/oferta me deu dinheiro** (venda × origem × destino × oferta, também ML/Amazon) — começa em C9 e B21.
@@ -306,10 +359,10 @@ Afiliados (B) ou dos outros relatórios.
 
 | Data | O quê | Quem |
 |---|---|---|
-| **28/09** (hoje) | Indexação Dia A (10 páginas) · Bing · conferir Dia 7 | Flávia |
+| **28/09** (hoje) | Indexação Dia A (10 páginas) · Bing · conferir Dia 7 · validar staging e abrir `develop → main` (libera o Dia F e o card do painel) | Flávia |
 | **29/09** | Indexação Dia B · Planejador de Palavras-Chave | Flávia |
 | **30/09** | Medição curta (Search Console + 2 diagnósticos) · indexação Dia C | Flávia |
-| **1–2/10** | Indexação Dias D e E · WhatsApp para os 63 (contínuo, 5–10/dia) · depoimentos | Flávia |
+| **1–2/10** | Indexação Dias D, E e F (F só depois do `main`) · WhatsApp para os 63 (contínuo, 5–10/dia) · depoimentos | Flávia |
 | **Semana de 5/10** | Guest-parágrafo (1.8) · vídeo 2 · responder D1 (carência) | Flávia |
 | **1ª quinzena de outubro** | Renovação da turma de setembro (só observar) | — |
 | **15/10** | Decidir teto de vagas (D2) e janela do supervisor (D3) | Flávia |
@@ -361,6 +414,12 @@ decisão de outubro.
 | Assunto | O que os documentos diziam | Decisão deste documento |
 |---|---|---|
 | Status das levas de indexação | Seções antigas de `ACOES_FLAVIA` ainda mostram `⏳`, embora várias páginas tenham sido pedidas em 28/09 | Vale a lista da 1.3, calculada removendo o que foi pedido em 28/09 |
+| Afilira: números do funil | A análise usa "516 visitas → 119 cadastros → 12 pagantes" (dado de 11/09) | Vale o de 27/09: 214 cadastros → 24 pagantes em 30 dias (11%) |
+| Afilira: "nenhum depoimento hoje" | Diz que foram removidos por falta de lastro | O site tem 5 textos ainda por confirmar (1.2); publicar só os confirmados |
+| EG-16 Reclame Aqui | Mandava reivindicar o perfil | Bloqueado: sem CNPJ |
+| EG-32 Google Ads / EG-14 "Troque de robô" | Marcados P2 | Fora da fila: anúncio e promoção de preço esperam a renovação de outubro (D6) |
+| EG-26 "garantia anti-ban 7 dias" | Proposta como diferencial | Descartada: nunca prometer anti-ban. Só o aquecimento guiado entra no backlog |
+| EG-02 preço do Afilira na página | Tabela pública "preço por grupo" | Só com ficha datada e reconferida |
 | Reindexação B29 | "quando B29 chegar em `main`" | Conferido em 28/09: **já está em `main`**. Pedir agora, junto com as levas que se sobrepõem |
 | E-mail "o que faltou" | `RESUMO_E_PLANO_2026-09-23` mandava disparar e-mail | Cancelado. WhatsApp (1.1) |
 | Retenção "6–17%" | Aparecia como gargalo | Corrigido em 27/09: 7 de 7 renovaram; só a renovação de outubro decide |
