@@ -1,5 +1,7 @@
 # Resumo da rodada de 23/09 e plano imediato
 
+> 📌 **A fila de trabalho unificada (suas ações, código e backlog) está em `PENDENCIAS_UNIFICADAS_2026-09-28.md`.** Este arquivo fica como registro e fonte de dados.
+
 ## O que ainda falta (mapa atualizado em 28/09/2026)
 
 - [ ] Conferir no Bing as páginas prioritárias e concluir as levas de reindexação que ainda aparecem como `⏳` em `ACOES_FLAVIA_2026-09-11.md`.
