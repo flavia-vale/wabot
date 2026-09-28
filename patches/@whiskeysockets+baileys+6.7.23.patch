@@ -1,17 +1,85 @@
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js b/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
+index f4458db..e6912a6 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Signal/libsignal.js
+@@ -66,6 +66,19 @@ export function makeLibSignalRepository(auth) {
+                 senderKeyDistributionMessage: senderKeyDistributionMessage.serialize()
+             };
+         },
++        // wabot patch (RCA 2026-09-28): SKDM da chave de grupo atual, sem cifrar nada -
++        // usado no reenvio pairwise de mensagem de grupo (igual ao Baileys 7.x).
++        async getSenderKeyDistributionMessage({ group, meId }) {
++            const senderName = jidToSignalSenderKeyName(group, meId);
++            const builder = new GroupSessionBuilder(storage);
++            const senderNameStr = senderName.toString();
++            const { [senderNameStr]: senderKey } = await auth.keys.get('sender-key', [senderNameStr]);
++            if (!senderKey) {
++                await storage.storeSenderKey(senderName, new SenderKeyRecord());
++            }
++            const skdm = await builder.create(senderName);
++            return skdm.serialize();
++        },
+         async injectE2ESession({ jid, session }) {
+             const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
+             await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..0418a65 100644
+index c46b096..73b27dc 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-@@ -7,7 +7,7 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
+@@ -7,7 +7,8 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
  import { WAMessageStatus, WAMessageStubType } from '../Types/index.js';
  import { aesDecryptCTR, aesEncryptGCM, cleanMessage, Curve, decodeMediaRetryNode, decodeMessageNode, decryptMessageNode, delay, derivePairingCodeKey, encodeBigEndian, encodeSignedDeviceIdentity, getCallStatusFromNode, getHistoryMsg, getNextPreKeys, getStatusFromReceiptType, hkdf, MISSING_KEYS_ERROR_TEXT, NACK_REASONS, NO_MESSAGE_FOUND_ERROR_TEXT, unixTimestampSeconds, xmppPreKey, xmppSignedPreKey } from '../Utils/index.js';
  import { makeMutex } from '../Utils/make-mutex.js';
 -import { areJidsSameUser, getAllBinaryNodeChildren, getBinaryNodeChild, getBinaryNodeChildBuffer, getBinaryNodeChildren, getBinaryNodeChildString, isJidGroup, isJidStatusBroadcast, isJidUser, isLidUser, jidDecode, jidNormalizedUser, S_WHATSAPP_NET } from '../WABinary/index.js';
++import { extractE2ESessionFromRetryReceipt } from '../Utils/signal.js';
 +import { areJidsSameUser, getAllBinaryNodeChildren, getBinaryNodeChild, getBinaryNodeChildBuffer, getBinaryNodeChildren, getBinaryNodeChildString, isJidGroup, isJidNewsletter, isJidStatusBroadcast, isJidUser, isLidUser, jidDecode, jidNormalizedUser, S_WHATSAPP_NET } from '../WABinary/index.js';
  import { extractGroupMetadata } from './groups.js';
  import { makeMessagesSocket } from './messages-send.js';
  export const makeMessagesRecvSocket = (config) => {
-@@ -668,6 +668,16 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -463,7 +464,7 @@ export const makeMessagesRecvSocket = (config) => {
+         const newValue = (msgRetryCache.get(key) || 0) + 1;
+         msgRetryCache.set(key, newValue);
+     };
+-    const sendMessagesAgain = async (key, ids, retryNode) => {
++    const sendMessagesAgain = async (key, ids, retryNode, receiptNode) => {
+         // todo: implement a cache to store the last 256 sent messages (copy whatsmeow)
+         const msgs = await Promise.all(ids.map(id => getMessage({ ...key, id })));
+         const remoteJid = key.remoteJid;
+@@ -472,7 +473,23 @@ export const makeMessagesRecvSocket = (config) => {
+         // just re-send the message to everyone
+         // prevents the first message decryption failure
+         const sendToAll = !jidDecode(participant)?.device;
+-        await assertSessions([participant], true);
++        // wabot patch (RCA 2026-09-28): o pedido de reenvio traz as chaves atuais do
++        // aparelho que pediu (<keys>). Montar a sessao com elas, como o Baileys 7.x;
++        // so buscar no servidor se o pedido vier sem chaves validas.
++        let injectedFromBundle = false;
++        const bundle = receiptNode ? extractE2ESessionFromRetryReceipt(receiptNode) : null;
++        if (bundle) {
++            try {
++                await signalRepository.injectE2ESession({ jid: participant, session: bundle });
++                injectedFromBundle = true;
++            }
++            catch (error) {
++                logger.warn({ error, participant }, 'failed to inject session from retry receipt');
++            }
++        }
++        if (!injectedFromBundle) {
++            await assertSessions([participant], true);
++        }
+         if (isJidGroup(remoteJid)) {
+             await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } });
+         }
+@@ -554,7 +571,7 @@ export const makeMessagesRecvSocket = (config) => {
+                             if (key.fromMe) {
+                                 try {
+                                     logger.debug({ attrs, key }, 'recv retry request');
+-                                    await sendMessagesAgain(key, ids, retryNode);
++                                    await sendMessagesAgain(key, ids, retryNode, node);
+                                 }
+                                 catch (error) {
+                                     logger.error({ key, ids, trace: error.stack }, 'error in sending message again');
+@@ -668,6 +685,16 @@ export const makeMessagesRecvSocket = (config) => {
                              }
                          });
                      }
@@ -28,3 +96,102 @@ index c46b096..0418a65 100644
                      else {
                          // no type in the receipt => message delivered
                          let type = undefined;
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
+index 38bb9e0..04ad8b7 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
+@@ -316,7 +316,39 @@ export const makeMessagesSocket = (config) => {
+             if (normalizeMessageContent(message)?.pinInChatMessage) {
+                 extraAttrs['decrypt-fail'] = 'hide';
+             }
+-            if (isGroup || isStatus) {
++            if ((isGroup || isStatus) && participant) {
++                // wabot patch (RCA 2026-09-28): reenvio (retry receipt) de mensagem de GRUPO
++                // vai cifrado direto para o aparelho que pediu (pkmsg/msg), com a chave do
++                // grupo (SKDM) embutida e o `count` do pedido - como o WA Web, o whatsmeow e o
++                // Baileys 7.x (isRetryResend). A 6.7.x re-cifrava com a chave do grupo (skmsg)
++                // e o membro seguia em "Aguardando mensagem", pedindo de novo ate o limite.
++                const isMe = areJidsSameUser(participant.jid, meId);
++                let messageToSend = message;
++                try {
++                    const skdm = await signalRepository.getSenderKeyDistributionMessage({ group: destinationJid, meId });
++                    messageToSend = {
++                        ...message,
++                        senderKeyDistributionMessage: {
++                            groupId: destinationJid,
++                            axolotlSenderKeyDistributionMessage: skdm
++                        }
++                    };
++                }
++                catch (err) {
++                    logger.warn({ err, jid: destinationJid }, 'failed to build SKDM for retry, sending without it');
++                }
++                const encoded = isMe
++                    ? encodeWAMessage({ deviceSentMessage: { destinationJid, message: messageToSend } })
++                    : encodeWAMessage(messageToSend);
++                const { type, ciphertext } = await signalRepository.encryptMessage({ jid: participant.jid, data: encoded });
++                binaryNodeContent.push({
++                    tag: 'enc',
++                    attrs: { v: '2', type, count: String(participant.count || 1) },
++                    content: ciphertext
++                });
++                shouldIncludeDeviceIdentity = true;
++            }
++            else if (isGroup || isStatus) {
+                 const [groupData, senderKeyMap] = await Promise.all([
+                     (async () => {
+                         let groupData = useCachedGroupMetadata && cachedGroupMetadata ? await cachedGroupMetadata(jid) : undefined;
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js b/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js
+index 13bf52b..31093ab 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js
+@@ -147,4 +147,48 @@ export const getNextPreKeysNode = async (state, count) => {
+     };
+     return { update, node };
+ };
++// wabot patch (RCA 2026-09-28): portado do Baileys 7.x - le o pacote de chaves que o
++// aparelho manda dentro do retry receipt (<keys>) para montar a sessao pairwise.
++const isValidUInt = (value) => typeof value === 'number' && Number.isInteger(value) && value >= 0;
++export const extractE2ESessionFromRetryReceipt = (receipt) => {
++    const keysNode = getBinaryNodeChild(receipt, 'keys');
++    if (!keysNode)
++        return null;
++    const typeBuf = getBinaryNodeChildBuffer(keysNode, 'type');
++    if (!typeBuf || typeBuf.length !== 1 || typeBuf[0] !== KEY_BUNDLE_TYPE[0])
++        return null;
++    const identity = getBinaryNodeChildBuffer(keysNode, 'identity');
++    const skey = getBinaryNodeChild(keysNode, 'skey');
++    if (!identity || identity.length !== 32 || !skey)
++        return null;
++    const registrationId = getBinaryNodeChildUInt(receipt, 'registration', 4);
++    if (!isValidUInt(registrationId))
++        return null;
++    const signedPubKey = getBinaryNodeChildBuffer(skey, 'value');
++    const signedSig = getBinaryNodeChildBuffer(skey, 'signature');
++    const signedKeyId = getBinaryNodeChildUInt(skey, 'id', 3);
++    if (!signedPubKey || signedPubKey.length !== 32 || !signedSig || !isValidUInt(signedKeyId)) {
++        return null;
++    }
++    const preKeyNode = getBinaryNodeChild(keysNode, 'key');
++    let preKey;
++    if (preKeyNode) {
++        const preKeyPub = getBinaryNodeChildBuffer(preKeyNode, 'value');
++        const preKeyId = getBinaryNodeChildUInt(preKeyNode, 'id', 3);
++        if (!preKeyPub || preKeyPub.length !== 32 || !isValidUInt(preKeyId)) {
++            return null;
++        }
++        preKey = { keyId: preKeyId, publicKey: generateSignalPubKey(preKeyPub) };
++    }
++    return {
++        registrationId,
++        identityKey: generateSignalPubKey(identity),
++        signedPreKey: {
++            keyId: signedKeyId,
++            publicKey: generateSignalPubKey(signedPubKey),
++            signature: signedSig
++        },
++        preKey
++    };
++};
+ //# sourceMappingURL=signal.js.map
+\ No newline at end of file
