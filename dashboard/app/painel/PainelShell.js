@@ -707,7 +707,7 @@ export default function PainelShell({ children }) {
                 nem foi ligado, e o alarme não corresponde a nada. */}
             <NoCredentialBanner show={shouldShowNoCredentialBanner({ hasAnyCredential, online, phone })} />
             <ExpiredMlSsidBanner expired={mlSsidExpired} />
-            <ScreenAssistant pathname={pathname} online={online} hasAnyCredential={hasAnyCredential} destinationCount={destGroupCount} />
+            <ScreenAssistant pathname={pathname} online={online} hasAnyCredential={hasAnyCredential} destinationCount={groupCount === null ? null : destGroupCount} />
             {children}
           </div>
         </div>
