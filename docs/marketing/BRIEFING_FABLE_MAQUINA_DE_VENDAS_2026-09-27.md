@@ -1,5 +1,7 @@
 # Briefing — tornar o Espelha Grupos uma máquina de vendas (27/09/2026)
 
+> 📌 **A fila de trabalho unificada (suas ações, código e backlog) está em `PENDENCIAS_UNIFICADAS_2026-09-28.md`.** Este arquivo fica como registro e fonte de dados.
+
 ## O que ainda falta (mapa atualizado em 28/09/2026)
 
 Este briefing **já foi executado** e não deve ser aberto novamente como se fosse uma demanda nova. O resultado está em `DIAGNOSTICO_MAQUINA_DE_VENDAS_2026-09-27.md` e `PLANO_SEO_GEO_2026-09-27.md`.

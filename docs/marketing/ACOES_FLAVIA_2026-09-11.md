@@ -1,5 +1,7 @@
 # O que você precisa fazer — fila única, em ordem
 
+> 📌 **A fila de trabalho unificada (suas ações, código e backlog) está em `PENDENCIAS_UNIFICADAS_2026-09-28.md`.** Este arquivo fica como registro e fonte de dados.
+
 ## O que ainda falta (resumo atualizado em 28/09/2026)
 
 - [ ] Quando B29 estiver em produção, pedir a reindexação das 10 páginas com “Revisado em” e `dateModified`.
@@ -36,6 +38,7 @@ para baixo; cada item diz o que decide.
 
 | # | Quando | O quê | Como | Tempo |
 |---|---|---|---|---|
+| 🔝 | assim que a PR dos links dos guias chegar em `main` | **Indexação dos guias por loja + 2 páginas editadas** (8 URLs, cabe em 1 dia): novas — `/guia/shopee-afiliados`, `/guia/amazon-afiliados`, `/guia/mercado-livre-afiliados`, `/guia/magalu-afiliados`, `/guia/shein-afiliados`, `/guia/aliexpress-afiliados`; editadas (ganharam links em "Continue lendo") — `/padronizar-divulgacao-afiliado-whatsapp`, `/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo` | Search Console → Inspeção de URL → conferir que abre em produção → Solicitar indexação | 15 min |
 | 🔝 | assim que a PR B29 chegar em `main` | **Reindexação B29 — “Revisado em” + `dateModified`** (10 por dia): `/`, `/bot-afiliados-whatsapp`, `/bot-achadinhos-whatsapp`, `/bot-que-busca-ofertas-shopee-whatsapp`, `/shopee-afiliados-whatsapp`, `/mercado-livre-afiliados-whatsapp`, `/amazon-afiliados-whatsapp`, `/espelhar-grupos-whatsapp`, `/automacao-whatsapp-afiliados`, `/alternativas/achadinhos-bot` | Search Console → Inspeção de URL → conferir “Revisado em” e o `dateModified` no HTML → Solicitar indexação | 15 min |
 | 1 | ✅ 28/09 | **Validar staging e levar `develop` → `main`** (7 PRs de 27/09: tela do dia 5, assinatura, ficha técnica, títulos, indicação, "é confiável", dados da pagadora) — **feito** | `http://178.105.54.0:3006`: home e `/precos` com a ficha técnica; `/espelha-grupos-e-confiavel` com os números; `/painel/plano` em conta de teste só com "Pagar agora"; card de indicação após 1ª oferta. Depois abrir PR `develop → main` | 20 min |
 | 2 | ✅ 28/09 | **Reindexação, leva 🔝 das páginas alteradas — pedida em 28/09**: `/`, `/precos`, `/espelha-grupos-e-confiavel`, `/alternativas/achadinho-pro`, `/programa-de-afiliados`, `/quanto-ganha-afiliado-shopee`, `/blog/como-divulgar-ofertas-mercado-livre-whatsapp`, `/amazon-afiliados-whatsapp`, `/espelhar-grupos-de-ofertas-vale-a-pena`, `/politica-de-reembolso` | Search Console → Inspeção de URL → produção conferida → indexação solicitada | 15 min |

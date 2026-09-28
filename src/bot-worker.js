@@ -116,6 +116,7 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { ensureDeviceSignaturePrefix } from './core/deviceIdentitySignature.js'
 import { createSentMessageStore } from './core/sentMessageStore.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
@@ -3523,6 +3524,20 @@ async function startBotInner() {
   startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
+  // Rede de segurança (RCA 2026-09-28, "Aguardando mensagem" parte 5): carteirinha
+  // do aparelho assinada com prefixo errado ([6,6], conta hosted na 6.7.23) faz todo
+  // celular de fora rejeitar o robô. Confere a cada start e refaz antes de conectar.
+  try {
+    const deviceSig = ensureDeviceSignaturePrefix(state.creds)
+    if (deviceSig.changed) {
+      await saveCreds()
+      logger.warn({ userId, wasLegacyHosted: deviceSig.wasLegacyHosted }, 'Assinatura do aparelho (device-identity) refeita com o prefixo [6,1] antes de conectar')
+    } else if (deviceSig.status === 'unfixable') {
+      logger.error({ userId }, 'Assinatura do aparelho não confere e não pôde ser refeita — par de chaves de identidade inconsistente; re-parear')
+    }
+  } catch (err) {
+    logger.warn({ userId, err: err?.message }, 'Falha ao conferir a assinatura do aparelho; seguindo sem alterar')
+  }
   const version = await fetchVersionCached()
 
   const sock = makeWASocket({

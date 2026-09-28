@@ -44,6 +44,14 @@ export function robotDiagnostic({ online = null, hasAnyCredential = null, destin
   if (destinationCount === 0) {
     return { step: 3, state: 'action', title: 'Falta escolher onde publicar', body: 'Adicione pelo menos um grupo ou canal de destino para concluir a configuração.', eta: 'cerca de 2 minutos', href: '/painel/espelhamento', action: 'Adicionar destino' }
   }
-  return { step: 3, state: 'ready', title: 'Seu robô está pronto para funcionar', body: 'WhatsApp conectado, loja cadastrada e destino escolhido.', eta: '3 de 3 concluídos', href: '/painel/envios?view=scheduled', action: 'Ver próximos envios' }
+  return { step: 3, state: 'ready', title: 'Seu robô está pronto para funcionar', body: 'WhatsApp conectado, loja cadastrada e destino escolhido.', eta: '3 de 3 concluídos', href: null, action: null }
 }
 
+// O card só existe para apontar uma pendência. Pronto (3/3) ou ainda
+// carregando não aparece: carregando evitaria um "pisca" em quem já está
+// pronta. Fechar vale para a pendência atual; se surgir outra (ex.: caiu o
+// WhatsApp depois de fechar o aviso da loja), o card volta.
+export function shouldShowRobotDiagnostic(diagnostic, dismissedStep = null) {
+  if (!diagnostic || diagnostic.state !== 'action') return false
+  return String(dismissedStep ?? '') !== String(diagnostic.step)
+}
