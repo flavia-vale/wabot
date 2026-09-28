@@ -22,9 +22,9 @@ da PR #1979 em `ACOES_FLAVIA` (+ o que eles mandam ler:
 | 1.8 | Contato e mensagem escritos para cada canal: `MENSAGENS_PRONTAS_2026-09-28.md` |
 | 1.9 CNPJ | **Não temos CNPJ** → B02 fora, segue sem razão social |
 | 1.9 print | Print do painel de vendas com dados de exemplo **marcados como ilustrativos** (Claude faz; nunca venda zero) |
-| 1.9 contadores | OK para expor contadores de uso, **com os números reais do banco** (B05) |
-| 1.9 pré-pago | **Aprovado** pré-pago de 3, 6 e 12 meses (B11); **falta só a tabela de valores** |
-| 1.9 sessão | OK para publicar agregados de sessão (B25); ver o que entra em 1.9 |
+| 1.9 contadores | **Só um contador: ofertas enviadas nos últimos 30 dias** (número real do banco). Os demais são pequenos e ficam de fora (B05) |
+| 1.9 pré-pago | **3 meses: 4% · 6 meses: 7%. Sem desconto para 12 meses (decidido: só esses dois)** (B11) |
+| 1.9 sessão | **B25 parado: Flávia não sabe onde é a derrubada de 50 min.** Nada de número de queda é publicado até haver dado (ver 1.9) |
 | D1 | **Sem carência de 48 h.** A partir do **5º dia do teste**, sinalizar no painel para a cliente |
 | D2 | **Sim: subir o teto de 80 para 100 vagas** (ver 2.4) |
 | D3 | Quando a correção estiver em `main`, Claude entrega o comando de reinício do `bot-supervisor` |
@@ -187,10 +187,10 @@ será inventado.
 | Tema | Situação (28/09) | Destrava |
 |---|---|---|
 | **CNPJ / razão social** | ✅ **Decidido: não temos.** B02 fica fora; segue sem `legalName`/`taxID`. Sem CNPJ também não há Reclame Aqui | B02 (descartado) |
-| **Print do painel de vendas** | ✅ Decidido: Claude gera com dados de exemplo **marcados "exemplo ilustrativo"** (nunca venda zero, nunca e-mail/cliente real). Depende de eu conseguir entrar no painel com a conta de teste | B04: home, `/precos`, `/vendas-e-comissao-afiliado-whatsapp` |
-| **Contadores de uso** (afiliadas ativas, envios 30 d, lojas, dias de sessão) | ✅ **OK, com os números reais do banco**, por snapshot diário. Número pequeno ou antigo eu omito | B05 |
-| **Pré-pago 3, 6 e 12 meses** | ✅ Aprovado. ⏳ **Falta a tabela de valores** (ex.: % de desconto por prazo). Sem ela não ligo desconto nenhum | B11 |
-| **Números agregados de sessão** | ✅ OK. Seriam: idade média das sessões, % que caíram no mês, preset padrão de envio. Só com amostra mínima, mês e método, e aviso de que o WhatsApp decide restrições; sem amostra, omito | B25 |
+| **Print do painel de vendas** | ✅ **Feito:** imagem ilustrativa ("exemplo ilustrativo — dados fictícios") colocada na home, em `/precos` e em `/vendas-e-comissao-afiliado-whatsapp` (componente `PainelVendasIlustrativo`). Ao ir para `main`, pedir reindexação dessas 3 URLs | B04 |
+| **Contadores de uso** | ✅ **Só "ofertas enviadas nos últimos 30 dias"**, número real, por snapshot diário. Afiliadas ativas, lojas e dias de sessão ficam de fora por serem pequenos | B05 |
+| **Pré-pago 3 e 6 meses** | ✅ **3 meses = 4% · 6 meses = 7%. Sem 12 meses (decidido).** Basic R$ 39: 3 m = R$ 112,32, 6 m = R$ 217,62; Pro R$ 69: 3 m = R$ 198,72, 6 m = R$ 385,02 (sobre 30 dias/mês). Falta só o código | B11 |
+| **Números agregados de sessão** | ⏳ **Parado.** Flávia não sabe onde é a derrubada de 50 min. Não achei derrubada proposital a cada 50 min no código; a queda de ~50 min em `docs/rca/whatsapp-sessao.md` era um defeito já corrigido, e a única derrubada de propósito que achei é `reception_self_heal`. O histórico de eventos guarda só 14 dias. Sem dado, **nada é publicado**; reabrir só se aparecer a origem da derrubada | B25 |
 | **Prints de preço + data** de concorrentes (página de preços inteira) | ⏳ Pendente. Ofertiva já tem ficha (22/09). Faltam: Afilira, GoGoBot, Afiliado Analytics, Afiliados Pro Bot, Whats.Ly, Pai das Ofertas, DisparaPromo, Growify, e Comission (site nunca achado — me mande o link ou print de onde a IA citou) | B26 e fichas |
 | **Conta de teste WhatsApp** disponível | ⏳ Pendente | B40 (Status) e validação da conversão pública |
 
@@ -249,11 +249,11 @@ começar qualquer uma: "faz o C3". Ordem = impacto ÷ esforço.
 
 | # | O quê | Por quê / métrica | Origem |
 |---|---|---|---|
-| **C1** | **Pedir a venda a quem viu funcionar** (decisão D1): (a) **a partir do 5º dia do teste, sinalizar no painel** com o número dela ("o robô publicou N ofertas em X grupos; continue por R$39") — *conferir antes o que a "tela do dia 5" já entregue em 27/09 faz e só completar o que falta*; (b) aviso de fim de teste também pelo WhatsApp da própria cliente (**validar tecnicamente antes de prometer**). **Sem carência de 48 h.** `TRIAL_ANCHOR_ON_CONNECT` segue desligado até decisão | ativou → abriu pagamento **26% → 40%** (+16 pagantes/mês); ler em 30 dias | Diagnóstico, ação 1 |
-| **C2** | **Diagnóstico da recorrência**: por que 13 assinaturas ficam pendentes e 11 cancelam (`diag-assinatura-recusada.mjs`); depois oferecer cobrança automática no 1º pagamento e no painel de quem paga avulso. *Status: há uma PR de "assinatura" mergeada em 28/09; falta confirmar com dado se a meta foi atingida* | pagantes com assinatura ativa **4 de 35 → ≥ 50%** | Diagnóstico, ação 3 |
-| **C3** | **Trilha D no medidor** (8 consultas de intenção de compra) em `ROTEIRO_MEDICAO_IA.md`, `scripts/medir-citacao-ia.mjs` e no teste que trava as consultas; conferir se as 4 consultas do B15 (grátis, Telegram, comissão, Pro Afiliados vale a pena) entraram na mesma rodada | linha de base em 27/10 | SEO-GEO F1, B15 |
-| **C4** | **Registro de "fatos errados ditos pelas IAs"** (Telegram, Basic manual, 4 lojas, 20 origens) com a fonte citada | zerar a lista | SEO-GEO F4 |
-| **C5** | **FAQ com schema nas 12 páginas-resposta** (hoje só as comerciais). Fonte única de 10 perguntas ("é grátis?", "tem Telegram?", "mostra comissão?", "é confiável?", "bloqueia o número?"); só onde falta | 12/12 páginas | SEO-GEO D3, B14 |
+| **C1** | ✅ **(a) feito** (tela de decisão no dia 5, `trialDecision.js`, sem carência). **(b) decidido (28/09): sinalizar no painel + e-mail + mensagem no próprio número conectado ao robô.** Painel e e-mail já existem; falta o envio pelo número conectado (validar tecnicamente: só para quem aceitou contato, sem virar spam, sem promessa de anti-ban). Entra no loop. **Sem carência de 48 h.** `TRIAL_ANCHOR_ON_CONNECT` segue desligado até decisão | ativou → abriu pagamento **26% → 40%** (+16 pagantes/mês); ler em 30 dias | Diagnóstico, ação 1 |
+| **C2** | ✅ **Diagnóstico feito (28/09, produção):** a chave do Mercado Pago está ok; 9 recusas por antifraude (`rejected_high_risk`) em 7 dias, 5 contas com checkout repetido e idêntico, 6 checkouts abandonados sem cartão. 3 contas voltaram a pagar na 2ª ou 3ª tentativa; 2 não voltaram (uma com 4 recusas seguidas, outra com 1). Contas identificadas só pelo script na VPS, sem nome no repositório. **Falta código:** não repetir checkout idêntico e mostrar o pagamento avulso (Pix) logo após a recusa. **Diagnóstico da recorrência**: por que 13 assinaturas ficam pendentes e 11 cancelam (`diag-assinatura-recusada.mjs`); depois oferecer cobrança automática no 1º pagamento e no painel de quem paga avulso. *Status: há uma PR de "assinatura" mergeada em 28/09; falta confirmar com dado se a meta foi atingida* | pagantes com assinatura ativa **4 de 35 → ≥ 50%** | Diagnóstico, ação 3 |
+| **C3** | ✅ **Já feito** (Trilha D com 8 consultas, B15 com 4 consultas em `src/ops/aiCitation.js`, teste em `test/ai-citation.test.js`; roteiro atualizado). **Trilha D no medidor** (8 consultas de intenção de compra) em `ROTEIRO_MEDICAO_IA.md`, `scripts/medir-citacao-ia.mjs` e no teste que trava as consultas; conferir se as 4 consultas do B15 (grátis, Telegram, comissão, Pro Afiliados vale a pena) entraram na mesma rodada | linha de base em 27/10 | SEO-GEO F1, B15 |
+| **C4** | ✅ **Já feito** (`FATOS_ERRADOS_IA.md`). **Registro de "fatos errados ditos pelas IAs"** (Telegram, Basic manual, 4 lojas, 20 origens) com a fonte citada | zerar a lista | SEO-GEO F4 |
+| **C5** | ✅ **Já feito (auditado em 28/09, sem mudança de código):** as 12 páginas-resposta já emitem `FAQPage` pelos seus renderizadores — `faqs` nas comerciais (`/bot-afiliados-whatsapp`, `/espelhar-grupos-de-ofertas-vale-a-pena`), `plainAnswers` no hub (`/automacao-whatsapp-afiliados`), `faq` via `buildArticleJsonLd` (`/melhores-bots-para-afiliados-whatsapp`, `/metodologia-uso-responsavel-whatsapp`, `/espelha-grupos-e-confiavel`, blogs) e FAQPage próprio em `/postar-em-varios-grupos…` e `/padronizar-divulgacao…`. Não criei a "fonte única de 10 perguntas": copiaria texto para páginas que já têm FAQ própria e coerente. **FAQ com schema nas 12 páginas-resposta** (hoje só as comerciais). Fonte única de 10 perguntas ("é grátis?", "tem Telegram?", "mostra comissão?", "é confiável?", "bloqueia o número?"); só onde falta | 12/12 páginas | SEO-GEO D3, B14 |
 | **C6** | **Próximas 8 páginas com impressão e pouco clique** (títulos): `/alternativas/achadinhos-bot` (6.508 imp., CTR 1,38%), `/blog/como-divulgar-ofertas-amazon-whatsapp`, `/blog/melhores-horarios-…`, `/blog/como-ser-afiliado-shopee-whatsapp` (pos. 9,4), `/alternativas/shozap`, `/alternativas/gigi-bot`, `/alternativas/fluxopromo`. *Parte foi feita no lote 2 de 27/09 — conferir o que resta antes de mexer.* **Não mexer** em título que está subindo fora dessa lista | +60 cliques/mês; medir pela série DIÁRIA | SEO-GEO D1 |
 | **C7** | **Tier 1 pela porta que já abre**: post "como ser afiliado Shopee" e `/quanto-ganha-afiliado-shopee` apontam para `/shopee-afiliados-whatsapp` como "próximo passo", e ela linka de volta; mesmo desenho para ML e Amazon. *Parcialmente feito em 27/09 (links "guia completo" em Shopee e ML) — conferir Amazon* | 3 páginas de loja com consulta-cabeça em posição < 20 | SEO-GEO D2 |
 | **C8** | **Repositório público `espelhagrupos/docs`** (glossário, metodologia, exemplos de mensagem convertida; sem abrir código do produto) | 2 domínios de terceiro citando o nome | Plano 18/09 §4.2 item 11 |
@@ -295,10 +295,10 @@ EG-07 = **B03** (feito) · EG-09 = **B07** e PR #1978 (feito) · EG-15 e EG-28 =
 | Item | Espera por | Estrutura já pronta? |
 |---|---|---|
 | ~~B02 CNPJ / razão social~~ | **descartado: sem CNPJ** | — |
-| B04 print do painel de vendas | Claude gerar o print de exemplo (marcado ilustrativo) | não |
-| B05 contadores no hero | **OK dado** (números reais); falta snapshot | não (hero lê arquivo estático validado, sem processo residente) |
-| B11 pré-pago 3/6/12 meses | **aprovado; falta a tabela de valores** | não (fluxo separado e idempotente; recorrência intocada) |
-| B25 "números do mês" | **OK dado**; falta amostra mínima e código | não |
+| ~~B04 print do painel de vendas~~ | **feito** (imagem ilustrativa nas 3 páginas) | — |
+| B05 contadores no hero | **OK dado**: só "ofertas enviadas 30 d" (real); falta snapshot | não (hero lê arquivo estático validado, sem processo residente) |
+| B11 pré-pago 3 e 6 meses | **aprovado: 3 m 4%, 6 m 7%; sem 12 meses** | não (fluxo separado e idempotente; recorrência intocada) |
+| B25 "números do mês" | **parado**: sem dado sobre a derrubada de 50 min | não |
 | B27 depoimentos | textos, fotos, permissões | componente compartilhado a fazer |
 | B26 comparativos / fichas | prints de preço | fichas em `dashboard/lib/competitors-data.js` |
 
@@ -385,7 +385,7 @@ Afiliados (B) ou dos outros relatórios.
 2. **Não repetir o que o grupo já viu** em 7/30 dias + "verificação antes de postar" (B35).
 3. **Página de "Proteção do número: os números do mês"** (B25, depende de dado seu).
 4. **Crescer o grupo, não só abastecê-lo** (contador de entradas/saídas, vitrine B33).
-5. **Pré-pago com desconto 3/6/12 meses** (B11, depende da tabela).
+5. **Pré-pago com desconto de 3 e 6 meses** (B11: 4% e 7%; sem 12 meses). Falta só o código.
 6. **Programa de indicação dentro do produto** — o link já aparece na 1ª oferta publicada (feito em 27/09); falta ver se gera cadastro (meta: ≥ 5 com `referredBy` em 30 dias, hoje 0).
 
 ---
@@ -398,7 +398,7 @@ Afiliados (B) ou dos outros relatórios.
 | **29/09** | Indexação Dia B · Planejador de Palavras-Chave | Flávia |
 | **30/09** | Medição curta (Search Console + 2 diagnósticos) · indexação Dia C | Flávia |
 | **1–2/10** | Indexação Dias D, E e F (F só depois do `main`) · WhatsApp para os 63 (contínuo, 5–10/dia) · depoimentos (1.2, comando + mensagem prontos) | Flávia |
-| **Semana de 5/10** | Guest-parágrafo (1.8) · vídeo 2 · mandar a tabela de desconto do pré-pago (B11) | Flávia |
+| **Semana de 5/10** | Guest-parágrafo (1.8) · vídeo 2 | Flávia |
 | **1ª quinzena de outubro** | Renovação da turma de setembro (só observar) | — |
 | **até 15/10** | Claude entrega comandos do teto 100 (D2, aprovado) · janela do supervisor (D3) assim que a correção estiver em `main` | Claude + Flávia |
 | **~11/10** | Rodada de IA opcional | Flávia |
