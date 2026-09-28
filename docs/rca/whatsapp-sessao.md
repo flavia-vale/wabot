@@ -135,6 +135,43 @@ do `sender-key` (estados/keyId/iteração/mtime) e do `sender-key-memory`
 `<keys>`, repetidos, não guardada, erro) e uma linha de leitura. Passo
 seguinte obrigatório: grupo de teste com um celular real como membro.
 
+### Parte 5 (RCA 2026-09-28): a carteirinha do aparelho em conta hosted era assinada com o prefixo errado
+
+**Dado (prod):** `diag-aguardando-frota` mostrou que pareamento, plataforma,
+keyIndex e LID não separam as contas afetadas das 61 saudáveis, e que em várias
+contas o reenvio direto funciona (pedidos sem desistência). No grupo da cliente
+(5 membros de fora, todos `@lid`), TODO aparelho de fora, inclusive um celular
+limpo entrando no grupo, recusava a original e o reenvio direto feito com as
+próprias chaves; só o celular da própria conta abria. `diag-identidade-aparelho`
+(verificação real com o libsignal — `Curve.verify` do Baileys 6.7.23 devolve
+`true` para qualquer assinatura) achou **5 de 150 contas** com
+`account.deviceSignature` que NÃO confere com o prefixo `[6,1]` e confere com
+`[6,6]`; a conta da cliente é uma delas.
+
+**Causa (código, 6.7.23 × whatsmeow × 7.x):** em `configureSuccessfulPairing`
+a 6.7.23 assina a carteirinha do aparelho com `[6,6]` quando a conta é hosted
+(WhatsApp Business hospedado, `accountType=HOSTED`). O whatsmeow
+(`generateDeviceSignature`) e o Baileys 7.x assinam **sempre** com `[6,1]`; só
+a assinatura da CONTA muda de prefixo em hosted. O celular de quem não é da
+conta verifica o `device-identity` que vai junto da mensagem com `[6,1]`,
+rejeita o aparelho e mostra "Aguardando mensagem" para tudo que ele manda; pede
+reenvio até desistir. O celular da própria conta confia no aparelho vinculado
+por outro caminho e abre normal — por isso "a dona vê, o resto não".
+
+**Conserto:**
+- patch (`validate-connection.js`): `devicePrefix` sempre `[6,1]` — vale para
+  pareamentos novos;
+- contas já pareadas: `scripts/fix-assinatura-aparelho.mjs <email> --aplicar`
+  recalcula `account.deviceSignature` com `[6,1]` usando a chave privada atual,
+  confere com a pública, guarda `creds.json.bak-<ts>` e grava só esse campo.
+  **Aplicar com a sessão desligada** (o worker regravaria a assinatura antiga
+  do `creds` em memória) e ligar de novo. Alternativa: re-parear.
+
+**Não regredir:** `test/baileys-hosted-device-signature.test.js` (patch no
+`node_modules` + prova de que assinatura `[6,6]` não confere com `[6,1]`).
+Diagnóstico: `scripts/diag-identidade-aparelho.mjs [email]` (`prefixo=6,6` =
+precisa do conserto).
+
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
 Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel
