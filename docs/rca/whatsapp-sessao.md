@@ -40,6 +40,42 @@ Falha de disco nunca quebra o envio.
 - Mensagens presas de antes do deploy não se recuperam.
 - Vale só após `pm2 restart bot-supervisor` (código do worker).
 
+### Parte 2 (RCA 2026-09-28): o reenvio saía, mas o membro não conseguia abrir
+
+**Dado (prod, `BOT_LOG_DIR=/home/deploy/BOTinho-shared/logs`, 6 h):** 4469
+pares mensagem+membro. Em 205 deles o membro pediu de novo DEPOIS de atendido.
+Houve 972 `error in sending message again` e 56.276 `will not send message
+again, as sent too many times`. 101 de 214 membros pediram 10+ vezes. 99% dos
+pedidos vinham de aparelho `@lid`.
+
+**Causa (código, 6.7.23 × 7.0.0-rc14):** no reenvio de mensagem de grupo, a
+6.7.23 re-cifrava com a chave do grupo (`skmsg`) e mandava uma SKDM nova, sem
+`count` no `<enc>`. Para montar a sessão, ignorava as chaves que vêm no próprio
+pedido (`<keys>`) e buscava no servidor (`assertSessions(force)`). A 7.x (e o
+whatsmeow/WA Web) fazem o reenvio assim:
+- a mensagem vai cifrada **direto para o aparelho que pediu** (`pkmsg`/`msg`),
+  com a SKDM embutida, `count` e `device-identity`;
+- a sessão é montada com o pacote de chaves do pedido
+  (`extractE2ESessionFromRetryReceipt`).
+
+**Conserto:** o mesmo `patches/@whiskeysockets+baileys+6.7.23.patch` porta as
+duas coisas:
+- `relayMessage` com `participant` em grupo;
+- `sendMessagesAgain(…, receiptNode)`;
+- `getSenderKeyDistributionMessage` no `libsignal.js`;
+- `extractE2ESessionFromRetryReceipt` em `Utils/signal.js`.
+
+Não migra para a 7.x (a migração de sessões para LID não tem volta).
+
+**Não regredir:** `test/baileys-retry-resend-patch.test.js` roda a
+criptografia real nos dois lados. O membro que não tinha a chave do grupo pede
+reenvio com as próprias chaves, abre o reenvio e abre a próxima oferta do grupo.
+O teste também confere o patch no `node_modules`.
+
+**Medição de aceite:** rodar `/tmp/diag-retry2.cjs` (script do RCA) depois do
+restart. "pediram de novo DEPOIS de atendido", "erro no reenvio" e "desistiu"
+têm que cair para perto de 0.
+
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
 Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel
