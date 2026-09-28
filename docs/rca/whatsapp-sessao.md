@@ -167,10 +167,20 @@ por outro caminho e abre normal — por isso "a dona vê, o resto não".
   **Aplicar com a sessão desligada** (o worker regravaria a assinatura antiga
   do `creds` em memória) e ligar de novo. Alternativa: re-parear.
 
-**Não regredir:** `test/baileys-hosted-device-signature.test.js` (patch no
-`node_modules` + prova de que assinatura `[6,6]` não confere com `[6,1]`).
+**Confirmado em prod (2026-09-28 15:10 BRT):** assinatura refeita na conta da
+cliente com a sessão parada, sessão religada, oferta seguinte abriu no celular
+de fora. As outras 4 contas hosted receberam o mesmo conserto em seguida.
+
+**Rede de segurança (não regredir):** `src/core/deviceIdentitySignature.js`
+(`ensureDeviceSignaturePrefix`, puro) roda no `bot-worker` logo depois de
+carregar o `auth_info` e ANTES de criar o socket: se a assinatura não confere
+com `[6,1]`, refaz com a chave privada atual e grava (`saveCreds`). Cobre conta
+antiga, backup restaurado e qualquer pareamento que volte a assinar errado.
+`test/device-identity-signature.test.js` prova o módulo e a ligação no worker;
+`test/baileys-hosted-device-signature.test.js` prende o patch.
 Diagnóstico: `scripts/diag-identidade-aparelho.mjs [email]` (`prefixo=6,6` =
-precisa do conserto).
+precisa do conserto); conserto imediato sem esperar restart:
+`scripts/fix-assinatura-aparelho.mjs --todas --aplicar --religar`.
 
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
