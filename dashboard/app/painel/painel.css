@@ -2475,7 +2475,9 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
 .pnl-robot-diagnostic h2 { margin: 2px 0; color: var(--ink); font-size: 15px; }
 .pnl-robot-diagnostic p { margin: 0; color: var(--ink-soft); font-size: 12.5px; }
 .pnl-robot-diagnostic p span { font-weight: 700; }
+.pnl-robot-actions { display: flex; align-items: center; gap: 8px; }
 @media (max-width: 640px) {
   .pnl-robot-diagnostic { grid-template-columns: auto minmax(0, 1fr); }
-  .pnl-robot-diagnostic > .pnl-btn { grid-column: 1 / -1; justify-content: center; }
+  .pnl-robot-actions { grid-column: 1 / -1; }
+  .pnl-robot-actions > .pnl-btn { flex: 1; justify-content: center; }
 }
