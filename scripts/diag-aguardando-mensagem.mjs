@@ -86,7 +86,7 @@ try {
   meUsers = new Set([creds?.me?.id, creds?.me?.lid].filter(Boolean).map((j) => String(j).split(/[:@]/)[0]))
   console.log(`\nIdentidade do robô: ${[...meUsers].join(' / ')} (PN / LID, só a parte do usuário)`)
 } catch {}
-const isOwnDevice = (jid) => meUsers.has(String(jid || '').split(/[:@]/)[0])
+const isOwnDevice = (jid) => meUsers.has(String(jid || '').split(/[-:@.]/)[0])
 
 console.log(`\n=== CHAVES DO GRUPO NO auth_info (${authDir}) ===`)
 const jids = destinos.map((g) => g.waJid)
