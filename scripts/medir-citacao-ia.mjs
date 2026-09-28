@@ -22,7 +22,7 @@
  */
 
 import { writeFileSync } from 'node:fs'
-import { ROUND_QUERIES, PROAFILIADOS_BASELINE_QUERIES, EXTRA_COMPETITOR_NAMES, buildGeminiRequest, parseGeminiResponse, buildTrackingRow } from '../src/ops/aiCitation.js'
+import { ROUND_QUERIES, PROAFILIADOS_BASELINE_QUERIES, AFILIRA_BASELINE_QUERIES, EXTRA_COMPETITOR_NAMES, buildGeminiRequest, parseGeminiResponse, buildTrackingRow } from '../src/ops/aiCitation.js'
 
 function arg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -79,7 +79,9 @@ async function ask(query) {
 }
 
 const names = await competitorNames()
-const availableQueries = querySet === 'b15' ? PROAFILIADOS_BASELINE_QUERIES : ROUND_QUERIES
+const availableQueries = querySet === 'b15'
+  ? PROAFILIADOS_BASELINE_QUERIES
+  : querySet === 'afilira' ? AFILIRA_BASELINE_QUERIES : ROUND_QUERIES
 const selected = only ? availableQueries.filter((_, i) => i + 1 === only) : availableQueries
 const rows = []
 const raw = []
