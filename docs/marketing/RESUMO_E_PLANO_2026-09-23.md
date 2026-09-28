@@ -1,5 +1,25 @@
 # Resumo da rodada de 23/09 e plano imediato
 
+## O que ainda falta (mapa atualizado em 28/09/2026)
+
+- [ ] Conferir no Bing as páginas prioritárias e concluir as levas de reindexação que ainda aparecem como `⏳` em `ACOES_FLAVIA_2026-09-11.md`.
+- [ ] Consultar no Planejador os termos `automação para afiliados` e `automação para afiliado shopee`.
+- [ ] Falar por WhatsApp, em lotes de 5 a 10, com as 63 pessoas que ativaram e sumiram; classificar as respostas em preço, função, medo de bloqueio e tempo/outro.
+- [ ] Obter 3 a 5 depoimentos reais, com nome e autorização, para publicação.
+- [ ] Publicar os vídeos 2 a 8 e iniciar distribuição externa: guest-parágrafos, criadores pequenos, Telegram autorizado e Quora.
+- [ ] Fazer a medição mensal em 27/10 e só então reavaliar anúncio pago; a renovação da turma de setembro ainda é o dado decisivo.
+- [ ] Manter a conferência mensal dos robôs de IA na Cloudflare; a regra contra robôs de ataque continua opcional.
+
+### O que já foi executado desde este resumo
+
+- [x] O prompt de aprofundamento virou o diagnóstico e o plano SEO/GEO de 27/09, além da análise do Pro Afiliados.
+- [x] A leitura errada de retenção foi corrigida com coorte: 7 de 7 clientes de agosto renovaram; não se trata mais retenção como gargalo comprovado.
+- [x] A rodada manual de Gemini, Perplexity e AI Overviews foi concluída em 27/09; a próxima passou a ser mensal.
+- [x] A definição da marca e as respostas sobre confiança, reembolso e modelos de automação foram publicadas; as principais páginas alteradas tiveram indexação solicitada em 28/09.
+- [x] O primeiro vídeo foi publicado, incorporado ao blog e à tela de Espelhamento.
+
+> Fonte de verdade para execução diária: `ACOES_FLAVIA_2026-09-11.md`. Este bloco substitui o plano imediato histórico abaixo; ele foi mantido como registro da decisão de 23/09.
+
 Fontes: Search Console (3 meses e série diária), `diag-origem-cadastros`,
 `diag-paginas-seo`, `diag-ltv-retencao` (30 dias), 10 consultas no ChatGPT com
 busca, Cloudflare AI Crawl Control (30 dias, códigos e endereços), Bing
