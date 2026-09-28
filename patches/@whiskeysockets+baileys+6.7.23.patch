@@ -23,7 +23,7 @@ index f4458db..e6912a6 100644
              const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
              await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..b029f6e 100644
+index c46b096..b8e3f77 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 @@ -7,7 +7,8 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
@@ -45,11 +45,18 @@ index c46b096..b029f6e 100644
          // todo: implement a cache to store the last 256 sent messages (copy whatsmeow)
          const msgs = await Promise.all(ids.map(id => getMessage({ ...key, id })));
          const remoteJid = key.remoteJid;
-@@ -472,7 +473,36 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -471,8 +472,42 @@ export const makeMessagesRecvSocket = (config) => {
+         // if it's the primary jid sending the request
          // just re-send the message to everyone
          // prevents the first message decryption failure
-         const sendToAll = !jidDecode(participant)?.device;
+-        const sendToAll = !jidDecode(participant)?.device;
 -        await assertSessions([participant], true);
++        // wabot patch (RCA 2026-09-28, parte 3): em GRUPO, pedido sem ":device" no jid vem do
++        // aparelho principal (device 0) do membro - o caso mais comum (97% em prod). A regra
++        // original tratava isso como "reenviar para o grupo todo" (skmsg de novo, o mesmo
++        // caminho que o membro nao conseguiu abrir). Em grupo o reenvio vai sempre direto
++        // (pairwise) para quem pediu; device 0 = jid sem ":N".
++        const sendToAll = !isJidGroup(remoteJid) && !jidDecode(participant)?.device;
 +        // wabot patch (RCA 2026-09-28): o pedido de reenvio traz as chaves atuais do
 +        // aparelho que pediu (<keys>). Montar a sessao com elas, como o Baileys 7.x;
 +        // so buscar no servidor se o pedido vier sem chaves validas.
@@ -83,7 +90,7 @@ index c46b096..b029f6e 100644
          if (isJidGroup(remoteJid)) {
              await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } });
          }
-@@ -554,7 +584,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -554,7 +589,7 @@ export const makeMessagesRecvSocket = (config) => {
                              if (key.fromMe) {
                                  try {
                                      logger.debug({ attrs, key }, 'recv retry request');
@@ -92,7 +99,7 @@ index c46b096..b029f6e 100644
                                  }
                                  catch (error) {
                                      logger.error({ key, ids, trace: error.stack }, 'error in sending message again');
-@@ -668,6 +698,16 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -668,6 +703,16 @@ export const makeMessagesRecvSocket = (config) => {
                              }
                          });
                      }
