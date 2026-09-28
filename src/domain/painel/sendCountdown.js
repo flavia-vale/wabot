@@ -10,9 +10,9 @@ export function formatSendCountdown(value, now = Date.now()) {
     return `sai em ${minutes}:${rest}`
   }
   const hours = Math.floor(seconds / 3600)
-  const minutes = Math.ceil((seconds % 3600) / 60)
+  const minutes = Math.floor((seconds % 3600) / 60)
   if (hours < 24) return `sai em ${hours}h${minutes ? ` ${minutes}min` : ''}`
-  const days = Math.ceil(seconds / 86400)
+  const days = Math.floor(seconds / 86400)
   return `sai em ${days}d`
 }
 

@@ -8,3 +8,10 @@ test('contagem regressiva mostra minutos e segundos até o envio', () => {
   assert.equal(formatSendCountdown('2026-09-28T12:00:00Z', now), 'sai agora')
 })
 
+
+test('contagem regressiva nunca mostra 60min nem arredonda o dia para cima', () => {
+  const now = 0
+  assert.equal(formatSendCountdown(new Date(7199 * 1000), now), 'sai em 1h 59min')
+  assert.equal(formatSendCountdown(new Date(3600 * 1000), now), 'sai em 1h')
+  assert.equal(formatSendCountdown(new Date(90000 * 1000), now), 'sai em 1d')
+})
