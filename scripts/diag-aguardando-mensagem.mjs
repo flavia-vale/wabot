@@ -80,6 +80,14 @@ const sentCount = existsSync(sentDir) ? readdirSync(sentDir).filter((f) => f.end
 console.log(`\n=== MENSAGENS GUARDADAS PARA REENVIO ===`)
 console.log(`${sentDir}: ${sentCount} arquivo(s)  (0 = nada enviado neste worker nas últimas 24 h, ou BOT_LOG_DIR errado)`)
 
+let meUsers = new Set()
+try {
+  const creds = JSON.parse(readFileSync(join(authDir, 'creds.json'), 'utf8'))
+  meUsers = new Set([creds?.me?.id, creds?.me?.lid].filter(Boolean).map((j) => String(j).split(/[:@]/)[0]))
+  console.log(`\nIdentidade do robô: ${[...meUsers].join(' / ')} (PN / LID, só a parte do usuário)`)
+} catch {}
+const isOwnDevice = (jid) => meUsers.has(String(jid || '').split(/[:@]/)[0])
+
 console.log(`\n=== CHAVES DO GRUPO NO auth_info (${authDir}) ===`)
 const jids = destinos.map((g) => g.waJid)
 for (const grupo of destinos) {
@@ -105,9 +113,11 @@ for (const grupo of destinos) {
     console.log('   sender-key: AUSENTE — o próximo envio cria chave NOVA; quem está na memory acima NÃO recebe a SKDM dela (todo mundo preso)')
   }
   for (const file of keyFiles) {
-    const who = file.slice(prefix.length + 2, -'.json'.length)
+    const who = file.slice(prefix.length + 2, -'.json'.length) + (isOwnDevice(file.slice(prefix.length + 2)) ? ' (do robô)' : ' (recebida de outro participante)')
     try {
-      const states = JSON.parse(readFileSync(join(authDir, file), 'utf8'))
+      // O Baileys grava o registro como Buffer (BufferJSON) contendo o JSON dos estados.
+      let states = JSON.parse(readFileSync(join(authDir, file), 'utf8'))
+      if (states && states.type === 'Buffer') states = JSON.parse(Buffer.from(states.data, 'base64').toString('utf8'))
       const resumo = (Array.isArray(states) ? states : []).map((s) => `id=${s?.senderKeyId} it=${s?.senderChainKey?.iteration}`).join(' | ')
       console.log(`   sender-key ${who}: ${Array.isArray(states) ? states.length : '?'} estado(s) [${resumo}]  gravado ${fmt(statSync(join(authDir, file)).mtimeMs)}`)
     } catch (err) {
@@ -131,6 +141,7 @@ const porGrupo = new Map(jids.map((jid) => [jid, {
   pedidosSendToAll: 0,
   countDist: new Map(),
   membros: new Set(),
+  pedidosPorMembro: new Map(),
   msgIds: new Set(),
   pares: new Map(),
   montados: 0,
@@ -168,7 +179,7 @@ for await (const raw of rl) {
     if (line.hasKeys) g.pedidosComKeys++
     if (line.sendToAll) g.pedidosSendToAll++
     inc(g.countDist, String(line.retryCount ?? '?'))
-    if (line.participant) g.membros.add(line.participant)
+    if (line.participant) { g.membros.add(line.participant); inc(g.pedidosPorMembro, line.participant) }
     if (line.msgId) g.msgIds.add(line.msgId)
     inc(g.pares, `${line.msgId}|${line.participant}`)
     g.primeiroPedido = g.primeiroPedido ?? line.time
@@ -198,6 +209,8 @@ for (const grupo of destinos) {
     console.log(`     pares (msg+membro) que pediram de novo depois de atendidos: ${repetidos}`)
     console.log(`     reenvios montados: ${g.montados} (${[...g.encType].map(([k, v]) => `${k}×${v}`).join(' ') || '-'})  erros: ${g.erros}  desistiu (>5): ${g.desistiu}  não guardada: ${g.naoGuardada}`)
     console.log(`     primeiro/último pedido: ${fmt(g.primeiroPedido)} / ${fmt(g.ultimoPedido)}`)
+    const top = [...g.pedidosPorMembro].sort((a, b) => b[1] - a[1]).slice(0, 10)
+    console.log(`     quem pediu (até 10): ${top.map(([m, n]) => `${m}×${n}${isOwnDevice(m) ? ' [aparelho da PRÓPRIA conta]' : ''}`).join('  ')}`)
   }
   if (g.envios > 0 && g.pedidos === 0) {
     console.log('   → LEITURA: houve envio e NENHUM aparelho pediu reenvio. Se a cliente vê "Aguardando mensagem" nestas mensagens, os aparelhos não estão pedindo reenvio (o retry não alcança) — validar com celular de teste no grupo.')
