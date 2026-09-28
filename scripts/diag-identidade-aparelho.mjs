@@ -24,9 +24,20 @@ import 'dotenv/config'
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 import { proto } from '@whiskeysockets/baileys'
-import { Curve } from '@whiskeysockets/baileys/lib/Utils/crypto.js'
+import libsignal from 'libsignal'
 import db from '../src/db.js'
 import { getAuthInfoBaseDir, getAuthInfoDir } from '../src/paths.js'
+
+// Não usar `Curve.verify` do Baileys 6.7.23: ele ignora o retorno booleano do
+// libsignal e devolve true para qualquer assinatura. Aqui a resposta é real.
+const verificar = (pubKey, message, signature) => {
+  try {
+    const key = pubKey.length === 33 ? pubKey : Buffer.concat([Buffer.from([5]), pubKey])
+    return libsignal.curve.verifySignature(key, message, signature) === true
+  } catch {
+    return false
+  }
+}
 
 const email = process.argv.slice(2).find((a) => !a.startsWith('--'))
 const fmt = (value) => (value ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '-')
@@ -57,10 +68,10 @@ function checar(userId) {
     out.advTs = Number(dev.timestamp) * 1000
   } catch { out.keyIndex = '?' }
   out.assinaturaConta = accountSignatureKey && accountSignature
-    ? Curve.verify(accountSignatureKey, Buffer.concat([Buffer.from([6, 0]), details, identityPub]), accountSignature)
+    ? verificar(accountSignatureKey, Buffer.concat([Buffer.from([6, 0]), details, identityPub]), accountSignature)
     : null
   out.assinaturaAparelho = accountSignatureKey && deviceSignature
-    ? Curve.verify(identityPub, Buffer.concat([Buffer.from([6, 1]), details, identityPub, accountSignatureKey]), deviceSignature)
+    ? verificar(identityPub, Buffer.concat([Buffer.from([6, 1]), details, identityPub, accountSignatureKey]), deviceSignature)
     : null
   const signalIdentity = (creds.signalIdentities || [])[0]
   const signalKey = toBuf(signalIdentity?.identifierKey)
