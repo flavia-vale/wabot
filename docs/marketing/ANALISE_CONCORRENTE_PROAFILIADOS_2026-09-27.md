@@ -1,5 +1,29 @@
 # Análise profunda do concorrente Pro Afiliados (proafiliados.com) — 27/09/2026
 
+## O que ainda falta (mapa atualizado em 28/09/2026)
+
+Fonte do status: `PLANO_EXECUCAO_BACKLOG_PROAFILIADOS_2026-09-28.md`.
+
+### Pendências imediatas ou bloqueadas
+
+- [ ] **B02, B04, B05, B10, B11, B25 e B27:** obter, respectivamente, dados oficiais de CNPJ/razão social, print sanitizado, snapshot de uso, acesso aos serviços externos, tabela aprovada de descontos, agregados mensais e depoimentos autorizados. Nada deve ser inventado.
+- [ ] **B15:** executar a medição externa nas quatro IAs; roteiro e medidor já estão instrumentados.
+- [ ] **B14 e B26:** completar FAQ/comparativos somente onde ainda há lacuna e existe ficha datada; seis dos oito comparativos já existiam.
+- [ ] **B12, B21, B22 e B40:** fazer validação funcional dedicada antes de liberar; conversão pública, atribuição, recorrência e Status podem afetar comissão ou envio.
+- [ ] **B20:** a fundação de cliques já existe, mas ainda falta usar os links no envio e mostrar oferta/destino no painel.
+- [ ] **B08, B17, B18, B23, B24, B31–B39 e B41:** continuam no backlog sem execução comprovada. B37 e B39 exigem aviso e aprovação de memória antes de qualquer implementação.
+- [ ] Pedir a reindexação B29 quando a versão com “Revisado em” estiver em produção e medir o efeito do vídeo B30.
+
+### Já executado ou confirmado
+
+- [x] **B01, B03, B06, B07, B09, B13, B19 e B42** foram implementados.
+- [x] **B16** já existia: pareamento por código de 8 dígitos.
+- [x] **B28** já existia em `/parceiro-influenciador` e `/painel/afiliados`; não foi movido para a URL editorial `/programa-de-afiliados`.
+- [x] **B29** foi implementado no código; resta a reindexação externa.
+- [x] **B30** teve a primeira entrega: vídeo publicado e incorporado ao blog e à tela de Espelhamento.
+
+> O backlog original abaixo registra a análise de 27/09. Em conflito de status, prevalece este mapa e o plano de execução de 28/09.
+
 **Método.** Site público inteiro lido em 27/09/2026 (48 URLs do sitemap, JSON-LD,
 robots, llms.txt), área logada percorrida com conta de teste (todas as 10 telas
 do menu, modal de planos, tema claro/escuro, versão celular) e mapa das 36 rotas

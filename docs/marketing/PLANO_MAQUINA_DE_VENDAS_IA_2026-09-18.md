@@ -1,5 +1,26 @@
 # Máquina de vendas por IA — o que fazer para o ChatGPT (e Gemini, Perplexity, AI Overviews) indicarem o Espelha Grupos
 
+## O que ainda falta (mapa atualizado em 28/09/2026)
+
+- [ ] Finalizar Bing, Planejador de Palavras-Chave e as levas de indexação ainda marcadas `⏳` na fila canônica `ACOES_FLAVIA_2026-09-11.md`.
+- [ ] Executar a linha de base B15 nas quatro superfícies; roteiro e medidor já estão prontos, mas a medição externa ainda falta.
+- [ ] Obter dados/autorização para CNPJ e razão social, print real do painel, contadores de uso e 3 a 5 depoimentos reais.
+- [ ] Publicar os vídeos 2 a 8 e criar presença de terceiros por guest-parágrafos, criadores pequenos, Telegram autorizado e Quora.
+- [ ] Completar fichas de concorrentes somente com preço, fonte e data; não criar ficha de PromoBot/OfertasBot sem evidência independente.
+- [ ] Medir novamente em 27/10: Search Console, funil, LTV, motivos de não renovação, origem de cadastro, indicações e as quatro IAs. Anúncio pago fica adiado até a renovação da turma de setembro.
+- [ ] Manter mensalmente a conferência de GPTBot, ClaudeBot e Claude-User na Cloudflare.
+
+### O que já foi executado depois da revisão de 20/09
+
+- [x] Rodada manual de IA concluída em 27/09; a marca passou de 0/4 para 3/4 na pergunta “o que é”, e o novo ponto fraco medido é categoria (6/20).
+- [x] LTV e retenção foram medidos; a leitura de 17% foi corrigida e a coorte de agosto fechou 7 de 7 renovações.
+- [x] Páginas de resposta, definição da marca, ficha técnica, confiança, reembolso, títulos e comparativos prioritários foram entregues.
+- [x] Validadores de SEO, frescor e CSV de medição estão no gate.
+- [x] Vídeo 1 foi publicado e embutido no blog e no painel.
+- [x] Parte segura do backlog Pro Afiliados foi implementada: B03, B06, B07, B09, B13, B19 e B42.
+
+> As seções datadas de 18–20/09 abaixo são histórico. Para a ordem operacional atual, usar `ACOES_FLAVIA_2026-09-11.md`.
+
 Data: 2026-09-18. Levantamento feito por 6 leitores em paralelo (docs de
 marketing, código do site, site ao vivo, mecânica do ChatGPT com fontes de
 2025-2026, onde os concorrentes aparecem, diretórios e comunidades) + 4 buscas
