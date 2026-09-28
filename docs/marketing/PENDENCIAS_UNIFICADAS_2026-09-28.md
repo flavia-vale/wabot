@@ -1,0 +1,374 @@
+# Tudo o que está em aberto — lista única (28/09/2026)
+
+**Este é o documento para olhar.** Ele junta e substitui os "O que ainda falta"
+dos cinco relatórios abaixo. Os relatórios continuam existindo como registro
+(dados, URLs, passo a passo), mas a fila de trabalho mora aqui.
+
+Fontes unidas: `ACOES_FLAVIA_2026-09-11.md`, `RESUMO_E_PLANO_2026-09-23.md`,
+`BRIEFING_FABLE_MAQUINA_DE_VENDAS_2026-09-27.md`,
+`PLANO_MAQUINA_DE_VENDAS_IA_2026-09-18.md`,
+`ANALISE_CONCORRENTE_PROAFILIADOS_2026-09-27.md` (+ o que eles mandam ler:
+`PLANO_EXECUCAO_BACKLOG_PROAFILIADOS_2026-09-28.md`,
+`DIAGNOSTICO_MAQUINA_DE_VENDAS_2026-09-27.md`, `PLANO_SEO_GEO_2026-09-27.md`).
+
+## Como está dividido
+
+| Parte | O que é | Quem faz |
+|---|---|---|
+| **1 · Suas ações** | Só você consegue (conta externa, decisão, conversa com cliente, vídeo, OK) | Flávia |
+| **2 · Ações de código** | Já decididas; é só pedir ("faz o item C3") | Claude (PR → `develop`) |
+| **3 · Backlog de funcionalidades** | Coisas novas, ainda sem decisão de fazer. Nada aqui começa sem você dizer | decisão sua, depois código |
+| **4 · Calendário** | As datas fixas juntas | — |
+| **5 · Não fazer** | Já derrubado por dado | — |
+
+Regras que valem para tudo: nada de anúncio pago antes da renovação de outubro;
+sem CNPJ não há Reclame Aqui nem razão social; depoimento só de cliente real
+com permissão; nunca prometer "não bane"; preço de concorrente só com ficha
+datada; qualquer coisa que aumente RAM exige aviso e OK antes.
+
+## O que decide a ordem (a "prioridade" em uma frase)
+
+1. **Quem já viu funcionar e sumiu** (63 pessoas) é o maior vazamento medido:
+   ativou → abriu pagamento é só 26%. Ação 1.1 e código C1.
+2. **Renovação da turma de setembro** (26 clientes, 1ª quinzena de outubro) é o
+   dado que destrava anúncio pago e teto de vagas. Só observar; 1.13 e 1.14.
+3. **Indexação das páginas alteradas** é o que faz Google/IAs pararem de ler o
+   texto velho. Barato (15 min/dia). 1.3.
+4. O resto é construção de autoridade externa (vídeos, guest, criadores), que
+   demora 30–60 dias para aparecer.
+
+---
+
+# PARTE 1 — Suas ações (Flávia)
+
+Legenda: 🔴 esta semana · 🟠 até 15/10 · 🟡 até 27/10 · 🔁 recorrente.
+Tempo é estimativa.
+
+## 1.1 🔴 Conversar com os 63 que ativaram e sumiram — 20 min/dia
+
+| | |
+|---|---|
+| **Por quê** | Maior perda absoluta da máquina. E-mail já provou que não funciona (zero respostas) |
+| **Como** | SQL e mensagem-modelo em `DIAGNOSTICO_MAQUINA_DE_VENDAS_2026-09-27.md`, item 2. WhatsApp, 5 a 10 por dia. Uma pergunta só: "o que faltou?" |
+| **Registrar** | 4 caixas: preço · função · medo de bloqueio · tempo/outro |
+| **Meta** | ≥ 15 respostas, ≥ 5 voltam a pagar (14 dias) |
+
+## 1.2 🔴 Depoimentos reais — 1 h
+
+- Colher 3 a 5, com nome, foto e permissão por escrito. Sem reescrever.
+- Frases que prometem resultado ("dobrar minhas comissões") ou "nunca banido"
+  ficam de fora, ou a cliente confirma que disse exatamente aquilo.
+- Me mandar: texto exato + nome + foto + autorização. Eu publico em
+  `/espelha-grupos-e-confiavel`, `/estudos-de-caso`, home e `/precos` (isso
+  também fecha o item **B27** do backlog do Pro Afiliados).
+- Também confirmar que os 5 textos que já estão no site são de clientes reais.
+
+## 1.3 🔴 Indexação no Search Console — 10 por dia, 15 min/dia
+
+As marcações `⏳` nas seções antigas de `ACOES_FLAVIA` estão desatualizadas.
+Conferido em 28/09: o **B29 já está em `main`** (código com "Revisado em" e
+`dateModified`). Então as páginas abaixo mudaram **duas vezes** e devem ser
+pedidas **uma vez só**, agora. Ordem (Search Console → Inspeção de URL →
+conferir em produção → Solicitar indexação):
+
+| Dia | 10 páginas (`https://espelhagrupos.com.br` + caminho) |
+|---|---|
+| **A** (B29 + R4 + R6) | `/` · `/bot-afiliados-whatsapp` · `/bot-achadinhos-whatsapp` · `/bot-que-busca-ofertas-shopee-whatsapp` · `/shopee-afiliados-whatsapp` · `/mercado-livre-afiliados-whatsapp` · `/amazon-afiliados-whatsapp` · `/espelhar-grupos-whatsapp` · `/automacao-whatsapp-afiliados` · `/alternativas/achadinhos-bot` |
+| **B** (R1 — falavam errado do produto) | `/bot-canais-whatsapp` · `/bot-comum-vs-espelha-grupos` · `/como-funciona-espelha-grupos-canais` · `/blog/bot-whatsapp-antiban-existe` · `/blog/shadowban-whatsapp-canais` · `/blog/como-evitar-banimento-whatsapp-afiliados` · `/blog/grupo-ou-canal-whatsapp-achadinhos` · `/blog/chip-dedicado-bot-whatsapp` · `/blog/migrar-grupo-achadinhos-para-canal` · `/diagnostico-antiban-whatsapp` |
+| **C** (R7 + GEO + títulos) | `/blog/como-espelhar-mensagens-entre-grupos-whatsapp` (vídeo 1) · `/quem-somos` · `/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp` · `/melhores-bots-para-afiliados-whatsapp` · `/metodologia-uso-responsavel-whatsapp` · `/blog/como-ser-afiliado-shopee-whatsapp` · `/blog/como-divulgar-ofertas-amazon-whatsapp` · `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp` · `/alternativas/shozap` · `/alternativas/gigi-bot` |
+| **D** (R3 + R2) | `/alternativas/fluxopromo` · `/seguranca-credenciais-afiliado` · `/conteudos` · `/glossario` · `/estudos-de-caso` · `/benchmarks/operacao-grupos-ofertas-whatsapp` · `/blog/como-escalar-grupos-sem-operacao-manual` · `/blog/checklist-padronizar-divulgacao-whatsapp` · `/blog/conferir-converter-link-afiliado-whatsapp` · `/blog/bot-para-afiliados-whatsapp-grupos-cupons` |
+| **E** (sobra) | `/materiais/checklist-operacao-whatsapp` · `/materiais/checklist-divulgacao-ofertas-grupos-whatsapp` |
+
+- Já pedidas em 28/09 (não repetir): `/precos`, `/espelha-grupos-e-confiavel`,
+  `/alternativas/achadinho-pro`, `/programa-de-afiliados`,
+  `/quanto-ganha-afiliado-shopee`, `/blog/como-divulgar-ofertas-mercado-livre-whatsapp`,
+  `/espelhar-grupos-de-ofertas-vale-a-pena`, `/politica-de-reembolso`,
+  `/alternativas/proafiliados`.
+- Antes de pedir cada página, abrir em produção e ver o texto novo. Se ainda
+  estiver o velho, não pedir (gasta a cota).
+- **Não pedir** as 9 LPs de cidade/nicho (congeladas).
+- Depois de cada dia, marcar ✅ na tabela detalhada de `ACOES_FLAVIA` e me
+  avisar; eu atualizo este documento.
+
+## 1.4 🔴 Bing Webmaster Tools — 10 min
+
+Inspeção de URL de `/`, `/precos`, `/bot-afiliados-whatsapp`,
+`/blog/como-espelhar-mensagens-entre-grupos-whatsapp` (post do vídeo),
+`/shopee-afiliados-whatsapp`, `/bot-achadinhos-whatsapp`. Se não estiver
+atualizada: "Enviar URL". Decide se o ChatGPT (que busca pelo Bing) lê a versão
+atual. Depois dos pedidos de indexação acima, enviar as mesmas URLs no Bing.
+Também `/llms.txt` e `/pricing.md`.
+
+## 1.5 🔴 Conferir o Dia 7 (venceu 28/09) — 10 min
+
+Inspeção de URL de `/alternativas/busqy`, `/afilira`, `/divulga-ninja`,
+`/afiliado-inteligente`. Precisa dizer "URL está no Google". Se continuar
+"Detectada", o problema é link interno/conteúdo repetido, não indexação. Me
+avisar o resultado.
+
+## 1.6 🔴 Planejador de Palavras-Chave — 10 min
+
+Volume e concorrência de `automação para afiliados` e `automação para afiliado
+shopee`. Me mandar os dois números. Decide se o hub dos 3 modelos disputa o
+Google ou fica só como página de resposta para IA.
+
+## 1.7 🟠 Vídeos 2 a 8 — 2 h/semana, um por semana
+
+Título = a pergunta, literal; sempre "Espelha Grupos" na legenda; nunca "anti-ban".
+Ordem: (2) Bot para afiliados no WhatsApp: como funciona o Espelha Grupos ·
+(3) Espelha Grupos é confiável? (rosto; LinkedIn só tela) · (4) Robô que busca
+ofertas da Shopee sozinho · (5) Ferramenta para divulgar ofertas em grupos: 6
+opções comparadas em 2026 · (6) Como postar em vários grupos ao mesmo tempo sem
+spam · (7) Quanto custa um bot de afiliados? Basic R$39, Pro R$69 · (8) Dá para
+usar pelo celular, sem computador? Repostar no TikTok/Instagram/LinkedIn; a
+página da empresa no LinkedIn e o TikTok ainda estão sem conteúdo. Cada vídeo
+publicado → me avisar para embutir na página-resposta certa.
+
+## 1.8 🟠 Menções de terceiros (autoridade externa) — semanas 2–8
+
+| Ação | Como | Tempo |
+|---|---|---|
+| **Guest-parágrafo** em `superfrete.com/blog/grupos-vendas-whatsapp` e `remessaonline.com.br/blog/grupo-de-promocoes-no-whatsapp` | E-mail ao editor com o texto-padrão de 62 palavras (em `PLANO_MAQUINA_DE_VENDAS_IA_2026-09-18.md`, §4.2) | 1 h |
+| **Criadores pequenos do YouTube** (lista nominal no plano de 18/09, §4.2 item 8) | Teste estendido + programa de afiliadas 30% recorrente + pedir "Espelha Grupos" no título | 2 h, semanas 3–6 |
+| **Telegram oficial** (Shopee, Mercado Livre) | Checklist gratuito, só com autorização do admin. Conteúdo, não anúncio | 1 h/semana, semanas 4–8 |
+| **Quora pt-BR** | Responder as perguntas já indexadas ("Como ser afiliado Shopee?") com resposta completa e UMA menção | 30 min/resposta |
+| **Medium** (opcional, camada 2) | Republicar 4–6 posts com canonical | 3 h |
+
+## 1.9 🟠 Dados que só você tem (destravam itens de código)
+
+Cada linha destrava um item da Parte 2. Sem o dado, o item fica parado — nada
+será inventado.
+
+| Você me manda | Destrava | Observação |
+|---|---|---|
+| **CNPJ e razão social oficiais** (ou decisão de continuar sem) | B02: `legalName`/`taxID` no rodapé, `/quem-somos` e schema | É a única objeção que a IA nomeou ("sem CNPJ"). Sem CNPJ também não há Reclame Aqui |
+| **Print real do painel de vendas**, sem e-mail/cliente/valor identificável | B04: home, `/precos`, `/vendas-e-comissao-afiliado-whatsapp` | A prévia bloqueada do Basic é o melhor upsell do painel; falta prova visual fora dele |
+| **OK para expor contadores de uso** (afiliadas ativas, envios 30 d, lojas, dias de sessão) | B05: contadores no hero, por snapshot diário | Números pequenos ou antigos enganam — eu omito o que estiver fraco |
+| **Tabela de desconto aprovada** para pré-pago de 3, 6 e 12 meses | B11 | Sem tabela, não ligo desconto nenhum |
+| **OK para publicar números agregados de sessão** | B25: "Proteção do número: os números do mês" | Só com amostra mínima e aviso de que o WhatsApp decide |
+| **Prints de preço + data** de concorrentes (página de preços inteira) | B26 e fichas | Ofertiva já tem ficha (22/09). Faltam: Afilira, GoGoBot, Afiliado Analytics, Afiliados Pro Bot, Whats.Ly, Pai das Ofertas, DisparaPromo, Growify, e Comission (site nunca achado — me mande o link ou print de onde a IA citou) |
+| **Conta de teste WhatsApp** disponível | B40 (Status) e validação da conversão pública | — |
+
+## 1.10 🟠 Decisões suas (uma resposta cada)
+
+| # | Decisão | Prazo | O que eu faço depois |
+|---|---|---|---|
+| D1 | **Carência de 48 h no vencimento do teste + "teste conta da 1ª conexão"** (`TRIAL_ANCHOR_ON_CONNECT`, hoje desligado; mexe em acesso pago) | antes de 15/10 | Valido em staging; ligar exige `pm2 delete` + `start`. Ver C1 |
+| D2 | **Teto de vagas: 62 de 80 → 100?** Servidor com 22,6 GB livres, swap zero; +20 vagas ≈ +7 GB. Alternativa mais leve: 1 número por conta em teste | **15/10** | Respondo com os 5 comandos e reinício anunciado do supervisor de madrugada. Só com "sim" explícito |
+| D3 | **Quando reiniciar o `bot-supervisor`** (destrava P1-4: hoje uma oferta cujo único link é de loja não suportada sai **sem o link**, em silêncio; ver `docs/produto/backlog-p1-4-loja-nao-suportada.md`) | escolher janela | Reconecta TODAS as sessões — anunciar antes. Pode ir junto com D2 |
+| D4 | **Ativar cobrança do Gemini** (menos de R$ 2 por rodada, estimativa não conferida) para a medição mensal por script | antes de 27/10 | Sem isso a rodada do Gemini é manual |
+| D5 | **Telegram: sim ou não** | quando quiser | Hoje está no backlog (B34) como "não recomendado agora" |
+
+## 1.11 🟠 Admin no GitHub — 5 min, ninguém além de você consegue
+
+**Branch protection** em `develop` e `main`: Settings → Branches → Require
+status checks → marcar `quality` e `no-undef`. Sem isso, PR com lint vermelho
+entra e quebra o staging (aconteceu duas vezes no mesmo dia).
+
+## 1.12 🟡 Perfis sociais vazios
+
+Instagram, TikTok e a página do LinkedIn existem e estão no `sameAs` do site,
+mas sem conteúdo. Um post/vídeo por perfil para tirar do zero (reaproveita o
+vídeo 1 e os próximos).
+
+## 1.13 🔁 Rodadas e conferências
+
+| Quando | O quê | Como |
+|---|---|---|
+| **30/09** | Medição curta: export do Search Console (3 meses + série diária `Gráfico.csv`), `diag-origem-cadastros --dias 30`, `diag-paginas-seo --dias 30` | Me mandar as saídas |
+| **~11/10** | Rodada manual de IA (10 perguntas do `ROTEIRO_MEDICAO_IA.md`, aba anônima, sem pergunta extra) — só se não esperar a de 27/10 | Opcional |
+| **1ª quinzena de outubro** | **Renovação da turma de setembro** (26 clientes) — só observar. É o dado que decide anúncio pago | `diag-ltv-retencao.mjs` |
+| **15/10** | Decidir D2 (teto de vagas) | — |
+| **27/10** | **Rodada mensal completa**: Trilhas A, B, C + nova D (B15 inclui "grátis", "Telegram", "comissão", "Pro Afiliados vale a pena"), 18 consultas × 4 IAs, conta neutra, ChatGPT com busca; `node scripts/validar-medicao-ia.mjs` antes de fechar | 2 h |
+| **27/10** (junto) | `diag-funil-ativacao --dias 30`, `diag-ltv-retencao`, `diag-motivo-nao-renovou`, `diag-origem-cadastros --dias 30`, `diag-vagas-robos`, `diag-financeiro-periodo.mjs 30d`, SQL de `Subscription` e `referredBy` (lista completa em `DIAGNOSTICO_…` §6) | Me mandar; eu atualizo `SERIE_HISTORICA_SEO.md` (coluna nova) |
+| **27/10** | Reavaliar anúncio pago com a renovação em mãos | — |
+| **Mensal** | Cloudflare: `node scripts/diag-acesso-robos-ia.mjs` (19 robôs em 200) + coluna "Unsuccessful" do AI Crawl Control para Claude-User/GPTBot | 5 min |
+| **Opcional** | Regra na Cloudflare contra robôs de ataque (`.env`, `/server-status`, porta 8080). Não vaza nada hoje | passo a passo em `SESSAO_2026-09-23_PROMPTS_E_DECISOES.md` |
+
+## 1.14 Fora dos 5 relatórios, mas aparece neles
+
+- **Site de matemática (BH)** e Cuponito: itens do implementador de cada site
+  (`PROMPT_MATEMATICA_BH_PENDENTES_2026-09-18.md`; decidir o telefone (31) ×
+  (32) e ficha do Google + 10 avaliações). Não fazem parte do Espelha Grupos —
+  listado só para não se perder.
+- **Prompts de segurança e funil comercial** (texto pronto em
+  `SESSAO_2026-09-23_PROMPTS_E_DECISOES.md`): rodar em outra sessão "quando der".
+
+---
+
+# PARTE 2 — Ações de código (Claude)
+
+Tudo em PR contra `develop`, validado em staging antes de `main`. Para
+começar qualquer uma: "faz o C3". Ordem = impacto ÷ esforço.
+
+## 2.1 Prontas para fazer (sem depender de você)
+
+| # | O quê | Por quê / métrica | Origem |
+|---|---|---|---|
+| **C1** | **Pedir a venda a quem viu funcionar**: (a) ligar/validar `TRIAL_ANCHOR_ON_CONNECT`; (b) 48 h de carência no vencimento com tela de pagamento que mostra o número dela ("o robô publicou N ofertas em X grupos; continue por R$39"); (c) aviso de fim de teste também pelo WhatsApp da própria cliente (**validar tecnicamente antes de prometer**). Depende da decisão **D1** | ativou → abriu pagamento **26% → 40%** (+16 pagantes/mês); ler em 30 dias | Diagnóstico, ação 1 |
+| **C2** | **Diagnóstico da recorrência**: por que 13 assinaturas ficam pendentes e 11 cancelam (`diag-assinatura-recusada.mjs`); depois oferecer cobrança automática no 1º pagamento e no painel de quem paga avulso. *Status: há uma PR de "assinatura" mergeada em 28/09; falta confirmar com dado se a meta foi atingida* | pagantes com assinatura ativa **4 de 35 → ≥ 50%** | Diagnóstico, ação 3 |
+| **C3** | **Trilha D no medidor** (8 consultas de intenção de compra) em `ROTEIRO_MEDICAO_IA.md`, `scripts/medir-citacao-ia.mjs` e no teste que trava as consultas; conferir se as 4 consultas do B15 (grátis, Telegram, comissão, Pro Afiliados vale a pena) entraram na mesma rodada | linha de base em 27/10 | SEO-GEO F1, B15 |
+| **C4** | **Registro de "fatos errados ditos pelas IAs"** (Telegram, Basic manual, 4 lojas, 20 origens) com a fonte citada | zerar a lista | SEO-GEO F4 |
+| **C5** | **FAQ com schema nas 12 páginas-resposta** (hoje só as comerciais). Fonte única de 10 perguntas ("é grátis?", "tem Telegram?", "mostra comissão?", "é confiável?", "bloqueia o número?"); só onde falta | 12/12 páginas | SEO-GEO D3, B14 |
+| **C6** | **Próximas 8 páginas com impressão e pouco clique** (títulos): `/alternativas/achadinhos-bot` (6.508 imp., CTR 1,38%), `/blog/como-divulgar-ofertas-amazon-whatsapp`, `/blog/melhores-horarios-…`, `/blog/como-ser-afiliado-shopee-whatsapp` (pos. 9,4), `/alternativas/shozap`, `/alternativas/gigi-bot`, `/alternativas/fluxopromo`. *Parte foi feita no lote 2 de 27/09 — conferir o que resta antes de mexer.* **Não mexer** em título que está subindo fora dessa lista | +60 cliques/mês; medir pela série DIÁRIA | SEO-GEO D1 |
+| **C7** | **Tier 1 pela porta que já abre**: post "como ser afiliado Shopee" e `/quanto-ganha-afiliado-shopee` apontam para `/shopee-afiliados-whatsapp` como "próximo passo", e ela linka de volta; mesmo desenho para ML e Amazon. *Parcialmente feito em 27/09 (links "guia completo" em Shopee e ML) — conferir Amazon* | 3 páginas de loja com consulta-cabeça em posição < 20 | SEO-GEO D2 |
+| **C8** | **Repositório público `espelhagrupos/docs`** (glossário, metodologia, exemplos de mensagem convertida; sem abrir código do produto) | 2 domínios de terceiro citando o nome | Plano 18/09 §4.2 item 11 |
+| **C9** | **Ligar B20 de ponta a ponta**: usar os links `/r/:hash` no envio e mostrar oferta/destino no painel (a fundação já mede cliques) | 1º passo do "qual grupo rende" | Pro Afiliados B20 |
+| **C10** | **B41 — credencial sem cookie** para Amazon (StoreID) e Mercado Livre (etiqueta/link). Maior fricção do onboarding (3 de 6 lojas pedem extensão Cookie Editor, só computador). **Primeiro medir** o que a conversão perde sem cookie (link curto × link com tag) | onboarding mais curto | Pro Afiliados B41 |
+| **C11** | **B08 — modelos prontos por nicho** (moda, casa, tech, bebê, beleza) além dos 2 genéricos | 1º envio mais rápido | Pro Afiliados B08 |
+| **C12** | **B14/B26 lacunas restantes**: FAQ e comparativos só onde falta e existe ficha datada. Seis dos oito comparativos pedidos já existem; PromoBot/OfertasBot **não entram** sem ficha (OfertasBot é o site do PromoBot) | — | Pro Afiliados |
+
+> A ficha do Ofertiva (22/09) ainda não tem página pública `/alternativas/ofertiva`. Não criei item: vai contra "parar de criar `/alternativas/*`". Se quiser, diga.
+
+## 2.2 Prontas, esperando um dado seu (Parte 1.9)
+
+| Item | Espera por | Estrutura já pronta? |
+|---|---|---|
+| B02 CNPJ / razão social | dados oficiais | não |
+| B04 print do painel de vendas | print sanitizado | não |
+| B05 contadores no hero | OK + snapshot | não (hero lê arquivo estático validado, sem processo residente) |
+| B11 pré-pago 3/6/12 meses | tabela de desconto | não (fluxo separado e idempotente; recorrência intocada) |
+| B25 "números do mês" | OK + amostra mínima | não |
+| B27 depoimentos | textos, fotos, permissões | componente compartilhado a fazer |
+| B26 comparativos / fichas | prints de preço | fichas em `dashboard/lib/competitors-data.js` |
+
+## 2.3 Precisam de validação dedicada antes de liberar (risco de comissão/envio)
+
+| Item | Risco | Condição |
+|---|---|---|
+| B12 `/ferramentas/testar-link` (conversão pública) | Link sem comissão sem credencial; abuso/gasto de API | Rate limit, lojas permitidas, consentimento de e-mail, sem acesso às credenciais de ninguém |
+| B21 comissão Shopee por destino | Atribuição não é causal, cobertura parcial | Mostrar cobertura e "não atribuído"; totais iguais ao relatório Shopee. Depende de C9 |
+| B22 mensagens recorrentes (com imagem) | Duplicar após restart, fuso, fila cresce | Idempotente, 1 ocorrência pendente por agenda, **sem processo PM2 novo** |
+| B40 Status do WhatsApp como destino | Envio indevido, risco alto | Feature flag desligada, conta de teste, sem fallback para grupos/contatos |
+| P1-4 loja não suportada (link some em silêncio) | Mexe em `bot-worker`; reconecta sessões | Depende de D3 (janela do supervisor) |
+
+## 2.4 Esperam dado de outubro
+
+- **Capacidade** (Diagnóstico ação 10): proposta com estimativa de RAM para
+  +20 vagas ou alternativa mais leve. Levo a proposta antes de 15/10; **só
+  executo com o seu "sim" (D2)**. Meta: vagas livres nunca abaixo de 10.
+- **B39 (camada grátis permanente)** e **B37 (vários números)**: aviso e
+  aprovação de memória obrigatórios (0,35 GB por sessão) — ver Parte 3.
+
+## 2.5 Acompanhar (não é trabalho novo)
+
+- Depois de cada rodada de indexação: conferir "Revisado em" e `dateModified`
+  nas páginas pedidas.
+- `validate:editorial-freshness` avisa páginas > 120 dias sem revisão (17
+  editoriais). A data só muda quando o conteúdo for de fato revisado.
+- O código de B29 (data visível + JSON-LD) está feito e em `main`; o que falta
+  é só a indexação (1.3).
+
+---
+
+# PARTE 3 — Backlog de novas funcionalidades
+
+Nada aqui é pedido em aberto: são ideias com evidência, esperando a sua decisão
+de "fazer" (e, quando indicado, o aviso de memória). IDs vêm da análise do Pro
+Afiliados (B) ou dos outros relatórios.
+
+## P2 — 30 a 90 dias (retenção, painel, autoridade)
+
+| ID | Funcionalidade | Impacto | Esforço | Observação |
+|---|---|---|---|---|
+| B31 | **Onboarding por nicho** (template + preset anti-ban + fontes sugeridas no cadastro); medir tempo até o 1º envio | Alto | Médio | Ataca a renovação do Basic (6%) |
+| B32 | **Alertas fora do painel** (e-mail/WhatsApp) quando a sessão cai ou a fila para; `receptionHealth` já detecta | Médio | Médio | Retenção |
+| B18 | **Barra inferior no celular** (Início · Espelhamento · Criar oferta · Envios · Menu) | Médio | Médio | CTR celular menor (3,52% × 4,85%) |
+| B17 | **Tema escuro** no painel | Baixo | Médio | Precisa entrar no design system v2 antes |
+| B23 | **Alternar lojas** (rodízio por destino) | Baixo | Médio | Entra no `destinationRouting` |
+| B24 | **Anti-link** para grupos onde o número é admin | Médio | Médio | — |
+| B30 | **Vídeo "do QR ao primeiro envio em 5 min"** | Médio | Médio | Primeira entrega feita; o resto é a sequência de vídeos (1.7) |
+
+## P3 — 90+ dias (diferenciais e paridade)
+
+| ID | Funcionalidade | Impacto | Esforço | Observação |
+|---|---|---|---|---|
+| B33 | **Vitrine pública do grupo** (página por cliente com últimas ofertas + botão entrar). SEO programático: ~8.950 buscas/mês por "entrar em grupo de ofertas" | Alto | Alto | Nenhum dos dois concorrentes tem |
+| B35 | **Verificação da oferta antes de sair** (preço atual, cupom válido, estoque) — vira promessa "não posta oferta morta" | Alto | Alto | Ninguém tem |
+| B34 | **Telegram** como destino e origem | Alto | Alto | 10 de 14 concorrentes têm; demanda de busca baixa (50/mês contra ~8.950); objeção de venda alta. Decisão D5 |
+| B39 | **Camada grátis permanente limitada** (ex.: 1 destino, 10 ofertas/dia, sem anúncio) | Alto | Alto | **MEMÓRIA — SUPER SINALIZAR** antes; decidir só com o dado de outubro |
+| B36 | **Mais lojas** (TikTok Shop, Awin, Natura): começar por Awin | Médio | Alto | Não prometer em texto público antes de existir |
+| B37 | **Vários números na mesma conta** (cobrança por conexão) | Médio | Alto | **MEMÓRIA — SUPER SINALIZAR** (~0,35 GB por sessão) |
+| B38 | **Copiar Tudo** (mídia, enquete, figurinha) por fonte | Baixo | Alto | — |
+
+## Ideias do "espaço em branco" (nenhum concorrente atende) — sem prioridade ainda
+
+1. **Qual grupo/oferta me deu dinheiro** (venda × origem × destino × oferta, também ML/Amazon) — começa em C9 e B21.
+2. **Não repetir o que o grupo já viu** em 7/30 dias + "verificação antes de postar" (B35).
+3. **Página de "Proteção do número: os números do mês"** (B25, depende de dado seu).
+4. **Crescer o grupo, não só abastecê-lo** (contador de entradas/saídas, vitrine B33).
+5. **Pré-pago com desconto 3/6/12 meses** (B11, depende da tabela).
+6. **Programa de indicação dentro do produto** — o link já aparece na 1ª oferta publicada (feito em 27/09); falta ver se gera cadastro (meta: ≥ 5 com `referredBy` em 30 dias, hoje 0).
+
+---
+
+# PARTE 4 — Calendário
+
+| Data | O quê | Quem |
+|---|---|---|
+| **28/09** (hoje) | Indexação Dia A (10 páginas) · Bing · conferir Dia 7 | Flávia |
+| **29/09** | Indexação Dia B · Planejador de Palavras-Chave | Flávia |
+| **30/09** | Medição curta (Search Console + 2 diagnósticos) · indexação Dia C | Flávia |
+| **1–2/10** | Indexação Dias D e E · WhatsApp para os 63 (contínuo, 5–10/dia) · depoimentos | Flávia |
+| **Semana de 5/10** | Guest-parágrafo (1.8) · vídeo 2 · responder D1 (carência) | Flávia |
+| **1ª quinzena de outubro** | Renovação da turma de setembro (só observar) | — |
+| **15/10** | Decidir teto de vagas (D2) e janela do supervisor (D3) | Flávia |
+| **~11/10** | Rodada de IA opcional | Flávia |
+| **27/10** | Rodada mensal completa + reavaliar anúncio pago | Flávia + Claude |
+| **Mensal** | Cloudflare (robôs de IA) | Flávia |
+| **Semanal, até semana 8** | 1 vídeo | Flávia |
+
+Metas de referência (do diagnóstico de 27/09): cadastros/mês 214 → 240 (27/10)
+→ 300 (27/12); ativou → abriu pagamento 26% → 40%; cadastro → pagante 11% →
+15%; renovação da coorte de setembro ≥ 70% (≥ 18 de 26); citação por IA
+(Trilha A) 6/20 → 10/20 → 14/20; menções de terceiros 0 → 2 → 8. A meta de 90
+dias (~100 clientes) **não cabe no teto atual de 80 vagas**, por isso D2 é
+decisão de outubro.
+
+---
+
+# PARTE 5 — Não fazer (derrubado por dado ou por regra)
+
+- **Anúncio pago** antes da renovação de outubro.
+- **Pesquisa por e-mail** (zero respostas). Conversa vai para o WhatsApp.
+- **Mais páginas `/alternativas/*`** sem bloco de conversão (já são 23; convertem 3% contra 12–14% das comerciais).
+- **Páginas por cidade/nicho**, "robô" como termo, "espelhamento de grupos" como porta de entrada no Google.
+- **Listicle do ofertasbot.com**: é do PromoBot (concorrente). Inclusão descartada em 19/09. Isso também vale para o B10 do Pro Afiliados: **não pedir inclusão**.
+- **Reclame Aqui / razão social / G2** sem CNPJ e sem clientes dispostas a avaliar.
+- **Diretórios em massa ou pagos** (BetaList, There's An AI For That); Product Hunt/AlternativeTo/SaaSHub agora.
+- **Avaliação fabricada, depoimento reescrito, thread promocional.**
+- **Prometer anti-ban ou Telegram**; citar preço de concorrente sem ficha datada.
+- **Mexer em checkout, Pix, cartão** (24 de 29 pagam).
+- **Mais `llms.txt`/schema** como alavanca; medir "BOTinho".
+- **Prometer Awin/Rakuten/Lomadee** em texto público antes de existir no código.
+- **Rodar de novo o Planejador/Trends completo** antes de outubro.
+
+---
+
+# PARTE 6 — Já feito (curto, para ninguém refazer)
+
+- **27–28/09:** as 7 PRs (tela do dia 5, assinatura, ficha técnica, títulos, indicação, "é confiável" com números, dados da pagadora) validadas em staging e em `main`.
+- Páginas: "espelhar grupos vale a pena?", comparativo AchadinhosBot refeito, `/politica-de-reembolso`, hub dos 3 modelos, FAQ+tabela em `/bot-afiliados-whatsapp`, títulos (2 lotes), topo da metodologia, ficha técnica, definição da marca. SEO-GEO A2, A3 e B1–B8 no ar.
+- **Pro Afiliados:** B01, B03, B06, B07, B09, B13, B19, B42 implementados; B16 e B28 já existiam; B29 no ar; B30 com o vídeo 1 no blog e no painel.
+- Indexação 28/09 (10 páginas + `/alternativas/proafiliados`); dias 1–9 concluídos.
+- Rodada manual de IA de 27/09 (19 de 36; marca "o que é" de 0/4 para 3/4); retenção corrigida (7 de 7 de agosto renovaram).
+- Validadores de SEO, frescor e CSV de medição no gate.
+
+---
+
+# Conflitos entre os relatórios (resolvidos aqui)
+
+| Assunto | O que os documentos diziam | Decisão deste documento |
+|---|---|---|
+| Status das levas de indexação | Seções antigas de `ACOES_FLAVIA` ainda mostram `⏳`, embora várias páginas tenham sido pedidas em 28/09 | Vale a lista da 1.3, calculada removendo o que foi pedido em 28/09 |
+| Reindexação B29 | "quando B29 chegar em `main`" | Conferido em 28/09: **já está em `main`**. Pedir agora, junto com as levas que se sobrepõem |
+| E-mail "o que faltou" | `RESUMO_E_PLANO_2026-09-23` mandava disparar e-mail | Cancelado. WhatsApp (1.1) |
+| Retenção "6–17%" | Aparecia como gargalo | Corrigido em 27/09: 7 de 7 renovaram; só a renovação de outubro decide |
+| B10 (Reclame Aqui + ofertasbot) | Backlog Pro Afiliados mandava fazer | Descartado: sem CNPJ; ofertasbot é do PromoBot |
+| B28 | Backlog mandava criar `/programa-de-afiliados` | Já existe em `/parceiro-influenciador` e `/painel/afiliados`; `/programa-de-afiliados` é comparativo dos programas das lojas |
+| Vídeos | "Vídeo 1 é B30" e "vídeos 2–8 são C1" | Mesma trilha; 1 publicado, 2–8 em 1.7 |
+| Rodada de IA | "próxima ~11/10" e "27/10" | 27/10 é a oficial (mensal); 11/10 é opcional |
+
+> Se algum item aqui já estiver feito e eu não vi, me avise que eu marco. Ao
+> concluir qualquer item, atualize **este** arquivo (e só ele); os cinco
+> relatórios de origem não precisam mais de atualização diária.

@@ -1,5 +1,7 @@
 # Máquina de vendas por IA — o que fazer para o ChatGPT (e Gemini, Perplexity, AI Overviews) indicarem o Espelha Grupos
 
+> 📌 **A fila de trabalho unificada (suas ações, código e backlog) está em `PENDENCIAS_UNIFICADAS_2026-09-28.md`.** Este arquivo fica como registro e fonte de dados.
+
 ## O que ainda falta (mapa atualizado em 28/09/2026)
 
 - [ ] Finalizar Bing, Planejador de Palavras-Chave e as levas de indexação ainda marcadas `⏳` na fila canônica `ACOES_FLAVIA_2026-09-11.md`.

@@ -1,5 +1,7 @@
 # O que você precisa fazer — fila única, em ordem
 
+> 📌 **A fila de trabalho unificada (suas ações, código e backlog) está em `PENDENCIAS_UNIFICADAS_2026-09-28.md`.** Este arquivo fica como registro e fonte de dados.
+
 ## O que ainda falta (resumo atualizado em 28/09/2026)
 
 - [ ] Quando B29 estiver em produção, pedir a reindexação das 10 páginas com “Revisado em” e `dateModified`.
