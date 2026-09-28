@@ -37,7 +37,7 @@ import { isDirectVitrineShare } from './converters/mercadolivre.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { downloadHighQualityLinkPreview } from './core/linkPreviewThumbnail.js'
-import { appendRelayFooter } from './core/relayFooter.js'
+import { appendRelayFooter, resolveRelayFooterVariables } from './core/relayFooter.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { captureInstagramMirror } from './instagram/mirroring/capture.js'
@@ -4770,7 +4770,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // original convertido". Dois saltos separam claramente o texto vindo da
       // origem da assinatura opcional escrita pela cliente.
       if (!effectiveTemplateKey) {
-        finalText = appendRelayFooter(finalText, monitorGroup?.relayFooterText)
+        finalText = appendRelayFooter(finalText, resolveRelayFooterVariables(monitorGroup?.relayFooterText, {
+          groupLink: cfg.botConfig?.brandingGroupLink,
+        }))
       }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {

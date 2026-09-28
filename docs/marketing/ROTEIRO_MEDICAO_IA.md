@@ -122,6 +122,19 @@ induzida **não vale como citação**; o que vale é o contraste entre superfíc
 
 ChatGPT Search · Google Gemini · Perplexity · Google AI Overviews
 
+### Linha de base B15 — Pro Afiliados (28/09/2026)
+
+Conjunto pontual, separado das Trilhas A–D para não quebrar a série:
+
+1. `existe bot grátis para afiliados no WhatsApp`
+2. `bot para afiliados com Telegram`
+3. `bot para afiliados que mostra comissão por grupo`
+4. `proafiliados vale a pena`
+
+Rodar no Gemini com busca: `GEMINI_API_KEY=<chave> node scripts/medir-citacao-ia.mjs --conjunto=b15 --saida=/tmp/b15-gemini.csv --json=/tmp/b15-gemini.json`.
+Nas outras três superfícies, usar conta neutra e registrar as mesmas quatro
+consultas no CSV. Este conjunto mede a linha de base; não entra no placar A–D.
+
 18 consultas × 4 superfícies = **72 linhas por rodada** (10 até 09/2026; a Trilha D entra em 10/2026).
 
 ---

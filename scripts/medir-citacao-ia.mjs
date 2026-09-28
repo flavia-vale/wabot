@@ -22,7 +22,7 @@
  */
 
 import { writeFileSync } from 'node:fs'
-import { ROUND_QUERIES, EXTRA_COMPETITOR_NAMES, buildGeminiRequest, parseGeminiResponse, buildTrackingRow } from '../src/ops/aiCitation.js'
+import { ROUND_QUERIES, PROAFILIADOS_BASELINE_QUERIES, EXTRA_COMPETITOR_NAMES, buildGeminiRequest, parseGeminiResponse, buildTrackingRow } from '../src/ops/aiCitation.js'
 
 function arg(name, fallback) {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -34,6 +34,7 @@ const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
 const outCsv = arg('saida', null)
 const outJson = arg('json', null)
 const only = Number(arg('so', 0))
+const querySet = arg('conjunto', 'rodada')
 const pauseMs = Number(arg('pausa', 3000))
 const date = new Date().toISOString().slice(0, 10)
 
@@ -78,7 +79,8 @@ async function ask(query) {
 }
 
 const names = await competitorNames()
-const selected = only ? ROUND_QUERIES.filter((_, i) => i + 1 === only) : ROUND_QUERIES
+const availableQueries = querySet === 'b15' ? PROAFILIADOS_BASELINE_QUERIES : ROUND_QUERIES
+const selected = only ? availableQueries.filter((_, i) => i + 1 === only) : availableQueries
 const rows = []
 const raw = []
 let failures = 0

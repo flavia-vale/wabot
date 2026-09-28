@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { formatSendCountdown } from '../../../../src/domain/painel/sendCountdown.js'
 
 // Aparência de cada origem do "futuro" de um envio. O chip de origem é o que
 // permite reunir as três fontes numa lista só sem o usuário se perder.
@@ -40,19 +41,6 @@ function formatWhen(value) {
   })
 }
 
-function relativeWhen(value) {
-  if (!value) return null
-  const target = new Date(value).getTime()
-  if (Number.isNaN(target)) return null
-  const diffMin = Math.round((target - Date.now()) / 60000)
-  if (diffMin <= 0) return 'agora'
-  if (diffMin < 60) return `em ${diffMin} min`
-  const hours = Math.round(diffMin / 60)
-  if (hours < 24) return `em ${hours} h`
-  const days = Math.round(hours / 24)
-  return `em ${days} d`
-}
-
 export default function UpcomingSends() {
   const [items, setItems] = useState(null)
   const [groupsByJid, setGroupsByJid] = useState({})
@@ -61,6 +49,7 @@ export default function UpcomingSends() {
   const [filter, setFilter] = useState('all')
   const [cancellingId, setCancellingId] = useState(null)
   const [confirmItem, setConfirmItem] = useState(null)
+  const [clock, setClock] = useState(() => Date.now())
 
   const load = useCallback(async () => {
     setRequestState('loading')
@@ -90,6 +79,14 @@ export default function UpcomingSends() {
     return () => { active = false; clearTimeout(timer) }
   }, [load])
 
+  // Um único relógio para a lista inteira. Não cria timer por card e pausa
+  // quando não há próximo envio com horário.
+  useEffect(() => {
+    if (!(items ?? []).some((item) => item.scheduledAt)) return undefined
+    const timer = setInterval(() => setClock(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [items])
+
   async function cancel(item) {
     setCancellingId(item.id)
     setConfirmItem(null)
@@ -105,7 +102,7 @@ export default function UpcomingSends() {
     }
   }
 
-  const list = items ?? []
+  const list = useMemo(() => items ?? [], [items])
   const loading = requestState === 'loading'
 
   const counts = useMemo(() => {
@@ -194,7 +191,7 @@ export default function UpcomingSends() {
             const source = SOURCE[item.source] ?? { label: item.source, className: 'bg-gray-100 text-gray-600', dot: '#9ca3af' }
             const status = STATUS[item.status] ?? { label: item.status || '—', className: 'bg-gray-100 text-gray-600' }
             const when = formatWhen(item.scheduledAt)
-            const eta = relativeWhen(item.scheduledAt)
+            const eta = formatSendCountdown(item.scheduledAt, clock)
             const isCancelling = cancellingId === item.id
 
             return (

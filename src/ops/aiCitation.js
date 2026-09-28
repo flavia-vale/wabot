@@ -27,6 +27,16 @@ export const ROUND_QUERIES = Object.freeze([
   { query: 'espelha grupos ou afilira', cluster: 'compra' },
 ])
 
+// B15 — linha de base pontual anterior às mudanças do backlog Pro Afiliados.
+// Não entra nas séries A–D: responde objeções específicas e fica separada para
+// que quatro consultas novas não alterem o denominador histórico.
+export const PROAFILIADOS_BASELINE_QUERIES = Object.freeze([
+  { query: 'existe bot grátis para afiliados no WhatsApp', cluster: 'b15' },
+  { query: 'bot para afiliados com Telegram', cluster: 'b15' },
+  { query: 'bot para afiliados que mostra comissão por grupo', cluster: 'b15' },
+  { query: 'proafiliados vale a pena', cluster: 'b15' },
+])
+
 // Nomes citados pelas IAs que ainda não têm ficha em competitors-data.js.
 // O script soma estes aos nomes das fichas.
 export const EXTRA_COMPETITOR_NAMES = Object.freeze([
