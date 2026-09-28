@@ -17,6 +17,7 @@ import {
   SUPPORT_WHATSAPP_URL,
 } from '@/lib/marketing-content'
 import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
+import { PainelVendasIlustrativo } from '@/components/marketing/PainelVendasIlustrativo'
 
 /* PÁGINA DE PREÇO (auditoria de funil 2026-08-05, §1.4).
  *
@@ -198,6 +199,7 @@ export default async function PrecosPage() {
       </section>
 
       <Pricing initialPlans={plans} showHeading={false} />
+      <div className="wrap"><PainelVendasIlustrativo /></div>
       <GuaranteeBlock />
 
       {/* Ficha técnica canônica (medição de IA 27/09/2026): idêntica à da

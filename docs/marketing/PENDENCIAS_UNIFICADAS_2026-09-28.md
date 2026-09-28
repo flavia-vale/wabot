@@ -23,8 +23,8 @@ da PR #1979 em `ACOES_FLAVIA` (+ o que eles mandam ler:
 | 1.9 CNPJ | **Não temos CNPJ** → B02 fora, segue sem razão social |
 | 1.9 print | Print do painel de vendas com dados de exemplo **marcados como ilustrativos** (Claude faz; nunca venda zero) |
 | 1.9 contadores | **Só um contador: ofertas enviadas nos últimos 30 dias** (número real do banco). Os demais são pequenos e ficam de fora (B05) |
-| 1.9 pré-pago | **3 meses: 4% de desconto · 6 meses: 7%** (B11). **12 meses: sem desconto definido** (ver 1.9) |
-| 1.9 sessão | Só publicar quedas **não propositais** (B25). Ainda a verificar se dá para separar (ver 1.9) |
+| 1.9 pré-pago | **3 meses: 4% · 6 meses: 7%. Sem desconto para 12 meses (decidido: só esses dois)** (B11) |
+| 1.9 sessão | **B25 parado: Flávia não sabe onde é a derrubada de 50 min.** Nada de número de queda é publicado até haver dado (ver 1.9) |
 | D1 | **Sem carência de 48 h.** A partir do **5º dia do teste**, sinalizar no painel para a cliente |
 | D2 | **Sim: subir o teto de 80 para 100 vagas** (ver 2.4) |
 | D3 | Quando a correção estiver em `main`, Claude entrega o comando de reinício do `bot-supervisor` |
@@ -187,10 +187,10 @@ será inventado.
 | Tema | Situação (28/09) | Destrava |
 |---|---|---|
 | **CNPJ / razão social** | ✅ **Decidido: não temos.** B02 fica fora; segue sem `legalName`/`taxID`. Sem CNPJ também não há Reclame Aqui | B02 (descartado) |
-| **Print do painel de vendas** | ✅ Decidido: uma **imagem ilustrativa** (mock do painel, marcada "exemplo ilustrativo", sem dado real de cliente). Feita em `dashboard/public/ilustracoes/painel-vendas-exemplo.png`; falta colocar nas páginas (B04) | B04: home, `/precos`, `/vendas-e-comissao-afiliado-whatsapp` |
+| **Print do painel de vendas** | ✅ **Feito:** imagem ilustrativa ("exemplo ilustrativo — dados fictícios") colocada na home, em `/precos` e em `/vendas-e-comissao-afiliado-whatsapp` (componente `PainelVendasIlustrativo`). Ao ir para `main`, pedir reindexação dessas 3 URLs | B04 |
 | **Contadores de uso** | ✅ **Só "ofertas enviadas nos últimos 30 dias"**, número real, por snapshot diário. Afiliadas ativas, lojas e dias de sessão ficam de fora por serem pequenos | B05 |
-| **Pré-pago 3, 6 e 12 meses** | ✅ **3 meses = 4% · 6 meses = 7%** (Basic R$ 39: 3 m = R$ 112,32, 6 m = R$ 217,62; Pro R$ 69: 3 m = R$ 198,72, 6 m = R$ 385,02, sobre 30 dias/mês). ⏳ **12 meses: sem desconto definido**; só ligo 3 e 6 até você dizer | B11 |
-| **Números agregados de sessão** | ⏳ Só valem quedas **não propositais**. **Atenção:** procurei no código e na RCA e **não achei derrubada proposital a cada 50 min**; a queda de ~50 min que aparece em `docs/rca/whatsapp-sessao.md` era um defeito (loop de retry-receipt), já corrigido. A única derrubada feita de propósito que achei é a autocura por "conectado sem receber" (`reception_self_heal`). O histórico de eventos guarda **só 14 dias**. Preciso que você confirme o que é a derrubada de 50 min antes de publicar qualquer número | B25 |
+| **Pré-pago 3 e 6 meses** | ✅ **3 meses = 4% · 6 meses = 7%. Sem 12 meses (decidido).** Basic R$ 39: 3 m = R$ 112,32, 6 m = R$ 217,62; Pro R$ 69: 3 m = R$ 198,72, 6 m = R$ 385,02 (sobre 30 dias/mês). Falta só o código | B11 |
+| **Números agregados de sessão** | ⏳ **Parado.** Flávia não sabe onde é a derrubada de 50 min. Não achei derrubada proposital a cada 50 min no código; a queda de ~50 min em `docs/rca/whatsapp-sessao.md` era um defeito já corrigido, e a única derrubada de propósito que achei é `reception_self_heal`. O histórico de eventos guarda só 14 dias. Sem dado, **nada é publicado**; reabrir só se aparecer a origem da derrubada | B25 |
 | **Prints de preço + data** de concorrentes (página de preços inteira) | ⏳ Pendente. Ofertiva já tem ficha (22/09). Faltam: Afilira, GoGoBot, Afiliado Analytics, Afiliados Pro Bot, Whats.Ly, Pai das Ofertas, DisparaPromo, Growify, e Comission (site nunca achado — me mande o link ou print de onde a IA citou) | B26 e fichas |
 | **Conta de teste WhatsApp** disponível | ⏳ Pendente | B40 (Status) e validação da conversão pública |
 
@@ -295,10 +295,10 @@ EG-07 = **B03** (feito) · EG-09 = **B07** e PR #1978 (feito) · EG-15 e EG-28 =
 | Item | Espera por | Estrutura já pronta? |
 |---|---|---|
 | ~~B02 CNPJ / razão social~~ | **descartado: sem CNPJ** | — |
-| B04 print do painel de vendas | imagem ilustrativa **pronta**; falta colocar nas 3 páginas | não |
+| ~~B04 print do painel de vendas~~ | **feito** (imagem ilustrativa nas 3 páginas) | — |
 | B05 contadores no hero | **OK dado**: só "ofertas enviadas 30 d" (real); falta snapshot | não (hero lê arquivo estático validado, sem processo residente) |
-| B11 pré-pago 3/6/12 meses | **3 m 4% e 6 m 7% aprovados**; falta decidir 12 meses | não (fluxo separado e idempotente; recorrência intocada) |
-| B25 "números do mês" | falta separar queda proposital de não proposital (ver 1.9) e amostra mínima | não |
+| B11 pré-pago 3 e 6 meses | **aprovado: 3 m 4%, 6 m 7%; sem 12 meses** | não (fluxo separado e idempotente; recorrência intocada) |
+| B25 "números do mês" | **parado**: sem dado sobre a derrubada de 50 min | não |
 | B27 depoimentos | textos, fotos, permissões | componente compartilhado a fazer |
 | B26 comparativos / fichas | prints de preço | fichas em `dashboard/lib/competitors-data.js` |
 
@@ -385,7 +385,7 @@ Afiliados (B) ou dos outros relatórios.
 2. **Não repetir o que o grupo já viu** em 7/30 dias + "verificação antes de postar" (B35).
 3. **Página de "Proteção do número: os números do mês"** (B25, depende de dado seu).
 4. **Crescer o grupo, não só abastecê-lo** (contador de entradas/saídas, vitrine B33).
-5. **Pré-pago com desconto 3/6/12 meses** (B11, depende da tabela).
+5. **Pré-pago com desconto de 3 e 6 meses** (B11: 4% e 7%; sem 12 meses). Falta só o código.
 6. **Programa de indicação dentro do produto** — o link já aparece na 1ª oferta publicada (feito em 27/09); falta ver se gera cadastro (meta: ≥ 5 com `referredBy` em 30 dias, hoje 0).
 
 ---
@@ -398,7 +398,7 @@ Afiliados (B) ou dos outros relatórios.
 | **29/09** | Indexação Dia B · Planejador de Palavras-Chave | Flávia |
 | **30/09** | Medição curta (Search Console + 2 diagnósticos) · indexação Dia C | Flávia |
 | **1–2/10** | Indexação Dias D, E e F (F só depois do `main`) · WhatsApp para os 63 (contínuo, 5–10/dia) · depoimentos (1.2, comando + mensagem prontos) | Flávia |
-| **Semana de 5/10** | Guest-parágrafo (1.8) · vídeo 2 · dizer o desconto de 12 meses (B11) e o que é a derrubada de 50 min (B25) | Flávia |
+| **Semana de 5/10** | Guest-parágrafo (1.8) · vídeo 2 | Flávia |
 | **1ª quinzena de outubro** | Renovação da turma de setembro (só observar) | — |
 | **até 15/10** | Claude entrega comandos do teto 100 (D2, aprovado) · janela do supervisor (D3) assim que a correção estiver em `main` | Claude + Flávia |
 | **~11/10** | Rodada de IA opcional | Flávia |
