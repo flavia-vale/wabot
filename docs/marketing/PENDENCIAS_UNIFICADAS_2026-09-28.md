@@ -297,7 +297,7 @@ EG-07 = **B03** (feito) · EG-09 = **B07** e PR #1978 (feito) · EG-15 e EG-28 =
 | ~~B02 CNPJ / razão social~~ | **descartado: sem CNPJ** | — |
 | ~~B04 print do painel de vendas~~ | **feito** (imagem ilustrativa nas 3 páginas) | — |
 | B05 contadores no hero | **OK dado**: só "ofertas enviadas 30 d" (real); falta snapshot | não (hero lê arquivo estático validado, sem processo residente) |
-| B11 pré-pago 3 e 6 meses | **aprovado: 3 m 4%, 6 m 7%; sem 12 meses** | não (fluxo separado e idempotente; recorrência intocada) |
+| B11 pré-pago 3 e 6 meses | ✅ **Servidor pronto, DESLIGADO (PR do loop, 28/09):** `POST /payments/checkout` aceita `months` = 3 ou 6 só com `BILLING_PREPAID_ENABLED=true`; preço calculado no servidor (4% e 7%); acesso de 90/180 dias só se o valor aprovado pelo Mercado Pago for IGUAL ao total gravado na preferência (senão, 1 mês como hoje); a flag não afeta quem já pagou. Recorrência intocada. **Falta:** (1) você validar com um pagamento real de teste no staging; (2) botões de 3/6 meses na tela do plano (não fiz: só depois da validação); (3) decidir se a comissão do programa de afiliadas incide sobre o total pré-pago (hoje incidiria); (4) ligar a flag (exige `pm2 delete` + `start`, não `restart --update-env`) | não |
 | B25 "números do mês" | **parado**: sem dado sobre a derrubada de 50 min | não |
 | B27 depoimentos | textos, fotos, permissões | componente compartilhado a fazer |
 | B26 comparativos / fichas | prints de preço | fichas em `dashboard/lib/competitors-data.js` |
