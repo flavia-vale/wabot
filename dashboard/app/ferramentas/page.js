@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/ferramentas'
 const siteUrl = getSiteUrl()
@@ -100,6 +101,7 @@ export default function Page() {
           ))}
         </section>
       </main>
+   <EditorialFreshness pathname="/ferramentas" />
     </PublicShell>
   )
 }

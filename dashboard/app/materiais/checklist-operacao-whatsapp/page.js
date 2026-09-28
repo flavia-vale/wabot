@@ -38,7 +38,7 @@ export default function Page() {
         title="Checklist de operação para divulgar ofertas no WhatsApp"
         description="Use antes de ligar uma rotina de espelhamento: padronize oferta, link, copy, destinos e métricas para reduzir erro manual."
       >
-        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
         <section className="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm leading-7 text-emerald-950">
           <h2 className="text-lg font-black text-emerald-950">Resposta direta</h2>
           <p className="mt-2">Um checklist de operação para WhatsApp organiza a revisão de oferta, link, texto, grupos e acompanhamento antes da automação. Ele reduz esquecimento, mas não substitui consentimento, revisão humana e cadência responsável. No Espelha Grupos, os itens de link são automáticos nas 6 lojas suportadas: o código de afiliada entra antes de a oferta sair.</p>

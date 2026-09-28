@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildOgImageUrl } from '@/lib/seo-og'
 
@@ -225,6 +226,7 @@ export function PreservationDecisionPage({ slug }) {
   return (
     <PublicShell>
       <OrganicPageTracker route={trackerRoute} />
+      <EditorialFreshness pathname={slug} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(buildJsonLd(page)).replace(/</g, '\\u003c') }} />
       <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
         <section className="rounded-[2rem] bg-emerald-950 p-7 text-white shadow-sm md:p-10">

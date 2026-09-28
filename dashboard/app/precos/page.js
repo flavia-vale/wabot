@@ -256,6 +256,7 @@ export default async function PrecosPage() {
 
       <FinalCTA />
       <Footer />
+   <EditorialFreshness pathname="/precos" />
     </div>
   )
 }

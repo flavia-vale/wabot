@@ -52,7 +52,7 @@ export default function Page() {
         title="Checklist de Preservação Avançada para WhatsApp"
         description="Use este roteiro antes de aumentar volume em grupos e Canais do WhatsApp. O objetivo é reduzir exposição operacional — não prometer banimento zero."
       >
-        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
         <section className="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm leading-7 text-emerald-950">
           <h2 className="text-lg font-black text-emerald-950">Resposta direta</h2>
           <p className="mt-2">Preservação avançada é um conjunto de camadas: chip dedicado, cadência, variações, monitoramento e recuperação. O termo “anti-ban” aparece como busca do mercado, mas nenhuma ferramenta séria deve prometer proteção absoluta.</p>

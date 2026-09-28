@@ -3,6 +3,7 @@ import { PublicPage } from '@/components/PublicShell'
 import { BRAND_LINKEDIN_URL, BRAND_YOUTUBE_URL, SISTER_SITES, SUPPORTED_STORES } from '@/lib/marketing-content'
 import { FICHA_DEFINICAO } from '@/lib/ficha-tecnica'
 import { EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 export const metadata = {
   title: 'Quem Somos',
@@ -106,6 +107,7 @@ export default function AboutPage() {
           </Link>
         </div>
       </div>
+   <EditorialFreshness pathname="/quem-somos" />
     </PublicPage>
   )
 }

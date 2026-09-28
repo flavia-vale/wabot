@@ -85,7 +85,7 @@ export function IntroCard({ eyebrow, brandMark = 'b', title, body, pills, accent
         {body && <p style={styles.body}>{body}</p>}
         {/* Frescor visível, a mesma data do dateModified/lastmod (EDITORIAL_DATES). */}
         {updatedAt && (
-          <p style={styles.updated}>Atualizado em <time dateTime={updatedAt}>{formatDatePtBr(updatedAt)}</time></p>
+          <p style={styles.updated}>Revisado em <time dateTime={updatedAt}>{formatDatePtBr(updatedAt)}</time></p>
         )}
         {pills && pills.length > 0 && (
           <div style={styles.pillsRow}>

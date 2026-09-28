@@ -99,6 +99,7 @@ export default async function LandingPage({ searchParams = {} }) {
       <FAQ />
       <FinalCTA />
       <Footer />
+   <EditorialFreshness pathname="/" />
     </div>
   )
 }
