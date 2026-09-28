@@ -17,7 +17,6 @@ import {
   SUPPORT_WHATSAPP_URL,
 } from '@/lib/marketing-content'
 import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
-import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 /* PÁGINA DE PREÇO (auditoria de funil 2026-08-05, §1.4).
  *
