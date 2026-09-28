@@ -23,7 +23,7 @@ index f4458db..e6912a6 100644
              const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
              await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..73b27dc 100644
+index c46b096..b029f6e 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 @@ -7,7 +7,8 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
@@ -45,7 +45,7 @@ index c46b096..73b27dc 100644
          // todo: implement a cache to store the last 256 sent messages (copy whatsmeow)
          const msgs = await Promise.all(ids.map(id => getMessage({ ...key, id })));
          const remoteJid = key.remoteJid;
-@@ -472,7 +473,23 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -472,7 +473,36 @@ export const makeMessagesRecvSocket = (config) => {
          // just re-send the message to everyone
          // prevents the first message decryption failure
          const sendToAll = !jidDecode(participant)?.device;
@@ -67,10 +67,23 @@ index c46b096..73b27dc 100644
 +        if (!injectedFromBundle) {
 +            await assertSessions([participant], true);
 +        }
++        // wabot patch (RCA 2026-09-28, medicao): por que o aparelho nao abriu (`error` do
++        // <retry>, ver RetryReason do Baileys 7.x) e como o reenvio foi montado.
++        logger.info({
++            msgId: ids[0],
++            remoteJid,
++            participant,
++            retryCount: retryNode?.attrs?.count,
++            retryError: retryNode?.attrs?.error,
++            hasKeys: !!(receiptNode && getBinaryNodeChild(receiptNode, 'keys')),
++            injectedFromBundle,
++            sendToAll,
++            found: msgs.map(m => !!m)
++        }, 'retry-diag: pedido de reenvio');
          if (isJidGroup(remoteJid)) {
              await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } });
          }
-@@ -554,7 +571,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -554,7 +584,7 @@ export const makeMessagesRecvSocket = (config) => {
                              if (key.fromMe) {
                                  try {
                                      logger.debug({ attrs, key }, 'recv retry request');
@@ -79,7 +92,7 @@ index c46b096..73b27dc 100644
                                  }
                                  catch (error) {
                                      logger.error({ key, ids, trace: error.stack }, 'error in sending message again');
-@@ -668,6 +685,16 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -668,6 +698,16 @@ export const makeMessagesRecvSocket = (config) => {
                              }
                          });
                      }
@@ -97,10 +110,10 @@ index c46b096..73b27dc 100644
                          // no type in the receipt => message delivered
                          let type = undefined;
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
-index 38bb9e0..04ad8b7 100644
+index 38bb9e0..188f37d 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
-@@ -316,7 +316,39 @@ export const makeMessagesSocket = (config) => {
+@@ -316,7 +316,40 @@ export const makeMessagesSocket = (config) => {
              if (normalizeMessageContent(message)?.pinInChatMessage) {
                  extraAttrs['decrypt-fail'] = 'hide';
              }
@@ -136,6 +149,7 @@ index 38bb9e0..04ad8b7 100644
 +                    content: ciphertext
 +                });
 +                shouldIncludeDeviceIdentity = true;
++                logger.info({ msgId, jid: destinationJid, participant: participant.jid, encType: type, count: participant.count, withSkdm: messageToSend !== message, isMe }, 'retry-diag: reenvio de grupo montado');
 +            }
 +            else if (isGroup || isStatus) {
                  const [groupData, senderKeyMap] = await Promise.all([
