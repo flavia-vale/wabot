@@ -4,6 +4,7 @@ import { Pricing } from '@/components/landing/Pricing'
 import { FichaTecnica } from '@/components/landing/FichaTecnica'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 import { getLandingPlans } from '@/lib/plans-server'
 import { buildOgImageUrl } from '@/lib/seo-og'
 import {
@@ -16,7 +17,6 @@ import {
   SUPPORT_WHATSAPP_URL,
 } from '@/lib/marketing-content'
 import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
-import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 /* PÁGINA DE PREÇO (auditoria de funil 2026-08-05, §1.4).
  *
@@ -33,8 +33,10 @@ import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 export const metadata = {
   title: 'Preços e planos: quanto custa o robô de ofertas para WhatsApp',
+  // 194 chars estourava o teto de 160 do Google/Bing (Bing Webmaster,
+  // 27/09/2026: "Descrição Meta muito longa"). Mesmos fatos, mais curto.
   description:
-    'Quanto custa automatizar a divulgação de ofertas de afiliado no WhatsApp: 7 dias grátis sem cartão, plano Basic por R$39 e plano Pro por R$69 a cada 30 dias. Sem fidelidade, cancela pelo painel.',
+    '7 dias grátis sem cartão, depois Basic por R$39 ou Pro por R$69 a cada 30 dias. Sem fidelidade, cancela pelo painel quando quiser.',
   alternates: { canonical: '/precos' },
   openGraph: {
     title: 'Preços e planos | Quanto custa o robô de ofertas para WhatsApp',
