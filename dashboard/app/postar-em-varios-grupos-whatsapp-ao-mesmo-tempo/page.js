@@ -4,7 +4,7 @@ import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { getSiteUrl } from '@/lib/site-url'
 import { getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 import { BRAND_LEGACY_NAME, BRAND_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORTED_STORES } from '@/lib/marketing-content'
-import { getProgrammaticSeoRoute } from '@/lib/seo-registry.mjs'
+import { getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoutes } from '@/lib/seo-registry.mjs'
 import { LP_CONFIG, getLpMetadata } from '../_lpShared'
 
 // Frente B do PLANO_SEO_GEO_2026-09-27 (B1). Medição de 27/09: para "como
@@ -174,6 +174,10 @@ export default function Page() {
   const siteUrl = getSiteUrl()
   const schemas = buildSchemas(siteUrl)
   const seoRoute = getProgrammaticSeoRoute(slug)
+  // Mesmas 3 vizinhas que as demais páginas de dor mostram: esta página deixou
+  // de usar o template compartilhado, e sem isto as vizinhas ficam órfãs
+  // (test/marketing-paginas-orfas.test.js).
+  const relatedRoutes = getRelatedProgrammaticSeoRoutes(seoRoute, 3)
 
   return (
     <PublicShell>
@@ -283,6 +287,9 @@ export default function Page() {
               <ul>
                 {entradas.map((l) => (
                   <li key={l.href}><Link href={l.href} className="font-bold text-emerald-700 hover:text-emerald-800">{l.label}</Link> — {l.note}</li>
+                ))}
+                {relatedRoutes.filter((route) => !entradas.some((l) => l.href === route.path)).map((route) => (
+                  <li key={route.path}><Link href={route.path} className="font-bold text-emerald-700 hover:text-emerald-800">{route.label}</Link></li>
                 ))}
               </ul>
             </section>
