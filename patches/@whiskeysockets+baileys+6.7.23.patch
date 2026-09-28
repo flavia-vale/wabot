@@ -117,10 +117,19 @@ index c46b096..b8e3f77 100644
                          // no type in the receipt => message delivered
                          let type = undefined;
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
-index 38bb9e0..188f37d 100644
+index 38bb9e0..3c1b783 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
-@@ -316,7 +316,40 @@ export const makeMessagesSocket = (config) => {
+@@ -4,7 +4,7 @@ import { proto } from '../../WAProto/index.js';
+ import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults/index.js';
+ import { aggregateMessageKeysNotFromMe, assertMediaContent, bindWaitForEvent, decryptMediaRetryData, encodeNewsletterMessage, encodeSignedDeviceIdentity, encodeWAMessage, encryptMediaRetryRequest, extractDeviceJids, generateMessageIDV2, generateWAMessage, getStatusCodeForMediaRetry, getUrlFromDirectPath, getWAUploadToServer, normalizeMessageContent, parseAndInjectE2ESessions, unixTimestampSeconds } from '../Utils/index.js';
+ import { getUrlInfo } from '../Utils/link-preview.js';
+-import { areJidsSameUser, getBinaryNodeChild, getBinaryNodeChildren, isJidGroup, isJidUser, jidDecode, jidEncode, jidNormalizedUser, S_WHATSAPP_NET } from '../WABinary/index.js';
++import { areJidsSameUser, getBinaryNodeChild, getBinaryNodeChildren, isJidGroup, isJidUser, isLidUser, jidDecode, jidEncode, jidNormalizedUser, S_WHATSAPP_NET } from '../WABinary/index.js';
+ import { USyncQuery, USyncUser } from '../WAUSync/index.js';
+ import { makeGroupsSocket } from './groups.js';
+ import { makeNewsletterSocket } from './newsletter.js';
+@@ -316,7 +316,43 @@ export const makeMessagesSocket = (config) => {
              if (normalizeMessageContent(message)?.pinInChatMessage) {
                  extraAttrs['decrypt-fail'] = 'hide';
              }
@@ -131,7 +140,10 @@ index 38bb9e0..188f37d 100644
 +                // grupo (SKDM) embutida e o `count` do pedido - como o WA Web, o whatsmeow e o
 +                // Baileys 7.x (isRetryResend). A 6.7.x re-cifrava com a chave do grupo (skmsg)
 +                // e o membro seguia em "Aguardando mensagem", pedindo de novo ate o limite.
-+                const isMe = areJidsSameUser(participant.jid, meId);
++                // Parte 4: em grupo @lid o pedido do proprio celular da conta vem com o LID;
++                // comparar com o PN (meId) nunca batia e o aparelho da mesma conta recebia o
++                // reenvio sem o embrulho deviceSentMessage (Baileys 7.x usa meLid aqui).
++                const isMe = areJidsSameUser(participant.jid, isLidUser(participant.jid) ? authState.creds.me?.lid || meId : meId);
 +                let messageToSend = message;
 +                try {
 +                    const skdm = await signalRepository.getSenderKeyDistributionMessage({ group: destinationJid, meId });
