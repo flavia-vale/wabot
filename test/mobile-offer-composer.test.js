@@ -31,8 +31,37 @@ test('normaliza preço raspado quando a API retorna newPrice em vez de price', (
 })
 
 
-test('lista apenas os presets Automático clássico e Simples', () => {
-  assert.deepEqual(TEMPLATE_OPTIONS.map((template) => template.key), ['automatico_classico', 'simples'])
+test('lista os dois presets genéricos e os cinco modelos prontos por nicho', () => {
+  assert.deepEqual(TEMPLATE_OPTIONS.map((template) => template.key), [
+    'automatico_classico',
+    'simples',
+    'moda',
+    'casa',
+    'tech',
+    'bebe',
+    'beleza',
+  ])
+})
+
+test('cada modelo por nicho vem completo e gera uma oferta sem tokens vazando', () => {
+  for (const key of ['moda', 'casa', 'tech', 'bebe', 'beleza']) {
+    const body = PRESET_TEMPLATE_BODIES[key]
+    assert.match(body, /\{produto\}/, `${key} sem produto`)
+    assert.match(body, /\{preço\}/, `${key} sem preço`)
+    assert.match(body, /\{link\}/, `${key} sem link`)
+
+    const text = buildMobileOfferText({
+      product: { title: 'Produto do nicho', price: 'R$ 79,90' },
+      link: 'https://afiliado.test/nicho',
+      template: key,
+      templateBody: body,
+    })
+
+    assert.match(text, /Produto do nicho/)
+    assert.match(text, /R\$ 79,90/)
+    assert.match(text, /https:\/\/afiliado\.test\/nicho/)
+    assert.doesNotMatch(text, /\{(?:produto|preço|preço_de|desconto|rating|vendas|link)\}/)
+  }
 })
 
 
