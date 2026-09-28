@@ -16,6 +16,7 @@ import { buildSendPauseNotice } from '@/lib/painel/sendPauseNotice'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../src/tutorialVideo.js'
 import { hasProLikeAccess } from '@/lib/planEntitlements'
 import { ProModal } from '@/components/pro/ProGate'
+import { ScreenAssistant } from '@/components/painel/ScreenAssistant'
 
 /* Contexto compartilhado: dados de sessão/usuário reusados pelas páginas. O
  * status de sessão (`online`/`phone`) é re-buscado periodicamente e ao focar a
@@ -706,6 +707,7 @@ export default function PainelShell({ children }) {
                 nem foi ligado, e o alarme não corresponde a nada. */}
             <NoCredentialBanner show={shouldShowNoCredentialBanner({ hasAnyCredential, online, phone })} />
             <ExpiredMlSsidBanner expired={mlSsidExpired} />
+            <ScreenAssistant pathname={pathname} online={online} hasAnyCredential={hasAnyCredential} destinationCount={groupCount === null ? null : destGroupCount} />
             {children}
           </div>
         </div>

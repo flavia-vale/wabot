@@ -51,6 +51,8 @@ import { instagramDestinationsFromConnections } from '@/components/InstagramDest
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import { AFFILIATE_PLATFORMS } from '@/lib/painel/affiliatePlatforms'
 import { buildMirrorCards, planMirrorCreation, resolveInitialOrigin } from '../../../../src/domain/painel/mirrorWizard.js'
+import { composeRelayFooter, relayFooterControls } from '../../../../src/core/relayFooter.js'
+import { VIDEO_ESPELHAMENTO_URL } from '../../../../src/tutorialVideo.js'
 
 // Espelha WATERMARK_MAX_CHARS de src/core/destinationWatermark.js (a tela não
 // importa aquele módulo: ele carrega `sharp`). test/watermark-limite-caracteres.test.js
@@ -209,8 +211,12 @@ function CfgRow({ label, hint, info, last, extra, children }) {
 
 function RelayFooterField({ group, onUpdate }) {
   const savedValue = group.relayFooterText ?? ''
-  const [draft, setDraft] = useState(savedValue)
+  const initial = relayFooterControls(savedValue)
+  const [customText, setCustomText] = useState(initial.customText)
+  const [includeCustomText, setIncludeCustomText] = useState(initial.includeCustomText)
+  const [includeGroupLink, setIncludeGroupLink] = useState(initial.includeGroupLink)
   const [status, setStatus] = useState('idle')
+  const draft = composeRelayFooter({ includeCustomText, customText, includeGroupLink })
 
   const changed = draft !== savedValue
 
@@ -223,18 +229,23 @@ function RelayFooterField({ group, onUpdate }) {
   return (
     <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--line)', borderRadius: 12, background: 'var(--surface-soft, #f8fafc)' }}>
       <label htmlFor={`relay-footer-${group.id}`} style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--ink)' }}>
-        Adicionar texto ao final da mensagem <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}>(opcional)</span>
+        Final de toda mensagem <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}>(opcional)</span>
       </label>
       <p style={{ margin: '4px 0 10px', fontSize: 12, lineHeight: 1.45, color: 'var(--ink-soft)' }}>
-        O texto será incluído depois de toda mensagem espelhada deste grupo. Deixe em branco para não adicionar nada.
+        Escolha o que será incluído depois de toda mensagem espelhada desta origem.
       </p>
+      <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+        <label className="cfg-check"><input type="checkbox" checked={includeGroupLink} onChange={(event) => { setIncludeGroupLink(event.target.checked); setStatus('idle') }} /> Colocar link do grupo no fim</label>
+        <label className="cfg-check"><input type="checkbox" checked={includeCustomText} onChange={(event) => { setIncludeCustomText(event.target.checked); setStatus('idle') }} /> Colocar texto no fim de toda mensagem</label>
+      </div>
       <textarea
         id={`relay-footer-${group.id}`}
         className="pnl-input"
         rows={4}
         maxLength={RELAY_FOOTER_MAX_CHARS}
-        value={draft}
-        onChange={(event) => { setDraft(event.target.value); setStatus('idle') }}
+        value={customText}
+        disabled={!includeCustomText}
+        onChange={(event) => { setCustomText(event.target.value); setStatus('idle') }}
         placeholder="Ex.: Entre no nosso grupo VIP para receber mais ofertas!"
         style={{ width: '100%', resize: 'vertical', lineHeight: 1.5 }}
       />
@@ -2323,6 +2334,18 @@ export default function EspelhamentoPage() {
           <Link href="/painel/whatsapp" className="pnl-btn">Conexão WhatsApp</Link>
         </div>
       </section>
+
+      {/* Vídeo 1 do canal (plano SEO+GEO, C1): o passo a passo desta tela.
+          Mesmo cartão de "Ofertas automáticas" — padrão que já existe no
+          painel, sem estilo novo. */}
+      <a className="offer-auto-guide" href={VIDEO_ESPELHAMENTO_URL} target="_blank" rel="noreferrer">
+        <span className="offer-auto-guide-play" aria-hidden="true">▶</span>
+        <span className="offer-auto-guide-copy">
+          <strong>Veja na prática: como espelhar mensagens entre grupos</strong>
+          <small>Escolha o grupo de origem e os seus destinos. O robô publica cada oferta com o seu link.</small>
+        </span>
+        <span className="offer-auto-guide-cta">Assistir <span aria-hidden="true">↗</span></span>
+      </a>
 
       {nothingYet ? (
         <section className="pnl-card" style={{ textAlign: 'center', padding: '34px 20px' }}>

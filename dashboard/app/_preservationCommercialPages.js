@@ -645,6 +645,10 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
   'bot-afiliados-whatsapp': {
     path: '/bot-afiliados-whatsapp',
     title: 'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',
+    // Sem o sufixo automático de marca (' | Espelha Grupos') — ver o
+    // comentário em getPreservationCommercialMetadata. Só esta página: as
+    // outras seguem o padrão normal do title.template.
+    titleAbsolute: true,
     // Reescrita de 2026-09-18 (PLANO_MAQUINA_DE_VENDAS_IA, seção 6 item 1): a
     // página tem CTR de 10% quando aparece e não apareceu em NENHUMA das 4
     // buscas reais de "bot para afiliados no whatsapp" — quem vence traz a
@@ -1034,7 +1038,12 @@ export function getPreservationCommercialMetadata(pageKey) {
   const ogImage = buildOgImageUrl({ slug: pageKey, cluster: 'canais-preservacao', template: 'commercial-seo' })
   const robots = buildSeoRobots(page.path)
   return {
-    title: page.title,
+    // `absolute` pula o `title.template` do layout raiz (`%s | Espelha
+    // Grupos`), que empurrava este título (62 chars) para 79 e o Bing
+    // Webmaster passou a marcar como "muito longo" (27/09/2026). O texto que
+    // mede 8,09% de clique no Search Console não muda — só o sufixo de marca
+    // some do <title>; a marca continua na URL, no H1 e no schema Organization.
+    title: page.titleAbsolute ? { absolute: page.title } : page.title,
     description: page.description,
     alternates: { canonical: page.path },
     ...(robots ? { robots } : {}),

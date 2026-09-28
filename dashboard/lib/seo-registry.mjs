@@ -289,6 +289,14 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/amazon-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/amazon-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/shein-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/shein-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/magalu-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/magalu-afiliados-whatsapp', '2026-09-02'), indexable: true },
+  ...['shopee-afiliados', 'amazon-afiliados', 'mercado-livre-afiliados', 'magalu-afiliados', 'shein-afiliados', 'aliexpress-afiliados'].map((store) => ({
+    path: `/guia/${store}`,
+    template: 'store-guide',
+    priority: 0.82,
+    changeFrequency: 'monthly',
+    lastModified: resolveLastModified(`/guia/${store}`, '2026-09-28'),
+    indexable: true,
+  })),
   // Modo "o robô busca a oferta sozinho" (23/09/2026): o ChatGPT lia "bot para
   // afiliados" como garimpo automático e não sabia que temos esse modo.
   // title/description ficam só em _preservationCommercialPages.js (FR-001).

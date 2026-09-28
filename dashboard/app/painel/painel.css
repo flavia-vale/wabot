@@ -2462,3 +2462,20 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   .pnl-pro-bars { height: 140px; gap: 4px; }
   .pnl-pro-bar-v { font-size: 9.5px; }
 }
+.pnl-screen-assistant { display: grid; gap: 10px; margin-bottom: 16px; }
+.pnl-screen-guide, .pnl-robot-diagnostic { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-soft); }
+.pnl-screen-guide { padding: 12px 16px; color: var(--ink-soft); font-size: 13px; }
+.pnl-screen-guide summary { color: var(--ink); cursor: pointer; font-weight: 700; }
+.pnl-screen-guide p { margin: 10px 0 4px; }
+.pnl-screen-guide strong { color: var(--accent-strong); }
+.pnl-robot-diagnostic { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 15px 16px; }
+.pnl-robot-diagnostic.is-ready { border-color: color-mix(in oklab, var(--accent-strong) 45%, var(--line)); background: color-mix(in oklab, var(--accent) 10%, var(--surface)); }
+.pnl-robot-step { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: var(--bg-soft); color: var(--accent-strong); font-size: 12px; font-weight: 800; }
+.pnl-robot-diagnostic > div > strong { display: block; color: var(--ink-soft); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+.pnl-robot-diagnostic h2 { margin: 2px 0; color: var(--ink); font-size: 15px; }
+.pnl-robot-diagnostic p { margin: 0; color: var(--ink-soft); font-size: 12.5px; }
+.pnl-robot-diagnostic p span { font-weight: 700; }
+@media (max-width: 640px) {
+  .pnl-robot-diagnostic { grid-template-columns: auto minmax(0, 1fr); }
+  .pnl-robot-diagnostic > .pnl-btn { grid-column: 1 / -1; justify-content: center; }
+}

@@ -79,3 +79,20 @@ export function videoEtiquetasParaLoja(platform) {
   const capitulo = VIDEO_ETIQUETAS_CAPITULOS.find((c) => c.chave === chave)
   return capitulo ? videoEtiquetasEm(capitulo.segundos) : VIDEO_CADASTRO_ETIQUETAS_URL
 }
+
+// Vídeo 1 do plano SEO+GEO (C1, `docs/marketing/PLANO_SEO_GEO_2026-09-27.md`):
+// "Como espelhar mensagens entre grupos de WhatsApp". Mesma regra dos vídeos
+// acima — um lugar só para o painel (tela Espelhamento) e para o post do blog
+// que responde à mesma pergunta (VideoObject). Título e data de publicação
+// conferidos no feed público do canal em 28/09/2026; se o vídeo for
+// regravado, trocar o ID e a data AQUI.
+export const VIDEO_ESPELHAMENTO = Object.freeze({
+  id: 'nch0Lo3Zz1U',
+  titulo: 'Como espelhar mensagens entre grupos de WhatsApp (sem programar)',
+  publicadoEm: '2026-09-28T02:25:42+00:00',
+})
+export const VIDEO_ESPELHAMENTO_URL = `https://www.youtube.com/watch?v=${VIDEO_ESPELHAMENTO.id}`
+// `youtube-nocookie` é o único domínio liberado no `frame-src` da CSP
+// (dashboard/next.config.mjs) e não grava cookie antes do play.
+export const VIDEO_ESPELHAMENTO_EMBED_URL = `https://www.youtube-nocookie.com/embed/${VIDEO_ESPELHAMENTO.id}?rel=0`
+export const VIDEO_ESPELHAMENTO_THUMB_URL = `https://i.ytimg.com/vi/${VIDEO_ESPELHAMENTO.id}/hqdefault.jpg`

@@ -72,7 +72,7 @@ export const EDITORIAL_DATES = {
   '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-31' },
   '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   // Páginas de resposta (19/09/2026) — ver _preservationBlogPosts.js.
-  '/blog/como-espelhar-mensagens-entre-grupos-whatsapp': { publishedAt: '2026-09-19', updatedAt: '2026-09-27' },
+  '/blog/como-espelhar-mensagens-entre-grupos-whatsapp': { publishedAt: '2026-09-19', updatedAt: '2026-09-28' },
   '/blog/melhores-automacoes-para-afiliado-shopee-2026': { publishedAt: '2026-09-19', updatedAt: '2026-09-19' },
   '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp': { publishedAt: '2026-09-19', updatedAt: '2026-09-27' },
   '/diagnostico-antiban-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-24' },
@@ -95,6 +95,12 @@ export const EDITORIAL_DATES = {
   '/amazon-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-27' },
   '/shein-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/magalu-afiliados-whatsapp': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
+  '/guia/shopee-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/amazon-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/mercado-livre-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/magalu-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/shein-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/guia/aliexpress-afiliados': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
   '/alternativas/promium': { publishedAt: '2026-09-02', updatedAt: '2026-09-11' },
   '/alternativas/achadinhos-bot': { publishedAt: '2026-08-03', updatedAt: '2026-09-27' },
   // US5 (specs/013-inbound-leads-strategy) — única página de comparação nova
