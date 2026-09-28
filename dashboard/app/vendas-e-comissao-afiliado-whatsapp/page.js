@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
+import { PainelVendasIlustrativo } from '@/components/marketing/PainelVendasIlustrativo'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
@@ -95,6 +96,8 @@ export default function Page() {
               <p>O <strong>Espelha Grupos</strong> tem uma aba <strong>Vendas</strong> no painel que mostra, para as ofertas da Shopee publicadas pelo robô: pedidos atribuídos, itens comprados, valor vendido e <strong>comissão estimada e confirmada</strong>, com quebra por pedido e por produto.</p>
               <p>Está no <strong>plano Pro</strong> (R$ 69 a cada 30 dias) e nos 7 dias de teste grátis, que liberam tudo do Pro.</p>
             </section>
+
+            <PainelVendasIlustrativo />
 
             <section>
               <h2>&quot;Quantas mensagens saíram&quot; não é a mesma pergunta que &quot;quanto eu ganhei&quot;</h2>

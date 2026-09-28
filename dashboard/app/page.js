@@ -7,6 +7,7 @@ import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import { FichaTecnica } from '@/components/landing/FichaTecnica'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { PainelVendasIlustrativo } from '@/components/marketing/PainelVendasIlustrativo'
 import { IntroCard, RulesCard } from '@/components/landing/IntroCard'
 import { BRAND_NAME, BRAND_SHORT_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
@@ -96,6 +97,7 @@ export default async function LandingPage({ searchParams = {} }) {
       <Hero tone={tone} />
       <How />
       <Features />
+      <div className="wrap"><PainelVendasIlustrativo /></div>
       <Social />
       <Pricing initialPlans={plans} />
       <GuaranteeBlock />
