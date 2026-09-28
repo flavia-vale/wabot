@@ -1,5 +1,23 @@
 # Briefing — tornar o Espelha Grupos uma máquina de vendas (27/09/2026)
 
+## O que ainda falta (mapa atualizado em 28/09/2026)
+
+Este briefing **já foi executado** e não deve ser aberto novamente como se fosse uma demanda nova. O resultado está em `DIAGNOSTICO_MAQUINA_DE_VENDAS_2026-09-27.md` e `PLANO_SEO_GEO_2026-09-27.md`.
+
+- [ ] Concluir as ações externas da dona do produto: Bing, Planejador de Palavras-Chave, levas restantes de indexação e monitoramento da Cloudflare.
+- [ ] Entrevistar por WhatsApp as 63 pessoas que ativaram e sumiram e registrar os motivos em quatro categorias.
+- [ ] Colher 3 a 5 depoimentos reais com autorização.
+- [ ] Manter um vídeo por semana (faltam os vídeos 2 a 8) e iniciar menções de terceiros por guest-parágrafos e criadores pequenos.
+- [ ] Medir novamente o funil, as quatro IAs e a renovação em 27/10; anúncio pago continua adiado até existir esse dado.
+
+### O que foi executado a partir deste briefing
+
+- [x] Diagnóstico de aquisição → cadastro → ativação → pagamento → renovação → indicação, com metas de 30 e 90 dias.
+- [x] Plano SEO/GEO priorizado e fila única da Flávia atualizada.
+- [x] Correções de confiança, ficha técnica, reembolso, títulos e página “vale a pena?” publicadas e reindexadas nas URLs prioritárias.
+- [x] Análise profunda do Pro Afiliados concluída e backlog transformado em plano de execução; a primeira entrega segura já foi implementada.
+- [x] Vídeo 1 publicado e incorporado ao produto e ao blog.
+
 Prompt para abrir uma sessão nova de estudo profundo. Copiar tudo a partir de
 "PROMPT" e colar na sessão.
 

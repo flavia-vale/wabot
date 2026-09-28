@@ -1,5 +1,25 @@
 # O que você precisa fazer — fila única, em ordem
 
+## O que ainda falta (resumo atualizado em 28/09/2026)
+
+- [ ] Quando B29 estiver em produção, pedir a reindexação das 10 páginas com “Revisado em” e `dateModified`.
+- [ ] Conferir no Bing `/`, `/precos`, `/bot-afiliados-whatsapp` e o post do vídeo; enviar as URLs que ainda não estiverem atualizadas.
+- [ ] Coletar no Planejador o volume e a concorrência de `automação para afiliados` e `automação para afiliado shopee`.
+- [ ] Terminar, no máximo 10 por dia, as levas de indexação ainda marcadas `⏳` nas seções abaixo.
+- [ ] Falar por WhatsApp com as 63 pessoas que ativaram e sumiram e classificar as respostas; e-mail de pesquisa foi encerrado por não gerar resposta.
+- [ ] Obter 3 a 5 depoimentos reais com autorização, sem reescrever promessas.
+- [ ] Produzir os vídeos 2 a 8 e executar guest-parágrafos, contato com criadores e distribuição autorizada em Telegram/Quora.
+- [ ] Em 15/10, decidir o teto de vagas; em 27/10, executar a rodada mensal completa e reavaliar anúncio pago com a renovação da turma de setembro.
+- [ ] Mensalmente, conferir acesso dos robôs de IA na Cloudflare.
+
+### O que já foi executado neste ciclo
+
+- [x] Deploy das entregas de 27/09 e reindexação das páginas prioritárias e de `/alternativas/proafiliados` em 28/09.
+- [x] Rodada manual das quatro IAs e correção da leitura de retenção.
+- [x] Página “vale a pena?”, comparativo AchadinhosBot, textos de reembolso e vídeo 1 publicado e embutido.
+
+> As tabelas detalhadas abaixo guardam URLs, datas e passos. Em conflito de status, vale este resumo e, depois, a linha detalhada com a data mais recente.
+
 Substitui as quatro listas de indexação que existiam em paralelo
 (`PAGINAS_PEDIR_INDEXACAO_2026-09-11.md`, a seção final de
 `PLANO_MELHORIA_2026-09-11.md`, `PENDENCIAS_INDEXACAO.md` e
@@ -305,7 +325,6 @@ pedido **só faz sentido agora**, porque a causa mudou: antes não havia link
 apontando para elas, agora há. Se o veredito voltar igual depois desta rodada,
 o problema deixa de ser descoberta e passa a ser conteúdo quase igual entre as
 cinco — e aí a ação é diferenciar o texto, não pedir de novo.
-
 
 ⚠️ **A Inspeção de URL tem cota de ~10 pedidos por dia.** A ordem importa. Faça
 de cima para baixo, uma leva por dia.
