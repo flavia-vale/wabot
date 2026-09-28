@@ -76,6 +76,19 @@ O teste também confere o patch no `node_modules`.
 restart. "pediram de novo DEPOIS de atendido", "erro no reenvio" e "desistiu"
 têm que cair para perto de 0.
 
+### Parte 3 (RCA 2026-09-28): 97% dos pedidos nem passavam pelo reenvio direto
+
+**Dado (log `retry-diag`, prod, após a parte 2):**
+- 375 de 387 pedidos caíram em `sendToAll:true`; só 12 foram direto ao aparelho (todos `pkmsg`, com SKDM);
+- todos com `retryCount:"1"`, sem `<keys>` e sem `error`.
+
+**Causa:** a regra `sendToAll = !jidDecode(participant)?.device` do Baileys trata o jid sem `:N` como "reenviar para o grupo todo". Só que jid sem `:N` é o **celular principal** (device 0), o caso mais comum. O reenvio voltava por `skmsg` ao grupo inteiro, o mesmo caminho que o membro não conseguiu abrir.
+
+**Conserto:**
+- em grupo, `sendToAll` é sempre `false` e o reenvio vai direto (pairwise) para o jid que pediu, com device 0 quando não há `:N`;
+- em conversa individual a regra original fica;
+- o teste roda a criptografia real para aparelho vinculado e para celular principal.
+
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
 Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel

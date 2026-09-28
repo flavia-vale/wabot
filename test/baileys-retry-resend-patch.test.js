@@ -66,9 +66,8 @@ async function buildRetryReceipt(member, groupJid, msgId) {
 
 const GROUP = '120363000000000001@g.us'
 const BOT = '5521900000001:7@s.whatsapp.net'
-const MEMBER = '99887766554433:2@lid'
-
-test('membro que não abriu a mensagem de grupo abre o reenvio e as mensagens seguintes', async () => {
+for (const [label, MEMBER] of [['aparelho vinculado (:2)', '99887766554433:2@lid'], ['celular principal (sem :device)', '99887766554433@lid']])
+test(`membro que não abriu a mensagem de grupo abre o reenvio e as mensagens seguintes — ${label}`, async () => {
   const bot = makeParty()
   const member = makeParty()
 
@@ -118,4 +117,7 @@ test('patch do reenvio está no pacote instalado (node_modules)', () => {
   assert.match(send, /shouldIncludeDeviceIdentity = true;/)
   assert.match(recv, /extractE2ESessionFromRetryReceipt\(receiptNode\)/)
   assert.match(recv, /await sendMessagesAgain\(key, ids, retryNode, node\);/)
+  // Parte 3: em grupo, pedido do celular principal (jid sem :device) NÃO pode cair no
+  // "reenviar para o grupo todo" — 97% dos pedidos em prod eram assim.
+  assert.match(recv, /const sendToAll = !isJidGroup\(remoteJid\) && !jidDecode\(participant\)\?\.device;/)
 })
