@@ -117,7 +117,7 @@ export const EDITORIAL_DATES = {
   '/glossario': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/estudos-de-caso': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/confiabilidade-sessao-whatsapp': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
-  '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-27' },
+  '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-28' },
   '/seguranca-credenciais-afiliado': { publishedAt: '2026-07-15', updatedAt: '2026-09-24' },
   '/quanto-ganha-afiliado-shopee': { publishedAt: '2026-09-11', updatedAt: '2026-09-27' },
   '/vendas-e-comissao-afiliado-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-23' },
