@@ -282,7 +282,7 @@ dias com tudo liberado, comissão no painel e espelhamento desde o Basic. IDs
 | **A6** | **6 posts "suporte como conteúdo"** das nossas RCAs: "bot conectado mas não envia", "oferta sem foto no WhatsApp", "número banido, o que fazer", "link de afiliado não gera comissão", "como aquecer número", "Shopee suspendeu afiliado". Sem prometer anti-ban; cada página nasce com 3+ links internos | cauda longa; série diária | EG-12 |
 | **A7** | **Reformatar `/alternativas/afilira`** (já existe) com tabela preço-por-grupo + CTA de teste. *Não é página nova* | comparativo converte 3% hoje | EG-10 |
 | **A8** | **5 páginas por loja com a palavra exata** no title/H1 (353 impressões, 7 cliques). *Junto com C6/C7* | consulta-cabeça em posição < 20 | EG-13 |
-| **A9** | **Calculadora de comissão/ROI de afiliado** (ferramenta grátis; já existem as de risco e de tempo) | cauda longa + e-mail com consentimento | EG-29 |
+| **A9** | ✅ **Feito (PR do loop, 28/09):** `/ferramentas/calculadora-comissao-afiliado-whatsapp` (cliques × conversão × valor médio × comissão − custo; ponto de equilíbrio; sem nenhuma média de mercado, exemplo marcado como exemplo). Entrou em `/ferramentas`, registry e datas. Teste `free-tools-commission-calculator`. **Pedir reindexação depois do `main`.** **Calculadora de comissão/ROI de afiliado** (ferramenta grátis; já existem as de risco e de tempo) | cauda longa + e-mail com consentimento | EG-29 |
 | **A10** | **Relatório trimestral com dado próprio** (horário e loja que mais convertem), só com números do nosso banco | fonte citável por IA | EG-27 |
 | **A11** | **Monitoramento mensal**: incluir "Afilira", "melhor bot de afiliados para WhatsApp" e "alternativa ao Afilira" na rodada de 27/10 (junto de C3) | placar da rodada | EG-31 |
 
