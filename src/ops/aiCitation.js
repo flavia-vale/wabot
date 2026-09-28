@@ -37,6 +37,15 @@ export const PROAFILIADOS_BASELINE_QUERIES = Object.freeze([
   { query: 'proafiliados vale a pena', cluster: 'b15' },
 ])
 
+// A11 — consultas sobre o Afilira (concorrente que cresce por SEO e GEO), na
+// rodada de 27/10. Conjunto separado, como o B15: não entra nas séries A–D
+// nem muda o denominador histórico.
+export const AFILIRA_BASELINE_QUERIES = Object.freeze([
+  { query: 'Afilira', cluster: 'afilira' },
+  { query: 'melhor bot de afiliados para WhatsApp', cluster: 'afilira' },
+  { query: 'alternativa ao Afilira', cluster: 'afilira' },
+])
+
 // Nomes citados pelas IAs que ainda não têm ficha em competitors-data.js.
 // O script soma estes aos nomes das fichas.
 export const EXTRA_COMPETITOR_NAMES = Object.freeze([
