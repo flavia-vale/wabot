@@ -535,7 +535,7 @@ test('fetchProductInfo extrai preços do JSON embarcado da PDP do Mercado Livre'
   assert.equal(info.oldPrice, '259,90')
 })
 
-test('fetchProductInfo envia cookie de sessão do ML e extrai dados da PDP autenticada', async (t) => {
+test('fetchProductInfo envia cookie de sessão do ML (último recurso) e extrai dados da PDP autenticada', async (t) => {
   const antiBot = '<!doctype html><html><head><title>Mercado Libre</title></head><body>account-verification</body></html>'
   const realPdp = `<!doctype html><html><head>
     <meta property="og:title" content="Forma Universal Air Fryer Forno E Micro-ondas"/>
@@ -570,6 +570,83 @@ test('fetchProductInfo envia cookie de sessão do ML e extrai dados da PDP auten
   assert.equal(sentCookie, 'id=42; _csrf=tok; ssid=sessionid1234567890')
   assert.match(info.title, /Forma Universal Air Fryer/i)
   assert.equal(info.newPrice, '29,90')
+})
+
+// RCA 2026-09-28: abrir página do ML com o cookie da cliente derrubava o código
+// de acesso dela em minutos. A sessão só pode ser usada quando a leitura de
+// prévia (crawler) E a API oficial não trouxeram título e preço.
+const ML_CREDS = { ssid: 'sessionid1234567890', csrf: 'tok', id: '42' }
+const ML_ANTIBOT = '<!doctype html><html><head><title>Mercado Libre</title></head><body>account-verification</body></html>'
+const ML_PDP = `<!doctype html><html><head>
+  <meta property="og:title" content="Liquidificador Arno Faciclic Plus 550W"/>
+  </head><body>
+  <h1 class="ui-pdp-title">Liquidificador Arno Faciclic Plus 550W</h1>
+  <div class="ui-pdp-price__second-line">
+    <span class="andes-money-amount"><span class="andes-money-amount__fraction">149</span><span class="andes-money-amount__cents">90</span></span>
+  </div>
+</body></html>`
+
+test('fetchProductInfo (ML com creds) NÃO usa a sessão quando a leitura de prévia (crawler) resolve', async (t) => {
+  const cookies = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (init?.headers?.Cookie) cookies.push(url)
+    if (url.includes('api.mercadolibre.com')) return { ok: false, status: 403, headers: { get: () => null } }
+    const ua = init?.headers?.['User-Agent'] || ''
+    return mockHtmlResponse(/facebookexternalhit/i.test(ua) ? ML_PDP : ML_ANTIBOT, url)
+  }
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/liquidificador-arno/p/MLB123456', { mlCredentials: ML_CREDS })
+  assert.deepEqual(cookies, [], 'nenhuma requisição pode levar o cookie da cliente')
+  assert.match(info.title, /Liquidificador Arno/i)
+  assert.equal(info.newPrice, '149,90')
+})
+
+test('fetchProductInfo (ML com creds) NÃO usa a sessão quando a API oficial do ML resolve', async (t) => {
+  const cookies = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (init?.headers?.Cookie) cookies.push(url)
+    if (url === 'https://api.mercadolibre.com/products/MLB70009242') {
+      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ name: 'Secador de roupas 600w', buy_box_winner: { price: 189.9 } }) }
+    }
+    if (url.includes('api.mercadolibre.com')) return { ok: false, status: 403, headers: { get: () => null } }
+    return mockHtmlResponse(ML_ANTIBOT, url)
+  }
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/secador/p/MLB70009242', { mlCredentials: ML_CREDS })
+  assert.deepEqual(cookies, [], 'nenhuma requisição pode levar o cookie da cliente')
+  assert.match(info.title, /Secador de roupas/i)
+  assert.equal(info.newPrice, '189,90')
+})
+
+test('fetchProductInfo (ML com creds) usa a sessão só como ÚLTIMO recurso, depois do crawler e da API', async (t) => {
+  const sequence = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    const ua = init?.headers?.['User-Agent'] || ''
+    const kind = url.includes('api.mercadolibre.com') ? 'api' : init?.headers?.Cookie ? 'sessao' : /facebookexternalhit/i.test(ua) ? 'crawler' : 'html'
+    sequence.push(kind)
+    if (kind === 'api') return { ok: false, status: 403, headers: { get: () => null } }
+    return mockHtmlResponse(kind === 'sessao' ? ML_PDP : ML_ANTIBOT, url)
+  }
+  _resetShopeeShortLinkCache()
+  t.after(() => { globalThis.fetch = originalFetch; _resetShopeeShortLinkCache() })
+
+  const info = await fetchProductInfo('https://www.mercadolivre.com.br/liquidificador-arno/p/MLB123456', { mlCredentials: ML_CREDS })
+  assert.equal(sequence[0], 'html', 'a 1ª leitura sai sem sessão')
+  assert.equal(sequence.filter(k => k === 'sessao').length, 1, 'a sessão é usada uma vez só')
+  assert.equal(sequence.at(-1), 'sessao', 'a sessão é a última tentativa')
+  assert.ok(sequence.indexOf('crawler') < sequence.indexOf('sessao'))
+  assert.ok(sequence.indexOf('api') < sequence.indexOf('sessao'))
+  assert.match(info.title, /Liquidificador Arno/i)
 })
 
 test('fetchProductInfo usa fallback da API de products do Mercado Livre para título e preço em URL /p/', async (t) => {
