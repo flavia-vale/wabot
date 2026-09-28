@@ -61,3 +61,15 @@ test('componente canônico gera data visível e WebPage.dateModified', () => {
   assert.match(freshness, /'@type': 'WebPage'/)
   assert.match(freshness, /dateModified: dates\.updatedAt/)
 })
+
+test('home mostra "Revisado em" uma vez só; o selo do rodapé fica só com o JSON-LD', () => {
+  assert.match(ler('dashboard/app/page.js'), /<EditorialFreshness pathname="\/" showLabel=\{false\} \/>/)
+  assert.match(ler('dashboard/components/marketing/EditorialFreshness.jsx'), /\{showLabel && \(/)
+})
+
+test('guias por loja tiram a data de EDITORIAL_DATES, nunca escrita à mão', () => {
+  const guia = ler('dashboard/app/guia/[slug]/page.js')
+  assert.match(guia, /getEditorialDates\(`\/guia\/\$\{slug\}`\)/)
+  assert.match(guia, /dateModified: dates\.updatedAt/)
+  assert.doesNotMatch(guia, /20\d\d-\d\d-\d\d|\d\d\/\d\d\/20\d\d/)
+})
