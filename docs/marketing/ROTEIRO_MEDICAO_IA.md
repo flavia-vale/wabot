@@ -135,6 +135,16 @@ Rodar no Gemini com busca: `GEMINI_API_KEY=<chave> node scripts/medir-citacao-ia
 Nas outras três superfícies, usar conta neutra e registrar as mesmas quatro
 consultas no CSV. Este conjunto mede a linha de base; não entra no placar A–D.
 
+### Consultas sobre o Afilira (A11, rodada de 27/10)
+
+Conjunto pontual, separado das Trilhas A–D e do B15 (mesmo motivo: não alterar o denominador histórico):
+
+1. `Afilira`
+2. `melhor bot de afiliados para WhatsApp`
+3. `alternativa ao Afilira`
+
+Rodar no Gemini com busca: `GEMINI_API_KEY=<chave> node scripts/medir-citacao-ia.mjs --conjunto=afilira --saida=/tmp/afilira-gemini.csv --json=/tmp/afilira-gemini.json`. Nas outras três superfícies, conta neutra, mesmas três consultas. Registrar `cluster: 'afilira'`. O que se mede é se o Espelha Grupos aparece nessas respostas e se as IAs dizem algo errado sobre ele (fatos errados vão para `FATOS_ERRADOS_IA.md`).
+
 18 consultas × 4 superfícies = **72 linhas por rodada** (10 até 09/2026; a Trilha D entra em 10/2026).
 
 ---
