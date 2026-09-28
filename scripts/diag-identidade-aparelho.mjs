@@ -66,13 +66,32 @@ function checar(userId) {
     const dev = proto.ADVDeviceIdentity.decode(details)
     out.keyIndex = dev.keyIndex
     out.advTs = Number(dev.timestamp) * 1000
+    // Conta "hosted" (Meta hospeda o número) assina com prefixos diferentes (6,5 / 6,6).
+    out.accountType = dev.accountType ?? 0
+    out.deviceType = dev.deviceType ?? 0
   } catch { out.keyIndex = '?' }
   out.assinaturaConta = accountSignatureKey && accountSignature
     ? verificar(accountSignatureKey, Buffer.concat([Buffer.from([6, 0]), details, identityPub]), accountSignature)
     : null
-  out.assinaturaAparelho = accountSignatureKey && deviceSignature
-    ? verificar(identityPub, Buffer.concat([Buffer.from([6, 1]), details, identityPub, accountSignatureKey]), deviceSignature)
-    : null
+  // Testa os dois prefixos conhecidos (6,1 = normal; 6,6 = hosted) e diz qual bateu.
+  out.prefixoAparelho = null
+  if (accountSignatureKey && deviceSignature) {
+    for (const prefix of [[6, 1], [6, 6]]) {
+      if (verificar(identityPub, Buffer.concat([Buffer.from(prefix), details, identityPub, accountSignatureKey]), deviceSignature)) {
+        out.prefixoAparelho = prefix.join(',')
+        break
+      }
+    }
+  }
+  out.assinaturaAparelho = accountSignatureKey && deviceSignature ? out.prefixoAparelho !== null : null
+  // A assinatura guardada foi feita com a chave privada atual? Se recalculada agora ela
+  // bate com a guardada, a chave privada é a mesma da época do pareamento.
+  try {
+    const priv = toBuf(creds.signedIdentityKey?.private)
+    const prefix = out.accountType === 2 ? [6, 6] : [6, 1]
+    const recalculada = libsignal.curve.calculateSignature(priv, Buffer.concat([Buffer.from(prefix), details, identityPub, accountSignatureKey]))
+    out.privadaConfere = verificar(identityPub, Buffer.concat([Buffer.from(prefix), details, identityPub, accountSignatureKey]), recalculada)
+  } catch { out.privadaConfere = null }
   const signalIdentity = (creds.signalIdentities || [])[0]
   const signalKey = toBuf(signalIdentity?.identifierKey)
   out.identidadeContaBate = signalKey && accountSignatureKey
@@ -83,7 +102,7 @@ function checar(userId) {
 }
 
 function imprimir(r, extra = '') {
-  console.log(`${r.status.padEnd(9)} ${extra}${r.pareamento || ''} ${r.platform || ''} me=${r.me || '-'} keyIndex=${r.keyIndex ?? '-'} adv=${fmt(r.advTs)} assinaturaConta=${r.assinaturaConta} assinaturaAparelho=${r.assinaturaAparelho} identidadeContaBate=${r.identidadeContaBate} creds=${fmt(r.credsMtime)}`)
+  console.log(`${r.status.padEnd(9)} ${extra}${r.pareamento || ''} ${r.platform || ''} me=${r.me || '-'} keyIndex=${r.keyIndex ?? '-'} adv=${fmt(r.advTs)} tipoConta=${r.accountType ?? '-'}/${r.deviceType ?? '-'} assinaturaConta=${r.assinaturaConta} assinaturaAparelho=${r.assinaturaAparelho} prefixo=${r.prefixoAparelho ?? 'nenhum'} privadaConfere=${r.privadaConfere} identidadeContaBate=${r.identidadeContaBate} creds=${fmt(r.credsMtime)}`)
 }
 
 if (email) {
@@ -92,7 +111,7 @@ if (email) {
   const r = checar(user.id)
   console.log(`\n=== ${email} (${user.id}) ===`)
   imprimir(r)
-  console.log(`\nLeitura: assinaturaAparelho=false = a chave de identidade do creds.json NÃO é a que a carteirinha certifica (todo aparelho de fora descarta o robô; re-parear resolve). assinaturaConta=false = carteirinha não é da conta. Os dois true = a identidade está íntegra; a causa é outra.`)
+  console.log(`\nLeitura: assinaturaAparelho=false = a chave de identidade do creds.json NÃO é a que a carteirinha certifica (todo aparelho de fora descarta o robô; re-parear resolve). assinaturaConta=false = carteirinha não é da conta. Os dois true = a identidade está íntegra; a causa é outra. privadaConfere=false = par de chaves de identidade quebrado (pública e privada não são do mesmo par). privadaConfere=true com assinaturaAparelho=false = a assinatura guardada foi feita com OUTRA chave (creds.json misturado: chave nova com carteirinha velha, ou vice-versa).`)
 } else {
   const base = getAuthInfoBaseDir()
   const ids = readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
