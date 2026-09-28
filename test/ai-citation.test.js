@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import {
   ROUND_QUERIES,
   PROAFILIADOS_BASELINE_QUERIES,
+  AFILIRA_BASELINE_QUERIES,
   buildGeminiRequest,
   parseGeminiResponse,
   classifyCitation,
@@ -92,4 +93,15 @@ test('linha do CSV tem as 11 colunas da planilha e escapa vírgula e aspas', () 
   assert.equal(cells.length, 11)
   assert.ok(row.startsWith('espelha grupos preço,marca,Gemini API (busca Google),2026-09-30,sim,sim,espelhagrupos.com.br,'))
   assert.ok(row.includes('""Pro""'))
+})
+
+test('A11 tem três consultas sobre o Afilira, separadas das séries A–D e do B15', () => {
+  assert.deepEqual(AFILIRA_BASELINE_QUERIES.map((item) => item.query), [
+    'Afilira',
+    'melhor bot de afiliados para WhatsApp',
+    'alternativa ao Afilira',
+  ])
+  assert.ok(AFILIRA_BASELINE_QUERIES.every((item) => item.cluster === 'afilira'))
+  const nasSeries = new Set(ROUND_QUERIES.map((q) => q.query))
+  assert.ok(AFILIRA_BASELINE_QUERIES.every((item) => !nasSeries.has(item.query)))
 })
