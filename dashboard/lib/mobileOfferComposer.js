@@ -19,6 +19,53 @@ export const TEMPLATE_OPTIONS = [
 
 🛒 Compre aqui 👉 {link}`,
   },
+  {
+    key: 'moda',
+    name: 'Moda',
+    preview: `👗 *Achadinho de moda: {produto}*
+
+🏷️ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+🛒 Garanta o seu 👉 {link}`,
+  },
+  {
+    key: 'casa',
+    name: 'Casa',
+    preview: `🏠 *Para deixar a casa ainda melhor: {produto}*
+
+💰 De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+👉 Veja a oferta: {link}`,
+  },
+  {
+    key: 'tech',
+    name: 'Tech',
+    preview: `🔌 *Achado tech: {produto}*
+
+⚡ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+{rating} | {vendas}
+
+👉 Confira aqui: {link}`,
+  },
+  {
+    key: 'bebe',
+    name: 'Bebê',
+    preview: `🧸 *Achadinho para o bebê: {produto}*
+
+💛 De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+🛒 Aproveite aqui 👉 {link}`,
+  },
+  {
+    key: 'beleza',
+    name: 'Beleza',
+    preview: `💄 *Achadinho de beleza: {produto}*
+
+✨ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+{rating} | {vendas}
+
+🛒 Quero o meu 👉 {link}`,
+  },
 ]
 
 export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
