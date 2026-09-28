@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/termos-parceria-influenciador'
 const title = 'Regras da parceria com criadores: cortesia e comissão recorrente'
@@ -153,6 +154,7 @@ export default function Page() {
           </p>
         </article>
       </main>
+   <EditorialFreshness pathname="/termos-parceria-influenciador" />
     </PublicShell>
   )
 }

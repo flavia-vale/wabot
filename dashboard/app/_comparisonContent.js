@@ -1681,7 +1681,7 @@ export function ComparisonPage({ slug }) {
             eyebrow={page.eyebrow}
             title="Resposta direta"
             body={page.directAnswer}
-            pills={[`Por ${EDITORIAL_AUTHOR}`, `Publicado em ${formatDatePtBr(dates.publishedAt)}`, `Atualizado em ${formatDatePtBr(dates.updatedAt)}`]}
+            pills={[`Por ${EDITORIAL_AUTHOR}`, `Publicado em ${formatDatePtBr(dates.publishedAt)}`, `Revisado em ${formatDatePtBr(dates.updatedAt)}`]}
             accent
           />
 

@@ -108,7 +108,7 @@ export default function Page() {
           <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Programas de afiliados · Comparativo</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">Comissão de afiliado: Shopee 3%, Amazon de 0% a 13%, Mercado Livre de 0% a 16%</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{directAnswer}</p>
-          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_PERSON_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_PERSON_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
 
           <section className="mt-10">
             <h2 className="text-2xl font-black tracking-tight text-gray-950">Comparativo dos três programas</h2>
