@@ -296,7 +296,7 @@ EG-07 = **B03** (feito) · EG-09 = **B07** e PR #1978 (feito) · EG-15 e EG-28 =
 |---|---|---|
 | ~~B02 CNPJ / razão social~~ | **descartado: sem CNPJ** | — |
 | ~~B04 print do painel de vendas~~ | **feito** (imagem ilustrativa nas 3 páginas) | — |
-| B05 contadores no hero | **OK dado**: só "ofertas enviadas 30 d" (real); falta snapshot | não (hero lê arquivo estático validado, sem processo residente) |
+| B05 contadores no hero | ✅ **Código pronto (PR do loop, 28/09):** a home mostra "N envios de ofertas nos últimos 30 dias" só se o número real passar de 1.000 e o arquivo tiver menos de 3 dias; senão some. **Falta você na VPS (prod e staging):** rodar `cd ~/wabot && node scripts/gerar-contadores-publicos.mjs` uma vez e agendar no cron `20 4 * * * cd ~/wabot && node scripts/gerar-contadores-publicos.mjs` (sem processo PM2 novo, sem RAM extra). **OK dado**: só "ofertas enviadas 30 d" (real); falta snapshot | não (hero lê arquivo estático validado, sem processo residente) |
 | B11 pré-pago 3 e 6 meses | **aprovado: 3 m 4%, 6 m 7%; sem 12 meses** | não (fluxo separado e idempotente; recorrência intocada) |
 | B25 "números do mês" | **parado**: sem dado sobre a derrubada de 50 min | não |
 | B27 depoimentos | textos, fotos, permissões | componente compartilhado a fazer |

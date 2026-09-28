@@ -19,3 +19,6 @@ twin-plans/
 
 # Artefatos locais da POC de marca d'agua (o codigo/config exemplo sao versionados)
 scripts/experiments/watermark-poc/output/
+
+# Contador público da home (gerado por scripts/gerar-contadores-publicos.mjs)
+dashboard/data/
