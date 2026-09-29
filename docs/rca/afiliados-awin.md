@@ -141,6 +141,14 @@
   página) não sai de novo pela mesma automação enquanto estiver entre os 200
   últimos `sentItemIds`.
 
+### "A Shopee trouxe produtos…" numa automação Awin (2026-09-29 — não regredir)
+
+- A tela usava o mesmo texto de `all_offers_filtered` para toda origem. Na
+  Awin esse código quer dizer **"todas as promoções válidas já saíram"**
+  (medido: 91 ativas → 53 produtos distintos, 68 envios, sobrando 0) — não é
+  defeito. Texto próprio em `AWIN_SKIP_LABELS` (`dashboard/lib/painel/awinCopy.js`),
+  escolhido pela origem da automação. Teste em `test/awin-linguagem.test.js`.
+
 ## Plano
 
 Cadastro de conta e sync: **Basic** (pensando na conversão de links futura).

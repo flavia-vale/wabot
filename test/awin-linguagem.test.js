@@ -54,3 +54,18 @@ test('o componente não escreve texto solto fora do arquivo de textos', () => {
     .filter((text) => !/\breturn\b|[()=;]/.test(text))
   assert.deepEqual(soltos, [])
 })
+
+// RCA 2026-09-29: automação Awin sem promoção nova mostrava o texto da
+// Shopee ("reduza o desconto mínimo").
+test('mensagem de "nada para enviar" da Awin não fala de Shopee nem de desconto', async () => {
+  const { AWIN_SKIP_LABELS } = await import('../dashboard/lib/painel/awinCopy.js')
+  for (const code of ['all_offers_filtered', 'no_awin_promotions', 'no_awin_account']) {
+    const text = AWIN_SKIP_LABELS[code]
+    assert.ok(text, `sem texto para ${code}`)
+    assert.doesNotMatch(text, /shopee|desconto/i, text)
+    for (const proibido of JARGAO) assert.doesNotMatch(text, proibido, text)
+  }
+  const page = readFileSync(new URL('../dashboard/app/painel/ofertas-automaticas/page.js', import.meta.url), 'utf8')
+  assert.match(page, /explainSkip\(result\.skipped, a\.source\)/, 'a tela passa a origem da automação')
+  assert.match(page, /source === 'awin' && AWIN_SKIP_LABELS\[code\]/)
+})
