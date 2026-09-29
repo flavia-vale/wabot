@@ -24,7 +24,7 @@ import { getLandingPlans } from '@/lib/plans-server'
  * está por trás, o que fazemos com os dados e o que NÃO garantimos.
  */
 
-const title = 'O Espelha Grupos é confiável? O que é, quem está por trás e o que não prometemos'
+const title = 'O Espelha Grupos é confiável? Quem está por trás'
 const description = 'Resposta direta sobre o Espelha Grupos: o que o produto faz, o que fazemos com os seus dados, o que não garantimos e por que ele não tem relação com o golpe de espelhamento de tela.'
 const slug = '/espelha-grupos-e-confiavel'
 const dates = getEditorialDates(slug)

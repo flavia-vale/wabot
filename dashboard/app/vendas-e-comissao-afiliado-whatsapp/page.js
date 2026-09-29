@@ -25,7 +25,7 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 //     ligado ao robô — o próprio arquivo diz que a integração ficou para uma PR
 //     dedicada. Por isso ele não aparece aqui.
 
-const title = 'Como saber quanto você ganhou de comissão divulgando no WhatsApp'
+const title = 'Quanto você ganhou de comissão divulgando no WhatsApp'
 const description = 'A diferença entre relatório de envio e relatório de venda, e como o Espelha Grupos mostra pedidos, valor vendido e comissão estimada e confirmada das ofertas da Shopee publicadas pelo robô.'
 const slug = '/vendas-e-comissao-afiliado-whatsapp'
 const dates = getEditorialDates(slug)

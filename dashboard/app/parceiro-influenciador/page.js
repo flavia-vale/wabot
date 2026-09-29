@@ -6,7 +6,7 @@ import { buildRegisterHref } from '@/lib/marketing-attribution'
 import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/parceiro-influenciador'
-const title = 'Parceria para criadores: robô grátis + 30% de comissão recorrente'
+const title = 'Parceria para criadores: robô grátis + 30% recorrente'
 const description = 'Se você ensina afiliação ou tem audiência de afiliados: use o Espelha Grupos de graça e ganhe 30% de comissão recorrente de cada pessoa que assinar pelo seu link. Todo mês, enquanto ela for cliente.'
 
 // Resposta direta em 40–60 palavras — bloco usado como snippet e citado por

@@ -6,7 +6,7 @@ import { buildRegisterHref } from '@/lib/marketing-attribution'
 import { getEditorialDates } from '@/lib/editorial-content'
 import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
-const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
+const title = 'Blog e materiais para afiliados no WhatsApp'
 const description = 'Central de conteúdos do Espelha Grupos com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
 const slug = '/conteudos'
 
@@ -35,7 +35,7 @@ const blogPosts = [
   },
   {
     href: '/clonar-mensagens-de-grupo-de-afiliados',
-    title: 'Como clonar mensagens de grupo de afiliados no WhatsApp',
+    title: 'Clonar mensagens de grupo de afiliados no WhatsApp',
     description: 'O que significa clonar um grupo de ofertas, como o link vira o seu e quais ferramentas fazem isso.',
   },
   {
@@ -145,7 +145,7 @@ const blogPosts = [
   },
   {
     href: '/blog/migrar-grupo-achadinhos-para-canal',
-    title: 'Como migrar grupo de achadinhos para Canal do WhatsApp',
+    title: 'Migrar grupo de achadinhos para Canal do WhatsApp',
     description: 'Passo a passo para migrar sem abandonar comunidade nem quebrar rotina.',
   },
   {
@@ -155,7 +155,7 @@ const blogPosts = [
   },
   {
     href: '/blog/bot-whatsapp-antiban-existe',
-    title: 'Bot “anti-ban” para WhatsApp existe? A resposta honesta',
+    title: 'Bot “anti-ban” para WhatsApp existe? Resposta honesta',
     description: 'Por que promessa absoluta é perigosa e como funciona preservação avançada.',
   },
   {
@@ -268,7 +268,7 @@ const methodologyPages = [
   },
   {
     href: '/como-funciona-espelha-grupos-canais',
-    title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
+    title: 'Como funciona o Espelha Grupos em Canais do WhatsApp',
     description: 'Fluxo operacional de fontes, destinos, cadência, variação e saúde de cada canal.',
   },
   {

@@ -201,7 +201,7 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'bot-whatsapp-antiban-existe': {
     slug: '/blog/bot-whatsapp-antiban-existe',
-    title: 'Bot “anti-ban” para WhatsApp existe? A resposta honesta',
+    title: 'Bot “anti-ban” para WhatsApp existe? Resposta honesta',
     description: 'Por que “anti-ban” absoluto não existe e o que o Módulo de Preservação Avançada do Espelha Grupos controla de fato para reduzir o risco.',
     eyebrow: 'Busca “anti-ban” · Resposta honesta',
     origin: 'blog_bot_whatsapp_antiban_existe',
@@ -337,7 +337,7 @@ export const PRESERVATION_BLOG_POSTS = {
     // 27/09/2026 (Frente D1): 618 impressões, CTR 1,6% na posição 8,3. Entra
     // pela pergunta do slug ("como divulgar ... whatsapp") e mantém o número;
     // deixa de disputar o mesmo título da comercial /amazon-afiliados-whatsapp.
-    title: 'Como divulgar Amazon no WhatsApp: comissão de 0% a 13%',
+    title: 'Como divulgar Amazon no WhatsApp: comissão 0% a 13%',
     description: 'Quanto a Amazon paga por categoria (0% a 13%), como conferir se a sua tag está no link e a cadência para divulgar no WhatsApp sem queimar o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
@@ -654,7 +654,7 @@ export const PRESERVATION_BLOG_POSTS = {
     // 27/09/2026 (Frente D1): 547 impressões, CTR 0,55% na posição 6,6 para
     // "melhor horário para postar no whatsapp". O título vira a pergunta
     // literal + o número de faixas que a página já afirma (nada inventado).
-    title: 'Qual o melhor horário para postar no WhatsApp? 3 faixas',
+    title: 'Melhor horário para postar no WhatsApp? 3 faixas',
     description: 'As 3 faixas em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
