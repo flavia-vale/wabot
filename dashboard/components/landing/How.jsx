@@ -46,7 +46,7 @@ const steps = [
   {
     n: '02',
     title: 'O bot detecta e converte o link',
-    body: 'Toda mensagem com link de Shopee, Mercado Livre, Amazon ou Magalu é interceptada. O bot troca o ID original pelo seu código de afiliada.',
+    body: 'Toda mensagem com link de Shopee, Mercado Livre, Amazon, Magalu, SHEIN ou AliExpress é interceptada. O bot troca o ID original pelo seu código de afiliada.',
     visual: (
       <div style={s.visual}>
         <div style={{ color: 'var(--ink-soft)' }}>{'// detectado em "Promoções Brasil"'}</div>
