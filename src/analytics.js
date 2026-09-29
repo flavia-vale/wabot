@@ -33,6 +33,14 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
   // aqueles 11 fizeram. Leitura: scripts/diag-paginas-seo.mjs.
   'organic_page_view',
   'organic_cta_click',
+  // Diagnóstico e calculadora da campanha Canais + Preservação. O navegador já
+  // ENVIAVA os três (PUBLIC_PERSISTED_EVENTS em dashboard/lib/analytics.js) e
+  // a rota respondia 400 — o funil da campanha não tinha a etapa do meio.
+  // Descoberto em 2026-09-29 (P1 do backlog pós-P3). `diagnostic_cta_clicked`
+  // com origin=calculadora_risco_whatsapp é o clique da calculadora.
+  'diagnostic_result_viewed',
+  'diagnostic_form_submitted',
+  'diagnostic_cta_clicked',
 ])
 
 export const ANALYTICS_EVENTS = new Set([
@@ -100,6 +108,10 @@ export const ANALYTICS_EVENTS = new Set([
   'organic_cta_click',
   // Origem da visita (IA / busca / social) — ver PUBLIC_ANALYTICS_EVENTS acima.
   'referral_visit',
+  // Campanha Canais + Preservação — ver PUBLIC_ANALYTICS_EVENTS acima.
+  'diagnostic_result_viewed',
+  'diagnostic_form_submitted',
+  'diagnostic_cta_clicked',
   'lead_magnet_started',
   'lead_magnet_submitted',
   'signup_started_from_seo',
