@@ -87,10 +87,23 @@
   (`sentItemIds` com `awin:<promotionId>`); **revezando lojas**; dentro da loja
   **vence antes primeiro**; **nunca com menos de 1h para vencer** nem antes de
   começar; filtro opcional por lojas e palavra (título/descrição, sem acento).
-- Sem preço e sem foto: modelo padrão `promocao_awin` (título, `{loja}`,
+- Sem preço: modelo padrão `promocao_awin` (título, `{loja}`,
   `{descrição}`, `{validade}`, link). Modelos da Shopee também funcionam: a
-  linha de preço some (limpeza de variável vazia do compositor). WhatsApp
-  mostra a prévia do link (hipótese H7 — conferir no staging).
+  linha de preço some (limpeza de variável vazia do compositor).
+- **Link curto e foto (2026-09-29, `src/offerAutomation/awinEnrich.js`).**
+  No staging a v1 saiu com o `cread.php` comprido e sem foto (a prévia do
+  WhatsApp do link `awin1.com` quase nunca traz imagem — H7 confirmada como
+  ruim). Agora, **só na hora do envio e só das que vão sair**: link curto do
+  gerador oficial (`generateLink` com `shorten: true` → `tidd.ly`) e foto lida
+  da página da loja (`AwinPromotion.url`) por `fetchProductImage` (o mesmo
+  leitor das outras lojas). Guardados em `shortUrl`/`imageUrl`; `enrichedAt`
+  marca a tentativa e uma falha só é tentada de novo após 24h. Qualquer falha
+  → sai como antes (link comprido, sem foto); nunca segura o envio. Fila de
+  revisão faz o mesmo ao montar a fila (só as que entram). Não fica em
+  `awinOffers.js` porque aquele arquivo é importado pelo painel.
+  **Hipóteses a medir:** cota diária de links curtos da conta
+  (https://help.awin.com/apidocs/quota — o valor não está na doc) e lojas que
+  bloqueiam leitura da página (`diag-awin.mjs` mostra `sem_foto loja=...`).
 - Dedup cruzada por grupo continua valendo (`productKey` =
   `awin:<conta>:<promotionId>`, `priceCents` 0).
 - Fora da v1 para Awin: **Instagram Stories** (sem foto/preço), **cupons**
@@ -116,8 +129,9 @@ limitador (poucos KB). Estimativa **< 5 MB de pico, ~0 em repouso**. Banco:
 
 ## Fase futura: converter links pela Awin
 
-Desenho no topo de `client.js`: `generateLink` / `generateLinks` (Link
-Builder oficial, avisa loja que não aceita `deeplinkNotPermitted`),
+Desenho no topo de `client.js`: `generateLink` (já usado para o link curto
+das promoções) / `generateLinks` (Link Builder oficial, avisa loja que não
+aceita `deeplinkNotPermitted`),
 `getLinkQuota`, e o `cread.php` montado localmente como plano B só para loja
 em que a cliente foi aprovada. `clickref` (até 6) serve para marcar de qual
 grupo veio a venda. Reconhecer link colado do KaBuM:

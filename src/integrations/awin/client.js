@@ -16,12 +16,15 @@
 //   { page, pageSize, total } } (formato medido):
 //   https://help.awin.com/apidocs/promotions
 //
-// FASE FUTURA (não implementada — só o desenho, para a interface não mudar):
 // - generateLink(token, publisherId, { advertiserId, destinationUrl,
 //   parameters: { clickref, clickref2..6 }, shorten }) →
 //   POST /publishers/{publisherId}/linkbuilder/generate  → { url, shortUrl }
 //   https://help.awin.com/apidocs/generatelink (loja pode recusar:
-//   "deeplinkNotPermitted")
+//   "deeplinkNotPermitted" / "Unknown error"). Usado desde 2026-09-29 para o
+//   link curto das promoções. Existe uma cota diária de links curtos
+//   (https://help.awin.com/apidocs/quota) — o valor não está na doc.
+//
+// FASE FUTURA (não implementada — só o desenho, para a interface não mudar):
 // - generateLinks(token, publisherId, requests[≤100]) →
 //   POST /publishers/{publisherId}/linkbuilder/generate-batch
 //   https://help.awin.com/apidocs/generatebatchlinks
@@ -137,7 +140,29 @@ export function createAwinClient({
     })
   }
 
-  return { listAccounts, listPromotions }
+  // Link de afiliado para uma página da loja. Com `shorten`, a Awin devolve
+  // também um link curto (tidd.ly). → { url, shortUrl } (qualquer um pode
+  // faltar: loja que não aceita deep link devolve só a descrição do erro).
+  async function generateLink(token, publisherId, { advertiserId, destinationUrl, parameters, shorten = false } = {}) {
+    if (!isValidPublisherId(publisherId)) throw new AwinHttpError(400)
+    if (!/^\d{1,12}$/.test(String(advertiserId ?? ''))) throw new AwinHttpError(400)
+    const body = await request(token, {
+      method: 'POST',
+      path: `/publishers/${String(publisherId).trim()}/linkbuilder/generate`,
+      body: {
+        advertiserId: Number(advertiserId),
+        ...(destinationUrl ? { destinationUrl: String(destinationUrl) } : {}),
+        ...(parameters && Object.keys(parameters).length ? { parameters } : {}),
+        shorten: Boolean(shorten),
+      },
+    })
+    return {
+      url: typeof body?.url === 'string' ? body.url : null,
+      shortUrl: typeof body?.shortUrl === 'string' ? body.shortUrl : null,
+    }
+  }
+
+  return { listAccounts, listPromotions, generateLink }
 }
 
 let defaultClient = null
