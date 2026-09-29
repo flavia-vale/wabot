@@ -56,16 +56,24 @@ Alternativa mais pesada (só se a Etapa 0 exigir): sync para `LomadeeOffer` no
 banco com agendador, igual Awin. **Custo de RAM/processo → REGRA #1 do
 AGENTS.md** (sinalizar e pedir OK antes).
 
-## 3. Decisões que dependem da usuária (antes de codar)
+## 3. Decisões tomadas (2026-09-29, pela dona do produto)
 
-1. Credencial **por cliente** (recomendado; comissão da cliente, igual Awin/Shopee)
-   ou token único da plataforma?
-2. Quais lojas da Lomadee entram? Há **sobreposição com a Awin** (ex.: Kabum,
-   Magalu) e com afiliado próprio (ML, Amazon, AliExpress, SHEIN). Sugestão v1:
-   sem filtro, mas **lista de exclusão por env** e aviso na tela.
-3. Plano: manter **PRO/Trial** (`canUseOfferAutomations`), sem plano novo. Cadastro
-   da conta Lomadee: **Basic** (como a Awin, pensando na v2)?
-4. Liberar para todas ou por lista de contas no início? Sugestão: lista.
+1. **Token por cliente.** Cada cliente cadastra a própria conta Lomadee; a
+   comissão é dela. Nenhuma credencial global (mesma regra da Awin).
+2. **Lojas = as que a afiliada tem vínculo.** Igual à Awin (`membership=joined`):
+   só entram lojas em que **aquela conta** foi aprovada/vinculada, e a cliente
+   pode filtrar por loja na automação. Sem lista de exclusão global por env.
+   ⚠️ Depende da Etapa 0: a API da Lomadee precisa **dizer quais lojas a conta
+   tem vínculo** (ou aceitar filtrar a busca por elas). Se não disser, plano B:
+   a cliente marca as lojas manualmente na tela (menos confiável) — decidir com
+   a dona do produto **antes** da Etapa 3.
+3. **Cadastro da conta Lomadee: Basic. Ofertas automáticas com Lomadee: PRO**
+   (`canUseOfferAutomations`, a trava de sempre). Cliente Basic conecta a conta
+   (preparando a v2) mas a automação Lomadee fica com cadeado PRO.
+4. **Liberação para todas as contas** (sem lista). Como não há liberação
+   gradual, o **interruptor de emergência** `LOMADEE_OFFERS_ENABLED` continua
+   (desliga sem deploy: `pm2 delete` + `start`) e o staging precisa cobrir mais
+   cenários antes do `main`.
 
 ## 4. Passo a passo (1 PR pequeno por etapa, todos contra `develop`)
 
@@ -83,8 +91,9 @@ AGENTS.md** (sinalizar e pedir OK antes).
 ### Etapa 1 — Banco (staging antes de prod)
 - Migration nova `…_lomadee_accounts`: tabela `LomadeeAccount` (userId com
   `onDelete: Cascade`, isolamento por `userId` em toda consulta).
-- `OfferAutomation`: `lomadeeAccountId String?` (o resto reaproveita `keyword`,
-  `minDiscountPct`, `sortType`, `page`). **Sem** mudar `source` default.
+- `OfferAutomation`: `lomadeeAccountId String?` e `lomadeeStoreIds String @default("[]")`
+  (filtro por lojas vinculadas, como `awinAdvertiserIds`); o resto reaproveita
+  `keyword`, `minDiscountPct`, `sortType`, `page`. **Sem** mudar `source` default.
 - Só cria tabela/coluna nulável → nada muda para automações existentes.
 - Conferir `COUNT(*)` de `OfferAutomation` antes/depois no staging; backup diário
   já existe.
@@ -100,6 +109,9 @@ AGENTS.md** (sinalizar e pedir OK antes).
 - **Token vai no caminho da URL** (`/v2/{app-token}/…`) → nunca logar URL nem
   erro cru do axios/fetch; `errors.js` sem token. Teste que varre logs/erros.
 - Cifra com `encryptCredential`; campo vazio na edição = mantém.
+- Lojas vinculadas da conta: `GET /api/lomadee/accounts/:id/stores` (só as com
+  vínculo; molde de `awinAccountAdvertisers`). Cadastro de conta = **Basic**
+  (sem `ProGate`); só criar a automação exige PRO.
 - Tela: cartão dentro de "Minhas credenciais" no molde de `AwinCredentialsCard.js`
   + `dashboard/lib/painel/lomadeeCopy.js` com teste de linguagem leiga (como
   `awin-linguagem.test.js`): "código de acesso", nunca "token/API/sourceId" sem
@@ -152,12 +164,18 @@ AGENTS.md** (sinalizar e pedir OK antes).
   controles só da Shopee (`listType`, AMS, vendedor-chave).
 - Trocar os avisos "só na Shopee" (linhas ~301 e ~529) por texto por origem.
 - Sem conta Lomadee: aviso "Conecte sua conta em Minhas credenciais".
-- Nome da automação na lista: "Lomadee · <palavra>".
+- Filtro opcional "Só destas lojas" (lojas com vínculo da conta, como o da Awin).
+- Nome da automação na lista: "Lomadee · <palavra>". Opção Lomadee com cadeado PRO
+  para Basic (`ProGate`), conforme design system.
 
-### Etapa 6 — Liberação gradual
-- `LOMADEE_OFFERS_ENABLED` + `LOMADEE_OFFERS_USER_IDS` (molde de `reviewFlags.js`).
-  Desligada: rota recusa criar, cron pula com log. Mudar env exige `pm2 delete`
-  + `start`.
+### Etapa 6 — Interruptor de emergência (sem liberação gradual)
+- Liberado para **todas as contas** desde o primeiro deploy em `main`.
+- `LOMADEE_OFFERS_ENABLED` (padrão ligado) só como **desligamento de
+  emergência**: desligada, a rota recusa criar e o cron pula as automações
+  Lomadee com log claro. Mudar env exige `pm2 delete` + `start`.
+- Como todas as contas ganham de uma vez: a Etapa 8 exige staging com conta
+  real, teste de carga do limitador (várias automações no mesmo token) e
+  observação de 48 h **em staging** antes do PR para `main`.
 
 ### Etapa 7 — Diagnóstico e docs
 - `scripts/diag-lomadee.mjs` (já da Etapa 0) ganha modo banco (automações,
@@ -173,7 +191,7 @@ AGENTS.md** (sinalizar e pedir OK antes).
 4. PR `develop → main`. Cron roda na API: em `remote` o deploy da API basta;
    `bot-supervisor` só se mexer em `bot-worker.js`/`core/` (não é o caso) —
    confirmar em `docs/rca/deploy-e-infra.md`.
-5. Liberar por lista; observar 48 h; ampliar.
+5. Liberar para todas; observar logs/swap por 48 h com o interruptor à mão.
 
 ## 5. Impactos e riscos
 
@@ -184,7 +202,8 @@ AGENTS.md** (sinalizar e pedir OK antes).
 | Vazamento de token | app-token no caminho da URL cai em log/PM2 | mascarar URL e erros; teste dedicado |
 | Isolamento | cliente usar conta de outra | toda consulta filtra `userId`; teste como `awin-routes.test.js` |
 | Duplicata entre redes | mesmo produto/loja em **Awin e Lomadee** (Kabum, Magalu) sai duas vezes no grupo | `dedupKey` por loja+produto; medir na Etapa 0 e no staging; aceitar na v1 se raro |
-| Comissão | loja também coberta por Awin/afiliado próprio | decisão 3.2; lista de exclusão |
+| Comissão | loja também coberta por Awin/afiliado próprio | só lojas com vínculo da conta (decisão 3.2); medir sobreposição na Etapa 0 |
+| Liberação para todas | erro atinge todas as contas de uma vez | interruptor de emergência + 48 h em staging + teste do limitador |
 | Desconto mínimo | Lomadee sem preço antigo → tudo filtrado | Etapa 0 mede; se faltar, `minDiscountPct` fica oculto para Lomadee |
 | Imagem | miniatura pequena/hotlink bloqueado | `imageRefererUrl` + `previewImageFallbackPolicy`; medir |
 | Link | expirar/perder rastreio | não reescrever; testar clique real no staging |
@@ -218,6 +237,8 @@ AGENTS.md** (sinalizar e pedir OK antes).
 
 ## 8. Perguntas para a Etapa 0
 
+**A mais importante:** a API lista as lojas em que a conta tem vínculo (ou filtra a
+busca por elas)? 
 Endpoint vigente (v2?); paginação; ordenação; campos de desconto; lojas
 disponíveis e sobreposição com Awin; expiração do link; limite de requisições;
 sandbox × produção; aprovação por loja; cupons no mesmo endpoint.
