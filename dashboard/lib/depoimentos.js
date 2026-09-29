@@ -88,8 +88,6 @@ export const DEPOIMENTOS = [
   },
 ]
 
-export const ROTULO_DEPOIMENTOS =
-  'Depoimentos de clientes pagantes, que receberam 5 dias de PRO como agradecimento por contar sua experiência.'
 
 const PROMESSAS_DE_GANHO = [
   'dobrei',
