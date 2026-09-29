@@ -16,7 +16,7 @@ que não há.
 | P0-1 | `pricing.md` — o arquivo que as IAs leem | **feito** |
 | P0-2 | Tabela de planos e FAQ em `marketing-content.js` | **feito** |
 | P0-3 | Página de vendas e comissão | **feito** — `/vendas-e-comissao-afiliado-whatsapp` |
-| P1-4 | Registrar loja não suportada | **backlog**, detalhada em `backlog-p1-4-loja-nao-suportada.md` |
+| P1-4 | Registrar loja não suportada | **implementada em 29/09/2026** (PR contra `develop`, aguarda staging + restart anunciado do `bot-supervisor`) — ver `backlog-p1-4-loja-nao-suportada.md` |
 | P2-5 | "Copiaram minha oferta" | **feito** — `/copiaram-minha-oferta-no-whatsapp` |
 | P2-6 | "Quanto ganha afiliado Shopee" | **feito** — `/quanto-ganha-afiliado-shopee` |
 | P3-7 | Instagram Stories | trabalho em curso da dona do produto, fora desta rodada |

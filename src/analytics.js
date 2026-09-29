@@ -247,6 +247,13 @@ export const ANALYTICS_EVENTS = new Set([
   // recusa — quando a cliente já ficou sem conectar. Ver
   // src/ops/sessionCapacityAlertPolicy.js.
   'ops_session_capacity_warning',
+  // P1-4: link de loja que ainda NÃO convertemos (Temu, Kabum, Natura...) que
+  // chegou num grupo monitorado. UMA linha por (dia, domínio), metadata só
+  // `{ domain, day, count }`, sem userId, podada em 30 dias — nunca uma linha
+  // por mensagem. Escrita por src/observability/unsupportedStoreSignal.js
+  // (não passa por trackAnalyticsEvent, que cria uma linha por chamada).
+  // Leitura: scripts/diag-lojas-nao-suportadas.mjs.
+  'ops_unsupported_store_daily',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

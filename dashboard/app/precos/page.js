@@ -17,6 +17,7 @@ import {
   SUPPORT_WHATSAPP_URL,
 } from '@/lib/marketing-content'
 import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
+import { fraseNumerosProprios } from '@/lib/resposta-citavel'
 import { PainelVendasIlustrativo } from '@/components/marketing/PainelVendasIlustrativo'
 import { PrecoPorGrupoAfilira } from '@/components/marketing/PrecoPorGrupoAfilira'
 
@@ -197,7 +198,12 @@ export default async function PrecosPage() {
             }}
           >
             Teste 7 dias com tudo liberado, sem cartão. Depois, {precoPorPlano},
-            sem fidelidade e com cancelamento pelo próprio painel.
+            sem fidelidade e com cancelamento pelo próprio painel. O {BRAND_ORG_NAME} é um robô para afiliadas que
+            publicam ofertas em grupos e canais do WhatsApp com o próprio código de afiliada, em {SUPPORTED_STORES.length} lojas.
+          </p>
+          {/* Topo citável (29/09/2026): 2 números próprios com a fonte na mesma frase. */}
+          <p style={{ fontSize: 14.5, color: 'var(--ink-soft)', maxWidth: 640, margin: '12px auto 0', lineHeight: 1.6 }}>
+            {fraseNumerosProprios()}
           </p>
         </div>
       </section>

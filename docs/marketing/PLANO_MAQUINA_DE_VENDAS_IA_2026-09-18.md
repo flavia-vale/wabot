@@ -150,7 +150,7 @@ Nada aqui depende de código. É tudo cadastro, medição ou decisão sua.
 | 8 | validador do CSV de medição | ✅ 23/09: `node scripts/validar-medicao-ia.mjs` (regra em `src/ops/aiVisibilityCsv.js`) |
 | 9 | LTV e retenção, read-only | ✅ feito — falta só rodar (item 6 da tabela acima) |
 | 4.3 (b)(c) | nome antigo fora do texto público; 5 rotas renomeadas com redirect | ✅ feito |
-| 4 | topo das 20 páginas no padrão citado | ❌ não iniciado |
+| 4 | topo das 20 páginas no padrão citado | ✅ 29/09 (PR `claude/seo-topo-e-definicao-marca`): "para quem é / quanto custa" com preço de `DEFAULT_LANDING_PLANS`, 2 números próprios com fonte (`lib/resposta-citavel.js`) e cabeçalho em pergunta nas 20 páginas; títulos intactos. **Sem citação entre aspas**: não há depoimento real com autorização no repositório. Guarda: `test/topo-citavel-paginas-prioritarias.test.js`. Reindexação: Leva T em `ACOES_FLAVIA_2026-09-11.md` |
 
 Cuponito e matemática não têm item de código aqui: são do implementador de
 cada site.

@@ -354,9 +354,18 @@ test('guarda: o motivo "loja não suportada" é decidido ANTES do sanitizador', 
   // encaminhamento que você configurou" — culpando a configuração dela por um
   // problema de cobertura de loja, e mandando mexer no lugar errado.
   const fonte = readFileSync(join(here, '..', 'src', 'bot-worker.js'), 'utf8')
+  // P1-4 (29/09/2026): a lista de candidatos passou a ser calculada UMA vez,
+  // antes da política, porque também alimenta a contagem agregada de loja não
+  // suportada e o descarte `skip:link_removed`. A regra continua a mesma: texto
+  // de ANTES do sanitizador.
   assert.match(
     fonte,
-    /const hadUnsupportedStoreUrl = findCandidateLinks\(textoParaEspelhar\)\.length > 0/,
+    /const linksDeLojaNaoSuportada = textoParaEspelhar \? findCandidateLinks\(textoParaEspelhar\) : \[\]/,
+    'o motivo precisa olhar o texto de antes do sanitizador',
+  )
+  assert.match(
+    fonte,
+    /const hadUnsupportedStoreUrl = linksDeLojaNaoSuportada\.length > 0/,
     'o motivo precisa olhar o texto de antes do sanitizador',
   )
   assert.match(

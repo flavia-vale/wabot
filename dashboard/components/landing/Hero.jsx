@@ -111,8 +111,9 @@ export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowL
   // 23/09/2026: a PRIMEIRA frase de corpo define a marca, nos três tons. Em
   // três rodadas de medição o ChatGPT leu "Espelha Grupos" como expressão
   // genérica, não como nome de produto, porque nada abria dizendo o que a
-  // marca É. A frase leva os dois modos com o limite exato do automático:
-  // busca sozinho SÓ na Shopee e SÓ no plano Pro (o Basic não tem).
+  // marca É. A frase leva os três modelos com o limite exato do automático:
+  // busca sozinho SÓ na Shopee e SÓ no plano Pro (o Basic não tem). Desde
+  // 29/09/2026 é a MESMA frase da ficha técnica, de /quem-somos e do llms.txt.
   const sub = subOverride ?? (tone === 'direto'
     ? `${BRAND_DEFINITION_PT} Posta no seu grupo com intervalo controlado.`
     : tone === 'animado'

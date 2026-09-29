@@ -167,11 +167,11 @@ começa com "Comissão de afiliado". Medir o efeito pela série DIÁRIA do Searc
 Console, nunca pelo acumulado de 3 meses (ver `docs/rca/seo-marketing.md`).
 
 ```
-https://espelhagrupos.com.br/alternativas/achadinho-pro                    → movida para a leva 🔝 de títulos-pergunta (29/09)
+https://espelhagrupos.com.br/alternativas/achadinho-pro                    ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 https://espelhagrupos.com.br/programa-de-afiliados                         ⏳
 https://espelhagrupos.com.br/quanto-ganha-afiliado-shopee                  ⏳
 https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ✅ pedida 2026-09-28 e 2026-09-29
-https://espelhagrupos.com.br/amazon-afiliados-whatsapp                     ⏳
+https://espelhagrupos.com.br/amazon-afiliados-whatsapp                     ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 ```
 
 `/alternativas/achadinho-pro` já está na R4 — se a R5 for pedida antes, tirar
@@ -192,8 +192,8 @@ https://espelhagrupos.com.br/blog/melhores-horarios-para-postar-ofertas-no-whats
 https://espelhagrupos.com.br/alternativas/shozap                           → movida para a leva 🔝 de títulos-pergunta (29/09)
 https://espelhagrupos.com.br/alternativas/gigi-bot                         ⏳
 https://espelhagrupos.com.br/alternativas/fluxopromo                       ⏳
-https://espelhagrupos.com.br/shopee-afiliados-whatsapp                     ⏳
-https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp              ⏳
+https://espelhagrupos.com.br/shopee-afiliados-whatsapp                     ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
+https://espelhagrupos.com.br/mercado-livre-afiliados-whatsapp              ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 ```
 
 `/alternativas/achadinhos-bot` (título novo neste lote também) já está na R4;
@@ -208,13 +208,13 @@ Achadinho Pro?" logo no primeiro bloco; `/politica-de-reembolso` mostra "Nada te
 prende ao plano"; a página nova abre.
 
 ```
-https://espelhagrupos.com.br/alternativas/achadinhos-bot                → movida para a leva 🔝 de títulos-pergunta (29/09)
-https://espelhagrupos.com.br/espelhar-grupos-de-ofertas-vale-a-pena     ⏳ (nova)
+https://espelhagrupos.com.br/alternativas/achadinhos-bot                ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
+https://espelhagrupos.com.br/espelhar-grupos-de-ofertas-vale-a-pena     ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 https://espelhagrupos.com.br/politica-de-reembolso                      ⏳
-https://espelhagrupos.com.br/alternativas/achadinho-pro                 → movida para a leva 🔝 de títulos-pergunta (29/09)
-https://espelhagrupos.com.br/bot-achadinhos-whatsapp                    ⏳
-https://espelhagrupos.com.br/bot-afiliados-whatsapp                     ⏳
-https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp      ⏳
+https://espelhagrupos.com.br/alternativas/achadinho-pro                 ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
+https://espelhagrupos.com.br/bot-achadinhos-whatsapp                    ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
+https://espelhagrupos.com.br/bot-afiliados-whatsapp                     ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
+https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp      ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 ```
 
 No Bing Webmaster Tools, enviar as mesmas 7 em "Enviar URLs" (o aviso
@@ -247,7 +247,7 @@ estão na R1 e `/espelhar-grupos-de-ofertas-vale-a-pena` na R4 — não repetir.
 **Leva R7** (ganhou o vídeo em 28/09): pedir uma vez só, depois daquela PR em `main`.
 
 ```
-https://espelhagrupos.com.br/quem-somos                                             ⏳
+https://espelhagrupos.com.br/quem-somos                                             ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 https://espelhagrupos.com.br/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp ⏳
 ```
 
@@ -268,10 +268,10 @@ PR: pedir só depois que ela chegar em `main` (pedir antes gasta a cota com o
 texto velho).
 
 ```
-https://espelhagrupos.com.br/automacao-whatsapp-afiliados               ⏳ (título e conteúdo novos)
+https://espelhagrupos.com.br/automacao-whatsapp-afiliados               ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 https://espelhagrupos.com.br/melhores-bots-para-afiliados-whatsapp      ⏳
-https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp       ⏳
-https://espelhagrupos.com.br/precos                                     ⏳
+https://espelhagrupos.com.br/metodologia-uso-responsavel-whatsapp       ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
+https://espelhagrupos.com.br/precos                                     ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 ```
 
 No Bing Webmaster Tools, enviar as mesmas 4 em "Enviar URLs".
@@ -296,7 +296,7 @@ https://espelhagrupos.com.br/materiais/checklist-divulgacao-ofertas-grupos-whats
 ```
 https://espelhagrupos.com.br/seguranca-credenciais-afiliado             ⏳
 https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ✅ pedida 2026-09-28 e 2026-09-29
-https://espelhagrupos.com.br/quem-somos                                 ⏳
+https://espelhagrupos.com.br/quem-somos                                 ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui
 ```
 
 As landings e hubs que só trocaram o botão "Lista VIP" por "Testar 7 dias

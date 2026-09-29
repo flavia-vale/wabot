@@ -1004,3 +1004,43 @@ modelo atribuído ao grupo em vez da ordem real (override do grupo → modelo
 atribuído → **modelo padrão da conta** → padrão do sistema); filtro de data em
 SQL comparando `sentAt` inteiro com texto (devolve vazio e parece ausência de
 dado — usar `CASE typeof(x) WHEN 'integer' THEN datetime(x/1000,'unixepoch') ELSE x END`).
+
+## Oferta com link SÓ de loja não suportada saía sem link, em silêncio (P1-4, 2026-09-29 — não regredir)
+
+**Sintoma:** oferta de Temu/Kabum/Natura (qualquer loja fora de `PATTERNS` em
+`src/detector.js`) chegava ao grupo da cliente **sem link nenhum**, sem linha no
+painel e sem sinal. Só acontecia em grupo com "aceitar mensagem sem link"
+(`ALLOW_NO_LINK`) — ou quando o texto inteiro era só o link.
+
+**Causa (medida no código):** `removeNonOfferUrls` (`src/messageProcessor.js`)
+apaga toda URL que não é de loja suportada. Remover está **certo** (link de
+terceiro dá a comissão para outra pessoa). O defeito era o que vinha depois: sem
+link sobrando, `ALLOW_NO_LINK` deixava a oferta mutilada seguir; em `LINK_ONLY`
+ela já virava `skip:policy:...:unsupported_store`, mas sem guardar qual loja era.
+
+**Conserto:**
+
+1. Oferta que tinha link e ficou sem nenhum porque TODOS eram de loja não
+   suportada **não é publicada**: vira `skip:link_removed:unsupported_store`
+   (ou `:offer_ended_at_source`, quando o site de origem já tinha encerrado a
+   promoção). Decisão em `linkRemovedSkipReason` (`src/core/unsupportedStore.js`);
+   texto para a cliente em `dashboard/lib/painel/logsCopy.js` e `mobileLogs.js`.
+   Mensagem que nunca teve link (aviso, "bom dia") segue igual.
+2. Contagem agregada: `src/observability/unsupportedStoreSignal.js` grava UMA
+   linha de `AnalyticsEvent` por (dia de Brasília, domínio registrável), evento
+   `ops_unsupported_store_daily`, metadata só `{ domain, day, count }`, sem
+   userId, id determinístico `uss:<dia>:<domínio>` (soma com compare-and-swap
+   entre robôs). Poda em 30 dias no próprio flush. Flush de carona no watchdog
+   de 5 min que já existia + no shutdown — **sem timer novo, sem processo novo**.
+3. "Site do grupo" que não resolveu até a loja também entra na contagem (a
+   regra é a mesma de `findCandidateLinks`); promoção encerrada na origem fica
+   de fora.
+
+**Diagnóstico:** `node scripts/diag-lojas-nao-suportadas.mjs [--dias 7]
+[--dominio temu.com]` (read-only).
+
+**Não regredir:** nunca voltar a encaminhar o link de terceiro; nada além de
+domínio + dia + contagem pode ser gravado (guarda de privacidade em
+`test/unsupported-store-signal.test.js`); nunca uma linha por mensagem; sem
+timer/processo/dependência nova. Mexe em código de robô: em `remote`, só vale
+depois de `pm2 restart bot-supervisor` (reconecta todas as sessões — anunciar).

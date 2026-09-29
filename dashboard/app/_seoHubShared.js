@@ -10,6 +10,7 @@ import { buildOgImageUrl } from '@/lib/seo-og'
 import { getEditorialDates } from '@/lib/editorial-content'
 import { SUPPORTED_STORES } from '@/lib/marketing-content'
 import { AUTOMATION_MODELS, BASIC_PRICE_LABEL, PRO_PRICE_LABEL, OUR_MODEL_COVERAGE, buildCompetitorModelRows } from '@/lib/automation-models'
+import { fraseNumerosProprios } from '@/lib/resposta-citavel'
 
 const HUB_CONTENT = {
   /* ESPELHAMENTO — a categoria principal do produto, reescrita em 2026-09-02.
@@ -123,6 +124,11 @@ const HUB_CONTENT = {
     title: 'Automação de afiliados no WhatsApp: 3 modelos, 8 bots',
     description: 'Espelhador de grupos, garimpo automático e formatador: o que cada modelo faz, para quem serve e 8 ferramentas comparadas com preço datado. A partir de R$ 39.',
     intro: `Automação para afiliados no WhatsApp é um software que publica ofertas com o seu código de afiliada nos seus grupos e canais, sem copiar e colar. O mercado se divide em três modelos: espelhador de grupos, garimpo automático e formatador de oferta. O Espelha Grupos tem os três numa conta só, em ${SUPPORTED_STORES.length} lojas, a partir de ${BASIC_PRICE_LABEL} (Basic) ou ${PRO_PRICE_LABEL} (Pro), com 7 dias grátis sem cartão.`,
+    // Topo citável (29/09/2026): o card de abertura vira pergunta e soma os 2
+    // números próprios com fonte. O `intro` (o que é, para quem, quanto custa)
+    // já vinha de 27/09 e não mudou.
+    introQuestion: 'O que é automação para afiliados no WhatsApp, e qual modelo serve para você?',
+    showOwnNumbers: true,
     promise: 'Para afiliada que divulga em grupos de WhatsApp e quer saber qual modelo de automação resolve o seu caso antes de assinar qualquer ferramenta.',
     checklist: ['Espelhador: republica o que já circula nos grupos que você segue.', 'Garimpo: o robô acha a oferta sozinho por tema e desconto.', 'Formatador: cola o link e a oferta sai montada.'],
     models: {
@@ -339,8 +345,8 @@ export function SeoHubPage({ hubSlug }) {
         <div className="wrap" style={{ marginTop: 28 }}>
           <IntroCard
             eyebrow={content.eyebrow}
-            title={title}
-            body={content.intro}
+            title={content.introQuestion || title}
+            body={content.showOwnNumbers ? `${content.intro} ${fraseNumerosProprios()}` : content.intro}
             pills={content.checklist}
             updatedAt={dates.updatedAt}
           />
