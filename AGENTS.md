@@ -192,7 +192,7 @@ arquivo (nova versão), não editar tela a tela.
 | SEO, marketing, páginas públicas, dados de mercado, marca | `docs/rca/seo-marketing.md` |
 | Instagram Stories | `docs/rca/instagram.md` |
 | plano Basic × PRO, cadeados do painel, menu, Minha conta | `docs/rca/planos-basic-pro.md` |
-| Awin (contas, sync de promoções, promoções nas ofertas automáticas, conversão futura) | `docs/rca/afiliados-awin.md` |
+| Awin (contas, sync de promoções, promoções nas ofertas automáticas, conversão de links) | `docs/rca/afiliados-awin.md` |
 
 ## Mapa de sintomas → onde olhar (atalhos mais usados)
 
@@ -225,6 +225,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Página/SEO sem impressão, cadastro sem origem | `dashboard/lib/seo-registry.mjs`, `src/domain/admin/signupOrigin.js` | `diag-paginas-seo.mjs`, `diag-origem-cadastros.mjs` | seo-marketing |
 | Recurso aparece com cadeado / "só no PRO" / 403 `FEATURE_REQUIRES_PRO` | `src/billing/plans.js`, `dashboard/components/pro/ProGate.js` | `scripts/basic-sem-recursos-pro.mjs` (quem ainda guarda marca/botão/variação sem o PRO) | planos-basic-pro |
 | Promoção Awin não chega / não sai / "código de acesso venceu" | `src/integrations/awin/syncService.js`, `src/offerAutomation/awinOffers.js` | `diag-awin.mjs <email> [--awin]` | afiliados-awin |
+| Link de loja da Awin (KaBuM, C&A, tidd.ly…) não converteu / oferta "loja da Awin sem aprovação" | `src/converters/awin.js`, `src/integrations/awin/storeMatcher.js`, `conversionContext.js` | `diag-awin.mjs <email>` (lojas_aprovadas, links guardados) | afiliados-awin |
 | Deploy vermelho | `.github/workflows/deploy.yml`, `scripts/deploy_safe_*.sh` | ver "Pegadinhas" | deploy-e-infra |
 
 Se o sintoma não está no mapa: ler o tema no índice, depois `Grep` pelo texto

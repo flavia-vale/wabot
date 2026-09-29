@@ -78,6 +78,9 @@ const ALL_PLATFORMS = [
   { id: 'magazineluiza', label: 'Magazine Luiza' },
   { id: 'shein', label: 'SHEIN' },
   { id: 'aliexpress', label: 'AliExpress' },
+  // Uma chave para todas as lojas da Awin em que a cliente foi aprovada
+  // (docs/rca/afiliados-awin.md). Sem conta Awin, não faz nada.
+  { id: 'awin', label: 'Awin' },
 ]
 
 const NO_LINK_SCOPE_OPTIONS = [

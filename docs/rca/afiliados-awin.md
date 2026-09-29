@@ -1,9 +1,9 @@
 # afiliados-awin — regras e decisões
 
-> Integração com a rede de afiliados **Awin** (2026-09-29). Primeiro uso:
-> **promoções** (não cupons) como origem das **ofertas automáticas**. Fase
-> futura (NÃO implementada): converter links pela Awin em outros pontos do
-> produto — o cliente HTTP já foi desenhado para isso.
+> Integração com a rede de afiliados **Awin** (2026-09-29). Dois usos:
+> **promoções** (não cupons) como origem das **ofertas automáticas**, e
+> (2026-09-30) **conversão de links** das lojas em que a cliente foi aprovada
+> no espelhamento, no "Converter links" e no "Criar oferta".
 
 ## Onde mora cada peça
 
@@ -20,8 +20,13 @@
 | Origem "awin" nas ofertas automáticas | `src/offerAutomation/awinOffers.js` + `dispatcher.js`, `reviewDiscoveryService.js`, `reviewDeliveryService.js` |
 | Tela (dentro de Minhas credenciais) | `dashboard/components/painel/AwinCredentialsCard.js`, textos em `dashboard/lib/painel/awinCopy.js` |
 | Tela (ofertas automáticas: "De onde vêm as ofertas?") | `dashboard/app/painel/ofertas-automaticas/page.js` |
+| Lojas aprovadas → "de qual loja é este link?" (puro) | `src/integrations/awin/storeMatcher.js` |
+| Contas + lojas + cache de links de UMA cliente | `src/integrations/awin/conversionContext.js` |
+| Conversor (curto guardado → longo como plano B) | `src/converters/awin.js` (plataforma `awin` em `src/converters/index.js`) |
+| Detector/sanitizador com lojas da cliente | `detectLinks(text, { awin })`, `isOfferUrl(url, { awin })` em `src/detector.js`; `sanitizeInviteLinks(text, { awin })` |
+| Motivo "loja da Awin sem aprovação" | `CONVERSION_FAILURE.AWIN_STORE_NOT_JOINED` + texto em `src/credentialBlockAlert/message.js` |
 | Diagnóstico (só leitura) | `scripts/diag-awin.mjs <email> [--awin]` |
-| Tabelas | `AwinAccount`, `AwinPromotion`, `AwinSyncRun` + `OfferAutomation.source/awinAccountId/awinAdvertiserIds` (migration `20260929120000_awin_promotions`) |
+| Tabelas | `AwinAccount`, `AwinPromotion`, `AwinSyncRun` + `OfferAutomation.source/awinAccountId/awinAdvertiserIds` (migration `20260929120000_awin_promotions`); `AwinProgramme`, `AwinLink` + `awin` em `BotConfig.platforms` (migration `20260930090000_awin_link_conversion`) |
 
 ## Fonte de verdade (doc oficial) e o que medimos
 
@@ -157,27 +162,86 @@ sempre (`canUseOfferAutomations`).
 
 ## Memória
 
+Conversão de links (2026-09-30): nada novo em processo/fila. Cada robô guarda
+as lojas da cliente (12 lojas × ~3 domínios ≈ poucos KB) e relê junto com a
+config (1 query a mais por minuto). Cache de links fica no banco (`AwinLink`,
+~0,5 KB por produto), não em memória.
+
 Nenhum processo, worker, Redis ou fila novos. Um `setInterval` + `unref` a
 mais na `api`. Pico: 1 página de até 200 promoções (~0,5–1 MB) + mapa do
 limitador (poucos KB). Estimativa **< 5 MB de pico, ~0 em repouso**. Banco:
 ~2–3 KB por promoção.
 
-## Fase futura: converter links pela Awin
+## Conversão de links pela Awin (2026-09-30 — não regredir)
 
-Desenho no topo de `client.js`: `generateLink` (já usado para o link curto
-das promoções) / `generateLinks` (Link Builder oficial, avisa loja que não
-aceita `deeplinkNotPermitted`),
-`getLinkQuota`, e o `cread.php` montado localmente como plano B só para loja
-em que a cliente foi aprovada. `clickref` (até 6) serve para marcar de qual
-grupo veio a venda. Reconhecer link colado do KaBuM:
-`kabum.com.br/produto/<id>/<slug>` (o número da loja vem das lojas aprovadas,
-nunca fixo no código).
+Decisões da dona do produto (2026-09-30): converter no **espelhamento**, no
+**Converter links** e no **Criar oferta**; **link curto guardado, caindo para o
+longo**; **uma chave "Awin"** por grupo; link de loja **não aprovada é
+apagado** (a oferta não sai com o link de outra pessoa).
+
+Medido em staging (conta 2701264, 2026-09-30): `GET /publishers/{id}/programmes
+?relationship=joined&countryCode=BR` → **12 lojas** (C&A, Nike, Vivara,
+Olympikus, KaBuM, Decathlon, Stanley, PUMA…), todas com `validDomains`
+preenchido e `deeplinkEnabled=true`. Cota de link curto
+(`/linkbuilder/quota`): **200 por dia por conta** (50 já usados pelas
+promoções). Produção, 7 dias: **63 links `tidd.ly`** de concorrente apagados
+como loja não suportada.
+
+Como funciona:
+
+1. **Lojas:** o sync de hora em hora grava as lojas aprovadas em
+   `AwinProgramme` (1 chamada a mais). Loja que sai da lista é apagada; falha
+   só nessa chamada não derruba as promoções e mantém as lojas antigas.
+2. **Reconhecer:** o robô relê as lojas a cada carga de config (1 min).
+   Link é `awin` quando o domínio é de loja aprovada **ou** é link da própria
+   Awin (`awin1.com/cread.php|awclick.php|pclick.php`, `tidd.ly`). As lojas
+   fixas (Shopee, ML, Amazon, Magalu, SHEIN, AliExpress) **sempre ganham**.
+   **Sem conta Awin, nada muda**: sem `{ awin }` o detector é o de antes.
+   **Chave "Awin" desligada no grupo = igual a sem conta** (link apagado, o
+   resto da oferta segue) — NÃO travar a oferta inteira por loja desligada.
+   Loja **não aprovada** também é apagada (e o resto segue), nunca trava:
+   `cread.php` se decide sem rede (`awinmid`/`ued`/dono); `tidd.ly` é aberto
+   ANTES do sanitizador (`refineAwinOptionsForText`, só o `Location`, até 5
+   por mensagem, cache de 2.000 links curtos). O mesmo conjunto vale nas 4
+   pontas do robô: desembrulho de site próprio, sanitizador, detector e rede
+   de segurança final (`findUnconvertedStoreLinks`).
+3. **Converter** (`src/converters/awin.js`):
+   - `tidd.ly` → lê só o `Location` (nunca segue até a loja);
+     `cread.php` → `ued` = página, `awinmid` = loja, `awinaffid` = dono;
+   - link já dela (`awinaffid` = conta dela) → fica como está, sem chamada;
+   - loja não aprovada que escapou do passo 2 (raro) → `stripFromMessage` +
+     `awinReason=awin_store_not_joined` →
+     `skip:no_valid_conversions:awin_store_not_joined` (etiqueta cinza "loja da
+     Awin sem aprovação"); no "Converter links" vira o código
+     `AWIN_STORE_NOT_JOINED` com o texto de como se inscrever;
+   - página limpa (sai `utm_*`, `awc`, `gclid`…) → cache `AwinLink`
+     (conta+loja+hash da página) → Link Builder com `shorten` e
+     **`noWait`** (sem vaga no limitador = plano B na hora, nunca segura a
+     oferta);
+   - sem vaga / Awin fora / erro → **link longo `cread.php` montado aqui**,
+     sem guardar (a próxima tenta o curto de novo). Awin respondeu sem curto
+     (cota no fim) → guarda o longo e só tenta o curto de novo após 24 h;
+   - cache sem uso há 90 dias é apagado no sync.
+4. **Criar oferta:** nome/preço/foto saem da **página da loja** (`destinationUrl`),
+   nunca do `tidd.ly` (não conta clique). Página crua ou link de outra pessoa
+   sai com o link DELA; link colado que já é dela fica.
+5. **Chave por grupo:** `awin` entrou em `BotConfig.platforms` (migration liga
+   para todas as configs, mesmo caminho da AliExpress). Grupo com lista própria
+   (`allowedPlatforms`) não ganhou a Awin sozinho — liga na tela Espelhamento.
+6. **Deploy:** `src/integrations/awin/` entrou em `WORKER_CODE_PATHS_RE` (o robô
+   carrega esses arquivos): mudança ali reinicia o `bot-supervisor`.
+
+Fora (v1): link de loja Awin escrito sem `https://` não é visto pela rede de
+segurança (os domínios são por cliente); `clickref` por grupo; loja que recusa
+link direto (`deeplinkNotPermitted`) cai no longo (a Awin leva à página inicial
+da loja, ainda com comissão) — todas as 12 medidas aceitam.
 
 ## Diagnóstico
 
 ```bash
 # só banco (status, execuções, promoções por loja, automações):
 node scripts/diag-awin.mjs <email>
+# (mostra também lojas_aprovadas e links_convertidos_guardados curtos/longos)
 # + 2 chamadas leves à Awin (código vale? chaves, total, link com o ID):
 node scripts/diag-awin.mjs <email> --awin
 ```

@@ -106,7 +106,7 @@ export function normalizeConverter(converter) {
     const result = await converter(platform, url, credentials)
     if (!result) return null
     if (typeof result === 'string') return { url: result, warning: null }
-    if (result.url) return { url: result.url, warning: result.warning ?? null }
+    if (result.url) return { url: result.url, warning: result.warning ?? null, ...(result.awin ? { awin: result.awin } : {}) }
     return null
   }
 }
@@ -152,6 +152,9 @@ export async function buildScrapedOffer({
   const platform = platformArg ?? parsedLink?.platform ?? null
 
   let offerUrl = url
+  // Awin: título/preço/foto saem da PÁGINA DA LOJA, nunca do link de clique
+  // (abrir o tidd.ly contaria clique e passaria pelo redirecionador).
+  let awinInfo = null
   let conversionSuccess = false
   let reasonCode = null
   let reasonMessage = null
@@ -188,6 +191,7 @@ export async function buildScrapedOffer({
         )
         if (conversionResult?.url) {
           offerUrl = conversionResult.url
+          awinInfo = conversionResult.awin ?? null
           conversionSuccess = true
           conversionWarning = conversionResult.warning ?? null
         } else {
@@ -219,14 +223,15 @@ export async function buildScrapedOffer({
   const displayUrl = injectOwnerTagInUrl(url, platform, credentialsMap)
   const displayUrlFor = (finalUrl) => keepOriginalLink ? displayUrl : (finalUrl || offerUrl)
 
+  const scrapeUrl = awinInfo?.destinationUrl || offerUrl
   try {
-    let info = await fetchProductInfo(offerUrl, { mlCredentials, shopeeCredentials, onDiagnostic })
+    let info = await fetchProductInfo(scrapeUrl, { mlCredentials, shopeeCredentials, onDiagnostic })
 
     // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver
     // bloqueio de redirect/anti-bot no scrape do convertido, ou o scrape pode
     // trazer título mas não preço. Nesses casos tentamos o original para
     // complementar título/preço sem perder o offerUrl convertido.
-    if (conversionSuccess && offerUrl !== url && !info?.newPrice) {
+    if (conversionSuccess && !awinInfo && offerUrl !== url && !info?.newPrice) {
       try {
         const fallbackInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials, onDiagnostic })
         if (hasUsefulOfferInfo(fallbackInfo)) {
@@ -257,11 +262,12 @@ export async function buildScrapedOffer({
       displayUrl: displayUrlFor(info?.finalUrl),
       conversionWarning,
       conversion: conversionMeta(),
+      ...(awinInfo ? { awin: awinInfo } : {}),
     }
   } catch (err) {
     logger.warn?.({ err: err.message, url: offerUrl }, 'Falha ao buscar informações do produto; retornando fallback mínimo')
 
-    if (conversionSuccess && offerUrl !== url) {
+    if (conversionSuccess && !awinInfo && offerUrl !== url) {
       try {
         const originalInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials, onDiagnostic })
         if (hasUsefulOfferInfo(originalInfo)) {
@@ -297,6 +303,7 @@ export async function buildScrapedOffer({
       displayUrl: displayUrlFor(null),
       conversionWarning,
       conversion: conversionMeta(),
+      ...(awinInfo ? { awin: awinInfo } : {}),
       scrapeWarning: {
         code: 'SCRAPE_OFFER_FETCH_FAILED',
         message: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',

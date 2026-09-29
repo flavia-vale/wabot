@@ -339,7 +339,7 @@ test('kill-switch: CUSTOM_DOMAIN_LINK_RESOLVE=false desliga sem tocar no texto',
 test('guarda estrutural: o desembrulho roda ANTES do sanitizador no bot-worker', () => {
   const fonte = readFileSync(join(here, '..', 'src', 'bot-worker.js'), 'utf8')
   const posResolve = fonte.indexOf('unwrapCustomDomainOfferLinks(text,')
-  const posSanitize = fonte.indexOf('sanitizeInviteLinks(textoParaEspelhar)')
+  const posSanitize = fonte.indexOf('sanitizeInviteLinks(textoParaEspelhar')
   assert.ok(posResolve > 0, 'o desembrulho precisa estar ligado no pipeline')
   assert.ok(posSanitize > 0, 'o sanitizador precisa consumir o texto desembrulhado')
   // Invertido, o sanitizador apaga a URL de domínio próprio antes de alguém
@@ -360,7 +360,7 @@ test('guarda: o motivo "loja não suportada" é decidido ANTES do sanitizador', 
   // de ANTES do sanitizador.
   assert.match(
     fonte,
-    /const linksDeLojaNaoSuportada = textoParaEspelhar \? findCandidateLinks\(textoParaEspelhar\) : \[\]/,
+    /const linksDeLojaNaoSuportada = textoParaEspelhar \? findCandidateLinks\(textoParaEspelhar(?:, awinOptions)?\) : \[\]/,
     'o motivo precisa olhar o texto de antes do sanitizador',
   )
   assert.match(
