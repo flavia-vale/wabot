@@ -549,5 +549,12 @@ ponto de risco é a abertura do app da loja, não o card:
 - `SELECT COUNT(*) FROM AffiliateClick` sobe 1 por toque de gente.
 
 Crescimento do banco: 1 linha em `AffiliateLink` por envio por destino com o
-recurso ligado (~200 B + índices) e 1 em `AffiliateClick` por clique. Não há
-limpeza automática dessas tabelas ainda (aberto).
+recurso ligado (~200 B + índices) e 1 em `AffiliateClick` por clique.
+Limpeza automática (2026-09-29): a passada diária de retenção da API
+(`cleanupOldLogs` em `src/api/server.js` → `pruneClickTracking` em
+`src/core/clickTracker.js`) apaga **clique com mais de 90 dias** e **link curto
+com mais de 180 dias** (os cliques dele vão junto, cascade). **Não regredir:**
+o link não pode ter a mesma retenção do clique — apagar o `AffiliateLink` faz o
+`/r/<hash>` de uma oferta antiga no histórico do grupo responder 404; 180 dias
+passam com folga da vida de qualquer promoção. Ajuste por
+`CLICK_RETENTION_DAYS` / `TRACKED_LINK_RETENTION_DAYS` (0 desliga).

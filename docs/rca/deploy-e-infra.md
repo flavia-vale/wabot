@@ -250,6 +250,8 @@ COUPON_BRAND_CARD_ENABLED=true
 # CLICK_HASH_SALT: sal do hash de IP/UA dos cliques (lido pela API). Setar um
 # valor secreto ANTES de ligar para qualquer conta — o padrão está no código.
 # Ver docs/rca/lojas-conversao.md, "Link rastreado".
+# CLICK_RETENTION_DAYS (padrão 90) e TRACKED_LINK_RETENTION_DAYS (padrão 180):
+# limpeza diária da API; só setar para mudar o padrão. 0 desliga.
 # SHORTLINK_BASE_URL=http://178.105.54.0:3006
 # CLICK_HASH_SALT=<segredo exclusivo de staging>
 ```
@@ -301,6 +303,8 @@ COUPON_LINK_CONVERT=true
 # pelo bot-worker (api em inline, bot-supervisor em remote) → pm2 delete +
 # start desse app, que RECONECTA as sessões (anunciar). CLICK_HASH_SALT é lido
 # pela API e precisa estar setado antes de ligar para qualquer conta.
+# CLICK_RETENTION_DAYS (padrão 90) e TRACKED_LINK_RETENTION_DAYS (padrão 180):
+# limpeza diária da API; só setar para mudar o padrão. 0 desliga.
 # SHORTLINK_BASE_URL=http://espelhagrupos.com.br   (mesma URL pública da tabela do AGENTS.md; https se a Cloudflare já servir)
 # CLICK_HASH_SALT=<segredo exclusivo de produção>
 ```
