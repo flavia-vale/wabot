@@ -1,6 +1,9 @@
 # Plano técnico — nova loja: TikTok Shop
 
-Status: **proposta (2026-09-29), não iniciada.** Molde usado: entrada da SHEIN
+Status: **Sprint 0 iniciado (2026-09-29); gate ainda bloqueado.** O diagnóstico
+read-only e o registro de pesquisa estão em `scripts/diag-tiktok-links.mjs` e
+`specs/020-tiktok-shop-store-support/research.md`. Os Sprints 1–6 continuam
+bloqueados até D-001–D-005 terem evidência real. Molde usado: entrada da SHEIN
 (`specs/012-shein-store-support/tasks.md`, 84 tasks) e da AliExpress
 (`specs/016-aliexpress-store-support`, `test/aliexpress-surface-contract.test.js`).
 Id interno da loja: **`tiktokshop`** · rótulo na tela: **TikTok Shop**.
