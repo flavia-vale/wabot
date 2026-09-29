@@ -503,6 +503,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Suporte · Card sem foto',
     usePersonAuthor: true,
     origin: 'blog_oferta_sem_foto_whatsapp',
+    heroImage: { path: '/blog/hero/33-oferta-sem-foto.jpg', alt: 'Oferta sem foto: por quê? Quatro causas: a loja bloqueou a leitura, link incompleto no texto, a origem veio sem foto e o link de afiliado continua convertido', width: 1080, height: 1080 },
     intro: 'Cada oferta espelhada pelo Espelha Grupos sai como um card clicável com a foto do produto. O card só existe quando há uma foto para mostrar; sem ela, a mensagem sai como texto e o link continua convertido. Isso acontece por poucos motivos, e três deles você mesma consegue conferir.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Uma oferta sai sem foto quando o robô não consegue obter a imagem do produto: a loja bloqueia a leitura da página para programas automáticos, o link não aparece por inteiro no texto da mensagem ou a mensagem de origem não tinha foto. O link de afiliado continua convertido em qualquer um dos casos, porque foto e conversão são etapas separadas.'] },
@@ -533,6 +534,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Suporte · Número banido',
     usePersonAuthor: true,
     origin: 'blog_numero_banido_whatsapp_o_que_fazer',
+    heroImage: { path: '/blog/hero/34-numero-banido.jpg', alt: 'Número banido: o que fazer. Quatro passos: ler o aviso na tela, pedir análise pelo app, rever volume e ritmo e não voltar igual com um número novo', width: 1080, height: 1080 },
     intro: 'Quem decide banir um número é o WhatsApp, com critérios que ele não publica por inteiro. Se a sua conta foi banida, o caminho que existe é o pedido de análise dentro do próprio app. Este guia resume o que a Central de Ajuda do WhatsApp informa, o que vale conferir na sua operação e o que o Espelha Grupos pode e não pode fazer por você.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Abra o WhatsApp no número afetado e leia a mensagem na tela. Se o app oferecer a opção de pedir análise, use-a: é o canal oficial. Não existe atalho por fora, e nenhum software, incluindo o Espelha Grupos, consegue desbanir um número nem assegurar que ele fique livre de banimento.'] },

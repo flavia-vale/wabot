@@ -15,8 +15,6 @@ const src = readFileSync(join(repoRoot, 'dashboard/app/blog/_preservationBlogPos
  * slug daqui e coloque o `heroImage` no post. Prompts em
  * docs/marketing/PROMPTS_IMAGENS_BLOG_2026-09-29.md. */
 const AGUARDANDO_IMAGEM = new Set([
-  'oferta-sem-foto-no-whatsapp-por-que-acontece',
-  'numero-banido-whatsapp-o-que-fazer',
   'amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp',
 ])
 const MIN_LINKS_DE_ENTRADA = 2
