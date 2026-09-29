@@ -1413,17 +1413,17 @@ export async function paymentsRoutes(app) {
       }).catch(() => null)
 
       const reuseDecision = decidePendingSubscriptionReuse({ subscription: pendingSubscription, plan })
-      let reuseSnapshot = null
+      let snapshot = null
       if (reuseDecision.reuse) {
-        reuseSnapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
+        snapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
         // Só reaproveita o que o MP confirma que continua em aberto. Falha de
         // rede, checkout já concluído ou apagado no MP caem no caminho normal —
         // checkout em aberto nunca pode deixar a conta sem conseguir assinar.
         // E só para o MESMO e-mail (ver `samePayerEmail`).
-        if (reuseSnapshot.ok && String(reuseSnapshot.status ?? '').toLowerCase() === 'pending' && reuseSnapshot.initPoint && samePayerEmail(reuseSnapshot.payerEmail, payerEmail)) {
+        if (snapshot.ok && String(snapshot.status ?? '').toLowerCase() === 'pending' && snapshot.initPoint && samePayerEmail(snapshot.payerEmail, payerEmail)) {
           trackAnalyticsEventSafe({ userId, event: 'subscription_checkout_reused', metadata: { plan } })
           req.log.info({ userId, plan }, 'Checkout de assinatura reaproveitado em vez de criar outro igual')
-          return { init_point: reuseSnapshot.initPoint }
+          return { init_point: snapshot.initPoint }
         }
       }
 
@@ -1432,8 +1432,8 @@ export async function paymentsRoutes(app) {
       const reuseSkip = describeReuseSkip({
         pending: pendingSubscription,
         decision: reuseDecision,
-        snapshot: reuseSnapshot,
-        emailMatches: reuseSnapshot?.ok ? samePayerEmail(reuseSnapshot.payerEmail, payerEmail) : false,
+        snapshot,
+        emailMatches: snapshot?.ok ? samePayerEmail(snapshot.payerEmail, payerEmail) : false,
       })
       if (reuseSkip) {
         trackAnalyticsEventSafe({ userId, event: 'subscription_checkout_reuse_skipped', metadata: { plan, ...reuseSkip } })
