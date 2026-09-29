@@ -2,9 +2,10 @@ import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/termos-parceria-influenciador'
-const title = 'Regras da parceria com criadores: cortesia e comissão recorrente'
+const title = 'Regras da parceria com criadores: cortesia e comissão'
 const description = 'As regras da parceria do Espelha Grupos com criadores: como funciona a cortesia do robô, por quanto tempo ela vale, o que renova, como é calculada a comissão de 30% recorrente e quando ela é paga.'
 
 // Esta página existe para que a cortesia possa ser encerrada sem virar briga:
@@ -153,6 +154,7 @@ export default function Page() {
           </p>
         </article>
       </main>
+   <EditorialFreshness pathname="/termos-parceria-influenciador" />
     </PublicShell>
   )
 }

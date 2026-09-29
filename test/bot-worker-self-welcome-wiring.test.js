@@ -113,3 +113,15 @@ test('o sendSelfMessage está no manager/sessionCore/supervisor, não só no wor
   assert.match(client, /const sendSelfMessage = /)
   assert.match(supervisorIndex, /\[COMMAND\.SEND_SELF_MESSAGE\]/)
 })
+
+test('decisão do teste (momento 6): decide via módulo puro, manda ao PRÓPRIO número e tem catch próprio', () => {
+  assert.match(src, /decideTrialDecisionSelfMessage/)
+  assert.match(src, /maybeSendTrialDecisionMessage\(\)\.catch\(/)
+  const fnStart = src.indexOf('async function maybeSendTrialDecisionMessage(')
+  assert.notEqual(fnStart, -1)
+  const fnBody = src.slice(fnStart, fnStart + 3200)
+  assert.match(fnBody, /\$\{phone\}@s\.whatsapp\.net/)
+  assert.doesNotMatch(fnBody, /@g\.us|@newsletter/)
+  assert.match(fnBody, /catch \(err\)/)
+  assert.match(fnBody, /contactPhoneOptInAt/)
+})

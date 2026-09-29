@@ -20,6 +20,7 @@ export const WHATSAPP_CONTACT_REASON_LABELS = Object.freeze({
   primeira_oferta_publicada: '1ª oferta publicada (prova de valor)',
   lembrete_sem_etiqueta: 'Lembrete: cadastrar a loja',
   lembrete_sem_grupo: 'Lembrete: escolher os grupos',
+  decisao_teste_dia5: 'Decisão do teste (a partir do dia 5)',
   mensagem_manual_suporte: 'Mensagem manual do suporte',
 })
 

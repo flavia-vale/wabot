@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainelHeader } from '../PainelShell'
 import {
@@ -13,6 +14,8 @@ import {
   quickSetupPlatforms,
 } from '@/lib/painel/affiliatePlatforms'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../../src/tutorialVideo.js'
+import { STORE_GUIDE_BY_PLATFORM } from '@/lib/store-guides'
+import AwinCredentialsCard from '@/components/painel/AwinCredentialsCard'
 
 const IconChevron = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -357,6 +360,11 @@ function PlatformCard({ platform, initialData, onSave, onDelete, disabled, sessi
         )}
 
         {platform.instructions && <p className="pnl-cred-onde">{platform.instructions}</p>}
+        {STORE_GUIDE_BY_PLATFORM[platform.id] && (
+          <p className="pnl-cred-onde">
+            <Link href={`/guia/${STORE_GUIDE_BY_PLATFORM[platform.id]}`} target="_blank">Ver guia completo de cadastro e identificação →</Link>
+          </p>
+        )}
 
         {!!platform.actionLinks?.length && (
           <div className="pnl-cred-ctas">
@@ -593,6 +601,15 @@ export default function IdsAfiliadaPage() {
             }
           />
         ))}
+
+      {/* Rede de afiliados (várias contas por cliente) — não é uma "loja" do
+          AFFILIATE_PLATFORMS: tem rotas e tabela próprias (/api/awin). */}
+      {!loading && (
+        <AwinCredentialsCard
+          open={openId === 'awin'}
+          onToggleOpen={() => setOpenId((cur) => (cur === 'awin' ? null : 'awin'))}
+        />
+      )}
     </div>
   )
 }

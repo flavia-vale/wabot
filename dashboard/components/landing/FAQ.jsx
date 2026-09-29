@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Icon } from './Icon';
 import { CORE_FAQ_ITEMS } from '@/lib/marketing-content';
 
@@ -37,7 +38,19 @@ const s = {
     flexShrink: 0,
   }),
   empty: { padding: 24, border: '1px dashed var(--line)', borderRadius: 18, color: 'var(--ink-soft)', background: 'var(--surface)' },
+  answers: { marginTop: 28, fontSize: 14.5, lineHeight: 1.7, color: 'var(--ink-soft)', maxWidth: 380 },
+  answerLink: { color: 'var(--accent-strong)', fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 4 },
 };
+
+/* 27/09/2026 (plano GEO, B6): as duas perguntas que a IA responde citando
+ * concorrente quando pesquisam a NOSSA marca ("é confiável?", "espelhar vale a
+ * pena?") ganham link a partir da home — sai no HTML do servidor, em texto
+ * estático, fora de CORE_FAQ_ITEMS (que exige migration de sincronia com
+ * /api/public/faq). */
+const RESPOSTAS_PRONTAS = [
+  { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?' },
+  { href: '/espelha-grupos-e-confiavel', label: 'O Espelha Grupos é confiável?' },
+];
 
 export function FAQ() {
   const [open, setOpen] = useState(0);
@@ -80,6 +93,15 @@ export function FAQ() {
             <a className="btn btn-ghost" href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" style={{ marginTop: 24 }}>
               <Icon name="whatsapp" size={16} /> Conversar agora
             </a>
+            <p style={s.answers}>
+              Duas respostas prontas, em página própria:{' '}
+              {RESPOSTAS_PRONTAS.map((item, index) => (
+                <span key={item.href}>
+                  {index > 0 ? ' · ' : ''}
+                  <Link href={item.href} style={s.answerLink}>{item.label}</Link>
+                </span>
+              ))}
+            </p>
           </div>
           <div style={s.list}>
             {status === 'static' && <div style={s.empty}>Estas são as perguntas mais comuns. Ficou alguma dúvida? Fale com o suporte.</div>}

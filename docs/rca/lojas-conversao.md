@@ -461,3 +461,111 @@ vale nos bots antes de `pm2 restart bot-supervisor --update-env` (reconecta TODA
 as sessões: anunciar antes). Ver "código novo não carregado pelos bots".
 
 Teste: `test/ml-oferta-de-produto-virou-vitrine.test.js`.
+
+## ML: código de acesso vencendo minutos depois de colado (RCA 2026-09-28 — não regredir)
+
+Clientes relatavam "coloco o código do ML e ele já vence". Medido em produção
+(`AnalyticsEvent` `credential_saved` × `MessageLog`, 7 dias, 122 cadastros):
+
+| Hipótese | Veredito |
+|---|---|
+| Chamadas em excesso ao `createLink` gastam o código | **FALSA** — 1 chamada por oferta, e o ML **não** rotaciona cookie no `createLink` (`rotatedCookie` = 0 em 2.161 chamadas) |
+| Painel/varredura diária batendo no ML | **FALSA** — nenhuma sondagem perto das quedas; varredura é 1×/dia |
+| Teste ao salvar aprova código morto | **Minoria** — 7 de 11 mortes rápidas converteram 1–11 links antes |
+| Raspagem da página do produto COM o cookie da cliente | **Forte correlação** — quem usa modelo de mensagem (caminho que raspava com cookie): 12 de 13 códigos morreram; sem modelo: 13 de 36 |
+
+`fetchProductInfo` (`src/converters/productInfoScraper.js`), usado pelo modelo de
+mensagem do espelhamento e pelo "Criar oferta", abria a página do produto no ML
+com o cookie da cliente (UA de celular, IP do servidor) **antes** de tentar
+qualquer caminho sem sessão, e descartava o `Set-Cookie` da resposta.
+
+**Fix:** ordem das fontes de título/preço para ML: (1) leitura sem sessão +
+UA de crawler (`facebookexternalhit`) se veio anti-bot; (2) API oficial
+(`api.mercadolibre.com`, token do app/OAuth — não usa cookie); (3) **só então**
+a página com a sessão da cliente, uma vez.
+
+**Não regredir:** não mandar o cookie na 1ª leitura nem antes do crawler/API.
+Testes em `test/product-info-scraper.test.js` ("NÃO usa a sessão…", "ÚLTIMO
+recurso"). Validar pós-deploy repetindo a medição "com modelo × sem modelo":
+sucesso = o grupo com modelo parar de perder o código.
+
+## Link rastreado (clique contado) — decisão 2026-09-29
+
+O `clickTracker` (`src/core/clickTracker.js` + `GET /r/:hash`) passou a poder
+ser usado pelo robô: com o recurso ligado, o link de afiliado que sai no texto
+da oferta vira `<SHORTLINK_BASE_URL>/r/<hash>`, que conta o clique e responde
+302 para o link de afiliado da cliente. Código: `src/core/trackedLinks.js`
+(regra pura), `trackLinksForSend` em `src/bot-worker.js` (fiação), rota em
+`src/api/routes/clickTracker.js`, repasse público em `dashboard/app/r/[hash]/route.js`.
+
+**Desligado por padrão.** Só liga com as três peças juntas:
+`BotConfig.clickTrackingEnabled = true` (por conta, sem tela ainda), plano
+PRO/Trial (mesmo acesso da Preservação avançada, onde o rastreio já aparecia) e
+`SHORTLINK_BASE_URL` válido no servidor (`.env` em `deploy-e-infra.md`).
+Faltou uma → o texto sai **byte a byte igual** ao de antes.
+
+Invariantes (não regredir):
+
+1. **Conversores intocados.** A troca é feita DEPOIS da conversão e DEPOIS da
+   trava do espelhamento (`mirrorLinkGuard.js`), dentro do `buildPayload` do
+   envio (por destino, ligado ao `MessageLog`). Só entra link CONVERTIDO de
+   verdade (nunca passthrough/original), de domínio oficial de loja (host
+   ancorado, `TRACKABLE_STORE_DOMAINS`) e público (`ssrfGuard`). Link de
+   concorrente que sobrasse nunca é embrulhado — continua visível e a trava pega.
+2. **O hash guarda o link convertido sem nenhuma alteração** (tag, parâmetros,
+   escapes). O `/r/:hash` só redireciona para link de loja + público; o
+   `POST /api/links/shortlink` também só aceita link de loja. O domínio não
+   vira redirecionador aberto.
+3. **Card/foto no link REAL.** `buildManualLinkPreview` recebe o shortlink só
+   como `anchorUrl` (âncora `matched-text`/`canonical-url`, que precisa estar
+   literalmente no texto). Foto, título e raspagem continuam no link real —
+   o card nunca busca o shortlink.
+4. **Falha nunca derruba oferta.** Erro ao criar o shortlink = aquele link sai
+   direto, como antes.
+5. **Clique de robô não conta**: UA vazio/cliente HTTP (`node`, `undici`, o
+   preview automático do Baileys), crawler e `facebookexternalhit` são
+   redirecionados mas não gravados. "WhatsApp" no UA **conta** (é o navegador
+   embutido do app).
+
+Fora do escopo desta entrega (seguem mandando o link direto): reenvio
+automático após restart, fila de ofertas, ofertas automáticas, agendados e
+"Criar oferta". Tela para ligar/ver cliques também fica para depois; o número
+já existe em `GET /api/groups/:id/clicks`, `/api/preservation/monitoring/clicks`
+e na variável `cliques` do resumo semanal.
+
+**Decisão 2026-09-29 (dona do produto): recurso mantido DESLIGADO.** Teste no
+staging mostrou o custo: o card do WhatsApp exibe o endereço do link curto
+(`178.105.54.0` no staging; `espelhagrupos.com.br` em produção) em vez do da loja,
+e no computador a foto do card não apareceu (causa não confirmada; hipótese: link
+`http://` com IP). Contar clique exige passar pelo nosso endereço, então não dá
+para mostrar o link oficial da loja e contar ao mesmo tempo. Só reavaliar quando
+houver **domínios próprios parecidos com os das lojas, em https**. Nenhum código
+liga o recurso sozinho (`clickTrackingEnabled` nasce `false`). Para desligar as
+contas de teste: `node scripts/desligar-rastreio-cliques.mjs` (lista) e
+`--aplicar` (desliga; vale em ~60 s, sem reiniciar).
+
+**⚠️ Checklist obrigatório em staging antes de ligar para cliente real** — o
+ponto de risco é a abertura do app da loja, não o card:
+
+- Tocar no link rastreado num Android e num iPhone, para cada loja
+  (Shopee produto, Shopee cupom, ML, Amazon, Magalu, SHEIN, AliExpress):
+  precisa abrir o **app** da loja (ou a página certa) como o link direto abre.
+  A Shopee bloqueia página web no navegador do WhatsApp (`unsupported.html`,
+  seção acima); o link direto `s.shopee.com.br` escapa porque o toque abre o
+  app. Com um salto a mais no nosso domínio isso **não foi medido** — se cair
+  no "Oops! Seu navegador não é mais aceito!", NÃO ligar para Shopee.
+- Conferir a comissão: uma compra de teste pelo link rastreado aparece no
+  painel de afiliado da loja com a etiqueta da cliente.
+- Card: a oferta sai com foto e o toque no card abre o link rastreado.
+- `SELECT COUNT(*) FROM AffiliateClick` sobe 1 por toque de gente.
+
+Crescimento do banco: 1 linha em `AffiliateLink` por envio por destino com o
+recurso ligado (~200 B + índices) e 1 em `AffiliateClick` por clique.
+Limpeza automática (2026-09-29): a passada diária de retenção da API
+(`cleanupOldLogs` em `src/api/server.js` → `pruneClickTracking` em
+`src/api/clickTrackingRetention.js`, fora de `WORKER_CODE_PATHS_RE` para o deploy não reiniciar o `bot-supervisor`) apaga **clique com mais de 90 dias** e **link curto
+com mais de 180 dias** (os cliques dele vão junto, cascade). **Não regredir:**
+o link não pode ter a mesma retenção do clique — apagar o `AffiliateLink` faz o
+`/r/<hash>` de uma oferta antiga no histórico do grupo responder 404; 180 dias
+passam com folga da vida de qualquer promoção. Ajuste por
+`CLICK_RETENTION_DAYS` / `TRACKED_LINK_RETENTION_DAYS` (0 desliga).

@@ -37,7 +37,8 @@
  * resolve e-mail/telefone/histórico e manda de fato.
  */
 
-import { DEFAULT_SUPPORT_WHATSAPP } from '../email/layout.js'
+import { DEFAULT_SUPPORT_WHATSAPP, resolveDashboardUrl } from '../email/layout.js'
+import { buildTrialDecisionScreen } from '../domain/painel/trialDecision.js'
 
 const BRAND_NAME = 'Espelha Grupos'
 
@@ -178,4 +179,52 @@ export function buildMissingGroupsNudgeText({ videoUrl } = {}) {
  */
 export function buildAdminSupportMessageText({ corpo } = {}) {
   return buildSelfMessageEnvelope({ titulo: '💬 Mensagem do suporte', corpo: String(corpo ?? '').trim() })
+}
+
+/**
+ * Momento 6 — a decisão do teste, a partir do DIA 5, no PRÓPRIO número (C1(b),
+ * decisão de 29/09/2026: painel + e-mail + esta mensagem). Mesmo texto de prova
+ * da tela do painel (`buildTrialDecisionScreen`): só o que o robô fez, sem
+ * promessa de ganho, sem preço inventado. Uma vez por dia de calendário, só com
+ * prova (ofertas publicadas > 0) e só para quem deixou o WhatsApp de contato
+ * (`contactPhoneOptInAt`).
+ *
+ * Liga com `TRIAL_DECISION_SELF_MESSAGE_ENABLED=true` (env, exige o reinício do
+ * `bot-supervisor`). Sem a env, só as contas do piloto recebem — a mesma trava
+ * dos outros momentos. Desligar = tirar a env e reiniciar o supervisor.
+ */
+export function isTrialDecisionSelfMessageEnabled(env = process.env) {
+  return String(env?.TRIAL_DECISION_SELF_MESSAGE_ENABLED ?? '').trim().toLowerCase() === 'true'
+}
+
+export function decideTrialDecisionSelfMessage({
+  accountEmail,
+  pilotEmails,
+  enabled = false,
+  optedIn = false,
+  plan,
+  accessExpiresAt,
+  offersPublished = null,
+  destGroupCount = 0,
+  lastSentDay = null,
+  now = new Date(),
+} = {}) {
+  if (!enabled && !isPilotEmail(accountEmail, pilotEmails)) return null
+  if (!optedIn) return null
+  const screen = buildTrialDecisionScreen({
+    plan,
+    accessExpiresAt,
+    offersPublished,
+    destGroupCount,
+    lastShownDay: lastSentDay,
+    now,
+  })
+  return screen
+}
+
+export function buildTrialDecisionMessageText({ screen, planUrl = `${resolveDashboardUrl()}/painel/plano` } = {}) {
+  return buildSelfMessageEnvelope({
+    titulo: `⏳ ${screen.headline}`,
+    corpo: [screen.proof, screen.preserved, `Para escolher seu plano: ${planUrl}`].join('\n\n'),
+  })
 }

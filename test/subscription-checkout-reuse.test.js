@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   decidePendingSubscriptionReuse,
+  describeReuseSkip,
   SUBSCRIPTION_REUSE_MAX_AGE_MS,
   decideSubscriptionAttemptCooldown,
   describeSubscriptionCooldown,
@@ -112,7 +113,7 @@ test('o preapproval manda notification_url (senão o aviso de renovação depend
 
 test('a rota tenta reaproveitar o checkout ANTES de criar outro', () => {
   const inicio = rota.indexOf("app.post('/create-subscription'")
-  const trecho = rota.slice(inicio, inicio + 6000)
+  const trecho = rota.slice(inicio, inicio + 8000)
   const posReuso = trecho.indexOf('decidePendingSubscriptionReuse')
   const posCriacao = trecho.indexOf('await createMercadoPagoSubscription')
   assert.ok(posReuso > -1, 'a rota não consulta a política de reaproveitamento')
@@ -212,7 +213,7 @@ test('o texto da espera não culpa o cartão, diz quando voltar e oferece o avul
 
 test('a rota consulta a espera ANTES de criar o checkout no Mercado Pago', () => {
   const inicio = rota.indexOf("app.post('/create-subscription'")
-  const trecho = rota.slice(inicio, inicio + 6000)
+  const trecho = rota.slice(inicio, inicio + 8000)
   const posEspera = trecho.indexOf('decideSubscriptionAttemptCooldown')
   const posCriacao = trecho.indexOf('await createMercadoPagoSubscription')
   assert.ok(posEspera > -1, 'a rota não consulta a política de espera')
@@ -222,7 +223,7 @@ test('o evento de tentativa só é emitido quando um checkout NOVO nasce', () =>
   // Emitido cedo demais, ele contava junto o clique devolvido ao checkout em
   // aberto e o adiado pela espera — os três caminhos viravam um número só.
   const inicio = rota.indexOf("app.post('/create-subscription'")
-  const trecho = rota.slice(inicio, inicio + 6000)
+  const trecho = rota.slice(inicio, inicio + 8000)
   const posEvento = trecho.indexOf("event: 'subscription_started'")
   const posReuso = trecho.indexOf('decidePendingSubscriptionReuse')
   const posEspera = trecho.indexOf('decideSubscriptionAttemptCooldown')
@@ -282,4 +283,36 @@ test('o diagnóstico mede repetição pelo que foi CRIADO, não pelo que segue e
     maiorRepeticaoNaJanela([encerrados[0], { ...encerrados[1], plan: 'basic' }]).total,
     1
   )
+})
+
+// Observabilidade (29/09/2026): por que o reaproveitamento foi ignorado.
+test('describeReuseSkip: sem checkout em aberto não há o que explicar', () => {
+  assert.equal(describeReuseSkip({ pending: null, decision: { reuse: false, reason: 'no_pending' } }), null)
+})
+
+test('describeReuseSkip: motivos da política e do Mercado Pago, sem dado pessoal', () => {
+  const ok = { ok: true, status: 'pending', initPoint: 'https://mp/x' }
+  const reuse = { reuse: true, reason: 'reusable_pending' }
+  const p = pendente()
+  assert.deepEqual(describeReuseSkip({ pending: p, decision: { reuse: false, reason: 'plan_changed' } }), { reason: 'plan_changed' })
+  assert.deepEqual(describeReuseSkip({ pending: p, decision: { reuse: false, reason: 'too_old' } }), { reason: 'too_old' })
+  assert.deepEqual(
+    describeReuseSkip({ pending: p, decision: reuse, snapshot: { ok: false, reason: 'provider_fetch_error', httpStatus: 429 } }),
+    { reason: 'snapshot_failed', httpStatus: 429, cause: 'provider_fetch_error' },
+  )
+  assert.deepEqual(
+    describeReuseSkip({ pending: p, decision: reuse, snapshot: { ...ok, status: 'cancelled' }, emailMatches: true }),
+    { reason: 'provider_status_not_pending', providerStatus: 'cancelled' },
+  )
+  assert.deepEqual(describeReuseSkip({ pending: p, decision: reuse, snapshot: { ...ok, initPoint: null }, emailMatches: true }), { reason: 'no_init_point' })
+  assert.deepEqual(describeReuseSkip({ pending: p, decision: reuse, snapshot: ok, emailMatches: false }), { reason: 'payer_email_differs' })
+  assert.equal(describeReuseSkip({ pending: p, decision: reuse, snapshot: ok, emailMatches: true }), null)
+})
+
+test('a rota registra o motivo do reaproveitamento ignorado e o evento está na lista permitida', () => {
+  const rota = readFileSync(new URL('../src/api/routes/payments.js', import.meta.url), 'utf8')
+  const analytics = readFileSync(new URL('../src/analytics.js', import.meta.url), 'utf8')
+  assert.match(rota, /subscription_checkout_reuse_skipped/)
+  assert.match(analytics, /'subscription_checkout_reuse_skipped'/)
+  assert.doesNotMatch(rota.slice(rota.indexOf('const reuseSkip')), /payerEmail[^)]*metadata/)
 })

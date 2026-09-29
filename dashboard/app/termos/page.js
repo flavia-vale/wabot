@@ -10,6 +10,7 @@ export const metadata = {
 }
 
 import { FALLBACK_TERMS, getPublicTerms } from '@/lib/legalTerms'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 export default async function TermsPage() {
   const terms = await getPublicTerms()
@@ -52,6 +53,7 @@ export default async function TermsPage() {
           <Link href="/politica-de-reembolso" className="text-inherit underline hover:no-underline">política de reembolso</Link>.
         </p>
       </div>
+   <EditorialFreshness pathname="/termos" />
     </PublicPage>
   )
 }

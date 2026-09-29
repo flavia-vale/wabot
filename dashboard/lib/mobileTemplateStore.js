@@ -31,6 +31,58 @@ export const PRESET_TEMPLATE_BODIES = {
 🛒 Compre aqui 👉 {link}
 
 {{convitegrupo}}`,
+  moda: `{{gancho}}
+
+👗 *Achadinho de moda: {produto}*
+
+🏷️ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+{{cta}}
+🛒 Garanta o seu 👉 {link}
+
+{{convitegrupo}}`,
+  casa: `{{gancho}}
+
+🏠 *Para deixar a casa ainda melhor: {produto}*
+
+💰 De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+{{cta}}
+👉 Veja a oferta: {link}
+
+{{convitegrupo}}`,
+  tech: `{{gancho}}
+
+🔌 *Achado tech: {produto}*
+
+⚡ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+{rating} | {vendas}
+
+{{cta}}
+👉 Confira aqui: {link}
+
+{{convitegrupo}}`,
+  bebe: `{{gancho}}
+
+🧸 *Achadinho para o bebê: {produto}*
+
+💛 De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+{{cta}}
+🛒 Aproveite aqui 👉 {link}
+
+{{convitegrupo}}`,
+  beleza: `{{gancho}}
+
+💄 *Achadinho de beleza: {produto}*
+
+✨ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+{rating} | {vendas}
+
+{{cta}}
+🛒 Quero o meu 👉 {link}
+
+{{convitegrupo}}`,
 }
 
 const EMPTY_STORE = { overrides: {}, custom: [] }

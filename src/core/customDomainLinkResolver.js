@@ -221,8 +221,8 @@ function listUrls(text) {
 }
 
 /** Verdadeiro quando o texto já traz ao menos um link de loja suportada. PURA. */
-export function hasStoreLink(text) {
-  return listUrls(text).some(isOfferUrl)
+export function hasStoreLink(text, offerOptions = {}) {
+  return listUrls(text).some((url) => isOfferUrl(url, offerOptions))
 }
 
 /**
@@ -236,8 +236,12 @@ export function hasStoreLink(text) {
  * NÃO voltar a desligar a varredura inteira quando existe link de loja no
  * texto: era exatamente isso que perdia os links do 3º produto em diante numa
  * oferta mista (ver a invariante no topo deste arquivo).
+ *
+ * `offerOptions.awin`: link de loja da Awin em que a cliente foi aprovada não
+ * é "site próprio de grupo" — não é desembrulhado nem contado como loja não
+ * suportada (docs/rca/afiliados-awin.md).
  */
-export function findCandidateLinks(text) {
+export function findCandidateLinks(text, offerOptions = {}) {
   const cleaned = listUrls(text)
   if (!cleaned.length) return []
 
@@ -246,7 +250,7 @@ export function findCandidateLinks(text) {
   for (const url of cleaned) {
     if (seen.has(url)) continue
     seen.add(url)
-    if (isOfferUrl(url)) continue
+    if (isOfferUrl(url, offerOptions)) continue
     if (!isSafeCandidateUrl(url)) continue
     candidates.push(url)
     if (candidates.length >= MAX_CANDIDATES_PER_MESSAGE) break
@@ -549,14 +553,15 @@ export async function resolveCustomDomainLinks(text, options = {}) {
   const raw = String(text ?? '')
   if (!raw || !isCustomDomainResolveEnabled()) return { text: raw, resolved: [], failures: [] }
 
-  const candidates = findCandidateLinks(raw)
+  const offerOptions = options.awin ? { awin: options.awin } : {}
+  const candidates = findCandidateLinks(raw, offerOptions)
   if (!candidates.length) return { text: raw, resolved: [], failures: [] }
 
   const comecouEm = Date.now()
   // Mensagem mista (já tem link de loja) gasta menos: ver invariante no topo.
   const orcamentoTotal = Number.isFinite(options.totalBudgetMs)
     ? options.totalBudgetMs
-    : (hasStoreLink(raw) ? CUSTOM_DOMAIN_MIXED_BUDGET_MS : CUSTOM_DOMAIN_TOTAL_BUDGET_MS)
+    : (hasStoreLink(raw, offerOptions) ? CUSTOM_DOMAIN_MIXED_BUDGET_MS : CUSTOM_DOMAIN_TOTAL_BUDGET_MS)
   const tetoPorLink = Number.isFinite(options.timeoutMs)
     ? options.timeoutMs
     : CUSTOM_DOMAIN_FETCH_TIMEOUT_MS

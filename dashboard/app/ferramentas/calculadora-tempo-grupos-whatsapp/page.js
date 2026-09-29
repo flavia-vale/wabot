@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { TimeSavingsCalculator } from '@/components/free-tools/TimeSavingsCalculator'
 import { getSiteUrl } from '@/lib/site-url'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/ferramentas/calculadora-tempo-grupos-whatsapp'
 const siteUrl = getSiteUrl()
@@ -110,6 +111,7 @@ export default function Page() {
           ))}
         </section>
       </main>
+   <EditorialFreshness pathname="/ferramentas/calculadora-tempo-grupos-whatsapp" />
     </PublicShell>
   )
 }

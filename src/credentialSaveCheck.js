@@ -83,7 +83,35 @@ export const FIRST_CREDENTIAL_HEADLINE = 'Pronto — agora o robô já pode publ
  * @param {boolean} [args.isFirstCredential]  esta é a primeira loja da conta
  * @returns {{ tone: 'success'|'error'|'warn', message: string }}
  */
-export function describeSaveSessionCheck({ platform, validation, probe, fallbackMessage, isFirstCredential = false }) {
+// O código colado é o MESMO que já estava guardado? Serve para o caso medido em
+// produção (2026-09-24): a cliente colou 8 vezes em 18 min o mesmo código já
+// vencido, e a mensagem genérica "pegue um código novo" não mudou o que ela
+// fazia. Compara só o portador da sessão (ML: ssid, direto ou dentro do jar;
+// Amazon: o código exportado), nunca loga valor.
+function sessionCarrier(platform, data = {}) {
+  if (!data || typeof data !== 'object') return ''
+  if (platform === 'mercadolivre') {
+    const ssid = typeof data.ssid === 'string' ? data.ssid.trim() : ''
+    if (ssid) return ssid
+    const jar = typeof data.cookie === 'string' ? data.cookie : ''
+    const m = /(?:^|;\s*)ssid=([^;]+)/.exec(jar)
+    return m ? m[1].trim() : ''
+  }
+  if (platform === 'amazon') return typeof data.cookie === 'string' ? data.cookie.trim() : ''
+  return ''
+}
+
+export function isSameAccessCode(platform, previousData, nextData) {
+  const antes = sessionCarrier(platform, previousData)
+  const depois = sessionCarrier(platform, nextData)
+  return Boolean(antes) && antes === depois
+}
+
+export const ML_RELOGIN_STEPS =
+  'No Mercado Livre, clique em Sair, entre de novo com seu e-mail e senha, atualize a página, copie o código de acesso novo e cole aqui ' +
+  '(o valor muda a cada entrada; o de antes não serve mais). Depois de copiar, não saia da conta.'
+
+export function describeSaveSessionCheck({ platform, validation, probe, fallbackMessage, isFirstCredential = false, sameCodeAsBefore = false }) {
   const label = STORE_LABEL[platform] || validation?.label || 'loja'
 
   // O marco só se aplica ao save que deu certo — ver FIRST_CREDENTIAL_HEADLINE.
@@ -136,11 +164,17 @@ export function describeSaveSessionCheck({ platform, validation, probe, fallback
           + '(as outras lojas seguem normalmente). Gere um App ID e uma chave secreta novos no painel de afiliada da Shopee e cole aqui.',
       }
     }
+    const repetido = sameCodeAsBefore
+      ? `Esse é o MESMO ${noun} que já estava salvo, e ele continua vencido — colar de novo não resolve. `
+      : ''
+    const comoPegar = platform === 'mercadolivre'
+      ? ML_RELOGIN_STEPS
+      : 'Pegue um código novo e cole aqui.'
     return {
       tone: 'error',
       message:
-        `Salvamos, mas a ${label} não aceitou esse ${noun} — ele já venceu. ` +
-        `Pegue um código novo e cole aqui. Enquanto isso suas ofertas continuam saindo e a comissão continua sendo sua, ` +
+        `Salvamos, mas a ${label} não aceitou esse ${noun} — ele já venceu. ${repetido}` +
+        `${comoPegar} Enquanto isso suas ofertas continuam saindo e a comissão continua sendo sua, ` +
         `só que o link fica mais comprido${EXTRA_LOSS[platform] || ''}.`,
     }
   }

@@ -141,6 +141,21 @@ function parsePreservationBlogMeta() {
   return map
 }
 
+// Guias por loja (/guia/[slug]): a rota é dinâmica, então title/description
+// vêm de lib/store-guides.js, chaveado pelo slug.
+function parseStoreGuideMeta() {
+  const sourcePath = path.resolve(process.cwd(), 'lib/store-guides.js')
+  if (!fs.existsSync(sourcePath)) return new Map()
+  const source = fs.readFileSync(sourcePath, 'utf8')
+  const map = new Map()
+  const blockRegex = /'([^']+)':\s*\{\s*title:\s*'([^']+)',\s*description:\s*'([^']+)'/gs
+  for (const match of source.matchAll(blockRegex)) {
+    const [, slug, title, description] = match
+    map.set(`/guia/${slug}`, { title, description })
+  }
+  return map
+}
+
 const programmaticMeta = parseProgrammaticMetadataFromLpShared()
 const preservationMeta = parsePreservationCommercialMeta()
 const comparisonMeta = parseComparisonContentMeta()
@@ -148,12 +163,13 @@ const hubMeta = parseSeoHubMeta()
 const preservationBlogMeta = parsePreservationBlogMeta()
 const preservationDecisionMeta = parsePreservationDecisionMeta()
 const organicNicheMeta = parseOrganicNicheMeta()
+const storeGuideMeta = parseStoreGuideMeta()
 
 // União de todos os módulos de conteúdo, indexada por path. É a "outra
 // ponta" da checagem de fonte única (FR-001): se um path tiver algo aqui E
 // title/description literal no registry, é divergência silenciosa em
 // potencial (ou pelo menos dado morto duplicado).
-const contentMetaByPath = new Map([...programmaticMeta, ...preservationMeta, ...comparisonMeta, ...hubMeta, ...preservationBlogMeta, ...preservationDecisionMeta, ...organicNicheMeta])
+const contentMetaByPath = new Map([...programmaticMeta, ...preservationMeta, ...comparisonMeta, ...hubMeta, ...preservationBlogMeta, ...preservationDecisionMeta, ...organicNicheMeta, ...storeGuideMeta])
 
 const records = []
 

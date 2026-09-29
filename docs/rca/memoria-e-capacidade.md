@@ -246,6 +246,8 @@ reconexão da frota e precisa da mesma medição por idade.
 
 ## Teto de robôs por processo (`MAX_SESSIONS_PER_PROCESS`) — RCA 2026-09-01, não regredir
 
+> **29/09/2026:** decidido subir o teto de 80 para **100** (D2). Estimativa, regra de parada (swap) e comandos em `docs/marketing/RUNBOOK_JANELA_SUPERVISOR_2026-09-29.md`. O teto é só `.env` de produção; o código não muda.
+
 O `bot-supervisor` recusa ligar sessão quando já tem `MAX_SESSIONS_PER_PROCESS`
 (default **20**; **produção está em 80** desde 2026-09-18 — ver a medição
 vigente abaixo) robôs vivos — `checkSessionCircuitBreaker` em

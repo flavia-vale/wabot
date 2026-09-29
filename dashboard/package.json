@@ -16,6 +16,7 @@
     "validate:schema-templates": "node scripts/validate-schema-templates.mjs",
     "validate:seo-p0": "npm run guard:seo-registry && npm run lint:seo-metadata",
     "validate:editorial-freshness": "node scripts/validate-editorial-freshness.mjs",
+    "validate:editorial-dates": "node scripts/validate-editorial-dates.mjs",
     "monitor:cwv-budget": "node scripts/monitor-cwv-budget.mjs",
     "validate:seo-p2": "npm run validate:editorial-freshness && npm run monitor:cwv-budget",
     "indexnow:submit": "node scripts/indexnow-submit.mjs"

@@ -3,7 +3,7 @@ import { ArticleShell } from '@/components/marketing/ArticleShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates } from '@/lib/editorial-content'
 
-const title = 'Bot para afiliados no WhatsApp: grupos de cupons sem copia-e-cola'
+const title = 'Bot de afiliados no WhatsApp: cupons sem copia e cola'
 const description = 'Entenda como afiliados e admins de grupos de cupons podem organizar distribuição de ofertas no WhatsApp com espelhamento, rotina e conferência de links.'
 const slug = '/blog/bot-para-afiliados-whatsapp-grupos-cupons'
 const dates = getEditorialDates(slug)

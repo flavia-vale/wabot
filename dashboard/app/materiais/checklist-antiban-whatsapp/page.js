@@ -52,7 +52,7 @@ export default function Page() {
         title="Checklist de Preservação Avançada para WhatsApp"
         description="Use este roteiro antes de aumentar volume em grupos e Canais do WhatsApp. O objetivo é reduzir exposição operacional — não prometer banimento zero."
       >
-        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
         <section className="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm leading-7 text-emerald-950">
           <h2 className="text-lg font-black text-emerald-950">Resposta direta</h2>
           <p className="mt-2">Preservação avançada é um conjunto de camadas: chip dedicado, cadência, variações, monitoramento e recuperação. O termo “anti-ban” aparece como busca do mercado, mas nenhuma ferramenta séria deve prometer proteção absoluta.</p>
@@ -101,7 +101,7 @@ export default function Page() {
 
           <aside className="space-y-4">
             <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Captura leve</p>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Checklist na sua conta</p>
               <h2 className="mt-3 text-2xl font-black tracking-tight text-gray-950">Receber o checklist no cadastro</h2>
               <p className="mt-3 text-sm leading-6 text-gray-700">Informe e-mail e perfil para levar este checklist como contexto da sua conta Espelha Grupos.</p>
               <form action="/login" method="get" className="mt-5 grid gap-3" data-crm-stage="Lead" data-crm-source="checklist_antiban_whatsapp">

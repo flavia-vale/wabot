@@ -16,7 +16,7 @@ export const AI_VISIBILITY_HEADER = [
 // Trilhas do ROTEIRO_MEDICAO_IA.md. `contaminacao` é a Trilha C (nome antigo),
 // que NUNCA pode ser registrada como `marca`. `indutora` é a pergunta que já
 // cita o produto (regra 3 do roteiro): fica registrada, mas fora do placar.
-export const AI_VISIBILITY_CLUSTERS = ['categoria', 'marca', 'problema', 'contaminacao', 'indutora']
+export const AI_VISIBILITY_CLUSTERS = ['categoria', 'marca', 'problema', 'contaminacao', 'indutora', 'compra']
 export const AI_VISIBILITY_YES_NO = ['sim', 'nao']
 export const AI_VISIBILITY_CITED = ['sim', 'nao', 'parcial']
 // Superfícies medidas. O sufixo entre parênteses é permitido de propósito
