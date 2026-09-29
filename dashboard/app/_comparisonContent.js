@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { Hero } from '@/components/landing/Hero'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { IntroCard } from '@/components/landing/IntroCard'
-import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS } from '@/lib/marketing-content'
+import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, SUPPORTED_STORES } from '@/lib/marketing-content'
+import { CUSTO_FRASE, fraseNumerosProprios } from '@/lib/resposta-citavel'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 import { getSiteUrl } from '@/lib/site-url'
 import { getCompetitorBySlug } from '@/lib/competitors-data'
@@ -67,7 +68,11 @@ export const COMPARISON_PAGES = {
       label: 'Como funciona a operação para afiliados, do começo ao fim',
       note: 'Origens, conversão do link, destinos e histórico — sem comparar com ninguém.',
     },
-    tldr: 'Se você está pesquisando alternativas de bot para WhatsApp, compare foco operacional, capacidade de governança e custo de manutenção contínua antes de decidir.',
+    // Topo citável (29/09/2026): 216 impressões e zero clique (ANALISE_SEO
+    // 11/09). A resposta curta passa a dizer o que é, para quem e quanto custa
+    // (preço de DEFAULT_LANDING_PLANS via CUSTO_FRASE), sem mudar o título.
+    answerQuestion: 'Qual alternativa de bot para afiliados serve para você?',
+    tldr: `Para afiliada que divulga ofertas em vários grupos do WhatsApp, a alternativa que resolve é um robô que troca cada link pelo seu código de afiliada e publica sozinho, com intervalo e histórico. O ${BRAND_NAME} faz isso em ${SUPPORTED_STORES.length} lojas, com grupos ilimitados: ${CUSTO_FRASE} Para poucos grupos e poucas ofertas por semana, planilha e envio manual ainda podem bastar — compare foco operacional, controle e custo de manutenção antes de decidir.`,
     directAnswer: 'A melhor alternativa de bot para WhatsApp para afiliados depende do estágio da operação. Para poucos grupos, planilha e revisão manual podem bastar. Para rotina com origem, destino, link monetizado, filtros, cadência e logs, o Espelha Grupos foi desenhado para organizar esse fluxo sem prometer ganho financeiro ou burlar regras das plataformas.',
     rows: [
       ['Planilha + envio manual', 'Baixo custo e controle humano total.', 'Não escala bem, depende de lembrar horários e dificulta auditoria por campanha.'],
@@ -161,6 +166,7 @@ export const COMPARISON_PAGES = {
       label: 'Como funciona o bot para achadinhos no WhatsApp',
       note: 'Grupos ilimitados, seis lojas e 7 dias grátis.',
     },
+    answerQuestion: 'Qual alternativa ao AchadinhosBot vale para o seu caso, e quanto custa?',
     tldr: 'Se você divulga só Shopee em poucos grupos, o AchadinhosBot resolve. Se divulga mais de uma loja ou tem vários grupos, o Espelha Grupos sai mais barato: R$ 39 por 30 dias, sem cobrar por grupo, com Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress. Dá para testar 7 dias com o plano Pro completo, sem cartão.',
     directAnswer: 'O AchadinhosBot automatiza grupos de achadinhos no WhatsApp com foco somente em Shopee. Seus planos começam em R$ 59,90 por mês para 1 grupo e chegam a R$ 199,90 para 15 grupos. O Espelha Grupos custa R$ 39 por 30 dias, permite grupos ilimitados e já inclui Shopee, Amazon, Mercado Livre, Magalu, SHEIN e AliExpress. Também converte links de produto e de cupom, trabalha com grupos, Canais e Comunidades do WhatsApp e oferece 7 dias grátis com o plano Pro completo. Para quem divulga várias lojas e não quer pagar mais ao adicionar grupos, o Espelha Grupos entrega mais recursos por um preço menor. O Achadinho Pro, apesar do nome parecido, é outra ferramenta, de outra empresa: começa em R$ 49,97 por mês, também somente com Shopee, e tem página de comparação própria aqui no site.',
     // Formato de objeto (em vez de tupla) liga o comparador interativo por
@@ -492,7 +498,8 @@ export const COMPARISON_PAGES = {
       label: 'Como funciona o bot para achadinhos no WhatsApp',
       note: 'Grupos ilimitados, seis lojas e 7 dias grátis.',
     },
-    tldr: 'Se você vai começar só com Shopee e não se importa em pagar mais depois para somar Mercado Livre e Amazon, o Achadinho Pro resolve. Se já divulga as três lojas (ou Magalu) desde o início, compare o custo total antes de decidir.',
+    answerQuestion: 'Qual a alternativa ao Achadinho Pro para quem divulga mais de uma loja?',
+    tldr: `Para quem divulga mais de uma loja, o ${BRAND_NAME} é a alternativa: ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}) já no plano de entrada e grupos ilimitados. ${CUSTO_FRASE} Se você vai começar só com Shopee e não se importa em pagar mais depois para somar Mercado Livre e Amazon, o Achadinho Pro resolve. Se já divulga as três lojas (ou Magalu) desde o início, compare o custo total antes de decidir.`,
     directAnswer: 'O Achadinho Pro é um bot de afiliados para WhatsApp com IA para selecionar produtos — e não é o mesmo produto que o AchadinhosBot, apesar do nome parecido. No Achadinho Pro, o plano Basic (R$ 49,97/mês) cobre só Shopee, com grupos ilimitados por automação e até 5 números de WhatsApp; o Pro (R$ 59,97/mês) soma Mercado Livre e Amazon pelo mesmo custo de apenas R$10 a mais. A página de preços consultada não indica teste grátis. A alternativa mais próxima é o Espelha Grupos, que cobre Shopee, Amazon, Mercado Livre e Magalu já no plano de entrada (R$39/30 dias) e converte também links de cupom, com teste grátis de 7 dias.',
     rows: [
       { key: 'marketplaces', label: 'Marketplaces no plano de entrada', produto: 'Shopee, Amazon, Mercado Livre e Magalu já no Basic (R$39/30 dias).', concorrente: 'Achadinho Pro: só Shopee no Basic (R$ 49,97/mês); Mercado Livre e Amazon entram no Pro (R$ 59,97/mês).', reading: 'Se você já divulga mais de uma loja, compare pelo plano que cobre todas — não pelo preço de entrada.' },
@@ -1648,8 +1655,13 @@ export function ComparisonPage({ slug }) {
         <div className="wrap comparison-stack">
           {/* 1. Resposta curta + porta de entrada para o teste. Quem decide na
             * primeira dobra não pode precisar rolar até o rodapé para clicar. */}
-          <SectionCard tone="accent" eyebrow="Resumo rápido" title="A resposta curta">
+          <SectionCard tone="accent" eyebrow="Resumo rápido" title={page.answerQuestion || 'A resposta curta'}>
             <p style={{ color: 'var(--ink)', lineHeight: 1.7, fontSize: 17, maxWidth: '70ch' }}>{page.tldr || page.directAnswer}</p>
+            {/* Topo citável (29/09/2026): as páginas prioritárias trazem 2
+              * números próprios com a fonte na mesma frase. */}
+            {page.answerQuestion ? (
+              <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, maxWidth: '70ch' }}>{fraseNumerosProprios()}</p>
+            ) : null}
             {page.competitorNotice ? (
               <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, maxWidth: '70ch' }}>
                 {page.competitorNotice.text}{' '}

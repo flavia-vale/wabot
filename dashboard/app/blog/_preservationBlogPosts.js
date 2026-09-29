@@ -14,31 +14,17 @@ import {
 } from '@/lib/editorial-content'
 import { internalContentHref } from '@/lib/marketing-attribution'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
-import { DEFAULT_LANDING_PLANS } from '@/lib/marketing-content'
 import { getCompetitorBySlug } from '@/lib/competitors-data'
+import { NUMEROS_MEDIDOS_EM, NUMEROS_PROPRIOS, PRECO_PLANOS_FRASE as precoPlanosFrase } from '@/lib/resposta-citavel'
 import { formatDatePtBr } from '@/lib/editorial-content'
 import { VIDEO_ESPELHAMENTO, VIDEO_ESPELHAMENTO_URL, VIDEO_ESPELHAMENTO_EMBED_URL, VIDEO_ESPELHAMENTO_THUMB_URL } from '../../../src/tutorialVideo.js'
 
 const siteUrl = getSiteUrl()
 
-// Preço próprio na frase, montado de DEFAULT_LANDING_PLANS (plano GEO de
-// 27/09/2026: bloco de conversão com preço vindo das constantes, nunca à mão).
-const precoPlanosFrase = (() => {
-  const pagos = DEFAULT_LANDING_PLANS.filter((plan) => Number(plan.priceValue) > 0)
-  const partes = pagos.map((plan) => `${plan.name} ${plan.price}`)
-  const lista = partes.length <= 1 ? partes.join('') : `${partes.slice(0, -1).join(', ')} ou ${partes.at(-1)}`
-  return pagos[0]?.period ? `${lista} a cada ${pagos[0].period}` : lista
-})()
-
-// Números próprios, MEDIDOS no banco de produção em 27/09/2026 (decisão da dona
-// do produto; os mesmos de /espelha-grupos-e-confiavel). Para atualizar, medir
-// de novo e trocar a data junto.
-const NUMEROS_MEDIDOS_EM = '2026-09-27'
-const NUMEROS_PROPRIOS = {
-  clientesPagantes: 38,
-  contasComOfertasAutomaticas: 43,
-  renovacaoAgosto: '7 de 7',
-}
+// Preço e números próprios vêm de lib/resposta-citavel.js (fonte única desde
+// 29/09/2026 — as mesmas peças do topo citável das páginas comerciais). Preço
+// montado de DEFAULT_LANDING_PLANS; números medidos no banco de produção em
+// 27/09/2026. Para atualizar, medir de novo e trocar a data lá.
 
 // Linha de concorrente numa lista comparada: nome, o que faz e o preço de
 // ENTRADA lidos da ficha datada em competitors-data.js — nunca digitados aqui

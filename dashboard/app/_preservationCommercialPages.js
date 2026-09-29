@@ -8,6 +8,7 @@ import { formatDatePtBr, getEditorialDates } from '@/lib/editorial-content'
 import { buildSeoRobots } from '@/lib/seo-registry.mjs'
 import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '@/lib/marketing-content'
 import { AUTOMATION_MODELS, OUR_MODEL_COVERAGE, buildCompetitorModelRows } from '@/lib/automation-models'
+import { CUSTO_FRASE, PRECO_PLANOS_FRASE, fraseNumerosProprios, precoDoPlano } from '@/lib/resposta-citavel'
 
 const siteUrl = getSiteUrl()
 // "As outras lojas" sai da lista canônica: a resposta escrita à mão ficou
@@ -17,20 +18,22 @@ function outrasLojas(loja) {
   return `${outras.slice(0, -1).join(', ')} e ${outras.at(-1)}`
 }
 // "Basic R$39 ou Pro R$69 a cada 30 dias", montado de DEFAULT_LANDING_PLANS
-// para a abertura das páginas-resposta (plano GEO 27/09/2026: as 3 primeiras
-// linhas dizem o que é, para quem e quanto custa — preço nunca escrito à mão).
-const precoPlanosFrase = (() => {
-  const pagos = DEFAULT_LANDING_PLANS.filter((plan) => Number(plan.priceValue) > 0)
-  const partes = pagos.map((plan) => `${plan.name} ${plan.price}`)
-  const lista = partes.length <= 1 ? partes.join('') : `${partes.slice(0, -1).join(', ')} ou ${partes.at(-1)}`
-  return pagos[0]?.period ? `${lista} a cada ${pagos[0].period}` : lista
-})()
+// (lib/resposta-citavel.js) para a abertura das páginas-resposta (plano GEO
+// 27/09/2026: as 3 primeiras linhas dizem o que é, para quem e quanto custa —
+// preço nunca escrito à mão).
+const precoPlanosFrase = PRECO_PLANOS_FRASE
+const precoPro = precoDoPlano('pro')
 const registerHref = '/login?mode=register&utm_source=seo&utm_medium=organic&utm_campaign=canais-preservacao&utm_content=sprint2'
 const mainLandingHref = '/bot-canais-whatsapp'
 const diagnosticHref = '/diagnostico-antiban-whatsapp'
 const checklistHref = '/materiais/checklist-antiban-whatsapp'
 const riskCalculatorHref = '/ferramentas/calculadora-risco-whatsapp'
 
+// Topo citável (29/09/2026, item 4 da seção 6 do PLANO_MAQUINA_DE_VENDAS_IA):
+// `lead` abre dizendo o que é; `forWhom` diz para quem é, e o template soma
+// "quanto custa" (CUSTO_FRASE, de DEFAULT_LANDING_PLANS) e os 2 números
+// próprios com fonte (fraseNumerosProprios). O `title` e o `h1` NÃO mudam
+// nesta rodada: os títulos estão subindo (RESUMO_E_PLANO_2026-09-23.md).
 export const PRESERVATION_COMMERCIAL_PAGES = {
   /* Frente Tier 1 (PLANO_ACAO_SEO_IA_2026-09-01, ação 9). "shopee afiliados" tem
    * 50.000 buscas/mês com concorrência BAIXA — o maior volume do levantamento
@@ -60,7 +63,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Já é afiliada Shopee? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link, sem copiar e colar oferta por oferta. 7 dias grátis.',
     eyebrow: 'Shopee Afiliados',
     h1: 'Shopee Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
-    lead: 'Depois de entrar no Shopee Afiliados, o trabalho deixa de ser achar oferta e passa a ser publicar. Cada produto precisa virar link com o seu código, o texto precisa ser montado, e tudo isso repetido em cada grupo. O Espelha Grupos faz esse caminho sozinho: acompanha as origens que você escolhe, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e registro do que saiu.',
+    lead: 'Com um robô que publica por você: o Espelha Grupos acompanha os grupos e canais de ofertas que você escolhe, troca cada link da Shopee pelo seu código de afiliada, cupom incluído, e publica nos seus grupos do WhatsApp, com intervalo entre os envios e registro do que saiu. Depois de entrar no Shopee Afiliados, o trabalho deixa de ser achar oferta e passa a ser publicar — gerar o link, montar o texto e repetir em cada grupo. É esse caminho que sai da sua mão.',
+    forWhom: 'Afiliada Shopee que já divulga, ou quer divulgar, em mais de um grupo ou canal do WhatsApp. No plano Pro, o robô também busca ofertas da Shopee sozinho, por tema e desconto mínimo.',
     intent: 'shopee afiliados whatsapp',
     // Frente D2: volta para o post que já está na página 1 ("como ser
     // afiliado shopee"); ele aponta para cá como próximo passo.
@@ -146,7 +150,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Já é afiliada do Mercado Livre? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link, sem copiar e colar oferta por oferta.',
     eyebrow: 'Mercado Livre Afiliados',
     h1: 'Afiliado do Mercado Livre: como divulgar suas ofertas no WhatsApp sem copiar e colar',
-    lead: 'Depois de entrar no programa de afiliados do Mercado Livre, o trabalho vira publicação: gerar o link com o seu código, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
+    lead: 'Com um robô que publica por você: o Espelha Grupos acompanha os grupos e canais de ofertas que você escolher, troca cada link do Mercado Livre pelo seu link de afiliado e publica nos seus grupos do WhatsApp, com intervalo entre os envios e histórico do que saiu. Depois de entrar no programa de afiliados do Mercado Livre, o trabalho vira publicação — gerar o link com o seu código, montar o texto e repetir em cada grupo. É esse caminho que sai da sua mão.',
+    forWhom: 'Quem já está no programa de afiliados do Mercado Livre e publica ofertas em mais de um grupo ou canal do WhatsApp, com ou sem outras lojas junto.',
     intent: 'mercado livre afiliados whatsapp',
     // Frente D2: par recíproco com o post de Mercado Livre.
     guide: {
@@ -224,7 +229,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Já é afiliada Amazon? Publique suas ofertas em vários grupos e canais do WhatsApp com a sua tag no link, sem copiar e colar oferta por oferta. 7 dias grátis.',
     eyebrow: 'Amazon Associados',
     h1: 'Afiliado Amazon no WhatsApp: divulgue suas ofertas com a sua tag, sem copiar e colar',
-    lead: 'Depois de entrar no Amazon Associados, o trabalho vira publicação: gerar o link com a sua tag, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
+    lead: 'Com um robô que publica por você: o Espelha Grupos acompanha os grupos e canais de ofertas que você escolher, troca cada link da Amazon pelo seu, com a sua tag do Amazon Associados, e publica nos seus grupos do WhatsApp, com intervalo entre os envios e histórico do que saiu. Depois de entrar no Amazon Associados, o trabalho vira publicação — gerar o link com a sua tag, montar o texto e repetir em cada grupo. É esse caminho que sai da sua mão.',
+    forWhom: 'Quem já tem a tag do Amazon Associados e publica ofertas em mais de um grupo ou canal do WhatsApp, com ou sem outras lojas junto.',
     intent: 'afiliado amazon whatsapp',
     // Frente D2: par recíproco com o post de Amazon.
     guide: {
@@ -306,7 +312,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Já é divulgadora do Magalu? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu código, sem copiar e colar oferta por oferta.',
     eyebrow: 'Divulgador Magalu',
     h1: 'Divulgador Magalu: como publicar suas ofertas no WhatsApp sem copiar e colar',
-    lead: 'Depois de entrar no programa de divulgação do Magalu, o trabalho vira publicação: aplicar o seu código no link, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
+    lead: 'Com um robô que publica por você: o Espelha Grupos acompanha os grupos e canais de ofertas que você escolher, aplica o seu código de divulgador Magalu em cada link e publica nos seus grupos do WhatsApp, com intervalo entre os envios e histórico do que saiu. Depois de entrar no programa de divulgação do Magalu, o trabalho vira publicação — aplicar o seu código no link, montar o texto e repetir em cada grupo. É esse caminho que sai da sua mão.',
+    forWhom: 'Divulgador Magalu que publica ofertas em mais de um grupo ou canal do WhatsApp, com ou sem outras lojas junto.',
     intent: 'divulgador magalu whatsapp',
     related: [
       { href: '/confiabilidade-sessao-whatsapp', label: 'O que acontece quando o WhatsApp cai', note: 'Como o robô se recupera sozinho e o que você vê no painel.' },
@@ -375,7 +382,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Já é afiliada SHEIN? Veja como publicar suas ofertas em vários grupos e canais do WhatsApp com o seu link curto, sem copiar e colar oferta por oferta.',
     eyebrow: 'SHEIN Afiliados',
     h1: 'SHEIN Afiliados: como divulgar suas ofertas no WhatsApp sem copiar e colar',
-    lead: 'Depois de entrar no programa de afiliados da SHEIN, o trabalho vira publicação: gerar o link com o seu código, montar o texto e repetir em cada grupo. O Espelha Grupos acompanha as origens que você escolher, troca o link pelo seu e publica nos seus destinos, com intervalo entre os envios e histórico do que saiu.',
+    lead: 'Com um robô que publica por você: o Espelha Grupos acompanha os grupos e canais de ofertas que você escolher, troca cada link da SHEIN pelo seu código de afiliada e publica nos seus grupos do WhatsApp, com intervalo entre os envios e histórico do que saiu. Depois de entrar no programa de afiliados da SHEIN, o trabalho vira publicação — gerar o link com o seu código, montar o texto e repetir em cada grupo. É esse caminho que sai da sua mão.',
+    forWhom: 'Afiliada SHEIN que publica ofertas em mais de um grupo ou canal do WhatsApp, com ou sem outras lojas junto.',
     intent: 'shein afiliados whatsapp',
     related: [
       { href: '/seguranca-credenciais-afiliado', label: 'O que fazemos com os seus dados de afiliada', note: 'Onde ficam, para que servem e como apagar quando quiser.' },
@@ -561,6 +569,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     eyebrow: 'Ofertas automáticas da Shopee',
     h1: 'Bot que busca ofertas da Shopee sozinho e publica no seu WhatsApp',
     lead: 'Você escreve o tema — "air fryer", "tênis", "maquiagem" — e o Espelha Grupos procura as ofertas na Shopee, descarta as que não têm o desconto mínimo que você pediu, troca o link pelo seu código de afiliada e publica nos seus grupos no ritmo que você escolher. Não precisa de grupo de origem nenhum. No painel, esse modo se chama "ofertas automáticas" (o mercado também chama de garimpo automático) e faz parte do plano Pro.',
+    forWhom: `Afiliada Shopee que não tem (ou não quer depender de) grupo de origem para achar oferta. A busca automática é só da Shopee e só do plano Pro (${precoPro}); o espelhamento dos grupos que você segue vale para as ${SUPPORTED_STORES.length} lojas nos dois planos.`,
     intent: 'bot que busca ofertas shopee whatsapp',
     related: [
       { href: '/bot-afiliados-whatsapp', label: 'O outro modo: espelhar grupos que você já segue', note: 'Converte o link em 6 lojas e republica nos seus grupos e canais.' },
@@ -660,6 +669,7 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     eyebrow: 'Bot para afiliados',
     h1: 'Bot para afiliados no WhatsApp: R$ 39 por 30 dias, 7 dias grátis',
     lead: `Um bot para afiliados no WhatsApp acompanha os grupos de origem que você já segue, troca cada link de produto ou cupom pelo seu código de afiliada e republica a oferta nos seus grupos e canais. O Espelha Grupos faz isso em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), com intervalo entre envios, limite por destino e histórico de tudo o que saiu.`,
+    forWhom: 'Afiliadas que divulgam uma ou mais dessas lojas em grupos e canais do WhatsApp e querem parar de copiar, trocar e colar cada link. No plano Pro, o robô também busca ofertas da Shopee sozinho.',
     intent: 'bot para afiliados whatsapp',
     related: [
       // 27/09/2026 (PLANO_SEO_GEO, B7): o hub dos 3 modelos nasce linkado
@@ -803,7 +813,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'O bot pega a oferta do grupo que você acompanha, troca o link pelo seu código de afiliado e publica nos seus grupos. 6 lojas: de Shopee a AliExpress.',
     eyebrow: 'Bot para achadinhos',
     h1: 'Bot para achadinhos no WhatsApp: as ofertas saem sozinhas',
-    lead: 'Um bot de achadinhos acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp. Você deixa de copiar e colar oferta por oferta e passa a revisar o que já foi enviado.',
+    lead: `Um bot de achadinhos acompanha os grupos onde as promoções aparecem primeiro, troca o link pelo seu código de afiliado e publica a oferta nos seus próprios grupos e canais do WhatsApp. O Espelha Grupos é esse bot, em ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}). Você deixa de copiar e colar oferta por oferta e passa a revisar o que já foi enviado.`,
+    forWhom: 'Quem administra grupo de achadinhos no WhatsApp e hoje copia oferta de outros grupos à mão. Grupos ilimitados nos dois planos; Canais do WhatsApp são do Pro.',
     intent: 'bot para achadinhos whatsapp',
     relatedTitle: 'Continue: o que publicar nos seus achadinhos',
     related: [
@@ -890,7 +901,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Por que o WhatsApp bane quem divulga ofertas em grupos, o que aumenta o risco e o que dá para controlar de verdade. Ninguém pode garantir imunidade.',
     eyebrow: 'WhatsApp banido: o que dá para controlar',
     h1: 'Teve o WhatsApp banido divulgando ofertas? Veja o que dá para controlar',
-    lead: 'Contas de WhatsApp usadas para divulgar ofertas costumam ser banidas quando o comportamento parece automático demais: muitas mensagens iguais em sequência, links repetidos e denúncias de membros. Nenhuma ferramenta garante imunidade — o que dá para controlar é ritmo, variação de texto e volume por destino.',
+    lead: 'Dá para controlar ritmo, variação de texto e volume por destino — e nada além disso: nenhuma ferramenta garante imunidade. Contas de WhatsApp usadas para divulgar ofertas costumam ser banidas quando o comportamento parece automático demais: muitas mensagens iguais em sequência, links repetidos e denúncias de membros. O Espelha Grupos é um robô para afiliadas que publica com intervalo entre os envios, limite por destino e horário de descanso, e bloqueia a mesma oferta repetida no mesmo grupo.',
+    forWhom: 'Afiliada que já perdeu um número, ou tem medo de perder, e quer publicar ofertas com ritmo controlado. Fila com intervalo, horário de descanso, limite por dia e variação do texto são do plano Pro.',
     intent: 'anti-ban whatsapp',
     relatedTitle: 'Continue: reduzir risco na prática',
     related: [
@@ -939,7 +951,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Planeje a migração de grupos de achadinhos para Canais do WhatsApp com o Espelha Grupos, mantendo grupos como fonte/comunidade e canais como vitrine preservada.',
     eyebrow: 'Migração grupo → canal',
     h1: 'Migre grupos de achadinhos para canais sem parar a operação',
-    lead: 'O Espelha Grupos permite uma transição gradual: grupos continuam úteis como comunidade ou fonte, enquanto os Canais do WhatsApp viram uma vitrine organizada com cadência e preservação avançada.',
+    lead: 'Dá para migrar aos poucos, sem parar de publicar: o Espelha Grupos é um robô para afiliadas que publica as mesmas ofertas, com o seu código de afiliada, nos grupos e nos Canais do WhatsApp. Os grupos continuam úteis como comunidade ou fonte, enquanto os canais viram uma vitrine organizada, com intervalo entre as publicações e histórico do que saiu.',
+    forWhom: `Quem tem grupo de achadinhos e quer abrir um Canal do WhatsApp sem dobrar o trabalho. Canais como origem e destino são do plano Pro (${precoPro}).`,
     intent: 'migrar grupo para canal whatsapp',
     relatedTitle: 'Continue: grupos, canais e o que publicar',
     related: [
@@ -986,7 +999,8 @@ export const PRESERVATION_COMMERCIAL_PAGES = {
     description: 'Publique ofertas em Canal do WhatsApp com o Espelha Grupos usando cadência humana, variações, monitoramento e Módulo de Preservação Avançada.',
     eyebrow: 'Bot para Canal do WhatsApp',
     h1: 'Canal do WhatsApp precisa de bot com cadência, não disparo',
-    lead: 'O Espelha Grupos transforma o canal em vitrine de ofertas com regras de publicação, variações e monitoramento. O objetivo é preservar a operação, não apenas postar mais rápido.',
+    lead: 'Um bot para Canal do WhatsApp publica as suas ofertas no canal com o seu código de afiliada, uma de cada vez, no ritmo que você define. O Espelha Grupos faz isso com regras de publicação, variação do texto e histórico do que saiu. O objetivo é preservar a operação, não apenas postar mais rápido.',
+    forWhom: `Afiliada que usa (ou quer usar) um Canal do WhatsApp como vitrine de ofertas. Canais são do plano Pro (${precoPro}).`,
     intent: 'bot para canal whatsapp',
     relatedTitle: 'Continue: cadência, canal e o que publicar',
     related: [
@@ -1181,6 +1195,14 @@ export function PreservationCommercialPage({ pageKey }) {
               <span className="pill"><span className="dot" />{page.eyebrow}</span>
               <h1 id="page-title" style={s.h1}>{page.h1}</h1>
               <p style={s.lead}>{page.lead}</p>
+              {/* Topo citável (29/09/2026): para quem é + quanto custa (preço de
+                  DEFAULT_LANDING_PLANS) + 2 números próprios com fonte. */}
+              {page.forWhom ? (
+                <p style={{ ...s.small, marginTop: 14, color: 'var(--ink)' }}>
+                  <strong>Para quem é:</strong> {page.forWhom} <strong>Quanto custa:</strong> {CUSTO_FRASE}
+                </p>
+              ) : null}
+              <p style={{ ...s.small, marginTop: 10 }}>{fraseNumerosProprios()}</p>
               {/* Frescor visível: a IA e a pessoa leem a mesma data do schema (dateModified). */}
               <p style={s.updated}>Revisado em <time dateTime={dates.updatedAt}>{formatDatePtBr(dates.updatedAt)}</time></p>
               {page.competitorNudge ? (
@@ -1232,7 +1254,7 @@ export function PreservationCommercialPage({ pageKey }) {
         {Array.isArray(page.decisionQA) && page.decisionQA.length > 0 && (
           <section style={s.section} aria-labelledby="decision-qa-title">
             <div className="wrap">
-              <SectionHeader eyebrow="Resposta rápida" title="O que você precisa saber antes de decidir" />
+              <SectionHeader eyebrow="Resposta rápida" title="O que você precisa saber antes de decidir?" />
               <div style={{ display: 'grid', gap: 14 }}>
                 {page.decisionQA.map(({ q, a }) => (
                   <div key={q} style={s.card}>
@@ -1267,7 +1289,7 @@ export function PreservationCommercialPage({ pageKey }) {
         {page.bestFor ? (
           <section style={s.section} aria-labelledby="best-for-title">
             <div className="wrap">
-              <SectionHeader eyebrow="Para quem é" title="Melhor para — e para quem não é" />
+              <SectionHeader eyebrow="Para quem é" title="Para quem é o Espelha Grupos, e para quem não é?" />
               <div style={s.grid}>
                 <div style={s.card}>
                   <strong style={{ display: 'block', fontSize: 18, marginBottom: 10 }}>Melhor para</strong>

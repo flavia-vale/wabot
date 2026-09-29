@@ -198,6 +198,15 @@ publicada no `llms.txt`.
   produto). Guarda: `test/marca-unica-espelha-grupos.test.js`.
 - **Medição de IA:** `node scripts/validar-medicao-ia.mjs` antes de fechar o
   placar (um "SIM" maiúsculo zerou o de 01/09).
+- **Definição da marca é UMA frase (29/09/2026):** `BRAND_DEFINITION_PT`
+  ("Espelha Grupos é um robô para afiliadas que…") = `FICHA_DEFINICAO`; abre o
+  Hero da home, `/quem-somos` e a 1ª linha do `llms.txt`. Guarda:
+  `test/ficha-tecnica-canonica.test.js`.
+- **Topo citável das 20 prioritárias (29/09/2026):** preço e números próprios
+  saem de `dashboard/lib/resposta-citavel.js` (preço de `DEFAULT_LANDING_PLANS`;
+  números medidos, com data e fonte na mesma frase). Número novo só medido;
+  citação entre aspas só com depoimento real autorizado. Guarda:
+  `test/topo-citavel-paginas-prioritarias.test.js`.
 
 ## Relatórios do Bing Webmaster — o que é defeito e o que não é (29/09/2026)
 
