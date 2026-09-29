@@ -244,7 +244,7 @@ async function main() {
   // Distingue "o Mercado Pago recusou" de "nós seguramos a tentativa": a espera
   // (429) manda a cliente para o pagamento avulso com a mensagem "espere X" —
   // e do ponto de vista dela é indistinguível de "não consegui assinar".
-  const EVENTOS = ['subscription_started', 'subscription_checkout_reused', 'subscription_attempt_throttled', 'subscription_provider_rejected']
+  const EVENTOS = ['subscription_started', 'subscription_checkout_reused', 'subscription_checkout_reuse_skipped', 'subscription_attempt_throttled', 'subscription_provider_rejected']
   console.log(`\n[2b] O que o sistema decidiu (eventos de assinatura)`)
   if (idsAlvo?.length) {
     const eventos = await db.analyticsEvent.findMany({
@@ -270,6 +270,20 @@ async function main() {
     }).catch(() => null)
     if (!contagem) console.log('    (não consegui ler os eventos)')
     else for (const c of contagem) console.log(`    ${c.event.padEnd(34)} ${c._count._all}`)
+    // Motivos pelos quais um checkout em aberto NÃO foi reaproveitado.
+    const pulados = await db.analyticsEvent.findMany({
+      where: { event: 'subscription_checkout_reuse_skipped', createdAt: { gte: desde } },
+      select: { metadata: true },
+      take: 500,
+    }).catch(() => [])
+    const porMotivo = new Map()
+    for (const e of pulados) {
+      let m = {}
+      try { m = JSON.parse(e.metadata || '{}') } catch { /* metadata ilegível */ }
+      const chave = [m.reason || '?', m.httpStatus ? `http ${m.httpStatus}` : null, m.providerStatus ? `mp=${m.providerStatus}` : null].filter(Boolean).join(' · ')
+      porMotivo.set(chave, (porMotivo.get(chave) || 0) + 1)
+    }
+    for (const [motivo, n] of [...porMotivo].sort((a, b) => b[1] - a[1])) console.log(`      reaproveitamento ignorado: ${motivo.padEnd(40)} ${n}`)
   }
 
   // ---- Causa 3: o motivo que só o Mercado Pago sabe ----------------------

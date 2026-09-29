@@ -94,6 +94,34 @@ export function decidePendingSubscriptionReuse({
 }
 
 /**
+ * Por que um checkout em aberto NÃO foi reaproveitado (observabilidade).
+ *
+ * Medido em 29/09/2026 (30 dias, 17 contas): checkouts duplicados em 1 a 8
+ * minutos e uma conta com 3 checkouts em aberto — o reaproveitamento deveria
+ * ter devolvido a cliente ao link que já existia. Hoje o sistema não registra
+ * o motivo quando o reaproveitamento é ignorado, então não dá para saber se a
+ * causa é a consulta ao MP falhando (429/timeout), o checkout já encerrado lá,
+ * ou e-mail diferente. Só descreve; NÃO muda a decisão.
+ *
+ * Devolve `null` quando não há nada a explicar (não existia checkout aberto).
+ * Nunca inclui e-mail nem dado pessoal — só o motivo e o código HTTP.
+ *
+ * @returns {null | { reason: string, httpStatus?: number|null, providerStatus?: string|null, cause?: string|null }}
+ */
+export function describeReuseSkip({ pending, decision, snapshot, emailMatches } = {}) {
+  if (!pending) return null
+  if (!decision?.reuse) return decision?.reason ? { reason: decision.reason } : null
+  if (!snapshot?.ok) {
+    return { reason: 'snapshot_failed', httpStatus: snapshot?.httpStatus ?? null, cause: snapshot?.reason ?? null }
+  }
+  const providerStatus = normalizeStatus(snapshot.status)
+  if (providerStatus !== 'pending') return { reason: 'provider_status_not_pending', providerStatus: providerStatus || null }
+  if (!snapshot.initPoint) return { reason: 'no_init_point' }
+  if (!emailMatches) return { reason: 'payer_email_differs' }
+  return null
+}
+
+/**
  * Intervalo mínimo antes de recriar um checkout idêntico depois de tentativas
  * seguidas que não deram em pagamento.
  *

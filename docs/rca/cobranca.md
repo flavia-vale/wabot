@@ -209,6 +209,13 @@ liberando de novo `SUBSCRIPTION_ATTEMPT_COOLDOWN_MS` (2h) depois da última.
   de "antifraude", "preapproval", "gateway", "checkout" na tela — teste falha
   se jargão voltar.
 
+**Sinal novo (29/09/2026): `subscription_checkout_reuse_skipped`** — havia checkout em aberto e,
+mesmo assim, nasceu outro. Guarda só o motivo (`snapshot_failed` com o HTTP, `provider_status_not_pending`,
+`payer_email_differs`, `no_init_point`, `plan_changed`, `too_old`), nunca e-mail. Motivo: em 30 dias
+7 contas tinham checkouts duplicados em 1 a 8 min (uma com 3 em aberto) e o sistema não sabia dizer por quê.
+Ler com `node scripts/diag-assinatura-recusada.mjs --days=30 --no-live` (bloco [2b]). Só descreve; não muda a
+decisão. **Decidir a correção só depois de alguns dias de dado.**
+
 Sinais `subscription_checkout_reused` e `subscription_attempt_throttled`
 (allowlist em `src/analytics.js`) — cada um é uma recusa por antifraude que
 deixou de acontecer. Volume alto no segundo é sinal de que muita gente está
