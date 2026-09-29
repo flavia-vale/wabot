@@ -103,6 +103,31 @@ function maiorRepeticaoNaJanela(lista) {
   return melhor
 }
 
+/**
+ * Igual à anterior, mas CONTANDO checkouts de qualquer plano na mesma janela.
+ * A regra de espera hoje conta só o mesmo plano (trocar de plano = intenção
+ * nova). Isto mede quantas contas fazem tentativas em planos diferentes, sem
+ * assinar, para decidir com dado se a regra deveria contar entre planos.
+ */
+function maiorTentativaEntrePlanos(lista) {
+  const ordenada = [...lista]
+    .filter(s => s.createdAt)
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+  let melhor = { total: 0, planos: 0 }
+  for (let i = 0; i < ordenada.length; i++) {
+    const inicio = new Date(ordenada[i].createdAt).getTime()
+    const planos = new Set()
+    let total = 0
+    for (let j = i; j < ordenada.length; j++) {
+      if (new Date(ordenada[j].createdAt).getTime() - inicio > SUBSCRIPTION_ATTEMPT_WINDOW_MS) break
+      total++
+      planos.add(String(ordenada[j].plan))
+    }
+    if (total > melhor.total) melhor = { total, planos: planos.size }
+  }
+  return melhor
+}
+
 function idDoAviso(aviso) {
   if (aviso?.dataId) return String(aviso.dataId)
   try {
@@ -183,6 +208,7 @@ async function main() {
   }
 
   let suspeitas = 0
+  let entrePlanos = 0
   for (const [userId, lista] of porConta) {
     const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, name: true } }).catch(() => null)
     const rotulo = user?.email || user?.name || userId
@@ -196,7 +222,12 @@ async function main() {
     const repeticao = maiorRepeticaoNaJanela(lista)
     const repetido = repeticao.total >= 2
     if (repetido) suspeitas++
+    const entre = maiorTentativaEntrePlanos(lista)
+    const semAssinaturaAtiva = !lista.some(x => ['authorized', 'active'].includes(String(x.status).toLowerCase()))
+    const cruzou = entre.planos >= 2 && entre.total >= 2 && semAssinaturaAtiva
+    if (cruzou) entrePlanos++
     console.log(`\n  ${rotulo} — ${lista.length} checkout(s), ${pendentes.length} em aberto${repetido ? `   << ${repeticao.total} tentativas do plano ${repeticao.plan} em ${repeticao.minutos} min` : ''}`)
+    if (cruzou) console.log(`    (entre planos: ${entre.total} tentativas em ${entre.planos} planos diferentes na janela, sem assinar — a regra de espera de hoje NÃO conta isso)`)
     for (const s of lista) {
       const decisao = decidePendingSubscriptionReuse({ subscription: s, plan: s.plan })
       console.log(`    ${fmt(s.createdAt)}  plano=${String(s.plan).padEnd(6)} situacao=${String(s.status).padEnd(10)} reaproveitavel=${decisao.reuse ? 'sim' : `nao (${decisao.reason})`}`)
@@ -205,6 +236,40 @@ async function main() {
 
   if (suspeitas > 0) {
     console.log(`\n>> ${suspeitas} conta(s) com checkouts repetidos e idênticos — o padrão que o antifraude do MP recusa.`)
+  }
+
+  console.log(`\n>> Contas que tentaram planos DIFERENTES na mesma janela sem assinar: ${entrePlanos} de ${porConta.size}`)
+
+  // ---- O que o NOSSO sistema decidiu ------------------------------------
+  // Distingue "o Mercado Pago recusou" de "nós seguramos a tentativa": a espera
+  // (429) manda a cliente para o pagamento avulso com a mensagem "espere X" —
+  // e do ponto de vista dela é indistinguível de "não consegui assinar".
+  const EVENTOS = ['subscription_started', 'subscription_checkout_reused', 'subscription_attempt_throttled', 'subscription_provider_rejected']
+  console.log(`\n[2b] O que o sistema decidiu (eventos de assinatura)`)
+  if (idsAlvo?.length) {
+    const eventos = await db.analyticsEvent.findMany({
+      where: { userId: { in: idsAlvo }, event: { in: EVENTOS }, createdAt: { gte: desde } },
+      orderBy: { createdAt: 'asc' },
+      take: 60,
+      select: { event: true, createdAt: true, metadata: true },
+    }).catch(() => null)
+    if (eventos === null) console.log('    (não consegui ler os eventos)')
+    else if (!eventos.length) console.log('    nenhum evento de assinatura na janela para esta conta')
+    for (const e of eventos || []) console.log(`    ${fmt(e.createdAt)}  ${e.event.padEnd(34)} ${String(e.metadata || '').slice(0, 80)}`)
+    if ((eventos || []).some(e => e.event === 'subscription_attempt_throttled')) {
+      console.log('    >> A espera de tentativas (429) SEGUROU esta conta: a tela mandou esperar e ofereceu o avulso.')
+    }
+    if ((eventos || []).some(e => e.event === 'subscription_provider_rejected')) {
+      console.log('    >> O Mercado Pago recusou CRIAR a assinatura (antes do cartão) — ver a metadata acima.')
+    }
+  } else {
+    const contagem = await db.analyticsEvent.groupBy({
+      by: ['event'],
+      where: { event: { in: EVENTOS }, createdAt: { gte: desde } },
+      _count: { _all: true },
+    }).catch(() => null)
+    if (!contagem) console.log('    (não consegui ler os eventos)')
+    else for (const c of contagem) console.log(`    ${c.event.padEnd(34)} ${c._count._all}`)
   }
 
   // ---- Causa 3: o motivo que só o Mercado Pago sabe ----------------------
