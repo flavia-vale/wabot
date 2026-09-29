@@ -29,7 +29,7 @@ test('POST /api/links/shortlink cria link e GET /r/:hash 302 redireciona', async
 
   const create = await app.inject({
     method: 'POST', url: '/api/links/shortlink',
-    payload: { originalUrl: 'https://example.com/produto?id=42' },
+    payload: { originalUrl: 'https://www.amazon.com.br/dp/B0TESTE42?tag=cliente-20&th=1' },
   })
   assert.equal(create.statusCode, 200)
   const { hash } = JSON.parse(create.body)
@@ -37,7 +37,7 @@ test('POST /api/links/shortlink cria link e GET /r/:hash 302 redireciona', async
 
   const redirect = await app.inject({ method: 'GET', url: `/r/${hash}` })
   assert.equal(redirect.statusCode, 302)
-  assert.equal(redirect.headers.location, 'https://example.com/produto?id=42')
+  assert.equal(redirect.headers.location, 'https://www.amazon.com.br/dp/B0TESTE42?tag=cliente-20&th=1')
 
   // click foi gravado
   const link = await db.affiliateLink.findUnique({ where: { hash } })
@@ -68,7 +68,7 @@ test('POST /api/links/shortlink valida ownership do groupId', async (t) => {
   })
   const res = await app.inject({
     method: 'POST', url: '/api/links/shortlink',
-    payload: { originalUrl: 'https://ex.com', groupId: otherGroup.id },
+    payload: { originalUrl: 'https://s.shopee.com.br/abc123', groupId: otherGroup.id },
   })
   assert.equal(res.statusCode, 404)
 })

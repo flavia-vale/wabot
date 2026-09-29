@@ -81,6 +81,8 @@ import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queue
 import { buildOutsideSendWindowReason, shouldDropOutsideSendWindow } from './core/sendWindow.js'
 import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
 import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
+import { anchorFor, applyTrackedLinks, resolveTrackedLinkSettings } from './core/trackedLinks.js'
+import { createShortlink } from './core/clickTracker.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -1173,7 +1175,16 @@ async function loadConfig() {
     logger.warn({ err: err?.message }, 'Falha ao carregar cupons da cliente; ofertas seguem sem cupom até a próxima carga')
   }
 
-  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive, coupons }
+  // Link rastreado (src/core/trackedLinks.js): flag da cliente + plano PRO/Trial
+  // (mesmo acesso da Preservação avançada, onde o rastreio já aparece) +
+  // SHORTLINK_BASE_URL no servidor. Faltou qualquer um → desligado.
+  const trackedLinks = resolveTrackedLinkSettings({
+    botConfig,
+    planAllows: Boolean(preservation?.active),
+    baseUrl: process.env.SHORTLINK_BASE_URL,
+  })
+
+  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive, coupons, trackedLinks }
 }
 
 async function getConfig() {
@@ -2230,14 +2241,43 @@ function kindDoCard(fonte) {
   return DELIVERY_KIND.CARD_LOJA
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto, watermark = null }) {
+// Troca os links convertidos pelo shortlink rastreado (src/core/trackedLinks.js).
+// Desligado → devolve o MESMO texto, sem tocar no banco. Qualquer falha →
+// texto de hoje (rastreio nunca derruba nem segura oferta).
+async function trackLinksForSend({ text, conversions, destJid, messageLogId, settings }) {
+  const semRastreio = { text, anchors: new Map() }
+  if (!settings?.enabled) return semRastreio
+  try {
+    let groupId = null
+    try {
+      const destino = await db.group.findFirst({ where: { userId, waJid: destJid, role: 'post' }, select: { id: true } })
+      groupId = destino?.id ?? null
+    } catch { /* clique sem grupo ainda conta para a conta */ }
+    return await applyTrackedLinks(text, conversions, {
+      enabled: true,
+      createLink: url => createShortlink(userId, url, { baseUrl: settings.baseUrl, groupId, messageLogId }),
+      onError: (err, url) => logger.warn({ err: err?.message, destJid, url }, 'Link rastreado: shortlink não criado; link sai direto'),
+    })
+  } catch (err) {
+    logger.warn({ err: err?.message, destJid }, 'Link rastreado falhou; oferta sai com o link direto')
+    return semRastreio
+  }
+}
+
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto, watermark = null, anchorUrl }) {
   // `onFonteDaFoto` (opcional): diz de ONDE veio a foto do card ('loja',
   // 'origem' ou 'banner'). Vai por callback, e não como campo do objeto
   // devolvido, porque esse objeto é o urlInfo que entra no proto do WhatsApp —
   // campo estranho ali é risco desnecessário (ver o RCA do `title` do PR #1186).
   const marcarFonte = fonte => { try { onFonteDaFoto?.(fonte) } catch { /* best-effort */ } }
-  const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
-  if (!matchedText) return null
+  const realUrl = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
+  if (!realUrl) return null
+  // Link rastreado (src/core/trackedLinks.js): quando o texto leva o shortlink
+  // no lugar do link convertido, a ÂNCORA do card (matched-text/canonical-url)
+  // é o shortlink — é ele que está literalmente no corpo. Todo o resto (foto,
+  // título, raspagem) continua no link REAL: o shortlink nunca é buscado aqui,
+  // senão o próprio robô contaria clique. Sem anchorUrl = comportamento de hoje.
+  const matchedText = isHttpUrl(anchorUrl) ? anchorUrl : realUrl
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
   // âncora o cliente WhatsApp não associa o card ao link e não renderiza nada.
   // Sem âncora, devolve null e o Baileys tenta o preview automático.
@@ -2246,7 +2286,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     return null
   }
 
-  const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
+  const sourceUrl = isHttpUrl(primary?.url) ? primary.url : realUrl
 
   // jpegThumbnail = placeholder pequeno (inline no proto, mostrado antes da
   // HQ carregar). hqSourceBuffer = imagem em resolução MAIOR, usada só como
@@ -2440,7 +2480,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // deploy do PR #1186 — cards sumiram até este fix). Em cupom, prefixa
     // "Cupom" — mesmo texto do banner (buildStoreBrandCardImage), pra não
     // ficar inconsistente (imagem diz "Cupom Amazon", título diz só "Amazon").
-    title: storePreviewTitle(primary?.platform, matchedText, useCouponBrandCard),
+    title: storePreviewTitle(primary?.platform, realUrl, useCouponBrandCard),
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
@@ -5281,6 +5321,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
+          // Link rastreado (src/core/trackedLinks.js), no ÚLTIMO passo antes do
+          // envio: depois da conversão e da trava do espelhamento, por destino
+          // (o clique fica ligado a este grupo e a este MessageLog). Desligado
+          // (padrão) → sendText é o MESMO variantText de sempre e anchorUrl é
+          // undefined, ou seja, payload idêntico ao de hoje.
+          const tracked = await trackLinksForSend({ text: variantText, conversions, destJid, messageLogId: log.id, settings: cfg.trackedLinks })
+          const sendText = tracked.text
+          const primaryAnchor = anchorFor(tracked.anchors, primary?.converted)
           // Quanto a MENSAGEM DE ORIGEM trouxe de imagem. `getOriginalPhotoOnce`
           // é memoizado por mensagem, então isto não gera download extra — e é o
           // dado que separa "não havia foto" de "havia foto e se perdeu".
@@ -5341,7 +5389,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             let fonteDaFoto = null
             const linkPreview = await buildManualLinkPreview({
               onFonteDaFoto: fonte => { fonteDaFoto = fonte },
-              text: variantText,
+              text: sendText,
               primary,
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
@@ -5353,13 +5401,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // mais ninguém (getImage devolve null cedo), então não há
               // download duplicado da mesma mídia.
               fetchOriginPhoto: getOriginalPhotoOnce,
+              anchorUrl: primaryAnchor,
               // Modo "card com marca d'água": a marca é uma camada em cima do
               // modo-base, igual ao par 'original'/'original_watermark'.
               watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
             })
             deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
-              finalText: variantText,
+              finalText: sendText,
               image: null,
               useLinkPreview: true,
               linkPreview,
@@ -5380,7 +5429,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
             // e externalAdReply). forwardNewsletter=null: relay nunca injeta canal.
             const replayProto = buildRelayProto(original.proto, {
-              caption: hasCaption ? variantText : undefined,
+              caption: hasCaption ? sendText : undefined,
               forwardNewsletter: null,
             })
             deliveryInfo.kind = DELIVERY_KIND.RELAY
@@ -5475,7 +5524,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             let fonteDaFotoFallback = null
             const fallbackPreview = await buildManualLinkPreview({
               onFonteDaFoto: fonte => { fonteDaFotoFallback = fonte },
-              text: variantText,
+              text: sendText,
               primary,
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
@@ -5486,6 +5535,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                 vitrineConfirmed: isDirectVitrineShare(primary?.url),
               }),
               fetchOriginPhoto: getOriginalPhotoOnce,
+              anchorUrl: primaryAnchor,
               // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
               // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
               allowSmallOriginPhoto: true,
@@ -5496,7 +5546,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             })
             deliveryInfo.kind = fallbackPreview ? kindDoCard(fonteDaFotoFallback) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
-              finalText: variantText,
+              finalText: sendText,
               image: null,
               useLinkPreview: true,
               linkPreview: fallbackPreview,
@@ -5505,7 +5555,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
           deliveryInfo.kind = image ? DELIVERY_KIND.FOTO : DELIVERY_KIND.TEXTO
           return buildMonitoredMessagePayload({
-            finalText: variantText,
+            finalText: sendText,
             image,
             useLinkPreview,
           })
