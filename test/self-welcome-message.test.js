@@ -13,6 +13,9 @@ import {
   buildMissingCredentialNudgeText,
   buildMissingGroupsNudgeText,
   buildAdminSupportMessageText,
+  isTrialDecisionSelfMessageEnabled,
+  decideTrialDecisionSelfMessage,
+  buildTrialDecisionMessageText,
 } from '../src/core/selfWelcomeMessage.js'
 
 test('sem env, o piloto é a lista padrão do código', () => {
@@ -136,4 +139,53 @@ test('mensagem manual do suporte: título fixo, corpo é o que a admin escreveu,
 test('mensagem manual do suporte tolera espaço/undefined no corpo', () => {
   assert.doesNotThrow(() => buildAdminSupportMessageText({ corpo: '  texto  ' }))
   assert.doesNotThrow(() => buildAdminSupportMessageText({}))
+})
+
+// C1(b) — decisão do teste no próprio número, a partir do dia 5.
+const dia5 = new Date('2026-10-05T15:00:00Z')
+const expira = new Date('2026-10-07T15:00:00Z') // faltam 2 dias = dia 5 de 7
+const base = {
+  accountEmail: 'cliente@exemplo.com',
+  pilotEmails: ['outra@exemplo.com'],
+  enabled: true,
+  optedIn: true,
+  plan: 'trial',
+  accessExpiresAt: expira,
+  offersPublished: 12,
+  destGroupCount: 2,
+  now: dia5,
+}
+
+test('decisão do teste: só com a env ligada (ou conta do piloto)', () => {
+  assert.equal(isTrialDecisionSelfMessageEnabled({}), false)
+  assert.equal(isTrialDecisionSelfMessageEnabled({ TRIAL_DECISION_SELF_MESSAGE_ENABLED: 'true' }), true)
+  assert.equal(decideTrialDecisionSelfMessage({ ...base, enabled: false }), null)
+  assert.ok(decideTrialDecisionSelfMessage({ ...base, enabled: false, pilotEmails: ['cliente@exemplo.com'] }))
+  assert.ok(decideTrialDecisionSelfMessage(base))
+})
+
+test('decisão do teste: exige opt-in do WhatsApp de contato', () => {
+  assert.equal(decideTrialDecisionSelfMessage({ ...base, optedIn: false }), null)
+})
+
+test('decisão do teste: não antes do dia 5, não sem prova, não fora do teste, não vencido', () => {
+  assert.equal(decideTrialDecisionSelfMessage({ ...base, accessExpiresAt: new Date('2026-10-09T15:00:00Z') }), null)
+  assert.equal(decideTrialDecisionSelfMessage({ ...base, offersPublished: 0 }), null)
+  assert.equal(decideTrialDecisionSelfMessage({ ...base, plan: 'basic' }), null)
+  assert.equal(decideTrialDecisionSelfMessage({ ...base, accessExpiresAt: new Date('2026-10-05T10:00:00Z') }), null)
+})
+
+test('decisão do teste: uma vez por dia de calendário', () => {
+  const screen = decideTrialDecisionSelfMessage(base)
+  assert.equal(decideTrialDecisionSelfMessage({ ...base, lastSentDay: screen.dayKey }), null)
+  assert.ok(decideTrialDecisionSelfMessage({ ...base, lastSentDay: '2026-10-04' }))
+})
+
+test('decisão do teste: texto com prova e link do plano, sem promessa de ganho', () => {
+  const screen = decideTrialDecisionSelfMessage(base)
+  const texto = buildTrialDecisionMessageText({ screen, planUrl: 'https://exemplo.com/painel/plano' })
+  assert.match(texto, /12 ofertas em 2 grupos/)
+  assert.match(texto, /https:\/\/exemplo\.com\/painel\/plano/)
+  assert.match(texto, /Essa é uma mensagem do Espelha Grupos/)
+  assert.doesNotMatch(texto, /comiss|ganh|lucro|anti-?ban|sem risco/i)
 })
