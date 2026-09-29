@@ -5,7 +5,7 @@ import { getSiteUrl } from '@/lib/site-url'
 import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/comparativos'
-const title = 'Comparativos e alternativas para operação de afiliados no WhatsApp'
+const title = 'Comparativos e alternativas: afiliados no WhatsApp'
 const description = 'Hub com páginas de comparativos e alternativas para avaliar Espelha Grupos, planilha manual e automações genéricas com critérios transparentes.'
 
 export const metadata = {

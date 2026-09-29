@@ -7,7 +7,7 @@ import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/parcerias'
 const siteUrl = getSiteUrl()
-const title = 'Parcerias | Co-marketing para admins e afiliados de ofertas'
+const title = 'Parcerias: co-marketing para admins e afiliados'
 const description = 'Programa de parcerias do Espelha Grupos para admins, creators e comunidades que operam ofertas no WhatsApp com piloto guiado, UTMs e operação responsável.'
 
 const partnerTypes = [

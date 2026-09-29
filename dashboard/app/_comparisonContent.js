@@ -235,7 +235,7 @@ export const COMPARISON_PAGES = {
   '/alternativas/proafiliados': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · ProAfiliados',
-    title: 'Alternativa ao ProAfiliados: sem anúncio e sem 2 h/dia',
+    title: 'Alternativa ao ProAfiliados: sem anúncio, sem 2 h/dia',
     description: 'ProAfiliados: grátis permanente, mas só 2 h/dia e com a marca dele nas mensagens. Compare preço, anúncios, lojas e relatórios. Verificado em 27/09/2026.',
     competitorSlugs: ['proafiliados-com'],
     productPage: {
@@ -705,7 +705,7 @@ export const COMPARISON_PAGES = {
   '/melhores-bots-para-afiliados-whatsapp': {
     format: 'alternative-plural',
     eyebrow: 'Critérios · Avaliação de ferramentas',
-    title: 'Melhores bots para afiliados no WhatsApp: como comparar',
+    title: 'Melhores bots de afiliados no WhatsApp: como comparar',
     description: 'Lista de critérios para avaliar bots e ferramentas de WhatsApp para afiliados sem ranking falso, promessa de ganho ou prova social inventada.',
     tldr: 'Não escolha por promessa de ganho: escolha por processo confiável, rastreabilidade e aderência às políticas das plataformas. E confira qual dos dois modos você precisa — espelhar grupos que já segue ou deixar o robô buscar oferta sozinho —, porque o mercado divide isso em ferramentas diferentes.',
     // 23/09/2026: "bot para afiliados" é lido por IA como "robô que busca oferta
@@ -817,7 +817,7 @@ export const COMPARISON_PAGES = {
   '/alternativas/divulgalinks': {
     format: 'alternative-plural',
     eyebrow: 'Alternativas · DivulgaLinks',
-    title: 'Alternativa ao DivulgaLinks: preço por grupo, não nicho',
+    title: 'Alternativa ao DivulgaLinks: preço por grupo',
     description: 'No DivulgaLinks o preço sobe por quantidade de nichos, e cada nicho embute Instagram e Telegram. No Espelha Grupos são grupos ilimitados por R$ 69 em 30 dias.',
     competitorSlugs: ['divulga-links'],
     productPage: {

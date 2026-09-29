@@ -8,7 +8,7 @@ const slug = '/programa-de-afiliados'
 // 73 chars de texto próprio. Reescrito em 27/09/2026: "Qual paga mais" teve
 // 0 clique em 225 impressões (posição 8) — agora entra pela palavra buscada
 // ("comissão de afiliado") e entrega a resposta em número já no título.
-const title = 'Comissão de afiliado: Shopee 3%, Amazon 0-13%, ML 0-16%'
+const title = 'Comissão afiliado: Shopee 3%, Amazon 0-13%, ML 0-16%'
 const description = 'Programas de afiliados Shopee, Amazon e Mercado Livre lado a lado: comissão por categoria, prazo de atribuição e entrada gratuita nos três, com fonte e data.'
 const dates = getEditorialDates(slug)
 

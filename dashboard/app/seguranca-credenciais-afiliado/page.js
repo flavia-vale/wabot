@@ -3,7 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
-const title = 'Segurança das credenciais de afiliado no Espelha Grupos'
+const title = 'Segurança das suas credenciais de afiliado'
 const description = 'Como o Espelha Grupos protege as credenciais das suas contas de afiliado e sua chave PIX: criptografia em repouso, proteção contra força bruta no login e isolamento entre ambientes.'
 const slug = '/seguranca-credenciais-afiliado'
 const dates = getEditorialDates(slug)

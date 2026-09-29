@@ -18,7 +18,7 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 // impossível. Não é verdade e não é prometível — as duas defesas mudam quem
 // leva o crédito e quanto trabalho a cópia dá, não a possibilidade dela.
 
-const title = 'Copiaram minha oferta no WhatsApp: o que dá e o que não dá para fazer'
+const title = 'Copiaram minha oferta no WhatsApp: o que fazer'
 const description = 'Quando outro grupo copia e cola a sua oferta, quem leva a comissão é quem publicou o link. As duas defesas que existem de verdade: marca d’água na foto e mensagem reescrita com o seu texto.'
 const slug = '/copiaram-minha-oferta-no-whatsapp'
 const dates = getEditorialDates(slug)

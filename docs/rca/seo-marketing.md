@@ -204,10 +204,11 @@ publicada no `llms.txt`.
 Medido em produção (curl com user-agent do bingbot) antes de mexer:
 
 - **"Título muito longo"** = título ENTREGUE (com ` | Espelha Grupos`) acima de
-  70 chars. É defeito real: `/precos` tinha 78 e caiu para 67. Guarda:
-  `test/bing-titulo-precos.test.js`. Em 29/09 outras 28 páginas do sitemap
-  também passavam de 70 (lista: rodar o laço de `curl` no sitemap) — o Bing só
-  acusa a URL inspecionada; trocar título é decisão da dona do produto.
+  70 chars. É defeito real: `/precos` tinha 78 (caiu para 67) e, na varredura
+  do sitemap de 29/09, outras 28 páginas passavam — todas encurtadas para no
+  máximo 53 + sufixo, mantendo o fato que converte (loja, %, "7 dias grátis").
+  Guarda: `test/bing-titulos.test.js` (páginas avulsas + módulos de conteúdo +
+  `lp-config`; `titleAbsolute` não leva sufixo). Título novo = até 53 chars.
 - **`/pricing.md` sem título, meta descrição, idioma e H1** = falso positivo: o
   Bing aplica checagem de HTML num arquivo Markdown (`text/markdown`). A URL
   está **indexada**. Não transformar em HTML nem pôr `noindex`/canonical: é o

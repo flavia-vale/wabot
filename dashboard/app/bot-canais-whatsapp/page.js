@@ -20,7 +20,7 @@ const decisionPages = [
   { href: '/protecao-antiban-espelha-grupos', title: 'Proteção avançada', description: 'Limites, variações, saúde de cada canal e pausa automática.' },
 ]
 
-const title = 'Bot para Canais do WhatsApp com Módulo de Preservação Avançada'
+const title = 'Bot para Canais do WhatsApp com preservação avançada'
 const description = 'Migre achadinhos para Canais do WhatsApp com o Espelha Grupos: espelhamento entre grupos e canais, ritmo humano, variações, monitoramento e Módulo de Preservação Avançada (o chamado "anti-ban").'
 
 export const metadata = {

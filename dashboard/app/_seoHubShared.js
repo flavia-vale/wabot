@@ -120,7 +120,7 @@ const HUB_CONTENT = {
    * continua listando os spokes de dores operacionais. */
   'automacao-whatsapp-afiliados': {
     eyebrow: 'Automação para afiliadas',
-    title: 'Automação para afiliados no WhatsApp: 3 modelos, 8 bots',
+    title: 'Automação de afiliados no WhatsApp: 3 modelos, 8 bots',
     description: 'Espelhador de grupos, garimpo automático e formatador: o que cada modelo faz, para quem serve e 8 ferramentas comparadas com preço datado. A partir de R$ 39.',
     intro: `Automação para afiliados no WhatsApp é um software que publica ofertas com o seu código de afiliada nos seus grupos e canais, sem copiar e colar. O mercado se divide em três modelos: espelhador de grupos, garimpo automático e formatador de oferta. O Espelha Grupos tem os três numa conta só, em ${SUPPORTED_STORES.length} lojas, a partir de ${BASIC_PRICE_LABEL} (Basic) ou ${PRO_PRICE_LABEL} (Pro), com 7 dias grátis sem cartão.`,
     promise: 'Para afiliada que divulga em grupos de WhatsApp e quer saber qual modelo de automação resolve o seu caso antes de assinar qualquer ferramenta.',
