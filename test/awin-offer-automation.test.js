@@ -9,6 +9,7 @@ import {
   awinPromotionToOffer,
   formatAwinValidity,
   selectAwinCandidates,
+  awinTitleItemId,
 } from '../src/offerAutomation/awinOffers.js'
 import { materializeAutomationOffer, runAutomation } from '../src/offerAutomation/dispatcher.js'
 import { productDedupKey } from '../src/offerAutomation/shopeeOffers.js'
@@ -222,4 +223,84 @@ test('rotas: cria automação Awin sem palavra, só com conta própria, sem Inst
     await cleanup(a.userId)
     await cleanup(b.userId)
   }
+})
+
+// RCA 2026-09-29 (staging): 4 promoções idênticas da Arno com números
+// 4118880..4118883 → automação de 3 por envio mandou o mesmo produto 3 vezes.
+test('cópias (mesma loja + mesmo título, números diferentes) contam como UMA oferta', () => {
+  const copy = (id) => promo(id, '108626', 10, { title: 'Liquidificador Arno Powermax 1400W Vermelho LN63 127V', advertiserName: 'Arno BR' })
+  const list = [copy(4118880), copy(4118881), copy(4118882), copy(4118883), promo(5, '108626', 12, { title: 'Batedeira Arno' }), promo(6, '17648', 20, { title: 'Moda infantil' })]
+  const picked = selectAwinCandidates(list, { now: NOW, limit: 3 })
+  assert.equal(picked.length, 3)
+  assert.equal(new Set(picked.map((p) => p.title)).size, 3, 'nada repetido no mesmo envio')
+  assert.equal(picked.filter((p) => p.title.startsWith('Liquidificador')).length, 1)
+  assert.equal(new Set(picked.map((p) => p.advertiserId)).size, 2, 'continua revezando lojas')
+})
+
+test('cópia de uma promoção já enviada não sai depois (formato novo e antigo)', () => {
+  const copy = (id) => promo(id, '108626', 10, { title: 'Liquidificador Arno  POWERMAX 1400W' })
+  const list = [copy(1), copy(2), copy(3)]
+  const [first] = selectAwinCandidates(list, { now: NOW, limit: 1 })
+  assert.deepEqual(selectAwinCandidates(list, { now: NOW, limit: 3, sentItemIds: [awinPromotionToOffer(first).itemId] }), [])
+  assert.deepEqual(selectAwinCandidates(list, { now: NOW, limit: 3, sentItemIds: ['awin:2'] }), [], 'enviada antes da correção, pelo número')
+  const otherStore = promo(9, '999', 10, { title: 'Liquidificador Arno Powermax 1400W' })
+  assert.equal(selectAwinCandidates([...list, otherStore], { now: NOW, limit: 3, sentItemIds: ['awin:2'] }).length, 1, 'mesmo título em OUTRA loja é outra oferta')
+})
+
+test('runAutomation: 3 por envio com cópias no banco manda 3 ofertas diferentes e não repete depois', async () => {
+  const { userId, account } = await setup()
+  try {
+    const later = new Date(Date.now() + 30 * 3_600_000)
+    await db.awinPromotion.createMany({ data: [4118880, 4118881, 4118882, 4118883].map((id) => ({ userId, accountId: account.id, promotionId: String(id), advertiserId: '108626', advertiserName: 'Arno BR', title: 'Liquidificador Arno Powermax', urlTracking: `https://www.awin1.com/cread.php?p=${id}`, endDate: later })) })
+    const automation = await db.offerAutomation.create({ data: { userId, keyword: '', intervalMinutes: 60, offersPerSend: 3, source: 'awin', awinAccountId: account.id, templateKey: AWIN_AUTOMATION_TEMPLATE_KEY, destGroupJid: 'grupo@g.us' } })
+    const sends = []
+    const deps = { dbOverride: db, isRunningFn: async () => true, sendBroadcastFn: async (...args) => { sends.push(args[1]) }, enrichAwinOffersFn: async (offers) => offers }
+    const first = await runAutomation(automation, deps)
+    assert.equal(first.sent, 3)
+    assert.equal(sends.filter((text) => text.includes('Liquidificador Arno Powermax')).length, 1)
+    const second = await runAutomation(await db.offerAutomation.findUnique({ where: { id: automation.id } }), deps)
+    assert.equal(second.skipped, 'all_offers_filtered', 'as cópias restantes não saem depois')
+  } finally {
+    await cleanup(userId)
+  }
+})
+
+// RCA 2026-09-29 (2ª rodada, staging): o "repetido" era o MESMO produto em
+// 127V e 220V — títulos diferentes, mesma página da loja. E, no empate de
+// validade, a ordem pelo número mandava liquidificadores em sequência.
+const ARNO = [
+  [4118874, 'Liquidificador Arno Powermax 700W Preto LN50 220V', 'https://www.arno.com.br/liquidificador-arno-power-max-700-ln50-preto-2720012726-pai/p'],
+  [4118875, 'Liquidificador Arno Powermax 700W Preto LN50 127V', 'https://www.arno.com.br/liquidificador-arno-power-max-700-ln50-preto-2720012726-pai/p'],
+  [4118880, 'Liquidificador Arno Powermax 1400W Vermelho LN63 220V', 'https://www.arno.com.br/powermax-vermelho-1400w-ln63-127v_2720018191_pai-1-1/p'],
+  [4118881, 'Liquidificador Arno Powermax 1400W Vermelho LN63 127V', 'https://www.arno.com.br/powermax-vermelho-1400w-ln63-127v_2720018191_pai-1-1/p'],
+  [4118892, 'LIQ POWERMAX EXTRA 1400W LN87 127V', 'https://www.arno.com.br/liquidificador-power-max-1400w-ln87-2720017891_pai/p'],
+  [4118893, 'LIQ POWERMAX EXTRA 1400W LN87 220V', 'https://www.arno.com.br/liquidificador-power-max-1400w-ln87-2720017891_pai/p?utm=x'],
+].map(([id, title, url]) => promo(id, '108626', 10, { title, url, advertiserName: 'Arno BR' }))
+
+test('127V e 220V do mesmo produto (mesma página da loja) contam como UMA oferta', () => {
+  const picked = selectAwinCandidates(ARNO, { now: NOW, limit: 6 })
+  assert.equal(picked.length, 3, 'três produtos, não seis')
+  const pages = picked.map((p) => new URL(p.url).pathname)
+  assert.equal(new Set(pages).size, 3)
+})
+
+test('outra voltagem de um produto já enviado não sai depois (formatos novo, do título e antigo)', () => {
+  const [lnd50] = ARNO
+  const others = (sentItemIds) => selectAwinCandidates(ARNO, { now: NOW, limit: 6, sentItemIds }).map((p) => p.promotionId)
+  for (const sentId of [awinPromotionToOffer(lnd50).itemId, awinTitleItemId(lnd50), 'awin:4118874']) {
+    const left = others([sentId])
+    assert.ok(!left.includes('4118874') && !left.includes('4118875'), `LN50 voltou com ${sentId}`)
+    assert.equal(left.length, 2)
+  }
+})
+
+test('empate de validade: a escolha varia (não segue a ordem do número) e é sempre a mesma', () => {
+  const list = Array.from({ length: 12 }, (_, i) => promo(5000 + i, '108626', 10, { title: `Produto ${i}`, url: `https://www.arno.com.br/p${i}/p` }))
+  const first = selectAwinCandidates(list, { now: NOW, limit: 3 }).map((p) => p.promotionId)
+  const again = selectAwinCandidates([...list].reverse(), { now: NOW, limit: 3 }).map((p) => p.promotionId)
+  assert.deepEqual(first, again, 'determinística')
+  assert.notDeepEqual(first, ['5000', '5001', '5002'], 'não é a ordem do número')
+  // A regra aprovada continua: vence antes, sai antes.
+  const urgent = promo(9999, '108626', 3, { title: 'Urgente', url: 'https://www.arno.com.br/urgente/p' })
+  assert.equal(selectAwinCandidates([...list, urgent], { now: NOW, limit: 1 })[0].promotionId, '9999')
 })

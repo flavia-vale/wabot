@@ -178,7 +178,7 @@ test('trava do espelhamento: texto aprovado pela trava continua aprovado depois 
 const worker = readFileSync(new URL('../../src/bot-worker.js', import.meta.url), 'utf8')
 
 test('robô: troca acontece DEPOIS da trava do espelhamento, no buildPayload do envio', () => {
-  const trava = worker.indexOf('const leakedLinks = findUnconvertedStoreLinks(finalText, conversions)')
+  const trava = worker.indexOf('const leakedLinks = findUnconvertedStoreLinks(finalText, conversions')
   const troca = worker.indexOf('const tracked = await trackLinksForSend({ text: variantText, conversions, destJid, messageLogId: log.id, settings: cfg.trackedLinks })')
   assert.ok(trava > 0 && troca > trava, 'trackLinksForSend precisa rodar depois da trava')
   // todo o payload do espelhamento usa o texto já com (ou sem) rastreio

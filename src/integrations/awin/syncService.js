@@ -16,6 +16,8 @@
 import dbDefault from '../../db.js'
 import { decryptCredential } from '../../credentialCrypto.js'
 import { getDefaultAwinClient, AWIN_MAX_PAGE_SIZE } from './client.js'
+import { extractProgrammes } from './storeMatcher.js'
+import { AWIN_LINK_RETENTION_MS } from './conversionContext.js'
 import { AwinAuthError, AwinRateLimitError, AwinResponseError } from './errors.js'
 import { extractPromotionPage, translatePromotion } from './translate.js'
 import { AWIN_ACCOUNT_STATUS, AWIN_MESSAGES } from './accountService.js'
@@ -97,6 +99,28 @@ function describeFailure(error) {
   return AWIN_MESSAGES.unavailable
 }
 
+// Lojas aprovadas (joined, BR) → AwinProgramme. 1 chamada por execução.
+// Loja que sumiu da lista (a cliente saiu ou foi removida) é apagada: sem ela,
+// o link daquela loja volta a ser tratado como loja não aprovada. Resposta
+// estranha não apaga nada. Devolve quantas lojas ficaram (null = não leu).
+async function syncProgrammes({ db, client, account, token, runId }) {
+  const body = await client.listProgrammes(token, account.publisherId, { relationship: 'joined', countryCode: 'BR' })
+  const stores = extractProgrammes(body)
+  if (!stores) return null
+  for (const store of stores) {
+    const data = { name: store.name, displayUrl: store.displayUrl, domainsJson: JSON.stringify(store.domains), lastSeenRunId: runId }
+    await db.awinProgramme.upsert({
+      where: { accountId_advertiserId: { accountId: account.id, advertiserId: store.advertiserId } },
+      create: { ...data, userId: account.userId, accountId: account.id, advertiserId: store.advertiserId },
+      update: data,
+    })
+  }
+  await db.awinProgramme.deleteMany({
+    where: { accountId: account.id, OR: [{ lastSeenRunId: null }, { lastSeenRunId: { not: runId } }] },
+  })
+  return stores.length
+}
+
 export async function syncAwinAccount(accountId, deps = {}) {
   if (runningAccounts.has(accountId)) return { skipped: 'busy' }
   runningAccounts.add(accountId)
@@ -120,12 +144,22 @@ export async function syncAwinAccount(accountId, deps = {}) {
     const skipReasons = new Map()
     let complete = true
     let failure = null
+    let programmes = null
+    let programmesError = null
 
     try {
       const token = decrypt(account.tokenEncrypted)
       for (const status of AWIN_SYNC_PROMOTION_STATUSES) {
         const finished = await syncStatus({ db, client, account, token, runId: run.id, status, counters, skipReasons, maxPages })
         if (!finished) complete = false
+      }
+      // Lojas para a conversão de links. Falha aqui não derruba as promoções
+      // já lidas (as lojas antigas continuam valendo); código vencido sim.
+      try {
+        programmes = await syncProgrammes({ db, client, account, token, runId: run.id })
+      } catch (error) {
+        if (error instanceof AwinAuthError || error instanceof AwinRateLimitError) throw error
+        programmesError = error
       }
     } catch (error) {
       failure = error
@@ -151,8 +185,15 @@ export async function syncAwinAccount(accountId, deps = {}) {
       where: { accountId: account.id, status: 'expired', expiredAt: { lt: new Date(finishedAt.getTime() - AWIN_EXPIRED_RETENTION_MS) } },
     })
 
+    // Links convertidos sem uso há 90 dias saem do cache (o link em si continua
+    // valendo na Awin; só não é mais reaproveitado).
+    await db.awinLink.deleteMany({
+      where: { accountId: account.id, lastUsedAt: { lt: new Date(finishedAt.getTime() - AWIN_LINK_RETENTION_MS) } },
+    })
+
     const errors = []
     if (failure) errors.push({ message: describeFailure(failure) })
+    if (programmesError) errors.push({ message: `Não deu para atualizar a lista de lojas aprovadas: ${describeFailure(programmesError)}` })
     for (const [reason, count] of skipReasons) {
       if (errors.length >= MAX_ERRORS) break
       errors.push({ message: `${count} ${count === 1 ? 'promoção foi ignorada porque' : 'promoções foram ignoradas porque'} ${SKIP_REASON_TEXT[reason] || SKIP_REASON_TEXT.invalid}` })
@@ -190,7 +231,7 @@ export async function syncAwinAccount(accountId, deps = {}) {
     })
     if (old.length) await db.awinSyncRun.deleteMany({ where: { id: { in: old.map((row) => row.id) } } })
 
-    return { runId: run.id, status: runStatus, ...counters, errors: errors.slice(0, MAX_ERRORS) }
+    return { runId: run.id, status: runStatus, ...counters, programmes, errors: errors.slice(0, MAX_ERRORS) }
   } finally {
     runningAccounts.delete(accountId)
   }

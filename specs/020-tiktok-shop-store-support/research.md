@@ -17,6 +17,11 @@ atribuição de comissão.
   cliente e 20 amostras podem ficar incompletos.
 - Decisão: **pendente**. O comando precisa ser executado na VPS e H2/H3 exigem
   amostras reais fornecidas voluntariamente, sem segredos de afiliada.
+- Execução de 2026-09-29 na produção: `0` para TikTok, `0` linhas na amostra.
+  Esse resultado da versão inicial não mostrou cobertura da telemetria e,
+  portanto, **não prova demanda zero**. A versão corrigida também informa links
+  de outras lojas, dias cobertos e atividade do robô; D-001 só fecha como zero
+  se outra loja comprovar que a telemetria estava funcionando no período.
 
 ### D-002 — Mecanismo de afiliação
 

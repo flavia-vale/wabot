@@ -11,6 +11,7 @@ import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
 import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 import { chooseCoupon, renderCouponText, applyCouponToken } from '../core/clientCouponPolicy.js'
 import { AWIN_AUTOMATION_TEMPLATE_KEY, AWIN_PROMOTION_TEMPLATE_BODY, loadAwinOffers } from './awinOffers.js'
+import { enrichAwinOffers as defaultEnrichAwinOffers } from './awinEnrich.js'
 
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
@@ -149,7 +150,7 @@ export function materializeAutomationOffer(automation, offer, botConfig) {
     priceCents: offerPriceCents(offer),
     productUrl: offer.offerLink,
     imageUrl: offer.imageUrl || null,
-    imageRefererUrl: offer.offerLink || null,
+    imageRefererUrl: offer.imageRefererUrl || offer.offerLink || null,
     productSnapshot: automationOfferProduct(offer),
     renderedText,
   }
@@ -261,6 +262,7 @@ export async function runAutomation(automation, {
   dbOverride,
   sendStoryFn = createAndEnqueueStory,
   instagramRuntimeFn = getInstagramDeliveryRuntime,
+  enrichAwinOffersFn = defaultEnrichAwinOffers,
 } = {}) {
   const dbInstance = dbOverride ?? db
   const source = automationSource(automation)
@@ -293,6 +295,10 @@ export async function runAutomation(automation, {
     if (loaded.skipped) return { skipped: loaded.skipped }
     ;({ offers, rawCount } = loaded)
     if (!offers.length) return { skipped: 'all_offers_filtered' }
+    // Link curto + foto só das que vão sair agora. Falha = sai como antes.
+    try {
+      offers = await enrichAwinOffersFn(offers, { db: dbInstance, userId: automation.userId, accountId: automation.awinAccountId })
+    } catch { /* oferta sai com o link comprido e sem foto */ }
   } else {
     const credRow = await dbInstance.credential.findUnique({
       where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },
@@ -422,7 +428,7 @@ export async function runAutomation(automation, {
     if (whatsappAvailable && whatsappEligible.has(String(offer.itemId))) try {
       await sendBroadcastFn(automation.userId, text, [automation.destGroupJid], {
         imageUrl: offer.imageUrl,
-        imageRefererUrl: offer.offerLink,
+        imageRefererUrl: offer.imageRefererUrl || offer.offerLink,
         source: 'offerAutomation',
       })
     } catch (err) {

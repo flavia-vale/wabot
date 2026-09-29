@@ -60,6 +60,21 @@ for (const account of accounts) {
   for (const row of byStore) console.log(`  loja=${row.advertiserName} ${row.status}=${row._count._all}`)
   const next24h = await db.awinPromotion.count({ where: { accountId: account.id, status: 'active', endDate: { lte: new Date(now.getTime() + 86_400_000) } } })
   console.log(`  ativas que vencem em 24h: ${next24h}`)
+  // Link curto e foto: só existem nas promoções que já foram enviadas.
+  const tried = await db.awinPromotion.count({ where: { accountId: account.id, enrichedAt: { not: null } } })
+  const withShort = await db.awinPromotion.count({ where: { accountId: account.id, shortUrl: { not: null } } })
+  const withImage = await db.awinPromotion.count({ where: { accountId: account.id, imageUrl: { not: null } } })
+  console.log(`  enviadas_com_busca=${tried} link_curto=${withShort} com_foto=${withImage}`)
+  // Conversão de links: lojas aprovadas (vêm do sync) e links guardados.
+  const lojas = await db.awinProgramme.findMany({ where: { accountId: account.id }, select: { name: true, domainsJson: true }, orderBy: { name: 'asc' } })
+  console.log(`  lojas_aprovadas=${lojas.length}${lojas.length ? ' ' + lojas.map((row) => row.name).join(' | ') : ''}`)
+  const semDominio = lojas.filter((row) => row.domainsJson === '[]').map((row) => row.name)
+  if (semDominio.length) console.log(`  lojas_sem_site (não convertem): ${semDominio.join(' | ')}`)
+  const linksGuardados = await db.awinLink.count({ where: { accountId: account.id } })
+  const linksCurtos = await db.awinLink.count({ where: { accountId: account.id, shortUrl: { not: null } } })
+  console.log(`  links_convertidos_guardados=${linksGuardados} curtos=${linksCurtos} longos=${linksGuardados - linksCurtos}`)
+  const noImage = await db.awinPromotion.groupBy({ by: ['advertiserName'], where: { accountId: account.id, enrichedAt: { not: null }, imageUrl: null }, _count: { _all: true } })
+  for (const row of noImage) console.log(`  sem_foto loja=${row.advertiserName} n=${row._count._all}`)
 
   const automations = await db.offerAutomation.findMany({ where: { userId: user.id, source: 'awin', awinAccountId: account.id }, select: { id: true, enabled: true, lastSentAt: true, publicationMode: true } })
   for (const item of automations) console.log(`  automação ${item.id} ${item.enabled ? 'ligada' : 'desligada'} ${item.publicationMode} ultimo_envio=${item.lastSentAt?.toISOString() ?? '-'}`)

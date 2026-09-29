@@ -79,7 +79,7 @@ function AccountForm({ account, onSaved, onCancel }) {
       {error && <div className="pnl-note-box is-error" role="alert" style={{ marginBottom: 12 }}>{error}</div>}
       <div className="pnl-toolbar">
         <button type="submit" className="pnl-btn is-primary" disabled={saving}>{saving ? AWIN_COPY.saving : AWIN_COPY.save}</button>
-        <button type="button" className="pnl-btn" onClick={onCancel} disabled={saving}>{AWIN_COPY.cancel}</button>
+        {onCancel && <button type="button" className="pnl-btn" onClick={onCancel} disabled={saving}>{AWIN_COPY.cancel}</button>}
       </div>
     </form>
   )
@@ -218,6 +218,8 @@ export default function AwinCredentialsCard({ open, onToggleOpen }) {
   }, [])
 
   const list = accounts ?? []
+  // Sem nenhuma conta, o formulário já vem aberto; o botão é só para a 2ª em diante.
+  const firstAccount = accounts !== null && !loadError && list.length === 0
   const hasProblem = list.some((account) => account.status === 'invalid_credential')
   // O problema já aparece na etiqueta ao lado do nome; aqui vão as contas.
   const subtitle = list.length ? list.map((account) => account.label).join(' · ') : AWIN_COPY.subtitleEmpty
@@ -252,7 +254,6 @@ export default function AwinCredentialsCard({ open, onToggleOpen }) {
         <div className="pnl-cred-ctas">
           <a className="pnl-btn is-primary" href={AWIN_PAGE_URL} target="_blank" rel="noopener noreferrer">{AWIN_COPY.openAwin}</a>
         </div>
-        <div className="pnl-note-box" style={{ marginBottom: 10 }}>{AWIN_COPY.safety}</div>
         <div className="pnl-note-box is-info" style={{ marginBottom: 12 }}>{AWIN_COPY.storesHint}</div>
 
         {loadError && <div className="pnl-note-box is-error" role="alert">{loadError}</div>}
@@ -268,10 +269,10 @@ export default function AwinCredentialsCard({ open, onToggleOpen }) {
           />
         ))}
 
-        {adding ? (
+        {adding || firstAccount ? (
           <div className="pnl-awin-account">
             <AccountForm
-              onCancel={() => setAdding(false)}
+              onCancel={firstAccount ? null : () => setAdding(false)}
               onSaved={(result) => {
                 setAccounts((current) => [...(current ?? []), result.account])
                 setAdding(false)

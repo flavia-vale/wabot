@@ -16,12 +16,25 @@
 //   { page, pageSize, total } } (formato medido):
 //   https://help.awin.com/apidocs/promotions
 //
-// FASE FUTURA (não implementada — só o desenho, para a interface não mudar):
 // - generateLink(token, publisherId, { advertiserId, destinationUrl,
 //   parameters: { clickref, clickref2..6 }, shorten }) →
 //   POST /publishers/{publisherId}/linkbuilder/generate  → { url, shortUrl }
 //   https://help.awin.com/apidocs/generatelink (loja pode recusar:
-//   "deeplinkNotPermitted")
+//   "deeplinkNotPermitted" / "Unknown error"). Usado desde 2026-09-29 para o
+//   link curto das promoções. Existe uma cota diária de links curtos
+//   (https://help.awin.com/apidocs/quota) — o valor não está na doc.
+//
+// - listProgrammes(token, publisherId, { relationship, countryCode }) →
+//   GET /publishers/{publisherId}/programmes → [{ id, name, displayUrl,
+//   validDomains: [{ domain }], ... }]  https://help.awin.com/apidocs/get-program-information
+//   Medido em 2026-09-29 (conta 2701264, joined+BR): 12 lojas, todas com
+//   validDomains preenchido ("*.kabum.com", "kabum.com.br"...). É daqui que
+//   sai "de qual loja é este link" na conversão.
+// - generateLink com `{ noWait: true }` não espera a janela do limitador:
+//   sem vaga, lança AwinRateLimitError na hora (quem chama cai para o link
+//   longo). Cota de links curtos medida: 200 por dia por conta.
+//
+// FASE FUTURA (não implementada — só o desenho, para a interface não mudar):
 // - generateLinks(token, publisherId, requests[≤100]) →
 //   POST /publishers/{publisherId}/linkbuilder/generate-batch
 //   https://help.awin.com/apidocs/generatebatchlinks
@@ -79,10 +92,14 @@ export function createAwinClient({
   limiter = sharedLimiter,
   baseUrl = AWIN_BASE_URL,
 } = {}) {
-  async function request(token, { method = 'GET', path, query = null, body = undefined }) {
+  async function request(token, { method = 'GET', path, query = null, body = undefined, noWait = false }) {
     const secret = String(token ?? '').trim()
     if (!secret) throw new AwinAuthError(null)
-    await limiter.acquire(tokenFingerprint(secret))
+    if (noWait && typeof limiter.tryAcquire === 'function') {
+      if (!limiter.tryAcquire(tokenFingerprint(secret))) throw new AwinRateLimitError(null)
+    } else {
+      await limiter.acquire(tokenFingerprint(secret))
+    }
 
     const url = new URL(path, baseUrl)
     for (const [key, value] of Object.entries(query || {})) {
@@ -137,7 +154,39 @@ export function createAwinClient({
     })
   }
 
-  return { listAccounts, listPromotions }
+  // Link de afiliado para uma página da loja. Com `shorten`, a Awin devolve
+  // também um link curto (tidd.ly). → { url, shortUrl } (qualquer um pode
+  // faltar: loja que não aceita deep link devolve só a descrição do erro).
+  async function generateLink(token, publisherId, { advertiserId, destinationUrl, parameters, shorten = false, noWait = false } = {}) {
+    if (!isValidPublisherId(publisherId)) throw new AwinHttpError(400)
+    if (!/^\d{1,12}$/.test(String(advertiserId ?? ''))) throw new AwinHttpError(400)
+    const body = await request(token, {
+      method: 'POST',
+      path: `/publishers/${String(publisherId).trim()}/linkbuilder/generate`,
+      noWait,
+      body: {
+        advertiserId: Number(advertiserId),
+        ...(destinationUrl ? { destinationUrl: String(destinationUrl) } : {}),
+        ...(parameters && Object.keys(parameters).length ? { parameters } : {}),
+        shorten: Boolean(shorten),
+      },
+    })
+    return {
+      url: typeof body?.url === 'string' ? body.url : null,
+      shortUrl: typeof body?.shortUrl === 'string' ? body.shortUrl : null,
+    }
+  }
+
+  // Lojas do programa (por padrão: as que aprovaram a cliente, no Brasil).
+  async function listProgrammes(token, publisherId, { relationship = 'joined', countryCode = 'BR' } = {}) {
+    if (!isValidPublisherId(publisherId)) throw new AwinHttpError(400)
+    return request(token, {
+      path: `/publishers/${String(publisherId).trim()}/programmes`,
+      query: { relationship, countryCode },
+    })
+  }
+
+  return { listAccounts, listPromotions, generateLink, listProgrammes }
 }
 
 let defaultClient = null

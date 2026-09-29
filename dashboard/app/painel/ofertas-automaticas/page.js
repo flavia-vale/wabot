@@ -20,7 +20,7 @@ import { validateOfferAutomationForm } from '@/lib/offerAutomationForm'
 import { SEARCH_ORDER_OPTIONS, DEFAULT_SEARCH_ORDER, searchOrderOption, describeSearchChoice, normalizeSearchChoice } from '@/lib/offerAutomationSearch'
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 import { AWIN_AUTOMATION_TEMPLATE_KEY, AWIN_PROMOTION_TEMPLATE_BODY } from '../../../../src/offerAutomation/awinOffers.js'
-import { AWIN_COPY } from '@/lib/painel/awinCopy'
+import { AWIN_COPY, AWIN_SKIP_LABELS } from '@/lib/painel/awinCopy'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -85,7 +85,8 @@ function perSendLabel(value, source) {
 
 const AWIN_TEMPLATE_OPTION = { key: AWIN_AUTOMATION_TEMPLATE_KEY, name: 'Promoção (sem preço)', body: AWIN_PROMOTION_TEMPLATE_BODY }
 
-function explainSkip(code) {
+function explainSkip(code, source) {
+  if (source === 'awin' && AWIN_SKIP_LABELS[code]) return AWIN_SKIP_LABELS[code]
   return SKIP_LABELS[code] ?? `Ignorado: ${code}`
 }
 
@@ -721,7 +722,7 @@ export default function OfertasAutomaticasPage() {
               {showForm && editId === a.id && renderAutomationForm()}
               {result && (
                 <p className="offer-auto-result" style={{ color: result.error ? 'var(--danger)' : 'var(--accent-strong)' }}>
-                  {result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped) : `✓ ${result.sent} produto(s) enviado(s)`}
+                  {result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped, a.source) : a.source === 'awin' ? `✓ ${result.sent} promoção(ões) enviada(s)` : `✓ ${result.sent} produto(s) enviado(s)`}
                 </p>
               )}
               {a.publicationMode === 'review' && reviewQueueOpen && <div className="offer-auto-review" id={`review-queue-${a.id}`}><ReviewQueue automation={a} /></div>}

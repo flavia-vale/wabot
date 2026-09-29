@@ -38,6 +38,12 @@ const DELIBERADAMENTE_FORA = new Set([
   'src/email/optOut.js',
   'src/email/registry.js',
   'src/domain/painel/whatsappSafety.js',
+  // Só o texto/regra do aviso do dia 5 do teste (mensagem no próprio número,
+  // C1(b)). Os mesmos arquivos alimentam a tela do painel; editar copy ali não
+  // deve reconectar a frota inteira.
+  'src/domain/painel/trialDecision.js',
+  'src/domain/painel/trialNotice.js',
+  'src/domain/painel/pricePerOffer.js',
   'src/tutorialVideo.js',
   'src/leadNurture/unsubscribeToken.js',
 ])

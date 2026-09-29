@@ -9,6 +9,7 @@ import {
   blocksNewSubscription,
   decidePendingSubscriptionReuse,
   decideSubscriptionAttemptCooldown,
+  describeReuseSkip,
   describeSubscriptionCooldown,
   SUBSCRIPTION_ATTEMPT_WINDOW_MS as DEFAULT_ATTEMPT_WINDOW_MS,
   SUBSCRIPTION_ATTEMPT_MAX as DEFAULT_ATTEMPT_MAX,
@@ -1412,8 +1413,9 @@ export async function paymentsRoutes(app) {
       }).catch(() => null)
 
       const reuseDecision = decidePendingSubscriptionReuse({ subscription: pendingSubscription, plan })
+      let snapshot = null
       if (reuseDecision.reuse) {
-        const snapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
+        snapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
         // Só reaproveita o que o MP confirma que continua em aberto. Falha de
         // rede, checkout já concluído ou apagado no MP caem no caminho normal —
         // checkout em aberto nunca pode deixar a conta sem conseguir assinar.
@@ -1423,6 +1425,18 @@ export async function paymentsRoutes(app) {
           req.log.info({ userId, plan }, 'Checkout de assinatura reaproveitado em vez de criar outro igual')
           return { init_point: snapshot.initPoint }
         }
+      }
+
+      // Observabilidade: havia checkout em aberto e mesmo assim vai nascer outro.
+      // Só registra o motivo (sem e-mail); não muda a decisão.
+      const reuseSkip = describeReuseSkip({
+        pending: pendingSubscription,
+        decision: reuseDecision,
+        snapshot,
+        emailMatches: snapshot?.ok ? samePayerEmail(snapshot.payerEmail, payerEmail) : false,
+      })
+      if (reuseSkip) {
+        trackAnalyticsEventSafe({ userId, event: 'subscription_checkout_reuse_skipped', metadata: { plan, ...reuseSkip } })
       }
 
       // Nada para reaproveitar não significa "pode criar outro igual". Quando os

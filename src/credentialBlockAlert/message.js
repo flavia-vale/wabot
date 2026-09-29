@@ -25,6 +25,7 @@ const STORE_LABELS = {
   magazineluiza: 'Magalu',
   shein: 'SHEIN',
   aliexpress: 'AliExpress',
+  awin: 'Awin',
 }
 
 // --- Shopee: SEM chave aceita, a conversão falha por completo — nenhuma
@@ -179,6 +180,16 @@ export function describeConversionFailure(errorMsg, platform = null) {
       motivo,
       tag: Object.freeze({ cls: 'is-skip', label: 'loja que você não usa' }),
       texto: `Essa oferta era ${daLoja}, que você não usa: ela não está na sua lista de lojas e está desligada neste grupo. O robô deixa essas ofertas de lado de propósito, não é uma falha. Se quiser espelhar ofertas dessa loja também, adicione a loja em IDs de afiliada e depois ligue a loja nas configurações deste grupo.`,
+    }
+  }
+
+  // Link da Awin de outra pessoa, de loja em que ela ainda não foi aprovada.
+  // Não é falha: é a regra "não converteu, não envia" (docs/rca/afiliados-awin.md).
+  if (motivo === CONVERSION_FAILURE.AWIN_STORE_NOT_JOINED) {
+    return {
+      motivo,
+      tag: Object.freeze({ cls: 'is-skip', label: 'loja da Awin sem aprovação' }),
+      texto: 'Essa oferta tinha um link da Awin de uma loja em que você ainda não foi aprovada. Mandar esse link daria a comissão para outra pessoa, então a oferta não foi enviada. Para receber ofertas dessa loja, inscreva-se no programa dela na Awin: depois da aprovação, ela passa a converter sozinha em até 1 hora.',
     }
   }
 

@@ -438,7 +438,7 @@ model BotConfig {
   user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   delayMin                 Int      @default(5)
   delayMax                 Int      @default(15)
-  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress")
+  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin")
   blockedKeywords          String   @default("")
   welcomeMsg               String   @default("")
   postToStatus             Boolean  @default(false)
@@ -1651,6 +1651,8 @@ model AwinAccount {
   updatedAt           DateTime  @updatedAt
   promotions          AwinPromotion[]
   syncRuns            AwinSyncRun[]
+  programmes          AwinProgramme[]
+  links               AwinLink[]
 
   @@unique([userId, publisherId])
   @@index([userId])
@@ -1680,6 +1682,12 @@ model AwinPromotion {
   // active | expired
   status         String    @default("active")
   lastSeenRunId  String?
+  // Preenchidos só na hora do PRIMEIRO envio (docs/rca/afiliados-awin.md):
+  // link curto do gerador oficial da Awin e foto lida da página da loja.
+  // enrichedAt marca a tentativa — falhou, só tenta de novo depois de 24h.
+  shortUrl       String?
+  imageUrl       String?
+  enrichedAt     DateTime?
   firstSeenAt    DateTime  @default(now())
   expiredAt      DateTime?
   updatedAt      DateTime  @updatedAt
@@ -1709,4 +1717,46 @@ model AwinSyncRun {
   finishedAt DateTime?
 
   @@index([accountId, startedAt])
+}
+
+// Loja em que a conta Awin foi APROVADA (joined, Brasil). Vem do sync de hora
+// em hora (GET /publishers/{id}/programmes). É daqui que a conversão de links
+// sabe de qual loja é uma URL (docs/rca/afiliados-awin.md).
+model AwinProgramme {
+  id             String      @id @default(cuid())
+  userId         String
+  accountId      String
+  account        AwinAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  advertiserId   Int
+  name           String
+  displayUrl     String?
+  // Domínios normalizados ("kabum.com.br", "kabum.com"), JSON array.
+  domainsJson    String      @default("[]")
+  lastSeenRunId  String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([accountId, advertiserId])
+  @@index([userId])
+}
+
+// Link convertido pela Awin, guardado para reuso: o mesmo produto não gasta
+// outra chamada nem outro link curto (cota medida: 200 por dia por conta).
+model AwinLink {
+  id              String      @id @default(cuid())
+  userId          String
+  accountId       String
+  account         AwinAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  advertiserId    Int
+  // Hash da página de destino limpa (sem utm): chave do reuso.
+  destinationKey  String
+  destinationUrl  String
+  shortUrl        String?
+  longUrl         String
+  createdAt       DateTime    @default(now())
+  lastUsedAt      DateTime    @default(now())
+
+  @@unique([accountId, advertiserId, destinationKey])
+  @@index([userId])
+  @@index([lastUsedAt])
 }

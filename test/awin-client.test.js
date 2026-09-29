@@ -101,3 +101,18 @@ test('limitador: no máximo N chamadas por minuto por token; tokens diferentes n
   assert.equal(sleeps.length, 1, 'quarta chamada do mesmo token espera a janela')
   assert.equal(sleeps[0], 60_000)
 })
+
+test('generateLink: gerador oficial com link curto, token só no cabeçalho', async () => {
+  let seen
+  const client = createAwinClient({ limiter: noLimit, fetchFn: async (url, init) => { seen = { url, init }; return jsonResponse(200, { url: 'https://www.awin1.com/cread.php?x', shortUrl: 'https://tidd.ly/abc' }) } })
+  const result = await client.generateLink(TOKEN, '2701264', { advertiserId: '51271', destinationUrl: 'https://www.mizuno.com.br/x', shorten: true })
+  assert.deepEqual(result, { url: 'https://www.awin1.com/cread.php?x', shortUrl: 'https://tidd.ly/abc' })
+  assert.equal(seen.url, 'https://api.awin.com/publishers/2701264/linkbuilder/generate')
+  assert.ok(!seen.url.includes(TOKEN))
+  assert.equal(seen.init.headers.Authorization, `Bearer ${TOKEN}`)
+  assert.deepEqual(JSON.parse(seen.init.body), { advertiserId: 51271, destinationUrl: 'https://www.mizuno.com.br/x', shorten: true })
+
+  const refused = createAwinClient({ limiter: noLimit, fetchFn: async () => jsonResponse(200, { description: 'Unknown error! Please try again later!' }) })
+  assert.deepEqual(await refused.generateLink(TOKEN, '2701264', { advertiserId: '1', shorten: true }), { url: null, shortUrl: null })
+  await assert.rejects(refused.generateLink(TOKEN, '2701264', { advertiserId: 'abc' }), AwinHttpError)
+})

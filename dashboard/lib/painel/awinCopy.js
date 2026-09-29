@@ -15,13 +15,12 @@ export const AWIN_COPY = Object.freeze({
     'O número da sua conta aparece no canto de cima da Awin, ao lado do nome da conta.',
   ],
   openAwin: 'Abrir a Awin',
-  safety: 'Esse código abre as suas contas da Awin. Usamos só para ler as promoções e conferir a conta. Ele fica guardado trancado (criptografado) e não aparece de novo. Para cortar o acesso, cancele o código na própria Awin.',
   storesHint: 'Só aparecem promoções das lojas em que você já foi aprovada. Não achou uma loja? Ela só aparece depois que você se inscreve no programa dela na Awin e é aprovada.',
   labelField: 'Apelido (opcional)',
   labelHint: 'Ex.: Minha Awin. Se deixar em branco, usamos o nome da conta.',
-  publisherField: 'Número da conta na Awin',
+  publisherField: 'ID/Número da conta AWIN',
   publisherHint: 'Só os números. Ex.: 2701264',
-  codeField: 'Código de acesso da Awin',
+  codeField: 'OAuth2 Token',
   codeHintNew: 'Cole o código inteiro que a Awin mostrou.',
   codeHintEdit: (masked) => `Deixe em branco para manter o código atual (${masked}).`,
   show: 'Mostrar',
@@ -51,6 +50,16 @@ export const AWIN_COPY = Object.freeze({
   savedWarn: 'Conta salva, mas não conseguimos falar com a Awin agora. Tentamos de novo sozinhos.',
   syncDone: (r) => `Pronto: ${r.inserted} novas, ${r.updated} conferidas${r.expired ? `, ${r.expired} vencidas` : ''}.`,
   loadError: 'Não conseguimos carregar suas contas da Awin.',
+})
+
+// Por que o "Enviar agora" de uma automação de promoções Awin não enviou.
+// Nunca usar o texto da Shopee aqui (RCA 2026-09-29: a tela dizia "A Shopee
+// trouxe produtos… reduza o desconto mínimo" numa automação Awin que só tinha
+// esgotado as promoções — e Awin nem tem desconto mínimo).
+export const AWIN_SKIP_LABELS = Object.freeze({
+  all_offers_filtered: 'Todas as promoções que ainda valem já foram enviadas por esta automação. Promoções novas chegam da Awin a cada hora e saem sozinhas.',
+  no_awin_promotions: 'Ainda não chegou nenhuma promoção ativa dessa conta Awin. Em Minhas credenciais, use "Atualizar agora".',
+  no_awin_account: 'Escolha uma conta Awin para esta automação (as contas ficam em Minhas credenciais).',
 })
 
 export const AWIN_STATUS = Object.freeze({
