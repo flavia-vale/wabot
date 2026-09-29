@@ -87,7 +87,6 @@ export const FICHA_LINHAS = [
 ]
 
 export const FICHA_TITULO = 'Ficha técnica'
-export const FICHA_NOTA = 'A mesma ficha vale na home, em /precos, no llms.txt e no pricing.md.'
 
 export const simNao = (valor) => (valor === true ? 'Sim' : valor === false ? 'Não' : String(valor))
 

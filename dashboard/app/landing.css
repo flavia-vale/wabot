@@ -924,7 +924,6 @@
 .landing-root .ficha-tecnica-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; margin-right: 6px; vertical-align: middle; }
 .landing-root .ficha-tecnica-table tbody tr:last-child th,
 .landing-root .ficha-tecnica-table tbody tr:last-child td { border-bottom: none; }
-.landing-root .ficha-tecnica-note { margin: 14px 0 0; font-size: 13px; color: var(--ink-soft); text-align: center; }
 @media (max-width: 768px) {
   .landing-root .ficha-tecnica-facts { grid-template-columns: 1fr; }
   .landing-root .ficha-tecnica-table { font-size: 13.5px; }

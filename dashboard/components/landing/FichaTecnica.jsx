@@ -4,7 +4,6 @@ import {
   FICHA_DEFINICAO,
   FICHA_FATOS,
   FICHA_LINHAS,
-  FICHA_NOTA,
   FICHA_TITULO,
   simNao,
 } from '@/lib/ficha-tecnica'
@@ -70,7 +69,6 @@ export function FichaTecnica({ headingLevel = 'h2' }) {
             </tbody>
           </table>
         </div>
-        <p className="ficha-tecnica-note">{FICHA_NOTA}</p>
       </div>
     </section>
   )
