@@ -1,215 +1,243 @@
 # Plano técnico — Integração LOMADEE (v1: só ofertas automáticas)
 
-> Status: **PLANO, nada implementado.** Data: 2026-09-29.
-> v1 = busca de ofertas para **Ofertas automáticas** (direct + fila de revisão).
-> v2 (depois) = conversão de links. Fora do escopo da v1: ver seção 9.
+> Status: **PLANO, nada implementado.** Revisado em 2026-09-29 depois de ler a
+> integração Awin que já está em `develop` (`docs/rca/afiliados-awin.md`).
+> v1 = Lomadee como **nova origem** das Ofertas automáticas (direto + fila de
+> revisão). v2 (depois) = conversão de links. Ver seção 10.
 
-## 0. Regra de honestidade sobre a API
+## 0. Aviso sobre a API
 
-A documentação oficial (`developer.socialsoul.com.vc`) estava fora do ar (503)
-quando este plano foi feito. Só está confirmado por busca: a API de Ofertas exige
-**app-token + sourceId**; existem também API de Cupons e API de Deeplink
-(`https://api.lomadee.com/v2/{app-token}/deeplink/_create`). **Todo nome de
-campo/parâmetro abaixo marcado com (⚠️ confirmar) é hipótese** e vira a Etapa 0.
+A documentação oficial (`developer.socialsoul.com.vc`) estava fora do ar (503).
+Confirmado só por busca: a API de Ofertas usa **app-token + sourceId**; há também
+API de Cupons e de Deeplink (`https://api.lomadee.com/v2/{app-token}/deeplink/_create`).
+Tudo marcado **(⚠️ confirmar)** é hipótese e vira a Etapa 0.
 
-## 1. Como as ofertas automáticas funcionam hoje (o que muda e o que não muda)
+## 1. O que já existe (a Awin abriu o caminho)
 
-- `src/offerAutomation/shopeeOffers.js` → `fetchOffers()` chama a Shopee e
-  devolve nós no formato Shopee (`itemId, productName, imageUrl, offerLink,
-  price/priceMin/priceMax, priceDiscountRate, sales, ratingStar`).
-- `dispatcher.js` (`runAutomation`, `resolveOffers`, `materializeAutomationOffer`)
-  e `reviewDiscoveryService.js` consomem esse formato. **A Shopee está fixa em:**
-  credencial `platform: 'shopee'` (dispatcher, discovery, rota `search-preview`),
-  `storeName: 'Shopee'`, título padrão "Produto Shopee", story do Instagram.
-- Já existe uma "costura" limpa: `fetchOffersFn` é injetável em `resolveOffers`,
-  `runAutomation`, `discoverReviewItems` e `searchOffersPreview`.
-- Dedup (`productDedupKey` por nome + `OfferAutomationSentLog` por grupo/preço +
-  `sentItemIds`) é independente da loja e serve para a Lomadee.
+Ofertas automáticas **não são mais só Shopee**. Hoje:
+
+- `OfferAutomation.source` = `shopee` (padrão) | `awin`. Lista em
+  `AUTOMATION_SOURCES` (`src/offerAutomation/dispatcher.js`); origem desconhecida
+  **pula** a automação (`invalid_source`), nunca cai em Shopee. A origem **não
+  muda** depois de criada.
+- **Shopee** = busca ao vivo por palavra (`fetchOffers` → `resolveOffers`),
+  oferta com preço/desconto/foto, credencial na tabela `Credential`.
+- **Awin** = **sync para o banco** (`AwinAccount`, `AwinPromotion`, agendador na
+  API, limitador 15/min por token) e o envio só **lê do banco**
+  (`src/offerAutomation/awinOffers.js`). Sem preço/foto; link curto e foto
+  entram na hora do envio (`awinEnrich.js`). Sem Stories, sem cupom, sem desconto
+  mínimo. Awin **fica fora de `PLATFORMS`** de propósito (não é `Credential`).
+- Pontos com `if source === 'awin'`: `dispatcher.js` (carga, Story, cupom,
+  `formatOfferMessage`, `automationOfferProduct`), `reviewDiscoveryService.js`,
+  `reviewDeliveryService.js` (valida validade/preço), `routes/offerAutomation.js`
+  (`isAwin` em POST/PATCH), tela `ofertas-automaticas/page.js` (`changeSource`,
+  `AWIN_SKIP_LABELS`), migration `20260929120000_awin_promotions`.
+- Dedup: `productDedupKey` aceita `offer.dedupKey` (Awin usa
+  `awin:<conta>:<loja+página>`); `OfferAutomationSentLog` por grupo; `sentItemIds`
+  por automação.
+
+**Consequência:** a Lomadee entra como **`source = 'lomadee'`**, seguindo o
+padrão da Awin. Não é "trocar o provedor da Shopee".
 
 ## 2. Decisão de arquitetura (recomendada)
 
-**Adaptador que devolve o MESMO formato dos nós da Shopee** (`src/offerAutomation/lomadeeOffers.js`
-com `fetchOffers()` de mesma assinatura) + um campo `provider` na automação que
-escolhe qual `fetchOffers` e qual credencial usar.
+**Lomadee = busca ao vivo com preço (modelo Shopee), credencial própria no
+modelo Awin (tabela separada, fora de `PLATFORMS`).**
 
-- Por quê: dispatcher, fila de revisão, dedup, cupom, variação e Stories seguem
-  intactos (menor risco de regressão, menor diff).
-- Alternativa descartada: formato neutro novo + reescrever dispatcher/review.
-  Mais limpo, mas toca o caminho que envia para todas as clientes hoje.
-- Mapa de escolha em um só lugar: `src/offerAutomation/providers.js`
-  (`{ shopee: {fetchOffers, credentialPlatform, hasCreds, storeLabel}, lomadee: {...} }`).
-  Regra do repo: um chokepoint só, não espalhar `if (provider === ...)`.
+| Ponto | Escolha | Por quê |
+|---|---|---|
+| Origem | `source = 'lomadee'` | mesmo mecanismo da Awin; sem tocar nas automações atuais |
+| Como busca | ao vivo, por palavra, no envio (como Shopee) | a Lomadee tem API de **ofertas com preço**; sync em banco só se a Etapa 0 mostrar limite de taxa apertado |
+| Credencial | tabela nova `LomadeeAccount` (rótulo, `appToken` cifrado, `sourceId`, últimos 4, status) — igual `AwinAccount` | várias contas por cliente; **fora de `PLATFORMS`**, então **não** entra em nenhum caminho de conversão de link na v1 (o risco que o plano anterior tinha) |
+| Formato da oferta | adaptador devolve nós no formato Shopee (`itemId`, `productName`, `price`, `priceDiscountRate`, `imageUrl`, `offerLink`) + `source:'lomadee'`, `storeName` real, `dedupKey` | reaproveita `filterOffers`, `dedupeOffersByProduct`, template com preço, Story, fila de revisão |
+| Limitador | 1 limitador por token, no processo da API (padrão `rateLimiter.js` da Awin) | vários automações do mesmo token no mesmo minuto |
 
-## 3. Decisões que dependem da usuária (perguntar ANTES de codar)
+Alternativa mais pesada (só se a Etapa 0 exigir): sync para `LomadeeOffer` no
+banco com agendador, igual Awin. **Custo de RAM/processo → REGRA #1 do
+AGENTS.md** (sinalizar e pedir OK antes).
 
-1. **Credencial por cliente ou token único da plataforma?**
-   Recomendado: **por cliente** (cada cliente cadastra o próprio app-token +
-   sourceId; a comissão é dela) — igual ao modelo da Shopee/Amazon/ML.
-   Token único faria a comissão cair na conta da plataforma e mudaria o modelo de negócio.
-2. Quais lojas da Lomadee entram? (a Lomadee mistura lojas; algumas o repo já
-   converte com afiliado próprio — ML, Amazon, Magalu, AliExpress, SHEIN.
-   Risco de a cliente ganhar comissão em dois lugares/conflito de tag.) Sugestão:
-   v1 sem filtro por loja, mas com lista de exclusão configurável por env.
-3. Plano: manter **PRO/Trial** (já é regra de Ofertas automáticas) — sem plano novo.
-4. Liberar para todas ou para lista de contas no começo? Sugestão: allowlist.
+## 3. Decisões que dependem da usuária (antes de codar)
 
-## 4. Passo a passo (cada etapa = 1 PR pequeno contra `develop`)
+1. Credencial **por cliente** (recomendado; comissão da cliente, igual Awin/Shopee)
+   ou token único da plataforma?
+2. Quais lojas da Lomadee entram? Há **sobreposição com a Awin** (ex.: Kabum,
+   Magalu) e com afiliado próprio (ML, Amazon, AliExpress, SHEIN). Sugestão v1:
+   sem filtro, mas **lista de exclusão por env** e aviso na tela.
+3. Plano: manter **PRO/Trial** (`canUseOfferAutomations`), sem plano novo. Cadastro
+   da conta Lomadee: **Basic** (como a Awin, pensando na v2)?
+4. Liberar para todas ou por lista de contas no início? Sugestão: lista.
 
-### Etapa 0 — Descoberta da API (sem código de produção)
-- Com um app-token/sourceId de teste, rodar `scripts/diag-busca-lomadee.mjs`
-  (read-only, novo, no padrão dos `diag-*.mjs`) e registrar **em
-  `docs/rca/ofertas-automaticas-e-criar-oferta.md`** a saída REAL: endpoint,
-  parâmetros (palavra-chave, ordenação, página, tamanho — ⚠️ confirmar), campos
-  de preço/preço antigo/desconto (⚠️ nem toda oferta traz desconto), imagem, loja,
-  link (já é o link de afiliado?), limites de taxa, tamanho máximo de página.
-- Decide: (a) se dá para filtrar por desconto mínimo; (b) se há "mais vendidos";
-  (c) como paginar (a rotação `nextOfferPage` precisa de página numérica);
-  (d) se o link expira; (e) o que a sandbox devolve vs. produção.
-- Impacto: nenhum em produção. Bloqueia as demais etapas.
+## 4. Passo a passo (1 PR pequeno por etapa, todos contra `develop`)
+
+### Etapa 0 — Medir a API (sem código de produção)
+- `scripts/diag-lomadee.mjs` (somente leitura, padrão `diag-awin.mjs`; mascara
+  token; pede credencial de teste). Saída REAL registrada em
+  `docs/rca/afiliados-lomadee.md` (arquivo novo + 1 linha no índice do AGENTS.md).
+- Decide: endpoint/versão vigente; parâmetros de busca por palavra, ordenação,
+  página e tamanho; se vem **preço antigo/desconto**; foto (tamanho); **loja** do
+  produto; o link já é o de afiliado (rastreio por `sourceId`)? **expira?**;
+  limite de taxa; sandbox × produção; se há aprovação por loja; se **cupons**
+  vêm juntos.
+- Sem isso as etapas 3+ ficam bloqueadas.
 
 ### Etapa 1 — Banco (staging antes de prod)
-- `prisma/schema.prisma`: `OfferAutomation.provider String @default("shopee")`.
-- Migration só adiciona coluna com default → automações existentes não mudam.
-- Impacto: SQLite; coluna com default é barata. Backup já é diário
-  (`scripts/backup_prod.sh`). Conferir `COUNT(*)` antes/depois no staging.
-- `src/domain/lgpd/dataRequest.js` já cobre `offerAutomation`; credencial
-  Lomadee entra pela tabela `Credential` existente (nada novo a apagar).
+- Migration nova `…_lomadee_accounts`: tabela `LomadeeAccount` (userId com
+  `onDelete: Cascade`, isolamento por `userId` em toda consulta).
+- `OfferAutomation`: `lomadeeAccountId String?` (o resto reaproveita `keyword`,
+  `minDiscountPct`, `sortType`, `page`). **Sem** mudar `source` default.
+- Só cria tabela/coluna nulável → nada muda para automações existentes.
+- Conferir `COUNT(*)` de `OfferAutomation` antes/depois no staging; backup diário
+  já existe.
+- `src/domain/lgpd/dataRequest.js`: incluir `lomadeeAccount` (cascade cobre a
+  exclusão; exportação precisa listar).
 
-### Etapa 2 — Credencial `lomadee`
-- `src/credentialHealth.js`: `PLATFORM_LABELS.lomadee`, `REQUIRED_FIELDS.lomadee = ['appToken','sourceId']`,
-  `FIELD_LABELS` em português simples ("o token do aplicativo Lomadee", "o código da sua fonte"),
-  `sanitizeCredentialBody` (trim, sem espaços/aspas), `getFormatWarnings`.
-- ⚠️ `PLATFORMS = Object.keys(PLATFORM_LABELS)` é iterado em vários lugares
-  (validação, listagem "Minhas credenciais", worker de conversão, admin,
-  `dashboard/lib/painel/logsCopy.js`). **Auditar todo uso de `PLATFORMS`** e
-  garantir que `lomadee` NÃO entra em caminho de conversão de link (v1 não
-  converte) nem em "faltou cadastrar a loja"/`skip:no_valid_conversions`.
-  Teste que falha se `lomadee` aparecer nesses caminhos.
-- Segurança: criptografia já existe (`credentialCrypto`). **O app-token vai no
-  caminho da URL (`/v2/{app-token}/...`)** → nunca logar URL/erro do axios
-  cru (vaza token em log/PM2). Mascarar no adaptador (`redactLomadeeUrl`).
-- Impacto: cliente nova vê um cartão a mais em credenciais; sem token nada muda.
+### Etapa 2 — Conta Lomadee (cadastro)
+- `src/integrations/lomadee/` no molde de `integrations/awin/`: `client.js`
+  (transporte, `fetch` injetável, timeout 10 s), `errors.js`, `rateLimiter.js`,
+  `accountService.js` (teste de conexão, máscara `••••1234`, frases leigas).
+- Rotas `/api/lomadee/*` no molde de `routes/awin.js` (**nunca 401 por causa da
+  Lomadee**, senão o painel desloga a cliente → 400 com frase leiga).
+- **Token vai no caminho da URL** (`/v2/{app-token}/…`) → nunca logar URL nem
+  erro cru do axios/fetch; `errors.js` sem token. Teste que varre logs/erros.
+- Cifra com `encryptCredential`; campo vazio na edição = mantém.
+- Tela: cartão dentro de "Minhas credenciais" no molde de `AwinCredentialsCard.js`
+  + `dashboard/lib/painel/lomadeeCopy.js` com teste de linguagem leiga (como
+  `awin-linguagem.test.js`): "código de acesso", nunca "token/API/sourceId" sem
+  explicar. Seguir `docs/design-system/design-system-v2.html`.
 
-### Etapa 3 — Adaptador `lomadeeOffers.js`
-- `fetchOffers({ keyword, minDiscountPct, limit, excludeItemIds, creds, sortType, page })`
-  → `{ offers, rawCount, dropped }` com nós no formato Shopee:
-  - `itemId = 'lomadee:<id>'` (prefixo evita colisão com itemId da Shopee em
-    `sentItemIds`/`OfferAutomationSentLog`);
-  - `offerLink` = link Lomadee (rastreável) — **nunca reescrever/encurtar**;
-  - `price`/`priceMin`, `priceDiscountRate` calculado de preço antigo (se vier);
-  - `sales`, `ratingStar` = null (a Lomadee provavelmente não traz — ⚠️ confirmar);
-  - campo extra `storeName` (loja real: Magalu, Casas Bahia…).
-- Reusar `filterOffers`/`dedupeOffersByProduct`/`resolveShopeeOfferPrice` (mesmas regras
-  de preço ausente e desconto mínimo).
-- Timeout 10 s como na Shopee; erro da API **lançado** (nunca disfarçado de
-  `no_offers_found` — lição do RCA da Shopee).
-- **Sem cache** (a doc da Lomadee desaconselha cache de ofertas: preço/estoque mudam).
-- Mapear `sortType` da tela → ordenação Lomadee só onde existir equivalente
-  (⚠️ confirmar); o resto cai em relevância e a tela mostra só as opções válidas.
-- Testes `test/lomadee-offers.test.js` (axios mockado; sem rede).
+### Etapa 3 — Adaptador de busca `lomadeeOffers.js`
+- `fetchLomadeeOffers({ keyword, minDiscountPct, limit, excludeItemIds, account, sortType, page })`
+  → `{ offers, rawCount, dropped }`.
+  - `itemId = 'lomadee:<id>'` (evita colisão com Shopee em `sentItemIds`/`SentLog`);
+  - `dedupKey = 'lomadee:<loja>:<produto normalizado>'`;
+  - `offerLink` = link Lomadee **sem reescrever nem encurtar**;
+  - `storeName` = loja real; `source: 'lomadee'`; `sales`/`ratingStar` nulos;
+  - reaproveita `filterOffers` (preço ausente, desconto mínimo, já enviada) e o
+    contador de descartes `OFFER_DROP_REASON`.
+- Erro da API **lançado**, nunca disfarçado de `no_offers_found`.
+- **Sem cache** de ofertas (a doc da Lomadee desaconselha).
+- `sortType`: só as ordens que a Lomadee tiver (⚠️ confirmar); tela mostra só essas.
+- Testes `test/lomadee-offers.test.js` (fetch mockado, sem rede).
 
-### Etapa 4 — Ligar o provider no fluxo (o ponto mais sensível)
-- `providers.js` + `resolveOffers` recebe `provider` e escolhe `fetchOffersFn` e
-  credencial. `runAutomation`, `discoverReviewItems` e `POST /search-preview`
-  trocam o `findUnique({platform:'shopee'})` fixo por `providerFor(automation).loadCreds`.
-- Textos fixos "Shopee" viram dinâmicos: `automationOfferProduct` usa
-  `offer.storeName ?? 'Shopee'`; título padrão `Produto`; `storeName` do Story.
-- Códigos de skip novos: `no_lomadee_credentials`, `invalid_lomadee_credentials`
-  + textos em `ofertas-automaticas/page.js` e `dashboard/lib/mobileLogs.js`.
-- **Não regredir:** para `provider = 'shopee'` (todas as automações atuais) o
-  comportamento tem que ser byte a byte igual → testes de regressão existentes
-  (`test/offer-automation.test.js`) rodam sem mudança e continuam verdes.
-- Rota `POST/PATCH /api/offer-automations`: validar `provider ∈ {shopee, lomadee}`;
-  `lomadee` só se a flag estiver ligada para a conta (Etapa 6) e a credencial existir.
-  `listType`/`prioritizeAMS`/`isKeySeller` são conceitos da Shopee → ignorados
-  (e escondidos na tela) para Lomadee.
+### Etapa 4 — Ligar a origem no fluxo (PR mais crítico)
+- `AUTOMATION_SOURCES` ganha `'lomadee'`. **Refatorar os `if source === 'awin'`
+  para um registro por origem** (`src/offerAutomation/sources.js`: `load`,
+  `credentialGate`, `supportsStories`, `supportsCoupons`, `skipLabels`), em vez de
+  um terceiro `else if` espalhado. Comportamento de `shopee` e `awin` **idêntico**
+  (testes atuais `offer-automation`, `awin-offer-automation` rodam sem edição).
+- `dispatcher.js` (`runAutomation`): ramo lomadee = carrega conta do dono
+  (`userId`), decifra, busca, segue o caminho de envio com preço. Ajustes:
+  - `automationOfferProduct`: `title` padrão e `storeName` vêm de `offer.storeName`
+    (hoje "Produto Shopee"/`'Shopee'` fixos);
+  - Story do Instagram: `storeName` dinâmico. Lomadee tem foto e preço →
+    **liberar Stories** (diferente da Awin) **ou** deixar fora da v1 (decidir na
+    Etapa 0 conforme a foto);
+  - cupom: `chooseCoupon({ platform: 'shopee' })` é fixo → **`useCoupons=false`
+    para Lomadee na v1** (cupom é por loja);
+  - `nextOfferPage` (rotação de página) vale.
+- `reviewDiscoveryService.js` e `reviewDeliveryService.js`: mesmo ramo; entrega
+  exige `priceCents > 0` (já vale) e, se o link expirar (Etapa 0), revalidar.
+- `routes/offerAutomation.js`: `source='lomadee'` exige `lomadeeAccountId` **do
+  próprio usuário**, palavra obrigatória (como Shopee), `listType/prioritizeAMS/
+  isKeySeller` ignorados; PATCH não troca `source`; `search-preview` por origem.
+- Códigos de skip novos: `no_lomadee_account`, `invalid_lomadee_credentials`,
+  `lomadee_api_error`; textos em `LOMADEE_SKIP_LABELS` (padrão `AWIN_SKIP_LABELS`)
+  — **o texto "A Shopee trouxe produtos…" já causou confusão na Awin (RCA
+  2026-09-29): cada origem tem o seu**.
+- Flag (Etapa 6) barra criar/rodar quando desligada.
 
-### Etapa 5 — Tela (`dashboard/app/painel/ofertas-automaticas/page.js`)
-- Seletor "Onde buscar: Shopee | Lomadee" (padrão Shopee). Seguir
-  `docs/design-system/design-system-v2.html` (tokens, sem hex solto).
-- Trocar os avisos "só na Shopee" (linhas ~301 e ~529) por texto que reflita as duas.
-- Para Lomadee: esconder controles exclusivos da Shopee; mostrar aviso claro se
-  não há credencial ("Cadastre seu token Lomadee em Minhas credenciais").
-- Voz/texto em português simples; nada de "appToken/sourceId" sem explicar.
-- Impacto: automações antigas abrem iguais (provider shopee).
+### Etapa 5 — Tela (`ofertas-automaticas/page.js`)
+- "De onde vêm as ofertas?" ganha a 3ª opção **Lomadee** (Shopee | Awin | Lomadee);
+  `changeSource` ajusta modelo padrão (Lomadee usa o modelo com preço) e esconde
+  controles só da Shopee (`listType`, AMS, vendedor-chave).
+- Trocar os avisos "só na Shopee" (linhas ~301 e ~529) por texto por origem.
+- Sem conta Lomadee: aviso "Conecte sua conta em Minhas credenciais".
+- Nome da automação na lista: "Lomadee · <palavra>".
 
-### Etapa 6 — Flag de liberação gradual
-- Padrão de `reviewFlags.js`: `LOMADEE_OFFERS_ENABLED` + `LOMADEE_OFFERS_USER_IDS`
-  (allowlist). Desligada = rota recusa `provider=lomadee`; cron ignora automação
-  `lomadee` com log claro.
-- Mudar env exige `pm2 delete` + `start` (não `restart --update-env`).
+### Etapa 6 — Liberação gradual
+- `LOMADEE_OFFERS_ENABLED` + `LOMADEE_OFFERS_USER_IDS` (molde de `reviewFlags.js`).
+  Desligada: rota recusa criar, cron pula com log. Mudar env exige `pm2 delete`
+  + `start`.
 
-### Etapa 7 — Diagnóstico e observabilidade
-- `scripts/diag-busca-lomadee.mjs` (read-only, `--keyword`, lê a credencial do
-  banco, mascara o token) — atalho novo no "Mapa de sintomas" do `AGENTS.md`.
-- Log de contagem por motivo de descarte (igual `OFFER_DROP_REASON`) para separar
-  "sem oferta" de "oferta sem preço/desconto".
+### Etapa 7 — Diagnóstico e docs
+- `scripts/diag-lomadee.mjs` (já da Etapa 0) ganha modo banco (automações,
+  contas, últimos skips). Atalho novo no "Mapa de sintomas" do AGENTS.md
+  (respeitar o teto de 40 KB: `test/agents-md-enxuto.test.js`).
 
-### Etapa 8 — Testes, staging, produção
-1. `node --test` dos arquivos afetados + suíte completa; teste do teto de
-   `AGENTS.md` (40 KB) — só uma linha nova no índice/mapa.
+### Etapa 8 — Staging → produção
+1. `node --test` dos arquivos afetados + suíte inteira.
 2. PR → `develop` → deploy automático em staging (`inline`).
-3. Validar em `http://178.105.54.0:3006` com credencial de teste: busca (preview),
-   envio direto, fila de revisão, Story (se houver), dedup entre 2 automações
-   no mesmo grupo, automação Shopee antiga inalterada.
-4. Só então PR `develop → main`. Em produção (`remote`): o worker precisa de
-   `pm2 restart bot-supervisor --update-env` **só se** mexermos em
-   `bot-worker.js`/`core/`; este plano roda no cron da API (`src/offerAutomation`),
-   então o deploy da API basta — confirmar no `docs/rca/deploy-e-infra.md`.
-5. Liberar primeiro via allowlist; observar 48 h; ampliar.
+3. Validar em `http://178.105.54.0:3006`: conectar conta, preview, envio direto,
+   fila de revisão, dedup entre 2 automações no mesmo grupo, **automações Shopee e
+   Awin antigas inalteradas**.
+4. PR `develop → main`. Cron roda na API: em `remote` o deploy da API basta;
+   `bot-supervisor` só se mexer em `bot-worker.js`/`core/` (não é o caso) —
+   confirmar em `docs/rca/deploy-e-infra.md`.
+5. Liberar por lista; observar 48 h; ampliar.
 
-## 5. Mapa de impactos e riscos
+## 5. Impactos e riscos
 
 | Área | Risco | Mitigação |
 |---|---|---|
-| Automações Shopee existentes | regressão no dispatcher | `provider` default `shopee`; testes atuais intactos; PR separado da Etapa 4 |
-| Vazamento de token | app-token na URL cai em log | mascarar URL/erros; nunca `console.log(err)` cru do axios |
-| Dedup | mesmo produto em Shopee e Lomadee | `productDedupKey` por nome já cobre entre lojas; `itemId` com prefixo |
-| Desconto mínimo | Lomadee pode não trazer preço antigo → tudo filtrado | Etapa 0 mede; se faltar, aviso na tela e `minDiscountPct` desativado p/ Lomadee |
-| Imagem | miniatura pequena/hotlink bloqueado | reaproveitar `imageRefererUrl` + `previewImageFallbackPolicy`; medir na Etapa 0 |
-| Comissão/conflito | loja coberta por afiliado próprio da cliente | decisão 3.2; lista de exclusão |
-| Link | link Lomadee expirar ou perder rastreio | não reescrever; testar clique real no staging |
-| Limite de taxa | N automações × tick de 60 s | sem cache, mas 1 chamada por execução (igual Shopee); backoff em 429 |
-| Credenciais | `PLATFORMS` usado em caminhos de conversão | auditoria + teste (Etapa 2) |
-| Fila de revisão (desligada por padrão) | `discoverReviewItems` também busca | coberta pela Etapa 4 (mesmo `resolveOffers`) |
-| Textos "Shopee" | oferta Lomadee saindo com "Shopee" | Etapa 4 + teste de snapshot |
-| **Memória (REGRA #1)** | — | **Sem processo PM2 novo, sem cache, sem worker, sem Redis: impacto de RAM ≈ 0.** Só uma chamada HTTP a mais por execução |
-| Banco | migration | só coluna com default; staging antes de prod |
-| Cobrança/Plano | — | mantém PRO/Trial já existente |
+| Shopee e Awin em produção | regressão ao mexer no `dispatcher` | refatoração para registro por origem em PR próprio; testes atuais sem edição; `source` padrão intacto |
+| Origem desconhecida | deploy velho lendo automação `lomadee` | `invalid_source` já pula (nunca publica por engano) |
+| Vazamento de token | app-token no caminho da URL cai em log/PM2 | mascarar URL e erros; teste dedicado |
+| Isolamento | cliente usar conta de outra | toda consulta filtra `userId`; teste como `awin-routes.test.js` |
+| Duplicata entre redes | mesmo produto/loja em **Awin e Lomadee** (Kabum, Magalu) sai duas vezes no grupo | `dedupKey` por loja+produto; medir na Etapa 0 e no staging; aceitar na v1 se raro |
+| Comissão | loja também coberta por Awin/afiliado próprio | decisão 3.2; lista de exclusão |
+| Desconto mínimo | Lomadee sem preço antigo → tudo filtrado | Etapa 0 mede; se faltar, `minDiscountPct` fica oculto para Lomadee |
+| Imagem | miniatura pequena/hotlink bloqueado | `imageRefererUrl` + `previewImageFallbackPolicy`; medir |
+| Link | expirar/perder rastreio | não reescrever; testar clique real no staging |
+| Taxa | N automações × tick de 60 s | 1 chamada por execução; limitador por token; 429 → pula o tick |
+| Fila de revisão (desligada por padrão) | `discoverReviewItems` também busca | coberta na Etapa 4 |
+| Textos | "Shopee" aparecendo em oferta Lomadee | `storeName` dinâmico + teste de snapshot |
+| Stories/cupom | `platform:'shopee'` fixo | cupom desligado; Story decidido na Etapa 0 |
+| `PLATFORMS`/conversão | Lomadee vazar para caminho de conversão | tabela própria fora de `PLATFORMS` (padrão Awin); teste que falha se aparecer |
+| Banco | migration | só tabela/coluna nulável; staging antes de prod |
+| **Memória (REGRA #1)** | busca ao vivo: **~0** (sem processo, worker, Redis ou cache; 1 HTTP a mais por execução; limitador = poucos KB). Se virar sync em banco: `setInterval` + página de resposta, **< 5 MB** de pico como a Awin — **pedir OK antes** | — |
 
-## 6. Ordem de PRs sugerida
+## 6. Ordem dos PRs
 
-1. Etapa 0 (script + RCA com dados reais) — desbloqueia o resto.
-2. Etapas 1+2 (coluna + credencial + auditoria de `PLATFORMS`).
-3. Etapa 3 (adaptador + testes, ainda sem ligar).
-4. Etapa 4 (providers + dispatcher/review/rota) — PR mais crítico, revisão extra.
-5. Etapas 5+6 (tela + flag).
-6. Etapa 7 (diag + docs/AGENTS.md índice).
+1. Etapa 0 (script + `docs/rca/afiliados-lomadee.md` com dados reais).
+2. Etapa 1 (migration + LGPD).
+3. Etapa 2 (conta + rotas + tela de credencial).
+4. Etapa 3 (adaptador + testes, ainda sem ligar).
+5. Etapa 4a: refatoração para registro por origem, **sem** Lomadee (prova que
+   Shopee/Awin não mudam).
+6. Etapa 4b: origem Lomadee no fluxo + rota.
+7. Etapas 5+6 (tela + flag).
+8. Etapa 7 (diag + índice).
 
-Todos: branch a partir de `develop`, PR contra `develop`, staging, depois `main`.
+## 7. Aceite da v1
 
-## 7. Critérios de aceite da v1
+- Cliente conecta a conta, cria automação Lomadee, vê o preview e o grupo recebe
+  oferta com loja, preço, foto e link corretos.
+- Automações Shopee e Awin existentes: mesmos envios, mesmos textos.
+- Sem conta/token, a tela diz o que falta em português simples.
+- Nenhum token em log. RAM/swap inalterados após 48 h.
 
-- Cliente com token Lomadee cria automação, vê o preview, e o grupo recebe oferta
-  com loja, preço, imagem e link Lomadee corretos.
-- Automação Shopee existente segue idêntica (testes + comparação de texto).
-- Sem token, o painel explica o que falta; nada quebra silenciosamente.
-- Nenhum token aparece em log.
-- RAM do VPS inalterada (conferir swap após 48 h).
+## 8. Perguntas para a Etapa 0
 
-## 8. Perguntas em aberto para a Etapa 0
+Endpoint vigente (v2?); paginação; ordenação; campos de desconto; lojas
+disponíveis e sobreposição com Awin; expiração do link; limite de requisições;
+sandbox × produção; aprovação por loja; cupons no mesmo endpoint.
 
-Endpoint/versão atual (v2 ainda vigente?); paginação; ordenação; campos de
-desconto; lojas disponíveis; expiração do link; limite de requisições; diferença
-sandbox × produção; se o cadastro da cliente exige aprovação por loja.
+## 9. Testes a escrever
 
-## 9. Fora da v1 → v2 (conversão de links)
+`lomadee-offers` (adaptador), `lomadee-routes` (isolamento, 7 rotas),
+`lomadee-linguagem` (frases leigas), `offer-automation-sources` (registro por
+origem; Shopee/Awin idênticos), `lomadee-offer-automation` (dispatcher +
+revisão), teste de que `lomadee` não está em `PLATFORMS` nem em caminho de
+conversão, teste de redação de token.
 
-Usar a API de Deeplink (`_create`) para converter links coladas/espelhadas de
-lojas que a Lomadee cobre. Impactos a planejar então: entra em
-`src/converters/`, `conversionScheduler`, `mirrorLinkGuard` (não converteu →
-não envia), `PLATFORMS`/"Minhas credenciais" nos caminhos de conversão, ordem de
-prioridade frente ao afiliado direto (Amazon/ML/Magalu), ROI/relatórios de
-comissão, cache de deeplinks e limite de taxa (aqui o volume é muito maior que
-nas ofertas automáticas → **avaliar RAM/cache com a REGRA #1**). Não começar
-antes da v1 validada em produção.
+## 10. Fora da v1 → v2 (conversão de links)
+
+Entraria em `src/converters/index.js` ao lado do conversor `awin`
+(`src/converters/awin.js`, lojas aprovadas por cliente, `storeMatcher`,
+`AwinLink` como cache no banco). Impactos: **ordem de prioridade** entre Awin,
+Lomadee e afiliado direto (uma loja pode estar nas três), `mirrorLinkGuard`
+(não converteu → não envia), `CONVERSION_FAILURE`, "Converter links", "Criar
+oferta", cache de deeplinks (no banco, como `AwinLink`, não em memória),
+limite de taxa bem maior que o das ofertas, e ROI/comissão. Revisitar o
+`PLATFORMS`/`BotConfig.platforms` só aí. **Não começar antes da v1 validada em
+produção.**
