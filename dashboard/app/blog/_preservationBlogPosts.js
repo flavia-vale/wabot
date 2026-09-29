@@ -594,6 +594,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Suporte · Comissão não apareceu',
     usePersonAuthor: true,
     origin: 'blog_link_de_afiliado_sem_comissao',
+    heroImage: { path: '/blog/hero/36-link-sem-comissao.jpg', alt: 'Link sem comissão? Confira quatro pontos: etiqueta cadastrada, link convertido, cookie e atribuição, regras da loja', width: 1024, height: 1024 },
     intro: 'Quando a venda saiu e a comissão não aparece, a causa costuma estar em quatro lugares: o link não levava o seu código, a venda ainda não foi confirmada pela loja, a categoria paga um percentual menor do que você esperava, ou a compra não é elegível pelas regras do programa. Este checklist ajuda a separar cada uma antes de falar com a loja ou com o suporte.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Confira, nesta ordem: (1) o link que foi para o grupo levava o seu código de afiliada; (2) a venda já foi confirmada pela loja; (3) o percentual da categoria; (4) se a compra é elegível pelas regras do programa. O Espelha Grupos ajuda no item 1: ele troca o link pelo seu código. Os itens 2 a 4 dependem da loja.'] },
@@ -625,6 +626,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Suporte · Conta suspensa',
     usePersonAuthor: true,
     origin: 'blog_shopee_suspendeu_afiliado',
+    heroImage: { path: '/blog/hero/37-conta-suspensa.jpg', alt: 'Shopee suspendeu sua conta? Quatro passos: ler o motivo, conferir os termos do programa, pedir revisão e não improvisar com outra conta', width: 1024, height: 1024 },
     intro: 'A Shopee decide sozinha sobre a conta de afiliado, e os termos do programa dão a ela bastante margem para suspender, reter comissão ou encerrar. Este guia resume o que os Termos e Condições do Programa de Afiliados Shopee dizem sobre isso e o que fazer com calma: entender o aviso, reunir provas e falar com o canal oficial. Não somos a Shopee e não temos como reverter uma decisão dela.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Leia o aviso da Shopee até o fim, guarde prints e datas, releia os termos do programa e fale com o suporte oficial da Shopee. Enquanto isso, pare de divulgar o que possa ter causado o problema. O Espelha Grupos não tem acesso à sua conta da Shopee e não consegue reativá-la.'] },
