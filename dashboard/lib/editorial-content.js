@@ -33,6 +33,7 @@ export const EDITORIAL_DATES = {
   '/bot-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   '/comparativos': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
   '/ferramentas': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
+  '/ferramentas/calculadora-comissao-afiliado-whatsapp': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
   '/ferramentas/calculadora-tempo-grupos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   // Lacuna herdada de 94c6a10f ("feature 010 seo-lead-capture, 24/27 tasks"): as duas
   // rotas entraram em CONTENT_SEO_ROUTES sem a data editorial correspondente, e o
@@ -45,7 +46,7 @@ export const EDITORIAL_DATES = {
   // 3 rotas abaixo já tinham data em resolveLastModified() no seo-registry,
   // só faltava aqui. Reaproveita a MESMA data já em uso no registry para não
   // inventar dado novo.
-  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-27' },
+  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-29' },
   '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-09-27' },
@@ -172,7 +173,7 @@ export const EDITORIAL_DATES = {
   '/alternativas/divulgalinks': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
   '/alternativas/lumi-ofertas-inteligentes': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
   '/alternativas/busqy': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
-  '/alternativas/afilira': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/afilira': { publishedAt: '2026-09-17', updatedAt: '2026-09-29' },
   '/alternativas/ia-divulgadora': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
   '/alternativas/divulga-ninja': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
   '/alternativas/shark': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },

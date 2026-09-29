@@ -18,6 +18,7 @@ import {
 } from '@/lib/marketing-content'
 import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
 import { PainelVendasIlustrativo } from '@/components/marketing/PainelVendasIlustrativo'
+import { PrecoPorGrupoAfilira } from '@/components/marketing/PrecoPorGrupoAfilira'
 
 /* PÁGINA DE PREÇO (auditoria de funil 2026-08-05, §1.4).
  *
@@ -205,6 +206,7 @@ export default async function PrecosPage() {
       {/* Ficha técnica canônica (medição de IA 27/09/2026): idêntica à da
         * home, do llms.txt e do pricing.md — lojas nomeadas e Basic × Pro. */}
       <FichaTecnica />
+      <PrecoPorGrupoAfilira plans={plans} />
 
       <section style={{ paddingTop: 64 }}>
         <div className="wrap" style={{ maxWidth: 820 }}>
