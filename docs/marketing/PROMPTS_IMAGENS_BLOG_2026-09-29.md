@@ -20,7 +20,7 @@ Ver `dashboard/public/blog/hero/22-protecao-camadas.png` como referência:
 > "@espelhagrupos" à direita. Sem fotos reais de pessoas. Sem logotipos de
 > terceiros (Shopee, WhatsApp, etc.). Sem promessas de ganho.
 
-## Os 7 prompts (colar depois do bloco de estilo)
+## Os prompts (as linhas 32 e 35 já foram feitas) (colar depois do bloco de estilo)
 
 | Arquivo (salvar em `dashboard/public/blog/hero/`) | Etiqueta | Título (palavra verde em **negrito**) | Cartões |
 |---|---|---|---|
