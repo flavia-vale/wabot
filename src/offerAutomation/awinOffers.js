@@ -35,12 +35,24 @@ export const AWIN_PROMOTION_TEMPLATE_BODY = `{{gancho}}
 
 {{convitegrupo}}`
 
-// Identidade da promoção = LOJA + TÍTULO, não o número da Awin.
-// Medido no staging em 2026-09-29: a Awin tinha 4 promoções idênticas da
-// Arno (mesmo título, loja e validade) com números 4118880..4118883, e uma
-// automação de 3 por envio mandou 3 vezes o mesmo liquidificador. Cópias com
-// números diferentes agora contam como UMA oferta: no mesmo envio, contra o
-// que já saiu (sentItemIds) e na dedup cruzada por grupo (productKey).
+// Identidade da promoção = LOJA + PÁGINA DA LOJA (ou título, sem página),
+// nunca o número da Awin. Medido no staging em 2026-09-29: a Arno publica o
+// MESMO produto duas vezes, uma por voltagem ("...LN63 127V" e "...LN63
+// 220V"), com números diferentes e a MESMA página (`url`). A 1ª correção
+// (loja + título) deixava os dois passarem; a página é o que eles têm igual.
+// Vale no mesmo envio, contra o que já saiu (sentItemIds) e na dedup cruzada
+// por grupo (productKey).
+function normalizedStorePage(value) {
+  try {
+    const url = new URL(String(value ?? '').trim())
+    const host = url.hostname.toLowerCase().replace(/^www\./, '')
+    const path = decodeURIComponent(url.pathname).toLowerCase().replace(/\/+$/, '')
+    return host ? `${host}${path}` : null
+  } catch {
+    return null
+  }
+}
+
 function normalizedTitle(value) {
   return normalizeText(value).replace(/[^a-z0-9]+/g, ' ').trim()
 }
@@ -56,12 +68,31 @@ function shortHash(text) {
   return hash.toString(36)
 }
 
-export function awinContentKey(promotion) {
+function awinTitleKey(promotion) {
   return `${promotion.advertiserId}:${shortHash(normalizedTitle(promotion.title))}`
+}
+
+export function awinContentKey(promotion) {
+  const page = normalizedStorePage(promotion.url)
+  return page ? `${promotion.advertiserId}:u:${shortHash(page)}` : awinTitleKey(promotion)
 }
 
 export function awinItemId(promotion) {
   return `awin:c:${awinContentKey(promotion)}`
+}
+
+// Formato da 1ª correção (loja + título, 2026-09-29 tarde). Continua valendo
+// para o que já foi enviado com ele.
+export function awinTitleItemId(promotion) {
+  return `awin:c:${awinTitleKey(promotion)}`
+}
+
+// Desempate quando várias vencem na mesma hora: ordem "embaralhada" mas
+// sempre a mesma (hash do número). Pela ordem do número, a loja que cadastra
+// em sequência (Arno: 4118874..4118893 = só liquidificadores) mandava três
+// produtos da mesma linha seguidos.
+function tieBreak(a, b) {
+  return shortHash(String(a.promotionId)).localeCompare(shortHash(String(b.promotionId))) || String(a.promotionId).localeCompare(String(b.promotionId))
 }
 
 // Formato antigo (até 2026-09-29): um item por número da Awin. Continua
@@ -139,8 +170,10 @@ export function awinPromotionToOffer(promotion) {
 export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserIds = [], keyword = '', now = new Date(), limit = 5 } = {}) {
   const nowMs = now.getTime()
   const sent = new Set(sentItemIds.map(String))
-  // Cópia de uma promoção já enviada no formato antigo também já saiu.
-  const sentContent = new Set(promotions.filter((promotion) => sent.has(awinLegacyItemId(promotion))).map(awinContentKey))
+  // Já saiu = qualquer formato de id que esta promoção já teve. E tudo que
+  // tem o mesmo conteúdo dela (a outra voltagem, a cópia) também já saiu.
+  const wasSent = (promotion) => sent.has(awinItemId(promotion)) || sent.has(awinTitleItemId(promotion)) || sent.has(awinLegacyItemId(promotion))
+  const sentContent = new Set(promotions.filter(wasSent).map(awinContentKey))
   const allowedStores = new Set(parseAdvertiserIds(advertiserIds))
   const filtered = promotions.filter((promotion) => {
     if (promotion.status && promotion.status !== 'active') return false
@@ -148,16 +181,16 @@ export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserI
     if (start != null && start > nowMs) return false
     const end = time(promotion.endDate)
     if (end != null && end - nowMs < AWIN_MIN_REMAINING_MS) return false
-    if (sent.has(awinItemId(promotion)) || sent.has(awinLegacyItemId(promotion)) || sentContent.has(awinContentKey(promotion))) return false
+    if (wasSent(promotion) || sentContent.has(awinContentKey(promotion))) return false
     if (allowedStores.size && !allowedStores.has(String(promotion.advertiserId))) return false
     return matchesKeyword(promotion, keyword)
   })
 
   const endOrInfinity = (promotion) => time(promotion.endDate) ?? Number.POSITIVE_INFINITY
-  // Uma só por conteúdo (loja + título): fica a que vence antes.
+  // Uma só por conteúdo (loja + página): fica a que vence antes.
   const seenContent = new Set()
   const eligible = [...filtered]
-    .sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || String(a.promotionId).localeCompare(String(b.promotionId)))
+    .sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || tieBreak(a, b))
     .filter((promotion) => {
       const key = awinContentKey(promotion)
       if (seenContent.has(key)) return false
@@ -171,7 +204,7 @@ export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserI
     if (!byStore.has(key)) byStore.set(key, [])
     byStore.get(key).push(promotion)
   }
-  const queues = [...byStore.values()].map((list) => list.sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || String(a.promotionId).localeCompare(String(b.promotionId))))
+  const queues = [...byStore.values()].map((list) => list.sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || tieBreak(a, b)))
   // A loja cuja próxima promoção vence antes abre a rodada.
   queues.sort((a, b) => endOrInfinity(a[0]) - endOrInfinity(b[0]) || String(a[0].advertiserName).localeCompare(String(b[0].advertiserName)))
 
