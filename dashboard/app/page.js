@@ -4,6 +4,7 @@ import { getPublicCounter } from '@/lib/public-counters'
 import { How } from '@/components/landing/How'
 import { Features } from '@/components/landing/Features'
 import { Social } from '@/components/landing/Social'
+import { Depoimentos } from '@/components/landing/Depoimentos'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import { FichaTecnica } from '@/components/landing/FichaTecnica'
@@ -100,6 +101,7 @@ export default async function LandingPage({ searchParams = {} }) {
       <Features />
       <VendasPreview />
       <Social />
+      <Depoimentos />
       <Pricing initialPlans={plans} />
       <GuaranteeBlock />
       {/* Ficha técnica canônica (medição de IA 27/09/2026): a mesma tabela

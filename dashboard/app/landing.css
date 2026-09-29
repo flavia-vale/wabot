@@ -947,3 +947,27 @@
 .marketing-guarantee-grid + p a { color: var(--accent-strong); font-weight: 700; }
 @media (max-width: 900px) { .marketing-guarantee-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .marketing-guarantee-grid { grid-template-columns: 1fr; } }
+
+/* Depoimentos (site público) — Design System v2, seção "Depoimentos".
+   Carrossel gira sozinho e para no hover, no foco e no botão Pausar. */
+.lp-depo{display:flex;flex-direction:column;gap:14px;width:320px;flex-shrink:0;padding:22px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 2px rgba(31,45,42,.04),0 6px 18px -10px rgba(62,156,122,.22);color:var(--ink);margin:0}
+.lp-depo-stars{display:flex;gap:3px;color:var(--accent-strong)}
+.lp-depo-stars svg{width:16px;height:16px}
+.lp-depo-stars .off{color:var(--line-strong)}
+.lp-depo-text{margin:0;font-size:15px;line-height:1.55;flex:1;text-wrap:pretty}
+.lp-depo-who{display:flex;align-items:center;gap:10px;padding-top:14px;border-top:1px solid var(--line)}
+.lp-depo-av{width:36px;height:36px;border-radius:50%;background:var(--bg-soft);color:var(--accent-strong);font-size:14px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.lp-depo-name{font-size:13px;font-weight:600;line-height:1.3}
+.lp-depo-role{font-size:12px;color:var(--ink-soft)}
+.lp-depo-row{display:flex;flex-wrap:wrap;justify-content:center;gap:16px}
+.lp-carousel{position:relative;overflow:hidden;padding:8px 0 16px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 64px,#000 calc(100% - 64px),transparent);mask-image:linear-gradient(90deg,transparent,#000 64px,#000 calc(100% - 64px),transparent)}
+.lp-carousel-track{display:flex;gap:16px;width:max-content;align-items:stretch;animation:lp-roll var(--lp-speed,48s) linear infinite}
+.lp-carousel-half{display:flex;gap:16px}
+.lp-carousel:hover .lp-carousel-track,.lp-carousel:focus-within .lp-carousel-track,.lp-carousel.paused .lp-carousel-track{animation-play-state:paused}
+.lp-carousel-ctrl{display:flex;justify-content:center;margin-top:4px}
+.lp-carousel-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:999px;border:1px solid transparent;background:transparent;color:var(--ink-soft);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.lp-carousel-btn:hover{background:var(--bg-soft);color:var(--ink)}
+.lp-depo-note{text-align:center;font-size:12px;color:var(--ink-soft);margin:10px auto 0;max-width:560px}
+@keyframes lp-roll{from{transform:translateX(0)}to{transform:translateX(calc(-50% - 8px))}}
+@media (max-width:640px){.lp-depo{width:280px;padding:18px}.lp-depo-text{font-size:14px}}
+@media (prefers-reduced-motion:reduce){.lp-carousel{overflow-x:auto;scroll-snap-type:x mandatory;-webkit-mask-image:none;mask-image:none}.lp-carousel-track{animation:none}.lp-carousel-track>[aria-hidden="true"]{display:none}.lp-depo{scroll-snap-align:start}.lp-carousel-ctrl{display:none}}

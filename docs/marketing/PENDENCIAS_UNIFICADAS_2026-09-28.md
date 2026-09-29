@@ -77,6 +77,13 @@ Tempo é estimativa.
 
 ## 1.2 🔴 Depoimentos reais — 1 h
 
+> **29/09/2026 — vitrine pronta, falta o conteúdo.** Design system ganhou a seção
+> "Depoimentos" (cartão + carrossel). Código: `dashboard/lib/depoimentos.js`
+> (lista **vazia** de propósito), `components/landing/Depoimentos.jsx`, na home,
+> nas LPs e em `/precos`. O bloco só aparece com depoimento **autorizado por
+> escrito**; cada item exige nome, papel, texto literal, data do "autorizo" e
+> origem (`test/depoimentos-guarda.test.js`). Para publicar: colar o item na lista.
+
 **Passo 1 (VPS, só leitura):** lista as pagantes atuais que mais usam e
 renovaram, sem reembolso (saída de até 15 linhas):
 
