@@ -199,6 +199,28 @@ publicada no `llms.txt`.
 - **Medição de IA:** `node scripts/validar-medicao-ia.mjs` antes de fechar o
   placar (um "SIM" maiúsculo zerou o de 01/09).
 
+## Relatórios do Bing Webmaster — o que é defeito e o que não é (29/09/2026)
+
+Medido em produção (curl com user-agent do bingbot) antes de mexer:
+
+- **"Título muito longo"** = título ENTREGUE (com ` | Espelha Grupos`) acima de
+  70 chars. É defeito real: `/precos` tinha 78 e caiu para 67. Guarda:
+  `test/bing-titulo-precos.test.js`. Em 29/09 outras 28 páginas do sitemap
+  também passavam de 70 (lista: rodar o laço de `curl` no sitemap) — o Bing só
+  acusa a URL inspecionada; trocar título é decisão da dona do produto.
+- **`/pricing.md` sem título, meta descrição, idioma e H1** = falso positivo: o
+  Bing aplica checagem de HTML num arquivo Markdown (`text/markdown`). A URL
+  está **indexada**. Não transformar em HTML nem pôr `noindex`/canonical: é o
+  recurso que IA lê direto (ver "Datas, validadores" acima).
+- **"Descoberta, mas não rastreada"** (`/llms.txt`, posts novos) = o Bing ainda
+  não visitou. Conferir só: 200, fora do `Disallow` do `robots.txt`, no
+  sitemap e no IndexNow (`getIndexableSeoRoutes`). Tudo ok → "Solicitar
+  indexação" no Bing; não há código a corrigir. A data "01 Jan 2006" é
+  placeholder do Bing, não dado nosso.
+- **URL com `//`** (`espelhagrupos.com.br//blog/...`) veio digitada na
+  inspeção: sitemap, IndexNow e `llms.txt` não geram `//`, e o servidor
+  responde 308 para a URL certa. Inspecionar sempre com uma barra só.
+
 ## Dados de mercado para marketing (canônico — usar em toda decisão de SEO/conteúdo)
 
 Baseline de **2026-07-30**, fonte: Search Console (12 meses), Planejador de

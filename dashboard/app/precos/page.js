@@ -34,7 +34,10 @@ import { PrecoPorGrupoAfilira } from '@/components/marketing/PrecoPorGrupoAfilir
  */
 
 export const metadata = {
-  title: 'Preços e planos: quanto custa o robô de ofertas para WhatsApp',
+  // 29/09/2026: com o sufixo " | Espelha Grupos" o título entregue tinha 78
+  // chars e o Bing Webmaster acusou "Título muito longo" (teto de 70). Agora
+  // são 67, com as mesmas palavras de busca ("preços", "quanto custa").
+  title: 'Preços: quanto custa o robô de ofertas no WhatsApp',
   // 194 chars estourava o teto de 160 do Google/Bing (Bing Webmaster,
   // 27/09/2026: "Descrição Meta muito longa"). Mesmos fatos, mais curto.
   description:
