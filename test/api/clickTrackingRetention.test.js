@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import db from '../../src/db.js'
-import { pruneClickTracking } from '../../src/core/clickTracker.js'
+import { pruneClickTracking } from '../../src/api/clickTrackingRetention.js'
 
 const DAY = 24 * 60 * 60 * 1000
 

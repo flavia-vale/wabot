@@ -552,7 +552,7 @@ Crescimento do banco: 1 linha em `AffiliateLink` por envio por destino com o
 recurso ligado (~200 B + índices) e 1 em `AffiliateClick` por clique.
 Limpeza automática (2026-09-29): a passada diária de retenção da API
 (`cleanupOldLogs` em `src/api/server.js` → `pruneClickTracking` em
-`src/core/clickTracker.js`) apaga **clique com mais de 90 dias** e **link curto
+`src/api/clickTrackingRetention.js`, fora de `WORKER_CODE_PATHS_RE` para o deploy não reiniciar o `bot-supervisor`) apaga **clique com mais de 90 dias** e **link curto
 com mais de 180 dias** (os cliques dele vão junto, cascade). **Não regredir:**
 o link não pode ter a mesma retenção do clique — apagar o `AffiliateLink` faz o
 `/r/<hash>` de uma oferta antiga no histórico do grupo responder 404; 180 dias

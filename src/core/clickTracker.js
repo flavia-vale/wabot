@@ -115,34 +115,3 @@ export async function getClickStats(opts) {
   })
   return { total, days }
 }
-
-// Retenção: clique vale 90 dias (é telemetria, some sozinho). O link curto
-// vale 180 dias porque apagar o AffiliateLink faz o /r/:hash de uma oferta
-// antiga ainda no histórico do grupo responder 404 — a folga de 180 dias passa
-// com sobra da vida de qualquer promoção. Apagar o link leva os cliques dele
-// junto (onDelete: Cascade). Chamado pela limpeza diária de src/api/server.js.
-export const CLICK_RETENTION_DAYS_DEFAULT = 90
-export const TRACKED_LINK_RETENTION_DAYS_DEFAULT = 180
-
-function retentionDaysFromEnv(name, fallback) {
-  const raw = process.env[name]
-  return raw === undefined ? fallback : Number(raw)
-}
-
-export async function pruneClickTracking(opts = {}) {
-  const db = opts.db ?? defaultDb
-  const now = opts.now ?? Date.now()
-  const clickDays = opts.clickDays ?? retentionDaysFromEnv('CLICK_RETENTION_DAYS', CLICK_RETENTION_DAYS_DEFAULT)
-  const linkDays = opts.linkDays ?? retentionDaysFromEnv('TRACKED_LINK_RETENTION_DAYS', TRACKED_LINK_RETENTION_DAYS_DEFAULT)
-  const day = 24 * 60 * 60 * 1000
-  const result = { clicks: 0, links: 0 }
-  if (Number.isFinite(clickDays) && clickDays > 0) {
-    const { count } = await db.affiliateClick.deleteMany({ where: { clickedAt: { lt: new Date(now - clickDays * day) } } })
-    result.clicks = count
-  }
-  if (Number.isFinite(linkDays) && linkDays > 0) {
-    const { count } = await db.affiliateLink.deleteMany({ where: { createdAt: { lt: new Date(now - linkDays * day) } } })
-    result.links = count
-  }
-  return result
-}
