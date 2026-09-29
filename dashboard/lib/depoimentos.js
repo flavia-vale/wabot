@@ -66,7 +66,7 @@ export const DEPOIMENTOS = [
     origem: 'prints guardados por Flávia (autorização por escrito de cada cliente)',
   },
   {
-    nome: "Roberta “Beto das Promoções”",
+    nome: "Roberta “Beta das Promoções”",
     papel: "Rede com 12 grupos de ofertas",
     texto: "Gente do céu, eu cuido de 12 grupos de achadinhos no WhatsApp e tava quase maluca kkkkk. O Espelha Grupos simplesmente automatizou toda a minha rotina, tô conseguindo dar conta de tudo sozinha. Muito obrigado de verdade!! 🙌✨",
     autorizadoEm: '2026-09-29',
