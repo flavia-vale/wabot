@@ -38,6 +38,7 @@ para baixo; cada item diz o que decide.
 
 | # | Quando | O quê | Como | Tempo |
 |---|---|---|---|---|
+| 🔝 | assim que a PR dos títulos-pergunta dos comparativos chegar em `main` | **Títulos-pergunta dos concorrentes (29/09)** — 3 URLs, 1 dia (no Google e no Bing): `/alternativas/achadinho-pro` ("Achadinho Pro cobra R$ 49,97 só p/ Shopee. Veja R$ 39"), `/alternativas/shozap` ("Shozap limita grupos? Aqui é ilimitado por R$ 39"), `/alternativas/achadinhos-bot` ("AchadinhosBot limita grupos? Aqui é ilimitado: R$ 39"). Tiradas da R4/R5/R6 para não pedir duas vezes. Medir pela série DIÁRIA a partir do deploy | Search Console e Bing Webmaster → Inspeção de URL → conferir o título novo em produção → Solicitar indexação | 5 min |
 | 🔝 | já (não depende de deploy) | **Bing Webmaster (29/09)**: Inspeção de URL → Solicitar indexação de `https://espelhagrupos.com.br/llms.txt` e `https://espelhagrupos.com.br/blog/como-espelhar-mensagens-entre-grupos-whatsapp` (uma barra só depois do `.br`). Depois que a PR do título de `/precos` chegar em `main`: pedir `/precos` no Bing e no Search Console | Bing Webmaster → Inspeção de URL → Solicitar indexação | 5 min |
 | 🔝 | assim que a PR dos títulos do Bing chegar em `main` (junto com `/precos`) | **Leva de títulos Bing (29/09)** — 28 páginas com título encurtado para caber em 70 chars (10 por dia, no Google e no Bing): dia 1: `/automacao-whatsapp-afiliados`, `/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo`, `/padronizar-divulgacao-afiliado-whatsapp`, `/parcerias`, `/bot-canais-whatsapp`, `/bot-achadinhos-whatsapp`, `/grupo-para-canal-whatsapp`, `/quanto-ganha-afiliado-shopee`, `/vendas-e-comissao-afiliado-whatsapp`, `/copiaram-minha-oferta-no-whatsapp`; dia 2: `/comparativos`, `/programa-de-afiliados`, `/parceiro-influenciador`, `/termos-parceria-influenciador`, `/conteudos`, `/blog/bot-para-afiliados-whatsapp-grupos-cupons`, `/blog/bot-whatsapp-antiban-existe`, `/blog/como-divulgar-ofertas-amazon-whatsapp`, `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp`, `/como-funciona-espelha-grupos-canais`; dia 3: `/metodologia-uso-responsavel-whatsapp`, `/melhores-bots-para-afiliados-whatsapp`, `/alternativas/proafiliados`, `/alternativas/divulgalinks`, `/clonar-mensagens-de-grupo-de-afiliados`, `/confiabilidade-sessao-whatsapp`, `/espelha-grupos-e-confiavel`, `/seguranca-credenciais-afiliado` | Search Console e Bing Webmaster → Inspeção de URL → conferir o título novo em produção → Solicitar indexação | 15 min por dia |
 | 🔝 | assim que a PR da home (vídeo novo + aba Vendas + cards de recursos) chegar em `main` | **Reindexação da home (29/09)**: `/` — trocou o vídeo, ganhou a seção da aba Vendas e os cards de recursos foram revisados | Search Console → Inspeção de URL → conferir em produção → Solicitar indexação | 2 min |
@@ -165,7 +166,7 @@ começa com "Comissão de afiliado". Medir o efeito pela série DIÁRIA do Searc
 Console, nunca pelo acumulado de 3 meses (ver `docs/rca/seo-marketing.md`).
 
 ```
-https://espelhagrupos.com.br/alternativas/achadinho-pro                    ⏳
+https://espelhagrupos.com.br/alternativas/achadinho-pro                    → movida para a leva 🔝 de títulos-pergunta (29/09)
 https://espelhagrupos.com.br/programa-de-afiliados                         ⏳
 https://espelhagrupos.com.br/quanto-ganha-afiliado-shopee                  ⏳
 https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ✅ pedida 2026-09-28 e 2026-09-29
@@ -187,7 +188,7 @@ Guia completo" logo abaixo do título. Medir pela série DIÁRIA.
 https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp        ⏳
 https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp    ⏳
 https://espelhagrupos.com.br/blog/melhores-horarios-para-postar-ofertas-no-whatsapp ⏳
-https://espelhagrupos.com.br/alternativas/shozap                           ⏳
+https://espelhagrupos.com.br/alternativas/shozap                           → movida para a leva 🔝 de títulos-pergunta (29/09)
 https://espelhagrupos.com.br/alternativas/gigi-bot                         ⏳
 https://espelhagrupos.com.br/alternativas/fluxopromo                       ⏳
 https://espelhagrupos.com.br/shopee-afiliados-whatsapp                     ⏳
@@ -206,10 +207,10 @@ Achadinho Pro?" logo no primeiro bloco; `/politica-de-reembolso` mostra "Nada te
 prende ao plano"; a página nova abre.
 
 ```
-https://espelhagrupos.com.br/alternativas/achadinhos-bot                ⏳
+https://espelhagrupos.com.br/alternativas/achadinhos-bot                → movida para a leva 🔝 de títulos-pergunta (29/09)
 https://espelhagrupos.com.br/espelhar-grupos-de-ofertas-vale-a-pena     ⏳ (nova)
 https://espelhagrupos.com.br/politica-de-reembolso                      ⏳
-https://espelhagrupos.com.br/alternativas/achadinho-pro                 ⏳
+https://espelhagrupos.com.br/alternativas/achadinho-pro                 → movida para a leva 🔝 de títulos-pergunta (29/09)
 https://espelhagrupos.com.br/bot-achadinhos-whatsapp                    ⏳
 https://espelhagrupos.com.br/bot-afiliados-whatsapp                     ⏳
 https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp      ⏳
