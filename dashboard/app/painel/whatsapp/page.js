@@ -41,6 +41,14 @@ function NoteBox({ variant = 'is-warn', title, message }) {
   )
 }
 
+function ConnectionHelp() {
+  return (
+    <div className="pnl-toolbar" style={{ justifyContent: 'flex-end' }}>
+      <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
+    </div>
+  )
+}
+
 /* Conexão recusada porque este número já foi usado em outra conta.
  *
  * A recusa NUNCA pode virar parede: a cliente perde o acesso ao robô e não tem
@@ -693,9 +701,7 @@ export default function WhatsAppPage() {
           porque logo após reconectar há uma rajada esperada de Bad MAC enquanto
           as sender keys dos grupos re-sincronizam, e re-escanear reinicia esse
           ciclo. Decrypt dessincronizado costuma normalizar sozinho. */}
-      <div className="pnl-toolbar whatsapp-help" style={{ justifyContent: 'flex-end' }}>
-        <HelpLink topic="como-conectar-whatsapp-qr-code">Ajuda para conectar</HelpLink>
-      </div>
+      <ConnectionHelp />
 
       {showConnectionCanvas && (
         <section className="whatsapp-steps" aria-labelledby="whatsapp-steps-title">
