@@ -138,8 +138,8 @@ e amostras reais. Nenhum sprint seguinte começa sem o gate aprovado.
 - **#S4-1** `dashboard/app/painel/converte-links/page.js` (texto + detecção),
   `dashboard/app/painel/criar-oferta/page.js` (`STORES` + texto),
   `dashboard/lib/mobileOfferComposer.js` (`COUPON_STORES` + host).
-- **#S4-2** `dashboard/app/painel/grupos/page.js` (`ALL_PLATFORMS`),
-  `dashboard/lib/mobileGroupPicker.js`, `dashboard/app/painel/espelhamento/page.js`.
+- **#S4-2** `dashboard/lib/mobileGroupPicker.js`, `dashboard/app/painel/espelhamento/page.js`
+  (lista de lojas por grupo), `dashboard/app/painel/ids-afiliada/page.js`.
 - **#S4-3** `dashboard/lib/mobileLogs.js`, `dashboard/lib/mobileCouponStore.js`,
   `dashboard/lib/painel/logsCopy.js` (motivos de falha em linguagem leiga),
   `src/domain/painel/conversionTest.js` (lista de lojas no texto).
