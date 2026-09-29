@@ -53,6 +53,16 @@ export const AWIN_COPY = Object.freeze({
   loadError: 'Não conseguimos carregar suas contas da Awin.',
 })
 
+// Por que o "Enviar agora" de uma automação de promoções Awin não enviou.
+// Nunca usar o texto da Shopee aqui (RCA 2026-09-29: a tela dizia "A Shopee
+// trouxe produtos… reduza o desconto mínimo" numa automação Awin que só tinha
+// esgotado as promoções — e Awin nem tem desconto mínimo).
+export const AWIN_SKIP_LABELS = Object.freeze({
+  all_offers_filtered: 'Todas as promoções que ainda valem já foram enviadas por esta automação. Promoções novas chegam da Awin a cada hora e saem sozinhas.',
+  no_awin_promotions: 'Ainda não chegou nenhuma promoção ativa dessa conta Awin. Em Minhas credenciais, use "Atualizar agora".',
+  no_awin_account: 'Escolha uma conta Awin para esta automação (as contas ficam em Minhas credenciais).',
+})
+
 export const AWIN_STATUS = Object.freeze({
   pending: { label: 'Aguardando a primeira atualização', tone: 'info', tag: 'info' },
   ok: { label: 'Conectada', tone: 'success', tag: 'success' },
