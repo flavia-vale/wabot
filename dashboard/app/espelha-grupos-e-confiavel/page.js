@@ -84,6 +84,16 @@ const oQueFazemos = [
   ],
 ]
 
+// A3 (28/09/2026): limites de FUNÇÃO, separados de "o que não é" (identidade).
+// Cada item vem de fato já publicado na ficha técnica (dashboard/lib/ficha-tecnica.js)
+// ou nas limitações do produto (marketing-content.js): nada novo é prometido.
+const naoFaz = [
+  ['Só WhatsApp', 'Publica em grupos e, no plano Pro, em canais do WhatsApp. Não envia para Telegram nem para Instagram.'],
+  ['Não garante que o número não será bloqueado', 'Quem decide restringir um número é o WhatsApp. O produto oferece controles de ritmo, mas nenhum software garante isso.'],
+  ['Não promete ganho nem comissão', 'Ele troca o link pelo seu código e publica com fila e intervalo. Quanto isso vira em venda depende da oferta, do grupo e da loja.'],
+  ['Não substitui a sua revisão', 'Preço, cupom, estoque e regras de cada plataforma de afiliados continuam sendo conferidos por quem opera o grupo.'],
+]
+
 const faq = [
   {
     q: 'O Espelha Grupos tem relação com o golpe de espelhamento de tela?',
@@ -182,6 +192,18 @@ export default async function Page() {
               <h2>O que o {BRAND_NAME} NÃO é</h2>
               <div className="mt-4 space-y-4">
                 {naoSomos.map(([heading, body]) => (
+                  <div key={heading}>
+                    <h3 className="font-black text-gray-950">{heading}</h3>
+                    <p className="mt-1 text-sm leading-7 text-gray-700">{body}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5 md:p-6">
+              <h2>O que o {BRAND_NAME} não faz</h2>
+              <div className="mt-4 space-y-4">
+                {naoFaz.map(([heading, body]) => (
                   <div key={heading}>
                     <h3 className="font-black text-gray-950">{heading}</h3>
                     <p className="mt-1 text-sm leading-7 text-gray-700">{body}</p>
