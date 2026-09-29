@@ -130,6 +130,9 @@ import {
   isPilotEmail,
   shouldSendSelfWelcomeMessage,
   decideActivationNudge,
+  isTrialDecisionSelfMessageEnabled,
+  decideTrialDecisionSelfMessage,
+  buildTrialDecisionMessageText,
   buildSelfWelcomeMessageText,
   buildFirstOfferPublishedMessageText,
   buildMissingCredentialNudgeText,
@@ -735,6 +738,7 @@ function startHeartbeatIpc() {
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
     maybeSendActivationNudge().catch(() => {})
+    maybeSendTrialDecisionMessage().catch(() => {})
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
@@ -1089,6 +1093,61 @@ async function maybeSendActivationNudge() {
     logWhatsappSelfMessageContact({ reason: kind === 'missing_credential' ? 'lembrete_sem_etiqueta' : 'lembrete_sem_grupo', texto })
   } catch (err) {
     logger.warn({ err: String(err?.message ?? err) }, 'Falha ao avaliar/enviar nudge de ativação (piloto, best-effort)')
+  }
+}
+
+// Decisão do teste pelo PRÓPRIO WhatsApp (momento 6 — ver
+// decideTrialDecisionSelfMessage em src/core/selfWelcomeMessage.js). A partir do
+// dia 5 do teste, uma vez por dia de calendário, só com prova e só para quem
+// tem `contactPhoneOptInAt`. Best-effort: falha aqui é só logada.
+let lastTrialDecisionCheckAt = 0
+async function maybeSendTrialDecisionMessage() {
+  if (!activeSock) return
+  const now = Date.now()
+  if (now - lastTrialDecisionCheckAt < ACTIVATION_NUDGE_CHECK_INTERVAL_MS) return
+  lastTrialDecisionCheckAt = now
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    const enabled = isTrialDecisionSelfMessageEnabled()
+    if (!enabled && !pilotEmails.length) return
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { email: true, plan: true, accessExpiresAt: true, contactPhoneOptInAt: true },
+    })
+    if (!user || String(user.plan ?? '').toLowerCase() !== 'trial') return
+    const [offersPublished, destGroupCount, sent] = await Promise.all([
+      db.messageLog.count({ where: { userId, status: 'success' } }),
+      db.group.count({ where: { userId, role: 'post' } }),
+      db.analyticsEvent.findFirst({
+        where: { userId, event: 'ops_self_trial_decision_sent' },
+        orderBy: { createdAt: 'desc' },
+        select: { metadata: true },
+      }),
+    ])
+    let lastSentDay = null
+    try { lastSentDay = JSON.parse(sent?.metadata || '{}').day ?? null } catch { /* metadata antiga: ignora */ }
+    const screen = decideTrialDecisionSelfMessage({
+      accountEmail: user.email,
+      pilotEmails,
+      enabled,
+      optedIn: Boolean(user.contactPhoneOptInAt),
+      plan: user.plan,
+      accessExpiresAt: user.accessExpiresAt,
+      offersPublished,
+      destGroupCount,
+      lastSentDay,
+      now: new Date(now),
+    })
+    if (!screen) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    const texto = buildTrialDecisionMessageText({ screen })
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+    logger.info({ userId, day: screen.dayKey }, 'Decisão do teste enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_trial_decision_sent', metadata: { day: screen.dayKey } })
+    logWhatsappSelfMessageContact({ reason: 'decisao_teste_dia5', texto })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao avaliar/enviar decisão do teste (best-effort)')
   }
 }
 
