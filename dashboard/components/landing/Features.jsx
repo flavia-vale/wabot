@@ -20,6 +20,11 @@ const s = {
   },
   cardTitle: { fontSize: 22, fontWeight: 600, marginBottom: 10, letterSpacing: '-0.01em' },
   cardBody: { fontSize: 14.5, lineHeight: 1.55, color: 'var(--ink-soft)' },
+  cardTop: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  proTag: {
+    padding: '4px 10px', borderRadius: 999, background: 'var(--pro-soft)', color: 'var(--pro-ink)',
+    fontSize: 11.5, fontWeight: 700, letterSpacing: '0.04em',
+  },
   preservationCard: {
     gridColumn: 'span 12',
     background: 'linear-gradient(135deg, color-mix(in oklab, var(--accent-3) 65%, var(--surface)) 0%, color-mix(in oklab, var(--accent-2) 45%, var(--surface)) 100%)',
@@ -39,66 +44,78 @@ const s = {
   store: { padding: '8px 14px', borderRadius: 999, background: 'var(--bg-soft)', border: '1px solid var(--line)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' },
 };
 
+/* Cards de recursos — revisados em 29/09/2026 contra a ficha técnica canônica
+ * (dashboard/lib/ficha-tecnica.js / public/pricing.md) e o menu do painel.
+ * Entraram os recursos lançados que não estavam aqui (criar oferta, ofertas
+ * automáticas, filas, marca d'água, cupons, trava do link); saíram os cards
+ * repetidos (duas "conversões", envio manual × broadcast). `pro: true` só
+ * onde a ficha diz "Não" para o Basic — não inventar divisão nova aqui. */
 const featureCards = [
-
   {
-    title: 'Conversão de links',
-    body: 'Converta automaticamente links de ofertas para o seu código de afiliada antes de enviar para grupos e/ou canais de destino.',
-    icon: 'link',
-    cols: 4,
-    accent: true,
-  },
-  {
-    title: 'Geração de texto de ofertas',
-    body: 'Crie mensagem promocional com estrutura pronta (benefício, preço e CTA) para publicar com mais consistência em grupos e/ou canais.',
-    icon: 'chat',
-    cols: 4,
-  },
-  {
-    title: 'Conversão Instantânea',
-    body: 'Links de lojas suportadas são detectados e convertidos em tempo real com o seu código de afiliada, sem copiar e colar manualmente.',
-    icon: 'bolt',
-    cols: 4,
-    accent: true,
-  },
-  {
-    title: 'Monitoramento 24/7',
-    body: 'O bot acompanha seus grupos e/ou canais de origem continuamente e mantém a operação rodando mesmo quando você não está no painel.',
-    icon: 'users',
-    cols: 4,
-  },
-  {
-    title: 'Anti-Spam Inteligente',
-    body: 'Regras de intervalo, filtros por palavras e controle por grupo/canal reduzem disparos repetidos e protegem a saúde do seu número.',
-    icon: 'shield',
-    cols: 4,
-  },
-  {
-    title: 'Envio manual',
-    body: 'Envie uma oferta pontual para seus grupos e/ou canais quando quiser reforçar uma campanha ou publicar um achadinho específico.',
-    icon: 'chat',
-    cols: 4,
-  },
-  {
-    title: 'Broadcast em Massa',
-    body: 'Distribua mensagens para múltiplos grupos e/ou canais de destino de uma só vez, mantendo controle sobre quais públicos recebem cada oferta.',
-    icon: 'sparkles',
-    cols: 4,
-    accent: true,
-  },
-
-  {
-    title: 'Espelhamento entre grupos e canais',
-    body: 'Envie de canais para grupos, de grupos para canais ou entre destinos do mesmo tipo, mantendo cada rotina com origem, destino e cadência definidos.',
+    title: 'Espelhamento automático 24 h',
+    body: 'O robô lê seus grupos de origem o dia todo e publica nos seus grupos de destino, sem copiar e colar. No Pro, também de e para canais do WhatsApp.',
     icon: 'arrow',
-    cols: 4,
     accent: true,
   },
   {
-    title: 'Histórico de Logs',
-    body: 'Acompanhe o que foi convertido, enviado ou bloqueado para validar a operação e diagnosticar falhas rapidamente.',
+    title: 'Link trocado pelo seu código',
+    body: 'Cada link de loja sai com o seu código de afiliada, inclusive link de cupom. Dá para testar a conversão no painel antes de ligar o robô.',
+    icon: 'link',
+  },
+  {
+    title: 'Nunca sai o link de outra pessoa',
+    body: 'Se a troca do link falhar, a oferta não é publicada. Seu grupo nunca recebe o link com o código de quem postou na origem.',
+    icon: 'shield',
+  },
+  {
+    title: 'Criar oferta a partir de um link',
+    body: 'Cole o seu link: o robô busca nome, preço e foto do produto e monta a oferta pronta para enviar agora ou agendar.',
+    icon: 'plus',
+    accent: true,
+  },
+  {
+    title: 'Ofertas automáticas da Shopee',
+    body: 'O robô busca ofertas da Shopee sozinho por tema e desconto mínimo, sem precisar de um grupo de origem para copiar.',
+    icon: 'sparkles',
+    pro: true,
+  },
+  {
+    title: 'Modelos de mensagem do seu jeito',
+    body: 'A oferta sai reescrita com o seu texto, não copiada da origem. Você define o modelo, com lugar para o link e o cupom.',
+    icon: 'chat',
+  },
+  {
+    title: 'Foto no card, com a sua marca',
+    body: 'A foto do produto sai no card clicável, sem cortar. No Pro, a foto leva a marca d’água com o seu nome.',
+    icon: 'star',
+  },
+  {
+    title: 'Seus cupons na oferta',
+    body: 'Cadastre os seus cupons de desconto uma vez. Na hora do envio, o robô coloca o cupom certo na mensagem.',
+    icon: 'check',
+    accent: true,
+  },
+  {
+    title: 'Palavras bloqueadas',
+    body: 'Escolha o que não deve ser espelhado, em todos os grupos ou só em um grupo de origem específico.',
+    icon: 'shield',
+  },
+  {
+    title: 'Enviar agora ou agendar',
+    body: 'Publique uma oferta pontual em vários grupos de uma vez, na hora ou no horário que você escolher.',
+    icon: 'bolt',
+  },
+  {
+    title: 'Filas de envio no seu ritmo',
+    body: 'Defina intervalo entre envios, horário de descanso e limite por dia. As ofertas esperam na fila e saem sem atropelo.',
+    icon: 'users',
+    pro: true,
+    accent: true,
+  },
+  {
+    title: 'Histórico de envios',
+    body: 'Veja o que foi convertido, enviado ou bloqueado, e por quê, para conferir a operação e resolver falhas rápido.',
     icon: 'chart',
-    cols: 4,
   },
 ];
 
@@ -146,8 +163,11 @@ export function Features() {
           </div>
 
           {featureCards.map((card) => (
-            <div key={card.title} style={s.card(card.cols, card.accent)} className="landing-feature-card">
-              <div style={s.iconBox}><Icon name={card.icon} size={22} /></div>
+            <div key={card.title} style={s.card(4, card.accent)} className="landing-feature-card">
+              <div style={s.cardTop}>
+                <div style={s.iconBox}><Icon name={card.icon} size={22} /></div>
+                {card.pro ? <span style={s.proTag}>PRO</span> : null}
+              </div>
               <div style={s.cardTitle}>{card.title}</div>
               <p style={s.cardBody}>{card.body}</p>
             </div>
