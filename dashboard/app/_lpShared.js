@@ -4,6 +4,7 @@ import { Hero } from '@/components/landing/Hero'
 import { How } from '@/components/landing/How'
 import { Features } from '@/components/landing/Features'
 import { Social } from '@/components/landing/Social'
+import { Depoimentos } from '@/components/landing/Depoimentos'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
@@ -447,6 +448,7 @@ export function LpTemplate({ slug }) {
       <How />
       <Features />
       <Social />
+      <Depoimentos />
       <Pricing />
       <FAQ />
       <FinalCTA />

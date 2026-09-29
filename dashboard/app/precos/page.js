@@ -20,6 +20,7 @@ import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
 import { fraseNumerosProprios } from '@/lib/resposta-citavel'
 import { PainelVendasIlustrativo } from '@/components/marketing/PainelVendasIlustrativo'
 import { PrecoPorGrupoAfilira } from '@/components/marketing/PrecoPorGrupoAfilira'
+import { Depoimentos } from '@/components/landing/Depoimentos'
 
 /* PÁGINA DE PREÇO (auditoria de funil 2026-08-05, §1.4).
  *
@@ -210,6 +211,7 @@ export default async function PrecosPage() {
 
       <Pricing initialPlans={plans} showHeading={false} />
       <div className="wrap"><PainelVendasIlustrativo /></div>
+      <Depoimentos titulo="Quem já assina conta como foi" />
       <GuaranteeBlock />
 
       {/* Ficha técnica canônica (medição de IA 27/09/2026): idêntica à da
