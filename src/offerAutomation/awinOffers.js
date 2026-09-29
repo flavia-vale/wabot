@@ -35,7 +35,38 @@ export const AWIN_PROMOTION_TEMPLATE_BODY = `{{gancho}}
 
 {{convitegrupo}}`
 
+// Identidade da promoção = LOJA + TÍTULO, não o número da Awin.
+// Medido no staging em 2026-09-29: a Awin tinha 4 promoções idênticas da
+// Arno (mesmo título, loja e validade) com números 4118880..4118883, e uma
+// automação de 3 por envio mandou 3 vezes o mesmo liquidificador. Cópias com
+// números diferentes agora contam como UMA oferta: no mesmo envio, contra o
+// que já saiu (sentItemIds) e na dedup cruzada por grupo (productKey).
+function normalizedTitle(value) {
+  return normalizeText(value).replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+// FNV-1a 32 bits: curto e sem depender de node:crypto (este arquivo também
+// é importado pelo painel).
+function shortHash(text) {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash.toString(36)
+}
+
+export function awinContentKey(promotion) {
+  return `${promotion.advertiserId}:${shortHash(normalizedTitle(promotion.title))}`
+}
+
 export function awinItemId(promotion) {
+  return `awin:c:${awinContentKey(promotion)}`
+}
+
+// Formato antigo (até 2026-09-29): um item por número da Awin. Continua
+// valendo para o que já foi enviado com ele.
+export function awinLegacyItemId(promotion) {
   return `awin:${promotion.promotionId}`
 }
 
@@ -91,7 +122,7 @@ export function awinPromotionToOffer(promotion) {
   return {
     source: 'awin',
     itemId: awinItemId(promotion),
-    dedupKey: `awin:${promotion.accountId}:${promotion.promotionId}`,
+    dedupKey: `awin:${promotion.accountId}:${awinContentKey(promotion)}`,
     productName: promotion.title,
     offerLink: promotion.urlTracking,
     imageUrl: null,
@@ -108,17 +139,31 @@ export function awinPromotionToOffer(promotion) {
 export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserIds = [], keyword = '', now = new Date(), limit = 5 } = {}) {
   const nowMs = now.getTime()
   const sent = new Set(sentItemIds.map(String))
+  // Cópia de uma promoção já enviada no formato antigo também já saiu.
+  const sentContent = new Set(promotions.filter((promotion) => sent.has(awinLegacyItemId(promotion))).map(awinContentKey))
   const allowedStores = new Set(parseAdvertiserIds(advertiserIds))
-  const eligible = promotions.filter((promotion) => {
+  const filtered = promotions.filter((promotion) => {
     if (promotion.status && promotion.status !== 'active') return false
     const start = time(promotion.startDate)
     if (start != null && start > nowMs) return false
     const end = time(promotion.endDate)
     if (end != null && end - nowMs < AWIN_MIN_REMAINING_MS) return false
-    if (sent.has(awinItemId(promotion))) return false
+    if (sent.has(awinItemId(promotion)) || sent.has(awinLegacyItemId(promotion)) || sentContent.has(awinContentKey(promotion))) return false
     if (allowedStores.size && !allowedStores.has(String(promotion.advertiserId))) return false
     return matchesKeyword(promotion, keyword)
   })
+
+  const endOrInfinity = (promotion) => time(promotion.endDate) ?? Number.POSITIVE_INFINITY
+  // Uma só por conteúdo (loja + título): fica a que vence antes.
+  const seenContent = new Set()
+  const eligible = [...filtered]
+    .sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || String(a.promotionId).localeCompare(String(b.promotionId)))
+    .filter((promotion) => {
+      const key = awinContentKey(promotion)
+      if (seenContent.has(key)) return false
+      seenContent.add(key)
+      return true
+    })
 
   const byStore = new Map()
   for (const promotion of eligible) {
@@ -126,7 +171,6 @@ export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserI
     if (!byStore.has(key)) byStore.set(key, [])
     byStore.get(key).push(promotion)
   }
-  const endOrInfinity = (promotion) => time(promotion.endDate) ?? Number.POSITIVE_INFINITY
   const queues = [...byStore.values()].map((list) => list.sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || String(a.promotionId).localeCompare(String(b.promotionId))))
   // A loja cuja próxima promoção vence antes abre a rodada.
   queues.sort((a, b) => endOrInfinity(a[0]) - endOrInfinity(b[0]) || String(a[0].advertiserName).localeCompare(String(b[0].advertiserName)))
