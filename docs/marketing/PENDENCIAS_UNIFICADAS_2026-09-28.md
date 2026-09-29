@@ -77,6 +77,7 @@ Tempo é estimativa.
 
 ## 1.2 🔴 Depoimentos reais — 1 h
 
+> **29/09/2026 (2º PR) — 10 depoimentos publicados na lista**, autorizados por escrito (prints com a Flávia); trechos com resultado/anti-ban/métrica saíram com o aceite de cada cliente.
 > **29/09/2026 — vitrine pronta, falta o conteúdo.** Design system ganhou a seção
 > "Depoimentos" (cartão + carrossel). Código: `dashboard/lib/depoimentos.js`
 > (lista **vazia** de propósito), `components/landing/Depoimentos.jsx`, na home,
