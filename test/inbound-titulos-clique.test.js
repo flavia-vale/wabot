@@ -158,8 +158,12 @@ test('as descrições das páginas de FR-004 cabem em 160 chars', () => {
   }
 })
 
-test('alternativas/fluxopromo e alternativas/achadinhos-bot dizem "alternativa a/ao", nunca se apresentam como o concorrente (FR-030)', () => {
-  for (const path of ['/alternativas/fluxopromo', '/alternativas/achadinhos-bot']) {
+// /alternativas/achadinhos-bot saiu daqui em 29/09/2026: exceção nominal à
+// FR-030 decidida pela dona do produto (ver
+// TITULOS_COM_MARCA_DO_CONCORRENTE_AUTORIZADOS em
+// test/marketing-limites-que-nao-se-cruzam.test.js).
+test('alternativas/fluxopromo diz "alternativa a/ao", nunca se apresenta como o concorrente (FR-030)', () => {
+  for (const path of ['/alternativas/fluxopromo']) {
     const alvo = ALVOS.find((a) => a.path === path)
     const { title } = alvo.fonte()
     assert.match(title, /^alternativa (a|ao)/i, `${path}: título "${title}" não começa com "Alternativa a/ao"`)
