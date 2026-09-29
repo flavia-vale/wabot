@@ -49,6 +49,8 @@ import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
+import { createUnsupportedStoreSignal } from './observability/unsupportedStoreSignal.js'
+import { linkRemovedSkipReason } from './core/unsupportedStore.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
@@ -394,6 +396,13 @@ const monitoredDropLogState = new Map()
 // não só ao log. Sem ele, oferta ENCERRADA no site de origem era mostrada à
 // cliente como "ainda não fazemos conversão para essa loja" — falso, e com ação
 // oposta (RCA 2026-09-19).
+// P1-4: contagem agregada (dia + domínio) de link de loja NÃO suportada que
+// chegou num grupo monitorado. Só o domínio registrável é guardado — nunca URL,
+// caminho, query, texto ou conta — e a linha é podada em 30 dias. Map limitado,
+// esvaziado a cada flush; o flush pega carona no watchdog de 5 min que já
+// existe (sem timer novo). Ver src/observability/unsupportedStoreSignal.js.
+const unsupportedStoreSignal = createUnsupportedStoreSignal({ db, logger })
+
 async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
   if (!text) return { text, failures: [] }
   try {
@@ -1328,6 +1337,9 @@ const stuckSendLogsTimer = setInterval(() => {
       if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
     })
     .catch(err => logger.error({ err: err.message }, 'Watchdog de envios presos falhou'))
+  // Carona (P1-4): grava a contagem agregada de loja não suportada que ficou
+  // pendente desde o último registro. Sem timer próprio de propósito.
+  unsupportedStoreSignal.flushIfDue().catch(() => {})
 }, STUCK_SEND_LOG_SWEEP_MS).unref()
 
 // Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
@@ -4269,8 +4281,48 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const { text: textoParaEspelhar, failures: falhasDeDominioProprio } =
         await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
       const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar) : ''
+      // P1-4: links que o sanitizador acabou de APAGAR por não serem de loja
+      // suportada (nem convite de grupo, nem rede social). Lido do texto de
+      // ANTES do sanitizador — a mesma regra do desembrulho de domínio próprio
+      // e do sufixo `:unsupported_store`, para as três pontas concordarem.
+      const linksDeLojaNaoSuportada = textoParaEspelhar ? findCandidateLinks(textoParaEspelhar) : []
+      const ofertaEncerradaNaOrigem = allCandidatesFailedBecauseOfferEnded(falhasDeDominioProprio)
+      // "Promoção encerrada no site de origem" é site próprio de grupo, não loja
+      // que falta apoiar — fica fora da contagem para não poluir a decisão.
+      if (linksDeLojaNaoSuportada.length && !ofertaEncerradaNaOrigem) {
+        unsupportedStoreSignal.record(linksDeLojaNaoSuportada)
+      }
+      // Oferta cujo(s) único(s) link(s) eram de loja não suportada: o link é
+      // removido (certo) e a oferta NÃO sai mutilada, sem ter onde clicar — ela
+      // vira linha no painel explicando o motivo. Antes ia para o grupo sem link
+      // e em silêncio (P1-4, defeito 1a). Vale para os dois caminhos em que isso
+      // acontecia: a política aceita mensagem sem link, ou o texto inteiro era
+      // só o link e ficou vazio. Mensagem que NUNCA teve link não é afetada.
+      async function recordLinkRemovedSkip(reason) {
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: 'nolink',
+            sourceGroup: jid,
+            destGroup: 'skipped',
+            originalUrl: '',
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(sanitizedText || '(só link de loja não suportada)'),
+            status: 'skipped',
+            errorMsg: reason,
+          },
+        }).catch(() => {})
+      }
       if (text && !sanitizedText) {
         logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
+        const motivo = linkRemovedSkipReason({
+          supportedLinkCount: 0,
+          unsupportedLinkCount: linksDeLojaNaoSuportada.length,
+          offerEndedAtSource: ofertaEncerradaNaOrigem,
+        })
+        // Texto que era SÓ link de loja não suportada também vira linha no
+        // painel (antes: só o log, que a cliente não vê).
+        if (motivo) await recordLinkRemovedSkip(motivo)
         return
       }
 
@@ -4324,13 +4376,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // a verdade; `findCandidateLinks` é a mesma regra do desembrulho de
         // domínio próprio (ignora convite de grupo e rede social), então as duas
         // pontas nunca discordam sobre o que é "link de loja desconhecida".
-        const hadUnsupportedStoreUrl = findCandidateLinks(textoParaEspelhar).length > 0
+        const hadUnsupportedStoreUrl = linksDeLojaNaoSuportada.length > 0
         // "A oferta acabou" e "não apoiamos essa loja" são causas DIFERENTES com
         // ações opostas, e até 19/09/2026 as duas saíam com a mesma frase — a
         // cliente lia que a Amazon não é convertida, o que é falso. Quando TODOS
         // os links do site de origem caíram na página de promoção encerrada, o
-        // painel passa a dizer isso.
-        const ofertaEncerradaNaOrigem = allCandidatesFailedBecauseOfferEnded(falhasDeDominioProprio)
+        // painel passa a dizer isso (`ofertaEncerradaNaOrigem`, calculado acima).
         const unsupportedStoreSuffix =
           links.length === 0 && ofertaEncerradaNaOrigem
             ? ':offer_ended_at_source'
@@ -4350,6 +4401,19 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}${unsupportedStoreSuffix}`,
           },
         }).catch(() => {})
+        return
+      }
+
+      // P1-4: a política deixou passar (grupo aceita mensagem sem link), mas o
+      // único link era de loja não suportada e já foi removido. Ver
+      // linkRemovedSkipReason em src/core/unsupportedStore.js.
+      const motivoLinkRemovido = linkRemovedSkipReason({
+        supportedLinkCount: links.length,
+        unsupportedLinkCount: linksDeLojaNaoSuportada.length,
+        offerEndedAtSource: ofertaEncerradaNaOrigem,
+      })
+      if (motivoLinkRemovido) {
+        await recordLinkRemovedSkip(motivoLinkRemovido)
         return
       }
 
@@ -5886,6 +5950,7 @@ async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
     flushDedupNow().catch(err => {
       logger.error({ err: err.message }, 'Erro ao persistir deduplicação antes de encerrar')
     }),
+    unsupportedStoreSignal.flush().catch(() => {}),
     markInterruptedSendLogs().catch(err => {
       logger.error({ err: err.message }, 'Erro ao marcar envios pendentes como interrompidos')
     }),
