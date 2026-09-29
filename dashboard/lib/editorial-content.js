@@ -33,6 +33,7 @@ export const EDITORIAL_DATES = {
   '/bot-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   '/comparativos': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
   '/ferramentas': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
+  '/ferramentas/calculadora-comissao-afiliado-whatsapp': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
   '/ferramentas/calculadora-tempo-grupos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   // Lacuna herdada de 94c6a10f ("feature 010 seo-lead-capture, 24/27 tasks"): as duas
   // rotas entraram em CONTENT_SEO_ROUTES sem a data editorial correspondente, e o
