@@ -47,5 +47,18 @@ export function createTokenRateLimiter({
     return next
   }
 
-  return { acquire, size: () => windows.size }
+  // Sem espera: reserva uma vaga agora ou devolve false. Para quem tem plano
+  // B imediato (conversão no espelhamento cai para o link longo em vez de
+  // segurar a oferta até a janela abrir).
+  function tryAcquire(key) {
+    if (tails.has(key)) return false
+    const at = now()
+    const list = prune(key, at)
+    if (list.length >= maxPerMinute) return false
+    list.push(at)
+    windows.set(key, list)
+    return true
+  }
+
+  return { acquire, tryAcquire, size: () => windows.size }
 }

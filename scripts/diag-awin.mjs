@@ -65,6 +65,14 @@ for (const account of accounts) {
   const withShort = await db.awinPromotion.count({ where: { accountId: account.id, shortUrl: { not: null } } })
   const withImage = await db.awinPromotion.count({ where: { accountId: account.id, imageUrl: { not: null } } })
   console.log(`  enviadas_com_busca=${tried} link_curto=${withShort} com_foto=${withImage}`)
+  // Conversão de links: lojas aprovadas (vêm do sync) e links guardados.
+  const lojas = await db.awinProgramme.findMany({ where: { accountId: account.id }, select: { name: true, domainsJson: true }, orderBy: { name: 'asc' } })
+  console.log(`  lojas_aprovadas=${lojas.length}${lojas.length ? ' ' + lojas.map((row) => row.name).join(' | ') : ''}`)
+  const semDominio = lojas.filter((row) => row.domainsJson === '[]').map((row) => row.name)
+  if (semDominio.length) console.log(`  lojas_sem_site (não convertem): ${semDominio.join(' | ')}`)
+  const linksGuardados = await db.awinLink.count({ where: { accountId: account.id } })
+  const linksCurtos = await db.awinLink.count({ where: { accountId: account.id, shortUrl: { not: null } } })
+  console.log(`  links_convertidos_guardados=${linksGuardados} curtos=${linksCurtos} longos=${linksGuardados - linksCurtos}`)
   const noImage = await db.awinPromotion.groupBy({ by: ['advertiserName'], where: { accountId: account.id, enrichedAt: { not: null }, imageUrl: null }, _count: { _all: true } })
   for (const row of noImage) console.log(`  sem_foto loja=${row.advertiserName} n=${row._count._all}`)
 

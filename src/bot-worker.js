@@ -23,6 +23,8 @@ import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecauseOfferEnded } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
+import { AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
+import { awinOfferOptions, loadAwinConversionContext, refineAwinOptionsForText } from './integrations/awin/conversionContext.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
@@ -406,10 +408,10 @@ const monitoredDropLogState = new Map()
 // existe (sem timer novo). Ver src/observability/unsupportedStoreSignal.js.
 const unsupportedStoreSignal = createUnsupportedStoreSignal({ db, logger })
 
-async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
+async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId, offerOptions = {} } = {}) {
   if (!text) return { text, failures: [] }
   try {
-    const desembrulhado = await resolveCustomDomainLinks(text)
+    const desembrulhado = await resolveCustomDomainLinks(text, offerOptions)
     // Candidato que NÃO resolveu precisa deixar rastro com o motivo: em
     // 2026-09-13 este caminho devolveu só `null` em staging, com código no ar,
     // rede boa e a página trazendo o link — e não havia por onde começar.
@@ -1185,6 +1187,17 @@ async function loadConfig() {
     }
   }
 
+  // Awin: contas + lojas aprovadas (tabelas próprias, não Credential). Relido a
+  // cada carga de config (1 min), então loja aprovada no sync já vale aqui.
+  // Falhou a leitura → segue sem Awin (link dessas lojas continua saindo do
+  // texto, como antes). docs/rca/afiliados-awin.md.
+  try {
+    const awin = await loadAwinConversionContext(userId, { db })
+    if (awin) credentials.awin = awin
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao carregar contas Awin; links dessas lojas seguem sem conversão até a próxima carga')
+  }
+
   Object.defineProperty(credentials, '__onCredentialPatch', {
     enumerable: false,
     value: async (platform, patch) => {
@@ -1214,7 +1227,7 @@ async function loadConfig() {
   const botConfig = {
     delayMin: 5,
     delayMax: 15,
-    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress',
+    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin',
     blockedKeywords: '',
     welcomeMsg: '',
     postToStatus: false,
@@ -4337,14 +4350,27 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
       }
 
+      // Lojas da Awin em que a cliente foi aprovada. {} (tudo igual a antes)
+      // sem conta Awin OU com a chave "Awin" desligada neste grupo: aí o link
+      // dessas lojas é apagado como sempre, sem travar o resto da oferta.
+      // Mesmo conjunto em todas as pontas: desembrulho, sanitizador, detector
+      // e rede de segurança final. docs/rca/afiliados-awin.md.
+      const awinLigadaNoGrupo = String(monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms || '')
+        .split(',').map(p => p.trim()).includes('awin')
+      const awinBase = awinLigadaNoGrupo ? awinOfferOptions(cfg.credentials.awin) : {}
       const { text: textoParaEspelhar, failures: falhasDeDominioProprio } =
-        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
-      const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar) : ''
+        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id, offerOptions: awinBase })
+      // tidd.ly só diz a loja quando aberto: de loja não aprovada, é apagado
+      // pelo sanitizador (e o resto da oferta segue).
+      const awinOptions = awinLigadaNoGrupo && textoParaEspelhar
+        ? await refineAwinOptionsForText(textoParaEspelhar, cfg.credentials.awin).catch(() => ({}))
+        : {}
+      const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar, awinOptions) : ''
       // P1-4: links que o sanitizador acabou de APAGAR por não serem de loja
       // suportada (nem convite de grupo, nem rede social). Lido do texto de
       // ANTES do sanitizador — a mesma regra do desembrulho de domínio próprio
       // e do sufixo `:unsupported_store`, para as três pontas concordarem.
-      const linksDeLojaNaoSuportada = textoParaEspelhar ? findCandidateLinks(textoParaEspelhar) : []
+      const linksDeLojaNaoSuportada = textoParaEspelhar ? findCandidateLinks(textoParaEspelhar, awinOptions) : []
       const ofertaEncerradaNaOrigem = allCandidatesFailedBecauseOfferEnded(falhasDeDominioProprio)
       // "Promoção encerrada no site de origem" é site próprio de grupo, não loja
       // que falta apoiar — fica fora da contagem para não poluir a decisão.
@@ -4387,7 +4413,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
       const isCouponMsg = isCouponAnnouncement(sanitizedText)
 
-      const links = detectLinks(sanitizedText)
+      const links = detectLinks(sanitizedText, awinOptions)
       const messageKind = detectMessageKind(innerMessage, sanitizedText)
       const policy = normalizeForwardingPolicy(monitorGroup)
       const canForwardCurrentMessage = shouldForwardMessage({
@@ -4761,7 +4787,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // do concorrente. A mensagem inteira deixa de sair — ver
             // core/mirrorLinkGuard.js (RCA 2026-09-23, 794 envios vazados).
             logger.warn({ platform, url, err: err.message }, 'Link não convertido — oferta não será publicada com o link de origem')
-            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
+            const failureReason = err.awinReason === AWIN_NOT_JOINED_ERROR
+              ? CONVERSION_FAILURE.AWIN_STORE_NOT_JOINED
+              : CONVERSION_FAILURE.CONVERSION_FAILED
+            return { platform, url, failureReason }
           }
           // Motivo pré-classificado pelo converter (feature
           // 007-ml-vitrine-fallback-expired: skip:ml_vitrine_missing) tem
@@ -4871,7 +4900,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // cliente (que são dela): nenhum link de loja pode sobrar no texto sem ser
       // um link convertido — inclusive o escrito sem `https://`, que o detector
       // não enxerga mas o WhatsApp torna clicável.
-      const leakedLinks = findUnconvertedStoreLinks(finalText, conversions)
+      const leakedLinks = findUnconvertedStoreLinks(finalText, conversions, awinOptions)
       if (leakedLinks.length) {
         logger.warn({ msgId: msg.key.id, leaked: leakedLinks.length }, 'Oferta não publicada: link de loja de origem ainda no texto')
         await recordUnconvertedSkip({

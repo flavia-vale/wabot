@@ -55,7 +55,7 @@ function normalizeForCtaCheck(text) {
     .toLowerCase()
 }
 
-function isInviteCtaOnlyLine(line) {
+function isInviteCtaOnlyLine(line, offerOptions) {
   const raw = String(line ?? '')
   // Um CTA órfão, por definição, NÃO tem link (o link de convite já foi
   // removido). Uma linha que ainda carrega uma URL de oferta legítima
@@ -63,7 +63,7 @@ function isInviteCtaOnlyLine(line) {
   // menciona "grupo"/"canal" por acaso — isso perderia a oferta.
   const urlMatch = raw.match(ANY_HTTP_URL_RE)
   ANY_HTTP_URL_RE.lastIndex = 0
-  if (urlMatch && urlMatch.some(url => isOfferUrl(url.replace(TRAILING_URL_NOISE_RE, '')))) {
+  if (urlMatch && urlMatch.some(url => isOfferUrl(url.replace(TRAILING_URL_NOISE_RE, ''), offerOptions))) {
     return false
   }
   const normalized = normalizeForCtaCheck(line)
@@ -71,11 +71,11 @@ function isInviteCtaOnlyLine(line) {
   return CTA_DESTINATION_RE.test(normalized) && CTA_KEYWORD_RE.test(normalized)
 }
 
-function removeOrphanInviteCtas(text) {
+function removeOrphanInviteCtas(text, offerOptions) {
   return String(text ?? '')
     .split('\n')
     .map(line => line.replace(TRAILING_INVITE_CTA_RE, '').trimEnd())
-    .filter(line => !isInviteCtaOnlyLine(line))
+    .filter(line => !isInviteCtaOnlyLine(line, offerOptions))
     .join('\n')
 }
 
@@ -92,22 +92,25 @@ function removeOrphanInviteCtas(text) {
 // para outra pessoa). O que o bot-worker faz com a oferta que ficou SEM link
 // por causa daqui — e a contagem agregada de qual loja era — está em
 // src/core/unsupportedStore.js (P1-4). Esta função continua pura e silenciosa.
-function removeNonOfferUrls(text) {
+function removeNonOfferUrls(text, offerOptions) {
   return String(text ?? '').replace(ANY_HTTP_URL_RE, (match) => {
     const trailing = match.match(TRAILING_URL_NOISE_RE)?.[0] ?? ''
     const core = trailing ? match.slice(0, match.length - trailing.length) : match
-    return isOfferUrl(core) ? match : trailing
+    return isOfferUrl(core, offerOptions) ? match : trailing
   })
 }
 
-export function sanitizeInviteLinks(text) {
+// `offerOptions.awin` (opcional): lojas da Awin em que a cliente foi aprovada
+// — o link delas deixa de ser apagado aqui para a conversão trocar pelo link
+// dela (docs/rca/afiliados-awin.md). Sem ele, comportamento de sempre.
+export function sanitizeInviteLinks(text, offerOptions = {}) {
   const raw = String(text ?? '')
   GROUP_INVITE_URL_RE.lastIndex = 0
   const withoutInviteLinks = hasInviteLinkCandidate(raw)
     ? raw.replace(GROUP_INVITE_URL_RE, removeInviteUrl)
     : raw
-  const withoutNonOfferUrls = removeNonOfferUrls(withoutInviteLinks)
-  const withoutOrphanCtas = removeOrphanInviteCtas(withoutNonOfferUrls)
+  const withoutNonOfferUrls = removeNonOfferUrls(withoutInviteLinks, offerOptions)
+  const withoutOrphanCtas = removeOrphanInviteCtas(withoutNonOfferUrls, offerOptions)
   // 4º passo: assinatura do grupo de ORIGEM colada no fim da oferta
   // (`sharabarros`, `@ocasaljovemoficial_`). Os três passos acima só enxergam
   // URL com protocolo ou CTA que fale "grupo/canal" — assinatura em texto puro

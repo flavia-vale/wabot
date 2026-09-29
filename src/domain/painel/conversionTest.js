@@ -222,11 +222,21 @@ export function describeConversionTest(resultado = {}) {
     }
   }
 
+  if (resultado.code === 'AWIN_STORE_NOT_JOINED') {
+    return {
+      veredito: VEREDITO.LINK,
+      titulo: 'Você ainda não foi aprovada nessa loja da Awin',
+      texto: 'Esse link da Awin é de uma loja em que você ainda não foi aprovada, então não dá para trocar pelo seu. Inscreva-se no programa dela na Awin; depois da aprovação, ela passa a converter sozinha em até 1 hora.',
+      mostrarCredenciais: false,
+      avisoTecnico: resultado.code,
+    }
+  }
+
   if (falaDeLinkNaoAtendido(mensagem)) {
     return {
       veredito: VEREDITO.LINK,
       titulo: 'Esse link não serve para o teste',
-      texto: 'Cole o endereço da página de um produto de uma das lojas que o robô atende: Shopee, Amazon, Mercado Livre, Magalu, SHEIN ou AliExpress.',
+      texto: 'Cole o endereço da página de um produto de uma das lojas que o robô atende: Shopee, Amazon, Mercado Livre, Magalu, SHEIN, AliExpress ou uma loja em que você foi aprovada na Awin.',
       mostrarCredenciais: false,
       avisoTecnico: resultado.code || null,
     }
@@ -262,7 +272,7 @@ export function describeConversionRequestFailure({ code = null, message = '' } =
     return {
       veredito: VEREDITO.LINK,
       titulo: 'Esse link não serve para o teste',
-      texto: 'Cole o endereço da página de um produto de uma das lojas que o robô atende: Shopee, Amazon, Mercado Livre, Magalu, SHEIN ou AliExpress.',
+      texto: 'Cole o endereço da página de um produto de uma das lojas que o robô atende: Shopee, Amazon, Mercado Livre, Magalu, SHEIN, AliExpress ou uma loja em que você foi aprovada na Awin.',
       mostrarCredenciais: false,
       avisoTecnico: code,
     }

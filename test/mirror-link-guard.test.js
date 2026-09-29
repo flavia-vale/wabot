@@ -89,11 +89,11 @@ test('nome da loja, domínio solto sem caminho e e-mail não são acusados', () 
 test('o worker decide com a trava e nunca devolve o link de origem como convertido', () => {
   const src = readFileSync(fileURLToPath(new URL('../src/bot-worker.js', import.meta.url)), 'utf8')
   assert.match(src, /const decision = decideMirrorConversions\(linkResults\)/)
-  assert.match(src, /const leakedLinks = findUnconvertedStoreLinks\(finalText, conversions\)/)
+  assert.match(src, /const leakedLinks = findUnconvertedStoreLinks\(finalText, conversions(?:, awinOptions)?\)/)
   assert.doesNotMatch(src, /passthrough:\s*true/)
   // A trava final roda ANTES do modelo e do texto adicional (que são da
   // cliente), senão o link próprio dela no texto adicional seria barrado.
-  const guard = src.indexOf('const leakedLinks = findUnconvertedStoreLinks(finalText, conversions)')
+  const guard = src.indexOf('const leakedLinks = findUnconvertedStoreLinks(finalText, conversions')
   const footer = src.indexOf('finalText = appendRelayFooter(finalText, resolveRelayFooterVariables(monitorGroup?.relayFooterText')
   const template = src.indexOf('await applyMirrorTemplate(finalText')
   assert.ok(template > 0 && footer > 0, 'âncoras do modelo e do texto adicional precisam existir')
