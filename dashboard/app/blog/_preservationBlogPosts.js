@@ -471,6 +471,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Suporte · Robô parado',
     usePersonAuthor: true,
     origin: 'blog_bot_whatsapp_conectado_mas_nao_envia',
+    heroImage: { path: '/blog/hero/32-conectado-nao-envia.png', alt: 'Painel verde e nada saindo? Cinco passos: a origem postou, motivo na tela Envios, intervalo e limites, refazer a conexão e chamar o suporte', width: 1024, height: 1024 },
     intro: 'Quando o painel mostra o robô conectado e mesmo assim nada sai no grupo, quase sempre é uma de três coisas: a origem não postou nada, a oferta foi segurada por uma regra (repetição, palavra bloqueada, intervalo) ou a conexão ficou parada sem avisar. Este guia mostra como separar as três, em ordem, antes de falar com o suporte.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Confira, nesta ordem: (1) se o grupo de origem realmente postou oferta nova; (2) o motivo que a tela Envios mostra para cada oferta que ficou de fora; (3) o intervalo e os limites do grupo de destino; (4) se clicar em Conectar volta a enviar. Se o passo 4 resolve, a conexão estava parada, e isso o robô também tenta corrigir sozinho.'] },
@@ -562,6 +563,7 @@ export const PRESERVATION_BLOG_POSTS = {
     eyebrow: 'Suporte · Aquecer número',
     usePersonAuthor: true,
     origin: 'blog_como_aquecer_numero_whatsapp_afiliados',
+    heroImage: { path: '/blog/hero/35-aquecer-numero.jpg', alt: 'Como aquecer um número: começar devagar, conversas reais, aumentar aos poucos e sem promessa mágica', width: 1024, height: 1024 },
     intro: 'Aquecer um número de WhatsApp é um termo do mercado, não uma regra do WhatsApp. Ele descreve começar uma operação devagar, aumentando o volume aos poucos. A ideia é razoável, mas o WhatsApp não publica um método de aquecimento, e nenhuma ferramenta consegue garantir que um número aquecido não será restrito. Este guia separa o que é prática de bom senso do que é promessa.',
     sections: [
       { h2: 'Resposta direta', paragraphs: ['Aquecer é começar com pouco volume e aumentar gradualmente, em vez de ligar um número novo e disparar dezenas de ofertas no primeiro dia. Não é um procedimento oficial do WhatsApp e não protege contra restrição. É uma forma prudente de começar.'] },
