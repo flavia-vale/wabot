@@ -84,7 +84,7 @@
 - O envio **não chama a Awin**: lê `AwinPromotion` do banco.
 - **Regra de envio (aprovada 2026-09-29):** mesmo ritmo da Shopee (intervalo e
   quantas por envio); **cada promoção sai uma vez por automação**
-  (`sentItemIds` com `awin:c:<loja>:<hash do título>`); **revezando lojas**; dentro da loja
+  (`sentItemIds` com `awin:c:<loja>:u:<hash da página da loja>`); **revezando lojas**; dentro da loja
   **vence antes primeiro**; **nunca com menos de 1h para vencer** nem antes de
   começar; filtro opcional por lojas e palavra (título/descrição, sem acento).
 - Sem preço: modelo padrão `promocao_awin` (título, `{loja}`,
@@ -114,24 +114,32 @@
 - `sentItemIds` guarda os 200 últimos (regra antiga). Promoção de vários dias
   pode voltar a sair depois de 200 envios da mesma automação — aceitável hoje.
 
-### Promoções repetidas da Awin (RCA 2026-09-29 — não regredir)
+### Promoções "repetidas" da Awin (RCA 2026-09-29 — não regredir)
 
-- **Sintoma:** automação de 3 por envio mandou o mesmo "Liquidificador Arno
-  Powermax" 3 vezes.
-- **Causa (medida no staging):** a Awin tinha **4 promoções idênticas**
-  (mesma loja, título e validade) com números diferentes (4118880..4118883), e
-  a identidade da promoção era o número. As outras lojas não entraram no
-  revezamento porque todas as delas já tinham sido enviadas nos testes
-  (C&A 7/7, Kabum 3/3, Mizuno 1/1) — o revezamento estava certo.
-- **Correção:** identidade = **loja + título normalizado** (`awinContentKey`
-  em `awinOffers.js`): uma só por conteúdo no mesmo envio (fica a que vence
-  antes), `sentItemIds` guarda `awin:c:...`, e `dedupKey`/`productKey` também
-  (dedup cruzada por grupo e fila de revisão). Itens antigos `awin:<número>`
-  continuam valendo — e bloqueiam as cópias deles. Mesmo título em OUTRA loja
-  é outra oferta. Testes: `test/awin-offer-automation.test.js`.
-- Efeito colateral aceito: produto que a loja republica no dia seguinte com o
-  mesmo título não sai de novo pela mesma automação enquanto estiver entre os
-  200 últimos `sentItemIds`.
+- **Sintoma:** automação de 3 por envio mandou 3 liquidificadores Arno —
+  duas vezes, mesmo depois da 1ª correção.
+- **Causa real (medida no staging, com os títulos):** a Arno publica o
+  **mesmo produto uma vez por voltagem** ("…LN63 127V" e "…LN63 220V"), com
+  números diferentes e **a mesma página da loja** (`url`). A 1ª leitura
+  ("4 promoções idênticas") estava errada: o comando não mostrava o título.
+  A 1ª correção (loja + título) por isso não pegou nada.
+- **Por que só liquidificadores:** as outras lojas já tinham saído todas
+  (C&A 7/7, Kabum 3/3, Mizuno 1/1). Todas as da Arno vencem na mesma hora e o
+  desempate era o número da Awin — que a Arno cadastra em sequência por
+  linha de produto (4118874..4118893 = liquidificadores).
+- **Correção (`awinOffers.js`):**
+  - identidade = **loja + página da loja** (`awinContentKey`, host+caminho
+    sem `www.`, query ou barra final); sem página, cai no título;
+  - "já saiu" aceita os três formatos de id (`awin:c:<loja>:u:<hash>`, o da
+    1ª correção por título e o antigo `awin:<número>`), e bloqueia tudo que
+    tem o mesmo conteúdo (a outra voltagem);
+  - **desempate** de validade igual por hash do número: varia a linha de
+    produto e é sempre o mesmo. A regra aprovada continua: vence antes, sai
+    antes. Testes com os títulos reais em `test/awin-offer-automation.test.js`.
+- Mesma página em OUTRA loja é outra oferta.
+- Efeito colateral aceito: produto republicado no dia seguinte (mesma
+  página) não sai de novo pela mesma automação enquanto estiver entre os 200
+  últimos `sentItemIds`.
 
 ## Plano
 
