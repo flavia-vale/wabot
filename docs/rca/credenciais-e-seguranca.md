@@ -237,6 +237,29 @@ tenta `with-csrf`) — conferir no `bot.log` em qual `attempt` cai o 401.
 - `bot.log` das recusas agora traz `setCookieNames` (nomes, `(del)` = o ML
   apagou) — vale após `pm2 restart bot-supervisor --update-env` em `remote`.
 
+**Resultado da coleta de 29/09 (noite) — o que já está decidido:**
+- O código **não** morre em 75–95 min. O da Denia colado em 24/09 20:43 viveu
+  **36 h** (morte limpa em 26/09 08:35); nas outras contas, **20 h a 103 h**
+  (Tainá 3.310 links a 32/h sem morrer). O `ssid` carrega data de 3 anos.
+  Com o código vivo, nem createLink nem a página logada do gerador devolvem
+  `ssid` novo. **Caíram:** prazo fixo do ML, rotação descartada, rotação pelo
+  navegador, volume, csrf (9.356 curtos, todos `no-csrf`; recusas são 401 real).
+- **O "toda hora" era colagem morta:** em 24/09, entre 20:23 e 20:41, ela colou
+  **8 vezes** e o ML recusou todas na hora (`credential_saved.sessionAlive=false`);
+  a 9ª, às 20:43, foi aceita. 13 colagens recusadas na hora em 7 dias na base,
+  8 dela. Correção: ao recusar, o painel manda sair do ML, entrar de novo e
+  copiar o código novo, e acusa quando o código colado é o **mesmo** de antes
+  (`isSameAccessCode` em `src/credentialSaveCheck.js`; `sameCode` no evento).
+- **Armadilha de diagnóstico:** a vitrine cadastrada é um `meli.la` e sai no
+  plano B de cupom (`warning:ml_vitrine_fallback_used`) sem createLink — parecia
+  "link curto com código morto" e fabricava gerações de 0–3 min. O diag ignora
+  essas linhas desde 2026-09-29.
+- **Em aberto:** por que a sessão morre depois de dias. Hipótese principal: o
+  ML revoga sessão usada de dois "aparelhos" (navegador da cliente + servidor
+  com `_d2id` próprio). Experimento `exp-ml-manter-viva.mjs --modo=so-sondagem`
+  rodando em staging (conta de teste, 96 h, 6 req/h) desde 29/09 23:24. Se
+  morrer sem uso de navegador → correção do nosso lado; se não → orientação.
+
 **Se confirmar renovação por rota (H1/H7):** fazer no robô o que o navegador
 faz — um `GET` autenticado periódico (ou aproveitar o GET do card, persistindo
 `Set-Cookie` via `buildCredentialPatchFromSetCookie` + `__onCredentialPatch`)
