@@ -9,6 +9,7 @@ import {
   blocksNewSubscription,
   decidePendingSubscriptionReuse,
   decideSubscriptionAttemptCooldown,
+  describeReuseSkip,
   describeSubscriptionCooldown,
   SUBSCRIPTION_ATTEMPT_WINDOW_MS as DEFAULT_ATTEMPT_WINDOW_MS,
   SUBSCRIPTION_ATTEMPT_MAX as DEFAULT_ATTEMPT_MAX,
@@ -1412,17 +1413,30 @@ export async function paymentsRoutes(app) {
       }).catch(() => null)
 
       const reuseDecision = decidePendingSubscriptionReuse({ subscription: pendingSubscription, plan })
+      let reuseSnapshot = null
       if (reuseDecision.reuse) {
-        const snapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
+        reuseSnapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
         // Só reaproveita o que o MP confirma que continua em aberto. Falha de
         // rede, checkout já concluído ou apagado no MP caem no caminho normal —
         // checkout em aberto nunca pode deixar a conta sem conseguir assinar.
         // E só para o MESMO e-mail (ver `samePayerEmail`).
-        if (snapshot.ok && String(snapshot.status ?? '').toLowerCase() === 'pending' && snapshot.initPoint && samePayerEmail(snapshot.payerEmail, payerEmail)) {
+        if (reuseSnapshot.ok && String(reuseSnapshot.status ?? '').toLowerCase() === 'pending' && reuseSnapshot.initPoint && samePayerEmail(reuseSnapshot.payerEmail, payerEmail)) {
           trackAnalyticsEventSafe({ userId, event: 'subscription_checkout_reused', metadata: { plan } })
           req.log.info({ userId, plan }, 'Checkout de assinatura reaproveitado em vez de criar outro igual')
-          return { init_point: snapshot.initPoint }
+          return { init_point: reuseSnapshot.initPoint }
         }
+      }
+
+      // Observabilidade: havia checkout em aberto e mesmo assim vai nascer outro.
+      // Só registra o motivo (sem e-mail); não muda a decisão.
+      const reuseSkip = describeReuseSkip({
+        pending: pendingSubscription,
+        decision: reuseDecision,
+        snapshot: reuseSnapshot,
+        emailMatches: reuseSnapshot?.ok ? samePayerEmail(reuseSnapshot.payerEmail, payerEmail) : false,
+      })
+      if (reuseSkip) {
+        trackAnalyticsEventSafe({ userId, event: 'subscription_checkout_reuse_skipped', metadata: { plan, ...reuseSkip } })
       }
 
       // Nada para reaproveitar não significa "pode criar outro igual". Quando os

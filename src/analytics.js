@@ -84,6 +84,9 @@ export const ANALYTICS_EVENTS = new Set([
   // Checkout de assinatura reaproveitado em vez de criar outro idêntico. Cada
   // evento destes é uma recusa por antifraude do MP que deixou de acontecer.
   'subscription_checkout_reused',
+  // Havia checkout em aberto e, mesmo assim, nasceu outro: guarda o MOTIVO (consulta
+  // ao MP falhou, checkout já encerrado lá, e-mail diferente, plano trocado...).
+  'subscription_checkout_reuse_skipped',
   // Tentativa de assinar adiada por repetição. Volume alto aqui é sinal de que
   // muita gente está batendo na recusa do MP — não de que a trava está errada.
   'subscription_attempt_throttled',
