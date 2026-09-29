@@ -99,6 +99,26 @@ const blogPosts = [
     description: 'As três causas mais comuns do card sem foto e o que conferir antes de pedir ajuda.',
   },
   {
+    href: '/blog/numero-banido-whatsapp-o-que-fazer',
+    title: 'Número banido no WhatsApp: o que fazer',
+    description: 'O caminho oficial de análise, o que conferir na operação e o que ninguém garante.',
+  },
+  {
+    href: '/blog/como-aquecer-numero-whatsapp-afiliados',
+    title: 'Aquecer número no WhatsApp: o que é e o que não é',
+    description: 'Começar devagar sem depender de promessa.',
+  },
+  {
+    href: '/blog/link-de-afiliado-sem-comissao-o-que-conferir',
+    title: 'Link de afiliado sem comissão: o que conferir',
+    description: 'Código no link, confirmação da venda, categoria e regras do programa.',
+  },
+  {
+    href: '/blog/shopee-suspendeu-afiliado-o-que-fazer',
+    title: 'Shopee suspendeu afiliado: o que fazer',
+    description: 'O que os termos do programa dizem e o que reunir antes de contestar.',
+  },
+  {
     href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp',
     title: 'Melhores horários para postar ofertas no WhatsApp',
     description: 'Janelas que funcionam e por que a cadência importa mais que o horário exato.',
