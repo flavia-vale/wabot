@@ -157,7 +157,8 @@
   }
   .landing-root .landing-pricing-grid,
   .landing-root .landing-how-steps,
-  .landing-root .landing-social-grid {
+  .landing-root .landing-social-grid,
+  .landing-root .landing-vendas-grid {
     grid-template-columns: 1fr !important;
   }
   .landing-root .landing-faq-wrap {
@@ -302,6 +303,7 @@
 }
 
 @media (max-width: 414px) {
+  .landing-root .landing-vendas-cards { grid-template-columns: 1fr !important; }
   .landing-root .wrap { padding: 0 16px; }
   .landing-root .landing-mobile-menu-panel {
     width: min(92vw, 320px);
