@@ -59,6 +59,7 @@ model User {
   followLogs            FollowLog[]
   offerAutomations      OfferAutomation[]
   offerAutomationReviewItems OfferAutomationReviewItem[]
+  awinAccounts          AwinAccount[]
   clientCoupons         ClientCoupon[]
   offerQueues           OfferQueue[]
   offerQueueItems       OfferQueueItem[]
@@ -869,6 +870,14 @@ model OfferAutomation {
   // DEFAULT false garante que automação já existente não muda de comportamento
   // sozinha (FR-023/SC-005).
   useCoupons      Boolean   @default(false)
+  // De onde vêm as ofertas: "shopee" (busca por palavra-chave, histórico) ou
+  // "awin" (promoções já importadas da conta Awin da cliente). Default
+  // "shopee" = automação existente não muda de comportamento.
+  // Ver docs/rca/afiliados-awin.md.
+  source            String    @default("shopee")
+  awinAccountId     String?
+  // JSON: ids de anunciante (lojas) escolhidos. "[]" = todas as lojas.
+  awinAdvertiserIds String    @default("[]")
 
   @@index([userId, enabled])
   @@index([enabled, lastSentAt])
@@ -1607,4 +1616,93 @@ model DeliveryInboxSeen {
 
   @@unique([deliveryNetwork, sourceId, messageId])
   @@index([seenAt])
+}
+
+// Contas Awin da cliente (docs/rca/afiliados-awin.md). O token da Awin é do
+// USUÁRIO Awin (serve para várias contas de publisher); cada linha aqui é um
+// par (Publisher ID + token) cadastrado pela cliente. Isolamento: toda
+// consulta filtra por userId.
+model AwinAccount {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label               String
+  publisherId         String
+  // encryptCredential (AES-256-GCM, "v1:..."). Nunca volta ao navegador.
+  tokenEncrypted      String
+  tokenLast4          String
+  // HMAC-SHA256 do token: chave do limitador de chamadas (20/min por token
+  // na Awin). Não permite recuperar o token.
+  tokenFingerprint    String
+  // pending | ok | invalid_credential | error
+  status              String    @default("pending")
+  statusDetail        String?
+  syncEnabled         Boolean   @default(true)
+  syncIntervalMinutes Int       @default(60)
+  nextSyncAt          DateTime?
+  lastSyncAt          DateTime?
+  lastSyncStatus      String?
+  lastTestAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  promotions          AwinPromotion[]
+  syncRuns            AwinSyncRun[]
+
+  @@unique([userId, publisherId])
+  @@index([userId])
+  @@index([syncEnabled, status, nextSyncAt])
+}
+
+// Promoção importada (type=promotion; cupons/vouchers ficam de fora).
+// Dedup por (conta, promotionId): duas contas podem ter a mesma promoção,
+// cada uma com o próprio link de afiliado.
+model AwinPromotion {
+  id             String    @id @default(cuid())
+  userId         String
+  accountId      String
+  account        AwinAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  promotionId    String
+  advertiserId   String
+  advertiserName String
+  title          String
+  description    String    @default("")
+  terms          String    @default("")
+  url            String?
+  urlTracking    String
+  regionsJson    String    @default("{}")
+  startDate      DateTime?
+  endDate        DateTime?
+  dateAdded      DateTime?
+  // active | expired
+  status         String    @default("active")
+  lastSeenRunId  String?
+  firstSeenAt    DateTime  @default(now())
+  expiredAt      DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([accountId, promotionId])
+  @@index([userId, status, endDate])
+  @@index([accountId, status])
+}
+
+// Histórico de sincronização por conta (o que a cliente vê na tela).
+model AwinSyncRun {
+  id         String    @id @default(cuid())
+  userId     String
+  accountId  String
+  account    AwinAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // schedule | manual
+  trigger    String
+  // running | success | partial | failed | invalid_credential | rate_limited
+  status     String
+  pages      Int       @default(0)
+  inserted   Int       @default(0)
+  updated    Int       @default(0)
+  skipped    Int       @default(0)
+  expired    Int       @default(0)
+  errorsJson String    @default("[]")
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([accountId, startedAt])
 }

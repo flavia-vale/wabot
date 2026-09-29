@@ -11,6 +11,7 @@ import { mlOAuthRoutes } from './routes/mlOAuth.js'
 import { sessionRoutes } from './routes/session.js'
 import { groupsRoutes } from './routes/groups.js'
 import { credentialsRoutes } from './routes/credentials.js'
+import { awinRoutes } from './routes/awin.js'
 import { couponsRoutes } from './routes/coupons.js'
 import { paymentsRoutes } from './routes/payments.js'
 import { configRoutes } from './routes/config.js'
@@ -28,6 +29,7 @@ import { offerAutomationReviewRoutes } from './routes/offerAutomationReview.js'
 import { offerQueueRoutes } from './routes/offerQueue.js'
 import { affiliateRoutes } from './routes/affiliate.js'
 import { startOfferAutomationCron } from '../offerAutomation/cron.js'
+import { startAwinSyncScheduler } from '../integrations/awin/scheduler.js'
 import { startOfferQueueCron } from '../offerQueue/cron.js'
 import { registerApiMetricsHooks, renderPrometheusMetrics, isPrivateAddress } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
@@ -543,6 +545,7 @@ app.register(mlOAuthRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
+app.register(awinRoutes, { prefix: '/api/awin' })
 app.register(couponsRoutes, { prefix: '/api/coupons' })
 app.register(paymentsRoutes, { prefix: '/api/payments' })
 app.register(configRoutes, { prefix: '/api/config' })
@@ -738,6 +741,8 @@ startWeeklySummarySweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()
+// Promoções Awin: setInterval + unref, sem processo novo (docs/rca/afiliados-awin.md).
+startAwinSyncScheduler({ logger: app.log })
 const stopDlqMaintenance = startDlqMaintenanceJob({ db })
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)

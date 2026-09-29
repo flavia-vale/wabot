@@ -1,0 +1,49 @@
+{
+  "data": [
+    {
+      "promotionId": 910001,
+      "type": "promotion",
+      "advertiser": { "id": 17729, "name": "Kabum BR", "joined": true },
+      "title": "Ofertas do dia em SSD",
+      "description": "<p>Até 35% OFF em SSDs selecionados</p>",
+      "terms": "Válido enquanto durarem os estoques.",
+      "startDate": "2026-09-28T03:00:00+00:00",
+      "endDate": "2026-09-29T02:59:59+00:00",
+      "dateAdded": "2026-09-27T18:00:00+00:00",
+      "url": "https://www.kabum.com.br/ofertas/ssd",
+      "urlTracking": "https://www.awin1.com/cread.php?awinmid=17729&awinaffid=2701264&ued=https%3A%2F%2Fwww.kabum.com.br%2Fofertas%2Fssd",
+      "regions": { "all": false, "list": [{ "name": "Brazil", "countryCode": "BR" }] }
+    },
+    {
+      "promotionId": 910002,
+      "type": "promotion",
+      "advertiser": { "id": 17729, "name": "Kabum BR", "joined": true },
+      "title": "Monitores com frete grátis",
+      "description": "Frete grátis em monitores",
+      "terms": "",
+      "startDate": "2026-09-28T03:00:00.000",
+      "endDate": "2026-10-05T02:59:59.000",
+      "dateAdded": "2026-09-27T18:00:00.000",
+      "url": "https://www.kabum.com.br/monitores",
+      "urlTracking": "https://www.awin1.com/cread.php?awinmid=17729&awinaffid=2701264&ued=https%3A%2F%2Fwww.kabum.com.br%2Fmonitores",
+      "regions": { "all": true }
+    },
+    {
+      "promotionId": 910003,
+      "type": "voucher",
+      "advertiser": { "id": 17729, "name": "Kabum BR", "joined": true },
+      "title": "Cupom 10OFF",
+      "urlTracking": "https://www.awin1.com/cread.php?awinmid=17729&awinaffid=2701264",
+      "voucher": { "code": "10OFF", "exclusive": false, "attributable": true }
+    },
+    {
+      "promotionId": 910004,
+      "type": "promotion",
+      "advertiser": { "id": 55555, "name": "Loja Portugal", "joined": true },
+      "title": "Só em Portugal",
+      "urlTracking": "https://www.awin1.com/cread.php?awinmid=55555&awinaffid=2701264",
+      "regions": { "all": false, "list": [{ "name": "Portugal", "countryCode": "PT" }] }
+    }
+  ],
+  "pagination": { "page": 1, "pageSize": 200, "total": 4 }
+}
