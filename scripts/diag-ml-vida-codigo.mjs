@@ -54,6 +54,10 @@ function minutes(a, b) { return Math.round((b.getTime() - a.getTime()) / 60000) 
 function classify(row) {
   const motivo = String(row.errorMsg || '')
   if (/ml_ssid_expired/.test(motivo)) return 'recusa'
+  // A vitrine cadastrada da cliente costuma ser um meli.la e sai como plano B
+  // de cupom SEM passar pelo createLink — com o código morto inclusive. Não é
+  // prova de código vivo (era isso que criava "gerações" de 0–3 min em rajada).
+  if (/ml_vitrine_fallback_used/.test(motivo)) return null
   if (/meli\.la/i.test(String(row.convertedUrl || ''))) return 'curto'
   return null // comprido sem recusa explícita, vazio, skip etc. — não decide nada
 }
