@@ -1,15 +1,15 @@
 # Janela do supervisor — D2 (teto 100), D3 e C1(b) (29/09/2026)
 
 Tudo na MESMA janela, porque reiniciar o `bot-supervisor` reconecta TODAS as
-sessões. **Anunciar antes** e fazer de madrugada. Ordem: código em `main` →
-(staging validado) → janela.
+sessões. **Anunciar antes** e fazer de madrugada. Ordem: staging validado →
+`.env` de produção → merge em `main` (o deploy reinicia o supervisor). Ver item 3.
 
 ## 0. O que muda
 
 | Item | O que é | Onde |
 |---|---|---|
 | D2 | Teto de vagas 80 → 100 | só `.env` de produção (`MAX_SESSIONS_PER_PROCESS=100`) |
-| D3 | Robôs passam a rodar o código novo (deploy em modo `remote` não recarrega workers) | `pm2 restart bot-supervisor` |
+| D3 | Robôs passam a rodar o código novo | o próprio deploy de `main` reinicia o supervisor (modo `auto`); comando manual só se o deploy avisar que preservou |
 | C1(b) | Mensagem no próprio número, a partir do dia 5 do teste, com o texto de prova do painel | código em `src/core/selfWelcomeMessage.js` + `bot-worker.js`; liga com `TRIAL_DECISION_SELF_MESSAGE_ENABLED=true` |
 
 C1(b) **não precisa de comando novo no supervisor**: usa o mesmo caminho das
@@ -39,7 +39,15 @@ free -m | awk '/Mem|Swap/'
 pgrep -fc "/home/deploy/wabot/src/bot-worker"
 ```
 
-## 3. Janela (produção, `~/wabot`, depois do deploy em `main`)
+## 3. Janela (produção)
+
+**O deploy de `main` JÁ reinicia o `bot-supervisor` sozinho** quando o commit toca
+código dos bots (`WORKER_CODE_PATHS_RE`, modo `auto` em `scripts/deploy_safe_dashboard.sh`;
+este PR mexe em `src/bot-worker.js` e `src/core/`). Ou seja: **o merge em `main` É a
+janela**, e ele reconecta TODAS as sessões. Por isso o `.env` muda ANTES do merge.
+
+1. **Anunciar** aos clientes e escolher a madrugada.
+2. **Antes do merge** (só edita, não reinicia nada):
 
 ```bash
 cd ~/wabot && cp .env .env.bak-$(date +%F)
@@ -49,10 +57,15 @@ grep -q '^MAX_SESSIONS_PER_PROCESS=' .env \
 grep -q '^TRIAL_DECISION_SELF_MESSAGE_ENABLED=' .env \
   && sed -i 's/^TRIAL_DECISION_SELF_MESSAGE_ENABLED=.*/TRIAL_DECISION_SELF_MESSAGE_ENABLED=true/' .env \
   || echo 'TRIAL_DECISION_SELF_MESSAGE_ENABLED=true' >> .env
-# API e supervisor releem o teto só no próprio boot; PM2 cacheia env, então delete + start:
-pm2 delete api bot-supervisor
-pm2 start ecosystem.config.cjs --only api,bot-supervisor
-pm2 save
+```
+
+3. **Mergear `develop` → `main`.** O deploy reinicia a API e o supervisor (o log do
+   Actions mostra "bot-supervisor será reiniciado ao final").
+4. Conferir (item 4). **Só se** o teto ainda aparecer 80 (PM2 guardou a env antiga —
+   pegadinha #1 de `docs/rca/deploy-e-infra.md`), forçar a leitura do `.env`:
+
+```bash
+cd ~/wabot && pm2 delete api bot-supervisor && pm2 start ecosystem.config.cjs --only api,bot-supervisor && pm2 save
 ```
 
 ## 4. Conferir (2 min depois)
@@ -69,7 +82,7 @@ cliente" no admin mostra "Decisão do teste (a partir do dia 5)" para cada envio
 
 ## 5. Voltar atrás
 
-- **Só C1(b):** trocar para `TRIAL_DECISION_SELF_MESSAGE_ENABLED=false` (ou apagar a linha) e repetir o `pm2 delete` + `start` do item 3.
+- **Só C1(b):** trocar para `TRIAL_DECISION_SELF_MESSAGE_ENABLED=false` (ou apagar a linha) e `pm2 restart bot-supervisor --update-env` (reconecta tudo).
 - **Teto:** `sed -i 's/^MAX_SESSIONS_PER_PROCESS=.*/MAX_SESSIONS_PER_PROCESS=80/' ~/wabot/.env` e repetir o `pm2 delete` + `start`.
 
 ## 6. Testar C1(b) no staging antes (`~/wabot-staging`, modo `inline`)

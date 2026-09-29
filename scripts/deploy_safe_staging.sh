@@ -431,7 +431,8 @@ REVISION_AFTER_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
 # Deliberadamente DE FORA (alcançados só pelo caminho de e-mail, e o worker só
 # os usa para o aviso interno de número repetido — texto velho ali não muda
 # nada para a cliente): src/email/, src/domain/painel/whatsappSafety.js,
-# src/tutorialVideo.js, src/leadNurture/unsubscribeToken.js.
+# src/domain/painel/trialDecision.js, trialNotice.js e pricePerOffer.js (só o aviso
+# do dia 5 no próprio número), src/tutorialVideo.js, src/leadNurture/unsubscribeToken.js.
 #
 # Guarda: test/deploy-worker-code-paths.test.js calcula o que o bot-worker e o
 # supervisor de fato importam e falha se um arquivo novo não estiver nem aqui
