@@ -49,6 +49,8 @@ import db from './db.js'
 import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
+import { createUnsupportedStoreSignal } from './observability/unsupportedStoreSignal.js'
+import { linkRemovedSkipReason } from './core/unsupportedStore.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
@@ -81,6 +83,8 @@ import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queue
 import { buildOutsideSendWindowReason, shouldDropOutsideSendWindow } from './core/sendWindow.js'
 import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
 import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
+import { anchorFor, applyTrackedLinks, resolveTrackedLinkSettings } from './core/trackedLinks.js'
+import { createShortlink } from './core/clickTracker.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
@@ -392,6 +396,13 @@ const monitoredDropLogState = new Map()
 // não só ao log. Sem ele, oferta ENCERRADA no site de origem era mostrada à
 // cliente como "ainda não fazemos conversão para essa loja" — falso, e com ação
 // oposta (RCA 2026-09-19).
+// P1-4: contagem agregada (dia + domínio) de link de loja NÃO suportada que
+// chegou num grupo monitorado. Só o domínio registrável é guardado — nunca URL,
+// caminho, query, texto ou conta — e a linha é podada em 30 dias. Map limitado,
+// esvaziado a cada flush; o flush pega carona no watchdog de 5 min que já
+// existe (sem timer novo). Ver src/observability/unsupportedStoreSignal.js.
+const unsupportedStoreSignal = createUnsupportedStoreSignal({ db, logger })
+
 async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
   if (!text) return { text, failures: [] }
   try {
@@ -1173,7 +1184,16 @@ async function loadConfig() {
     logger.warn({ err: err?.message }, 'Falha ao carregar cupons da cliente; ofertas seguem sem cupom até a próxima carga')
   }
 
-  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive, coupons }
+  // Link rastreado (src/core/trackedLinks.js): flag da cliente + plano PRO/Trial
+  // (mesmo acesso da Preservação avançada, onde o rastreio já aparece) +
+  // SHORTLINK_BASE_URL no servidor. Faltou qualquer um → desligado.
+  const trackedLinks = resolveTrackedLinkSettings({
+    botConfig,
+    planAllows: Boolean(preservation?.active),
+    baseUrl: process.env.SHORTLINK_BASE_URL,
+  })
+
+  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive, coupons, trackedLinks }
 }
 
 async function getConfig() {
@@ -1317,6 +1337,9 @@ const stuckSendLogsTimer = setInterval(() => {
       if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
     })
     .catch(err => logger.error({ err: err.message }, 'Watchdog de envios presos falhou'))
+  // Carona (P1-4): grava a contagem agregada de loja não suportada que ficou
+  // pendente desde o último registro. Sem timer próprio de propósito.
+  unsupportedStoreSignal.flushIfDue().catch(() => {})
 }, STUCK_SEND_LOG_SWEEP_MS).unref()
 
 // Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
@@ -2230,14 +2253,43 @@ function kindDoCard(fonte) {
   return DELIVERY_KIND.CARD_LOJA
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto, watermark = null }) {
+// Troca os links convertidos pelo shortlink rastreado (src/core/trackedLinks.js).
+// Desligado → devolve o MESMO texto, sem tocar no banco. Qualquer falha →
+// texto de hoje (rastreio nunca derruba nem segura oferta).
+async function trackLinksForSend({ text, conversions, destJid, messageLogId, settings }) {
+  const semRastreio = { text, anchors: new Map() }
+  if (!settings?.enabled) return semRastreio
+  try {
+    let groupId = null
+    try {
+      const destino = await db.group.findFirst({ where: { userId, waJid: destJid, role: 'post' }, select: { id: true } })
+      groupId = destino?.id ?? null
+    } catch { /* clique sem grupo ainda conta para a conta */ }
+    return await applyTrackedLinks(text, conversions, {
+      enabled: true,
+      createLink: url => createShortlink(userId, url, { baseUrl: settings.baseUrl, groupId, messageLogId }),
+      onError: (err, url) => logger.warn({ err: err?.message, destJid, url }, 'Link rastreado: shortlink não criado; link sai direto'),
+    })
+  } catch (err) {
+    logger.warn({ err: err?.message, destJid }, 'Link rastreado falhou; oferta sai com o link direto')
+    return semRastreio
+  }
+}
+
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto, watermark = null, anchorUrl }) {
   // `onFonteDaFoto` (opcional): diz de ONDE veio a foto do card ('loja',
   // 'origem' ou 'banner'). Vai por callback, e não como campo do objeto
   // devolvido, porque esse objeto é o urlInfo que entra no proto do WhatsApp —
   // campo estranho ali é risco desnecessário (ver o RCA do `title` do PR #1186).
   const marcarFonte = fonte => { try { onFonteDaFoto?.(fonte) } catch { /* best-effort */ } }
-  const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
-  if (!matchedText) return null
+  const realUrl = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
+  if (!realUrl) return null
+  // Link rastreado (src/core/trackedLinks.js): quando o texto leva o shortlink
+  // no lugar do link convertido, a ÂNCORA do card (matched-text/canonical-url)
+  // é o shortlink — é ele que está literalmente no corpo. Todo o resto (foto,
+  // título, raspagem) continua no link REAL: o shortlink nunca é buscado aqui,
+  // senão o próprio robô contaria clique. Sem anchorUrl = comportamento de hoje.
+  const matchedText = isHttpUrl(anchorUrl) ? anchorUrl : realUrl
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
   // âncora o cliente WhatsApp não associa o card ao link e não renderiza nada.
   // Sem âncora, devolve null e o Baileys tenta o preview automático.
@@ -2246,7 +2298,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     return null
   }
 
-  const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
+  const sourceUrl = isHttpUrl(primary?.url) ? primary.url : realUrl
 
   // jpegThumbnail = placeholder pequeno (inline no proto, mostrado antes da
   // HQ carregar). hqSourceBuffer = imagem em resolução MAIOR, usada só como
@@ -2440,7 +2492,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // deploy do PR #1186 — cards sumiram até este fix). Em cupom, prefixa
     // "Cupom" — mesmo texto do banner (buildStoreBrandCardImage), pra não
     // ficar inconsistente (imagem diz "Cupom Amazon", título diz só "Amazon").
-    title: storePreviewTitle(primary?.platform, matchedText, useCouponBrandCard),
+    title: storePreviewTitle(primary?.platform, realUrl, useCouponBrandCard),
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
@@ -4229,8 +4281,48 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const { text: textoParaEspelhar, failures: falhasDeDominioProprio } =
         await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
       const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar) : ''
+      // P1-4: links que o sanitizador acabou de APAGAR por não serem de loja
+      // suportada (nem convite de grupo, nem rede social). Lido do texto de
+      // ANTES do sanitizador — a mesma regra do desembrulho de domínio próprio
+      // e do sufixo `:unsupported_store`, para as três pontas concordarem.
+      const linksDeLojaNaoSuportada = textoParaEspelhar ? findCandidateLinks(textoParaEspelhar) : []
+      const ofertaEncerradaNaOrigem = allCandidatesFailedBecauseOfferEnded(falhasDeDominioProprio)
+      // "Promoção encerrada no site de origem" é site próprio de grupo, não loja
+      // que falta apoiar — fica fora da contagem para não poluir a decisão.
+      if (linksDeLojaNaoSuportada.length && !ofertaEncerradaNaOrigem) {
+        unsupportedStoreSignal.record(linksDeLojaNaoSuportada)
+      }
+      // Oferta cujo(s) único(s) link(s) eram de loja não suportada: o link é
+      // removido (certo) e a oferta NÃO sai mutilada, sem ter onde clicar — ela
+      // vira linha no painel explicando o motivo. Antes ia para o grupo sem link
+      // e em silêncio (P1-4, defeito 1a). Vale para os dois caminhos em que isso
+      // acontecia: a política aceita mensagem sem link, ou o texto inteiro era
+      // só o link e ficou vazio. Mensagem que NUNCA teve link não é afetada.
+      async function recordLinkRemovedSkip(reason) {
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: 'nolink',
+            sourceGroup: jid,
+            destGroup: 'skipped',
+            originalUrl: '',
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(sanitizedText || '(só link de loja não suportada)'),
+            status: 'skipped',
+            errorMsg: reason,
+          },
+        }).catch(() => {})
+      }
       if (text && !sanitizedText) {
         logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
+        const motivo = linkRemovedSkipReason({
+          supportedLinkCount: 0,
+          unsupportedLinkCount: linksDeLojaNaoSuportada.length,
+          offerEndedAtSource: ofertaEncerradaNaOrigem,
+        })
+        // Texto que era SÓ link de loja não suportada também vira linha no
+        // painel (antes: só o log, que a cliente não vê).
+        if (motivo) await recordLinkRemovedSkip(motivo)
         return
       }
 
@@ -4284,13 +4376,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // a verdade; `findCandidateLinks` é a mesma regra do desembrulho de
         // domínio próprio (ignora convite de grupo e rede social), então as duas
         // pontas nunca discordam sobre o que é "link de loja desconhecida".
-        const hadUnsupportedStoreUrl = findCandidateLinks(textoParaEspelhar).length > 0
+        const hadUnsupportedStoreUrl = linksDeLojaNaoSuportada.length > 0
         // "A oferta acabou" e "não apoiamos essa loja" são causas DIFERENTES com
         // ações opostas, e até 19/09/2026 as duas saíam com a mesma frase — a
         // cliente lia que a Amazon não é convertida, o que é falso. Quando TODOS
         // os links do site de origem caíram na página de promoção encerrada, o
-        // painel passa a dizer isso.
-        const ofertaEncerradaNaOrigem = allCandidatesFailedBecauseOfferEnded(falhasDeDominioProprio)
+        // painel passa a dizer isso (`ofertaEncerradaNaOrigem`, calculado acima).
         const unsupportedStoreSuffix =
           links.length === 0 && ofertaEncerradaNaOrigem
             ? ':offer_ended_at_source'
@@ -4310,6 +4401,19 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}${unsupportedStoreSuffix}`,
           },
         }).catch(() => {})
+        return
+      }
+
+      // P1-4: a política deixou passar (grupo aceita mensagem sem link), mas o
+      // único link era de loja não suportada e já foi removido. Ver
+      // linkRemovedSkipReason em src/core/unsupportedStore.js.
+      const motivoLinkRemovido = linkRemovedSkipReason({
+        supportedLinkCount: links.length,
+        unsupportedLinkCount: linksDeLojaNaoSuportada.length,
+        offerEndedAtSource: ofertaEncerradaNaOrigem,
+      })
+      if (motivoLinkRemovido) {
+        await recordLinkRemovedSkip(motivoLinkRemovido)
         return
       }
 
@@ -5281,6 +5385,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
+          // Link rastreado (src/core/trackedLinks.js), no ÚLTIMO passo antes do
+          // envio: depois da conversão e da trava do espelhamento, por destino
+          // (o clique fica ligado a este grupo e a este MessageLog). Desligado
+          // (padrão) → sendText é o MESMO variantText de sempre e anchorUrl é
+          // undefined, ou seja, payload idêntico ao de hoje.
+          const tracked = await trackLinksForSend({ text: variantText, conversions, destJid, messageLogId: log.id, settings: cfg.trackedLinks })
+          const sendText = tracked.text
+          const primaryAnchor = anchorFor(tracked.anchors, primary?.converted)
           // Quanto a MENSAGEM DE ORIGEM trouxe de imagem. `getOriginalPhotoOnce`
           // é memoizado por mensagem, então isto não gera download extra — e é o
           // dado que separa "não havia foto" de "havia foto e se perdeu".
@@ -5341,7 +5453,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             let fonteDaFoto = null
             const linkPreview = await buildManualLinkPreview({
               onFonteDaFoto: fonte => { fonteDaFoto = fonte },
-              text: variantText,
+              text: sendText,
               primary,
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
@@ -5353,13 +5465,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // mais ninguém (getImage devolve null cedo), então não há
               // download duplicado da mesma mídia.
               fetchOriginPhoto: getOriginalPhotoOnce,
+              anchorUrl: primaryAnchor,
               // Modo "card com marca d'água": a marca é uma camada em cima do
               // modo-base, igual ao par 'original'/'original_watermark'.
               watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
             })
             deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
-              finalText: variantText,
+              finalText: sendText,
               image: null,
               useLinkPreview: true,
               linkPreview,
@@ -5380,7 +5493,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
             // e externalAdReply). forwardNewsletter=null: relay nunca injeta canal.
             const replayProto = buildRelayProto(original.proto, {
-              caption: hasCaption ? variantText : undefined,
+              caption: hasCaption ? sendText : undefined,
               forwardNewsletter: null,
             })
             deliveryInfo.kind = DELIVERY_KIND.RELAY
@@ -5475,7 +5588,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             let fonteDaFotoFallback = null
             const fallbackPreview = await buildManualLinkPreview({
               onFonteDaFoto: fonte => { fonteDaFotoFallback = fonte },
-              text: variantText,
+              text: sendText,
               primary,
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
@@ -5486,6 +5599,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                 vitrineConfirmed: isDirectVitrineShare(primary?.url),
               }),
               fetchOriginPhoto: getOriginalPhotoOnce,
+              anchorUrl: primaryAnchor,
               // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
               // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
               allowSmallOriginPhoto: true,
@@ -5496,7 +5610,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             })
             deliveryInfo.kind = fallbackPreview ? kindDoCard(fonteDaFotoFallback) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
-              finalText: variantText,
+              finalText: sendText,
               image: null,
               useLinkPreview: true,
               linkPreview: fallbackPreview,
@@ -5505,7 +5619,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
           deliveryInfo.kind = image ? DELIVERY_KIND.FOTO : DELIVERY_KIND.TEXTO
           return buildMonitoredMessagePayload({
-            finalText: variantText,
+            finalText: sendText,
             image,
             useLinkPreview,
           })
@@ -5836,6 +5950,7 @@ async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
     flushDedupNow().catch(err => {
       logger.error({ err: err.message }, 'Erro ao persistir deduplicação antes de encerrar')
     }),
+    unsupportedStoreSignal.flush().catch(() => {}),
     markInterruptedSendLogs().catch(err => {
       logger.error({ err: err.message }, 'Erro ao marcar envios pendentes como interrompidos')
     }),

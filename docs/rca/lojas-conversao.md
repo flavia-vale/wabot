@@ -488,3 +488,66 @@ a página com a sessão da cliente, uma vez.
 Testes em `test/product-info-scraper.test.js` ("NÃO usa a sessão…", "ÚLTIMO
 recurso"). Validar pós-deploy repetindo a medição "com modelo × sem modelo":
 sucesso = o grupo com modelo parar de perder o código.
+
+## Link rastreado (clique contado) — decisão 2026-09-29
+
+O `clickTracker` (`src/core/clickTracker.js` + `GET /r/:hash`) passou a poder
+ser usado pelo robô: com o recurso ligado, o link de afiliado que sai no texto
+da oferta vira `<SHORTLINK_BASE_URL>/r/<hash>`, que conta o clique e responde
+302 para o link de afiliado da cliente. Código: `src/core/trackedLinks.js`
+(regra pura), `trackLinksForSend` em `src/bot-worker.js` (fiação), rota em
+`src/api/routes/clickTracker.js`, repasse público em `dashboard/app/r/[hash]/route.js`.
+
+**Desligado por padrão.** Só liga com as três peças juntas:
+`BotConfig.clickTrackingEnabled = true` (por conta, sem tela ainda), plano
+PRO/Trial (mesmo acesso da Preservação avançada, onde o rastreio já aparecia) e
+`SHORTLINK_BASE_URL` válido no servidor (`.env` em `deploy-e-infra.md`).
+Faltou uma → o texto sai **byte a byte igual** ao de antes.
+
+Invariantes (não regredir):
+
+1. **Conversores intocados.** A troca é feita DEPOIS da conversão e DEPOIS da
+   trava do espelhamento (`mirrorLinkGuard.js`), dentro do `buildPayload` do
+   envio (por destino, ligado ao `MessageLog`). Só entra link CONVERTIDO de
+   verdade (nunca passthrough/original), de domínio oficial de loja (host
+   ancorado, `TRACKABLE_STORE_DOMAINS`) e público (`ssrfGuard`). Link de
+   concorrente que sobrasse nunca é embrulhado — continua visível e a trava pega.
+2. **O hash guarda o link convertido sem nenhuma alteração** (tag, parâmetros,
+   escapes). O `/r/:hash` só redireciona para link de loja + público; o
+   `POST /api/links/shortlink` também só aceita link de loja. O domínio não
+   vira redirecionador aberto.
+3. **Card/foto no link REAL.** `buildManualLinkPreview` recebe o shortlink só
+   como `anchorUrl` (âncora `matched-text`/`canonical-url`, que precisa estar
+   literalmente no texto). Foto, título e raspagem continuam no link real —
+   o card nunca busca o shortlink.
+4. **Falha nunca derruba oferta.** Erro ao criar o shortlink = aquele link sai
+   direto, como antes.
+5. **Clique de robô não conta**: UA vazio/cliente HTTP (`node`, `undici`, o
+   preview automático do Baileys), crawler e `facebookexternalhit` são
+   redirecionados mas não gravados. "WhatsApp" no UA **conta** (é o navegador
+   embutido do app).
+
+Fora do escopo desta entrega (seguem mandando o link direto): reenvio
+automático após restart, fila de ofertas, ofertas automáticas, agendados e
+"Criar oferta". Tela para ligar/ver cliques também fica para depois; o número
+já existe em `GET /api/groups/:id/clicks`, `/api/preservation/monitoring/clicks`
+e na variável `cliques` do resumo semanal.
+
+**⚠️ Checklist obrigatório em staging antes de ligar para cliente real** — o
+ponto de risco é a abertura do app da loja, não o card:
+
+- Tocar no link rastreado num Android e num iPhone, para cada loja
+  (Shopee produto, Shopee cupom, ML, Amazon, Magalu, SHEIN, AliExpress):
+  precisa abrir o **app** da loja (ou a página certa) como o link direto abre.
+  A Shopee bloqueia página web no navegador do WhatsApp (`unsupported.html`,
+  seção acima); o link direto `s.shopee.com.br` escapa porque o toque abre o
+  app. Com um salto a mais no nosso domínio isso **não foi medido** — se cair
+  no "Oops! Seu navegador não é mais aceito!", NÃO ligar para Shopee.
+- Conferir a comissão: uma compra de teste pelo link rastreado aparece no
+  painel de afiliado da loja com a etiqueta da cliente.
+- Card: a oferta sai com foto e o toque no card abre o link rastreado.
+- `SELECT COUNT(*) FROM AffiliateClick` sobe 1 por toque de gente.
+
+Crescimento do banco: 1 linha em `AffiliateLink` por envio por destino com o
+recurso ligado (~200 B + índices) e 1 em `AffiliateClick` por clique. Não há
+limpeza automática dessas tabelas ainda (aberto).

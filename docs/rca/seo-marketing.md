@@ -176,6 +176,29 @@ pode virar promessa de que não banem. Corrigir a expectativa dentro da página 
 honesto; prometer é risco jurídico e contraria a política de uso responsável já
 publicada no `llms.txt`.
 
+## Títulos-pergunta nos comparativos: exceção à FR-030 (decisão 29/09/2026)
+
+A FR-030 (`test/marketing-limites-que-nao-se-cruzam.test.js`) obriga o título
+de comparativo a começar com "Alternativa ao X", para a página não se passar
+pelo concorrente (risco de marca/propaganda enganosa). Em 29/09 a dona do
+produto decidiu, com o risco explicado, abrir **exceção nominal** para 3 páginas
+com título-pergunta + contraste:
+
+| Página | Título |
+|---|---|
+| `/alternativas/achadinho-pro` | Achadinho Pro cobra R$ 49,97 só p/ Shopee. Veja R$ 39 |
+| `/alternativas/shozap` | Shozap limita grupos? Aqui é ilimitado por R$ 39 |
+| `/alternativas/achadinhos-bot` | AchadinhosBot limita grupos? Aqui é ilimitado: R$ 39 |
+
+- A lista é `TITULOS_COM_MARCA_DO_CONCORRENTE_AUTORIZADOS`; mesmo nela o título
+  precisa trazer o contraste "R$ 39". Página nova **não** entra sem nova decisão.
+- Os fatos do título vêm de `competitors-data.js` (FR-031 continua valendo). Se
+  o preço/limite do concorrente mudar, o título muda junto — é afirmação sobre
+  terceiro, não pode ficar velha.
+- Contexto de medição: os 3 já tinham sido reescritos em 27/09 (Frente D1) e
+  foram trocados de novo antes de medir. Comparar pela série diária a partir do
+  deploy desta troca, não contra 27/09.
+
 ## Datas, "Melhor para" e validadores de SEO (23/09/2026 — não regredir)
 
 - **`EDITORIAL_DATES` é a fonte ÚNICA da data** de toda rota indexável: o
@@ -671,7 +694,9 @@ marketing bloqueia anúncio pago até esse número existir. Teste:
   (`src/core/reportRiskScore.js`); horário de descanso, intervalo, limite por
   dia, variação de texto.
 - **Não existe:** "pausa preventiva" antes do risco, medição de cliques ou
-  visualizações do canal (`clickTracker.js` não está ligado no envio), plano de
+  visualizações do canal (o link rastreado existe no robô desde 2026-09-29, mas
+  é opt-in, desligado por padrão e sem conta ativa — ver `lojas-conversao.md`,
+  "Link rastreado"; só vira texto público depois de ligado e validado), plano de
   recuperação como função da ferramenta (é da cliente).
 - O PR #1848 errou para o outro lado ("não pausa sozinha", "não mede saúde") —
   corrigido. Convite é "Testar 7 dias grátis", nunca "Lista VIP"; sem "staging"/

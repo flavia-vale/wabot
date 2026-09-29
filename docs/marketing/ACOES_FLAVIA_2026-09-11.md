@@ -188,7 +188,7 @@ Guia completo" logo abaixo do título. Medir pela série DIÁRIA.
 https://espelhagrupos.com.br/blog/como-ser-afiliado-shopee-whatsapp        ⏳
 https://espelhagrupos.com.br/blog/como-divulgar-ofertas-amazon-whatsapp    ⏳
 https://espelhagrupos.com.br/blog/melhores-horarios-para-postar-ofertas-no-whatsapp ⏳
-https://espelhagrupos.com.br/alternativas/shozap                           ⏳
+https://espelhagrupos.com.br/alternativas/shozap                           → movida para a leva 🔝 de títulos-pergunta (29/09)
 https://espelhagrupos.com.br/alternativas/gigi-bot                         ⏳
 https://espelhagrupos.com.br/alternativas/fluxopromo                       ⏳
 https://espelhagrupos.com.br/shopee-afiliados-whatsapp                     ➡️ movida para a Leva T (topo citável, 29/09) — não pedir aqui

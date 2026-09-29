@@ -129,7 +129,11 @@ export const COMPARISON_PAGES = {
     // posição 6,4 — a maior página do site com o menor clique. Em consulta de
     // MARCA de concorrente há teto (quem digita a marca quer a marca); o ganho
     // está no diferencial com número: 6 lojas por R$ 39.
-    title: 'Alternativa ao AchadinhosBot: 6 lojas por R$ 39',
+    // 29/09/2026: título no estilo pergunta + contraste, por decisão explícita
+    // da dona do produto (exceção nominal à FR-030 em
+    // test/marketing-limites-que-nao-se-cruzam.test.js). "Limita grupos" vem
+    // de competitors-data.js: 1 grupo no Starter, teto de 15 no Premium.
+    title: 'AchadinhosBot limita grupos? Aqui é ilimitado: R$ 39',
     description: 'O AchadinhosBot cobra por grupo e só cobre Shopee. O Espelha Grupos custa R$ 39 por 30 dias, com grupos ilimitados, 6 lojas e 7 dias grátis com o Pro completo.',
     competitorSlugs: ['achadinhosbot', 'achadinho-pro'],
     // Par recíproco do `competitorNudge` de /bot-achadinhos-whatsapp: as duas
@@ -299,7 +303,9 @@ export const COMPARISON_PAGES = {
     // 27/09/2026 (Frente D1): 531 impressões, CTR 0,94% na posição 6,2. O
     // título dizia "preço e limites" sem número nenhum; agora traz o
     // diferencial concreto. Sem preço do Shozap (não visível no site dele).
-    title: 'Alternativa ao Shozap: grupos ilimitados por R$ 39',
+    // 29/09/2026: estilo pergunta + contraste, decisão da dona do produto
+    // (exceção nominal à FR-030). Básico do Shozap: 3 grupos por campanha.
+    title: 'Shozap limita grupos? Aqui é ilimitado por R$ 39',
     description: 'Shozap ou Espelha Grupos? Compare grupos, conexões e lojas por plano. Aqui: grupos ilimitados por R$ 39/30 dias e 7 dias grátis. Verificado em 04/08/2026.',
     competitorSlugs: ['shozap'],
     productPage: {
@@ -478,7 +484,11 @@ export const COMPARISON_PAGES = {
     // ("6 lojas e 7 dias grátis"). A FR-030 (test/marketing-limites-que-nao-
     // se-cruzam.test.js) proíbe título que COMEÇA com o nome do concorrente —
     // por isso "Alternativa ao" vem antes e a marca dele logo em seguida.
-    title: 'Alternativa ao Achadinho Pro: 6 lojas e 7 dias grátis',
+    // 29/09/2026: título pedido pela dona do produto ("Achadinho Pro cobra
+    // R$ 49,97 só p/ Shopee. Veja a opção de R$ 39", 64 chars), encurtado
+    // para caber no teto de 55. Exceção nominal à FR-030; preço do Basic
+    // verificado em competitors-data.js.
+    title: 'Achadinho Pro cobra R$ 49,97 só p/ Shopee. Veja R$ 39',
     description: 'O Achadinho Pro cobre só Shopee no plano de entrada (R$ 49,97/mês). No Espelha Grupos são 6 lojas por R$ 39 ou R$ 69 a cada 30 dias e 7 dias grátis sem cartão.',
     competitorSlugs: ['achadinho-pro'],
     // Páginas de resposta (19/09/2026): quem chega comparando ferramenta ainda

@@ -105,7 +105,9 @@ test('bot-worker sempre inclui title (nome da loja) no urlInfo manual do preview
   const botWorkerSource = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.match(
     botWorkerSource,
-    /title: storePreviewTitle\(primary\?\.platform, matchedText, useCouponBrandCard\)/,
+    // realUrl (link convertido): com o link rastreado ligado, o título segue
+    // saindo do link REAL, nunca do shortlink (docs/rca/lojas-conversao.md).
+    /title: storePreviewTitle\(primary\?\.platform, realUrl, useCouponBrandCard\)/,
     'urlInfo manual precisa de title fixo do nome da loja',
   )
 })

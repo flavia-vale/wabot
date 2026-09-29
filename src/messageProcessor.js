@@ -80,12 +80,18 @@ function removeOrphanInviteCtas(text) {
 }
 
 // Remove qualquer URL http(s) que NÃO seja de um marketplace de oferta
-// suportado (Amazon, Shopee, Mercado Livre, Magalu). Links de outras
+// suportado (as lojas de `PATTERNS` em src/detector.js — hoje Amazon, Shopee,
+// Mercado Livre, Magalu, SHEIN e AliExpress). Links de outras
 // origens — landing pages, lovable.app, encurtadores aleatórios, sites do
 // próprio grupo monitorado — não são ofertas e não devem ser repassados.
 // A pontuação final ("https://x.com.") é preservada para não deixar o
 // texto truncado de forma estranha. Os links de oferta ficam intactos para
 // que applyConversionsAndBranding os substitua pelo link de afiliado.
+//
+// A remoção é CERTA e não deve mudar (link de terceiro dá a comissão da cliente
+// para outra pessoa). O que o bot-worker faz com a oferta que ficou SEM link
+// por causa daqui — e a contagem agregada de qual loja era — está em
+// src/core/unsupportedStore.js (P1-4). Esta função continua pura e silenciosa.
 function removeNonOfferUrls(text) {
   return String(text ?? '').replace(ANY_HTTP_URL_RE, (match) => {
     const trailing = match.match(TRAILING_URL_NOISE_RE)?.[0] ?? ''
