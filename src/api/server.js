@@ -23,6 +23,7 @@ import { adminRoutes } from './routes/admin.js'
 import { adminEmailsRoutes } from './routes/adminEmails.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
+import { pruneClickTracking } from './clickTrackingRetention.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { offerAutomationRoutes } from './routes/offerAutomation.js'
 import { offerAutomationReviewRoutes } from './routes/offerAutomationReview.js'
@@ -182,6 +183,11 @@ async function cleanupOldLogs() {
   })
   await cleanupByRetentionDays(db.adminAuditLog, 'createdAt', ADMIN_AUDIT_RETENTION_DAYS, 'Admin audit logs').catch(err => {
     app.log.error({ err: err.message }, 'Falha na limpeza automática de admin audit logs')
+  })
+  await pruneClickTracking({ db }).then(({ clicks, links }) => {
+    if (clicks > 0 || links > 0) app.log.info({ clicks, links }, 'Cliques e links curtos removidos por retenção automática')
+  }).catch(err => {
+    app.log.error({ err: err.message }, 'Falha na limpeza automática de cliques')
   })
 }
 
