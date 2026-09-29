@@ -43,8 +43,7 @@ baixo, 3 a 5 por dia.** A nota é palpite: quem confirma é a resposta dela.
   mesmo jeito e a crítica vira item de produto.
 - Frase com "dobrei minhas comissões" ou "nunca fui banida": não publicar, ou
   ela confirma que disse exatamente aquilo.
-- Publicar com o rótulo "cliente pagante, recebeu 5 dias de PRO como
-  agradecimento" nas páginas em que o depoimento aparecer.
+- Decisão de 29/09/2026: o site **não** mostra rótulo sobre os "5 dias de PRO".
 
 ### Passo 3 — dar os 5 dias de PRO
 

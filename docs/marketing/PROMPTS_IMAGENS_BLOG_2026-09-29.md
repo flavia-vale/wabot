@@ -1,9 +1,10 @@
 # Imagens de capa dos posts — prompts para gerar em outra IA (29/09/2026)
 
-Regra: **todo post do blog tem imagem de capa**. Hoje faltam 7 (os 6 posts novos
-e `amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp`). Enquanto a imagem
-não existe, o post entra na lista `AGUARDANDO_IMAGEM` de
-`test/blog-posts-obrigatorios.test.js`; a lista só encolhe.
+Regra: **todo post do blog tem imagem de capa**. **Todas as capas estão prontas
+(29/09):** 32 a 37 nos 6 posts novos e `38-qual-loja.jpg` no comparativo das 3 lojas
+(esta última mantém as aspas do título, por decisão da dona do produto). A lista
+`AGUARDANDO_IMAGEM` de `test/blog-posts-obrigatorios.test.js` está vazia; post novo
+sem capa entra nela até a imagem chegar. Este documento fica como referência de estilo.
 
 ## Estilo (igual às capas que já existem)
 

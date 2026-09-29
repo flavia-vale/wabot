@@ -729,6 +729,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Como operar os três programas de afiliados ao mesmo tempo no WhatsApp: qual loja usar em cada oferta, como não misturar os códigos e qual rende mais.',
     eyebrow: 'Estratégia · Operar os três programas',
     origin: 'blog_amazon_shopee_ou_mercado_livre_para_afiliados_whatsapp',
+    heroImage: { path: '/blog/hero/38-qual-loja.jpg', alt: 'Comparativo entre marketplaces: Shopee para achadinhos e cupom, Amazon para variedade e marcas, Mercado Livre para ticket maior e frete. Quem decide é a atribuição do link e o seu público', width: 1024, height: 1024 },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta. Se você ainda está decidindo por onde começar, veja antes o comparativo de comissão dos três programas.',
