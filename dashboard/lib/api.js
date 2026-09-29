@@ -445,6 +445,11 @@ export const api = {
     return apiFetch(`/api/admin/marketing/funnel${query ? `?${query}` : ''}`)
   },
 
+  adminMarketingCampanhaCanais: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/campanha-canais${query ? `?${query}` : ''}`)
+  },
+
   adminMarketingSignupsByLanding: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/marketing/signups-by-landing${query ? `?${query}` : ''}`)

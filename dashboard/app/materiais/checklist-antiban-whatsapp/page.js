@@ -101,7 +101,7 @@ export default function Page() {
 
           <aside className="space-y-4">
             <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Captura leve</p>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Checklist na sua conta</p>
               <h2 className="mt-3 text-2xl font-black tracking-tight text-gray-950">Receber o checklist no cadastro</h2>
               <p className="mt-3 text-sm leading-6 text-gray-700">Informe e-mail e perfil para levar este checklist como contexto da sua conta Espelha Grupos.</p>
               <form action="/login" method="get" className="mt-5 grid gap-3" data-crm-stage="Lead" data-crm-source="checklist_antiban_whatsapp">

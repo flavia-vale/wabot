@@ -1,3 +1,5 @@
+import { readEntryUtm } from './marketing-attribution.js'
+
 export const TRACKING_EVENTS = {
   AUTH_SUBMIT_ATTEMPT: 'auth_submit_attempt',
   SIGNUP_SUCCESS: 'signup_success',
@@ -124,7 +126,9 @@ export function trackEvent(eventName, params = {}) {
 
 function persistPublicEvent(payload) {
   if (!PUBLIC_PERSISTED_EVENTS.has(payload.event)) return
-  const body = JSON.stringify({ event: payload.event, metadata: payload })
+  // UTM do link que trouxe a pessoa (ver readEntryUtm). Não sobrescreve campo
+  // que o próprio evento já mandou.
+  const body = JSON.stringify({ event: payload.event, metadata: { ...readEntryUtm(), ...payload } })
   try {
     if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
       const blob = new Blob([body], { type: 'application/json' })

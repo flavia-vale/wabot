@@ -701,3 +701,17 @@ marketing bloqueia anúncio pago até esse número existir. Teste:
 - O PR #1848 errou para o outro lado ("não pausa sozinha", "não mede saúde") —
   corrigido. Convite é "Testar 7 dias grátis", nunca "Lista VIP"; sem "staging"/
   "Sprint" em texto público. Guarda: `test/paginas-publicas-sem-promessa-falsa.test.js`.
+
+## Funil da campanha Canais + Preservação — três furos de medição (29/09/2026, não regredir)
+
+Achados no P1 do backlog pós-P3 (`docs/marketing/canais-antiban/backlog-pos-p3-prioridades.md`). Os três descartavam dado **sem erro**:
+
+1. **`diagnostic_result_viewed`, `diagnostic_form_submitted`, `diagnostic_cta_clicked`** estavam em `PUBLIC_PERSISTED_EVENTS` (navegador) mas fora das duas allowlists de `src/analytics.js` → a rota pública respondia 400 e o funil não tinha a etapa do diagnóstico nem o clique da calculadora (`diagnostic_cta_clicked` com `origin=calculadora_risco_whatsapp`). Mesma falha do `organic_page_view` em 08/2026: **evento novo entra nas TRÊS listas**.
+2. **`diagnostic_score_band`, `risk_score_band`, `segmento`** vinham na URL do `/login` e eram descartados (fora de `ATTRIBUTION_QUERY_KEYS`; o `/register` nem lia). Agora vão ao `signup_created`, saneados por `campaignSignupFields` (`src/domain/signup/entryUtm.js`).
+3. **UTM do post que trouxe a pessoa** só existia dentro do `landing_page` saneado (`?`/`=`/`&` → `-`) e cortado em 80 caracteres pelo `sanitizeAnalyticsMetadata` — o `utm_content` sumia. Agora todo evento público persistido e o `signup_created` levam `entry_utm_source/medium/campaign/content`, extraídos antes do corte. A regra de leitura existe duas vezes (servidor `src/domain/signup/entryUtm.js`, navegador `readEntryUtm` em `dashboard/lib/marketing-attribution.js`) porque `src/` não importa `dashboard/lib`; o teste compara as duas.
+
+Extra: o "Criar conta" das 4 páginas de decisão mandava `utm_content=p2_signup` igual e um `page=` que o `/login` descarta — agora `p2_signup_<página>` (`decisionSignupHref`).
+
+Leitura: `/admin/marketing-growth` → "Campanha Canais + Preservação" (`GET /api/admin/marketing/campanha-canais`, `admin:read`, janela máx. 90 dias, 2 consultas `GROUP BY` + `LIMIT 2000`, zero processo novo) e `node scripts/diag-funil-antiban.mjs [--dias 7]`. Montagem única em `src/domain/admin/campaignFunnel.js`. Eventos e `entry_utm_*` só existem a partir do deploy de 29/09 — semana anterior mostra zero nessas etapas, não é queda.
+
+Guardas: `test/campanha-canais-funil.test.js`, `test/campanha-canais-qa.test.js` (8 rotas, CTAs, promessa, mock rotulado, sem jargão "P1/P2"), `test/campanha-canais-criativos.test.js`.
