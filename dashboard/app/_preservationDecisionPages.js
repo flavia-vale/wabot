@@ -87,7 +87,7 @@ export const PRESERVATION_DECISION_PAGES = {
     slug: '/como-funciona-espelha-grupos-canais',
     template: 'howto',
     eyebrow: 'Como funciona · Canais',
-    title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
+    title: 'Como funciona o Espelha Grupos em Canais do WhatsApp',
     description: 'Veja o fluxo operacional do Espelha Grupos para Canais do WhatsApp: fontes, destinos, cadência, variações, saúde por canal e preservação avançada.',
     intent: 'como funciona espelha grupos canais',
     h1: 'Como o Espelha Grupos transforma grupos e canais em uma operação controlada.',

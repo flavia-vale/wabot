@@ -158,8 +158,12 @@ test('as descrições das páginas de FR-004 cabem em 160 chars', () => {
   }
 })
 
-test('alternativas/fluxopromo e alternativas/achadinhos-bot dizem "alternativa a/ao", nunca se apresentam como o concorrente (FR-030)', () => {
-  for (const path of ['/alternativas/fluxopromo', '/alternativas/achadinhos-bot']) {
+// /alternativas/achadinhos-bot saiu daqui em 29/09/2026: exceção nominal à
+// FR-030 decidida pela dona do produto (ver
+// TITULOS_COM_MARCA_DO_CONCORRENTE_AUTORIZADOS em
+// test/marketing-limites-que-nao-se-cruzam.test.js).
+test('alternativas/fluxopromo diz "alternativa a/ao", nunca se apresenta como o concorrente (FR-030)', () => {
+  for (const path of ['/alternativas/fluxopromo']) {
     const alvo = ALVOS.find((a) => a.path === path)
     const { title } = alvo.fonte()
     assert.match(title, /^alternativa (a|ao)/i, `${path}: título "${title}" não começa com "Alternativa a/ao"`)
@@ -277,9 +281,11 @@ const MODULOS_VARREDURA = [
 // hipótese de corte no celular — os dois títulos mais longos são os melhores
 // conversores. Ficam como grupo de controle até haver medição que os condene.
 // Entrar aqui exige DADO de Search Console, nunca conveniência de escrita.
+// 29/09/2026: o de achadinhos saiu da lista — o Bing acusou título acima de 70
+// chars e ele foi encurtado para 53 mantendo o fato que converte ("6 lojas,
+// 7 dias grátis"). O de afiliados usa título absoluto (sem sufixo) e fica em 62.
 const TITULOS_LONGOS_DELIBERADOS = new Set([
   'Bot para Afiliados no WhatsApp: Shopee, Amazon e Mercado Livre',
-  'Bot para achadinhos no WhatsApp: 6 lojas e 7 dias grátis',
 ])
 
 test('todo título de página nos módulos de conteúdo cabe em 55 chars, salvo exceção nominal medida', () => {

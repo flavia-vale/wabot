@@ -242,6 +242,16 @@ COUPON_BRAND_CARD_ENABLED=true
 # Aplicar exige pm2 delete + start (pegadinha #1). Ver seção "SHEIN: encurtamento
 # de link".
 # SHEIN_SHORTLINK_ENABLED=false
+# Link rastreado (src/core/trackedLinks.js): endereço público onde /r/<hash>
+# responde (o Next repassa /r/* para a API). AUSENTE = recurso desligado para
+# TODAS as contas, mesmo com BotConfig.clickTrackingEnabled ligado. Lido pelo
+# bot-worker (herda do processo que faz o fork: api-staging em inline,
+# bot-supervisor-staging em remote) → aplicar com pm2 delete + start desse app.
+# CLICK_HASH_SALT: sal do hash de IP/UA dos cliques (lido pela API). Setar um
+# valor secreto ANTES de ligar para qualquer conta — o padrão está no código.
+# Ver docs/rca/lojas-conversao.md, "Link rastreado".
+# SHORTLINK_BASE_URL=http://178.105.54.0:3006
+# CLICK_HASH_SALT=<segredo exclusivo de staging>
 ```
 
 ### `~/wabot-staging/dashboard/.env.local`
@@ -286,6 +296,13 @@ COUPON_LINK_CONVERT=true
 # Aplicar exige pm2 delete + start (pegadinha #1). Ver seção "SHEIN: encurtamento
 # de link".
 # SHEIN_SHORTLINK_ENABLED=false
+# Link rastreado (src/core/trackedLinks.js). AUSENTE em produção até passar o
+# checklist de staging (docs/rca/lojas-conversao.md, "Link rastreado"). Lido
+# pelo bot-worker (api em inline, bot-supervisor em remote) → pm2 delete +
+# start desse app, que RECONECTA as sessões (anunciar). CLICK_HASH_SALT é lido
+# pela API e precisa estar setado antes de ligar para qualquer conta.
+# SHORTLINK_BASE_URL=http://espelhagrupos.com.br   (mesma URL pública da tabela do AGENTS.md; https se a Cloudflare já servir)
+# CLICK_HASH_SALT=<segredo exclusivo de produção>
 ```
 
 ### `~/wabot/dashboard/.env.local`

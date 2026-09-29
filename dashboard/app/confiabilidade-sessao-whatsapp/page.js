@@ -3,7 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
-const title = 'Confiabilidade da sessão do WhatsApp no Espelha Grupos'
+const title = 'Confiabilidade da sessão WhatsApp no Espelha Grupos'
 const description = 'Como o Espelha Grupos mantém sua sessão do WhatsApp conectada durante atualizações do sistema, com um processo dedicado ao ciclo de vida do bot e status honesto no painel.'
 const slug = '/confiabilidade-sessao-whatsapp'
 const dates = getEditorialDates(slug)

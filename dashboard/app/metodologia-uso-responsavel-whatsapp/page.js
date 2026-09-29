@@ -4,7 +4,7 @@ import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS } from '@/lib/marketing-content'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
-const title = 'Metodologia de uso responsável para automação no WhatsApp'
+const title = 'Uso responsável de automação no WhatsApp: metodologia'
 // Topo reescrito em 2026-09-27 (PLANO_SEO_GEO, B8): o Gemini lia esta página
 // como "lançamento digital" e "STJ". As 3 primeiras linhas agora dizem de quem
 // é a metodologia e para quem: afiliadas espelhando e publicando ofertas no

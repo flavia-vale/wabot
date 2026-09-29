@@ -95,6 +95,14 @@ export function explainErrorMsg(errorMsg, platform) {
     const help = buildCredentialBlockHelp(platform)
     return `${help.paragraphs[0]} ${help.nextStep}`
   }
+  if (errorMsg.startsWith('skip:link_removed')) {
+    // P1-4: o grupo aceita mensagem sem link, mas o ÚNICO link desta oferta era
+    // de loja que não convertemos. Mandar o link original daria a comissão para
+    // outra pessoa; mandar sem link publicaria oferta sem ter onde clicar. Antes
+    // ela saía assim, mutilada e sem aviso nenhum.
+    if (errorMsg.endsWith(':offer_ended_at_source')) return 'Quando o robô foi abrir essa promoção, ela já tinha sido encerrada no site de quem publicou. Não é problema da sua configuração nem da loja — essa oferta simplesmente saiu do ar.'
+    return 'Essa promoção não foi enviada porque o único link dela era de uma loja que ainda não convertemos em link de afiliado. Mandar o link original daria a comissão para outra pessoa, e mandar sem link deixaria a oferta sem ter onde clicar.'
+  }
   if (errorMsg.startsWith('skip:policy')) {
     // "A oferta acabou" NUNCA pode sair como "não apoiamos essa loja": a loja
     // costuma ser a Amazon, que convertemos desde sempre, e a cliente era
