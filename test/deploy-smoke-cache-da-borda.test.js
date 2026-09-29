@@ -93,4 +93,14 @@ test('a limpeza do cache roda mesmo com o deploy vermelho', () => {
   // reprovado nunca limpa a copia velha. Ver RCA 2026-09-10 no AGENTS.md.
   assert.match(condicao, /always\(\)/, 'a limpeza nao pode depender do deploy ter passado')
   assert.match(condicao, /refs\/heads\/main/, 'continua so em producao')
+
+  // A publicação e os smokes terminam antes desta integração. Uma chave
+  // expirada ou indisponibilidade da Cloudflare deve deixar aviso no step, não
+  // mentir que o redeploy inteiro falhou depois de o produto já estar no ar.
+  assert.match(passo, /continue-on-error:\s*true/, 'falha do purge nao pode reprovar um deploy concluido')
+
+  // GitHub executa blocos `run` com `bash -e`. Sem o curl protegido por uma
+  // condicao, erro de DNS/transporte sai no primeiro request e nunca usa o
+  // retry de tres tentativas que o workflow anuncia.
+  assert.match(passo, /if ! resp="\$\(curl/, 'erro de transporte precisa passar pelo retry')
 })
