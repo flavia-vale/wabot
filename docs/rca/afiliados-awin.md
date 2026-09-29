@@ -84,13 +84,26 @@
 - O envio **não chama a Awin**: lê `AwinPromotion` do banco.
 - **Regra de envio (aprovada 2026-09-29):** mesmo ritmo da Shopee (intervalo e
   quantas por envio); **cada promoção sai uma vez por automação**
-  (`sentItemIds` com `awin:<promotionId>`); **revezando lojas**; dentro da loja
+  (`sentItemIds` com `awin:c:<loja>:<hash do título>`); **revezando lojas**; dentro da loja
   **vence antes primeiro**; **nunca com menos de 1h para vencer** nem antes de
   começar; filtro opcional por lojas e palavra (título/descrição, sem acento).
-- Sem preço e sem foto: modelo padrão `promocao_awin` (título, `{loja}`,
+- Sem preço: modelo padrão `promocao_awin` (título, `{loja}`,
   `{descrição}`, `{validade}`, link). Modelos da Shopee também funcionam: a
-  linha de preço some (limpeza de variável vazia do compositor). WhatsApp
-  mostra a prévia do link (hipótese H7 — conferir no staging).
+  linha de preço some (limpeza de variável vazia do compositor).
+- **Link curto e foto (2026-09-29, `src/offerAutomation/awinEnrich.js`).**
+  No staging a v1 saiu com o `cread.php` comprido e sem foto (a prévia do
+  WhatsApp do link `awin1.com` quase nunca traz imagem — H7 confirmada como
+  ruim). Agora, **só na hora do envio e só das que vão sair**: link curto do
+  gerador oficial (`generateLink` com `shorten: true` → `tidd.ly`) e foto lida
+  da página da loja (`AwinPromotion.url`) por `fetchProductImage` (o mesmo
+  leitor das outras lojas). Guardados em `shortUrl`/`imageUrl`; `enrichedAt`
+  marca a tentativa e uma falha só é tentada de novo após 24h. Qualquer falha
+  → sai como antes (link comprido, sem foto); nunca segura o envio. Fila de
+  revisão faz o mesmo ao montar a fila (só as que entram). Não fica em
+  `awinOffers.js` porque aquele arquivo é importado pelo painel.
+  **Hipóteses a medir:** cota diária de links curtos da conta
+  (https://help.awin.com/apidocs/quota — o valor não está na doc) e lojas que
+  bloqueiam leitura da página (`diag-awin.mjs` mostra `sem_foto loja=...`).
 - Dedup cruzada por grupo continua valendo (`productKey` =
   `awin:<conta>:<promotionId>`, `priceCents` 0).
 - Fora da v1 para Awin: **Instagram Stories** (sem foto/preço), **cupons**
@@ -100,6 +113,25 @@
   `expired` sem enviar.
 - `sentItemIds` guarda os 200 últimos (regra antiga). Promoção de vários dias
   pode voltar a sair depois de 200 envios da mesma automação — aceitável hoje.
+
+### Promoções repetidas da Awin (RCA 2026-09-29 — não regredir)
+
+- **Sintoma:** automação de 3 por envio mandou o mesmo "Liquidificador Arno
+  Powermax" 3 vezes.
+- **Causa (medida no staging):** a Awin tinha **4 promoções idênticas**
+  (mesma loja, título e validade) com números diferentes (4118880..4118883), e
+  a identidade da promoção era o número. As outras lojas não entraram no
+  revezamento porque todas as delas já tinham sido enviadas nos testes
+  (C&A 7/7, Kabum 3/3, Mizuno 1/1) — o revezamento estava certo.
+- **Correção:** identidade = **loja + título normalizado** (`awinContentKey`
+  em `awinOffers.js`): uma só por conteúdo no mesmo envio (fica a que vence
+  antes), `sentItemIds` guarda `awin:c:...`, e `dedupKey`/`productKey` também
+  (dedup cruzada por grupo e fila de revisão). Itens antigos `awin:<número>`
+  continuam valendo — e bloqueiam as cópias deles. Mesmo título em OUTRA loja
+  é outra oferta. Testes: `test/awin-offer-automation.test.js`.
+- Efeito colateral aceito: produto que a loja republica no dia seguinte com o
+  mesmo título não sai de novo pela mesma automação enquanto estiver entre os
+  200 últimos `sentItemIds`.
 
 ## Plano
 
@@ -116,8 +148,9 @@ limitador (poucos KB). Estimativa **< 5 MB de pico, ~0 em repouso**. Banco:
 
 ## Fase futura: converter links pela Awin
 
-Desenho no topo de `client.js`: `generateLink` / `generateLinks` (Link
-Builder oficial, avisa loja que não aceita `deeplinkNotPermitted`),
+Desenho no topo de `client.js`: `generateLink` (já usado para o link curto
+das promoções) / `generateLinks` (Link Builder oficial, avisa loja que não
+aceita `deeplinkNotPermitted`),
 `getLinkQuota`, e o `cread.php` montado localmente como plano B só para loja
 em que a cliente foi aprovada. `clickref` (até 6) serve para marcar de qual
 grupo veio a venda. Reconhecer link colado do KaBuM:

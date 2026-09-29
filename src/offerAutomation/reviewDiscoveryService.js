@@ -1,8 +1,9 @@
 import dbDefault from '../db.js'
 import { parseCredentialData } from '../credentialHealth.js'
-import { dedupeOffersByProduct } from './shopeeOffers.js'
+import { dedupeOffersByProduct, productDedupKey } from './shopeeOffers.js'
 import { automationSource, materializeAutomationOffer, resolveOffers } from './dispatcher.js'
 import { loadAwinOffers } from './awinOffers.js'
+import { enrichAwinOffers } from './awinEnrich.js'
 import { REVIEW_STATUS } from './reviewState.js'
 
 const DEFAULT_TTL_MS = 48 * 60 * 60_000
@@ -67,6 +68,11 @@ export async function discoverReviewItems(automation, deps = {}) {
     const loaded = await loadAwinOffers({ db, automation, sentItemIds, now, limit: searchSize })
     if (loaded.skipped) return { skipped: loaded.skipped }
     ;({ offers, rawCount } = loaded)
+    // Link curto + foto só das que entram na fila agora (preço é sempre 0).
+    offers = offers.filter(offer => !blocked.has(`${productDedupKey(offer)}:0`)).slice(0, capacity)
+    try {
+      offers = await (deps.enrichAwinOffersFn ?? enrichAwinOffers)(offers, { db, userId: automation.userId, accountId: automation.awinAccountId, now })
+    } catch { /* entra na fila com o link comprido e sem foto */ }
   } else {
     ;({ offers, rawCount } = await resolveOffers({ automation: { ...automation, offersPerSend: searchSize, page: searchPage }, sentItemIds, creds, fetchOffersFn: deps.fetchOffersFn }))
   }

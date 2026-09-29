@@ -533,6 +533,17 @@ automático após restart, fila de ofertas, ofertas automáticas, agendados e
 já existe em `GET /api/groups/:id/clicks`, `/api/preservation/monitoring/clicks`
 e na variável `cliques` do resumo semanal.
 
+**Decisão 2026-09-29 (dona do produto): recurso mantido DESLIGADO.** Teste no
+staging mostrou o custo: o card do WhatsApp exibe o endereço do link curto
+(`178.105.54.0` no staging; `espelhagrupos.com.br` em produção) em vez do da loja,
+e no computador a foto do card não apareceu (causa não confirmada; hipótese: link
+`http://` com IP). Contar clique exige passar pelo nosso endereço, então não dá
+para mostrar o link oficial da loja e contar ao mesmo tempo. Só reavaliar quando
+houver **domínios próprios parecidos com os das lojas, em https**. Nenhum código
+liga o recurso sozinho (`clickTrackingEnabled` nasce `false`). Para desligar as
+contas de teste: `node scripts/desligar-rastreio-cliques.mjs` (lista) e
+`--aplicar` (desliga; vale em ~60 s, sem reiniciar).
+
 **⚠️ Checklist obrigatório em staging antes de ligar para cliente real** — o
 ponto de risco é a abertura do app da loja, não o card:
 
