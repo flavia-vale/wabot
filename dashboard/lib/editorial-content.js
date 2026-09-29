@@ -67,6 +67,8 @@ export const EDITORIAL_DATES = {
   '/blog/como-divulgar-ofertas-amazon-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-09-27' },
   '/blog/como-divulgar-ofertas-mercado-livre-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-09-27' },
   '/blog/quanto-custa-bot-para-whatsapp-afiliados': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
+  '/blog/bot-de-whatsapp-conectado-mas-nao-envia': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
   '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-09-27' },
   '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-31' },

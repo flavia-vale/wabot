@@ -89,6 +89,16 @@ const blogPosts = [
     description: 'Preços dos planos e como avaliar o custo real além da mensalidade.',
   },
   {
+    href: '/blog/bot-de-whatsapp-conectado-mas-nao-envia',
+    title: 'Bot conectado mas não envia ofertas: o que conferir',
+    description: 'Os 5 passos para separar origem parada, oferta segurada por regra e conexão parada.',
+  },
+  {
+    href: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece',
+    title: 'Oferta sem foto no WhatsApp: por que acontece',
+    description: 'As três causas mais comuns do card sem foto e o que conferir antes de pedir ajuda.',
+  },
+  {
     href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp',
     title: 'Melhores horários para postar ofertas no WhatsApp',
     description: 'Janelas que funcionam e por que a cadência importa mais que o horário exato.',
