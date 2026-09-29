@@ -185,3 +185,62 @@ lugares.
 `/logs/summary` só em trial), nenhum processo novo, zero impacto de RAM.
 Testes: `test/painel-credencial-clareza.test.js`,
 `test/painel-whatsapp-seguranca.test.js`.
+
+## Código de acesso do ML vence em ~75–95 min (investigação 2026-09-29 — EM ABERTO)
+
+Cliente de produção (`cmu4jtqzs00dhan9xwgoh7po2`) relata "toda hora o cookie
+do ML expira". Pedido da dona do produto: **não** resolver com "cole de novo".
+
+**FATOS (banco de prod, 21–29/09):** 46% dos envios de ML da conta recusados
+(`ml_ssid_expired`); 10 contas com ⚠ em 3 dias (não é só ela). Cada código
+colado viveu **76, 94 e ≥75 min** (1º→último `meli.la`), em horários e volumes
+diferentes (11, 27 e 89 links). `diag-ml-cookie-poisoning.mjs`: jar e campo
+`ssid` iguais (sem envenenamento), sondagem viva, **createLink não devolve
+Set-Cookie** (patch vazio). Spec 005 (refresh OAuth + cache da sondagem) está em
+`main` desde 13/07 e **não toca o eixo do cookie** — não é a causa.
+
+**Verificado no código (2026-09-29):** o cookie da cliente vai em DUAS rotas ao
+ML, sempre do IP do VPS com UA de iPhone: (1) `POST createLink`
+(`mercadolivre.js`, guarda rotação de `Set-Cookie`); (2) **`GET` da página do
+produto para montar o card** (`fetchHtml` em `productInfoScraper.js`, com
+`redirect: 'follow'`) — essa rota **ignora qualquer `Set-Cookie`**. Um jar
+colado tem ~3 cookies; um navegador logado manda ~15–25 (aparelho/fingerprint).
+`createAffiliateLink` tenta `no-csrf` primeiro e um 401 ali é terminal (não
+tenta `with-csrf`) — conferir no `bot.log` em qual `attempt` cai o 401.
+
+**HIPÓTESES (nenhuma confirmada), em ordem de plausibilidade pelos dados:**
+- H1/H6 prazo fixo do ML para sessão sem renovação de navegador — encaixa na
+  vida quase constante (75–95 min) independente de volume/hora.
+- H7 o robô recebe rotação do `ssid` na rota (2) e descarta — corrigível.
+- H3 falta de cookies de aparelho no jar → o ML tolera um tempo e derruba.
+- H2 uso do ML no navegador da cliente rotaciona/invalida a cópia — daria vidas
+  espalhadas, não constantes; testar com as outras 9 contas.
+- H4 volume (50–60 chamadas/h) — contradito: 11 links viveram o mesmo que 89.
+- H5 código velho no `bot-supervisor` / staging com credencial de prod — não
+  explica a vida fixa, mas conferir (`pm2 describe bot-supervisor | grep -E
+  'uptime|created'`; `COUNT(*) FROM Credential WHERE platform='mercadolivre'`
+  no `staging.db`).
+
+**Diagnósticos (read-only, nunca imprimem código de acesso):**
+- `scripts/diag-ml-vida-codigo.mjs [--days=7] [--email=]` — vida de cada
+  "geração" do código por conta, por volume. Só banco. **Decide H1/H6 × H2 × H4.**
+- `scripts/diag-ml-rotacao-cookie.mjs --email= [--url=<produto>]` — até 3
+  requests com a credencial real: quais cookies (só nomes) o ML devolve no
+  createLink, na página do gerador de links e na página do produto; formato
+  do `ssid` (segmentos com data?). **Decide H7 e alimenta H3.** Rodar em prod
+  só com OK.
+- `scripts/exp-ml-manter-viva.mjs --email= --modo=so-sondagem|manter-viva`
+  — só staging/conta de TESTE (recusa `prod.db`): sonda a cada 5 min e, no
+  modo `manter-viva`, faz o GET do gerador de links guardando o `Set-Cookie`
+  em memória. Sobreviveu bem além de ~95 min = renovação vem dessa rota.
+  Custo: 12–24 requests/h ao ML, zero RAM (processo avulso).
+- `bot.log` das recusas agora traz `setCookieNames` (nomes, `(del)` = o ML
+  apagou) — vale após `pm2 restart bot-supervisor --update-env` em `remote`.
+
+**Se confirmar renovação por rota (H1/H7):** fazer no robô o que o navegador
+faz — um `GET` autenticado periódico (ou aproveitar o GET do card, persistindo
+`Set-Cookie` via `buildCredentialPatchFromSetCookie` + `__onCredentialPatch`)
+— e persistir. Sinalizar antes (REGRA #1): +1 request/conta a cada N min; RAM
+desprezível. Alternativa mais leve: só persistir a rotação que já chega no GET
+do card (zero request extra). Não há API oficial de afiliados do ML (confirmado
+2026-09-29); OAuth do ML não gera link de afiliado.
