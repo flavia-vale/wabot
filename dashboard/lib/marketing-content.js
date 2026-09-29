@@ -155,20 +155,28 @@ export const FOUNDER_SAME_AS = [
 // ligação em silêncio — o Cuponito afirma e o Espelha Grupos não confirma.
 export const FOUNDER_PERSON_ID_PATH = '/quem-somos#person'
 
-// Definição da marca em UMA frase auto-contida (23/09/2026). É a primeira frase
-// de corpo da home, de /quem-somos e do llms.txt: em três rodadas de medição o
-// ChatGPT leu "Espelha Grupos" como expressão genérica, e não como nome de
-// produto, porque nada abria dizendo o que a marca É. Os dois modos entram com
-// o limite exato do automático — só Shopee e só no plano Pro — para a frase
-// nunca prometer ao Basic o que ele não entrega.
-export const BRAND_DEFINITION_PT = 'Espelha Grupos é um robô para afiliadas que espelha as ofertas dos grupos e canais que você já acompanha e, no plano Pro, também busca ofertas da Shopee sozinho, trocando o link pelo seu código de afiliada.'
-
 export const PRODUCT_DEFINITION ='O Espelha Grupos é um software web para afiliados, curadores de ofertas e admins de grupos e canais que organiza grupos e/ou canais de origem e destino, converte links suportados e ajuda a distribuir mensagens de WhatsApp com revisão humana, cadência responsável e histórico de logs.'
 
 // Lojas com conversão de link suportada. Fonte ÚNICA para texto público,
 // schema e FAQ: em 2026-09-18 a página de preços, a API pública de planos e a
 // FAQ pública ainda diziam 4 lojas enquanto o produto já cobria 6.
 export const SUPPORTED_STORES = ['Shopee', 'Mercado Livre', 'Amazon', 'Magalu', 'SHEIN', 'AliExpress']
+
+// Definição da marca em UMA frase auto-contida — a MESMA em todo lugar que
+// define o produto: primeira frase de corpo da home (Hero), de /quem-somos, do
+// llms.txt, e também a da ficha técnica (FICHA_DEFINICAO = esta constante), de
+// /precos, do pricing.md e de /espelha-grupos-e-confiavel.
+//
+// Histórico: 23/09/2026 — em três rodadas de medição o ChatGPT leu "Espelha
+// Grupos" como expressão genérica, não como marca ("o que é": 0 citações),
+// porque nada abria dizendo o que a marca É. 27/09/2026 — a ficha ganhou os 3
+// modelos (espelhador, formatador, garimpo). 29/09/2026 — as duas frases que
+// conviviam (home com "robô para afiliadas", ficha com "software web") viraram
+// UMA: começa pela categoria que a afiliada busca ("robô para afiliadas") e
+// mantém os três modelos e o limite exato do automático (só Shopee, só Pro),
+// para nunca prometer ao Basic o que ele não entrega. Sem "não bane", sem
+// promessa de ganho, sem o nome antigo. Guarda: test/ficha-tecnica-canonica.test.js.
+export const BRAND_DEFINITION_PT = `${BRAND_NAME} é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em ${SUPPORTED_STORES.length} lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.`
 
 // Sites-irmãos da mesma fundadora, citados em /quem-somos com link normal
 // (sem nofollow: é relação real, declarada dos dois lados).

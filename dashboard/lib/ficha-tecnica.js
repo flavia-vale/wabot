@@ -17,7 +17,7 @@
 //
 // Módulo puro (sem JSX, sem React) para o teste em node:test importar direto.
 
-import { BRAND_NAME, DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from './marketing-content.js'
+import { BRAND_DEFINITION_PT, DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from './marketing-content.js'
 
 const planoPorId = (id) => DEFAULT_LANDING_PLANS.find((plan) => plan.id === id)
 const basic = planoPorId('basic')
@@ -30,9 +30,11 @@ const listaLojas = `${SUPPORTED_STORES.slice(0, -1).join(', ')} e ${SUPPORTED_ST
  * /precos, llms.txt, pricing.md, /quem-somos e /espelha-grupos-e-confiavel.
  * Cita os três modelos que o mercado usa para classificar (plano GEO de
  * 27/09/2026, §3): espelhador, formatador (criar oferta a partir de um link)
- * e garimpo automático (ofertas automáticas da Shopee, Pro).
+ * e garimpo automático (ofertas automáticas da Shopee, Pro). Desde 29/09/2026
+ * é a própria definição da marca (BRAND_DEFINITION_PT, marketing-content.js):
+ * uma frase só, byte a byte, também no Hero da home e na 1ª linha do llms.txt.
  */
-export const FICHA_DEFINICAO = `${BRAND_NAME} é um software web para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em ${SUPPORTED_STORES.length} lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.`
+export const FICHA_DEFINICAO = BRAND_DEFINITION_PT
 
 /** Rótulo de plano com preço, ex.: "Basic (R$39 / 30 dias)". */
 export const rotuloPlano = (plan) => `${plan.name} (${plan.price} / ${plan.period})`

@@ -33,6 +33,7 @@ const dates = getEditorialDates(slug)
 // 38 clientes/jun-2026 que estava registrada antes nesta página — ela confirmou
 // que a base cresceu e que estes são os números atuais). Sem reembolso/
 // cancelamento e sem menção a CNPJ aqui, por decisão dela.
+const NUMEROS_INFORMADOS_EM = '2026-09-27'
 const numeros = [
   ['+ de 3.000 clientes', 'já usaram o Espelha Grupos.'],
   ['95% de renovação', 'das clientes que pagam continuam no mês seguinte.'],
@@ -155,7 +156,9 @@ export default async function Page() {
 
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_strong]:text-gray-950">
             <section>
-              <h2>Resposta direta</h2>
+              {/* 29/09/2026: cabeçalho em pergunta (topo citável, item 4 da
+                * seção 6 do PLANO_MAQUINA_DE_VENDAS_IA). */}
+              <h2>O que é o {BRAND_NAME}, para quem é e quanto custa?</h2>
               {/* 27/09/2026: a frase de abertura é a MESMA constante da ficha
                 * técnica (FICHA_DEFINICAO) — idêntica na home, em /precos, no
                 * llms.txt, no pricing.md e em /quem-somos. Nada escrito à mão
@@ -177,7 +180,7 @@ export default async function Page() {
             </section>
 
             <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 md:p-6">
-              <h2>Números do {BRAND_NAME}</h2>
+              <h2>Quantas clientes usam o {BRAND_NAME}?</h2>
               <dl className="mt-4 grid gap-3 sm:grid-cols-2">
                 {numeros.map(([valor, detalhe]) => (
                   <div key={valor} className="rounded-2xl bg-white p-4 ring-1 ring-emerald-100">
@@ -186,6 +189,10 @@ export default async function Page() {
                   </div>
                 ))}
               </dl>
+              {/* Número sem fonte não é citável (e não é honesto): a origem vai
+                * na mesma caixa. Os valores são os informados pela dona do
+                * produto em 27/09/2026 — ver o comentário em `numeros`. */}
+              <p className="mt-3 text-sm leading-7 text-gray-600">Fonte: dados internos do {BRAND_NAME}, informados pela fundadora em {formatDatePtBr(NUMEROS_INFORMADOS_EM)}.</p>
             </section>
 
             <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
