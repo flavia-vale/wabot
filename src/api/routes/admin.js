@@ -1,4 +1,6 @@
 import db from '../../db.js'
+import { boundedRange as boundedCampaignRange } from '../../domain/admin/campaignFunnel.js'
+import { loadCampaignFunnel } from '../../domain/admin/campaignFunnelQuery.js'
 import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
 import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics } from '../../manager.js'
@@ -2733,6 +2735,18 @@ export async function adminRoutes(app) {
       from,
       to,
     }
+  })
+
+  // Funil da campanha Canais + Preservação (P1 do backlog pós-P3, 2026-09-29):
+  // página → clique → diagnóstico → calculadora → cadastro, por página e por
+  // UTM de entrada, com faixa de risco e perfil. Só leitura, janela máx. 90
+  // dias, consultas agregadas com LIMIT (src/domain/admin/campaignFunnelQuery.js).
+  app.get('/marketing/campanha-canais', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'admin:read'))) return
+    const { from, to } = boundedCampaignRange(req.query ?? {})
+    const result = await loadCampaignFunnel(db, { from, to })
+    await writeAdminAuditLog(req, { action: 'admin.marketing.campanhaCanais.read', resource: 'marketingCampaignFunnel' })
+    return result
   })
 
   app.get('/marketing/prompts', async (req, reply) => {

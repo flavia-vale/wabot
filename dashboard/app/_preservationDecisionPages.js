@@ -16,6 +16,15 @@ const sharedCtas = {
   landing: '/bot-canais-whatsapp',
 }
 
+// O cadastro de cada página de decisão leva a PRÓPRIA página no `utm_content`
+// (ex.: `p2_signup_faq-antiban-whatsapp`). Antes as quatro mandavam o mesmo
+// `p2_signup` e um `page=` que o /login descarta (não está em
+// ATTRIBUTION_QUERY_KEYS) — era impossível dizer qual delas gerou o cadastro.
+export function decisionSignupHref(slug) {
+  const pagina = String(slug ?? '').replace(/^\//, '').replace(/[^a-z0-9-]/g, '')
+  return sharedCtas.signup.replace('utm_content=p2_signup', `utm_content=p2_signup_${pagina}`)
+}
+
 export const PRESERVATION_DECISION_PAGES = {
   '/bot-comum-vs-espelha-grupos': {
     slug: '/bot-comum-vs-espelha-grupos',
@@ -211,7 +220,7 @@ function DecisionCtas({ slug }) {
       <Link href={sharedCtas.calculator} data-seo-cta="p2_calculator" data-cta-position="decision_cta" data-cta-stage="tool" data-cta-destination="calculator" className="rounded-2xl border border-emerald-200 bg-white px-5 py-4 text-center text-sm font-black text-emerald-800 hover:bg-emerald-50">
         Calcular risco
       </Link>
-      <Link href={`${sharedCtas.signup}&page=${encodeURIComponent(slug)}`} data-seo-cta="p2_signup" data-cta-position="decision_cta" data-cta-stage="conversion" data-cta-destination="signup" className="rounded-2xl border border-gray-200 bg-gray-950 px-5 py-4 text-center text-sm font-black text-white hover:bg-gray-800">
+      <Link href={decisionSignupHref(slug)} data-seo-cta="p2_signup" data-cta-position="decision_cta" data-cta-stage="conversion" data-cta-destination="signup" className="rounded-2xl border border-gray-200 bg-gray-950 px-5 py-4 text-center text-sm font-black text-white hover:bg-gray-800">
         Criar conta
       </Link>
     </div>
@@ -296,7 +305,7 @@ export function PreservationDecisionPage({ slug }) {
         </section>
 
         <section className="mt-8 rounded-[2rem] border border-emerald-100 bg-emerald-50 p-6 shadow-sm md:p-8">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Próximas páginas P2</p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Leia também</p>
           <h2 className="mt-2 text-3xl font-black tracking-tight text-gray-950">Continue a avaliação</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             {related.map((item) => (

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS } from '@/lib/marketing-content'
+import { CUSTO_FRASE, fraseNumerosProprios } from '@/lib/resposta-citavel'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
 const title = 'Uso responsável de automação no WhatsApp: metodologia'
@@ -79,13 +80,18 @@ export default function Page() {
 
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-6 [&_strong]:text-gray-950">
             <section>
-              <h2>Resposta direta</h2>
+              {/* 29/09/2026: cabeçalho em pergunta + quanto custa + 2 números
+                * próprios com fonte (topo citável, item 4 da seção 6 do
+                * PLANO_MAQUINA_DE_VENDAS_IA). As 3 primeiras linhas de 27/09
+                * (de quem é e para quem) não mudaram. */}
+              <h2>O que é a metodologia do {BRAND_NAME}, e para quem ela vale?</h2>
               <p>
                 Esta é a metodologia do <strong>{BRAND_NAME}</strong> para afiliadas que espelham e publicam ofertas em grupos e
                 canais do WhatsApp: como fazer isso com segurança, em grupos autorizados, com o link já trocado pelo seu código,
                 revisão humana, intervalo entre os envios e histórico do que saiu. Não é sobre lançamento digital nem sobre
-                atendimento de empresa — é sobre divulgação de ofertas de afiliada.
+                atendimento de empresa — é sobre divulgação de ofertas de afiliada. O produto custa {CUSTO_FRASE}
               </p>
+              <p className="mt-3 text-sm leading-7 text-gray-600">{fraseNumerosProprios()}</p>
               <p className="mt-3">{PRODUCT_DEFINITION} A metodologia pública do produto orienta que automação só entre depois de validação de oferta, link, grupo, copy e cadência.</p>
               {/*
                 Esta é a página que o Google AI Overviews INVENTOU quando não a

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '../dashboard/lib/marketing-content.js'
+import { BRAND_DEFINITION_PT, DEFAULT_LANDING_PLANS, SUPPORTED_STORES } from '../dashboard/lib/marketing-content.js'
 import {
   FICHA_COLUNAS,
   FICHA_DEFINICAO,
@@ -44,7 +44,10 @@ test('home e /precos renderizam o MESMO componente, que lê só de lib/ficha-tec
 })
 
 test('a definição é uma só, cita as lojas pela constante e os 3 modelos (espelhar, criar a partir do link, garimpar)', () => {
-  assert.match(FICHA_DEFINICAO, /^Espelha Grupos é um software web para afiliadas/)
+  // 29/09/2026: começa pela categoria ("robô para afiliadas") — achado 6 de
+  // RESUMO_E_PLANO_2026-09-23.md: "espelha grupos" era lido como expressão.
+  assert.match(FICHA_DEFINICAO, /^Espelha Grupos é um robô para afiliadas que /)
+  assert.equal(FICHA_DEFINICAO, BRAND_DEFINITION_PT, 'definição da marca e da ficha divergiram — tem que ser UMA frase')
   assert.ok(FICHA_DEFINICAO.includes(`${SUPPORTED_STORES.length} lojas`))
   // Plano GEO 27/09/2026 §3: a Perplexity classifica o mercado em espelhador,
   // formatador e garimpo automático — a frase precisa nomear os três.
@@ -67,6 +70,16 @@ test('a MESMA frase de definição abre /quem-somos e /espelha-grupos-e-confiave
     assert.match(fonte, /\{FICHA_DEFINICAO\}/, `${rel} não renderiza FICHA_DEFINICAO`)
     assert.ok(!fonte.includes('é um software brasileiro de divulgação'), `${rel}: frase de abertura ainda escrita à mão`)
   }
+})
+
+test('a definição é a PRIMEIRA linha de conteúdo do llms.txt e a 1ª frase do Hero da home', () => {
+  // Item 8 do plano (achado 6 de 23/09): a frase abre /quem-somos, a home e o
+  // llms.txt. No llms.txt, logo depois do título, antes do resumo em inglês.
+  const llms = ler('dashboard/public/llms.txt').split('\n')
+  const primeiraLinhaDeConteudo = llms.slice(1).find((linha) => linha.trim() !== '')
+  assert.equal(primeiraLinhaDeConteudo, `> ${FICHA_DEFINICAO}`)
+  const hero = ler('dashboard/components/landing/Hero.jsx')
+  assert.match(hero, /\$\{BRAND_DEFINITION_PT\} Posta no seu grupo/)
 })
 
 test('os 3 fatos que a IA pedia (palavras bloqueadas, imagem/card, criar oferta pelo link) estão na ficha, nos dois planos', () => {

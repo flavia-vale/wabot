@@ -215,11 +215,11 @@ function JsonLd() {
 
 function MiniDashboard() {
   return (
-    <div style={{ ...s.card, padding: 20, background: 'linear-gradient(160deg, var(--surface), color-mix(in oklab, var(--accent-3) 34%, var(--surface)))' }} aria-label="Prévia do painel de preservação avançada">
+    <div style={{ ...s.card, padding: 20, background: 'linear-gradient(160deg, var(--surface), color-mix(in oklab, var(--accent-3) 34%, var(--surface)))' }} role="img" aria-label="Ilustração do painel de canais com dados de exemplo — não é uma tela real de cliente">
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', marginBottom: 18 }}>
         <div>
           <strong style={{ display: 'block', fontSize: 18 }}>Painel de canais</strong>
-          <span style={s.small}>Saúde por destino · exemplo</span>
+          <span style={s.small}>Ilustração · dados de exemplo</span>
         </div>
         <span className="pill"><span className="dot" />preservação ativa</span>
       </div>
@@ -412,7 +412,7 @@ export default function BotCanaisWhatsAppPage() {
         <section style={s.section} aria-labelledby="ativos-p1-title">
           <div className="wrap">
             <SectionHeader
-              eyebrow="Ferramentas P1"
+              eyebrow="Ferramentas grátis"
               title="Antes de escalar, transforme risco em checklist e número."
               body="Use a calculadora para estimar exposição operacional e o checklist para aplicar as camadas de preservação no dia a dia."
             />
@@ -434,7 +434,7 @@ export default function BotCanaisWhatsAppPage() {
         <section style={s.section} aria-labelledby="decisao-p2-title">
           <div className="wrap">
             <SectionHeader
-              eyebrow="Decisão P2"
+              eyebrow="Antes de decidir"
               title="Compare, tire objeções e entenda o funcionamento antes de configurar."
               body="Estas páginas fecham as dúvidas de decisão: diferença contra bot comum, FAQ honesto, fluxo de canais e detalhes do Módulo de Preservação Avançada."
             />

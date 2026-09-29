@@ -6,6 +6,7 @@ import { getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/edito
 import { BRAND_LEGACY_NAME, BRAND_NAME, DEFAULT_LANDING_PLANS, PRODUCT_DEFINITION, SUPPORTED_STORES } from '@/lib/marketing-content'
 import { getProgrammaticSeoRoute, getRelatedProgrammaticSeoRoutes } from '@/lib/seo-registry.mjs'
 import { LP_CONFIG, getLpMetadata } from '../_lpShared'
+import { fraseNumerosProprios } from '@/lib/resposta-citavel'
 
 // Frente B do PLANO_SEO_GEO_2026-09-27 (B1). Medição de 27/09: para "como
 // postar em vários grupos de WhatsApp ao mesmo tempo sem spam" as 4 IAs
@@ -195,9 +196,12 @@ export default function Page() {
 
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_h3]:text-lg [&_h3]:font-black [&_h3]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-6 [&_strong]:text-gray-950">
             <section>
-              <h2>Resposta direta</h2>
+              {/* 29/09/2026: cabeçalho em pergunta + 2 números próprios com
+                * fonte (topo citável). A resposta de 27/09 não mudou. */}
+              <h2>Dá para postar em vários grupos ao mesmo tempo sem virar spam?</h2>
               <p><strong>Sim, dá para publicar a mesma oferta em vários grupos de WhatsApp sem virar spam</strong>: o que separa publicação de spam não é a quantidade de grupos, é publicar só onde as pessoas escolheram estar, um grupo por vez com intervalo, sem repetir a mesma oferta no mesmo grupo.</p>
               <p>Para afiliada com grupos próprios, o caminho que faz isso sozinho é um robô com fila de envio que também troca o link pelo seu código de afiliada em {SUPPORTED_STORES.length} lojas. O {BRAND_NAME} faz isso a partir de {basic.price} a cada {basic.period}, com 7 dias grátis; a fila com intervalo, horário de descanso e limite por dia está no plano Pro ({pro.price}).</p>
+              <p className="text-sm leading-7 text-gray-600">{fraseNumerosProprios()}</p>
               <p>Os outros três caminhos que aparecem em toda resposta sobre o assunto (encaminhar à mão, Comunidades e extensão de navegador) resolvem parte do problema. A tabela abaixo diz o que cada um faz e para quem serve, sem esconder o que não faz.</p>
             </section>
 

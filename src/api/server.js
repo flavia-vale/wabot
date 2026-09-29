@@ -11,6 +11,7 @@ import { mlOAuthRoutes } from './routes/mlOAuth.js'
 import { sessionRoutes } from './routes/session.js'
 import { groupsRoutes } from './routes/groups.js'
 import { credentialsRoutes } from './routes/credentials.js'
+import { awinRoutes } from './routes/awin.js'
 import { couponsRoutes } from './routes/coupons.js'
 import { paymentsRoutes } from './routes/payments.js'
 import { configRoutes } from './routes/config.js'
@@ -22,12 +23,14 @@ import { adminRoutes } from './routes/admin.js'
 import { adminEmailsRoutes } from './routes/adminEmails.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
+import { pruneClickTracking } from './clickTrackingRetention.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { offerAutomationRoutes } from './routes/offerAutomation.js'
 import { offerAutomationReviewRoutes } from './routes/offerAutomationReview.js'
 import { offerQueueRoutes } from './routes/offerQueue.js'
 import { affiliateRoutes } from './routes/affiliate.js'
 import { startOfferAutomationCron } from '../offerAutomation/cron.js'
+import { startAwinSyncScheduler } from '../integrations/awin/scheduler.js'
 import { startOfferQueueCron } from '../offerQueue/cron.js'
 import { registerApiMetricsHooks, renderPrometheusMetrics, isPrivateAddress } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
@@ -180,6 +183,11 @@ async function cleanupOldLogs() {
   })
   await cleanupByRetentionDays(db.adminAuditLog, 'createdAt', ADMIN_AUDIT_RETENTION_DAYS, 'Admin audit logs').catch(err => {
     app.log.error({ err: err.message }, 'Falha na limpeza automática de admin audit logs')
+  })
+  await pruneClickTracking({ db }).then(({ clicks, links }) => {
+    if (clicks > 0 || links > 0) app.log.info({ clicks, links }, 'Cliques e links curtos removidos por retenção automática')
+  }).catch(err => {
+    app.log.error({ err: err.message }, 'Falha na limpeza automática de cliques')
   })
 }
 
@@ -543,6 +551,7 @@ app.register(mlOAuthRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
+app.register(awinRoutes, { prefix: '/api/awin' })
 app.register(couponsRoutes, { prefix: '/api/coupons' })
 app.register(paymentsRoutes, { prefix: '/api/payments' })
 app.register(configRoutes, { prefix: '/api/config' })
@@ -738,6 +747,8 @@ startWeeklySummarySweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()
+// Promoções Awin: setInterval + unref, sem processo novo (docs/rca/afiliados-awin.md).
+startAwinSyncScheduler({ logger: app.log })
 const stopDlqMaintenance = startDlqMaintenanceJob({ db })
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)

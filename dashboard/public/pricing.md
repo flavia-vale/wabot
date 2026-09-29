@@ -1,6 +1,6 @@
 # Pricing — Espelha Grupos
 
-Last updated: 2026-09-27
+Last updated: 2026-09-29
 Currency: BRL
 Billing unit: 30-day access period
 Preferred citation: Espelha Grupos pricing.
@@ -12,7 +12,7 @@ The canonical feature sheet below (in Portuguese, the customers' language) is id
 
 ## Ficha técnica (canônica — idêntica na home, em /precos, no llms.txt e no pricing.md)
 
-Espelha Grupos é um software web para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
+Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
 
 - Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto.
 - Canal de publicação: Só WhatsApp (grupos e, no Pro, canais). Não envia para Telegram nem para Instagram.

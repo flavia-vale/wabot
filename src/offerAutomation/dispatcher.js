@@ -10,9 +10,18 @@ import { createAndEnqueueStory } from '../instagram/storyDeliveryService.js'
 import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
 import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 import { chooseCoupon, renderCouponText, applyCouponToken } from '../core/clientCouponPolicy.js'
+import { AWIN_AUTOMATION_TEMPLATE_KEY, AWIN_PROMOTION_TEMPLATE_BODY, loadAwinOffers } from './awinOffers.js'
 
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
+// Origens aceitas. Desconhecida PULA a automação (nunca cai em "shopee"),
+// mesma regra do publicationMode: publicar por engano é irreversível.
+export const AUTOMATION_SOURCES = Object.freeze(['shopee', 'awin'])
+
+export function automationSource(automation) {
+  const source = automation?.source ?? 'shopee'
+  return AUTOMATION_SOURCES.includes(source) ? source : null
+}
 
 // Janela da dedup cruzada por grupo (default 120min). Override em ms via
 // env OFFER_AUTOMATION_DEDUP_WINDOW_MS.
@@ -79,6 +88,13 @@ export function automationOfferProduct(offer) {
     title: offer.productName ?? 'Produto Shopee',
     price,
     oldPrice,
+    ...(offer.source === 'awin' ? {
+      source: 'awin',
+      description: offer.description || '',
+      validity: offer.validity || '',
+      awinPromotionId: offer.awinPromotionId ?? null,
+      validUntil: offer.validUntil ? new Date(offer.validUntil).toISOString() : null,
+    } : {}),
     // Alguns modelos salvos usam a variável editorial `{preçoDoTexto}` em
     // vez de `{preço}`. A fila tinha preço no snapshot, mas não preenchia esse
     // campo, então o compositor removia a variável e deixava apenas "💰".
@@ -86,7 +102,7 @@ export function automationOfferProduct(offer) {
     discount: discountStr(pct),
     rating: ratingStr(offer.ratingStar),
     sales: salesStr(offer.sales),
-    storeName: 'Shopee',
+    storeName: offer.storeName || 'Shopee',
   }
 }
 
@@ -107,6 +123,7 @@ function parseTemplateStore(mobileTemplatesJson) {
 }
 
 export function resolveAutomationTemplateBody(botConfig, templateKey) {
+  if (templateKey === AWIN_AUTOMATION_TEMPLATE_KEY) return AWIN_PROMOTION_TEMPLATE_BODY
   const templates = composeTemplates(parseTemplateStore(botConfig?.mobileTemplatesJson))
   const key = templateKey || DEFAULT_AUTOMATION_TEMPLATE_KEY
   return templates.find((template) => template.key === key)?.body
@@ -126,6 +143,7 @@ export function materializeAutomationOffer(automation, offer, botConfig) {
     autoInjectWhenMissing: false,
   })
   return {
+    ...(offer.validUntil ? { validUntil: new Date(offer.validUntil) } : {}),
     productKey: productDedupKey(offer),
     itemId: offer.itemId == null ? null : String(offer.itemId),
     priceCents: offerPriceCents(offer),
@@ -150,6 +168,15 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
       // sempre — com cupom, ou apagado quando a automação não usa cupons.
       keepCouponToken: true,
     })
+  }
+
+  if (offer.source === 'awin') {
+    const lines = [`🏷️ *${offer.productName}*`]
+    if (offer.storeName) lines.push(`🏬 ${offer.storeName}`)
+    if (offer.description) lines.push('', offer.description)
+    if (offer.validity) lines.push('', `⏰ ${offer.validity}`)
+    lines.push('', `👉 ${offer.offerLink}`)
+    return lines.join('\n')
   }
 
   const name = offer.productName ?? 'Produto Shopee'
@@ -236,22 +263,17 @@ export async function runAutomation(automation, {
   instagramRuntimeFn = getInstagramDeliveryRuntime,
 } = {}) {
   const dbInstance = dbOverride ?? db
+  const source = automationSource(automation)
+  if (!source) return { skipped: 'invalid_source' }
 
   // `await`: no modo inline isRunning é boolean; no modo remote devolve uma
   // Promise. Sem await, `!Promise` é sempre false e o guard era ignorado em
   // remote — o dispatcher seguia pro sendBroadcast e falhava com "Bot não está
   // rodando" a cada tick do cron, floodando log e gastando CPU/IO à toa.
-  const instagramDestinations = (automation.instagramDestinations ?? []).map(link => link.destination ?? link).filter(destination => destination?.id && destination.enabled !== false)
+  // (Promoção Awin não tem foto nem preço para o card do Story — fora da v1.)
+  const instagramDestinations = source === 'awin' ? [] : (automation.instagramDestinations ?? []).map(link => link.destination ?? link).filter(destination => destination?.id && destination.enabled !== false)
   const whatsappAvailable = automation.destGroupJid ? await isRunningFn(automation.userId) : false
   if (!whatsappAvailable && !instagramDestinations.length) return { skipped: 'bot_not_running' }
-
-  const credRow = await dbInstance.credential.findUnique({
-    where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },
-  })
-  if (!credRow) return { skipped: 'no_shopee_credentials' }
-
-  const creds = parseCredentialData(credRow.data)
-  if (!creds?.appId || !creds?.secretKey) return { skipped: 'invalid_shopee_credentials' }
 
   let sentItemIds
   try {
@@ -265,18 +287,34 @@ export async function runAutomation(automation, {
   const currentPage = Number(automation.page) > 0 ? Number(automation.page) : 1
 
   let offers, rawCount
-  try {
-    ;({ offers, rawCount } = await resolveOffers({
-      automation: { ...automation, page: currentPage },
-      sentItemIds,
-      creds,
-      fetchOffersFn,
-    }))
-  } catch (err) {
-    return { error: err.message }
-  }
+  let advancedPage = currentPage
+  if (source === 'awin') {
+    const loaded = await loadAwinOffers({ db: dbInstance, automation, sentItemIds, now: new Date(), limit: automation.offersPerSend })
+    if (loaded.skipped) return { skipped: loaded.skipped }
+    ;({ offers, rawCount } = loaded)
+    if (!offers.length) return { skipped: 'all_offers_filtered' }
+  } else {
+    const credRow = await dbInstance.credential.findUnique({
+      where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },
+    })
+    if (!credRow) return { skipped: 'no_shopee_credentials' }
 
-  const advancedPage = nextOfferPage(currentPage, rawCount)
+    const creds = parseCredentialData(credRow.data)
+    if (!creds?.appId || !creds?.secretKey) return { skipped: 'invalid_shopee_credentials' }
+
+    try {
+      ;({ offers, rawCount } = await resolveOffers({
+        automation: { ...automation, page: currentPage },
+        sentItemIds,
+        creds,
+        fetchOffersFn,
+      }))
+    } catch (err) {
+      return { error: err.message }
+    }
+
+    advancedPage = nextOfferPage(currentPage, rawCount)
+  }
 
   // A Shopee devolve o mesmo produto sob itemIds diferentes (mesmo nome, preço
   // ligeiramente distinto). Sem colapsar por nome, ofertas idênticas saíam em
@@ -328,7 +366,7 @@ export async function runAutomation(automation, {
   // automação, UMA leitura por EXECUÇÃO — nunca uma por oferta do lote.
   // Falha na carga não aborta o laço: lista vazia = ofertas saem sem cupom.
   let activeCoupons = []
-  if (automation.useCoupons === true) {
+  if (automation.useCoupons === true && source !== 'awin') {
     try {
       activeCoupons = await dbInstance.clientCoupon.findMany({ where: { userId: automation.userId, enabled: true } })
     } catch {
