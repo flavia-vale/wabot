@@ -1680,6 +1680,12 @@ model AwinPromotion {
   // active | expired
   status         String    @default("active")
   lastSeenRunId  String?
+  // Preenchidos só na hora do PRIMEIRO envio (docs/rca/afiliados-awin.md):
+  // link curto do gerador oficial da Awin e foto lida da página da loja.
+  // enrichedAt marca a tentativa — falhou, só tenta de novo depois de 24h.
+  shortUrl       String?
+  imageUrl       String?
+  enrichedAt     DateTime?
   firstSeenAt    DateTime  @default(now())
   expiredAt      DateTime?
   updatedAt      DateTime  @updatedAt
