@@ -20,6 +20,7 @@ import {
   summarizeSubscriptionForPanel,
 } from '../../domain/payments/subscriptionPolicy.js'
 import { subscriptionStartDate } from '../../domain/payments/checkoutOffer.js'
+import { buildPrepaidMetadata, buildPrepaidOffer, isPrepaidEnabled, resolvePurchaseTerms, PREPAID_MONTHS } from '../../domain/payments/prepaidOffer.js'
 import { buildCheckoutPayer, buildCheckoutItem } from '../../domain/payments/checkoutPayer.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
@@ -235,8 +236,20 @@ export function isReversiblePaymentStatus(status) {
 
 // Activates a payment and grants 30-day access. Shared by /recover, /callback and webhook processor.
 // Must be called inside a db.$transaction — tx is a Prisma transaction client.
-export async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount }) {
-  return paymentsService.activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount })
+export async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount, days }) {
+  return paymentsService.activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount, ...(days ? { days } : {}) })
+}
+
+// Termos da compra a partir do que o Mercado Pago devolveu. Sem metadata de
+// pré-pago válida e igual ao valor aprovado: 1 mês e o preço mensal, como sempre.
+// A flag BILLING_PREPAID_ENABLED NÃO entra aqui de propósito (ver prepaidOffer.js).
+function purchaseTermsFor(snapshot, monthlyPrice) {
+  return resolvePurchaseTerms({
+    metadataMonths: snapshot?.preferredMonths,
+    metadataPrepaidTotal: snapshot?.prepaidTotal,
+    paidAmount: snapshot?.transactionAmount,
+    monthlyPrice,
+  })
 }
 
 async function fetchMercadoPagoPaymentSnapshot(paymentId) {
@@ -257,6 +270,8 @@ async function fetchMercadoPagoPaymentSnapshot(paymentId) {
       externalReference: response.data?.external_reference ?? null,
       paymentTypeId: response.data?.payment_type_id ?? null,
       preferredPlan: response.data?.metadata?.plan ?? null,
+      preferredMonths: response.data?.metadata?.months ?? null,
+      prepaidTotal: response.data?.metadata?.prepaid_total ?? null,
     }
   } catch (err) {
     return {
@@ -538,7 +553,7 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDa
   }
 }
 
-async function createMercadoPagoPreference({ userId, plan, payer = null }) {
+async function createMercadoPagoPreference({ userId, plan, payer = null, months = 1 }) {
   const accessToken = getMpAccessToken()
   if (!accessToken) {
     const err = new Error('MP_ACCESS_TOKEN não configurado')
@@ -571,13 +586,24 @@ async function createMercadoPagoPreference({ userId, plan, payer = null }) {
   // Mercado Pago validates `back_urls` as user-facing return URLs.
   const callbackBase = `${callbackOrigin}/api/payments/callback`
 
+  // Pré-pago (B11): o preço vem do servidor (preço mensal do plano × meses × desconto).
+  // Sem `months` (ou 1) tudo segue idêntico ao checkout de sempre.
+  const prepaid = Number(months) > 1 ? buildPrepaidOffer({ months, monthlyPrice: normalizedPlan.price }) : null
+  if (Number(months) > 1 && !prepaid) {
+    const err = new Error('Período de pré-pago inválido')
+    err.code = 'INVALID_PREPAID_MONTHS'
+    throw err
+  }
+  const itemTitle = prepaid ? `${normalizedPlan.title.replace(/30 dias/i, `${prepaid.days} dias`)}` : normalizedPlan.title
+  const itemPrice = prepaid ? prepaid.total : normalizedPlan.price
+
   // Pagador e item completos: é o que o antifraude do MP usa para aprovar
   // (recusas "high_risk" em cartão avulso, 27/09/2026 — ver checkoutPayer.js).
   const preference = {
-    items: [buildCheckoutItem({ plan, title: normalizedPlan.title, price: normalizedPlan.price })],
+    items: [buildCheckoutItem({ plan, title: itemTitle, price: itemPrice })],
     ...(payer ? { payer } : {}),
     external_reference: userId,
-    metadata: { plan },
+    metadata: { plan, ...buildPrepaidMetadata(prepaid) },
     back_urls: {
       success: `${callbackBase}?collection_status=approved`,
       failure: `${callbackBase}?collection_status=rejected`,
@@ -650,8 +676,9 @@ async function runPaymentReconciliation({ log } = {}) {
     const plans = await getBillingPlans()
     const plan = resolvePlanForPayment({ preferredPlan: snapshot.preferredPlan, amount: snapshot.transactionAmount, plans })
     if (!plan) continue
+    const terms = purchaseTermsFor(snapshot, plans[plan].price)
     await db.$transaction(async (tx) => {
-      await activatePaymentAccess(tx, { userId: snapshot.externalReference, plan, mpPaymentId: String(payment.mpPaymentId), amount: plans[plan].price })
+      await activatePaymentAccess(tx, { userId: snapshot.externalReference, plan, mpPaymentId: String(payment.mpPaymentId), amount: terms.amount, ...(terms.prepaid ? { days: terms.days } : {}) })
       await tx.payment.updateMany({ where: { mpPaymentId: String(payment.mpPaymentId) }, data: { gatewayEventId: payment.gatewayEventId ?? null, lastSyncedAt: new Date() } })
     })
     await invalidatePaymentCache(snapshot.externalReference, log)
@@ -942,20 +969,22 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
           const plan = resolvePlanForPayment({ preferredPlan: reconciliation.preferredPlan, amount: reconciliation.transactionAmount, plans })
 
           if (plan) {
+            const terms = purchaseTermsFor(reconciliation, plans[plan].price)
             try {
               const result = await db.$transaction(async (tx) =>
                 activatePaymentAccess(tx, {
                   userId,
                   plan,
                   mpPaymentId: String(summary.dataResourceId),
-                  amount: plans[plan].price,
+                  amount: terms.amount,
+                  ...(terms.prepaid ? { days: terms.days } : {}),
                 })
               )
               activation = { triggered: true, ...result }
               if (!result.alreadyActivated) {
                 trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'webhook' } })
                 // Recibo por e-mail. Best-effort: nunca segura nem derruba o webhook.
-                notifyPaymentApproved({ db, userId, plan, amount: plans[plan].price, accessExpiresAt: result?.expiresAt, logger: log }).catch(() => {})
+                notifyPaymentApproved({ db, userId, plan, amount: terms.amount, accessExpiresAt: result?.expiresAt, logger: log }).catch(() => {})
                 const payment = await db.payment.findUnique({ where: { mpPaymentId: String(summary.dataResourceId) }, select: { id: true, amount: true } }).catch(() => null)
                 if (payment) {
                   tryCreateAffiliateCommission({
@@ -1291,17 +1320,24 @@ export async function paymentsRoutes(app) {
 
   // Creates a dynamic Mercado Pago Preference (supports PIX + credit card) and returns the checkout URL
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { plan } = req.body ?? {}
+    const { plan, months: rawMonths } = req.body ?? {}
     const plans = await getBillingPlans()
     if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
+    // Pré-pago (B11) só existe com a flag ligada; o valor nunca vem da tela.
+    const months = rawMonths === undefined || rawMonths === null || rawMonths === '' ? 1 : Number(rawMonths)
+    if (months !== 1) {
+      if (!isPrepaidEnabled()) return sendError(reply, 400, 'PREPAID_DISABLED', 'Pagamento por vários meses ainda não está disponível.')
+      if (!PREPAID_MONTHS.includes(months)) return sendError(reply, 400, 'INVALID_PREPAID_MONTHS', 'Período inválido. Use 3 ou 6 meses.')
+    }
+
     const userId = req.user.sub
-    trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
+    trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan, ...(months !== 1 ? { months } : {}) } })
 
     try {
       const payerUser = await db.user.findUnique({ where: { id: userId }, select: { name: true, email: true, contactPhone: true } }).catch(() => null)
       const payer = buildCheckoutPayer({ name: payerUser?.name, email: payerUser?.email, phone: payerUser?.contactPhone })
-      const checkoutUrl = await createMercadoPagoPreference({ userId, plan, payer })
+      const checkoutUrl = await createMercadoPagoPreference({ userId, plan, payer, months })
       return { checkout_url: checkoutUrl }
     } catch (err) {
       if (err?.code === 'INVALID_PLAN_CONFIG') {
@@ -1636,13 +1672,14 @@ export async function paymentsRoutes(app) {
       return reply.redirect(`${dashboardUrl}/painel/plano?status=pending`)
     }
 
+    const terms = purchaseTermsFor(snapshot, plans[plan].price)
     try {
       const result = await db.$transaction(async (tx) =>
-        activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: plans[plan].price })
+        activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: terms.amount, ...(terms.prepaid ? { days: terms.days } : {}) })
       )
       trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'callback' } })
       if (!result.alreadyActivated) {
-        notifyPaymentApproved({ db, userId, plan, amount: plans[plan].price, accessExpiresAt: result?.expiresAt, logger: req.log }).catch(() => {})
+        notifyPaymentApproved({ db, userId, plan, amount: terms.amount, accessExpiresAt: result?.expiresAt, logger: req.log }).catch(() => {})
         const payment = await db.payment.findUnique({ where: { mpPaymentId: String(mpPaymentId) }, select: { id: true, amount: true } }).catch(() => null)
         if (payment) {
           tryCreateAffiliateCommission({

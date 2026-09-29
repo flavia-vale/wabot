@@ -33,6 +33,7 @@ export const EDITORIAL_DATES = {
   '/bot-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   '/comparativos': { publishedAt: '2026-05-15', updatedAt: '2026-07-30' },
   '/ferramentas': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
+  '/ferramentas/calculadora-comissao-afiliado-whatsapp': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
   '/ferramentas/calculadora-tempo-grupos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-07-30' },
   // Lacuna herdada de 94c6a10f ("feature 010 seo-lead-capture, 24/27 tasks"): as duas
   // rotas entraram em CONTENT_SEO_ROUTES sem a data editorial correspondente, e o
@@ -45,7 +46,7 @@ export const EDITORIAL_DATES = {
   // 3 rotas abaixo já tinham data em resolveLastModified() no seo-registry,
   // só faltava aqui. Reaproveita a MESMA data já em uso no registry para não
   // inventar dado novo.
-  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-27' },
+  '/precos': { publishedAt: '2026-08-05', updatedAt: '2026-09-29' },
   '/parceiro-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/termos-parceria-influenciador': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
   '/programa-de-afiliados': { publishedAt: '2026-07-31', updatedAt: '2026-09-27' },
@@ -67,6 +68,12 @@ export const EDITORIAL_DATES = {
   '/blog/como-divulgar-ofertas-amazon-whatsapp': { publishedAt: '2026-06-08', updatedAt: '2026-09-27' },
   '/blog/como-divulgar-ofertas-mercado-livre-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-09-27' },
   '/blog/quanto-custa-bot-para-whatsapp-afiliados': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
+  '/blog/bot-de-whatsapp-conectado-mas-nao-envia': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece': { publishedAt: '2026-09-28', updatedAt: '2026-09-28' },
+  '/blog/numero-banido-whatsapp-o-que-fazer': { publishedAt: '2026-09-29', updatedAt: '2026-09-29' },
+  '/blog/como-aquecer-numero-whatsapp-afiliados': { publishedAt: '2026-09-29', updatedAt: '2026-09-29' },
+  '/blog/link-de-afiliado-sem-comissao-o-que-conferir': { publishedAt: '2026-09-29', updatedAt: '2026-09-29' },
+  '/blog/shopee-suspendeu-afiliado-o-que-fazer': { publishedAt: '2026-09-29', updatedAt: '2026-09-29' },
   '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-09-27' },
   '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-22' },
   '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp': { publishedAt: '2026-07-22', updatedAt: '2026-07-31' },
@@ -117,7 +124,7 @@ export const EDITORIAL_DATES = {
   '/glossario': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/estudos-de-caso': { publishedAt: '2026-05-15', updatedAt: '2026-09-24' },
   '/confiabilidade-sessao-whatsapp': { publishedAt: '2026-07-15', updatedAt: '2026-07-15' },
-  '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-27' },
+  '/espelha-grupos-e-confiavel': { publishedAt: '2026-09-11', updatedAt: '2026-09-28' },
   '/seguranca-credenciais-afiliado': { publishedAt: '2026-07-15', updatedAt: '2026-09-24' },
   '/quanto-ganha-afiliado-shopee': { publishedAt: '2026-09-11', updatedAt: '2026-09-27' },
   '/vendas-e-comissao-afiliado-whatsapp': { publishedAt: '2026-09-11', updatedAt: '2026-09-23' },
@@ -166,7 +173,7 @@ export const EDITORIAL_DATES = {
   '/alternativas/divulgalinks': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
   '/alternativas/lumi-ofertas-inteligentes': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
   '/alternativas/busqy': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
-  '/alternativas/afilira': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
+  '/alternativas/afilira': { publishedAt: '2026-09-17', updatedAt: '2026-09-29' },
   '/alternativas/ia-divulgadora': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
   '/alternativas/divulga-ninja': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },
   '/alternativas/shark': { publishedAt: '2026-09-17', updatedAt: '2026-09-17' },

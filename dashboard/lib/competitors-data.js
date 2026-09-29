@@ -328,9 +328,9 @@ const COMPETITORS = [
     strengths: ['Menor preço de entrada entre os concorrentes mapeados: R$ 47/mês', 'Busca as ofertas sozinha, em grupos e nas lojas, em vez de só publicar o link que a afiliada escolheu', 'Awin (Casas Bahia, KaBuM!, Centauro, Dafiti), Terabyte Shop e SHEIN a partir do Professional', 'Telegram além do WhatsApp, e até 10 números conectados no Enterprise', 'Publicação no Status do WhatsApp, boas-vindas e saída automáticas no privado, criação de grupos em lote e relatórios', 'Integração com sistemas próprios da cliente no Enterprise'],
     weaknesses: ['O plano de R$ 47 busca ofertas em apenas 1 grupo e envia para apenas 1 grupo', 'O envio de um grupo específico para outro — o espelhamento — aparece só a partir do Professional, de R$ 97/mês', 'Awin, Terabyte e SHEIN também só a partir do Professional', 'O plano de entrada tem suporte apenas pelo painel; suporte por WhatsApp começa no Professional'],
     migrationNotes: 'O preço de R$ 47 é real, mas cobre uma origem e um destino. Se você já acompanha mais de um grupo ou publica em mais de um, o valor a comparar é o Professional, de R$ 97/mês — que é onde também entram o espelhamento entre grupos, a Awin, a Terabyte e a SHEIN.',
-    updatedAt: '2026-09-17',
-    verifiedAt: '2026-09-17',
-    source: 'Página de planos do Afilira (Starter, Professional e Enterprise), transcrita pela usuária em 17/09/2026.',
+    updatedAt: '2026-09-29',
+    verifiedAt: '2026-09-29',
+    source: 'Página de planos do Afilira (Starter, Professional e Enterprise), reconferida por print da usuária em 29/09/2026 (preços e recursos iguais aos de 17/09/2026).',
   },
   {
     slug: 'ia-divulgadora',

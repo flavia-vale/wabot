@@ -1,5 +1,6 @@
 import './landing.css'
 import { Hero } from '@/components/landing/Hero'
+import { getPublicCounter } from '@/lib/public-counters'
 import { How } from '@/components/landing/How'
 import { Features } from '@/components/landing/Features'
 import { Social } from '@/components/landing/Social'
@@ -94,7 +95,7 @@ export default async function LandingPage({ searchParams = {} }) {
       {jsonLd.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <Hero tone={tone} />
+      <Hero tone={tone} publicCounter={getPublicCounter()} />
       <How />
       <Features />
       <div className="wrap"><PainelVendasIlustrativo /></div>

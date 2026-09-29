@@ -99,7 +99,7 @@ function Nav({ registerHref }) {
  * PRODUCT_LIMITATIONS — e carrega a preservação como "intervalo controlado",
  * sem o jargão da casa ("cadência", "Preservação Avançada"). */
 
-export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowLabel = '7 dias grátis, sem cartão', headlineOverride, subOverride, heroStyle }) {
+export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowLabel = '7 dias grátis, sem cartão', headlineOverride, subOverride, heroStyle, publicCounter = null }) {
   const heroPrimaryHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-primary' })
   const navRegisterHref = buildRegisterHref({ source: 'landing', campaign: 'home-nav', content: 'nav-primary' })
   const headline = headlineOverride ?? (tone === 'direto'
@@ -145,6 +145,7 @@ export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowL
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Sem cartão para testar</div>
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Configura em 4 minutos</div>
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Cancela quando quiser</div>
+            {publicCounter ? <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> {publicCounter.label}</div> : null}
           </div>
         </div>
 

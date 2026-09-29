@@ -352,6 +352,12 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/blog/como-divulgar-ofertas-amazon-whatsapp', template: 'article', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-divulgar-ofertas-amazon-whatsapp', '2026-07-31'), indexable: true },
   { path: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-divulgar-ofertas-mercado-livre-whatsapp'), indexable: true },
   { path: '/blog/quanto-custa-bot-para-whatsapp-afiliados', template: 'article', priority: 0.82, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/quanto-custa-bot-para-whatsapp-afiliados'), indexable: true },
+  { path: '/blog/bot-de-whatsapp-conectado-mas-nao-envia', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/bot-de-whatsapp-conectado-mas-nao-envia'), indexable: true },
+  { path: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/oferta-sem-foto-no-whatsapp-por-que-acontece'), indexable: true },
+  { path: '/blog/numero-banido-whatsapp-o-que-fazer', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/numero-banido-whatsapp-o-que-fazer'), indexable: true },
+  { path: '/blog/como-aquecer-numero-whatsapp-afiliados', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/como-aquecer-numero-whatsapp-afiliados'), indexable: true },
+  { path: '/blog/link-de-afiliado-sem-comissao-o-que-conferir', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/link-de-afiliado-sem-comissao-o-que-conferir'), indexable: true },
+  { path: '/blog/shopee-suspendeu-afiliado-o-que-fazer', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/shopee-suspendeu-afiliado-o-que-fazer'), indexable: true },
   { path: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/melhores-horarios-para-postar-ofertas-no-whatsapp'), indexable: true },
   { path: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', template: 'article', priority: 0.82, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-converter-link-de-afiliado-automaticamente-whatsapp'), indexable: true },
   { path: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp'), indexable: true },
@@ -431,6 +437,7 @@ export const CONTENT_SEO_ROUTES = [
   // só em app/clonar-mensagens-de-grupo-de-afiliados/page.js (fonte única, FR-001).
   { path: '/clonar-mensagens-de-grupo-de-afiliados', template: 'article', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/clonar-mensagens-de-grupo-de-afiliados', '2026-08-26'), indexable: true },
   { path: '/ferramentas', template: 'tools-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
+  { path: '/ferramentas/calculadora-comissao-afiliado-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/ferramentas/calculadora-tempo-grupos-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   // title/description ficam só em app/ferramentas/calculadora-risco-whatsapp/page.js (fonte única, FR-001).
   { path: '/ferramentas/calculadora-risco-whatsapp', template: 'tool-calculator', priority: 0.84, changeFrequency: 'weekly', lastModified: resolveLastModified('/ferramentas/calculadora-risco-whatsapp'), indexable: true },
