@@ -433,6 +433,7 @@ export const CONTENT_SEO_ROUTES = [
   // só em app/clonar-mensagens-de-grupo-de-afiliados/page.js (fonte única, FR-001).
   { path: '/clonar-mensagens-de-grupo-de-afiliados', template: 'article', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/clonar-mensagens-de-grupo-de-afiliados', '2026-08-26'), indexable: true },
   { path: '/ferramentas', template: 'tools-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
+  { path: '/ferramentas/calculadora-comissao-afiliado-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/ferramentas/calculadora-tempo-grupos-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   // title/description ficam só em app/ferramentas/calculadora-risco-whatsapp/page.js (fonte única, FR-001).
   { path: '/ferramentas/calculadora-risco-whatsapp', template: 'tool-calculator', priority: 0.84, changeFrequency: 'weekly', lastModified: resolveLastModified('/ferramentas/calculadora-risco-whatsapp'), indexable: true },

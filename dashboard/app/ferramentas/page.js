@@ -24,6 +24,13 @@ const tools = [
     cta: 'Calcular tempo',
   },
   {
+    href: '/ferramentas/calculadora-comissao-afiliado-whatsapp',
+    status: 'Disponível',
+    title: 'Calculadora de comissão de afiliado',
+    description: 'Estime pedidos, comissão e ponto de equilíbrio a partir dos seus cliques, conversão e valor médio.',
+    cta: 'Calcular comissão',
+  },
+  {
     href: '/ferramentas/calculadora-tempo-grupos-whatsapp',
     status: 'Planejada',
     title: 'Gerador de calendário de ofertas',
