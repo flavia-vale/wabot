@@ -65,7 +65,7 @@ para baixo; cada item diz o que decide.
 | # | Quando | O quê | Tempo |
 |---|---|---|---|
 | 🔝 | **assim que a PR `feat/video-espelhar-blog-painel` chegar em `main`** | **Leva R7 (28/09, vídeo)** (abaixo): 1 página — `/blog/como-espelhar-mensagens-entre-grupos-whatsapp` ganhou o vídeo embutido e a marcação VideoObject. Substitui o pedido dela na R6 | 2 min |
-| 🔝 | **assim que `develop` chegar em `main`** | **Reindexação das páginas corrigidas — Leva R1** (abaixo): 10 páginas que diziam coisa errada sobre o produto. Passa na frente de qualquer outra indexação | 15 min |
+| 🔝 | ✅ 29/09 | ~~Reindexação das páginas corrigidas — Leva R1~~ **pedida em 29/09** (10 de 10) + `/blog/como-divulgar-ofertas-mercado-livre-whatsapp` (R3/R5, já pedida em 28/09 — repetida) | — |
 | 🔝 | **junto com a R1, assim que a PR dos títulos chegar em `main`** | **Leva R5 (27/09)** (abaixo): 5 páginas com muita impressão e quase zero clique que ganharam título e descrição novos (Achadinho Pro, comissão de afiliado, quanto ganha afiliado Shopee, Mercado Livre e Amazon no WhatsApp). Inclui a maior consulta do site (`achadinho pro`, 4.005 impressões) | 10 min |
 | 🔝 | **junto com a R5, assim que a PR do lote 2 de títulos chegar em `main`** | **Leva R6 (27/09, lote 2)** (abaixo): 8 páginas — 6 que ganharam título e descrição novos (AchadinhosBot já está na R4; Shozap, Gigi Bot, FluxoPromo, como ser afiliado Shopee, divulgar Amazon, melhor horário) e as 2 páginas de loja que ganharam o link "guia completo" (Shopee e Mercado Livre no WhatsApp) | 10 min |
 | 🔝 | dia seguinte à R1 | **Leva R4 (27/09)** (abaixo): 7 páginas — comparativo do AchadinhosBot refeito, página nova "espelhar grupos vale a pena?", reembolso e as que ganharam link. Passa na frente da R2 porque inclui a 3ª página mais visitada do site | 15 min |
@@ -140,19 +140,19 @@ certo. Por isso passam na frente das levas comuns.
 texto novo está no ar (ex.: `/bot-canais-whatsapp` mostra "pausado sozinho por
 1 hora"); se ainda mostrar o texto velho, o deploy não chegou — não pedir.
 
-**Leva R1 — as que falavam errado do produto (1ª cota)**
+**Leva R1 — as que falavam errado do produto — ✅ CONCLUÍDA, 10 de 10 pedidas em 2026-09-29**
 
 ```
-https://espelhagrupos.com.br/bot-canais-whatsapp                        ⏳
-https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                ⏳
-https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais        ⏳
-https://espelhagrupos.com.br/blog/bot-whatsapp-antiban-existe           ⏳
-https://espelhagrupos.com.br/blog/shadowban-whatsapp-canais             ⏳
-https://espelhagrupos.com.br/blog/como-evitar-banimento-whatsapp-afiliados ⏳
-https://espelhagrupos.com.br/blog/grupo-ou-canal-whatsapp-achadinhos    ⏳
-https://espelhagrupos.com.br/blog/chip-dedicado-bot-whatsapp            ⏳
-https://espelhagrupos.com.br/blog/migrar-grupo-achadinhos-para-canal    ⏳
-https://espelhagrupos.com.br/diagnostico-antiban-whatsapp               ⏳
+https://espelhagrupos.com.br/bot-canais-whatsapp                        ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/bot-comum-vs-espelha-grupos                ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/como-funciona-espelha-grupos-canais        ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/blog/bot-whatsapp-antiban-existe           ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/blog/shadowban-whatsapp-canais             ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/blog/como-evitar-banimento-whatsapp-afiliados ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/blog/grupo-ou-canal-whatsapp-achadinhos    ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/blog/chip-dedicado-bot-whatsapp            ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/blog/migrar-grupo-achadinhos-para-canal    ✅ pedida 2026-09-29
+https://espelhagrupos.com.br/diagnostico-antiban-whatsapp               ✅ pedida 2026-09-29
 ```
 
 **Leva R5 — títulos reescritos em 27/09 (junto com a R1; a R4 pode esperar um dia)**
@@ -166,7 +166,7 @@ Console, nunca pelo acumulado de 3 meses (ver `docs/rca/seo-marketing.md`).
 https://espelhagrupos.com.br/alternativas/achadinho-pro                    ⏳
 https://espelhagrupos.com.br/programa-de-afiliados                         ⏳
 https://espelhagrupos.com.br/quanto-ganha-afiliado-shopee                  ⏳
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ⏳
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ✅ pedida 2026-09-28 e 2026-09-29
 https://espelhagrupos.com.br/amazon-afiliados-whatsapp                     ⏳
 ```
 
@@ -291,7 +291,7 @@ https://espelhagrupos.com.br/materiais/checklist-divulgacao-ofertas-grupos-whats
 
 ```
 https://espelhagrupos.com.br/seguranca-credenciais-afiliado             ⏳
-https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ⏳
+https://espelhagrupos.com.br/blog/como-divulgar-ofertas-mercado-livre-whatsapp ✅ pedida 2026-09-28 e 2026-09-29
 https://espelhagrupos.com.br/quem-somos                                 ⏳
 ```
 
