@@ -74,7 +74,7 @@ function readArgs(argv) {
 
 export async function buildTiktokReport(db, { days = 30, now = Date.now() } = {}) {
   const since = new Date(now - days * 864e5)
-  const [events, rows] = await Promise.all([
+  const [events, rows, recentMessageCount] = await Promise.all([
     db.analyticsEvent.findMany({
       where: { event: EVENT, createdAt: { gte: since } },
       select: { metadata: true },
@@ -93,13 +93,30 @@ export async function buildTiktokReport(db, { days = 30, now = Date.now() } = {}
       orderBy: { sentAt: 'desc' },
       take: 5000,
     }),
+    db.messageLog.count({ where: { sentAt: { gte: since } } }),
   ])
 
   let demandTotal = 0
+  let unsupportedTotal = 0
+  const observedDomains = new Set()
+  const observedDays = new Set()
   for (const event of events) {
     const data = parseMetadata(event.metadata)
-    if (data.domain === TIKTOK_DOMAIN && Number(data.count) > 0) demandTotal += Number(data.count)
+    const count = Number(data.count)
+    if (!data.domain || !(count > 0)) continue
+    unsupportedTotal += count
+    observedDomains.add(data.domain)
+    if (data.day) observedDays.add(data.day)
+    if (data.domain === TIKTOK_DOMAIN) demandTotal += count
   }
+
+  const coverage = demandTotal > 0
+    ? 'tiktok_observado'
+    : unsupportedTotal > 0
+      ? 'zero_tiktok_com_telemetria'
+      : recentMessageCount > 0
+        ? 'inconclusivo_sem_telemetria'
+        : 'inconclusivo_sem_atividade'
 
   const byKind = new Map()
   const byUser = new Map()
@@ -115,12 +132,35 @@ export async function buildTiktokReport(db, { days = 30, now = Date.now() } = {}
     }
   }
 
-  return { days, demandTotal, observableRows: rows.length, byKind, byUser, samples }
+  return {
+    days,
+    demandTotal,
+    unsupportedTotal,
+    observedDomainCount: observedDomains.size,
+    observedDayCount: observedDays.size,
+    recentMessageCount,
+    coverage,
+    observableRows: rows.length,
+    byKind,
+    byUser,
+    samples,
+  }
 }
 
 export function printTiktokReport(report, out = console.log) {
   out(`TikTok Shop — descoberta dos últimos ${report.days} dia(s)`)
   out(`Demanda registrada (tiktok.com): ${report.demandTotal} mensagem(ns)`)
+  out(`Cobertura: ${report.unsupportedTotal} link(s) de loja não suportada, ${report.observedDomainCount} domínio(s), ${report.observedDayCount} dia(s)`)
+  out(`Atividade do robô no período: ${report.recentMessageCount} linha(s) no MessageLog`)
+  if (report.coverage === 'zero_tiktok_com_telemetria') {
+    out('Conclusão D-001: zero TikTok com telemetria funcionando para outras lojas.')
+  } else if (report.coverage === 'tiktok_observado') {
+    out('Conclusão D-001: demanda TikTok observada.')
+  } else if (report.coverage === 'inconclusivo_sem_telemetria') {
+    out('Conclusão D-001: INCONCLUSIVA — há atividade, mas nenhuma telemetria de loja não suportada prova a cobertura.')
+  } else {
+    out('Conclusão D-001: INCONCLUSIVA — não há atividade nem telemetria suficiente no período.')
+  }
   out('')
   out('Amostra observável no MessageLog (não é o total de recebidas)')
   out(`Linhas: ${report.observableRows}`)
