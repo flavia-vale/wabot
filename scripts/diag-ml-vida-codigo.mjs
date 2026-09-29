@@ -19,7 +19,16 @@
  * Read-only: não grava nada, não chama o ML, não imprime código de acesso.
  *
  * Uso:
- *   cd ~/wabot && node scripts/diag-ml-vida-codigo.mjs [--days=7] [--email=x@y] [--min-curtos=3]
+ *   cd ~/wabot && node scripts/diag-ml-vida-codigo.mjs [--days=7] [--email=x@y] [--min-curtos=3] [--detalhe]
+ *
+ * Colagens: cada salvamento do código no painel gera o evento
+ * `credential_saved` (AnalyticsEvent) com `sessionAlive` = o ML aceitou o
+ * código NA HORA de colar. O script cruza isso com as gerações: mostra a hora
+ * real da colagem, e lista colagens que o ML recusou na hora (código já
+ * deslogado) ou que nunca geraram link curto.
+ * --detalhe (com --email): minuto a minuto ao redor de cada morte, para
+ * separar "código morto" (só recusas depois) de "401 passageiro" (curtos e
+ * recusas misturados no mesmo minuto).
  */
 
 import 'dotenv/config'
@@ -33,6 +42,7 @@ const days = Number(arg('days', 7))
 const email = arg('email', null)
 const minCurtos = Number(arg('min-curtos', 3))
 const TZ_OFFSET_MIN = Number(arg('tz', -180)) // -3h (Brasília) por padrão
+const detalhe = process.argv.includes('--detalhe')
 const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 
 function local(d) {
@@ -85,6 +95,31 @@ const rows = await db.messageLog.findMany({
   take: 300000,
 })
 
+const saves = await db.analyticsEvent.findMany({
+  where: { event: 'credential_saved', createdAt: { gte: since }, ...(where.userId ? { userId: where.userId } : {}) },
+  select: { userId: true, createdAt: true, metadata: true },
+  orderBy: { createdAt: 'asc' },
+})
+const colagens = new Map()
+for (const ev of saves) {
+  let meta = {}
+  try { meta = JSON.parse(ev.metadata || '{}') } catch {}
+  if (meta.platform !== 'mercadolivre' || !ev.userId) continue
+  if (!colagens.has(ev.userId)) colagens.set(ev.userId, [])
+  colagens.get(ev.userId).push({ at: ev.createdAt, alive: meta.sessionAlive ?? null })
+}
+function colagemAntes(userId, at) {
+  const lista = colagens.get(userId) || []
+  let hit = null
+  for (const c of lista) if (c.at <= at) hit = c
+  return hit
+}
+function descreveColagem(c) {
+  if (!c) return null
+  const veredito = c.alive === true ? 'ML aceitou na hora' : c.alive === false ? 'ML RECUSOU na hora (código já deslogado)' : 'ML não respondeu na hora'
+  return `${local(c.at)} (${veredito})`
+}
+
 const porConta = new Map()
 for (const r of rows) {
   const kind = classify(r)
@@ -94,7 +129,7 @@ for (const r of rows) {
 }
 
 const users = await db.user.findMany({
-  where: { id: { in: [...porConta.keys()] } },
+  where: { id: { in: [...new Set([...porConta.keys(), ...colagens.keys()])] } },
   select: { id: true, email: true, name: true },
 })
 const nome = new Map(users.map(u => [u.id, `${u.name} <${u.email}>`]))
@@ -112,10 +147,46 @@ for (const [userId, events] of porConta) {
     const vidaMax = g.recusaDepois ? minutes(g.first, g.recusaDepois) : null
     const horas = Math.max(vidaMin, 1) / 60
     const porHora = (g.curtos / horas).toFixed(1)
-    const colagem = g.recusaAntes ? `colou entre ${local(g.recusaAntes)} e ${local(g.first)}` : 'sem recusa antes (início da janela)'
+    const colagemReal = colagemAntes(userId, g.first)
+    const colagemRecente = colagemReal && (!g.recusaAntes || colagemReal.at >= g.recusaAntes)
+    const colagem = colagemRecente
+      ? `colou ${descreveColagem(colagemReal)}`
+      : g.recusaAntes ? `sem colagem registrada; recusa antes em ${local(g.recusaAntes)}` : 'sem recusa antes (início da janela)'
     const fim = g.recusaDepois ? `1ª recusa ${local(g.recusaDepois)} (≤${vidaMax} min)` : 'AINDA VIVA no fim da janela'
     console.log(`  ${local(g.first)} → ${local(g.last)}  vida ≥${String(vidaMin).padStart(4)} min | ${fim} | curtos ${String(g.curtos).padStart(4)} (${porHora}/h) | ${colagem}`)
     todas.push({ userId, vidaMin, vidaMax, curtos: g.curtos, porHora: Number(porHora), viva: !g.recusaDepois })
+    if (detalhe && email && g.recusaDepois) printDetalhe(events, g)
+  }
+  const lista = colagens.get(userId) || []
+  const semCurto = lista.filter(c => !events.some(e => e.kind === 'curto' && e.at >= c.at && e.at < (lista.find(n => n.at > c.at)?.at ?? new Date(8.64e15))))
+  if (lista.length) {
+    console.log(`  colagens na janela: ${lista.length} → ${lista.map(descreveColagem).join(' | ')}`)
+    if (semCurto.length) console.log(`  ⚠ colagens sem NENHUM link curto depois (código morto ao colar?): ${semCurto.map(c => local(c.at)).join(', ')}`)
+  }
+}
+
+// Contas que colaram mas não têm nenhuma geração (nunca saiu link curto).
+for (const [userId, lista] of colagens) {
+  if (porConta.has(userId) && splitGenerations(porConta.get(userId)).some(g => g.curtos >= minCurtos)) continue
+  console.log(`${nome.get(userId) || userId}`)
+  console.log(`  ⚠ colou ${lista.length}x e nenhuma geração com ≥${minCurtos} curtos: ${lista.map(descreveColagem).join(' | ')}`)
+}
+
+function printDetalhe(events, g) {
+  const ini = new Date(g.last.getTime() - 10 * 60000)
+  const fim = new Date(g.recusaDepois.getTime() + 15 * 60000)
+  const porMinuto = new Map()
+  for (const e of events) {
+    if (e.at < ini || e.at > fim) continue
+    const k = local(e.at)
+    const m = porMinuto.get(k) || { curto: 0, recusa: 0 }
+    m[e.kind]++
+    porMinuto.set(k, m)
+  }
+  console.log('    minuto a minuto (10 min antes do último curto → 15 min depois da 1ª recusa):')
+  for (const [k, m] of [...porMinuto.entries()].slice(0, 40)) {
+    const marca = m.curto && m.recusa ? '  ← curto E recusa no MESMO minuto (não é código morto)' : ''
+    console.log(`      ${k}  curtos ${String(m.curto).padStart(3)} | recusas ${String(m.recusa).padStart(3)}${marca}`)
   }
 }
 
@@ -131,7 +202,8 @@ if (mortas.length) {
     if (!b.length) continue
     console.log(`  ${label.padEnd(30)} n=${b.length} | mediana ${b[Math.floor(b.length / 2)]} min | faixa ${b[0]}–${b[b.length - 1]} min`)
   }
-  console.log('\nComo ler: mediana parecida em todos os volumes e faixa estreita (ex.: 60–100 min) = prazo FIXO do ML (hipótese H1/H6).')
+  console.log('\nColagem "ML RECUSOU na hora" = a cliente colou um código que já estava deslogado (saiu da conta antes/depois de copiar).')
+  console.log('Como ler: mediana parecida em todos os volumes e faixa estreita (ex.: 60–100 min) = prazo FIXO do ML (hipótese H1/H6).')
   console.log('Faixa larga (ex.: 10–600 min) sem relação com volume = algo externo (navegador da cliente, H2). Vida menor no alto volume = H4.')
 } else {
   console.log('\nNenhuma geração morta com pelo menos', minCurtos, 'links curtos na janela.')
