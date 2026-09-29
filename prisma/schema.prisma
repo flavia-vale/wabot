@@ -465,6 +465,10 @@ model BotConfig {
   mirrorTemplateKeyDefault String?
   primaryLinkTargetDefault String   @default("first")
   preservationEnabled      Boolean  @default(false)
+  // Link rastreado (src/core/trackedLinks.js): o robô troca o link de afiliado
+  // pelo shortlink /r/<hash> que conta clique. Opt-in, desligado por padrão;
+  // só vale com plano PRO/Trial e SHORTLINK_BASE_URL no servidor.
+  clickTrackingEnabled     Boolean  @default(false)
   channelForwardJid        String?
   channelForwardName       String?
   updatedAt                DateTime @updatedAt

@@ -662,7 +662,9 @@ marketing bloqueia anúncio pago até esse número existir. Teste:
   (`src/core/reportRiskScore.js`); horário de descanso, intervalo, limite por
   dia, variação de texto.
 - **Não existe:** "pausa preventiva" antes do risco, medição de cliques ou
-  visualizações do canal (`clickTracker.js` não está ligado no envio), plano de
+  visualizações do canal (o link rastreado existe no robô desde 2026-09-29, mas
+  é opt-in, desligado por padrão e sem conta ativa — ver `lojas-conversao.md`,
+  "Link rastreado"; só vira texto público depois de ligado e validado), plano de
   recuperação como função da ferramenta (é da cliente).
 - O PR #1848 errou para o outro lado ("não pausa sozinha", "não mede saúde") —
   corrigido. Convite é "Testar 7 dias grátis", nunca "Lista VIP"; sem "staging"/
