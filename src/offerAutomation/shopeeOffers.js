@@ -87,6 +87,9 @@ export function resolveShopeeOfferPrice(offer = {}) {
 // Aqui colapsamos por identidade de produto (nome normalizado), mantendo a
 // primeira ocorrência (que respeita a ordem de prioridade/sort já aplicada).
 export function productDedupKey(offer) {
+  // Origem que já traz identidade própria (promoção Awin: conta + promoção).
+  // Sem isso, duas lojas com o mesmo título ("Frete grátis") virariam uma só.
+  if (offer?.dedupKey) return String(offer.dedupKey)
   const name = String(offer?.productName ?? '')
     .toLowerCase()
     .replace(/\s+/g, ' ')

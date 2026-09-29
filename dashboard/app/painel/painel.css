@@ -1588,6 +1588,15 @@ select.pnl-input { appearance: none; -webkit-appearance: none; background-image:
 .pnl-cred-onde { font-size: 12px; color: var(--ink-soft); line-height: 1.55; margin: 0 0 14px; }
 .pnl-cred-ctas { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .pnl-cred-ctas .pnl-btn { flex: 1; min-width: 150px; justify-content: center; text-align: center; }
+/* Awin (Minhas credenciais): várias contas por cliente, cada uma num bloco. */
+.pnl-awin-steps { list-style: decimal; margin: 0 0 14px; padding-left: 18px; font-size: 12px; color: var(--ink-soft); line-height: 1.6; }
+.pnl-awin-account { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; background: var(--surface); }
+.pnl-awin-account-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.pnl-awin-account-head .pnl-tag { flex-shrink: 0; }
+.pnl-awin-runs { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; font-size: 12px; }
+.pnl-awin-runs li { border-top: 1px solid var(--line); padding-top: 8px; }
+.pnl-awin-form .pnl-toolbar { margin-top: 4px; }
+.pnl-awin-stores { display: grid; gap: 6px; margin-top: 6px; }
 
 .pnl-cred-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 13px; }
 .pnl-cred-label { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 12.5px; font-weight: 600; }

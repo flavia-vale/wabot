@@ -15,6 +15,7 @@ import {
 } from '@/lib/painel/affiliatePlatforms'
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../../src/tutorialVideo.js'
 import { STORE_GUIDE_BY_PLATFORM } from '@/lib/store-guides'
+import AwinCredentialsCard from '@/components/painel/AwinCredentialsCard'
 
 const IconChevron = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -600,6 +601,15 @@ export default function IdsAfiliadaPage() {
             }
           />
         ))}
+
+      {/* Rede de afiliados (várias contas por cliente) — não é uma "loja" do
+          AFFILIATE_PLATFORMS: tem rotas e tabela próprias (/api/awin). */}
+      {!loading && (
+        <AwinCredentialsCard
+          open={openId === 'awin'}
+          onToggleOpen={() => setOpenId((cur) => (cur === 'awin' ? null : 'awin'))}
+        />
+      )}
     </div>
   )
 }
