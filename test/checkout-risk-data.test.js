@@ -9,23 +9,25 @@ import {
 } from '../src/domain/payments/checkoutRiskData.js'
 import { describeChargeStatusDetail, CHARGE_ACTION_OWNERS } from '../src/domain/payments/chargeOutcome.js'
 
-test('manda nome, sobrenome, e-mail e telefone reais da compradora', () => {
-  const payer = buildCheckoutPayer({ name: 'Maria da Silva Souza', email: 'maria@gmail.com', contactPhone: '+55 (11) 98765-4321' })
+test('manda e-mail e telefone reais da compradora', () => {
+  const payer = buildCheckoutPayer({ email: 'maria@gmail.com', contactPhone: '+55 (11) 98765-4321' })
   assert.deepEqual(payer, {
-    name: 'Maria',
-    surname: 'da Silva Souza',
     email: 'maria@gmail.com',
     phone: { area_code: '11', number: '987654321' },
   })
 })
 
-test('nome de uma palavra só vai sem sobrenome', () => {
-  assert.deepEqual(buildCheckoutPayer({ name: 'Maria' }), { name: 'Maria' })
+test('nome NUNCA vai — cadastro pode ser nome de loja ("Achadinhos da Flavia")', () => {
+  const payer = buildCheckoutPayer({ name: 'Achadinhos da Flavia', email: 'loja@gmail.com' })
+  assert.deepEqual(payer, { email: 'loja@gmail.com' })
+  assert.equal(buildCheckoutPayer({ name: 'Maria' }), null)
+  const rota = readFileSync(new URL('../src/api/routes/payments.js', import.meta.url), 'utf8')
+  const bloco = rota.slice(rota.indexOf('async function createMercadoPagoPreference'), rota.indexOf('checkout/preferences'))
+  assert.doesNotMatch(bloco, /name: true|surname/)
 })
 
 test('e-mail de preenchimento automático não vai — dado falso piora a nota de risco', () => {
-  const payer = buildCheckoutPayer({ name: 'Ana', email: 'user_abc@sistema.com' })
-  assert.equal(payer.email, undefined)
+  assert.equal(buildCheckoutPayer({ email: 'user_abc@sistema.com' }), null)
   assert.equal(buildCheckoutPayer({ email: 'nao-e-email' }), null)
 })
 
@@ -86,5 +88,5 @@ test('e-mail preenchido ganha do da conta; inválido não vai (e não bloqueia o
   const vazio = resolveSubscriptionPayerEmail({ accountEmail: 'conta@gmail.com', informedEmail: '' })
   assert.equal(buildCheckoutPayer({ email: vazio.email }).email, 'conta@gmail.com')
   const invalido = resolveSubscriptionPayerEmail({ accountEmail: 'conta@gmail.com', informedEmail: 'xx' })
-  assert.equal(buildCheckoutPayer({ name: 'Ana', email: invalido.email }).email, undefined)
+  assert.equal(buildCheckoutPayer({ email: invalido.email }), null)
 })

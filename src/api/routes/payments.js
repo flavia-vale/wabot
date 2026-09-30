@@ -572,7 +572,7 @@ async function createMercadoPagoPreference({ userId, plan, informedEmail }) {
   // Falha ao ler a conta nunca impede o checkout — só vai sem os dados.
   const buyer = await db.user.findUnique({
     where: { id: userId },
-    select: { name: true, email: true, contactPhone: true },
+    select: { email: true, contactPhone: true },
   }).catch(() => null)
   // O e-mail é o que ela preencheu em PLANOS (o mesmo campo serve aos dois
   // botões); vazio → o da conta. Inválido não bloqueia o avulso: só não vai.

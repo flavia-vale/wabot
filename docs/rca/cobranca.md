@@ -328,12 +328,15 @@ produção (30 dias, cada pagamento consultado no MP por `GET /v1/payments/:id`)
 
 **Causa:** a preferência do avulso mandava só `title`, `quantity` e
 `unit_price` — nada sobre quem compra. A doc de aprovação do MP pede `payer`
-(nome, sobrenome, e-mail, telefone) e `items` com `id`, `description` e
+(e-mail, telefone) e `items` com `id`, `description` e
 `category_id`. Sem isso o motor de risco julga uma compra anônima.
 
 **Correção:** `buildCheckoutPayer` / `buildCheckoutItem`
 (`src/domain/payments/checkoutRiskData.js`, puro) montam esses campos a partir
-da conta (`name`, `email`, `contactPhone`). `rejected_high_risk` (o código sem
+da conta (`email`, `contactPhone`). **O nome NÃO vai** (decisão da dona do
+produto, 2026-09-30): o cadastro guarda nome de loja ("Achadinhos da Flavia")
+tanto quanto de pessoa, e nome que não bate com o titular do cartão piora a
+nota — o checkout do MP já pede o nome do titular. `rejected_high_risk` (o código sem
 `cc_`, que sai em Pix/saldo) entrou em `chargeOutcome.js` — antes virava
 "motivo fora da lista" e o diagnóstico contava 13 recusas por suspeita quando
 eram 17. O diagnóstico agora imprime `operation_type` e separa avulso de
