@@ -12,6 +12,8 @@ import { sessionRoutes } from './routes/session.js'
 import { multiNumberRoutes } from './routes/multiNumber.js'
 import { groupsRoutes } from './routes/groups.js'
 import { groupMembersRoutes } from './routes/groupMembers.js'
+import { smartLinksRoutes } from './routes/smartLinks.js'
+import { smartLinkPublicRoutes } from './routes/smartLinkPublic.js'
 import { credentialsRoutes } from './routes/credentials.js'
 import { awinRoutes } from './routes/awin.js'
 import { rakutenRoutes } from './routes/rakuten.js'
@@ -583,6 +585,8 @@ app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(multiNumberRoutes, { prefix: '/api/multi-number' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
 app.register(groupMembersRoutes, { prefix: '/api/group-members' })
+app.register(smartLinksRoutes, { prefix: '/api/smart-links' })
+app.register(smartLinkPublicRoutes) // sem prefix — /g/:slug precisa estar na raiz
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
 app.register(awinRoutes, { prefix: '/api/awin' })
 app.register(rakutenRoutes, { prefix: '/api/rakuten' })

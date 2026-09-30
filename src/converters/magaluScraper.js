@@ -9,9 +9,19 @@
 //   MAGALU_SCRAPER_KEY       chave da conta
 //   MAGALU_SCRAPER_DAILY_CAP chamadas por dia (default 100)
 
+// Cada provedor devolve as tentativas da MAIS BARATA para a mais cara
+// (RCA 2026-09-30, medido na VPS com o Scrape.do): a foto da Magalu vem no
+// HTML puro, então `render` (JavaScript) é desperdício; e sem `super` (IP
+// residencial) a página também veio com foto, por 1 crédito em vez de 10.
+// O `super` fica só como segunda tentativa, quando a barata cai no muro.
 const PROVIDERS = {
-  zenrows: (key, target) => `https://api.zenrows.com/v1/?apikey=${encodeURIComponent(key)}&url=${encodeURIComponent(target)}&js_render=true&premium_proxy=true&proxy_country=br`,
-  scrapedo: (key, target) => `https://api.scrape.do/?token=${encodeURIComponent(key)}&url=${encodeURIComponent(target)}&render=true&geoCode=br&super=true`,
+  zenrows: (key, target) => [
+    `https://api.zenrows.com/v1/?apikey=${encodeURIComponent(key)}&url=${encodeURIComponent(target)}&js_render=true&premium_proxy=true&proxy_country=br`,
+  ],
+  scrapedo: (key, target) => {
+    const base = `https://api.scrape.do/?token=${encodeURIComponent(key)}&url=${encodeURIComponent(target)}&geoCode=br`
+    return [base, `${base}&super=true`]
+  },
 }
 
 export function readMagaluScraperConfig(env = process.env) {
@@ -22,7 +32,7 @@ export function readMagaluScraperConfig(env = process.env) {
   return { key, provider, dailyCap: Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : 100 }
 }
 
-export function buildMagaluScraperUrl(config, targetUrl) {
+export function buildMagaluScraperUrls(config, targetUrl) {
   return PROVIDERS[config.provider](config.key, targetUrl)
 }
 

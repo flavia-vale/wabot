@@ -22,6 +22,7 @@ Allow: /suporte
 Allow: /api/public/faq
 Allow: /api/public/plans
 Disallow: /api/*
+Disallow: /g/
 Disallow: /painel
 Disallow: /painel/*
 Disallow: /admin

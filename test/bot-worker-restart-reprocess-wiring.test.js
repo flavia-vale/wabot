@@ -63,3 +63,27 @@ test('reprocessRestartFailures remonta o card manual (foto+watermark) via buildP
   // aqui, não herdados da oferta original perdida.
   assert.match(fnBody, /destinationImageUsesWatermark\(/, 'precisa resolver a marca d\'água do destino antes de montar o card')
 })
+
+// RCA 2026-09-30: messageText é cortado em 240 chars e sem quebras de linha
+// (sanitizeMessageForLog). Reenviar dele mandava a oferta mutilada.
+test('reprocessRestartFailures reenvia o texto completo (resendText), nunca o messageText cortado', () => {
+  const fnIndex = botWorkerSource.indexOf('async function reprocessRestartFailures()')
+  const fnEnd = botWorkerSource.indexOf('\nasync function createSendBackend()', fnIndex)
+  const fnBody = botWorkerSource.slice(fnIndex, fnEnd === -1 ? undefined : fnEnd)
+
+  assert.match(fnBody, /resendText:\s*\{\s*not:\s*null\s*\}/, 'só reprocessa linha que tem o texto completo guardado')
+  assert.match(fnBody, /finalText:\s*resendText/, 'o payload reenviado precisa sair do texto completo')
+  assert.match(fnBody, /text:\s*resendText/, 'o card precisa ancorar no texto completo')
+  assert.doesNotMatch(fnBody, /finalText:\s*row\.messageText/, 'não pode reenviar messageText (240 chars, sem quebras)')
+  assert.doesNotMatch(fnBody, /text:\s*row\.messageText/, 'não pode usar messageText cortado em nenhum ponto do reenvio')
+  // A linha nova leva o texto adiante (novo restart antes do envio).
+  const createIndex = fnBody.indexOf('db.messageLog.create(')
+  assert.match(fnBody.slice(createIndex, createIndex + 600), /resendText,/, 'a linha reenfileirada precisa carregar o resendText')
+})
+
+test('espelhamento grava resendText ao enfileirar e zera no sucesso', () => {
+  assert.match(botWorkerSource, /resendText:\s*sanitizeResendText\(finalText\)/, 'logData do espelhamento precisa gravar o texto completo')
+  const successIndex = botWorkerSource.indexOf("status: 'success',\n            errorMsg: null,")
+  assert.notEqual(successIndex, -1, 'update de sucesso do processSendJob não encontrado')
+  assert.match(botWorkerSource.slice(successIndex, successIndex + 300), /resendText:\s*null/, 'o sucesso precisa zerar resendText para o banco não crescer')
+})

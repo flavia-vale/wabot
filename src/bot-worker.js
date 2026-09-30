@@ -57,7 +57,7 @@ import { linkRemovedSkipReason } from './core/unsupportedStore.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
-import { sanitizeMessageForLog, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
+import { sanitizeMessageForLog, sanitizeResendText, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
@@ -3196,6 +3196,8 @@ async function processSendJob(job) {
             status: 'success',
             errorMsg: null,
             sentAt: new Date(),
+            // Já saiu: o texto completo do reenvio não serve mais.
+            resendText: null,
             ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
             ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
             // Feature 017 (arquitetura multicanal de entrega), T023: este é o
@@ -3337,6 +3339,11 @@ async function reprocessRestartFailures() {
       // removido") — RCA 2026-09-30. Fica como error:worker_restart, que é o
       // motivo verdadeiro.
       platform: { notIn: ['scheduled', 'broadcast'] },
+      // Só reenvia com o texto COMPLETO (resendText). `messageText` é cortado
+      // em 240 chars e sem quebras de linha: reenviar dele mandava a oferta
+      // mutilada para o grupo (RCA 2026-09-30). Sem resendText (linha antiga,
+      // texto acima do teto) fica como error:worker_restart — motivo verdadeiro.
+      resendText: { not: null },
       sentAt: { gte: cutoff },
     },
     take: 200,
@@ -3354,7 +3361,8 @@ async function reprocessRestartFailures() {
         data: { errorMsg: 'error:worker_restart:requeued' },
       })
       if (claimed.count !== 1) continue
-      if (!row.destGroup || !row.messageText || !cfg) continue
+      const resendText = row.resendText
+      if (!row.destGroup || !resendText || !cfg) continue
 
       const log = await db.messageLog.create({
         data: {
@@ -3365,6 +3373,9 @@ async function reprocessRestartFailures() {
           originalUrl: row.originalUrl,
           convertedUrl: row.convertedUrl,
           messageText: row.messageText,
+          // Leva o texto completo adiante: se o robô reiniciar de novo antes
+          // deste reenvio sair, ele ainda pode ser reenviado inteiro.
+          resendText,
           status: 'queued',
         },
       })
@@ -3396,12 +3407,12 @@ async function reprocessRestartFailures() {
         platforms: row.platform,
         plan: cfg.plan,
         delayMs: 0,
-        typingDelayMs: calculateTypingDelayMs({ text: row.messageText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+        typingDelayMs: calculateTypingDelayMs({ text: resendText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward,
-        couponContext: couponContextFromText(row.messageText),
+        couponContext: couponContextFromText(resendText),
         buildPayload: async () => {
           const linkPreview = await buildManualLinkPreview({
-            text: row.messageText,
+            text: resendText,
             primary,
             credentialsMap: cfg.credentials,
             uploadToServer: activeSock?.waUploadToServer,
@@ -3413,7 +3424,7 @@ async function reprocessRestartFailures() {
             return null
           })
           return buildMonitoredMessagePayload({
-            finalText: row.messageText,
+            finalText: resendText,
             image: null,
             useLinkPreview: true,
             linkPreview,
@@ -5416,6 +5427,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           originalUrl: primary.url,
           convertedUrl: primary.converted,
           messageText: sanitizeMessageForLog(finalText),
+          // Texto completo só para o reenvio pós-restart; zerado no sucesso.
+          resendText: sanitizeResendText(finalText),
         }
 
         // Restaura o caminho estável que continua funcionando em produção:
@@ -6291,6 +6304,24 @@ const handleMessage = async msg => {
       logWhatsappSelfMessageContact({ reason: 'mensagem_manual_suporte', texto, actorUserId: msg.actorUserId ?? null })
     } catch (err) {
       sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: String(err?.message ?? err) })
+    }
+    return
+  }
+
+  // Convite do grupo (Link Inteligente). Só admin consegue: o WhatsApp recusa
+  // para quem não é. Devolve só o código — nunca loga o código completo.
+  if (msg?.type === 'group:inviteCode') {
+    if (!activeSock) {
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      const code = await activeSock.groupInviteCode(msg.jid)
+      if (!code) throw new Error('O WhatsApp não devolveu o convite (o robô precisa ser admin do grupo)')
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, data: { code } })
+    } catch (err) {
+      logger.warn({ err: err?.message, jid: msg.jid }, 'group:inviteCode falhou')
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, error: err.message })
     }
     return
   }

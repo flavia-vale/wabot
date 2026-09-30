@@ -135,6 +135,13 @@ async function apiFetch(path, options = {}) {
 
 export const api = {
   groupMembers: ({ signal } = {}) => apiFetch('/api/group-members', { signal }),
+  smartLinks: ({ signal } = {}) => apiFetch('/api/smart-links', { signal }),
+  createSmartLink: (body) => apiFetch('/api/smart-links', { method: 'POST', body: JSON.stringify(body) }),
+  updateSmartLink: (id, body) => apiFetch(`/api/smart-links/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteSmartLink: (id) => apiFetch(`/api/smart-links/${id}`, { method: 'DELETE' }),
+  addSmartLinkGroup: (id, groupId) => apiFetch(`/api/smart-links/${id}/groups`, { method: 'POST', body: JSON.stringify({ groupId }) }),
+  updateSmartLinkGroup: (id, linkGroupId, body) => apiFetch(`/api/smart-links/${id}/groups/${linkGroupId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteSmartLinkGroup: (id, linkGroupId) => apiFetch(`/api/smart-links/${id}/groups/${linkGroupId}`, { method: 'DELETE' }),
   shopeeSales: ({ from, to, orderPage = 1, productPage = 1, limit = 20, timeZone = 'America/Sao_Paulo' }, { signal } = {}) => {
     const params = new URLSearchParams({ from, to, orderPage: String(orderPage), productPage: String(productPage), limit: String(limit), timeZone })
     return apiFetch(`/api/shopee-sales?${params}`, { signal })
