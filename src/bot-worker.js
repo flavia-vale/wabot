@@ -3327,7 +3327,15 @@ async function reprocessRestartFailures() {
       userId,
       status: 'error',
       errorMsg: 'error:worker_restart',
-      platform: { not: 'scheduled' },
+      // Só espelhamento é reenviado. Agendamento tem fluxo próprio; broadcast
+      // (oferta automática, fila de ofertas, envio manual) não tem origem
+      // monitorada e o log não guarda o que precisa para reenviar fiel (texto
+      // cortado em 240 chars sem quebras de linha, sem a foto da receita).
+      // Reenviado como `converted` com sourceJid='offerAutomation', caía na
+      // revalidação do dequeue como `skip:source_unlinked` ("grupo de origem
+      // removido") — RCA 2026-09-30. Fica como error:worker_restart, que é o
+      // motivo verdadeiro.
+      platform: { notIn: ['scheduled', 'broadcast'] },
       sentAt: { gte: cutoff },
     },
     take: 200,

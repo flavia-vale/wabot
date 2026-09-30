@@ -587,3 +587,25 @@ semântica fail-open/closed, **validar em staging primeiro** (vide
 sem setar nada o comportamento é idêntico ao histórico. A camada local de
 dedup (em disco, por worker) continua sendo a primeira linha e independe do
 Redis.
+
+## Oferta automática "ignorada: grupo de origem removido" após reinício (RCA 2026-09-30)
+
+Sintoma: oferta automática (`platform=broadcast`, `sourceGroup=offerAutomation`)
+aparecia como `skip:source_unlinked` ("O grupo de origem dessa oferta foi
+removido…"), sem ter grupo de origem. Dado (staging): 3 linhas
+`offerAutomation` com `error:worker_restart:requeued`.
+
+Causa: `reprocessRestartFailures` (`src/bot-worker.js`) reenviava TODA linha
+`error:worker_restart` (menos `scheduled`) como job `converted` com
+`sourceJid = row.sourceGroup`. Para broadcast isso é `offerAutomation`/`manual`/
+`offerQueue:<id>`; a revalidação do destino no dequeue não acha essa "origem"
+nos monitorados e descarta como `source_unlinked`.
+
+Correção: broadcast fica **fora** do reenvio (`platform notIn ['scheduled',
+'broadcast']`) e segue como `error:worker_restart`, o motivo verdadeiro. Não dá
+para reenviar fiel: o log guarda o texto cortado em 240 chars e sem quebras de
+linha (`sanitizeMessageForLog`) e não guarda a foto da receita (`imageUrl`).
+
+**Não regredir:** não reenviar broadcast a partir do `MessageLog`; não enfileirar
+como `converted` nada que não tenha origem monitorada de verdade. Teste:
+`test/bot-worker-restart-reprocess-wiring.test.js`.

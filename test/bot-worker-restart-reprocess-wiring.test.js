@@ -39,7 +39,11 @@ test('reprocessRestartFailures só reprocessa error:worker_restart exato (não o
   // Marca a linha original como :requeued (não some do painel, só sai do filtro).
   assert.match(fnBody, /errorMsg:\s*'error:worker_restart:requeued'/, 'linha original precisa ser marcada como requeued para não reprocessar de novo')
   // Mensagens agendadas têm fluxo próprio (scheduledMessage.status) — não entram aqui.
-  assert.match(fnBody, /platform:\s*\{\s*not:\s*'scheduled'\s*\}/, 'mensagens agendadas (platform scheduled) precisam ficar de fora do reprocessamento')
+  assert.match(fnBody, /platform:\s*\{\s*notIn:\s*\[[^\]]*'scheduled'[^\]]*\]\s*\}/, 'mensagens agendadas (platform scheduled) precisam ficar de fora do reprocessamento')
+  // RCA 2026-09-30: broadcast (oferta automática, fila, manual) reenviado como
+  // `converted` com sourceJid='offerAutomation' virava skip:source_unlinked
+  // ("grupo de origem removido"). E o log não guarda texto inteiro nem foto.
+  assert.match(fnBody, /platform:\s*\{\s*notIn:\s*\[[^\]]*'broadcast'[^\]]*\]\s*\}/, 'broadcast (oferta automática/fila/manual) precisa ficar de fora do reprocessamento')
   // Escape hatch operacional, sem precisar de deploy para desligar.
   assert.match(fnBody, /WORKER_RESTART_REPROCESS_ENABLED/, 'precisa ter escape hatch por env var')
 })
