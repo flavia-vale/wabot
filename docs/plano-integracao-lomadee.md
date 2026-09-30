@@ -5,12 +5,13 @@
 > v1 = Lomadee como **nova origem** das Ofertas automáticas (direto + fila de
 > revisão). v2 (depois) = conversão de links. Ver seção 10.
 
-## 0. Aviso sobre a API
+## 0. API (medida em 2026-09-30 — ver seção 11)
 
-A documentação oficial (`developer.socialsoul.com.vc`) estava fora do ar (503).
-Confirmado só por busca: a API de Ofertas usa **app-token + sourceId**; há também
-API de Cupons e de Deeplink (`https://api.lomadee.com/v2/{app-token}/deeplink/_create`).
-Tudo marcado **(⚠️ confirmar)** é hipótese e vira a Etapa 0.
+A API que vale é a **nova**: `https://api.lomadee.com.br`, autenticação pelo
+header `x-api-key` (docs: `docs.lomadee.com.br`, OpenAPI em
+`/api-reference/openapi.json`). **Não** é a v2 antiga (`app-token` + `sourceId`
+na URL). Onde este plano dizia "app-token/sourceId", leia **chave da API** e
+**ID do canal**. Itens ainda não medidos seguem marcados **(⚠️ confirmar)**.
 
 ## 1. O que já existe (a Awin abriu o caminho)
 
@@ -106,8 +107,9 @@ AGENTS.md** (sinalizar e pedir OK antes).
   `accountService.js` (teste de conexão, máscara `••••1234`, frases leigas).
 - Rotas `/api/lomadee/*` no molde de `routes/awin.js` (**nunca 401 por causa da
   Lomadee**, senão o painel desloga a cliente → 400 com frase leiga).
-- **Token vai no caminho da URL** (`/v2/{app-token}/…`) → nunca logar URL nem
-  erro cru do axios/fetch; `errors.js` sem token. Teste que varre logs/erros.
+- A chave vai no **header `x-api-key`** (não na URL, como na API antiga): nunca
+  logar headers nem o objeto de erro cru do axios/fetch; `errors.js` sem chave.
+  Teste que varre logs/erros.
 - Cifra com `encryptCredential`; campo vazio na edição = mantém.
 - Lojas vinculadas da conta: `GET /api/lomadee/accounts/:id/stores` (só as com
   vínculo; molde de `awinAccountAdvertisers`). Cadastro de conta = **Basic**
@@ -199,7 +201,7 @@ AGENTS.md** (sinalizar e pedir OK antes).
 |---|---|---|
 | Shopee e Awin em produção | regressão ao mexer no `dispatcher` | refatoração para registro por origem em PR próprio; testes atuais sem edição; `source` padrão intacto |
 | Origem desconhecida | deploy velho lendo automação `lomadee` | `invalid_source` já pula (nunca publica por engano) |
-| Vazamento de token | app-token no caminho da URL cai em log/PM2 | mascarar URL e erros; teste dedicado |
+| Vazamento da chave | chave no header `x-api-key` cai em log/PM2 se o erro do axios for impresso cru | nunca logar headers/erro cru; teste dedicado |
 | Isolamento | cliente usar conta de outra | toda consulta filtra `userId`; teste como `awin-routes.test.js` |
 | Duplicata entre redes | mesmo produto/loja em **Awin e Lomadee** (Kabum, Magalu) sai duas vezes no grupo | `dedupKey` por loja+produto; medir na Etapa 0 e no staging; aceitar na v1 se raro |
 | Comissão | loja também coberta por Awin/afiliado próprio | só lojas com vínculo da conta (decisão 3.2); medir sobreposição na Etapa 0 |
@@ -262,3 +264,74 @@ oferta", cache de deeplinks (no banco, como `AwinLink`, não em memória),
 limite de taxa bem maior que o das ofertas, e ROI/comissão. Revisitar o
 `PLATFORMS`/`BotConfig.platforms` só aí. **Não começar antes da v1 validada em
 produção.**
+
+## 11. Medições da Etapa 0 (2026-09-30, com a conta real da Flavia)
+
+Feitas com chamadas **somente leitura** (canais, lojas, produtos). A chave foi
+passada só por variável de ambiente e **não está em nenhum arquivo do repo**.
+
+**Confirmado**
+- Chave `lmd_production_…` funciona: `GET /affiliate/channels` → 200.
+- **Limite:** 60 chamadas / 60 s **por chave e por IP** (headers
+  `x-ratelimit-*`). Bem mais folgado que a Awin (15/min). Limitador por chave no
+  processo da API continua (padrão `rateLimiter.js` da Awin), com folga (ex. 40/min).
+- **Canais:** `GET /affiliate/channels` devolve os canais da conta (`id`, `name`,
+  `active`). A conta de teste tem 2 (SocialMedia e CouponSite). O "ID do canal"
+  que a cliente cola é esse `id`. ⚠️ O UUID que veio junto da chave no teste é o
+  `availableChannel.id` (tipo do canal), **não** o `id` do canal — a tela deve
+  **listar os canais pela API e deixar a cliente escolher**, em vez de pedir para
+  colar o UUID (menos erro; valida a chave ao mesmo tempo).
+- **Lojas:** `GET /affiliate/brands` (máx. 20 por página) → 138 lojas na conta de
+  teste, todas `active`, 134 públicas. Cada loja traz `channels[]` com `shortUrls`
+  **por canal** (link de afiliado da loja), `commission` (`value`, `transfer`) e
+  `site`. Não há campo "aprovada/vinculada" explícito: 133 de 138 têm link no canal.
+  ⚠️ **Decisão 3.2 (só lojas com vínculo)** precisa de confirmação: usar
+  "loja tem `shortUrls` no canal escolhido" como critério de vínculo, e confirmar
+  com a Lomadee se lojas com candidatura pendente aparecem com ou sem link.
+- **Produtos:** `GET /affiliate/products` (máx. 100), filtros `search`, `price`
+  (`de:ate` em centavos), `organizationIds` (várias lojas separadas por vírgula —
+  serve ao filtro por loja) e `isAvailable`. Produto: `name`, `url`, `images`,
+  `options[].pricing[]` com `price` e `listPrice` **em centavos** (o desconto se
+  calcula), `available`, `organizationId`. **Não há ordenação** (nem "mais
+  vendidos"), nem vendas/avaliação → `sortType`, `listType`, AMS e vendedor-chave
+  não se aplicam; a tela não mostra essas opções para a Lomadee.
+- **Links de afiliado:** o `url` do produto é a página da loja (não é link de
+  afiliado). O link vem de `POST /affiliate/shortener/url` (`organizationId`,
+  `type: "Custom"`, `url` https) e devolve **um link curto por canal** da conta
+  (`shortUrls`) — daí a necessidade do ID do canal. Custo: 1 chamada por oferta
+  que vai sair (só as escolhidas), como o `awinEnrich.js`.
+
+**Não medido (bloqueia a Etapa 3)**
+- `GET /affiliate/products` deu **timeout sem nenhum byte** (30 s, 90 s e 60 s,
+  com e sem `search`, `limit=2`), enquanto canais/lojas responderam na hora.
+  Pode ser lentidão da API, do proxy deste ambiente ou do endpoint. **Repetir a
+  medição da VPS** com o `scripts/diag-lomadee.mjs` (Etapa 0 do PR de código):
+  mede tempo, campos reais de preço/desconto, imagem, e se o `search` acha os
+  produtos das lojas com vínculo. Se a API for lenta demais para busca ao vivo no
+  envio, a saída é **sincronizar produtos das lojas escolhidas para o banco**
+  (modelo Awin) — isso pesa RAM/banco e exige o OK da REGRA #1.
+- Se o link curto expira, tamanho das imagens, cota diária do encurtador.
+- Se a busca por palavra respeita `isAvailable=true` sem pesar no tempo.
+
+**Mudanças no desenho por causa das medições**
+1. Credencial = **chave da API + ID do canal** (a tela lista os canais pela chave).
+2. Lojas com vínculo = lojas com link no canal escolhido; filtro por loja usa
+   `organizationIds`.
+3. Sem ordenação: a rotação `page` continua, mas a ordem é a da Lomadee; a
+   tela avisa "a Lomadee não permite escolher a ordem".
+4. Desconto mínimo só funciona quando `listPrice > price`; sem isso, fica oculto.
+5. Cada oferta enviada = 1 chamada de encurtador (dentro dos 60/min).
+
+## 12. Textos para a tela de credenciais (definidos pela dona do produto)
+
+Nome na tela: **Lomadee**. Campos: **Chave** e **ID do canal**.
+
+- **Chave:** "Na sua conta da Lomadee, clique na sua conta (canto inferior
+  esquerdo) → **Credenciais de API** → copie a **chave**."
+- **ID do canal:** "Na Lomadee, abra a aba **Canais**, crie um **canal de
+  divulgação** e copie o **ID** dele." (A tela também lista os canais da conta
+  depois de salvar a chave, para escolher em vez de colar.)
+- Vocabulário leigo: "chave" e "ID do canal"; nunca "token", "API key",
+  "sourceId" ou "x-api-key". Teste de linguagem como `awin-linguagem.test.js`.
+- A chave é de escrita: cifrada, exibida como `••••1234`, campo vazio na edição
+  mantém. Aviso na tela: "não compartilhe sua chave com ninguém".
