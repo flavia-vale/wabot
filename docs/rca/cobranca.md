@@ -317,60 +317,6 @@ descrito abaixo.
 
 Teste: `test/subscription-checkout-reuse.test.js`.
 
-#### As recusas por suspeita eram do AVULSO, não da recorrente (RCA 2026-09-30 — não regredir)
-
-Queixa: "ainda há recusas do antifraude na cobrança recorrente". Medição em
-produção (30 dias, cada pagamento consultado no MP por `GET /v1/payments/:id`):
-
-- **`SubscriptionCharge` com `rejected` = 0.** A cobrança recorrente do mês
-  não foi recusada nenhuma vez.
-- **17 recusas por suspeita, todas `operation_type=regular_payment`** — o
-  pagamento avulso (Checkout Pro) —, mais 2 `card_validation` (a validação de
-  cartão do checkout da assinatura). Nenhuma `recurring_payment`.
-- **As 9 contas foram recusadas já na 1ª tentativa**, então não é
-  repetição: a trava de tentativas não tinha como pegar.
-- **Recusa até em Pix e `account_money`** (saldo do MP), onde não há cartão
-  nem banco. A nota de risco é dada à COMPRADORA.
-- 7 das 9 contas acabaram pagando depois; 2 foram perdidas.
-
-**Causa:** a preferência do avulso mandava só `title`, `quantity` e
-`unit_price` — nada sobre quem compra. A doc de aprovação do MP pede `payer`
-(e-mail, telefone) e `items` com `id`, `description` e
-`category_id`. Sem isso o motor de risco julga uma compra anônima.
-
-**Correção:** `buildCheckoutPayer` / `buildCheckoutItem`
-(`src/domain/payments/checkoutRiskData.js`, puro) montam esses campos a partir
-da conta (`email`, `contactPhone`). **O nome NÃO vai** (decisão da dona do
-produto, 2026-09-30): o cadastro guarda nome de loja ("Achadinhos da Flavia")
-tanto quanto de pessoa, e nome que não bate com o titular do cartão piora a
-nota — o checkout do MP já pede o nome do titular. `rejected_high_risk` (o código sem
-`cc_`, que sai em Pix/saldo) entrou em `chargeOutcome.js` — antes virava
-"motivo fora da lista" e o diagnóstico contava 13 recusas por suspeita quando
-eram 17. O diagnóstico agora imprime `operation_type` e separa avulso de
-assinatura na conclusão.
-
-**Não regredir:**
-
-- **Só vai dado REAL.** E-mail `@sistema.com`, formato inválido ou telefone
-  fora do padrão (DDD + 8/9 dígitos) não vão — dado falso piora a nota.
-- **O e-mail é o que ela preenche em PLANOS** ("Usa outro e-mail no Mercado
-  Pago?"), o mesmo campo dos dois botões; vazio → o da conta. Antes o avulso
-  ignorava esse campo e ia com o e-mail da conta, diferente da conta do MP
-  em que ela entra. E-mail preenchido inválido não bloqueia o avulso: só não vai.
-- **Falha ao ler a conta nunca impede o checkout** — a preferência só sai sem
-  os dados.
-- **Antes de mexer na recorrente por "recusa", olhe o `operation_type`.**
-  `regular_payment` é o avulso; `recurring_payment`/`card_validation` são a
-  assinatura. Sem isso o conserto vai para o fluxo errado.
-- O `/preapproval` não aceita nome/telefone da compradora (só `payer_email`),
-  por isso as 2 `card_validation` recusadas não têm conserto do nosso lado
-  além do que já existe (reaproveitar checkout + espera entre tentativas).
-- **Não há como garantir recusa zero**: a decisão é do MP. O que controlamos é
-  mandar tudo que ele pede. Medir de novo depois do deploy:
-  `node scripts/diag-assinatura-recusada.mjs --days=14` (linha "Por tipo").
-
-Teste: `test/checkout-risk-data.test.js`.
-
 ### "Assinou recorrente e o painel diz que ela não terminou" (RCA 2026-09-07 — não regredir)
 
 Cliente assinou com renovação automática, viu a mensagem de sucesso, o acesso
