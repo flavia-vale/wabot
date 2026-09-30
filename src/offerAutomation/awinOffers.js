@@ -13,9 +13,20 @@
 // - dentro de cada loja, primeiro a que vence antes;
 // - nunca envia promoção que vence em menos de 1h nem que ainda não começou;
 // - filtro opcional por lojas e por palavra (título ou descrição).
+//
+// O núcleo dessa regra é comum às origens de promoção e mora em
+// promotionSelection.js (puro; este arquivo também é importado pelo painel).
+
+import {
+  PROMOTION_MIN_REMAINING_MS,
+  createPromotionSelector,
+  formatPromotionValidity,
+  hasMinimumTimeLeft,
+  normalizeText,
+} from './promotionSelection.js'
 
 export const AWIN_AUTOMATION_TEMPLATE_KEY = 'promocao_awin'
-export const AWIN_MIN_REMAINING_MS = 60 * 60_000
+export const AWIN_MIN_REMAINING_MS = PROMOTION_MIN_REMAINING_MS
 const CANDIDATE_ROWS_LIMIT = 1000
 const DESCRIPTION_IN_MESSAGE_MAX = 280
 
@@ -41,71 +52,43 @@ export const AWIN_PROMOTION_TEMPLATE_BODY = `{{gancho}}
 // 220V"), com números diferentes e a MESMA página (`url`). A 1ª correção
 // (loja + título) deixava os dois passarem; a página é o que eles têm igual.
 // Vale no mesmo envio, contra o que já saiu (sentItemIds) e na dedup cruzada
-// por grupo (productKey).
-function normalizedStorePage(value) {
-  try {
-    const url = new URL(String(value ?? '').trim())
-    const host = url.hostname.toLowerCase().replace(/^www\./, '')
-    const path = decodeURIComponent(url.pathname).toLowerCase().replace(/\/+$/, '')
-    return host ? `${host}${path}` : null
-  } catch {
-    return null
-  }
-}
-
-function normalizedTitle(value) {
-  return normalizeText(value).replace(/[^a-z0-9]+/g, ' ').trim()
-}
-
-// FNV-1a 32 bits: curto e sem depender de node:crypto (este arquivo também
-// é importado pelo painel).
-function shortHash(text) {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193) >>> 0
-  }
-  return hash.toString(36)
-}
-
-function awinTitleKey(promotion) {
-  return `${promotion.advertiserId}:${shortHash(normalizedTitle(promotion.title))}`
-}
+// por grupo (productKey). A regra mora em promotionSelection.js (comum às
+// origens de promoção); aqui só os campos e o prefixo da Awin.
+const awinSelector = createPromotionSelector({
+  prefix: 'awin',
+  minRemainingMs: AWIN_MIN_REMAINING_MS,
+  fields: {
+    id: 'promotionId',
+    store: 'advertiserId',
+    storeName: 'advertiserName',
+    title: 'title',
+    description: 'description',
+    page: 'url',
+    start: 'startDate',
+    end: 'endDate',
+    status: 'status',
+  },
+})
 
 export function awinContentKey(promotion) {
-  const page = normalizedStorePage(promotion.url)
-  return page ? `${promotion.advertiserId}:u:${shortHash(page)}` : awinTitleKey(promotion)
+  return awinSelector.contentKey(promotion)
 }
 
+// Formato atual: awin:c:<loja>:u:<hash da página> (ou por título, sem página).
 export function awinItemId(promotion) {
-  return `awin:c:${awinContentKey(promotion)}`
+  return awinSelector.itemId(promotion)
 }
 
 // Formato da 1ª correção (loja + título, 2026-09-29 tarde). Continua valendo
 // para o que já foi enviado com ele.
 export function awinTitleItemId(promotion) {
-  return `awin:c:${awinTitleKey(promotion)}`
-}
-
-// Desempate quando várias vencem na mesma hora: ordem "embaralhada" mas
-// sempre a mesma (hash do número). Pela ordem do número, a loja que cadastra
-// em sequência (Arno: 4118874..4118893 = só liquidificadores) mandava três
-// produtos da mesma linha seguidos.
-function tieBreak(a, b) {
-  return shortHash(String(a.promotionId)).localeCompare(shortHash(String(b.promotionId))) || String(a.promotionId).localeCompare(String(b.promotionId))
+  return awinSelector.titleItemId(promotion)
 }
 
 // Formato antigo (até 2026-09-29): um item por número da Awin. Continua
 // valendo para o que já foi enviado com ele.
 export function awinLegacyItemId(promotion) {
-  return `awin:${promotion.promotionId}`
-}
-
-function normalizeText(value) {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
+  return awinSelector.legacyItemId(promotion)
 }
 
 export function parseAdvertiserIds(value) {
@@ -117,27 +100,9 @@ export function parseAdvertiserIds(value) {
   return [...new Set(list.map((item) => String(item).trim()).filter((item) => /^\d{1,12}$/.test(item)))]
 }
 
-function matchesKeyword(promotion, keyword) {
-  const words = normalizeText(keyword).split(/\s+/).filter(Boolean)
-  if (!words.length) return true
-  const haystack = normalizeText(`${promotion.title} ${promotion.description ?? ''}`)
-  return words.every((word) => haystack.includes(word))
-}
-
-function time(value) {
-  if (!value) return null
-  const at = new Date(value).getTime()
-  return Number.isFinite(at) ? at : null
-}
-
 // "Válida até 29/09 às 23:59" no horário de Brasília.
 export function formatAwinValidity(endDate) {
-  const at = time(endDate)
-  if (at == null) return ''
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('pt-BR', {
-    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date(at)).map((part) => [part.type, part.value]))
-  return `Válida até ${parts.day}/${parts.month} às ${parts.hour}:${parts.minute}`
+  return formatPromotionValidity(endDate)
 }
 
 function shortDescription(text, title) {
@@ -166,60 +131,11 @@ export function awinPromotionToOffer(promotion) {
   }
 }
 
-// PURA: escolhe e ordena as promoções candidatas.
+// PURA: escolhe e ordena as promoções candidatas (regra em
+// promotionSelection.js: revezamento de lojas, vence antes primeiro, janela
+// de 1h, uma por conteúdo, filtro por loja e palavra).
 export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserIds = [], keyword = '', now = new Date(), limit = 5 } = {}) {
-  const nowMs = now.getTime()
-  const sent = new Set(sentItemIds.map(String))
-  // Já saiu = qualquer formato de id que esta promoção já teve. E tudo que
-  // tem o mesmo conteúdo dela (a outra voltagem, a cópia) também já saiu.
-  const wasSent = (promotion) => sent.has(awinItemId(promotion)) || sent.has(awinTitleItemId(promotion)) || sent.has(awinLegacyItemId(promotion))
-  const sentContent = new Set(promotions.filter(wasSent).map(awinContentKey))
-  const allowedStores = new Set(parseAdvertiserIds(advertiserIds))
-  const filtered = promotions.filter((promotion) => {
-    if (promotion.status && promotion.status !== 'active') return false
-    const start = time(promotion.startDate)
-    if (start != null && start > nowMs) return false
-    const end = time(promotion.endDate)
-    if (end != null && end - nowMs < AWIN_MIN_REMAINING_MS) return false
-    if (wasSent(promotion) || sentContent.has(awinContentKey(promotion))) return false
-    if (allowedStores.size && !allowedStores.has(String(promotion.advertiserId))) return false
-    return matchesKeyword(promotion, keyword)
-  })
-
-  const endOrInfinity = (promotion) => time(promotion.endDate) ?? Number.POSITIVE_INFINITY
-  // Uma só por conteúdo (loja + página): fica a que vence antes.
-  const seenContent = new Set()
-  const eligible = [...filtered]
-    .sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || tieBreak(a, b))
-    .filter((promotion) => {
-      const key = awinContentKey(promotion)
-      if (seenContent.has(key)) return false
-      seenContent.add(key)
-      return true
-    })
-
-  const byStore = new Map()
-  for (const promotion of eligible) {
-    const key = String(promotion.advertiserId)
-    if (!byStore.has(key)) byStore.set(key, [])
-    byStore.get(key).push(promotion)
-  }
-  const queues = [...byStore.values()].map((list) => list.sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || tieBreak(a, b)))
-  // A loja cuja próxima promoção vence antes abre a rodada.
-  queues.sort((a, b) => endOrInfinity(a[0]) - endOrInfinity(b[0]) || String(a[0].advertiserName).localeCompare(String(b[0].advertiserName)))
-
-  const picked = []
-  for (let round = 0; picked.length < limit; round++) {
-    let added = false
-    for (const queue of queues) {
-      if (round < queue.length && picked.length < limit) {
-        picked.push(queue[round])
-        added = true
-      }
-    }
-    if (!added) break
-  }
-  return picked
+  return awinSelector.select(promotions, { sentItemIds, storeIds: parseAdvertiserIds(advertiserIds), keyword, now, limit })
 }
 
 // Lê do banco as promoções da conta da automação (sempre filtrando por
@@ -260,6 +176,5 @@ export async function isAwinPromotionStillValid({ db, userId, awinPromotionId, n
     select: { endDate: true },
   })
   if (!row) return false
-  const end = time(row.endDate)
-  return end == null || end - now.getTime() >= AWIN_MIN_REMAINING_MS
+  return hasMinimumTimeLeft(row.endDate, { now, minRemainingMs: AWIN_MIN_REMAINING_MS })
 }
