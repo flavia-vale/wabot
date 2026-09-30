@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import axios from 'axios'
-import { clearMercadoLivreAffiliateCooldownsForTest, resolveToCleanProductUrl, convert, extractFeaturedSocialProduct, isSyntheticListingUrl } from '../src/converters/mercadolivre.js'
+import { clearMercadoLivreAffiliateCooldownsForTest, resolveToCleanProductUrl, convert, extractFeaturedSocialProduct, isSyntheticListingUrl, shouldRetryUnsupportedUrl } from '../src/converters/mercadolivre.js'
 
 test('link de recomendação com MLB no path resolve para o produto (tracking removido)', async () => {
   const url = 'https://produto.mercadolivre.com.br/MLB-4049246221-secadora-roupas-portatil-_JM?searchVariation=188766696371#polycard_client=recommendations&reco_backend=x&c_id=/home/element'
@@ -860,4 +860,72 @@ test('endereço montado segue valendo como ENTRADA da API de afiliados (link cur
   assert.equal(typeof result, 'object')
   assert.equal(result.url, 'https://meli.la/2hDEepb')
   assert.equal(result.linkKind, 'product')
+})
+
+
+// ===== Produto real recusado pelo ML (erro 111) — RCA 2026-09-30 =====
+// Medido em produção: o MESMO endereço de produto foi aceito para 12 contas e
+// recusado 3 vezes ("URL not allowed in affiliates program", HTTP 200). Antes,
+// a 1ª recusa era terminal e a oferta saía comprida sem nova tentativa.
+
+const ERRO_111 = (originUrl) => ({
+  status: 200,
+  data: { status: 200, urls: [{ origin_url: originUrl, message: 'URL not allowed in affiliates program', error_code: 111, status: 200 }], total_items: 1, total_success: 0, total_error: 1 },
+  headers: {},
+})
+const PRODUTO = 'https://produto.mercadolivre.com.br/MLB-4570819989-parafusadeira-eletrica-profissional-45-pecas-portatil-usb-_JM'
+
+function semEsperaNoRetry(t) {
+  const prev = process.env.ML_UNSUPPORTED_URL_RETRY_DELAY_MS
+  process.env.ML_UNSUPPORTED_URL_RETRY_DELAY_MS = '0'
+  t.after(() => { if (prev === undefined) delete process.env.ML_UNSUPPORTED_URL_RETRY_DELAY_MS; else process.env.ML_UNSUPPORTED_URL_RETRY_DELAY_MS = prev })
+}
+
+test('shouldRetryUnsupportedUrl: só erro 111 em endereço com MLB, e só uma vez', () => {
+  assert.equal(shouldRetryUnsupportedUrl({ failureType: 'unsupported_url', mlUrl: PRODUTO, retry: 0 }), true)
+  assert.equal(shouldRetryUnsupportedUrl({ failureType: 'unsupported_url', mlUrl: PRODUTO, retry: 1 }), false)
+  assert.equal(shouldRetryUnsupportedUrl({ failureType: 'unsupported_url', mlUrl: 'https://www.mercadolivre.com.br/social/gatuna', retry: 0 }), false)
+  assert.equal(shouldRetryUnsupportedUrl({ failureType: 'expired', mlUrl: PRODUTO, retry: 0 }), false)
+})
+
+test('produto recusado pelo ML (erro 111) ganha uma nova tentativa: 2ª aceita → link curto, sem aviso', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  semEsperaNoRetry(t)
+  let calls = 0
+  t.mock.method(axios, 'post', async () => {
+    calls += 1
+    if (calls === 1) return ERRO_111(PRODUTO)
+    return { status: 200, data: { urls: [{ short_url: 'https://meli.la/NOVO123' }] }, headers: {} }
+  })
+  t.mock.method(global, 'fetch', async () => ({ url: PRODUTO }))
+  const result = await convert(PRODUTO, { tag: 'deniaribeiro', ssid: 'ssid-valido-1234567890' })
+  assert.equal(result.url, 'https://meli.la/NOVO123')
+  assert.equal(result.linkKind, 'product')
+  assert.equal(result.warning, undefined)
+  assert.equal(calls, 2)
+})
+
+test('produto recusado pelo ML duas vezes → plano B com aviso ml_url_not_supported e só 2 chamadas', async (t) => {
+  clearMercadoLivreAffiliateCooldownsForTest()
+  semEsperaNoRetry(t)
+  let calls = 0
+  t.mock.method(axios, 'post', async () => { calls += 1; return ERRO_111(PRODUTO) })
+  const result = await convert(PRODUTO, { tag: 'deniaribeiro', ssid: 'ssid-valido-1234567890' })
+  assert.equal(typeof result, 'object')
+  assert.equal(result.linkKind, 'product')
+  assert.equal(result.warning, 'ml_url_not_supported')
+  assert.match(result.url, /partner_id=deniaribeiro/)
+  assert.equal(calls, 2)
+})
+
+test('vitrine sem produto recusada (erro 111) continua terminal: nenhuma nova tentativa', async (t) => {
+  const prev = process.env.COUPON_LINK_CONVERT
+  process.env.COUPON_LINK_CONVERT = 'true'
+  t.after(() => { process.env.COUPON_LINK_CONVERT = prev })
+  semEsperaNoRetry(t)
+  t.mock.method(global, 'fetch', async () => ({ url: 'https://www.mercadolivre.com.br/social/gatuna' }))
+  let calls = 0
+  t.mock.method(axios, 'post', async () => { calls += 1; return ERRO_111('https://www.mercadolivre.com.br/social/gatuna') })
+  await assert.rejects(() => convert('https://www.mercadolivre.com.br/social/gatuna', { tag: '475630078', ssid: 'ssid-valido-1234567890' }))
+  assert.equal(calls, 1)
 })
