@@ -555,19 +555,31 @@ export function getImageResolverMetrics() {
 // salva a oferta continua sendo o plano B da foto da mensagem de origem.
 async function resolveMagaluImageViaScraper(productUrl, { onDiagnostic } = {}) {
   const config = readMagaluScraperConfig()
-  if (!config) return null
+  if (!config) {
+    onDiagnostic?.({ stage: 'scraper_desligado', detail: {} })
+    return null
+  }
   if (!takeMagaluScraperQuota(config)) {
     recordOperationalSignal('magalu_scraper_quota', { url: productUrl })
     onDiagnostic?.({ stage: 'scraper_sem_cota', detail: { cap: config.dailyCap } })
     return null
   }
   try {
-    const { html } = await fetchHtml(buildMagaluScraperUrl(config, productUrl), { timeoutMs: IMAGE_HTML_FETCH_TIMEOUT_MS * 3 })
+    const { html, status } = await fetchHtml(buildMagaluScraperUrl(config, productUrl), { timeoutMs: IMAGE_HTML_FETCH_TIMEOUT_MS * 3 })
+    // Cada saída sem foto tem nome (RCA 2026-09-30): resposta de erro do
+    // provedor (chave inválida, plano sem a opção pedida) voltava `null` MUDO
+    // e chegava ao log só como `scrape_sem_imagem`.
+    if (!html) {
+      onDiagnostic?.({ stage: 'scraper_recusou', detail: { provider: config.provider, status: status ?? null } })
+      return null
+    }
     if (isMagaluBotWallHtml(html)) {
       onDiagnostic?.({ stage: 'scraper_bloqueado', detail: { provider: config.provider } })
       return null
     }
-    return extractImageFromHtmlLayers(html)
+    const image = extractImageFromHtmlLayers(html)
+    if (!image) onDiagnostic?.({ stage: 'scraper_sem_imagem', detail: { provider: config.provider, status: status ?? null, bytes: html.length } })
+    return image
   } catch (err) {
     onDiagnostic?.({ stage: 'scraper_falhou', detail: { provider: config.provider, error: err?.message } })
     return null
