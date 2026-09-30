@@ -282,7 +282,7 @@ const HTML_URL_RE = /https?:\/\/[^\s"'<>\\`{}()\[\]]+/gi
 /**
  * Todos os links de loja presentes num HTML, na ordem em que aparecem. PURO.
  */
-export function extractStoreUrlsFromHtml(html) {
+export function extractStoreUrlsFromHtml(html, offerOptions = {}) {
   const body = unescapeHtmlish(html)
   HTML_URL_RE.lastIndex = 0
   const tokens = body.match(HTML_URL_RE) || []
@@ -291,7 +291,7 @@ export function extractStoreUrlsFromHtml(html) {
   for (const token of tokens) {
     const url = stripNoise(token)
     if (!url || seen.has(url)) continue
-    if (!isOfferUrl(url)) continue
+    if (!isOfferUrl(url, offerOptions)) continue
     let pathname
     try {
       pathname = new URL(url).pathname
@@ -299,7 +299,7 @@ export function extractStoreUrlsFromHtml(html) {
       continue
     }
     if (FILE_EXTENSION_RE.test(pathname)) continue
-    const platform = detectLinks(url)[0]?.platform
+    const platform = detectLinks(url, offerOptions)[0]?.platform
     if (!platform) continue
     seen.add(url)
     found.push({ platform, url })
@@ -464,13 +464,20 @@ export async function resolveStoreUrlFromCustomDomainDetailed(candidateUrl, opti
     fetchImpl = globalThis.fetch,
     timeoutMs = CUSTOM_DOMAIN_FETCH_TIMEOUT_MS,
     useCache = true,
+    awin = null,
   } = options
+  // Lojas Awin da cliente (revisão 2026-09-30): site próprio que leva a uma
+  // loja aprovada na Awin também é desembrulhado. O cache é por processo e o
+  // processo pode atender mais de uma cliente: resultado com lojas Awin fica
+  // numa chave separada, para não vazar para quem não tem essas lojas.
+  const offerOptions = awin ? { awin } : {}
+  const cacheKey = awin ? `awin|${candidateUrl}` : candidateUrl
 
   if (typeof fetchImpl !== 'function') return { store: null, reason: 'sem_suporte_a_rede' }
   if (!isSafeCandidateUrl(candidateUrl)) return { store: null, reason: 'endereco_recusado' }
 
   if (useCache) {
-    const cached = getCached(candidateUrl)
+    const cached = getCached(cacheKey)
     if (cached) return { store: cached, reason: null }
   }
 
@@ -481,11 +488,11 @@ export async function resolveStoreUrlFromCustomDomainDetailed(candidateUrl, opti
   try {
     for (let hop = 0; hop <= CUSTOM_DOMAIN_MAX_REDIRECTS; hop += 1) {
       // Um hop pode já ser a loja (domínio próprio que só redireciona).
-      if (isOfferUrl(current)) {
-        const direct = extractStoreUrlsFromHtml(current)
+      if (isOfferUrl(current, offerOptions)) {
+        const direct = extractStoreUrlsFromHtml(current, offerOptions)
         const best = pickBestStoreUrl(direct)
         if (best) {
-          if (useCache) setCached(candidateUrl, best)
+          if (useCache) setCached(cacheKey, best)
           return { store: best, reason: null }
         }
       }
@@ -512,7 +519,7 @@ export async function resolveStoreUrlFromCustomDomainDetailed(candidateUrl, opti
       }
 
       const html = await readLimitedText(res)
-      const achados = extractStoreUrlsFromHtml(html)
+      const achados = extractStoreUrlsFromHtml(html, offerOptions)
       if (isListingPageAfterRedirect(achados, { redirected })) {
         return {
           store: null,
@@ -522,7 +529,7 @@ export async function resolveStoreUrlFromCustomDomainDetailed(candidateUrl, opti
       }
       const best = pickBestStoreUrl(achados)
       // Fracasso NÃO é cacheado — de propósito.
-      if (best && useCache) setCached(candidateUrl, best)
+      if (best && useCache) setCached(cacheKey, best)
       if (best) return { store: best, reason: null }
       return { store: null, reason: html ? 'pagina_sem_link_de_loja' : 'pagina_vazia' }
     }

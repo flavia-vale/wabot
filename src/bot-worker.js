@@ -30,7 +30,7 @@ import { loadRakutenConversionContext, rakutenOfferOptions } from './integration
 import { primaryPlatformFromLog } from './core/primaryPlatformFromLog.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
-import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
+import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, fetchSmallImageAsCard as fetchSmallImageAsCardBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
 import { buildInlineThumbnail } from './core/inlineThumbnail.js'
 import { composePreviewCardImage } from './core/previewCardCanvas.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
@@ -173,6 +173,7 @@ export async function createBotSessionRuntime({
 const withLimit = (semaphore, task) => semaphore?.run ? semaphore.run(task) : task()
 const fetchProductImage = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchProductImageBase(...args))
 const fetchImageBuffer = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchImageBufferBase(...args))
+const fetchSmallImageAsCard = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchSmallImageAsCardBase(...args))
 const normalizeImageForWhatsApp = (...args) => withLimit(sharedLimits.sharpSemaphore, () => normalizeImageForWhatsAppBase(...args))
 const WORKER_STARTED_AT = Date.now()
 const workerMetadata = buildWorkerMetadata({ userId, startedAt: WORKER_STARTED_AT })
@@ -2674,7 +2675,16 @@ async function buildPayloadFromRecipe(recipe, { destJid } = {}) {
 
   let baixada = null
   try {
-    const fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
+    let fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
+    // Imagem pequena demais (ex.: logo da loja 120×60 das promoções Awin): em
+    // quadro branco, em vez de a oferta sair só com texto (revisão 2026-09-30).
+    if (!fetched?.buffer) {
+      const card = await fetchSmallImageAsCard(recipe.imageUrl, recipe.refererUrl).catch(() => null)
+      if (card?.buffer) {
+        logger.info({ imageUrl: recipe.imageUrl }, 'broadcast image: imagem pequena montada em quadro')
+        fetched = card
+      }
+    }
     baixada = fetched?.buffer ?? null
     if (fetched && !baixada) {
       logger.warn({ srcMime: fetched.mimetype }, 'broadcast image: download sem bytes — enviando texto com preview')

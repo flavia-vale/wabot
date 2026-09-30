@@ -14,6 +14,7 @@
 //     (link convertido na oferta).
 
 import { detectLinks } from '../detector.js'
+import { isAwinTrackingUrl } from '../integrations/awin/storeMatcher.js'
 import { convertLink as defaultConvertLink } from './index.js'
 import { rakutenStorePageUrl } from './rakuten.js'
 import { fetchProductInfo as defaultFetchProductInfo } from './productInfoScraper.js'

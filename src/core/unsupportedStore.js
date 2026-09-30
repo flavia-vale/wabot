@@ -14,7 +14,7 @@
 // public suffix no repo e dependência nova é memória nova (REGRA #1). Um sufixo
 // que falte aqui só faz o domínio sair "curto demais" (`algo.xx`) — nunca faz
 // caminho, query ou texto chegar ao que é gravado.
-const THREE_LABEL_SUFFIXES = new Set([
+export const THREE_LABEL_SUFFIXES = new Set([
   'com.br', 'net.br', 'org.br', 'art.br', 'blog.br', 'eco.br', 'ind.br',
   'inf.br', 'tv.br', 'app.br', 'dev.br', 'log.br', 'shop.br', 'gov.br', 'edu.br',
   'com.ar', 'com.mx', 'com.co', 'com.pe', 'com.uy', 'com.py', 'com.cl',

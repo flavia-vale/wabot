@@ -208,6 +208,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Foto pequena/selo, card de tamanho variado, só aparece se clicar | `src/core/previewCardCanvas.js`, `src/core/cardPhoto.js`, `src/core/inlineThumbnail.js` | — | imagem-e-preview |
 | Marca d'água não sai / some | `src/core/destinationWatermark.js`, `reportWatermarkMissing` em `src/bot-worker.js` | conferir uptime do `bot-supervisor` vs data do fix | imagem-e-preview |
 | Link de loja não converteu / link errado / página não existe | `src/converters/<loja>.js`, `src/core/conversionScheduler.js` | `diag-ml-sends.mjs`, `diag-ml-social-featured.mjs`, `diag-amazon-clicks.mjs`, `diag-shein-shortlink.mjs` | lojas-conversao |
+| Link do ML saiu comprido com código vivo ("a API caiu"), abre o produto sem a página da vitrine | `shouldRetryUnsupportedUrl`/`createAffiliateLink` em `src/converters/mercadolivre.js` | `diag-ml-shortlink.mjs --email= --convert=<produto>` (erro 111 = o ML recusa o produto para a conta) | lojas-conversao |
 | Oferta espelhada saiu com link do concorrente | `src/core/mirrorLinkGuard.js` (se não converteu, não envia) | SQL: `success` com `convertedUrl = originalUrl` fora de `broadcast` | lojas-conversao |
 | Preço errado na oferta | `src/converters/amazonPrice.js`, `src/converters/productInfoScraper.js` | `diag-amazon-preco.mjs` | lojas-conversao |
 | "Faltou cadastrar a loja" / `skip:no_valid_conversions` | `src/credentialHealth.js`, `dashboard/lib/painel/logsCopy.js` | `diag-sem-etiqueta.mjs`, `diag-shopee-chave-por-conta.mjs` | credenciais-e-seguranca |

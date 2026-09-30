@@ -369,6 +369,44 @@ normalmente no fallback. Testes: `test/mercadolivre-resolve.test.js` (bloco
 — read-only, classifica o formato de cada link de ML publicado e marca com ⚠ os
 suspeitos (`listing_fabricado`, `vitrine_social`, `cupom_generico`).
 
+## Produto real recusado pelo ML ("URL not allowed", erro 111) sai comprido (RCA 2026-09-30)
+
+Cliente (`cmu4jtqzs00dhan9xwgoh7po2`) reportou "a API caiu": oferta saiu com
+link comprido (`partner_id`) que abre o produto direto, sem a página da vitrine
+do `meli.la`. O código de acesso estava **vivo** (380 links curtos no dia, zero
+recusas). O `bot.log` mostrou: o createLink respondeu HTTP 200 com
+`"URL not allowed in affiliates program"` (erro 111) para
+`produto.mercadolivre.com.br/MLB-4570819989-...-_JM`, e o robô tratou como
+terminal → plano B. **O mesmo endereço foi aceito para 12 contas e recusado 3
+vezes** (2 delas da mesma cliente, com 30 min de intervalo, uma no
+`diag-ml-shortlink.mjs --convert`). Ou seja: o ML recusa produto real às vezes,
+e para essa conta recusou de forma consistente — causa do lado do ML (regra da
+conta/produto), não do nosso código nem da credencial.
+
+**O que mudou:** erro 111 em endereço COM MLB não é mais terminal na 1ª
+resposta: `shouldRetryUnsupportedUrl` (puro) libera UMA nova tentativa
+(`ML_UNSUPPORTED_URL_RETRIES`, default 1; espera
+`ML_UNSUPPORTED_URL_RETRY_DELAY_MS`, default 1500) e o `convert()` deixa os
+demais candidatos tentarem antes do plano B. Sem MLB (vitrine, `/lists`, cupom)
+continua terminal. O aviso `warning:ml_url_not_supported` (linha `info` do
+painel) ganhou texto leigo (`logsCopy.js`, `mobileLogs.js`): o ML não aceitou o
+produto na conta dela, a oferta saiu comprida, a comissão pode não ser
+creditada nesse caso, e o teste de confirmação é colar o endereço no Gerador de
+Links do ML logada. Custo: +1 chamada só nesses casos (5 em 13 h na base
+inteira); RAM zero.
+
+**Armadilha de diagnóstico:** o `bot.log` é compartilhado por todos os robôs.
+Para isolar a tentativa de UMA conta, filtrar pelo carimbo `"time":<epoch ms>`
+do horário do envio (ver `MessageLog.sentAt`). Só 124 "unsupported_url" no log
+em 13 h, e 119 eram página sem produto (esperado).
+
+**Limite honesto:** se o ML recusa o produto para a conta da cliente nas duas
+tentativas, não há código que force a aceitação. A oferta sai com `partner_id`
+e o painel explica. Confirmar caso a caso com
+`scripts/diag-ml-shortlink.mjs --email=... --convert=<endereço do produto>`.
+Testes: `test/mercadolivre-resolve.test.js` (bloco "Produto real recusado"),
+`test/painel-ml-produto-recusado-copy.test.js`.
+
 ## Oferta de PRODUTO publicada como VITRINE (+ banner de cupom) (RCA 2026-09-18)
 
 Cliente mandou print de duas ofertas de perfume, com nome e preço, saindo com o
