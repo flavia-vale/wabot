@@ -1,5 +1,6 @@
 import dbDefault from '../../db.js'
 import { groupInviteCode as _groupInviteCode } from '../../manager.js'
+import { captureMemberSamplesForUser } from '../../jobs/groupMemberSamples.js'
 import { buildFeatureGateError, canUseSmartLinks, FEATURE_CODES } from '../../billing/plans.js'
 import { DEFAULT_CAP_PER_GROUP, isValidInviteCode, normalizeCap, normalizeSlug } from '../../core/smartLinkPicker.js'
 
@@ -14,6 +15,7 @@ const saoPauloDay = (date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Amer
 export async function smartLinksRoutes(app, options = {}) {
   const db = options.db ?? dbDefault
   const groupInviteCode = options.groupInviteCode ?? _groupInviteCode
+  const captureSamples = options.captureSamples ?? captureMemberSamplesForUser
   const now = options.now ?? (() => new Date())
   const loadPlanSubject = options.loadPlanSubject
     ?? (userId => db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } }))
@@ -25,7 +27,7 @@ export async function smartLinksRoutes(app, options = {}) {
     }
   })
 
-  const ownedLink = (userId, id) => db.smartLink.findFirst({ where: { id, userId } })
+  const ownedLink = (userId, id) => db.smartLink.findFirst({ where: { id, userId, deletedAt: null } })
 
   // O robô precisa ser admin: o WhatsApp só entrega o convite para admin.
   async function fetchInvite(userId, waJid) {
@@ -45,7 +47,7 @@ export async function smartLinksRoutes(app, options = {}) {
     const t = now()
     const since = saoPauloDay(new Date(t.getTime() - 6 * 24 * 60 * 60 * 1000))
     const links = await db.smartLink.findMany({
-      where: { userId: req.user.sub },
+      where: { userId: req.user.sub, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
         groups: {
@@ -88,18 +90,27 @@ export async function smartLinksRoutes(app, options = {}) {
     if (!name) return reply.code(400).send({ error: 'Dê um nome para o link.' })
     const slug = normalizeSlug(req.body?.slug)
     if (!slug) return reply.code(400).send({ error: 'Nome do endereço inválido. Use de 3 a 40 letras minúsculas, números ou hífen (ex.: promo-tech).' })
-    if (await db.smartLink.count({ where: { userId: req.user.sub } }) >= MAX_LINKS_PER_USER) {
+    if (await db.smartLink.count({ where: { userId: req.user.sub, deletedAt: null } }) >= MAX_LINKS_PER_USER) {
       return reply.code(409).send({ error: `Limite de ${MAX_LINKS_PER_USER} links inteligentes.` })
     }
-    if (await db.smartLink.findUnique({ where: { slug }, select: { id: true } })) {
-      return reply.code(409).send({ error: 'Este endereço já está em uso. Escolha outro.' })
-    }
+    const taken = { error: 'Este endereço já está em uso. Escolha outro.' }
+    const existing = await db.smartLink.findUnique({ where: { slug }, select: { id: true, userId: true, deletedAt: true } })
     try {
+      if (existing) {
+        // Endereço apagado continua reservado para quem o divulgou: só a mesma
+        // dona reativa (sem os grupos antigos); nenhuma outra pessoa o pega.
+        if (existing.deletedAt && existing.userId === req.user.sub) {
+          await db.smartLinkGroup.deleteMany({ where: { smartLinkId: existing.id } })
+          await db.smartLink.update({ where: { id: existing.id }, data: { name, enabled: true, deletedAt: null, capPerGroup: DEFAULT_CAP_PER_GROUP } })
+          return reply.code(201).send({ id: existing.id, slug, path: `/g/${slug}` })
+        }
+        return reply.code(409).send(taken)
+      }
       const link = await db.smartLink.create({ data: { userId: req.user.sub, name, slug, capPerGroup: DEFAULT_CAP_PER_GROUP } })
       return reply.code(201).send({ id: link.id, slug: link.slug, path: `/g/${link.slug}` })
     } catch (err) {
       // Corrida entre dois cadastros do mesmo endereço (unique no banco).
-      if (err?.code === 'P2002') return reply.code(409).send({ error: 'Este endereço já está em uso. Escolha outro.' })
+      if (err?.code === 'P2002') return reply.code(409).send(taken)
       throw err
     }
   })
@@ -113,7 +124,10 @@ export async function smartLinksRoutes(app, options = {}) {
       if (!name) return reply.code(400).send({ error: 'Dê um nome para o link.' })
       data.name = name
     }
-    if (req.body?.enabled !== undefined) data.enabled = Boolean(req.body.enabled)
+    if (req.body?.enabled !== undefined) {
+      if (typeof req.body.enabled !== 'boolean') return reply.code(400).send({ error: 'Valor inválido.' })
+      data.enabled = req.body.enabled
+    }
     if (req.body?.capPerGroup !== undefined) {
       const cap = normalizeCap(req.body.capPerGroup)
       if (cap == null) return reply.code(400).send({ error: 'O limite por grupo deve ficar entre 50 e 1024 membros.' })
@@ -126,7 +140,8 @@ export async function smartLinksRoutes(app, options = {}) {
   app.delete('/:id', { onRequest: [app.authenticate] }, async (req, reply) => {
     const link = await ownedLink(req.user.sub, req.params.id)
     if (!link) return reply.code(404).send({ error: 'Link não encontrado.' })
-    await db.smartLink.delete({ where: { id: link.id } })
+    await db.smartLinkGroup.deleteMany({ where: { smartLinkId: link.id } })
+    await db.smartLink.update({ where: { id: link.id }, data: { deletedAt: new Date(), enabled: false } })
     return { ok: true }
   })
 
@@ -146,7 +161,16 @@ export async function smartLinksRoutes(app, options = {}) {
     }
     const invite = await fetchInvite(req.user.sub, group.waJid)
     if (invite.error) return reply.code(invite.status ?? 422).send({ error: invite.error })
-    const row = await db.smartLinkGroup.create({ data: { smartLinkId: link.id, groupId: group.id, inviteCode: invite.code } })
+    let row
+    try {
+      row = await db.smartLinkGroup.create({ data: { smartLinkId: link.id, groupId: group.id, inviteCode: invite.code } })
+    } catch (err) {
+      if (err?.code === 'P2002') return reply.code(409).send({ error: 'Este grupo já está neste link.' })
+      throw err
+    }
+    // Sem amostra o grupo só entraria no rodízio na próxima hora cheia (e, sendo
+    // provavelmente o mais vazio, ficaria sem tráfego). Mede já — sem travar a resposta.
+    void Promise.resolve(captureSamples(req.user.sub)).catch(err => req.log.warn({ err: err?.message }, 'amostra imediata do grupo falhou'))
     return reply.code(201).send({ id: row.id })
   })
 
@@ -159,7 +183,10 @@ export async function smartLinksRoutes(app, options = {}) {
     const row = await ownedLinkGroup(req.user.sub, req.params.id, req.params.linkGroupId)
     if (!row) return reply.code(404).send({ error: 'Grupo não encontrado neste link.' })
     const data = {}
-    if (req.body?.enabled !== undefined) data.enabled = Boolean(req.body.enabled)
+    if (req.body?.enabled !== undefined) {
+      if (typeof req.body.enabled !== 'boolean') return reply.code(400).send({ error: 'Valor inválido.' })
+      data.enabled = req.body.enabled
+    }
     if (req.body?.refreshInvite) {
       const invite = await fetchInvite(req.user.sub, row.group.waJid)
       if (invite.error) return reply.code(invite.status ?? 422).send({ error: invite.error })

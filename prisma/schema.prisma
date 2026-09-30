@@ -1013,6 +1013,9 @@ model SmartLink {
   slug         String           @unique
   enabled      Boolean          @default(true)
   capPerGroup  Int              @default(1000)
+  // Apagar NÃO libera o endereço: ele já foi divulgado e outra pessoa que o
+  // pegasse receberia o tráfego. Só a mesma dona pode reativá-lo.
+  deletedAt    DateTime?
   groups       SmartLinkGroup[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt

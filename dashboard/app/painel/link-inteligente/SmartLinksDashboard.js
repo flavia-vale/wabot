@@ -59,7 +59,7 @@ function LinkCard({ link, postGroups, onChanged, onNotice }) {
           <button className="pnl-btn is-sm" disabled={busy} onClick={() => run(() => api.updateSmartLink(link.id, { enabled: !link.enabled }), link.enabled ? 'Link pausado.' : 'Link ativado.')}>
             {link.enabled ? 'Pausar' : 'Ativar'}
           </button>
-          <button className="pnl-btn is-sm is-danger" disabled={busy} onClick={() => { if (window.confirm(`Apagar o link "${link.name}"? Quem já o divulgou verá "link não encontrado".`)) run(() => api.deleteSmartLink(link.id), 'Link apagado.') }}>Apagar</button>
+          <button className="pnl-btn is-sm is-danger" disabled={busy} onClick={() => { if (window.confirm(`Apagar o link "${link.name}"? Quem já o divulgou verá "link não encontrado". O endereço continua reservado para você.`)) run(() => api.deleteSmartLink(link.id), 'Link apagado.') }}>Apagar</button>
         </div>
       </div>
 

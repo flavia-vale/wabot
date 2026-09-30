@@ -6119,7 +6119,9 @@ const handleMessage = async msg => {
             : g.subject
           // `size` alimenta o painel de Membros (amostra horária). Campo extra
           // é inofensivo para quem só lê waJid/name.
-          const size = Number.isFinite(g.size) ? g.size : Array.isArray(g.participants) ? g.participants.length : null
+          // Só vale número positivo: 0/ausente = resposta truncada, não "grupo vazio".
+          const fromParticipants = Array.isArray(g.participants) ? g.participants.length : 0
+          const size = Number.isInteger(g.size) && g.size > 0 ? g.size : fromParticipants > 0 ? fromParticipants : null
           return { waJid: id, name, size }
         })
         sendIpc({ type: 'groups', requestId: msg.requestId, data: list })

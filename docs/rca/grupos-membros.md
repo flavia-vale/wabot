@@ -31,3 +31,26 @@ Escolhe o grupo elegível com menos membros; teto por grupo (padrão 1000 — **
 - Deploy: comando novo `group:inviteCode` vive no worker → em `remote` só vale após `pm2 restart bot-supervisor --update-env` (reconecta TODAS as sessões — anunciar). Em `inline`, o restart da API já basta. Migration `20260930180000_smart_link` passa por staging antes de prod.
 - Plano: `canUseSmartLinks` = PRO/Trial (`FEATURE_REQUIRES_PRO`, feature `smart_links`); migra para Escala depois.
 - Diagnóstico rápido: "link manda para grupo cheio" → conferir `GroupMemberSample` recente do grupo (job horário) e se o convite ainda é válido (botão "Atualizar convite").
+
+## Revisão crítica 2026-09-30 (o que foi achado e corrigido)
+Achados com dado (simulação/teste), todos corrigidos com teste:
+- **Variação "24 h" media ~18 h** com amostras horárias (escolhia a amostra mais nova depois do corte). Agora pega a **mais próxima** do alvo (tolerância 3 h; 12 h em janelas longas) e ancora na **última medição**, não em "agora" (sessão caída comparava dado velho com janela que ele nunca cobriu).
+- **Tamanho 0 era aceito**: resposta truncada do WhatsApp gravava 0 → o grupo parecia vazio e recebia TODO o tráfego. 0/ausente = desconhecido (worker e job).
+- **Reserva por linha do link, não por grupo**: o mesmo grupo em dois links não compartilhava a reserva. Agora a chave é o grupo.
+- **Amostra velha (> 24 h)** (sessão fora do ar / robô removido do grupo) valia como medida. Agora o grupo vira "sem medida" e só recebe tráfego se não há grupo medido com vaga.
+- **Escrita por clique no SQLite** competiria com os envios do robô num link viral. Agora cliques são somados em memória e gravados em lote a cada 5 s (e ao fechar a API; queda seca perde ≤ 5 s de contagem, nunca o redirect).
+- **Virada do cache** (10 s) mandava todos os acessos simultâneos ao banco. Agora 1 consulta em andamento por endereço.
+- **Limite por IP de 120/min bloquearia gente real** (CGNAT das operadoras). Agora: geral 1200/min (`SMART_LINK_RATE_MAX`) + limite só para ERROS de endereço 30/min (`SMART_LINK_MISS_MAX`) contra varredura.
+- **Endereço apagado voltava para o mercado**: outra pessoa pegaria o tráfego de um link já divulgado. Agora apagar é soft delete (`deletedAt`); só a mesma dona reativa.
+- **Grupo recém-adicionado ficava até 1 h sem amostra** (e sem tráfego, sendo o mais vazio). Agora mede na hora (não trava a resposta; falha não derruba o cadastro).
+- `enabled: "false"` (texto) virava `true`; dupla adição simultânea dava 500. Agora 400 / 409.
+
+## Limitações conhecidas (não corrigidas — decisão de produto ou fora de escopo)
+- **Grupo com aprovação de entrada**: clique vira pedido, não membro; o total não sobe e o grupo parece vazio para sempre. O rodízio não detecta.
+- **Convite revogado / robô deixou de ser admin**: o cliente cai numa página de "link inválido" do WhatsApp. Só se corrige com "Atualizar convite". Detecção automática = parte 2.
+- **Plano vencido**: o link público continua redirecionando (a amostragem para). Decidir se corta na hora (prejudica o público da cliente) ou após carência.
+- **Preview do link** (colar `/g/...` no WhatsApp): o app de quem envia busca o link e conta 1 clique/vaga; a prévia mostra o grupo sorteado naquela hora.
+- **Reserva em memória**: zera se a API reiniciar (até 1 h de folga). Cliques ≠ entradas (parte não entra); a amostra horária corrige.
+- **Grupo apagado em Espelhamento** sai do link em cascata, sem aviso.
+- **Sem troca ao vivo de cap para baixo**: reduzir o teto tira o grupo do rodízio no próximo cache (≤ 10 s).
+- `req.ip` atrás de proxy segue `trustProxy` (XFF): limite por IP é anti-abuso, não segurança forte.
