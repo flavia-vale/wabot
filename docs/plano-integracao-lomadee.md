@@ -5,6 +5,12 @@
 > v1 = Lomadee como **nova origem** das Ofertas automáticas (direto + fila de
 > revisão). v2 (depois) = conversão de links. Ver seção 10.
 
+> ⚠️ **CORREÇÃO DE RUMO (2026-09-30) — leia a seção 13 primeiro.** A "oferta" da
+> Lomadee que a cliente publica é uma **campanha do tipo Oferta** (título, loja,
+> validade, link), **sem preço e sem foto** — o mesmo formato das promoções da
+> Awin, e não um produto com preço. A seção 13 **substitui** o desenho de busca
+> ao vivo de produtos das seções 2, 4 (Etapas 3–5) e 11 onde houver conflito.
+
 ## 0. API (medida em 2026-09-30 — ver seção 11)
 
 A API que vale é a **nova**: `https://api.lomadee.com.br`, autenticação pelo
@@ -335,3 +341,187 @@ Nome na tela: **Lomadee**. Campos: **Chave** e **ID do canal**.
   "sourceId" ou "x-api-key". Teste de linguagem como `awin-linguagem.test.js`.
 - A chave é de escrita: cifrada, exibida como `••••1234`, campo vazio na edição
   mantém. Aviso na tela: "não compartilhe sua chave com ninguém".
+
+## 13. Correção de rumo: Lomadee = campanhas "Oferta", modelo Awin (2026-09-30)
+
+**O que a dona do produto mostrou** (exemplo real de oferta para publicar):
+
+> Malas, mochilas e acessórios com até 60% OFF · por Up4you · Válido até
+> 12/10/2026 · Oferta · URL da página da loja · link curto `lmdee.link/…`
+
+Isso é `GET /affiliate/campaigns` com `types=Offer`: `name` (título), `period.endAt`
+(validade), `url` (página da loja), `organizationId` (loja), `description`,
+`status` (`onTime` | `scheduled` | `expired`), `channels` (links por canal ⚠️
+confirmar o formato) e `period = null` quando a campanha é permanente. **Não tem
+preço, desconto em número nem foto.**
+
+### 13.1 O que muda no desenho
+
+| Ponto | Antes (seções 2/4/11) | Agora |
+|---|---|---|
+| Fonte | produtos com preço (`/affiliate/products`), busca ao vivo | **campanhas Oferta** (`/affiliate/campaigns`), **sincronizadas para o banco** |
+| Modelo de envio | igual Shopee | **igual Awin**: o envio só **lê do banco**, nunca chama a Lomadee |
+| Tabelas | `LomadeeAccount` | `LomadeeAccount` + `LomadeeCampaign` (+ `LomadeeSyncRun`, como a Awin) |
+| Seleção | ordem da API, palavra, rotação de página | regra da Awin: **revezar lojas, vence antes primeiro, nunca com menos de 1 h para vencer nem antes de começar, cada oferta sai uma vez por automação** |
+| Mensagem | preço, foto, desconto | título, loja, descrição curta, validade, link — modelo `promocao_awin` |
+| Stories / cupom / desconto mínimo | possível | **fora da v1** (igual Awin) |
+| Palavra-chave | obrigatória | **opcional** (filtra título/descrição, sem acento) |
+| Ordem/`sortType`/`listType` | não se aplica | não se aplica |
+
+Por que o modelo Awin: (1) é o formato real da oferta; (2) os endpoints de
+campanhas e de produtos deram **timeout sem resposta** neste ambiente (canais e
+lojas responderam na hora) — com o envio lendo do banco, uma API lenta atrasa só
+o sync, nunca o envio; (3) o limite de 60 chamadas/min por chave sobra para um
+sync de hora em hora; (4) reaproveita regras já testadas e "não regredir" da Awin
+(`docs/rca/afiliados-awin.md`), inclusive a repetição de promoção "por voltagem".
+
+### 13.2 Reaproveitar, não copiar
+
+- Extrair o núcleo de `src/offerAutomation/awinOffers.js` (`selectAwinCandidates`,
+  identidade por **loja + página**, desempate, revezamento, janela de 1 h) para um
+  módulo neutro `promotionOffers.js`, usado por Awin **e** Lomadee.
+  **PR de refatoração separado, sem Lomadee**, com os testes atuais
+  (`test/awin-offer-automation.test.js`) rodando **sem edição** — prova que a Awin
+  não mudou.
+- `src/integrations/lomadee/` no molde de `integrations/awin/` (`client`,
+  `errors`, `rateLimiter`, `translate`, `accountService`, `syncService`,
+  `scheduler`), rotas `/api/lomadee/*` no molde de `routes/awin.js`.
+- Dispatcher/fila de revisão/rota: o registro por origem (Etapa 4a) ganha a
+  origem `lomadee` com as mesmas capacidades da `awin` (sem Story, sem cupom, sem
+  desconto mínimo, validade obrigatória na entrega da fila).
+- Link: usar o **link curto do canal** que a própria campanha traz (`lmdee.link`)
+  quando existir; senão o encurtador (`POST /affiliate/shortener/url`,
+  `type: "Offer"` com `featureId` = id da campanha, ou `Custom` com a `url`).
+  ⚠️ confirmar na medição. Nunca reescrever o link.
+- Nome da loja: `GET /affiliate/brands` (20 por página, ~7 páginas) guardado por
+  conta e atualizado no sync — a campanha só traz `organizationId`.
+
+### 13.3 Sync (novo, pesa pouco)
+
+- Filtros fixos, como na Awin: `types=Offer`, status `onTime` + `scheduled`
+  (as do dia seguinte chegam antes da meia-noite), só lojas com vínculo no canal
+  escolhido (decisão 3.2: loja com link no canal), `limit=20` paginando.
+- **Vencer por ausência só com leitura completa**; 401/403 → `invalid_credential`
+  (para de agendar até salvar chave nova); 429 → reagenda (≥5 min); outro erro →
+  tenta em 15 min; uma conta nunca trava outra. Timeout do sync maior que o da
+  Awin (60 s) por causa do que medimos.
+- Retenção: campanha vencida some após 30 dias. Sync de hora em hora; o tick de
+  5 min do agendador é **compartilhado com o da Awin** (um só `setInterval` na
+  API, dois provedores) para não somar processo/timer.
+- **REGRA #1 (memória) — SINALIZAÇÃO:** sem processo PM2, worker, Redis ou cache
+  novos. Estimativa como a Awin: **< 5 MB de pico, ~0 em repouso** (uma página de
+  20 campanhas por chamada, mapa do limitador em KB), banco ~2–3 KB por campanha.
+  Alternativa mais leve: sync só das lojas que a cliente escolheu na automação
+  (em vez de todas as lojas do canal). **Peço OK explícito antes de ligar.**
+
+### 13.4 Decisões da dona do produto (2026-09-30)
+
+1. **Campanha permanente** (`period = null`): pode sair, **no máximo uma vez a
+   cada 15 dias por automação**, **sem "validade" na mensagem**. Campanha com data
+   de fim segue a regra normal (uma vez por automação, enquanto vale).
+   - Consequência técnica: `sentItemIds` guarda só os últimos 200 ids, **sem data**
+     — não serve para "15 dias". Precisa de registro com data: tabela pequena
+     `OfferAutomationPromoSend (automationId, itemKey, sentAt)` (índice
+     `automationId, itemKey`), gravada só para campanha permanente, com poda
+     de linhas com mais de 15 dias a cada execução (tabela limitada).
+     Candidata é elegível de novo quando `agora - sentAt ≥ 15 dias`.
+   - O modelo `promocao_awin` tem `{validade}`; para permanente a variável fica
+     vazia e some sozinha (limpeza de variável vazia do compositor) — teste
+     garante que não sai "Válida até" nem linha ⏰ vazia.
+   - A regra de 15 dias vale por automação; a dedup cruzada por grupo (janela de
+     120 min) continua valendo por cima.
+2. **Cupons:** fora da v1, como na Awin.
+3. **Produtos com preço** (`/affiliate/products`): fora da v1.
+4. ⏳ **Ainda sem resposta:** OK para reaproveitar o agendador da Awin no sync da
+   Lomadee (REGRA #1, ver 13.3). Nada será ligado sem esse OK.
+
+### 13.5 O que ainda precisa ser medido (da VPS)
+
+Tempo de resposta de `/affiliate/campaigns` (`types=Offer&status=onTime`) e de
+`/affiliate/brands`; o formato real de `channels` na campanha (traz o
+`lmdee.link`?); quantas campanhas Oferta ativas a conta tem; se `status=scheduled`
+traz as de amanhã; como vem `description` (HTML?); se o exemplo da Up4you aparece
+com o mesmo `name`, `period.endAt = 12/10/2026` e `url` da página.
+`scripts/diag-lomadee.mjs` (somente leitura, chave por variável de ambiente)
+imprime tudo isso em uma saída curta.
+
+### 13.6 Ordem dos PRs (substitui a seção 6)
+
+1. `scripts/diag-lomadee.mjs` + `docs/rca/afiliados-lomadee.md` com a medição real.
+2. Refatoração: núcleo de promoções neutro (`promotionOffers.js`), Awin idêntica.
+3. Migration (`LomadeeAccount`, `LomadeeCampaign`, `LomadeeSyncRun`, `OfferAutomationPromoSend`,
+   `OfferAutomation.lomadeeAccountId/lomadeeStoreIds`) + LGPD.
+4. Integração `integrations/lomadee/` + rotas + cartão em Minhas credenciais.
+5. Registro por origem + origem `lomadee` no dispatcher/revisão/rota.
+6. Tela ("De onde vêm as ofertas?": Shopee | Awin | Lomadee) + interruptor
+   `LOMADEE_OFFERS_ENABLED` + PRO na automação.
+7. Índice do AGENTS.md (1 linha) e atalhos no mapa de sintomas.
+
+### 13.7 Medição real da Etapa 0 — campanhas (2026-09-30, conta da Flavia)
+
+Feita com `scripts/diag-lomadee.mjs` (somente leitura). **A oferta da Up4you
+apareceu e bate com o que a dona do produto mostrou:**
+
+- `name` = "Malas, mochilas e acessórios com até 60% OFF"; `type = Offer`,
+  `offerType = Url`; `url` = página da coleção; `period.endAt =
+  2026-10-13T02:30:00Z` (= **12/10 às 23:30 em Brasília** — converter para
+  America/Sao_Paulo, como `formatAwinValidity`); `status = onTime`.
+- **Link por canal:** `channels[].shortUrls[0]`. No canal **Cuponito**
+  (CouponSite) é `https://lmdee.link/OVzB900HqJgQ` — exatamente o link que veio
+  no exemplo; no outro canal (Grupo de Ofertas Fafaciane) é outro link. Ou seja:
+  **o link depende do canal escolhido na conta** (confirma o campo "ID do
+  canal" e a escolha do canal por lista). **Não precisa do encurtador** para
+  campanha: o link curto já vem pronto.
+- `mediaKit.banners[]` traz **imagem** da campanha (CDN da Lomadee) — foto
+  disponível sem raspar a loja (melhor que a Awin). ⚠️ a usar como `imageUrl`
+  após medir tamanho/qualidade.
+- Campanhas **Oferta ativas: 317** (16 páginas de 20). **Agendadas: 0** (não
+  precisa tratar `scheduled` na v1, mas o filtro fica). Cerca de 10–15% são
+  **permanentes** (`period = null`; uma loja tem 9 de 10 permanentes) — a regra
+  de 15 dias (13.4) vale bastante.
+- `description` veio **vazia** na maioria; o título às vezes já leva o preço
+  ("… (Por R$ 65,55)"). A mensagem usa só título + loja + validade + link (+ foto).
+- `offerType = Spreadsheet` tem `url` de **planilha CSV** (não é página de
+  loja) → o sync filtra `offerType = Url`.
+- **Nome da loja** vem só como `organizationId`; o nome sai de `GET
+  /affiliate/brands` (138 lojas, 7 páginas), guardado no sync.
+- **Sobreposição com a Shopee:** a **Shopee aparece como loja da Lomadee**
+  ("Mega Oferta Full…", `shopee.com.br/oficial`). Publicar essas campanhas por
+  aqui duplica a origem Shopee. ⚠️ **Decisão pendente** (13.8, item 1).
+
+**Latência e como listar (importante para o sync)**
+- Canais ~0,5 s; lojas ~1–3 s; campanhas ~1–7 s **com filtro**.
+- Listar campanhas **sem nenhum filtro travou** (6 tentativas × 45 s sem
+  resposta) e depois respondeu em 3,7 s: **comportamento instável**. Nunca
+  chamar sem filtro.
+- Filtros que responderam sempre: `name` (a busca "Up4you" achou 5), `name=%`
+  (curinga: 1898 campanhas no total; com `types=Offer&status=onTime` → 317),
+  `organizationIds` repetido (várias lojas na mesma chamada), `types`, `status`.
+  `name=%` **não está documentado** — usar como recurso do sync **somente se a
+  Lomadee confirmar**; o caminho seguro é sincronizar **por lotes de lojas**
+  (`organizationIds`, ~20 por chamada) só das lojas com vínculo no canal.
+- Custo de um sync completo: ~16 chamadas de campanhas + 7 de lojas ≈ 23
+  chamadas (limite 60/min por chave) e ~1–2 min. Timeout do sync: 60 s por
+  chamada, com nova tentativa em 15 min (regra 13.3).
+- Produtos: 1 chamada com `limit=1` respondeu em 0,3 s via Node (o `curl` deste
+  ambiente havia travado); segue **fora da v1**.
+
+### 13.8 Novas decisões para a dona do produto
+
+1. **Campanhas da Shopee que a Lomadee lista:** excluir (a Shopee já é origem
+   própria, com preço e foto) ou deixar entrar? Recomendo **excluir** as lojas que
+   já têm origem/afiliado próprio (Shopee, e conferir ML/Amazon/AliExpress/Magalu).
+2. **Foto:** usar `mediaKit.banners[0]` da campanha como foto do card (banner pode
+   ser largo, não quadrado)? Recomendo testar 3–5 campanhas no staging e decidir
+   pelo resultado; sem banner, sai só texto.
+3. **Uma conta = um canal:** cada `LomadeeAccount` guarda **um** canal escolhido
+   (a lista sai da API). Cliente com dois canais cadastra duas contas? Recomendo sim.
+
+### 13.9 Como rodar o diagnóstico na VPS
+
+```
+cd ~/wabot-staging && LOMADEE_KEY='SUA_CHAVE' node scripts/diag-lomadee.mjs --nome="Up4you"
+```
+
+Só leitura, ~10 chamadas, não grava nada e não imprime a chave. Depois de
+rodar, limpar do histórico do shell (`history -d` da linha) ou usar `read -s`.
