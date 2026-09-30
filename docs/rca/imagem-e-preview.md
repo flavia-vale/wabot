@@ -393,7 +393,15 @@ teto diário; falha do scraper devolve `null` (plano B), nunca banner de marca.
 JavaScript do Akamai (200, 2.511 bytes) mesmo com `impit` + Chrome Android: o IP
 da VPS está marcado. Só outro IP (o scraper) resolve.
 
-**Ainda não validado com chave real** — testar antes de promover para `main`:
+**Validado em staging (2026-09-30) com Scrape.do** (`MAGALU_SCRAPER_PROVIDER=scrapedo`):
+oferta Magalu saiu com foto. Custo medido na VPS: `render+super` gastou muito;
+só `geoCode=br` (sem `render`, sem `super`) trouxe a foto por **1 crédito**
+(`super` = 10). Por isso o Scrape.do tenta primeiro a chamada barata e só usa
+`super` se a barata cair no muro. Erro da conta (401/402/429) não repete.
+⚠️ O teto `MAGALU_SCRAPER_DAILY_CAP` é **por processo** (cada robô tem o seu):
+em produção o gasto máximo é teto × robôs. Plano grátis = 1.000 créditos/mês.
+
+**Histórico: antes da validação,** — testar antes de promover para `main`:
 `curl` do provedor com a URL da Magalu e conferir `og:image`.
 
 ## Foto do card saindo como SELO no meio de um fundo borrado (RCA 2026-09-18)
