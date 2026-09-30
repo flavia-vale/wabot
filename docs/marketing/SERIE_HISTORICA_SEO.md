@@ -49,6 +49,7 @@ Três semanas de setembro já renderam **3,2× os cliques de agosto inteiro**.
 | 01/09–07/09 | 124 | 3.515 | 3,53% | 6,19 |
 | 08/09–14/09 | 173 | 3.630 | 4,77% | 5,74 |
 | **15/09–21/09** | **192** | **3.342** | **5,75%** | **5,94** |
+| **22/09–27/09** (6 dias; export de 30/09) | **175** | **2.828** | **6,19%** | **5,94** |
 
 A última semana teve **mais clique com menos impressão** — o crescimento passou
 a vir da taxa de clique, não do volume. Quarta semana seguida de CTR subindo.
@@ -98,6 +99,45 @@ impressões. Ainda sem impressão: `busqy`, `afilira`, `divulga-ninja`,
 `divulgalinks preço` (4), `afilimais` (3), `lumi ofertas inteligentes` (2),
 `divulgalinks planos` (1) — pouco, mas **não é zero**, ao contrário do que se
 supôs em 17/09.
+
+### Marco de 30/09 (export do Search Console; o gráfico vai até 27/09)
+
+Janela de 3 meses, soma da aba "Países": **850 cliques, 19.320 impressões,
+CTR 4,40%, posição 6,37 (Brasil)**; 289 consultas distintas; 129 páginas com
+impressão (23/09: 680 / 16.581 / 4,10% / 225 / 113).
+
+- Quinta semana seguida de CTR subindo: 3,53% → 4,77% → 5,75% → **6,19%**
+  (22 a 27/09, 6 dias). Cliques por dia: ~29/dia contra ~27/dia na
+  semana anterior; o dado ainda **não inclui** as reindexações de 28/09 nem o
+  título novo de `/alternativas/achadinhos-bot` (27/09).
+- Três páginas fazem 575 dos 850 cliques: `/` (260), `/bot-achadinhos-whatsapp`
+  (228) e `/bot-afiliados-whatsapp` (87).
+- Maiores perdas de clique: `/alternativas/achadinhos-bot` 6.864 impressões,
+  CTR **1,35%**, posição 6,35; consulta `achadinho pro` 4.164 impressões, CTR
+  **0,96%**.
+- Melhores taxas: `/bot-afiliados-whatsapp` 8,75% (994 impr.), `/precos` 8,42%
+  (95 impr., posição 4,2), `espelha grupos` (marca) **61 cliques / 79
+  impressões = 77%**, posição 1,04.
+- Dispositivo: computador 435 cliques / 8.561 impr. (5,08%); celular 411 /
+  10.625 (3,87%); a distância caiu para ~1,3×.
+- **Cobertura:** "Rastreada, mas não indexada" 18 (mesmos 18: LPs congeladas,
+  arquivos e `/espelha-grupos-vs-ferramentas-genericas-automacao`, último
+  rastreamento ainda **21/09** apesar do pedido de 25/09); "Detectada, mas não
+  indexada" 4, **validação passou**; `noindex` 15, bloqueada pelo robots 1,
+  "alternativa com canônica" 9 (só URLs com `?utm_` e `?from=`).
+
+| Página (3 meses) | Cliques | Impressões | CTR | Posição |
+|---|---:|---:|---:|---:|
+| `/` | 260 | 808 | 32,18% | 3,22 |
+| `/bot-achadinhos-whatsapp` | 228 | 3.805 | 5,99% | 5,72 |
+| `/alternativas/achadinhos-bot` | 93 | 6.864 | **1,35%** | 6,35 |
+| `/bot-afiliados-whatsapp` | 87 | 994 | 8,75% | 5,57 |
+| `/alternativas/achadinho-pro` | 29 | 1.007 | 2,88% | 5,84 |
+| `/blog/como-divulgar-ofertas-amazon-whatsapp` | 10 | 605 | 1,65% | 8,27 |
+| `/precos` | 8 | 95 | 8,42% | 4,20 |
+| `/alternativas/shozap` | 5 | 537 | **0,93%** | 6,23 |
+| `/alternativas/bot-para-whatsapp-afiliados` | 7 | 363 | 1,93% | 9,60 |
+| `/shein-afiliados-whatsapp` | 5 | 270 | 1,85% | 6,80 |
 
 ### Marca
 
@@ -283,6 +323,27 @@ de 60 até 18/10 (`PLANO_MAQUINA_DE_VENDAS_IA_2026-09-18.md`, seção 8).
 Entrada dos cadastros de 23/09: home 50% (102, ambíguo — inclui 44 que chegaram
 em `/?utm_source=chatgpt.com`), página de busca 32% (66), direto no cadastro
 11%, comparativo 3% (6), `/precos` 2%, blog 1%.
+
+### Marco de 30/09 (`diag-origem-cadastros.mjs --dias 30` e `diag-paginas-seo.mjs --dias 30`)
+
+| Métrica | 27/09 | **30/09** |
+|---|---:|---:|
+| Cadastros no período | 214 | **231** |
+| Entraram por página de conteúdo | 37% (79) | **36% (84)** |
+| Viraram pagante | 24 (11%) | **29 (12,6%)** |
+| Visitas vindas de fora | 1.113 | **1.224** |
+| Google / ChatGPT / Bing | 88% / 7% / — | **89% (1.093) / 6% (72) / 1% (15)** |
+| Outros | — | Brave 10, Instagram 9, Claude 7, Gemini 6, YouTube 6, TikTok 2 |
+
+A saída do script cortada em `tail -n 40` **não trouxe o cadastro por fonte**,
+então o "cadastros com carimbo do ChatGPT" (54 → 60) não foi atualizado aqui.
+Não calcular conversão do ChatGPT com as visitas (ver aviso acima).
+
+Funil por página (30 dias): 2.313 visitas, 602 cliques em CTA (26,0%), 231
+cadastros atribuídos, 22 páginas de comparação (257 visitas). Zero clique com
+5+ visitas: `/alternativas/shozap` (13), `/alternativas/bot-para-whatsapp-afiliados`
+(12), `/rastrear-resultados-de-divulgacao-em-grupos` (8),
+`/alternativas/afilimais` (5). Pagantes atuais sem reembolso: 41.
 
 ### Funil por página (`diag-paginas-seo.mjs --dias 30`, 27/09)
 
