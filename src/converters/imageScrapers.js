@@ -6,6 +6,7 @@ import { computeMutationCrop } from '../core/imageMutationCrop.js'
 import { buildInlineThumbnail } from '../core/inlineThumbnail.js'
 import { readMagaluScraperConfig, buildMagaluScraperUrl, takeMagaluScraperQuota } from './magaluScraper.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
+import { awinStorePageUrl } from './awin.js'
 import {
   isMagaluBotWallHtml,
   isMagaluBlockedStatus,
@@ -590,6 +591,18 @@ async function resolveMagaluImage(productUrl, { onDiagnostic } = {}) {
 // caminho da Shopee era mudo — chave recusada, item fora do catálogo de
 // afiliado e short link não resolvido produziam todos o mesmo `null`.
 export async function fetchProductImage(platform, productUrl, creds, { onDiagnostic } = {}) {
+  // Awin: a foto sai da PÁGINA DA LOJA. Abrir o tidd.ly/cread.php até o fim
+  // passava pelo redirecionador da Awin (sem og:image do produto) e ainda
+  // contava clique para o dono do link — a oferta espelhada saía sem foto
+  // (RCA 2026-09-30, docs/rca/afiliados-awin.md).
+  if (platform === 'awin') {
+    const storePage = await awinStorePageUrl(productUrl)
+    if (!storePage) {
+      onDiagnostic?.({ stage: 'awin_sem_pagina_da_loja', detail: null })
+      return null
+    }
+    productUrl = storePage
+  }
   const cached = getCached(productUrl)
   if (cached !== null) return cached
 

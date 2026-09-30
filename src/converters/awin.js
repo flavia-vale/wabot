@@ -88,6 +88,22 @@ export async function resolveAwinShortUrlCached(url, options = {}) {
   return target
 }
 
+/**
+ * Página da LOJA por trás de um link da Awin (tidd.ly / cread.php), para ler
+ * foto e nome. Nunca abre o link de clique até o fim: tidd.ly → só o Location
+ * (com cache — a conversão já leu o mesmo link); cread.php → o `ued`, sem
+ * rede. Link que não é da Awin volta como está. null = não deu para saber.
+ */
+export async function awinStorePageUrl(url, { resolveShortUrl = resolveAwinShortUrlCached } = {}) {
+  let target = url
+  if (isAwinShortUrl(target)) target = await resolveShortUrl(target).catch(() => null)
+  if (!target) return null
+  const click = parseAwinClickUrl(target)
+  if (click) return cleanDestinationUrl(click.destinationUrl)
+  if (isAwinTrackingUrl(target)) return null
+  return target
+}
+
 // De onde o link aponta e (se já for da Awin) de quem ele é.
 async function readLink(url, deps) {
   let target = url
