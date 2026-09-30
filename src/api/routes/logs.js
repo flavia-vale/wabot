@@ -171,7 +171,9 @@ export async function logsRoutes(app) {
       limit: limitNum,
       statusCounts,
       statusCountsTotal,
-      logs: logs.map(log => ({
+      // resendText é o texto completo guardado só para o reenvio pós-restart
+      // (a tela usa messageText) — não trafega para o painel.
+      logs: logs.map(({ resendText: _resendText, ...log }) => ({
         ...log,
         sourceGroupName: sourceGroupNameFor(log.sourceGroup),
         destGroupName: groupMap[log.destGroup] || log.destGroup,

@@ -77,3 +77,26 @@ test('lone surrogate já presente na entrada (input malformado) é removido', ()
   assert.equal(LONE_SURROGATE_RE.test(out), false)
   assert.equal(out, 'ab')
 })
+
+// RCA 2026-09-30: o reenvio pós-restart mandava `messageText` (240 chars, sem
+// quebras de linha). resendText guarda a oferta inteira, como saiu.
+test('sanitizeResendText preserva quebras de linha e texto longo', async () => {
+  const { sanitizeResendText } = await import('../src/messageLogSanitizer.js')
+  const oferta = `💥 CHOCADO COM ESSE VALOR!\n\n🏷️ *Gabinete Gamer*\n${'detalhe '.repeat(60)}\n👉 https://s.shopee.com.br/abc`
+  assert.equal(sanitizeResendText(oferta), oferta)
+  assert.ok(sanitizeResendText(oferta).length > MESSAGE_LOG_MAX_CHARS)
+})
+
+test('sanitizeResendText tira NUL e surrogate solto, sem mexer no resto', async () => {
+  const { sanitizeResendText } = await import('../src/messageLogSanitizer.js')
+  assert.equal(sanitizeResendText('a\u0000b\nc\uD83D'), 'ab\nc')
+})
+
+test('sanitizeResendText devolve null para vazio e acima do teto (não reenvia cortado)', async () => {
+  const { sanitizeResendText, RESEND_TEXT_MAX_CHARS } = await import('../src/messageLogSanitizer.js')
+  assert.equal(sanitizeResendText(''), null)
+  assert.equal(sanitizeResendText('   \n '), null)
+  assert.equal(sanitizeResendText(null), null)
+  assert.equal(sanitizeResendText('x'.repeat(RESEND_TEXT_MAX_CHARS + 1)), null)
+  assert.equal(sanitizeResendText('x'.repeat(RESEND_TEXT_MAX_CHARS)).length, RESEND_TEXT_MAX_CHARS)
+})
