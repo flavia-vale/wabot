@@ -343,6 +343,10 @@ assinatura na conclusão.
 
 - **Só vai dado REAL.** E-mail `@sistema.com`, formato inválido ou telefone
   fora do padrão (DDD + 8/9 dígitos) não vão — dado falso piora a nota.
+- **O e-mail é o que ela preenche em PLANOS** ("Usa outro e-mail no Mercado
+  Pago?"), o mesmo campo dos dois botões; vazio → o da conta. Antes o avulso
+  ignorava esse campo e ia com o e-mail da conta, diferente da conta do MP
+  em que ela entra. E-mail preenchido inválido não bloqueia o avulso: só não vai.
 - **Falha ao ler a conta nunca impede o checkout** — a preferência só sai sem
   os dados.
 - **Antes de mexer na recorrente por "recusa", olhe o `operation_type`.**

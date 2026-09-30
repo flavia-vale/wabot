@@ -534,7 +534,7 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
   }
 }
 
-async function createMercadoPagoPreference({ userId, plan }) {
+async function createMercadoPagoPreference({ userId, plan, informedEmail }) {
   const accessToken = getMpAccessToken()
   if (!accessToken) {
     const err = new Error('MP_ACCESS_TOKEN não configurado')
@@ -574,7 +574,10 @@ async function createMercadoPagoPreference({ userId, plan }) {
     where: { id: userId },
     select: { name: true, email: true, contactPhone: true },
   }).catch(() => null)
-  const payer = buildCheckoutPayer(buyer ?? {})
+  // O e-mail é o que ela preencheu em PLANOS (o mesmo campo serve aos dois
+  // botões); vazio → o da conta. Inválido não bloqueia o avulso: só não vai.
+  const { email } = resolveSubscriptionPayerEmail({ accountEmail: buyer?.email, informedEmail })
+  const payer = buildCheckoutPayer({ ...(buyer ?? {}), email })
 
   const preference = {
     items: [buildCheckoutItem({ plan, title: normalizedPlan.title, price: normalizedPlan.price })],
@@ -1294,7 +1297,7 @@ export async function paymentsRoutes(app) {
 
   // Creates a dynamic Mercado Pago Preference (supports PIX + credit card) and returns the checkout URL
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { plan } = req.body ?? {}
+    const { plan, payerEmail } = req.body ?? {}
     const plans = await getBillingPlans()
     if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
@@ -1302,7 +1305,7 @@ export async function paymentsRoutes(app) {
     trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
 
     try {
-      const checkoutUrl = await createMercadoPagoPreference({ userId, plan })
+      const checkoutUrl = await createMercadoPagoPreference({ userId, plan, informedEmail: payerEmail })
       return { checkout_url: checkoutUrl }
     } catch (err) {
       if (err?.code === 'INVALID_PLAN_CONFIG') {

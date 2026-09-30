@@ -65,3 +65,26 @@ test('guarda estrutural: a preferência do avulso manda payer e item completo', 
   assert.match(bloco, /buildCheckoutItem\(/)
   assert.match(bloco, /\.\.\.\(payer \? \{ payer \} : \{\}\)/)
 })
+
+test('avulso usa o e-mail preenchido em PLANOS — o mesmo campo dos dois botões', () => {
+  const rota = readFileSync(new URL('../src/api/routes/payments.js', import.meta.url), 'utf8')
+  const bloco = rota.slice(rota.indexOf('async function createMercadoPagoPreference'), rota.indexOf('checkout/preferences'))
+  assert.match(bloco, /resolveSubscriptionPayerEmail\(\{ accountEmail: buyer\?\.email, informedEmail \}\)/)
+  const rotaCheckout = rota.slice(rota.indexOf("app.post('/checkout'"), rota.indexOf("app.post('/create-subscription'"))
+  assert.match(rotaCheckout, /informedEmail: payerEmail/)
+
+  const tela = readFileSync(new URL('../dashboard/app/painel/plano/page.js', import.meta.url), 'utf8')
+  assert.match(tela, /api\.paymentsCheckout\(planId, mpEmail\.trim\(\) \|\| undefined\)/)
+  const api = readFileSync(new URL('../dashboard/lib/api.js', import.meta.url), 'utf8')
+  assert.match(api, /paymentsCheckout: \(plan, payerEmail\) =>/)
+})
+
+test('e-mail preenchido ganha do da conta; inválido não vai (e não bloqueia o avulso)', async () => {
+  const { resolveSubscriptionPayerEmail } = await import('../src/domain/payments/payerEmail.js')
+  const preenchido = resolveSubscriptionPayerEmail({ accountEmail: 'conta@gmail.com', informedEmail: 'mp@gmail.com' })
+  assert.equal(buildCheckoutPayer({ email: preenchido.email }).email, 'mp@gmail.com')
+  const vazio = resolveSubscriptionPayerEmail({ accountEmail: 'conta@gmail.com', informedEmail: '' })
+  assert.equal(buildCheckoutPayer({ email: vazio.email }).email, 'conta@gmail.com')
+  const invalido = resolveSubscriptionPayerEmail({ accountEmail: 'conta@gmail.com', informedEmail: 'xx' })
+  assert.equal(buildCheckoutPayer({ name: 'Ana', email: invalido.email }).email, undefined)
+})
