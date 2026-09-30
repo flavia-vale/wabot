@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
+import { PainelVendasIlustrativo } from '@/components/marketing/PainelVendasIlustrativo'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
@@ -24,7 +25,7 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 //     ligado ao robô — o próprio arquivo diz que a integração ficou para uma PR
 //     dedicada. Por isso ele não aparece aqui.
 
-const title = 'Como saber quanto você ganhou de comissão divulgando no WhatsApp'
+const title = 'Quanto você ganhou de comissão divulgando no WhatsApp'
 const description = 'A diferença entre relatório de envio e relatório de venda, e como o Espelha Grupos mostra pedidos, valor vendido e comissão estimada e confirmada das ofertas da Shopee publicadas pelo robô.'
 const slug = '/vendas-e-comissao-afiliado-whatsapp'
 const dates = getEditorialDates(slug)
@@ -87,7 +88,7 @@ export default function Page() {
           <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Resultado · Vendas e comissão</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{title}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{description}</p>
-          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
 
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_h3]:text-lg [&_h3]:font-black [&_h3]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_strong]:text-gray-950">
             <section>
@@ -95,6 +96,8 @@ export default function Page() {
               <p>O <strong>Espelha Grupos</strong> tem uma aba <strong>Vendas</strong> no painel que mostra, para as ofertas da Shopee publicadas pelo robô: pedidos atribuídos, itens comprados, valor vendido e <strong>comissão estimada e confirmada</strong>, com quebra por pedido e por produto.</p>
               <p>Está no <strong>plano Pro</strong> (R$ 69 a cada 30 dias) e nos 7 dias de teste grátis, que liberam tudo do Pro.</p>
             </section>
+
+            <PainelVendasIlustrativo />
 
             <section>
               <h2>&quot;Quantas mensagens saíram&quot; não é a mesma pergunta que &quot;quanto eu ganhei&quot;</h2>

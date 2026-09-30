@@ -14,8 +14,32 @@ import {
 } from '@/lib/editorial-content'
 import { internalContentHref } from '@/lib/marketing-attribution'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
+import { getCompetitorBySlug } from '@/lib/competitors-data'
+import { NUMEROS_MEDIDOS_EM, NUMEROS_PROPRIOS, PRECO_PLANOS_FRASE as precoPlanosFrase } from '@/lib/resposta-citavel'
+import { formatDatePtBr } from '@/lib/editorial-content'
+import { VIDEO_ESPELHAMENTO, VIDEO_ESPELHAMENTO_URL, VIDEO_ESPELHAMENTO_EMBED_URL, VIDEO_ESPELHAMENTO_THUMB_URL } from '../../../src/tutorialVideo.js'
 
 const siteUrl = getSiteUrl()
+
+// Preço e números próprios vêm de lib/resposta-citavel.js (fonte única desde
+// 29/09/2026 — as mesmas peças do topo citável das páginas comerciais). Preço
+// montado de DEFAULT_LANDING_PLANS; números medidos no banco de produção em
+// 27/09/2026. Para atualizar, medir de novo e trocar a data lá.
+
+// Linha de concorrente numa lista comparada: nome, o que faz e o preço de
+// ENTRADA lidos da ficha datada em competitors-data.js — nunca digitados aqui
+// (FR-031). Se a ficha mudar, a linha muda junto.
+function opcaoDaFicha(slug, { href, oQueFaz, bestFor }) {
+  const ficha = getCompetitorBySlug(slug)
+  const entrada = ficha.pricingTiers[0]
+  return {
+    name: ficha.name,
+    text: `${oQueFaz} Plano de entrada: ${entrada.name}, ${entrada.price} (ficha conferida em ${formatDatePtBr(ficha.verifiedAt)}).`,
+    bestFor,
+    href,
+    linkLabel: `Ficha completa: alternativa ao ${ficha.name}`,
+  }
+}
 
 export const PRESERVATION_BLOG_POSTS = {
   'grupo-ou-canal-whatsapp-achadinhos': {
@@ -69,6 +93,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'comissão real de Shopee, Amazon e Mercado Livre' },
       { href: '/anti-ban-whatsapp', label: 'Reduzir o risco de banimento na prática', note: 'cadência, limites e preservação de sessão' },
       { href: '/blog/chip-dedicado-bot-whatsapp', label: 'Por que usar chip dedicado', note: 'separar o número pessoal da operação' },
+      { href: '/blog/numero-banido-whatsapp-o-que-fazer', label: 'Número banido no WhatsApp: o que fazer', note: 'o que fazer nas primeiras horas' },
+      { href: '/blog/como-aquecer-numero-whatsapp-afiliados', label: 'Como aquecer um número de WhatsApp para afiliados', note: 'ritmo certo para um número novo' },
     ],
     faq: [
       { q: 'Existe “anti-ban” 100%?', a: 'Não. Qualquer promessa absoluta deve ser tratada como sinal de alerta. A abordagem correta é redução de risco com camadas de preservação.' },
@@ -97,6 +123,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'sem promessa de imunidade' },
       { href: '/blog/bot-whatsapp-antiban-existe', label: 'Bot antiban existe mesmo?', note: 'o que nenhuma ferramenta pode garantir' },
       { href: '/faq-antiban-whatsapp', label: 'Perguntas frequentes sobre banimento', note: 'respostas diretas' },
+      { href: '/blog/numero-banido-whatsapp-o-que-fazer', label: 'Número banido no WhatsApp: o que fazer', note: 'o que fazer nas primeiras horas' },
     ],
     faq: [
       { q: 'Shadowban no WhatsApp é sempre comprovável?', a: 'Não. Normalmente você trabalha com sinais indiretos: cliques, entrega, relatos, conta-sentinela e comparação entre canais.' },
@@ -154,6 +181,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'os fatores que realmente pesam' },
       { href: '/blog/como-evitar-banimento-whatsapp-afiliados', label: 'Reduzir risco de banimento como afiliado', note: 'cadência e variação de texto' },
       { href: '/protecao-antiban-espelha-grupos', label: 'Como o Espelha Grupos preserva a sessão', note: 'limites por destino e monitoramento' },
+      { href: '/blog/como-aquecer-numero-whatsapp-afiliados', label: 'Como aquecer um número de WhatsApp para afiliados', note: 'ritmo certo para um número novo' },
+      { href: '/blog/numero-banido-whatsapp-o-que-fazer', label: 'Número banido no WhatsApp: o que fazer', note: 'o que fazer nas primeiras horas' },
     ],
     faq: [
       { q: 'Posso começar com meu número pessoal?', a: 'Não é recomendado. Mesmo operações pequenas deveriam separar número pessoal e número operacional desde o início.' },
@@ -163,7 +192,7 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'bot-whatsapp-antiban-existe': {
     slug: '/blog/bot-whatsapp-antiban-existe',
-    title: 'Bot “anti-ban” para WhatsApp existe? A resposta honesta',
+    title: 'Bot “anti-ban” para WhatsApp existe? Resposta honesta',
     description: 'Por que “anti-ban” absoluto não existe e o que o Módulo de Preservação Avançada do Espelha Grupos controla de fato para reduzir o risco.',
     eyebrow: 'Busca “anti-ban” · Resposta honesta',
     origin: 'blog_bot_whatsapp_antiban_existe',
@@ -183,6 +212,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/anti-ban-whatsapp', label: 'WhatsApp banido: o que aumenta e o que reduz o risco', note: 'redução de risco, não imunidade' },
       { href: '/faq-antiban-whatsapp', label: 'Perguntas frequentes sobre banimento', note: 'as dúvidas mais comuns' },
       { href: '/protecao-antiban-espelha-grupos', label: 'Como o Espelha Grupos preserva a sessão', note: 'o que a ferramenta faz de fato' },
+      { href: '/blog/numero-banido-whatsapp-o-que-fazer', label: 'Número banido no WhatsApp: o que fazer', note: 'o que fazer nas primeiras horas' },
+      { href: '/blog/como-aquecer-numero-whatsapp-afiliados', label: 'Como aquecer um número de WhatsApp para afiliados', note: 'ritmo certo para um número novo' },
     ],
     faq: [
       { q: 'Então o Espelha Grupos é “anti-ban”?', a: 'Não como promessa. O Espelha Grupos controla o ritmo do que sai para reduzir o risco; a decisão de banir é do WhatsApp.' },
@@ -212,6 +243,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'cadastro gratuito, comissão a partir de 3%' },
       { href: '/programa-de-afiliados', label: 'Qual programa de afiliados escolher', note: 'Shopee, Amazon e Mercado Livre comparados' },
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Montar um grupo de ofertas do zero', note: 'os primeiros passos' },
+      { href: '/blog/grupo-ou-canal-whatsapp-achadinhos', label: 'Grupo ou Canal do WhatsApp: qual é melhor?', note: 'qual formato combina com você' },
     ],
     faq: [
       { q: 'Preciso de muitos seguidores para começar?', a: 'Não. Dá para começar com um grupo ou canal pequeno. O que importa no início é converter os links corretamente e manter consistência, não o tamanho da audiência.' },
@@ -221,8 +253,11 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'como-ser-afiliado-shopee-whatsapp': {
     slug: '/blog/como-ser-afiliado-shopee-whatsapp',
-    title: 'Shopee Afiliados: como entrar e quanto paga',
-    description: 'Como entrar no Shopee Afiliados, quanto a Shopee paga por tipo de venda, o prazo para a comissão contar e como divulgar no WhatsApp sem perder venda.',
+    // 27/09/2026 (Frente D1/D2): 532 impressões, CTR 0,56% na posição 9,4 —
+    // periferia de "como ser afiliado shopee" (5.000/mês). O título passa a
+    // ser a pergunta literal + o número de passos que a página já ensina.
+    title: 'Como ser afiliado Shopee: 5 passos e comissão de 3%',
+    description: 'Como ser afiliado Shopee em 5 passos: cadastro gratuito, comissão a partir de 3% (até 30% na Comissão Extra), atribuição de 7 dias e como divulgar no WhatsApp.',
     eyebrow: 'Shopee Afiliados · Guia completo',
     origin: 'blog_como_ser_afiliado_shopee_whatsapp',
     heroImage: { path: '/blog/hero/shopee-afiliada-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas da Shopee no Espelha Grupos', width: 1024, height: 1024 },
@@ -258,6 +293,15 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Como divulgar sem queimar o número', paragraphs: ['Use um chip dedicado, publique poucas ofertas boas por vez, varie o texto e evite mandar a mesma mensagem idêntica para todos os destinos ao mesmo tempo.', 'Quem dispara dezenas de links iguais em sequência arrisca o número e ainda cansa a audiência. Cadência responsável vende mais no médio prazo.'] },
       { h2: 'Como o Espelha Grupos automatiza a Shopee', paragraphs: ['Com as credenciais de afiliada Shopee cadastradas, o Espelha Grupos converte os links para o seu código automaticamente antes de enviar, monta a oferta com título e preço e distribui para os seus grupos e canais com cadência controlada.', 'Assim você não precisa gerar link a link na mão nem corre o risco de enviar um link sem comissão.'] },
     ],
+    // Frente D2 (PLANO_SEO_GEO_2026-09-27): este post está na página 1 para a
+    // periferia de "como ser afiliado shopee" — é a porta que já abre. O
+    // "próximo passo" manda a força para a comercial do Tier 1, que responde
+    // "já sou afiliada, como distribuo"; ela linka de volta como guia completo.
+    nextStep: {
+      href: '/shopee-afiliados-whatsapp',
+      label: 'Já é afiliada Shopee? Veja como divulgar no WhatsApp',
+      body: 'Depois do cadastro, o trabalho vira publicar oferta por oferta com o seu link. A página de Shopee Afiliados no WhatsApp mostra como o robô faz isso sozinho, com 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/melhores-automacoes-para-afiliado-shopee-2026', label: 'As automações que um afiliado Shopee usa em 2026', note: 'espelhar, garimpar, converter, enfileirar — e quem faz cada uma' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'os 4 caminhos e o passo a passo com o robô' },
@@ -268,6 +312,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'a Amazon paga de 0% a 13% dependendo do produto' },
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para não enviar link sem o seu código' },
+      { href: '/blog/shopee-suspendeu-afiliado-o-que-fazer', label: 'Shopee suspendeu sua conta de afiliada: o que fazer', note: 'regras do programa e próximos passos' },
+      { href: '/blog/link-de-afiliado-sem-comissao-o-que-conferir', label: 'Link de afiliado sem comissão: o que conferir', note: 'o que checar antes de culpar a loja' },
     ],
     faq: [
       { q: 'Ser afiliado Shopee é gratuito?', a: 'Sim, a entrada no programa de afiliados não tem custo. Você ganha comissão sobre as vendas geradas pelos seus links.' },
@@ -284,8 +330,11 @@ export const PRESERVATION_BLOG_POSTS = {
     slug: '/blog/como-divulgar-ofertas-amazon-whatsapp',
     // Título encurtado em 2026-08-19 (P1): era 75 chars de texto próprio. O
     // número da comissão vai na frente — é o motivo concreto pra clicar.
-    title: 'Afiliado Amazon: comissão por categoria (0% a 13%)',
-    description: 'Guia de afiliado Amazon: quanto paga de comissão por categoria, como divulgar no WhatsApp com a tag correta e cadência que protege o número.',
+    // 27/09/2026 (Frente D1): 618 impressões, CTR 1,6% na posição 8,3. Entra
+    // pela pergunta do slug ("como divulgar ... whatsapp") e mantém o número;
+    // deixa de disputar o mesmo título da comercial /amazon-afiliados-whatsapp.
+    title: 'Como divulgar Amazon no WhatsApp: comissão 0% a 13%',
+    description: 'Quanto a Amazon paga por categoria (0% a 13%), como conferir se a sua tag está no link e a cadência para divulgar no WhatsApp sem queimar o número.',
     eyebrow: 'Afiliado Amazon · Divulgação',
     origin: 'blog_como_divulgar_ofertas_amazon_whatsapp',
     heroImage: { path: '/blog/hero/amazon-associado-hero.jpg', alt: 'Mascote Bit ao lado da tela de conversão de ofertas da Amazon no Espelha Grupos', width: 1024, height: 1024 },
@@ -306,6 +355,13 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Cadência e preservação do número', paragraphs: ['A Amazon costuma ter muitas ofertas, e a tentação é mandar tudo de uma vez. Resista: poucas ofertas selecionadas por vez, com variação de texto, performam melhor e protegem o número.', 'Use chip dedicado e horário de silêncio para a operação não parecer um robô disparando.'] },
       { h2: 'Como o Espelha Grupos cuida da Amazon', paragraphs: ['Com a sua tag de associado cadastrada, o Espelha Grupos converte os links da Amazon automaticamente, busca a imagem em alta resolução para o preview do WhatsApp e distribui a oferta para seus grupos e canais com cadência responsável.', 'Isso evita o erro clássico de enviar um link sem tag e garante que a oferta chegue com cara profissional.'] },
     ],
+    // Frente D2: mesmo desenho do post da Shopee — o guia manda para a
+    // comercial /amazon-afiliados-whatsapp como próximo passo, e ela linka de volta.
+    nextStep: {
+      href: '/amazon-afiliados-whatsapp',
+      label: 'Já é afiliada Amazon? Veja como divulgar no WhatsApp',
+      body: 'Com a tag cadastrada, a página de Afiliado Amazon no WhatsApp mostra como o robô converte o link, busca a imagem do produto e publica nos seus grupos com intervalo. 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Amazon, Shopee ou Mercado Livre: qual paga mais na sua categoria', note: 'a comissão muda muito conforme o produto' },
       { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa automatizar isso', note: 'preço das ferramentas do mercado, lado a lado' },
@@ -315,6 +371,10 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'para a tag nunca cair no caminho' },
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'os 4 caminhos e o passo a passo com o robô' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'checklist, preço e como testar em 7 dias' },
+      { href: '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo', label: 'Postar a oferta da Amazon em vários grupos sem spam', note: 'os 4 caminhos e o que o WhatsApp trata como spam' },
+      { href: '/padronizar-divulgacao-afiliado-whatsapp', label: 'Padronizar a divulgação de cupons', note: 'modelo de mensagem pronto, com cupom e link com a sua tag' },
+      { href: '/blog/link-de-afiliado-sem-comissao-o-que-conferir', label: 'Link de afiliado sem comissão: o que conferir', note: 'o que checar antes de culpar a loja' },
+      { href: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece', label: 'Oferta sem foto no WhatsApp: por que acontece', note: 'card, foto e link de loja' },
     ],
     faq: [
       { q: 'Como sei se o link tem minha tag?', a: 'O link de afiliado da Amazon inclui um parâmetro de tag (tag=seucodigo). Sem ela, a venda não é atribuída a você. Uma ferramenta de conversão garante isso automaticamente.' },
@@ -326,8 +386,10 @@ export const PRESERVATION_BLOG_POSTS = {
   'como-divulgar-ofertas-mercado-livre-whatsapp': {
     slug: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
     // Título encurtado em 2026-08-19 (P1): era 74 chars de texto próprio.
-    title: 'Afiliado Mercado Livre: de 0% a 16% por categoria',
-    description: 'Quanto o Mercado Livre paga de comissão por categoria (direta e indireta), prazo de pagamento e como divulgar no WhatsApp sem perder a atribuição.',
+    // Reescrito em 27/09/2026: 153 impressões e 0 clique — faltava "WhatsApp",
+    // que é metade da consulta, e o número vinha depois do corte do celular.
+    title: 'Afiliado Mercado Livre no WhatsApp: comissão até 16%',
+    description: 'Quanto o Mercado Livre paga por categoria (0% a 16%, direta e indireta), prazo de pagamento e o passo a passo para divulgar no WhatsApp sem perder a atribuição.',
     eyebrow: 'Afiliado Mercado Livre · Guia completo',
     usePersonAuthor: true,
     origin: 'blog_como_divulgar_ofertas_mercado_livre_whatsapp',
@@ -344,6 +406,13 @@ export const PRESERVATION_BLOG_POSTS = {
       { h2: 'Por que o preview com imagem importa', paragraphs: ['No WhatsApp, o card clicável com foto do produto em boa resolução converte muito mais que um link seco. O Espelha Grupos monta o preview com a imagem em alta e o nome da loja acima do domínio, mantendo o card sempre renderizado.', 'Sem imagem, a oferta compete em desvantagem com todos os outros links do grupo. Com imagem, ela ocupa espaço visual e chama o olho.'] },
       { h2: 'Cadência que protege o número', paragraphs: ['Despejar 20 ofertas em sequência é o caminho mais rápido para o número entrar em risco. Distribua ao longo do dia, varie o texto e respeite horário de silêncio.', 'No plano Pro, a Preservação Avançada organiza essas camadas: intervalo entre envios, limite por dia, horário de descanso e variação do texto, para que a operação não pareça robótica.'] },
     ],
+    // Frente D2: mesmo desenho dos posts de Shopee e Amazon — próximo passo
+    // é a comercial /mercado-livre-afiliados-whatsapp, que linka de volta.
+    nextStep: {
+      href: '/mercado-livre-afiliados-whatsapp',
+      label: 'Já é afiliada do Mercado Livre? Veja como divulgar no WhatsApp',
+      body: 'Depois do cadastro, a página de Afiliado Mercado Livre no WhatsApp mostra como o robô troca o link pelo seu código e publica nos seus grupos com intervalo entre os envios. 7 dias grátis.',
+    },
     relatedLinks: [
       { href: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', label: 'Mercado Livre, Amazon ou Shopee: qual paga mais', note: 'comissão por categoria nos três programas' },
       { href: '/blog/como-escalar-grupos-sem-operacao-manual', label: 'Quando o trabalho manual deixa de caber', note: 'o sinal de que a operação passou do ponto' },
@@ -351,6 +420,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/programa-de-afiliados', label: 'Shopee, Amazon ou Mercado Livre: qual programa escolher', note: 'comparativo de comissão e prazo de atribuição dos três' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o programa com maior volume de busca no Brasil' },
       { href: '/bot-afiliados-whatsapp', label: 'Converter os links de afiliado automaticamente', note: 'produto, cupom e short link' },
+      { href: '/blog/link-de-afiliado-sem-comissao-o-que-conferir', label: 'Link de afiliado sem comissão: o que conferir', note: 'o que checar antes de culpar a loja' },
     ],
     faq: [
       { q: 'Quanto o Mercado Livre paga de comissão de afiliado?', a: 'Para Afiliados generalistas, de 0% a 16% conforme a categoria: 16% em Beleza, Calçados/Roupas/Bolsas e Esportes; 12% na maioria das categorias; 5% em eletrônicos, celulares e informática; e 0% em Alimentos e Bebidas. Em venda indireta o percentual cai pela metade.' },
@@ -386,6 +456,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/quanto-ganha-afiliado-shopee', label: 'Quanto ganha um afiliado Shopee', note: 'para fechar a conta do outro lado do custo' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: comissão e prazo de atribuição', note: '3% na venda padrão, até 30% na Comissão Extra' },
       { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Comparativo de bots para afiliados', note: 'o que avaliar antes de assinar' },
+      { href: '/blog/bot-de-whatsapp-conectado-mas-nao-envia', label: 'Bot conectado mas não envia ofertas: o que conferir', note: '5 passos antes de chamar o suporte' },
     ],
     faq: [
       { q: 'Tem plano gratuito?', a: 'Há um teste grátis de 7 dias com o fluxo Pro completo. Depois disso, os planos pagos são Basic (R$39/30 dias) e Pro (R$69/30 dias).' },
@@ -393,13 +464,204 @@ export const PRESERVATION_BLOG_POSTS = {
       { q: 'Existe fidelidade ou multa?', a: 'O modelo é de acesso por período de 30 dias. Consulte os termos atuais dentro do produto para regras de renovação e cancelamento.' },
     ],
   },
+  'bot-de-whatsapp-conectado-mas-nao-envia': {
+    slug: '/blog/bot-de-whatsapp-conectado-mas-nao-envia',
+    title: 'Bot conectado mas não envia ofertas: o que conferir',
+    description: 'O painel mostra conectado, mas nenhuma oferta sai no grupo. As causas mais comuns, o que conferir em 5 passos e quando o Espelha Grupos refaz a conexão sozinho.',
+    eyebrow: 'Suporte · Robô parado',
+    usePersonAuthor: true,
+    origin: 'blog_bot_whatsapp_conectado_mas_nao_envia',
+    heroImage: { path: '/blog/hero/32-conectado-nao-envia.png', alt: 'Painel verde e nada saindo? Cinco passos: a origem postou, motivo na tela Envios, intervalo e limites, refazer a conexão e chamar o suporte', width: 1024, height: 1024 },
+    intro: 'Quando o painel mostra o robô conectado e mesmo assim nada sai no grupo, quase sempre é uma de três coisas: a origem não postou nada, a oferta foi segurada por uma regra (repetição, palavra bloqueada, intervalo) ou a conexão ficou parada sem avisar. Este guia mostra como separar as três, em ordem, antes de falar com o suporte.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Confira, nesta ordem: (1) se o grupo de origem realmente postou oferta nova; (2) o motivo que a tela Envios mostra para cada oferta que ficou de fora; (3) o intervalo e os limites do grupo de destino; (4) se clicar em Conectar volta a enviar. Se o passo 4 resolve, a conexão estava parada, e isso o robô também tenta corrigir sozinho.'] },
+      { h2: 'Passo 1: a origem postou de verdade?', paragraphs: ['O robô só espelha o que chega dos grupos e canais que você escolheu como origem. Se ninguém postou, não há o que enviar, e o painel verde é o comportamento certo. Abra o grupo de origem no seu WhatsApp e veja se há oferta nova no horário em que você esperava.'] },
+      { h2: 'Passo 2: leia o motivo na tela Envios', paragraphs: ['Toda oferta que não sai fica registrada com o motivo em linguagem simples. Os mais comuns são: oferta repetida (o mesmo link já foi enviado há pouco), palavra que você marcou para bloquear, texto que não combina com o produto do link, fila limpa ou expirada, fora do horário de envio e loja ainda sem cadastro de afiliada. Cada um tem uma correção diferente, por isso vale ler o motivo antes de mexer em qualquer configuração.'] },
+      { h2: 'Passo 3: intervalo, limites e horário', paragraphs: ['Os envios saem em fila, com intervalo entre uma oferta e outra e limites por hora e por dia. Se você aumentou o intervalo ou reduziu o limite, a fila anda mais devagar. Isso protege o grupo de receber tudo de uma vez, então uma fila que espera não é defeito.'] },
+      { h2: 'Passo 4: conectado no painel, mas sem receber nada', paragraphs: ['Existe um caso em que a conexão fica aberta, o painel continua verde, e mesmo assim nenhuma mensagem chega ao robô. Nele, clicar em Conectar refaz a conexão e os envios voltam. O Espelha Grupos compara o movimento da sua conta com o que ela costuma receber; quando fica muito tempo sem receber numa conta que normalmente recebe bastante, ele refaz a conexão sozinho, sem apagar as suas credenciais.'] },
+      { h2: 'Passo 5: quando chamar o suporte', paragraphs: ['Se os quatro passos não resolveram, chame o suporte com o horário aproximado em que parou, o nome do grupo de origem e a tela Envios aberta. Com esses três dados dá para achar a causa sem adivinhar.'] },
+    ],
+    relatedTitle: 'Continue: como o robô publica',
+    relatedLinks: [
+      { href: '/como-funciona-espelha-grupos-canais', label: 'Como o Espelha Grupos funciona, do QR ao envio', note: 'o caminho que cada oferta percorre' },
+      { href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', label: 'Cadência e horários de envio', note: 'por que o intervalo entre ofertas importa' },
+      { href: '/espelhar-grupos-whatsapp', label: 'Espelhar grupos e canais do WhatsApp', note: 'origem, destino e filtros' },
+      { href: '/suporte', label: 'Falar com o suporte', note: 'com horário, grupo e a tela Envios' },
+      { href: '/bot-afiliados-whatsapp', label: 'Bot para afiliados no WhatsApp', note: 'o que ele faz e o que não faz' },
+    ],
+    faq: [
+      { q: 'Por que o painel mostra conectado e nada é enviado?', a: 'Porque conexão aberta não significa oferta nova. A origem pode não ter postado, a oferta pode ter sido segurada por uma regra, ou a conexão pode estar parada sem avisar. A tela Envios mostra o motivo de cada oferta que ficou de fora.' },
+      { q: 'Clicar em Conectar apaga alguma configuração?', a: 'Não. Ele refaz a conexão com o WhatsApp; as suas configurações, grupos e credenciais de afiliada continuam como estavam.' },
+      { q: 'O robô se reconecta sozinho?', a: 'Sim, quando fica muito tempo sem receber nada numa conta que costuma receber bastante. Ele decide pelo movimento da própria conta, não por um número fixo.' },
+      { q: 'O robô pode enviar uma oferta repetida?', a: 'Por padrão ele segura o mesmo link que já foi enviado há pouco, e mostra na tela Envios que a oferta foi bloqueada por repetição.' },
+    ],
+  },
+  'oferta-sem-foto-no-whatsapp-por-que-acontece': {
+    slug: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece',
+    title: 'Oferta sem foto no WhatsApp: por que acontece',
+    description: 'A oferta saiu só com texto, sem o card com a foto do produto. As causas mais comuns e o que conferir antes de pedir ajuda.',
+    eyebrow: 'Suporte · Card sem foto',
+    usePersonAuthor: true,
+    origin: 'blog_oferta_sem_foto_whatsapp',
+    heroImage: { path: '/blog/hero/33-oferta-sem-foto.jpg', alt: 'Oferta sem foto: por quê? Quatro causas: a loja bloqueou a leitura, link incompleto no texto, a origem veio sem foto e o link de afiliado continua convertido', width: 1080, height: 1080 },
+    intro: 'Cada oferta espelhada pelo Espelha Grupos sai como um card clicável com a foto do produto. O card só existe quando há uma foto para mostrar; sem ela, a mensagem sai como texto e o link continua convertido. Isso acontece por poucos motivos, e três deles você mesma consegue conferir.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Uma oferta sai sem foto quando o robô não consegue obter a imagem do produto: a loja bloqueia a leitura da página para programas automáticos, o link não aparece por inteiro no texto da mensagem ou a mensagem de origem não tinha foto. O link de afiliado continua convertido em qualquer um dos casos, porque foto e conversão são etapas separadas.'] },
+      { h2: 'Causa 1: a loja não deixa o robô ler a página', paragraphs: ['Algumas lojas protegem a página do produto contra leitura automática. Quando isso acontece, o robô recebe uma página sem imagem e não tem de onde tirar a foto. O bloqueio pode variar de um dia para o outro e depende da loja, por isso o mesmo produto pode sair com foto num dia e sem foto no outro.'] },
+      { h2: 'Causa 2: o link não está visível no texto', paragraphs: ['O card é montado a partir do link que aparece no texto da mensagem. Se o link estiver escondido ou fora do texto principal, o robô não encontra onde ancorar o card e envia só o texto.'] },
+      { h2: 'Causa 3: a origem não trouxe foto', paragraphs: ['Se a mensagem original já era só texto, não há foto para reaproveitar. Vale abrir a oferta no grupo de origem e conferir se ela tinha imagem.'] },
+      { h2: 'O que conferir antes de pedir ajuda', bullets: ['A oferta original, no grupo de origem, tinha foto?', 'O problema acontece com uma loja só ou com todas?', 'Aconteceu com mais de uma oferta seguida ou foi pontual?', 'O link enviado está com o seu código de afiliada? (Isso independe da foto.)'] },
+      { h2: 'Como falar com o suporte', paragraphs: ['Mande o link da oferta que saiu sem foto e o nome da loja. Com o link dá para testar a leitura da página do produto no mesmo momento e dizer se a causa é a loja ou o texto da mensagem.'] },
+    ],
+    relatedTitle: 'Continue: card, foto e conversão',
+    relatedLinks: [
+      { href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', label: 'Como converter o link de afiliado automaticamente', note: 'a etapa que independe da foto' },
+      { href: '/como-funciona-espelha-grupos-canais', label: 'Como o Espelha Grupos funciona, do QR ao envio', note: 'onde o card é montado' },
+      { href: '/shopee-afiliados-whatsapp', label: 'Divulgar Shopee no WhatsApp', note: 'como a oferta sai convertida' },
+      { href: '/suporte', label: 'Falar com o suporte', note: 'mande o link da oferta e a loja' },
+      { href: '/blog/bot-de-whatsapp-conectado-mas-nao-envia', label: 'Bot conectado mas não envia ofertas', note: 'quando nada sai, e não só a foto' },
+    ],
+    faq: [
+      { q: 'Oferta sem foto perde a comissão?', a: 'Não por causa da foto. O link de afiliado é convertido em uma etapa separada. O que a foto muda é o quanto a oferta chama atenção no grupo.' },
+      { q: 'Por que o mesmo produto sai com foto às vezes e sem foto outras?', a: 'Porque a leitura da página da loja pode ser bloqueada em alguns momentos. Quando o bloqueio passa, a foto volta a ser obtida.' },
+      { q: 'O robô inventa uma foto quando não acha?', a: 'Não. Sem foto do produto, a mensagem sai como texto com o link convertido.' },
+    ],
+  },
+  'numero-banido-whatsapp-o-que-fazer': {
+    slug: '/blog/numero-banido-whatsapp-o-que-fazer',
+    title: 'Número banido no WhatsApp: o que fazer',
+    description: 'O WhatsApp avisou que o número não pode usar o app. O que a Central de Ajuda diz, como pedir análise, o que evitar e o que nenhum software consegue garantir.',
+    eyebrow: 'Suporte · Número banido',
+    usePersonAuthor: true,
+    origin: 'blog_numero_banido_whatsapp_o_que_fazer',
+    heroImage: { path: '/blog/hero/34-numero-banido.jpg', alt: 'Número banido: o que fazer. Quatro passos: ler o aviso na tela, pedir análise pelo app, rever volume e ritmo e não voltar igual com um número novo', width: 1080, height: 1080 },
+    intro: 'Quem decide banir um número é o WhatsApp, com critérios que ele não publica por inteiro. Se a sua conta foi banida, o caminho que existe é o pedido de análise dentro do próprio app. Este guia resume o que a Central de Ajuda do WhatsApp informa, o que vale conferir na sua operação e o que o Espelha Grupos pode e não pode fazer por você.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Abra o WhatsApp no número afetado e leia a mensagem na tela. Se o app oferecer a opção de pedir análise, use-a: é o canal oficial. Não existe atalho por fora, e nenhum software, incluindo o Espelha Grupos, consegue desbanir um número nem assegurar que ele fique livre de banimento.'] },
+      { h2: 'O que a Central de Ajuda do WhatsApp diz', paragraphs: ['Segundo a Central de Ajuda do WhatsApp, uma conta pode ser banida quando a empresa entende que ela viola os Termos de Serviço, com exemplos como envio de spam e golpes. Quando o app mostra que o número não pode usar o WhatsApp, ele pode oferecer o pedido de análise, e a resposta chega por notificação no próprio app. Se a opção de análise não aparece, a página informa que a decisão não pode ser contestada por esse caminho.', 'Confira sempre o texto atual na Central de Ajuda, porque as regras do WhatsApp mudam.'] },
+      { h2: 'O que conferir na sua operação antes de tentar de novo', bullets: ['Volume: muitas mensagens iguais em pouco tempo, para muitos grupos ao mesmo tempo.', 'Repetição: o mesmo texto e o mesmo link enviados sem variação.', 'Consentimento: grupos e contatos que não pediram para receber ofertas.', 'Número: um chip que mistura conversa pessoal e divulgação. O número dedicado à operação separa o risco.', 'Ritmo: intervalo entre envios, limite por dia e horário de descanso configurados.'] },
+      { h2: 'O que não fazer', bullets: ['Contratar quem promete "desbloquear" o número por fora do app: a Central de Ajuda diz que contatar o WhatsApp fora do processo de análise não acelera nem muda a decisão.', 'Voltar a operar na mesma velocidade em um número novo. Se o comportamento que gerou o problema continua, o risco também.', 'Perder o histórico do grupo: anote os grupos de origem e destino e as suas configurações antes de reconectar qualquer número.'] },
+      { h2: 'Como o Espelha Grupos entra nisso', paragraphs: ['O Espelha Grupos publica com fila, intervalo entre envios, limite por dia e horário de descanso, para a operação não sair despejando ofertas. Isso reduz um tipo de risco; não elimina nenhum. Quem restringe ou bane é o WhatsApp, e nós não temos como prever nem reverter a decisão.', 'Se o número banido era o conectado ao robô, conecte outro número pelo QR Code no painel. Os grupos de origem e destino ficam guardados na sua conta.'] },
+    ],
+    relatedTitle: 'Continue: proteger a operação',
+    relatedLinks: [
+      { href: '/blog/chip-dedicado-bot-whatsapp', label: 'Chip dedicado para o bot', note: 'separar a operação do seu número pessoal' },
+      { href: '/blog/como-evitar-banimento-whatsapp-afiliados', label: 'Como reduzir o risco de banimento', note: 'práticas de ritmo e volume, sem promessa' },
+      { href: '/metodologia-uso-responsavel-whatsapp', label: 'Metodologia de uso responsável', note: 'como o Espelha Grupos trata o envio' },
+      { href: '/diagnostico-antiban-whatsapp', label: 'Diagnóstico de risco da sua operação', note: 'ferramenta gratuita' },
+      { href: '/suporte', label: 'Falar com o suporte', note: 'para reconectar outro número' },
+    ],
+    faq: [
+      { q: 'O Espelha Grupos protege meu número contra banimento?', a: 'Não, e ninguém pode garantir isso. Quem decide restringir ou banir um número é o WhatsApp, com critérios próprios. O produto oferece controles de ritmo para reduzir um tipo de risco.' },
+      { q: 'Dá para recuperar um número banido pelo Espelha Grupos?', a: 'Não. O caminho oficial é o pedido de análise dentro do WhatsApp, quando o app oferece essa opção.' },
+      { q: 'Perdi meus grupos e configurações ao trocar de número?', a: 'Os grupos de origem e destino e as configurações ficam na sua conta do Espelha Grupos. Ao conectar outro número pelo QR Code, você continua a partir deles.' },
+      { q: 'Posso usar meu número pessoal para divulgar ofertas?', a: 'Pode, mas o risco da operação passa a atingir também as suas conversas pessoais. Por isso recomendamos um número dedicado.' },
+    ],
+  },
+  'como-aquecer-numero-whatsapp-afiliados': {
+    slug: '/blog/como-aquecer-numero-whatsapp-afiliados',
+    title: 'Aquecer número no WhatsApp: o que é e o que não é',
+    description: 'O que se chama de aquecer um número de WhatsApp, o que a prática tem de fato e o que ninguém garante. Como começar devagar sem depender de promessa.',
+    eyebrow: 'Suporte · Aquecer número',
+    usePersonAuthor: true,
+    origin: 'blog_como_aquecer_numero_whatsapp_afiliados',
+    heroImage: { path: '/blog/hero/35-aquecer-numero.jpg', alt: 'Como aquecer um número: começar devagar, conversas reais, aumentar aos poucos e sem promessa mágica', width: 1024, height: 1024 },
+    intro: 'Aquecer um número de WhatsApp é um termo do mercado, não uma regra do WhatsApp. Ele descreve começar uma operação devagar, aumentando o volume aos poucos. A ideia é razoável, mas o WhatsApp não publica um método de aquecimento, e nenhuma ferramenta consegue garantir que um número aquecido não será restrito. Este guia separa o que é prática de bom senso do que é promessa.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Aquecer é começar com pouco volume e aumentar gradualmente, em vez de ligar um número novo e disparar dezenas de ofertas no primeiro dia. Não é um procedimento oficial do WhatsApp e não protege contra restrição. É uma forma prudente de começar.'] },
+      { h2: 'O que se sabe e o que não se sabe', paragraphs: ['Sabemos, pela Central de Ajuda do WhatsApp, que contas podem ser banidas por violar os Termos de Serviço, com exemplos como spam e envio automatizado em massa. Não sabemos, porque o WhatsApp não divulga, quantas mensagens por dia são seguras, nem por quantos dias um número precisa ser aquecido. Quem afirma um número exato está adivinhando.'] },
+      { h2: 'Como começar devagar, sem prometer nada', bullets: ['Use um número dedicado à operação, separado do pessoal.', 'Nos primeiros dias, publique poucas ofertas por dia e aumente aos poucos, observando o que acontece.', 'Varie o texto e o horário; evite a mesma mensagem idêntica repetida.', 'Publique só onde as pessoas pediram para estar: grupo que você administra ou tem permissão para divulgar.', 'Mantenha intervalo entre um envio e outro e um horário de descanso.'] },
+      { h2: 'O que o Espelha Grupos faz por você aqui', paragraphs: ['O Espelha Grupos publica em fila, com intervalo entre envios, limite por dia e horário de descanso configuráveis no seu plano Pro (Módulo de Preservação Avançada). Isso ajuda a manter um ritmo constante. Ele não faz aquecimento automático de número e não garante que o número não será restrito.'] },
+      { h2: 'Sinais para desacelerar', bullets: ['Aumento de reclamações ou saída de membros logo após as ofertas.', 'Mensagens de aviso do próprio WhatsApp sobre o uso da conta.', 'Queda de envios ou de conexão sem causa técnica clara.'] },
+    ],
+    relatedTitle: 'Continue: ritmo e risco',
+    relatedLinks: [
+      { href: '/blog/chip-dedicado-bot-whatsapp', label: 'Chip dedicado para o bot', note: 'por que separar da conta pessoal' },
+      { href: '/blog/numero-banido-whatsapp-o-que-fazer', label: 'Número banido: o que fazer', note: 'o caminho oficial de análise' },
+      { href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', label: 'Cadência e horários de envio', note: 'como distribuir as ofertas no dia' },
+      { href: '/metodologia-uso-responsavel-whatsapp', label: 'Metodologia de uso responsável', note: 'como o Espelha Grupos trata o envio' },
+      { href: '/diagnostico-antiban-whatsapp', label: 'Diagnóstico de risco da sua operação', note: 'ferramenta gratuita' },
+    ],
+    faq: [
+      { q: 'Quantas mensagens por dia posso enviar num número novo?', a: 'O WhatsApp não publica um número seguro. Comece com pouco, aumente aos poucos e observe. Qualquer número exato prometido por terceiros é estimativa.' },
+      { q: 'O Espelha Grupos aquece o meu número?', a: 'Não. Ele publica com intervalo, limite por dia e horário de descanso configuráveis; isso ajuda a manter um ritmo, mas não é aquecimento e não garante nada.' },
+      { q: 'Um número aquecido nunca é banido?', a: 'Não. Aquecer é uma prática de prudência, não uma proteção. Quem restringe ou bane é o WhatsApp.' },
+      { q: 'Preciso de número dedicado?', a: 'Recomendamos, para que um problema na operação não atinja as suas conversas pessoais.' },
+    ],
+  },
+  'link-de-afiliado-sem-comissao-o-que-conferir': {
+    slug: '/blog/link-de-afiliado-sem-comissao-o-que-conferir',
+    title: 'Link de afiliado sem comissão: o que conferir',
+    description: 'Vendeu mas a comissão não apareceu? As causas mais comuns: link sem o seu código, prazo de confirmação, tabela por categoria e regras da loja. Checklist.',
+    eyebrow: 'Suporte · Comissão não apareceu',
+    usePersonAuthor: true,
+    origin: 'blog_link_de_afiliado_sem_comissao',
+    heroImage: { path: '/blog/hero/36-link-sem-comissao.jpg', alt: 'Link sem comissão? Confira quatro pontos: etiqueta cadastrada, link convertido, cookie e atribuição, regras da loja', width: 1024, height: 1024 },
+    intro: 'Quando a venda saiu e a comissão não aparece, a causa costuma estar em quatro lugares: o link não levava o seu código, a venda ainda não foi confirmada pela loja, a categoria paga um percentual menor do que você esperava, ou a compra não é elegível pelas regras do programa. Este checklist ajuda a separar cada uma antes de falar com a loja ou com o suporte.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Confira, nesta ordem: (1) o link que foi para o grupo levava o seu código de afiliada; (2) a venda já foi confirmada pela loja; (3) o percentual da categoria; (4) se a compra é elegível pelas regras do programa. O Espelha Grupos ajuda no item 1: ele troca o link pelo seu código. Os itens 2 a 4 dependem da loja.'] },
+      { h2: '1. O link levava o seu código?', paragraphs: ['Sem o seu identificador no link, a venda não é atribuída a você. Na Amazon, por exemplo, a tag de associado precisa estar no link; no Mercado Livre, o link precisa ser o seu, não o do grupo de onde a oferta veio. Abra o link enviado no grupo, confira o endereço final e compare com o que a loja gera para a sua conta.'] },
+      { h2: '2. A venda já foi confirmada?', paragraphs: ['As lojas só pagam depois de confirmar a venda. No Mercado Livre, por exemplo, o pagamento só ocorre após a confirmação de uma transação válida, o que pode levar até 60 dias a partir da entrega do produto. A comissão estimada no painel pode mudar até a confirmação, e compras canceladas ou devolvidas deixam de valer.'] },
+      { h2: '3. Qual é o percentual da categoria?', paragraphs: ['Cada loja paga um percentual por categoria, e ele pode ser menor do que você imaginava. Quem divulga ofertas pode ter uma tabela própria no programa. Confira a tabela que vale para a sua conta no programa de afiliados da loja.'] },
+      { h2: '4. A compra é elegível?', paragraphs: ['Os termos de cada programa listam o que é proibido e o que pode anular uma comissão. Nos Termos e Condições do Programa de Afiliados Shopee, por exemplo, há previsão de estorno em transações realizadas por meio de um esquema e quando o próprio afiliado compra os produtos. Leia os termos do programa em que você está.'] },
+      { h2: 'O que o Espelha Grupos mostra', paragraphs: ['Para Shopee, o painel tem a aba Vendas com pedidos atribuídos e comissão estimada e confirmada. Ele mostra o que a loja informa; a decisão de pagar é sempre da loja, e o Espelha Grupos não recebe nem repassa comissão.'] },
+    ],
+    relatedTitle: 'Continue: conversão e comissão',
+    relatedLinks: [
+      { href: '/vendas-e-comissao-afiliado-whatsapp', label: 'Ver vendas e comissão no painel', note: 'a aba Vendas da Shopee' },
+      { href: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', label: 'Como converter o link de afiliado automaticamente', note: 'a etapa que coloca o seu código' },
+      { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Amazon: tag e comissão por categoria', note: 'de 0% a 13%' },
+      { href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', label: 'Mercado Livre: comissão e prazo', note: 'até 60 dias para pagar' },
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como funciona', note: 'comissão e prazo de atribuição' },
+    ],
+    faq: [
+      { q: 'Por que vendi e a comissão não apareceu?', a: 'O motivo mais comum é a venda ainda não estar confirmada pela loja. Depois vêm o link sem o seu código, a categoria com percentual menor e compras inelegíveis pelas regras do programa.' },
+      { q: 'O Espelha Grupos garante que toda venda vira comissão?', a: 'Não. Ele coloca o seu código nos links; quem confirma a venda e paga a comissão é a loja, pelas regras do programa dela.' },
+      { q: 'Quanto tempo a loja leva para pagar?', a: 'Depende da loja. No Mercado Livre, por exemplo, o pagamento pode levar até 60 dias a partir da entrega do produto.' },
+      { q: 'Posso comprar pelo meu próprio link?', a: 'Confira os termos do programa. Nos da Shopee, há previsão de estorno quando o próprio afiliado compra os produtos.' },
+    ],
+  },
+  'shopee-suspendeu-afiliado-o-que-fazer': {
+    slug: '/blog/shopee-suspendeu-afiliado-o-que-fazer',
+    title: 'Shopee suspendeu afiliado: o que fazer',
+    description: 'A conta de afiliado da Shopee foi suspensa ou a comissão retida. O que os termos do programa dizem, o que reunir antes de contestar e o que evitar.',
+    eyebrow: 'Suporte · Conta suspensa',
+    usePersonAuthor: true,
+    origin: 'blog_shopee_suspendeu_afiliado',
+    heroImage: { path: '/blog/hero/37-conta-suspensa.jpg', alt: 'Shopee suspendeu sua conta? Quatro passos: ler o motivo, conferir os termos do programa, pedir revisão e não improvisar com outra conta', width: 1024, height: 1024 },
+    intro: 'A Shopee decide sozinha sobre a conta de afiliado, e os termos do programa dão a ela bastante margem para suspender, reter comissão ou encerrar. Este guia resume o que os Termos e Condições do Programa de Afiliados Shopee dizem sobre isso e o que fazer com calma: entender o aviso, reunir provas e falar com o canal oficial. Não somos a Shopee e não temos como reverter uma decisão dela.',
+    sections: [
+      { h2: 'Resposta direta', paragraphs: ['Leia o aviso da Shopee até o fim, guarde prints e datas, releia os termos do programa e fale com o suporte oficial da Shopee. Enquanto isso, pare de divulgar o que possa ter causado o problema. O Espelha Grupos não tem acesso à sua conta da Shopee e não consegue reativá-la.'] },
+      { h2: 'O que os termos do programa dizem', paragraphs: ['Segundo os Termos e Condições do Programa de Afiliados Shopee, a Seção 4.3 lista práticas proibidas, como divulgar informações falsas ou não verificadas, usar meios automatizados de extração de dados e anunciar em Google Ads ou Bing Ads. A Seção 7.2 permite à Shopee encerrar o contrato a qualquer momento, e a Seção 5.2 prevê remover links, impor multas e reter comissões. A Seção 7.5 diz que, se o encerramento vier de violação do afiliado, os valores a pagar podem ser perdidos.', 'Os termos que consultamos não descrevem um processo formal de contestação. Confira a versão atual no site da Shopee, porque o texto muda.'] },
+      { h2: 'O que reunir antes de contestar', bullets: ['O aviso da Shopee (print, data e o motivo citado).', 'Os links, textos e imagens que você divulgou nos últimos dias.', 'Os canais em que você divulga: grupos, páginas, redes.', 'O histórico de pedidos e de comissão do painel do programa.'] },
+      { h2: 'O que evitar', bullets: ['Continuar divulgando o mesmo tipo de conteúdo enquanto a causa não é entendida.', 'Comprar pelos próprios links para "testar": os termos preveem estorno nesse caso.', 'Compartilhar informação não verificada de preço ou cupom.', 'Ignorar o e-mail cadastrado no programa: é por ele que a Shopee avisa.'] },
+      { h2: 'Como o Espelha Grupos entra nisso', paragraphs: ['O Espelha Grupos troca os links pelo seu código e publica com intervalo, mas não confere o conteúdo de cada oferta contra as regras da Shopee: preço, cupom, estoque e texto continuam sendo responsabilidade de quem divulga. Não prometemos evitar suspensão. Uma checagem automática de texto proibido não existe hoje no produto.'] },
+    ],
+    relatedTitle: 'Continue: regras e comissão',
+    relatedLinks: [
+      { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como funciona', note: 'cadastro, comissão e prazo' },
+      { href: '/blog/link-de-afiliado-sem-comissao-o-que-conferir', label: 'Link sem comissão: o que conferir', note: 'quando a venda não vira comissão' },
+      { href: '/shopee-afiliados-whatsapp', label: 'Divulgar Shopee no WhatsApp', note: 'como a oferta sai convertida' },
+      { href: '/metodologia-uso-responsavel-whatsapp', label: 'Metodologia de uso responsável', note: 'o que o Espelha Grupos faz e não faz' },
+      { href: '/suporte', label: 'Falar com o suporte', note: 'dúvidas sobre o uso do Espelha Grupos' },
+    ],
+    faq: [
+      { q: 'O Espelha Grupos pode reativar minha conta de afiliado da Shopee?', a: 'Não. A conta é da Shopee e a decisão é dela. O caminho é o suporte oficial do programa.' },
+      { q: 'A Shopee pode reter minha comissão?', a: 'Segundo os termos do programa, sim: a Seção 5.2 prevê reter comissões e a Seção 7.5 prevê perda de valores em caso de encerramento por violação. Confira o texto atual.' },
+      { q: 'O Espelha Grupos evita que a Shopee suspenda a conta?', a: 'Não prometemos isso. Ele troca links e publica com intervalo, mas o conteúdo de cada oferta continua sendo responsabilidade de quem divulga.' },
+      { q: 'Onde leio as regras do programa?', a: 'Nos Termos e Condições do Programa de Afiliados Shopee, na Central de Ajuda da Shopee.' },
+    ],
+  },
   'melhores-horarios-para-postar-ofertas-no-whatsapp': {
     slug: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp',
     // Título encurtado em 2026-08-19 (specs/013-inbound-leads-strategy, P1):
     // era 64 chars de texto próprio, o que empurrava o corte do Google no
     // celular. Motivo pra clicar ("horário certo") na frente.
-    title: 'Melhor horário para postar oferta: 7h, 12h e 19h',
-    description: 'Os três horários em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
+    // 27/09/2026 (Frente D1): 547 impressões, CTR 0,55% na posição 6,6 para
+    // "melhor horário para postar no whatsapp". O título vira a pergunta
+    // literal + o número de faixas que a página já afirma (nada inventado).
+    title: 'Melhor horário para postar no WhatsApp? 3 faixas',
+    description: 'As 3 faixas em que as pessoas abrem o WhatsApp — 7h-9h, 11h30-13h30 e 18h-21h — e por que espalhar os envios rende mais que acertar a hora exata.',
     eyebrow: 'Cadência · Rotina de postagem',
     origin: 'blog_melhores_horarios_para_postar_ofertas_no_whatsapp',
     heroImage: { path: '/blog/hero/02-radar.png', alt: 'Radar monitorando ofertas de vários grupos de origem ao mesmo tempo, para não perder o timing', width: 1080, height: 1080 },
@@ -418,6 +680,7 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'o que publicar nesses horários' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: comissão por categoria', note: 'de 0% a 13% conforme o produto' },
       { href: '/anti-ban-whatsapp', label: 'Frequência de envio e risco de banimento', note: 'por que concentrar tudo num horário só é arriscado' },
+      { href: '/blog/como-aquecer-numero-whatsapp-afiliados', label: 'Como aquecer um número de WhatsApp para afiliados', note: 'ritmo certo para um número novo' },
     ],
     faq: [
       { q: 'Existe um horário único que converte mais?', a: 'Não. As janelas de manhã, almoço e noite costumam render bem, mas o comportamento do seu público específico manda. Acompanhe cliques por horário e ajuste.' },
@@ -451,6 +714,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/copiaram-minha-oferta-no-whatsapp', label: 'Copiaram a sua oferta no WhatsApp', note: 'link com o seu código é a defesa que mexe no bolso' },
       { href: '/blog/como-divulgar-ofertas-amazon-whatsapp', label: 'Afiliado Amazon: a tag na URL da loja', note: 'sem ela a venda não é atribuída a você' },
       { href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', label: 'Afiliado Mercado Livre: comissão por categoria', note: 'venda direta e venda indireta' },
+      { href: '/blog/link-de-afiliado-sem-comissao-o-que-conferir', label: 'Link de afiliado sem comissão: o que conferir', note: 'o que checar antes de culpar a loja' },
+      { href: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece', label: 'Oferta sem foto no WhatsApp: por que acontece', note: 'card, foto e link de loja' },
     ],
     faq: [
       { q: 'A conversão automática funciona com short link?', a: 'Sim. O short link é resolvido antes da conversão para não perder o produto no meio da cadeia de redirecionamento, especialmente na Shopee.' },
@@ -464,6 +729,7 @@ export const PRESERVATION_BLOG_POSTS = {
     description: 'Como operar os três programas de afiliados ao mesmo tempo no WhatsApp: qual loja usar em cada oferta, como não misturar os códigos e qual rende mais.',
     eyebrow: 'Estratégia · Operar os três programas',
     origin: 'blog_amazon_shopee_ou_mercado_livre_para_afiliados_whatsapp',
+    heroImage: { path: '/blog/hero/38-qual-loja.jpg', alt: 'Comparativo entre marketplaces: Shopee para achadinhos e cupom, Amazon para variedade e marcas, Mercado Livre para ticket maior e frete. Quem decide é a atribuição do link e o seu público', width: 1024, height: 1024 },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Não existe um único programa vencedor: Amazon é forte em variedade e confiança, Shopee é forte em achadinhos baratos e cupom, e Mercado Livre é forte em ticket médio e frete. Para quem divulga no WhatsApp, a estratégia madura combina os três, escolhendo o programa por tipo de oferta. Se você ainda está decidindo por onde começar, veja antes o comparativo de comissão dos três programas.',
@@ -494,6 +760,7 @@ export const PRESERVATION_BLOG_POSTS = {
     title: 'Grupo de ofertas no WhatsApp: montar do zero',
     description: 'Guia para montar um grupo de ofertas no WhatsApp do zero: chip dedicado, primeiras fontes de oferta, conversão de link, cadência e quando migrar para canal.',
     eyebrow: 'Começando · Grupo de ofertas',
+    usePersonAuthor: true,
     origin: 'blog_como_montar_grupo_de_ofertas_no_whatsapp_do_zero',
     heroImage: { path: '/blog/hero/05-copia-cola.png', alt: 'Checklist da rotina manual de copiar, colar e reenviar oferta grupo por grupo, substituída pelo bot', width: 1080, height: 1080 },
     intro: 'Montar um grupo de ofertas no WhatsApp do zero é menos sobre audiência grande e mais sobre processo: chip dedicado, boas fontes de oferta, link com a sua comissão e uma rotina de postagem consistente. Quem começa com processo cresce com estabilidade; quem começa no improviso perde o número.',
@@ -513,6 +780,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/copiaram-minha-oferta-no-whatsapp', label: 'E quando copiarem as suas ofertas?', note: 'o que dá e o que não dá para fazer — e por que o link importa mais que a foto' },
       { href: '/blog/como-ser-afiliado-shopee-whatsapp', label: 'Shopee Afiliados: como se cadastrar e quanto paga', note: 'cadastro gratuito, sem exigir audiência grande' },
       { href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', label: 'Melhores horários para postar ofertas', note: 'quando o grupo responde mais' },
+      { href: '/blog/grupo-ou-canal-whatsapp-achadinhos', label: 'Grupo ou Canal do WhatsApp: qual é melhor?', note: 'qual formato combina com você' },
+      { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Migrar um grupo de achadinhos para Canal do WhatsApp', note: 'passo a passo da migração' },
     ],
     faq: [
       { q: 'Preciso de muita gente para começar?', a: 'Não. Constância e ofertas boas importam mais que tamanho no início. Audiência cresce com rotina consistente e curadoria.' },
@@ -531,16 +800,33 @@ export const PRESERVATION_BLOG_POSTS = {
   // porque comparação sem ele converteu 0% (medição de 11/09), e entra
   // linkada de páginas COM impressão (regra "página nova nunca nasce órfã").
   //
-  // Preço de concorrente NÃO aparece aqui: só nome e o que faz, com link para
-  // a ficha datada em /alternativas/* (FR-031). O nosso pode.
+  // Preço de concorrente NÃO é digitado aqui: ou não aparece (só nome e o que
+  // faz, com link para a ficha datada em /alternativas/*), ou é LIDO da ficha
+  // em competitors-data.js por `opcaoDaFicha()`, com a data de conferência
+  // junto (FR-031). O nosso vem de DEFAULT_LANDING_PLANS.
   // -------------------------------------------------------------------------
   'como-espelhar-mensagens-entre-grupos-whatsapp': {
     slug: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp',
-    title: 'Como espelhar mensagens entre grupos de WhatsApp',
-    description: 'Os 4 jeitos de espelhar mensagens entre grupos de WhatsApp — na mão, com agendador, com automação genérica ou com robô de afiliada — e o que cada um custa.',
+    // 27/09/2026 (plano GEO, B5): posição 3,2 com 59 impressões e ZERO clique
+    // — o problema era título/descrição sem promessa. Título ≤ 55 (teto medido
+    // do celular) com o número de caminhos; descrição com os 4 caminhos, o
+    // link trocado e o preço.
+    title: 'Espelhar mensagens entre grupos de WhatsApp: 4 jeitos',
+    description: '4 jeitos de espelhar mensagens entre grupos de WhatsApp sem programar: na mão, agendador, automação ou robô que troca o link pelo seu código. De R$ 39/30 dias.',
     eyebrow: 'Espelhamento · Passo a passo',
     origin: 'blog_como_espelhar_mensagens_entre_grupos_whatsapp',
     heroImage: { path: '/blog/hero/06-escalar.png', alt: 'Um robô central distribuindo ofertas para vários grupos e canais de destino ao mesmo tempo', width: 1080, height: 1080 },
+    // 28/09/2026 (plano GEO, C1): vídeo 1 do canal responde à MESMA pergunta
+    // e a descrição dele aponta para cá. Vídeo e página apontando um para o
+    // outro (VideoObject aqui) é o que o plano mede em "AIO embute vídeo nosso".
+    video: {
+      title: VIDEO_ESPELHAMENTO.titulo,
+      description: 'Na tela do painel: conectar o WhatsApp, escolher o grupo de origem e os seus destinos, e ver a oferta sair com o seu link de afiliada.',
+      uploadDate: VIDEO_ESPELHAMENTO.publicadoEm,
+      url: VIDEO_ESPELHAMENTO_URL,
+      embedUrl: VIDEO_ESPELHAMENTO_EMBED_URL,
+      thumbnailUrl: VIDEO_ESPELHAMENTO_THUMB_URL,
+    },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
     intro: 'Espelhar mensagens entre grupos de WhatsApp é fazer a oferta que aparece num grupo de origem sair, sozinha, nos seus grupos e canais — com o link trocado pelo seu código de afiliada. Serve para quem divulga ofertas de Shopee, Mercado Livre, Amazon, Magalu, SHEIN ou AliExpress e hoje copia e cola oferta por oferta. Dá para fazer de quatro jeitos; com robô especializado custa a partir de R$ 39 por 30 dias e tem 7 dias de teste sem cartão.',
@@ -579,7 +865,7 @@ export const PRESERVATION_BLOG_POSTS = {
       },
       { h2: 'O que espelhar mensagens NÃO é', bullets: ['Não é espelhar o WhatsApp em outro celular ou no computador — isso é usar a mesma conta em dois aparelhos, e não tem relação com grupos de ofertas.', 'Não é clonar contatos nem entrar em grupo escondido: o robô usa o seu número, nos grupos onde ele já está, e publica como você.', 'Não é disparo em massa: espelhar é republicar UMA oferta de origem nos SEUS destinos, com intervalo — o oposto de mandar a mesma mensagem para uma lista fria.'] },
       { h2: 'Melhor para e não é ideal para', bullets: ['Melhor para: afiliada que já segue grupos onde a promoção aparece primeiro, publica em mais de um grupo ou canal e perde comissão por link errado ou por oferta que chega atrasada.', 'Melhor para: quem quer o robô publicando 24 horas sem depender de estar no celular.', 'Não é ideal para: quem cria todas as ofertas do zero, sem grupo de origem — um agendador resolve por menos.', 'Não é ideal para: quem espera que uma ferramenta impeça banimento. Nenhuma ferramenta controla a decisão do WhatsApp; o que dá para controlar é ritmo, variação e para quem você publica.'] },
-      { h2: 'Como o Espelha Grupos faz isso', paragraphs: ['O Espelha Grupos é um espelhador: acompanha os grupos de origem que você escolhe, troca o link de cada oferta pelo seu código de afiliada em seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress), converte também link de cupom, e publica nos seus grupos e canais com intervalo, limite por destino e histórico completo. Além do espelhamento, tem filas de ofertas e busca automática de ofertas da Shopee.', 'Ele não promete que ninguém será banido e não promete quanto você vai vender. O que promete é o trabalho repetitivo saindo da sua mão, com registro de tudo o que saiu.'] },
+      { h2: 'Como o Espelha Grupos faz isso', paragraphs: ['O Espelha Grupos é um espelhador: acompanha os grupos de origem que você escolhe, troca o link de cada oferta pelo seu código de afiliada em seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress), converte também link de cupom, e publica nos seus grupos e canais com intervalo, limite por destino e histórico completo. Além do espelhamento, cria a oferta a partir de um link que você cola e, no plano Pro, busca ofertas da Shopee sozinho.', `Ele não promete que ninguém será banido e não promete quanto você vai vender. O que promete é o trabalho repetitivo saindo da sua mão, com registro de tudo o que saiu. Números nossos, medidos em ${formatDatePtBr(NUMEROS_MEDIDOS_EM)}: ${NUMEROS_PROPRIOS.clientesPagantes} clientes pagantes e ${NUMEROS_PROPRIOS.renovacaoAgosto} das que pagaram em agosto renovaram no mês seguinte.`] },
     ],
     relatedLinks: [
       { href: '/bot-afiliados-whatsapp', label: 'Como funciona a operação para afiliados', note: 'origens, conversão de link, destinos e histórico' },
@@ -589,6 +875,10 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'checklist antes de assinar qualquer uma' },
       { href: '/espelha-grupos-vs-planilha-manual', label: 'Quando a planilha ainda basta', note: 'e quando o robô passa a compensar' },
       { href: '/grupo-para-canal-whatsapp', label: 'Grupo ou Canal: qual usar como destino', note: 'o que muda no alcance e em quem pode responder' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?', note: 'a crítica mais comum e o controle que responde a cada uma' },
+      { href: '/blog/bot-de-whatsapp-conectado-mas-nao-envia', label: 'Bot conectado mas não envia ofertas: o que conferir', note: '5 passos antes de chamar o suporte' },
+      { href: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece', label: 'Oferta sem foto no WhatsApp: por que acontece', note: 'card, foto e link de loja' },
+      { href: '/blog/migrar-grupo-achadinhos-para-canal', label: 'Migrar um grupo de achadinhos para Canal do WhatsApp', note: 'passo a passo da migração' },
     ],
     faq: [
       { q: 'Espelhar mensagens entre grupos é o mesmo que espelhar o WhatsApp em outro celular?', a: 'Não. Espelhar o WhatsApp em outro aparelho é usar a mesma conta em dois lugares. Espelhar mensagens entre grupos é republicar, nos seus grupos, a oferta que apareceu num grupo de origem — com o seu link de afiliada no lugar do original.' },
@@ -656,6 +946,8 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/blog/como-espelhar-mensagens-entre-grupos-whatsapp', label: 'Como espelhar mensagens entre grupos', note: 'os 4 caminhos e o passo a passo' },
       { href: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp', label: 'O que uma ferramenta de divulgação precisa ter', note: 'checklist antes de assinar' },
       { href: '/alternativas/bot-para-whatsapp-afiliados', label: 'Comparativo de bots para afiliados', note: 'planilha, automação genérica e ferramentas, lado a lado' },
+      { href: '/blog/shopee-suspendeu-afiliado-o-que-fazer', label: 'Shopee suspendeu sua conta de afiliada: o que fazer', note: 'regras do programa e próximos passos' },
+      { href: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece', label: 'Oferta sem foto no WhatsApp: por que acontece', note: 'card, foto e link de loja' },
     ],
     faq: [
       { q: 'Qual é a melhor automação para afiliado Shopee?', a: 'Depende de onde as suas ofertas nascem. Se você já acompanha grupos onde a promoção aparece primeiro, o espelhamento é a que mais economiza tempo. Se não acompanha grupo nenhum, a busca automática por palavra-chave é a que faz as ofertas saírem sozinhas. A conversão de link vale para todo mundo.' },
@@ -667,14 +959,19 @@ export const PRESERVATION_BLOG_POSTS = {
   },
   'ferramenta-para-divulgar-ofertas-em-grupos-whatsapp': {
     slug: '/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp',
-    title: 'Ferramenta para divulgar ofertas em grupos do WhatsApp',
-    description: 'O que uma ferramenta para divulgar ofertas em grupos do WhatsApp precisa ter em 2026, quanto custa, para quem serve e como testar antes de assinar.',
-    eyebrow: 'Divulgação em grupos · Como escolher',
+    // 27/09/2026 (plano GEO, B4): posição 3,8 e 30 impressões — virou lista
+    // "6 opções comparadas" (ItemList), nossa linha primeiro e mais 5 com ficha
+    // datada em competitors-data.js. Título ≤ 55 (teto medido do celular): "de
+    // WhatsApp" e o ano não couberam junto de "6 opções"; a consulta inteira e
+    // o 2026 ficam na descrição e no H2.
+    title: 'Ferramenta para divulgar ofertas em grupos: 6 opções',
+    description: '6 ferramentas para divulgar ofertas em grupos de WhatsApp em 2026, com preço: Espelha Grupos, Afilira, Achadinho Pro, Shozap, Ofertiva e ProAfiliados.',
+    eyebrow: 'Divulgação em grupos · 6 opções comparadas · 2026',
     origin: 'blog_ferramenta_para_divulgar_ofertas_em_grupos_whatsapp',
     heroImage: { path: '/blog/hero/00-mascote.png', alt: 'Bit, o assistente do Espelha Grupos, que monitora, encaminha e converte links de afiliado', width: 1080, height: 1080 },
     leadMagnetVariant: 'afiliados',
     usePersonAuthor: true,
-    intro: 'Uma ferramenta para divulgar ofertas em grupos do WhatsApp é um robô que publica as ofertas nos seus grupos e canais por você: pega a oferta de um grupo de origem ou de uma busca, troca o link pelo seu código de afiliada e envia com intervalo. Serve para afiliadas e admins de grupo de promoções que hoje fazem isso na mão. O Espelha Grupos faz isso a partir de R$ 39 por 30 dias, com grupos ilimitados e 7 dias de teste sem cartão.',
+    intro: `Uma ferramenta para divulgar ofertas em grupos do WhatsApp é um robô que publica as ofertas nos seus grupos e canais por você: pega a oferta de um grupo de origem, de um link que você cola ou de uma busca, troca o link pelo seu código de afiliada e envia com intervalo. Serve para afiliadas e admins de grupo de promoções que hoje fazem isso na mão. Abaixo, 6 opções comparadas em 2026 — a nossa primeiro, e cinco concorrentes com preço lido da ficha datada de cada um. O Espelha Grupos custa ${precoPlanosFrase}, com grupos ilimitados e 7 dias de teste sem cartão.`,
     midBridge: {
       question: 'Quer testar com os seus grupos antes de decidir?',
       body: 'Conecte o número, escolha origem e destinos, cadastre o seu código de afiliada e veja as ofertas saindo — com histórico de tudo. Basic R$ 39 e Pro R$ 69 a cada 30 dias; 7 dias grátis, sem cartão.',
@@ -683,7 +980,45 @@ export const PRESERVATION_BLOG_POSTS = {
       secondary: { label: 'Como funciona a operação para afiliados', href: '/bot-afiliados-whatsapp' },
     },
     sections: [
-      { h2: 'Resposta direta', paragraphs: ['Em 2026, uma ferramenta para divulgar ofertas em grupos do WhatsApp precisa fazer cinco coisas: ler a origem da oferta (grupo, canal ou busca na loja), trocar o link pelo seu código de afiliada, publicar nos seus grupos e canais com intervalo e limite, não repetir a mesma oferta no mesmo destino e guardar o histórico do que saiu. O resto — arte, texto gerado, site próprio — é acessório. Se uma das cinco falta, você continua com trabalho na mão ou com comissão indo para outra pessoa.'] },
+      { h2: 'Resposta direta', paragraphs: ['Em 2026, uma ferramenta para divulgar ofertas em grupos do WhatsApp precisa fazer cinco coisas: ler a origem da oferta (grupo, canal, link colado ou busca na loja), trocar o link pelo seu código de afiliada, publicar nos seus grupos e canais com intervalo e limite, não repetir a mesma oferta no mesmo destino e guardar o histórico do que saiu. O resto — arte, texto gerado, site próprio — é acessório. Se uma das cinco falta, você continua com trabalho na mão ou com comissão indo para outra pessoa.', `As seis opções abaixo estão em ordem: a nossa primeiro, declarada como tal, e depois cinco ferramentas cujo preço e recursos têm ficha própria, com a data em que foram conferidos. Onde cada uma é melhor está dito na ficha. Números nossos, medidos em ${formatDatePtBr(NUMEROS_MEDIDOS_EM)}: ${NUMEROS_PROPRIOS.clientesPagantes} clientes pagantes e ${NUMEROS_PROPRIOS.contasComOfertasAutomaticas} contas com ofertas automáticas ativas.`] },
+      {
+        h2: 'As 6 opções comparadas em 2026 (preço de entrada com data de conferência)',
+        schema: 'ItemList',
+        items: [
+          {
+            name: 'Espelha Grupos (a nossa)',
+            text: `Espelha os grupos e canais que você já acompanha, troca o link pelo seu código em 6 lojas (inclusive cupom), cria a oferta a partir de um link colado e, no Pro, busca ofertas da Shopee sozinho. Só WhatsApp. ${precoPlanosFrase}, grupos ilimitados nos dois planos, 7 dias grátis sem cartão.`,
+            bestFor: 'afiliada que já acompanha grupos de origem, publica em mais de um grupo ou canal e quer o mesmo preço para poucos ou muitos grupos',
+            href: '/precos',
+            linkLabel: 'Preços e planos',
+          },
+          opcaoDaFicha('afilira', {
+            href: '/alternativas/afilira',
+            oQueFaz: 'Busca ofertas sozinha em grupos e nas lojas, prepara o link com a comissão e envia para WhatsApp e Telegram; o espelhamento entre grupos entra a partir do plano intermediário.',
+            bestFor: 'quem quer a ferramenta achando a oferta e precisa de Awin, Terabyte e SHEIN além dos marketplaces',
+          }),
+          opcaoDaFicha('achadinho-pro', {
+            href: '/alternativas/achadinho-pro',
+            oQueFaz: 'Bot de afiliados com IA para selecionar produtos e gerar links, com vários números de WhatsApp por conta; o plano de entrada cobre só Shopee.',
+            bestFor: 'quem começa só com Shopee e quer evoluir depois para Mercado Livre e Amazon',
+          }),
+          opcaoDaFicha('shozap', {
+            href: '/alternativas/shozap',
+            oQueFaz: 'Campanhas e monitoramento de grupos para WhatsApp e Telegram, com créditos de IA e de SMS, escalando por número de conexões e de contas de marketplace.',
+            bestFor: 'quem opera WhatsApp e Telegram juntos e precisa de várias conexões na mesma conta',
+          }),
+          opcaoDaFicha('ofertiva', {
+            href: '/alternativas/ofertiva',
+            oQueFaz: 'Bot de ofertas com página na bio (vitrine com IA) em todo plano e Meta Pixel a partir do intermediário; cobra por WhatsApps conectados, destinos e grupos espelhados.',
+            bestFor: 'quem quer, junto do robô, uma página de bio pronta e pixel para medir anúncio, com poucos grupos espelhados',
+          }),
+          opcaoDaFicha('proafiliados-com', {
+            href: '/alternativas/proafiliados',
+            oQueFaz: 'Bot para WhatsApp e Telegram com plano gratuito permanente (com a tag do sistema nas mensagens) e cobrança via PIX nos planos pagos.',
+            bestFor: 'quem quer testar automação de afiliados sem custo nenhum antes de pagar por qualquer coisa',
+          }),
+        ],
+      },
       { h2: 'O que ela precisa ter (checklist)', bullets: ['Conversão de link nas lojas que você divulga — produto E cupom. Sem isso, a oferta sai com o link do grupo de origem e a comissão não é sua.', 'Grupos de origem que você escolhe, e não um feed pronto: quem escolhe o que entra é você.', 'Intervalo entre envios, limite por grupo e horário de funcionamento, por destino.', 'Bloqueio de repetição: a mesma oferta não pode sair duas vezes no mesmo grupo no mesmo dia.', 'Histórico do que saiu, do que foi segurado e do que falhou — com o motivo em português.', 'Canal do WhatsApp como destino, além de grupo.', 'Preço que não muda quando você adiciona grupo.'] },
       {
         h2: 'Tipos de ferramenta e para quem serve cada uma',
@@ -697,7 +1032,7 @@ export const PRESERVATION_BLOG_POSTS = {
           ],
         },
       },
-      { h2: 'Quanto custa', paragraphs: ['No Espelha Grupos: Basic por R$ 39 e Pro por R$ 69, a cada 30 dias, grupos ilimitados nos dois, seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress) e 7 dias de teste com o Pro completo, sem cartão. Preços verificados em 19/09/2026 na página de preços.', 'Concorrentes cobram por grupo, por conexão de WhatsApp ou por número de usuários — e é isso que muda a conta quando a operação cresce. Os preços de cada um, com a data em que foram conferidos, estão nas fichas em /alternativas.'] },
+      { h2: 'Quanto custa', paragraphs: [`No Espelha Grupos: ${precoPlanosFrase}, grupos ilimitados nos dois, seis lojas (Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress) e 7 dias de teste com o Pro completo, sem cartão. O valor sai da mesma tabela da página de preços.`, 'Concorrentes cobram por grupo, por conexão de WhatsApp ou por número de usuários — e é isso que muda a conta quando a operação cresce. O preço de entrada de cada um está na lista acima, lido da ficha com a data em que foi conferido; a ficha completa, com todos os planos, está em /alternativas.'] },
       { h2: 'Melhor para e não é ideal para', bullets: ['Melhor para: afiliada ou admin de grupo de promoções que publica todo dia, em mais de um grupo ou canal, e quer o robô cuidando do que se repete.', 'Melhor para: quem divulga mais de uma loja e precisa que cada link saia com o código certo.', 'Não é ideal para: quem publica menos de 10 ofertas por semana num grupo só — o custo não se paga em tempo.', 'Não é ideal para: quem quer disparar para lista fria. Isso não é divulgação em grupo, é spam, e nenhuma ferramenta séria deveria fazer.'] },
       { h2: 'Como testar em 7 dias sem se comprometer', bullets: ['Dia 1: chip dedicado conectado, um grupo de origem e um destino de teste (pode ser um grupo só seu).', 'Dia 2: cadastre o código de afiliada de uma loja e confira, no celular, se o link publicado é o seu.', 'Dias 3 a 5: adicione os destinos reais com intervalo e limite; olhe o histórico todo dia.', 'Dias 6 e 7: compare com a semana anterior — tempo gasto, ofertas publicadas, link certo em 100% delas. Aí decida.'] },
     ],
@@ -708,10 +1043,12 @@ export const PRESERVATION_BLOG_POSTS = {
       { href: '/blog/quanto-custa-bot-para-whatsapp-afiliados', label: 'Quanto custa um bot para WhatsApp de afiliados', note: 'o custo real além da mensalidade' },
       { href: '/melhores-bots-para-afiliados-whatsapp', label: 'Critérios para comparar bots', note: 'sem ranking falso nem promessa de ganho' },
       { href: '/alternativas/bot-para-whatsapp-afiliados', label: 'Comparativo de bots para afiliados', note: 'planilha, automação genérica e ferramentas, lado a lado' },
+      { href: '/espelhar-grupos-de-ofertas-vale-a-pena', label: 'Espelhar grupos vale a pena?', note: 'quando compensa, quando não, e o que responde a cada crítica' },
       { href: '/blog/como-montar-grupo-de-ofertas-no-whatsapp-do-zero', label: 'Ainda não tem grupo?', note: 'os primeiros passos antes de automatizar' },
     ],
     faq: [
-      { q: 'Qual a melhor ferramenta para divulgar ofertas em grupos do WhatsApp?', a: 'A que faz as cinco coisas da resposta direta para as lojas que você divulga, sem cobrar por grupo. Para afiliada que publica todo dia, isso é um espelhador com conversão de link; para quem publica pouco, um conversor de link e o próprio WhatsApp bastam.' },
+      { q: 'Qual a melhor ferramenta para divulgar ofertas em grupos do WhatsApp?', a: 'A que faz as cinco coisas da resposta direta para as lojas que você divulga, sem cobrar por grupo. Para afiliada que publica todo dia, isso é um espelhador com conversão de link; para quem publica pouco, um conversor de link e o próprio WhatsApp bastam. Das seis comparadas acima, cada ficha diz quando o concorrente é a melhor escolha.' },
+      { q: 'Os preços dos concorrentes nesta lista estão atualizados?', a: 'Cada preço vem da ficha da ferramenta, com a data em que foi conferido, e não é digitado na lista. Preço muda; antes de assinar qualquer uma, confirme no site oficial dela.' },
       { q: 'Existe ferramenta grátis para divulgar ofertas em grupos?', a: 'Existem geradores de link gratuitos e agendadores simples. O que costuma ser pago é a parte que economiza tempo de verdade: ler o grupo de origem, converter e publicar sozinho. No Espelha Grupos o teste de 7 dias é gratuito e não pede cartão.' },
       { q: 'Ferramenta de divulgação dá banimento?', a: 'Ninguém pode garantir que um número não será banido. O que aumenta o risco é padrão de rajada, mensagem idêntica repetida e gente que não pediu para receber. Uma ferramenta séria controla os dois primeiros; o terceiro é decisão sua.' },
       { q: 'Preciso de um número só para isso?', a: 'É o mais recomendado. Se o número da operação tiver problema, os seus contatos e conversas pessoais continuam intactos em outro número.' },
@@ -818,6 +1155,42 @@ export function buildSectionSchemas(post, baseUrl) {
   return out
 }
 
+export function buildVideoSchema(video) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    name: video.title,
+    description: video.description,
+    thumbnailUrl: [video.thumbnailUrl],
+    uploadDate: video.uploadDate,
+    contentUrl: video.url,
+    embedUrl: video.embedUrl,
+  }
+}
+
+function ArticleVideo({ video }) {
+  return (
+    <section>
+      <h2>Veja em vídeo</h2>
+      <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-2xl ring-1 ring-emerald-100">
+        <iframe
+          src={video.embedUrl}
+          title={video.title}
+          className="absolute inset-0 h-full w-full border-0"
+          loading="lazy"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+      <p className="mt-3 text-sm text-gray-500">
+        {video.description}{' '}
+        <a href={video.url} target="_blank" rel="noopener noreferrer" className="font-bold text-emerald-700 underline underline-offset-4">Assistir no YouTube</a>
+      </p>
+    </section>
+  )
+}
+
 export function PreservationBlogPost({ postKey }) {
   const post = PRESERVATION_BLOG_POSTS[postKey]
   const dates = getEditorialDates(post.slug)
@@ -834,6 +1207,7 @@ export function PreservationBlogPost({ postKey }) {
   const schemas = [
     ...buildArticleJsonLd({ title: post.title, description: post.description, slug: post.slug, siteUrl, faq: post.faq, author: personAuthor, image: post.heroImage }),
     ...buildSectionSchemas(post, siteUrl),
+    ...(post.video ? [buildVideoSchema(post.video)] : []),
   ]
 
   return (
@@ -858,6 +1232,8 @@ export function PreservationBlogPost({ postKey }) {
           <h2>Resumo prático</h2>
           <p>{post.intro}</p>
         </section>
+
+        {post.video ? <ArticleVideo video={post.video} /> : null}
 
         {post.sections.map((section, sectionIndex) => (
           <Fragment key={section.h2}>
@@ -941,6 +1317,38 @@ export function PreservationBlogPost({ postKey }) {
           </section>
         ) : null}
 
+        {/* Frente D2 (PLANO_SEO_GEO_2026-09-27): post que já ranqueia para a
+            consulta de loja manda a força para a comercial do Tier 1 como
+            próximo passo único — em vez do bloco genérico de preservação, que
+            não é o assunto de quem chegou perguntando de comissão. */}
+        {post.nextStep ? (
+          <section>
+            <h2>Próximo passo</h2>
+            <p>{post.nextStep.body}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Link
+                className="rounded-2xl bg-emerald-600 px-5 py-4 text-center font-black text-white no-underline hover:bg-emerald-700"
+                href={post.nextStep.href}
+                data-seo-cta="blog_store_landing"
+                data-cta-position="article_next_step_primary"
+                data-cta-stage="consideration"
+                data-cta-destination="landing"
+              >
+                {post.nextStep.label}
+              </Link>
+              <Link
+                className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
+                href="/precos"
+                data-seo-cta="blog_pricing"
+                data-cta-position="article_next_step_secondary"
+                data-cta-stage="consideration"
+                data-cta-destination="pricing"
+              >
+                Ver preços e testar 7 dias grátis
+              </Link>
+            </div>
+          </section>
+        ) : (
         <section>
           <h2>Próximo passo</h2>
           <p>
@@ -989,6 +1397,7 @@ export function PreservationBlogPost({ postKey }) {
             </Link>
           </div>
         </section>
+        )}
 
         <section>
           <h2>FAQ</h2>

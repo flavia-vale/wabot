@@ -73,9 +73,10 @@ function hasPathAfterHost(match) {
  *
  * @param {string} text texto que vai ser publicado
  * @param {Array<{converted?: string, passthrough?: boolean}>} conversions
+ * @param {{awin?: object}} [offerOptions] lojas Awin da cliente (detector)
  * @returns {string[]}
  */
-export function findUnconvertedStoreLinks(text, conversions = []) {
+export function findUnconvertedStoreLinks(text, conversions = [], offerOptions = {}) {
   const body = String(text ?? '')
   if (!body) return []
   const allowed = new Set(
@@ -84,7 +85,7 @@ export function findUnconvertedStoreLinks(text, conversions = []) {
       .map(c => normalizeDetectedUrl(String(c.converted))),
   )
   const leaks = []
-  for (const { url } of detectLinks(body)) {
+  for (const { url } of detectLinks(body, offerOptions)) {
     if (!allowed.has(url)) leaks.push(url)
   }
   // Os links convertidos saem do texto antes da busca sem `https://`: o

@@ -17,8 +17,11 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 // promete quanto alguém vai ganhar. A política de uso responsável já publicada
 // diz que não prometemos comissão nem aumento de vendas.
 
-const title = 'Quanto ganha um afiliado Shopee? A conta real, sem promessa'
-const description = 'Quanto a Shopee paga de comissão, em quanto tempo a venda é atribuída a você e como fazer a conta do quanto dá para ganhar por mês — com a tabela oficial e sem promessa de resultado.'
+// 27/09/2026: 248 impressões e 1 clique na posição 7,4 — "A conta real, sem
+// promessa" não dava motivo para clicar. A pergunta literal fica, e o número
+// da tabela oficial entra no título (3% na venda padrão, até 30% na Extra).
+const title = 'Quanto ganha afiliado Shopee? 3% por venda, até 30%'
+const description = 'A Shopee paga 3% na venda padrão e até 30% em produtos de Comissão Extra. Veja o prazo de atribuição e como fazer a conta do quanto dá para ganhar por mês.'
 const slug = '/quanto-ganha-afiliado-shopee'
 const dates = getEditorialDates(slug)
 
@@ -90,7 +93,7 @@ export default function Page() {
           <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Shopee Afiliados · Comissão</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{title}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{description}</p>
-          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
 
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_h3]:text-lg [&_h3]:font-black [&_h3]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_strong]:text-gray-950">
             <section>
@@ -176,10 +179,40 @@ export default function Page() {
               </div>
             </section>
 
+            {/* Frente D2 (PLANO_SEO_GEO_2026-09-27): próximo passo único para a
+                comercial do Tier 1 — esta página e o post de cadastro fundem
+                força em /shopee-afiliados-whatsapp. */}
+            <section>
+              <h2>Próximo passo</h2>
+              <p>Se você já é afiliada e o que pesa é publicar oferta por oferta com o seu link, o caminho é a página de Shopee Afiliados no WhatsApp: ela mostra como o robô converte o link, monta a oferta e publica nos seus grupos com intervalo entre os envios.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Link
+                  href="/shopee-afiliados-whatsapp"
+                  className="rounded-2xl bg-emerald-600 px-5 py-4 text-center font-black text-white no-underline hover:bg-emerald-700"
+                  data-seo-cta="article_store_landing"
+                  data-cta-position="article_next_step_primary"
+                  data-cta-stage="consideration"
+                  data-cta-destination="landing"
+                >
+                  Já é afiliada Shopee? Veja como divulgar no WhatsApp
+                </Link>
+                <Link
+                  href="/precos"
+                  className="rounded-2xl border border-emerald-200 px-5 py-4 text-center font-black text-emerald-700 no-underline hover:bg-emerald-50"
+                  data-seo-cta="article_pricing"
+                  data-cta-position="article_next_step_secondary"
+                  data-cta-stage="consideration"
+                  data-cta-destination="pricing"
+                >
+                  Ver preços e testar 7 dias grátis
+                </Link>
+              </div>
+            </section>
+
             <section>
               <h2>Continue lendo</h2>
               <ul>
-                <li><Link href="/blog/como-ser-afiliado-shopee-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Shopee Afiliados: como entrar e quanto paga</Link> — o cadastro passo a passo e as regras do programa.</li>
+                <li><Link href="/blog/como-ser-afiliado-shopee-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Como ser afiliado Shopee: 5 passos e comissão de 3%</Link> — o cadastro passo a passo e as regras do programa.</li>
                 <li><Link href="/shopee-afiliados-whatsapp" className="font-bold text-emerald-700 hover:text-emerald-800">Divulgar Shopee no WhatsApp sem copiar e colar</Link> — o que muda na prática depois do cadastro.</li>
                 <li><Link href="/programa-de-afiliados" className="font-bold text-emerald-700 hover:text-emerald-800">Shopee, Amazon ou Mercado Livre: qual programa escolher</Link> — comissão e prazo de atribuição dos três lado a lado.</li>
               </ul>

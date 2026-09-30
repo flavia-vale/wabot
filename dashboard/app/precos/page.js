@@ -1,17 +1,26 @@
 import Link from 'next/link'
 import '../landing.css'
 import { Pricing } from '@/components/landing/Pricing'
+import { FichaTecnica } from '@/components/landing/FichaTecnica'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 import { getLandingPlans } from '@/lib/plans-server'
+import { buildOgImageUrl } from '@/lib/seo-og'
 import {
   BRAND_ORG_NAME,
   BRAND_PRODUCT_NAME,
   PRICING_PRODUCT_DESCRIPTION,
+  SUPPORTED_STORES,
   SUPPORT_HOURS,
   SUPPORT_RESPONSE_SLA,
   SUPPORT_WHATSAPP_URL,
 } from '@/lib/marketing-content'
+import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
+import { fraseNumerosProprios } from '@/lib/resposta-citavel'
+import { PainelVendasIlustrativo } from '@/components/marketing/PainelVendasIlustrativo'
+import { PrecoPorGrupoAfilira } from '@/components/marketing/PrecoPorGrupoAfilira'
+import { Depoimentos } from '@/components/landing/Depoimentos'
 
 /* PÁGINA DE PREÇO (auditoria de funil 2026-08-05, §1.4).
  *
@@ -27,9 +36,14 @@ import {
  */
 
 export const metadata = {
-  title: 'Preços e planos: quanto custa o robô de ofertas para WhatsApp',
+  // 29/09/2026: com o sufixo " | Espelha Grupos" o título entregue tinha 78
+  // chars e o Bing Webmaster acusou "Título muito longo" (teto de 70). Agora
+  // são 67, com as mesmas palavras de busca ("preços", "quanto custa").
+  title: 'Preços: quanto custa o robô de ofertas no WhatsApp',
+  // 194 chars estourava o teto de 160 do Google/Bing (Bing Webmaster,
+  // 27/09/2026: "Descrição Meta muito longa"). Mesmos fatos, mais curto.
   description:
-    'Quanto custa automatizar a divulgação de ofertas de afiliado no WhatsApp: 7 dias grátis sem cartão, plano Basic por R$39 e plano Pro por R$69 a cada 30 dias. Sem fidelidade, cancela pelo painel.',
+    '7 dias grátis sem cartão, depois Basic por R$39 ou Pro por R$69 a cada 30 dias. Sem fidelidade, cancela pelo painel quando quiser.',
   alternates: { canonical: '/precos' },
   openGraph: {
     title: 'Preços e planos | Quanto custa o robô de ofertas para WhatsApp',
@@ -62,7 +76,9 @@ const BILLING_FAQ = [
   },
   {
     q: 'Qual a diferença entre o Basic e o Pro?',
-    a: 'O Basic cobre a operação em grupos: espelhamento, conversão dos links de Shopee, Amazon, Mercado Livre e Magalu, criação de oferta e agendamento. O Pro acrescenta canais do WhatsApp, ofertas automáticas da Shopee por palavra-chave, filas com limite por hora e por dia, e o controle fino de intervalo entre os envios.',
+    // Lojas vêm da constante (eram 4 escritas à mão aqui enquanto o produto já
+    // cobria 6 — o mesmo defeito do RCA 2026-09-18, em outro arquivo).
+    a: `O Basic cobre a operação automática em grupos: espelhamento dos grupos de origem para os de destino, conversão dos links de ${SUPPORTED_STORES.length} lojas (${SUPPORTED_STORES.join(', ')}), criação de oferta e agendamento. O Pro acrescenta canais do WhatsApp, ofertas automáticas da Shopee por tema e desconto mínimo, filas com limite por hora e por dia, variação do texto, marca d'água e o painel de vendas da Shopee. A ficha técnica completa está logo acima.`,
   },
   {
     q: 'Dá para trocar de plano depois?',
@@ -99,6 +115,11 @@ function buildPricingJsonLd(plans) {
       '@context': 'https://schema.org',
       '@type': 'Product',
       name: BRAND_PRODUCT_NAME,
+      // Sem "image" o Google Merchant Listings recusa o item inteiro como
+      // inválido (Inspeção de URL, 27/09/2026) — usa a mesma arte OG padrão
+      // do site (dashboard/public/og-default.png, 1200x630), que já é
+      // validada por test/og-image-existe.test.js.
+      image: buildOgImageUrl(),
       brand: { '@type': 'Brand', name: BRAND_ORG_NAME },
       // Lojas vêm da mesma constante do FAQ (6, não 4 — RCA 2026-09-18).
       description: PRICING_PRODUCT_DESCRIPTION,
@@ -109,6 +130,17 @@ function buildPricingJsonLd(plans) {
         priceCurrency: 'BRL',
         availability: 'https://schema.org/InStock',
         url: 'https://espelhagrupos.com.br/precos',
+        // Reembolso integral em até 7 dias (art. 49 CDC) — mesmo texto do
+        // FAQ de cobrança acima. Resolve o aviso opcional
+        // "hasMerchantReturnPolicy não encontrado" do Merchant Listings.
+        hasMerchantReturnPolicy: {
+          '@type': 'MerchantReturnPolicy',
+          applicableCountry: 'BR',
+          returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+          merchantReturnDays: 7,
+          returnMethod: 'https://schema.org/ReturnByMail',
+          returnFees: 'https://schema.org/FreeReturn',
+        },
       })),
     },
     {
@@ -167,12 +199,25 @@ export default async function PrecosPage() {
             }}
           >
             Teste 7 dias com tudo liberado, sem cartão. Depois, {precoPorPlano},
-            sem fidelidade e com cancelamento pelo próprio painel.
+            sem fidelidade e com cancelamento pelo próprio painel. O {BRAND_ORG_NAME} é um robô para afiliadas que
+            publicam ofertas em grupos e canais do WhatsApp com o próprio código de afiliada, em {SUPPORTED_STORES.length} lojas.
+          </p>
+          {/* Topo citável (29/09/2026): 2 números próprios com a fonte na mesma frase. */}
+          <p style={{ fontSize: 14.5, color: 'var(--ink-soft)', maxWidth: 640, margin: '12px auto 0', lineHeight: 1.6 }}>
+            {fraseNumerosProprios()}
           </p>
         </div>
       </section>
 
       <Pricing initialPlans={plans} showHeading={false} />
+      <div className="wrap"><PainelVendasIlustrativo /></div>
+      <Depoimentos titulo="Quem já assina conta como foi" />
+      <GuaranteeBlock />
+
+      {/* Ficha técnica canônica (medição de IA 27/09/2026): idêntica à da
+        * home, do llms.txt e do pricing.md — lojas nomeadas e Basic × Pro. */}
+      <FichaTecnica />
+      <PrecoPorGrupoAfilira plans={plans} />
 
       <section style={{ paddingTop: 64 }}>
         <div className="wrap" style={{ maxWidth: 820 }}>
@@ -213,18 +258,23 @@ export default async function PrecosPage() {
             — {SUPPORT_HOURS.toLowerCase()}. {SUPPORT_RESPONSE_SLA}. Você também pode ver{' '}
             <Link href="/" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
               como o robô funciona
-            </Link>{' '}
-            e a{' '}
+            </Link>
+            , a{' '}
             <Link href="/politica-de-reembolso" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
               política de reembolso
-            </Link>
-            .
+            </Link>{' '}
+            e{' '}
+            <Link href="/automacao-whatsapp-afiliados" style={{ color: 'var(--accent-strong)', fontWeight: 600 }}>
+              os 3 modelos de automação para afiliadas
+            </Link>{' '}
+            (espelhador, garimpo e formatador) que o Basic e o Pro cobrem.
           </p>
         </div>
       </section>
 
       <FinalCTA />
       <Footer />
+   <EditorialFreshness pathname="/precos" />
     </div>
   )
 }

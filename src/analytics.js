@@ -33,6 +33,14 @@ export const PUBLIC_ANALYTICS_EVENTS = new Set([
   // aqueles 11 fizeram. Leitura: scripts/diag-paginas-seo.mjs.
   'organic_page_view',
   'organic_cta_click',
+  // Diagnóstico e calculadora da campanha Canais + Preservação. O navegador já
+  // ENVIAVA os três (PUBLIC_PERSISTED_EVENTS em dashboard/lib/analytics.js) e
+  // a rota respondia 400 — o funil da campanha não tinha a etapa do meio.
+  // Descoberto em 2026-09-29 (P1 do backlog pós-P3). `diagnostic_cta_clicked`
+  // com origin=calculadora_risco_whatsapp é o clique da calculadora.
+  'diagnostic_result_viewed',
+  'diagnostic_form_submitted',
+  'diagnostic_cta_clicked',
 ])
 
 export const ANALYTICS_EVENTS = new Set([
@@ -76,6 +84,9 @@ export const ANALYTICS_EVENTS = new Set([
   // Checkout de assinatura reaproveitado em vez de criar outro idêntico. Cada
   // evento destes é uma recusa por antifraude do MP que deixou de acontecer.
   'subscription_checkout_reused',
+  // Havia checkout em aberto e, mesmo assim, nasceu outro: guarda o MOTIVO (consulta
+  // ao MP falhou, checkout já encerrado lá, e-mail diferente, plano trocado...).
+  'subscription_checkout_reuse_skipped',
   // Tentativa de assinar adiada por repetição. Volume alto aqui é sinal de que
   // muita gente está batendo na recusa do MP — não de que a trava está errada.
   'subscription_attempt_throttled',
@@ -100,6 +111,10 @@ export const ANALYTICS_EVENTS = new Set([
   'organic_cta_click',
   // Origem da visita (IA / busca / social) — ver PUBLIC_ANALYTICS_EVENTS acima.
   'referral_visit',
+  // Campanha Canais + Preservação — ver PUBLIC_ANALYTICS_EVENTS acima.
+  'diagnostic_result_viewed',
+  'diagnostic_form_submitted',
+  'diagnostic_cta_clicked',
   'lead_magnet_started',
   'lead_magnet_submitted',
   'signup_started_from_seo',
@@ -235,6 +250,13 @@ export const ANALYTICS_EVENTS = new Set([
   // recusa — quando a cliente já ficou sem conectar. Ver
   // src/ops/sessionCapacityAlertPolicy.js.
   'ops_session_capacity_warning',
+  // P1-4: link de loja que ainda NÃO convertemos (Temu, Kabum, Natura...) que
+  // chegou num grupo monitorado. UMA linha por (dia, domínio), metadata só
+  // `{ domain, day, count }`, sem userId, podada em 30 dias — nunca uma linha
+  // por mensagem. Escrita por src/observability/unsupportedStoreSignal.js
+  // (não passa por trackAnalyticsEvent, que cria uma linha por chamada).
+  // Leitura: scripts/diag-lojas-nao-suportadas.mjs.
+  'ops_unsupported_store_daily',
   // US6 (009-affiliate-improvements-r1): a promoção pending→eligible parou de
   // avançar (comissões com eligibleAt vencido há mais que o limiar) — sinal
   // operacional de que o cron de reconciliação de pagamentos parou ou está

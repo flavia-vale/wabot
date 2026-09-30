@@ -1,8 +1,6 @@
 import { Icon } from './Icon';
+import { VIDEO_ESPELHAMENTO, VIDEO_ESPELHAMENTO_EMBED_URL, VIDEO_ESPELHAMENTO_URL } from '../../../src/tutorialVideo.js';
 import {
-  BRAND_PRODUCT_NAME,
-  BRAND_YOUTUBE_TUTORIAL_EMBED_URL,
-  BRAND_YOUTUBE_TUTORIAL_URL,
   BRAND_LINKEDIN_URL,
   BRAND_YOUTUBE_URL,
   SUPPORT_HOURS,
@@ -27,6 +25,10 @@ import {
  * Enquanto não houver depoimento colhido, o bloco entrega prova VERIFICÁVEL:
  * o vídeo oficial do canal (qualquer um confere) e os compromissos que o
  * produto de fato cumpre (trial sem cartão, cancelamento, suporte humano).
+ *
+ * 29/09/2026: o vídeo da home passou do tutorial de criar conta para o
+ * "Como espelhar mensagens entre grupos" (pedido da dona do produto). Vem da
+ * MESMA constante do blog e da tela Espelhamento (src/tutorialVideo.js).
  */
 
 const s = {
@@ -84,8 +86,8 @@ export function Social() {
             <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>acredite</span>. Veja.
           </h2>
           <p style={s.sub}>
-            O passo a passo real de criar a conta, no nosso canal oficial — sem corte e sem
-            edição. É o mesmo caminho que você vai fazer em seguida.
+            O espelhamento funcionando de verdade, no nosso canal oficial: de um grupo de
+            origem para o seu grupo, sem programar e sem copiar e colar.
           </p>
         </div>
 
@@ -93,8 +95,8 @@ export function Social() {
           <div style={s.videoCard}>
             <div style={s.videoFrame}>
               <iframe
-                src={BRAND_YOUTUBE_TUTORIAL_EMBED_URL}
-                title={`Como criar sua conta no ${BRAND_PRODUCT_NAME}`}
+                src={VIDEO_ESPELHAMENTO_EMBED_URL}
+                title={VIDEO_ESPELHAMENTO.titulo}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
                 loading="lazy"
                 referrerPolicy="strict-origin-when-cross-origin"
@@ -103,8 +105,8 @@ export function Social() {
               />
             </div>
             <p style={s.videoCaption}>
-              Tutorial: como criar sua conta.{' '}
-              <a style={s.link} href={BRAND_YOUTUBE_TUTORIAL_URL} target="_blank" rel="noopener noreferrer">
+              Vídeo: como espelhar mensagens entre grupos.{' '}
+              <a style={s.link} href={VIDEO_ESPELHAMENTO_URL} target="_blank" rel="noopener noreferrer">
                 Assistir no YouTube
               </a>
               {' · '}

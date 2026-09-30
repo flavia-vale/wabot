@@ -49,8 +49,9 @@ const hubRoutes = [
     slug: 'automacao-whatsapp-afiliados',
     path: '/automacao-whatsapp-afiliados',
     label: 'Automação para afiliados',
-    title: 'Automação de WhatsApp para afiliados e grupos de ofertas',
-    description: 'Hub para resolver gargalos de rotina, escala, consistência e rastreamento em grupos de WhatsApp para afiliados.',
+    // title/description ficam só em _seoHubShared.js (HUB_CONTENT), fonte
+    // única FR-001 — reescrito em 2026-09-27 (PLANO_SEO_GEO, B7): o hub dos 3
+    // modelos de automação para afiliadas.
     type: 'hub',
     cluster: 'dores-operacionais',
     intent: 'automacao whatsapp afiliados',
@@ -254,7 +255,7 @@ export const CORE_SEO_ROUTES = [
   { path: '/termos', template: 'legal', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   // Política de reembolso pública (23/09/2026) — evidência de confiança que o
   // ChatGPT cobrou na consulta "bot para afiliados no WhatsApp".
-  { path: '/politica-de-reembolso', template: 'legal', priority: 0.6, changeFrequency: 'monthly', lastModified: resolveLastModified('/politica-de-reembolso', '2026-09-23'), indexable: true },
+  { path: '/politica-de-reembolso', template: 'legal', priority: 0.6, changeFrequency: 'monthly', lastModified: resolveLastModified('/politica-de-reembolso', '2026-09-27'), indexable: true },
   { path: '/privacidade', template: 'legal', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/quem-somos', template: 'institutional', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/suporte', template: 'support', priority: 0.6, changeFrequency: 'monthly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
@@ -288,10 +289,21 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/amazon-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/amazon-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/shein-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/shein-afiliados-whatsapp', '2026-09-02'), indexable: true },
   { path: '/magalu-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/magalu-afiliados-whatsapp', '2026-09-02'), indexable: true },
+  ...['shopee-afiliados', 'amazon-afiliados', 'mercado-livre-afiliados', 'magalu-afiliados', 'shein-afiliados', 'aliexpress-afiliados'].map((store) => ({
+    path: `/guia/${store}`,
+    template: 'store-guide',
+    priority: 0.82,
+    changeFrequency: 'monthly',
+    lastModified: resolveLastModified(`/guia/${store}`, '2026-09-28'),
+    indexable: true,
+  })),
   // Modo "o robô busca a oferta sozinho" (23/09/2026): o ChatGPT lia "bot para
   // afiliados" como garimpo automático e não sabia que temos esse modo.
   // title/description ficam só em _preservationCommercialPages.js (FR-001).
   { path: '/bot-que-busca-ofertas-shopee-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-que-busca-ofertas-shopee-whatsapp', '2026-09-23'), indexable: true },
+  // Resposta à tese "espelhar grupos não vale a pena" (27/09/2026), que virou
+  // fonte do AI Overviews. Alvo é citação por IA; title/description só no módulo.
+  { path: '/espelhar-grupos-de-ofertas-vale-a-pena', template: 'commercial-seo', priority: 0.8, changeFrequency: 'monthly', lastModified: resolveLastModified('/espelhar-grupos-de-ofertas-vale-a-pena', '2026-09-27'), indexable: true },
   { path: '/bot-afiliados-whatsapp', template: 'commercial-seo', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-afiliados-whatsapp', '2026-07-30'), indexable: true },
   { path: '/bot-achadinhos-whatsapp', template: 'commercial-seo', priority: 0.88, changeFrequency: 'weekly', lastModified: resolveLastModified('/bot-achadinhos-whatsapp', '2026-07-30'), indexable: true },
   { path: '/anti-ban-whatsapp', template: 'commercial-seo', priority: 0.85, changeFrequency: 'weekly', lastModified: resolveLastModified('/anti-ban-whatsapp', '2026-07-30'), indexable: true },
@@ -340,6 +352,12 @@ export const CONTENT_SEO_ROUTES = [
   { path: '/blog/como-divulgar-ofertas-amazon-whatsapp', template: 'article', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-divulgar-ofertas-amazon-whatsapp', '2026-07-31'), indexable: true },
   { path: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-divulgar-ofertas-mercado-livre-whatsapp'), indexable: true },
   { path: '/blog/quanto-custa-bot-para-whatsapp-afiliados', template: 'article', priority: 0.82, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/quanto-custa-bot-para-whatsapp-afiliados'), indexable: true },
+  { path: '/blog/bot-de-whatsapp-conectado-mas-nao-envia', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/bot-de-whatsapp-conectado-mas-nao-envia'), indexable: true },
+  { path: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/oferta-sem-foto-no-whatsapp-por-que-acontece'), indexable: true },
+  { path: '/blog/numero-banido-whatsapp-o-que-fazer', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/numero-banido-whatsapp-o-que-fazer'), indexable: true },
+  { path: '/blog/como-aquecer-numero-whatsapp-afiliados', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/como-aquecer-numero-whatsapp-afiliados'), indexable: true },
+  { path: '/blog/link-de-afiliado-sem-comissao-o-que-conferir', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/link-de-afiliado-sem-comissao-o-que-conferir'), indexable: true },
+  { path: '/blog/shopee-suspendeu-afiliado-o-que-fazer', template: 'article', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/blog/shopee-suspendeu-afiliado-o-que-fazer'), indexable: true },
   { path: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/melhores-horarios-para-postar-ofertas-no-whatsapp'), indexable: true },
   { path: '/blog/como-converter-link-de-afiliado-automaticamente-whatsapp', template: 'article', priority: 0.82, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/como-converter-link-de-afiliado-automaticamente-whatsapp'), indexable: true },
   { path: '/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp', template: 'article', priority: 0.8, changeFrequency: 'weekly', lastModified: resolveLastModified('/blog/amazon-shopee-ou-mercado-livre-para-afiliados-whatsapp'), indexable: true },
@@ -419,6 +437,7 @@ export const CONTENT_SEO_ROUTES = [
   // só em app/clonar-mensagens-de-grupo-de-afiliados/page.js (fonte única, FR-001).
   { path: '/clonar-mensagens-de-grupo-de-afiliados', template: 'article', priority: 0.9, changeFrequency: 'weekly', lastModified: resolveLastModified('/clonar-mensagens-de-grupo-de-afiliados', '2026-08-26'), indexable: true },
   { path: '/ferramentas', template: 'tools-hub', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
+  { path: '/ferramentas/calculadora-comissao-afiliado-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   { path: '/ferramentas/calculadora-tempo-grupos-whatsapp', template: 'tool-calculator', priority: 0.8, changeFrequency: 'weekly', lastModified: DEFAULT_LAST_MODIFIED, indexable: true },
   // title/description ficam só em app/ferramentas/calculadora-risco-whatsapp/page.js (fonte única, FR-001).
   { path: '/ferramentas/calculadora-risco-whatsapp', template: 'tool-calculator', priority: 0.84, changeFrequency: 'weekly', lastModified: resolveLastModified('/ferramentas/calculadora-risco-whatsapp'), indexable: true },

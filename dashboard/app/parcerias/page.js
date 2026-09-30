@@ -3,10 +3,11 @@ import { PublicShell } from '@/components/PublicShell'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { PartnerLeadForm } from '@/components/marketing/PartnerLeadForm'
 import { getSiteUrl } from '@/lib/site-url'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/parcerias'
 const siteUrl = getSiteUrl()
-const title = 'Parcerias | Co-marketing para admins e afiliados de ofertas'
+const title = 'Parcerias: co-marketing para admins e afiliados'
 const description = 'Programa de parcerias do Espelha Grupos para admins, creators e comunidades que operam ofertas no WhatsApp com piloto guiado, UTMs e operação responsável.'
 
 const partnerTypes = [
@@ -179,6 +180,7 @@ export default function Page() {
           </ul>
         </section>
       </main>
+   <EditorialFreshness pathname="/parcerias" />
     </PublicShell>
   )
 }

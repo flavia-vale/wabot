@@ -10,6 +10,7 @@ import {
   blocksNewSubscription,
   decidePendingSubscriptionReuse,
   decideSubscriptionAttemptCooldown,
+  describeReuseSkip,
   describeSubscriptionCooldown,
   SUBSCRIPTION_ATTEMPT_WINDOW_MS as DEFAULT_ATTEMPT_WINDOW_MS,
   SUBSCRIPTION_ATTEMPT_MAX as DEFAULT_ATTEMPT_MAX,
@@ -20,6 +21,9 @@ import {
   shouldRefreshPendingSubscription,
   summarizeSubscriptionForPanel,
 } from '../../domain/payments/subscriptionPolicy.js'
+import { subscriptionStartDate } from '../../domain/payments/checkoutOffer.js'
+import { buildPrepaidMetadata, buildPrepaidOffer, isPrepaidEnabled, resolvePurchaseTerms, PREPAID_MONTHS } from '../../domain/payments/prepaidOffer.js'
+import { buildCheckoutPayer, buildCheckoutItem } from '../../domain/payments/checkoutPayer.js'
 import { appContainer } from '../../app/container.js'
 import { writeWebhookEvent } from '../../events/store.js'
 import { notifyPaymentApproved, notifyChargeFailed } from '../../emailTriggers/events.js'
@@ -234,8 +238,20 @@ export function isReversiblePaymentStatus(status) {
 
 // Activates a payment and grants 30-day access. Shared by /recover, /callback and webhook processor.
 // Must be called inside a db.$transaction — tx is a Prisma transaction client.
-export async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount }) {
-  return paymentsService.activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount })
+export async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount, days }) {
+  return paymentsService.activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount, ...(days ? { days } : {}) })
+}
+
+// Termos da compra a partir do que o Mercado Pago devolveu. Sem metadata de
+// pré-pago válida e igual ao valor aprovado: 1 mês e o preço mensal, como sempre.
+// A flag BILLING_PREPAID_ENABLED NÃO entra aqui de propósito (ver prepaidOffer.js).
+function purchaseTermsFor(snapshot, monthlyPrice) {
+  return resolvePurchaseTerms({
+    metadataMonths: snapshot?.preferredMonths,
+    metadataPrepaidTotal: snapshot?.prepaidTotal,
+    paidAmount: snapshot?.transactionAmount,
+    monthlyPrice,
+  })
 }
 
 async function fetchMercadoPagoPaymentSnapshot(paymentId) {
@@ -256,6 +272,8 @@ async function fetchMercadoPagoPaymentSnapshot(paymentId) {
       externalReference: response.data?.external_reference ?? null,
       paymentTypeId: response.data?.payment_type_id ?? null,
       preferredPlan: response.data?.metadata?.plan ?? null,
+      preferredMonths: response.data?.metadata?.months ?? null,
+      prepaidTotal: response.data?.metadata?.prepaid_total ?? null,
     }
   } catch (err) {
     return {
@@ -456,7 +474,7 @@ async function cancelMercadoPagoSubscription(preapprovalId) {
   }
 }
 
-async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
+async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDate = null }) {
   if (!payerEmail) {
     const err = new Error('payer_email obrigatório para criar assinatura')
     err.code = 'MISSING_PAYER_EMAIL'
@@ -505,6 +523,9 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail }) {
           frequency_type: 'months',
           transaction_amount: normalizedPlan.price,
           currency_id: 'BRL',
+          // Quem já pagou o mês não é cobrada de novo agora: a recorrência
+          // começa quando o período pago termina (ver checkoutOffer.js).
+          ...(startDate ? { start_date: startDate.toISOString() } : {}),
         },
         back_url: `${dashboardUrl}/painel/pagamento/sucesso`,
         // Sem isso os avisos da assinatura dependem só do que estiver marcado no
@@ -583,7 +604,7 @@ async function createMercadoPagoPreference({ userId, plan, informedEmail }) {
     items: [buildCheckoutItem({ plan, title: normalizedPlan.title, price: normalizedPlan.price })],
     ...(payer ? { payer } : {}),
     external_reference: userId,
-    metadata: { plan },
+    metadata: { plan, ...buildPrepaidMetadata(prepaid) },
     back_urls: {
       success: `${callbackBase}?collection_status=approved`,
       failure: `${callbackBase}?collection_status=rejected`,
@@ -656,8 +677,9 @@ async function runPaymentReconciliation({ log } = {}) {
     const plans = await getBillingPlans()
     const plan = resolvePlanForPayment({ preferredPlan: snapshot.preferredPlan, amount: snapshot.transactionAmount, plans })
     if (!plan) continue
+    const terms = purchaseTermsFor(snapshot, plans[plan].price)
     await db.$transaction(async (tx) => {
-      await activatePaymentAccess(tx, { userId: snapshot.externalReference, plan, mpPaymentId: String(payment.mpPaymentId), amount: plans[plan].price })
+      await activatePaymentAccess(tx, { userId: snapshot.externalReference, plan, mpPaymentId: String(payment.mpPaymentId), amount: terms.amount, ...(terms.prepaid ? { days: terms.days } : {}) })
       await tx.payment.updateMany({ where: { mpPaymentId: String(payment.mpPaymentId) }, data: { gatewayEventId: payment.gatewayEventId ?? null, lastSyncedAt: new Date() } })
     })
     await invalidatePaymentCache(snapshot.externalReference, log)
@@ -948,20 +970,22 @@ async function processPendingWebhookEvents({ limit = 50, log } = {}) {
           const plan = resolvePlanForPayment({ preferredPlan: reconciliation.preferredPlan, amount: reconciliation.transactionAmount, plans })
 
           if (plan) {
+            const terms = purchaseTermsFor(reconciliation, plans[plan].price)
             try {
               const result = await db.$transaction(async (tx) =>
                 activatePaymentAccess(tx, {
                   userId,
                   plan,
                   mpPaymentId: String(summary.dataResourceId),
-                  amount: plans[plan].price,
+                  amount: terms.amount,
+                  ...(terms.prepaid ? { days: terms.days } : {}),
                 })
               )
               activation = { triggered: true, ...result }
               if (!result.alreadyActivated) {
                 trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'webhook' } })
                 // Recibo por e-mail. Best-effort: nunca segura nem derruba o webhook.
-                notifyPaymentApproved({ db, userId, plan, amount: plans[plan].price, accessExpiresAt: result?.expiresAt, logger: log }).catch(() => {})
+                notifyPaymentApproved({ db, userId, plan, amount: terms.amount, accessExpiresAt: result?.expiresAt, logger: log }).catch(() => {})
                 const payment = await db.payment.findUnique({ where: { mpPaymentId: String(summary.dataResourceId) }, select: { id: true, amount: true } }).catch(() => null)
                 if (payment) {
                   tryCreateAffiliateCommission({
@@ -1301,8 +1325,15 @@ export async function paymentsRoutes(app) {
     const plans = await getBillingPlans()
     if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
+    // Pré-pago (B11) só existe com a flag ligada; o valor nunca vem da tela.
+    const months = rawMonths === undefined || rawMonths === null || rawMonths === '' ? 1 : Number(rawMonths)
+    if (months !== 1) {
+      if (!isPrepaidEnabled()) return sendError(reply, 400, 'PREPAID_DISABLED', 'Pagamento por vários meses ainda não está disponível.')
+      if (!PREPAID_MONTHS.includes(months)) return sendError(reply, 400, 'INVALID_PREPAID_MONTHS', 'Período inválido. Use 3 ou 6 meses.')
+    }
+
     const userId = req.user.sub
-    trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan } })
+    trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan, ...(months !== 1 ? { months } : {}) } })
 
     try {
       const checkoutUrl = await createMercadoPagoPreference({ userId, plan, informedEmail: payerEmail })
@@ -1332,7 +1363,8 @@ export async function paymentsRoutes(app) {
       const plans = await getBillingPlans()
       if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
-      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+      const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, plan: true, accessExpiresAt: true } })
+      const startDate = subscriptionStartDate({ plan: user?.plan, accessExpiresAt: user?.accessExpiresAt })
       // E-mail do Mercado Pago informado só para a cobrança (ver payerEmail.js).
       const payer = resolveSubscriptionPayerEmail({ accountEmail: user?.email, informedEmail: informedPayerEmail })
       const payerEmail = payer.email
@@ -1379,8 +1411,9 @@ export async function paymentsRoutes(app) {
       }).catch(() => null)
 
       const reuseDecision = decidePendingSubscriptionReuse({ subscription: pendingSubscription, plan })
+      let snapshot = null
       if (reuseDecision.reuse) {
-        const snapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
+        snapshot = await fetchMercadoPagoSubscriptionSnapshot(pendingSubscription.mpSubscriptionId)
         // Só reaproveita o que o MP confirma que continua em aberto. Falha de
         // rede, checkout já concluído ou apagado no MP caem no caminho normal —
         // checkout em aberto nunca pode deixar a conta sem conseguir assinar.
@@ -1390,6 +1423,18 @@ export async function paymentsRoutes(app) {
           req.log.info({ userId, plan }, 'Checkout de assinatura reaproveitado em vez de criar outro igual')
           return { init_point: snapshot.initPoint }
         }
+      }
+
+      // Observabilidade: havia checkout em aberto e mesmo assim vai nascer outro.
+      // Só registra o motivo (sem e-mail); não muda a decisão.
+      const reuseSkip = describeReuseSkip({
+        pending: pendingSubscription,
+        decision: reuseDecision,
+        snapshot,
+        emailMatches: snapshot?.ok ? samePayerEmail(snapshot.payerEmail, payerEmail) : false,
+      })
+      if (reuseSkip) {
+        trackAnalyticsEventSafe({ userId, event: 'subscription_checkout_reuse_skipped', metadata: { plan, ...reuseSkip } })
       }
 
       // Nada para reaproveitar não significa "pode criar outro igual". Quando os
@@ -1430,7 +1475,7 @@ export async function paymentsRoutes(app) {
       // só, e era impossível ver quantas clientes estavam batendo em cada um.
       trackAnalyticsEventSafe({ userId, event: 'subscription_started', metadata: { plan, payerEmailSource: payer.source } })
 
-      const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail })
+      const { initPoint, mpSubscriptionId } = await createMercadoPagoSubscription({ userId, plan, payerEmail, startDate })
       await db.subscription.upsert({
         where: { mpSubscriptionId },
         update: { plan, status: 'pending', updatedAt: new Date() },
@@ -1639,13 +1684,14 @@ export async function paymentsRoutes(app) {
       return reply.redirect(`${dashboardUrl}/painel/plano?status=pending`)
     }
 
+    const terms = purchaseTermsFor(snapshot, plans[plan].price)
     try {
       const result = await db.$transaction(async (tx) =>
-        activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: plans[plan].price })
+        activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount: terms.amount, ...(terms.prepaid ? { days: terms.days } : {}) })
       )
       trackAnalyticsEventSafe({ userId, event: 'payment_approved', metadata: { plan, source: 'callback' } })
       if (!result.alreadyActivated) {
-        notifyPaymentApproved({ db, userId, plan, amount: plans[plan].price, accessExpiresAt: result?.expiresAt, logger: req.log }).catch(() => {})
+        notifyPaymentApproved({ db, userId, plan, amount: terms.amount, accessExpiresAt: result?.expiresAt, logger: req.log }).catch(() => {})
         const payment = await db.payment.findUnique({ where: { mpPaymentId: String(mpPaymentId) }, select: { id: true, amount: true } }).catch(() => null)
         if (payment) {
           tryCreateAffiliateCommission({

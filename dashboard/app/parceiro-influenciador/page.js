@@ -3,9 +3,10 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildArticleJsonLd, EDITORIAL_PERSON_AUTHOR, EDITORIAL_PERSON_AUTHOR_DESCRIPTION } from '@/lib/editorial-content'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/parceiro-influenciador'
-const title = 'Parceria para criadores: robô grátis + 30% de comissão recorrente'
+const title = 'Parceria para criadores: robô grátis + 30% recorrente'
 const description = 'Se você ensina afiliação ou tem audiência de afiliados: use o Espelha Grupos de graça e ganhe 30% de comissão recorrente de cada pessoa que assinar pelo seu link. Todo mês, enquanto ela for cliente.'
 
 // Resposta direta em 40–60 palavras — bloco usado como snippet e citado por
@@ -234,6 +235,7 @@ export default function Page() {
           </p>
         </article>
       </main>
+   <EditorialFreshness pathname="/parceiro-influenciador" />
     </PublicShell>
   )
 }

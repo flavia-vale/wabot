@@ -17,6 +17,7 @@ export const MOBILE_LOG_PLATFORM_LABEL = {
   magalu: 'Magalu',
   aliexpress: 'AliExpress',
   shein: 'SHEIN',
+  awin: 'Awin',
 }
 
 function formatMobileDuration(totalSeconds) {
@@ -53,6 +54,10 @@ export function friendlyMobileLogError(errorMsg) {
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
   if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'
   if (errorMsg.startsWith('skip:no_valid_conversions')) return 'Nenhum link da mensagem pôde ser convertido em link de afiliado.'
+  if (errorMsg.startsWith('skip:link_removed')) {
+    if (errorMsg.endsWith(':offer_ended_at_source')) return 'Ignorada: a promoção já tinha sido encerrada no site de quem publicou.'
+    return 'Não enviada: o único link era de uma loja que ainda não convertemos.'
+  }
   if (errorMsg.startsWith('skip:policy')) {
     if (errorMsg.endsWith(':offer_ended_at_source')) return 'Ignorada: a promoção já tinha sido encerrada no site de quem publicou.'
     if (errorMsg.endsWith(':unsupported_store')) return 'Ignorada: ainda não fazemos conversão de afiliado para essa loja.'

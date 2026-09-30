@@ -18,7 +18,7 @@ import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR
 // impossível. Não é verdade e não é prometível — as duas defesas mudam quem
 // leva o crédito e quanto trabalho a cópia dá, não a possibilidade dela.
 
-const title = 'Copiaram minha oferta no WhatsApp: o que dá e o que não dá para fazer'
+const title = 'Copiaram minha oferta no WhatsApp: o que fazer'
 const description = 'Quando outro grupo copia e cola a sua oferta, quem leva a comissão é quem publicou o link. As duas defesas que existem de verdade: marca d’água na foto e mensagem reescrita com o seu texto.'
 const slug = '/copiaram-minha-oferta-no-whatsapp'
 const dates = getEditorialDates(slug)
@@ -90,7 +90,7 @@ export default function Page() {
           <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Grupos de ofertas · Cópia e crédito</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{title}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{description}</p>
-          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
 
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_h3]:text-lg [&_h3]:font-black [&_h3]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_strong]:text-gray-950">
             <section>
