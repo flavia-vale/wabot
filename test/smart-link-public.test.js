@@ -40,12 +40,25 @@ test('redireciona 302 para o grupo mais vazio, sem cache e noindex', async () =>
   assert.equal(clicks[0].where.smartLinkGroupId_day.smartLinkGroupId, 'lg2')
 })
 
-test('rajada de cliques alterna entre grupos próximos (reserva)', async () => {
+test('rajada: o mais vazio recebe até o freio empurrá-lo para a margem de 95%, sem nova medição', async () => {
   const at = new Date()
-  const { app } = await make({ link: baseLink(), samples: { g1: { size: 300, sampledAt: at }, g2: { size: 300, sampledAt: at } } })
-  const seen = new Set()
-  for (let i = 0; i < 6; i++) seen.add((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).headers.location)
-  assert.equal(seen.size, 2)
+  const { app } = await make({ link: baseLink(), samples: { g1: { size: 900, sampledAt: at }, g2: { size: 500, sampledAt: at } } })
+  const seen = []
+  for (let i = 0; i < 500; i++) seen.push((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).headers.location)
+  // g2 (500) recebe tudo até 500 + cliques chegar a 950; g1 (900) fica abaixo disso só nos primeiros.
+  const toG2 = seen.filter(l => l.endsWith('BBBBBBBBBB2222')).length
+  assert.ok(toG2 >= 440 && toG2 <= 460, `g2 recebeu ${toG2}`)
+  // depois de g2 passar da margem (freio), os dois estão na margem: vale o menos cheio, nunca a página morta
+  assert.ok(seen.every(Boolean))
+  await app.close()
+})
+
+test('todos na margem mas não lotados: continua redirecionando (reserva), nunca "lotados"', async () => {
+  const at = new Date()
+  const { app } = await make({ link: baseLink(), samples: { g1: { size: 990, sampledAt: at }, g2: { size: 960, sampledAt: at } } })
+  const res = await app.inject({ url: '/g/promo-tech', headers: HUMAN })
+  assert.equal(res.statusCode, 302)
+  assert.equal(res.headers.location, 'https://chat.whatsapp.com/BBBBBBBBBB2222')
   await app.close()
 })
 

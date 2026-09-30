@@ -29,6 +29,8 @@ test('Link Inteligente: não diz mais que clique ocupa vaga; mostra cliques hoje
   assert.match(links, /nos últimos 7 dias/)
   assert.match(links, /Clique não é entrada/)
   assert.match(links, /role="progressbar"/)
+  assert.match(links, /vira reserva/)
+  assert.match(links, /text: 'Reserva'/)
 })
 
 test('card do painel: Basic nunca chama a API (embaçado com exemplo); PRO busca o resumo', () => {

@@ -1,10 +1,12 @@
 // Regras puras do Link Inteligente (rodízio de convites). Sem banco, sem relógio.
 //
-// Escolha: o grupo elegível com MENOS membros. Membros = última amostra horária
-// (GroupMemberSample) + "reserva" (cliques desde essa amostra) — sem a reserva,
-// uma rajada de cliques cairia toda no mesmo grupo até a próxima amostra.
-// Diferença pequena (<= NEAR_TIE_MEMBERS) conta como empate e alterna entre os
-// grupos (o menos recentemente escolhido vai primeiro).
+// Escolha: o grupo com MENOS membros ATUAIS (última medição), trocando para outro
+// grupo ao chegar na margem de 95% da capacidade. Cliques não mandam no
+// rodízio: só entram como freio interno contra estouro entre duas medições
+// (ver `pickGroup`). Diferença pequena (<= NEAR_TIE_MEMBERS) conta como empate e
+// alterna entre os grupos (o menos recentemente escolhido vai primeiro).
+
+import { ROTATION_MARGIN_PCT } from './smartLinkOccupancy.js'
 
 export const DEFAULT_CAP_PER_GROUP = 1000
 export const MIN_CAP_PER_GROUP = 50
@@ -41,31 +43,55 @@ export function normalizeCap(raw) {
   return n
 }
 
+/** Membros a partir dos quais o grupo entra na "reserva" (95% da capacidade). */
+export function marginMembers(cap, marginPct = ROTATION_MARGIN_PCT) {
+  return Math.floor((cap * marginPct) / 100)
+}
+
 /**
+ * Escolhe para qual grupo mandar o próximo clique.
+ *
+ * O RANKING usa os membros atuais medidos (o grupo com menos gente vai primeiro).
+ * Os cliques recentes (`reserved`) NÃO mexem no ranking: só entram como freio na
+ * checagem de limite, para um grupo não estourar entre duas medições.
+ *
+ *  1. Grupos medidos abaixo da MARGEM (95% da capacidade): o de menos membros;
+ *     diferença de até 5 membros é empate e alterna pelo menos recente.
+ *  2. Grupo sem medição (recém-adicionado): só se nenhum medido tem vaga.
+ *  3. "Reserva": todos já passaram da margem mas ainda não lotaram (< 100%):
+ *     manda para o menos cheio — melhor um grupo quase cheio do que uma página
+ *     morta, enquanto o WhatsApp ainda aceita gente.
+ *  4. Todos em 100%: sem destino (`all_full`).
+ *
  * @param {Array<{id:string, enabled:boolean, inviteCode:string|null, size:number|null, reserved:number, lastPickedAt:number}>} candidates
  * @param {{cap?:number}} [opts]
- * @returns {{ group: object|null, reason: 'ok'|'empty'|'all_full' }}
+ * @returns {{ group: object|null, reason: 'ok'|'reserve'|'empty'|'all_full' }}
  */
 export function pickGroup(candidates, { cap = DEFAULT_CAP_PER_GROUP } = {}) {
   const usable = (candidates ?? []).filter(c => c.enabled && isValidInviteCode(c.inviteCode))
   if (usable.length === 0) return { group: null, reason: 'empty' }
 
   const oldestPickedFirst = (a, b) => (a.lastPickedAt ?? 0) - (b.lastPickedAt ?? 0) || String(a.id).localeCompare(String(b.id))
+  const margin = marginMembers(cap)
+  const withBrake = c => c.size + (c.reserved ?? 0)
+  const measured = usable.filter(c => Number.isInteger(c.size))
 
-  const known = usable
-    .filter(c => Number.isInteger(c.size))
-    .map(c => ({ c, effective: c.size + (c.reserved ?? 0) }))
-    .filter(x => x.effective < cap)
-  if (known.length > 0) {
-    const min = Math.min(...known.map(x => x.effective))
-    const near = known.filter(x => x.effective <= min + NEAR_TIE_MEMBERS).map(x => x.c)
+  const preferred = measured.filter(c => withBrake(c) < margin)
+  if (preferred.length > 0) {
+    const min = Math.min(...preferred.map(c => c.size))
+    const near = preferred.filter(c => c.size <= min + NEAR_TIE_MEMBERS)
     return { group: near.sort(oldestPickedFirst)[0], reason: 'ok' }
   }
 
-  // Sem amostra ainda (grupo recém-adicionado): só entra se não há grupo medido
-  // com vaga. Conta a reserva para não lotar às cegas.
-  const unknown = usable.filter(c => !Number.isInteger(c.size) && (c.reserved ?? 0) < cap)
+  // Sem medição ainda: entra só se não há grupo medido com vaga (conta a reserva).
+  const unknown = usable.filter(c => !Number.isInteger(c.size) && (c.reserved ?? 0) < margin)
   if (unknown.length > 0) return { group: unknown.sort(oldestPickedFirst)[0], reason: 'ok' }
+
+  const reserve = measured.filter(c => withBrake(c) < cap)
+  if (reserve.length > 0) {
+    const leastFull = [...reserve].sort((a, b) => withBrake(a) - withBrake(b) || oldestPickedFirst(a, b))[0]
+    return { group: leastFull, reason: 'reserve' }
+  }
 
   return { group: null, reason: 'all_full' }
 }

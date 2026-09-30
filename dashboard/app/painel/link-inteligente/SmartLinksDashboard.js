@@ -33,7 +33,9 @@ function groupStatus(g) {
   if (!g.enabled) return { text: 'Pausado', tone: '' }
   if (g.size == null) return { text: 'Aguardando contagem', tone: '' }
   if (g.occupancyPct >= 100) return { text: 'Lotado', tone: 'is-full' }
-  if (g.occupancyPct >= 90) return { text: 'Quase cheio', tone: 'is-warn' }
+  // A partir de 95% o grupo vira "reserva": só recebe gente se nenhum outro tiver espaço.
+  if (g.occupancyPct >= 95) return { text: 'Reserva', tone: 'is-warn' }
+  if (g.occupancyPct >= 90) return { text: 'Enchendo', tone: 'is-warn' }
   return { text: 'No rodízio', tone: 'is-ok' }
 }
 
@@ -81,7 +83,7 @@ function LinkCard({ link, postGroups, onChanged, onNotice }) {
         <span><strong>{number(link.totalSize)}</strong> membros nos {link.groups.length} grupos</span>
       </div>
       <p className="pnl-hint" style={{ margin: '6px 0 0' }}>
-        Clique não é entrada: nem todo mundo que clica entra no grupo. O rodízio usa os membros atuais de cada grupo.
+        Clique não é entrada: nem todo mundo que clica entra no grupo. O rodízio manda para o grupo com menos membros; ao chegar em {Math.floor(link.capPerGroup * 0.95)} membros (95%), o grupo vira reserva e só recebe gente se nenhum outro tiver espaço.
         {occ?.avgPct != null && <> Ocupação média: <strong>{occ.avgPct}%</strong>{occ.remainingSlots != null && <> · {number(occ.remainingSlots)} vagas restantes</>}.</>}
       </p>
 

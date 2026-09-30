@@ -41,7 +41,7 @@ import { startOfferQueueCron } from '../offerQueue/cron.js'
 import { registerApiMetricsHooks, renderPrometheusMetrics, isPrivateAddress } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
 import { startDlqMaintenanceJob, getDlqMaintenanceSnapshot } from '../jobs/dlqMaintenance.js'
-import { runGroupMemberSampleSweep } from '../jobs/groupMemberSamples.js'
+import { runGroupMemberSampleSweep, runHotSampleSweep } from '../jobs/groupMemberSamples.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
@@ -325,7 +325,25 @@ async function runGroupMemberSamplesTick() {
     groupMemberSamplesRunning = false
   }
 }
+// Medição adaptativa (Link Inteligente): só usuários com grupo >80% cheio, a cada
+// 10 min. Não roda junto com a passada horária (evita 2 consultas ao WhatsApp ao mesmo tempo).
+//   SMART_LINK_HOT_SAMPLE_MS — intervalo (default 10 min; mínimo 2 min).
+const SMART_LINK_HOT_SAMPLE_MS = Math.max(Number(process.env.SMART_LINK_HOT_SAMPLE_MS) || 10 * 60 * 1000, 2 * 60 * 1000)
+async function runHotSamplesTick() {
+  if (String(process.env.GROUP_MEMBER_SAMPLES_ENABLED ?? '').trim().toLowerCase() === 'false') return
+  if (groupMemberSamplesRunning) return
+  groupMemberSamplesRunning = true
+  try {
+    const summary = await runHotSampleSweep({ db, logger: app.log })
+    if (summary.users > 0) app.log.info({ ...summary }, 'medição adaptativa: passada concluída')
+  } catch (err) {
+    app.log.error({ err: err.message }, 'medição adaptativa: passada falhou')
+  } finally {
+    groupMemberSamplesRunning = false
+  }
+}
 function startGroupMemberSamplesSweep() {
+  setInterval(runHotSamplesTick, SMART_LINK_HOT_SAMPLE_MS).unref?.()
   // Primeira passada 5 min após subir (sessões retomam antes); depois de hora em hora.
   setTimeout(runGroupMemberSamplesTick, 5 * 60 * 1000).unref?.()
   setInterval(runGroupMemberSamplesTick, GROUP_MEMBER_SAMPLES_INTERVAL_MS).unref?.()

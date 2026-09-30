@@ -12,6 +12,8 @@ export const MEASURABLE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 export const WARN_PCT = 90
 /** Margem do rodízio: a partir daqui o grupo só recebe tráfego se não houver outro. */
 export const ROTATION_MARGIN_PCT = 95
+/** A partir daqui o link é medido com mais frequência (antes de chegar na margem). */
+export const HOT_PCT = 80
 /** O aviso só rearma quando algum grupo cai abaixo disto (histerese contra repique). */
 export const REARM_PCT = 85
 
@@ -78,4 +80,14 @@ const LEVEL_RANK = { nodata: 0, ok: 1, warn: 2, critical: 3 }
 export function pickWorstLink(summaries) {
   return [...(summaries ?? [])].sort((a, b) =>
     (LEVEL_RANK[b.level] - LEVEL_RANK[a.level]) || ((b.avgPct ?? -1) - (a.avgPct ?? -1)))[0] ?? null
+}
+
+/**
+ * O link está "quente" (merece medição mais frequente) quando algum grupo ativo,
+ * com medição recente, já passou de 80% da capacidade.
+ * @param {Array<{size:number|null, enabled:boolean, hasInvite:boolean, measurable:boolean}>} groups
+ */
+export function isHotLink(groups, cap) {
+  if (!(cap > 0)) return false
+  return (groups ?? []).some(g => g.enabled && g.hasInvite && g.measurable && Number.isInteger(g.size) && pct(g.size, cap) >= HOT_PCT)
 }

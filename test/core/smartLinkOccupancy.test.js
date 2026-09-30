@@ -79,3 +79,14 @@ test('link pior: crítico vence aviso vence ok; empate pela maior ocupação', (
   assert.equal(pickWorstLink([a, b, c]).id, 'c')
   assert.equal(pickWorstLink([]), null)
 })
+
+import { isHotLink } from '../../src/core/smartLinkOccupancy.js'
+
+test('link quente: algum grupo ativo e medido com >= 80% da capacidade', () => {
+  assert.equal(isHotLink([g(800)], 1000), true)
+  assert.equal(isHotLink([g(799), g(100)], 1000), false)
+  assert.equal(isHotLink([g(950, { enabled: false })], 1000), false)
+  assert.equal(isHotLink([g(950, { measurable: false })], 1000), false)
+  assert.equal(isHotLink([g(950)], 0), false)
+  assert.equal(isHotLink([], 1000), false)
+})

@@ -54,3 +54,10 @@ Achados com dado (simulação/teste), todos corrigidos com teste:
 - **Grupo apagado em Espelhamento** sai do link em cascata, sem aviso.
 - **Sem troca ao vivo de cap para baixo**: reduzir o teto tira o grupo do rodízio no próximo cache (≤ 10 s).
 - `req.ip` atrás de proxy segue `trustProxy` (XFF): limite por IP é anti-abuso, não segurança forte.
+
+## Rodízio v2 (PR 2 do plano de 30/09 — margem de 95%)
+Decisões da dona: ranking pelos **membros atuais**; cliques só mostram no card.
+- **Escolha** (`pickGroup`): 1) grupos medidos abaixo da margem (95% da capacidade, `marginMembers`): o de menos membros (empate ≤ 5 alterna); 2) grupo sem medição, só se nenhum medido tem vaga; 3) **reserva**: todos na margem mas < 100% → o menos cheio (nunca página morta enquanto o WhatsApp aceita); 4) todos em 100% → "Grupos lotados".
+- **Cliques = freio, não ranking**: a reserva em memória (+1 por clique humano desde a última medição) só entra na checagem de margem/teto, para o grupo não estourar entre duas medições. Não mexe em quem é "o de menos membros".
+- **Medição adaptativa** (`runHotSampleSweep`, timer na API): usuário com grupo ≥ 80% da capacidade (amostra < 24 h, grupo ativo) é medido a cada 10 min (`SMART_LINK_HOT_SAMPLE_MS`, mín. 2 min); os demais seguem de hora em hora. 1 `listGroups` por usuário quente por passada, com pausa de 2 s entre usuários; usuário com 2 links quentes é medido uma vez. Custo: só quem importa.
+- Risco conhecido: a cada 10 min `groupFetchAllParticipating` em conta com muitos grupos é pesado; se o WhatsApp reclamar (rate-limit), subir o intervalo ou trocar por `groupMetadata` só dos grupos quentes.
