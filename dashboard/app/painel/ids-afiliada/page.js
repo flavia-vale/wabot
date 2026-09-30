@@ -16,6 +16,7 @@ import {
 import { VIDEO_CADASTRO_ETIQUETAS_URL } from '../../../../src/tutorialVideo.js'
 import { STORE_GUIDE_BY_PLATFORM } from '@/lib/store-guides'
 import AwinCredentialsCard from '@/components/painel/AwinCredentialsCard'
+import RakutenCredentialsCard from '@/components/painel/RakutenCredentialsCard'
 
 const IconChevron = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -608,6 +609,12 @@ export default function IdsAfiliadaPage() {
         <AwinCredentialsCard
           open={openId === 'awin'}
           onToggleOpen={() => setOpenId((cur) => (cur === 'awin' ? null : 'awin'))}
+        />
+      )}
+      {!loading && (
+        <RakutenCredentialsCard
+          open={openId === 'rakuten'}
+          onToggleOpen={() => setOpenId((cur) => (cur === 'rakuten' ? null : 'rakuten'))}
         />
       )}
     </div>

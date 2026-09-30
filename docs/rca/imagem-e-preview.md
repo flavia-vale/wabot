@@ -367,6 +367,43 @@ TODAS as sessões — anunciar antes). Ver "código novo não carregado pelos bo
 Teste: `test/magalu-imagem-oferta.test.js` (muro reproduzido por servidor
 local, sem tocar a loja).
 
+## Magalu sem foto, parte 2: scraper externo (2026-09-30)
+
+Medido na VPS e fora dela: `magazineluiza.com.br` devolve **403** (1.083 bytes)
+para WhatsApp e navegador — o Akamai barra o servidor por inteiro, então nenhum
+fetch direto pega a foto. Oferta de texto + link sem foto na origem saía sem imagem.
+
+**Correção:** `src/converters/magaluScraper.js` + `resolveMagaluImageViaScraper`
+(`imageScrapers.js`). Só roda quando a loja bloqueia, **desligado por padrão**:
+`MAGALU_SCRAPER_KEY` (+ `MAGALU_SCRAPER_PROVIDER=zenrows|scrapedo`,
+`MAGALU_SCRAPER_DAILY_CAP`, default 100/dia por processo). Cota esgotada →
+sinal `ops_magalu_scraper_quota` e volta ao plano B. Mudar env exige
+`pm2 delete` + `start`; em modo `remote`, `pm2 restart bot-supervisor --update-env`.
+
+**Não regredir:** sem chave, nada muda; o scraper nunca roda sem passar pelo
+teto diário; falha do scraper devolve `null` (plano B), nunca banner de marca.
+**Validação em staging (2026-09-30):** com a chave no `.env`, o log mostrou só
+`loja_bloqueou` → `scrape_sem_imagem`. Resposta de erro do provedor voltava
+`null` MUDA. Agora cada saída tem nome: `scraper_desligado` (sem chave),
+`scraper_recusou` (+ `status` HTTP do provedor), `scraper_bloqueado`,
+`scraper_sem_imagem`, `scraper_falhou`, `scraper_sem_cota`.
+
+**Descartado com dado (2026-09-30):** trocar User-Agent / imitar TLS do Chrome
+(`impit`, `got-scraping`). Passou de um IP limpo, mas a VPS recebe o desafio
+JavaScript do Akamai (200, 2.511 bytes) mesmo com `impit` + Chrome Android: o IP
+da VPS está marcado. Só outro IP (o scraper) resolve.
+
+**Validado em staging (2026-09-30) com Scrape.do** (`MAGALU_SCRAPER_PROVIDER=scrapedo`):
+oferta Magalu saiu com foto. Custo medido na VPS: `render+super` gastou muito;
+só `geoCode=br` (sem `render`, sem `super`) trouxe a foto por **1 crédito**
+(`super` = 10). Por isso o Scrape.do tenta primeiro a chamada barata e só usa
+`super` se a barata cair no muro. Erro da conta (401/402/429) não repete.
+⚠️ O teto `MAGALU_SCRAPER_DAILY_CAP` é **por processo** (cada robô tem o seu):
+em produção o gasto máximo é teto × robôs. Plano grátis = 1.000 créditos/mês.
+
+**Histórico: antes da validação,** — testar antes de promover para `main`:
+`curl` do provedor com a URL da Magalu e conferir `og:image`.
+
 ## Foto do card saindo como SELO no meio de um fundo borrado (RCA 2026-09-18)
 
 Cliente mandou print: card de tênis (Magalu, `magazinevoce.com.br`) com a foto
@@ -789,3 +826,19 @@ Antes de mexer, leia esta seção inteira.
 | `mlstatic.com`                     | `D_NQ_NP_` → `D_NQ_NP_2X_` (não tocar — referência)                      |
 
 Teste: `node --test test/image-scrapers.test.js`.
+
+## Oferta reenviada depois do reinício do robô saía sem foto (RCA 2026-09-30 — não regredir)
+
+Sintoma: logo depois de um reinício do robô (deploy), ofertas da Shopee com 2
+links saíram sem foto; log `Card de preview sem imagem … "platform":"shopee+shopee"
+… "stage":"scrape_sem_imagem"` (staging, pid novo, 01:23 UTC).
+Causa (código + log): `reprocessRestartFailures` (reenvio das linhas
+`error:worker_restart`) montava `primary.platform = row.platform`, e
+`MessageLog.platform` é o RÓTULO de todas as lojas da mensagem
+(`conversions.map(c => c.platform).join('+')`). `fetchProductImage` não
+reconhece `shopee+shopee`, pula o ramo da Shopee (API de afiliado, única fonte
+de foto dela) e cai na leitura genérica do link curto, que a Shopee bloqueia.
+Correção: `src/core/primaryPlatformFromLog.js` (loja detectada no link
+principal → 1ª loja do rótulo). Teste: `test/primary-platform-from-log.test.js`.
+Regra: rótulo de `MessageLog.platform` nunca vai como nome de loja para
+conversor ou busca de foto.

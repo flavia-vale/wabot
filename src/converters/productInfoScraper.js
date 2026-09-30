@@ -2,6 +2,9 @@
 // A ferramenta "Gerar oferta" recebe um link que JÁ é de afiliado — não deve
 // re-converter. Aqui buscamos título e preços para preencher o template.
 
+import { isSheinHostname } from '../detector.js'
+import { isSheinShortLink, resolveSheinShortLink } from './shein.js'
+import { fetchSheinProductInfoByGoodsId, sheinGoodsIdFromUrl } from './sheinProductInfo.js'
 import { fetchShopeeProductInfo, extractShopeeIds, isShopeeShortLink, resolveShopeeShortLink } from './shopee.js'
 import { resolveToCleanProductUrl } from './mercadolivre.js'
 import { isAmazonShortLink, resolveAmazonShortLink } from './amazon.js'
@@ -391,7 +394,20 @@ const BOGUS_SCRAPE_TITLE_PATTERNS = [
   // marca SHEIN igual ao padrão irmão acima — só descarta quando as duas
   // partes aparecem juntas no mesmo título.
   /shein.{0,60}economize muito agora|economize muito agora.{0,60}shein/i,
+  // <title> das páginas de captcha/home da SHEIN (`/risk/challenge`), medido
+  // em 2026-09-30: vazava como nome do produto no Criar oferta.
+  /shein\.com is mainly design/i,
+  /loja de moda online \| shein/i,
 ]
+
+function isSheinRiskPage(url) {
+  try {
+    const parsed = new URL(String(url || ''))
+    return isSheinHostname(parsed.hostname) && /\/risk\//i.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
 
 function isBogusScrapeTitle(title) {
   if (!title) return true
@@ -935,6 +951,28 @@ export async function fetchProductInfo(url, opts = {}) {
     resolvedUrl = await resolveAmazonShortLink(url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
   }
 
+  // SHEIN: caminho próprio ANTES do fetch de HTML (RCA 2026-09-30, ver
+  // sheinProductInfo.js). Produto/vitrine/APIs caem no captcha para IP de
+  // servidor; a landing de afiliada `ark/7287?goods_id=` é a única página
+  // renderizada no servidor e traz nome + sale/retail price DO produto.
+  // oneLink → resolve até achar o goods_id (o resolvedor já existente para no
+  // primeiro hop com id). Falhou → segue o caminho antigo (og:title do oneLink).
+  let sheinGoodsId = sheinGoodsIdFromUrl(resolvedUrl)
+  if (!sheinGoodsId && isSheinShortLink(url)) {
+    try {
+      const hop = await resolveSheinShortLink(url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
+      sheinGoodsId = sheinGoodsIdFromUrl(hop)
+    } catch {
+      sheinGoodsId = null
+    }
+  }
+  if (sheinGoodsId) {
+    const ark = await fetchSheinProductInfoByGoodsId(sheinGoodsId)
+    if (ark?.title) {
+      return { title: ark.title, oldPrice: ark.oldPrice, newPrice: ark.newPrice, finalUrl: ark.sourceUrl, resolvedUrl: url }
+    }
+  }
+
   // A 1ª leitura de página do ML sai SEM a sessão da cliente (RCA 2026-09-28):
   // abrir página do ML com o cookie dela, do IP do servidor, derrubava o código
   // de acesso em minutos. Ela só entra no fim, se nada sem sessão resolveu.
@@ -949,6 +987,16 @@ export async function fetchProductInfo(url, opts = {}) {
     html = null
     finalUrl = resolvedUrl
   }
+
+  // SHEIN: página de produto, vitrine do oneLink e APIs `productInfo/*` caem
+  // em `/risk/challenge` (captcha) para IP de servidor — medido em 2026-09-30
+  // da VPS e de fora, com e sem cookie da cliente. A página do captcha tem
+  // <title> próprio ("SHEIN.com is mainly design and produce…") que passava
+  // pelo filtro de títulos genéricos e vazava como NOME do produto no Criar
+  // oferta — e, por ser truthy, impedia o fallback pelo link original (o
+  // oneLink serve og:title com o nome real, sem captcha). Página de risco =
+  // sem página. Ver docs/rca/lojas-conversao.md, "SHEIN: nome vem do oneLink".
+  if (isSheinRiskPage(finalUrl)) html = null
 
   // Retry do CAPTCHA do Amazon: quando o request cai na página de bloqueio
   // (opfcaptcha, ~5KB, sem #productTitle), refaz a busca — cada tentativa tem

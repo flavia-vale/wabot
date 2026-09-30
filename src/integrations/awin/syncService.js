@@ -108,7 +108,7 @@ async function syncProgrammes({ db, client, account, token, runId }) {
   const stores = extractProgrammes(body)
   if (!stores) return null
   for (const store of stores) {
-    const data = { name: store.name, displayUrl: store.displayUrl, domainsJson: JSON.stringify(store.domains), lastSeenRunId: runId }
+    const data = { name: store.name, displayUrl: store.displayUrl, logoUrl: store.logoUrl, domainsJson: JSON.stringify(store.domains), lastSeenRunId: runId }
     await db.awinProgramme.upsert({
       where: { accountId_advertiserId: { accountId: account.id, advertiserId: store.advertiserId } },
       create: { ...data, userId: account.userId, accountId: account.id, advertiserId: store.advertiserId },

@@ -37,6 +37,9 @@ export const CONVERSION_FAILURE = Object.freeze({
    *  cliente ainda não foi aprovada na Awin. Não é falha do robô nem do
    *  cadastro: a comissão iria para outra pessoa, então a oferta não sai. */
   AWIN_STORE_NOT_JOINED: 'awin_store_not_joined',
+  /** Idem na Rakuten (link click.linksynergy.com de outra pessoa ou página de
+   *  loja em que a cliente ainda não foi aprovada). */
+  RAKUTEN_STORE_NOT_JOINED: 'rakuten_store_not_joined',
 })
 
 // Mais acionável primeiro: falta de cadastro é o que a cliente resolve em um
@@ -47,6 +50,7 @@ const PRECEDENCE = [
   CONVERSION_FAILURE.STORE_DISABLED,
   CONVERSION_FAILURE.CONVERSION_FAILED,
   CONVERSION_FAILURE.AWIN_STORE_NOT_JOINED,
+  CONVERSION_FAILURE.RAKUTEN_STORE_NOT_JOINED,
   CONVERSION_FAILURE.STORE_NOT_USED,
 ]
 

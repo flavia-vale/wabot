@@ -587,3 +587,58 @@ semântica fail-open/closed, **validar em staging primeiro** (vide
 sem setar nada o comportamento é idêntico ao histórico. A camada local de
 dedup (em disco, por worker) continua sendo a primeira linha e independe do
 Redis.
+
+## Resgate pós-reinício DESLIGADO em produção (RCA 2026-09-30 — não regredir)
+
+Medido: `.env` de prod tinha `WORKER_RESTART_REPROCESS_ENABLED=false`, sem
+registro do motivo. Efeito: **1.333 `error:worker_restart` em 24 h na frota,
+zero `:requeued`** — cada `pm2 delete/start` do supervisor (hotfix em
+`converters/`, `pm2 update`, queda) jogava fora tudo que estava na fila de
+todas as contas. Religado (`=true` + `pm2 delete` + `start bot-supervisor`):
+72 ofertas resgatadas nos 30 min seguintes.
+
+**Não regredir:** essa env fica LIGADA em prod. Quem precisar desligar escreve
+aqui o motivo e a data. Conferir: `grep WORKER_RESTART_REPROCESS ~/wabot/.env`
+(vazio ou `=true` = ligado) e `sqlite3 prisma/prod.db "SELECT errorMsg, COUNT(*)
+FROM MessageLog WHERE errorMsg LIKE 'error:worker_restart%' AND
+sentAt>(strftime('%s','now','-24 hours')*1000) GROUP BY 1;"` (tem que aparecer
+`:requeued`). Reinício do supervisor: só em horário de pouco envio, anunciado.
+
+## Oferta automática "ignorada: grupo de origem removido" após reinício (RCA 2026-09-30)
+
+Sintoma: oferta automática (`platform=broadcast`, `sourceGroup=offerAutomation`)
+aparecia como `skip:source_unlinked` ("O grupo de origem dessa oferta foi
+removido…"), sem ter grupo de origem. Dado (staging): 3 linhas
+`offerAutomation` com `error:worker_restart:requeued`.
+
+Causa: `reprocessRestartFailures` (`src/bot-worker.js`) reenviava TODA linha
+`error:worker_restart` (menos `scheduled`) como job `converted` com
+`sourceJid = row.sourceGroup`. Para broadcast isso é `offerAutomation`/`manual`/
+`offerQueue:<id>`; a revalidação do destino no dequeue não acha essa "origem"
+nos monitorados e descarta como `source_unlinked`.
+
+Correção: broadcast fica **fora** do reenvio (`platform notIn ['scheduled',
+'broadcast']`) e segue como `error:worker_restart`, o motivo verdadeiro. Não dá
+para reenviar fiel: o log guarda o texto cortado em 240 chars e sem quebras de
+linha (`sanitizeMessageForLog`) e não guarda a foto da receita (`imageUrl`).
+
+**Não regredir:** não reenviar broadcast a partir do `MessageLog`; não enfileirar
+como `converted` nada que não tenha origem monitorada de verdade. Teste:
+`test/bot-worker-restart-reprocess-wiring.test.js`.
+
+### Adendo: espelhamento reenviado saía cortado (mesma investigação)
+
+O mesmo `reprocessRestartFailures` reenviava a oferta ESPELHADA a partir de
+`messageText`, que `sanitizeMessageForLog` corta em 240 chars e colapsa as
+quebras de linha — a oferta saía mutilada (e o link podia ficar de fora do
+corte). Correção: coluna `MessageLog.resendText` (migration
+`20261001090000_message_log_resend_text`) com o texto COMPLETO
+(`sanitizeResendText`: só tira NUL/surrogate solto; acima de 8000 chars → null),
+gravada ao enfileirar o espelhamento e **zerada no sucesso** (sem crescimento do
+banco; nenhuma escrita a mais — vai no mesmo create/update). O reenvio só pega
+linha com `resendText` e usa ele no texto, card e cupom; linha antiga/sem texto
+fica `error:worker_restart`. `resendText` não vai para o painel (`/logs`).
+
+**Não regredir:** não reenviar a partir de `messageText`; não deixar de zerar
+`resendText` no sucesso. Testes: `test/bot-worker-restart-reprocess-wiring.test.js`,
+`test/message-log-sanitizer.test.js`.

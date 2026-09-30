@@ -88,6 +88,22 @@ export async function resolveAwinShortUrlCached(url, options = {}) {
   return target
 }
 
+/**
+ * Página da LOJA por trás de um link da Awin (tidd.ly / cread.php), para ler
+ * foto e nome. Nunca abre o link de clique até o fim: tidd.ly → só o Location
+ * (com cache — a conversão já leu o mesmo link); cread.php → o `ued`, sem
+ * rede. Link que não é da Awin volta como está. null = não deu para saber.
+ */
+export async function awinStorePageUrl(url, { resolveShortUrl = resolveAwinShortUrlCached } = {}) {
+  let target = url
+  if (isAwinShortUrl(target)) target = await resolveShortUrl(target).catch(() => null)
+  if (!target) return null
+  const click = parseAwinClickUrl(target)
+  if (click) return cleanDestinationUrl(click.destinationUrl)
+  if (isAwinTrackingUrl(target)) return null
+  return target
+}
+
 // De onde o link aponta e (se já for da Awin) de quem ele é.
 async function readLink(url, deps) {
   let target = url
@@ -129,16 +145,21 @@ export async function convert(url, creds, _options = {}) {
     }
   }
 
-  const destinationUrl = cleanDestinationUrl(link.destinationUrl)
-  const store = (destinationUrl && matcher.storeForUrl(destinationUrl))
+  const cleanDestination = cleanDestinationUrl(link.destinationUrl)
+  const storeByPage = cleanDestination ? matcher.storeForUrl(cleanDestination) : null
+  const store = storeByPage
     || (link.advertiserId && matcher.storeForAdvertiser(link.advertiserId))
     || null
   if (!store) throw notConvertible('Loja da Awin em que você ainda não foi aprovada.', AWIN_NOT_JOINED_ERROR)
-  if (!destinationUrl) throw notConvertible('O link da Awin não diz para qual página da loja ele vai.', 'no_destination')
+  // Link da Awin SEM página (vai para a página inicial da loja) ou com página
+  // de OUTRO site: o link dela vai para a página inicial da MESMA loja — antes
+  // a oferta inteira era descartada (revisão 2026-09-30). Página de outro site
+  // nunca vai junto: a Awin redirecionaria para lá com a comissão da loja.
+  const destinationUrl = storeByPage ? cleanDestination : null
   const account = accounts.get(store.accountId)
   if (!account) throw notConvertible('Conta Awin da loja não encontrada.', 'no_account')
 
-  const destinationKey = awinDestinationKey(destinationUrl)
+  const destinationKey = awinDestinationKey(destinationUrl || `home:${store.advertiserId}`)
   const info = { own: false, advertiserId: store.advertiserId, storeName: store.name, destinationUrl }
   const cached = await creds.linkStore?.get({ accountId: account.id, advertiserId: store.advertiserId, destinationKey }).catch(() => null)
   if (cached?.shortUrl) return { url: cached.shortUrl, awin: { ...info, short: true, cached: true } }
@@ -153,7 +174,7 @@ export async function convert(url, creds, _options = {}) {
       const client = creds.client ?? getDefaultAwinClient()
       const generated = await withTimeout(client.generateLink(account.token, account.publisherId, {
         advertiserId: store.advertiserId,
-        destinationUrl,
+        ...(destinationUrl ? { destinationUrl } : {}),
         shorten: true,
         noWait: true,
       }), creds.generateTimeoutMs ?? GENERATE_TIMEOUT_MS)
@@ -168,7 +189,7 @@ export async function convert(url, creds, _options = {}) {
       accountId: account.id,
       advertiserId: store.advertiserId,
       destinationKey,
-      destinationUrl,
+      destinationUrl: destinationUrl || '',
       shortUrl,
       longUrl: apiLongUrl || longUrl,
     }).catch(() => {})

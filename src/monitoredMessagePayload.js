@@ -1,4 +1,21 @@
+import { isRakutenTrackingUrl } from './integrations/rakuten/storeMatcher.js'
+
 const EXTERNAL_AD_REPLY_KEY = 'externalAdReply'
+
+// Mesma regra do Baileys para achar o link da prévia automática
+// (Defaults/index.js URL_REGEX: o PRIMEIRO https:// do texto).
+const BAILEYS_PREVIEW_URL_RE = /https:\/\/(?![^:@\/\s]+:[^:@\/\s]+@)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:\d+)?(\/[^\s]*)?/
+
+// Sem `linkPreview` no payload, o Baileys ABRE o primeiro link do texto a
+// partir do servidor para montar a prévia (Utils/messages.js,
+// generateLinkPreviewIfRequired) — mesmo com useLinkPreview=false. Num link
+// da Rakuten isso é um clique contado vindo da VPS (clique falso,
+// docs/rca/afiliados-rakuten.md). `linkPreview: null` desliga essa busca: a
+// oferta sai como texto, sem card.
+export function firstPreviewUrlCountsClick(text) {
+  const url = String(text ?? '').match(BAILEYS_PREVIEW_URL_RE)?.[0]
+  return Boolean(url && isRakutenTrackingUrl(url))
+}
 
 // Lição de produção (incidente "Ver canal" + tentativa de preview 2026-06):
 // contextInfo.externalAdReply em mensagem monitorada causa DROP SILENCIOSO no
@@ -26,6 +43,8 @@ export function buildMonitoredMessagePayload({ finalText, image, useLinkPreview 
   const textPayload = { text: String(finalText || '') }
   if (useLinkPreview && linkPreview && typeof linkPreview === 'object') {
     textPayload.linkPreview = linkPreview
+  } else if (firstPreviewUrlCountsClick(textPayload.text)) {
+    textPayload.linkPreview = null
   }
   const textSendOptions = useLinkPreview ? { generateHighQualityLinkPreview: true } : undefined
 

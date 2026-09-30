@@ -25,9 +25,12 @@ import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecaus
 import { convertLink } from './converters/index.js'
 import { AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
 import { awinOfferOptions, loadAwinConversionContext, refineAwinOptionsForText } from './integrations/awin/conversionContext.js'
+import { RAKUTEN_NOT_JOINED_ERROR } from './converters/rakuten.js'
+import { loadRakutenConversionContext, rakutenOfferOptions } from './integrations/rakuten/conversionContext.js'
+import { primaryPlatformFromLog } from './core/primaryPlatformFromLog.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
-import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
+import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, fetchSmallImageAsCard as fetchSmallImageAsCardBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
 import { buildInlineThumbnail } from './core/inlineThumbnail.js'
 import { composePreviewCardImage } from './core/previewCardCanvas.js'
 import { buildStoreBrandCardImage } from './converters/storeBrandCard.js'
@@ -56,9 +59,10 @@ import { linkRemovedSkipReason } from './core/unsupportedStore.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
-import { sanitizeMessageForLog, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
+import { sanitizeMessageForLog, sanitizeResendText, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
+import { describeLogoutReason } from './core/logoutReason.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
@@ -170,6 +174,7 @@ export async function createBotSessionRuntime({
 const withLimit = (semaphore, task) => semaphore?.run ? semaphore.run(task) : task()
 const fetchProductImage = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchProductImageBase(...args))
 const fetchImageBuffer = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchImageBufferBase(...args))
+const fetchSmallImageAsCard = (...args) => withLimit(sharedLimits.scrapingSemaphore, () => fetchSmallImageAsCardBase(...args))
 const normalizeImageForWhatsApp = (...args) => withLimit(sharedLimits.sharpSemaphore, () => normalizeImageForWhatsAppBase(...args))
 const WORKER_STARTED_AT = Date.now()
 const workerMetadata = buildWorkerMetadata({ userId, startedAt: WORKER_STARTED_AT })
@@ -1197,6 +1202,14 @@ async function loadConfig() {
   } catch (err) {
     logger.warn({ err: err?.message }, 'Falha ao carregar contas Awin; links dessas lojas seguem sem conversão até a próxima carga')
   }
+  // Rakuten: mesmo caminho (lojas aprovadas + id dos links dela). Falhou →
+  // segue sem Rakuten. docs/rca/afiliados-rakuten.md.
+  try {
+    const rakuten = await loadRakutenConversionContext(userId, { db })
+    if (rakuten) credentials.rakuten = rakuten
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao carregar contas Rakuten; links dessas lojas seguem sem conversão até a próxima carga')
+  }
 
   Object.defineProperty(credentials, '__onCredentialPatch', {
     enumerable: false,
@@ -1227,7 +1240,7 @@ async function loadConfig() {
   const botConfig = {
     delayMin: 5,
     delayMax: 15,
-    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin',
+    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin,rakuten',
     blockedKeywords: '',
     welcomeMsg: '',
     postToStatus: false,
@@ -2663,7 +2676,16 @@ async function buildPayloadFromRecipe(recipe, { destJid } = {}) {
 
   let baixada = null
   try {
-    const fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
+    let fetched = await fetchImageBuffer(recipe.imageUrl, recipe.refererUrl)
+    // Imagem pequena demais (ex.: logo da loja 120×60 das promoções Awin): em
+    // quadro branco, em vez de a oferta sair só com texto (revisão 2026-09-30).
+    if (!fetched?.buffer) {
+      const card = await fetchSmallImageAsCard(recipe.imageUrl, recipe.refererUrl).catch(() => null)
+      if (card?.buffer) {
+        logger.info({ imageUrl: recipe.imageUrl }, 'broadcast image: imagem pequena montada em quadro')
+        fetched = card
+      }
+    }
     baixada = fetched?.buffer ?? null
     if (fetched && !baixada) {
       logger.warn({ srcMime: fetched.mimetype }, 'broadcast image: download sem bytes — enviando texto com preview')
@@ -3195,6 +3217,8 @@ async function processSendJob(job) {
             status: 'success',
             errorMsg: null,
             sentAt: new Date(),
+            // Já saiu: o texto completo do reenvio não serve mais.
+            resendText: null,
             ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
             ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
             // Feature 017 (arquitetura multicanal de entrega), T023: este é o
@@ -3327,7 +3351,20 @@ async function reprocessRestartFailures() {
       userId,
       status: 'error',
       errorMsg: 'error:worker_restart',
-      platform: { not: 'scheduled' },
+      // Só espelhamento é reenviado. Agendamento tem fluxo próprio; broadcast
+      // (oferta automática, fila de ofertas, envio manual) não tem origem
+      // monitorada e o log não guarda o que precisa para reenviar fiel (texto
+      // cortado em 240 chars sem quebras de linha, sem a foto da receita).
+      // Reenviado como `converted` com sourceJid='offerAutomation', caía na
+      // revalidação do dequeue como `skip:source_unlinked` ("grupo de origem
+      // removido") — RCA 2026-09-30. Fica como error:worker_restart, que é o
+      // motivo verdadeiro.
+      platform: { notIn: ['scheduled', 'broadcast'] },
+      // Só reenvia com o texto COMPLETO (resendText). `messageText` é cortado
+      // em 240 chars e sem quebras de linha: reenviar dele mandava a oferta
+      // mutilada para o grupo (RCA 2026-09-30). Sem resendText (linha antiga,
+      // texto acima do teto) fica como error:worker_restart — motivo verdadeiro.
+      resendText: { not: null },
       sentAt: { gte: cutoff },
     },
     take: 200,
@@ -3345,7 +3382,8 @@ async function reprocessRestartFailures() {
         data: { errorMsg: 'error:worker_restart:requeued' },
       })
       if (claimed.count !== 1) continue
-      if (!row.destGroup || !row.messageText || !cfg) continue
+      const resendText = row.resendText
+      if (!row.destGroup || !resendText || !cfg) continue
 
       const log = await db.messageLog.create({
         data: {
@@ -3356,6 +3394,9 @@ async function reprocessRestartFailures() {
           originalUrl: row.originalUrl,
           convertedUrl: row.convertedUrl,
           messageText: row.messageText,
+          // Leva o texto completo adiante: se o robô reiniciar de novo antes
+          // deste reenvio sair, ele ainda pode ser reenviado inteiro.
+          resendText,
           status: 'queued',
         },
       })
@@ -3371,7 +3412,13 @@ async function reprocessRestartFailures() {
       const watermarkSize = postDetail?.watermarkSize ?? undefined
       const watermarkPosition = postDetail?.watermarkPosition ?? undefined
       const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
-      const primary = { platform: row.platform, url: row.originalUrl, converted: row.convertedUrl }
+      // `row.platform` é o rótulo de TODAS as lojas ("shopee+shopee"); a foto
+      // precisa da loja do link principal (core/primaryPlatformFromLog.js).
+      const primary = {
+        platform: primaryPlatformFromLog(row, { ...awinOfferOptions(cfg.credentials?.awin), ...rakutenOfferOptions(cfg.credentials?.rakuten) }),
+        url: row.originalUrl,
+        converted: row.convertedUrl,
+      }
 
       const accepted = await enqueueSendJob({
         type: 'converted',
@@ -3381,12 +3428,12 @@ async function reprocessRestartFailures() {
         platforms: row.platform,
         plan: cfg.plan,
         delayMs: 0,
-        typingDelayMs: calculateTypingDelayMs({ text: row.messageText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
+        typingDelayMs: calculateTypingDelayMs({ text: resendText, minMs: SMART_DELAY_TYPING_MIN_MS, maxMs: SMART_DELAY_TYPING_MAX_MS, charsPerSecond: SMART_DELAY_TYPING_CHARS_PER_SECOND }),
         channelForward,
-        couponContext: couponContextFromText(row.messageText),
+        couponContext: couponContextFromText(resendText),
         buildPayload: async () => {
           const linkPreview = await buildManualLinkPreview({
-            text: row.messageText,
+            text: resendText,
             primary,
             credentialsMap: cfg.credentials,
             uploadToServer: activeSock?.waUploadToServer,
@@ -3398,7 +3445,7 @@ async function reprocessRestartFailures() {
             return null
           })
           return buildMonitoredMessagePayload({
-            finalText: row.messageText,
+            finalText: resendText,
             image: null,
             useLinkPreview: true,
             linkPreview,
@@ -3958,6 +4005,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           pairing: wasPairing,
           stuckMsg: Boolean(stuckMsgId),
           versionRejected: isVersionRejected,
+          // Só no 401: o motivo que o WhatsApp informou (ver logoutReason.js).
+          ...(isLoggedOut ? { waReason: describeLogoutReason(lastDisconnect?.error) } : {}),
         },
       })
       if (isVersionRejected) {
@@ -3997,7 +4046,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // devolvida ao lugar por `recoverOrphan` no próximo boot.
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
         await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
-        logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
+        logger.info({ code, waReason: describeLogoutReason(lastDisconnect?.error) }, 'Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
       } else if (wasPairing && isRestartRequired) {
         // Pairing aceito pelo WA: o servidor manda close com code 515 esperando
         // que a gente reconecte com as novas creds salvas via saveCreds. Esse é
@@ -4355,16 +4404,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // dessas lojas é apagado como sempre, sem travar o resto da oferta.
       // Mesmo conjunto em todas as pontas: desembrulho, sanitizador, detector
       // e rede de segurança final. docs/rca/afiliados-awin.md.
-      const awinLigadaNoGrupo = String(monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms || '')
-        .split(',').map(p => p.trim()).includes('awin')
+      const lojasLigadasNoGrupo = String(monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms || '')
+        .split(',').map(p => p.trim())
+      const awinLigadaNoGrupo = lojasLigadasNoGrupo.includes('awin')
+      // Rakuten: mesma regra. Loja aprovada nas duas redes sai pela Awin
+      // (ordem fixa do detector); Awin desligada no grupo → sai pela Rakuten.
+      const rakutenBase = lojasLigadasNoGrupo.includes('rakuten') ? rakutenOfferOptions(cfg.credentials.rakuten) : {}
       const awinBase = awinLigadaNoGrupo ? awinOfferOptions(cfg.credentials.awin) : {}
       const { text: textoParaEspelhar, failures: falhasDeDominioProprio } =
-        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id, offerOptions: awinBase })
+        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id, offerOptions: { ...awinBase, ...rakutenBase } })
       // tidd.ly só diz a loja quando aberto: de loja não aprovada, é apagado
-      // pelo sanitizador (e o resto da oferta segue).
-      const awinOptions = awinLigadaNoGrupo && textoParaEspelhar
-        ? await refineAwinOptionsForText(textoParaEspelhar, cfg.credentials.awin).catch(() => ({}))
-        : {}
+      // pelo sanitizador (e o resto da oferta segue). Link da Rakuten nunca é
+      // aberto (conta clique): decide-se pelo `murl`, sem rede.
+      // O nome ficou `awinOptions` (os testes de fonte ancoram nele), mas leva
+      // as DUAS redes: { awin, rakuten }.
+      const awinOptions = {
+        ...(awinLigadaNoGrupo && textoParaEspelhar
+          ? await refineAwinOptionsForText(textoParaEspelhar, cfg.credentials.awin).catch(() => ({}))
+          : {}),
+        ...rakutenBase,
+      }
       const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar, awinOptions) : ''
       // P1-4: links que o sanitizador acabou de APAGAR por não serem de loja
       // suportada (nem convite de grupo, nem rede social). Lido do texto de
@@ -4789,7 +4848,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             logger.warn({ platform, url, err: err.message }, 'Link não convertido — oferta não será publicada com o link de origem')
             const failureReason = err.awinReason === AWIN_NOT_JOINED_ERROR
               ? CONVERSION_FAILURE.AWIN_STORE_NOT_JOINED
-              : CONVERSION_FAILURE.CONVERSION_FAILED
+              : err.rakutenReason === RAKUTEN_NOT_JOINED_ERROR
+                ? CONVERSION_FAILURE.RAKUTEN_STORE_NOT_JOINED
+                : CONVERSION_FAILURE.CONVERSION_FAILED
             return { platform, url, failureReason }
           }
           // Motivo pré-classificado pelo converter (feature
@@ -5401,6 +5462,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           originalUrl: primary.url,
           convertedUrl: primary.converted,
           messageText: sanitizeMessageForLog(finalText),
+          // Texto completo só para o reenvio pós-restart; zerado no sucesso.
+          resendText: sanitizeResendText(finalText),
         }
 
         // Restaura o caminho estável que continua funcionando em produção:
@@ -6089,7 +6152,12 @@ const handleMessage = async msg => {
           const name = parent?.subject && parent.subject !== g.subject
             ? `${parent.subject} - ${g.subject}`
             : g.subject
-          return { waJid: id, name }
+          // `size` alimenta o painel de Membros (amostra horária). Campo extra
+          // é inofensivo para quem só lê waJid/name.
+          // Só vale número positivo: 0/ausente = resposta truncada, não "grupo vazio".
+          const fromParticipants = Array.isArray(g.participants) ? g.participants.length : 0
+          const size = Number.isInteger(g.size) && g.size > 0 ? g.size : fromParticipants > 0 ? fromParticipants : null
+          return { waJid: id, name, size }
         })
         sendIpc({ type: 'groups', requestId: msg.requestId, data: list })
       })
@@ -6273,6 +6341,24 @@ const handleMessage = async msg => {
       logWhatsappSelfMessageContact({ reason: 'mensagem_manual_suporte', texto, actorUserId: msg.actorUserId ?? null })
     } catch (err) {
       sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: String(err?.message ?? err) })
+    }
+    return
+  }
+
+  // Convite do grupo (Link Inteligente). Só admin consegue: o WhatsApp recusa
+  // para quem não é. Devolve só o código — nunca loga o código completo.
+  if (msg?.type === 'group:inviteCode') {
+    if (!activeSock) {
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      const code = await activeSock.groupInviteCode(msg.jid)
+      if (!code) throw new Error('O WhatsApp não devolveu o convite (o robô precisa ser admin do grupo)')
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, data: { code } })
+    } catch (err) {
+      logger.warn({ err: err?.message, jid: msg.jid }, 'group:inviteCode falhou')
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, error: err.message })
     }
     return
   }

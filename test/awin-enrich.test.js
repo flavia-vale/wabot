@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import db from '../src/db.js'
-import { AWIN_ENRICH_RETRY_MS, enrichAwinOffers } from '../src/offerAutomation/awinEnrich.js'
+import { AWIN_ENRICH_RETRY_MS, AWIN_IMAGE_RETRY_MS, enrichAwinOffers } from '../src/offerAutomation/awinEnrich.js'
 import { awinPromotionToOffer } from '../src/offerAutomation/awinOffers.js'
 import { runAutomation } from '../src/offerAutomation/dispatcher.js'
 import { AwinHttpError } from '../src/integrations/awin/errors.js'
@@ -58,7 +58,9 @@ test('troca o link comprido pelo curto, põe a foto da página da loja e guarda 
   } finally { await cleanup(userId) }
 })
 
-test('falhou: sai com o link comprido e sem foto, e só tenta de novo depois de 24h', async () => {
+// RCA 2026-09-30: foto falhou → promoção ficava sem foto por 24h (51 da KaBuM).
+// Agora a foto é tentada de novo em 1h; o link curto continua em 24h.
+test('falhou: sai com o link comprido e sem foto; foto tenta de novo em 1h, link curto em 24h', async () => {
   const { userId, account, promotion } = await setup()
   try {
     const f = fakes({ image: null, linkError: new AwinHttpError(400) })
@@ -68,8 +70,14 @@ test('falhou: sai com o link comprido e sem foto, e só tenta de novo depois de 
     assert.equal(offer.imageUrl, null)
 
     const soon = fakes()
-    await enrichAwinOffers([base], { db, userId, accountId: account.id, client: soon.client, fetchImage: soon.fetchImage, decrypt: (v) => v, now: new Date(NOW.getTime() + 3_600_000) })
+    await enrichAwinOffers([base], { db, userId, accountId: account.id, client: soon.client, fetchImage: soon.fetchImage, decrypt: (v) => v, now: new Date(NOW.getTime() + 30 * 60_000) })
     assert.equal(soon.calls.link.length + soon.calls.image.length, 0, 'não gasta chamada a cada envio')
+
+    const hour = fakes()
+    const [withPhoto] = await enrichAwinOffers([base], { db, userId, accountId: account.id, client: hour.client, fetchImage: hour.fetchImage, decrypt: (v) => v, now: new Date(NOW.getTime() + AWIN_IMAGE_RETRY_MS) })
+    assert.equal(hour.calls.image.length, 1, 'foto tentada de novo depois de 1h')
+    assert.equal(hour.calls.link.length, 0, 'link curto ainda espera as 24h')
+    assert.equal(withPhoto.imageUrl, 'https://img.mizuno.com.br/tenis.jpg')
 
     const later = fakes()
     const [retried] = await enrichAwinOffers([base], { db, userId, accountId: account.id, client: later.client, fetchImage: later.fetchImage, decrypt: (v) => v, now: new Date(NOW.getTime() + AWIN_ENRICH_RETRY_MS) })
@@ -122,5 +130,21 @@ test('envio: a mensagem sai com o link curto e a foto; se o enriquecimento quebr
     const broken = await runAutomation(await db.offerAutomation.findUnique({ where: { id: automation.id } }), { ...base, enrichAwinOffersFn: async () => { throw new Error('boom') } })
     assert.equal(broken.sent, 1, 'falha no enriquecimento não segura a oferta')
     assert.match(sends[1][1], /cread\.php/)
+  } finally { await cleanup(userId) }
+})
+
+// RCA 2026-09-30: a oferta automática nunca sai só com texto — sem foto do
+// produto, vai a logo da loja (Awin /programmes). A logo não é gravada como
+// foto do produto: a foto continua sendo tentada.
+test('sem foto do produto: sai com a logo da loja, sem gravar a logo como foto', async () => {
+  const { userId, account, promotion } = await setup()
+  try {
+    await db.awinProgramme.create({ data: { userId, accountId: account.id, advertiserId: 51271, name: 'Mizuno', logoUrl: 'https://ui.awin.com/images/upload/merchant/profile/51271.png' } })
+    const f = fakes({ image: null })
+    const [offer] = await enrichAwinOffers([awinPromotionToOffer(promotion)], { db, userId, accountId: account.id, client: f.client, fetchImage: f.fetchImage, decrypt: (v) => v, now: NOW })
+    assert.equal(offer.imageUrl, 'https://ui.awin.com/images/upload/merchant/profile/51271.png')
+    const row = await db.awinPromotion.findUnique({ where: { id: promotion.id } })
+    assert.equal(row.imageUrl, null)
+    assert.ok(row.imageTriedAt)
   } finally { await cleanup(userId) }
 })

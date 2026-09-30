@@ -85,11 +85,35 @@ function isStaticOfferUrl(url) {
   return false
 }
 
-// `awin` (opcional): lojas da Awin em que a CLIENTE foi aprovada
-// (src/integrations/awin/storeMatcher.js). Sem ele, nada muda: a lista de lojas
-// é só a fixa acima. As lojas fixas sempre ganham — um link da Shopee nunca
-// vira "awin", mesmo se a Shopee aparecer um dia no programa da cliente.
-export function detectLinks(text, { awin = null } = {}) {
+// Redes de afiliados por cliente, em ORDEM FIXA de prioridade (decisão da
+// dona do produto, 2026-09-30): a mesma loja aprovada em mais de uma rede sai
+// pela primeira da lista que a reconhece. Rede desligada no grupo, sem conta
+// ou sem aprovação na loja não entra nas opções → a próxima assume.
+// Lomadee entra aqui quando tiver conversão.
+export const AFFILIATE_NETWORK_PRIORITY = Object.freeze([
+  ['awin', 'isAwinLink'],
+  ['rakuten', 'isRakutenLink'],
+])
+
+/** Primeira rede (na ordem acima) que reconhece o link, ou null. */
+export function networkForUrl(url, offerOptions = {}) {
+  for (const [network, method] of AFFILIATE_NETWORK_PRIORITY) {
+    const matcher = offerOptions?.[network]
+    if (matcher && typeof matcher[method] === 'function' && matcher[method](url)) return network
+  }
+  return null
+}
+
+function hasNetworkOptions(offerOptions) {
+  return AFFILIATE_NETWORK_PRIORITY.some(([network, method]) => typeof offerOptions?.[network]?.[method] === 'function')
+}
+
+// `offerOptions` (opcional): `{ awin, rakuten }` = lojas de cada rede em que a
+// CLIENTE foi aprovada (src/integrations/<rede>/storeMatcher.js). Sem elas,
+// nada muda: a lista de lojas é só a fixa acima. As lojas fixas sempre
+// ganham — um link da Shopee nunca vira "awin"/"rakuten", mesmo se a Shopee
+// aparecer um dia no programa da cliente.
+export function detectLinks(text, offerOptions = {}) {
   const found = []
   for (const [platform, regex] of Object.entries(PATTERNS)) {
     regex.lastIndex = 0
@@ -98,11 +122,13 @@ export function detectLinks(text, { awin = null } = {}) {
       if (url) found.push({ platform, url })
     }
   }
-  if (awin && typeof awin.isAwinLink === 'function') {
+  if (hasNetworkOptions(offerOptions)) {
     ANY_URL_RE.lastIndex = 0
     for (const match of String(text || '').matchAll(ANY_URL_RE)) {
       const url = normalizeDetectedUrl(match[0], String(text || '').slice(0, match.index))
-      if (url && !isStaticOfferUrl(url) && awin.isAwinLink(url)) found.push({ platform: 'awin', url })
+      if (!url || isStaticOfferUrl(url)) continue
+      const network = networkForUrl(url, offerOptions)
+      if (network) found.push({ platform: network, url })
     }
   }
   return found
@@ -111,8 +137,8 @@ export function detectLinks(text, { awin = null } = {}) {
 // Fonte única de verdade para "este URL é de um marketplace de oferta?".
 // Usa exatamente os mesmos padrões de detectLinks para que o sanitizador
 // (messageProcessor) nunca remova um link que o pipeline iria converter.
-export function isOfferUrl(url, { awin = null } = {}) {
+export function isOfferUrl(url, offerOptions = {}) {
   const raw = String(url ?? '')
   if (isStaticOfferUrl(raw)) return true
-  return Boolean(awin && typeof awin.isAwinLink === 'function' && awin.isAwinLink(raw))
+  return Boolean(networkForUrl(raw, offerOptions))
 }

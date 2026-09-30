@@ -18,6 +18,7 @@ import { buildJustConnectedNextStep } from '../../../../src/credentialBlockAlert
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { WhatsAppConnectedOverview } from '@/components/WhatsAppConnectedOverview'
+import { MultiNumberWaitlistCard } from '@/components/MultiNumberWaitlistCard'
 import {
   QR_POLL_INTERVAL_MS,
   INACTIVITY_RESET_SECONDS,
@@ -682,6 +683,12 @@ export default function WhatsAppPage() {
           onDisconnect={handleStop}
           disconnecting={actionLoading === 'stop'}
         />
+        {/* Fase 0 do vários números por conta (docs/rca/multi-numero.md). Tem
+            que ficar AQUI: conectada, a tela sai por este retorno e nunca
+            chega ao JSX de baixo. */}
+        <div style={{ marginTop: 16 }}>
+          <MultiNumberWaitlistCard />
+        </div>
       </>
     )
   }

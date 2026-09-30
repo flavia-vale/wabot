@@ -191,6 +191,54 @@ dos outros interruptores de rollout desta seção (`COUPON_LINK_CONVERT`,
   continua saindo **exatamente como veio**, sem reescrever nem remover
   parâmetro. Teste: `test/shein-shortlink.test.js`.
 
+## SHEIN: nome vem do oneLink; preço NÃO tem caminho pelo servidor (RCA 2026-09-30 — não regredir)
+
+Conta promosdaella: "Criar oferta" com oneLink da SHEIN vinha sem nome e sem
+preço. Tudo medido (VPS e de fora; `scripts/diag-shein-produto-com-cookie.mjs`):
+
+| Endereço | Sem sessão | Com o cookie da cliente |
+|---|---|---|
+| `onelink.shein.com/54/<código>` (página do oneLink) | **200, `og:title` = nome real do produto + `og:image`** | idem |
+| `m.shein.com/br/-p-<id>.html` e `br.shein.com/-p-<id>.html` | 302 → `/risk/challenge` (captcha) | idem |
+| `m.shein.com/br/ark/default?goods_id=` (vitrine) | 302 → captcha | 200, mas página **genérica** (título "SHEIN", 133 preços, nenhum nome) |
+| `api/productInfo/quickView|attr` | 302 → `/risk/action/limit` | idem, mesmo com token da sessão |
+| `api/others/getSiteInfo` + `affiliate/api/share/link/from/url` | — | funciona (é o encurtador) |
+
+Causa do "sem nome": o `fetch(redirect:'follow')` da vitrine/produto termina na
+página do captcha, cujo `<title>` ("SHEIN.com is mainly design and produce…")
+passava por `isBogusScrapeTitle` e virava título; por ser truthy, o fallback
+pelo link original (`offerEngine.js`, "tentamos o original para complementar")
+não substituía. Correção: `isSheinRiskPage(finalUrl)` zera o HTML (página de
+risco = sem página) e os dois `<title>` da SHEIN entraram em
+`BOGUS_SCRAPE_TITLE_PATTERNS`. Com isso o fallback lê o `og:title` do oneLink.
+
+**Preço e nome: o caminho que funciona é a landing de afiliada `ark/7287`**
+(`src/converters/sheinProductInfo.js`, mesma sessão, medido de fora e de
+dentro):
+`https://m.shein.com/br/ark/7287?goods_id=<id>&test=5051&scene=1&ad_type=KOC&language=pt-br&siteuid=mbr`
+responde 200 renderizada no servidor, SEM sessão, com `<div class="goods-name">`
+(nome exato) e um JSON escapado com `sale_price`/`retail_price`/`unit_discount`
+DO produto (R$68,36 / R$75,95 / -10% — bateu com o que a cliente via no app).
+É para onde a vitrine `ark/default` manda o navegador via
+`history.replaceState`. Três pegadinhas medidas: (1) **os parâmetros de
+campanha importam** — `ark/7287?goods_id=` sozinho cai no captcha; (2) a
+página tem **130+ preços de outros produtos** (recomendações) — o preço é lido
+SÓ do bloco JSON que carrega o `goods_id` pedido, nunca o primeiro `R$`; (3) o
+bloco do produto vem **depois dos 700 KB** — teto de leitura de 1,5 MB (os
+short links usam 512 KB). `fetchProductInfo` tenta esse caminho ANTES do fetch
+de HTML para qualquer URL da SHEIN (oneLink resolvido até o `goods_id`); falhou
+→ segue o caminho antigo (og:title do oneLink) e, sem preço, o aviso da tela
+nomeia a loja (`dashboard/lib/painel/criarOfertaCopy.js`). Navegador real
+continua vetado (memória, regra #1). Se o id `7287` mudar, `SHEIN_ARK_PAGE_ID`
+troca sem deploy.
+
+Achado lateral da mesma conta: `sessaoLogada:false` = código de acesso da SHEIN
+vencido → encurtador recusa em silêncio e o link sai **longo** (`ark/default?…`
+com `koc_id` dela — a comissão continua certa). Sintoma no banco: `convertedUrl`
+começando por `https://m.shein.com/br/ark/default`.
+
+Testes: `test/shein-criar-oferta-titulo.test.js`, `test/shein-product-info-ark.test.js`.
+
 ## Amazon: a tag PRECISA estar dentro da `longUrl` mandada ao SiteStripe (RCA 2026-07 — não regredir)
 
 **Sintoma:** cliente relatou **zero cliques** no painel de afiliados da Amazon

@@ -4,7 +4,11 @@ import { resolveToCleanProductUrl, fetchFeaturedSocialImage, resolveSocialShareU
 import { fetchMercadoLivreApiImageId } from './productInfoScraper.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
 import { buildInlineThumbnail } from '../core/inlineThumbnail.js'
+import { readMagaluScraperConfig, buildMagaluScraperUrls, takeMagaluScraperQuota } from './magaluScraper.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
+import { awinStorePageUrl } from './awin.js'
+import { rakutenStorePageUrl } from './rakuten.js'
+import { buildKabumImageUrlCandidates, fetchKabumApiImage, isKabumImageUrl, kabumProductId } from './kabumImage.js'
 import {
   isMagaluBotWallHtml,
   isMagaluBlockedStatus,
@@ -548,13 +552,57 @@ export function getImageResolverMetrics() {
 // core/previewImageFallbackPolicy.js, que já roda quando este caminho devolve
 // `null`). O muro da Magalu no User-Agent do WhatsApp responde **200**, então
 // sem esta checagem não há como diferenciar.
+// Único caminho que passa pelo Akamai da Magalu (RCA 2026-09-30): serviço de
+// scraping externo, opcional (env) e com teto diário. Falha = `null`, e quem
+// salva a oferta continua sendo o plano B da foto da mensagem de origem.
+async function resolveMagaluImageViaScraper(productUrl, { onDiagnostic } = {}) {
+  const config = readMagaluScraperConfig()
+  if (!config) {
+    onDiagnostic?.({ stage: 'scraper_desligado', detail: {} })
+    return null
+  }
+  let last = null
+  for (const scraperUrl of buildMagaluScraperUrls(config, productUrl)) {
+    if (!takeMagaluScraperQuota(config)) {
+      recordOperationalSignal('magalu_scraper_quota', { url: productUrl })
+      onDiagnostic?.({ stage: 'scraper_sem_cota', detail: { cap: config.dailyCap } })
+      return null
+    }
+    try {
+      const { html, status } = await fetchHtml(scraperUrl, { timeoutMs: IMAGE_HTML_FETCH_TIMEOUT_MS * 3 })
+      // Cada saída sem foto tem nome (RCA 2026-09-30): resposta de erro do
+      // provedor (chave inválida, plano sem a opção pedida) voltava `null` MUDO
+      // e chegava ao log só como `scrape_sem_imagem`.
+      if (!html) {
+        last = { stage: 'scraper_recusou', detail: { provider: config.provider, status: status ?? null } }
+        // Erro da CONTA (chave 401, créditos 402/429) vale para todas as
+        // tentativas: não insiste. 403 não entra: o Scrape.do repassa o status
+        // da loja, e 403 da Magalu é exatamente o caso de tentar o `super`.
+        if (status === 401 || status === 402 || status === 429) break
+        continue
+      }
+      if (isMagaluBotWallHtml(html)) {
+        last = { stage: 'scraper_bloqueado', detail: { provider: config.provider } }
+        continue
+      }
+      const image = extractImageFromHtmlLayers(html)
+      if (image) return image
+      last = { stage: 'scraper_sem_imagem', detail: { provider: config.provider, status: status ?? null, bytes: html.length } }
+    } catch (err) {
+      last = { stage: 'scraper_falhou', detail: { provider: config.provider, error: err?.message } }
+    }
+  }
+  if (last) onDiagnostic?.(last)
+  return null
+}
+
 async function resolveMagaluImage(productUrl, { onDiagnostic } = {}) {
   const { html, status } = await fetchHtml(productUrl, { ua: BROWSER_UA }).catch(() => ({ html: null, status: null }))
 
   if (isMagaluBotWallHtml(html) || isMagaluBlockedStatus(status)) {
     recordOperationalSignal('magalu_bot_wall', { url: productUrl, status: status ?? null })
     onDiagnostic?.({ stage: 'loja_bloqueou', detail: { status: status ?? null } })
-    return null
+    return resolveMagaluImageViaScraper(productUrl, { onDiagnostic })
   }
 
   return extractImageFromHtmlLayers(html)
@@ -565,8 +613,42 @@ async function resolveMagaluImage(productUrl, { onDiagnostic } = {}) {
 // caminho da Shopee era mudo — chave recusada, item fora do catálogo de
 // afiliado e short link não resolvido produziam todos o mesmo `null`.
 export async function fetchProductImage(platform, productUrl, creds, { onDiagnostic } = {}) {
+  // Awin: a foto sai da PÁGINA DA LOJA. Abrir o tidd.ly/cread.php até o fim
+  // passava pelo redirecionador da Awin (sem og:image do produto) e ainda
+  // contava clique para o dono do link — a oferta espelhada saía sem foto
+  // (RCA 2026-09-30, docs/rca/afiliados-awin.md).
+  if (platform === 'awin') {
+    const storePage = await awinStorePageUrl(productUrl)
+    if (!storePage) {
+      onDiagnostic?.({ stage: 'awin_sem_pagina_da_loja', detail: null })
+      return null
+    }
+    productUrl = storePage
+  }
+  // Rakuten: idem, e com mais razão — o click.linksynergy.com conta o clique
+  // e redireciona. A página vem do `murl`; sem ele, sem foto (nunca abrir).
+  if (platform === 'rakuten') {
+    const storePage = rakutenStorePageUrl(productUrl)
+    if (!storePage) {
+      onDiagnostic?.({ stage: 'rakuten_sem_pagina_da_loja', detail: null })
+      return null
+    }
+    productUrl = storePage
+  }
   const cached = getCached(productUrl)
   if (cached !== null) return cached
+
+  // KaBuM (loja da Awin): consulta pública de produto ANTES da página. A
+  // leitura do og:image da página falhou no servidor em 51 promoções
+  // (RCA 2026-09-30); a consulta devolve a foto em alta e não depende do HTML.
+  if (kabumProductId(productUrl)) {
+    const kabum = await fetchKabumApiImage(productUrl)
+    if (kabum) {
+      setCached(productUrl, kabum)
+      return kabum
+    }
+    onDiagnostic?.({ stage: 'kabum_consulta_sem_foto', detail: null })
+  }
 
   try {
     let image = null
@@ -828,6 +910,12 @@ function buildImageUrlCandidates(rawUrl) {
       return buildSheinImageUrlCandidates(rawUrl)
     }
 
+    // KaBuM: `_m`/`_g` e `/medium/`/`/large/` são 200–400px; `_gg` e
+    // `/xlarge/` são 1000px (medido 2026-09-30). Maior primeiro.
+    if (isKabumImageUrl(rawUrl)) {
+      return buildKabumImageUrlCandidates(rawUrl)
+    }
+
     // Magalu: o tamanho vem no caminho do CDN (`/450x450/...`) e a loja
     // costuma anunciar uma variante abaixo dos 800px do preview. Pede as
     // maiores primeiro, mantendo a original como último recurso.
@@ -845,7 +933,7 @@ function buildImageUrlCandidates(rawUrl) {
   return uniqueImageUrls(candidates)
 }
 
-async function validateDownloadedImage(buf) {
+async function validateDownloadedImage(buf, minDimension = IMAGE_MIN_DIMENSION_PX) {
   const mime = detectImageMime(buf)
   if (!mime) return null
 
@@ -854,7 +942,7 @@ async function validateDownloadedImage(buf) {
   try {
     const meta = await sharp(buf, { failOn: 'none' }).metadata()
     if (!meta?.width || !meta?.height) return null
-    if (meta.width < IMAGE_MIN_DIMENSION_PX || meta.height < IMAGE_MIN_DIMENSION_PX) return null
+    if (meta.width < minDimension || meta.height < minDimension) return null
     width = meta.width
     height = meta.height
   } catch {
@@ -864,7 +952,7 @@ async function validateDownloadedImage(buf) {
   return { buffer: buf, mimetype: mime, width, height }
 }
 
-async function fetchImageBufferRaw(imageUrl, refererUrl) {
+async function fetchImageBufferRaw(imageUrl, refererUrl, minDimension = IMAGE_MIN_DIMENSION_PX) {
   try {
     const headers = {
       'User-Agent': BROWSER_UA,
@@ -887,7 +975,7 @@ async function fetchImageBufferRaw(imageUrl, refererUrl) {
       const ab = await res.arrayBuffer()
       if (ab.byteLength > IMAGE_BUFFER_MAX_BYTES) return null
       const buf = Buffer.from(ab)
-      return validateDownloadedImage(buf)
+      return validateDownloadedImage(buf, minDimension)
     }
     const chunks = []
     let received = 0
@@ -902,7 +990,7 @@ async function fetchImageBufferRaw(imageUrl, refererUrl) {
       chunks.push(value)
     }
     const buf = Buffer.concat(chunks.map(c => Buffer.from(c)), received)
-    return validateDownloadedImage(buf)
+    return validateDownloadedImage(buf, minDimension)
   } catch {
     return null
   }
@@ -925,4 +1013,37 @@ export async function fetchImageBuffer(imageUrlRaw, refererUrl) {
     }
   }
   return fallback
+}
+
+// Logo / imagem pequena (revisão 2026-09-30): a logo da loja na Awin tem
+// 120×60 px e caía no piso de 120 px do download — a oferta automática, que
+// devia sair com a logo como último recurso, voltava a sair SÓ COM TEXTO.
+// Aqui a imagem pequena (≥ 32 px) é centralizada num quadro branco de 800 px,
+// sem esticar mais que 3×: nunca vira foto borrada de corpo inteiro.
+export const SMALL_IMAGE_MIN_PX = 32
+const SMALL_IMAGE_CANVAS_PX = 800
+const SMALL_IMAGE_MAX_UPSCALE = 3
+
+export async function fetchSmallImageAsCard(imageUrl, refererUrl) {
+  if (!imageUrl) return null
+  const image = await fetchImageBufferRaw(imageUrl, refererUrl, SMALL_IMAGE_MIN_PX)
+  if (!image?.buffer) return null
+  try {
+    const box = Math.round(SMALL_IMAGE_CANVAS_PX * 0.7)
+    const scale = Math.min(SMALL_IMAGE_MAX_UPSCALE, box / Math.max(image.width || 1, image.height || 1))
+    const width = Math.max(1, Math.round((image.width || 1) * scale))
+    const height = Math.max(1, Math.round((image.height || 1) * scale))
+    const logo = await sharp(image.buffer, { failOn: 'none' })
+      .resize({ width, height, fit: 'inside', kernel: 'lanczos3' })
+      .flatten({ background: '#ffffff' })
+      .png()
+      .toBuffer()
+    const buffer = await sharp({ create: { width: SMALL_IMAGE_CANVAS_PX, height: SMALL_IMAGE_CANVAS_PX, channels: 3, background: '#ffffff' } })
+      .composite([{ input: logo, gravity: 'center' }])
+      .jpeg({ quality: 92 })
+      .toBuffer()
+    return { buffer, mimetype: 'image/jpeg', width: SMALL_IMAGE_CANVAS_PX, height: SMALL_IMAGE_CANVAS_PX }
+  } catch {
+    return null
+  }
 }

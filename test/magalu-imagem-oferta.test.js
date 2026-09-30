@@ -112,7 +112,8 @@ test('muro com status 200 é reportado como bloqueio da loja, não como "sem fot
       onDiagnostic: d => diagnosticos.push(d),
     })
     assert.equal(image, null)
-    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou'])
+    // Sem MAGALU_SCRAPER_KEY o desvio pelo scraper também tem nome.
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_desligado'])
     assert.equal(diagnosticos[0].detail.status, 200)
   })
 })
@@ -127,7 +128,8 @@ test('403 de bloqueio também é reportado com nome próprio', async () => {
       onDiagnostic: d => diagnosticos.push(d),
     })
     assert.equal(image, null)
-    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou'])
+    // Sem MAGALU_SCRAPER_KEY o desvio pelo scraper também tem nome.
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_desligado'])
     assert.equal(diagnosticos[0].detail.status, 403)
   })
 })
@@ -161,4 +163,124 @@ test('o sinal do bloqueio da Magalu está nas duas allowlists (senão é descart
   assert.match(mapa, /magalu_bot_wall: 'ops_magalu_bot_wall'/)
   const analytics = readFileSync(new URL('../src/analytics.js', import.meta.url), 'utf8')
   assert.match(analytics, /'ops_magalu_bot_wall'/)
+})
+
+// ── Scraper externo (RCA 2026-09-30) ────────────────────────────────────────
+import {
+  readMagaluScraperConfig,
+  buildMagaluScraperUrls,
+  takeMagaluScraperQuota,
+  resetMagaluScraperQuotaForTest,
+} from '../src/converters/magaluScraper.js'
+
+test('scraper fica DESLIGADO sem chave ou com provedor desconhecido', () => {
+  assert.equal(readMagaluScraperConfig({}), null)
+  assert.equal(readMagaluScraperConfig({ MAGALU_SCRAPER_KEY: 'k', MAGALU_SCRAPER_PROVIDER: 'xyz' }), null)
+  const cfg = readMagaluScraperConfig({ MAGALU_SCRAPER_KEY: 'k' })
+  assert.deepEqual(cfg, { key: 'k', provider: 'zenrows', dailyCap: 100 })
+})
+
+test('Scrape.do tenta primeiro a chamada barata (sem render/super) e só depois o super', () => {
+  const cfg = readMagaluScraperConfig({ MAGALU_SCRAPER_KEY: 'a b', MAGALU_SCRAPER_PROVIDER: 'scrapedo' })
+  const urls = buildMagaluScraperUrls(cfg, 'https://www.magazineluiza.com.br/p/1/?a=1&b=2')
+  assert.equal(urls.length, 2)
+  assert.match(urls[0], /^https:\/\/api\.scrape\.do\/\?token=a%20b&url=https%3A%2F%2Fwww\.magazineluiza/)
+  // Medido na VPS: `render` não é preciso (a foto vem no HTML puro) e custa caro.
+  for (const u of urls) assert.doesNotMatch(u, /render=/)
+  assert.doesNotMatch(urls[0], /super=/)
+  assert.match(urls[1], /&super=true$/)
+})
+
+test('teto diário do scraper bloqueia a chamada seguinte e zera no dia novo', () => {
+  resetMagaluScraperQuotaForTest()
+  const cfg = { dailyCap: 2 }
+  const d1 = new Date('2026-09-30T10:00:00Z')
+  assert.equal(takeMagaluScraperQuota(cfg, d1), true)
+  assert.equal(takeMagaluScraperQuota(cfg, d1), true)
+  assert.equal(takeMagaluScraperQuota(cfg, d1), false)
+  assert.equal(takeMagaluScraperQuota(cfg, new Date('2026-10-01T00:01:00Z')), true)
+  resetMagaluScraperQuotaForTest()
+})
+
+test('estrutural: o ramo da Magalu tenta o scraper quando a loja bloqueia', () => {
+  const src = readFileSync(new URL('../src/converters/imageScrapers.js', import.meta.url), 'utf8')
+  assert.match(src, /loja_bloqueou[\s\S]{0,120}return resolveMagaluImageViaScraper/)
+})
+
+// RCA 2026-09-30 (parte 3): em staging, com a chave configurada, o log só
+// mostrou `loja_bloqueou` → `scrape_sem_imagem`. Resposta de erro do provedor
+// voltava `null` sem diagnóstico. Cada saída sem foto precisa de nome.
+async function comScraperFalso(respostaDoProvedor, fn, provider = 'zenrows') {
+  const fetchOriginal = globalThis.fetch
+  const envOriginal = { key: process.env.MAGALU_SCRAPER_KEY, provider: process.env.MAGALU_SCRAPER_PROVIDER }
+  process.env.MAGALU_SCRAPER_KEY = 'chave-teste'
+  process.env.MAGALU_SCRAPER_PROVIDER = provider
+  resetMagaluScraperQuotaForTest()
+  globalThis.fetch = async url => /^https:\/\/api\.(zenrows\.com|scrape\.do)\//.test(String(url))
+    ? respostaDoProvedor(String(url))
+    : new Response(MURO_403, { status: 403, headers: { 'content-type': 'text/html' } })
+  try {
+    return await fn()
+  } finally {
+    globalThis.fetch = fetchOriginal
+    if (envOriginal.key === undefined) delete process.env.MAGALU_SCRAPER_KEY; else process.env.MAGALU_SCRAPER_KEY = envOriginal.key
+    if (envOriginal.provider === undefined) delete process.env.MAGALU_SCRAPER_PROVIDER; else process.env.MAGALU_SCRAPER_PROVIDER = envOriginal.provider
+    resetMagaluScraperQuotaForTest()
+  }
+}
+
+test('provedor do scraper recusando (ex.: 401/402) sai com nome e status, não mudo', async () => {
+  await comScraperFalso(() => new Response('{"error":"plan"}', { status: 402, headers: { 'content-type': 'application/json' } }), async () => {
+    const diagnosticos = []
+    const image = await fetchProductImage('magazineluiza', 'https://www.magazineluiza.com.br/x/p/1/aa/bb/', {}, { onDiagnostic: d => diagnosticos.push(d) })
+    assert.equal(image, null)
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_recusou'])
+    assert.equal(diagnosticos[1].detail.status, 402)
+  })
+})
+
+test('provedor devolvendo página sem foto sai como scraper_sem_imagem', async () => {
+  await comScraperFalso(() => new Response('<html><body>vazio</body></html>', { status: 200, headers: { 'content-type': 'text/html' } }), async () => {
+    const diagnosticos = []
+    const image = await fetchProductImage('magazineluiza', 'https://www.magazineluiza.com.br/x/p/2/aa/bb/', {}, { onDiagnostic: d => diagnosticos.push(d) })
+    assert.equal(image, null)
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_sem_imagem'])
+  })
+})
+
+test('provedor devolvendo a página do produto entrega a foto', async () => {
+  await comScraperFalso(() => new Response(PAGINA_DE_PRODUTO, { status: 200, headers: { 'content-type': 'text/html' } }), async () => {
+    const diagnosticos = []
+    const image = await fetchProductImage('magazineluiza', 'https://www.magazineluiza.com.br/x/p/3/aa/bb/', {}, { onDiagnostic: d => diagnosticos.push(d) })
+    assert.equal(image, 'https://a-static.mlcdn.com.br/450x450/geladeira/magazineluiza/155603000/abc.jpg')
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou'])
+  })
+})
+
+test('Scrape.do: tentativa barata barrada pela loja cai para o super e traz a foto', async () => {
+  const chamadas = []
+  await comScraperFalso(url => {
+    chamadas.push(url)
+    return url.includes('super=true')
+      ? new Response(PAGINA_DE_PRODUTO, { status: 200, headers: { 'content-type': 'text/html' } })
+      : new Response(MURO_403, { status: 403, headers: { 'content-type': 'text/html' } })
+  }, async () => {
+    const image = await fetchProductImage('magazineluiza', 'https://www.magazineluiza.com.br/x/p/4/aa/bb/', {}, {})
+    assert.equal(image, 'https://a-static.mlcdn.com.br/450x450/geladeira/magazineluiza/155603000/abc.jpg')
+    assert.equal(chamadas.length, 2)
+  }, 'scrapedo')
+})
+
+test('Scrape.do: chave recusada (401) não gasta a segunda tentativa', async () => {
+  const chamadas = []
+  await comScraperFalso(url => {
+    chamadas.push(url)
+    return new Response('unauthorized', { status: 401, headers: { 'content-type': 'text/plain' } })
+  }, async () => {
+    const diagnosticos = []
+    const image = await fetchProductImage('magazineluiza', 'https://www.magazineluiza.com.br/x/p/5/aa/bb/', {}, { onDiagnostic: d => diagnosticos.push(d) })
+    assert.equal(image, null)
+    assert.equal(chamadas.length, 1)
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_recusou'])
+  }, 'scrapedo')
 })

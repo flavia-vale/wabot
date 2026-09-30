@@ -7,6 +7,10 @@ export function validateOfferAutomationForm(form = {}) {
     if (!form.awinAccountId) return 'Escolha qual conta Awin usar.'
     // Promoção Awin ainda não sai no Instagram: o grupo é obrigatório.
     if (!form.destGroupJid) return 'Escolha o grupo que vai receber as promoções.'
+  } else if (form.source === 'rakuten') {
+    // Mesma regra para as promoções Rakuten (docs/rca/afiliados-rakuten.md).
+    if (!form.rakutenAccountId) return 'Escolha qual conta Rakuten usar.'
+    if (!form.destGroupJid) return 'Escolha o grupo que vai receber as promoções.'
   } else if (!String(form.keyword || '').trim()) return 'Escreva o que você quer vender.'
   const instagramIds = Array.isArray(form.instagramDestinationIds) ? form.instagramDestinationIds : []
   if (!form.destGroupJid && instagramIds.length === 0) return 'Escolha pelo menos um grupo ou destino do Instagram.'

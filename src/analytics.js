@@ -209,6 +209,7 @@ export const ANALYTICS_EVENTS = new Set([
   // é bloqueio da loja, e a foto tem que vir por outra fonte (a vitrine).
   'ops_ml_anti_bot_wall',
   'ops_magalu_bot_wall',
+  'ops_magalu_scraper_quota',
   // A foto da loja falhou, mas o card de preview SAIU MESMO ASSIM — com a foto
   // da mensagem de origem (plano B em cascata, core/previewImageFallbackPolicy.js).
   // Sinal separado de propósito: aqui a oferta saiu completa (foto + clique que

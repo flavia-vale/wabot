@@ -231,6 +231,67 @@ Como funciona:
 6. **Deploy:** `src/integrations/awin/` entrou em `WORKER_CODE_PATHS_RE` (o robô
    carrega esses arquivos): mudança ali reinicia o `bot-supervisor`.
 
+**Mesma loja na Awin e na Rakuten (2026-10-01):** sai pela **Awin** (ordem
+fixa `AFFILIATE_NETWORK_PRIORITY` em `src/detector.js`, decisão da dona do
+produto). Awin desligada no grupo/sem conta/sem aprovação → a Rakuten assume.
+Detalhes: `docs/rca/afiliados-rakuten.md`.
+
+### Oferta espelhada com `tidd.ly` saiu sem foto (RCA 2026-09-30 — não regredir)
+
+Sintoma: ofertas da KaBuM espelhadas com `tidd.ly` corretos, mas sem imagem.
+Causa (código + medição): a foto era buscada com a URL ORIGINAL do link
+(`resolveMonitoredImage`/`buildManualLinkPreview` → `fetchProductImage('awin',
+tidd.ly)`), ou seja, abrindo o redirecionador da Awin, que não tem `og:image`
+do produto (e ainda conta clique para o dono do link). A página da loja
+(`kabum.com.br/produto/645897`) devolve a foto em ~1 s. Correção:
+`fetchProductImage` troca o link Awin pela página da loja ANTES do cache
+(`awinStorePageUrl`: tidd.ly → só o Location, com cache; cread.php → `ued`,
+sem rede). Teste em `test/awin-link-conversion.test.js`.
+
+### Oferta AUTOMÁTICA da Awin saindo sem foto (RCA 2026-09-30 — não regredir)
+
+Sintoma: promoções da KaBuM nas ofertas automáticas saíam só com texto
+(MessageLog `platform=broadcast`, 02:02 UTC). NÃO era o espelhamento — as
+correções anteriores (tidd.ly → página da loja) eram de outro caminho.
+Dados (staging): `diag-awin.mjs` → `enviadas_com_busca=109 com_foto=49`,
+`sem_foto Kabum BR=51`, `C&A BR=9`; as 51 da KaBuM eram `/produto/<id>`.
+As mesmas páginas devolvem a foto fora do servidor (medido).
+Causa: (1) a foto das promoções vinha SÓ do og:image da página da loja, que
+falhou no servidor; (2) falhou uma vez → `enrichedAt` travava a foto por 24h;
+(3) sem foto não havia plano B — oferta automática sem `imageUrl` sai texto
+puro (`buildBroadcastImageRecipe` devolve null).
+Correção (3 camadas, a oferta nunca sai só com texto):
+1. **KaBuM:** consulta pública `servicespub.prod.api.aws.grupokabum.com.br/
+   descricao/v1/descricao/produto/<id>` (`fotos[]`) ANTES da página
+   (`src/converters/kabumImage.js`, ligado em `fetchProductImage`). Download
+   pede 1000px primeiro (`_gg`, `/xlarge/`; medido: `_m`=200, `_g`=395,
+   `/medium/`=200, `/large/`=400).
+2. Página da loja (og:image), como antes.
+3. **Logo da loja** (`AwinProgramme.logoUrl`, vem do sync `/programmes`).
+   Não é gravada como foto: a foto do produto segue sendo tentada.
+Foto tenta de novo em **1h** (`AwinPromotion.imageTriedAt`, separado de
+`enrichedAt`, que continua marcando o link curto em 24h). As 51 promoções já
+travadas se curam sozinhas no próximo envio (tentativa > 1h). Migration
+`20261001090000_awin_programme_logo`. Testes: `test/kabum-image.test.js`,
+`test/awin-enrich.test.js`.
+
+### Revisão crítica 2026-09-30 — casos de borda corrigidos (não regredir)
+
+| # | Falha | Efeito | Correção |
+|---|---|---|---|
+| F1 | Link Awin de concorrente SEM página (`cread.php` sem `ued`) | oferta inteira descartada | vira link dela para a página inicial da MESMA loja; página de outro site nunca vai junto |
+| F2 | Programa listando sufixo público (`*.com.br`) ou plataforma compartilhada (whatsapp, linktr.ee, bit.ly…) | QUALQUER link .com.br passaria como "loja Awin" | `normalizeStoreDomain` recusa sufixo público (`THREE_LABEL_SUFFIXES`) e `SHARED_HOSTS` |
+| F3 | `tidd.ly/…` / `awin1.com/…` sem `https://` | link do concorrente saía clicável | `findUnconvertedStoreLinks` pega Awin sem protocolo (toda cliente) |
+| F4 | Site próprio de grupo que leva a loja Awin | oferta perdida (`garimpeiros.com.br` 304/semana em loja não suportada) | desembrulho enxerga lojas Awin da cliente; cache separado (`awin|url`) |
+| F5 | Revezamento só DENTRO da execução | com 1 oferta/envio, a loja que vence antes monopolizava | abre a loja que saiu há mais tempo (`storeLastSentOrder`); fim só desempata |
+| F6 | Teto global de 1000 por fim | loja com fim mais tarde ficava de fora; "acabou" com promoções no banco | carga por loja (`distinct advertiserId`, 300 cada) |
+| F7 | Memória de enviados = últimos 200 | a mesma promoção voltava após ~200 envios | poda pelo que está ativo (`pruneAwinSentIds`) + teto 3000 para promoções |
+| F8 | Promoções diferentes para a PÁGINA INICIAL | a 1ª enviada bloqueava todas as outras para sempre | página inicial usa o título como identidade |
+| F9 | Logo da Awin 120×60 < piso de 120 px do download | a "última camada" da foto falhava → só texto | `fetchSmallImageAsCard`: imagem ≥ 32 px em quadro branco 800 px (oferta automática) |
+
+Efeito colateral conhecido de F8: uma promoção de página inicial que já tinha
+saído pode sair UMA vez de novo (a identidade antiga era a página).
+
 Fora (v1): link de loja Awin escrito sem `https://` não é visto pela rede de
 segurança (os domínios são por cliente); `clickref` por grupo; loja que recusa
 link direto (`deeplinkNotPermitted`) cai no longo (a Awin leva à página inicial

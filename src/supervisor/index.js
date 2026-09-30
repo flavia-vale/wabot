@@ -373,6 +373,13 @@ const COMMAND_HANDLERS = {
     }
     return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'channel:metadata', { jid, inviteCode }) : sessionCore.channelMetadata(userId, { jid, inviteCode })
   },
+  [COMMAND.GROUP_INVITE_CODE]: ({ userId, jid }) => {
+    if (!belongsToThisShard(userId)) {
+      void noteSessionOwnerMismatch(userId, 'groupInviteCode')
+      throw new Error('Session owner mismatch')
+    }
+    return shardOwnedUsers.has(userId) ? pocShard.command(userId, 'group:inviteCode', { jid }) : sessionCore.groupInviteCode(userId, jid)
+  },
   [COMMAND.CHANNEL_FOLLOW]: ({ userId, jid }) => {
     if (!belongsToThisShard(userId)) {
       void noteSessionOwnerMismatch(userId, 'channelFollow')

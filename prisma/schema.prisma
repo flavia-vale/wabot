@@ -43,6 +43,7 @@ model User {
   waSession             WaSession?
   waConnectionEvents    WaConnectionEvent[]
   groups                Group[]
+  smartLinks            SmartLink[]
   groupTargets          GroupTarget[]
   credentials           Credential[]
   payments              Payment[]
@@ -60,6 +61,7 @@ model User {
   offerAutomations      OfferAutomation[]
   offerAutomationReviewItems OfferAutomationReviewItem[]
   awinAccounts          AwinAccount[]
+  rakutenAccounts       RakutenAccount[]
   clientCoupons         ClientCoupon[]
   offerQueues           OfferQueue[]
   offerQueueItems       OfferQueueItem[]
@@ -222,6 +224,8 @@ model Group {
   channelHealth         ChannelHealth?
   channelThrottle       ChannelThrottle?
   channelSnapshots      ChannelSnapshot[]
+  memberSamples         GroupMemberSample[]
+  smartLinkGroups       SmartLinkGroup[]
   probeEvidences        ProbeEvidence[]
 
   instagramMirrorTargets InstagramMirrorDestination[]
@@ -438,7 +442,7 @@ model BotConfig {
   user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   delayMin                 Int      @default(5)
   delayMax                 Int      @default(15)
-  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin")
+  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin,rakuten")
   blockedKeywords          String   @default("")
   welcomeMsg               String   @default("")
   postToStatus             Boolean  @default(false)
@@ -656,6 +660,12 @@ model MessageLog {
   originalUrl  String
   convertedUrl String
   messageText  String
+  // Texto COMPLETO da oferta espelhada (com quebras de linha), guardado só
+  // enquanto ela espera na fila: é o que o reenvio pós-restart usa
+  // (reprocessRestartFailures). `messageText` é cortado em 240 chars e sem
+  // quebras — reenviar dele mandava a oferta mutilada. Zerado quando o envio
+  // dá certo, para o banco não crescer. Ver docs/rca/envio-e-filas.md.
+  resendText   String?
   status       String   @default("success")
   errorMsg     String?
   // Contador de repostas/duplicatas bloqueadas após a primeira gravação desta
@@ -882,6 +892,11 @@ model OfferAutomation {
   awinAccountId     String?
   // JSON: ids de anunciante (lojas) escolhidos. "[]" = todas as lojas.
   awinAdvertiserIds String    @default("[]")
+  // "rakuten": promoções já importadas da conta Rakuten Advertising da
+  // cliente (docs/rca/afiliados-rakuten.md). Mesmo desenho da Awin.
+  rakutenAccountId     String?
+  // JSON: ids de anunciante (lojas) escolhidos. "[]" = todas as lojas.
+  rakutenAdvertiserIds String @default("[]")
 
   @@index([userId, enabled])
   @@index([enabled, lastSentAt])
@@ -975,6 +990,68 @@ model OfferAutomationSentLog {
 
 // Destinos multicanal coexistem com Group durante a migração progressiva.
 // providerRef nunca contém token; para Instagram aponta à conta profissional.
+// Amostra horária do total de membros de um grupo (só quantidade — nunca
+// números de telefone). Base do painel "Membros" e do futuro rodízio de convites.
+model GroupMemberSample {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  size      Int
+  sampledAt DateTime @default(now())
+
+  @@index([groupId, sampledAt])
+}
+
+// Link Inteligente: um endereço público (/g/<slug>) que redireciona para o
+// convite do grupo MAIS VAZIO entre os cadastrados (rodízio). Ver
+// docs/rca/grupos-membros.md.
+model SmartLink {
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  slug         String           @unique
+  enabled      Boolean          @default(true)
+  capPerGroup  Int              @default(1000)
+  // Apagar NÃO libera o endereço: ele já foi divulgado e outra pessoa que o
+  // pegasse receberia o tráfego. Só a mesma dona pode reativá-lo.
+  deletedAt    DateTime?
+  groups       SmartLinkGroup[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([userId])
+}
+
+model SmartLinkGroup {
+  id          String               @id @default(cuid())
+  smartLinkId String
+  smartLink   SmartLink            @relation(fields: [smartLinkId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  // Código do convite (parte final de chat.whatsapp.com/<código>). Nulo = sem
+  // convite válido; o grupo fica fora do rodízio.
+  inviteCode  String?
+  enabled     Boolean              @default(true)
+  dailyClicks SmartLinkDailyClick[]
+  createdAt   DateTime             @default(now())
+
+  @@unique([smartLinkId, groupId])
+  @@index([groupId])
+}
+
+// Cliques por grupo por dia (fuso de São Paulo). Contador, não um registro por
+// clique: o link é divulgado em muitos lugares e o volume pode ser grande.
+model SmartLinkDailyClick {
+  id               String         @id @default(cuid())
+  smartLinkGroupId String
+  smartLinkGroup   SmartLinkGroup @relation(fields: [smartLinkGroupId], references: [id], onDelete: Cascade)
+  day              String
+  clicks           Int            @default(0)
+
+  @@unique([smartLinkGroupId, day])
+}
+
 model Destination {
   id                    String               @id @default(cuid())
   userId                String
@@ -1684,10 +1761,12 @@ model AwinPromotion {
   lastSeenRunId  String?
   // Preenchidos só na hora do PRIMEIRO envio (docs/rca/afiliados-awin.md):
   // link curto do gerador oficial da Awin e foto lida da página da loja.
-  // enrichedAt marca a tentativa — falhou, só tenta de novo depois de 24h.
+  // enrichedAt marca a tentativa do link curto — falhou, tenta de novo em 24h.
   shortUrl       String?
   imageUrl       String?
   enrichedAt     DateTime?
+  // Última tentativa de FOTO (separada: foto é tentada de novo em 1h).
+  imageTriedAt   DateTime?
   firstSeenAt    DateTime  @default(now())
   expiredAt      DateTime?
   updatedAt      DateTime  @updatedAt
@@ -1730,6 +1809,8 @@ model AwinProgramme {
   advertiserId   Int
   name           String
   displayUrl     String?
+  // Logo da loja (programmes.logoUrl): foto de último recurso das promoções.
+  logoUrl        String?
   // Domínios normalizados ("kabum.com.br", "kabum.com"), JSON array.
   domainsJson    String      @default("[]")
   lastSeenRunId  String?
@@ -1759,4 +1840,120 @@ model AwinLink {
   @@unique([accountId, advertiserId, destinationKey])
   @@index([userId])
   @@index([lastUsedAt])
+}
+
+// Contas Rakuten Advertising da cliente (docs/rca/afiliados-rakuten.md).
+// Cada linha é um trio (SID + Client ID + Client Secret) cadastrado pela
+// cliente. Isolamento: toda consulta filtra por userId.
+model RakutenAccount {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label                 String
+  // SID = número do site da cliente na Rakuten (vai como "scope" do token).
+  sid                   String
+  // encryptCredential (AES-256-GCM, "v1:..."). Nunca voltam ao navegador.
+  clientIdEncrypted     String
+  clientIdLast4         String
+  clientSecretEncrypted String
+  clientSecretLast4     String
+  // HMAC-SHA256 do trio: chave do limitador e do cache de token.
+  credentialFingerprint String
+  // pending | ok | invalid_credential | error
+  status                String    @default("pending")
+  statusDetail          String?
+  syncEnabled           Boolean   @default(true)
+  syncIntervalMinutes   Int       @default(60)
+  nextSyncAt            DateTime?
+  lastSyncAt            DateTime?
+  lastSyncStatus        String?
+  lastTestAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  // `id` dos links da cliente na Rakuten (tirado do clickurl das promoções).
+  // Monta o deep link da conversão; null = ainda não deu para saber.
+  linkId                String?
+  promotions            RakutenPromotion[]
+  syncRuns              RakutenSyncRun[]
+  programmes            RakutenProgramme[]
+
+  @@unique([userId, sid])
+  @@index([userId])
+  @@index([syncEnabled, status, nextSyncAt])
+}
+
+// Oferta importada do feed da Rakuten (/coupon/1.0, rede Brasil). Dedup por
+// (conta, promotionId = offerid do link). couponCode só quando a loja deu
+// um cupom. logoUrl/storeUrl vêm do cadastro da loja (/v2/advertisers).
+model RakutenPromotion {
+  id             String    @id @default(cuid())
+  userId         String
+  accountId      String
+  account        RakutenAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  promotionId    String
+  advertiserId   String
+  advertiserName String
+  title          String
+  couponCode     String?
+  promotionTypes String    @default("")
+  categories     String    @default("")
+  clickUrl       String
+  networkId      String?
+  logoUrl        String?
+  storeUrl       String?
+  startDate      DateTime?
+  endDate        DateTime?
+  // active | expired
+  status         String    @default("active")
+  lastSeenRunId  String?
+  firstSeenAt    DateTime  @default(now())
+  expiredAt      DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([accountId, promotionId])
+  @@index([userId, status, endDate])
+  @@index([accountId, status])
+}
+
+// Histórico de sincronização por conta Rakuten (o que a cliente vê na tela).
+model RakutenSyncRun {
+  id         String    @id @default(cuid())
+  userId     String
+  accountId  String
+  account    RakutenAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // schedule | manual
+  trigger    String
+  // running | success | partial | failed | invalid_credential | rate_limited
+  status     String
+  pages      Int       @default(0)
+  inserted   Int       @default(0)
+  updated    Int       @default(0)
+  skipped    Int       @default(0)
+  expired    Int       @default(0)
+  errorsJson String    @default("[]")
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([accountId, startedAt])
+}
+
+// Lojas da Rakuten em que a cliente foi APROVADA (Link Locator) — base da
+// conversão de links (docs/rca/afiliados-rakuten.md). Atualizada no sync.
+model RakutenProgramme {
+  id            String         @id @default(cuid())
+  userId        String
+  accountId     String
+  account       RakutenAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  advertiserId  String
+  name          String
+  // Site da loja (/v2/advertisers/{id} → url); de onde sai o domínio.
+  storeUrl      String?
+  // Domínios normalizados ("netshoes.com.br"), JSON array.
+  domainsJson   String         @default("[]")
+  lastSeenRunId String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([accountId, advertiserId])
+  @@index([userId])
 }
