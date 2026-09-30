@@ -922,7 +922,7 @@ function buildImageUrlCandidates(rawUrl) {
   return uniqueImageUrls(candidates)
 }
 
-async function validateDownloadedImage(buf) {
+async function validateDownloadedImage(buf, minDimension = IMAGE_MIN_DIMENSION_PX) {
   const mime = detectImageMime(buf)
   if (!mime) return null
 
@@ -931,7 +931,7 @@ async function validateDownloadedImage(buf) {
   try {
     const meta = await sharp(buf, { failOn: 'none' }).metadata()
     if (!meta?.width || !meta?.height) return null
-    if (meta.width < IMAGE_MIN_DIMENSION_PX || meta.height < IMAGE_MIN_DIMENSION_PX) return null
+    if (meta.width < minDimension || meta.height < minDimension) return null
     width = meta.width
     height = meta.height
   } catch {
@@ -941,7 +941,7 @@ async function validateDownloadedImage(buf) {
   return { buffer: buf, mimetype: mime, width, height }
 }
 
-async function fetchImageBufferRaw(imageUrl, refererUrl) {
+async function fetchImageBufferRaw(imageUrl, refererUrl, minDimension = IMAGE_MIN_DIMENSION_PX) {
   try {
     const headers = {
       'User-Agent': BROWSER_UA,
@@ -964,7 +964,7 @@ async function fetchImageBufferRaw(imageUrl, refererUrl) {
       const ab = await res.arrayBuffer()
       if (ab.byteLength > IMAGE_BUFFER_MAX_BYTES) return null
       const buf = Buffer.from(ab)
-      return validateDownloadedImage(buf)
+      return validateDownloadedImage(buf, minDimension)
     }
     const chunks = []
     let received = 0
@@ -979,7 +979,7 @@ async function fetchImageBufferRaw(imageUrl, refererUrl) {
       chunks.push(value)
     }
     const buf = Buffer.concat(chunks.map(c => Buffer.from(c)), received)
-    return validateDownloadedImage(buf)
+    return validateDownloadedImage(buf, minDimension)
   } catch {
     return null
   }
@@ -1002,4 +1002,37 @@ export async function fetchImageBuffer(imageUrlRaw, refererUrl) {
     }
   }
   return fallback
+}
+
+// Logo / imagem pequena (revisão 2026-09-30): a logo da loja na Awin tem
+// 120×60 px e caía no piso de 120 px do download — a oferta automática, que
+// devia sair com a logo como último recurso, voltava a sair SÓ COM TEXTO.
+// Aqui a imagem pequena (≥ 32 px) é centralizada num quadro branco de 800 px,
+// sem esticar mais que 3×: nunca vira foto borrada de corpo inteiro.
+export const SMALL_IMAGE_MIN_PX = 32
+const SMALL_IMAGE_CANVAS_PX = 800
+const SMALL_IMAGE_MAX_UPSCALE = 3
+
+export async function fetchSmallImageAsCard(imageUrl, refererUrl) {
+  if (!imageUrl) return null
+  const image = await fetchImageBufferRaw(imageUrl, refererUrl, SMALL_IMAGE_MIN_PX)
+  if (!image?.buffer) return null
+  try {
+    const box = Math.round(SMALL_IMAGE_CANVAS_PX * 0.7)
+    const scale = Math.min(SMALL_IMAGE_MAX_UPSCALE, box / Math.max(image.width || 1, image.height || 1))
+    const width = Math.max(1, Math.round((image.width || 1) * scale))
+    const height = Math.max(1, Math.round((image.height || 1) * scale))
+    const logo = await sharp(image.buffer, { failOn: 'none' })
+      .resize({ width, height, fit: 'inside', kernel: 'lanczos3' })
+      .flatten({ background: '#ffffff' })
+      .png()
+      .toBuffer()
+    const buffer = await sharp({ create: { width: SMALL_IMAGE_CANVAS_PX, height: SMALL_IMAGE_CANVAS_PX, channels: 3, background: '#ffffff' } })
+      .composite([{ input: logo, gravity: 'center' }])
+      .jpeg({ quality: 92 })
+      .toBuffer()
+    return { buffer, mimetype: 'image/jpeg', width: SMALL_IMAGE_CANVAS_PX, height: SMALL_IMAGE_CANVAS_PX }
+  } catch {
+    return null
+  }
 }

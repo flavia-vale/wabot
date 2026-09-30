@@ -14,6 +14,7 @@
 //     (link convertido na oferta).
 
 import { detectLinks } from '../detector.js'
+import { isAwinTrackingUrl } from '../integrations/awin/storeMatcher.js'
 import { convertLink as defaultConvertLink } from './index.js'
 import { fetchProductInfo as defaultFetchProductInfo } from './productInfoScraper.js'
 import { describeMissingCredentials, parseCredentialData, validateCredentialData } from '../credentialHealth.js'
@@ -223,8 +224,13 @@ export async function buildScrapedOffer({
   const displayUrl = injectOwnerTagInUrl(url, platform, credentialsMap)
   const displayUrlFor = (finalUrl) => keepOriginalLink ? displayUrl : (finalUrl || offerUrl)
 
-  const scrapeUrl = awinInfo?.destinationUrl || offerUrl
+  // Link da Awin sem página (vai para a página inicial): nunca raspar o link de
+  // clique — sem página, cai no preenchimento mínimo (título pelo endereço).
+  const scrapeUrl = awinInfo
+    ? (awinInfo.destinationUrl || (isAwinTrackingUrl(url) ? null : url))
+    : offerUrl
   try {
+    if (!scrapeUrl) throw new Error('awin_sem_pagina')
     let info = await fetchProductInfo(scrapeUrl, { mlCredentials, shopeeCredentials, onDiagnostic })
 
     // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver

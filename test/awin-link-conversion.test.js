@@ -512,3 +512,53 @@ test('foto de link Awin: vem da página da loja, sem abrir o link de clique até
   assert.ok(guard > 0 && guard < cache, 'a troca para a página da loja precisa vir antes do cache e do fetch')
   assert.match(src, /productUrl = storePage/)
 })
+
+// ---------- revisão crítica 2026-09-30: casos de borda ----------
+
+test('F1: link Awin de concorrente SEM página vira link dela para a página inicial da mesma loja', async () => {
+  const client = fakeClient()
+  const result = await convert('https://www.awin1.com/cread.php?awinmid=17729&awinaffid=111111', context({ client }))
+  assert.equal(result.url, 'https://tidd.ly/abc')
+  assert.equal(client.calls[0].advertiserId, 17729)
+  assert.equal('destinationUrl' in client.calls[0], false, 'sem página: a Awin manda para a página inicial')
+  // Sem vaga na Awin: o longo sai sem `ued` (página inicial), nunca descarta.
+  const fallback = await convert('https://www.awin1.com/cread.php?awinmid=17729&awinaffid=111111', context({ client: fakeClient(new AwinRateLimitError(null)) }))
+  assert.equal(fallback.url, 'https://www.awin1.com/cread.php?awinmid=17729&awinaffid=2701264')
+})
+
+test('F1: página de OUTRO site dentro do link Awin nunca vai junto (vai a página inicial da loja)', async () => {
+  const client = fakeClient()
+  await convert('https://www.awin1.com/cread.php?awinmid=17729&awinaffid=111111&ued=https%3A%2F%2Fgolpe.example.com%2Fx', context({ client }))
+  assert.equal('destinationUrl' in client.calls[0], false)
+})
+
+test('F2: sufixo público e plataforma compartilhada nunca viram loja da Awin', () => {
+  const stores = extractProgrammes([{ id: 1, name: 'Ruim', displayUrl: 'https://linktr.ee/loja', validDomains: [{ domain: '*.com.br' }, { domain: 'com.br' }, { domain: 'chat.whatsapp.com' }, { domain: 'bit.ly' }, { domain: '*.lojaboa.com.br' }] }])
+  assert.deepEqual(stores[0].domains, ['lojaboa.com.br'])
+  const matcher = createAwinStoreMatcher(stores.map((s) => ({ ...s, accountId: 'a', publisherId: PUBLISHER })))
+  assert.equal(matcher.isAwinLink('https://www.qualquercoisa.com.br/x'), false)
+  assert.equal(matcher.isAwinLink('https://chat.whatsapp.com/abc'), false)
+  assert.equal(matcher.isAwinLink('https://www.lojaboa.com.br/p/1'), true)
+})
+
+test('F3: tidd.ly / awin1.com SEM https no texto final bloqueia o envio (com ou sem conta Awin)', () => {
+  assert.deepEqual(findUnconvertedStoreLinks('corre tidd.ly/abc123 agora', []), ['tidd.ly/abc123'])
+  assert.deepEqual(findUnconvertedStoreLinks('www.awin1.com/cread.php?awinmid=1&awinaffid=2', []), ['www.awin1.com/cread.php?awinmid=1&awinaffid=2'])
+  // O link DELA (convertido) continua liberado.
+  assert.deepEqual(findUnconvertedStoreLinks('veja https://tidd.ly/dela', [{ converted: 'https://tidd.ly/dela' }]), [])
+  // Menção sem caminho não é link de ninguém.
+  assert.deepEqual(findUnconvertedStoreLinks('achei no tidd.ly', []), [])
+})
+
+test('F4: site próprio de grupo que leva a loja Awin é desembrulhado; sem conta Awin, não', async () => {
+  const { extractStoreUrlsFromHtml } = await import('../src/core/customDomainLinkResolver.js')
+  const html = '<a href="https://www.kabum.com.br/produto/931218">Comprar</a> <a href="https://tidd.ly/xyz">x</a>'
+  const awin = createAwinStoreMatcher(storesFor())
+  assert.deepEqual(extractStoreUrlsFromHtml(html), [])
+  assert.deepEqual(extractStoreUrlsFromHtml(html, { awin }).map((l) => [l.platform, l.url]), [
+    ['awin', 'https://www.kabum.com.br/produto/931218'],
+    ['awin', 'https://tidd.ly/xyz'],
+  ])
+  const src = readFileSync(new URL('../src/core/customDomainLinkResolver.js', import.meta.url), 'utf8')
+  assert.match(src, /const cacheKey = awin \? `awin\|\$\{candidateUrl\}` : candidateUrl/, 'cache separado: resultado com lojas Awin não vaza para outra cliente')
+})

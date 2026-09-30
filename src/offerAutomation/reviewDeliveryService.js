@@ -6,7 +6,7 @@ import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 import { claimNextReviewItem } from './reviewRepository.js'
 import { REVIEW_STATUS } from './reviewState.js'
 import { ensureRenderedAutomationPrice } from './dispatcher.js'
-import { isAwinPromotionStillValid } from './awinOffers.js'
+import { AWIN_SENT_IDS_CAP, isAwinPromotionStillValid } from './awinOffers.js'
 import { isRakutenPromotionStillValid } from './rakutenOffers.js'
 
 export const REVIEW_ITEM_LEASE_MS = Math.max(60_000, Number(process.env.OFFER_AUTOMATION_REVIEW_LEASE_MS) || 5 * 60_000)
@@ -15,9 +15,11 @@ const deliveryLocks = new Set()
 
 function parse(value, fallback) { try { return JSON.parse(value) } catch { return fallback } }
 function retryDelay(attempt) { return Math.min(60_000 * (2 ** Math.max(0, attempt - 1)), 3_600_000) }
-function addSent(existing, itemId) {
+// Promoção (Awin/Rakuten) guarda mais: catálogo finito, 200 fazia repetir
+// (revisão 2026-09-30). Mesmo teto do disparador automático.
+function addSent(existing, itemId, cap = 200) {
   const values = [...new Set([...parse(existing || '[]', []), String(itemId)])]
-  return JSON.stringify(values.slice(-200))
+  return JSON.stringify(values.slice(-cap))
 }
 
 export async function recoverReviewItems(deps = {}) {
@@ -87,10 +89,10 @@ export async function deliverApprovedReviewItems(automation, deps = {}) {
         }
         await db.$transaction(async tx => {
           await tx.offerAutomationReviewItem.updateMany({ where: { id: item.id, userId: automation.userId, automationId: automation.id, status: REVIEW_STATUS.SENDING }, data: { status: REVIEW_STATUS.SENT, sentAt: now, claimedAt: null, lastError: null, deliverySnapshot: JSON.stringify(progress) } })
-          await tx.offerAutomation.update({ where: { id: automation.id }, data: { lastSentAt: now, sentItemIds: addSent(automation.sentItemIds, item.itemId) } })
+          await tx.offerAutomation.update({ where: { id: automation.id }, data: { lastSentAt: now, sentItemIds: addSent(automation.sentItemIds, item.itemId, isPromotion ? AWIN_SENT_IDS_CAP : 200) } })
           if (targets.whatsapp?.jid) await tx.offerAutomationSentLog.create({ data: { userId: automation.userId, destGroupJid: targets.whatsapp.jid, productKey: item.productKey, priceCents: item.priceCents, itemId: item.itemId } })
         })
-        automation.sentItemIds = addSent(automation.sentItemIds, item.itemId)
+        automation.sentItemIds = addSent(automation.sentItemIds, item.itemId, isPromotion ? AWIN_SENT_IDS_CAP : 200)
         sent++
       } catch (error) {
         const terminal = error.permanent === true || item.attemptCount >= REVIEW_ITEM_MAX_ATTEMPTS

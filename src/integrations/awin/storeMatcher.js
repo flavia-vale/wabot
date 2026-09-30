@@ -12,11 +12,25 @@
 // https://success.awin.com/articles/en_US/Knowledge/What-does-an-affiliate-link-look-like
 // O link curto oficial é tidd.ly (Link Builder com shorten).
 
+import { THREE_LABEL_SUFFIXES } from '../../core/unsupportedStore.js'
+
 export const AWIN_CLICK_HOSTS = ['awin1.com']
 export const AWIN_SHORT_HOSTS = ['tidd.ly']
 const AWIN_CLICK_PATH_RE = /^\/(?:cread|awclick|pclick)\.php$/i
 const MAX_DOMAINS_PER_STORE = 30
 const DOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,62})(?:\.[a-z0-9-]{1,63})+$/
+
+// Domínio que NUNCA pode virar "loja da Awin", mesmo se a Awin o listar em
+// validDomains/displayUrl de algum programa (revisão 2026-09-30): um sufixo
+// público ("com.br") faria QUALQUER link .com.br passar pelo sanitizador e ir
+// para a conversão; plataformas compartilhadas (rede social, encurtador,
+// convite de grupo, lojas de app) são de todo mundo, não de uma loja.
+const SHARED_HOSTS = [
+  'whatsapp.com', 'wa.me', 'instagram.com', 'facebook.com', 'fb.com', 'fb.me', 'm.me',
+  't.me', 'telegram.me', 'youtube.com', 'youtu.be', 'tiktok.com', 'twitter.com', 'x.com',
+  'linktr.ee', 'bit.ly', 'tinyurl.com', 'cutt.ly', 'is.gd', 'google.com', 'goo.gl',
+  'apple.com', 'apps.apple.com', 'play.google.com', 'blogspot.com', 'wordpress.com',
+]
 
 function hostOf(url) {
   try {
@@ -45,6 +59,7 @@ export function normalizeStoreDomain(value) {
   if (!DOMAIN_RE.test(raw)) return null
   // Nunca a própria Awin como domínio de loja (o link dela é tratado à parte).
   if (hostIn(raw, AWIN_CLICK_HOSTS) || hostIn(raw, AWIN_SHORT_HOSTS)) return null
+  if (THREE_LABEL_SUFFIXES.has(raw) || hostIn(raw, SHARED_HOSTS)) return null
   return raw
 }
 
