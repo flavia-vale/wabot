@@ -3,6 +3,8 @@
 // re-converter. Aqui buscamos título e preços para preencher o template.
 
 import { isSheinHostname } from '../detector.js'
+import { isSheinShortLink, resolveSheinShortLink } from './shein.js'
+import { fetchSheinProductInfoByGoodsId, sheinGoodsIdFromUrl } from './sheinProductInfo.js'
 import { fetchShopeeProductInfo, extractShopeeIds, isShopeeShortLink, resolveShopeeShortLink } from './shopee.js'
 import { resolveToCleanProductUrl } from './mercadolivre.js'
 import { isAmazonShortLink, resolveAmazonShortLink } from './amazon.js'
@@ -947,6 +949,28 @@ export async function fetchProductInfo(url, opts = {}) {
     // que o fetch(redirect:follow) não atravessa, deixando o scrape na página
     // de redirect sem og:title/preço. O resolvedor robusto chega na PDP real.
     resolvedUrl = await resolveAmazonShortLink(url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
+  }
+
+  // SHEIN: caminho próprio ANTES do fetch de HTML (RCA 2026-09-30, ver
+  // sheinProductInfo.js). Produto/vitrine/APIs caem no captcha para IP de
+  // servidor; a landing de afiliada `ark/7287?goods_id=` é a única página
+  // renderizada no servidor e traz nome + sale/retail price DO produto.
+  // oneLink → resolve até achar o goods_id (o resolvedor já existente para no
+  // primeiro hop com id). Falhou → segue o caminho antigo (og:title do oneLink).
+  let sheinGoodsId = sheinGoodsIdFromUrl(resolvedUrl)
+  if (!sheinGoodsId && isSheinShortLink(url)) {
+    try {
+      const hop = await resolveSheinShortLink(url, { timeoutMs: HTML_FETCH_TIMEOUT_MS })
+      sheinGoodsId = sheinGoodsIdFromUrl(hop)
+    } catch {
+      sheinGoodsId = null
+    }
+  }
+  if (sheinGoodsId) {
+    const ark = await fetchSheinProductInfoByGoodsId(sheinGoodsId)
+    if (ark?.title) {
+      return { title: ark.title, oldPrice: ark.oldPrice, newPrice: ark.newPrice, finalUrl: ark.sourceUrl, resolvedUrl: url }
+    }
   }
 
   // A 1ª leitura de página do ML sai SEM a sessão da cliente (RCA 2026-09-28):
