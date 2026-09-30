@@ -49,7 +49,9 @@ const IDLE_GATE_EXEMPT_SLUGS = new Set(['whatsapp_desconectado'])
 // gatilho é dispare-e-esqueça, não item de fila), então um dia de campanha
 // grande derrubava toda recuperação de senha até o dia seguinte, em silêncio.
 // Volume é desprezível: a rota já é limitada por e-mail e por IP.
-const DAILY_CAP_EXEMPT_SLUGS = new Set(['recuperar_senha'])
+// Avisos do Link Inteligente também ficam de fora: são poucos (um por episódio) e
+// só têm valor NA HORA — "lotou" enviado amanhã às 8h já perdeu o motivo.
+const DAILY_CAP_EXEMPT_SLUGS = new Set(['recuperar_senha', 'link_inteligente_quase_cheio', 'link_inteligente_lotado'])
 
 export function isRealEmail(email) {
   const trimmed = String(email ?? '').trim()

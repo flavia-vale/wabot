@@ -33,6 +33,14 @@ test('Link Inteligente: não diz mais que clique ocupa vaga; mostra cliques hoje
   assert.match(links, /text: 'Reserva'/)
 })
 
+test('Link Inteligente: interruptores de aviso por e-mail e WhatsApp e último aviso', () => {
+  assert.match(links, /notifyEmail: e\.target\.checked/)
+  assert.match(links, /notifyWhatsapp: e\.target\.checked/)
+  assert.match(links, /Avisar por e-mail/)
+  assert.match(links, /próprio número/)
+  assert.match(links, /Último aviso/)
+})
+
 test('card do painel: Basic nunca chama a API (embaçado com exemplo); PRO busca o resumo', () => {
   const card = painel.slice(painel.indexOf('function OccupancyCard'), painel.indexOf('export default function PainelPage'))
   assert.match(card, /if \(!isPro \|\| !state\.loading\) return undefined/)

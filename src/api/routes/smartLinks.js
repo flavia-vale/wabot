@@ -3,8 +3,8 @@ import { groupInviteCode as _groupInviteCode } from '../../manager.js'
 import { captureMemberSamplesForUser } from '../../jobs/groupMemberSamples.js'
 import { buildFeatureGateError, canUseSmartLinks, FEATURE_CODES } from '../../billing/plans.js'
 import { DEFAULT_CAP_PER_GROUP, isValidInviteCode, normalizeCap, normalizeSlug } from '../../core/smartLinkPicker.js'
-import { summarizeGroupMembers } from '../../core/groupMemberStats.js'
-import { MEASURABLE_MAX_AGE_MS, linkGrowthPerHour, pickWorstLink, summarizeLinkOccupancy } from '../../core/smartLinkOccupancy.js'
+import { pickWorstLink } from '../../core/smartLinkOccupancy.js'
+import { loadSmartLinkStats } from '../../core/smartLinkStats.js'
 
 const MAX_LINKS_PER_USER = 20
 const MAX_GROUPS_PER_LINK = 30
@@ -45,61 +45,12 @@ export async function smartLinksRoutes(app, options = {}) {
     }
   }
 
-  // Links da cliente com ocupação e cliques. O número de membros é a última
-  // amostra medida (nunca estimativa por clique); `occupancy` diz se o link está
-  // enchendo (ver core/smartLinkOccupancy.js).
-  async function loadLinkStats(userId) {
-    const t = now()
-    const todayKey = saoPauloDay(t)
-    const since7 = saoPauloDay(new Date(t.getTime() - 6 * 24 * 60 * 60 * 1000))
-    const samplesSince = new Date(t.getTime() - 8 * 24 * 60 * 60 * 1000)
-    const links = await db.smartLink.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        groups: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            group: { select: { id: true, name: true, memberSamples: { where: { sampledAt: { gte: samplesSince } }, orderBy: { sampledAt: 'desc' }, select: { size: true, sampledAt: true } } } },
-            dailyClicks: { where: { day: { gte: since7 } }, select: { day: true, clicks: true } },
-          },
-        },
-      },
-    })
-    return links.map(link => {
-      const groups = link.groups.map(g => {
-        const stats = summarizeGroupMembers(g.group.memberSamples, t)
-        const ageMs = stats.sampledAt ? t.getTime() - Date.parse(stats.sampledAt) : Infinity
-        return {
-          id: g.id,
-          groupId: g.groupId,
-          name: g.group.name,
-          enabled: g.enabled,
-          hasInvite: isValidInviteCode(g.inviteCode),
-          size: stats.size,
-          sampledAt: stats.sampledAt,
-          stale: stats.stale,
-          measurable: ageMs <= MEASURABLE_MAX_AGE_MS,
-          delta24h: stats.delta24h,
-          delta7d: stats.delta7d,
-          occupancyPct: stats.size == null ? null : Math.round((stats.size / link.capPerGroup) * 100),
-          clicksToday: g.dailyClicks.filter(d => d.day === todayKey).reduce((sum, d) => sum + d.clicks, 0),
-          clicks7d: g.dailyClicks.reduce((sum, d) => sum + d.clicks, 0),
-        }
-      })
-      const measuredActive = groups.filter(g => g.enabled && g.hasInvite && g.measurable && g.size != null)
-      const occupancy = summarizeLinkOccupancy(groups, { cap: link.capPerGroup, growthPerHour: linkGrowthPerHour(measuredActive) })
-      return {
-        id: link.id, name: link.name, slug: link.slug, path: `/g/${link.slug}`,
-        enabled: link.enabled, capPerGroup: link.capPerGroup,
-        clicksToday: groups.reduce((sum, g) => sum + g.clicksToday, 0),
-        clicks7d: groups.reduce((sum, g) => sum + g.clicks7d, 0),
-        totalSize: groups.reduce((sum, g) => sum + (g.size ?? 0), 0),
-        occupancy,
-        groups: groups.map(({ measurable, ...publicGroup }) => publicGroup),
-      }
-    })
-  }
+  // Nada interno sai para a tela: sem id de usuária e sem o estado bruto do aviso.
+  const presentLink = ({ userId, alert, ...link }) => ({
+    ...link,
+    lastAlert: alert?.kind ? { kind: alert.kind, sentAt: alert.lastSentAt ? new Date(alert.lastSentAt).toISOString() : null } : null,
+  })
+  const loadLinkStats = async (userId) => (await loadSmartLinkStats({ db, where: { userId, deletedAt: null }, now: now() })).map(presentLink)
 
   app.get('/', { onRequest: [app.authenticate] }, async (req) => ({ links: await loadLinkStats(req.user.sub) }))
 
@@ -152,6 +103,11 @@ export async function smartLinksRoutes(app, options = {}) {
     if (req.body?.enabled !== undefined) {
       if (typeof req.body.enabled !== 'boolean') return reply.code(400).send({ error: 'Valor inválido.' })
       data.enabled = req.body.enabled
+    }
+    for (const field of ['notifyEmail', 'notifyWhatsapp']) {
+      if (req.body?.[field] === undefined) continue
+      if (typeof req.body[field] !== 'boolean') return reply.code(400).send({ error: 'Valor inválido.' })
+      data[field] = req.body[field]
     }
     if (req.body?.capPerGroup !== undefined) {
       const cap = normalizeCap(req.body.capPerGroup)

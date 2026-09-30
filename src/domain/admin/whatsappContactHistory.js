@@ -22,6 +22,7 @@ export const WHATSAPP_CONTACT_REASON_LABELS = Object.freeze({
   lembrete_sem_grupo: 'Lembrete: escolher os grupos',
   decisao_teste_dia5: 'Decisão do teste (a partir do dia 5)',
   mensagem_manual_suporte: 'Mensagem manual do suporte',
+  alerta_link_inteligente: 'Aviso: grupos do Link Inteligente enchendo',
 })
 
 /** Slug desconhecido devolve ele mesmo — nunca some da tela por dúvida. */
