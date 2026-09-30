@@ -24,7 +24,7 @@ const pct = (size, cap) => (cap > 0 ? (size / cap) * 100 : 0)
  * @param {{cap:number, growthPerHour?:number|null}} opts
  *   - `measurable`: amostra recente o bastante para valer como medida.
  *   - `growthPerHour`: membros ganhos por hora no link inteiro (null = sem histórico).
- * @returns {{level:'nodata'|'ok'|'warn'|'critical', avgPct:number|null, activeCount:number,
+ * @returns {{level:'nodata'|'ok'|'warn'|'critical', avgPct:number|null, minPct:number|null, activeCount:number,
  *   measuredCount:number, above90Count:number, allFull:boolean, remainingSlots:number|null, etaHours:number|null}}
  */
 export function summarizeLinkOccupancy(groups, { cap, growthPerHour = null } = {}) {
@@ -33,7 +33,7 @@ export function summarizeLinkOccupancy(groups, { cap, growthPerHour = null } = {
   const measured = active.filter(g => g.measurable && Number.isInteger(g.size))
 
   if (!(cap > 0) || measured.length === 0) {
-    return { level: 'nodata', avgPct: null, activeCount: active.length, measuredCount: measured.length, above90Count: 0, allFull: false, remainingSlots: null, etaHours: null }
+    return { level: 'nodata', avgPct: null, minPct: null, activeCount: active.length, measuredCount: measured.length, above90Count: 0, allFull: false, remainingSlots: null, etaHours: null }
   }
 
   const totalSize = measured.reduce((sum, g) => sum + g.size, 0)
@@ -52,6 +52,7 @@ export function summarizeLinkOccupancy(groups, { cap, growthPerHour = null } = {
   return {
     level,
     avgPct: Math.round(pct(totalSize, cap * measured.length)),
+    minPct: Math.round(Math.min(...measured.map(g => pct(g.size, cap)))),
     activeCount: active.length,
     measuredCount: measured.length,
     above90Count,

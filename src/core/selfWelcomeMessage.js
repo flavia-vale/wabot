@@ -137,6 +137,14 @@ export function buildSelfMessageEnvelope({ titulo, corpo, videoUrl } = {}) {
   return linhas.join('\n')
 }
 
+/** Aviso do Link Inteligente (grupos quase cheios / lotados), no PRÓPRIO número da cliente. */
+export function buildSmartLinkAlertMessageText({ corpo, urgent = false } = {}) {
+  return buildSelfMessageEnvelope({
+    titulo: urgent ? '🚨 Seu Link Inteligente lotou' : '🔔 Seus grupos estão quase cheios',
+    corpo: String(corpo ?? '').trim(),
+  })
+}
+
 /** Momento 1 — 1ª conexão do WhatsApp. */
 export function buildSelfWelcomeMessageText({ videoUrl } = {}) {
   return buildSelfMessageEnvelope({

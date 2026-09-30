@@ -132,6 +132,24 @@ function LinkCard({ link, postGroups, onChanged, onNotice }) {
           <input key={link.capPerGroup} className="pnl-input" type="number" min="50" max="1024" defaultValue={link.capPerGroup} onBlur={e => { const value = e.target.value; if (value !== String(link.capPerGroup)) run(() => api.updateSmartLink(link.id, { capPerGroup: Number(value) }), 'Limite atualizado.') }} />
         </label>
       </div>
+      <fieldset className="lk-notify" style={{ border: 0, padding: 0, margin: '14px 0 0' }}>
+        <legend className="pnl-hint" style={{ padding: 0 }}>
+          Avisos: você recebe um quando TODOS os grupos passarem de 90% e outro se lotarem.
+        </legend>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+          <input type="checkbox" checked={link.notifyEmail} disabled={busy} onChange={e => run(() => api.updateSmartLink(link.id, { notifyEmail: e.target.checked }))} />
+          <span>Avisar por e-mail</span>
+        </label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+          <input type="checkbox" checked={link.notifyWhatsapp} disabled={busy} onChange={e => run(() => api.updateSmartLink(link.id, { notifyWhatsapp: e.target.checked }))} />
+          <span>Avisar no WhatsApp (mensagem do robô para o seu próprio número)</span>
+        </label>
+        {link.lastAlert && (
+          <p className="pnl-hint" style={{ margin: '6px 0 0' }}>
+            Último aviso: {link.lastAlert.kind === 'urgent' ? 'link lotado' : 'grupos quase cheios'}{link.lastAlert.sentAt ? ` em ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(new Date(link.lastAlert.sentAt))}` : ''}.
+          </p>
+        )}
+      </fieldset>
       {available.length === 0 && <p className="pnl-hint" style={{ marginTop: 8 }}>Todos os seus grupos de destino já estão neste link (ou você ainda não tem grupos de destino).</p>}
     </section>
   )

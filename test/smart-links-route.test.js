@@ -218,3 +218,29 @@ test('amostra com mais de 24h não vira "crítico" (nunca alarma no escuro)', as
   assert.equal(r.worst.level, 'nodata')
   await app.close()
 })
+
+test('interruptores de aviso: só booleano de verdade; a tela não recebe id interno nem estado bruto', async () => {
+  const { app } = await make()
+  const link = (await post(app, '/', { name: 'A', slug: 'link-a' })).json()
+  const patch = (payload) => app.inject({ method: 'PATCH', url: `/${link.id}`, payload })
+  assert.equal((await patch({ notifyEmail: 'false' })).statusCode, 400)
+  assert.equal((await patch({ notifyWhatsapp: 0 })).statusCode, 400)
+  assert.equal((await patch({ notifyEmail: false, notifyWhatsapp: false })).statusCode, 200)
+  await app.close()
+})
+
+test('lista: expõe interruptores e último aviso, mas nunca userId nem alertReminders', async () => {
+  const link = {
+    id: 'l1', userId: 'owner', name: 'Tech', slug: 'tech', enabled: true, capPerGroup: 1000, createdAt: new Date(),
+    notifyEmail: true, notifyWhatsapp: false, alertKind: 'warn', alertLastSentAt: new Date('2026-09-30T15:00:00Z'), alertReminders: 1, alertActiveGroups: 2,
+    groups: [mkGroup('g1', 'G1', [sampleAt(0, 500)])],
+  }
+  const app = await makeStats([link])
+  const body = (await app.inject({ url: '/' })).json()
+  const l = body.links[0]
+  assert.equal(l.notifyEmail, true)
+  assert.equal(l.notifyWhatsapp, false)
+  assert.deepEqual(l.lastAlert, { kind: 'warn', sentAt: '2026-09-30T15:00:00.000Z' })
+  assert.doesNotMatch(JSON.stringify(body), /userId|alertReminders|alertActiveGroups/)
+  await app.close()
+})
