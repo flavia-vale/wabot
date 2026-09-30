@@ -29,7 +29,7 @@ export function buildCardPaymentSteps({ accountEmail } = {}) {
 }
 
 export const CARD_HELP_MP_EMAIL_TITLE = 'Usa outro e-mail no Mercado Pago?'
-export const CARD_HELP_MP_EMAIL_TEXT = 'Só preencha se o e-mail que você usa no Mercado Pago for diferente do da sua conta aqui. Ele vale só para a cobrança automática.'
+export const CARD_HELP_MP_EMAIL_TEXT = 'Só preencha se o e-mail que você usa no Mercado Pago for diferente do da sua conta aqui. Ele vale para os dois jeitos de pagar.'
 
 export const CARD_HELP_PIX_TITLE = 'Quer resolver agora?'
 export const CARD_HELP_PIX_TEXT = 'Toque em "Pagar uma vez" no seu plano e escolha PIX: é liberado na hora e não depende de cartão. Depois você liga a cobrança automática com calma.'
