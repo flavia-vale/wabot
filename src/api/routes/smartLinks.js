@@ -3,6 +3,8 @@ import { groupInviteCode as _groupInviteCode } from '../../manager.js'
 import { captureMemberSamplesForUser } from '../../jobs/groupMemberSamples.js'
 import { buildFeatureGateError, canUseSmartLinks, FEATURE_CODES } from '../../billing/plans.js'
 import { DEFAULT_CAP_PER_GROUP, isValidInviteCode, normalizeCap, normalizeSlug } from '../../core/smartLinkPicker.js'
+import { pickWorstLink } from '../../core/smartLinkOccupancy.js'
+import { loadSmartLinkStats } from '../../core/smartLinkStats.js'
 
 const MAX_LINKS_PER_USER = 20
 const MAX_GROUPS_PER_LINK = 30
@@ -43,46 +45,20 @@ export async function smartLinksRoutes(app, options = {}) {
     }
   }
 
-  app.get('/', { onRequest: [app.authenticate] }, async (req) => {
-    const t = now()
-    const since = saoPauloDay(new Date(t.getTime() - 6 * 24 * 60 * 60 * 1000))
-    const links = await db.smartLink.findMany({
-      where: { userId: req.user.sub, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        groups: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            group: { select: { id: true, name: true, memberSamples: { orderBy: { sampledAt: 'desc' }, take: 1, select: { size: true, sampledAt: true } } } },
-            dailyClicks: { where: { day: { gte: since } }, select: { clicks: true } },
-          },
-        },
-      },
-    })
-    return {
-      links: links.map(link => {
-        const groups = link.groups.map(g => {
-          const sample = g.group.memberSamples[0] ?? null
-          return {
-            id: g.id,
-            groupId: g.groupId,
-            name: g.group.name,
-            enabled: g.enabled,
-            hasInvite: isValidInviteCode(g.inviteCode),
-            size: sample?.size ?? null,
-            sampledAt: sample?.sampledAt ? new Date(sample.sampledAt).toISOString() : null,
-            clicks7d: g.dailyClicks.reduce((sum, d) => sum + d.clicks, 0),
-          }
-        })
-        return {
-          id: link.id, name: link.name, slug: link.slug, path: `/g/${link.slug}`,
-          enabled: link.enabled, capPerGroup: link.capPerGroup,
-          clicks7d: groups.reduce((sum, g) => sum + g.clicks7d, 0),
-          totalSize: groups.reduce((sum, g) => sum + (g.size ?? 0), 0),
-          groups,
-        }
-      }),
-    }
+  // Nada interno sai para a tela: sem id de usuária e sem o estado bruto do aviso.
+  const presentLink = ({ userId, alert, ...link }) => ({
+    ...link,
+    lastAlert: alert?.kind ? { kind: alert.kind, sentAt: alert.lastSentAt ? new Date(alert.lastSentAt).toISOString() : null } : null,
+  })
+  const loadLinkStats = async (userId) => (await loadSmartLinkStats({ db, where: { userId, deletedAt: null }, now: now() })).map(presentLink)
+
+  app.get('/', { onRequest: [app.authenticate] }, async (req) => ({ links: await loadLinkStats(req.user.sub) }))
+
+  // Card do painel principal: só o que ele precisa (sem a lista de grupos).
+  app.get('/summary', { onRequest: [app.authenticate] }, async (req) => {
+    const links = (await loadLinkStats(req.user.sub)).filter(l => l.enabled)
+    const summaries = links.map(l => ({ id: l.id, name: l.name, path: l.path, capPerGroup: l.capPerGroup, groupCount: l.groups.length, ...l.occupancy }))
+    return { linkCount: links.length, worst: pickWorstLink(summaries) }
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
@@ -127,6 +103,11 @@ export async function smartLinksRoutes(app, options = {}) {
     if (req.body?.enabled !== undefined) {
       if (typeof req.body.enabled !== 'boolean') return reply.code(400).send({ error: 'Valor inválido.' })
       data.enabled = req.body.enabled
+    }
+    for (const field of ['notifyEmail', 'notifyWhatsapp']) {
+      if (req.body?.[field] === undefined) continue
+      if (typeof req.body[field] !== 'boolean') return reply.code(400).send({ error: 'Valor inválido.' })
+      data[field] = req.body[field]
     }
     if (req.body?.capPerGroup !== undefined) {
       const cap = normalizeCap(req.body.capPerGroup)

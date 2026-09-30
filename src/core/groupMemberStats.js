@@ -74,3 +74,26 @@ export function pruneMemberSampleIds(samples, now = new Date()) {
     return lastOfDay.get(day)?.id !== s.id
   }).map(s => s.id)
 }
+
+/**
+ * Pontos para o gráfico pequeno de um grupo: últimas `windowDays` ANTES da
+ * última medição (mesma âncora da variação), no máximo `maxPoints`. Devolve []
+ * com menos de 2 pontos — sem histórico não se desenha linha.
+ * @returns {Array<{t:number, size:number}>} em ordem cronológica
+ */
+export function seriesForPeriod(samples, windowDays, maxPoints = 48) {
+  if (!Array.isArray(samples) || samples.length < 2) return []
+  const sorted = [...samples].sort((a, b) => ts(a.sampledAt) - ts(b.sampledAt))
+  const end = ts(sorted[sorted.length - 1].sampledAt)
+  const inWindow = sorted.filter(s => ts(s.sampledAt) >= end - windowDays * DAY_MS)
+  if (inWindow.length < 2) return []
+  if (inWindow.length <= maxPoints) return inWindow.map(s => ({ t: ts(s.sampledAt), size: s.size }))
+  // Reduz por "baldes" iguais, sempre mantendo o primeiro e o último ponto.
+  const out = []
+  const step = (inWindow.length - 1) / (maxPoints - 1)
+  for (let i = 0; i < maxPoints; i++) {
+    const s = inWindow[Math.round(i * step)]
+    out.push({ t: ts(s.sampledAt), size: s.size })
+  }
+  return out
+}

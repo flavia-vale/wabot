@@ -88,7 +88,7 @@ test('o comando sendSelfMessage manda pro PRÓPRIO número, nunca grupo/canal', 
   assert.match(fnBody, /buildAdminSupportMessageText/)
 })
 
-test('as 4 mensagens (automáticas + manual) gravam no histórico de contato (CustomerContactLog)', () => {
+test('as 5 mensagens (automáticas + manual + aviso do Link Inteligente) gravam no histórico de contato (CustomerContactLog)', () => {
   assert.match(src, /async function logWhatsappSelfMessageContact/)
   assert.match(src, /db\.customerContactLog\.create/)
   for (const chamada of [
@@ -96,6 +96,7 @@ test('as 4 mensagens (automáticas + manual) gravam no histórico de contato (Cu
     "logWhatsappSelfMessageContact\\({ reason: 'primeira_oferta_publicada'",
     "reason: kind === 'missing_credential' \\? 'lembrete_sem_etiqueta' : 'lembrete_sem_grupo'",
     "logWhatsappSelfMessageContact\\({ reason: 'mensagem_manual_suporte'",
+    "logWhatsappSelfMessageContact\\({ reason: 'alerta_link_inteligente'",
   ]) {
     assert.match(src, new RegExp(chamada), `chamada não encontrada: ${chamada}`)
   }

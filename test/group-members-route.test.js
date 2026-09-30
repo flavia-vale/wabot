@@ -35,3 +35,15 @@ test('PRO recebe grupos com total e variação', async () => {
   assert.doesNotMatch(res.body, /userId|@g\.us/)
   await app.close()
 })
+
+test('PRO recebe séries por período (24h/7d/30d) para o gráfico', async () => {
+  const base = new Date('2026-09-30T12:00:00Z').getTime()
+  const samples = [...Array(48).keys()].map(h => ({ size: 1000 - h, sampledAt: new Date(base - h * 3600_000) }))
+  const { app } = await make({ plan: 'pro', accessExpiresAt: new Date(Date.now() + 86400000) }, [{ id: 'g1', name: 'A', memberSamples: samples }])
+  const g = (await app.inject({ url: '/' })).json().groups[0]
+  assert.equal(g.series.d1.length, 25)
+  assert.equal(g.series.d7.length, 48)
+  assert.ok(g.series.d30.length >= 2)
+  assert.deepEqual(g.delta24h, { diff: 24, pct: 2.5 })
+  await app.close()
+})

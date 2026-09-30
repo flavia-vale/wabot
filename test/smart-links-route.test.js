@@ -142,3 +142,105 @@ test('falha na medição imediata não derruba o cadastro do grupo', async () =>
   assert.equal((await post(app, `/${link.id}/groups`, { groupId: 'g-ok' })).statusCode, 201)
   await app.close()
 })
+
+const H = 3600_000
+const fixedNow = new Date('2026-09-30T12:00:00Z')
+function statsDb({ links }) {
+  return { smartLink: { findMany: async () => links }, group: {}, smartLinkGroup: {} }
+}
+const sampleAt = (hoursAgo, size) => ({ size, sampledAt: new Date(fixedNow.getTime() - hoursAgo * H) })
+const mkGroup = (id, name, samples, clicks = []) => ({
+  id: `lg-${id}`, groupId: id, inviteCode: 'ABCDEFGHIJ1234', enabled: true, createdAt: new Date(),
+  group: { id, name, memberSamples: samples }, dailyClicks: clicks,
+})
+
+async function makeStats(links, plan = { plan: 'pro' }) {
+  const app = Fastify()
+  app.decorate('authenticate', async (req) => { req.user = { sub: 'owner' } })
+  await app.register(smartLinksRoutes, { db: statsDb({ links }), loadPlanSubject: async () => plan, groupInviteCode: async () => ({}), captureSamples: async () => {}, now: () => fixedNow })
+  return app
+}
+
+test('lista: ocupação, cliques de hoje/7 dias e membros atuais por grupo', async () => {
+  const link = {
+    id: 'l1', name: 'Tech', slug: 'tech', enabled: true, capPerGroup: 1000, createdAt: new Date(),
+    groups: [
+      mkGroup('g1', 'Grupo 1', [sampleAt(0, 950), sampleAt(24, 900)], [{ day: '2026-09-30', clicks: 7 }, { day: '2026-09-28', clicks: 3 }]),
+      mkGroup('g2', 'Grupo 2', [sampleAt(1, 400)]),
+    ],
+  }
+  const app = await makeStats([link])
+  const body = (await app.inject({ url: '/' })).json()
+  const l = body.links[0]
+  assert.equal(l.clicksToday, 7)
+  assert.equal(l.clicks7d, 10)
+  assert.equal(l.totalSize, 1350)
+  assert.equal(l.groups[0].size, 950)
+  assert.equal(l.groups[0].occupancyPct, 95)
+  assert.equal(l.occupancy.level, 'warn')
+  assert.doesNotMatch(JSON.stringify(body), /ABCDEFGHIJ1234|inviteCode/)
+  await app.close()
+})
+
+test('resumo do painel: pior link, crítico quando todos >= 90%, link pausado fora', async () => {
+  const mk = (id, enabled, sizes) => ({
+    id, name: id, slug: id, enabled, capPerGroup: 1000, createdAt: new Date(),
+    groups: sizes.map((s, i) => mkGroup(`${id}-${i}`, `G${i}`, [sampleAt(0, s)])),
+  })
+  const app = await makeStats([mk('calmo', true, [100, 200]), mk('cheio', true, [950, 920, 990]), mk('pausado', false, [999])])
+  const r = (await app.inject({ url: '/summary' })).json()
+  assert.equal(r.linkCount, 2)
+  assert.equal(r.worst.id, 'cheio')
+  assert.equal(r.worst.level, 'critical')
+  assert.equal(r.worst.avgPct, 95)
+  assert.equal(r.worst.remainingSlots, 140)
+  await app.close()
+})
+
+test('resumo sem links: worst nulo (o card mostra o convite para criar)', async () => {
+  const app = await makeStats([])
+  assert.deepEqual((await app.inject({ url: '/summary' })).json(), { linkCount: 0, worst: null })
+  await app.close()
+})
+
+test('resumo: Basic recebe 403 e nenhum dado real', async () => {
+  const app = await makeStats([], { plan: 'basic' })
+  const res = await app.inject({ url: '/summary' })
+  assert.equal(res.statusCode, 403)
+  assert.equal(res.json().feature, 'smart_links')
+  await app.close()
+})
+
+test('amostra com mais de 24h não vira "crítico" (nunca alarma no escuro)', async () => {
+  const link = { id: 'l', name: 'l', slug: 'l', enabled: true, capPerGroup: 1000, createdAt: new Date(), groups: [mkGroup('g', 'G', [sampleAt(30, 990)])] }
+  const app = await makeStats([link])
+  const r = (await app.inject({ url: '/summary' })).json()
+  assert.equal(r.worst.level, 'nodata')
+  await app.close()
+})
+
+test('interruptores de aviso: só booleano de verdade; a tela não recebe id interno nem estado bruto', async () => {
+  const { app } = await make()
+  const link = (await post(app, '/', { name: 'A', slug: 'link-a' })).json()
+  const patch = (payload) => app.inject({ method: 'PATCH', url: `/${link.id}`, payload })
+  assert.equal((await patch({ notifyEmail: 'false' })).statusCode, 400)
+  assert.equal((await patch({ notifyWhatsapp: 0 })).statusCode, 400)
+  assert.equal((await patch({ notifyEmail: false, notifyWhatsapp: false })).statusCode, 200)
+  await app.close()
+})
+
+test('lista: expõe interruptores e último aviso, mas nunca userId nem alertReminders', async () => {
+  const link = {
+    id: 'l1', userId: 'owner', name: 'Tech', slug: 'tech', enabled: true, capPerGroup: 1000, createdAt: new Date(),
+    notifyEmail: true, notifyWhatsapp: false, alertKind: 'warn', alertLastSentAt: new Date('2026-09-30T15:00:00Z'), alertReminders: 1, alertActiveGroups: 2,
+    groups: [mkGroup('g1', 'G1', [sampleAt(0, 500)])],
+  }
+  const app = await makeStats([link])
+  const body = (await app.inject({ url: '/' })).json()
+  const l = body.links[0]
+  assert.equal(l.notifyEmail, true)
+  assert.equal(l.notifyWhatsapp, false)
+  assert.deepEqual(l.lastAlert, { kind: 'warn', sentAt: '2026-09-30T15:00:00.000Z' })
+  assert.doesNotMatch(JSON.stringify(body), /userId|alertReminders|alertActiveGroups/)
+  await app.close()
+})

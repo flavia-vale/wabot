@@ -183,6 +183,94 @@ function CommissionStat({ isPro, onLocked }) {
   )
 }
 
+
+/* Card "Link Inteligente" no Painel: quão cheios estão os grupos do(s) link(s).
+ * PRO vê o número real; o Basic vê o card EMBAÇADO com exemplo (sem chamar a API,
+ * que devolveria 403). Borda vermelha escura quando TODOS os grupos ativos
+ * passaram de 90% (decisão da dona, 2026-09-30). */
+const OCC_CACHE_MS = 2 * 60 * 1000
+let occCache = null // { at, state }
+
+const etaText = (hours) => {
+  if (hours == null) return null
+  if (hours < 1) return 'menos de 1 hora'
+  if (hours < 48) return `~${Math.round(hours)} h`
+  return `~${Math.round(hours / 24)} dias`
+}
+
+function OccupancyCard({ isPro, onLocked }) {
+  const [state, setState] = useState(() => (
+    occCache && Date.now() - occCache.at < OCC_CACHE_MS ? occCache.state : { loading: true, data: null, failed: false }
+  ))
+  useEffect(() => {
+    if (!isPro || !state.loading) return undefined
+    let active = true
+    const done = (next) => {
+      occCache = { at: Date.now(), state: next }
+      if (active) setState(next)
+    }
+    api.smartLinkSummary()
+      .then((data) => done({ loading: false, data, failed: false }))
+      .catch(() => done({ loading: false, data: null, failed: true }))
+    return () => { active = false }
+  }, [isPro, state.loading])
+
+  if (!isPro) {
+    return (
+      <button type="button" className="occ-card pnl-kpi-locked" onClick={onLocked} aria-label="Ocupação dos grupos do Link Inteligente — disponível no plano PRO">
+        <span className="pnl-pro-lock-content" aria-hidden="true" style={{ display: 'grid', gap: 10 }}>
+          <span className="occ-card-label">Ocupação dos seus grupos</span>
+          <span className="occ-card-num">78%</span>
+          <span className="occ-bar"><span style={{ width: '78%' }} /></span>
+          <span className="occ-card-foot">3 grupos · 660 vagas restantes</span>
+        </span>
+        <span className="pnl-pro-lock-tag"><ProTag small /></span>
+      </button>
+    )
+  }
+  if (state.loading) return <div className="occ-card" aria-busy="true"><span className="pv-skel" style={{ width: 90, height: 34 }} /></div>
+  if (state.failed || !state.data) return null
+
+  const { linkCount, worst } = state.data
+  if (linkCount === 0 || !worst) {
+    return (
+      <Link href="/painel/link-inteligente" className="occ-card">
+        <span className="occ-card-label">Link Inteligente</span>
+        <strong>Divulgue um link só e o robô manda cada pessoa para o grupo mais vazio.</strong>
+        <span className="occ-card-foot">Criar meu primeiro link →</span>
+      </Link>
+    )
+  }
+  const tone = worst.level === 'critical' ? 'is-critical' : worst.level === 'warn' ? 'is-warn' : ''
+  const eta = etaText(worst.etaHours)
+  const others = linkCount > 1 ? ` · +${linkCount - 1} ${linkCount - 1 === 1 ? 'outro link' : 'outros links'}` : ''
+  if (worst.level === 'nodata') {
+    return (
+      <Link href="/painel/link-inteligente" className="occ-card">
+        <span className="occ-card-label">Ocupação dos grupos · {worst.name}</span>
+        <strong>Aguardando a primeira contagem de membros</strong>
+        <span className="occ-card-foot">A contagem roda de hora em hora, com o robô conectado{others}.</span>
+      </Link>
+    )
+  }
+  return (
+    <Link href="/painel/link-inteligente" className={`occ-card ${tone}`}>
+      <span className="occ-card-head">
+        <span>
+          <span className="occ-card-label">Ocupação dos grupos · {worst.name}</span>
+          <span className="occ-card-num" style={{ display: 'block' }}>{worst.avgPct}%</span>
+        </span>
+        {worst.level === 'critical' && <span className="occ-card-alert" role="alert">{worst.allFull ? 'Todos os grupos lotados' : '90% de capacidade atingido'}</span>}
+      </span>
+      <span className={`occ-bar ${worst.level === 'critical' ? 'is-full' : worst.level === 'warn' ? 'is-warn' : ''}`} aria-hidden="true"><span style={{ width: `${Math.min(100, worst.avgPct)}%` }} /></span>
+      <span className="occ-card-foot">
+        {worst.above90Count} de {worst.measuredCount} {worst.measuredCount === 1 ? 'grupo' : 'grupos'} acima de 90%
+        {' · '}{worst.remainingSlots} vagas restantes{eta ? ` (acaba em ${eta} no ritmo atual)` : ''}{others}
+      </span>
+    </Link>
+  )
+}
+
 export default function PainelPage() {
   const { user, isPro, openPro } = usePainel()
 
@@ -256,6 +344,9 @@ export default function PainelPage() {
         })}
         <CommissionStat isPro={isPro} onLocked={() => openPro('vendas')} />
       </section>
+
+      {/* 2b. Ocupação dos grupos do Link Inteligente (PRO; embaçado no Basic). */}
+      <OccupancyCard isPro={isPro} onLocked={() => openPro('rodizio')} />
 
       {/* 3. Funções mais usadas. */}
       <section className="pnl-card">

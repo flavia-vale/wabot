@@ -4,6 +4,7 @@
 
 import dbDefault from '../../db.js'
 import { createReserveTracker, inviteUrl, normalizeSlug, pickGroup } from '../../core/smartLinkPicker.js'
+import { MEASURABLE_MAX_AGE_MS } from '../../core/smartLinkOccupancy.js'
 import { createTrackGuard } from './affiliateTrackGuard.js'
 import { isNonHumanUserAgent } from './clickTracker.js'
 
@@ -12,7 +13,7 @@ const CLICK_FLUSH_MS = 5_000
 // Amostra mais velha que isto (sessão fora do ar, robô removido do grupo) deixa
 // de valer como medida: o grupo passa a "sem medida" e só recebe tráfego se não
 // houver grupo medido com vaga. Evita mandar gente ao grupo de tamanho velho.
-const STALE_SAMPLE_MS = 24 * 60 * 60 * 1000
+const STALE_SAMPLE_MS = MEASURABLE_MAX_AGE_MS
 // Limite geral por IP: FOLGADO, porque muita gente compartilha o mesmo IP na
 // rede móvel (CGNAT) e o link é divulgado em vários lugares. Não é para barrar
 // tráfego normal, só robô descontrolado.
