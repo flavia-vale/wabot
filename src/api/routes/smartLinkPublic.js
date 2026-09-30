@@ -5,6 +5,7 @@
 import dbDefault from '../../db.js'
 import { createReserveTracker, inviteUrl, normalizeSlug, pickGroup } from '../../core/smartLinkPicker.js'
 import { MEASURABLE_MAX_AGE_MS } from '../../core/smartLinkOccupancy.js'
+import { isSmartLinkOwnerEligible } from '../../core/smartLinkAccess.js'
 import { createTrackGuard } from './affiliateTrackGuard.js'
 import { isNonHumanUserAgent } from './clickTracker.js'
 
@@ -78,6 +79,7 @@ export async function smartLinkPublicRoutes(app, options = {}) {
       where: { slug },
       select: {
         id: true, enabled: true, deletedAt: true, capPerGroup: true,
+        user: { select: { plan: true, accessExpiresAt: true, status: true } },
         groups: { select: { id: true, groupId: true, inviteCode: true, enabled: true } },
       },
     })
@@ -91,7 +93,7 @@ export async function smartLinkPublicRoutes(app, options = {}) {
       const stale = !sample || now() - sampledAtMs > STALE_SAMPLE_MS
       groups.push({ ...g, size: stale ? null : sample.size, sampledAtMs })
     }
-    return { id: link.id, enabled: link.enabled, capPerGroup: link.capPerGroup, groups }
+    return { id: link.id, enabled: link.enabled, capPerGroup: link.capPerGroup, owner: link.user ?? null, groups }
   }
 
   // Cache de 10 s + uma única consulta em andamento por endereço: sem isso, na
@@ -125,6 +127,13 @@ export async function smartLinkPublicRoutes(app, options = {}) {
 
     const link = await loadLink(slug)
     if (!link || !link.enabled) return miss(reply, req.ip, 'Link não encontrado', 'Este link não está disponível.')
+    // Plano vencido (ou conta bloqueada) da dona do link: para NA HORA. A data é
+    // avaliada a cada acesso (não só quando o cache enche), então o corte é exato
+    // e a renovação volta em até 10 s. Não conta no limite de erros: é tráfego
+    // legítimo de gente que clicou num link divulgado, não varredura.
+    if (!isSmartLinkOwnerEligible(link.owner, new Date(now()))) {
+      return reply.code(404).send(page('Link indisponível', 'Este link está temporariamente indisponível.'))
+    }
 
     // A reserva é do GRUPO de verdade (o mesmo grupo pode estar em dois links).
     const candidates = link.groups.map(g => ({

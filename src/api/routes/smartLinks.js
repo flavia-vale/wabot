@@ -4,6 +4,7 @@ import { captureMemberSamplesForUser } from '../../jobs/groupMemberSamples.js'
 import { buildFeatureGateError, canUseSmartLinks, FEATURE_CODES } from '../../billing/plans.js'
 import { DEFAULT_CAP_PER_GROUP, isValidInviteCode, normalizeCap, normalizeSlug } from '../../core/smartLinkPicker.js'
 import { pickWorstLink } from '../../core/smartLinkOccupancy.js'
+import { isSmartLinkOwnerEligible } from '../../core/smartLinkAccess.js'
 import { loadSmartLinkStats } from '../../core/smartLinkStats.js'
 
 const MAX_LINKS_PER_USER = 20
@@ -20,13 +21,14 @@ export async function smartLinksRoutes(app, options = {}) {
   const captureSamples = options.captureSamples ?? captureMemberSamplesForUser
   const now = options.now ?? (() => new Date())
   const loadPlanSubject = options.loadPlanSubject
-    ?? (userId => db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true } }))
+    ?? (userId => db.user.findUnique({ where: { id: userId }, select: { plan: true, accessExpiresAt: true, status: true } }))
 
   app.addHook('preHandler', async (req, reply) => {
     const subject = await loadPlanSubject(req.user.sub)
     if (!canUseSmartLinks(subject ?? { plan: 'basic' })) {
       return reply.code(403).send(buildFeatureGateError(FEATURE_CODES.SMART_LINKS))
     }
+    req.planSubject = subject
   })
 
   const ownedLink = (userId, id) => db.smartLink.findFirst({ where: { id, userId, deletedAt: null } })
@@ -52,7 +54,12 @@ export async function smartLinksRoutes(app, options = {}) {
   })
   const loadLinkStats = async (userId) => (await loadSmartLinkStats({ db, where: { userId, deletedAt: null }, now: now() })).map(presentLink)
 
-  app.get('/', { onRequest: [app.authenticate] }, async (req) => ({ links: await loadLinkStats(req.user.sub) }))
+  // `planActive: false` = plano vencido/conta bloqueada: os links estão PARADOS
+  // (quem clica vê "indisponível"); a tela explica e leva para renovar.
+  app.get('/', { onRequest: [app.authenticate] }, async (req) => ({
+    links: await loadLinkStats(req.user.sub),
+    planActive: isSmartLinkOwnerEligible(req.planSubject, now()),
+  }))
 
   // Card do painel principal: só o que ele precisa (sem a lista de grupos).
   app.get('/summary', { onRequest: [app.authenticate] }, async (req) => {

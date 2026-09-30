@@ -8,6 +8,7 @@ import { pruneMemberSampleIds } from '../core/groupMemberStats.js'
 import { canUseGroupMembers } from '../billing/plans.js'
 import { MEASURABLE_MAX_AGE_MS, isHotLink } from '../core/smartLinkOccupancy.js'
 import { isValidInviteCode } from '../core/smartLinkPicker.js'
+import { isSmartLinkOwnerEligible } from '../core/smartLinkAccess.js'
 import { isRunning as defaultIsRunning } from '../manager.js'
 
 export function normalizeSize(size) {
@@ -109,7 +110,7 @@ export async function runHotSampleSweep({ db = defaultDb, isRunning = defaultIsR
 
   const hotUsers = new Set()
   for (const link of links) {
-    if (hotUsers.has(link.userId) || link.user?.status !== 'active' || !canUseGroupMembers(link.user)) continue
+    if (hotUsers.has(link.userId) || link.user?.status !== 'active' || !isSmartLinkOwnerEligible(link.user, now)) continue
     const groups = link.groups.map(g => {
       const sample = g.group?.memberSamples?.[0] ?? null
       const ageMs = sample ? now.getTime() - new Date(sample.sampledAt).getTime() : Infinity

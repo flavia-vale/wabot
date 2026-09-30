@@ -41,6 +41,12 @@ test('Link Inteligente: interruptores de aviso por e-mail e WhatsApp e último a
   assert.match(links, /Último aviso/)
 })
 
+test('Link Inteligente: plano vencido mostra por que os links pararam e leva para renovar', () => {
+  assert.match(links, /planActive/)
+  assert.match(links, /Seu plano venceu: seus links estão parados/)
+  assert.match(links, /href="\/painel\/plano"/)
+})
+
 test('card do painel: Basic nunca chama a API (embaçado com exemplo); PRO busca o resumo', () => {
   const card = painel.slice(painel.indexOf('function OccupancyCard'), painel.indexOf('export default function PainelPage'))
   assert.match(card, /if \(!isPro \|\| !state\.loading\) return undefined/)

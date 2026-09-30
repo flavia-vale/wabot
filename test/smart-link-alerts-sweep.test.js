@@ -209,3 +209,11 @@ import { describeWhatsappContactReason } from '../src/domain/admin/whatsappConta
 test('o motivo do contato por WhatsApp aparece em português na tela da admin (nunca slug cru)', () => {
   assert.equal(describeWhatsappContactReason('alerta_link_inteligente'), 'Aviso: grupos do Link Inteligente enchendo')
 })
+
+test('plano vencido: não manda aviso (nem e-mail nem WhatsApp)', async () => {
+  const expired = { id: 'u1', name: 'V', email: 'v@exemplo.com', status: 'active', plan: 'pro', accessExpiresAt: new Date(NOW.getTime() - 1000) }
+  const db = makeDb({ links: [baseLink()], user: expired })
+  const h = harness(db)
+  const stats = await h.run()
+  assert.deepEqual([stats.sent, stats.skipped, h.mails.length, h.wpp.length], [0, 1, 0, 0])
+})
