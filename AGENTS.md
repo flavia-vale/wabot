@@ -192,6 +192,7 @@ arquivo (nova versão), não editar tela a tela.
 | SEO, marketing, páginas públicas, dados de mercado, marca | `docs/rca/seo-marketing.md` |
 | Instagram Stories | `docs/rca/instagram.md` |
 | plano Basic × PRO, cadeados do painel, menu, Minha conta | `docs/rca/planos-basic-pro.md` |
+| membros dos grupos, painel Membros, rodízio de convites (Link Inteligente) | `docs/rca/grupos-membros.md` |
 
 ## Mapa de sintomas → onde olhar (atalhos mais usados)
 

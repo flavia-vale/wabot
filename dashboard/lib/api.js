@@ -134,6 +134,7 @@ async function apiFetch(path, options = {}) {
 }
 
 export const api = {
+  groupMembers: ({ signal } = {}) => apiFetch('/api/group-members', { signal }),
   shopeeSales: ({ from, to, orderPage = 1, productPage = 1, limit = 20, timeZone = 'America/Sao_Paulo' }, { signal } = {}) => {
     const params = new URLSearchParams({ from, to, orderPage: String(orderPage), productPage: String(productPage), limit: String(limit), timeZone })
     return apiFetch(`/api/shopee-sales?${params}`, { signal })

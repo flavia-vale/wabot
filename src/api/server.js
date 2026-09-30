@@ -10,6 +10,7 @@ import { authRoutes } from './routes/auth.js'
 import { mlOAuthRoutes } from './routes/mlOAuth.js'
 import { sessionRoutes } from './routes/session.js'
 import { groupsRoutes } from './routes/groups.js'
+import { groupMembersRoutes } from './routes/groupMembers.js'
 import { credentialsRoutes } from './routes/credentials.js'
 import { couponsRoutes } from './routes/coupons.js'
 import { paymentsRoutes } from './routes/payments.js'
@@ -542,6 +543,7 @@ app.register(authRoutes, { prefix: '/api/auth' })
 app.register(mlOAuthRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
+app.register(groupMembersRoutes, { prefix: '/api/group-members' })
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
 app.register(couponsRoutes, { prefix: '/api/coupons' })
 app.register(paymentsRoutes, { prefix: '/api/payments' })
