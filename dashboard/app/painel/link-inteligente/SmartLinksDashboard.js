@@ -29,8 +29,6 @@ function SmartLinksPreview() {
 function LinkCard({ link, postGroups, onChanged, onNotice }) {
   const [busy, setBusy] = useState(false)
   const [pickGroup, setPickGroup] = useState('')
-  const [cap, setCap] = useState(String(link.capPerGroup))
-  useEffect(() => { setCap(String(link.capPerGroup)) }, [link.capPerGroup])
   const used = new Set(link.groups.map(g => g.groupId))
   const available = postGroups.filter(g => !used.has(g.id))
 
@@ -107,7 +105,7 @@ function LinkCard({ link, postGroups, onChanged, onNotice }) {
         <button className="pnl-btn is-primary is-sm" disabled={busy || !pickGroup} onClick={() => run(async () => { await api.addSmartLinkGroup(link.id, pickGroup); setPickGroup('') }, 'Grupo adicionado.')}>Adicionar</button>
         <label className="pnl-field" style={{ width: 150 }}>
           <span className="pnl-hint">Limite por grupo</span>
-          <input className="pnl-input" type="number" min="50" max="1024" value={cap} onChange={e => setCap(e.target.value)} onBlur={() => { if (String(cap) !== String(link.capPerGroup)) run(() => api.updateSmartLink(link.id, { capPerGroup: Number(cap) }), 'Limite atualizado.') }} />
+          <input key={link.capPerGroup} className="pnl-input" type="number" min="50" max="1024" defaultValue={link.capPerGroup} onBlur={e => { const value = e.target.value; if (value !== String(link.capPerGroup)) run(() => api.updateSmartLink(link.id, { capPerGroup: Number(value) }), 'Limite atualizado.') }} />
         </label>
       </div>
       {available.length === 0 && <p className="pnl-hint" style={{ marginTop: 8 }}>Todos os seus grupos de destino já estão neste link (ou você ainda não tem grupos de destino).</p>}
