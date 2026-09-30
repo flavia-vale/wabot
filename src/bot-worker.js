@@ -25,6 +25,7 @@ import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecaus
 import { convertLink } from './converters/index.js'
 import { AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
 import { awinOfferOptions, loadAwinConversionContext, refineAwinOptionsForText } from './integrations/awin/conversionContext.js'
+import { primaryPlatformFromLog } from './core/primaryPlatformFromLog.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
@@ -3390,7 +3391,13 @@ async function reprocessRestartFailures() {
       const watermarkSize = postDetail?.watermarkSize ?? undefined
       const watermarkPosition = postDetail?.watermarkPosition ?? undefined
       const useDestinationWatermark = destinationImageUsesWatermark(destinationImageMode) && Boolean(watermarkText)
-      const primary = { platform: row.platform, url: row.originalUrl, converted: row.convertedUrl }
+      // `row.platform` é o rótulo de TODAS as lojas ("shopee+shopee"); a foto
+      // precisa da loja do link principal (core/primaryPlatformFromLog.js).
+      const primary = {
+        platform: primaryPlatformFromLog(row, awinOfferOptions(cfg.credentials?.awin)),
+        url: row.originalUrl,
+        converted: row.convertedUrl,
+      }
 
       const accepted = await enqueueSendJob({
         type: 'converted',

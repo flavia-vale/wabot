@@ -826,3 +826,19 @@ Antes de mexer, leia esta seção inteira.
 | `mlstatic.com`                     | `D_NQ_NP_` → `D_NQ_NP_2X_` (não tocar — referência)                      |
 
 Teste: `node --test test/image-scrapers.test.js`.
+
+## Oferta reenviada depois do reinício do robô saía sem foto (RCA 2026-09-30 — não regredir)
+
+Sintoma: logo depois de um reinício do robô (deploy), ofertas da Shopee com 2
+links saíram sem foto; log `Card de preview sem imagem … "platform":"shopee+shopee"
+… "stage":"scrape_sem_imagem"` (staging, pid novo, 01:23 UTC).
+Causa (código + log): `reprocessRestartFailures` (reenvio das linhas
+`error:worker_restart`) montava `primary.platform = row.platform`, e
+`MessageLog.platform` é o RÓTULO de todas as lojas da mensagem
+(`conversions.map(c => c.platform).join('+')`). `fetchProductImage` não
+reconhece `shopee+shopee`, pula o ramo da Shopee (API de afiliado, única fonte
+de foto dela) e cai na leitura genérica do link curto, que a Shopee bloqueia.
+Correção: `src/core/primaryPlatformFromLog.js` (loja detectada no link
+principal → 1ª loja do rótulo). Teste: `test/primary-platform-from-log.test.js`.
+Regra: rótulo de `MessageLog.platform` nunca vai como nome de loja para
+conversor ou busca de foto.
