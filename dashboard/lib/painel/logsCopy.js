@@ -59,6 +59,9 @@ export function explainErrorMsg(errorMsg, platform) {
   if (errorMsg.startsWith('warning:ml_affiliate_busy')) {
     return 'Outra conversão do Mercado Livre já estava usando esta credencial. A oferta saiu com link longo para evitar disputa de sessão.'
   }
+  if (errorMsg.startsWith('warning:ml_url_not_supported')) {
+    return 'O Mercado Livre não aceitou esse produto no programa de afiliados da sua conta (o robô tentou mais de uma vez). A oferta saiu com o link mais comprido, com a sua identificação, mas nesse caso o Mercado Livre pode não creditar a comissão. Não é problema do seu código de acesso: outras contas conseguem o link curto do mesmo produto. Para confirmar, cole esse endereço no Gerador de Links do Mercado Livre, logada; se ele recusar lá também, é uma regra da sua conta no Mercado Livre.'
+  }
   if (errorMsg.startsWith('warning:ml_vitrine_fallback_used')) {
     return 'Esse link era uma vitrine/perfil de outra loja, que o Mercado Livre não aceita converter em link de afiliado. A oferta saiu usando o link da SUA vitrine, cadastrado em IDs de afiliada → Mercado Livre.'
   }
