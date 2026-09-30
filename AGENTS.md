@@ -193,6 +193,7 @@ arquivo (nova versão), não editar tela a tela.
 | Instagram Stories | `docs/rca/instagram.md` |
 | plano Basic × PRO, cadeados do painel, menu, Minha conta | `docs/rca/planos-basic-pro.md` |
 | Awin (contas, sync de promoções, promoções nas ofertas automáticas, conversão de links) | `docs/rca/afiliados-awin.md` |
+| Rakuten Advertising (contas, sync de promoções/cupons, promoções nas ofertas automáticas) | `docs/rca/afiliados-rakuten.md` |
 
 ## Mapa de sintomas → onde olhar (atalhos mais usados)
 
@@ -226,6 +227,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Código de acesso do ML "vence toda hora" (~75–95 min), link comprido em massa | `createAffiliateLink` em `src/converters/mercadolivre.js`, `fetchHtml` em `src/converters/productInfoScraper.js` | `diag-ml-vida-codigo.mjs`, `diag-ml-rotacao-cookie.mjs`, `diag-ml-cookie-poisoning.mjs` | credenciais-e-seguranca |
 | Recurso aparece com cadeado / "só no PRO" / 403 `FEATURE_REQUIRES_PRO` | `src/billing/plans.js`, `dashboard/components/pro/ProGate.js` | `scripts/basic-sem-recursos-pro.mjs` (quem ainda guarda marca/botão/variação sem o PRO) | planos-basic-pro |
 | Promoção Awin não chega / não sai / "código de acesso venceu" | `src/integrations/awin/syncService.js`, `src/offerAutomation/awinOffers.js` | `diag-awin.mjs <email> [--awin]` | afiliados-awin |
+| Promoção Rakuten não chega / não sai / "A Rakuten recusou os dados" / oferta sem logo | `src/integrations/rakuten/syncService.js`, `src/offerAutomation/rakutenOffers.js` | `diag-rakuten.mjs <email> [--rakuten]` | afiliados-rakuten |
 | Link de loja da Awin (KaBuM, C&A, tidd.ly…) não converteu / oferta "loja da Awin sem aprovação" | `src/converters/awin.js`, `src/integrations/awin/storeMatcher.js`, `conversionContext.js` | `diag-awin.mjs <email>` (lojas_aprovadas, links guardados) | afiliados-awin |
 | Deploy vermelho | `.github/workflows/deploy.yml`, `scripts/deploy_safe_*.sh` | ver "Pegadinhas" | deploy-e-infra |
 

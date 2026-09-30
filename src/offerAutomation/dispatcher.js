@@ -12,12 +12,20 @@ import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 import { chooseCoupon, renderCouponText, applyCouponToken } from '../core/clientCouponPolicy.js'
 import { AWIN_AUTOMATION_TEMPLATE_KEY, AWIN_PROMOTION_TEMPLATE_BODY, loadAwinOffers } from './awinOffers.js'
 import { enrichAwinOffers as defaultEnrichAwinOffers } from './awinEnrich.js'
+import { loadRakutenOffers } from './rakutenOffers.js'
 
 const PRICE_DIVISOR = 1
 const DEFAULT_AUTOMATION_TEMPLATE_KEY = 'automatico_classico'
 // Origens aceitas. Desconhecida PULA a automação (nunca cai em "shopee"),
 // mesma regra do publicationMode: publicar por engano é irreversível.
-export const AUTOMATION_SOURCES = Object.freeze(['shopee', 'awin'])
+export const AUTOMATION_SOURCES = Object.freeze(['shopee', 'awin', 'rakuten'])
+// Origens de PROMOÇÃO (sem preço, lidas do banco): Awin e Rakuten seguem a
+// mesma regra de envio (docs/rca/afiliados-awin.md, afiliados-rakuten.md).
+export const PROMOTION_SOURCES = Object.freeze(['awin', 'rakuten'])
+
+export function isPromotionSource(source) {
+  return PROMOTION_SOURCES.includes(source)
+}
 
 export function automationSource(automation) {
   const source = automation?.source ?? 'shopee'
@@ -89,11 +97,11 @@ export function automationOfferProduct(offer) {
     title: offer.productName ?? 'Produto Shopee',
     price,
     oldPrice,
-    ...(offer.source === 'awin' ? {
-      source: 'awin',
+    ...(isPromotionSource(offer.source) ? {
+      source: offer.source,
       description: offer.description || '',
       validity: offer.validity || '',
-      awinPromotionId: offer.awinPromotionId ?? null,
+      ...(offer.source === 'awin' ? { awinPromotionId: offer.awinPromotionId ?? null } : { rakutenPromotionId: offer.rakutenPromotionId ?? null }),
       validUntil: offer.validUntil ? new Date(offer.validUntil).toISOString() : null,
     } : {}),
     // Alguns modelos salvos usam a variável editorial `{preçoDoTexto}` em
@@ -171,7 +179,7 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
     })
   }
 
-  if (offer.source === 'awin') {
+  if (isPromotionSource(offer.source)) {
     const lines = [`🏷️ *${offer.productName}*`]
     if (offer.storeName) lines.push(`🏬 ${offer.storeName}`)
     if (offer.description) lines.push('', offer.description)
@@ -263,6 +271,7 @@ export async function runAutomation(automation, {
   sendStoryFn = createAndEnqueueStory,
   instagramRuntimeFn = getInstagramDeliveryRuntime,
   enrichAwinOffersFn = defaultEnrichAwinOffers,
+  now = () => new Date(),
 } = {}) {
   const dbInstance = dbOverride ?? db
   const source = automationSource(automation)
@@ -272,8 +281,8 @@ export async function runAutomation(automation, {
   // Promise. Sem await, `!Promise` é sempre false e o guard era ignorado em
   // remote — o dispatcher seguia pro sendBroadcast e falhava com "Bot não está
   // rodando" a cada tick do cron, floodando log e gastando CPU/IO à toa.
-  // (Promoção Awin não tem foto nem preço para o card do Story — fora da v1.)
-  const instagramDestinations = source === 'awin' ? [] : (automation.instagramDestinations ?? []).map(link => link.destination ?? link).filter(destination => destination?.id && destination.enabled !== false)
+  // (Promoção Awin/Rakuten não tem preço para o card do Story — fora da v1.)
+  const instagramDestinations = isPromotionSource(source) ? [] : (automation.instagramDestinations ?? []).map(link => link.destination ?? link).filter(destination => destination?.id && destination.enabled !== false)
   const whatsappAvailable = automation.destGroupJid ? await isRunningFn(automation.userId) : false
   if (!whatsappAvailable && !instagramDestinations.length) return { skipped: 'bot_not_running' }
 
@@ -299,6 +308,12 @@ export async function runAutomation(automation, {
     try {
       offers = await enrichAwinOffersFn(offers, { db: dbInstance, userId: automation.userId, accountId: automation.awinAccountId })
     } catch { /* oferta sai com o link comprido e sem foto */ }
+  } else if (source === 'rakuten') {
+    // Link e logo já vêm do sync: nada a buscar na hora do envio.
+    const loaded = await loadRakutenOffers({ db: dbInstance, automation, sentItemIds, now: now(), limit: automation.offersPerSend })
+    if (loaded.skipped) return { skipped: loaded.skipped }
+    ;({ offers, rawCount } = loaded)
+    if (!offers.length) return { skipped: 'all_offers_filtered' }
   } else {
     const credRow = await dbInstance.credential.findUnique({
       where: { userId_platform: { userId: automation.userId, platform: 'shopee' } },
@@ -372,7 +387,7 @@ export async function runAutomation(automation, {
   // automação, UMA leitura por EXECUÇÃO — nunca uma por oferta do lote.
   // Falha na carga não aborta o laço: lista vazia = ofertas saem sem cupom.
   let activeCoupons = []
-  if (automation.useCoupons === true && source !== 'awin') {
+  if (automation.useCoupons === true && !isPromotionSource(source)) {
     try {
       activeCoupons = await dbInstance.clientCoupon.findMany({ where: { userId: automation.userId, enabled: true } })
     } catch {

@@ -60,6 +60,7 @@ model User {
   offerAutomations      OfferAutomation[]
   offerAutomationReviewItems OfferAutomationReviewItem[]
   awinAccounts          AwinAccount[]
+  rakutenAccounts       RakutenAccount[]
   clientCoupons         ClientCoupon[]
   offerQueues           OfferQueue[]
   offerQueueItems       OfferQueueItem[]
@@ -882,6 +883,11 @@ model OfferAutomation {
   awinAccountId     String?
   // JSON: ids de anunciante (lojas) escolhidos. "[]" = todas as lojas.
   awinAdvertiserIds String    @default("[]")
+  // "rakuten": promoções já importadas da conta Rakuten Advertising da
+  // cliente (docs/rca/afiliados-rakuten.md). Mesmo desenho da Awin.
+  rakutenAccountId     String?
+  // JSON: ids de anunciante (lojas) escolhidos. "[]" = todas as lojas.
+  rakutenAdvertiserIds String @default("[]")
 
   @@index([userId, enabled])
   @@index([enabled, lastSentAt])
@@ -1759,4 +1765,95 @@ model AwinLink {
   @@unique([accountId, advertiserId, destinationKey])
   @@index([userId])
   @@index([lastUsedAt])
+}
+
+// Contas Rakuten Advertising da cliente (docs/rca/afiliados-rakuten.md).
+// Cada linha é um trio (SID + Client ID + Client Secret) cadastrado pela
+// cliente. Isolamento: toda consulta filtra por userId.
+model RakutenAccount {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label                 String
+  // SID = número do site da cliente na Rakuten (vai como "scope" do token).
+  sid                   String
+  // encryptCredential (AES-256-GCM, "v1:..."). Nunca voltam ao navegador.
+  clientIdEncrypted     String
+  clientIdLast4         String
+  clientSecretEncrypted String
+  clientSecretLast4     String
+  // HMAC-SHA256 do trio: chave do limitador e do cache de token.
+  credentialFingerprint String
+  // pending | ok | invalid_credential | error
+  status                String    @default("pending")
+  statusDetail          String?
+  syncEnabled           Boolean   @default(true)
+  syncIntervalMinutes   Int       @default(60)
+  nextSyncAt            DateTime?
+  lastSyncAt            DateTime?
+  lastSyncStatus        String?
+  lastTestAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  promotions            RakutenPromotion[]
+  syncRuns              RakutenSyncRun[]
+
+  @@unique([userId, sid])
+  @@index([userId])
+  @@index([syncEnabled, status, nextSyncAt])
+}
+
+// Oferta importada do feed da Rakuten (/coupon/1.0, rede Brasil). Dedup por
+// (conta, promotionId = offerid do link). couponCode só quando a loja deu
+// um cupom. logoUrl/storeUrl vêm do cadastro da loja (/v2/advertisers).
+model RakutenPromotion {
+  id             String    @id @default(cuid())
+  userId         String
+  accountId      String
+  account        RakutenAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  promotionId    String
+  advertiserId   String
+  advertiserName String
+  title          String
+  couponCode     String?
+  promotionTypes String    @default("")
+  categories     String    @default("")
+  clickUrl       String
+  networkId      String?
+  logoUrl        String?
+  storeUrl       String?
+  startDate      DateTime?
+  endDate        DateTime?
+  // active | expired
+  status         String    @default("active")
+  lastSeenRunId  String?
+  firstSeenAt    DateTime  @default(now())
+  expiredAt      DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([accountId, promotionId])
+  @@index([userId, status, endDate])
+  @@index([accountId, status])
+}
+
+// Histórico de sincronização por conta Rakuten (o que a cliente vê na tela).
+model RakutenSyncRun {
+  id         String    @id @default(cuid())
+  userId     String
+  accountId  String
+  account    RakutenAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // schedule | manual
+  trigger    String
+  // running | success | partial | failed | invalid_credential | rate_limited
+  status     String
+  pages      Int       @default(0)
+  inserted   Int       @default(0)
+  updated    Int       @default(0)
+  skipped    Int       @default(0)
+  expired    Int       @default(0)
+  errorsJson String    @default("[]")
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([accountId, startedAt])
 }

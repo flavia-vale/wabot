@@ -4,6 +4,7 @@ import { dedupeOffersByProduct, productDedupKey } from './shopeeOffers.js'
 import { automationSource, materializeAutomationOffer, resolveOffers } from './dispatcher.js'
 import { loadAwinOffers } from './awinOffers.js'
 import { enrichAwinOffers } from './awinEnrich.js'
+import { loadRakutenOffers } from './rakutenOffers.js'
 import { REVIEW_STATUS } from './reviewState.js'
 
 const DEFAULT_TTL_MS = 48 * 60 * 60_000
@@ -73,6 +74,12 @@ export async function discoverReviewItems(automation, deps = {}) {
     try {
       offers = await (deps.enrichAwinOffersFn ?? enrichAwinOffers)(offers, { db, userId: automation.userId, accountId: automation.awinAccountId, now })
     } catch { /* entra na fila com o link comprido e sem foto */ }
+  } else if (source === 'rakuten') {
+    // Mesmo caminho da Awin; link e logo já vêm do sync.
+    const loaded = await loadRakutenOffers({ db, automation, sentItemIds, now, limit: searchSize })
+    if (loaded.skipped) return { skipped: loaded.skipped }
+    ;({ offers, rawCount } = loaded)
+    offers = offers.filter(offer => !blocked.has(`${productDedupKey(offer)}:0`)).slice(0, capacity)
   } else {
     ;({ offers, rawCount } = await resolveOffers({ automation: { ...automation, offersPerSend: searchSize, page: searchPage }, sentItemIds, creds, fetchOffersFn: deps.fetchOffersFn }))
   }
@@ -87,7 +94,7 @@ export async function discoverReviewItems(automation, deps = {}) {
     // Só troca a seleção atual depois de encontrar substitutas. Uma página
     // vazia ou uma falha externa nunca apaga o que a cliente já podia revisar.
     if (replacingAwaiting && prepared.length) await tx.offerAutomationReviewItem.updateMany({ where: { automationId: automation.id, userId: automation.userId, status: REVIEW_STATUS.AWAITING }, data: { status: REVIEW_STATUS.REMOVED, reviewedAt: now, reviewedAction: REVIEW_STATUS.REMOVED } })
-    // Promoção Awin vence no endDate: o item some sozinho da fila nessa hora
+    // Promoção Awin/Rakuten vence no endDate: o item some sozinho da fila nessa hora
     // (recoverReviewItems marca "expired"), mesmo antes das 48h.
     if (prepared.length) await tx.offerAutomationReviewItem.createMany({ data: prepared.map(({ validUntil, ...item }, index) => ({ ...item, productSnapshot: JSON.stringify(item.productSnapshot), targetSnapshot, userId: automation.userId, automationId: automation.id, position: (last?.position || 0) + index + 1, expiresAt: earliestExpiry(now.getTime() + (deps.ttlMs || DEFAULT_TTL_MS), validUntil) })) })
     await tx.offerAutomation.update({ where: { id: automation.id }, data: { lastDiscoveryAt: now, ...(replacingAwaiting && prepared.length ? { page: searchPage } : {}) } })
