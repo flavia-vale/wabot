@@ -120,8 +120,7 @@ export default function PlanoPage() {
     setCheckoutError('')
     setCheckoutPlan(planId)
     try {
-      // Mesmo e-mail do Mercado Pago dos dois botões: o campo fica acima de ambos.
-      const data = await api.paymentsCheckout(planId, mpEmail.trim() || undefined)
+      const data = await api.paymentsCheckout(planId)
       if (!data?.checkout_url) throw new Error('Checkout indisponível no momento. Tente novamente ou fale com o suporte.')
       window.location.assign(data.checkout_url)
     } catch (err) {
