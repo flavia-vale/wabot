@@ -414,15 +414,26 @@ sync de hora em hora; (4) reaproveita regras já testadas e "não regredir" da A
   Alternativa mais leve: sync só das lojas que a cliente escolheu na automação
   (em vez de todas as lojas do canal). **Peço OK explícito antes de ligar.**
 
-### 13.4 Perguntas novas para a dona do produto
+### 13.4 Decisões da dona do produto (2026-09-30)
 
-1. **Campanha permanente** (`period = null`): enviar? Sugestão v1: sim, **uma vez
-   por automação** (mesma regra da Awin: os 200 últimos `sentItemIds`), sem
-   "validade" na mensagem.
-2. **Cupons** (`GenericCoupon`/`PersonalCoupon`): ficam fora da v1, como na Awin?
-   Sugestão: sim; entram depois, com modelo próprio (`{cupom}`).
-3. **Produtos com preço** (`/affiliate/products`): fora da v1 (sem ordem, sem
-   vendas, timeout). Voltar a isso só se a dona do produto quiser preço nas ofertas.
+1. **Campanha permanente** (`period = null`): pode sair, **no máximo uma vez a
+   cada 15 dias por automação**, **sem "validade" na mensagem**. Campanha com data
+   de fim segue a regra normal (uma vez por automação, enquanto vale).
+   - Consequência técnica: `sentItemIds` guarda só os últimos 200 ids, **sem data**
+     — não serve para "15 dias". Precisa de registro com data: tabela pequena
+     `OfferAutomationPromoSend (automationId, itemKey, sentAt)` (índice
+     `automationId, itemKey`), gravada só para campanha permanente, com poda
+     de linhas com mais de 15 dias a cada execução (tabela limitada).
+     Candidata é elegível de novo quando `agora - sentAt ≥ 15 dias`.
+   - O modelo `promocao_awin` tem `{validade}`; para permanente a variável fica
+     vazia e some sozinha (limpeza de variável vazia do compositor) — teste
+     garante que não sai "Válida até" nem linha ⏰ vazia.
+   - A regra de 15 dias vale por automação; a dedup cruzada por grupo (janela de
+     120 min) continua valendo por cima.
+2. **Cupons:** fora da v1, como na Awin.
+3. **Produtos com preço** (`/affiliate/products`): fora da v1.
+4. ⏳ **Ainda sem resposta:** OK para reaproveitar o agendador da Awin no sync da
+   Lomadee (REGRA #1, ver 13.3). Nada será ligado sem esse OK.
 
 ### 13.5 O que ainda precisa ser medido (da VPS)
 
@@ -438,7 +449,7 @@ imprime tudo isso em uma saída curta.
 
 1. `scripts/diag-lomadee.mjs` + `docs/rca/afiliados-lomadee.md` com a medição real.
 2. Refatoração: núcleo de promoções neutro (`promotionOffers.js`), Awin idêntica.
-3. Migration (`LomadeeAccount`, `LomadeeCampaign`, `LomadeeSyncRun`,
+3. Migration (`LomadeeAccount`, `LomadeeCampaign`, `LomadeeSyncRun`, `OfferAutomationPromoSend`,
    `OfferAutomation.lomadeeAccountId/lomadeeStoreIds`) + LGPD.
 4. Integração `integrations/lomadee/` + rotas + cartão em Minhas credenciais.
 5. Registro por origem + origem `lomadee` no dispatcher/revisão/rota.
