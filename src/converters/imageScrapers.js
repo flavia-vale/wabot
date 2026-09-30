@@ -4,6 +4,7 @@ import { resolveToCleanProductUrl, fetchFeaturedSocialImage, resolveSocialShareU
 import { fetchMercadoLivreApiImageId } from './productInfoScraper.js'
 import { computeMutationCrop } from '../core/imageMutationCrop.js'
 import { buildInlineThumbnail } from '../core/inlineThumbnail.js'
+import { readMagaluScraperConfig, buildMagaluScraperUrl, takeMagaluScraperQuota } from './magaluScraper.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
 import {
   isMagaluBotWallHtml,
@@ -548,13 +549,37 @@ export function getImageResolverMetrics() {
 // core/previewImageFallbackPolicy.js, que já roda quando este caminho devolve
 // `null`). O muro da Magalu no User-Agent do WhatsApp responde **200**, então
 // sem esta checagem não há como diferenciar.
+// Único caminho que passa pelo Akamai da Magalu (RCA 2026-09-30): serviço de
+// scraping externo, opcional (env) e com teto diário. Falha = `null`, e quem
+// salva a oferta continua sendo o plano B da foto da mensagem de origem.
+async function resolveMagaluImageViaScraper(productUrl, { onDiagnostic } = {}) {
+  const config = readMagaluScraperConfig()
+  if (!config) return null
+  if (!takeMagaluScraperQuota(config)) {
+    recordOperationalSignal('magalu_scraper_quota', { url: productUrl })
+    onDiagnostic?.({ stage: 'scraper_sem_cota', detail: { cap: config.dailyCap } })
+    return null
+  }
+  try {
+    const { html } = await fetchHtml(buildMagaluScraperUrl(config, productUrl), { timeoutMs: IMAGE_HTML_FETCH_TIMEOUT_MS * 3 })
+    if (isMagaluBotWallHtml(html)) {
+      onDiagnostic?.({ stage: 'scraper_bloqueado', detail: { provider: config.provider } })
+      return null
+    }
+    return extractImageFromHtmlLayers(html)
+  } catch (err) {
+    onDiagnostic?.({ stage: 'scraper_falhou', detail: { provider: config.provider, error: err?.message } })
+    return null
+  }
+}
+
 async function resolveMagaluImage(productUrl, { onDiagnostic } = {}) {
   const { html, status } = await fetchHtml(productUrl, { ua: BROWSER_UA }).catch(() => ({ html: null, status: null }))
 
   if (isMagaluBotWallHtml(html) || isMagaluBlockedStatus(status)) {
     recordOperationalSignal('magalu_bot_wall', { url: productUrl, status: status ?? null })
     onDiagnostic?.({ stage: 'loja_bloqueou', detail: { status: status ?? null } })
-    return null
+    return resolveMagaluImageViaScraper(productUrl, { onDiagnostic })
   }
 
   return extractImageFromHtmlLayers(html)
