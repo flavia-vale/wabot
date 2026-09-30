@@ -193,6 +193,9 @@ export const api = {
   // link para o e-mail da conta anterior; o endereço nunca vem para cá.
   sessionBlockedRecover: () => apiFetch('/api/session/blocked-recover', { method: 'POST' }),
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
+  multiNumberWaitlist: () => apiFetch('/api/multi-number/waitlist'),
+  multiNumberWaitlistJoin: (body) => apiFetch('/api/multi-number/waitlist', { method: 'POST', body: JSON.stringify(body) }),
+  multiNumberWaitlistLeave: () => apiFetch('/api/multi-number/waitlist', { method: 'DELETE' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
   sessionQRLatest: () => apiFetch('/api/session/qr-latest'),
