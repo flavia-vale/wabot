@@ -12,6 +12,10 @@
  *   - promoções ativas/vencidas por loja, quantas com cupom e com logo;
  *   - automações que usam a conta (ligadas/desligadas, último envio);
  *   - com --rakuten: os dados ainda valem? quantas ofertas o feed tem agora?
+ *   - conversão de links: lojas aprovadas guardadas (com domínio?), o `id`
+ *     dos links dela e um deep link de exemplo para testar à mão; com
+ *     --rakuten, o formato REAL da lista de lojas aprovadas (Link Locator)
+ *     — mais 1 chamada.
  *
  * Uso (dentro do diretório do ambiente):
  *   cd ~/wabot-staging && node scripts/diag-rakuten.mjs <email> [--rakuten]
@@ -23,6 +27,7 @@ import { createRakutenClient } from '../src/integrations/rakuten/client.js'
 import { testRakutenCredentials } from '../src/integrations/rakuten/accountService.js'
 import { decryptRakutenCreds } from '../src/integrations/rakuten/syncService.js'
 import { extractCouponPage, translateCoupon } from '../src/integrations/rakuten/translate.js'
+import { buildRakutenDeepLink, extractApprovedMerchants } from '../src/integrations/rakuten/storeMatcher.js'
 
 const positional = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
 const [email] = positional
@@ -69,6 +74,18 @@ for (const account of accounts) {
   const automations = await db.offerAutomation.findMany({ where: { userId: user.id, source: 'rakuten', rakutenAccountId: account.id }, select: { id: true, enabled: true, lastSentAt: true, publicationMode: true } })
   for (const item of automations) console.log(`  automação ${item.id} ${item.enabled ? 'ligada' : 'desligada'} ${item.publicationMode} ultimo_envio=${item.lastSentAt?.toISOString() ?? '-'}`)
 
+  // Conversão de links: sem id dos links ou sem loja com domínio, nada converte.
+  const programmes = await db.rakutenProgramme.findMany({ where: { accountId: account.id }, orderBy: { advertiserId: 'asc' } })
+  const withDomain = programmes.filter((row) => JSON.parse(row.domainsJson || '[]').length)
+  console.log(`  conversao: link_id=${account.linkId ?? 'NÃO (sem promoção no sync ainda)'} lojas_aprovadas=${programmes.length} com_dominio=${withDomain.length}`)
+  for (const row of programmes.slice(0, 10)) console.log(`  loja_aprovada ${row.advertiserId} ${row.name} dominios=${row.domainsJson}`)
+  if (account.linkId && withDomain[0]) {
+    // Abrir este link no navegador (NUNCA pelo servidor) deve cair na página
+    // da loja e contar clique para ela: confirma o formato do deep link.
+    const page = withDomain[0].storeUrl || `https://${JSON.parse(withDomain[0].domainsJson)[0]}/`
+    console.log(`  deep_link_exemplo=${buildRakutenDeepLink({ linkId: account.linkId, advertiserId: withDomain[0].advertiserId, destinationUrl: page })}`)
+  }
+
   if (!callRakuten) continue
   const creds = decryptRakutenCreds(account)
   const test = await testRakutenCredentials({ client, creds })
@@ -81,6 +98,14 @@ for (const account of accounts) {
     for (const result of results.filter((r) => r.ok).slice(0, 3)) console.log(`  rakuten: ${result.record.advertiserName} | ${result.record.endDate?.toISOString() ?? '-'} | cupom=${result.record.couponCode ? 'sim' : 'não'}`)
   } catch (error) {
     console.log(`  rakuten: erro=${error.code || error.message}`)
+  }
+  try {
+    const raw = await client.listApprovedMerchants(creds)
+    const merchants = extractApprovedMerchants(raw)
+    console.log(`  rakuten: lojas_aprovadas_lidas=${merchants ? merchants.length : 'FORMATO DESCONHECIDO'} amostra=${merchants?.slice(0, 5).map((m) => `${m.advertiserId}:${m.name}`).join(' | ') || '-'}`)
+    if (!merchants?.length) console.log(`  rakuten: resposta_crua=${String(raw).replace(/\s+/g, ' ').slice(0, 400)}`)
+  } catch (error) {
+    console.log(`  rakuten: lojas_aprovadas erro=${error.code || error.message}`)
   }
 }
 

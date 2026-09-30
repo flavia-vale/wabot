@@ -68,7 +68,14 @@ mínimo, busca de produtos, link curto.
 Rollback: `RAKUTEN_SYNC_ENABLED=false` (para o sync) e desligar as
 automações Rakuten; as tabelas novas podem ficar.
 
-## 4. V2 — conversão de links (só o desenho, igual à fase 2 da Awin)
+## 4. V2 — conversão de links (implementada em 2026-10-01)
+
+> Feito como desenhado abaixo, com duas mudanças: deep link **montado sem
+> chamada** (formato público, sem Deep Links API nem cache no banco) e
+> conflito com a Awin resolvido pela **ordem fixa Awin > Rakuten** (decisão
+> da dona do produto). Regras e hipóteses a medir:
+> `docs/rca/afiliados-rakuten.md` → "Conversão de links pela Rakuten".
+
 
 1. **Lojas aprovadas** 🟡: `GET /linklocator/1.0/getMerchByAppStatus/approved`
    (medido: Netshoes WL `43984`, Cruzeiro Store `54198`) → tabela

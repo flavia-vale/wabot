@@ -26,6 +26,7 @@ const STORE_LABELS = {
   shein: 'SHEIN',
   aliexpress: 'AliExpress',
   awin: 'Awin',
+  rakuten: 'Rakuten',
 }
 
 // --- Shopee: SEM chave aceita, a conversão falha por completo — nenhuma
@@ -190,6 +191,14 @@ export function describeConversionFailure(errorMsg, platform = null) {
       motivo,
       tag: Object.freeze({ cls: 'is-skip', label: 'loja da Awin sem aprovação' }),
       texto: 'Essa oferta tinha um link da Awin de uma loja em que você ainda não foi aprovada. Mandar esse link daria a comissão para outra pessoa, então a oferta não foi enviada. Para receber ofertas dessa loja, inscreva-se no programa dela na Awin: depois da aprovação, ela passa a converter sozinha em até 1 hora.',
+    }
+  }
+
+  if (motivo === CONVERSION_FAILURE.RAKUTEN_STORE_NOT_JOINED) {
+    return {
+      motivo,
+      tag: Object.freeze({ cls: 'is-skip', label: 'loja da Rakuten sem aprovação' }),
+      texto: 'Essa oferta tinha um link da Rakuten de uma loja em que você ainda não foi aprovada. Mandar esse link daria a comissão para outra pessoa, então a oferta não foi enviada. Para receber ofertas dessa loja, inscreva-se no programa dela na Rakuten: depois da aprovação, ela passa a converter sozinha em até 1 hora.',
     }
   }
 

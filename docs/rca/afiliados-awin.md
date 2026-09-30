@@ -231,6 +231,11 @@ Como funciona:
 6. **Deploy:** `src/integrations/awin/` entrou em `WORKER_CODE_PATHS_RE` (o robô
    carrega esses arquivos): mudança ali reinicia o `bot-supervisor`.
 
+**Mesma loja na Awin e na Rakuten (2026-10-01):** sai pela **Awin** (ordem
+fixa `AFFILIATE_NETWORK_PRIORITY` em `src/detector.js`, decisão da dona do
+produto). Awin desligada no grupo/sem conta/sem aprovação → a Rakuten assume.
+Detalhes: `docs/rca/afiliados-rakuten.md`.
+
 ### Oferta espelhada com `tidd.ly` saiu sem foto (RCA 2026-09-30 — não regredir)
 
 Sintoma: ofertas da KaBuM espelhadas com `tidd.ly` corretos, mas sem imagem.

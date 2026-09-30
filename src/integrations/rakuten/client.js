@@ -18,6 +18,8 @@
 // - GET /v2/advertisers/{id} → JSON { advertiser: { id, name, url,
 //   logo_url, network } }. O logo (merchant.linksynergy.com/fs/logo/lg_<id>)
 //   é imagem estática: baixá-lo NÃO conta clique (diferente do clickurl).
+// - GET /linklocator/1.0/getMerchByAppStatus/approved → lojas aprovadas
+//   (plano de 2026-09-30: Netshoes WL 43984, Cruzeiro Store 54198). XML.
 //
 // O token de acesso fica em memória (um por conta, ~1 KB) até 5 min antes
 // de vencer. O segredo nunca vai na URL — URL vai para log de proxy.
@@ -183,7 +185,13 @@ export function createRakutenClient({
     return request(creds, { path: `/v2/advertisers/${String(advertiserId)}` })
   }
 
-  return { verify, listCoupons, getAdvertiser, cachedTokens: () => tokens.size }
+  // Lojas em que a cliente foi APROVADA (Link Locator, XML cru; quem traduz é
+  // storeMatcher.extractApprovedMerchants). Base da conversão de links.
+  async function listApprovedMerchants(creds) {
+    return request(creds, { path: '/linklocator/1.0/getMerchByAppStatus/approved', accept: 'application/xml', parse: 'text' })
+  }
+
+  return { verify, listCoupons, getAdvertiser, listApprovedMerchants, cachedTokens: () => tokens.size }
 }
 
 let defaultClient = null

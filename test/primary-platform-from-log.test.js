@@ -25,5 +25,6 @@ test('com as lojas Awin da cliente, página da loja Awin vira "awin"', () => {
 test('reenvio pós-reinício não passa mais o rótulo cru para a foto', () => {
   const src = readFileSync(new URL('../src/bot-worker.js', import.meta.url), 'utf8')
   assert.doesNotMatch(src, /const primary = \{ platform: row\.platform/)
-  assert.match(src, /platform: primaryPlatformFromLog\(row, awinOfferOptions\(cfg\.credentials\?\.awin\)\)/)
+  // Com a Rakuten (2026-10-01) as opções levam as duas redes.
+  assert.match(src, /platform: primaryPlatformFromLog\(row, \{ \.\.\.awinOfferOptions\(cfg\.credentials\?\.awin\), \.\.\.rakutenOfferOptions\(cfg\.credentials\?\.rakuten\) \}\)/)
 })

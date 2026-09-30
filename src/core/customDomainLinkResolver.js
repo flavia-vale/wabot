@@ -237,9 +237,9 @@ export function hasStoreLink(text, offerOptions = {}) {
  * texto: era exatamente isso que perdia os links do 3º produto em diante numa
  * oferta mista (ver a invariante no topo deste arquivo).
  *
- * `offerOptions.awin`: link de loja da Awin em que a cliente foi aprovada não
- * é "site próprio de grupo" — não é desembrulhado nem contado como loja não
- * suportada (docs/rca/afiliados-awin.md).
+ * `offerOptions.awin`/`.rakuten`: link de loja da rede em que a cliente foi
+ * aprovada não é "site próprio de grupo" — não é desembrulhado nem contado
+ * como loja não suportada (docs/rca/afiliados-awin.md, afiliados-rakuten.md).
  */
 export function findCandidateLinks(text, offerOptions = {}) {
   const cleaned = listUrls(text)
@@ -553,7 +553,10 @@ export async function resolveCustomDomainLinks(text, options = {}) {
   const raw = String(text ?? '')
   if (!raw || !isCustomDomainResolveEnabled()) return { text: raw, resolved: [], failures: [] }
 
-  const offerOptions = options.awin ? { awin: options.awin } : {}
+  // Só as redes de afiliados (Awin, Rakuten) — o resto de `options` é tempo/fetch.
+  const offerOptions = {}
+  if (options.awin) offerOptions.awin = options.awin
+  if (options.rakuten) offerOptions.rakuten = options.rakuten
   const candidates = findCandidateLinks(raw, offerOptions)
   if (!candidates.length) return { text: raw, resolved: [], failures: [] }
 

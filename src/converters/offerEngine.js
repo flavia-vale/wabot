@@ -15,6 +15,7 @@
 
 import { detectLinks } from '../detector.js'
 import { convertLink as defaultConvertLink } from './index.js'
+import { rakutenStorePageUrl } from './rakuten.js'
 import { fetchProductInfo as defaultFetchProductInfo } from './productInfoScraper.js'
 import { describeMissingCredentials, parseCredentialData, validateCredentialData } from '../credentialHealth.js'
 
@@ -106,7 +107,7 @@ export function normalizeConverter(converter) {
     const result = await converter(platform, url, credentials)
     if (!result) return null
     if (typeof result === 'string') return { url: result, warning: null }
-    if (result.url) return { url: result.url, warning: result.warning ?? null, ...(result.awin ? { awin: result.awin } : {}) }
+    if (result.url) return { url: result.url, warning: result.warning ?? null, ...(result.awin ? { awin: result.awin } : {}), ...(result.rakuten ? { rakuten: result.rakuten } : {}) }
     return null
   }
 }
@@ -152,9 +153,10 @@ export async function buildScrapedOffer({
   const platform = platformArg ?? parsedLink?.platform ?? null
 
   let offerUrl = url
-  // Awin: título/preço/foto saem da PÁGINA DA LOJA, nunca do link de clique
-  // (abrir o tidd.ly contaria clique e passaria pelo redirecionador).
+  // Awin/Rakuten: título/preço/foto saem da PÁGINA DA LOJA, nunca do link de
+  // clique (abrir o tidd.ly/click.linksynergy.com contaria clique).
   let awinInfo = null
+  let rakutenInfo = null
   let conversionSuccess = false
   let reasonCode = null
   let reasonMessage = null
@@ -192,6 +194,7 @@ export async function buildScrapedOffer({
         if (conversionResult?.url) {
           offerUrl = conversionResult.url
           awinInfo = conversionResult.awin ?? null
+          rakutenInfo = conversionResult.rakuten ?? null
           conversionSuccess = true
           conversionWarning = conversionResult.warning ?? null
         } else {
@@ -223,15 +226,20 @@ export async function buildScrapedOffer({
   const displayUrl = injectOwnerTagInUrl(url, platform, credentialsMap)
   const displayUrlFor = (finalUrl) => keepOriginalLink ? displayUrl : (finalUrl || offerUrl)
 
-  const scrapeUrl = awinInfo?.destinationUrl || offerUrl
+  const networkInfo = awinInfo || rakutenInfo
+  // Rakuten sem página conhecida (link sem `murl`): não lê nada — o único
+  // endereço seria o de clique.
+  // Rakuten que não converteu: idem, só a página do `murl`
+  // (rakutenStorePageUrl nunca devolve o link de clique).
+  const scrapeUrl = networkInfo?.destinationUrl || (platform === 'rakuten' ? rakutenStorePageUrl(url) : offerUrl)
   try {
-    let info = await fetchProductInfo(scrapeUrl, { mlCredentials, shopeeCredentials, onDiagnostic })
+    let info = scrapeUrl ? await fetchProductInfo(scrapeUrl, { mlCredentials, shopeeCredentials, onDiagnostic }) : null
 
     // Quando o link convertido é short-link (ex.: Shopee/Amazon) pode haver
     // bloqueio de redirect/anti-bot no scrape do convertido, ou o scrape pode
     // trazer título mas não preço. Nesses casos tentamos o original para
     // complementar título/preço sem perder o offerUrl convertido.
-    if (conversionSuccess && !awinInfo && offerUrl !== url && !info?.newPrice) {
+    if (conversionSuccess && !networkInfo && offerUrl !== url && !info?.newPrice) {
       try {
         const fallbackInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials, onDiagnostic })
         if (hasUsefulOfferInfo(fallbackInfo)) {
@@ -263,11 +271,12 @@ export async function buildScrapedOffer({
       conversionWarning,
       conversion: conversionMeta(),
       ...(awinInfo ? { awin: awinInfo } : {}),
+      ...(rakutenInfo ? { rakuten: rakutenInfo } : {}),
     }
   } catch (err) {
     logger.warn?.({ err: err.message, url: offerUrl }, 'Falha ao buscar informações do produto; retornando fallback mínimo')
 
-    if (conversionSuccess && !awinInfo && offerUrl !== url) {
+    if (conversionSuccess && !networkInfo && offerUrl !== url) {
       try {
         const originalInfo = await fetchProductInfo(url, { mlCredentials, shopeeCredentials, onDiagnostic })
         if (hasUsefulOfferInfo(originalInfo)) {
@@ -304,6 +313,7 @@ export async function buildScrapedOffer({
       conversionWarning,
       conversion: conversionMeta(),
       ...(awinInfo ? { awin: awinInfo } : {}),
+      ...(rakutenInfo ? { rakuten: rakutenInfo } : {}),
       scrapeWarning: {
         code: 'SCRAPE_OFFER_FETCH_FAILED',
         message: 'Não foi possível ler as informações do produto agora. Preencha o template manualmente ou tente outro link.',

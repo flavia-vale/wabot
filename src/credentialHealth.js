@@ -31,6 +31,7 @@ const FIELD_LABELS = {
   appSecret: 'o segredo do aplicativo',
   trackingId: 'a identificação de rastreamento',
   awinAccount: 'uma conta Awin (em Minhas credenciais)',
+  rakutenAccount: 'uma conta Rakuten (em Minhas credenciais)',
 }
 
 export function friendlyFieldName(field) {
@@ -274,8 +275,27 @@ function validateAwinContext(data) {
   }
 }
 
+// Rakuten: idem Awin. `data` = contexto de
+// src/integrations/rakuten/conversionContext.js (só existe com conta que já
+// tem o `id` dos links — sem ele, não dá para montar o link).
+function validateRakutenContext(data) {
+  const hasAccount = Boolean(data?.accountsById?.size)
+  const hasStores = Array.isArray(data?.stores) && data.stores.length > 0
+  const configured = hasAccount && hasStores
+  return {
+    platform: 'rakuten',
+    label: 'Rakuten',
+    status: configured ? 'configured' : 'incomplete',
+    configured,
+    missing: hasAccount ? [] : ['rakutenAccount'],
+    invalid: [],
+    warnings: hasAccount && !hasStores ? ['Nenhuma loja aprovada na Rakuten ainda.'] : [],
+  }
+}
+
 export function validateCredentialData(platform, data = {}) {
   if (platform === 'awin') return validateAwinContext(data)
+  if (platform === 'rakuten') return validateRakutenContext(data)
   if (!PLATFORMS.includes(platform)) {
     return {
       platform,

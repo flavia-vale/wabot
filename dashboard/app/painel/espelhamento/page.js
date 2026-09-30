@@ -81,6 +81,8 @@ const ALL_PLATFORMS = [
   // Uma chave para todas as lojas da Awin em que a cliente foi aprovada
   // (docs/rca/afiliados-awin.md). Sem conta Awin, não faz nada.
   { id: 'awin', label: 'Awin' },
+  // Idem Rakuten. Loja aprovada nas duas redes sai pela Awin.
+  { id: 'rakuten', label: 'Rakuten' },
 ]
 
 const NO_LINK_SCOPE_OPTIONS = [

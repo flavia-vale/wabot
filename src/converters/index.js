@@ -5,6 +5,7 @@ import { convert as convertMagalu } from './magazineluiza.js'
 import { convert as convertShein }  from './shein.js'
 import { convert as convertAliExpress } from './aliexpress.js'
 import { convert as convertAwin } from './awin.js'
+import { convert as convertRakuten } from './rakuten.js'
 
 const CONVERTERS = {
   mercadolivre:  convertML,
@@ -16,6 +17,8 @@ const CONVERTERS = {
   // Credencial da Awin não vem da tabela Credential: é o contexto montado por
   // src/integrations/awin/conversionContext.js (contas + lojas aprovadas).
   awin:          convertAwin,
+  // Idem Rakuten: src/integrations/rakuten/conversionContext.js.
+  rakuten:       convertRakuten,
 }
 
 // Normaliza retorno dos converters para `{ url, warning } | null`.

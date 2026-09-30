@@ -442,7 +442,7 @@ model BotConfig {
   user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   delayMin                 Int      @default(5)
   delayMax                 Int      @default(15)
-  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin")
+  platforms                String   @default("shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin,rakuten")
   blockedKeywords          String   @default("")
   welcomeMsg               String   @default("")
   postToStatus             Boolean  @default(false)
@@ -1870,8 +1870,12 @@ model RakutenAccount {
   lastTestAt            DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+  // `id` dos links da cliente na Rakuten (tirado do clickurl das promoções).
+  // Monta o deep link da conversão; null = ainda não deu para saber.
+  linkId                String?
   promotions            RakutenPromotion[]
   syncRuns              RakutenSyncRun[]
+  programmes            RakutenProgramme[]
 
   @@unique([userId, sid])
   @@index([userId])
@@ -1931,4 +1935,25 @@ model RakutenSyncRun {
   finishedAt DateTime?
 
   @@index([accountId, startedAt])
+}
+
+// Lojas da Rakuten em que a cliente foi APROVADA (Link Locator) — base da
+// conversão de links (docs/rca/afiliados-rakuten.md). Atualizada no sync.
+model RakutenProgramme {
+  id            String         @id @default(cuid())
+  userId        String
+  accountId     String
+  account       RakutenAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  advertiserId  String
+  name          String
+  // Site da loja (/v2/advertisers/{id} → url); de onde sai o domínio.
+  storeUrl      String?
+  // Domínios normalizados ("netshoes.com.br"), JSON array.
+  domainsJson   String         @default("[]")
+  lastSeenRunId String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([accountId, advertiserId])
+  @@index([userId])
 }

@@ -12,6 +12,8 @@ import { resolveShopeeShortLink } from '../../converters/shopee.js'
 import { AWIN_NOT_JOINED_ERROR } from '../../converters/awin.js'
 import { DONO_DO_LINK } from '../../converters/pastedLinkOwnership.js'
 import { awinOfferOptions, loadAwinConversionContext } from '../../integrations/awin/conversionContext.js'
+import { RAKUTEN_NOT_JOINED_ERROR } from '../../converters/rakuten.js'
+import { loadRakutenConversionContext, rakutenOfferOptions } from '../../integrations/rakuten/conversionContext.js'
 import {
   buildScrapedOffer,
   buildCredentialsMap,
@@ -138,6 +140,19 @@ export async function linkConversionRoutes(app, opts = {}) {
       return null
     }
   }
+  // Idem Rakuten (null sem conta Rakuten pronta).
+  const loadRakutenContext = opts.loadRakutenContext ?? ((userId) => loadRakutenConversionContext(userId))
+  async function rakutenContextFor(userId) {
+    try {
+      return await loadRakutenContext(userId)
+    } catch (err) {
+      app.log.warn({ err: err?.message }, 'Falha ao carregar contas Rakuten; seguindo sem conversão Rakuten')
+      return null
+    }
+  }
+  // Redes de afiliados da cliente para o detector (Awin antes da Rakuten).
+  const networkOptions = (awinContext, rakutenContext) => ({ ...awinOfferOptions(awinContext), ...rakutenOfferOptions(rakutenContext) })
+  const NETWORK_PLATFORMS = new Set(['awin', 'rakuten'])
   const rateState = opts.rateState ?? new Map()
   const getNow = opts.now ?? (() => Date.now())
   const operational = resolveOperationalOptions(opts)
@@ -174,7 +189,10 @@ export async function linkConversionRoutes(app, opts = {}) {
     // aprovada. Só entra quando o link não é de uma das lojas fixas.
     const awinContext = await awinContextFor(userId)
     if (awinContext) credentialsMap.awin = awinContext
-    const pastedPlatform = detectLinks(url, awinOfferOptions(awinContext))[0]?.platform
+    const rakutenContext = await rakutenContextFor(userId)
+    if (rakutenContext) credentialsMap.rakuten = rakutenContext
+    const pastedPlatform = detectLinks(url, networkOptions(awinContext, rakutenContext))[0]?.platform
+    const pastedNetwork = NETWORK_PLATFORMS.has(pastedPlatform) ? pastedPlatform : null
 
     // TEMPORÁRIO (2026-06): o painel "Criar oferta" exige que o usuário cole o
     // PRÓPRIO link de afiliado e NÃO devolve mais link convertido
@@ -188,7 +206,7 @@ export async function linkConversionRoutes(app, opts = {}) {
     const infoDiagnostics = []
     const offer = await buildScrapedOffer({
       url,
-      ...(pastedPlatform === 'awin' ? { platform: 'awin' } : {}),
+      ...(pastedNetwork ? { platform: pastedNetwork } : {}),
       credentialsMap,
       keepOriginalLink: true,
       convertLink,
@@ -213,10 +231,10 @@ export async function linkConversionRoutes(app, opts = {}) {
     // disso (`shopeeApiSourceUrl` em productInfoScraper.js); o da foto não,
     // e era exatamente essa assimetria que fazia a oferta chegar com título e
     // preço e SEM imagem (RCA 2026-09-16).
-    const platform = pastedPlatform === 'awin'
-      ? 'awin'
-      : detectLinks(offer.finalUrl || url)[0]?.platform || detectLinks(url)[0]?.platform
-    const imageSourceUrl = offer.awin?.destinationUrl || pickOfferImageSourceUrl({
+    const platform = pastedNetwork
+      || detectLinks(offer.finalUrl || url)[0]?.platform || detectLinks(url)[0]?.platform
+    const networkInfo = offer.awin || offer.rakuten || null
+    const imageSourceUrl = networkInfo?.destinationUrl || pickOfferImageSourceUrl({
       platform,
       // Ordem IGUAL à de `shopeeApiSourceUrl` (título/preço): `finalUrl`
       // primeiro preserva byte a byte o comportamento das demais lojas; a
@@ -256,7 +274,7 @@ export async function linkConversionRoutes(app, opts = {}) {
       // painel não exibir status de "link convertido" enquanto o modo durar.
       // Awin: link colado que já era dela fica; página de loja crua ou link de
       // outra pessoa sai com o link DELA (sem isso a venda não seria dela).
-      offerUrl: offer.awin && !offer.awin.own ? offer.offerUrl : (offer.displayUrl || url),
+      offerUrl: networkInfo && !networkInfo.own ? offer.offerUrl : (offer.displayUrl || url),
       conversionWarning: null,
       conversion: null,
       imageUrl,
@@ -320,11 +338,13 @@ export async function linkConversionRoutes(app, opts = {}) {
       }
 
       const awinContext = await awinContextFor(userId)
-      const links = detectLinks(text, awinOfferOptions(awinContext))
+      const rakutenContext = await rakutenContextFor(userId)
+      const links = detectLinks(text, networkOptions(awinContext, rakutenContext))
       if (!links.length) {
+        const redes = [awinContext && 'na Awin', rakutenContext && 'na Rakuten'].filter(Boolean).join(' ou ')
         return reply.code(400).send({
-          error: awinContext
-            ? 'Não encontramos links compatíveis. Cole links da Amazon, Mercado Livre, Shopee, Magazine Luiza ou das lojas em que você foi aprovada na Awin.'
+          error: redes
+            ? `Não encontramos links compatíveis. Cole links da Amazon, Mercado Livre, Shopee, Magazine Luiza ou das lojas em que você foi aprovada ${redes}.`
             : 'Não encontramos links compatíveis. Cole links da Amazon, Mercado Livre, Shopee ou Magazine Luiza.',
           code: 'LINK_CONVERSION_NO_LINKS',
         })
@@ -342,6 +362,7 @@ export async function linkConversionRoutes(app, opts = {}) {
       const credentials = await findCredentials(userId)
       const credentialsMap = attachCredentialPatchHandler(buildCredentialsMap(credentials), userId, app.log)
       if (awinContext) credentialsMap.awin = awinContext
+      if (rakutenContext) credentialsMap.rakuten = rakutenContext
       const deadlineAt = Date.now() + operational.requestDeadlineMs
 
       const results = []
@@ -399,8 +420,8 @@ export async function linkConversionRoutes(app, opts = {}) {
             continue
           }
 
-          // Awin: o próprio conversor já sabe se o link era dela.
-          if (link.platform === 'awin' && conversionResult.awin?.own) {
+          // Awin/Rakuten: o próprio conversor já sabe se o link era dela.
+          if ((link.platform === 'awin' && conversionResult.awin?.own) || (link.platform === 'rakuten' && conversionResult.rakuten?.own)) {
             results.push({
               index,
               platform: link.platform,
@@ -415,7 +436,7 @@ export async function linkConversionRoutes(app, opts = {}) {
             continue
           }
 
-          const ownership = link.platform === 'awin' ? DONO_DO_LINK.OUTRO : await detectOwnership({
+          const ownership = NETWORK_PLATFORMS.has(link.platform) ? DONO_DO_LINK.OUTRO : await detectOwnership({
             platform: link.platform,
             originalUrl: link.url,
             convertedUrl: conversionResult.url,
@@ -441,6 +462,10 @@ export async function linkConversionRoutes(app, opts = {}) {
         } catch (err) {
           if (err?.awinReason === AWIN_NOT_JOINED_ERROR) {
             results.push(buildErrorResult(index, link, validation, 'AWIN_STORE_NOT_JOINED', 'Esse link da Awin é de uma loja em que você ainda não foi aprovada. Inscreva-se no programa dela na Awin; depois da aprovação, ela passa a converter sozinha em até 1 hora.'))
+            continue
+          }
+          if (err?.rakutenReason === RAKUTEN_NOT_JOINED_ERROR) {
+            results.push(buildErrorResult(index, link, validation, 'RAKUTEN_STORE_NOT_JOINED', 'Esse link é de uma loja da Rakuten em que você ainda não foi aprovada. Inscreva-se no programa dela na Rakuten; depois da aprovação, ela passa a converter sozinha em até 1 hora.'))
             continue
           }
           results.push(buildErrorResult(index, link, validation, 'CONVERSION_FAILED', `Falha na conversão de ${validation.label}: ${err.message}`))

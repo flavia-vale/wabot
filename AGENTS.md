@@ -195,7 +195,7 @@ arquivo (nova versão), não editar tela a tela.
 | membros dos grupos, painel Membros, rodízio de convites (Link Inteligente) | `docs/rca/grupos-membros.md` |
 | vários números por conta, número reserva, rodízio de envio entre números, lista de espera | `docs/rca/multi-numero.md` |
 | Awin (contas, sync de promoções, promoções nas ofertas automáticas, conversão de links) | `docs/rca/afiliados-awin.md` |
-| Rakuten Advertising (contas, sync de promoções/cupons, promoções nas ofertas automáticas) | `docs/rca/afiliados-rakuten.md` |
+| Rakuten Advertising (contas, sync de promoções/cupons, promoções nas ofertas automáticas, conversão de links, ordem Awin > Rakuten) | `docs/rca/afiliados-rakuten.md` |
 
 ## Mapa de sintomas → onde olhar (atalhos mais usados)
 
@@ -233,6 +233,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Promoção Rakuten não chega / não sai / "A Rakuten recusou os dados" / oferta sem logo | `src/integrations/rakuten/syncService.js`, `src/offerAutomation/rakutenOffers.js` | `diag-rakuten.mjs <email> [--rakuten]` | afiliados-rakuten |
 | Oferta automática da Awin (promoção) saiu **sem foto** / só texto | `src/offerAutomation/awinEnrich.js`, `src/converters/kabumImage.js` | `diag-awin.mjs <email>` (`com_foto`, `sem_foto loja=`) | afiliados-awin |
 | Link de loja da Awin (KaBuM, C&A, tidd.ly…) não converteu / oferta "loja da Awin sem aprovação" | `src/converters/awin.js`, `src/integrations/awin/storeMatcher.js`, `conversionContext.js` | `diag-awin.mjs <email>` (lojas_aprovadas, links guardados) | afiliados-awin |
+| Link de loja da Rakuten (Netshoes, `click.linksynergy.com`…) não converteu / "loja da Rakuten sem aprovação" / saiu pela Awin em vez da Rakuten | `src/converters/rakuten.js`, `src/integrations/rakuten/storeMatcher.js`, `AFFILIATE_NETWORK_PRIORITY` em `src/detector.js` | `diag-rakuten.mjs <email> --rakuten` (link_id, lojas_aprovadas) | afiliados-rakuten |
 | Deploy vermelho | `.github/workflows/deploy.yml`, `scripts/deploy_safe_*.sh` | ver "Pegadinhas" | deploy-e-infra |
 
 Se o sintoma não está no mapa: ler o tema no índice, depois `Grep` pelo texto

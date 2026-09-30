@@ -1,9 +1,9 @@
 # afiliados-rakuten — regras e decisões
 
 > Integração com a rede de afiliados **Rakuten Advertising** (2026-09-30).
-> **v1 = só ofertas automáticas**: promoções e cupons do feed de ofertas da
+> **v1 = ofertas automáticas**: promoções e cupons do feed de ofertas da
 > Rakuten como ORIGEM das ofertas automáticas, no mesmo desenho da Awin
-> (`docs/rca/afiliados-awin.md`). **v2 (depois) = conversão de links.**
+> (`docs/rca/afiliados-awin.md`). **v2 = conversão de links (2026-10-01, seção abaixo).**
 > Plano completo e impactos: `docs/plano-integracao-rakuten.md`.
 
 ## Onde mora cada peça
@@ -20,6 +20,7 @@
 | Origem "rakuten" nas ofertas automáticas | `src/offerAutomation/rakutenOffers.js` + `dispatcher.js` (`PROMOTION_SOURCES`), `reviewDiscoveryService.js`, `reviewDeliveryService.js`, `src/api/routes/offerAutomation.js` |
 | Tela (Minhas credenciais) | `dashboard/components/painel/RakutenCredentialsCard.js`, textos em `dashboard/lib/painel/rakutenCopy.js` |
 | Tela (ofertas automáticas) | `dashboard/app/painel/ofertas-automaticas/page.js`, `dashboard/lib/offerAutomationForm.js` |
+| Conversão de links: lojas aprovadas, reconhecer, deep link | `src/integrations/rakuten/storeMatcher.js`, `conversionContext.js`, `src/converters/rakuten.js`; prioridade entre redes em `src/detector.js` |
 | Diagnóstico (só leitura) | `scripts/diag-rakuten.mjs <email> [--rakuten]` |
 | Tabelas | `RakutenAccount`, `RakutenPromotion`, `RakutenSyncRun` + `OfferAutomation.rakutenAccountId/rakutenAdvertiserIds` (migration `20260930150000_rakuten_promotions`) |
 
@@ -91,16 +92,82 @@ trava `canUseOfferAutomations`).
 Nada novo em processo/fila/Redis. Um `setInterval` + `unref` a mais na
 `api`. Pico: 1 página do feed (até 500 ofertas, ~1 MB de XML) + cache de
 token (~1 KB por conta). Estimativa **< 5 MB de pico, ~0 em repouso**.
-Nenhum código do robô mudou (`bot-worker`, `core/`, `converters/`), MAS
-`prisma/schema.prisma` mudou e está em `WORKER_CODE_PATHS_RE`
-(`scripts/deploy_safe_*.sh`): **o deploy desta versão reinicia o
-`bot-supervisor` e reconecta TODAS as sessões — anunciar antes.** Mudanças
-futuras só em `src/integrations/rakuten/` ou `src/offerAutomation/` não
-reiniciam o robô (o cron e o sync rodam na `api`).
+`prisma/schema.prisma` está em `WORKER_CODE_PATHS_RE`
+(`scripts/deploy_safe_*.sh`): **deploy com migration reinicia o
+`bot-supervisor` e reconecta TODAS as sessões — anunciar antes.** Desde a
+conversão de links (2026-10-01) **`src/integrations/rakuten/` também está
+nessa lista** (o robô carrega o reconhecimento de lojas): mudança ali
+reinicia o supervisor. Só `src/offerAutomation/` continua sem reiniciar.
+
+## Conversão de links pela Rakuten (2026-10-01 — não regredir)
+
+Decisões da dona do produto (2026-09-30): **mesma regra da Awin** (espelhamento,
+"Converter links", "Criar oferta"; loja não aprovada → link apagado; chave
+"Rakuten" por grupo) e **ordem fixa quando a loja está em mais de uma rede:
+Awin > Rakuten > Lomadee** (Lomadee entra quando tiver conversão). OK de
+memória dado: poucos KB por cliente, sem processo novo, reinício do supervisor
+no deploy.
+
+Como funciona:
+
+1. **Lojas aprovadas:** o sync de hora em hora lê o Link Locator
+   (`/linklocator/1.0/getMerchByAppStatus/approved`, XML) → `RakutenProgramme`.
+   Domínio = site da loja (`/v2/advertisers/{id}` → `url`; guardado, só loja
+   nova gasta chamada, até 30 por hora). Loja que sai da lista é apagada;
+   falha ou resposta estranha nessa chamada não apaga nada nem derruba as
+   promoções.
+2. **`id` dos links dela** (`RakutenAccount.linkId`): tirado do `clickurl` das
+   promoções do feed (`id=`). **Sem promoção nenhuma no feed, a conta não tem
+   `linkId` e NÃO converte** (o link não teria como ser dela).
+3. **Reconhecer** (`src/integrations/rakuten/storeMatcher.js`): link é
+   `rakuten` quando o domínio é de loja aprovada ou é
+   `click.linksynergy.com` que já é dela, ou de outra pessoa **com `murl`**
+   (página) de loja aprovada. `fs-bin/click` de outra pessoa (sem página) é
+   apagado: **nunca abrimos link da Rakuten** — ao contrário do `tidd.ly`, o
+   `click.linksynergy.com` já conta o clique ao ser aberto.
+4. **Prioridade entre redes** (`AFFILIATE_NETWORK_PRIORITY` em
+   `src/detector.js`): lojas fixas (Shopee, ML, Amazon, Magalu, SHEIN,
+   AliExpress) sempre ganham; depois Awin; depois Rakuten. Awin desligada no
+   grupo, sem conta Awin ou loja não aprovada na Awin → a Rakuten assume. Link
+   de rastreio fica na rede dele (link da Rakuten nunca vira Awin).
+5. **Converter** (`src/converters/rakuten.js`): deep link
+   `click.linksynergy.com/deeplink?id=<dela>&mid=<loja>&murl=<página>`,
+   **montado sem chamada** (sem cota, sem espera, sem cache no banco). Página
+   limpa: saem `utm_*`, `gclid`… e `ranMID/ranEAID/ranSiteID/siteID` (o site
+   de quem clicou antes). Link que já é dela fica. Loja da página OU do `mid`
+   (igual à Awin).
+6. **Nunca abrir o link de clique:** foto (`fetchProductImage('rakuten')`) e
+   "Criar oferta" (`offerEngine`) usam só a página do `murl`; sem ela, sem foto.
+   **Prévia automática do WhatsApp:** sem `linkPreview` no envio, o Baileys
+   abre o 1º link do texto pelo servidor — mesmo com prévia "desligada".
+   `buildMonitoredMessagePayload` agora manda `linkPreview: null` quando esse
+   1º link é da Rakuten (a oferta sai como texto, sem card). Isso também fecha
+   o risco residual das ofertas automáticas sem logo (seção de Regras).
+7. **Motivo no painel:** `skip:no_valid_conversions:rakuten_store_not_joined`
+   ("loja da Rakuten sem aprovação"); no "Converter links", o código
+   `RAKUTEN_STORE_NOT_JOINED`.
+8. **Chave por grupo:** `rakuten` entrou em `BotConfig.platforms` (migration
+   `20261001120000_rakuten_link_conversion` liga para todas as configs). Grupo
+   com lista própria (`allowedPlatforms`) não ganhou sozinho — liga na tela
+   Espelhamento.
+
+⚠️ **Hipóteses a medir antes de ir para produção** (`diag-rakuten.mjs
+<email> --rakuten`): (a) formato do XML do Link Locator (`<ns1:return>` com
+`<ns1:mid>`/`<ns1:name>`; se vier `FORMATO DESCONHECIDO`, o parser precisa de
+ajuste e nada converte — nada quebra); (b) o `id` do `clickurl` é o mesmo do
+deep link: abrir o `deep_link_exemplo` **no navegador** (nunca pelo servidor)
+e conferir que cai na loja e o clique aparece no painel da Rakuten.
+
+Fora (v1): link de uma rede virando link de OUTRA rede (ex.: `tidd.ly` de
+concorrente para loja que ela só tem na Rakuten → apagado, como hoje); link da
+Rakuten escrito sem `https://`; loja da Rakuten com domínio de rastreio próprio
+(fora de `linksynergy.com`); o desembrulho de "site próprio de grupo" ainda
+pode abrir `click.linksynergy.com` de quem NÃO tem conta Rakuten (vale medir
+antes de bloquear: hoje isso também recupera links da AliExpress).
 
 ## Diagnóstico
 
 ```bash
 node scripts/diag-rakuten.mjs <email>            # só banco
-node scripts/diag-rakuten.mjs <email> --rakuten  # + token e 1ª página do feed
+node scripts/diag-rakuten.mjs <email> --rakuten  # + token, 1ª página do feed e lojas aprovadas (Link Locator)
 ```

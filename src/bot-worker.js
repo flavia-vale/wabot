@@ -25,6 +25,8 @@ import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecaus
 import { convertLink } from './converters/index.js'
 import { AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
 import { awinOfferOptions, loadAwinConversionContext, refineAwinOptionsForText } from './integrations/awin/conversionContext.js'
+import { RAKUTEN_NOT_JOINED_ERROR } from './converters/rakuten.js'
+import { loadRakutenConversionContext, rakutenOfferOptions } from './integrations/rakuten/conversionContext.js'
 import { primaryPlatformFromLog } from './core/primaryPlatformFromLog.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
@@ -1198,6 +1200,14 @@ async function loadConfig() {
   } catch (err) {
     logger.warn({ err: err?.message }, 'Falha ao carregar contas Awin; links dessas lojas seguem sem conversão até a próxima carga')
   }
+  // Rakuten: mesmo caminho (lojas aprovadas + id dos links dela). Falhou →
+  // segue sem Rakuten. docs/rca/afiliados-rakuten.md.
+  try {
+    const rakuten = await loadRakutenConversionContext(userId, { db })
+    if (rakuten) credentials.rakuten = rakuten
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao carregar contas Rakuten; links dessas lojas seguem sem conversão até a próxima carga')
+  }
 
   Object.defineProperty(credentials, '__onCredentialPatch', {
     enumerable: false,
@@ -1228,7 +1238,7 @@ async function loadConfig() {
   const botConfig = {
     delayMin: 5,
     delayMax: 15,
-    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin',
+    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin,rakuten',
     blockedKeywords: '',
     welcomeMsg: '',
     postToStatus: false,
@@ -3394,7 +3404,7 @@ async function reprocessRestartFailures() {
       // `row.platform` é o rótulo de TODAS as lojas ("shopee+shopee"); a foto
       // precisa da loja do link principal (core/primaryPlatformFromLog.js).
       const primary = {
-        platform: primaryPlatformFromLog(row, awinOfferOptions(cfg.credentials?.awin)),
+        platform: primaryPlatformFromLog(row, { ...awinOfferOptions(cfg.credentials?.awin), ...rakutenOfferOptions(cfg.credentials?.rakuten) }),
         url: row.originalUrl,
         converted: row.convertedUrl,
       }
@@ -4381,16 +4391,26 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // dessas lojas é apagado como sempre, sem travar o resto da oferta.
       // Mesmo conjunto em todas as pontas: desembrulho, sanitizador, detector
       // e rede de segurança final. docs/rca/afiliados-awin.md.
-      const awinLigadaNoGrupo = String(monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms || '')
-        .split(',').map(p => p.trim()).includes('awin')
+      const lojasLigadasNoGrupo = String(monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms || '')
+        .split(',').map(p => p.trim())
+      const awinLigadaNoGrupo = lojasLigadasNoGrupo.includes('awin')
+      // Rakuten: mesma regra. Loja aprovada nas duas redes sai pela Awin
+      // (ordem fixa do detector); Awin desligada no grupo → sai pela Rakuten.
+      const rakutenBase = lojasLigadasNoGrupo.includes('rakuten') ? rakutenOfferOptions(cfg.credentials.rakuten) : {}
       const awinBase = awinLigadaNoGrupo ? awinOfferOptions(cfg.credentials.awin) : {}
       const { text: textoParaEspelhar, failures: falhasDeDominioProprio } =
-        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id, offerOptions: awinBase })
+        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id, offerOptions: { ...awinBase, ...rakutenBase } })
       // tidd.ly só diz a loja quando aberto: de loja não aprovada, é apagado
-      // pelo sanitizador (e o resto da oferta segue).
-      const awinOptions = awinLigadaNoGrupo && textoParaEspelhar
-        ? await refineAwinOptionsForText(textoParaEspelhar, cfg.credentials.awin).catch(() => ({}))
-        : {}
+      // pelo sanitizador (e o resto da oferta segue). Link da Rakuten nunca é
+      // aberto (conta clique): decide-se pelo `murl`, sem rede.
+      // O nome ficou `awinOptions` (os testes de fonte ancoram nele), mas leva
+      // as DUAS redes: { awin, rakuten }.
+      const awinOptions = {
+        ...(awinLigadaNoGrupo && textoParaEspelhar
+          ? await refineAwinOptionsForText(textoParaEspelhar, cfg.credentials.awin).catch(() => ({}))
+          : {}),
+        ...rakutenBase,
+      }
       const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar, awinOptions) : ''
       // P1-4: links que o sanitizador acabou de APAGAR por não serem de loja
       // suportada (nem convite de grupo, nem rede social). Lido do texto de
@@ -4815,7 +4835,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             logger.warn({ platform, url, err: err.message }, 'Link não convertido — oferta não será publicada com o link de origem')
             const failureReason = err.awinReason === AWIN_NOT_JOINED_ERROR
               ? CONVERSION_FAILURE.AWIN_STORE_NOT_JOINED
-              : CONVERSION_FAILURE.CONVERSION_FAILED
+              : err.rakutenReason === RAKUTEN_NOT_JOINED_ERROR
+                ? CONVERSION_FAILURE.RAKUTEN_STORE_NOT_JOINED
+                : CONVERSION_FAILURE.CONVERSION_FAILED
             return { platform, url, failureReason }
           }
           // Motivo pré-classificado pelo converter (feature
