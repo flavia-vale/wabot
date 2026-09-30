@@ -456,3 +456,72 @@ imprime tudo isso em uma saída curta.
 6. Tela ("De onde vêm as ofertas?": Shopee | Awin | Lomadee) + interruptor
    `LOMADEE_OFFERS_ENABLED` + PRO na automação.
 7. Índice do AGENTS.md (1 linha) e atalhos no mapa de sintomas.
+
+### 13.7 Medição real da Etapa 0 — campanhas (2026-09-30, conta da Flavia)
+
+Feita com `scripts/diag-lomadee.mjs` (somente leitura). **A oferta da Up4you
+apareceu e bate com o que a dona do produto mostrou:**
+
+- `name` = "Malas, mochilas e acessórios com até 60% OFF"; `type = Offer`,
+  `offerType = Url`; `url` = página da coleção; `period.endAt =
+  2026-10-13T02:30:00Z` (= **12/10 às 23:30 em Brasília** — converter para
+  America/Sao_Paulo, como `formatAwinValidity`); `status = onTime`.
+- **Link por canal:** `channels[].shortUrls[0]`. No canal **Cuponito**
+  (CouponSite) é `https://lmdee.link/OVzB900HqJgQ` — exatamente o link que veio
+  no exemplo; no outro canal (Grupo de Ofertas Fafaciane) é outro link. Ou seja:
+  **o link depende do canal escolhido na conta** (confirma o campo "ID do
+  canal" e a escolha do canal por lista). **Não precisa do encurtador** para
+  campanha: o link curto já vem pronto.
+- `mediaKit.banners[]` traz **imagem** da campanha (CDN da Lomadee) — foto
+  disponível sem raspar a loja (melhor que a Awin). ⚠️ a usar como `imageUrl`
+  após medir tamanho/qualidade.
+- Campanhas **Oferta ativas: 317** (16 páginas de 20). **Agendadas: 0** (não
+  precisa tratar `scheduled` na v1, mas o filtro fica). Cerca de 10–15% são
+  **permanentes** (`period = null`; uma loja tem 9 de 10 permanentes) — a regra
+  de 15 dias (13.4) vale bastante.
+- `description` veio **vazia** na maioria; o título às vezes já leva o preço
+  ("… (Por R$ 65,55)"). A mensagem usa só título + loja + validade + link (+ foto).
+- `offerType = Spreadsheet` tem `url` de **planilha CSV** (não é página de
+  loja) → o sync filtra `offerType = Url`.
+- **Nome da loja** vem só como `organizationId`; o nome sai de `GET
+  /affiliate/brands` (138 lojas, 7 páginas), guardado no sync.
+- **Sobreposição com a Shopee:** a **Shopee aparece como loja da Lomadee**
+  ("Mega Oferta Full…", `shopee.com.br/oficial`). Publicar essas campanhas por
+  aqui duplica a origem Shopee. ⚠️ **Decisão pendente** (13.8, item 1).
+
+**Latência e como listar (importante para o sync)**
+- Canais ~0,5 s; lojas ~1–3 s; campanhas ~1–7 s **com filtro**.
+- Listar campanhas **sem nenhum filtro travou** (6 tentativas × 45 s sem
+  resposta) e depois respondeu em 3,7 s: **comportamento instável**. Nunca
+  chamar sem filtro.
+- Filtros que responderam sempre: `name` (a busca "Up4you" achou 5), `name=%`
+  (curinga: 1898 campanhas no total; com `types=Offer&status=onTime` → 317),
+  `organizationIds` repetido (várias lojas na mesma chamada), `types`, `status`.
+  `name=%` **não está documentado** — usar como recurso do sync **somente se a
+  Lomadee confirmar**; o caminho seguro é sincronizar **por lotes de lojas**
+  (`organizationIds`, ~20 por chamada) só das lojas com vínculo no canal.
+- Custo de um sync completo: ~16 chamadas de campanhas + 7 de lojas ≈ 23
+  chamadas (limite 60/min por chave) e ~1–2 min. Timeout do sync: 60 s por
+  chamada, com nova tentativa em 15 min (regra 13.3).
+- Produtos: 1 chamada com `limit=1` respondeu em 0,3 s via Node (o `curl` deste
+  ambiente havia travado); segue **fora da v1**.
+
+### 13.8 Novas decisões para a dona do produto
+
+1. **Campanhas da Shopee que a Lomadee lista:** excluir (a Shopee já é origem
+   própria, com preço e foto) ou deixar entrar? Recomendo **excluir** as lojas que
+   já têm origem/afiliado próprio (Shopee, e conferir ML/Amazon/AliExpress/Magalu).
+2. **Foto:** usar `mediaKit.banners[0]` da campanha como foto do card (banner pode
+   ser largo, não quadrado)? Recomendo testar 3–5 campanhas no staging e decidir
+   pelo resultado; sem banner, sai só texto.
+3. **Uma conta = um canal:** cada `LomadeeAccount` guarda **um** canal escolhido
+   (a lista sai da API). Cliente com dois canais cadastra duas contas? Recomendo sim.
+
+### 13.9 Como rodar o diagnóstico na VPS
+
+```
+cd ~/wabot-staging && LOMADEE_KEY='SUA_CHAVE' node scripts/diag-lomadee.mjs --nome="Up4you"
+```
+
+Só leitura, ~10 chamadas, não grava nada e não imprime a chave. Depois de
+rodar, limpar do histórico do shell (`history -d` da linha) ou usar `read -s`.
