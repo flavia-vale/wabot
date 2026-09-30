@@ -101,13 +101,20 @@ test('a retirada do índice pegou exatamente as rotas de grade mortas (15 cidade
   // ?aff= dos links de indicação. Pedir indexação de um redirect não faz
   // sentido — o Google segue e indexa outra coisa, ou nada.
   const REDIRECIONAMENTOS_FORA = ['/cadastro']
+  // Página de divulgação do Link Inteligente (30/09/2026): fora do índice POR
+  // DECISÃO (indexar exige 3 links internos vindos de páginas já no Google e
+  // pede reindexação). Quando virar indexável, sai daqui.
+  const PAGINAS_FORA_POR_DECISAO = ['/link-inteligente']
+  for (const rota of PAGINAS_FORA_POR_DECISAO) {
+    assert.ok(fora.some((r) => r.path === rota), `${rota} deveria estar fora do índice`)
+  }
   for (const rota of REDIRECIONAMENTOS_FORA) {
     assert.ok(
       fora.some((r) => r.path === rota),
       `${rota} é um redirecionamento e precisa continuar fora do índice`
     )
   }
-  assert.equal(fora.length, CIDADES_FORA + NICHOS_FORA + DORES_FORA + REDIRECIONAMENTOS_FORA.length)
+  assert.equal(fora.length, CIDADES_FORA + NICHOS_FORA + DORES_FORA + REDIRECIONAMENTOS_FORA.length + PAGINAS_FORA_POR_DECISAO.length)
 })
 
 test('a página de nicho que US1 reescreveu continua indexável (não desfazer entrega na mesma rodada)', () => {

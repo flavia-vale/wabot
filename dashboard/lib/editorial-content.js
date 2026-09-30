@@ -157,6 +157,7 @@ export const EDITORIAL_DATES = {
   // LPs de dor: o bloco de recursos (Features.jsx) passou a dizer 6 lojas em 18/09.
   '/bot-ofertas-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
   '/automatizar-divulgacao-em-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
+  '/link-inteligente': { publishedAt: '2026-09-30', updatedAt: '2026-09-30' },
   '/escalar-grupos-ofertas-sem-equipe': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
   '/postar-em-varios-grupos-whatsapp-ao-mesmo-tempo': { publishedAt: '2026-05-15', updatedAt: '2026-09-29' },
   '/padronizar-divulgacao-afiliado-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-27' },
