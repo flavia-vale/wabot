@@ -32,10 +32,6 @@ export const CHARGE_STATUS_DETAILS = Object.freeze({
   pending_waiting_payment: { texto: 'Esperando a cliente pagar (Pix/boleto gerado).', dono: CHARGE_ACTION_OWNERS.CLIENTE },
   pending_waiting_transfer: { texto: 'Esperando a transferência da cliente.', dono: CHARGE_ACTION_OWNERS.CLIENTE },
   cc_rejected_high_risk: { texto: 'O Mercado Pago barrou por suspeita. NÃO foi o banco dela. Ação nossa: não deixar repetir tentativa idêntica; ação dela: pagar do aparelho e cartão que costuma usar.', dono: CHARGE_ACTION_OWNERS.NOSSA },
-  // Mesmo antifraude, código sem o prefixo `cc_` — sai em Pix e saldo do MP,
-  // que não são cartão. Fora da lista, virava "motivo desconhecido" e o
-  // diagnóstico contava 13 recusas por suspeita quando eram 17 (2026-09-30).
-  rejected_high_risk: { texto: 'O Mercado Pago barrou por suspeita (fora do cartão: Pix ou saldo). NÃO foi o banco dela. Ação dela: pagar do aparelho e da conta que costuma usar.', dono: CHARGE_ACTION_OWNERS.NOSSA },
   cc_rejected_duplicated_payment: { texto: 'O Mercado Pago entendeu como cobrança repetida. Ação nossa: espaçar as tentativas.', dono: CHARGE_ACTION_OWNERS.NOSSA },
   cc_rejected_insufficient_amount: { texto: 'Sem limite ou saldo no cartão. Ação dela: usar outro cartão.', dono: CHARGE_ACTION_OWNERS.CLIENTE },
   cc_rejected_call_for_authorize: { texto: 'O banco quer que ela autorize a compra. Ação dela: ligar para o banco e liberar.', dono: CHARGE_ACTION_OWNERS.CLIENTE },
