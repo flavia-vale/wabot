@@ -6308,6 +6308,24 @@ const handleMessage = async msg => {
     return
   }
 
+  // Convite do grupo (Link Inteligente). Só admin consegue: o WhatsApp recusa
+  // para quem não é. Devolve só o código — nunca loga o código completo.
+  if (msg?.type === 'group:inviteCode') {
+    if (!activeSock) {
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, error: 'Bot não conectado' })
+      return
+    }
+    try {
+      const code = await activeSock.groupInviteCode(msg.jid)
+      if (!code) throw new Error('O WhatsApp não devolveu o convite (o robô precisa ser admin do grupo)')
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, data: { code } })
+    } catch (err) {
+      logger.warn({ err: err?.message, jid: msg.jid }, 'group:inviteCode falhou')
+      sendIpc({ type: 'group:inviteCodeResult', requestId: msg.requestId, error: err.message })
+    }
+    return
+  }
+
   if (msg?.type === 'channel:metadata') {
     if (!activeSock) {
       sendIpc({ type: 'channel:metadataResult', requestId: msg.requestId, error: 'Bot não conectado' })

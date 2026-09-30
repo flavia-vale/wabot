@@ -195,6 +195,9 @@ export const refreshWaGroups = userId =>
 export const channelMetadata = (userId, { jid, inviteCode }) =>
   requestWithTimeout(userId, 'channel:metadata', { jid, inviteCode }, 15000, 'Timeout ao buscar metadata do canal')
 
+export const groupInviteCode = (userId, jid) =>
+  requestWithTimeout(userId, 'group:inviteCode', { jid }, 15000, 'Timeout ao buscar convite do grupo')
+
 export const followChannelImmediate = (userId, jid) =>
   requestWithTimeout(userId, 'channel:follow', { jid }, 15000, 'Timeout ao seguir canal')
 

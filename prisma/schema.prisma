@@ -43,6 +43,7 @@ model User {
   waSession             WaSession?
   waConnectionEvents    WaConnectionEvent[]
   groups                Group[]
+  smartLinks            SmartLink[]
   groupTargets          GroupTarget[]
   credentials           Credential[]
   payments              Payment[]
@@ -224,6 +225,7 @@ model Group {
   channelThrottle       ChannelThrottle?
   channelSnapshots      ChannelSnapshot[]
   memberSamples         GroupMemberSample[]
+  smartLinkGroups       SmartLinkGroup[]
   probeEvidences        ProbeEvidence[]
 
   instagramMirrorTargets InstagramMirrorDestination[]
@@ -998,6 +1000,53 @@ model GroupMemberSample {
   sampledAt DateTime @default(now())
 
   @@index([groupId, sampledAt])
+}
+
+// Link Inteligente: um endereço público (/g/<slug>) que redireciona para o
+// convite do grupo MAIS VAZIO entre os cadastrados (rodízio). Ver
+// docs/rca/grupos-membros.md.
+model SmartLink {
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  slug         String           @unique
+  enabled      Boolean          @default(true)
+  capPerGroup  Int              @default(1000)
+  groups       SmartLinkGroup[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([userId])
+}
+
+model SmartLinkGroup {
+  id          String               @id @default(cuid())
+  smartLinkId String
+  smartLink   SmartLink            @relation(fields: [smartLinkId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  // Código do convite (parte final de chat.whatsapp.com/<código>). Nulo = sem
+  // convite válido; o grupo fica fora do rodízio.
+  inviteCode  String?
+  enabled     Boolean              @default(true)
+  dailyClicks SmartLinkDailyClick[]
+  createdAt   DateTime             @default(now())
+
+  @@unique([smartLinkId, groupId])
+  @@index([groupId])
+}
+
+// Cliques por grupo por dia (fuso de São Paulo). Contador, não um registro por
+// clique: o link é divulgado em muitos lugares e o volume pode ser grande.
+model SmartLinkDailyClick {
+  id               String         @id @default(cuid())
+  smartLinkGroupId String
+  smartLinkGroup   SmartLinkGroup @relation(fields: [smartLinkGroupId], references: [id], onDelete: Cascade)
+  day              String
+  clicks           Int            @default(0)
+
+  @@unique([smartLinkGroupId, day])
 }
 
 model Destination {

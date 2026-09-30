@@ -20,6 +20,7 @@ export const FEATURE_CODES = Object.freeze({
   COPY_VARIATION: 'copy_variation',
   SHOPEE_SALES: 'shopee_sales',
   GROUP_MEMBERS: 'group_members',
+  SMART_LINKS: 'smart_links',
   // Feature 017 (arquitetura multicanal de entrega). Nunca reaproveitar
   // `channels` — esse código já significa Canal do WhatsApp (`@newsletter`),
   // um conceito diferente (FR-046, AGENTS.md "Vocabulário").
@@ -71,6 +72,9 @@ export function getPlanEntitlements(userOrPlan = {}, { now = new Date() } = {}) 
     // Painel de membros dos grupos (2026-09-30): PRO por enquanto; a intenção é
     // migrar para o plano Escala (múltiplas sessões) — ver docs/rca/grupos-membros.md.
     canUseGroupMembers: hasProLikeAccess,
+    // Link Inteligente (rodízio de convites): PRO por enquanto; migra para o
+    // plano Escala junto das múltiplas sessões (docs/rca/grupos-membros.md).
+    canUseSmartLinks: hasProLikeAccess,
     // Instagram nunca é herdado pelo Trial nem pelo Pro. Só o plano superior.
     canUseInstagramStories: hasPremiumAccess,
     // Feature 017 (arquitetura multicanal de entrega, D2): o multicanal
@@ -82,6 +86,10 @@ export function getPlanEntitlements(userOrPlan = {}, { now = new Date() } = {}) 
     // specs/017-multicanal-telegram-instagram/plan.md, "Questões em aberto".
     canUseMultiNetwork: hasPremiumAccess,
   }
+}
+
+export function canUseSmartLinks(userOrPlan = {}, options = {}) {
+  return getPlanEntitlements(userOrPlan, options).canUseSmartLinks
 }
 
 export function canUseGroupMembers(userOrPlan = {}, options = {}) {
@@ -265,6 +273,7 @@ export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
     [FEATURE_CODES.WATERMARK]: 'A marca d\'água nas ofertas está disponível no Trial ativo e no plano Pro.',
     [FEATURE_CODES.CHANNEL_BUTTON]: 'O botão "Ver canal" está disponível no Trial ativo e no plano Pro.',
     [FEATURE_CODES.COPY_VARIATION]: 'A variação do texto está disponível no Trial ativo e no plano Pro.',
+    [FEATURE_CODES.SMART_LINKS]: 'O Link Inteligente (rodízio de convites) está disponível no Trial ativo e no plano Pro.',
     [FEATURE_CODES.GROUP_MEMBERS]: 'O painel de membros dos grupos está disponível no Trial ativo e no plano Pro.',
     [FEATURE_CODES.SHOPEE_SALES]: 'O painel de vendas e comissão da Shopee está disponível no Trial ativo e no plano Pro.',
   }
