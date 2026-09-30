@@ -65,6 +65,9 @@ export function extractProgrammes(body) {
       advertiserId,
       name: String(item.name ?? '').trim().slice(0, 200) || `Loja ${advertiserId}`,
       displayUrl: typeof item.displayUrl === 'string' ? item.displayUrl.slice(0, 500) : null,
+      // Logo da loja: última camada da foto das promoções (a oferta nunca sai
+      // só com texto — RCA 2026-09-30).
+      logoUrl: /^https:\/\/[^\s]{4,500}$/i.test(String(item.logoUrl ?? '')) ? String(item.logoUrl) : null,
       domains,
     })
   }

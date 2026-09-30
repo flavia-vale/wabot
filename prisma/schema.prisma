@@ -1703,10 +1703,12 @@ model AwinPromotion {
   lastSeenRunId  String?
   // Preenchidos só na hora do PRIMEIRO envio (docs/rca/afiliados-awin.md):
   // link curto do gerador oficial da Awin e foto lida da página da loja.
-  // enrichedAt marca a tentativa — falhou, só tenta de novo depois de 24h.
+  // enrichedAt marca a tentativa do link curto — falhou, tenta de novo em 24h.
   shortUrl       String?
   imageUrl       String?
   enrichedAt     DateTime?
+  // Última tentativa de FOTO (separada: foto é tentada de novo em 1h).
+  imageTriedAt   DateTime?
   firstSeenAt    DateTime  @default(now())
   expiredAt      DateTime?
   updatedAt      DateTime  @updatedAt
@@ -1749,6 +1751,8 @@ model AwinProgramme {
   advertiserId   Int
   name           String
   displayUrl     String?
+  // Logo da loja (programmes.logoUrl): foto de último recurso das promoções.
+  logoUrl        String?
   // Domínios normalizados ("kabum.com.br", "kabum.com"), JSON array.
   domainsJson    String      @default("[]")
   lastSeenRunId  String?

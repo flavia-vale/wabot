@@ -82,7 +82,9 @@ function fakeClient(response = { url: 'https://www.awin1.com/cread.php?x=1', sho
 
 test('lojas da Awin: domínios da resposta real viram base sem "*." nem "www."', () => {
   const [kabum, cea, puma] = extractProgrammes(PROGRAMMES)
-  assert.deepEqual(kabum, { advertiserId: 17729, name: 'Kabum BR', displayUrl: 'https://www.kabum.com.br/', domains: ['kabum.com', 'kabum.com.br'] })
+  assert.deepEqual(kabum, { advertiserId: 17729, name: 'Kabum BR', displayUrl: 'https://www.kabum.com.br/', logoUrl: null, domains: ['kabum.com', 'kabum.com.br'] })
+  assert.equal(extractProgrammes([{ id: 1, name: 'X', logoUrl: 'https://ui.awin.com/images/upload/merchant/profile/17729.png' }])[0].logoUrl, 'https://ui.awin.com/images/upload/merchant/profile/17729.png')
+  assert.equal(extractProgrammes([{ id: 1, name: 'X', logoUrl: 'javascript:alert(1)' }])[0].logoUrl, null)
   assert.deepEqual(cea.domains, ['cea.com', 'cea.com.br'])
   assert.deepEqual(puma.domains, ['br.puma.com'])
   assert.equal(normalizeStoreDomain('https://tidd.ly/x'), null)
