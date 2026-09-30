@@ -23,7 +23,9 @@ test('os dois descartes silenciosos de origem monitorada agora deixam rastro no 
   // processSendJob, que é a revalidação de destino no dequeue — outro assunto).
   const start = worker.indexOf('const shouldTrackSkipped = Boolean(monitorGroup)')
   assert.notEqual(start, -1, 'processIncomingMessage não encontrado')
-  const trecho = worker.slice(start, start + 9000)
+  // Janela ampliada de 9000 para 12000 em 29/09/2026 (P1-4 acrescentou o
+  // registro de loja não suportada logo depois do sanitizador).
+  const trecho = worker.slice(start, start + 12000)
 
   assert.match(
     trecho,

@@ -367,6 +367,24 @@ TODAS as sessões — anunciar antes). Ver "código novo não carregado pelos bo
 Teste: `test/magalu-imagem-oferta.test.js` (muro reproduzido por servidor
 local, sem tocar a loja).
 
+## Magalu sem foto, parte 2: scraper externo (2026-09-30)
+
+Medido na VPS e fora dela: `magazineluiza.com.br` devolve **403** (1.083 bytes)
+para WhatsApp e navegador — o Akamai barra o servidor por inteiro, então nenhum
+fetch direto pega a foto. Oferta de texto + link sem foto na origem saía sem imagem.
+
+**Correção:** `src/converters/magaluScraper.js` + `resolveMagaluImageViaScraper`
+(`imageScrapers.js`). Só roda quando a loja bloqueia, **desligado por padrão**:
+`MAGALU_SCRAPER_KEY` (+ `MAGALU_SCRAPER_PROVIDER=zenrows|scrapedo`,
+`MAGALU_SCRAPER_DAILY_CAP`, default 100/dia por processo). Cota esgotada →
+sinal `ops_magalu_scraper_quota` e volta ao plano B. Mudar env exige
+`pm2 delete` + `start`; em modo `remote`, `pm2 restart bot-supervisor --update-env`.
+
+**Não regredir:** sem chave, nada muda; o scraper nunca roda sem passar pelo
+teto diário; falha do scraper devolve `null` (plano B), nunca banner de marca.
+**Ainda não validado com chave real** — testar antes de promover para `main`:
+`curl` do provedor com a URL da Magalu e conferir `og:image`.
+
 ## Foto do card saindo como SELO no meio de um fundo borrado (RCA 2026-09-18)
 
 Cliente mandou print: card de tênis (Magalu, `magazinevoce.com.br`) com a foto

@@ -19,6 +19,53 @@ export const TEMPLATE_OPTIONS = [
 
 🛒 Compre aqui 👉 {link}`,
   },
+  {
+    key: 'moda',
+    name: 'Moda',
+    preview: `👗 *Achadinho de moda: {produto}*
+
+🏷️ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+🛒 Garanta o seu 👉 {link}`,
+  },
+  {
+    key: 'casa',
+    name: 'Casa',
+    preview: `🏠 *Para deixar a casa ainda melhor: {produto}*
+
+💰 De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+👉 Veja a oferta: {link}`,
+  },
+  {
+    key: 'tech',
+    name: 'Tech',
+    preview: `🔌 *Achado tech: {produto}*
+
+⚡ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+{rating} | {vendas}
+
+👉 Confira aqui: {link}`,
+  },
+  {
+    key: 'bebe',
+    name: 'Bebê',
+    preview: `🧸 *Achadinho para o bebê: {produto}*
+
+💛 De ~{preço_de}~ por *{preço}* (*{desconto}*)
+
+🛒 Aproveite aqui 👉 {link}`,
+  },
+  {
+    key: 'beleza',
+    name: 'Beleza',
+    preview: `💄 *Achadinho de beleza: {produto}*
+
+✨ De ~{preço_de}~ por *{preço}* (*{desconto}*)
+{rating} | {vendas}
+
+🛒 Quero o meu 👉 {link}`,
+  },
 ]
 
 export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
@@ -37,6 +84,8 @@ export const OFFER_TEMPLATE_VARIABLE_GROUPS = [
       { token: '{loja}', label: 'Loja/plataforma', example: 'Shopee' },
       { token: '{preçoDoTexto}', label: 'Preço escrito na oferta', example: 'De R$ 129,90 por R$ 89,90' },
       { token: '{cupom}', label: 'Cupom de desconto', example: '🎟️ Use o cupom BEMVINDO10 — de R$ 300,00 por R$ 270,00 com o cupom' },
+      { token: '{descrição}', label: 'Descrição da promoção (Awin)', example: 'Até 40% OFF em notebooks selecionados' },
+      { token: '{validade}', label: 'Validade da promoção (Awin)', example: 'Válida até 29/09 às 23:59' },
     ],
   },
   {
@@ -224,7 +273,7 @@ export function showCouponStandIn(text) {
   return String(text ?? '').replace(/\{cupom\}/g, COUPON_PREVIEW_STAND_IN)
 }
 
-export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '', textPrice = '', keepCouponToken = false } = {}) {
+export function applyTemplateVariables(body, { title = '', price = '', oldPrice = '', link = '', discount = '', rating = '', sales = '', storeName = '', textPrice = '', description = '', validity = '', keepCouponToken = false } = {}) {
   let preparedBody = String(body ?? '').replace(SENTINELS_RE, '')
   // specs/017-client-coupon-catalog (US4, FR-019): {linhaDeCupom} saiu do
   // produto — a linha é SEMPRE removida, mesmo em template salvo antes da
@@ -250,6 +299,9 @@ export function applyTemplateVariables(body, { title = '', price = '', oldPrice 
     .replace(/\{loja\}/g, markValue(storeName))
     .replace(/\{linhaDeCupom\}/g, markValue(''))
     .replace(/\{preçoDoTexto\}/g, markValue(textPrice))
+    // Promoções Awin (sem preço): vazias em qualquer outra oferta, então somem.
+    .replace(/\{descrição\}/g, markValue(description))
+    .replace(/\{validade\}/g, markValue(validity))
   if (oldPrice) {
     result = result.replace(/\{preço_de\}/g, markValue(oldPrice))
   } else {
@@ -301,6 +353,8 @@ export function buildMobileOfferText({
       sales: normalized.sales,
       storeName: normalized.storeName,
       textPrice: product?.textPrice,
+      description: product?.description,
+      validity: product?.validity,
       keepCouponToken,
     })
     lines = (preserveAutomationPlaceholders ? bodyText : stripAutomationTemplatePlaceholders(bodyText)).split('\n')

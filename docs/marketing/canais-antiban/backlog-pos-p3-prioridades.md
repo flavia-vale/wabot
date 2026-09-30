@@ -6,12 +6,32 @@ Sim: a campanha Canais + Preservação já tem páginas, blog, diagnóstico, che
 
 | Prioridade | Tema | Status | Por que importa |
 |---|---|---|---|
-| P0 | QA em staging + correções antes de tráfego | Pendente | Evita divulgar página com erro visual, CTA quebrado ou expectativa desalinhada. |
-| P1 | Medição real + CRM/funil | Parcial | Eventos e UTMs foram definidos, mas ainda precisam ser acompanhados em dashboard/CRM. |
-| P2 | Execução da distribuição P3 | Pendente operacional | Posts e roteiros existem, mas ainda precisam virar criativos publicados. |
+| P0 | QA em staging + correções antes de tráfego | QA automático feito (29/09) · falta aprovação visual na 3006 | Evita divulgar página com erro visual, CTA quebrado ou expectativa desalinhada. |
+| P1 | Medição real + CRM/funil | Feito no código (29/09) · dado real só após deploy | Eventos e UTMs foram definidos, mas ainda precisam ser acompanhados em dashboard/CRM. |
+| P2 | Execução da distribuição P3 | 8 criativos prontos (29/09) · publicar e vídeos pendentes | Posts e roteiros existem, mas ainda precisam virar criativos publicados. |
 | P3 | Provas comerciais e autoridade | Pendente operacional | Aumenta confiança e reduz dependência de promessa textual. |
 | P4 | SEO pós-indexação e CRO | Pendente de dados | Só deve começar depois de impressões/cliques suficientes. |
 | P5 | Produto/onboarding alinhado à promessa | Pendente de validação | Evita fricção entre campanha, cadastro e experiência real no dashboard. |
+
+## Status da execução (29/09/2026)
+
+| Item | Status | Onde |
+|---|---|---|
+| P0 · 8 rotas respondem (3 antigas redirecionam 308 para o endereço novo, UTM preservada) | ✅ build local + Playwright 390px | `test/campanha-canais-qa.test.js` |
+| P0 · todo CTA vai para rota existente, sem redirect; cadastro com `utm_campaign=canais-preservacao` | ✅ | idem |
+| P0 · copy sem "100%"/"não bane"/"anti-ban garantido" fora de negação | ✅ | idem |
+| P0 · mock do painel rotulado "Ilustração · dados de exemplo" | ✅ corrigido | `dashboard/app/bot-canais-whatsapp/page.js` |
+| P0 · jargão interno visível ("Ferramentas P1", "Decisão P2", "Próximas páginas P2", "Captura leve") | ✅ corrigido | landing, páginas de decisão, checklist |
+| P0 · mobile 390px: sem rolagem lateral, CTAs ≥ 40px de altura, sem erro de JS | ✅ (tabela comparativa rola dentro do próprio quadro) | QA do PR |
+| P0 · aprovação visual/copy na porta 3006 | ⏳ dona do produto | `http://178.105.54.0:3006` |
+| P1 · `diagnostic_result_viewed`/`_form_submitted`/`_cta_clicked` eram recusados pela API (400) | ✅ corrigido | `src/analytics.js` |
+| P1 · `diagnostic_score_band`, `risk_score_band`, `segmento` chegam ao `signup_created` | ✅ corrigido | `dashboard/lib/marketing-attribution.js`, `src/api/routes/auth.js` |
+| P1 · UTM do post que trouxe a pessoa (`entry_utm_*`) em todo evento público e no cadastro | ✅ | `src/domain/signup/entryUtm.js` |
+| P1 · cada página de decisão manda a própria página no `utm_content` do cadastro (`p2_signup_<página>`) | ✅ | `_preservationDecisionPages.js` |
+| P1 · visão de funil no admin | ✅ | `/admin/marketing-growth` → "Campanha Canais + Preservação" (`GET /api/admin/marketing/campanha-canais`) |
+| P1 · relatório semanal | ✅ | `node scripts/diag-funil-antiban.mjs` (read-only, padrão 7 dias, máx. 90) |
+| P2 · 8 posts em criativos finais (copy por rede, hashtags, alt text, UTM, capa SVG 1080×1080) | ✅ | [`criativos/`](./criativos/README.md) |
+| P2 · publicar/agendar os 8 posts e produzir os 3 vídeos | ⏳ dona do produto | checklist em `criativos/README.md` |
 
 ## P0 — Validação obrigatória em staging antes de divulgar
 

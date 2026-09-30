@@ -339,7 +339,7 @@ test('kill-switch: CUSTOM_DOMAIN_LINK_RESOLVE=false desliga sem tocar no texto',
 test('guarda estrutural: o desembrulho roda ANTES do sanitizador no bot-worker', () => {
   const fonte = readFileSync(join(here, '..', 'src', 'bot-worker.js'), 'utf8')
   const posResolve = fonte.indexOf('unwrapCustomDomainOfferLinks(text,')
-  const posSanitize = fonte.indexOf('sanitizeInviteLinks(textoParaEspelhar)')
+  const posSanitize = fonte.indexOf('sanitizeInviteLinks(textoParaEspelhar')
   assert.ok(posResolve > 0, 'o desembrulho precisa estar ligado no pipeline')
   assert.ok(posSanitize > 0, 'o sanitizador precisa consumir o texto desembrulhado')
   // Invertido, o sanitizador apaga a URL de domínio próprio antes de alguém
@@ -354,9 +354,18 @@ test('guarda: o motivo "loja não suportada" é decidido ANTES do sanitizador', 
   // encaminhamento que você configurou" — culpando a configuração dela por um
   // problema de cobertura de loja, e mandando mexer no lugar errado.
   const fonte = readFileSync(join(here, '..', 'src', 'bot-worker.js'), 'utf8')
+  // P1-4 (29/09/2026): a lista de candidatos passou a ser calculada UMA vez,
+  // antes da política, porque também alimenta a contagem agregada de loja não
+  // suportada e o descarte `skip:link_removed`. A regra continua a mesma: texto
+  // de ANTES do sanitizador.
   assert.match(
     fonte,
-    /const hadUnsupportedStoreUrl = findCandidateLinks\(textoParaEspelhar\)\.length > 0/,
+    /const linksDeLojaNaoSuportada = textoParaEspelhar \? findCandidateLinks\(textoParaEspelhar(?:, awinOptions)?\) : \[\]/,
+    'o motivo precisa olhar o texto de antes do sanitizador',
+  )
+  assert.match(
+    fonte,
+    /const hadUnsupportedStoreUrl = linksDeLojaNaoSuportada\.length > 0/,
     'o motivo precisa olhar o texto de antes do sanitizador',
   )
   assert.match(

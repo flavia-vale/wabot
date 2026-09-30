@@ -99,7 +99,7 @@ function Nav({ registerHref }) {
  * PRODUCT_LIMITATIONS — e carrega a preservação como "intervalo controlado",
  * sem o jargão da casa ("cadência", "Preservação Avançada"). */
 
-export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowLabel = '7 dias grátis, sem cartão', headlineOverride, subOverride, heroStyle }) {
+export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowLabel = '7 dias grátis, sem cartão', headlineOverride, subOverride, heroStyle, publicCounter = null }) {
   const heroPrimaryHref = buildRegisterHref({ source: 'landing', campaign: 'home-hero', content: 'hero-primary' })
   const navRegisterHref = buildRegisterHref({ source: 'landing', campaign: 'home-nav', content: 'nav-primary' })
   const headline = headlineOverride ?? (tone === 'direto'
@@ -111,8 +111,9 @@ export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowL
   // 23/09/2026: a PRIMEIRA frase de corpo define a marca, nos três tons. Em
   // três rodadas de medição o ChatGPT leu "Espelha Grupos" como expressão
   // genérica, não como nome de produto, porque nada abria dizendo o que a
-  // marca É. A frase leva os dois modos com o limite exato do automático:
-  // busca sozinho SÓ na Shopee e SÓ no plano Pro (o Basic não tem).
+  // marca É. A frase leva os três modelos com o limite exato do automático:
+  // busca sozinho SÓ na Shopee e SÓ no plano Pro (o Basic não tem). Desde
+  // 29/09/2026 é a MESMA frase da ficha técnica, de /quem-somos e do llms.txt.
   const sub = subOverride ?? (tone === 'direto'
     ? `${BRAND_DEFINITION_PT} Posta no seu grupo com intervalo controlado.`
     : tone === 'animado'
@@ -145,6 +146,7 @@ export function Hero({ tone, primaryCtaLabel = 'Testar 7 dias grátis', eyebrowL
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Sem cartão para testar</div>
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Configura em 4 minutos</div>
             <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> Cancela quando quiser</div>
+            {publicCounter ? <div style={s.trustItem} className="landing-trust-item"><Icon name="check" size={16} /> {publicCounter.label}</div> : null}
           </div>
         </div>
 

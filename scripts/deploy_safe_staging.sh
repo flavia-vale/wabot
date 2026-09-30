@@ -431,14 +431,15 @@ REVISION_AFTER_SYNC="$(git rev-parse HEAD 2>/dev/null || true)"
 # Deliberadamente DE FORA (alcançados só pelo caminho de e-mail, e o worker só
 # os usa para o aviso interno de número repetido — texto velho ali não muda
 # nada para a cliente): src/email/, src/domain/painel/whatsappSafety.js,
-# src/tutorialVideo.js, src/leadNurture/unsubscribeToken.js.
+# src/domain/painel/trialDecision.js, trialNotice.js e pricePerOffer.js (só o aviso
+# do dia 5 no próprio número), src/tutorialVideo.js, src/leadNurture/unsubscribeToken.js.
 #
 # Guarda: test/deploy-worker-code-paths.test.js calcula o que o bot-worker e o
 # supervisor de fato importam e falha se um arquivo novo não estiver nem aqui
 # nem na lista de exceções. Foi assim que 33 arquivos carregados pelo worker
 # (entre eles src/detector.js e src/messageDedup.js) ficaram anos de fora sem
 # ninguém notar: correção de bot chegava ao disco e não valia nos bots.
-WORKER_CODE_PATHS_RE='^(src/bot-worker\.js|src/supervisor/|src/core/|src/converters/|src/monitored[A-Za-z]*\.js|src/message[A-Za-z]*\.js|src/send[A-Za-z]*\.js|src/credential[A-Za-z]*\.js|src/detector\.js|src/smartDelay\.js|src/forwardingPolicy\.js|src/conversionDiagnostics\.js|src/waConnectionTelemetry\.js|src/workerMetadata\.js|src/paths\.js|src/manager\.js|src/db\.js|src/logger\.js|src/analytics\.js|src/errorTaxonomy\.js|src/observability/|src/billing/|src/jobs/|src/events/|src/domain/session/|src/instagram/mirroring/|src/offerQueue/sourceTag\.js|prisma/schema\.prisma|package-lock\.json|patches/)'
+WORKER_CODE_PATHS_RE='^(src/bot-worker\.js|src/supervisor/|src/core/|src/delivery/|src/deliveryOutbox/|src/converters/|src/monitored[A-Za-z]*\.js|src/message[A-Za-z]*\.js|src/send[A-Za-z]*\.js|src/credential[A-Za-z]*\.js|src/detector\.js|src/smartDelay\.js|src/forwardingPolicy\.js|src/conversionDiagnostics\.js|src/waConnectionTelemetry\.js|src/workerMetadata\.js|src/paths\.js|src/manager\.js|src/db\.js|src/logger\.js|src/analytics\.js|src/errorTaxonomy\.js|src/observability/|src/billing/|src/jobs/|src/events/|src/domain/session/|src/instagram/mirroring/|src/offerQueue/sourceTag\.js|src/integrations/awin/|prisma/schema\.prisma|package-lock\.json|patches/)'
 
 SUPERVISOR_APP_NAME="${SUPERVISOR_APP:-bot-supervisor-staging}"
 STALE_WORKER_TOLERANCE_SEC="${STALE_WORKER_TOLERANCE_SEC:-60}"

@@ -10,6 +10,12 @@ export const ATTRIBUTION_QUERY_KEYS = [
   'ref',
   'conversion_prompt_id',
   'conversion_prompt_variant',
+  // Campanha Canais + Preservação: faixa do diagnóstico/calculadora e perfil da
+  // operação. Vinham na URL do /login e eram descartados aqui — o cadastro
+  // nunca sabia de qual faixa de risco a pessoa veio (P1, 2026-09-29).
+  'diagnostic_score_band',
+  'risk_score_band',
+  'segmento',
 ]
 
 const SAFE_VALUE_RE = /[^\p{L}\p{N}._~:@/-]/gu
@@ -189,4 +195,67 @@ export function internalContentHref(href, queryString = '') {
   const query = String(queryString ?? '').replace(/^[?&]+/, '')
   if (!query) return alvo
   return alvo.includes('?') ? `${alvo}&${query}` : `${alvo}?${query}`
+}
+
+// ---------------------------------------------------------------------------
+// UTM da ENTRADA (2026-09-29, P1 da campanha Canais + Preservação).
+//
+// Os CTAs internos não carregam querystring (regra "página nova nunca nasce
+// órfã") e o cadastro recebe a UTM DA PÁGINA (`utm_source=seo`). A UTM do link
+// que trouxe a pessoa (post do Instagram, por exemplo) só existia no cookie de
+// primeiro toque, saneado. Todo evento público persistido passa a levar
+// `entry_utm_*`, para o funil da campanha separar página e post de origem.
+//
+// MESMA regra de `src/domain/signup/entryUtm.js` (o backend não importa daqui);
+// `test/campanha-canais-funil.test.js` compara as duas.
+// ---------------------------------------------------------------------------
+export const ENTRY_UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content']
+const ENTRY_STOP_KEYS = '(?:utm_[a-z]+|fbclid|gclid|gbraid|wbraid|ref|source|aff|mode|email)'
+
+function cleanEntryValue(value, max = 64) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, max)
+}
+
+export function parseEntryUtm(landing) {
+  const raw = String(landing ?? '').slice(0, 500)
+  const out = {}
+  if (!raw) return out
+
+  const q = raw.indexOf('?')
+  if (q !== -1) {
+    const params = new URLSearchParams(raw.slice(q + 1))
+    for (const key of ENTRY_UTM_KEYS) {
+      const value = cleanEntryValue(params.get(key))
+      if (value) out[`entry_${key}`] = value
+    }
+    return out
+  }
+
+  for (const key of ENTRY_UTM_KEYS) {
+    const match = raw.match(new RegExp(`-${key}-(.+?)(?=-${ENTRY_STOP_KEYS}-|$)`))
+    const value = match ? cleanEntryValue(match[1]) : ''
+    if (value) out[`entry_${key}`] = value
+  }
+  return out
+}
+
+/**
+ * UTM da entrada para o evento: a da URL atual, se tiver `utm_source`; senão a
+ * do cookie de primeiro toque. Nunca lança.
+ */
+export function readEntryUtm() {
+  try {
+    if (typeof window === 'undefined') return {}
+    const search = String(window.location?.search || '')
+    if (/[?&]utm_source=/.test(search)) return parseEntryUtm(`${window.location.pathname}${search}`)
+    return parseEntryUtm(getFirstTouchLandingPage())
+  } catch {
+    return {}
+  }
 }

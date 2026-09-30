@@ -1,7 +1,18 @@
 # Backlog · P1-4 — Registrar loja não suportada (e consertar o link que some em silêncio)
 
-Status: **não implementado, no backlog por decisão da dona do produto (11/09/2026).**
-As outras nove issues de `docs/produto/issues-priorizadas-2026-09-11.md` foram executadas.
+Status: **implementado em 29/09/2026 (PR `claude/p1-4-loja-nao-suportada` → `develop`),
+aguardando validação em staging e janela anunciada de restart do `bot-supervisor`.**
+Resumo do que entrou: oferta cujo único link era de loja não suportada deixa de
+sair sem link e vira `skip:link_removed:unsupported_store` no painel; contagem
+agregada `ops_unsupported_store_daily` (domínio + dia + contagem, podada em 30
+dias); leitura em `scripts/diag-lojas-nao-suportadas.mjs`. RCA em
+`docs/rca/espelhamento.md` ("Oferta com link SÓ de loja não suportada...").
+Pendente: tela no admin para responder o critério 1 "sem entrar no VPS" (hoje a
+leitura é pelo script).
+
+Histórico: ficou no backlog por decisão da dona do produto (11/09/2026); as
+outras nove issues de `docs/produto/issues-priorizadas-2026-09-11.md` foram
+executadas antes.
 
 Esta ficou de fora porque é a única que mexe em **código de robô**
 (`src/messageProcessor.js` e `src/bot-worker.js`), e em modo `remote` isso exige

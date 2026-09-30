@@ -287,6 +287,17 @@ test('FR-030/031/032 (T047): varredura roda sobre pelo menos os 8 comparativos c
   assert.ok(paginas.length >= 8, `esperava >= 8 páginas com competitorSlugs em _comparisonContent.js, achei ${paginas.length} — checklist-comparativos.md prevê mais 5`)
 })
 
+// Exceção NOMINAL à FR-030, decidida pela dona do produto em 29/09/2026 com o
+// risco explicado (marca de terceiro no começo do título): títulos no estilo
+// "X limita grupos? Aqui é ilimitado por R$ 39". Os fatos citados vêm de
+// competitors-data.js e continuam cobertos pela FR-031. Página nova NÃO entra
+// aqui sem nova decisão dela.
+const TITULOS_COM_MARCA_DO_CONCORRENTE_AUTORIZADOS = new Set([
+  '/alternativas/achadinhos-bot',
+  '/alternativas/achadinho-pro',
+  '/alternativas/shozap',
+])
+
 test('FR-030: todo comparativo com concorrente nomeado se apresenta como alternativa/comparação, nunca se passa pelo concorrente', () => {
   // Formato aceito: "Alternativa(s) a/ao/de X" (formato /alternativas/*) OU
   // "X ou Y: quando/qual ..." (formato "vs" contra prática genérica). Os dois
@@ -307,6 +318,13 @@ test('FR-030: todo comparativo com concorrente nomeado se apresenta como alterna
   for (const { path, bloco } of comparisonPagesComConcorrente()) {
     const title = bloco.match(/title:\s*'([^']+)'/)?.[1]
     assert.ok(title, `${path}: não achei o title`)
+
+    if (TITULOS_COM_MARCA_DO_CONCORRENTE_AUTORIZADOS.has(path)) {
+      // Mesmo na exceção, o título precisa contrastar com a nossa oferta
+      // (preço próprio), nunca se passar pelo concorrente sem contraponto.
+      assert.match(title, /R\$ ?39\b/, `${path}: exceção da FR-030 exige o contraste com a nossa oferta (R$ 39) no título`)
+      continue
+    }
 
     assert.ok(
       FRAMES_COMPARATIVOS.some((re) => re.test(title)),
@@ -489,7 +507,10 @@ test('FR-033: "robô" não vira termo próprio de cluster (Trends: "robô whatsa
 // comercial por loja é o padrão da frente Tier 1 (mesma forma de Shopee,
 // Mercado Livre, Amazon e SHEIN), mas cidade, nicho e dor seguem congelados, e
 // nenhuma outra rota de Magalu pode nascer sem passar por aqui de novo.
-const ROTAS_MAGALU_APROVADAS = new Set(['/magalu-afiliados-whatsapp'])
+// 2026-09-28: a dona do produto liberou também o guia de cadastro por loja
+// (/guia/magalu-afiliados, item B09 da análise Pro Afiliados). Cidade, nicho e
+// dor de Magalu seguem congelados.
+const ROTAS_MAGALU_APROVADAS = new Set(['/magalu-afiliados-whatsapp', '/guia/magalu-afiliados'])
 
 test('FR-033: Magalu só existe na rota comercial aprovada em 02/09 — nenhuma outra', () => {
   for (const route of SEO_ROUTES) {

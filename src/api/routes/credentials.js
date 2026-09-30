@@ -8,7 +8,7 @@ import { checkShopeeSession as defaultCheckShopeeSession } from '../../converter
 import { getCachedProbe as defaultGetCachedProbe, invalidateCachedProbe as defaultInvalidateCachedProbe, setCachedProbe as defaultSetCachedProbe } from '../../converters/amazonSessionProbeCache.js'
 import { getCachedProbe as defaultGetCachedMlProbe, invalidateCachedProbe as defaultInvalidateCachedMlProbe, setCachedProbe as defaultSetCachedMlProbe } from '../../converters/mercadolivreSessionProbeCache.js'
 import { getBotMetrics as defaultGetBotMetrics, isRunning as defaultIsRunning, reloadConfig as defaultReloadConfig, startBot as defaultStartBot, stopBot as defaultStopBot } from '../../manager.js'
-import { describeSaveSessionCheck, platformSupportsSessionCheck } from '../../credentialSaveCheck.js'
+import { describeSaveSessionCheck, isSameAccessCode, platformSupportsSessionCheck } from '../../credentialSaveCheck.js'
 import { classifyWorkerHealth } from '../../workerHealth.js'
 import { restartStaleWorkerIfNeeded } from '../../workerRemediation.js'
 import { extractSheinAffiliateId, isSheinShortLink, resolveSheinShortLink as defaultResolveSheinShortLink } from '../../converters/shein.js'
@@ -224,6 +224,19 @@ export async function credentialsRoutes(app, opts = {}) {
       app.log.warn({ platform, err: err?.message }, 'Não deu para saber se esta é a primeira loja da conta')
     }
 
+    // O código colado é o mesmo que já estava guardado? Decidido ANTES do
+    // upsert (depois ele seria sempre "sim"). Best-effort: falha de leitura só
+    // apaga o aviso de "código repetido", nunca derruba o save.
+    let sameCodeAsBefore = false
+    try {
+      const anterior = await db.credential.findUnique({
+        where: { userId_platform: { userId: req.user.sub, platform } },
+      })
+      if (anterior) sameCodeAsBefore = isSameAccessCode(platform, parseCredentialData(anterior.data), sanitizedBody)
+    } catch (err) {
+      app.log.warn({ platform, err: err?.message }, 'Não deu para comparar o código colado com o anterior')
+    }
+
     const encryptedData = encryptCredential(JSON.stringify(sanitizedBody))
     const cred = await db.credential.upsert({
       where: { userId_platform: { userId: req.user.sub, platform } },
@@ -294,6 +307,7 @@ export async function credentialsRoutes(app, opts = {}) {
       probe: sessionCheck,
       fallbackMessage: getCredentialSaveMessage(validation),
       isFirstCredential,
+      sameCodeAsBefore,
     })
     trackAnalyticsEventSafe({
       userId: req.user.sub,
@@ -303,7 +317,7 @@ export async function credentialsRoutes(app, opts = {}) {
       // preso tentando de novo em vez de esperar ele reclamar no WhatsApp.
       // `firstCredential` responde, no histórico, quantas contas chegam de fato
       // a destravar o robô — a passagem que a frente C existe para melhorar.
-      metadata: { platform, status: validation.status, sessionAlive: sessionCheck?.alive ?? null, sessionReason: sessionCheck?.reason ?? null, firstCredential: isFirstCredential },
+      metadata: { platform, status: validation.status, sessionAlive: sessionCheck?.alive ?? null, sessionReason: sessionCheck?.reason ?? null, firstCredential: isFirstCredential, sameCode: sameCodeAsBefore },
     })
     return {
       ...cred,

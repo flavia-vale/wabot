@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import Link from 'next/link'
 import { buildCredentialBlockHelp, explainErrorMsg, isCredentialBlockErrorMsg, STATUS_TABS, statusTagForLog } from '@/lib/painel/logsCopy'
 import { videoEtiquetasParaLoja } from '../../../../src/tutorialVideo.js'
+import { shouldShowStuckQueueRecovery } from '../../../../src/domain/painel/stuckQueueRecovery.js'
 
 const LIMIT = 20
 const PERIODS = [['today', 'Hoje'], ['7d', '7 dias'], ['30d', '30 dias']]
@@ -154,6 +155,10 @@ export default function SendHistory() {
   const failed = num(counts?.timeoutTotal) + num(counts?.errorOther)
   const deliveryRate = typeof summary?.deliveryRate === 'number' ? `${Math.round(summary.deliveryRate * 100)}%` : '—'
   const inFlight = num(counts?.inFlight)
+  const showQueueRecovery = shouldShowStuckQueueRecovery({
+    inFlight,
+    oldestInFlightAt: counts?.oldestInFlightAt,
+  })
 
   const cards = useMemo(() => ([
     { label: 'Enviados', value: num(counts?.success) },
@@ -239,7 +244,7 @@ export default function SendHistory() {
       </section>
 
       {/* Destaque: destravar a fila de envio */}
-      <section className="pnl-card" style={{ borderColor: 'color-mix(in oklab, var(--warn) 55%, transparent)', borderWidth: 2, borderStyle: 'solid' }}>
+      {showQueueRecovery && <section className="pnl-card" style={{ borderColor: 'color-mix(in oklab, var(--warn) 55%, transparent)', borderWidth: 2, borderStyle: 'solid' }}>
         <div className="pnl-toolbar" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="pnl-card-title">
@@ -266,7 +271,7 @@ export default function SendHistory() {
           </button>
         </div>
         {queueNotice && <div className="pnl-note-box is-success" role="status" style={{ marginTop: 12 }}>{queueNotice}</div>}
-      </section>
+      </section>}
 
       {/* Filtros */}
       <div className="pnl-toolbar">

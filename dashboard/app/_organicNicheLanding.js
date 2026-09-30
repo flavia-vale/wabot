@@ -125,6 +125,7 @@ export function getOrganicNicheMetadata(key) {
 function buildSchema(page) {
   const siteUrl = getSiteUrl()
   const url = `${siteUrl}${page.slug}`
+  const dates = getEditorialDates(page.slug)
 
   return [
     {
@@ -133,6 +134,8 @@ function buildSchema(page) {
       headline: page.h1,
       description: page.description,
       mainEntityOfPage: url,
+      datePublished: dates.publishedAt,
+      dateModified: dates.updatedAt,
       author: { '@type': 'Organization', name: 'Equipe editorial do Espelha Grupos' },
       publisher: { '@type': 'Organization', name: 'Espelha Grupos', logo: { '@type': 'ImageObject', url: `${siteUrl}/botinho-logo.svg` } },
     },
