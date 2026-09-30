@@ -23,6 +23,7 @@ import {
   resolveSelectedTemplate,
   saveTemplateKey,
 } from '@/lib/offerTemplateSelection'
+import { SHEIN_SEM_PRECO_TITULO, SHEIN_SEM_PRECO_TEXTO, SHEIN_SEM_NOME, SHEIN_SEM_NOME_E_PRECO } from '@/lib/painel/criarOfertaCopy'
 
 const STORES = [
   { test: /shopee/i, platform: 'shopee', name: 'Shopee', bg: '#EE4D2D', fg: '#fff', mark: 'S' },
@@ -212,8 +213,13 @@ export default function CriarOfertaPage() {
       // título vindo e o preço não, a cliente não via aviso nenhum e enviava a
       // oferta sem preço. Agora cada caso tem o seu — e o preço, por ser o que
       // some com mais frequência, também ganha faixa fixa acima da prévia.
-      if (!title && !newPrice) setError('Não conseguimos ler título e preço desse link. Edite a mensagem direto na prévia abaixo.')
-      else if (!title) setError('Não conseguimos ler o nome do produto desse link. Escreva o nome na mensagem antes de enviar.')
+      // SHEIN (2026-09-30): a loja bloqueia a leitura de preço pelo servidor
+      // (captcha) — não é falha do link nem do cadastro. O nome vem do
+      // oneLink; o preço a cliente escreve. Aviso próprio para não mandar
+      // "confira se o link está certo" quando o link está certo.
+      const isShein = detectStore(trimmed)?.platform === 'shein'
+      if (!title && !newPrice) setError(isShein ? SHEIN_SEM_NOME_E_PRECO : 'Não conseguimos ler título e preço desse link. Edite a mensagem direto na prévia abaixo.')
+      else if (!title) setError(isShein ? SHEIN_SEM_NOME : 'Não conseguimos ler o nome do produto desse link. Escreva o nome na mensagem antes de enviar.')
       setCustomText(null)
       setGenerated({
         title,
@@ -377,7 +383,13 @@ export default function CriarOfertaPage() {
       {error && <div className="pnl-note-box is-error" role="alert">{error}</div>}
       {pasteFeedback && <div className="pnl-note-box is-success" role="status">{pasteFeedback}</div>}
 
-      {generated && !generated.newPrice && (
+      {generated && !generated.newPrice && store?.platform === 'shein' && (
+        <div className="pnl-note-box is-warn" role="alert">
+          <strong style={{ fontWeight: 600 }}>{SHEIN_SEM_PRECO_TITULO}</strong>
+          <p style={{ marginTop: 4 }}>{SHEIN_SEM_PRECO_TEXTO}</p>
+        </div>
+      )}
+      {generated && !generated.newPrice && store?.platform !== 'shein' && (
         <div className="pnl-note-box is-warn" role="alert">
           <strong style={{ fontWeight: 600 }}>Não conseguimos ler o preço na loja.</strong>
           <p style={{ marginTop: 4 }}>A oferta vai sair <strong style={{ fontWeight: 600 }}>sem preço</strong>. Confira o preço na loja e escreva ele na mensagem abaixo antes de enviar.</p>

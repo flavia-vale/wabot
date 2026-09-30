@@ -588,6 +588,22 @@ sem setar nada o comportamento é idêntico ao histórico. A camada local de
 dedup (em disco, por worker) continua sendo a primeira linha e independe do
 Redis.
 
+## Resgate pós-reinício DESLIGADO em produção (RCA 2026-09-30 — não regredir)
+
+Medido: `.env` de prod tinha `WORKER_RESTART_REPROCESS_ENABLED=false`, sem
+registro do motivo. Efeito: **1.333 `error:worker_restart` em 24 h na frota,
+zero `:requeued`** — cada `pm2 delete/start` do supervisor (hotfix em
+`converters/`, `pm2 update`, queda) jogava fora tudo que estava na fila de
+todas as contas. Religado (`=true` + `pm2 delete` + `start bot-supervisor`):
+72 ofertas resgatadas nos 30 min seguintes.
+
+**Não regredir:** essa env fica LIGADA em prod. Quem precisar desligar escreve
+aqui o motivo e a data. Conferir: `grep WORKER_RESTART_REPROCESS ~/wabot/.env`
+(vazio ou `=true` = ligado) e `sqlite3 prisma/prod.db "SELECT errorMsg, COUNT(*)
+FROM MessageLog WHERE errorMsg LIKE 'error:worker_restart%' AND
+sentAt>(strftime('%s','now','-24 hours')*1000) GROUP BY 1;"` (tem que aparecer
+`:requeued`). Reinício do supervisor: só em horário de pouco envio, anunciado.
+
 ## Oferta automática "ignorada: grupo de origem removido" após reinício (RCA 2026-09-30)
 
 Sintoma: oferta automática (`platform=broadcast`, `sourceGroup=offerAutomation`)
