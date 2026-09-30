@@ -551,3 +551,15 @@ teste deu 401 por chave colada errada, não por defeito do script).
   decisão 13.8 item 1 segue pendente.
 - Campanha "onTime" que vence em menos de 1 h (ex.: fim `2026-09-30T02:30Z`) é
   descartada pela regra da janela mínima de 1 h.
+
+### 13.11 Respostas às decisões 13.8 (2026-09-30)
+
+1. **Campanhas da Shopee que a Lomadee lista: EXCLUIR.** O sync ignora a loja
+   Shopee (a Shopee já é origem própria, com preço e foto). Implementação:
+   lista de lojas excluídas por origem própria, comparando o `site` da loja
+   (`shopee.com.br`), não o nome. Conferir a mesma regra para ML, Amazon,
+   AliExpress e Magalu quando aparecerem na lista de lojas da conta.
+2. **Foto:** a dona do produto vai testar o banner (`mediaKit.banners[0]`) no
+   staging antes de decidir. Até lá o envio da v1 sai **sem foto** (só texto), e
+   o campo do banner é guardado no banco para uso futuro.
+3. **Dois canais = duas contas Lomadee:** aprovado.
