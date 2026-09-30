@@ -79,6 +79,8 @@ const ANALYTICS_EVENT_BY_SIGNAL = {
   // Muro anti-robô do ML batendo no IP do servidor (RCA 2026-08-19/20).
   ml_anti_bot_wall: 'ops_ml_anti_bot_wall',
   magalu_bot_wall: 'ops_magalu_bot_wall',
+  // Cota diária do scraper da Magalu esgotada: foto volta ao plano B.
+  magalu_scraper_quota: 'ops_magalu_scraper_quota',
   // Card de preview salvo pelo plano B: loja sem foto, foto da mensagem de
   // origem no lugar. A oferta SAIU com card clicável e com imagem.
   preview_card_origin_fallback: 'ops_preview_card_origin_fallback',
