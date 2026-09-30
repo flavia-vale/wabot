@@ -56,4 +56,22 @@ function sanitizeMessageForLog(text) {
   return truncated ? `${cleaned}…` : cleaned
 }
 
-export { sanitizeMessageForLog, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS }
+// Texto completo para o reenvio pós-restart (MessageLog.resendText). Ao
+// contrário de sanitizeMessageForLog, NÃO colapsa espaços nem quebras de linha
+// nem corta em 240: é a oferta que vai sair de novo no grupo. Só tira o que o
+// Prisma/SQLite recusa (NUL, surrogate solto). Acima do teto devolve null em
+// vez de cortar — oferta cortada não deve ser reenviada (o reenvio pula).
+const RESEND_TEXT_MAX_CHARS = 8000
+// eslint-disable-next-line no-control-regex
+const RESEND_UNSAFE_CONTROL_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g
+
+function sanitizeResendText(text) {
+  const raw = String(text ?? '')
+  if (!raw.trim()) return null
+  const cleaned = raw.replace(RESEND_UNSAFE_CONTROL_RE, '').replace(LONE_SURROGATE_RE, '')
+  if (!cleaned.trim()) return null
+  if (Array.from(cleaned).length > RESEND_TEXT_MAX_CHARS) return null
+  return cleaned
+}
+
+export { sanitizeMessageForLog, sanitizeResendText, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS, RESEND_TEXT_MAX_CHARS }

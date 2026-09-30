@@ -609,3 +609,20 @@ linha (`sanitizeMessageForLog`) e não guarda a foto da receita (`imageUrl`).
 **Não regredir:** não reenviar broadcast a partir do `MessageLog`; não enfileirar
 como `converted` nada que não tenha origem monitorada de verdade. Teste:
 `test/bot-worker-restart-reprocess-wiring.test.js`.
+
+### Adendo: espelhamento reenviado saía cortado (mesma investigação)
+
+O mesmo `reprocessRestartFailures` reenviava a oferta ESPELHADA a partir de
+`messageText`, que `sanitizeMessageForLog` corta em 240 chars e colapsa as
+quebras de linha — a oferta saía mutilada (e o link podia ficar de fora do
+corte). Correção: coluna `MessageLog.resendText` (migration
+`20261001090000_message_log_resend_text`) com o texto COMPLETO
+(`sanitizeResendText`: só tira NUL/surrogate solto; acima de 8000 chars → null),
+gravada ao enfileirar o espelhamento e **zerada no sucesso** (sem crescimento do
+banco; nenhuma escrita a mais — vai no mesmo create/update). O reenvio só pega
+linha com `resendText` e usa ele no texto, card e cupom; linha antiga/sem texto
+fica `error:worker_restart`. `resendText` não vai para o painel (`/logs`).
+
+**Não regredir:** não reenviar a partir de `messageText`; não deixar de zerar
+`resendText` no sucesso. Testes: `test/bot-worker-restart-reprocess-wiring.test.js`,
+`test/message-log-sanitizer.test.js`.

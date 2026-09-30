@@ -658,6 +658,12 @@ model MessageLog {
   originalUrl  String
   convertedUrl String
   messageText  String
+  // Texto COMPLETO da oferta espelhada (com quebras de linha), guardado só
+  // enquanto ela espera na fila: é o que o reenvio pós-restart usa
+  // (reprocessRestartFailures). `messageText` é cortado em 240 chars e sem
+  // quebras — reenviar dele mandava a oferta mutilada. Zerado quando o envio
+  // dá certo, para o banco não crescer. Ver docs/rca/envio-e-filas.md.
+  resendText   String?
   status       String   @default("success")
   errorMsg     String?
   // Contador de repostas/duplicatas bloqueadas após a primeira gravação desta
