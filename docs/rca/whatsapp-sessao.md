@@ -916,3 +916,43 @@ rebaixado de `error` para `debug` em `instrumentBaileysLoggerForHealth`
 observadas) — não muda a lógica de reconexão nem a métrica de saúde
 (`SESSION_HEALTH_SIGNAL_RE`), que continuam olhando o fechamento real da
 conexão, não a linha de log.
+
+
+## 401 (sessão deslogada) em massa: o que foi medido e o que falta (RCA 2026-09-30 — EM ABERTO)
+
+Conta (Denia) parou de espelhar às 11:14: `disconnect_terminal` 401, sessão
+estável, 2 s depois do último envio, sem fase de cegueira antes. Investigando
+a frota (`WaConnectionEvent`, tipo **`disconnect_terminal`** — não `disconnect`;
+consultar o tipo errado devolve 0 e parece ausência de dado):
+
+- **Crônico, não novo:** 3 a 19 contas/dia com 401 desde 16/09 (38 contas
+  distintas em 7 dias; uma conta 13×, outra 11×, outra 8×). 28 e 29/09 (13 e
+  15) ficam acima da média de ~9, mas 24/09 teve 19 sem patch nenhum — **não
+  dá para atribuir à assinatura do aparelho de 28/09**.
+- **Iniciar sessão não causa 401:** o restart do supervisor de 30/09 10:25
+  reconectou 65 sessões e a hora 10h não teve nenhuma queda 401.
+- **Não é oscilação:** as contas que caíram tinham 10,1 quedas (não terminais)
+  nas 24 h anteriores contra 9,3 por conta por dia na frota — igual. (A média
+  de ~9 quedas/conta/dia é o problema crônico das quedas 500 acima.)
+- **Trial pesa mais:** 63% das contas com 401 são trial contra 46% dos
+  conectados. Basic e pro também: 7 e 7 contas em 7 dias.
+- **Nosso código nunca chama logout do WhatsApp** (nenhum `.logout(` em `src/`):
+  o 401 sempre vem do servidor do WhatsApp.
+- **Efeito no negócio:** a sessão deslogada NÃO reconecta sozinha (auth
+  apagado, exige novo QR) e o e-mail `whatsapp_desconectado` só sai após 24 h
+  (`lifecyclePolicy.js`). Das 15 contas desconectadas mais antigas, 13 eram
+  trial, algumas paradas desde 23/09.
+
+**Como achar a causa:** desde este commit o `disconnect_terminal` grava
+`waReason` (`message`, `failureReason`, `conflictType`; ver
+`src/core/logoutReason.js`). `conflictType=device_removed` = a cliente (ou o
+celular dela) removeu o aparelho; outro motivo = o WhatsApp invalidou.
+Depois de ~24 h de dados novos (vale só para workers iniciados depois do deploy;
+em modo `remote` isso exige `pm2 restart bot-supervisor --update-env`):
+
+```
+sqlite3 ~/wabot/prisma/prod.db "SELECT COALESCE(json_extract(metadata,'$.waReason.message'),'(sem motivo)'), COALESCE(json_extract(metadata,'$.waReason.conflictType'),''), COUNT(*) FROM WaConnectionEvent WHERE type='disconnect_terminal' AND code='401' AND occurredAt > (strftime('%s','now')-2*86400)*1000 GROUP BY 1,2 ORDER BY 3 DESC LIMIT 10"
+```
+
+**Não regredir / não fazer sem dado:** não reverter a assinatura do aparelho
+nem reiniciar a frota por causa do 401; não trocar biblioteca por palpite.
