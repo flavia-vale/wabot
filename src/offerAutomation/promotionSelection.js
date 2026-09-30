@@ -168,5 +168,7 @@ export function createPromotionSelector({ prefix, fields = {}, minRemainingMs = 
     return picked
   }
 
-  return { contentKey, titleKey, itemId, titleItemId, legacyItemId, select }
+  // tieBreak/matchesKeyword/byEnd expostos para a origem que precisa de uma
+  // seleção própria (Awin: revezamento por loja + página inicial → título).
+  return { contentKey, titleKey, itemId, titleItemId, legacyItemId, select, tieBreak, matchesKeyword, byEnd }
 }
