@@ -18,6 +18,7 @@ import { buildJustConnectedNextStep } from '../../../../src/credentialBlockAlert
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
 import { SUPPORT_WHATSAPP_URL } from '@/lib/marketing-content'
 import { WhatsAppConnectedOverview } from '@/components/WhatsAppConnectedOverview'
+import { MultiNumberWaitlistCard } from '@/components/MultiNumberWaitlistCard'
 import {
   QR_POLL_INTERVAL_MS,
   INACTIVITY_RESET_SECONDS,
@@ -1007,6 +1008,10 @@ export default function WhatsAppPage() {
           </div>
         </div>
       )}
+
+      {/* Fase 0 do vários números por conta: só aparece com o robô conectado,
+          para não competir com o passo a passo de conexão. */}
+      {isConnected && <MultiNumberWaitlistCard />}
 
       <ConfirmDialog open={showForgetConfirm} title="Esquecer número" message="Isso vai desconectar o WhatsApp e remover a sessão salva neste painel. Para usar novamente, você precisará conectar por QR Code ou código." confirmLabel="Esquecer sessão" danger onCancel={() => setShowForgetConfirm(false)} onConfirm={async () => { setShowForgetConfirm(false); await handleForget() }} />
       <ConfirmDialog
