@@ -23,6 +23,9 @@ import {
   formatPromotionValidity,
   hasMinimumTimeLeft,
   normalizeText,
+  normalizedStorePage,
+  promotionTime,
+  shortHash,
 } from './promotionSelection.js'
 
 export const AWIN_AUTOMATION_TEMPLATE_KEY = 'promocao_awin'
@@ -87,12 +90,14 @@ function isStoreHome(page) {
 
 export function awinContentKey(promotion) {
   const page = normalizedStorePage(promotion.url)
-  return page && !isStoreHome(page) ? `${promotion.advertiserId}:u:${shortHash(page)}` : awinTitleKey(promotion)
+  return page && !isStoreHome(page) ? `${promotion.advertiserId}:u:${shortHash(page)}` : awinSelector.titleKey(promotion)
 }
 
-// Formato atual: awin:c:<loja>:u:<hash da página> (ou por título, sem página).
+// Formato atual: awin:c:<loja>:u:<hash da página> (ou por título, sem página
+// ou página inicial). Passa por awinContentKey, não pelo contentKey genérico
+// do selector: a regra da página inicial (revisão 2026-09-30) só existe aqui.
 export function awinItemId(promotion) {
-  return awinSelector.itemId(promotion)
+  return `awin:c:${awinContentKey(promotion)}`
 }
 
 // Formato da 1ª correção (loja + título, 2026-09-29 tarde). Continua valendo
@@ -170,20 +175,20 @@ export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserI
   const allowedStores = new Set(parseAdvertiserIds(advertiserIds))
   const filtered = promotions.filter((promotion) => {
     if (promotion.status && promotion.status !== 'active') return false
-    const start = time(promotion.startDate)
+    const start = promotionTime(promotion.startDate)
     if (start != null && start > nowMs) return false
-    const end = time(promotion.endDate)
+    const end = promotionTime(promotion.endDate)
     if (end != null && end - nowMs < AWIN_MIN_REMAINING_MS) return false
     if (wasSent(promotion) || sentContent.has(awinContentKey(promotion))) return false
     if (allowedStores.size && !allowedStores.has(String(promotion.advertiserId))) return false
-    return matchesKeyword(promotion, keyword)
+    return awinSelector.matchesKeyword(promotion, keyword)
   })
 
-  const endOrInfinity = (promotion) => time(promotion.endDate) ?? Number.POSITIVE_INFINITY
+  const endOrInfinity = (promotion) => promotionTime(promotion.endDate) ?? Number.POSITIVE_INFINITY
   // Uma só por conteúdo (loja + página): fica a que vence antes.
   const seenContent = new Set()
   const eligible = [...filtered]
-    .sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || tieBreak(a, b))
+    .sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || awinSelector.tieBreak(a, b))
     .filter((promotion) => {
       const key = awinContentKey(promotion)
       if (seenContent.has(key)) return false
@@ -197,7 +202,7 @@ export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserI
     if (!byStore.has(key)) byStore.set(key, [])
     byStore.get(key).push(promotion)
   }
-  const queues = [...byStore.values()].map((list) => list.sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || tieBreak(a, b)))
+  const queues = [...byStore.values()].map((list) => list.sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || awinSelector.tieBreak(a, b)))
   // A loja cuja próxima promoção vence antes abre a rodada.
   // Revezamento DE VERDADE entre execuções (revisão 2026-09-30): antes a loja
   // com a promoção mais perto de vencer abria TODA rodada — com 1 oferta por
