@@ -102,7 +102,6 @@ function getFormatWarnings(platform, data = {}) {
     const appId = getString(data, 'appId')
     const secretKey = getString(data, 'secretKey')
     if (appId && !/^\d+$/.test(appId)) warnings.push('O App ID da Shopee normalmente contém apenas números.')
-    if (secretKey && secretKey.length < 16) warnings.push('A Secret Key da Shopee parece curta. Confira se copiou a chave inteira.')
   }
 
   if (platform === 'amazon') {
@@ -228,6 +227,15 @@ const ACCESS_CODE_RULES = {
 // (dashboard/lib/painel/affiliatePlatforms.js). Aqui é a autoridade.
 export function describeInvalidCredentialFields(platform, data = {}) {
   const problemas = []
+  // Shopee: Secret Key curta era só aviso e o save passava. Uma conta
+  // (2026-09-30) ficou com 9 caracteres e a Shopee devolvia erro 10000 em
+  // TODA conversão, enquanto a chave de outra conta respondia OK no mesmo
+  // instante — 27 ofertas perdidas em 48h. Chave pela metade nunca funciona.
+  if (platform === 'shopee') {
+    const secretKey = getString(data, 'secretKey')
+    if (secretKey && secretKey.length < SHOPEE_SECRET_MIN_LENGTH) problemas.push({ field: 'secretKey', message: SHOPEE_SECRET_CURTA })
+    return problemas
+  }
   if (platform === 'aliexpress') {
     const cookie = getString(data, 'cookie')
     if (cookie && cookie.length > 120_000) problemas.push({ field: 'cookie', message: 'Esse código está grande demais. Copie novamente usando o botão Export da extensão Cookie-Editor.' })
@@ -253,6 +261,8 @@ export function describeInvalidCredentialFields(platform, data = {}) {
   return problemas
 }
 
+export const SHOPEE_SECRET_MIN_LENGTH = 16
+export const SHOPEE_SECRET_CURTA = 'A chave secreta da Shopee está curta demais — parece que faltou um pedaço. Copie a chave inteira na página Open API do portal de afiliados da Shopee.'
 export const LINK_NO_LUGAR_DO_CODIGO = 'Isso é um link, não o código de acesso. O código não começa com "http" — é uma sequência de letras e números que você copia com a extensão Cookie-Editor.'
 export const CODIGO_COM_ESPACO = 'O código não pode ter espaços no meio. Copie o valor inteiro, de uma vez só.'
 export const CODIGO_CURTO_DEMAIS = 'Esse código está curto demais — parece que faltou um pedaço. Copie o valor inteiro do campo na extensão Cookie-Editor.'
