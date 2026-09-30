@@ -67,20 +67,6 @@ module.exports = {
       max_memory_restart: '300M',
     },
     {
-      // Painel "Membros" (2026-09-30): amostra horária do total de membros dos
-      // grupos-destino. Roda 1x e sai (autorestart:false); ~0 MB fora da execução.
-      name: 'group-member-samples',
-      script: 'scripts/run_group_member_samples.mjs',
-      exec_mode: 'fork',
-      instances: 1,
-      autorestart: false,
-      cron_restart: '7 * * * *',
-      env: {
-        NODE_ENV: 'production',
-      },
-      max_memory_restart: '300M',
-    },
-    {
       // Staging mirror de 'api'. deploy_safe_staging.sh roda este config a
       // partir de ~/wabot-staging com `--only api-staging`; PM2 usa o cwd
       // de invocação para localizar o .env (que carrega DATABASE_URL,
