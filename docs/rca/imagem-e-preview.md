@@ -382,6 +382,17 @@ sinal `ops_magalu_scraper_quota` e volta ao plano B. Mudar env exige
 
 **Não regredir:** sem chave, nada muda; o scraper nunca roda sem passar pelo
 teto diário; falha do scraper devolve `null` (plano B), nunca banner de marca.
+**Validação em staging (2026-09-30):** com a chave no `.env`, o log mostrou só
+`loja_bloqueou` → `scrape_sem_imagem`. Resposta de erro do provedor voltava
+`null` MUDA. Agora cada saída tem nome: `scraper_desligado` (sem chave),
+`scraper_recusou` (+ `status` HTTP do provedor), `scraper_bloqueado`,
+`scraper_sem_imagem`, `scraper_falhou`, `scraper_sem_cota`.
+
+**Descartado com dado (2026-09-30):** trocar User-Agent / imitar TLS do Chrome
+(`impit`, `got-scraping`). Passou de um IP limpo, mas a VPS recebe o desafio
+JavaScript do Akamai (200, 2.511 bytes) mesmo com `impit` + Chrome Android: o IP
+da VPS está marcado. Só outro IP (o scraper) resolve.
+
 **Ainda não validado com chave real** — testar antes de promover para `main`:
 `curl` do provedor com a URL da Magalu e conferir `og:image`.
 

@@ -112,7 +112,8 @@ test('muro com status 200 é reportado como bloqueio da loja, não como "sem fot
       onDiagnostic: d => diagnosticos.push(d),
     })
     assert.equal(image, null)
-    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou'])
+    // Sem MAGALU_SCRAPER_KEY o desvio pelo scraper também tem nome.
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_desligado'])
     assert.equal(diagnosticos[0].detail.status, 200)
   })
 })
@@ -127,7 +128,8 @@ test('403 de bloqueio também é reportado com nome próprio', async () => {
       onDiagnostic: d => diagnosticos.push(d),
     })
     assert.equal(image, null)
-    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou'])
+    // Sem MAGALU_SCRAPER_KEY o desvio pelo scraper também tem nome.
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_desligado'])
     assert.equal(diagnosticos[0].detail.status, 403)
   })
 })
@@ -198,4 +200,54 @@ test('teto diário do scraper bloqueia a chamada seguinte e zera no dia novo', (
 test('estrutural: o ramo da Magalu tenta o scraper quando a loja bloqueia', () => {
   const src = readFileSync(new URL('../src/converters/imageScrapers.js', import.meta.url), 'utf8')
   assert.match(src, /loja_bloqueou[\s\S]{0,120}return resolveMagaluImageViaScraper/)
+})
+
+// RCA 2026-09-30 (parte 3): em staging, com a chave configurada, o log só
+// mostrou `loja_bloqueou` → `scrape_sem_imagem`. Resposta de erro do provedor
+// voltava `null` sem diagnóstico. Cada saída sem foto precisa de nome.
+async function comScraperFalso(respostaDoProvedor, fn) {
+  const fetchOriginal = globalThis.fetch
+  const envOriginal = { key: process.env.MAGALU_SCRAPER_KEY, provider: process.env.MAGALU_SCRAPER_PROVIDER }
+  process.env.MAGALU_SCRAPER_KEY = 'chave-teste'
+  process.env.MAGALU_SCRAPER_PROVIDER = 'zenrows'
+  resetMagaluScraperQuotaForTest()
+  globalThis.fetch = async url => String(url).startsWith('https://api.zenrows.com/')
+    ? respostaDoProvedor()
+    : new Response(MURO_403, { status: 403, headers: { 'content-type': 'text/html' } })
+  try {
+    return await fn()
+  } finally {
+    globalThis.fetch = fetchOriginal
+    if (envOriginal.key === undefined) delete process.env.MAGALU_SCRAPER_KEY; else process.env.MAGALU_SCRAPER_KEY = envOriginal.key
+    if (envOriginal.provider === undefined) delete process.env.MAGALU_SCRAPER_PROVIDER; else process.env.MAGALU_SCRAPER_PROVIDER = envOriginal.provider
+    resetMagaluScraperQuotaForTest()
+  }
+}
+
+test('provedor do scraper recusando (ex.: 401/402) sai com nome e status, não mudo', async () => {
+  await comScraperFalso(() => new Response('{"error":"plan"}', { status: 402, headers: { 'content-type': 'application/json' } }), async () => {
+    const diagnosticos = []
+    const image = await fetchProductImage('magazineluiza', 'https://www.magazineluiza.com.br/x/p/1/aa/bb/', {}, { onDiagnostic: d => diagnosticos.push(d) })
+    assert.equal(image, null)
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_recusou'])
+    assert.equal(diagnosticos[1].detail.status, 402)
+  })
+})
+
+test('provedor devolvendo página sem foto sai como scraper_sem_imagem', async () => {
+  await comScraperFalso(() => new Response('<html><body>vazio</body></html>', { status: 200, headers: { 'content-type': 'text/html' } }), async () => {
+    const diagnosticos = []
+    const image = await fetchProductImage('magazineluiza', 'https://www.magazineluiza.com.br/x/p/2/aa/bb/', {}, { onDiagnostic: d => diagnosticos.push(d) })
+    assert.equal(image, null)
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou', 'scraper_sem_imagem'])
+  })
+})
+
+test('provedor devolvendo a página do produto entrega a foto', async () => {
+  await comScraperFalso(() => new Response(PAGINA_DE_PRODUTO, { status: 200, headers: { 'content-type': 'text/html' } }), async () => {
+    const diagnosticos = []
+    const image = await fetchProductImage('magazineluiza', 'https://www.magazineluiza.com.br/x/p/3/aa/bb/', {}, { onDiagnostic: d => diagnosticos.push(d) })
+    assert.equal(image, 'https://a-static.mlcdn.com.br/450x450/geladeira/magazineluiza/155603000/abc.jpg')
+    assert.deepEqual(diagnosticos.map(d => d.stage), ['loja_bloqueou'])
+  })
 })
