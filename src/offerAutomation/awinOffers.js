@@ -16,7 +16,14 @@
 
 export const AWIN_AUTOMATION_TEMPLATE_KEY = 'promocao_awin'
 export const AWIN_MIN_REMAINING_MS = 60 * 60_000
-const CANDIDATE_ROWS_LIMIT = 1000
+// Por LOJA (revisão 2026-09-30): um teto global ordenado por fim deixava de
+// fora a loja cujas promoções vencem depois — e, com as mais próximas todas já
+// enviadas, a automação "acabava" com promoções boas ainda no banco.
+const CANDIDATE_ROWS_PER_STORE = 300
+// Memória do que já saiu, para promoções (catálogo finito). O teto de 200 da
+// Shopee fazia a mesma promoção voltar depois de ~200 envios; aqui a lista é
+// podada pelo que ainda está ativo, e o teto é só rede de segurança.
+export const AWIN_SENT_IDS_CAP = 3000
 const DESCRIPTION_IN_MESSAGE_MAX = 280
 
 // Modelo padrão sem preço. As variáveis vazias somem sozinhas
@@ -72,9 +79,17 @@ function awinTitleKey(promotion) {
   return `${promotion.advertiserId}:${shortHash(normalizedTitle(promotion.title))}`
 }
 
+// Página INICIAL da loja (sem caminho) não identifica produto nenhum: várias
+// promoções diferentes da mesma loja apontam para ela. Usar a página como
+// identidade fazia a 1ª enviada bloquear todas as outras para sempre
+// (revisão 2026-09-30) — para ela vale o título.
+function isStoreHome(page) {
+  return !page || !page.includes('/')
+}
+
 export function awinContentKey(promotion) {
   const page = normalizedStorePage(promotion.url)
-  return page ? `${promotion.advertiserId}:u:${shortHash(page)}` : awinTitleKey(promotion)
+  return page && !isStoreHome(page) ? `${promotion.advertiserId}:u:${shortHash(page)}` : awinTitleKey(promotion)
 }
 
 export function awinItemId(promotion) {
@@ -167,6 +182,18 @@ export function awinPromotionToOffer(promotion) {
 }
 
 // PURA: escolhe e ordena as promoções candidatas.
+// Em que posição do histórico cada loja saiu por último (maior = mais recente).
+// Os ids novos carregam a loja (`awin:c:<loja>:...`); o histórico é gravado em
+// ordem de envio.
+export function storeLastSentOrder(sentItemIds = []) {
+  const order = new Map()
+  sentItemIds.forEach((id, index) => {
+    const match = /^awin:c:(\d{1,12}):/.exec(String(id))
+    if (match) order.set(match[1], index)
+  })
+  return order
+}
+
 export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserIds = [], keyword = '', now = new Date(), limit = 5 } = {}) {
   const nowMs = now.getTime()
   const sent = new Set(sentItemIds.map(String))
@@ -206,7 +233,13 @@ export function selectAwinCandidates(promotions, { sentItemIds = [], advertiserI
   }
   const queues = [...byStore.values()].map((list) => list.sort((a, b) => endOrInfinity(a) - endOrInfinity(b) || tieBreak(a, b)))
   // A loja cuja próxima promoção vence antes abre a rodada.
-  queues.sort((a, b) => endOrInfinity(a[0]) - endOrInfinity(b[0]) || String(a[0].advertiserName).localeCompare(String(b[0].advertiserName)))
+  // Revezamento DE VERDADE entre execuções (revisão 2026-09-30): antes a loja
+  // com a promoção mais perto de vencer abria TODA rodada — com 1 oferta por
+  // envio, só ela saía até acabar. Agora abre a loja que saiu há mais tempo
+  // (nunca saiu = primeiro); o fim mais próximo só desempata.
+  const lastSent = storeLastSentOrder(sentItemIds)
+  const recency = (queue) => lastSent.get(String(queue[0].advertiserId)) ?? -1
+  queues.sort((a, b) => recency(a) - recency(b) || endOrInfinity(a[0]) - endOrInfinity(b[0]) || String(a[0].advertiserName).localeCompare(String(b[0].advertiserName)))
 
   const picked = []
   for (let round = 0; picked.length < limit; round++) {
@@ -231,17 +264,20 @@ export async function loadAwinOffers({ db, automation, sentItemIds = [], now = n
     select: { id: true },
   })
   if (!account) return { skipped: 'no_awin_account' }
-  const rows = await db.awinPromotion.findMany({
-    where: {
-      userId: automation.userId,
-      accountId: account.id,
-      status: 'active',
-      OR: [{ endDate: null }, { endDate: { gt: new Date(now.getTime() + AWIN_MIN_REMAINING_MS) } }],
-    },
+  const where = {
+    userId: automation.userId,
+    accountId: account.id,
+    status: 'active',
+    OR: [{ endDate: null }, { endDate: { gt: new Date(now.getTime() + AWIN_MIN_REMAINING_MS) } }],
+  }
+  const stores = await db.awinPromotion.findMany({ where, distinct: ['advertiserId'], select: { advertiserId: true } })
+  const perStore = await Promise.all(stores.map(({ advertiserId }) => db.awinPromotion.findMany({
+    where: { ...where, advertiserId },
     orderBy: { endDate: 'asc' },
-    take: CANDIDATE_ROWS_LIMIT,
-  })
-  if (!rows.length) return { skipped: 'no_awin_promotions' }
+    take: CANDIDATE_ROWS_PER_STORE,
+  })))
+  const rows = perStore.flat()
+  if (!rows.length) return { skipped: 'no_awin_promotions', sentItemIds: pruneAwinSentIds(sentItemIds, []) }
   const picked = selectAwinCandidates(rows, {
     sentItemIds,
     advertiserIds: automation.awinAdvertiserIds,
@@ -249,7 +285,13 @@ export async function loadAwinOffers({ db, automation, sentItemIds = [], now = n
     now,
     limit: Math.max(1, Number(limit) || 1),
   })
-  return { offers: picked.map(awinPromotionToOffer), rawCount: rows.length }
+  // Memória podada: fica só o que ainda está ativo (inclusive as promoções que
+  // não entraram nesta leitura — a identidade vem de todas as ativas).
+  const active = await db.awinPromotion.findMany({
+    where: { userId: automation.userId, accountId: account.id, status: 'active' },
+    select: { promotionId: true, advertiserId: true, url: true, title: true },
+  })
+  return { offers: picked.map(awinPromotionToOffer), rawCount: rows.length, sentItemIds: pruneAwinSentIds(sentItemIds, active) }
 }
 
 // Na entrega da fila de revisão: a promoção ainda vale?
@@ -262,4 +304,24 @@ export async function isAwinPromotionStillValid({ db, userId, awinPromotionId, n
   if (!row) return false
   const end = time(row.endDate)
   return end == null || end - now.getTime() >= AWIN_MIN_REMAINING_MS
+}
+
+/**
+ * Histórico de enviados só com o que ainda pode voltar a ser candidato (as
+ * três formas de id de cada promoção ativa). Ids de outras origens (Shopee)
+ * ficam intactos. PURA.
+ */
+export function pruneAwinSentIds(sentItemIds = [], activePromotions = []) {
+  const alive = new Set()
+  for (const promotion of activePromotions) {
+    alive.add(awinItemId(promotion))
+    alive.add(awinTitleItemId(promotion))
+    alive.add(awinLegacyItemId(promotion))
+    // Forma antiga (antes da página inicial virar título): continua valendo
+    // enquanto a promoção existir, para não reenviar o que já saiu.
+    const page = normalizedStorePage(promotion.url)
+    if (page) alive.add(`awin:c:${promotion.advertiserId}:u:${shortHash(page)}`)
+  }
+  const kept = sentItemIds.map(String).filter((id) => !id.startsWith('awin:') || alive.has(id))
+  return kept.length > AWIN_SENT_IDS_CAP ? kept.slice(kept.length - AWIN_SENT_IDS_CAP) : kept
 }

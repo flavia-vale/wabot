@@ -10,7 +10,7 @@ import { createAndEnqueueStory } from '../instagram/storyDeliveryService.js'
 import { getInstagramDeliveryRuntime } from '../instagram/publishing/runtime.js'
 import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 import { chooseCoupon, renderCouponText, applyCouponToken } from '../core/clientCouponPolicy.js'
-import { AWIN_AUTOMATION_TEMPLATE_KEY, AWIN_PROMOTION_TEMPLATE_BODY, loadAwinOffers } from './awinOffers.js'
+import { AWIN_AUTOMATION_TEMPLATE_KEY, AWIN_PROMOTION_TEMPLATE_BODY, AWIN_SENT_IDS_CAP, loadAwinOffers } from './awinOffers.js'
 import { enrichAwinOffers as defaultEnrichAwinOffers } from './awinEnrich.js'
 import { loadRakutenOffers } from './rakutenOffers.js'
 
@@ -214,9 +214,13 @@ export function formatOfferMessage(offer, keyword, templateBody = null) {
 }
 
 
-function addSentIds(existing, newIds) {
+// Shopee: janela das últimas 200 (catálogo infinito, reaparecer é aceitável).
+// Promoções (Awin/Rakuten): catálogo finito — com 200, a mesma promoção voltava
+// depois de ~200 envios (revisão 2026-09-30). A lista da Awin já chega podada
+// pelo que ainda está ativo (pruneAwinSentIds); o teto maior é rede de segurança.
+function addSentIds(existing, newIds, cap = 200) {
   const all = [...existing, ...newIds.map(String)]
-  return all.length > 200 ? all.slice(all.length - 200) : all
+  return all.length > cap ? all.slice(all.length - cap) : all
 }
 
 export async function resolveOffers({ automation, sentItemIds, creds, fetchOffersFn = defaultFetchOffers }) {
@@ -301,6 +305,7 @@ export async function runAutomation(automation, {
   let advancedPage = currentPage
   if (source === 'awin') {
     const loaded = await loadAwinOffers({ db: dbInstance, automation, sentItemIds, now: new Date(), limit: automation.offersPerSend })
+    if (Array.isArray(loaded.sentItemIds)) sentItemIds = loaded.sentItemIds
     if (loaded.skipped) return { skipped: loaded.skipped }
     ;({ offers, rawCount } = loaded)
     if (!offers.length) return { skipped: 'all_offers_filtered' }
@@ -496,7 +501,7 @@ export async function runAutomation(automation, {
     where: { userId: automation.userId, destGroupJid: automation.destGroupJid, sentAt: { lt: dedupSince } },
   }).catch(() => {})
 
-  const newSentIds = addSentIds(sentItemIds, sentIds)
+  const newSentIds = addSentIds(sentItemIds, sentIds, source === 'shopee' ? 200 : AWIN_SENT_IDS_CAP)
   await dbInstance.offerAutomation.update({
     where: { id: automation.id },
     data: { lastSentAt: new Date(), sentItemIds: JSON.stringify(newSentIds), page: advancedPage },

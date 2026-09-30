@@ -3,6 +3,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import Fastify from 'fastify'
+import { readFileSync } from 'node:fs'
 import db from '../src/db.js'
 import {
   AWIN_AUTOMATION_TEMPLATE_KEY,
@@ -303,4 +304,55 @@ test('empate de validade: a escolha varia (não segue a ordem do número) e é s
   // A regra aprovada continua: vence antes, sai antes.
   const urgent = promo(9999, '108626', 3, { title: 'Urgente', url: 'https://www.arno.com.br/urgente/p' })
   assert.equal(selectAwinCandidates([...list, urgent], { now: NOW, limit: 1 })[0].promotionId, '9999')
+})
+
+// ---------- revisão crítica 2026-09-30: revezamento e memória ----------
+import { AWIN_SENT_IDS_CAP, awinContentKey as contentKeyF, awinItemId as itemIdF, pruneAwinSentIds, selectAwinCandidates as selectF, storeLastSentOrder } from '../src/offerAutomation/awinOffers.js'
+
+function promoF(id, advertiserId, name, hoursToEnd, url = `https://loja${advertiserId}.com.br/p/${id}`, title = `Promo ${id}`) {
+  return { id: `row-${id}`, promotionId: String(id), advertiserId: String(advertiserId), advertiserName: name, title, url, urlTracking: url, status: 'active', endDate: new Date(Date.parse('2026-09-30T12:00:00Z') + hoursToEnd * 3_600_000) }
+}
+const NOW_F = new Date('2026-09-30T12:00:00Z')
+
+test('F5: revezamento entre execuções — com 1 por envio, a loja que saiu por último vai para o fim da fila', () => {
+  // KaBuM sempre vence antes; antes da correção, ela abria TODA execução.
+  const all = [promoF(1, 17729, 'Kabum', 5), promoF(2, 17729, 'Kabum', 6), promoF(3, 17648, 'C&A', 50), promoF(4, 32675, 'PUMA', 80)]
+  const sent = []
+  const order = []
+  for (let run = 0; run < 3; run++) {
+    const [picked] = selectF(all, { sentItemIds: sent, now: NOW_F, limit: 1 })
+    order.push(picked.advertiserName)
+    sent.push(itemIdF(picked))
+  }
+  assert.deepEqual(order, ['Kabum', 'C&A', 'PUMA'])
+  const [fourth] = selectF(all, { sentItemIds: sent, now: NOW_F, limit: 1 })
+  assert.equal(fourth.advertiserName, 'Kabum', 'volta para a loja que saiu há mais tempo')
+  assert.deepEqual([...storeLastSentOrder(sent).entries()], [['17729', 0], ['17648', 1], ['32675', 2]])
+})
+
+test('F8: promoções diferentes que apontam para a PÁGINA INICIAL da loja não se bloqueiam', () => {
+  const a = promoF(10, 17729, 'Kabum', 5, 'https://www.kabum.com.br/', 'Semana do gamer')
+  const b = promoF(11, 17729, 'Kabum', 6, 'https://www.kabum.com.br', 'Frete grátis no app')
+  assert.notEqual(contentKeyF(a), contentKeyF(b))
+  const picked = selectF([a, b], { sentItemIds: [itemIdF(a)], now: NOW_F, limit: 5 })
+  assert.deepEqual(picked.map((p) => p.promotionId), ['11'])
+  // Mesma página de produto continua sendo UMA oferta (RCA das variantes 127V/220V).
+  assert.equal(contentKeyF(promoF(20, 1, 'X', 5, 'https://x.com.br/p/1', 'A 127V')), contentKeyF(promoF(21, 1, 'X', 5, 'https://x.com.br/p/1', 'A 220V')))
+})
+
+test('F7: memória do que saiu é podada pelo que ainda está ativo; ids da Shopee ficam; teto de segurança', () => {
+  const alive = promoF(1, 17729, 'Kabum', 5)
+  const gone = promoF(2, 17729, 'Kabum', 5)
+  const kept = pruneAwinSentIds(['12345', itemIdF(alive), itemIdF(gone), 'awin:999'], [alive])
+  assert.deepEqual(kept, ['12345', itemIdF(alive)])
+  const many = Array.from({ length: AWIN_SENT_IDS_CAP + 10 }, (_, i) => `shopee-${i}`)
+  assert.equal(pruneAwinSentIds(many, []).length, AWIN_SENT_IDS_CAP)
+})
+
+test('F6/F7: disparador usa a memória podada e teto maior para promoções', () => {
+  const src = readFileSync(new URL('../src/offerAutomation/dispatcher.js', import.meta.url), 'utf8')
+  assert.match(src, /if \(Array\.isArray\(loaded\.sentItemIds\)\) sentItemIds = loaded\.sentItemIds/)
+  assert.match(src, /addSentIds\(sentItemIds, sentIds, source === 'shopee' \? 200 : AWIN_SENT_IDS_CAP\)/)
+  const offers = readFileSync(new URL('../src/offerAutomation/awinOffers.js', import.meta.url), 'utf8')
+  assert.match(offers, /distinct: \['advertiserId'\]/, 'carga por loja: nenhuma loja fica de fora por teto global')
 })

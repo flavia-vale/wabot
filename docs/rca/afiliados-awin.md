@@ -270,6 +270,23 @@ travadas se curam sozinhas no próximo envio (tentativa > 1h). Migration
 `20261001090000_awin_programme_logo`. Testes: `test/kabum-image.test.js`,
 `test/awin-enrich.test.js`.
 
+### Revisão crítica 2026-09-30 — casos de borda corrigidos (não regredir)
+
+| # | Falha | Efeito | Correção |
+|---|---|---|---|
+| F1 | Link Awin de concorrente SEM página (`cread.php` sem `ued`) | oferta inteira descartada | vira link dela para a página inicial da MESMA loja; página de outro site nunca vai junto |
+| F2 | Programa listando sufixo público (`*.com.br`) ou plataforma compartilhada (whatsapp, linktr.ee, bit.ly…) | QUALQUER link .com.br passaria como "loja Awin" | `normalizeStoreDomain` recusa sufixo público (`THREE_LABEL_SUFFIXES`) e `SHARED_HOSTS` |
+| F3 | `tidd.ly/…` / `awin1.com/…` sem `https://` | link do concorrente saía clicável | `findUnconvertedStoreLinks` pega Awin sem protocolo (toda cliente) |
+| F4 | Site próprio de grupo que leva a loja Awin | oferta perdida (`garimpeiros.com.br` 304/semana em loja não suportada) | desembrulho enxerga lojas Awin da cliente; cache separado (`awin|url`) |
+| F5 | Revezamento só DENTRO da execução | com 1 oferta/envio, a loja que vence antes monopolizava | abre a loja que saiu há mais tempo (`storeLastSentOrder`); fim só desempata |
+| F6 | Teto global de 1000 por fim | loja com fim mais tarde ficava de fora; "acabou" com promoções no banco | carga por loja (`distinct advertiserId`, 300 cada) |
+| F7 | Memória de enviados = últimos 200 | a mesma promoção voltava após ~200 envios | poda pelo que está ativo (`pruneAwinSentIds`) + teto 3000 para promoções |
+| F8 | Promoções diferentes para a PÁGINA INICIAL | a 1ª enviada bloqueava todas as outras para sempre | página inicial usa o título como identidade |
+| F9 | Logo da Awin 120×60 < piso de 120 px do download | a "última camada" da foto falhava → só texto | `fetchSmallImageAsCard`: imagem ≥ 32 px em quadro branco 800 px (oferta automática) |
+
+Efeito colateral conhecido de F8: uma promoção de página inicial que já tinha
+saído pode sair UMA vez de novo (a identidade antiga era a página).
+
 Fora (v1): link de loja Awin escrito sem `https://` não é visto pela rede de
 segurança (os domínios são por cliente); `clickref` por grupo; loja que recusa
 link direto (`deeplinkNotPermitted`) cai no longo (a Awin leva à página inicial
