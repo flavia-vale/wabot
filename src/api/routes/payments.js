@@ -3,6 +3,7 @@ import { createHmac } from 'crypto'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
 import { resolveSubscriptionPayerEmail, samePayerEmail } from '../../domain/payments/payerEmail.js'
+import { buildCheckoutPayer, buildCheckoutItem } from '../../domain/payments/checkoutRiskData.js'
 import { classifyMpAccessTokenMode, isSandboxTokenInProduction, SANDBOX_TOKEN_USER_MESSAGE } from '../../domain/payments/accessTokenMode.js'
 import {
   SUBSCRIPTION_OPEN_STATUSES,
@@ -566,13 +567,18 @@ async function createMercadoPagoPreference({ userId, plan }) {
   // Mercado Pago validates `back_urls` as user-facing return URLs.
   const callbackBase = `${callbackOrigin}/api/payments/callback`
 
+  // Quem compra e o que compra. Sem isso o antifraude do MP julgava uma compra
+  // anônima e recusava até Pix e saldo (RCA 2026-09-30, `checkoutRiskData.js`).
+  // Falha ao ler a conta nunca impede o checkout — só vai sem os dados.
+  const buyer = await db.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, contactPhone: true },
+  }).catch(() => null)
+  const payer = buildCheckoutPayer(buyer ?? {})
+
   const preference = {
-    items: [{
-      title: normalizedPlan.title,
-      quantity: 1,
-      unit_price: normalizedPlan.price,
-      currency_id: 'BRL',
-    }],
+    items: [buildCheckoutItem({ plan, title: normalizedPlan.title, price: normalizedPlan.price })],
+    ...(payer ? { payer } : {}),
     external_reference: userId,
     metadata: { plan },
     back_urls: {

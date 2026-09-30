@@ -262,9 +262,12 @@ async function main() {
         if (u) dequem = u.email || u.name || dono
         else dequem += ' (conta não existe mais no nosso banco)'
       }
-      console.log(`    ${fmt(pag.date_created)}  R$${pag.transaction_amount ?? '?'}  ${situacao.toUpperCase()}  ${dequem}`)
+      // `operation_type` separa o que é da assinatura (`recurring_payment`,
+      // `card_validation`) do avulso (`regular_payment`). Sem ele, em 2026-09-30
+      // as recusas do avulso foram lidas como recusas da cobrança recorrente.
+      console.log(`    ${fmt(pag.date_created)}  R$${pag.transaction_amount ?? '?'}  ${situacao.toUpperCase()}  ${pag.operation_type || '?'}  ${dequem}`)
       console.log(`        ${explicarMotivo(pag.status_detail)}`)
-      if (situacao === 'rejected') recusas.push({ id, detalhe: pag.status_detail, quando: pag.date_created })
+      if (situacao === 'rejected') recusas.push({ id, detalhe: pag.status_detail, quando: pag.date_created, tipo: pag.operation_type })
     }
   }
 
@@ -299,9 +302,12 @@ async function main() {
   // ---- Conclusão ---------------------------------------------------------
   console.log('')
   if (recusas.length) {
-    const antifraude = recusas.filter(r => r.detalhe === 'cc_rejected_high_risk' || r.detalhe === 'cc_rejected_duplicated_payment')
+    const antifraude = recusas.filter(r => ['cc_rejected_high_risk', 'rejected_high_risk', 'cc_rejected_duplicated_payment'].includes(r.detalhe))
     if (antifraude.length) {
+      const porTipo = {}
+      for (const r of antifraude) porTipo[r.tipo || '?'] = (porTipo[r.tipo || '?'] || 0) + 1
       console.log(`>> CAUSA ENCONTRADA: ${antifraude.length} recusa(s) do antifraude do Mercado Pago.`)
+      console.log(`   Por tipo: ${Object.entries(porTipo).map(([k, v]) => `${k}=${v}`).join(', ')} (regular_payment = avulso; recurring_payment/card_validation = assinatura)`)
       console.log('   Não é o cartão dela. Ação nossa: não deixar repetir tentativa idêntica.')
       console.log('   Ação com ela: tentar do aparelho e do cartão que ela costuma usar, ou o pagamento avulso.')
     } else {
