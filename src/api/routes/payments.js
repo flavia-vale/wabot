@@ -3,7 +3,6 @@ import { createHmac } from 'crypto'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { resolvePlanForPayment, DEFAULT_PLANS } from '../../domain/payments/service.js'
 import { resolveSubscriptionPayerEmail, samePayerEmail } from '../../domain/payments/payerEmail.js'
-import { buildCheckoutPayer, buildCheckoutItem } from '../../domain/payments/checkoutRiskData.js'
 import { classifyMpAccessTokenMode, isSandboxTokenInProduction, SANDBOX_TOKEN_USER_MESSAGE } from '../../domain/payments/accessTokenMode.js'
 import {
   SUBSCRIPTION_OPEN_STATUSES,
@@ -555,7 +554,7 @@ async function createMercadoPagoSubscription({ userId, plan, payerEmail, startDa
   }
 }
 
-async function createMercadoPagoPreference({ userId, plan, informedEmail }) {
+async function createMercadoPagoPreference({ userId, plan, payer = null, months = 1 }) {
   const accessToken = getMpAccessToken()
   if (!accessToken) {
     const err = new Error('MP_ACCESS_TOKEN não configurado')
@@ -588,20 +587,21 @@ async function createMercadoPagoPreference({ userId, plan, informedEmail }) {
   // Mercado Pago validates `back_urls` as user-facing return URLs.
   const callbackBase = `${callbackOrigin}/api/payments/callback`
 
-  // Quem compra e o que compra. Sem isso o antifraude do MP julgava uma compra
-  // anônima e recusava até Pix e saldo (RCA 2026-09-30, `checkoutRiskData.js`).
-  // Falha ao ler a conta nunca impede o checkout — só vai sem os dados.
-  const buyer = await db.user.findUnique({
-    where: { id: userId },
-    select: { email: true, contactPhone: true },
-  }).catch(() => null)
-  // O e-mail é o que ela preencheu em PLANOS (o mesmo campo serve aos dois
-  // botões); vazio → o da conta. Inválido não bloqueia o avulso: só não vai.
-  const { email } = resolveSubscriptionPayerEmail({ accountEmail: buyer?.email, informedEmail })
-  const payer = buildCheckoutPayer({ ...(buyer ?? {}), email })
+  // Pré-pago (B11): o preço vem do servidor (preço mensal do plano × meses × desconto).
+  // Sem `months` (ou 1) tudo segue idêntico ao checkout de sempre.
+  const prepaid = Number(months) > 1 ? buildPrepaidOffer({ months, monthlyPrice: normalizedPlan.price }) : null
+  if (Number(months) > 1 && !prepaid) {
+    const err = new Error('Período de pré-pago inválido')
+    err.code = 'INVALID_PREPAID_MONTHS'
+    throw err
+  }
+  const itemTitle = prepaid ? `${normalizedPlan.title.replace(/30 dias/i, `${prepaid.days} dias`)}` : normalizedPlan.title
+  const itemPrice = prepaid ? prepaid.total : normalizedPlan.price
 
+  // Pagador e item completos: é o que o antifraude do MP usa para aprovar
+  // (recusas "high_risk" em cartão avulso, 27/09/2026 — ver checkoutPayer.js).
   const preference = {
-    items: [buildCheckoutItem({ plan, title: normalizedPlan.title, price: normalizedPlan.price })],
+    items: [buildCheckoutItem({ plan, title: itemTitle, price: itemPrice })],
     ...(payer ? { payer } : {}),
     external_reference: userId,
     metadata: { plan, ...buildPrepaidMetadata(prepaid) },
@@ -1321,7 +1321,7 @@ export async function paymentsRoutes(app) {
 
   // Creates a dynamic Mercado Pago Preference (supports PIX + credit card) and returns the checkout URL
   app.post('/checkout', { onRequest: [app.authenticate] }, async (req, reply) => {
-    const { plan, payerEmail } = req.body ?? {}
+    const { plan, months: rawMonths } = req.body ?? {}
     const plans = await getBillingPlans()
     if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
@@ -1336,7 +1336,9 @@ export async function paymentsRoutes(app) {
     trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan, ...(months !== 1 ? { months } : {}) } })
 
     try {
-      const checkoutUrl = await createMercadoPagoPreference({ userId, plan, informedEmail: payerEmail })
+      const payerUser = await db.user.findUnique({ where: { id: userId }, select: { name: true, email: true, contactPhone: true } }).catch(() => null)
+      const payer = buildCheckoutPayer({ name: payerUser?.name, email: payerUser?.email, phone: payerUser?.contactPhone })
+      const checkoutUrl = await createMercadoPagoPreference({ userId, plan, payer, months })
       return { checkout_url: checkoutUrl }
     } catch (err) {
       if (err?.code === 'INVALID_PLAN_CONFIG') {
