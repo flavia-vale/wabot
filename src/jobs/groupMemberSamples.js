@@ -6,6 +6,9 @@ import defaultDb from '../db.js'
 import { listGroups as defaultListGroups } from '../manager.js'
 import { pruneMemberSampleIds } from '../core/groupMemberStats.js'
 import { canUseGroupMembers } from '../billing/plans.js'
+import { MEASURABLE_MAX_AGE_MS, isHotLink } from '../core/smartLinkOccupancy.js'
+import { isValidInviteCode } from '../core/smartLinkPicker.js'
+import { isSmartLinkOwnerEligible } from '../core/smartLinkAccess.js'
 import { isRunning as defaultIsRunning } from '../manager.js'
 
 export function normalizeSize(size) {
@@ -72,6 +75,62 @@ export async function runGroupMemberSampleSweep({ db = defaultDb, isRunning = de
     } catch (err) {
       stats.errors++
       logger?.warn?.({ userId: u.id, err: err.message }, 'amostra de membros falhou')
+    }
+    if (pauseMs > 0) await new Promise(resolve => setTimeout(resolve, pauseMs))
+  }
+  return stats
+}
+
+/**
+ * Medição adaptativa do Link Inteligente: quem tem grupo com mais de 80% da
+ * capacidade é medido a cada poucos minutos (não de hora em hora), para a troca
+ * de grupo na margem de 95% não ficar cega por até 60 min. Só esses usuários, só
+ * com sessão viva, e 1 consulta (`listGroups`) por usuário por passada, com
+ * pausa entre eles (anti-ban). O caminho comum segue sendo a passada horária.
+ *
+ * @returns {Promise<{ users: number, captured: number, skipped: number, errors: number }>}
+ */
+export async function runHotSampleSweep({ db = defaultDb, isRunning = defaultIsRunning, listGroups = defaultListGroups, now = new Date(), pauseMs = 2000, logger } = {}) {
+  const stats = { users: 0, captured: 0, skipped: 0, errors: 0 }
+  const links = await db.smartLink.findMany({
+    where: { enabled: true, deletedAt: null },
+    select: {
+      userId: true,
+      capPerGroup: true,
+      user: { select: { plan: true, accessExpiresAt: true, status: true } },
+      groups: {
+        select: {
+          enabled: true,
+          inviteCode: true,
+          group: { select: { memberSamples: { orderBy: { sampledAt: 'desc' }, take: 1, select: { size: true, sampledAt: true } } } },
+        },
+      },
+    },
+  })
+
+  const hotUsers = new Set()
+  for (const link of links) {
+    if (hotUsers.has(link.userId) || link.user?.status !== 'active' || !isSmartLinkOwnerEligible(link.user, now)) continue
+    const groups = link.groups.map(g => {
+      const sample = g.group?.memberSamples?.[0] ?? null
+      const ageMs = sample ? now.getTime() - new Date(sample.sampledAt).getTime() : Infinity
+      return { size: sample?.size ?? null, enabled: g.enabled, hasInvite: isValidInviteCode(g.inviteCode), measurable: ageMs <= MEASURABLE_MAX_AGE_MS }
+    })
+    if (isHotLink(groups, link.capPerGroup)) hotUsers.add(link.userId)
+  }
+
+  for (const userId of hotUsers) {
+    let running = false
+    try { running = Boolean(await isRunning(userId)) } catch { running = false }
+    if (!running) continue
+    stats.users++
+    try {
+      const r = await captureMemberSamplesForUser(userId, { db, listGroups, now })
+      stats.captured += r.captured
+      stats.skipped += r.skipped
+    } catch (err) {
+      stats.errors++
+      logger?.warn?.({ userId, err: err.message }, 'medição adaptativa falhou')
     }
     if (pauseMs > 0) await new Promise(resolve => setTimeout(resolve, pauseMs))
   }

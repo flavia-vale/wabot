@@ -53,3 +53,22 @@ test('janela longa aceita até 12h de folga (histórico diário); 24h só 3h', (
   assert.deepEqual(computeDelta(daily, 30), { diff: 100, pct: 25 })
   assert.equal(computeDelta([at(0, 500, 'a'), at(30, 400, 'b')], 1), null)
 })
+
+import { seriesForPeriod } from '../../src/core/groupMemberStats.js'
+
+test('série: só a janela, em ordem, e com menos de 2 pontos não desenha', () => {
+  const hourly = [...Array(72).keys()].map(h => at(h, 1000 - h, `s${h}`))
+  const day = seriesForPeriod(hourly, 1)
+  assert.equal(day.length, 25)
+  assert.ok(day[0].t < day[day.length - 1].t)
+  assert.equal(day[day.length - 1].size, 1000)
+  assert.deepEqual(seriesForPeriod([at(0, 5, 'a')], 7), [])
+})
+
+test('série longa é reduzida para no máximo 48 pontos mantendo primeiro e último', () => {
+  const many = [...Array(300).keys()].map(h => at(h, h, `s${h}`))
+  const s = seriesForPeriod(many, 30, 48)
+  assert.equal(s.length, 48)
+  assert.equal(s[0].size, 299)
+  assert.equal(s[s.length - 1].size, 0)
+})

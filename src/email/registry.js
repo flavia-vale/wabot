@@ -32,6 +32,10 @@ export const EMAIL_GROUPS = Object.freeze({
   afiliados: 'Programa de afiliados',
   marketing: 'Marketing e avisos',
   contato: 'Contato e escuta',
+  // Avisos do Link Inteligente (grupos quase cheios / lotados). Grupo próprio de
+  // propósito: fora dos tetos semanais e da trava de conta parada — aviso de
+  // link lotando não pode ser calado por "já mandamos muitos e-mails".
+  link: 'Link Inteligente',
   // Avisos que vão para a ADMIN do produto, não para a cliente. Ficam no mesmo
   // catálogo (dá para editar o texto pelo painel), mas saem por um caminho
   // próprio: `src/email/adminAlerts.js`. Disparo em massa é BARRADO para eles.
@@ -729,6 +733,65 @@ Já trocamos o servidor por um bem maior e o limite subiu. **Agora é só entrar
 Se aparecer qualquer coisa estranha na tela, responde este e-mail ou chama a gente no WhatsApp ({{whatsapp_suporte}}) que a gente resolve com você.
 
 Desculpa pelo transtorno — e obrigada pela paciência.`,
+  },
+  {
+    slug: 'link_inteligente_quase_cheio',
+    name: 'Link Inteligente: grupos quase cheios',
+    description: 'Sai quando TODOS os grupos de um Link Inteligente passaram de 90% da capacidade. Um aviso por episódio; lembra no máximo 2 vezes (1 a cada 24 h).',
+    group: 'link',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 1,
+    variables: [
+      { name: 'nome_link', description: 'Nome do link', example: 'Ofertas Tech' },
+      { name: 'ocupacao', description: 'Quanto, em média, os grupos já estão cheios (%)', example: '93' },
+      { name: 'vagas', description: 'Vagas que ainda sobram somando os grupos', example: '215' },
+      { name: 'previsao_frase', description: 'Frase com a previsão (vazia sem histórico suficiente)', example: ' — no ritmo dos últimos dias, elas acabam em cerca de 2 dias' },
+      { name: 'link_painel', description: 'Endereço da tela do Link Inteligente', example: 'https://espelhagrupos.com.br/painel/link-inteligente' },
+    ],
+    title: 'Seus grupos estão quase cheios',
+    subject: 'Os grupos do seu Link Inteligente estão quase cheios',
+    body: `{{saudacao}} Todos os grupos do seu Link Inteligente "{{nome_link}}" passaram de 90% da capacidade — em média, já estão {{ocupacao}}% cheios.
+
+Sobram cerca de **{{vagas}} vagas** no total{{previsao_frase}}.
+
+O que fazer, em poucos minutos:
+
+1. Crie um grupo novo no WhatsApp e coloque o robô como administrador.
+2. No painel, abra o Link Inteligente e adicione o grupo novo ao link.
+3. Pronto: o link passa a mandar as pessoas para o grupo que tem mais espaço.
+
+[[botao:Abrir o Link Inteligente|{{link_painel}}]]
+
+Enquanto ainda houver vaga, o link continua funcionando e manda as pessoas para o grupo menos cheio.`,
+  },
+  {
+    slug: 'link_inteligente_lotado',
+    name: 'Link Inteligente: todos os grupos lotados',
+    description: 'Sai quando TODOS os grupos de um Link Inteligente chegaram ao limite — quem clica no link vê "Grupos lotados". Urgente: sai a qualquer hora.',
+    group: 'link',
+    category: 'transactional',
+    trigger: 'auto',
+    dedupDays: 1,
+    variables: [
+      { name: 'nome_link', description: 'Nome do link', example: 'Ofertas Tech' },
+      { name: 'grupos', description: 'Quantos grupos o link tem', example: '3' },
+      { name: 'link_painel', description: 'Endereço da tela do Link Inteligente', example: 'https://espelhagrupos.com.br/painel/link-inteligente' },
+    ],
+    title: 'Seu Link Inteligente lotou',
+    subject: 'Urgente: todos os grupos do seu Link Inteligente lotaram',
+    body: `{{saudacao}} Os {{grupos}} grupos do seu Link Inteligente "{{nome_link}}" chegaram ao limite.
+
+**Quem clicar no link agora vê a mensagem "Grupos lotados" e não consegue entrar** — cada minuto assim é gente que você deixa de receber.
+
+Para resolver agora:
+
+1. Crie um grupo novo no WhatsApp e coloque o robô como administrador.
+2. No painel, abra o Link Inteligente e adicione o grupo novo ao link.
+
+[[botao:Adicionar um grupo ao link|{{link_painel}}]]
+
+Assim que o grupo novo entrar, o link volta a mandar as pessoas para ele.`,
   },
   {
     slug: 'whatsapp_desconectado',

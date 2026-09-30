@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { pickGroup, normalizeSlug, isValidInviteCode, inviteUrl, normalizeCap, createReserveTracker } from '../../src/core/smartLinkPicker.js'
+import { pickGroup, marginMembers, normalizeSlug, isValidInviteCode, inviteUrl, normalizeCap, createReserveTracker } from '../../src/core/smartLinkPicker.js'
 
 const g = (id, size, extra = {}) => ({ id, enabled: true, inviteCode: 'ABCDEFGHIJ1234', size, reserved: 0, lastPickedAt: 0, ...extra })
 
@@ -14,13 +14,34 @@ test('diferença de até 5 membros é empate e alterna pelo menos recente', () =
   assert.equal(r.group.id, 'b')
 })
 
-test('reserva de cliques desloca a escolha (rajada não cai toda no mesmo grupo)', () => {
+test('cliques NÃO mudam o ranking: o de menos membros continua na frente enquanto não chega na margem', () => {
   const r = pickGroup([g('a', 300, { reserved: 40 }), g('b', 320)])
-  assert.equal(r.group.id, 'b')
+  assert.equal(r.group.id, 'a')
 })
 
-test('grupo no teto sai do rodízio; todos cheios = all_full', () => {
-  assert.equal(pickGroup([g('a', 1000), g('b', 400)]).group.id, 'b')
+test('margem de 95%: em 950 o grupo sai da preferência e o link passa para os outros', () => {
+  assert.equal(marginMembers(1000), 950)
+  assert.equal(marginMembers(50), 47)
+  // 949 ainda está abaixo da margem: é preferido sobre quem já passou dela
+  assert.equal(pickGroup([g('a', 949), g('b', 960)]).group.id, 'a')
+  // 950 já é margem: o link passa para o que ainda tem espaço, e o de 800 é o único abaixo da margem
+  assert.equal(pickGroup([g('a', 950), g('b', 960), g('c', 800)]).group.id, 'c')
+})
+
+test('freio: clique recente empurra o grupo para fora da margem entre duas medições', () => {
+  const r = pickGroup([g('a', 940, { reserved: 15 }), g('b', 700)])
+  assert.equal(r.group.id, 'b')
+  assert.equal(r.reason, 'ok')
+})
+
+test('todos na margem mas abaixo de 100%: manda para o MENOS cheio (não uma página morta)', () => {
+  const r = pickGroup([g('a', 990), g('b', 955), g('c', 970)])
+  assert.equal(r.group.id, 'b')
+  assert.equal(r.reason, 'reserve')
+})
+
+test('em 100% (contando o freio) o grupo sai; todos cheios = all_full', () => {
+  assert.equal(pickGroup([g('a', 1000), g('b', 960)]).group.id, 'b')
   const full = pickGroup([g('a', 1000), g('b', 990, { reserved: 10 })])
   assert.deepEqual([full.group, full.reason], [null, 'all_full'])
   assert.equal(pickGroup([g('a', 60)], { cap: 50 }).reason, 'all_full')
@@ -34,6 +55,7 @@ test('desligado ou sem convite válido não entra; nenhum utilizável = empty', 
 test('grupo sem amostra só é usado se não há grupo medido com vaga', () => {
   assert.equal(pickGroup([g('novo', null), g('a', 500)]).group.id, 'a')
   assert.equal(pickGroup([g('novo', null), g('a', 1000)]).group.id, 'novo')
+  assert.equal(pickGroup([g('novo', null), g('a', 960)]).group.id, 'novo')
 })
 
 test('slug: normaliza, recusa reservado, curto e hífen duplo', () => {

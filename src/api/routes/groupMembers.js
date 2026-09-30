@@ -1,6 +1,6 @@
 import dbDefault from '../../db.js'
 import { buildFeatureGateError, canUseGroupMembers, FEATURE_CODES } from '../../billing/plans.js'
-import { summarizeGroupMembers } from '../../core/groupMemberStats.js'
+import { seriesForPeriod, summarizeGroupMembers } from '../../core/groupMemberStats.js'
 
 const WINDOW_DAYS = 31
 
@@ -26,7 +26,10 @@ export async function groupMembersRoutes(app, options = {}) {
       },
       orderBy: { name: 'asc' },
     })
-    const rows = groups.map(g => ({ id: g.id, name: g.name, ...summarizeGroupMembers(g.memberSamples, now) }))
+    const rows = groups.map(g => ({
+      id: g.id, name: g.name, ...summarizeGroupMembers(g.memberSamples, now),
+      series: { d1: seriesForPeriod(g.memberSamples, 1), d7: seriesForPeriod(g.memberSamples, 7), d30: seriesForPeriod(g.memberSamples, 30) },
+    }))
     const totalSize = rows.reduce((sum, r) => sum + (r.size ?? 0), 0)
     return { groups: rows, totalSize }
   })

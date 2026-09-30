@@ -2490,3 +2490,52 @@ a.pv-stat:hover { border-color: var(--line-strong); transform: translateY(-1px);
   .pnl-robot-actions { grid-column: 1 / -1; }
   .pnl-robot-actions > .pnl-btn { flex: 1; justify-content: center; }
 }
+
+/* ── Membros / Link Inteligente / card de ocupação ────────────────────────────
+ * Sem tabela: `.pnl-table-wrap` some em telas ≤720px, então tudo aqui é lista de
+ * cards (funciona no celular). O vermelho escuro do alerta é decisão da dona
+ * (2026-09-30), fora do design system por enquanto.
+ */
+:root { --danger-deep: #9b1c1c; }
+.mb-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.mb-toolbar .pnl-input { width: auto; min-width: 190px; }
+.mb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.mb-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--pnl-radius); padding: 16px; display: grid; gap: 6px; box-shadow: var(--pnl-shadow-soft); min-width: 0; }
+.mb-card-name { font-weight: 700; overflow-wrap: anywhere; }
+.mb-card-num { font-size: 30px; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.mb-card-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.mb-delta { font-weight: 700; font-variant-numeric: tabular-nums; }
+.mb-delta small { font-weight: 500; margin-left: 4px; }
+.mb-delta.is-up { color: var(--accent-strong); }
+.mb-delta.is-down { color: var(--danger); }
+.mb-delta.is-flat { color: var(--ink-soft); }
+.mb-meta { font-size: 12px; color: var(--ink-soft); }
+.mb-spark { flex: none; }
+
+.occ-bar { height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
+.occ-bar > span { display: block; height: 100%; background: var(--accent-strong); border-radius: 999px; transition: width .3s; }
+.occ-bar.is-warn > span { background: var(--warn); }
+.occ-bar.is-full > span { background: var(--danger-deep); }
+
+.lk-groups { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.lk-group { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); min-width: 0; }
+.lk-group-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.lk-group-name { font-weight: 700; overflow-wrap: anywhere; }
+.lk-group-num { font-variant-numeric: tabular-nums; font-weight: 700; }
+.lk-group-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lk-status { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--bg-soft); color: var(--ink-soft); }
+.lk-status.is-ok { background: color-mix(in oklab, var(--accent) 30%, transparent); color: var(--accent-strong); }
+.lk-status.is-warn { background: color-mix(in oklab, var(--warn) 25%, transparent); color: var(--ink); }
+.lk-status.is-full { background: color-mix(in oklab, var(--danger-deep) 14%, transparent); color: var(--danger-deep); }
+.lk-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.lk-clicks { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 0; font-size: 13px; }
+
+.occ-card { display: grid; gap: 10px; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pnl-radius); box-shadow: var(--pnl-shadow-soft); text-decoration: none; color: inherit; position: relative; text-align: left; font: inherit; width: 100%; cursor: pointer; }
+.occ-card.is-warn { border: 2px solid var(--warn); }
+.occ-card.is-critical { border: 2px solid var(--danger-deep); background: color-mix(in oklab, var(--danger-deep) 6%, var(--surface)); }
+.occ-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.occ-card-label { font-size: 12.5px; color: var(--ink-soft); }
+.occ-card-num { font-size: 30px; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.occ-card.is-critical .occ-card-num { color: var(--danger-deep); }
+.occ-card-alert { font-weight: 800; color: var(--danger-deep); }
+.occ-card-foot { font-size: 12.5px; color: var(--ink-soft); }

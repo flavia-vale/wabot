@@ -19,8 +19,10 @@ async function make({ link, links, samples = {}, opts = {} } = {}) {
   return { app, clicks, counters }
 }
 
+const FUTURE = new Date(Date.now() + 30 * 864e5)
 const baseLink = (over = {}) => ({
   slug: 'promo-tech', id: 'l1', enabled: true, capPerGroup: 1000,
+  user: { plan: 'pro', accessExpiresAt: FUTURE, status: 'active' },
   groups: [
     { id: 'lg1', groupId: 'g1', inviteCode: 'AAAAAAAAAA1111', enabled: true },
     { id: 'lg2', groupId: 'g2', inviteCode: 'BBBBBBBBBB2222', enabled: true },
@@ -40,12 +42,25 @@ test('redireciona 302 para o grupo mais vazio, sem cache e noindex', async () =>
   assert.equal(clicks[0].where.smartLinkGroupId_day.smartLinkGroupId, 'lg2')
 })
 
-test('rajada de cliques alterna entre grupos próximos (reserva)', async () => {
+test('rajada: o mais vazio recebe até o freio empurrá-lo para a margem de 95%, sem nova medição', async () => {
   const at = new Date()
-  const { app } = await make({ link: baseLink(), samples: { g1: { size: 300, sampledAt: at }, g2: { size: 300, sampledAt: at } } })
-  const seen = new Set()
-  for (let i = 0; i < 6; i++) seen.add((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).headers.location)
-  assert.equal(seen.size, 2)
+  const { app } = await make({ link: baseLink(), samples: { g1: { size: 900, sampledAt: at }, g2: { size: 500, sampledAt: at } } })
+  const seen = []
+  for (let i = 0; i < 500; i++) seen.push((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).headers.location)
+  // g2 (500) recebe tudo até 500 + cliques chegar a 950; g1 (900) fica abaixo disso só nos primeiros.
+  const toG2 = seen.filter(l => l.endsWith('BBBBBBBBBB2222')).length
+  assert.ok(toG2 >= 440 && toG2 <= 460, `g2 recebeu ${toG2}`)
+  // depois de g2 passar da margem (freio), os dois estão na margem: vale o menos cheio, nunca a página morta
+  assert.ok(seen.every(Boolean))
+  await app.close()
+})
+
+test('todos na margem mas não lotados: continua redirecionando (reserva), nunca "lotados"', async () => {
+  const at = new Date()
+  const { app } = await make({ link: baseLink(), samples: { g1: { size: 990, sampledAt: at }, g2: { size: 960, sampledAt: at } } })
+  const res = await app.inject({ url: '/g/promo-tech', headers: HUMAN })
+  assert.equal(res.statusCode, 302)
+  assert.equal(res.headers.location, 'https://chat.whatsapp.com/BBBBBBBBBB2222')
   await app.close()
 })
 
@@ -152,4 +167,61 @@ test('link apagado (soft delete) responde 404 mesmo com grupos', async () => {
   const { app } = await make({ link: baseLink({ deletedAt: new Date() }), samples: { g1: { size: 1, sampledAt: new Date() } } })
   assert.equal((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).statusCode, 404)
   await app.close()
+})
+
+test('plano vencido da dona: o link PARA NA HORA (404 amigável, sem redirecionar nem contar clique)', async () => {
+  const samples = { g1: { size: 1, sampledAt: new Date() }, g2: { size: 2, sampledAt: new Date() } }
+  const expired = await make({ link: baseLink({ user: { plan: 'pro', accessExpiresAt: new Date(Date.now() - 1000), status: 'active' } }), samples })
+  const res = await expired.app.inject({ url: '/g/promo-tech', headers: HUMAN })
+  assert.equal(res.statusCode, 404)
+  assert.match(res.body, /temporariamente indisponível/)
+  assert.equal(res.headers.location, undefined)
+  await expired.app.close()
+  assert.equal(expired.clicks.length, 0)
+})
+
+test('o corte é exato: o cache de 10 s não segura o link depois que o plano vence', async () => {
+  let t = Date.now()
+  const expiresAt = new Date(t + 5000)
+  const { createTrackGuard } = await import('../src/api/routes/affiliateTrackGuard.js')
+  const { app } = await make({
+    link: baseLink({ user: { plan: 'pro', accessExpiresAt: expiresAt, status: 'active' } }),
+    samples: { g1: { size: 1, sampledAt: new Date() } },
+    opts: { now: () => t, guard: createTrackGuard({ rateMax: 1000 }) },
+  })
+  assert.equal((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).statusCode, 302)
+  t += 6000 // passou do vencimento, mas o link ainda está no cache (TTL 10 s)
+  assert.equal((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).statusCode, 404)
+  await app.close()
+})
+
+test('plano vencido NÃO gasta o limite de erros por IP (é gente clicando num link divulgado)', async () => {
+  const { createTrackGuard } = await import('../src/api/routes/affiliateTrackGuard.js')
+  const { app } = await make({
+    link: baseLink({ user: { plan: 'pro', accessExpiresAt: new Date(Date.now() - 1000), status: 'active' } }),
+    opts: { missGuard: createTrackGuard({ rateMax: 2 }) },
+  })
+  const codes = []
+  for (let i = 0; i < 5; i++) codes.push((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).statusCode)
+  assert.deepEqual(codes, [404, 404, 404, 404, 404])
+  await app.close()
+})
+
+test('quem pode e quem não pode: PRO sem vencimento, trial ativo, trial vencido, Basic, conta bloqueada', async () => {
+  const samples = { g1: { size: 1, sampledAt: new Date() } }
+  const cases = [
+    [{ plan: 'pro', accessExpiresAt: null, status: 'active' }, 302, 'PRO sem vencimento'],
+    [{ plan: 'trial', accessExpiresAt: FUTURE, status: 'active' }, 302, 'trial ativo'],
+    [{ plan: 'trial', accessExpiresAt: new Date(Date.now() - 1000), status: 'active' }, 404, 'trial vencido'],
+    [{ plan: 'basic', accessExpiresAt: FUTURE, status: 'active' }, 404, 'Basic'],
+    [{ plan: 'pro', accessExpiresAt: FUTURE, status: 'banned' }, 404, 'banida'],
+    [{ plan: 'pro', accessExpiresAt: FUTURE, status: 'suspended' }, 404, 'suspensa'],
+    [{ plan: 'pro', accessExpiresAt: 'data-quebrada', status: 'active' }, 404, 'data ilegível'],
+    [null, 404, 'sem dono'],
+  ]
+  for (const [user, expected, label] of cases) {
+    const { app } = await make({ link: baseLink({ user }), samples })
+    assert.equal((await app.inject({ url: '/g/promo-tech', headers: HUMAN })).statusCode, expected, label)
+    await app.close()
+  }
 })

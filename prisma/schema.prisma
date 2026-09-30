@@ -1016,6 +1016,14 @@ model SmartLink {
   // Apagar NÃO libera o endereço: ele já foi divulgado e outra pessoa que o
   // pegasse receberia o tráfego. Só a mesma dona pode reativá-lo.
   deletedAt    DateTime?
+  // Avisos de "link enchendo" (PR 3): por canal, desligáveis pela cliente.
+  notifyEmail      Boolean   @default(true)
+  notifyWhatsapp   Boolean   @default(true)
+  // Estado do aviso (controle de repetição): ver src/core/smartLinkAlertPolicy.js.
+  alertKind        String?   // 'warn' | 'urgent' enquanto há um episódio aberto
+  alertLastSentAt  DateTime?
+  alertReminders   Int       @default(0)
+  alertActiveGroups Int?     // grupos ativos quando avisou (grupo novo rearma)
   groups       SmartLinkGroup[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt

@@ -144,6 +144,7 @@ import {
   buildMissingCredentialNudgeText,
   buildMissingGroupsNudgeText,
   buildAdminSupportMessageText,
+  buildSmartLinkAlertMessageText,
 } from './core/selfWelcomeMessage.js'
 import { VIDEO_CADASTRO_ETIQUETAS_URL, VIDEO_ATIVACAO_ROBO_URL } from './tutorialVideo.js'
 import sharp from 'sharp'
@@ -6334,11 +6335,16 @@ const handleMessage = async msg => {
       return
     }
     try {
-      const texto = buildAdminSupportMessageText({ corpo: msg.text })
+      // `kind` desconhecido/ausente = mensagem manual do suporte (comportamento de sempre).
+      const isSmartLinkAlert = msg.kind === 'smart_link_alert' || msg.kind === 'smart_link_alert_urgent'
+      const texto = isSmartLinkAlert
+        ? buildSmartLinkAlertMessageText({ corpo: msg.text, urgent: msg.kind === 'smart_link_alert_urgent' })
+        : buildAdminSupportMessageText({ corpo: msg.text })
       await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
-      logger.info({ userId }, 'Mensagem manual do suporte enviada para o próprio número')
+      logger.info({ userId, kind: isSmartLinkAlert ? msg.kind : 'suporte' }, isSmartLinkAlert ? 'Aviso do Link Inteligente enviado para o próprio número' : 'Mensagem manual do suporte enviada para o próprio número')
       sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, data: { ok: true } })
-      logWhatsappSelfMessageContact({ reason: 'mensagem_manual_suporte', texto, actorUserId: msg.actorUserId ?? null })
+      if (isSmartLinkAlert) logWhatsappSelfMessageContact({ reason: 'alerta_link_inteligente', texto })
+      else logWhatsappSelfMessageContact({ reason: 'mensagem_manual_suporte', texto, actorUserId: msg.actorUserId ?? null })
     } catch (err) {
       sendIpc({ type: 'sendSelfMessageResult', requestId: msg.requestId, error: String(err?.message ?? err) })
     }
