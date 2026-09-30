@@ -210,6 +210,7 @@ export function createSupervisorClient({
   const reloadConfig = userId => send(COMMAND.RELOAD_CONFIG, { userId })
   const refreshWaGroups = userId => send(COMMAND.REFRESH_WA_GROUPS, { userId })
   const channelMetadata = (userId, { jid, inviteCode }) => send(COMMAND.CHANNEL_METADATA, { userId, jid, inviteCode })
+  const groupInviteCode = (userId, jid) => send(COMMAND.GROUP_INVITE_CODE, { userId, jid })
   const followChannelImmediate = (userId, jid) => send(COMMAND.CHANNEL_FOLLOW, { userId, jid })
   const listFollowedChannels = userId => send(COMMAND.CHANNEL_LIST_FOLLOWED, { userId })
   const getLastQR = userId => send(COMMAND.GET_LAST_QR, { userId })
@@ -275,7 +276,7 @@ export function createSupervisorClient({
     // superfície igual a sessionCore.js
     startBot, stopBot, isRunning, listRunningBots,
     listGroups, sendBroadcast, sendSelfMessage, requestPairingCode, getBotMetrics, reloadConfig, refreshWaGroups,
-    channelMetadata, followChannelImmediate, listFollowedChannels,
+    channelMetadata, groupInviteCode, followChannelImmediate, listFollowedChannels,
     onQR, onStatus, getLastQR,
     resumePersistedBots, startSessionHealthMonitor, stopAllBots,
     // extras

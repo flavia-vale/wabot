@@ -12,6 +12,7 @@ export const PRO_FEATURES = Object.freeze({
   ritmo: { title: 'Controle de ritmo', desc: 'Horário de descanso, máximo de ofertas por dia e intervalo entre mensagens — para o seu número se comportar como uma pessoa.' },
   variacao: { title: 'Variação do texto', desc: 'O robô alterna ganchos, chamadas e convites para as mensagens não ficarem repetidas.' },
   vercanal: { title: 'Botão “Ver canal”', desc: 'Um botão para o seu canal embaixo de cada oferta publicada.' },
+  rodizio: { title: 'Link Inteligente (rodízio de grupos)', desc: 'Um só link para divulgar: o robô manda cada pessoa para o grupo mais vazio e evita grupo lotado.' },
   membros: { title: 'Painel de membros dos grupos', desc: 'Quantas pessoas há em cada grupo de destino e quanto cresceu ou diminuiu em 24 horas, 7 e 30 dias.' },
   vendas: { title: 'Painel de vendas Shopee', desc: 'Vendas, comissão por dia e produtos que mais venderam na Shopee, direto no painel, sem abrir outra tela.' },
 })
