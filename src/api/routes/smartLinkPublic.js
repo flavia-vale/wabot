@@ -8,9 +8,18 @@ import { createTrackGuard } from './affiliateTrackGuard.js'
 import { isNonHumanUserAgent } from './clickTracker.js'
 
 const CACHE_TTL_MS = 10_000
-// Muita gente atrás do mesmo IP (rede móvel/CGNAT): o limite por IP é folgado.
-// Serve contra abuso de robô, não contra tráfego normal do link divulgado.
-const RATE_MAX_PER_MIN = Number(process.env.SMART_LINK_RATE_MAX) || 120
+const CLICK_FLUSH_MS = 5_000
+// Amostra mais velha que isto (sessão fora do ar, robô removido do grupo) deixa
+// de valer como medida: o grupo passa a "sem medida" e só recebe tráfego se não
+// houver grupo medido com vaga. Evita mandar gente ao grupo de tamanho velho.
+const STALE_SAMPLE_MS = 24 * 60 * 60 * 1000
+// Limite geral por IP: FOLGADO, porque muita gente compartilha o mesmo IP na
+// rede móvel (CGNAT) e o link é divulgado em vários lugares. Não é para barrar
+// tráfego normal, só robô descontrolado.
+const RATE_MAX_PER_MIN = Number(process.env.SMART_LINK_RATE_MAX) || 1200
+// Limite dos ERROS (endereço que não existe): é assim que se varre endereços
+// alheios. Bem mais baixo, e só conta quem erra.
+const MISS_MAX_PER_MIN = Number(process.env.SMART_LINK_MISS_MAX) || 30
 
 const saoPauloDay = (date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
 
@@ -20,55 +29,106 @@ export async function smartLinkPublicRoutes(app, options = {}) {
   const db = options.db ?? dbDefault
   const now = options.now ?? (() => Date.now())
   const guard = options.guard ?? createTrackGuard({ rateMax: RATE_MAX_PER_MIN, now })
+  const missGuard = options.missGuard ?? createTrackGuard({ rateMax: MISS_MAX_PER_MIN, now })
   const reserve = createReserveTracker()
   const lastPicked = new Map()
   const cache = new Map()
+  const inflight = new Map()
+  // Cliques em memória, gravados em lote: um link divulgado em muitos lugares
+  // pode dar dezenas de cliques por segundo e cada um virar escrita no SQLite
+  // disputaria o banco com os envios do robô.
+  const pendingClicks = new Map()
 
-  const cleanup = setInterval(() => guard.cleanup(), 5 * 60_000)
+  async function flushClicks() {
+    const batch = [...pendingClicks.values()]
+    pendingClicks.clear()
+    for (const item of batch) {
+      try {
+        await db.smartLinkDailyClick.upsert({
+          where: { smartLinkGroupId_day: { smartLinkGroupId: item.smartLinkGroupId, day: item.day } },
+          create: { smartLinkGroupId: item.smartLinkGroupId, day: item.day, clicks: item.n },
+          update: { clicks: { increment: item.n } },
+        })
+      } catch (err) {
+        app.log.warn({ err: err?.message, smartLinkGroupId: item.smartLinkGroupId }, 'cliques do link inteligente não gravados')
+      }
+    }
+  }
+  function countClick(smartLinkGroupId) {
+    const day = saoPauloDay(new Date(now()))
+    const key = `${smartLinkGroupId}|${day}`
+    const cur = pendingClicks.get(key)
+    if (cur) cur.n += 1
+    else pendingClicks.set(key, { smartLinkGroupId, day, n: 1 })
+  }
+
+  const cleanup = setInterval(() => { guard.cleanup(); missGuard.cleanup() }, 5 * 60_000)
+  const flusher = setInterval(() => { void flushClicks() }, options.clickFlushMs ?? CLICK_FLUSH_MS)
   cleanup.unref?.()
-  app.addHook('onClose', async () => clearInterval(cleanup))
+  flusher.unref?.()
+  app.addHook('onClose', async () => {
+    clearInterval(cleanup)
+    clearInterval(flusher)
+    await flushClicks()
+  })
 
-  async function loadLink(slug) {
-    const hit = cache.get(slug)
-    if (hit && hit.expiresAt > now()) return hit.value
+  async function fetchLink(slug) {
     const link = await db.smartLink.findUnique({
       where: { slug },
       select: {
-        id: true, enabled: true, capPerGroup: true,
+        id: true, enabled: true, deletedAt: true, capPerGroup: true,
         groups: { select: { id: true, groupId: true, inviteCode: true, enabled: true } },
       },
     })
-    let value = null
-    if (link) {
-      const groups = []
-      for (const g of link.groups) {
-        const sample = await db.groupMemberSample.findFirst({
-          where: { groupId: g.groupId }, orderBy: { sampledAt: 'desc' }, select: { size: true, sampledAt: true },
-        })
-        groups.push({ ...g, size: sample?.size ?? null, sampledAtMs: sample?.sampledAt ? new Date(sample.sampledAt).getTime() : 0 })
-      }
-      value = { id: link.id, enabled: link.enabled, capPerGroup: link.capPerGroup, groups }
+    if (!link || link.deletedAt) return null
+    const groups = []
+    for (const g of link.groups) {
+      const sample = await db.groupMemberSample.findFirst({
+        where: { groupId: g.groupId }, orderBy: { sampledAt: 'desc' }, select: { size: true, sampledAt: true },
+      })
+      const sampledAtMs = sample?.sampledAt ? new Date(sample.sampledAt).getTime() : 0
+      const stale = !sample || now() - sampledAtMs > STALE_SAMPLE_MS
+      groups.push({ ...g, size: stale ? null : sample.size, sampledAtMs })
     }
-    cache.set(slug, { value, expiresAt: now() + CACHE_TTL_MS })
-    if (cache.size > 5000) cache.clear()
-    return value
+    return { id: link.id, enabled: link.enabled, capPerGroup: link.capPerGroup, groups }
   }
+
+  // Cache de 10 s + uma única consulta em andamento por endereço: sem isso, na
+  // virada do cache todos os acessos simultâneos de um link viral iriam ao banco.
+  async function loadLink(slug) {
+    const hit = cache.get(slug)
+    if (hit && hit.expiresAt > now()) return hit.value
+    if (inflight.has(slug)) return inflight.get(slug)
+    const job = fetchLink(slug).then(value => {
+      cache.set(slug, { value, expiresAt: now() + CACHE_TTL_MS })
+      if (cache.size > 5000) cache.clear()
+      return value
+    }).finally(() => inflight.delete(slug))
+    inflight.set(slug, job)
+    return job
+  }
+
+  const miss = (reply, ip, title, message) =>
+    (missGuard.rateLimited(ip)
+      ? reply.code(429).send(page('Muitos acessos', 'Aguarde um minuto e tente de novo.'))
+      : reply.code(404).send(page(title, message)))
 
   app.get('/g/:slug', async (req, reply) => {
     reply.header('cache-control', 'private, no-store, max-age=0')
     reply.header('x-robots-tag', 'noindex, nofollow')
     reply.type('text/html; charset=utf-8')
 
-    const slug = normalizeSlug(req.params.slug)
-    if (!slug) return reply.code(404).send(page('Link não encontrado', 'Confira o endereço e tente de novo.'))
     if (guard.rateLimited(req.ip)) return reply.code(429).send(page('Muitos acessos', 'Aguarde um minuto e tente de novo.'))
+    const slug = normalizeSlug(req.params.slug)
+    if (!slug) return miss(reply, req.ip, 'Link não encontrado', 'Confira o endereço e tente de novo.')
 
     const link = await loadLink(slug)
-    if (!link || !link.enabled) return reply.code(404).send(page('Link não encontrado', 'Este link não está disponível.'))
+    if (!link || !link.enabled) return miss(reply, req.ip, 'Link não encontrado', 'Este link não está disponível.')
 
+    // A reserva é do GRUPO de verdade (o mesmo grupo pode estar em dois links).
     const candidates = link.groups.map(g => ({
       id: g.id, enabled: g.enabled, inviteCode: g.inviteCode, size: g.size,
-      reserved: reserve.get(g.id, g.sampledAtMs), lastPickedAt: lastPicked.get(g.id) ?? 0,
+      reserved: reserve.get(g.groupId, g.sampledAtMs), lastPickedAt: lastPicked.get(g.id) ?? 0,
     }))
     const { group, reason } = pickGroup(candidates, { cap: link.capPerGroup })
     if (!group) {
@@ -81,13 +141,9 @@ export async function smartLinkPublicRoutes(app, options = {}) {
     // Robô de checagem/preview não é gente: redireciona, mas não reserva vaga nem conta clique.
     if (!isNonHumanUserAgent(req.headers['user-agent'])) {
       const chosen = link.groups.find(g => g.id === group.id)
-      reserve.add(group.id, chosen?.sampledAtMs ?? 0)
+      reserve.add(chosen.groupId, chosen.sampledAtMs)
       lastPicked.set(group.id, now())
-      db.smartLinkDailyClick.upsert({
-        where: { smartLinkGroupId_day: { smartLinkGroupId: group.id, day: saoPauloDay(new Date(now())) } },
-        create: { smartLinkGroupId: group.id, day: saoPauloDay(new Date(now())), clicks: 1 },
-        update: { clicks: { increment: 1 } },
-      }).catch(err => req.log.warn({ err: err?.message, smartLinkGroupId: group.id }, 'clique do link inteligente não contado'))
+      countClick(group.id)
     }
     return reply.redirect(inviteUrl(group.inviteCode), 302)
   })

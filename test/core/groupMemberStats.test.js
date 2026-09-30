@@ -35,3 +35,21 @@ test('prune mantém tudo <7d, 1/dia até 90d e apaga >90d', () => {
   const del = pruneMemberSampleIds(samples, NOW).sort()
   assert.deepEqual(del, ['d10-b', 'velho'])
 })
+
+test('24h de verdade com amostras horárias (antes media ~18h)', () => {
+  const hourly = [...Array(72).keys()].map(h => at(h, 1000 - h, `s${h}`))
+  assert.deepEqual(computeDelta(hourly, 1), { diff: 24, pct: 2.5 })
+  assert.deepEqual(computeDelta(hourly, 2), { diff: 48, pct: 5 })
+})
+
+test('sessão caída: variação é relativa à ÚLTIMA medição, não a "agora"', () => {
+  const old = [...Array(72).keys()].map(h => at(48 + h, 1000 - h, `s${h}`))
+  assert.deepEqual(computeDelta(old, 1), { diff: 24, pct: 2.5 })
+  assert.equal(summarizeGroupMembers(old, NOW).stale, true)
+})
+
+test('janela longa aceita até 12h de folga (histórico diário); 24h só 3h', () => {
+  const daily = [at(0, 500, 'a'), at(24 * 30 + 10, 400, 'b')]
+  assert.deepEqual(computeDelta(daily, 30), { diff: 100, pct: 25 })
+  assert.equal(computeDelta([at(0, 500, 'a'), at(30, 400, 'b')], 1), null)
+})

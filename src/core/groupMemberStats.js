@@ -12,19 +12,29 @@ export const MEMBER_SAMPLE_STALE_HOURS = 3
 const ts = (v) => (v instanceof Date ? v : new Date(v)).getTime()
 
 /**
- * Variação entre a amostra mais recente e a mais próxima de `windowDays` atrás.
- * Sem amostra tão antiga (grupo novo no painel) devolve null — nunca inventa
- * variação a partir de um histórico curto demais.
+ * Variação entre a última medição e a amostra mais próxima de `windowDays`
+ * ANTES dela. Ancorar na última medição (não em "agora") evita comparar um
+ * dado velho com uma janela que ele nunca cobriu quando a sessão ficou fora do
+ * ar. Escolher a mais próxima do alvo (e não "a mais nova que passa do corte")
+ * mantém a janela em 24 h de verdade com amostras horárias.
+ * Sem amostra dentro da tolerância (grupo novo no painel) devolve null — nunca
+ * inventa variação a partir de um histórico curto demais.
  */
-export function computeDelta(samples, windowDays, now = new Date()) {
+export function computeDelta(samples, windowDays) {
   if (!Array.isArray(samples) || samples.length < 2) return null
   const sorted = [...samples].sort((a, b) => ts(b.sampledAt) - ts(a.sampledAt))
   const latest = sorted[0]
-  const target = ts(now) - windowDays * DAY_MS
-  // Tolerância de 6h: a amostra-base pode ter sido colhida um pouco depois do
-  // alvo (job atrasou). Mais que isso = histórico curto demais → null.
-  const base = sorted.find(s => ts(s.sampledAt) <= target + 6 * HOUR_MS && ts(s.sampledAt) < ts(latest.sampledAt))
-  if (!base) return null
+  const target = ts(latest.sampledAt) - windowDays * DAY_MS
+  // Depois de 7 dias o histórico é 1 amostra/dia (ver pruneMemberSampleIds):
+  // janelas longas aceitam até 12 h de distância; a de 24 h, só 3 h.
+  const tolerance = (windowDays <= 1 ? 3 : 12) * HOUR_MS
+  let base = null
+  let bestGap = Infinity
+  for (const s of sorted.slice(1)) {
+    const gap = Math.abs(ts(s.sampledAt) - target)
+    if (gap < bestGap) { bestGap = gap; base = s }
+  }
+  if (!base || bestGap > tolerance) return null
   const diff = latest.size - base.size
   return { diff, pct: base.size > 0 ? Math.round((diff / base.size) * 1000) / 10 : null }
 }
@@ -37,9 +47,9 @@ export function summarizeGroupMembers(samples, now = new Date()) {
     size: latest?.size ?? null,
     sampledAt: latest ? new Date(ts(latest.sampledAt)).toISOString() : null,
     stale: latest ? ageHours > MEMBER_SAMPLE_STALE_HOURS : true,
-    delta24h: computeDelta(sorted, 1, now),
-    delta7d: computeDelta(sorted, 7, now),
-    delta30d: computeDelta(sorted, 30, now),
+    delta24h: computeDelta(sorted, 1),
+    delta7d: computeDelta(sorted, 7),
+    delta30d: computeDelta(sorted, 30),
   }
 }
 

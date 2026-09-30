@@ -9,7 +9,9 @@ import { canUseGroupMembers } from '../billing/plans.js'
 import { isRunning as defaultIsRunning } from '../manager.js'
 
 export function normalizeSize(size) {
-  return Number.isInteger(size) && size >= 0 ? size : null
+  // 0 é impossível (o próprio robô é membro): vem de resposta truncada do
+  // WhatsApp. Gravar 0 faria o grupo parecer vazio e receber TODO o tráfego.
+  return Number.isInteger(size) && size >= 1 ? size : null
 }
 
 /**

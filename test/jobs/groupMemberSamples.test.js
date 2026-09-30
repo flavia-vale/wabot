@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { captureMemberSamplesForUser } from '../../src/jobs/groupMemberSamples.js'
+import { captureMemberSamplesForUser, normalizeSize } from '../../src/jobs/groupMemberSamples.js'
 
 function fakeDb(groups) {
   const created = []
@@ -55,4 +55,16 @@ test('sweep: só PRO com sessão viva; isRunning assíncrono (modo remote) funci
   assert.deepEqual(stats, { users: 1, captured: 1, skipped: 0, errors: 0 })
   assert.deepEqual(asked, ['pro-on'])
   assert.equal(created[0].groupId, 'g-pro-on')
+})
+
+test('tamanho 0/negativo/decimal é desconhecido (resposta truncada do WhatsApp), não "grupo vazio"', () => {
+  for (const bad of [0, -1, 1.5, '12', null, undefined, NaN]) assert.equal(normalizeSize(bad), null, String(bad))
+  assert.equal(normalizeSize(1), 1)
+})
+
+test('grupo que veio com size 0 é pulado, nada é gravado', async () => {
+  const db = fakeDb([{ id: 'g1', waJid: 'a@g.us' }])
+  const r = await captureMemberSamplesForUser('u1', { db, listGroups: async () => [{ waJid: 'a@g.us', size: 0 }] })
+  assert.deepEqual(r, { captured: 0, skipped: 1 })
+  assert.equal(db.created.length, 0)
 })
