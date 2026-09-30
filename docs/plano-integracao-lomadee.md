@@ -525,3 +525,41 @@ cd ~/wabot-staging && LOMADEE_KEY='SUA_CHAVE' node scripts/diag-lomadee.mjs --no
 
 Só leitura, ~10 chamadas, não grava nada e não imprime a chave. Depois de
 rodar, limpar do histórico do shell (`history -d` da linha) ou usar `read -s`.
+
+### 13.10 Medição da VPS (staging, 2026-09-30) — confirma 13.7
+
+Rodado por `scripts/diag-lomadee.mjs` no staging (chave válida; um primeiro
+teste deu 401 por chave colada errada, não por defeito do script).
+
+- **Todas as chamadas responderam 200 em 0,35–1,9 s**, inclusive a listagem de
+  campanhas **sem filtro** (1,8 s) e produtos (0,35 s). Os travamentos de 45–90 s
+  vistos no ambiente de desenvolvimento **não se repetiram na VPS**: eram do
+  ambiente de teste (proxy), não da API. Mantemos filtro em toda chamada de
+  campanhas por segurança, mas o timeout do sync pode voltar a 30 s.
+- **Mesmos números da medição anterior:** 138 lojas (7 páginas), **317 campanhas
+  Oferta ativas** (16 páginas), **0 agendadas**, 2 de 20 permanentes na 1ª página.
+- **Up4you confirmada** no staging: "Malas, mochilas e acessórios com até 60% OFF",
+  `status = onTime`, `period.endAt = 2026-10-13T02:30:00Z` (12/10 23:30 em
+  Brasília), com `shortUrls` nos dois canais.
+- **Campanha vencida não tem link:** as campanhas `expired` da busca vieram com
+  `shortUrls: null` e um campo `message` no canal. Regra do sync: só entra
+  campanha `onTime` **com `shortUrls` preenchido no canal escolhido**; sem link,
+  ignorar (e contar como descartada por "sem link" no log do sync).
+- **Nome da loja:** a 1ª página de lojas cobre só 20 das 138; o sync precisa ler
+  as 7 páginas (o diagnóstico mostra o UUID quando a loja não está na página 1).
+- **Shopee continua aparecendo como loja da Lomadee** ("Mega Oferta Full…") →
+  decisão 13.8 item 1 segue pendente.
+- Campanha "onTime" que vence em menos de 1 h (ex.: fim `2026-09-30T02:30Z`) é
+  descartada pela regra da janela mínima de 1 h.
+
+### 13.11 Respostas às decisões 13.8 (2026-09-30)
+
+1. **Campanhas da Shopee que a Lomadee lista: EXCLUIR.** O sync ignora a loja
+   Shopee (a Shopee já é origem própria, com preço e foto). Implementação:
+   lista de lojas excluídas por origem própria, comparando o `site` da loja
+   (`shopee.com.br`), não o nome. Conferir a mesma regra para ML, Amazon,
+   AliExpress e Magalu quando aparecerem na lista de lojas da conta.
+2. **Foto:** a dona do produto vai testar o banner (`mediaKit.banners[0]`) no
+   staging antes de decidir. Até lá o envio da v1 sai **sem foto** (só texto), e
+   o campo do banner é guardado no banco para uso futuro.
+3. **Dois canais = duas contas Lomadee:** aprovado.
