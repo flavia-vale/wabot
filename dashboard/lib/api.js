@@ -231,6 +231,18 @@ export const api = {
   awinAccountRuns: (id) => apiFetch(`/api/awin/accounts/${id}/runs`),
   awinAccountAdvertisers: (id) => apiFetch(`/api/awin/accounts/${id}/advertisers`),
 
+  // Contas Rakuten (docs/rca/afiliados-rakuten.md). Client ID/Secret só vão; nunca voltam.
+  rakutenAccounts: () => apiFetch('/api/rakuten/accounts'),
+  rakutenAccountCreate: (data) =>
+    apiFetch('/api/rakuten/accounts', { method: 'POST', body: JSON.stringify(data) }),
+  rakutenAccountUpdate: (id, data) =>
+    apiFetch(`/api/rakuten/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  rakutenAccountDelete: (id) => apiFetch(`/api/rakuten/accounts/${id}`, { method: 'DELETE' }),
+  rakutenAccountTest: (id) => apiFetch(`/api/rakuten/accounts/${id}/test`, { method: 'POST' }),
+  rakutenAccountSync: (id) => apiFetch(`/api/rakuten/accounts/${id}/sync`, { method: 'POST' }),
+  rakutenAccountRuns: (id) => apiFetch(`/api/rakuten/accounts/${id}/runs`),
+  rakutenAccountAdvertisers: (id) => apiFetch(`/api/rakuten/accounts/${id}/advertisers`),
+
   coupons: () => apiFetch('/api/coupons'),
   couponCreate: (data) => apiFetch('/api/coupons', { method: 'POST', body: JSON.stringify(data) }),
   couponUpdate: (id, data) => apiFetch(`/api/coupons/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

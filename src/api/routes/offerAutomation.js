@@ -2,7 +2,7 @@ import dbDefault from '../../db.js'
 import { ensureCountQuota } from '../quotas.js'
 import { loadUserPlanSubject, validateOwnedTargetJids } from './broadcastTargets.js'
 import { buildFeatureGateError, canUseOfferAutomations, canUseInstagramStories, FEATURE_CODES } from '../../billing/plans.js'
-import { AUTOMATION_SOURCES, runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
+import { AUTOMATION_SOURCES, isPromotionSource, runAutomation, searchOffersPreview } from '../../offerAutomation/dispatcher.js'
 import { AWIN_AUTOMATION_TEMPLATE_KEY, parseAdvertiserIds } from '../../offerAutomation/awinOffers.js'
 import { normalizeDailyRunTime } from '../../offerAutomation/schedule.js'
 import { parseCredentialData } from '../../credentialHealth.js'
@@ -65,11 +65,18 @@ async function resolveOwnedAwinAccountId(db, userId, awinAccountId) {
   return row?.id ?? null
 }
 
+// Idem para a conta Rakuten (docs/rca/afiliados-rakuten.md).
+async function resolveOwnedRakutenAccountId(db, userId, rakutenAccountId) {
+  if (!rakutenAccountId) return null
+  const row = await db.rakutenAccount.findFirst({ where: { id: String(rakutenAccountId), userId }, select: { id: true } })
+  return row?.id ?? null
+}
+
 function presentAutomation(row) {
   const instagramDestinationIds = row.instagramDestinations?.map(item => item.destinationId) ?? []
   const approvedReviewCount = row._count?.reviewItems ?? 0
   const { instagramDestinations, _count, ...automation } = row
-  return { ...automation, source: automation.source ?? 'shopee', awinAdvertiserIds: parseAdvertiserIds(automation.awinAdvertiserIds), instagramDestinationIds, approvedReviewCount }
+  return { ...automation, source: automation.source ?? 'shopee', awinAdvertiserIds: parseAdvertiserIds(automation.awinAdvertiserIds), rakutenAdvertiserIds: parseAdvertiserIds(automation.rakutenAdvertiserIds), instagramDestinationIds, approvedReviewCount }
 }
 
 export async function offerAutomationRoutes(app, opts = {}) {
@@ -100,14 +107,25 @@ export async function offerAutomationRoutes(app, opts = {}) {
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!(await ensureOfferAutomationAllowed(req, reply))) return reply
-    const { destGroupJid, destGroupName, instagramDestinationIds, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey, publicationMode = 'direct', reviewTargetSize = 10, useCoupons, source = 'shopee', awinAccountId, awinAdvertiserIds } = req.body ?? {}
+    const { destGroupJid, destGroupName, instagramDestinationIds, keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, sortType, listType, prioritizeAMS, isKeySeller, templateKey, publicationMode = 'direct', reviewTargetSize = 10, useCoupons, source = 'shopee', awinAccountId, awinAdvertiserIds, rakutenAccountId, rakutenAdvertiserIds } = req.body ?? {}
 
     if (!AUTOMATION_SOURCES.includes(source)) return reply.code(400).send({ error: 'Origem das ofertas inválida' })
     const isAwin = source === 'awin'
-    // Awin: a palavra é um filtro OPCIONAL sobre as promoções já importadas.
-    if (!isAwin && !keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
+    const isRakuten = source === 'rakuten'
+    const isPromotion = isPromotionSource(source)
+    // Awin/Rakuten: a palavra é um filtro OPCIONAL sobre as promoções já importadas.
+    if (!isPromotion && !keyword?.trim()) return reply.code(400).send({ error: 'Palavra-chave obrigatória' })
     let ownedAwinAccountId = null
+    let ownedRakutenAccountId = null
     let advertiserIds = []
+    let rakutenIds = []
+    if (isRakuten) {
+      ownedRakutenAccountId = await resolveOwnedRakutenAccountId(db, req.user.sub, rakutenAccountId)
+      if (!ownedRakutenAccountId) return reply.code(400).send({ error: 'Escolha uma das suas contas Rakuten' })
+      rakutenIds = parseAdvertiserIds(rakutenAdvertiserIds)
+      if (rakutenIds.length > MAX_AWIN_ADVERTISERS) return reply.code(400).send({ error: `Escolha no máximo ${MAX_AWIN_ADVERTISERS} lojas` })
+      if (Array.isArray(instagramDestinationIds) && instagramDestinationIds.length) return reply.code(400).send({ error: 'As promoções da Rakuten ainda não saem no Instagram' })
+    }
     if (isAwin) {
       ownedAwinAccountId = await resolveOwnedAwinAccountId(db, req.user.sub, awinAccountId)
       if (!ownedAwinAccountId) return reply.code(400).send({ error: 'Escolha uma das suas contas Awin' })
@@ -146,7 +164,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
     if (!VALID_LIST_TYPES.includes(parsedListType)) {
       return reply.code(400).send({ error: 'listType inválido. Use 0 (recomendados), 1 (maior comissão) ou 2 (melhor desempenho)' })
     }
-    const parsedTemplateKey = normalizeTemplateKey(templateKey ?? (isAwin ? AWIN_AUTOMATION_TEMPLATE_KEY : undefined))
+    const parsedTemplateKey = normalizeTemplateKey(templateKey ?? (isPromotion ? AWIN_AUTOMATION_TEMPLATE_KEY : undefined))
     if (!parsedTemplateKey) return reply.code(400).send({ error: 'templateKey inválido' })
     if (!(await ensureCountQuota(reply, {
       userId: req.user.sub,
@@ -167,11 +185,13 @@ export async function offerAutomationRoutes(app, opts = {}) {
         source,
         awinAccountId: ownedAwinAccountId,
         awinAdvertiserIds: JSON.stringify(advertiserIds),
+        rakutenAccountId: ownedRakutenAccountId,
+        rakutenAdvertiserIds: JSON.stringify(rakutenIds),
         intervalMinutes: parsedIntervalMinutes,
         dailyRunTime: parsedIntervalMinutes === DAILY_INTERVAL_MINUTES ? parsedDailyRunTime : null,
         offersPerSend: perSend,
-        // Promoção Awin não tem desconto em número: filtro não se aplica.
-        minDiscountPct: isAwin ? 0 : (Number(minDiscountPct) || 0),
+        // Promoção Awin/Rakuten não tem desconto em número: filtro não se aplica.
+        minDiscountPct: isPromotion ? 0 : (Number(minDiscountPct) || 0),
         sortType: parsedSortType,
         listType: parsedListType,
         prioritizeAMS: Boolean(prioritizeAMS ?? false),
@@ -180,8 +200,8 @@ export async function offerAutomationRoutes(app, opts = {}) {
         reviewTargetSize: targetSize,
         // specs/017-client-coupon-catalog (FR-022/FR-023): ausente = false,
         // igual ao default da coluna — opt-in explícito, nunca automático.
-        // Cupons são por loja (Shopee, ML...): não valem para promoção Awin.
-        useCoupons: isAwin ? false : Boolean(useCoupons ?? false),
+        // Cupons são por loja (Shopee, ML...): não valem para promoção Awin/Rakuten.
+        useCoupons: isPromotion ? false : Boolean(useCoupons ?? false),
       },
     })
   })
@@ -193,10 +213,12 @@ export async function offerAutomationRoutes(app, opts = {}) {
     })
     if (!existing) return reply.code(404).send({ error: 'Automação não encontrada' })
 
-    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, instagramDestinationIds, prioritizeAMS, isKeySeller, sortType, listType, templateKey, publicationMode, reviewTargetSize, confirmPublicationModeChange, useCoupons, source, awinAccountId, awinAdvertiserIds } = req.body ?? {}
+    const { keyword, intervalMinutes, dailyRunTime, offersPerSend, minDiscountPct, enabled, destGroupJid, destGroupName, instagramDestinationIds, prioritizeAMS, isKeySeller, sortType, listType, templateKey, publicationMode, reviewTargetSize, confirmPublicationModeChange, useCoupons, source, awinAccountId, awinAdvertiserIds, rakutenAccountId, rakutenAdvertiserIds } = req.body ?? {}
     const updates = {}
     const existingSource = existing.source ?? 'shopee'
     const isAwin = existingSource === 'awin'
+    const isRakuten = existingSource === 'rakuten'
+    const isPromotion = isPromotionSource(existingSource)
     if (source !== undefined && source !== existingSource) return reply.code(400).send({ error: 'Não dá para trocar a origem das ofertas de uma automação. Crie uma nova.' })
     if (isAwin) {
       if (awinAccountId !== undefined) {
@@ -212,6 +234,20 @@ export async function offerAutomationRoutes(app, opts = {}) {
       if (Array.isArray(instagramDestinationIds) && instagramDestinationIds.length) return reply.code(400).send({ error: 'As promoções da Awin ainda não saem no Instagram' })
       if (enabled === true && !(updates.awinAccountId ?? existing.awinAccountId)) return reply.code(400).send({ error: 'Escolha uma das suas contas Awin antes de ligar' })
     }
+    if (isRakuten) {
+      if (rakutenAccountId !== undefined) {
+        const owned = await resolveOwnedRakutenAccountId(db, req.user.sub, rakutenAccountId)
+        if (!owned) return reply.code(400).send({ error: 'Escolha uma das suas contas Rakuten' })
+        updates.rakutenAccountId = owned
+      }
+      if (rakutenAdvertiserIds !== undefined) {
+        const ids = parseAdvertiserIds(rakutenAdvertiserIds)
+        if (ids.length > MAX_AWIN_ADVERTISERS) return reply.code(400).send({ error: `Escolha no máximo ${MAX_AWIN_ADVERTISERS} lojas` })
+        updates.rakutenAdvertiserIds = JSON.stringify(ids)
+      }
+      if (Array.isArray(instagramDestinationIds) && instagramDestinationIds.length) return reply.code(400).send({ error: 'As promoções da Rakuten ainda não saem no Instagram' })
+      if (enabled === true && !(updates.rakutenAccountId ?? existing.rakutenAccountId)) return reply.code(400).send({ error: 'Escolha uma das suas contas Rakuten antes de ligar' })
+    }
     if (publicationMode !== undefined) {
       if (!['direct', 'review'].includes(publicationMode)) return reply.code(400).send({ error: 'Modo de publicação inválido' })
       if (publicationMode === 'review' && !canUseReview(req.user.sub)) return reply.code(403).send({ error: 'Fila de revisão ainda não está liberada para esta conta' })
@@ -226,7 +262,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
 
     if (keyword !== undefined) {
       const k = String(keyword ?? '').trim()
-      if (!k && !isAwin) return reply.code(400).send({ error: 'Palavra-chave não pode ficar vazia' })
+      if (!k && !isPromotion) return reply.code(400).send({ error: 'Palavra-chave não pode ficar vazia' })
       updates.keyword = k
     }
     if (destGroupJid !== undefined) {
@@ -265,7 +301,7 @@ export async function offerAutomationRoutes(app, opts = {}) {
         return reply.code(400).send({ error: `offersPerSend deve ser entre 1 e ${MAX_OFFERS_PER_SEND}` })
       updates.offersPerSend = ps
     }
-    if (minDiscountPct !== undefined && !isAwin) {
+    if (minDiscountPct !== undefined && !isPromotion) {
       const pct = Number(minDiscountPct)
       if (pct < 0 || pct > 100)
         return reply.code(400).send({ error: 'minDiscountPct deve estar entre 0 e 100' })
@@ -291,9 +327,9 @@ export async function offerAutomationRoutes(app, opts = {}) {
     }
     // specs/017-client-coupon-catalog (FR-023): ausente = não muda o valor
     // atual (diferente do POST, onde ausente = false).
-    if (useCoupons !== undefined) updates.useCoupons = isAwin ? false : Boolean(useCoupons)
+    if (useCoupons !== undefined) updates.useCoupons = isPromotion ? false : Boolean(useCoupons)
 
-    const invalidatesReview = existing.publicationMode === 'review' && (publicationMode === 'direct' || templateKey !== undefined || destGroupJid !== undefined || instagramDestinationIds !== undefined || updates.awinAccountId !== undefined)
+    const invalidatesReview = existing.publicationMode === 'review' && (publicationMode === 'direct' || templateKey !== undefined || destGroupJid !== undefined || instagramDestinationIds !== undefined || updates.awinAccountId !== undefined || updates.rakutenAccountId !== undefined)
     if (invalidatesReview) await db.offerAutomationReviewItem.updateMany({ where: { automationId: existing.id, userId: req.user.sub, status: { in: [REVIEW_STATUS.AWAITING, REVIEW_STATUS.APPROVED] } }, data: { status: REVIEW_STATUS.EXPIRED } })
     return presentAutomation(await db.offerAutomation.update({ where: { id: req.params.id }, data: updates, include: { instagramDestinations: { select: { destinationId: true } } } }))
   })
