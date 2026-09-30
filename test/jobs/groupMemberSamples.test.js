@@ -30,3 +30,29 @@ test('sem grupos-destino não consulta o WhatsApp', async () => {
   assert.deepEqual(r, { captured: 0, skipped: 0 })
   assert.equal(called, false)
 })
+
+import { runGroupMemberSampleSweep } from '../../src/jobs/groupMemberSamples.js'
+
+test('sweep: só PRO com sessão viva; isRunning assíncrono (modo remote) funciona', async () => {
+  const future = new Date(Date.now() + 86400000)
+  const users = [
+    { id: 'pro-on', plan: 'pro', accessExpiresAt: future },
+    { id: 'pro-off', plan: 'pro', accessExpiresAt: future },
+    { id: 'basic-on', plan: 'basic', accessExpiresAt: future },
+  ]
+  const created = []
+  const db = {
+    user: { findMany: async () => users },
+    group: { findMany: async ({ where }) => [{ id: `g-${where.userId}`, waJid: 'a@g.us' }] },
+    groupMemberSample: { create: async ({ data }) => created.push(data), findMany: async () => [], deleteMany: async () => ({}) },
+  }
+  const asked = []
+  const stats = await runGroupMemberSampleSweep({
+    db, pauseMs: 0,
+    isRunning: async id => id !== 'pro-off',
+    listGroups: async id => (asked.push(id), [{ waJid: 'a@g.us', size: 7 }]),
+  })
+  assert.deepEqual(stats, { users: 1, captured: 1, skipped: 0, errors: 0 })
+  assert.deepEqual(asked, ['pro-on'])
+  assert.equal(created[0].groupId, 'g-pro-on')
+})

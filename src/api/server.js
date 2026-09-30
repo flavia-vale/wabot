@@ -39,6 +39,7 @@ import { startOfferQueueCron } from '../offerQueue/cron.js'
 import { registerApiMetricsHooks, renderPrometheusMetrics, isPrivateAddress } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
 import { startDlqMaintenanceJob, getDlqMaintenanceSnapshot } from '../jobs/dlqMaintenance.js'
+import { runGroupMemberSampleSweep } from '../jobs/groupMemberSamples.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
@@ -300,6 +301,32 @@ async function runSessionCapacityAlertTick() {
 function startSessionCapacityAlertSweep() {
   const timer = setInterval(runSessionCapacityAlertTick, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
   timer.unref?.()
+}
+
+// Amostra de membros dos grupos-destino (painel Membros): 1 passada por hora,
+// in-process (setInterval + unref, sem processo PM2 novo). Precisa ser na API:
+// em modo inline só ela enxerga as sessões. Ver docs/rca/grupos-membros.md.
+//   GROUP_MEMBER_SAMPLES_ENABLED     — 'false' desliga.
+//   GROUP_MEMBER_SAMPLES_INTERVAL_MS — intervalo (default 1h).
+const GROUP_MEMBER_SAMPLES_INTERVAL_MS = Math.max(Number(process.env.GROUP_MEMBER_SAMPLES_INTERVAL_MS) || 60 * 60 * 1000, 60 * 1000)
+let groupMemberSamplesRunning = false
+async function runGroupMemberSamplesTick() {
+  if (String(process.env.GROUP_MEMBER_SAMPLES_ENABLED ?? '').trim().toLowerCase() === 'false') return
+  if (groupMemberSamplesRunning) return
+  groupMemberSamplesRunning = true
+  try {
+    const summary = await runGroupMemberSampleSweep({ db, logger: app.log })
+    app.log.info({ ...summary }, 'amostra de membros: passada concluída')
+  } catch (err) {
+    app.log.error({ err: err.message }, 'amostra de membros: passada falhou')
+  } finally {
+    groupMemberSamplesRunning = false
+  }
+}
+function startGroupMemberSamplesSweep() {
+  // Primeira passada 5 min após subir (sessões retomam antes); depois de hora em hora.
+  setTimeout(runGroupMemberSamplesTick, 5 * 60 * 1000).unref?.()
+  setInterval(runGroupMemberSamplesTick, GROUP_MEMBER_SAMPLES_INTERVAL_MS).unref?.()
 }
 
 // E-mails de ciclo de vida (vencimento de teste/plano, saúde do robô, saque
@@ -757,6 +784,7 @@ startOfferQueueCron()
 // Promoções Awin: setInterval + unref, sem processo novo (docs/rca/afiliados-awin.md).
 startAwinSyncScheduler({ logger: app.log })
 startRakutenSyncScheduler({ logger: app.log })
+startGroupMemberSamplesSweep()
 const stopDlqMaintenance = startDlqMaintenanceJob({ db })
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
