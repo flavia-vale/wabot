@@ -6,6 +6,8 @@ import { DELIVERY_SOURCE_TYPE } from '../domain/delivery/constants.js'
 import { claimNextReviewItem } from './reviewRepository.js'
 import { REVIEW_STATUS } from './reviewState.js'
 import { ensureRenderedAutomationPrice } from './dispatcher.js'
+import { isAwinPromotionStillValid } from './awinOffers.js'
+import { isRakutenPromotionStillValid } from './rakutenOffers.js'
 
 export const REVIEW_ITEM_LEASE_MS = Math.max(60_000, Number(process.env.OFFER_AUTOMATION_REVIEW_LEASE_MS) || 5 * 60_000)
 export const REVIEW_ITEM_MAX_ATTEMPTS = Math.max(1, Number(process.env.OFFER_AUTOMATION_REVIEW_MAX_ATTEMPTS) || 3)
@@ -54,7 +56,20 @@ export async function deliverApprovedReviewItems(automation, deps = {}) {
         // Items created before the price validation fix may already be in the
         // review queue. Never publish those stale snapshots without a price;
         // failing permanently is safer than retrying the same invalid content.
-        if (!Number.isSafeInteger(item.priceCents) || item.priceCents <= 0) {
+        // Promoção Awin não tem preço (é assim mesmo), mas pode ter vencido ou
+        // sumido da Awin desde que entrou na fila: aí sai da fila sem enviar.
+        // Mesma regra para a Rakuten (docs/rca/afiliados-rakuten.md).
+        const isAwin = product.source === 'awin'
+        const isRakuten = product.source === 'rakuten'
+        const isPromotion = isAwin || isRakuten
+        const stillValid = isAwin
+          ? await isAwinPromotionStillValid({ db, userId: automation.userId, awinPromotionId: product.awinPromotionId, now })
+          : isRakuten ? await isRakutenPromotionStillValid({ db, userId: automation.userId, rakutenPromotionId: product.rakutenPromotionId, now }) : true
+        if (isPromotion && !stillValid) {
+          await db.offerAutomationReviewItem.updateMany({ where: { id: item.id, status: REVIEW_STATUS.SENDING }, data: { status: REVIEW_STATUS.EXPIRED, claimedAt: null, lastError: 'A promoção venceu antes do envio' } })
+          continue
+        }
+        if (!isPromotion && (!Number.isSafeInteger(item.priceCents) || item.priceCents <= 0)) {
           throw Object.assign(new Error('Oferta sem preço válido; busque novas opções'), { permanent: true })
         }
         if (targets.whatsapp?.jid && !progress.whatsapp) {

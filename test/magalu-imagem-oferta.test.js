@@ -162,3 +162,40 @@ test('o sinal do bloqueio da Magalu está nas duas allowlists (senão é descart
   const analytics = readFileSync(new URL('../src/analytics.js', import.meta.url), 'utf8')
   assert.match(analytics, /'ops_magalu_bot_wall'/)
 })
+
+// ── Scraper externo (RCA 2026-09-30) ────────────────────────────────────────
+import {
+  readMagaluScraperConfig,
+  buildMagaluScraperUrl,
+  takeMagaluScraperQuota,
+  resetMagaluScraperQuotaForTest,
+} from '../src/converters/magaluScraper.js'
+
+test('scraper fica DESLIGADO sem chave ou com provedor desconhecido', () => {
+  assert.equal(readMagaluScraperConfig({}), null)
+  assert.equal(readMagaluScraperConfig({ MAGALU_SCRAPER_KEY: 'k', MAGALU_SCRAPER_PROVIDER: 'xyz' }), null)
+  const cfg = readMagaluScraperConfig({ MAGALU_SCRAPER_KEY: 'k' })
+  assert.deepEqual(cfg, { key: 'k', provider: 'zenrows', dailyCap: 100 })
+})
+
+test('URL do scraper codifica o alvo e a chave', () => {
+  const cfg = readMagaluScraperConfig({ MAGALU_SCRAPER_KEY: 'a b', MAGALU_SCRAPER_PROVIDER: 'scrapedo' })
+  const url = buildMagaluScraperUrl(cfg, 'https://www.magazineluiza.com.br/p/1/?a=1&b=2')
+  assert.match(url, /^https:\/\/api\.scrape\.do\/\?token=a%20b&url=https%3A%2F%2Fwww\.magazineluiza/)
+})
+
+test('teto diário do scraper bloqueia a chamada seguinte e zera no dia novo', () => {
+  resetMagaluScraperQuotaForTest()
+  const cfg = { dailyCap: 2 }
+  const d1 = new Date('2026-09-30T10:00:00Z')
+  assert.equal(takeMagaluScraperQuota(cfg, d1), true)
+  assert.equal(takeMagaluScraperQuota(cfg, d1), true)
+  assert.equal(takeMagaluScraperQuota(cfg, d1), false)
+  assert.equal(takeMagaluScraperQuota(cfg, new Date('2026-10-01T00:01:00Z')), true)
+  resetMagaluScraperQuotaForTest()
+})
+
+test('estrutural: o ramo da Magalu tenta o scraper quando a loja bloqueia', () => {
+  const src = readFileSync(new URL('../src/converters/imageScrapers.js', import.meta.url), 'utf8')
+  assert.match(src, /loja_bloqueou[\s\S]{0,120}return resolveMagaluImageViaScraper/)
+})

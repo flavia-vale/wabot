@@ -3,6 +3,7 @@ import { PublicShell } from '@/components/PublicShell'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
 import { WhatsAppRiskCalculator } from '@/components/free-tools/WhatsAppRiskCalculator'
 import { getSiteUrl } from '@/lib/site-url'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/ferramentas/calculadora-risco-whatsapp'
 const siteUrl = getSiteUrl()
@@ -111,6 +112,7 @@ export default function Page() {
           ))}
         </section>
       </main>
+   <EditorialFreshness pathname="/ferramentas/calculadora-risco-whatsapp" />
     </PublicShell>
   )
 }

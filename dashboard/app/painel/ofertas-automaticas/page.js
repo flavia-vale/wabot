@@ -19,6 +19,9 @@ import { ReviewQueue } from '@/components/offerAutomation/ReviewQueue'
 import { validateOfferAutomationForm } from '@/lib/offerAutomationForm'
 import { SEARCH_ORDER_OPTIONS, DEFAULT_SEARCH_ORDER, searchOrderOption, describeSearchChoice, normalizeSearchChoice } from '@/lib/offerAutomationSearch'
 import { VIDEO_ATIVACAO_ROBO_URL } from '../../../../src/tutorialVideo.js'
+import { AWIN_AUTOMATION_TEMPLATE_KEY, AWIN_PROMOTION_TEMPLATE_BODY } from '../../../../src/offerAutomation/awinOffers.js'
+import { AWIN_COPY, AWIN_SKIP_LABELS } from '@/lib/painel/awinCopy'
+import { RAKUTEN_COPY, RAKUTEN_SKIP_LABELS } from '@/lib/painel/rakutenCopy'
 
 const DAILY_INTERVAL_MINUTES = 1440
 const DEFAULT_DAILY_RUN_TIME = '09:00'
@@ -58,9 +61,48 @@ const SKIP_LABELS = {
   no_offers_found: 'A Shopee não retornou produtos para essa palavra-chave.',
   all_offers_filtered: 'A Shopee trouxe produtos, mas todos foram filtrados (desconto mínimo alto ou já enviados). Tente reduzir o desconto mínimo.',
   no_approved_review_items: 'Aprove pelo menos uma oferta na fila antes de enviar.',
+  no_awin_account: 'Escolha uma conta Awin para esta automação (as contas ficam em Minhas credenciais).',
+  no_awin_promotions: 'Ainda não chegou nenhuma promoção ativa dessa conta Awin. Em Minhas credenciais, use "Atualizar agora".',
+  no_rakuten_account: RAKUTEN_SKIP_LABELS.no_rakuten_account,
+  no_rakuten_promotions: RAKUTEN_SKIP_LABELS.no_rakuten_promotions,
+  invalid_source: 'Não reconhecemos de onde vêm as ofertas desta automação. Edite e salve de novo.',
 }
 
-function explainSkip(code) {
+// Automação de promoções Awin não tem palavra obrigatória: o nome na lista
+// vem da origem (docs/rca/afiliados-awin.md).
+function automationTitle(automation) {
+  if (automation.source === 'rakuten') return automation.keyword ? `Promoções Rakuten · ${automation.keyword}` : 'Promoções Rakuten'
+  if (automation.source !== 'awin') return automation.keyword
+  return automation.keyword ? `Promoções Awin · ${automation.keyword}` : 'Promoções Awin'
+}
+
+// Origens de promoção (sem preço): Awin e Rakuten.
+function isPromotionSource(source) {
+  return source === 'awin' || source === 'rakuten'
+}
+
+function rakutenChoiceLabel(automation, rakutenAccounts) {
+  const account = rakutenAccounts.find((item) => item.id === automation.rakutenAccountId)
+  const stores = automation.rakutenAdvertiserIds?.length || 0
+  return `${account ? account.label : 'Conta Rakuten removida'} · ${stores ? `${stores} ${stores === 1 ? 'loja' : 'lojas'}` : 'todas as lojas'}`
+}
+
+function awinChoiceLabel(automation, awinAccounts) {
+  const account = awinAccounts.find((item) => item.id === automation.awinAccountId)
+  const stores = automation.awinAdvertiserIds?.length || 0
+  return `${account ? account.label : 'Conta Awin removida'} · ${stores ? `${stores} ${stores === 1 ? 'loja' : 'lojas'}` : 'todas as lojas'}`
+}
+
+function perSendLabel(value, source) {
+  if (isPromotionSource(source)) return `${value} ${value === 1 ? 'promoção' : 'promoções'} por envio`
+  return OFFERS_PER_SEND_OPTIONS.find((o) => o.value === value)?.label ?? `${value} produto(s)`
+}
+
+const AWIN_TEMPLATE_OPTION = { key: AWIN_AUTOMATION_TEMPLATE_KEY, name: 'Promoção (sem preço)', body: AWIN_PROMOTION_TEMPLATE_BODY }
+
+function explainSkip(code, source) {
+  if (source === 'awin' && AWIN_SKIP_LABELS[code]) return AWIN_SKIP_LABELS[code]
+  if (source === 'rakuten' && RAKUTEN_SKIP_LABELS[code]) return RAKUTEN_SKIP_LABELS[code]
   return SKIP_LABELS[code] ?? `Ignorado: ${code}`
 }
 
@@ -114,6 +156,13 @@ const emptyForm = {
   // specs/017-client-coupon-catalog: desmarcada por padrão — automação
   // existente nunca muda de comportamento sozinha (FR-023/SC-005).
   useCoupons: false,
+  // De onde vêm as ofertas: 'shopee' (busca por palavra) ou 'awin'
+  // (promoções já importadas da conta Awin). Não muda depois de criada.
+  source: 'shopee',
+  awinAccountId: '',
+  awinAdvertiserIds: [],
+  rakutenAccountId: '',
+  rakutenAdvertiserIds: [],
 }
 
 function nextSendLabel(lastSentAt, intervalMinutes, dailyRunTime) {
@@ -151,18 +200,24 @@ export default function OfertasAutomaticasPage() {
   const [openReviewQueues, setOpenReviewQueues] = useState(() => new Set())
   const [planSubject, setPlanSubject] = useState({ plan: 'pro', accessExpiresAt: null })
   const [reviewAvailable, setReviewAvailable] = useState(false)
+  const [awinAccounts, setAwinAccounts] = useState([])
+  const [awinStores, setAwinStores] = useState({ accountId: '', list: [], error: '' })
+  const [rakutenAccounts, setRakutenAccounts] = useState([])
+  const [rakutenStores, setRakutenStores] = useState({ accountId: '', list: [], error: '' })
 
   async function load() {
     setLoading(true)
     setError('')
     try {
-      const [list, groups, templateStore, me, connections, reviewCapability] = await Promise.all([
+      const [list, groups, templateStore, me, connections, reviewCapability, awinList, rakutenList] = await Promise.all([
         api.offerAutomations(),
         api.groups().then((gs) => gs.filter((g) => g.role === 'post')),
         loadTemplateStore(),
         api.me().catch(() => null),
         api.instagramConnections().catch(() => []),
         api.offerAutomationReviewCapability().catch(() => ({ enabled: false })),
+        api.awinAccounts().catch(() => []),
+        api.rakutenAccounts().catch(() => []),
       ])
       setAutomations(list)
       setWaGroups(groups)
@@ -170,6 +225,8 @@ export default function OfertasAutomaticasPage() {
       setInstagramDestinations(hasInstagramStoriesAccess(me || {}) ? instagramDestinationsFromConnections(connections) : [])
       if (me) setPlanSubject({ plan: me.plan ?? 'trial', accessExpiresAt: me.accessExpiresAt ?? null })
       setReviewAvailable(reviewCapability.enabled === true)
+      setAwinAccounts(Array.isArray(awinList) ? awinList : [])
+      setRakutenAccounts(Array.isArray(rakutenList) ? rakutenList : [])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -178,6 +235,26 @@ export default function OfertasAutomaticasPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  // Lojas com promoção ativa na conta Awin escolhida (filtro opcional).
+  useEffect(() => {
+    if (!showForm || form.source !== 'awin' || !form.awinAccountId) return
+    let active = true
+    api.awinAccountAdvertisers(form.awinAccountId)
+      .then((list) => { if (active) setAwinStores({ accountId: form.awinAccountId, list, error: '' }) })
+      .catch((err) => { if (active) setAwinStores({ accountId: form.awinAccountId, list: [], error: err?.message || 'Não conseguimos carregar as lojas.' }) })
+    return () => { active = false }
+  }, [showForm, form.source, form.awinAccountId])
+
+  // Idem para a conta Rakuten escolhida.
+  useEffect(() => {
+    if (!showForm || form.source !== 'rakuten' || !form.rakutenAccountId) return
+    let active = true
+    api.rakutenAccountAdvertisers(form.rakutenAccountId)
+      .then((list) => { if (active) setRakutenStores({ accountId: form.rakutenAccountId, list, error: '' }) })
+      .catch((err) => { if (active) setRakutenStores({ accountId: form.rakutenAccountId, list: [], error: err?.message || 'Não conseguimos carregar as lojas.' }) })
+    return () => { active = false }
+  }, [showForm, form.source, form.rakutenAccountId])
 
   function openCreate() {
     setEditId(null)
@@ -203,6 +280,11 @@ export default function OfertasAutomaticasPage() {
       reviewTargetSize: a.reviewTargetSize || 10,
       instagramDestinationIds: a.instagramDestinationIds || [],
       useCoupons: a.useCoupons ?? false,
+      source: a.source || 'shopee',
+      awinAccountId: a.awinAccountId || '',
+      awinAdvertiserIds: a.awinAdvertiserIds || [],
+      rakutenAccountId: a.rakutenAccountId || '',
+      rakutenAdvertiserIds: a.rakutenAdvertiserIds || [],
     })
     setSaveError('')
     setShowForm(true)
@@ -211,6 +293,26 @@ export default function OfertasAutomaticasPage() {
   function handleGroupChange(jid) {
     const g = waGroups.find((g) => g.waJid === jid)
     setForm((f) => ({ ...f, destGroupJid: jid, destGroupName: g?.name ?? jid }))
+  }
+
+  function changeSource(source) {
+    setForm((current) => ({
+      ...current,
+      source,
+      templateKey: isPromotionSource(source)
+        ? AWIN_AUTOMATION_TEMPLATE_KEY
+        : (current.templateKey === AWIN_AUTOMATION_TEMPLATE_KEY ? 'automatico_classico' : current.templateKey),
+      awinAccountId: source === 'awin' ? (current.awinAccountId || awinAccounts[0]?.id || '') : current.awinAccountId,
+      rakutenAccountId: source === 'rakuten' ? (current.rakutenAccountId || rakutenAccounts[0]?.id || '') : current.rakutenAccountId,
+    }))
+  }
+
+  function toggleRakutenStore(id) {
+    setForm((current) => ({ ...current, rakutenAdvertiserIds: current.rakutenAdvertiserIds.includes(id) ? current.rakutenAdvertiserIds.filter((value) => value !== id) : [...current.rakutenAdvertiserIds, id] }))
+  }
+
+  function toggleAwinStore(id) {
+    setForm((current) => ({ ...current, awinAdvertiserIds: current.awinAdvertiserIds.includes(id) ? current.awinAdvertiserIds.filter((value) => value !== id) : [...current.awinAdvertiserIds, id] }))
   }
 
   function toggleInstagramDestination(id) {
@@ -225,12 +327,19 @@ export default function OfertasAutomaticasPage() {
     }
     setSaving(true)
     setSaveError('')
+    // Promoção Awin/Rakuten não sai no Instagram nem usa cupom/desconto (fora da v1).
+    // Cada origem só manda os campos dela.
+    const withoutAwin = form.source === 'awin' ? {} : { awinAccountId: undefined, awinAdvertiserIds: undefined }
+    const withoutRakuten = form.source === 'rakuten' ? {} : { rakutenAccountId: undefined, rakutenAdvertiserIds: undefined }
+    const payload = isPromotionSource(form.source)
+      ? { ...form, instagramDestinationIds: [], useCoupons: false, ...withoutAwin, ...withoutRakuten }
+      : { ...form, ...withoutAwin, ...withoutRakuten }
     try {
       if (editId) {
         const previous = automations.find((item) => item.id === editId)
-        await api.offerAutomationUpdate(editId, { ...form, confirmPublicationModeChange: previous?.publicationMode !== form.publicationMode })
+        await api.offerAutomationUpdate(editId, { ...payload, confirmPublicationModeChange: previous?.publicationMode !== form.publicationMode })
       }
-      else await api.offerAutomationCreate(form)
+      else await api.offerAutomationCreate(payload)
       setShowForm(false)
       await load()
     } catch (err) {
@@ -319,7 +428,7 @@ export default function OfertasAutomaticasPage() {
             {automations.map((a) => (
               <div key={a.id} style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 12, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                 <div style={{ minWidth: 0 }}>
-                  <strong>{a.keyword}</strong>
+                  <strong>{automationTitle(a)}</strong>
                   <p className="pnl-hint" style={{ marginTop: 2 }}>{automationDestinationLabel(a, instagramDestinations)}</p>
                 </div>
                 <button className="pnl-btn" onClick={() => setDeleteTarget(a)}>Excluir</button>
@@ -331,7 +440,7 @@ export default function OfertasAutomaticasPage() {
           <ConfirmDialog
             open
             title="Remover automação"
-            message={`Tem certeza que deseja remover a automação para "${deleteTarget.keyword}"?`}
+            message={`Tem certeza que deseja remover a automação para "${automationTitle(deleteTarget)}"?`}
             confirmLabel="Remover"
             danger
             onConfirm={() => handleDelete(deleteTarget)}
@@ -342,7 +451,11 @@ export default function OfertasAutomaticasPage() {
     )
   }
 
-  const selectedTemplatePreview = templatePreview(templates, form.templateKey)
+  const isAwinForm = form.source === 'awin'
+  const isRakutenForm = form.source === 'rakuten'
+  const isPromotionForm = isAwinForm || isRakutenForm
+  const formTemplates = isPromotionForm ? [AWIN_TEMPLATE_OPTION, ...templates] : templates
+  const selectedTemplatePreview = templatePreview(formTemplates, form.templateKey)
 
   // Métricas do card-mestre/stats — todas derivadas das automações reais.
   const activeCount = automations.filter((a) => a.enabled).length
@@ -374,23 +487,113 @@ export default function OfertasAutomaticasPage() {
           <div className="pnl-card-title">{editId ? 'Editar automação' : 'Nova automação'}</div>
 
           <div>
-            <label className="pnl-label">O que você quer vender?</label>
+            <label className="pnl-label">De onde vêm as ofertas?</label>
+            <select className="pnl-input" value={form.source} onChange={(e) => changeSource(e.target.value)} disabled={!!editId}>
+              <option value="shopee">Produtos da Shopee (busca por palavra)</option>
+              <option value="awin">Promoções das lojas da Awin</option>
+              <option value="rakuten">Promoções e cupons das lojas da Rakuten</option>
+            </select>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>
+              {editId
+                ? 'Para mudar de onde vêm as ofertas, crie uma automação nova.'
+                : isAwinForm
+                  ? 'Promoções que as lojas publicam na Awin. Elas não têm preço nem foto: saem com o nome da loja, a validade e o seu link.'
+                  : isRakutenForm
+                    ? 'Promoções e cupons que as lojas publicam na Rakuten. Elas não têm preço: saem com o nome da loja, o cupom (quando tem), o logo da loja e o seu link.'
+                    : 'O robô procura produtos na Shopee pela palavra que você escolher.'}
+            </p>
+          </div>
+
+          {isAwinForm && (
+            <div>
+              <label className="pnl-label">Qual conta Awin?</label>
+              {awinAccounts.length ? (
+                <select className="pnl-input" value={form.awinAccountId} onChange={(e) => setForm((f) => ({ ...f, awinAccountId: e.target.value, awinAdvertiserIds: [] }))}>
+                  <option value="">Selecione uma conta</option>
+                  {awinAccounts.map((account) => <option key={account.id} value={account.id}>{account.label} ({account.activePromotions || 0} promoções ativas)</option>)}
+                </select>
+              ) : (
+                <p className="pnl-field-error" style={{ marginTop: 4 }}>
+                  Nenhuma conta Awin conectada. <Link href="/painel/ids-afiliada" style={{ textDecoration: 'underline' }}>Conecte em Minhas credenciais.</Link>
+                </p>
+              )}
+            </div>
+          )}
+
+          {isAwinForm && form.awinAccountId && (
+            <div>
+              <label className="pnl-label">De quais lojas?</label>
+              {awinStores.accountId === form.awinAccountId && awinStores.error && <p className="pnl-field-error">{awinStores.error}</p>}
+              {awinStores.accountId === form.awinAccountId && !awinStores.error && !awinStores.list.length && (
+                <p className="pnl-hint">Ainda não chegou promoção dessa conta. Elas chegam alguns minutos depois de conectar.</p>
+              )}
+              <div className="pnl-awin-stores">
+                {awinStores.accountId === form.awinAccountId && awinStores.list.map((store) => (
+                  <label key={store.id} className="pnl-check">
+                    <input type="checkbox" checked={form.awinAdvertiserIds.includes(store.id)} onChange={() => toggleAwinStore(store.id)} />
+                    <span>{store.name} <span className="pnl-hint">({store.activePromotions} ativas)</span></span>
+                  </label>
+                ))}
+              </div>
+              <p className="pnl-hint" style={{ marginTop: 4 }}>Nenhuma marcada = todas as lojas. O robô reveza: uma promoção de cada loja por vez, primeiro as que vencem antes.</p>
+              <p className="pnl-hint" style={{ marginTop: 4 }}>{AWIN_COPY.storesHint}</p>
+            </div>
+          )}
+
+          {isRakutenForm && (
+            <div>
+              <label className="pnl-label">Qual conta Rakuten?</label>
+              {rakutenAccounts.length ? (
+                <select className="pnl-input" value={form.rakutenAccountId} onChange={(e) => setForm((f) => ({ ...f, rakutenAccountId: e.target.value, rakutenAdvertiserIds: [] }))}>
+                  <option value="">Selecione uma conta</option>
+                  {rakutenAccounts.map((account) => <option key={account.id} value={account.id}>{account.label} ({account.activePromotions || 0} promoções ativas)</option>)}
+                </select>
+              ) : (
+                <p className="pnl-field-error" style={{ marginTop: 4 }}>
+                  Nenhuma conta Rakuten conectada. <Link href="/painel/ids-afiliada" style={{ textDecoration: 'underline' }}>Conecte em Minhas credenciais.</Link>
+                </p>
+              )}
+            </div>
+          )}
+
+          {isRakutenForm && form.rakutenAccountId && (
+            <div>
+              <label className="pnl-label">De quais lojas?</label>
+              {rakutenStores.accountId === form.rakutenAccountId && rakutenStores.error && <p className="pnl-field-error">{rakutenStores.error}</p>}
+              {rakutenStores.accountId === form.rakutenAccountId && !rakutenStores.error && !rakutenStores.list.length && (
+                <p className="pnl-hint">Ainda não chegou promoção dessa conta. Elas chegam alguns minutos depois de conectar.</p>
+              )}
+              <div className="pnl-awin-stores">
+                {rakutenStores.accountId === form.rakutenAccountId && rakutenStores.list.map((store) => (
+                  <label key={store.id} className="pnl-check">
+                    <input type="checkbox" checked={form.rakutenAdvertiserIds.includes(store.id)} onChange={() => toggleRakutenStore(store.id)} />
+                    <span>{store.name} <span className="pnl-hint">({store.activePromotions} ativas)</span></span>
+                  </label>
+                ))}
+              </div>
+              <p className="pnl-hint" style={{ marginTop: 4 }}>Nenhuma marcada = todas as lojas. O robô reveza: uma promoção de cada loja por vez, primeiro as que vencem antes.</p>
+              <p className="pnl-hint" style={{ marginTop: 4 }}>{RAKUTEN_COPY.storesHint}</p>
+            </div>
+          )}
+
+          <div>
+            <label className="pnl-label">{isPromotionForm ? 'Filtrar por palavra (opcional)' : 'O que você quer vender?'}</label>
             <input
               type="text"
               className="pnl-input"
               value={form.keyword}
               onChange={(e) => setForm((f) => ({ ...f, keyword: e.target.value }))}
-              placeholder="Ex: decoração de festas, eletrônicos, moda feminina"
+              placeholder={isPromotionForm ? 'Ex: notebook, frete grátis' : 'Ex: decoração de festas, eletrônicos, moda feminina'}
             />
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Use palavras que descrevem o tipo de produto.</p>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>{isPromotionForm ? 'Só saem promoções com essas palavras no título ou na descrição. Deixe em branco para todas.' : 'Use palavras que descrevem o tipo de produto.'}</p>
           </div>
 
           <div>
             <label className="pnl-label">Modelo da mensagem</label>
             <select className="pnl-input" value={form.templateKey} onChange={(e) => setForm((f) => ({ ...f, templateKey: e.target.value }))}>
-              {templates.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
+              {formTemplates.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
             </select>
-            <p className="pnl-hint" style={{ marginTop: 4 }}>Edite os modelos em Mensagens. O padrão “Automático clássico” mantém o texto atual.</p>
+            <p className="pnl-hint" style={{ marginTop: 4 }}>{isPromotionForm ? `O modelo “Promoção (sem preço)” foi feito para as promoções da ${isRakutenForm ? 'Rakuten: nome da loja, cupom' : 'Awin: nome da loja, descrição'}, validade e link. Nos outros modelos, a linha de preço some sozinha.` : 'Edite os modelos em Mensagens. O padrão “Automático clássico” mantém o texto atual.'}</p>
             {selectedTemplatePreview && <pre className="pnl-pre" style={{ background: 'var(--bg-soft)', borderRadius: 8, padding: 12, marginTop: 8, maxHeight: 112 }}>{selectedTemplatePreview}</pre>}
           </div>
 
@@ -416,7 +619,7 @@ export default function OfertasAutomaticasPage() {
             {!waGroups.length && <p className="pnl-field-error" style={{ marginTop: 4 }}>Nenhum grupo de destino cadastrado. Vá em Espelhamento para adicionar.</p>}
           </div>
 
-          <InstagramDestinationPicker destinations={instagramDestinations} selectedIds={form.instagramDestinationIds} onToggle={toggleInstagramDestination} title="Também publicar no Instagram" />
+          {!isPromotionForm && <InstagramDestinationPicker destinations={instagramDestinations} selectedIds={form.instagramDestinationIds} onToggle={toggleInstagramDestination} title="Também publicar no Instagram" />}
 
           <div>
             <label className="pnl-label">Com que frequência enviar?</label>
@@ -441,12 +644,13 @@ export default function OfertasAutomaticasPage() {
           )}
 
           <div>
-            <label className="pnl-label">Quantos produtos enviar de uma vez?</label>
+            <label className="pnl-label">{isPromotionForm ? 'Quantas promoções enviar de uma vez?' : 'Quantos produtos enviar de uma vez?'}</label>
             <select className="pnl-input" value={form.offersPerSend} onChange={(e) => setForm((f) => ({ ...f, offersPerSend: Number(e.target.value) }))}>
-              {OFFERS_PER_SEND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {OFFERS_PER_SEND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{isPromotionForm ? perSendLabel(o.value, form.source) : o.label}</option>)}
             </select>
           </div>
 
+          {!isPromotionForm && <>
           <div>
             <label className="pnl-label">Qual o desconto mínimo para enviar?</label>
             <select className="pnl-input" value={form.minDiscountPct} onChange={(e) => setForm((f) => ({ ...f, minDiscountPct: Number(e.target.value) }))}>
@@ -488,6 +692,7 @@ export default function OfertasAutomaticasPage() {
               <span className="pnl-hint">Quando o modelo da mensagem tiver a variável {'{cupom}'}, o bot escolhe sozinho o melhor cupom da loja cadastrado em Cupons.</span>
             </span>
           </label>
+          </>}
 
           {saveError && <div className="pnl-note-box is-error" role="alert">{saveError}</div>}
 
@@ -526,7 +731,7 @@ export default function OfertasAutomaticasPage() {
       </a>
 
       <div className="pnl-note-box is-info">
-        🛍️ Por enquanto, o garimpo automático busca produtos só na <strong>Shopee</strong>. Mercado Livre, Amazon, SHEIN, Magalu e AliExpress ainda não têm busca automática por palavra-chave.
+        🛍️ O garimpo automático busca produtos por palavra só na <strong>Shopee</strong>. Também dá para enviar as <strong>promoções das lojas da Awin e da Rakuten</strong> (conecte a conta em Minhas credenciais). Mercado Livre, Amazon, SHEIN, Magalu e AliExpress ainda não têm busca automática.
       </div>
 
       {automations.length > 0 && (
@@ -575,8 +780,8 @@ export default function OfertasAutomaticasPage() {
           return (
             <article key={a.id} className={`offer-auto-topic${a.enabled ? '' : ' is-paused'}`}>
               <div className="offer-auto-topic-main">
-                <strong>{a.keyword}</strong>
-                <small>{describeSearchChoice(a)} · {OFFERS_PER_SEND_OPTIONS.find((o) => o.value === a.offersPerSend)?.label ?? `${a.offersPerSend} produto(s)`}</small>
+                <strong>{automationTitle(a)}</strong>
+                <small>{a.source === 'awin' ? awinChoiceLabel(a, awinAccounts) : a.source === 'rakuten' ? rakutenChoiceLabel(a, rakutenAccounts) : describeSearchChoice(a)} · {perSendLabel(a.offersPerSend, a.source)}</small>
                 <AutomationActions automation={a} triggering={triggering === a.id} reviewQueueOpen={reviewQueueOpen} onTrigger={() => handleTrigger(a)} onToggleQueue={() => setOpenReviewQueues((current) => { const next = new Set(current); if (next.has(a.id)) next.delete(a.id); else next.add(a.id); return next })} onEdit={() => openEdit(a)} onRemove={() => setDeleteTarget(a)} />
               </div>
               <div className={`offer-auto-topic-destination offer-auto-publication ${a.publicationMode === 'review' ? 'is-review' : 'is-direct'}`}>
@@ -584,7 +789,7 @@ export default function OfertasAutomaticasPage() {
                 {a.publicationMode === 'review' && <small>{a.approvedReviewCount || 0} {a.approvedReviewCount === 1 ? 'oferta aprovada' : 'ofertas aprovadas'} na fila</small>}
                 <span>{automationDestinationLabel(a, instagramDestinations)}</span>
               </div>
-              <div><span className="offer-auto-discount">{a.minDiscountPct > 0 ? `${a.minDiscountPct}% ou mais` : 'Qualquer oferta'}</span></div>
+              <div><span className="offer-auto-discount">{isPromotionSource(a.source) ? 'Promoções' : a.minDiscountPct > 0 ? `${a.minDiscountPct}% ou mais` : 'Qualquer oferta'}</span></div>
               <div className="offer-auto-rhythm">{intervalShortLabel(a)}<small>{nextSendLabel(a.lastSentAt, a.intervalMinutes, a.dailyRunTime)}</small></div>
               <div className="offer-auto-topic-toggle">
                 <button
@@ -600,7 +805,7 @@ export default function OfertasAutomaticasPage() {
               {showForm && editId === a.id && renderAutomationForm()}
               {result && (
                 <p className="offer-auto-result" style={{ color: result.error ? 'var(--danger)' : 'var(--accent-strong)' }}>
-                  {result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped) : `✓ ${result.sent} produto(s) enviado(s)`}
+                  {result.error ? `Erro: ${result.error}` : result.skipped ? explainSkip(result.skipped, a.source) : isPromotionSource(a.source) ? `✓ ${result.sent} promoção(ões) enviada(s)` : `✓ ${result.sent} produto(s) enviado(s)`}
                 </p>
               )}
               {a.publicationMode === 'review' && reviewQueueOpen && <div className="offer-auto-review" id={`review-queue-${a.id}`}><ReviewQueue automation={a} /></div>}
@@ -621,7 +826,7 @@ export default function OfertasAutomaticasPage() {
         <ConfirmDialog
           open
           title="Remover automação"
-          message={`Tem certeza que deseja remover a automação para "${deleteTarget.keyword}"?`}
+          message={`Tem certeza que deseja remover a automação para "${automationTitle(deleteTarget)}"?`}
           confirmLabel="Remover"
           danger
           onConfirm={() => handleDelete(deleteTarget)}

@@ -44,3 +44,10 @@ test('editar abre o formulário dentro do card escolhido e revisão mantém Envi
   assert.doesNotMatch(source, /publicationMode !== 'review' && <button[^>]+>\s*\{triggering/)
   assert.match(source, /no_approved_review_items: 'Aprove pelo menos uma oferta/)
 })
+
+test('promoções Awin: palavra é opcional, conta e grupo são obrigatórios', () => {
+  const awin = { ...valid, source: 'awin', keyword: '', awinAccountId: 'acc1' }
+  assert.equal(validateOfferAutomationForm(awin), null)
+  assert.equal(validateOfferAutomationForm({ ...awin, awinAccountId: '' }), 'Escolha qual conta Awin usar.')
+  assert.equal(validateOfferAutomationForm({ ...awin, destGroupJid: '', instagramDestinationIds: ['ig-1'] }), 'Escolha o grupo que vai receber as promoções.')
+})

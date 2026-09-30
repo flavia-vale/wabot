@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 const slug = '/ferramentas'
 const siteUrl = getSiteUrl()
@@ -21,6 +22,13 @@ const tools = [
     title: 'Calculadora de tempo em grupos de WhatsApp',
     description: 'Estime horas/mês gastas com curadoria, conferência e repostagem manual de ofertas.',
     cta: 'Calcular tempo',
+  },
+  {
+    href: '/ferramentas/calculadora-comissao-afiliado-whatsapp',
+    status: 'Disponível',
+    title: 'Calculadora de comissão de afiliado',
+    description: 'Estime pedidos, comissão e ponto de equilíbrio a partir dos seus cliques, conversão e valor médio.',
+    cta: 'Calcular comissão',
   },
   {
     href: '/ferramentas/calculadora-tempo-grupos-whatsapp',
@@ -100,6 +108,7 @@ export default function Page() {
           ))}
         </section>
       </main>
+   <EditorialFreshness pathname="/ferramentas" />
     </PublicShell>
   )
 }

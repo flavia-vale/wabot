@@ -75,14 +75,17 @@ test('bloco de prova social não promete retorno financeiro', () => {
 
 test('home usa o vídeo oficial como prova verificável', () => {
   const src = readSocial('dashboard/components/landing/Social.jsx')
+  // 29/09/2026: vídeo da home = "Como espelhar mensagens entre grupos", lido
+  // da mesma constante do blog e do painel (src/tutorialVideo.js).
   assert.ok(
-    src.includes('BRAND_YOUTUBE_TUTORIAL_EMBED_URL'),
-    'o bloco de prova social deve embutir o tutorial oficial — é a prova que o visitante consegue conferir sozinho',
+    src.includes('VIDEO_ESPELHAMENTO_EMBED_URL'),
+    'o bloco de prova social deve embutir o vídeo oficial do espelhamento — é a prova que o visitante consegue conferir sozinho',
   )
+  assert.ok(!/nch0Lo3Zz1U/.test(src), 'ID colado na mão vira cópia esquecida quando o vídeo for regravado')
 
-  const content = readFileSync(join(repoRoot, 'dashboard/lib/marketing-content.js'), 'utf8')
+  const video = readFileSync(join(repoRoot, 'src/tutorialVideo.js'), 'utf8')
   assert.ok(
-    content.includes('youtube-nocookie.com/embed/'),
+    video.includes('youtube-nocookie.com/embed/'),
     'o embed deve usar youtube-nocookie para não plantar cookie de rastreio antes de o vídeo tocar',
   )
 })

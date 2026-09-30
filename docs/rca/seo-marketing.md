@@ -176,11 +176,39 @@ pode virar promessa de que não banem. Corrigir a expectativa dentro da página 
 honesto; prometer é risco jurídico e contraria a política de uso responsável já
 publicada no `llms.txt`.
 
+## Títulos-pergunta nos comparativos: exceção à FR-030 (decisão 29/09/2026)
+
+A FR-030 (`test/marketing-limites-que-nao-se-cruzam.test.js`) obriga o título
+de comparativo a começar com "Alternativa ao X", para a página não se passar
+pelo concorrente (risco de marca/propaganda enganosa). Em 29/09 a dona do
+produto decidiu, com o risco explicado, abrir **exceção nominal** para 3 páginas
+com título-pergunta + contraste:
+
+| Página | Título |
+|---|---|
+| `/alternativas/achadinho-pro` | Achadinho Pro cobra R$ 49,97 só p/ Shopee. Veja R$ 39 |
+| `/alternativas/shozap` | Shozap limita grupos? Aqui é ilimitado por R$ 39 |
+| `/alternativas/achadinhos-bot` | AchadinhosBot limita grupos? Aqui é ilimitado: R$ 39 |
+
+- A lista é `TITULOS_COM_MARCA_DO_CONCORRENTE_AUTORIZADOS`; mesmo nela o título
+  precisa trazer o contraste "R$ 39". Página nova **não** entra sem nova decisão.
+- Os fatos do título vêm de `competitors-data.js` (FR-031 continua valendo). Se
+  o preço/limite do concorrente mudar, o título muda junto — é afirmação sobre
+  terceiro, não pode ficar velha.
+- Contexto de medição: os 3 já tinham sido reescritos em 27/09 (Frente D1) e
+  foram trocados de novo antes de medir. Comparar pela série diária a partir do
+  deploy desta troca, não contra 27/09.
+
 ## Datas, "Melhor para" e validadores de SEO (23/09/2026 — não regredir)
 
 - **`EDITORIAL_DATES` é a fonte ÚNICA da data** de toda rota indexável: o
-  `lastmod` do sitemap, o `dateModified` e o "Atualizado em" visível saem dela.
+  `lastmod` do sitemap, o `dateModified` e o "Revisado em" visível saem dela.
   Nunca inventar data: `updatedAt` só muda quando o CONTEÚDO muda.
+- Páginas sem autoria/data próprias usam
+  `components/marketing/EditorialFreshness.jsx`, que imprime o selo e o schema
+  `WebPage`. A guarda HTTP `npm run validate:editorial-dates` cobre todas as
+  páginas HTML indexáveis. `llms.txt` e `pricing.md` são recursos de texto, não
+  páginas HTML.
 - **Toda página de `_preservationCommercialPages.js` tem "Melhor para / Não é
   ideal para"** — a IA recomenda por adequação. Guarda:
   `test/paginas-comerciais-melhor-para-e-data.test.js`.
@@ -193,6 +221,38 @@ publicada no `llms.txt`.
   produto). Guarda: `test/marca-unica-espelha-grupos.test.js`.
 - **Medição de IA:** `node scripts/validar-medicao-ia.mjs` antes de fechar o
   placar (um "SIM" maiúsculo zerou o de 01/09).
+- **Definição da marca é UMA frase (29/09/2026):** `BRAND_DEFINITION_PT`
+  ("Espelha Grupos é um robô para afiliadas que…") = `FICHA_DEFINICAO`; abre o
+  Hero da home, `/quem-somos` e a 1ª linha do `llms.txt`. Guarda:
+  `test/ficha-tecnica-canonica.test.js`.
+- **Topo citável das 20 prioritárias (29/09/2026):** preço e números próprios
+  saem de `dashboard/lib/resposta-citavel.js` (preço de `DEFAULT_LANDING_PLANS`;
+  números medidos, com data e fonte na mesma frase). Número novo só medido;
+  citação entre aspas só com depoimento real autorizado. Guarda:
+  `test/topo-citavel-paginas-prioritarias.test.js`.
+
+## Relatórios do Bing Webmaster — o que é defeito e o que não é (29/09/2026)
+
+Medido em produção (curl com user-agent do bingbot) antes de mexer:
+
+- **"Título muito longo"** = título ENTREGUE (com ` | Espelha Grupos`) acima de
+  70 chars. É defeito real: `/precos` tinha 78 (caiu para 67) e, na varredura
+  do sitemap de 29/09, outras 28 páginas passavam — todas encurtadas para no
+  máximo 53 + sufixo, mantendo o fato que converte (loja, %, "7 dias grátis").
+  Guarda: `test/bing-titulos.test.js` (páginas avulsas + módulos de conteúdo +
+  `lp-config`; `titleAbsolute` não leva sufixo). Título novo = até 53 chars.
+- **`/pricing.md` sem título, meta descrição, idioma e H1** = falso positivo: o
+  Bing aplica checagem de HTML num arquivo Markdown (`text/markdown`). A URL
+  está **indexada**. Não transformar em HTML nem pôr `noindex`/canonical: é o
+  recurso que IA lê direto (ver "Datas, validadores" acima).
+- **"Descoberta, mas não rastreada"** (`/llms.txt`, posts novos) = o Bing ainda
+  não visitou. Conferir só: 200, fora do `Disallow` do `robots.txt`, no
+  sitemap e no IndexNow (`getIndexableSeoRoutes`). Tudo ok → "Solicitar
+  indexação" no Bing; não há código a corrigir. A data "01 Jan 2006" é
+  placeholder do Bing, não dado nosso.
+- **URL com `//`** (`espelhagrupos.com.br//blog/...`) veio digitada na
+  inspeção: sitemap, IndexNow e `llms.txt` não geram `//`, e o servidor
+  responde 308 para a URL certa. Inspecionar sempre com uma barra só.
 
 ## Dados de mercado para marketing (canônico — usar em toda decisão de SEO/conteúdo)
 
@@ -634,8 +694,24 @@ marketing bloqueia anúncio pago até esse número existir. Teste:
   (`src/core/reportRiskScore.js`); horário de descanso, intervalo, limite por
   dia, variação de texto.
 - **Não existe:** "pausa preventiva" antes do risco, medição de cliques ou
-  visualizações do canal (`clickTracker.js` não está ligado no envio), plano de
+  visualizações do canal (o link rastreado existe no robô desde 2026-09-29, mas
+  é opt-in, desligado por padrão e sem conta ativa — ver `lojas-conversao.md`,
+  "Link rastreado"; só vira texto público depois de ligado e validado), plano de
   recuperação como função da ferramenta (é da cliente).
 - O PR #1848 errou para o outro lado ("não pausa sozinha", "não mede saúde") —
   corrigido. Convite é "Testar 7 dias grátis", nunca "Lista VIP"; sem "staging"/
   "Sprint" em texto público. Guarda: `test/paginas-publicas-sem-promessa-falsa.test.js`.
+
+## Funil da campanha Canais + Preservação — três furos de medição (29/09/2026, não regredir)
+
+Achados no P1 do backlog pós-P3 (`docs/marketing/canais-antiban/backlog-pos-p3-prioridades.md`). Os três descartavam dado **sem erro**:
+
+1. **`diagnostic_result_viewed`, `diagnostic_form_submitted`, `diagnostic_cta_clicked`** estavam em `PUBLIC_PERSISTED_EVENTS` (navegador) mas fora das duas allowlists de `src/analytics.js` → a rota pública respondia 400 e o funil não tinha a etapa do diagnóstico nem o clique da calculadora (`diagnostic_cta_clicked` com `origin=calculadora_risco_whatsapp`). Mesma falha do `organic_page_view` em 08/2026: **evento novo entra nas TRÊS listas**.
+2. **`diagnostic_score_band`, `risk_score_band`, `segmento`** vinham na URL do `/login` e eram descartados (fora de `ATTRIBUTION_QUERY_KEYS`; o `/register` nem lia). Agora vão ao `signup_created`, saneados por `campaignSignupFields` (`src/domain/signup/entryUtm.js`).
+3. **UTM do post que trouxe a pessoa** só existia dentro do `landing_page` saneado (`?`/`=`/`&` → `-`) e cortado em 80 caracteres pelo `sanitizeAnalyticsMetadata` — o `utm_content` sumia. Agora todo evento público persistido e o `signup_created` levam `entry_utm_source/medium/campaign/content`, extraídos antes do corte. A regra de leitura existe duas vezes (servidor `src/domain/signup/entryUtm.js`, navegador `readEntryUtm` em `dashboard/lib/marketing-attribution.js`) porque `src/` não importa `dashboard/lib`; o teste compara as duas.
+
+Extra: o "Criar conta" das 4 páginas de decisão mandava `utm_content=p2_signup` igual e um `page=` que o `/login` descarta — agora `p2_signup_<página>` (`decisionSignupHref`).
+
+Leitura: `/admin/marketing-growth` → "Campanha Canais + Preservação" (`GET /api/admin/marketing/campanha-canais`, `admin:read`, janela máx. 90 dias, 2 consultas `GROUP BY` + `LIMIT 2000`, zero processo novo) e `node scripts/diag-funil-antiban.mjs [--dias 7]`. Montagem única em `src/domain/admin/campaignFunnel.js`. Eventos e `entry_utm_*` só existem a partir do deploy de 29/09 — semana anterior mostra zero nessas etapas, não é queda.
+
+Guardas: `test/campanha-canais-funil.test.js`, `test/campanha-canais-qa.test.js` (8 rotas, CTAs, promessa, mock rotulado, sem jargão "P1/P2"), `test/campanha-canais-criativos.test.js`.

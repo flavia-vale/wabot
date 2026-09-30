@@ -4,6 +4,7 @@ import { convert as convertShopee } from './shopee.js'
 import { convert as convertMagalu } from './magazineluiza.js'
 import { convert as convertShein }  from './shein.js'
 import { convert as convertAliExpress } from './aliexpress.js'
+import { convert as convertAwin } from './awin.js'
 
 const CONVERTERS = {
   mercadolivre:  convertML,
@@ -12,6 +13,9 @@ const CONVERTERS = {
   magazineluiza: convertMagalu,
   shein:         convertShein,
   aliexpress:    convertAliExpress,
+  // Credencial da Awin não vem da tabela Credential: é o contexto montado por
+  // src/integrations/awin/conversionContext.js (contas + lojas aprovadas).
+  awin:          convertAwin,
 }
 
 // Normaliza retorno dos converters para `{ url, warning } | null`.

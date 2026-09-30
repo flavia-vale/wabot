@@ -16,6 +16,7 @@ import { checkDuplicateTrialAtSignup } from '../../domain/signup/duplicateTrialA
 import { normalizeContactPhone } from '../../domain/signup/contactPhone.js'
 import { isReservedAdminEmail } from '../../auth/reservedAdminEmails.js'
 import { passwordVersion } from '../../auth/sessionVersion.js'
+import { campaignSignupFields, parseEntryUtm } from '../../domain/signup/entryUtm.js'
 
 // Hash descartável usado só para igualar o custo de tempo do bcrypt.compare
 // no caminho "usuário não existe". Sem ele, login com e-mail inexistente
@@ -410,6 +411,10 @@ export async function authRoutes(app) {
       termsAccepted,
       termsVersion: rawTermsVersion,
     } = req.body ?? {}
+    // Campanha Canais + Preservação (2026-09-29): faixa do diagnóstico/calculadora
+    // e perfil da operação chegam pela URL do /login; só valores curtos e no
+    // formato esperado passam (src/domain/signup/entryUtm.js).
+    const campaignFields = campaignSignupFields(req.body ?? {})
     const name = normalizeName(rawName)
     const providedEmail = normalizeEmail(rawEmail)
     const email = providedEmail || generateFallbackEmail()
@@ -577,6 +582,10 @@ export async function authRoutes(app) {
         utm_content: utmContent || null,
         utm_term: utmTerm || null,
         landing_page: landingPage,
+        // UTM do link que trouxe a pessoa (post, anúncio), lida da página de
+        // entrada ANTES do corte de 80 caracteres da metadata.
+        ...parseEntryUtm(landingPage),
+        ...campaignFields,
         gclid: gclid || null,
         conversion_prompt_id: conversionPromptId || null,
         conversion_prompt_variant: conversionPromptVariant || null,

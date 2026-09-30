@@ -1,11 +1,15 @@
 import './landing.css'
 import { Hero } from '@/components/landing/Hero'
+import { getPublicCounter } from '@/lib/public-counters'
 import { How } from '@/components/landing/How'
 import { Features } from '@/components/landing/Features'
 import { Social } from '@/components/landing/Social'
+import { Depoimentos } from '@/components/landing/Depoimentos'
 import { Pricing } from '@/components/landing/Pricing'
 import { FAQ } from '@/components/landing/FAQ'
+import { FichaTecnica } from '@/components/landing/FichaTecnica'
 import Footer, { FinalCTA } from '@/components/landing/Footer'
+import { VendasPreview } from '@/components/landing/VendasPreview'
 import { IntroCard, RulesCard } from '@/components/landing/IntroCard'
 import { BRAND_NAME, BRAND_SHORT_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS, CORE_FAQ_ITEMS } from '@/lib/marketing-content'
 import { OrganicPageTracker } from '@/components/marketing/OrganicPageTracker'
@@ -13,17 +17,25 @@ import { selectHomeHeroVariant } from '@/lib/cro-experiments'
 import { getLandingPlans } from '@/lib/plans-server'
 import { buildOgImageDescriptor } from '@/lib/seo-og'
 import { getEditorialDates } from '@/lib/editorial-content'
+import { GuaranteeBlock } from '@/components/marketing/GuaranteeBlock'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
+
+// Descrição curta só para <meta name="description">/OG (Bing Webmaster, 27/09/2026:
+// "Descrição Meta muito longa"). PRODUCT_DEFINITION (283 chars) é o texto certo
+// para o corpo da página — não para a meta, que os motores cortam em 150-160.
+const HOME_META_DESCRIPTION =
+  'O Espelha Grupos converte o link de afiliado de 6 lojas (Shopee, Amazon, Mercado Livre e mais) e publica as ofertas em grupos e canais do WhatsApp.'
 
 export const metadata = {
   // `absolute` porque o título da home já termina na marca — sem isso o template
   // do layout raiz (`%s | Espelha Grupos`) somaria a marca de novo e o título
   // sairia duplicado, que é exatamente o defeito apontado no P3 do estudo.
   title: { absolute: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp' },
-  description: PRODUCT_DEFINITION,
+  description: HOME_META_DESCRIPTION,
   alternates: { canonical: '/' },
   openGraph: {
     title: 'Espelha Grupos | Bot para afiliados espelhar ofertas no WhatsApp',
-    description: PRODUCT_DEFINITION,
+    description: HOME_META_DESCRIPTION,
     url: '/',
     // A home não declarava imagem nenhuma (RCA 2026-09-18) — o card de prévia
     // do link principal do produto saía sem foto.
@@ -84,15 +96,22 @@ export default async function LandingPage({ searchParams = {} }) {
       {jsonLd.map((schema) => (
         <script key={schema['@type']} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
-      <Hero tone={tone} />
+      <Hero tone={tone} publicCounter={getPublicCounter()} />
       <How />
       <Features />
+      <VendasPreview />
       <Social />
+      <Depoimentos />
       <Pricing initialPlans={plans} />
+      <GuaranteeBlock />
+      {/* Ficha técnica canônica (medição de IA 27/09/2026): a mesma tabela
+        * "Recurso | Basic | Pro" da /precos, do llms.txt e do pricing.md. */}
+      <FichaTecnica />
       <ProductDefinition />
       <FAQ />
       <FinalCTA />
       <Footer />
+   <EditorialFreshness pathname="/" showLabel={false} />
     </div>
   )
 }

@@ -5,9 +5,10 @@
 //   - logging de click em AffiliateClick (IP/UA hashed por privacidade)
 //   - endpoint público GET /r/:hash que 302 redireciona + grava click
 //
-// NÃO mexe em src/converters/ (bloco protegido). A integração — fazer
-// o bot enviar o shortlink em vez do link original — fica para PR
-// dedicada, com cuidado.
+// NÃO mexe em src/converters/ (bloco protegido). A integração com o robô
+// (enviar o shortlink no lugar do link convertido) veio depois, opt-in e
+// desligada por padrão: src/core/trackedLinks.js + trackLinksForSend em
+// src/bot-worker.js (docs/rca/lojas-conversao.md, "Link rastreado").
 //
 // Próximo PR (já desbloqueado): PR-5.C.4 — usar getClickStats como
 // sinal indireto de saúde (drop > 70% em 48h → yellow).

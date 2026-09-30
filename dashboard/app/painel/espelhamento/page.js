@@ -51,6 +51,7 @@ import { instagramDestinationsFromConnections } from '@/components/InstagramDest
 import { hasInstagramStoriesAccess, hasProLikeAccess } from '@/lib/planEntitlements'
 import { AFFILIATE_PLATFORMS } from '@/lib/painel/affiliatePlatforms'
 import { buildMirrorCards, planMirrorCreation, resolveInitialOrigin } from '../../../../src/domain/painel/mirrorWizard.js'
+import { VIDEO_ESPELHAMENTO_URL } from '../../../../src/tutorialVideo.js'
 
 // Espelha WATERMARK_MAX_CHARS de src/core/destinationWatermark.js (a tela não
 // importa aquele módulo: ele carrega `sharp`). test/watermark-limite-caracteres.test.js
@@ -77,6 +78,9 @@ const ALL_PLATFORMS = [
   { id: 'magazineluiza', label: 'Magazine Luiza' },
   { id: 'shein', label: 'SHEIN' },
   { id: 'aliexpress', label: 'AliExpress' },
+  // Uma chave para todas as lojas da Awin em que a cliente foi aprovada
+  // (docs/rca/afiliados-awin.md). Sem conta Awin, não faz nada.
+  { id: 'awin', label: 'Awin' },
 ]
 
 const NO_LINK_SCOPE_OPTIONS = [
@@ -2323,6 +2327,18 @@ export default function EspelhamentoPage() {
           <Link href="/painel/whatsapp" className="pnl-btn">Conexão WhatsApp</Link>
         </div>
       </section>
+
+      {/* Vídeo 1 do canal (plano SEO+GEO, C1): o passo a passo desta tela.
+          Mesmo cartão de "Ofertas automáticas" — padrão que já existe no
+          painel, sem estilo novo. */}
+      <a className="offer-auto-guide" href={VIDEO_ESPELHAMENTO_URL} target="_blank" rel="noreferrer">
+        <span className="offer-auto-guide-play" aria-hidden="true">▶</span>
+        <span className="offer-auto-guide-copy">
+          <strong>Veja na prática: como espelhar mensagens entre grupos</strong>
+          <small>Escolha o grupo de origem e os seus destinos. O robô publica cada oferta com o seu link.</small>
+        </span>
+        <span className="offer-auto-guide-cta">Assistir <span aria-hidden="true">↗</span></span>
+      </a>
 
       {nothingYet ? (
         <section className="pnl-card" style={{ textAlign: 'center', padding: '34px 20px' }}>

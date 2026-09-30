@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" role="img" aria-labelledby="t d">
+  <title id="t">Post 8 — Preservação em camadas</title>
+  <desc id="d">Card com sete blocos empilhados como camadas: chip dedicado, intervalo, limite por dia, horário de silêncio, variação de texto, consentimento e plano B. Título: &#x27;Preservação é camada sobre camada&#x27;.</desc>
+  <!-- Espelha Grupos · Design System v2. Cada classe = um token (ver docs/design-system/design-system-v2.html). -->
+  <style>
+    .bg{fill:#EEF6F2}          /* --bg */
+    .bg-soft{fill:#DDEDE5}     /* --bg-soft */
+    .surface{fill:#FCFEFD}     /* --surface */
+    .accent{fill:#7CC9A9}      /* --accent */
+    .accent-strong{fill:#3E9C7A} /* --accent-strong */
+    .accent-3{fill:#F6E8D8}    /* --accent-3 */
+    .line{stroke:#1F2D2A;stroke-opacity:.10} /* --line */
+    text{font-family:'Figtree',system-ui,-apple-system,sans-serif}
+    .ink{fill:#1F2D2A}         /* --ink */
+    .ink-soft{fill:#5A6E68}    /* --ink-soft */
+    .on-accent{fill:#FCFEFD}   /* --surface sobre --accent-strong */
+    .eyebrow{font-size:28px;font-weight:800;letter-spacing:3px}
+    .h1{font-size:84px;font-weight:800;letter-spacing:-2px}
+    .sub{font-size:44px;font-weight:600}
+    .cta{font-size:38px;font-weight:800}
+    .brand{font-size:32px;font-weight:800}
+    .foot{font-size:24px;font-weight:600}
+  </style>
+  <rect class="bg" width="1080" height="1080"/>
+  <circle class="accent-3" cx="960" cy="140" r="220"/>
+  <circle class="bg-soft" cx="80" cy="1000" r="200"/>
+  <rect class="surface line" x="72" y="72" width="936" height="936" rx="48" stroke-width="2"/>
+  <rect class="bg-soft" x="132" y="140" width="606" height="60" rx="30"/>
+  <circle class="accent-strong" cx="166" cy="170" r="9"/>
+  <text class="eyebrow accent-strong" x="190" y="180">PRESERVAÇÃO EM CAMADAS</text>
+  <text class="h1 ink" x="132" y="360">Camada sobre</text>
+  <text class="h1 ink" x="132" y="466">camada</text>
+  <text class="sub ink-soft" x="132" y="580">Nenhuma é milagre.</text>
+  <text class="sub ink-soft" x="132" y="640">Juntas, reduzem o risco.</text>
+  <rect class="accent-strong" x="132" y="730" width="508" height="100" rx="50"/>
+  <text class="cta on-accent" x="172" y="793">Veja as camadas →</text>
+  <line class="line" x1="132" y1="890" x2="948" y2="890" stroke-width="2"/>
+  <circle class="accent" cx="152" cy="940" r="20"/>
+  <text class="brand ink" x="188" y="951">Espelha Grupos</text>
+  <text class="foot ink-soft" x="948" y="951" text-anchor="end">espelhagrupos.com.br</text>
+</svg>

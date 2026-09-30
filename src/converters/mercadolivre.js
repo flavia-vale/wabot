@@ -754,6 +754,17 @@ function serializeCookieJar(jar) {
     .join('; ')
 }
 
+// Só os NOMES dos cookies de um Set-Cookie (nunca o valor), marcando deleção
+// com "(del)". Vai para o bot.log nas recusas do createLink: distingue "o ML
+// apagou o ssid" (ssid(del)) de "o ML emitiu ssid anônimo" (ssid) de "só
+// cookie de rastreio" — investigação do código que vence em ~75–95 min.
+export function describeSetCookieNames(headers = {}) {
+  return getSetCookieLines(headers)
+    .map(parseSetCookieLine)
+    .filter(Boolean)
+    .map(({ name, isDeletion }) => (isDeletion ? `${name}(del)` : name))
+}
+
 function buildCredentialPatchFromSetCookie(creds = {}, cookieHeader = '', headers = {}) {
   const lines = getSetCookieLines(headers)
   if (!lines.length) return null
@@ -931,7 +942,7 @@ async function createAffiliateLink(mlUrl, tag, creds) {
           apiError,
           urls: res.data?.urls,
           rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
-          responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
+          responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length, setCookieNames: describeSetCookieNames(res.headers) },
         }
 
         if (affiliateFailure) {

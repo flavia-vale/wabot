@@ -4,8 +4,9 @@ import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { buildRegisterHref } from '@/lib/marketing-attribution'
 import { getEditorialDates } from '@/lib/editorial-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
-const title = 'Conteúdos: blog e materiais para afiliados no WhatsApp'
+const title = 'Blog e materiais para afiliados no WhatsApp'
 const description = 'Central de conteúdos do Espelha Grupos com artigos e materiais práticos para padronizar divulgação, validar links de afiliado e escalar grupos no WhatsApp com responsabilidade.'
 const slug = '/conteudos'
 
@@ -34,7 +35,7 @@ const blogPosts = [
   },
   {
     href: '/clonar-mensagens-de-grupo-de-afiliados',
-    title: 'Como clonar mensagens de grupo de afiliados no WhatsApp',
+    title: 'Clonar mensagens de grupo de afiliados no WhatsApp',
     description: 'O que significa clonar um grupo de ofertas, como o link vira o seu e quais ferramentas fazem isso.',
   },
   {
@@ -54,7 +55,7 @@ const blogPosts = [
   },
   {
     href: '/blog/como-divulgar-ofertas-mercado-livre-whatsapp',
-    title: 'Como divulgar ofertas do Mercado Livre no WhatsApp como afiliado',
+    title: 'Afiliado Mercado Livre no WhatsApp: comissão até 16%',
     description: 'Link de afiliado, conversão automática de MLB e landings, preview com imagem e cadência.',
   },
   {
@@ -88,6 +89,36 @@ const blogPosts = [
     description: 'Preços dos planos e como avaliar o custo real além da mensalidade.',
   },
   {
+    href: '/blog/bot-de-whatsapp-conectado-mas-nao-envia',
+    title: 'Bot conectado mas não envia ofertas: o que conferir',
+    description: 'Os 5 passos para separar origem parada, oferta segurada por regra e conexão parada.',
+  },
+  {
+    href: '/blog/oferta-sem-foto-no-whatsapp-por-que-acontece',
+    title: 'Oferta sem foto no WhatsApp: por que acontece',
+    description: 'As três causas mais comuns do card sem foto e o que conferir antes de pedir ajuda.',
+  },
+  {
+    href: '/blog/numero-banido-whatsapp-o-que-fazer',
+    title: 'Número banido no WhatsApp: o que fazer',
+    description: 'O caminho oficial de análise, o que conferir na operação e o que ninguém garante.',
+  },
+  {
+    href: '/blog/como-aquecer-numero-whatsapp-afiliados',
+    title: 'Aquecer número no WhatsApp: o que é e o que não é',
+    description: 'Começar devagar sem depender de promessa.',
+  },
+  {
+    href: '/blog/link-de-afiliado-sem-comissao-o-que-conferir',
+    title: 'Link de afiliado sem comissão: o que conferir',
+    description: 'Código no link, confirmação da venda, categoria e regras do programa.',
+  },
+  {
+    href: '/blog/shopee-suspendeu-afiliado-o-que-fazer',
+    title: 'Shopee suspendeu afiliado: o que fazer',
+    description: 'O que os termos do programa dizem e o que reunir antes de contestar.',
+  },
+  {
     href: '/blog/melhores-horarios-para-postar-ofertas-no-whatsapp',
     title: 'Melhores horários para postar ofertas no WhatsApp',
     description: 'Janelas que funcionam e por que a cadência importa mais que o horário exato.',
@@ -114,7 +145,7 @@ const blogPosts = [
   },
   {
     href: '/blog/migrar-grupo-achadinhos-para-canal',
-    title: 'Como migrar grupo de achadinhos para Canal do WhatsApp',
+    title: 'Migrar grupo de achadinhos para Canal do WhatsApp',
     description: 'Passo a passo para migrar sem abandonar comunidade nem quebrar rotina.',
   },
   {
@@ -124,7 +155,7 @@ const blogPosts = [
   },
   {
     href: '/blog/bot-whatsapp-antiban-existe',
-    title: 'Bot “anti-ban” para WhatsApp existe? A resposta honesta',
+    title: 'Bot “anti-ban” para WhatsApp existe? Resposta honesta',
     description: 'Por que promessa absoluta é perigosa e como funciona preservação avançada.',
   },
   {
@@ -177,6 +208,11 @@ const nichePages = [
     description: 'O modo de ofertas automáticas por palavra-chave: o que faz, o limite e o plano.',
   },
   {
+    href: '/espelhar-grupos-de-ofertas-vale-a-pena',
+    title: 'Espelhar grupos de ofertas vale a pena?',
+    description: 'As críticas ao espelhamento, o que é verdade nelas e o controle para cada uma.',
+  },
+  {
     href: '/shopee-afiliados-whatsapp',
     title: 'Shopee Afiliados: divulgar no WhatsApp',
     description: 'Para quem já é afiliada Shopee e quer publicar as ofertas sem copiar e colar.',
@@ -188,7 +224,7 @@ const nichePages = [
   },
   {
     href: '/amazon-afiliados-whatsapp',
-    title: 'Afiliado Amazon: divulgar ofertas no WhatsApp',
+    title: 'Afiliado Amazon no WhatsApp: até 13% e 7 dias grátis',
     description: 'Para quem já é afiliada Amazon e quer publicar sem perder a tag no caminho.',
   },
   {
@@ -232,7 +268,7 @@ const methodologyPages = [
   },
   {
     href: '/como-funciona-espelha-grupos-canais',
-    title: 'Como funciona o Espelha Grupos para Canais do WhatsApp',
+    title: 'Como funciona o Espelha Grupos em Canais do WhatsApp',
     description: 'Fluxo operacional de fontes, destinos, cadência, variação e saúde de cada canal.',
   },
   {
@@ -621,6 +657,7 @@ export default function Page() {
         </section>
       </main>
     </PublicShell>
+   <EditorialFreshness pathname="/conteudos" />
     </>
   )
 }

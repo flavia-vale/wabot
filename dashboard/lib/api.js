@@ -194,6 +194,9 @@ export const api = {
   // link para o e-mail da conta anterior; o endereço nunca vem para cá.
   sessionBlockedRecover: () => apiFetch('/api/session/blocked-recover', { method: 'POST' }),
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
+  multiNumberWaitlist: () => apiFetch('/api/multi-number/waitlist'),
+  multiNumberWaitlistJoin: (body) => apiFetch('/api/multi-number/waitlist', { method: 'POST', body: JSON.stringify(body) }),
+  multiNumberWaitlistLeave: () => apiFetch('/api/multi-number/waitlist', { method: 'DELETE' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
   sessionQRLatest: () => apiFetch('/api/session/qr-latest'),
@@ -219,6 +222,30 @@ export const api = {
   mercadolivreSession: () => apiFetch('/api/credentials/mercadolivre/session'),
   amazonSession: () => apiFetch('/api/credentials/amazon/session'),
   shopeeSession: () => apiFetch('/api/credentials/shopee/session'),
+
+  // Contas Awin (docs/rca/afiliados-awin.md). O código de acesso só vai; nunca volta.
+  awinAccounts: () => apiFetch('/api/awin/accounts'),
+  awinAccountCreate: (data) =>
+    apiFetch('/api/awin/accounts', { method: 'POST', body: JSON.stringify(data) }),
+  awinAccountUpdate: (id, data) =>
+    apiFetch(`/api/awin/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  awinAccountDelete: (id) => apiFetch(`/api/awin/accounts/${id}`, { method: 'DELETE' }),
+  awinAccountTest: (id) => apiFetch(`/api/awin/accounts/${id}/test`, { method: 'POST' }),
+  awinAccountSync: (id) => apiFetch(`/api/awin/accounts/${id}/sync`, { method: 'POST' }),
+  awinAccountRuns: (id) => apiFetch(`/api/awin/accounts/${id}/runs`),
+  awinAccountAdvertisers: (id) => apiFetch(`/api/awin/accounts/${id}/advertisers`),
+
+  // Contas Rakuten (docs/rca/afiliados-rakuten.md). Client ID/Secret só vão; nunca voltam.
+  rakutenAccounts: () => apiFetch('/api/rakuten/accounts'),
+  rakutenAccountCreate: (data) =>
+    apiFetch('/api/rakuten/accounts', { method: 'POST', body: JSON.stringify(data) }),
+  rakutenAccountUpdate: (id, data) =>
+    apiFetch(`/api/rakuten/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  rakutenAccountDelete: (id) => apiFetch(`/api/rakuten/accounts/${id}`, { method: 'DELETE' }),
+  rakutenAccountTest: (id) => apiFetch(`/api/rakuten/accounts/${id}/test`, { method: 'POST' }),
+  rakutenAccountSync: (id) => apiFetch(`/api/rakuten/accounts/${id}/sync`, { method: 'POST' }),
+  rakutenAccountRuns: (id) => apiFetch(`/api/rakuten/accounts/${id}/runs`),
+  rakutenAccountAdvertisers: (id) => apiFetch(`/api/rakuten/accounts/${id}/advertisers`),
 
   coupons: () => apiFetch('/api/coupons'),
   couponCreate: (data) => apiFetch('/api/coupons', { method: 'POST', body: JSON.stringify(data) }),
@@ -444,6 +471,11 @@ export const api = {
   adminMarketingFunnel: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/marketing/funnel${query ? `?${query}` : ''}`)
+  },
+
+  adminMarketingCampanhaCanais: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/campanha-canais${query ? `?${query}` : ''}`)
   },
 
   adminMarketingSignupsByLanding: (params = {}) => {

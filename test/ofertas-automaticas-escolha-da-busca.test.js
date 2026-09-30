@@ -140,7 +140,8 @@ test('o formulário oferece UMA escolha e a carrega ao editar', async () => {
   // Sem isto, abrir "Editar" reverteria a escolha salva para o padrão.
   assert.match(source, /\.\.\.normalizeSearchChoice\(a\)/)
   assert.match(source, /sortType: DEFAULT_SEARCH_ORDER/)
-  assert.match(source, /\{describeSearchChoice\(a\)\}/)
+  // Automação Shopee mostra a escolha na lista (a Awin mostra conta e lojas).
+  assert.match(source, /: describeSearchChoice\(a\)\}/)
 })
 
 test('quem JÁ tem comissão extra ligada continua enviando igual', async () => {

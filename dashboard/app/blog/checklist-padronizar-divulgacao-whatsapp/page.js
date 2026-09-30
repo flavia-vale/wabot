@@ -12,6 +12,7 @@ const faq = [
   { q: 'Por que padronizar divulgação antes de automatizar?', a: 'Porque automação amplia o processo existente. Se oferta, link, copy e destino não estiverem padronizados, o erro também escala para mais grupos.' },
   { q: 'O checklist substitui revisão humana?', a: 'Não. Ele organiza a revisão humana antes da automação e reduz esquecimento de pontos como preço, cupom, tag de afiliado, grupo e horário.' },
   { q: 'Como usar o checklist com o Espelha Grupos?', a: 'Use o checklist para aprovar a mensagem e os grupos; depois configure origem, destino, filtros e intervalos no Espelha Grupos e revise os primeiros envios no histórico. A troca do link pelo seu código de afiliada é automática nas 6 lojas suportadas.' },
+  { q: 'Onde está o modelo de mensagem pronto para cupons?', a: 'Na página Como padronizar a divulgação de cupons no WhatsApp, com o modelo para copiar, o exemplo preenchido e o que cada variável (produto, preço, cupom, link) faz. Este artigo é o checklist do que conferir antes; aquela página é a forma em que a oferta sai.' },
 ]
 
 export const metadata = {
@@ -60,14 +61,11 @@ export default function Page() {
         </section>
 
         <section>
-          <h2>Template de copy recomendado</h2>
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 text-sm leading-7 text-gray-700">
-            <p><strong>[Categoria/Nicho]</strong> Oferta rápida para quem acompanha o grupo.</p>
-            <p><strong>Produto:</strong> nome curto + diferencial.</p>
-            <p><strong>Preço/benefício:</strong> valor, cupom ou condição especial.</p>
-            <p><strong>Validade:</strong> enquanto durar estoque ou até o horário definido.</p>
-            <p><strong>CTA:</strong> acessar link conferido.</p>
-          </div>
+          <h2>Modelo de mensagem: onde está</h2>
+          <p>
+            O checklist é o que você confere; o modelo é a forma em que a oferta sai. O modelo pronto, com cupom e link já com o seu código de afiliada, e a explicação de cada variável estão em{' '}
+            <Link href="/padronizar-divulgacao-afiliado-whatsapp" className="font-bold text-emerald-700 underline underline-offset-4">Como padronizar a divulgação de cupons no WhatsApp</Link>. Aqui fica só a regra que o checklist exige do modelo: uma ordem fixa (produto, preço, cupom, link, aviso de que preço e cupom mudam), a mesma em todos os grupos.
+          </p>
         </section>
 
         <section>
@@ -84,7 +82,7 @@ export default function Page() {
           <h2>Como conectar esse checklist ao Espelha Grupos</h2>
           <ol>
             <li>Use o checklist para definir quais grupos são origem e quais são destino.</li>
-            <li>Transforme a copy padrão em um modelo de mensagem no painel (Templates de mensagens).</li>
+            <li>Transforme a copy padrão em um modelo de mensagem no painel (Modelos de mensagem). O modelo pronto com cupom e link está na <Link href="/padronizar-divulgacao-afiliado-whatsapp" className="font-bold text-emerald-700 underline underline-offset-4">página de padronização de cupons</Link>.</li>
             <li>Configure a rotina de espelhamento e revise os primeiros envios no histórico.</li>
             <li>Ajuste frequência e destinos a partir dos dados do primeiro dia.</li>
           </ol>

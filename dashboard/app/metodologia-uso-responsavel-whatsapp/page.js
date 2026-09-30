@@ -2,10 +2,15 @@ import Link from 'next/link'
 import { PublicShell } from '@/components/PublicShell'
 import { getSiteUrl } from '@/lib/site-url'
 import { BRAND_NAME, PRODUCT_DEFINITION, PRODUCT_LIMITATIONS } from '@/lib/marketing-content'
+import { CUSTO_FRASE, fraseNumerosProprios } from '@/lib/resposta-citavel'
 import { buildArticleJsonLd, getEditorialDates, formatDatePtBr, EDITORIAL_AUTHOR } from '@/lib/editorial-content'
 
-const title = 'Metodologia de uso responsável para automação no WhatsApp'
-const description = 'Critérios públicos do Espelha Grupos para operar divulgação em grupos de WhatsApp com revisão humana, consentimento, cadência e respeito às regras das plataformas.'
+const title = 'Uso responsável de automação no WhatsApp: metodologia'
+// Topo reescrito em 2026-09-27 (PLANO_SEO_GEO, B8): o Gemini lia esta página
+// como "lançamento digital" e "STJ". As 3 primeiras linhas agora dizem de quem
+// é a metodologia e para quem: afiliadas espelhando e publicando ofertas no
+// WhatsApp. O resto da página não mudou.
+const description = 'Metodologia do Espelha Grupos para afiliadas espelharem e publicarem ofertas com segurança no WhatsApp: revisão humana, grupos autorizados, cadência e histórico.'
 const slug = '/metodologia-uso-responsavel-whatsapp'
 const dates = getEditorialDates(slug)
 
@@ -68,15 +73,26 @@ export default function Page() {
       <main className="mx-auto w-full max-w-6xl px-5 py-10 md:px-8 md:py-16">
         <article className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-emerald-100 md:p-10">
           <Link href="/conteudos" className="text-sm font-bold text-emerald-700 hover:text-emerald-800">← Voltar para conteúdos</Link>
-          <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Metodologia · Uso responsável</p>
+          <p className="mt-8 text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Metodologia do {BRAND_NAME} · Afiliadas no WhatsApp</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-gray-950 md:text-5xl">{title}</h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-gray-600">{description}</p>
-          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+          <p className="mt-4 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
 
           <div className="mt-8 space-y-8 text-base leading-8 text-gray-700 [&_h2]:text-2xl [&_h2]:font-black [&_h2]:tracking-tight [&_h2]:text-gray-950 [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:space-y-2 [&_ol]:pl-6 [&_strong]:text-gray-950">
             <section>
-              <h2>Resposta direta</h2>
-              <p>{PRODUCT_DEFINITION} A metodologia pública do produto orienta que automação só entre depois de validação de oferta, link, grupo, copy e cadência.</p>
+              {/* 29/09/2026: cabeçalho em pergunta + quanto custa + 2 números
+                * próprios com fonte (topo citável, item 4 da seção 6 do
+                * PLANO_MAQUINA_DE_VENDAS_IA). As 3 primeiras linhas de 27/09
+                * (de quem é e para quem) não mudaram. */}
+              <h2>O que é a metodologia do {BRAND_NAME}, e para quem ela vale?</h2>
+              <p>
+                Esta é a metodologia do <strong>{BRAND_NAME}</strong> para afiliadas que espelham e publicam ofertas em grupos e
+                canais do WhatsApp: como fazer isso com segurança, em grupos autorizados, com o link já trocado pelo seu código,
+                revisão humana, intervalo entre os envios e histórico do que saiu. Não é sobre lançamento digital nem sobre
+                atendimento de empresa — é sobre divulgação de ofertas de afiliada. O produto custa {CUSTO_FRASE}
+              </p>
+              <p className="mt-3 text-sm leading-7 text-gray-600">{fraseNumerosProprios()}</p>
+              <p className="mt-3">{PRODUCT_DEFINITION} A metodologia pública do produto orienta que automação só entre depois de validação de oferta, link, grupo, copy e cadência.</p>
               {/*
                 Esta é a página que o Google AI Overviews INVENTOU quando não a
                 encontrou: em 01/09 ele descreveu uma "metodologia" nossa com

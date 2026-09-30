@@ -9,6 +9,7 @@ import makeWASocket, {
   downloadMediaMessage,
   extractMessageContent,
   prepareWAMessageMedia,
+  proto,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import NodeCache from '@cacheable/node-cache'
@@ -22,6 +23,8 @@ import logger from './logger.js'
 import { detectLinks } from './detector.js'
 import { resolveCustomDomainLinks, findCandidateLinks, allCandidatesFailedBecauseOfferEnded } from './core/customDomainLinkResolver.js'
 import { convertLink } from './converters/index.js'
+import { AWIN_NOT_JOINED_ERROR } from './converters/awin.js'
+import { awinOfferOptions, loadAwinConversionContext, refineAwinOptionsForText } from './integrations/awin/conversionContext.js'
 import { buildConversionIssue } from './conversionDiagnostics.js'
 import { applyConversionsAndBranding, DEFAULT_BRANDING_CTA_TEXT, hasSignificantTokenOverlap, isCouponAnnouncement, looksLikeGenericCoupon, normalizeBrandingCtaText, normalizeBrandingLink, sanitizeInviteLinks, uniqueConversionsByUrl } from './messageProcessor.js'
 import { fetchProductImage as fetchProductImageBase, fetchImageBuffer as fetchImageBufferBase, normalizeImageForWhatsApp as normalizeImageForWhatsAppBase } from './converters/imageScrapers.js'
@@ -36,7 +39,7 @@ import { isDirectVitrineShare } from './converters/mercadolivre.js'
 import { scrapeProductTitle } from './converters/productTitleScraper.js'
 import { resolveMonitoredImage, decideSkipActiveFetchForCoupon } from './monitoredImageResolver.js'
 import { downloadHighQualityLinkPreview } from './core/linkPreviewThumbnail.js'
-import { appendRelayFooter } from './core/relayFooter.js'
+import { appendRelayFooter, resolveRelayFooterVariables } from './core/relayFooter.js'
 import { resolveMonitorDestinations, shouldDropUnlinkedDestination, DESTINATION_REASON } from './core/destinationRouting.js'
 import { DELIVERY_KIND } from './core/deliveryKind.js'
 import { captureInstagramMirror } from './instagram/mirroring/capture.js'
@@ -45,9 +48,11 @@ import { shouldRelayOriginalMediaForImageMode } from './monitoredRelayPolicy.js'
 import { shouldReuploadOriginalMedia, destinationImageBaseMode, destinationImageUsesWatermark, effectiveDestinationImageMode, resolveOfferAppearance } from './core/imageModePolicy.js'
 import { renderDestinationWatermark } from './core/destinationWatermark.js'
 import db from './db.js'
-import { getAuthInfoDir, getDedupFile, getKnownChannelsFile } from './paths.js'
+import { getAuthInfoDir, getDedupFile, getKnownChannelsFile, getSentMessagesDir } from './paths.js'
 import { trackAnalyticsEventSafe } from './analytics.js'
 import { recordOperationalSignal } from './observability/operationalSignals.js'
+import { createUnsupportedStoreSignal } from './observability/unsupportedStoreSignal.js'
+import { linkRemovedSkipReason } from './core/unsupportedStore.js'
 import { shouldIgnoreChatJid, buildAllowedJidSet, shouldIgnoreDesyncedChannel } from './core/ignoredJidPolicy.js'
 import { shouldIgnoreByChatScope, shouldAutoDisableChatScope, normalizeChatScopeMode, normalizeJid as normalizeChatScopeJid, CHAT_SCOPE_MODES, DEFAULT_CHAT_SCOPE_PANIC_MS } from './core/chatScopePolicy.js'
 import { validateCredentialData } from './credentialHealth.js'
@@ -56,11 +61,8 @@ import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
-import { withSendTimeout as withSendTimeoutImpl } from './sendMessageTimeout.js'
-import { buildStableSendMessageId } from './core/stableMessageId.js'
 import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
 import { checkAndSetGlobalDedup } from './core/globalDedup.js'
-import { resolveSendTimeoutOverrideMs, resolveSendTimeoutMs as resolveSendTimeoutMsPure, DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS } from './core/sendTimeout.js'
 import { detectKind, JID_KIND } from './core/jid.js'
 import { subscribeToMonitorChannels } from './core/channels.js'
 import { getChannelMetadata, followChannel, listFollowedChannels } from './core/channelDirectory.js'
@@ -83,10 +85,12 @@ import { buildQueueExpiredReason, shouldDropExpiredQueueJob } from './core/queue
 import { buildOutsideSendWindowReason, shouldDropOutsideSendWindow } from './core/sendWindow.js'
 import { CONVERSION_FAILURE, buildNoValidConversionsErrorMsg } from './core/conversionFailureReason.js'
 import { decideMirrorConversions, findUnconvertedStoreLinks } from './core/mirrorLinkGuard.js'
+import { anchorFor, applyTrackedLinks, resolveTrackedLinkSettings } from './core/trackedLinks.js'
+import { createShortlink } from './core/clickTracker.js'
 import { applyVariation, resolveCopyVariationPoolJson } from './core/copyVariation.js'
 import { PRESERVATION_FEATURE, isPreservationFeatureEnabled } from './core/preservationFeatures.js'
 import { waitUntilDrained, makeInFlightTracker } from './core/drainQueue.js'
-import { shouldUseRelayPath, stripChannelUnsafeFields, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
+import { shouldUseRelayPath, isChannelDestination, isChannelForbiddenError, buildRelayProto, injectChannelForwardIntoPayload, normalizeChannelForwardJid } from './core/channelSend.js'
 import { createPairingState, PAIRING_WINDOW_MS_DEFAULT } from './core/pairingState.js'
 import { createPairingAuthBackup } from './core/pairingAuthBackup.js'
 import { resolveWaWebVersion, WA_VERSION_REGISTRY_URL_DEFAULT, WA_FAILURE_VERSION_REJECTED } from './core/waVersion.js'
@@ -94,6 +98,12 @@ import { calcBackoffDelayMs, registerReplacedAndDecide, registerCloseAndDecide, 
 import { buildAuthResetSessionPatch, buildCloseSessionPatch, buildHeartbeatSessionPatch, computeHeartbeatState, DEFAULT_MAX_RECONNECTING_MS } from './core/sessionPersistencePolicy.js'
 import { buildEntitledGroupConfig } from './billing/groupEntitlements.js'
 import { getAdvancedPreservationAccess, isPreservationActive } from './billing/plans.js'
+// Feature 017 (arquitetura multicanal de entrega), D-A2: sendPreparedPayload
+// é o único ponto que fala com o socket do WhatsApp, movido para o adaptador
+// de WhatsApp com o corpo INALTERADO (test/delivery-whatsapp-send-inalterado.test.js).
+import { sendPreparedPayload } from './delivery/whatsapp/send.js'
+import { DELIVERY_NETWORK } from './core/delivery/networks.js'
+import { enqueueDeliveryOutbox } from './deliveryOutbox/enqueue.js'
 import { calculateProgressiveDelayMs, calculateRestWindowDelayMs, calculateTypingDelayMs } from './smartDelay.js'
 import { buildMonitoredMessagePayload } from './monitoredMessagePayload.js'
 import { applyMirrorTemplate } from './core/mirrorTemplate.js'
@@ -112,6 +122,8 @@ import { installWorkerCrashGuards } from './core/workerCrashGuard.js'
 import { buildWorkerMetadata } from './workerMetadata.js'
 import { recordWaConnectionEventSafe } from './waConnectionTelemetry.js'
 import { createDurableStuckMessageRetryCache } from './core/stuckMessageQuarantine.js'
+import { ensureDeviceSignaturePrefix } from './core/deviceIdentitySignature.js'
+import { createSentMessageStore } from './core/sentMessageStore.js'
 import { decideRetryPace, RETRY_ACTION, DEFAULT_GIVEUP_ATTEMPTS, DEFAULT_SLOW_INTERVAL_MS, DEFAULT_NEVER_CONNECTED_MAX } from './core/reconnectGiveupPolicy.js'
 import { computeReceptionState, isReceptionProblem, DEFAULT_RECEPTION_WINDOW_MS, DEFAULT_RECEPTION_MIN_FAILURES, DEFAULT_BLIND_ACROSS_RECONNECTS_MS } from './core/receptionHealth.js'
 import { shouldSelfHealReception, DEFAULT_SILENCE_MS, DEFAULT_BASELINE_WINDOW_MS, DEFAULT_MIN_BASELINE, DEFAULT_COOLDOWN_MS, DEFAULT_MAX_PER_DAY } from './core/receptionSelfHeal.js'
@@ -120,6 +132,9 @@ import {
   isPilotEmail,
   shouldSendSelfWelcomeMessage,
   decideActivationNudge,
+  isTrialDecisionSelfMessageEnabled,
+  decideTrialDecisionSelfMessage,
+  buildTrialDecisionMessageText,
   buildSelfWelcomeMessageText,
   buildFirstOfferPublishedMessageText,
   buildMissingCredentialNudgeText,
@@ -386,10 +401,17 @@ const monitoredDropLogState = new Map()
 // não só ao log. Sem ele, oferta ENCERRADA no site de origem era mostrada à
 // cliente como "ainda não fazemos conversão para essa loja" — falso, e com ação
 // oposta (RCA 2026-09-19).
-async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId } = {}) {
+// P1-4: contagem agregada (dia + domínio) de link de loja NÃO suportada que
+// chegou num grupo monitorado. Só o domínio registrável é guardado — nunca URL,
+// caminho, query, texto ou conta — e a linha é podada em 30 dias. Map limitado,
+// esvaziado a cada flush; o flush pega carona no watchdog de 5 min que já
+// existe (sem timer novo). Ver src/observability/unsupportedStoreSignal.js.
+const unsupportedStoreSignal = createUnsupportedStoreSignal({ db, logger })
+
+async function unwrapCustomDomainOfferLinks(text, { userId, jid, msgId, offerOptions = {} } = {}) {
   if (!text) return { text, failures: [] }
   try {
-    const desembrulhado = await resolveCustomDomainLinks(text)
+    const desembrulhado = await resolveCustomDomainLinks(text, offerOptions)
     // Candidato que NÃO resolveu precisa deixar rastro com o motivo: em
     // 2026-09-13 este caminho devolveu só `null` em staging, com código no ar,
     // rede boa e a página trazendo o link — e não havia por onde começar.
@@ -543,6 +565,58 @@ const msgRetryCounterCache = createDurableStuckMessageRetryCache({
   logger,
 })
 const placeholderResendCache = new NodeCache({ stdTTL: 60 * 60, useClones: false })
+// RCA 2026-09 ("Aguardando mensagem" nos membros do grupo de destino): quem
+// recebe e não consegue decifrar pede reenvio; o Baileys só reenvia se
+// `getMessage` devolver a mensagem original. Sem isso (default = undefined) o
+// pedido morria em silêncio e o membro ficava preso para sempre. Guardado em
+// disco (src/core/sentMessageStore.js), escopo de módulo para sobreviver a
+// reconexões. Ver docs/rca/whatsapp-sessao.md.
+const sentMessageStore = createSentMessageStore({
+  dir: getSentMessagesDir(userId),
+  encode: (message) => proto.Message.encode(proto.Message.fromObject(message)).finish(),
+  decode: (bytes) => proto.Message.decode(bytes),
+  logger,
+})
+sentMessageStore.prune()
+
+function rememberSentMessage(id, message) {
+  if (!id || !message) return
+  sentMessageStore.save(id, message)
+}
+
+// Guarda cada mensagem enviada para atender pedido de reenvio. O
+// `sendMessage` do Baileys emite `messages.upsert` (type 'append', fromMe)
+// depois do envio; o caminho `relay` (src/delivery/whatsapp/send.js) chama
+// `socket.relayMessage` direto e não emite nada — por isso o embrulho. O
+// `sendMessage` interno usa a própria closure de relayMessage, então o
+// embrulho não grava em dobro.
+function attachSentMessageRecorder(socket) {
+  const originalRelayMessage = socket.relayMessage
+  socket.relayMessage = async (jid, message, opts) => {
+    const msgId = await originalRelayMessage(jid, message, opts)
+    rememberSentMessage(msgId, message)
+    return msgId
+  }
+  socket.ev.on('messages.upsert', ({ messages, type }) => {
+    if (type !== 'append') return
+    for (const msg of messages || []) {
+      if (msg?.key?.fromMe && msg.message) rememberSentMessage(msg.key.id, msg.message)
+    }
+  })
+}
+
+async function getSentMessageForRetry(key) {
+  const message = sentMessageStore.load(key?.id)
+  // Nível info de propósito: é a medição de aceite do conserto (quantos
+  // pedidos de reenvio chegam e quantos são atendidos).
+  logger.info({
+    remoteJid: key?.remoteJid,
+    participant: key?.participant,
+    msgId: key?.id,
+    found: Boolean(message),
+  }, message ? 'retry-receipt: reenviando mensagem pedida pelo destinatário' : 'retry-receipt: mensagem pedida não está guardada')
+  return message
+}
 // Timestamp (Date.now()) até quando uma reconexão automática já está agendada
 // (setTimeout(startBot, ...) pendente). Existe um intervalo real entre o close
 // (activeSock/pendingSock viram null) e o próximo startBot() de fato criar um
@@ -666,6 +740,7 @@ function startHeartbeatIpc() {
     try { trySelfHealReception() } catch (err) { logger.warn({ err: err?.message }, 'Falha na checagem de auto-cura de recepção') }
     try { reviewChatScope() } catch {}
     maybeSendActivationNudge().catch(() => {})
+    maybeSendTrialDecisionMessage().catch(() => {})
     void persistWorkerHeartbeat(state, { reconnectScheduled })
   }, intervalMs)
   heartbeatTimer.unref?.()
@@ -1023,6 +1098,61 @@ async function maybeSendActivationNudge() {
   }
 }
 
+// Decisão do teste pelo PRÓPRIO WhatsApp (momento 6 — ver
+// decideTrialDecisionSelfMessage em src/core/selfWelcomeMessage.js). A partir do
+// dia 5 do teste, uma vez por dia de calendário, só com prova e só para quem
+// tem `contactPhoneOptInAt`. Best-effort: falha aqui é só logada.
+let lastTrialDecisionCheckAt = 0
+async function maybeSendTrialDecisionMessage() {
+  if (!activeSock) return
+  const now = Date.now()
+  if (now - lastTrialDecisionCheckAt < ACTIVATION_NUDGE_CHECK_INTERVAL_MS) return
+  lastTrialDecisionCheckAt = now
+  try {
+    const pilotEmails = resolveSelfWelcomePilotEmails()
+    const enabled = isTrialDecisionSelfMessageEnabled()
+    if (!enabled && !pilotEmails.length) return
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { email: true, plan: true, accessExpiresAt: true, contactPhoneOptInAt: true },
+    })
+    if (!user || String(user.plan ?? '').toLowerCase() !== 'trial') return
+    const [offersPublished, destGroupCount, sent] = await Promise.all([
+      db.messageLog.count({ where: { userId, status: 'success' } }),
+      db.group.count({ where: { userId, role: 'post' } }),
+      db.analyticsEvent.findFirst({
+        where: { userId, event: 'ops_self_trial_decision_sent' },
+        orderBy: { createdAt: 'desc' },
+        select: { metadata: true },
+      }),
+    ])
+    let lastSentDay = null
+    try { lastSentDay = JSON.parse(sent?.metadata || '{}').day ?? null } catch { /* metadata antiga: ignora */ }
+    const screen = decideTrialDecisionSelfMessage({
+      accountEmail: user.email,
+      pilotEmails,
+      enabled,
+      optedIn: Boolean(user.contactPhoneOptInAt),
+      plan: user.plan,
+      accessExpiresAt: user.accessExpiresAt,
+      offersPublished,
+      destGroupCount,
+      lastSentDay,
+      now: new Date(now),
+    })
+    if (!screen) return
+    const phone = activeSock.user?.id?.split(':')[0] ?? null
+    if (!phone) return
+    const texto = buildTrialDecisionMessageText({ screen })
+    await activeSock.sendMessage(`${phone}@s.whatsapp.net`, { text: texto })
+    logger.info({ userId, day: screen.dayKey }, 'Decisão do teste enviada para o próprio número')
+    trackAnalyticsEventSafe({ userId, event: 'ops_self_trial_decision_sent', metadata: { day: screen.dayKey } })
+    logWhatsappSelfMessageContact({ reason: 'decisao_teste_dia5', texto })
+  } catch (err) {
+    logger.warn({ err: String(err?.message ?? err) }, 'Falha ao avaliar/enviar decisão do teste (best-effort)')
+  }
+}
+
 async function loadConfig() {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -1057,6 +1187,17 @@ async function loadConfig() {
     }
   }
 
+  // Awin: contas + lojas aprovadas (tabelas próprias, não Credential). Relido a
+  // cada carga de config (1 min), então loja aprovada no sync já vale aqui.
+  // Falhou a leitura → segue sem Awin (link dessas lojas continua saindo do
+  // texto, como antes). docs/rca/afiliados-awin.md.
+  try {
+    const awin = await loadAwinConversionContext(userId, { db })
+    if (awin) credentials.awin = awin
+  } catch (err) {
+    logger.warn({ err: err?.message }, 'Falha ao carregar contas Awin; links dessas lojas seguem sem conversão até a próxima carga')
+  }
+
   Object.defineProperty(credentials, '__onCredentialPatch', {
     enumerable: false,
     value: async (platform, patch) => {
@@ -1086,7 +1227,7 @@ async function loadConfig() {
   const botConfig = {
     delayMin: 5,
     delayMax: 15,
-    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress',
+    platforms: 'shopee,amazon,mercadolivre,magazineluiza,shein,aliexpress,awin',
     blockedKeywords: '',
     welcomeMsg: '',
     postToStatus: false,
@@ -1115,7 +1256,16 @@ async function loadConfig() {
     logger.warn({ err: err?.message }, 'Falha ao carregar cupons da cliente; ofertas seguem sem cupom até a próxima carga')
   }
 
-  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive, coupons }
+  // Link rastreado (src/core/trackedLinks.js): flag da cliente + plano PRO/Trial
+  // (mesmo acesso da Preservação avançada, onde o rastreio já aparece) +
+  // SHORTLINK_BASE_URL no servidor. Faltou qualquer um → desligado.
+  const trackedLinks = resolveTrackedLinkSettings({
+    botConfig,
+    planAllows: Boolean(preservation?.active),
+    baseUrl: process.env.SHORTLINK_BASE_URL,
+  })
+
+  return { credentials, groups, plan: user.plan, accessExpiresAt: user.accessExpiresAt, botConfig, preservationActive, coupons, trackedLinks }
 }
 
 async function getConfig() {
@@ -1259,6 +1409,9 @@ const stuckSendLogsTimer = setInterval(() => {
       if (recovered > 0) logger.warn({ recovered, cutoffMs: STUCK_SEND_LOG_CUTOFF_MS }, 'Watchdog: MessageLog preso em sending reclassificado como erro')
     })
     .catch(err => logger.error({ err: err.message }, 'Watchdog de envios presos falhou'))
+  // Carona (P1-4): grava a contagem agregada de loja não suportada que ficou
+  // pendente desde o último registro. Sem timer próprio de propósito.
+  unsupportedStoreSignal.flushIfDue().catch(() => {})
 }, STUCK_SEND_LOG_SWEEP_MS).unref()
 
 // Força re-emissão de sender_keys do WhatsApp via groupFetchAllParticipating().
@@ -1474,15 +1627,6 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = Math.max(0, envNumber('SHUTDOWN_DRAIN_TIMEOUT_
 // Política por tentativa: 1ª paciente (gera link preview, mídia hospedada,
 // rede pode oscilar), demais rápidas para liberar a fila. Configurável via
 // env caso precise uniformizar em incidentes — caem todos no mesmo valor.
-// Override uniforme opcional; vazio/0 => null para cair no array por-tentativa.
-// (Lógica pura em core/sendTimeout.js — corrige o bug em que a expressão antiga
-// `Math.max(5000, envNumber(...,0)) || null` devolvia 5000 SEMPRE, travando
-// todo envio em 5s e deixando o array [90,60,45]s morto.)
-const SEND_MESSAGE_TIMEOUT_MS = resolveSendTimeoutOverrideMs(process.env.SEND_MESSAGE_TIMEOUT_MS)
-const SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS = DEFAULT_SEND_TIMEOUT_BY_ATTEMPT_MS
-function resolveSendTimeoutMs(attempt) {
-  return resolveSendTimeoutMsPure(attempt, { overrideMs: SEND_MESSAGE_TIMEOUT_MS, byAttempt: SEND_MESSAGE_TIMEOUT_BY_ATTEMPT_MS })
-}
 const DEST_RATE_LIMIT_MS = Math.max(0, envNumber('DEST_RATE_LIMIT_MS', 1_000))
 const SMART_DELAY_PROGRESSIVE_THRESHOLD = Math.max(1, envNumber('SMART_DELAY_PROGRESSIVE_THRESHOLD', 20))
 const SMART_DELAY_PROGRESSIVE_STEP_MS = Math.max(0, envNumber('SMART_DELAY_PROGRESSIVE_STEP_MS', 5_000))
@@ -2068,12 +2212,6 @@ async function finishSendJob(job, result) {
   await finalizeSendJob(onDone, job, result)
 }
 
-function withSendTimeout(promise, ctx) {
-  const timeoutMs = resolveSendTimeoutMs(ctx?.attempt)
-  return withSendTimeoutImpl(promise, { ...ctx, timeoutMs })
-}
-
-
 function isHttpUrl(value) {
   if (typeof value !== 'string') return false
   try {
@@ -2187,14 +2325,43 @@ function kindDoCard(fonte) {
   return DELIVERY_KIND.CARD_LOJA
 }
 
-async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto, watermark = null }) {
+// Troca os links convertidos pelo shortlink rastreado (src/core/trackedLinks.js).
+// Desligado → devolve o MESMO texto, sem tocar no banco. Qualquer falha →
+// texto de hoje (rastreio nunca derruba nem segura oferta).
+async function trackLinksForSend({ text, conversions, destJid, messageLogId, settings }) {
+  const semRastreio = { text, anchors: new Map() }
+  if (!settings?.enabled) return semRastreio
+  try {
+    let groupId = null
+    try {
+      const destino = await db.group.findFirst({ where: { userId, waJid: destJid, role: 'post' }, select: { id: true } })
+      groupId = destino?.id ?? null
+    } catch { /* clique sem grupo ainda conta para a conta */ }
+    return await applyTrackedLinks(text, conversions, {
+      enabled: true,
+      createLink: url => createShortlink(userId, url, { baseUrl: settings.baseUrl, groupId, messageLogId }),
+      onError: (err, url) => logger.warn({ err: err?.message, destJid, url }, 'Link rastreado: shortlink não criado; link sai direto'),
+    })
+  } catch (err) {
+    logger.warn({ err: err?.message, destJid }, 'Link rastreado falhou; oferta sai com o link direto')
+    return semRastreio
+  }
+}
+
+async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToServer, destJid, couponTextSignal, fetchOriginPhoto, allowSmallOriginPhoto = false, onFonteDaFoto, watermark = null, anchorUrl }) {
   // `onFonteDaFoto` (opcional): diz de ONDE veio a foto do card ('loja',
   // 'origem' ou 'banner'). Vai por callback, e não como campo do objeto
   // devolvido, porque esse objeto é o urlInfo que entra no proto do WhatsApp —
   // campo estranho ali é risco desnecessário (ver o RCA do `title` do PR #1186).
   const marcarFonte = fonte => { try { onFonteDaFoto?.(fonte) } catch { /* best-effort */ } }
-  const matchedText = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
-  if (!matchedText) return null
+  const realUrl = isHttpUrl(primary?.converted) ? primary.converted : (isHttpUrl(primary?.url) ? primary.url : '')
+  if (!realUrl) return null
+  // Link rastreado (src/core/trackedLinks.js): quando o texto leva o shortlink
+  // no lugar do link convertido, a ÂNCORA do card (matched-text/canonical-url)
+  // é o shortlink — é ele que está literalmente no corpo. Todo o resto (foto,
+  // título, raspagem) continua no link REAL: o shortlink nunca é buscado aqui,
+  // senão o próprio robô contaria clique. Sem anchorUrl = comportamento de hoje.
+  const matchedText = isHttpUrl(anchorUrl) ? anchorUrl : realUrl
   // matched-text precisa existir literalmente no corpo da mensagem; sem essa
   // âncora o cliente WhatsApp não associa o card ao link e não renderiza nada.
   // Sem âncora, devolve null e o Baileys tenta o preview automático.
@@ -2203,7 +2370,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     return null
   }
 
-  const sourceUrl = isHttpUrl(primary?.url) ? primary.url : matchedText
+  const sourceUrl = isHttpUrl(primary?.url) ? primary.url : realUrl
 
   // jpegThumbnail = placeholder pequeno (inline no proto, mostrado antes da
   // HQ carregar). hqSourceBuffer = imagem em resolução MAIOR, usada só como
@@ -2397,7 +2564,7 @@ async function buildManualLinkPreview({ text, primary, credentialsMap, uploadToS
     // deploy do PR #1186 — cards sumiram até este fix). Em cupom, prefixa
     // "Cupom" — mesmo texto do banner (buildStoreBrandCardImage), pra não
     // ficar inconsistente (imagem diz "Cupom Amazon", título diz só "Amazon").
-    title: storePreviewTitle(primary?.platform, matchedText, useCouponBrandCard),
+    title: storePreviewTitle(primary?.platform, realUrl, useCouponBrandCard),
     ...(jpegThumbnail ? { jpegThumbnail } : {}),
     ...(highQualityThumbnail ? { highQualityThumbnail } : {}),
   }
@@ -2579,66 +2746,6 @@ function resolveChannelForward(postDetail) {
     return { newsletterJid: jid, newsletterName: String(postDetail?.channelButtonName ?? '').trim(), serverMessageId: null }
   }
   return null
-}
-
-async function sendPreparedPayload({ sock, job, payload, attempt = 1 }) {
-  // messageId ESTÁVEL por job (derivado do logId), reutilizado em TODAS as rotas
-  // e tentativas: o WhatsApp deduplica no servidor pela key.id, então um
-  // timeout/Connection Closed que já entregou não vira duplicata quando o
-  // retry/fallback reenvia. null => Baileys gera o id normalmente (comportamento
-  // histórico) quando não há logId.
-  const stableMessageId = buildStableSendMessageId(job.logId)
-  const sendOptionsWith = (opts) => {
-    if (!stableMessageId) return opts || undefined
-    return { ...(opts || {}), messageId: stableMessageId }
-  }
-
-  if (payload && payload._route === 'relay' && payload.relay?.type && payload.relay?.proto) {
-    await withSendTimeout(
-      sock.relayMessage(job.destJid, { [payload.relay.type]: payload.relay.proto }, stableMessageId ? { messageId: stableMessageId } : {}),
-      { destJid: job.destJid, route: 'relay', attempt },
-    )
-    return
-  }
-
-  if (payload && payload.primary) {
-    const channelDest = isChannelDestination(job.destJid)
-    if (detectKind(job.destJid) === null) {
-      logger.warn({ destJid: job.destJid }, 'JID kind inesperado chegou ao send path; usando sendMessage como fallback')
-    }
-    const routes = [
-      {
-        body: channelDest ? stripChannelUnsafeFields(payload.primary) : payload.primary,
-        sendOptions: payload.primarySendOptions,
-      },
-      ...(payload.fallbacks || []).map((body, idx) => ({
-        body: channelDest ? stripChannelUnsafeFields(body) : body,
-        sendOptions: payload.fallbackSendOptions?.[idx],
-      })),
-    ]
-    let lastErr = null
-    for (let i = 0; i < routes.length; i++) {
-      const route = routes[i]
-      try {
-        await withSendTimeout(
-          sock.sendMessage(job.destJid, route.body, sendOptionsWith(route.sendOptions)),
-          { destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]`, attempt },
-        )
-        return
-      } catch (err) {
-        lastErr = err
-        if (err?.code === 'SEND_MESSAGE_TIMEOUT') {
-          logger.warn({ destJid: job.destJid, route: i === 0 ? 'primary' : `fallback[${i - 1}]` }, 'sendMessage timeout; tentando próximo fallback se houver')
-        }
-      }
-    }
-    throw lastErr || new Error('Todos os fallbacks de envio falharam')
-  }
-
-  await withSendTimeout(
-    sock.sendMessage(job.destJid, payload, sendOptionsWith()),
-    { destJid: job.destJid, route: 'default', attempt },
-  )
 }
 
 /**
@@ -3090,6 +3197,13 @@ async function processSendJob(job) {
             sentAt: new Date(),
             ...(entrega.kind ? { deliveryKind: entrega.kind } : {}),
             ...(Number.isFinite(entrega.originImageBytes) ? { originImageBytes: entrega.originImageBytes } : {}),
+            // Feature 017 (arquitetura multicanal de entrega), T023: este é o
+            // caminho de envio de WhatsApp — toda linha nova sai marcada
+            // 'whatsapp', sem reduções (FR-027/SC-003). Sem backfill: linha
+            // anterior a esta feature já lê como WhatsApp por resolver
+            // null como whatsapp em toda leitura.
+            deliveryNetwork: DELIVERY_NETWORK.WHATSAPP,
+            deliveryReductions: null,
           },
         })
 
@@ -3534,6 +3648,20 @@ async function startBotInner() {
   startHeartbeatIpc()
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
+  // Rede de segurança (RCA 2026-09-28, "Aguardando mensagem" parte 5): carteirinha
+  // do aparelho assinada com prefixo errado ([6,6], conta hosted na 6.7.23) faz todo
+  // celular de fora rejeitar o robô. Confere a cada start e refaz antes de conectar.
+  try {
+    const deviceSig = ensureDeviceSignaturePrefix(state.creds)
+    if (deviceSig.changed) {
+      await saveCreds()
+      logger.warn({ userId, wasLegacyHosted: deviceSig.wasLegacyHosted }, 'Assinatura do aparelho (device-identity) refeita com o prefixo [6,1] antes de conectar')
+    } else if (deviceSig.status === 'unfixable') {
+      logger.error({ userId }, 'Assinatura do aparelho não confere e não pôde ser refeita — par de chaves de identidade inconsistente; re-parear')
+    }
+  } catch (err) {
+    logger.warn({ userId, err: err?.message }, 'Falha ao conferir a assinatura do aparelho; seguindo sem alterar')
+  }
   const version = await fetchVersionCached()
 
   const sock = makeWASocket({
@@ -3564,6 +3692,8 @@ async function startBotInner() {
     msgRetryCounterCache,
     placeholderResendCache,
     maxMsgRetryCount: WA_MAX_MSG_RETRY_COUNT,
+    // Reenvio para quem pediu (retry receipt) — ver sentMessageStore acima.
+    getMessage: getSentMessageForRetry,
     // Fix de causa raiz: grupo @g.us não-monitorado e dessincronizado que
     // derrubava a sessão via retry-receipt agora é ACKado e descartado antes do
     // decrypt (ver src/core/ignoredJidPolicy.js). Default OFF; ready-guard evita
@@ -3596,6 +3726,8 @@ async function startBotInner() {
   })
 
   pendingSock = sock
+
+  attachSentMessageRecorder(sock)
 
   // Aquece o allowlist antes de qualquer mensagem chegar (o shouldIgnoreJid é
   // síncrono; sem isso o 1º lote de mensagens passaria com ready=false). Best
@@ -4218,17 +4350,70 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         }
       }
 
+      // Lojas da Awin em que a cliente foi aprovada. {} (tudo igual a antes)
+      // sem conta Awin OU com a chave "Awin" desligada neste grupo: aí o link
+      // dessas lojas é apagado como sempre, sem travar o resto da oferta.
+      // Mesmo conjunto em todas as pontas: desembrulho, sanitizador, detector
+      // e rede de segurança final. docs/rca/afiliados-awin.md.
+      const awinLigadaNoGrupo = String(monitorGroup?.allowedPlatforms?.trim() || cfg.botConfig.platforms || '')
+        .split(',').map(p => p.trim()).includes('awin')
+      const awinBase = awinLigadaNoGrupo ? awinOfferOptions(cfg.credentials.awin) : {}
       const { text: textoParaEspelhar, failures: falhasDeDominioProprio } =
-        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id })
-      const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar) : ''
+        await unwrapCustomDomainOfferLinks(text, { userId, jid, msgId: msg.key.id, offerOptions: awinBase })
+      // tidd.ly só diz a loja quando aberto: de loja não aprovada, é apagado
+      // pelo sanitizador (e o resto da oferta segue).
+      const awinOptions = awinLigadaNoGrupo && textoParaEspelhar
+        ? await refineAwinOptionsForText(textoParaEspelhar, cfg.credentials.awin).catch(() => ({}))
+        : {}
+      const sanitizedText = textoParaEspelhar ? sanitizeInviteLinks(textoParaEspelhar, awinOptions) : ''
+      // P1-4: links que o sanitizador acabou de APAGAR por não serem de loja
+      // suportada (nem convite de grupo, nem rede social). Lido do texto de
+      // ANTES do sanitizador — a mesma regra do desembrulho de domínio próprio
+      // e do sufixo `:unsupported_store`, para as três pontas concordarem.
+      const linksDeLojaNaoSuportada = textoParaEspelhar ? findCandidateLinks(textoParaEspelhar, awinOptions) : []
+      const ofertaEncerradaNaOrigem = allCandidatesFailedBecauseOfferEnded(falhasDeDominioProprio)
+      // "Promoção encerrada no site de origem" é site próprio de grupo, não loja
+      // que falta apoiar — fica fora da contagem para não poluir a decisão.
+      if (linksDeLojaNaoSuportada.length && !ofertaEncerradaNaOrigem) {
+        unsupportedStoreSignal.record(linksDeLojaNaoSuportada)
+      }
+      // Oferta cujo(s) único(s) link(s) eram de loja não suportada: o link é
+      // removido (certo) e a oferta NÃO sai mutilada, sem ter onde clicar — ela
+      // vira linha no painel explicando o motivo. Antes ia para o grupo sem link
+      // e em silêncio (P1-4, defeito 1a). Vale para os dois caminhos em que isso
+      // acontecia: a política aceita mensagem sem link, ou o texto inteiro era
+      // só o link e ficou vazio. Mensagem que NUNCA teve link não é afetada.
+      async function recordLinkRemovedSkip(reason) {
+        await db.messageLog.create({
+          data: {
+            userId,
+            platform: 'nolink',
+            sourceGroup: jid,
+            destGroup: 'skipped',
+            originalUrl: '',
+            convertedUrl: '',
+            messageText: sanitizeMessageForLog(sanitizedText || '(só link de loja não suportada)'),
+            status: 'skipped',
+            errorMsg: reason,
+          },
+        }).catch(() => {})
+      }
       if (text && !sanitizedText) {
         logMonitoredSourceDrop(jid, 'texto_virou_vazio', { msgId: msg.key.id, textLength: text.length })
+        const motivo = linkRemovedSkipReason({
+          supportedLinkCount: 0,
+          unsupportedLinkCount: linksDeLojaNaoSuportada.length,
+          offerEndedAtSource: ofertaEncerradaNaOrigem,
+        })
+        // Texto que era SÓ link de loja não suportada também vira linha no
+        // painel (antes: só o log, que a cliente não vê).
+        if (motivo) await recordLinkRemovedSkip(motivo)
         return
       }
 
       const isCouponMsg = isCouponAnnouncement(sanitizedText)
 
-      const links = detectLinks(sanitizedText)
+      const links = detectLinks(sanitizedText, awinOptions)
       const messageKind = detectMessageKind(innerMessage, sanitizedText)
       const policy = normalizeForwardingPolicy(monitorGroup)
       const canForwardCurrentMessage = shouldForwardMessage({
@@ -4276,13 +4461,12 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // a verdade; `findCandidateLinks` é a mesma regra do desembrulho de
         // domínio próprio (ignora convite de grupo e rede social), então as duas
         // pontas nunca discordam sobre o que é "link de loja desconhecida".
-        const hadUnsupportedStoreUrl = findCandidateLinks(textoParaEspelhar).length > 0
+        const hadUnsupportedStoreUrl = linksDeLojaNaoSuportada.length > 0
         // "A oferta acabou" e "não apoiamos essa loja" são causas DIFERENTES com
         // ações opostas, e até 19/09/2026 as duas saíam com a mesma frase — a
         // cliente lia que a Amazon não é convertida, o que é falso. Quando TODOS
         // os links do site de origem caíram na página de promoção encerrada, o
-        // painel passa a dizer isso.
-        const ofertaEncerradaNaOrigem = allCandidatesFailedBecauseOfferEnded(falhasDeDominioProprio)
+        // painel passa a dizer isso (`ofertaEncerradaNaOrigem`, calculado acima).
         const unsupportedStoreSuffix =
           links.length === 0 && ofertaEncerradaNaOrigem
             ? ':offer_ended_at_source'
@@ -4302,6 +4486,19 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             errorMsg: `skip:policy:${policy.forwardMode}:${policy.noLinkScope}:${messageKind}${unsupportedStoreSuffix}`,
           },
         }).catch(() => {})
+        return
+      }
+
+      // P1-4: a política deixou passar (grupo aceita mensagem sem link), mas o
+      // único link era de loja não suportada e já foi removido. Ver
+      // linkRemovedSkipReason em src/core/unsupportedStore.js.
+      const motivoLinkRemovido = linkRemovedSkipReason({
+        supportedLinkCount: links.length,
+        unsupportedLinkCount: linksDeLojaNaoSuportada.length,
+        offerEndedAtSource: ofertaEncerradaNaOrigem,
+      })
+      if (motivoLinkRemovido) {
+        await recordLinkRemovedSkip(motivoLinkRemovido)
         return
       }
 
@@ -4590,7 +4787,10 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // do concorrente. A mensagem inteira deixa de sair — ver
             // core/mirrorLinkGuard.js (RCA 2026-09-23, 794 envios vazados).
             logger.warn({ platform, url, err: err.message }, 'Link não convertido — oferta não será publicada com o link de origem')
-            return { platform, url, failureReason: CONVERSION_FAILURE.CONVERSION_FAILED }
+            const failureReason = err.awinReason === AWIN_NOT_JOINED_ERROR
+              ? CONVERSION_FAILURE.AWIN_STORE_NOT_JOINED
+              : CONVERSION_FAILURE.CONVERSION_FAILED
+            return { platform, url, failureReason }
           }
           // Motivo pré-classificado pelo converter (feature
           // 007-ml-vitrine-fallback-expired: skip:ml_vitrine_missing) tem
@@ -4700,7 +4900,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // cliente (que são dela): nenhum link de loja pode sobrar no texto sem ser
       // um link convertido — inclusive o escrito sem `https://`, que o detector
       // não enxerga mas o WhatsApp torna clicável.
-      const leakedLinks = findUnconvertedStoreLinks(finalText, conversions)
+      const leakedLinks = findUnconvertedStoreLinks(finalText, conversions, awinOptions)
       if (leakedLinks.length) {
         logger.warn({ msgId: msg.key.id, leaked: leakedLinks.length }, 'Oferta não publicada: link de loja de origem ainda no texto')
         await recordUnconvertedSkip({
@@ -4777,7 +4977,9 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       // original convertido". Dois saltos separam claramente o texto vindo da
       // origem da assinatura opcional escrita pela cliente.
       if (!effectiveTemplateKey) {
-        finalText = appendRelayFooter(finalText, monitorGroup?.relayFooterText)
+        finalText = appendRelayFooter(finalText, resolveRelayFooterVariables(monitorGroup?.relayFooterText, {
+          groupLink: cfg.botConfig?.brandingGroupLink,
+        }))
       }
       const originalMedia = getOriginalMediaMessage()
       if (!finalText && !originalMedia) {
@@ -4919,6 +5121,34 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
       const pendingDedupMaxAgeMs = isCouponLink ? effectiveDedupWindowMs : PENDING_DEDUP_MAX_AGE_MS
       for (const destJid of destinations) {
         const postDetail = cfg.groups.postDetails.find(g => g.waJid === destJid)
+        // Feature 017 (arquitetura multicanal de entrega), D-A4/D-A6/T022:
+        // ÚNICO ramo de hand-off do worker. `postDetail.deliveryNetwork` já
+        // vem RESOLVIDO por toPostDetail() (src/billing/groupEntitlements.js)
+        // — 'whatsapp' para destino ausente/legado. `status@broadcast` (sem
+        // postDetail) também é sempre WhatsApp. Com o interruptor
+        // DELIVERY_NETWORKS_ENABLED no default, buildEntitledGroupConfig já
+        // filtrou qualquer destino não-WhatsApp para fora de
+        // cfg.groups.postDetails — este ramo é INALCANÇÁVEL em produção
+        // hoje, por construção (ver test/delivery-rollout-fora-do-worker.test.js).
+        // Nada do caminho de WhatsApp abaixo (dedup, buildPayload, envio) é
+        // tocado quando o destino É WhatsApp — o `continue` só corre para o
+        // destino de outra rede.
+        const destDeliveryNetwork = postDetail?.deliveryNetwork ?? DELIVERY_NETWORK.WHATSAPP
+        if (destDeliveryNetwork !== DELIVERY_NETWORK.WHATSAPP) {
+          await enqueueDeliveryOutbox({
+            userId,
+            deliveryNetwork: destDeliveryNetwork,
+            destinationId: destJid,
+            sourceId: jid,
+            offer: {
+              texto: finalText,
+              linkConvertido: primary.converted || primary.url || '',
+              imagem: null,
+              produto: { titulo: null, preco: null },
+            },
+          }).catch(err => logger.warn({ err: err?.message, destJid, deliveryNetwork: destDeliveryNetwork }, 'Falha ao enfileirar hand-off multicanal'))
+          continue
+        }
         // Botão "Ver canal" definido pelo GRUPO DE DESTINO (ou null = sem botão).
         const channelForward = resolveChannelForward(postDetail)
         // Aparência da imagem: escolhida pelo DESTINO, não pela origem. Ver
@@ -5243,6 +5473,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // worker. Mantém image.buffer (Buffer) em memória do processo, sem
         // passar pelo Redis. Ver enqueueSendJob() para a explicação completa.
         const buildPayload = async () => {
+          // Link rastreado (src/core/trackedLinks.js), no ÚLTIMO passo antes do
+          // envio: depois da conversão e da trava do espelhamento, por destino
+          // (o clique fica ligado a este grupo e a este MessageLog). Desligado
+          // (padrão) → sendText é o MESMO variantText de sempre e anchorUrl é
+          // undefined, ou seja, payload idêntico ao de hoje.
+          const tracked = await trackLinksForSend({ text: variantText, conversions, destJid, messageLogId: log.id, settings: cfg.trackedLinks })
+          const sendText = tracked.text
+          const primaryAnchor = anchorFor(tracked.anchors, primary?.converted)
           // Quanto a MENSAGEM DE ORIGEM trouxe de imagem. `getOriginalPhotoOnce`
           // é memoizado por mensagem, então isto não gera download extra — e é o
           // dado que separa "não havia foto" de "havia foto e se perdeu".
@@ -5303,7 +5541,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             let fonteDaFoto = null
             const linkPreview = await buildManualLinkPreview({
               onFonteDaFoto: fonte => { fonteDaFoto = fonte },
-              text: variantText,
+              text: sendText,
               primary,
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
@@ -5315,13 +5553,14 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               // mais ninguém (getImage devolve null cedo), então não há
               // download duplicado da mesma mídia.
               fetchOriginPhoto: getOriginalPhotoOnce,
+              anchorUrl: primaryAnchor,
               // Modo "card com marca d'água": a marca é uma camada em cima do
               // modo-base, igual ao par 'original'/'original_watermark'.
               watermark: useDestinationWatermark ? { text: watermarkText, color: watermarkColor, size: watermarkSize, position: watermarkPosition } : null,
             })
             deliveryInfo.kind = linkPreview ? kindDoCard(fonteDaFoto) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
-              finalText: variantText,
+              finalText: sendText,
               image: null,
               useLinkPreview: true,
               linkPreview,
@@ -5342,7 +5581,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             // Higieniza o contextInfo herdado da ORIGEM (remove botão de terceiros
             // e externalAdReply). forwardNewsletter=null: relay nunca injeta canal.
             const replayProto = buildRelayProto(original.proto, {
-              caption: hasCaption ? variantText : undefined,
+              caption: hasCaption ? sendText : undefined,
               forwardNewsletter: null,
             })
             deliveryInfo.kind = DELIVERY_KIND.RELAY
@@ -5437,7 +5676,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             let fonteDaFotoFallback = null
             const fallbackPreview = await buildManualLinkPreview({
               onFonteDaFoto: fonte => { fonteDaFotoFallback = fonte },
-              text: variantText,
+              text: sendText,
               primary,
               credentialsMap: cfg.credentials,
               uploadToServer: activeSock?.waUploadToServer,
@@ -5448,6 +5687,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
                 vitrineConfirmed: isDirectVitrineShare(primary?.url),
               }),
               fetchOriginPhoto: getOriginalPhotoOnce,
+              anchorUrl: primaryAnchor,
               // O piso NÃO vale aqui: neste ponto a alternativa não é uma foto
               // melhor, é nenhuma imagem. Card com miniatura pequena > texto.
               allowSmallOriginPhoto: true,
@@ -5458,7 +5698,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
             })
             deliveryInfo.kind = fallbackPreview ? kindDoCard(fonteDaFotoFallback) : DELIVERY_KIND.TEXTO
             return buildMonitoredMessagePayload({
-              finalText: variantText,
+              finalText: sendText,
               image: null,
               useLinkPreview: true,
               linkPreview: fallbackPreview,
@@ -5467,7 +5707,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
 
           deliveryInfo.kind = image ? DELIVERY_KIND.FOTO : DELIVERY_KIND.TEXTO
           return buildMonitoredMessagePayload({
-            finalText: variantText,
+            finalText: sendText,
             image,
             useLinkPreview,
           })
@@ -5798,6 +6038,7 @@ async function shutdown(code = 0, { exit = registerProcessHandlers } = {}) {
     flushDedupNow().catch(err => {
       logger.error({ err: err.message }, 'Erro ao persistir deduplicação antes de encerrar')
     }),
+    unsupportedStoreSignal.flush().catch(() => {}),
     markInterruptedSendLogs().catch(err => {
       logger.error({ err: err.message }, 'Erro ao marcar envios pendentes como interrompidos')
     }),

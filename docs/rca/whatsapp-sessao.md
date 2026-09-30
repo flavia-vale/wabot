@@ -4,6 +4,184 @@
 > Leia este arquivo ANTES de mexer no assunto. Referências a "AGENTS.md" em
 > comentários de código/testes apontam para as seções abaixo.
 
+## "Aguardando mensagem" nos membros do grupo de destino: robô não atendia pedido de reenvio (RCA 2026-09-27)
+
+**Sintoma:** membros do grupo de destino veem as ofertas espelhadas como
+"Aguardando mensagem. Essa ação pode levar alguns instantes" para sempre.
+Mensagens mandadas pelo celular da cliente no mesmo grupo abrem normal.
+
+**Causa (lida no código, Baileys 6.7.23):** quando o aparelho de um membro não
+consegue decifrar uma mensagem (aparelho/WhatsApp novo, entrou há pouco no
+grupo, WhatsApp Web), ele manda ao remetente um retry receipt ("reenvia").
+O Baileys atende em `sendMessagesAgain` (`Socket/messages-recv.js:466`)
+chamando `getMessage(key)`. Não passávamos `getMessage` ao `makeWASocket`, e
+o default (`Defaults/index.js:57`) devolve `undefined`. O pedido era descartado
+com `recv retry request, but message not available`, em **debug**, invisível
+no nosso log (nível info). O celular da cliente guarda o que envia, por isso as
+mensagens dela abriam.
+
+**Conserto:** `src/core/sentMessageStore.js` guarda em **disco** o protobuf de
+cada mensagem enviada (`BOT_LOG_DIR/sent-messages/<userId>/<msgId>.bin`, TTL
+24 h, teto 3000 arquivos por sessão). Fica fora do `auth_info` porque ele entra
+no backup diário. Gravação: `messages.upsert` type `append` fromMe (caminho
+`sendMessage`) + embrulho de `sock.relayMessage` (caminho `relay` de
+`src/delivery/whatsapp/send.js`, que não emite evento). RAM: só o contador.
+Falha de disco nunca quebra o envio.
+
+**Medição (info no `bot.log`):**
+- `retry-receipt: reenviando mensagem pedida pelo destinatário`: pedido atendido.
+- `retry-receipt: mensagem pedida não está guardada`: id fora do TTL, ou
+  mandado antes do deploy.
+
+**Não regredir:**
+- `test/sent-message-store.test.js` falha se `getMessage` sair do
+  `makeWASocket`, se a gravação dos dois caminhos sumir ou se o armazenamento
+  sair do escopo de módulo.
+- Mensagens presas de antes do deploy não se recuperam.
+- Vale só após `pm2 restart bot-supervisor` (código do worker).
+
+### Parte 2 (RCA 2026-09-28): o reenvio saía, mas o membro não conseguia abrir
+
+**Dado (prod, `BOT_LOG_DIR=/home/deploy/BOTinho-shared/logs`, 6 h):** 4469
+pares mensagem+membro. Em 205 deles o membro pediu de novo DEPOIS de atendido.
+Houve 972 `error in sending message again` e 56.276 `will not send message
+again, as sent too many times`. 101 de 214 membros pediram 10+ vezes. 99% dos
+pedidos vinham de aparelho `@lid`.
+
+**Causa (código, 6.7.23 × 7.0.0-rc14):** no reenvio de mensagem de grupo, a
+6.7.23 re-cifrava com a chave do grupo (`skmsg`) e mandava uma SKDM nova, sem
+`count` no `<enc>`. Para montar a sessão, ignorava as chaves que vêm no próprio
+pedido (`<keys>`) e buscava no servidor (`assertSessions(force)`). A 7.x (e o
+whatsmeow/WA Web) fazem o reenvio assim:
+- a mensagem vai cifrada **direto para o aparelho que pediu** (`pkmsg`/`msg`),
+  com a SKDM embutida, `count` e `device-identity`;
+- a sessão é montada com o pacote de chaves do pedido
+  (`extractE2ESessionFromRetryReceipt`).
+
+**Conserto:** o mesmo `patches/@whiskeysockets+baileys+6.7.23.patch` porta as
+duas coisas:
+- `relayMessage` com `participant` em grupo;
+- `sendMessagesAgain(…, receiptNode)`;
+- `getSenderKeyDistributionMessage` no `libsignal.js`;
+- `extractE2ESessionFromRetryReceipt` em `Utils/signal.js`.
+
+Não migra para a 7.x (a migração de sessões para LID não tem volta).
+
+**Não regredir:** `test/baileys-retry-resend-patch.test.js` roda a
+criptografia real nos dois lados. O membro que não tinha a chave do grupo pede
+reenvio com as próprias chaves, abre o reenvio e abre a próxima oferta do grupo.
+O teste também confere o patch no `node_modules`.
+
+**Medição de aceite:** rodar `/tmp/diag-retry2.cjs` (script do RCA) depois do
+restart. "pediram de novo DEPOIS de atendido", "erro no reenvio" e "desistiu"
+têm que cair para perto de 0.
+
+### Parte 3 (RCA 2026-09-28): 97% dos pedidos nem passavam pelo reenvio direto
+
+**Dado (log `retry-diag`, prod, após a parte 2):**
+- 375 de 387 pedidos caíram em `sendToAll:true`; só 12 foram direto ao aparelho (todos `pkmsg`, com SKDM);
+- todos com `retryCount:"1"`, sem `<keys>` e sem `error`.
+
+**Causa:** a regra `sendToAll = !jidDecode(participant)?.device` do Baileys trata o jid sem `:N` como "reenviar para o grupo todo". Só que jid sem `:N` é o **celular principal** (device 0), o caso mais comum. O reenvio voltava por `skmsg` ao grupo inteiro, o mesmo caminho que o membro não conseguiu abrir.
+
+**Conserto:**
+- em grupo, `sendToAll` é sempre `false` e o reenvio vai direto (pairwise) para o jid que pediu, com device 0 quando não há `:N`;
+- em conversa individual a regra original fica;
+- o teste roda a criptografia real para aparelho vinculado e para celular principal.
+
+### Parte 4 (RCA 2026-09-28, 13:25 BRT): retry no log "resolvido", cliente segue vendo "Aguardando mensagem"
+
+**Dado (prod, desde o restart 15:49:20Z com as partes 1–3):** 128 pedidos
+(`sendToAll:false` 94 / `true` 34), 53 atendidos na 1ª, 4 pediram de novo,
+53 `não guardada`, 0 erros, 8 "desistiu". Clientes `queridoachadoparceiro@gmail.com`
+("OFERTAS DO DIA", temporárias 7 dias, só admins) e `+5547991314690`
+("OFERTANDO PROMO DO DIA") relatam que TODAS as mensagens do robô chegam
+presas; as do celular abrem.
+
+**Hipótese 1 (sender key nomeado com PN na 6.7.23 × LID na 7.x) — REFUTADA
+com criptografia real** (`test/baileys-sender-key-identity.test.js`): o nome do
+sender key é só o rótulo do arquivo local `sender-key-<grupo>::<user>::<device>`.
+A SKDM que vai no fio leva id, iteração e chaves — nenhum endereço; o membro
+guarda a chave sob o `participant` que o SERVIDOR carimba. Uma SKDM criada sob
+o PN abre sob o LID. Portar `groupSenderIdentity = meLid` da 7.x **não muda nada
+para o membro** e cria uma chave NOVA que ninguém tem (o teste mostra o membro
+preso na hora). Não fazer.
+
+**O que o mesmo teste prova (mecanismo que deixa TODO MUNDO preso de uma vez):**
+se o arquivo `sender-key-…` do grupo some ou troca de `senderKeyId` enquanto o
+`sender-key-memory-<grupo>.json` segue dizendo que os aparelhos "já têm a
+chave", o envio normal sai com chave que ninguém recebeu e sem SKDM. Só o
+reenvio direto (parte 2) recupera, um aparelho por vez. É a única hipótese que
+explica "todas as mensagens, para todos" sem depender de LID.
+
+**Conserto pequeno que entrou (lido no código, 6.7.23 × 7.x):** no reenvio de
+grupo, `isMe` comparava o `participant` (`@lid` em grupo LID) com o PN do robô;
+o celular da PRÓPRIA conta nunca batia e recebia o reenvio sem
+`deviceSentMessage`. Agora compara com `creds.me.lid` quando o pedido vem em
+LID (patch + teste).
+
+**O que ainda NÃO tem dado (não corrigir por suposição):**
+- se as mensagens presas que a cliente vê são de ANTES do restart (fora do TTL
+  de 24 h e do teto de 5 pedidos do aparelho — não se recuperam) ou NOVAS;
+- se os aparelhos das clientes estão sequer pedindo reenvio (o log só vê pedido
+  que chega; 0 pedido + envios = falha primária invisível ao retry);
+- se o reenvio atendido abre de fato no aparelho (só um celular de teste no
+  grupo responde).
+
+**Diagnóstico pronto (read-only):** `scripts/diag-aguardando-mensagem.mjs
+<email> [jid|nome] --desde=2026-09-28T15:49:20Z` — por grupo de destino: estado
+do `sender-key` (estados/keyId/iteração/mtime) e do `sender-key-memory`
+(quantos aparelhos, lid × pn), envios × pedidos (membros distintos, count,
+`<keys>`, repetidos, não guardada, erro) e uma linha de leitura. Passo
+seguinte obrigatório: grupo de teste com um celular real como membro.
+
+### Parte 5 (RCA 2026-09-28): a carteirinha do aparelho em conta hosted era assinada com o prefixo errado
+
+**Dado (prod):** `diag-aguardando-frota` mostrou que pareamento, plataforma,
+keyIndex e LID não separam as contas afetadas das 61 saudáveis, e que em várias
+contas o reenvio direto funciona (pedidos sem desistência). No grupo da cliente
+(5 membros de fora, todos `@lid`), TODO aparelho de fora, inclusive um celular
+limpo entrando no grupo, recusava a original e o reenvio direto feito com as
+próprias chaves; só o celular da própria conta abria. `diag-identidade-aparelho`
+(verificação real com o libsignal — `Curve.verify` do Baileys 6.7.23 devolve
+`true` para qualquer assinatura) achou **5 de 150 contas** com
+`account.deviceSignature` que NÃO confere com o prefixo `[6,1]` e confere com
+`[6,6]`; a conta da cliente é uma delas.
+
+**Causa (código, 6.7.23 × whatsmeow × 7.x):** em `configureSuccessfulPairing`
+a 6.7.23 assina a carteirinha do aparelho com `[6,6]` quando a conta é hosted
+(WhatsApp Business hospedado, `accountType=HOSTED`). O whatsmeow
+(`generateDeviceSignature`) e o Baileys 7.x assinam **sempre** com `[6,1]`; só
+a assinatura da CONTA muda de prefixo em hosted. O celular de quem não é da
+conta verifica o `device-identity` que vai junto da mensagem com `[6,1]`,
+rejeita o aparelho e mostra "Aguardando mensagem" para tudo que ele manda; pede
+reenvio até desistir. O celular da própria conta confia no aparelho vinculado
+por outro caminho e abre normal — por isso "a dona vê, o resto não".
+
+**Conserto:**
+- patch (`validate-connection.js`): `devicePrefix` sempre `[6,1]` — vale para
+  pareamentos novos;
+- contas já pareadas: `scripts/fix-assinatura-aparelho.mjs <email> --aplicar`
+  recalcula `account.deviceSignature` com `[6,1]` usando a chave privada atual,
+  confere com a pública, guarda `creds.json.bak-<ts>` e grava só esse campo.
+  **Aplicar com a sessão desligada** (o worker regravaria a assinatura antiga
+  do `creds` em memória) e ligar de novo. Alternativa: re-parear.
+
+**Confirmado em prod (2026-09-28 15:10 BRT):** assinatura refeita na conta da
+cliente com a sessão parada, sessão religada, oferta seguinte abriu no celular
+de fora. As outras 4 contas hosted receberam o mesmo conserto em seguida.
+
+**Rede de segurança (não regredir):** `src/core/deviceIdentitySignature.js`
+(`ensureDeviceSignaturePrefix`, puro) roda no `bot-worker` logo depois de
+carregar o `auth_info` e ANTES de criar o socket: se a assinatura não confere
+com `[6,1]`, refaz com a chave privada atual e grava (`saveCreds`). Cobre conta
+antiga, backup restaurado e qualquer pareamento que volte a assinar errado.
+`test/device-identity-signature.test.js` prova o módulo e a ligação no worker;
+`test/baileys-hosted-device-signature.test.js` prende o patch.
+Diagnóstico: `scripts/diag-identidade-aparelho.mjs [email]` (`prefixo=6,6` =
+precisa do conserto); conserto imediato sem esperar restart:
+`scripts/fix-assinatura-aparelho.mjs --todas --aplicar --religar`.
+
 ## Status honesto da sessão WA no painel: nem falso-offline, nem "conectando" eterno (2026-07)
 
 Dois bugs relacionados, resolvidos juntos, no eixo "o que o cliente vê no painel

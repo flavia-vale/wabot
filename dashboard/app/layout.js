@@ -65,6 +65,8 @@ function buildGlobalJsonLd() {
       name: BRAND_ORG_NAME,
       alternateName: [BRAND_LEGACY_NAME],
       url: siteUrl,
+      // Data de fundação informada pela dona do produto em 29/09/2026.
+      foundingDate: '2026-07-14',
       logo: `${siteUrl}/botinho-logo.svg`,
       contactPoint: [{ '@type': 'ContactPoint', contactType: 'customer support', email: SUPPORT_EMAIL, url: `${siteUrl}/suporte` }],
       sameAs: BRAND_SAME_AS,

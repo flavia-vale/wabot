@@ -78,13 +78,14 @@ export function createPaymentsService({ db, now = () => new Date() } = {}) {
     }
   }
 
-  async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount }) {
+  async function activatePaymentAccess(tx, { userId, plan, mpPaymentId, amount, days = 30 }) {
     const nowDate = now()
     const user = await tx.user.findUnique({ where: { id: userId }, select: { accessExpiresAt: true } })
     const attribution = await resolveAffiliateAttributionSnapshot(tx, userId, nowDate)
     const currentExpiry = user?.accessExpiresAt ? new Date(user.accessExpiresAt) : null
     const baseDate = currentExpiry && currentExpiry > nowDate ? currentExpiry : nowDate
-    const expiresAt = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const grantedDays = Number.isFinite(Number(days)) && Number(days) > 0 ? Number(days) : 30
+    const expiresAt = new Date(baseDate.getTime() + grantedDays * 24 * 60 * 60 * 1000)
     const existing = await tx.payment.findUnique({ where: { mpPaymentId: String(mpPaymentId) } })
 
     if (existing?.status === 'approved') {
@@ -96,10 +97,10 @@ export function createPaymentsService({ db, now = () => new Date() } = {}) {
       throw err
     }
     if (existing) {
-      await tx.payment.update({ where: { id: existing.id }, data: { status: 'approved', expiresAt, lastSyncedAt: nowDate, ...attribution } })
+      await tx.payment.update({ where: { id: existing.id }, data: { status: 'approved', expiresAt, ...(grantedDays !== 30 ? { daysGranted: grantedDays } : {}), lastSyncedAt: nowDate, ...attribution } })
     } else {
       await tx.payment.create({
-        data: { userId, mpPaymentId: String(mpPaymentId), plan, status: 'approved', amount, expiresAt, lastSyncedAt: nowDate, ...attribution },
+        data: { userId, mpPaymentId: String(mpPaymentId), plan, status: 'approved', amount, expiresAt, ...(grantedDays !== 30 ? { daysGranted: grantedDays } : {}), lastSyncedAt: nowDate, ...attribution },
       })
     }
     await tx.user.update({ where: { id: userId }, data: { plan, accessExpiresAt: expiresAt } })
