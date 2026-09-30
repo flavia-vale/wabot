@@ -18,6 +18,7 @@ export const MOBILE_LOG_PLATFORM_LABEL = {
   aliexpress: 'AliExpress',
   shein: 'SHEIN',
   awin: 'Awin',
+  rakuten: 'Rakuten',
 }
 
 function formatMobileDuration(totalSeconds) {

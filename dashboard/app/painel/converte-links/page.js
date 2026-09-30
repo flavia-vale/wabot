@@ -196,7 +196,7 @@ export default function TestarConversaoPage() {
               </span>
             ) : (
               <span className="tc-detect is-vazio">
-                {texto.trim() ? 'loja não reconhecida aqui — se for loja da Awin, teste mesmo assim' : 'Shopee, Amazon, Mercado Livre, Magalu, SHEIN, AliExpress ou lojas da Awin'}
+                {texto.trim() ? 'loja não reconhecida aqui — se for loja da Awin ou da Rakuten, teste mesmo assim' : 'Shopee, Amazon, Mercado Livre, Magalu, SHEIN, AliExpress ou lojas da Awin e da Rakuten'}
               </span>
             )}
             <span className="tc-count">{texto.length}/{MAX_CHARS}</span>

@@ -7,6 +7,7 @@ import { buildInlineThumbnail } from '../core/inlineThumbnail.js'
 import { readMagaluScraperConfig, buildMagaluScraperUrls, takeMagaluScraperQuota } from './magaluScraper.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
 import { awinStorePageUrl } from './awin.js'
+import { rakutenStorePageUrl } from './rakuten.js'
 import { buildKabumImageUrlCandidates, fetchKabumApiImage, isKabumImageUrl, kabumProductId } from './kabumImage.js'
 import {
   isMagaluBotWallHtml,
@@ -620,6 +621,16 @@ export async function fetchProductImage(platform, productUrl, creds, { onDiagnos
     const storePage = await awinStorePageUrl(productUrl)
     if (!storePage) {
       onDiagnostic?.({ stage: 'awin_sem_pagina_da_loja', detail: null })
+      return null
+    }
+    productUrl = storePage
+  }
+  // Rakuten: idem, e com mais razão — o click.linksynergy.com conta o clique
+  // e redireciona. A página vem do `murl`; sem ele, sem foto (nunca abrir).
+  if (platform === 'rakuten') {
+    const storePage = rakutenStorePageUrl(productUrl)
+    if (!storePage) {
+      onDiagnostic?.({ stage: 'rakuten_sem_pagina_da_loja', detail: null })
       return null
     }
     productUrl = storePage

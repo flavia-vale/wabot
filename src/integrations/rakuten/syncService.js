@@ -12,6 +12,8 @@
 //   loja já conhecida reaproveita o que está no banco. O logo é a foto da
 //   oferta — sem foto, o WhatsApp abriria o link de rastreio a partir do
 //   servidor para montar a prévia (clique falso vindo da VPS).
+// - lojas aprovadas (Link Locator) → RakutenProgramme e o `id` dos links da
+//   cliente (do clickurl) → RakutenAccount.linkId: base da conversão de links.
 // - promoção que SUMIU do feed só vira "expired" quando a execução leu tudo
 //   até o fim. Execução parcial só vence as que passaram do endDate.
 // - dados recusados → conta "invalid_credential", para de agendar até
@@ -22,10 +24,15 @@ import { decryptCredential } from '../../credentialCrypto.js'
 import { getDefaultRakutenClient, RAKUTEN_MAX_PAGE_SIZE } from './client.js'
 import { RakutenAuthError, RakutenRateLimitError, RakutenResponseError } from './errors.js'
 import { extractAdvertiser, extractCouponPage, translateCoupon } from './translate.js'
+import { extractApprovedMerchants, extractRakutenLinkId, storeDomainsFromUrl } from './storeMatcher.js'
 import { RAKUTEN_ACCOUNT_STATUS, RAKUTEN_MESSAGES } from './accountService.js'
 
 export const RAKUTEN_MAX_PAGES = 20
 export const RAKUTEN_MAX_NEW_ADVERTISERS_PER_RUN = 30
+// Lojas aprovadas SEM site conhecido: quantas perguntamos por execução (o
+// resto fica para a próxima hora; loja sem domínio só converte link da
+// própria Rakuten com `mid`).
+export const RAKUTEN_MAX_PROGRAMME_LOOKUPS_PER_RUN = 30
 export const RAKUTEN_RETRY_AFTER_ERROR_MS = 15 * 60_000
 export const RAKUTEN_RETRY_AFTER_RATE_LIMIT_MS = 5 * 60_000
 export const RAKUTEN_EXPIRED_RETENTION_MS = 30 * 24 * 60 * 60_000
@@ -115,6 +122,53 @@ async function fillAdvertiserInfo({ db, client, account, creds, advertiserIds })
   return asked
 }
 
+// Lojas aprovadas (Link Locator) → RakutenProgramme. Base da conversão de
+// links. Site/domínio: o que já está guardado (programa ou promoção) ou 1
+// chamada por loja nova (teto por execução). Loja que sumiu da lista é
+// apagada; resposta estranha não apaga nada. Devolve quantas lojas ficaram
+// (null = não leu).
+async function syncProgrammes({ db, client, account, creds, runId }) {
+  if (typeof client.listApprovedMerchants !== 'function') return null
+  const merchants = extractApprovedMerchants(await client.listApprovedMerchants(creds))
+  if (!merchants) return null
+  const ids = merchants.map((merchant) => merchant.advertiserId)
+  const knownProgrammes = await db.rakutenProgramme.findMany({
+    where: { accountId: account.id, advertiserId: { in: ids } },
+    select: { advertiserId: true, storeUrl: true },
+  })
+  const storeUrls = new Map(knownProgrammes.filter((row) => row.storeUrl).map((row) => [row.advertiserId, row.storeUrl]))
+  const fromPromotions = await db.rakutenPromotion.findMany({
+    where: { accountId: account.id, advertiserId: { in: ids.filter((id) => !storeUrls.has(id)) }, storeUrl: { not: null } },
+    select: { advertiserId: true, storeUrl: true },
+    distinct: ['advertiserId'],
+  })
+  for (const row of fromPromotions) storeUrls.set(row.advertiserId, row.storeUrl)
+  let asked = 0
+  for (const merchant of merchants) {
+    if (storeUrls.has(merchant.advertiserId) || asked >= RAKUTEN_MAX_PROGRAMME_LOOKUPS_PER_RUN) continue
+    asked++
+    try {
+      const advertiser = extractAdvertiser(await client.getAdvertiser(creds, merchant.advertiserId))
+      if (advertiser?.storeUrl) storeUrls.set(merchant.advertiserId, advertiser.storeUrl)
+    } catch (error) {
+      if (error instanceof RakutenAuthError || error instanceof RakutenRateLimitError) throw error
+    }
+  }
+  for (const merchant of merchants) {
+    const storeUrl = storeUrls.get(merchant.advertiserId) ?? null
+    const data = { name: merchant.name, storeUrl, domainsJson: JSON.stringify(storeDomainsFromUrl(storeUrl)), lastSeenRunId: runId }
+    await db.rakutenProgramme.upsert({
+      where: { accountId_advertiserId: { accountId: account.id, advertiserId: merchant.advertiserId } },
+      create: { ...data, userId: account.userId, accountId: account.id, advertiserId: merchant.advertiserId },
+      update: data,
+    })
+  }
+  await db.rakutenProgramme.deleteMany({
+    where: { accountId: account.id, OR: [{ lastSeenRunId: null }, { lastSeenRunId: { not: runId } }] },
+  })
+  return merchants.length
+}
+
 function describeFailure(error) {
   if (error instanceof RakutenAuthError) return RAKUTEN_MESSAGES.auth
   if (error instanceof RakutenRateLimitError) return RAKUTEN_MESSAGES.rateLimited
@@ -145,6 +199,9 @@ export async function syncRakutenAccount(accountId, deps = {}) {
     let complete = false
     let failure = null
     let advertiserError = null
+    let programmes = null
+    let programmesError = null
+    let linkId = null
 
     try {
       const creds = decryptRakutenCreds(account, decrypt)
@@ -154,7 +211,10 @@ export async function syncRakutenAccount(accountId, deps = {}) {
         if (!parsed) throw new RakutenResponseError()
         counters.pages++
         const records = await upsertPage({ db, account, runId: run.id, items: parsed.items, counters, skipReasons })
-        for (const record of records) advertiserIds.add(record.advertiserId)
+        for (const record of records) {
+          advertiserIds.add(record.advertiserId)
+          linkId ||= extractRakutenLinkId(record.clickUrl)
+        }
         const lastPage = parsed.totalPages ?? page
         if (!parsed.items.length || page >= lastPage) { complete = true; break }
       }
@@ -163,6 +223,14 @@ export async function syncRakutenAccount(accountId, deps = {}) {
       } catch (error) {
         if (error instanceof RakutenAuthError) throw error
         advertiserError = error
+      }
+      // Lojas aprovadas: falha só aqui não derruba as promoções e mantém a
+      // lista antiga (a conversão segue com ela).
+      try {
+        programmes = await syncProgrammes({ db, client, account, creds, runId: run.id })
+      } catch (error) {
+        if (error instanceof RakutenAuthError) throw error
+        programmesError = error
       }
     } catch (error) {
       failure = error
@@ -189,6 +257,7 @@ export async function syncRakutenAccount(accountId, deps = {}) {
     const errors = []
     if (failure) errors.push({ message: describeFailure(failure) })
     if (advertiserError) errors.push({ message: `Não deu para buscar o logo de algumas lojas: ${describeFailure(advertiserError)}` })
+    if (programmesError) errors.push({ message: `Não deu para atualizar a lista de lojas aprovadas: ${describeFailure(programmesError)}` })
     for (const [reason, count] of skipReasons) {
       if (errors.length >= MAX_ERRORS) break
       errors.push({ message: `${count} ${count === 1 ? 'promoção foi ignorada porque' : 'promoções foram ignoradas porque'} ${SKIP_REASON_TEXT[reason] || SKIP_REASON_TEXT.invalid}` })
@@ -196,6 +265,8 @@ export async function syncRakutenAccount(accountId, deps = {}) {
 
     let runStatus
     const accountUpdate = { lastSyncAt: finishedAt }
+    // Só troca quando achou: conta sem promoção nesta hora mantém o que tinha.
+    if (linkId && linkId !== account.linkId) accountUpdate.linkId = linkId
     if (failure instanceof RakutenAuthError) {
       runStatus = 'invalid_credential'
       Object.assign(accountUpdate, { status: RAKUTEN_ACCOUNT_STATUS.INVALID_CREDENTIAL, statusDetail: RAKUTEN_MESSAGES.auth, nextSyncAt: null })
@@ -226,7 +297,7 @@ export async function syncRakutenAccount(accountId, deps = {}) {
     })
     if (old.length) await db.rakutenSyncRun.deleteMany({ where: { id: { in: old.map((row) => row.id) } } })
 
-    return { runId: run.id, status: runStatus, ...counters, errors: errors.slice(0, MAX_ERRORS) }
+    return { runId: run.id, status: runStatus, ...counters, programmes, errors: errors.slice(0, MAX_ERRORS) }
   } finally {
     runningAccounts.delete(accountId)
   }
