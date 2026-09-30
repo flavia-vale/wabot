@@ -9,7 +9,7 @@ import { sendMail as defaultSendMail } from '../email/mailer.js'
 import { sendTemplateEmail } from '../email/dispatcher.js'
 import { resolveDashboardUrl } from '../email/layout.js'
 import { isRunning as defaultIsRunning, sendSelfMessage as defaultSendSelfMessage } from '../manager.js'
-import { canUseSmartLinks } from '../billing/plans.js'
+import { isSmartLinkOwnerEligible } from '../core/smartLinkAccess.js'
 import { loadSmartLinkStats } from '../core/smartLinkStats.js'
 import { decideAlert, stateAfterRearm, stateAfterSend } from '../core/smartLinkAlertPolicy.js'
 import { buildAlertContent } from '../core/smartLinkAlertMessage.js'
@@ -49,7 +49,7 @@ export async function runSmartLinkAlertSweep({
     try {
       const user = userById.get(link.userId)
       // Plano vencido, conta bloqueada ou link sem dono: não incomoda.
-      if (!user || user.status !== 'active' || !canUseSmartLinks(user)) { stats.skipped++; continue }
+      if (!user || user.status !== 'active' || !isSmartLinkOwnerEligible(user, now)) { stats.skipped++; continue }
 
       const decision = decideAlert({ occupancy: link.occupancy, state: link.alert, now })
       if (!decision.send) {

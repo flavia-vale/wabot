@@ -244,3 +244,16 @@ test('lista: expõe interruptores e último aviso, mas nunca userId nem alertRem
   assert.doesNotMatch(JSON.stringify(body), /userId|alertReminders|alertActiveGroups/)
   await app.close()
 })
+
+test('lista: planActive falso quando o plano venceu (a tela avisa que os links pararam)', async () => {
+  const expired = { plan: 'pro', accessExpiresAt: new Date(fixedNow.getTime() - 1000), status: 'active' }
+  const app = await makeStats([], expired)
+  assert.equal((await app.inject({ url: '/' })).json().planActive, false)
+  await app.close()
+  const ok = await makeStats([], { plan: 'pro', accessExpiresAt: new Date(fixedNow.getTime() + 86400000), status: 'active' })
+  assert.equal((await ok.inject({ url: '/' })).json().planActive, true)
+  await ok.close()
+  const banned = await makeStats([], { plan: 'pro', accessExpiresAt: null, status: 'banned' })
+  assert.equal((await banned.inject({ url: '/' })).json().planActive, false)
+  await banned.close()
+})

@@ -1,5 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { usePainel, usePainelHeader } from '../PainelShell'
 import { LockedPage } from '@/components/pro/ProGate'
@@ -156,16 +157,16 @@ function LinkCard({ link, postGroups, onChanged, onNotice }) {
 }
 
 function SmartLinksLive() {
-  const [state, setState] = useState({ loading: true, error: null, links: [], postGroups: [] })
+  const [state, setState] = useState({ loading: true, error: null, links: [], postGroups: [], planActive: true })
   const [notice, setNotice] = useState(null)
   const [form, setForm] = useState({ name: '', slug: '' })
   const [creating, setCreating] = useState(false)
 
   const load = useCallback(async () => {
     try {
-      const [{ links }, groups] = await Promise.all([api.smartLinks(), api.groups()])
+      const [{ links, planActive }, groups] = await Promise.all([api.smartLinks(), api.groups()])
       const postGroups = (Array.isArray(groups) ? groups : []).filter(g => g.role === 'post' && (g.kind ?? 'group') === 'group')
-      setState({ loading: false, error: null, links, postGroups })
+      setState({ loading: false, error: null, links, postGroups, planActive: planActive !== false })
     } catch (err) {
       setState(s => ({ ...s, loading: false, error: err?.message || 'Não foi possível carregar os links.' }))
     }
@@ -194,6 +195,13 @@ function SmartLinksLive() {
       <p className="pnl-hint" style={{ margin: 0 }}>
         🔔 Em breve este recurso será exclusivo do plano <strong>Escala</strong>. Enquanto isso, está liberado para todos do PRO.
       </p>
+      {!state.planActive && (
+        <div className="pnl-card" role="alert" style={{ borderColor: 'var(--danger-deep)' }}>
+          <strong style={{ color: 'var(--danger-deep)' }}>Seu plano venceu: seus links estão parados.</strong>
+          <p className="pnl-hint" style={{ margin: '6px 0 10px' }}>Quem clicar em um Link Inteligente agora vê “Link indisponível”. Renove o plano e eles voltam a funcionar em até 10 segundos, com os mesmos endereços.</p>
+          <Link className="pnl-btn is-primary is-sm" href="/painel/plano">Renovar meu plano</Link>
+        </div>
+      )}
       {notice && <p className="pnl-hint" role="status" style={{ color: notice.ok ? 'var(--accent-strong)' : 'var(--danger)', fontWeight: 600 }}>{notice.text}</p>}
 
       <form className="pnl-card" onSubmit={create}>
