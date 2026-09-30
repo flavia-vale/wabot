@@ -62,6 +62,7 @@ import { validateCredentialData } from './credentialHealth.js'
 import { sanitizeMessageForLog, sanitizeResendText, truncateByCodePoints, MESSAGE_LOG_MAX_CHARS } from './messageLogSanitizer.js'
 import { decryptCredential } from './credentialCrypto.js'
 import { persistCredentialPatch } from './credentialPatch.js'
+import { describeLogoutReason } from './core/logoutReason.js'
 import { createMessageQueue } from './messageQueue.js'
 import { createMemorySendBackend, createBullmqSendBackend, finalizeSendJob, resolveBackendMode, findUnserializableField } from './sendQueueBackend.js'
 import { buildMirrorDedupKeys } from './core/mirrorDedupKey.js'
@@ -4004,6 +4005,8 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
           pairing: wasPairing,
           stuckMsg: Boolean(stuckMsgId),
           versionRejected: isVersionRejected,
+          // Só no 401: o motivo que o WhatsApp informou (ver logoutReason.js).
+          ...(isLoggedOut ? { waReason: describeLogoutReason(lastDisconnect?.error) } : {}),
         },
       })
       if (isVersionRejected) {
@@ -4043,7 +4046,7 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
         // devolvida ao lugar por `recoverOrphan` no próximo boot.
         await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {})
         await rm(pairingAuthBackup.backupDir, { recursive: true, force: true }).catch(() => {})
-        logger.info('Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
+        logger.info({ code, waReason: describeLogoutReason(lastDisconnect?.error) }, 'Sessão encerrada pelo servidor WA — auth_info limpo automaticamente')
       } else if (wasPairing && isRestartRequired) {
         // Pairing aceito pelo WA: o servidor manda close com code 515 esperando
         // que a gente reconecte com as novas creds salvas via saveCreds. Esse é
