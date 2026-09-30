@@ -487,3 +487,26 @@ test('Criar oferta: link Awin que já é dela fica como ela colou', async (t) =>
   const res = await app.inject({ method: 'POST', url: '/api/link-conversion/scrape-offer', payload: { url: own } })
   assert.equal(JSON.parse(res.body).offerUrl, own)
 })
+
+// RCA 2026-09-30: oferta espelhada com tidd.ly saía sem foto — a foto era
+// buscada abrindo o link de clique (redirecionador da Awin) e não a página da loja.
+test('foto de link Awin: vem da página da loja, sem abrir o link de clique até o fim', async () => {
+  const { awinStorePageUrl } = await import('../src/converters/awin.js')
+  const resolveShortUrl = async (url) => {
+    assert.equal(url, 'https://tidd.ly/4xXIjUX')
+    return 'https://www.awin1.com/cread.php?awinmid=17729&awinaffid=2701264&ued=https://www.kabum.com.br/produto/645897&platform=sl'
+  }
+  assert.equal(await awinStorePageUrl('https://tidd.ly/4xXIjUX', { resolveShortUrl }), 'https://www.kabum.com.br/produto/645897')
+  assert.equal(
+    await awinStorePageUrl('https://www.awin1.com/cread.php?awinmid=1&awinaffid=2&ued=https%3A%2F%2Fwww.cea.com.br%2Fx%3Futm_source%3Dconc'),
+    'https://www.cea.com.br/x',
+  )
+  assert.equal(await awinStorePageUrl('https://www.kabum.com.br/p/1'), 'https://www.kabum.com.br/p/1')
+  assert.equal(await awinStorePageUrl('https://tidd.ly/quebrado', { resolveShortUrl: async () => null }), null)
+
+  const src = readFileSync(new URL('../src/converters/imageScrapers.js', import.meta.url), 'utf8')
+  const guard = src.indexOf("if (platform === 'awin') {")
+  const cache = src.indexOf('const cached = getCached(productUrl)')
+  assert.ok(guard > 0 && guard < cache, 'a troca para a página da loja precisa vir antes do cache e do fetch')
+  assert.match(src, /productUrl = storePage/)
+})

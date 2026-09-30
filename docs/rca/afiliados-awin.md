@@ -231,6 +231,18 @@ Como funciona:
 6. **Deploy:** `src/integrations/awin/` entrou em `WORKER_CODE_PATHS_RE` (o robô
    carrega esses arquivos): mudança ali reinicia o `bot-supervisor`.
 
+### Oferta espelhada com `tidd.ly` saiu sem foto (RCA 2026-09-30 — não regredir)
+
+Sintoma: ofertas da KaBuM espelhadas com `tidd.ly` corretos, mas sem imagem.
+Causa (código + medição): a foto era buscada com a URL ORIGINAL do link
+(`resolveMonitoredImage`/`buildManualLinkPreview` → `fetchProductImage('awin',
+tidd.ly)`), ou seja, abrindo o redirecionador da Awin, que não tem `og:image`
+do produto (e ainda conta clique para o dono do link). A página da loja
+(`kabum.com.br/produto/645897`) devolve a foto em ~1 s. Correção:
+`fetchProductImage` troca o link Awin pela página da loja ANTES do cache
+(`awinStorePageUrl`: tidd.ly → só o Location, com cache; cread.php → `ued`,
+sem rede). Teste em `test/awin-link-conversion.test.js`.
+
 Fora (v1): link de loja Awin escrito sem `https://` não é visto pela rede de
 segurança (os domínios são por cliente); `clickref` por grupo; loja que recusa
 link direto (`deeplinkNotPermitted`) cai no longo (a Awin leva à página inicial
