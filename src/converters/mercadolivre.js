@@ -754,6 +754,17 @@ function serializeCookieJar(jar) {
     .join('; ')
 }
 
+// Só os NOMES dos cookies de um Set-Cookie (nunca o valor), marcando deleção
+// com "(del)". Vai para o bot.log nas recusas do createLink: distingue "o ML
+// apagou o ssid" (ssid(del)) de "o ML emitiu ssid anônimo" (ssid) de "só
+// cookie de rastreio" — investigação do código que vence em ~75–95 min.
+export function describeSetCookieNames(headers = {}) {
+  return getSetCookieLines(headers)
+    .map(parseSetCookieLine)
+    .filter(Boolean)
+    .map(({ name, isDeletion }) => (isDeletion ? `${name}(del)` : name))
+}
+
 function buildCredentialPatchFromSetCookie(creds = {}, cookieHeader = '', headers = {}) {
   const lines = getSetCookieLines(headers)
   if (!lines.length) return null
@@ -838,6 +849,25 @@ function classifyMlAffiliateFailure(status, apiError = '') {
   return null
 }
 
+// "URL not allowed in affiliates program" (erro 111) em endereço COM código de
+// produto (MLB) não é a recusa esperada de vitrine/cupom: é o ML recusando um
+// produto real. Medido em produção (2026-09-30): o mesmo endereço foi aceito
+// para 12 contas e recusado 3 vezes — não dá para tratar como definitivo na
+// primeira resposta. Vale UMA nova tentativa (e os demais candidatos) antes do
+// plano B. Sem MLB (vitrine, /lists, cupom) continua terminal: repetir só
+// gastaria chamada. Puro, sem I/O.
+export function shouldRetryUnsupportedUrl({ failureType, mlUrl, retry }) {
+  if (failureType !== 'unsupported_url') return false
+  if (!extractMlbId(mlUrl)) return false
+  return Number(retry) < ML_UNSUPPORTED_URL_RETRIES
+}
+const ML_UNSUPPORTED_URL_RETRIES = Math.max(0, Number(process.env.ML_UNSUPPORTED_URL_RETRIES) || 1)
+// Lido na hora (não no boot) para o teste poder zerar a espera.
+function unsupportedUrlRetryDelayMs() {
+  const raw = Number(process.env.ML_UNSUPPORTED_URL_RETRY_DELAY_MS)
+  return Number.isFinite(raw) && raw >= 0 ? raw : 1500
+}
+
 function buildMlAffiliateError(classification) {
   const err = new Error(classification.type === 'expired'
     ? 'Credencial Mercado Livre inválida/expirada. Renove o SSID (ou cookie) e tente novamente.'
@@ -920,6 +950,12 @@ async function createAffiliateLink(mlUrl, tag, creds) {
         const status = Number(res.status) || 0
         const apiError = String(result?.error || result?.message || res.data?.error || res.data?.message || '')
         const affiliateFailure = classifyMlAffiliateFailure(status, apiError)
+        if (affiliateFailure && shouldRetryUnsupportedUrl({ failureType: affiliateFailure.type, mlUrl, retry: i })) {
+          const retryInMs = unsupportedUrlRetryDelayMs()
+          logger.warn({ attempt: attempt.label, retry: i, mlUrl, retryInMs }, 'ML createLink: ML recusou produto real (erro 111) — tentando de novo antes do plano B')
+          await new Promise(resolve => setTimeout(resolve, retryInMs))
+          continue
+        }
         if (affiliateFailure) {
           terminalFailure = affiliateFailure
         }
@@ -931,7 +967,7 @@ async function createAffiliateLink(mlUrl, tag, creds) {
           apiError,
           urls: res.data?.urls,
           rawBody: typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500),
-          responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length },
+          responseHeaders: { 'content-type': res.headers?.['content-type'], 'set-cookie': res.headers?.['set-cookie']?.length, setCookieNames: describeSetCookieNames(res.headers) },
         }
 
         if (affiliateFailure) {
@@ -1388,6 +1424,13 @@ export async function convert(url, creds) {
           if (err.code === 'ML_AFFILIATE_LOCK_TIMEOUT') {
             affiliateWarning = ML_AFFILIATE_ERROR_WARNING.busy
             break
+          }
+          if (err.mlFailureType === 'unsupported_url' && anchorMlbId) {
+            // Produto real recusado (erro 111): guarda o motivo, mas deixa os
+            // demais candidatos tentarem — a recusa pode ser do formato do
+            // endereço, não do produto. Só cai no plano B se todos falharem.
+            affiliateWarning = err.mlWarning
+            continue
           }
           if (err.mlWarning || /credencial|inv[aá]lida|expirad|recusou|limitou/i.test(err.message)) {
             // Sem persistir cookie de recusa — ver comentário no ramo de cupom.

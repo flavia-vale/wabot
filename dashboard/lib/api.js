@@ -134,6 +134,14 @@ async function apiFetch(path, options = {}) {
 }
 
 export const api = {
+  groupMembers: ({ signal } = {}) => apiFetch('/api/group-members', { signal }),
+  smartLinks: ({ signal } = {}) => apiFetch('/api/smart-links', { signal }),
+  createSmartLink: (body) => apiFetch('/api/smart-links', { method: 'POST', body: JSON.stringify(body) }),
+  updateSmartLink: (id, body) => apiFetch(`/api/smart-links/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteSmartLink: (id) => apiFetch(`/api/smart-links/${id}`, { method: 'DELETE' }),
+  addSmartLinkGroup: (id, groupId) => apiFetch(`/api/smart-links/${id}/groups`, { method: 'POST', body: JSON.stringify({ groupId }) }),
+  updateSmartLinkGroup: (id, linkGroupId, body) => apiFetch(`/api/smart-links/${id}/groups/${linkGroupId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteSmartLinkGroup: (id, linkGroupId) => apiFetch(`/api/smart-links/${id}/groups/${linkGroupId}`, { method: 'DELETE' }),
   shopeeSales: ({ from, to, orderPage = 1, productPage = 1, limit = 20, timeZone = 'America/Sao_Paulo' }, { signal } = {}) => {
     const params = new URLSearchParams({ from, to, orderPage: String(orderPage), productPage: String(productPage), limit: String(limit), timeZone })
     return apiFetch(`/api/shopee-sales?${params}`, { signal })
@@ -193,6 +201,9 @@ export const api = {
   // link para o e-mail da conta anterior; o endereço nunca vem para cá.
   sessionBlockedRecover: () => apiFetch('/api/session/blocked-recover', { method: 'POST' }),
   sessionForget: () => apiFetch('/api/session/forget', { method: 'POST' }),
+  multiNumberWaitlist: () => apiFetch('/api/multi-number/waitlist'),
+  multiNumberWaitlistJoin: (body) => apiFetch('/api/multi-number/waitlist', { method: 'POST', body: JSON.stringify(body) }),
+  multiNumberWaitlistLeave: () => apiFetch('/api/multi-number/waitlist', { method: 'DELETE' }),
   sessionPairingCode: (phone) => apiFetch('/api/session/pairing-code', { method: 'POST', body: JSON.stringify({ phone }) }),
   sessionQRTicket: () => apiFetch('/api/session/qr-ticket', { method: 'POST' }),
   sessionQRLatest: () => apiFetch('/api/session/qr-latest'),
@@ -218,6 +229,30 @@ export const api = {
   mercadolivreSession: () => apiFetch('/api/credentials/mercadolivre/session'),
   amazonSession: () => apiFetch('/api/credentials/amazon/session'),
   shopeeSession: () => apiFetch('/api/credentials/shopee/session'),
+
+  // Contas Awin (docs/rca/afiliados-awin.md). O código de acesso só vai; nunca volta.
+  awinAccounts: () => apiFetch('/api/awin/accounts'),
+  awinAccountCreate: (data) =>
+    apiFetch('/api/awin/accounts', { method: 'POST', body: JSON.stringify(data) }),
+  awinAccountUpdate: (id, data) =>
+    apiFetch(`/api/awin/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  awinAccountDelete: (id) => apiFetch(`/api/awin/accounts/${id}`, { method: 'DELETE' }),
+  awinAccountTest: (id) => apiFetch(`/api/awin/accounts/${id}/test`, { method: 'POST' }),
+  awinAccountSync: (id) => apiFetch(`/api/awin/accounts/${id}/sync`, { method: 'POST' }),
+  awinAccountRuns: (id) => apiFetch(`/api/awin/accounts/${id}/runs`),
+  awinAccountAdvertisers: (id) => apiFetch(`/api/awin/accounts/${id}/advertisers`),
+
+  // Contas Rakuten (docs/rca/afiliados-rakuten.md). Client ID/Secret só vão; nunca voltam.
+  rakutenAccounts: () => apiFetch('/api/rakuten/accounts'),
+  rakutenAccountCreate: (data) =>
+    apiFetch('/api/rakuten/accounts', { method: 'POST', body: JSON.stringify(data) }),
+  rakutenAccountUpdate: (id, data) =>
+    apiFetch(`/api/rakuten/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  rakutenAccountDelete: (id) => apiFetch(`/api/rakuten/accounts/${id}`, { method: 'DELETE' }),
+  rakutenAccountTest: (id) => apiFetch(`/api/rakuten/accounts/${id}/test`, { method: 'POST' }),
+  rakutenAccountSync: (id) => apiFetch(`/api/rakuten/accounts/${id}/sync`, { method: 'POST' }),
+  rakutenAccountRuns: (id) => apiFetch(`/api/rakuten/accounts/${id}/runs`),
+  rakutenAccountAdvertisers: (id) => apiFetch(`/api/rakuten/accounts/${id}/advertisers`),
 
   coupons: () => apiFetch('/api/coupons'),
   couponCreate: (data) => apiFetch('/api/coupons', { method: 'POST', body: JSON.stringify(data) }),
@@ -443,6 +478,11 @@ export const api = {
   adminMarketingFunnel: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/marketing/funnel${query ? `?${query}` : ''}`)
+  },
+
+  adminMarketingCampanhaCanais: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
+    return apiFetch(`/api/admin/marketing/campanha-canais${query ? `?${query}` : ''}`)
   },
 
   adminMarketingSignupsByLanding: (params = {}) => {

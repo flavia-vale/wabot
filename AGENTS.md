@@ -192,6 +192,10 @@ arquivo (nova versão), não editar tela a tela.
 | SEO, marketing, páginas públicas, dados de mercado, marca | `docs/rca/seo-marketing.md` |
 | Instagram Stories | `docs/rca/instagram.md` |
 | plano Basic × PRO, cadeados do painel, menu, Minha conta | `docs/rca/planos-basic-pro.md` |
+| membros dos grupos, painel Membros, rodízio de convites (Link Inteligente) | `docs/rca/grupos-membros.md` |
+| vários números por conta, número reserva, rodízio de envio entre números, lista de espera | `docs/rca/multi-numero.md` |
+| Awin (contas, sync de promoções, promoções nas ofertas automáticas, conversão de links) | `docs/rca/afiliados-awin.md` |
+| Rakuten Advertising (contas, sync de promoções/cupons, promoções nas ofertas automáticas, conversão de links, ordem Awin > Rakuten) | `docs/rca/afiliados-rakuten.md` |
 
 ## Mapa de sintomas → onde olhar (atalhos mais usados)
 
@@ -204,14 +208,18 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Foto pequena/selo, card de tamanho variado, só aparece se clicar | `src/core/previewCardCanvas.js`, `src/core/cardPhoto.js`, `src/core/inlineThumbnail.js` | — | imagem-e-preview |
 | Marca d'água não sai / some | `src/core/destinationWatermark.js`, `reportWatermarkMissing` em `src/bot-worker.js` | conferir uptime do `bot-supervisor` vs data do fix | imagem-e-preview |
 | Link de loja não converteu / link errado / página não existe | `src/converters/<loja>.js`, `src/core/conversionScheduler.js` | `diag-ml-sends.mjs`, `diag-ml-social-featured.mjs`, `diag-amazon-clicks.mjs`, `diag-shein-shortlink.mjs` | lojas-conversao |
+| Link do ML saiu comprido com código vivo ("a API caiu"), abre o produto sem a página da vitrine | `shouldRetryUnsupportedUrl`/`createAffiliateLink` em `src/converters/mercadolivre.js` | `diag-ml-shortlink.mjs --email= --convert=<produto>` (erro 111 = o ML recusa o produto para a conta) | lojas-conversao |
 | Oferta espelhada saiu com link do concorrente | `src/core/mirrorLinkGuard.js` (se não converteu, não envia) | SQL: `success` com `convertedUrl = originalUrl` fora de `broadcast` | lojas-conversao |
 | Preço errado na oferta | `src/converters/amazonPrice.js`, `src/converters/productInfoScraper.js` | `diag-amazon-preco.mjs` | lojas-conversao |
 | "Faltou cadastrar a loja" / `skip:no_valid_conversions` | `src/credentialHealth.js`, `dashboard/lib/painel/logsCopy.js` | `diag-sem-etiqueta.mjs`, `diag-shopee-chave-por-conta.mjs` | credenciais-e-seguranca |
 | "Criar oferta" da Shopee sem nome/preço; chave Shopee recusada (erro 10020/10035) | `src/converters/shopee.js`, `src/converters/offerEngine.js` | `diag-shopee-chave.mjs` (cada operação com a chave real + conta de controle), `diag-criar-oferta-shopee.mjs` | ofertas-automaticas-e-criar-oferta |
 | Oferta de site próprio do grupo não espelha / link some | `src/core/customDomainLinkResolver.js` | `diag-dominio-proprio.mjs --horas=72` | espelhamento |
+| Oferta de Temu/Kabum/Natura (loja fora da lista) não saiu / `skip:link_removed`; "que loja nova vale apoiar?" | `src/core/unsupportedStore.js`, `src/observability/unsupportedStoreSignal.js` | `diag-lojas-nao-suportadas.mjs --dias 7` | espelhamento |
 | Espelhou para grupo errado / não espelhou / duplicou | `src/core/destinationRouting.js`, `src/core/incomingFreshness.js` | `diag-mirror-duplicates.mjs`, `diag-oferta-descartada.mjs` | espelhamento |
 | Fila não envia / envio atrasado / fila parada | `processSendJob` em `src/bot-worker.js`, `src/core/queueExpiry.js` | `diag-fila-grupo.mjs`, `diag-fila-parada.mjs` | envio-e-filas |
 | Ofertas automáticas: só acessório, não envia | `src/offerAutomation/dispatcher.js`, `src/offerAutomation/searchListType.js` | `diag-busca-shopee.mjs`, `diag-offer-review.mjs` | ofertas-automaticas-e-criar-oferta |
+| Membro do grupo vê oferta como "Aguardando mensagem" | `src/core/sentMessageStore.js`, `getMessage` no `makeWASocket` de `src/bot-worker.js` | `grep -c "retry-receipt:" bot.log` | whatsapp-sessao |
+| Membro do grupo de destino vê "Aguardando mensagem" nas ofertas do robô (só a dona abre) | `src/core/deviceIdentitySignature.js`, `patches/@whiskeysockets+baileys+6.7.23.patch`, `src/core/sentMessageStore.js` | `diag-identidade-aparelho.mjs <email>` (prefixo=6,6 → `fix-assinatura-aparelho.mjs`), `diag-aguardando-mensagem.mjs <email> [grupo] --desde=ISO` | whatsapp-sessao |
 | WhatsApp caindo / "conectado" sem receber / não conecta | `src/core/reconnectPolicy.js`, `src/core/receptionHealth.js`, `src/core/waVersion.js` | `diag-nao-conecta.mjs`, `diag-frota-cega.mjs` | whatsapp-sessao |
 | "Servidor no limite de robôs" / sem vaga | `src/domain/session/startRefusal.js`, `src/supervisor/index.js` | `diag-vagas-robos.mjs`, `diag-clientes-sem-vaga.mjs` | memoria-e-capacidade |
 | RAM/swap subindo | `src/ops/capacity/policy.js` | `diag-memoria-crescimento.mjs`, `diag-memoria-nativa.mjs` | memoria-e-capacidade |
@@ -219,7 +227,14 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | E-mail não chegou | `src/email/dispatcher.js`, `src/emailTriggers/lifecyclePolicy.js` | `diag-email-vencimento.mjs` (antes: conferir `SMTP_*`) | emails |
 | Tag Pagante/número repetido não aparece | `src/domain/admin/payingStatus.js`, `src/domain/admin/sharedPhoneStatus.js` | `diag-tag-pagante.mjs`, `backfill-numeros-whatsapp.mjs` | admin |
 | Página/SEO sem impressão, cadastro sem origem | `dashboard/lib/seo-registry.mjs`, `src/domain/admin/signupOrigin.js` | `diag-paginas-seo.mjs`, `diag-origem-cadastros.mjs` | seo-marketing |
+| Código de acesso do ML "vence toda hora" (~75–95 min), link comprido em massa | `createAffiliateLink` em `src/converters/mercadolivre.js`, `fetchHtml` em `src/converters/productInfoScraper.js` | `diag-ml-vida-codigo.mjs`, `diag-ml-rotacao-cookie.mjs`, `diag-ml-cookie-poisoning.mjs` | credenciais-e-seguranca |
+| Link Inteligente (`/g/<slug>`) manda para grupo cheio / não redireciona / "Grupos lotados" | `src/core/smartLinkPicker.js`, `src/api/routes/smartLinkPublic.js` | log da API `amostra de membros`; SQL em `GroupMemberSample` do grupo | grupos-membros |
 | Recurso aparece com cadeado / "só no PRO" / 403 `FEATURE_REQUIRES_PRO` | `src/billing/plans.js`, `dashboard/components/pro/ProGate.js` | `scripts/basic-sem-recursos-pro.mjs` (quem ainda guarda marca/botão/variação sem o PRO) | planos-basic-pro |
+| Promoção Awin não chega / não sai / "código de acesso venceu" | `src/integrations/awin/syncService.js`, `src/offerAutomation/awinOffers.js` | `diag-awin.mjs <email> [--awin]` | afiliados-awin |
+| Promoção Rakuten não chega / não sai / "A Rakuten recusou os dados" / oferta sem logo | `src/integrations/rakuten/syncService.js`, `src/offerAutomation/rakutenOffers.js` | `diag-rakuten.mjs <email> [--rakuten]` | afiliados-rakuten |
+| Oferta automática da Awin (promoção) saiu **sem foto** / só texto | `src/offerAutomation/awinEnrich.js`, `src/converters/kabumImage.js` | `diag-awin.mjs <email>` (`com_foto`, `sem_foto loja=`) | afiliados-awin |
+| Link de loja da Awin (KaBuM, C&A, tidd.ly…) não converteu / oferta "loja da Awin sem aprovação" | `src/converters/awin.js`, `src/integrations/awin/storeMatcher.js`, `conversionContext.js` | `diag-awin.mjs <email>` (lojas_aprovadas, links guardados) | afiliados-awin |
+| Link de loja da Rakuten (Netshoes, `click.linksynergy.com`…) não converteu / "loja da Rakuten sem aprovação" / saiu pela Awin em vez da Rakuten | `src/converters/rakuten.js`, `src/integrations/rakuten/storeMatcher.js`, `AFFILIATE_NETWORK_PRIORITY` em `src/detector.js` | `diag-rakuten.mjs <email> --rakuten` (link_id, lojas_aprovadas) | afiliados-rakuten |
 | Deploy vermelho | `.github/workflows/deploy.yml`, `scripts/deploy_safe_*.sh` | ver "Pegadinhas" | deploy-e-infra |
 
 Se o sintoma não está no mapa: ler o tema no índice, depois `Grep` pelo texto

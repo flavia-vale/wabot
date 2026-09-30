@@ -171,7 +171,9 @@ export async function logsRoutes(app) {
       limit: limitNum,
       statusCounts,
       statusCountsTotal,
-      logs: logs.map(log => ({
+      // resendText é o texto completo guardado só para o reenvio pós-restart
+      // (a tela usa messageText) — não trafega para o painel.
+      logs: logs.map(({ resendText: _resendText, ...log }) => ({
         ...log,
         sourceGroupName: sourceGroupNameFor(log.sourceGroup),
         destGroupName: groupMap[log.destGroup] || log.destGroup,
@@ -227,10 +229,20 @@ export async function logsRoutes(app) {
 
     const { from, to } = resolvePeriodRange(period)
 
-    const logs = await db.messageLog.findMany({
-      where: { userId, sentAt: { gte: from, lte: to } },
-      select: { status: true, errorMsg: true, sourceGroup: true, destGroup: true, dedupHits: true },
-    })
+    const [logs, oldestInFlight, inFlightTotal] = await Promise.all([
+      db.messageLog.findMany({
+        where: { userId, sentAt: { gte: from, lte: to } },
+        select: { status: true, errorMsg: true, sourceGroup: true, destGroup: true, dedupHits: true, sentAt: true },
+      }),
+      // A ação de recuperação não depende do filtro Hoje/7/30 dias: um item
+      // preso antes da meia-noite continua preso depois dela.
+      db.messageLog.findFirst({
+        where: { userId, status: { in: ['queued', 'sending'] } },
+        orderBy: { sentAt: 'asc' },
+        select: { sentAt: true },
+      }),
+      db.messageLog.count({ where: { userId, status: { in: ['queued', 'sending'] } } }),
+    ])
 
     const counts = {
       success: 0,
@@ -238,7 +250,8 @@ export async function logsRoutes(app) {
       skippedConfig: 0,
       timeoutTotal: 0,
       errorOther: 0,
-      inFlight: 0,
+      inFlight: inFlightTotal,
+      oldestInFlightAt: oldestInFlight?.sentAt ?? null,
     }
     const sourceAgg = new Map()
     const destAgg = new Map()
@@ -246,7 +259,6 @@ export async function logsRoutes(app) {
     for (const log of logs) {
       const hits = Number(log.dedupHits) || 0
       if (log.status === 'queued' || log.status === 'sending') {
-        counts.inFlight++
         continue
       }
       if (log.status === 'success') {

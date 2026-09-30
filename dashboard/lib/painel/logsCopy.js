@@ -59,6 +59,9 @@ export function explainErrorMsg(errorMsg, platform) {
   if (errorMsg.startsWith('warning:ml_affiliate_busy')) {
     return 'Outra conversão do Mercado Livre já estava usando esta credencial. A oferta saiu com link longo para evitar disputa de sessão.'
   }
+  if (errorMsg.startsWith('warning:ml_url_not_supported')) {
+    return 'O Mercado Livre não aceitou esse produto no programa de afiliados da sua conta (o robô tentou mais de uma vez). A oferta saiu com o link mais comprido, com a sua identificação, mas nesse caso o Mercado Livre pode não creditar a comissão. Não é problema do seu código de acesso: outras contas conseguem o link curto do mesmo produto. Para confirmar, cole esse endereço no Gerador de Links do Mercado Livre, logada; se ele recusar lá também, é uma regra da sua conta no Mercado Livre.'
+  }
   if (errorMsg.startsWith('warning:ml_vitrine_fallback_used')) {
     return 'Esse link era uma vitrine/perfil de outra loja, que o Mercado Livre não aceita converter em link de afiliado. A oferta saiu usando o link da SUA vitrine, cadastrado em IDs de afiliada → Mercado Livre.'
   }
@@ -94,6 +97,14 @@ export function explainErrorMsg(errorMsg, platform) {
     // já resolve essa diferença (2026-09-02).
     const help = buildCredentialBlockHelp(platform)
     return `${help.paragraphs[0]} ${help.nextStep}`
+  }
+  if (errorMsg.startsWith('skip:link_removed')) {
+    // P1-4: o grupo aceita mensagem sem link, mas o ÚNICO link desta oferta era
+    // de loja que não convertemos. Mandar o link original daria a comissão para
+    // outra pessoa; mandar sem link publicaria oferta sem ter onde clicar. Antes
+    // ela saía assim, mutilada e sem aviso nenhum.
+    if (errorMsg.endsWith(':offer_ended_at_source')) return 'Quando o robô foi abrir essa promoção, ela já tinha sido encerrada no site de quem publicou. Não é problema da sua configuração nem da loja — essa oferta simplesmente saiu do ar.'
+    return 'Essa promoção não foi enviada porque o único link dela era de uma loja que ainda não convertemos em link de afiliado. Mandar o link original daria a comissão para outra pessoa, e mandar sem link deixaria a oferta sem ter onde clicar.'
   }
   if (errorMsg.startsWith('skip:policy')) {
     // "A oferta acabou" NUNCA pode sair como "não apoiamos essa loja": a loja

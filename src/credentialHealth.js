@@ -30,6 +30,8 @@ const FIELD_LABELS = {
   appKey: 'a chave do aplicativo',
   appSecret: 'o segredo do aplicativo',
   trackingId: 'a identificação de rastreamento',
+  awinAccount: 'uma conta Awin (em Minhas credenciais)',
+  rakutenAccount: 'uma conta Rakuten (em Minhas credenciais)',
 }
 
 export function friendlyFieldName(field) {
@@ -265,7 +267,45 @@ export const LINK_NO_LUGAR_DO_CODIGO = 'Isso é um link, não o código de acess
 export const CODIGO_COM_ESPACO = 'O código não pode ter espaços no meio. Copie o valor inteiro, de uma vez só.'
 export const CODIGO_CURTO_DEMAIS = 'Esse código está curto demais — parece que faltou um pedaço. Copie o valor inteiro do campo na extensão Cookie-Editor.'
 
+// Awin fica fora de PLATFORMS de propósito: o cadastro dela não mora na tabela
+// Credential (AwinAccount, várias contas por cliente). `data` aqui é o contexto
+// de src/integrations/awin/conversionContext.js.
+function validateAwinContext(data) {
+  const hasAccount = Boolean(data?.accountsById?.size)
+  const hasStores = Array.isArray(data?.stores) && data.stores.length > 0
+  const configured = hasAccount && hasStores
+  return {
+    platform: 'awin',
+    label: 'Awin',
+    status: configured ? 'configured' : 'incomplete',
+    configured,
+    missing: hasAccount ? [] : ['awinAccount'],
+    invalid: [],
+    warnings: hasAccount && !hasStores ? ['Nenhuma loja aprovada na Awin ainda.'] : [],
+  }
+}
+
+// Rakuten: idem Awin. `data` = contexto de
+// src/integrations/rakuten/conversionContext.js (só existe com conta que já
+// tem o `id` dos links — sem ele, não dá para montar o link).
+function validateRakutenContext(data) {
+  const hasAccount = Boolean(data?.accountsById?.size)
+  const hasStores = Array.isArray(data?.stores) && data.stores.length > 0
+  const configured = hasAccount && hasStores
+  return {
+    platform: 'rakuten',
+    label: 'Rakuten',
+    status: configured ? 'configured' : 'incomplete',
+    configured,
+    missing: hasAccount ? [] : ['rakutenAccount'],
+    invalid: [],
+    warnings: hasAccount && !hasStores ? ['Nenhuma loja aprovada na Rakuten ainda.'] : [],
+  }
+}
+
 export function validateCredentialData(platform, data = {}) {
+  if (platform === 'awin') return validateAwinContext(data)
+  if (platform === 'rakuten') return validateRakutenContext(data)
   if (!PLATFORMS.includes(platform)) {
     return {
       platform,

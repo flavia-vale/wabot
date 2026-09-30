@@ -57,7 +57,7 @@ export default function Page() {
       <OrganicPageTracker route={route} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd).replace(/</g, '\\u003c') }} />
       <PublicPage eyebrow="Operação · Como medir" title={title} description={description}>
-        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Atualizado em {formatDatePtBr(dates.updatedAt)}</p>
+        <p className="mb-6 text-sm font-semibold text-gray-500">Por {EDITORIAL_AUTHOR} · Publicado em {formatDatePtBr(dates.publishedAt)} · Revisado em {formatDatePtBr(dates.updatedAt)}</p>
         <div className="space-y-8 text-base leading-8 text-gray-700">
           <section>
             <h2 className="text-2xl font-black tracking-tight text-gray-950">Resposta direta</h2>

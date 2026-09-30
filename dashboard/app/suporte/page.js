@@ -8,6 +8,7 @@ import {
   SUPPORT_HOURS,
   SUPPORT_RESPONSE_SLA,
 } from '@/lib/marketing-content'
+import { EditorialFreshness } from '@/components/marketing/EditorialFreshness'
 
 export const metadata = {
   title: 'Suporte',
@@ -126,6 +127,7 @@ export default function SupportPage() {
           </section>
         </div>
       </PublicPage>
+   <EditorialFreshness pathname="/suporte" />
     </>
   )
 }

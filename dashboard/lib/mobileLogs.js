@@ -17,6 +17,8 @@ export const MOBILE_LOG_PLATFORM_LABEL = {
   magalu: 'Magalu',
   aliexpress: 'AliExpress',
   shein: 'SHEIN',
+  awin: 'Awin',
+  rakuten: 'Rakuten',
 }
 
 function formatMobileDuration(totalSeconds) {
@@ -38,6 +40,7 @@ export function friendlyMobileLogError(errorMsg) {
   if (errorMsg.startsWith('warning:ml_ssid_expired')) return 'Sua credencial do Mercado Livre (SSID/cookie) expirou. As ofertas continuam saindo; renove em Conta → Credenciais → Mercado Livre para voltar a gerar links curtos.'
   if (errorMsg.startsWith('warning:ml_affiliate_forbidden')) return 'O Mercado Livre recusou a geração do link curto neste momento. As ofertas continuam saindo com link de afiliado longo; aguarde antes de tentar novamente.'
   if (errorMsg.startsWith('warning:ml_affiliate_rate_limited')) return 'O Mercado Livre limitou temporariamente as conversões. As ofertas continuam saindo com link de afiliado longo; o bot evita novas tentativas imediatas.'
+  if (errorMsg.startsWith('warning:ml_url_not_supported')) return 'O Mercado Livre não aceitou esse produto no programa de afiliados da sua conta. A oferta saiu com o link mais comprido; não é problema do seu código de acesso.'
   if (errorMsg.startsWith('warning:ml_affiliate_busy')) return 'Outra conversão do Mercado Livre já está usando esta credencial. Esta oferta saiu com link de afiliado longo para evitar disputa de sessão.'
   if (errorMsg.startsWith('warning:ml_vitrine_fallback_used')) return 'Esse link era uma vitrine de outra loja, que o Mercado Livre não aceita converter. A oferta saiu com o link da SUA vitrine, cadastrado em IDs de afiliada → Mercado Livre.'
   if (errorMsg.startsWith('error:conversion:') && errorMsg.includes('Cadastre o link da SUA vitrine')) return 'Esse link era uma vitrine de outra loja, que o Mercado Livre não aceita converter. Cadastre o link da SUA vitrine em IDs de afiliada → Mercado Livre para que esses casos saiam automaticamente.'
@@ -53,6 +56,10 @@ export function friendlyMobileLogError(errorMsg) {
   if (errorMsg.startsWith('skip:title_mismatch')) return 'O texto da oferta não combina com o produto do link. Bloqueado por segurança.'
   if (errorMsg.startsWith('skip:text_too_large')) return 'Mensagem muito grande — ignorada para não atrasar o restante da fila.'
   if (errorMsg.startsWith('skip:no_valid_conversions')) return 'Nenhum link da mensagem pôde ser convertido em link de afiliado.'
+  if (errorMsg.startsWith('skip:link_removed')) {
+    if (errorMsg.endsWith(':offer_ended_at_source')) return 'Ignorada: a promoção já tinha sido encerrada no site de quem publicou.'
+    return 'Não enviada: o único link era de uma loja que ainda não convertemos.'
+  }
   if (errorMsg.startsWith('skip:policy')) {
     if (errorMsg.endsWith(':offer_ended_at_source')) return 'Ignorada: a promoção já tinha sido encerrada no site de quem publicou.'
     if (errorMsg.endsWith(':unsupported_store')) return 'Ignorada: ainda não fazemos conversão de afiliado para essa loja.'

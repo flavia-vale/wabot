@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
+import { CampanhaCanaisFunil } from './CampanhaCanaisFunil'
 
 const PERIOD_OPTIONS = [{ value: '7d', label: '7 dias' }, { value: '30d', label: '30 dias' }, { value: '90d', label: '90 dias' }]
 const pct = (part, total) => (!Number(total || 0) ? 0 : Math.round((Number(part || 0) / Number(total || 0)) * 1000) / 10)
@@ -563,6 +564,8 @@ export default function MarketingGrowthAdminPage() {
           <p className="text-xs text-gray-500">Qual página orgânica (first-touch) trouxe cada cadastro novo. {updatedAt.signupsByLanding ? `Atualizado: ${updatedAt.signupsByLanding}` : ''}</p>
           <div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase tracking-wide text-gray-400"><tr><th className="px-3 py-2">Página de entrada</th><th className="px-3 py-2">Cadastros</th></tr></thead><tbody className="divide-y divide-gray-100">{signupsByLanding.map(row => <tr key={row.landingPage}><td className="px-3 py-3 font-semibold text-gray-900">{row.landingPage}</td><td className="px-3 py-3">{row.signups}</td></tr>)}</tbody></table></div>
         </section>
+
+        <CampanhaCanaisFunil />
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
           <h2 className="text-lg font-black text-gray-900">Experiment OS (Sprint 2)</h2>

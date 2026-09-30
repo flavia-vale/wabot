@@ -54,10 +54,16 @@ export function decideMirrorConversions(linkResults = []) {
 // Mesmo conjunto de lojas do detector, mas SEM exigir `https://`. O lookbehind
 // impede casar pedaço de URL que já tem protocolo (`://meli.la/...`), e-mail
 // (`@`) ou subdomínio cortado (`.`).
-const BARE_STORE_LINK_RES = Object.values(PATTERNS).map(re => new RegExp(
-  String.raw`(?<![\w./@:%-])` + re.source.replace(/^https\?:(?:\\\/\\\/|\/\/)/, ''),
-  'gi',
-))
+const BARE_STORE_LINK_RES = [
+  ...Object.values(PATTERNS).map(re => new RegExp(
+    String.raw`(?<![\w./@:%-])` + re.source.replace(/^https\?:(?:\\\/\\\/|\/\/)/, ''),
+    'gi',
+  )),
+  // Link de afiliado da Awin sem `https://` (`tidd.ly/abc`, `awin1.com/cread.php?…`):
+  // é de alguém (o dono do grupo de origem) e o WhatsApp o torna clicável.
+  // Vale para TODA cliente, com ou sem conta Awin (revisão 2026-09-30).
+  /(?<![\w./@:%-])(?:[a-z0-9-]+\.)*(?:tidd\.ly|awin1\.com)\/[^\s]*/gi,
+]
 
 // Domínio solto sem caminho ("compre na shopee.com.br") não carrega afiliado de
 // ninguém; só vira risco quando tem caminho depois do domínio.
@@ -73,9 +79,10 @@ function hasPathAfterHost(match) {
  *
  * @param {string} text texto que vai ser publicado
  * @param {Array<{converted?: string, passthrough?: boolean}>} conversions
+ * @param {{awin?: object}} [offerOptions] lojas Awin da cliente (detector)
  * @returns {string[]}
  */
-export function findUnconvertedStoreLinks(text, conversions = []) {
+export function findUnconvertedStoreLinks(text, conversions = [], offerOptions = {}) {
   const body = String(text ?? '')
   if (!body) return []
   const allowed = new Set(
@@ -84,7 +91,7 @@ export function findUnconvertedStoreLinks(text, conversions = []) {
       .map(c => normalizeDetectedUrl(String(c.converted))),
   )
   const leaks = []
-  for (const { url } of detectLinks(body)) {
+  for (const { url } of detectLinks(body, offerOptions)) {
     if (!allowed.has(url)) leaks.push(url)
   }
   // Os links convertidos saem do texto antes da busca sem `https://`: o

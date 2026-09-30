@@ -35,7 +35,7 @@ import {
  */
 
 const slug = '/clonar-mensagens-de-grupo-de-afiliados'
-const title = 'Como clonar mensagens de grupo de afiliados no WhatsApp'
+const title = 'Clonar mensagens de grupo de afiliados no WhatsApp'
 const description = 'Clonar um grupo de ofertas é copiar a mensagem da origem, trocar o link pelo seu link de afiliado e republicar no seu grupo ou canal. Veja como funciona, o que é permitido e quais ferramentas fazem isso.'
 const siteUrl = getSiteUrl()
 

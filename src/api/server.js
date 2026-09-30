@@ -9,8 +9,14 @@ import { createCorsOriginChecker, getAllowedOrigins } from './cors.js'
 import { authRoutes } from './routes/auth.js'
 import { mlOAuthRoutes } from './routes/mlOAuth.js'
 import { sessionRoutes } from './routes/session.js'
+import { multiNumberRoutes } from './routes/multiNumber.js'
 import { groupsRoutes } from './routes/groups.js'
+import { groupMembersRoutes } from './routes/groupMembers.js'
+import { smartLinksRoutes } from './routes/smartLinks.js'
+import { smartLinkPublicRoutes } from './routes/smartLinkPublic.js'
 import { credentialsRoutes } from './routes/credentials.js'
+import { awinRoutes } from './routes/awin.js'
+import { rakutenRoutes } from './routes/rakuten.js'
 import { couponsRoutes } from './routes/coupons.js'
 import { paymentsRoutes } from './routes/payments.js'
 import { configRoutes } from './routes/config.js'
@@ -22,16 +28,20 @@ import { adminRoutes } from './routes/admin.js'
 import { adminEmailsRoutes } from './routes/adminEmails.js'
 import { publicRoutes } from './routes/public.js'
 import { clickTrackerRoutes } from './routes/clickTracker.js'
+import { pruneClickTracking } from './clickTrackingRetention.js'
 import { preservationRoutes } from './routes/preservation.js'
 import { offerAutomationRoutes } from './routes/offerAutomation.js'
 import { offerAutomationReviewRoutes } from './routes/offerAutomationReview.js'
 import { offerQueueRoutes } from './routes/offerQueue.js'
 import { affiliateRoutes } from './routes/affiliate.js'
 import { startOfferAutomationCron } from '../offerAutomation/cron.js'
+import { startAwinSyncScheduler } from '../integrations/awin/scheduler.js'
+import { startRakutenSyncScheduler } from '../integrations/rakuten/scheduler.js'
 import { startOfferQueueCron } from '../offerQueue/cron.js'
 import { registerApiMetricsHooks, renderPrometheusMetrics, isPrivateAddress } from './metrics.js'
 import { getSupervisorOperationalCounters } from '../supervisor/operationalCounters.js'
 import { startDlqMaintenanceJob, getDlqMaintenanceSnapshot } from '../jobs/dlqMaintenance.js'
+import { runGroupMemberSampleSweep } from '../jobs/groupMemberSamples.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
@@ -181,6 +191,11 @@ async function cleanupOldLogs() {
   await cleanupByRetentionDays(db.adminAuditLog, 'createdAt', ADMIN_AUDIT_RETENTION_DAYS, 'Admin audit logs').catch(err => {
     app.log.error({ err: err.message }, 'Falha na limpeza automática de admin audit logs')
   })
+  await pruneClickTracking({ db }).then(({ clicks, links }) => {
+    if (clicks > 0 || links > 0) app.log.info({ clicks, links }, 'Cliques e links curtos removidos por retenção automática')
+  }).catch(err => {
+    app.log.error({ err: err.message }, 'Falha na limpeza automática de cliques')
+  })
 }
 
 function startLogRetentionJob() {
@@ -288,6 +303,32 @@ async function runSessionCapacityAlertTick() {
 function startSessionCapacityAlertSweep() {
   const timer = setInterval(runSessionCapacityAlertTick, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
   timer.unref?.()
+}
+
+// Amostra de membros dos grupos-destino (painel Membros): 1 passada por hora,
+// in-process (setInterval + unref, sem processo PM2 novo). Precisa ser na API:
+// em modo inline só ela enxerga as sessões. Ver docs/rca/grupos-membros.md.
+//   GROUP_MEMBER_SAMPLES_ENABLED     — 'false' desliga.
+//   GROUP_MEMBER_SAMPLES_INTERVAL_MS — intervalo (default 1h).
+const GROUP_MEMBER_SAMPLES_INTERVAL_MS = Math.max(Number(process.env.GROUP_MEMBER_SAMPLES_INTERVAL_MS) || 60 * 60 * 1000, 60 * 1000)
+let groupMemberSamplesRunning = false
+async function runGroupMemberSamplesTick() {
+  if (String(process.env.GROUP_MEMBER_SAMPLES_ENABLED ?? '').trim().toLowerCase() === 'false') return
+  if (groupMemberSamplesRunning) return
+  groupMemberSamplesRunning = true
+  try {
+    const summary = await runGroupMemberSampleSweep({ db, logger: app.log })
+    app.log.info({ ...summary }, 'amostra de membros: passada concluída')
+  } catch (err) {
+    app.log.error({ err: err.message }, 'amostra de membros: passada falhou')
+  } finally {
+    groupMemberSamplesRunning = false
+  }
+}
+function startGroupMemberSamplesSweep() {
+  // Primeira passada 5 min após subir (sessões retomam antes); depois de hora em hora.
+  setTimeout(runGroupMemberSamplesTick, 5 * 60 * 1000).unref?.()
+  setInterval(runGroupMemberSamplesTick, GROUP_MEMBER_SAMPLES_INTERVAL_MS).unref?.()
 }
 
 // E-mails de ciclo de vida (vencimento de teste/plano, saúde do robô, saque
@@ -541,8 +582,14 @@ app.decorate('authenticate', async function (req, reply) {
 app.register(authRoutes, { prefix: '/api/auth' })
 app.register(mlOAuthRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/session' })
+app.register(multiNumberRoutes, { prefix: '/api/multi-number' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
+app.register(groupMembersRoutes, { prefix: '/api/group-members' })
+app.register(smartLinksRoutes, { prefix: '/api/smart-links' })
+app.register(smartLinkPublicRoutes) // sem prefix — /g/:slug precisa estar na raiz
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
+app.register(awinRoutes, { prefix: '/api/awin' })
+app.register(rakutenRoutes, { prefix: '/api/rakuten' })
 app.register(couponsRoutes, { prefix: '/api/coupons' })
 app.register(paymentsRoutes, { prefix: '/api/payments' })
 app.register(configRoutes, { prefix: '/api/config' })
@@ -738,6 +785,10 @@ startWeeklySummarySweep()
 startProbeWatchdogJob()
 startOfferAutomationCron()
 startOfferQueueCron()
+// Promoções Awin: setInterval + unref, sem processo novo (docs/rca/afiliados-awin.md).
+startAwinSyncScheduler({ logger: app.log })
+startRakutenSyncScheduler({ logger: app.log })
+startGroupMemberSamplesSweep()
 const stopDlqMaintenance = startDlqMaintenanceJob({ db })
 await app.listen({ port, host: '0.0.0.0' })
 console.log(`API rodando em http://localhost:${port}`)
