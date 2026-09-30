@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import Fastify from 'fastify'
 import { credentialsRoutes } from '../src/api/routes/credentials.js'
-import { describeSaveSessionCheck, platformSupportsSessionCheck } from '../src/credentialSaveCheck.js'
+import { describeSaveSessionCheck, isSameAccessCode, platformSupportsSessionCheck } from '../src/credentialSaveCheck.js'
 
 // RCA 2026-08-15: salvar o código de acesso respondia "Tudo certo!" mesmo quando
 // a loja recusa o código. Um cliente novo salvou 17 vezes em 4h30 sem descobrir
@@ -25,6 +25,47 @@ test('loja recusou o código: banner vermelho e frase que manda pegar um novo', 
   // Não pode dizer que parou de enviar — o plano B segue enviando (AGENTS.md).
   assert.match(out.message, /continuam saindo/i)
   assert.doesNotMatch(out.message, /pausad/i)
+})
+
+// Medido em produção (2026-09-24): a cliente colou 8 vezes em 18 min um código
+// já vencido. A frase "pegue um código novo" não dizia o que fazer diferente.
+test('ML recusou: manda sair do Mercado Livre, entrar de novo e copiar o código novo', () => {
+  const out = describeSaveSessionCheck({
+    platform: 'mercadolivre',
+    validation: VALIDATION_OK,
+    probe: { configured: true, alive: false, reason: 'expired' },
+    fallbackMessage: 'x',
+  })
+  assert.equal(out.tone, 'error')
+  assert.match(out.message, /clique em Sair/i)
+  assert.match(out.message, /entre de novo/i)
+  assert.match(out.message, /não saia da conta/i)
+  assert.doesNotMatch(out.message, /mesmo código/i, 'sem código repetido, não acusa repetição')
+})
+
+test('ML recusou o MESMO código de antes: diz que colar de novo não resolve', () => {
+  const out = describeSaveSessionCheck({
+    platform: 'mercadolivre',
+    validation: VALIDATION_OK,
+    probe: { configured: true, alive: false, reason: 'expired' },
+    fallbackMessage: 'x',
+    sameCodeAsBefore: true,
+  })
+  assert.equal(out.tone, 'error')
+  assert.match(out.message, /MESMO código de acesso que já estava salvo/i)
+  assert.match(out.message, /colar de novo não resolve/i)
+  assert.match(out.message, /clique em Sair/i)
+  assert.match(out.message, /continuam saindo/i)
+})
+
+test('isSameAccessCode: compara o portador da sessão, direto ou dentro do jar, e nunca casa vazio', () => {
+  assert.equal(isSameAccessCode('mercadolivre', { ssid: 'abc123' }, { ssid: ' abc123 ' }), true)
+  assert.equal(isSameAccessCode('mercadolivre', { cookie: '_d2id=x; ssid=abc123; _csrf=y' }, { ssid: 'abc123' }), true)
+  assert.equal(isSameAccessCode('mercadolivre', { ssid: 'abc123' }, { ssid: 'outro' }), false)
+  assert.equal(isSameAccessCode('mercadolivre', {}, { ssid: '' }), false)
+  assert.equal(isSameAccessCode('amazon', { cookie: 'exp1' }, { cookie: 'exp1' }), true)
+  assert.equal(isSameAccessCode('amazon', { cookie: 'exp1' }, { cookie: 'exp2' }), false)
+  assert.equal(isSameAccessCode('shopee', { appId: '1' }, { appId: '1' }), false)
 })
 
 test('código funcionando: diz que testamos agora (o verde passa a significar algo)', () => {
@@ -205,6 +246,29 @@ test('PUT credenciais: código recusado responde 200, salva, e devolve tom de er
     assert.equal(body.sessionCheck.alive, false)
     assert.match(body.message, /não aceitou/i)
     assert.ok(db.current(), 'a credencial foi gravada')
+    await app.close()
+  })
+})
+
+test('PUT credenciais: colar de novo o MESMO código recusado avisa que é repetido', async () => {
+  await withEncryptionKey(async () => {
+    const db = fakeDb()
+    const probeCache = fakeProbeCache()
+    const app = await buildApp({
+      userId: 'u-repetido',
+      db,
+      checkMercadoLivreSession: async () => ({ configured: true, alive: false, reason: 'expired' }),
+      probeCache,
+    })
+    const primeira = (await app.inject({ method: 'PUT', url: '/mercadolivre', payload: ML_BODY })).json()
+    assert.doesNotMatch(primeira.message, /mesmo código/i, '1ª colagem não é repetição')
+    const segunda = (await app.inject({ method: 'PUT', url: '/mercadolivre', payload: ML_BODY })).json()
+    assert.equal(segunda.statusCode ?? 200, 200)
+    assert.equal(segunda.messageTone, 'error')
+    assert.match(segunda.message, /mesmo código de acesso/i)
+    assert.match(segunda.message, /clique em Sair/i)
+    const outro = (await app.inject({ method: 'PUT', url: '/mercadolivre', payload: { ...ML_BODY, ssid: 'ghy-1111111111111111111111111111' } })).json()
+    assert.doesNotMatch(outro.message, /mesmo código/i, 'código diferente não é repetição')
     await app.close()
   })
 })
