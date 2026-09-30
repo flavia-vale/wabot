@@ -121,3 +121,16 @@ test('rota: Basic entra na lista marcado como "precisa subir de plano"', async (
     await cleanup(userId)
   }
 })
+
+// Regressão 2026-09-30: o cartão foi posto no JSX de baixo com `isConnected &&`,
+// mas conectada a tela sai pelo retorno antecipado do WhatsAppConnectedOverview
+// — o cartão nunca aparecia para ninguém.
+test('tela WhatsApp: cartão da lista de espera está no retorno de quem está conectada', async () => {
+  const { readFileSync } = await import('node:fs')
+  const tela = readFileSync(new URL('../dashboard/app/painel/whatsapp/page.js', import.meta.url), 'utf8')
+  const inicio = tela.indexOf('if (isConnected && !statusLoading && !statusError)')
+  assert.ok(inicio > 0, 'retorno antecipado de conectada não encontrado')
+  const blocoConectada = tela.slice(inicio, tela.indexOf('\n  }\n', inicio))
+  assert.match(blocoConectada, /<WhatsAppConnectedOverview/)
+  assert.match(blocoConectada, /<MultiNumberWaitlistCard \/>/)
+})

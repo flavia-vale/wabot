@@ -683,6 +683,12 @@ export default function WhatsAppPage() {
           onDisconnect={handleStop}
           disconnecting={actionLoading === 'stop'}
         />
+        {/* Fase 0 do vários números por conta (docs/rca/multi-numero.md). Tem
+            que ficar AQUI: conectada, a tela sai por este retorno e nunca
+            chega ao JSX de baixo. */}
+        <div style={{ marginTop: 16 }}>
+          <MultiNumberWaitlistCard />
+        </div>
       </>
     )
   }
@@ -1008,10 +1014,6 @@ export default function WhatsAppPage() {
           </div>
         </div>
       )}
-
-      {/* Fase 0 do vários números por conta: só aparece com o robô conectado,
-          para não competir com o passo a passo de conexão. */}
-      {isConnected && <MultiNumberWaitlistCard />}
 
       <ConfirmDialog open={showForgetConfirm} title="Esquecer número" message="Isso vai desconectar o WhatsApp e remover a sessão salva neste painel. Para usar novamente, você precisará conectar por QR Code ou código." confirmLabel="Esquecer sessão" danger onCancel={() => setShowForgetConfirm(false)} onConfirm={async () => { setShowForgetConfirm(false); await handleForget() }} />
       <ConfirmDialog
