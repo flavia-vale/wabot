@@ -86,7 +86,33 @@ const tokenHeaders = logado ? { token: sess.token || '', siteuid: sess.SiteUID |
 // 2) página de produto e vitrine do oneLink, COM cookie
 await chamar('produto m.shein.com COM cookie', `https://m.shein.com/br/-p-${goodsId}.html`, { headers: comCookie })
 await chamar('produto br.shein.com COM cookie', `https://br.shein.com/-p-${goodsId}.html`, { headers: comCookie })
-await chamar('vitrine ark/default COM cookie', `https://m.shein.com/br/ark/default?goods_id=${goodsId}&scene=1&test=5051&ad_type=KOC&campaign=goods&campaign_id=20`, { headers: comCookie })
+const ark = await chamar('vitrine ark/default COM cookie', `https://m.shein.com/br/ark/default?goods_id=${goodsId}&scene=1&test=5051&ad_type=KOC&campaign=goods&campaign_id=20`, { headers: comCookie })
+// A vitrine foi a ÚNICA página que a SHEIN entregou ao servidor (30/09, 772 KB,
+// com "R$79,99" dentro). Guarda o corpo (sem cookie/token — é só o HTML da
+// resposta) e mostra onde nome/preço aparecem, para decidir se dá para ler
+// título/preço por aqui.
+if (ark.texto) {
+  const { writeFileSync } = await import('node:fs')
+  const arquivo = `/tmp/shein-ark-${goodsId}.html`
+  writeFileSync(arquivo, ark.texto)
+  const t = ark.texto
+  const achados = {}
+  for (const [nome, re] of Object.entries({
+    goods_name: /"goods_name"\s*:\s*"([^"]{3,120})"/g,
+    goodsName: /"goodsName"\s*:\s*"([^"]{3,120})"/g,
+    productName: /"productName"\s*:\s*"([^"]{3,120})"/g,
+    og_title: /property=["']og:title["'][^>]*content=["']([^"']{3,120})["']/g,
+    title_tag: /<title>([^<]{3,120})<\/title>/g,
+    amountWithSymbol: /"amountWithSymbol"\s*:\s*"([^"]{2,30})"/g,
+    reais: /(R\$\s?\d[\d.]*,\d{2})/g,
+    goods_id_ctx: new RegExp(`.{0,80}${goodsId}.{0,80}`, 'g'),
+  })) {
+    const vals = [...t.matchAll(re)].map(m => (m[1] ?? m[0]).replace(/\s+/g, ' ').trim()).filter(Boolean)
+    achados[nome] = { ocorrencias: vals.length, primeiras: [...new Set(vals)].slice(0, 4) }
+  }
+  console.log({ arquivoSalvo: arquivo, bytes: t.length })
+  console.log(JSON.stringify(achados, null, 1))
+}
 
 // 3) APIs JSON de produto, COM cookie + token de sessão
 const q = `goods_id=${goodsId}&_ver=1.1.8&_lang=pt-br`
