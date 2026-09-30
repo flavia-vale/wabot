@@ -114,7 +114,7 @@ conferir em produção → Solicitar indexação):
 
 | Dia | 10 páginas (`https://espelhagrupos.com.br` + caminho) |
 |---|---|
-| **A** (B29 + R4 + R6) | `/` · `/bot-afiliados-whatsapp` · `/bot-achadinhos-whatsapp` · `/bot-que-busca-ofertas-shopee-whatsapp` · `/shopee-afiliados-whatsapp` · `/mercado-livre-afiliados-whatsapp` · `/amazon-afiliados-whatsapp` · `/espelhar-grupos-whatsapp` · `/automacao-whatsapp-afiliados` · `/alternativas/achadinhos-bot` |
+| **A** (B29 + R4 + R6) ✅ **pedido em 30/09** (as 10 + `/precos`) | `/` · `/bot-afiliados-whatsapp` · `/bot-achadinhos-whatsapp` · `/bot-que-busca-ofertas-shopee-whatsapp` · `/shopee-afiliados-whatsapp` · `/mercado-livre-afiliados-whatsapp` · `/amazon-afiliados-whatsapp` · `/espelhar-grupos-whatsapp` · `/automacao-whatsapp-afiliados` · `/alternativas/achadinhos-bot` |
 | **B** (R1 — falavam errado do produto) | `/bot-canais-whatsapp` · `/bot-comum-vs-espelha-grupos` · `/como-funciona-espelha-grupos-canais` · `/blog/bot-whatsapp-antiban-existe` · `/blog/shadowban-whatsapp-canais` · `/blog/como-evitar-banimento-whatsapp-afiliados` · `/blog/grupo-ou-canal-whatsapp-achadinhos` · `/blog/chip-dedicado-bot-whatsapp` · `/blog/migrar-grupo-achadinhos-para-canal` · `/diagnostico-antiban-whatsapp` |
 | **C** (R7 + GEO + títulos) | `/blog/como-espelhar-mensagens-entre-grupos-whatsapp` (vídeo 1) · `/quem-somos` · `/blog/ferramenta-para-divulgar-ofertas-em-grupos-whatsapp` · `/melhores-bots-para-afiliados-whatsapp` · `/metodologia-uso-responsavel-whatsapp` · `/blog/como-ser-afiliado-shopee-whatsapp` · `/blog/como-divulgar-ofertas-amazon-whatsapp` · `/blog/melhores-horarios-para-postar-ofertas-no-whatsapp` · `/alternativas/shozap` · `/alternativas/gigi-bot` |
 | **D** (R3 + R2) | `/alternativas/fluxopromo` · `/seguranca-credenciais-afiliado` · `/conteudos` · `/glossario` · `/estudos-de-caso` · `/benchmarks/operacao-grupos-ofertas-whatsapp` · `/blog/como-escalar-grupos-sem-operacao-manual` · `/blog/checklist-padronizar-divulgacao-whatsapp` · `/blog/conferir-converter-link-afiliado-whatsapp` · `/blog/bot-para-afiliados-whatsapp-grupos-cupons` |
@@ -128,6 +128,8 @@ conferir em produção → Solicitar indexação):
   outras lojas"), abra a PR `develop → main` e só então peça o Dia F. A #1979
   registrou esse pedido como linha 🔝 nova no `ACOES_FLAVIA`; aqui ele fica
   **depois do Dia A**, porque A/B corrigem texto que já está no Google.
+- ✅ **30/09:** pedidas as 10 do Dia A e `/precos` (11 no total). Não repetir; conferir no
+  Search Console a partir de 07/10. Próximo: Dia B (R1), depois Dia C e F.
 - Já pedidas em 28/09 (não repetir): `/precos`, `/espelha-grupos-e-confiavel`,
   `/alternativas/achadinho-pro`, `/programa-de-afiliados`,
   `/quanto-ganha-afiliado-shopee`, `/blog/como-divulgar-ofertas-mercado-livre-whatsapp`,
