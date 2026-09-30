@@ -223,6 +223,7 @@ model Group {
   channelHealth         ChannelHealth?
   channelThrottle       ChannelThrottle?
   channelSnapshots      ChannelSnapshot[]
+  memberSamples         GroupMemberSample[]
   probeEvidences        ProbeEvidence[]
 
   instagramMirrorTargets InstagramMirrorDestination[]
@@ -981,6 +982,18 @@ model OfferAutomationSentLog {
 
 // Destinos multicanal coexistem com Group durante a migração progressiva.
 // providerRef nunca contém token; para Instagram aponta à conta profissional.
+// Amostra horária do total de membros de um grupo (só quantidade — nunca
+// números de telefone). Base do painel "Membros" e do futuro rodízio de convites.
+model GroupMemberSample {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  size      Int
+  sampledAt DateTime @default(now())
+
+  @@index([groupId, sampledAt])
+}
+
 model Destination {
   id                    String               @id @default(cuid())
   userId                String

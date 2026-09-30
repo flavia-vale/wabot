@@ -11,6 +11,7 @@ import { mlOAuthRoutes } from './routes/mlOAuth.js'
 import { sessionRoutes } from './routes/session.js'
 import { multiNumberRoutes } from './routes/multiNumber.js'
 import { groupsRoutes } from './routes/groups.js'
+import { groupMembersRoutes } from './routes/groupMembers.js'
 import { credentialsRoutes } from './routes/credentials.js'
 import { awinRoutes } from './routes/awin.js'
 import { rakutenRoutes } from './routes/rakuten.js'
@@ -554,6 +555,7 @@ app.register(mlOAuthRoutes, { prefix: '/api/auth' })
 app.register(sessionRoutes, { prefix: '/api/session' })
 app.register(multiNumberRoutes, { prefix: '/api/multi-number' })
 app.register(groupsRoutes, { prefix: '/api/groups' })
+app.register(groupMembersRoutes, { prefix: '/api/group-members' })
 app.register(credentialsRoutes, { prefix: '/api/credentials' })
 app.register(awinRoutes, { prefix: '/api/awin' })
 app.register(rakutenRoutes, { prefix: '/api/rakuten' })

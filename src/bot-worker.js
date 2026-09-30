@@ -6089,7 +6089,10 @@ const handleMessage = async msg => {
           const name = parent?.subject && parent.subject !== g.subject
             ? `${parent.subject} - ${g.subject}`
             : g.subject
-          return { waJid: id, name }
+          // `size` alimenta o painel de Membros (amostra horária). Campo extra
+          // é inofensivo para quem só lê waJid/name.
+          const size = Number.isFinite(g.size) ? g.size : Array.isArray(g.participants) ? g.participants.length : null
+          return { waJid: id, name, size }
         })
         sendIpc({ type: 'groups', requestId: msg.requestId, data: list })
       })

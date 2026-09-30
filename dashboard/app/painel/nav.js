@@ -73,6 +73,12 @@ export const NAV_GROUPS = [
     title: 'Acompanhar',
     items: [
       {
+        label: 'Membros',
+        href: '/painel/membros',
+        pro: true,
+        icon: i(<><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7" /><path d="M18 14.2A6.5 6.5 0 0 1 21.5 20" /></>),
+      },
+      {
         label: 'Envios',
         href: '/painel/envios',
         icon: i(<><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" /></>),
