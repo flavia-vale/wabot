@@ -9,6 +9,28 @@ import { deliverApprovedReviewItems, recoverReviewItems } from './reviewDelivery
 
 const TICK_MS = 60_000
 
+// Cada execução "direct" que NÃO envia precisa deixar rastro com o motivo.
+// Até 2026-09-30 o retorno de runAutomation ({ skipped } / { error } /
+// { sent }) era descartado aqui: uma automação que rodava a cada 30 min e
+// caía em `all_offers_filtered`, `no_offers_found` ou `bot_not_running` não
+// escrevia UMA linha no log — do lado de fora, "a automação não executa" e
+// não havia por onde começar. Uma linha por execução, sem chave nem texto.
+export function describeAutomationResult(result) {
+  if (!result || typeof result !== 'object') return 'sem_retorno'
+  if (result.skipped) return `pulou=${result.skipped}`
+  if (result.error) return `erro=${result.error}`
+  const partes = [`enviou=${Number(result.sent) || 0}`]
+  if (result.failed) partes.push(`falhou=${result.failed}`)
+  if (result.storiesQueued) partes.push(`stories=${result.storiesQueued}`)
+  return partes.join(' ')
+}
+
+function logAutomationResult(automation, result) {
+  const linha = `[offer-cron] automation ${automation.id} user=${automation.userId} keyword="${automation.keyword}" page=${automation.page ?? 1}: ${describeAutomationResult(result)}`
+  if (result?.error || (result?.sent === 0 && result?.failed)) console.error(linha)
+  else console.log(linha)
+}
+
 let running = false
 
 export async function tickOfferAutomations(deps = {}) {
@@ -77,7 +99,8 @@ export async function tickOfferAutomations(deps = {}) {
       }
 
       try {
-        await run(automation, { dbOverride: database })
+        const result = await run(automation, { dbOverride: database })
+        logAutomationResult(automation, result)
       } catch (err) {
         console.error(`[offer-cron] automation ${automation.id} failed:`, err.message)
       }
