@@ -136,6 +136,7 @@ async function apiFetch(path, options = {}) {
 export const api = {
   groupMembers: ({ signal } = {}) => apiFetch('/api/group-members', { signal }),
   smartLinks: ({ signal } = {}) => apiFetch('/api/smart-links', { signal }),
+  smartLinkSummary: ({ signal } = {}) => apiFetch('/api/smart-links/summary', { signal }),
   createSmartLink: (body) => apiFetch('/api/smart-links', { method: 'POST', body: JSON.stringify(body) }),
   updateSmartLink: (id, body) => apiFetch(`/api/smart-links/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteSmartLink: (id) => apiFetch(`/api/smart-links/${id}`, { method: 'DELETE' }),

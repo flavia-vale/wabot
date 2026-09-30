@@ -8,22 +8,33 @@ const number = value => new Intl.NumberFormat('pt-BR').format(value)
 const publicUrl = path => `${typeof window === 'undefined' ? '' : window.location.origin}${path}`
 
 function SmartLinksPreview() {
+  const rows = [['Ofertas Tech 1', 998, 40], ['Ofertas Tech 2', 812, 120], ['Ofertas Tech 3', 330, 152]]
   return (
     <div className="pnl-pro-card">
       <strong>espelhagrupos.com.br/g/promo-tech</strong>
       <p className="pnl-hint">3 grupos · 2.140 membros · 312 cliques nos últimos 7 dias</p>
-      <div className="pnl-table-wrap">
-        <table className="pnl-table">
-          <thead><tr><th>Grupo</th><th>Membros</th><th>Cliques 7 dias</th></tr></thead>
-          <tbody>
-            <tr><td>Ofertas Tech 1</td><td>998</td><td>40</td></tr>
-            <tr><td>Ofertas Tech 2</td><td>812</td><td>120</td></tr>
-            <tr><td>Ofertas Tech 3</td><td>330</td><td>152</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <ul className="lk-groups">
+        {rows.map(([name, size, clicks]) => (
+          <li key={name} className="lk-group">
+            <div className="lk-group-head"><span className="lk-group-name">{name}</span><span className="lk-group-num">{number(size)}<span className="pnl-hint"> / 1.000</span></span></div>
+            <div className={`occ-bar ${size >= 900 ? 'is-warn' : ''}`}><span style={{ width: `${Math.round(size / 10)}%` }} /></div>
+            <span className="pnl-hint">{clicks} cliques em 7 dias</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
+}
+
+const barTone = pct => (pct == null ? '' : pct >= 100 ? 'is-full' : pct >= 90 ? 'is-warn' : '')
+
+function groupStatus(g) {
+  if (!g.hasInvite) return { text: 'Sem convite', tone: 'is-full' }
+  if (!g.enabled) return { text: 'Pausado', tone: '' }
+  if (g.size == null) return { text: 'Aguardando contagem', tone: '' }
+  if (g.occupancyPct >= 100) return { text: 'Lotado', tone: 'is-full' }
+  if (g.occupancyPct >= 90) return { text: 'Quase cheio', tone: 'is-warn' }
+  return { text: 'No rodízio', tone: 'is-ok' }
 }
 
 function LinkCard({ link, postGroups, onChanged, onNotice }) {
@@ -31,6 +42,7 @@ function LinkCard({ link, postGroups, onChanged, onNotice }) {
   const [pickGroup, setPickGroup] = useState('')
   const used = new Set(link.groups.map(g => g.groupId))
   const available = postGroups.filter(g => !used.has(g.id))
+  const occ = link.occupancy
 
   async function run(action, okMessage) {
     setBusy(true)
@@ -50,11 +62,11 @@ function LinkCard({ link, postGroups, onChanged, onNotice }) {
   return (
     <section className="pnl-card" aria-label={link.name}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div className="pnl-card-title">{link.name}</div>
+        <div style={{ minWidth: 0 }}>
+          <div className="pnl-card-title">{link.name}{link.enabled ? '' : ' · PAUSADO'}</div>
           <code style={{ wordBreak: 'break-all' }}>{publicUrl(link.path)}</code>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div className="lk-actions">
           <button className="pnl-btn is-sm" disabled={busy} onClick={copy}>Copiar link</button>
           <button className="pnl-btn is-sm" disabled={busy} onClick={() => run(() => api.updateSmartLink(link.id, { enabled: !link.enabled }), link.enabled ? 'Link pausado.' : 'Link ativado.')}>
             {link.enabled ? 'Pausar' : 'Ativar'}
@@ -63,36 +75,46 @@ function LinkCard({ link, postGroups, onChanged, onNotice }) {
         </div>
       </div>
 
-      <p className="pnl-hint" style={{ margin: '12px 0' }}>
-        {link.groups.length} grupos · {number(link.totalSize)} membros · {number(link.clicks7d)} cliques nos últimos 7 dias{link.enabled ? '' : ' · PAUSADO'}
+      <div className="lk-clicks" aria-label="Cliques no link">
+        <span><strong>{number(link.clicksToday)}</strong> cliques hoje</span>
+        <span><strong>{number(link.clicks7d)}</strong> nos últimos 7 dias</span>
+        <span><strong>{number(link.totalSize)}</strong> membros nos {link.groups.length} grupos</span>
+      </div>
+      <p className="pnl-hint" style={{ margin: '6px 0 0' }}>
+        Clique não é entrada: nem todo mundo que clica entra no grupo. O rodízio usa os membros atuais de cada grupo.
+        {occ?.avgPct != null && <> Ocupação média: <strong>{occ.avgPct}%</strong>{occ.remainingSlots != null && <> · {number(occ.remainingSlots)} vagas restantes</>}.</>}
       </p>
 
-      {link.groups.length > 0 && (
-        <div className="pnl-table-wrap">
-          <table className="pnl-table">
-            <thead><tr><th>Grupo</th><th>Membros</th><th>Cliques 7 dias</th><th>Situação</th><th /></tr></thead>
-            <tbody>
-              {link.groups.map(g => {
-                const full = g.size != null && g.size >= link.capPerGroup
-                const status = !g.hasInvite ? 'Sem convite' : !g.enabled ? 'Pausado' : full ? 'Lotado' : 'No rodízio'
-                return (
-                  <tr key={g.id}>
-                    <td>{g.name}</td>
-                    <td>{g.size == null ? <span className="pnl-hint">coletando…</span> : number(g.size)}</td>
-                    <td>{number(g.clicks7d)}</td>
-                    <td>{status}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button className="pnl-btn is-sm" disabled={busy} onClick={() => run(() => api.updateSmartLinkGroup(link.id, g.id, { enabled: !g.enabled }))}>{g.enabled ? 'Pausar' : 'Retomar'}</button>{' '}
-                      <button className="pnl-btn is-sm" disabled={busy} title="Busca de novo o convite do grupo (use se você o revogou no WhatsApp)" onClick={() => run(() => api.updateSmartLinkGroup(link.id, g.id, { refreshInvite: true }), 'Convite atualizado.')}>Atualizar convite</button>{' '}
+      {link.groups.length === 0
+        ? <p className="pnl-hint" style={{ marginTop: 12 }}>Nenhum grupo neste link ainda. Adicione abaixo.</p>
+        : (
+          <ul className="lk-groups" aria-label="Grupos deste link">
+            {link.groups.map(g => {
+              const status = groupStatus(g)
+              return (
+                <li key={g.id} className="lk-group">
+                  <div className="lk-group-head">
+                    <span className="lk-group-name">{g.name}</span>
+                    <span className="lk-group-num">
+                      {g.size == null ? <span className="pnl-hint">coletando…</span> : <>{number(g.size)}<span className="pnl-hint"> / {number(link.capPerGroup)}</span>{g.occupancyPct != null && <span className="pnl-hint"> ({g.occupancyPct}%)</span>}</>}
+                    </span>
+                  </div>
+                  <div className={`occ-bar ${barTone(g.occupancyPct)}`} role="progressbar" aria-label={`Ocupação de ${g.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, g.occupancyPct ?? 0)}>
+                    <span style={{ width: `${Math.min(100, g.occupancyPct ?? 0)}%` }} />
+                  </div>
+                  <div className="lk-group-foot">
+                    <span><span className={`lk-status ${status.tone}`}>{status.text}</span> <span className="pnl-hint">{number(g.clicksToday)} cliques hoje · {number(g.clicks7d)} em 7 dias</span></span>
+                    <span className="lk-actions">
+                      <button className="pnl-btn is-sm" disabled={busy} onClick={() => run(() => api.updateSmartLinkGroup(link.id, g.id, { enabled: !g.enabled }))}>{g.enabled ? 'Pausar' : 'Retomar'}</button>
+                      <button className="pnl-btn is-sm" disabled={busy} title="Busca de novo o convite do grupo (use se você o revogou no WhatsApp)" onClick={() => run(() => api.updateSmartLinkGroup(link.id, g.id, { refreshInvite: true }), 'Convite atualizado.')}>Atualizar convite</button>
                       <button className="pnl-btn is-sm is-danger" disabled={busy} onClick={() => run(() => api.deleteSmartLinkGroup(link.id, g.id), 'Grupo removido do link.')}>Remover</button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14, alignItems: 'flex-end' }}>
         <label className="pnl-field" style={{ minWidth: 220 }}>
@@ -174,7 +196,7 @@ function SmartLinksLive() {
         ? <p className="pnl-hint">Você ainda não tem nenhum link.</p>
         : state.links.map(link => <LinkCard key={link.id} link={link} postGroups={state.postGroups} onChanged={load} onNotice={setNotice} />)}
 
-      <p className="pnl-hint">A contagem de membros é atualizada 1 vez por hora; entre uma atualização e outra, cada clique conta como uma vaga ocupada. Guardamos só quantidades, nunca os números das pessoas.</p>
+      <p className="pnl-hint">A contagem de membros é atualizada 1 vez por hora. Guardamos só quantidades, nunca os números das pessoas.</p>
     </div>
   )
 }

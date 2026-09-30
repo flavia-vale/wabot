@@ -3,6 +3,8 @@ import { groupInviteCode as _groupInviteCode } from '../../manager.js'
 import { captureMemberSamplesForUser } from '../../jobs/groupMemberSamples.js'
 import { buildFeatureGateError, canUseSmartLinks, FEATURE_CODES } from '../../billing/plans.js'
 import { DEFAULT_CAP_PER_GROUP, isValidInviteCode, normalizeCap, normalizeSlug } from '../../core/smartLinkPicker.js'
+import { summarizeGroupMembers } from '../../core/groupMemberStats.js'
+import { MEASURABLE_MAX_AGE_MS, linkGrowthPerHour, pickWorstLink, summarizeLinkOccupancy } from '../../core/smartLinkOccupancy.js'
 
 const MAX_LINKS_PER_USER = 20
 const MAX_GROUPS_PER_LINK = 30
@@ -43,46 +45,69 @@ export async function smartLinksRoutes(app, options = {}) {
     }
   }
 
-  app.get('/', { onRequest: [app.authenticate] }, async (req) => {
+  // Links da cliente com ocupação e cliques. O número de membros é a última
+  // amostra medida (nunca estimativa por clique); `occupancy` diz se o link está
+  // enchendo (ver core/smartLinkOccupancy.js).
+  async function loadLinkStats(userId) {
     const t = now()
-    const since = saoPauloDay(new Date(t.getTime() - 6 * 24 * 60 * 60 * 1000))
+    const todayKey = saoPauloDay(t)
+    const since7 = saoPauloDay(new Date(t.getTime() - 6 * 24 * 60 * 60 * 1000))
+    const samplesSince = new Date(t.getTime() - 8 * 24 * 60 * 60 * 1000)
     const links = await db.smartLink.findMany({
-      where: { userId: req.user.sub, deletedAt: null },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
         groups: {
           orderBy: { createdAt: 'asc' },
           include: {
-            group: { select: { id: true, name: true, memberSamples: { orderBy: { sampledAt: 'desc' }, take: 1, select: { size: true, sampledAt: true } } } },
-            dailyClicks: { where: { day: { gte: since } }, select: { clicks: true } },
+            group: { select: { id: true, name: true, memberSamples: { where: { sampledAt: { gte: samplesSince } }, orderBy: { sampledAt: 'desc' }, select: { size: true, sampledAt: true } } } },
+            dailyClicks: { where: { day: { gte: since7 } }, select: { day: true, clicks: true } },
           },
         },
       },
     })
-    return {
-      links: links.map(link => {
-        const groups = link.groups.map(g => {
-          const sample = g.group.memberSamples[0] ?? null
-          return {
-            id: g.id,
-            groupId: g.groupId,
-            name: g.group.name,
-            enabled: g.enabled,
-            hasInvite: isValidInviteCode(g.inviteCode),
-            size: sample?.size ?? null,
-            sampledAt: sample?.sampledAt ? new Date(sample.sampledAt).toISOString() : null,
-            clicks7d: g.dailyClicks.reduce((sum, d) => sum + d.clicks, 0),
-          }
-        })
+    return links.map(link => {
+      const groups = link.groups.map(g => {
+        const stats = summarizeGroupMembers(g.group.memberSamples, t)
+        const ageMs = stats.sampledAt ? t.getTime() - Date.parse(stats.sampledAt) : Infinity
         return {
-          id: link.id, name: link.name, slug: link.slug, path: `/g/${link.slug}`,
-          enabled: link.enabled, capPerGroup: link.capPerGroup,
-          clicks7d: groups.reduce((sum, g) => sum + g.clicks7d, 0),
-          totalSize: groups.reduce((sum, g) => sum + (g.size ?? 0), 0),
-          groups,
+          id: g.id,
+          groupId: g.groupId,
+          name: g.group.name,
+          enabled: g.enabled,
+          hasInvite: isValidInviteCode(g.inviteCode),
+          size: stats.size,
+          sampledAt: stats.sampledAt,
+          stale: stats.stale,
+          measurable: ageMs <= MEASURABLE_MAX_AGE_MS,
+          delta24h: stats.delta24h,
+          delta7d: stats.delta7d,
+          occupancyPct: stats.size == null ? null : Math.round((stats.size / link.capPerGroup) * 100),
+          clicksToday: g.dailyClicks.filter(d => d.day === todayKey).reduce((sum, d) => sum + d.clicks, 0),
+          clicks7d: g.dailyClicks.reduce((sum, d) => sum + d.clicks, 0),
         }
-      }),
-    }
+      })
+      const measuredActive = groups.filter(g => g.enabled && g.hasInvite && g.measurable && g.size != null)
+      const occupancy = summarizeLinkOccupancy(groups, { cap: link.capPerGroup, growthPerHour: linkGrowthPerHour(measuredActive) })
+      return {
+        id: link.id, name: link.name, slug: link.slug, path: `/g/${link.slug}`,
+        enabled: link.enabled, capPerGroup: link.capPerGroup,
+        clicksToday: groups.reduce((sum, g) => sum + g.clicksToday, 0),
+        clicks7d: groups.reduce((sum, g) => sum + g.clicks7d, 0),
+        totalSize: groups.reduce((sum, g) => sum + (g.size ?? 0), 0),
+        occupancy,
+        groups: groups.map(({ measurable, ...publicGroup }) => publicGroup),
+      }
+    })
+  }
+
+  app.get('/', { onRequest: [app.authenticate] }, async (req) => ({ links: await loadLinkStats(req.user.sub) }))
+
+  // Card do painel principal: só o que ele precisa (sem a lista de grupos).
+  app.get('/summary', { onRequest: [app.authenticate] }, async (req) => {
+    const links = (await loadLinkStats(req.user.sub)).filter(l => l.enabled)
+    const summaries = links.map(l => ({ id: l.id, name: l.name, path: l.path, capPerGroup: l.capPerGroup, groupCount: l.groups.length, ...l.occupancy }))
+    return { linkCount: links.length, worst: pickWorstLink(summaries) }
   })
 
   app.post('/', { onRequest: [app.authenticate] }, async (req, reply) => {
