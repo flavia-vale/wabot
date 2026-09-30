@@ -185,3 +185,18 @@ lugares.
 `/logs/summary` só em trial), nenhum processo novo, zero impacto de RAM.
 Testes: `test/painel-credencial-clareza.test.js`,
 `test/painel-whatsapp-seguranca.test.js`.
+
+## Secret Key da Shopee curta passava no save (RCA 2026-09-30 — não regredir)
+
+Conta com Secret Key de **9 caracteres** salva: a Shopee devolvia
+`error [10000]: System Error` em busca, produto e `generateShortLink`, enquanto
+a conta de controle respondia OK no mesmo instante (`diag-shopee-chave.mjs`).
+27 ofertas perdidas em 48 h. A regra "< 16 caracteres" existia, mas só como
+**aviso** (`status: 'warning'`), e o save aceitava.
+
+Agora `describeInvalidCredentialFields('shopee')` recusa a chave curta (o
+`PUT /credentials/shopee` devolve 400) e a tela recusa antes de enviar
+(`describeInvalidAffiliateValue` em `dashboard/lib/painel/affiliatePlatforms.js`).
+Cadastro antigo curto continua `configured` (o robô não muda); só o save novo
+é barrado. Erro 10000 da Shopee com chave de tamanho normal **não** tem causa
+registrada — medir antes de supor. Teste: `test/credential-format-validation.test.js`.

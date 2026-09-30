@@ -210,6 +210,12 @@ const ACCESS_CODE_RULES = {
 // Os textos precisam bater com os do servidor
 // (test/credential-format-validation.test.js falha se divergirem).
 export function describeInvalidAffiliateValue(platformId, fieldKey, rawValue) {
+  // Espelho de SHOPEE_SECRET_MIN_LENGTH em src/credentialHealth.js.
+  if (platformId === 'shopee') {
+    const value = String(rawValue ?? '').trim()
+    if (fieldKey === 'secretKey' && value && value.length < 16) return 'A chave secreta da Shopee está curta demais — parece que faltou um pedaço. Copie a chave inteira na página Open API do portal de afiliados da Shopee.'
+    return ''
+  }
   if (platformId === 'aliexpress') {
     const value = String(rawValue ?? '').trim()
     if (!value) return ''

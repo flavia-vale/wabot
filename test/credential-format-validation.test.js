@@ -103,3 +103,25 @@ test('mensagens de recusa não usam jargão técnico', () => {
     assert.doesNotMatch(msg, /cookie de sess[ãa]o|ssid|token|payload|endpoint/i, `jargão em: ${msg}`)
   }
 })
+
+// Caso real 2026-09-30: Secret Key da Shopee com 9 caracteres era só aviso, o
+// save passava e a Shopee devolvia erro 10000 em toda conversão.
+test('Shopee: Secret Key curta é recusada no save (servidor e tela)', () => {
+  const curta = { appId: '18360000001', secretKey: 'k'.repeat(9) }
+  const problemas = describeInvalidCredentialFields('shopee', curta)
+  assert.equal(problemas.length, 1)
+  assert.equal(problemas[0].field, 'secretKey')
+  assert.match(problemas[0].message, /curta/i)
+  assert.equal(validateCredentialData('shopee', curta).status, 'invalid')
+  assert.match(describeInvalidAffiliateValue('shopee', 'secretKey', 'k'.repeat(9)), /curta/i)
+})
+
+test('Shopee: Secret Key de tamanho real passa', () => {
+  for (const tamanho of [16, 32]) {
+    const dados = { appId: '18360000001', secretKey: 'k'.repeat(tamanho) }
+    assert.deepEqual(describeInvalidCredentialFields('shopee', dados), [])
+    assert.equal(validateCredentialData('shopee', dados).status, 'configured')
+    assert.equal(describeInvalidAffiliateValue('shopee', 'secretKey', 'k'.repeat(tamanho)), '')
+  }
+  assert.equal(describeInvalidAffiliateValue('shopee', 'appId', '123'), '')
+})
