@@ -7,6 +7,7 @@ import { buildInlineThumbnail } from '../core/inlineThumbnail.js'
 import { readMagaluScraperConfig, buildMagaluScraperUrls, takeMagaluScraperQuota } from './magaluScraper.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
 import { awinStorePageUrl } from './awin.js'
+import { buildKabumImageUrlCandidates, fetchKabumApiImage, isKabumImageUrl, kabumProductId } from './kabumImage.js'
 import {
   isMagaluBotWallHtml,
   isMagaluBlockedStatus,
@@ -626,6 +627,18 @@ export async function fetchProductImage(platform, productUrl, creds, { onDiagnos
   const cached = getCached(productUrl)
   if (cached !== null) return cached
 
+  // KaBuM (loja da Awin): consulta pública de produto ANTES da página. A
+  // leitura do og:image da página falhou no servidor em 51 promoções
+  // (RCA 2026-09-30); a consulta devolve a foto em alta e não depende do HTML.
+  if (kabumProductId(productUrl)) {
+    const kabum = await fetchKabumApiImage(productUrl)
+    if (kabum) {
+      setCached(productUrl, kabum)
+      return kabum
+    }
+    onDiagnostic?.({ stage: 'kabum_consulta_sem_foto', detail: null })
+  }
+
   try {
     let image = null
     if (platform === 'shopee') {
@@ -884,6 +897,12 @@ function buildImageUrlCandidates(rawUrl) {
     // `buildSheinImageUrlCandidates`.
     if (isSheinImageUrl(rawUrl)) {
       return buildSheinImageUrlCandidates(rawUrl)
+    }
+
+    // KaBuM: `_m`/`_g` e `/medium/`/`/large/` são 200–400px; `_gg` e
+    // `/xlarge/` são 1000px (medido 2026-09-30). Maior primeiro.
+    if (isKabumImageUrl(rawUrl)) {
+      return buildKabumImageUrlCandidates(rawUrl)
     }
 
     // Magalu: o tamanho vem no caminho do CDN (`/450x450/...`) e a loja

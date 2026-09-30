@@ -231,6 +231,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Recurso aparece com cadeado / "só no PRO" / 403 `FEATURE_REQUIRES_PRO` | `src/billing/plans.js`, `dashboard/components/pro/ProGate.js` | `scripts/basic-sem-recursos-pro.mjs` (quem ainda guarda marca/botão/variação sem o PRO) | planos-basic-pro |
 | Promoção Awin não chega / não sai / "código de acesso venceu" | `src/integrations/awin/syncService.js`, `src/offerAutomation/awinOffers.js` | `diag-awin.mjs <email> [--awin]` | afiliados-awin |
 | Promoção Rakuten não chega / não sai / "A Rakuten recusou os dados" / oferta sem logo | `src/integrations/rakuten/syncService.js`, `src/offerAutomation/rakutenOffers.js` | `diag-rakuten.mjs <email> [--rakuten]` | afiliados-rakuten |
+| Oferta automática da Awin (promoção) saiu **sem foto** / só texto | `src/offerAutomation/awinEnrich.js`, `src/converters/kabumImage.js` | `diag-awin.mjs <email>` (`com_foto`, `sem_foto loja=`) | afiliados-awin |
 | Link de loja da Awin (KaBuM, C&A, tidd.ly…) não converteu / oferta "loja da Awin sem aprovação" | `src/converters/awin.js`, `src/integrations/awin/storeMatcher.js`, `conversionContext.js` | `diag-awin.mjs <email>` (lojas_aprovadas, links guardados) | afiliados-awin |
 | Deploy vermelho | `.github/workflows/deploy.yml`, `scripts/deploy_safe_*.sh` | ver "Pegadinhas" | deploy-e-infra |
 

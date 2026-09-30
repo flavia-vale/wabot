@@ -243,6 +243,33 @@ do produto (e ainda conta clique para o dono do link). A página da loja
 (`awinStorePageUrl`: tidd.ly → só o Location, com cache; cread.php → `ued`,
 sem rede). Teste em `test/awin-link-conversion.test.js`.
 
+### Oferta AUTOMÁTICA da Awin saindo sem foto (RCA 2026-09-30 — não regredir)
+
+Sintoma: promoções da KaBuM nas ofertas automáticas saíam só com texto
+(MessageLog `platform=broadcast`, 02:02 UTC). NÃO era o espelhamento — as
+correções anteriores (tidd.ly → página da loja) eram de outro caminho.
+Dados (staging): `diag-awin.mjs` → `enviadas_com_busca=109 com_foto=49`,
+`sem_foto Kabum BR=51`, `C&A BR=9`; as 51 da KaBuM eram `/produto/<id>`.
+As mesmas páginas devolvem a foto fora do servidor (medido).
+Causa: (1) a foto das promoções vinha SÓ do og:image da página da loja, que
+falhou no servidor; (2) falhou uma vez → `enrichedAt` travava a foto por 24h;
+(3) sem foto não havia plano B — oferta automática sem `imageUrl` sai texto
+puro (`buildBroadcastImageRecipe` devolve null).
+Correção (3 camadas, a oferta nunca sai só com texto):
+1. **KaBuM:** consulta pública `servicespub.prod.api.aws.grupokabum.com.br/
+   descricao/v1/descricao/produto/<id>` (`fotos[]`) ANTES da página
+   (`src/converters/kabumImage.js`, ligado em `fetchProductImage`). Download
+   pede 1000px primeiro (`_gg`, `/xlarge/`; medido: `_m`=200, `_g`=395,
+   `/medium/`=200, `/large/`=400).
+2. Página da loja (og:image), como antes.
+3. **Logo da loja** (`AwinProgramme.logoUrl`, vem do sync `/programmes`).
+   Não é gravada como foto: a foto do produto segue sendo tentada.
+Foto tenta de novo em **1h** (`AwinPromotion.imageTriedAt`, separado de
+`enrichedAt`, que continua marcando o link curto em 24h). As 51 promoções já
+travadas se curam sozinhas no próximo envio (tentativa > 1h). Migration
+`20261001090000_awin_programme_logo`. Testes: `test/kabum-image.test.js`,
+`test/awin-enrich.test.js`.
+
 Fora (v1): link de loja Awin escrito sem `https://` não é visto pela rede de
 segurança (os domínios são por cliente); `clickref` por grupo; loja que recusa
 link direto (`deeplinkNotPermitted`) cai no longo (a Awin leva à página inicial
