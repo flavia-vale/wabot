@@ -193,3 +193,32 @@ test('sweep sem listRunningBotsByNode: chave do cooldown e texto idênticos ao l
   assert.equal(enviados[0].key, 'max=20')
   assert.equal(enviados[0].vars.resumo, '20 robôs ligados de 20 que cabem')
 })
+
+// ---- MN-09: teto por nó no aviso de vagas ----
+
+test('MN-09: avalia pela MENOR folga com o teto de cada nó, não pelo teto do .env', async () => {
+  const r = await countRunningBotsByNode(async () => ({ n1: 70, n2: 9 }), async () => ({ n1: 80, n2: 10 }))
+  assert.deepEqual(r, { running: 9, nodeId: 'n2', nodes: 2, max: 10 }) // folga 1 < 10
+})
+
+test('MN-09: nó sem teto publicado não entra; sem nenhum teto -> sem medição', async () => {
+  const r = await countRunningBotsByNode(async () => ({ n1: 5, n2: 9 }), async () => ({ n1: null, n2: 10 }))
+  assert.equal(r.nodeId, 'n2')
+  const nada = await countRunningBotsByNode(async () => ({ n1: 5 }), async () => ({}))
+  assert.equal(nada.running, null)
+  assert.equal(nada.max, null)
+})
+
+test('MN-09: sweep alerta com o teto do nó apertado mesmo com o .env folgado', async () => {
+  const enviados = []
+  const r = await runSessionCapacityAlertSweep({
+    db: fakeDb(),
+    listRunningBotsByNode: async () => ({ n1: 10, n2: 9 }),
+    getNodeCapacities: async () => ({ n1: 80, n2: 10 }),
+    sendAlert: async args => { enviados.push(args); return { sent: true } },
+    env: { CAPACITY_ALERT_ENABLED: 'true', MAX_SESSIONS_PER_PROCESS: '80', CAPACITY_ALERT_FREE_SLOTS: '2' },
+    logger: quietLogger,
+  })
+  assert.equal(r.sent, 1)
+  assert.match(enviados[0].vars.resumo, /9 robôs ligados de 10 que cabem \(servidor n2\)/)
+})

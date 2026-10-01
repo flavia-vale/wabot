@@ -46,7 +46,7 @@ import { runSmartLinkAlertSweep } from '../jobs/smartLinkAlerts.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, SUPERVISOR_MODE } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
@@ -55,7 +55,8 @@ import { classifyApiError, describeApiErrorKind } from '../ops/apiErrorSignal.js
 import { sendAdminAlert } from '../email/adminAlerts.js'
 import { runNurtureSweep } from '../leadNurture/sweep.js'
 import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
-import { isNodeRoutingEnabled } from '../supervisor/nodeRouting.js'
+import { isNodeRoutingEnabled, resolveKnownNodeIds } from '../supervisor/nodeRouting.js'
+import { nodesWithoutHeartbeat } from '../supervisor/preflight.js'
 import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
@@ -298,12 +299,37 @@ async function runSessionCapacityAlertTick() {
   try {
     // Roteamento por nó ligado: avisa pelo nó mais cheio (teto é por nó).
     const listRunningBotsByNodeDep = SUPERVISOR_MODE === 'remote' && isNodeRoutingEnabled() ? listRunningBotsByNode : null
-    const summary = await runSessionCapacityAlertSweep({ db, listRunningBots, listRunningBotsByNode: listRunningBotsByNodeDep, logger: app.log })
+    const summary = await runSessionCapacityAlertSweep({ db, listRunningBots, listRunningBotsByNode: listRunningBotsByNodeDep, getNodeCapacities: listRunningBotsByNodeDep ? getNodeCapacities : null, logger: app.log })
     if (summary.sent > 0) app.log.warn({ ...summary }, 'aviso de vagas: passada concluída')
   } catch (err) {
     app.log.error({ err: err.message }, 'aviso de vagas: passada falhou')
   }
 }
+// Guarda do roteamento por nó: com a flag ligada, avisa (log de erro) se algum
+// nó conhecido está sem heartbeat — é o sintoma de "API trocou de fila antes do
+// supervisor" ou de SUPERVISOR_NODE_IDS com nome errado. SÓ LOGA: derrubar a
+// API por isso pioraria o incidente (um deploy ficaria fora do ar).
+const NODE_ROUTING_GUARD_INTERVAL_MS = Math.max(Number(process.env.NODE_ROUTING_GUARD_INTERVAL_MS) || 30_000, 5_000)
+async function runNodeRoutingGuardTick() {
+  try {
+    const ids = resolveKnownNodeIds()
+    const heartbeats = {}
+    for (const id of ids) heartbeats[id] = Boolean(await isSupervisorAlive(id))
+    const missing = nodesWithoutHeartbeat(ids, heartbeats)
+    if (missing.length) {
+      app.log.error({ nodes: missing, event: 'node_routing_no_heartbeat' }, 'node_routing_no_heartbeat: servidor(es) de robôs sem heartbeat com o roteamento por nó ligado — comandos podem ficar sem atendimento (supervisor ainda na versão antiga? SUPERVISOR_NODE_IDS com nome errado?)')
+    }
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'guarda do roteamento por nó: falha ao checar')
+  }
+}
+function startNodeRoutingGuard() {
+  if (SUPERVISOR_MODE !== 'remote' || !isNodeRoutingEnabled()) return
+  void runNodeRoutingGuardTick()
+  const timer = setInterval(runNodeRoutingGuardTick, NODE_ROUTING_GUARD_INTERVAL_MS)
+  timer.unref?.()
+}
+
 function startSessionCapacityAlertSweep() {
   const timer = setInterval(runSessionCapacityAlertTick, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
   timer.unref?.()
@@ -678,6 +704,8 @@ app.get('/metrics', async (req, reply) => {
       dlqTotal: getDlqMaintenanceSnapshot().lastKnownDlqTotal,
       supervisorMode: SUPERVISOR_MODE,
       supervisorAlive: await isSupervisorAlive(),
+      supervisorNodes: await getSupervisorNodesSnapshot(),
+      sessionDualOwnerTotal: getDualOwnerTotal(),
     }))
 })
 
@@ -782,32 +810,49 @@ if (databaseReadyAtBoot) {
 // velho que o código, os bots estão desatualizados. Só avisa — reiniciar o
 // supervisor reconecta todas as sessões e é decisão humana (AGENTS.md).
 async function warnIfWorkersRunStaleCode() {
+  // Com roteamento por nó cada servidor tem o próprio boot: avaliar um a um,
+  // senão o nó deployado por último esconde (ou inventa) o atraso dos outros.
+  if (SUPERVISOR_MODE === 'remote' && isNodeRoutingEnabled()) {
+    const codeChangedAtMs = await getCodeChangedAtMs()
+    for (const nodeId of resolveKnownNodeIds()) {
+      try { await warnStaleCodeForBoot(await getSupervisorBootedAtMs(nodeId), codeChangedAtMs, nodeId) } catch (err) {
+        app.log.warn({ err: err.message, nodeId }, 'Falha ao checar código desatualizado do servidor')
+      }
+    }
+    return
+  }
   try {
     const [supervisorBootedAtMs, codeChangedAtMs] = await Promise.all([
       getSupervisorBootedAtMs(),
       getCodeChangedAtMs(),
     ])
-    if (!shouldWarnStaleWorkerCode({ supervisorMode: SUPERVISOR_MODE, supervisorBootedAtMs, codeChangedAtMs })) return
-
-    app.log.error(
-      {
-        supervisorMode: SUPERVISOR_MODE,
-        supervisorBootedAt: new Date(supervisorBootedAtMs).toISOString(),
-        codeChangedAt: new Date(codeChangedAtMs).toISOString(),
-        acao: 'pm2 restart bot-supervisor --update-env',
-      },
-      describeStaleWorkerCode({ supervisorBootedAtMs, codeChangedAtMs }),
-    )
-    trackAnalyticsEventSafe({
-      event: 'ops_stale_worker_code',
-      metadata: {
-        supervisorMode: SUPERVISOR_MODE,
-        staleMinutes: Math.round((codeChangedAtMs - supervisorBootedAtMs) / 60_000),
-      },
-    })
+    await warnStaleCodeForBoot(supervisorBootedAtMs, codeChangedAtMs, null)
   } catch (err) {
     app.log.warn({ err: err.message }, 'Falha ao checar se os bots estão com código desatualizado')
   }
+}
+
+async function warnStaleCodeForBoot(supervisorBootedAtMs, codeChangedAtMs, nodeId) {
+  if (!shouldWarnStaleWorkerCode({ supervisorMode: SUPERVISOR_MODE, supervisorBootedAtMs, codeChangedAtMs })) return
+
+  app.log.error(
+    {
+      supervisorMode: SUPERVISOR_MODE,
+      ...(nodeId ? { nodeId } : {}),
+      supervisorBootedAt: new Date(supervisorBootedAtMs).toISOString(),
+      codeChangedAt: new Date(codeChangedAtMs).toISOString(),
+      acao: 'pm2 restart bot-supervisor --update-env',
+    },
+    (nodeId ? `Servidor ${nodeId}: ` : '') + describeStaleWorkerCode({ supervisorBootedAtMs, codeChangedAtMs }),
+  )
+  trackAnalyticsEventSafe({
+    event: 'ops_stale_worker_code',
+    metadata: {
+      supervisorMode: SUPERVISOR_MODE,
+      ...(nodeId ? { nodeId } : {}),
+      staleMinutes: Math.round((codeChangedAtMs - supervisorBootedAtMs) / 60_000),
+    },
+  })
 }
 
 // Adiado (e `unref()`) de propósito: a checagem depende do client Redis do
@@ -822,6 +867,7 @@ startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
 startSessionCapacityAlertSweep()
+startNodeRoutingGuard()
 startEmailQueueJob()
 startLifecycleEmailSweep()
 startWeeklySummarySweep()

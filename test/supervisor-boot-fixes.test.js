@@ -93,3 +93,11 @@ test('supervisor: flag off mantém posse por hash, fila e chaves legadas no cód
   assert.match(src, /\[createCommandWorker\(COMMAND_QUEUE\)\]/)
   assert.match(src, /!NODE_ROUTING \|\| ownsLegacyQueue\(NODE_ID\)/)
 })
+
+test('MN-09/10: supervisor publica o teto do nó e usa o cadeado só atrás da flag', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const src = await readFile(supervisorEntry, 'utf8')
+  assert.match(src, /publisher\.set\(capacityKey\(NODE_ID\), String\(MAX_SESSIONS_PER_PROCESS\)/)
+  assert.match(src, /const ownerLease = OWNER_LEASE \? createOwnerLease/)
+  assert.match(src, /if \(ownerLease && !sessionCore\.isRunning\(userId\)\)/)
+})

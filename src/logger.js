@@ -3,6 +3,7 @@ import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { getLogsBaseDir } from './paths.js'
 import { resolveLogTransportMode, LOG_TRANSPORT_MODES } from './core/loggerTransport.js'
+import { resolveNodeLogBase } from './core/nodeLogBinding.js'
 
 const logDir = getLogsBaseDir()
 mkdirSync(logDir, { recursive: true })
@@ -10,6 +11,8 @@ const logFile = join(logDir, 'bot.log')
 
 const level = process.env.LOG_LEVEL || 'info'
 const mode = resolveLogTransportMode(process.env)
+const nodeBase = resolveNodeLogBase(process.env)
+const baseOption = nodeBase ? { base: nodeBase } : {}
 
 // Modo `inline`: multistream roda NO PRÓPRIO processo — sem worker thread, sem
 // isolate extra do V8 (ver src/core/loggerTransport.js). Escreve nos MESMOS dois
@@ -20,7 +23,7 @@ const mode = resolveLogTransportMode(process.env)
 const logger =
   mode === LOG_TRANSPORT_MODES.INLINE
     ? pino(
-        { level },
+        { level, ...baseOption },
         pino.multistream([
           { level, stream: pino.destination({ dest: logFile, sync: false }) },
           { level, stream: process.stdout },
@@ -28,6 +31,7 @@ const logger =
       )
     : pino({
         level,
+        ...baseOption,
         transport: {
           targets: [
             { target: 'pino-pretty', options: { colorize: true }, level: 'info' },
