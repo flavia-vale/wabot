@@ -30,3 +30,9 @@ test('vigia_cron.sh usa trava e só notifica na transição para vermelho', () =
   assert.match(s, /flock -n/)
   assert.match(s, /\$PREV" != red/)
 })
+
+test('vigia.mjs ignora snapshot-cron por padrão e separa worker_restart do erro', () => {
+  const s = read('vigia.mjs')
+  assert.match(s, /VIGIA_PM2_IGNORE \?\? 'snapshot-cron'/)
+  assert.match(s, /startsWith: 'error:worker_restart'/)
+})

@@ -107,7 +107,8 @@ function evalSends(s, t) {
   const stuck = s.stuck ?? 0
   const finished = (s.success ?? 0) + (s.error ?? 0)
   const errPct = finished > 0 ? ((s.error ?? 0) / finished) * 100 : 0
-  const base = `${s.success ?? 0} enviados, ${s.error ?? 0} com erro, ${stuck} parados na fila há mais de ${s.stuckMin ?? 15} min.`
+  const rest = s.restarted ? ` (+${s.restarted} interrompidos por reinício do robô, reenfileirados — não contam como erro)` : ''
+  const base = `${s.success ?? 0} enviados, ${s.error ?? 0} com erro${rest}, ${stuck} parados na fila há mais de ${s.stuckMin ?? 15} min.`
   if (stuck >= t.stuckSendsRed) return check('envios', LEVEL.RED, title, base)
   if (finished >= t.sendMinSample && errPct >= t.sendErrRedPct) return check('envios', LEVEL.RED, title, `${base} Erro em ${errPct.toFixed(0)}%.`)
   if (stuck >= t.stuckSendsWarn) return check('envios', LEVEL.WARN, title, base)

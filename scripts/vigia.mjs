@@ -60,7 +60,9 @@ function readBackupAgeH() {
 }
 
 const prev = stateFile ? await safe(() => JSON.parse(fs.readFileSync(stateFile, 'utf8'))) : null
-const pm2 = await safe(readPm2)
+// Processos parados DE PROPÓSITO (rodam só em horário agendado) não são problema.
+const pm2Ignore = new Set(String(process.env.VIGIA_PM2_IGNORE ?? 'snapshot-cron').split(',').map(x => x.trim()).filter(Boolean))
+const pm2 = (await safe(readPm2))?.filter(p => !pm2Ignore.has(p.name)) ?? null
 
 const snapshot = {
   pm2,
@@ -120,13 +122,17 @@ if (db) {
   snapshot.sends = await safe(async () => {
     const since = new Date(now - HORA)
     const stuckBefore = new Date(now - 15 * 60_000)
-    const [success, error, stuck, total] = await Promise.all([
+    // `error:worker_restart*` NÃO é falha de envio: é o marcador que o robô grava
+    // ao reiniciar (a oferta é reenfileirada). Conta à parte, fora da taxa de erro.
+    const restartMark = { errorMsg: { startsWith: 'error:worker_restart' } }
+    const [success, error, restarted, stuck, total] = await Promise.all([
       db.messageLog.count({ where: { sentAt: { gte: since }, status: 'success' } }),
-      db.messageLog.count({ where: { sentAt: { gte: since }, status: { in: ['error', 'failed'] } } }),
+      db.messageLog.count({ where: { sentAt: { gte: since }, status: { in: ['error', 'failed'] }, NOT: restartMark } }),
+      db.messageLog.count({ where: { sentAt: { gte: since }, status: { in: ['error', 'failed'] }, ...restartMark } }),
       db.messageLog.count({ where: { sentAt: { lt: stuckBefore, gte: new Date(now - 6 * HORA) }, status: { in: ['queued', 'sending', 'pending'] } } }),
       db.messageLog.count({ where: { sentAt: { gte: since } } }),
     ])
-    return { total, success, error, stuck, stuckMin: 15 }
+    return { total, success, error, restarted, stuck, stuckMin: 15 }
   })
   snapshot.wa = await safe(async () => {
     const since = new Date(now - HORA)
