@@ -3,7 +3,7 @@
  * Flag off (default) = comportamento legado, nada aqui é consultado.
  */
 
-import { DEFAULT_NODE_ID, isValidNodeId } from './protocol.js'
+import { COMMAND, DEFAULT_NODE_ID, isValidNodeId } from './protocol.js'
 
 export function isNodeRoutingEnabled(env = process.env) {
   return ['1', 'true', 'on'].includes(String(env.SUPERVISOR_NODE_ROUTING ?? '').trim().toLowerCase())
@@ -65,4 +65,9 @@ export function createNodeOwnershipCache({ loadNodeId, ttlMs = 10_000, now = () 
     set(userId, nodeId) { entries.set(userId, { nodeId, expiresAt: now() + ttlMs }) },
     invalidate(userId) { entries.delete(userId) },
   }
+}
+
+/** Cadeado de posse no Redis: só existe com roteamento por nó ligado. Default off. */
+export function isOwnerLeaseEnabled(env = process.env) {
+  return isNodeRoutingEnabled(env) && ['1', 'true', 'on'].includes(String(env.SUPERVISOR_OWNER_LEASE ?? '').trim().toLowerCase())
 }

@@ -121,3 +121,8 @@ test('com nós: textos continuam sem jargão', () => {
     assert.doesNotMatch(r.error, /shard|supervisor|worker|processo|nó\b|node/i)
   }
 })
+
+test('MN-09: com nós, sem teto publicado (max null) não afirma teto cheio', () => {
+  const r = classifyStartRefusal({ userId: 'u', nodeRouting: true, nodeAlive: true, runningCount: 80, maxSessions: null })
+  assert.equal(r.reason, START_REFUSAL_UNKNOWN)
+})

@@ -53,24 +53,36 @@ export async function countRunningBots(listRunningBots) {
  * devolve `running: null` (a política não avisa).
  * @returns {Promise<{running:number|null, nodeId:string|null, nodes:number}>}
  */
-export async function countRunningBotsByNode(listRunningBotsByNode) {
+export async function countRunningBotsByNode(listRunningBotsByNode, getNodeCapacities = null) {
   let counts = null
   try { counts = await listRunningBotsByNode() } catch { counts = null }
+  let caps = null
+  if (getNodeCapacities) { try { caps = await getNodeCapacities() } catch { caps = null } }
   const entries = Object.entries(counts ?? {})
   let worst = null
   for (const [nodeId, value] of entries) {
     if (value === null || value === undefined || value === '') continue
     const running = Number(value)
     if (!Number.isFinite(running) || running < 0) continue
-    if (!worst || running > worst.running) worst = { nodeId, running }
+    if (!getNodeCapacities) {
+      if (!worst || running > worst.running) worst = { nodeId, running }
+      continue
+    }
+    // Com tetos por nó: o mais apertado é o de MENOR folga (teto - robôs).
+    // Nó sem teto publicado não entra (não se presume).
+    const max = Number(caps?.[nodeId])
+    if (!Number.isFinite(max) || max < 1) continue
+    if (!worst || max - running < worst.max - worst.running) worst = { nodeId, running, max }
   }
-  return { running: worst?.running ?? null, nodeId: worst?.nodeId ?? null, nodes: entries.length }
+  const base = { running: worst?.running ?? null, nodeId: worst?.nodeId ?? null, nodes: entries.length }
+  return getNodeCapacities ? { ...base, max: worst?.max ?? null } : base
 }
 
 export async function runSessionCapacityAlertSweep({
   db,
   listRunningBots,
   listRunningBotsByNode = null,
+  getNodeCapacities = null,
   sendAlert = sendAdminAlert,
   env = process.env,
   now = new Date(),
@@ -83,13 +95,14 @@ export async function runSessionCapacityAlertSweep({
   // Com roteamento por nó o `max` já é por nó (MAX_SESSIONS_PER_PROCESS é por
   // processo): avalia o nó mais cheio, não a soma.
   const perNode = listRunningBotsByNode
-    ? await countRunningBotsByNode(listRunningBotsByNode)
+    ? await countRunningBotsByNode(listRunningBotsByNode, getNodeCapacities)
     : null
   const running = perNode ? perNode.running : await countRunningBots(listRunningBots)
   const nodeLabel = perNode && perNode.nodes > 1 && perNode.nodeId ? `servidor ${perNode.nodeId}` : null
+  const nodeMax = perNode && getNodeCapacities ? perNode.max : max
   const decision = shouldAlertSessionCapacity({
     running,
-    max,
+    max: nodeMax,
     freeSlots,
   })
   if (!decision.alert) return { sent: 0, reason: decision.reason, running, free: decision.free }
@@ -99,8 +112,8 @@ export async function runSessionCapacityAlertSweep({
     slug: CAPACITY_ALERT_SLUG,
     // Assunto do cooldown: o teto vigente. Subir o teto é uma situação nova e
     // pode avisar de novo sem esperar a janela do teto antigo.
-    key: nodeLabel ? `max=${max};${nodeLabel}` : `max=${max}`,
-    vars: buildCapacityAlertVars({ running, max, free: decision.free, nodeLabel }),
+    key: nodeLabel ? `max=${nodeMax};${nodeLabel}` : `max=${max}`,
+    vars: buildCapacityAlertVars({ running, max: nodeMax, free: decision.free, nodeLabel }),
     cooldownHours: resolveAlertCooldownHours(env),
     now,
     env,

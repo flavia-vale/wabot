@@ -27,12 +27,15 @@ import { shouldResurrectSession, buildResurrectionWhere, resolveIncludeReconnect
 import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
+import { createOwnerLease } from './ownerLease.js'
 import { createShardProcessController } from './shardProcessController.js'
 import { createShardOwnershipCoordinator } from '../core/shardOwnershipCoordinator.js'
 import {
   buildResumeWhere,
+  commandNeedsFreshOwnership,
   createNodeOwnershipCache,
   isNodeRoutingEnabled,
+  isOwnerLeaseEnabled,
   ownsLegacyQueue,
   resolveSupervisorNodeId,
 } from './nodeRouting.js'
@@ -45,8 +48,10 @@ import {
   SUPERVISOR_BOOTED_AT_KEY,
   SUPERVISOR_HEARTBEAT_KEY,
   SUPERVISOR_HEARTBEAT_RENEW_INTERVAL_MS,
+  OWNER_LEASE_RENEW_INTERVAL_MS,
   SUPERVISOR_HEARTBEAT_TTL_SECONDS,
   bootedAtKey,
+  capacityKey,
   commandQueueName,
   encodeEvent,
   heartbeatKey,
@@ -254,6 +259,11 @@ const nodeOwnership = createNodeOwnershipCache({
   },
 })
 
+// Cadeado de posse (SUPERVISOR_OWNER_LEASE, default off): 2ª barreira contra o
+// mesmo WhatsApp ligado em dois nós. Falha aberta; o banco é a verdade.
+const OWNER_LEASE = isOwnerLeaseEnabled(process.env)
+const ownerLease = OWNER_LEASE ? createOwnerLease({ redis: publisher, nodeId: NODE_ID, logger }) : null
+
 function belongsToThisShard(userId) {
   if (!NODE_ROUTING) return shouldHandleUserOnShard(userId, SHARD_COUNT, SHARD_INDEX)
   const cached = nodeOwnership.peek(userId)
@@ -330,7 +340,16 @@ async function startBotWithBridge(userId) {
     return false
   }
   if (!(await checkSessionCircuitBreaker(userId))) return false
+  if (ownerLease && !sessionCore.isRunning(userId)) {
+    const lease = await ownerLease.acquire(userId)
+    if (!lease.ok) {
+      logger.error({ userId, holder: lease.holder, nodeId: NODE_ID, event: 'session_lease_conflict' }, 'session_lease_conflict: outro servidor já está com este WhatsApp ligado — start recusado')
+      void noteSessionOwnerMismatch(userId, 'startBot:lease')
+      return false
+    }
+  }
   const ok = sessionCore.startBot(userId)
+  if (!ok && ownerLease) void ownerLease.release(userId)
   if (ok) attachBridge(userId)
   return ok
 }
@@ -342,6 +361,7 @@ function stopBotWithBridge(userId) {
   }
   const ok = sessionCore.stopBot(userId)
   detachBridge(userId)
+  if (ownerLease) void ownerLease.release(userId)
   return ok
 }
 
@@ -464,6 +484,10 @@ const COMMAND_HANDLERS = {
 // velho demais e é descartado em vez de reexecutado.
 const COMMAND_LOCK_DURATION_MS = Math.max(60_000, Math.max(...Object.values(COMMAND_TIMEOUTS_MS)) + 15_000)
 
+// Hora do Redis (só com roteamento por nó): API e supervisor carimbam e
+// comparam na MESMA régua, imune a desvio de relógio entre servidores.
+const redisClock = createRedisClock({ time: () => publisher.time() })
+
 async function processCommand(job) {
   const name = job.name
   if (!isKnownCommand(name)) throw new Error(`Comando desconhecido: ${name}`)
@@ -472,16 +496,23 @@ async function processCommand(job) {
   // esperar, descartar em vez de executar (evita SEND_BROADCAST duplicado).
   // Retornamos resultado (job 'completed') em vez de throw: a decisão de
   // descartar foi bem-sucedida; ninguém está aguardando o valor.
-  if (isCommandStale(name, data._enqueuedAt)) {
-    const ageMs = Date.now() - Number(data._enqueuedAt)
+  const nowMs = NODE_ROUTING ? await redisClock.now() : Date.now()
+  if (isCommandStale(name, data._enqueuedAt, nowMs)) {
+    const ageMs = nowMs - Number(data._enqueuedAt)
     logger.warn({ jobId: job.id, name, userId: data.userId ?? null, ageMs }, 'Comando obsoleto descartado (API já desistiu) — não executado')
+    // Com roteamento, START_BOT obsoleto devolve `false` (recusa): o objeto
+    // `{_stale}` é truthy e a rota o lia como "robô iniciado" (QR nunca vinha).
+    if (NODE_ROUTING && name === COMMAND.START_BOT) return false
     return { _stale: true, discarded: true, ageMs }
   }
   const handler = COMMAND_HANDLERS[name]
   if (!handler) throw new Error(`Handler ausente para ${name}`)
   // Aquece a posse por nó (async) para os handlers síncronos. Falha de banco
   // propaga: o comando falha visível em vez de rodar sem saber de quem é.
-  if (NODE_ROUTING && data.userId) await nodeOwnership.get(data.userId)
+  if (NODE_ROUTING && data.userId) {
+    if (commandNeedsFreshOwnership(name)) nodeOwnership.invalidate(data.userId) // START/STOP: banco, sem cache
+    await nodeOwnership.get(data.userId)
+  }
   return await handler(data)
 }
 
@@ -522,6 +553,8 @@ async function renewHeartbeat() {
     if (NODE_ROUTING) {
       await publisher.set(heartbeatKey(NODE_ID), String(Date.now()), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
       await publisher.set(bootedAtKey(NODE_ID), String(SUPERVISOR_BOOTED_AT_MS), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
+      // Teto DESTE nó: a API lê daqui em vez de presumir o mesmo teto para todos.
+      await publisher.set(capacityKey(NODE_ID), String(MAX_SESSIONS_PER_PROCESS), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
     }
     // Chaves legadas: sempre com a flag off; com ela on, só o 'n1' (a API ainda
     // em modo legado lê estas — dois nós não podem sobrescrever a mesma chave).
@@ -714,6 +747,17 @@ async function boot() {
     }
   }, 5_000).unref?.()
 
+  // Renova o cadeado dos robôs que ESTE nó roda. Se outro nó o segurou, só
+  // sinaliza (nunca derruba robô por causa do cadeado — o banco manda).
+  if (ownerLease) {
+    setInterval(async () => {
+      for (const userId of sessionCore.listRunningBots()) {
+        const r = await ownerLease.renew(userId)
+        if (!r.ok) logger.error({ userId, holder: r.holder, nodeId: NODE_ID, event: 'session_lease_conflict' }, 'session_lease_conflict: outro servidor segura o cadeado de um robô que roda aqui')
+      }
+    }, OWNER_LEASE_RENEW_INTERVAL_MS).unref?.()
+  }
+
   logger.info('bot-supervisor pronto — consumindo comandos')
 }
 
@@ -724,6 +768,8 @@ async function shutdown(signal) {
   if (NODE_ROUTING) {
     try { await publisher.del(heartbeatKey(NODE_ID)) } catch {}
     try { await publisher.del(bootedAtKey(NODE_ID)) } catch {}
+    try { await publisher.del(capacityKey(NODE_ID)) } catch {}
+    if (ownerLease) for (const userId of sessionCore.listRunningBots()) { try { await ownerLease.release(userId) } catch {} }
   }
   if (!NODE_ROUTING || ownsLegacyQueue(NODE_ID)) {
     try { await publisher.del(SUPERVISOR_HEARTBEAT_KEY) } catch {}
