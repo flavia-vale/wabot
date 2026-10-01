@@ -116,6 +116,7 @@ import { chooseCoupon, renderCouponText, applyCouponToken, sanitizePriceCents } 
 import { buildIncomingDedupKey, hasRecentDedupEntry, hasSeenIncomingId, pruneDedupStore, rememberDedupEntry, rememberSeenIncomingId } from './messageDedup.js'
 import { INCOMING_ACCEPT_REASON, INCOMING_DROP_REASON, INCOMING_LATE_MAX_AGE_MS, INCOMING_MAX_AGE_MS, shouldProcessIncomingMessage } from './core/incomingFreshness.js'
 import { classifyError } from './errorTaxonomy.js'
+import { isQueueClearedLog } from './jobs/stuckSendLogs.js'
 import { recoverStuckSendLogs, STUCK_SEND_LOG_CUTOFF_MS } from './jobs/stuckSendLogs.js'
 import { detectMessageKind, extractIncomingText, normalizeForwardingPolicy, shouldForwardMessage } from './forwardingPolicy.js'
 import { broadcastSourceGroup } from './offerQueue/sourceTag.js'
@@ -2805,10 +2806,19 @@ function deferReasonMessage(reason) {
 async function deferSendJob(job, gate) {
   const deferUntil = gate?.deferUntil ?? Date.now()
   sendMetrics.deferredTotal++
-  await db.messageLog.update({
-    where: { id: job.logId },
+  // Só volta para 'queued' quem ainda está em vôo: se a cliente clicou em
+  // "Limpar ofertas da fila" enquanto este job era processado, a linha já está
+  // em 'skipped' e o job NÃO pode ser re-enfileirado (senão a oferta removida
+  // sairia mesmo assim — RCA 2026-10-01).
+  const requeued = await db.messageLog.updateMany({
+    where: { id: job.logId, status: { in: ['queued', 'sending'] } },
     data: { status: 'queued', errorMsg: deferReasonMessage(gate?.reason) },
-  }).catch(() => {})
+  }).catch(() => null)
+  if (requeued && requeued.count === 0) {
+    logger.info({ destJid: job.destJid, logId: job.logId }, 'Envio cancelado: a cliente limpou a fila de envios')
+    await finishSendJob(job, { ok: false, error: 'queue_cleared' })
+    return
+  }
   logger.info(
     { destJid: job.destJid, reason: gate?.reason, deferUntil, logId: job.logId },
     'Defer longo: re-enfileirando job com notBefore (não congela a fila serial)',
@@ -2910,6 +2920,19 @@ async function processSendJob(job) {
   let destGroupId = null
 
   try {
+    // "Limpar ofertas da fila" (aba Envios) só marca a linha como
+    // `skip:queue_cleared` no banco — o job continua na fila do robô. Sem esta
+    // checagem a oferta removida saía mesmo assim e voltava a aparecer como
+    // "enviando" (RCA 2026-10-01). Ver isQueueClearedLog.
+    const current = await db.messageLog.findUnique({
+      where: { id: job.logId },
+      select: { status: true, errorMsg: true },
+    }).catch(() => null)
+    if (isQueueClearedLog(current)) {
+      logger.info({ destJid: job.destJid, logId: job.logId }, 'Envio cancelado: a cliente limpou a fila de envios')
+      await finishSendJob(job, { ok: false, error: 'queue_cleared' })
+      return
+    }
     await db.messageLog.update({
       where: { id: job.logId },
       // sentAt estampado ao ENTRAR em 'sending' para o watchdog de envios presos

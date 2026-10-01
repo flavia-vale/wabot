@@ -48,9 +48,11 @@ export async function recoverStuckSendLogs(deps = {}) {
 // acima, é imediato (sem cutoff de tempo) e cobre 'queued' além de 'sending' —
 // serve para o cliente "soltar" agarramentos visíveis no contador "em vôo".
 //
-// Não re-enfileira nem cancela envios em andamento no worker: o payload já não
-// existe fora do processo que o criou. Apenas limpa o registro preso para que o
-// painel pare de mostrar "na fila/enviando" eterno e novas ofertas fluam.
+// Não mexe no processo do robô: o payload só existe lá dentro. O CANCELAMENTO
+// acontece no próprio robô — processSendJob/deferSendJob (bot-worker) leem a
+// linha antes de enviar/re-enfileirar e descartam o job quando
+// isQueueClearedLog é verdadeiro (RCA 2026-10-01: antes a oferta removida saía
+// mesmo assim).
 // Exige userId — nunca varre todos os usuários.
 export async function clearUserQueuedSendLogs(deps = {}) {
   const db = deps.db ?? dbDefault
@@ -61,9 +63,17 @@ export async function clearUserQueuedSendLogs(deps = {}) {
     where: { userId, status: { in: ['queued', 'sending'] } },
     data: {
       status: 'skipped',
-      errorMsg: classifyError(null, { kind: 'queue_cleared' }),
+      errorMsg: QUEUE_CLEARED_ERROR_MSG,
       sentAt: now,
     },
   })
   return { cleared: res.count ?? 0 }
+}
+
+export const QUEUE_CLEARED_ERROR_MSG = classifyError(null, { kind: 'queue_cleared' })
+
+// A linha foi removida pela cliente em "Limpar ofertas da fila"? Usado pelo
+// bot-worker para NÃO enviar a oferta que ainda estava na fila dele.
+export function isQueueClearedLog(row) {
+  return row?.status === 'skipped' && row?.errorMsg === QUEUE_CLEARED_ERROR_MSG
 }
