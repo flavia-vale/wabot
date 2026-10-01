@@ -146,16 +146,10 @@ Decisões de projeto (e por quê):
 - **MN-09** Cada supervisor publica o próprio teto em `supervisor:capacity:<nodeId>` (TTL do heartbeat). A API lê dali para placement, recusa de start e aviso de vagas (menor folga entre nós). **Sem a chave o teto não é presumido** (nó nunca é escolhido; nenhum teto cheio é afirmado). Por isso o supervisor precisa estar na versão nova antes de ligar a flag na API (passo 1 antes do passo 2/3).
 - **MN-10** Cadeado de posse no Redis (`SUPERVISOR_OWNER_LEASE=1`, só com roteamento ligado; padrão off): `supervisor:owner:<userId>`, TTL 60 s, renovado a cada 20 s. START_BOT em nó diferente do dono do cadeado é recusado (`session_lease_conflict`). Falha ABERTA: Redis fora = só perde a guarda extra, o banco continua mandando. Liberado em STOP_BOT e no shutdown.
 
-## Runbook revisado (MN-14) — rode a pré-checagem ANTES de cada passo
+## Observabilidade por servidor (MN-15)
 
-Script read-only (`scripts/preflight-multi-supervisor.mjs`, no diretório do ambiente). Sai com erro se algo bloquear:
-
-| Antes de… | Comando | O que ele barra |
-|---|---|---|
-| reiniciar o supervisor com a flag (passo 2) | `node scripts/preflight-multi-supervisor.mjs --passo=supervisor` | `SUPERVISOR_NODE_ID` inválido (o supervisor não sobe e TODOS os robôs caem) |
-| ligar a flag na API (passo 3) | `node scripts/preflight-multi-supervisor.mjs --passo=api` | servidor sem heartbeat ou sem teto publicado; avisa se a fila antiga ainda tem pedidos; nome inválido em `SUPERVISOR_NODE_IDS` |
-| listar um n2 em `SUPERVISOR_NODE_IDS` | `node scripts/preflight-multi-supervisor.mjs --passo=segundo-no` | contas ainda sem `nodeId` (rode o backfill antes), conta apontando para servidor fora da lista |
-
-Ordem obrigatória: supervisor (passo 2) → API (passo 3) → **backfill** → só então n2 na lista. Mantenha o consumidor da fila legada (remoção só pegando carona num restart inevitável — MN-19); não conte com "remover o consumidor legado" como passo de baixo impacto: exige novo restart do supervisor = reconexão geral.
-Guarda da API: com a flag ligada, a API loga `node_routing_no_heartbeat` (a cada 30 s) se algum nó listado estiver sem heartbeat. **Só loga**, nunca derruba a API.
-Rollback da API só é seguro enquanto nenhuma linha tiver `nodeId` diferente de `n1`.
+- **Log:** com a flag ligada e `SUPERVISOR_NODE_ID` definido, toda linha de log do supervisor E dos robôs (herdam o env) leva `nodeId`. Desligado, o log é idêntico ao de hoje.
+- **/metrics:** `wabot_supervisor_node_alive{node}`, `…_running_bots{node}`, `…_capacity{node}` (não medido é omitido, nunca 0) e `wabot_supervisor_session_dual_owner_total`.
+- **Código desatualizado:** com roteamento, o aviso é avaliado por servidor ("Servidor n2: …") em vez de usar só o boot mais antigo.
+- **Contadores do supervisor:** a chave ganha `:<nodeId>` (o leitor soma por prefixo, então os totais seguem iguais).
+- **Diagnóstico:** `node scripts/diag-nos.mjs` (read-only): por servidor, se responde, desde quando, quantas vagas informa, pedidos na fila dele e contas apontando para ele; mais fila antiga e contas sem servidor.

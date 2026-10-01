@@ -81,10 +81,10 @@ export async function isSupervisorAlive(nodeId = null) {
  * Best-effort: nunca lança. Consumido pelo guard de "código novo não
  * carregado" (`ops/staleWorkerCodeGuard.js`).
  */
-export async function getSupervisorBootedAtMs() {
+export async function getSupervisorBootedAtMs(nodeId = null) {
   if (MODE !== 'remote' || !remoteClient?.getSupervisorBootedAtMs) return null
   try {
-    return await remoteClient.getSupervisorBootedAtMs()
+    return await remoteClient.getSupervisorBootedAtMs(nodeId)
   } catch {
     return null
   }
@@ -95,6 +95,26 @@ export async function getSupervisorBootedAtMs() {
  * medido, NUNCA 0). Em `inline` ou com SUPERVISOR_NODE_ROUTING desligado há um
  * nó só ('n1'). Nunca lança.
  */
+/** Estado de cada nó para o /metrics: [{nodeId, alive, running, capacity}] ou null (flag off / inline). */
+export async function getSupervisorNodesSnapshot() {
+  if (MODE !== 'remote' || !remoteClient?.nodeRouting) return null
+  try {
+    const [counts, caps] = await Promise.all([remoteClient.listRunningBotsByNode(), remoteClient.getNodeCapacities()])
+    return await Promise.all(remoteClient.nodeIds.map(async nodeId => ({
+      nodeId,
+      alive: Boolean(await remoteClient.isSupervisorAlive(nodeId)),
+      running: counts?.[nodeId] ?? null,
+      capacity: caps?.[nodeId] ?? null,
+    })))
+  } catch {
+    return null
+  }
+}
+
+export function getDualOwnerTotal() {
+  return remoteClient?.getDualOwnerTotal?.() ?? 0
+}
+
 export async function getNodeCapacities() {
   try {
     if (remoteClient?.getNodeCapacities) return await remoteClient.getNodeCapacities()
