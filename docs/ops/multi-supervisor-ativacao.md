@@ -153,3 +153,8 @@ Decisões de projeto (e por quê):
 - **Código desatualizado:** com roteamento, o aviso é avaliado por servidor ("Servidor n2: …") em vez de usar só o boot mais antigo.
 - **Contadores do supervisor:** a chave ganha `:<nodeId>` (o leitor soma por prefixo, então os totais seguem iguais).
 - **Diagnóstico:** `node scripts/diag-nos.mjs` (read-only): por servidor, se responde, desde quando, quantas vagas informa, pedidos na fila dele e contas apontando para ele; mais fila antiga e contas sem servidor.
+
+## Capacidade por servidor no admin (MN-17) — só a API; a tela é o próximo passo
+
+`GET /admin/capacity/nodes` (permissão `tech:read`, sem auditoria por polling). Com `SUPERVISOR_NODE_ROUTING` desligado responde `{ routing: false, nodes: [], totals: null }` (nada muda para a tela atual). Ligado, devolve por servidor: situação em linguagem leiga (`ok`, `apertado`, `lotado`, `fora_do_ar`, `sem_medicao`), robôs ligados, vagas que ele informa, vagas livres, quando ligou e quantas contas do banco apontam para ele. **Sem medição não se afirma nada:** servidor não medido nunca vira "0"/"vazio" e o total geral só existe se todos os servidores vivos foram medidos. Regras em `src/ops/capacity/nodesView.js` (pura, testada).
+A **tela** do painel (`/admin/capacidade`) ainda mostra só o servidor principal: mexer nela é mudança visual e precisa seguir o design system v2 (`docs/design-system/design-system-v2.html`) — decisão/aprovação da dona do produto antes de ir para a tela.

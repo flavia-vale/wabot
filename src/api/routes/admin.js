@@ -3,7 +3,9 @@ import { boundedRange as boundedCampaignRange } from '../../domain/admin/campaig
 import { loadCampaignFunnel } from '../../domain/admin/campaignFunnelQuery.js'
 import { carregarVisaoEntrega } from '../../ops/deliveryQuality.js'
 import { categorizeErrorMsg, ERROR_CATEGORIES } from '../../errorTaxonomy.js'
-import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics } from '../../manager.js'
+import { listRunningBots, isSupervisorAlive, SUPERVISOR_MODE, startBot, getBotMetrics, moveSessionToShard, rollbackSessionFromShard, getShardMetrics, getSupervisorNodesSnapshot, getSupervisorBootedAtMs } from '../../manager.js'
+import { isNodeRoutingEnabled } from '../../supervisor/nodeRouting.js'
+import { buildNodesCapacityView, nodesViewDisabled } from '../../ops/capacity/nodesView.js'
 import { getApiMetricsSnapshot } from '../metrics.js'
 import { getSupervisorOperationalCounters } from '../../supervisor/operationalCounters.js'
 import { summarizeCredentialHealth } from '../../credentialHealth.js'
@@ -1431,6 +1433,28 @@ export async function adminRoutes(app) {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
     const result = await createCapacityService({ db }).current()
     return result
+  })
+
+  // Capacidade POR SERVIDOR (só com SUPERVISOR_NODE_ROUTING ligado; senão responde
+  // routing:false). Somente leitura; não escreve auditoria a cada polling.
+  app.get('/capacity/nodes', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    if (SUPERVISOR_MODE !== 'remote' || !isNodeRoutingEnabled()) return nodesViewDisabled()
+    const snapshot = await getSupervisorNodesSnapshot()
+    if (!snapshot) return reply.code(503).send({ code: 'NODES_SNAPSHOT_UNAVAILABLE', error: 'Não consegui consultar os servidores de robôs agora.' })
+    const bootedAtMs = {}
+    for (const n of snapshot) bootedAtMs[n.nodeId] = await getSupervisorBootedAtMs(n.nodeId)
+    const dbSessions = {}
+    try {
+      const grouped = await db.waSession.groupBy({ by: ['nodeId'], _count: { _all: true } })
+      for (const g of grouped) {
+        const id = g.nodeId ?? 'n1' // nulo = n1
+        dbSessions[id] = (dbSessions[id] ?? 0) + g._count._all
+      }
+    } catch {
+      for (const n of snapshot) dbSessions[n.nodeId] = null
+    }
+    return buildNodesCapacityView({ nodes: snapshot, bootedAtMs, dbSessions, tightFreeSlots: Number(process.env.CAPACITY_ALERT_FREE_SLOTS) || 2 })
   })
 
   const CAPACITY_HISTORY_PERIODS = new Set(['24h', '7d', '30d', '90d'])
