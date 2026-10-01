@@ -945,3 +945,23 @@ comportamento do robô": cada caminho ali custa uma reconexão da frota inteira.
 só os carrega para o aviso interno de número repetido; texto velho ali não muda
 nada para a cliente, e incluí-los faria toda edição de e-mail reconectar todo
 mundo).
+
+## Vários supervisores (nós) — `SUPERVISOR_NODE_ROUTING` (nasce DESLIGADO)
+
+Preparação para rodar um `bot-supervisor` por servidor, cada um dono de um
+conjunto de sessões. **Com a flag off nada muda** (fila única, posse por hash).
+
+- Posse = `WaSession.nodeId` (nulo = `n1`). **Não** usar `ownerInstance` (é da POC de shard).
+  O hash `sha1(userId) % SHARD_COUNT` ignorado com a flag on: mudar a contagem de nós
+  realocaria metade das contas e o `auth_info` é disco local.
+- Filas `supervisor-commands-<nodeId>` (hífen, BullMQ proíbe `:`); chaves
+  `supervisor:heartbeat:<nodeId>` / `supervisor:bootedAt:<nodeId>`. Só o `n1`
+  também consome a fila legada e grava as chaves legadas (transição).
+- API (flag on): `Queue`+`QueueEvents` por nó, sob demanda; `START_BOT` de sessão
+  sem nó escolhe o nó vivo com mais vagas (`placement.js`) e grava `nodeId` ANTES do envio.
+  `listRunningBots()` faz fan-out e **rejeita** se qualquer nó falhar (nunca soma parcial).
+- Env: supervisor `SUPERVISOR_NODE_ID` (default `n1`); API `SUPERVISOR_NODE_IDS` (csv, default `n1`).
+- **Ordem (modo `remote`: deploy da API NÃO reinicia o supervisor):** 1) supervisor novo
+  ouvindo legada + `-n1`, API na legada; 2) ligar a flag só na API, 48h com a legada zerada;
+  3) backfill `nodeId='n1'` e remover o consumidor legado. A API nunca troca de fila antes do supervisor.
+- `prisma/schema.postgres.prisma` ainda não tem modelos (stub): o campo entra com o modelo.

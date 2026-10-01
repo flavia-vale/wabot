@@ -224,3 +224,201 @@ test('encodeEvent integra com EventEmitter do client', async () => {
   // mesma constante para falar.
   assert.equal(EVENTS_CHANNEL, 'bots:events')
 })
+
+// ---- Roteamento por nó (SUPERVISOR_NODE_ROUTING) ----
+
+// Redis com store compartilhado (heartbeats) e Bullmq que registra o nome de
+// cada fila aberta e as chamadas a add(). `handlers[queueName]` decide o retorno.
+function createNodeHarness({ alive = ['n1', 'n2'], handlers = {}, events = [] } = {}) {
+  const store = new Map(alive.map(id => [`supervisor:heartbeat:${id}`, '1']))
+  class FakeRedis extends EventEmitter {
+    async subscribe() { return 1 }
+    async unsubscribe() { return 0 }
+    async get(key) { return store.get(key) ?? null }
+    async quit() { return 'OK' }
+  }
+  const openedQueues = []
+  const added = []
+  class FakeQueue {
+    constructor(name) { this.name = name; openedQueues.push(name) }
+    async add(name, data) {
+      added.push({ queue: this.name, name, data })
+      events.push(`add:${this.name}:${name}`)
+      const handler = handlers[this.name]
+      return { id: String(added.length), waitUntilFinished: async () => (handler ? handler(name, data) : { ok: true }) }
+    }
+    async close() {}
+  }
+  class FakeQueueEvents { async waitUntilReady() {} async close() {} }
+  return { ioredisModule: { default: FakeRedis }, bullmqModule: { Queue: FakeQueue, QueueEvents: FakeQueueEvents }, openedQueues, added, store }
+}
+
+function fakeDb(rows = {}, events = []) {
+  return {
+    rows,
+    waSession: {
+      findUnique: async ({ where }) => (rows[where.userId] ? { ...rows[where.userId] } : null),
+      updateMany: async ({ where, data }) => {
+        const row = rows[where.userId]
+        if (!row || row.nodeId !== where.nodeId) return { count: 0 }
+        Object.assign(row, data)
+        events.push(`db:nodeId=${data.nodeId}`)
+        return { count: 1 }
+      },
+      create: async ({ data }) => { rows[data.userId] = { ...data }; events.push(`db:create:${data.nodeId}`); return data },
+    },
+  }
+}
+
+const routed = (h, extra = {}) => createSupervisorClient({
+  redisUrl: 'redis://fake', ioredisModule: h.ioredisModule, bullmqModule: h.bullmqModule,
+  env: {}, nodeRouting: true, nodeIds: ['n1', 'n2'], maxSessionsPerNode: 20, ...extra,
+})
+
+test('flag OFF: só a fila legada, sem tocar no banco (comportamento atual)', async () => {
+  const h = createNodeHarness()
+  const client = createSupervisorClient({ redisUrl: 'redis://fake', ioredisModule: h.ioredisModule, bullmqModule: h.bullmqModule, env: {}, nodeRouting: false })
+  await client.sendBroadcast('u1', 'oi', [])
+  await client.startBot('u1')
+  assert.deepEqual([...new Set(h.openedQueues)], ['supervisor-commands'])
+  assert.ok(h.added.every(a => a.queue === 'supervisor-commands'))
+  await client.close()
+})
+
+test('flag ON: comando vai para a fila do nó dono, sem ":" no nome', async () => {
+  const h = createNodeHarness()
+  const db = fakeDb({ u1: { nodeId: 'n2' }, u2: { nodeId: null }, u3: { nodeId: 'n1' } })
+  const client = routed(h, { db })
+  await client.sendBroadcast('u1', 'a', [])
+  await client.sendBroadcast('u2', 'b', []) // nodeId nulo = n1
+  await client.sendBroadcast('u3', 'c', [])
+  assert.deepEqual(h.added.map(a => a.queue), ['supervisor-commands-n2', 'supervisor-commands-n1', 'supervisor-commands-n1'])
+  assert.ok(h.openedQueues.every(n => !n.includes(':')))
+  assert.ok(!h.openedQueues.includes('supervisor-commands'), 'a fila legada nem é aberta com a API roteada')
+  await client.close()
+})
+
+test('flag ON: Queue/QueueEvents por nó são lazy e reaproveitados', async () => {
+  const h = createNodeHarness()
+  const client = routed(h, { db: fakeDb({ u1: { nodeId: 'n2' } }) })
+  assert.equal(h.openedQueues.length, 0)
+  await client.sendBroadcast('u1', 'a', [])
+  await client.sendBroadcast('u1', 'b', [])
+  assert.equal(h.openedQueues.filter(n => n === 'supervisor-commands-n2').length, 1)
+  await client.close()
+})
+
+test('flag ON: cache de posse evita reler o banco a cada comando', async () => {
+  const h = createNodeHarness()
+  let reads = 0
+  const db = fakeDb({ u1: { nodeId: 'n2' } })
+  const original = db.waSession.findUnique
+  db.waSession.findUnique = async args => { reads++; return original(args) }
+  const client = routed(h, { db })
+  await client.sendBroadcast('u1', 'a', [])
+  await client.sendBroadcast('u1', 'b', [])
+  assert.equal(reads, 1)
+  await client.close()
+})
+
+test('flag ON: falha ao ler o banco propaga (nunca roteia às cegas)', async () => {
+  const h = createNodeHarness()
+  const db = { waSession: { findUnique: async () => { throw new Error('db fora') } } }
+  const client = routed(h, { db })
+  await assert.rejects(() => client.sendBroadcast('u1', 'a', []), /db fora/)
+  assert.equal(h.added.length, 0)
+  await client.close()
+})
+
+test('flag ON: nodeId é gravado ANTES do START_BOT e vai ao nó escolhido', async () => {
+  const events = []
+  const h = createNodeHarness({ events, handlers: { 'supervisor-commands-n2': name => (name === 'listRunningBots' ? [] : true), 'supervisor-commands-n1': name => (name === 'listRunningBots' ? Array.from({ length: 15 }, (_, i) => `x${i}`) : true) } })
+  // n2 vazio (0), n1 com 15 -> n2 tem mais vagas
+  h.added.length = 0
+  const db = fakeDb({ novo: { nodeId: null } }, events)
+  const client = routed(h, { db })
+  const ok = await client.startBot('novo')
+  assert.equal(ok, true)
+  const gravou = events.indexOf('db:nodeId=n2')
+  const enviou = events.indexOf('add:supervisor-commands-n2:startBot')
+  assert.ok(gravou >= 0 && enviou >= 0 && gravou < enviou, `ordem errada: ${events.join(' | ')}`)
+  assert.equal(db.rows.novo.nodeId, 'n2')
+  await client.close()
+})
+
+test('flag ON: sessão sem linha no banco ganha linha com nodeId antes do envio', async () => {
+  const events = []
+  const h = createNodeHarness({ events })
+  const db = fakeDb({}, events)
+  const client = routed(h, { db, nodeIds: ['n1'] })
+  await client.startBot('zero')
+  assert.equal(db.rows.zero.nodeId, 'n1')
+  assert.ok(events.indexOf('db:create:n1') < events.findIndex(e => e.endsWith(':startBot')))
+  await client.close()
+})
+
+test('flag ON: sessão que já tem nodeId NÃO é recolocada', async () => {
+  const h = createNodeHarness()
+  const db = fakeDb({ u1: { nodeId: 'n1' } })
+  const client = routed(h, { db })
+  await client.startBot('u1')
+  assert.equal(db.rows.u1.nodeId, 'n1')
+  assert.deepEqual(h.added.map(a => a.queue), ['supervisor-commands-n1'])
+  await client.close()
+})
+
+test('flag ON: sem nó vivo com vaga o start é recusado (false) e nada é enviado', async () => {
+  const h = createNodeHarness({ alive: [] })
+  const db = fakeDb({ novo: { nodeId: null } })
+  const client = routed(h, { db })
+  assert.equal(await client.startBot('novo'), false)
+  assert.equal(db.rows.novo.nodeId, null)
+  assert.equal(h.added.filter(a => a.name === 'startBot').length, 0)
+  await client.close()
+})
+
+test('LIST_RUNNING_BOTS faz fan-out aos nós vivos e soma', async () => {
+  const h = createNodeHarness({ handlers: { 'supervisor-commands-n1': () => ['a', 'b'], 'supervisor-commands-n2': () => ['c'] } })
+  const client = routed(h, { db: fakeDb() })
+  assert.deepEqual((await client.listRunningBots()).sort(), ['a', 'b', 'c'])
+  assert.deepEqual(await client.listRunningBotsByNode(), { n1: 2, n2: 1 })
+  await client.close()
+})
+
+test('LIST_RUNNING_BOTS com um nó falhando: total indisponível, nunca soma parcial', async () => {
+  const h = createNodeHarness({ handlers: { 'supervisor-commands-n1': () => ['a', 'b'], 'supervisor-commands-n2': () => { throw new Error('timeout') } } })
+  const client = routed(h, { db: fakeDb() })
+  await assert.rejects(() => client.listRunningBots(), /indisponível/)
+  // por nó: o que falhou vira null (nunca 0), o outro segue medido
+  assert.deepEqual(await client.listRunningBotsByNode(), { n1: 2, n2: null })
+  await client.close()
+})
+
+test('LIST_RUNNING_BOTS ignora nó sem heartbeat (nó morto não roda robô)', async () => {
+  const h = createNodeHarness({ alive: ['n1'], handlers: { 'supervisor-commands-n1': () => ['a'] } })
+  const client = routed(h, { db: fakeDb() })
+  assert.deepEqual(await client.listRunningBots(), ['a'])
+  assert.ok(!h.openedQueues.includes('supervisor-commands-n2'))
+  await client.close()
+})
+
+test('isSupervisorAlive e bootedAt aceitam nodeId; sem nodeId exigem todos os nós', async () => {
+  const h = createNodeHarness({ alive: ['n1'] })
+  h.store.set('supervisor:bootedAt:n1', '2000')
+  h.store.set('supervisor:bootedAt:n2', '1000')
+  const client = routed(h, { db: fakeDb() })
+  assert.equal(await client.isSupervisorAlive('n1'), true)
+  assert.equal(await client.isSupervisorAlive('n2'), false)
+  assert.equal(await client.isSupervisorAlive(), false)
+  assert.equal(await client.getSupervisorBootedAtMs('n1'), 2000)
+  assert.equal(await client.getSupervisorBootedAtMs(), 1000) // o boot mais antigo
+  await client.close()
+})
+
+test('flag OFF: isSupervisorAlive segue lendo a chave legada', async () => {
+  const h = createNodeHarness({ alive: [] })
+  h.store.set('supervisor:heartbeat', '1')
+  const client = createSupervisorClient({ redisUrl: 'redis://fake', ioredisModule: h.ioredisModule, bullmqModule: h.bullmqModule, env: {}, nodeRouting: false })
+  assert.equal(await client.isSupervisorAlive(), true)
+  await client.close()
+})

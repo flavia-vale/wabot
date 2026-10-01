@@ -11,3 +11,6 @@ datasource db {
 // Mantido em arquivo dedicado para não quebrar provider SQLite atual.
 // A estrutura de modelos deve ser sincronizada a partir de prisma/schema.prisma
 // via processo controlado de migração (P2.2+).
+// WaSession.nodeId (String?, @@index([nodeId])) entra aqui junto com o modelo
+// WaSession quando este schema for sincronizado a partir de schema.prisma:
+// hoje este arquivo não tem modelos (stub P2.1), então não há onde declarar o campo.

@@ -1,4 +1,4 @@
-import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR, refreshWaGroups, listRunningBots } from '../../manager.js'
+import { startBot, stopBot, isRunning, onQR, onStatus, listGroups, requestPairingCode, getBotMetrics, getLastQR, refreshWaGroups, listRunningBots, getNodeRoutingInfo } from '../../manager.js'
 import db from '../../db.js'
 import { rm } from 'fs/promises'
 import { getAuthInfoDir } from '../../paths.js'
@@ -42,6 +42,17 @@ const SHARD_INDEX = Number(process.env.SHARD_INDEX ?? 0)
 // Mede quantos robôs estão de fato ligados NA HORA da recusa. Best-effort: se
 // a consulta falhar, devolve `null` e a classificação não afirma teto cheio.
 async function describeStartRefusal(userId) {
+  // Com roteamento por nó: usa a contagem e a vida do nó DESTA conta.
+  const node = await getNodeRoutingInfo(userId)
+  if (node) {
+    return classifyStartRefusal({
+      userId,
+      nodeRouting: true,
+      nodeAlive: node.alive,
+      runningCount: node.running,
+      maxSessions: MAX_SESSIONS_PER_PROCESS,
+    })
+  }
   let runningCount = null
   try {
     const list = await listRunningBots()

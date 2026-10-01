@@ -203,3 +203,30 @@ export function decodeEvent(raw) {
 export function resolveRedisUrl(env = process.env) {
   return env.SUPERVISOR_REDIS_URL || env.REDIS_URL || ''
 }
+
+// ---- Roteamento por nó (SUPERVISOR_NODE_ROUTING; aditivo, PROTOCOL_VERSION segue 1) ----
+//
+// Cada supervisor (nó) tem fila, heartbeat e bootedAt PRÓPRIOS. Os nomes
+// legados acima seguem existindo (transição: o nó 'n1' consome e grava nos dois).
+export const DEFAULT_NODE_ID = 'n1'
+const NODE_ID_PATTERN = /^[a-z0-9-]{1,16}$/
+
+export function isValidNodeId(nodeId) {
+  return typeof nodeId === 'string' && NODE_ID_PATTERN.test(nodeId)
+}
+
+function assertNodeId(nodeId) {
+  if (!isValidNodeId(nodeId)) throw new Error(`nodeId inválido: ${JSON.stringify(nodeId)} (use [a-z0-9-], até 16 caracteres)`)
+  return nodeId
+}
+
+// Hífen, nunca ':' — BullMQ proíbe ':' em nome de fila (ver COMMAND_QUEUE).
+export function commandQueueName(nodeId) {
+  return `${COMMAND_QUEUE}-${assertNodeId(nodeId)}`
+}
+export function heartbeatKey(nodeId) {
+  return `${SUPERVISOR_HEARTBEAT_KEY}:${assertNodeId(nodeId)}`
+}
+export function bootedAtKey(nodeId) {
+  return `${SUPERVISOR_BOOTED_AT_KEY}:${assertNodeId(nodeId)}`
+}
