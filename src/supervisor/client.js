@@ -31,7 +31,7 @@ import {
 } from './protocol.js'
 import { isNodeRoutingEnabled, resolveKnownNodeIds } from './nodeRouting.js'
 import { createRedisClock } from './redisClock.js'
-import { pickNodeForNewSession, resolveSessionNodeId } from './placement.js'
+import { findDualOwners, pickNodeForNewSession, resolveSessionNodeId, shouldPlaceSession } from './placement.js'
 
 // P2-2: pub/sub é versionado (decodeEvent rejeita versão incompatível). Antes
 // isso era um descarte SILENCIOSO — num rolling deploy com PROTOCOL_VERSION
