@@ -103,6 +103,9 @@ model WaSession {
   status             String    @default("disconnected")
   lifecycle          String    @default("idle")
   ownerInstance      String?
+  // Nó (servidor) do supervisor dono desta sessão. Nulo = 'n1'. Só é lido com
+  // SUPERVISOR_NODE_ROUTING ligado. NÃO confundir com `ownerInstance` (POC de shard).
+  nodeId             String?
   lastHeartbeatAt    DateTime?
   lastDisconnectCode String?
   // Aviso que a CLIENTE precisa ler quando a conexão foi recusada por regra
@@ -113,6 +116,7 @@ model WaSession {
   updatedAt          DateTime  @updatedAt
 
   @@index([status, lastHeartbeatAt])
+  @@index([nodeId])
 }
 
 // Histórico de qual conta conectou qual número de WhatsApp.

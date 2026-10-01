@@ -105,3 +105,43 @@ test('resolveRedisUrl prefere SUPERVISOR_REDIS_URL sobre REDIS_URL', () => {
   assert.equal(resolveRedisUrl({ REDIS_URL: 'redis://b' }), 'redis://b')
   assert.equal(resolveRedisUrl({}), '')
 })
+
+// ---- Roteamento por nó (aditivo) ----
+import {
+  SUPERVISOR_BOOTED_AT_KEY,
+  SUPERVISOR_HEARTBEAT_KEY,
+  bootedAtKey,
+  commandQueueName,
+  heartbeatKey,
+  isValidNodeId,
+} from '../src/supervisor/protocol.js'
+
+test('nomes legados e PROTOCOL_VERSION seguem intactos', () => {
+  assert.equal(PROTOCOL_VERSION, 1)
+  assert.equal(COMMAND_QUEUE, 'supervisor-commands')
+  assert.equal(SUPERVISOR_HEARTBEAT_KEY, 'supervisor:heartbeat')
+  assert.equal(SUPERVISOR_BOOTED_AT_KEY, 'supervisor:bootedAt')
+})
+
+test('commandQueueName usa hífen e nunca contém ":" (BullMQ proíbe)', () => {
+  assert.equal(commandQueueName('n1'), 'supervisor-commands-n1')
+  assert.equal(commandQueueName('node-2'), 'supervisor-commands-node-2')
+  assert.ok(!commandQueueName('n1').includes(':'))
+})
+
+test('heartbeatKey e bootedAtKey são por nó', () => {
+  assert.equal(heartbeatKey('n2'), 'supervisor:heartbeat:n2')
+  assert.equal(bootedAtKey('n2'), 'supervisor:bootedAt:n2')
+  assert.notEqual(heartbeatKey('n1'), heartbeatKey('n2'))
+})
+
+test('isValidNodeId aceita só [a-z0-9-] curto', () => {
+  for (const ok of ['n1', 'node-2', 'a', 'sp-01']) assert.equal(isValidNodeId(ok), true, ok)
+  for (const bad of ['', 'N1', 'n:1', 'n 1', 'n_1', 'a'.repeat(17), null, undefined, 5]) assert.equal(isValidNodeId(bad), false, String(bad))
+})
+
+test('nodeId inválido lança em vez de montar nome de fila errado', () => {
+  assert.throws(() => commandQueueName('n:1'), /nodeId inválido/)
+  assert.throws(() => heartbeatKey(''), /nodeId inválido/)
+  assert.throws(() => bootedAtKey(undefined), /nodeId inválido/)
+})

@@ -66,10 +66,10 @@ export const SUPERVISOR_MODE = MODE
  * `null` (N/A) para o chamador distinguir "morto" de "não se aplica".
  * Best-effort: nunca lança.
  */
-export async function isSupervisorAlive() {
+export async function isSupervisorAlive(nodeId = null) {
   if (MODE !== 'remote' || !remoteClient?.isSupervisorAlive) return null
   try {
-    return await remoteClient.isSupervisorAlive()
+    return await remoteClient.isSupervisorAlive(nodeId)
   } catch {
     return false
   }
@@ -87,5 +87,35 @@ export async function getSupervisorBootedAtMs() {
     return await remoteClient.getSupervisorBootedAtMs()
   } catch {
     return null
+  }
+}
+
+/**
+ * Robôs ligados por nó do supervisor: `{ n1: 12, n2: null }` (null = não
+ * medido, NUNCA 0). Em `inline` ou com SUPERVISOR_NODE_ROUTING desligado há um
+ * nó só ('n1'). Nunca lança.
+ */
+export async function listRunningBotsByNode() {
+  try {
+    if (remoteClient?.listRunningBotsByNode) return await remoteClient.listRunningBotsByNode()
+    return { n1: Array.from(await impl.listRunningBots()).length }
+  } catch {
+    return { n1: null }
+  }
+}
+
+/**
+ * Nó da conta, se ele está vivo e quantos robôs tem — só quando o roteamento
+ * por nó está ligado (modo `remote`); senão `null` e quem chama usa o caminho
+ * legado. Nunca lança; campos não medidos vêm `null`.
+ */
+export async function getNodeRoutingInfo(userId) {
+  if (MODE !== 'remote' || !remoteClient?.nodeRouting) return null
+  try {
+    const nodeId = await remoteClient.resolveNodeId(userId)
+    const [alive, counts] = await Promise.all([remoteClient.isSupervisorAlive(nodeId), remoteClient.listRunningBotsByNode()])
+    return { nodeId, alive: Boolean(alive), running: counts?.[nodeId] ?? null }
+  } catch {
+    return { nodeId: null, alive: null, running: null }
   }
 }

@@ -83,3 +83,41 @@ test('a resposta da rota carrega o motivo classificado', () => {
   const semContexto = classifyBotStartOutcome({ startAccepted: false, running: false })
   assert.equal(semContexto.code, 'WA_CAPACITY_LIMIT')
 })
+
+// ---- Roteamento por nó (SUPERVISOR_NODE_ROUTING) ----
+
+test('flag off: o hash por shard continua decidindo "servidor errado"', () => {
+  const shardCount = 2
+  const donoIndex = computeShardIndex('u-hash', shardCount)
+  const errado = classifyStartRefusal({ userId: 'u-hash', shardCount, shardIndex: (donoIndex + 1) % shardCount, runningCount: 1, maxSessions: 20 })
+  assert.equal(errado.reason, START_REFUSAL_MISPLACED)
+})
+
+test('com nós: o hash é ignorado; só "nó da conta fora do ar" é servidor errado', () => {
+  const shardCount = 2
+  const naoDono = (computeShardIndex('u-hash', shardCount) + 1) % shardCount
+  const viva = classifyStartRefusal({ userId: 'u-hash', shardCount, shardIndex: naoDono, nodeRouting: true, nodeAlive: true, runningCount: 5, maxSessions: 20 })
+  assert.equal(viva.reason, START_REFUSAL_UNKNOWN)
+  const morta = classifyStartRefusal({ userId: 'u-hash', nodeRouting: true, nodeAlive: false, runningCount: 5, maxSessions: 20 })
+  assert.equal(morta.reason, START_REFUSAL_MISPLACED)
+  assert.equal(morta.code, 'WA_SESSION_MISPLACED')
+})
+
+test('com nós: nó desconhecido (alive null) não afirma servidor errado', () => {
+  const r = classifyStartRefusal({ userId: 'u', nodeRouting: true, nodeAlive: null, runningCount: 5, maxSessions: 20 })
+  assert.equal(r.reason, START_REFUSAL_UNKNOWN)
+})
+
+test('com nós: teto vale para a contagem DO NÓ da conta', () => {
+  const cheio = classifyStartRefusal({ userId: 'u', nodeRouting: true, nodeAlive: true, runningCount: 20, maxSessions: 20 })
+  assert.equal(cheio.reason, START_REFUSAL_CAPACITY)
+  const semMedida = classifyStartRefusal({ userId: 'u', nodeRouting: true, nodeAlive: true, runningCount: null, maxSessions: 20 })
+  assert.equal(semMedida.reason, START_REFUSAL_UNKNOWN)
+})
+
+test('com nós: textos continuam sem jargão', () => {
+  for (const nodeAlive of [true, false]) {
+    const r = classifyStartRefusal({ userId: 'u', nodeRouting: true, nodeAlive, runningCount: 20, maxSessions: 20 })
+    assert.doesNotMatch(r.error, /shard|supervisor|worker|processo|nó\b|node/i)
+  }
+})

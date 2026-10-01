@@ -62,13 +62,20 @@ function toCount(value) {
  * é recusada mesmo com o servidor vazio, então concluir "teto" ali contaria a
  * história errada.
  */
-export function classifyStartRefusal({ userId, shardCount, shardIndex, runningCount, maxSessions } = {}) {
+export function classifyStartRefusal({ userId, shardCount, shardIndex, runningCount, maxSessions, nodeRouting = false, nodeAlive } = {}) {
   const count = toCount(shardCount) ?? 1
   const index = toCount(shardIndex) ?? 0
   const running = toCount(runningCount)
   const max = toCount(maxSessions)
 
-  if (count > 1 && !shouldHandleUserOnShard(userId, count, index)) {
+  // Com roteamento por nó (SUPERVISOR_NODE_ROUTING) a posse vem do banco, não
+  // do hash: "servidor errado" = o servidor da conta não está respondendo
+  // (`nodeAlive === false`). `runningCount` e `maxSessions` são os DESSE nó.
+  // `nodeAlive` desconhecido (undefined/null) não afirma nada.
+  const misplaced = nodeRouting
+    ? nodeAlive === false
+    : count > 1 && !shouldHandleUserOnShard(userId, count, index)
+  if (misplaced) {
     return { reason: START_REFUSAL_MISPLACED, running, max, ...MESSAGES[START_REFUSAL_MISPLACED] }
   }
   // Sem medição confiável (consulta falhou, supervisor mudo) NÃO afirmamos
