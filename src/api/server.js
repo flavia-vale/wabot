@@ -55,7 +55,7 @@ import { classifyApiError, describeApiErrorKind } from '../ops/apiErrorSignal.js
 import { sendAdminAlert } from '../email/adminAlerts.js'
 import { runNurtureSweep } from '../leadNurture/sweep.js'
 import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
-import { isNodeRoutingEnabled } from '../supervisor/nodeRouting.js'
+import { isNodeRoutingEnabled, resolveKnownNodeIds } from '../supervisor/nodeRouting.js'
 import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
