@@ -122,7 +122,9 @@ if (NODE_ROUTING) {
   }
 }
 const SHARD_TAG = `shard-${SHARD_INDEX + 1}-of-${SHARD_COUNT}`
-const SESSION_OWNER_MISMATCH_KEY = `supervisor:session_owner_mismatch_total:${SHARD_TAG}`
+// Chaves dos contadores por nó (o leitor soma por prefixo, então segue valendo).
+const COUNTER_TAG = NODE_ROUTING ? `${SHARD_TAG}:${NODE_ID}` : SHARD_TAG
+const SESSION_OWNER_MISMATCH_KEY = `supervisor:session_owner_mismatch_total:${COUNTER_TAG}`
 
 // Acopla o supervisor à MESMA flag que a API (src/manager.js) já respeita. Só
 // em `remote` o supervisor é dono das sessões; em `inline` (ou qualquer outro
@@ -164,8 +166,8 @@ let sessionOwnerMismatchTotal = 0
 // killer do host antes de qualquer proteção. Subir só com evidência de soak.
 const MAX_SESSIONS_PER_PROCESS = Math.max(1, Number(process.env.MAX_SESSIONS_PER_PROCESS || 20))
 const SESSION_CIRCUIT_BREAKER_MODE = parseEnumEnv('SESSION_CIRCUIT_BREAKER_MODE', process.env.SESSION_CIRCUIT_BREAKER_MODE || 'closed', ['closed', 'open'], 'closed')
-const SESSION_CIRCUIT_BREAKER_ALERT_KEY = `supervisor:session_circuit_breaker_alert:${SHARD_TAG}`
-const SESSION_QUARANTINE_KEY = `supervisor:session_quarantine_total:${SHARD_TAG}`
+const SESSION_CIRCUIT_BREAKER_ALERT_KEY = `supervisor:session_circuit_breaker_alert:${COUNTER_TAG}`
+const SESSION_QUARANTINE_KEY = `supervisor:session_quarantine_total:${COUNTER_TAG}`
 const SHARD_POC_MODE = parseEnumEnv('WA_SESSION_SHARD_POC', process.env.WA_SESSION_SHARD_POC || 'observe', ['off', 'observe', 'enabled'], 'observe')
 const shardOwnedUsers = new Set()
 const pocShard = createShardProcessController({
