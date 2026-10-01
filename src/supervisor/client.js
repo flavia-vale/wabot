@@ -20,6 +20,7 @@ import {
   SUPERVISOR_BOOTED_AT_KEY,
   SUPERVISOR_HEARTBEAT_KEY,
   bootedAtKey,
+  capacityKey,
   commandQueueName,
   commandTimeoutMs,
   decodeEvent,
@@ -264,6 +265,24 @@ export function createSupervisorClient({
   // existe (supervisor fora do ar, ou versão anterior a esta que ainda não
   // publica o campo). Consumido pelo guard de "código novo não carregado"
   // (ops/staleWorkerCodeGuard.js), que trata null como "não avisar".
+  // Teto de sessões publicado por cada nó (supervisor:capacity:<id>). `null` =
+  // nó sem chave (parado, ou supervisor antigo): teto desconhecido, não presumido.
+  async function getNodeCapacities() {
+    const out = {}
+    if (!publisherCheck) {
+      try { await init() } catch { return Object.fromEntries(nodeIds.map(id => [id, null])) }
+    }
+    await Promise.all(nodeIds.map(async id => {
+      try {
+        const n = Number(await publisherCheck.get(capacityKey(id)))
+        out[id] = Number.isFinite(n) && n >= 1 ? Math.floor(n) : null
+      } catch {
+        out[id] = null
+      }
+    }))
+    return out
+  }
+
   async function getSupervisorBootedAtMs(nodeId = null) {
     if (!publisherCheck) {
       try { await init() } catch { return null }
@@ -304,11 +323,13 @@ export function createSupervisorClient({
       chosen = nodeIds[0] // um nó só: nada a decidir nem a medir
     } else {
       const counts = await listRunningBotsByNode()
+      const capacities = await getNodeCapacities()
       const nodes = await Promise.all(nodeIds.map(async id => ({
         nodeId: id,
         alive: await isSupervisorAlive(id),
         running: counts[id] ?? null,
-        max: maxSessionsPerNode,
+        // Teto publicado pelo próprio nó; sem chave NÃO se presume (nó nunca é escolhido).
+        max: capacities[id] ?? null,
       })))
       chosen = pickNodeForNewSession({ nodes })
     }
@@ -466,6 +487,6 @@ export function createSupervisorClient({
     // extras
     isSupervisorAlive, getSupervisorBootedAtMs, getLastEvent, close, _events: events,
     moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
-    resolveNodeId, nodeIds, nodeRouting,
+    resolveNodeId, nodeIds, nodeRouting, getNodeCapacities,
   })
 }

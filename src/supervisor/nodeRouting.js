@@ -66,3 +66,8 @@ export function createNodeOwnershipCache({ loadNodeId, ttlMs = 10_000, now = () 
     invalidate(userId) { entries.delete(userId) },
   }
 }
+
+/** Cadeado de posse no Redis: só existe com roteamento por nó ligado. Default off. */
+export function isOwnerLeaseEnabled(env = process.env) {
+  return isNodeRoutingEnabled(env) && ['1', 'true', 'on'].includes(String(env.SUPERVISOR_OWNER_LEASE ?? '').trim().toLowerCase())
+}

@@ -95,6 +95,13 @@ export async function getSupervisorBootedAtMs() {
  * medido, NUNCA 0). Em `inline` ou com SUPERVISOR_NODE_ROUTING desligado há um
  * nó só ('n1'). Nunca lança.
  */
+export async function getNodeCapacities() {
+  try {
+    if (remoteClient?.getNodeCapacities) return await remoteClient.getNodeCapacities()
+  } catch {}
+  return {}
+}
+
 export async function listRunningBotsByNode() {
   try {
     if (remoteClient?.listRunningBotsByNode) return await remoteClient.listRunningBotsByNode()
@@ -113,9 +120,9 @@ export async function getNodeRoutingInfo(userId) {
   if (MODE !== 'remote' || !remoteClient?.nodeRouting) return null
   try {
     const nodeId = await remoteClient.resolveNodeId(userId)
-    const [alive, counts] = await Promise.all([remoteClient.isSupervisorAlive(nodeId), remoteClient.listRunningBotsByNode()])
-    return { nodeId, alive: Boolean(alive), running: counts?.[nodeId] ?? null }
+    const [alive, counts, caps] = await Promise.all([remoteClient.isSupervisorAlive(nodeId), remoteClient.listRunningBotsByNode(), remoteClient.getNodeCapacities()])
+    return { nodeId, alive: Boolean(alive), running: counts?.[nodeId] ?? null, max: caps?.[nodeId] ?? null }
   } catch {
-    return { nodeId: null, alive: null, running: null }
+    return { nodeId: null, alive: null, running: null, max: null }
   }
 }
