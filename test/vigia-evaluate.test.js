@@ -98,3 +98,10 @@ test('envios: interrompidos por reinício aparecem à parte e não entram na tax
   assert.equal(c.level, LEVEL.OK)
   assert.match(c.detail, /620 interrompidos por reinício/)
 })
+
+test('sessões: desconectadas de longa data aparecem à parte e não rebaixam', () => {
+  const s = saudavel(); s.sessions = { total: 70, connected: 70, stale: 0, disconnected: 14 }
+  const c = por(evaluateVigia(s), 'sessoes')
+  assert.equal(c.level, LEVEL.OK)
+  assert.match(c.detail, /14 contas desconectadas há tempo/)
+})
