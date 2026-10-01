@@ -130,6 +130,10 @@ conferir em produção → Solicitar indexação):
   **depois do Dia A**, porque A/B corrigem texto que já está no Google.
 - ✅ **30/09:** pedidas as 10 do Dia A e `/precos` (11 no total). Não repetir; conferir no
   Search Console a partir de 07/10. Próximo: Dia B (R1), depois Dia C e F.
+- **Ordem atualizada em 01/10:** B em 01/10 → **Leva da sessão de 29/09** (novas: calculadora + 6 posts;
+  editadas: `/ferramentas`, `/conteudos`, `/espelha-grupos-e-confiavel`; depois `/alternativas/afilira` e
+  `/vendas-e-comissao-afiliado-whatsapp`, ver `ACOES_FLAVIA` 🔝) → C → F (**guias já estão em `main`**, o aviso acima
+  de "depende de main" está superado) → D → E. Os Dias B e C já levam as páginas que ganharam links/capa.
 - Já pedidas em 28/09 (não repetir): `/precos`, `/espelha-grupos-e-confiavel`,
   `/alternativas/achadinho-pro`, `/programa-de-afiliados`,
   `/quanto-ganha-afiliado-shopee`, `/blog/como-divulgar-ofertas-mercado-livre-whatsapp`,
