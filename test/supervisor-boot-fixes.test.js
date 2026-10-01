@@ -24,6 +24,7 @@ function bootSupervisorWith(env) {
       SHARD_COUNT: env.SHARD_COUNT ?? '1',
       ...(env.SHARD_INDEX !== undefined ? { SHARD_INDEX: env.SHARD_INDEX } : {}),
       AUTO_START_WHATSAPP_SESSIONS: 'false',
+      ...(env.extra ?? {}),
     },
     timeout: 4000,
     encoding: 'utf8',
@@ -69,4 +70,26 @@ test('listSessionHealth exporta snapshot read-only de heartbeat', () => {
   }
   // listRunningBots e listSessionHealth devem concordar em cardinalidade.
   assert.equal(snapshot.length, listRunningBots().length)
+})
+
+// ---- Roteamento por nó ----
+
+test('SUPERVISOR_NODE_ROUTING ligado com SUPERVISOR_NODE_ID inválido aborta o boot', () => {
+  const res = bootSupervisorWith({ extra: { BOT_SUPERVISOR_MODE: 'remote', SUPERVISOR_NODE_ROUTING: 'true', SUPERVISOR_NODE_ID: 'N:2' } })
+  assert.equal(res.status, 1, `stderr: ${res.stderr}\nstdout: ${res.stdout}`)
+  assert.match((res.stdout || '') + (res.stderr || ''), /SUPERVISOR_NODE_ID inválido/)
+})
+
+test('flag desligada ignora SUPERVISOR_NODE_ID (comportamento atual: não aborta por ele)', () => {
+  const res = bootSupervisorWith({ extra: { BOT_SUPERVISOR_MODE: 'inline', SUPERVISOR_NODE_ID: 'N:2' } })
+  const out = (res.stdout || '') + (res.stderr || '')
+  assert.doesNotMatch(out, /SUPERVISOR_NODE_ID inválido/)
+})
+
+test('supervisor: flag off mantém posse por hash, fila e chaves legadas no código', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const src = await readFile(supervisorEntry, 'utf8')
+  assert.match(src, /if \(!NODE_ROUTING\) return shouldHandleUserOnShard\(userId, SHARD_COUNT, SHARD_INDEX\)/)
+  assert.match(src, /\[createCommandWorker\(COMMAND_QUEUE\)\]/)
+  assert.match(src, /!NODE_ROUTING \|\| ownsLegacyQueue\(NODE_ID\)/)
 })

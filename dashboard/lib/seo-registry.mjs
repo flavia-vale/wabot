@@ -270,6 +270,13 @@ export const CONTENT_SEO_ROUTES = [
   // indexável pedia ao Google para indexar um redirect — ele segue e indexa
   // outra coisa, ou nada. Os links de afiliada continuam funcionando igual:
   // indexação não tem relação com o redirect.
+  // Divulgação do Link Inteligente (30/09/2026). `indexable: false` DE PROPÓSITO:
+  // indexar exige 3 links internos vindos de páginas já no Google (teste de
+  // páginas órfãs) — isso mexe em páginas indexadas e pede reindexação, decisão
+  // da dona. Até lá a página é compartilhável por link (e-mail, WhatsApp, redes).
+  // Para indexar: trocar para `true`, linkar de 3 páginas afins e listar as URLs
+  // na leva 🔝 de docs/marketing/ACOES_FLAVIA_2026-09-11.md.
+  { path: '/link-inteligente', template: 'campaign-landing', priority: 0.7, changeFrequency: 'monthly', lastModified: '2026-09-30', indexable: false },
   { path: '/cadastro', title: 'Cadastro Espelha Grupos — teste grátis para automatizar ofertas no WhatsApp', description: 'Crie sua conta no Espelha Grupos e comece a automatizar a divulgação de ofertas em grupos e canais do WhatsApp.', template: 'signup', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/cadastro'), indexable: false },
   // title/description ficam só em app/parcerias/page.js (fonte única, FR-001).
   { path: '/parcerias', template: 'partnerships', priority: 0.7, changeFrequency: 'monthly', lastModified: resolveLastModified('/parcerias'), indexable: true },

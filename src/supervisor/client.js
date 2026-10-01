@@ -15,14 +15,21 @@ import {
   COMMAND_QUEUE,
   EVENT,
   EVENTS_CHANNEL,
+  DEFAULT_NODE_ID,
   PROTOCOL_VERSION,
   SUPERVISOR_BOOTED_AT_KEY,
   SUPERVISOR_HEARTBEAT_KEY,
+  bootedAtKey,
+  commandQueueName,
   commandTimeoutMs,
   decodeEvent,
+  heartbeatKey,
+  isValidNodeId,
   lastEventKey,
   resolveRedisUrl,
 } from './protocol.js'
+import { isNodeRoutingEnabled, resolveKnownNodeIds } from './nodeRouting.js'
+import { pickNodeForNewSession, resolveSessionNodeId } from './placement.js'
 
 // P2-2: pub/sub é versionado (decodeEvent rejeita versão incompatível). Antes
 // isso era um descarte SILENCIOSO — num rolling deploy com PROTOCOL_VERSION
@@ -81,6 +88,15 @@ export function createSupervisorClient({
   // permite injeção em testes
   ioredisModule = null,
   bullmqModule = null,
+  // Roteamento por nó (SUPERVISOR_NODE_ROUTING, default OFF). Desligado, este
+  // cliente se comporta exatamente como antes: uma fila só, chaves legadas.
+  env = process.env,
+  nodeRouting = isNodeRoutingEnabled(env),
+  nodeIds = resolveKnownNodeIds(env),
+  maxSessionsPerNode = Math.max(1, Number(env.MAX_SESSIONS_PER_PROCESS || 20)),
+  nodeCacheTtlMs = 45_000,
+  db = null, // injetável em testes; senão, import tardio de ../db.js
+  now = () => Date.now(),
 } = {}) {
   if (!redisUrl) {
     logger.warn('SupervisorClient inicializado sem REDIS_URL — operações remotas vão falhar')
@@ -91,6 +107,9 @@ export function createSupervisorClient({
   let subscriber = null
   let publisherCheck = null
   let initPromise = null
+  let deps = null
+  const nodeChannels = new Map() // nodeId -> Promise<{queue, queueEvents}>
+  const nodeOfUser = new Map() // userId -> { nodeId, expiresAt }
   const events = new EventEmitter()
   // Evita warning quando muitos sockets WebSocket assinam o mesmo emitter.
   events.setMaxListeners(0)
@@ -104,12 +123,17 @@ export function createSupervisorClient({
   async function init() {
     if (initPromise) return initPromise
     initPromise = (async () => {
-      const { Redis, Queue, QueueEvents } = await loadDeps()
+      deps = await loadDeps()
+      const { Redis, Queue, QueueEvents } = deps
       const connectionOpts = { maxRetriesPerRequest: null, enableReadyCheck: false }
-      // BullMQ aceita { url } via connection
-      queue = new Queue(COMMAND_QUEUE, { connection: { url: redisUrl, ...connectionOpts } })
-      queueEvents = new QueueEvents(COMMAND_QUEUE, { connection: { url: redisUrl, ...connectionOpts } })
-      await queueEvents.waitUntilReady()
+      // Com roteamento por nó, as filas são criadas sob demanda POR nó (e a
+      // legada nem é aberta — economiza 2-3 conexões Redis).
+      if (!nodeRouting) {
+        // BullMQ aceita { url } via connection
+        queue = new Queue(COMMAND_QUEUE, { connection: { url: redisUrl, ...connectionOpts } })
+        queueEvents = new QueueEvents(COMMAND_QUEUE, { connection: { url: redisUrl, ...connectionOpts } })
+        await queueEvents.waitUntilReady()
+      }
 
       subscriber = new Redis(redisUrl, buildRedisOptions('supervisor-client-sub', { lazyConnect: false }))
       publisherCheck = new Redis(redisUrl, buildRedisOptions('supervisor-client-check', { lazyConnect: false }))
@@ -132,21 +156,72 @@ export function createSupervisorClient({
     return initPromise
   }
 
-  async function send(name, payload = {}, { timeoutMs = commandTimeoutMs(name) } = {}) {
-    await init()
-    const job = await queue.add(name, { ...payload, _enqueuedAt: Date.now() }, {
+  async function enqueue(q, qe, name, payload, timeoutMs) {
+    const job = await q.add(name, { ...payload, _enqueuedAt: Date.now() }, {
       removeOnComplete: { age: 60 },
       removeOnFail: { age: 600 },
       attempts: 1,
     })
     try {
-      const result = await job.waitUntilFinished(queueEvents, timeoutMs)
+      const result = await job.waitUntilFinished(qe, timeoutMs)
       return result
     } catch (err) {
       // BullMQ lança Error("Job ... has failed with reason: ...") quando o
       // supervisor reporta erro. Propaga com mensagem útil.
       throw new Error(`Comando ${name} falhou: ${err.message}`)
     }
+  }
+
+  // ---- Roteamento por nó (só com SUPERVISOR_NODE_ROUTING) ----
+
+  async function getDb() {
+    if (db) return db
+    db = (await import('../db.js')).default
+    return db
+  }
+
+  // Fila + QueueEvents do nó, lazy. Falha de criação não fica em cache.
+  function getNodeChannel(nodeId) {
+    if (!nodeChannels.has(nodeId)) {
+      const promise = (async () => {
+        await init()
+        const { Queue, QueueEvents } = deps
+        const connection = { url: redisUrl, maxRetriesPerRequest: null, enableReadyCheck: false }
+        const name = commandQueueName(nodeId)
+        const q = new Queue(name, { connection })
+        const qe = new QueueEvents(name, { connection })
+        await qe.waitUntilReady()
+        return { queue: q, queueEvents: qe }
+      })().catch(err => { nodeChannels.delete(nodeId); throw err })
+      nodeChannels.set(nodeId, promise)
+    }
+    return nodeChannels.get(nodeId)
+  }
+
+  // Nó dono da sessão: cache curto + banco (nodeId null = 'n1'). Falha de
+  // leitura propaga — rotear às cegas mandaria o comando ao nó errado.
+  async function resolveNodeId(userId) {
+    const hit = nodeOfUser.get(userId)
+    if (hit && hit.expiresAt > now()) return hit.nodeId
+    const row = await (await getDb()).waSession.findUnique({ where: { userId }, select: { nodeId: true } })
+    const nodeId = resolveSessionNodeId(row)
+    nodeOfUser.set(userId, { nodeId, expiresAt: now() + nodeCacheTtlMs })
+    return nodeId
+  }
+
+  async function sendToNode(nodeId, name, payload, timeoutMs) {
+    const { queue: q, queueEvents: qe } = await getNodeChannel(nodeId)
+    return enqueue(q, qe, name, payload, timeoutMs)
+  }
+
+  async function send(name, payload = {}, { timeoutMs = commandTimeoutMs(name), nodeId = null } = {}) {
+    if (!nodeRouting) {
+      await init()
+      return enqueue(queue, queueEvents, name, payload, timeoutMs)
+    }
+    // Comando sem userId (ex.: métricas do shard POC) vai para o 'n1'.
+    const target = nodeId ?? (payload?.userId ? await resolveNodeId(payload.userId) : DEFAULT_NODE_ID)
+    return sendToNode(target, name, payload, timeoutMs)
   }
 
   // Lê o último valor cacheado de um evento (QR/STATUS) gravado pelo supervisor
@@ -166,11 +241,18 @@ export function createSupervisorClient({
     }
   }
 
-  async function isSupervisorAlive() {
+  async function isSupervisorAlive(nodeId = null) {
     if (!publisherCheck) {
       try { await init() } catch { return false }
     }
     try {
+      if (nodeRouting) {
+        if (nodeId) return Boolean(await publisherCheck.get(heartbeatKey(nodeId)))
+        // Sem nodeId: vivo só se TODOS os nós conhecidos estão vivos — um nó
+        // morto não pode ficar escondido atrás dos outros.
+        const flags = await Promise.all(nodeIds.map(id => publisherCheck.get(heartbeatKey(id))))
+        return flags.every(Boolean)
+      }
       const value = await publisherCheck.get(SUPERVISOR_HEARTBEAT_KEY)
       return Boolean(value)
     } catch {
@@ -182,14 +264,23 @@ export function createSupervisorClient({
   // existe (supervisor fora do ar, ou versão anterior a esta que ainda não
   // publica o campo). Consumido pelo guard de "código novo não carregado"
   // (ops/staleWorkerCodeGuard.js), que trata null como "não avisar".
-  async function getSupervisorBootedAtMs() {
+  async function getSupervisorBootedAtMs(nodeId = null) {
     if (!publisherCheck) {
       try { await init() } catch { return null }
     }
-    try {
-      const value = await publisherCheck.get(SUPERVISOR_BOOTED_AT_KEY)
+    const parse = value => {
       const parsed = Number(value)
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+    }
+    try {
+      if (nodeRouting) {
+        if (nodeId) return parse(await publisherCheck.get(bootedAtKey(nodeId)))
+        // Sem nodeId: o boot MAIS ANTIGO (o nó com código mais velho é o que importa).
+        const boots = (await Promise.all(nodeIds.map(id => publisherCheck.get(bootedAtKey(id))))).map(parse).filter(Boolean)
+        return boots.length ? Math.min(...boots) : null
+      }
+      const value = await publisherCheck.get(SUPERVISOR_BOOTED_AT_KEY)
+      return parse(value)
     } catch {
       return null
     }
@@ -198,10 +289,96 @@ export function createSupervisorClient({
   // ---- Superfície compatível com src/core/sessionCore.js ----
 
   // Comandos fire-and-forget assíncronos: aguardam ack do supervisor.
-  const startBot = userId => send(COMMAND.START_BOT, { userId })
+  // Sessão nova (sem nodeId): escolhe o nó vivo com mais vagas e GRAVA o
+  // nodeId ANTES de enviar o START_BOT — assim um segundo comando concorrente
+  // já enxerga o dono. Devolve null quando nenhum nó pode receber.
+  async function ensureNodePlacement(userId) {
+    const database = await getDb()
+    const row = await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } })
+    if (row?.nodeId && isValidNodeId(row.nodeId)) {
+      nodeOfUser.set(userId, { nodeId: row.nodeId, expiresAt: now() + nodeCacheTtlMs })
+      return row.nodeId
+    }
+    let chosen = null
+    if (nodeIds.length === 1) {
+      chosen = nodeIds[0] // um nó só: nada a decidir nem a medir
+    } else {
+      const counts = await listRunningBotsByNode()
+      const nodes = await Promise.all(nodeIds.map(async id => ({
+        nodeId: id,
+        alive: await isSupervisorAlive(id),
+        running: counts[id] ?? null,
+        max: maxSessionsPerNode,
+      })))
+      chosen = pickNodeForNewSession({ nodes })
+    }
+    if (!chosen) {
+      logger.warn({ userId, nodeIds }, 'Nenhum nó do supervisor disponível para a sessão nova — start recusado')
+      return null
+    }
+    if (row) {
+      // updateMany com nodeId:null: se outro request gravou antes, não sobrescreve.
+      await database.waSession.updateMany({ where: { userId, nodeId: null }, data: { nodeId: chosen } })
+    } else {
+      try {
+        await database.waSession.create({ data: { userId, nodeId: chosen } })
+      } catch {
+        // Corrida de criação (userId é único): quem perdeu lê o dono gravado.
+        const again = await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } })
+        chosen = resolveSessionNodeId(again)
+      }
+    }
+    const final = resolveSessionNodeId(await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } }))
+    nodeOfUser.set(userId, { nodeId: final, expiresAt: now() + nodeCacheTtlMs })
+    return final
+  }
+
+  const startBot = async userId => {
+    if (!nodeRouting) return send(COMMAND.START_BOT, { userId })
+    const nodeId = await ensureNodePlacement(userId)
+    if (!nodeId) return false // sem nó disponível = recusa, classificada pela API
+    return send(COMMAND.START_BOT, { userId }, { nodeId })
+  }
   const stopBot = userId => send(COMMAND.STOP_BOT, { userId })
   const isRunning = userId => send(COMMAND.IS_RUNNING, { userId })
-  const listRunningBots = () => send(COMMAND.LIST_RUNNING_BOTS, {})
+  // Fan-out aos nós VIVOS. Cada valor é a lista de userIds do nó, ou null se
+  // aquele nó não respondeu. Nó morto (sem heartbeat) não entra: não roda robô.
+  async function listRunningByNode() {
+    const result = {}
+    await Promise.all(nodeIds.map(async id => {
+      if (!(await isSupervisorAlive(id))) return
+      try {
+        const list = await send(COMMAND.LIST_RUNNING_BOTS, {}, { nodeId: id })
+        result[id] = Array.isArray(list) ? list : null
+      } catch {
+        result[id] = null
+      }
+    }))
+    return result
+  }
+  // Contagem por nó: { n1: 12, n2: null } (null = não medido; NUNCA 0).
+  async function listRunningBotsByNode() {
+    if (!nodeRouting) {
+      try {
+        const list = await send(COMMAND.LIST_RUNNING_BOTS, {})
+        return { [DEFAULT_NODE_ID]: Array.isArray(list) ? list.length : null }
+      } catch {
+        return { [DEFAULT_NODE_ID]: null }
+      }
+    }
+    const lists = await listRunningByNode()
+    return Object.fromEntries(Object.entries(lists).map(([id, list]) => [id, list ? list.length : null]))
+  }
+  // Com roteamento: soma de todos os nós vivos. Se QUALQUER nó falhar, rejeita
+  // — a contagem total vira "sem medição" (os chamadores já tratam rejeição
+  // como null; somar parcial afirmaria vaga/teto sem medir, ver RCA de capacidade).
+  const listRunningBots = async () => {
+    if (!nodeRouting) return send(COMMAND.LIST_RUNNING_BOTS, {})
+    const lists = await listRunningByNode()
+    const failed = Object.entries(lists).filter(([, list]) => list === null).map(([id]) => id)
+    if (failed.length) throw new Error(`Contagem de robôs indisponível: nó(s) sem resposta: ${failed.join(', ')}`)
+    return [...new Set(Object.values(lists).flat())]
+  }
   const listGroups = userId => send(COMMAND.LIST_GROUPS, { userId })
   const sendBroadcast = (userId, text, jids, options = {}) => send(COMMAND.SEND_BROADCAST, { userId, text, jids, options })
   const sendSelfMessage = (userId, text, actorUserId = null, options = {}) => send(COMMAND.SEND_SELF_MESSAGE, { userId, text, actorUserId, kind: options?.kind })
@@ -270,11 +447,18 @@ export function createSupervisorClient({
     try { await publisherCheck?.quit() } catch {}
     try { await queueEvents?.close() } catch {}
     try { await queue?.close() } catch {}
+    for (const channel of nodeChannels.values()) {
+      try {
+        const { queue: q, queueEvents: qe } = await channel
+        await qe?.close()
+        await q?.close()
+      } catch {}
+    }
   }
 
   return /** @type {SupervisorClient} */ ({
     // superfície igual a sessionCore.js
-    startBot, stopBot, isRunning, listRunningBots,
+    startBot, stopBot, isRunning, listRunningBots, listRunningBotsByNode,
     listGroups, sendBroadcast, sendSelfMessage, requestPairingCode, getBotMetrics, reloadConfig, refreshWaGroups,
     channelMetadata, groupInviteCode, followChannelImmediate, listFollowedChannels,
     onQR, onStatus, getLastQR,
@@ -282,5 +466,6 @@ export function createSupervisorClient({
     // extras
     isSupervisorAlive, getSupervisorBootedAtMs, getLastEvent, close, _events: events,
     moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
+    resolveNodeId, nodeIds, nodeRouting,
   })
 }

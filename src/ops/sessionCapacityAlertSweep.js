@@ -47,9 +47,30 @@ export async function countRunningBots(listRunningBots) {
  * Uma passada. Efeitos injetados para manter a decisão pura e testável.
  * @returns {Promise<{sent:number, reason:string, running:number|null, free:number|null}>}
  */
+/**
+ * Roteamento por nó: o aviso vale para o nó MAIS CHEIO entre os medidos. Nó
+ * não medido (null) não conta como vaga nem como lotado; sem nenhum nó medido
+ * devolve `running: null` (a política não avisa).
+ * @returns {Promise<{running:number|null, nodeId:string|null, nodes:number}>}
+ */
+export async function countRunningBotsByNode(listRunningBotsByNode) {
+  let counts = null
+  try { counts = await listRunningBotsByNode() } catch { counts = null }
+  const entries = Object.entries(counts ?? {})
+  let worst = null
+  for (const [nodeId, value] of entries) {
+    if (value === null || value === undefined || value === '') continue
+    const running = Number(value)
+    if (!Number.isFinite(running) || running < 0) continue
+    if (!worst || running > worst.running) worst = { nodeId, running }
+  }
+  return { running: worst?.running ?? null, nodeId: worst?.nodeId ?? null, nodes: entries.length }
+}
+
 export async function runSessionCapacityAlertSweep({
   db,
   listRunningBots,
+  listRunningBotsByNode = null,
   sendAlert = sendAdminAlert,
   env = process.env,
   now = new Date(),
@@ -58,11 +79,18 @@ export async function runSessionCapacityAlertSweep({
   if (!isCapacityAlertEnabled(env)) return { sent: 0, reason: 'desligado', running: null, free: null }
 
   const max = resolveSessionCapacityMax(env)
-  const running = await countRunningBots(listRunningBots)
+  const freeSlots = resolveAlertFreeSlots(env)
+  // Com roteamento por nó o `max` já é por nó (MAX_SESSIONS_PER_PROCESS é por
+  // processo): avalia o nó mais cheio, não a soma.
+  const perNode = listRunningBotsByNode
+    ? await countRunningBotsByNode(listRunningBotsByNode)
+    : null
+  const running = perNode ? perNode.running : await countRunningBots(listRunningBots)
+  const nodeLabel = perNode && perNode.nodes > 1 && perNode.nodeId ? `servidor ${perNode.nodeId}` : null
   const decision = shouldAlertSessionCapacity({
     running,
     max,
-    freeSlots: resolveAlertFreeSlots(env),
+    freeSlots,
   })
   if (!decision.alert) return { sent: 0, reason: decision.reason, running, free: decision.free }
 
@@ -71,8 +99,8 @@ export async function runSessionCapacityAlertSweep({
     slug: CAPACITY_ALERT_SLUG,
     // Assunto do cooldown: o teto vigente. Subir o teto é uma situação nova e
     // pode avisar de novo sem esperar a janela do teto antigo.
-    key: `max=${max}`,
-    vars: buildCapacityAlertVars({ running, max, free: decision.free }),
+    key: nodeLabel ? `max=${max};${nodeLabel}` : `max=${max}`,
+    vars: buildCapacityAlertVars({ running, max, free: decision.free, nodeLabel }),
     cooldownHours: resolveAlertCooldownHours(env),
     now,
     env,

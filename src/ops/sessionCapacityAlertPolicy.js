@@ -71,9 +71,9 @@ export function shouldAlertSessionCapacity({ running, max, freeSlots } = {}) {
  * Texto do aviso. Linguagem leiga: "vagas de robô", nunca "sessão por
  * processo", "circuit breaker", "shard" ou "worker".
  */
-export function buildCapacityAlertVars({ running, max, free }) {
+export function buildCapacityAlertVars({ running, max, free, nodeLabel = null }) {
   return {
-    resumo: `${running} robôs ligados de ${max} que cabem`,
+    resumo: `${running} robôs ligados de ${max} que cabem${nodeLabel ? ` (${nodeLabel})` : ''}`,
     situacao: free === 0
       ? 'Não há mais vaga: cliente nova não consegue conectar agora.'
       : `Sobra${free === 1 ? '' : 'm'} ${free} vaga${free === 1 ? '' : 's'}.`,

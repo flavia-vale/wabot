@@ -30,6 +30,13 @@ import { recordOperationalSignal } from '../observability/operationalSignals.js'
 import { createShardProcessController } from './shardProcessController.js'
 import { createShardOwnershipCoordinator } from '../core/shardOwnershipCoordinator.js'
 import {
+  buildResumeWhere,
+  createNodeOwnershipCache,
+  isNodeRoutingEnabled,
+  ownsLegacyQueue,
+  resolveSupervisorNodeId,
+} from './nodeRouting.js'
+import {
   COMMAND,
   COMMAND_QUEUE,
   COMMAND_TIMEOUTS_MS,
@@ -39,7 +46,10 @@ import {
   SUPERVISOR_HEARTBEAT_KEY,
   SUPERVISOR_HEARTBEAT_RENEW_INTERVAL_MS,
   SUPERVISOR_HEARTBEAT_TTL_SECONDS,
+  bootedAtKey,
+  commandQueueName,
   encodeEvent,
+  heartbeatKey,
   isCommandStale,
   isKnownCommand,
   lastEventCacheTtlSeconds,
@@ -90,6 +100,23 @@ if (!Number.isInteger(SHARD_INDEX_PARSED) || SHARD_INDEX_PARSED < 0 || SHARD_IND
   process.exit(1)
 }
 const SHARD_INDEX = SHARD_INDEX_PARSED
+
+// Roteamento por nó (SUPERVISOR_NODE_ROUTING, default OFF). Desligado, nada
+// abaixo muda: posse por hash, fila e chaves legadas. Ligado, a posse vem de
+// WaSession.nodeId (null = 'n1') e este processo é o nó SUPERVISOR_NODE_ID.
+const NODE_ROUTING = isNodeRoutingEnabled(process.env)
+let NODE_ID = 'n1'
+if (NODE_ROUTING) {
+  try {
+    NODE_ID = resolveSupervisorNodeId(process.env)
+  } catch (err) {
+    logger.fatal({ err: err.message }, 'SUPERVISOR_NODE_ID inválido — abortando')
+    process.exit(1)
+  }
+  if (SHARD_COUNT > 1) {
+    logger.warn({ shardCount: SHARD_COUNT, nodeId: NODE_ID }, 'SUPERVISOR_NODE_ROUTING ligado: SHARD_COUNT/SHARD_INDEX são IGNORADOS para posse de sessão (vale WaSession.nodeId)')
+  }
+}
 const SHARD_TAG = `shard-${SHARD_INDEX + 1}-of-${SHARD_COUNT}`
 const SESSION_OWNER_MISMATCH_KEY = `supervisor:session_owner_mismatch_total:${SHARD_TAG}`
 
@@ -188,6 +215,8 @@ logModeSummary('bot-supervisor', {
   shardCount: SHARD_COUNT,
   shardIndex: SHARD_INDEX,
   shardTag: SHARD_TAG,
+  nodeRouting: NODE_ROUTING,
+  nodeId: NODE_ROUTING ? NODE_ID : null,
   maxSessionsPerProcess: MAX_SESSIONS_PER_PROCESS,
   sessionCircuitBreakerMode: SESSION_CIRCUIT_BREAKER_MODE,
   restartBudgetMax: RESTART_BUDGET_MAX,
@@ -212,8 +241,23 @@ async function checkSessionCircuitBreaker(userId) {
   return false
 }
 
+// Posse por nó: cache curto de WaSession.nodeId. O processador de comandos
+// aquece o cache (async) antes de rodar o handler; daí `belongsToThisShard`
+// continua síncrono. Desconhecido (nunca consultado) conta como "meu": quem
+// chega aqui sem aquecer vem do resume/health monitor, que já filtram por nó
+// no banco, ou é um bot que ESTE processo iniciou — nunca paramos robô por
+// falha de leitura.
+const nodeOwnership = createNodeOwnershipCache({
+  loadNodeId: async userId => {
+    const row = await db.waSession.findUnique({ where: { userId }, select: { nodeId: true } })
+    return row?.nodeId || 'n1'
+  },
+})
+
 function belongsToThisShard(userId) {
-  return shouldHandleUserOnShard(userId, SHARD_COUNT, SHARD_INDEX)
+  if (!NODE_ROUTING) return shouldHandleUserOnShard(userId, SHARD_COUNT, SHARD_INDEX)
+  const cached = nodeOwnership.peek(userId)
+  return cached === null ? true : cached === NODE_ID
 }
 
 async function noteSessionOwnerMismatch(userId, command = 'unknown') {
@@ -420,41 +464,50 @@ const COMMAND_HANDLERS = {
 // velho demais e é descartado em vez de reexecutado.
 const COMMAND_LOCK_DURATION_MS = Math.max(60_000, Math.max(...Object.values(COMMAND_TIMEOUTS_MS)) + 15_000)
 
-const worker = new Worker(
-  COMMAND_QUEUE,
-  async job => {
-    const name = job.name
-    if (!isKnownCommand(name)) throw new Error(`Comando desconhecido: ${name}`)
-    const data = job.data ?? {}
-    // Drenagem de jobs velhos / TTL de comando: se a API já desistiu de
-    // esperar, descartar em vez de executar (evita SEND_BROADCAST duplicado).
-    // Retornamos resultado (job 'completed') em vez de throw: a decisão de
-    // descartar foi bem-sucedida; ninguém está aguardando o valor.
-    if (isCommandStale(name, data._enqueuedAt)) {
-      const ageMs = Date.now() - Number(data._enqueuedAt)
-      logger.warn({ jobId: job.id, name, userId: data.userId ?? null, ageMs }, 'Comando obsoleto descartado (API já desistiu) — não executado')
-      return { _stale: true, discarded: true, ageMs }
-    }
-    const handler = COMMAND_HANDLERS[name]
-    if (!handler) throw new Error(`Handler ausente para ${name}`)
-    return await handler(data)
-  },
-  {
+async function processCommand(job) {
+  const name = job.name
+  if (!isKnownCommand(name)) throw new Error(`Comando desconhecido: ${name}`)
+  const data = job.data ?? {}
+  // Drenagem de jobs velhos / TTL de comando: se a API já desistiu de
+  // esperar, descartar em vez de executar (evita SEND_BROADCAST duplicado).
+  // Retornamos resultado (job 'completed') em vez de throw: a decisão de
+  // descartar foi bem-sucedida; ninguém está aguardando o valor.
+  if (isCommandStale(name, data._enqueuedAt)) {
+    const ageMs = Date.now() - Number(data._enqueuedAt)
+    logger.warn({ jobId: job.id, name, userId: data.userId ?? null, ageMs }, 'Comando obsoleto descartado (API já desistiu) — não executado')
+    return { _stale: true, discarded: true, ageMs }
+  }
+  const handler = COMMAND_HANDLERS[name]
+  if (!handler) throw new Error(`Handler ausente para ${name}`)
+  // Aquece a posse por nó (async) para os handlers síncronos. Falha de banco
+  // propaga: o comando falha visível em vez de rodar sem saber de quem é.
+  if (NODE_ROUTING && data.userId) await nodeOwnership.get(data.userId)
+  return await handler(data)
+}
+
+function createCommandWorker(queueName) {
+  const w = new Worker(queueName, processCommand, {
     connection: { url: REDIS_URL, maxRetriesPerRequest: null },
     concurrency: 8,
     lockDuration: COMMAND_LOCK_DURATION_MS,
-  },
-)
+  })
+  w.on('failed', (job, err) => {
+    logger.warn({ jobId: job?.id, name: job?.name, queue: queueName, err: err?.message }, 'Comando supervisor falhou')
+  })
+  w.on('stalled', jobId => {
+    // Reprocesso por stall é tolerado: isCommandStale descarta o reentregue se já
+    // passou do timeout. Logamos para visibilidade do sinal (morte abrupta).
+    logger.warn({ jobId, queue: queueName }, 'Comando supervisor stalled (lock expirou) — guard de staleness evita efeito duplicado no reprocesso')
+  })
+  return w
+}
 
-worker.on('failed', (job, err) => {
-  logger.warn({ jobId: job?.id, name: job?.name, err: err?.message }, 'Comando supervisor falhou')
-})
-
-worker.on('stalled', jobId => {
-  // Reprocesso por stall é tolerado: isCommandStale descarta o reentregue se já
-  // passou do timeout. Logamos para visibilidade do sinal (morte abrupta).
-  logger.warn({ jobId }, 'Comando supervisor stalled (lock expirou) — guard de staleness evita efeito duplicado no reprocesso')
-})
+// Flag off: UMA fila, a legada (idêntico ao histórico). Flag on: a fila do nó
+// E, só no 'n1', a legada (transição — a API ainda pode estar nela). Outros
+// nós NUNCA leem a legada: pegariam jobs de sessões do 'n1'.
+const workers = NODE_ROUTING
+  ? [createCommandWorker(commandQueueName(NODE_ID)), ...(ownsLegacyQueue(NODE_ID) ? [createCommandWorker(COMMAND_QUEUE)] : [])]
+  : [createCommandWorker(COMMAND_QUEUE)]
 
 // ---- Heartbeat ----
 
@@ -466,8 +519,16 @@ let heartbeatTimer = null
 const SUPERVISOR_BOOTED_AT_MS = Date.now()
 async function renewHeartbeat() {
   try {
-    await publisher.set(SUPERVISOR_HEARTBEAT_KEY, String(Date.now()), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
-    await publisher.set(SUPERVISOR_BOOTED_AT_KEY, String(SUPERVISOR_BOOTED_AT_MS), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
+    if (NODE_ROUTING) {
+      await publisher.set(heartbeatKey(NODE_ID), String(Date.now()), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
+      await publisher.set(bootedAtKey(NODE_ID), String(SUPERVISOR_BOOTED_AT_MS), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
+    }
+    // Chaves legadas: sempre com a flag off; com ela on, só o 'n1' (a API ainda
+    // em modo legado lê estas — dois nós não podem sobrescrever a mesma chave).
+    if (!NODE_ROUTING || ownsLegacyQueue(NODE_ID)) {
+      await publisher.set(SUPERVISOR_HEARTBEAT_KEY, String(Date.now()), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
+      await publisher.set(SUPERVISOR_BOOTED_AT_KEY, String(SUPERVISOR_BOOTED_AT_MS), 'EX', SUPERVISOR_HEARTBEAT_TTL_SECONDS)
+    }
   } catch (err) {
     logger.warn({ err: err.message }, 'Falha ao renovar heartbeat')
   }
@@ -519,10 +580,11 @@ async function healthMonitorTick() {
   if (!AUTO_RESUME) return
   try {
     const persisted = (await db.waSession.findMany({
-      where: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }),
+      where: buildResumeWhere({ base: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }), nodeId: NODE_ID, routing: NODE_ROUTING }),
       select: { userId: true, status: true, lifecycle: true, ownerInstance: true },
     })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
     for (const s of persisted) {
+      if (NODE_ROUTING) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
       if (!belongsToThisShard(s.userId)) continue
       if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       if (sessionCore.isRunning(s.userId)) continue
@@ -604,13 +666,14 @@ async function boot() {
   try {
     const persisted = AUTO_RESUME
       ? (await db.waSession.findMany({
-          where: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }),
+          where: buildResumeWhere({ base: buildResurrectionWhere({ includeReconnecting: RESURRECT_RECONNECTING }), nodeId: NODE_ID, routing: NODE_ROUTING }),
           select: { userId: true, status: true, lifecycle: true, ownerInstance: true },
         })).filter(row => shouldResurrectSession({ ...row, includeReconnecting: RESURRECT_RECONNECTING }))
       : []
     if (!AUTO_RESUME) logger.info({ shard: SHARD_TAG }, 'AUTO_START_WHATSAPP_SESSIONS=false — supervisor não faz auto-resume (só comandos manuais)')
     attempted = persisted.length
     for (const s of persisted) {
+      if (NODE_ROUTING) nodeOwnership.set(s.userId, NODE_ID) // o filtro do banco já provou a posse
       if (!belongsToThisShard(s.userId)) continue
       if (String(s.lifecycle).startsWith('moving') || String(s.lifecycle).startsWith('restoring') || String(s.ownerInstance).startsWith('shard:')) continue
       try {
@@ -637,7 +700,9 @@ async function boot() {
   // momento que health monitor reerga um). Custo: O(n) a cada 5s, n <= 100.
   setInterval(() => {
     for (const userId of sessionCore.listRunningBots()) {
-      if (!belongsToThisShard(userId)) {
+      // Com roteamento por nó NÃO paramos robô por "posse": o cache vem de
+      // comandos (um comando mal roteado faria este nó matar o próprio robô).
+      if (!NODE_ROUTING && !belongsToThisShard(userId)) {
         void noteSessionOwnerMismatch(userId, 'runningBotSweep')
         stopBotWithBridge(userId)
         continue
@@ -656,9 +721,15 @@ async function shutdown(signal) {
   logger.info({ signal }, 'bot-supervisor encerrando')
   try { if (heartbeatTimer) clearInterval(heartbeatTimer) } catch {}
   try { if (healthMonitorTimer) clearInterval(healthMonitorTimer) } catch {}
-  try { await publisher.del(SUPERVISOR_HEARTBEAT_KEY) } catch {}
-  try { await publisher.del(SUPERVISOR_BOOTED_AT_KEY) } catch {}
-  try { await worker.close() } catch {}
+  if (NODE_ROUTING) {
+    try { await publisher.del(heartbeatKey(NODE_ID)) } catch {}
+    try { await publisher.del(bootedAtKey(NODE_ID)) } catch {}
+  }
+  if (!NODE_ROUTING || ownsLegacyQueue(NODE_ID)) {
+    try { await publisher.del(SUPERVISOR_HEARTBEAT_KEY) } catch {}
+    try { await publisher.del(SUPERVISOR_BOOTED_AT_KEY) } catch {}
+  }
+  for (const w of workers) { try { await w.close() } catch {} }
   try { await pocShard.shutdown() } catch {}
   try { await publisher.quit() } catch {}
   try { sessionCore.stopAllBots() } catch {}

@@ -141,3 +141,55 @@ test('o evento está na allowlist de analytics (senão sumiria em silêncio)', (
   const src = readFileSync(new URL('../src/analytics.js', import.meta.url), 'utf8')
   assert.ok(src.includes("'ops_session_capacity_warning'"))
 })
+
+// ---- Roteamento por nó ----
+import { countRunningBotsByNode } from '../src/ops/sessionCapacityAlertSweep.js'
+
+const ENV_ALERTA = { CAPACITY_ALERT_ENABLED: 'true', MAX_SESSIONS_PER_PROCESS: '20', CAPACITY_ALERT_FREE_SLOTS: '2' }
+
+test('por nó: pega o nó mais cheio entre os medidos', async () => {
+  const r = await countRunningBotsByNode(async () => ({ n1: 5, n2: 19 }))
+  assert.deepEqual(r, { running: 19, nodeId: 'n2', nodes: 2 })
+})
+
+test('por nó: nó não medido (null) nunca vira 0; nenhum medido -> null', async () => {
+  assert.equal((await countRunningBotsByNode(async () => ({ n1: null, n2: null }))).running, null)
+  assert.equal((await countRunningBotsByNode(async () => { throw new Error('x') })).running, null)
+  assert.equal((await countRunningBotsByNode(async () => ({ n1: null, n2: 3 }))).running, 3)
+})
+
+test('sweep por nó: um nó cheio avisa mesmo com a soma folgada, e a chave do cooldown leva o nó', async () => {
+  const enviados = []
+  const r = await runSessionCapacityAlertSweep({
+    db: fakeDb(),
+    listRunningBots: async () => { throw new Error('não deveria ser usado') },
+    listRunningBotsByNode: async () => ({ n1: 2, n2: 20 }),
+    sendAlert: async args => { enviados.push(args); return { sent: true } },
+    env: ENV_ALERTA,
+    logger: quietLogger,
+  })
+  assert.equal(r.sent, 1)
+  assert.equal(r.running, 20)
+  assert.match(enviados[0].key, /servidor n2/)
+  assert.match(enviados[0].vars.resumo, /servidor n2/)
+  assert.doesNotMatch(enviados[0].vars.resumo, /nó\b|shard|node/i)
+})
+
+test('sweep por nó: todos com vaga -> não avisa; sem medição -> não avisa', async () => {
+  const base = { db: fakeDb(), sendAlert: async () => { throw new Error('não deveria avisar') }, env: ENV_ALERTA, logger: quietLogger }
+  assert.equal((await runSessionCapacityAlertSweep({ ...base, listRunningBotsByNode: async () => ({ n1: 3, n2: 4 }) })).sent, 0)
+  assert.equal((await runSessionCapacityAlertSweep({ ...base, listRunningBotsByNode: async () => ({ n1: null }) })).reason, 'contagem_indisponivel')
+})
+
+test('sweep sem listRunningBotsByNode: chave do cooldown e texto idênticos ao legado', async () => {
+  const enviados = []
+  await runSessionCapacityAlertSweep({
+    db: fakeDb(),
+    listRunningBots: async () => Array.from({ length: 20 }, (_, i) => `u${i}`),
+    sendAlert: async args => { enviados.push(args); return { sent: true } },
+    env: ENV_ALERTA,
+    logger: quietLogger,
+  })
+  assert.equal(enviados[0].key, 'max=20')
+  assert.equal(enviados[0].vars.resumo, '20 robôs ligados de 20 que cabem')
+})
