@@ -3,7 +3,7 @@
  * Flag off (default) = comportamento legado, nada aqui é consultado.
  */
 
-import { DEFAULT_NODE_ID, isValidNodeId } from './protocol.js'
+import { COMMAND, DEFAULT_NODE_ID, isValidNodeId } from './protocol.js'
 
 export function isNodeRoutingEnabled(env = process.env) {
   return ['1', 'true', 'on'].includes(String(env.SUPERVISOR_NODE_ROUTING ?? '').trim().toLowerCase())
@@ -65,4 +65,13 @@ export function createNodeOwnershipCache({ loadNodeId, ttlMs = 10_000, now = () 
     set(userId, nodeId) { entries.set(userId, { nodeId, expiresAt: now() + ttlMs }) },
     invalidate(userId) { entries.delete(userId) },
   }
+}
+
+/**
+ * Comandos que ligam/desligam o socket do WhatsApp: a posse é relida do banco
+ * (sem cache) antes de rodar. Cache de 10 s não basta aqui — um START_BOT no nó
+ * errado abre um segundo socket na mesma credencial.
+ */
+export function commandNeedsFreshOwnership(name) {
+  return name === COMMAND.START_BOT || name === COMMAND.STOP_BOT
 }

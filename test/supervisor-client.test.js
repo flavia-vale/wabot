@@ -335,7 +335,7 @@ test('flag ON: nodeId é gravado ANTES do START_BOT e vai ao nó escolhido', asy
   const h = createNodeHarness({ events, handlers: { 'supervisor-commands-n2': name => (name === 'listRunningBots' ? [] : true), 'supervisor-commands-n1': name => (name === 'listRunningBots' ? Array.from({ length: 15 }, (_, i) => `x${i}`) : true) } })
   // n2 vazio (0), n1 com 15 -> n2 tem mais vagas
   h.added.length = 0
-  const db = fakeDb({ novo: { nodeId: null } }, events)
+  const db = fakeDb({ novo: { nodeId: null, phone: null, status: 'disconnected', lifecycle: 'idle' } }, events)
   const client = routed(h, { db })
   const ok = await client.startBot('novo')
   assert.equal(ok, true)
@@ -369,7 +369,7 @@ test('flag ON: sessão que já tem nodeId NÃO é recolocada', async () => {
 
 test('flag ON: sem nó vivo com vaga o start é recusado (false) e nada é enviado', async () => {
   const h = createNodeHarness({ alive: [] })
-  const db = fakeDb({ novo: { nodeId: null } })
+  const db = fakeDb({ novo: { nodeId: null, phone: null, status: 'disconnected', lifecycle: 'idle' } })
   const client = routed(h, { db })
   assert.equal(await client.startBot('novo'), false)
   assert.equal(db.rows.novo.nodeId, null)
@@ -421,4 +421,48 @@ test('flag OFF: isSupervisorAlive segue lendo a chave legada', async () => {
   const client = createSupervisorClient({ redisUrl: 'redis://fake', ioredisModule: h.ioredisModule, bullmqModule: h.bullmqModule, env: {}, nodeRouting: false })
   assert.equal(await client.isSupervisorAlive(), true)
   await client.close()
+})
+
+// ---- MN-01/02/03: posse única, trava no START/STOP, dono duplo ----
+
+test('MN-01: conta antiga (nodeId nulo, número pareado) fica no n1 mesmo com o n2 mais vazio', async () => {
+  const h = createNodeHarness({ handlers: { 'supervisor-commands-n1': name => (name === 'listRunningBots' ? Array.from({ length: 18 }, (_, i) => `x${i}`) : true), 'supervisor-commands-n2': name => (name === 'listRunningBots' ? [] : true) } })
+  const db = fakeDb({ velha: { nodeId: null, phone: '5511999990000', status: 'disconnected', lifecycle: 'idle' } })
+  const client = routed(h, { db })
+  await client.startBot('velha')
+  assert.deepEqual(h.added.filter(a => a.name === 'startBot').map(a => a.queue), ['supervisor-commands-n1'])
+  assert.equal(db.rows.velha.nodeId, null, 'não grava nodeId: nulo continua significando n1')
+  await client.close()
+})
+
+test('MN-01: conta com nodeId nulo e robô em andamento (lifecycle != idle) também fica no n1', async () => {
+  const h = createNodeHarness()
+  const db = fakeDb({ pareando: { nodeId: null, phone: null, status: 'connecting', lifecycle: 'qr' } })
+  const client = routed(h, { db })
+  await client.startBot('pareando')
+  assert.deepEqual(h.added.filter(a => a.name === 'startBot').map(a => a.queue), ['supervisor-commands-n1'])
+  await client.close()
+})
+
+test('MN-03: o mesmo robô nos dois nós é detectado, contado e logado (não some no Set)', async () => {
+  const h = createNodeHarness({ handlers: { 'supervisor-commands-n1': () => ['u1', 'u2'], 'supervisor-commands-n2': () => ['u2', 'u3'] } })
+  const client = routed(h, { db: fakeDb() })
+  const lista = await client.listRunningBots()
+  assert.deepEqual(lista.sort(), ['u1', 'u2', 'u3'])
+  assert.equal(client.getDualOwnerTotal(), 1)
+  await client.close()
+})
+
+test('MN-03: auto-stop é opt-in e só para o nó que NÃO é o dono do banco', async () => {
+  const h = createNodeHarness({ handlers: { 'supervisor-commands-n1': () => ['u2'], 'supervisor-commands-n2': () => ['u2'] } })
+  const sem = routed(h, { db: fakeDb({ u2: { nodeId: 'n1' } }) })
+  await sem.listRunningBots()
+  assert.equal(h.added.filter(a => a.name === 'stopBot').length, 0)
+  await sem.close()
+
+  const h2 = createNodeHarness({ handlers: { 'supervisor-commands-n1': () => ['u2'], 'supervisor-commands-n2': () => ['u2'] } })
+  const com = routed(h2, { db: fakeDb({ u2: { nodeId: 'n1' } }), env: { SUPERVISOR_DUAL_OWNER_AUTOSTOP: '1' } })
+  await com.listRunningBots()
+  assert.deepEqual(h2.added.filter(a => a.name === 'stopBot').map(a => a.queue), ['supervisor-commands-n2'])
+  await com.close()
 })

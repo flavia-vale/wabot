@@ -142,3 +142,13 @@ Decisões de projeto (e por quê):
 - `isSupervisorAlive()` sem `nodeId` exige todos os nós listados em `SUPERVISOR_NODE_IDS`: um nó listado que nunca subiu mantém o alarme aceso.
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
+
+---
+
+## Atualização — itens da segunda opinião implementados (tudo desligado)
+
+- **MN-01** `nodeId` nulo = `n1`, sempre. Só entra em escolha de nó a sessão inexistente ou nunca pareada e parada (`shouldPlaceSession`). Conta antiga (número pareado) nunca é recolocada. NOT NULL no banco fica para o cutover Postgres (SQLite não altera coluna).
+- **MN-02** START_BOT/STOP_BOT releem a posse no banco, sem cache de 10 s, antes de rodar.
+- **MN-03** Fan-out detecta o mesmo robô em dois nós (`session_dual_owner`, contador `getDualOwnerTotal()`); parar o do nó errado é opt-in (`SUPERVISOR_DUAL_OWNER_AUTOSTOP=1`).
+- Script: `node scripts/backfill-node-id.mjs` (simulação) / `--aplicar`. **Obrigatório antes de listar um n2 em `SUPERVISOR_NODE_IDS`.**
+- Rollback da API (voltar à fila legada) só é seguro enquanto nenhuma linha tiver `nodeId` diferente de `n1`.

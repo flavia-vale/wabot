@@ -93,3 +93,9 @@ test('supervisor: flag off mantém posse por hash, fila e chaves legadas no cód
   assert.match(src, /\[createCommandWorker\(COMMAND_QUEUE\)\]/)
   assert.match(src, /!NODE_ROUTING \|\| ownsLegacyQueue\(NODE_ID\)/)
 })
+
+test('MN-02: supervisor invalida o cache de posse antes de START/STOP (lido do banco)', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const src = await readFile(supervisorEntry, 'utf8')
+  assert.match(src, /if \(commandNeedsFreshOwnership\(name\)\) nodeOwnership\.invalidate\(data\.userId\)/)
+})
