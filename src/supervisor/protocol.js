@@ -230,3 +230,19 @@ export function heartbeatKey(nodeId) {
 export function bootedAtKey(nodeId) {
   return `${SUPERVISOR_BOOTED_AT_KEY}:${assertNodeId(nodeId)}`
 }
+
+// Teto de sessões do próprio nó (MAX_SESSIONS_PER_PROCESS), publicado pelo
+// supervisor com o mesmo TTL do heartbeat. A API lê daqui em vez de presumir
+// que todos os nós têm o mesmo teto. Aditivo.
+export function capacityKey(nodeId) {
+  return `supervisor:capacity:${assertNodeId(nodeId)}`
+}
+
+// Cadeado de curta duração "este WhatsApp já está ligado neste nó"
+// (SUPERVISOR_OWNER_LEASE). Guarda extra — a fonte da verdade é WaSession.nodeId.
+export const OWNER_LEASE_KEY_PREFIX = 'supervisor:owner'
+export const OWNER_LEASE_TTL_SECONDS = 60
+export const OWNER_LEASE_RENEW_INTERVAL_MS = 20_000
+export function ownerLeaseKey(userId) {
+  return `${OWNER_LEASE_KEY_PREFIX}:${userId}`
+}

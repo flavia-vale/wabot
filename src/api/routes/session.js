@@ -50,7 +50,8 @@ async function describeStartRefusal(userId) {
       nodeRouting: true,
       nodeAlive: node.alive,
       runningCount: node.running,
-      maxSessions: MAX_SESSIONS_PER_PROCESS,
+      // Teto do PRÓPRIO nó (publicado por ele); sem a chave não se afirma teto.
+      maxSessions: node.max,
     })
   }
   let runningCount = null

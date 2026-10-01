@@ -142,3 +142,16 @@ Decisões de projeto (e por quê):
 - `isSupervisorAlive()` sem `nodeId` exige todos os nós listados em `SUPERVISOR_NODE_IDS`: um nó listado que nunca subiu mantém o alarme aceso.
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
+
+## Deploy e backup por servidor (MN-12, MN-13) — arquivos novos, nada existente foi tocado
+
+`deploy.yml`, `deploy_safe_*.sh` e `backup_prod.sh` **não foram alterados** (continuam sendo do servidor principal). Para um servidor secundário:
+
+| Arquivo | Para quê |
+|---|---|
+| `ecosystem.node.config.cjs` | PM2 do nó: **só** o `bot-supervisor` (api/dashboard/snapshot-cron duplicariam as tarefas diárias). Config do nó vem do `.env` DELE (`SUPERVISOR_NODE_ID`, `REDIS_URL` e banco do principal, `MAX_SESSIONS_PER_PROCESS`). |
+| `scripts/deploy_node.sh` | Atualiza o código do nó (`git` fast-forward + `npm ci` + `prisma generate`). **Simulação por padrão** (`APLICAR=1` grava). **Não roda migration** (a do banco compartilhado roda uma vez, no principal) e **não reinicia o supervisor** sem `REINICIAR_SUPERVISOR=1` (reinício reconecta todas as sessões do nó; anuncie antes). |
+| `scripts/backup_no.sh` | Backup diário do nó: logins (`auth_info`) + `.env` do nó, cifra com `age` (opcional, recomendada), rotação e `rclone`, marcador `last_success_node_<id>.txt`. Sem banco. Recusa gravar cópia se o `auth_info` estiver vazio. |
+| `scripts/restaurar_auth_conta.sh` | Restaura o login de **uma** conta a partir desse backup (simulação por padrão; `APLICAR=1`). Recusa sobrescrever (`FORCAR=1` guarda o antigo ao lado). Caminho de recuperação se um servidor morrer (RTO a testar com uma conta-teste: meta < 30 min). |
+
+Ainda **não** está ligado ao GitHub Actions: disparar o deploy do nó pelo `deploy.yml` (matriz de servidores) exige segredos SSH por servidor e é uma mudança no deploy de produção — fica para decisão sua (MN-12 parte workflow).
