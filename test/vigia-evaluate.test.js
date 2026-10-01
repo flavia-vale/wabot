@@ -91,3 +91,10 @@ test('formato: só problemas esconde os verdes', () => {
   assert.doesNotMatch(txt, /🟢 Memória/)
   assert.match(txt, /🔴 Site\/API/)
 })
+
+test('envios: interrompidos por reinício aparecem à parte e não entram na taxa de erro', () => {
+  const s = saudavel(); s.sends = { total: 2000, success: 1300, error: 40, restarted: 620, stuck: 0 }
+  const c = por(evaluateVigia(s), 'envios')
+  assert.equal(c.level, LEVEL.OK)
+  assert.match(c.detail, /620 interrompidos por reinício/)
+})

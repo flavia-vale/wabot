@@ -149,9 +149,16 @@ que a Perplexity e o ChatGPT usam para nos descartar (ver
   PromoBot, DivulgaLinks, OfertasBot), 9 guias `/guia/<loja>-afiliados`
   (cadastro no programa + onde achar o ID), 8 posts, `/comparativo`,
   `/lojas` + 3 páginas de rede (Awin, Lomadee, Rakuten).
-- **Frescor artificial:** todas as páginas exibem "Atualizado em 27 de setembro
-  de 2026" e `lastmod` do sitemap = hoje. Hipótese: carimbo automático diário.
-  Funciona como sinal de frescor para Google e IA.
+- **Frescor em lote (não é carimbo diário):** todas as páginas exibem
+  "Atualizado em 27 de setembro de 2026" e o `lastmod` do sitemap era o dia da
+  leitura. A hipótese de 27/09 era carimbo automático diário — **descartada em
+  01/10/2026**: no site dele, nesse dia, 43 das 44 datas do sitemap ainda eram
+  27/09 (1 era 28/09, arquivo gerado em 28/09 22:23), e "Atualizado em", `<time>`
+  e `dateModified` do JSON-LD continuavam 27/09, vindos prontos do servidor (o
+  `site.js` não mexe em data). Ele trocou a data de todas as páginas de uma vez
+  no deploy da versão nova. Não copiamos: a nossa data sai de
+  `EDITORIAL_DATES` e só muda quando o conteúdo muda (o Google ignora `lastmod`
+  que não bate com mudança real).
 - **Satélites do mesmo dono:** gruposdowpp.com.br (diretório de grupos de
   WhatsApp, "maior do Brasil", com categoria Afiliados e link "Parceiro" no
   login/cadastro dele), criarfigurinha.com, nexoafiliados.com e
@@ -431,7 +438,7 @@ Alto/Médio/Baixo. Prioridade: P1 (0–30 d, quick win) · P2 (30–90 d) · P3 
 | B26 | Comparativos dos 8 concorrentes que ele cobre e nós não (Afilira, Divulgador Inteligente, Divulga Ninja, Gigi Prime, Busqy, PromoBot, DivulgaLinks, OfertasBot) | SEO | Motor de 47 % das impressões; exige ficha com preço datado | Alto | Médio | P2 |
 | B27 | 5 depoimentos com nome/foto/permissão em `/espelha-grupos-e-confiavel`, home e preços | Vendas/Growth | Já no plano de 23/09; ninguém no nicho tem | Alto | Baixo | P2 |
 | B28 | Programa de afiliados público (`/programa-de-afiliados` com comissão em PIX) + card no painel | Vendas/Growth | Ele dá 15 dias; nós pagamos dinheiro e não contamos | Médio | Baixo | P2 |
-| B29 | `dateModified` visível ("Revisado em …") + no JSON-LD em todas as páginas comerciais | SEO | Frescor; ele carimba diariamente | Baixo | Baixo | P2 |
+| B29 | `dateModified` visível ("Revisado em …") + no JSON-LD em todas as páginas comerciais | SEO | Frescor; ele carimba todas as páginas com a data do deploy (não é diário — conferido em 01/10) | Baixo | Baixo | P2 |
 | B30 | Vídeo YouTube "Espelha Grupos: do QR ao primeiro envio em 5 min" com o nome no título | GEO/IA | Menção de terceiro que a IA e o Google mostram | Médio | Médio | P2 |
 | B31 | Onboarding por nicho (template + preset anti-ban + sugestão de fontes) no cadastro | Produto | Ataca Basic 6 % de renovação; mede tempo até 1º envio | Alto | Médio | P2 |
 | B32 | Alertas fora do painel (e-mail/WhatsApp) quando a sessão cai ou a fila para | Produto | Retenção; `receptionHealth` já detecta | Médio | Médio | P2 |

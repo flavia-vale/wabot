@@ -204,6 +204,16 @@ com título-pergunta + contraste:
 - **`EDITORIAL_DATES` é a fonte ÚNICA da data** de toda rota indexável: o
   `lastmod` do sitemap, o `dateModified` e o "Revisado em" visível saem dela.
   Nunca inventar data: `updatedAt` só muda quando o CONTEÚDO muda.
+- **Mudou a ficha do concorrente → muda a data da página (01/10/2026).** A
+  `/alternativas/proafiliados` foi reescrita em 27/09 ("Verificado em
+  27/09/2026" no texto), mas ficou com `updatedAt` 04/08 — Google e IAs viam
+  04/08. Guarda: `test/data-revisao-comparativo-vs-ficha.test.js` (data da
+  página ≥ `verifiedAt` de toda ficha que ela exibe). Ao trocar uma ficha em
+  `competitors-data.js`, conferir também `lib/automation-models.js`, que tem
+  texto próprio por concorrente (a linha do ProAfiliados ficou com "5
+  plataformas" e "tag" até 01/10).
+- **O concorrente ProAfiliados NÃO carimba data diária** (conferido em
+  01/10/2026: tudo ainda 27/09). Não criar carimbo automático aqui.
 - Páginas sem autoria/data próprias usam
   `components/marketing/EditorialFreshness.jsx`, que imprime o selo e o schema
   `WebPage`. A guarda HTTP `npm run validate:editorial-dates` cobre todas as
