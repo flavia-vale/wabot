@@ -231,6 +231,7 @@ test('encodeEvent integra com EventEmitter do client', async () => {
 // cada fila aberta e as chamadas a add(). `handlers[queueName]` decide o retorno.
 function createNodeHarness({ alive = ['n1', 'n2'], handlers = {}, events = [] } = {}) {
   const store = new Map(alive.map(id => [`supervisor:heartbeat:${id}`, '1']))
+  for (const id of alive) store.set(`supervisor:capacity:${id}`, '20') // teto publicado por cada nó vivo
   class FakeRedis extends EventEmitter {
     async subscribe() { return 1 }
     async unsubscribe() { return 0 }
@@ -423,39 +424,39 @@ test('flag OFF: isSupervisorAlive segue lendo a chave legada', async () => {
   await client.close()
 })
 
-// ---- MN-05: falha rápida com nó fora do ar ----
+// ---- MN-09: teto por nó publicado pelo próprio supervisor ----
 
-test('MN-05: nó sem heartbeat falha na hora, com mensagem leiga, e NADA é enfileirado', async () => {
-  const h = createNodeHarness({ alive: ['n1'] })
-  const client = routed(h, { db: fakeDb({ u9: { nodeId: 'n2' } }) })
-  const t0 = Date.now()
-  await assert.rejects(() => client.sendBroadcast('u9', 'oi', []), err => {
-    assert.equal(err.code, 'WA_NODE_UNAVAILABLE')
-    assert.equal(err.nodeId, 'n2')
-    assert.doesNotMatch(err.message, /shard|supervisor|worker|fila|redis|n2/i)
-    return true
-  })
-  assert.ok(Date.now() - t0 < 100)
-  assert.equal(h.added.length, 0)
+test('MN-09: placement usa o teto de cada nó, e nó sem teto publicado nunca é escolhido', async () => {
+  const handlers = {
+    'supervisor-commands-n1': name => (name === 'listRunningBots' ? Array.from({ length: 10 }, (_, i) => `a${i}`) : true),
+    'supervisor-commands-n2': name => (name === 'listRunningBots' ? Array.from({ length: 5 }, (_, i) => `b${i}`) : true),
+  }
+  // n1 tem teto 80 (70 vagas livres); n2 tem teto 10 (5 livres) -> n1
+  const h = createNodeHarness({ handlers })
+  h.store.set('supervisor:capacity:n1', '80')
+  h.store.set('supervisor:capacity:n2', '10')
+  const db = fakeDb({ novo: { nodeId: null, phone: null, status: 'disconnected', lifecycle: 'idle' } })
+  const client = routed(h, { db })
+  await client.startBot('novo')
+  assert.equal(db.rows.novo.nodeId, 'n1')
   await client.close()
+
+  // n1 sem chave de teto (supervisor antigo): não se presume -> n2
+  const h2 = createNodeHarness({ handlers })
+  h2.store.delete('supervisor:capacity:n1')
+  h2.store.set('supervisor:capacity:n2', '10')
+  const db2 = fakeDb({ novo: { nodeId: null, phone: null, status: 'disconnected', lifecycle: 'idle' } })
+  const c2 = routed(h2, { db: db2 })
+  await c2.startBot('novo')
+  assert.equal(db2.rows.novo.nodeId, 'n2')
+  await c2.close()
 })
 
-test('MN-05: Redis pendurado ao enfileirar vira erro em vez de esperar para sempre', async () => {
+test('MN-09: getNodeCapacities devolve null (nunca 0) para nó sem chave ou chave lixo', async () => {
   const h = createNodeHarness()
-  const original = h.bullmqModule.Queue
-  h.bullmqModule.Queue = class extends original { add() { return new Promise(() => {}) } }
-  const client = routed(h, { db: fakeDb({ u1: { nodeId: 'n1' } }), addTimeoutMs: 50 })
-  await assert.rejects(() => client.sendBroadcast('u1', 'oi', []), /Redis não respondeu/)
-  await client.close()
-})
-
-test('MN-04: com roteamento, _enqueuedAt usa a régua do Redis', async () => {
-  const h = createNodeHarness()
-  const FakeRedis = h.ioredisModule.default
-  FakeRedis.prototype.time = async function () { const t = Date.now() + 20_000; return [String(Math.floor(t / 1000)), String((t % 1000) * 1000)] }
-  const client = routed(h, { db: fakeDb({ u1: { nodeId: 'n1' } }) })
-  await client.sendBroadcast('u1', 'oi', [])
-  const stamped = h.added.find(a => a.name === 'sendBroadcast').data._enqueuedAt
-  assert.ok(Math.abs(stamped - (Date.now() + 20_000)) < 2_000, `carimbo ${stamped} não está na hora do Redis`)
+  h.store.set('supervisor:capacity:n1', '40')
+  h.store.set('supervisor:capacity:n2', 'abc')
+  const client = routed(h, { db: fakeDb() })
+  assert.deepEqual(await client.getNodeCapacities(), { n1: 40, n2: null })
   await client.close()
 })

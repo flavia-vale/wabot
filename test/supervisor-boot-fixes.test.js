@@ -94,10 +94,10 @@ test('supervisor: flag off mantém posse por hash, fila e chaves legadas no cód
   assert.match(src, /!NODE_ROUTING \|\| ownsLegacyQueue\(NODE_ID\)/)
 })
 
-test('MN-04: com roteamento, comparação de obsolescência usa a hora do Redis e START_BOT obsoleto devolve false', async () => {
+test('MN-09/10: supervisor publica o teto do nó e usa o cadeado só atrás da flag', async () => {
   const { readFile } = await import('node:fs/promises')
   const src = await readFile(supervisorEntry, 'utf8')
-  assert.match(src, /const nowMs = NODE_ROUTING \? await redisClock\.now\(\) : Date\.now\(\)/)
-  assert.match(src, /isCommandStale\(name, data\._enqueuedAt, nowMs\)/)
-  assert.match(src, /if \(NODE_ROUTING && name === COMMAND\.START_BOT\) return false/)
+  assert.match(src, /publisher\.set\(capacityKey\(NODE_ID\), String\(MAX_SESSIONS_PER_PROCESS\)/)
+  assert.match(src, /const ownerLease = OWNER_LEASE \? createOwnerLease/)
+  assert.match(src, /if \(ownerLease && !sessionCore\.isRunning\(userId\)\)/)
 })

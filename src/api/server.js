@@ -46,7 +46,7 @@ import { runSmartLinkAlertSweep } from '../jobs/smartLinkAlerts.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, SUPERVISOR_MODE } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
@@ -298,7 +298,7 @@ async function runSessionCapacityAlertTick() {
   try {
     // Roteamento por nó ligado: avisa pelo nó mais cheio (teto é por nó).
     const listRunningBotsByNodeDep = SUPERVISOR_MODE === 'remote' && isNodeRoutingEnabled() ? listRunningBotsByNode : null
-    const summary = await runSessionCapacityAlertSweep({ db, listRunningBots, listRunningBotsByNode: listRunningBotsByNodeDep, logger: app.log })
+    const summary = await runSessionCapacityAlertSweep({ db, listRunningBots, listRunningBotsByNode: listRunningBotsByNodeDep, getNodeCapacities: listRunningBotsByNodeDep ? getNodeCapacities : null, logger: app.log })
     if (summary.sent > 0) app.log.warn({ ...summary }, 'aviso de vagas: passada concluída')
   } catch (err) {
     app.log.error({ err: err.message }, 'aviso de vagas: passada falhou')

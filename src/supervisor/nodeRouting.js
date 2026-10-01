@@ -67,11 +67,7 @@ export function createNodeOwnershipCache({ loadNodeId, ttlMs = 10_000, now = () 
   }
 }
 
-/**
- * Comandos que ligam/desligam o socket do WhatsApp: a posse é relida do banco
- * (sem cache) antes de rodar. Cache de 10 s não basta aqui — um START_BOT no nó
- * errado abre um segundo socket na mesma credencial.
- */
-export function commandNeedsFreshOwnership(name) {
-  return name === COMMAND.START_BOT || name === COMMAND.STOP_BOT
+/** Cadeado de posse no Redis: só existe com roteamento por nó ligado. Default off. */
+export function isOwnerLeaseEnabled(env = process.env) {
+  return isNodeRoutingEnabled(env) && ['1', 'true', 'on'].includes(String(env.SUPERVISOR_OWNER_LEASE ?? '').trim().toLowerCase())
 }
