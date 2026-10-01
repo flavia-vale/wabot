@@ -28,6 +28,7 @@ import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
 import { createOwnerLease } from './ownerLease.js'
+import { createRedisClock } from './redisClock.js'
 import { createShardProcessController } from './shardProcessController.js'
 import { createShardOwnershipCoordinator } from '../core/shardOwnershipCoordinator.js'
 import {
