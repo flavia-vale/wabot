@@ -159,3 +159,17 @@ Script read-only (`scripts/preflight-multi-supervisor.mjs`, no diretório do amb
 Ordem obrigatória: supervisor (passo 2) → API (passo 3) → **backfill** → só então n2 na lista. Mantenha o consumidor da fila legada (remoção só pegando carona num restart inevitável — MN-19); não conte com "remover o consumidor legado" como passo de baixo impacto: exige novo restart do supervisor = reconexão geral.
 Guarda da API: com a flag ligada, a API loga `node_routing_no_heartbeat` (a cada 30 s) se algum nó listado estiver sem heartbeat. **Só loga**, nunca derruba a API.
 Rollback da API só é seguro enquanto nenhuma linha tiver `nodeId` diferente de `n1`.
+
+## Rede e staging com 2 servidores (MN-08, MN-06) — preparado, NADA ativado
+
+**Rede (MN-08)** — três checagens read-only; rode antes de abrir o Redis/banco para outro servidor:
+
+| Onde | Comando | O que barra |
+|---|---|---|
+| no servidor que hospeda Redis/banco | `scripts/preflight-portas.sh` | porta 6379/5432 aberta para TODAS as interfaces (0.0.0.0/::) |
+| no servidor secundário | `node scripts/preflight-rede-nos.mjs --secundario` | Redis local (deveria ser o do principal), Redis sem senha, endereço público sem TLS; banco SQLite/local; Postgres público sem `sslmode=require`; Redis lento (p99 > 5 ms); relógio com > 1 s de diferença do Redis |
+| no principal | `node scripts/preflight-rede-nos.mjs` | mesma medição, sem exigir Redis/banco remotos |
+
+Regras em `src/supervisor/networkPreflight.js` (pura, testada). Não configura firewall nem rede privada: isso é infraestrutura (VPN/provedor), fora do código.
+
+**Staging com 2 supervisores (MN-06)** — `ecosystem.staging-multinode.config.cjs` (template, não usado por nenhum deploy): `bot-supervisor-staging-n1` e `-n2` no mesmo VPS, pastas de login e de log distintas, teto 5 vagas. **REGRA #1:** sobe 1 processo a mais (~100–150 MB, hipótese a medir) e precisa de OK explícito. Passo a passo e como voltar atrás estão no cabeçalho do arquivo.
