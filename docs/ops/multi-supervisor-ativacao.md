@@ -145,3 +145,14 @@ Decisões de projeto (e por quê):
 
 - **MN-09** Cada supervisor publica o próprio teto em `supervisor:capacity:<nodeId>` (TTL do heartbeat). A API lê dali para placement, recusa de start e aviso de vagas (menor folga entre nós). **Sem a chave o teto não é presumido** (nó nunca é escolhido; nenhum teto cheio é afirmado). Por isso o supervisor precisa estar na versão nova antes de ligar a flag na API (passo 1 antes do passo 2/3).
 - **MN-10** Cadeado de posse no Redis (`SUPERVISOR_OWNER_LEASE=1`, só com roteamento ligado; padrão off): `supervisor:owner:<userId>`, TTL 60 s, renovado a cada 20 s. START_BOT em nó diferente do dono do cadeado é recusado (`session_lease_conflict`). Falha ABERTA: Redis fora = só perde a guarda extra, o banco continua mandando. Liberado em STOP_BOT e no shutdown.
+
+## Mover uma conta entre servidores (MN-16) — script pronto, nunca automático
+
+`scripts/mover-conta-no.mjs` (simulação por padrão; só funciona com `SUPERVISOR_NODE_ROUTING` ligado e `BOT_SUPERVISOR_MODE=remote`). Decisões em `src/supervisor/accountMove.js` (puras, testadas).
+
+1. **Plano (não altera nada):** `node scripts/mover-conta-no.mjs --email=cliente@x.com --para=n2` — recusa se: mesmo servidor, destino fora do ar, lotado, sem teto informado, sem medição, ou cliente no meio do pareamento. Origem fora do ar = aviso forte.
+2. **Parar:** `… --aplicar --fase=parar [--host-origem=usuario@ip]` — marca `stopped_by_user` (a origem não ressuscita o robô), manda parar e **confere que parou**; imprime o `rsync` da cópia do login.
+3. **Copiar** (humano, no servidor de destino): o `rsync -a --checksum origem:pasta/ pasta/` impresso.
+4. **Trocar:** `… --aplicar --fase=trocar --auth-copiado` — confere de novo que não roda na origem, grava `nodeId`, religa no destino e confere. **Se não religar, volta o `nodeId` para a origem sozinho.**
+
+Cuidados: a pasta antiga na origem fica (backup); **não religue a conta por lá**. O cache de posse da API dura até 45 s, mas o supervisor da origem relê o banco no START (MN-02) e recusa. Teste a primeira vez com UMA conta-teste e observe 72 h (risco K9: IP de saída diferente no WhatsApp).
