@@ -23,7 +23,7 @@ index f4458db..e6912a6 100644
              const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
              await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..b8e3f77 100644
+index c46b096..5d75cbe 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 @@ -7,7 +7,8 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
@@ -99,7 +99,28 @@ index c46b096..b8e3f77 100644
                                  }
                                  catch (error) {
                                      logger.error({ key, ids, trace: error.stack }, 'error in sending message again');
-@@ -668,6 +703,16 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -652,6 +687,20 @@ export const makeMessagesRecvSocket = (config) => {
+                         if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
+                             return sendMessageAck(node, NACK_REASONS.ParsingError);
+                         }
++                        // wabot patch (RCA 2026-10-01): conversa PRIVADA (DM, jid de usuario ou
++                        // LID) que nao abre e confirmada com <ack> e descartada, sem pedir
++                        // reenvio. Medido: um aparelho da propria conta mandava DMs (fromMe) que
++                        // o robo nao decifrava (MessageCounterError); o <receipt type=retry> era
++                        // recusado com <stream:error><ack class=message/></stream:error> (500),
++                        // a conexao caia e a fila offline voltava ao mesmo ponto - 236 DMs na
++                        // fila seguravam as ofertas dos grupos monitorados atras delas. O robo
++                        // so espelha GRUPO/CANAL: DM sem conteudo legivel nao tem uso aqui.
++                        // Grupo, canal e status seguem o caminho original (retry).
++                        if (isJidUser(msg.key.remoteJid) || isLidUser(msg.key.remoteJid)) {
++                            await sendMessageAck(node);
++                            logger.info({ key: msg.key, fromMe: !!msg.key.fromMe, stub: msg.messageStubParameters?.[0] }, 'wabot: DM sem decifrar confirmada com ack, sem retry');
++                            return;
++                        }
+                         retryMutex.mutex(async () => {
+                             if (ws.isOpen) {
+                                 if (getBinaryNodeChild(node, 'unavailable')) {
+@@ -668,6 +717,16 @@ export const makeMessagesRecvSocket = (config) => {
                              }
                          });
                      }
