@@ -197,6 +197,21 @@ export function renderPrometheusMetrics(extra = {}) {
     )
   }
 
+  // Por servidor (só com SUPERVISOR_NODE_ROUTING): vivo, robôs ligados e teto.
+  // `running`/`capacity` null (não medido) é OMITIDO — nunca vira 0, que
+  // afirmaria "vazio"/"sem teto" sem medição.
+  if (Array.isArray(extra.supervisorNodes) && extra.supervisorNodes.length) {
+    const nodes = extra.supervisorNodes
+    lines.push('# HELP wabot_supervisor_node_alive Whether the node heartbeat is present', '# TYPE wabot_supervisor_node_alive gauge')
+    for (const n of nodes) lines.push(`wabot_supervisor_node_alive{node="${escLabel(n.nodeId)}"} ${n.alive ? 1 : 0}`)
+    lines.push('# HELP wabot_supervisor_node_running_bots Bots running on the node (omitted when not measured)', '# TYPE wabot_supervisor_node_running_bots gauge')
+    for (const n of nodes) if (Number.isFinite(n.running)) lines.push(`wabot_supervisor_node_running_bots{node="${escLabel(n.nodeId)}"} ${n.running}`)
+    lines.push('# HELP wabot_supervisor_node_capacity Session ceiling published by the node (omitted when unknown)', '# TYPE wabot_supervisor_node_capacity gauge')
+    for (const n of nodes) if (Number.isFinite(n.capacity)) lines.push(`wabot_supervisor_node_capacity{node="${escLabel(n.nodeId)}"} ${n.capacity}`)
+    const dual = Number(extra.sessionDualOwnerTotal ?? 0)
+    lines.push('# HELP wabot_supervisor_session_dual_owner_total Same bot seen running on more than one node', '# TYPE wabot_supervisor_session_dual_owner_total counter', `wabot_supervisor_session_dual_owner_total ${Number.isFinite(dual) ? dual : 0}`)
+  }
+
   // Sinais operacionais dos gatilhos de escala (auditoria/WABOT-010). Contadores
   // in-process: SQLITE_BUSY é por-processo da API; dedup fail-open vem do worker
   // e some aqui — para histórico cross-processo, ver os AnalyticsEvent

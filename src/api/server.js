@@ -46,7 +46,7 @@ import { runSmartLinkAlertSweep } from '../jobs/smartLinkAlerts.js'
 import db from '../db.js'
 import { revokeTokenJtiGlobal, isTokenRevokedGlobal } from '../core/tokenRevocationStore.js'
 import { validateEncryptionKey } from '../credentialCrypto.js'
-import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, SUPERVISOR_MODE } from '../manager.js'
+import { resumePersistedBots, startSessionHealthMonitor, stopAllBots, isSupervisorAlive, getSupervisorBootedAtMs, listRunningBots, listRunningBotsByNode, getNodeCapacities, getSupervisorNodesSnapshot, getDualOwnerTotal, SUPERVISOR_MODE } from '../manager.js'
 import { shouldWarnModeRegression } from '../ops/modeRegressionGuard.js'
 import { describeStaleWorkerCode, shouldWarnStaleWorkerCode } from '../ops/staleWorkerCodeGuard.js'
 import { getCodeChangedAtMs } from '../ops/codeVersion.js'
@@ -704,6 +704,8 @@ app.get('/metrics', async (req, reply) => {
       dlqTotal: getDlqMaintenanceSnapshot().lastKnownDlqTotal,
       supervisorMode: SUPERVISOR_MODE,
       supervisorAlive: await isSupervisorAlive(),
+      supervisorNodes: await getSupervisorNodesSnapshot(),
+      sessionDualOwnerTotal: getDualOwnerTotal(),
     }))
 })
 
@@ -808,32 +810,49 @@ if (databaseReadyAtBoot) {
 // velho que o código, os bots estão desatualizados. Só avisa — reiniciar o
 // supervisor reconecta todas as sessões e é decisão humana (AGENTS.md).
 async function warnIfWorkersRunStaleCode() {
+  // Com roteamento por nó cada servidor tem o próprio boot: avaliar um a um,
+  // senão o nó deployado por último esconde (ou inventa) o atraso dos outros.
+  if (SUPERVISOR_MODE === 'remote' && isNodeRoutingEnabled()) {
+    const codeChangedAtMs = await getCodeChangedAtMs()
+    for (const nodeId of resolveKnownNodeIds()) {
+      try { await warnStaleCodeForBoot(await getSupervisorBootedAtMs(nodeId), codeChangedAtMs, nodeId) } catch (err) {
+        app.log.warn({ err: err.message, nodeId }, 'Falha ao checar código desatualizado do servidor')
+      }
+    }
+    return
+  }
   try {
     const [supervisorBootedAtMs, codeChangedAtMs] = await Promise.all([
       getSupervisorBootedAtMs(),
       getCodeChangedAtMs(),
     ])
-    if (!shouldWarnStaleWorkerCode({ supervisorMode: SUPERVISOR_MODE, supervisorBootedAtMs, codeChangedAtMs })) return
-
-    app.log.error(
-      {
-        supervisorMode: SUPERVISOR_MODE,
-        supervisorBootedAt: new Date(supervisorBootedAtMs).toISOString(),
-        codeChangedAt: new Date(codeChangedAtMs).toISOString(),
-        acao: 'pm2 restart bot-supervisor --update-env',
-      },
-      describeStaleWorkerCode({ supervisorBootedAtMs, codeChangedAtMs }),
-    )
-    trackAnalyticsEventSafe({
-      event: 'ops_stale_worker_code',
-      metadata: {
-        supervisorMode: SUPERVISOR_MODE,
-        staleMinutes: Math.round((codeChangedAtMs - supervisorBootedAtMs) / 60_000),
-      },
-    })
+    await warnStaleCodeForBoot(supervisorBootedAtMs, codeChangedAtMs, null)
   } catch (err) {
     app.log.warn({ err: err.message }, 'Falha ao checar se os bots estão com código desatualizado')
   }
+}
+
+async function warnStaleCodeForBoot(supervisorBootedAtMs, codeChangedAtMs, nodeId) {
+  if (!shouldWarnStaleWorkerCode({ supervisorMode: SUPERVISOR_MODE, supervisorBootedAtMs, codeChangedAtMs })) return
+
+  app.log.error(
+    {
+      supervisorMode: SUPERVISOR_MODE,
+      ...(nodeId ? { nodeId } : {}),
+      supervisorBootedAt: new Date(supervisorBootedAtMs).toISOString(),
+      codeChangedAt: new Date(codeChangedAtMs).toISOString(),
+      acao: 'pm2 restart bot-supervisor --update-env',
+    },
+    (nodeId ? `Servidor ${nodeId}: ` : '') + describeStaleWorkerCode({ supervisorBootedAtMs, codeChangedAtMs }),
+  )
+  trackAnalyticsEventSafe({
+    event: 'ops_stale_worker_code',
+    metadata: {
+      supervisorMode: SUPERVISOR_MODE,
+      ...(nodeId ? { nodeId } : {}),
+      staleMinutes: Math.round((codeChangedAtMs - supervisorBootedAtMs) / 60_000),
+    },
+  })
 }
 
 // Adiado (e `unref()`) de propósito: a checagem depende do client Redis do
