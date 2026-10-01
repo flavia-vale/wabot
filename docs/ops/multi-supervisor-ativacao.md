@@ -143,12 +143,16 @@ Decisões de projeto (e por quê):
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
 
-- **MN-09** Cada supervisor publica o próprio teto em `supervisor:capacity:<nodeId>` (TTL do heartbeat). A API lê dali para placement, recusa de start e aviso de vagas (menor folga entre nós). **Sem a chave o teto não é presumido** (nó nunca é escolhido; nenhum teto cheio é afirmado). Por isso o supervisor precisa estar na versão nova antes de ligar a flag na API (passo 1 antes do passo 2/3).
-- **MN-10** Cadeado de posse no Redis (`SUPERVISOR_OWNER_LEASE=1`, só com roteamento ligado; padrão off): `supervisor:owner:<userId>`, TTL 60 s, renovado a cada 20 s. START_BOT em nó diferente do dono do cadeado é recusado (`session_lease_conflict`). Falha ABERTA: Redis fora = só perde a guarda extra, o banco continua mandando. Liberado em STOP_BOT e no shutdown.
+## Deploy e backup por servidor (MN-12, MN-13) — arquivos novos, nada existente foi tocado
 
-## Runbook revisado (MN-14) — rode a pré-checagem ANTES de cada passo
+`deploy.yml`, `deploy_safe_*.sh` e `backup_prod.sh` **não foram alterados** (continuam sendo do servidor principal). Para um servidor secundário:
 
-Script read-only (`scripts/preflight-multi-supervisor.mjs`, no diretório do ambiente). Sai com erro se algo bloquear:
+| Arquivo | Para quê |
+|---|---|
+| `ecosystem.node.config.cjs` | PM2 do nó: **só** o `bot-supervisor` (api/dashboard/snapshot-cron duplicariam as tarefas diárias). Config do nó vem do `.env` DELE (`SUPERVISOR_NODE_ID`, `REDIS_URL` e banco do principal, `MAX_SESSIONS_PER_PROCESS`). |
+| `scripts/deploy_node.sh` | Atualiza o código do nó (`git` fast-forward + `npm ci` + `prisma generate`). **Simulação por padrão** (`APLICAR=1` grava). **Não roda migration** (a do banco compartilhado roda uma vez, no principal) e **não reinicia o supervisor** sem `REINICIAR_SUPERVISOR=1` (reinício reconecta todas as sessões do nó; anuncie antes). |
+| `scripts/backup_no.sh` | Backup diário do nó: logins (`auth_info`) + `.env` do nó, cifra com `age` (opcional, recomendada), rotação e `rclone`, marcador `last_success_node_<id>.txt`. Sem banco. Recusa gravar cópia se o `auth_info` estiver vazio. |
+| `scripts/restaurar_auth_conta.sh` | Restaura o login de **uma** conta a partir desse backup (simulação por padrão; `APLICAR=1`). Recusa sobrescrever (`FORCAR=1` guarda o antigo ao lado). Caminho de recuperação se um servidor morrer (RTO a testar com uma conta-teste: meta < 30 min). |
 
 | Antes de… | Comando | O que ele barra |
 |---|---|---|
