@@ -304,6 +304,31 @@ async function runSessionCapacityAlertTick() {
     app.log.error({ err: err.message }, 'aviso de vagas: passada falhou')
   }
 }
+// Guarda do roteamento por nó: com a flag ligada, avisa (log de erro) se algum
+// nó conhecido está sem heartbeat — é o sintoma de "API trocou de fila antes do
+// supervisor" ou de SUPERVISOR_NODE_IDS com nome errado. SÓ LOGA: derrubar a
+// API por isso pioraria o incidente (um deploy ficaria fora do ar).
+const NODE_ROUTING_GUARD_INTERVAL_MS = Math.max(Number(process.env.NODE_ROUTING_GUARD_INTERVAL_MS) || 30_000, 5_000)
+async function runNodeRoutingGuardTick() {
+  try {
+    const ids = resolveKnownNodeIds()
+    const heartbeats = {}
+    for (const id of ids) heartbeats[id] = Boolean(await isSupervisorAlive(id))
+    const missing = nodesWithoutHeartbeat(ids, heartbeats)
+    if (missing.length) {
+      app.log.error({ nodes: missing, event: 'node_routing_no_heartbeat' }, 'node_routing_no_heartbeat: servidor(es) de robôs sem heartbeat com o roteamento por nó ligado — comandos podem ficar sem atendimento (supervisor ainda na versão antiga? SUPERVISOR_NODE_IDS com nome errado?)')
+    }
+  } catch (err) {
+    app.log.warn({ err: err.message }, 'guarda do roteamento por nó: falha ao checar')
+  }
+}
+function startNodeRoutingGuard() {
+  if (SUPERVISOR_MODE !== 'remote' || !isNodeRoutingEnabled()) return
+  void runNodeRoutingGuardTick()
+  const timer = setInterval(runNodeRoutingGuardTick, NODE_ROUTING_GUARD_INTERVAL_MS)
+  timer.unref?.()
+}
+
 function startSessionCapacityAlertSweep() {
   const timer = setInterval(runSessionCapacityAlertTick, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
   timer.unref?.()
@@ -841,6 +866,7 @@ startActivityCacheCleanup()
 startLeadNurtureSweep()
 startCredentialExpirySweep()
 startSessionCapacityAlertSweep()
+startNodeRoutingGuard()
 startEmailQueueJob()
 startLifecycleEmailSweep()
 startWeeklySummarySweep()
