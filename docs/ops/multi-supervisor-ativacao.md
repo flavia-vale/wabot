@@ -145,11 +145,13 @@ Decisões de projeto (e por quê):
 
 ## MN-11 (freio de envio global) — NÃO é necessário; premissa verificada e travada em teste
 
-A segunda opinião (K10) temia que o freio anti-bloqueio "por processo" dobrasse com dois servidores. Lido o código (`src/bot-worker.js`):
+## Mover uma conta entre servidores (MN-16) — script pronto, nunca automático
 
-- O freio por destino (`DEST_RATE_LIMIT_MS`, 1 s) **já é global**: chave Redis `send:last:<conta>:<destino>` (`globalRateLimitWait`), no Redis compartilhado. Não é por nó nem por processo.
-- Fila, atrasos e "descanso" (`SMART_DELAY_*`) são **por conta** (um worker por conta). Não existe limitador compartilhado entre contas diferentes.
-- Cada conta roda em **um nó só** (posse por `nodeId`), então um segundo servidor não soma envios sobre o mesmo número.
+`scripts/mover-conta-no.mjs` (simulação por padrão; só funciona com `SUPERVISOR_NODE_ROUTING` ligado e `BOT_SUPERVISOR_MODE=remote`). Decisões em `src/supervisor/accountMove.js` (puras, testadas).
 
-Consequência: nada a implementar no envio. Pré-requisito real (B-2): os workers do n2 precisam apontar `REDIS_URL` para o **mesmo** Redis do n1 — se cada servidor usasse o próprio Redis local, aí sim o freio e a deduplicação (`GLOBAL_DEDUP_MODE`) deixariam de ser globais. Teste `test/multi-supervisor-rate-limit-invariante.test.js` impede regressão (chave por nó/processo).
-O que continua em aberto e é outro assunto: IP de saída por servidor (K9 / MN-20).
+1. **Plano (não altera nada):** `node scripts/mover-conta-no.mjs --email=cliente@x.com --para=n2` — recusa se: mesmo servidor, destino fora do ar, lotado, sem teto informado, sem medição, ou cliente no meio do pareamento. Origem fora do ar = aviso forte.
+2. **Parar:** `… --aplicar --fase=parar [--host-origem=usuario@ip]` — marca `stopped_by_user` (a origem não ressuscita o robô), manda parar e **confere que parou**; imprime o `rsync` da cópia do login.
+3. **Copiar** (humano, no servidor de destino): o `rsync -a --checksum origem:pasta/ pasta/` impresso.
+4. **Trocar:** `… --aplicar --fase=trocar --auth-copiado` — confere de novo que não roda na origem, grava `nodeId`, religa no destino e confere. **Se não religar, volta o `nodeId` para a origem sozinho.**
+
+Cuidados: a pasta antiga na origem fica (backup); **não religue a conta por lá**. O cache de posse da API dura até 45 s, mas o supervisor da origem relê o banco no START (MN-02) e recusa. Teste a primeira vez com UMA conta-teste e observe 72 h (risco K9: IP de saída diferente no WhatsApp).
