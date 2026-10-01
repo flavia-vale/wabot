@@ -23,7 +23,7 @@ index f4458db..e6912a6 100644
              const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
              await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..5d75cbe 100644
+index c46b096..cbe3bfb 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 @@ -7,7 +7,8 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
@@ -99,8 +99,29 @@ index c46b096..5d75cbe 100644
                                  }
                                  catch (error) {
                                      logger.error({ key, ids, trace: error.stack }, 'error in sending message again');
-@@ -652,6 +687,20 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -608,6 +643,17 @@ export const makeMessagesRecvSocket = (config) => {
+         }
+     };
+     const handleMessage = async (node) => {
++        // wabot patch (RCA 2026-10-01, so log): registra a CHEGADA de mensagem de OUTRO aparelho da
++        // propria conta (copia fromMe). O id travado de um stream:error 500 so aparecia no log depois
++        // da queda; sem este registro nao da para saber o que o robo fez com ela antes. Nao muda
++        // nenhum comportamento.
++        if (!isJidGroup(node.attrs.from) && !isJidNewsletter(node.attrs.from) && !isJidStatusBroadcast(node.attrs.from)) {
++            const meId = authState.creds.me?.id;
++            const meLid = authState.creds.me?.lid;
++            if ((meId && areJidsSameUser(node.attrs.from, meId)) || (meLid && areJidsSameUser(node.attrs.from, meLid))) {
++                logger.info({ id: node.attrs.id, from: node.attrs.from, recipient: node.attrs.recipient, type: node.attrs.type, offline: node.attrs.offline }, 'wabot: mensagem de outro aparelho da conta chegou ao socket');
++            }
++        }
+         if (shouldIgnoreJid(node.attrs.from) && node.attrs.from !== '@s.whatsapp.net') {
+             logger.debug({ key: node.attrs.key }, 'ignored message');
+             await sendMessageAck(node);
+@@ -650,8 +696,23 @@ export const makeMessagesRecvSocket = (config) => {
+                     // message failed to decrypt
+                     if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
                          if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
++                            logger.info({ id: msg.key.id, remoteJid: msg.key.remoteJid, fromMe: !!msg.key.fromMe, nack: NACK_REASONS.ParsingError }, 'wabot: mensagem sem chave confirmada com nack');
                              return sendMessageAck(node, NACK_REASONS.ParsingError);
                          }
 +                        // wabot patch (RCA 2026-10-01): conversa PRIVADA (DM, jid de usuario ou
@@ -120,7 +141,7 @@ index c46b096..5d75cbe 100644
                          retryMutex.mutex(async () => {
                              if (ws.isOpen) {
                                  if (getBinaryNodeChild(node, 'unavailable')) {
-@@ -668,6 +717,16 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -668,6 +729,16 @@ export const makeMessagesRecvSocket = (config) => {
                              }
                          });
                      }
@@ -137,6 +158,16 @@ index c46b096..5d75cbe 100644
                      else {
                          // no type in the receipt => message delivered
                          let type = undefined;
+@@ -687,6 +758,9 @@ export const makeMessagesRecvSocket = (config) => {
+                         else if (!sendActiveReceipts) {
+                             type = 'inactive';
+                         }
++                        if (msg.key.fromMe && !isJidGroup(msg.key.remoteJid)) {
++                            logger.info({ id: msg.key.id, type, participant }, 'wabot: DM de outro aparelho da conta confirmada com receipt');
++                        }
+                         await sendReceipt(msg.key.remoteJid, participant, [msg.key.id], type);
+                         // send ack for history message
+                         const isAnyHistoryMsg = getHistoryMsg(msg.message);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
 index 38bb9e0..3c1b783 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js

@@ -957,51 +957,63 @@ sqlite3 ~/wabot/prisma/prod.db "SELECT COALESCE(json_extract(metadata,'$.waReaso
 **Não regredir / não fazer sem dado:** não reverter a assinatura do aparelho
 nem reiniciar a frota por causa do 401; não trocar biblioteca por palpite.
 
-## Cegueira por DMs `fromMe` presas na fila offline (RCA 2026-10-01 — não regredir)
+## Cegueira com DMs `fromMe` de outro aparelho da conta (RCA 2026-10-01 — EM ABERTO, não regredir)
 
 Conta `glauciasimoes10@gmail.com`: espelhava 31× em 7 dias e passou a 0 desde
 ~23:36Z; painel "conectado", 23 quedas 500 em 24 h; a cliente confirmou que as
 origens postaram. `diag-frota-cega.mjs` só acusou 2 contas (ela e outra).
 
-**Medido (bot.log, pid da conta):** no boot o robô drena a fila offline e **236
-de 236** mensagens `offline:"1"` vinham de `<id>:14@lid` — OUTRO aparelho da
-própria conta (`verified_name` preenchido) mandando DMs (`fromMe`, `@lid`). Elas
-falham ao abrir (`MessageCounterError: Key used already or never filled`); os
-dois `stuckMsgId` das quedas 500 eram `fromMe` em `@lid` (um id novo por queda,
-por isso a quarentena por id — que exige o MESMO id 2× — nunca pegava). A fila
-offline é entregue em ordem: as ofertas dos grupos monitorados ficavam atrás.
+**Medido (bot.log, pid da conta):**
+- no boot o robô drena a fila offline e **236 de 236** mensagens `offline:"1"`
+  vinham de `<id>:14@lid` — OUTRO aparelho da própria conta (`verified_name`
+  preenchido; os ids começam com `3EB0`, prefixo de envio do Baileys: sinal, não
+  prova, de que é outro sistema Baileys no mesmo número);
+- elas falham ao abrir com `MessageCounterError: Key used already or never
+  filled`; os `stuckMsgId` das quedas 500 eram `fromMe` em `@lid`, um id novo por
+  queda;
+- **o id travado só aparece no log como o próprio `stream:error` do servidor**;
+  o erro de decrypt dele vem 7 s depois, no reenvio pós-reconexão, e aí não
+  derruba mais. Nos 3 s antes da queda não há nenhuma linha do robô. Ou seja, o
+  log atual NÃO mostra o que o robô fez com a mensagem antes da queda;
+- depois do patch de DM (PR #2112) e do restart: 0 quedas no pid novo, mas
+  `mensagem recebida` = 0 enquanto 63 outros robôs recebiam, e `DM sem decifrar`
+  = 0 nela (as 276 da frota são de outros erros).
 
-**Causa raiz (inferida da evidência, mesmo desenho do RCA 2026-09-24 de canal):**
-em `handleMessage` do Baileys 6.7.23, DM que não decifra recebe
-`<receipt type=retry>`; o servidor recusa com `<stream:error><ack class=message/>`
-(o ack que esperava) → 500 → reconexão → a fila volta ao mesmo ponto.
-O que NÃO foi medido: o `<receipt>` recusado em si (não há log dele); a evidência
-é o `stuckMsgId` ser sempre DM `fromMe` e o desaparecimento esperado das quedas
-após o patch (ver aceite).
+**⚠️ Correção do que este RCA dizia antes:** `MessageCounterError` =
+`MISSING_KEYS_ERROR_TEXT` e cai no ramo ANTERIOR de `handleMessage`
+(`sendMessageAck(node, 487)`), não no ramo de DM do patch #2112. O ramo de DM só
+age em OUTROS erros de decrypt (Bad MAC, No session...). A hipótese "o
+`<receipt type=retry>` é recusado" **não** vale para o erro dela. A cadência de
+"50 min" também não é fixa (71 e 50 min nos eventos dela).
 
-**Hipóteses derrubadas:** fonte parada (cliente confirmou postagens);
-`WA_IGNORE_UNMONITORED_GROUPS` (já ligado nos robôs, origens estão no allowlist);
-re-parear/apagar auth (não ataca a causa; ver RCA das quedas 500 acima); o único
-erro de grupo (`No session found`, `group_cipher.js`) foi isolado e o reenvio
-chegou.
+**Causa raiz: NÃO provada.** Hipóteses abertas: (a) o `nack` 487 de mensagem
+`fromMe` é recusado pelo servidor; (b) a mensagem chega por um caminho abaixo do
+`handleMessage` e fica sem ack; (c) a convivência com o outro aparelho deixa a
+recepção morta no servidor. Nenhuma tem dado.
 
-**Conserto:** `patches/@whiskeysockets+baileys+6.7.23.patch`, 1 ramo novo em
-`handleMessage`: DM (`isJidUser || isLidUser`) que não abre → `sendMessageAck(node)`
-e `return`, SEM `sendRetryRequest`. Grupo, canal e status seguem o retry
-(a falha de chave de grupo continua sendo curada por ele). Mensagem `fromMe` em
-grupo MONITORADO continua sendo espelhada (`bot-worker.js`, ramo `fromMe` com
-`isMonitoredSource`) — o patch só atua em DM sem conteúdo legível.
+**Instrumentação (só log, sem mudar comportamento — patch do Baileys):**
+- `wabot: mensagem de outro aparelho da conta chegou ao socket` — chegada
+  (`id`, `from`, `recipient`, `type`, `offline`), ANTES de qualquer ack/ignore;
+- `wabot: mensagem sem chave confirmada com nack` — o nack 487 enviado;
+- `wabot: DM de outro aparelho da conta confirmada com receipt` — o receipt;
+- `wabot: DM sem decifrar confirmada com ack, sem retry` — o ramo de DM (age).
+
+**Próxima queda 500 com `stuckMsgId`:** `grep <id> bot.log | cut -c1-240` agora
+mostra a sequência chegada → decisão → `stream:error`. Se a chegada NÃO aparecer
+antes do `stream:error`, a mensagem é perdida abaixo de `handleMessage` (hipótese
+b). Se aparecer o nack, a hipótese (a) ganha dado.
+
+**Experimento reversível com a cliente:** perguntar se há outro sistema ligado ao
+mesmo número; se houver, removê-lo em "Aparelhos conectados" por algumas horas e
+reiniciar só o robô dela. Se a recepção voltar, a causa é a convivência com esse
+aparelho.
 
 **Não regredir:** `test/baileys-dm-undecryptable-ack-patch.test.js` trava o
-escopo (DM só; nunca grupo/canal/status) e o ramo `fromMe` do worker. Subir o
-Baileys exige refazer o patch.
+escopo do ramo de DM (nunca grupo/canal/status), o ramo `fromMe` do worker
+(a dona posta na origem e o robô espelha) e que os logs novos não mudam o fluxo.
+Subir o Baileys exige refazer o patch. Não ampliar o ramo de DM para
+`MISSING_KEYS` sem dado: seria repetir o erro de achar a causa por suposição.
 
-**Aceite (depois do restart do `bot-supervisor`):**
-- `grep -c 'wabot: DM sem decifrar confirmada com ack' bot.log` > 0 nos robôs
-  que tinham o padrão (é o log do ramo novo);
-- `500 / conexões` por dia cai (hoje ~9/conta/dia); `diag-frota-cega.mjs` deixa
-  de listar a conta; `mensagem recebida` volta a aparecer para ela;
-- a fila que já estava presa no servidor esvazia sozinha: cada DM vira ack no
-  boot em vez de derrubar a conexão.
-Se ainda houver `stuckMsgId` com `@g.us` ou `@newsletter`, é outro balde
-(medir de novo, não ampliar este patch por palpite).
+**Aceite do ramo de DM (frota):** `grep -c 'wabot: DM sem decifrar confirmada
+com ack' bot.log` > 0; `500 / conexões` por dia cai; `diag-frota-cega.mjs`
+estável. Isso NÃO é aceite do caso da cliente (segue cega).

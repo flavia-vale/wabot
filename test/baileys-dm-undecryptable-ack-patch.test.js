@@ -7,15 +7,20 @@ import { createRequire } from 'node:module'
 // e passou a 0, "conectada" o tempo todo). Medido no bot.log: 236 de 236 mensagens
 // drenadas da fila offline no boot vinham de `9252148089054:14@lid` — OUTRO
 // aparelho da própria conta, mandando DMs (`fromMe`, `@lid`) que o robô não
-// decifra (`MessageCounterError`). O `<receipt type=retry>` para essas DMs era
-// recusado com `<stream:error><ack class=message/></stream:error>` (500), a
-// conexão caía e a fila voltava ao mesmo ponto; as ofertas dos grupos ficavam
-// presas atrás das DMs. Cada queda "gastava" uma DM (id novo a cada queda).
+// decifra. As quedas 500 carregavam `stuckMsgId` dessas DMs.
 //
-// Conserto (patch no Baileys 6.7.23): DM (jid de usuário ou LID) que não abre é
-// confirmada com <ack> e descartada, SEM pedir reenvio. Grupo, canal e status
-// seguem o caminho original. Estes testes travam o escopo: se ele alargar para
-// grupo, a falha de chave de grupo deixa de ser curada pelo retry.
+// ⚠️ Correção do RCA: o `MessageCounterError` dessas DMs ("Key used already or
+// never filled" == MISSING_KEYS_ERROR_TEXT) cai no ramo ANTERIOR do Baileys
+// (`sendMessageAck(node, 487)`), não no ramo de DM deste patch. O ramo de DM só
+// age em OUTROS erros de decrypt (Bad MAC, No session...), e foi medido agindo na
+// frota. A causa da queda da conta dela NÃO está provada; o patch ganhou LOGS
+// (sem mudar comportamento) para provar o mecanismo na próxima queda.
+//
+// Conserto do ramo de DM (patch no Baileys 6.7.23): DM (jid de usuário ou LID)
+// que não abre por outro erro é confirmada com <ack> e descartada, SEM pedir
+// reenvio. Grupo, canal e status seguem o caminho original. Estes testes travam
+// o escopo: se ele alargar para grupo, a falha de chave de grupo deixa de ser
+// curada pelo retry.
 
 const require = createRequire(import.meta.url)
 const recv = readFileSync(require.resolve('@whiskeysockets/baileys/lib/Socket/messages-recv.js'), 'utf8')
@@ -58,4 +63,22 @@ test('o worker continua espelhando mensagem fromMe de grupo MONITORADO (a dona p
   const m = worker.match(/if \(msg\.key\.fromMe\) \{[\s\S]*?if \(!isMonitoredSource\) continue/)
   assert.ok(m, 'o ramo fromMe do worker mudou — a dona perderia a postagem manual na origem')
   assert.match(m[0], /selfCfg\?\.groups\?\.monitor\?\.some/)
+})
+
+// --- Instrumentação (só log): provar o mecanismo da queda 500 na próxima ocorrência.
+test('só LOG: a chegada de mensagem de outro aparelho da conta é registrada ANTES do filtro de ignorar', () => {
+  const idxHandle = recv.indexOf('const handleMessage = async (node) => {')
+  const idxLog = recv.indexOf("'wabot: mensagem de outro aparelho da conta chegou ao socket'")
+  const idxIgnore = recv.indexOf('if (shouldIgnoreJid(node.attrs.from)', idxHandle)
+  assert.ok(idxHandle > 0 && idxLog > idxHandle && idxLog < idxIgnore, 'o log de chegada precisa vir antes de qualquer ack/ignore')
+  const bloco = recv.slice(idxHandle, idxIgnore)
+  assert.match(bloco, /areJidsSameUser\(node\.attrs\.from, meId\)/)
+  assert.match(bloco, /areJidsSameUser\(node\.attrs\.from, meLid\)/)
+  assert.match(bloco, /offline: node\.attrs\.offline/)
+  assert.doesNotMatch(bloco, /sendMessageAck|sendReceipt|return;|await /, 'o log de chegada não pode mudar o fluxo')
+})
+
+test('só LOG: o nack de MISSING_KEYS e o receipt de DM de outro aparelho continuam sendo enviados, agora registrados', () => {
+  assert.match(failureBranch, /logger\.info\([^)]*'wabot: mensagem sem chave confirmada com nack'\);\s*return sendMessageAck\(node, NACK_REASONS\.ParsingError\);/)
+  assert.match(recv, /logger\.info\(\{ id: msg\.key\.id, type, participant \}, 'wabot: DM de outro aparelho da conta confirmada com receipt'\);\s*\}\s*await sendReceipt\(msg\.key\.remoteJid, participant, \[msg\.key\.id\], type\);/)
 })
