@@ -19,14 +19,22 @@ test('telefone brasileiro em vários formatos vira DDD + número; lixo vira null
   assert.equal(splitBrazilianPhone(null), null)
 })
 
-test('pagador só leva o que existe e é válido; sem nada, null', () => {
+test('pagador só leva e-mail e telefone válidos; sem nada, null', () => {
   const p = buildCheckoutPayer({ name: 'Ana Souza', email: 'ana@exemplo.com', phone: '+55 21 99999-0000' })
-  assert.deepEqual(p, { first_name: 'Ana', last_name: 'Souza', email: 'ana@exemplo.com', phone: { area_code: '21', number: '999990000' } })
-  assert.deepEqual(buildCheckoutPayer({ name: 'Ana', email: 'nao-e-email', phone: 'x' }), { first_name: 'Ana', last_name: 'Ana' })
+  assert.deepEqual(p, { email: 'ana@exemplo.com', phone: { area_code: '21', number: '999990000' } })
+  assert.equal(buildCheckoutPayer({ name: 'Ana', email: 'nao-e-email', phone: 'x' }), null)
   assert.equal(buildCheckoutPayer({}), null)
   // Nunca inventamos CPF ou endereço.
   assert.equal('identification' in (p ?? {}), false)
   assert.equal('address' in (p ?? {}), false)
+})
+
+test('nome do cadastro NÃO vai ao Mercado Pago (nome de loja/outra pessoa não bate com quem paga)', () => {
+  const p = buildCheckoutPayer({ name: 'Bianca Mariolo Pontes', email: 'gabriel@exemplo.com' })
+  assert.equal('first_name' in p, false)
+  assert.equal('last_name' in p, false)
+  const rota = readFileSync(new URL('../src/api/routes/payments.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(rota, /buildCheckoutPayer\(\{[^}]*name:/)
 })
 
 test('item completo: id por plano, descrição, categoria services, preço do plano', () => {

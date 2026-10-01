@@ -227,6 +227,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | "Servidor no limite de robôs" / sem vaga | `src/domain/session/startRefusal.js`, `src/supervisor/index.js` | `diag-vagas-robos.mjs`, `diag-clientes-sem-vaga.mjs` | memoria-e-capacidade |
 | RAM/swap subindo | `src/ops/capacity/policy.js` | `diag-memoria-crescimento.mjs`, `diag-memoria-nativa.mjs` | memoria-e-capacidade |
 | Pagamento recusado / assinatura "não concluída" | `src/domain/payments/subscriptionPolicy.js`, `src/api/routes/payments.js` | `diag-assinatura-recusada.mjs`, `testar-recorrencia.mjs`, `sincronizar-assinatura.mjs` | cobranca |
+| Pix/cartão recusado "por suspeita" (`rejected_high_risk`), "o Pix não funciona" | `src/domain/payments/checkoutOffer.js` (`canStartSubscription`), `src/domain/payments/checkoutPayer.js` | `diag-antifraude-mp.mjs [email] --days=30` (separar avulso × assinatura por `point_of_interaction.type`, não por `operation_type`) | cobranca |
 | E-mail não chegou | `src/email/dispatcher.js`, `src/emailTriggers/lifecyclePolicy.js` | `diag-email-vencimento.mjs` (antes: conferir `SMTP_*`) | emails |
 | Tag Pagante/número repetido não aparece | `src/domain/admin/payingStatus.js`, `src/domain/admin/sharedPhoneStatus.js` | `diag-tag-pagante.mjs`, `backfill-numeros-whatsapp.mjs` | admin |
 | Página/SEO sem impressão, cadastro sem origem | `dashboard/lib/seo-registry.mjs`, `src/domain/admin/signupOrigin.js` | `diag-paginas-seo.mjs`, `diag-origem-cadastros.mjs` | seo-marketing |
