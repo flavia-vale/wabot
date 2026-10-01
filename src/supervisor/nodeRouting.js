@@ -3,7 +3,7 @@
  * Flag off (default) = comportamento legado, nada aqui é consultado.
  */
 
-import { DEFAULT_NODE_ID, isValidNodeId } from './protocol.js'
+import { COMMAND, DEFAULT_NODE_ID, isValidNodeId } from './protocol.js'
 
 export function isNodeRoutingEnabled(env = process.env) {
   return ['1', 'true', 'on'].includes(String(env.SUPERVISOR_NODE_ROUTING ?? '').trim().toLowerCase())

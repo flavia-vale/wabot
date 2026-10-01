@@ -30,6 +30,7 @@ import {
   resolveRedisUrl,
 } from './protocol.js'
 import { isNodeRoutingEnabled, resolveKnownNodeIds } from './nodeRouting.js'
+import { createRedisClock } from './redisClock.js'
 import { pickNodeForNewSession, resolveSessionNodeId } from './placement.js'
 
 // P2-2: pub/sub é versionado (decodeEvent rejeita versão incompatível). Antes
@@ -96,6 +97,7 @@ export function createSupervisorClient({
   nodeIds = resolveKnownNodeIds(env),
   maxSessionsPerNode = Math.max(1, Number(env.MAX_SESSIONS_PER_PROCESS || 20)),
   nodeCacheTtlMs = 45_000,
+  addTimeoutMs = 3_000,
   db = null, // injetável em testes; senão, import tardio de ../db.js
   now = () => Date.now(),
 } = {}) {
@@ -111,6 +113,7 @@ export function createSupervisorClient({
   let deps = null
   const nodeChannels = new Map() // nodeId -> Promise<{queue, queueEvents}>
   const nodeOfUser = new Map() // userId -> { nodeId, expiresAt }
+  let dualOwnerTotal = 0
   const events = new EventEmitter()
   // Evita warning quando muitos sockets WebSocket assinam o mesmo emitter.
   events.setMaxListeners(0)
@@ -157,12 +160,26 @@ export function createSupervisorClient({
     return initPromise
   }
 
+  // Hora do Redis para carimbar `_enqueuedAt` (só com roteamento por nó); o
+  // supervisor compara na mesma régua. Ver redisClock.js.
+  const redisClock = createRedisClock({ time: async () => (publisherCheck ?? (await init(), publisherCheck)).time() })
+
+  // `queue.add` com maxRetriesPerRequest:null fica pendurado para sempre se o
+  // Redis sumir; o teto de tempo transforma isso em erro visível.
+  function withTimeout(promise, ms, message) {
+    let timer
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms) })
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+  }
+
   async function enqueue(q, qe, name, payload, timeoutMs) {
-    const job = await q.add(name, { ...payload, _enqueuedAt: Date.now() }, {
+    const enqueuedAt = nodeRouting ? await redisClock.now() : Date.now()
+    const add = q.add(name, { ...payload, _enqueuedAt: enqueuedAt }, {
       removeOnComplete: { age: 60 },
       removeOnFail: { age: 600 },
       attempts: 1,
     })
+    const job = nodeRouting ? await withTimeout(add, addTimeoutMs, 'Redis não respondeu ao enfileirar o comando') : await add
     try {
       const result = await job.waitUntilFinished(qe, timeoutMs)
       return result
@@ -211,6 +228,14 @@ export function createSupervisorClient({
   }
 
   async function sendToNode(nodeId, name, payload, timeoutMs) {
+    // Falha rápida: nó sem heartbeat = ninguém vai ler a fila. Sem isso cada
+    // clique esperava o timeout cheio (5-45 s) e o job ficava parado na fila.
+    if (!(await isSupervisorAlive(nodeId))) {
+      const err = new Error('O servidor dos seus robôs não está respondendo agora. Nossa equipe já foi avisada — tente de novo em alguns minutos.')
+      err.code = 'WA_NODE_UNAVAILABLE'
+      err.nodeId = nodeId
+      throw err
+    }
     const { queue: q, queueEvents: qe } = await getNodeChannel(nodeId)
     return enqueue(q, qe, name, payload, timeoutMs)
   }
@@ -313,10 +338,12 @@ export function createSupervisorClient({
   // já enxerga o dono. Devolve null quando nenhum nó pode receber.
   async function ensureNodePlacement(userId) {
     const database = await getDb()
-    const row = await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } })
-    if (row?.nodeId && isValidNodeId(row.nodeId)) {
-      nodeOfUser.set(userId, { nodeId: row.nodeId, expiresAt: now() + nodeCacheTtlMs })
-      return row.nodeId
+    const row = await database.waSession.findUnique({ where: { userId }, select: { nodeId: true, phone: true, status: true, lifecycle: true } })
+    // Regra única: nulo = 'n1'. Conta antiga (já pareada) NUNCA é recolocada.
+    if (!shouldPlaceSession(row)) {
+      const existing = resolveSessionNodeId(row)
+      nodeOfUser.set(userId, { nodeId: existing, expiresAt: now() + nodeCacheTtlMs })
+      return existing
     }
     let chosen = null
     if (nodeIds.length === 1) {
@@ -362,6 +389,27 @@ export function createSupervisorClient({
   }
   const stopBot = userId => send(COMMAND.STOP_BOT, { userId })
   const isRunning = userId => send(COMMAND.IS_RUNNING, { userId })
+  // Split-brain: o mesmo robô ligado em dois nós. É o único ponto que enxerga
+  // os dois nós juntos, então a deduplicação por Set NÃO pode apagar o sinal.
+  // Parar o robô do nó errado é opt-in (SUPERVISOR_DUAL_OWNER_AUTOSTOP=1).
+  async function reportDualOwners(lists) {
+    const dual = findDualOwners(lists)
+    if (!dual.length) return
+    dualOwnerTotal += dual.length
+    for (const { userId, nodes } of dual) {
+      logger.error({ userId, nodes, event: 'session_dual_owner' }, 'session_dual_owner: o mesmo robô está ligado em mais de um servidor')
+      if (!['1', 'true', 'on'].includes(String(env.SUPERVISOR_DUAL_OWNER_AUTOSTOP ?? '').toLowerCase())) continue
+      try {
+        const owner = await resolveNodeId(userId)
+        for (const nodeId of nodes.filter(id => id !== owner)) {
+          await send(COMMAND.STOP_BOT, { userId }, { nodeId })
+        }
+      } catch (err) {
+        logger.error({ userId, err: err?.message }, 'session_dual_owner: falha ao parar o robô do servidor errado')
+      }
+    }
+  }
+
   // Fan-out aos nós VIVOS. Cada valor é a lista de userIds do nó, ou null se
   // aquele nó não respondeu. Nó morto (sem heartbeat) não entra: não roda robô.
   async function listRunningByNode() {
@@ -398,6 +446,7 @@ export function createSupervisorClient({
     const lists = await listRunningByNode()
     const failed = Object.entries(lists).filter(([, list]) => list === null).map(([id]) => id)
     if (failed.length) throw new Error(`Contagem de robôs indisponível: nó(s) sem resposta: ${failed.join(', ')}`)
+    await reportDualOwners(lists)
     return [...new Set(Object.values(lists).flat())]
   }
   const listGroups = userId => send(COMMAND.LIST_GROUPS, { userId })
