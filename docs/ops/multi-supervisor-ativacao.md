@@ -142,3 +142,14 @@ Decisões de projeto (e por quê):
 - `isSupervisorAlive()` sem `nodeId` exige todos os nós listados em `SUPERVISOR_NODE_IDS`: um nó listado que nunca subiu mantém o alarme aceso.
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
+
+## MN-11 (freio de envio global) — NÃO é necessário; premissa verificada e travada em teste
+
+A segunda opinião (K10) temia que o freio anti-bloqueio "por processo" dobrasse com dois servidores. Lido o código (`src/bot-worker.js`):
+
+- O freio por destino (`DEST_RATE_LIMIT_MS`, 1 s) **já é global**: chave Redis `send:last:<conta>:<destino>` (`globalRateLimitWait`), no Redis compartilhado. Não é por nó nem por processo.
+- Fila, atrasos e "descanso" (`SMART_DELAY_*`) são **por conta** (um worker por conta). Não existe limitador compartilhado entre contas diferentes.
+- Cada conta roda em **um nó só** (posse por `nodeId`), então um segundo servidor não soma envios sobre o mesmo número.
+
+Consequência: nada a implementar no envio. Pré-requisito real (B-2): os workers do n2 precisam apontar `REDIS_URL` para o **mesmo** Redis do n1 — se cada servidor usasse o próprio Redis local, aí sim o freio e a deduplicação (`GLOBAL_DEDUP_MODE`) deixariam de ser globais. Teste `test/multi-supervisor-rate-limit-invariante.test.js` impede regressão (chave por nó/processo).
+O que continua em aberto e é outro assunto: IP de saída por servidor (K9 / MN-20).
