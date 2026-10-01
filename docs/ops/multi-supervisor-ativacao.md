@@ -143,15 +143,15 @@ Decisões de projeto (e por quê):
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
 
-## MN-11 (freio de envio global) — NÃO é necessário; premissa verificada e travada em teste
+## Deploy e backup por servidor (MN-12, MN-13) — arquivos novos, nada existente foi tocado
 
-## Mover uma conta entre servidores (MN-16) — script pronto, nunca automático
+`deploy.yml`, `deploy_safe_*.sh` e `backup_prod.sh` **não foram alterados** (continuam sendo do servidor principal). Para um servidor secundário:
 
-`scripts/mover-conta-no.mjs` (simulação por padrão; só funciona com `SUPERVISOR_NODE_ROUTING` ligado e `BOT_SUPERVISOR_MODE=remote`). Decisões em `src/supervisor/accountMove.js` (puras, testadas).
+| Arquivo | Para quê |
+|---|---|
+| `ecosystem.node.config.cjs` | PM2 do nó: **só** o `bot-supervisor` (api/dashboard/snapshot-cron duplicariam as tarefas diárias). Config do nó vem do `.env` DELE (`SUPERVISOR_NODE_ID`, `REDIS_URL` e banco do principal, `MAX_SESSIONS_PER_PROCESS`). |
+| `scripts/deploy_node.sh` | Atualiza o código do nó (`git` fast-forward + `npm ci` + `prisma generate`). **Simulação por padrão** (`APLICAR=1` grava). **Não roda migration** (a do banco compartilhado roda uma vez, no principal) e **não reinicia o supervisor** sem `REINICIAR_SUPERVISOR=1` (reinício reconecta todas as sessões do nó; anuncie antes). |
+| `scripts/backup_no.sh` | Backup diário do nó: logins (`auth_info`) + `.env` do nó, cifra com `age` (opcional, recomendada), rotação e `rclone`, marcador `last_success_node_<id>.txt`. Sem banco. Recusa gravar cópia se o `auth_info` estiver vazio. |
+| `scripts/restaurar_auth_conta.sh` | Restaura o login de **uma** conta a partir desse backup (simulação por padrão; `APLICAR=1`). Recusa sobrescrever (`FORCAR=1` guarda o antigo ao lado). Caminho de recuperação se um servidor morrer (RTO a testar com uma conta-teste: meta < 30 min). |
 
-1. **Plano (não altera nada):** `node scripts/mover-conta-no.mjs --email=cliente@x.com --para=n2` — recusa se: mesmo servidor, destino fora do ar, lotado, sem teto informado, sem medição, ou cliente no meio do pareamento. Origem fora do ar = aviso forte.
-2. **Parar:** `… --aplicar --fase=parar [--host-origem=usuario@ip]` — marca `stopped_by_user` (a origem não ressuscita o robô), manda parar e **confere que parou**; imprime o `rsync` da cópia do login.
-3. **Copiar** (humano, no servidor de destino): o `rsync -a --checksum origem:pasta/ pasta/` impresso.
-4. **Trocar:** `… --aplicar --fase=trocar --auth-copiado` — confere de novo que não roda na origem, grava `nodeId`, religa no destino e confere. **Se não religar, volta o `nodeId` para a origem sozinho.**
-
-Cuidados: a pasta antiga na origem fica (backup); **não religue a conta por lá**. O cache de posse da API dura até 45 s, mas o supervisor da origem relê o banco no START (MN-02) e recusa. Teste a primeira vez com UMA conta-teste e observe 72 h (risco K9: IP de saída diferente no WhatsApp).
+Ainda **não** está ligado ao GitHub Actions: disparar o deploy do nó pelo `deploy.yml` (matriz de servidores) exige segredos SSH por servidor e é uma mudança no deploy de produção — fica para decisão sua (MN-12 parte workflow).
