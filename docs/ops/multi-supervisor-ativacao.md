@@ -143,17 +143,13 @@ Decisões de projeto (e por quê):
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
 
-## Deploy e backup por servidor (MN-12, MN-13) — arquivos novos, nada existente foi tocado
+## Medir se o endereço de internet do servidor novo prejudica o WhatsApp (MN-20)
 
-`deploy.yml`, `deploy_safe_*.sh` e `backup_prod.sh` **não foram alterados** (continuam sendo do servidor principal). Para um servidor secundário:
+Risco K9: cada servidor sai para a internet por um endereço (IP) diferente; o WhatsApp pode estranhar isso (queda, QR novo, bloqueio). Hoje é **hipótese**, sem dado. O script mede com o que já é gravado (eventos de conexão):
 
-- **Log:** com a flag ligada e `SUPERVISOR_NODE_ID` definido, toda linha de log do supervisor E dos robôs (herdam o env) leva `nodeId`. Desligado, o log é idêntico ao de hoje.
-- **/metrics:** `wabot_supervisor_node_alive{node}`, `…_running_bots{node}`, `…_capacity{node}` (não medido é omitido, nunca 0) e `wabot_supervisor_session_dual_owner_total`.
-- **Código desatualizado:** com roteamento, o aviso é avaliado por servidor ("Servidor n2: …") em vez de usar só o boot mais antigo.
-- **Contadores do supervisor:** a chave ganha `:<nodeId>` (o leitor soma por prefixo, então os totais seguem iguais).
-- **Diagnóstico:** `node scripts/diag-nos.mjs` (read-only): por servidor, se responde, desde quando, quantas vagas informa, pedidos na fila dele e contas apontando para ele; mais fila antiga e contas sem servidor.
+`node scripts/medir-ip-no.mjs --candidato=n2 [--base=n1] [--horas=72]` (read-only)
 
-## Capacidade por servidor no admin (MN-17) — só a API; a tela é o próximo passo
-
-`GET /admin/capacity/nodes` (permissão `tech:read`, sem auditoria por polling). Com `SUPERVISOR_NODE_ROUTING` desligado responde `{ routing: false, nodes: [], totals: null }` (nada muda para a tela atual). Ligado, devolve por servidor: situação em linguagem leiga (`ok`, `apertado`, `lotado`, `fora_do_ar`, `sem_medicao`), robôs ligados, vagas que ele informa, vagas livres, quando ligou e quantas contas do banco apontam para ele. **Sem medição não se afirma nada:** servidor não medido nunca vira "0"/"vazio" e o total geral só existe se todos os servidores vivos foram medidos. Regras em `src/ops/capacity/nodesView.js` (pura, testada).
-A **tela** do painel (`/admin/capacidade`) ainda mostra só o servidor principal: mexer nela é mudança visual e precisa seguir o design system v2 (`docs/design-system/design-system-v2.html`) — decisão/aprovação da dona do produto antes de ir para a tela.
+- Compara, por servidor, os eventos de instabilidade (`replaced`, `auth_reset`, `forbidden`, `flap_cooldown`, `stable_close_cooldown`, `retry_giveup`) por conta e por dia; mostra também os códigos 405/408/428/440/500.
+- Veredito leigo: **piora** (QR novo/bloqueio só no candidato, ou taxa ≥ 2× a da base com ≥ 3 eventos), **sem diferença gritante** ou **dados insuficientes** (janela < 72 h, sem conta no candidato ou sem base).
+- **Honestidade:** com 1 conta-teste só aparece problema grosseiro. "Sem diferença" NÃO prova que dá para mover muitas contas — aumente aos poucos e meça de novo.
+- Limites: os eventos ficam ~14 dias; o servidor usado é o ATUAL da conta (meça só depois de mover e de esperar a janela inteira).
