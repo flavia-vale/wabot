@@ -422,3 +422,40 @@ test('flag OFF: isSupervisorAlive segue lendo a chave legada', async () => {
   assert.equal(await client.isSupervisorAlive(), true)
   await client.close()
 })
+
+// ---- MN-05: falha rápida com nó fora do ar ----
+
+test('MN-05: nó sem heartbeat falha na hora, com mensagem leiga, e NADA é enfileirado', async () => {
+  const h = createNodeHarness({ alive: ['n1'] })
+  const client = routed(h, { db: fakeDb({ u9: { nodeId: 'n2' } }) })
+  const t0 = Date.now()
+  await assert.rejects(() => client.sendBroadcast('u9', 'oi', []), err => {
+    assert.equal(err.code, 'WA_NODE_UNAVAILABLE')
+    assert.equal(err.nodeId, 'n2')
+    assert.doesNotMatch(err.message, /shard|supervisor|worker|fila|redis|n2/i)
+    return true
+  })
+  assert.ok(Date.now() - t0 < 100)
+  assert.equal(h.added.length, 0)
+  await client.close()
+})
+
+test('MN-05: Redis pendurado ao enfileirar vira erro em vez de esperar para sempre', async () => {
+  const h = createNodeHarness()
+  const original = h.bullmqModule.Queue
+  h.bullmqModule.Queue = class extends original { add() { return new Promise(() => {}) } }
+  const client = routed(h, { db: fakeDb({ u1: { nodeId: 'n1' } }), addTimeoutMs: 50 })
+  await assert.rejects(() => client.sendBroadcast('u1', 'oi', []), /Redis não respondeu/)
+  await client.close()
+})
+
+test('MN-04: com roteamento, _enqueuedAt usa a régua do Redis', async () => {
+  const h = createNodeHarness()
+  const FakeRedis = h.ioredisModule.default
+  FakeRedis.prototype.time = async function () { const t = Date.now() + 20_000; return [String(Math.floor(t / 1000)), String((t % 1000) * 1000)] }
+  const client = routed(h, { db: fakeDb({ u1: { nodeId: 'n1' } }) })
+  await client.sendBroadcast('u1', 'oi', [])
+  const stamped = h.added.find(a => a.name === 'sendBroadcast').data._enqueuedAt
+  assert.ok(Math.abs(stamped - (Date.now() + 20_000)) < 2_000, `carimbo ${stamped} não está na hora do Redis`)
+  await client.close()
+})

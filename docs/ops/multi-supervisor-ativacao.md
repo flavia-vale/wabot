@@ -142,3 +142,6 @@ Decisões de projeto (e por quê):
 - `isSupervisorAlive()` sem `nodeId` exige todos os nós listados em `SUPERVISOR_NODE_IDS`: um nó listado que nunca subiu mantém o alarme aceso.
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
+
+- **MN-04** Com roteamento, API e supervisor medem o desvio contra o `TIME` do Redis (`src/supervisor/redisClock.js`, cache de 60 s) e carimbam/comparam na mesma régua. START_BOT obsoleto devolve `false` (antes, objeto truthy lido como "iniciado"). Flag off: relógio local, como antes. Pré-requisito operacional continua sendo NTP nos dois servidores (`chronyc tracking`).
+- **MN-05** Com roteamento, `send()` falha em <100 ms (`WA_NODE_UNAVAILABLE`, mensagem leiga) se o nó não tem heartbeat, e o `queue.add` tem teto de 3 s (`addTimeoutMs`).

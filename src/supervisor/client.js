@@ -29,6 +29,7 @@ import {
   resolveRedisUrl,
 } from './protocol.js'
 import { isNodeRoutingEnabled, resolveKnownNodeIds } from './nodeRouting.js'
+import { createRedisClock } from './redisClock.js'
 import { pickNodeForNewSession, resolveSessionNodeId } from './placement.js'
 
 // P2-2: pub/sub é versionado (decodeEvent rejeita versão incompatível). Antes
@@ -95,6 +96,7 @@ export function createSupervisorClient({
   nodeIds = resolveKnownNodeIds(env),
   maxSessionsPerNode = Math.max(1, Number(env.MAX_SESSIONS_PER_PROCESS || 20)),
   nodeCacheTtlMs = 45_000,
+  addTimeoutMs = 3_000,
   db = null, // injetável em testes; senão, import tardio de ../db.js
   now = () => Date.now(),
 } = {}) {
@@ -156,12 +158,26 @@ export function createSupervisorClient({
     return initPromise
   }
 
+  // Hora do Redis para carimbar `_enqueuedAt` (só com roteamento por nó); o
+  // supervisor compara na mesma régua. Ver redisClock.js.
+  const redisClock = createRedisClock({ time: async () => (publisherCheck ?? (await init(), publisherCheck)).time() })
+
+  // `queue.add` com maxRetriesPerRequest:null fica pendurado para sempre se o
+  // Redis sumir; o teto de tempo transforma isso em erro visível.
+  function withTimeout(promise, ms, message) {
+    let timer
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms) })
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+  }
+
   async function enqueue(q, qe, name, payload, timeoutMs) {
-    const job = await q.add(name, { ...payload, _enqueuedAt: Date.now() }, {
+    const enqueuedAt = nodeRouting ? await redisClock.now() : Date.now()
+    const add = q.add(name, { ...payload, _enqueuedAt: enqueuedAt }, {
       removeOnComplete: { age: 60 },
       removeOnFail: { age: 600 },
       attempts: 1,
     })
+    const job = nodeRouting ? await withTimeout(add, addTimeoutMs, 'Redis não respondeu ao enfileirar o comando') : await add
     try {
       const result = await job.waitUntilFinished(qe, timeoutMs)
       return result
@@ -210,6 +226,14 @@ export function createSupervisorClient({
   }
 
   async function sendToNode(nodeId, name, payload, timeoutMs) {
+    // Falha rápida: nó sem heartbeat = ninguém vai ler a fila. Sem isso cada
+    // clique esperava o timeout cheio (5-45 s) e o job ficava parado na fila.
+    if (!(await isSupervisorAlive(nodeId))) {
+      const err = new Error('O servidor dos seus robôs não está respondendo agora. Nossa equipe já foi avisada — tente de novo em alguns minutos.')
+      err.code = 'WA_NODE_UNAVAILABLE'
+      err.nodeId = nodeId
+      throw err
+    }
     const { queue: q, queueEvents: qe } = await getNodeChannel(nodeId)
     return enqueue(q, qe, name, payload, timeoutMs)
   }
