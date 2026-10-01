@@ -154,16 +154,19 @@ test('a partir do mês da virada o custo é o patamar fixo, e faturas antigas n�
   // Todo mês daqui pra frente é o mesmo patamar — inclusive os projetados.
   assert.equal(costForMonth('2027-06', config).total, 755)
 
-  // E nenhuma fatura histórica pode existir a partir da virada.
-  for (const entrada of config.historical) {
-    assert.ok(entrada.month < config.recurring.startMonth, `fatura em ${entrada.month} seria contada duas vezes`)
-  }
+  // Fatura registrada depois da virada SUBSTITUI o patamar naquele mês, nunca soma.
+  const outubro = costForMonth('2026-10', config)
+  assert.equal(outubro.source, 'realizado')
+  assert.equal(outubro.claude, 565)
+  assert.equal(outubro.vps, 122)
+  assert.equal(outubro.total, 687)
+  assert.equal(costForMonth('2026-11', config).total, 755)
 })
 
 test('o patamar fixo é ajustável por env, sem deploy', () => {
   const config = resolveCostConfig({ COST_CLAUDE_MONTHLY_BRL: '700', COST_VPS_MONTHLY_BRL: '250', COST_RECURRING_START_MONTH: '2026-10' })
   assert.equal(monthlyRecurringCost(config), 950)
-  assert.equal(costForMonth('2026-10', config).total, 950)
+  assert.equal(costForMonth('2026-11', config).total, 950)
   // ⚠️ Adiar a virada faz o mês descoberto ficar sem custo, porque as faturas
   // históricas param onde a recorrência começa (é isso que impede contar o
   // mesmo mês duas vezes). Quem mexer nessa env precisa mexer no ledger junto.
@@ -303,7 +306,8 @@ test('a projeção respeita o teto de clientes do servidor — receita que a inf
 test('o custo dos meses projetados é o patamar fixo, não zero', () => {
   const r = relatorio()
   for (const cenario of r.future.scenarios) {
-    assert.ok(cenario.months.every(m => m.cost === 755), 'projeção sem custo faria o produto se pagar sozinho no papel')
+    // Outubro/2026 tem gasto real registrado (565 + 122); o resto é o patamar.
+    assert.ok(cenario.months.every(m => m.cost === (m.month === '2026-10' ? 687 : 755)), 'projeção sem custo faria o produto se pagar sozinho no papel')
   }
 })
 
@@ -537,7 +541,7 @@ test('gasto fixo salvo na tela vale mais que env e padrão, e refaz a conta', ()
     { claudeMonthlyBrl: 110, vpsMonthlyBrl: 90, usdBrlRate: 6 },
   )
   assert.equal(monthlyRecurringCost(config), 200)
-  assert.equal(costForMonth('2026-10', config).total, 200)
+  assert.equal(costForMonth('2026-11', config).total, 200)
   assert.equal(config.usdBrlRate, 6)
   assert.equal(config.edited, true)
   // Mês antes da virada continua sendo fatura real (convertida pela cotação nova).
@@ -565,7 +569,7 @@ test('validação dos gastos fixos: aceita vírgula, recusa lixo e valor absurdo
 test('buildRoiReport usa os gastos fixos salvos', () => {
   const report = buildRoiReport({
     revenueByMonth: {},
-    now: new Date('2026-10-15T12:00:00-03:00'),
+    now: new Date('2026-11-15T12:00:00-03:00'),
     env: {},
     costOverrides: { claudeMonthlyBrl: 300, vpsMonthlyBrl: 100 },
   })

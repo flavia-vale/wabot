@@ -26,6 +26,9 @@
  * históricas do Claude param em agosto: setembro em diante vem da recorrência,
  * e somar os dois contaria o mesmo mês duas vezes.
  *
+ * Mês da recorrência que tem fatura registrada (ex.: out/2026) usa SÓ as
+ * faturas — o gasto real substitui o patamar fixo naquele mês, nunca soma.
+ *
  * Módulo PURO: sem banco, sem rede, sem `Date.now()` implícito.
  */
 
@@ -61,6 +64,10 @@ export const HISTORICAL_COSTS = Object.freeze([
   { month: '2026-06', category: COST_CATEGORIES.VPS, amountUsd: 17.78, note: 'Fatura da hospedagem' },
   { month: '2026-07', category: COST_CATEGORIES.VPS, amountUsd: 17.78, note: 'Fatura da hospedagem' },
   { month: '2026-08', category: COST_CATEGORIES.VPS, amountUsd: 10.59, note: 'Fatura da hospedagem (servidor ampliado)' },
+  // Outubro/2026: gasto real informado pela dona do produto — substitui o
+  // patamar fixo SÓ neste mês (ver `costForMonth`).
+  { month: '2026-10', category: COST_CATEGORIES.CLAUDE, amountBrl: 565, note: 'Gasto de outubro' },
+  { month: '2026-10', category: COST_CATEGORIES.VPS, amountBrl: 122, note: 'Gasto de outubro' },
 ])
 
 /** Patamar fixo mensal a partir de `startMonth` (inclusive). */
@@ -217,13 +224,14 @@ export function costForMonth(monthKey, config = resolveCostConfig()) {
     return { month: monthKey, claude: 0, vps: 0, total: 0, source: 'desconhecido', entries: [] }
   }
 
-  if (startIndex !== null && index >= startIndex) {
+  const entries = (config?.historical ?? []).filter(entry => entry.month === monthKey)
+
+  if (startIndex !== null && index >= startIndex && !entries.length) {
     const claude = round2(config.recurring[COST_CATEGORIES.CLAUDE] ?? 0)
     const vps = round2(config.recurring[COST_CATEGORIES.VPS] ?? 0)
     return { month: monthKey, claude, vps, total: round2(claude + vps), source: 'fixo', entries: [] }
   }
 
-  const entries = (config?.historical ?? []).filter(entry => entry.month === monthKey)
   let claude = 0
   let vps = 0
   for (const entry of entries) {
