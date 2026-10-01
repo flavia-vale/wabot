@@ -147,33 +147,13 @@ Decisões de projeto (e por quê):
 
 `deploy.yml`, `deploy_safe_*.sh` e `backup_prod.sh` **não foram alterados** (continuam sendo do servidor principal). Para um servidor secundário:
 
-| Arquivo | Para quê |
-|---|---|
-| `ecosystem.node.config.cjs` | PM2 do nó: **só** o `bot-supervisor` (api/dashboard/snapshot-cron duplicariam as tarefas diárias). Config do nó vem do `.env` DELE (`SUPERVISOR_NODE_ID`, `REDIS_URL` e banco do principal, `MAX_SESSIONS_PER_PROCESS`). |
-| `scripts/deploy_node.sh` | Atualiza o código do nó (`git` fast-forward + `npm ci` + `prisma generate`). **Simulação por padrão** (`APLICAR=1` grava). **Não roda migration** (a do banco compartilhado roda uma vez, no principal) e **não reinicia o supervisor** sem `REINICIAR_SUPERVISOR=1` (reinício reconecta todas as sessões do nó; anuncie antes). |
-| `scripts/backup_no.sh` | Backup diário do nó: logins (`auth_info`) + `.env` do nó, cifra com `age` (opcional, recomendada), rotação e `rclone`, marcador `last_success_node_<id>.txt`. Sem banco. Recusa gravar cópia se o `auth_info` estiver vazio. |
-| `scripts/restaurar_auth_conta.sh` | Restaura o login de **uma** conta a partir desse backup (simulação por padrão; `APLICAR=1`). Recusa sobrescrever (`FORCAR=1` guarda o antigo ao lado). Caminho de recuperação se um servidor morrer (RTO a testar com uma conta-teste: meta < 30 min). |
+- **Log:** com a flag ligada e `SUPERVISOR_NODE_ID` definido, toda linha de log do supervisor E dos robôs (herdam o env) leva `nodeId`. Desligado, o log é idêntico ao de hoje.
+- **/metrics:** `wabot_supervisor_node_alive{node}`, `…_running_bots{node}`, `…_capacity{node}` (não medido é omitido, nunca 0) e `wabot_supervisor_session_dual_owner_total`.
+- **Código desatualizado:** com roteamento, o aviso é avaliado por servidor ("Servidor n2: …") em vez de usar só o boot mais antigo.
+- **Contadores do supervisor:** a chave ganha `:<nodeId>` (o leitor soma por prefixo, então os totais seguem iguais).
+- **Diagnóstico:** `node scripts/diag-nos.mjs` (read-only): por servidor, se responde, desde quando, quantas vagas informa, pedidos na fila dele e contas apontando para ele; mais fila antiga e contas sem servidor.
 
-| Antes de… | Comando | O que ele barra |
-|---|---|---|
-| reiniciar o supervisor com a flag (passo 2) | `node scripts/preflight-multi-supervisor.mjs --passo=supervisor` | `SUPERVISOR_NODE_ID` inválido (o supervisor não sobe e TODOS os robôs caem) |
-| ligar a flag na API (passo 3) | `node scripts/preflight-multi-supervisor.mjs --passo=api` | servidor sem heartbeat ou sem teto publicado; avisa se a fila antiga ainda tem pedidos; nome inválido em `SUPERVISOR_NODE_IDS` |
-| listar um n2 em `SUPERVISOR_NODE_IDS` | `node scripts/preflight-multi-supervisor.mjs --passo=segundo-no` | contas ainda sem `nodeId` (rode o backfill antes), conta apontando para servidor fora da lista |
+## Capacidade por servidor no admin (MN-17) — só a API; a tela é o próximo passo
 
-Ordem obrigatória: supervisor (passo 2) → API (passo 3) → **backfill** → só então n2 na lista. Mantenha o consumidor da fila legada (remoção só pegando carona num restart inevitável — MN-19); não conte com "remover o consumidor legado" como passo de baixo impacto: exige novo restart do supervisor = reconexão geral.
-Guarda da API: com a flag ligada, a API loga `node_routing_no_heartbeat` (a cada 30 s) se algum nó listado estiver sem heartbeat. **Só loga**, nunca derruba a API.
-Rollback da API só é seguro enquanto nenhuma linha tiver `nodeId` diferente de `n1`.
-
-## Rede e staging com 2 servidores (MN-08, MN-06) — preparado, NADA ativado
-
-**Rede (MN-08)** — três checagens read-only; rode antes de abrir o Redis/banco para outro servidor:
-
-| Onde | Comando | O que barra |
-|---|---|---|
-| no servidor que hospeda Redis/banco | `scripts/preflight-portas.sh` | porta 6379/5432 aberta para TODAS as interfaces (0.0.0.0/::) |
-| no servidor secundário | `node scripts/preflight-rede-nos.mjs --secundario` | Redis local (deveria ser o do principal), Redis sem senha, endereço público sem TLS; banco SQLite/local; Postgres público sem `sslmode=require`; Redis lento (p99 > 5 ms); relógio com > 1 s de diferença do Redis |
-| no principal | `node scripts/preflight-rede-nos.mjs` | mesma medição, sem exigir Redis/banco remotos |
-
-Regras em `src/supervisor/networkPreflight.js` (pura, testada). Não configura firewall nem rede privada: isso é infraestrutura (VPN/provedor), fora do código.
-
-**Staging com 2 supervisores (MN-06)** — `ecosystem.staging-multinode.config.cjs` (template, não usado por nenhum deploy): `bot-supervisor-staging-n1` e `-n2` no mesmo VPS, pastas de login e de log distintas, teto 5 vagas. **REGRA #1:** sobe 1 processo a mais (~100–150 MB, hipótese a medir) e precisa de OK explícito. Passo a passo e como voltar atrás estão no cabeçalho do arquivo.
+`GET /admin/capacity/nodes` (permissão `tech:read`, sem auditoria por polling). Com `SUPERVISOR_NODE_ROUTING` desligado responde `{ routing: false, nodes: [], totals: null }` (nada muda para a tela atual). Ligado, devolve por servidor: situação em linguagem leiga (`ok`, `apertado`, `lotado`, `fora_do_ar`, `sem_medicao`), robôs ligados, vagas que ele informa, vagas livres, quando ligou e quantas contas do banco apontam para ele. **Sem medição não se afirma nada:** servidor não medido nunca vira "0"/"vazio" e o total geral só existe se todos os servidores vivos foram medidos. Regras em `src/ops/capacity/nodesView.js` (pura, testada).
+A **tela** do painel (`/admin/capacidade`) ainda mostra só o servidor principal: mexer nela é mudança visual e precisa seguir o design system v2 (`docs/design-system/design-system-v2.html`) — decisão/aprovação da dona do produto antes de ir para a tela.
