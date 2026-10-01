@@ -3095,6 +3095,7 @@ async function processSendJob(job) {
           intervalMs: spacingIntervalMs,
           state: destinationSpacingState,
           enabled: spacingEnabled,
+          ticket: job.spacingTicket ?? null,
         })
         // Peek: NÃO reserva rajada/limite diário ainda — só depois de saber
         // que o gate COMBINADO libera (destino + espaçamento), senão um job
@@ -3128,7 +3129,11 @@ async function processSendJob(job) {
             intervalMs: spacingIntervalMs,
             deferredUntil: gate.deferUntil,
           })
-          logger.info({ destJid: job.destJid, deferUntil: gate.deferUntil }, 'Adiado pelo intervalo entre destinos')
+          // Senha de vez: o job leva a vaga que recebeu e, ao voltar, sai
+          // nela — sem isso ele era re-adiado para o fim da fila para sempre
+          // (RCA 2026-10-01 "só um grupo de destino recebe").
+          if (spacing.ticket != null) job.spacingTicket = spacing.ticket
+          logger.info({ destJid: job.destJid, deferUntil: gate.deferUntil, spacingTicket: job.spacingTicket ?? null }, 'Adiado pelo intervalo entre destinos')
           await deferSendJob(job, gate)
           return
         }
