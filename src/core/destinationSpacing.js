@@ -43,28 +43,50 @@ export function toDestinationIntervalMs(botConfig) {
  * intervalo entre destinos desde o ÚLTIMO envio da conta (qualquer destino).
  *
  * allow quando: espaçamento desligado, intervalo <= 0, primeiro envio do
- * worker (lastSendAt null), ou destJid === lastDestJid (mesmo destino é
- * ISENTO — quem decide a cadência dentro do mesmo destino é o próprio
- * minIntervalSec dele, não este módulo).
+ * worker (lastSendAt null), ou destJid === lastDestJid SEM fila de outros
+ * destinos esperando (mesmo destino é isento — quem decide a cadência dentro
+ * do mesmo destino é o próprio minIntervalSec dele).
  *
- * Senão: earliest = max(lastSendAt + intervalMs, nextFreeSlotAt) — o cursor
- * de próxima vaga livre evita que jobs simultâneos recalculem sempre contra o
- * MESMO lastSendAt (o que produziria re-adiamento em cascata O(N²)).
+ * Senha de vez (`ticket`, RCA 2026-10-01 "só um grupo recebe"): o job adiado
+ * guarda a vaga que recebeu (`deferUntil`) e a devolve aqui quando volta. Quem
+ * tem senha sai quando a vaga chega (respeitando o intervalo desde o último
+ * envio), sem ser jogado de novo para o fim da fila. Antes não havia senha:
+ * o job voltava, encontrava `nextFreeSlotAt` já empurrado pelos jobs adiados
+ * DEPOIS dele e era adiado de novo, para sempre — enquanto o destino do último
+ * envio, isento, furava a fila. Resultado: um grupo recebia tudo e os outros
+ * nada.
+ *
+ * Sem senha: earliest = max(lastSendAt + intervalMs, nextFreeSlotAt) e a
+ * decisão adiada devolve `ticket = deferUntil` (a vaga reservada).
  *
  * @param {{ now:number, destJid:string, intervalMs:number,
  *   state:{lastSendAt:number|null,lastDestJid:string|null,nextFreeSlotAt:number|null},
- *   enabled?:boolean }} input
- * @returns {{ allow:boolean, deferUntil?:number, reason?:'destination_spacing' }}
+ *   enabled?:boolean, ticket?:number|null }} input
+ * @returns {{ allow:boolean, deferUntil?:number, ticket?:number, reason?:'destination_spacing' }}
  */
-export function decideDestinationSpacing({ now, destJid, intervalMs, state, enabled = true }) {
+export function decideDestinationSpacing({ now, destJid, intervalMs, state, enabled = true, ticket = null }) {
   if (!enabled) return { allow: true }
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) return { allow: true }
   if (state?.lastSendAt == null) return { allow: true }
-  if (destJid === state?.lastDestJid) return { allow: true }
 
-  const earliest = Math.max(state.lastSendAt + intervalMs, state.nextFreeSlotAt ?? 0)
+  const sameDest = destJid === state?.lastDestJid
+  const minGapAt = state.lastSendAt + intervalMs
+  const ticketAt = Number.isFinite(Number(ticket)) && ticket != null ? Number(ticket) : null
+
+  if (ticketAt != null) {
+    if (now >= ticketAt && sameDest) return { allow: true }
+    const earliest = Math.max(ticketAt, minGapAt)
+    if (now >= earliest) return { allow: true }
+    return { allow: false, deferUntil: earliest, ticket: ticketAt, reason: DESTINATION_SPACING_REASON }
+  }
+
+  const nextFree = state.nextFreeSlotAt ?? 0
+  const othersWaiting = now < nextFree
+  if (sameDest && !othersWaiting) return { allow: true }
+
+  const earliest = Math.max(minGapAt, nextFree)
   if (now >= earliest) return { allow: true }
-  return { allow: false, deferUntil: earliest, reason: DESTINATION_SPACING_REASON }
+  return { allow: false, deferUntil: earliest, ticket: earliest, reason: DESTINATION_SPACING_REASON }
 }
 
 /**
@@ -108,7 +130,9 @@ export function combineGateDecisions(destDecision, spacingDecision) {
  *   lastDestJid=destJid — este é o novo "último envio da conta".
  * - Job adiado pelo espaçamento: nextFreeSlotAt = deferredUntil + intervalMs
  *   — é o cursor que dá a vaga ao PRÓXIMO job simultâneo sem recalcular
- *   contra o lastSendAt antigo (evita cascata O(N²)).
+ *   contra o lastSendAt antigo (evita cascata O(N²)). O cursor só ANDA para
+ *   frente: um job com senha re-adiado para antes do cursor não o puxa de
+ *   volta (senão a vaga de quem está mais atrás seria dada de novo).
  *
  * @param {{lastSendAt:number|null,lastDestJid:string|null,nextFreeSlotAt:number|null}} state
  * @param {{now:number, destJid:string, intervalMs:number, deferredUntil?:number|null}} opts
@@ -117,5 +141,5 @@ export function reserveSpacingSlot(state, { now, destJid, intervalMs, deferredUn
   if (deferredUntil == null) {
     return { ...state, lastSendAt: now, lastDestJid: destJid }
   }
-  return { ...state, nextFreeSlotAt: deferredUntil + intervalMs }
+  return { ...state, nextFreeSlotAt: Math.max(state?.nextFreeSlotAt ?? 0, deferredUntil + intervalMs) }
 }

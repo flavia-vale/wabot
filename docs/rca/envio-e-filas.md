@@ -441,6 +441,36 @@ a vazão teórica × observada, e a proximidade com o descarte por idade da fila
 exclusiva da dona do produto**, com a saída em mãos (staging e produção). Não
 foi rodado em staging/produção ainda; não tratar 20s como valor confirmado.
 
+### "Só um grupo de destino recebe" — fila travada no intervalo entre destinos (RCA 2026-10-01, fechado)
+
+**Sintoma:** conta com 12 destinos e intervalo de 30s — #17/#18 com 16-19
+posts no dia, os outros 10 com 1; 184 jobs `queued` com "Esperando o
+intervalo entre destinos que você definiu no Anti-banimento"
+(`diag-sem-disparos.mjs <email> --hoje`).
+
+**Causa (dois defeitos em `decideDestinationSpacing`):**
+1. O job adiado não guardava a vaga que recebeu. Ao voltar, encontrava
+   `nextFreeSlotAt` já empurrado pelos jobs adiados DEPOIS dele e era
+   adiado de novo para o fim da fila — para sempre.
+2. O destino do último envio era isento e furava a fila. Ele recebia tudo; os
+   outros só saíam no restart do worker (estado zera), uma vez.
+
+Afetava TODA conta com 2+ destinos e intervalo > 0 recebendo ofertas mais
+rápido que `destinos × intervalo`.
+
+**Correção:** senha de vez (`job.spacingTicket`). O job adiado leva a vaga
+(`deferUntil`) e, ao voltar, sai nela (respeitando o intervalo desde o
+último envio, mantendo a senha se precisar esperar mais). A isenção do mesmo
+destino só vale quando ninguém está esperando. O cursor `nextFreeSlotAt` só
+anda para frente.
+
+**Não regredir:** `test/destination-spacing-sem-trava.test.js` simula a fila
+serial real (12 destinos, 1 h, fila acima da vazão, envio lento, fila parada
+10 min) e exige que todos os destinos recebam, sem rajada. Nunca remover a
+senha nem devolver a isenção incondicional do mesmo destino. Fix no
+`bot-worker.js` → em `remote` só vale após `pm2 restart bot-supervisor
+--update-env`.
+
 ### Gate de plano — fonte única
 
 A tela antiga tinha uma checagem PRÓPRIA (`canAccessAdvancedPreservation` em
