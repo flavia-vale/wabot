@@ -27,6 +27,7 @@ import { shouldResurrectSession, buildResurrectionWhere, resolveIncludeReconnect
 import { createReloadConfigHandler } from './commandHandlers.js'
 import { parseEnumEnv, logModeSummary } from '../core/envModes.js'
 import { recordOperationalSignal } from '../observability/operationalSignals.js'
+import { createRedisClock } from './redisClock.js'
 import { createShardProcessController } from './shardProcessController.js'
 import { createShardOwnershipCoordinator } from '../core/shardOwnershipCoordinator.js'
 import {
@@ -465,6 +466,10 @@ const COMMAND_HANDLERS = {
 // velho demais e é descartado em vez de reexecutado.
 const COMMAND_LOCK_DURATION_MS = Math.max(60_000, Math.max(...Object.values(COMMAND_TIMEOUTS_MS)) + 15_000)
 
+// Hora do Redis (só com roteamento por nó): API e supervisor carimbam e
+// comparam na MESMA régua, imune a desvio de relógio entre servidores.
+const redisClock = createRedisClock({ time: () => publisher.time() })
+
 async function processCommand(job) {
   const name = job.name
   if (!isKnownCommand(name)) throw new Error(`Comando desconhecido: ${name}`)
@@ -473,9 +478,13 @@ async function processCommand(job) {
   // esperar, descartar em vez de executar (evita SEND_BROADCAST duplicado).
   // Retornamos resultado (job 'completed') em vez de throw: a decisão de
   // descartar foi bem-sucedida; ninguém está aguardando o valor.
-  if (isCommandStale(name, data._enqueuedAt)) {
-    const ageMs = Date.now() - Number(data._enqueuedAt)
+  const nowMs = NODE_ROUTING ? await redisClock.now() : Date.now()
+  if (isCommandStale(name, data._enqueuedAt, nowMs)) {
+    const ageMs = nowMs - Number(data._enqueuedAt)
     logger.warn({ jobId: job.id, name, userId: data.userId ?? null, ageMs }, 'Comando obsoleto descartado (API já desistiu) — não executado')
+    // Com roteamento, START_BOT obsoleto devolve `false` (recusa): o objeto
+    // `{_stale}` é truthy e a rota o lia como "robô iniciado" (QR nunca vinha).
+    if (NODE_ROUTING && name === COMMAND.START_BOT) return false
     return { _stale: true, discarded: true, ageMs }
   }
   const handler = COMMAND_HANDLERS[name]

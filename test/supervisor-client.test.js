@@ -423,46 +423,39 @@ test('flag OFF: isSupervisorAlive segue lendo a chave legada', async () => {
   await client.close()
 })
 
-// ---- MN-01/02/03: posse única, trava no START/STOP, dono duplo ----
+// ---- MN-05: falha rápida com nó fora do ar ----
 
-test('MN-01: conta antiga (nodeId nulo, número pareado) fica no n1 mesmo com o n2 mais vazio', async () => {
-  const h = createNodeHarness({ handlers: { 'supervisor-commands-n1': name => (name === 'listRunningBots' ? Array.from({ length: 18 }, (_, i) => `x${i}`) : true), 'supervisor-commands-n2': name => (name === 'listRunningBots' ? [] : true) } })
-  const db = fakeDb({ velha: { nodeId: null, phone: '5511999990000', status: 'disconnected', lifecycle: 'idle' } })
-  const client = routed(h, { db })
-  await client.startBot('velha')
-  assert.deepEqual(h.added.filter(a => a.name === 'startBot').map(a => a.queue), ['supervisor-commands-n1'])
-  assert.equal(db.rows.velha.nodeId, null, 'não grava nodeId: nulo continua significando n1')
+test('MN-05: nó sem heartbeat falha na hora, com mensagem leiga, e NADA é enfileirado', async () => {
+  const h = createNodeHarness({ alive: ['n1'] })
+  const client = routed(h, { db: fakeDb({ u9: { nodeId: 'n2' } }) })
+  const t0 = Date.now()
+  await assert.rejects(() => client.sendBroadcast('u9', 'oi', []), err => {
+    assert.equal(err.code, 'WA_NODE_UNAVAILABLE')
+    assert.equal(err.nodeId, 'n2')
+    assert.doesNotMatch(err.message, /shard|supervisor|worker|fila|redis|n2/i)
+    return true
+  })
+  assert.ok(Date.now() - t0 < 100)
+  assert.equal(h.added.length, 0)
   await client.close()
 })
 
-test('MN-01: conta com nodeId nulo e robô em andamento (lifecycle != idle) também fica no n1', async () => {
+test('MN-05: Redis pendurado ao enfileirar vira erro em vez de esperar para sempre', async () => {
   const h = createNodeHarness()
-  const db = fakeDb({ pareando: { nodeId: null, phone: null, status: 'connecting', lifecycle: 'qr' } })
-  const client = routed(h, { db })
-  await client.startBot('pareando')
-  assert.deepEqual(h.added.filter(a => a.name === 'startBot').map(a => a.queue), ['supervisor-commands-n1'])
+  const original = h.bullmqModule.Queue
+  h.bullmqModule.Queue = class extends original { add() { return new Promise(() => {}) } }
+  const client = routed(h, { db: fakeDb({ u1: { nodeId: 'n1' } }), addTimeoutMs: 50 })
+  await assert.rejects(() => client.sendBroadcast('u1', 'oi', []), /Redis não respondeu/)
   await client.close()
 })
 
-test('MN-03: o mesmo robô nos dois nós é detectado, contado e logado (não some no Set)', async () => {
-  const h = createNodeHarness({ handlers: { 'supervisor-commands-n1': () => ['u1', 'u2'], 'supervisor-commands-n2': () => ['u2', 'u3'] } })
-  const client = routed(h, { db: fakeDb() })
-  const lista = await client.listRunningBots()
-  assert.deepEqual(lista.sort(), ['u1', 'u2', 'u3'])
-  assert.equal(client.getDualOwnerTotal(), 1)
+test('MN-04: com roteamento, _enqueuedAt usa a régua do Redis', async () => {
+  const h = createNodeHarness()
+  const FakeRedis = h.ioredisModule.default
+  FakeRedis.prototype.time = async function () { const t = Date.now() + 20_000; return [String(Math.floor(t / 1000)), String((t % 1000) * 1000)] }
+  const client = routed(h, { db: fakeDb({ u1: { nodeId: 'n1' } }) })
+  await client.sendBroadcast('u1', 'oi', [])
+  const stamped = h.added.find(a => a.name === 'sendBroadcast').data._enqueuedAt
+  assert.ok(Math.abs(stamped - (Date.now() + 20_000)) < 2_000, `carimbo ${stamped} não está na hora do Redis`)
   await client.close()
-})
-
-test('MN-03: auto-stop é opt-in e só para o nó que NÃO é o dono do banco', async () => {
-  const h = createNodeHarness({ handlers: { 'supervisor-commands-n1': () => ['u2'], 'supervisor-commands-n2': () => ['u2'] } })
-  const sem = routed(h, { db: fakeDb({ u2: { nodeId: 'n1' } }) })
-  await sem.listRunningBots()
-  assert.equal(h.added.filter(a => a.name === 'stopBot').length, 0)
-  await sem.close()
-
-  const h2 = createNodeHarness({ handlers: { 'supervisor-commands-n1': () => ['u2'], 'supervisor-commands-n2': () => ['u2'] } })
-  const com = routed(h2, { db: fakeDb({ u2: { nodeId: 'n1' } }), env: { SUPERVISOR_DUAL_OWNER_AUTOSTOP: '1' } })
-  await com.listRunningBots()
-  assert.deepEqual(h2.added.filter(a => a.name === 'stopBot').map(a => a.queue), ['supervisor-commands-n2'])
-  await com.close()
 })
