@@ -471,6 +471,26 @@ senha nem devolver a isenção incondicional do mesmo destino. Fix no
 `bot-worker.js` → em `remote` só vale após `pm2 restart bot-supervisor
 --update-env`.
 
+### "Limpar ofertas da fila" não cancelava o envio (RCA 2026-10-01, fechado)
+
+**Sintoma:** a cliente clica em "Limpar ofertas da fila" (aba Envios), a tela
+mostra as ofertas como removidas, mas o robô continua enviando todas e elas
+voltam a aparecer como "enviando".
+
+**Causa:** `clearUserQueuedSendLogs` (`src/jobs/stuckSendLogs.js`) só marcava a
+linha como `skip:queue_cleared` no banco. O job continuava na fila do robô
+(memória/BullMQ), e o `processSendJob` não lia a linha antes de enviar:
+sobrescrevia para `sending` e mandava. Jobs adiados pelo Anti-banimento
+voltavam via `deferSendJob`, que também sobrescrevia para `queued`.
+
+**Correção:** `processSendJob` lê a linha antes de marcar `sending` e descarta
+o job quando `isQueueClearedLog` é verdadeiro. `deferSendJob` só re-enfileira
+linha que ainda está em `queued`/`sending` (`updateMany` condicional); se a
+cliente limpou no meio, o job é encerrado. Fix no `bot-worker.js` → em
+`remote` só vale após `pm2 restart bot-supervisor --update-env`.
+
+**Não regredir:** `test/limpar-fila-cancela-envio.test.js`.
+
 ### Gate de plano — fonte única
 
 A tela antiga tinha uma checagem PRÓPRIA (`canAccessAdvancedPreservation` em

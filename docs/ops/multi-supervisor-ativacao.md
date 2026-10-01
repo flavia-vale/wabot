@@ -143,15 +143,13 @@ Decisões de projeto (e por quê):
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
 
-## Deploy e backup por servidor (MN-12, MN-13) — arquivos novos, nada existente foi tocado
+## Medir se o endereço de internet do servidor novo prejudica o WhatsApp (MN-20)
 
-`deploy.yml`, `deploy_safe_*.sh` e `backup_prod.sh` **não foram alterados** (continuam sendo do servidor principal). Para um servidor secundário:
+Risco K9: cada servidor sai para a internet por um endereço (IP) diferente; o WhatsApp pode estranhar isso (queda, QR novo, bloqueio). Hoje é **hipótese**, sem dado. O script mede com o que já é gravado (eventos de conexão):
 
-| Arquivo | Para quê |
-|---|---|
-| `ecosystem.node.config.cjs` | PM2 do nó: **só** o `bot-supervisor` (api/dashboard/snapshot-cron duplicariam as tarefas diárias). Config do nó vem do `.env` DELE (`SUPERVISOR_NODE_ID`, `REDIS_URL` e banco do principal, `MAX_SESSIONS_PER_PROCESS`). |
-| `scripts/deploy_node.sh` | Atualiza o código do nó (`git` fast-forward + `npm ci` + `prisma generate`). **Simulação por padrão** (`APLICAR=1` grava). **Não roda migration** (a do banco compartilhado roda uma vez, no principal) e **não reinicia o supervisor** sem `REINICIAR_SUPERVISOR=1` (reinício reconecta todas as sessões do nó; anuncie antes). |
-| `scripts/backup_no.sh` | Backup diário do nó: logins (`auth_info`) + `.env` do nó, cifra com `age` (opcional, recomendada), rotação e `rclone`, marcador `last_success_node_<id>.txt`. Sem banco. Recusa gravar cópia se o `auth_info` estiver vazio. |
-| `scripts/restaurar_auth_conta.sh` | Restaura o login de **uma** conta a partir desse backup (simulação por padrão; `APLICAR=1`). Recusa sobrescrever (`FORCAR=1` guarda o antigo ao lado). Caminho de recuperação se um servidor morrer (RTO a testar com uma conta-teste: meta < 30 min). |
+`node scripts/medir-ip-no.mjs --candidato=n2 [--base=n1] [--horas=72]` (read-only)
 
-Ainda **não** está ligado ao GitHub Actions: disparar o deploy do nó pelo `deploy.yml` (matriz de servidores) exige segredos SSH por servidor e é uma mudança no deploy de produção — fica para decisão sua (MN-12 parte workflow).
+- Compara, por servidor, os eventos de instabilidade (`replaced`, `auth_reset`, `forbidden`, `flap_cooldown`, `stable_close_cooldown`, `retry_giveup`) por conta e por dia; mostra também os códigos 405/408/428/440/500.
+- Veredito leigo: **piora** (QR novo/bloqueio só no candidato, ou taxa ≥ 2× a da base com ≥ 3 eventos), **sem diferença gritante** ou **dados insuficientes** (janela < 72 h, sem conta no candidato ou sem base).
+- **Honestidade:** com 1 conta-teste só aparece problema grosseiro. "Sem diferença" NÃO prova que dá para mover muitas contas — aumente aos poucos e meça de novo.
+- Limites: os eventos ficam ~14 dias; o servidor usado é o ATUAL da conta (meça só depois de mover e de esperar a janela inteira).

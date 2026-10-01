@@ -19,6 +19,18 @@
 // só recebe o e-mail da pagadora; nome, telefone e CPF são digitados por ela
 // na tela do próprio Mercado Pago. Os dados completos que passamos a mandar
 // valem para o avulso (`checkoutPayer.js`).
+//
+// REVISTO 01/10/2026 (dado de produção, `diag-antifraude-mp.mjs --days=30`):
+// a premissa "as recusas aconteciam TAMBÉM no avulso" estava errada. A 1ª
+// cobrança da assinatura chega do MP como `operation_type=regular_payment`
+// (igual ao avulso); o que a separa é `point_of_interaction.type=SUBSCRIPTIONS`.
+// Separando por ele: das 9 contas recusadas por suspeita em 30 dias, 8
+// começaram pela cobrança automática e TODAS foram recusadas na 1ª tentativa
+// (~3 aprovadas × ~12 recusadas). No avulso: ~38 aprovadas × 6 recusadas, e 6
+// das 8 pagaram o avulso minutos depois da recusa. Decisão: no PRIMEIRO
+// pagamento só o avulso (Pix ou cartão); a cobrança automática é oferecida a
+// quem já tem período pago e começa no vencimento. A rota
+// `/create-subscription` aplica a mesma regra (`canStartSubscription`).
 
 const PAID_PLANS = new Set(['basic', 'pro'])
 
@@ -94,9 +106,26 @@ export function decideCheckoutOffer({ plan, isActive, autoRenew, accessExpiresAt
   return {
     mode: 'first_payment',
     primaryLabel: 'Pagar agora (Pix ou cartão)',
-    showAutoRenew: true,
-    autoRenewLabel: 'Assinar com cobrança automática (cartão)',
+    showAutoRenew: false,
+    autoRenewLabel: null,
     autoRenewStartsAt: null,
-    note: 'Pix ou cartão no pagamento avulso; a cobrança automática é só no cartão e você desliga quando quiser.',
+    note: 'Depois do primeiro pagamento você pode ligar a renovação automática no cartão, começando no vencimento.',
+  }
+}
+
+/**
+ * A rota de assinatura só cria checkout para quem já tem período pago — a
+ * mesma regra da tela, aplicada no servidor para que tela antiga em cache ou
+ * chamada direta não volte a mandar ninguém para a cobrança imediata que o
+ * antifraude do MP recusa (ver o topo deste arquivo).
+ * @returns {{ allowed: true, startDate: Date } | { allowed: false, code: string, message: string }}
+ */
+export function canStartSubscription({ plan, accessExpiresAt, now = new Date() } = {}) {
+  const startDate = subscriptionStartDate({ plan, accessExpiresAt, now })
+  if (startDate) return { allowed: true, startDate }
+  return {
+    allowed: false,
+    code: 'SUBSCRIPTION_REQUIRES_PAID_PERIOD',
+    message: 'Faça o primeiro pagamento por Pix ou cartão. Depois dele você pode ligar a renovação automática, começando no vencimento.',
   }
 }
