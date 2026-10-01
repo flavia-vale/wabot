@@ -143,8 +143,7 @@ Decisões de projeto (e por quê):
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
 
-- **MN-09** Cada supervisor publica o próprio teto em `supervisor:capacity:<nodeId>` (TTL do heartbeat). A API lê dali para placement, recusa de start e aviso de vagas (menor folga entre nós). **Sem a chave o teto não é presumido** (nó nunca é escolhido; nenhum teto cheio é afirmado). Por isso o supervisor precisa estar na versão nova antes de ligar a flag na API (passo 1 antes do passo 2/3).
-- **MN-10** Cadeado de posse no Redis (`SUPERVISOR_OWNER_LEASE=1`, só com roteamento ligado; padrão off): `supervisor:owner:<userId>`, TTL 60 s, renovado a cada 20 s. START_BOT em nó diferente do dono do cadeado é recusado (`session_lease_conflict`). Falha ABERTA: Redis fora = só perde a guarda extra, o banco continua mandando. Liberado em STOP_BOT e no shutdown.
+## MN-11 (freio de envio global) — NÃO é necessário; premissa verificada e travada em teste
 
 ## Mover uma conta entre servidores (MN-16) — script pronto, nunca automático
 
