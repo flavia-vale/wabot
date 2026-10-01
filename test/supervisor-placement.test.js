@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { pickNodeForNewSession, resolveSessionNodeId } from '../src/supervisor/placement.js'
+import { findDualOwners, pickNodeForNewSession, resolveSessionNodeId, shouldPlaceSession } from '../src/supervisor/placement.js'
 
 const node = (nodeId, running, { alive = true, max = 20 } = {}) => ({ nodeId, alive, running, max })
 
@@ -40,4 +40,19 @@ test('sessão sem nodeId pertence ao n1', () => {
   assert.equal(resolveSessionNodeId(null), 'n1')
   assert.equal(resolveSessionNodeId({ nodeId: 'n2' }), 'n2')
   assert.equal(resolveSessionNodeId({ nodeId: 'lixo:1' }), 'n1')
+})
+
+test('MN-01: só coloca sessão inexistente ou nunca pareada e parada', () => {
+  assert.equal(shouldPlaceSession(null), true)
+  assert.equal(shouldPlaceSession({ nodeId: null, phone: null, status: 'disconnected', lifecycle: 'idle' }), true)
+  assert.equal(shouldPlaceSession({ nodeId: null, phone: '5511999990000', status: 'disconnected', lifecycle: 'idle' }), false)
+  assert.equal(shouldPlaceSession({ nodeId: null, phone: null, status: 'connecting', lifecycle: 'qr' }), false)
+  assert.equal(shouldPlaceSession({ nodeId: 'n2', phone: null, status: 'disconnected', lifecycle: 'idle' }), false)
+})
+
+test('MN-03: findDualOwners acha a interseção e ignora nó sem medição', () => {
+  assert.deepEqual(findDualOwners({ n1: ['a', 'b'], n2: ['b', 'c'] }), [{ userId: 'b', nodes: ['n1', 'n2'] }])
+  assert.deepEqual(findDualOwners({ n1: ['a'], n2: ['b'] }), [])
+  assert.deepEqual(findDualOwners({ n1: ['a'], n2: null }), [])
+  assert.deepEqual(findDualOwners({ n1: ['a', 'a'] }), [])
 })
