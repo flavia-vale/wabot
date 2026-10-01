@@ -956,3 +956,52 @@ sqlite3 ~/wabot/prisma/prod.db "SELECT COALESCE(json_extract(metadata,'$.waReaso
 
 **Não regredir / não fazer sem dado:** não reverter a assinatura do aparelho
 nem reiniciar a frota por causa do 401; não trocar biblioteca por palpite.
+
+## Cegueira por DMs `fromMe` presas na fila offline (RCA 2026-10-01 — não regredir)
+
+Conta `glauciasimoes10@gmail.com`: espelhava 31× em 7 dias e passou a 0 desde
+~23:36Z; painel "conectado", 23 quedas 500 em 24 h; a cliente confirmou que as
+origens postaram. `diag-frota-cega.mjs` só acusou 2 contas (ela e outra).
+
+**Medido (bot.log, pid da conta):** no boot o robô drena a fila offline e **236
+de 236** mensagens `offline:"1"` vinham de `<id>:14@lid` — OUTRO aparelho da
+própria conta (`verified_name` preenchido) mandando DMs (`fromMe`, `@lid`). Elas
+falham ao abrir (`MessageCounterError: Key used already or never filled`); os
+dois `stuckMsgId` das quedas 500 eram `fromMe` em `@lid` (um id novo por queda,
+por isso a quarentena por id — que exige o MESMO id 2× — nunca pegava). A fila
+offline é entregue em ordem: as ofertas dos grupos monitorados ficavam atrás.
+
+**Causa raiz (inferida da evidência, mesmo desenho do RCA 2026-09-24 de canal):**
+em `handleMessage` do Baileys 6.7.23, DM que não decifra recebe
+`<receipt type=retry>`; o servidor recusa com `<stream:error><ack class=message/>`
+(o ack que esperava) → 500 → reconexão → a fila volta ao mesmo ponto.
+O que NÃO foi medido: o `<receipt>` recusado em si (não há log dele); a evidência
+é o `stuckMsgId` ser sempre DM `fromMe` e o desaparecimento esperado das quedas
+após o patch (ver aceite).
+
+**Hipóteses derrubadas:** fonte parada (cliente confirmou postagens);
+`WA_IGNORE_UNMONITORED_GROUPS` (já ligado nos robôs, origens estão no allowlist);
+re-parear/apagar auth (não ataca a causa; ver RCA das quedas 500 acima); o único
+erro de grupo (`No session found`, `group_cipher.js`) foi isolado e o reenvio
+chegou.
+
+**Conserto:** `patches/@whiskeysockets+baileys+6.7.23.patch`, 1 ramo novo em
+`handleMessage`: DM (`isJidUser || isLidUser`) que não abre → `sendMessageAck(node)`
+e `return`, SEM `sendRetryRequest`. Grupo, canal e status seguem o retry
+(a falha de chave de grupo continua sendo curada por ele). Mensagem `fromMe` em
+grupo MONITORADO continua sendo espelhada (`bot-worker.js`, ramo `fromMe` com
+`isMonitoredSource`) — o patch só atua em DM sem conteúdo legível.
+
+**Não regredir:** `test/baileys-dm-undecryptable-ack-patch.test.js` trava o
+escopo (DM só; nunca grupo/canal/status) e o ramo `fromMe` do worker. Subir o
+Baileys exige refazer o patch.
+
+**Aceite (depois do restart do `bot-supervisor`):**
+- `grep -c 'wabot: DM sem decifrar confirmada com ack' bot.log` > 0 nos robôs
+  que tinham o padrão (é o log do ramo novo);
+- `500 / conexões` por dia cai (hoje ~9/conta/dia); `diag-frota-cega.mjs` deixa
+  de listar a conta; `mensagem recebida` volta a aparecer para ela;
+- a fila que já estava presa no servidor esvazia sozinha: cada DM vira ack no
+  boot em vez de derrubar a conexão.
+Se ainda houver `stuckMsgId` com `@g.us` ou `@newsletter`, é outro balde
+(medir de novo, não ampliar este patch por palpite).
