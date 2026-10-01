@@ -143,10 +143,9 @@ Decisões de projeto (e por quê):
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
 
-- **MN-09** Cada supervisor publica o próprio teto em `supervisor:capacity:<nodeId>` (TTL do heartbeat). A API lê dali para placement, recusa de start e aviso de vagas (menor folga entre nós). **Sem a chave o teto não é presumido** (nó nunca é escolhido; nenhum teto cheio é afirmado). Por isso o supervisor precisa estar na versão nova antes de ligar a flag na API (passo 1 antes do passo 2/3).
-- **MN-10** Cadeado de posse no Redis (`SUPERVISOR_OWNER_LEASE=1`, só com roteamento ligado; padrão off): `supervisor:owner:<userId>`, TTL 60 s, renovado a cada 20 s. START_BOT em nó diferente do dono do cadeado é recusado (`session_lease_conflict`). Falha ABERTA: Redis fora = só perde a guarda extra, o banco continua mandando. Liberado em STOP_BOT e no shutdown.
+## Deploy e backup por servidor (MN-12, MN-13) — arquivos novos, nada existente foi tocado
 
-## Observabilidade por servidor (MN-15)
+`deploy.yml`, `deploy_safe_*.sh` e `backup_prod.sh` **não foram alterados** (continuam sendo do servidor principal). Para um servidor secundário:
 
 - **Log:** com a flag ligada e `SUPERVISOR_NODE_ID` definido, toda linha de log do supervisor E dos robôs (herdam o env) leva `nodeId`. Desligado, o log é idêntico ao de hoje.
 - **/metrics:** `wabot_supervisor_node_alive{node}`, `…_running_bots{node}`, `…_capacity{node}` (não medido é omitido, nunca 0) e `wabot_supervisor_session_dual_owner_total`.
