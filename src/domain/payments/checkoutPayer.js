@@ -8,7 +8,8 @@
 // telefone) e o item ia sem id, descrição e categoria. A documentação do MP
 // ("Melhorar a aprovação dos pagamentos") lista exatamente esses campos como
 // insumo da análise de risco. Mandamos o que a conta já tem; nunca inventamos
-// CPF nem endereço (não pedimos e não temos).
+// CPF nem endereço (não pedimos e não temos). Nome NÃO vai (ver
+// buildCheckoutPayer).
 
 const PLAN_ITEM_DESCRIPTION = {
   basic: 'Espelha Grupos — plano Basic, 30 dias de acesso ao robô de ofertas para WhatsApp',
@@ -41,13 +42,16 @@ export function splitBrazilianPhone(phone) {
 }
 
 /**
- * @param {{ name?: string, email?: string, phone?: string|null }} user
- * @returns {null | { first_name?: string, last_name?: string, email?: string, phone?: { area_code: string, number: string } }}
+ * @param {{ email?: string, phone?: string|null }} user
+ * @returns {null | { email?: string, phone?: { area_code: string, number: string } }}
  */
-export function buildCheckoutPayer({ name, email, phone } = {}) {
+export function buildCheckoutPayer({ email, phone } = {}) {
+  // Sem nome, de propósito (decisão da dona do produto, 29/09/2026): o
+  // cadastro guarda nome de loja ou de outra pessoa da casa ("Achadinhos da
+  // Flavia"; conta gabriel… com nome "Bianca …") e isso, mandado como titular,
+  // não bate com quem paga logado no MP. A decisão se perdeu no revert de
+  // 30/09 (35a0fa2) e voltou aqui.
   const payer = {}
-  const nome = splitPayerName(name)
-  if (nome) Object.assign(payer, nome)
   const mail = String(email ?? '').trim()
   if (mail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) payer.email = mail
   const tel = splitBrazilianPhone(phone)

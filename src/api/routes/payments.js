@@ -20,7 +20,7 @@ import {
   shouldRefreshPendingSubscription,
   summarizeSubscriptionForPanel,
 } from '../../domain/payments/subscriptionPolicy.js'
-import { subscriptionStartDate } from '../../domain/payments/checkoutOffer.js'
+import { canStartSubscription } from '../../domain/payments/checkoutOffer.js'
 import { buildPrepaidMetadata, buildPrepaidOffer, isPrepaidEnabled, resolvePurchaseTerms, PREPAID_MONTHS } from '../../domain/payments/prepaidOffer.js'
 import { buildCheckoutPayer, buildCheckoutItem } from '../../domain/payments/checkoutPayer.js'
 import { appContainer } from '../../app/container.js'
@@ -1336,8 +1336,8 @@ export async function paymentsRoutes(app) {
     trackAnalyticsEventSafe({ userId, event: 'checkout_started', metadata: { plan, ...(months !== 1 ? { months } : {}) } })
 
     try {
-      const payerUser = await db.user.findUnique({ where: { id: userId }, select: { name: true, email: true, contactPhone: true } }).catch(() => null)
-      const payer = buildCheckoutPayer({ name: payerUser?.name, email: payerUser?.email, phone: payerUser?.contactPhone })
+      const payerUser = await db.user.findUnique({ where: { id: userId }, select: { email: true, contactPhone: true } }).catch(() => null)
+      const payer = buildCheckoutPayer({ email: payerUser?.email, phone: payerUser?.contactPhone })
       const checkoutUrl = await createMercadoPagoPreference({ userId, plan, payer, months })
       return { checkout_url: checkoutUrl }
     } catch (err) {
@@ -1366,7 +1366,18 @@ export async function paymentsRoutes(app) {
       if (!plans[plan]) return sendError(reply, 400, 'INVALID_PLAN', 'Plano inválido. Use basic ou pro.')
 
       const user = await db.user.findUnique({ where: { id: userId }, select: { email: true, plan: true, accessExpiresAt: true } })
-      const startDate = subscriptionStartDate({ plan: user?.plan, accessExpiresAt: user?.accessExpiresAt })
+      // 1ª cobrança imediata da assinatura = recusa do antifraude do MP em 8 de
+      // 8 contas (01/10/2026). Só quem já tem período pago assina, começando
+      // no vencimento — ver checkoutOffer.js.
+      const subscriptionGate = canStartSubscription({ plan: user?.plan, accessExpiresAt: user?.accessExpiresAt })
+      if (!subscriptionGate.allowed) {
+        trackAnalyticsEventSafe({ userId, event: 'subscription_requires_paid_period', metadata: { plan } })
+        return reply.code(409).send({
+          code: subscriptionGate.code,
+          error: { code: subscriptionGate.code, message: subscriptionGate.message },
+        })
+      }
+      const startDate = subscriptionGate.startDate
       // E-mail do Mercado Pago informado só para a cobrança (ver payerEmail.js).
       const payer = resolveSubscriptionPayerEmail({ accountEmail: user?.email, informedEmail: informedPayerEmail })
       const payerEmail = payer.email

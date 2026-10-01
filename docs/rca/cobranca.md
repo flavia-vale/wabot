@@ -317,6 +317,58 @@ descrito abaixo.
 
 Teste: `test/subscription-checkout-reuse.test.js`.
 
+#### "O Pix não funciona": a recusa por suspeita vinha da COBRANÇA AUTOMÁTICA (RCA 2026-10-01 — não regredir)
+
+Queixa: dois clientes "não conseguem pagar por Pix". Um deles nem tentou pagar
+(nenhum pagamento no MP); o outro foi recusado 3x no Pix e 2x no cartão, tudo
+`rejected_high_risk`/`cc_rejected_high_risk`.
+
+**Medição** (`node scripts/diag-antifraude-mp.mjs --days=30`, produção):
+
+- A 1ª cobrança da assinatura chega do MP como `operation_type=regular_payment`,
+  IGUAL ao avulso. O que separa é `point_of_interaction.type`: `SUBSCRIPTIONS`
+  (cobrança automática) × `CHECKOUT` (avulso, Checkout Pro). A medição de 30/09
+  usou só o `operation_type` e por isso culpou o avulso — errado.
+- Separando pela origem: **cobrança automática ~3 aprovadas × ~12 recusadas por
+  suspeita**; **avulso ~38 aprovadas × 6**.
+- **8 das 9 contas** recusadas por suspeita começaram pela cobrança automática,
+  e todas foram recusadas na 1ª tentativa. **6 delas pagaram o avulso minutos
+  depois** — a recusa não "contamina" a pessoa.
+- O cliente do Pix foi o caso fora da curva: recusado na assinatura às 12:52 e
+  depois 3x no Pix (12:54–13:03). Recusa do MP para essa pessoa; nenhuma outra
+  conta teve isso. Saída para ele: Pix direto + pagamento manual no admin.
+- `CPF do pagador` ausente nas recusas é efeito, não causa: aparece também em
+  `insufficient_amount`/`bad_filled_*`.
+- Conta vendedora (`/users/me`): pessoal (CPF), `seller_experience=NEWBIE`, a
+  mesma conta recebe outra marca na fatura (`MP *BOTCONVERSOR`). Pode pesar na
+  nota; só o MP confirma — pedir revisão / avaliar conta CNPJ é ação da dona.
+
+**Correção:**
+
+- `decideCheckoutOffer` (`checkoutOffer.js`): no 1º pagamento só o avulso (Pix
+  ou cartão); a cobrança automática é oferecida a quem já tem período pago e
+  começa no vencimento. Isso desfaz a decisão de 27/09, que se apoiou na
+  premissa errada "o avulso também é recusado".
+- `canStartSubscription` aplica a MESMA regra na rota `/create-subscription`
+  (409 `SUBSCRIPTION_REQUIRES_PAID_PERIOD`) ANTES de qualquer chamada ao MP —
+  tela antiga em cache ou chamada direta não volta a mandar ninguém para a
+  cobrança imediata. Evento: `subscription_requires_paid_period`.
+- `buildCheckoutPayer` deixou de mandar o NOME do cadastro (decisão da dona de
+  29/09, perdida no revert `35a0fa2`): nome de loja ou de outra pessoa da casa
+  não bate com quem paga logado no MP. Vai só e-mail e telefone.
+- `rejected_high_risk` (sem `cc_`, Pix/saldo) voltou a `chargeOutcome.js`.
+
+**Não regredir:**
+
+- **Para separar avulso × assinatura use `point_of_interaction.type`**, nunca
+  só `operation_type`.
+- Não oferecer a cobrança automática no 1º pagamento sem medir de novo
+  (`diag-antifraude-mp.mjs`, linha "Cobrança automática (SUBSCRIPTIONS)").
+- Recusa por suspeita não tem conserto garantido do nosso lado (a decisão é do
+  MP); o que controlamos é não mandar a cliente para o fluxo que ele recusa.
+
+Testes: `test/payments-checkout-offer.test.js`, `test/payments-checkout-pagador.test.js`.
+
 ### "Assinou recorrente e o painel diz que ela não terminou" (RCA 2026-09-07 — não regredir)
 
 Cliente assinou com renovação automática, viu a mensagem de sucesso, o acesso

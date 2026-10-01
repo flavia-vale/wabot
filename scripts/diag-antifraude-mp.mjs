@@ -13,8 +13,8 @@
 //   [1] nossa conta vendedora no MP (`/users/me`): tipo, situação, se pode
 //       vender, reputação, data de cadastro;
 //   [2] a aplicação dona da chave (`/applications/:id`): site, escopos;
-//   [3] todos os pagamentos da janela por tipo × meio × situação × motivo e
-//       por dia (aprovado × suspeita);
+//   [3] todos os pagamentos da janela por tipo × origem × meio × situação ×
+//       motivo, a cobrança automática à parte e o avulso por dia;
 //   [4] aprovado × suspeita CAMPO A CAMPO no avulso — o campo que separa os
 //       dois grupos é o suspeito;
 //   [5] (com <email>) cada pagamento da conta + a preferência que o MP
@@ -103,12 +103,18 @@ for (let offset = 0; offset < 1000; offset += 100) {
 console.log(`    ${pagamentos.length} pagamento(s)`)
 const porGrupo = new Map()
 for (const p of pagamentos) {
-  const k = `${p.operation_type} | ${p.payment_method_id} | ${p.status} | ${p.status_detail}`
+  // `point_of_interaction.type` é o que separa avulso (CHECKOUT) da 1ª cobrança
+  // da assinatura (SUBSCRIPTIONS): as duas chegam como `regular_payment`.
+  const k = `${p.operation_type} | ${p.point_of_interaction?.type || '—'} | ${p.payment_method_id} | ${p.status} | ${p.status_detail}`
   porGrupo.set(k, (porGrupo.get(k) || 0) + 1)
 }
 for (const [k, n] of [...porGrupo].sort((a, b) => b[1] - a[1])) console.log(`    ${String(n).padStart(4)}  ${k}`)
 
-const avulso = pagamentos.filter(p => p.operation_type === 'regular_payment')
+// Avulso de verdade = Checkout Pro. A 1ª cobrança da assinatura também vem como
+// `regular_payment`; misturar as duas fez o RCA de 30/09 culpar o avulso.
+const avulso = pagamentos.filter(p => p.operation_type === 'regular_payment' && p.point_of_interaction?.type !== 'SUBSCRIPTIONS')
+const assinatura = pagamentos.filter(p => p.point_of_interaction?.type === 'SUBSCRIPTIONS')
+console.log(`\n    Cobrança automática (SUBSCRIPTIONS): aprovadas=${assinatura.filter(p => p.status === 'approved').length} suspeita=${assinatura.filter(p => SUSPEITA.has(p.status_detail)).length} total=${assinatura.length}`)
 console.log('\n    Avulso por dia (aprovado / suspeita / outra recusa / pendente):')
 const porDia = new Map()
 for (const p of avulso) {
