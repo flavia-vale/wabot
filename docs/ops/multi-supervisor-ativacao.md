@@ -142,3 +142,14 @@ Decisões de projeto (e por quê):
 - `isSupervisorAlive()` sem `nodeId` exige todos os nós listados em `SUPERVISOR_NODE_IDS`: um nó listado que nunca subiu mantém o alarme aceso.
 - Lacuna de teste: não há teste de integração do `index.js` do supervisor com Redis real; posse/resume são cobertos nos helpers puros e por leitura de código/subprocesso.
 - Reiniciar o supervisor derruba e reconecta todas as sessões (anunciar antes).
+
+## Medir se o endereço de internet do servidor novo prejudica o WhatsApp (MN-20)
+
+Risco K9: cada servidor sai para a internet por um endereço (IP) diferente; o WhatsApp pode estranhar isso (queda, QR novo, bloqueio). Hoje é **hipótese**, sem dado. O script mede com o que já é gravado (eventos de conexão):
+
+`node scripts/medir-ip-no.mjs --candidato=n2 [--base=n1] [--horas=72]` (read-only)
+
+- Compara, por servidor, os eventos de instabilidade (`replaced`, `auth_reset`, `forbidden`, `flap_cooldown`, `stable_close_cooldown`, `retry_giveup`) por conta e por dia; mostra também os códigos 405/408/428/440/500.
+- Veredito leigo: **piora** (QR novo/bloqueio só no candidato, ou taxa ≥ 2× a da base com ≥ 3 eventos), **sem diferença gritante** ou **dados insuficientes** (janela < 72 h, sem conta no candidato ou sem base).
+- **Honestidade:** com 1 conta-teste só aparece problema grosseiro. "Sem diferença" NÃO prova que dá para mover muitas contas — aumente aos poucos e meça de novo.
+- Limites: os eventos ficam ~14 dias; o servidor usado é o ATUAL da conta (meça só depois de mover e de esperar a janela inteira).
