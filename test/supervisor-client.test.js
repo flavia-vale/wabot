@@ -335,7 +335,7 @@ test('flag ON: nodeId é gravado ANTES do START_BOT e vai ao nó escolhido', asy
   const h = createNodeHarness({ events, handlers: { 'supervisor-commands-n2': name => (name === 'listRunningBots' ? [] : true), 'supervisor-commands-n1': name => (name === 'listRunningBots' ? Array.from({ length: 15 }, (_, i) => `x${i}`) : true) } })
   // n2 vazio (0), n1 com 15 -> n2 tem mais vagas
   h.added.length = 0
-  const db = fakeDb({ novo: { nodeId: null } }, events)
+  const db = fakeDb({ novo: { nodeId: null, phone: null, status: 'disconnected', lifecycle: 'idle' } }, events)
   const client = routed(h, { db })
   const ok = await client.startBot('novo')
   assert.equal(ok, true)
@@ -369,7 +369,7 @@ test('flag ON: sessão que já tem nodeId NÃO é recolocada', async () => {
 
 test('flag ON: sem nó vivo com vaga o start é recusado (false) e nada é enviado', async () => {
   const h = createNodeHarness({ alive: [] })
-  const db = fakeDb({ novo: { nodeId: null } })
+  const db = fakeDb({ novo: { nodeId: null, phone: null, status: 'disconnected', lifecycle: 'idle' } })
   const client = routed(h, { db })
   assert.equal(await client.startBot('novo'), false)
   assert.equal(db.rows.novo.nodeId, null)

@@ -32,6 +32,7 @@ import { createShardProcessController } from './shardProcessController.js'
 import { createShardOwnershipCoordinator } from '../core/shardOwnershipCoordinator.js'
 import {
   buildResumeWhere,
+  commandNeedsFreshOwnership,
   createNodeOwnershipCache,
   isNodeRoutingEnabled,
   ownsLegacyQueue,
@@ -490,7 +491,10 @@ async function processCommand(job) {
   if (!handler) throw new Error(`Handler ausente para ${name}`)
   // Aquece a posse por nó (async) para os handlers síncronos. Falha de banco
   // propaga: o comando falha visível em vez de rodar sem saber de quem é.
-  if (NODE_ROUTING && data.userId) await nodeOwnership.get(data.userId)
+  if (NODE_ROUTING && data.userId) {
+    if (commandNeedsFreshOwnership(name)) nodeOwnership.invalidate(data.userId) // START/STOP: banco, sem cache
+    await nodeOwnership.get(data.userId)
+  }
   return await handler(data)
 }
 

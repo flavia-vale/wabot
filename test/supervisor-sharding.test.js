@@ -29,6 +29,7 @@ test('shouldHandleUserOnShard respeita índice', () => {
 // ---- Roteamento por nó: o hash legado NÃO muda e os helpers novos são puros ----
 import {
   buildResumeWhere,
+  commandNeedsFreshOwnership,
   createNodeOwnershipCache,
   isNodeRoutingEnabled,
   nodeIdWhere,
@@ -90,4 +91,10 @@ test('cache de posse: lê o banco só em miss/expirado e guarda a última posse'
   await cache.get('u')
   assert.equal(loads, 2)
   assert.equal(cache.peek('u'), 'n2')
+})
+
+test('MN-02: só START_BOT e STOP_BOT exigem posse fresca do banco', () => {
+  assert.equal(commandNeedsFreshOwnership('startBot'), true)
+  assert.equal(commandNeedsFreshOwnership('stopBot'), true)
+  assert.equal(commandNeedsFreshOwnership('sendBroadcast'), false)
 })

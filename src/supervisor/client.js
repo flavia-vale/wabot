@@ -112,6 +112,7 @@ export function createSupervisorClient({
   let deps = null
   const nodeChannels = new Map() // nodeId -> Promise<{queue, queueEvents}>
   const nodeOfUser = new Map() // userId -> { nodeId, expiresAt }
+  let dualOwnerTotal = 0
   const events = new EventEmitter()
   // Evita warning quando muitos sockets WebSocket assinam o mesmo emitter.
   events.setMaxListeners(0)
@@ -318,10 +319,12 @@ export function createSupervisorClient({
   // já enxerga o dono. Devolve null quando nenhum nó pode receber.
   async function ensureNodePlacement(userId) {
     const database = await getDb()
-    const row = await database.waSession.findUnique({ where: { userId }, select: { nodeId: true } })
-    if (row?.nodeId && isValidNodeId(row.nodeId)) {
-      nodeOfUser.set(userId, { nodeId: row.nodeId, expiresAt: now() + nodeCacheTtlMs })
-      return row.nodeId
+    const row = await database.waSession.findUnique({ where: { userId }, select: { nodeId: true, phone: true, status: true, lifecycle: true } })
+    // Regra única: nulo = 'n1'. Conta antiga (já pareada) NUNCA é recolocada.
+    if (!shouldPlaceSession(row)) {
+      const existing = resolveSessionNodeId(row)
+      nodeOfUser.set(userId, { nodeId: existing, expiresAt: now() + nodeCacheTtlMs })
+      return existing
     }
     let chosen = null
     if (nodeIds.length === 1) {
@@ -365,6 +368,27 @@ export function createSupervisorClient({
   }
   const stopBot = userId => send(COMMAND.STOP_BOT, { userId })
   const isRunning = userId => send(COMMAND.IS_RUNNING, { userId })
+  // Split-brain: o mesmo robô ligado em dois nós. É o único ponto que enxerga
+  // os dois nós juntos, então a deduplicação por Set NÃO pode apagar o sinal.
+  // Parar o robô do nó errado é opt-in (SUPERVISOR_DUAL_OWNER_AUTOSTOP=1).
+  async function reportDualOwners(lists) {
+    const dual = findDualOwners(lists)
+    if (!dual.length) return
+    dualOwnerTotal += dual.length
+    for (const { userId, nodes } of dual) {
+      logger.error({ userId, nodes, event: 'session_dual_owner' }, 'session_dual_owner: o mesmo robô está ligado em mais de um servidor')
+      if (!['1', 'true', 'on'].includes(String(env.SUPERVISOR_DUAL_OWNER_AUTOSTOP ?? '').toLowerCase())) continue
+      try {
+        const owner = await resolveNodeId(userId)
+        for (const nodeId of nodes.filter(id => id !== owner)) {
+          await send(COMMAND.STOP_BOT, { userId }, { nodeId })
+        }
+      } catch (err) {
+        logger.error({ userId, err: err?.message }, 'session_dual_owner: falha ao parar o robô do servidor errado')
+      }
+    }
+  }
+
   // Fan-out aos nós VIVOS. Cada valor é a lista de userIds do nó, ou null se
   // aquele nó não respondeu. Nó morto (sem heartbeat) não entra: não roda robô.
   async function listRunningByNode() {
@@ -401,6 +425,7 @@ export function createSupervisorClient({
     const lists = await listRunningByNode()
     const failed = Object.entries(lists).filter(([, list]) => list === null).map(([id]) => id)
     if (failed.length) throw new Error(`Contagem de robôs indisponível: nó(s) sem resposta: ${failed.join(', ')}`)
+    await reportDualOwners(lists)
     return [...new Set(Object.values(lists).flat())]
   }
   const listGroups = userId => send(COMMAND.LIST_GROUPS, { userId })
@@ -490,6 +515,6 @@ export function createSupervisorClient({
     // extras
     isSupervisorAlive, getSupervisorBootedAtMs, getLastEvent, close, _events: events,
     moveSessionToShard, rollbackSessionFromShard, getShardMetrics,
-    resolveNodeId, nodeIds, nodeRouting,
+    resolveNodeId, nodeIds, nodeRouting, getDualOwnerTotal: () => dualOwnerTotal,
   })
 }
