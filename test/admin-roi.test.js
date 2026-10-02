@@ -329,7 +329,7 @@ test('quanto mais crescimento, mais cedo se paga — a ordem dos cenários não 
 })
 
 test('a tela fala em linguagem leiga — nada de jargão financeiro', () => {
-  const fonte = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  const fonte = readFileSync(new URL('../dashboard/app/admin/receita/page.js', import.meta.url), 'utf8')
   // Nomes de campo do backend (`paybackMonth`, `breakEvenMonth`) são código,
   // não texto de tela — a checagem é sobre o que a pessoa LÊ.
   const painel = fonte
@@ -343,7 +343,7 @@ test('a tela fala em linguagem leiga — nada de jargão financeiro', () => {
 })
 
 test('o gráfico não depende só da cor — verde e vermelho são o par que mais confunde', () => {
-  const fonte = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  const fonte = readFileSync(new URL('../dashboard/app/admin/receita/page.js', import.meta.url), 'utf8')
   const grafico = fonte.slice(fonte.indexOf('function CumulativeProfitChart('), fonte.indexOf('function RoiPanel('))
   assert.ok(grafico.includes('signedCurrency'), 'o valor precisa sair escrito com sinal')
   assert.ok(grafico.includes('R$ 0'), 'a linha do zero é o que separa vermelho de azul sem usar cor')
@@ -351,8 +351,8 @@ test('o gráfico não depende só da cor — verde e vermelho são o par que mai
 })
 
 test('a sub-aba ROI só busca dados quando é aberta', () => {
-  const fonte = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
-  assert.match(fonte, /if \(tab !== 'financeiro' \|\| financeTab !== 'roi'\) return/)
+  const fonte = readFileSync(new URL('../dashboard/app/admin/receita/page.js', import.meta.url), 'utf8')
+  assert.match(fonte, /if \(financeTab !== 'roi'\) return/)
 })
 
 
@@ -413,7 +413,7 @@ test('a cascata de conciliação FECHA: líquido do histórico menos o mês corr
 })
 
 test('a tela mostra a cascata em linguagem leiga, sem mandar a pessoa perguntar', () => {
-  const fonte = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  const fonte = readFileSync(new URL('../dashboard/app/admin/receita/page.js', import.meta.url), 'utf8')
   // Comentário de código não é tela — a checagem de jargão olha só o que a
   // pessoa LÊ, senão explicar o motivo num comentário reprova o teste.
   const painel = fonte
@@ -481,7 +481,7 @@ test('os números de mês fechado continuam existindo — a tabela do passado so
 })
 
 test('a tela usa a régua do placar e mostra a conta ABERTA', () => {
-  const fonte = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+  const fonte = readFileSync(new URL('../dashboard/app/admin/receita/page.js', import.meta.url), 'utf8')
   const painel = fonte.slice(fonte.indexOf('function RoiPanel('), fonte.indexOf('function FinancePeriodSelector('))
 
   for (const campo of ['netToDate', 'investedToDate', 'resultToDate', 'roiPctToDate']) {

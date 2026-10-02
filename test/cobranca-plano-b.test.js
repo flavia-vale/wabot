@@ -227,8 +227,8 @@ test('o aviso interno não passa pelo despachante da cliente', () => {
   assert.ok(alertsSource.includes('sem_smtp'), 'sem SMTP a janela de cooldown não pode queimar sem ninguém receber')
 })
 
-test('o alarme da máquina aparece na aba Financeiro', () => {
-  const adminPageSource = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+test('o alarme da máquina aparece na página Receita', () => {
+  const adminPageSource = readFileSync(new URL('../dashboard/app/admin/receita/page.js', import.meta.url), 'utf8')
   assert.ok(adminPageSource.includes('data.health.headline'))
   assert.ok(adminPageSource.includes('problema.fix'), 'a tela precisa dizer o que fazer, não só que está ruim')
 })
