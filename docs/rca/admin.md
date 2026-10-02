@@ -478,3 +478,26 @@ de e-mail em massa (`adminEmails.js` `/send`), `confirmTotal` era opcional:
 sem ele, saía para a base sem conferir. Agora é obrigatório (400) e segue 409
 quando a lista mudou. Guarda: `test/admin-afiliados-auditoria.test.js`.
 Zero RAM.
+
+## Início quebrado em Receita e Operação (G2 da auditoria, 2026-10-02)
+
+`dashboard/app/admin/page.js` tinha 3.825 linhas e disparava 20 consultas no
+boot, mesmo para quem só queria ver o semáforo. Metade era a aba Financeiro
+(ROI, cobranças recorrentes, reembolso, pagamento por fora) e a aba oculta
+"Observabilidade (técnico)" + Configurações (planos da LP, FAQ, termos, tutorial).
+
+| Peça | Onde agora |
+|---|---|
+| Financeiro inteiro (visão, ROI, cobranças, pagos vencidos, todos que já pagaram, reembolso, pagamento por fora) | `dashboard/app/admin/receita/page.js` (link "Receita" no menu, `billing:read`) |
+| Observabilidade técnica (sessão admin, métricas completas, GO/NO-GO, saúde, sessões WA, telemetria, robô do Telegram, erros 24h, logs) + card de staging + Configurações | `dashboard/app/admin/operacao/page.js` (link "Operação", `tech:read`; conteúdo do site fica recolhido em "Conteúdo e modelos do site") |
+| Início | 1.719 linhas; boot caiu de 20 para 10 consultas (saíram sessions, session-telemetry, logs, logs/summary, payments, subscriptions, system/health, lp-content, legal/terms; `finance/overview` ficou só para os dois cards da aba Afiliados) |
+| Guarda | `test/admin-inicio-enxuto.test.js` (teto de linhas por tela + boot enxuto); testes antigos de ROI/cobranças/reembolso/staging apontam para as páginas novas |
+
+Clicar numa cliente na Receita abre a ficha `/admin/clientes/:id` (antes abria
+um painel duplicado dentro do Início). Nada mudou de rota, permissão ou banco.
+Zero RAM: mesmas consultas, agora cada uma só na tela que a mostra.
+
+**Não regredir:** aba nova no Início é a exceção, não a regra — tela com dono
+próprio (Receita, Operação, Hoje) nasce como página em `dashboard/app/admin/`.
+Próximo corte previsto: abas Online e Sucesso saem do Início quando a caixa
+"Hoje" (G1) for validada em staging.
