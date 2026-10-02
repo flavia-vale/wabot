@@ -478,3 +478,23 @@ de e-mail em massa (`adminEmails.js` `/send`), `confirmTotal` era opcional:
 sem ele, saía para a base sem conferir. Agora é obrigatório (400) e segue 409
 quando a lista mudou. Guarda: `test/admin-afiliados-auditoria.test.js`.
 Zero RAM.
+
+## Caixa de entrada "Hoje" (`/admin/hoje`, G1 da auditoria, 2026-10-02)
+
+Responde "o que precisa de mim agora" com a ação ao lado, em vez de cards e
+números espalhados.
+
+| Peça | Onde |
+|---|---|
+| Prioridade (PURA): peso financeiro × gravidade, uma linha por cliente | `src/domain/admin/inboxPriority.js` |
+| Rota (support:read, auditada, só leitura em lote, teto de 2 000 contas) | `GET /api/admin/inbox` em `src/api/routes/admin.js` |
+| Tela | `dashboard/app/admin/hoje/page.js` (tokens do DS, sem hex) |
+| Guarda | `test/admin-caixa-hoje.test.js` |
+
+Fontes reaproveitadas, nunca reescritas: `classifyOutreachSegment` (os 10
+grupos do contato semanal) e `findPayingDown`/`findPayingBlind` (as mesmas
+regras do aviso M4). **Não regredir:** cada cliente entra UMA vez (operacional
+vence comercial); todo segmento novo em `outreachSegments.js` precisa de
+gravidade em `GRAVIDADE`, senão some da caixa em silêncio (teste trava);
+telefone mascarado por papel (`canSeePhone`); reconectar sempre com confirmação.
+Custo: ~10 agregações em lote por abertura, zero processo novo, zero RAM.
