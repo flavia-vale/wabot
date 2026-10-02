@@ -59,6 +59,7 @@ import { runCredentialExpirySweep } from '../credentialExpiry/sweep.js'
 import { isNodeRoutingEnabled, resolveKnownNodeIds } from '../supervisor/nodeRouting.js'
 import { nodesWithoutHeartbeat } from '../supervisor/preflight.js'
 import { runSessionCapacityAlertSweep } from '../ops/sessionCapacityAlertSweep.js'
+import { runAdminOpsAlertSweep } from '../ops/adminOpsAlertSweep.js'
 import { sendMail, isEmailConfigured } from '../email/mailer.js'
 import { leadNurtureRoutes } from './routes/leadNurture.js'
 import { emailPrefsRoutes } from './routes/emailPrefs.js'
@@ -344,8 +345,21 @@ function startNodeRoutingGuard() {
   timer.unref?.()
 }
 
+// Avisos operacionais para a dona (pagante fora do ar, conectada sem receber,
+// envio preso). Mesmo timer do aviso de vagas: nenhum timer novo.
+//   ADMIN_OPS_ALERT_ENABLED         — 'false' desliga.
+//   ADMIN_OPS_ALERT_COOLDOWN_HOURS  — silêncio por situação (default 12h).
+async function runAdminOpsAlertTick() {
+  try {
+    const summary = await runAdminOpsAlertSweep({ db, logger: app.log })
+    if (summary.sent > 0) app.log.warn({ ...summary }, 'avisos operacionais da dona: passada concluída')
+  } catch (err) {
+    app.log.error({ err: err.message }, 'avisos operacionais da dona: passada falhou')
+  }
+}
+
 function startSessionCapacityAlertSweep() {
-  const timer = setInterval(runSessionCapacityAlertTick, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
+  const timer = setInterval(() => { void runSessionCapacityAlertTick(); void runAdminOpsAlertTick() }, CAPACITY_ALERT_SWEEP_INTERVAL_MS)
   timer.unref?.()
 }
 
