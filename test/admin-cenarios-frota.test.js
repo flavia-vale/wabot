@@ -30,7 +30,7 @@ test('a aba online aceita filtro por cenário', () => {
 
 test('os conjuntos de usuários por cenário NÃO vazam na resposta', () => {
   // byScenario é Set (não serializa) e é dado interno de filtro.
-  assert.match(adminRoute, /const \{ byScenario: _byScenario, \.\.\.scenarioCounts \}/)
+  assert.match(adminRoute, /const \{ byScenario: _byScenario, blindDetailByUser: _blindDetailByUser, \.\.\.scenarioCounts \}/)
 })
 
 test('os cards de cenário estão na primeira tela e são clicáveis', () => {

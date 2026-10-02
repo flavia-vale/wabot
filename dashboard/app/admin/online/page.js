@@ -108,6 +108,21 @@ function statusMeta(status, lifecycle) {
   return { label: 'Desconectado', className: 'bg-red-100 text-red-700 ring-red-200', dot: 'bg-red-500' }
 }
 
+// "Conectado" no WhatsApp não prova que as ofertas estão chegando: a conta pode
+// estar ligada e sem receber nada (sinal ops_wa_reception_blind do robô).
+function ReceptionCell({ blind }) {
+  if (!blind) return <span className="text-xs text-slate-400">—</span>
+  return (
+    <div title="O robô está conectado, mas não chega nenhuma mensagem dos grupos de origem">
+      <span className="inline-block whitespace-nowrap rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-black text-red-700">
+        sem receber
+      </span>
+      {blind.silentForMs ? <p className="mt-1 text-xs text-slate-500">há {formatDurationMs(blind.silentForMs)}</p> : null}
+      {blind.haMuito ? <p className="text-xs font-bold text-red-700">mesmo depois de reconectar</p> : null}
+    </div>
+  )
+}
+
 function OnlineCard({ label, value, helper, tone = 'slate' }) {
   const tones = {
     slate: 'bg-slate-950 text-white ring-slate-800',
@@ -426,6 +441,7 @@ export default function AdminOnlinePage() {
                 <tr>
                   <th className="px-3 py-3">Usuário</th>
                   <th className="px-3 py-3">WhatsApp</th>
+                  <th className="px-3 py-3">Recebendo</th>
                   <th className="px-3 py-3">Última atividade</th>
                   <th className="px-3 py-3 text-right">Envios 24h</th>
                   <th className="px-3 py-3 text-right">Quedas 24h</th>
@@ -448,6 +464,9 @@ export default function AdminOnlinePage() {
                           <span className={`h-2 w-2 rounded-full ${meta.dot}`} />{meta.label}
                         </span>
                         <p className="mt-1 text-xs text-slate-500">HB {formatRelative(user.waSession?.lastHeartbeatAt)}</p>
+                      </td>
+                      <td className="px-3 py-4">
+                        <ReceptionCell blind={user.receptionBlind} />
                       </td>
                       <td className="px-3 py-4 text-xs text-slate-600">
                         <p className="font-bold">{formatRelative(user.effectiveLastActivityAt)}</p>
