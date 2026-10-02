@@ -66,7 +66,7 @@ nenhuma no banco** e volta apagando a linha do `.env` (pegadinha #1: `pm2
 delete` + `start`, e reiniciar o `bot-supervisor` para os bots pegarem).
 
 **A memória de quem estava em preview** fica em
-`scripts/snapshot-image-mode.mjs` (read-only): grava cliente por cliente, grupo
+`scripts/arquivo/snapshot-image-mode.mjs` (read-only): grava cliente por cliente, grupo
 por grupo, num JSON com data e motivo. Rodar ANTES de trocar.
 
 **Não regredir:** a invariante do chokepoint continua valendo — `toMonitorGroup`
