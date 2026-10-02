@@ -7,10 +7,8 @@ import { Alert } from '@/components/Alert'
 import { LoadingState } from '@/components/States'
 import { PayingTag } from '@/components/PayingTag'
 import { SharedPhoneTag } from '@/components/SharedPhoneTag'
+import { canAccessCustomerSuccess } from '@/lib/admin/access'
 
-const CS_ALLOWED_EMAILS = ['flavia.vale@usp.br', 'flaviaroberta.1496@gmail.com', 'tacianeaas02@gmail.com']
-const CS_PERMISSION_KEYS = ['customer_success', 'customer_success_ops', 'success']
-const resolveAdminEmail = admin => String(admin?.email || admin?.user?.email || admin?.profile?.email || '').toLowerCase().trim()
 
 const REASON_LABELS = {
   all: 'Todos',
@@ -64,12 +62,8 @@ export default function CustomerSuccessPage() {
   const [savingAccess, setSavingAccess] = useState(false)
   const [accessPayload, setAccessPayload] = useState({ plan: '', expiresAt: '', reason: '' })
 
-  const hasCustomerSuccessAccess = useMemo(() => {
-    const email = resolveAdminEmail(admin)
-    const permissions = Array.isArray(admin?.permissions) ? admin.permissions : []
-    const hasPermission = permissions.some(permission => CS_PERMISSION_KEYS.includes(String(permission).toLowerCase().trim()))
-    return CS_ALLOWED_EMAILS.includes(email) || hasPermission || admin?.role === 'owner'
-  }, [admin])
+  // Decidido por permissão (support:read), nunca por e-mail fixo (Q7 da auditoria).
+  const hasCustomerSuccessAccess = useMemo(() => canAccessCustomerSuccess(admin), [admin])
 
   const loadData = useCallback(async (selectedReason = reason) => {
     const [nextOverview, nextQueue, nextMetrics] = await Promise.all([
