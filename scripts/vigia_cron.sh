@@ -12,6 +12,11 @@
 #                     vermelho|resolvido). Padrão: e-mail para a administradora
 #                     via scripts/vigia-notificar.mjs. VIGIA_EMAIL=0 desliga.
 #   Janela de manutenção aberta (scripts/janela.sh) = registra no log, não avisa.
+#   VIGIA_AUTOCURA=1  (P2-2, DESLIGADO por padrão) quando o vigia acusa app
+#                     SUMIDO do pm2, chama `APLICAR=1 scripts/religar-producao.sh`
+#                     — no máximo 1 vez a cada 30 min, nunca com janela aberta.
+#                     O religar já recusa se houver robôs órfãos ou outra
+#                     operação/deploy em andamento.
 #   VIGIA_MAX_LOG_KB  tamanho máximo do log antes de rodar (default 2048)
 set -uo pipefail
 
@@ -46,6 +51,21 @@ JANELA_FILE="${WABOT_JANELA_FILE:-$HOME/.wabot-janela}"
 if [ -f "$JANELA_FILE" ]; then
   echo "   (janela de manutenção aberta: $(head -n 1 "$JANELA_FILE") — sem aviso)" >> "$LOG"
   NOTIFY=""
+fi
+
+# Autocura (opt-in). Roda ANTES do aviso: o e-mail já sai dizendo que tentou.
+AUTOCURA_STAMP="$VIGIA_DIR/ultima-autocura"
+if [ "${VIGIA_AUTOCURA:-0}" = "1" ] && [ ! -f "$JANELA_FILE" ] && echo "$OUT" | grep -q "Sumiram do pm2"; then
+  ULTIMA="$(cat "$AUTOCURA_STAMP" 2>/dev/null || echo 0)"
+  AGORA="$(date +%s)"
+  if [ $(( AGORA - ULTIMA )) -ge "${VIGIA_AUTOCURA_INTERVALO_S:-1800}" ]; then
+    echo "$AGORA" > "$AUTOCURA_STAMP"
+    { echo "   autocura: religando o que sumiu"; APLICAR=1 RELIGAR_ESPERA_S=0 RELIGAR_SEM_VIGIA=1 timeout 300 bash scripts/religar-producao.sh 2>&1 | sed 's/^/   /'; } >> "$LOG"
+    OUT="$OUT
+(autocura tentou religar às $NOW — ver $LOG)"
+  else
+    echo "   autocura: já tentou há menos de ${VIGIA_AUTOCURA_INTERVALO_S:-1800}s; só avisando" >> "$LOG"
+  fi
 fi
 
 # Avisa só na TROCA de estado (não repete a cada execução).

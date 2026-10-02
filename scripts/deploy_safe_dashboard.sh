@@ -687,6 +687,13 @@ ensure_pm2_app_running "api"
 if [[ "${RESTART_SUPERVISOR:-0}" == "1" ]]; then
   echo "  Reiniciando bot-supervisor para os bots carregarem o código novo (sessões reconectam)"
   pm2 restart bot-supervisor --update-env
+  # P2-3 do plano anti-queda (opt-in): avisar quando o DEPLOY reinicia os
+  # robôs — a reconexão de todas as sessões não pode ser surpresa (01/10, 22:42).
+  # Liga com DEPLOY_AVISO_REINICIO=1 no .env de produção. Nunca falha o deploy.
+  if grep -q '^DEPLOY_AVISO_REINICIO=1' "$ROOT_DIR/.env" 2>/dev/null; then
+    git -C "$ROOT_DIR" log --oneline "${REVISION_BEFORE_SYNC:-HEAD~1}..HEAD" -- src 2>/dev/null | head -n 15 \
+      | timeout 60 node "$ROOT_DIR/scripts/avisar-admin.mjs" "Deploy reiniciou os robôs: o código do robô mudou (sessões reconectando)" || true
+  fi
 else
   echo "  bot-supervisor preservado. Sessões WhatsApp continuam ativas."
 fi
