@@ -14,7 +14,7 @@ suficiente, alguém decide se/como atualizar a prova social pública.
 ## Como coletar (formato de 5 perguntas, leva ~5 min por cliente)
 
 1. Nicho/tipo de operação (ex.: achadinhos de moda, cupons de eletrônico).
-2. Qual era o problema antes do BOTinho (em 1-2 frases, na palavra da
+2. Qual era o problema antes do Espelha Grupos (em 1-2 frases, na palavra da
    própria pessoa).
 3. O que ela usa hoje (quais recursos: espelhamento, ofertas automáticas,
    canais, etc.).

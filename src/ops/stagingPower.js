@@ -14,6 +14,8 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { fileURLToPath } from 'url'
+import fs from 'fs'
 
 const execFileP = promisify(execFile)
 
@@ -26,6 +28,19 @@ const STAGING_APPS = (process.env.STAGING_PM2_APPS || 'api-staging visual-stagin
   .split(/\s+/)
   .filter(Boolean)
 
+// P2-1 do plano anti-queda: depois de scripts/migrar-pm2-staging.sh o
+// staging tem pm2 PRÓPRIO, apontado por este arquivo. Sem ele, o daemon é o
+// mesmo da produção (padrão de hoje).
+const STAGING_PM2_HOME_FILE = process.env.WABOT_STAGING_PM2_HOME_FILE || `${process.env.HOME || '/home/deploy'}/.wabot-staging-pm2-home`
+
+export function resolveStagingPm2Env({ readFile = (f) => fs.readFileSync(f, 'utf8'), env = process.env } = {}) {
+  let home = ''
+  try { home = String(readFile(STAGING_PM2_HOME_FILE)).split('\n')[0].trim() } catch { home = '' }
+  return home ? { ...env, PM2_HOME: home } : null
+}
+
+const SAFE_SAVE_SCRIPT = fileURLToPath(new URL('../../scripts/pm2-save-seguro.mjs', import.meta.url))
+
 const NOT_FOUND_RE = /not found|doesn't exist|process or namespace/i
 
 export function assertStagingControlAllowed(env = process.env) {
@@ -34,9 +49,9 @@ export function assertStagingControlAllowed(env = process.env) {
   }
 }
 
-export async function getStagingStatus({ exec = execFileP } = {}) {
+export async function getStagingStatus({ exec = execFileP, pm2Env = resolveStagingPm2Env() } = {}) {
   let list = []
-  const { stdout } = await exec(PM2_BIN, ['jlist'])
+  const { stdout } = await exec(PM2_BIN, ['jlist'], pm2Env ? { env: pm2Env } : undefined)
   try { list = JSON.parse(stdout) } catch { list = [] }
   const apps = STAGING_APPS.map((name) => {
     const proc = Array.isArray(list) ? list.find((p) => p?.name === name) : null
@@ -58,7 +73,8 @@ export async function getStagingStatus({ exec = execFileP } = {}) {
   }
 }
 
-export async function setStagingPower(action, { exec = execFileP } = {}) {
+export async function setStagingPower(action, { exec = execFileP, pm2Env = resolveStagingPm2Env() } = {}) {
+  const envOpt = pm2Env ? { env: pm2Env } : {}
   assertStagingControlAllowed()
   const normalized = String(action || '').toLowerCase()
   if (normalized !== 'on' && normalized !== 'off') {
@@ -68,15 +84,18 @@ export async function setStagingPower(action, { exec = execFileP } = {}) {
   if (normalized === 'off') {
     // Para app por app para que um app já parado/inexistente não aborte o resto.
     for (const name of STAGING_APPS) {
-      await exec(PM2_BIN, ['stop', name]).catch((err) => {
+      await exec(PM2_BIN, ['stop', name], pm2Env ? envOpt : undefined).catch((err) => {
         if (!NOT_FOUND_RE.test(err?.message || '')) throw err
       })
     }
   } else {
-    await exec(PM2_BIN, ['start', 'ecosystem.config.cjs', '--only', STAGING_APPS.join(',')], { cwd: STAGING_DIR })
+    await exec(PM2_BIN, ['start', 'ecosystem.config.cjs', '--only', STAGING_APPS.join(',')], { cwd: STAGING_DIR, ...envOpt })
   }
-  await exec(PM2_BIN, ['save']).catch(() => {})
-  return getStagingStatus({ exec })
+  // `pm2 save` PROTEGIDO (RCA 2026-10-01): este daemon é o mesmo da produção;
+  // um save cru com produção fora do ar apagaria bot-supervisor/dashboard do
+  // dump. Recusa do guarda não derruba o botão (o estado do staging já mudou).
+  await exec(process.execPath, [SAFE_SAVE_SCRIPT], pm2Env ? envOpt : undefined).catch(() => {})
+  return getStagingStatus({ exec, pm2Env })
 }
 
-export const __test = { STAGING_APPS, STAGING_DIR, PM2_BIN }
+export const __test = { STAGING_APPS, STAGING_DIR, PM2_BIN, SAFE_SAVE_SCRIPT }

@@ -159,6 +159,10 @@ arquivo (nova versão), não editar tela a tela.
 - **Não rodar destrutivos** (`reset --hard`, `push --force`, `branch -D`,
   `rm -rf` em paths reais) sem permissão explícita.
 - **Não mexer em `.env` ou banco** em produção sem confirmar com a usuária.
+- **`apt`, `systemctl`, `pm2 kill|update|resurrect|delete|save`** em produção só
+  com janela aberta (`scripts/janela.sh`), uma pessoa por vez, e `pm2 save`
+  sempre via `scripts/pm2-save-seguro.mjs`. App sumiu do pm2 →
+  `scripts/religar-producao.sh` (RCA 2026-10-01, `docs/ops/runbook-pm2-sumiu.md`).
 - Antes de "consertar" o deploy, conferir se a falha está no workflow
   (Actions) ou no smoke test pós-PM2 (`.env`/porta no VPS) — são causas
   diferentes com correções diferentes.
@@ -224,6 +228,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Membro do grupo de destino vê "Aguardando mensagem" nas ofertas do robô (só a dona abre) | `src/core/deviceIdentitySignature.js`, `patches/@whiskeysockets+baileys+6.7.23.patch`, `src/core/sentMessageStore.js` | `diag-identidade-aparelho.mjs <email>` (prefixo=6,6 → `fix-assinatura-aparelho.mjs`), `diag-aguardando-mensagem.mjs <email> [grupo] --desde=ISO` | whatsapp-sessao |
 | "Conectado" mas 0 mensagens das origens, quedas 500 de hora em hora; `diag-frota-cega` acusa conta que espelhava | patch `handleMessage` em `patches/@whiskeysockets+baileys+6.7.23.patch` (DM `fromMe` de outro aparelho da conta; causa AINDA em aberto, ver RCA) | `grep '"offline":"1"' bot.log \| grep -o '"from":"[^"]*"' \| sort \| uniq -c \| sort -rn \| head` (um aparelho dominando); logs `wabot: mensagem de outro aparelho...` | whatsapp-sessao |
 | WhatsApp caindo / "conectado" sem receber / não conecta | `src/core/reconnectPolicy.js`, `src/core/receptionHealth.js`, `src/core/waVersion.js` | `diag-nao-conecta.mjs`, `diag-frota-cega.mjs` | whatsapp-sessao |
+| Quedas 500 em ciclo (`stuckMsg`), patch de ack não fez efeito, fila offline presa | `patches/@whiskeysockets+baileys+6.7.23.patch`, `src/core/stuckCycleDetector.js`, `src/core/offlineDrainTelemetry.js` | `diag-quedas-500.mjs` (razão por dia + balde por tipo de chat); `grep "fila offline do WhatsApp" bot.log` | whatsapp-sessao |
 | "Servidor no limite de robôs" / sem vaga | `src/domain/session/startRefusal.js`, `src/supervisor/index.js` | `diag-vagas-robos.mjs`, `diag-clientes-sem-vaga.mjs` | memoria-e-capacidade |
 | RAM/swap subindo | `src/ops/capacity/policy.js` | `diag-memoria-crescimento.mjs`, `diag-memoria-nativa.mjs` | memoria-e-capacidade |
 | Pagamento recusado / assinatura "não concluída" | `src/domain/payments/subscriptionPolicy.js`, `src/api/routes/payments.js` | `diag-assinatura-recusada.mjs`, `testar-recorrencia.mjs`, `sincronizar-assinatura.mjs` | cobranca |
@@ -240,6 +245,7 @@ diagnóstico pronto (read-only, rodar no diretório do ambiente na VPS) · tema.
 | Oferta automática da Awin (promoção) saiu **sem foto** / só texto | `src/offerAutomation/awinEnrich.js`, `src/converters/kabumImage.js` | `diag-awin.mjs <email>` (`com_foto`, `sem_foto loja=`) | afiliados-awin |
 | Link de loja da Awin (KaBuM, C&A, tidd.ly…) não converteu / oferta "loja da Awin sem aprovação" | `src/converters/awin.js`, `src/integrations/awin/storeMatcher.js`, `conversionContext.js` | `diag-awin.mjs <email>` (lojas_aprovadas, links guardados) | afiliados-awin |
 | Link de loja da Rakuten (Netshoes, `click.linksynergy.com`…) não converteu / "loja da Rakuten sem aprovação" / saiu pela Awin em vez da Rakuten | `src/converters/rakuten.js`, `src/integrations/rakuten/storeMatcher.js`, `AFFILIATE_NETWORK_PRIORITY` em `src/detector.js` | `diag-rakuten.mjs <email> --rakuten` (link_id, lojas_aprovadas) | afiliados-rakuten |
+| Robôs parados / app **sumiu do pm2** / `/ready/bots` 503 / e-mail "[Servidor] 🔴" | `src/ops/pm2Guard.js`, `scripts/religar-producao.sh` | `node scripts/vigia.mjs`, `scripts/religar-producao.sh` (dry-run) | deploy-e-infra |
 | Deploy vermelho | `.github/workflows/deploy.yml`, `scripts/deploy_safe_*.sh` | ver "Pegadinhas" | deploy-e-infra |
 
 Se o sintoma não está no mapa: ler o tema no índice, depois `Grep` pelo texto

@@ -43,7 +43,9 @@ test("setStagingPower('off') para cada app, salva e retorna status", async () =>
   await setStagingPower('off', { exec: fakeExec(calls) })
   const stops = calls.filter((c) => c.args[0] === 'stop').map((c) => c.args[1])
   assert.deepEqual(stops, __test.STAGING_APPS)
-  assert.ok(calls.some((c) => c.args[0] === 'save'))
+  // Salva pelo guarda (nunca `pm2 save` cru — RCA 2026-10-01).
+  assert.ok(calls.some((c) => c.args[0] === __test.SAFE_SAVE_SCRIPT))
+  assert.ok(!calls.some((c) => c.args[0] === 'save'))
 })
 
 test("setStagingPower('off') tolera app inexistente (not found)", async () => {
@@ -69,4 +71,18 @@ test('ação inválida lança', async () => {
 test('assertStagingControlAllowed bloqueia no host de staging', () => {
   assert.throws(() => assertStagingControlAllowed({ APP_ENV: 'staging' }), /staging/)
   assert.doesNotThrow(() => assertStagingControlAllowed({ APP_ENV: 'production' }))
+})
+
+test('pm2 separado do staging (P2-1): com PM2_HOME do staging, todas as chamadas levam esse env', async () => {
+  const calls = []
+  const pm2Env = { PM2_HOME: '/home/deploy/.pm2-staging' }
+  await setStagingPower('off', { exec: fakeExec(calls), pm2Env })
+  assert.ok(calls.length > 0)
+  for (const c of calls) assert.equal(c.opts?.env?.PM2_HOME, '/home/deploy/.pm2-staging', JSON.stringify(c.args))
+})
+
+test('resolveStagingPm2Env: sem arquivo = null (daemon compartilhado, padrão de hoje)', async () => {
+  const { resolveStagingPm2Env } = await import('../src/ops/stagingPower.js')
+  assert.equal(resolveStagingPm2Env({ readFile: () => { throw new Error('ENOENT') } }), null)
+  assert.equal(resolveStagingPm2Env({ readFile: () => '/x/.pm2-staging\n', env: {} }).PM2_HOME, '/x/.pm2-staging')
 })

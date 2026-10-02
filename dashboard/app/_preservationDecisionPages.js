@@ -127,7 +127,7 @@ export const PRESERVATION_DECISION_PAGES = {
     description: 'As cinco camadas que reduzem o risco de banimento ao divulgar ofertas: espaçar envios, variar a mensagem, falar só com quem aceitou, monitorar e ter plano B.',
     intent: 'como nao tomar ban no whatsapp',
     h1: 'Como reduzir o risco de banimento divulgando ofertas no WhatsApp.',
-    intro: 'Não existe fórmula que impeça o WhatsApp de banir um número — quem promete isso está vendendo o que não controla. O que existe são quatro camadas que reduzem os padrões que mais chamam atenção, e um plano para quando algo dá errado.',
+    intro: 'Não existe fórmula que impeça o WhatsApp de banir um número — quem promete isso está vendendo o que não controla. O que existe são cinco camadas que reduzem os padrões que mais chamam atenção, e um plano para quando algo dá errado.',
     sections: [
       { title: 'Antes das camadas: use um chip só para a operação', body: 'É a medida mais barata e a que mais limita prejuízo. Não impede o banimento, mas se o número cair você não perde seus contatos, suas conversas e seu histórico pessoal. Quem divulga oferta pelo número pessoal está apostando o WhatsApp da vida inteira numa operação comercial.' },
       { title: 'Camada 1 — espaçar os envios', body: 'Disparar a mesma oferta para dez grupos em dois minutos é o padrão mais fácil de identificar como automação. Deixar intervalo entre um envio e outro, e não publicar de madrugada, aproxima o comportamento do que uma pessoa faria. Nesta camada entram intervalo mínimo, limite por hora e por dia, e horário de silêncio.' },

@@ -43,7 +43,7 @@ export const rotuloPlano = (plan) => `${plan.name} (${plan.price} / ${plan.perio
 export const FICHA_FATOS = [
   {
     rotulo: 'Lojas com conversão de link',
-    valor: `${SUPPORTED_STORES.length} lojas: ${listaLojas}. Converte também link de cupom, não só de produto.`,
+    valor: `${SUPPORTED_STORES.length} lojas: ${listaLojas}. Converte também link de cupom, não só de produto, e as lojas em que você é aprovada na Awin e na Rakuten.`,
   },
   {
     rotulo: 'Canal de publicação',
@@ -59,7 +59,7 @@ export const FICHA_FATOS = [
   },
   {
     rotulo: 'Conexão',
-    valor: 'Pelo QR Code do WhatsApp; roda no servidor 24 h, sem deixar o celular ligado. Recomendamos um número dedicado. Nenhum software garante que o número não será bloqueado.',
+    valor: 'Pelo QR Code do WhatsApp ou por código de pareamento com o número (sem câmera); roda no servidor 24 h, sem deixar o celular ligado. Recomendamos um número dedicado. Nenhum software garante que o número não será bloqueado.',
   },
 ]
 
@@ -79,8 +79,8 @@ export const FICHA_LINHAS = [
   { recurso: 'Imagem e card da oferta preservados: a foto do produto sai no card clicável, sem cortar', basic: true, pro: true }, // src/core/previewCardCanvas.js + cardPhoto.js (sem gate de plano)
   { recurso: 'Criar oferta a partir de um link: você cola o seu link, o robô busca nome, preço e foto e monta a oferta', basic: true, pro: true }, // /painel/criar-oferta + /api/link-conversion/scrape-offer via buildScrapedOffer (sem gate de plano)
   { recurso: 'Canais do WhatsApp como origem e destino', basic: false, pro: true }, // canUseChannels
-  { recurso: 'Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem', basic: false, pro: true }, // canUseOfferAutomations + minDiscountPct
-  { recurso: 'Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por dia)', basic: false, pro: true }, // canUseOfferQueues + canUseAdvancedPreservation
+  { recurso: 'Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem (e das promoções Awin e Rakuten das lojas em que você é aprovada)', basic: false, pro: true }, // canUseOfferAutomations + minDiscountPct; fontes em src/offerAutomation/dispatcher.js
+  { recurso: 'Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por hora e por dia)', basic: false, pro: true }, // canUseOfferQueues + canUseAdvancedPreservation
   { recurso: 'Variação do texto entre os envios', basic: false, pro: true }, // canUseCopyVariation
   { recurso: 'Marca d’água com o seu nome na foto da oferta', basic: false, pro: true }, // canUseWatermark
   { recurso: 'Painel de vendas e comissão da Shopee', basic: false, pro: true }, // canUseShopeeSales

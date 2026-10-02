@@ -965,3 +965,37 @@ conjunto de sessões. **Com a flag off nada muda** (fila única, posse por hash)
   ouvindo legada + `-n1`, API na legada; 2) ligar a flag só na API, 48h com a legada zerada;
   3) backfill `nodeId='n1'` e remover o consumidor legado. A API nunca troca de fila antes do supervisor.
 - `prisma/schema.postgres.prisma` ainda não tem modelos (stub): o campo entra com o modelo.
+
+## O pm2 perdeu o bot-supervisor e o dashboard (RCA 2026-10-01 — não regredir)
+
+**Sintoma:** robôs de todas as clientes parados ~20 min e painel fora; `pm2 list`
+só com `api`, `api-staging` e `visual-staging`; `/ready` respondendo 200.
+
+**Cadeia (dados: journal, `apt/history.log`, log do Actions run 36942377802):**
+1. 23:45:32 UTC `sudo apt-get install -y age` (só instalou o `age`).
+2. 23:45:34 `systemd: Stopping pm2-deploy.service` → `pm2 kill`
+   (`deleteProcessId on app [all]`), derrubando produção E staging (um daemon
+   só). Mecanismo provável: o gancho `needrestart` do Ubuntu, em modo padrão,
+   reinicia serviços depois de qualquer `apt install`. **Hipótese forte, não
+   provada** (o needrestart não escreve no log do apt).
+3. 23:45:54 o deploy de staging (#2137), que rodava ao mesmo tempo, fez
+   `pm2 save` cru com o pm2 vazio → o dump perdeu `bot-supervisor`/`dashboard`.
+4. Nenhum alarme: o vigia não existia em cron e só olhava apps presentes.
+5. Religação feita por duas pessoas ao mesmo tempo → supervisor reiniciado 2×.
+
+**Defesas (não remover):**
+- `/etc/needrestart/conf.d/50-wabot.conf` com `$nrconf{restart} = 'l';`
+  (só lista). O vigia acusa 🟡 se sumir.
+- `scripts/lib/deploy-lock.sh`: um deploy por vez no servidor (`flock -o`; o
+  `-o` impede um daemon do pm2 nascido no deploy de herdar a trava). Grupo
+  único de `concurrency` no GitHub NÃO serve: ele cancela o deploy pendente.
+- `scripts/pm2-save-seguro.mjs` (regras em `src/ops/pm2Guard.js`): nunca
+  `pm2 save` cru — recusa pm2 vazio e app de produção sumindo do dump.
+- Vigia: app esperado AUSENTE = 🔴; `vigia_cron.sh` manda e-mail
+  (`admin_servidor_vigia`) na troca de estado.
+- `GET /ready/bots` (503 com supervisor sem sinal ou ≥50% das sessões sem
+  sinal) para monitor EXTERNO.
+- `scripts/religar-producao.sh` (roteiro `docs/ops/runbook-pm2-sumiu.md`) e
+  `scripts/janela.sh` (janela de manutenção: deploy não entra, vigia não avisa).
+- Log do pm2 com nome fixo por app (`ecosystem.config.cjs`) — acabou o acúmulo
+  de logs órfãos a cada `delete`+`start`.

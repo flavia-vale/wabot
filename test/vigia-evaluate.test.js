@@ -14,6 +14,9 @@ const saudavel = () => ({
   queueBacklog: 0,
   wa: { reconnects: 2, forbidden: 0, replaced: 0 },
   backupAgeH: 5,
+  backupInfo: { cloud: true, encrypted: true },
+  needrestartMode: 'l',
+  missingApps: [],
 })
 const por = (r, id) => r.checks.find(c => c.id === id)
 
@@ -104,4 +107,31 @@ test('sessões: desconectadas de longa data aparecem à parte e não rebaixam', 
   const c = por(evaluateVigia(s), 'sessoes')
   assert.equal(c.level, LEVEL.OK)
   assert.match(c.detail, /14 contas desconectadas há tempo/)
+})
+
+test('app esperado SUMIU do pm2 = vermelho (RCA 2026-10-01)', () => {
+  const s = saudavel(); s.missingApps = ['bot-supervisor', 'dashboard']
+  const c = por(evaluateVigia(s), 'pm2')
+  assert.equal(c.level, LEVEL.RED)
+  assert.match(c.detail, /bot-supervisor, dashboard/)
+  assert.match(c.detail, /religar-producao/)
+})
+
+test('needrestart fora do modo l = amarelo; não instalado = ok', () => {
+  const s = saudavel(); s.needrestartMode = 'i'
+  assert.equal(por(evaluateVigia(s), 'needrestart').level, LEVEL.WARN)
+  s.needrestartMode = null
+  assert.equal(por(evaluateVigia(s), 'needrestart').level, LEVEL.OK)
+  s.needrestartMode = undefined
+  assert.equal(por(evaluateVigia(s), 'needrestart').level, LEVEL.UNKNOWN)
+})
+
+test('backup sem nuvem ou sem cifra = amarelo; velho continua vermelho', () => {
+  const s = saudavel(); s.backupInfo = { cloud: false, encrypted: false }
+  const c = por(evaluateVigia(s), 'backup')
+  assert.equal(c.level, LEVEL.WARN)
+  assert.match(c.detail, /fora da VPS/)
+  assert.match(c.detail, /cifrado/)
+  s.backupAgeH = 30
+  assert.equal(por(evaluateVigia(s), 'backup').level, LEVEL.RED)
 })

@@ -44,3 +44,24 @@ rodam e saem (sem processo PM2 novo).
 `node scripts/vigia.mjs` (agora, +10 min, +1 h). Esperado em modo `remote`: aviso inofensivo
 "código novo não carregado pelos robôs" até o restart planejado do supervisor.
 Se 🔴 em sessões/envios/memória → comparar com o retrato salvo e decidir o retorno.
+
+## Plano anti-queda do pm2 (RCA 2026-10-01) — o que ativar, quando quiser
+
+Nada abaixo liga sozinho. Cada item é independente e reversível.
+
+| Item | Como ligar | Como desligar |
+|---|---|---|
+| Vigia com e-mail a cada 3 min | `crontab -e` → `*/3 * * * * cd /home/deploy/wabot && scripts/vigia_cron.sh >/dev/null 2>&1` (o e-mail usa o SMTP/`ADMIN_ALERT_EMAIL` da API) | apagar a linha; ou `VIGIA_EMAIL=0` na linha |
+| Monitor externo (avisa até com a VPS fora) | num serviço grátis de uptime, checar `https://espelhagrupos.com.br/api/ready/bots` a cada 5 min, alerta em 503/timeout | apagar o monitor |
+| Aviso ao entrar na VPS | `echo '[ -x ~/wabot/scripts/aviso-login.sh ] && ~/wabot/scripts/aviso-login.sh' >> ~/.bashrc` | apagar a linha do `~/.bashrc` |
+| needrestart só lista | já aplicado em 01/10 (`/etc/needrestart/conf.d/50-wabot.conf`) | apagar o arquivo |
+| **P2-1** staging com pm2 próprio (RAM +60–80 MB fixos — precisa de OK) | `scripts/janela.sh abrir "migrar pm2 do staging"` → `APLICAR=1 scripts/migrar-pm2-staging.sh` → rodar o `sudo … pm2 startup … --service-name pm2-deploy-staging` que ele imprime → `scripts/janela.sh fechar` | `REVERTER=1 APLICAR=1 scripts/migrar-pm2-staging.sh` (com janela) + `sudo systemctl disable --now pm2-deploy-staging` |
+| **P2-2** religar sozinho quando app some | na linha do cron: `VIGIA_AUTOCURA=1 scripts/vigia_cron.sh` (máx. 1 tentativa/30 min; nunca com janela aberta; recusa com robôs órfãos) | tirar `VIGIA_AUTOCURA=1` |
+| **P2-3** e-mail quando o deploy reinicia os robôs | `DEPLOY_AVISO_REINICIO=1` no `~/wabot/.env` (lido pelo script de deploy, não precisa reiniciar nada) | apagar a linha |
+
+Já valem no próximo deploy (sem ação): trava de um deploy por vez,
+`pm2 save` protegido, log do pm2 com nome fixo (a partir do próximo
+`delete`+`start` de cada app), vigia acusando app sumido, `/ready/bots`.
+
+RAM (REGRA #1): o cron roda um `node` de ~80–120 MB por 2–5 s a cada 3 min e
+sai; nada fica residente. `/ready/bots` usa cache de 20 s.

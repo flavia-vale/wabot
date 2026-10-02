@@ -1,3 +1,21 @@
+const os = require('os')
+const path = require('path')
+
+// Log com nome FIXO por app (sem o id do pm2). RCA 2026-10-01: o deploy faz
+// `pm2 delete` + `start` do dashboard/visual a cada vez (e dos outros quando o
+// restart falha); cada start ganhava um id novo e um arquivo de log novo, e os
+// antigos ficavam para trás — 1.266 arquivos órfãos, 1,5 GB. Vale a partir do
+// próximo `pm2 delete` + `start` de cada app.
+const PM2_LOG_DIR = path.join(process.env.PM2_HOME || path.join(os.homedir(), '.pm2'), 'logs')
+function withFixedLogs(app) {
+  return {
+    out_file: path.join(PM2_LOG_DIR, `${app.name}-out.log`),
+    error_file: path.join(PM2_LOG_DIR, `${app.name}-error.log`),
+    merge_logs: true,
+    ...app,
+  }
+}
+
 module.exports = {
   apps: [
     {
@@ -163,5 +181,5 @@ module.exports = {
       max_restarts: 8,
       min_uptime: 15000,
     },
-  ],
+  ].map(withFixedLogs),
 }

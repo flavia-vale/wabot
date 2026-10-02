@@ -18,6 +18,9 @@ import fs from 'node:fs'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { evaluateVigia, formatVigia } from '../src/ops/vigia/evaluate.js'
+import { parseNeedrestartMode } from '../src/ops/vigia/needrestart.js'
+import { parseBackupStatus } from '../src/ops/vigia/backupStatus.js'
+import { missingApps, resolveExpectedApps } from '../src/ops/pm2Guard.js'
 
 const sh = promisify(execFile)
 const args = new Map(process.argv.slice(2).map(a => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? true] }))
@@ -31,6 +34,17 @@ const safe = async fn => { try { return await fn() } catch { return null } }
 async function readPm2() {
   const { stdout } = await sh('pm2', ['jlist'], { timeout: 15_000, maxBuffer: 20 * 1024 * 1024 })
   return JSON.parse(stdout).map(p => ({ name: p.name, status: p.pm2_env?.status, restarts: p.pm2_env?.restart_time ?? 0 }))
+}
+
+function readNeedrestartMode() {
+  const dir = '/etc/needrestart'
+  if (!fs.existsSync(dir)) return null
+  const files = []
+  if (fs.existsSync(`${dir}/needrestart.conf`)) files.push(`${dir}/needrestart.conf`)
+  if (fs.existsSync(`${dir}/conf.d`)) {
+    for (const f of fs.readdirSync(`${dir}/conf.d`).filter(f => f.endsWith('.conf')).sort()) files.push(`${dir}/conf.d/${f}`)
+  }
+  return parseNeedrestartMode(files.map(f => fs.readFileSync(f, 'utf8')))
 }
 
 function readMemory() {
@@ -62,15 +76,23 @@ function readBackupAgeH() {
 const prev = stateFile ? await safe(() => JSON.parse(fs.readFileSync(stateFile, 'utf8'))) : null
 // Processos parados DE PROPÓSITO (rodam só em horário agendado) não são problema.
 const pm2Ignore = new Set(String(process.env.VIGIA_PM2_IGNORE ?? 'snapshot-cron').split(',').map(x => x.trim()).filter(Boolean))
-const pm2 = (await safe(readPm2))?.filter(p => !pm2Ignore.has(p.name)) ?? null
+const allPm2 = await safe(readPm2)
+const pm2 = allPm2?.filter(p => !pm2Ignore.has(p.name)) ?? null
 
 const snapshot = {
   pm2,
+  // Ausência é medida na lista COMPLETA (sem o filtro de ignorados).
+  missingApps: allPm2 ? missingApps(allPm2, resolveExpectedApps(process.env)) : [],
+  needrestartMode: (() => { try { return readNeedrestartMode() } catch { return undefined } })(),
   prevRestarts: prev?.restarts ?? null,
   mem: await safe(readMemory),
   diskFreePct: await safe(readDisk),
   apiReady: await safe(readApi),
   backupAgeH: await safe(readBackupAgeH),
+  backupInfo: await safe(() => parseBackupStatus({
+    marker: fs.readFileSync(`${backupDir}/last_success.txt`, 'utf8'),
+    logTail: (() => { try { const t = fs.readFileSync(`${backupDir}/backup.log`, 'utf8'); return t.slice(-20_000) } catch { return null } })(),
+  })),
   supervisorAlive: null,
   queueBacklog: null,
   sessions: null,
