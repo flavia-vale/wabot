@@ -210,7 +210,7 @@ crontab -l 2>/dev/null | grep -c healthcheck_alerts
 
 Comando para medir o custo real da auditoria de leitura (decide prioridade do item 1):
 ```bash
-sqlite3 prisma/prod.db "SELECT action, COUNT(*) FROM AdminAuditLog WHERE createdAt > datetime('now','-7 days') GROUP BY action ORDER BY 2 DESC LIMIT 10"
+sqlite3 prisma/prod.db "SELECT action, COUNT(*) FROM AdminAuditLog WHERE createdAt > (strftime('%s','now','-7 days')*1000) GROUP BY action ORDER BY 2 DESC LIMIT 10"
 ```
 E o tamanho do `AnalyticsEvent`:
 ```bash
@@ -466,9 +466,9 @@ Permissões: `owner` tudo; `admin` sem `admin:write`/`billing:write`; `billing_a
 
 | Decide | Comando (rodar em `~/wabot`) | Leitura |
 |---|---|---|
-| Prioridade de Q1 | `sqlite3 prisma/prod.db "SELECT action, COUNT(*) FROM AdminAuditLog WHERE createdAt > datetime('now','-7 days') GROUP BY action ORDER BY 2 DESC LIMIT 5"` | se `admin.online.read` for o maior, Q1 vai primeiro |
+| Prioridade de Q1 | `sqlite3 prisma/prod.db "SELECT action, COUNT(*) FROM AdminAuditLog WHERE createdAt > (strftime('%s','now','-7 days')*1000) GROUP BY action ORDER BY 2 DESC LIMIT 5"` | se `admin.online.read` for o maior, Q1 vai primeiro |
 | Prioridade de M7 | `sqlite3 prisma/prod.db "SELECT COUNT(*) FROM AnalyticsEvent WHERE event LIKE 'ops_%'"` | > 500k = M7 sobe |
 | Telegram existe? | `crontab -l 2>/dev/null \| grep -c healthcheck_alerts` | 0 = não há alerta de infra nenhum |
-| Fila é BullMQ? | `pm2 env $(pm2 id bot-supervisor \| tr -d '[] ') \| grep -c QUEUE_BACKEND=bullmq` | 0 = DLQ de envio não existe em prod; M5 muda de escopo |
+| Fila é BullMQ? | `grep -c '^QUEUE_BACKEND=bullmq' .env` | 0 = DLQ de envio não existe em prod; M5 muda de escopo |
 | Divergência de pagantes | `node scripts/diag-tag-pagante.mjs \| tail -n 5` vs. card do Início | diferença > 0 confirma Q3 |
-| Tamanho de `logs/summary` | `sqlite3 prisma/prod.db "SELECT COUNT(*) FROM MessageLog WHERE sentAt > datetime('now','-30 days')"` | > 100k = Q2 urgente |
+| Tamanho de `logs/summary` | `sqlite3 prisma/prod.db "SELECT COUNT(*) FROM MessageLog WHERE sentAt > (strftime('%s','now','-30 days')*1000)"` | > 100k = Q2 urgente |
