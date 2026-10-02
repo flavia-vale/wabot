@@ -7,6 +7,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/deploy-lock.sh
 source "$SCRIPT_DIR/lib/deploy-lock.sh"
 wabot_deploy_lock bash "$0" "$@"
+# pm2 próprio do staging, se já migrado (scripts/migrar-pm2-staging.sh).
+# shellcheck source=lib/staging-pm2-home.sh
+source "$SCRIPT_DIR/lib/staging-pm2-home.sh"
+wabot_staging_pm2_home
 DEFAULT_ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 ROOT_DIR="${ROOT_DIR:-$DEFAULT_ROOT_DIR}"
 DASHBOARD_DIR="$ROOT_DIR/dashboard"

@@ -24,6 +24,9 @@ APLICAR=1 scripts/religar-producao.sh  # sobe só o que falta, salva e roda o vi
   pessoa (`scripts/janela.sh status`).
 - Saiu com "Um deploy ou outra pessoa está mexendo no pm2": espere e rode de novo.
 
+Com `VIGIA_AUTOCURA=1` no cron, o vigia já tenta este mesmo script sozinho
+(uma vez a cada 30 min) — o e-mail diz se tentou.
+
 Depois: `node scripts/vigia.mjs` em 5 e em 15 min (sessões "sem sinal" devem
 cair para perto de 0).
 
