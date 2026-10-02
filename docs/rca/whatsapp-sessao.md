@@ -620,7 +620,14 @@ Teste: `test/reconnect-giveup-policy.test.js`.
 Parar uma sessão à mão (marca como parada de propósito, não gera aviso de robô
 caído): `node scripts/parar-sessao.mjs <email>`.
 
-## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default OFF)
+## Olhar só o que foi escolhido (`WA_CHAT_SCOPE_MODE`, default `dm` desde 2026-10-02)
+
+**2026-10-02:** o default no worker passou a `dm` (env ausente). Medido em prod:
+312 boots com `chatScopeMode:"off"` e 2.740 DMs (`@lid`) abertas e descartadas no
+`bot.log` — a porta das quedas 500/cegueira do RCA "Cegueira com DMs fromMe". `dm`
+não cobre DM de outro aparelho da própria conta (vem pela identidade da conta):
+isso é a regra A de `src/core/outOfScopeChatGuard.js`. Rollback:
+`WA_CHAT_SCOPE_MODE=off` + `pm2 delete`/`start`.
 
 A regra acima (`WA_IGNORE_UNMONITORED_GROUPS`) é uma **lista de exceções**, e
 listas de exceções envelhecem mal: começou cobrindo grupo, veio o incidente de
@@ -636,8 +643,8 @@ Modo em degraus via `WA_CHAT_SCOPE_MODE`:
 
 | Modo | Ignora, fora da lista de escolhidos |
 |---|---|
-| `off` (default) | nada — comportamento histórico |
-| `dm` | conversa direta (`@lid`, `@s.whatsapp.net`) |
+| `off` | nada — comportamento histórico |
+| `dm` (default) | conversa direta (`@lid`, `@s.whatsapp.net`) |
 | `dm+group` | soma grupo `@g.us` |
 | `strict` | soma canal `@newsletter` (**só após a validação da Fase 3**) |
 
