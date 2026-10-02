@@ -482,6 +482,15 @@ concorrente antes de citar preço em qualquer página pública.
 
 ### Registro de execução (comparar contra ele, não recomeçar do zero)
 
+**02/10/2026 — `docs/marketing/ANALISE_SEO_GEO_AS_IS_TO_BE_2026-10-02.md`:**
+103 dos 116 termos de funcionalidade estão abaixo do piso do Planejador
+(funcionalidade é argumento dentro da página, nunca URL); a demanda nova com
+volume é de rede (`afiliado netshoes` 5.000, `afiliado kabum` 500, `rakuten
+afiliados` 500) e `limite de membros grupo whatsapp` 500; o ChatGPT é 27% dos
+cadastros mas não reconhece a marca em janela anônima; 95% das impressões com
+consulta são marca de concorrente. Fichas dos 8 sites concorrentes em
+`CONCORRENTES_8_SITES_2026-10-02.md`.
+
 `docs/marketing/REGISTRO_EXECUCAO_2026-08-16_A_09-02.md` guarda o ciclo fechado
 em 02/09: os três marcos de medição lado a lado (30/07, 16/08, 01/09), as 25 PRs
 que entraram em produção, o que a medição **derrubou** (indexação não era
