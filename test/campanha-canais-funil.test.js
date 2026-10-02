@@ -258,13 +258,13 @@ test('rota do admin: só leitura, exige admin, janela limitada, auditada', () =>
 })
 
 test('tela do admin usa só tokens do design system (sem hex solto) e mostra as três perguntas', () => {
-  const tela = ler('dashboard/app/admin/marketing-growth/CampanhaCanaisFunil.js')
+  const tela = ler('dashboard/app/admin/funil/CampanhaCanaisFunil.js')
   assert.doesNotMatch(tela, /#[0-9a-fA-F]{3,8}\b/, 'cor em hex solto — usar var(--token)')
   assert.match(tela, /var\(--accent-strong\)/)
   for (const pergunta of ['Qual página trouxe lead?', 'Qual botão gerou cadastro?', 'Qual faixa de risco converte melhor?']) {
     assert.ok(tela.includes(pergunta), `falta a seção "${pergunta}"`)
   }
-  assert.match(ler('dashboard/app/admin/marketing-growth/page.js'), /<CampanhaCanaisFunil \/>/)
+  assert.match(ler('dashboard/app/admin/funil/page.js'), /<CampanhaCanaisFunil \/>/)
   assert.match(ler('dashboard/lib/api.js'), /adminMarketingCampanhaCanais/)
 })
 

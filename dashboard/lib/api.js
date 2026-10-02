@@ -474,46 +474,14 @@ export const api = {
       headers: mfaToken ? { 'x-admin-mfa-token': String(mfaToken).trim() } : {},
     }),
 
-  adminMarketingOverview: (params = {}) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
-    return apiFetch(`/api/admin/marketing/overview${query ? `?${query}` : ''}`)
-  },
-  adminMarketingCampaigns: (params = {}) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
-    return apiFetch(`/api/admin/marketing/campaigns${query ? `?${query}` : ''}`)
-  },
 
-  adminMarketingFunnel: (params = {}) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
-    return apiFetch(`/api/admin/marketing/funnel${query ? `?${query}` : ''}`)
-  },
 
   adminMarketingCampanhaCanais: (params = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
     return apiFetch(`/api/admin/marketing/campanha-canais${query ? `?${query}` : ''}`)
   },
 
-  adminMarketingSignupsByLanding: (params = {}) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
-    return apiFetch(`/api/admin/marketing/signups-by-landing${query ? `?${query}` : ''}`)
-  },
 
-  adminMarketingDataTrust: (params = {}) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
-    return apiFetch(`/api/admin/marketing/data-trust${query ? `?${query}` : ''}`)
-  },
-  adminMarketingPrompts: (params = {}) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
-    return apiFetch(`/api/admin/marketing/prompts${query ? `?${query}` : ''}`)
-  },
-  adminMarketingCohorts: (params = {}) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
-    return apiFetch(`/api/admin/marketing/cohorts${query ? `?${query}` : ''}`)
-  },
-  adminMarketingAlerts: (params = {}) => {
-    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString()
-    return apiFetch(`/api/admin/marketing/alerts${query ? `?${query}` : ''}`)
-  },
 
 
 
