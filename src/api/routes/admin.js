@@ -24,6 +24,7 @@ import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
 import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePayingWhere } from '../../domain/admin/payingLoader.js'
 import { OBSERVABILITY_WINDOWS, OPERATIONAL_LOG_ROW_LIMIT, emptyOperationalLogCounts, classifyOperationalLogIntoCounts, buildOperationalWindows, windowStart } from '../../domain/admin/operationalLogs.js'
+import { SESSION_TELEMETRY_EVENT, buildSessionTelemetryReport } from '../../domain/admin/sessionTelemetry.js'
 import { withSharedPhoneStatus } from '../../domain/admin/sharedPhoneStatus.js'
 import { loadSharedPhoneCounts } from '../../domain/admin/sharedPhoneLoader.js'
 import { describeDisconnectReason } from '../../domain/admin/disconnectReason.js'
@@ -45,6 +46,9 @@ import { buildRoiReport } from '../../domain/admin/roi.js'
 import { costForMonth, monthIndex, monthKeyFromIndex, monthKeyOf, normalizeCostOverrides, resolveCostConfig, COST_CATEGORY_LABELS } from '../../domain/admin/operatingCosts.js'
 import { DEFAULT_OWNER_ADMIN_EMAILS, PRIMARY_OWNER_ADMIN_EMAIL } from '../../auth/reservedAdminEmails.js'
 import { isAdminMfaVerified } from '../adminMfa.js'
+import { getTelegramRuntime } from '../../delivery/telegram/runtime.js'
+import { DELIVERY_NETWORK } from '../../core/delivery/networks.js'
+import { computeNetworkHealth } from '../../core/delivery/networkHealth.js'
 
 const ROLE_PERMISSIONS = {
   owner: ['admin:read', 'admin:write', 'billing:read', 'billing:write', 'support:read', 'support:write', 'tech:read', 'tech:write'],
@@ -1411,6 +1415,17 @@ export async function adminRoutes(app) {
     const userId = String(req.params.userId || '')
     await writeAdminAuditLog(req, { action: 'admin.shard_poc.member.rollback', resource: 'waSession', resourceId: userId, targetUserId: userId })
     return reply.code(202).send(await rollbackSessionFromShard(userId, 'poc-1'))
+  })
+
+  // Feature 017, Fatia 6 (T080): estado do robô único do Telegram para o
+  // painel de operação. Desligado no servidor = "desligado", não erro.
+  app.get('/delivery-networks/health', async (req, reply) => {
+    if (!(await requireAdmin(req, reply, 'tech:read'))) return
+    const runtime = getTelegramRuntime()
+    if (!runtime) return { aplicativos: [{ id: DELIVERY_NETWORK.TELEGRAM, nome: 'Telegram', ligado: false, estado: 'desligado', motivo: 'O Telegram não está ligado neste servidor.', desde: null }] }
+    const health = computeNetworkHealth(runtime.health.signals(DELIVERY_NETWORK.TELEGRAM))
+    const pendentes = await db.deliveryOutbox.count({ where: { deliveryNetwork: DELIVERY_NETWORK.TELEGRAM, status: 'pending' } }).catch(() => null)
+    return { aplicativos: [{ id: DELIVERY_NETWORK.TELEGRAM, nome: 'Telegram', ligado: true, ...health, pendentes }] }
   })
 
   app.get('/capacity/current', async (req, reply) => {
@@ -3715,24 +3730,21 @@ export async function adminRoutes(app) {
   app.get('/session-telemetry', async (req, reply) => {
     if (!(await requireAdmin(req, reply, 'tech:read'))) return
     const limit = Math.min(Math.max(Number(req.query?.limit ?? 100), 1), 300)
-    const events = await db.adminAuditLog.findMany({
-      where: { action: 'session.telemetry', resource: 'wa_session' },
+    // Telemetria mora em AnalyticsEvent (não em AdminAuditLog) desde 2026-10-02.
+    // Nome/e-mail entram por UMA consulta em lote — AnalyticsEvent não tem relação.
+    const rows = await db.analyticsEvent.findMany({
+      where: { event: SESSION_TELEMETRY_EVENT },
       orderBy: { createdAt: 'desc' },
       take: limit,
-      select: { id: true, actorUserId: true, createdAt: true, after: true, actorUser: { select: { email: true, name: true } } },
+      select: { id: true, userId: true, createdAt: true, metadata: true },
     })
-    const parsed = events.map((item) => {
-      let payload = {}
-      try { payload = item.after ? JSON.parse(item.after) : {} } catch {}
-      return { id: item.id, createdAt: item.createdAt, userId: item.actorUserId, user: item.actorUser, ...payload }
-    })
-    const summary = parsed.reduce((acc, item) => {
-      const key = `${item.stage || 'unknown'}:${item.event || 'unknown'}`
-      acc[key] = (acc[key] || 0) + 1
-      return acc
-    }, {})
+    const userIds = [...new Set(rows.map((row) => row.userId).filter(Boolean))]
+    const users = userIds.length
+      ? await db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, name: true } })
+      : []
+    const usersById = new Map(users.map((user) => [user.id, { email: user.email, name: user.name }]))
     await writeAdminAuditLog(req, { action: 'admin.session.telemetry.read', resource: 'waSessionTelemetry' })
-    return { total: parsed.length, summary, events: parsed }
+    return buildSessionTelemetryReport({ rows, usersById })
   })
 
 app.get('/sessions', async (req, reply) => {

@@ -960,6 +960,52 @@ function onlineStatusMeta(status, lifecycle) {
   return { label: 'Desconectado', cls: 'bg-red-100 text-red-700' }
 }
 
+// Feature 017, Fatia 6 (T080): estado do robô único do Telegram. Busca o
+// próprio dado para não mexer no carregamento do resto do painel.
+const ROBO_ESTADO_TOM = {
+  funcionando: 'bg-green-100 text-green-700',
+  limitado: 'bg-amber-100 text-amber-700',
+  bloqueado: 'bg-red-100 text-red-700',
+  indisponivel: 'bg-red-100 text-red-700',
+  sem_medicao: 'bg-gray-100 text-gray-600',
+  desligado: 'bg-gray-100 text-gray-600',
+}
+const ROBO_ESTADO_TEXTO = {
+  funcionando: 'funcionando',
+  limitado: 'limitado no ritmo',
+  bloqueado: 'bloqueado',
+  indisponivel: 'fora do ar',
+  sem_medicao: 'sem medição',
+  desligado: 'desligado',
+}
+
+function DeliveryNetworkHealthCard() {
+  const [data, setData] = useState(null)
+  useEffect(() => {
+    let alive = true
+    api.adminDeliveryNetworksHealth().then((r) => { if (alive) setData(r) }).catch(() => { if (alive) setData({ aplicativos: [] }) })
+    return () => { alive = false }
+  }, [])
+  const apps = asArray(data?.aplicativos)
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div className="mb-3 flex items-center gap-2">
+        <h3 className="text-sm font-bold text-gray-800">Robô do Telegram</h3>
+        <HelpDot {...CARD_HELP.roboTelegram} />
+      </div>
+      {data === null && <p className="text-sm text-gray-400">Carregando…</p>}
+      {apps.map((app) => (
+        <div key={app.id} className="flex flex-wrap items-center gap-2 text-sm">
+          <span className={`rounded-full px-2 py-1 text-xs font-bold ${ROBO_ESTADO_TOM[app.estado] ?? ROBO_ESTADO_TOM.sem_medicao}`}>{ROBO_ESTADO_TEXTO[app.estado] ?? app.estado}</span>
+          <span className="text-gray-600">{app.motivo}</span>
+          {app.desde && <span className="text-xs text-gray-400">desde {formatDate(app.desde)}</span>}
+          {app.pendentes != null && <span className="text-xs text-gray-500">· {formatNumber(app.pendentes)} oferta(s) esperando</span>}
+        </div>
+      ))}
+    </section>
+  )
+}
+
 function ErrorVolumeCard({ summary }) {
   const items = asArray(summary?.errorsByMessage)
   const total = items.reduce((sum, item) => sum + Number(item?.count || 0), 0)
@@ -2507,6 +2553,8 @@ export default function AdminPage() {
   // recusa com o motivo, porque reconectar ali não resolveria.
   async function reconectarCliente(userId) {
     if (!userId) return
+    // Ação sobre a conta de uma cliente: nunca sem confirmar (Q4 da auditoria).
+    if (!window.confirm('Subir o robô desta cliente agora? Ela não precisa fazer nada. Se o WhatsApp exigir QR novo, a API recusa e avisa.')) return
     setReconectando(userId)
     setError('')
     try {
@@ -3744,6 +3792,8 @@ export default function AdminPage() {
             <div className="mb-3 flex flex-wrap gap-2">{Object.entries(asPlainObject(sessionTelemetry?.summary)).slice(0, 8).map(([key, count]) => <span key={key} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">{key}: {count}</span>)}</div>
             <div className="space-y-2">{asArray(sessionTelemetry?.events).slice(0, 12).map((evt) => <div key={evt?.id ?? `${evt?.userId ?? 'evento'}-${evt?.createdAt ?? 'sem-data'}`} className="rounded-lg border border-gray-100 p-2 text-xs text-gray-700"><p className="font-semibold">{evt?.user?.email || evt?.userId || 'usuário'} · {evt?.stage || 'unknown'} / {evt?.event || 'unknown'}</p><p className="text-gray-500">{formatDate(evt?.createdAt)}{evt?.elapsedSec != null ? ` · ${evt?.elapsedSec}s` : ''}{evt?.detail ? ` · ${evt?.detail}` : ''}</p></div>)}{!asArray(sessionTelemetry?.events).length && <p className="text-sm text-gray-400">Sem telemetria recente.</p>}</div>
           </section>
+
+          <DeliveryNetworkHealthCard />
 
           <ErrorVolumeCard summary={logsSummary24h} />
 

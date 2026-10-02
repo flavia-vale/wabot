@@ -181,8 +181,14 @@ export const ANALYTICS_EVENTS = new Set([
   // toda mensagem NOVA do canal reabria o ciclo decrypt-fail -> retry-receipt
   // -> stream:error -> queda, pra sempre (medido: 63% da frota afetada).
   'ops_wa_channel_desync_quarantine',
+  // Blindagem B (RCA 2026-10-02): chat fora da lista em quarentena por derrubar a sessão.
+  'ops_wa_chat_drop_quarantine',
   'ops_wa_reception_blind',
   'ops_wa_reception_self_heal',
+  // Telemetria da tela Conexão WhatsApp do painel da cliente (etapa/evento/
+  // detalhe/segundos). Saiu de AdminAuditLog em 2026-10-02: era 75 % daquela
+  // tabela sem ser auditoria. Lida por GET /api/admin/session-telemetry.
+  'session_telemetry',
   // Piloto de reforço de ativação (2026-09-23): mensagem de boas-vindas pelo
   // próprio WhatsApp na 1ª conexão de conta do piloto (ver
   // src/core/selfWelcomeMessage.js). Cada evento é uma vez que o robô mandou —

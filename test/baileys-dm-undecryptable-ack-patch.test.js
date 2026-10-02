@@ -66,16 +66,19 @@ test('o worker continua espelhando mensagem fromMe de grupo MONITORADO (a dona p
 })
 
 // --- Instrumentação (só log): provar o mecanismo da queda 500 na próxima ocorrência.
-test('só LOG: a chegada de mensagem de outro aparelho da conta é registrada ANTES do filtro de ignorar', () => {
+test('a chegada de mensagem de outro aparelho da conta é registrada ANTES de qualquer ack/ignore', () => {
   const idxHandle = recv.indexOf('const handleMessage = async (node) => {')
   const idxLog = recv.indexOf("'wabot: mensagem de outro aparelho da conta chegou ao socket'")
   const idxIgnore = recv.indexOf('if (shouldIgnoreJid(node.attrs.from)', idxHandle)
   assert.ok(idxHandle > 0 && idxLog > idxHandle && idxLog < idxIgnore, 'o log de chegada precisa vir antes de qualquer ack/ignore')
-  const bloco = recv.slice(idxHandle, idxIgnore)
-  assert.match(bloco, /areJidsSameUser\(node\.attrs\.from, meId\)/)
-  assert.match(bloco, /areJidsSameUser\(node\.attrs\.from, meLid\)/)
-  assert.match(bloco, /offline: node\.attrs\.offline/)
-  assert.doesNotMatch(bloco, /sendMessageAck|sendReceipt|return;|await /, 'o log de chegada não pode mudar o fluxo')
+  // RCA 2026-10-02: depois do log entra a blindagem A (DM de outro aparelho fora do
+  // escopo -> ack sem abrir, test/out-of-scope-chat-guard.test.js). Até o log, nada
+  // pode confirmar nem retornar.
+  const bloco = recv.slice(idxHandle, idxLog)
+  assert.match(bloco, /areJidsSameUser\(jid, meId\)/)
+  assert.match(bloco, /areJidsSameUser\(jid, meLid\)/)
+  assert.doesNotMatch(bloco, /sendMessageAck|sendReceipt|return;|await /, 'o log de chegada não pode vir depois de uma decisão')
+  assert.match(recv.slice(idxLog - 400, idxLog + 400), /offline: node\.attrs\.offline/)
 })
 
 test('só LOG: o nack de MISSING_KEYS e o receipt de DM de outro aparelho continuam sendo enviados, agora registrados', () => {

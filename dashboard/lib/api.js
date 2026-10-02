@@ -381,6 +381,7 @@ export const api = {
   adminSystemObservability: () => apiFetch('/api/admin/system/observability'),
   adminFunnel: (weeks = 8) => apiFetch(`/api/admin/funnel?weeks=${encodeURIComponent(weeks)}`),
   adminCapacityCurrent: () => apiFetch('/api/admin/capacity/current'),
+  adminDeliveryNetworksHealth: () => apiFetch('/api/admin/delivery-networks/health'),
   adminCapacityHistory: (period = '30d') => apiFetch(`/api/admin/capacity/history?period=${encodeURIComponent(period)}`),
   adminCapacityForecast: () => apiFetch('/api/admin/capacity/forecast'),
   adminCapacityScenario: (input) => apiFetch('/api/admin/capacity/scenario', { method: 'POST', body: JSON.stringify(input) }),

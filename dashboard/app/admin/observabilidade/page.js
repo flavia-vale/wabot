@@ -149,6 +149,9 @@ function PaymentDlqRunbook({ dlqOpen, lastPrune, onReprocessed }) {
   }, [])
 
   async function runReprocess() {
+    const abertos = Number(health?.dlqOpen ?? dlqOpen ?? 0)
+    // Mexe em pagamento e pode liberar acesso: nunca sem confirmar (Q4 da auditoria).
+    if (!window.confirm(`Reprocessar ${numberFmt(abertos)} webhook(s) de pagamento agora? Isso reconcilia com o Mercado Pago e pode liberar acesso de clientes. Continuar?`)) return
     setBusy(true)
     setResult(null)
     setFeedbackError('')

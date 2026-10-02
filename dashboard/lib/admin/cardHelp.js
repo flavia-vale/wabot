@@ -8,6 +8,12 @@
 // Baileys" no texto que a pessoa lê.
 
 export const CARD_HELP = {
+  roboTelegram: {
+    title: 'Robô do Telegram',
+    oQueE: 'O estado do robô único que publica nos grupos do Telegram de TODAS as clientes Premium. Não tem nada a ver com o WhatsApp delas.',
+    impacto: 'Fora do ar ou bloqueado: nenhuma cliente recebe no Telegram (as ofertas esperam guardadas e as velhas são descartadas com motivo). Limitado: as ofertas saem mais devagar. O WhatsApp continua normal em qualquer caso.',
+    comoResolver: 'Fora do ar ou limitado costuma passar sozinho. Bloqueado precisa de robô novo: criar no Telegram, trocar o segredo no .env da API e reiniciar a API (pm2 delete + start). Passo a passo em docs/rca/multicanal.md.',
+  },
   paradasSemNinguem: {
     title: 'Paradas sem ninguém tentando',
     oQueE: 'Contas cujo WhatsApp caiu e não há nenhum robô no ar tentando levantar. É diferente de "o robô está tentando": aqui ninguém está.',

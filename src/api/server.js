@@ -178,6 +178,9 @@ async function verifyDatabase() {
 const MESSAGE_LOG_RETENTION_DAYS = process.env.LOG_RETENTION_DAYS === undefined ? 90 : Number(process.env.LOG_RETENTION_DAYS)
 const WEBHOOK_RETENTION_DAYS = process.env.WEBHOOK_RETENTION_DAYS === undefined ? 30 : Number(process.env.WEBHOOK_RETENTION_DAYS)
 const ADMIN_AUDIT_RETENTION_DAYS = process.env.ADMIN_AUDIT_RETENTION_DAYS === undefined ? 180 : Number(process.env.ADMIN_AUDIT_RETENTION_DAYS)
+// Telemetria da tela Conexão WhatsApp (AnalyticsEvent `session_telemetry`):
+// ~1.500 linhas/semana em prod; sem poda, AnalyticsEvent cresce para sempre.
+const SESSION_TELEMETRY_RETENTION_DAYS = process.env.SESSION_TELEMETRY_RETENTION_DAYS === undefined ? 90 : Number(process.env.SESSION_TELEMETRY_RETENTION_DAYS)
 const LOG_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 async function cleanupByRetentionDays(model, dateField, retentionDays, logLabel) {
@@ -197,6 +200,14 @@ async function cleanupOldLogs() {
   await cleanupByRetentionDays(db.adminAuditLog, 'createdAt', ADMIN_AUDIT_RETENTION_DAYS, 'Admin audit logs').catch(err => {
     app.log.error({ err: err.message }, 'Falha na limpeza automática de admin audit logs')
   })
+  if (Number.isFinite(SESSION_TELEMETRY_RETENTION_DAYS) && SESSION_TELEMETRY_RETENTION_DAYS > 0) {
+    const cutoff = new Date(Date.now() - SESSION_TELEMETRY_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+    await db.analyticsEvent.deleteMany({ where: { event: 'session_telemetry', createdAt: { lt: cutoff } } }).then((result) => {
+      if (result.count > 0) app.log.info({ deleted: result.count, cutoff }, 'Telemetria de sessão removida por retenção automática')
+    }).catch(err => {
+      app.log.error({ err: err.message }, 'Falha na limpeza automática da telemetria de sessão')
+    })
+  }
   await pruneClickTracking({ db }).then(({ clicks, links }) => {
     if (clicks > 0 || links > 0) app.log.info({ clicks, links }, 'Cliques e links curtos removidos por retenção automática')
   }).catch(err => {
