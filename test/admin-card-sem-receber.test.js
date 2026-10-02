@@ -33,7 +33,10 @@ test('a janela do admin é maior que o throttle com que o worker emite o sinal',
 
 test('o card separa quem parou agora de quem está cega atravessando reconexões', () => {
   assert.match(adminRoute, /semReceberHaMuito:/, 'o backend precisa contar as cegas graves separadamente')
-  assert.match(adminRoute, /acrossReconnects/, 'a separação sai do metadata do sinal')
+  // A leitura do metadata mora em src/domain/admin/receptionBlindStatus.js,
+  // compartilhada com a coluna "Recebendo" da aba Online.
+  assert.match(adminRoute, /summarizeReceptionBlindRows\(blindRows\)/)
+  assert.match(readFileSync(new URL('../src/domain/admin/receptionBlindStatus.js', import.meta.url), 'utf8'), /acrossReconnects/, 'a separação sai do metadata do sinal')
   assert.match(adminRoute, /semReceberPiorSilencioMs/, 'o admin precisa dizer HÁ QUANTO TEMPO')
 })
 

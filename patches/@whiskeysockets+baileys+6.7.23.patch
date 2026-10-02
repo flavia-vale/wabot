@@ -23,7 +23,7 @@ index f4458db..e6912a6 100644
              const cipher = new libsignal.SessionBuilder(storage, jidToSignalProtocolAddress(jid));
              await cipher.initOutgoing(session);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
-index c46b096..cbe3bfb 100644
+index c46b096..416d372 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
 @@ -7,7 +7,8 @@ import { DEFAULT_CACHE_TTLS, KEY_BUNDLE_TYPE, MIN_PREKEY_COUNT } from '../Defaul
@@ -36,7 +36,21 @@ index c46b096..cbe3bfb 100644
  import { extractGroupMetadata } from './groups.js';
  import { makeMessagesSocket } from './messages-send.js';
  export const makeMessagesRecvSocket = (config) => {
-@@ -463,7 +464,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -32,7 +33,12 @@ export const makeMessagesRecvSocket = (config) => {
+             useClones: false
+         });
+     let sendActiveReceipts = false;
+-    const sendMessageAck = async ({ tag, attrs, content }, errorCode) => {
++    // wabot patch (ack de ultimo recurso): nodes de mensagem que ja receberam resposta
++    // (ack, nack, receipt ou retry-receipt). handleMessageGuarded consulta este conjunto.
++    const respondedMessageNodes = new WeakSet();
++    const sendMessageAck = async (node, errorCode) => {
++        const { tag, attrs, content } = node;
++        respondedMessageNodes.add(node);
+         const stanza = {
+             tag: 'ack',
+             attrs: {
+@@ -463,7 +469,7 @@ export const makeMessagesRecvSocket = (config) => {
          const newValue = (msgRetryCache.get(key) || 0) + 1;
          msgRetryCache.set(key, newValue);
      };
@@ -45,7 +59,7 @@ index c46b096..cbe3bfb 100644
          // todo: implement a cache to store the last 256 sent messages (copy whatsmeow)
          const msgs = await Promise.all(ids.map(id => getMessage({ ...key, id })));
          const remoteJid = key.remoteJid;
-@@ -471,8 +472,42 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -471,8 +477,42 @@ export const makeMessagesRecvSocket = (config) => {
          // if it's the primary jid sending the request
          // just re-send the message to everyone
          // prevents the first message decryption failure
@@ -90,7 +104,7 @@ index c46b096..cbe3bfb 100644
          if (isJidGroup(remoteJid)) {
              await authState.keys.set({ 'sender-key-memory': { [remoteJid]: null } });
          }
-@@ -554,7 +589,7 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -554,7 +594,7 @@ export const makeMessagesRecvSocket = (config) => {
                              if (key.fromMe) {
                                  try {
                                      logger.debug({ attrs, key }, 'recv retry request');
@@ -99,7 +113,7 @@ index c46b096..cbe3bfb 100644
                                  }
                                  catch (error) {
                                      logger.error({ key, ids, trace: error.stack }, 'error in sending message again');
-@@ -608,6 +643,17 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -608,6 +648,17 @@ export const makeMessagesRecvSocket = (config) => {
          }
      };
      const handleMessage = async (node) => {
@@ -117,7 +131,7 @@ index c46b096..cbe3bfb 100644
          if (shouldIgnoreJid(node.attrs.from) && node.attrs.from !== '@s.whatsapp.net') {
              logger.debug({ key: node.attrs.key }, 'ignored message');
              await sendMessageAck(node);
-@@ -650,8 +696,23 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -650,11 +701,44 @@ export const makeMessagesRecvSocket = (config) => {
                      // message failed to decrypt
                      if (msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
                          if (msg?.messageStubParameters?.[0] === MISSING_KEYS_ERROR_TEXT) {
@@ -138,10 +152,31 @@ index c46b096..cbe3bfb 100644
 +                            logger.info({ key: msg.key, fromMe: !!msg.key.fromMe, stub: msg.messageStubParameters?.[0] }, 'wabot: DM sem decifrar confirmada com ack, sem retry');
 +                            return;
 +                        }
++                        // wabot patch (status que nao decifra): o robo nao le status (status so e
++                        // DESTINO de publicacao; o recibo dos nossos posts vem por handleReceipt).
++                        // O retry-receipt de status@broadcast era recusado com
++                        // <stream:error><ack class=status/></stream:error> (500) - 10 em 24h na
++                        // medicao de 2026-09-24. Confirma com <ack> e descarta, sem retry.
++                        if (isJidStatusBroadcast(msg.key.remoteJid)) {
++                            await sendMessageAck(node);
++                            logger.info({ key: msg.key, stub: msg.messageStubParameters?.[0] }, 'wabot: status sem decifrar confirmado com ack, sem retry');
++                            return;
++                        }
++                        respondedMessageNodes.add(node);
                          retryMutex.mutex(async () => {
                              if (ws.isOpen) {
                                  if (getBinaryNodeChild(node, 'unavailable')) {
-@@ -668,6 +729,16 @@ export const makeMessagesRecvSocket = (config) => {
++                                    // wabot patch (ack de ultimo recurso): unavailable COM enc que nao
++                                    // decifra saia daqui sem ack nem retry -> reentregue a cada
++                                    // reconexao. Sem enc o ack ja foi enviado no topo de handleMessage.
++                                    if (getBinaryNodeChild(node, 'enc')) {
++                                        await sendMessageAck(node);
++                                        logger.info({ key: msg.key }, 'wabot: unavailable com enc sem decifrar confirmado com ack');
++                                    }
+                                     return;
+                                 }
+                                 const encNode = getBinaryNodeChild(node, 'enc');
+@@ -668,6 +752,16 @@ export const makeMessagesRecvSocket = (config) => {
                              }
                          });
                      }
@@ -158,7 +193,7 @@ index c46b096..cbe3bfb 100644
                      else {
                          // no type in the receipt => message delivered
                          let type = undefined;
-@@ -687,6 +758,9 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -687,7 +781,11 @@ export const makeMessagesRecvSocket = (config) => {
                          else if (!sendActiveReceipts) {
                              type = 'inactive';
                          }
@@ -166,8 +201,78 @@ index c46b096..cbe3bfb 100644
 +                            logger.info({ id: msg.key.id, type, participant }, 'wabot: DM de outro aparelho da conta confirmada com receipt');
 +                        }
                          await sendReceipt(msg.key.remoteJid, participant, [msg.key.id], type);
++                        respondedMessageNodes.add(node);
                          // send ack for history message
                          const isAnyHistoryMsg = getHistoryMsg(msg.message);
+                         if (isAnyHistoryMsg) {
+@@ -702,6 +800,33 @@ export const makeMessagesRecvSocket = (config) => {
+         }
+         catch (error) {
+             logger.error({ error, node }, 'error in handling message');
++            await nackUnansweredMessage(node, error);
++        }
++    };
++    // wabot patch (ack de ultimo recurso, porta do Baileys 7.x): toda saida de handleMessage
++    // termina em ack, receipt, retry-receipt ou nack. Na 6.7 uma excecao (no try acima ou
++    // antes dele, ex.: decryptMessageNode/decodeMessageNode) deixava a mensagem sem resposta:
++    // o servidor a reentregava a cada reconexao e, na fila offline, a excecao matava o dreno.
++    // Troca "perder a mensagem e a sessao" por "perder so a mensagem".
++    const nackUnansweredMessage = async (node, error) => {
++        if (respondedMessageNodes.has(node)) {
++            return;
++        }
++        try {
++            await sendMessageAck(node, NACK_REASONS.UnhandledError);
++            logger.warn({ id: node.attrs.id, from: node.attrs.from, err: error?.message }, 'wabot: mensagem com erro confirmada com nack de ultimo recurso');
++        }
++        catch (ackError) {
++            logger.warn({ id: node.attrs.id, err: ackError?.message }, 'wabot: falha ao enviar nack de ultimo recurso');
++        }
++    };
++    const handleMessageGuarded = async (node) => {
++        try {
++            await handleMessage(node);
++        }
++        catch (error) {
++            logger.error({ error, node }, 'error in handling message');
++            await nackUnansweredMessage(node, error);
+         }
+     };
+     const fetchMessageHistory = async (count, oldestMsgKey, oldestMsgTimestamp) => {
+@@ -846,7 +971,7 @@ export const makeMessagesRecvSocket = (config) => {
+     };
+     const makeOfflineNodeProcessor = () => {
+         const nodeProcessorMap = new Map([
+-            ['message', handleMessage],
++            ['message', handleMessageGuarded],
+             ['call', handleCall],
+             ['receipt', handleReceipt],
+             ['notification', handleNotification]
+@@ -867,7 +992,14 @@ export const makeMessagesRecvSocket = (config) => {
+                         onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node');
+                         continue;
+                     }
+-                    await nodeProcessor(node);
++                    // wabot patch: uma excecao num node nao pode matar o dreno da fila offline
++                    // (antes: isProcessing ficava true e nada mais era processado nesta conexao).
++                    try {
++                        await nodeProcessor(node);
++                    }
++                    catch (error) {
++                        onUnexpectedError(error, 'processing offline node');
++                    }
+                 }
+                 isProcessing = false;
+             };
+@@ -1020,7 +1152,7 @@ export const makeMessagesRecvSocket = (config) => {
+     }
+     // recv a message
+     ws.on('CB:message', (node) => {
+-        processNode('message', node, 'processing message', handleMessage);
++        processNode('message', node, 'processing message', handleMessageGuarded);
+     });
+     ws.on('CB:call', async (node) => {
+         processNode('call', node, 'handling call', handleCall);
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
 index 38bb9e0..3c1b783 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-send.js
@@ -226,6 +331,20 @@ index 38bb9e0..3c1b783 100644
                  const [groupData, senderKeyMap] = await Promise.all([
                      (async () => {
                          let groupData = useCachedGroupMetadata && cachedGroupMetadata ? await cachedGroupMetadata(jid) : undefined;
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js b/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
+index c819745..7cb598b 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
+@@ -552,7 +552,8 @@ export const makeSocket = (config) => {
+             ev.flush();
+             logger.trace('flushed events for initial buffer');
+         }
+-        ev.emit('connection.update', { receivedPendingNotifications: true });
++        // wabot patch (medida da fila offline): a contagem do servidor vai junto no evento.
++        ev.emit('connection.update', { receivedPendingNotifications: true, wabotOfflineCount: offlineNotifs });
+     });
+     // update credentials when required
+     ev.on('creds.update', update => {
 diff --git a/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js b/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js
 index 13bf52b..31093ab 100644
 --- a/node_modules/@whiskeysockets/baileys/lib/Utils/signal.js

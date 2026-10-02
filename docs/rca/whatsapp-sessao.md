@@ -4,6 +4,50 @@
 > Leia este arquivo ANTES de mexer no assunto. Referências a "AGENTS.md" em
 > comentários de código/testes apontam para as seções abaixo.
 
+## Ack de último recurso, ciclo de mensagem travada e fila offline medida (2026-10-02 — não regredir)
+
+Diagnóstico de travamento de filas (E1–E17 entrada, S1–S12 saída): a causa
+comum das quedas 500 é o Baileys 6.7 ter só dois desfechos para uma mensagem
+(`<receipt>` ou retry-receipt) enquanto o servidor espera `<ack>` em vários
+casos — cada caso novo virava um patch por tipo de chat (canal, depois DM).
+**Status: código + teste; aceite em produção ainda NÃO medido.**
+
+**Camada A — ack de último recurso (`patches/@whiskeysockets+baileys+6.7.23.patch`):**
+- `sendMessageAck` marca o node em `respondedMessageNodes` (WeakSet); receipt e
+  retry-receipt também marcam.
+- `handleMessageGuarded` (entrada online e da fila offline) e o `catch` de
+  `handleMessage`: exceção sem resposta → `sendMessageAck(node, UnhandledError)`
+  (porta do 7.x). Troca "perder a mensagem e a sessão" por "perder só a
+  mensagem". Log `wabot: mensagem com erro confirmada com nack de ultimo recurso`.
+- `unavailable` COM `enc` que não decifra: antes saía sem ack nem retry; agora ack.
+- `status@broadcast` que não decifra: ack sem retry (o robô não lê status).
+- Dreno da fila offline: exceção num node não mata mais o laço
+  (`isProcessing` ficava `true` e nada mais era processado na conexão).
+- Grupo e canal que não decifram seguem no retry (não alargar: em grupo
+  monitorado o retry é o único caminho de recuperação da sender-key).
+
+**Camada B — detector de ciclo (`src/core/stuckCycleDetector.js`, só sinal):**
+3 quedas 500 com `stuckMsg` em 3 h (`WA_STUCK_CYCLE_THRESHOLD`/`_WINDOW_MS`, 0
+desliga), com ≥2 ids distintos e nada aceito no meio → `ops_wa_stuck_cycle`
+com o tipo de chat culpado (jid do ack, senão o jid com mais falhas de decrypt
+nos 10 min anteriores). Estado em escopo de módulo, zerado só em
+`markMessageAccepted`. Ação automática (chat-scope por sessão) só depois de medir.
+
+**Medidas:**
+- `scripts/diag-quedas-500.mjs` (read-only): por dia, `500 com stuckMsg ÷ opens`
+  e o balde do ack recusado por tipo de chat (cruza o id com as linhas do
+  worker). **Aceite: razão perto de zero por 7 dias.**
+- Fila offline: `grep "fila offline do WhatsApp" bot.log | tail` — `offlineCount`
+  do servidor × `appendUpserts` entregues, no fim da fila e 2 min depois.
+  `appendUpserts` parado com `maxPending` alto = dreno preso.
+- Admin › Online: coluna **Recebendo** ("sem receber há Xh") a partir de
+  `ops_wa_reception_blind`, mesma fonte e janela do card da frota.
+- Fila de envio BullMQ: `lockDuration` 120 s (`SEND_WORKER_LOCK_DURATION_MS`);
+  com 30 s um engasgo do event loop vira job `stalled` → envio duplicado.
+
+⚠️ Patch e worker só valem nos robôs depois do restart do `bot-supervisor`
+(deploy faz sozinho: `patches/` está em `WORKER_CODE_PATHS_RE`) — anunciar antes.
+
 ## "Aguardando mensagem" nos membros do grupo de destino: robô não atendia pedido de reenvio (RCA 2026-09-27)
 
 **Sintoma:** membros do grupo de destino veem as ofertas espelhadas como
