@@ -59,7 +59,7 @@ function ProductDefinition() {
           eyebrow={BRAND_SHORT_NAME}
           title={<>O que é o <span className="serif" style={{ fontStyle: 'italic', color: 'var(--accent-strong)' }}>{BRAND_NAME}?</span></>}
           body={PRODUCT_DEFINITION}
-          pills={['Revisão humana', 'Cadência responsável', 'Histórico de logs', 'Grupos de origem & destino']}
+          pills={['Trava de link de terceiro', 'Cadência responsável', 'Histórico de logs', 'Grupos de origem & destino']}
           updatedAt={getEditorialDates('/').updatedAt}
         >
           <RulesCard label={rulesLabel} negatives={negatives} positive={positive} />

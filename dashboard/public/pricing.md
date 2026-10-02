@@ -14,11 +14,11 @@ The canonical feature sheet below (in Portuguese, the customers' language) is id
 
 Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
 
-- Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto.
+- Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto, e as lojas em que você é aprovada na Awin e na Rakuten.
 - Canal de publicação: Só WhatsApp (grupos e, no Pro, canais). Não envia para Telegram nem para Instagram.
 - Teste grátis: 7 dias com o Pro completo, sem cartão.
 - Reembolso e cancelamento: Reembolso integral em até 7 dias corridos depois do pagamento; depois disso, cancela sem multa e usa até o fim do período pago.
-- Conexão: Pelo QR Code do WhatsApp; roda no servidor 24 h, sem deixar o celular ligado. Recomendamos um número dedicado. Nenhum software garante que o número não será bloqueado.
+- Conexão: Pelo QR Code do WhatsApp ou por código de pareamento com o número (sem câmera); roda no servidor 24 h, sem deixar o celular ligado. Recomendamos um número dedicado. Nenhum software garante que o número não será bloqueado.
 
 | Recurso | Basic (R$39 / 30 dias) | Pro (R$69 / 30 dias) |
 |---|---|---|
@@ -30,8 +30,8 @@ Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais
 | Imagem e card da oferta preservados: a foto do produto sai no card clicável, sem cortar | Sim | Sim |
 | Criar oferta a partir de um link: você cola o seu link, o robô busca nome, preço e foto e monta a oferta | Sim | Sim |
 | Canais do WhatsApp como origem e destino | Não | Sim |
-| Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem | Não | Sim |
-| Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por dia) | Não | Sim |
+| Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem (e das promoções Awin e Rakuten das lojas em que você é aprovada) | Não | Sim |
+| Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por hora e por dia) | Não | Sim |
 | Variação do texto entre os envios | Não | Sim |
 | Marca d’água com o seu nome na foto da oferta | Não | Sim |
 | Painel de vendas e comissão da Shopee | Não | Sim |

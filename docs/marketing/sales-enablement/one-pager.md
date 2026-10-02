@@ -1,4 +1,4 @@
-# One-pager — BOTinho
+# One-pager — Espelha Grupos
 
 > Formato de uso: copiar o texto abaixo (ou adaptar as 2-3 linhas de cada
 > bloco) para uma mensagem de WhatsApp/DM após o primeiro contato com um
@@ -14,12 +14,14 @@ colando link de afiliado manualmente, arrisca esquecer de trocar o código
 de afiliado, e não tem visibilidade de quantas mensagens realmente saíram
 ou falharam.
 
-## O que o BOTinho faz
+## O que o Espelha Grupos faz
 
 Monitora os grupos/canais de origem que você indicar, detecta links de
-Shopee, Mercado Livre, Amazon e Magalu, converte para o seu código de
-afiliado e publica no seu grupo/canal de destino — com revisão humana e
-histórico de logs, não em piloto automático cego.
+Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress (e das lojas em
+que você é aprovada na Awin e na Rakuten), converte para o seu código de
+afiliado e publica no seu grupo/canal de destino — no ritmo que você
+definir e com histórico de cada envio. Se a troca do link falhar, a oferta
+não sai.
 
 ## Três diferenciais que não são "feature comum de bot"
 
@@ -30,7 +32,7 @@ histórico de logs, não em piloto automático cego.
 2. **Credenciais criptografadas, não em texto puro.** Suas contas de
    afiliado e sua chave PIX ficam cifradas em repouso (AES-256-GCM).
    (Detalhe técnico: `/seguranca-credenciais-afiliado`)
-3. **Sem promessa de ganho.** O BOTinho não promete comissão, faturamento
+3. **Sem promessa de ganho.** O Espelha Grupos não promete comissão, faturamento
    ou aprovação de marketplace — organiza a execução, a responsabilidade
    pela oferta continua sendo de quem revisa antes de publicar. É chato de
    ler num pitch, mas é a diferença entre uma ferramenta séria e uma que

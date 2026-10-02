@@ -89,7 +89,7 @@ export function FAQ() {
             <h2 style={{ ...s.h2, marginTop: 16 }}>
               Antes de você <span className="serif" style={{ fontStyle: 'italic' }}>perguntar</span>.
             </h2>
-            <p style={s.sub}>Se ficar alguma dúvida, fala com a gente no WhatsApp. Respondemos em minutos no horário comercial.</p>
+            <p style={s.sub}>Se ficar alguma dúvida, fala com a gente no WhatsApp. Respondemos em até 1 dia útil, de segunda a sexta, das 9h às 18h.</p>
             <a className="btn btn-ghost" href={SUPPORT_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" style={{ marginTop: 24 }}>
               <Icon name="whatsapp" size={16} /> Conversar agora
             </a>

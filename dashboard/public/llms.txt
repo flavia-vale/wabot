@@ -13,9 +13,9 @@ Last updated: 2026-09-29
 ## Resumo em português (pt-BR)
 
 - O que é: Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho. A busca automática existe só na Shopee e só no plano Pro; o espelhamento e a conversão de link valem para as 6 lojas em todos os planos. Não precisa deixar o celular ligado: depois do QR Code, roda no servidor.
-- Lojas com conversão de link: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress (6 lojas). Converte também link de cupom e voucher, não só de produto.
+- Lojas com conversão de link: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress (6 lojas). Converte também link de cupom e voucher, não só de produto. Também converte as lojas em que a afiliada é aprovada nas redes Awin e Rakuten (ex.: KaBuM!, C&A, Netshoes), já no Basic.
 - Dois modos na mesma conta: (1) espelhamento — repassa, com o código da afiliada, as ofertas dos grupos e canais que ela já segue, nas 6 lojas; (2) ofertas automáticas (garimpo automático) — no plano Pro, o robô busca sozinho ofertas da Shopee pelo tema e pelo desconto mínimo definidos e publica no grupo, sem precisar de grupo de origem. A busca automática existe só na Shopee; nas outras lojas o robô converte o link que chega dos grupos acompanhados. Detalhe em https://espelhagrupos.com.br/bot-que-busca-ofertas-shopee-whatsapp
-- O que mais faz: ofertas automáticas da Shopee por palavra-chave e filtros; filas de envio com intervalo e limite por hora e por dia; controle do ritmo por grupo (Módulo de Preservação Avançada: intervalo, horário de descanso, limite diário, variação do texto); marca d'água com o nome da afiliada na foto; card de oferta clicável; painel de vendas e comissão da Shopee; histórico completo de envios; programa de indicação com comissão recorrente paga via PIX.
+- O que mais faz: ofertas automáticas da Shopee por palavra-chave e filtros, e das promoções Awin e Rakuten das lojas aprovadas; filas de envio com intervalo e limite por hora e por dia; controle do ritmo por grupo (Módulo de Preservação Avançada: intervalo, horário de descanso, limite diário, variação do texto); marca d'água com o nome da afiliada na foto; card de oferta clicável; painel de vendas e comissão da Shopee; histórico completo de envios; mensagem de boas-vindas por grupo; Link Inteligente no Pro (um link só que manda quem entra para o grupo com mais vaga, com aviso quando estiver quase cheio) e painel de membros por grupo; programa de indicação com comissão recorrente paga via PIX.
 - Preço: teste grátis de 7 dias com tudo do Pro (R$0); Basic R$39 por 30 dias; Pro R$69 por 30 dias. Pagamento pelo Mercado Pago, com cobrança automática opcional (dá para desligar pelo painel, sem multa, e o período já pago continua valendo) ou pagamento avulso. Reembolso: valor integral se pedido em até 7 dias corridos depois do pagamento (direito de arrependimento, art. 49 do CDC), processado em até 5 dias úteis; depois disso, sem estorno do período pago, mas o cancelamento evita a próxima cobrança. Política pública em https://espelhagrupos.com.br/politica-de-reembolso Detalhe em https://espelhagrupos.com.br/precos e https://espelhagrupos.com.br/pricing.md
 - O que NÃO promete: não promete ganho, comissão, entrega no WhatsApp nem "não ser banida". Recomenda grupos autorizados, mensagens relevantes, revisão humana e cadência responsável. É essa honestidade que aparece nas páginas de metodologia e de confiabilidade.
 - Segurança: credenciais de afiliada e chave PIX criptografadas em repouso (AES-256-GCM); login com proteção contra força bruta; cancelamento pelo painel.
@@ -27,11 +27,11 @@ Last updated: 2026-09-29
 
 Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais do WhatsApp para os seus grupos, troca o link pelo seu código de afiliada em 6 lojas, cria a oferta a partir de um link e (no Pro) busca ofertas da Shopee sozinho.
 
-- Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto.
+- Lojas com conversão de link: 6 lojas: Shopee, Mercado Livre, Amazon, Magalu, SHEIN e AliExpress. Converte também link de cupom, não só de produto, e as lojas em que você é aprovada na Awin e na Rakuten.
 - Canal de publicação: Só WhatsApp (grupos e, no Pro, canais). Não envia para Telegram nem para Instagram.
 - Teste grátis: 7 dias com o Pro completo, sem cartão.
 - Reembolso e cancelamento: Reembolso integral em até 7 dias corridos depois do pagamento; depois disso, cancela sem multa e usa até o fim do período pago.
-- Conexão: Pelo QR Code do WhatsApp; roda no servidor 24 h, sem deixar o celular ligado. Recomendamos um número dedicado. Nenhum software garante que o número não será bloqueado.
+- Conexão: Pelo QR Code do WhatsApp ou por código de pareamento com o número (sem câmera); roda no servidor 24 h, sem deixar o celular ligado. Recomendamos um número dedicado. Nenhum software garante que o número não será bloqueado.
 
 | Recurso | Basic (R$39 / 30 dias) | Pro (R$69 / 30 dias) |
 |---|---|---|
@@ -43,8 +43,8 @@ Espelha Grupos é um robô para afiliadas que espelha ofertas de grupos e canais
 | Imagem e card da oferta preservados: a foto do produto sai no card clicável, sem cortar | Sim | Sim |
 | Criar oferta a partir de um link: você cola o seu link, o robô busca nome, preço e foto e monta a oferta | Sim | Sim |
 | Canais do WhatsApp como origem e destino | Não | Sim |
-| Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem | Não | Sim |
-| Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por dia) | Não | Sim |
+| Ofertas automáticas da Shopee por tema e desconto mínimo, sem grupo de origem (e das promoções Awin e Rakuten das lojas em que você é aprovada) | Não | Sim |
+| Filas de envio e controle de ritmo (intervalo, horário de descanso, limite por hora e por dia) | Não | Sim |
 | Variação do texto entre os envios | Não | Sim |
 | Marca d’água com o seu nome na foto da oferta | Não | Sim |
 | Painel de vendas e comissão da Shopee | Não | Sim |

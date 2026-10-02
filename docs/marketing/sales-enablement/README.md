@@ -1,4 +1,4 @@
-# Sales enablement — BOTinho
+# Sales enablement — Espelha Grupos
 
 Materiais de venda 1:1 (DM, WhatsApp, conversa com admin de grupo/canal),
 complementares ao site público. Diferente das páginas de SEO em
