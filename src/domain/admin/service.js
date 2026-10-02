@@ -242,7 +242,7 @@ export function createAdminService({
           errorCount24h,
           credentialHealth: summarizeCredentialHealth(user.credentials),
           credentials: undefined,
-          riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running: userRunning }),
+          riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running: userRunning, everPaid: everPaidIds.has(user.id) }),
         }, { everPaid: everPaidIds.has(user.id), now: now.getTime() }), adminRole)
       }),
     }
@@ -329,7 +329,7 @@ export function createAdminService({
         const groupCounts = getGroupCounts(user.groups)
         const botRunning = running.has(user.id)
         const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
-        const riskFlags = buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running: botRunning })
+        const riskFlags = buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running: botRunning, everPaid: everPaidIds.has(user.id) })
         const planWeight = user.plan === 'premium' ? 40 : user.plan === 'pro' ? 35 : user.plan === 'basic' ? 25 : 10
         const successWeight = Math.min(25, successCount * 2)
         const noContactWeight = user.lastSupportContactAt ? 0 : 15
