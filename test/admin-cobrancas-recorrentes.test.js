@@ -149,7 +149,7 @@ test('a rota exige permissão de financeiro, é auditada e não chama o Mercado 
   assert.ok(corpo.includes('__sem_resultado__'), 'busca sem resultado precisa devolver vazio, nunca a lista inteira')
 })
 
-const adminPageSource = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+const adminPageSource = readFileSync(new URL('../dashboard/app/admin/receita/page.js', import.meta.url), 'utf8')
 
 test('a sub-aba existe dentro do Financeiro e mostra o que foi pedido', () => {
   assert.ok(adminPageSource.includes("financeTab"), 'o Financeiro precisa ter sub-abas')
@@ -171,7 +171,7 @@ test('a tela não recalcula o motivo por conta própria', () => {
 
 test('a sub-aba só busca dados quando é aberta', () => {
   assert.ok(
-    adminPageSource.includes("if (tab !== 'financeiro' || financeTab !== 'cobrancas') return"),
+    adminPageSource.includes("if (financeTab !== 'cobrancas') return"),
     'carregar isso no boot do admin custaria consulta para quem nem abriu a aba'
   )
 })

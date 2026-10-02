@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs'
 import { CARD_HELP } from '../dashboard/lib/admin/cardHelp.js'
 
 const painel = readFileSync(new URL('../dashboard/app/admin/page.js', import.meta.url), 'utf8')
+// O card do robô do Telegram foi para a página Operação (G2 da auditoria).
+const operacao = readFileSync(new URL('../dashboard/app/admin/operacao/page.js', import.meta.url), 'utf8')
 
 test('a fila proativa não volta para a aba Início', () => {
   // Pedido de 2026-09-05: a aba Início é "o que precisa de decisão agora"; a
@@ -30,7 +32,7 @@ test('os cards técnicos abrem o detalhe do que está pendente', () => {
 })
 
 test('todo card do painel tem explicação atrás do "?"', () => {
-  const usados = [...painel.matchAll(/CARD_HELP\.(\w+)/g)].map(match => match[1])
+  const usados = [...(painel + operacao).matchAll(/CARD_HELP\.(\w+)/g)].map(match => match[1])
   const esperados = Object.keys(CARD_HELP)
   for (const chave of esperados) {
     assert.ok(usados.includes(chave), `card sem ajuda ligada na tela: ${chave}`)
