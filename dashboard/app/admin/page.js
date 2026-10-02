@@ -3032,7 +3032,7 @@ export default function AdminPage() {
                 value={online?.summary?.currentPayingUsers ?? '—'}
                 tone="ok"
                 helper="com acesso pago ainda válido"
-                help="Clientes dos planos pagos cujo acesso ainda não venceu."
+                help="Clientes que já pagaram (avulso ou assinatura) e cujo acesso ainda não venceu. Cortesia e liberação manual não contam."
                 onClick={() => { setOnlineFilters({ ...onlineFilters, plan: 'all' }); setTab('online') }}
               />
               <CommandCard

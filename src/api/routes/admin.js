@@ -22,7 +22,7 @@ import { buildErrorObservability, buildErrorsByMessage, summarizeDesyncGroups } 
 import { OFFLINE_EPISODE_EVENT_TYPES, buildOfflineEpisodesByUser, summarizeEpisodes, summarizeOfflineEpisodesByUser, presentOfflineEpisodes } from '../../core/offlineEpisodes.js'
 import { resolveSessionOwner, SESSION_OWNER } from '../../core/sessionOwnership.js'
 import { withPayingStatus } from '../../domain/admin/payingStatus.js'
-import { loadEverPaidUserIds } from '../../domain/admin/payingLoader.js'
+import { loadEverPaidUserIds, currentPayingWhere, formerPayingWhere, stalePayingWhere } from '../../domain/admin/payingLoader.js'
 import { withSharedPhoneStatus } from '../../domain/admin/sharedPhoneStatus.js'
 import { loadSharedPhoneCounts } from '../../domain/admin/sharedPhoneLoader.js'
 import { describeDisconnectReason } from '../../domain/admin/disconnectReason.js'
@@ -573,7 +573,7 @@ function getAccessStatus(user, now = new Date()) {
   return 'active'
 }
 
-function buildRiskFlags({ user, groups, successCount = 0, errorCount = 0, now = new Date(), running = false }) {
+function buildRiskFlags({ user, groups, successCount = 0, errorCount = 0, now = new Date(), running = false, everPaid = false }) {
   const groupCounts = getGroupCounts(groups)
   const flags = []
   const expiresSoon = user.accessExpiresAt && user.accessExpiresAt > now && user.accessExpiresAt <= addDays(now, 7)
@@ -583,8 +583,10 @@ function buildRiskFlags({ user, groups, successCount = 0, errorCount = 0, now = 
   if (user.status === 'banned' || user.status === 'suspended') flags.push(user.status)
   if (user.accessExpiresAt && user.accessExpiresAt < now) flags.push('expired')
   if (expiresSoon) flags.push('expiring_soon')
-  if (PAID_PLANS.includes(user.plan) && stale) flags.push('paid_stale_48h')
-  if (!running && PAID_PLANS.includes(user.plan)) flags.push('bot_not_running')
+  // Pagante é quem JÁ PAGOU (everPaid), nunca o campo `plan`: liberação
+  // manual e cortesia também escrevem `plan` (docs/rca/admin.md).
+  if (everPaid && stale) flags.push('paid_stale_48h')
+  if (!running && everPaid) flags.push('bot_not_running')
   if (!user.waSession || user.waSession.status !== 'connected') flags.push('wa_disconnected')
   if (!user._count?.credentials) flags.push('no_credentials')
   if (!groupCounts.monitor) flags.push('no_monitor_group')
@@ -772,9 +774,9 @@ async function getOperationalOverview(now = new Date()) {
     db.user.count(),
     db.user.count({ where: { status: 'active' } }),
     db.user.count({ where: { contactPhone: null } }),
-    db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { gt: now } } }),
+    db.user.count({ where: currentPayingWhere(now) }),
     db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: inSevenDays } } }),
-    db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: twoDaysAgo } }] } }),
+    db.user.count({ where: stalePayingWhere(now, twoDaysAgo) }),
     db.payment.count({ where: { status: 'pending' } }),
     db.payment.aggregate({ where: { status: 'approved', createdAt: { gte: addDays(now, -30) } }, _sum: { amount: true } }),
     db.messageLog.count({ where: { sentAt: { gte: since24h } } }),
@@ -1039,13 +1041,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       select: { userId: true, status: true, lifecycle: true, lastHeartbeatAt: true },
     }).catch(() => []),
     db.user.findMany({
-      where: {
-        status: 'active', accessExpiresAt: { gt: now },
-        OR: [
-          { payments: { some: { status: 'approved' } } },
-          { subscriptionCharges: { some: { status: { in: CHARGE_OUTCOME_STATUSES.aprovada } } } },
-        ],
-      },
+      where: currentPayingWhere(now),
       select: { id: true },
     }).catch(() => []),
   ])
@@ -1778,7 +1774,7 @@ export async function adminRoutes(app) {
       db.customerContactLog.count({ where: { createdAt: { gte: sinceToday } } }),
       db.customerContactLog.count({ where: { outcome: 'follow_up', nextFollowUpAt: { lte: now } } }),
       db.user.count({ where: { status: 'active', contactPhone: null } }),
-      db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: addDays(now, -2) } }] } }),
+      db.user.count({ where: stalePayingWhere(now, addDays(now, -2)) }),
       db.user.count({ where: { status: 'active', OR: [{ credentials: { none: {} } }, { groups: { none: { role: 'monitor' } } }, { groups: { none: { role: 'post' } } }] } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.messageLog.groupBy({ by: ['userId'], where: { status: 'error', sentAt: { gte: since24h } }, _count: { _all: true } }),
@@ -1843,7 +1839,7 @@ export async function adminRoutes(app) {
         const successCount = successMap.get(user.id) ?? 0
         const errorCount24h = errorMap.get(user.id) ?? 0
         const botRunning = running.has(user.id)
-        const riskFlags = buildRiskFlags({ user, groups: user.groups, successCount, errorCount: errorCount24h, now, running: botRunning })
+        const riskFlags = buildRiskFlags({ user, groups: user.groups, successCount, errorCount: errorCount24h, now, running: botRunning, everPaid: everPaidIds.has(user.id) })
         const contactReasons = getCustomerSuccessReasons({ user, riskFlags, errorCount24h })
         const lastContact = user.customerContacts?.[0] ?? null
         const financialWeight = scoreFinancialWeight(user)
@@ -2082,13 +2078,15 @@ export async function adminRoutes(app) {
       db.subscriptionCharge.groupBy({ by: ['userId'], where: { ...subscriptionChargeApprovedWhere, ...notTestUser } }),
       db.payment.count({ where: { status: 'pending', ...notTestUser } }),
       db.payment.count({ where: { status: { notIn: ['approved', 'pending'] }, ...notTestUser } }),
-      db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now }, ...notTestAccount } }),
-      db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now }, ...notTestAccount } }),
-      db.user.count({ where: { status: 'active', plan: 'premium', accessExpiresAt: { gt: now }, ...notTestAccount } }),
+      // Assinaturas ativas = quem JÁ PAGOU e está em dia, por plano. Cortesia e
+      // liberação manual têm `plan` preenchido e não entram no MRR.
+      db.user.count({ where: { ...currentPayingWhere(now), plan: 'basic', ...notTestAccount } }),
+      db.user.count({ where: { ...currentPayingWhere(now), plan: 'pro', ...notTestAccount } }),
+      db.user.count({ where: { ...currentPayingWhere(now), plan: 'premium', ...notTestAccount } }),
       db.user.count({ where: { status: 'active', plan: 'trial', OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: now } }] } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 7) } } }),
       db.user.count({ where: { status: 'active', accessExpiresAt: { gt: now, lte: addDays(now, 30) } } }),
-      db.user.count({ where: { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { lt: now } } }),
+      db.user.count({ where: { status: 'active', ...formerPayingWhere(now) } }),
       // Comissões de afiliados a descontar da receita bruta do período
       // (casadas com revenuePeriod: cada pagamento aprovado gera uma comissão,
       // inclusive renovação de assinatura). Exclui rejeitadas/revertidas —
@@ -2446,9 +2444,9 @@ export async function adminRoutes(app) {
         orderBy: { refundedAt: 'asc' },
         take: ROI_ROW_LIMIT,
       }),
-      db.user.count({ where: { status: 'active', plan: 'basic', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
-      db.user.count({ where: { status: 'active', plan: 'pro', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
-      db.user.count({ where: { status: 'active', plan: 'premium', accessExpiresAt: { gt: now }, ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
+      db.user.count({ where: { ...currentPayingWhere(now), plan: 'basic', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
+      db.user.count({ where: { ...currentPayingWhere(now), plan: 'pro', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
+      db.user.count({ where: { ...currentPayingWhere(now), plan: 'premium', ...excludeUserIdsWhere(testAccounts.ids, 'id') } }),
       getCurrentPlanPrices(),
     ])
 
@@ -2982,7 +2980,7 @@ export async function adminRoutes(app) {
       // "Pagos vencidos": mesmo critério do card `finance.overduePaid` — plano
       // pago, conta ainda ativa, acesso já vencido. Trial vencido não entra
       // aqui (não pagou nada para "vencer").
-      ...(status === 'overdue' ? { status: 'active', plan: { in: PAID_PLANS }, accessExpiresAt: { lt: now } } : {}),
+      ...(status === 'overdue' ? { status: 'active', ...formerPayingWhere(now) } : {}),
       // "Todos que já pagaram": qualquer status atual (inclusive banida/vencida),
       // desde que exista ao menos um pagamento aprovado no histórico.
       ...(status === 'paid' ? { payments: { some: { status: 'approved' } } } : {}),
@@ -3235,6 +3233,7 @@ export async function adminRoutes(app) {
       db.payment.aggregate({ where: { userId: user.id, status: 'approved' }, _sum: { amount: true }, _count: { _all: true } }),
     ])
     const running = (await listRunningBots()).includes(user.id)
+    const everPaid = (await loadEverPaidUserIds(db, [user.id])).has(user.id)
     const lastMessageAt = lastMessage?.sentAt ?? null
     const effectiveLastActivityAt = resolveEffectiveLastActivity(user, lastMessageAt)
     const riskUser = { ...user, lastActivityAt: effectiveLastActivityAt }
@@ -3260,8 +3259,8 @@ export async function adminRoutes(app) {
       recentLogs,
       successCount,
       errorCount24h,
-      riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running }),
-    }, { everPaid: Number(ltv?._count?._all ?? 0) > 0, now: now.getTime() }), req.admin.role)
+      riskFlags: buildRiskFlags({ user: riskUser, groups: user.groups, successCount, errorCount: errorCount24h, now, running, everPaid }),
+    }, { everPaid, now: now.getTime() }), req.admin.role)
   })
 
   // Lista larga de clientes (página /admin/clientes). É a porta de entrada do

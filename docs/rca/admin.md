@@ -423,3 +423,27 @@ papel (`sanitizeUser`); aqui não mascara de propósito — é a dona do produto
 rodando no próprio servidor para conseguir ligar. Não repassar o CSV.
 
 Teste: `test/admin-contato-ativo.test.js` (puro, sem banco).
+
+## Pagante canônico nas contagens (Q3 da auditoria, 2026-10-02)
+
+A tag já saía de pagamento aprovado, mas as **contagens** não: "Pagantes
+atuais"/"Pagos parados" do Início, "pagante parado" da fila de sucesso,
+`activeBasic/Pro/Premium` (MRR) do Financeiro e do ROI, "Pagos vencidos" e o
+filtro `overdue` de assinaturas contavam por `plan IN PAID_PLANS` — cortesia e
+liberação manual entravam como receita. E `buildRiskFlags` acendia
+`paid_stale_48h`/`bot_not_running` pelo `plan`.
+
+| Peça | Onde |
+|---|---|
+| Cláusulas únicas `everPaidWhere` / `currentPayingWhere` / `formerPayingWhere` / `stalePayingWhere` | `src/domain/admin/payingLoader.js` |
+| `loadEverPaidUserIds` agora une `Payment` e `SubscriptionCharge` aprovados | idem |
+| Guarda | `test/admin-pagante-canonico.test.js` |
+
+**Não regredir:** `admin.js` não pode voltar a ter `plan: { in: PAID_PLANS }`
+nem `plan: 'basic', accessExpiresAt` em contagem — o teste falha. `PAID_PLANS`
+só serve para validar o valor que o admin digita. Renovação recuperada pela
+reconciliação grava só `SubscriptionCharge`; contar só `Payment` escondia
+pagante. **Números mudam** (para baixo onde havia cortesia, para cima onde só
+havia cobrança de assinatura): avisar a dona antes do deploy em `main`.
+**Custo:** filtros de relação dentro do próprio `count`, nenhuma consulta por
+linha, zero RAM.
