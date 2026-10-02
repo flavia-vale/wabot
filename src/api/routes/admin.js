@@ -12,7 +12,6 @@ import { summarizeCredentialHealth } from '../../credentialHealth.js'
 import { getPublicAnalyticsQualitySnapshot } from './public.js'
 import { trackAnalyticsEventSafe } from '../../analytics.js'
 import { createAdminService, buildUserOrigin } from '../../domain/admin/service.js'
-import { summarizeReceptionBlindRows, resolveReceptionBlindForRow } from '../../domain/admin/receptionBlindStatus.js'
 import { buildCustomerHistory } from '../../domain/admin/customerHistory.js'
 import { readBacklogPipeline, updateBacklogIssueStatus } from '../../backlogPipeline.js'
 import { TERMS_DOCUMENT_ID, getEffectiveTermsDocument, nextTermsVersion, normalizeTermsContent } from '../../legalTerms.js'
@@ -945,12 +944,17 @@ async function buildFleetScenarios(now = new Date()) {
   // a primeira costuma se resolver sozinha, a segunda nunca se resolveu e é a
   // que fez uma cliente passar dois dias sem espelhar nada. Contar as duas no
   // mesmo número esconde justamente a grave.
-  const blindDetailByUser = summarizeReceptionBlindRows(blindRows)
-  const blindUserIds = new Set(blindDetailByUser.keys())
-  const blindHaMuitoUserIds = new Set([...blindDetailByUser].filter(([, d]) => d.haMuito).map(([id]) => id))
+  const blindUserIds = new Set()
+  const blindHaMuitoUserIds = new Set()
   let blindPiorSilencioMs = 0
-  for (const d of blindDetailByUser.values()) {
-    if (Number(d.silentForMs) > blindPiorSilencioMs) blindPiorSilencioMs = d.silentForMs
+  for (const row of blindRows) {
+    if (!row.userId) continue
+    blindUserIds.add(row.userId)
+    let meta = null
+    try { meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata } catch { meta = null }
+    if (meta?.acrossReconnects) blindHaMuitoUserIds.add(row.userId)
+    const silencio = Number(meta?.silentForMs)
+    if (Number.isFinite(silencio) && silencio > blindPiorSilencioMs) blindPiorSilencioMs = silencio
   }
 
   const byScenario = {
@@ -966,7 +970,6 @@ async function buildFleetScenarios(now = new Date()) {
 
   return {
     byScenario,
-    blindDetailByUser,
     paradasSemNinguem: paradas.size,
     precisamDeQr: precisamDaCliente.size,
     acessoVencido: acessoVencido.size,
@@ -1137,9 +1140,6 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
       automaticRecoveries24h: Number(offline24h.automaticRecoveries || 0),
       automaticOfflineMs24h: Number(offline24h.automaticOfflineMs || 0),
       ongoingOfflineMs24h: Number(offline24h.ongoingOfflineMs || 0),
-      // Conectada e sem receber (ops_wa_reception_blind na janela do card da
-      // frota). null = recebendo normalmente ou desconectada.
-      receptionBlind: resolveReceptionBlindForRow(scenarios?.blindDetailByUser, user.id, session?.status),
       disconnectReason: describeDisconnectReason({
         owner: ownership.owner,
         hasSession: Boolean(session),
@@ -1181,7 +1181,7 @@ async function buildAdminOnlineOverview({ query = {}, adminRole = 'support' } = 
         },
       }).catch(() => 0)
 
-  const { byScenario: _byScenario, blindDetailByUser: _blindDetailByUser, ...scenarioCounts } = scenarios ?? {}
+  const { byScenario: _byScenario, ...scenarioCounts } = scenarios ?? {}
 
   return {
     checkedAt: now.toISOString(),

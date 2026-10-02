@@ -163,7 +163,6 @@ export const ANALYTICS_EVENTS = new Set([
   // loop de retry-receipt travado derrubando a sessão em cadência (RCA
   // 2026-07, ver AGENTS.md "Loop de retry-receipt travado").
   'ops_wa_stuck_message_retry',
-  'ops_wa_stuck_cycle',
   // Camada 3 (issue #1216): grupo com falhas de decrypt repetidas (sender-key
   // dessincronizada) disparou auto-refresh de sender-keys (não-destrutivo, não
   // derruba a sessão) sem intervenção humana.

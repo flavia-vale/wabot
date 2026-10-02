@@ -121,18 +121,6 @@ export function createMemorySendBackend({ maxSize, onRejected, onDequeued }) {
  * DLQ é uma Queue BullMQ sem Worker associado: jobs ficam parados,
  * removeOnComplete/Fail desligados. Inspeção via `src/jobs/sendDlq.js`.
  */
-// lockDuration do Worker de envio (S6 do diagnóstico de travamento de filas).
-// Um job de envio pode durar minutos (timeout por tentativa 90/60/45 s + espera
-// entre tentativas). O BullMQ renova o lock a cada lockDuration/2, mas só se o
-// event loop do worker estiver livre: com o default de 30 s, um engasgo de >30 s
-// (card de preview, GC de heap grande) deixa o lock vencer, o job vira
-// `stalled`, é reprocessado e a oferta sai DUPLICADA. 120 s dá a mesma folga
-// que o supervisor tem (COMMAND_LOCK_DURATION_MS). Não muda RAM.
-export const SEND_WORKER_LOCK_DURATION_MS = Math.max(
-  30_000,
-  Number(process.env.SEND_WORKER_LOCK_DURATION_MS) || 120_000,
-)
-
 export async function createBullmqSendBackend({
   redisUrl,
   queueName,
@@ -155,7 +143,7 @@ export async function createBullmqSendBackend({
     async bullJob => {
       await onDequeued(bullJob.data)
     },
-    { connection, concurrency, lockDuration: SEND_WORKER_LOCK_DURATION_MS },
+    { connection, concurrency },
   )
 
   worker.on('failed', async (bullJob, err) => {
