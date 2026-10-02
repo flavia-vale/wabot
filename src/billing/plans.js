@@ -221,15 +221,16 @@ export function buildFeatureGateError(feature = FEATURE_CODES.CHANNELS) {
   const featureCode = String(feature || FEATURE_CODES.CHANNELS)
   if (featureCode === FEATURE_CODES.INSTAGRAM_STORIES) {
     return {
-      error: 'A publicação de Stories no Instagram estará disponível em um novo plano acima do Pro.',
+      error: 'A publicação de Stories no Instagram faz parte do plano Premium. Para liberar, escolha o Premium na tela Plano.',
       code: 'FEATURE_REQUIRES_PREMIUM',
       feature: FEATURE_CODES.INSTAGRAM_STORIES,
       requiredPlan: PLAN_IDS.PREMIUM,
+      upgradePath: '/painel/plano',
     }
   }
   if (featureCode === FEATURE_CODES.MULTI_NETWORK) {
     return {
-      error: 'Enviar suas ofertas também para o Telegram faz parte do plano Premium. Para liberar, escolha o Premium na tela de planos (/painel/plano).',
+      error: 'Enviar suas ofertas também para o Telegram faz parte do plano Premium. Para liberar, escolha o Premium na tela Plano.',
       code: 'FEATURE_REQUIRES_PREMIUM',
       feature: FEATURE_CODES.MULTI_NETWORK,
       requiredPlan: PLAN_IDS.PREMIUM,

@@ -41,6 +41,10 @@ function PremiumNeeded() {
         Com o plano Premium, as mesmas ofertas que saem no seu WhatsApp vão também para os seus grupos do Telegram,
         com o seu link de afiliado. O plano também libera os Stories do Instagram.
       </p>
+      <p className="pnl-hint">
+        Já usava o Telegram e seu plano mudou? O envio ficou pausado e nada foi apagado: com o Premium ativo,
+        seus grupos voltam a receber sozinhos.
+      </p>
       <Link href="/painel/plano" className="pnl-btn is-primary">Ver o plano Premium</Link>
     </div>
   )
@@ -107,29 +111,28 @@ function TelegramCard({ status, destinations, onToggle, busy }) {
   )
 }
 
+async function fetchTelegramState() {
+  try {
+    const [status, destinations] = await Promise.all([api.telegramStatus(), api.telegramDestinations()])
+    return { loading: false, locked: false, status, destinations, error: null }
+  } catch (err) {
+    const locked = err?.status === 403
+    return { loading: false, locked, status: null, destinations: null, error: locked ? null : 'Não foi possível carregar o Telegram agora. Tente de novo em instantes.' }
+  }
+}
+
 export default function AppsPanel() {
   usePainelHeader({ title: 'Aplicativos', subtitle: 'Onde suas ofertas são publicadas' })
   const [apps, setApps] = useState(null)
   const [telegram, setTelegram] = useState({ loading: true, locked: false, status: null, destinations: null, error: null })
   const [busy, setBusy] = useState(false)
 
-  const loadTelegram = useCallback(async () => {
-    try {
-      const [status, destinations] = await Promise.all([
-        api.get('/delivery-networks/telegram/status'),
-        api.get('/delivery-networks/telegram/destinations'),
-      ])
-      setTelegram({ loading: false, locked: false, status, destinations, error: null })
-    } catch (err) {
-      const locked = err?.status === 403 || err?.response?.status === 403
-      setTelegram({ loading: false, locked, status: null, destinations: null, error: locked ? null : 'Não foi possível carregar o Telegram agora. Tente de novo em instantes.' })
-    }
-  }, [])
+  const loadTelegram = useCallback(() => fetchTelegramState().then(setTelegram), [])
 
   useEffect(() => {
-    api.get('/delivery-networks').then((r) => setApps(r?.aplicativos ?? [])).catch(() => setApps([]))
-    loadTelegram()
-  }, [loadTelegram])
+    api.deliveryNetworks().then((r) => setApps(r?.aplicativos ?? [])).catch(() => setApps([]))
+    fetchTelegramState().then(setTelegram)
+  }, [])
 
   // Enquanto a cliente adiciona o robô no Telegram, a lista se atualiza sozinha.
   useEffect(() => {
@@ -141,7 +144,7 @@ export default function AppsPanel() {
   async function toggle() {
     setBusy(true)
     try {
-      await api.post(telegram.status?.desligado ? '/delivery-networks/telegram/enable' : '/delivery-networks/telegram/disable', {})
+      await (telegram.status?.desligado ? api.telegramEnable() : api.telegramDisable())
       await loadTelegram()
     } finally {
       setBusy(false)

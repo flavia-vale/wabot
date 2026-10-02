@@ -60,7 +60,7 @@ test('gate do multicanal aponta para a compra do Premium em /painel/plano', () =
   const gate = buildFeatureGateError(FEATURE_CODES.MULTI_NETWORK)
   assert.equal(gate.requiredPlan, PLAN_IDS.PREMIUM)
   assert.equal(gate.upgradePath, '/painel/plano')
-  assert.match(gate.error, /\/painel\/plano/)
+  assert.match(gate.error, /tela Plano/)
   assert.match(gate.error, /Premium/)
   assert.match(gate.error, /Telegram/)
   assert.doesNotMatch(gate.error, /seu plano n[ãa]o permite|estará disponível/i)
