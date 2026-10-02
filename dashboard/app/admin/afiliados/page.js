@@ -461,6 +461,15 @@ function CommissionsTab() {
 
   async function handleMarkAllPaid() {
     setBulkMessage('')
+    // Mesma regra do backend (COMMISSION_PAYABLE_STATUSES): elegível ou aprovada.
+    const pagaveis = commissions.filter(c => ['eligible', 'approved'].includes(c.status))
+    if (!pagaveis.length) {
+      setBulkMessage('Nenhuma comissão elegível neste mês.')
+      return
+    }
+    const total = pagaveis.reduce((soma, c) => soma + Number(c.commissionAmountCents || 0), 0)
+    // Dinheiro saindo em lote: nunca sem confirmar (Q4 da auditoria).
+    if (!window.confirm(`Marcar como PAGAS ${pagaveis.length} comissão(ões) de ${month}, somando ${formatCurrency(total)}?\n\nIsso registra que o dinheiro já saiu. Não dá para desfazer em lote.`)) return
     try {
       const result = await api.adminAffiliateCycleMarkAllPaid(month)
       setBulkMessage(`${result.updated} comissões elegíveis marcadas como pagas.`)

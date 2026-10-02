@@ -324,6 +324,8 @@ export default function AdminOnlinePage() {
   // quando a credencial ainda existe (`canAdminRetry`) — em conta que precisa
   // de QR novo ele não resolveria, e a API recusa por garantia.
   async function reconnect(userId) {
+    // Ação sobre a conta de uma cliente: nunca sem confirmar (Q4 da auditoria).
+    if (!window.confirm('Subir o robô desta cliente agora? Ela não precisa fazer nada. Se o WhatsApp exigir QR novo, a API recusa e avisa.')) return
     setReconnecting(userId)
     setError('')
     setFeedback('')
