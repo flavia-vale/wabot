@@ -95,7 +95,8 @@ function evalSessions(s, t, now) {
   if (s.total === 0) return check('sessoes', LEVEL.OK, title, 'Nenhuma sessão ativa.')
   const stale = s.stale ?? 0
   const pct = (stale / s.total) * 100
-  const base = `${s.connected ?? 0} conectadas de ${s.total} que deveriam estar ligadas; ${stale} sem sinal há mais de ${Math.round(t.staleHeartbeatMs / 60_000)} min.`
+  const off = s.disconnected ? ` (${s.disconnected} contas desconectadas há tempo — não é queda nova)` : ''
+  const base = `${s.connected ?? 0} conectadas de ${s.total} que deveriam estar ligadas; ${stale} sem sinal há mais de ${Math.round(t.staleHeartbeatMs / 60_000)} min${off}.`
   if (pct >= t.staleSessionsRedPct) return check('sessoes', LEVEL.RED, title, base)
   if (pct >= t.staleSessionsWarnPct) return check('sessoes', LEVEL.WARN, title, base)
   return check('sessoes', LEVEL.OK, title, base)

@@ -26,7 +26,7 @@ export const EDITORIAL_DATES = {
   // acusava 9 erros). Sem essa data não há sinal de frescor para o Google nem para
   // os motores de IA, que pesam recência ao escolher o que citar.
   '/bot-canais-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-24' },
-  '/bot-afiliados-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-29' },
+  '/bot-afiliados-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-10-01' },
   '/bot-achadinhos-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-29' },
   '/anti-ban-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-29' },
   '/grupo-para-canal-whatsapp': { publishedAt: '2026-05-18', updatedAt: '2026-09-29' },
@@ -114,7 +114,7 @@ export const EDITORIAL_DATES = {
   // desta rodada, publicada em 2026-08-19.
   '/alternativas/achadinho-pro': { publishedAt: '2026-08-19', updatedAt: '2026-09-29' },
   '/alternativas/gigi-bot': { publishedAt: '2026-08-26', updatedAt: '2026-09-27' },
-  '/alternativas/proafiliados': { publishedAt: '2026-08-04', updatedAt: '2026-08-04' },
+  '/alternativas/proafiliados': { publishedAt: '2026-08-04', updatedAt: '2026-09-27' },
   '/alternativas/shozap': { publishedAt: '2026-08-04', updatedAt: '2026-09-27' },
   '/alternativas/fluxopromo': { publishedAt: '2026-08-04', updatedAt: '2026-09-27' },
   '/alternativas/bot-para-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-09-29' },
@@ -153,7 +153,7 @@ export const EDITORIAL_DATES = {
   '/suporte': { publishedAt: '2026-05-15', updatedAt: '2026-05-15' },
   '/espelhar-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-02' },
   '/bot-ofertas-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-08-19' },
-  '/automacao-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-09-29' },
+  '/automacao-whatsapp-afiliados': { publishedAt: '2026-05-15', updatedAt: '2026-10-01' },
   // LPs de dor: o bloco de recursos (Features.jsx) passou a dizer 6 lojas em 18/09.
   '/bot-ofertas-afiliados-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },
   '/automatizar-divulgacao-em-grupos-whatsapp': { publishedAt: '2026-05-15', updatedAt: '2026-09-18' },

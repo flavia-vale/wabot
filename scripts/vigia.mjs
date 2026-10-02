@@ -111,13 +111,17 @@ const db = await safe(async () => (await import('../src/db.js')).default)
 if (db) {
   const now = Date.now()
   snapshot.sessions = await safe(async () => {
-    const should = { lifecycle: { in: ['ready', 'reconnecting', 'connecting', 'authenticating'] } }
-    const total = await db.waSession.count({ where: should })
-    const connected = await db.waSession.count({ where: { ...should, status: 'connected' } })
+    // "Deveriam estar ligadas" = status connected/connecting. Conta com status
+    // `disconnected` (cliente que desligou/perdeu o pareamento há dias ou meses)
+    // NÃO é queda nova: entra só como informação (`disconnected`).
+    const live = { status: { in: ['connected', 'connecting'] } }
+    const total = await db.waSession.count({ where: live })
+    const connected = await db.waSession.count({ where: { status: 'connected' } })
     const stale = await db.waSession.count({
-      where: { ...should, OR: [{ lastHeartbeatAt: null }, { lastHeartbeatAt: { lt: new Date(now - 5 * 60_000) } }] },
+      where: { ...live, OR: [{ lastHeartbeatAt: null }, { lastHeartbeatAt: { lt: new Date(now - 5 * 60_000) } }] },
     })
-    return { total, connected, stale }
+    const disconnected = await db.waSession.count({ where: { status: 'disconnected', lifecycle: { in: ['ready', 'reconnecting', 'connecting', 'authenticating'] } } })
+    return { total, connected, stale, disconnected }
   })
   snapshot.sends = await safe(async () => {
     const since = new Date(now - HORA)

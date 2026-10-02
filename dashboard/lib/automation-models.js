@@ -95,13 +95,12 @@ export const COMPETITOR_MODEL_COVERAGE = [
   {
     slug: 'proafiliados-com',
     href: '/alternativas/proafiliados',
-    // tiers: "Grupos ilimitados, monitoramento 24/7, 5 plataformas, feed
-    // global" — a ficha não diz o que é monitorado nem de onde vem o feed.
+    // Ficha de 27/09/2026: não diz se espelha grupo, garimpa ou formata.
     espelhador: null,
     garimpo: null,
     formatador: null,
-    stores: '5 plataformas (a ficha não as nomeia)',
-    freeTrial: 'Plano grátis permanente, com a tag "proafiliados" nas mensagens', // tiers
+    stores: '12 integrações: Shopee, Mercado Livre, Amazon, AliExpress, Magalu, SHEIN, TikTok Shop, TerabyteShop, Pró Spin, Awin, Lomadee e Rakuten', // strengths
+    freeTrial: 'Plano grátis permanente, limitado a 2 h por dia, com a marca dele em cada mensagem e 1 post dele a cada 30 envios por grupo', // tiers
     entryTier: 'Grátis',
   },
   {
