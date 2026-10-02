@@ -5273,6 +5273,11 @@ await persistSessionPatch({ status: 'connected', phone, lifecycle: 'ready', owne
               linkConvertido: primary.converted || primary.url || '',
               imagem: null,
               produto: { titulo: null, preco: null },
+              // Fatia 4: o histórico do outro aplicativo mostra a loja e o
+              // link de origem, e a caixa de saída aplica a MESMA janela
+              // anti-repetição deste destino (cupom: janela curta).
+              historico: { loja: primary.platform ?? null, linkOriginal: primary.url ?? null, origem: jid },
+              janelaRepeticaoMs: effectiveDedupWindowMs,
             },
           }).catch(err => logger.warn({ err: err?.message, destJid, deliveryNetwork: destDeliveryNetwork }, 'Falha ao enfileirar hand-off multicanal'))
           continue
